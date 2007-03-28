@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: initial_read.module.f90,v 1.18.2.2 2006/03/31 12:19:14 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module initial_read
 ! ------------------------------------------------------------------------------
@@ -44,7 +44,7 @@ module initial_read
   implicit none
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: initial_read.module.f90,v 1.18.2.2 2006/03/31 12:19:14 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -318,7 +318,7 @@ contains
     use read_pao_info, ONLY: pao_info_file, pao_norm_flag
     use read_support_spec, ONLY: support_spec_file, flag_read_support_spec
     use test_force_module, ONLY: flag_test_all_forces, flag_which_force, TF_direction, TF_atom_moved, TF_delta
-    use io_module, ONLY: pdb_format, pdb_altloc, append_coords
+    use io_module, ONLY: pdb_format, pdb_altloc, append_coords, pdb_output
     use group_module, ONLY : part_method, HILBERT, PYTHON
 
     implicit none
@@ -635,6 +635,7 @@ contains
        for_conv = en_conv/dist_conv
        pdb_format = fdf_boolean('General.PdbIn',.false.)
        pdb_altloc = fdf_string('General.PdbAltLoc',' ')
+       pdb_output = fdf_boolean('General.PdbOut',.false.)
        !part_mode = fdf_string('General.Partitions','Python')
        part_mode = fdf_string('General.Partitions','Hilbert')
        if (leqi (part_mode(1:6),'Python')) then
@@ -928,6 +929,7 @@ contains
        for_conv = en_conv/dist_conv
        pdb_format = fdf_boolean('General.PdbIn',.false.)
        pdb_altloc = fdf_string('General.PdbAltLoc',' ')
+       pdb_output = fdf_boolean('General.PdbOut',.false.)
        part_mode = fdf_string('General.Partitions','Python')
        if (leqi (part_mode(1:6),'Python')) then
           part_method = PYTHON
