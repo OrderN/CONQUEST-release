@@ -1,0 +1,141 @@
+# -*- mode: makefile; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+#
+# $Id: Makefile.ifc_lam,v 1.7 2002/09/05 11:33:44 mjg Exp $
+#
+# $Log: Makefile.ifc_lam,v $
+# Revision 1.7  2002/09/05 11:33:44  mjg
+# Added ionics.obj
+#
+# 05/09/2002 mjg & drb
+#
+# Revision 1.4  2002/06/25 12:42:32  drb
+# Added FFT library (again, I don't know how this got past me)
+#
+# 25/06/2002 drb
+#
+# Revision 1.3  2002/06/25 10:19:30  drb
+# Major changes:
+#
+# i) Added more tags to header
+# ii) Fixed default
+# iii) Added commands for FFT library
+# iv) Added FDF and FFT to make clean
+#
+# 25/06/2002 drb
+#
+# Revision 1.2  2002/05/07 14:02:42  drb
+# Changed library reference to work with new MKL
+# 07/05/2002 dave
+#
+# Revision 1.1  2002/05/07 13:35:59  drb
+# Added Makefile for intel/linux machines using lam and ifc
+# 07/05/2002 dave
+#
+# Revision 1.2  2002/03/12 14:26:28  drb
+# Improved syntax for help, added FDF, removed include.obj
+# 12/03/2002 dave
+#
+# Revision 1.1.1.1  2001/06/11 13:28:11  drb
+# First check in of new set_grid version - now pure F90
+#
+TARGET = Conquest
+default: $(TARGET)
+CF = mpif77
+DATE = `date +"%b%d%y"`
+TARNAME = "CQ_"$(DATE)"_"`date +"%H%M"`".tar"
+ECHOSTR = @echo -e
+SHELL = /bin/sh
+
+LINKFLAGS = 
+
+include compile_flags
+
+# This line is for no ScaLAPACK and BLACS libraries - use DiagModule.dummy.f90
+LIBS = -L/usr/local/intel/mkl/lib/32/ -lmkl_lapack -lmkl_def -lpthread $(FFT)
+# This line is for explicit ScaLAPACK and BLACS libraries
+#LIBS = -L/home/dave/LocalUtils/SCALAPACK_mpich_pgi/ -lscalapack -L/home/dave/LocalUtils/BLACS_mpich_pgi/LIB -lmpiblacsF77init-p3 -lmpiblacs-p3 -L/usr/local/intel/mkl/lib/32/ -lmkl_lapack -lmkl_def -lpthread 
+CFFLAGS = 
+
+#Libraries
+# fdf from Siesta project
+FDF=libfdf.a
+$(FDF):
+	(cd fdf; $(MAKE) "FC=$(CF)" "FFLAGS=$(CFFLAGS)" module)
+
+# Default FFT (GPFA) - replace as necessary
+FFT=libgpfa.a
+$(FFT):
+	(cd FFT; $(MAKE) "FC=$(CF)")
+
+
+include comm.obj
+include energy.obj
+include forces.obj
+include matrix.obj
+include odd.obj
+include ionics.obj
+include overlap.obj
+include setgrid_new.obj
+include pao2blip.obj
+
+NODE_OBJECTS = main.o $(COMM_OBJS) $(ENERGY_OBJS) $(FORCES_OBJS) $(MATRIX_OBJS) $(ODD_OBJS) $(IONICS_OBJS) $(OVERLAP_OBJS) $(SETGRID_NEW_OBJS) $(PAO2BLIP_OBJS)
+
+$(TARGET) : $(NODE_OBJECTS) $(FDF) $(FFT)
+	$(CF) $(CFFLAGS) $(OPT) -o $(TARGET) $(LINKFLAGS) $(NODE_OBJECTS) $(FDF) $(LIBS)
+
+.SUFFIXES: .f .f90
+
+%.o: %.f90
+	$(CF) $(COMPFLAGS) $(OPT) -c $<
+
+.f.o:
+	$(CF) $(COMPFLAGS) $(OPT) -c $<
+
+
+include deps.obj
+
+$(NODE_OBJECTS): compile_flags
+
+# Output the compiler that this Makefile is intended for
+compiler: 
+	$(ECHOSTR) "\nConquest Makefile for ifc, lam and mkl on x86\n"
+
+# Make a tar file
+tar:
+	tar cvf ../$(TARNAME) *.f *.f90 *.inc *.obj Makefile* compile_flags* template* fdf/*.f fdf/*.h fdf/Makefile fdf/README
+	gzip ../$(TARNAME)
+
+# Cleaning options
+clean:
+	rm -f *.o *.mod *~ *.d work.pc work.pcl
+	(cd fdf; make clean)
+	(cd FFT; make clean)
+very_clean: 
+	make clean; make doc_clean; make pure_clean
+
+# Documentation options
+doc:
+	make xhtml; make html
+help:
+	$(ECHOSTR) "\nConquest Makefile\n-----------------\n"
+	$(ECHOSTR) "\t default (make or make Conquest) is to make Conquest\n"
+	$(ECHOSTR) "\t make tar makes a .tar.gz file in the directory below\n"
+	$(ECHOSTR) "\t make compiler gives platform/compiler the Makefile was intended for\n"
+	$(ECHOSTR) "\t make xhtml makes xrefs for ROBODoc html documentation"
+	$(ECHOSTR) "\t make html makes ROBODoc html documentation"
+	$(ECHOSTR) "\t make doc; netscape Conquest_mi.html gives documentation\n"
+	$(ECHOSTR) "\t make <file>_pure removes \"!!\" lines from source file <file>"
+	$(ECHOSTR) "\t make pure does for all files (puts into subdir pure)\n"
+	$(ECHOSTR) "\t make clean removes all object files and emacs ~ files"
+	$(ECHOSTR) "\t make doc_clean cleans up ROBODoc html documentation"
+	$(ECHOSTR) "\t make pure_clean removes all _pure files"
+	$(ECHOSTR) "\t make very_clean does all above"
+list:
+	$(ECHOSTR) $(NODE_OBJECTS)
+	$(ECHOSTR) $(SOURCES)
+	$(ECHOSTR) $(HTMLXREFS)
+	$(ECHOSTR) $(HTMLDOCS)
+
+SRC2 = basic_types.f90 datatypes.module.f90 matrix_data_module.f90 \
+  numbers.module.f90
+include Makefile.Doc

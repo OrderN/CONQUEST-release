@@ -1,0 +1,27 @@
+# -*- mode: Makefile -*-
+# $Id: energy.obj,v 1.14.2.1 2006/03/07 07:36:42 drb Exp $
+#
+#
+ENERGY_OBJS = H_matrix_module.o \
+              SelfCon_module.o \
+              EarlySC_module.o \
+              PosTan_module.o \
+              DMMinModule.o \
+              DiagModule.o \
+              ScalapackFormat.o \
+              blip_minimisation.module.o \
+              blip_gradient.module.o \
+              pseudopotential.module.o \
+              potential_module.o \
+              ewald.o \
+              minimise.o \
+	      Pulay.o \
+	      S_matrix_module.o \
+              McWeeny.o \
+	      control.o \
+	      density_module.o \
+	      initialisation_module.o \
+	      initial_read.module.o \
+	      energy.module.o \
+              test_force_module.o\
+              functions_on_grid_module.o

@@ -1,0 +1,130 @@
+! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! ------------------------------------------------------------------------------
+! $Id: main.f90,v 1.12.2.1 2006/03/07 07:36:44 drb Exp $
+! ------------------------------------------------------------------------------
+! Conquest: O(N) DFT
+! ------------------------------------------------------------------------------
+! Code area 9: general
+! ------------------------------------------------------------------------------
+
+!!****h* Conquest/Conquest *
+!!
+!!  NAME 
+!!   Conquest
+!!  PURPOSE
+!!   Main routine for the Conquest code
+!!  USES
+!!   common, dimens, logicals, numbers, matrix_data,
+!!   pseudopotential_data, global_module, mpi, io_module
+!!  AUTHOR
+!!   D.R.Bowler
+!!  CREATION DATE
+!!   Way, way back in the deep history of Conquest - 1995 or so
+!!  MODIFICATION HISTORY
+!!   07/05/01 by DRB
+!!    Added ROBODoc header, changed indentation
+!!   28/05/2001 dave
+!!    Changed ROBODoc header to a module so that it shows up at the top :)
+!!    Stripped control call
+!!   29/05/2001 dave
+!!    Stripped initialise call
+!!    Stripped and inserted main.inc
+!!   31/05/2001 dave
+!!    Added RCS Id tag to header
+!!   07/06/2001 dave
+!!    Added use fft_module, datatypes and removed includes and mpi
+!!    Also changed comms to cq_init and cq_exit
+!!   13/06/2001 dave
+!!    Changed call to cq_init to use numprocs
+!!   15/03/2002 dave
+!!    Added RCS id tag for object file identification and tidied 
+!!    comment structure a little (added header)
+!!   15:20, 25/09/2002 mjg & drb 
+!!    Changed so that the variable density is used from density_module
+!!   12:43, 04/02/2003 drb 
+!!    Changed to use init_comms and end_comms from GenComms
+!!   13:50, 10/02/2003 drb 
+!!    Changed to use control_run
+!!   15:01, 12/03/2003 drb 
+!!    Removed reference to workspace
+!!   10:18, 2004/01/09 dave
+!!    Added use pseudopotential_common
+!!  SOURCE
+!!
+program Conquest
+
+  use datatypes
+  use blip
+  use dimens
+  use logicals
+  use numbers
+  use matrix_data
+  use group_module
+  use primary_module
+  use cover_module
+  use mult_module
+  use pseudopotential_data
+  use pseudopotential_common
+  use pseudo_tm_info, ONLY: pseudo
+  use pao_format, ONLY: pao
+  use initialisation
+  use potential_module
+  use global_module
+  use force_module, ONLY: tot_force
+  use io_module, ONLY: banner
+  use grid_index
+  use atoms
+  use species_module
+  use fft_module
+  use GenComms
+  use density_module, ONLY: density
+  use control, ONLY: control_run
+  use support_spec_format
+  use ol_int_datatypes
+  use functions_on_grid
+  use ewald_module
+  use DiagModule
+  use ScalapackFormat
+  use atomic_density, ONLY: atomic_density_table, rcut_dens, flag_atomic_density_from_pao
+  use block_module, ONLY: nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
+  use memory_module
+  use minimise
+
+  implicit none
+
+  ! RCS tag for object file identification 
+  character(len=80), save :: CQid = "$Id: main.f90,v 1.12.2.1 2006/03/07 07:36:44 drb Exp $"
+
+  ! Global variables (for now !)
+
+  logical :: fixed_potential
+
+  ! Energies and electrons
+  real(double) :: total_energy
+  real(double) :: number_of_bands
+  
+  ! Chemical potential
+  real(double) :: mu
+  logical :: vary_mu
+
+  fixed_potential = .false.
+  ! identify what node we are on
+  call init_comms(myid,numprocs)
+  if(inode==ionode) call banner
+
+  ! Initialise reads in data and finds an initial, self-consistent Hamiltonian
+  call initialise(vary_mu, fixed_potential, number_of_bands, mu, total_energy)
+  if(inode==ionode.AND.iprint_gen>0) write(*,'(4x,"Finished initialise")')
+
+  ! control does (at the moment) blip minimisation and simple MD
+  call control_run(fixed_potential, vary_mu, number_of_bands, mu, total_energy)
+  if(inode==ionode.AND.iprint_gen>0) write(*,'(4x,"Finished control")')
+
+  call write_mem_use
+  ! Wrap up
+  call my_barrier()
+  !call save_state( inode, ionode, mu, expected_reduction, n_run, output_file)
+  !call save_blip(inode, ionode)
+  call end_comms()
+end program Conquest
+!!*****

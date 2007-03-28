@@ -1,0 +1,6 @@
+# For Troullier-Martin pseudo: Tsuyoshi MIYAZAKI 
+#                         22/Nov/2002
+# DRB 2007/02/26
+PS_TM_OBJS = pseudo_tm_module.o\
+                 pseudo_tm_info.o\
+                 pseudopotential_common.o

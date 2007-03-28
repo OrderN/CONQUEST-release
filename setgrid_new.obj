@@ -1,0 +1,11 @@
+# -*- mode: Makefile -*-
+# $Id: setgrid_new.obj,v 1.4.2.1 2006/03/31 14:06:39 drb Exp $
+#
+SETGRID_NEW_OBJS  = block_module.o\
+                    comm_array_module.o\
+                    naba_blk_module.o\
+                    set_blipgrid_module.o\
+                    bucket_module.o\
+                    set_bucket_module.o\
+                    calc_matrix_elements_module.o\
+                    blip_grid_transform_module.o

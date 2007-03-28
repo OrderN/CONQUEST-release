@@ -1,0 +1,66 @@
+# -*- mode: makefile; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+#
+# $Id: Makefile.pc,v 1.2 2002/07/05 11:26:43 mjg Exp $
+#
+# $Log: Makefile.pc,v $
+# Revision 1.2  2002/07/05 11:26:43  mjg
+# Added object files for pao2blip routines (through include pao2blip.obj)
+# and added the PAO2BLIP_OBJ variable to the list of object files to be
+# linked.  Also added headers to Makefile.Cray and Makefile.pc
+#
+# 05/07/2002 mjg and drb
+#
+#CF = pgf90
+CF = /home/dave/lam/bin/mpif77
+#CF = /home/dave/mpich/bin/mpif90
+NAME = Conquest
+DATE = `date +"%b%d%y"`
+TARNAME = "CQ_"$(DATE)"_"`date +"%H%M"`".tar"
+
+LINKFLAGS = 
+
+include compile_flags
+
+.SUFFIXES: .f .f90
+
+%.o: %.f90
+	$(CF) $(COMPFLAGS) $(OPT) -c $<
+
+.f.o:
+	$(CF) $(COMPFLAGS) $(OPT) -c $<
+
+#OPT = -O 0
+#COMPFLAGS =  -Wf'-N 80 -dp -Ta -P /usr/include/mpp '
+#LIBS = -lapp -lblas
+#LIBS = -L/home/dave/mpich/build/LINUX/ch_p4/lib -lmpich
+LIBS = -lmpi -L/home/dave/lib -llapack -lblas -lpgftnrtl -lfft
+#CFFLAGS = -g 
+
+#include modules.obj
+include matrix.obj
+include comm.obj
+include odd.obj
+include overlap.obj
+include energy.obj
+include forces.obj
+include setgrid_new.obj
+include pao2blip.obj
+
+
+NODE_OBJECTS = main.o $(MATRIX_OBJS) $(COMM_OBJS) $(ODD_OBJS) $(OVERLAP_OBJS) $(ENERGY_OBJS) $(FORCES_OBJS) $(SETGRID_NEW_OBJS) $(PAO2BLIP_OBJS)
+
+#Conquest : $(NODE_OBJECTS) 
+#	$(CF) $(CFFLAGS) $(OPT) -o $(NAME) $(LIBS) $(LINKFLAGS) $(MODULE_FLAGS) $(NODE_OBJECTS) -L/home/dave/lib -lfft -lmpi -llapack -lblas -lpgftnrtl
+Conquest : $(NODE_OBJECTS) 
+	$(CF) $(CFFLAGS) $(OPT) -o $(NAME) $(LINKFLAGS) $(NODE_OBJECTS) $(LIBS)
+
+#include modules.dep.obj
+include deps.obj
+include includes.obj
+
+$(NODE_OBJECTS): compile_flags
+
+
+tar:
+	tar cvf ../$(TARNAME) *.f *.f90 *.inc *.obj Makefile* compile_flags*
+	gzip ../$(TARNAME)

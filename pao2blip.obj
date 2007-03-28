@@ -1,0 +1,18 @@
+# -*- mode: Makefile -*-
+# $Id: pao2blip.obj,v 1.5 2005/05/26 08:36:27 drb Exp $
+#
+PAO2BLIP_OBJS = blip_pao_values.o\
+                linear_equation_solver.o\
+                ol_ang_coeff_subs.o\
+                ol_bessel_transforms.o\
+                ol_fft_procs.o\
+                ol_int_datatypes.module.o\
+                ol_rad_table_subs.o\
+                ol_spline_subs.o\
+                pao2blip.o\
+                pao_minimisation.module.o \
+                PAO_grid_transform_module.o \
+                build_PAO_matrices.module.o\
+                read_support_spec.o\
+                support_spec_format.o\
+                symmetry.o

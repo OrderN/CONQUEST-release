@@ -1,0 +1,83 @@
+# -*- mode: makefile; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+#
+# $Id: Makefile.Cray,v 1.2 2002/07/05 11:26:43 mjg Exp $
+# 
+# $Log: Makefile.Cray,v $
+# Revision 1.2  2002/07/05 11:26:43  mjg
+# Added object files for pao2blip routines (through include pao2blip.obj)
+# and added the PAO2BLIP_OBJ variable to the list of object files to be
+# linked.  Also added headers to Makefile.Cray and Makefile.pc
+#
+# 05/07/2002 mjg and drb
+#
+#CF = pgf90
+CF = f90
+NAME = Conquest
+
+LINKFLAGS = 
+
+include compile_flags
+
+.SUFFIXES: .f .f90
+
+.f90.o:
+	$(CF) $(COMPFLAGS) $(OPT) -c $<
+
+.f.o:
+	$(CF) $(COMPFLAGS) $(OPT) -c $<
+
+#OPT = -O 0
+#COMPFLAGS =  -Wf'-N 80 -dp -Ta -P /usr/include/mpp '
+#LIBS = -lapp -lblas
+#LIBS = -L/home/dave/mpich/build/LINUX/ch_p4/lib -lmpich
+#LIBS = -lmpi -lblas -llapack
+LIBS = -lmpi 
+#CFFLAGS = -g 
+
+#include modules.obj
+include matrix.obj
+include comm.obj
+include odd.obj
+include overlap.obj
+include energy.obj
+include forces.obj
+include pao2blip.obj
+
+NODE_OBJECTS = main.o $(MATRIX_OBJS) $(COMM_OBJS) $(ODD_OBJS) $(OVERLAP_OBJS) $(ENERGY_OBJS) $(FORCES_OBJS) $(PAO2BLIP_OBJS)
+
+#Conquest : $(NODE_OBJECTS) 
+#	$(CF) $(CFFLAGS) $(OPT) -o $(NAME) $(LIBS) $(LINKFLAGS) $(MODULE_FLAGS) $(NODE_OBJECTS) -L/home/dave/lib -lfft -lmpi -llapack -lblas -lpgftnrtl
+Conquest : $(NODE_OBJECTS) 
+	$(CF) $(CFFLAGS) $(OPT) -o $(NAME) $(LINKFLAGS) $(NODE_OBJECTS) $(LIBS)
+
+#include modules.dep.obj
+include deps.obj
+include includes.obj
+
+$(NODE_OBJECTS): compile_flags
+
+
+tar:
+	tar cvf ../FinalNL.tar *.f *.f90 *.inc *.obj Makefile compile_flags template*
+	gzip ../FinalNL.tar
+clean:
+        rm -f *.o *.mod *~
+very_clean: 
+        make clean; make doc_clean; make pure_clean
+help:
+        @echo -e "\nConquest Makefile\n-----------------\n"
+        @echo -e "\t default (make or make Conquest) is to make Conquest\n"
+        @echo -e "\t make tar makes a .tar.gz file in the directory below\n"
+        @echo -e "\t make xhtml makes xrefs for ROBODoc html documentation"
+        @echo -e "\t make html makes ROBODoc html documentation"
+        @echo -e "\t make xhtml; make html; netscape Conquest_mi.html gives docu
+mentation\n"
+        @echo -e "\t make <file>_pure removes \"!!\" lines from source file <fil
+e>"
+        @echo -e "\t make pure does for all files (puts into subdir pure)\n"
+        @echo -e "\t make clean removes all object files and emacs ~ files"
+        @echo -e "\t make doc_clean cleans up ROBODoc html documentation"
+        @echo -e "\t make pure_clean removes all _pure files"
+        @echo -e "\t make very_clean does all above"
+
+include Makefile.Doc

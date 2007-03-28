@@ -1,0 +1,104 @@
+# -*- mode: makefile; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+#
+# $Id: Makefile.SGI,v 1.3 2002/07/05 11:26:43 mjg Exp $
+#
+# $Log: Makefile.SGI,v $
+# Revision 1.3  2002/07/05 11:26:43  mjg
+# Added object files for pao2blip routines (through include pao2blip.obj)
+# and added the PAO2BLIP_OBJ variable to the list of object files to be
+# linked.  Also added headers to Makefile.Cray and Makefile.pc
+#
+# 05/07/2002 mjg and drb
+#
+# Revision 1.2  2002/06/25 10:17:50  drb
+# Three main changes:
+#
+# i) Added default tag
+# ii) Added Scalapack and BLACS to LIBS
+# iii) Added fdf to make clean
+#
+# 25/06/2002 drb
+#
+#
+TARGET = Conquest
+default: $(TARGET)
+CF = f90 -64
+DATE = `date +"%b%d%y"`
+TARNAME = "CQ_"$(DATE)"_"`date +"%H%M"`".tar"
+ECHOSTR = @echo -e
+SHELL = /bin/sh
+
+LINKFLAGS = 
+
+include compile_flags
+
+# This line is for systems with ScaLAPACK, BLACS and diagonalisation
+LIBS = -lcomplib.sgimath -lscalapack -lmpiblacs -lsma -lmpi
+# This line is for systems with dummy DiagModule
+#LIBS = -lcomplib.sgimath -lsma -lmpi
+CFFLAGS = -mips4 
+
+include matrix.obj
+include comm.obj
+include odd.obj
+include overlap.obj
+include energy.obj
+include forces.obj
+include setgrid_new.obj
+include pao2blip.obj
+
+NODE_OBJECTS = main.o $(MATRIX_OBJS) $(COMM_OBJS) $(ODD_OBJS) $(OVERLAP_OBJS) $(ENERGY_OBJS) $(FORCES_OBJS) $(SETGRID_NEW_OBJS) $(PAO2BLIP_OBJS)
+
+FDF=libfdf.a
+$(FDF):
+	(cd fdf; $(MAKE) "FC=$(CF)" "FFLAGS=$(CFFLAGS)" module)
+
+$(TARGET) : $(NODE_OBJECTS) 
+	$(CF) $(CFFLAGS) $(OPT) -o $(TARGET) $(LINKFLAGS) $(NODE_OBJECTS) $(FDF) $(LIBS) 
+
+.SUFFIXES: .f .f90
+
+.f90.o:
+	$(CF) $(COMPFLAGS) $(OPT) -c $<
+
+.f.o:
+	$(CF) $(COMPFLAGS) $(OPT) -c $<
+
+include deps.obj
+
+$(NODE_OBJECTS): compile_flags
+
+
+tar:
+	tar cvf ../$(TARNAME) *.f *.f90 *.inc *.obj Makefile* compile_flags* template*
+	gzip ../$(TARNAME)
+
+clean:
+	rm -f *.o *.mod *~ libfdf.a
+	(cd fdf; make clean)
+very_clean: 
+	make clean; make doc_clean; make pure_clean
+doc:
+	make xhtml; make html
+help:
+	$(ECHOSTR) "\nConquest Makefile\n-----------------\n"
+	$(ECHOSTR) "\t default (make or make Conquest) is to make Conquest\n"
+	$(ECHOSTR) "\t make tar makes a .tar.gz file in the directory below\n"
+	$(ECHOSTR) "\t make xhtml makes xrefs for ROBODoc html documentation"
+	$(ECHOSTR) "\t make html makes ROBODoc html documentation"
+	$(ECHOSTR) "\t make doc; netscape Conquest_mi.html gives documentation\n"
+	$(ECHOSTR) "\t make <file>_pure removes \"!!\" lines from source file <file>"
+	$(ECHOSTR) "\t make pure does for all files (puts into subdir pure)\n"
+	$(ECHOSTR) "\t make clean removes all object files and emacs ~ files"
+	$(ECHOSTR) "\t make doc_clean cleans up ROBODoc html documentation"
+	$(ECHOSTR) "\t make pure_clean removes all _pure files"
+	$(ECHOSTR) "\t make very_clean does all above"
+list:
+	$(ECHOSTR) $(NODE_OBJECTS)
+	$(ECHOSTR) $(SOURCES)
+	$(ECHOSTR) $(HTMLXREFS)
+	$(ECHOSTR) $(HTMLDOCS)
+
+SRC2 = basic_types.f90 datatypes.module.f90 matrix_data_module.f90 \
+  numbers.module.f90
+include Makefile.Doc

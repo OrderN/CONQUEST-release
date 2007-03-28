@@ -1,0 +1,18 @@
+# Compile flags
+FC?=pgf77
+CFLAGS=
+FFLAGS?= -fast $(CFLAGS)
+LDFLAGS?= $(CFLAGS)
+ARFL?=
+
+OBJS =	gpfa.o setgpfa.o gpfa2f.o gpfa3f.o gpfa5f.o
+
+libgpfa.a: $(OBJS)
+	ar $(ARFL) rv libgpfa.a $(OBJS)
+	cp libgpfa.a ..
+
+.f.o:	
+	$(FC) $(FFLAGS) -c $<
+
+clean:
+	rm -f *.o *.a
