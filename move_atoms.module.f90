@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: move_atoms.module.f90,v 1.17.2.2 2006/03/07 07:36:45 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module move_atoms
 ! ------------------------------------------------------------------------------
@@ -54,7 +54,7 @@ module move_atoms
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), save, private :: RCSid = "$Id: move_atoms.module.f90,v 1.17.2.2 2006/03/07 07:36:45 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -273,7 +273,7 @@ contains
     use SelfCon, ONLY: new_SC_potl
     use GenBlas, ONLY: dot
     use force_module, ONLY: tot_force
-    use io_module, ONLY: write_atomic_positions
+    use io_module, ONLY: write_atomic_positions, pdb_template
 
     implicit none
 
@@ -301,7 +301,7 @@ contains
          write(*,fmt='(4x,"In safemin, initial energy is ",f15.10," ",a2)') en_conv*energy_in,en_units(energy_units)
     if(inode==ionode) write(*,fmt='(/4x,"Seeking bracketing triplet of points"/)')
     ! Unnecessary and over cautious !
-    !k0 = 0.000001_double
+    k0 = 0.000001_double
     !do i=1,ni_in_cell
     !   x_atom_cell(i) = start_x(i) + k0*direction(1,i)
     !   y_atom_cell(i) = start_y(i) + k0*direction(2,i)
@@ -366,7 +366,7 @@ contains
           x_atom_cell(i) = start_x(i) + k3*direction(1,i)
           y_atom_cell(i) = start_y(i) + k3*direction(2,i)
           z_atom_cell(i) = start_z(i) + k3*direction(3,i)
-!          write(*,*) 'Position: ',i,x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
+          !write(*,*) 'Position: ',i,x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
        end do
 !Update atom_coord : TM 27Aug2003
        call update_atom_coord
@@ -384,7 +384,7 @@ contains
        ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
        ! Write out atomic positions
        if(iprint_MD>2) then
-          call write_atomic_positions("UpdatedAtoms_tmp.dat")
+          call write_atomic_positions("UpdatedAtoms_tmp.dat",trim(pdb_template))
        end if
        if(flag_vary_basis) then
           call new_SC_potl( .false., sc_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
@@ -437,7 +437,7 @@ contains
     !   density = store_density + density
     !end if
     if(iprint_MD>2) then
-       call write_atomic_positions("UpdatedAtoms_tmp.dat")
+       call write_atomic_positions("UpdatedAtoms_tmp.dat",trim(pdb_template))
     end if
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
     if(flag_vary_basis) then
@@ -476,7 +476,7 @@ contains
        !   density = store_density + density
        !end if
        if(iprint_MD>2) then
-          call write_atomic_positions("UpdatedAtoms_tmp.dat")
+          call write_atomic_positions("UpdatedAtoms_tmp.dat",trim(pdb_template))
        end if
        ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
        if(flag_vary_basis) then
