@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: trans_module.f90,v 1.3.2.1 2006/03/31 13:08:11 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module trans_module
 ! ------------------------------------------------------------------------------
@@ -37,7 +37,7 @@ module trans_module
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: trans_module.f90,v 1.3.2.1 2006/03/31 13:08:11 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
 contains
 
@@ -311,6 +311,7 @@ contains
                   halo_rem%i_hbeg(jjjp)+iseq_b_rem(nn)-1,gcs%mx_mcover)
           endif
           ih=halo_rem%i_halo(halo_rem%i_hbeg(jjjp)+iseq_b_rem(nn)-1)
+          if(ih>halo_rem%ni_in_halo) call cq_abort("Overrun in halo index: ",ih,halo_rem%ni_in_halo)
           pairs(nr)%submat(nn)=halo_rem%ndimi(ip)*halo_rem%ndimj(ih)
           if((ip-1)*halo_rem%ni_in_halo+ih>prim%mx_iprim*halo_rem%mx_halo.OR. &
                (ip-1)*halo_rem%ni_in_halo+ih<1) then
