@@ -155,11 +155,11 @@ contains
     if ( pdb_format ) then
        pdb_template = fdf_string('General.PdbTemplate',atom_coord_file)
     else
-       pdb_template = fdf_string('General.PdbTemplate','')
+       pdb_template = fdf_string('General.PdbTemplate',' ')
     end if    
     def = 'make_prt.dat'
     part_coord_file = fdf_string('partitions',def)
-    call read_atomic_positions(atom_coord_file)
+    call read_atomic_positions(trim(atom_coord_file))
     ! By now, we'll have unit cell sizes and grid cutoff
     call find_grid
     if(diagon) call readDiagInfo
