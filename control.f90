@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: control.f90,v 1.12.2.2 2006/03/07 07:36:42 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module control
 ! ------------------------------------------------------------------------------
@@ -42,7 +42,7 @@ module control
   real(double) :: MDcgtol 
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: control.f90,v 1.12.2.2 2006/03/07 07:36:42 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -169,7 +169,7 @@ contains
     use GenComms, ONLY: gsum, myid
     use GenBlas, ONLY: dot
     use force_module, ONLY: tot_force
-    use io_module, ONLY: write_atomic_positions
+    use io_module, ONLY: write_atomic_positions, pdb_template
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
@@ -241,7 +241,7 @@ contains
              write(*,1) i,atom_coord(1,i),atom_coord(2,i),atom_coord(3,i)
           end do
        end if
-       call write_atomic_positions("UpdatedAtoms.dat")
+       call write_atomic_positions("UpdatedAtoms.dat",trim(pdb_template))
        ! Analyse forces
        g0 = dot(length,tot_force,1,tot_force,1)
        max = 0.0_double
