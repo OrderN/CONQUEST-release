@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: dimens.module.f90,v 1.8 2005/05/26 08:36:24 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module dimens
 ! ------------------------------------------------------------------------------
@@ -41,7 +41,7 @@ module dimens
   save
 
   ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id: dimens.module.f90,v 1.8 2005/05/26 08:36:24 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
   real(double) :: r_super_x, r_super_y, r_super_z, volume
   real(double) :: r_super_x_squared, r_super_y_squared, r_super_z_squared
@@ -184,13 +184,13 @@ contains
        r_s = r_c
        r_h = r_c 
     endif
-    !if(runtype /= 'static') then
-    !    r_s = 1.1_double * r_s
-    !    r_c = 1.1_double * r_c
-    !    r_h = 1.1_double * r_h
-    !   r_core = 1.1_double * r_core
-    !   rcut_dens = 1.1_double * rcut_dens
-    ! endif
+    if(runtype /= 'static') then
+        r_s = 1.1_double * r_s
+        r_c = 1.1_double * r_c
+        r_h = 1.1_double * r_h
+       r_core = 1.1_double * r_core
+       rcut_dens = 1.1_double * rcut_dens
+     endif
 
     ! Set other ranges
     r_core_squared = r_core * r_core
