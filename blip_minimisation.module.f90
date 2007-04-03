@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: blip_minimisation.module.f90,v 1.3.2.2 2006/03/07 07:36:41 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module blip_minimisation
 ! ------------------------------------------------------------------------------
@@ -27,7 +27,7 @@ module blip_minimisation
   implicit none
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: blip_minimisation.module.f90,v 1.3.2.2 2006/03/07 07:36:41 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -73,6 +73,7 @@ contains
 !!    Changed to use blip_gradient for get_blip_gradient and get_electron_gradient
 !!   11:30, 12/11/2004 dave 
 !!    Changed to use mx_at_prim from maxima
+!!   2007/03/29 08:20 dave and tsuyoshi
 !!  SOURCE
 !!
   subroutine vary_support( n_support_iterations, fixed_potential, vary_mu, number_of_bands, &
@@ -124,6 +125,7 @@ contains
          step, step_0, step_1, sum_0, sum_1, diff,  &
          total_energy_0, total_energy_test, &
          energy_in, en_dot_el, el_dot_el, kinetic_energy, e_dot_e
+    real(double), parameter :: gamma_max = 6.0_double !! TM 2007.03.29
 
     real(double), allocatable, dimension(:) :: search_direction
     real(double), allocatable, dimension(:) :: last_sd
@@ -152,17 +154,17 @@ contains
 
     length = coeff_array_size
 
-    search_direction = 0.0_double
-    Psd = 0.0_double
-    grad_coeff_array = 0.0_double
-    elec_grad_coeff_array = 0.0_double
+    search_direction = zero
+    Psd = zero
+    grad_coeff_array = zero
+    elec_grad_coeff_array = zero
 
     !     evaluate the action of H on the support functions, calculate
     !     the corresponding matrix elements in the 'support representation'
     !     and calculate the start-point energy
 
     total_energy_0 = total_energy_last
-    if(total_energy_last.eq.0.0_double) total_energy_0 = expected_reduction
+    if(total_energy_last.eq.zero) total_energy_0 = expected_reduction
     call my_barrier()
     total_energy_last = total_energy_0
 
@@ -252,6 +254,10 @@ contains
        else
           gamma = zero
        end if
+       if(gamma > gamma_max) then
+         if(inode==ionode) write(*,*) ' Warning: CG direction is reset! '
+         gamma=zero
+       endif
        if(inode==ionode.AND.iprint_basis>2) write(*,fmt='(6x,"Gamma is ",f20.12)') gamma
 
        ! Construct the actual search direction
@@ -269,7 +275,7 @@ contains
        end if
        sum_0 = dot( length, grad_coeff_array, 1, search_direction, 1 )
        call gsum(sum_0)
-       if(inode==ionode.AND.iprint_basis>3) write(*,fmt='(6x,"sum_0 is ")') sum_0
+       if(inode==ionode.AND.iprint_basis>3) write(*,fmt='(6x,"sum_0 is ",f20.12)') sum_0
        call my_barrier()
        ! minimise the energy (approximately) in this direction.
 
@@ -294,6 +300,7 @@ contains
 
        if(.NOT.diagon) call LNV_matrix_multiply(electrons, energy_in, &
             doK, doM1, doM2, dontM3, doM4, dontphi, dontE,matM12,0,matM4,0)
+       grad_coeff_array = zero   !! TSUYOSHI MIYAZAKI 2007 Mar 29
        call get_blip_gradient(inode, ionode)
 
        ! The density matrix is effectively idempotent during diagonalisation
@@ -400,7 +407,7 @@ contains
 
     ! Local variables
 
-    real(double), save :: dE = 0.0_double ! Use this to guess initial step ?
+    real(double), save :: dE = zero ! Use this to guess initial step ?
     real(double), allocatable, dimension(:) :: data_blip0
     real(double) :: k0, k1, k2, k3, kmin, lambda
     real(double) :: e0, e1, e2, e3, electrons, tmp, energy_out
@@ -413,9 +420,9 @@ contains
     call copy( lengthBlip, coefficient_array, 1, data_blip0, 1)
     ! We're assuming that we've ALREADY gone to a self-consistent ground state before arriving here
     iter = 1
-    k1 = 0.0_double
+    k1 = zero
     e1 = total_energy_0
-    k2 = 0.0_double
+    k2 = zero
     e2 = total_energy_0
     e3 = e2
     lambda = 2.0_double
@@ -426,7 +433,7 @@ contains
        write(*,fmt='(6x,"Bracketing")')
     end if
     do while(e3<=e2)
-       if (k2==0.0_double) then
+       if (k2==zero) then
           k3 = 0.001_double
           ! DRB 2004/03/03
           if(abs(dE)<very_small) then
@@ -464,7 +471,7 @@ contains
           k2 = k3
           e2 = e3
           iter=iter+1
-       else if(k2==0.0_double) then
+       else if(k2==zero) then
           dE = 0.5_double*dE
           e3 = e2
        endif
