@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: io_module.f90,v 1.12.2.3 2006/03/31 12:19:50 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module io_module
 ! ------------------------------------------------------------------------------
@@ -67,7 +67,7 @@ module io_module
   character(len=80) :: pdb_template
 
   ! RCS tag for object file identification 
-  character(len=80), save, private :: RCSid = "$Id: io_module.f90,v 1.12.2.3 2006/03/31 12:19:50 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
 contains
 
@@ -275,6 +275,7 @@ second:   do
                      10x,'a = ',f9.5,' b = ',f9.5,' c = ',f9.5,' a.u.')
              end select
           end do second
+          call io_close(lun)
        else
           if(iprint_init>2) write(*,*) 'Entering read_atomic_positions'
           call io_assign(lun)
@@ -354,7 +355,7 @@ second:   do
 !!   Added option for writing out pdb files
 !!  SOURCE
 !!
-  subroutine write_atomic_positions(filename)
+  subroutine write_atomic_positions(filename,pdb_temp)
 
     use datatypes
     use numbers, ONLY: zero
@@ -368,7 +369,7 @@ second:   do
     use units, ONLY: BohrToAng
 
     ! Passed variables
-    character(len=*) :: filename
+    character(len=*) :: filename, pdb_temp
 
     ! Local variables
     integer :: lun, i, spec, stat, template, ios, j
@@ -389,8 +390,11 @@ second:   do
           if ( ios > 0 ) call cq_abort('Cannot create file.')
           ! Open the template file
           call io_assign(template)
-          open (unit = template, file = pdb_template, status = 'old', iostat = ios)
-          if ( ios > 0 ) call cq_abort('Reading template file: file error')
+          open (unit = template, file = pdb_temp, status = 'old', iostat = ios)
+          if ( ios > 0 ) then
+             write(*,*) 'Filename was: |',pdb_temp,'|'
+             call cq_abort('Reading template file: file error ',ios)
+          end if
           ! Read the template file, reprint all lines that are not ATOM, HETATM, or CRYST1
           ! to the output file
           ! If the line contains coords/cell parameters, replace them by the calculated ones.
@@ -890,6 +894,7 @@ second:   do
     ! av_atom_part is not used at the moment 
     ! av_atom_part = 13
     min_atoms_part = 5
+    if(min_atoms_part>ni_in_cell) min_atoms_part = ni_in_cell
     max_atoms_part = 20
 
     maxpartscell = 0 ! max number of partitions in the unit cell
@@ -1671,16 +1676,17 @@ hc2:    do
      end do
 !    if(myid==0) then
 !       open(unit=76,file='make_prtSFC7.dat')
-!       write(76,*) parts_edge,parts_edge,parts_edge
-!       write(76,*) numprocs
+!       write(*,*) 'Partitions '
+!       write(*,*) parts_edge,parts_edge,parts_edge
+!       write(*,*) numprocs
 !       do i=1,numprocs
-!          write(76,*) i,parts%ng_on_node(i),parts%inode_beg(i)
+!          write(*,*) i,parts%ng_on_node(i),parts%inode_beg(i)
 !          do j=1,parts%ng_on_node(i)
-!             write(76,*) j,parts%ngnode(parts%inode_beg(i)+j-1), &
+!             write(*,*) j,parts%ngnode(parts%inode_beg(i)+j-1), &
 !                  parts%nm_group(parts%ngnode(parts%inode_beg(i)+j-1)), &
 !                  parts%icell_beg(parts%ngnode(parts%inode_beg(i)+j-1))
 !             do k=1,parts%nm_group(parts%ngnode(parts%inode_beg(i)+j-1))
-!                write(76,*) k,id_glob(parts%icell_beg(parts%ngnode(parts%inode_beg(i)+j-1))+k-1)
+!                write(*,*) k,id_glob(parts%icell_beg(parts%ngnode(parts%inode_beg(i)+j-1))+k-1)
 !             end do
 !          end do
 !       end do
