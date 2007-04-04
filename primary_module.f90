@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: primary_module.f90,v 1.3 2002/06/25 10:47:02 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module primary_module
 ! ------------------------------------------------------------------------------
@@ -48,7 +48,7 @@ module primary_module
   save
 
   ! Used for identifying object files (RCS ident command)
-  character(len=80) :: RCSid = "$Id: primary_module.f90,v 1.3 2002/06/25 10:47:02 drb Exp $"
+  character(len=80) :: RCSid = "$Id$"
 
   type(primary_set) :: domain ! Integration grid points
   type(primary_set) :: bundle ! Atoms
@@ -186,9 +186,9 @@ contains
        nx1=prim%nx_origin+prim%idisp_primx(ng)
        ny1=prim%ny_origin+prim%idisp_primy(ng)
        nz1=prim%nz_origin+prim%idisp_primz(ng)
-       xadd=dble(nx1-nx)*dcellx
-       yadd=dble(ny1-ny)*dcelly
-       zadd=dble(nz1-nz)*dcellz
+       xadd=real(nx1-nx,double)*dcellx
+       yadd=real(ny1-ny,double)*dcelly
+       zadd=real(nz1-nz,double)*dcellz
        prim%nm_nodgroup(ng)=groups%nm_group(ind_group)
        if(prim%nm_nodgroup(ng).gt.0) then
           do ni=1,prim%nm_nodgroup(ng)

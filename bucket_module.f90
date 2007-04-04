@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: bucket_module.f90,v 1.4.2.1 2006/03/31 12:10:11 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module bucket_module
 ! ------------------------------------------------------------------------------
@@ -44,7 +44,7 @@ module bucket_module
   implicit none
 
   ! RCS tag for object file identification 
-  character(len=80), save, private :: RCSid = "$Id: bucket_module.f90,v 1.4.2.1 2006/03/31 12:10:11 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
 !!****s* bucket_module/local_bucket *
 !!  NAME
@@ -290,7 +290,7 @@ contains
     implicit none
 
     ! Passed variables
-    type(local_bucket), intent(out) :: set
+    type(local_bucket), intent(inout) :: set
 
     ! Local variables
     integer :: stat
@@ -343,7 +343,7 @@ contains
     implicit none
 
     ! Passed variables
-    type(remote_bucket), intent(in) :: set
+    type(remote_bucket), intent(inout) :: set
 
     ! Local variables
     integer :: stat

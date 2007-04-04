@@ -133,6 +133,7 @@ contains
     real(double) :: HNL_fac, core_radius(:)
 
     ! Local variables
+    logical, external :: leqi
     integer :: max_extent, n, stat
     real(double) :: r_core, r_t
 
@@ -179,12 +180,12 @@ contains
 
     ! Set range of S matrix
     r_s = r_h
-    if(r_s>r_c) then
+    if(two*r_s>r_c) then
        if(inode==ionode) write(*,*) 'WARNING ! S range greater than L !'
-       r_s = r_c
-       r_h = r_c 
+       !r_s = r_c
+       !r_h = r_c 
     endif
-    if(runtype /= 'static') then
+    if(.NOT.leqi(runtype,'static')) then
         r_s = 1.1_double * r_s
         r_c = 1.1_double * r_c
         r_h = 1.1_double * r_h

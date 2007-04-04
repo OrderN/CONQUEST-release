@@ -919,9 +919,9 @@ contains
        nx1=prim%nx_origin+prim%idisp_primx(ng)
        ny1=prim%ny_origin+prim%idisp_primy(ng)
        nz1=prim%nz_origin+prim%idisp_primz(ng)
-       xadd=dble(nx1-nx)*dcellx
-       yadd=dble(ny1-ny)*dcelly
-       zadd=dble(nz1-nz)*dcellz
+       xadd=real(nx1-nx,double)*dcellx
+       yadd=real(ny1-ny,double)*dcelly
+       zadd=real(nz1-nz,double)*dcellz
        if(prim%nm_nodgroup(ng).gt.0) then
           do ni=1,prim%nm_nodgroup(ng)
              n_prim = n_prim + 1
@@ -1012,9 +1012,9 @@ contains
     allocate(nx_in_cover(set%ng_cover),ny_in_cover(set%ng_cover),nz_in_cover(set%ng_cover),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating nx_in_cover: ",set%ng_cover,stat)
     ! Conversion factors from unit cell lengths->groups
-    dcellx=rcellx/dble(groups%ngcellx)
-    dcelly=rcelly/dble(groups%ngcelly)
-    dcellz=rcellz/dble(groups%ngcellz)
+    dcellx=rcellx/real(groups%ngcellx,double)
+    dcelly=rcelly/real(groups%ngcelly,double)
+    dcellz=rcellz/real(groups%ngcellz,double)
     ! Used in calculating offsets of groups in CS
     nmodx=((groups%ngcellx+set%nspanlx-1)/groups%ngcellx)*groups%ngcellx
     nmody=((groups%ngcelly+set%nspanly-1)/groups%ngcelly)*groups%ngcelly

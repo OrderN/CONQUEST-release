@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: mult_module.f90,v 1.11.2.3 2006/03/31 12:28:40 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module mult_module
 ! ------------------------------------------------------------------------------
@@ -111,7 +111,7 @@ module mult_module
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: mult_module.f90,v 1.11.2.3 2006/03/31 12:28:40 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 !!***
 contains
 
@@ -1191,9 +1191,9 @@ contains
     ! Local variables
     integer :: i
 
-!%%!    ! Global transpose
-!%%!    if(PRESENT(gtran)) call deallocate_trans_rem(gtrans(gtran))
-!%%!    ! Matrices
+    ! Global transpose
+    if(PRESENT(gtran)) call deallocate_trans_rem(gtrans(gtran))
+    ! Matrices
     call deallocate_trans(ltrans(range))
     call deallocate_halo(halo(range))
     call deallocate_matrix(mat(:,range),prim%groups_on_node)

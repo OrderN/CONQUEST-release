@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: cover_module.f90,v 1.6 2003/10/22 15:06:25 mjg Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module cover_module
 ! ------------------------------------------------------------------------------
@@ -72,7 +72,7 @@ module cover_module
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: cover_module.f90,v 1.6 2003/10/22 15:06:25 mjg Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
 !!***
 contains
@@ -572,17 +572,17 @@ contains
        call cq_abort('convert_primary: primary set groups pointer not assoc')
     endif
     ! First, find sizes of groups in terms of unit cell
-    dx = rcellx/dble(prim%groups%ngcellx)   ! Check for a more portable way !
-    dy = rcelly/dble(prim%groups%ngcelly)
-    dz = rcellz/dble(prim%groups%ngcellz)
-    dcx = rcellx/dble(groups%ngcellx)
-    dcy = rcelly/dble(groups%ngcelly)
-    dcz = rcellz/dble(groups%ngcellz)
+    dx =  rcellx/real(prim%groups%ngcellx,double)   ! Check for a more portable way !
+    dy =  rcelly/real(prim%groups%ngcelly,double)
+    dz =  rcellz/real(prim%groups%ngcellz,double)
+    dcx = rcellx/real(groups%ngcellx,double)
+    dcy = rcelly/real(groups%ngcelly,double)
+    dcz = rcellz/real(groups%ngcellz,double)
     !    write(*,*) 'dx, dcx: ',dx,dy,dz,dcx,dcy,dcz
     ! Convert origin of prim to reals (add eps to prevent ambiguity)
-    ro_x = (dble(prim%nx_origin-1))*dx + eps 
-    ro_y = (dble(prim%ny_origin-1))*dy + eps
-    ro_z = (dble(prim%nz_origin-1))*dz + eps
+    ro_x = (real(prim%nx_origin-1,double))*dx + eps 
+    ro_y = (real(prim%ny_origin-1,double))*dy + eps
+    ro_z = (real(prim%nz_origin-1,double))*dz + eps
     ! Convert this to number of CS groups
     ro_cx = ro_x/dcx
     ro_cy = ro_y/dcy
@@ -595,9 +595,9 @@ contains
     set%ny_origin = ncy_o
     set%nz_origin = ncz_o
     ! Find CS origin in reals
-    ro_cx = (dble(ncx_o-1))*dcx
-    ro_cy = (dble(ncy_o-1))*dcy
-    ro_cz = (dble(ncz_o-1))*dcz
+    ro_cx = (real(ncx_o-1,double))*dcx
+    ro_cy = (real(ncy_o-1,double))*dcy
+    ro_cz = (real(ncz_o-1,double))*dcz
     !    write(*,*) 'Origin: ',ro_x,ro_y,ro_z,ro_cx,ro_cy,ro_cz
     ! Start by finding the left and right hand corners of the CS
     lhx = dx*(prim%nx_origin-1-prim%nleftx)-set%rcut

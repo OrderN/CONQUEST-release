@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: naba_blk_module.f90,v 1.2 2003/02/10 13:53:05 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module naba_blk_module
 ! ------------------------------------------------------------------------------
@@ -174,7 +174,7 @@ module naba_blk_module
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), save, private :: RCSid = "$Id: naba_blk_module.f90,v 1.2 2003/02/10 13:53:05 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
   !!***
 
 contains
@@ -268,7 +268,7 @@ contains
 
     implicit none
 
-    type(naba_blk_of_atm),intent(in)::set
+    type(naba_blk_of_atm),intent(inout)::set
     integer :: stat
 
     call reg_dealloc_mem(area_integn, 7*set%mx_iprim+3*set%mx_iprim*set%mx_naba_blk,type_int)
@@ -376,7 +376,7 @@ contains
 
     implicit none
 
-    type(naba_atm_of_blk),intent(in)::set
+    type(naba_atm_of_blk),intent(inout)::set
     integer :: stat
 
     call reg_dealloc_mem(area_integn,5*set%mx_iprim_blk+3*set%mx_part*set%mx_iprim_blk+&
@@ -469,7 +469,7 @@ contains
 
     implicit none
 
-    type(halo_atm_of_blk),intent(in)::set
+    type(halo_atm_of_blk),intent(inout)::set
     integer :: stat
 
     call reg_dealloc_mem(area_integn,set%mx_node+set%mx_part+2*set%mx_mcover,type_int)
@@ -602,7 +602,7 @@ contains
 
     implicit none
 
-    type(comm_in_BG),intent(in) :: set
+    type(comm_in_BG),intent(inout) :: set
     integer :: stat
 
     deallocate(set%ibeg_recv_call, set%table_pair, set%table_blk, &

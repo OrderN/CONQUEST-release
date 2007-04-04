@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: test_force_module.f90,v 1.5.2.3 2006/03/31 13:07:40 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module test_force_module
 ! ------------------------------------------------------------------------------
@@ -544,7 +544,7 @@ contains
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
     if(inode==ionode) write(*,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)'),numerical_force - analytic_force
+    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
@@ -728,13 +728,13 @@ contains
     analytic_force = 0.5_double*(Fnl1+Fnl0)
     if(inode==ionode) write(*,fmt='(2x,"Numerical NL Force: ",f20.12,/,2x,"Analytic NL Force : ",f20.12)') &
          numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)'),numerical_force - analytic_force
+    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     if(inode==ionode) write(*,fmt='(2x,"Final band energy: ",f20.12,/,2x,"Final HF force : ",f20.12)') E1, F1
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
     if(inode==ionode) write(*,fmt='(2x,"Numerical local Force: ",f20.12,/,2x,"Analytic local Force : ",f20.12)') &
          numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)'),numerical_force - analytic_force
+    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
@@ -869,7 +869,7 @@ contains
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
     if(inode==ionode) write(*,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)'),numerical_force - analytic_force
+    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
@@ -988,7 +988,7 @@ contains
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
     if(inode==ionode) write(*,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)'),numerical_force - analytic_force
+    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
@@ -1115,7 +1115,7 @@ contains
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
     if(inode==ionode) write(*,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)'),numerical_force - analytic_force
+    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
@@ -1264,7 +1264,7 @@ contains
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
     if(inode==ionode) write(*,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)'),numerical_force - analytic_force
+    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(flag_basis_set==blips) then
        if(TF_direction==1) then
@@ -1384,7 +1384,7 @@ contains
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
     if(inode==ionode) write(*,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)'),numerical_force - analytic_force
+    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
@@ -1508,7 +1508,7 @@ contains
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
     if(inode==ionode) write(*,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)'),numerical_force - analytic_force
+    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta

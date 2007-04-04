@@ -269,6 +269,8 @@ contains
 !!    Store max_L_iterations in global variable
 !!   13:34, 2006/07/09 ast
 !!    Added flag for functional
+!!   2007/04/02 07:53 dave
+!!    Changed defaults
 !!  TODO
 !!   Think about single node read and broadcast 10/05/2002 dave
 !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
@@ -363,7 +365,7 @@ contains
     end if
     ! Start fdf reading from the file Conquest_input
     call fdf_init('Conquest_input','fdf.out')
-    new_format = fdf_boolean('General.NewFormat',.false.)
+    new_format = fdf_boolean('General.NewFormat',.true.)
     if(new_format) then
        def = ' '
        iprint = fdf_integer('iprint',0)
@@ -393,7 +395,7 @@ contains
        ! Read run title
        titles = fdf_string('General.title',def)
        ! Is this a restart run ? **NB NOT AVAILABLE RIGHT NOW**
-       start = fdf_defined('General.start')
+       start = .true.!fdf_defined('General.start')
        if(start) then
           start_L = .true.
           start_blips = .true.  ! N.B. Original had option for a blip model - add this later
@@ -686,7 +688,7 @@ contains
        ! Read run title
        titles = fdf_string('title',def)
        ! Is this a restart run ? **NB NOT AVAILABLE RIGHT NOW**
-       start = fdf_defined('start')
+       start = .true.!fdf_defined('start')
        if(start) then
           start_L = .true.
           start_blips = .true.  ! N.B. Original had option for a blip model - add this later
@@ -797,7 +799,7 @@ contains
                 p=>digest(line)           ! Break the line up
                 if(search(p,'charge',j)) then               ! Charge
                    charge(i) = reals(p,1)
-                else if(search(p,'NumberOfSupports',j)) then            ! Mass
+                else if(search(p,'NumberOfSupports',j)) then            ! NSF
                    nsf_species(i) = integers(p,1)
                 else if(search(p,'SupportFunctionRange',j)) then            ! Support radius
                    RadiusSupport(i) = reals(p,1)
@@ -1326,7 +1328,7 @@ contains
 
     ! Local variables
     integer :: stat, iunit, i, j, k, matrix_size
-    real(double) :: a
+    real(double) :: a, sum
     ! k-point mesh type
     logical :: mp_mesh, done
     real(double), dimension(1:3) :: mp_shift
@@ -1404,6 +1406,7 @@ contains
           allocate(kk(3,nkp),wtk(nkp),STAT=stat)
           if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp)
           call reg_alloc_mem(area_general,4*nkp,type_dbl)
+          sum = zero
           ! Read k-points
           if(fdf_block('Diag.Kpoints',iunit))then
              do i=1,nkp
@@ -1412,7 +1415,9 @@ contains
                 kk(1,i) = two*pi*kk(1,i)/rcellx
                 kk(2,i) = two*pi*kk(2,i)/rcelly
                 kk(3,i) = two*pi*kk(3,i)/rcellz
+                sum = sum + wtk(i)
              end do
+             wtk = wtk/sum
           else ! Force gamma point dependence
              write(*,4)
              nkp = 1
@@ -1508,8 +1513,13 @@ contains
 
           ! How many k-points are now left? 
           nkp = 0
+          ! DRB fix 
+          sum = zero
           do i = 1, nkp_tmp
-             if (wtk_tmp(i) > very_small ) nkp = nkp + 1 
+             if (wtk_tmp(i) > very_small ) then
+                nkp = nkp + 1 
+                sum = sum + wtk_tmp(i)
+             end if
           end do
           ! Fill in the real k-point array
           allocate(kk(3,nkp),wtk(nkp),STAT=stat)
@@ -1522,7 +1532,8 @@ contains
                 kk(1,counter) = kk_tmp(1,i)
                 kk(2,counter) = kk_tmp(2,i)
                 kk(3,counter) = kk_tmp(3,i)
-                wtk(counter) = wtk_tmp(i)
+                !DRB fix to sum weights to one
+                wtk(counter) = wtk_tmp(i)/sum
              end if
           end do
           if(counter>nkp) call cq_abort("Error in kpt symmetry ! ",counter,nkp)
