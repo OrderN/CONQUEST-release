@@ -111,6 +111,8 @@ contains
 !!    Changed scan over core radii to be for ALL cases: we need this for local pseudos too
 !!   12:17, 2004/06/09 dave
 !!    Added scan for separate InvSrange to allow larger radii.
+!!   2007/04/17 09:42 dave
+!!    Removed rcut_dens
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -121,7 +123,6 @@ contains
     use matrix_data
     use GenComms, ONLY: cq_abort
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, ABINIT
-    use atomic_density, ONLY: rcut_dens
     use block_module, ONLY: in_block_x, in_block_y, in_block_z, n_pts_in_block, n_blocks
 
     implicit none
@@ -190,7 +191,6 @@ contains
         r_c = 1.1_double * r_c
         r_h = 1.1_double * r_h
        r_core = 1.1_double * r_core
-       rcut_dens = 1.1_double * rcut_dens
      endif
 
     ! Set other ranges

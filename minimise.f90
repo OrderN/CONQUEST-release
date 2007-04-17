@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: minimise.f90,v 1.9.2.2 2006/03/07 07:36:44 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module minimise
 ! ------------------------------------------------------------------------------
@@ -40,7 +40,7 @@ module minimise
   real(double) :: L_tolerance, sc_tolerance, energy_tolerance, expected_reduction
 
   ! RCS tag for object file identification
-  character(len=80), private :: RCSid = "$Id: minimise.f90,v 1.9.2.2 2006/03/07 07:36:44 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -78,6 +78,8 @@ contains
 !!    Changed flag_vary_blips to basis and added basis switch for outer loop minimiser
 !!   2006/11/13 18:20 dave
 !!    Added new flags to test for finding and/or writing forces
+!!   2007/04/17 09:34 dave
+!!    Passed no. of L iterations to vary_support
 !!  SOURCE
 !!
   subroutine get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, total_energy, find_forces, write_forces)
@@ -112,8 +114,9 @@ contains
     ! Now choose what we vary
     if(flag_vary_basis) then ! Vary everything: DM, charge density, basis set
        if(flag_basis_set==blips) then
-          call vary_support( n_support_iterations, fixed_potential, vary_mu, number_of_bands, &
-               L_tolerance, sc_tolerance, energy_tolerance, mu, total_energy, expected_reduction)
+          call vary_support( n_support_iterations, fixed_potential, vary_mu, n_L_iterations, &
+               number_of_bands, L_tolerance, sc_tolerance, energy_tolerance, mu, total_energy, &
+               expected_reduction)
        else if(flag_basis_set==PAOs) then
           if(UsePulay) then
              call pulay_min_pao( n_support_iterations, fixed_potential, vary_mu, n_L_iterations, &

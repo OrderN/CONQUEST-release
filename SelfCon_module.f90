@@ -1,4 +1,4 @@
-! $Id: SelfCon_module.f90,v 1.11.2.2 2006/03/07 07:36:40 drb Exp $
+! $Id$
 ! -----------------------------------------------------------
 ! Module SelfCon_module
 ! -----------------------------------------------------------
@@ -69,7 +69,7 @@ module SelfCon
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), save, private :: RCSid = "$Id: SelfCon_module.f90,v 1.11.2.2 2006/03/07 07:36:40 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
 !!***
 
@@ -107,6 +107,8 @@ contains
 !!    Removed fitting of C and beta to PosTan and called fit_coeff
 !!   10:37, 06/03/2003 drb 
 !!    Added call to simple linear mixing
+!!   2007/04/17 09:37 dave
+!!    Changed tolerance for non-self-consistent call to DMM minimisation
 !!  SOURCE
 !!
   subroutine new_SC_potl( record, self_tol, reset_L, fixed_potential, vary_mu, n_L_iterations, &
@@ -145,7 +147,7 @@ contains
     ! Build H matrix *with NL and KE*
     call get_H_matrix(.true., fixed_potential, electrons, density, maxngrid)
     if(.NOT.flag_self_consistent) then
-       call FindMinDM(n_L_iterations, number_of_bands, vary_mu, DMM_tol, mu, inode, ionode, reset_L, .false.)
+       call FindMinDM(n_L_iterations, number_of_bands, vary_mu, L_tol, mu, inode, ionode, reset_L, .false.)
        call get_energy(total_energy)
        return
     end if

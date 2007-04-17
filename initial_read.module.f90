@@ -434,7 +434,7 @@ contains
        end if
        ! Radii - again, astonishingly badly named
        r_h = fdf_double('hamiltonian_range',zero)
-       r_c = fdf_double('L_range',zero)
+       r_c = fdf_double('L_range',one)
        r_t = fdf_double('InvSRange',r_h)
        HNL_fac = fdf_double('non_local_factor',zero)
        ! Exponents for initial gaussian blips
@@ -511,6 +511,7 @@ contains
                 else if(search(p,'SupportFunctionRange',j)) then            ! Support radius
                    RadiusSupport(i) = reals(p,1)
                    if(InvSRange(i)<very_small) InvSRange(i) = RadiusSupport(i)
+                   !if(r_c<two*RadiusSupport(i)) r_c = two*RadiusSupport(i)
                 else if(search(p,'InvSRange',j)) then            ! Support radius
                    InvSRange(i) = reals(p,1)
                 else if(search(p,'NonLocalFactor',j)) then            ! Full Ham radius
@@ -581,9 +582,9 @@ contains
        UseGemm = fdf_boolean('MM.UseGemm',.false.)
        del_k = fdf_double('Basis.pao_kspace_ol_gridspace',0.1_double)
        kcut = fdf_double('Basis.pao_kspace_ol_cutoff', 1000.0_double)
-       flag_paos_atoms_in_cell = fdf_boolean('BasisSet.PAOs_StoreAllAtomsInCell',.true.)
+       flag_paos_atoms_in_cell = fdf_boolean('Basis.PAOs_StoreAllAtomsInCell',.true.)
        read_option = fdf_boolean('Basis.read_pao_coeffs',.false.)
-       symmetry_breaking = fdf_boolean('BasisSet.SymmetryBreaking',.false.)
+       symmetry_breaking = fdf_boolean('Basis.SymmetryBreaking',.false.)
        support_pao_file = fdf_string('Basis.support_pao_file','supp_pao.dat')
        pao_info_file = fdf_string('Basis.pao_info_file','pao.dat')
        pao_norm_flag = fdf_integer('Basis.pao_norm_flag',0)
@@ -658,7 +659,7 @@ contains
        end if
        many_processors = fdf_boolean('General.ManyProcessors',.false.)
        global_maxatomspart = fdf_integer('General.MaxAtomsPartition', 34)
-       append_coords = fdf_boolean('MD.AppendCoords',.true.)
+       append_coords = fdf_boolean('AtomMove.AppendCoords',.true.)
     else
        def = ' '
        iprint = fdf_integer('iprint',0)
@@ -727,7 +728,7 @@ contains
        end if
        ! Radii - again, astonishingly badly named
        r_h = fdf_double('hamiltonian_range',zero)
-       r_c = fdf_double('L_range',zero)
+       r_c = fdf_double('L_range',one)
        r_t = fdf_double('InvSRange',r_h)
        HNL_fac = fdf_double('non_local_factor',zero)
        ! Exponents for initial gaussian blips
@@ -804,7 +805,7 @@ contains
                 else if(search(p,'SupportFunctionRange',j)) then            ! Support radius
                    RadiusSupport(i) = reals(p,1)
                    if(InvSRange(i)<very_small) InvSRange(i) = RadiusSupport(i)
-                   if(r_c<two*RadiusSupport(i)) r_c = two*RadiusSupport(i)
+                   !if(r_c<two*RadiusSupport(i)) r_c = two*RadiusSupport(i)
                 else if(search(p,'InvSRange',j)) then            ! Support radius
                    InvSRange(i) = reals(p,1)
                 else if(search(p,'NonLocalFactor',j)) then            ! Support radius
@@ -1192,9 +1193,9 @@ contains
 3   format(/10x,'This job was run on ',a4,'/',a2,'/',a2,' at ',a2,':',a2,/)
 
 4   format(/10x,'The simulation box has the following dimensions',/, &
-         10x,'a = ',f8.5,' b = ',f8.5,' c = ',f8.5,' 'a2)
+         10x,'a = ',f11.5,' b = ',f11.5,' c = ',f11.5,' 'a2)
 
-5   format(/10x,'The simulation box contains ',i5,' atoms.')
+5   format(/10x,'The simulation box contains ',i7,' atoms.')
 
 6   format(/10x,'The number of bands is ',f8.2)
 

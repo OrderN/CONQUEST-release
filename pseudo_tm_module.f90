@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: pseudo_tm_module.f90,v 1.12.2.1 2006/03/07 07:36:45 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module pseudo_tm_module
 ! ------------------------------------------------------------------------------
@@ -68,7 +68,7 @@ module pseudo_tm_module
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: pseudo_tm_module.f90,v 1.12.2.1 2006/03/07 07:36:45 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
   !!***
 
 contains
@@ -433,7 +433,11 @@ contains
     end do
     !allocates allocatable arrays
     allocate(chlocal_density(maxngrid), STAT=stat)
-    allocate(coulomb_potential(maxngrid), STAT=stat)
+    if(stat/=0) call cq_abort('set_ps: alloc c_d ', stat)
+    if(.NOT.local_charge) then
+       allocate(coulomb_potential(maxngrid), STAT=stat)
+       if(stat/=0) call cq_abort('set_ps: alloc c_p ', stat)
+    end if
     if(stat/=0) call cq_abort('set_ps: alloc c_d ', stat)
     chlocal_density   = zero
 
@@ -774,6 +778,7 @@ contains
        call axpy( n_my_grid_points, -one, coulomb_potential, 1, &
             pseudopotential, 1 )
        deallocate(coulomb_potential, STAT=stat)
+       if(stat/=0) call cq_abort('set_ps: dealloc c_p ', stat)
     end if
 
     !deallocates allocatable arrays

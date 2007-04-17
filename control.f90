@@ -274,7 +274,7 @@ contains
     deallocate(cg,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating cg in control: ",ni_in_cell,stat)
     call reg_dealloc_mem(area_general,6*ni_in_cell,type_dbl)
-1   format(4x,'Atom ',i4,' Position ',3f15.8)
+1   format(4x,'Atom ',i8,' Position ',3f15.8)
 2   format(4x,'Welcome to cg_run. Doing ',i4,' steps with tolerance of ',f8.4,' ev/A')
 3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
 4   format(4x,'Energy change: ',f15.8,' ',a2)

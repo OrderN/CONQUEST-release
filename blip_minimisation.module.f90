@@ -74,10 +74,13 @@ contains
 !!   11:30, 12/11/2004 dave 
 !!    Changed to use mx_at_prim from maxima
 !!   2007/03/29 08:20 dave and tsuyoshi
+!!   2007/04/17 09:36 dave
+!!    Added n_L_iterations
 !!  SOURCE
 !!
-  subroutine vary_support( n_support_iterations, fixed_potential, vary_mu, number_of_bands, &
-       L_tolerance, sc_tolerance, energy_tolerance, mu, total_energy_last, expected_reduction)
+  subroutine vary_support( n_support_iterations, fixed_potential, vary_mu, n_L_iterations, &
+       number_of_bands, L_tolerance, sc_tolerance, energy_tolerance, mu, total_energy_last, &
+       expected_reduction)
 
     use datatypes
     use logicals
@@ -103,7 +106,7 @@ contains
     !     Shared variables
 
     logical :: vary_mu, fixed_potential
-    integer :: n_cg_L_iterations
+    integer :: n_L_iterations
     real(double) ::  number_of_bands, mu
 
     integer :: n_support_iterations
@@ -281,13 +284,13 @@ contains
 
        if(inode==ionode.AND.iprint_basis>2) write(*,fmt='(6x,"Calling minimise")')
        call my_barrier()
-       call line_minimise_support( search_direction, length, fixed_potential, vary_mu, n_cg_L_iterations, &
+       call line_minimise_support( search_direction, length, fixed_potential, vary_mu, n_L_iterations, &
             number_of_bands, tolerance, con_tolerance, mu, total_energy_0, expected_reduction, last_step)
        if(inode==ionode.AND.iprint_basis>2) write(*,'(6x,"Returned !")')
        call dump_blip_coeffs(coefficient_array,coeff_array_size,inode)
        ! Find change in energy for convergence
        diff = total_energy_last - total_energy_0
-       if (dabs(diff/total_energy_0) .le. energy_tolerance) then
+       if (abs(diff/total_energy_0) .le. energy_tolerance) then
           if (inode==ionode) write(6,18) total_energy_0*en_conv,en_units(energy_units)
           convergence_flag = .true.
           total_energy_last = total_energy_0
@@ -301,6 +304,7 @@ contains
        if(.NOT.diagon) call LNV_matrix_multiply(electrons, energy_in, &
             doK, doM1, doM2, dontM3, doM4, dontphi, dontE,matM12,0,matM4,0)
        grad_coeff_array = zero   !! TSUYOSHI MIYAZAKI 2007 Mar 29
+       elec_grad_coeff_array = zero   !! TSUYOSHI MIYAZAKI 2007 Mar 29
        call get_blip_gradient(inode, ionode)
 
        ! The density matrix is effectively idempotent during diagonalisation
