@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: DMMinModule.f90,v 1.10.2.2 2006/03/07 07:36:39 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module DMMin
 ! ------------------------------------------------------------------------------
@@ -53,7 +53,7 @@ module DMMin
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), save, private :: RCSid = "$Id: DMMinModule.f90,v 1.10.2.2 2006/03/07 07:36:39 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -867,8 +867,8 @@ contains
     if (inode.eq.ionode.and.output_level>=2) write(*,*) 'g0, step1 are ',g0,step1
     ! if we are within 0.1% of the correct number, linear will do.
     !if (abs((electrons_0 - electrons)/electrons_0)<1e-6_double) then
-    if (abs(electrons_0 - electrons)<1e-4_double) then
-       !call matrix_sum(one,matL,step1,matphi)
+    if (abs(electrons_0 - electrons)<1e-9_double) then
+       call matrix_sum(one,matL,step1,matphi)
        !call LNV_matrix_multiply(electrons2,energy, &
        !     dontK, dontM1, dontM2, dontM3, dontM4, dophi, dontE,0,0,0,matphi)
        !if (inode .eq. ionode.and.output_level>=2) write(*,2) electrons2
