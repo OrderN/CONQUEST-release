@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: global_module.f90,v 1.12.2.1 2006/03/31 12:18:00 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module global_module
 ! ------------------------------------------------------------------------------
@@ -43,6 +43,8 @@
 !!    Flag for selecting functional and string for its description
 !!   2007/03/23 17:16 dave
 !!    Added new variables for automatic partitioning
+!!   2007/04/18 17:26 dave
+!!    Added flag for block assignment
 !!  SOURCE
 !!
 module global_module
@@ -53,7 +55,7 @@ module global_module
   implicit none
 
   ! RCS tag for object file identification 
-  character(len=80), save, private :: RCSid = "$Id: global_module.f90,v 1.12.2.1 2006/03/31 12:18:00 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
   integer :: iprint                 ! Level of output
   integer, allocatable, dimension(:) :: id_glob      ! global label of atom in sim cell (CC)
@@ -91,6 +93,9 @@ module global_module
   logical :: flag_read_blocks ! Do we read make_blk.prt or raster ?
   logical :: flag_test_forces
   logical :: UseGemm
+
+  ! How should blocks be assigned ? See block_module.f90
+  integer :: flag_assign_blocks
 
   ! Number of L iterations
   integer :: max_L_iterations

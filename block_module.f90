@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: block_module.f90,v 1.4 2005/08/05 07:20:11 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module block_module
 ! ------------------------------------------------------------------------------
@@ -56,13 +56,18 @@ module block_module
   save
 
   ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id: block_module.f90,v 1.4 2005/08/05 07:20:11 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
   integer :: nx_in_block,ny_in_block,nz_in_block
   integer :: n_pts_in_block
   integer :: n_blocks
   integer :: in_block_x,in_block_y,in_block_z
   !real(double) :: grid_point_volume
+
+  integer, parameter :: blocks_file    = 0
+  integer, parameter :: blocks_raster  = 1
+  integer, parameter :: blocks_hilbert = 2
+
 !!***
 
 contains
@@ -190,6 +195,8 @@ contains
 !!    Incorporated into block_module
 !!   2006/10/10 16:59 dave
 !!    in_block_ variables now part of module, so removed from argument list
+!!   2007/04/18 17:26 dave
+!!    Added block assignment following partitions and choice flag
 !!  SOURCE
 !!
   subroutine set_blocks_from_old(n_grid_x, n_grid_y, n_grid_z)
@@ -197,9 +204,9 @@ contains
     !Modules and Dummy Arguments
     use datatypes
     use numbers
-    use global_module, ONLY: numprocs, iprint_index
+    use global_module, ONLY: numprocs, iprint_index, flag_assign_blocks
     use construct_module, ONLY: init_group
-    use group_module,  ONLY: blocks, allocate_group_set, make_cc2
+    use group_module,  ONLY: blocks, allocate_group_set, make_cc2, parts
     use maxima_module, ONLY: maxngrid, maxblocks
     use GenComms, ONLY: inode, ionode, cq_abort
 
@@ -214,8 +221,10 @@ contains
          n_add_x, n_add_y, n_add_z, nx, ny, nz, icount
 
 
-    integer:: mx_gedge_tmp,ind_block,nnd, maxtmp
-    integer:: iblock
+    integer:: mx_gedge_tmp,ind_block,nnd, maxtmp, i, cx, cy, cz, cc
+    integer:: iblock, minblocks
+
+    integer, dimension(:), allocatable :: blocks_per_proc, proc_block, proc_which_block
 
     !--- find numbers of blocks in each direction
     n_block_x = n_grid_x/in_block_x
@@ -230,88 +239,167 @@ contains
     !-- set variables in block_module
     call set_block_module
     mx_gedge_tmp=max(n_block_x,n_block_y,n_block_z)
-    !--- distribution of blocks over nodes:
-    !--- the first  n_first  nodes each have  n_per_proc + 1  blocks;
-    !--- the remaining  numprocs - n_first  nodes each have  n_per_proc  blocks.
-    n_all_blocks = n_block_x * n_block_y * n_block_z
-    n_per_proc = n_all_blocks / numprocs
-    if(n_per_proc==0) call cq_abort("There must be at least one block per node")
-    n_first = n_all_blocks - n_per_proc * numprocs
-    if(inode==ionode.AND.iprint_index>0) then
-       if (n_first.ne.0) then
-          write(*,fmt='(10x,"The first ",i5," processors each have ",i5," blocks"/&
-               &10x,"The remaining ",i5," processors each have ",i5," blocks.")') &
-               n_first,n_per_proc+1,numprocs-n_first,n_per_proc
-       else
-          write(*,fmt='(10x,"All processors have ",i5," blocks.")') n_per_proc
-       end if
-    endif
-    ! Define maximum number of grid points on any processor for FFTs
-    maxblocks = n_per_proc+1
-    maxngrid = n_pts_in_block * (n_per_proc+1)
-    ! FFT check
-    maxtmp = n_grid_x * (n_grid_y*n_grid_z/numprocs + 1)
-    if(maxtmp>maxngrid) maxngrid = maxtmp
-    maxtmp = n_grid_y * (n_grid_z*n_grid_x/numprocs + 1)
-    if(maxtmp>maxngrid) maxngrid = maxtmp
-    maxtmp = n_grid_z * (n_grid_x*n_grid_y/numprocs + 1)
-    if(maxtmp>maxngrid) maxngrid = maxtmp
-    call init_group(blocks, maxblocks, mx_gedge_tmp, n_all_blocks, n_pts_in_block, numprocs)
-
-    !--- number of blocks on current node
-    blocks%ng_on_node(:)=0
-    do nnd=1, numprocs
-       if(nnd .gt. n_first) then
-          blocks%ng_on_node(nnd) = n_per_proc
-       else
-          blocks%ng_on_node(nnd) = n_per_proc + 1
+    if(flag_assign_blocks==blocks_raster) then
+       !--- distribution of blocks over nodes:
+       !--- the first  n_first  nodes each have  n_per_proc + 1  blocks;
+       !--- the remaining  numprocs - n_first  nodes each have  n_per_proc  blocks.
+       n_all_blocks = n_block_x * n_block_y * n_block_z
+       n_per_proc = n_all_blocks / numprocs
+       if(n_per_proc==0) call cq_abort("There must be at least one block per node")
+       n_first = n_all_blocks - n_per_proc * numprocs
+       if(inode==ionode.AND.iprint_index>0) then
+          if (n_first.ne.0) then
+             write(*,fmt='(10x,"The first ",i5," processors each have ",i5," blocks"/&
+                  &10x,"The remaining ",i5," processors each have ",i5," blocks.")') &
+                  n_first,n_per_proc+1,numprocs-n_first,n_per_proc
+          else
+             write(*,fmt='(10x,"All processors have ",i5," blocks.")') n_per_proc
+          end if
        endif
-    enddo
-    !--- index of first block on current node
-    blocks%inode_beg=0
-    do nnd=1, numprocs
-       if(nnd == 1) then
-          blocks%inode_beg(nnd)=1
-       else
-          blocks%inode_beg(nnd)= &
-               blocks%inode_beg(nnd-1)+blocks%ng_on_node(nnd-1)
-       endif
-    enddo
-    !--- make list of indices of blocks on current node
-    blocks%ngnode(:)=0
-    blocks%inv_ngnode(:)=0
+       ! Define maximum number of grid points on any processor for FFTs
+       maxblocks = n_per_proc+1
+       maxngrid = n_pts_in_block * (n_per_proc+1)
+       ! FFT check
+       maxtmp = n_grid_x * (n_grid_y*n_grid_z/numprocs + 1)
+       if(maxtmp>maxngrid) maxngrid = maxtmp
+       maxtmp = n_grid_y * (n_grid_z*n_grid_x/numprocs + 1)
+       if(maxtmp>maxngrid) maxngrid = maxtmp
+       maxtmp = n_grid_z * (n_grid_x*n_grid_y/numprocs + 1)
+       if(maxtmp>maxngrid) maxngrid = maxtmp
+       call init_group(blocks, maxblocks, mx_gedge_tmp, n_all_blocks, n_pts_in_block, numprocs)
 
-    nfb_x = 1 ; nfb_y = 1 ; nfb_z = 1
-    nc_x = 1  ; nc_y = 1  ; nc_z = 1
-    icount=0
+       !--- number of blocks on current node
+       blocks%ng_on_node(:)=0
+       do nnd=1, numprocs
+          if(nnd .gt. n_first) then
+             blocks%ng_on_node(nnd) = n_per_proc
+          else
+             blocks%ng_on_node(nnd) = n_per_proc + 1
+          endif
+       enddo
+       !--- index of first block on current node
+       blocks%inode_beg=0
+       do nnd=1, numprocs
+          if(nnd == 1) then
+             blocks%inode_beg(nnd)=1
+          else
+             blocks%inode_beg(nnd)= &
+                  blocks%inode_beg(nnd-1)+blocks%ng_on_node(nnd-1)
+          endif
+       enddo
+       !--- make list of indices of blocks on current node
+       blocks%ngnode(:)=0
+       blocks%inv_ngnode(:)=0
 
-    n_add_z = 0
-    do nz = 1, n_block_z
-       nc_z = nc_z + n_add_z
-       n_add_z = nfb_z
+       nfb_x = 1 ; nfb_y = 1 ; nfb_z = 1
+       nc_x = 1  ; nc_y = 1  ; nc_z = 1
+       icount=0
 
-       n_add_y = 0
-       do ny = 1, n_block_y
-          nc_y = nc_y + n_add_y
-          n_add_y = nfb_y
+       n_add_z = 0
+       do nz = 1, n_block_z
+          nc_z = nc_z + n_add_z
+          n_add_z = nfb_z
 
-          n_add_x = 0
-          do nx = 1, n_block_x
-             nc_x = nc_x + n_add_x
-             n_add_x = nfb_x
-             icount=icount+1
-             ind_block = nc_z+(nc_y-1)*n_block_z &
-                  +(nc_x-1)*n_block_y*n_block_z
+          n_add_y = 0
+          do ny = 1, n_block_y
+             nc_y = nc_y + n_add_y
+             n_add_y = nfb_y
 
-             blocks%ngnode(icount) = ind_block
-             blocks%inv_ngnode(ind_block)=icount
+             n_add_x = 0
+             do nx = 1, n_block_x
+                nc_x = nc_x + n_add_x
+                n_add_x = nfb_x
+                icount=icount+1
+                ind_block = nc_z+(nc_y-1)*n_block_z &
+                     +(nc_x-1)*n_block_y*n_block_z
+
+                blocks%ngnode(icount) = ind_block
+                blocks%inv_ngnode(ind_block)=icount
+             enddo
+             nfb_x = -nfb_x
+
           enddo
-          nfb_x = -nfb_x
+          nfb_y = -nfb_y
 
        enddo
-       nfb_y = -nfb_y
-
-    enddo
+    else if(flag_assign_blocks==blocks_hilbert) then
+       n_all_blocks = n_block_x * n_block_y * n_block_z
+       allocate(blocks_per_proc(numprocs),proc_block(n_all_blocks),proc_which_block(n_all_blocks))
+       ! This counts blocks per processor
+       blocks_per_proc = 0
+       ! This stores the processor for each block
+       proc_block = 0
+       ! This stores WHICH block on the processor each block is
+       proc_which_block = 0
+       maxblocks = 0
+       i=0
+       ! Work out max blocks on a processor: loop over blocks
+       do nz = 1, n_block_z
+          do ny = 1, n_block_y
+             do nx = 1, n_block_x
+                i = i+1
+                ! Convert centre of block into a partition index
+                cx = floor(parts%ngcellx*(real(nx,double)-0.5)/real(n_block_x,double))
+                cy = floor(parts%ngcelly*(real(ny,double)-0.5)/real(n_block_y,double))
+                cz = floor(parts%ngcellz*(real(nz,double)-0.5)/real(n_block_z,double))
+                cc = 1+cz+parts%ngcellz*(cy+parts%ngcelly*cx)
+                proc_block(i) = parts%i_cc2node(cc)
+                blocks_per_proc(proc_block(i)) = blocks_per_proc(proc_block(i))+1
+                if(blocks_per_proc(proc_block(i))>maxblocks) maxblocks = blocks_per_proc(proc_block(i))
+                proc_which_block(i) = blocks_per_proc(proc_block(i))
+                !write(*,*) 'Block: ',i,proc_block(i),proc_which_block(i)
+             end do
+          end do
+       end do
+       ! Define maximum number of grid points on any processor for FFTs
+       maxngrid = n_pts_in_block * maxblocks
+       ! FFT check
+       maxtmp = n_grid_x * (n_grid_y*n_grid_z/numprocs + 1)
+       if(maxtmp>maxngrid) maxngrid = maxtmp
+       maxtmp = n_grid_y * (n_grid_z*n_grid_x/numprocs + 1)
+       if(maxtmp>maxngrid) maxngrid = maxtmp
+       maxtmp = n_grid_z * (n_grid_x*n_grid_y/numprocs + 1)
+       if(maxtmp>maxngrid) maxngrid = maxtmp
+       call init_group(blocks, maxblocks, mx_gedge_tmp, n_all_blocks, n_pts_in_block, numprocs)
+       !--- number of blocks on current node
+       blocks%ng_on_node(:)=0
+       minblocks = 1e8
+       do nnd=1, numprocs
+          blocks%ng_on_node(nnd) = blocks_per_proc(nnd)
+          if(blocks_per_proc(nnd)<minblocks) minblocks = blocks_per_proc(nnd)
+       enddo
+       if(inode==ionode.AND.iprint_index>0) then
+          write(*,fmt='(10x,"Minimum blocs/proc is ",i5,". Maximum blocs/proc is ",i5)') minblocks, maxblocks
+       end if
+       !--- index of first block on current node
+       blocks%inode_beg=0
+       do nnd=1, numprocs
+          if(nnd == 1) then
+             blocks%inode_beg(nnd)=1
+          else
+             blocks%inode_beg(nnd)= &
+                  blocks%inode_beg(nnd-1)+blocks%ng_on_node(nnd-1)
+          endif
+       enddo
+       ! ngnode gives the CC label of block as we loop over them in NODE ORDER
+       ! Here we loop over blocks in CC order and work out the node order label
+       i=0
+       do nz = 1, n_block_z
+          do ny = 1, n_block_y
+             do nx = 1, n_block_x
+                i = i+1
+                nnd = proc_block(i)
+                icount = blocks%inode_beg(nnd) + proc_which_block(i)-1
+                ind_block = nz+blocks%ngcellz*(ny-1+blocks%ngcelly*(nx-1))
+                blocks%ngnode(icount) = ind_block
+                blocks%inv_ngnode(ind_block)=icount
+             end do
+          end do
+       end do
+       deallocate(blocks_per_proc,proc_block,proc_which_block)
+    else 
+       call cq_abort("Unknown block-assignment mode: ",flag_assign_blocks)
+    end if
     !--- member information     -- SHOULD BE MEANINGLESS
     blocks%nm_group(:)=0
     blocks%icell_beg(:)=0

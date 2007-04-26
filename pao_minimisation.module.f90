@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: pao_minimisation.module.f90,v 1.2.2.3 2006/03/31 13:05:01 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module pao_minimisation
 ! ------------------------------------------------------------------------------
@@ -39,7 +39,7 @@ module pao_minimisation
   !real(double), save  :: PAOprecond2(npao)
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: pao_minimisation.module.f90,v 1.2.2.3 2006/03/31 13:05:01 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -83,6 +83,8 @@ contains
 !!    Included in pao_minimisation
 !!   08:29, 2003/04/03 dave
 !!    Changed to use pao_gradient for get_pao_gradient and get_electron_gradient
+!!   2007/04/26 12:08 dave
+!!    Changed TestPAOGrads to TestBasisGrads (to allow both blip and PAO testing with same flag)
 !!  SOURCE
 !!
   subroutine vary_pao( n_support_iterations, fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -103,7 +105,7 @@ contains
     use make_rad_tables, ONLY: writeout_support_functions
     use support_spec_format, ONLY: supports_on_atom, coeff_array_size, grad_coeff_array, elec_grad_coeff_array,&
          support_gradient, support_elec_gradient, flag_paos_atoms_in_cell, &
-         TestPAOGrads, TestTot, TestBoth, TestS, TestH
+         TestBasisGrads, TestTot, TestBoth, TestS, TestH
     use DMMin, ONLY: FindMinDM
     use energy, ONLY: get_energy, kinetic_energy, nl_energy, band_energy
     use PAO_grid_transform_module, ONLY: PAO_to_grid
@@ -148,7 +150,7 @@ contains
 
     reset_L = .true.
     allocate(search_direction(coeff_array_size),last_sd(coeff_array_size), Psd(coeff_array_size))
-    if(TestPAOGrads) then
+    if(TestBasisGrads) then
        allocate(grad_copy(coeff_array_size),grad_copy_dH(coeff_array_size),grad_copy_dS(coeff_array_size))
     end if
     ! Set tolerances for self-consistency and L minimisation
@@ -174,7 +176,7 @@ contains
     grad_coeff_array = zero
     elec_grad_coeff_array = zero
     call build_PAO_coeff_grad(full)
-    if(TestPAOGrads) then
+    if(TestBasisGrads) then
        grad_copy = grad_coeff_array
        do i = 1,size(grad_coeff_array)
           write(20,*) grad_coeff_array(i)
@@ -310,7 +312,7 @@ contains
           enddo
        enddo
        deallocate(grad_copy,grad_copy_dH,grad_copy_dS)
-    end if ! TestPAOGrads
+    end if ! TestBasisGrads
     ! What about preconditioning ?       
     call my_barrier()
     ! Now we have a basic gradient, so loop

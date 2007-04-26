@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: support_spec_format.f90,v 1.2 2005/05/26 08:36:28 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module support_spec_format
 ! ------------------------------------------------------------------------------
@@ -58,7 +58,7 @@ module support_spec_format
   logical :: flag_paos_atoms_in_cell ! Do we store coefficients for ALL atoms in cell, or only in primary set
   integer :: mx_pao_coeff_atoms ! max atoms coefficients stored for
   logical :: read_option, symmetry_breaking
-  logical :: TestPAOGrads, TestTot, TestBoth, TestS, TestH
+  logical :: TestBasisGrads, TestTot, TestBoth, TestS, TestH
 
   character(len=80) :: support_pao_file
   
@@ -77,7 +77,7 @@ module support_spec_format
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: support_spec_format.f90,v 1.2 2005/05/26 08:36:28 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
 !!***
 

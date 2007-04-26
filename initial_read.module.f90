@@ -151,14 +151,14 @@ contains
     ! Initialise group data for partitions and read in partitions and atoms
     call my_barrier()
     def = ' '
-    atom_coord_file = fdf_string('coordinates',def)
+    atom_coord_file = fdf_string('IO.Coordinates',def)
     if ( pdb_format ) then
-       pdb_template = fdf_string('General.PdbTemplate',atom_coord_file)
+       pdb_template = fdf_string('IO.PdbTemplate',atom_coord_file)
     else
-       pdb_template = fdf_string('General.PdbTemplate',' ')
+       pdb_template = fdf_string('IO.PdbTemplate',' ')
     end if    
     def = 'make_prt.dat'
-    part_coord_file = fdf_string('partitions',def)
+    part_coord_file = fdf_string('IO.Partitions',def)
     call read_atomic_positions(trim(atom_coord_file))
     ! By now, we'll have unit cell sizes and grid cutoff
     call find_grid
@@ -291,10 +291,10 @@ contains
          functional_lda_pw92, functional_gga_pbe96, &
          iprint_init, iprint_mat, iprint_ops, iprint_DM, iprint_SC, iprint_minE, &
          iprint_MD, iprint_index, iprint_gen, iprint_pseudo, iprint_basis, iprint_intgn, area_general, &
-         global_maxatomspart, load_balance, many_processors
+         global_maxatomspart, load_balance, many_processors, flag_assign_blocks
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff, &
          n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport, NonLocalFactor, InvSRange, min_blip_sp
-    use block_module, ONLY: in_block_x, in_block_y, in_block_z
+    use block_module, ONLY: in_block_x, in_block_y, in_block_z, blocks_raster, blocks_hilbert
     use species_module, ONLY: species_label, charge, mass, n_species, &
          species, ps_file, ch_file, phi_file, nsf_species, nlpf_species, npao_species, &
          non_local_species
@@ -316,7 +316,7 @@ contains
          energy_tolerance, expected_reduction
     use pao_format, ONLY: kcut, del_k
     use support_spec_format, ONLY : flag_paos_atoms_in_cell, read_option, symmetry_breaking, support_pao_file, &
-         TestPAOGrads, TestTot, TestBoth, TestS, TestH
+         TestBasisGrads, TestTot, TestBoth, TestS, TestH
     use read_pao_info, ONLY: pao_info_file, pao_norm_flag
     use read_support_spec, ONLY: support_spec_file, flag_read_support_spec
     use test_force_module, ONLY: flag_test_all_forces, flag_which_force, TF_direction, TF_atom_moved, TF_delta
@@ -365,22 +365,22 @@ contains
     end if
     ! Start fdf reading from the file Conquest_input
     call fdf_init('Conquest_input','fdf.out')
-    new_format = fdf_boolean('General.NewFormat',.true.)
+    new_format = fdf_boolean('IO.NewFormat',.true.)
     if(new_format) then
        def = ' '
-       iprint = fdf_integer('iprint',0)
-       iprint_init   = fdf_integer('iprint_init',iprint)
-       iprint_mat    = fdf_integer('iprint_mat',iprint)
-       iprint_ops    = fdf_integer('iprint_ops',iprint)
-       iprint_DM     = fdf_integer('iprint_DM',iprint)
-       iprint_SC     = fdf_integer('iprint_SC',iprint)
-       iprint_minE   = fdf_integer('iprint_minE',iprint)
-       iprint_MD     = fdf_integer('iprint_MD',iprint)
-       iprint_index  = fdf_integer('iprint_index',iprint)
-       iprint_gen    = fdf_integer('iprint_gen',iprint)
-       iprint_pseudo = fdf_integer('iprint_pseudo',iprint)
-       iprint_basis  = fdf_integer('iprint_basis',iprint)
-       iprint_intgn  = fdf_integer('iprint_intgn',iprint)
+       iprint = fdf_integer('IO.Iprint',0)
+       iprint_init   = fdf_integer('IO.Iprint_init',iprint)
+       iprint_mat    = fdf_integer('IO.Iprint_mat',iprint)
+       iprint_ops    = fdf_integer('IO.Iprint_ops',iprint)
+       iprint_DM     = fdf_integer('IO.Iprint_DM',iprint)
+       iprint_SC     = fdf_integer('IO.Iprint_SC',iprint)
+       iprint_minE   = fdf_integer('IO.Iprint_minE',iprint)
+       iprint_MD     = fdf_integer('IO.Iprint_MD',iprint)
+       iprint_index  = fdf_integer('IO.Iprint_index',iprint)
+       iprint_gen    = fdf_integer('IO.Iprint_gen',iprint)
+       iprint_pseudo = fdf_integer('IO.Iprint_pseudo',iprint)
+       iprint_basis  = fdf_integer('IO.Iprint_basis',iprint)
+       iprint_intgn  = fdf_integer('IO.Iprint_intgn',iprint)
        tmp = fdf_string('General.MemoryUnits','MB')
        if(leqi(tmp(1:2),'kB')) then
           m_units = kbytes
@@ -393,24 +393,24 @@ contains
           mem_conv = GB
        end if
        ! Read run title
-       titles = fdf_string('General.title',def)
+       titles = fdf_string('IO.Title',def)
        ! Is this a restart run ? **NB NOT AVAILABLE RIGHT NOW**
-       start = .true.!fdf_defined('General.start')
+       start = fdf_boolean('General.NewRun',.true.)
        if(start) then
           start_L = .true.
           start_blips = .true.  ! N.B. Original had option for a blip model - add this later
        else ! This option loads data from a file - we need to add the option to search for this
           call cq_abort('read_input: you may not select restart for a run just now')
        endif
-       start_blips = fdf_boolean('Basis.StartBlip',.true.)
+       start_blips = fdf_boolean('Basis.LoadBlip',.false.)
        if(.NOT.start_blips) restart_file = fdf_string('Basis.LoadBlipFile',' ')
        init_blip_flag = fdf_string('Basis.InitBlipFlag','pao')
-       restart_L = fdf_boolean('Init.RestartL',.false.)
-       restart_rho = fdf_boolean('Init.RestartRho',.false.)
+       restart_L = fdf_boolean('General.LoadL',.false.)
+       restart_rho = fdf_boolean('General.LoadRho',.false.)
        ! Is there a net charge on the cell ?
        ne_in_cell = fdf_double('General.NetCharge',zero)
        ! Read coordinates file 
-       flag_fractional_atomic_coords = fdf_boolean('General.FractionalAtomicCoords',.true.)
+       flag_fractional_atomic_coords = fdf_boolean('IO.FractionalAtomicCoords',.true.)
        call my_barrier()
        !blip_width = fdf_double('blip_width',zero)
        !support_grid_spacing = fdf_double('support_grid_spacing',zero)
@@ -434,19 +434,19 @@ contains
        end if
        ! Radii - again, astonishingly badly named
        r_h = fdf_double('hamiltonian_range',zero)
-       r_c = fdf_double('L_range',one)
+       r_c = fdf_double('DM.L_range',one)
        r_t = fdf_double('InvSRange',r_h)
        HNL_fac = fdf_double('non_local_factor',zero)
        ! Exponents for initial gaussian blips
-       alpha = fdf_double('Basis.s_gauss_exponent',zero)
-       beta = fdf_double('Basis.p_gauss_exponent',zero)
+       alpha = fdf_double('Basis.SGaussExponent',zero)
+       beta = fdf_double('Basis.PGaussExponent',zero)
        ! Tolerance on minimisation
-       energy_tolerance = fdf_double('minE.energy_tolerance',1.0e-5_double)
+       energy_tolerance = fdf_double('minE.EnergyTolerance',1.0e-5_double)
        UsePulay = fdf_boolean('Basis.UsePulayForPAOs',.false.)
        ! Sizes of integration grid blocks
-       in_block_x = fdf_integer('Grid.in_block_x',4)
-       in_block_y = fdf_integer('Grid.in_block_y',4)
-       in_block_z = fdf_integer('Grid.in_block_z',4)
+       in_block_x = fdf_integer('Grid.InBlockX',4)
+       in_block_y = fdf_integer('Grid.InBlockY',4)
+       in_block_z = fdf_integer('Grid.InBlockZ',4)
        ! Solution method - O(N) or diagonalisation ?
        method = fdf_string('DM.SolutionMethod','ordern') ! Default is O(N)
        if(leqi(method,'diagon')) then
@@ -461,13 +461,13 @@ contains
        else if(leqi(basis_string,'PAOs')) then
           flag_basis_set = PAOs
        end if
-       find_chdens = fdf_boolean('SC.make_initial_charge_from_K',.false.)
+       find_chdens = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        ! Number of species
        n_species = fdf_integer('General.NumberOfSpecies',1)
        call allocate_species_vars
        flag_angular_new = fdf_boolean('Basis.FlagNewAngular',.true.)
        ! Tweak DRB 2007/03/23: fix abinit as standard type
-       ps_type = fdf_string('Pseudo.PseudopotentialType','abinit') 
+       ps_type = fdf_string('General.PseudopotentialType','abinit') 
        ! Write out pseudopotential type
        if(leqi(ps_type,'siest')) then
           if(inode==ionode.AND.iprint_init>0) write(*,fmt='(10x,"SIESTA pseudopotential will be used. ")')
@@ -504,28 +504,28 @@ contains
           if(fdf_block(species_label(i),bp)) then
              do while(fdf_bline(bp,line)) ! While there are lines in the block
                 p=>digest(line)           ! Break the line up
-                if(search(p,'charge',j)) then               ! Charge
+                if(search(p,'Atom.ValenceCharge',j)) then               ! Charge
                    charge(i) = reals(p,1)
-                else if(search(p,'NumberOfSupports',j)) then            ! Number of SFs
+                else if(search(p,'Atom.NumberOfSupports',j)) then            ! Number of SFs
                    nsf_species(i) = integers(p,1)
-                else if(search(p,'SupportFunctionRange',j)) then            ! Support radius
+                else if(search(p,'Atom.SupportFunctionRange',j)) then            ! Support radius
                    RadiusSupport(i) = reals(p,1)
                    if(InvSRange(i)<very_small) InvSRange(i) = RadiusSupport(i)
                    !if(r_c<two*RadiusSupport(i)) r_c = two*RadiusSupport(i)
-                else if(search(p,'InvSRange',j)) then            ! Support radius
+                else if(search(p,'Atom.InvSRange',j)) then            ! Support radius
                    InvSRange(i) = reals(p,1)
-                else if(search(p,'NonLocalFactor',j)) then            ! Full Ham radius
+                else if(search(p,'Atom.NonLocalFactor',j)) then            ! Full Ham radius
                    NonLocalFactor(i) = reals(p,1)
-                else if(search(p,'SupportGridSpacing',j)) then            ! Support spacing
+                else if(search(p,'Atom.SupportGridSpacing',j)) then            ! Support spacing
                    SupportGridSpacing(i) = reals(p,1)
                    min_blip_sp = min(SupportGridSpacing(i),min_blip_sp)
                    BlipWidth(i) = four*SupportGridSpacing(i)
-                else if(pseudo_type==OLDPS.AND.search(p,'pseudopotential',j)) then ! Pseudopotential
-                   if(search(p,'non_local',j)) then         ! Non-local or local ?
+                else if(pseudo_type==OLDPS.AND.search(p,'Atom.Pseudopotential',j)) then ! Pseudopotential
+                   if(search(p,'Atom.NonLocal',j)) then         ! Non-local or local ?
                       non_local_species(i) = .true.
                       ps_file(i) = names(p,3)               ! We expect a line: pseudopotential (non_)local file 
                    else
-                      if(.NOT.search(p,'local',j)) then
+                      if(.NOT.search(p,'Atom.Local',j)) then
                          call cq_abort('read_input: no local/non-local specification for pseudopotential !')
                       else
                          non_local_species(i) = .false.
@@ -545,8 +545,8 @@ contains
                call cq_abort("Radius of support too small for species; increase SupportFunctionRange ",i)
        end do
        !blip_width = support_grid_spacing * fdf_double('blip_width_over_support_grid_spacing',four)
-       L_tolerance = fdf_double('minE.l_tolerance',1.0e-7_double)
-       sc_tolerance  = fdf_double('minE.sc_tolerance',1.0e-6_double)
+       L_tolerance = fdf_double('minE.LTolerance',1.0e-7_double)
+       sc_tolerance  = fdf_double('minE.SCTolerance',1.0e-6_double)
        maxpulayDMM = fdf_integer('DM.MaxPulay',5)
        LinTol_DMM = fdf_double('DM.LinTol',0.1_double)
        ! Find out what type of run we're doing
@@ -556,7 +556,6 @@ contains
        MDtimestep = fdf_double('AtomMove.Timestep',0.5_double)
        MDcgtol = fdf_double('AtomMove.MaxForceTol',0.0005_double)
        flag_vary_basis = fdf_boolean('minE.VaryBasis',.false.)
-       if(fdf_boolean('VaryBlips',.false.)) flag_vary_basis = .true.
        if(.NOT.flag_vary_basis) then
           flag_precondition_blips = .false.
        else 
@@ -572,28 +571,34 @@ contains
        maxitersSC = fdf_integer('SC.MaxIters',50)
        maxearlySC = fdf_integer('SC.MaxEarly',3)
        maxpulaySC = fdf_integer('SC.MaxPulay',5)
-       read_atomic_density_file = fdf_string('SC.read_atomic_density_file','read_atomic_density.dat')
+       read_atomic_density_file = fdf_string('SC.ReadAtomicDensityFile','read_atomic_density.dat')
        ! Read atomic density initialisation flag
-       atomic_density_method = fdf_string('SC.atomic_density_flag','pao')
+       atomic_density_method = fdf_string('SC.AtomicDensityFlag','pao')
        InvSTolerance = fdf_double('DM.InvSTolerance',1e-2_double)
+       basis_string = fdf_string('General.BlockAssign','Hilbert')
+       if(leqi(basis_string,'Raster')) then
+          flag_assign_blocks = blocks_raster
+       else if(leqi(basis_string,'Hilbert')) then
+          flag_assign_blocks = blocks_hilbert
+       end if
        flag_read_blocks = fdf_boolean('Grid.ReadBlocks',.false.)
        ewald_accuracy = fdf_double('General.EwaldAccuracy',1.0e-10_double) ! Default value of 10^-10 Ha per atom
        flag_old_ewald = fdf_boolean('General.FlagOldEwald',.false.)
        UseGemm = fdf_boolean('MM.UseGemm',.false.)
-       del_k = fdf_double('Basis.pao_kspace_ol_gridspace',0.1_double)
-       kcut = fdf_double('Basis.pao_kspace_ol_cutoff', 1000.0_double)
+       del_k = fdf_double('Basis.PaoKspaceOlGridspace',0.1_double)
+       kcut = fdf_double('Basis.PaoKspaceOlCutoff', 1000.0_double)
        flag_paos_atoms_in_cell = fdf_boolean('Basis.PAOs_StoreAllAtomsInCell',.true.)
-       read_option = fdf_boolean('Basis.read_pao_coeffs',.false.)
+       read_option = fdf_boolean('Basis.LoadPaoCoeffs',.false.)
        symmetry_breaking = fdf_boolean('Basis.SymmetryBreaking',.false.)
-       support_pao_file = fdf_string('Basis.support_pao_file','supp_pao.dat')
-       pao_info_file = fdf_string('Basis.pao_info_file','pao.dat')
-       pao_norm_flag = fdf_integer('Basis.pao_norm_flag',0)
-       TestPAOGrads = fdf_boolean('Basis.TestPAOGrads',.false.)
-       TestTot = fdf_boolean('Basis.TestPAOGradTot',.false.)
-       TestBoth = fdf_boolean('Basis.TestPAOGradBoth',.false.)
-       TestS = fdf_boolean('Basis.TestPAOGrad_S',.false.)
-       TestH = fdf_boolean('Basis.TestPAOGrad_H',.false.)
-       support_spec_file = fdf_string('Basis.support_spec_file','support.dat')
+       support_pao_file = fdf_string('Basis.SupportPaoFile','supp_pao.dat')
+       pao_info_file = fdf_string('Basis.PaoInfoFile','pao.dat')
+       pao_norm_flag = fdf_integer('Basis.PaoNormFlag',0)
+       TestBasisGrads = fdf_boolean('Basis.TestBasisGradients',.false.)
+       TestTot = fdf_boolean('Basis.TestBasisGradTot',.false.)
+       TestBoth = fdf_boolean('Basis.TestBasisGradBoth',.false.)
+       TestS = fdf_boolean('Basis.TestBasisGrad_S',.false.)
+       TestH = fdf_boolean('Basis.TestBasisGrad_H',.false.)
+       support_spec_file = fdf_string('Basis.SupportSpecFile','support.dat')
        flag_read_support_spec = fdf_boolean('Basis.ReadSupportSpec',.false.)
        flag_test_forces = fdf_boolean('AtomMove.TestForces',.false.)
        flag_test_all_forces = fdf_boolean('AtomMove.TestAllForces',.true.)
@@ -636,11 +641,10 @@ contains
           dist_conv = BohrToAng
        endif
        for_conv = en_conv/dist_conv
-       pdb_format = fdf_boolean('General.PdbIn',.false.)
-       pdb_altloc = fdf_string('General.PdbAltLoc',' ')
-       pdb_output = fdf_boolean('General.PdbOut',.false.)
-       !part_mode = fdf_string('General.Partitions','Python')
-       part_mode = fdf_string('General.Partitions','Hilbert')
+       pdb_format = fdf_boolean('IO.PdbIn',.false.)
+       pdb_altloc = fdf_string('IO.PdbAltLoc',' ')
+       pdb_output = fdf_boolean('IO.PdbOut',.false.)
+       part_mode = fdf_string('General.PartitionMethod','Hilbert')
        if (leqi (part_mode(1:6),'Python')) then
           part_method = PYTHON
        else if (leqi (part_mode(1:7), 'Hilbert')) then
@@ -882,7 +886,7 @@ contains
        support_pao_file = fdf_string('support_pao_file','supp_pao.dat')
        pao_info_file = fdf_string('pao_info_file','pao.dat')
        pao_norm_flag = fdf_integer('pao_norm_flag',0)
-       TestPAOGrads = fdf_boolean('TestPAOGrads',.false.)
+       TestBasisGrads = fdf_boolean('TestPAOGrads',.false.)
        TestTot = fdf_boolean('TestPAOGradTot',.false.)
        TestBoth = fdf_boolean('TestPAOGradBoth',.false.)
        TestS = fdf_boolean('TestPAOGrad_S',.false.)
@@ -1445,9 +1449,9 @@ contains
           ! if (fdf_boolean('mp_mesh_x',.false.)==.false.) write (*,8)
           ! The above causes an error message in case mp_mesh_x exists, because
           ! it's then handled as boolean below
-          mp(1) = fdf_integer('Diag.mp_mesh_x',1)
-          mp(2) = fdf_integer('Diag.mp_mesh_y',1)
-          mp(3) = fdf_integer('Diag.mp_mesh_z',1) 
+          mp(1) = fdf_integer('Diag.MPMeshX',1)
+          mp(2) = fdf_integer('Diag.MPMeshY',1)
+          mp(3) = fdf_integer('Diag.MPMeshZ',1) 
           if(iprint_init>0) write(*,'(a, 3i3)') ' Monkhorst-Pack mesh: ', (mp(i), i=1,3)
           if (mp(1) <= 0) call cq_abort('K-points: number of k-points must be > 0!')
           if (mp(2) <= 0) call cq_abort('K-points: number of k-points must be > 0!')
@@ -1455,9 +1459,9 @@ contains
           nkp_tmp = mp(1)*mp(2)*mp(3)
           if(iprint_init>0) write(*,'(a, i4)') ' Number of k-points: ',nkp_tmp
           ! Read k-point shift, default (0.0 0.0 0.0)
-          mp_shift(1) = fdf_double('Diag.mp_shift_x',zero)
-          mp_shift(2) = fdf_double('Diag.mp_shift_y',zero)
-          mp_shift(3) = fdf_double('Diag.mp_shift_z',zero)
+          mp_shift(1) = fdf_double('Diag.MPShiftX',zero)
+          mp_shift(2) = fdf_double('Diag.MPShiftY',zero)
+          mp_shift(3) = fdf_double('Diag.MPShiftZ',zero)
           if (mp_shift(1) >= one) then
              write(*,9)
              mp_shift(1) = mp_shift(1) - one
