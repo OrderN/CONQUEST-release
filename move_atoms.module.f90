@@ -257,6 +257,9 @@ contains
 !!    out as it's not been tested or checked rigorously
 !!   09:51, 25/10/2005 drb 
 !!    Added correction so that the present energy is passed to get_E_and_F for blip minimisation loop
+!!   15:13, 27/04/2007 drb 
+!!    Reworked minimiser to be more robust; added (but not implemented) corrections
+!!    to permit VERY SIMPLE charge density prediction
 !!  SOURCE
 !!
   subroutine safemin(start_x,start_y,start_z,direction,energy_in,energy_out,&
@@ -274,6 +277,8 @@ contains
     use GenBlas, ONLY: dot
     use force_module, ONLY: tot_force
     use io_module, ONLY: write_atomic_positions, pdb_template
+    use density_module, ONLY: density, set_density, flag_no_atomic_densities
+    use maxima_module, ONLY: maxngrid
 
     implicit none
 
@@ -292,16 +297,19 @@ contains
     ! Local variables
     real(double) :: k0, k1, k2, k3, lambda, k3old
     real(double), save :: kmin = 0.0_double, dE = 0.0_double
-    real(double) :: e0, e1, e2, e3, tmp
+    real(double) :: e0, e1, e2, e3, tmp, bottom
+    real(double), dimension(:), allocatable :: store_density
     integer :: i,j, iter, lun
     logical :: reset_L = .false.
+    logical :: done
 
+    !allocate(store_density(maxngrid))
     e0 = total_energy
     if(inode==ionode.AND.iprint_MD>0) &
          write(*,fmt='(4x,"In safemin, initial energy is ",f15.10," ",a2)') en_conv*energy_in,en_units(energy_units)
     if(inode==ionode) write(*,fmt='(/4x,"Seeking bracketing triplet of points"/)')
     ! Unnecessary and over cautious !
-    k0 = 0.000001_double
+    k0 = 0.0_double
     !do i=1,ni_in_cell
     !   x_atom_cell(i) = start_x(i) + k0*direction(1,i)
     !   y_atom_cell(i) = start_y(i) + k0*direction(2,i)
@@ -327,40 +335,47 @@ contains
     k2 = k0
     e2 = e0
     e3 = e2
-    k3 = 0.0_double
-    k3old = k3
+    !k3 = 0.0_double
+    !k3old = k3
+    if(kmin<1.0e-3) then
+       kmin = 0.7_double
+    else
+       kmin = 0.75_double*kmin
+    end if
+    k3 = kmin
     lambda = 2.0_double
+    done = .false.
     ! Loop to find a bracketing triplet
-    do while(e3<=e2)
-       if (k2==k0) then
-          !k3 = 0.001_double
-          !if(abs(kmin) < very_small) then
-          if(abs(dE) < very_small) then
-             if(k3<very_small) then ! First guess
-                k3 = 0.70_double!k3old/lambda
-             end if
-          else
-             tmp = dot(3*ni_in_cell,direction,1,tot_force,1)
-             k3 = 0.5_double*dE/tmp!kmin/lambda
-             if(abs(k3)>abs(kmin)) k3 = kmin
-          endif
-          !   k3 = 0.1_double
-          !else
-          !   k3 = kmin/lambda
-          !endif
-       elseif (k2==0.01_double) then
-          k3 = 0.01_double
-       else
-          k3 = lambda*k2          
-       endif
+    do while(.NOT.done)!e3<=e2)
+       !if (k2==k0) then
+       !   !k3 = 0.001_double
+       !   !if(abs(kmin) < very_small) then
+       !   if(abs(dE) < very_small) then
+       !      if(k3<very_small) then ! First guess
+       !         k3 = 0.70_double!k3old/lambda
+       !      end if
+       !   else
+       !      tmp = dot(3*ni_in_cell,direction,1,tot_force,1)
+       !      k3 = abs(0.5_double*dE/tmp)!kmin/lambda
+       !      if(abs(k3)>abs(kmin)) k3 = kmin
+       !   endif
+       !   !   k3 = 0.1_double
+       !   !else
+       !   !   k3 = kmin/lambda
+       !   !endif
+       !elseif (k2==0.01_double) then
+       !   k3 = 0.01_double
+       !else
+       !   k3 = lambda*k2          
+       !endif
 !       k3 = 0.032_double
        ! These lines calculate the difference between atomic densities and total density
-       !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-       !   ! Subtract off atomic densities
-       !   store_density = density
-       !   call set_density()
-       !   density = store_density - density
-       !end if
+       !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
+       !%%!   ! Subtract off atomic densities
+       !%%!   store_density = density
+       !%%!   call set_density()
+       !%%!   density = store_density - density
+       !%%!end if
        ! Move atoms
        do i=1,ni_in_cell
           x_atom_cell(i) = start_x(i) + k3*direction(1,i)
@@ -368,18 +383,18 @@ contains
           z_atom_cell(i) = start_z(i) + k3*direction(3,i)
           !write(*,*) 'Position: ',i,x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
        end do
-!Update atom_coord : TM 27Aug2003
+       !Update atom_coord : TM 27Aug2003
        call update_atom_coord
-!Update atom_coord : TM 27Aug2003
+       !Update atom_coord : TM 27Aug2003
        ! Update indices and find energy and forces
        !call updateIndices(.false.,fixed_potential, number_of_bands)
        call updateIndices(.true.,fixed_potential, number_of_bands)
        ! These lines add back on the atomic densities for NEW atomic positions
        !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-       !   ! Add on atomic densities
-       !   store_density = density
-       !   call set_density()
-       !   density = store_density + density
+          ! Add on atomic densities
+          !store_density = density
+          !call set_density()
+          !density = store_density + density
        !end if
        ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
        ! Write out atomic positions
@@ -392,49 +407,66 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, e3, .false., .false.)
        if(inode==ionode.AND.iprint_MD>1) &
-            write(*,fmt='(4x,"In safemin, iter ",i3," step and energy are ",2f15.10)') iter,k3,e3
+            write(*,fmt='(4x,"In safemin, iter ",i3," step and energy are ",2f15.10" ",a2)') &
+            iter,k3,en_conv*e3,en_units(energy_units)
        if (e3<e2) then ! We're still going down hill
           k1 = k2
           e1 = e2
           k2 = k3
           e2 = e3
+          ! New DRB 2007/04/18
+          k3 = lambda*k3
           iter=iter+1
-       else if(k2==0.0_double) then
-          k3old = k3
-          if(abs(dE)<very_small) then 
-             k3 = k3old/2.0_double
-             dE = 1.0_double
-          else
-             dE = 0.5_double*dE
-          end if
-          e3 = e2
+       else if(k2==0.0_double) then ! We've gone too far
+          !k3old = k3
+          !if(abs(dE)<very_small) then 
+          !   k3 = k3old/2.0_double
+          !   dE = 1.0_double
+          !else
+          !   dE = 0.5_double*dE
+          !end if
+          !e3 = e2
+          k3 = k3/lambda
+       else
+          done = .true.
        endif
     end do
     if(inode==ionode) write(*,fmt='(/4x,"Interpolating minimum"/)')
     ! Interpolate to find minimum.
-    kmin = 0.5_double*(((k1*k1-k3*k3)*(e1-e2)-(k1*k1-k2*k2)*(e1-e3))/((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3)))
-    !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-    !   ! Subtract off atomic densities
-    !   store_density = density
-    !   call set_density()
-    !   density = store_density - density
-    !end if
+    if(inode==ionode.AND.iprint_MD>1) &
+            write(*,fmt='(4x,"In safemin, brackets are: ",6f15.10)') k1,e1,k2,e2,k3,e3
+    bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
+    if(abs(bottom)>very_small) then
+       kmin = 0.5_double*(((k1*k1-k3*k3)*(e1-e2)-(k1*k1-k2*k2)*(e1-e3))/((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3)))
+    else
+       if(inode==ionode) then
+          write(*,fmt='(4x,"Error in safemin !")')
+          write(*,fmt='(4x,"Interpolation failed: ",6f15.10)')k1,e1,k2,e2,k3,e3
+       end if
+       kmin = k2
+    end if
+    !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
+    !%%!   ! Subtract off atomic densities
+    !%%!   store_density = density
+    !%%!   call set_density()
+    !%%!   density = store_density - density
+    !%%!end if
     do i=1,ni_in_cell
        x_atom_cell(i) = start_x(i) + kmin*direction(1,i)
        y_atom_cell(i) = start_y(i) + kmin*direction(2,i)
        z_atom_cell(i) = start_z(i) + kmin*direction(3,i)
     end do
-!Update atom_coord : TM 27Aug2003
+    !Update atom_coord : TM 27Aug2003
     call update_atom_coord
-!Update atom_coord : TM 27Aug2003
+    !Update atom_coord : TM 27Aug2003
     ! Check minimum: update indices and find energy and forces
     !call updateIndices(.false.,fixed_potential, number_of_bands)
     call updateIndices(.true.,fixed_potential, number_of_bands)
     !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-    !   ! Add on atomic densities
-    !   store_density = density
-    !   call set_density()
-    !   density = store_density + density
+       ! Add on atomic densities
+       !store_density = density
+       !call set_density()
+       !density = store_density + density
     !end if
     if(iprint_MD>2) then
        call write_atomic_positions("UpdatedAtoms_tmp.dat",trim(pdb_template))
@@ -450,15 +482,18 @@ contains
     else
        call get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, energy_out, .true., .false.)
     end if
-    if (energy_out>e2) then ! The interpolation failed - go back
+    if(inode==ionode.AND.iprint_MD>1) &
+         write(*,fmt='(4x,"In safemin, Interpolation step and energy are ",2f15.10" ",a2)') &
+         kmin,en_conv*energy_out,en_units(energy_units)
+    if (energy_out>e2.AND.abs(bottom)>very_small) then ! The interpolation failed - go back
        if(inode==ionode) write(*,fmt='(/4x,"Interpolation failed; reverting"/)')
        kmin = k2
-       !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-       !   ! Subtract off atomic densities
-       !   store_density = density
-       !   call set_density()
-       !   density = store_density - density
-       !end if
+       !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
+       !%%!   ! Subtract off atomic densities
+       !%%!   store_density = density
+       !%%!   call set_density()
+       !%%!   density = store_density - density
+       !%%!end if
        do i=1,ni_in_cell
           x_atom_cell(i) = start_x(i) + kmin*direction(1,i)
           y_atom_cell(i) = start_y(i) + kmin*direction(2,i)
@@ -470,10 +505,10 @@ contains
        call updateIndices(.true.,fixed_potential, number_of_bands)
        !call updateIndices(.false.,fixed_potential, number_of_bands)
        !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-       !   ! Add on atomic densities
-       !   store_density = density
-       !   call set_density()
-       !   density = store_density + density
+          ! Add on atomic densities
+          !store_density = density
+          !call set_density()
+          !density = store_density + density
        !end if
        if(iprint_MD>2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat",trim(pdb_template))
@@ -493,10 +528,13 @@ contains
     dE = e0 - energy_out
 7   format(4x,3f15.8)
     if(inode==ionode.AND.iprint_MD>0) then
-       write(*,fmt='(4x,"In safemin, exit after ",i4," iterations with energy ",f20.10)') iter,energy_out
+       write(*,fmt='(4x,"In safemin, exit after ",i4," iterations with energy ",f20.10," ",a2)') &
+            iter,en_conv*energy_out,en_units(energy_units)
     else
-       write(*,fmt='(/4x,"Final energy: ",f15.10)/') energy_out
+       write(*,fmt='(/4x,"Final energy: ",f15.10," ",a2)/') &
+            en_conv*energy_out,en_units(energy_units)
     end if
+    !deallocate(store_density)
     return
   end subroutine safemin
 !!***

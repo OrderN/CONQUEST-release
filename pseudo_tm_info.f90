@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: pseudo_tm_info.f90,v 1.5.2.2 2006/03/31 13:05:30 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module pseudo_tm_info
 ! ------------------------------------------------------------------------------
@@ -75,7 +75,7 @@ module pseudo_tm_info
   type(pseudo_info), allocatable :: pseudo(:)
 
   ! RCS tag for object file identification
-  character(len=80), private :: RCSid = "$Id: pseudo_tm_info.f90,v 1.5.2.2 2006/03/31 13:05:30 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -159,8 +159,8 @@ contains
           end do
           if(cutoff>RadiusSupport(ispecies)) then
              if(inode==ionode.AND.iprint_pseudo>0) &
-                  write(*,fmt='(10x,"Warning ! Adjusted species ",i3," support radius to ",f8.3)') ispecies,cutoff
-             RadiusSupport(ispecies) = cutoff
+                  write(*,fmt='(10x,"Warning ! Species ",i3," support radius less than PAO radius ",f8.3)') ispecies,cutoff
+             !RadiusSupport(ispecies) = cutoff
           endif
        enddo
     endif

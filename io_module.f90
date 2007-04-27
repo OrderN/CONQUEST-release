@@ -102,6 +102,8 @@ contains
 !!    Tidying up output
 !!   20/11/2006 Veronika
 !!    Corrected reading of constraints from pdb file
+!!   15:05, 27/04/2007 drb 
+!!    Check to ensure right number of species added
 !!  SOURCE
 !!
   subroutine read_atomic_positions(filename)
@@ -205,6 +207,10 @@ second:   do
                       do j = 1, n_species
                          if (leqi (atom_name,species_label(j) ) ) then
                             species_glob(i) = j
+                            if(species_glob(i)>n_species) then
+                               write(*,fmt='(2x,"** WARNING ! ** Species incompatibility between coordinates and input")')
+                               call cq_abort("Species specified greater than number in input file: ",species_glob(i),n_species)
+                            end if
                             exit
                          end if
                       end do
@@ -240,6 +246,10 @@ second:   do
                    do j = 1, n_species
                       if (leqi (atom_name,species_label(j) ) ) then
                          species_glob(i) = j
+                         if(species_glob(i)>n_species) then
+                            write(*,fmt='(2x,"** WARNING ! ** Species incompatibility between coordinates and input")')
+                            call cq_abort("Species specified greater than number in input file: ",species_glob(i),n_species)
+                         end if
                          exit
                       end if
                    end do
@@ -291,6 +301,10 @@ second:   do
           call reg_alloc_mem(area_init, 4*ni_in_cell,type_int)
           do i=1,ni_in_cell
              read(lun,*) x,y,z,species_glob(i),movex,movey,movez
+             if(species_glob(i)>n_species) then
+                write(*,fmt='(2x,"** WARNING ! ** Species incompatibility between coordinates and input")')
+                call cq_abort("Species specified greater than number in input file: ",species_glob(i),n_species)
+             end if
              if(flag_fractional_atomic_coords) then
                 atom_coord(1,i) = x*r_super_x
                 atom_coord(2,i) = y*r_super_y
@@ -815,7 +829,8 @@ second:   do
 !!  CREATION DATE
 !!   2006/12/14
 !!  MODIFICATION HISTORY
-!!  
+!!   15:05, 27/04/2007 drb & vb
+!!    Added further check for no atoms on a processor and corrected small bug
 !!  SOURCE
 !!  
   subroutine create_sfc_partitions(myid, parts)
@@ -1501,6 +1516,13 @@ hc2:    do
         end if
 
       end do 
+      do i = 0, numprocs - 1
+         if (iprint_init > 4.AND.myid==0) write(*,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+         if (no_atoms_proc(i) == 0) then
+            write(*,*) "WARNING: Processor", i," has no atoms! Too many processors?"
+            call cq_abort("Automatic partitioner requires all processors to have atoms")
+         end if
+      end do
 
       ! Statistics
       ! allocate(histogram(proc_atoms_min:proc_atoms_max), STAT = stat)
@@ -1553,6 +1575,9 @@ hc2:    do
 
       parts_boundaries(numprocs-1) = (numprocs - 1) * parts_per_node
       parts_inode_tmp(numprocs-1) = parts_per_node
+      do j = parts_boundaries(numprocs-1), no_hc - 1
+         no_atoms_proc(numprocs-1) = no_atoms_proc(numprocs-1) + sfc_sequence(j)
+      end do
 
     end if
 
