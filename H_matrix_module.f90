@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: H_matrix_module.f90,v 1.20.2.3 2006/03/31 12:05:00 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module H_matrix_module
 ! ------------------------------------------------------------------------------
@@ -57,7 +57,7 @@ module H_matrix_module
   implicit none
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: H_matrix_module.f90,v 1.20.2.3 2006/03/31 12:05:00 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
 !!***
 
@@ -325,15 +325,20 @@ contains
 
     select case(flag_functional_type)
        case (functional_lda_pz81)
-          call get_xc_potential( rho, xc_potential, xc_energy, n_my_grid_points )
+          !ORI call get_xc_potential( rho, xc_potential, xc_energy, n_my_grid_points )
+          call get_xc_potential( rho, xc_potential, xc_energy, size )
        case (functional_lda_gth96)
-          call get_GTH_xc_potential( rho, xc_potential, xc_energy, n_my_grid_points )
+          !ORI call get_GTH_xc_potential( rho, xc_potential, xc_energy, n_my_grid_points )
+          call get_GTH_xc_potential( rho, xc_potential, xc_energy, size )
        case (functional_lda_pw92)
-          call get_xc_potential_LDA_PW92( rho, xc_potential, xc_energy, n_my_grid_points )
+          !ORI call get_xc_potential_LDA_PW92( rho, xc_potential, xc_energy, n_my_grid_points )
+          call get_xc_potential_LDA_PW92( rho, xc_potential, xc_energy, size )
        case (functional_gga_pbe96)
-          call get_xc_potential_GGA_PBE( rho, xc_potential, xc_energy, n_my_grid_points )
+          !ORI call get_xc_potential_GGA_PBE( rho, xc_potential, xc_energy, n_my_grid_points )
+          call get_xc_potential_GGA_PBE( rho, xc_potential, xc_energy, size )
        case default
-          call get_xc_potential( rho, xc_potential, xc_energy, n_my_grid_points )
+          !ORI call get_xc_potential( rho, xc_potential, xc_energy, n_my_grid_points )
+          call get_xc_potential( rho, xc_potential, xc_energy, size )
     end select
 
     ! Make total potential
@@ -1353,6 +1358,8 @@ contains
 !!            instead of direct transform of the sum 
 !!            rgradient(1,:) + rgradient(2,:) + rgradient(3,:)
 !!          (this was less efficient)
+!!   15:55, 27/04/2007 drb 
+!!    Changed recip_vector, grad_density to (n,3) for speed
 !!  SOURCE
 !!
   subroutine get_xc_potential_GGA_PBE(density,xc_potential,xc_energy,size )
@@ -1378,7 +1385,8 @@ contains
     !     Local variables
     integer n
 
-    real(double)  :: grad_density(size), grad_density_xyz(3, size)
+    !ORI real(double)  :: grad_density(size), grad_density_xyz(3, size)
+    real(double)  :: grad_density(size), grad_density_xyz(size,3)
     real(double)  :: rho, grad_rho, rho1_3, rho1_6, &
                      ks, s, s2, &
                      t, t2, A, At2, &
@@ -1398,7 +1406,8 @@ contains
                     dde_exchange, dde_correlation
     real(double) :: df_dgrad_rho
 
-    complex(double_cplx), dimension(3,size) :: rgradient      ! Gradient in reciprocal space
+    !ORIcomplex(double_cplx), dimension(3,size) :: rgradient      ! Gradient in reciprocal space
+    complex(double_cplx), dimension(size,3) :: rgradient      ! Gradient in reciprocal space
 
     !     From Phys. Rev. Lett. 77, 3865 (1996)
     real(double), parameter :: mu = 0.21951_double
@@ -1590,9 +1599,9 @@ contains
 
        ! Gradient times derivative of energy
 
-       grad_density_xyz(1,n) = grad_density_xyz(1,n)*df_dgrad_rho
-       grad_density_xyz(2,n) = grad_density_xyz(2,n)*df_dgrad_rho
-       grad_density_xyz(3,n) = grad_density_xyz(3,n)*df_dgrad_rho
+       grad_density_xyz(n,1) = grad_density_xyz(n,1)*df_dgrad_rho
+       grad_density_xyz(n,2) = grad_density_xyz(n,2)*df_dgrad_rho
+       grad_density_xyz(n,3) = grad_density_xyz(n,3)*df_dgrad_rho
 
        !*ast* TEST-POINT 4
        delta_E_xc = delta_E_xc + (xc_energy_lda(n) + e_exchange + e_correlation)*rho
@@ -1619,22 +1628,22 @@ contains
 
     ! Fourier transform the gradient, component by component
 
-    call fft3(grad_density_xyz(1,:), rgradient(1,:), size, -1 )
-    call fft3(grad_density_xyz(2,:), rgradient(2,:), size, -1 )
-    call fft3(grad_density_xyz(3,:), rgradient(3,:), size, -1 )
+    call fft3(grad_density_xyz(:,1), rgradient(:,1), size, -1 )
+    call fft3(grad_density_xyz(:,2), rgradient(:,2), size, -1 )
+    call fft3(grad_density_xyz(:,3), rgradient(:,3), size, -1 )
 
     !!!   Get the second term of the potential by taking derivatives
 
     ! First, get the scalar product of the (normalised) gradient and the wave vector (times i)
 
-    rgradient(1,:) = -rgradient(1,:)*minus_i*recip_vector(1,:)
-    rgradient(1,:) = rgradient(1,:) - rgradient(2,:)*minus_i*recip_vector(2,:)
-    rgradient(1,:) = rgradient(1,:) - rgradient(3,:)*minus_i*recip_vector(3,:)
+    rgradient(:,1) = -rgradient(:,1)*minus_i*recip_vector(:,1)
+    rgradient(:,1) = rgradient(:,1) - rgradient(:,2)*minus_i*recip_vector(:,2)
+    rgradient(:,1) = rgradient(:,1) - rgradient(:,3)*minus_i*recip_vector(:,3)
 
     ! Add terms of the scalar product and then Fourier transform back the resultant vector
     ! NOTE: Store the result in the modulus of the gradient (not needed anymore) to save memory
 
-    call fft3( grad_density, rgradient(1,:), size, 1 )
+    call fft3( grad_density, rgradient(:,1), size, 1 )
 
     ! Finally, get the potential
     ! NOTE that here grad_density is NOT the modulus of the gradient,
@@ -1675,7 +1684,8 @@ contains
 !!  CREATION DATE
 !!   11/11/05
 !!  MODIFICATION HISTORY
-!!
+!!   15:55, 27/04/2007 drb 
+!!    Changed recip_vector, grad_density to (n,3) for speed
 !!  SOURCE
 !!
   subroutine build_gradient (density, grad_density, grad_density_xyz, size)
@@ -1692,30 +1702,34 @@ contains
     integer size
     real(double), intent(inout), dimension(size) :: density
     real(double), intent(out), dimension(size) :: grad_density
-    real(double), intent(out), dimension(3, size) :: grad_density_xyz
+    !ORI real(double), intent(out), dimension(3, size) :: grad_density_xyz
+    real(double), intent(out), dimension(size,3) :: grad_density_xyz
 
     ! Local variables
     complex(double_cplx), dimension(size) :: rdensity      ! Density in reciprocal space
     complex(double_cplx), dimension(size) :: rdensity_tmp  ! Temporal reciprocal density
+
+    !local recip_vec_tm
+     
 
     ! Fourier transform the density
     call fft3( density, rdensity, size, -1 )
 
 
     ! Compute the derivative with respect to x
-    rdensity_tmp = -rdensity*minus_i*recip_vector(1,:)!*rcellx/n_grid_x
-    call fft3( grad_density_xyz(1,:), rdensity_tmp, size, 1 )
+    rdensity_tmp = -rdensity*minus_i*recip_vector(:,1)!*rcellx/n_grid_x
+    call fft3( grad_density_xyz(:,1), rdensity_tmp, size, 1 )
 
     ! Compute the derivative with respect to y
-    rdensity_tmp = -rdensity*minus_i*recip_vector(2,:)!*rcelly/n_grid_y
-    call fft3( grad_density_xyz(2,:), rdensity_tmp, size, 1 )
+    rdensity_tmp = -rdensity*minus_i*recip_vector(:,2)!*rcelly/n_grid_y
+    call fft3( grad_density_xyz(:,2), rdensity_tmp, size, 1 )
 
     ! Compute the derivative with respect to z
-    rdensity_tmp = -rdensity*minus_i*recip_vector(3,:)!*rcellz/n_grid_z
-    call fft3( grad_density_xyz(3,:), rdensity_tmp, size, 1 )
+    rdensity_tmp = -rdensity*minus_i*recip_vector(:,3)!*rcellz/n_grid_z
+    call fft3( grad_density_xyz(:,3), rdensity_tmp, size, 1 )
 
     ! Calculate the modulus of the gradient
-    grad_density = sqrt(grad_density_xyz(1,:)**2 + grad_density_xyz(2,:)**2 + grad_density_xyz(3,:)**2)
+    grad_density = sqrt(grad_density_xyz(:,1)**2 + grad_density_xyz(:,2)**2 + grad_density_xyz(:,3)**2)
 
 
     return

@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: force_module.f90,v 1.19.2.3 2006/03/31 12:16:18 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module force_module
 ! ------------------------------------------------------------------------------
@@ -60,7 +60,7 @@ module force_module
   integer, parameter :: HF_and_Pulay = 3
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: force_module.f90,v 1.19.2.3 2006/03/31 12:16:18 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
 !!***
 contains
@@ -2031,7 +2031,8 @@ contains
 !!  CREATION DATE
 !!   31/01/05
 !!  MODIFICATION HISTORY
-!!
+!!   15:54, 27/04/2007 drb 
+!!    Changed recip_vector, grad_density and tmp2, tmp3 to (n,3) for speed
 !!  SOURCE
 !!
   subroutine get_dxc_potential_GGA_PBE(density,density_out, dxc_potential, size )
@@ -2058,7 +2059,7 @@ contains
     !     Local variables
     integer n, i
 
-    real(double) :: grad_density(size), grad_density_xyz(3, size)
+    real(double) :: grad_density(size), grad_density_xyz(size,3)
     real(double) :: rho, grad_rho, rho1_3, rho1_6
     real(double) :: e_exchange
     real(double) :: xc_energy_lda_total, dxc_potential_lda(size), &
@@ -2321,23 +2322,23 @@ contains
 
     do n=1, n_my_grid_points
        ! Product by reciprocal vector stored for later use
-       tmp2(1,n) = -minus_i*recip_vector(1,n)*tmp1(n)
-       tmp2(2,n) = -minus_i*recip_vector(2,n)*tmp1(n)
-       tmp2(3,n) = -minus_i*recip_vector(3,n)*tmp1(n)
+       tmp2(n,1) = -minus_i*recip_vector(n,1)*tmp1(n)
+       tmp2(n,2) = -minus_i*recip_vector(n,2)*tmp1(n)
+       tmp2(n,3) = -minus_i*recip_vector(n,3)*tmp1(n)
     end do
 
     ! Fourier transform the vector back to the grid
-    call fft3(tmp3(1,:), tmp2(1,:), size, 1)
-    call fft3(tmp3(2,:), tmp2(2,:), size, 1)
-    call fft3(tmp3(3,:), tmp2(3,:), size, 1)
+    call fft3(tmp3(:,1), tmp2(:,1), size, 1)
+    call fft3(tmp3(:,2), tmp2(:,2), size, 1)
+    call fft3(tmp3(:,3), tmp2(:,3), size, 1)
 
     ! Add term L3 to potential
     do n=1, n_my_grid_points
        do i=1,3 
           if(grad_density(n) > very_small) then
-            dxc_potential(n) = dxc_potential(n) + (tmp3(i,n) &
+            dxc_potential(n) = dxc_potential(n) + (tmp3(n,i) &
                                                 * d2e_dgrad_drho(n) &
-                                                * grad_density_xyz(i,n) )/grad_density(n)
+                                                * grad_density_xyz(n,i) )/grad_density(n)
           end if
        end do
     end do
@@ -2345,17 +2346,17 @@ contains
     ! Term L4
     do n=1, n_my_grid_points
        if(grad_density(n) > very_small) then
-         tmp_factor =(tmp3(1,n) * grad_density_xyz(1,n) &
-                    + tmp3(2,n) * grad_density_xyz(2,n) &
-                    + tmp3(3,n) * grad_density_xyz(3,n)) &
+         tmp_factor =(tmp3(n,1) * grad_density_xyz(n,1) &
+                    + tmp3(n,2) * grad_density_xyz(n,2) &
+                    + tmp3(n,3) * grad_density_xyz(n,3)) &
                     * (d2e_dgrad2(n) &
                     - de_dgrad(n)/grad_density(n) ) / (grad_density(n)*grad_density(n))
        end if
        ! Reuse tmp3
        do i=1,3
           if(grad_density(n) > very_small) then
-            tmp3(i,n) = tmp_factor * grad_density_xyz(i,n) &
-                      + de_dgrad(n) * tmp3(i,n)/grad_density(n)
+            tmp3(n,i) = tmp_factor * grad_density_xyz(n,i) &
+                      + de_dgrad(n) * tmp3(n,i)/grad_density(n)
           end if
        end do
     end do
@@ -2364,30 +2365,30 @@ contains
     do n=1, n_my_grid_points
        do i=1,3
           if(grad_density(n) > very_small) then
-            tmp3(i,n) = tmp3(i,n) &
-                      + diff_rho(n) * d2e_dgrad_drho(n)* grad_density_xyz(i,n) &
+            tmp3(n,i) = tmp3(n,i) &
+                      + diff_rho(n) * d2e_dgrad_drho(n)* grad_density_xyz(n,i) &
                       / grad_density(n)
           end if
        end do
     end do
 
-    call fft3(tmp3(1,:), tmp2(1,:), size, -1)
-    call fft3(tmp3(2,:), tmp2(2,:), size, -1)
-    call fft3(tmp3(3,:), tmp2(3,:), size, -1)
+    call fft3(tmp3(:,1), tmp2(:,1), size, -1)
+    call fft3(tmp3(:,2), tmp2(:,2), size, -1)
+    call fft3(tmp3(:,3), tmp2(:,3), size, -1)
 
     do n=1, n_my_grid_points
        ! Product by reciprocal vector stored for later use
        tmp1(n) = -minus_i &
-               *(recip_vector(1,n)*tmp2(1,n) &
-               + recip_vector(2,n)*tmp2(2,n) &
-               + recip_vector(3,n)*tmp2(3,n))
+               *(recip_vector(n,1)*tmp2(n,1) &
+               + recip_vector(n,2)*tmp2(n,2) &
+               + recip_vector(n,3)*tmp2(n,3))
     end do
 
     ! Use first component of tmp3 to store final vector
-    call fft3(tmp3(1,:), tmp1, size, 1)    
+    call fft3(tmp3(:,1), tmp1, size, 1)    
 
     do n=1, n_my_grid_points
-       dxc_potential(n) = dxc_potential(n) - tmp3(1,n)
+       dxc_potential(n) = dxc_potential(n) - tmp3(n,1)
     end do
 
     return

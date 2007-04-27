@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: fft_module.f90,v 1.6 2005/11/14 11:07:49 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module fft_module
 ! ------------------------------------------------------------------------------
@@ -45,6 +45,8 @@
 !!    Also commented out MAX_FFT_SIZE variable which (it turns out) isn't being used !
 !!   11:02, 14/11/2005 drb 
 !!    Added array (recip_vector) to store reciprocal space vectors for grid 
+!!   15:54, 27/04/2007 drb 
+!!    Changed recip_vector to be (n,3) for speed
 !!  SOURCE
 !!
 module fft_module
@@ -56,7 +58,7 @@ module fft_module
   save
 
   ! RCS tag for object file identification   
-  character(len=80), private :: RCSid = "$Id: fft_module.f90,v 1.6 2005/11/14 11:07:49 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
   ! Previously ffttable
 !  integer, parameter :: MAX_FFT_SIZE=8*128
@@ -576,6 +578,8 @@ contains
 !!    Note: this routine ASSUMES orthorhombic cells
 !!   11:06, 14/11/2005 drb 
 !!    Also changed check for zero (used to be r2.NE.0, now r2>very_small)
+!!   15:54, 27/04/2007 drb 
+!!    Changed recip_vector for consistency
 !!  SOURCE
 !!
   subroutine set_fft_map ( )
@@ -621,7 +625,7 @@ contains
     allocate(x_columns_node(numprocs), y_columns_node(numprocs), z_columns_node(numprocs), STAT=ierr)
     if(ierr/=0) call cq_abort("Allocation error for columns in set_fft: ",numprocs,ierr)
     call reg_alloc_mem(area_SC,3*numprocs,type_int)
-    allocate(hartree_factor(maxngrid), recip_vector(3,maxngrid), STAT=ierr)
+    allocate(hartree_factor(maxngrid), recip_vector(maxngrid,3), STAT=ierr)
     if(ierr/=0) call cq_abort("Allocation error for reciprocal factors in set_fft: ",maxngrid,ierr)
     call reg_alloc_mem(area_SC,4*maxngrid,type_dbl)
     allocate(remote_grid_point_x(maxngrid),remote_grid_point_y(maxngrid),remote_grid_point_z(maxngrid),&
@@ -922,9 +926,9 @@ contains
                    ymin = real(y,double)/r_super_y
                 end if
                 ymin2 = ymin*ymin
-                recip_vector(1,site) = two*pi*xmin
-                recip_vector(2,site) = two*pi*ymin
-                recip_vector(3,site) = two*pi*zmin
+                recip_vector(site,1) = two*pi*xmin
+                recip_vector(site,2) = two*pi*ymin
+                recip_vector(site,3) = two*pi*zmin
                 r2 = xmin2+ymin2+zmin2
                 if (r2>very_small) then 
                    tmp_r2 = one/r2
