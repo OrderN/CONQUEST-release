@@ -516,6 +516,11 @@ contains
                    InvSRange(i) = reals(p,1)
                 else if(search(p,'Atom.NonLocalFactor',j)) then            ! Full Ham radius
                    NonLocalFactor(i) = reals(p,1)
+                   if(NonLocalFactor(i)>one.OR.NonLocalFactor(i)<zero) then
+                      write(*,fmt='(10x,"Warning: Atom.NonLocalFactor must lie between 0.0 and 1.0: ",f9.5)') NonLocalFactor(i)
+                      if(NonLocalFactor(i)>one) NonLocalFactor(i) = one
+                      if(NonLocalFactor(i)<zero) NonLocalFactor(i) = zero
+                   end if
                 else if(search(p,'Atom.SupportGridSpacing',j)) then            ! Support spacing
                    SupportGridSpacing(i) = reals(p,1)
                    min_blip_sp = min(SupportGridSpacing(i),min_blip_sp)
@@ -604,8 +609,13 @@ contains
        flag_test_all_forces = fdf_boolean('AtomMove.TestAllForces',.true.)
        if(.NOT.flag_test_all_forces) then ! Test one force component
           flag_which_force = fdf_integer('AtomMove.TestSpecificForce',1)
+          if(flag_which_force>8.OR.flag_which_force<0) write(*,fmt='(10x,"Warning ! TestSpecificForce must lie between 1 and 8: ",i3)') flag_which_force
        end if
        TF_direction = fdf_integer('AtomMove.TestForceDirection',1)
+       if(TF_direction>3.OR.TF_direction<0) then
+          write(*,fmt='(10x,"Warning ! TestForceDirection must lie between 1 and 3: ",i3)') TF_direction
+          TF_direction = 1
+       end if
        TF_atom_moved = fdf_integer('AtomMove.TestForceAtom',1)
        TF_delta = fdf_double('AtomMove.TestForceDelta',0.00001_double)
        flag_functional_type = fdf_integer('General.FunctionalType', 1)   ! LDA PZ81
@@ -645,7 +655,7 @@ contains
        pdb_altloc = fdf_string('IO.PdbAltLoc',' ')
        pdb_output = fdf_boolean('IO.PdbOut',.false.)
        part_mode = fdf_string('General.PartitionMethod','Hilbert')
-       if (leqi (part_mode(1:6),'Python')) then
+       if (leqi (part_mode(1:6),'File')) then
           part_method = PYTHON
        else if (leqi (part_mode(1:7), 'Hilbert')) then
           part_method = HILBERT

@@ -113,6 +113,10 @@ contains
     logical :: reset_L = .false.
 
     if(inode==ionode) write(*,fmt='(2x,"******************"/,2x,"* Testing Forces *"/,2x,"******************"/)')
+    if(TF_atom_moved>ni_in_cell) then
+       write(*,fmt='(2x,"Error: specified atom out-of-range: ",2i8)') TF_atom_moved, ni_in_cell
+       TF_atom_moved = 1
+    end if
     ! Here we want to back up the state of the system by saving H, K, density, blips, chis, local ps
     ! Energies
     H0 = hartree_energy
