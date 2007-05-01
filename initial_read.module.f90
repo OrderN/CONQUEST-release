@@ -93,7 +93,7 @@ contains
 !!   Change input so that appropriate variables are taken from modules 10/05/2002 dave
 !!  SOURCE
 !!
-  subroutine read_and_write(start, start_L, start_blips,&
+  subroutine read_and_write(start, start_L,&
        inode, ionode, restart_file, vary_mu, mu, &
        find_chdens, read_phi, number_of_bands)
 
@@ -123,7 +123,7 @@ contains
     implicit none
 
     ! Passed variables
-    logical :: vary_mu, start, start_L, start_blips, read_phi
+    logical :: vary_mu, start, start_L, read_phi
     logical :: find_chdens
 
     character(len=40) restart_file
@@ -146,7 +146,7 @@ contains
 
     ! read input data: parameters for run
     find_chdens = .true.
-    call read_input(start, start_L, start_blips, titles, restart_file, vary_mu, mu, find_chdens, read_phi,HNL_fac)
+    call read_input(start, start_L, titles, restart_file, vary_mu, mu, find_chdens, read_phi,HNL_fac)
 
     ! Initialise group data for partitions and read in partitions and atoms
     call my_barrier()
@@ -277,7 +277,7 @@ contains
 !!   Fix rigid shift 10/05/2002 dave
 !!  SOURCE
 !!
-  subroutine read_input( start, start_L, start_blips, &
+  subroutine read_input( start, start_L, &
        titles, restart_file, vary_mu, mu, find_chdens, read_phi,HNL_fac)
 
     use datatypes
@@ -288,7 +288,7 @@ contains
          runtype, restart_L, restart_rho, flag_basis_set, blips, PAOs, flag_test_forces, UseGemm, &
          flag_fractional_atomic_coords, flag_old_partitions, ne_in_cell, max_L_iterations, flag_read_blocks, &
          flag_functional_type, functional_description, functional_lda_pz81, functional_lda_gth96, &
-         functional_lda_pw92, functional_gga_pbe96, &
+         functional_lda_pw92, functional_gga_pbe96, flag_reset_dens_on_atom_move, flag_continue_on_SC_fail, &
          iprint_init, iprint_mat, iprint_ops, iprint_DM, iprint_SC, iprint_minE, &
          iprint_MD, iprint_index, iprint_gen, iprint_pseudo, iprint_basis, iprint_intgn, area_general, &
          global_maxatomspart, load_balance, many_processors, flag_assign_blocks
@@ -327,7 +327,7 @@ contains
 
     ! Passed variables
     logical :: vary_mu, find_chdens
-    logical :: start, start_L, start_blips, read_phi
+    logical :: start, start_L, read_phi
 
     character(len=40) :: restart_file
     character(len=80) :: titles
@@ -398,12 +398,10 @@ contains
        start = fdf_boolean('General.NewRun',.true.)
        if(start) then
           start_L = .true.
-          start_blips = .true.  ! N.B. Original had option for a blip model - add this later
+          read_option = .false.  ! N.B. Original had option for a blip model - add this later
        else ! This option loads data from a file - we need to add the option to search for this
           call cq_abort('read_input: you may not select restart for a run just now')
        endif
-       start_blips = fdf_boolean('Basis.LoadBlip',.false.)
-       if(.NOT.start_blips) restart_file = fdf_string('Basis.LoadBlipFile',' ')
        init_blip_flag = fdf_string('Basis.InitBlipFlag','pao')
        restart_L = fdf_boolean('General.LoadL',.false.)
        restart_rho = fdf_boolean('General.LoadRho',.false.)
@@ -461,6 +459,8 @@ contains
        else if(leqi(basis_string,'PAOs')) then
           flag_basis_set = PAOs
        end if
+       read_option = fdf_boolean('Basis.LoadCoeffs',.false.)
+       if(read_option.AND.flag_basis_set==blips) restart_file = fdf_string('Basis.LoadBlipFile',' ')
        find_chdens = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        ! Number of species
        n_species = fdf_integer('General.NumberOfSpecies',1)
@@ -573,6 +573,8 @@ contains
        EndLinearMixing = fdf_double('SC.LinearMixingEnd',sc_tolerance)
        q0 = fdf_double('SC.KerkerFactor',0.1_double)
        n_exact = fdf_integer('SC.LateStageReset',5)
+       flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
+       flag_continue_on_SC_fail = fdf_boolean('SC.ContinueOnSCFail',.false.)
        maxitersSC = fdf_integer('SC.MaxIters',50)
        maxearlySC = fdf_integer('SC.MaxEarly',3)
        maxpulaySC = fdf_integer('SC.MaxPulay',5)
@@ -593,7 +595,6 @@ contains
        del_k = fdf_double('Basis.PaoKspaceOlGridspace',0.1_double)
        kcut = fdf_double('Basis.PaoKspaceOlCutoff', 1000.0_double)
        flag_paos_atoms_in_cell = fdf_boolean('Basis.PAOs_StoreAllAtomsInCell',.true.)
-       read_option = fdf_boolean('Basis.LoadPaoCoeffs',.false.)
        symmetry_breaking = fdf_boolean('Basis.SymmetryBreaking',.false.)
        support_pao_file = fdf_string('Basis.SupportPaoFile','supp_pao.dat')
        pao_info_file = fdf_string('Basis.PaoInfoFile','pao.dat')
@@ -706,12 +707,12 @@ contains
        start = .true.!fdf_defined('start')
        if(start) then
           start_L = .true.
-          start_blips = .true.  ! N.B. Original had option for a blip model - add this later
+          read_option = .false.  ! N.B. Original had option for a blip model - add this later
        else ! This option loads data from a file - we need to add the option to search for this
           call cq_abort('read_input: you may not select restart for a run just now')
        endif
-       start_blips = fdf_boolean('StartBlip',.true.)
-       if(.NOT.start_blips) restart_file = fdf_string('LoadBlipFile',' ')
+       !read_option = fdf_boolean('StartBlip',.true.)
+       !if(.NOT.start_blips) restart_file = fdf_string('LoadBlipFile',' ')
        init_blip_flag = fdf_string('init_blip_flag','pao')
        restart_L = fdf_boolean('RestartL',.false.)
        restart_rho = fdf_boolean('RestartRho',.false.)

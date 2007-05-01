@@ -103,13 +103,13 @@ contains
 
     ! Local variables
     logical :: start, start_L
-    logical :: start_blips, read_phi
+    logical :: read_phi
 
     character(len=40) :: restart_file
 
     ! Read input
     call init_reg_mem
-    call read_and_write(start, start_L, start_blips,&
+    call read_and_write(start, start_L,&
          inode, ionode, restart_file, vary_mu, mu,&
          find_chdens, read_phi, number_of_bands)
 
@@ -125,7 +125,7 @@ contains
 
     call my_barrier
 
-    call initial_phis( mu, restart_file, read_phi, vary_mu, start, start_blips)
+    call initial_phis( mu, restart_file, read_phi, vary_mu, start)
 
     call initial_H( start, start_L, find_chdens, fixed_potential, vary_mu, number_of_bands, mu, total_energy)
     return
@@ -431,9 +431,11 @@ contains
 !!    Tidied call and passed variables
 !!   2006/09/13 07:57 dave
 !!    Changed to get number of coefficients for blips from support_function structure 
+!!   2007/05/01 08:31 dave
+!!    Changed start_blip into read_option for unified naming
 !!  SOURCE
 !!
-  subroutine initial_phis( mu, restart_file, read_phi, vary_mu, start, start_blips)
+  subroutine initial_phis( mu, restart_file, read_phi, vary_mu, start)
 
     use datatypes
     use blip, ONLY: init_blip_flag, make_pre, set_blip_index, gauss2blip
@@ -457,7 +459,7 @@ contains
     use angular_coeff_routines, ONLY: make_ang_coeffs, set_fact, set_prefac, set_prefac_real
     use read_support_spec, ONLY: read_support
     use functions_on_grid, ONLY: supportfns
-    use support_spec_format, ONLY: supports_on_atom, coefficient_array, coeff_array_size
+    use support_spec_format, ONLY: supports_on_atom, coefficient_array, coeff_array_size, read_option
 
     implicit none
 
@@ -466,14 +468,13 @@ contains
 
     character(len=40) :: restart_file
 
-    logical :: read_phi, vary_mu, start, start_blips
+    logical :: read_phi, vary_mu, start
 
     ! Local variables
 
     integer :: isf, np, ni, iprim, n_blip, n_run
     real(double) :: mu_copy
     real(double) :: factor
-    logical :: read_option
     logical, external :: leqi
 
     ! Used by pseudopotentials as well as PAOs
@@ -490,17 +491,11 @@ contains
        !   write(unit=*,fmt='(/" initial_phis: support_grid_spacing:"&
        !        &,f12.6)') support_grid_spacing
        !end if
-       if(start_blips) then
+       if(.NOT.read_option) then
           if(leqi(init_blip_flag,'gauss')) then
              call gauss2blip
           else if(leqi(init_blip_flag,'pao')) then
-             !read_option = fdf_boolean('read_pao_coeffs',.false.)
-             !if(read_option) then
-             !   call get_support_pao_rep(inode,ionode)
-             !   call make_blips_from_relaxed_paos(inode,ionode,n_species)
-             !else
              call make_blips_from_paos(inode,ionode,n_species)
-             !end if
           else
              call cq_abort('initial_phis: init_blip_flag no good')
           end if
@@ -519,7 +514,7 @@ contains
        !     if (start.and.(.not.start_blips)) call load_blip(inode, ionode, restart_file)
        ! Tweak DRB 2007/03/34 Remove need for start
        !if (start.and.(.not.start_blips)) then
-       if (.not.start_blips) then
+       if (read_option) then
           if(inode==ionode.AND.iprint_init>0) write(*,fmt='(10x,"Loading blips")')
           call grab_blip_coeffs(coefficient_array,coeff_array_size, inode)
        end if
@@ -529,7 +524,7 @@ contains
        if((inode == ionode).AND.(iprint_init > 1)) then
           write(unit=*,fmt='(10x,"initial_phis: completed blip_to_support()")')
        end if
-       if (start .or. start_blips) then
+       if (start .or. (.NOT.read_option)) then
           n_run = 0
           !     call normalise_support(support, inode, ionode,&
           !          NSF, SUPPORT_SIZE)

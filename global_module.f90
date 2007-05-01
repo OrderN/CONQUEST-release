@@ -92,6 +92,9 @@ module global_module
   logical :: flag_old_partitions
   logical :: flag_read_blocks ! Do we read make_blk.prt or raster ?
   logical :: flag_test_forces
+  logical :: flag_reset_dens_on_atom_move
+  logical :: flag_continue_on_SC_fail
+  logical :: flag_SCconverged
   logical :: UseGemm
 
   ! How should blocks be assigned ? See block_module.f90

@@ -109,6 +109,8 @@ contains
 !!    Added call to simple linear mixing
 !!   2007/04/17 09:37 dave
 !!    Changed tolerance for non-self-consistent call to DMM minimisation
+!!   2007/05/01 10:05 dave
+!!    Added converged flag to allow continuation without convergence
 !!  SOURCE
 !!
   subroutine new_SC_potl( record, self_tol, reset_L, fixed_potential, vary_mu, n_L_iterations, &
@@ -118,7 +120,7 @@ contains
     use PosTan, ONLY: PulayC, PulayBeta, SCC, SCBeta, pos_tan, &
          max_iters, SCE, SCR, fit_coeff
     use numbers
-    use global_module, ONLY: iprint_SC, flag_self_consistent
+    use global_module, ONLY: iprint_SC, flag_self_consistent, flag_SCconverged
     use H_matrix_module, ONLY: get_H_matrix
     use DMMin, ONLY: FindMinDM
     use energy, ONLY: get_energy
@@ -164,6 +166,7 @@ contains
     done = .false.
     problem = .false.
     early = .false.
+    flag_SCconverged = .true.
     ! Check on whether we need to do early iterations
     if(.NOT.allocated(EarlyRecord)) then
        allocate(EarlyRecord(maxearlySC),STAT=stat)
@@ -264,7 +267,7 @@ contains
     use EarlySCMod
     use GenComms, ONLY: cq_abort, gsum, my_barrier, inode, ionode
     use dimens, ONLY: n_my_grid_points, grid_point_volume
-    use global_module, ONLY: ne_in_cell, area_SC
+    use global_module, ONLY: ne_in_cell, area_SC, flag_continue_on_SC_fail, flag_SCconverged
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use maxima_module, ONLY: maxngrid
 
@@ -301,8 +304,11 @@ contains
     ! Test to check for available iterations
     n_iters = ndone
     if(n_iters>=maxitersSC) then
-       call cq_abort('earlySC: Too many self-consisteny iterations: ',n_iters,&
+       if(.NOT.flag_continue_on_SC_fail) call cq_abort('earlySC: Too many self-consisteny iterations: ',n_iters,&
             maxitersSC)
+       flag_SCconverged = .false.
+       done = .true.
+       return
     endif
     ! Decide on whether or not to record dE vs R for L min
     if(record) then 
@@ -506,7 +512,7 @@ contains
     use EarlySCMod, ONLY: get_new_rho
     use GenComms, ONLY: gsum, cq_abort, inode, ionode
     use hartree_module, ONLY: kerker
-    use global_module, ONLY: ne_in_cell, area_SC
+    use global_module, ONLY: ne_in_cell, area_SC, flag_continue_on_SC_fail, flag_SCconverged
     use maxima_module, ONLY: maxngrid
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
@@ -544,7 +550,10 @@ contains
     linear = .true.
     n_iters = ndone
     if(n_iters>=maxitersSC) then
-       call cq_abort('lateSC: too many iterations: ',n_iters, maxitersSC)
+       if(.NOT.flag_continue_on_SC_fail) call cq_abort('lateSC: too many iterations: ',n_iters, maxitersSC)
+       flag_SCconverged = .false.
+       done = .true.
+       return
     endif
     ! Compute residual of initial density
     rho_pul(1:n_my_grid_points, 1) = rho(1:n_my_grid_points)
@@ -750,7 +759,7 @@ contains
     use GenComms, ONLY: gsum, cq_abort, inode, ionode
     use io_module, ONLY: dump_charge
     use hartree_module, ONLY: kerker
-    use global_module, ONLY: ne_in_cell, area_SC
+    use global_module, ONLY: ne_in_cell, area_SC, flag_continue_on_SC_fail, flag_SCconverged
     use maxima_module, ONLY: maxngrid
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
@@ -778,7 +787,10 @@ contains
     done = .false.
     n_iters = ndone
     if(n_iters>=maxitersSC) then
-       call cq_abort('lateSC: too many iterations: ',n_iters, maxitersSC)
+       if(.NOT.flag_continue_on_SC_fail) call cq_abort('lateSC: too many iterations: ',n_iters, maxitersSC)
+       flag_SCconverged = .false.
+       done = .true.
+       return
     endif
     R0 = 100.0_double
     do while(R0>EndLinearMixing)
@@ -817,7 +829,7 @@ contains
     use GenComms, ONLY: gsum, cq_abort, inode, ionode
     use io_module, ONLY: dump_charge
     use hartree_module, ONLY: kerker
-    use global_module, ONLY: ne_in_cell, area_SC
+    use global_module, ONLY: ne_in_cell, area_SC,flag_continue_on_SC_fail, flag_SCconverged
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use maxima_module, ONLY: maxngrid
 
@@ -856,7 +868,10 @@ contains
     done = .false.
     n_iters = ndone
     if(n_iters>=maxitersSC) then
-       call cq_abort('lateSC: too many iterations: ',n_iters, maxitersSC)
+       if(.NOT.flag_continue_on_SC_fail) call cq_abort('lateSC: too many iterations: ',n_iters, maxitersSC)
+       flag_SCconverged = .false.
+       done = .true.
+       return
     endif
     ! m=1
     call get_new_rho(.false., reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
@@ -987,7 +1002,7 @@ contains
     use GenComms, ONLY: gsum, cq_abort, inode, ionode
     use io_module, ONLY: dump_charge, dump_charge2
     use hartree_module, ONLY: kerker
-    use global_module, ONLY: ne_in_cell, iprint_SC, area_SC
+    use global_module, ONLY: ne_in_cell, iprint_SC, area_SC, flag_continue_on_SC_fail, flag_SCconverged
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use maxima_module, ONLY: maxngrid
 
@@ -1033,7 +1048,10 @@ contains
     n_iters = ndone
     m=1
     if(n_iters>=maxitersSC) then
-       call cq_abort('lateSC: too many iterations: ',n_iters, maxitersSC)
+       if(.NOT.flag_continue_on_SC_fail) call cq_abort('lateSC: too many iterations: ',n_iters, maxitersSC)
+       flag_SCconverged = .false.
+       done = .true.
+       return
     endif
     ! m=1
     max_neg = 0.0_double
@@ -1207,7 +1225,7 @@ contains
     use GenComms, ONLY: gsum, cq_abort, inode, ionode
     use io_module, ONLY: dump_charge, dump_charge2
     use hartree_module, ONLY: kerker
-    use global_module, ONLY: ne_in_cell
+    use global_module, ONLY: ne_in_cell, flag_continue_on_SC_fail, flag_SCconverged
     use maxima_module, ONLY: maxngrid
 
     implicit none
@@ -1250,7 +1268,10 @@ contains
     done = .false.
     n_iters = ndone
     if(n_iters>=maxitersSC) then
-       call cq_abort('lateSC: too many iterations: ',n_iters, maxitersSC)
+       if(.NOT.flag_continue_on_SC_fail) call cq_abort('lateSC: too many iterations: ',n_iters, maxitersSC)
+       flag_SCconverged = .false.
+       done = .true.
+       return
     endif
     ! m=1
     max_neg = 0.0_double

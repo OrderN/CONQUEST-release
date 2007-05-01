@@ -270,7 +270,8 @@ contains
     use numbers
     use units
     use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, &
-         flag_vary_basis, atom_coord, ni_in_cell, rcellx, rcelly, rcellz, flag_self_consistent
+         flag_vary_basis, atom_coord, ni_in_cell, rcellx, rcelly, rcellz, flag_self_consistent, &
+         flag_reset_dens_on_atom_move
     use minimise, ONLY: get_E_and_F, sc_tolerance, L_tolerance, n_L_iterations
     use GenComms, ONLY: my_barrier, myid, inode, ionode
     use SelfCon, ONLY: new_SC_potl
@@ -396,11 +397,12 @@ contains
           !call set_density()
           !density = store_density + density
        !end if
-       ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
        ! Write out atomic positions
        if(iprint_MD>2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat",trim(pdb_template))
        end if
+       if(flag_reset_dens_on_atom_move) call set_density()
+       ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
        if(flag_vary_basis) then
           call new_SC_potl( .false., sc_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
                number_of_bands, L_tolerance, mu, e3)
@@ -471,6 +473,7 @@ contains
     if(iprint_MD>2) then
        call write_atomic_positions("UpdatedAtoms_tmp.dat",trim(pdb_template))
     end if
+    if(flag_reset_dens_on_atom_move) call set_density()
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
     if(flag_vary_basis) then
        call new_SC_potl( .false., sc_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
@@ -513,6 +516,7 @@ contains
        if(iprint_MD>2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat",trim(pdb_template))
        end if
+       if(flag_reset_dens_on_atom_move) call set_density()
        ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
        if(flag_vary_basis) then
           call new_SC_potl( .false., sc_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
