@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: multiply_module.f90,v 1.10.2.2 2006/03/31 13:03:38 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module multiply_module
 ! ------------------------------------------------------------------------------
@@ -50,7 +50,7 @@ module multiply_module
   implicit none
 
   ! RCS tag for object file identification 
-  character(len=80), save, private :: RCSid = "$Id: multiply_module.f90,v 1.10.2.2 2006/03/31 13:03:38 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -151,7 +151,8 @@ contains
     allocate(atrans(lena),STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error allocating atrans')
     !write(*,*) 'Sizes: ',a_b_c%comms%mx_dim3*a_b_c%comms%mx_dim2*a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs,&
-    !     a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs,a_b_c%comms%mx_dim3*a_b_c%comms%mx_dim1*a_b_c%prim%mx_iprim*a_b_c%amat(1)%mx_nab
+    !     a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs,a_b_c%comms%mx_dim3*a_b_c%comms%mx_dim1* &
+    !     a_b_c%prim%mx_iprim*a_b_c%amat(1)%mx_nab
     sends = 0
     do i=1,a_b_c%comms%inode
        if(a_b_c%comms%np_send(i)>0) then
@@ -716,7 +717,8 @@ contains
                 ncbeg=chalo%i_h2d(icad+j_in_halo)
                 !nd2 = chalo%ndimj(j_in_halo)
                 if(ncbeg/=0) then  ! multiplication of ndim x ndim blocks 
-                   !if (PRESENT(debug)) write(21+debug,*) 'Details2: ',j,nd2,(nabeg-1)/(nd1*nd3),(ncbeg-1)/(nd1*nd2),(nbbeg-1)/(nd2*nd3)
+                   !if (PRESENT(debug)) write(21+debug,*) &
+                   !     'Details2: ',j,nd2,(nabeg-1)/(nd1*nd3),(ncbeg-1)/(nd1*nd2),(nbbeg-1)/(nd2*nd3)
 !DIR$ NOPATTERN
                    !!  do n2=1,nd2
                    !!     nbaddr = nbbeg+nd3*(n2-1)
@@ -1141,7 +1143,8 @@ contains
                 ncbeg=chalo%i_h2d(icad+j_in_halo)
                 !nd2 = chalo%ndimj(j_in_halo)
                 if(ncbeg/=0) then  ! multiplication of ndim x ndim blocks 
-                   !if (PRESENT(debug)) write(21+debug,*) 'Details2: ',j,nd2,(nabeg-1)/(nd1*nd3),(ncbeg-1)/(nd1*nd2),(nbbeg-1)/(nd2*nd3)
+                   !if (PRESENT(debug)) write(21+debug,*) &
+                   !     'Details2: ',j,nd2,(nabeg-1)/(nd1*nd3),(ncbeg-1)/(nd1*nd2),(nbbeg-1)/(nd2*nd3)
 !DIR$ NOPATTERN
                    do n2=1,nd2
                       nbaddr = nbbeg+nd3*(n2-1)

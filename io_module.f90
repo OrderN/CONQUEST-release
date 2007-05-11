@@ -846,7 +846,7 @@ second:   do
     use numbers, ONLY: very_small, one, two, three
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use construct_module, ONLY: init_group
-    use GenComms, ONLY: my_barrier
+    use GenComms, ONLY: my_barrier, mtime
 
     implicit none
 
@@ -857,7 +857,7 @@ second:   do
     ! Local variables
     integer :: nnode, min_atoms_part, max_atoms_part
     integer :: min_parts_occ, max_parts_occ
-    real(double) :: real_min_parts, real_max_parts, real_j_max, real_j_min, dims
+    real(double) :: real_min_parts, real_max_parts, real_j_max, real_j_min, dims, time0, time1
     real(double), dimension(-3:3) :: minmax_coords
     real(double), dimension(1:3) :: occupied_cell, tmp_parts, hc_edge
     integer :: b, i0, i1, i2, i3, i4, i5, tmp, stat, start
@@ -928,6 +928,8 @@ second:   do
     if (.not.many_processors) then
       ! Sort the atoms according to x, y, and z coordinates
       ! and store their *indices* in sorted_coord.
+
+      time0 = mtime()
  
       allocate(sorted_coord(3,ni_in_cell), STAT = stat)
       if(stat/=0) call cq_abort("Failure to allocate sorted_coord: ",ni_in_cell)
@@ -978,6 +980,8 @@ second:   do
         minmax_coords(-3)
 
     end if
+
+    if (myid==0.AND.iprint_init>2) write(*,'(a,f14.10)') "Time for min-max", mtime()-time0
 
     do i = 1, 3
       occupied_cell(i) = minmax_coords(i) - minmax_coords(-i)
@@ -1053,6 +1057,8 @@ second:   do
     ! depend on the number of processors
 
     if (.not.many_processors) then
+
+       time0 = mtime()
  
 hc:   do 
         refine = .false.
@@ -1205,11 +1211,13 @@ hc2:    do
                                   end if
                                   map(Hilbert,sfc_sequence(Hilbert)) = sorted_coord(1,i3)
                                   if (iprint_init > 4.AND.myid==0) write(*,'(a,i5,a)') "    Atom", sorted_coord(1,i3), " matches"
-                                  if (iprint_init > 4.AND.myid==0) write(*,'(a,i5,a,i5)') "    Sequence(", Hilbert,") atoms:",sfc_sequence(Hilbert)
+                                  if (iprint_init > 4.AND.myid==0) &
+                                       write(*,'(a,i5,a,i5)') "    Sequence(", Hilbert,") atoms:",sfc_sequence(Hilbert)
                                   if (maxatomspart < sfc_sequence(Hilbert)) maxatomspart = sfc_sequence(Hilbert)
                                   exit
                                 else
-                                  if (iprint_init > 4.AND.myid==0) write(*,'(a,i5,a)') "    Z range, atom",sorted_coord(3,i5)," does not match"
+                                  if (iprint_init > 4.AND.myid==0) &
+                                       write(*,'(a,i5,a)') "    Z range, atom",sorted_coord(3,i5)," does not match"
                                   exit
                                 end if
                               end if
@@ -1217,7 +1225,8 @@ hc2:    do
                             end do
                             exit
                           else
-                            if (iprint_init > 4.AND.myid==0) write(*,'(a,i5,a)') "  Y range, atom",sorted_coord(2,i4)," does not match"
+                            if (iprint_init > 4.AND.myid==0) &
+                                 write(*,'(a,i5,a)') "  Y range, atom",sorted_coord(2,i4)," does not match"
                             exit
                           end if   
                         end if
@@ -1226,7 +1235,8 @@ hc2:    do
                   end do
                 end if
          
-                if (iprint_init > 3.AND.myid==0) write(*,'(a,i5,a,i5,a)') "Sfc_sequence(",Hilbert,") =",sfc_sequence(Hilbert)," finished"
+                if (iprint_init > 2.AND.myid==0) &
+                     write(*,'(a,i5,a,i5,a)') "Sfc_sequence(",Hilbert,") =",sfc_sequence(Hilbert)," finished"
 
       !         if (sfc_sequence(Hilbert) > global_maxatomspart) then
       !           refine = .true.
@@ -1267,8 +1277,13 @@ hc2:    do
         b = b + 1
      
       end do hc
+
+      if(myid==0.AND.iprint_init>2) &
+           write(*,'(10x,a,f14.10)') "Time for assigning atoms to partitions, loop over partitions", mtime()-time0
      
     else ! Many Processors
+
+      time0 = mtime()
 
       refine = .true.
       do 
@@ -1393,6 +1408,8 @@ hc2:    do
       deallocate(H,STAT = stat)
       if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array H')
  
+      if(myid==0.AND.iprint_init>2) &
+           write(*,'(10x,a,f14.10)') "Time for assigning atoms to partitions, loop over partitions", mtime()-time0
     end if ! partitioning algorithm
 
     maxatomsproc_tmp = ni_in_cell / numprocs 
@@ -1495,7 +1512,8 @@ hc2:    do
             if (iprint_init > 4.AND.myid==0) write(*,*) "Numprocs =", numprocs
             if (iprint_init > 4.AND.myid==0) write(*,*) "Loop: Maxatomsproc_tmp =", maxatomsproc_tmp
             do i = 0, numprocs - 1
-              if (iprint_init > 4.AND.myid==0) write(*,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+              if (iprint_init > 4.AND.myid==0) &
+                   write(*,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
               if (no_atoms_proc(i) == 0) write(*,*) "WARNING: Processor", i," has no atoms! Too many processors?"
               ! Statistics
               ! proc_atoms_min = ni_in_cell
@@ -1517,12 +1535,68 @@ hc2:    do
 
       end do 
       do i = 0, numprocs - 1
-         if (iprint_init > 4.AND.myid==0) write(*,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+         if (iprint_init > 4.AND.myid==0) &
+              write(*,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+         ! The following needs to stay here because the reshuffling part relies on all processors having atoms
          if (no_atoms_proc(i) == 0) then
             write(*,*) "WARNING: Processor", i," has no atoms! Too many processors?"
             call cq_abort("Automatic partitioner requires all processors to have atoms")
          end if
       end do
+
+      ! Reshuffling empty partitions
+
+      if (numprocs > 2) then
+
+        ! We skip the first and last processor
+        do i = 1, numprocs - 2
+
+          if ((sfc_sequence(parts_boundaries(i)) == 0) .and. (parts_inode_tmp(i) > parts_inode_tmp(i-1))) then
+
+            j = 0
+            do while ( (sfc_sequence(parts_boundaries(i)+j) == 0) .and. (parts_boundaries(i)+j < parts_boundaries(i+1)) )
+              j = j + 1
+            end do
+            k = min (((parts_inode_tmp(i) - parts_inode_tmp(i-1)) / 2), j)
+            parts_boundaries(i) = parts_boundaries(i) + k
+            parts_inode_tmp(i-1) = parts_inode_tmp(i-1) + k
+            parts_inode_tmp(i) = parts_inode_tmp(i) - k
+
+          end if
+
+        end do
+
+      end if
+
+      if (numprocs > 1) then
+
+        ! The same for the last processor
+        if ((sfc_sequence(parts_boundaries(numprocs-1)) == 0) .and. &
+             (parts_inode_tmp(numprocs-1) > parts_inode_tmp(numprocs-2))) then
+
+          j = 0
+          do while ( (sfc_sequence(parts_boundaries(numprocs-1)+j) == 0) .and. (parts_boundaries(numprocs-1)+j < no_hc - 1) ) 
+            j = j + 1
+          end do
+          k = min (((parts_inode_tmp(numprocs-1) - parts_inode_tmp(numprocs-2)) / 2), j)
+          parts_boundaries(numprocs-1) = parts_boundaries(numprocs-1) + k
+          parts_inode_tmp(numprocs-2) = parts_inode_tmp(numprocs-2) + k
+          parts_inode_tmp(numprocs-1) = parts_inode_tmp(numprocs-1) - k
+
+        end if
+
+
+        do i = 0, numprocs - 1
+           if (iprint_init > 4.AND.myid==0) &
+                write(*,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+           ! Probably unnecessary - was done earlier
+           if (no_atoms_proc(i) == 0) then
+              write(*,*) "WARNING: Processor", i," has no atoms! Too many processors?"
+              call cq_abort("Automatic partitioner requires all processors to have atoms")
+           end if
+        end do
+
+      end if
 
       ! Statistics
       ! allocate(histogram(proc_atoms_min:proc_atoms_max), STAT = stat)
@@ -1599,7 +1673,7 @@ hc2:    do
     if (total_no_parts /= no_hc) call cq_abort('Creafe_sfc_partitions: Partition number does not match')
 
     ! Delete later
-    if (iprint_init > 4.AND.myid==0) then
+    if (iprint_init > 3.AND.myid==0) then
       do i = 0, numprocs -1
         write(*,'(a,i3,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
       end do
@@ -1626,7 +1700,8 @@ hc2:    do
        call cq_abort('read_partitions: too many parts edge ', &
             max(parts%ngcellx,parts%ngcelly,parts%ngcellz),parts%mx_gedge)
     endif
-    if (iprint_init > 0.AND.myid==0) write(*,'(2x,a,3i5)') "partitions along cell sides", parts%ngcellx, parts%ngcelly, parts%ngcellz
+    if (iprint_init > 0.AND.myid==0) write(*,'(2x,a,3i5)') "partitions along cell sides", &
+         parts%ngcellx, parts%ngcelly, parts%ngcellz
     if (iprint_init > 2.AND.myid==0) write(*,'(2x,a,i5)') "maximum number of atoms in a partition", maxatomspart
     if (iprint_init > 2.AND.myid==0) write(*,'(2x,a,i5)') "maximum number of atoms on a processor", maxatomsproc
     if (iprint_init > 2.AND.myid==0) write(*,'(2x,a,i5)') "maximum number of partitions on a processor", maxpartsproc
@@ -1741,7 +1816,8 @@ hc2:    do
 !%%!        do j = 1, sfc_sequence(i)
 !%%!          id_glob(parts%icell_beg(cc_part_id(i))+j-1) = map(i,j)
 !%%!          id_glob_inv(map(i,j)) = parts%icell_beg(cc_part_id(i)) + j - 1
-!%%!          write(*,'(a,6i3)') 'Part, seq, map: ',i,j,map(i,j),cc_part_id(i),parts%icell_beg(cc_part_id(i)),parts%icell_beg(cc_part_id(i))+j-1
+!%%!          write(*,'(a,6i3)') 'Part, seq, map: ',i,j,map(i,j),cc_part_id(i), &
+!%%!               parts%icell_beg(cc_part_id(i)),parts%icell_beg(cc_part_id(i))+j-1
 !%%!        end do
 !%%!      end if
 !%%!    end do

@@ -1,6 +1,6 @@
 !-*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! -----------------------------------------------------------------------------
-! $Id: DiagModule.f90,v 1.9.2.3 2006/03/31 12:04:27 drb Exp $
+! $Id$
 ! -----------------------------------------------------------------------------
 ! DiagModule
 ! -----------------------------------------------------------------------------
@@ -181,7 +181,7 @@ module DiagModule
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: DiagModule.f90,v 1.9.2.3 2006/03/31 12:04:27 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
   ! Local scratch data
   real(double), allocatable, dimension(:,:) :: w
@@ -278,7 +278,7 @@ contains
     use numbers, ONLY: zero
     use units
     use global_module, ONLY: iprint_DM, ni_in_cell, numprocs, area_DM
-    use GenComms, ONLY: my_barrier, cq_abort, mtmini, mtime, gcopy, myid
+    use GenComms, ONLY: my_barrier, cq_abort, mtime, gcopy, myid
     use ScalapackFormat, ONLY: matrix_size, proc_rows, proc_cols, deallocate_arrays, &
          block_size_r, block_size_c, my_row
     use mult_module, ONLY: matH, matS, matK, matM12, matrix_scale, matrix_product_trace
@@ -293,7 +293,7 @@ contains
     real(double) :: electrons
     
     ! Local variables
-    real(double) :: Ef, bandE, abstol, a
+    real(double) :: Ef, bandE, abstol, a, time0, time1
     real(double), external :: dlamch
     complex(double_cplx), dimension(:,:), allocatable :: expH
     integer :: merow, mecol, info, lwork, stat, row_size, nump
@@ -324,7 +324,7 @@ contains
     ! Start diagonalisation
     ! -------------------------------------------------------------------------------------------------
     ! First diagonalisation - get eigenvalues only (so that we can find Ef)
-    call mtmini
+    time0 = mtime()
     abstol = 1e-30_double!pdlamch(context,'U')
     if(iprint_DM>=2.AND.myid==0) write(*,fmt='(10x,"In FindEvals, tolerance is ",g20.12)') abstol
     do i=1,nkp ! Build and send Hamiltonian for each k-point
@@ -349,7 +349,8 @@ contains
           if(info/=0) call cq_abort("FindEvals: pzheev failed !",info)
        end if ! if(me<proc_rows*proc_cols)
     end do ! End do i=1,nkp
-    if(iprint_DM>=2) write(*,2) myid,mtime()
+    time1 = mtime()
+    if(iprint_DM>=2) write(*,2) myid,time1 - time0
     ! Find Fermi level, given the eigenvalues at all k-points (in w)
     if(me<proc_rows*proc_cols) then
        call findFermi(electrons,w,matrix_size,nkp,Ef)
@@ -383,7 +384,7 @@ contains
     allocate(expH(matrix_size,prim_size),STAT=stat)
     if(stat/=0) call cq_abort('FindEvals: failed to alloc expH',matrix_size)
     call reg_alloc_mem(area_DM,2*matrix_size*prim_size,type_dbl)
-    call mtmini
+    time0 = mtime()
     call matrix_scale(zero,matK)
     call matrix_scale(zero,matM12)
     ! Second diagonalisation - get eigenvectors and build K
@@ -424,7 +425,8 @@ contains
        ! Now build data_M12_ij (=-\sum_n eps^n c^n_i c^n_j - hence scaling occs by eps allows reuse of buildK)
        call buildK(Srange, matM12, occ(1:matrix_size,i), kk(1:3,i), wtk(i), expH)
     end do ! End do i=1,nkp
-    if(iprint_DM>=2) write(*,3) myid,mtime()
+    time1 = mtime()
+    if(iprint_DM>=2) write(*,3) myid,time1 - time0
     ! -------------------------------------------------------------------------------------------------
     ! End diagonalisation
     ! -------------------------------------------------------------------------------------------------
@@ -1502,7 +1504,7 @@ contains
                    refblock = mapy(recv_proc+1,rblock,cblock)
                    coff = (refblock-1)*block_size_c + 1
                    if(iprint_DM>=5) write(*,3) myid,j,k,rblock,cblock,refblock,coff,Distrib%firstrow(recv_proc+1),RecvBuffer(j,k)
-                   !                localEig(Distrib%firstrow(recv_proc+1)+j-1,coff:coff+block_size_c-1) = RecvBuffer(j,k:k+block_size_c-1)
+                   !localEig(Distrib%firstrow(recv_proc+1)+j-1,coff:coff+block_size_c-1) = RecvBuffer(j,k:k+block_size_c-1)
                    localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
                 end do
              end do

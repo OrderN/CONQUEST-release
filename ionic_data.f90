@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: ionic_data.f90,v 1.6.2.1 2006/02/13 10:56:04 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module ionic_data
 ! ------------------------------------------------------------------------------
@@ -30,7 +30,7 @@ module ionic_data
   implicit none
 
   ! RCS tag for object file identification
-  character(len=80), private, save :: RCSid = "$Id: ionic_data.f90,v 1.6.2.1 2006/02/13 10:56:04 drb Exp $"
+  character(len=80), private, save :: RCSid = "$Id$"
 !!***
 
 contains
@@ -105,7 +105,8 @@ contains
     if(leqi(atomic_density_method,'pao')) flag_atomic_density_from_pao = .true.
     ! If PAOs are needed, then read them
     ! Note that we now read PAOs from the .ion file if we're using that pseudopotential
-    if((pseudo_type/=SIESTA.AND.pseudo_type/=ABINIT).AND.(flag_blips_from_pao.OR.flag_atomic_density_from_pao.OR.flag_basis_set==PAOs)) then
+    if((pseudo_type/=SIESTA.AND.pseudo_type/=ABINIT).AND. &
+         (flag_blips_from_pao.OR.flag_atomic_density_from_pao.OR.flag_basis_set==PAOs)) then
        if(inode == ionode.AND.iprint_init>1) &
             write(unit=*,fmt='(//" **** get_ionic_data: about to call read_pao_info")')
        call read_pao(inode,ionode,n_species)

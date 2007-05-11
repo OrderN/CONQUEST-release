@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: generic_comms.f90,v 1.11 2005/10/17 11:17:40 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module GenComms
 ! -----------------------------------------------------------
@@ -57,7 +57,7 @@ module GenComms
   implicit none
 
   ! RCS tag for object file identification 
-  character(len=80), save, private :: RCSid = "$Id: generic_comms.f90,v 1.11 2005/10/17 11:17:40 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
   integer, save :: myid, root
   integer, save :: inode, ionode
@@ -234,6 +234,8 @@ contains
 !!    Added ROBODoc header
 !!   30/08/2001 dave
 !!    Moved to GenComms module
+!!   2007/05/11 08:00 dave
+!!    Added initialisation call for mtmini
 !!  SOURCE
 !!
   subroutine init_comms(myid,number_of_procs)
@@ -255,6 +257,7 @@ contains
     call MPI_COMM_SIZE( MPI_COMM_WORLD, number_of_procs, ierr )
     inode = myid+1
     ionode = 1
+    call mtmini()
     return
   end subroutine init_comms
 !!***
@@ -285,6 +288,8 @@ contains
 !!    ROBODoc header
 !!   30/08/2001 dave
 !!    Included in generic_comms and changed to end_comms
+!!   2007/05/11 07:58 dave
+!!    Added final call to mtime to give overall run time
 !!  SOURCE
 !!
   subroutine end_comms
@@ -296,7 +301,8 @@ contains
 
     ! Local variables
     integer :: ierr
-
+    
+    if(myid==0) write(*,fmt='(2x,"Total run time was: ",f20.3," seconds")') mtime()*0.001_double
     call MPI_Barrier(MPI_COMM_WORLD, ierr)
     call MPI_Finalize(ierr)
     return

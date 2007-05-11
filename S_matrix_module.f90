@@ -1,4 +1,4 @@
-! $Id: S_matrix_module.f90,v 1.17.2.3 2006/03/31 12:07:59 drb Exp $
+! $Id$
 ! -----------------------------------------------------------
 ! Module S_matrix_module
 ! -----------------------------------------------------------
@@ -35,7 +35,7 @@ module S_matrix_module
   real(double) :: InvSTolerance
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: S_matrix_module.f90,v 1.17.2.3 2006/03/31 12:07:59 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -623,8 +623,10 @@ contains
 !%%!
 !%%!    ! Local variables
 !%%!    real(double) :: FAC(-3:3)
-!%%!    real(double) :: work1(this_nsf,-BlipArraySize(spec)-3:BlipArraySize(spec)+3,-BlipArraySize(spec)-3:BlipArraySize(spec)+3,-BlipArraySize(spec)-3:BlipArraySize(spec)+3), &
-!%%!         work2(this_nsf,-BlipArraySize(spec)-3:BlipArraySize(spec)+3,-BlipArraySize(spec)-3:BlipArraySize(spec)+3,-BlipArraySize(spec)-3:BlipArraySize(spec)+3)
+!%%!    real(double) :: work1(this_nsf,-BlipArraySize(spec)-3:BlipArraySize(spec)+3,&
+!%%!         -BlipArraySize(spec)-3:BlipArraySize(spec)+3,-BlipArraySize(spec)-3:BlipArraySize(spec)+3), &
+!%%!         work2(this_nsf,-BlipArraySize(spec)-3:BlipArraySize(spec)+3,&
+!%%!         -BlipArraySize(spec)-3:BlipArraySize(spec)+3,-BlipArraySize(spec)-3:BlipArraySize(spec)+3)
 !%%!    integer :: dx,dy,dz,nx,nx1,l,l1,nsf1,ny,ny1,nz,nz1,nsf2
 !%%!
 !%%!    FAC(-3) = 1.0_double/2240.0_double

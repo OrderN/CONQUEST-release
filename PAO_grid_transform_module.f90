@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: PAO_grid_transform_module.f90,v 1.7.2.2 2006/03/07 07:36:40 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module PAO_grid_transform_module
 ! ------------------------------------------------------------------------------
@@ -27,6 +27,8 @@
 !!    Changed lines to conform to F90 standard
 !!   2006/06/20 08:15 dave
 !!    Various changes for variable NSF
+!!   2007/05/11 07:56 dave
+!!    Tidying up timing calls throughout
 !!  SOURCE
 !!
 module PAO_grid_transform_module
@@ -34,7 +36,7 @@ module PAO_grid_transform_module
   implicit none
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: PAO_grid_transform_module.f90,v 1.7.2.2 2006/03/07 07:36:40 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -71,7 +73,7 @@ contains
     use datatypes
     use numbers, ONLY: zero
     use primary_module, ONLY: bundle
-    use GenComms, ONLY: my_barrier, cq_abort, mtmini, mtime
+    use GenComms, ONLY: my_barrier, cq_abort, mtime
     use blip_grid_transform_module, ONLY: distribute_result
     use global_module, ONLY: iprint_basis
     use functions_on_grid, ONLY: gridfunctions
@@ -100,17 +102,20 @@ contains
           if( iprim <= bundle%n_prim ) then
              nsf_send = nsf_species(bundle%species(iprim))
              call do_PAO_transform(iprim,nsf_send)
-             now = mtime()
-             write(*,fmt='(2x,"Proc ",i5," Time for PAO_grid transform (in ms): ",f15.8)') myid,now-nthen
-             nthen = now
+             if(iprint_basis>1) then
+                now = mtime()
+                write(*,fmt='(2x,"Proc ",i5," Time for PAO_grid transform (in ms): ",f15.8)') myid,now-nthen
+                nthen = now
+             end if
           else
              nsf_send = 0
           endif
-          !call mtmini
           call distribute_result(myid,iprim,nsf_send,support)
-          now = mtime()
-          write(*,fmt='(2x,"Proc ",i5," Time for PAO_grid distribute (in ms): ",f15.8)') myid,now - nthen
-          nthen = now
+          if(iprint_basis>1) then
+             now = mtime()
+             write(*,fmt='(2x,"Proc ",i5," Time for PAO_grid distribute (in ms): ",f15.8)') myid,now - nthen
+             nthen = now
+          end if
        end do
     end if
     return
@@ -316,8 +321,9 @@ contains
 
     use datatypes
     use numbers, ONLY: zero
+    use global_module, ONLY: iprint_basis
     use primary_module, ONLY: bundle
-    use GenComms, ONLY: my_barrier, cq_abort, mtmini, mtime
+    use GenComms, ONLY: my_barrier, cq_abort, mtime
     use blip_grid_transform_module, ONLY: distribute_result
     use functions_on_grid, ONLY: gridfunctions
     use species_module, ONLY: nsf_species
@@ -344,17 +350,20 @@ contains
           if( iprim <= bundle%n_prim ) then
              nsf_send = nsf_species(bundle%species(iprim))
              call do_PAO_grad_transform(direction,iprim,nsf_send)
-             now = mtime()
-             write(*,fmt='(2x,"Proc ",i5," Time for PAO_grad transform (in ms): ",f15.8)') myid,now - nthen
-             nthen = now
+             if(iprint_basis>1) then
+                now = mtime()
+                write(*,fmt='(2x,"Proc ",i5," Time for PAO_grad transform (in ms): ",f15.8)') myid,now - nthen
+                nthen = now
+             end if
           else
              nsf_send = 0
           endif
-          !call mtmini
           call distribute_result(myid,iprim,nsf_send,support)
-          now = mtime()
-          write(*,fmt='(2x,"Proc ",i5," Time for PAO_grad distribute (in ms): ",f15.8)') myid,now - nthen
-          nthen = now
+          if(iprint_basis>1) then
+             now = mtime()
+             write(*,fmt='(2x,"Proc ",i5," Time for PAO_grad distribute (in ms): ",f15.8)') myid,now - nthen
+             nthen = now
+          end if
        end do
     end if
     return
@@ -554,7 +563,7 @@ contains
 
     use datatypes
     use primary_module, ONLY: bundle
-    use GenComms, ONLY: my_barrier, cq_abort, mtmini, mtime
+    use GenComms, ONLY: my_barrier, cq_abort, mtime
     use dimens, ONLY: r_h
     use GenComms, ONLY: inode, ionode, cq_abort
     use numbers
@@ -759,7 +768,7 @@ contains
 
     use datatypes
     use primary_module, ONLY: bundle
-    use GenComms, ONLY: my_barrier, cq_abort, mtmini, mtime
+    use GenComms, ONLY: my_barrier, cq_abort, mtime
     use dimens, ONLY: r_h
     use GenComms, ONLY: inode, ionode
     use numbers
@@ -933,7 +942,7 @@ contains
 
     use datatypes
     use primary_module, ONLY: bundle
-    use GenComms, ONLY: my_barrier, cq_abort, mtmini, mtime
+    use GenComms, ONLY: my_barrier, cq_abort, mtime
     use dimens, ONLY: r_h
     use GenComms, ONLY: inode, ionode
     use numbers

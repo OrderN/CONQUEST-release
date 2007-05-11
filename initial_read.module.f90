@@ -88,6 +88,8 @@ contains
 !!    Removed atomic coordinate fiddling
 !!   14:59, 02/05/2005 dave 
 !!    Added calculation of number of electrons in cell
+!!   2007/05/08 17:00 dave
+!!    Added net charge on cell to number_of_bands for consistency
 !!  TODO
 !!   Improve calculation of number of bands 28/05/2001 dave
 !!   Change input so that appropriate variables are taken from modules 10/05/2002 dave
@@ -192,7 +194,7 @@ contains
     if(iprint_init>4) write(*,fmt='(10x,"Proc: ",i4," done pseudo")') inode
 
     ! Make number of bands in an astonishingly crude way
-    number_of_bands = zero 
+    number_of_bands = half*ne_in_cell!zero 
     do i = 1, ni_in_cell
        number_of_bands = number_of_bands + half * charge(species(i))
        ne_in_cell = ne_in_cell + charge(species(i))
@@ -610,7 +612,8 @@ contains
        flag_test_all_forces = fdf_boolean('AtomMove.TestAllForces',.true.)
        if(.NOT.flag_test_all_forces) then ! Test one force component
           flag_which_force = fdf_integer('AtomMove.TestSpecificForce',1)
-          if(flag_which_force>8.OR.flag_which_force<0) write(*,fmt='(10x,"Warning ! TestSpecificForce must lie between 1 and 8: ",i3)') flag_which_force
+          if(flag_which_force>8.OR.flag_which_force<0) &
+               write(*,fmt='(10x,"Warning ! TestSpecificForce must lie between 1 and 8: ",i3)') flag_which_force
        end if
        TF_direction = fdf_integer('AtomMove.TestForceDirection',1)
        if(TF_direction>3.OR.TF_direction<0) then

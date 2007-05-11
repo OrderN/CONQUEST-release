@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: ewald.f90,v 1.20.2.2 2006/03/07 07:36:42 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module ewald
 ! ------------------------------------------------------------------------------
@@ -77,7 +77,7 @@ module ewald_module
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: ewald.f90,v 1.20.2.2 2006/03/07 07:36:42 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
   !!***
 
 contains
@@ -1710,10 +1710,9 @@ contains
              enddo
           enddo
        endif
-       ! >>>>>>
-       if(inode == ionode.AND.iprint_gen>=4) write(unit=*,fmt='(/" >>> mikes_ewald: node:",i3:" real_sum_intra for partition no:",i3,&
+       if(inode == ionode.AND.iprint_gen>=4) &
+            write(unit=*,fmt='(/" >>> mikes_ewald: node:",i3:" real_sum_intra for partition no:",i3,&
             &" is:",e20.12)') inode, ip, ewald_real_sum_ip
-       ! <<<<<<
        ewald_real_sum_intra = ewald_real_sum_intra + ewald_real_sum_ip
     enddo
 
@@ -1794,10 +1793,9 @@ contains
              enddo
           enddo
        endif
-       ! >>>>>>
-       if(inode == ionode.AND.iprint_gen>=4) write(unit=*,fmt='(/" >>> mikes_ewald: node:",i3:" real_sum_inter for partition no:",i3,&
+       if(inode == ionode.AND.iprint_gen>=4) &
+            write(unit=*,fmt='(/" >>> mikes_ewald: node:",i3:" real_sum_inter for partition no:",i3,&
             &" is:",e20.12)') inode, ip, ewald_real_sum_ip
-       ! <<<<<<
        ewald_real_sum_inter = ewald_real_sum_inter + ewald_real_sum_ip
     enddo
 

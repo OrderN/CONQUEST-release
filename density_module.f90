@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: density_module.f90,v 1.6.2.1 2006/03/07 07:36:42 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module density_module
 ! ------------------------------------------------------------------------------
@@ -40,7 +40,7 @@ module density_module
   real(double), allocatable, dimension(:) :: density ! values at gridpoints, to be calculated.
 
   ! RCS tag for object file identification
-  character(len=80), private :: RCSid = "$Id: density_module.f90,v 1.6.2.1 2006/03/07 07:36:42 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
 !!***
 
@@ -78,13 +78,15 @@ contains
 !!    Added entry print statement
 !!   2004/10/29 drb
 !!    Bug fix for species
+!!   2007/05/08 17:00 dave
+!!    Added scaling to fix electron number (specifically to ensure correct charge in cell)
 !!  SOURCE
 !!
   subroutine set_density()
 
     use datatypes
     use numbers, ONLY: zero, one
-    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell, iprint_SC, species_glob, dens
+    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell, iprint_SC, species_glob, dens, ne_in_cell
     use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
     use group_module, ONLY : blocks, parts
     use primary_module, ONLY: domain
@@ -226,6 +228,8 @@ contains
 
     call gsum(local_density)
     if(inode.eq.ionode.AND.iprint_SC>0) write(*,*) 'In set_density, electrons: ',local_density
+    ! Correct electron density
+    density = ne_in_cell*density/local_density
     call my_barrier()
     return
   end subroutine set_density
