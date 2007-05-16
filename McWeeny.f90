@@ -1,4 +1,4 @@
-! $Id: McWeeny.f90,v 1.6.2.3 2006/03/31 12:06:16 drb Exp $
+! $Id$
 ! -----------------------------------------------------------
 ! Module McWeeny
 ! -----------------------------------------------------------
@@ -57,6 +57,8 @@ contains
 !!    ROBODoc headers and better output also nsf from maxima_module
 !!   08/06/2001 dave
 !!    Tidied and indented
+!!   10:38, 16/05/2007 drb 
+!!    Moved matrix_sum to stop error at end
 !!  SOURCE
 !!
   subroutine McWMin( n_L_iterations, deltaE)
@@ -103,9 +105,9 @@ contains
 5      format(3x,'Energy: ',f15.6,' Mid-point: ',f15.6)
        call symmetrise_L()
     end do
+    if(n_iterations<3) call matrix_sum(zero,matL,one,mat_oldL)
     call free_temp_matrix(matRhoNew)
     call free_temp_matrix(mat_oldL)
-    if(n_iterations<3) call matrix_sum(zero,matL,one,mat_oldL)
     if (inode.eq.ionode.and.iprint_DM.ge.1) write(6,3) n_iterations, omega1
 2   format(/,20x,'McWeeny L iteration:',i5)
 3   format(/,20x,'Functional value reached after ',i5,' L iterations: ', &
