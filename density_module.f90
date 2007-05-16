@@ -227,9 +227,9 @@ contains
     !local_density = grid_point_volume * rsum( n_my_grid_points, density, 1 )
 
     call gsum(local_density)
-    if(inode.eq.ionode.AND.iprint_SC>0) write(*,*) 'In set_density, electrons: ',local_density
     ! Correct electron density
     density = ne_in_cell*density/local_density
+    if(inode.eq.ionode.AND.iprint_SC>0) write(*,*) 'In set_density, electrons: ',local_density
     call my_barrier()
     return
   end subroutine set_density

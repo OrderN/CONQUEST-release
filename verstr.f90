@@ -1,1 +1,1 @@
-  character(len=*), parameter :: commentver="Development version pre-beta 0.2: timings, line length, partitioning, 20070511"
+  character(len=*), parameter :: commentver="Version beta 0.1: initial beta release, 20070516"
