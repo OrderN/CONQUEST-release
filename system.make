@@ -1,20 +1,22 @@
 # -*- mode: makefile; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 #
-# $Id: irix_mips4.make,v 1.1 2003/03/12 14:52:22 drb Exp $
+# $Id$
 #
-# Conquest system file for IRIX on mips4
+# Conquest example system.make
 #
 #
-FC = mpif77
+FC = mpif90
 F77 = mpif77
 # If you need 64-bit flags for compiling, add them for linking
 LINKFLAGS = 
-COMPFLAGS = -O2 -check all -fltconsistency -fpe0 -traceback
-COMPFLAGS_F77 = -O2 -check all -fltconsistency -fpe0 -traceback
+COMPFLAGS = -O2 
+COMPFLAGS_F77 = -O2 
 ARFLAGS = 
 
 # This line is for systems with ScaLAPACK, BLACS and diagonalisation
-LIBS = $(FFT) -lscalapack -lblacsF77init -lblacs -L/opt/intel/mkl721/lib/32/ -lmkl_lapack -lmkl_ia32 -lguide -lmpi $(FFT)
+LIBS = $(FFT) -L/scratch/drb/lib -lscalapack -lmpiblacsF77init -lmpiblacs -lacml $(FFT)
+# This line is for systems with NO ScaLAPACK and BLAS - replace DiagModule.f90 with DiagModule.f90_DUMMY
+#LIBS = $(FFT) -llapack -lblas $(FFT)
 
 # Default FFT (GPFA) - replace as necessary
 FFT=libgpfa.a
