@@ -25,12 +25,12 @@ fdf_mod.o: fdf_mod.f parse.o
 	@cp -p fdf_mod.f parse.f ..
 	(cd ..;	$(FC) $(FFLAGS) -c parse.f ; $(FC) $(FFLAGS) -c fdf_mod.f )
 fdf.o:  fdf.f fdf.h
-	$(F77) $(FFLAGS) -c fdf.f
+	$(FC) $(FFLAGS) -c fdf.f
 #
 clean:
 	rm -f *.o libfdf.a *.mod fdf_mod.o *.d work.pc work.pcl ../fdf_mod.d ../fdf_mod.o ../parse.d ../parse.o ../libfdf.a
 #
 .f.o:
-	$(F77) $(FFLAGS) -c $<
+	$(FC) $(FFLAGS) -c $<
 
 
