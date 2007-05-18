@@ -273,6 +273,8 @@ contains
 !!    Added flag for functional
 !!   2007/04/02 07:53 dave
 !!    Changed defaults
+!!   2007/05/18 15:18 dave
+!!    Added nullify for bp to stop g95 crash
 !!  TODO
 !!   Think about single node read and broadcast 10/05/2002 dave
 !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
@@ -301,7 +303,8 @@ contains
          species, ps_file, ch_file, phi_file, nsf_species, nlpf_species, npao_species, &
          non_local_species
     use GenComms, ONLY: gcopy, my_barrier, cq_abort, inode, ionode
-    use fdf
+    use fdf, ONLY: fdf_block, block, fdf_integer, fdf_boolean, fdf_init, &
+         fdf_string, fdf_double, fdf_defined, fdf_bline, destroy
     use parse, ONLY: parsed_line, digest, search, reals, names, destroy, integers
     use DiagModule, ONLY: diagon
     use DMMin, ONLY: maxpulayDMM, LinTol_DMM
@@ -503,8 +506,12 @@ contains
           SupportGridSpacing(i) = zero
           if(pseudo_type==SIESTA.OR.pseudo_type==ABINIT) non_local_species(i) = .true.
           ! This is new-style fdf_block
+          write(*,*) 'Species ',i,species_label(i)
+          nullify(bp)
           if(fdf_block(species_label(i),bp)) then
+             write(*,*) 'Entered'
              do while(fdf_bline(bp,line)) ! While there are lines in the block
+                write(*,*) 'Digesting line'
                 p=>digest(line)           ! Break the line up
                 if(search(p,'Atom.ValenceCharge',j)) then               ! Charge
                    charge(i) = reals(p,1)
@@ -541,8 +548,10 @@ contains
                    end if
                 end if
              end do
+             write(*,*) 'Calling destroy'
              call destroy(p)  ! Remove storage
           end if
+          write(*,*) 'Calling destroy bp'
           call destroy(bp)    ! Remove storage
           if(nsf_species(i)==0) call cq_abort("Number of supports not specified for species ",i)
           if(flag_basis_set==blips.AND.SupportGridSpacing(i)<very_small) &
@@ -813,6 +822,7 @@ contains
           SupportGridSpacing(i) = zero
           if(pseudo_type==SIESTA.OR.pseudo_type==ABINIT) non_local_species(i) = .true.
           ! This is new-style fdf_block
+          nullify(bp)
           if(fdf_block(species_label(i),bp)) then
              do while(fdf_bline(bp,line)) ! While there are lines in the block
                 p=>digest(line)           ! Break the line up

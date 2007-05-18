@@ -60,7 +60,7 @@ module force_module
   integer, parameter :: HF_and_Pulay = 3
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id$"
+  character(len=80), private :: RCSid = "$Id$"
 
 !!***
 contains

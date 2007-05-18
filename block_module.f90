@@ -197,6 +197,8 @@ contains
 !!    in_block_ variables now part of module, so removed from argument list
 !!   2007/04/18 17:26 dave
 !!    Added block assignment following partitions and choice flag
+!!   2007/05/18 15:17 dave
+!!    Added lines to write out block distribution for Hilbert partitioner
 !!  SOURCE
 !!
   subroutine set_blocks_from_old(n_grid_x, n_grid_y, n_grid_z)
@@ -218,7 +220,7 @@ contains
     integer:: n_block_x, n_block_y, n_block_z, n_all_block,   &
          n_per_proc, n_first, n_all_blocks,              &
          nfb_x, nfb_y, nfb_z, nc_x, nc_y, nc_z,  &
-         n_add_x, n_add_y, n_add_z, nx, ny, nz, icount
+         n_add_x, n_add_y, n_add_z, nx, ny, nz, icount, lun
 
 
     integer:: mx_gedge_tmp,ind_block,nnd, maxtmp, i, cx, cy, cz, cc
@@ -397,6 +399,19 @@ contains
           end do
        end do
        deallocate(blocks_per_proc,proc_block,proc_which_block)
+       if(inode==ionode) then
+          call io_assign(lun)
+          open(unit=lun,file='hilbert_make_blk.dat')
+          write(lun,fmt='(3i8)') n_block_x, n_block_y, n_block_z
+          write(lun,fmt='(i8)') numprocs
+          do nnd = 1,numprocs
+             write(lun,fmt='(3i8)') nnd,blocks%ng_on_node(nnd),blocks%inode_beg(nnd)
+             do nx = 1,blocks%ng_on_node(nnd)
+                write(lun,fmt='(2i8)') nx,blocks%ngnode(blocks%inode_beg(nnd)+nx-1)
+             end do
+          end do
+          call io_close(lun)
+       end if
     else 
        call cq_abort("Unknown block-assignment mode: ",flag_assign_blocks)
     end if
