@@ -367,6 +367,8 @@ second:   do
 !!  MODIFICATION HISTORY
 !!   20/11/2006 Veronika
 !!   Added option for writing out pdb files
+!!   18/06/2007 Veronika
+!!   Fixed minor problems in printing out pdb files
 !!  SOURCE
 !!
   subroutine write_atomic_positions(filename,pdb_temp)
@@ -425,14 +427,14 @@ second:   do
                 coords(1) = BohrToAng * atom_coord(1,i)
                 coords(2) = BohrToAng * atom_coord(2,i)
                 coords(3) = BohrToAng * atom_coord(3,i)
-                atom_name = species_label(species_glob(i))(1:2)
+                atom_name = adjustr(species_label(species_glob(i))(1:2))
                 beta = 0.0
                 if (flag_move_atom(1,i)) beta = beta + 1
                 if (flag_move_atom(2,i)) beta = beta + 2
                 if (flag_move_atom(3,i)) beta = beta + 4
-                write (lun,'(a12,a2,2x,a14,3f8.3,a6,f6.2,a7)') &
-                      pdb_line(1:12), atom_name, pdb_line(17:30), &
-                      coords(:), pdb_line(55:60), beta, pdb_line(73:80)
+                write (lun,'(a12,a2,a16,3f8.3,a6,f6.2,a13)') &
+                      pdb_line(1:12), atom_name, pdb_line(15:30), &
+                      coords(:), pdb_line(55:60), beta, pdb_line(67:80)
               else
                 ! If the entry is ATOM or HETATM but the alternate location
                 ! does not match, just copy the line from the template
@@ -443,8 +445,8 @@ second:   do
               coords(2) = BohrToAng * r_super_y
               coords(3) = BohrToAng * r_super_z
               ! Once we get to non-orthorhombic cells the line below has to be updated
-              write (lun,'(a6,3f9.3,3f7.2,a)') pdb_line(1:6), coords(:), &
-                    90.0, 90.0, 90.0, pdb_line(56:80)
+              write (lun,'(a6,3f9.3,3f7.2,a25)') pdb_line(1:6), coords(:), &
+                    90.0, 90.0, 90.0, pdb_line(55:80)
             case default
               write (lun,'(a)') pdb_line
             end select
