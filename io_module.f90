@@ -104,6 +104,8 @@ contains
 !!    Corrected reading of constraints from pdb file
 !!   15:05, 27/04/2007 drb 
 !!    Check to ensure right number of species added
+!!   2007/06/28, 21:37 mt + drb
+!!    Added coordinate wrapping to non-pdb coordinates.
 !!  SOURCE
 !!
   subroutine read_atomic_positions(filename)
@@ -118,7 +120,7 @@ contains
     use GenComms, ONLY: inode, ionode, cq_abort
     use memory_module, ONLY: reg_alloc_mem, type_dbl, type_int
     use units, ONLY: AngToBohr
-    use numbers, ONLY: very_small
+    use numbers, ONLY: very_small, zero
 
     ! Passed variables
     character(len=*) :: filename
@@ -314,6 +316,12 @@ second:   do
                 atom_coord(2,i) = y
                 atom_coord(3,i) = z
              end if
+             if (atom_coord(1,i) > r_super_x) atom_coord(1,i) = atom_coord(1,i)-r_super_x
+             if (atom_coord(2,i) > r_super_y) atom_coord(2,i) = atom_coord(2,i)-r_super_y
+             if (atom_coord(3,i) > r_super_z) atom_coord(3,i) = atom_coord(3,i)-r_super_z
+             if (atom_coord(1,i) < zero) atom_coord(1,i) = atom_coord(1,i)+r_super_x
+             if (atom_coord(2,i) < zero) atom_coord(2,i) = atom_coord(2,i)+r_super_y
+             if (atom_coord(3,i) < zero) atom_coord(3,i) = atom_coord(3,i)+r_super_z
              flag_move_atom(1,i) = movex
              flag_move_atom(2,i) = movey
              flag_move_atom(3,i) = movez
@@ -367,8 +375,6 @@ second:   do
 !!  MODIFICATION HISTORY
 !!   20/11/2006 Veronika
 !!   Added option for writing out pdb files
-!!   18/06/2007 Veronika
-!!   Fixed minor problems in printing out pdb files
 !!  SOURCE
 !!
   subroutine write_atomic_positions(filename,pdb_temp)
@@ -427,14 +433,14 @@ second:   do
                 coords(1) = BohrToAng * atom_coord(1,i)
                 coords(2) = BohrToAng * atom_coord(2,i)
                 coords(3) = BohrToAng * atom_coord(3,i)
-                atom_name = adjustr(species_label(species_glob(i))(1:2))
+                atom_name = species_label(species_glob(i))(1:2)
                 beta = 0.0
                 if (flag_move_atom(1,i)) beta = beta + 1
                 if (flag_move_atom(2,i)) beta = beta + 2
                 if (flag_move_atom(3,i)) beta = beta + 4
-                write (lun,'(a12,a2,a16,3f8.3,a6,f6.2,a13)') &
-                      pdb_line(1:12), atom_name, pdb_line(15:30), &
-                      coords(:), pdb_line(55:60), beta, pdb_line(67:80)
+                write (lun,'(a12,a2,2x,a14,3f8.3,a6,f6.2,a7)') &
+                      pdb_line(1:12), atom_name, pdb_line(17:30), &
+                      coords(:), pdb_line(55:60), beta, pdb_line(73:80)
               else
                 ! If the entry is ATOM or HETATM but the alternate location
                 ! does not match, just copy the line from the template
@@ -445,8 +451,8 @@ second:   do
               coords(2) = BohrToAng * r_super_y
               coords(3) = BohrToAng * r_super_z
               ! Once we get to non-orthorhombic cells the line below has to be updated
-              write (lun,'(a6,3f9.3,3f7.2,a25)') pdb_line(1:6), coords(:), &
-                    90.0, 90.0, 90.0, pdb_line(55:80)
+              write (lun,'(a6,3f9.3,3f7.2,a)') pdb_line(1:6), coords(:), &
+                    90.0, 90.0, 90.0, pdb_line(56:80)
             case default
               write (lun,'(a)') pdb_line
             end select
@@ -637,6 +643,8 @@ second:   do
 !!  MODIFICATION HISTORY
 !!   2006/10/19 16:42 dave
 !!    Added filename for partitions (defaults to make_prt.dat)
+!!   2007/06/28 21:16 mt + drb
+!!    Added check for partition file access error.
 !!  SOURCE
 !!
   subroutine read_partitions(parts,part_file)
@@ -647,6 +655,7 @@ second:   do
     use maxima_module, ONLY: maxpartsproc, maxatomspart, maxatomsproc, maxpartscell
     use basic_types
     use construct_module, ONLY: init_group
+    use GenComms, ONLY: cq_abort
 
     implicit none
 
@@ -657,13 +666,15 @@ second:   do
     ! Local variables
     integer :: nnode
     integer :: nnd,nnd1,np,np1,ind_part,n_cont,n_beg,ni,ni1
-    integer :: irc,ierr,np_in_cell, lun, glob_count, map
+    integer :: irc,ierr,np_in_cell, lun, glob_count, map, ios
     integer :: ind_global, ntmpx, ntmpy, ntmpz, ntmp1, ntmp2, ntmp3, mx_tmp_edge
 
     if(iprint_init>2) write(*,*) 'Entering read_partitions'
     call io_assign(lun)
 
-    open(unit=lun,file=part_file)
+    open(unit=lun, file=part_file, status='old', iostat=ios)
+    if ( ios > 0 ) call cq_abort('Reading partition file: file error')
+    !open(unit=lun,file=part_file)
     ! Read and check partitions along cell sides
     read(lun,*) ntmpx,ntmpy,ntmpz
     mx_tmp_edge = max(ntmpx,ntmpy,ntmpz)
@@ -709,7 +720,10 @@ second:   do
     call init_group(parts, maxpartsproc, mx_tmp_edge, np_in_cell, maxatomspart, numprocs)
     maxpartscell = np_in_cell
     close(unit=lun)
-    open(unit=lun,file=part_file)
+
+    open(unit=lun, file=part_file, status='old', iostat=ios)
+    if ( ios > 0 ) call cq_abort('Reading partition file: file error')
+    !open(unit=lun,file=part_file)
     ! Read and check partitions along cell sides
     read(lun,*) parts%ngcellx,parts%ngcelly,parts%ngcellz
     if(iprint_init>0) write(*,102) parts%ngcellx,parts%ngcelly,parts%ngcellz
