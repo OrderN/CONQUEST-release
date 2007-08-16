@@ -335,6 +335,8 @@ contains
 
     use numbers, ONLY: BIG, zero
     use spline_module, ONLY: spline
+    use global_module, ONLY: iprint_pseudo
+    use GenComms, ONLY: myid
 
     implicit none
 
@@ -349,6 +351,7 @@ contains
     !ori read(lun,'(i4,2g25.15)') npts, op%delta, op%cutoff
 !    read(lun,'(i4,2g25.15)') npts, delta, cutoff
     read(lun,*) npts, delta, cutoff
+    if(myid==0.AND.iprint_pseudo>3) write(*,fmt='(10x,"Radius: ",f15.10)') cutoff
     op%delta = delta
     op%cutoff= cutoff
     call rad_alloc(op,npts)
@@ -398,6 +401,8 @@ contains
 !!    Rewrote to read once on inode and broadcast
 !!   2007/02/12 08:21 dave
 !!    Added changes for TM potentials from ABINIT
+!!   2007/08/16 15:36 dave
+!!    More tweaks for local potential (particularly short/long range division)
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -421,7 +426,7 @@ contains
     integer :: i, lun , i1, i2, i3, i4
     real(double) :: dummy, a, r
     integer :: n_orbnl, n_pjnl
-    real(double) :: zval, yp1, ypn, erfarg
+    real(double) :: zval, yp1, ypn, erfarg, tmpv
     real(double), parameter :: ln10 = 2.302585092994_double
 
     integer :: iproc, lmax, maxz, alls, nzeta, l, count,tzl
@@ -451,6 +456,7 @@ contains
           thispop(i)=dummy
           if(thisz(i)>zl(thisl(i))) zl(thisl(i))=thisz(i)
           maxz = max(maxz,thisz(i))
+          if(iprint_pseudo>3) write(*,fmt='(10x,"l: ",i3," z: ",i3)') i1,i3
           call radial_read_ascii(dummy_rada(i),lun)
        enddo
        allocate(indexlz(maxz,0:lmax))
@@ -536,15 +542,19 @@ contains
           ps_info%prefac = (ps_info%alpha/pi)**1.5_double
           ! Remove long-range part from short-range part
           a = sqrt(ps_info%alpha)
-          r = ps_info%vlocal%delta
+          !r = ps_info%vlocal%delta
+          r = 1.0e-7_double
           erfarg = one - erfc(a*r)
           !erfarg = derf(a*r)
+          tmpv = ps_info%vlocal%f(1)
           ps_info%vlocal%f(1) = ps_info%vlocal%f(1) + ps_info%zval * erfarg/r
+          !write(52,*) r,ps_info%vlocal%f(1),tmpv,ps_info%zval * erfarg/r!ps_info%zval * derf(a*r)/r
           do i=2,ps_info%vlocal%n
              r = ps_info%vlocal%delta*real(i-1,double)
              erfarg = one - erfc(a*r)
+             tmpv = ps_info%vlocal%f(i)
              ps_info%vlocal%f(i) = ps_info%vlocal%f(i) + ps_info%zval * erfarg/r
-             !write(52,*) r,ps_info%vlocal%f(i),ps_info%zval * derf(a*r)/r
+             !write(52,*) r,ps_info%vlocal%f(i), tmpv,ps_info%zval * erfarg/r!,ps_info%zval * derf(a*r)/r
           end do
           call spline(ps_info%vlocal%n, ps_info%vlocal%delta, ps_info%vlocal%f, zero, zero, ps_info%vlocal%d2)
        else

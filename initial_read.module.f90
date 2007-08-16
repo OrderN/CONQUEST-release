@@ -1349,7 +1349,7 @@ contains
     use GenComms, ONLY: cq_abort, gcopy, myid
     use fdf, ONLY: fdf_integer, fdf_block, fdf_boolean, fdf_double, fdf_defined
     use ScalapackFormat, ONLY: proc_rows, proc_cols, block_size_r, block_size_c
-    use DiagModule, ONLY: nkp, kk, wtk
+    use DiagModule, ONLY: nkp, kk, wtk, kT
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use species_module, ONLY: nsf_species
 
@@ -1596,6 +1596,8 @@ contains
           write(*,*) 'Finished reading Kpoints'
           write(*,*)
        end if
+       kT = fdf_double('Diag.kT',0.001_double)
+       if(iprint_init>0) write(*,'(10x,"Temperature used for smearing: ",f10.6)') kT
     end if ! myid==0
 
     ! Distribute data to all processors
@@ -1611,6 +1613,7 @@ contains
     end if
     call gcopy(kk,3,nkp)
     call gcopy(wtk,nkp)
+    call gcopy(kT)
     if(iprint_init>=5.AND.myid/=0) then
        write(*,*) 'Proc: ',myid
        write(*,5)

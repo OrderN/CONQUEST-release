@@ -482,6 +482,9 @@ contains
           else
              call cq_abort("pulay_force: basis set undefined ",flag_basis_set)
           end if
+          t1 = mtime()
+          if(inode==ionode.AND.iprint_MD>3) write(*,fmt='(10x,"Phi Pulay grad ",i4," time: ",f12.5)') direction,t1-t0
+          t0 = t1
 
 
           !       ! and do the integration
@@ -510,6 +513,9 @@ contains
           !    call gsum(p_force,3,n_atoms)
 
           call get_matrix_elements_new(inode-1,rem_bucket(sf_sf_rem),mat_tmp, H_on_supportfns, tmp_fn)
+          t1 = mtime()
+          if(inode==ionode.AND.iprint_MD>3) write(*,fmt='(10x,"Phi Pulay int ",i4," time: ",f12.5)') direction,t1-t0
+          t0 = t1
 
           iprim=0
           do np=1,bundle%groups_on_node
@@ -529,7 +535,7 @@ contains
              endif ! if the partition has atoms
           enddo ! np
           t1 = mtime()
-          if(inode==ionode.AND.iprint_MD>3) write(*,fmt='(10x,"Phi Pulay ",f12.5," time: ",f12.5)') direction,t1-t0
+          if(inode==ionode.AND.iprint_MD>3) write(*,fmt='(10x,"Phi Pulay sum ",i4," time: ",f12.5)') direction,t1-t0
           t0 = t1
 
        enddo ! direction
@@ -1441,7 +1447,7 @@ contains
     use spline_module, ONLY: dsplint
     use dimens, ONLY: grid_point_volume, n_my_grid_points
     use GenBlas, ONLY: axpy
-    use density_module, ONLY: density
+    use density_module, ONLY: density, density_scale
     use hartree_module, ONLY: hartree
     use maxima_module, ONLY: maxngrid
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
@@ -1580,9 +1586,9 @@ contains
                                  atomic_density_table(the_species)%length, & 
                                  r_from_i,v,derivative,range_flag)
                             if(range_flag) call cq_abort('get_nonSC_force: overrun problem')
-                            fx_1 = -x * derivative
-                            fy_1 = -y * derivative 
-                            fz_1 = -z * derivative 
+                            fx_1 = -x * derivative*density_scale
+                            fy_1 = -y * derivative*density_scale 
+                            fz_1 = -z * derivative*density_scale 
                          else
                             fx_1 = zero
                             fy_1 = zero

@@ -1978,7 +1978,7 @@ contains
        mat_p(current_matrix)%matrix(i) = zero
     end do
     allocate_temp_matrix = current_matrix
-    if(iprint_mat>2.AND.myid==0) write(*,*) '(A)Current matrix is: ',current_matrix,mat_p(current_matrix)%length
+    if(iprint_mat>4.AND.myid==0) write(*,*) '(A)Current matrix is: ',current_matrix,mat_p(current_matrix)%length
     call reg_alloc_mem(area_matrices,mat_p(current_matrix)%length,type_dbl)
   end function allocate_temp_matrix
 
@@ -1997,7 +1997,7 @@ contains
 
     call reg_dealloc_mem(area_matrices,mat_p(current_matrix)%length,type_dbl)
     if(A/=current_matrix) call cq_abort("Out-of-order deallocation of matrices ",A,current_matrix)
-    if(iprint_mat>2.AND.myid==0) write(*,*) '(D)Current matrix is: ',current_matrix,mat_p(current_matrix)%length
+    if(iprint_mat>4.AND.myid==0) write(*,*) '(D)Current matrix is: ',current_matrix,mat_p(current_matrix)%length
     deallocate(mat_p(current_matrix)%matrix,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating matrix ",current_matrix,mat_p(current_matrix)%length)
     mat_p(current_matrix)%length = 0

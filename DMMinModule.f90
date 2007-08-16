@@ -113,6 +113,7 @@ contains
          PulayC, PulayBeta, pos_tan, fit_coeff
     use DiagModule, ONLY: FindEvals, diagon
     use io_module, ONLY: dump_matrix
+    use energy, ONLY: entropy
 
     implicit none
 
@@ -128,6 +129,7 @@ contains
     real(double), parameter :: eprec = 1.0e-12_double
     real(double), save :: delta_e
 
+    entropy = zero
     if(diagon) then ! Use exact diagonalisation to get K
        call FindEvals(2.0_double*number_of_bands)
        return

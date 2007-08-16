@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: energy.module.f90,v 1.4.2.2 2006/03/07 07:36:42 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module energy
 ! ------------------------------------------------------------------------------
@@ -22,6 +22,8 @@
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2007/08/14 17:31 dave
+!!    Added entropy, free energy output
 !!  SOURCE
 !!
 module energy
@@ -38,9 +40,10 @@ module energy
   real(double) :: kinetic_energy
   real(double) :: delta_E_hartree
   real(double) :: delta_E_xc
+  real(double) :: entropy
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: energy.module.f90,v 1.4.2.2 2006/03/07 07:36:42 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!*** energy
 
 contains
@@ -66,6 +69,9 @@ contains
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2007/08/16 15:31 dave
+!!    Changed output format for energy, added Free Energy for smeared electron distribution
+!!    and Gillan E-0.5*TS kT=0 extrapolation (see J. Phys.:Condens. Matter 1, 689 (1989)
 !!  SOURCE
 !!
   subroutine get_energy(total_energy)
@@ -105,7 +111,11 @@ contains
        if(iprint_gen>=1) write(*,9) en_conv*ewald_energy, en_units(energy_units)
        if(iprint_gen>=1) write(*,11) en_conv*delta_E_hartree, en_units(energy_units)
        if(iprint_gen>=1) write(*,12) en_conv*delta_E_xc, en_units(energy_units)
-       if(iprint_gen>=0) write(*,10) en_conv*total_energy, en_units(energy_units)
+       if(iprint_gen>=0) write(*,10) en_conv*(total_energy- half*entropy), en_units(energy_units)
+!       if(iprint_gen>=0) write(*,fmt='(20x,"DFT Energy (kT=0)        ",f25.15," ",a2)') &
+!            en_conv*(total_energy - half*entropy), en_units(energy_units)
+       if(iprint_gen>=1) write(*,fmt='(10x,"Free Energy                      : ",f25.15," ",a2)') &
+            en_conv*(total_energy - entropy), en_units(energy_units)
     end if
     ! Check on validity of band energy
     if(iprint_gen>=2) then
@@ -114,19 +124,19 @@ contains
        if(myid==0) write(*,13) en_conv*total_energy2, en_units(energy_units)
     end if
     return
-1   format(20x,'Band Energy, 2Tr[K.H]  : ',f25.15,' ',a2)
-2   format(20x,'Electron Count         : ',f25.15,' ',a2)
-3   format(20x,'Hartree Energy         : ',f25.15,' ',a2)
-4   format(20x,'X-C     Energy         : ',f25.15,' ',a2)
-5   format(20x,'Local PsePot  Energy   : ',f25.15,' ',a2)
-6   format(20x,'Core Correction Energy : ',f25.15,' ',a2)
-7   format(20x,'NonLocal PsePot Energy : ',f25.15,' ',a2)
-8   format(20x,'Kinetic Energy         : ',f25.15,' ',a2)
-9   format(20x,'Ewald Energy           : ',f25.15,' ',a2)
-10  format(20x,'Harris-Foulkes Energy  : ',f25.15,' ',a2)
-13  format(20x,'DFT Total Energy       : ',f25.15,' ',a2)
-11  format(20x,'Ha Correction          : ',f25.15,' ',a2)
-12  format(20x,'XC Correction          : ',f25.15,' ',a2)
+1   format(10x,'Band Energy, 2Tr[K.H]            : ',f25.15,' ',a2)
+2   format(10x,'Electron Count                   : ',f25.15,' ',a2)
+3   format(10x,'Hartree Energy                   : ',f25.15,' ',a2)
+4   format(10x,'X-C     Energy                   : ',f25.15,' ',a2)
+5   format(10x,'Local PsePot  Energy             : ',f25.15,' ',a2)
+6   format(10x,'Core Correction Energy           : ',f25.15,' ',a2)
+7   format(10x,'NonLocal PsePot Energy           : ',f25.15,' ',a2)
+8   format(10x,'Kinetic Energy                   : ',f25.15,' ',a2)
+9   format(10x,'Ewald Energy                     : ',f25.15,' ',a2)
+10  format(10x,'Harris-Foulkes Energy (kT=0)     : ',f25.15,' ',a2)
+13  format(10x,'DFT Total Energy                 : ',f25.15,' ',a2)
+11  format(10x,'Ha Correction                    : ',f25.15,' ',a2)
+12  format(10x,'XC Correction                    : ',f25.15,' ',a2)
   end subroutine get_energy
 !!*** get_energy
 

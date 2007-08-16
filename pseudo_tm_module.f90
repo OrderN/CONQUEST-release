@@ -379,14 +379,15 @@ contains
 !!  CREATION DATE
 !!   20/06/2002
 !!  MODIFICATION HISTORY
-!!  
+!!   2007/07/30 08:06 dave
+!!    Tidied up cutoff finding: re-using core_radius instead of finding max every time
 !!  SOURCE
 !!
   subroutine set_tm_pseudo
 
     use datatypes
     use numbers
-    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob, ni_in_cell, iprint_pseudo, species_glob, nlpf, &
+    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob, ni_in_cell, iprint_pseudo, species_glob, nlpf, sf, &
          flag_basis_set, blips
     use species_module, ONLY: species, nlpf_species, n_species
     !  At present, these arrays are dummy arguments.
@@ -396,7 +397,7 @@ contains
     use primary_module, ONLY: domain
     use cover_module, ONLY: DCS_parts
     use set_blipgrid_module, ONLY : naba_atm
-    use GenBlas, ONLY: axpy
+    use GenBlas, ONLY: axpy, copy
     use GenComms, ONLY: my_barrier, cq_abort, inode, ionode, myid
     use angular_coeff_routines, ONLY : pp_elem
     use hartree_module, ONLY: hartree
@@ -458,6 +459,8 @@ contains
     ! we don't need to consider the short range term of the local
     ! pseudopotential. 
     !      29/06/2002  Tsuyoshi MIYAZAKI
+    ! For ABINIT style, the local potential is tabulated as are the projectors
+    !      30/07/2007 David Bowler (belated note)
 
     call my_barrier()
 
@@ -514,18 +517,7 @@ contains
 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
-                if(pseudo(the_species)%tm_loc_pot==loc_pot) then
-                   rcut = pseudo(the_species)%vlocal%cutoff
-                   do nl= 1, pseudo(the_species)%n_pjnl
-                      rcut = max(rcut, pseudo(the_species)%pjnl(nl)%cutoff)
-                   enddo
-                else
-                   rcut = pseudo(the_species)%chlocal%cutoff
-                   do nl= 1, pseudo(the_species)%n_pjnl
-                      rcut = max(rcut, pseudo(the_species)%pjnl(nl)%cutoff)
-                   enddo
-                end if
-                rcut = rcut + very_small   !!   03032003TM
+                rcut = core_radius(the_species) + very_small   !!   30072007 drb
                 ! write(*,*) ' rcut for check_block = ', rcut
                 call check_block &
                      (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
@@ -569,8 +561,9 @@ contains
                          !  cutoff for this function might be smaller
                          !  than cut off used in check_block
                          !write(51,*) 'Pseudo dist: ',r_from_i, j
-                         if(j+1 < pseudo(the_species)%vlocal%n) then
-                            rr = float(j) * step
+                         if(j+1 <= pseudo(the_species)%vlocal%n) then
+                            ! rr is BEYOND the point we're interested in
+                            rr = real(j,double) * step
                             a = ( rr - r_from_i ) / step
                             b = one - a
                             c = a * ( a * a - one ) * step * step / six
@@ -617,7 +610,7 @@ contains
                          ! Use the spline interpolation tables
                          !  cutoff for this function might be smaller
                          !  than cut off used in check_block
-                         if(j+1 < pseudo(the_species)%chlocal%n) then
+                         if(j+1 <= pseudo(the_species)%chlocal%n) then
                             rr = float(j) * step
                             a = ( rr - r_from_i ) / step
                             b = one - a
@@ -678,7 +671,7 @@ contains
                          ! Use the spline interpolation tables 
                          !  cutoff for this function might be smaller
                          !  than cut off used in check_block
-                         if(j+1 < pseudo(the_species)%pjnl(nl)%n) then
+                         if(j+1 <= pseudo(the_species)%pjnl(nl)%n) then
                             rr = float(j) * step
                             a = ( rr - r_from_i ) / step
                             b = one - a
@@ -694,7 +687,7 @@ contains
 
                             !pjnl = chi_nl(r)/r**l ----
                             if(the_l > 0) then
-                               nl_potential= nl_potential *  r_from_i**(the_l)
+                               nl_potential= nl_potential *  r_from_i**(real(the_l,double))
                             endif
                             ! for r_from_i < very_small
                             !   x, y, z are set to be 0 in check_block
@@ -826,9 +819,8 @@ contains
 
     use datatypes
     use numbers
-    use GenComms, ONLY: inode
     use dimens, ONLY: grid_point_volume, n_my_grid_points
-    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, species_glob, nlpf,ni_in_cell
+    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, species_glob, nlpf,ni_in_cell, sf
     use block_module, ONLY : n_pts_in_block
     use group_module, ONLY : blocks, parts
     use primary_module, ONLY: domain
@@ -836,7 +828,7 @@ contains
     use set_blipgrid_module, ONLY : naba_atm
 
     use species_module, ONLY: species
-    use GenComms, ONLY: gsum, cq_abort
+    use GenComms, ONLY: gsum, cq_abort, inode, ionode
     use hartree_module, ONLY: hartree
     use maxima_module, ONLY: maxngrid
 
@@ -869,6 +861,7 @@ contains
     ! allocatable
     real(double),allocatable :: h_potential(:)
 
+    if(iprint_pseudo>2.AND.inode==ionode) write(*,fmt='(4x,"Doing TM force with pseudotype: ",i3)') pseudo(1)%tm_loc_pot
     ! the structure of this subroutine is similar to set_tm_pseudo et.
     HF_force = 0
 
@@ -924,18 +917,7 @@ contains
 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
-                if(pseudo(the_species)%tm_loc_pot==loc_pot) then
-                   rcut = pseudo(the_species)%vlocal%cutoff
-                   do nl= 1, pseudo(the_species)%n_pjnl
-                      rcut = max(rcut, pseudo(the_species)%pjnl(nl)%cutoff)
-                   enddo
-                else
-                   rcut = pseudo(the_species)%chlocal%cutoff
-                   do nl= 1, pseudo(the_species)%n_pjnl
-                      rcut = max(rcut, pseudo(the_species)%pjnl(nl)%cutoff)
-                   enddo
-                end if
-                rcut = rcut + very_small   !!   03032003TM
+                rcut = core_radius(the_species) + very_small   !!   03032003TM
                 call check_block &
                      (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store) !out
@@ -989,10 +971,10 @@ contains
                       ! check j (j+1 =< N_TAB)
                       ! Use the spline interpolation tables
                       if(pseudo(the_species)%tm_loc_pot==loc_pot) then
-                         if(j+1 < pseudo(the_species)%vlocal%n) then
+                         if(j+1 <= pseudo(the_species)%vlocal%n) then
                             elec_here = density(igrid) * grid_point_volume
                             gauss = exp( -pseudo(the_species)%alpha * r_from_i*r_from_i )
-                            rr = real(j) * step
+                            rr = real(j,double) * step
                             a = ( rr - r_from_i ) / step
                             b = one - a
                             da = -one / step
@@ -1023,7 +1005,7 @@ contains
                             HF_force(3,ig_atom) = HF_force(3,ig_atom) + fz_1 * elec_here + fz_2
                          end if ! j+1<pseudo(the_species)%chlocal%n
                       else
-                         if(j+1 < pseudo(the_species)%chlocal%n) then
+                         if(j+1 <= pseudo(the_species)%chlocal%n) then
                             rr = real(j) * step
                             a = ( rr - r_from_i ) / step
                             b = one - a
@@ -1136,8 +1118,8 @@ contains
     real(double):: xatom,yatom,zatom,step
     real(double):: xblock,yblock,zblock
     integer :: the_species
-    integer :: j,iblock,the_l,ipoint
-    real(double) :: r_from_i
+    integer :: j,iblock,the_l,ipoint, ll
+    real(double) :: r_from_i, r_the_l
     real(double) :: rr,a,b,c,d,x,y,z,nl_potential,nl_potential_derivative
     real(double) :: alpha,beta,gamma,delta
     integer :: no_of_ib_ia, offset_position
@@ -1202,19 +1184,7 @@ contains
 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
-                rcut = zero
-                if(pseudo(the_species)%tm_loc_pot==loc_pot) then
-                   rcut = pseudo(the_species)%vlocal%cutoff
-                   do nl= 1, pseudo(the_species)%n_pjnl
-                      rcut = max(rcut, pseudo(the_species)%pjnl(nl)%cutoff)
-                   enddo
-                else
-                   rcut = pseudo(the_species)%chlocal%cutoff
-                   do nl= 1, pseudo(the_species)%n_pjnl
-                      rcut = max(rcut, pseudo(the_species)%pjnl(nl)%cutoff)
-                   enddo
-                end if
-                rcut = rcut + very_small   !!   03032003TM
+                rcut = core_radius(the_species) + very_small   !!   03032003TM
                 call check_block &
                      (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &   ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store) !out
@@ -1256,7 +1226,7 @@ contains
                          !  cutoff for this function might be smaller
                          !  than cut off used in check_block
                          ! FIX 2007/03/19 DRB
-                         if(j+1 < pseudo(the_species)%pjnl(nl)%n) then
+                         if(j+1 <= pseudo(the_species)%pjnl(nl)%n) then
                             !if(j+1 < pseudo(the_species)%chlocal%n) then
                             rr = real(j,double) * step
                             a = ( rr - r_from_i ) / step
@@ -1307,12 +1277,17 @@ contains
                             if(flag_angular_new) then !using new spherical harmonics
                                !forming nl_potential derivative
                                if(the_l>0) then
-                                  rl = r_from_i**the_l
-                                  rl1 = r_from_i**(the_l-1)
-                                  !if(l==1.AND.r_from_i<1.0e-8) rl1 = 1.0_double
+                                  r_the_l = real(the_l,double)
+                                  ! More efficient way of doing r**l and r**(l-1)
+                                  rl = r_from_i
+                                  rl1 = one
+                                  do ll=1,the_l-1
+                                     rl = rl*r_from_i
+                                     rl1 = rl1*r_from_i
+                                  end do
                                   nl_potential_derivative_new = rl*nl_potential_derivative&
-                                       &+the_l*rl1*nl_potential
-                                  nl_potential_new = nl_potential*(r_from_i**the_l)
+                                       &+r_the_l*rl1*nl_potential
+                                  nl_potential_new = nl_potential*rl
                                else
                                   nl_potential_derivative_new = nl_potential_derivative
                                   nl_potential_new = nl_potential

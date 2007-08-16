@@ -38,6 +38,7 @@ module density_module
   logical :: flag_no_atomic_densities
   ! charge density
   real(double), allocatable, dimension(:) :: density ! values at gridpoints, to be calculated.
+  real(double) :: density_scale ! Scaling factor for atomic densities
 
   ! RCS tag for object file identification
   character(len=80), private :: RCSid = "$Id$"
@@ -228,8 +229,9 @@ contains
 
     call gsum(local_density)
     ! Correct electron density
-    density = ne_in_cell*density/local_density
-    if(inode.eq.ionode.AND.iprint_SC>0) write(*,*) 'In set_density, electrons: ',local_density
+    density_scale = ne_in_cell/local_density
+    density = density_scale*density
+    if(inode.eq.ionode.AND.iprint_SC>0) write(*,*) 'In set_density, electrons: ',density_scale*local_density
     call my_barrier()
     return
   end subroutine set_density

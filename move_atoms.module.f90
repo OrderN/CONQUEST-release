@@ -142,6 +142,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   17:08, 2003/02/04 dave
 !!    Changed position to x_atom_cell
+!!   2007/08/16 15:40 dave
+!!    Bug fix for indexing of force
 !!  TODO
 !!   Proper buffer zones for matrix mults so initialisation doesn't have
 !!   to be done at every step 03/07/2001 dave
@@ -151,7 +153,7 @@ contains
 
     use datatypes
     use basic_types
-    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell
+    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell, id_glob
     use species_module, ONLY: species, mass
     use numbers
     use GenComms, ONLY: myid
@@ -166,7 +168,7 @@ contains
     logical :: quenchflag
 
     ! Local variables
-    integer :: part, memb, atom, speca, k
+    integer :: part, memb, atom, speca, k, gatom
     real(double) :: massa, acc
 
     if(myid==0.AND.iprint_MD>0) write(*,1) step,quenchflag
@@ -175,17 +177,18 @@ contains
     do atom = 1, ni_in_cell
        speca = species(atom) 
        massa = mass(speca)*fac
+       gatom = id_glob(atom)
        if(quenchflag) then
           do k=1,3
-             if(velocity(k,atom)*force(k,atom)<zero) &
+             if(velocity(k,atom)*force(k,gatom)<zero) &
                   velocity(k,atom) = zero
              velocity(k,atom) = velocity(k,atom)+ &
-                  step*force(k,atom)/(two*massa)
+                  step*force(k,gatom)/(two*massa)
           end do
        else
           do k=1,3
              velocity(k,atom) = velocity(k,atom)+ &
-                  step*force(k,atom)/(two*massa)
+                  step*force(k,gatom)/(two*massa)
           enddo
        endif
     end do
@@ -198,20 +201,21 @@ contains
     end do
     ! Update positions and velocities
     do atom = 1, ni_in_cell
+       gatom = id_glob(atom)
        speca = species(atom) 
        massa = mass(speca)*fac
        ! X
-       acc = force(1,atom)/massa
+       acc = force(1,gatom)/massa
        x_atom_cell(atom) = x_atom_cell(atom) + &
             step*velocity(1,atom) + half*step*step*acc
        velocity(1,atom) = velocity(1,atom)+half*step*acc
        ! Y
-       acc = force(2,atom)/massa
+       acc = force(2,gatom)/massa
        y_atom_cell(atom) = y_atom_cell(atom) + &
             step*velocity(2,atom) + half*step*step*acc
        velocity(2,atom) = velocity(2,atom)+half*step*acc
        ! Z
-       acc = force(3,atom)/massa
+       acc = force(3,gatom)/massa
        z_atom_cell(atom) = z_atom_cell(atom) + &
             step*velocity(3,atom) + half*step*step*acc
        velocity(3,atom) = velocity(3,atom)+half*step*acc

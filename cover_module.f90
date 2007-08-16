@@ -743,6 +743,8 @@ contains
        call cq_abort('allocate_cs: error(4)')
     endif
     call reg_alloc_mem(area_index,3*set%mx_gcover+3*mx_node,type_int)
+    ! Be safe with pointer
+    nullify(set%iprim_group)
     if(members) then
        allocate(set%n_ing_cover(set%mx_gcover),STAT=stat)
        if(stat/=0) then

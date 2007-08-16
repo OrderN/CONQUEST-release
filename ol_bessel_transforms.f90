@@ -22,6 +22,8 @@
 !!  MODIFICATION HISTORY
 !!   2007/01/09 08:28 dave
 !!    Tidying, incorporating changes from TM
+!!   2007/08/15 12:04 dave
+!!    Changed lmax_fact to 22 to accomodate f functions
 !!  SOURCE
 !!
 module bessel_integrals
@@ -33,9 +35,9 @@ module bessel_integrals
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: ol_bessel_transforms.f90,v 1.4 2005/05/26 08:36:26 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
-  integer,parameter :: lmax_fact=20
+  integer,parameter :: lmax_fact=22
   real(double) :: fact(-1:lmax_fact)
 
 !!***

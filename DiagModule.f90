@@ -68,6 +68,8 @@
 !!    and DistributeCQ_to_SC to reflect all this.
 !!   11:48, 30/09/2003 drb 
 !!    Changed iprint levels throughout
+!!   2007/08/13 17:27 dave
+!!    Changed kT to be user-set parameter in input file (Diag.kT keyword)
 !!***
 module DiagModule
 
@@ -173,7 +175,8 @@ module DiagModule
   real(double), allocatable, dimension(:,:) :: kk
   real(double), allocatable, dimension(:) :: wtk
   real(double), allocatable, dimension(:,:) :: occ
-  real(double), parameter :: kT = 0.0001_double
+  ! 2007/08/13 dave changed this to be set by user
+  real(double) :: kT
 
   logical :: first = .true.
 
@@ -270,12 +273,14 @@ contains
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2007/08/14 17:31 dave
+!!    Added entropy calculation
 !!  SOURCE
 !!
   subroutine FindEvals(electrons)
 
     use datatypes
-    use numbers, ONLY: zero
+    use numbers, ONLY: zero, half, one, two, very_small
     use units
     use global_module, ONLY: iprint_DM, ni_in_cell, numprocs, area_DM
     use GenComms, ONLY: my_barrier, cq_abort, mtime, gcopy, myid
@@ -286,6 +291,7 @@ contains
     use primary_module, ONLY: bundle
     use species_module, ONLY: species, nsf_species
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
+    use energy, ONLY: entropy
 
     implicit none
 
@@ -293,14 +299,19 @@ contains
     real(double) :: electrons
     
     ! Local variables
-    real(double) :: Ef, bandE, abstol, a, time0, time1
+    real(double) :: Ef, bandE, abstol, a, time0, time1, vl, vu, orfac, locc
     real(double), external :: dlamch
     complex(double_cplx), dimension(:,:), allocatable :: expH
-    integer :: merow, mecol, info, lwork, stat, row_size, nump
+    integer :: merow, mecol, info, lwork, stat, row_size, nump, il, iu
     integer :: iunit, i, j, k, l, lrwork, nsf1, k1, k2, col_size, np
     integer :: liwork, m, mz, prim_size
     integer, dimension(50) :: desca,descz,descb
 
+    vl = zero
+    vu = zero
+    orfac = -1.0_double
+    il = 0
+    iu = 0
     if(iprint_DM>=2.AND.myid==0) write(*,fmt='(10x,"Entering FindEvals")')
     ! Read appropriate data for Scalapack diagonalisation - k-points, block sizes etc
     !if(first) call readDiagInfo(proc_rows,proc_cols,block_size_r,block_size_c)
@@ -341,7 +352,7 @@ contains
        if(me<proc_rows*proc_cols) then
           ! Call the diagonalisation routine for generalised problem H.psi = E.S.psi
           call pzhegvx(1,'N','A','U',matrix_size,SCHmat,1,1,desca,SCSmat,1,1,descb,&
-               0.0d0,0.0d0,0,0,abstol,m,mz,w(1,i),-1.0_double,z,1,1,descz,&
+               vl,vu,il,iu,abstol,m,mz,w(1,i),orfac,z,1,1,descz,&
                work,lwork,rwork,lrwork,iwork,liwork,ifail,iclustr,gap,info)
           !call zhegvx(1,'N','A','U',matrix_size,SCHmat,matrix_size,SCSmat,matrix_size,&               
           !     0.0d0,0.0d0,0,0,abstol,m,w(1,i),z,matrix_size,&
@@ -388,6 +399,7 @@ contains
     call matrix_scale(zero,matK)
     call matrix_scale(zero,matM12)
     ! Second diagonalisation - get eigenvectors and build K
+    entropy = zero
     do i=1,nkp
        ! Form the Hamiltonian for this k-point and send it to appropriate processors
        if(iprint_DM>=3) write(*,*) myid,' Calling DistributeCQ_to_SC for H'
@@ -399,7 +411,7 @@ contains
        if(me<proc_rows*proc_cols) then
           ! Call the diagonalisation routine for generalised problem H.psi = E.S.psi
           call pzhegvx(1,'V','A','U',matrix_size,SCHmat,1,1,desca,SCSmat,1,1,descb,&
-               0.0d0,0.0d0,0,0,abstol,m,mz,W(1,i),-1.0_double,z,1,1,descz,&
+               vl,vu,il,iu,abstol,m,mz,W(1,i),orfac,z,1,1,descz,&
                work,lwork,rwork,lrwork,iwork,liwork,ifail,iclustr,gap,info)
           !call zhegvx(1,'V','A','U',matrix_size,SCHmat,matrix_size,SCSmat,matrix_size,&
           !     0.0d0,0.0d0,0,0,abstol,m,w(1,i),z,matrix_size,&
@@ -420,11 +432,20 @@ contains
        ! We can do this simply because we won't use them again (though we could use a dummy variable if we
        ! wanted to use them again)
        do j=1,matrix_size 
+          ! Calculate entropic contribution to electronic energy
+          if((occ(j,i)>very_small).AND.(two-occ(j,i)>very_small)) then
+             locc = half*occ(j,i)
+             if(iprint_DM>3) write(*,fmt='(2x,"Occ, wt: ",2f12.8," ent: ",f20.12)') &
+                  locc,wtk(i),locc*log(locc) + (one-locc)*log(one-locc)
+             entropy = entropy - two*wtk(i)*(locc*log(locc) + (one-locc)*log(one-locc))
+          end if
           occ(j,i) = -occ(j,i)*w(j,i)
        end do
        ! Now build data_M12_ij (=-\sum_n eps^n c^n_i c^n_j - hence scaling occs by eps allows reuse of buildK)
        call buildK(Srange, matM12, occ(1:matrix_size,i), kk(1:3,i), wtk(i), expH)
     end do ! End do i=1,nkp
+    if(iprint_DM>3) write(*,*) "Entropy, TS: ",entropy,kT*entropy
+    entropy = entropy*kT
     time1 = mtime()
     if(iprint_DM>=2) write(*,3) myid,time1 - time0
     ! -------------------------------------------------------------------------------------------------
