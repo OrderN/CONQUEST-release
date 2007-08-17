@@ -433,8 +433,10 @@ contains
        ! wanted to use them again)
        do j=1,matrix_size 
           ! Calculate entropic contribution to electronic energy
-          if((occ(j,i)>very_small).AND.(two-occ(j,i)>very_small)) then
-             locc = half*occ(j,i)
+          if((occ(j,i)>very_small).AND.(two*wtk(i)-occ(j,i)>very_small)) then
+             ! This is for NO spin; wtk is added in occupy(), called by findFermi
+             ! The factor of half gives us occupancies between 0 and 1
+             locc = half*occ(j,i)/wtk(i)
              if(iprint_DM>3) write(*,fmt='(2x,"Occ, wt: ",2f12.8," ent: ",f20.12)') &
                   locc,wtk(i),locc*log(locc) + (one-locc)*log(one-locc)
              entropy = entropy - two*wtk(i)*(locc*log(locc) + (one-locc)*log(one-locc))
