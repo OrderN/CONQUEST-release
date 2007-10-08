@@ -205,6 +205,7 @@ contains
         gl_wf_set(no_set)%orb_cutoff_radius(i) = gl_cutoff_radius
         gl_wf_set(no_set)%orb_occ(i) = gl_occ(i)
         gl_wf_set(no_set)%orb_keep(i) = gl_orbitals(i)%keep
+        gl_wf_set(no_set)%orb_zeta(i) = gl_orbitals(i)%zeta
         gl_wf_set(no_set)%orb_eigenvalues(i) = gl_eigenvalues(i)
         do  j=1, gl_wf_set(no_set)%points_mesh
             gl_wf_set(no_set)%orb_ul(i, j) = gl_ul(j+(i-1)*gl_wf_set(no_set)%points_mesh)
@@ -368,6 +369,7 @@ contains
              gl_basis%orb_n(orb_no) = gl_wf_set(i)%orb_n(j)
              gl_basis%orb_l(orb_no) = gl_wf_set(i)%orb_l(j)
              gl_basis%orb_keep(orb_no) = gl_wf_set(i)%orb_keep(j)        ! Not really necessary
+             gl_basis%orb_zeta(orb_no) = gl_wf_set(i)%orb_zeta(j)
              gl_basis%orb_cutoff_radius(orb_no) = gl_wf_set(i)%orb_cutoff_radius(j)
 
              ! Only the first set is occupied

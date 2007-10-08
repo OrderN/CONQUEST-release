@@ -34,6 +34,7 @@ module cq_ut_psp2pao_alloc
      module procedure cq_allocate_real_2
      module procedure cq_allocate_logical
      module procedure cq_allocate_orbital_info
+     module procedure cq_allocate_orbital_table
      module procedure cq_allocate_basis_data
      module procedure cq_allocate_psp_in_table_fhi
   end interface
@@ -192,8 +193,6 @@ contains
     stop
   end if
 
-  !*ast* TO DO: Fix the labels so they indicate the actual no_set
-
   call cq_allocate(gl_wf_set(no_set)%r, points_mesh, 'allocate_wavefunction_set', 'gl_wf_set(no_set)%r')
   call cq_allocate(gl_wf_set(no_set)%rho, 2*points_mesh, 'allocate_wavefunction_set', 'gl_wf_set(no_set)%rho')
   call cq_allocate(gl_wf_set(no_set)%l_nonlocal, psp_comp, &
@@ -212,6 +211,7 @@ contains
                    'allocate_wavefunction_set', 'gl_wf_set(no_set)%v_nonlocal2')
   call cq_allocate(gl_wf_set(no_set)%orb_n, no_orbitals, 'allocate_wavefunction_set', 'gl_wf_set(no_set)%orb_n')
   call cq_allocate(gl_wf_set(no_set)%orb_l, no_orbitals, 'allocate_wavefunction_set', 'gl_wf_set(no_set)%orb_l')
+  call cq_allocate(gl_wf_set(no_set)%orb_zeta, no_orbitals, 'allocate_wavefunction_set', 'gl_wf_set(no_set)%orb_l')
   call cq_allocate(gl_wf_set(no_set)%orb_occ, no_orbitals, 'allocate_wavefunction_set', 'gl_wf_set(no_set)%orb_occ')
   call cq_allocate(gl_wf_set(no_set)%orb_keep, no_orbitals, 'allocate_wavefunction_set', 'gl_wf_set(no_set)%orb_keep')
   call cq_allocate(gl_wf_set(no_set)%orb_cutoff_radius, no_orbitals, &
@@ -275,6 +275,7 @@ contains
   call cq_allocate(gl_basis%v_nonlocal_cutoff, psp_comp, 'allocate_basis', 'gl_basis%v_nonlocal_cutoff')
   call cq_allocate(gl_basis%orb_n, no_orbitals, 'allocate_basis', 'gl_basis%orb_n')
   call cq_allocate(gl_basis%orb_l, no_orbitals, 'allocate_basis', 'gl_basis%orb_l')
+  call cq_allocate(gl_basis%orb_zeta, no_orbitals, 'allocate_basis', 'gl_basis%orb_l')
   call cq_allocate(gl_basis%orb_cutoff_radius, no_orbitals, 'allocate_basis', 'gl_basis%orb_cutoff_radius')
   call cq_allocate(gl_basis%orb_keep, no_orbitals, 'allocate_basis', 'gl_basis%orb_keep')
   call cq_allocate(gl_basis%orb_occ, no_orbitals, 'allocate_basis', 'gl_basis%orb_occ')
@@ -287,6 +288,46 @@ contains
 
   end subroutine allocate_basis
 
+
+! -----------------------------------------------------------------------------
+! Subroutine allocate_orbital_in_table
+! -----------------------------------------------------------------------------
+
+!!****f* cq_ut_psp2pao_alloc/allocate_orbital_in_table *
+!!
+!!NAME
+!! allocate_orbital_in_table
+!!USAGE
+!!
+!!PURPOSE
+!! Allocates a new orbital in the table that accumulates all wavefunction sets
+!!INPUTS
+!!
+!!USES
+!!  cq_ut_psp2pao_global
+!!AUTHOR
+!! Antonio S. Torralba
+!!CREATION DATE
+!! 28/06/2007
+!!MODIFICATION HISTORY
+!!
+!!SOURCE
+!!
+  subroutine allocate_orbital_in_table()
+
+  use cq_ut_psp2pao_global
+
+  implicit none 
+
+  if(gl_orb_list%size_alloc < orb_table_max) then
+    call cq_allocate(gl_orb_list%table(gl_orb_list%size_alloc+1)%p, 'allocate_orbital_in_table', 'gl_orb_list%table')
+    gl_orb_list%size_alloc = gl_orb_list%size_alloc + 1
+  else
+     write(*,*) 'ERROR: Orbital table exhausted: too many orbitals'
+     stop
+  end if
+
+  end subroutine allocate_orbital_in_table
 
 ! -----------------------------------------------------------------------------
 ! Subroutine deallocate_writable_globals
@@ -413,7 +454,7 @@ contains
 !!CREATION DATE
 !! 09/08/2006
 !!MODIFICATION HISTORY
-!!
+!! 20/09/2007 Fix bug in the deallocation of the semicore functions
 !!SOURCE
 !!
   subroutine deallocate_wavefunction_sets(no_sets)
@@ -440,6 +481,7 @@ contains
      if(associated(gl_wf_set(i)%v_nonlocal2))        deallocate(gl_wf_set(i)%v_nonlocal2)
      if(associated(gl_wf_set(i)%orb_n))              deallocate(gl_wf_set(i)%orb_n)
      if(associated(gl_wf_set(i)%orb_l))              deallocate(gl_wf_set(i)%orb_l)
+     if(associated(gl_wf_set(i)%orb_zeta))           deallocate(gl_wf_set(i)%orb_zeta)
      if(associated(gl_wf_set(i)%orb_occ))            deallocate(gl_wf_set(i)%orb_occ)
      if(associated(gl_wf_set(i)%orb_keep))           deallocate(gl_wf_set(i)%orb_keep)
      if(associated(gl_wf_set(i)%orb_cutoff_radius))  deallocate(gl_wf_set(i)%orb_cutoff_radius)
@@ -448,8 +490,8 @@ contains
      if(associated(gl_wf_set(i)%orb_ul2))            deallocate(gl_wf_set(i)%orb_ul2)
 
      if(gl_wf_set(i)%partial_core) then
-        if(associated(gl_wf_set(i)%rhopc))           deallocate(gl_wf_set(i)%orb_ul2)
-        if(associated(gl_wf_set(i)%rhopc2))          deallocate(gl_wf_set(i)%orb_ul2)
+        if(associated(gl_wf_set(i)%rhopc))           deallocate(gl_wf_set(i)%rhopc)
+        if(associated(gl_wf_set(i)%rhopc2))          deallocate(gl_wf_set(i)%rhopc2)
      end if
    end do
 
@@ -501,6 +543,7 @@ contains
   if(associated(gl_basis%v_nonlocal_cutoff)) deallocate(gl_basis%v_nonlocal_cutoff)
   if(associated(gl_basis%orb_n))             deallocate(gl_basis%orb_n)
   if(associated(gl_basis%orb_l))             deallocate(gl_basis%orb_l)
+  if(associated(gl_basis%orb_zeta))          deallocate(gl_basis%orb_zeta)
   if(associated(gl_basis%orb_cutoff_radius)) deallocate(gl_basis%orb_cutoff_radius)
   if(associated(gl_basis%orb_keep))          deallocate(gl_basis%orb_keep)
   if(associated(gl_basis%orb_occ))           deallocate(gl_basis%orb_occ)
@@ -797,6 +840,53 @@ contains
   end if
 
   end subroutine cq_allocate_orbital_info
+
+! -----------------------------------------------------------------------------
+! Subroutine cq_allocate_orbital_table
+! -----------------------------------------------------------------------------
+
+!!****f* cq_ut_psp2pao_alloc/cq_allocate_orbital_table *
+!!
+!!NAME
+!! cq_allocate_orbital_table
+!!USAGE
+!!
+!!PURPOSE
+!! Allocate an orbital_table type
+!!INPUTS
+!!
+!!USES
+!!  cq_ut_psp2pao_types
+!!AUTHOR
+!! Antonio S. Torralba
+!!CREATION DATE
+!! 09/08/2006
+!!MODIFICATION HISTORY
+!!
+!!SOURCE
+!!
+  subroutine cq_allocate_orbital_table(array, routine, message)
+
+  use cq_ut_psp2pao_types
+
+  implicit none
+
+  ! Passed variables
+  type(orbital_table), pointer :: array
+  character(len=*) :: routine
+  character(len=*) :: message
+
+  ! Local variables
+  integer :: stat
+
+  nullify(array)
+  allocate(array, STAT=stat)
+  if(stat /= 0) then
+     write(*,*) routine,': Error allocating ',message
+     stop
+  end if
+
+  end subroutine cq_allocate_orbital_table
 
 ! -----------------------------------------------------------------------------
 ! Subroutine cq_allocate_basis_data

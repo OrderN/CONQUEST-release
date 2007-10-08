@@ -254,8 +254,6 @@ return
      y_der = (y(xmax) - y(xmin)) / delta - ((three * tmp1 * tmp1 - one) * d2y(xmin) &
            - (three * tmp2 * tmp2 - one) * d2y(xmax)) * delta / six;
 
-!print *,"AST-splineder", xmin, xmax, tmp1, tmp2, delta, x_der, y_der
-
   end subroutine spline_derivative
 !!***
 
@@ -341,8 +339,6 @@ return
      b = (int_x - x(min))/incr
      int_y = a * y(min) + b * y(max) &
            + ((a*a*a-a)*d2y(min) + (b*b*b-b)*d2y(max)) * incr *incr / 6.0_double
-
-!print *,"AST-splint", min, max, x(min), x(max), y(min), y(max)
 
   end subroutine spline_interpolation
 !!***

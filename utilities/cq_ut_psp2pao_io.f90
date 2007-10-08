@@ -92,7 +92,8 @@ contains
 
      do i=1, gl_no_orbitals
         write(lun, fmt='(2i5,2e18.10e2,l2)') gl_orbitals(i)%n, gl_orbitals(i)%l, &
-                                             gl_occ(i), gl_eigenvalues(i), gl_orbitals(i)%keep
+                                             gl_occ(i)+gl_occ(i+gl_no_orbitals), &
+                                             gl_eigenvalues(i), gl_orbitals(i)%keep
      end do
 
      write(lun, fmt=*) gl_psp_in%l_nonlocal(1:gl_psp_in%psp_comp)
@@ -314,6 +315,13 @@ contains
      do i=1, gl_no_orbitals
         read(lun, fmt=*) gl_orbitals(i)%n, gl_orbitals(i)%l, &
                          gl_occ(i), gl_eigenvalues(i), gl_orbitals(i)%keep
+        ! For the moment, NON-POLARISED CASE is assumed
+        ! For the polarised case, we should read two occupancies 
+        !   for up and down, assign them to the global variable 
+        !   and assign the nonlocal psp integrals
+        ! Half the occupancy read because unpolarised
+        gl_occ(i) = 0.5_double * gl_occ(i)
+        gl_occ(i + gl_no_orbitals) = gl_occ(i)
      end do
 
      read(lun, fmt=*) gl_psp_in%l_nonlocal(1:gl_psp_in%psp_comp)
@@ -469,7 +477,7 @@ contains
 !!CREATION DATE
 !! 17/05/2006
 !!MODIFICATION HISTORY
-!!
+!! 20/09/2007 Clean code and fix wrong infinite for r=0 and l>1
 !!SOURCE
 !!
   subroutine write_basis(filename)
@@ -491,11 +499,13 @@ contains
 
      integer :: i, j, lun
      integer :: max_l_orb, max_l_psp
+integer :: max_point
+
 
      character(len=200) :: format1
      real(double) :: splineder(gl_basis%points_mesh)  ! Second derivatives for splines     
      real(double) :: delta, splineval
-
+real(double), dimension(3) :: primer, primer_der
 
      ! Create file for writing
 
@@ -532,28 +542,17 @@ contains
      write(lun, fmt='(a)')   "#PAOs:_______________________________"
      do i=1, gl_basis%no_orbitals
         write(lun, fmt='(4i5,f10.6,3x,"#orbital l, n, z, is_polarized, population")') &
-             gl_basis%orb_l(i), gl_basis%orb_n(i), 1, 0, 2.0_double*gl_basis%orb_occ(i)
+             gl_basis%orb_l(i), gl_basis%orb_n(i), gl_basis%orb_zeta(i), 0, 2.0_double*gl_basis%orb_occ(i)
         delta = gl_basis%orb_cutoff_radius(i)/(gl_basis%points_mesh-1)
-!norm_factor=0.0_double
-!do j=1, gl_basis%points_mesh
-!   norm_factor = norm_factor + (gl_basis%orb_ul(i,j)**2.0_double)*(gl_basis%r(j)**4.0_double)
-!end do
-!norm_factor = norm_factor * delta
-!print *,"AST-factors", gl_basis%orb_l(i), norm_factor
 
-!norm_factor=1.0_double
+        do j=1, gl_basis%points_mesh
+           if(gl_basis%r(j) < 1e-300_double) then
+              gl_basis%orb_ul(i, j) = 0.0_double
+           else
+              gl_basis%orb_ul(i, j) = ((four_pi)**0.5)*gl_basis%orb_ul(i, j)/(gl_basis%r(j)**(gl_basis%orb_l(i)))
+           end if
+        end do
 
-do j=1, gl_basis%points_mesh
-!gl_basis%r(j)=0.0_double
-!gl_basis%orb_ul(i,j)=0.0_double
-  if(gl_basis%r(j) < 1e-300_double) then
-     gl_basis%orb_ul(i, j) = 0.0_double
-!print *,"AST-Zeroing"
-  else
-!     gl_basis%orb_ul(i, j) = gl_basis%orb_ul(i, j)*(gl_basis%r(j)**(0.0-gl_basis%orb_l(i)))/norm_factor
-     gl_basis%orb_ul(i, j) = ((four_pi)**0.5)*gl_basis%orb_ul(i, j)/(gl_basis%r(j)**(gl_basis%orb_l(i)))
-  end if
-end do
         call spline(gl_basis%r, gl_basis%orb_ul(i, 1:gl_basis%points_mesh), &
                     gl_basis%points_mesh, splineder)
         write(lun, fmt='(i4,2g25.15,3x,"# npts, delta, cutoff")')  &
@@ -561,11 +560,7 @@ end do
         do j=1, gl_basis%points_mesh
            call spline_interpolation(gl_basis%r, gl_basis%orb_ul(i, 1:gl_basis%points_mesh), &
                                      gl_basis%points_mesh, splineder, (j-1)*delta, splineval)
-!if(gl_basis%orb_l(i).eq.1) then
-!           write(lun, fmt='(2g25.15)')  (j-1)*delta, 0.0_double !gl_basis%r(j), gl_basis%orb_ul(i, j)
-!else
            write(lun, fmt='(2g25.15)')  (j-1)*delta, splineval !gl_basis%r(j), gl_basis%orb_ul(i, j)
-!end if
         end do
      end do
 
@@ -577,7 +572,6 @@ end do
         ! n is just the number in sequence of zetas (for the moment, just one)
         write(lun, fmt='(2i3,x,g23.16,3x,"#kb l, n, Reference energy")') &
              gl_basis%l_nonlocal(i), 1, real(gl_basis%sign_nonlocal(i))
-!        delta = gl_basis%orb_cutoff_radius(1)/(gl_basis%points_mesh-1)
         delta = gl_basis%v_nonlocal_cutoff(i)/(gl_basis%points_mesh-1)
 
         ! Do proper scaling for Conquest
@@ -588,21 +582,45 @@ end do
               gl_basis%v_nonlocal((i-1)*gl_basis%points_mesh+j) = 2.0_double &
                                                           * gl_basis%v_nonlocal((i-1)*gl_basis%points_mesh + j) &
                                                           / (gl_basis%r(j)**(gl_basis%l_nonlocal(i)))
-!print *,"AST-outvnonlo", i, j, gl_basis%v_nonlocal((i-1)*gl_basis%points_mesh+j)
            end if
         end do
 
         call spline(gl_basis%r, gl_basis%v_nonlocal(1+(i-1)*gl_basis%points_mesh:i*gl_basis%points_mesh), &
                     gl_basis%points_mesh, splineder)
-!print *,"AST-here", gl_basis%v_nonlocal((i-1)*gl_basis%points_mesh+2), gl_basis%v_nonlocal((i-1)*gl_basis%points_mesh+1),&
-!                    gl_basis%l_nonlocal(i), gl_basis%r(i)
         write(lun, fmt='(i4,2g25.15,3x,"# npts, delta, cutoff")')  &
               gl_basis%points_mesh, delta, gl_basis%v_nonlocal_cutoff(1)
-        do j=1, gl_basis%points_mesh
+
+!if(gl_basis%points_mesh < 4) then
+!  max_point=gl_basis%points_mesh
+!else
+!  max_point=4
+!end if
+!
+!do j=2,max_point
+!   call spline_interpolation(gl_basis%r, &
+!                             gl_basis%v_nonlocal(1+(i-1)*gl_basis%points_mesh:i*gl_basis%points_mesh), &
+!                             gl_basis%points_mesh, splineder, (j-1)*delta, primer(j-1))
+!end do
+!call spline(gl_basis%r(2:4), primer, 3, primer_der)
+!call spline_interpolation(gl_basis%r(2:4), primer, 3, primer_der, 0.0_double, splineval)
+!!write(lun, fmt='(2g25.15)')  0.0_double, splineval
+
+
+        ! First point of the projector, extrapolated linearly to prevent  
+        !   non-sensical values that happen for l>0 on the original logarithmic scale 
+        call spline_interpolation(gl_basis%r, &
+                                  gl_basis%v_nonlocal(1+(i-1)*gl_basis%points_mesh:i*gl_basis%points_mesh), &
+                                  gl_basis%points_mesh, splineder, 1*delta, primer(1))
+        call spline_interpolation(gl_basis%r, &
+                                  gl_basis%v_nonlocal(1+(i-1)*gl_basis%points_mesh:i*gl_basis%points_mesh), &
+                                  gl_basis%points_mesh, splineder, 2*delta, primer(2))
+        !Linear extrapolation to 0.0
+        write(lun, fmt='(2g25.15)')  0.0_double, (primer(1)*2-primer(2))
+
+        do j=2, gl_basis%points_mesh
            call spline_interpolation(gl_basis%r, &
                                      gl_basis%v_nonlocal(1+(i-1)*gl_basis%points_mesh:i*gl_basis%points_mesh), &
                                      gl_basis%points_mesh, splineder, (j-1)*delta, splineval)
-!           splineval = 2.0_double * splineval / (gl_basis%r(j)**(gl_basis%l_nonlocal(i)))
            write(lun, fmt='(2g25.15)')  (j-1)*delta, splineval
         end do
      end do
@@ -610,7 +628,6 @@ end do
      ! This potential is the local part
      ! In the siesta version, this is Vna. Here, it is the local potential
      write(lun, fmt='(a)')   "#Vlocal:________________________________"
-!     delta = gl_basis%cutoff_radius/(gl_basis%points_mesh-1)
      delta = gl_basis%v_local_cutoff/(gl_basis%points_mesh-1)
      write(lun, fmt='(i4,2g25.15,3x,"# npts, delta, cutoff")')  &
               gl_basis%points_mesh, delta, gl_basis%v_local_cutoff
@@ -648,46 +665,6 @@ end do
           write(lun, fmt='(2g25.15)')  (i-1)*delta, splineval
        end do
      end if
-
-!     write(lun, fmt='(i5,i10,l5,5e18.10e2)') &
-!                    gl_basis%no_orbitals, gl_basis%points_mesh, &
-!                    gl_basis%partial_core, &
-!                    gl_basis%e_total, &
-!                    gl_basis%cutoff_radius, &
-!                    gl_basis%core_charge, gl_basis%dnu
-!
-!     do i=1, gl_basis%no_orbitals
-!        write(lun, fmt='(2i5,3e18.10e2)') gl_basis%orb_n(i), &
-!                                          gl_basis%orb_l(i), &
-!                                          gl_basis%orb_occ(i), &
-!                                          gl_basis%orb_eigenvalues(i), &
-!                                          gl_basis%orb_cutoff_radius(i)
-!     end do
-!
-!     write(lun, fmt=*) gl_basis%psp_comp, &
-!                       gl_basis%l_nonlocal(1:gl_basis%psp_comp)
-!     write(lun, fmt=*) gl_basis%sign_nonlocal(1:gl_basis%psp_comp)
-! 
-!     do i=1,gl_basis%points_mesh
-!        if(gl_basis%partial_core) then
-!          write(format1, '(a,i3,a)'),'(',4+gl_basis%no_orbitals+gl_basis%psp_comp,'e18.10e2)'
-!          write(lun, fmt=format1) gl_basis%r(i), &
-!                    (gl_basis%orb_ul(j, i), j=1,gl_basis%no_orbitals), &
-!                    gl_basis%rho(i)+gl_basis%rho(i+gl_basis%points_mesh), &
-!                    gl_basis%rhopc(i), &
-!                    gl_basis%v_local(i), &
-!                    (gl_basis%v_nonlocal(i+j*gl_basis%points_mesh), &
-!                    j=0,gl_basis%psp_comp-1)
-!        else
-!          write(format1, '(a,i3,a)'),'(',3+gl_basis%no_orbitals+gl_basis%psp_comp,'e18.10e2)'
-!          write(lun, fmt=format1) gl_basis%r(i), &
-!                    (gl_basis%orb_ul(j, i), j=1,gl_basis%no_orbitals), &
-!                    gl_basis%rho(i)+gl_basis%rho(i+gl_basis%points_mesh), &
-!                    gl_basis%v_local(i), &
-!                    (gl_basis%v_nonlocal(i+j*gl_basis%points_mesh), &
-!                    j=0,gl_basis%psp_comp-1)
-!        end if
-!     end do
 
      call io_close(lun)
 

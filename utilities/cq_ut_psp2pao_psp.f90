@@ -60,7 +60,7 @@ contains
 !!
 !!SOURCE
 !!
-   subroutine read_pseudopotential(filename)
+   subroutine read_pseudopotential(filename,wf_no)
 
      use cq_ut_psp2pao_global, ONLY: gl_grid_rmin, gl_grid_rmax, gl_points_psp, &
                                      gl_psp_in, gl_local_cutoff_tolerance, gl_cutoff_radius
@@ -76,6 +76,7 @@ contains
      ! Passed variables
 
      character(len=*) :: filename
+     integer :: wf_no
 
      ! Local variables
 
@@ -85,13 +86,13 @@ contains
      integer :: stat
 
      integer :: junk_int
-     real(double) :: junk_real, z
+     real(double) :: junk_real, z, zat
      real(double) :: r_incr, r
      real(double), dimension(:), allocatable :: tmp, tmp1, tmp2, tmp3, tmp4, tmp5
      real(double) :: tmp_v, tmp_u
      real(double) :: tail, tail_nl
      real(double) :: min_cutoff
-
+!*ast* integer :: tmp_elec, tmp_n, tmp_l, min, shell_elec
 
      integer :: psp_comp
      integer :: local_comp         ! Local component of the psp
@@ -113,10 +114,12 @@ contains
 
      ! NOTE: Fritz-Haber-Institut Troullier-Martins-type Abinit type 6 psp assumed
 
-     ! Read first two lines and discard
+     ! Read first line and discard
      read(lun,fmt=*, iostat=stat) line
      !read(lun,fmt=*, iostat=stat) line
-     read(lun,fmt=*, iostat=stat) junk_real, z, junk_int
+
+     ! Read atom number and valence electrons
+     read(lun,fmt=*, iostat=stat) zat, z, junk_int
 
      ! Read the local component of the pseudopotential
      read(lun, fmt=*) junk_int, junk_int, &
@@ -280,18 +283,20 @@ contains
      end do
 
 
-     ! Inform the user about the cutoffs
-     write (*,*)
-     write (*,*) 'The following pseudopotential cutoffs will be assigned'
-     write (*,*)
-     do i=1,psp_comp
-        if(i /= local_comp) then
-           write (*,*) 'Component', i, '(nonlocal) Cutoff = ', readin_psp(i)%cutoff
-        else
-           write (*,*) 'Component', i, '(local)    Cutoff = ', readin_psp(i)%cutoff
-        end if
-     end do
-     write (*,*)
+     if(wf_no == 1) then
+       ! Inform the user about the cutoffs
+       write (*,*)
+       write (*,'(a)') 'The following pseudopotential cutoffs will be assigned'
+       write (*,*)
+       do i=1,psp_comp
+          if(i /= local_comp) then
+             write (*,'(a,i3,a,f9.6)') 'Component', i, ' (nonlocal) Cutoff = ', readin_psp(i)%cutoff
+          else
+             write (*,'(a,i3,a,f9.6)') 'Component', i, ' (local)    Cutoff = ', readin_psp(i)%cutoff
+          end if
+       end do
+       write (*,*)
+     end if
 
 
      !! Build PSP tables

@@ -17,7 +17,7 @@ default: $(CQ_UT_PSP2PAO)
 
 # Include system dependent variables
 
-include ../system.make
+include system.make
 
 
 ## LISTS OF OBJECTS

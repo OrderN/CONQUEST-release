@@ -28,6 +28,8 @@ module cq_ut_psp2pao_types
    implicit none
 
    integer, parameter :: double = selected_real_kind( 6, 70 )
+   integer, parameter :: orb_table_max = 1000
+   integer, parameter :: l_table_max = 15
 !   integer, parameter :: double = selected_real_kind( 15, 307 )
 
 !!****s* cq_ut_psp2pao_types/orbital_info *
@@ -44,7 +46,70 @@ module cq_ut_psp2pao_types
       integer :: l
       real(double) :: occ
       logical :: keep 
+      integer :: zeta       !*ast* Added for multiple zeta implementation
    end type orbital_info
+!!***
+
+!!****s* cq_ut_psp2pao_types/orbital_table *
+!!NAME
+!! orbital_info
+!!PURPOSE
+!! Defines a derived type that contains some information about an orbital
+!!AUTHOR
+!! Antonio S. Torralba
+!!SOURCE
+!!
+   type orbital_table
+      integer :: wf_set    ! The number of wavefunction set to which this belongs
+      logical :: read      ! Whether the user requested to read this from file
+      type(orbital_info) :: orb
+   end type orbital_table
+!!***
+
+!!****s* cq_ut_psp2pao_types/ang_momentum_list *
+!!NAME
+!! ang_momentum_list
+!!PURPOSE
+!! Defines a derived type that lists present angular momenta
+!!AUTHOR
+!! Antonio S. Torralba
+!!SOURCE
+!!
+   type ang_momentum_list
+      integer, dimension(0:l_table_max+1) :: no_l   ! Used to store number of orbitals with a given l
+      integer, dimension(0:l_table_max+1) :: occ_l  ! Number of those orbital which are occupied
+   end type ang_momentum_list
+!!***
+
+!!****s* cq_ut_psp2pao_types/orbital_table_ptr *
+!!NAME
+!! orbital_table_ptr
+!!PURPOSE
+!! Defines a derived type that contains a pointer to an orbital table
+!! Fortran makes me do this, if I want an array of pointers
+!!AUTHOR
+!! Antonio S. Torralba
+!!SOURCE
+!!
+   type orbital_table_ptr
+      type(orbital_table), pointer :: p
+   end type orbital_table_ptr
+!!***
+
+!!****s* cq_ut_psp2pao_types/orbital_list *
+!!NAME
+!! orbital_list
+!!PURPOSE
+!! Defines a derived type that contains an array of pointers to orbital tables
+!! For the moment, there is a maximum size
+!!AUTHOR
+!! Antonio S. Torralba
+!!SOURCE
+!!
+   type orbital_list
+      integer :: size_alloc
+      type(orbital_table_ptr), dimension(orb_table_max) :: table
+   end type orbital_list
 !!***
 
 !!****s* cq_ut_psp2pao_types/psp_in_table_fhi *
@@ -79,6 +144,24 @@ module cq_ut_psp2pao_types
      real(double), dimension(:), pointer :: rhopc
      real(double), dimension(:), pointer :: rhopc2
    end type psp_in_table_fhi
+!!***
+
+!!****s* cq_ut_psp2pao_types/wf_set_description *
+!!NAME
+!! wf_set_description
+!!PURPOSE
+!! Table for storing general information about a wavefunction set
+!!AUTHOR
+!! Antonio S. Torralba
+!!SOURCE
+!!
+   type wf_set_description
+     real(double) :: zatom
+     real(double) :: zion
+     real(double) :: ion_charge
+     real(double) :: cutoff
+     logical :: user_defined
+   end type wf_set_description
 !!***
 
 !!****s* cq_ut_psp2pao_types/in_pseudopotential *
@@ -159,6 +242,7 @@ module cq_ut_psp2pao_types
       ! Orbitals
       integer, dimension(:), pointer :: orb_n
       integer, dimension(:), pointer :: orb_l
+      integer, dimension(:), pointer :: orb_zeta
       logical, dimension(:), pointer :: orb_keep
       real(double), dimension(:), pointer :: orb_cutoff_radius
       real(double), dimension(:), pointer :: orb_occ

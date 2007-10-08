@@ -50,6 +50,7 @@ module cq_ut_psp2pao_global
 
    ! Orbitals
    integer :: gl_no_orbitals
+   type(orbital_list) :: gl_orb_list
    type(orbital_info), dimension(:), pointer :: gl_orbitals
    real(double), dimension(:), pointer :: gl_ul
    real(double), dimension(:), pointer :: gl_eigenvalues
