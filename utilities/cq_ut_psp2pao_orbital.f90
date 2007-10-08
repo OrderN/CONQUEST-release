@@ -84,8 +84,9 @@ contains
      ! THIS IS A TEMPORARY SOLUTION: ORTHOGONALISATION IS NOT ALLOWED
      !   IF THERE ARE SEVERAL CUTOFF RADII FOR THE PAOS
      ! WARNED THE USER AND RETURN WITHOUT ORTHOGONALISING
-     do i=2, gl_basis%no__orbitals
+     do i=2, gl_basis%no_orbitals
         if(gl_basis%orb_cutoff_radius(i) /= gl_basis%orb_cutoff_radius(1)) then
+           write(*,*) gl_basis%orb_cutoff_radius(1),gl_basis%orb_cutoff_radius(i)
            write(*,*) "************************************************************"
            write(*,*) "*                                                          *"
            write(*,*) "*  WARNING: The basis contains different PAO cutoff radii  *"
