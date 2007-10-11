@@ -106,6 +106,10 @@ contains
 !!    Check to ensure right number of species added
 !!   2007/06/28, 21:37 mt + drb
 !!    Added coordinate wrapping to non-pdb coordinates.
+!!   2007/10/11 Veronika
+!!    Added coordinate wrapping to pdb coordinates
+!!    Added coordinate wrapping for coordinates outside 
+!!    the [-1*cell parameter; 2*cell parameter] range
 !!  SOURCE
 !!
   subroutine read_atomic_positions(filename)
@@ -130,6 +134,7 @@ contains
     real(double) :: x, y, z
     logical :: movex, movey, movez
     logical, external :: leqi
+    real(double), dimension(3) :: cell
     ! Local variables for reading pdb files
     integer :: ios, j
     character(len=80) :: pdb_line
@@ -287,6 +292,17 @@ second:   do
                      10x,'a = ',f9.5,' b = ',f9.5,' c = ',f9.5,' a.u.')
              end select
           end do second
+          ! Wrap coordinates
+          cell(1) = r_super_x
+          cell(2) = r_super_y
+          cell(3) = r_super_z
+          do i = 1, ni_in_cell
+             do j = 1, 3
+                if ((atom_coord(j,i) < zero) .or. (atom_coord(j,i) > cell(j))) &
+                   atom_coord(j,i) = &
+                      atom_coord(j,i) - floor(atom_coord(j,i)/cell(j)) * cell(j)
+             end do
+          end do
           call io_close(lun)
        else
           if(iprint_init>2) write(*,*) 'Entering read_atomic_positions'
@@ -316,12 +332,15 @@ second:   do
                 atom_coord(2,i) = y
                 atom_coord(3,i) = z
              end if
-             if (atom_coord(1,i) > r_super_x) atom_coord(1,i) = atom_coord(1,i)-r_super_x
-             if (atom_coord(2,i) > r_super_y) atom_coord(2,i) = atom_coord(2,i)-r_super_y
-             if (atom_coord(3,i) > r_super_z) atom_coord(3,i) = atom_coord(3,i)-r_super_z
-             if (atom_coord(1,i) < zero) atom_coord(1,i) = atom_coord(1,i)+r_super_x
-             if (atom_coord(2,i) < zero) atom_coord(2,i) = atom_coord(2,i)+r_super_y
-             if (atom_coord(3,i) < zero) atom_coord(3,i) = atom_coord(3,i)+r_super_z
+             ! Wrap coordinates
+             cell(1) = r_super_x
+             cell(2) = r_super_y
+             cell(3) = r_super_z
+             do j = 1, 3
+                if ((atom_coord(j,i) < zero) .or. (atom_coord(j,i) > cell(j))) &
+                   atom_coord(j,i) = &
+                      atom_coord(j,i) - floor(atom_coord(j,i)/cell(j)) * cell(j)
+             end do
              flag_move_atom(1,i) = movex
              flag_move_atom(2,i) = movey
              flag_move_atom(3,i) = movez
