@@ -275,6 +275,8 @@ contains
 !!    Changed defaults
 !!   2007/05/18 15:18 dave
 !!    Added nullify for bp to stop g95 crash
+!!   2007/10/15 Veronika
+!!    Added keyword MaxEfIter to stop infinite loop in findFermi
 !!  TODO
 !!   Think about single node read and broadcast 10/05/2002 dave
 !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
@@ -306,11 +308,12 @@ contains
     use fdf, ONLY: fdf_block, block, fdf_integer, fdf_boolean, fdf_init, &
          fdf_string, fdf_double, fdf_defined, fdf_bline, destroy
     use parse, ONLY: parsed_line, digest, search, reals, names, destroy, integers
-    use DiagModule, ONLY: diagon
+    use DiagModule, ONLY: diagon, maxefermi
     use DMMin, ONLY: maxpulayDMM, LinTol_DMM
 !TM
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT, flag_angular_new
-    use SelfCon, ONLY: A, flag_linear_mixing, EndLinearMixing, q0, n_exact, maxitersSC, maxearlySC, maxpulaySC
+    use SelfCon, ONLY: A, flag_linear_mixing, EndLinearMixing, q0, n_exact, maxitersSC, maxearlySC, &
+        maxpulaySC
     use atomic_density, ONLY: read_atomic_density_file, atomic_density_method
     use S_matrix_module, ONLY: InvSTolerance
     use blip, ONLY: SupportGridSpacing, BlipWidth, init_blip_flag, alpha, beta
@@ -589,6 +592,7 @@ contains
        maxitersSC = fdf_integer('SC.MaxIters',50)
        maxearlySC = fdf_integer('SC.MaxEarly',3)
        maxpulaySC = fdf_integer('SC.MaxPulay',5)
+       maxefermi = fdf_integer('SC.MaxEfIter',50)
        read_atomic_density_file = fdf_string('SC.ReadAtomicDensityFile','read_atomic_density.dat')
        ! Read atomic density initialisation flag
        atomic_density_method = fdf_string('SC.AtomicDensityFlag','pao')

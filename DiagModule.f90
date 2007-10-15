@@ -70,6 +70,9 @@
 !!    Changed iprint levels throughout
 !!   2007/08/13 17:27 dave
 !!    Changed kT to be user-set parameter in input file (Diag.kT keyword)
+!!   2007/10/15 Veronika
+!!    Added keyword maxefermi: Max number of iteration when searching
+!!    for E_Fermi
 !!***
 module DiagModule
 
@@ -195,6 +198,10 @@ module DiagModule
 
   ! BLACS variables
   integer :: me, context
+
+  ! Max number of iterations when searching for E_Fermi
+  integer :: maxefermi
+
 
 contains
 
@@ -1607,6 +1614,7 @@ contains
     real(double) :: lowEf, highEf
     real(double), parameter :: incEf = one
     real(double), parameter :: tolElec = 1.0e-6_double
+    integer :: counter
 
     if(iprint_DM>=2) write(*,5) myid,electrons
     ! Take first guess as double filling each band at first k point
@@ -1643,7 +1651,9 @@ contains
     if(iprint_DM>=3) write(*,2) myid,lowEf,highEf
     Ef = half*(lowEf + highEf)
     call occupy(occ,eig,Ef,thisElec,nbands,nkp)
-    do while(abs(thisElec - electrons)>tolElec)
+    counter = 0
+    do while((abs(thisElec - electrons)) > tolElec .and. (counter <= maxefermi))
+       counter = counter + 1
        if(thisElec>electrons) then
           highElec = thisElec
           highEf = Ef
