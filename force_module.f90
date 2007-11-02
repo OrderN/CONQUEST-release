@@ -1479,7 +1479,7 @@ contains
     ! Automatic
     real(double), allocatable, dimension(:) :: h_potential 
 
-    HF_force = 0
+    HF_force = zero
     dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
     dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
     dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nz_in_block
@@ -2075,8 +2075,8 @@ contains
     real(double) :: d2e_drho2, d2e_dgrad2(size), d2e_dgrad_drho(size)
     real(double) :: dden0_drho, df0f1_drho, ds_grad, dden0_dgrad, ds_dgrad, df1_dgrad
     real(double) :: diff_rho(size)
-    complex(double_cplx) :: tmp1(size), tmp2(3, size)
-    real(double) :: tmp3(3, size), tmp_factor
+    complex(double_cplx) :: tmp1(size), tmp2(size,3)
+    real(double) :: tmp3(size,3), tmp_factor
 
     real(double) :: a, a2, t, t2, t3, t4, num1, den1, den1_2, fl
     real(double) :: factor_exp, factor_exp2, factor_exp3
@@ -2106,7 +2106,6 @@ contains
     real(double), parameter :: third = 0.333333333_double        ! 1/3
     real(double), parameter :: eight = 8.0_double
     real(double), parameter :: eight_thirds = 8.0_double / 3.0_double
-
 
     ! Build the gradient of the density
     call build_gradient (density, grad_density, grad_density_xyz, size)
@@ -2140,8 +2139,10 @@ contains
           !       in xc_energy_lda(n), in the total energy below
           e_exchange = factor0 * factor1
        else
+          s  = 0.0_double              
           s2 = 0.0_double
           denominator0 = 0.0_double
+          denominator0_2 = 0.0_double 
           factor0 = 0.0_double
           factor1 = 0.0_double
           e_exchange = zero
@@ -2158,7 +2159,8 @@ contains
        end if
 
        !!   Second derivative of Ex wrt grad
-       ds_dgrad = k01 * rho**(-four_thirds)
+       ds_dgrad = 0.0_double
+       if(rho > very_small) ds_dgrad = k01 * rho**(-four_thirds)
        dden0_dgrad = -two * mu_kappa * denominator0_2 * s * ds_dgrad 
 
        d2e_dgrad2(n) = two * rho * factor0 * ds_dgrad * (ds_dgrad * denominator0_2 &
@@ -2213,7 +2215,16 @@ contains
        else
          dt_drho = 0.0_double
        end if
-       factor_exp2 = (factor_exp - one)**(-two)
+    !TM 2007_10_18  
+    ! eclda(n) = 0 -> factor_exp = one -> zero**(-2) !!!
+    !ORI   factor_exp2 = (factor_exp - one)**(-two)
+     if(abs(factor_exp-one) > very_small) then
+       factor_exp2 = one/(factor_exp - one)
+       factor_exp2 = factor_exp2**2
+     else
+       factor_exp2 = 0.0_double
+     endif
+
        da_drho = beta_gamma * factor_exp * factor_exp2 * declda_drho(n)/gamma
        dnum1_drho = da_drho * t2 + two*a*t*dt_drho
        dden1_drho = dnum1_drho + two*a*t4*da_drho + four*a2*t3*dt_drho
@@ -2227,34 +2238,39 @@ contains
        !!   Second derivative with respect to rho
 
        if(rho > very_small) then
-         d2t_drho2 = seven_sixths*(t/(rho**two) - dt_drho/rho)
+         d2t_drho2 = seven_sixths*(t/(rho*rho) - dt_drho/rho)
        else
          d2t_drho2 = 0.0_double
        end if
        factor_exp3 = factor_exp * factor_exp2
+      if(abs(factor_exp-one) > very_small) then
        d2a_drho2 = (beta_gamma/gamma)*( ( ( (two * factor_exp / (factor_exp - one)) - one )&
-                 * factor_exp3 * (declda_drho(n)**two) )/gamma &
+                 * factor_exp3 * declda_drho(n)**2) /gamma &
                  + factor_exp3 * d2eclda_drho2(n))
+      else
+       d2a_drho2 = zero
+      endif
+
        d2num1_drho2 = d2a_drho2*t2 + four*t*da_drho*dt_drho &
-                    + two*a*((dt_drho**two) + t*d2t_drho2)
-       d2den1_drho2 = d2num1_drho2 + two*((da_drho*t2)**two) &
+                    + two*a*((dt_drho**2) + t*d2t_drho2)
+       d2den1_drho2 = d2num1_drho2 + two*((da_drho*t2)**2) &
                     + two*a*d2a_drho2*t4 &
                     + 16.0_double*a*t3*da_drho*dt_drho &
-                    + 12.0_double*((a*t*dt_drho)**two) &
+                    + 12.0_double*((a*t*dt_drho)**2) &
                     + four*a2*t3*d2t_drho2
        if(den1 > very_small) then
-         d2fl_drho2 = beta_gamma*(two*num1*(dt_drho**two) &
+         d2fl_drho2 = beta_gamma*(two*num1*(dt_drho**2) &
                     + t*(four*(dnum1_drho*dt_drho &
                     - num1*dden1_drho*dt_drho/den1) &
                     + two*num1*d2t_drho2) &
                     + t2*(d2num1_drho2 &
-                    + two*(num1*((dden1_drho/den1)**two) &
+                    + two*(num1*((dden1_drho/den1)**2) &
                     - dnum1_drho*dden1_drho/den1) &
                     - num1*d2den1_drho2/den1))/den1
        else
          d2fl_drho2 = 0.0_double
        end if
-       d2e_drho2 = d2e_drho2 + gamma*(two*dfl_drho/fl - rho*((dfl_drho/fl)**two) + rho*d2fl_drho2/fl);
+       d2e_drho2 = d2e_drho2 + gamma*(two*dfl_drho/fl - rho*((dfl_drho/fl)**2) + rho*d2fl_drho2/fl);
 
        !!   First derivative with respect to grad
 
@@ -2276,22 +2292,27 @@ contains
  
        !!   Second derivative with respect to grad
  
-       d2num1_dgrad2 = two*a*(dt_dgrad**two)
-       d2den1_dgrad2 = d2num1_dgrad2 + 12.0*((a*t*dt_dgrad)**two)
-       d2fl_dgrad2 = beta_gamma*(two*num1*(dt_dgrad**two)/den1 &
-                   + four*t*dnum1_dgrad*dt_dgrad/den1 &
-                   - two*t*num1*dden1_dgrad*dt_dgrad/den1_2 &
-                   + t2*d2num1_dgrad2/den1 &
-                   - t2*dden1_dgrad*dnum1_dgrad/den1_2 &
-                   - two*t*num1*dden1_dgrad*dt_dgrad/den1_2 &
-                   - t2*dnum1_dgrad*dden1_dgrad/den1_2 &
-                   + two*t2*num1*(dden1_dgrad**two)/(den1_2*den1) &
-                   - t2*num1*d2den1_dgrad2/den1_2)
-       d2e_dgrad2(n) = d2e_dgrad2(n) + gamma*rho*(d2fl_dgrad2/fl - (dfl_dgrad**two)/(fl*fl))
+       d2num1_dgrad2 = two*a*(dt_dgrad**2)
+       d2den1_dgrad2 = d2num1_dgrad2 + 12.0*((a*t*dt_dgrad)**2)
+       if(den1 > very_small) then
+        d2fl_dgrad2 = beta_gamma*(two*num1*(dt_dgrad**2)/den1 &
+                    + four*t*dnum1_dgrad*dt_dgrad/den1 &
+                    - two*t*num1*dden1_dgrad*dt_dgrad/den1_2 &
+                    + t2*d2num1_dgrad2/den1 &
+                    - t2*dden1_dgrad*dnum1_dgrad/den1_2 &
+                    - two*t*num1*dden1_dgrad*dt_dgrad/den1_2 &
+                    - t2*dnum1_dgrad*dden1_dgrad/den1_2 &
+                    + two*t2*num1*(dden1_dgrad**2)/(den1_2*den1) &
+                    - t2*num1*d2den1_dgrad2/den1_2)
+       else
+        d2fl_dgrad2 = zero
+       endif
+       d2e_dgrad2(n) = d2e_dgrad2(n) + gamma*rho*(d2fl_dgrad2/fl - (dfl_dgrad**2)/(fl*fl))
  
        !!   Second derivative with respect to rho and grad
 
-       if((grad_rho > very_small ) .or. (rho > very_small)) then 
+       ! if((grad_rho > very_small ) .or. (rho > very_small)) then  ! Changed by TM 19Oct2007
+       if((grad_rho > very_small ) .and. (rho > very_small)) then 
          d2t_drho_dgrad = -seven_sixths*t/(grad_rho*rho)
        else
          d2t_drho_dgrad = 0.0_double
@@ -2300,12 +2321,12 @@ contains
        d2den1_drho_dgrad = d2num1_drho_dgrad + 8.0*a*t3*da_drho*dt_dgrad + 12.0*a2*t2*dt_drho*dt_dgrad &
                          + four*a2*t3*d2t_drho_dgrad
        if(den1 > very_small) then
-         d2fl_drho_dgrad = beta_gamma*(two*(dt_drho*dt_dgrad*num1 &
-                         + t*(dnum1_drho*dt_dgrad &
-                         + num1*(d2t_drho_dgrad &
-                         - (dden1_drho*dt_dgrad &
-                         + dt_drho*dden1_dgrad)/den1) &
-                         + dnum1_dgrad*dt_drho &
+          d2fl_drho_dgrad = beta_gamma*(two*(dt_drho*dt_dgrad*num1 &
+                          + t*(dnum1_drho*dt_dgrad &
+                          + num1*(d2t_drho_dgrad &
+                          - (dden1_drho*dt_dgrad &
+                          + dt_drho*dden1_dgrad)/den1) &
+                          + dnum1_dgrad*dt_drho &
                          + t*num1*dden1_drho*dden1_dgrad/den1_2)) &
                          + t2*(d2num1_drho_dgrad &
                          - (dnum1_dgrad*dden1_drho &
@@ -2314,7 +2335,7 @@ contains
        else
          d2fl_drho_dgrad = 0.0_double
        end if
-       d2e_dgrad_drho(n) = d2e_dgrad_drho(n) + gamma*(dfl_dgrad + rho*(d2fl_drho_dgrad - dfl_drho*dfl_dgrad/fl))/fl
+        d2e_dgrad_drho(n) = d2e_dgrad_drho(n) + gamma*(dfl_dgrad + rho*(d2fl_drho_dgrad - dfl_drho*dfl_dgrad/fl))/fl
  
  
        !!   Add term L1 to the potential
@@ -2324,9 +2345,11 @@ contains
     end do ! do n_my_grid_points
 
     ! Fourier transform the difference of densities
+     tmp1(:)=cmplx(zero,zero,double_cplx)  !TM
     call fft3(diff_rho, tmp1, size, -1)
 
-    do n=1, n_my_grid_points
+    !do n=1, n_my_grid_points  ! debugged 25Oct2007 TM
+    do n=1, size        
        ! Product by reciprocal vector stored for later use
        tmp2(n,1) = -minus_i*recip_vector(n,1)*tmp1(n)
        tmp2(n,2) = -minus_i*recip_vector(n,2)*tmp1(n)
@@ -2357,12 +2380,16 @@ contains
                     + tmp3(n,3) * grad_density_xyz(n,3)) &
                     * (d2e_dgrad2(n) &
                     - de_dgrad(n)/grad_density(n) ) / (grad_density(n)*grad_density(n))
+       else
+         tmp_factor = zero
        end if
        ! Reuse tmp3
        do i=1,3
           if(grad_density(n) > very_small) then
             tmp3(n,i) = tmp_factor * grad_density_xyz(n,i) &
                       + de_dgrad(n) * tmp3(n,i)/grad_density(n)
+          else
+            tmp3(n,i) = zero
           end if
        end do
     end do
@@ -2374,15 +2401,19 @@ contains
             tmp3(n,i) = tmp3(n,i) &
                       + diff_rho(n) * d2e_dgrad_drho(n)* grad_density_xyz(n,i) &
                       / grad_density(n)
+          else
+            tmp3(n,i) = zero
           end if
        end do
     end do
 
+    tmp2(:,:) = cmplx(zero,zero,double_cplx) ! 25Oct2007 TM
     call fft3(tmp3(:,1), tmp2(:,1), size, -1)
     call fft3(tmp3(:,2), tmp2(:,2), size, -1)
     call fft3(tmp3(:,3), tmp2(:,3), size, -1)
 
-    do n=1, n_my_grid_points
+    !do n=1, n_my_grid_points  ! debugged 25Oct2007 TM
+    do n=1, size
        ! Product by reciprocal vector stored for later use
        tmp1(n) = -minus_i &
                *(recip_vector(n,1)*tmp2(n,1) &
