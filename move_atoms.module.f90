@@ -264,6 +264,10 @@ contains
 !!   15:13, 27/04/2007 drb 
 !!    Reworked minimiser to be more robust; added (but not implemented) corrections
 !!    to permit VERY SIMPLE charge density prediction
+!!   07/11/2007 vb
+!!    Added cq_abort when the trial step in safemin gets too small
+!!    Changed output format for energies and brackets so that the numbers are not out of range
+!!    
 !!  SOURCE
 !!
   subroutine safemin(start_x,start_y,start_z,direction,energy_in,energy_out,&
@@ -277,7 +281,7 @@ contains
          flag_vary_basis, atom_coord, ni_in_cell, rcellx, rcelly, rcellz, flag_self_consistent, &
          flag_reset_dens_on_atom_move
     use minimise, ONLY: get_E_and_F, sc_tolerance, L_tolerance, n_L_iterations
-    use GenComms, ONLY: my_barrier, myid, inode, ionode
+    use GenComms, ONLY: my_barrier, myid, inode, ionode, cq_abort
     use SelfCon, ONLY: new_SC_potl
     use GenBlas, ONLY: dot
     use force_module, ONLY: tot_force
@@ -311,7 +315,7 @@ contains
     !allocate(store_density(maxngrid))
     e0 = total_energy
     if(inode==ionode.AND.iprint_MD>0) &
-         write(*,fmt='(4x,"In safemin, initial energy is ",f15.10," ",a2)') en_conv*energy_in,en_units(energy_units)
+         write(*,fmt='(4x,"In safemin, initial energy is ",f20.10," ",a2)') en_conv*energy_in,en_units(energy_units)
     if(inode==ionode) write(*,fmt='(/4x,"Seeking bracketing triplet of points"/)')
     ! Unnecessary and over cautious !
     k0 = 0.0_double
@@ -413,7 +417,7 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, e3, .false., .false.)
        if(inode==ionode.AND.iprint_MD>1) &
-            write(*,fmt='(4x,"In safemin, iter ",i3," step and energy are ",2f15.10" ",a2)') &
+            write(*,fmt='(4x,"In safemin, iter ",i3," step and energy are ",2f20.10" ",a2)') &
             iter,k3,en_conv*e3,en_units(energy_units)
        if (e3<e2) then ! We're still going down hill
           k1 = k2
@@ -436,11 +440,12 @@ contains
        else
           done = .true.
        endif
+       if (k3 <= very_small) call cq_abort("Step too small: safemin failed!")
     end do
     if(inode==ionode) write(*,fmt='(/4x,"Interpolating minimum"/)')
     ! Interpolate to find minimum.
     if(inode==ionode.AND.iprint_MD>1) &
-            write(*,fmt='(4x,"In safemin, brackets are: ",6f15.10)') k1,e1,k2,e2,k3,e3
+            write(*,fmt='(4x,"In safemin, brackets are: ",6f18.10)') k1,e1,k2,e2,k3,e3
     bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
     if(abs(bottom)>very_small) then
        kmin = 0.5_double*(((k1*k1-k3*k3)*(e1-e2)-(k1*k1-k2*k2)*(e1-e3))/((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3)))
@@ -490,7 +495,7 @@ contains
        call get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, energy_out, .true., .false.)
     end if
     if(inode==ionode.AND.iprint_MD>1) &
-         write(*,fmt='(4x,"In safemin, Interpolation step and energy are ",2f15.10" ",a2)') &
+         write(*,fmt='(4x,"In safemin, Interpolation step and energy are ",f15.10,f20.10" ",a2)') &
          kmin,en_conv*energy_out,en_units(energy_units)
     if (energy_out>e2.AND.abs(bottom)>very_small) then ! The interpolation failed - go back
        if(inode==ionode) write(*,fmt='(/4x,"Interpolation failed; reverting"/)')
