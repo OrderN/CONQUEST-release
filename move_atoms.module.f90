@@ -544,7 +544,7 @@ contains
        write(*,fmt='(4x,"In safemin, exit after ",i4," iterations with energy ",f20.10," ",a2)') &
             iter,en_conv*energy_out,en_units(energy_units)
     else
-       write(*,fmt='(/4x,"Final energy: ",f15.10," ",a2)/') &
+       write(*,fmt='(/4x,"Final energy: ",f20.10," ",a2)/') &
             en_conv*energy_out,en_units(energy_units)
     end if
     !deallocate(store_density)
