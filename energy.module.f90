@@ -29,6 +29,7 @@
 module energy
 
   use datatypes
+  use numbers, ONLY: zero
 
   implicit none
 
@@ -40,8 +41,9 @@ module energy
   real(double) :: kinetic_energy
   real(double) :: delta_E_hartree
   real(double) :: delta_E_xc
-  real(double) :: entropy
+  real(double) :: entropy=zero
 
+  logical :: flag_check_DFT=.false.
   ! RCS tag for object file identification
   character(len=80), save, private :: RCSid = "$Id$"
 !!*** energy
@@ -74,7 +76,7 @@ contains
 !!    and Gillan E-0.5*TS kT=0 extrapolation (see J. Phys.:Condens. Matter 1, 689 (1989)
 !!  SOURCE
 !!
-  subroutine get_energy(total_energy)
+  subroutine get_energy(total_energy,printDFT)
 
     use datatypes
     use numbers
@@ -92,6 +94,26 @@ contains
 
     ! Local variables
     real(double) :: total_energy2
+    ! check DFT energy mode  : by TM Nov2007
+    logical, intent(in), OPTIONAL :: printDFT
+    logical :: print_Harris, print_DFT
+
+ ! For Now, 
+ ! If printDFT does not exist (as in the previous version), 
+ !  DFT energy will be printed out if iprint_gen >= 2
+ !
+ ! If it exists,
+ !  printDFT = .true.  -> prints out only DFT energy
+ !  printDFT = .false. -> prints out Energies except DFT energy
+ !  
+    print_DFT=.false.
+    print_Harris = .true.
+    if(PRESENT(printDFT)) then
+      if(printDFT) print_Harris = .false.
+      print_DFT=printDFT
+    else
+      if(iprint_gen>=2) print_DFT=.true.
+    endif
 
     ! Find energies
     nl_energy = two*matrix_product_trace(matK,matNL)
@@ -100,6 +122,7 @@ contains
     total_energy = band_energy + delta_E_hartree + delta_E_xc + ewald_energy + core_correction
     ! Write out data
     if(myid==0) then
+     if(print_Harris) then
        !if(iprint_gen>=1) write(*,2) electrons
        if(iprint_gen>=1) write(*,1) en_conv*band_energy, en_units(energy_units)
        if(iprint_gen>=1) write(*,3) en_conv*hartree_energy, en_units(energy_units)
@@ -111,14 +134,20 @@ contains
        if(iprint_gen>=1) write(*,9) en_conv*ewald_energy, en_units(energy_units)
        if(iprint_gen>=1) write(*,11) en_conv*delta_E_hartree, en_units(energy_units)
        if(iprint_gen>=1) write(*,12) en_conv*delta_E_xc, en_units(energy_units)
-       if(iprint_gen>=0) write(*,10) en_conv*(total_energy- half*entropy), en_units(energy_units)
-!       if(iprint_gen>=0) write(*,fmt='(20x,"DFT Energy (kT=0)        ",f25.15," ",a2)') &
-!            en_conv*(total_energy - half*entropy), en_units(energy_units)
-       if(iprint_gen>=1) write(*,fmt='(10x,"Free Energy                      : ",f25.15," ",a2)') &
-            en_conv*(total_energy - entropy), en_units(energy_units)
+      if(entropy >= very_small) then
+       if(iprint_gen>=0) write(*,10) en_conv*total_energy, en_units(energy_units)
+       if(iprint_gen>=0) write(*,14) en_conv*(total_energy- half*entropy), en_units(energy_units)
+       if(iprint_gen>=1) write(*,15) en_conv*(total_energy - entropy), en_units(energy_units)
+      elseif(abs(entropy) < very_small) then
+       if(iprint_gen>=0) write(*,10) en_conv*total_energy, en_units(energy_units)
+       if(iprint_gen>=0) write(*,*) '  (TS=0 as O(N) or entropic contribution is negligible) '
+      else
+       write(*,*) ' WARNING !!!!    entropy < 0??? ', entropy
+      endif
+     endif ! (print_Harris)
     end if
     ! Check on validity of band energy
-    if(iprint_gen>=2) then
+    if(print_DFT) then
        total_energy2 = hartree_energy + xc_energy + local_ps_energy + &
             nl_energy + kinetic_energy + core_correction + ewald_energy
        if(myid==0) write(*,13) en_conv*total_energy2, en_units(energy_units)
@@ -133,7 +162,9 @@ contains
 7   format(10x,'NonLocal PsePot Energy           : ',f25.15,' ',a2)
 8   format(10x,'Kinetic Energy                   : ',f25.15,' ',a2)
 9   format(10x,'Ewald Energy                     : ',f25.15,' ',a2)
-10  format(10x,'Harris-Foulkes Energy (kT=0)     : ',f25.15,' ',a2)
+10  format(10x,'Harris-Foulkes Energy            : ',f25.15,' ',a2)
+14  format(10x,'GroundState Energy (E-(1/2)TS)   : ',f25.15,' ',a2)
+15  format(10x,'Free Energy (E-TS)               : ',f25.15,' ',a2)
 13  format(10x,'DFT Total Energy                 : ',f25.15,' ',a2)
 11  format(10x,'Ha Correction                    : ',f25.15,' ',a2)
 12  format(10x,'XC Correction                    : ',f25.15,' ',a2)

@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: EarlySC_module.f90,v 1.8.2.2 2006/03/07 07:36:39 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module EarlySC_module
 ! ------------------------------------------------------------------------------
@@ -46,7 +46,7 @@ module EarlySCMod
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), save, private :: RCSid = "$Id: EarlySC_module.f90,v 1.8.2.2 2006/03/07 07:36:39 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
 contains
 
@@ -739,7 +739,7 @@ subroutine get_new_rho( record, reset_L, fixed_potential, vary_mu, &
   use global_module, ONLY: iprint_SC, sf
   use H_matrix_module, ONLY: get_H_matrix
   use DiagModule, ONLY: diagon
-  use energy, ONLY: get_energy
+  use energy, ONLY: get_energy, flag_check_DFT
   use functions_on_grid, ONLY: supportfns, allocate_temp_fn_on_grid, free_temp_fn_on_grid
   use density_module, ONLY: get_electronic_density
   use GenComms, ONLY: inode, ionode
@@ -758,7 +758,8 @@ subroutine get_new_rho( record, reset_L, fixed_potential, vary_mu, &
   
   ! Local variables
   real(double) :: electrons, total_energy_1, start_BE, new_BE, Ltol
-  
+  !For DFT energy with charge density constructed by density matrix   --  TM  Nov2007
+
   ! ** Useful, but not rigorous **
   !start_BE = 2.0_double*vdot(nsf*nsf*mat(1,Hrange)%length,data_K,1,data_H,1)
   ! get new H matrix 
@@ -787,12 +788,23 @@ subroutine get_new_rho( record, reset_L, fixed_potential, vary_mu, &
   if(.NOT.diagon) call LNV_matrix_multiply(electrons, total_energy_1,  &
        doK, dontM1, dontM2, dontM3, dontM4, dontphi, dontE,0,0,0,0)
   ! Get total energy
-  call get_energy(total_energy)
+  if(flag_check_DFT) then
+   call get_energy(total_energy,.false.)
+  else
+   call get_energy(total_energy)
+  endif
 
   ! And get that density
   temp_supp_fn = allocate_temp_fn_on_grid(sf)
   call get_electronic_density(rhoout, electrons, supportfns, temp_supp_fn, inode, ionode, size)
   call free_temp_fn_on_grid(temp_supp_fn)
+
+  !For DFT energy with charge density constructed by density matrix   --  TM  Nov2007
+  if(flag_check_DFT) then
+   call get_H_matrix( .false., fixed_potential, electrons, rhoout, size)
+   call get_energy(total_energy,flag_check_DFT)
+  endif
+
   return
 end subroutine get_new_rho
 !!***

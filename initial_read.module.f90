@@ -310,7 +310,7 @@ contains
     use parse, ONLY: parsed_line, digest, search, reals, names, destroy, integers
     use DiagModule, ONLY: diagon, maxefermi
     use DMMin, ONLY: maxpulayDMM, LinTol_DMM
-!TM
+
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT, flag_angular_new
     use SelfCon, ONLY: A, flag_linear_mixing, EndLinearMixing, q0, n_exact, maxitersSC, maxearlySC, &
         maxpulaySC
@@ -330,6 +330,7 @@ contains
     use test_force_module, ONLY: flag_test_all_forces, flag_which_force, TF_direction, TF_atom_moved, TF_delta
     use io_module, ONLY: pdb_format, pdb_altloc, append_coords, pdb_output
     use group_module, ONLY : part_method, HILBERT, PYTHON
+    use energy, ONLY: flag_check_DFT
 
     implicit none
 
@@ -607,6 +608,8 @@ contains
        ewald_accuracy = fdf_double('General.EwaldAccuracy',1.0e-10_double) ! Default value of 10^-10 Ha per atom
        flag_old_ewald = fdf_boolean('General.FlagOldEwald',.false.)
        UseGemm = fdf_boolean('MM.UseGemm',.false.)
+       flag_check_DFT=fdf_boolean('General.CheckDFT',.false.)
+
        del_k = fdf_double('Basis.PaoKspaceOlGridspace',0.1_double)
        kcut = fdf_double('Basis.PaoKspaceOlCutoff', 1000.0_double)
        flag_paos_atoms_in_cell = fdf_boolean('Basis.PAOs_StoreAllAtomsInCell',.true.)
