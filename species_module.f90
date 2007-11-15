@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: species_module.f90,v 1.5.2.1 2006/03/31 13:07:15 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module species_module
 ! ------------------------------------------------------------------------------
@@ -44,7 +44,7 @@ module species_module
   save
 
   ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id: species_module.f90,v 1.5.2.1 2006/03/31 13:07:15 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
   integer :: n_species
 
@@ -62,6 +62,8 @@ module species_module
   integer, allocatable, dimension(:)  :: nlpf_species
   integer, allocatable, dimension(:)  :: nsf_species
   integer, allocatable, dimension(:)  :: npao_species
+
+  integer, allocatable, dimension(:)  :: type_species
 !!***
 
  

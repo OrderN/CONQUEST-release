@@ -303,14 +303,14 @@ contains
     use block_module, ONLY: in_block_x, in_block_y, in_block_z, blocks_raster, blocks_hilbert
     use species_module, ONLY: species_label, charge, mass, n_species, &
          species, ps_file, ch_file, phi_file, nsf_species, nlpf_species, npao_species, &
-         non_local_species
+         non_local_species, type_species
     use GenComms, ONLY: gcopy, my_barrier, cq_abort, inode, ionode
     use fdf, ONLY: fdf_block, block, fdf_integer, fdf_boolean, fdf_init, &
          fdf_string, fdf_double, fdf_defined, fdf_bline, destroy
     use parse, ONLY: parsed_line, digest, search, reals, names, destroy, integers
     use DiagModule, ONLY: diagon, maxefermi
     use DMMin, ONLY: maxpulayDMM, LinTol_DMM
-
+!TM
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT, flag_angular_new
     use SelfCon, ONLY: A, flag_linear_mixing, EndLinearMixing, q0, n_exact, maxitersSC, maxearlySC, &
         maxpulaySC
@@ -357,6 +357,8 @@ contains
     logical :: new_format
     logical, external :: leqi
     real(double) :: r_t
+
+    logical :: flag_ghost, find_species
 
     ! Set defaults
     vary_mu = .true.
@@ -494,10 +496,38 @@ contains
        end if
        ! Read, using old-style fdf_block, the information about the different species
        if(fdf_block('ChemicalSpeciesLabel',lun)) then
+        flag_ghost=.false.
           do i=1,n_species
              read(lun,*) j,mass(i),species_label(i)
+             if(mass(i) < -very_small) flag_ghost=.true.
+             type_species(i)=i
           end do
        end if
+       ! I (TM) now assume we will use type_species(j) = 0
+       ! for vacancy sites.   Nov. 14, 2007 
+       if(flag_ghost) then
+          do i=1, n_species
+             if(mass(i) < -very_small) then
+              find_species=.false.
+               do j=1,n_species
+                if(j == i) cycle
+                if(species_label(i) == species_label(j)) then
+                 type_species(i)=-j; find_species=.true.
+                 exit
+                endif
+               enddo
+              if(.not.find_species) then 
+                 type_species(i) = -i
+              endif
+             elseif(mass(i) > very_small) then
+                 type_species(i) = i
+             else
+               write(*,*) ' There are chemical species which have zero mass ',i,mass(i),species_label(i)
+                 type_species(i) = 0    !  Vacancy sites
+             endif
+          enddo
+       endif
+        
        ! Read charge, mass, pseudopotential and starting charge and blip models for the individual species
        maxnsf = 0
        min_blip_sp = 1.0e8_double
@@ -564,6 +594,14 @@ contains
           if(RadiusSupport(i)<very_small) &
                call cq_abort("Radius of support too small for species; increase SupportFunctionRange ",i)
        end do
+ ! For ghost atoms
+    if(flag_ghost) then
+       do i=1, n_species
+         if(type_species(i) < 0) then
+          charge(i) = zero
+         endif
+       enddo
+    endif
        !blip_width = support_grid_spacing * fdf_double('blip_width_over_support_grid_spacing',four)
        L_tolerance = fdf_double('minE.LTolerance',1.0e-7_double)
        sc_tolerance  = fdf_double('minE.SCTolerance',1.0e-6_double)
@@ -608,6 +646,10 @@ contains
        ewald_accuracy = fdf_double('General.EwaldAccuracy',1.0e-10_double) ! Default value of 10^-10 Ha per atom
        flag_old_ewald = fdf_boolean('General.FlagOldEwald',.false.)
        UseGemm = fdf_boolean('MM.UseGemm',.false.)
+        if(flag_ghost) then
+         write(*,*) ' As ghost atoms are included, UseGemm must be false.'
+         UseGemm = .false.
+        endif
        flag_check_DFT=fdf_boolean('General.CheckDFT',.false.)
 
        del_k = fdf_double('Basis.PaoKspaceOlGridspace',0.1_double)
@@ -1005,7 +1047,7 @@ contains
     use blip, ONLY: SupportGridSpacing, BlipWidth, Extent
     use memory_module, ONLY: reg_alloc_mem, type_dbl
     use species_module, ONLY: nsf_species, nlpf_species, npao_species, charge, mass, non_local_species, &
-         ps_file, ch_file, phi_file, species_label, n_species
+         ps_file, ch_file, phi_file, species_label, n_species, type_species
     use global_module, ONLY: area_general
     use GenComms, ONLY: cq_abort
 
@@ -1055,6 +1097,9 @@ contains
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(species_label(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating species_label in allocate_species_vars: ",n_species,stat)
+    call reg_alloc_mem(area_general,n_species,type_dbl)
+    allocate(type_species(n_species),STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating type_species in allocate_species_vars: ",n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(BlipWidth(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating BlipWidth in allocate_species_vars: ",n_species,stat)

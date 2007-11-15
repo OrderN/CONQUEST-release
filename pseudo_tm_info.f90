@@ -110,7 +110,7 @@ contains
     use datatypes
     use numbers, ONLY: zero
     use pao_format, ONLY: pao
-    use species_module, ONLY: npao_species, nsf_species
+    use species_module, ONLY: npao_species, nsf_species, type_species
     use global_module, ONLY: iprint_pseudo
     use dimens, ONLY: RadiusSupport
     use GenComms, ONLY: inode, ionode, cq_abort
@@ -125,6 +125,7 @@ contains
     integer :: stat, ispecies, l, zeta
     real(double) :: cutoff
     character(len=20) :: filename
+    integer :: ii
 
     if(allocated(pseudo)) then
        if(iprint_pseudo>2) write(*,fmt='(10x," setup_pseudo_info is skipped because it is already called")')
@@ -146,6 +147,26 @@ contains
           pseudo(ispecies)%filename = filename
           call read_ion_ascii_tmp(pseudo(ispecies),pao(ispecies))
           npao_species(ispecies) = pao(ispecies)%count
+          !For Ghost atoms
+          if(type_species(ispecies) < 0) then
+            pseudo(ispecies)%zval = zero
+           if(pseudo(ispecies)%n_pjnl > 0) then
+            do ii=1, pseudo(ispecies)%n_pjnl
+             call init_rad(pseudo(ispecies)%pjnl(ii))
+            enddo
+           endif
+            call init_rad(pseudo(ispecies)%vlocal)
+            call init_rad(pseudo(ispecies)%chlocal)
+            if(pseudo(ispecies)%flag_pcc) call init_rad(pseudo(ispecies)%chpcc)
+            pseudo(ispecies)%n_pjnl = 0
+            pseudo(ispecies)%flag_pcc = .false.
+            pseudo(ispecies)%pjnl_l(:) = 0
+            pseudo(ispecies)%pjnl_n(:) = 0
+            pseudo(ispecies)%pjnl_ekb(:) = zero
+            ! pseudo(ispecies)%alpha
+            ! pseudo(ispecies)%prefac
+          endif
+
           if(npao_species(ispecies)<nsf_species(ispecies)) &
                call cq_abort("Error ! Less PAOs than SFs.  Decrease NumberOfSupports: ", &
                npao_species(ispecies),nsf_species(ispecies))
@@ -304,6 +325,50 @@ contains
     return
   end subroutine rad_dealloc
 !!***
+
+!---------------------------------------------------------------
+! sbrt init_rad: from TM
+!---------------------------------------------------------------
+
+!!****f* pseudo_tm_info/init_rad *
+!!
+!!  NAME
+!!   init_rad
+!!  USAGE
+!!
+!!  PURPOSE
+!!   initilise all members of rad_func
+!!
+!!  INPUTS
+!!
+!!
+!!  USES
+!!
+!!  AUTHOR
+!!   T.Miyazaki
+!!  CREATION DATE
+!!
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine init_rad(func)
+
+    use numbers, only: zero
+    implicit none
+
+    type(rad_func), intent(out)    :: func
+
+    func%n = 0
+    func%cutoff = zero
+    func%delta = zero
+    func%f(:) = zero
+    func%d2(:) = zero
+    return
+  end subroutine init_rad
+!!***
+
+
 
 !---------------------------------------------------------------
 ! sbrt radial_read_ascii : from SIESTA, with small changes

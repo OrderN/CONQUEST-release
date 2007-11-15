@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: ol_rad_table_subs.f90,v 1.5.2.2 2006/03/07 07:36:45 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module make_rad_tables
 ! ------------------------------------------------------------------------------
@@ -25,7 +25,7 @@ module make_rad_tables
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: ol_rad_table_subs.f90,v 1.5.2.2 2006/03/07 07:36:45 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -587,6 +587,7 @@ contains
              do nz1 = 1, pao(nsp1)%angmom(l1)%n_zeta_in_angmom
                 do nsp2 = 1,nspecies
                    n_pfnls = pseudo(nsp2)%n_pjnl
+                  if(n_pfnls > 0) then
                    do i_pfnl = 1, n_pfnls !1,0 should abort loop
                          l2 = pseudo(nsp2)%pjnl_l(i_pfnl)
                          nz2 = pseudo(nsp2)%pjnl_n(i_pfnl)
@@ -617,10 +618,11 @@ contains
                             do k=abs(l1-l2),l1+l2,2
                             rad_tables_nlpf_pao(count)%l_values(smallcount)=k
                             smallcount = smallcount+1
-                         enddo
-                         count = count+1
-                      endif
+                            enddo
+                            count = count+1
+                         endif
                    enddo
+                  endif ! (n_pfnls > 0) 
                 enddo
              enddo
           enddo

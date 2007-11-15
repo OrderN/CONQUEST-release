@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: build_PAO_matrices.module.f90,v 1.8.2.3 2006/03/31 12:11:04 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module build_PAO_matrices
 ! ------------------------------------------------------------------------------
@@ -32,7 +32,7 @@ module build_PAO_matrices
   implicit none
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: build_PAO_matrices.module.f90,v 1.8.2.3 2006/03/31 12:11:04 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -275,6 +275,7 @@ contains
           do m1 = -l1,l1
              ! Fix DRB 2007/03/22
              part_index_j = 0
+            if(n_pfnls>0) then
              do i_pfnl = 1, n_pfnls
                 l2 = pseudo(neigh_species)%pjnl_l(i_pfnl)
                 nzeta2 = pseudo(neigh_species)%pjnl_n(i_pfnl)
@@ -310,6 +311,7 @@ contains
                 part_index_j = part_index_j + (2*l2+1)
              enddo ! i_pfnl
              count1 = count1+1
+            endif ! (n_pfnls>0) then
           enddo ! m1
        enddo ! nacz1
     enddo ! l1

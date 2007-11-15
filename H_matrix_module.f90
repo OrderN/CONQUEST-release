@@ -566,6 +566,7 @@ contains
                      k = parts%icell_beg(ind_qart)+mat(np,range)%i_seq(isu)-1
                      species_k = species(k)
                      n_proj=0
+                    if(pseudo(species_k)%n_pjnl > 0) then
                      do nl = 1, pseudo(species_k)%n_pjnl
                         mmax=pseudo(species_k)%pjnl_l(nl)*2+1
                         do mm=1,mmax
@@ -578,6 +579,7 @@ contains
                            enddo !nsf1=1,nonef
                         enddo !mm=1,mmax
                      enddo !nl = 1, pseudo(species_k)%n_pjnl
+                    endif ! (pseudo(species_k)%n_pjnl > 0
                   enddo ! nb=mat%n_nab(i)
                endif ! mat%n_nab(i)>0
             enddo ! i=bundle%nm_nodgroup

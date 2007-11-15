@@ -157,11 +157,13 @@ contains
       do ispecies = 1, nspecies
          nl_max = max(nl_max, pseudo(ispecies)%n_pjnl)
          nlm =  0  ! # of projector functions
+        if(pseudo(ispecies)%n_pjnl>0) then
          do nl= 1, pseudo(ispecies)%n_pjnl
             the_l = pseudo(ispecies)%pjnl_l(nl)
             nlm = nlm + 2* the_l +1
             lcomp_max = max(lcomp_max, the_l)
          enddo
+        endif
          !  (we may have multi refs. for each l)
          ncf_max = max(ncf_max, nlm)     ! # of nlm 
       enddo
@@ -177,11 +179,13 @@ contains
       do ispecies = 1, nspecies
          nl_max = max(nl_max, pseudo(ispecies)%n_pjnl)
          nlm =  0  ! # of projector functions
+        if(pseudo(ispecies)%n_pjnl > 0) then
          do nl= 1, pseudo(ispecies)%n_pjnl
             the_l = pseudo(ispecies)%pjnl_l(nl)
             nlm = nlm + 2* the_l +1
             lcomp_max = max(lcomp_max, the_l)
          enddo
+        endif
          !  (we may have multi refs. for each l)
          ncf_max = max(ncf_max, nlm)     ! # of nlm
          nlpf_species(ispecies)= nlm
@@ -292,9 +296,11 @@ contains
          end if
          if(pseudo(ispecies)%flag_pcc) &
               rcutmax = max(rcutmax, pseudo(ispecies)%chpcc%cutoff)
+        if(pseudo(ispecies)%n_pjnl > 0) then
          do nl= 1, pseudo(ispecies)%n_pjnl
             rcutmax = max(rcutmax, pseudo(ispecies)%pjnl(nl)%cutoff)
          enddo
+        endif
          core_radius(ispecies) = rcutmax
       enddo
       return
@@ -1499,7 +1505,7 @@ contains
     use numbers
     use GenComms, ONLY: inode,ionode
     use dimens, ONLY: volume
-    use species_module, ONLY: species, n_species
+    use species_module, ONLY: species, n_species, type_species
     use global_module, ONLY: ni_in_cell, iprint_pseudo
     use GenComms, ONLY: cq_abort
 
@@ -1545,9 +1551,11 @@ contains
     nfac2= 8
     nfac3= 10
 
+    eshift(:) =zero
     do ispecies = 1, n_species
        beta = pseudo(ispecies)%alpha
        z = pseudo(ispecies)%zval
+     if(type_species(ispecies) > 0) then
        if(pseudo(ispecies)%tm_loc_pot == loc_pot) then
           call calc_energy_shift(pseudo(ispecies),nfac1, eshift1, vlocG0_1)
           call calc_energy_shift(pseudo(ispecies),nfac2, eshift2, vlocG0_2)
@@ -1573,6 +1581,7 @@ contains
                eshift1,eshift2,eshift3, eshift2-eshift3
           eshift(ispecies) = eshift3
        end if
+     endif ! (type_species(ispecies) > 0) 
     enddo
 
     do ispecies=1, n_species
