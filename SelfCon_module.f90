@@ -1032,6 +1032,12 @@ contains
 
     character(len=11) :: digitstr = "01234567890"
 
+!Reset Pulay Iterations  -- introduced by TM, Nov2007
+    integer, parameter :: mx_fail = 3
+    integer :: IterPulayReset=1, icounter_fail=0
+    logical :: reset_Pulay=.false.
+    real(double) :: R0_old
+
     allocate(rho_pul(maxngrid,maxpulaySC), R(maxngrid,maxpulaySC),rho1(maxngrid), &
          resid(maxngrid), Kresid(maxngrid), Aij(maxpulaySC, maxpulaySC), alph(maxpulaySC), STAT=stat)
     if(stat/=0) call cq_abort("Allocation error in PulayMixSC: ",maxngrid, maxpulaySC)
@@ -1118,11 +1124,19 @@ contains
     if(max_neg>0.0_double.AND.iprint_SC>1) write(*,*) 'First Max negative dens on node ',inode,max_neg
     ! Store deltarho
     n_iters = n_iters+1
+ !Reset Pulay Iterations  -- introduced by TM, Nov2007
+      R0_old = R0
+      IterPulayReset=1
+      icounter_fail = 0
     do m=2,maxitersSC
        ! calculate i (cyclical index for storing history) and pul_mx
-       i = mod(m, maxpulaySC)
+       !ORI i = mod(m, maxpulaySC)
+       !ORI if(i==0) i=maxpulaySC
+       !ORI pul_mx = min(m, maxpulaySC)
+      !Reset Version   TM Nov2007
+       i = mod(m-IterPulayReset+1, maxpulaySC)
        if(i==0) i=maxpulaySC
-       pul_mx = min(m, maxpulaySC)
+       pul_mx = min(m-IterPulayReset+1, maxpulaySC)
        !if(inode==ionode) write(*,fmt='(8x,"Pulay iteration ",i4)') m
        do j=1,n_my_grid_points
           rho_pul(j,i) = rho(j)
@@ -1143,6 +1157,14 @@ contains
        if(inode==ionode) write(*,fmt='(8x,"Pulay iteration ",i5," Residual is ",e12.5,/)') m,R0
        !call dump_charge2('re'//digitstr(m:m),resid,size,inode)
        !call dump_locps(resid,size,inode)
+    !Reset Pulay Iterations
+       if(R0 > R0_old ) icounter_fail = icounter_fail+1
+       if(icounter_fail > mx_fail) then 
+        if(inode == ionode) write(*,*) ' Pulay iteration is reset !!  at ',m,'  th iteration'
+        reset_Pulay = .true.
+       endif 
+        R0_old = R0
+    !Reset Pulay Iterations  -- introduced by TM, Nov2007
        do j=1,n_my_grid_points
           R(j,i) = resid(j)
        end do
@@ -1183,8 +1205,13 @@ contains
           Kresid = zero
           Kresid(1:n_my_grid_points) = R(1:n_my_grid_points,ii)
           call kerker(Kresid,maxngrid,q0)
+         !if(ii==pul_mx) then
           rho(1:n_my_grid_points) = rho(1:n_my_grid_points) + &
                alph(ii)*(rho_pul(1:n_my_grid_points,ii) + A*Kresid(1:n_my_grid_points))
+         !else
+         ! rho(1:n_my_grid_points) = rho(1:n_my_grid_points) + &
+         !      alph(ii)*rho_pul(1:n_my_grid_points,ii) 
+         !endif
        end do
        do j=1,n_my_grid_points
           if(rho(j)<0.0_double) then
@@ -1193,6 +1220,15 @@ contains
        end do
        if(max_neg>0.0_double.AND.iprint_SC>2) write(*,*) i,' premix Max negative dens on node ',inode,max_neg
        n_iters = n_iters+1
+     !Reset Pulay Iterations  -- introduced by TM, Nov2007
+      if(reset_Pulay) then
+        rho_pul(1:n_my_grid_points, 1) = rho_pul(1:n_my_grid_points, i)
+        R(1:n_my_grid_points, 1) = R(1:n_my_grid_points, i)
+        IterPulayReset = m
+        icounter_fail=0
+      endif
+      reset_Pulay = .false.
+     !Reset Pulay Iterations  -- introduced by TM, Nov2007
     end do
     ndone = n_iters
     call dealloc_PulayMixSCA
