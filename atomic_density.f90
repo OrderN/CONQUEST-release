@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: atomic_density.f90,v 1.7 2005/05/26 08:36:24 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module atomic_density
 ! ------------------------------------------------------------------------------
@@ -52,7 +52,7 @@ module atomic_density
   character(len=10) :: atomic_density_method
 
   ! RCS tag for object file identification
-  character(len=80), private :: RCSid = "$Id: atomic_density.f90,v 1.7 2005/05/26 08:36:24 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -229,6 +229,8 @@ contains
 !!    Added rcut_dens to keep track of maximum cutoff on atomic charge density
 !!   13:52, 29/07/2003 drb 
 !!    Changed iprint level at which 2001 point table printed out...
+!!   2007/11/16 10:19 dave
+!!    Changed linear interpolation to spline interpolation to fix forces problem
 !!  SOURCE
 !!
   subroutine make_atomic_density_from_paos(inode,ionode,n_species)
@@ -239,6 +241,7 @@ contains
     use numbers, ONLY : zero, one, four, very_small, pi
     use pao_format
     use memory_module, ONLY: reg_alloc_mem, type_dbl
+    use spline_module, ONLY: splint
 
     implicit none
 
@@ -246,7 +249,8 @@ contains
     integer, intent(in) :: inode,ionode, n_species
     integer :: alls, i, lun, nt, n_am, n_sp, n_zeta
     integer, parameter :: default_atomic_density_length = 2001
-    real(double) :: alpha, cutoff, density_deltar, pao_deltar, r, rn_am
+    real(double) :: alpha, cutoff, density_deltar, pao_deltar, r, rn_am, val
+    logical :: range_flag
 
     if(allocated(atomic_density_table)) then
        do i=1,size(atomic_density_table)
@@ -315,20 +319,24 @@ contains
                       r = (nt-1)*density_deltar
                       i = one + very_small + r/pao_deltar
                       if(i+1 <= pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length) then
-                         alpha = one + r/pao_deltar - i
-                         !atomic_density_table(n_sp)%table(nt) = atomic_density_table(n_sp)%table(nt) + &
-                         !     &one_over_four_pi * pao(n_sp)%angmom(n_am)%occ(n_zeta) * &
-                         !     &((r**n_am) * ((one-alpha)*pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table(i) + &
-                         !     &alpha*pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table(i+1)))**2
                          if(n_am /=0) then
                            rn_am = r**n_am
                          else
                            rn_am = one
                          endif
+                         call splint(pao_deltar,pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table(:), &
+                              pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table2(:), &
+                              pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length, &
+                              r,val,range_flag)
                          atomic_density_table(n_sp)%table(nt) = atomic_density_table(n_sp)%table(nt) + &
                               &one_over_four_pi * pao(n_sp)%angmom(n_am)%occ(n_zeta) * &
-                              &(rn_am * ((one-alpha)*pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table(i) + &
-                              &alpha*pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table(i+1)))**2
+                              &(rn_am * val )**2
+                         ! Linear interpolation
+                         !alpha = one + r/pao_deltar - i
+                         !atomic_density_table(n_sp)%table(nt) = atomic_density_table(n_sp)%table(nt) + &
+                         !     &one_over_four_pi * pao(n_sp)%angmom(n_am)%occ(n_zeta) * &
+                         !     &(rn_am * ((one-alpha)*pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table(i) + &
+                         !     &alpha*pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table(i+1)))**2
                       end if ! if(i+1<=pao(...)%length
                    end do ! do nt = atomic_density_table()%length
                 end if ! if(pao(...)%length > 1
