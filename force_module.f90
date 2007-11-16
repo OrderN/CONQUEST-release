@@ -1641,7 +1641,8 @@ contains
 !!  CREATION DATE
 !!   09:36, 2003/03/20 dave
 !!  MODIFICATION HISTORY
-!!
+!!   2007/11/16 12:10 dave
+!!    Bug fix: sign of ninth*(two*s+r)*rs term in dv_correlation was wrong
 !!  SOURCE
 !!
   subroutine get_dxc_potential(density,dxc_potential,size )
@@ -1712,7 +1713,8 @@ contains
           ln_rs = log(rs)
           rs_ln_rs = rs * ln_rs
           if(rho>very_small) then
-             dv_correlation = -(third*p+two*ninth*r*rs_ln_rs-ninth*(two*s+r)*rs)/rho
+             ! DRB 2007/11/16 Changed sign of ninth to PLUS to correct error
+             dv_correlation = -(third*p+two*ninth*r*rs_ln_rs+ninth*(two*s+r)*rs)/rho
           else
              dv_correlation = zero
           end if
