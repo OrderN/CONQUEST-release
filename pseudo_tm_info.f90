@@ -468,6 +468,8 @@ contains
 !!    Added changes for TM potentials from ABINIT
 !!   2007/08/16 15:36 dave
 !!    More tweaks for local potential (particularly short/long range division)
+!!   09:30, 27/11/2007 drb 
+!!    Added calculation of prefac on all processors for local potential
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -710,6 +712,7 @@ contains
        if(inode/=ionode) then
           if(ps_info%tm_loc_pot==loc_pot) then
              ps_info%alpha = six * ln10 / (ps_info%vlocal%cutoff ** 2)
+             ps_info%prefac = (ps_info%alpha/pi)**1.5_double
           else
              ps_info%alpha = six * ln10 / (ps_info%chlocal%cutoff ** 2)
           end if

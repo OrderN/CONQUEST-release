@@ -57,7 +57,8 @@ contains
 !!  CREATION DATE
 !!   24/07/03
 !!  MODIFICATION HISTORY
-!!
+!!   09:29, 27/11/2007 drb 
+!!    Bug fix: zero dummy1bt and dummy2bt before use
 !!  SOURCE
 !!
   subroutine make_rad_table_nlpfpao(npts1,l1,delr1,npts2,l2,delr2&
@@ -116,6 +117,8 @@ contains
     dummy2(1:npts2) = table2(1:npts2)
     dummy1(npts1+1:n12) = zero
     dummy2(npts2+1:n12) = zero
+    dummy1bt = zero
+    dummy2bt = zero
     call matcharrays(dummy1,npts1,delr1,dummy2,npts2,delr2,d12,n1_new&
          &,n2_new,n12) 
     !loop to calculate spherical Bessel transforms of basis
@@ -183,7 +186,8 @@ contains
 !!   18/09/03 corrected k-space params, added y2 construction too.
 !!   28/10/03 new routine to calculate BOTH pao_pao radial tables
 !!    and pao_ke_pao radial tables without option flag
-!!
+!!   09:29, 27/11/2007 drb 
+!!    Bug fix: zero dummy1bt and dummy2bt before use
 !!  SOURCE
 !!  
   subroutine make_rad_table_supp_ke(npts1,l1,delr1,npts2,l2,delr2&
@@ -234,6 +238,8 @@ contains
     dummy2(1:npts2) = table2(1:npts2)
     dummy1(npts1+1:n12) = zero
     dummy2(npts2+1:n12) = zero
+    dummy1bt = zero
+    dummy2bt = zero
     call matcharrays(dummy1,npts1,delr1,dummy2,npts2,delr2,d12,n1_new&
          &,n2_new,n12) 
     !loop to calculate spherical Bessel transforms of basis
