@@ -179,7 +179,7 @@ first:    do
              end select
           end do first
           call io_close(lun)
-          if (iprint_init>0) write(*,'(x,a,i)') 'Number of atoms: ', ni_in_cell
+          if (iprint_init>0) write(*,'(x,a,i5)') 'Number of atoms: ', ni_in_cell
 
           ! Now read the file again and extracts the coordinates
           open( unit=lun, file=filename, status='old', iostat=ios)
@@ -2028,37 +2028,26 @@ hc2:    do
     end if
 
     N = ishft(2, b - 1)
-    write(*,'(a,i)') "N = ", N
 
     ! Gray decode by H .ieor. H/2
     t = ishft(X(nn-1), -1)
-    write(*,'(a,i)') "t = ", t
 
     do i = nn-1, 1, -1
-    write(*,'(a,i,a,i)') "i = ", i, " X(i) = ", X(i)
-    write(*,'(a,i)') "                X(i-1) =", X(i-1)
       X(i) = ieor(X(i), X(i-1))
-    write(*,'(a,i,a,i)') "i = ", i, " X(i) = ", X(i)
-    write(*,'(a,i)') "                X(i-1) =", X(i-1)
     end do
 
     X(0) = ieor(X(0), t)
-    write(*,'(a,i)') "X(0) = ", X(0)
     ! Undo excess work
     Q = 2
     do
       if (Q == N) exit
 
       P = Q - 1
-      write(*,'(a,i3,a,i3)') "P = ", P, " Q = ", Q
       do i = nn - 1, 0, -1
         if ( iand(X(i),Q) > 0) then
-          write(*,'(a,i)') "X(i) = ", X(i)
           X(0) = ieor(X(0), P)
-          write(*,'(a,i)') "X(0) = ", X(0)
         else
           t = iand( ieor( X(0), X(i)), P) ! invert
-          write(*,'(a,i)') "t = ",t
           X(0) = ieor( X(0), t)
           X(i) = ieor( X(i), t)
         end if
