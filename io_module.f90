@@ -55,6 +55,9 @@
 !!    Added option for reading pdb files
 !!   20/11/2006 Veronika
 !!    Added option for writing out pdb files
+!!   28/01/2008 Veronika
+!!    Fixed writing out pdb files - the pdb-style atom names are now also 
+!!    written out
 !!***
 module io_module
 
@@ -452,14 +455,14 @@ second:   do
                 coords(1) = BohrToAng * atom_coord(1,i)
                 coords(2) = BohrToAng * atom_coord(2,i)
                 coords(3) = BohrToAng * atom_coord(3,i)
-                atom_name = species_label(species_glob(i))(1:2)
+                atom_name = adjustr (species_label(species_glob(i))(1:2))
                 beta = 0.0
                 if (flag_move_atom(1,i)) beta = beta + 1
                 if (flag_move_atom(2,i)) beta = beta + 2
                 if (flag_move_atom(3,i)) beta = beta + 4
-                write (lun,'(a12,a2,2x,a14,3f8.3,a6,f6.2,a7)') &
-                      pdb_line(1:12), atom_name, pdb_line(17:30), &
-                      coords(:), pdb_line(55:60), beta, pdb_line(73:80)
+                write (lun,'(a12,a2,a16,3f8.3,a6,f6.2,a14)') &
+                      pdb_line(1:12), atom_name, pdb_line(15:30), &
+                      coords(:), pdb_line(55:60), beta, pdb_line(67:80)
               else
                 ! If the entry is ATOM or HETATM but the alternate location
                 ! does not match, just copy the line from the template
@@ -866,6 +869,8 @@ second:   do
 !!  MODIFICATION HISTORY
 !!   15:05, 27/04/2007 drb & vb
 !!    Added further check for no atoms on a processor and corrected small bug
+!!   28/01/2008 Veronika & Milica
+!!    Fixed memory allocation and deallocation
 !!  SOURCE
 !!  
   subroutine create_sfc_partitions(myid, parts)
@@ -1111,10 +1116,10 @@ hc2:    do
           no_hc = 2**(3*b)
          
           allocate (H(1:3*b), STAT = stat)
-          if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array H')
+          if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array H (Hilbert)')
           allocate (sfc_sequence(0:no_hc-1), STAT = stat)
           if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array sfc_sequence')
-          allocate (map(0:no_hc-1,1:global_maxatomspart+1), STAT = stat)
+          allocate (map(0:no_hc-1,1:global_maxatomspart*4), STAT = stat)
           if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array map')
          
           parts_edge = 2**b 
@@ -1242,6 +1247,14 @@ hc2:    do
                                   atom_sfc_id(sorted_coord(1,i3)) = Hilbert
                                   if (sfc_sequence(Hilbert) > global_maxatomspart) then
                                     refine = .true.
+                                    deallocate(H,STAT = stat)
+                                    if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array H (Hilbert)')
+                                    deallocate(sfc_sequence,STAT = stat)
+                                    if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array sfc_sequence')
+                                    deallocate(map,STAT = stat)
+                                    if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array sfc_sequence')
+                                    deallocate(cc_to_H,cc_part_id,STAT = stat)
+                                    if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array cc_part_id')
                                     exit hc2
                                   end if
                                   map(Hilbert,sfc_sequence(Hilbert)) = sorted_coord(1,i3)
@@ -1295,7 +1308,7 @@ hc2:    do
           end do
      
           deallocate(H,STAT = stat)
-          if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array H')
+          if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array H (Hilbert)')
 
           if (.not.refine) exit hc
       
@@ -1329,10 +1342,10 @@ hc2:    do
         no_hc = 2**(3*b)
  
         allocate (H(1:3*b), STAT = stat)
-        if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array H')
+        if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array H (Hilbert)')
         allocate (sfc_sequence(0:no_hc-1), STAT = stat)
         if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array sfc_sequence')
-        allocate (map(0:no_hc-1,1:global_maxatomspart*2), STAT = stat)
+        allocate (map(0:no_hc-1,1:global_maxatomspart*4), STAT = stat)
         if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array map')
         allocate (cc_part_id(0:no_hc-1), cc_to_H(no_hc), STAT = stat)
         if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array cc_part_id')
@@ -1395,7 +1408,7 @@ hc2:    do
         if (.not.refine) exit
   
         deallocate(H,STAT = stat)
-        if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array H')
+        if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array H (Hilbert)')
  
         deallocate(sfc_sequence,STAT = stat)
         if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array sfc_sequence')
@@ -1441,7 +1454,7 @@ hc2:    do
       end do
 
       deallocate(H,STAT = stat)
-      if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array H')
+      if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array H (Hilbert)')
  
       if(myid==0.AND.iprint_init>2) &
            write(*,'(10x,a,f14.10)') "Time for assigning atoms to partitions, loop over partitions", mtime()-time0
@@ -1893,7 +1906,7 @@ hc2:    do
     if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array sfc_sequence')
 
     deallocate(map,STAT = stat)
-    if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array sfc_sequence')
+    if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array map')
 
     deallocate(cc_part_id, cc_to_H, STAT = stat)
     if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array cc_part_id')

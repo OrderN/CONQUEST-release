@@ -515,8 +515,8 @@ contains
     if(stat/=0) call cq_abort('Error deallocating (2a) in FindEvals',stat)
     call deallocate_arrays
     return
-2   format(10x,'Proc: ',i5,' Time taken for eval diag: ',f15.8,' ms')
-3   format(10x,'Proc: ',i5,' Time taken for evec diag: ',f15.8,' ms')
+2   format(10x,'Proc: ',i5,' Time taken for eval diag: ',f20.8,' ms')
+3   format(10x,'Proc: ',i5,' Time taken for evec diag: ',f20.8,' ms')
 4   format(10x,'Sum of eigenvalues: ',f18.11,' ',a2)
 5   format(10x,'Energy as 2Tr[K.H]: ',f18.11,' ',a2)
 6   format(10x,'2Tr[S.G]: ',f18.11,' ',a2)

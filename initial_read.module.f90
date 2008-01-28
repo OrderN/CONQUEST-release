@@ -277,6 +277,8 @@ contains
 !!    Added nullify for bp to stop g95 crash
 !!   2007/10/15 Veronika
 !!    Added keyword MaxEfIter to stop infinite loop in findFermi
+!!   2008/01/24 Veronika
+!!    Changed the default of General.ManyProcessors to .true.
 !!  TODO
 !!   Think about single node read and broadcast 10/05/2002 dave
 !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
@@ -733,7 +735,7 @@ contains
        else
           load_balance = 0
        end if
-       many_processors = fdf_boolean('General.ManyProcessors',.false.)
+       many_processors = fdf_boolean('General.ManyProcessors',.true.)
        global_maxatomspart = fdf_integer('General.MaxAtomsPartition', 34)
        append_coords = fdf_boolean('AtomMove.AppendCoords',.true.)
     else

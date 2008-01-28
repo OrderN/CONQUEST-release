@@ -199,6 +199,8 @@ contains
 !!    Added block assignment following partitions and choice flag
 !!   2007/05/18 15:17 dave
 !!    Added lines to write out block distribution for Hilbert partitioner
+!!   2008/01/21 Veronika
+!!    Changed write format "Minimum blocs/proc ..."
 !!  SOURCE
 !!
   subroutine set_blocks_from_old(n_grid_x, n_grid_y, n_grid_z)
@@ -371,7 +373,7 @@ contains
           if(blocks_per_proc(nnd)<minblocks) minblocks = blocks_per_proc(nnd)
        enddo
        if(inode==ionode.AND.iprint_index>0) then
-          write(*,fmt='(10x,"Minimum blocs/proc is ",i5,". Maximum blocs/proc is ",i5)') minblocks, maxblocks
+          write(*,fmt='(10x,"Minimum blocs/proc is ",i8,". Maximum blocs/proc is ",i8)') minblocks, maxblocks
        end if
        !--- index of first block on current node
        blocks%inode_beg=0
