@@ -24,11 +24,14 @@
 !!    Tidying, incorporating changes from TM
 !!   2007/08/15 12:04 dave
 !!    Changed lmax_fact to 22 to accomodate f functions
+!!   2008/02/06 08:28 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module bessel_integrals
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -665,30 +668,30 @@ contains
 
      !if clause to select correct subroutine
      if(l.eq.0) then
-        !write(*,*) 'bessloop l=0'
+        !write(io_lun,*) 'bessloop l=0'
         !RC for debugging purposes
         !call bess0_int_test(dummyin,npts,npts_2,rcut,deltar,dummyout)
         call bess0_int(dummyin,npts,npts_2,rcut,deltar,dummyout)
      else if(l.eq.1) then
-        !write(*,*) 'bessloop l=1'
+        !write(io_lun,*) 'bessloop l=1'
         call bess1_int(dummyin,npts,npts_2,rcut,deltar,dummyout)
      else if(l.eq.2) then
-        !write(*,*) 'bessloop l=2'
+        !write(io_lun,*) 'bessloop l=2'
         call bess2_int(dummyin,npts,npts_2,rcut,deltar,dummyout)
      else if(l.eq.3) then 
-        !write(*,*) 'bessloop l=3'
+        !write(io_lun,*) 'bessloop l=3'
         call bess3_int(dummyin,npts,npts_2,rcut,deltar,dummyout)
      else if(l.eq.4) then
-        !write(*,*) 'bessloop l=4'
+        !write(io_lun,*) 'bessloop l=4'
         call bess4_int(dummyin,npts,npts_2,rcut,deltar,dummyout)
      else if(l.eq.5) then
-        !write(*,*) 'bessloop l=5'
+        !write(io_lun,*) 'bessloop l=5'
         call bess5_int(dummyin,npts,npts_2,rcut,deltar,dummyout)
      else if(l.eq.6) then
-        !write(*,*) 'bessloop l=6'
+        !write(io_lun,*) 'bessloop l=6'
         call bess6_int(dummyin,npts,npts_2,rcut,deltar,dummyout)
      else 
-        write(*,*) 'steady on, this value of the total&
+        write(io_lun,*) 'steady on, this value of the total&
              &angular momentum has made me dizzy!'
      endif
 
@@ -768,7 +771,7 @@ contains
 
      factor1 = (z1**l1)*(conjg(z1**l2))*(conjg(z1**l))
      factor = factor1-aimag(factor1)
-     !write(*,*) factor1,'factor1',factor,'factor'
+     !write(io_lun,*) factor1,'factor1',factor,'factor'
 
    end subroutine complx_fctr
 !!***

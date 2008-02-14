@@ -15,12 +15,14 @@
 !!  CREATION DATE
 !!   2006/09/27
 !!  MODIFICATION HISTORY
-!! 
+!!   2008/02/06 08:24 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module memory_module
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   implicit none
   save
@@ -80,7 +82,7 @@ contains
     integer, intent(in) :: amount
     integer, intent(in) :: type
 
-    if(iprint_gen>4) write(*,fmt='(10x,"Allocating in area ",i3,f10.3," ",a2)') &
+    if(iprint_gen>4) write(io_lun,fmt='(10x,"Allocating in area ",i3,f10.3," ",a2)') &
          area, real(amount*no_bytes(type),double)*mem_conv,mem_units(m_units)
     tot_alloc_area(area) = tot_alloc_area(area) + amount*no_bytes(type)
     max_alloc_area(area) = max(max_alloc_area(area),tot_alloc_area(area))
@@ -194,15 +196,18 @@ contains
     use datatypes
     use global_module, ONLY: n_areas
     use units, ONLY: m_units, mem_units, mem_conv
+    use GenComms, ONLY: inode, ionode
 
     implicit none
 
     integer :: i
 
-    do i=1,n_areas
-       write(*,'(2x,"Max mem use for area ",i4," is ",f10.3," ",a2)') i,real(max_alloc_area(i))*mem_conv,mem_units(m_units)
-    end do
-    write(*,'(2x,"Max total mem use is ",f10.3," ",a2)') real(max_alloc)*mem_conv,mem_units(m_units)
+    if(inode==ionode) then
+       do i=1,n_areas
+          write(io_lun,'(2x,"Max mem use for area ",i4," is ",f10.3," ",a2)') i,real(max_alloc_area(i))*mem_conv,mem_units(m_units)
+       end do
+       write(io_lun,'(2x,"Max total mem use is ",f10.3," ",a2)') real(max_alloc)*mem_conv,mem_units(m_units)
+    end if
   end subroutine write_mem_use
 
 end module memory_module

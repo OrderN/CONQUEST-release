@@ -23,9 +23,13 @@
 !!    Added module header and a check for gauss/pao before calling read_pao
 !!   13:56, 2003/09/22 dave
 !!    Added read for basis set: defaults to blips
+!!   2008/02/06 08:08 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module ionic_data
+
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -108,12 +112,12 @@ contains
     if((pseudo_type/=SIESTA.AND.pseudo_type/=ABINIT).AND. &
          (flag_blips_from_pao.OR.flag_atomic_density_from_pao.OR.flag_basis_set==PAOs)) then
        if(inode == ionode.AND.iprint_init>1) &
-            write(unit=*,fmt='(//" **** get_ionic_data: about to call read_pao_info")')
+            write(unit=io_lun,fmt='(//" **** get_ionic_data: about to call read_pao_info")')
        call read_pao(inode,ionode,n_species)
     else if((pseudo_type==SIESTA.OR.pseudo_type==ABINIT).AND. &
          (flag_blips_from_pao.OR.flag_atomic_density_from_pao.OR.flag_basis_set==PAOs)) then
        if(inode == ionode.AND.iprint_init>1) &
-            write(unit=*,fmt='(//" **** get_ionic_data: PAO input from init_pseudo_tm already done")')
+            write(unit=io_lun,fmt='(//" **** get_ionic_data: PAO input from init_pseudo_tm already done")')
     end if
     ! If we're using PAOs as a basis, need coefficients
     if(flag_basis_set==PAOs) call get_support_pao_rep(inode,ionode)

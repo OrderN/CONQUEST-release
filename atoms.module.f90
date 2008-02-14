@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: atoms.module.f90,v 1.3 2004/11/12 02:24:16 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module atoms
 ! ------------------------------------------------------------------------------
@@ -21,17 +21,20 @@
 !!    Added RCS Id and Log tags and static tag for object file id
 !!   2004/11/10 drb
 !!    Changed dimensions to use global and mx_, and added allocation call
+!!   2008/02/04 08:24 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module atoms
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   implicit none
   save
 
   ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id: atoms.module.f90,v 1.3 2004/11/12 02:24:16 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
   integer :: n_my_atoms
 
@@ -97,7 +100,7 @@ contains
     integer :: ind_part
 
 
-    if(iprint_init>1.AND.inode==ionode) write(*,fmt='(10x,"Allocating memory for distribute_atom")')
+    if(iprint_init>1.AND.inode==ionode) write(io_lun,fmt='(10x,"Allocating memory for distribute_atom")')
     call allocate_distribute_atom
     ia = 0
     do node_doing = 1,numprocs

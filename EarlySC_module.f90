@@ -36,10 +36,13 @@
 !!    generating K (and not generate it if using diagonalisation)
 !!   31/07/2002 dave
 !!    Changed matrix_data usage in get_new_rho to use new variable data_M12
+!!   2008/02/01 17:47 dave
+!!    Changes to write to file not stdout
 !!***
 module EarlySCMod
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -107,20 +110,20 @@ contains
     integer :: nreduc
 
     reduce = .false.
-    if(inode==ionode) write(*,*) 'Welcome to reduceLambda. R0: ',R0
+    if(inode==ionode) write(io_lun,*) 'Welcome to reduceLambda. R0: ',R0
     nreduc = 0
     do while(.NOT.reduce)
        ! Change lambda and recalculate residual
        nreduc = nreduc + 1
        lambda_1 = half*lambda_1*(thresh-one)*R0/(R1-R0)
-       if (inode==ionode) write(*,*) 'reduceLambda: ',nreduc,lambda_1
+       if (inode==ionode) write(io_lun,*) 'reduceLambda: ',nreduc,lambda_1
        R1 = getR2( MixLin, lambda_1, reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, &
             L_tol, mu, total_energy, rho0, rho1,resid, size)
        if(R1<=thresh*R0) then 
           reduce = .true.
-          if(inode==ionode) write(*,*) 'Done reducing'
+          if(inode==ionode) write(io_lun,*) 'Done reducing'
        endif
-       if (inode==ionode) write(*,*) 'In reduceLambda, R1 is ',R1
+       if (inode==ionode) write(io_lun,*) 'In reduceLambda, R1 is ',R1
        if((.NOT.reduce).AND.(nreduc>=mx_SCiters)) then
           call cq_abort('reduceLambda: exceeded reduction iterations',&
                nreduc,mx_SCiters)
@@ -203,13 +206,13 @@ contains
          total_energy, den0, den1,residc, size)
     Rcross_c = dot(n_my_grid_points, residc, 1, resid0, 1)
     call gsum(Rcross_c)
-    if(inode==ionode) write(*,108) n_brak, Rc
+    if(inode==ionode) write(io_lun,108) n_brak, Rc
 108 format('Residual after bracket search ',i5,': ',e15.6)
     bracket = .false.
     do while((.NOT.bracket).AND.(n_brak<mx_SCiters))
        if(Rc>Rb) then  ! Assume that a>b to start ! Min: (a,b,c)
           bracket=.true.
-          if(inode==ionode) write(*,*) 'Accepted bracket'
+          if(inode==ionode) write(io_lun,*) 'Accepted bracket'
        else ! Search for a min
           r = (lambda_b-lambda_a)*(Rb-Rc)
           cq = (lambda_b - lambda_c)*(Rb-Ra)
@@ -223,7 +226,7 @@ contains
                   total_energy, den0, den1,residu, size)
              Rcross = dot(n_my_grid_points, residu, 1, resid0, 1)
              call gsum(Rcross)
-             if(inode==ionode) write(*,108) n_brak, Ru
+             if(inode==ionode) write(io_lun,108) n_brak, Ru
              if(Ru<Rc) then  ! Min between b and c: (b,u,c)
                 lambda_a = lambda_b
                 Ra = Rb
@@ -245,7 +248,7 @@ contains
                 n_brak = n_brak + 1
                 Ru = getR2( MixLin, u, reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
                      total_energy, den0, den1,residu, size)
-                if(inode==ionode) write(*,108) n_brak, Ru
+                if(inode==ionode) write(io_lun,108) n_brak, Ru
                 Rcross = dot(n_my_grid_points, residu, 1, resid0, 1)
                 call gsum(Rcross)
              endif
@@ -255,7 +258,7 @@ contains
                   total_energy, den0, den1,residu, size)
              Rcross = dot(n_my_grid_points, residu, 1, resid0, 1)
              call gsum(Rcross)
-             if(inode==ionode) write(*,108) n_brak, Ru
+             if(inode==ionode) write(io_lun,108) n_brak, Ru
              if(Ru<Rc) then  ! Extrapolate u and move all along to (b,c,u)
                 lambda_b = lambda_c
                 moved = .true.
@@ -272,7 +275,7 @@ contains
                      total_energy, den0, den1,residu, size)
                 Rcross = dot(n_my_grid_points, residu, 1, resid0, 1)
                 call gsum(Rcross)
-                if(inode==ionode) write(*,108) n_brak, Ru
+                if(inode==ionode) write(io_lun,108) n_brak, Ru
              endif
           else if((u-ulim)*(ulim-lambda_c)>=zero) then ! Parabolic u to ulim
              u = ulim
@@ -281,7 +284,7 @@ contains
                   total_energy, den0, den1,residu, size)
              Rcross = dot(n_my_grid_points, residu, 1, resid0, 1)
              call gsum(Rcross)
-             if(inode==ionode) write(*,108) n_brak, Ru
+             if(inode==ionode) write(io_lun,108) n_brak, Ru
           else ! Reject parabolic fit and do default magnify
              u = lambda_c + GOLD*(lambda_c-lambda_b)
              n_brak = n_brak + 1
@@ -289,7 +292,7 @@ contains
                   total_energy, den0, den1,residu, size)
              Rcross = dot(n_my_grid_points, residu, 1, resid0, 1)
              call gsum(Rcross)
-             if(inode==ionode) write(*,108) n_brak, Ru
+             if(inode==ionode) write(io_lun,108) n_brak, Ru
           endif
           if(.NOT.bracket) then ! Update everything to (b,c,u)
              lambda_a = lambda_b
@@ -382,7 +385,7 @@ contains
        f1 = Rb
        f2 = getR2( MixLin, x2, reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
             total_energy, den0, den1,resid, size)
-       if(inode==ionode) write(*,108) n_s, f2
+       if(inode==ionode) write(io_lun,108) n_s, f2
        Rl = f2
     else
        x2 = lambda_b
@@ -390,7 +393,7 @@ contains
        f2 = Rb
        f1 = getR2( MixLin, x1, reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
             total_energy, den0, den1,resid, size)
-       if(inode==ionode) write(*,108) n_s, f1
+       if(inode==ionode) write(io_lun,108) n_s, f1
        Rl = f1
     endif
     ! Now loop until done
@@ -408,7 +411,7 @@ contains
           f1 = f2
           f2 = getR2( MixLin, x2, reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
                total_energy, den0, den1,resid, size)
-          if(inode==ionode) write(*,108) n_s, f2
+          if(inode==ionode) write(io_lun,108) n_s, f2
           Rl = f2
           if(Rl<Rb) then
              done = .true.
@@ -428,7 +431,7 @@ contains
           f2 = f1
           f1 = getR2( MixLin, x1, reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
                total_energy, den0, den1,resid, size)
-          if(inode==ionode) write(*,108) n_s, f1
+          if(inode==ionode) write(io_lun,108) n_s, f1
           Rl = f1
           if(Rl<Rb) then
              done = .true.
@@ -442,7 +445,7 @@ contains
     enddo
 108 format('Residual after golden section ',i5,': ',e15.6)
     if(n_s>=mx_SCiters) then
-       write(*,*) 'Attempted to reduce residual via golden search, but failed'
+       write(io_lun,*) 'Attempted to reduce residual via golden search, but failed'
     endif
   end subroutine searchMin
 !!***
@@ -523,7 +526,7 @@ contains
        xm = half*(a+b)
        n_s = n_s+1
        if(inode==ionode) &
-            write(*,*) 'Iteration ',n_s,' in brentMin, x,Rx: ',x,fx
+            write(io_lun,*) 'Iteration ',n_s,' in brentMin, x,Rx: ',x,fx
        tol1 = tol*dabs(x)+zeps
        tol2 = two*tol1
        if(fx<Rb) then ! Not part of the original Brent criterion !
@@ -603,7 +606,7 @@ contains
        endif
        if(n_s>itmax) done = .true. ! Force quit
     enddo
-    if(inode==ionode) write(*,*) 'Finishing brentMin with residual ',Rb
+    if(inode==ionode) write(io_lun,*) 'Finishing brentMin with residual ',Rb
     return
   end subroutine brentMin
 !!***
@@ -768,7 +771,7 @@ subroutine get_new_rho( record, reset_L, fixed_potential, vary_mu, &
 
   ! ** Useful, but not rigorous **
   !new_BE = 2.0_double*vdot(nsf*nsf*mat(1,Hrange)%length,data_K,1,data_H,1)
-  !if(inode==ionode) write(*,*) 'Old and new BE are: ',start_BE, new_BE
+  !if(inode==ionode) write(io_lun,*) 'Old and new BE are: ',start_BE, new_BE
   !if(reset_L) then
   !   if(abs(new_BE-start_BE)<0.5.AND.abs(new_BE-start_BE)>1.0e-10_double) then
   !      reset_L = .false.

@@ -58,9 +58,12 @@
 !!   28/01/2008 Veronika
 !!    Fixed writing out pdb files - the pdb-style atom names are now also 
 !!    written out
+!!   2008/02/06 08:07 dave
+!!    Changed for output to file not stdout
 !!***
 module io_module
 
+  use global_module, ONLY: io_lun
   use GenComms, ONLY: cq_abort, gcopy
 
   implicit none
@@ -151,12 +154,12 @@ contains
 pdb:   if (pdb_format) then
           if(flag_fractional_atomic_coords) &
                call cq_abort('Pdb file format does not support fractional coordinates.')
-          if (iprint_init>2) write(*,*) 'Entering read_atomic_positions, pdb file'
+          if (iprint_init>2) write(io_lun,*) 'Entering read_atomic_positions, pdb file'
           call io_assign(lun)
           ! Go through the file and count the atoms
           open( unit=lun, file=filename, status='old', iostat=ios)
           if ( ios > 0 ) call cq_abort('Reading pdb file: file error')
-          if (iprint_init > 2) write(*,'(x,a)') 'Counting atoms, checking for alternate locations'
+          if (iprint_init > 2) write(io_lun,'(x,a)') 'Counting atoms, checking for alternate locations'
           ni_in_cell = 0
 first:    do
              read (lun, '(a)', iostat=ios) pdb_line
@@ -182,7 +185,7 @@ first:    do
              end select
           end do first
           call io_close(lun)
-          if (iprint_init>0) write(*,'(x,a,i5)') 'Number of atoms: ', ni_in_cell
+          if (iprint_init>0) write(io_lun,'(x,a,i5)') 'Number of atoms: ', ni_in_cell
 
           ! Now read the file again and extracts the coordinates
           open( unit=lun, file=filename, status='old', iostat=ios)
@@ -218,7 +221,7 @@ second:   do
                          if (leqi (atom_name,species_label(j) ) ) then
                             species_glob(i) = j
                             if(species_glob(i)>n_species) then
-                               write(*,fmt='(2x,"** WARNING ! ** Species incompatibility between coordinates and input")')
+                               write(io_lun,fmt='(2x,"** WARNING ! ** Species incompatibility between coordinates and input")')
                                call cq_abort("Species specified greater than number in input file: ",species_glob(i),n_species)
                             end if
                             exit
@@ -240,7 +243,7 @@ second:   do
                          num_move_atom = num_move_atom - 2
                       end if
                       if (num_move_atom == 1) flag_move_atom(1,i) = .true.
-                      if (iprint_init > 0) write(*,fmt='(3x, i7, 3f15.8, i3, 3L2)') i,atom_coord(1:3,i), &
+                      if (iprint_init > 0) write(io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)') i,atom_coord(1:3,i), &
                            species_glob(i),flag_move_atom(1:3,i)
                    end if
                 else
@@ -257,7 +260,7 @@ second:   do
                       if (leqi (atom_name,species_label(j) ) ) then
                          species_glob(i) = j
                          if(species_glob(i)>n_species) then
-                            write(*,fmt='(2x,"** WARNING ! ** Species incompatibility between coordinates and input")')
+                            write(io_lun,fmt='(2x,"** WARNING ! ** Species incompatibility between coordinates and input")')
                             call cq_abort("Species specified greater than number in input file: ",species_glob(i),n_species)
                          end if
                          exit
@@ -279,7 +282,7 @@ second:   do
                       num_move_atom = num_move_atom - 2
                    end if
                    if (num_move_atom .eq. 1) flag_move_atom(1,i) = .true.
-                   if (iprint_init > 0) write(*,fmt='(3x, i7, 3f15.8, i3, 3L2)') i,atom_coord(1:3,i), &
+                   if (iprint_init > 0) write(io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)') i,atom_coord(1:3,i), &
                         species_glob(i),flag_move_atom(1:3,i)
                 end if
              case ('CRYST1')
@@ -290,7 +293,7 @@ second:   do
                 ! The following write statement is also in initial_read_module, but
                 ! I think it's better to have it (also) here, because then the cell size
                 ! will be printed together with the coordinates
-                write(*,4) r_super_x, r_super_y, r_super_z
+                write(io_lun,4) r_super_x, r_super_y, r_super_z
 4               format(/10x,'The simulation box has the following dimensions',/, &
                      10x,'a = ',f9.5,' b = ',f9.5,' c = ',f9.5,' a.u.')
              end select
@@ -308,7 +311,7 @@ second:   do
           end do
           call io_close(lun)
        else
-          if(iprint_init>2) write(*,*) 'Entering read_atomic_positions'
+          if(iprint_init>2) write(io_lun,*) 'Entering read_atomic_positions'
           call io_assign(lun)
           open(unit=lun,file=filename,status='old')
           ! Read supercell vector - for now it must be orthorhombic so we use x and y as dummy variables
@@ -323,7 +326,7 @@ second:   do
           do i=1,ni_in_cell
              read(lun,*) x,y,z,species_glob(i),movex,movey,movez
              if(species_glob(i)>n_species) then
-                write(*,fmt='(2x,"** WARNING ! ** Species incompatibility between coordinates and input")')
+                write(io_lun,fmt='(2x,"** WARNING ! ** Species incompatibility between coordinates and input")')
                 call cq_abort("Species specified greater than number in input file: ",species_glob(i),n_species)
              end if
              if(flag_fractional_atomic_coords) then
@@ -348,7 +351,7 @@ second:   do
              flag_move_atom(2,i) = movey
              flag_move_atom(3,i) = movez
              !          id_glob(i) = i
-             if(iprint_init>0) write(*,fmt='(3x, i7, 3f15.8, i3, 3L2)') i,atom_coord(1:3,i), &
+             if(iprint_init>0) write(io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)') i,atom_coord(1:3,i), &
                   species_glob(i),flag_move_atom(1:3,i)
           end do
           call io_close(lun)
@@ -427,7 +430,7 @@ second:   do
 
     if(inode==ionode) then
        if (pdb_output) then
-          if (iprint_init > 2) write(*,*) 'Writing write_atomic_positions'
+          if (iprint_init > 2) write(io_lun,*) 'Writing write_atomic_positions'
           call io_assign(lun)
           ! No appending of coords for a pdb file
           open (unit = lun, file = 'output.pdb', status = 'replace', iostat = ios)
@@ -436,7 +439,7 @@ second:   do
           call io_assign(template)
           open (unit = template, file = pdb_temp, status = 'old', iostat = ios)
           if ( ios > 0 ) then
-             write(*,*) 'Filename was: |',pdb_temp,'|'
+             write(io_lun,*) 'Filename was: |',pdb_temp,'|'
              call cq_abort('Reading template file: file error ',ios)
           end if
           ! Read the template file, reprint all lines that are not ATOM, HETATM, or CRYST1
@@ -482,7 +485,7 @@ second:   do
           call io_close(lun)
           call io_close(template)
        else
-          if(iprint_init>2) write(*,*) 'Writing read_atomic_positions'
+          if(iprint_init>2) write(io_lun,*) 'Writing read_atomic_positions'
           call io_assign(lun)
           if(append_coords) then
              open(unit=lun,file=filename,position='append')
@@ -574,13 +577,13 @@ second:   do
     if(part_method == PYTHON) then
        if(myid==0) then
           if(iprint_init>1) then
-             write(*,*) 'Reading partition data'
-             write(*,*) '--------------------------'
-             write(*,*) 
-             write(*,*) '  *** Partition Data Starts ***'
+             write(io_lun,*) 'Reading partition data'
+             write(io_lun,*) '--------------------------'
+             write(io_lun,*) 
+             write(io_lun,*) '  *** Partition Data Starts ***'
           end if
           call read_partitions(parts,part_file)
-          if(iprint_init>1) write(*,*) '  *** Partition Data Ends ***'
+          if(iprint_init>1) write(io_lun,*) '  *** Partition Data Ends ***'
        end if
        isendbuf = 0
        if(myid==0) then
@@ -614,13 +617,13 @@ second:   do
        call gcopy(id_glob_inv, ni_in_cell)
     else if (part_method == HILBERT) then
        if (iprint_init > 1.AND.myid==0) then
-          write(*,*) 'Partitioning using Hilbert curves'
-          write(*,*) '---------------------------------'
-          write(*,*)
+          write(io_lun,*) 'Partitioning using Hilbert curves'
+          write(io_lun,*) '---------------------------------'
+          write(io_lun,*)
        end if
        call create_sfc_partitions(myid, parts)
        np_in_cell = parts%ngcellx*parts%ngcelly*parts%ngcellz
-       if (iprint_init > 1.AND.myid==0) write(*,*) 'Finished partitioning'
+       if (iprint_init > 1.AND.myid==0) write(io_lun,*) 'Finished partitioning'
     endif
     ! inverse table to npnode
     do np=1,np_in_cell
@@ -691,7 +694,7 @@ second:   do
     integer :: irc,ierr,np_in_cell, lun, glob_count, map, ios
     integer :: ind_global, ntmpx, ntmpy, ntmpz, ntmp1, ntmp2, ntmp3, mx_tmp_edge
 
-    if(iprint_init>2) write(*,*) 'Entering read_partitions'
+    if(iprint_init>2) write(io_lun,*) 'Entering read_partitions'
     call io_assign(lun)
 
     open(unit=lun, file=part_file, status='old', iostat=ios)
@@ -738,7 +741,7 @@ second:   do
        endif ! if(parts%ng_on_node>0)
        if(ntmp3>maxatomsproc) maxatomsproc = ntmp3
     enddo ! nnd = 1,nnode
-    if(iprint_init>3) write(*,*) 'Atoms proc max: ',maxatomsproc, maxpartsproc
+    if(iprint_init>3) write(io_lun,*) 'Atoms proc max: ',maxatomsproc, maxpartsproc
     call init_group(parts, maxpartsproc, mx_tmp_edge, np_in_cell, maxatomspart, numprocs)
     maxpartscell = np_in_cell
     close(unit=lun)
@@ -748,26 +751,26 @@ second:   do
     !open(unit=lun,file=part_file)
     ! Read and check partitions along cell sides
     read(lun,*) parts%ngcellx,parts%ngcelly,parts%ngcellz
-    if(iprint_init>0) write(*,102) parts%ngcellx,parts%ngcelly,parts%ngcellz
+    if(iprint_init>0) write(io_lun,102) parts%ngcellx,parts%ngcelly,parts%ngcellz
     if(max(parts%ngcellx,parts%ngcelly,parts%ngcellz)>parts%mx_gedge) then
        call cq_abort('read_partitions: too many parts edge ', &
             max(parts%ngcellx,parts%ngcelly,parts%ngcellz),parts%mx_gedge)
     endif
     ! Read and check number of processors
     read(lun,*) nnode
-    if(iprint_init>0) write(*,110) nnode
+    if(iprint_init>0) write(io_lun,110) nnode
     if((nnode<1).or.(nnode>numprocs)) then
        call cq_abort('read_partitions: nodes wrong ',nnode,numprocs)
     endif
     ! Output header for atoms
-!    if(iprint_init==0) write(*,*) '   Partn        x              y              z        Species   Proc'
+!    if(iprint_init==0) write(io_lun,*) '   Partn        x              y              z        Species   Proc'
     ! Loop over nodes, reading bundle information
     glob_count = 0
     do nnd=1,nnode
        ! First node number, partitions and starting pointer
        read(lun,*) nnd1,parts%ng_on_node(nnd),parts%inode_beg(nnd)
-       if(iprint_init>0) write(*,111) nnd1,parts%ng_on_node(nnd),parts%inode_beg(nnd)
-!       if(iprint_init==1) write(*,*) '   Partn        x              y              z        Species   Proc'
+       if(iprint_init>0) write(io_lun,111) nnd1,parts%ng_on_node(nnd),parts%inode_beg(nnd)
+!       if(iprint_init==1) write(io_lun,*) '   Partn        x              y              z        Species   Proc'
        if(nnd1/=nnd) then
           call cq_abort('read_partitions: node label wrong ',nnd1,nnd)
        endif
@@ -800,7 +803,7 @@ second:   do
              parts%ngnode(parts%inode_beg(nnd)+np-1)=ind_part
              parts%nm_group(ind_part)=n_cont
              parts%icell_beg(ind_part)=n_beg
-             if(iprint_init>1) write(*,113) ind_part,np1,n_cont,n_beg
+             if(iprint_init>1) write(io_lun,113) ind_part,np1,n_cont,n_beg
              ! Read atoms
              if(n_cont>0) then
                 ! Check maxima
@@ -821,7 +824,7 @@ second:   do
                    id_glob(parts%icell_beg(ind_part)+ni-1) = map
                    ! Map from coord file to partition number
                    id_glob_inv(map) = parts%icell_beg(ind_part)+ni-1
-                   write(*,*) ' Global map: ',parts%icell_beg(ind_part)+ni-1,map
+                   write(io_lun,*) ' Global map: ',parts%icell_beg(ind_part)+ni-1,map
                 enddo
              endif
           enddo ! Loop over np = parts%ng_on_node
@@ -942,9 +945,9 @@ second:   do
     ! curve (this is NOT the Gray code of the position but the binary
     ! representation of the sequential number).
 
-    !write(*,*) 'Proc, starting sfc: ',myid
+    !write(io_lun,*) 'Proc, starting sfc: ',myid
 !if(myid==0) then
-    if (iprint_init > 2.AND.myid==0) write(*,*) 'Entering create_sfc_partitions'
+    if (iprint_init > 2.AND.myid==0) write(io_lun,*) 'Entering create_sfc_partitions'
 
     ! av_atom_part is not used at the moment 
     ! av_atom_part = 13
@@ -961,9 +964,9 @@ second:   do
 
     if (max_parts_occ == 0) max_parts_occ = 1
     
-    if (iprint_init > 3.AND.myid==0) write(*,*) 'ni_in_cell = ', ni_in_cell
-    if (iprint_init > 3.AND.myid==0) write(*,*) 'min_parts_occ = ', min_parts_occ
-    if (iprint_init > 3.AND.myid==0) write(*,*) 'max_parts_occ = ', max_parts_occ
+    if (iprint_init > 3.AND.myid==0) write(io_lun,*) 'ni_in_cell = ', ni_in_cell
+    if (iprint_init > 3.AND.myid==0) write(io_lun,*) 'min_parts_occ = ', min_parts_occ
+    if (iprint_init > 3.AND.myid==0) write(io_lun,*) 'max_parts_occ = ', max_parts_occ
 
     if (.not.many_processors) then
       ! Sort the atoms according to x, y, and z coordinates
@@ -994,7 +997,7 @@ second:   do
       minmax_coords(-2) = atom_coord(2,sorted_coord(2,1))
       minmax_coords(-3) = atom_coord(3,sorted_coord(3,1))
 
-      if (iprint_init > 4.AND.myid==0) write(*,'(a,6f12.6)') "Minmax:", minmax_coords(1), &
+      if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,6f12.6)') "Minmax:", minmax_coords(1), &
         minmax_coords(2), minmax_coords(3),  minmax_coords(-1), minmax_coords(-2), &
         minmax_coords(-3)
     else
@@ -1015,13 +1018,13 @@ second:   do
         if(minmax_coords(-3) > atom_coord(3,i)) minmax_coords(-3) = atom_coord(3,i) 
       end do
 
-      if (iprint_init > 4.AND.myid==0) write(*,'(a,6f12.6)') "Minmax:", minmax_coords(1), &
+      if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,6f12.6)') "Minmax:", minmax_coords(1), &
         minmax_coords(2), minmax_coords(3),  minmax_coords(-1), minmax_coords(-2), &
         minmax_coords(-3)
 
     end if
 
-    if (myid==0.AND.iprint_init>2) write(*,'(a,f14.10)') "Time for min-max", mtime()-time0
+    if (myid==0.AND.iprint_init>2) write(io_lun,'(a,f14.10)') "Time for min-max", mtime()-time0
 
     do i = 1, 3
       occupied_cell(i) = minmax_coords(i) - minmax_coords(-i)
@@ -1055,30 +1058,30 @@ second:   do
     end if
     if (dims < very_small) dims = one ! if dims is 0, we only have one atom
 
-    if (iprint_init > 3.AND.myid==0) write(*,'(a,3f12.6)') "Tmp_parts:", tmp_parts(1), tmp_parts(2), tmp_parts(3)
+    if (iprint_init > 3.AND.myid==0) write(io_lun,'(a,3f12.6)') "Tmp_parts:", tmp_parts(1), tmp_parts(2), tmp_parts(3)
     real_min_parts = tmp_parts(1) * tmp_parts(2) * tmp_parts(3) * min_parts_occ
     real_max_parts = tmp_parts(1) * tmp_parts(2) * tmp_parts(3) * max_parts_occ
 
-    if (iprint_init > 3.AND.myid==0) write(*,'("Min parts = ",f14.5)') real_min_parts
-    if (iprint_init > 3.AND.myid==0) write(*,'("Max parts = ",f14.5)') real_max_parts
+    if (iprint_init > 3.AND.myid==0) write(io_lun,'("Min parts = ",f14.5)') real_min_parts
+    if (iprint_init > 3.AND.myid==0) write(io_lun,'("Max parts = ",f14.5)') real_max_parts
  
     ! j is the actual level of recursion, we will have 2^j^3 partitions
     real_j_max = log(real_max_parts)/log(two)/dims
     real_j_min = log(real_min_parts)/log(two)/dims
-    if (iprint_init > 3.AND.myid==0) write(*,'("Real j max = ",f15.9)') real_j_max
-    if (iprint_init > 3.AND.myid==0) write(*,'("Real j min = ",f15.9)') real_j_min
+    if (iprint_init > 3.AND.myid==0) write(io_lun,'("Real j max = ",f15.9)') real_j_max
+    if (iprint_init > 3.AND.myid==0) write(io_lun,'("Real j min = ",f15.9)') real_j_min
     j_max = floor(real_j_max)
     j_min = ceiling(real_j_min)
-    if (iprint_init > 3.AND.myid==0) write(*,'("J max = ",i5)') j_max
-    if (iprint_init > 3.AND.myid==0) write(*,'("J min = ",i5)') j_min
+    if (iprint_init > 3.AND.myid==0) write(io_lun,'("J max = ",i5)') j_max
+    if (iprint_init > 3.AND.myid==0) write(io_lun,'("J min = ",i5)') j_min
  
     ! This can happen when the interval real_j_min -- real_j_max is small
     if (j_min > j_max) then
       k = j_min
       j_min = j_max
       j_max = k
-      if (iprint_init > 3.AND.myid==0) write(*,'("J max = ",i5)') j_max
-      if (iprint_init > 3.AND.myid==0) write(*,'("J min = ",i5)') j_min
+      if (iprint_init > 3.AND.myid==0) write(io_lun,'("J max = ",i5)') j_max
+      if (iprint_init > 3.AND.myid==0) write(io_lun,'("J min = ",i5)') j_min
     end if
     ! Similar as above
     if (j_min == 0) j_min = 1
@@ -1105,7 +1108,7 @@ hc:   do
         maxatomspart = 0
 
 hc2:    do
-          if (iprint_init > 3.AND.myid==0) write(*,'(a,i2)') "Hilbert curve recursion level =", b
+          if (iprint_init > 3.AND.myid==0) write(io_lun,'(a,i2)') "Hilbert curve recursion level =", b
          
           ! Initialise the array of atom <--> Hilbert cube
           ! -1 means atom not assigned to any HC
@@ -1152,7 +1155,7 @@ hc2:    do
                 X(1) = i1
                 X(2) = i2
          
-                if (iprint_init > 4.AND.myid==0) write(*,'(a,3i7)') "Sent:", X(0), X(1), X(2)
+                if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,3i7)') "Sent:", X(0), X(1), X(2)
                 call axes_to_transpose(X, b, 3)
         
                 ! Construct the Hilbert integer
@@ -1161,7 +1164,7 @@ hc2:    do
                    H(j+(i-1)*3) = iand(ishft(X(j-1),(i-b)),1)
                   end do
                 end do
-                if (iprint_init > 4.AND.myid==0) write(*,'(a,12b1)') "Hilbert integer = ", H
+                if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,12b1)') "Hilbert integer = ", H
         
                 ! Convert the binary Hilbert integer to decimal
                 Hilbert = 0
@@ -1169,20 +1172,20 @@ hc2:    do
                   Hilbert = Hilbert + 2**(i-1)*H(b*3+1-i)
                 end do
         
-                if (iprint_init > 3.AND.myid==0) write(*,'(a,3i3,i7)') "Result:", X(0), X(1), X(2), Hilbert
+                if (iprint_init > 3.AND.myid==0) write(io_lun,'(a,3i3,i7)') "Result:", X(0), X(1), X(2), Hilbert
         
                 ! How many atoms are in this Hilbert cube?
                 ! A cunning way to search in all 3 cartesian directions using the arrays
                 ! of (sorted) atom IDs
          
                 sfc_sequence(Hilbert) = 0
-                if (iprint_init > 4.AND.myid==0) write(*,'(a,f9.5)') "X value:", (hc_edge(1) * (i0 + 1))
-                if (iprint_init > 4.AND.myid==0) write(*,'(a,f9.5)') "Y value:", (hc_edge(2) * (i1 + 1))
-                if (iprint_init > 4.AND.myid==0) write(*,'(a,f9.5)') "Z value:", (hc_edge(3) * (i2 + 1))
+                if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,f9.5)') "X value:", (hc_edge(1) * (i0 + 1))
+                if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,f9.5)') "Y value:", (hc_edge(2) * (i1 + 1))
+                if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,f9.5)') "Z value:", (hc_edge(3) * (i2 + 1))
          
                 cc_part_id(Hilbert) = 1 + i0 * parts_edge**2 + i1 * parts_edge + i2
                 cc_to_H(1 + i0 * parts_edge**2 + i1 * parts_edge + i2) = Hilbert
-                if (iprint_init > 4.AND.myid==0) write(*,'(a,i6)') "cc_part_id =", cc_part_id(Hilbert)
+                if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,i6)') "cc_part_id =", cc_part_id(Hilbert)
          
                 ! Check whether we are in the occupied region. If not, sfc_sequence(Hilbert) will remain 0
                 if (((hc_edge(1) * (i0 + 1)) >= minmax_coords(-1)) .and. &
@@ -1196,10 +1199,10 @@ hc2:    do
                   do i3 = coord_start(1), ni_in_cell
          
                     ! If x coord is > the HC x boundries, exit
-                     if (iprint_init > 4.AND.myid==0) write(*,'(a,i5,a,f9.5)') "Atom ",sorted_coord(1,i3), &
+                     if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,i5,a,f9.5)') "Atom ",sorted_coord(1,i3), &
                             " coord =", atom_coord(1,sorted_coord(1,i3))
                      if ((atom_coord(1,sorted_coord(1,i3)) > (hc_edge(1) * (i0 + 1)))) then
-                       if (iprint_init > 4.AND.myid==0) write(*,'(a,i5)') "Atom over x:", sorted_coord(1,i3) 
+                       if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,i5)') "Atom over x:", sorted_coord(1,i3) 
                          coord_end(1) = i3
                        exit
                      end if
@@ -1207,7 +1210,7 @@ hc2:    do
                     ! Are we in the right delta(x) range?
                     if ((i0 == 0 .and. (atom_coord(1,sorted_coord(1,i3)) >= hc_edge(1) * i0)) &
                       .or. ((i0 /= 0 .and. atom_coord(1,sorted_coord(1,i3)) > hc_edge(1) * i0))) then
-                      if (iprint_init > 4.AND.myid==0) write(*,'(a,i5)') "  Entering y loop. Atom id: ", sorted_coord(1,i3)
+                      if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,i5)') "  Entering y loop. Atom id: ", sorted_coord(1,i3)
                       if (shift_start(1)) then 
                         coord_start(1) = i3
                         shift_start(1) = .false.
@@ -1217,7 +1220,7 @@ hc2:    do
          
                         ! If y coord is > the HC y boundries, exit
                         if ((atom_coord(2,sorted_coord(2,i4)) > (hc_edge(2) * (i1 + 1)))) then
-                          if (iprint_init > 4.AND.myid==0) write(*,'(a,i5)') "  Atom over y:", sorted_coord(2,i4)
+                          if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,i5)') "  Atom over y:", sorted_coord(2,i4)
                           exit
                         end if
          
@@ -1226,13 +1229,14 @@ hc2:    do
                         if (sorted_coord(1,i3) == sorted_coord(2,i4)) then
                           if ((i1 == 0 .and. atom_coord(2,sorted_coord(2,i4)) >= hc_edge(2) * i1) &
                             .or. ((i1 /= 0 .and. atom_coord(2,sorted_coord(2,i4)) > hc_edge(2) * i1))) then
-                            if (iprint_init > 4.AND.myid==0) write(*,'(a,i5)') "    Entering z loop. Atom id: ", sorted_coord(1,i3)
+                            if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,i5)') &
+                                 "    Entering z loop. Atom id: ", sorted_coord(1,i3)
          
                             do i5 = 1, ni_in_cell
          
                               ! If z coord is > the HC z boundries, exit
                               if (atom_coord(3,sorted_coord(3,i5)) > (hc_edge(3) * (i2 + 1))) then
-                                if (iprint_init > 4.AND.myid==0) write(*,'(a,i5)') "    Atom over z:", sorted_coord(3,i5)
+                                if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,i5)') "    Atom over z:", sorted_coord(3,i5)
                                 exit
                               end if
          
@@ -1258,14 +1262,15 @@ hc2:    do
                                     exit hc2
                                   end if
                                   map(Hilbert,sfc_sequence(Hilbert)) = sorted_coord(1,i3)
-                                  if (iprint_init > 4.AND.myid==0) write(*,'(a,i5,a)') "    Atom", sorted_coord(1,i3), " matches"
                                   if (iprint_init > 4.AND.myid==0) &
-                                       write(*,'(a,i5,a,i5)') "    Sequence(", Hilbert,") atoms:",sfc_sequence(Hilbert)
+                                       write(io_lun,'(a,i5,a)') "    Atom", sorted_coord(1,i3), " matches"
+                                  if (iprint_init > 4.AND.myid==0) &
+                                       write(io_lun,'(a,i5,a,i5)') "    Sequence(", Hilbert,") atoms:",sfc_sequence(Hilbert)
                                   if (maxatomspart < sfc_sequence(Hilbert)) maxatomspart = sfc_sequence(Hilbert)
                                   exit
                                 else
                                   if (iprint_init > 4.AND.myid==0) &
-                                       write(*,'(a,i5,a)') "    Z range, atom",sorted_coord(3,i5)," does not match"
+                                       write(io_lun,'(a,i5,a)') "    Z range, atom",sorted_coord(3,i5)," does not match"
                                   exit
                                 end if
                               end if
@@ -1274,7 +1279,7 @@ hc2:    do
                             exit
                           else
                             if (iprint_init > 4.AND.myid==0) &
-                                 write(*,'(a,i5,a)') "  Y range, atom",sorted_coord(2,i4)," does not match"
+                                 write(io_lun,'(a,i5,a)') "  Y range, atom",sorted_coord(2,i4)," does not match"
                             exit
                           end if   
                         end if
@@ -1284,7 +1289,7 @@ hc2:    do
                 end if
          
                 if (iprint_init > 2.AND.myid==0) &
-                     write(*,'(a,i5,a,i5,a)') "Sfc_sequence(",Hilbert,") =",sfc_sequence(Hilbert)," finished"
+                     write(io_lun,'(a,i5,a,i5,a)') "Sfc_sequence(",Hilbert,") =",sfc_sequence(Hilbert)," finished"
 
       !         if (sfc_sequence(Hilbert) > global_maxatomspart) then
       !           refine = .true.
@@ -1298,7 +1303,7 @@ hc2:    do
           ! Delete later
           if (iprint_init > 3.AND.myid==0) then
             do tmp = 1, ni_in_cell
-              write(*,'(a,i5,a,i5)') "Atom number", tmp, " HC cube", atom_sfc_id(tmp)
+              write(io_lun,'(a,i5,a,i5)') "Atom number", tmp, " HC cube", atom_sfc_id(tmp)
           end do
           end if
     
@@ -1327,7 +1332,7 @@ hc2:    do
       end do hc
 
       if(myid==0.AND.iprint_init>2) &
-           write(*,'(10x,a,f14.10)') "Time for assigning atoms to partitions, loop over partitions", mtime()-time0
+           write(io_lun,'(10x,a,f14.10)') "Time for assigning atoms to partitions, loop over partitions", mtime()-time0
      
     else ! Many Processors
 
@@ -1376,7 +1381,7 @@ hc2:    do
              H(j+(k-1)*3) = iand(ishft(X(j-1),(k-b)),1)
             end do
           end do
-          if (iprint_init > 4.AND.myid==0) write(*,'(a,12b1)') "Hilbert integer = ", H
+          if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,12b1)') "Hilbert integer = ", H
   
           ! Convert the binary Hilbert integer to decimal
           Hilbert = 0
@@ -1386,11 +1391,11 @@ hc2:    do
  
           atom_sfc_id(i) = Hilbert
           sfc_sequence(Hilbert) = sfc_sequence(Hilbert) + 1
-          if(sfc_sequence(Hilbert)>2*global_maxatomspart) write(*,*) 'Warning ! ',sfc_sequence(Hilbert),2*global_maxatomspart
+          if(sfc_sequence(Hilbert)>2*global_maxatomspart) write(io_lun,*) 'Warning ! ',sfc_sequence(Hilbert),2*global_maxatomspart
           map(Hilbert,sfc_sequence(Hilbert)) = i
   
-          if (iprint_init > 3.AND.myid==0) write(*,'(a,i5,a,i5)') "Atom number", i, " HC cube", Hilbert
-          if (iprint_init > 3.AND.myid==0) write(*,'(a,3i3,i7)') "Result:", X(0), X(1), X(2), Hilbert
+          if (iprint_init > 3.AND.myid==0) write(io_lun,'(a,i5,a,i5)') "Atom number", i, " HC cube", Hilbert
+          if (iprint_init > 3.AND.myid==0) write(io_lun,'(a,3i3,i7)') "Result:", X(0), X(1), X(2), Hilbert
   
         end do
         do tmp = 1, ni_in_cell
@@ -1398,7 +1403,7 @@ hc2:    do
         end do
   
         do i = 0, no_hc - 1
-          if (iprint_init > 3.AND.myid==0) write(*,'(a,i5,a,i5,a)') "Sfc_sequence(",i,") =",sfc_sequence(i)," finished"
+          if (iprint_init > 3.AND.myid==0) write(io_lun,'(a,i5,a,i5,a)') "Sfc_sequence(",i,") =",sfc_sequence(i)," finished"
           if (sfc_sequence(i) > global_maxatomspart) then
             refine = .true.
             exit 
@@ -1438,7 +1443,7 @@ hc2:    do
                H(j+(k-1)*3) = iand(ishft(X(j-1),(k-b)),1)
               end do
             end do
-            if (iprint_init > 4.AND.myid==0) write(*,'(a,12b1)') "Hilbert integer = ", H
+            if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,12b1)') "Hilbert integer = ", H
      
             ! Convert the binary Hilbert integer to decimal
             Hilbert = 0
@@ -1448,7 +1453,7 @@ hc2:    do
             cc_part_id(Hilbert) = 1 + i0 * parts_edge**2 + i1 * parts_edge + i2
             cc_to_H(1 + i0 * parts_edge**2 + i1 * parts_edge + i2) = Hilbert
             if (maxatomspart < sfc_sequence(Hilbert)) maxatomspart = sfc_sequence(Hilbert)
-            if (iprint_init > 4.AND.myid==0) write(*,'(a,i6)') "cc_part_id =", cc_part_id(Hilbert)
+            if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,i6)') "cc_part_id =", cc_part_id(Hilbert)
           end do
         end do
       end do
@@ -1457,7 +1462,7 @@ hc2:    do
       if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array H (Hilbert)')
  
       if(myid==0.AND.iprint_init>2) &
-           write(*,'(10x,a,f14.10)') "Time for assigning atoms to partitions, loop over partitions", mtime()-time0
+           write(io_lun,'(10x,a,f14.10)') "Time for assigning atoms to partitions, loop over partitions", mtime()-time0
     end if ! partitioning algorithm
 
     maxatomsproc_tmp = ni_in_cell / numprocs 
@@ -1500,10 +1505,10 @@ hc2:    do
         reassign = .false.
  
         if (iprint_init > 4.AND.myid==0) then
-          write(*,*)
-          write(*,*) "Maxatomsproc_tmp =", maxatomsproc_tmp
+          write(io_lun,*)
+          write(io_lun,*) "Maxatomsproc_tmp =", maxatomsproc_tmp
           do i = 0, numprocs -1
-            write(*,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+            write(io_lun,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
           end do
         end if
 
@@ -1521,7 +1526,7 @@ hc2:    do
         if (numprocs > 1) then
           ! Too few atoms on the last processor?
           average = (ni_in_cell - no_atoms_proc(numprocs-1)) / (numprocs - 1)
-          if (iprint_init > 4.AND.myid==0) write(*,*) average, (maxatomsproc_tmp - no_atoms_proc(numprocs-1))
+          if (iprint_init > 4.AND.myid==0) write(io_lun,*) average, (maxatomsproc_tmp - no_atoms_proc(numprocs-1))
           if ((average - no_atoms_proc(numprocs-1) > average - maxatomsproc_tmp + 1) &
              .and. (.not.too_many_atoms) .and. (.not.reassign)) then
              maxatomsproc_tmp = maxatomsproc_tmp - 1
@@ -1538,7 +1543,7 @@ hc2:    do
               if (sfc_sequence(i) /= 0) occupied_parts = occupied_parts + 1
             end do
             correct_parts = ni_in_cell / occupied_parts
-            if (iprint_init > 4.AND.myid==0) write(*,*) "correct_parts =", correct_parts
+            if (iprint_init > 4.AND.myid==0) write(io_lun,*) "correct_parts =", correct_parts
          
             do i = numprocs - 1, 1, -1
               if (no_atoms_proc(i) - no_atoms_proc(i-1) > correct_parts) then
@@ -1557,12 +1562,12 @@ hc2:    do
               end if
             end do
          
-            if (iprint_init > 4.AND.myid==0) write(*,*) "Numprocs =", numprocs
-            if (iprint_init > 4.AND.myid==0) write(*,*) "Loop: Maxatomsproc_tmp =", maxatomsproc_tmp
+            if (iprint_init > 4.AND.myid==0) write(io_lun,*) "Numprocs =", numprocs
+            if (iprint_init > 4.AND.myid==0) write(io_lun,*) "Loop: Maxatomsproc_tmp =", maxatomsproc_tmp
             do i = 0, numprocs - 1
               if (iprint_init > 4.AND.myid==0) &
-                   write(*,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
-              if (no_atoms_proc(i) == 0) write(*,*) "WARNING: Processor", i," has no atoms! Too many processors?"
+                   write(io_lun,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+              if (no_atoms_proc(i) == 0) write(io_lun,*) "WARNING: Processor", i," has no atoms! Too many processors?"
               ! Statistics
               ! proc_atoms_min = ni_in_cell
               ! proc_atoms_max = 0
@@ -1575,7 +1580,7 @@ hc2:    do
           end if
          
           if ((maxatomsproc_tmp <= 0) .and. (.not.too_many_atoms)) then
-            write(*,'(a,i6,a)') "WARNING: You are using too many processors for", ni_in_cell, " atoms"
+            write(io_lun,'(a,i6,a)') "WARNING: You are using too many processors for", ni_in_cell, " atoms"
             exit
           end if
          
@@ -1584,10 +1589,10 @@ hc2:    do
       end do 
       do i = 0, numprocs - 1
          if (iprint_init > 4.AND.myid==0) &
-              write(*,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+              write(io_lun,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
          ! The following needs to stay here because the reshuffling part relies on all processors having atoms
          if (no_atoms_proc(i) == 0) then
-            write(*,*) "WARNING: Processor", i," has no atoms! Too many processors?"
+            write(io_lun,*) "WARNING: Processor", i," has no atoms! Too many processors?"
             call cq_abort("Automatic partitioner requires all processors to have atoms")
          end if
       end do
@@ -1636,10 +1641,10 @@ hc2:    do
 
         do i = 0, numprocs - 1
            if (iprint_init > 4.AND.myid==0) &
-                write(*,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+                write(io_lun,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
            ! Probably unnecessary - was done earlier
            if (no_atoms_proc(i) == 0) then
-              write(*,*) "WARNING: Processor", i," has no atoms! Too many processors?"
+              write(io_lun,*) "WARNING: Processor", i," has no atoms! Too many processors?"
               call cq_abort("Automatic partitioner requires all processors to have atoms")
            end if
         end do
@@ -1660,10 +1665,10 @@ hc2:    do
       ! do i = histogram(proc_atoms_min), histogram(proc_atoms_max)
       !   if (histogram(i) > mode_value) mode = i
       ! end do
-      ! write(*,'(a,i6,a)') "Average =", av_atom_processor, " atoms / processor"
-      ! write(*,'(a,i6,a)') "Mode =", mode_value, " atoms / processor"
+      ! write(io_lun,'(a,i6,a)') "Average =", av_atom_processor, " atoms / processor"
+      ! write(io_lun,'(a,i6,a)') "Mode =", mode_value, " atoms / processor"
       ! do i = histogram(proc_atoms_min), histogram(proc_atoms_max)
-      !   if (histogram(i) == mode_value) write(*,'(a,i6)') "Modal value: processor", i
+      !   if (histogram(i) == mode_value) write(io_lun,'(a,i6)') "Modal value: processor", i
       ! end do
       ! deallocate(histogram, STAT = stat)
       ! if(stat/=0) call cq_abort("Failure to deallocate histogram")
@@ -1723,7 +1728,7 @@ hc2:    do
     ! Delete later
     if (iprint_init > 3.AND.myid==0) then
       do i = 0, numprocs -1
-        write(*,'(a,i3,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+        write(io_lun,'(a,i3,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
       end do
     end if
 
@@ -1748,11 +1753,11 @@ hc2:    do
        call cq_abort('read_partitions: too many parts edge ', &
             max(parts%ngcellx,parts%ngcelly,parts%ngcellz),parts%mx_gedge)
     endif
-    if (iprint_init > 0.AND.myid==0) write(*,'(2x,a,3i5)') "partitions along cell sides", &
+    if (iprint_init > 0.AND.myid==0) write(io_lun,'(2x,a,3i5)') "partitions along cell sides", &
          parts%ngcellx, parts%ngcelly, parts%ngcellz
-    if (iprint_init > 2.AND.myid==0) write(*,'(2x,a,i5)') "maximum number of atoms in a partition", maxatomspart
-    if (iprint_init > 2.AND.myid==0) write(*,'(2x,a,i5)') "maximum number of atoms on a processor", maxatomsproc
-    if (iprint_init > 2.AND.myid==0) write(*,'(2x,a,i5)') "maximum number of partitions on a processor", maxpartsproc
+    if (iprint_init > 2.AND.myid==0) write(io_lun,'(2x,a,i5)') "maximum number of atoms in a partition", maxatomspart
+    if (iprint_init > 2.AND.myid==0) write(io_lun,'(2x,a,i5)') "maximum number of atoms on a processor", maxatomsproc
+    if (iprint_init > 2.AND.myid==0) write(io_lun,'(2x,a,i5)') "maximum number of partitions on a processor", maxpartsproc
 
     counter = 1
     do i = 0, numprocs - 1  
@@ -1774,7 +1779,7 @@ hc2:    do
 !%%!       counter = counter + sfc_sequence(cc_to_H(i))
 !%%!       if(sfc_sequence(cc_to_H(i))>0) then
 !%%!          do j=1,sfc_sequence(cc_to_H(i))
-!%%!             write(*,'(a,6i3)') 'Part, seq, map: ',i,j,map(cc_to_H(i),j),cc_to_H(i),parts%icell_beg(i),parts%icell_beg(i)+j-1
+!%%!             write(io_lun,'(a,6i3)') 'Part, seq, map: ',i,j,map(cc_to_H(i),j),cc_to_H(i),parts%icell_beg(i),parts%icell_beg(i)+j-1
 !%%!             id_glob(parts%icell_beg(i)+j-1) = map(cc_to_H(i),j)
 !%%!             id_glob_inv(map(cc_to_H(i),j)) = parts%icell_beg(i)+j-1
 !%%!          end do
@@ -1783,29 +1788,12 @@ hc2:    do
 !%%!    if(myid==0) then
 !%%!     counter = 1
 !%%!     do i = 0, no_hc - 1
-!%%!        write(*,*) 'ID: ',parts%ngnode(i+1),cc_part_id(i)
-!%%!        write(*,*) 'In group: ',parts%nm_group(cc_part_id(i)),sfc_sequence(i)
-!%%!        write(*,*) 'Start: ',parts%icell_beg(cc_part_id(i)),counter
+!%%!        write(io_lun,*) 'ID: ',parts%ngnode(i+1),cc_part_id(i)
+!%%!        write(io_lun,*) 'In group: ',parts%nm_group(cc_part_id(i)),sfc_sequence(i)
+!%%!        write(io_lun,*) 'Start: ',parts%icell_beg(cc_part_id(i)),counter
 !%%!        counter = counter + sfc_sequence(i)
 !%%!     end do
 !%%!    end if
-!%%!!    if(myid==0) then
-!%%!!       open(unit=76,file='make_prtSFC7.dat')
-!%%!!       write(76,*) parts_edge,parts_edge,parts_edge
-!%%!!       write(76,*) numprocs
-!%%!!       do i=1,numprocs
-!%%!!          write(76,*) i,parts%ng_on_node(i),parts%inode_beg(i)
-!%%!!          do j=1,parts%ng_on_node(i)
-!%%!!             write(76,*) j,parts%ngnode(parts%inode_beg(i)+j-1), &
-!%%!!                  parts%nm_group(parts%ngnode(parts%inode_beg(i)+j-1)), &
-!%%!!                  parts%icell_beg(parts%ngnode(parts%inode_beg(i)+j-1))
-!%%!!             do k=1,parts%nm_group(parts%ngnode(parts%inode_beg(i)+j-1))
-!%%!!                write(76,*) k,id_glob(parts%icell_beg(parts%ngnode(parts%inode_beg(i)+j-1))+k-1)
-!%%!!             end do
-!%%!!          end do
-!%%!!       end do
-!%%!!       close(unit=76)
-!%%!!    endif
 !%%!    call my_barrier
 !%%!    stop
 
@@ -1824,17 +1812,17 @@ hc2:    do
      end do
 !    if(myid==0) then
 !       open(unit=76,file='make_prtSFC7.dat')
-!       write(*,*) 'Partitions '
-!       write(*,*) parts_edge,parts_edge,parts_edge
-!       write(*,*) numprocs
+!       write(io_lun,*) 'Partitions '
+!       write(io_lun,*) parts_edge,parts_edge,parts_edge
+!       write(io_lun,*) numprocs
 !       do i=1,numprocs
-!          write(*,*) i,parts%ng_on_node(i),parts%inode_beg(i)
+!          write(io_lun,*) i,parts%ng_on_node(i),parts%inode_beg(i)
 !          do j=1,parts%ng_on_node(i)
-!             write(*,*) j,parts%ngnode(parts%inode_beg(i)+j-1), &
+!             write(io_lun,*) j,parts%ngnode(parts%inode_beg(i)+j-1), &
 !                  parts%nm_group(parts%ngnode(parts%inode_beg(i)+j-1)), &
 !                  parts%icell_beg(parts%ngnode(parts%inode_beg(i)+j-1))
 !             do k=1,parts%nm_group(parts%ngnode(parts%inode_beg(i)+j-1))
-!                write(*,*) k,id_glob(parts%icell_beg(parts%ngnode(parts%inode_beg(i)+j-1))+k-1)
+!                write(io_lun,*) k,id_glob(parts%icell_beg(parts%ngnode(parts%inode_beg(i)+j-1))+k-1)
 !             end do
 !          end do
 !       end do
@@ -1864,14 +1852,14 @@ hc2:    do
 !%%!        do j = 1, sfc_sequence(i)
 !%%!          id_glob(parts%icell_beg(cc_part_id(i))+j-1) = map(i,j)
 !%%!          id_glob_inv(map(i,j)) = parts%icell_beg(cc_part_id(i)) + j - 1
-!%%!          write(*,'(a,6i3)') 'Part, seq, map: ',i,j,map(i,j),cc_part_id(i), &
+!%%!          write(io_lun,'(a,6i3)') 'Part, seq, map: ',i,j,map(i,j),cc_part_id(i), &
 !%%!               parts%icell_beg(cc_part_id(i)),parts%icell_beg(cc_part_id(i))+j-1
 !%%!        end do
 !%%!      end if
 !%%!    end do
 
 !end if
-    !write(*,*) 'Proc, ending sfc: ',myid
+    !write(io_lun,*) 'Proc, ending sfc: ',myid
     call my_barrier()
 
     !call gcopy(maxpartsproc)
@@ -2036,7 +2024,7 @@ hc2:    do
     integer i
 
     if (b <= 0 .or. nn <= 0) then
-      write(*,*) "Error: b and n must be positive."
+      write(io_lun,*) "Error: b and n must be positive."
       return
     end if
 
@@ -2227,7 +2215,7 @@ hc2:    do
     integer :: ind_global, ntmpx, ntmpy, ntmpz, nmyblocks,ntmp1, ntmp2
     integer:: n_block_x, n_block_y, n_block_z, maxtmp
 
-    if(iprint_init>2) write(*,*) 'Entering read_blocks ', in_block_x,in_block_y,in_block_z
+    if(iprint_init>2) write(io_lun,*) 'Entering read_blocks ', in_block_x,in_block_y,in_block_z
     !--- find numbers of blocks in each direction
     n_block_x = n_grid_x/in_block_x
     n_block_y = n_grid_y/in_block_y
@@ -2244,10 +2232,10 @@ hc2:    do
     ! Read and check blocks along cell sides
     read(lun,*) ntmpx, ntmpy, ntmpz
     if(ntmpx/=n_block_x.OR.ntmpy/=n_block_y.OR.ntmpz/=n_block_z) then
-       write(*,fmt='(2x,"In input, ReadBlocks T has been set, so the distribution of blocks is ")')
-       write(*,fmt='(2x,"read from a file.  There is an error specifying numbers of blocks.  ")')
-       write(*,fmt='(2x,"Found from the file: ",3i6)') ntmpx, ntmpy, ntmpz
-       write(*,fmt='(2x,"Calculated from input using grid points: ",3i6)') n_block_x, n_block_y, n_block_z
+       write(io_lun,fmt='(2x,"In input, ReadBlocks T has been set, so the distribution of blocks is ")')
+       write(io_lun,fmt='(2x,"read from a file.  There is an error specifying numbers of blocks.  ")')
+       write(io_lun,fmt='(2x,"Found from the file: ",3i6)') ntmpx, ntmpy, ntmpz
+       write(io_lun,fmt='(2x,"Calculated from input using grid points: ",3i6)') n_block_x, n_block_y, n_block_z
        call cq_abort("Aborting ! Please bring block input file and overall input file together.")
     end if
     ! Find and check total number of blocks
@@ -2281,18 +2269,18 @@ hc2:    do
     open(unit=lun,file='make_blk.dat')
     ! Read and check blocks along cell sides
     read(lun,*) blocks%ngcellx,blocks%ngcelly,blocks%ngcellz
-    !if(iprint_init>0) write(*,102) blocks%ngcellx,blocks%ngcelly,blocks%ngcellz
+    !if(iprint_init>0) write(io_lun,102) blocks%ngcellx,blocks%ngcelly,blocks%ngcellz
     ! Find and check total number of blocks
     np_in_cell=blocks%ngcellx*blocks%ngcelly*blocks%ngcellz
     ! Read and check number of processors
     read(lun,*) nnode
-    !if(iprint_init>=0) write(*,110) nnode
+    !if(iprint_init>=0) write(io_lun,110) nnode
     ! Loop over nodes, reading bundle information
     glob_count = 0
     do nnd=1,nnode
        ! First node number, blocks and starting pointer
        read(lun,*) nnd1,blocks%ng_on_node(nnd),blocks%inode_beg(nnd)
-       !if(iprint_init>0) write(*,111) nnd1,blocks%ng_on_node(nnd),blocks%inode_beg(nnd)
+       !if(iprint_init>0) write(io_lun,111) nnd1,blocks%ng_on_node(nnd),blocks%inode_beg(nnd)
        if(nnd1/=nnd) then
           call cq_abort('read_blocks: node label wrong ',nnd1,nnd)
        endif
@@ -2326,7 +2314,7 @@ hc2:    do
              ! These next two lines are essentially meaningless, but added for completeness
              blocks%nm_group(ind_part)=n_pts_in_block!n_cont
              blocks%icell_beg(ind_part)=(ind_part-1)*n_pts_in_block+1!n_beg
-             !if(iprint_init>1) write(*,113) ind_part,np1,n_cont,n_beg
+             !if(iprint_init>1) write(io_lun,113) ind_part,np1,n_cont,n_beg
           enddo ! Loop over np = blocks%ng_on_node
        endif ! if(blocks%ng_on_node>0)
     enddo ! nnd = 1,nnode
@@ -3278,7 +3266,7 @@ hc2:    do
 
     implicit none
 
-    write(*,1) 
+    write(io_lun,1) 
 
 1   format(/12x, &
          '______________________________________________________',/,12x, &

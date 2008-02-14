@@ -1,1 +1,1 @@
-  character(len=*), parameter :: commentver="Version beta 0.1: initial beta release, 20070516"
+  character(len=*), parameter :: commentver="Version beta 0.3 (r59): corrected beta release, 20080214"

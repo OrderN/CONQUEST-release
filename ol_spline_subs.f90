@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: ol_spline_subs.f90,v 1.4 2005/05/26 08:36:27 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module cubic_spline_routines
 ! ------------------------------------------------------------------------------
@@ -19,16 +19,19 @@
 !!  CREATION DATE
 !!   24/07/03
 !!  MODIFICATION HISTORY
-!! 
+!!   2008/02/06 08:30 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module cubic_spline_routines
    
+  use global_module, ONLY: io_lun
+
   implicit none
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: ol_spline_subs.f90,v 1.4 2005/05/26 08:36:27 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
 !!***
 contains
@@ -332,12 +335,12 @@ contains
     !have to make sure I have enough space to take n-3 points
     flag_spline_direct = 1
     if(flag_spline_direct.eq.1) then
-       !          write(*,*) 'using direct spline interpolation'
+       !          write(io_lun,*) 'using direct spline interpolation'
        !locate points nearest to r
        n1 = aint(r/del_x)
        n2 = n1+1
        if(n2>npts-1) then
-          !write(*,*) 'OVERFLOW ERROR ',r,del_x,npts,n2
+          !write(io_lun,*) 'OVERFLOW ERROR ',r,del_x,npts,n2
           ol_intval = 0.0_double
           return
        end if
@@ -351,8 +354,8 @@ contains
 
        ol_intval = a*radial_table(n1+1)+b*radial_table(n2+1)+&
             &c*radial_table2(n1+1) + d*radial_table2(n2+1)
-       !write(*,*) a*radial_table(n1+1)+b*radial_table(n2+1), 'spline first part'
-       !          write(*,*) ol_intval, 'spline returned value'
+       !write(io_lun,*) a*radial_table(n1+1)+b*radial_table(n2+1), 'spline first part'
+       !          write(io_lun,*) ol_intval, 'spline returned value'
     else
        return
     endif

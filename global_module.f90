@@ -45,6 +45,10 @@
 !!    Added new variables for automatic partitioning
 !!   2007/04/18 17:26 dave
 !!    Added flag for block assignment
+!!   2008/02/01 03:43 dave
+!!    Added output unit (output to file rather than stdout)
+!!   12:19, 14/02/2008 drb 
+!!    Added flag for Pulay relaxation algorithm
 !!  SOURCE
 !!
 module global_module
@@ -58,6 +62,7 @@ module global_module
   character(len=80), save, private :: RCSid = "$Id$"
 
   integer :: iprint                 ! Level of output
+  integer :: io_lun                 ! Output unit
   integer, allocatable, dimension(:) :: id_glob      ! global label of atom in sim cell (CC)
   integer, allocatable, dimension(:) :: id_glob_inv  ! gives global number for a CC atom
   integer, dimension(:), allocatable :: species_glob ! gives species 
@@ -96,6 +101,7 @@ module global_module
   logical :: flag_continue_on_SC_fail
   logical :: flag_SCconverged
   logical :: UseGemm
+  logical :: flag_pulay_simpleStep
 
   ! How should blocks be assigned ? See block_module.f90
   integer :: flag_assign_blocks

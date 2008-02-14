@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: blip_module.f90,v 1.4 2004/11/12 02:31:03 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module blip
 ! ------------------------------------------------------------------------------
@@ -44,18 +44,21 @@
 !!    Included make_pre and set_blip_index
 !!   2006/11/01 17:04 dave
 !!    Added alpha, beta and gauss2blip
+!!   2008/02/04 08:28 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module blip
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   implicit none
 
   save
 
   ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id: blip_module.f90,v 1.4 2004/11/12 02:31:03 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
   ! variables related to blip functions
   real(double), allocatable, dimension(:) :: SupportGridSpacing
@@ -161,7 +164,7 @@ contains
           PreCond(spec)%size = NBlipsRegion(spec)
           PreCond(spec)%coeffs = zero
           Kmat = zero
-          if(inode==ionode.AND.iprint_basis>0) write(*,fmt='(6x,"Applying preconditioning")')
+          if(inode==ionode.AND.iprint_basis>0) write(io_lun,fmt='(6x,"Applying preconditioning")')
           asq = one/(k0*k0*SupportGridSpacing(spec)*SupportGridSpacing(spec))
           ! Set up the coefficients for the blip multiples
           p0(0)=151.0_double/140.0_double
@@ -233,7 +236,7 @@ contains
        end do
     else
        if(inode==ionode.AND.iprint_basis>0) &
-            write(*,fmt='(6x,"Not applying preconditioning")') 
+            write(io_lun,fmt='(6x,"Not applying preconditioning")') 
        !do n_blip1 = 1, NBlipsRegion(spec)
        !   do n_blip2 = 1, NBlipsRegion(spec)
        !      if(n_blip1.EQ.n_blip2) then
@@ -333,7 +336,7 @@ contains
 
 
     if((inode == ionode).and.(iprint_init >= 2)) then
-       write(unit=*,fmt='(//10x,65("*")/25x,"REPORT FROM SET_BLIP_INDEX"/&
+       write(unit=io_lun,fmt='(//10x,65("*")/25x,"REPORT FROM SET_BLIP_INDEX"/&
             &10x,65("*"))')
     end if
 
@@ -358,7 +361,7 @@ contains
        ! is checked here, and the calculation stops if the condition
        ! is not satisfied:
        !BlipWidth(spec) = four*SupportGridSpacing(spec)
-       if(inode==ionode.AND.iprint_init>2) write(*,fmt='(10x,"Blip width: ",f20.12)') BlipWidth(spec)
+       if(inode==ionode.AND.iprint_init>2) write(io_lun,fmt='(10x,"Blip width: ",f20.12)') BlipWidth(spec)
        FourOnBlipWidth(spec) = four/BlipWidth(spec)
        !if(abs(blip_width - four*support_grid_spacing) > very_small) then
        !   call cq_abort('set_blip_index: blip width must be exactly four &
@@ -380,7 +383,7 @@ contains
        ! tested against the relevant array bound:
        BlipArraySize(spec) = sqrt(r2_over_b2 - 8.0_double) - 2.0_double
        if((inode == ionode).and.(iprint_init >= 2)) then
-          write(unit=*,fmt='(/10x," set_blip_index: bliparraysize:",i5/10x&
+          write(unit=io_lun,fmt='(/10x," set_blip_index: bliparraysize:",i5/10x&
                &"(This is the smallest integer such that for all blip functions"/10x&
                &" wholly contained within the support region, these blip"/10x&
                &" functions being centred on sites (nx,ny,nz), the absolute"/10x&
@@ -450,34 +453,34 @@ contains
           end do
        end do
        if((inode == ionode).and.(iprint_init >= 2)) then
-          write(unit=*,fmt='(/10x," set_blip_index: total number of blip &
+          write(unit=io_lun,fmt='(/10x," set_blip_index: total number of blip &
                &functions wholly contained within support region:",i5)') &
                &NBlipsRegion(spec)
        end if
 
        if((inode == ionode).and.(iprint_init > 2)) then
-          write(unit=*,fmt='(/10x," set_blip_index: index array region_single:"/)')
+          write(unit=io_lun,fmt='(/10x," set_blip_index: index array region_single:"/)')
           do na = 0, BlipArraySize(spec)
-             write(unit=*,fmt='(10x,i5,3x,i5)') na, blip_info(spec)%region_single(na)
+             write(unit=io_lun,fmt='(10x,i5,3x,i5)') na, blip_info(spec)%region_single(na)
           end do
-          write(unit=*,fmt='(/10x," set_blip_index: index array region_double:"/)')
+          write(unit=io_lun,fmt='(/10x," set_blip_index: index array region_double:"/)')
           do na = 0, BlipArraySize(spec)
              do nb = 0, blip_info(spec)%region_single(na)
-                write(unit=*,fmt='(10x,2i5,3x,i5)') na, nb, blip_info(spec)%region_double(na,nb)
+                write(unit=io_lun,fmt='(10x,2i5,3x,i5)') na, nb, blip_info(spec)%region_double(na,nb)
              end do
           end do
-          write(unit=*,fmt='(/10x," set_blip_index: index array blip_number:"/)')
+          write(unit=io_lun,fmt='(/10x," set_blip_index: index array blip_number:"/)')
           do nz = -BlipArraySize(spec), BlipArraySize(spec)
              do ny = -BlipArraySize(spec), BlipArraySize(spec)
                 do nx = -BlipArraySize(spec), BlipArraySize(spec)
-                   write(unit=*,fmt='(10x,3i5,3x,i5)') nx, ny, nz, &
+                   write(unit=io_lun,fmt='(10x,3i5,3x,i5)') nx, ny, nz, &
                         &blip_info(spec)%blip_number(nx,ny,nz)
                 end do
              end do
           end do
-          write(unit=*,fmt='(/10x," set_blip_index: index array blip_location:"/)')
+          write(unit=io_lun,fmt='(/10x," set_blip_index: index array blip_location:"/)')
           do i = 1, NBlipsRegion(spec)
-             write(unit=*,fmt='(10x,i5,3x,3i5)') i, blip_info(spec)%blip_location(1,i), &
+             write(unit=io_lun,fmt='(10x,i5,3x,3i5)') i, blip_info(spec)%blip_location(1,i), &
                   &blip_info(spec)%blip_location(2,i), blip_info(spec)%blip_location(3,i)
           end do
        end if
@@ -589,11 +592,11 @@ contains
     ! calculation is aborted.
 
     if((inode == ionode).and.(iprint_basis >= 0)) then
-       write(unit=*,fmt='(/10x," gauss2blip: sbrt entered")')
+       write(unit=io_lun,fmt='(/10x," gauss2blip: sbrt entered")')
     end if
 
     if((inode == ionode) .AND. (iprint_basis >= 0)) then
-       write(unit=*,fmt='(10x," gauss2blip: support-grid spacing:",f20.12)') &
+       write(unit=io_lun,fmt='(10x," gauss2blip: support-grid spacing:",f20.12)') &
             &SupportGridSpacing(spec)
     end if
 
@@ -626,13 +629,13 @@ contains
              supports_on_atom(i)%supp_func(3)%coefficients(n_blip) = y * gauss_2
              supports_on_atom(i)%supp_func(4)%coefficients(n_blip) = z * gauss_2
              if(iprint_basis>2) then
-                write(*,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 1, n_blip, &
+                write(io_lun,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 1, n_blip, &
                      supports_on_atom(i)%supp_func(1)%coefficients(n_blip)
-                write(*,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 2, n_blip, &
+                write(io_lun,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 2, n_blip, &
                      supports_on_atom(i)%supp_func(2)%coefficients(n_blip)
-                write(*,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 3, n_blip, &
+                write(io_lun,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 3, n_blip, &
                      supports_on_atom(i)%supp_func(3)%coefficients(n_blip)
-                write(*,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 4, n_blip, &
+                write(io_lun,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 4, n_blip, &
                      supports_on_atom(i)%supp_func(4)%coefficients(n_blip)
              end if
           else

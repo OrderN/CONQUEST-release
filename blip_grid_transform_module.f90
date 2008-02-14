@@ -1,4 +1,4 @@
-! $Id: blip_grid_transform_module.f90,v 1.4.2.1 2006/03/07 07:36:41 drb Exp $
+! $Id$
 ! -----------------------------------------------------------
 ! Module blip_grid_transform_module
 ! -----------------------------------------------------------
@@ -38,16 +38,18 @@
 !!    declarations of NSF so that they were BEFORE first use of NSF
 !!   2006/06/16 07:39 dave
 !!    Changing to variable NSF
+!!   2008/02/04 08:25 dave
+!!    Changing for output to file not stdout
 !!  SOURCE
 module blip_grid_transform_module
 
  use datatypes
- use global_module, ONLY: iprint_basis
+ use global_module, ONLY: iprint_basis, io_lun
 
  implicit none
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: blip_grid_transform_module.f90,v 1.4.2.1 2006/03/07 07:36:41 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -104,7 +106,7 @@ contains
        call cq_abort(' No primary atoms for processor=',myid)
     endif
     do iprim = 1,bundle%mx_iprim
-       if(iprint_basis>2) write(*,fmt='(2x,"Proc: ",i5," blip-transform for atom ",i5)') myid,iprim
+       if(iprint_basis>2) write(io_lun,fmt='(2x,"Proc: ",i5," blip-transform for atom ",i5)') myid,iprim
        call my_barrier()
        if( iprim <= bundle%n_prim ) then
           spec = bundle%species(iprim)
@@ -115,7 +117,7 @@ contains
        else
           nsf_send = 0
        endif
-       if(iprint_basis>2) write(*,fmt='(2x,"Proc: ",i5," distribute result for atom ",i5)') myid,iprim
+       if(iprint_basis>2) write(io_lun,fmt='(2x,"Proc: ",i5," distribute result for atom ",i5)') myid,iprim
        call my_barrier()
        call distribute_result(myid,iprim,nsf_send,support)
     end do
@@ -230,17 +232,17 @@ contains
     !check extent
     ierr=0
     if(2*extent < nxmax_grid-nxmin_grid) then
-       write(*,*) myid,' ERROR in do_blip : extent for x dir ::', &
+       write(io_lun,*) myid,' ERROR in do_blip : extent for x dir ::', &
             ' extent nxmin_grid nxmax_grid = ',extent,nxmin_grid,nxmax_grid
        ierr=1
     endif
     if(2*extent < nymax_grid-nymin_grid) then
-       write(*,*) myid,' ERROR in do_blip : extent for y dir ::', &
+       write(io_lun,*) myid,' ERROR in do_blip : extent for y dir ::', &
             ' extent nymin_grid nymax_grid = ',extent,nymin_grid,nymax_grid
        ierr=1
     endif
     if(2*extent < nzmax_grid-nzmin_grid) then
-       write(*,*) myid,' ERROR in do_blip : extent for z dir ::', &
+       write(io_lun,*) myid,' ERROR in do_blip : extent for z dir ::', &
             ' extent nymin_grid nymax_grid = ',extent,nzmin_grid,nzmax_grid
        ierr=1
     endif
@@ -803,17 +805,17 @@ contains
     !check extent & MAXBAS.
     ierr=0
     if(2*extent < nxmax_grid-nxmin_grid) then
-       write(*,*) ' ERROR in do_blip_transform : extent for x direction ::', &
+       write(io_lun,*) ' ERROR in do_blip_transform : extent for x direction ::', &
             ' extent nxmin_grid nxmax_grid = ',extent,nxmin_grid,nxmax_grid
        ierr=1
     endif
     if(2*extent < nymax_grid-nymin_grid) then
-       write(*,*) ' ERROR in do_blip_transform : extent for y direction ::', &
+       write(io_lun,*) ' ERROR in do_blip_transform : extent for y direction ::', &
             ' extent nymin_grid nymax_grid = ',extent,nymin_grid,nymax_grid
        ierr=1
     endif
     if(2*extent < nzmax_grid-nzmin_grid) then
-       write(*,*) ' ERROR in do_blip_transform : extent for z direction ::', &
+       write(io_lun,*) ' ERROR in do_blip_transform : extent for z direction ::', &
             ' extent nymin_grid nymax_grid = ',extent,nzmin_grid,nzmax_grid
        ierr=1
     endif
@@ -1228,17 +1230,17 @@ contains
     !check extent
     ierr=0
     if(2*extent < nxmax_grid-nxmin_grid) then
-       write(*,*) ' ERROR in do_blip_transform : extent for x direction ::', &
+       write(io_lun,*) ' ERROR in do_blip_transform : extent for x direction ::', &
             ' extent nxmin_grid nxmax_grid = ',extent,nxmin_grid,nxmax_grid
        ierr=1
     endif
     if(2*extent < nymax_grid-nymin_grid) then
-       write(*,*) ' ERROR in do_blip_transform : extent for y direction ::', &
+       write(io_lun,*) ' ERROR in do_blip_transform : extent for y direction ::', &
             ' extent nymin_grid nymax_grid = ',extent,nymin_grid,nymax_grid
        ierr=1
     endif
     if(2*extent < nzmax_grid-nzmin_grid) then
-       write(*,*) ' ERROR in do_blip_transform : extent for z direction ::', &
+       write(io_lun,*) ' ERROR in do_blip_transform : extent for z direction ::', &
             ' extent nymin_grid nymax_grid = ',extent,nzmin_grid,nzmax_grid
        ierr=1
     endif
@@ -1675,17 +1677,17 @@ contains
     !check extent
     ierr=0
     if(2*extent < nxmax_grid-nxmin_grid) then
-       write(*,*) myid,' ERROR in do_inverse_blip : extent for x dir ::', &
+       write(io_lun,*) myid,' ERROR in do_inverse_blip : extent for x dir ::', &
             ' extent nxmin_grid nxmax_grid = ',extent,nxmin_grid,nxmax_grid
        ierr=1
     endif
     if(2*extent < nymax_grid-nymin_grid) then
-       write(*,*) myid,' ERROR in do_inverse_blip : extent for y dir ::', &
+       write(io_lun,*) myid,' ERROR in do_inverse_blip : extent for y dir ::', &
             ' extent nymin_grid nymax_grid = ',extent,nymin_grid,nymax_grid
        ierr=1
     endif
     if(2*extent < nzmax_grid-nzmin_grid) then
-       write(*,*) myid,' ERROR in do_inverse_blip : extent for z dir ::', &
+       write(io_lun,*) myid,' ERROR in do_inverse_blip : extent for z dir ::', &
             ' extent nymin_grid nymax_grid = ',extent,nzmin_grid,nzmax_grid
        ierr=1
     endif
@@ -1937,7 +1939,7 @@ contains
        do inode=1,comBG%no_recv_node(iprim)
           nsize = nsize+comBG%no_naba_blk(inode,iprim)
        enddo
-       !write(*,*) 'Allocating send_array: ',nsize
+       !write(io_lun,*) 'Allocating send_array: ',nsize
        allocate(send_array(nsize*nunit_recv),STAT=stat)
        if(stat/=0) call cq_abort("Error allocating send_array in collect_result: ", nsize,nunit_recv)
        call reg_alloc_mem(area_basis,nsize*nunit_recv,type_dbl)
@@ -1975,7 +1977,7 @@ contains
           nunit_send = nsf_send*n_pts_in_block
           msize=max(msize,comBG%no_sent_pairs(jnode,iprim)*nunit_send)
        end do
-       !write(*,*) 'Allocating recv_array: ',nsize
+       !write(io_lun,*) 'Allocating recv_array: ',nsize
        allocate(recv_array(msize),STAT=stat)
        if(stat/=0) call cq_abort("Error allocating recv_array in collect_result: ",nsize)
        call reg_alloc_mem(area_basis,msize,type_dbl)
@@ -2010,9 +2012,9 @@ contains
                 call cq_abort(' ERROR loc1 in collect_result ',nunit_send+loc1, nsize)
              endif
              if(loc2+nunit_send>gridfunctions(support)%size .or. loc2<0) then
-                write(*,*) ' ERROR loc2 in collect_result for mynode= ',&
+                write(io_lun,*) ' ERROR loc2 in collect_result for mynode= ',&
                      mynode,' loc2 = ',loc2+nunit_send,gridfunctions(support)%size
-                write(*,*) '  ERROR prim_blk, naba_atm_tmp = ',prim_blk,naba_atm_tmp,&
+                write(io_lun,*) '  ERROR prim_blk, naba_atm_tmp = ',prim_blk,naba_atm_tmp,&
                      ' ibegin_blk = ',naba_atm(sf)%ibegin_blk(prim_blk),&
                      ' naba_atom_of_blk = ',naba_atm(sf)%no_of_atom(prim_blk)
                 call cq_abort("Stopping in inverse_blip_transform")
@@ -2044,7 +2046,7 @@ contains
              if(ierr /= 0) then 
                 call cq_abort(' ERROR!  MPI_ssend in collect_result ' ,nnd_rem,iprim)
              endif
-             !write(*,*) 'MPI_ssend in collect_result END ' &
+             !write(io_lun,*) 'MPI_ssend in collect_result END ' &
              !           ,mynode,nnd_rem,iprim
           endif
           !deallocate(recv_array,STAT=stat)
@@ -2052,7 +2054,7 @@ contains
        enddo ! loop over sending nodes
     endif ! if there are sending nodes
 
-    ! write(*,*) ' MPI_WAIT start for Node',mynode
+    ! write(io_lun,*) ' MPI_WAIT start for Node',mynode
     !Check whether we have finished all MPI_irecv
     if(comBG%no_recv_node(iprim) > 0) then
        do inode=1,comBG%no_recv_node(iprim)
@@ -2075,7 +2077,7 @@ contains
           if(stat/=0) call cq_abort("Error deallocating recv_array in collect_result: ",nsize)
           call reg_dealloc_mem(area_basis,msize,type_dbl)
        else
-          write(*,fmt='(2x,"Possible problem in collect_result: recv_array not allocated")')
+          write(io_lun,fmt='(2x,"Possible problem in collect_result: recv_array not allocated")')
        end if
     end if
     call my_barrier() ! this is not needed, I think.
@@ -2259,17 +2261,17 @@ contains
     !check extent
     ierr=0
     if(2*extent < nxmax_grid-nxmin_grid) then
-       write(*,*) myid,' ERROR in do_inverse_blip : extent for x dir ::', &
+       write(io_lun,*) myid,' ERROR in do_inverse_blip : extent for x dir ::', &
             ' extent nxmin_grid nxmax_grid = ',extent,nxmin_grid,nxmax_grid
        ierr=1
     endif
     if(2*extent < nymax_grid-nymin_grid) then
-       write(*,*) myid,' ERROR in do_inverse_blip : extent for y dir ::', &
+       write(io_lun,*) myid,' ERROR in do_inverse_blip : extent for y dir ::', &
             ' extent nymin_grid nymax_grid = ',extent,nymin_grid,nymax_grid
        ierr=1
     endif
     if(2*extent < nzmax_grid-nzmin_grid) then
-       write(*,*) myid,' ERROR in do_inverse_blip : extent for z dir ::', &
+       write(io_lun,*) myid,' ERROR in do_inverse_blip : extent for z dir ::', &
             ' extent nymin_grid nymax_grid = ',extent,nzmin_grid,nzmax_grid
        ierr=1
     endif

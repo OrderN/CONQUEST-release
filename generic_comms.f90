@@ -46,12 +46,14 @@
 !!    Added logical_gsum with MPI_LOR (so if ANY of the variables are true, all are)
 !!   13:33, 22/09/2003 drb 
 !!    Added logical_two_copy
+!!   2008/02/06 08:17 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module GenComms
 
   use datatypes
-  use global_module, ONLY: numprocs
+  use global_module, ONLY: numprocs, io_lun
   use mpi
 
   implicit none
@@ -252,7 +254,7 @@ contains
     integer :: ierr
 
     call MPI_INIT(ierr)
-    if(ierr.ne.0) write(*,*) 'ierr is ',ierr
+    if(ierr.ne.0) write(io_lun,*) 'ierr is ',ierr
     call MPI_COMM_RANK( MPI_COMM_WORLD, myid, ierr )
     call MPI_COMM_SIZE( MPI_COMM_WORLD, number_of_procs, ierr )
     inode = myid+1
@@ -302,7 +304,7 @@ contains
     ! Local variables
     integer :: ierr
     
-    if(myid==0) write(*,fmt='(2x,"Total run time was: ",f20.3," seconds")') mtime()*0.001_double
+    if(myid==0) write(io_lun,fmt='(2x,"Total run time was: ",f20.3," seconds")') mtime()*0.001_double
     call MPI_Barrier(MPI_COMM_WORLD, ierr)
     call MPI_Finalize(ierr)
     return
@@ -355,10 +357,13 @@ contains
     ! Local variables
     integer :: ierror
     
-    write (*,1)  myid+1
+    write(*,1)  myid+1
     write(*,4) message
+    write(io_lun,1)  myid+1
+    write(io_lun,4) message
 1   format(2x,'Error in process ',i4)
 4   format(2x,a)
+    call flush(io_lun)
     call MPI_abort( MPI_comm_world, 1, ierror )
     stop
     return
@@ -416,14 +421,18 @@ contains
     integer :: ierror
     
     write (*,1)  myid+1
+    write (io_lun,1)  myid+1
     if(PRESENT(int2)) then
        write(*,3) message, int1, int2
+       write(io_lun,3) message, int1, int2
     else 
        write(*,2) message, int1
+       write(io_lun,2) message, int1
     endif
 1   format(2x,'Error in process ',i4)
 2   format(2x,a,i10)
 3   format(2x,a,2i10)
+    call flush(io_lun)
     call MPI_abort( MPI_comm_world, 1, ierror )
     stop
     return
@@ -481,15 +490,19 @@ contains
     integer :: ierror
     
     write (*,1)  myid+1
+    write (io_lun,1)  myid+1
     if(PRESENT(real2)) then 
        write(*,3) message, real1, real2
+       write(io_lun,3) message, real1, real2
     else
        write(*,2) message, real1
+       write(io_lun,2) message, real1
     endif
 1   format(2x,'Error in process ',i4)
 2   format(2x,a,f20.12)
 3   format(2x,a,2f20.12)
 4   format(2x,a)
+    call flush(io_lun)
     call MPI_abort( MPI_comm_world, 1, ierror )
     stop
     return

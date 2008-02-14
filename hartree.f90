@@ -1,4 +1,4 @@
-! $Id: hartree.f90,v 1.6 2004/11/12 02:39:22 drb Exp $
+! $Id$
 ! -----------------------------------------------------------
 ! Subroutine hartree
 ! -----------------------------------------------------------
@@ -13,14 +13,18 @@
 !!  MODIFICATION HISTORY
 !!   2004/10/29 drb
 !!    Note: this was a subroutine, but was incorporated into a module to add kerker preconditioning
+!!   2008/02/06 08:17 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module hartree_module
 
+  use global_module, ONLY: io_lun
+
   implicit none
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: hartree.f90,v 1.6 2004/11/12 02:39:22 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
 !!***
 
@@ -114,7 +118,7 @@ contains
     ! the density is in e/au^3, so convert to e/grid_point
     ! call scal( N_GRID_MAX, grid_point_volume, chden, 1 )
     call fft3( chden, chdenr, size, -1 )
-    !write(*,*) 'G=0 component is: ',chdenr(i0)
+    !write(io_lun,*) 'G=0 component is: ',chdenr(i0)
     energy = zero
     do i = 1, z_columns_node(inode)*n_grid_z
        !dumr = dble(chdenr(i))*hartree_factor(i)*harcon*  &
@@ -173,7 +177,7 @@ contains
     real(double) :: fac, facmin
     real(double) :: q02
 
-    !write(*,*) 'In kerker with q0: ',q0,size
+    !write(io_lun,*) 'In kerker with q0: ',q0,size
     if(abs(q0)<1.0e-8_double) then
        return
     else
@@ -184,9 +188,9 @@ contains
     allocate(chdenr(size), STAT=stat)
     if(stat/=0) call cq_abort("Error allocating chdenr in kerker: ",size,stat)
     call reg_alloc_mem(area_SC,2*size,type_dbl)
-    !write(*,*) 'Calling fft3'
+    !write(io_lun,*) 'Calling fft3'
     call fft3( resid, chdenr, size, -1 )
-    !write(*,*) 'Called fft3'
+    !write(io_lun,*) 'Called fft3'
     do i = 1, z_columns_node(inode)*n_grid_z
        if(hartree_factor(i)>very_small) then
           fac = 1.0_double
@@ -208,9 +212,9 @@ contains
     if(i0>0) then
        chdenr(i0) = -chdenr(i0)*facmin
     end if
-    !write(*,*) 'Calling fft3'
+    !write(io_lun,*) 'Calling fft3'
     call fft3( resid, chdenr, size, +1 )
-    !write(*,*) 'Called fft3'
+    !write(io_lun,*) 'Called fft3'
     deallocate(chdenr)
     if(stat/=0) call cq_abort("Error deallocating chdenr in kerker: ",size,stat)
     call reg_dealloc_mem(area_SC,2*size,type_dbl)

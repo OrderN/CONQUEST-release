@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: set_bucket_module.f90,v 1.5 2003/11/13 05:19:40 tm Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module set_bucket_module
 ! ------------------------------------------------------------------------------
@@ -50,10 +50,13 @@
 !!    Added new buckets for PAO integrals on grid
 !!   2006/10/18 17:20 dave
 !!    Changes from TM incorporated to find max recvs/sends
+!!   2008/02/06 08:36 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module set_bucket_module
 
+  use global_module, ONLY: io_lun
   use bucket_module
   use numbers, ONLY: very_small
   use matrix_module, ONLY: matrix_halo
@@ -77,7 +80,7 @@ module set_bucket_module
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), save, private :: RCSid = "$Id: set_bucket_module.f90,v 1.5 2003/11/13 05:19:40 tm Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
 !!***
 
@@ -212,10 +215,10 @@ contains
     call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(pao_sf_loc))
     call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(pao_H_sf_rem))
     if(iprint_index>3) then
-       write(*,*) myid,' sf_H_sf: ',rem_bucket(sf_H_sf_rem)%no_of_pair
-       write(*,*) myid,' sf_H_sf: ',rem_bucket(sf_H_sf_rem)%no_of_pair_orbs
-       write(*,*) myid,' pao_H_sf: ',rem_bucket(pao_H_sf_rem)%no_of_pair
-       write(*,*) myid,' pao_H_sf: ',rem_bucket(pao_H_sf_rem)%no_of_pair_orbs
+       write(io_lun,*) myid,' sf_H_sf: ',rem_bucket(sf_H_sf_rem)%no_of_pair
+       write(io_lun,*) myid,' sf_H_sf: ',rem_bucket(sf_H_sf_rem)%no_of_pair_orbs
+       write(io_lun,*) myid,' pao_H_sf: ',rem_bucket(pao_H_sf_rem)%no_of_pair
+       write(io_lun,*) myid,' pao_H_sf: ',rem_bucket(pao_H_sf_rem)%no_of_pair_orbs
     end if
     call setup_recvME(pao_H_sf_rem,myid,myid_ibegin,rem_bucket(pao_H_sf_rem),halo(dHrange))
     deallocate(isend_array,STAT=stat)
@@ -355,7 +358,7 @@ contains
       enddo
       mx_recv_BRnode=nnode
 
-      if(iprint_index >= 4) write(*,111) myid+1, mx_recv_BRnode, mx_send_DRnode
+      if(iprint_index >= 4) write(io_lun,111) myid+1, mx_recv_BRnode, mx_send_DRnode
       111 format(' Calc_mx_send for local and remote buckets : Node = ',i4,&
                  ' mx_recv_BRnode & mx_send_DRnode = ',2i4)
      return
@@ -634,7 +637,7 @@ contains
       !TM VARNSF: START
       loc_bucket%no_pair_orb = norb
       !TM VARNSF: END
-      if(iprint_index>3) write(*,*) 'n_pair in make_pair_DCSpart = ',npair
+      if(iprint_index>3) write(io_lun,*) 'n_pair in make_pair_DCSpart = ',npair
       !if(npair > loc_bucket%mx_pair) call cq_abort('ERROR in make_pair_DCSpart for loc_bucket%mx_pair',&
       !     npair,loc_bucket%mx_pair)
       !making tables
@@ -663,7 +666,7 @@ contains
 !         end do
 !      end do
       ! End counting pairs
-      if(allocated(isend_array)) write(*,*) "isend_array allocated: ",size(isend_array)
+      if(allocated(isend_array)) write(io_lun,*) "isend_array allocated: ",size(isend_array)
       allocate(isend_array(4*npair),STAT=stat)
       if(stat/=0) call cq_abort("Error allocating isend_array in make_pair_DCSprt: ",npair)
       ind_pair=0
@@ -883,12 +886,12 @@ contains
                myid_npair=buff_npair(nnd)
                !TM VARNSF : START
                myid_npair_orb=buff_npair_orb(nnd)
-                if(iprint_index>4) write(*,112) mynode ,myid_ibegin,myid_npair, myid_npair_orb
+                if(iprint_index>4) write(io_lun,112) mynode ,myid_ibegin,myid_npair, myid_npair_orb
                 112 format(' Node ',i3,' myid_ibegin, myid_npair, myid_npair_orb = ',3i6)
-               !if(iprint_index>4) write(*,*) ' Node ',mynode, &
+               !if(iprint_index>4) write(io_lun,*) ' Node ',mynode, &
                !     ' myid_ibegin, myid_npair and myid_npair_orb= ',myid_ibegin,myid_npair,myid_npair_orb
                !TM VARNSF : END
-               !if(iprint_index>4) write(*,*) ' Node ',mynode, ' isend for my node =',(isend_array(myid_ibegin+ii),ii=0,3)
+               !if(iprint_index>4) write(io_lun,*) ' Node ',mynode, ' isend for my node =',(isend_array(myid_ibegin+ii),ii=0,3)
             else
                !!  first, sending buff_npair to nnd_rem
                !tag=1
@@ -914,14 +917,14 @@ contains
                ibegin=4*(loc_bucket%ibegin_pair(nnd)-1)+1
                send_size=4*buff_npair(nnd)
                if(send_size>0) then
-                  if(ibegin>4*loc_bucket%no_pair) write(*,*) 'ERROR: ',ibegin,send_size,4*loc_bucket%no_pair
-                  if(ibegin + send_size-1>4*loc_bucket%no_pair) write(*,*) 'ERROR: ',ibegin,send_size,4*loc_bucket%no_pair
+                  if(ibegin>4*loc_bucket%no_pair) write(io_lun,*) 'ERROR: ',ibegin,send_size,4*loc_bucket%no_pair
+                  if(ibegin + send_size-1>4*loc_bucket%no_pair) write(io_lun,*) 'ERROR: ',ibegin,send_size,4*loc_bucket%no_pair
                   call MPI_issend(isend_array(ibegin),send_size,MPI_INTEGER,&
                        nnd_rem-1,tag,MPI_COMM_WORLD,nsend_req(3*nnd),ierr)
                   !TM VARNSF : END
                end if
             endif
-            !if(iprint_index>4) write(*,*) '$ME$ Node ',myid+1, ' RecvNode ',nnd_rem,' npair= ',buff_npair(nnd)
+            !if(iprint_index>4) write(io_lun,*) '$ME$ Node ',myid+1, ' RecvNode ',nnd_rem,' npair= ',buff_npair(nnd)
 
          enddo ! End do loop over receiving nodes
          !deallocate(buff_npair, buff_npair_orb,STAT=stat)
@@ -1113,7 +1116,7 @@ contains
                recv_ptr => irecv_array(1:nsize)
             endif
 
-            if(iprint_index>3) write(*,*) '$ME$ Node ',myid+1,' SendNode ',nnd_send,' npair= ',npair
+            if(iprint_index>3) write(io_lun,*) '$ME$ Node ',myid+1,' SendNode ',nnd_send,' npair= ',npair
             !TM VARNSF : START
             ibeg_orb1 = 0
             ibeg_orb2 = 0
@@ -1129,8 +1132,8 @@ contains
                !ORI if(parts%i_cc2node(ind_part) /= myid+1) call cq_abort(' ERROR : ind_part in setup_recvME ', &
                !ORI      parts%i_cc2node(ind_part),ipair)
                if(parts%i_cc2node(ind_part) /= myid+1) then
-                  write(*,*) ' ind_part, mu, nu, offset = ',ind_part, mu, nu,offset
-                  write(*,*) ' myid, nnd, nnd_send, npair - ',myid, nnd, nnd_send, npair
+                  write(io_lun,*) ' ind_part, mu, nu, offset = ',ind_part, mu, nu,offset
+                  write(io_lun,*) ' myid, nnd, nnd_send, npair - ',myid, nnd, nnd_send, npair
                   call cq_abort(' ERROR : ind_part in setup_recvME ', parts%i_cc2node(ind_part),ipair)
                endif
                if(mu > bundle%nm_nodgroup(ipart).or.mu<1) call cq_abort(' ERROR : mu in setup_recvME ',mu,ipair)
@@ -1157,7 +1160,7 @@ contains
                ny=(offset-nx*(BCS_parts%ncovery*BCS_parts%ncoverz))/BCS_parts%ncoverz
                nz=offset-nx*(BCS_parts%ncovery*BCS_parts%ncoverz)-ny*BCS_parts%ncoverz
                if(dx*dx+dy*dy+dz*dz > rcut*rcut) then
-                  if(iprint_index>3) write(*,101) myid+1,ipair,dx,dy,dz,bundle%xprim(nprim)&
+                  if(iprint_index>3) write(io_lun,101) myid+1,ipair,dx,dy,dz,bundle%xprim(nprim)&
                        ,bundle%yprim(nprim),bundle%zprim(nprim)&
                        ,BCS_parts%xcover(ni2_new),BCS_parts%ycover(ni2_new)&
                        ,BCS_parts%zcover(ni2_new)&

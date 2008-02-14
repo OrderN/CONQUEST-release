@@ -43,9 +43,13 @@
 !!    than automatically allocated.
 !!   10:59, 13/02/2006 drb 
 !!    Removed prune, graft routines (no longer used) and small tidying in preparation for variable NSF
+!!   2008/02/06 08:26 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module multiply_module
+
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -150,7 +154,7 @@ contains
     !allocate(atrans(a_b_c%amat(1)%length),STAT=stat)
     allocate(atrans(lena),STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error allocating atrans')
-    !write(*,*) 'Sizes: ',a_b_c%comms%mx_dim3*a_b_c%comms%mx_dim2*a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs,&
+    !write(io_lun,*) 'Sizes: ',a_b_c%comms%mx_dim3*a_b_c%comms%mx_dim2*a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs,&
     !     a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs,a_b_c%comms%mx_dim3*a_b_c%comms%mx_dim1* &
     !     a_b_c%prim%mx_iprim*a_b_c%amat(1)%mx_nab
     sends = 0
@@ -166,7 +170,7 @@ contains
     sends = 0
     ! For type 1, form local transpose of my data (a_halo) and zero C-matrix 
     invdir=0
-    !write(*,*) 'Local trans'
+    !write(io_lun,*) 'Local trans'
     if(a_b_c%mult_type.eq.1) then
        call loc_trans( a_b_c%ltrans, a_b_c%ahalo,a,lena,atrans,lena,invdir)
        c = zero
@@ -174,26 +178,26 @@ contains
        atrans = zero
     endif
     ! Start the send procedure
-    !write(*,*) 'Sending'
+    !write(io_lun,*) 'Sending'
     call Mquest_start_send(a_b_c,b,nreqs,myid,a_b_c%prim%mx_ngonn,sends)
-    !write(*,*) 'Returned ',a_b_c%ahalo%np_in_halo,myid
+    !write(io_lun,*) 'Returned ',a_b_c%ahalo%np_in_halo,myid
     ncover_yz=a_b_c%gcs%ncovery*a_b_c%gcs%ncoverz
     do kpart = 1,a_b_c%ahalo%np_in_halo  ! Main loop
-       !write(*,*) 'Part: ',kpart,myid
+       !write(io_lun,*) 'Part: ',kpart,myid
        icall=1
        ind_part = a_b_c%ahalo%lab_hcell(kpart)
-       !write(*,*) 'ind_part: ',ind_part
+       !write(io_lun,*) 'ind_part: ',ind_part
        if(kpart>1) then  ! Is it a periodic image of the previous partition ?
           if(ind_part.eq.a_b_c%ahalo%lab_hcell(kpart-1)) then 
              icall=0
           else ! Get the data
-             !write(*,*) myid,' seq: ',size(a_b_c%parts%i_cc2seq)
+             !write(io_lun,*) myid,' seq: ',size(a_b_c%parts%i_cc2seq)
              ipart = a_b_c%parts%i_cc2seq(ind_part)
-             !write(*,*) myid,' Alloc b_rem part: ',ipart
+             !write(io_lun,*) myid,' Alloc b_rem part: ',ipart
              nnode = a_b_c%comms%neigh_node_list(kpart)
-             !write(*,*) myid,' Alloc b_rem node: ',nnode
-             !write(*,*) myid,' Alloc b_rem icc: ',a_b_c%parts%i_cc2node(ind_part)
-             !write(*,*) myid,' Alloc b_rem alloc: ',allocated(b_rem)
+             !write(io_lun,*) myid,' Alloc b_rem node: ',nnode
+             !write(io_lun,*) myid,' Alloc b_rem icc: ',a_b_c%parts%i_cc2node(ind_part)
+             !write(io_lun,*) myid,' Alloc b_rem alloc: ',allocated(b_rem)
              if(allocated(b_rem)) deallocate(b_rem)
              if(a_b_c%parts%i_cc2node(ind_part)==myid+1) then
                 lenb_rem = a_b_c%bmat(ipart)%part_nd_nabs
@@ -204,7 +208,7 @@ contains
              call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,icall,&  
                   n_cont,part_array,a_b_c%bindex,b_rem,lenb_rem,b,myid,ilen2,&
                   mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs)
-             !write(*,*) 'b_rem: ',lenb_rem
+             !write(io_lun,*) 'b_rem: ',lenb_rem
              ! Now point the _rem variables at the appropriate parts of 
              ! the array where we will receive the data
              offset = 0
@@ -228,13 +232,13 @@ contains
                   ibpart_rem,ncover_yz,a_b_c%gcs%ncoverz)
           endif
        else ! Get the data
-          !write(*,*) myid,' seq: ',size(a_b_c%parts%i_cc2seq)
+          !write(io_lun,*) myid,' seq: ',size(a_b_c%parts%i_cc2seq)
           ipart = a_b_c%parts%i_cc2seq(ind_part)
-          !write(*,*) myid,' Alloc b_rem part: ',ipart
+          !write(io_lun,*) myid,' Alloc b_rem part: ',ipart
           nnode = a_b_c%comms%neigh_node_list(kpart)
-          !write(*,*) myid,' Alloc b_rem node: ',nnode
-          !write(*,*) myid,' Alloc b_rem icc: ',a_b_c%parts%i_cc2node(ind_part)
-          !write(*,*) myid,' Alloc b_rem alloc: ',allocated(b_rem)
+          !write(io_lun,*) myid,' Alloc b_rem node: ',nnode
+          !write(io_lun,*) myid,' Alloc b_rem icc: ',a_b_c%parts%i_cc2node(ind_part)
+          !write(io_lun,*) myid,' Alloc b_rem alloc: ',allocated(b_rem)
           if(allocated(b_rem)) deallocate(b_rem)
           if(a_b_c%parts%i_cc2node(ind_part)==myid+1) then
              lenb_rem = a_b_c%bmat(ipart)%part_nd_nabs
@@ -246,7 +250,7 @@ contains
                n_cont,part_array,a_b_c%bindex,b_rem,lenb_rem,b,myid,ilen2,&
                mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs)
           lenb_rem = size(b_rem)
-          !write(*,*) 'b_rem: ',lenb_rem
+          !write(io_lun,*) 'b_rem: ',lenb_rem
           ! Now point the _rem variables at the appropriate parts of the array 
           ! where we will receive the data
           offset = 0
@@ -285,7 +289,7 @@ contains
                   ibpart_rem,ibseq_rem,ibndimj_rem,&
                   atrans,b_rem,c,a_b_c%ahalo,a_b_c%chalo,a_b_c%ltrans,&
                   a_b_c%bmat(1)%mx_abs,a_b_c%parts%mx_mem_grp, &
-                  a_b_c%prim%mx_iprim, lena, lenb_rem, lenc,debug)
+                  a_b_c%prim%mx_iprim, lena, lenb_rem, lenc)
           else if(a_b_c%mult_type.eq.2) then ! A is partial mult
              call m_kern_minGEMM( k_off,kpart,ib_nd_acc_rem, ibind_rem,nbnab_rem,&
                   ibpart_rem,ibseq_rem,ibndimj_rem,&
@@ -299,7 +303,7 @@ contains
                   ibpart_rem,ibseq_rem,ibndimj_rem,&
                   atrans,b_rem,c,a_b_c%ahalo,a_b_c%chalo,a_b_c%ltrans,&
                   a_b_c%bmat(1)%mx_abs,a_b_c%parts%mx_mem_grp, &
-                  a_b_c%prim%mx_iprim, lena, lenb_rem, lenc,debug)
+                  a_b_c%prim%mx_iprim, lena, lenb_rem, lenc)
           else if(a_b_c%mult_type.eq.2) then ! A is partial mult
              call m_kern_min( k_off,kpart,ib_nd_acc_rem, ibind_rem,nbnab_rem,&
                   ibpart_rem,ibseq_rem,ibndimj_rem,&
@@ -317,12 +321,12 @@ contains
     ! End of the main loop over partitions in the A-halo
     ! --------------------------------------------------
     ! sends is only incremented in the MPI version of Mquest_start_send, so this works
-    !write(*,*) 'Done loop ',myid,sends
+    !write(io_lun,*) 'Done loop ',myid,sends
     if(sends>0) then
        do i=1,sends
           call MPI_Wait(nreqs(i),mpi_stat,ierr)
           if(ierr/=0) call cq_abort("Error waiting for send to finish",i)
-          !write(*,*) 'Send done ',i,myid
+          !write(io_lun,*) 'Send done ',i,myid
        end do
     end if
     call my_barrier
@@ -346,7 +350,7 @@ contains
     !call my_barrier
     if(iprint_mat>3.AND.myid==0) then
        t1 = mtime()
-       write(*,*) 'mult time: ',t1-t0
+       write(io_lun,*) 'mult time: ',t1-t0
     end if
     return
   end subroutine mat_mult
@@ -467,7 +471,7 @@ contains
     ! --- invdir=0: normal -> retro; invdir=1: retro -> normal ------------
     if(invdir.eq.0) then
        do ni=1,ahalo%ni_in_halo
-          !write(*,*) 'Atom no: ',ni
+          !write(io_lun,*) 'Atom no: ',ni
           if(at%n_hnab(ni)<=0) then
              call cq_abort('loc_trans: no. of neighbours < 1')
           endif
@@ -675,7 +679,7 @@ contains
        nbkbeg=ibaddr(k_in_part)
        nb_nd_kbeg=ib_nd_acc(k_in_part)
        nd3 = ahalo%ndimj(k_in_halo)
-       if(PRESENT(debug)) write(21+debug,*) 'Details1: ',k,nb_nd_kbeg
+       !if(PRESENT(debug)) write(21+debug,*) 'Details1: ',k,nb_nd_kbeg
        ! transcription of j from partition to C-halo labelling
        maxlen = 0
        do j=1,nbnab(k_in_part)
@@ -1121,7 +1125,7 @@ contains
        nbkbeg=ibaddr(k_in_part)
        nb_nd_kbeg=ib_nd_acc(k_in_part)
        nd3 = ahalo%ndimj(k_in_halo)
-       if(PRESENT(debug)) write(21+debug,*) 'Details1: ',k,nb_nd_kbeg
+       !if(PRESENT(debug)) write(21+debug,*) 'Details1: ',k,nb_nd_kbeg
        ! transcription of j from partition to C-halo labelling
        do j=1,nbnab(k_in_part)
           jpart=ibpart(nbkbeg+j-1)+k_off
@@ -1479,21 +1483,21 @@ contains
       do j=1,nbnab_rem(k_in_part)
         jpart=ibpart_rem(nbindbeg+j-1)+k_off
         if(jpart.gt.mx_pcover) then
-          write(*,911) jpart,mx_pcover
+          write(io_lun,911) jpart,mx_pcover
 911       format(//'error mat_mult: jchbeg arg. out of range',i12,i6)
           icall = 0
           return
         endif
         jseq=ibseq_rem(nbindbeg+j-1)
         if(jchbeg(jpart)+jseq-1.gt.mx_icover) then
-          write(*,912) jchbeg(jpart)+jseq-1,mx_icover
+          write(io_lun,912) jchbeg(jpart)+jseq-1,mx_icover
 912       format(//'error mat_mult: j_halo arg. out of range',i10,i6)
           icall = 0
           return
         endif
       enddo
     enddo
-    if(icall==0) write(*,*) 'ERROR!!!!!!!!!!!!!!!!!!!!!!!!!'
+    if(icall==0) write(io_lun,*) 'ERROR!!!!!!!!!!!!!!!!!!!!!!!!!'
     return
   end subroutine check_mkm
 !!***

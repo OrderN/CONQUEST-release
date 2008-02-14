@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: set_blipgrid_module.f90,v 1.8 2004/11/12 02:57:02 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module set_blipgrid_module
 ! ------------------------------------------------------------------------------
@@ -26,11 +26,13 @@
 !!    Added ROBOdoc headers to about half routines and TM's debug and tidy statements
 !!   2006/07/05 08:14 dave
 !!    Various changes for variable NSF, and consolidation of different local orbital definitions
+!!   2008/02/06 08:35 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module set_blipgrid_module
 
-  use global_module, ONLY: sf, nlpf, paof, dens, iprint_index
+  use global_module, ONLY: sf, nlpf, paof, dens, iprint_index, io_lun
   use naba_blk_module, ONLY: &
        comm_in_BG, naba_blk_of_atm, naba_atm_of_blk, halo_atm_of_blk, &
        alloc_comm_in_BG1, alloc_comm_in_BG2, alloc_naba_blk, alloc_naba_atm, alloc_halo_atm
@@ -56,7 +58,7 @@ module set_blipgrid_module
   integer,pointer :: offset_rem(:)
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: set_blipgrid_module.f90,v 1.8 2004/11/12 02:57:02 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -152,8 +154,8 @@ contains
        call alloc_halo_atm(halo_atm(nlpf), max_recv_node_BG,max_halo_part,DCS_parts%mx_mcover)
     else
        ! Note: this is a problem because max_recv_node_BG isn't defined
-       write(*,*) ' WARNING !! '
-       write(*,*) ' before alloc_halo_atm : rcut_supp < rcut_proj '
+       write(io_lun,*) ' WARNING !! '
+       write(io_lun,*) ' before alloc_halo_atm : rcut_supp < rcut_proj '
        call alloc_halo_atm(halo_atm(nlpf), numprocs,max_halo_part,DCS_parts%mx_mcover)
     endif
     ! Densities
@@ -212,7 +214,7 @@ contains
     do iprim=1,domain%mx_ngonn
        gridsize(nlpf) = gridsize(nlpf) + naba_atm(nlpf)%no_of_orb(iprim)*n_pts_in_block
     end do
-    !write(*,*) 'gridsizes: ',gridsize(sf),gridsize(paof),gridsize(nlpf)
+    !write(io_lun,*) 'gridsizes: ',gridsize(sf),gridsize(paof),gridsize(nlpf)
     ! Now add atomic density tables
     call get_naba_DCSprt(rcut_dens,naba_atm(dens),halo_atm(dens))
     ! End of atomic density tables
@@ -321,13 +323,13 @@ contains
     dcellz_grid=dcellz_block/nz_in_block
 
     !- CHECK BCS_blocks ---
-    !  write(*,*) ' ng_cover of BCS_blocks ',&
+    !  write(io_lun,*) ' ng_cover of BCS_blocks ',&
     !         BCS_blocks%ng_cover
-    !  write(*,*) ' ncovers of BCS_blocks ',&
+    !  write(io_lun,*) ' ncovers of BCS_blocks ',&
     !         BCS_blocks%ncoverx,BCS_blocks%ncovery,BCS_blocks%ncoverz
-    !  write(*,*) ' origin of BCS_blocks ',&
+    !  write(io_lun,*) ' origin of BCS_blocks ',&
     !         BCS_blocks%nx_origin,BCS_blocks%ny_origin,BCS_blocks%nz_origin
-    !  write(*,*) ' nleft of BCS_blocks ',&
+    !  write(io_lun,*) ' nleft of BCS_blocks ',&
     !         BCS_blocks%nspanlx,BCS_blocks%nspanly,BCS_blocks%nspanly
 
     do np=1,bundle%groups_on_node  ! primary partitions in bundle
@@ -340,7 +342,7 @@ contains
           ny1=1+mod(ny-1+parts%ngcelly,parts%ngcelly)
           nz1=1+mod(nz-1+parts%ngcellz,parts%ngcellz)
           ind_part=(nx1-1)*parts%ngcelly*parts%ngcellz+(ny1-1)*parts%ngcellz+nz1
-          if(np /= parts%i_cc2seq(ind_part)) write(*,*) 'BUNDLE ERROR!!',&
+          if(np /= parts%i_cc2seq(ind_part)) write(io_lun,*) 'BUNDLE ERROR!!',&
                ' nx1,ny1,nz1 = ',nx1,ny1,nz1,'ind',ind_part,'np & i_cc2 = ', &
                np,parts%i_cc2seq(ind_part)
 
@@ -416,7 +418,7 @@ contains
                    if(flag_new) then
                       comBG%no_recv_node(inp)=comBG%no_recv_node(inp)+1
                       comBG%list_recv_node(comBG%no_recv_node(inp),inp)=nnd_rem
-                      !write(*,*) comBG%no_recv_node(inp),'-th node for iprim = ',inp,&
+                      !write(io_lun,*) comBG%no_recv_node(inp),'-th node for iprim = ',inp,&
                       !               ' ind_block, nnd_rem = ',ind_block,nnd_rem
                       ncoverx_add =DCS_parts%ncover_rem(1+(nnd_rem-1)*3)
                       ncovery_add =DCS_parts%ncover_rem(2+(nnd_rem-1)*3)
@@ -457,7 +459,7 @@ contains
                 endif ! (distsq < rcutsq)
 
              enddo ! iblock in covering sets
-             if(iprint_index>3) write(*,101) inp,naba_blk%nxmin(inp),naba_blk%nxmax(inp),&
+             if(iprint_index>3) write(io_lun,101) inp,naba_blk%nxmin(inp),naba_blk%nxmax(inp),&
                   naba_blk%nymin(inp),naba_blk%nymax(inp),&
                   naba_blk%nzmin(inp),naba_blk%nzmax(inp)
 101          format('inp =',i4,' nxmin,max= ',2i6,' ny ',2i6,' nz ',2i6)
@@ -471,10 +473,10 @@ contains
     if(ierror /= 0) then
        inp=0
        do np=1,bundle%groups_on_node  ! primary partitions in bundle
-          write(*,*) ' np & atoms in this partition = ',np, bundle%nm_nodgroup(np)
+          write(io_lun,*) ' np & atoms in this partition = ',np, bundle%nm_nodgroup(np)
           do ni=1,bundle%nm_nodgroup(np)  ! number of atoms in the partition
              inp=inp+1
-             write(*,*) &
+             write(io_lun,*) &
                   'inp:naba_blk%no_naba_blk(inp):mx_naba_blk = ', &
                   inp,naba_blk%no_naba_blk(inp),naba_blk%mx_naba_blk
           enddo
@@ -797,7 +799,7 @@ contains
              do ni=1,DCS_parts%n_ing_cover(np)
                 icover=icover+1                     ! cover set seq. label of atom
                 if(icover /= DCS_parts%icover_ibeg(np)+ni-1 ) &
-                     write(*,*) ' ERROR icover np+ni = ', &
+                     write(io_lun,*) ' ERROR icover np+ni = ', &
                      icover,DCS_parts%icover_ibeg(np)+ni-1
 
                 xatom=DCS_parts%xcover(DCS_parts%icover_ibeg(np)+ni-1)
@@ -1041,7 +1043,7 @@ contains
              do ni=1,DCS_parts%n_ing_cover(np)
                 icover=icover+1                     ! cover set seq. label of atom
                 if(icover /= DCS_parts%icover_ibeg(np)+ni-1 ) &
-                     write(*,*) ' ERROR icover np+ni = ', &
+                     write(io_lun,*) ' ERROR icover np+ni = ', &
                      icover,DCS_parts%icover_ibeg(np)+ni-1
 
                 xatom=DCS_parts%xcover(DCS_parts%icover_ibeg(np)+ni-1)
@@ -1162,8 +1164,8 @@ contains
 
              if(naba_supp%no_atom_on_part(ipart,iprim_blk) < 1) then  
                 !!   check no_naba_atom
-                write(*,*) 'no of atoms in the neighbour partition is 0 ???'
-                write(*,*) ' ERROR in make_sendinfo_BG &
+                write(io_lun,*) 'no of atoms in the neighbour partition is 0 ???'
+                write(io_lun,*) ' ERROR in make_sendinfo_BG &
                      &for iprim_blk,ipart,jpart = ' &
                      ,iprim_blk,ipart,jpart
                 call cq_abort('ERROR in naba_supp%no_atom_on_part in make_sendinfo_BG')
@@ -1191,12 +1193,12 @@ contains
                 if(ifind == 0) then   ! (if the current sending node is new )
                    comBG%no_send_node(iprim_rem)=comBG%no_send_node(iprim_rem)+1
                    if(comBG%no_send_node(iprim_rem) > comBG%mx_send_node) then
-                      write(*,*) ' ERROR mx_send_node in make_sendinfo_BG', &
+                      write(io_lun,*) ' ERROR mx_send_node in make_sendinfo_BG', &
                            comBG%no_send_node(iprim_rem), comBG%mx_send_node
                       call cq_abort('ERROR in mx_send_node in make_sendinfo_BG')
                    endif
-                   ! write(*,*) 'no_send_node = ',comBG%no_send_node(iprim_rem)
-                   ! write(*,*) 'B list_send_node', &
+                   ! write(io_lun,*) 'no_send_node = ',comBG%no_send_node(iprim_rem)
+                   ! write(io_lun,*) 'B list_send_node', &
                    !  comBG%list_send_node(comBG%no_send_node(iprim_rem),iprim_rem), &
                    !         'no_sent_pairs for this node at present ', &
                    !  comBG%no_sent_pairs(comBG%no_send_node(iprim_rem),iprim_rem) 
@@ -1206,7 +1208,7 @@ contains
                    comBG%no_sent_pairs(comBG%no_send_node(iprim_rem),iprim_rem)= &
                         comBG%no_sent_pairs(comBG%no_send_node(iprim_rem),iprim_rem) + 1
 
-                   !write(*,*) 'A list_send_node', &
+                   !write(io_lun,*) 'A list_send_node', &
                    !    comBG%list_send_node(comBG%no_send_node(iprim_rem),iprim_rem), &
                    !           'no_sent_pairs for this node at present ', &
                    !    comBG%no_sent_pairs(comBG%no_send_node(iprim_rem),iprim_rem) 
@@ -1216,7 +1218,7 @@ contains
                         comBG%no_sent_pairs(ifind,iprim_rem) + 1
                 endif                 !(the present node is new or old)
 
-                ! write(*,101) myid,&
+                ! write(io_lun,101) myid,&
                 !  nnd_rem,ni,ia,iprim_rem, comBG%no_send_node(iprim_rem), &
                 !  (comBG%no_sent_pairs(ii,iprim_rem),ii=1,comBG%no_send_node(iprim_rem))
                 !101 format(i3,'RemNode',i3,' ni, ia = ',i3,i5,'iprim_rem= ',i4, &
@@ -1241,7 +1243,7 @@ contains
 !%%!
 !%%!             npair=npair+comBG%no_sent_pairs(inode,iprim)
 !%%!             if(comBG%no_sent_pairs(inode,iprim) > comBG%mx_pair) then
-!%%!                write(*,*) ' ERROR mx_pair in make_sendinfo_BG'
+!%%!                write(io_lun,*) ' ERROR mx_pair in make_sendinfo_BG'
 !%%!                call cq_abort('ERROR mx_pair in make_sendinfo_BG')
 !%%!             endif
 !%%!          enddo
@@ -1263,28 +1265,28 @@ contains
 !%%!    enddo
 !%%!
 !%%!    if(iprint > iprint_debug ) then
-!%%!       write(*,*) ' @@ mx_sent_pair_BG should be ',mx_sent_pair,&
+!%%!       write(io_lun,*) ' @@ mx_sent_pair_BG should be ',mx_sent_pair,&
 !%%!            ' for node ',myid+1
-!%%!       write(*,*) ' @@ mx_send_node_BG should be ',mx_send_node,&
+!%%!       write(io_lun,*) ' @@ mx_send_node_BG should be ',mx_send_node,&
 !%%!            ' for node ',myid+1
-!%%!       write(*,*) ' @@ mx_recv_node_BG should be ',mx_recv_node,&
+!%%!       write(io_lun,*) ' @@ mx_recv_node_BG should be ',mx_recv_node,&
 !%%!            ' for node ',myid+1
 !%%!    endif
 !%%!    ! To check mx_sent_pair_BG etc.
 !%%!    ierr = 0
 !%%!    if(mx_sent_pair > mx_sent_pair_BG) then
 !%%!       ierr = ierr + 1   
-!%%!       write(*,*) 'ERROR! mx_sent_pair_BG must be larger than ',&
+!%%!       write(io_lun,*) 'ERROR! mx_sent_pair_BG must be larger than ',&
 !%%!            mx_sent_pair,' present value = ', mx_sent_pair_BG
 !%%!    endif
 !%%!    if(mx_send_node > mx_send_node_BG) then
 !%%!       ierr = ierr + 2
-!%%!       write(*,*) 'ERROR! mx_send_node_BG must be larger than ',&
+!%%!       write(io_lun,*) 'ERROR! mx_send_node_BG must be larger than ',&
 !%%!            mx_send_node,' present value = ', mx_send_node_BG
 !%%!    endif
 !%%!    if(mx_recv_node > mx_recv_node_BG) then
 !%%!       ierr = ierr + 4
-!%%!       write(*,*) 'ERROR! mx_recv_node_BG must be larger than ',&
+!%%!       write(io_lun,*) 'ERROR! mx_recv_node_BG must be larger than ',&
 !%%!            mx_recv_node,' present value = ', mx_recv_node_BG
 !%%!    endif
 !%%!    call my_barrier()
@@ -1293,10 +1295,10 @@ contains
 !%%!    endif
 !%%!
 !%%!    if(iprint > iprint_debug2) then
-!%%!       write(*,*) ' Node ', myid+1,'  isend,npair = ',isend,npair
-!%%!       write(*,*) 'COMBGMXIPRIM= ',comBG%mx_iprim
+!%%!       write(io_lun,*) ' Node ', myid+1,'  isend,npair = ',isend,npair
+!%%!       write(io_lun,*) 'COMBGMXIPRIM= ',comBG%mx_iprim
 !%%!       do iprim=1,comBG%mx_iprim
-!%%!          write(*,*) myid+1,' IPRIM = ',iprim,' No of remote nodes = ', &
+!%%!          write(io_lun,*) myid+1,' IPRIM = ',iprim,' No of remote nodes = ', &
 !%%!               comBG%no_send_node(iprim),' LIST SEND= ', &
 !%%!               (comBG%list_send_node(inode,iprim),inode=1,comBG%no_send_node(iprim))&
 !%%!               ,' LIST RECV= ',&
@@ -1377,8 +1379,8 @@ contains
              nnd_rem=parts%i_cc2node(ind_part)
              if(naba_supp%no_atom_on_part(ipart,iprim_blk) < 1) then  
                 !!   check no_naba_atom
-                write(*,*) 'no of atoms in the neighbour partition is 0 ???'
-                write(*,*) ' ERROR in make_sendinfo_BG for iprim_blk,ipart,jpart = ' ,iprim_blk,ipart,jpart
+                write(io_lun,*) 'no of atoms in the neighbour partition is 0 ???'
+                write(io_lun,*) ' ERROR in make_sendinfo_BG for iprim_blk,ipart,jpart = ' ,iprim_blk,ipart,jpart
                 call cq_abort('ERROR in naba_supp%no_atom_on_part in make_sendinfo_BG')
              endif
              ibegin=naba_supp%ibegin_part(ipart,iprim_blk)
@@ -1457,6 +1459,7 @@ contains
 !!
   subroutine make_table_BG(myid,comBG)
 
+    use mpi, ONLY: MPI_STATUS_SIZE
     use datatypes
     use maxima_module, ONLY: maxnsf
     use primary_module,  ONLY:bundle
@@ -1473,12 +1476,14 @@ contains
     !Local variables           
     integer,parameter :: tag=1  
     !integer,save :: iprim
-    integer :: iprim
+    integer :: iprim, j
     integer :: ierr,irc,istart_myid
     integer :: mynode
     integer :: isend, stat
     integer :: mx_send,mx_recv
-
+    integer :: nsend_req(comBG%mx_recv_node)
+    integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
+    
     integer :: ii
     mynode=myid+1
     isend=0           ! index of receiving data from sending nodes
@@ -1492,11 +1497,14 @@ contains
           comBG%ibeg_recv_call(iprim)=isend+1
        endif
        if(iprim <=  bundle%n_prim) then
-          call send_array_BG(iprim,mynode,istart_myid)
+          call send_array_BG(iprim,mynode,istart_myid,nsend_req)
        else
           istart_myid=0
        endif
        call recv_array_BG(iprim,mynode,istart_myid,isend)
+       do j = 1,comBG%no_recv_node(iprim)
+          if(comBG%list_recv_node(j,iprim)/=mynode) call MPI_Wait(nsend_req(j),mpi_stat,ierr)
+       end do
        call my_barrier()
        ! we need this BARRIER as the send_array of a node which finish
        ! receiving MPI calls might be changed before other nodes have
@@ -1515,7 +1523,7 @@ contains
   ! send no_naba_blks for each node,
   ! send_naba_blk and offset_naba_blk
   !-------------------------------------------------------------------
-  subroutine send_array_BG(iprim,mynode,istart_myid)
+  subroutine send_array_BG(iprim,mynode,istart_myid,nsend_req)
 
     !Modules and Dummy Arguments --
     use mpi, ONLY: MPI_INTEGER, MPI_COMM_WORLD
@@ -1525,12 +1533,12 @@ contains
 
     integer,intent(in)  :: iprim,mynode
     integer,intent(out) :: istart_myid
+    integer,intent(out) :: nsend_req(comBG%mx_recv_node)
     !Local variables -- 
     integer :: nnodes,istart,inode,nnd,ibegin
     integer :: iend,nsize,send_size, tmpsize, stat
     integer :: ierr(comBG%mx_recv_node)
     integer,parameter :: tag=1
-    integer :: nsend_req(comBG%mx_recv_node)
 
     nnodes=comBG%no_recv_node(iprim)
 
@@ -1542,7 +1550,7 @@ contains
           tmpsize = tmpsize+2*nsize+1
        enddo
        if(allocated(isend_array)) then 
-          write(*,*) mynode,' send_array alloc: ',size(isend_array)
+          write(io_lun,*) mynode,' send_array alloc: ',size(isend_array)
           call cq_abort('Problem with send_array !')
        end if
        allocate(isend_array(tmpsize),STAT=stat)
@@ -1630,7 +1638,7 @@ contains
 
           else
 
-             !write(*,*) ' Recv Node ',mynode,' Istart: ',istart_myid
+             !write(io_lun,*) ' Recv Node ',mynode,' Istart: ',istart_myid
              npair=isend_array(istart_myid)
              naba_blk_rem => isend_array(istart_myid+        1:istart_myid+npair)
              offset_rem => isend_array(istart_myid+  npair+1:istart_myid+2*npair)
@@ -1760,8 +1768,8 @@ contains
           ia2=atoms_on_node(iprim,nnd_rem)           
 
           if(iprim /= atom_number_on_node(ia2)) &
-               write(*,*) ' ERROR: IPRIM in make_table! '
-          !write(*,102) ii,j,ia1,ia2
+               write(io_lun,*) ' ERROR: IPRIM in make_table! '
+          !write(io_lun,102) ii,j,ia1,ia2
           !102 format(6x,'ii,j,ia1,ia2 = ',2i4,2i6)
           ! glob no. of iprim-th atm on nnd_rem
           !if(ia1 == ia2) then

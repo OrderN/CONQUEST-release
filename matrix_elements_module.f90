@@ -1,4 +1,4 @@
-! $Id: matrix_elements_module.f90,v 1.1.1.1.2.1 2006/03/31 12:26:00 drb Exp $
+! $Id$
 ! -----------------------------------------------------------
 ! Module matrix_elements_module
 ! -----------------------------------------------------------
@@ -29,8 +29,12 @@
 !!    Now uses the generic group, primary and cover_set types
 !!   08/06/2001 dave
 !!    Added ROBODoc header and GenComms for my_barrier and cq_abort
+!!   2008/02/06 08:22 dave
+!!    Changed for output to file not stdout
 !!***
 module matrix_elements_module
+
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -101,8 +105,8 @@ contains
        amat(2:prim%groups_on_node)%mx_nab = amat(1)%mx_nab
        call gmax(amat(1)%mx_abs)
        amat(2:prim%groups_on_node)%mx_abs = amat(1)%mx_abs
-       !write(*,*) 'Matrix maxima: ',amat(1)%mx_nab, amat(1)%mx_abs
-       !write(*,*) 'Index length: ',parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs)
+       !write(io_lun,*) 'Matrix maxima: ',amat(1)%mx_nab, amat(1)%mx_abs
+       !write(io_lun,*) 'Index length: ',parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs)
        allocate(aind(parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs)),STAT=ierr)
        if(ierr/=0) call cq_abort("Error allocating matrix index: ", &
             parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs),ierr)
@@ -119,7 +123,7 @@ contains
           call make_halo_max(prim,gcs,amat,ahalo)
           call gmax(ahalo%mx_part)
           call gmax(ahalo%mx_halo)
-          !write(*,*) 'Halo maxima: ',ahalo%mx_part, ahalo%mx_halo
+          !write(io_lun,*) 'Halo maxima: ',ahalo%mx_part, ahalo%mx_halo
           call allocate_halo(ahalo,prim%mx_iprim,gcs%mx_mcover,gcs%mx_gcover)
           call make_halo(prim,gcs,amat,ahalo)
        endif ! halo
@@ -154,7 +158,8 @@ contains
 !!  CREATION DATE
 !!   2006/09/07 (though just relocating earlier code)
 !!  MODIFICATION HISTORY
-!!
+!!   2008/02/11 17:08 dave
+!!    Changes for correct release of non-blocking sends
 !!  SOURCE
 !!
   subroutine trans_ini(parts,prim,gcs,amat,myid,&
@@ -162,6 +167,7 @@ contains
 
     ! Module usage
     use datatypes
+    use mpi, ONLY: MPI_STATUS_SIZE
     use global_module
     use basic_types
     use matrix_module
@@ -188,8 +194,10 @@ contains
     integer(integ), pointer, dimension(:) :: apairind
 
     ! Local variables
-    integer :: nnd,nr,posn
+    integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
+    integer :: nnd,nr,posn, j
     integer :: irc,ierr
+    integer, dimension(:), allocatable :: nreq
 
 
     nnd = myid+1
@@ -202,10 +210,17 @@ contains
        call set_trans_pointers(apairind,atrans_rem,apairs)
        call a_and_b(nnd,atrans,ahalo,atrans_rem,apairs,prim,gcs)
        call my_barrier
-       call send_pair_info(nnd,apairind,atrans_rem)
+       allocate(nreq(2*atrans_rem%n_rem_node),STAT=ierr)
+       call send_pair_info(nnd,apairind,atrans_rem,nreq)
        call my_barrier
        call index_transpose(prim%mx_iprim,nnd,atrans_rem, &
             ahalo,ahalo_rem,apairind,apairs,parts,prim,gcs)
+       do j=1,atrans_rem%n_rem_node
+          !write(*,*) nnd,' j: ',j,nreq(j)
+          if(nnd/=atrans_rem%list_rem_node(j)) call MPI_Wait(nreq(2*j-1),mpi_stat,ierr)
+          if(nnd/=atrans_rem%list_rem_node(j)) call MPI_Wait(nreq(2*j),mpi_stat,ierr)
+       end do
+       deallocate(nreq)
     endif 
   end subroutine trans_ini
 !!***
@@ -277,7 +292,7 @@ contains
           amat(nn)%i_acc(1)=1
           amat(nn)%i_nd_acc(1)=1
           amat(nn)%n_atoms = prim%nm_nodgroup(nn) ! Redundant, but useful
-          !write(*,*) 'Starting group with atoms: ',nn,prim%nm_nodgroup(nn)
+          !write(io_lun,*) 'Starting group with atoms: ',nn,prim%nm_nodgroup(nn)
           do j=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
              amat(nn)%n_nab(j)=0
              select case(amat(nn)%sf1_type)
@@ -303,7 +318,7 @@ contains
                       dz=gcs%zcover(gcs%icover_ibeg(np)+ni-1)-prim%zprim(inp)
                       if(dx*dx+dy*dy+dz*dz<rcutsq-tol) then
                          amat(nn)%n_nab(j)=amat(nn)%n_nab(j)+1
-                         !write(*,*) 'Neighbour: ',j,amat(nn)%n_nab(j)
+                         !write(io_lun,*) 'Neighbour: ',j,amat(nn)%n_nab(j)
                          if(amat(nn)%n_nab(j).gt.amat(nn)%mx_abs) then
                             call cq_abort('get_naba: n_nab>mx_nab: ',amat(nn)%n_nab(j), &
                                  amat(nn)%mx_abs)
@@ -328,7 +343,7 @@ contains
                    enddo ! End n_inp_cover
                 endif
              enddo ! End np_cover
-             !write(*,*) 'Finishing prim atom: ',inode,inp,cumu_ndims,j,prim%nm_nodgroup(nn)
+             !write(io_lun,*) 'Finishing prim atom: ',inode,inp,cumu_ndims,j,prim%nm_nodgroup(nn)
              if(j.lt.prim%nm_nodgroup(nn)) then
                 amat(nn)%i_acc(j+1)=amat(nn)%i_acc(j)+amat(nn)%n_nab(j)
                 amat(nn)%i_nd_acc(j+1)=amat(nn)%i_nd_acc(j)+cumu_ndims
@@ -726,7 +741,7 @@ contains
     integer :: stat,pr, neigh_spec
 
     allocate(ahalo%i_halo(gcs%mx_mcover),STAT=stat)
-    if(stat/=0) write(*,*) 'Error allocating ihalo !'
+    if(stat/=0) write(io_lun,*) 'Error allocating ihalo !'
     ! initialise flag for every part and atom in covering set
     do np=1,gcs%ng_cover
        if(gcs%n_ing_cover(np).gt.0) then
@@ -768,7 +783,7 @@ contains
     ahalo%mx_halo = max_atoms_halo
     ! Dellocate memory
     deallocate(ahalo%i_halo,STAT=stat)
-    if(stat/=0) write(*,*) 'Error allocating ihalo !'    
+    if(stat/=0) write(io_lun,*) 'Error allocating ihalo !'    
     return
   end subroutine make_halo_max
 !!***
@@ -927,13 +942,13 @@ contains
     adata%nhp_for_node(adata%n_rem_node)=1
     if(halo%np_in_halo.gt.1) then
        do np=2,halo%np_in_halo
-          !write(*,*) 'Halo part: ',np,mynode
+          !write(io_lun,*) 'Halo part: ',np,mynode
           ind_part=halo%lab_hcell(np)
           nnd_rem=parts%i_cc2node(ind_part)
           if(nnd_rem.ne.adata%list_rem_node(adata%n_rem_node)) then
              if(nnd_rem<adata%list_rem_node(adata%n_rem_node).AND. &
                   nnd_rem>mynode) then
-                write(*,923) 
+                write(io_lun,923) 
 923             format(//'Possible error halo_com: halo nodes out of order')
              endif
              adata%n_rem_node=adata%n_rem_node+1

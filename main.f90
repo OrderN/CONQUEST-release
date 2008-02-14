@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: main.f90,v 1.12.2.1 2006/03/07 07:36:44 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Conquest: O(N) DFT
 ! ------------------------------------------------------------------------------
@@ -49,6 +49,8 @@
 !!    Removed reference to workspace
 !!   10:18, 2004/01/09 dave
 !!    Added use pseudopotential_common
+!!   2008/02/06 08:21 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 program Conquest
@@ -71,7 +73,7 @@ program Conquest
   use potential_module
   use global_module
   use force_module, ONLY: tot_force
-  use io_module, ONLY: banner
+!  use io_module, ONLY: banner
   use grid_index
   use atoms
   use species_module
@@ -93,7 +95,7 @@ program Conquest
   implicit none
 
   ! RCS tag for object file identification 
-  character(len=80), save :: CQid = "$Id: main.f90,v 1.12.2.1 2006/03/07 07:36:44 drb Exp $"
+  character(len=80), save :: CQid = "$Id$"
 
   ! Global variables (for now !)
 
@@ -110,15 +112,15 @@ program Conquest
   fixed_potential = .false.
   ! identify what node we are on
   call init_comms(myid,numprocs)
-  if(inode==ionode) call banner
+!  if(inode==ionode) call banner
 
   ! Initialise reads in data and finds an initial, self-consistent Hamiltonian
   call initialise(vary_mu, fixed_potential, number_of_bands, mu, total_energy)
-  if(inode==ionode.AND.iprint_gen>0) write(*,'(4x,"Finished initialise")')
+  if(inode==ionode.AND.iprint_gen>0) write(io_lun,'(4x,"Finished initialise")')
 
   ! control does (at the moment) blip minimisation and simple MD
   call control_run(fixed_potential, vary_mu, number_of_bands, mu, total_energy)
-  if(inode==ionode.AND.iprint_gen>0) write(*,'(4x,"Finished control")')
+  if(inode==ionode.AND.iprint_gen>0) write(io_lun,'(4x,"Finished control")')
 
   call write_mem_use
   ! Wrap up

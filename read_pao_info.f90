@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: read_pao_info.f90,v 1.6 2005/05/26 08:36:28 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module read_pao_info
 ! ------------------------------------------------------------------------------
@@ -23,8 +23,12 @@
 !!    Changed to do dynamic allocation of memory while reading is in progress
 !!   14:04, 2003/12/19 dave & rc
 !!    Changed reading to follow new derived types: occupation numbers outside table
+!!   2008/02/06 08:09 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 module read_pao_info
+
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -37,7 +41,7 @@ module read_pao_info
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: read_pao_info.f90,v 1.6 2005/05/26 08:36:28 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
 !!***
 
@@ -98,7 +102,7 @@ contains
     if(inode == ionode) then
 
        if(iprint_init >= 0) then
-          write(unit=*,fmt='(//1x,60("+")/10x,"read_pao_info: no. of species for",&
+          write(unit=io_lun,fmt='(//1x,60("+")/10x,"read_pao_info: no. of species for",&
                &" reading pao data:",i5/1x,60("+"))') n_species
        end if
        if(n_species < 1) then
@@ -108,11 +112,11 @@ contains
 
        call io_assign(lun)
        if(iprint_init >= 0) then
-          write(unit=*,fmt='(/" read_pao_info: io_assign unit no. lun:",&
+          write(unit=io_lun,fmt='(/" read_pao_info: io_assign unit no. lun:",&
                &i3)') lun
        end if
        if(iprint_init >= 0) then
-          write(unit=*,fmt='(/" read_pao_info: name of input file:",a80)') &
+          write(unit=io_lun,fmt='(/" read_pao_info: name of input file:",a80)') &
                &pao_info_file
        end if
 
@@ -129,8 +133,8 @@ contains
        if(inode == ionode) then      
           read(unit=lun,fmt=*) pao(n_sp)%greatest_angmom
           if(iprint_init >= 0) then
-             write(unit=*,fmt='(//" species number:",i5/1x,60("-"))') n_sp
-             write(unit=*,fmt='(" greatest angular momentum:",i3)') &
+             write(unit=io_lun,fmt='(//" species number:",i5/1x,60("-"))') n_sp
+             write(unit=io_lun,fmt='(" greatest angular momentum:",i3)') &
                   &pao(n_sp)%greatest_angmom
           end if
           if(pao(n_sp)%greatest_angmom < 0) &
@@ -148,8 +152,8 @@ contains
           if(inode == ionode) then
              read(unit=lun, fmt=*) pao(n_sp)%angmom(n_am)%n_zeta_in_angmom
              if(iprint_init >= 0) then
-                write(unit=*,fmt='(//" angular momentum:",i5/1x,60("."))') n_am
-                write(unit=*,fmt='(/" no. of zetas in this angular momentum:",i3)') &
+                write(unit=io_lun,fmt='(//" angular momentum:",i5/1x,60("."))') n_am
+                write(unit=io_lun,fmt='(/" no. of zetas in this angular momentum:",i3)') &
                      &pao(n_sp)%angmom(n_am)%n_zeta_in_angmom
              end if
           end if
@@ -171,12 +175,12 @@ contains
                    read(unit=lun,fmt=*) pao(n_sp)%angmom(n_am)%zeta(n_zeta)%cutoff
                    read(unit=lun,fmt=*) pao(n_sp)%angmom(n_am)%occ(n_zeta)
                    if(iprint_init >= 0) then
-                      write(unit=*,fmt='(/" zeta no:",i5)') n_zeta
-                      write(unit=*,fmt='(" table length for this ang. mom. and zeta no:",i5)') &
+                      write(unit=io_lun,fmt='(/" zeta no:",i5)') n_zeta
+                      write(unit=io_lun,fmt='(" table length for this ang. mom. and zeta no:",i5)') &
                            pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length
-                      write(unit=*,fmt='(" table cut-off radius for this ang. mom. and zeta no:",f12.6)') &
+                      write(unit=io_lun,fmt='(" table cut-off radius for this ang. mom. and zeta no:",f12.6)') &
                            pao(n_sp)%angmom(n_am)%zeta(n_zeta)%cutoff
-                      write(unit=*,fmt='(" occupancy for this ang. mom. and zeta no:",f12.6)') &
+                      write(unit=io_lun,fmt='(" occupancy for this ang. mom. and zeta no:",f12.6)') &
                            pao(n_sp)%angmom(n_am)%occ(n_zeta)
                    end if
                 end if
@@ -232,11 +236,11 @@ contains
           enddo
        enddo
     enddo
-    if(iprint_init>3.AND.inode==ionode) write(*,*) 'finished making tables of PAO second derivatives'
+    if(iprint_init>3.AND.inode==ionode) write(io_lun,*) 'finished making tables of PAO second derivatives'
     
     ! Optional normalisation of PAO's
     if((inode == ionode).and.(iprint_init >= 1)) &
-         &write(unit=*,fmt='(/" read_pao: pao_norm_flag:",i3)') pao_norm_flag
+         &write(unit=io_lun,fmt='(/" read_pao: pao_norm_flag:",i3)') pao_norm_flag
 
     if(pao_norm_flag == 1) then
 
@@ -246,7 +250,7 @@ contains
                 do n_zeta = 1, pao(n_sp)%angmom(n_am)%n_zeta_in_angmom
                    if(pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length < 3) then
                       if((inode == ionode).and.(iprint_init > 0)) then
-                         write(unit=*,fmt='(//" read_pao: n_sp:",i3," n_am:",i3," n_zeta:",i3,":"/&
+                         write(unit=io_lun,fmt='(//" read_pao: n_sp:",i3," n_am:",i3," n_zeta:",i3,":"/&
                               &" PAO normalisation requested, but cannot be done because table length < 3")') &
                               &n_sp, n_am, n_zeta
                       end if
@@ -281,7 +285,7 @@ contains
        end do
 
        if((inode == ionode).and.(iprint_init >= 1)) &
-            &write(unit=*,fmt='(/" read_pao: normalisation of PAOs done")')
+            &write(unit=io_lun,fmt='(/" read_pao: normalisation of PAOs done")')
 
     end if
 

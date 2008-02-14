@@ -32,10 +32,15 @@
 !!    Flag to allow maximum numbers not to be checked
 !!   2006/10/19 16:49 dave
 !!    Added automatic grid density finding, and GridCutoff variable
+!!   2008/02/04 17:14 dave
+!!    Changes for output to file not stdout
+!!   12:15, 14/02/2008 drb 
+!!    Added variables for buffer around primary and covering sets
 !!  SOURCE
 module dimens
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   implicit none
   save
@@ -49,6 +54,8 @@ module dimens
   real(double) :: grid_point_volume, one_over_grid_point_volume
   real(double) :: support_grid_volume
   real(double) :: GridCutoff, min_blip_sp
+  real(double) :: AtomMove_buffer ! Buffer around primary sets and covering sets
+  logical :: flag_buffer_old
   !real(double) :: support_grid_spacing, support_grid_volume
   !real(double) ::  blip_width, four_on_blip_width, fobw2, fobw3
 
@@ -166,7 +173,7 @@ contains
     !       end do
     !    end if
     if(non_local.and.(inode==ionode).and.iprint_init>0) then
-       write(*,2) r_core
+       write(io_lun,2) r_core
 2      format(2x,'This calculation includes non-local pseudopotentials,'/&
             3x,'with a maximum core radius of ',f15.8)
     end if
@@ -182,15 +189,22 @@ contains
     ! Set range of S matrix
     r_s = r_h
     if(two*r_s>r_c) then
-       if(inode==ionode) write(*,*) 'WARNING ! S range greater than L !'
+       if(inode==ionode) write(io_lun,*) 'WARNING ! S range greater than L !'
        !r_s = r_c
        !r_h = r_c 
     endif
     if(.NOT.leqi(runtype,'static')) then
-        r_s = 1.1_double * r_s
-        r_c = 1.1_double * r_c
-        r_h = 1.1_double * r_h
-       r_core = 1.1_double * r_core
+       if(flag_buffer_old) then
+          r_s = 1.1_double * r_s
+          r_c = 1.1_double * r_c
+          r_h = 1.1_double * r_h
+          r_core = 1.1_double * r_core
+       else
+          r_s = AtomMove_buffer +  r_s
+          r_c = AtomMove_buffer +  r_c
+          r_h = AtomMove_buffer +  r_h
+          r_core = AtomMove_buffer +  r_core
+       end if
      endif
 
     ! Set other ranges
@@ -225,7 +239,7 @@ contains
     mat_name(TLrange)  = "TL "
     if(inode==ionode.AND.iprint_init>1) then
        do n=1,12!mx_matrices
-          write(*,1) mat_name(n),rcut(n)
+          write(io_lun,1) mat_name(n),rcut(n)
        enddo
     endif
 1   format(2x,'Matrix ',a3,' has range ',f15.8)
@@ -262,7 +276,7 @@ contains
 
     if(n_grid_x>0.AND.n_grid_y>0.AND.n_grid_z>0) then ! We dont need to find grids
        if(iprint_init>1.AND.inode==ionode) &
-            write(*,fmt='(2x,"User specified grid dimensions: ",3i5)') n_grid_x,n_grid_y,n_grid_z
+            write(io_lun,fmt='(2x,"User specified grid dimensions: ",3i5)') n_grid_x,n_grid_y,n_grid_z
        return
     else
        if(GridCutoff<very_small) call cq_abort("Grid cutoff too small: ",GridCutoff)
@@ -271,7 +285,7 @@ contains
           blipKE = half*(pi/blip_sp)*(pi/blip_sp)
           if(GridCutoff<blipKE) then
              if(iprint_init>0.AND.inode==ionode) &
-                  write(*,fmt='(2x,"Warning ! Adjusted grid cutoff to ",f8.3)') blipKE
+                  write(io_lun,fmt='(2x,"Warning ! Adjusted grid cutoff to ",f8.3)') blipKE
              GridCutoff = blipKE
           end if
        end if

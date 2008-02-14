@@ -24,11 +24,14 @@
 !!    matrix routines
 !!   2007/08/14 17:31 dave
 !!    Added entropy, free energy output
+!!   2008/02/04 17:16 dave
+!!    Changes for output to file not stdout
 !!  SOURCE
 !!
 module energy
 
   use datatypes
+  use global_module, ONLY: io_lun
   use numbers, ONLY: zero
 
   implicit none
@@ -123,26 +126,26 @@ contains
     ! Write out data
     if(myid==0) then
      if(print_Harris) then
-       !if(iprint_gen>=1) write(*,2) electrons
-       if(iprint_gen>=1) write(*,1) en_conv*band_energy, en_units(energy_units)
-       if(iprint_gen>=1) write(*,3) en_conv*hartree_energy, en_units(energy_units)
-       if(iprint_gen>=1) write(*,4) en_conv*xc_energy, en_units(energy_units)
-       if(iprint_gen>=1) write(*,5) en_conv*local_ps_energy, en_units(energy_units)
-       if(iprint_gen>=1) write(*,6) en_conv*core_correction, en_units(energy_units)
-       if(iprint_gen>=1) write(*,7) en_conv*nl_energy, en_units(energy_units)
-       if(iprint_gen>=1) write(*,8) en_conv*kinetic_energy, en_units(energy_units)
-       if(iprint_gen>=1) write(*,9) en_conv*ewald_energy, en_units(energy_units)
-       if(iprint_gen>=1) write(*,11) en_conv*delta_E_hartree, en_units(energy_units)
-       if(iprint_gen>=1) write(*,12) en_conv*delta_E_xc, en_units(energy_units)
+       !if(iprint_gen>=1) write(io_lun,2) electrons
+       if(iprint_gen>=1) write(io_lun,1) en_conv*band_energy, en_units(energy_units)
+       if(iprint_gen>=1) write(io_lun,3) en_conv*hartree_energy, en_units(energy_units)
+       if(iprint_gen>=1) write(io_lun,4) en_conv*xc_energy, en_units(energy_units)
+       if(iprint_gen>=1) write(io_lun,5) en_conv*local_ps_energy, en_units(energy_units)
+       if(iprint_gen>=1) write(io_lun,6) en_conv*core_correction, en_units(energy_units)
+       if(iprint_gen>=1) write(io_lun,7) en_conv*nl_energy, en_units(energy_units)
+       if(iprint_gen>=1) write(io_lun,8) en_conv*kinetic_energy, en_units(energy_units)
+       if(iprint_gen>=1) write(io_lun,9) en_conv*ewald_energy, en_units(energy_units)
+       if(iprint_gen>=1) write(io_lun,11) en_conv*delta_E_hartree, en_units(energy_units)
+       if(iprint_gen>=1) write(io_lun,12) en_conv*delta_E_xc, en_units(energy_units)
       if(entropy >= very_small) then
-       if(iprint_gen>=0) write(*,10) en_conv*total_energy, en_units(energy_units)
-       if(iprint_gen>=0) write(*,14) en_conv*(total_energy- half*entropy), en_units(energy_units)
-       if(iprint_gen>=1) write(*,15) en_conv*(total_energy - entropy), en_units(energy_units)
+       if(iprint_gen>=0) write(io_lun,10) en_conv*total_energy, en_units(energy_units)
+       if(iprint_gen>=0) write(io_lun,14) en_conv*(total_energy- half*entropy), en_units(energy_units)
+       if(iprint_gen>=1) write(io_lun,15) en_conv*(total_energy - entropy), en_units(energy_units)
       elseif(abs(entropy) < very_small) then
-       if(iprint_gen>=0) write(*,10) en_conv*total_energy, en_units(energy_units)
-       if(iprint_gen>=0) write(*,*) '  (TS=0 as O(N) or entropic contribution is negligible) '
+       if(iprint_gen>=0) write(io_lun,10) en_conv*total_energy, en_units(energy_units)
+       if(iprint_gen>=0) write(io_lun,*) '  (TS=0 as O(N) or entropic contribution is negligible) '
       else
-       write(*,*) ' WARNING !!!!    entropy < 0??? ', entropy
+       write(io_lun,*) ' WARNING !!!!    entropy < 0??? ', entropy
       endif
      endif ! (print_Harris)
     end if
@@ -150,7 +153,7 @@ contains
     if(print_DFT) then
        total_energy2 = hartree_energy + xc_energy + local_ps_energy + &
             nl_energy + kinetic_energy + core_correction + ewald_energy
-       if(myid==0) write(*,13) en_conv*total_energy2, en_units(energy_units)
+       if(myid==0) write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
     end if
     return
 1   format(10x,'Band Energy, 2Tr[K.H]            : ',f25.15,' ',a2)

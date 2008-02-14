@@ -36,11 +36,14 @@
 !!    Rewrote calls to entire module to simplify
 !!   2006/09/20 17:06 dave
 !!    Made parameters user-definable
+!!   2008/02/04 08:23 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module SelfCon
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -153,9 +156,9 @@ contains
        call get_energy(total_energy)
        return
     end if
-    if(inode==ionode) write(*,fmt='(8x,"Starting self-consistency.  Tolerance: ",e12.5,/)') self_tol
+    if(inode==ionode) write(io_lun,fmt='(8x,"Starting self-consistency.  Tolerance: ",e12.5,/)') self_tol
     if(record) then
-       if(inode==ionode.AND.iprint_SC>1) write(*,*) 'Original tol: ',L_tol
+       if(inode==ionode.AND.iprint_SC>1) write(io_lun,*) 'Original tol: ',L_tol
        SC_tol = self_tol
        DMM_tol = L_tol
     else
@@ -175,7 +178,7 @@ contains
     end if
     do i=1,maxearlySC
        if(EarlyRecord(i)==0) early = .true.
-       if(inode.eq.ionode.AND.iprint_SC>1) write(*,*) 'early: ',i,EarlyRecord(i)
+       if(inode.eq.ionode.AND.iprint_SC>1) write(io_lun,*) 'early: ',i,EarlyRecord(i)
     enddo
     ! Loop until self-consistent
     do while(.NOT.done)
@@ -186,8 +189,8 @@ contains
        else if(early.OR.problem) then ! Early stage strategy
           earlyL = .false.
           reset_L = .true.
-          if(inode==ionode.AND.iprint_SC>0) write(*,*) '********** EarlySC **********'
-          if(inode==ionode.AND.problem) write(*,*) 'Problem restart'
+          if(inode==ionode.AND.iprint_SC>0) write(io_lun,*) '********** EarlySC **********'
+          if(inode==ionode.AND.problem) write(io_lun,*) 'Problem restart'
           call earlySC(record,done,earlyL,ndone, SC_tol, reset_L, fixed_potential, vary_mu, n_L_iterations, &
                number_of_bands, DMM_tol, mu, total_energy, density, maxngrid)
           ! Check for early/late stage switching and update variables
@@ -196,7 +199,7 @@ contains
        endif
        if(.NOT.done) then ! Late stage strategy
           reset_L = .true. !.false.
-          if(inode==ionode.AND.iprint_SC>0) write(*,*) '********** LateSC **********'
+          if(inode==ionode.AND.iprint_SC>0) write(io_lun,*) '********** LateSC **********'
           call lateSC(record,done,ndone, SC_tol, reset_L, fixed_potential, vary_mu, n_L_iterations, &
                number_of_bands, DMM_tol, mu, total_energy, density, maxngrid)
           problem = .true.  ! This catches returns from lateSC when not done
@@ -205,20 +208,20 @@ contains
        early = .false.
        do i=1,maxearlySC
           if(EarlyRecord(i)==0) early = .true.
-          if(inode.eq.ionode.AND.iprint_SC>1) write(*,*) 'early: ',i,EarlyRecord(i)
+          if(inode.eq.ionode.AND.iprint_SC>1) write(io_lun,*) 'early: ',i,EarlyRecord(i)
        enddo
     enddo
     if(record) then ! Fit the C and beta coefficients
        if(inode==ionode.AND.iprint_SC>1) then
-          write(*,*) '  List of residuals and energies'
+          write(io_lun,*) '  List of residuals and energies'
           if(ndone>0) then
              do i=1,ndone
-                write(*,7) i, SCR(i), SCE(i)
+                write(io_lun,7) i, SCR(i), SCE(i)
              enddo
           end if
        endif
        call fit_coeff(SCC, SCBeta, SCE, SCR, ndone)
-       if(inode==ionode.AND.iprint_SC>1) write(*,6) SCC,SCBeta
+       if(inode==ionode.AND.iprint_SC>1) write(io_lun,6) SCC,SCBeta
     endif
 6   format(8x,'dE to dR parameters - C: ',f15.8,' beta: ',f15.8)
 7   format(8x,i4,2f15.8)
@@ -298,7 +301,7 @@ contains
     allocate(resid0(maxngrid),rho1(maxngrid),residb(maxngrid),STAT=ierr)
     if(ierr/=0) call cq_abort("Allocation error in earlySC: ",maxngrid, ierr)
     call reg_alloc_mem(area_SC, 3*maxngrid, type_dbl)
-    !    write(*,*) inode,'Welcome to earlySC'
+    !    write(io_lun,*) inode,'Welcome to earlySC'
     init_reset = reset_L
     call my_barrier()
     ! Test to check for available iterations
@@ -324,10 +327,10 @@ contains
     R0 = dot(n_my_grid_points,resid0,1,resid0,1)
     call gsum(R0)
     R0 = sqrt(grid_point_volume*R0)/ne_in_cell
-    if(inode.eq.ionode) write(*,*) 'In EarlySC, R0 is ',R0
+    if(inode.eq.ionode) write(io_lun,*) 'In EarlySC, R0 is ',R0
     if(R0<self_tol) then
        done = .true.
-       if(inode==ionode) write(*,*) 'Done ! Self-consistent'
+       if(inode==ionode) write(io_lun,*) 'Done ! Self-consistent'
     endif
     linear = .false.
     lambda_1 = InitialLambda
@@ -341,21 +344,21 @@ contains
        if(init_reset) reset_L = .true.
        n_iters = n_iters + 1
        ! Go to initial lambda and find R
-       if(inode==ionode) write(*,*) '********** Early iter ',n_iters
+       if(inode==ionode) write(io_lun,*) '********** Early iter ',n_iters
        R1 = getR2( MixLin, lambda_1, reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
             total_energy, rho, rho1,residb, maxngrid)
        Rcross = dot(n_my_grid_points, residb, 1, resid0, 1)
        if(R0<self_tol) then
           done = .true.
-          if(inode==ionode) write(*,*) 'Done ! Self-consistent'
+          if(inode==ionode) write(io_lun,*) 'Done ! Self-consistent'
           exit
        endif
        ! Test for acceptable reduction
-       if(inode.eq.ionode) write(*,*) 'In EarlySC, R1 is ',R1
+       if(inode.eq.ionode) write(io_lun,*) 'In EarlySC, R1 is ',R1
        if(R1<=thresh*R0) then
-          if (inode==ionode) write(*,*) 'No need to reduce'
+          if (inode==ionode) write(io_lun,*) 'No need to reduce'
        else
-          if (inode==ionode) write(*,*) 'Reducing lambda'
+          if (inode==ionode) write(io_lun,*) 'Reducing lambda'
           call reduceLambda(R0,R1,lambda_1, thresh, MixLin, reset_L, fixed_potential, vary_mu, n_L_iterations, &
                maxitersSC, number_of_bands, L_tol, mu, total_energy,rho,rho1,residb, maxngrid)
           Rcross = dot(n_my_grid_points, residb, 1, resid0, 1)
@@ -389,18 +392,18 @@ contains
             total_energy, rho, rho1, residb, resid0, maxngrid)
        ! Test for acceptability - otherwise do line search
        reset_L = .false.
-       if(inode==ionode) write(*,*) 'a,b,c: ',lambda_a, lambda_b, lambda_c, &
+       if(inode==ionode) write(io_lun,*) 'a,b,c: ',lambda_a, lambda_b, lambda_c, &
             Ra,Rb,Rc
        if(moved.AND.Rb<ReduceLimit*R0) then ! Accept
           if (inode==ionode) &
-               write(*,*) 'Line search accepted after bracketing', R0, Rb
+               write(io_lun,*) 'Line search accepted after bracketing', R0, Rb
        else ! Line search
           if(.NOT.moved) then
              if (inode==ionode) &
-                  write(*,*) 'Search because intern point not moved'
+                  write(io_lun,*) 'Search because intern point not moved'
           else
              if (inode==ionode) &
-                  write(*,*) 'Search because R reduction too small'
+                  write(io_lun,*) 'Search because R reduction too small'
           endif
           ! Do golden section or brent search
           ! call searchMin(lambda_a, lambda_b, lambda_c, Rcross_a, Rcross_c, &
@@ -428,11 +431,11 @@ contains
        pred_Rb = qatio*qatio*R0+ratio*ratio*Rup+two*ratio*qatio*Rcrossup
        zeta_num = abs(Rb - pred_Rb)
        zeta = zeta_num/zeta_exact
-       if (inode==ionode) write(*,31) zeta
+       if (inode==ionode) write(io_lun,31) zeta
 31     format('Linearity monitor for this line search: ',e15.6)
        if(zeta<crit_lin) then
           linear = .true.
-          if(inode==ionode) write(*,*) 'Linearity fulfilled'
+          if(inode==ionode) write(io_lun,*) 'Linearity fulfilled'
        endif
        ! And record residual and total energy if necessary
        if(record) then
@@ -451,10 +454,10 @@ contains
        R0 = dot(n_my_grid_points,resid0,1,resid0,1)
        call gsum(R0)
 !       R0 = sqrt(R0)
-       if(inode.eq.ionode) write(*,*) 'In EarlySC, R0 is ',R0
+       if(inode.eq.ionode) write(io_lun,*) 'In EarlySC, R0 is ',R0
        if(R0<self_tol) then
           done = .true.
-          if(inode==ionode) write(*,*) 'Done ! Self-consistent'
+          if(inode==ionode) write(io_lun,*) 'Done ! Self-consistent'
        endif
     enddo ! end do while(.NOT.linear.AND..NOT.done)
     ! -------------------------------------------------------------
@@ -568,7 +571,7 @@ contains
     call gsum(R0)
     R0 = sqrt(grid_point_volume*R0)/ne_in_cell
     ! Try this ?!
-    if(inode==ionode) write(*,*) 'Residual is ',R0
+    if(inode==ionode) write(io_lun,*) 'Residual is ',R0
     ! Old output becomes new input
     rho(1:n_my_grid_points) = rho(1:n_my_grid_points) + resid_pul(1:n_my_grid_points,1)
     tmp = grid_point_volume*rsum(n_my_grid_points,rho,1)
@@ -579,12 +582,12 @@ contains
     do while((.NOT.done).AND.(linear).AND.(n_iters<maxitersSC))
        if(R0<1.0_double) reset_L = .false.
        n_iters = n_iters + 1
-       if(inode==ionode) write(*,*) '********** Late iter ',n_iters
+       if(inode==ionode) write(io_lun,*) '********** Late iter ',n_iters
        n_pulay = n_pulay+1
        ! Storage for pulay charges/residuals
        npmod = mod(n_pulay, maxpulaySC)+1
        pul_mx = min(n_pulay+1, maxpulaySC)
-       if(inode==ionode) write(*,*) 'npmod, pul_mx: ',npmod,pul_mx
+       if(inode==ionode) write(io_lun,*) 'npmod, pul_mx: ',npmod,pul_mx
        ! For the present output, find the residual (i.e. R_n^\prime)
        call get_new_rho(.false., reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
             total_energy, rho, rho1, maxngrid)
@@ -603,10 +606,10 @@ contains
              Aij(j,i) = R
           enddo
        enddo
-       !      if(inode==ionode)write(*,*) 'Aij: ',Aij(1:pul_mx,1:pul_mx)
+       !      if(inode==ionode)write(io_lun,*) 'Aij: ',Aij(1:pul_mx,1:pul_mx)
        ! Solve to get alphas
        call DoPulay2D(Aij,alph,pul_mx,maxpulaySC,inode,ionode)
-       if(inode==ionode)write(*,*) 'alph: ',alph(1:pul_mx)
+       if(inode==ionode)write(io_lun,*) 'alph: ',alph(1:pul_mx)
        ! Build new input density - we could do this wrap around, but will 
        ! need rho anyway, so might as well use it.
        rho = zero
@@ -620,7 +623,7 @@ contains
        rho_pul(1:n_my_grid_points,npmod) = rho(1:n_my_grid_points)
        ! Generate the residual either exactly or by extrapolation
        if(mod(n_iters, n_exact)==0) then
-          if(inode==ionode) write(*,*) 'Generating rho exactly'
+          if(inode==ionode) write(io_lun,*) 'Generating rho exactly'
           resid_pul(1:n_my_grid_points, npmod) = alph(npmod)* &
                resid_pul(1:n_my_grid_points, npmod)
           if(pul_mx==maxpulaySC) then
@@ -641,7 +644,7 @@ contains
           R1 = dot(n_my_grid_points, resid_pul(:,npmod),1,resid_pul(:,npmod),1)
           call gsum(R1)
           R1 = sqrt(grid_point_volume*R1)/ne_in_cell
-          if(inode==ionode) write(*,fmt='(8x,"Predicted residual is ",f20.12)') R1
+          if(inode==ionode) write(io_lun,fmt='(8x,"Predicted residual is ",f20.12)') R1
           call get_new_rho(.false., reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
                total_energy, rho, rho1, maxngrid)
           resid_pul(1:n_my_grid_points, npmod) = rho1(1:n_my_grid_points) - &
@@ -652,13 +655,13 @@ contains
           R1 = dot(n_my_grid_points, resid_pul(:,npmod),1,resid_pul(:,npmod),1)
           call gsum(R1)
           R1 = sqrt(grid_point_volume*R1)/ne_in_cell
-          if(inode==ionode) write(*,fmt='(8x,"Actual residual is ",f20.12)') R1
+          if(inode==ionode) write(io_lun,fmt='(8x,"Actual residual is ",f20.12)') R1
           rho(1:n_my_grid_points) = rho(1:n_my_grid_points) + resid_pul(1:n_my_grid_points,npmod)
           tmp = grid_point_volume*rsum(n_my_grid_points,rho,1)
           call gsum(tmp)
           rho = ne_in_cell*rho/tmp
        else
-          if(inode==ionode) write(*,*) 'Generating rho by interpolation'
+          if(inode==ionode) write(io_lun,*) 'Generating rho by interpolation'
           ! Clever, wrap-around way to do it
           resid_pul(1:n_my_grid_points, npmod) = alph(npmod)* &
                resid_pul(1:n_my_grid_points, npmod)
@@ -698,23 +701,23 @@ contains
           else
              rho(1:n_my_grid_points) = rho_pul(1:n_my_grid_points, pul_mx)
           endif
-          write(*,*) 'PANIC ! Residual increase !'
+          write(io_lun,*) 'PANIC ! Residual increase !'
        endif
        R0 = R1
        if(R0<self_tol) then
           done = .true.
-          if(inode==ionode) write(*,*) 'Done ! Self-consistent'
+          if(inode==ionode) write(io_lun,*) 'Done ! Self-consistent'
        endif
-       if(inode==ionode) write(*,*) 'Residual is ',R0
+       if(inode==ionode) write(io_lun,*) 'Residual is ',R0
        ! Output an energy
-       !      write(*,*) 'Energy is: '
+       !      write(io_lun,*) 'Energy is: '
        if(record) then
           SCE(n_iters) = total_energy
           SCR(n_iters) = R0
        endif
     enddo
     ndone = n_iters
-    if(inode==ionode) write(*,*) 'Finishing lateSC after ',ndone, &
+    if(inode==ionode) write(io_lun,*) 'Finishing lateSC after ',ndone, &
          'iterations with residual of ',R0
     deallocate(rho_pul, Kresid, resid_pul,rho1, Aij, alph, STAT=stat)
     if(stat/=0) call cq_abort("Dellocation error in lateSC: ",maxngrid, maxpulaySC)
@@ -802,7 +805,7 @@ contains
        R0 = dot(n_my_grid_points,resid,1,resid,1)
        call gsum(R0)
        R0 = sqrt(grid_point_volume*R0)/ne_in_cell
-       if(inode==ionode) write(*,*) 'Residual is ',R0
+       if(inode==ionode) write(io_lun,*) 'Residual is ',R0
        ! Old output becomes new input
        !rho = A*rho1 + (1.0_double-A)*rho
        rho = rho + A*resid
@@ -884,7 +887,7 @@ contains
     R0 = dot(n_my_grid_points,resid,1,resid,1)
     call gsum(R0)
     R0 = sqrt(grid_point_volume*R0)/ne_in_cell
-    if(inode==ionode) write(*,*) 'Residual is ',R0
+    if(inode==ionode) write(io_lun,*) 'Residual is ',R0
     ! Create new input charge
     !rho = rho + A*Kresid
     rho = rho + A*resid
@@ -899,7 +902,7 @@ contains
        i = mod(m-2, maxpulaySC)+1
        next_i = mod(i,maxpulaySC)+1
        pul_mx = min(m-1, maxpulaySC)
-       if(inode==ionode) write(*,fmt='(8x,"Pulay iteration ",i4," counters are ",2i4)') m, i, pul_mx
+       if(inode==ionode) write(io_lun,fmt='(8x,"Pulay iteration ",i4," counters are ",2i4)') m, i, pul_mx
        ! Generate new charge and find residual
        call get_new_rho(.false., reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
             total_energy, rho, rho1, size)
@@ -910,15 +913,15 @@ contains
        R0 = dot(n_my_grid_points,resid,1,resid,1)
        call gsum(R0)
        R0 = sqrt(grid_point_volume*R0)/ne_in_cell
-       if(inode==ionode) write(*,*) 'Residual is ',R0
+       if(inode==ionode) write(io_lun,*) 'Residual is ',R0
        if(R0<self_tol) then
-          if(inode==ionode) write(*,'(8x,"Reached tolerance")')
+          if(inode==ionode) write(io_lun,'(8x,"Reached tolerance")')
           done = .true.
           call dealloc_PulayMixSC
           return
        end if
        if(R0<EndLinearMixing) then
-          if(inode==ionode) write(*,'(8x,"Reached transition to LateSC")')
+          if(inode==ionode) write(io_lun,'(8x,"Reached transition to LateSC")')
           call dealloc_PulayMixSC
           return
        end if
@@ -933,7 +936,7 @@ contains
        !norm = sqrt(norm)
        !delta_R(:,i) = delta_R(:,i)/norm
        !delta_rho(:,i) = delta_rho(:,i)/norm
-       !if(inode==ionode) write(*,fmt='(8x,"Norm of deltaF is ",f20.12)') norm
+       !if(inode==ionode) write(io_lun,fmt='(8x,"Norm of deltaF is ",f20.12)') norm
        ! now build new rho
        do ii=1,pul_mx
           do j=1,pul_mx
@@ -943,10 +946,10 @@ contains
              if(ii==j) Aij(j,ii) = Aij(j,ii) !+ 0.0001_double ! w_0 = 0.01
           enddo
        enddo
-       write(*,*) 'A is ',Aij
+       write(io_lun,*) 'A is ',Aij
        ! Solve to get alphas
        call DoPulay2D(Aij,alph,pul_mx,maxpulaySC,inode,ionode)
-       write(*,*) 'A is ',Aij
+       write(io_lun,*) 'A is ',Aij
        alph = zero
        do j=1,pul_mx
           R = dot(n_my_grid_points, delta_R(:,j),1,resid(:),1)
@@ -955,7 +958,7 @@ contains
              alph(ii) = alph(ii) + Aij(j,ii)*R
           enddo
        enddo
-       if(inode==ionode)write(*,*) 'alph: ',alph(1:pul_mx)
+       if(inode==ionode)write(io_lun,*) 'alph: ',alph(1:pul_mx)
        ! Create delta rho - add on new rho
        !Kresid = resid
        !call kerker(Kresid,maxngrid,q0)
@@ -1049,7 +1052,7 @@ contains
     Kresid = zero
     Aij = zero
     alph = zero
-    if(inode==ionode) write(*,fmt='(8x,"Starting Pulay mixing, A = ",f6.3," q0= ",f7.4)') A, q0
+    if(inode==ionode) write(io_lun,fmt='(8x,"Starting Pulay mixing, A = ",f6.3," q0= ",f7.4)') A, q0
     done = .false.
     n_iters = ndone
     m=1
@@ -1066,7 +1069,7 @@ contains
        if(rho(j)<zero) max_neg = max(max_neg,abs(rho(j)))
     end do
     if(max_neg>0.0_double.AND.iprint_SC>3) &
-         write(*,fmt='(8x,"Init Max negative dens on node ",i5," is ",f8.3)') inode,max_neg
+         write(io_lun,fmt='(8x,"Init Max negative dens on node ",i5," is ",f8.3)') inode,max_neg
     call get_new_rho(.false., reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
          total_energy, rho, rho1, size)
     ! Evaluate residual
@@ -1074,23 +1077,23 @@ contains
        resid(j) = rho1(j) - rho(j)
     end do
     !tmp = grid_point_volume*asum(n_my_grid_points,resid,1)
-    !write(*,*) 'Sum of resid: ',tmp
+    !write(io_lun,*) 'Sum of resid: ',tmp
     R0 = dot(n_my_grid_points,resid,1,resid,1)
     call gsum(R0)
     R0 = sqrt(grid_point_volume*R0)/ne_in_cell
     if(R0<self_tol) then
-       if(inode==ionode) write(*,'(8x,"Reached self-consistency tolerance")')
+       if(inode==ionode) write(io_lun,'(8x,"Reached self-consistency tolerance")')
        done = .true.
        call dealloc_PulayMiXSCA
        return
     end if
     if(R0<EndLinearMixing) then
-       if(inode==ionode) write(*,'(8x,"Reached transition to LateSC")')
+       if(inode==ionode) write(io_lun,'(8x,"Reached transition to LateSC")')
        call dealloc_PulayMiXSCA
        return
     end if
-    !if(inode==ionode.AND.iprint_SC>=0) write(*,*) 'Initial residual is ',R0
-    if(inode==ionode) write(*,fmt='(8x,"Pulay iteration ",i5," Residual is ",e12.5,/)') m,R0
+    !if(inode==ionode.AND.iprint_SC>=0) write(io_lun,*) 'Initial residual is ',R0
+    if(inode==ionode) write(io_lun,fmt='(8x,"Pulay iteration ",i5," Residual is ",e12.5,/)') m,R0
     do j=1,n_my_grid_points
        R(j,1) = resid(j)
     end do
@@ -1101,18 +1104,18 @@ contains
     end do
     call kerker(Kresid,maxngrid,q0)
     !tmp = grid_point_volume*asum(n_my_grid_points,Kresid,1)
-    !write(*,*) 'Sum of Kresid: ',tmp
+    !write(io_lun,*) 'Sum of Kresid: ',tmp
     max_neg = 0.0_double
     rho1 = zero
     rho1 = rho + Kresid
     !tmp = grid_point_volume*asum(n_my_grid_points,rho1,1)
     !call gsum(tmp)
-    !write(*,*) 'Sum of rho1: ',tmp
+    !write(io_lun,*) 'Sum of rho1: ',tmp
     !rho1 = ne_in_cell*rho1/tmp
-    !write(*,*) 'Calling mixtwo'
+    !write(io_lun,*) 'Calling mixtwo'
     call mixtwo(n_my_grid_points, .true., A, rho, rho1, resid)
     !tmp = grid_point_volume*asum(n_my_grid_points,resid,1)
-    !write(*,*) 'Sum of rho1: ',tmp
+    !write(io_lun,*) 'Sum of rho1: ',tmp
     rho = resid!*ne_in_cell/tmp
     !rho = rho1
     do j=1,n_my_grid_points
@@ -1121,7 +1124,7 @@ contains
        !   rho(j) = 0.0_double
        end if
     end do
-    if(max_neg>0.0_double.AND.iprint_SC>1) write(*,*) 'First Max negative dens on node ',inode,max_neg
+    if(max_neg>0.0_double.AND.iprint_SC>1) write(io_lun,*) 'First Max negative dens on node ',inode,max_neg
     ! Store deltarho
     n_iters = n_iters+1
  !Reset Pulay Iterations  -- introduced by TM, Nov2007
@@ -1137,7 +1140,7 @@ contains
        i = mod(m-IterPulayReset+1, maxpulaySC)
        if(i==0) i=maxpulaySC
        pul_mx = min(m-IterPulayReset+1, maxpulaySC)
-       !if(inode==ionode) write(*,fmt='(8x,"Pulay iteration ",i4)') m
+       !if(inode==ionode) write(io_lun,fmt='(8x,"Pulay iteration ",i4)') m
        do j=1,n_my_grid_points
           rho_pul(j,i) = rho(j)
        end do
@@ -1150,17 +1153,17 @@ contains
           resid(j) = rho1(j) - rho(j)
        end do
        !tmp = grid_point_volume*asum(n_my_grid_points,resid,1)
-       !write(*,*) 'Sum of resid: ',tmp
+       !write(io_lun,*) 'Sum of resid: ',tmp
        R0 = dot(n_my_grid_points,resid,1,resid,1)
        call gsum(R0)
        R0 = sqrt(grid_point_volume*R0)/ne_in_cell
-       if(inode==ionode) write(*,fmt='(8x,"Pulay iteration ",i5," Residual is ",e12.5,/)') m,R0
+       if(inode==ionode) write(io_lun,fmt='(8x,"Pulay iteration ",i5," Residual is ",e12.5,/)') m,R0
        !call dump_charge2('re'//digitstr(m:m),resid,size,inode)
        !call dump_locps(resid,size,inode)
     !Reset Pulay Iterations
        if(R0 > R0_old ) icounter_fail = icounter_fail+1
        if(icounter_fail > mx_fail) then 
-        if(inode == ionode) write(*,*) ' Pulay iteration is reset !!  at ',m,'  th iteration'
+        if(inode == ionode) write(io_lun,*) ' Pulay iteration is reset !!  at ',m,'  th iteration'
         reset_Pulay = .true.
        endif 
         R0_old = R0
@@ -1169,13 +1172,13 @@ contains
           R(j,i) = resid(j)
        end do
        if(R0<self_tol) then
-          if(inode==ionode) write(*,'(8x,"Reached self-consistent tolerance")')
+          if(inode==ionode) write(io_lun,'(8x,"Reached self-consistent tolerance")')
           done = .true.
           call dealloc_PulayMiXSCA
           return
        end if
        if(R0<EndLinearMixing) then
-          if(inode==ionode) write(*,'(8x,"Reached transition to LateSC")')
+          if(inode==ionode) write(io_lun,'(8x,"Reached transition to LateSC")')
           call dealloc_PulayMixSCA
           return
        end if
@@ -1193,11 +1196,11 @@ contains
                 Aij(ii,j) = R1
              enddo
           end if
-          !if(iprint_SC>2) write(*,fmt='(5f16.12)') Aij(:,ii)
+          !if(iprint_SC>2) write(io_lun,fmt='(5f16.12)') Aij(:,ii)
        enddo
        ! Solve to get alphas
        call DoPulay2D(Aij,alph,pul_mx,maxpulaySC,inode,ionode)
-       if(inode==ionode.AND.iprint_SC>2) write(*,*) 'alph: ',alph(1:pul_mx)
+       if(inode==ionode.AND.iprint_SC>2) write(io_lun,*) 'alph: ',alph(1:pul_mx)
        ! Create delta rho - add on new rho
        rho = 0.0_double
        max_neg = 0.0_double
@@ -1218,7 +1221,7 @@ contains
              if(-rho(j)>max_neg) max_neg = -rho(j)
           end if
        end do
-       if(max_neg>0.0_double.AND.iprint_SC>2) write(*,*) i,' premix Max negative dens on node ',inode,max_neg
+       if(max_neg>0.0_double.AND.iprint_SC>2) write(io_lun,*) i,' premix Max negative dens on node ',inode,max_neg
        n_iters = n_iters+1
      !Reset Pulay Iterations  -- introduced by TM, Nov2007
       if(reset_Pulay) then
@@ -1300,7 +1303,7 @@ contains
     Kresid = zero
     Aij = zero
     alph = zero
-    if(inode==ionode) write(*,fmt='(8x,"Starting Pulay mixing, A = ",f6.3," q0= ",f7.4)') A, q0
+    if(inode==ionode) write(io_lun,fmt='(8x,"Starting Pulay mixing, A = ",f6.3," q0= ",f7.4)') A, q0
     done = .false.
     n_iters = ndone
     if(n_iters>=maxitersSC) then
@@ -1314,7 +1317,7 @@ contains
     do j=1,n_my_grid_points
        rho_pul(j,1) = rho(j)
     end do
-    if(max_neg>0.0_double) write(*,*) 'Init Max negative dens on node ',inode,max_neg
+    if(max_neg>0.0_double) write(io_lun,*) 'Init Max negative dens on node ',inode,max_neg
     call get_new_rho(.false., reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
          total_energy, rho, rho1, size)
     ! Evaluate residual
@@ -1323,22 +1326,22 @@ contains
     end do
     call kerker(resid,maxngrid,q0)
     !tmp = grid_point_volume*rsum(n_my_grid_points,resid,1)
-    !write(*,*) 'Sum of resid: ',tmp
+    !write(io_lun,*) 'Sum of resid: ',tmp
     R0 = dot(n_my_grid_points,resid,1,resid,1)
     call gsum(R0)
     R0 = sqrt(grid_point_volume*R0)/ne_in_cell
     if(R0<self_tol) then
-       if(inode==ionode) write(*,'(8x,"Reached tolerance")')
+       if(inode==ionode) write(io_lun,'(8x,"Reached tolerance")')
        done = .true.
        call dealloc_PulayMixSCB
        return
     end if
     if(R0<EndLinearMixing) then
-       if(inode==ionode) write(*,'(8x,"Reached transition to LateSC")')
+       if(inode==ionode) write(io_lun,'(8x,"Reached transition to LateSC")')
        call dealloc_PulayMixSCB
        return
     end if
-    if(inode==ionode) write(*,*) 'Residual is ',R0
+    if(inode==ionode) write(io_lun,*) 'Residual is ',R0
     do j=1,n_my_grid_points
        R(j,1) = resid(j)
     end do
@@ -1346,7 +1349,7 @@ contains
     rho1 = rho + A*resid
     !tmp = grid_point_volume*rsum(n_my_grid_points,rho1,1)
     !call gsum(tmp)
-    !write(*,*) 'Sum of rho1: ',tmp
+    !write(io_lun,*) 'Sum of rho1: ',tmp
     !rho1 = ne_in_cell*rho1/tmp
     rho = rho1
     ! Store deltarho
@@ -1361,7 +1364,7 @@ contains
        if(i==0) i=maxpulaySC
        ! Need something here to replace WORST residual
        pul_mx = min(m, maxpulaySC)
-       if(inode==ionode) write(*,fmt='(8x,"Pulay iteration ",i4," counters are ",2i4)') m, i, pul_mx
+       if(inode==ionode) write(io_lun,fmt='(8x,"Pulay iteration ",i4," counters are ",2i4)') m, i, pul_mx
        do j=1,n_my_grid_points
           rho_pul(j,i) = rho(j)
        end do
@@ -1376,40 +1379,40 @@ contains
        R0 = dot(n_my_grid_points,resid,1,resid,1)
        call gsum(R0)
        R0 = sqrt(grid_point_volume*R0)/ne_in_cell
-       if(inode==ionode) write(*,*) 'Residual is ',R0
+       if(inode==ionode) write(io_lun,*) 'Residual is ',R0
        !call dump_charge2('re'//digitstr(m:m),resid,size,inode)
        !call dump_locps(resid,size,inode)
        do j=1,n_my_grid_points
           R(j,i) = resid(j)
        end do
        if(R0<self_tol) then
-          if(inode==ionode) write(*,'(8x,"Reached tolerance")')
+          if(inode==ionode) write(io_lun,'(8x,"Reached tolerance")')
           done = .true.
           call dealloc_PulayMixSCB
           return
        end if
        if(R0<EndLinearMixing) then
-          if(inode==ionode) write(*,'(8x,"Reached transition to LateSC")')
+          if(inode==ionode) write(io_lun,'(8x,"Reached transition to LateSC")')
           call dealloc_PulayMixSCB
           return
        end if
        ! now build new rho
        Aij = zero
-       write(*,*) 'A is :'
+       write(io_lun,*) 'A is :'
        do ii=1,pul_mx
           do j=1,pul_mx
              R1 = dot(n_my_grid_points, R(:,ii), 1, R(:,j),1)
              call gsum(R1)
              Aij(j,ii) = R1
           enddo
-          write(*,fmt='(5f16.12)') Aij(:,ii)
+          write(io_lun,fmt='(5f16.12)') Aij(:,ii)
        enddo
        !if(minA/maxA<0.001_double) then
-       !   write(*,*) '
+       !   write(io_lun,*) '
        !end if
        ! Solve to get alphas
        call DoPulay2D(Aij,alph,pul_mx,maxpulaySC,inode,ionode)
-       if(inode==ionode)write(*,*) 'alph: ',alph(1:pul_mx)
+       if(inode==ionode)write(io_lun,*) 'alph: ',alph(1:pul_mx)
        ! Create delta rho - add on new rho
        rho = 0.0_double
        max_neg = 0.0_double
@@ -1423,7 +1426,7 @@ contains
        end do
        tmp = grid_point_volume*rsum(n_my_grid_points,rho,1)
        call gsum(tmp)
-       write(*,*) 'Sum of rho1: ',tmp
+       write(io_lun,*) 'Sum of rho1: ',tmp
        rho = ne_in_cell*rho/tmp
        !rho = rho*ne_in_cell/tmp
        !do j=1,n_my_grid_points
@@ -1432,7 +1435,7 @@ contains
           !   rho(j) = 0.0_double
           !end if
        !end do
-       if(max_neg>0.0_double) write(*,*) i,' premix Max negative dens on node ',inode,max_neg
+       if(max_neg>0.0_double) write(io_lun,*) i,' premix Max negative dens on node ',inode,max_neg
        n_iters = n_iters+1
     end do
     ndone = n_iters

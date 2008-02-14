@@ -22,6 +22,8 @@
 !!    Added deallocation for structures
 !!   14:03, 2003/12/19 dave & rc
 !!    Added new angular routines for PAO compatibility
+!!   2008/02/06 08:33 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module pseudo_tm_module
@@ -30,7 +32,7 @@ module pseudo_tm_module
   use pseudo_tm_info, ONLY: pseudo_info, pseudo, setup_pseudo_info, loc_pot, loc_chg
   use pseudopotential_common, ONLY: pseudopotential, &
        core_radius, flag_angular_new
-  use global_module, ONLY: iprint_pseudo
+  use global_module, ONLY: iprint_pseudo, io_lun
   implicit none
 
   !arrays
@@ -128,7 +130,7 @@ contains
     endif
 
     nspecies=n_species
-    if(myid==0.AND.iprint_pseudo>2) write(*,fmt='(10x,"Entering init_pseudo_tm")')
+    if(myid==0.AND.iprint_pseudo>2) write(io_lun,fmt='(10x,"Entering init_pseudo_tm")')
     call setup_pseudo_info(nspecies, species_label)
     ! in the moduel pseudo_tm_info
     if(flag_calc_max) then
@@ -262,7 +264,7 @@ contains
     !%%!      spherical_harmonic_norm(9) = sqrt( ( three*five ) / ( four * pi ) )
     !%%!   else if(n_mcomp/=4.AND.n_mcomp/=9) then
     !%%!      if(inode==ionode) &
-    !%%!           write(*,fmt='(10x,"Warning! Possible problem with ang. mom. in  pseudo_tm_module: ",i4)') n_mcomp
+    !%%!           write(io_lun,fmt='(10x,"Warning! Possible problem with ang. mom. in  pseudo_tm_module: ",i4)') n_mcomp
     !%%!   endif
     !%%!   return
     !%%! end subroutine setup_spherical_harmonic
@@ -524,14 +526,14 @@ contains
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
                 rcut = core_radius(the_species) + very_small   !!   30072007 drb
-                ! write(*,*) ' rcut for check_block = ', rcut
+                ! write(io_lun,*) ' rcut for check_block = ', rcut
                 call check_block &
                      (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store) !out
                 r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
                      (zatom-zblock)**2 )
                 if(npoint == 0 .and. iprint_pseudo > 4) &
-                     write(*,1001) inode,iblock,ipart, iatom, &
+                     write(io_lun,1001) inode,iblock,ipart, iatom, &
                      xatom, yatom, zatom, xblock, yblock, zblock, r_from_i
 1001            format (10x,'Node ',i3,' no grid points in the block &
                      & touch the atom ',3i6/,' atom',3d12.3,' block', 3d12.3, &
@@ -705,13 +707,13 @@ contains
                                   do m = -the_l, the_l
                                      call pp_elem(nl_potential,the_l,m,x,y,z,r_from_i,val)
                                      gridfunctions(pseudofns)%griddata(position+i*n_pts_in_block) = val
-                                     !write(*,*) val, 'val', the_l, m,myid
+                                     !write(io_lun,*) val, 'val', the_l, m,myid
                                      i = i+1
                                   enddo
                                else
                                   call pp_elem(nl_potential,the_l,0,x,y,z,r_from_i,val)
                                   gridfunctions(pseudofns)%griddata(position) = val
-                                  !write(*,*) val, 'val', the_l, m,myid
+                                  !write(io_lun,*) val, 'val', the_l, m,myid
                                endif
                             else
                                call cq_abort("Must have FlagNewAngular T for siesta/abinit pseudos")
@@ -720,7 +722,7 @@ contains
                                !%%! if ( the_l .eq. 0 ) then      ! NonLocal : S component
                                !%%!    gridfunctions(pseudofns)%griddata(position) =   &
                                !%%!         nl_potential*spherical_harmonic_norm(1)
-                               !%%!    !write(*,*) pseudofunctions(position), 'val_orig',myid
+                               !%%!    !write(io_lun,*) pseudofunctions(position), 'val_orig',myid
                                !%%!    
                                !%%! else if ( the_l .eq. 1 ) then ! Nonlocal : P components
                                !%%!    gridfunctions(pseudofns)%griddata(position) =  & 
@@ -729,9 +731,9 @@ contains
                                !%%!         nl_potential*spherical_harmonic_norm(3) * y 
                                !%%!    gridfunctions(pseudofns)%griddata(position+2*n_pts_in_block) =   &
                                !%%!         nl_potential*spherical_harmonic_norm(4) * z
-                               !%%!    !write(*,*) pseudofunctions(position),the_l, -1,myid 
-                               !%%!    !write(*,*) pseudofunctions(position+1*n_pts_in_block),the_l,0,myid
-                               !%%!    !write(*,*) pseudofunctions(position+2*n_pts_in_block),the_l,+1,myid
+                               !%%!    !write(io_lun,*) pseudofunctions(position),the_l, -1,myid 
+                               !%%!    !write(io_lun,*) pseudofunctions(position+1*n_pts_in_block),the_l,0,myid
+                               !%%!    !write(io_lun,*) pseudofunctions(position+2*n_pts_in_block),the_l,+1,myid
                                !%%!    
                                !%%! else if ( the_l .eq. 2 ) then ! Nonlocal : D components
                                !%%!    gridfunctions(pseudofns)%griddata(position) =  &
@@ -746,7 +748,7 @@ contains
                                !%%!         nl_potential*spherical_harmonic_norm(9) * y * z 
                                !%%!    
                                !%%! else
-                               !%%!    write(*,fmt='(10x," ERROR in set_tm_pseudo! l_component = ",i3)') the_l
+                               !%%!    write(io_lun,fmt='(10x," ERROR in set_tm_pseudo! l_component = ",i3)') the_l
                                !%%! end if
                             endif ! flag_angular_new
                          endif !(j+1 < pseudo(the_species)%pjnl(nl)%n) then
@@ -772,7 +774,7 @@ contains
     if(local_charge) then
        call hartree( chlocal_density, pseudopotential, maxngrid, coulomb_energy )
     else
-       !write(*,*) 'Calling hartree to do FFT of loc pot'
+       !write(io_lun,*) 'Calling hartree to do FFT of loc pot'
        call hartree( chlocal_density, coulomb_potential, maxngrid, coulomb_energy )
        call axpy( n_my_grid_points, -one, coulomb_potential, 1, &
             pseudopotential, 1 )
@@ -867,7 +869,7 @@ contains
     ! allocatable
     real(double),allocatable :: h_potential(:)
 
-    if(iprint_pseudo>2.AND.inode==ionode) write(*,fmt='(4x,"Doing TM force with pseudotype: ",i3)') pseudo(1)%tm_loc_pot
+    if(iprint_pseudo>2.AND.inode==ionode) write(io_lun,fmt='(4x,"Doing TM force with pseudotype: ",i3)') pseudo(1)%tm_loc_pot
     ! the structure of this subroutine is similar to set_tm_pseudo et.
     HF_force = 0
 
@@ -928,7 +930,7 @@ contains
                      (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store) !out
                 if(npoint == 0 .and. iprint_pseudo > 4) &
-                     write(*,1001) inode,iblock,ipart, iatom, &
+                     write(io_lun,1001) inode,iblock,ipart, iatom, &
                      xatom, yatom, zatom, xblock, yblock, zblock, r_from_i
 1001            format ('Node ',i3,' no grid points in the block &
                      & touch the atom ',3i6/,' atom',3d12.3,' block', 3d12.3, &
@@ -1194,7 +1196,7 @@ contains
                 call check_block &
                      (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &   ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store) !out
-                if(npoint == 0 .and. iprint_pseudo > 4) write(*,*) &
+                if(npoint == 0 .and. iprint_pseudo > 4) write(io_lun,*) &
                      'Node ',inode,' no grid points in the block &
                      & touch the atom ',iblock,ipart,iatom,xatom,yatom,zatom, &
                      xblock,yblock,zblock,' r_from_i = ',r_from_i
@@ -1560,13 +1562,13 @@ contains
           call calc_energy_shift(pseudo(ispecies),nfac1, eshift1, vlocG0_1)
           call calc_energy_shift(pseudo(ispecies),nfac2, eshift2, vlocG0_2)
           call calc_energy_shift(pseudo(ispecies),nfac3, eshift3, vlocG0_3)
-          if(abs(eshift2-eshift3) > eps) write(*,fmt='(10x,"WARNING!!!   eshift")')
+          if(abs(eshift2-eshift3) > eps) write(io_lun,fmt='(10x,"WARNING!!!   eshift")')
           if(inode == ionode.AND.iprint_pseudo>0) &
-               write(*,fmt="(10x,'ispecies = ',i2,2x,'eshift for ',3i3,&
+               write(io_lun,fmt="(10x,'ispecies = ',i2,2x,'eshift for ',3i3,&
                &' times fine mesh = ',3d15.7,3x,' diff = ',d15.5)") ispecies,nfac1, nfac2, nfac3,&
                eshift1,eshift2,eshift3, eshift2-eshift3
           if(inode == ionode.AND.iprint_pseudo>0) &
-               write(*,fmt="(10x,'ispecies = ',i2,2x,'eshift for ',3i3,&
+               write(io_lun,fmt="(10x,'ispecies = ',i2,2x,'eshift for ',3i3,&
                &' times fine mesh = ',3d15.7,3x,' diff = ',d15.5)") ispecies,nfac1, nfac2, nfac3,&
                vlocG0_1,vlocG0_2,vlocG0_3, vlocG0_2-vlocG0_3
           eshift(ispecies) = eshift3 - vlocG0_3
@@ -1574,9 +1576,9 @@ contains
           call calc_energy_shift(pseudo(ispecies),nfac1, eshift1)
           call calc_energy_shift(pseudo(ispecies),nfac2, eshift2)
           call calc_energy_shift(pseudo(ispecies),nfac3, eshift3)
-          if(abs(eshift2-eshift3) > eps) write(*,fmt='(10x,"WARNING!!!   eshift")')
+          if(abs(eshift2-eshift3) > eps) write(io_lun,fmt='(10x,"WARNING!!!   eshift")')
           if(inode == ionode.AND.iprint_pseudo>0) &
-               write(*,fmt="(10x,'ispecies = ',i2,2x,'eshift for ',3i3,&
+               write(io_lun,fmt="(10x,'ispecies = ',i2,2x,'eshift for ',3i3,&
                &' times fine mesh = ',3d15.7,3x,' diff = ',d15.5)") ispecies,nfac1, nfac2, nfac3,&
                eshift1,eshift2,eshift3, eshift2-eshift3
           eshift(ispecies) = eshift3
@@ -1678,7 +1680,7 @@ contains
          !%%!    func1%f(imesh) = rho* four * pi * rr **2
          !%%!    zcore=zcore + func1%f(imesh)*wos(imesh)
          !%%! enddo
-         !%%! if(inode==ionode.AND.iprint_pseudo>1) write(*,fmt='(10x,"Integral of interpolated chlocal ",f8.3)') zcore
+         !%%! if(inode==ionode.AND.iprint_pseudo>1) write(io_lun,fmt='(10x,"Integral of interpolated chlocal ",f8.3)') zcore
          !%%! zcore = - zcore   ! makes zcore positive
          eshift = zero
          intvloc = zero
@@ -1732,15 +1734,15 @@ contains
                  (vlocal + z * erfarg )
             !(vlocal + z * derf(dsqrt(beta) *rr) )
             if(imesh==nmesh_vloc.AND.inode==ionode.AND.iprint_pseudo>1) &
-                 write(*,fmt='(2x,"Sum of local potential and core charge: ",3f12.8)') &
+                 write(io_lun,fmt='(2x,"Sum of local potential and core charge: ",3f12.8)') &
                  vlocal + z, vlocal, z
          enddo
          deallocate(wos, STAT = stat)
          if(stat /= 0) call cq_abort ('ERROR in deallocating wos in calc_energy_shift', stat)
-         !write(*,*) 'Int. vloc: ',intvloc
+         !write(io_lun,*) 'Int. vloc: ',intvloc
          !intvloc = intvloc + pi*z/beta
          if(PRESENT(vlocG0)) vlocG0 = intvloc
-         !write(*,*) 'Int. vloc, eshift: ',intvloc,eshift, beta, pi*z/beta, z/beta
+         !write(io_lun,*) 'Int. vloc, eshift: ',intvloc,eshift, beta, pi*z/beta, z/beta
       else
          nmesh = pseudo%chlocal%n
          nmesh_vloc = (nmesh-1) * nfac + 1
@@ -1757,7 +1759,7 @@ contains
             rho = rho + four*pi*rr**2* pseudo%chlocal%f(imesh) * wos(imesh)
             !         if(inode == ionode.and.icall==1) write(40,*) rr, pseudo%chlocal%f(imesh)
          enddo
-         if(inode == ionode.AND.iprint_pseudo>1) write(*,fmt='(2x,"Integral of chlocal = ",2f8.3)') rho, z
+         if(inode == ionode.AND.iprint_pseudo>1) write(io_lun,fmt='(2x,"Integral of chlocal = ",2f8.3)') rho, z
          !check the integral of chlocal ---------------
 
          if(stat /= 0) call cq_abort &
@@ -1799,7 +1801,7 @@ contains
             func2%f(imesh) = rho* four * pi * rr
             zcore=zcore + func1%f(imesh)*wos(imesh)
          enddo
-         if(inode == ionode.AND.iprint_pseudo>1) write(*,fmt='(2x,"Integral of interpolated chlocal ",f8.3)') zcore
+         if(inode == ionode.AND.iprint_pseudo>1) write(io_lun,fmt='(2x,"Integral of interpolated chlocal ",f8.3)') zcore
          zcore = - zcore   ! makes zcore positive
 
          !Makes vlocal & integrates vlocal
@@ -1833,7 +1835,7 @@ contains
             !erf eshift = eshift +  four *pi * rr * wos(imesh) * &
             !erf            (vlocal + zcore * derf(dsqrt(beta) *rr) )
             if(imesh==nmesh_vloc.AND.inode==ionode.AND.iprint_pseudo>1) &
-                 write(*,fmt='(2x,"Sum of local potential and core charge: ",3f8.3)') &
+                 write(io_lun,fmt='(2x,"Sum of local potential and core charge: ",3f8.3)') &
                  vlocal + zcore, vlocal, zcore
          enddo
          !Choose whether we use gaussian distribution
@@ -1845,7 +1847,7 @@ contains
          deallocate(wos, STAT = stat)
          if(stat /= 0) call cq_abort &
               ('ERROR in deallocating wos in calc_energy_shift', stat)
-         !write(*,*) 'Int. vloc, eshift: ',intvloc,eshift
+         !write(io_lun,*) 'Int. vloc, eshift: ',intvloc,eshift
       end if ! tm_loc_pot == loc_pot
       return
     end subroutine calc_energy_shift

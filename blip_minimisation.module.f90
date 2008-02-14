@@ -20,9 +20,13 @@
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2008/02/04 08:27 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module blip_minimisation
+
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -138,9 +142,9 @@ contains
     integer indexy, return_ok, jj, n_blip, k, nx, ny, nz, i, j
     integer n,k2,j2, spec, stat
 
-    if(inode==ionode) write(*,fmt='(/6x,"Starting blip-coefficient variation",/)')
+    if(inode==ionode) write(io_lun,fmt='(/6x,"Starting blip-coefficient variation",/)')
     if(inode==ionode.AND.iprint_basis>0) &
-         write(*,fmt='(6x,"Performing at most ",i4," iterations with a tolerance of ",e12.5,/)') &
+         write(io_lun,fmt='(6x,"Performing at most ",i4," iterations with a tolerance of ",e12.5,/)') &
          n_support_iterations, energy_tolerance
     allocate(search_direction(coeff_array_size), last_sd(coeff_array_size), Psd(coeff_array_size),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating search directions in vary_support: ",coeff_array_size)
@@ -153,7 +157,7 @@ contains
     con_tolerance = sc_tolerance
     tolerance = L_tolerance
 
-    if(inode==ionode.AND.iprint_basis>1) write(*,fmt='(6x,"L, SC tolerances: ",2f20.12)') con_tolerance, tolerance
+    if(inode==ionode.AND.iprint_basis>1) write(io_lun,fmt='(6x,"L, SC tolerances: ",2f20.12)') con_tolerance, tolerance
 
     length = coeff_array_size
 
@@ -173,11 +177,11 @@ contains
 
     !     now obtain the gradient of the energy with respect to support functions
     ! For diagonalisation, this is already stored
-    if(inode==ionode.AND.iprint_basis>2) write(*,fmt='(6x,"Finding gradient")')
+    if(inode==ionode.AND.iprint_basis>2) write(io_lun,fmt='(6x,"Finding gradient")')
     if(.NOT.diagon) call LNV_matrix_multiply(electrons, energy_in, &
          doK, doM1, doM2, dontM3, doM4, dontphi, dontE,matM12,0,matM4,0)
     call get_blip_gradient(inode, ionode)
-    if (inode==ionode.AND.iprint_basis>2) write(*,fmt='(6x,"Got blip gradient")')
+    if (inode==ionode.AND.iprint_basis>2) write(io_lun,fmt='(6x,"Got blip gradient")')
     call my_barrier()
 
     ! The density matrix is effectively idempotent during diagonalisation
@@ -199,9 +203,9 @@ contains
 
        if (inode==ionode) then
           if(iprint_basis>0) then
-             write(*,7) n_iterations
+             write(io_lun,7) n_iterations
           else 
-             write(*,fmt='(6x,"Support variation: ",i5)') n_iterations
+             write(io_lun,fmt='(6x,"Support variation: ",i5)') n_iterations
           end if
        end if
        ! We need the last search direction for CG manipulations
@@ -215,14 +219,14 @@ contains
           dN_dot_dN = dot( length, elec_grad_coeff_array, 1, elec_grad_coeff_array, 1 )
           call gsum(dN_dot_de)
           call gsum(dN_dot_dN)
-          if(inode==ionode.AND.iprint_basis>2) write(*,fmt='(6x,"dN.de, dN.dN ",2f20.12)') dN_dot_de, dN_dot_dN
+          if(inode==ionode.AND.iprint_basis>2) write(io_lun,fmt='(6x,"dN.de, dN.dN ",2f20.12)') dN_dot_de, dN_dot_dN
           call axpy( length, -(dN_dot_de/dN_dot_dN), elec_grad_coeff_array, 1, &
                search_direction, 1 )      
        end if
        ! Precondition if we need to
        if(flag_precondition_blips) then
           offset = 0
-          if(inode==ionode.AND.iprint_basis>3) write(*,fmt='(6x,"Preconditioning !")')
+          if(inode==ionode.AND.iprint_basis>3) write(io_lun,fmt='(6x,"Preconditioning !")')
           call my_barrier()
           do i=1,bundle%n_prim
              spec = bundle%species(i)
@@ -241,7 +245,7 @@ contains
              offset = offset + supports_on_atom(i)%nsuppfuncs*NBlipsRegion(spec)
              deallocate(sum)
           enddo
-          if(inode==ionode.AND.iprint_basis>3) write(*,fmt='(6x,"Preconditioned !")')
+          if(inode==ionode.AND.iprint_basis>3) write(io_lun,fmt='(6x,"Preconditioned !")')
           call my_barrier()
        else
           Psd=search_direction
@@ -250,7 +254,7 @@ contains
        gg = dgg
        dgg = dot( length,search_direction, 1,Psd, 1)
        call gsum(dgg)
-       if(inode==ionode.AND.iprint_basis>3) write(*,fmt='(6x,"dgg is ",f20.12)') dgg
+       if(inode==ionode.AND.iprint_basis>2) write(io_lun,fmt='(6x,"dgg is ",f20.12)') dgg
 
        if (gg.ne.zero) then
           gamma = dgg / gg
@@ -258,10 +262,10 @@ contains
           gamma = zero
        end if
        if(gamma > gamma_max) then
-         if(inode==ionode) write(*,*) ' Warning: CG direction is reset! '
+         if(inode==ionode) write(io_lun,*) ' Warning: CG direction is reset! '
          gamma=zero
        endif
-       if(inode==ionode.AND.iprint_basis>2) write(*,fmt='(6x,"Gamma is ",f20.12)') gamma
+       if(inode==ionode.AND.iprint_basis>2) write(io_lun,fmt='(6x,"Gamma is ",f20.12)') gamma
 
        ! Construct the actual search direction
        call copy( length, Psd, 1, search_direction, 1)
@@ -272,26 +276,26 @@ contains
           dN_dot_dN = dot( length, elec_grad_coeff_array, 1, elec_grad_coeff_array, 1 )
           call gsum(dN_dot_de)
           call gsum(dN_dot_dN)
-          if(inode==ionode.AND.iprint_basis>3) write(*,fmt='(6x,"dN.de, dN.dN ",2f20.12)') dN_dot_de, dN_dot_dN
+          if(inode==ionode.AND.iprint_basis>3) write(io_lun,fmt='(6x,"dN.de, dN.dN ",2f20.12)') dN_dot_de, dN_dot_dN
           call axpy( length, -(dN_dot_de/dN_dot_dN), elec_grad_coeff_array, 1, &
                search_direction, 1 )
        end if
        sum_0 = dot( length, grad_coeff_array, 1, search_direction, 1 )
        call gsum(sum_0)
-       if(inode==ionode.AND.iprint_basis>3) write(*,fmt='(6x,"sum_0 is ",f20.12)') sum_0
+       if(inode==ionode.AND.iprint_basis>3) write(io_lun,fmt='(6x,"sum_0 is ",f20.12)') sum_0
        call my_barrier()
        ! minimise the energy (approximately) in this direction.
 
-       if(inode==ionode.AND.iprint_basis>2) write(*,fmt='(6x,"Calling minimise")')
+       if(inode==ionode.AND.iprint_basis>2) write(io_lun,fmt='(6x,"Calling minimise")')
        call my_barrier()
        call line_minimise_support( search_direction, length, fixed_potential, vary_mu, n_L_iterations, &
             number_of_bands, tolerance, con_tolerance, mu, total_energy_0, expected_reduction, last_step)
-       if(inode==ionode.AND.iprint_basis>2) write(*,'(6x,"Returned !")')
+       if(inode==ionode.AND.iprint_basis>2) write(io_lun,'(6x,"Returned !")')
        call dump_blip_coeffs(coefficient_array,coeff_array_size,inode)
        ! Find change in energy for convergence
        diff = total_energy_last - total_energy_0
        if (abs(diff/total_energy_0) .le. energy_tolerance) then
-          if (inode==ionode) write(6,18) total_energy_0*en_conv,en_units(energy_units)
+          if (inode==ionode) write(io_lun,18) total_energy_0*en_conv,en_units(energy_units)
           convergence_flag = .true.
           total_energy_last = total_energy_0
           return
@@ -417,7 +421,7 @@ contains
     real(double) :: e0, e1, e2, e3, electrons, tmp, energy_out
     integer :: i,j, iter, stat
 
-    if(inode==ionode.AND.iprint_basis>2) write(*,fmt='(6x,"On entry to blip line_min, dE is ",e12.5)') dE
+    if(inode==ionode.AND.iprint_basis>2) write(io_lun,fmt='(6x,"On entry to blip line_min, dE is ",e12.5)') dE
     allocate(data_blip0(lengthBlip), STAT=stat)
     if(stat/=0) call cq_abort("LinMinBlip: Error allocating blip storage: ",lengthBlip)
     call reg_alloc_mem(area_basis,lengthBlip,type_dbl)
@@ -432,18 +436,19 @@ contains
     lambda = 2.0_double
     ! Loop to find a bracketing triplet
     if(inode==ionode.AND.iprint_basis>0) then
-       write(*,fmt='(6x,"Seeking bracketing triplet of points")')
+       write(io_lun,fmt='(6x,"Seeking bracketing triplet of points")')
     else if(inode==ionode.AND.iprint_basis==0) then
-       write(*,fmt='(6x,"Bracketing")')
+       write(io_lun,fmt='(6x,"Bracketing")')
     end if
     do while(e3<=e2)
        if (k2==zero) then
           k3 = 0.001_double
           ! DRB 2004/03/03
+          tmp = vdot(lengthBlip,search_direction,1,grad_coeff_array,1)
           if(abs(dE)<very_small) then
              k3 = 0.008_double
+             dE = tmp*k3
           else
-             tmp = vdot(lengthBlip,search_direction,1,grad_coeff_array,1)
              k3 = 0.5_double*dE/tmp
           end if
 !       elseif (k2==0.01_double) then
@@ -466,8 +471,8 @@ contains
        call new_SC_potl( .false., con_tolerance, reset_L, fixed_potential, vary_mu, n_cg_L_iterations, &
             number_of_bands, tolerance, mu, e3)
        if(inode==ionode.AND.iprint_basis>2) &
-            write(*,fmt='(6x,"In blip_min, iter ",i3," step and energy are ",2f12.6)') iter,k3,e3
-       if(inode==ionode.AND.iprint_basis>2) write(*,fmt='(6x," iter=", i3," k0,k1,k2,k3,kmin = ",5f12.6)') &
+            write(io_lun,fmt='(6x,"In blip_min, iter ",i3," step and energy are ",2f12.6)') iter,k3,e3
+       if(inode==ionode.AND.iprint_basis>2) write(io_lun,fmt='(6x," iter=", i3," k0,k1,k2,k3,kmin = ",5f12.6)') &
             iter,k0,k1,k2,k3,kmin
        if (e3<e2) then ! We're still going down hill
           k1 = k2
@@ -483,11 +488,11 @@ contains
     ! Interpolate to find minimum.
     kmin = 0.5_double*(((k1*k1-k3*k3)*(e1-e2)-(k1*k1-k2*k2)*(e1-e3))/((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3)))
     if(inode==ionode.AND.iprint_basis>1) &
-         write(*,fmt='(6x,"In blip_min, bracketed - min from extrap: ",4f12.6)') k1,k2,k3,kmin
+         write(io_lun,fmt='(6x,"In blip_min, bracketed - min from extrap: ",4f12.6)') k1,k2,k3,kmin
     if(inode==ionode.AND.iprint_basis>0) then
-       write(*,fmt='(6x,"In blip_min, bracketed - energies: ",3f15.6)') e1,e2,e3
+       write(io_lun,fmt='(6x,"In blip_min, bracketed - energies: ",3f15.6)') e1,e2,e3
     else if(inode==ionode.AND.iprint_basis==0) then
-       write(*,fmt='(6x,"Interpolating minimum")')
+       write(io_lun,fmt='(6x,"Interpolating minimum")')
     end if
     ! Change blips: start from blip0
     call copy( lengthBlip, data_blip0, 1, coefficient_array, 1)
@@ -522,12 +527,12 @@ contains
             number_of_bands, tolerance, mu, energy_out)
     end if
     if(inode==ionode.AND.iprint_basis>0) then
-       write(*,fmt='(6x,"In blip_min, at exit energy is ",f15.10)') energy_out
+       write(io_lun,fmt='(6x,"In blip_min, at exit energy is ",f15.10)') energy_out
     else if(inode==ionode.AND.iprint_basis==0) then
-       write(*,fmt='(6x,"Final Energy: ",f15.10)') energy_out
+       write(io_lun,fmt='(6x,"Final Energy: ",f15.10)') energy_out
     endif
     dE = total_energy_0 - energy_out
-    if(inode==ionode.AND.iprint_basis>2) write(*,fmt='(6x,"On exit from blip line_min, dE is ",f15.10)') dE
+    if(inode==ionode.AND.iprint_basis>2) write(io_lun,fmt='(6x,"On exit from blip line_min, dE is ",f15.10)') dE
     total_energy_0 = energy_out
     deallocate(data_blip0, STAT=stat)
     if(stat/=0) call cq_abort("LinMinBlip: Error allocating blip storage: ",lengthBlip)

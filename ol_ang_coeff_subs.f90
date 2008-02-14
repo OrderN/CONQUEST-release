@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: ol_ang_coeff_subs.f90,v 1.11 2005/10/21 12:24:12 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module angular_coeff_routines
 ! ------------------------------------------------------------------------------
@@ -22,12 +22,15 @@
 !!    changed inout specification to in for ifort compilation
 !!   2007/01/05 17:30 dave
 !!    included prefac and fact arrays
+!!   2008/02/06 08:27 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 
 module angular_coeff_routines
 
   use datatypes
+  use global_module, ONLY: io_lun
   use bessel_integrals, ONLY: fact, lmax_fact
 
   implicit none
@@ -35,7 +38,7 @@ module angular_coeff_routines
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: ol_ang_coeff_subs.f90,v 1.11 2005/10/21 12:24:12 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
   integer,parameter :: lmax_prefac=8
   real(double) :: prefac(-1:lmax_prefac,-lmax_prefac:lmax_prefac)
@@ -82,7 +85,7 @@ contains
        l2_dum = l1
        m2_dum = m1
     else  !no switching necessary
-       !write(*,*) 'l1 greater or equal to l2'
+       !write(io_lun,*) 'l1 greater or equal to l2'
        l1_dum = l1
        m1_dum = m1
        l2_dum = l2
@@ -105,7 +108,7 @@ contains
     l_index = l_index + (l3 - (l1_dum-l2_dum))/2
 
     !also working out position of m_triplet within m_combs array
-    !write(*,*) l1_dum,m1_dum,l2_dum,m2_dum
+    !write(io_lun,*) l1_dum,m1_dum,l2_dum,m2_dum
     m_index = 1
     m_index = m_index + (2*l1_dum+1)*(m2_dum+l2_dum)
     m_index = m_index + (m1_dum+l1_dum)
@@ -302,8 +305,8 @@ contains
        else if(m1.eq.0.and.m2.eq.0) then
           ang_factor1 = ang_factor1*(1.0_double/4.0_double)
        else
-          !write(*,*) 'mi.gt.0, mj.eq.0'
-          !write(*,*) 'ang factor 1', ang_factor1
+          !write(io_lun,*) 'mi.gt.0, mj.eq.0'
+          !write(io_lun,*) 'ang factor 1', ang_factor1
           ang_factor1 = ang_factor1*(1.0_double/(2.0_double*sqrt(2.0_double)))
        endif
     else if(m1.lt.0.and.m2.lt.0) then
@@ -328,7 +331,7 @@ contains
        else if(m2_dum.gt.0) then !m1 must be .lt.0 
           ang_factor1 = ang_factor1*(-1.0_double/2.0_double)
        else !m2.eq.0 and m1.lt.0
-          !write(*,*) 'm2.eq.0 m1.lt.0'
+          !write(io_lun,*) 'm2.eq.0 m1.lt.0'
           ang_factor1 = ang_factor1*(1.0_double/(2.0_double*sqrt(2.0_double)))
        endif
           
@@ -390,7 +393,7 @@ contains
              !combinations
              !number of n_combinations is;
              no_m_combs = ((2*l2)+1)*((2*l1)+1)
-             if(ncount>tot_l_trips) write(*,*) 'ERROR ! Coefficients overrun: ',ncount,tot_l_trips
+             if(ncount>tot_l_trips) write(io_lun,*) 'ERROR ! Coefficients overrun: ',ncount,tot_l_trips
              coefficients(ncount)%n_m_combs=no_m_combs
              
              allocate(coefficients(ncount)%m_combs(no_m_combs))
@@ -751,7 +754,7 @@ contains
     else if(l==3) then ! f
        pao_val = pao_val*r*r*r
     else if(l>3) then
-       write(*,*) '*** ERROR *** ! Angular momentum l>3 not implemented !'
+       write(io_lun,*) '*** ERROR *** ! Angular momentum l>3 not implemented !'
     end if
   end subroutine evaluate_pao
   !!***
@@ -796,7 +799,7 @@ contains
     z = z_n*r
     !converting basis from Cartesian params to spherical polars
     call convert_basis(x,y,z,r_my,theta,phi)
-    !write(*,*) 'Basis: ',x,y,z,r_my,theta,phi
+    !write(io_lun,*) 'Basis: ',x,y,z,r_my,theta,phi
     !call test_rotation(l,m,theta)
     val = 0.0_double
     val = f_r*re_sph_hrmnc(l,m,theta,phi)
@@ -1215,11 +1218,11 @@ contains
     endif
     dir = 1 !telling fix_dval which gradient we are taking
     call make_grad_prefacs(x_comp_1,x_comp_2,x_comp_3,x_comp_4,coeff1,coeff2,df_r,f_r,r,l,m)
-    !write(*,*) x_comp_1,x_comp_2,x_comp_3,x_comp_4,'x_comps'
+    !write(io_lun,*) x_comp_1,x_comp_2,x_comp_3,x_comp_4,'x_comps'
     !now actually calculate and sum the gradient components 
     !RC need to fix the equations for the case where l=0
     if(abs(theta).lt.epsilon) then
-       !write(*,*) 'theta small condition satisfied'
+       !write(io_lun,*) 'theta small condition satisfied'
        x_comp_1 = x_comp_1*coeff1*sph_hrmnc_z(l+1,m+1,theta)
        x_comp_3 = -x_comp_3*coeff1*sph_hrmnc_z(l+1,m-1,theta)
        x_comp_2 = -x_comp_2*coeff2*sph_hrmnc_z(l-1,m+1,theta)
@@ -1256,9 +1259,9 @@ contains
        d_val = (cos((m+1)*phi)*(x_comp_1+x_comp_2))+(cos((m-1)*phi))*(x_comp_3+x_comp_4)
        if(m.eq.0) then
           d_val = (cos((m+1)*phi)*(x_comp_1+x_comp_2))+(cos((m-1)*phi))*(x_comp_3+x_comp_4)
-          !write(*,*) cos((m+1)*phi),x_comp_1+x_comp_2,cos((m-1)*phi),x_comp_3+x_comp_4
+          !write(io_lun,*) cos((m+1)*phi),x_comp_1+x_comp_2,cos((m-1)*phi),x_comp_3+x_comp_4
           d_val = d_val/sqrt(2.0_double)
-          !write(*,*) d_val, 'd_val'
+          !write(io_lun,*) d_val, 'd_val'
        else
           continue
        endif
@@ -1299,7 +1302,7 @@ contains
     call make_grad_prefacs(y_comp_1,y_comp_2,y_comp_3,y_comp_4,coeff1,coeff2,df_r,f_r,r,l,m)
     dir = 2 !telling fix_dval which direction we are taking the gradient in
     if(abs(theta).lt.epsilon) then
-       !write(*,*) 'theta small condition satisfied'
+       !write(io_lun,*) 'theta small condition satisfied'
        y_comp_1 =  y_comp_1*coeff1*sph_hrmnc_z(l+1,m+1,theta)
        y_comp_2 = -y_comp_2*coeff2*sph_hrmnc_z(l-1,m+1,theta)
        y_comp_3 =  y_comp_3*coeff1*sph_hrmnc_z(l+1,m-1,theta)
@@ -1379,7 +1382,7 @@ contains
     end if
     z_comp_1 = pref1*coeff1; z_comp_2 = pref2*coeff2
     if(abs(theta).lt.epsilon) then
-       !write(*,*) 'theta small condition satisfied'
+       !write(io_lun,*) 'theta small condition satisfied'
        if(m.ge.0) then
           z_comp_1 = z_comp_1*sph_hrmnc_z(l+1,m,theta)
           z_comp_2 = z_comp_2*sph_hrmnc_z(l-1,m,theta)
@@ -1528,7 +1531,7 @@ contains
     comp1 = pref1*coeff1; comp2 = pref2*coeff2
 
     if(abs(theta).lt.epsilon.or.(theta.lt.pi+epsilon.and.theta.gt.pi-epsilon)) then
-    !   !write(*,*) 'theta small condition satisfied'
+    !   !write(io_lun,*) 'theta small condition satisfied'
        if(arg.eq.1) then
           comp1 = comp1*sph_hrmnc_z(l+1,m,theta)
           comp2 = comp2*sph_hrmnc_z(l-1,m,theta)
@@ -1682,7 +1685,7 @@ contains
     !x_dashed = acos(x)
     x = cos(theta)
     sto_x = sin(theta)
-    !write(*,*) sto_x,'sto_x'
+    !write(io_lun,*) sto_x,'sto_x'
     
     if(m>0) then
        do i=1,2*m-1,2
@@ -1812,7 +1815,7 @@ contains
           endif
 
           prefac_real(ll,mm) = sqrt(g*h)
-          !write(*,*) 'pfr: ',ll,mm,ll-mm,ll+mm,2*ll+1,prefac_real(ll,mm)
+          !write(io_lun,*) 'pfr: ',ll,mm,ll-mm,ll+mm,2*ll+1,prefac_real(ll,mm)
        enddo
     enddo
     return

@@ -29,9 +29,13 @@
 !!    Various changes for variable NSF
 !!   2007/05/11 07:56 dave
 !!    Tidying up timing calls throughout
+!!   2008/02/01 17:45 dave
+!!    Changes to write output to file not stdout
 !!  SOURCE
 !!
 module PAO_grid_transform_module
+
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -104,7 +108,7 @@ contains
              call do_PAO_transform(iprim,nsf_send)
              if(iprint_basis>1) then
                 now = mtime()
-                write(*,fmt='(2x,"Proc ",i5," Time for PAO_grid transform (in ms): ",f15.8)') myid,now-nthen
+                write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grid transform (in ms): ",f15.8)') myid,now-nthen
                 nthen = now
              end if
           else
@@ -113,7 +117,7 @@ contains
           call distribute_result(myid,iprim,nsf_send,support)
           if(iprint_basis>1) then
              now = mtime()
-             write(*,fmt='(2x,"Proc ",i5," Time for PAO_grid distribute (in ms): ",f15.8)') myid,now - nthen
+             write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grid distribute (in ms): ",f15.8)') myid,now - nthen
              nthen = now
           end if
        end do
@@ -352,7 +356,7 @@ contains
              call do_PAO_grad_transform(direction,iprim,nsf_send)
              if(iprint_basis>1) then
                 now = mtime()
-                write(*,fmt='(2x,"Proc ",i5," Time for PAO_grad transform (in ms): ",f15.8)') myid,now - nthen
+                write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grad transform (in ms): ",f15.8)') myid,now - nthen
                 nthen = now
              end if
           else
@@ -361,7 +365,7 @@ contains
           call distribute_result(myid,iprim,nsf_send,support)
           if(iprint_basis>1) then
              now = mtime()
-             write(*,fmt='(2x,"Proc ",i5," Time for PAO_grad distribute (in ms): ",f15.8)') myid,now - nthen
+             write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grad distribute (in ms): ",f15.8)') myid,now - nthen
              nthen = now
           end if
        end do
@@ -680,7 +684,7 @@ contains
                 r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
                      (zatom-zblock)**2 )
                 if(npoint == 0 .and. iprint_basis > 4) &
-                     write(*,1001) inode,iblock,ipart, iatom, &
+                     write(io_lun,1001) inode,iblock,ipart, iatom, &
                      xatom, yatom, zatom, xblock, yblock, zblock, r_from_i
 1001            format ('Node ',i3,' no grid points in the block &
                      & touch the atom ',3i6/,' atom',3d12.3,' block', 3d12.3, &
@@ -866,7 +870,7 @@ contains
                 r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
                      (zatom-zblock)**2 )
                 if(npoint == 0 .and. iprint_basis > 4) &
-                     write(*,1001) inode,iblock,ipart, iatom, &
+                     write(io_lun,1001) inode,iblock,ipart, iatom, &
                      xatom, yatom, zatom, xblock, yblock, zblock, r_from_i
 1001            format ('Node ',i3,' no grid points in the block &
                      & touch the atom ',3i6/,' atom',3d12.3,' block', 3d12.3, &
@@ -1050,7 +1054,7 @@ contains
                 r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
                      (zatom-zblock)**2 )
                 if(npoint == 0 .and. iprint_basis > 4) &
-                     write(*,1001) inode,iblock,ipart, iatom, &
+                     write(io_lun,1001) inode,iblock,ipart, iatom, &
                      xatom, yatom, zatom, xblock, yblock, zblock, r_from_i
 1001            format ('Node ',i3,' no grid points in the block &
                      & touch the atom ',3i6/,' atom',3d12.3,' block', 3d12.3, &
@@ -1202,7 +1206,7 @@ contains
 
              if(r2 < rcut2) then
                 npoint=npoint+1
-                if(npoint>blocksize) write(*,*) 'ALERT: Too many points ! ',npoint,blocksize
+                if(npoint>blocksize) write(io_lun,*) 'ALERT: Too many points ! ',npoint,blocksize
                 r_from_i = sqrt( r2 )
 
 !                ! direction cosines needed for spher harms

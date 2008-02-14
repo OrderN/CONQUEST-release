@@ -46,11 +46,14 @@
 !!    Added set_blocks_from_new (to take block structure and create old-style data)
 !!   2006/10/10 16:49 dave
 !!    Removed grid_point_volume (to be found in dimens.module.f90)
+!!   2008/02/04 08:30 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module block_module
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   implicit none
   save
@@ -253,11 +256,11 @@ contains
        n_first = n_all_blocks - n_per_proc * numprocs
        if(inode==ionode.AND.iprint_index>0) then
           if (n_first.ne.0) then
-             write(*,fmt='(10x,"The first ",i5," processors each have ",i5," blocks"/&
+             write(io_lun,fmt='(10x,"The first ",i5," processors each have ",i5," blocks"/&
                   &10x,"The remaining ",i5," processors each have ",i5," blocks.")') &
                   n_first,n_per_proc+1,numprocs-n_first,n_per_proc
           else
-             write(*,fmt='(10x,"All processors have ",i5," blocks.")') n_per_proc
+             write(io_lun,fmt='(10x,"All processors have ",i5," blocks.")') n_per_proc
           end if
        endif
        ! Define maximum number of grid points on any processor for FFTs
@@ -351,7 +354,7 @@ contains
                 blocks_per_proc(proc_block(i)) = blocks_per_proc(proc_block(i))+1
                 if(blocks_per_proc(proc_block(i))>maxblocks) maxblocks = blocks_per_proc(proc_block(i))
                 proc_which_block(i) = blocks_per_proc(proc_block(i))
-                !write(*,*) 'Block: ',i,proc_block(i),proc_which_block(i)
+                !write(io_lun,*) 'Block: ',i,proc_block(i),proc_which_block(i)
              end do
           end do
        end do
@@ -373,7 +376,7 @@ contains
           if(blocks_per_proc(nnd)<minblocks) minblocks = blocks_per_proc(nnd)
        enddo
        if(inode==ionode.AND.iprint_index>0) then
-          write(*,fmt='(10x,"Minimum blocs/proc is ",i8,". Maximum blocs/proc is ",i8)') minblocks, maxblocks
+          write(io_lun,fmt='(10x,"Minimum blocs/proc is ",i8,". Maximum blocs/proc is ",i8)') minblocks, maxblocks
        end if
        !--- index of first block on current node
        blocks%inode_beg=0

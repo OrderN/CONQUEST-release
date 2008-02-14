@@ -23,11 +23,14 @@
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2008/02/06 08:31 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module pao_minimisation
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -160,8 +163,8 @@ contains
     if (con_tolerance<10.0_double*tolerance) tolerance = 0.1_double*con_tolerance
     con_tolerance = sc_tolerance
 
-    if(inode==ionode) write(*,*) 'Tolerances: ',con_tolerance, tolerance
-    if (inode.eq.ionode) write(*,*) INODE,' entering vary_pao'
+    if(inode==ionode) write(io_lun,*) 'Tolerances: ',con_tolerance, tolerance
+    if (inode.eq.ionode) write(io_lun,*) INODE,' entering vary_pao'
 
     length = coeff_array_size
 
@@ -215,7 +218,7 @@ contains
                 else
                    which_atom = local_atom
                 end if
-                if(my_atom) write(*,*) 'global, primary, prim(glob) ',which_atom, local_atom, bundle%ig_prim(local_atom)
+                if(my_atom) write(io_lun,*) 'global, primary, prim(glob) ',which_atom, local_atom, bundle%ig_prim(local_atom)
                 do nsf1 = 1,nsf_species(bundle%species(local_atom))
                    do npao1 = 1,npao_species(bundle%species(local_atom))
                       tmp = 0.0001_double*supports_on_atom(which_atom)%supp_func(nsf1)%coefficients(npao1)
@@ -238,8 +241,8 @@ contains
                             g1 = support_gradient(which_atom)%supp_func(nsf1)%coefficients(npao1)
                             grad_coeff_array = grad_copy
                             g2 = support_gradient(which_atom)%supp_func(nsf1)%coefficients(npao1)
-                            write(*,*) 'Tot: Numerical, analytic grad: ', (E2-E1)/tmp, -0.5_double*(g1+g2)
-                            write(*,*) 'Tot:Components: ', tmp,E1,E2,g1,g2
+                            write(io_lun,*) 'Tot: Numerical, analytic grad: ', (E2-E1)/tmp, -0.5_double*(g1+g2)
+                            write(io_lun,*) 'Tot:Components: ', tmp,E1,E2,g1,g2
                          end if
                          ! Shift coefficient back
                          supports_on_atom(which_atom)%supp_func(nsf1)%coefficients(npao1) = &
@@ -267,8 +270,8 @@ contains
                             g1 = support_gradient(which_atom)%supp_func(nsf1)%coefficients(npao1)
                             grad_coeff_array = grad_copy_dS
                             g2 = support_gradient(which_atom)%supp_func(nsf1)%coefficients(npao1)
-                            write(*,*) 'GdS: Numerical, analytic grad: ', (E2-E1)/tmp, -0.5_double*(g1+g2)
-                            write(*,*) 'GdS:Components: ', tmp,E1,E2,g1,g2
+                            write(io_lun,*) 'GdS: Numerical, analytic grad: ', (E2-E1)/tmp, -0.5_double*(g1+g2)
+                            write(io_lun,*) 'GdS:Components: ', tmp,E1,E2,g1,g2
                          end if
                          ! Shift coefficient back
                          supports_on_atom(which_atom)%supp_func(nsf1)%coefficients(npao1) = &
@@ -297,8 +300,8 @@ contains
                             g1 = support_gradient(which_atom)%supp_func(nsf1)%coefficients(npao1)
                             grad_coeff_array = grad_copy_dH
                             g2 = support_gradient(which_atom)%supp_func(nsf1)%coefficients(npao1)
-                            write(*,*) 'KdH: Numerical, analytic grad: ', (E2-E1)/tmp, -0.5_double*(g1+g2)
-                            write(*,*) 'KdH:Components: ', tmp,E1,E2,g1,g2
+                            write(io_lun,*) 'KdH: Numerical, analytic grad: ', (E2-E1)/tmp, -0.5_double*(g1+g2)
+                            write(io_lun,*) 'KdH:Components: ', tmp,E1,E2,g1,g2
                          end if
                          ! Shift coefficient back
                          supports_on_atom(which_atom)%supp_func(nsf1)%coefficients(npao1) = &
@@ -321,7 +324,7 @@ contains
 
     !     now loop over search directions
     do n_iterations = 1, n_support_iterations
-       if (inode .eq. ionode) write(6,7) n_iterations
+       if (inode .eq. ionode) write(io_lun,7) n_iterations
        ! We need the last search direction for CG manipulations
        call copy( length, search_direction, 1, last_sd, 1 )
        ! The basis for searching is gradient
@@ -334,7 +337,7 @@ contains
              call gsum(dN_dot_de)
              call gsum(dN_dot_dN)
           end if
-          if(inode.eq.ionode) write(*,*) 'dN.de, dN.dN ',dN_dot_de, dN_dot_dN
+          if(inode.eq.ionode) write(io_lun,*) 'dN.de, dN.dN ',dN_dot_de, dN_dot_dN
           call axpy( length, -(dN_dot_de/dN_dot_dN), elec_grad_coeff_array, 1, &
                search_direction, 1 )      
        end if
@@ -344,7 +347,7 @@ contains
        gg = dgg
        dgg = dot( length,search_direction, 1,Psd, 1)
        call gsum(dgg)
-       if(inode.eq.ionode) write(*,*) 'dgg is ',dgg
+       if(inode.eq.ionode) write(io_lun,*) 'dgg is ',dgg
        if (gg.ne.zero) then
           gamma = dgg / gg
        else
@@ -352,7 +355,7 @@ contains
        end if
        !gamma = zero
        !if(mod(n_iterations,5)==0) gamma = zero
-       if(inode.eq.ionode) write(*,*) 'Gamma is ',gamma
+       if(inode.eq.ionode) write(io_lun,*) 'Gamma is ',gamma
 
        ! Construct the actual search direction
        call copy( length, Psd, 1, search_direction, 1)
@@ -365,18 +368,18 @@ contains
              call gsum(dN_dot_de)
              call gsum(dN_dot_dN)
           end if
-          if(inode.eq.ionode) write(*,*) 'dN.de, dN.dN ',dN_dot_de, dN_dot_dN
+          if(inode.eq.ionode) write(io_lun,*) 'dN.de, dN.dN ',dN_dot_de, dN_dot_dN
           call axpy( length, -(dN_dot_de/dN_dot_dN), elec_grad_coeff_array, 1, &
                search_direction, 1 )
        end if
        ! Check this !
        sum_0 = dot( length, grad_coeff_array, 1, search_direction, 1 )
        if(.NOT.flag_paos_atoms_in_cell) call gsum(sum_0)
-       if(inode.eq.ionode) write(*,*) 'sum_0 is ',sum_0
+       if(inode.eq.ionode) write(io_lun,*) 'sum_0 is ',sum_0
        call my_barrier()
 
        ! minimise the energy (approximately) in this direction.
-       if(inode.eq.ionode) write(*,*) 'Minimise'
+       if(inode.eq.ionode) write(io_lun,*) 'Minimise'
        call my_barrier()
        tmp = dot(length,search_direction,1,grad_coeff_array,1)
        if(.NOT.flag_paos_atoms_in_cell) call gsum(tmp)
@@ -386,7 +389,7 @@ contains
        !flag_self_consistent = .false.
        call line_minimise_pao( search_direction, fixed_potential, vary_mu, n_cg_L_iterations, &
             number_of_bands, tolerance, con_tolerance, mu, total_energy_0, expected_reduction, last_step, tmp)
-       if(inode.eq.ionode) write(*,*) 'Returned !'
+       if(inode.eq.ionode) write(io_lun,*) 'Returned !'
        do i=1,ni_in_cell
           do nsf1 = 1,supports_on_atom(i)%nsuppfuncs
              sum = zero
@@ -402,7 +405,7 @@ contains
        ! Find change in energy for convergence
        diff = total_energy_last - total_energy_0
        if (dabs(diff/total_energy_0) .le. energy_tolerance) then
-          if (inode .eq. ionode) write(6,18) total_energy_0
+          if (inode .eq. ionode) write(io_lun,18) total_energy_0
           convergence_flag = .true.
           total_energy_last = total_energy_0
           return
@@ -416,7 +419,7 @@ contains
        call get_H_matrix(.true., fixed_potential, electrons, density, maxngrid)
        call FindMinDM(n_cg_L_iterations, number_of_bands, vary_mu, &
             L_tolerance, mu, inode, ionode, .false., .false.)
-       write(*,*) 'HERE'
+       write(io_lun,*) 'HERE'
        call get_energy(total_energy_test)
        ! We need to assemble the gradient
        grad_coeff_array = zero
@@ -429,7 +432,7 @@ contains
        !end if
        sum = dot(length,grad_coeff_array,1,grad_coeff_array,1)
        if(.NOT.flag_paos_atoms_in_cell) call gsum(sum)
-       write(*,*) 'Dot prod of gradient: ',sum
+       write(io_lun,*) 'Dot prod of gradient: ',sum
        total_energy_last = total_energy_0
     end do
 
@@ -513,8 +516,8 @@ contains
     if (con_tolerance<10.0_double*tolerance) tolerance = 0.1_double*con_tolerance
     con_tolerance = sc_tolerance
 
-    if(inode==ionode) write(*,*) 'Tolerances: ',con_tolerance, tolerance, energy_tolerance
-    if (inode.eq.ionode) write(*,*) INODE,' entering vary_pao'
+    if(inode==ionode) write(io_lun,*) 'Tolerances: ',con_tolerance, tolerance, energy_tolerance
+    if (inode.eq.ionode) write(io_lun,*) INODE,' entering vary_pao'
 
     length = coeff_array_size
 
@@ -539,26 +542,26 @@ contains
     g0 = dot(length,grad_coeff_array,1,grad_coeff_array,1)
     if(.NOT.flag_paos_atoms_in_cell) call gsum(g0)
     last_step = 1.0D10
-    write(*,*) 'Dot product of initial gradient ',g0
+    write(io_lun,*) 'Dot product of initial gradient ',g0
     ! Store gradient
     call copy(length,grad_coeff_array,1,data_gradstore(1:,1),1)
     data_paostore(:,1) = coefficient_array
     diff = zero
     !     now loop over search directions
     do n_iterations = 1, n_support_iterations
-       if (inode .eq. ionode) write(6,7) n_iterations
+       if (inode .eq. ionode) write(io_lun,7) n_iterations
        npmod = mod(n_iterations, mx_pulay)+1
        pul_mx = min(n_iterations+1, mx_pulay)
        step = diff/g0 ! Base step on present gradient and expected dE
        if(step == zero) step = 0.01_double
-       if(inode==ionode) write(*,*) 'npmod, pul_mx and step: ',npmod, pul_mx,step
+       if(inode==ionode) write(io_lun,*) 'npmod, pul_mx and step: ',npmod, pul_mx,step
        ! Build PAO coefficients
        if(npmod>1) then
           coefficient_array = coefficient_array + step*data_gradstore(:,npmod-1)
        else
           coefficient_array = coefficient_array + step*data_gradstore(:,pul_mx)
        endif
-       write(*,*) 'Normalising'
+       write(io_lun,*) 'Normalising'
        ! Normalise
        do ii=1,ni_in_cell
           do nsf1 = 1,supports_on_atom(ii)%nsuppfuncs ! Select alpha
@@ -573,7 +576,7 @@ contains
        end do
        ! Find change in energy for convergence
        ! Get energy and gradient for step
-       write(*,*) 'Getting new S, H, E'
+       write(io_lun,*) 'Getting new S, H, E'
        flag_vary_basis = .true.
        ! Find new self-consistent energy 
        ! 1. Generate data_dS
@@ -591,7 +594,7 @@ contains
        call build_PAO_coeff_grad(full)
        sum = dot(length,grad_coeff_array,1,grad_coeff_array,1)
        if(.NOT.flag_paos_atoms_in_cell) call gsum(sum)
-       write(*,*) 'Dot prod of gradient: ',sum
+       write(io_lun,*) 'Dot prod of gradient: ',sum
        ! Store PAO and gradient at this step
        call copy(length,grad_coeff_array,1,data_gradstore(1:,npmod),1)
        call copy(length,coefficient_array,1,data_paostore(1:,npmod),1)
@@ -608,7 +611,7 @@ contains
        enddo
        ! Solve to get alphas
        call DoPulay2D(Aij,alph,pul_mx,mx_pulay,inode,ionode)
-       write(*,*) 'Alph: ',alph
+       write(io_lun,*) 'Alph: ',alph
        ! Make new supports
        coefficient_array = zero
        do ii=1,pul_mx
@@ -643,7 +646,7 @@ contains
        call build_PAO_coeff_grad(full)
        sum = dot(length,grad_coeff_array,1,grad_coeff_array,1)
        if(.NOT.flag_paos_atoms_in_cell) call gsum(sum)
-       write(*,*) 'Dot prod of gradient: ',sum
+       write(io_lun,*) 'Dot prod of gradient: ',sum
        ! Replace step with real L
        call copy(length,grad_coeff_array,1,data_gradstore(1:,npmod),1)
        call copy(length,coefficient_array,1,data_paostore(1:,npmod),1)
@@ -651,7 +654,7 @@ contains
        diff = total_energy_last - total_energy_0
        total_energy_last = total_energy_0
        if (dabs(diff/total_energy_0) .le. energy_tolerance) then
-          if (inode .eq. ionode) write(6,18) total_energy_0
+          if (inode .eq. ionode) write(io_lun,18) total_energy_0
           convergence_flag = .true.
           total_energy_last = total_energy_0
           return
@@ -757,7 +760,7 @@ contains
     real(double) :: e0, e1, e2, e3, electrons, tmp, energy_out, sum
     integer :: i,j, iter, part, memb, nsf1, npao1, iprim,l1,acz,m1
 
-    write(*,*) 'On entry to pao line_min, dE is ',dE, total_energy_0
+    write(io_lun,*) 'On entry to pao line_min, dE is ',dE, total_energy_0
     if(flag_paos_atoms_in_cell) then
        n_atoms = ni_in_cell
     else
@@ -766,11 +769,11 @@ contains
     lengthBlip = coeff_array_size
     tmp = dot(lengthBlip,search_direction,1,search_direction,1)
     if(.NOT.flag_paos_atoms_in_cell) call gsum(tmp)
-    search_direction = search_direction/sqrt(tmp)
-    write(*,*) 'Searchdir: ',tmp
+    !search_direction = search_direction/sqrt(tmp)
+    write(io_lun,*) 'Searchdir: ',tmp
     !do i = 1,n_atoms
     !   do nsf1=1,nsf
-    !      write(*,*) 'Atom ',i,' supp ',nsf1,' coeffs ',supports_on_atom(i)%supp_func(nsf1)%coefficients
+    !      write(io_lun,*) 'Atom ',i,' supp ',nsf1,' coeffs ',supports_on_atom(i)%supp_func(nsf1)%coefficients
     !   end do
     !end do
     ! First, make a copy of the coefficients FOR THIS PRIMARY SET
@@ -791,10 +794,11 @@ contains
           k3 = 0.001_double
           ! DRB 2004/03/03
           if(abs(dE)<very_small) then
-             k3 = 0.0001_double
+             k3 = 0.008_double
+             dE = tmp*k3
              !k3 = 0.05_double!/g_dot_sd
           else
-             k3 = 0.05_double*dE/g_dot_sd
+             k3 = 0.5_double*dE/tmp!g_dot_sd
           end if
 !       elseif (k2==0.01_double) then
 !          k3 = 0.01_double
@@ -825,8 +829,8 @@ contains
        ! I've not put a call to get_H_matrix here because it's currently in new_SC_potl
        call new_SC_potl( .false., con_tolerance, reset_L, fixed_potential, vary_mu, n_cg_L_iterations, &
             number_of_bands, tolerance, mu, e3)
-       if(inode==ionode) write(*,fmt='(2x,"In pao_min, iter ",i3," step and energy are ",2f15.10)') iter,k3,e3
-       if(inode==ionode) write(*,fmt='(" iter=", i3," k0,k1,k2,k3,kmin = ",5f15.8)') iter,k0,k1,k2,k3,kmin
+       if(inode==ionode) write(io_lun,fmt='(2x,"In pao_min, iter ",i3," step and energy are ",2f15.10)') iter,k3,e3
+       if(inode==ionode) write(io_lun,fmt='(" iter=", i3," k0,k1,k2,k3,kmin = ",5f15.8)') iter,k0,k1,k2,k3,kmin
        if (e3<e2) then ! We're still going down hill
           k1 = k2
           e1 = e2
@@ -834,7 +838,7 @@ contains
           e2 = e3
           iter=iter+1
        else if(k3<0.0006_double.AND.k2==0.0_double) then ! We're at the start, and E has increased
-          write(*,*) 'Error ! Energy went up: making k3 negative'
+          write(io_lun,*) 'Error ! Energy went up: making k3 negative'
           k3 = -k3
           k2 = k3
           e3 = e2
@@ -846,8 +850,8 @@ contains
     ! Turn  basis variation back on
     ! Interpolate to find minimum.
     kmin = 0.5_double*(((k1*k1-k3*k3)*(e1-e2)-(k1*k1-k2*k2)*(e1-e3))/((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3)))
-    if(inode==ionode) write(*,*) 'In pao_min, bracketed - min from extrap: ',k1,k2,k3,kmin
-    if(inode==ionode) write(*,*) 'In pao_min, bracketed - energies: ',e1,e2,e3
+    if(inode==ionode) write(io_lun,*) 'In pao_min, bracketed - min from extrap: ',k1,k2,k3,kmin
+    if(inode==ionode) write(io_lun,*) 'In pao_min, bracketed - energies: ',e1,e2,e3
     ! Change blips: start from blip0
     call copy( lengthBlip, data_PAO0, 1, coefficient_array, 1)
     call axpy( lengthBlip, kmin, search_direction, 1, coefficient_array, 1 )
@@ -898,9 +902,9 @@ contains
        call new_SC_potl( .false., con_tolerance, reset_L, fixed_potential, vary_mu, n_cg_L_iterations, &
             number_of_bands, tolerance, mu, energy_out)
     end if
-    if(inode==ionode) write(*,fmt='(2x,"In pao_min, at exit energy is ",2f15.10)') energy_out
+    if(inode==ionode) write(io_lun,fmt='(2x,"In pao_min, at exit energy is ",2f15.10)') energy_out
     dE = total_energy_0 - energy_out
-    write(*,*) 'On exit from pao line_min, dE is ',dE,total_energy_0,energy_out
+    write(io_lun,*) 'On exit from pao line_min, dE is ',dE,total_energy_0,energy_out
     total_energy_0 = energy_out
     return
   end subroutine line_minimise_pao
@@ -970,19 +974,19 @@ contains
           do memb=1,bundle%nm_nodgroup(part) ! Select i
              nsfi = mat(part,Srange)%ndimi(memb)
              npaoi = mat(part,dSrange)%ndimi(memb)
-             if(iprint_minE>2) write(*,*) myid,' atom, nsf, npao: ',memb,nsfi,npaoi
+             if(iprint_minE>2) write(io_lun,*) myid,' atom, nsf, npao: ',memb,nsfi,npaoi
              if(memb<bundle%nm_nodgroup(part)) then
                 S_nd_nabs = mat(part,Srange)%i_nd_acc(memb+1)-mat(part,Srange)%i_nd_acc(memb)
-                if(iprint_minE>2) write(*,*) myid,' 1 nd: ',&
+                if(iprint_minE>2) write(io_lun,*) myid,' 1 nd: ',&
                      mat(part,Srange)%i_nd_acc(memb+1),mat(part,Srange)%i_nd_acc(memb)
              else 
                 S_nd_nabs = mat(part,Srange)%part_nd_nabs-mat(part,Srange)%i_nd_acc(memb)+1
-                if(iprint_minE>2) write(*,*) myid,' 2 nd: ',&
+                if(iprint_minE>2) write(io_lun,*) myid,' 2 nd: ',&
                      mat(part,Srange)%part_nd_nabs,mat(part,Srange)%i_nd_acc(memb)
              end if
-             if(iprint_minE>2) write(*,*) 'S_nd_nabs: ', S_nd_nabs, mat(part,Srange)%n_nab(memb)
+             if(iprint_minE>2) write(io_lun,*) 'S_nd_nabs: ', S_nd_nabs, mat(part,Srange)%n_nab(memb)
              S_nd_nabs = S_nd_nabs/nsfi
-             if(iprint_minE>2) write(*,*) 'S_nd_nabs: ', S_nd_nabs, mat(part,Srange)%n_nab(memb)
+             if(iprint_minE>2) write(io_lun,*) 'S_nd_nabs: ', S_nd_nabs, mat(part,Srange)%n_nab(memb)
              allocate(tmpS(nsfi*S_nd_nabs))
              allocate(tmpM12(nsfi*S_nd_nabs))
              allocate(tmpM4(nsfi*S_nd_nabs))
@@ -994,9 +998,9 @@ contains
              else
                 H_nd_nabs = mat(part,Hrange)%part_nd_nabs
              end if
-             if(iprint_minE>2) write(*,*) myid,' H_nd_nabs: ', H_nd_nabs, mat(part,Hrange)%n_nab(memb)
+             if(iprint_minE>2) write(io_lun,*) myid,' H_nd_nabs: ', H_nd_nabs, mat(part,Hrange)%n_nab(memb)
              H_nd_nabs = H_nd_nabs/nsfi
-             if(iprint_minE>2) write(*,*) myid,' H_nd_nabs: ', H_nd_nabs, mat(part,Hrange)%n_nab(memb)
+             if(iprint_minE>2) write(io_lun,*) myid,' H_nd_nabs: ', H_nd_nabs, mat(part,Hrange)%n_nab(memb)
              allocate(tmpK(nsfi*H_nd_nabs))
              allocate(tmpdH(npaoi*H_nd_nabs))
              tmpS = zero
@@ -1035,7 +1039,7 @@ contains
                    end do
                 end do
              end do
-             if(iprint_minE>2) write(*,*) 'tmpc is ',tmpc
+             if(iprint_minE>2) write(io_lun,*) 'tmpc is ',tmpc
              count = 0
              do nab = 1,mat(part,Hrange)%n_nab(memb)
                 ist = mat(part,Hrange)%i_acc(memb)+nab-1
@@ -1056,7 +1060,7 @@ contains
              do i1 = 1,nsfi
                 do i2 = 1,npaoi
                    ! First do G.dS
-                   if(iprint_minE>2) write(*,*) 'atom, nsf, npao, grad: ',atom_no,i1, &
+                   if(iprint_minE>2) write(io_lun,*) 'atom, nsf, npao, grad: ',atom_no,i1, &
                         i2, support_gradient(atom_no)%supp_func(i1)%coefficients(i2)
                    if(flag==GdS.OR.flag==full) then
                       support_gradient(atom_no)%supp_func(i1)%coefficients(i2) =  &
@@ -1067,7 +1071,7 @@ contains
                       !write(myid+16,*) 'grad: ',support_gradient(atom_no)%supp_func(i1)%coefficients(i2)
                       !write(myid+16,*) 'grad: ',four*dot(S_nd_nabs,tmpM12((i1-1)*S_nd_nabs+1:),1,tmpdS((i2-1)*S_nd_nabs+1:),1)
                    end if
-                   if(iprint_minE>2) write(*,*) 'atom, nsf, npao, grad: ',atom_no,i1, &
+                   if(iprint_minE>2) write(io_lun,*) 'atom, nsf, npao, grad: ',atom_no,i1, &
                         i2, support_gradient(atom_no)%supp_func(i1)%coefficients(i2)
                    ! Now do K.dH
                    if(flag==KdH.OR.flag==full) then
@@ -1079,7 +1083,7 @@ contains
                       !write(myid+16,*) 'grad: ',four*dot(H_nd_nabs,tmpK((i1-1)*H_nd_nabs+1:),1,tmpdH((i2-1)*H_nd_nabs+1:),1)
                       !write(myid+16,*) 'grad: ',support_gradient(atom_no)%supp_func(i1)%coefficients(i2)
                    end if
-                   if(iprint_minE>2) write(*,*) 'atom, nsf, npao, grad: ',atom_no,i1, &
+                   if(iprint_minE>2) write(io_lun,*) 'atom, nsf, npao, grad: ',atom_no,i1, &
                         i2, support_gradient(atom_no)%supp_func(i1)%coefficients(i2)
                    ! Electron gradient
                    if(.NOT.diagon) then ! No problems with electron number when diagonalising
@@ -1108,7 +1112,7 @@ contains
                    !if(inode==ionode) tmp = 0.001_double*supports_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1)
                    ! supports_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1) = &
                    !      supports_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1) + tmp
-                   !write(*,*) 'On this proc, global(iprim) is ',iprim,bundle%ig_prim(iprim)
+                   !write(io_lun,*) 'On this proc, global(iprim) is ',iprim,bundle%ig_prim(iprim)
                    !%%!  tmp = 0.001_double*supports_on_atom(1)%supp_func(nsf1)%coefficients(npao1)
                    !%%!  supports_on_atom(1)%supp_func(nsf1)%coefficients(npao1) = &
                    !%%!       supports_on_atom(1)%supp_func(nsf1)%coefficients(npao1) + tmp
@@ -1172,15 +1176,15 @@ contains
                    !%%!  !     support, workspace_support, workspace2_support,&
                    !%%!  !     inode, ionode,&
                    !%%!  !     N_GRID_MAX, ntwof, SUPPORT_SIZE)
-                   !write(*,*) 'Numerical, analytic grad: ',(E2-E1)/tmp, 0.5_double*(tmpgrad+gradient(npao1,nsf1,iprim))
+                   !write(io_lun,*) 'Numerical, analytic grad: ',(E2-E1)/tmp, 0.5_double*(tmpgrad+gradient(npao1,nsf1,iprim))
                    ! BE1 = band_energy
                    !%%! H1 = data_H(nsf1,1,point)
                    !%%! H1a = data_H(nsf1,3,point)
                    !%%! E1 = nl_energy
-                   !write(*,*) 'Numerical, analytic grad: ',(BE2-BE1)/tmp, 0.5_double*(tmpgrad+four*sum)
-                   !write(*,*) 'Numerical, analytic grad: ',(E2-E1)/tmp, 0.5_double*(tmpgrad+gradient(npao1,nsf1,iprim))
-                   !%%! write(*,*) 'M Numerical, analytic: ',(H2-H1)/tmp,data_dH(npao1,1,point)
-                   !%%! write(*,*) 'M Numerical, analytic: ',(H2a-H1a)/tmp,data_dH(npao1,3,point)
+                   !write(io_lun,*) 'Numerical, analytic grad: ',(BE2-BE1)/tmp, 0.5_double*(tmpgrad+four*sum)
+                   !write(io_lun,*) 'Numerical, analytic grad: ',(E2-E1)/tmp, 0.5_double*(tmpgrad+gradient(npao1,nsf1,iprim))
+                   !%%! write(io_lun,*) 'M Numerical, analytic: ',(H2-H1)/tmp,data_dH(npao1,1,point)
+                   !%%! write(io_lun\,*) 'M Numerical, analytic: ',(H2a-H1a)/tmp,data_dH(npao1,3,point)
                    !sum = dot(nsf*mat(part,Srange)%n_nab(memb),data_K(nsf1,1:,point:),1,data_dC_NL(npao1,1,point),1)
                    !gradient(npao1,nsf1,iprim) = gradient(npao1,nsf1,iprim) + sum
                    !sum = dot(nsf*mat(part,Srange)%n_nab(memb),data_K(nsf1,1:,point:),1,data_dHloc(npao1,1,point),1)

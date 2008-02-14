@@ -27,8 +27,12 @@
 !!    matrix routines
 !!   2006/11/21 16:53 dave
 !!    Changed iprint statements
+!!   2008/02/01 17:48 dave
+!!    Changes for output to file not stdout
 !!***
 module McWeeny
+
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -87,13 +91,13 @@ contains
     matRhoNew = allocate_temp_matrix(Lrange,0)
     call matrix_sum(zero,mat_oldL,one,matL)
     do n_iterations=1,n_L_iterations
-       if (inode==ionode.and.iprint_DM>=1) write(6,2) n_iterations
+       if (inode==ionode.and.iprint_DM>=1) write(io_lun,2) n_iterations
 
        ! find new rho and energy
        call McW_matrix_multiply( matH, matS, matL, matT, matRhoNew, omega1, cn  )
        ! If new energy is lower, copy new rho into old rho and repeat
        if(omega1.GT.oldE.OR.cn.GT.one.OR.cn.LT.zero) then
-          if(inode==ionode.AND.iprint_DM>0) write(*,4) c_old, oldE, cn,omega1
+          if(inode==ionode.AND.iprint_DM>0) write(io_lun,4) c_old, oldE, cn,omega1
 4         format(2x,'Rounding error found: ',4f15.6)
           exit
        endif
@@ -101,14 +105,14 @@ contains
        call matrix_sum(zero,matL,one,matRhoNew)
        oldE = omega1
        c_old = cn
-       if(inode==ionode.AND.iprint_DM>=0) write(*,5) oldE,c_old
+       if(inode==ionode.AND.iprint_DM>=0) write(io_lun,5) oldE,c_old
 5      format(3x,'Energy: ',f15.6,' Mid-point: ',f15.6)
        call symmetrise_L()
     end do
     if(n_iterations<3) call matrix_sum(zero,matL,one,mat_oldL)
     call free_temp_matrix(matRhoNew)
     call free_temp_matrix(mat_oldL)
-    if (inode.eq.ionode.and.iprint_DM.ge.1) write(6,3) n_iterations, omega1
+    if (inode.eq.ionode.and.iprint_DM.ge.1) write(io_lun,3) n_iterations, omega1
 2   format(/,20x,'McWeeny L iteration:',i5)
 3   format(/,20x,'Functional value reached after ',i5,' L iterations: ', &
          /,20x,' Omega: ', f15.7)
@@ -174,7 +178,7 @@ contains
     integer :: matXHX, mat_temp, matTS
     integer :: length, i
 
-    if(inode==ionode.AND.iprint_DM>1) write(*,1)
+    if(inode==ionode.AND.iprint_DM>1) write(io_lun,1)
 1   format(1x,'Welcome to InitMcW')
     ! We must first initialise rho
     n_e = number_of_bands
@@ -183,7 +187,7 @@ contains
     do i=1,ni_in_cell
        n_o = n_o + nsf_species(species(i))
     end do
-    if(inode==ionode.AND.iprint_DM>1) write(*,2) n_e,n_o
+    if(inode==ionode.AND.iprint_DM>1) write(io_lun,2) n_e,n_o
 2   format(2x,'Electrons: ',f15.6,' Orbitals: ',f15.6)
     matXHX = allocate_temp_matrix(Lrange,0)
     mat_temp = allocate_temp_matrix(Srange,0)
@@ -191,22 +195,22 @@ contains
     call McWXHX(matH, matT, matXHX, mat_temp)
     call matrix_product(matT,matS,matTS, mult( T_S_TS ))
     SX = matrix_trace(matTS)
-    write(*,*) 'Trace of temp: ',matrix_trace(mat_temp)
+    write(io_lun,*) 'Trace of temp: ',matrix_trace(mat_temp)
     SXHX = matrix_product_trace(matS,mat_temp)
     call my_barrier()
-    if(inode==ionode.AND.iprint_DM>1) write(*,*) 'SX, SXHX are ',SX,SXHX
-    if(inode==ionode.AND.iprint_DM>1) write(*,*) 'SX/n_o is ',SX/n_o
+    if(inode==ionode.AND.iprint_DM>1) write(io_lun,*) 'SX, SXHX are ',SX,SXHX
+    if(inode==ionode.AND.iprint_DM>1) write(io_lun,*) 'SX/n_o is ',SX/n_o
     ! Get Gershgorin limits on H
     call GetHLimits(hmin,hmax)
     call gmin(hmin)
     call gmax(hmax)
-    if(inode==ionode.AND.iprint_DM>1) write(*,3) hmin,hmax
+    if(inode==ionode.AND.iprint_DM>1) write(io_lun,3) hmin,hmax
 3   format(2x,'Minimum and maximum limits on H are ',2f15.6)
     A = (1.0_double - SX/n_o) 
     mu1 = SXHX/n_o + hmax*A
     ! DRB 2004/09/16 Fixing typo ?
     mu2 = (hmin*A*n_e/(n_o-n_e) - SXHX/n_o)/(n_o*A/(n_o-n_e) - one)
-    if(inode==ionode) write(*,*) 'Mu1,2: ',mu1,mu2
+    if(inode==ionode) write(io_lun,*) 'Mu1,2: ',mu1,mu2
     if((mu1<hmax.AND.mu1>hmin).AND.(abs(n_e/(hmax-mu1)).LT.abs((n_o - n_e)/(mu2-hmin)))) then
        mubar = mu1
        lambda = n_e/(hmax-mu1)
@@ -214,9 +218,9 @@ contains
        mubar = mu2
        lambda = (n_o - n_e)/(mu2-hmin)
     endif
-    if(inode==ionode.AND.iprint_DM>1) write(*,4) mubar
+    if(inode==ionode.AND.iprint_DM>1) write(io_lun,4) mubar
 4   format(2x,'Mubar is ',f15.6)
-    if(inode==ionode.AND.iprint_DM>1) write(*,*) 'lambda and mu are ',lambda,mubar
+    if(inode==ionode.AND.iprint_DM>1) write(io_lun,*) 'lambda and mu are ',lambda,mubar
     call McWRho0(matL, matT, matXHX, mubar, lambda, n_e, n_o)
     call free_temp_matrix(matTS)
     call free_temp_matrix(mat_temp)
@@ -286,10 +290,10 @@ contains
     call matrix_sum(zero,mat_top,one,matLSL)
     call matrix_sum(one,mat_top,-one,matLSLSL)
     c1 = matrix_product_trace(matS,mat_top)
-    if(inode==ionode.AND.iprint_DM>=2) write(*,*) 'S.top is ',c1
+    if(inode==ionode.AND.iprint_DM>=2) write(io_lun,*) 'S.top is ',c1
     call matrix_sum(zero,mat_bottom,one,matL)
     c1 = matrix_product_trace(matS,mat_bottom)
-    if(inode==ionode.AND.iprint_DM>=2) write(*,*) 'N_e is ',c1
+    if(inode==ionode.AND.iprint_DM>=2) write(io_lun,*) 'N_e is ',c1
     call matrix_sum(one,mat_bottom,-one,matLSL)
     c1 = matrix_product_trace(matS,mat_top)
     c2 = matrix_product_trace(matS,mat_bottom)
@@ -299,7 +303,7 @@ contains
        call cq_abort('McW_matrix_multiply: c2 is zero')
     endif
     c = cn
-    if(inode.eq.ionode.AND.iprint_DM>=2) write(*,*) 'c, c1,c2 are ',cn,c1,c2
+    if(inode.eq.ionode.AND.iprint_DM>=2) write(io_lun,*) 'c, c1,c2 are ',cn,c1,c2
     ! Shorten LSL and LSLSL to range L
     call matrix_scale(zero,matRhoNew)
     call matrix_sum(zero,matRhoNew,-one,matLSLSL)
@@ -322,16 +326,16 @@ contains
     !%%! call mult_wrap(inode-1,dat_S,data_SL,data_XHX,mult(S_LS_L))
     !%%! cn = dot(NSF*NSF*mat(1,Lrange)%length,data_SLS2, 1, data_L3, 1)
     !%%! call gsum(cn)
-    !%%! if(inode.eq.ionode.AND.iprint_DM>=2) write(*,*) 'Idempot monitor is ',cn/256.0_double 
+    !%%! if(inode.eq.ionode.AND.iprint_DM>=2) write(io_lun,*) 'Idempot monitor is ',cn/256.0_double 
     ! Shorten rhonew to range H into temp
     call free_temp_matrix(mat_bottom)
     mat_bottom = allocate_temp_matrix(Hrange,0)
     call matrix_sum(zero,mat_bottom,one,matRhoNew)
     energy = two*matrix_product_trace(mat_bottom,matH)
-    if(inode==ionode.AND.iprint_DM>=3) write(*,*) 'energy is ',energy
+    if(inode==ionode.AND.iprint_DM>=3) write(io_lun,*) 'energy is ',energy
     call matrix_sum(zero,mat_top,one,matRhoNew)
     c1 = matrix_product_trace(mat_top,matS)
-    if(inode==ionode.AND.iprint_DM>=3) write(*,*) 'N_e(2) is ',c1
+    if(inode==ionode.AND.iprint_DM>=3) write(io_lun,*) 'N_e(2) is ',c1
     call free_temp_matrix(mat_bottom)
     call free_temp_matrix(mat_top)
     call free_temp_matrix(matLSLSL)
@@ -349,6 +353,7 @@ contains
     use mult_module, ONLY: matrix_product, matrix_sum, T_H_TH, TH_T_L, &
          allocate_temp_matrix, mult, free_temp_matrix, matrix_trace
     use GenComms, ONLY : inode, ionode
+    use global_module, ONLY: iprint_DM
 
     implicit none
 
@@ -360,11 +365,11 @@ contains
 
     matBA = allocate_temp_matrix(THrange,0)
     call matrix_product(matB, matA, matBA, mult( T_H_TH ))
-    write(*,*) 'Trace of BA: ',matrix_trace(matBA)
+    if(inode.eq.ionode.AND.iprint_DM>=2) write(io_lun,*) 'Trace of BA: ',matrix_trace(matBA)
     call matrix_product(matBA, matB, matBAB, mult( TH_T_L ))
-    write(*,*) 'Trace of BAB: ',matrix_trace(matBAB)
+    if(inode.eq.ionode.AND.iprint_DM>=2) write(io_lun,*) 'Trace of BAB: ',matrix_trace(matBAB)
     call matrix_sum(zero, mat_temp, one, matBAB)
-    write(*,*) 'Trace of BAB: ',matrix_trace(mat_temp)
+    if(inode.eq.ionode.AND.iprint_DM>=2) write(io_lun,*) 'Trace of BAB: ',matrix_trace(mat_temp)
     call free_temp_matrix(matBA)
 
   End Subroutine McWXHX
@@ -383,10 +388,10 @@ contains
     Real( double ) :: m, l, n_e, n_o, tmp
 
     tmp = (l*m+n_e)/n_o
-    if(inode.eq.ionode.AND.iprint_DM>=2) write(*,*) 'l,m,n_e,n_o and tmp are ',l,m,n_e,n_o,tmp
+    if(inode.eq.ionode.AND.iprint_DM>=2) write(io_lun,*) 'l,m,n_e,n_o and tmp are ',l,m,n_e,n_o,tmp
     call matrix_sum(zero,matA, tmp, matB)
     tmp = -l/n_o
-    if(inode.eq.ionode.AND.iprint_DM>=2) write(*,*) 'tmp is ',tmp
+    if(inode.eq.ionode.AND.iprint_DM>=2) write(io_lun,*) 'tmp is ',tmp
     call matrix_sum(one, matA, tmp, matC)
 
   End Subroutine McWRho0

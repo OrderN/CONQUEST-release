@@ -1,4 +1,4 @@
-! $Id: Pulay.f90,v 1.1.1.1 2001/06/11 13:28:11 drb Exp $
+! $Id$
 ! -----------------------------------------------------------
 ! Module Pulay
 ! -----------------------------------------------------------
@@ -22,8 +22,19 @@
 !!   11/06/2001 dave
 !!    Added RCS Id and Log tags and changed dsytr LAPACK calls
 !!    to generic ones through GenBlas
-!!***
+!!   2008/02/01 17:49 dave
+!!    Changes for output to file not stdout
+!!  SOURCE
+!!
 module Pulay
+
+  use global_module, ONLY: io_lun
+
+  implicit none
+
+  ! RCS tag for object file identification
+  character(len=80), save, private :: RCSid = "$Id$"
+!!***
 
 contains
 
@@ -77,10 +88,10 @@ contains
     ipiv = 0
     work = 0.0_double
     call sytrf('U',n,Aij,n,ipiv,work,n,info)
-    if(inode.eq.ionode.AND.info.ne.0) write(*,*) 'info is ',info
+    if(inode.eq.ionode.AND.info.ne.0) write(io_lun,*) 'info is ',info
     info = 0
     call sytri('U',n,Aij,n,ipiv,work,info)  
-    if(inode.eq.ionode.AND.info.ne.0) write(*,*) 'info is ',info
+    if(inode.eq.ionode.AND.info.ne.0) write(io_lun,*) 'info is ',info
     ! Only a triangle is returned, so complete Aij
     do i=1,n
        do j=i,n
@@ -101,10 +112,10 @@ contains
     enddo
     ! Write out alphas
     if(inode.eq.ionode.AND.WRITE_OUT) then 
-       write(*,*) 'Alpha:'
-       if(n.eq.2) write(*,111) (al(i),i=1,n)
-       if(n.eq.3) write(*,112) (al(i),i=1,n)
-       if(n.eq.4) write(*,113) (al(i),i=1,n)
+       write(io_lun,*) 'Alpha:'
+       if(n.eq.2) write(io_lun,111) (al(i),i=1,n)
+       if(n.eq.3) write(io_lun,112) (al(i),i=1,n)
+       if(n.eq.4) write(io_lun,113) (al(i),i=1,n)
     endif
 111 format(2f10.6)
 112 format(3f10.6)
@@ -168,14 +179,15 @@ contains
        work = 0.0_double
        OA = Aij
        call sytrf('U',n,Aij,max_n,ipiv,work,max_n,info)
-       if(inode.eq.ionode.AND.info.ne.0) then 
-          write(*,*) 'info is ',info
-          write(*,*) 'A was: ',OA
-          write(*,*) 'A is: ',Aij
+       if(inode==ionode.AND.info/=0) then 
+          write(io_lun,*) inode,' sytrf: info is ',info
+          write(io_lun,*) inode,' A was: ',OA
+          write(io_lun,*) inode,' A is: ',Aij
        end if
        info = 0
        call sytri('U',n,Aij,max_n,ipiv,work,info)  
-       if(inode.eq.ionode.AND.info.ne.0) write(*,*) 'info is ',info
+       if(info/=0) write(io_lun,*) 'info is ',info
+       if(inode==ionode.AND.info/=0) write(io_lun,*) ' sytri: info is ',info
        ! Only a triangle is returned, so complete Aij
        do i=1,n
           do j=i,n
@@ -197,10 +209,10 @@ contains
     enddo
     ! Write out alphas
     if(inode.eq.ionode.AND.WRITE_OUT) then 
-       write(*,*) 'Alpha:'
-       if(n.eq.2) write(*,111) (al(i),i=1,n)
-       if(n.eq.3) write(*,112) (al(i),i=1,n)
-       if(n.eq.4) write(*,113) (al(i),i=1,n)
+       write(io_lun,*) 'Alpha:'
+       if(n.eq.2) write(io_lun,111) (al(i),i=1,n)
+       if(n.eq.3) write(io_lun,112) (al(i),i=1,n)
+       if(n.eq.4) write(io_lun,113) (al(i),i=1,n)
     endif
 111 format(2f10.6)
 112 format(3f10.6)

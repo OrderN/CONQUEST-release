@@ -25,9 +25,13 @@
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2008/02/04 08:35 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module build_PAO_matrices
+
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -104,15 +108,15 @@ contains
     real(double) :: dx, dy, dz, mat_val, tmp1, dtmp1,delt
     
 
-    if(iprint_basis>=5) write(*,fmt='(6x,i5," Zeroing S")') myid
+    if(iprint_basis>=5) write(io_lun,fmt='(6x,i5," Zeroing S")') myid
     call matrix_scale(zero,matA)
-    !write(*,*) 'Zeroing dS: ',PRESENT(matAD)
+    !write(io_lun,*) 'Zeroing dS: ',PRESENT(matAD)
     if(PRESENT(matAD)) call matrix_scale(zero,matAD)
-    if(iprint_basis>=5) write(*,fmt='(6x,i5," Done Zeroing")') 
+    if(iprint_basis>=5) write(io_lun,fmt='(6x,i5," Done Zeroing")') 
     iprim = 0; ip = 0
     if(flag_paos_atoms_in_cell.OR.flag==3) then
        do part = 1,bundle%groups_on_node ! Loop over primary set partitions
-          if(iprint_basis>=6) write(*,fmt='(6x,"Processor, partition: ",2i6)') myid,part
+          if(iprint_basis>=6) write(io_lun,fmt='(6x,"Processor, partition: ",2i6)') myid,part
           if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
              do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
                 atom_num = bundle%nm_nodbeg(part)+memb-1
@@ -120,7 +124,7 @@ contains
                 ip=bundle%ig_prim(iprim)
                 ! Atomic species
                 atom_spec = bundle%species(atom_num)
-                if(iprint_basis>=6) write(*,'(6x,"Processor, atom, spec: ",3i6)') myid,memb,atom_spec
+                if(iprint_basis>=6) write(io_lun,'(6x,"Processor, atom, spec: ",3i6)') myid,memb,atom_spec
                 do neigh = 1, mat(part,range)%n_nab(memb) ! Loop over neighbours of atom
                    ist = mat(part,range)%i_acc(memb)+neigh-1
                    ! Build the distances between atoms - needed for phases 
@@ -134,7 +138,7 @@ contains
                    neigh_global_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist)) 
                    neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,range)%i_seq(ist)-1)
                    neigh_species = species_glob(neigh_global_num)
-                   if(iprint_basis>=6) write(*,'(6x,"Processor, neighbour, spec: ",3i6)') myid,neigh,neigh_species
+                   if(iprint_basis>=6) write(io_lun,'(6x,"Processor, neighbour, spec: ",3i6)') myid,neigh,neigh_species
                    ! Now loop over support functions and PAOs and call routine
                    if(flag<3) then
                       if(PRESENT(matAD)) then
@@ -380,7 +384,7 @@ contains
     iprim = 0; ip = 0
     if(flag_paos_atoms_in_cell.OR.flag==3) then
        do part = 1,bundle%groups_on_node ! Loop over primary set partitions
-          if(iprint_basis>=6) write(*,fmt='(6x,"Processor, partition: ",2i6)') myid,part
+          if(iprint_basis>=6) write(io_lun,fmt='(6x,"Processor, partition: ",2i6)') myid,part
           if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
              do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
                 atom_num = bundle%nm_nodbeg(part)+memb-1
@@ -389,7 +393,7 @@ contains
                 ip=bundle%ig_prim(iprim)
                 ! Atomic species
                 atom_spec = bundle%species(atom_num)
-                if(iprint_basis>=6) write(*,'(6x,"Processor, atom, spec: ",3i6)') myid,memb,atom_spec
+                if(iprint_basis>=6) write(io_lun,'(6x,"Processor, atom, spec: ",3i6)') myid,memb,atom_spec
                 do neigh = 1, mat(part,range)%n_nab(memb) ! Loop over neighbours of atom
                    ist = mat(part,range)%i_acc(memb)+neigh-1
                    ! Build the distances between atoms - needed for phases 
@@ -462,7 +466,7 @@ contains
 !%%!     data_build = 0.0_double
 !%%!     iprim = 0; ip = 0
 !%%!     do part = 1,bundle%groups_on_node ! Loop over primary set partitions
-!%%!        if(iprint_basis>=6) write(*,fmt='(6x,"Processor, partition: ",2i6)') myid,part
+!%%!        if(iprint_basis>=6) write(io_lun,fmt='(6x,"Processor, partition: ",2i6)') myid,part
 !%%!        if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
 !%%!           do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
 !%%!              atom_num = bundle%nm_nodbeg(part)+memb-1
@@ -470,7 +474,7 @@ contains
 !%%!              ip=bundle%ig_prim(iprim)
 !%%!              ! Atomic species
 !%%!              atom_spec = bundle%species(atom_num)
-!%%!              if(iprint_basis>=6) write(*,'(6x,"Processor, atom, spec: ",3i6)') myid,memb,atom_spec
+!%%!              if(iprint_basis>=6) write(io_lun,'(6x,"Processor, atom, spec: ",3i6)') myid,memb,atom_spec
 !%%!              do neigh = 1, mat(part)%n_nab(memb) ! Loop over neighbours of atom
 !%%!                 ist = mat(part)%i_acc(memb)+neigh-1
 !%%!                 ! Build the distances between atoms - needed for phases 
@@ -484,7 +488,7 @@ contains
 !%%!                 neigh_global_part = BCS_parts%lab_cell(mat(part)%i_part(ist)) 
 !%%!                 neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part)%i_seq(ist)-1)
 !%%!                 neigh_species = species_glob(neigh_global_num)
-!%%!                 if(iprint_basis>=6) write(*,'(6x,"Processor, neighbour, spec: ",3i6)') myid,neigh,neigh_species
+!%%!                 if(iprint_basis>=6) write(io_lun,'(6x,"Processor, neighbour, spec: ",3i6)') myid,neigh,neigh_species
 !%%!                 ! Where to put the result
 !%%!                 wheremat = mat(part)%offset + ist
 !%%!                 if(wheremat>mat(part)%length) call cq_abort("Error in matrix length ",mat(part)%length,wheremat)

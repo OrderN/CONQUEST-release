@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: calc_matrix_elements_module.f90,v 1.5.2.3 2006/03/31 12:12:43 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module calc_matrix_elements_module
 ! ------------------------------------------------------------------------------
@@ -28,14 +28,19 @@
 !!    Added use association for function-on-grid data, removed reference to size
 !!   2006/06/15 08:24 dave
 !!    Changing in preparation for variable NSF
+!!   2008/02/04 16:57 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module calc_matrix_elements_module
 
+  use global_module, ONLY: io_lun
+
+  implicit none
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), save, private :: RCSid = "$Id: calc_matrix_elements_module.f90,v 1.5.2.3 2006/03/31 12:12:43 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 contains
 
@@ -359,8 +364,8 @@ contains
                         enddo
                      enddo
                   else
-                     write(*,*) 'ERROR? in remote_bucket',ipair,myid
-                     write(*,*) ' a pair of two atoms in a domain partial node &
+                     write(io_lun,*) 'ERROR? in remote_bucket',ipair,myid
+                     write(io_lun,*) ' a pair of two atoms in a domain partial node &
                           & is not a neighbour pair in a bundle node. ??? '
                   endif
                enddo        ! Loop over sent pairs
@@ -627,9 +632,9 @@ contains
                         end do
                      end do
                   else
-                     write(*,*) 'ERROR? of remote_bucket in &
+                     write(io_lun,*) 'ERROR? of remote_bucket in &
                           & collect_matrix_elements',ipair,myid
-                     write(*,*) ' a pair of two atoms in a domain partial node &
+                     write(io_lun,*) ' a pair of two atoms in a domain partial node &
                           & is not a neighbour pair in a bundle node. ??? '
                   endif
                enddo        ! Loop over sending pairs
@@ -668,7 +673,7 @@ contains
             if(stat/=0) call cq_abort("Error deallocating recv_array in collect_matrix_elements: ",nsize)
             call reg_dealloc_mem(area_integn,msize,type_dbl)
          else
-            write(*,*) 'Wierd: recv_array no allocated'
+            write(io_lun,*) 'Wierd: recv_array no allocated'
          endif
       endif
       return

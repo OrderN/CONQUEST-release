@@ -47,12 +47,16 @@
 !!    matrix routines
 !!   2006/03/06 04:46 dave
 !!    Removing passed arrays support, workspace_support
+!!   2008/02/01 17:47 dave
+!!    Changes for output to file not stdout
 !!  TODO
 !!   08:28, 2003/09/22 dave
 !!    Understand and document onsite_T
 !!  SOURCE
 !!
 module H_matrix_module
+
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -148,21 +152,21 @@ contains
 
     integer :: length, stat, paolength, matwork
 
-    if(inode==ionode.AND.iprint_ops>3) write(*,fmt='(10x,"Entering get_H_matrix")')
+    if(inode==ionode.AND.iprint_ops>3) write(io_lun,fmt='(10x,"Entering get_H_matrix")')
     if(flag_vary_basis.AND.flag_basis_set==PAOs) matwork = allocate_temp_matrix(dHrange,0,paof,sf)
     call matrix_scale(zero,matH)
     if(flag_vary_basis.AND.flag_basis_set==PAOs) call matrix_scale(zero,matdH)
     gridfunctions(H_on_supportfns)%griddata = zero
 
     if(rebuild_KE_NL) then
-       if(inode==ionode.AND.iprint_ops>3) write(*,fmt='(2x,"Rebuilding KE")')
+       if(inode==ionode.AND.iprint_ops>3) write(io_lun,fmt='(2x,"Rebuilding KE")')
        call matrix_scale(zero,matKE)
        call matrix_scale(zero,matNL)
        ! get the T matrix and the kinetic energy...
        call get_T_matrix(matKE)
        ! now, we do the non-local part (if we are doing it)
        if ( non_local ) then
-          if(inode==ionode.AND.iprint_ops>3) write(*,fmt='(2x,"Rebuilding NL")')
+          if(inode==ionode.AND.iprint_ops>3) write(io_lun,fmt='(2x,"Rebuilding NL")')
           call get_HNL_matrix(matNL)
        end if
        if(iprint_ops>2) call dump_matrix("NNL",matNL,inode)
@@ -171,27 +175,27 @@ contains
     ! from here on, workspace support becomes h_on_support...
     ! in fact, what we are getting here is (H_local - T) acting on support
     call get_h_on_support( iprint_ops, fixed_potential, electrons, rho, size)
-    if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Doing integration'
+    if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Doing integration'
     ! Do the integration - support holds <phi| and workspace_support holds H|phi>
     call get_matrix_elements_new(inode-1,rem_bucket(sf_H_sf_rem),matH,supportfns,H_on_supportfns)
-    if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Done integration'
+    if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Done integration'
     if(iprint_ops>2) call dump_matrix("Nl",matH,inode)
     ! After doing this, we need \chi_{ilm} projected onto the grid, and then a new call to get_matrix_elements_new
     if(flag_vary_basis.AND.flag_basis_set==PAOs) then
        ! Project PAOs onto grid
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Doing single_pao_on_support'
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Doing single_pao_on_support'
        pao_support = allocate_temp_fn_on_grid(paof)
        call single_PAO_to_grid(pao_support)
        ! Do integration
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Doing integration'
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Doing integration'
        call get_matrix_elements_new(inode-1,rem_bucket(pao_H_sf_rem),matwork,pao_support,H_on_supportfns)
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Done integration'
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Done integration'
        call my_barrier()
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Doing axpy'
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Doing axpy'
        call matrix_sum(one,matdH,one,matwork)
        call free_temp_fn_on_grid(pao_support)
        call free_temp_matrix(matwork)
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Done axpy'
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Done axpy'
     end if
 
     ! add the kinetic energy and non-local matrices to give the complete H matrix
@@ -294,7 +298,7 @@ contains
     !fften = zero
     !do i = 1, z_columns_node(inode)*n_grid_z
     !   if(i==i0) then
-    !      write(*,*) 'G=0: ',grid_point_volume*real(chdenr(i),double)*real(locpotr(i),double), &
+    !      write(io_lun,*) 'G=0: ',grid_point_volume*real(chdenr(i),double)*real(locpotr(i),double), &
     !           aimag(chdenr(i))*aimag(locpotr(i))*grid_point_volume
     !      !locpotr(i0)=cmplx(zero,zero)
     !   else
@@ -302,7 +306,7 @@ contains
     !           aimag(chdenr(i))*aimag(locpotr(i))*grid_point_volume
     !   end if
     !end do
-    !write(*,*) 'Energy via FFT: ',fften
+    !write(io_lun,*) 'Energy via FFT: ',fften
     !call fft3( pseudopotential, locpotr, size, 1 )
     !deallocate(chdenr, locpotr, STAT=stat)
     allocate(xc_potential(n_my_grid_points), h_potential(maxngrid), STAT=stat)
@@ -316,7 +320,7 @@ contains
 
     electrons = grid_point_volume * rsum( n_my_grid_points, rho, 1 )
     call gsum(electrons)
-    if (inode==ionode.and.output_level>=1) write(*,114) electrons
+    if (inode==ionode.and.output_level>=1) write(io_lun,114) electrons
 
     !     now calculate the hartree potential on the grid
     call hartree( rho, h_potential, maxngrid, hartree_energy )
@@ -459,22 +463,22 @@ contains
     matSCtmp = allocate_temp_matrix(SPrange,SP_trans,sf,nlpf)
     ! first, get the overlap of support functions with core pseudowavefunctions
     if(flag_basis_set==blips) then
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Calling get_matrix_elements'
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Calling get_matrix_elements'
        call get_matrix_elements_new(myid,rem_bucket(sf_nlpf_rem),matSC,supportfns,pseudofns)
        !call dump_matrix("NSC",matSC,inode)
     else if(flag_basis_set==PAOs) then
        ! Use assemble to generate matrix elements
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Calling assemble'
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Calling assemble'
        if(flag_vary_basis) then
           call assemble_2(SPrange, matSC,3,matdSC)
        else
           call assemble_2(SPrange, matSC,3)       
        end if
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Called assemble'
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Called assemble'
     else
        call cq_abort('get_HNL_matrix: basis set incorrectly specified ',flag_basis_set)
     end if
-    if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Made SP'
+    if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Made SP'
     call matrix_sum(zero,matSCtmp,one,matSC)
     if(mult(SP_PS_H)%mult_type==2) then ! type 2 means no transpose necessary
        select case(pseudo_type)
@@ -486,36 +490,36 @@ contains
           call matrix_scale_diag_tm(matSC,SPrange)
        end select
        call matrix_product(matSCtmp,matSC,matNL,mult(SP_PS_H))
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Calling mult_wrap'
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Calling mult_wrap'
        if(flag_vary_basis.AND.flag_basis_set==PAOs) then
           call matrix_product(matdSC,matSC,matdCNL,mult(PAOP_PS_H))
        end if
     else ! Transpose SP->PS, then mult
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Type 1 ',matSC,matCS
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Type 1 ',matSC,matCS
        call matrix_transpose(matSC,matCS)
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Done transpose' 
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Done transpose' 
        select case(pseudo_type)
        case(OLDPS) 
           call matrix_scale_diag(matSC, species, n_projectors, l_core, recip_scale,SPrange)
        case(SIESTA)
-          if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Doing scale' 
+          if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Doing scale' 
           call matrix_scale_diag_tm(matSC,SPrange)
-          if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Calling scale'
+          if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Calling scale'
           if(flag_vary_basis.AND.flag_basis_set==PAOs) call matrix_scale_diag_tm(matdSC,PAOPrange)
        case(ABINIT)
-          if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Doing scale' 
+          if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Doing scale' 
           call matrix_scale_diag_tm(matSC,SPrange)
-          if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Calling scale'
+          if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Calling scale'
           if(flag_vary_basis.AND.flag_basis_set==PAOs) call matrix_scale_diag_tm(matdSC,PAOPrange)
        end select
        call matrix_product(matSC,matCS,matNL,mult(SP_PS_H))
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Calling mult_wrap'
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Calling mult_wrap'
        if(flag_vary_basis.AND.flag_basis_set==PAOs) then 
           call matrix_product(matdSC,matCS,matdCNL,mult(PAOP_PS_H))
        end if
     endif
     if(flag_vary_basis.AND.flag_basis_set==PAOs) then
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'PAOs'
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'PAOs'
        call matrix_sum(one,matdH,one,matdCNL)
     end if
     call free_temp_matrix(matSCtmp)
@@ -574,7 +578,7 @@ contains
                            do nsf1=1,mat(np,range)%ndimi(i)
                               call scale_matrix_value(matSC,np,i,ip,nb,nsf1,n_proj,pseudo(species_k)%pjnl_ekb(nl))
                               if(abs(pseudo(species_k)%pjnl_ekb(nl)) < very_small) &
-                                   write(*,*) 'ekb = 0!!   for nl, species_k, ekb = ', &
+                                   write(io_lun,*) 'ekb = 0!!   for nl, species_k, ekb = ', &
                                    nl, species_k, pseudo(species_k)%pjnl_ekb(nl)
                            enddo !nsf1=1,nonef
                         enddo !mm=1,mmax
@@ -1135,11 +1139,11 @@ contains
        if (rho>very_small) then ! Find radius of hole
           rcp_rs = ( four*third * pi * rho )**(third)
           rs = one/rcp_rs
-          if(rs<0.01_double) write(*,*) 'rs out of range ',n
+          if(rs<0.01_double) write(io_lun,*) 'rs out of range ',n
        else
           rcp_rs = zero
           rs = zero
-          write(*,*) 'rho out of range ',n
+          write(io_lun,*) 'rho out of range ',n
        end if
        if(rs>zero) then
           drs_dRho = -rs / (3.0 * rho)

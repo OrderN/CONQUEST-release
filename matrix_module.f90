@@ -1,4 +1,4 @@
-! $Id: matrix_module.f90,v 1.4.2.1 2006/03/31 12:27:41 drb Exp $
+! $Id$
 ! -----------------------------------------------------------
 ! Module matrix_module
 ! -----------------------------------------------------------
@@ -30,11 +30,14 @@
 !!    Tidied cq_aborts and removed integ in halo structure
 !!   07:59, 2003/06/11 dave
 !!    Added TM's debugging changes
+!!   2008/02/06 08:23 dave
+!!    Changed for output to file not stdout
 !!***
 module matrix_module
 
   ! Module usage
   use datatypes
+  use global_module, ONLY: io_lun
   use basic_types
   use GenComms, ONLY: cq_abort
 
@@ -328,7 +331,7 @@ contains
          call cq_abort('Overrun: ',maxlen,part_on_node*(3*mx_part + 5*mx_part*mat(1)%mx_abs))
     offset = 0
     do i=1,part_on_node
-       !write(*,*) 'Part: ',i
+       !write(io_lun,*) 'Part: ',i
        !call my_barrier
        if(mat(i)%n_atoms>mx_part) then
           call cq_abort('set_matrix_pointers2: too many atoms ',&
@@ -417,7 +420,7 @@ contains
     lenind = size(apairind)
     posn = 0
     do nr=1,atrans_rem%n_rem_node
-       if(atrans_rem%n_pair(nr) <= 0) write(*,*) 'nr, n_pair ',nr, atrans_rem%n_pair(nr)
+       if(atrans_rem%n_pair(nr) <= 0) write(io_lun,*) 'nr, n_pair ',nr, atrans_rem%n_pair(nr)
        apairs(nr)%ipart_a => apairind(posn+1:posn+atrans_rem%n_pair(nr))
        posn = posn+atrans_rem%n_pair(nr)
        apairs(nr)%iseq_a  => apairind(posn+1:posn+atrans_rem%n_pair(nr))
@@ -426,7 +429,7 @@ contains
        posn = posn+atrans_rem%n_pair(nr)
        apairs(nr)%iseq_b  => apairind(posn+1:posn+atrans_rem%n_pair(nr))
        posn = posn+atrans_rem%n_pair(nr)
-       !write(*,*) 'About to dealloc submat'
+       !write(io_lun,*) 'About to dealloc submat'
        !if(associated(apairs(nr)%submat)) deallocate(apairs(nr)%submat)
        allocate(apairs(nr)%submat(atrans_rem%n_pair(nr)))
        if(posn>lenind) call cq_abort('Pairs overflow: ',posn,lenind)
@@ -435,7 +438,7 @@ contains
     !    nr = atrans_rem%n_rem_node
     !    posn = posn - atrans_rem%n_pair(nr)
     !    if(posn>4*mx_iprim*amat(1)%mx_nab) then
-    !      write(*,*) 'Index overflow for pairind ! ', &
+    !      write(io_lun,*) 'Index overflow for pairind ! ', &
     !         posn,4*mx_iprim*amat(1)%mx_nab
     !      stop
     !    endif

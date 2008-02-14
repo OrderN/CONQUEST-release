@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: generic_blas.f90,v 1.5 2005/10/06 09:01:50 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module GenBlas
 ! ------------------------------------------------------------------------------
@@ -31,19 +31,22 @@
 !!    and added static RCSid object
 !!   15:47, 04/02/2003 drb 
 !!    Added vdot calls and many comments
+!!   2008/02/06 08:16 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module GenBlas
 
   use datatypes
   use numbers
+  use global_module, ONLY: io_lun
 
   implicit none
 
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), save, private :: RCSid = "$Id: generic_blas.f90,v 1.5 2005/10/06 09:01:50 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
   interface dot
      module procedure onedot
@@ -569,7 +572,7 @@ contains
     temp = dot(len,a,stride_a,b,stride_b)
     call MPI_allreduce(temp, v1dot, 1, MPI_double_precision, &
          MPI_sum, MPI_COMM_WORLD, ierr)
-    if(ierr/=0) write(*,*) 'Problem with MPI_allreduce in v1dot !'
+    if(ierr/=0) write(io_lun,*) 'Problem with MPI_allreduce in v1dot !'
   end function v1dot
 !!***
 
@@ -601,7 +604,7 @@ contains
     temp = dot(len,a,stride_a,b,stride_b)
     call MPI_allreduce(temp, v2dot, 1, MPI_double_precision, &
          MPI_sum, MPI_COMM_WORLD, ierr)
-    if(ierr/=0) write(*,*) 'Problem with MPI_allreduce in v1dot !'
+    if(ierr/=0) write(io_lun,*) 'Problem with MPI_allreduce in v1dot !'
   end function v2dot
 !!***
 
@@ -633,7 +636,7 @@ contains
     temp = dot(len,a,stride_a,b,stride_b)
     call MPI_allreduce(temp, v3dot, 1, MPI_double_precision, &
          MPI_sum, MPI_COMM_WORLD, ierr)
-    if(ierr/=0) write(*,*) 'Problem with MPI_allreduce in v1dot !'
+    if(ierr/=0) write(io_lun,*) 'Problem with MPI_allreduce in v1dot !'
   end function v3dot
 !!***
 

@@ -73,10 +73,13 @@
 !!   2007/10/15 Veronika
 !!    Added keyword maxefermi: Max number of iteration when searching
 !!    for E_Fermi
+!!   2008/02/01 17:46 dave
+!!    Changes for output to file not stdout
 !!***
 module DiagModule
 
   use datatypes
+  use global_module, ONLY: io_lun
   use GenComms, ONLY: cq_abort
   use numbers, ONLY: zero
 
@@ -319,7 +322,7 @@ contains
     orfac = -1.0_double
     il = 0
     iu = 0
-    if(iprint_DM>=2.AND.myid==0) write(*,fmt='(10x,"Entering FindEvals")')
+    if(iprint_DM>=2.AND.myid==0) write(io_lun,fmt='(10x,"Entering FindEvals")')
     ! Read appropriate data for Scalapack diagonalisation - k-points, block sizes etc
     !if(first) call readDiagInfo(proc_rows,proc_cols,block_size_r,block_size_c)
     matrix_size = 0 !ni_in_cell*nsf
@@ -344,18 +347,18 @@ contains
     ! First diagonalisation - get eigenvalues only (so that we can find Ef)
     time0 = mtime()
     abstol = 1e-30_double!pdlamch(context,'U')
-    if(iprint_DM>=2.AND.myid==0) write(*,fmt='(10x,"In FindEvals, tolerance is ",g20.12)') abstol
+    if(iprint_DM>=2.AND.myid==0) write(io_lun,fmt='(10x,"In FindEvals, tolerance is ",g20.12)') abstol
     do i=1,nkp ! Build and send Hamiltonian for each k-point
        ! Form the Hamiltonian for this k-point and send it to appropriate processors
-       if(iprint_DM>=3) write(*,*) myid,' Calling DistributeCQ_to_SC for H'
+       if(iprint_DM>=3) write(io_lun,*) myid,' Calling DistributeCQ_to_SC for H'
        call my_barrier()
        call DistributeCQ_to_SC(DistribH,matH,kk(1,i),SCHmat)
        ! Form the overlap for this k-point and send it to appropriate processors
-       if(iprint_DM>=3) write(*,*) myid,' Calling DistributeCQ_to_SC for S'
+       if(iprint_DM>=3) write(io_lun,*) myid,' Calling DistributeCQ_to_SC for S'
        call DistributeCQ_to_SC(DistribS,matS,kk(1,i),SCSmat)
-       if(iprint_DM>=3) write(*,*) myid,' Done DistributeCQ_to_SC for S'
+       if(iprint_DM>=3) write(io_lun,*) myid,' Done DistributeCQ_to_SC for S'
        ! Now, if this processor is involved, do the diagonalisation
-       if(iprint_DM>=3) write(*,*) myid,'Proc row, cols, me: ',proc_rows, proc_cols, me, i, nkp
+       if(iprint_DM>=3) write(io_lun,*) myid,'Proc row, cols, me: ',proc_rows, proc_cols, me, i, nkp
        if(me<proc_rows*proc_cols) then
           ! Call the diagonalisation routine for generalised problem H.psi = E.S.psi
           call pzhegvx(1,'N','A','U',matrix_size,SCHmat,1,1,desca,SCSmat,1,1,descb,&
@@ -368,7 +371,7 @@ contains
        end if ! if(me<proc_rows*proc_cols)
     end do ! End do i=1,nkp
     time1 = mtime()
-    if(iprint_DM>=2) write(*,2) myid,time1 - time0
+    if(iprint_DM>=2) write(io_lun,2) myid,time1 - time0
     ! Find Fermi level, given the eigenvalues at all k-points (in w)
     if(me<proc_rows*proc_cols) then
        call findFermi(electrons,w,matrix_size,nkp,Ef)
@@ -382,21 +385,21 @@ contains
     if(iprint_DM>=3.AND.myid==0) then
        bandE = 0.0_double
        do i=1,nkp
-          write(*,7) i,kk(1,i),kk(2,i),kk(3,i)
+          write(io_lun,7) i,kk(1,i),kk(2,i),kk(3,i)
           do j=1,matrix_size,3
              if (j==matrix_size) then
-                write(*,8) w(j,i),occ(j,i)
+                write(io_lun,8) w(j,i),occ(j,i)
                 bandE = bandE + w(j,i)*occ(j,i)
              else if (j==matrix_size-1) then
-                write(*,9) w(j,i),occ(j,i),w(j+1,i),occ(j+1,i)
+                write(io_lun,9) w(j,i),occ(j,i),w(j+1,i),occ(j+1,i)
                 bandE = bandE + w(j,i)*occ(j,i)+ w(j+1,i)*occ(j+1,i)
              else
-                write(*,10) w(j,i),occ(j,i),w(j+1,i),occ(j+1,i),w(j+2,i),occ(j+2,i)
+                write(io_lun,10) w(j,i),occ(j,i),w(j+1,i),occ(j+1,i),w(j+2,i),occ(j+2,i)
                 bandE = bandE + w(j,i)*occ(j,i)+ w(j+1,i)*occ(j+1,i)+ w(j+2,i)*occ(j+2,i)
              endif
           end do ! j=matrix_size
        end do ! End do i=1,nkp
-       write(*,4) bandE
+       write(io_lun,4) bandE
     end if ! if(iprint_DM>=1.AND.myid==0)
     ! Allocate space to expand eigenvectors into (i.e. when reversing ScaLAPACK distribution)
     allocate(expH(matrix_size,prim_size),STAT=stat)
@@ -409,10 +412,10 @@ contains
     entropy = zero
     do i=1,nkp
        ! Form the Hamiltonian for this k-point and send it to appropriate processors
-       if(iprint_DM>=3) write(*,*) myid,' Calling DistributeCQ_to_SC for H'
+       if(iprint_DM>=3) write(io_lun,*) myid,' Calling DistributeCQ_to_SC for H'
        call DistributeCQ_to_SC(DistribH,matH,kk(1,i),SCHmat)
        ! Form the overlap for this k-point and send it to appropriate processors
-       if(iprint_DM>=3) write(*,*) myid,' Calling DistributeCQ_to_SC for S'
+       if(iprint_DM>=3) write(io_lun,*) myid,' Calling DistributeCQ_to_SC for S'
        call DistributeCQ_to_SC(DistribS,matS,kk(1,i),SCSmat)
        ! Now, if this processor is involved, do the diagonalisation
        if(me<proc_rows*proc_cols) then
@@ -424,15 +427,15 @@ contains
           !     0.0d0,0.0d0,0,0,abstol,m,w(1,i),z,matrix_size,&
           !     work,lwork,rwork,iwork,ifail,info)
           if(info<0) call cq_abort("FindEvals: pzheev failed !",info)
-          if(info>=1) write(*,*) 'Problem - info returned as: ',info
+          if(info>=1) write(io_lun,*) 'Problem - info returned as: ',info
        end if ! if(me<proc_rows*proc_cols)
-       if(iprint_DM>=5) write(*,*) myid,' Calling barrier'
+       if(iprint_DM>=5) write(io_lun,*) myid,' Calling barrier'
        call my_barrier()
-       if(iprint_DM>=5) write(*,*) myid,' Calling DistributeSC_to_Ref'
+       if(iprint_DM>=5) write(io_lun,*) myid,' Calling DistributeSC_to_Ref'
        ! Reverse the CQ to SC distribution so that eigenvector coefficients for atoms are on the appropriate processor
        call DistributeSC_to_ref(DistribH,z,expH) 
        ! Build K from the eigenvectors
-       if(iprint_DM>=4) write(*,*) myid,' Calling buildK ',Hrange, matK
+       if(iprint_DM>=4) write(io_lun,*) myid,' Calling buildK ',Hrange, matK
        call buildK(Hrange, matK, occ(1:matrix_size,i), kk(1:3,i), wtk(i), expH)
        ! Build matrix needed for Pulay force
        ! We scale the occupation number for this k-point by the eigenvalues in order to build the matrix M12
@@ -444,7 +447,7 @@ contains
              ! This is for NO spin; wtk is added in occupy(), called by findFermi
              ! The factor of half gives us occupancies between 0 and 1
              locc = half*occ(j,i)/wtk(i)
-             if(iprint_DM>3) write(*,fmt='(2x,"Occ, wt: ",2f12.8," ent: ",f20.12)') &
+             if(iprint_DM>3) write(io_lun,fmt='(2x,"Occ, wt: ",2f12.8," ent: ",f20.12)') &
                   locc,wtk(i),locc*log(locc) + (one-locc)*log(one-locc)
              entropy = entropy - two*wtk(i)*(locc*log(locc) + (one-locc)*log(one-locc))
           end if
@@ -453,19 +456,19 @@ contains
        ! Now build data_M12_ij (=-\sum_n eps^n c^n_i c^n_j - hence scaling occs by eps allows reuse of buildK)
        call buildK(Srange, matM12, occ(1:matrix_size,i), kk(1:3,i), wtk(i), expH)
     end do ! End do i=1,nkp
-    if(iprint_DM>3) write(*,*) "Entropy, TS: ",entropy,kT*entropy
+    if(iprint_DM>3) write(io_lun,*) "Entropy, TS: ",entropy,kT*entropy
     entropy = entropy*kT
     time1 = mtime()
-    if(iprint_DM>=2) write(*,3) myid,time1 - time0
+    if(iprint_DM>=2) write(io_lun,3) myid,time1 - time0
     ! -------------------------------------------------------------------------------------------------
     ! End diagonalisation
     ! -------------------------------------------------------------------------------------------------
     ! Write out the band energy and trace of K
     if(iprint_DM>=1) then
        bandE = 2.0_double*matrix_product_trace(matK,matH)
-       if(myid==0) write(*,5) en_conv*bandE,en_units(energy_units)
+       if(myid==0) write(io_lun,5) en_conv*bandE,en_units(energy_units)
        bandE = 2.0_double*matrix_product_trace(matS,matM12)
-       if(myid==0) write(*,6) en_conv*bandE,en_units(energy_units)
+       if(myid==0) write(io_lun,6) en_conv*bandE,en_units(energy_units)
     end if
     call my_barrier()
     ! Deallocate space
@@ -605,7 +608,7 @@ contains
     ! How many rows and columns do we have ?
     row_size = proc_start(myid+1)%rows*block_size_r ! Sizes of local "chunk"
     col_size = proc_start(myid+1)%cols*block_size_c
-    if(iprint_DM>=3) write(*,12) myid,row_size,col_size
+    if(iprint_DM>=3) write(io_lun,12) myid,row_size,col_size
     ! Allocate space for the distributed Scalapack matrices
     allocate(SCHmat(row_size,col_size),STAT=stat)
     if(stat/=0) call cq_abort("DiagModule: Could not alloc SCHmat",stat)
@@ -626,7 +629,7 @@ contains
     call blacs_get(-1,0,context)
     call blacs_gridinit(context,'R',proc_rows,proc_cols)
     call blacs_gridinfo(context,proc_rows,proc_cols,merow,mecol)
-    if(iprint_DM>=3) write(*,1) myid,me,merow,mecol
+    if(iprint_DM>=3) write(io_lun,1) myid,me,merow,mecol
     call blacs_pinfo(me,nump)
     call my_barrier
     if(nump/=numprocs) call cq_abort('FindEvals: BLACS procs error !',nump,numprocs)
@@ -736,7 +739,7 @@ contains
     integer :: row_size,col_size,count
     integer :: row, rowblock,proc
 
-    if(iprint_DM>=2.AND.myid==0) write(*,fmt='(10x,"Entering PrepareRecv")')
+    if(iprint_DM>=2.AND.myid==0) write(io_lun,fmt='(10x,"Entering PrepareRecv")')
     allocate(Distrib%num_rows(numprocs),Distrib%start_row(numprocs),Distrib%send_rows(numprocs),&
          Distrib%firstrow(numprocs),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating Distrib arrays: ",numprocs,stat)
@@ -747,12 +750,12 @@ contains
     do rowblock=1,blocks_r
        if(my_row(rowblock)>0) then ! If this row block is part of my chunk
           do row = 1,block_size_r
-             if(iprint_DM>=5) write(*,4) myid,i,rowblock,row
+             if(iprint_DM>=5) write(io_lun,4) myid,i,rowblock,row
              ! Find processor and increment processors and rows from proc
              proc = parts%i_cc2node(SC_row_block_atom(row,rowblock)%part)
              if(Distrib%num_rows(proc)==0) Distrib%start_row(proc)=count ! Where data from proc goes
              Distrib%num_rows(proc) = Distrib%num_rows(proc)+1
-             if(iprint_DM>=5) write(*,3) myid,i,proc,Distrib%start_row(proc),Distrib%num_rows(proc)
+             if(iprint_DM>=5) write(io_lun,3) myid,i,proc,Distrib%start_row(proc),Distrib%num_rows(proc)
              count = count + 1  ! Position within my chunk of matrix
              i = i+1
              if(i>matrix_size+1) call cq_abort('Matrix too large !')
@@ -866,7 +869,7 @@ contains
     integer :: maxr, maxc, CC, row, currow, start, gcspart
     integer :: FSCpart, i_acc_prim_nsf, prim_nsf_so_far
 
-    if(iprint_DM>=2.AND.myid==0) write(*,fmt='(10x,"Entering PrepareSend")')
+    if(iprint_DM>=2.AND.myid==0) write(io_lun,fmt='(10x,"Entering PrepareSend")')
     ! Initialise and allocate memory
     allocate(sendlist(maxnsf,bundle%n_prim,numprocs),STAT=stat)
     if(stat/=0) call cq_abort("DiagModule: Failed to alloc sendlist",stat)
@@ -880,7 +883,7 @@ contains
     firstcol = 0
     sendlist = 0
     ! Part (i)
-    if(iprint_DM>=2.AND.myid==0) write(*,*) 'Part i ',myid
+    if(iprint_DM>=2.AND.myid==0) write(io_lun,*) 'Part i ',myid
     call my_barrier()
     ! Work out which processors I send to
     i_acc_prim_nsf = 0
@@ -912,7 +915,7 @@ contains
     end do ! End do part = 1,groups_on_node
     ! Part (ii)
     ! Work out how many rows to send to each remote processor
-    if(iprint_DM>=2.AND.myid==0) write(*,*) 'Part ii ',myid
+    if(iprint_DM>=2.AND.myid==0) write(io_lun,*) 'Part ii ',myid
     call my_barrier()
     Distrib%send_rows = 0
     do proc=1,numprocs ! Loop over processors
@@ -925,7 +928,7 @@ contains
                 end if
                 if(sendlist(supfn_r,i,proc)==1) then
                    Distrib%send_rows(proc)=Distrib%send_rows(proc)+1
-                   if(iprint_DM>=5) write(*,11) myid,proc,i,supfn_r
+                   if(iprint_DM>=5) write(io_lun,11) myid,proc,i,supfn_r
                 end if
              end do ! End do supfn_r
           end do ! End do i=bundle%n_prim
@@ -939,30 +942,30 @@ contains
        if(proc_start(proc)%cols*block_size_c>maxc) maxc = proc_start(proc)%cols*block_size_c
     end do
     if(iprint_DM>=5) then
-       write(*,*) myid,' Allocating ele_list: ',numprocs,maxr,maxc
+       write(io_lun,*) myid,' Allocating ele_list: ',numprocs,maxr,maxc
        call my_barrier()
     end if
     stat = 0
     allocate(ele_list(numprocs,maxr,maxc),STAT=stat)
     if(stat/=0) call cq_abort("DiagModule: Failed to alloc ele_list ",stat)
     ele_list = 0
-    if(iprint_DM>=2.AND.myid==0) write(*,*) 'Part iia ',myid
+    if(iprint_DM>=2.AND.myid==0) write(io_lun,*) 'Part iia ',myid
     call my_barrier()
     ! Added to count elements: how many CQ elements fall onto this one SC one ?
-    !write(*,*) myid,' Parts: ',bundle%groups_on_node
+    !write(io_lun,*) myid,' Parts: ',bundle%groups_on_node
     i_acc_prim_nsf = 0
     do part = 1,bundle%groups_on_node ! Loop over primary set partitions
        if(bundle%nm_nodgroup(part)>0) then
           CC = parts%ngnode(parts%inode_beg(myid+1)+part-1)
-          !write(*,*) myid,' Membs: ',part,bundle%nm_nodgroup(part)
+          !write(io_lun,*) myid,' Membs: ',part,bundle%nm_nodgroup(part)
           do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
              atom_num = bundle%nm_nodbeg(part)+memb-1
              Row_FSC_part = CC
              Row_FSC_seq  = memb
-             !write(*,*) myid,' Nabs:  ',part,memb,mat(part,range)%n_nab(memb)
+             !write(io_lun,*) myid,' Nabs:  ',part,memb,mat(part,range)%n_nab(memb)
              prim_nsf_so_far = i_acc_prim_nsf
              do neigh = 1, mat(part,range)%n_nab(memb) ! Loop over neighbours of atom
-                if(iprint_DM>=5) write(*,3) myid,neigh
+                if(iprint_DM>=5) write(io_lun,3) myid,neigh
                 ist = mat(part,range)%i_acc(memb)+neigh-1
                 ! Establish FSC number of neighbour
                 Col_FSC_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist))
@@ -984,12 +987,12 @@ contains
                       j = row-Distrib%firstrow(proc)+1  
                       k = (SCblockc-1)*block_size_c + SCrowc-firstcol(proc)+1
                       if(j>maxr.OR.k>maxc.OR.proc>numprocs) then
-                         write(*,*) 'Error ! Maxr/c exceeded: ',j,maxr,k,maxc,proc,numprocs
+                         write(io_lun,*) 'Error ! Maxr/c exceeded: ',j,maxr,k,maxc,proc,numprocs
                          call cq_abort('Error in counting elements !')
                       end if
                       if(iprint_DM>=5) then
-                         write(*,*) myid,' Loop: ',part,memb,supfn_r,supfn_c
-                         write(*,*) myid,' j,k,proc: ',j,k,proc
+                         write(io_lun,*) myid,' Loop: ',part,memb,supfn_r,supfn_c
+                         write(io_lun,*) myid,' j,k,proc: ',j,k,proc
                       end if
                       ele_list(proc,j,k) = ele_list(proc,j,k) + 1
                    end do
@@ -1000,10 +1003,10 @@ contains
     end do ! End do part = 1,groups_on_node
     call my_barrier()
     if(iprint_DM>=5) then
-       write(*,10) myid,maxr,maxc,maxrow,maxcol
+       write(io_lun,10) myid,maxr,maxc,maxrow,maxcol
        call my_barrier()
     end if
-    if(iprint_DM>=2.AND.myid==0) write(*,*) 'Part iib ',myid
+    if(iprint_DM>=2.AND.myid==0) write(io_lun,*) 'Part iib ',myid
     call my_barrier()
     allocate(Distrib%images(numprocs,maxr,maxc),STAT=stat)
     if(stat/=0) call cq_abort("DiagModule: Failed to alloc images",stat,numprocs*maxr*maxc)
@@ -1030,34 +1033,34 @@ contains
        end do
     end do
     if(iprint_DM>=5) then
-       write(*,*) myid," calling part iii"
+       write(io_lun,*) myid," calling part iii"
        call my_barrier()
     end if
     ! Part (iii)
     ! Build the loc index - for each non-zero element in data_H, record where it goes in SC matrix
-    if(iprint_DM>=2.AND.myid==0) write(*,*) 'Part iii ',myid
+    if(iprint_DM>=2.AND.myid==0) write(io_lun,*) 'Part iii ',myid
     call my_barrier()
     i_acc_prim_nsf = 0
     do part = 1,bundle%groups_on_node ! Loop over primary set partitions
-       if(iprint_DM>=5) write(*,1) myid,part
+       if(iprint_DM>=5) write(io_lun,1) myid,part
        if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
           CC = parts%ngnode(parts%inode_beg(myid+1)+part-1)
           do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
-             if(iprint_DM>=5) write(*,2) myid,memb
+             if(iprint_DM>=5) write(io_lun,2) myid,memb
              atom_num = bundle%nm_nodbeg(part)+memb-1
              Row_FSC_part = CC
              Row_FSC_seq  = memb
              prim_nsf_so_far = i_acc_prim_nsf
              do neigh = 1, mat(part,range)%n_nab(memb) ! Loop over neighbours of atom
-                if(iprint_DM>=5) write(*,3) myid,neigh
+                if(iprint_DM>=5) write(io_lun,3) myid,neigh
                 ist = mat(part,range)%i_acc(memb)+neigh-1
                 ! Establish FSC number of neighbour
                 Col_FSC_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist))
                 Col_FSC_seq  = mat(part,range)%i_seq(ist)
                 gcspart = BCS_parts%icover_ibeg(mat(part,range)%i_part(ist))+Col_FSC_seq-1
                 ! Debugging information
-                if(iprint_DM>=5) write(*,5) myid,Col_FSC_part,Col_FSC_seq
-                if(iprint_DM>=5) write(*,6) myid,BCS_parts%xcover(gcspart),&
+                if(iprint_DM>=5) write(io_lun,5) myid,Col_FSC_part,Col_FSC_seq
+                if(iprint_DM>=5) write(io_lun,6) myid,BCS_parts%xcover(gcspart),&
                      BCS_parts%ycover(gcspart), BCS_parts%zcover(gcspart)
                 i_acc_prim_nsf = prim_nsf_so_far
                 do supfn_r=1,nsf_species(bundle%species(atom_num))
@@ -1071,11 +1074,11 @@ contains
                       ! Find processor that this block belongs to
                       proc = proc_block(SC_to_refx(SCblockr,SCblockc), &
                            SC_to_refy(SCblockr,SCblockc))
-                      if(iprint_DM>=5) write(*,4) myid,proc,SCblockr,SCblockc
+                      if(iprint_DM>=5) write(io_lun,4) myid,proc,SCblockr,SCblockc
                       ! Create atom numbers and store posn in array at point
                       j = row-Distrib%firstrow(proc)+1  
                       k = (SCblockc-1)*block_size_c + SCrowc-firstcol(proc)+1
-                      if(iprint_DM>=5) write(*,9) myid,proc,SCblockc,SCrowc,block_size_c,firstcol(proc)
+                      if(iprint_DM>=5) write(io_lun,9) myid,proc,SCblockc,SCrowc,block_size_c,firstcol(proc)
                       ! Create location
                       ! First increment (and check) number of elements
                       Distrib%images(proc,j,k)%n_elements = Distrib%images(proc,j,k)%n_elements + 1
@@ -1096,7 +1099,7 @@ contains
 ! Change distances here: we now use displacement between supercells
 !                      FSCpart = BCS_parts%lab_cell(mat(part,range)%i_part(ist))!gcspart)
 ! Here we assume that j_0 is in the FSC, as is i_0             
-!                      write(*,*) myid,' FSCpart, atom and xyz: ',FSCpart,parts%icell_beg(FSCpart)+mat(part,range)%i_seq(ist)-1,&
+!                      write(io_lun,*) myid,' FSCpart, atom and xyz: ',FSCpart,parts%icell_beg(FSCpart)+mat(part,range)%i_seq(ist)-1,&
 !                           x_atom_cell(parts%icell_beg(FSCpart)+mat(part,range)%i_seq(ist)-1),&
 !                           y_atom_cell(parts%icell_beg(FSCpart)+mat(part,range)%i_seq(ist)-1),&
 !                           z_atom_cell(parts%icell_beg(FSCpart)+mat(part,range)%i_seq(ist)-1)
@@ -1106,8 +1109,8 @@ contains
 !                           y_atom_cell(parts%icell_beg(FSCpart)+mat(part,range)%i_seq(ist)-1)
 !                      Distrib%loc(proc,j,k)%dz = BCS_parts%zcover(gcspart)- &
 !                           z_atom_cell(parts%icell_beg(FSCpart)+mat(part,range)%i_seq(ist)-1)
-!                      if(iprint_DM>=5) write(*,7) myid,proc,j,k,Distrib%loc(proc,j,k)
-                      if(j>maxr.OR.k>maxc) write(*,*) 'Problem! j,k,max row,col: ',j,k,maxr,maxc
+!                      if(iprint_DM>=5) write(io_lun,7) myid,proc,j,k,Distrib%loc(proc,j,k)
+                      if(j>maxr.OR.k>maxc) write(io_lun,*) 'Problem! j,k,max row,col: ',j,k,maxr,maxc
                    end do ! End do supfn_c = 1,nsf
                 end do ! End do supfn_r = 1,nsf
              end do ! End do neigh=1,mat%n_nab
@@ -1236,7 +1239,7 @@ contains
     ! Distribute data: loop over processors and issue sends and receives as appropriate
     SCmat = zero
     do i=1,numprocs
-       if(iprint_DM>=4) write(*,1) myid,i,send_proc,recv_proc
+       if(iprint_DM>=4) write(io_lun,1) myid,i,send_proc,recv_proc
        ! Sizes
        srow_size = Distrib%send_rows(send_proc+1)                    ! Sizes of remote 
        scol_size = proc_start(send_proc+1)%cols*block_size_c ! "chunk"
@@ -1255,8 +1258,8 @@ contains
        RecvBuffer = cmplx(zero,zero,double_cplx)
        ! On-site
        if(send_proc==myid.AND.recv_proc==myid) then 
-          if(iprint_DM>=5) write(*,*) 'num_rows, send_rows: ',Distrib%num_rows(myid+1),Distrib%send_rows(myid+1)
-          if(iprint_DM>=5) write(*,11) myid,srow_size,scol_size,send_size,rrow_size,rcol_size,recv_size
+          if(iprint_DM>=5) write(io_lun,*) 'num_rows, send_rows: ',Distrib%num_rows(myid+1),Distrib%send_rows(myid+1)
+          if(iprint_DM>=5) write(io_lun,11) myid,srow_size,scol_size,send_size,rrow_size,rcol_size,recv_size
           ! Fill local copy of H matrix
           do j=1,srow_size
              do k=1,scol_size
@@ -1266,7 +1269,7 @@ contains
                            Distrib%images(send_proc+1,j,k)%where(l)%locj,&
                            Distrib%images(send_proc+1,j,k)%where(l)%supfn_row,&
                            Distrib%images(send_proc+1,j,k)%where(l)%supfn_col)
-                      if(iprint_DM>=5) write(*,7) myid,send_proc,j,k,wheremat
+                      if(iprint_DM>=5) write(io_lun,7) myid,send_proc,j,k,wheremat
                       phase = kk(1)*Distrib%images(send_proc+1,j,k)%where(l)%dx + &
                            kk(2)*Distrib%images(send_proc+1,j,k)%where(l)%dy + &
                            kk(3)*Distrib%images(send_proc+1,j,k)%where(l)%dz
@@ -1279,8 +1282,8 @@ contains
                 end if ! n_elements>0
              end do ! k=1,scol_size
           end do ! j=1,srow_size
-          if(iprint_DM>=5) write(*,8) myid,Distrib%start_row(recv_proc+1)
-          if(iprint_DM>=4) write(*,*) '  Done on-proc'
+          if(iprint_DM>=5) write(io_lun,8) myid,Distrib%start_row(recv_proc+1)
+          if(iprint_DM>=4) write(io_lun,*) '  Done on-proc'
           deallocate(RecvBuffer,STAT=stat)
           deallocate(SendBuffer,STAT=stat)
        ! Send and receive data to/from remote processors
@@ -1297,7 +1300,7 @@ contains
                               Distrib%images(send_proc+1,j,k)%where(l)%locj,&
                               Distrib%images(send_proc+1,j,k)%where(l)%supfn_row,&
                               Distrib%images(send_proc+1,j,k)%where(l)%supfn_col)
-                         if(iprint_DM>=5) write(*,7) myid,send_proc,j,k,wheremat
+                         if(iprint_DM>=5) write(io_lun,7) myid,send_proc,j,k,wheremat
                          phase = kk(1)*Distrib%images(send_proc+1,j,k)%where(l)%dx + &
                               kk(2)*Distrib%images(send_proc+1,j,k)%where(l)%dy + &
                               kk(3)*Distrib%images(send_proc+1,j,k)%where(l)%dz
@@ -1318,9 +1321,9 @@ contains
           recvtag = recv_proc + myid*numprocs
           ! Debugging output
           if(iprint_DM>=5) then
-             write(*,*) 'Proc: ',myid,' Sizes: ',send_size,recv_size
-             write(*,10) i,myid,send_proc,recv_proc,srow_size, scol_size, rrow_size, rcol_size
-             write(*,*) 'About to send...'
+             write(io_lun,*) 'Proc: ',myid,' Sizes: ',send_size,recv_size
+             write(io_lun,10) i,myid,send_proc,recv_proc,srow_size, scol_size, rrow_size, rcol_size
+             write(io_lun,*) 'About to send...'
           end if
           ! Issue non-blocking send and then receive
           if(send_size>0) then
@@ -1333,24 +1336,24 @@ contains
           end if
           ! More debugging output
           if(iprint_DM>=5) then
-             write(*,8) myid,Distrib%start_row(recv_proc+1)
+             write(io_lun,8) myid,Distrib%start_row(recv_proc+1)
           end if
-          if(iprint_DM>=4) write(*,2) myid,i
+          if(iprint_DM>=4) write(io_lun,2) myid,i
           ! Put the data in place from the receive buffer
-          if(iprint_DM>=4) write(*,*) myid,'rowsize, start, col: ',rrow_size, Distrib%start_row(recv_proc+1), rcol_size
+          if(iprint_DM>=4) write(io_lun,*) myid,'rowsize, start, col: ',rrow_size, Distrib%start_row(recv_proc+1), rcol_size
           if(rrow_size > 0) then
              do j=1,rrow_size
                 SCmat(Distrib%start_row(recv_proc+1)+j-1,1:rcol_size) = RecvBuffer(j,1:rcol_size)
              end do
           end if ! (rrow_size > 0)
           ! Now wait for the non-blocking send to finish before deallocating !
-          if(iprint_DM>=4) write(*,13) myid,i
+          if(iprint_DM>=4) write(io_lun,13) myid,i
           if(send_size>0) call MPI_Wait(req,mpi_stat,ierr)
           deallocate(RecvBuffer,STAT=stat)
           if(stat/=0) call cq_abort("DiagModule: Failed to dealloc buffer",stat)
           deallocate(SendBuffer,STAT=stat)
           if(stat/=0) call cq_abort("DiagModule: Failed to dealloc buffer",stat)
-          if(iprint_DM>=4) write(*,12) myid,i
+          if(iprint_DM>=4) write(io_lun,12) myid,i
        end if ! else part of if(send_proc==myid.AND.recv_proc==myid)
        ! Increment/decrement recv and send, and wrap
        ! Remember that we go from 0->numprocs-1
@@ -1448,7 +1451,7 @@ contains
     ! Distribute data: loop over processors and issue sends and receives as appropriate
     localEig = zero
     do i=1,numprocs
-       if(iprint_DM>=4) write(*,1) myid,i,send_proc,recv_proc
+       if(iprint_DM>=4) write(io_lun,1) myid,i,send_proc,recv_proc
        ! Sizes
        rrow_size = Distrib%send_rows(recv_proc+1)                    ! Sizes of remote 
        rcol_size = proc_start(recv_proc+1)%cols*block_size_c         ! "chunk"
@@ -1465,11 +1468,11 @@ contains
        SendBuffer = cmplx(zero,zero,double_cplx)
        ! Zero RecvBuffer
        RecvBuffer = cmplx(zero,zero,double_cplx)
-       if(iprint_DM>=5) write(*,8) myid,Distrib%start_row(recv_proc+1)
+       if(iprint_DM>=5) write(io_lun,8) myid,Distrib%start_row(recv_proc+1)
        ! On-site
        if(send_proc==myid.AND.recv_proc==myid) then 
-          if(iprint_DM>=5) write(*,*) 'num_rows, send_rows: ',Distrib%num_rows(myid+1),Distrib%send_rows(myid+1)
-          if(iprint_DM>=5) write(*,11) myid,srow_size,scol_size,send_size,rrow_size,rcol_size,recv_size
+          if(iprint_DM>=5) write(io_lun,*) 'num_rows, send_rows: ',Distrib%num_rows(myid+1),Distrib%send_rows(myid+1)
+          if(iprint_DM>=5) write(io_lun,11) myid,srow_size,scol_size,send_size,rrow_size,rcol_size,recv_size
           ! Fill send buffer
           ! Normally we'd then send this, and copy our receive buffer out
           do j=1,srow_size
@@ -1484,12 +1487,12 @@ contains
                 cblock = aint(real((k-1)/block_size_c))+1
                 refblock = mapy(recv_proc+1,rblock,cblock)
                 coff = (refblock-1)*block_size_c + 1
-                if(iprint_DM>=5) write(*,3) myid,j,k,rblock,cblock,refblock,coff,Distrib%firstrow(recv_proc+1),RecvBuffer(j,k)
+                if(iprint_DM>=5) write(io_lun,3) myid,j,k,rblock,cblock,refblock,coff,Distrib%firstrow(recv_proc+1),RecvBuffer(j,k)
 !                localEig(Distrib%firstrow(recv_proc+1)+j-1,coff:coff+block_size_c-1) = RecvBuffer(j,k:k+block_size_c-1)
                 localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
              end do
           end do
-          if(iprint_DM>=4) write(*,*) '  Done on-proc'
+          if(iprint_DM>=4) write(io_lun,*) '  Done on-proc'
           deallocate(RecvBuffer,STAT=stat)
           deallocate(SendBuffer,STAT=stat)
        ! Send and receive data to/from remote processors
@@ -1510,9 +1513,9 @@ contains
           recvtag = recv_proc + myid*2*numprocs
           ! Debugging output
           if(iprint_DM>=5) then
-             write(*,*) 'Proc: ',myid,' Sizes: ',send_size,recv_size
-             write(*,10) i,myid,send_proc,recv_proc,srow_size, scol_size, rrow_size, rcol_size
-             write(*,*) 'About to send...'
+             write(io_lun,*) 'Proc: ',myid,' Sizes: ',send_size,recv_size
+             write(io_lun,10) i,myid,send_proc,recv_proc,srow_size, scol_size, rrow_size, rcol_size
+             write(io_lun,*) 'About to send...'
           end if
           ! Issue non-blocking send and then receive
           if(send_size>0) then
@@ -1524,7 +1527,7 @@ contains
              call MPI_recv(RecvBuffer,recv_size,MPI_DOUBLE_COMPLEX,&
                   recv_proc,recvtag+1,MPI_COMM_WORLD,mpi_stat,ierr)
           end if
-          if(iprint_DM>=4) write(*,2) myid,roff
+          if(iprint_DM>=4) write(io_lun,2) myid,roff
           ! Put the data in place from the receive buffer
           if(rrow_size > 0) then
              do j=1,rrow_size
@@ -1533,9 +1536,11 @@ contains
                    cblock = aint(real((k-1)/block_size_c))+1
                    refblock = mapy(recv_proc+1,rblock,cblock)
                    coff = (refblock-1)*block_size_c + 1
-                   if(iprint_DM>=5) write(*,3) myid,j,k,rblock,cblock,refblock,coff,Distrib%firstrow(recv_proc+1),RecvBuffer(j,k)
+                   if(iprint_DM>=5) write(io_lun,3) myid,j,k,rblock,cblock,refblock,coff,&
+                        Distrib%firstrow(recv_proc+1),RecvBuffer(j,k)
                    !localEig(Distrib%firstrow(recv_proc+1)+j-1,coff:coff+block_size_c-1) = RecvBuffer(j,k:k+block_size_c-1)
-                   localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = RecvBuffer(j,k:k+block_size_c-1)
+                   localEig(coff:coff+block_size_c-1,Distrib%firstrow(recv_proc+1)+j-1) = &
+                        RecvBuffer(j,k:k+block_size_c-1)
                 end do
              end do
           end if ! (rrow_size > 0)
@@ -1614,15 +1619,17 @@ contains
     real(double) :: lowEf, highEf
     real(double), parameter :: incEf = one
     real(double), parameter :: tolElec = 1.0e-6_double
-    integer :: counter
+    integer :: counter, ne
 
-    if(iprint_DM>=2) write(*,5) myid,electrons
+    if(iprint_DM>=2) write(io_lun,5) myid,electrons
     ! Take first guess as double filling each band at first k point
-    Ef = eig(int(electrons/2),1)
+    ne = int(electrons/2)
+    if(ne<1) ne=1
+    Ef = eig(ne,1)
     call occupy(occ,eig,Ef,thisElec,nbands,nkp)
     ! Find two values than bracket true Ef
     if(thisElec<electrons) then ! We've found a lower bound
-       if(iprint_DM>=4) write(*,3) myid,Ef
+       if(iprint_DM>=4) write(io_lun,3) myid,Ef
        lowEf = Ef
        lowElec = thisElec
        highEf = lowEf + incEf
@@ -1632,10 +1639,10 @@ contains
           lowElec = highElec
           highEf = highEf + incEf
           call occupy(occ,eig,highEf,highElec,nbands,nkp)
-          if(iprint_DM>=4) write(*,6) myid,highEf,highElec
+          if(iprint_DM>=4) write(io_lun,6) myid,highEf,highElec
        end do
     else ! We have an upper bound
-       if(iprint_DM>=4) write(*,4) myid,Ef
+       if(iprint_DM>=4) write(io_lun,4) myid,Ef
        highEf = Ef
        highElec = thisElec
        lowEf = highEf - incEf
@@ -1645,10 +1652,10 @@ contains
           highElec = lowElec
           lowEf = lowEf - incEf
           call occupy(occ,eig,lowEf,lowElec,nbands,nkp)
-          if(iprint_DM>=4) write(*,6) myid,lowEf,lowElec
+          if(iprint_DM>=4) write(io_lun,6) myid,lowEf,lowElec
        end do
     end if
-    if(iprint_DM>=3) write(*,2) myid,lowEf,highEf
+    if(iprint_DM>=3) write(io_lun,2) myid,lowEf,highEf
     Ef = half*(lowEf + highEf)
     call occupy(occ,eig,Ef,thisElec,nbands,nkp)
     counter = 0
@@ -1664,7 +1671,7 @@ contains
        Ef = half*(lowEf + highEf)
        call occupy(occ,eig,Ef,thisElec,nbands,nkp)
     end do
-    if(iprint_DM>=2) write(*,1) Ef
+    if(iprint_DM>=2) write(io_lun,1) Ef
     return
 1   format(10x,'Fermi level is ',f12.5)
 2   format(10x,'Proc: ',i5,' bracketed Ef: ',2f12.5)
@@ -1729,7 +1736,7 @@ contains
           electrons = electrons + occ(iband,ikp)
        end do
     end do
-    if(iprint_DM>=5) write(*,1) myid,Ef,electrons
+    if(iprint_DM>=5) write(io_lun,1) myid,Ef,electrons
     return
 1   format(10x,'In occupy on proc: ',i5,' For Ef of ',f8.5,' we get ',f12.5,' electrons')
   end subroutine occupy
@@ -1881,7 +1888,7 @@ contains
     logical :: flag
     integer :: FSCpart, ipart
 
-    if(iprint_DM>=2.AND.myid==0) write(*,fmt='(10x,"Entering buildK ",i4)') matA
+    if(iprint_DM>=2.AND.myid==0) write(io_lun,fmt='(10x,"Entering buildK ",i4)') matA
     ! Allocate data and zero arrays
     allocate(ints(numprocs,bundle%mx_iprim),current_loc_atoms(numprocs),atom_list(numprocs,bundle%mx_iprim),&
          LocalAtom(ni_in_cell),send_prim(numprocs,bundle%mx_iprim),&
@@ -1894,18 +1901,18 @@ contains
     send_prim = 0
     num_send = 0
     norb_send = 0
-    if(iprint_DM>=3) write(*,*) 'buildK: Stage one'
-!    write(*,*) myid,' send_prim: ',send_prim
+    if(iprint_DM>=3) write(io_lun,*) 'buildK: Stage one'
+!    write(io_lun,*) myid,' send_prim: ',send_prim
     ! Step one - work out which processors we need to exchange data with
     do part = 1,bundle%groups_on_node ! Loop over primary set partitions
-       if(iprint_DM>=5) write(*,1) myid,part
+       if(iprint_DM>=5) write(io_lun,1) myid,part
        if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
           CC = parts%ngnode(parts%inode_beg(myid+1)+part-1)
           do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
-             if(iprint_DM>=5) write(*,2) myid,memb
+             if(iprint_DM>=5) write(io_lun,2) myid,memb
              prim_atom = bundle%nm_nodbeg(part)+memb-1
              do neigh = 1, mat(part,range)%n_nab(memb) ! Loop over neighbours of atom
-                if(iprint_DM>=5) write(*,3) myid,neigh
+                if(iprint_DM>=5) write(io_lun,3) myid,neigh
                 ist = mat(part,range)%i_acc(memb)+neigh-1
                 ! Establish FSC number of neighbour
                 Col_FSC_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist))
@@ -1916,12 +1923,12 @@ contains
                 FSC_atom = id_glob(parts%icell_beg(Col_FSC_part)+Col_FSC_seq-1)
                 ! Find if we have seen this before
                 flag = .false.
-                if(iprint_DM>=5) write(*,*) 'prim, neigh, FSC: ',prim_atom, neigh, FSC_atom
-                if(iprint_DM>=5) write(*,*) 'curr_loc_atoms: ',current_loc_atoms(owning_proc)
+                if(iprint_DM>=5) write(io_lun,*) 'prim, neigh, FSC: ',prim_atom, neigh, FSC_atom
+                if(iprint_DM>=5) write(io_lun,*) 'curr_loc_atoms: ',current_loc_atoms(owning_proc)
                 if(current_loc_atoms(owning_proc)>0) then
                    do i=1,current_loc_atoms(owning_proc)
                       if(atom_list(owning_proc,i)==FSC_atom) then
-                         if(iprint_DM>=5) write(*,*) 'Loc atom: ',i, LocalAtom(FSC_atom)
+                         if(iprint_DM>=5) write(io_lun,*) 'Loc atom: ',i, LocalAtom(FSC_atom)
                          ints(owning_proc,LocalAtom(FSC_atom)) = ints(owning_proc,LocalAtom(FSC_atom)) + 1
                          send_prim(owning_proc,prim_atom) = nsf_species(bundle%species(prim_atom))
                          flag = .true.
@@ -1943,22 +1950,22 @@ contains
        end if ! End if nm_nodgroup > 0
     end do ! End do part=1,groups_on_node
     ! Find max value of current_loc_atoms and interactions
-    if(iprint_DM>=3) write(*,*) 'buildK: Stage two'
+    if(iprint_DM>=3) write(io_lun,*) 'buildK: Stage two'
     maxloc = 0
     maxint = 0
     maxsend = 0
     do i=1,numprocs
-       if(iprint_DM>=4) write(*,*) myid,' Curr loc atoms: ',i,current_loc_atoms(i)
+       if(iprint_DM>=4) write(io_lun,*) myid,' Curr loc atoms: ',i,current_loc_atoms(i)
        if(current_loc_atoms(i)>maxloc) maxloc = current_loc_atoms(i)
        do j=1,bundle%mx_iprim ! Needs to be mx_iprim because goes over primary atoms on REMOTE processors
           if(ints(i,j)>maxint) maxint = ints(i,j)
           if(send_prim(i,j)>0) num_send(i) = num_send(i) + 1
           norb_send(i) = norb_send(i) + send_prim(i,j)
-          if(iprint_DM>=5) write(*,4) myid,j,send_prim(i,j),num_send(i)
+          if(iprint_DM>=5) write(io_lun,4) myid,j,send_prim(i,j),num_send(i)
        end do
        if(num_send(i)>maxsend) maxsend = num_send(i)
     end do
-    if(iprint_DM>=4) write(*,*) myid,' Maxima: ',maxloc, maxint, maxsend
+    if(iprint_DM>=4) write(io_lun,*) myid,' Maxima: ',maxloc, maxint, maxsend
     ! Allocate recv_info
     allocate(send_info(numprocs,maxsend),send_orbs(numprocs,maxsend),send_off(numprocs,maxsend), &
          prim_orbs(bundle%mx_iprim),STAT=stat)
@@ -2002,14 +2009,14 @@ contains
        if(stat/=0) call cq_abort('buildK: Error allocating recv_info !',stat)
     end do
     do part = 1,bundle%groups_on_node ! Loop over primary set partitions
-       if(iprint_DM>=5) write(*,1) myid,part
+       if(iprint_DM>=5) write(io_lun,1) myid,part
        if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
           CC = parts%ngnode(parts%inode_beg(myid+1)+part-1)
           do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
-             if(iprint_DM>=5) write(*,2) myid,memb
+             if(iprint_DM>=5) write(io_lun,2) myid,memb
              prim_atom = bundle%nm_nodbeg(part)+memb-1
              do neigh = 1, mat(part,range)%n_nab(memb) ! Loop over neighbours of atom
-                if(iprint_DM>=5) write(*,3) myid,neigh
+                if(iprint_DM>=5) write(io_lun,3) myid,neigh
                 ist = mat(part,range)%i_acc(memb)+neigh-1
                 ! Establish FSC number of neighbour
                 Col_FSC_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist))
@@ -2020,10 +2027,10 @@ contains
                 FSC_atom = id_glob(parts%icell_beg(Col_FSC_part)+Col_FSC_seq-1)
                 ! Work out a map from primary atom + FSC + identifier to distance and position in data_Matrix
                 locatom = LocalAtom(FSC_atom) ! Which atom in the list on the remote proc is this ?
-                if(iprint_DM>=5) write(*,*) myid,' own, FSC, loc: ',owning_proc, FSC_atom, locatom, &
+                if(iprint_DM>=5) write(io_lun,*) myid,' own, FSC, loc: ',owning_proc, FSC_atom, locatom, &
                      recv_info(owning_proc)%ints(locatom)
                 recv_info(owning_proc)%ints(locatom) = recv_info(owning_proc)%ints(locatom) + 1
-                if(iprint_DM>=5) write(*,*) myid,' ints: ',recv_info(owning_proc)%ints(locatom)
+                if(iprint_DM>=5) write(io_lun,*) myid,' ints: ',recv_info(owning_proc)%ints(locatom)
                 gcspart = BCS_parts%icover_ibeg(mat(part,range)%i_part(ist))+mat(part,range)%i_seq(ist)-1
                 !recv_info(owning_proc)%ndimi(locatom) = mat(part,range)%ndimi(memb)
                 recv_info(owning_proc)%ndimj(locatom) = mat(part,range)%ndimj(ist)
@@ -2048,10 +2055,10 @@ contains
     do i=1,matrix_size
        if(abs(occs(i))>very_small) then
           len = len+1
-          if(myid==0.AND.iprint_DM>=4) write(*,*) 'Occ is ',occs(i)
+          if(myid==0.AND.iprint_DM>=4) write(io_lun,*) 'Occ is ',occs(i)
        end if
     end do
-    if(iprint_DM>=3) write(*,*) 'buildK: Stage three len:',len, matA
+    if(iprint_DM>=3) write(io_lun,*) 'buildK: Stage three len:',len, matA
     ! Step three - loop over processors, send and recv data and build K
     allocate(send_fsc(bundle%mx_iprim),recv_to_FSC(bundle%mx_iprim),mapchunk(bundle%mx_iprim),STAT=stat)
     if(stat/=0) call cq_abort('buildK: Error allocating send_fsc, recv_to_FSC and mapchunk',stat)
@@ -2063,11 +2070,11 @@ contains
     do i=1,numprocs
        send_size = len*norb_send(send_proc+1)!num_send(send_proc+1)*nsf
        recv_size = len*recv_info(recv_proc+1)%orbs!current_loc_atoms(recv_proc+1)*nsf
-       if(iprint_DM>=4) write(*,*) 'Send and recv sizes: ',send_size, recv_size
+       if(iprint_DM>=4) write(io_lun,*) 'Send and recv sizes: ',send_size, recv_size
        ! Fill SendBuffer
        allocate(SendBuffer(len,norb_send(send_proc+1)),STAT=stat)
        if(stat/=0) call cq_abort('buildK: Unable to allocate SendBuffer !',stat)
-       if(iprint_DM>=4) write(*,*) 'Filling SendBuffer'
+       if(iprint_DM>=4) write(io_lun,*) 'Filling SendBuffer'
        orb_count = 0
        do j=1,num_send(send_proc+1)
           do nsf1=1,send_orbs(send_proc+1,j)
@@ -2076,13 +2083,13 @@ contains
           end do
           ! We also need to send a list of what FSC each primary atom sent corresponds to - use bundle%ig_prim
          send_FSC(j) = bundle%ig_prim(send_info(send_proc+1,j))
-         if(iprint_DM>=4) write(*,*) 'Building send_FSC: ',send_info(send_proc+1,j), &
+         if(iprint_DM>=4) write(io_lun,*) 'Building send_FSC: ',send_info(send_proc+1,j), &
               bundle%ig_prim(send_info(send_proc+1,j)),send_FSC(j)
        end do
        if(orb_count/=norb_send(send_proc+1)) call cq_abort("Orbital mismatch in buildK: ",orb_count,norb_send(send_proc+1))
        sendtag = myid + send_proc*2*numprocs
        recvtag = recv_proc + myid*2*numprocs
-       if(iprint_DM>=4) write(*,*) 'Sending'
+       if(iprint_DM>=4) write(io_lun,*) 'Sending'
        ! Now send
        if(send_size>0) then
           if(send_proc/=myid) then
@@ -2091,36 +2098,36 @@ contains
           end if
        end if
        ! Now receive data
-       if(iprint_DM>=4) write(*,*) 'Alloc RecvBuffer ',len,recv_info(recv_proc+1)%orbs
+       if(iprint_DM>=4) write(io_lun,*) 'Alloc RecvBuffer ',len,recv_info(recv_proc+1)%orbs
        !allocate(RecvBuffer(len,current_loc_atoms(recv_proc+1)*nsf),STAT=stat)
        allocate(RecvBuffer(len,recv_info(recv_proc+1)%orbs),STAT=stat)
        if(stat/=0) call cq_abort('buildK: Unable to allocate RecvBuffer !',stat)
-       if(iprint_DM>=4) write(*,*) 'Recving'
+       if(iprint_DM>=4) write(io_lun,*) 'Recving'
        if(recv_size>0) then
           if(recv_proc/=myid) then
              call MPI_recv(recv_to_FSC,current_loc_atoms(recv_proc+1),MPI_INTEGER,recv_proc,recvtag,MPI_COMM_WORLD,mpi_stat,ierr)
-             if(iprint_DM>=4) write(*,*) 'Got recv_to_FSC'
+             if(iprint_DM>=4) write(io_lun,*) 'Got recv_to_FSC'
              call MPI_recv(RecvBuffer,recv_size,MPI_DOUBLE_COMPLEX,&
                   recv_proc,recvtag+1,MPI_COMM_WORLD,mpi_stat,ierr)
-             if(iprint_DM>=4) write(*,*) 'Got RecvBuffer'
+             if(iprint_DM>=4) write(io_lun,*) 'Got RecvBuffer'
           else
-             if(iprint_DM>=4) write(*,*) 'On-proc: getting recv_to_FSC'
+             if(iprint_DM>=4) write(io_lun,*) 'On-proc: getting recv_to_FSC'
              recv_to_FSC(1:current_loc_atoms(recv_proc+1)) = send_FSC(1:current_loc_atoms(recv_proc+1))
-             if(iprint_DM>=4) write(*,*) 'On-proc: getting RecvBuffer'
+             if(iprint_DM>=4) write(io_lun,*) 'On-proc: getting RecvBuffer'
              RecvBuffer(1:len,1:recv_info(recv_proc+1)%orbs) = SendBuffer(1:len,1:recv_info(recv_proc+1)%orbs)
           end if
-          if(iprint_DM>=4) write(*,*) 'Doing the mapchunk', recv_to_FSC
+          if(iprint_DM>=4) write(io_lun,*) 'Doing the mapchunk', recv_to_FSC
           do j=1,current_loc_atoms(recv_proc+1)
              mapchunk(j) = LocalAtom(recv_to_FSC(j))
           end do
-          if(iprint_DM>=4) write(*,*) 'filling buffer'
+          if(iprint_DM>=4) write(io_lun,*) 'filling buffer'
           do j=1,len
              RecvBuffer(j,1:recv_info(recv_proc+1)%orbs) = RecvBuffer(j,1:recv_info(recv_proc+1)%orbs)*0.5_double*occs(j)
           end do
           orb_count = 0
           do atom = 1,current_loc_atoms(recv_proc+1)
              locatom = mapchunk(atom)
-             if(iprint_DM>=4) write(*,*) 'Atom, loc: ',atom,locatom,recv_info(recv_proc+1)%ints(locatom)
+             if(iprint_DM>=4) write(io_lun,*) 'Atom, loc: ',atom,locatom,recv_info(recv_proc+1)%ints(locatom)
              ! Scale the eigenvector coefficients we've received
              ! The factor of 0.5 is because the occupation numbers are from 0->2 (we expect 0->1 in K)
              ! The occupation numbers contain the k-point weight
@@ -2133,10 +2140,10 @@ contains
              ! N.B. the routine used for dot is zdotc which takes the complex conjugate of the first vector
              do inter = 1,recv_info(recv_proc+1)%ints(locatom)
                 prim = recv_info(recv_proc+1)%prim_atom(inter,locatom)
-                if(iprint_DM>=4) write(*,*) 'Inter: ',inter,prim
+                if(iprint_DM>=4) write(io_lun,*) 'Inter: ',inter,prim
                 phase = kps(1)*recv_info(recv_proc+1)%dx(inter,locatom) + kps(2)*recv_info(recv_proc+1)%dy(inter,locatom) + &
                      kps(3)*recv_info(recv_proc+1)%dz(inter,locatom)
-                if(iprint_DM>=5) write(*,*) 'Prim, where, phase: ',prim, whereMat, phase
+                if(iprint_DM>=5) write(io_lun,*) 'Prim, where, phase: ',prim, whereMat, phase
                 rfac = cos(phase)
                 ifac = sin(phase)
                 do row_sup = 1,recv_info(recv_proc+1)%ndimj(locatom)
@@ -2152,20 +2159,20 @@ contains
              orb_count = orb_count + recv_info(recv_proc+1)%ndimj(locatom)
           end do ! atom=current_loc_atoms
        end if ! recv_size>0
-       if(iprint_DM>=4) write(*,*) 'Calling MPI_Wait'
+       if(iprint_DM>=4) write(io_lun,*) 'Calling MPI_Wait'
        if(send_size>0.AND.myid/=send_proc) then
           call MPI_Wait(req1,mpi_stat,ierr)
           call MPI_Wait(req2,mpi_stat,ierr)
        end if
-       if(iprint_DM>=4) write(*,*) 'Calling dealloc'
+       if(iprint_DM>=4) write(io_lun,*) 'Calling dealloc'
        deallocate(RecvBuffer,STAT=stat)
        if(stat/=0) call cq_abort("buildK: Failed to dealloc buffer",stat) 
-       if(iprint_DM>=4) write(*,*) 'Calling dealloc'
+       if(iprint_DM>=4) write(io_lun,*) 'Calling dealloc'
        deallocate(SendBuffer,STAT=stat)
        if(stat/=0) call cq_abort("buildK: Failed to dealloc buffer",stat)
        ! Increment/decrement recv and send, and wrap
        ! Remember that we go from 0->numprocs-1
-       if(iprint_DM>=4) write(*,*) 'Doing proc thang'
+       if(iprint_DM>=4) write(io_lun,*) 'Doing proc thang'
        send_proc = send_proc +1
        if(send_proc.GT.numprocs-1) send_proc = 0
        recv_proc = recv_proc -1
@@ -2185,7 +2192,7 @@ contains
     if(stat/=0) call cq_abort('buildK: Error allocating recv_info !',stat)
     deallocate(ints,current_loc_atoms,atom_list,LocalAtom,send_prim,num_send,norb_send,STAT=stat)
     if(stat/=0) call cq_abort('buildK: Error allocating ints etc !',stat)
-    !    write(*,*) 'Returning'
+    !    write(io_lun,*) 'Returning'
     return
 1   format(10x,'Processor: ',i5,' Partition: ',i5)
 2   format(10x,'Processor: ',i5,' Atom: ',i5)

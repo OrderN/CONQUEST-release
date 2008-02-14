@@ -36,11 +36,14 @@
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2008/02/06 08:24 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module move_atoms
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   ! Useful physical constants
   real(double), parameter:: amu = 1.660566e-27_double
@@ -171,7 +174,7 @@ contains
     integer :: part, memb, atom, speca, k, gatom
     real(double) :: massa, acc
 
-    if(myid==0.AND.iprint_MD>0) write(*,1) step,quenchflag
+    if(myid==0.AND.iprint_MD>0) write(io_lun,1) step,quenchflag
 1   format(4x,'In velocityVerlet, timestep is ',f10.5/&
          'Quench is ',l3)
     do atom = 1, ni_in_cell
@@ -315,15 +318,15 @@ contains
     !allocate(store_density(maxngrid))
     e0 = total_energy
     if(inode==ionode.AND.iprint_MD>0) &
-         write(*,fmt='(4x,"In safemin, initial energy is ",f20.10," ",a2)') en_conv*energy_in,en_units(energy_units)
-    if(inode==ionode) write(*,fmt='(/4x,"Seeking bracketing triplet of points"/)')
+         write(io_lun,fmt='(4x,"In safemin, initial energy is ",f20.10," ",a2)') en_conv*energy_in,en_units(energy_units)
+    if(inode==ionode) write(io_lun,fmt='(/4x,"Seeking bracketing triplet of points"/)')
     ! Unnecessary and over cautious !
     k0 = 0.0_double
     !do i=1,ni_in_cell
     !   x_atom_cell(i) = start_x(i) + k0*direction(1,i)
     !   y_atom_cell(i) = start_y(i) + k0*direction(2,i)
     !   z_atom_cell(i) = start_z(i) + k0*direction(3,i)
-    !   !write(*,*) 'Position: ',i,x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
+    !   !write(io_lun,*) 'Position: ',i,x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
     !end do
     !!  Update atom_coord : TM 27Aug2003
     !call update_atom_coord
@@ -390,7 +393,7 @@ contains
           x_atom_cell(i) = start_x(i) + k3*direction(1,i)
           y_atom_cell(i) = start_y(i) + k3*direction(2,i)
           z_atom_cell(i) = start_z(i) + k3*direction(3,i)
-          !write(*,*) 'Position: ',i,x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
+          if(inode==ionode.AND.iprint_MD>2) write(io_lun,*) 'Position: ',i,x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
        end do
        !Update atom_coord : TM 27Aug2003
        call update_atom_coord
@@ -417,7 +420,7 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, e3, .false., .false.)
        if(inode==ionode.AND.iprint_MD>1) &
-            write(*,fmt='(4x,"In safemin, iter ",i3," step and energy are ",2f20.10" ",a2)') &
+            write(io_lun,fmt='(4x,"In safemin, iter ",i3," step and energy are ",2f20.10" ",a2)') &
             iter,k3,en_conv*e3,en_units(energy_units)
        if (e3<e2) then ! We're still going down hill
           k1 = k2
@@ -442,17 +445,17 @@ contains
        endif
        if (k3 <= very_small) call cq_abort("Step too small: safemin failed!")
     end do
-    if(inode==ionode) write(*,fmt='(/4x,"Interpolating minimum"/)')
+    if(inode==ionode) write(io_lun,fmt='(/4x,"Interpolating minimum"/)')
     ! Interpolate to find minimum.
     if(inode==ionode.AND.iprint_MD>1) &
-            write(*,fmt='(4x,"In safemin, brackets are: ",6f18.10)') k1,e1,k2,e2,k3,e3
+            write(io_lun,fmt='(4x,"In safemin, brackets are: ",6f18.10)') k1,e1,k2,e2,k3,e3
     bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
     if(abs(bottom)>very_small) then
        kmin = 0.5_double*(((k1*k1-k3*k3)*(e1-e2)-(k1*k1-k2*k2)*(e1-e3))/((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3)))
     else
        if(inode==ionode) then
-          write(*,fmt='(4x,"Error in safemin !")')
-          write(*,fmt='(4x,"Interpolation failed: ",6f15.10)')k1,e1,k2,e2,k3,e3
+          write(io_lun,fmt='(4x,"Error in safemin !")')
+          write(io_lun,fmt='(4x,"Interpolation failed: ",6f15.10)')k1,e1,k2,e2,k3,e3
        end if
        kmin = k2
     end if
@@ -495,10 +498,10 @@ contains
        call get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, energy_out, .true., .false.)
     end if
     if(inode==ionode.AND.iprint_MD>1) &
-         write(*,fmt='(4x,"In safemin, Interpolation step and energy are ",f15.10,f20.10" ",a2)') &
+         write(io_lun,fmt='(4x,"In safemin, Interpolation step and energy are ",f15.10,f20.10" ",a2)') &
          kmin,en_conv*energy_out,en_units(energy_units)
     if (energy_out>e2.AND.abs(bottom)>very_small) then ! The interpolation failed - go back
-       if(inode==ionode) write(*,fmt='(/4x,"Interpolation failed; reverting"/)')
+       if(inode==ionode) write(io_lun,fmt='(/4x,"Interpolation failed; reverting"/)')
        kmin = k2
        !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
        !%%!   ! Subtract off atomic densities
@@ -541,15 +544,93 @@ contains
     dE = e0 - energy_out
 7   format(4x,3f15.8)
     if(inode==ionode.AND.iprint_MD>0) then
-       write(*,fmt='(4x,"In safemin, exit after ",i4," iterations with energy ",f20.10," ",a2)') &
+       write(io_lun,fmt='(4x,"In safemin, exit after ",i4," iterations with energy ",f20.10," ",a2)') &
             iter,en_conv*energy_out,en_units(energy_units)
-    else
-       write(*,fmt='(/4x,"Final energy: ",f20.10," ",a2)/') &
+    else if(inode==ionode) then
+       write(io_lun,fmt='(/4x,"Final energy: ",f20.10," ",a2)/') &
             en_conv*energy_out,en_units(energy_units)
     end if
     !deallocate(store_density)
     return
   end subroutine safemin
+!!***
+
+!!****f* move_atoms/pulayStep *
+!!
+!!NAME 
+!! pulayStep
+!!USAGE
+!! 
+!!PURPOSE
+!! Relaxes the atoms to their minimum energy positions using the
+!! guaranteed reduction Pulay algorithm (see Chem. Phys. Lett. 325, 796
+!! (2000) for more details - also minimise).  Take a step with the atoms
+!! based on the timestep and then minimise the norm of the force vector.
+!!INPUTS
+!! 
+!! 
+!!USES
+!! 
+!!AUTHOR
+!! D.R.Bowler
+!!CREATION DATE
+!! 17/07/2001
+!!MODIFICATION HISTORY
+!! 20/07/2001 dave
+!!  Changed so that loops only go over primary set atoms
+!!SOURCE
+!!
+  subroutine pulayStep(posnStore,forceStore,x_atom_cell,y_atom_cell,z_atom_cell,mx_pulay,pul_mx)
+
+    use datatypes
+    use global_module, ONLY: iprint_MD, ni_in_cell
+    use numbers
+    use GenBlas, ONLY: dot, axpy
+    use GenComms, ONLY: gsum, myid
+    use Pulay, ONLY: DoPulay2D
+    use primary_module, ONLY: bundle
+
+    implicit none
+
+    ! Passed variables
+    real(double), dimension(3,ni_in_cell,mx_pulay) :: forceStore
+    real(double), dimension(3,ni_in_cell,mx_pulay) :: posnStore
+    real(double), dimension(ni_in_cell) :: x_atom_cell
+    real(double), dimension(ni_in_cell) :: y_atom_cell
+    real(double), dimension(ni_in_cell) :: z_atom_cell
+    integer :: mx_pulay, pul_mx
+
+    ! Local variables
+    integer :: i,j, length
+    real(double) :: gg
+    real(double), dimension(mx_pulay,mx_pulay) :: Aij
+    real(double), dimension(mx_pulay) :: alph
+
+    length = 3*ni_in_cell
+    Aij = zero
+    do i=1,pul_mx
+       do j=1,pul_mx
+          gg = dot(length, forceStore(1:,1:,j),1, &
+               forceStore(1:,1:,i),1)
+          Aij(j,i) = gg
+          !write(io_lun,fmt='(4x,"A is : ",2i3,f22.17)') i,j,Aij(j,i)
+       enddo
+    enddo
+    !call gsum(Aij,mx_pulay,mx_pulay)
+    call DoPulay2D(Aij,alph,pul_mx,mx_pulay,myid,0)
+    if(myid==0.AND.iprint_MD>2) write(io_lun,*) 'Alpha: ', alph
+    x_atom_cell(:) = 0.0_double
+    y_atom_cell(:) = 0.0_double
+    z_atom_cell(:) = 0.0_double
+    do i=1,pul_mx
+       do j=1,ni_in_cell
+          x_atom_cell(j) = x_atom_cell(j) + alph(i)*posnStore(1,j,i)
+          y_atom_cell(j) = y_atom_cell(j) + alph(i)*posnStore(2,j,i)
+          z_atom_cell(j) = z_atom_cell(j) + alph(i)*posnStore(3,j,i)
+       enddo
+    enddo
+    return
+  end subroutine pulayStep
 !!***
 
 ! --------------------------------------------------------------------
@@ -1223,15 +1304,34 @@ contains
 !!
   subroutine update_atom_coord
     
+    use datatypes
     use global_module, ONLY: x_atom_cell, y_atom_cell, z_atom_cell, &
-         id_glob, atom_coord, ni_in_cell
+         id_glob, atom_coord, ni_in_cell, io_lun, iprint_MD
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use group_module, ONLY: parts
 
     implicit none
 
     integer :: ni, id_global
+    real(double) :: dx, dy, dz
+    
+    dx = r_super_x/parts%ngcellx
+    dy = r_super_y/parts%ngcelly
+    dz = r_super_z/parts%ngcellz
 
     do ni=1, ni_in_cell
        id_global=id_glob(ni)
+       if(iprint_MD>2) then
+          if(floor(atom_coord(1,id_global)/dx)/=floor(x_atom_cell(ni)/dx)) then
+             write(io_lun,*) id_global,' Partition boundary crossed in x ! ',dx,atom_coord(1,id_global),x_atom_cell(ni)
+          end if
+          if(floor(atom_coord(2,id_global)/dy)/=floor(y_atom_cell(ni)/dy)) then
+             write(io_lun,*) id_global,'Partition boundary crossed in y ! ',dy,atom_coord(2,id_global),y_atom_cell(ni)
+          end if
+          if(floor(atom_coord(3,id_global)/dz)/=floor(z_atom_cell(ni)/dz)) then
+             write(io_lun,*) id_global,'Partition boundary crossed in z ! ',dz,atom_coord(3,id_global),z_atom_cell(ni)
+          end if
+       end if
        atom_coord(1, id_global)= x_atom_cell(ni)
        atom_coord(2, id_global)= y_atom_cell(ni)
        atom_coord(3, id_global)= z_atom_cell(ni)

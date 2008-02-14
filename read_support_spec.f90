@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: read_support_spec.f90,v 1.1 2002/07/05 11:39:03 mjg Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module read_support_spec
 ! ------------------------------------------------------------------------------
@@ -21,10 +21,13 @@
 !!  MODIFICATION HISTORY
 !!   2006/06/12 08:10 dave
 !!    Added per-species PAO coefficient information derived type
+!!   2008/02/06 08:10 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 module read_support_spec
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -49,7 +52,7 @@ module read_support_spec
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: read_support_spec.f90,v 1.1 2002/07/05 11:39:03 mjg Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
 !!***
   
@@ -103,16 +106,16 @@ contains
     if(info/=0) call cq_abort("read_support_spec: support info: ",n_species)
     if(inode == ionode) then
        if(iprint_basis >= 3) then
-          write(unit=*,fmt='(//1x,60("+")/10x,"no of species for reading",&
+          write(unit=io_lun,fmt='(//1x,60("+")/10x,"no of species for reading",&
                &" support spec:",i5/1x,60("+"))') n_species
        end if
        call io_assign(lun)
        if(iprint_basis >= 3) then
-          write(unit=*,fmt='(/" read_support_spec: input file unit no:",&
+          write(unit=io_lun,fmt='(/" read_support_spec: input file unit no:",&
                &i3)') lun
        end if
        if(iprint_basis >= 3) then
-          write(unit=*,fmt='(/" read_support_spec: name of input file:",&
+          write(unit=io_lun,fmt='(/" read_support_spec: name of input file:",&
                &a80)') support_spec_file
        end if
        if(flag_read_support_spec) then
@@ -122,19 +125,19 @@ contains
           end if
           do n_sp = 1, n_species
              if(iprint_basis >= 1) then
-                write(unit=*,fmt='(/1x,60("*")/5x,"species no",i5/1x,60("*")/)') n_sp
-                write(unit=*,fmt='(/" no. of support functions:",i5)') nsf_species(n_sp)
+                write(unit=io_lun,fmt='(/1x,60("*")/5x,"species no",i5/1x,60("*")/)') n_sp
+                write(unit=io_lun,fmt='(/" no. of support functions:",i5)') nsf_species(n_sp)
              end if
 
              do n_s = 1, nsf_species(n_sp)
                 if(iprint_basis >= 1) then
-                   write(unit=*,fmt='(/1x,40("-")/8x," support function no:",i5/&
+                   write(unit=io_lun,fmt='(/1x,40("-")/8x," support function no:",i5/&
                         &1x,40("-"))') n_s
                 end if
 
                 read(unit=lun,fmt=*) support_info(n_sp,n_s)%no_of_acz
                 if(iprint_basis >= 1) then
-                   write(unit=*,fmt='(" no. of acz to specify support&
+                   write(unit=io_lun,fmt='(" no. of acz to specify support&
                         & function:",i5)') support_info(n_sp,n_s)%no_of_acz
                 end if
                 allocate(support_info(n_sp,n_s)%acz_info(support_info(n_sp,n_s)%no_of_acz))
@@ -144,7 +147,7 @@ contains
                         support_info(n_sp,n_s)%acz_info(n_acz)%which_zeta, &
                         support_info(n_sp,n_s)%acz_info(n_acz)%coeff
                    if(iprint_basis >= 1) then
-                      write(unit=*,fmt='(" acz no:",i5," which ac:",i5,& 
+                      write(unit=io_lun,fmt='(" acz no:",i5," which ac:",i5,& 
                            &" which zeta:",i5," coeff:",e15.6)') n_acz, &
                            &support_info(n_sp,n_s)%acz_info(n_acz)%which_ac, &
                            &support_info(n_sp,n_s)%acz_info(n_acz)%which_zeta, &
@@ -157,22 +160,22 @@ contains
        else
           do n_sp = 1, n_species
              if(iprint_basis >= 1) then
-                write(unit=*,fmt='(/1x,60("*")/5x,"species no",i5/1x,60("*")/)') n_sp
-                write(unit=*,fmt='(/" no. of support functions:",i5)') nsf_species(n_sp)
+                write(unit=io_lun,fmt='(/1x,60("*")/5x,"species no",i5/1x,60("*")/)') n_sp
+                write(unit=io_lun,fmt='(/" no. of support functions:",i5)') nsf_species(n_sp)
              end if
              if(npao_species(n_sp)/=nsf_species(n_sp)) then
-                write(*,fmt='(10x,"If there are more PAOs than SFs you must specify how they map using support.dat")')
+                write(io_lun,fmt='(10x,"If there are more PAOs than SFs you must specify how they map using support.dat")')
                 call cq_abort("PAO-to-blip map not specified.")
              end if
              do n_s = 1, nsf_species(n_sp)
                 if(iprint_basis >= 1) then
-                   write(unit=*,fmt='(/1x,40("-")/8x," support function no:",i5/&
+                   write(unit=io_lun,fmt='(/1x,40("-")/8x," support function no:",i5/&
                         &1x,40("-"))') n_s
                 end if
 
                 support_info(n_sp,n_s)%no_of_acz = 1
                 if(iprint_basis >= 1) then
-                   write(unit=*,fmt='(" no. of acz to specify support&
+                   write(unit=io_lun,fmt='(" no. of acz to specify support&
                         & function:",i5)') support_info(n_sp,n_s)%no_of_acz
                 end if
                 allocate(support_info(n_sp,n_s)%acz_info(support_info(n_sp,n_s)%no_of_acz))
@@ -180,7 +183,7 @@ contains
                 support_info(n_sp,n_s)%acz_info(1)%which_zeta = 1
                 support_info(n_sp,n_s)%acz_info(1)%coeff = one
                 if(iprint_basis >= 1) then
-                   write(unit=*,fmt='(" acz no:",i5," which ac:",i5,& 
+                   write(unit=io_lun,fmt='(" acz no:",i5," which ac:",i5,& 
                         &" which zeta:",i5," coeff:",e15.6)') 1, &
                         &support_info(n_sp,n_s)%acz_info(1)%which_ac, &
                         &support_info(n_sp,n_s)%acz_info(1)%which_zeta, &
@@ -213,7 +216,7 @@ contains
     end do
     deallocate(ibuff1)
     if((inode == ionode).and.(iprint_basis >= 2)) then
-       write(unit=*,fmt='(/" read_support_spec:&
+       write(unit=io_lun,fmt='(/" read_support_spec:&
             & support_info(n_sp,n_s)%no_of_acz distributed")')
     end if
 
@@ -257,11 +260,11 @@ contains
     end do
     deallocate(rbuff,ibuff2,ibuff1)
     if((inode == ionode).and.(iprint_basis >= 2)) then
-       write(unit=*,fmt='(/" read_support_spec: support_info(n_sp,n_s)%&
+       write(unit=io_lun,fmt='(/" read_support_spec: support_info(n_sp,n_s)%&
             &acz_info(n_acz)%which_ac distributed")')
-       write(unit=*,fmt='(/" read_support_spec: support_info(n_sp,n_s)%&
+       write(unit=io_lun,fmt='(/" read_support_spec: support_info(n_sp,n_s)%&
             &acz_info(n_acz)%which_zeta distributed")')
-       write(unit=*,fmt='(/" read_support_spec: support_info(n_sp,n_s)%&
+       write(unit=io_lun,fmt='(/" read_support_spec: support_info(n_sp,n_s)%&
             &acz_info(n_acz)%coeff distributed")')
     end if
     if(inode==ionode) then

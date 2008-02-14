@@ -27,11 +27,14 @@
 !!    Added flag_no_atomic_densities
 !!   2006/03/04 09:10 dave
 !!    Added get_electronic_density
+!!   2008/02/04 17:13 dave
+!!    Changdes for output to file not stdout
 !!  SOURCE
 module density_module
   
   use datatypes
-  
+  use global_module, ONLY: io_lun
+
   implicit none
   save
 
@@ -117,10 +120,10 @@ contains
 
     logical :: range_flag ! logical flag to warn if splint routine called out of the tabulated range.
 
-    if(inode==ionode.AND.iprint_SC>=2) write(*,fmt='(2x,"Entering set_density")')
+    if(inode==ionode.AND.iprint_SC>=2) write(io_lun,fmt='(2x,"Entering set_density")')
 
     density = zero  ! initialize density
-    !write(*,*) 'Size of density: ',size(density)
+    !write(io_lun,*) 'Size of density: ',size(density)
     !call scal(n_my_grid_points,zero,density,1)
     
     ! determine the block and grid spacing
@@ -135,7 +138,7 @@ contains
     call my_barrier()
 
     do iblock = 1, domain%groups_on_node ! loop over blocks of grid points
-       !write(*,*) 'Block ',iblock
+       !write(io_lun,*) 'Block ',iblock
        ! determine the position of this block
        xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
@@ -231,7 +234,7 @@ contains
     ! Correct electron density
     density_scale = ne_in_cell/local_density
     density = density_scale*density
-    if(inode.eq.ionode.AND.iprint_SC>0) write(*,*) 'In set_density, electrons: ',density_scale*local_density
+    if(inode.eq.ionode.AND.iprint_SC>0) write(io_lun,*) 'In set_density, electrons: ',density_scale*local_density
     call my_barrier()
     return
   end subroutine set_density
@@ -305,7 +308,7 @@ contains
 
     integer :: blk, i_count_alpha, n, n_i, n_point 
 
-    if(inode==ionode.AND.iprint_SC>=2) write(*,fmt='(2x,"Entering get_electronic_density")')
+    if(inode==ionode.AND.iprint_SC>=2) write(io_lun,fmt='(2x,"Entering get_electronic_density")')
     gridfunctions(support_K)%griddata = zero
     call act_on_vectors_new(inode-1,rem_bucket(sf_H_sf_rem),matK,support_K,support)
     ! we can now calculate the density at each point
@@ -337,7 +340,7 @@ contains
     ! FOR DEBUGGING   T. MIYAZAKI 30/Jun/2003
     !do n=1, size
     !   if (denout(n) < -very_small) then
-    !      write(*,*) ' WARNING!!!   density < 0 ',n, size, denout(n)
+    !      write(io_lun,*) ' WARNING!!!   density < 0 ',n, size, denout(n)
     !   endif
     !enddo
     ! FOR DEBUGGING   T. MIYAZAKI 30/Jun/2003
@@ -350,7 +353,7 @@ contains
     electrons = grid_point_volume * rsum( n_my_grid_points, denout, 1 )
 
     call gsum(electrons)
-    if(inode.eq.ionode.AND.iprint_SC>1) write(*,*) 'Electrons: ',electrons
+    if(inode.eq.ionode.AND.iprint_SC>1) write(io_lun,*) 'Electrons: ',electrons
 
     ! support_K is using the same memory as h_on_support, so lets be safe
     ! and set it back to zero

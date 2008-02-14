@@ -28,11 +28,15 @@
 !!    Added debugging statements
 !!   17:28, 2003/06/10 tm
 !!    spline problem fixed
+!!   2008/02/04 08:21 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module atomic_density
 
   use datatypes
+  use global_module, ONLY: io_lun
+
   implicit none
   save
   
@@ -120,7 +124,7 @@ contains
 
     if(inode == ionode) then
        if(iprint_SC >= 1) then
-          write(unit=*,fmt='(//10x,50("+")/10x,"read_atomic_density: &
+          write(unit=io_lun,fmt='(//10x,50("+")/10x,"read_atomic_density: &
                &no. of species for reading atomic density:",i5/10x,50("+"))') n_species
        end if
 
@@ -129,11 +133,11 @@ contains
 
        call io_assign(lun)
        if(iprint_SC >= 2) then
-          write(unit=*,fmt='(/10x," read_atomic_density: io_assign unit no. lun:",i3)') lun
+          write(unit=io_lun,fmt='(/10x," read_atomic_density: io_assign unit no. lun:",i3)') lun
        end if
 
        if(iprint_SC >= 2) then
-          write(unit=*,fmt='(/10x," read_atomic_density: name of input file:",a80)') &
+          write(unit=io_lun,fmt='(/10x," read_atomic_density: name of input file:",a80)') &
                &read_atomic_density_file
        end if
 
@@ -157,13 +161,13 @@ contains
     rcut_dens = 0.0_double
     do n_sp = 1, n_species
 
-       if(iprint_SC >= 2) write(unit=*,fmt='(/10x," reading atomic density data for species no:",i3)') n_sp
+       if(iprint_SC >= 2) write(unit=io_lun,fmt='(/10x," reading atomic density data for species no:",i3)') n_sp
        if(inode == ionode) then
           read(lun,fmt=*) atomic_density_table(n_sp)%length
           read(lun,fmt=*) atomic_density_table(n_sp)%cutoff
           if(iprint_SC >= 2) then
-             write(unit=*,fmt='(/10x," table length:",i5)') atomic_density_table(n_sp)%length
-             write(unit=*,fmt='(/10x," radial cut-off distance:",f12.6)') atomic_density_table(n_sp)%cutoff
+             write(unit=io_lun,fmt='(/10x," table length:",i5)') atomic_density_table(n_sp)%length
+             write(unit=io_lun,fmt='(/10x," radial cut-off distance:",f12.6)') atomic_density_table(n_sp)%cutoff
           end if
        end if
 
@@ -194,7 +198,7 @@ contains
        call io_close(lun)
        if(iprint_SC>2) then
           do n_sp = 1,n_species
-            write(*,fmt='(10x,"Atomic density cutoff for species ",i4," : ",f15.8)') n_sp,rcut_dens(n_sp)
+            write(io_lun,fmt='(10x,"Atomic density cutoff for species ",i4," : ",f15.8)') n_sp,rcut_dens(n_sp)
          end do
       end if
    end if
@@ -279,7 +283,7 @@ contains
        rcut_dens(n_sp)=atomic_density_table(n_sp)%cutoff
        !if(atomic_density_table(n_sp)%cutoff>rcut_dens) rcut_dens=atomic_density_table(n_sp)%cutoff
        if((inode == ionode).and.(iprint_SC >= 2)) &
-            &write(unit=*,fmt='(/10x," radial cut-off to be used is taken to be max PAO cut-off radius for &
+            &write(unit=io_lun,fmt='(/10x," radial cut-off to be used is taken to be max PAO cut-off radius for &
             &this species:",f12.6)') atomic_density_table(n_sp)%cutoff     
        ! By default, use the parameter given above for length
        atomic_density_table(n_sp)%length = default_atomic_density_length
@@ -302,7 +306,7 @@ contains
             &float(atomic_density_table(n_sp)%length-1)
        ! Write out info and check angular momentum
        if((inode == ionode).and.(iprint_SC >= 2)) &
-            write(unit=*,fmt='(/10x," greatest ang. mom. for making density from PAOs:",i3)') &
+            write(unit=io_lun,fmt='(/10x," greatest ang. mom. for making density from PAOs:",i3)') &
             &pao(n_sp)%greatest_angmom
        if(pao(n_sp)%greatest_angmom < 0) &
             &call cq_abort('make_atomic_density_from_paos: greatest ang. mom. cannot be negative')
@@ -345,13 +349,13 @@ contains
        end do ! n_am = pao(...)%greatest_angmom
        do nt = 1, atomic_density_table(n_sp)%length
           r = (nt-1)*density_deltar
-          if(inode==ionode.AND.iprint_SC>3) write(*,fmt='(10x,"Radial table: ",i5,2f15.8)') &
+          if(inode==ionode.AND.iprint_SC>3) write(io_lun,fmt='(10x,"Radial table: ",i5,2f15.8)') &
                nt,r,atomic_density_table(n_sp)%table(nt)
        end do
     end do ! n_sp = n_species
     do n_sp = 1,n_species
        if(inode == ionode.AND.iprint_SC>2) &
-            write(*,fmt='(10x,"Atomic density cutoff for species ",i4," : ",f15.8)') n_sp,rcut_dens(n_sp)
+            write(io_lun,fmt='(10x,"Atomic density cutoff for species ",i4," : ",f15.8)') n_sp,rcut_dens(n_sp)
     end do
   end subroutine make_atomic_density_from_paos
 !!***
@@ -415,7 +419,7 @@ contains
        call spline( atomic_density_table(n)%length, delta_r, atomic_density_table(n)%table(:),  &
             d_origin, d_end, atomic_density_table(n)%d2_table(:) )
        if(inode==ionode.AND.iprint_SC>3) then
-          write(*,fmt='(10x,"Atomic density for species ",i5)') n
+          write(io_lun,fmt='(10x,"Atomic density for species ",i5)') n
           do i=1,atomic_density_table(n)%length
              r = real(i-1,double)*delta_r
              if(r < atomic_density_table(n)%cutoff) then   !TM
@@ -427,11 +431,11 @@ contains
                      atomic_density_table(n)%d2_table(:), &
                      atomic_density_table(n)%length, & 
                      r,local_density,derivative,range_flag)
-                write(*,fmt='(10x,3f20.12)') r,local_density,derivative
+                write(io_lun,fmt='(10x,3f20.12)') r,local_density,derivative
              else                                                    !TM
-                write(*,fmt='(10x,"r in spline_atomic_density > cutoff  ",2f20.12)') &
+                write(io_lun,fmt='(10x,"r in spline_atomic_density > cutoff  ",2f20.12)') &
                      r, atomic_density_table(n)%cutoff
-                write(*,fmt='(10x,3f20.12)') r, &                                   !TM
+                write(io_lun,fmt='(10x,3f20.12)') r, &                                   !TM
                      atomic_density_table(n)%table(atomic_density_table(n)%length), & !TM
                      atomic_density_table(n)%d2_table(atomic_density_table(n)%length) !TM
              endif                                                   !TM

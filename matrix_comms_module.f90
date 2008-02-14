@@ -1,4 +1,4 @@
-! $Id: matrix_comms_module.f90,v 1.2.2.1 2006/03/31 12:21:19 drb Exp $
+! $Id$
 ! -----------------------------------------------------------
 ! Module matrix_comms_module
 ! -----------------------------------------------------------
@@ -26,6 +26,8 @@
 !!   20/06/2001 dave
 !!    Added ROBODoc header, RCS Id and Log tags and removed stops
 !!    Added GenComms to init_mult_comms
+!!   2008/02/06 08:22 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module matrix_comms_module
@@ -190,6 +192,8 @@ contains
 !!   20/06/2001 dave
 !!    Added ROBODoc header
 !!    Added GenComms
+!!   2008/02/11 16:55 dave
+!!    Added MPI_Wait calls for non-blocking sends
 !!  SOURCE
 !!
   subroutine init_mult_comms(parts,a_b_c,myid)
@@ -216,8 +220,8 @@ contains
 
     ! Local variables
     integer :: ierr,kpart,ind_part,i,j,nod,stat
-    integer :: nreq(2*maxnabaprocs)
-    integer :: nrstat(MPI_STATUS_SIZE,2*maxnabaprocs)
+    integer :: nreq(3*maxnabaprocs)
+    integer :: nrstat(MPI_STATUS_SIZE,3*maxnabaprocs)
     integer :: np_get(maxnabaprocs)  
     integer, pointer :: part_list(:,:)
 
@@ -240,7 +244,7 @@ contains
     a_b_c%comms%ncomm = 0
     a_b_c%comms%inode = 0
     ! Now loop over partitions and work out where to get data from/send data to
-    if(a_b_c%ahalo%np_in_halo>a_b_c%ahalo%mx_part) write(*,*) 'ERROR in HALO'
+    if(a_b_c%ahalo%np_in_halo>a_b_c%ahalo%mx_part) write(io_lun,*) 'ERROR in HALO'
     do kpart=1,a_b_c%ahalo%np_in_halo
        new = .true.
        ind_part=a_b_c%ahalo%lab_hcell(kpart)
@@ -284,6 +288,11 @@ contains
                MPI_INTEGER,a_b_c%comms%ncomm(i)-1,2,&
                MPI_COMM_WORLD,nrstat(1,i*2),ierr)
        enddo
+       ! Add MPI_Wait calls
+       do i=1,a_b_c%comms%inode
+          call MPI_Wait(nreq(i*2-1),nrstat(1,1),ierr)
+          call MPI_Wait(nreq(i*2),nrstat(1,2),ierr)
+       end do
        ! The next two send/recv pairs are for the ilen2 parameter - this
        ! is the sum of the number of B neighbours for all atoms in a 
        ! partition.  It's rather useful.
@@ -315,11 +324,11 @@ contains
        ! Now send our stuff, and then get what we need
        do i=1,a_b_c%comms%inode
           call MPI_issend(ilen2(1,i),parts%mx_ngonn,MPI_INTEGER, &
-               a_b_c%comms%ncomm(i)-1,3,MPI_COMM_WORLD,nreq(i*2),ierr)
+               a_b_c%comms%ncomm(i)-1,3,MPI_COMM_WORLD,nreq(i*3-2),ierr)
           call MPI_issend(ilen3(1,i),parts%mx_ngonn,MPI_INTEGER, &
-               a_b_c%comms%ncomm(i)-1,4,MPI_COMM_WORLD,nreq(i*2),ierr)
+               a_b_c%comms%ncomm(i)-1,4,MPI_COMM_WORLD,nreq(i*3-1),ierr)
           call MPI_issend(istart(1,i),parts%mx_ngonn,MPI_INTEGER, &
-               a_b_c%comms%ncomm(i)-1,5,MPI_COMM_WORLD,nreq(i*2),ierr)
+               a_b_c%comms%ncomm(i)-1,5,MPI_COMM_WORLD,nreq(i*3),ierr)
        enddo
        do i=1,a_b_c%comms%inode
           call MPI_recv(a_b_c%comms%ilen2rec(1,i),parts%mx_ngonn,&
@@ -332,6 +341,11 @@ contains
                MPI_INTEGER,a_b_c%comms%ncomm(i)-1,5,&
                MPI_COMM_WORLD,nrstat(1,i*2),ierr)
        enddo
+       do i=1,a_b_c%comms%inode
+          call MPI_Wait(nreq(i*3-2),nrstat(1,1),ierr)
+          call MPI_Wait(nreq(i*3-1),nrstat(1,2),ierr)
+          call MPI_Wait(nreq(i*3),nrstat(1,3),ierr)
+       end do
     end if !(a_b_c%comms%inode > 0)
     call MPI_Barrier(MPI_COMM_WORLD, ierr)
     deallocate(part_list,STAT=stat)
@@ -399,7 +413,7 @@ contains
        endif
     enddo
     if(maxnabaprocs==0) maxnabaprocs = 1
-    if(iprint_mat>2) write(*,fmt='(2x,"Proc: ",i5," has ",i5," neighbour processors")') myid+1,maxnabaprocs
+    if(iprint_mat>2) write(io_lun,fmt='(2x,"Proc: ",i5," has ",i5," neighbour processors")') myid+1,maxnabaprocs
   end subroutine find_neighbour_procs
 !!***
 end module matrix_comms_module

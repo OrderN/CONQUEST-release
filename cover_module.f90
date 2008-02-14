@@ -51,12 +51,15 @@
 !!    Corrected reference to notes and added USE field for whole module
 !!   17/06/2002 dave
 !!    Added RCS Id tag and improved headers a little
+!!   2008/02/04 17:12 dave
+!!    Changes for output to file not stdoutx
 !!  SOURCE
 !!
 module cover_module
 
   ! Module use
   use datatypes
+  use global_module, ONLY: io_lun
   use basic_types
 
   implicit none
@@ -330,7 +333,7 @@ contains
        !endif ! members.AND.nm_group>0
     enddo
     if(members) then ! Now generate member information
-       if(inode==ionode.AND.iprint_index>1) write(*,*) 'Members in covering set: ',nm_in_cover
+       if(inode==ionode.AND.iprint_index>1) write(io_lun,*) 'Members in covering set: ',nm_in_cover
        if(members) set%icover_ibeg(1)=1
        set%mx_mcover = nm_in_cover
        allocate(set%xcover(set%mx_mcover),STAT=stat)
@@ -578,7 +581,7 @@ contains
     dcx = rcellx/real(groups%ngcellx,double)
     dcy = rcelly/real(groups%ngcelly,double)
     dcz = rcellz/real(groups%ngcellz,double)
-    !    write(*,*) 'dx, dcx: ',dx,dy,dz,dcx,dcy,dcz
+    !    write(io_lun,*) 'dx, dcx: ',dx,dy,dz,dcx,dcy,dcz
     ! Convert origin of prim to reals (add eps to prevent ambiguity)
     ro_x = (real(prim%nx_origin-1,double))*dx + eps 
     ro_y = (real(prim%ny_origin-1,double))*dy + eps
@@ -598,7 +601,7 @@ contains
     ro_cx = (real(ncx_o-1,double))*dcx
     ro_cy = (real(ncy_o-1,double))*dcy
     ro_cz = (real(ncz_o-1,double))*dcz
-    !    write(*,*) 'Origin: ',ro_x,ro_y,ro_z,ro_cx,ro_cy,ro_cz
+    !    write(io_lun,*) 'Origin: ',ro_x,ro_y,ro_z,ro_cx,ro_cy,ro_cz
     ! Start by finding the left and right hand corners of the CS
     lhx = dx*(prim%nx_origin-1-prim%nleftx)-set%rcut
     lhy = dy*(prim%ny_origin-1-prim%nlefty)-set%rcut
@@ -629,55 +632,55 @@ contains
     ! First check that the LH and RH corners are large enough
     ! LH
     if(lhx+eps<lhcx) then
-       write(*,*) 'CS too small; adjusting nspanlx',lhx,lhcx
+       write(io_lun,*) 'CS too small; adjusting nspanlx',lhx,lhcx
        set%nspanlx = set%nspanlx+ceiling((lhcx-lhx)/dcx)
     endif
     if(lhy+eps<lhcy) then
-       write(*,*) 'CS too small; adjusting nspanly',lhy,lhcy
+       write(io_lun,*) 'CS too small; adjusting nspanly',lhy,lhcy
        set%nspanly = set%nspanly+ceiling((lhcy-lhy)/dcy)
     endif
     if(lhz+eps<lhcz) then
-       write(*,*) 'CS too small; adjusting nspanlz',lhz,lhcz
+       write(io_lun,*) 'CS too small; adjusting nspanlz',lhz,lhcz
        set%nspanlz = set%nspanlz+ceiling((lhcz-lhz)/dcz)
     endif
     ! RH
     if(rhx>rhcx+eps) then
-       write(*,*) 'CS too small; adjusting ncoverx',rhx,rhcx
+       write(io_lun,*) 'CS too small; adjusting ncoverx',rhx,rhcx
        set%ncoverx = set%ncoverx+ceiling((rhx-rhcx)/dcx)
     endif
     if(rhy>rhcy+eps) then
-       write(*,*) 'CS too small; adjusting ncovery',rhy,rhcy
+       write(io_lun,*) 'CS too small; adjusting ncovery',rhy,rhcy
        set%ncovery = set%ncovery+ceiling((rhy-rhcy)/dcy)
     endif
     if(rhz>rhcz+eps) then
-       write(*,*) 'CS too small; adjusting ncoverz',rhz,rhcz
+       write(io_lun,*) 'CS too small; adjusting ncoverz',rhz,rhcz
        set%ncoverz = set%ncoverz+ceiling((rhz-rhcz)/dcz)
     endif
     ! Now check that the CS isn't too large
     ! LH
     if(lhx-lhcx>dcx) then
-       write(*,*) 'CS too big; adjusting nspanlx',lhx,lhcx
+       write(io_lun,*) 'CS too big; adjusting nspanlx',lhx,lhcx
        set%nspanlx = set%nspanlx-floor((lhx-lhcx)/dcx)
     endif
     if(lhy-lhcy>dcy) then
-       write(*,*) 'CS too big; adjusting nspanly',lhy,lhcy
+       write(io_lun,*) 'CS too big; adjusting nspanly',lhy,lhcy
        set%nspanly = set%nspanly-floor((lhy-lhcy)/dcy)
     endif
     if(lhz-lhcz>dcz) then
-       write(*,*) 'CS too big; adjusting nspanlz',lhz,lhcz
+       write(io_lun,*) 'CS too big; adjusting nspanlz',lhz,lhcz
        set%nspanlz = set%nspanlz-floor((lhz-lhcz)/dcz)
     endif
     ! RH
     if(rhcx-rhx>dcx) then
-       write(*,*) 'CS too big; adjusting ncoverx',rhx,rhcx
+       write(io_lun,*) 'CS too big; adjusting ncoverx',rhx,rhcx
        set%ncoverx = set%ncoverx-floor((rhx-rhcx)/dcx)
     endif
     if(rhcy-rhy>dcy) then
-       write(*,*) 'CS too big; adjusting ncovery',rhy,rhcy
+       write(io_lun,*) 'CS too big; adjusting ncovery',rhy,rhcy
        set%ncovery = set%ncovery-floor((rhy-rhcy)/dcy)
     endif
     if(rhcz-rhz>dcz) then
-       write(*,*) 'CS too big; adjusting ncoverz',rhz,rhcz
+       write(io_lun,*) 'CS too big; adjusting ncoverz',rhz,rhcz
        set%ncoverz = set%ncoverz-floor((rhz-rhcz)/dcz)
     endif
     return

@@ -31,11 +31,14 @@
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2008/02/06 11:03 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module test_force_module
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -112,9 +115,9 @@ contains
     real(double), dimension(3,ni_in_cell) :: HF_force
     logical :: reset_L = .false.
 
-    if(inode==ionode) write(*,fmt='(2x,"******************"/,2x,"* Testing Forces *"/,2x,"******************"/)')
+    if(inode==ionode) write(io_lun,fmt='(2x,"******************"/,2x,"* Testing Forces *"/,2x,"******************"/)')
     if(TF_atom_moved>ni_in_cell) then
-       write(*,fmt='(2x,"Error: specified atom out-of-range: ",2i8)') TF_atom_moved, ni_in_cell
+       write(io_lun,fmt='(2x,"Error: specified atom out-of-range: ",2i8)') TF_atom_moved, ni_in_cell
        TF_atom_moved = 1
     end if
     ! Here we want to back up the state of the system by saving H, K, density, blips, chis, local ps
@@ -139,7 +142,7 @@ contains
     !call dump_matrix("K", matK,inode)
     ! Full forces
     if(flag_test_all_forces.OR.flag_which_force==1) then
-       if(inode==ionode) write(*,*) '*** Full ***'
+       if(inode==ionode) write(io_lun,*) '*** Full ***'
        call test_full(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
             total_energy, expected_reduction)
        !call grab_blips("O",supportfns,inode)
@@ -180,7 +183,7 @@ contains
     end if
     ! *** Hellmann-Feynman ***
     if(flag_test_all_forces.OR.flag_which_force==2) then
-       if(inode==ionode) write(*,*) '*** Full HF ***'
+       if(inode==ionode) write(io_lun,*) '*** Full HF ***'
        call test_HF(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
             total_energy, expected_reduction)
        if(flag_test_all_forces) then
@@ -212,7 +215,7 @@ contains
     end if
     ! *** Total Pulay ***
     if(flag_test_all_forces.OR.flag_which_force==3) then
-       if(inode==ionode) write(*,*) '*** Full Pulay ***'
+       if(inode==ionode) write(io_lun,*) '*** Full Pulay ***'
        call test_FullPulay(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
             total_energy, expected_reduction)
        if(flag_test_all_forces) then
@@ -246,7 +249,7 @@ contains
     ! *** NSC ***
     if(flag_test_all_forces.OR.flag_which_force==4) then
        if(.NOT.flag_self_consistent) then
-          if(inode==ionode) write(*,*) '*** Non Self-Consistent ***'
+          if(inode==ionode) write(io_lun,*) '*** Non Self-Consistent ***'
           delta_E_hartree = dH0  
           delta_E_xc      = dXC0 
           call set_density()
@@ -271,7 +274,7 @@ contains
     end if
     ! *** phi Pulay Non-local ***
     if(flag_test_all_forces.OR.flag_which_force==5) then
-       if(inode==ionode) write(*,*) '*** Non-local phi Pulay ***'
+       if(inode==ionode) write(io_lun,*) '*** Non-local phi Pulay ***'
        call test_PhiPulay_nonlocal(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
             total_energy, expected_reduction)
        if(flag_test_all_forces) then
@@ -302,7 +305,7 @@ contains
     end if
     ! *** phi Pulay KE ***
     if(flag_test_all_forces.OR.flag_which_force==6) then
-       if(inode==ionode) write(*,*) '*** KE phi Pulay ***'
+       if(inode==ionode) write(io_lun,*) '*** KE phi Pulay ***'
        call test_PhiPulay_KE(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
             total_energy, expected_reduction)
        if(flag_test_all_forces) then
@@ -336,7 +339,7 @@ contains
     end if
     ! *** phi Pulay local ***
     if(flag_test_all_forces.OR.flag_which_force==7) then
-       if(inode==ionode) write(*,*) '*** Local (Ha, XC, loc ps) phi Pulay ***'
+       if(inode==ionode) write(io_lun,*) '*** Local (Ha, XC, loc ps) phi Pulay ***'
        call test_PhiPulay_Local(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
             total_energy, expected_reduction)
        if(flag_test_all_forces) then
@@ -367,7 +370,7 @@ contains
     end if
     ! *** S Pulay ***
     if(flag_test_all_forces.OR.flag_which_force==8) then
-       if(inode==ionode) write(*,*) '*** S Pulay ***'
+       if(inode==ionode) write(io_lun,*) '*** S Pulay ***'
        call test_SPulay(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
             total_energy, expected_reduction)
        if(flag_test_all_forces) then
@@ -466,13 +469,13 @@ contains
 
     ! Warn user that we're NOT getting just HF with PAOs !
     if(flag_basis_set==PAOs) then
-       if(myid==0) write(*,fmt='(2x,"********************************************************")')
-       if(myid==0) write(*,fmt='(2x,"*                                                      *")')
-       if(myid==0) write(*,fmt='(2x,"*    WARNING * WARNING * WARNING * WARNING * WARNING   *")')
-       if(myid==0) write(*,fmt='(2x,"*                                                      *")')
-       if(myid==0) write(*,fmt='(2x,"* With a PAO basis we calculate NL HF AND Pulay forces *")')
-       if(myid==0) write(*,fmt='(2x,"*                                                      *")')
-       if(myid==0) write(*,fmt='(2x,"********************************************************")')
+       if(myid==0) write(io_lun,fmt='(2x,"********************************************************")')
+       if(myid==0) write(io_lun,fmt='(2x,"*                                                      *")')
+       if(myid==0) write(io_lun,fmt='(2x,"*    WARNING * WARNING * WARNING * WARNING * WARNING   *")')
+       if(myid==0) write(io_lun,fmt='(2x,"*                                                      *")')
+       if(myid==0) write(io_lun,fmt='(2x,"* With a PAO basis we calculate NL HF AND Pulay forces *")')
+       if(myid==0) write(io_lun,fmt='(2x,"*                                                      *")')
+       if(myid==0) write(io_lun,fmt='(2x,"********************************************************")')
     end if
     ! We're coming in from initial_H: assume that initial E found
     E0 = total_energy
@@ -495,9 +498,9 @@ contains
     ! Store local energy
 !    E0 = hartree_energy + xc_energy + local_ps_energy
     ! Find out direction and atom for displacement
-    write(*,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
     F0 = p_force(TF_direction,TF_atom_moved)+HF_NL_force(TF_direction,TF_atom_moved)+KE_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Initial energy      : ",f20.12,/,2x,"Initial pulay force: ",f20.12)') E0, F0
+    if(inode==ionode) write(io_lun,fmt='(2x,"Initial energy      : ",f20.12,/,2x,"Initial pulay force: ",f20.12)') E0, F0
     ! Move the specified atom 
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
@@ -544,11 +547,12 @@ contains
 !    E1 = hartree_energy + xc_energy + local_ps_energy
     E1 = total_energy
     F1 = p_force(TF_direction,TF_atom_moved)+HF_NL_force(TF_direction,TF_atom_moved)+KE_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Final energy      : ",f20.12,/,2x,"Final pulay force: ",f20.12)') E1, F1
+    if(inode==ionode) write(io_lun,fmt='(2x,"Final energy      : ",f20.12,/,2x,"Final pulay force: ",f20.12)') E1, F1
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
-    if(inode==ionode) write(*,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') &
+         numerical_force, analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
@@ -636,13 +640,13 @@ contains
     allocate(density_out(maxngrid), STAT=stat)
     ! Warn user that we're NOT getting just HF with PAOs !
     if(flag_basis_set==PAOs) then
-       if(myid==0) write(*,fmt='(2x,"********************************************************")')
-       if(myid==0) write(*,fmt='(2x,"*                                                      *")')
-       if(myid==0) write(*,fmt='(2x,"*    WARNING * WARNING * WARNING * WARNING * WARNING   *")')
-       if(myid==0) write(*,fmt='(2x,"*                                                      *")')
-       if(myid==0) write(*,fmt='(2x,"* With a PAO basis we calculate NL HF AND Pulay forces *")')
-       if(myid==0) write(*,fmt='(2x,"*                                                      *")')
-       if(myid==0) write(*,fmt='(2x,"********************************************************")')
+       if(myid==0) write(io_lun,fmt='(2x,"********************************************************")')
+       if(myid==0) write(io_lun,fmt='(2x,"*                                                      *")')
+       if(myid==0) write(io_lun,fmt='(2x,"*    WARNING * WARNING * WARNING * WARNING * WARNING   *")')
+       if(myid==0) write(io_lun,fmt='(2x,"*                                                      *")')
+       if(myid==0) write(io_lun,fmt='(2x,"* With a PAO basis we calculate NL HF AND Pulay forces *")')
+       if(myid==0) write(io_lun,fmt='(2x,"*                                                      *")')
+       if(myid==0) write(io_lun,fmt='(2x,"********************************************************")')
     end if
     ! We're coming in from initial_H: assume that initial E found
     ! Non-local
@@ -674,12 +678,12 @@ contains
        call get_HF_non_local_force( HF_NL_force, HF, ni_in_cell)
     end if
     ! Find out direction and atom for displacement
-    write(*,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
     Fnl0 = HF_NL_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Initial NL energy: ",f20.12,/,2x,"Initial NL force : ",f20.12)') Enl0, Fnl0
+    if(inode==ionode) write(io_lun,fmt='(2x,"Initial NL energy: ",f20.12,/,2x,"Initial NL force : ",f20.12)') Enl0, Fnl0
     F0 = HF_NL_force(TF_direction,TF_atom_moved)+HF_force(TF_direction,TF_atom_moved)
     F0 = HF_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Initial band energy: ",f20.12,/,2x,"Initial HF force : ",f20.12)') E0, F0
+    if(inode==ionode) write(io_lun,fmt='(2x,"Initial band energy: ",f20.12,/,2x,"Initial HF force : ",f20.12)') E0, F0
     ! Move the specified atom 
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
@@ -727,18 +731,18 @@ contains
     Fnl1 = HF_NL_force(TF_direction,TF_atom_moved)
     F1 = HF_NL_force(TF_direction,TF_atom_moved)+HF_force(TF_direction,TF_atom_moved)
     F1 = HF_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Final NL energy: ",f20.12,/,2x,"Final NL force : ",f20.12)') Enl1, Fnl1
+    if(inode==ionode) write(io_lun,fmt='(2x,"Final NL energy: ",f20.12,/,2x,"Final NL force : ",f20.12)') Enl1, Fnl1
     numerical_force = -(Enl1-Enl0)/TF_delta
     analytic_force = 0.5_double*(Fnl1+Fnl0)
-    if(inode==ionode) write(*,fmt='(2x,"Numerical NL Force: ",f20.12,/,2x,"Analytic NL Force : ",f20.12)') &
+    if(inode==ionode) write(io_lun,fmt='(2x,"Numerical NL Force: ",f20.12,/,2x,"Analytic NL Force : ",f20.12)') &
          numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Final band energy: ",f20.12,/,2x,"Final HF force : ",f20.12)') E1, F1
+    if(inode==ionode) write(io_lun,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Final band energy: ",f20.12,/,2x,"Final HF force : ",f20.12)') E1, F1
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
-    if(inode==ionode) write(*,fmt='(2x,"Numerical local Force: ",f20.12,/,2x,"Analytic local Force : ",f20.12)') &
+    if(inode==ionode) write(io_lun,fmt='(2x,"Numerical local Force: ",f20.12,/,2x,"Analytic local Force : ",f20.12)') &
          numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
@@ -826,13 +830,13 @@ contains
 
     ! Warn user that we're don't get NL phi Pulay with PAOs !
     if(flag_basis_set==PAOs) then
-       if(myid==0) write(*,fmt='(2x,"*************************************************************")')
-       if(myid==0) write(*,fmt='(2x,"*                                                           *")')
-       if(myid==0) write(*,fmt='(2x,"* WARNING * WARNING * WARNING * WARNING * WARNING * WARNING *")')
-       if(myid==0) write(*,fmt='(2x,"*                                                           *")')
-       if(myid==0) write(*,fmt='(2x,"* With a PAO basis we DO NOT calculate NL phi Pulay forces  *")')
-       if(myid==0) write(*,fmt='(2x,"*                                                           *")')
-       if(myid==0) write(*,fmt='(2x,"*************************************************************")')
+       if(myid==0) write(io_lun,fmt='(2x,"*************************************************************")')
+       if(myid==0) write(io_lun,fmt='(2x,"*                                                           *")')
+       if(myid==0) write(io_lun,fmt='(2x,"* WARNING * WARNING * WARNING * WARNING * WARNING * WARNING *")')
+       if(myid==0) write(io_lun,fmt='(2x,"*                                                           *")')
+       if(myid==0) write(io_lun,fmt='(2x,"* With a PAO basis we DO NOT calculate NL phi Pulay forces  *")')
+       if(myid==0) write(io_lun,fmt='(2x,"*                                                           *")')
+       if(myid==0) write(io_lun,fmt='(2x,"*************************************************************")')
        return
     end if
     ! We're coming in from initial_H: assume that initial E found
@@ -841,9 +845,9 @@ contains
     ! Store local energy
     E0 = nl_energy
     ! Find out direction and atom for displacement
-    write(*,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
     F0 = HF_NL_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Initial NL energy: ",f20.12,/,2x,"Initial NL force : ",f20.12)') E0, F0
+    if(inode==ionode) write(io_lun,fmt='(2x,"Initial NL energy: ",f20.12,/,2x,"Initial NL force : ",f20.12)') E0, F0
     ! Move the specified atom 
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
@@ -869,11 +873,12 @@ contains
     call get_HF_non_local_force(HF_NL_force, Pulay, ni_in_cell)
     E1 = nl_energy
     F1 = HF_NL_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Final NL energy: ",f20.12,/,2x,"Final NL force : ",f20.12)') E1, F1
+    if(inode==ionode) write(io_lun,fmt='(2x,"Final NL energy: ",f20.12,/,2x,"Final NL force : ",f20.12)') E1, F1
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
-    if(inode==ionode) write(*,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') &
+         numerical_force, analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
@@ -960,9 +965,9 @@ contains
     ! Store local energy
     E0 = kinetic_energy
     ! Find out direction and atom for displacement
-    write(*,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
     F0 = KE_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Initial KE energy: ",f20.12,/,2x,"Initial KE force : ",f20.12)') E0, F0
+    if(inode==ionode) write(io_lun,fmt='(2x,"Initial KE energy: ",f20.12,/,2x,"Initial KE force : ",f20.12)') E0, F0
     ! Move the specified atom 
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
@@ -988,11 +993,12 @@ contains
     call get_KE_force( KE_force, ni_in_cell)
     E1 = kinetic_energy
     F1 = KE_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Final KE energy: ",f20.12,/,2x,"Final KE force : ",f20.12)') E1, F1
+    if(inode==ionode) write(io_lun,fmt='(2x,"Final KE energy: ",f20.12,/,2x,"Final KE force : ",f20.12)') E1, F1
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
-    if(inode==ionode) write(*,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') &
+         numerical_force, analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
@@ -1083,9 +1089,9 @@ contains
 !    E0 = hartree_energy + xc_energy + local_ps_energy
     E0 = band_energy
     ! Find out direction and atom for displacement
-    write(*,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
     F0 = p_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Initial energy         : ",f20.12,/,2x,"Initial phi Pulay force : ",f20.12)') E0, F0
+    if(inode==ionode) write(io_lun,fmt='(2x,"Initial energy         : ",f20.12,/,2x,"Initial phi Pulay force : ",f20.12)') E0, F0
     ! Move the specified atom 
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
@@ -1115,11 +1121,12 @@ contains
 !    E1 = hartree_energy + xc_energy + local_ps_energy
     E1 = band_energy
     F1 = p_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Final energy         : ",f20.12,/,2x,"Final phi Pulay force: ",f20.12)') E1, F1
+    if(inode==ionode) write(io_lun,fmt='(2x,"Final energy         : ",f20.12,/,2x,"Final phi Pulay force: ",f20.12)') E1, F1
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
-    if(inode==ionode) write(*,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') &
+         numerical_force, analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
@@ -1207,9 +1214,9 @@ contains
 !    E0 = hartree_energy + xc_energy + local_ps_energy
     E0 = band_energy
     ! Find out direction and atom for displacement
-    write(*,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
     F0 = p_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Initial energy      : ",f20.12,/,2x,"Initial S-pulay force: ",f20.12)') E0, F0
+    if(inode==ionode) write(io_lun,fmt='(2x,"Initial energy      : ",f20.12,/,2x,"Initial S-pulay force: ",f20.12)') E0, F0
     ! Move the specified atom 
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
@@ -1264,11 +1271,12 @@ contains
 !    E1 = hartree_energy + xc_energy + local_ps_energy
     E1 = band_energy
     F1 = p_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Final energy      : ",f20.12,/,2x,"Final S-pulay force: ",f20.12)') E1, F1
+    if(inode==ionode) write(io_lun,fmt='(2x,"Final energy      : ",f20.12,/,2x,"Final S-pulay force: ",f20.12)') E1, F1
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
-    if(inode==ionode) write(*,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') &
+         numerical_force, analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(flag_basis_set==blips) then
        if(TF_direction==1) then
@@ -1348,7 +1356,7 @@ contains
     real(double), dimension(:), allocatable :: density_out
 
     ! We're coming in from initial_H: assume that initial E found
-    write(*,*) 'Allocating density_out'
+    write(io_lun,*) 'Allocating density_out'
     allocate(density_out(maxngrid), STAT=stat)
     call get_electronic_density(   density_out, electrons, supportfns, H_on_supportfns, &
          inode, ionode, maxngrid)
@@ -1357,9 +1365,9 @@ contains
     ! Store local energy
     E0 = band_energy + delta_E_hartree + delta_E_xc
     ! Find out direction and atom for displacement
-    write(*,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
     F0 = nonSC_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Initial energy   : ",f20.12,/,2x,"Initial NSC force: ",f20.12)') E0, F0
+    if(inode==ionode) write(io_lun,fmt='(2x,"Initial energy   : ",f20.12,/,2x,"Initial NSC force: ",f20.12)') E0, F0
     ! Move the specified atom 
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
@@ -1384,11 +1392,12 @@ contains
     deallocate(density_out)
     E1 = band_energy + delta_E_hartree + delta_E_xc
     F1 = nonSC_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Final energy   : ",f20.12,/,2x,"Final NSC force: ",f20.12)') E1, F1
+    if(inode==ionode) write(io_lun,fmt='(2x,"Final energy   : ",f20.12,/,2x,"Final NSC force: ",f20.12)') E1, F1
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
-    if(inode==ionode) write(*,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') &
+         numerical_force, analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
@@ -1475,9 +1484,9 @@ contains
     call force( fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu,  &
          total_energy, expected_reduction,.true.)
     ! Find out direction and atom for displacement
-    write(*,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
     F0 = tot_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Initial energy: ",f20.12,/,2x,"Initial force : ",f20.12)') E0, F0
+    if(inode==ionode) write(io_lun,fmt='(2x,"Initial energy: ",f20.12,/,2x,"Initial force : ",f20.12)') E0, F0
     ! Move the specified atom 
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
@@ -1508,11 +1517,12 @@ contains
     call force( fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu,  &
          total_energy, expected_reduction,.true.)
     F1 = tot_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(*,fmt='(2x,"Final energy: ",f20.12,/,2x,"Final force : ",f20.12)') E1, F1
+    if(inode==ionode) write(io_lun,fmt='(2x,"Final energy: ",f20.12,/,2x,"Final force : ",f20.12)') E1, F1
     numerical_force = -(E1-E0)/TF_delta
     analytic_force = 0.5_double*(F1+F0)
-    if(inode==ionode) write(*,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') numerical_force, analytic_force
-    if(inode==ionode) write(*,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Numerical Force: ",f20.12,/,2x,"Analytic Force : ",f20.12)') &
+         numerical_force, analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"Force error: ",e20.12)') numerical_force - analytic_force
     ! Move the specified atom back
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta

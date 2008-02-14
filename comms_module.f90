@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: comms_module.f90,v 1.4.2.1 2006/03/31 12:13:54 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module comms_module (MPI1 version)
 ! ------------------------------------------------------------------------------
@@ -24,16 +24,20 @@
 !!   24/06/2002 dave
 !!    Changed Mquest_start_send to correct (spurious) array bound errors and
 !!    altered fetch_trans_data to make array copy explicit
+!!   2008/02/04 17:05 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module comms_module
+
+  use global_module, ONLY: io_lun
 
   implicit none
 
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: comms_module.f90,v 1.4.2.1 2006/03/31 12:13:54 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -92,7 +96,7 @@ contains
 
     lenb = size(b)
     lenbind = size(a_b_c%bindex)
-    !write(*,*) 'Lengths: ',lenb,lenbind
+    !write(io_lun,*) 'Lengths: ',lenb,lenbind
     sends = 0
     do i=1,a_b_c%comms%inode ! Loop over neighbour nodes
        do j=1,a_b_c%comms%np_send(i) ! Loop over partitions to send
@@ -111,9 +115,9 @@ contains
           if(get) then
              !        if(j.EQ.1.OR.(j.gt.1.AND.ind_part.ne.a_b_c%comms%pl_send(j-1,i))) then
              istart = a_b_c%bmat(ind_part)%array_posn
-             if(istart==0) write(*,*) myid,' ERROR for istart ',ind_part
+             if(istart==0) write(io_lun,*) myid,' ERROR for istart ',ind_part
              istart2 = a_b_c%bmat(ind_part)%nd_offset+a_b_c%bmat(ind_part)%i_nd_acc(1)
-             if(istart2==0) write(*,*) myid,' ERROR for istart2 ',ind_part,i,j,a_b_c%comms%ncomm(i)
+             if(istart2==0) write(io_lun,*) myid,' ERROR for istart2 ',ind_part,i,j,a_b_c%comms%ncomm(i)
              ilen1 = a_b_c%bmat(ind_part)%n_atoms
              ilen2 = a_b_c%bmat(ind_part)%part_nabs
              ilen3 = a_b_c%bmat(ind_part)%part_nd_nabs !part_nabs
@@ -124,15 +128,15 @@ contains
              sends = sends+1
              call MPI_issend(a_b_c%bindex(istart),(3*ilen1+5*ilen2),MPI_INTEGER, &
                   a_b_c%comms%ncomm(i)-1,tag+1,MPI_COMM_WORLD,nreq(sends),ierr)
-             if(ierr/=0) write(*,*) 'Error sending indices'
+             if(ierr/=0) write(io_lun,*) 'Error sending indices'
              ! Send xyz, sequence and elements
              if(ilen3>0)then 
                 ierr = 0
-                if(istart2==0) write(*,*) myid,' ERROR for istart2 ',ind_part
+                if(istart2==0) write(io_lun,*) myid,' ERROR for istart2 ',ind_part
                 sends = sends+1
                 call MPI_issend(b(istart2), ilen3, MPI_DOUBLE_PRECISION,&
                      a_b_c%comms%ncomm(i)-1,tag+2,MPI_COMM_WORLD,nreq(sends),ierr)
-                if(ierr/=0) write(*,*) 'Error sending elements'
+                if(ierr/=0) write(io_lun,*) 'Error sending elements'
              endif
           endif
        enddo ! Partitions to send
@@ -204,12 +208,12 @@ contains
     if(ilen3>lenb_rem) call cq_abort('Get error 2 ',ilen3,lenb_rem)
     call MPI_recv(bind_rem,3*ilen1+5*ilen2,MPI_INTEGER, &
          send_node-1,tag+1,MPI_COMM_WORLD,nrstat,ierr)
-    if(ierr/=0) write(*,*) 'Error receiving indices !'
+    if(ierr/=0) write(io_lun,*) 'Error receiving indices !'
     if(ilen3.gt.0)then ! Get xyz, sequence list and elements
        ierr = 0
        call MPI_recv(b_rem,ilen3, MPI_DOUBLE_PRECISION,send_node-1,&
             tag+2,MPI_COMM_WORLD,nrstat,ierr)
-       if(ierr/=0) write(*,*) 'Error receiving data !'
+       if(ierr/=0) write(io_lun,*) 'Error receiving data !'
     endif
     return
   end subroutine Mquest_get

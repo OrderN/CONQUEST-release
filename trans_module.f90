@@ -173,9 +173,11 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    Added ROBODoc header and cq_abort
+!!   2008/02/11 17:07 dave
+!!    Added full set of requests passed in from trans_ini for non-blocking sends
 !!  SOURCE
 !!
-  subroutine send_pair_info(mynode,pairsind,trans)
+  subroutine send_pair_info(mynode,pairsind,trans,nreq)
 
     use mpi
     use datatypes
@@ -188,9 +190,10 @@ contains
     type(trans_remote) :: trans
     integer(integ) :: pairsind(:)
     integer(integ) :: mynode
+    integer, dimension(2*trans%n_rem_node) :: nreq
 
     ! Local variables
-    integer(integ) :: nr,nnd_rem,tag,nreq,ierr,nn,irc
+    integer(integ) :: nr,nnd_rem,tag,ierr,nn,irc
 
     ! Send pairs data to halo nodes
     do nr=1,trans%n_rem_node
@@ -199,10 +202,10 @@ contains
           tag=(nnd_rem-1)*mx_msg_per_part
           call MPI_issend(pairsind(4*(trans%i_pair_addr(nr)-1)+1), &
                4*trans%n_pair(nr), &
-               MPI_INTEGER,nnd_rem-1,tag+1,MPI_COMM_WORLD,nreq,ierr)
+               MPI_INTEGER,nnd_rem-1,tag+1,MPI_COMM_WORLD,nreq(2*nr-1),ierr)
           if(ierr/=MPI_Success) call cq_abort('send_pair_info: error sending')
           call MPI_issend(trans%i_nd_pair_addr(nr),1,MPI_INTEGER, &
-               nnd_rem-1,tag+2,MPI_COMM_WORLD,nreq,ierr)
+               nnd_rem-1,tag+2,MPI_COMM_WORLD,nreq(2*nr),ierr)
           if(ierr/=MPI_Success) call cq_abort('send_pair_info: error sending')
        endif
     enddo

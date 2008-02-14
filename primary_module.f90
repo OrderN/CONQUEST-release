@@ -35,12 +35,15 @@
 !!    Added RCS Id and Log tags and used cq_abort
 !!   31/05/2002 dave
 !!    Bug fix for make_prim (from TM), added RCSid and more comments
+!!   2008/02/06 08:32 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module primary_module
 
   ! Module usage 
   use datatypes
+  use global_module, ONLY: io_lun
   use basic_types
   use GenComms, ONLY: cq_abort
 
@@ -133,7 +136,7 @@ contains
     prim%nz_origin = ind_group0- &
          (prim%nx_origin-1)*groups%ngcelly*groups%ngcellz- &
          (prim%ny_origin-1)*groups%ngcellz
-    if(iprint_gen>2) write(*,1) myid,prim%nx_origin,prim%ny_origin,prim%nz_origin
+    if(iprint_gen>2) write(io_lun,1) myid,prim%nx_origin,prim%ny_origin,prim%nz_origin
 1   format(2x,'On processor ',i4,' the primary set origin is ',3i5)
     ! --- determine widths and left spans of primary shell ----------------
     iprojx=0
@@ -209,7 +212,7 @@ contains
                      z_mem_cell(groups%icell_beg(ind_group)+ni-1)+zadd
                 prim%species(prim%n_prim)= &
                      spec(groups%icell_beg(ind_group)+ni-1)
-                if(iprint_gen>4) write(*,fmt='(2x,"Prim atom: ",i4," position: ",3f8.3)') prim%n_prim, &
+                if(iprint_gen>4) write(io_lun,fmt='(2x,"Prim atom: ",i4," position: ",3f8.3)') prim%n_prim, &
                      prim%xprim(prim%n_prim),prim%yprim(prim%n_prim),prim%zprim(prim%n_prim)
              endif
           enddo

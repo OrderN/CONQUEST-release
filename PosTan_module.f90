@@ -1,4 +1,4 @@
-! $Id: PosTan_module.f90,v 1.2 2002/03/12 14:33:45 drb Exp $
+! $Id$
 ! -----------------------------------------------------------
 ! Module PosTan
 ! -----------------------------------------------------------
@@ -27,11 +27,14 @@
 !!   21/06/2001 dave
 !!    Added RCS Id and Log tags and removed stop statements.
 !!    Created fit_coeff; bug fixes
+!!   2008/02/01 17:48 dave
+!!    Changes for output to file not stdout
 !!  SOURCE
 !!
 module PosTan
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -45,6 +48,10 @@ module PosTan
   real(double) :: PulayC, PulayBeta
   real(double) :: SCC,SCBeta
   real(double) :: SupFnC, SupFnBeta
+
+  ! RCS tag for object file identification
+  character(len=80), save, private :: RCSid = "$Id$"
+
 !!***
 
 contains
@@ -110,14 +117,14 @@ contains
        enddo
     endif
     if(nkeep<2) then
-       if(inode==ionode.AND.iprint_gen>1) write(*,*) '  No energy deviations kept'
+       if(inode==ionode.AND.iprint_gen>1) write(io_lun,*) '  No energy deviations kept'
        C = zero
        beta = zero
     else
        if(inode==ionode.AND.iprint_gen>1) then
-          write(*,*) '  Logs of residual and energy deviations'
+          write(io_lun,*) '  Logs of residual and energy deviations'
           do i=1,nkeep
-             write(*,1) i,SCR(i),SCE(i)
+             write(io_lun,1) i,SCR(i),SCE(i)
           enddo
        endif
        call pos_tan(n,nkeep,SCE,SCR,C,beta, inode-1)
@@ -182,10 +189,10 @@ contains
     ! --- make index for ordering of points from right to left ----------
     call picksort(mxnpt,npt,xpt,indx)
     if(myid==0.AND.iprint_gen>1) then 
-       write(*,15)
+       write(io_lun,15)
 15     format(/'sequence nos. of points, going from right to left:'/)
        do i=1,npt
-          write(*,16) i,indx(i)
+          write(io_lun,16) i,indx(i)
 16        format(5x,i5,2x,i5)
        enddo
     endif
@@ -239,20 +246,20 @@ contains
        endif
     enddo
     if(myid==0.AND.iprint_gen>1) then
-       write(*,21)
+       write(io_lun,21)
 21     format(/'surviving candidates:'/)
        do n=1,npt
-          write(*,22) n,icand(n)
+          write(io_lun,22) n,icand(n)
 22        format(i5,2x,i3)
        enddo
-       write(*,23)
+       write(io_lun,23)
 23     format(/'min. and max. slopes:'/)
        n=1
-       write(*,24) n,slopmin(n)
+       write(io_lun,24) n,slopmin(n)
 24     format(i5,2x,e15.6)
        do n=2,npt
           if(icand(n).eq.1) then
-             write(*,25) n,slopmin(n),slopmax(n)
+             write(io_lun,25) n,slopmin(n),slopmax(n)
 25           format(i5,2x,2e15.6)
           endif
        enddo
@@ -306,7 +313,7 @@ contains
           endif
        endif
     enddo
-    if(myid==0.AND.iprint_gen>1) write(*,31) nptmin,bminmin,sumsq
+    if(myid==0.AND.iprint_gen>1) write(io_lun,31) nptmin,bminmin,sumsq
 31  format(/'point with smallest sum of squares:',i5/ &
          'slope with smallest sum of squares:',e15.6/ &
          'sum of squares:',e15.6)

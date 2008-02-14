@@ -23,14 +23,15 @@
 !!  CREATION DATE
 !!   18/06/2002
 !!  MODIFICATION HISTORY
-!!
+!!   2008/02/06 08:32 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module pseudo_tm_info
 
   use datatypes, ONLY: double
   use GenComms, ONLY: cq_abort
-  use global_module, ONLY: area_pseudo
+  use global_module, ONLY: area_pseudo, io_lun
 
   implicit none
 
@@ -128,7 +129,7 @@ contains
     integer :: ii
 
     if(allocated(pseudo)) then
-       if(iprint_pseudo>2) write(*,fmt='(10x," setup_pseudo_info is skipped because it is already called")')
+       if(iprint_pseudo>2) write(io_lun,fmt='(10x," setup_pseudo_info is skipped because it is already called")')
     else
        allocate(pseudo(nspecies),STAT=stat)
        if(stat /= 0) call cq_abort ('allocating pseudo in setup_pseudo_info',stat)
@@ -143,7 +144,7 @@ contains
              call cq_abort("Error in pseudopotential type: ",pseudo_type)
           end if
           write(filename,'(a,a)') trim(species_label(ispecies)), ".ion"
-          if(iprint_pseudo>3) write(*,fmt='(10x,"ispecies = ",i5," file = ",a)') ispecies,filename
+          if(iprint_pseudo>3) write(io_lun,fmt='(10x,"ispecies = ",i5," file = ",a)') ispecies,filename
           pseudo(ispecies)%filename = filename
           call read_ion_ascii_tmp(pseudo(ispecies),pao(ispecies))
           npao_species(ispecies) = pao(ispecies)%count
@@ -180,7 +181,7 @@ contains
           end do
           if(cutoff>RadiusSupport(ispecies)) then
              if(inode==ionode.AND.iprint_pseudo>0) &
-                  write(*,fmt='(10x,"Warning ! Species ",i3," support radius less than PAO radius ",f8.3)') ispecies,cutoff
+                  write(io_lun,fmt='(10x,"Warning ! Species ",i3," support radius less than PAO radius ",f8.3)') ispecies,cutoff
              !RadiusSupport(ispecies) = cutoff
           endif
        enddo
@@ -416,7 +417,7 @@ contains
     !ori read(lun,'(i4,2g25.15)') npts, op%delta, op%cutoff
 !    read(lun,'(i4,2g25.15)') npts, delta, cutoff
     read(lun,*) npts, delta, cutoff
-    if(myid==0.AND.iprint_pseudo>3) write(*,fmt='(10x,"Radius: ",f15.10)') cutoff
+    if(myid==0.AND.iprint_pseudo>3) write(io_lun,fmt='(10x,"Radius: ",f15.10)') cutoff
     op%delta = delta
     op%cutoff= cutoff
     call rad_alloc(op,npts)
@@ -515,7 +516,7 @@ contains
        read(lun,*)
        zl = 0
        maxz = 0
-       if(iprint_pseudo>3) write(*,fmt='(10x,"Reading PAOs")')
+       if(iprint_pseudo>3) write(io_lun,fmt='(10x,"Reading PAOs")')
        do i=1,n_orbnl
           read(lun,*) i1,i2,i3,i4, dummy
           thisl(i)=i1
@@ -523,31 +524,31 @@ contains
           thispop(i)=dummy
           if(thisz(i)>zl(thisl(i))) zl(thisl(i))=thisz(i)
           maxz = max(maxz,thisz(i))
-          if(iprint_pseudo>3) write(*,fmt='(10x,"l: ",i3," z: ",i3)') i1,i3
+          if(iprint_pseudo>3) write(io_lun,fmt='(10x,"l: ",i3," z: ",i3)') i1,i3
           call radial_read_ascii(dummy_rada(i),lun)
        enddo
        allocate(indexlz(maxz,0:lmax))
        indexlz = 0
        do i=1,n_orbnl
           indexlz(thisz(i),thisl(i)) = i
-          if(iprint_pseudo>3) write(*,fmt='(10x,"indexlz: ",3i5)') thisz(i),thisl(i),i
+          if(iprint_pseudo>3) write(io_lun,fmt='(10x,"indexlz: ",3i5)') thisz(i),thisl(i),i
        end do
        ! Now store data
        pao_info%greatest_angmom = lmax
        allocate(pao_info%angmom(0:lmax),STAT=alls)
        count = 0
        if(alls/=0) call cq_abort('Failed to allocate PAOs')
-       if(iprint_pseudo>3) write(*,fmt='(10x,"Storing PAOs lmax: ",i5)') lmax
+       if(iprint_pseudo>3) write(io_lun,fmt='(10x,"Storing PAOs lmax: ",i5)') lmax
        do l=0,lmax
           pao_info%angmom(l)%n_zeta_in_angmom = zl(l)
-          if(iprint_pseudo>3) write(*,fmt='(10x,"l, zl: ",2i5)') l,zl(l)
+          if(iprint_pseudo>3) write(io_lun,fmt='(10x,"l, zl: ",2i5)') l,zl(l)
           if(zl(l)>0) then
              allocate(pao_info%angmom(l)%zeta(zl(l)),pao_info%angmom(l)%occ(zl(l)),STAT=alls)
              if(alls/=0) call cq_abort('Failed to allocate PAOs zeta')
              count = count + zl(l)*(2*l+1)
              do nzeta = 1,zl(l)
                 i = indexlz(nzeta,l)
-                if(iprint_pseudo>3) write(*,fmt='(10x,"i,z,l: ",3i5)') i,nzeta,l
+                if(iprint_pseudo>3) write(io_lun,fmt='(10x,"i,z,l: ",3i5)') i,nzeta,l
                 pao_info%angmom(l)%zeta(nzeta)%length = dummy_rada(i)%n
                 pao_info%angmom(l)%zeta(nzeta)%cutoff = dummy_rada(i)%cutoff
                 pao_info%angmom(l)%occ(nzeta) = thispop(i)
@@ -578,7 +579,7 @@ contains
        deallocate(dummy_rada,thisl,thisz,thispop,zl)
 
        ! KBs
-       if(iprint_pseudo>3) write(*,fmt='(10x,"Reading KB projectors ")')
+       if(iprint_pseudo>3) write(io_lun,fmt='(10x,"Reading KB projectors ")')
        read(lun,*)
        ps_info%lmax = 0
        do i=1,ps_info%n_pjnl
@@ -586,20 +587,20 @@ contains
                ps_info%pjnl_l(i), ps_info%pjnl_n(i), ps_info%pjnl_ekb(i)
           !!   25/Jul/2002 TM : Rydberg units -> Hartree units
           ps_info%pjnl_ekb(i) = half* ps_info%pjnl_ekb(i)
-          if(iprint_pseudo>1) write(*,fmt='(10x,"PSEUDO_TM: i, l,n, ekb = ",2i3,f22.16)') &
+          if(iprint_pseudo>1) write(io_lun,fmt='(10x,"PSEUDO_TM: i, l,n, ekb = ",2i3,f22.16)') &
                ps_info%pjnl_l(i), ps_info%pjnl_n(i),ps_info%pjnl_ekb(i)
           if(ps_info%pjnl_l(i)>ps_info%lmax) ps_info%lmax = ps_info%pjnl_l(i)
           call radial_read_ascii(ps_info%pjnl(i),lun)
        enddo
        !Vlocal
-       if(iprint_pseudo>3) write(*,fmt='(10x,"Reading Vlocal ")')
+       if(iprint_pseudo>3) write(io_lun,fmt='(10x,"Reading Vlocal ")')
        read(lun,*)
        ! Read and store local potential; it may be local part of pseudo, or neutral atom
        call radial_read_ascii(ps_info%vlocal,lun)
        !call radial_read_ascii(dummy_rad,lun)
        !call rad_dealloc(dummy_rad)
        !Chlocal
-       if(iprint_pseudo>3) write(*,fmt='(10x,"Reading Chlocal ")')
+       if(iprint_pseudo>3) write(io_lun,fmt='(10x,"Reading Chlocal ")')
        read(lun,*)
        call radial_read_ascii(ps_info%chlocal,lun)
        !sets up gaussian which is used to calculate G=0 term
@@ -631,7 +632,7 @@ contains
        ps_info%flag_pcc = .false.
        ! I *really* don't like this, but we'll stay with it for now
        read(lun,*,end=9999)
-       if(iprint_pseudo>3) write(*,fmt='(10x,"Reading pcc ")')
+       if(iprint_pseudo>3) write(io_lun,fmt='(10x,"Reading pcc ")')
        call radial_read_ascii(ps_info%chpcc,lun)
        ps_info%flag_pcc = .true.
 
@@ -651,7 +652,7 @@ contains
     if(numprocs>1) then
        count = 0
        do l=0,lmax
-          if(iprint_pseudo>3) write(*,fmt='(10x," l is ",i5)') l
+          if(iprint_pseudo>3) write(io_lun,fmt='(10x," l is ",i5)') l
           call gcopy(pao_info%angmom(l)%n_zeta_in_angmom)
           tzl = pao_info%angmom(l)%n_zeta_in_angmom
           if(tzl>0) then
@@ -756,22 +757,22 @@ contains
 
       if(iprint_pseudo>1) then
          read(unit,'(a2)') symbol
-         write(*,fmt='(10x,"symbol = ",a2)') symbol
+         write(io_lun,fmt='(10x,"symbol = ",a2)') symbol
          read(unit,'(a20)') label
-         write(*,fmt='(10x,"label = ",a20)') label
+         write(io_lun,fmt='(10x,"label = ",a20)') label
          read(unit,'(i5)') z
-         write(*,fmt='(10x,"z = ",i5)') z
+         write(io_lun,fmt='(10x,"z = ",i5)') z
          read(unit,'(i5)') zval_int
          zval=real(zval_int,double)
-         write(*,fmt='(10x,"zval_int, zval = ",i5,f12.5)') zval_int, zval
+         write(io_lun,fmt='(10x,"zval_int, zval = ",i5,f12.5)') zval_int, zval
          read(unit,'(g25.15)') mass
-         write(*,fmt='(10x,"mass = ",g25.15)') mass
+         write(io_lun,fmt='(10x,"mass = ",g25.15)') mass
          read(unit,'(g25.15)') self_energy
-         write(*,fmt='(10x,"self_energy = ",g25.15)') self_energy
+         write(io_lun,fmt='(10x,"self_energy = ",g25.15)') self_energy
          read(unit,'(2i4)') lmax_basis, n_orbnl
-         write(*,fmt='(10x,"lmax_basis, n_orbnl = ",2i4)') lmax_basis, n_orbnl
+         write(io_lun,fmt='(10x,"lmax_basis, n_orbnl = ",2i4)') lmax_basis, n_orbnl
          read(unit,'(2i4)') lmax_projs, n_pjnl
-         write(*,fmt='(10x,"lmax_projs, n_pjnl = ",2i4)') lmax_projs, n_pjnl
+         write(io_lun,fmt='(10x,"lmax_projs, n_pjnl = ",2i4)') lmax_projs, n_pjnl
       else
          read(unit,'(a2)') symbol
          read(unit,'(a20)') label

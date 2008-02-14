@@ -39,11 +39,14 @@
 !!    Added electron number check to linear part of correct_electron_number
 !!   16:43, 10/05/2005 dave 
 !!    Various small changes throughout code: mainly bug fixes
+!!   2008/02/01 17:46 dave
+!!    Changes to write output to file not stdout
 !!  SOURCE
 !!
 module DMMin
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   integer :: maxpulayDMM
   real(double) :: LinTol_DMM
@@ -134,7 +137,7 @@ contains
        call FindEvals(2.0_double*number_of_bands)
        return
     end if
-    if(inode==ionode) write(*,*) 'Welcome to FindDMMin, tol: ',tolerance, n_L_iterations
+    if(inode==ionode) write(io_lun,*) 'Welcome to FindDMMin, tol: ',tolerance, n_L_iterations
     problem = .false.
     inflex = .false.
     done = .false.
@@ -166,13 +169,13 @@ contains
     call dump_matrix("L",matL,inode)
     if(record) then
        if(inode==ionode.AND.iprint_DM>1) then
-          write(*,*) '  List of residuals and energies'
+          write(io_lun,*) '  List of residuals and energies'
           do i=1,ndone
-             write(*,7) i, PulayR(i), PulayE(i)
+             write(io_lun,7) i, PulayR(i), PulayE(i)
           enddo
        endif
        call fit_coeff(PulayC, PulayBeta,PulayE, PulayR,ndone)
-       if(inode==ionode) write(*,6) PulayC,PulayBeta
+       if(inode==ionode) write(io_lun,6) PulayC,PulayBeta
     endif
 6   format(2x,'dE to dR parameters - C: ',f15.8,' beta: ',f15.8)
 7   format(2x,i4,2f15.8)
@@ -273,7 +276,7 @@ contains
        n_dot_n = matrix_product_trace(matSphi,matphi)
        !mu = e_dot_n/n_dot_n
        if(inode.eq.ionode.and.iprint_DM>=2) &
-            write(*,*) 'e.n and n.n: ',e_dot_n, n_dot_n
+            write(io_lun,*) 'e.n and n.n: ',e_dot_n, n_dot_n
        ! This is right: search dirn is -SM3
        call matrix_sum(one,mat_search,(e_dot_n)/(n_dot_n),matSphi)
        ! Here, we can't alter M3 directly: lineMinL expects REAL gradient
@@ -285,13 +288,13 @@ contains
     do n_iter = 1,n_L_iterations
        ! Gradient before line min
        g0 = matrix_product_trace(matM3,matSM3)
-       if(inode==ionode.AND.iprint_DM>=1) write(*,1) n_iter, energy0, g0
+       if(inode==ionode.AND.iprint_DM>=1) write(io_lun,1) n_iter, energy0, g0
 1      format('Iteration: ',i3,' Energy: ',e20.12,' Residual: ',e20.12)
        call lineMinL(iprint_DM, matM3, mat_search, mat_temp,matSM3,&
             energy0, energy1, delta_e, inode, ionode, inflex,interpG)       
        delta_e = energy1 - energy0
        if(inflex) then
-          if(inode==ionode) write(*,*) 'Panic ! Inflexion point found !'
+          if(inode==ionode) write(io_lun,*) 'Panic ! Inflexion point found !'
           ndone = n_iter
           call free_temp_matrix(mat_search)
           call free_temp_matrix(mat_temp)
@@ -309,9 +312,9 @@ contains
        !zeta = (interpG - g1)/(g0)
        ! DRB 2004/09/28 Now zeta returned by lineMinL
        zeta = interpG
-       if(inode==ionode.AND.iprint_DM>=2) write(*,2) delta_e, zeta
+       if(inode==ionode.AND.iprint_DM>=2) write(io_lun,2) delta_e, zeta
 2      format('Change in energy: ',e20.12,' Linearity: ',e20.12)
-       if(inode==ionode.AND.iprint_DM>=2) write(*,*) 'zeta...: ',g0,g1,interpG
+       if(inode==ionode.AND.iprint_DM>=2) write(io_lun,*) 'zeta...: ',g0,g1,interpG
        if(vary_mu) then
             call correct_electron_number(iprint_DM,number_of_bands,inode,ionode)
        endif
@@ -338,12 +341,12 @@ contains
           ! Commented out test for convergence to force checking of 
           ! convergence by Pulay - DRB, 22/03/01
           ! Added +1 to n_iter for cosmetic reasons
-          if(inode==ionode.AND.iprint_DM>=1) write(*,1) n_iter+1, energy0, g0
+          if(inode==ionode.AND.iprint_DM>=1) write(io_lun,1) n_iter+1, energy0, g0
           if((inode==ionode).AND.(iprint_DM>=2)) &
-               write(*,*) 'Linearity satisfied - calling PulayL'
+               write(io_lun,*) 'Linearity satisfied - calling PulayL'
           !if(dabs(delta_E)<tolerance) then
           !  if((inode==ionode).AND.(iprint_DM>=2)) &
-          !    write(*,*) 'Tolerance also achieved'
+          !    write(io_lun,*) 'Tolerance also achieved'
           !  done = .true.
           !endif
           ndone = n_iter
@@ -354,9 +357,9 @@ contains
           call free_temp_matrix(matM3)
           return
        !else if(abs(delta_E)<tolerance) then
-       !   if(inode==ionode.AND.iprint_DM>=1) write(*,1) n_iter, energy0, g0
+       !   if(inode==ionode.AND.iprint_DM>=1) write(io_lun,1) n_iter, energy0, g0
        !   if((inode==ionode).AND.(iprint_DM>=2)) &
-       !        write(*,*) 'Tolerance achieved - exiting'
+       !        write(io_lun,*) 'Tolerance achieved - exiting'
        !   done = .true.
        !   ndone = n_iter
        !   return
@@ -466,7 +469,7 @@ contains
        e_dot_n = matrix_product_trace(matSM3,matphi) 
        n_dot_n = matrix_product_trace(matSphi,matphi)
        if(inode==ionode.and.iprint_DM>=2) &
-            write(*,*) 'edotn, ndotn are: ',e_dot_n, n_dot_n
+            write(io_lun,*) 'edotn, ndotn are: ',e_dot_n, n_dot_n
        ! These should be positive because we SUBTRACT M3 off below
        ! Here, we can alter M3 directly because it's not expected to be an exact gradient
        call matrix_sum(one,matSM3,-(e_dot_n)/(n_dot_n),matSphi)
@@ -481,7 +484,7 @@ contains
     !-----------!
     g0 = matrix_product_trace(matM3,matSM3)
     do n_iter = 1,n_L_iterations
-       if(inode==ionode.AND.iprint_DM>=1) write(*,1) n_iter, energy0, g0
+       if(inode==ionode.AND.iprint_DM>=1) write(io_lun,1) n_iter, energy0, g0
 1      format('Iteration: ',i3,' Energy: ',e20.12,' Residual: ',e20.12)
        ! Storage for pulay DMs/residuals
        npmod = mod(n_iter, maxpulayDMM)+1
@@ -492,7 +495,7 @@ contains
        if(abs(step)<0.001_double) step = 0.001_double
        if(abs(step)>0.1_double) step = 0.1_double
        if(inode==ionode.and.iprint_DM>=2) &
-            write(*,*) 'npmod, pul_mx and step: ',npmod, pul_mx,step
+            write(io_lun,*) 'npmod, pul_mx and step: ',npmod, pul_mx,step
        if(npmod>1) then
           call matrix_sum(zero,matL,one,mat_Lstore(npmod-1))
           call matrix_sum(one,matL,step,mat_SGstore(npmod-1))
@@ -521,7 +524,7 @@ contains
        end if
        ! Find the residual (i.e. the gradient)
        gg = matrix_product_trace(matM3,matSM3)
-       if(inode==ionode.AND.iprint_DM>=2) write(*,*) 'R2 is ',dsqrt(gg)
+       if(inode==ionode.AND.iprint_DM>=2) write(io_lun,*) 'R2 is ',dsqrt(gg)
        call matrix_sum(zero,mat_SGstore(npmod),-one,matSM3)
        call matrix_sum(zero,mat_Gstore(npmod),-one,matM3)
        call matrix_sum(zero,mat_Lstore(npmod),one,matL)
@@ -550,7 +553,7 @@ contains
        call matrix_product(matT,matM3,mat_temp,mult(T_L_TL))
        call matrix_product(mat_temp,matT,matSM3,mult(TL_T_L))
        g1 = matrix_product_trace(matM3,matSM3)
-       if(inode==ionode.and.iprint_DM>=3) write(*,*) 'Residual before electron gradient correction: ',g1
+       if(inode==ionode.and.iprint_DM>=3) write(io_lun,*) 'Residual before electron gradient correction: ',g1
        if (vary_mu) then
           call matrix_product(matT,matphi,mat_temp,mult(T_L_TL))
           call matrix_product(mat_temp,matT,matSphi,mult(TL_T_L))
@@ -562,7 +565,7 @@ contains
        deltaE = energy1 - energy0
        ! Find the residual
        g1 = matrix_product_trace(matM3,matSM3)
-       if(inode==ionode.and.iprint_DM>=2) write(*,*) 'New residual: ',g1
+       if(inode==ionode.and.iprint_DM>=2) write(io_lun,*) 'New residual: ',g1
        if(ndone+n_iter<max_iters) then
           PulayR(ndone+n_iter) = g1
           PulayE(ndone+n_iter) = energy1
@@ -570,8 +573,8 @@ contains
        if(g1<tolerance) then 
           done = .true.
           ndone = n_iter
-          if(inode==ionode) write(*,*) 'Achieved tolerance in lateDM'
-          if(inode==ionode) write(*,fmt='("Final energy and residual: ",2f15.9)') energy1,g1
+          if(inode==ionode) write(io_lun,*) 'Achieved tolerance in lateDM'
+          if(inode==ionode) write(io_lun,fmt='("Final energy and residual: ",2f15.9)') energy1,g1
           call free_temp_matrix(mat_temp)
           call free_temp_matrix(matSphi)
           call free_temp_matrix(matSM3)
@@ -583,8 +586,8 @@ contains
           end do
           return
        else if(g1>2.0_double*g0) then
-          if(inode==ionode) write(*,*) 'Panic ! Residual increase in lateDM'
-          if(inode==ionode) write(*,*) 'Final energy and residual: ',energy1,g1
+          if(inode==ionode) write(io_lun,*) 'Panic ! Residual increase in lateDM'
+          if(inode==ionode) write(io_lun,*) 'Final energy and residual: ',energy1,g1
           ndone = n_iter
           call free_temp_matrix(mat_temp)
           call free_temp_matrix(matSphi)
@@ -690,7 +693,7 @@ contains
     step = delta_e/g0
     if(abs(step)<1.0e-2_double) step = 0.01_double
     if(abs(step)>0.1_double) step = 0.1_double
-    if(inode==ionode.and.output_level>=2) write(*,*) 'Step is ',step
+    if(inode==ionode.and.output_level>=2) write(io_lun,*) 'Step is ',step
     ! now we add a step in the direction D
     call matrix_sum(one,matL,step,mat_D)
     call LNV_matrix_multiply(electrons, energy_1, doK, dontM1, dontM2, doM3, dontM4, dontphi, doE,0,matM3,0,0)
@@ -714,7 +717,7 @@ contains
     if (SQ.LT.0) then
        ! point of inflexion - problem !
        if (inode .eq. ionode) write (*,*) 'Inflexion  approximation:'
-       write(*,*) 'A, B, C, D: ',A, B, C, D
+       write(io_lun,*) 'A, B, C, D: ',A, B, C, D
        inflex = .true.
        call free_temp_matrix(matM3old)
        return
@@ -726,7 +729,7 @@ contains
           truestep = C/(two*B)
        end if
     end if
-    if (INODE.EQ.IONODE.and.output_level>=2) write(*,*) ' STEP : ',truestep
+    if (INODE.EQ.IONODE.and.output_level>=2) write(io_lun,*) ' STEP : ',truestep
   !TM 09/09/2003
       if(truestep < 1.e-04_double) truestep = 1.e-04_double
   !TM 09/09/2003
@@ -764,8 +767,8 @@ contains
        zeta = (interpG - ig1_step)/(ig0-ig1_step)
     end if
     interpG = zeta
-    if(INODE.EQ.IONODE.and.output_level>=2) write(*,*) 'energy_1 is ',energy_1
-    !    if(INODE.EQ.IONODE) write(*,*) 'diff is ',energy_1-energy_out
+    if(INODE.EQ.IONODE.and.output_level>=2) write(io_lun,*) 'energy_1 is ',energy_1
+    !    if(INODE.EQ.IONODE) write(io_lun,*) 'diff is ',energy_1-energy_out
     call free_temp_matrix(matM3old)
     return
   end subroutine lineMinL
@@ -859,21 +862,21 @@ contains
     call LNV_matrix_multiply( electrons,energy, dontK, dontM1, dontM2, dontM3, dontM4, dophi, dontE,0,0,0,matphi)
     call matrix_product(matT,matphi,matTL,mult(T_L_TL))
     call matrix_product(matTL, matTtran,matSphi,mult(TL_T_L))
-    if (inode .eq. ionode.and.output_level>=2) write(6,1) electrons
+    if (inode .eq. ionode.and.output_level>=2) write(io_lun,1) electrons
 
     g0 = matrix_product_trace(matSphi, matphi)
     ! initial guess is linear correction...
     step1 = ( electrons_0 - electrons) / g0
     step = 0.1_double
     !step = step1
-    if (inode.eq.ionode.and.output_level>=2) write(*,*) 'g0, step1 are ',g0,step1
+    if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'g0, step1 are ',g0,step1
     ! if we are within 0.1% of the correct number, linear will do.
     !if (abs((electrons_0 - electrons)/electrons_0)<1e-6_double) then
     if (abs(electrons_0 - electrons)<1e-9_double) then
        call matrix_sum(one,matL,step1,matphi)
        !call LNV_matrix_multiply(electrons2,energy, &
        !     dontK, dontM1, dontM2, dontM3, dontM4, dophi, dontE,0,0,0,matphi)
-       !if (inode .eq. ionode.and.output_level>=2) write(*,2) electrons2
+       !if (inode .eq. ionode.and.output_level>=2) write(io_lun,2) electrons2
        call free_temp_matrix(matSphi2)
        call free_temp_matrix(matSphi)
        call free_temp_matrix(matphi2)
@@ -890,7 +893,7 @@ contains
        call matrix_product(matTL, matTtran,matSphi2,mult(TL_T_L))
 
        g1 = matrix_product_trace(matphi,matSphi2)
-       if (inode.eq.ionode.and.output_level>=2) write(*,*) 'g1, elec2 are ',g1,electrons2
+       if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'g1, elec2 are ',g1,electrons2
 
        ! get coefficients of polynomial
        D = electrons - electrons_0
@@ -907,11 +910,11 @@ contains
        D = D * recA
 
        truestep = SolveCubic(B,C,D,step,inode,ionode)
-       if(inode.eq.ionode.and.output_level>=2) write(*,*) 'Step, truestep', step,truestep
+       if(inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'Step, truestep', step,truestep
 
        call matrix_sum(one,matL,truestep-step,matSphi)
        if(truestep==step)then
-          write(*,*) 'Still in linear loop'
+          write(io_lun,*) 'Still in linear loop'
           ! check that electron number is correct
           call LNV_matrix_multiply(electrons2,energy, &
                dontK, dontM1, dontM2, dontM3, dontM4, dophi, dontE,0,0,0,matphi)
@@ -921,7 +924,7 @@ contains
           !     dontK, dontM1, dontM2, dontM3, dontM4, dophi, dontE  )
 
 
-          if (inode .eq. ionode.and.output_level>=2) write(*,2) electrons2
+          if (inode .eq. ionode.and.output_level>=2) write(io_lun,2) electrons2
           dne = abs(electrons2 - electrons_0)
           if((dne/electrons_0)<1e-6_double) done = .true.
           iter = iter+1
@@ -935,12 +938,12 @@ contains
           !     dontK, dontM1, dontM2, dontM3, dontM4, dophi, dontE  )
 
 
-          if (inode .eq. ionode.and.output_level>=2) write(*,2) electrons2
+          if (inode .eq. ionode.and.output_level>=2) write(io_lun,2) electrons2
        end if
        ! check that electron number is correct
        !call LNV_matrix_multiply(electrons2,energy, &
        !     dontK, dontM1, dontM2, dontM3, dontM4, dophi, dontE,0,0,0,matphi)
-       !if (inode .eq. ionode.and.output_level>=2) write(*,2) electrons2
+       !if (inode .eq. ionode.and.output_level>=2) write(io_lun,2) electrons2
     endif
     enddo
     call free_temp_matrix(matSphi2)
@@ -1039,7 +1042,7 @@ contains
 
        SolveCubic = S1 + S2 - A/3.0_double
        if(abs(SolveCubic)>10.0_double*abs(guess)) then
-          write(*,*) 'Step too large: linear guess was: ',SolveCubic, guess
+          write(io_lun,*) 'Step too large: linear guess was: ',SolveCubic, guess
           SolveCubic = guess
        end if
 

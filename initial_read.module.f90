@@ -37,6 +37,8 @@
 !!    Included MP k-mesh generation from VB
 !!   11:40, 10/11/2006 Veronika
 !!    Added option for reading pdb files
+!!   2008/02/01 03:43 dave
+!!    Changes to give output to file not stdout
 !!  SOURCE
 !!
 module initial_read
@@ -107,7 +109,7 @@ contains
     use maxima_module, ONLY: maxpartsproc, maxatomsproc
     use global_module, ONLY: id_glob,x_atom_cell,y_atom_cell, &
          z_atom_cell, numprocs, iprint_init, rcellx,rcelly,rcellz,flag_old_partitions, &
-         ne_in_cell, ni_in_cell, area_moveatoms
+         ne_in_cell, ni_in_cell, area_moveatoms, io_lun
     use memory_module, ONLY: reg_alloc_mem, type_dbl
     use primary_module, ONLY: bundle, make_prim
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, &
@@ -165,11 +167,11 @@ contains
     ! By now, we'll have unit cell sizes and grid cutoff
     call find_grid
     if(diagon) call readDiagInfo
-    if(inode==ionode.AND.iprint_init>1) write(*,fmt='(10x,"Partitioning method: ",i2)') part_method
+    if(inode==ionode.AND.iprint_init>1) write(io_lun,fmt='(10x,"Partitioning method: ",i2)') part_method
     call read_mult(inode-1,parts,part_coord_file)
-    if(iprint_init>4) write(*,fmt='(10x,"Proc: ",i4," done read_mult: ",2i5)') inode,maxatomsproc,maxpartsproc
+    if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done read_mult: ",2i5)') inode,maxatomsproc,maxpartsproc
     if(allocated(tot_force)) then
-       write(*,fmt='(10x,"WARNING! Proc: ",i4," tot_force already allocated: ",i7)')  size(tot_force)
+       write(io_lun,fmt='(10x,"WARNING! Proc: ",i4," tot_force already allocated: ",i7)')  size(tot_force)
        deallocate(tot_force)
     end if
     allocate(tot_force(3,ni_in_cell))
@@ -180,7 +182,7 @@ contains
     call init_primary(bundle, maxatomsproc, maxpartsproc, .true.)
     call make_prim(parts, bundle, inode-1,id_glob,x_atom_cell, y_atom_cell, z_atom_cell, species)
 
-    if(iprint_init>4) write(*,fmt='(10x,"Proc: ",i4," done primary")') inode
+    if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done primary")') inode
     ! Read pseudopotential data
     if(pseudo_type == OLDPS) then
        call read_pseudopotential( inode, ionode)
@@ -191,7 +193,7 @@ contains
     else
        call cq_abort(' Pseudotype Error ', pseudo_type)
     endif
-    if(iprint_init>4) write(*,fmt='(10x,"Proc: ",i4," done pseudo")') inode
+    if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done pseudo")') inode
 
     ! Make number of bands in an astonishingly crude way
     number_of_bands = half*ne_in_cell!zero 
@@ -279,6 +281,8 @@ contains
 !!    Added keyword MaxEfIter to stop infinite loop in findFermi
 !!   2008/01/24 Veronika
 !!    Changed the default of General.ManyProcessors to .true.
+!!   12:18, 14/02/2008 drb 
+!!    Added options for buffer around primary and covering sets
 !!  TODO
 !!   Think about single node read and broadcast 10/05/2002 dave
 !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
@@ -299,9 +303,11 @@ contains
          functional_lda_pw92, functional_gga_pbe96, flag_reset_dens_on_atom_move, flag_continue_on_SC_fail, &
          iprint_init, iprint_mat, iprint_ops, iprint_DM, iprint_SC, iprint_minE, &
          iprint_MD, iprint_index, iprint_gen, iprint_pseudo, iprint_basis, iprint_intgn, area_general, &
-         global_maxatomspart, load_balance, many_processors, flag_assign_blocks
+         global_maxatomspart, load_balance, many_processors, flag_assign_blocks, io_lun, &
+         flag_pulay_simpleStep
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff, &
-         n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport, NonLocalFactor, InvSRange, min_blip_sp
+         n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport, NonLocalFactor, InvSRange, min_blip_sp, &
+         flag_buffer_old, AtomMove_buffer
     use block_module, ONLY: in_block_x, in_block_y, in_block_z, blocks_raster, blocks_hilbert
     use species_module, ONLY: species_label, charge, mass, n_species, &
          species, ps_file, ch_file, phi_file, nsf_species, nlpf_species, npao_species, &
@@ -330,7 +336,7 @@ contains
     use read_pao_info, ONLY: pao_info_file, pao_norm_flag
     use read_support_spec, ONLY: support_spec_file, flag_read_support_spec
     use test_force_module, ONLY: flag_test_all_forces, flag_which_force, TF_direction, TF_atom_moved, TF_delta
-    use io_module, ONLY: pdb_format, pdb_altloc, append_coords, pdb_output
+    use io_module, ONLY: pdb_format, pdb_altloc, append_coords, pdb_output, banner
     use group_module, ONLY : part_method, HILBERT, PYTHON
     use energy, ONLY: flag_check_DFT
 
@@ -378,6 +384,19 @@ contains
     end if
     ! Start fdf reading from the file Conquest_input
     call fdf_init('Conquest_input','fdf.out')
+    ! Here we need to read output file name, and open it.
+    if(fdf_boolean('IO.WriteOutToFile',.true.)) then
+       if(inode==ionode) then
+          coordfile = fdf_string('IO.OutputFile',"Conquest_out")
+          call io_assign(io_lun)
+          open(unit=io_lun,file=coordfile,iostat=stat)
+          if(stat/=0) call cq_abort("Failed to open Conquest output file",stat)
+       end if
+       call gcopy(io_lun)
+    else
+       io_lun = 6
+    end if
+    if(inode==ionode) call banner
     new_format = fdf_boolean('IO.NewFormat',.true.)
     if(new_format) then
        def = ' '
@@ -483,17 +502,17 @@ contains
        ps_type = fdf_string('General.PseudopotentialType','abinit') 
        ! Write out pseudopotential type
        if(leqi(ps_type,'siest')) then
-          if(inode==ionode.AND.iprint_init>0) write(*,fmt='(10x,"SIESTA pseudopotential will be used. ")')
+          if(inode==ionode.AND.iprint_init>0) write(io_lun,fmt='(10x,"SIESTA pseudopotential will be used. ")')
           pseudo_type = SIESTA
        else if(leqi(ps_type,'plato').OR.leqi(ps_type,'abini')) then
-          if(inode==ionode.AND.iprint_init>0) write(*,fmt='(10x,"ABINIT pseudopotential will be used. ")')
+          if(inode==ionode.AND.iprint_init>0) write(io_lun,fmt='(10x,"ABINIT pseudopotential will be used. ")')
           pseudo_type = ABINIT
        else
-          if(inode==ionode.AND.iprint_init>0) write(*,fmt='(10x,"OLD pseudopotential will be used. ")')
+          if(inode==ionode.AND.iprint_init>0) write(io_lun,fmt='(10x,"OLD pseudopotential will be used. ")')
           pseudo_type = OLDPS
        endif
        if((.NOT.flag_angular_new).AND.(pseudo_type==SIESTA.OR.pseudo_type==ABINIT)) then
-          write(*,fmt='(10x,"Setting FlagNewAngular to T for Siesta/Abinit pseudopotentials")') 
+          write(io_lun,fmt='(10x,"Setting FlagNewAngular to T for Siesta/Abinit pseudopotentials")') 
           flag_angular_new = .true.
        end if
        ! Read, using old-style fdf_block, the information about the different species
@@ -524,7 +543,7 @@ contains
              elseif(mass(i) > very_small) then
                  type_species(i) = i
              else
-               write(*,*) ' There are chemical species which have zero mass ',i,mass(i),species_label(i)
+               write(io_lun,*) ' There are chemical species which have zero mass ',i,mass(i),species_label(i)
                  type_species(i) = 0    !  Vacancy sites
              endif
           enddo
@@ -542,12 +561,9 @@ contains
           SupportGridSpacing(i) = zero
           if(pseudo_type==SIESTA.OR.pseudo_type==ABINIT) non_local_species(i) = .true.
           ! This is new-style fdf_block
-          write(*,*) 'Species ',i,species_label(i)
           nullify(bp)
           if(fdf_block(species_label(i),bp)) then
-             write(*,*) 'Entered'
              do while(fdf_bline(bp,line)) ! While there are lines in the block
-                write(*,*) 'Digesting line'
                 p=>digest(line)           ! Break the line up
                 if(search(p,'Atom.ValenceCharge',j)) then               ! Charge
                    charge(i) = reals(p,1)
@@ -562,7 +578,7 @@ contains
                 else if(search(p,'Atom.NonLocalFactor',j)) then            ! Full Ham radius
                    NonLocalFactor(i) = reals(p,1)
                    if(NonLocalFactor(i)>one.OR.NonLocalFactor(i)<zero) then
-                      write(*,fmt='(10x,"Warning: Atom.NonLocalFactor must lie between 0.0 and 1.0: ",f9.5)') NonLocalFactor(i)
+                      write(io_lun,fmt='(10x,"Warning: Atom.NonLocalFactor must lie between 0.0 and 1.0: ",f9.5)') NonLocalFactor(i)
                       if(NonLocalFactor(i)>one) NonLocalFactor(i) = one
                       if(NonLocalFactor(i)<zero) NonLocalFactor(i) = zero
                    end if
@@ -584,10 +600,8 @@ contains
                    end if
                 end if
              end do
-             write(*,*) 'Calling destroy'
              call destroy(p)  ! Remove storage
           end if
-          write(*,*) 'Calling destroy bp'
           call destroy(bp)    ! Remove storage
           if(nsf_species(i)==0) call cq_abort("Number of supports not specified for species ",i)
           if(flag_basis_set==blips.AND.SupportGridSpacing(i)<very_small) &
@@ -611,6 +625,9 @@ contains
        LinTol_DMM = fdf_double('DM.LinTol',0.1_double)
        ! Find out what type of run we're doing
        runtype = fdf_string('AtomMove.TypeOfRun','static')
+       flag_buffer_old = fdf_boolean('AtomMove.OldBuffer',.false.)
+       AtomMove_buffer = fdf_double('AtomMove.BufferSize',4.0_double)
+       flag_pulay_simpleStep = fdf_boolean('AtomMove.PulaySimpleStep',.false.)
        MDn_steps = fdf_integer('AtomMove.NumSteps',100)
        MDfreq = fdf_integer('AtomMove.OutputFreq',50)
        MDtimestep = fdf_double('AtomMove.Timestep',0.5_double)
@@ -649,7 +666,7 @@ contains
        flag_old_ewald = fdf_boolean('General.FlagOldEwald',.false.)
        UseGemm = fdf_boolean('MM.UseGemm',.false.)
         if(flag_ghost) then
-         write(*,*) ' As ghost atoms are included, UseGemm must be false.'
+         write(io_lun,*) ' As ghost atoms are included, UseGemm must be false.'
          UseGemm = .false.
         endif
        flag_check_DFT=fdf_boolean('General.CheckDFT',.false.)
@@ -673,11 +690,11 @@ contains
        if(.NOT.flag_test_all_forces) then ! Test one force component
           flag_which_force = fdf_integer('AtomMove.TestSpecificForce',1)
           if(flag_which_force>8.OR.flag_which_force<0) &
-               write(*,fmt='(10x,"Warning ! TestSpecificForce must lie between 1 and 8: ",i3)') flag_which_force
+               write(io_lun,fmt='(10x,"Warning ! TestSpecificForce must lie between 1 and 8: ",i3)') flag_which_force
        end if
        TF_direction = fdf_integer('AtomMove.TestForceDirection',1)
        if(TF_direction>3.OR.TF_direction<0) then
-          write(*,fmt='(10x,"Warning ! TestForceDirection must lie between 1 and 3: ",i3)') TF_direction
+          write(io_lun,fmt='(10x,"Warning ! TestForceDirection must lie between 1 and 3: ",i3)') TF_direction
           TF_direction = 1
        end if
        TF_atom_moved = fdf_integer('AtomMove.TestForceAtom',1)
@@ -725,7 +742,7 @@ contains
           part_method = HILBERT
        else
           part_method = HILBERT
-          write(*,*) 'WARNING: Unrecognised partitioning method'
+          write(io_lun,*) 'WARNING: Unrecognised partitioning method'
        end if
        tmp2 = fdf_string('General.LoadBalance','atoms')
        if (leqi (tmp2(1:10),'partitions')) then
@@ -842,17 +859,17 @@ contains
        ps_type = fdf_string('PseudopotentialType','abinit') 
        ! siesta's pseudo is not used in default
        if(leqi(ps_type,'siest')) then
-          if(inode==ionode.AND.iprint_init>0) write(*,fmt='(10x,"SIESTA pseudopotential will be used. ")')
+          if(inode==ionode.AND.iprint_init>0) write(io_lun,fmt='(10x,"SIESTA pseudopotential will be used. ")')
           pseudo_type = SIESTA
        else if(leqi(ps_type,'plato').OR.leqi(ps_type,'abini')) then
-          if(inode==ionode.AND.iprint_init>0) write(*,fmt='(10x,"ABINIT pseudopotential will be used. ")')
+          if(inode==ionode.AND.iprint_init>0) write(io_lun,fmt='(10x,"ABINIT pseudopotential will be used. ")')
           pseudo_type = ABINIT
        else
-          if(inode==ionode.AND.iprint_init>0) write(*,fmt='(10x,"OLD pseudopotential will be used. ")')
+          if(inode==ionode.AND.iprint_init>0) write(io_lun,fmt='(10x,"OLD pseudopotential will be used. ")')
           pseudo_type = OLDPS
        endif
        if((.NOT.flag_angular_new).AND.(pseudo_type==SIESTA.OR.pseudo_type==ABINIT)) then
-          write(*,fmt='(10x,"Setting FlagNewAngular to T for Siesta/Abinit pseudopotentials")') 
+          write(io_lun,fmt='(10x,"Setting FlagNewAngular to T for Siesta/Abinit pseudopotentials")') 
           flag_angular_new = .true.
        end if
        ! Read, using old-style fdf_block, the information about the different species
@@ -1019,7 +1036,7 @@ contains
           part_method = HILBERT
        else
           part_method = HILBERT
-          write(*,*) 'WARNING: Unrecognised partitioning method'
+          write(io_lun,*) 'WARNING: Unrecognised partitioning method'
        end if
        tmp2 = fdf_string('General.LoadBalance','atoms')
        if (leqi (tmp2(1:10),'partitions')) then
@@ -1159,7 +1176,7 @@ contains
     use DiagModule, ONLY: diagon
     use blip, ONLY: SupportGridSpacing, BlipWidth
     use global_module, ONLY: flag_basis_set, PAOs,blips, functional_description, &
-         flag_precondition_blips
+         flag_precondition_blips, io_lun
     use minimise, ONLY: energy_tolerance, L_tolerance, sc_tolerance, &
          n_support_iterations, n_L_iterations
     use datestamp, ONLY: datestr, commentver
@@ -1183,90 +1200,90 @@ contains
     character(len=10) :: today, the_time
 
     call date_and_time(today, the_time)
-    write(*,3) today(1:4), today(5:6), today(7:8), the_time(1:2), the_time(3:4)
-    write(*,'(/10x,"Code compiled on: ",a,/10x,"Version comment: ",/10x,a)') datestr,commentver
+    write(io_lun,3) today(1:4), today(5:6), today(7:8), the_time(1:2), the_time(3:4)
+    write(io_lun,'(/10x,"Code compiled on: ",a,/10x,"Version comment: ",/10x,a)') datestr,commentver
     
-    write(*,1)
-    write(*,2) titles
+    write(io_lun,1)
+    write(io_lun,2) titles
 
     if(diagon) then
-       write(*,30) 'diagonalisation '
+       write(io_lun,30) 'diagonalisation '
     else
-       write(*,30) 'order N with LNV'   
+       write(io_lun,30) 'order N with LNV'   
     end if
-    write(*,4) dist_conv*r_super_x, dist_conv*r_super_y, dist_conv*r_super_z,d_units(dist_units)
+    write(io_lun,4) dist_conv*r_super_x, dist_conv*r_super_y, dist_conv*r_super_z,d_units(dist_units)
 
-    write(*,9) n_grid_x, n_grid_y, n_grid_z
+    write(io_lun,9) n_grid_x, n_grid_y, n_grid_z
 
-    write(*,17) in_block_x, in_block_y, in_block_z
+    write(io_lun,17) in_block_x, in_block_y, in_block_z
 
-    write(*,15) dist_conv*(r_super_x/n_grid_x),d_units(dist_units), &
+    write(io_lun,15) dist_conv*(r_super_x/n_grid_x),d_units(dist_units), &
          dist_conv*(r_super_y/n_grid_y), d_units(dist_units),&
          dist_conv*(r_super_z/n_grid_z),d_units(dist_units)
 
-    write(*,18) n_species, d_units(dist_units)
+    write(io_lun,18) n_species, d_units(dist_units)
 
     do n=1, n_species
-       write(*,19) n, species_label(n), mass(n), charge(n), dist_conv*core_radius(n), nsf_species(n)
+       write(io_lun,19) n, species_label(n), mass(n), charge(n), dist_conv*core_radius(n), nsf_species(n)
        if(flag_basis_set==blips) then 
           if(flag_precondition_blips) then
-             write(*,'(/13x,"Blip basis with preconditioning")') 
+             write(io_lun,'(/13x,"Blip basis with preconditioning")') 
           else
-             write(*,'(/13x,"Blip basis - no preconditioning")') 
+             write(io_lun,'(/13x,"Blip basis - no preconditioning")') 
           end if
-          write(*,14) dist_conv*SupportGridSpacing(n), d_units(dist_units),&
+          write(io_lun,14) dist_conv*SupportGridSpacing(n), d_units(dist_units),&
                dist_conv*BlipWidth(n),d_units(dist_units)
        else
-          write(*,'(13x,"PAO basis")') 
+          write(io_lun,'(13x,"PAO basis")') 
        end if
     end do
 
-    write(*,20)
+    write(io_lun,20)
 
-    write(*,29) energy_tolerance, L_tolerance, sc_tolerance
+    write(io_lun,29) energy_tolerance, L_tolerance, sc_tolerance
 
-    !write(*,26)
+    !write(io_lun,26)
     !do n=1, n_species
-    !   write(*,21) species_label(n), ps_file(n)
+    !   write(io_lun,21) species_label(n), ps_file(n)
     !end do
-    write(*,27)
+    write(io_lun,27)
     do n=1, n_species
        if ( non_local_species(n) ) then
-          write(*,22) species_label(n), 'Non Local'
+          write(io_lun,22) species_label(n), 'Non Local'
        else 
-          write(*,22) species_label(n), 'Local    '
+          write(io_lun,22) species_label(n), 'Local    '
        end if
     end do
 
     !if(.NOT.find_chdens) then
-    !   write(*,261)
+    !   write(io_lun,261)
     !   do n=1, n_species
-    !      write(*,211) species_label(n), ch_file(n)
+    !      write(io_lun,211) species_label(n), ch_file(n)
     !   end do
     !endif
     if(read_phi) then
-       write(*,262)
+       write(io_lun,262)
        do n=1, n_species
-          write(*,212) species_label(n), phi_file(n)
+          write(io_lun,212) species_label(n), phi_file(n)
        end do
     endif
 
-    write(*,6) number_of_bands
+    write(io_lun,6) number_of_bands
 
     if (.not.vary_mu) then
-       write(*,*) '          mu is constant'
-       write(*,16) mu
+       write(io_lun,*) '          mu is constant'
+       write(io_lun,16) mu
     endif
 
-    write(*,7) NODES
+    write(io_lun,7) NODES
 
-    write(*,8) functional_description
+    write(io_lun,8) functional_description
 
-    write(*,11) n_support_iterations, n_L_iterations
+    write(io_lun,11) n_support_iterations, n_L_iterations
 
-    write(*,13) dist_conv*r_h, d_units(dist_units),dist_conv*r_c,d_units(dist_units)
+    write(io_lun,13) dist_conv*r_h, d_units(dist_units),dist_conv*r_c,d_units(dist_units)
     do n=1, n_species
-       write(*,131) n,dist_conv*r_h+core_radius(n)*HNL_fac,d_units(dist_units)
+       write(io_lun,131) n,dist_conv*r_h+core_radius(n)*HNL_fac,d_units(dist_units)
     enddo
 
 1   format(/10x,'Job title: ')
@@ -1398,7 +1415,8 @@ contains
   subroutine readDiagInfo
 
     use datatypes
-    use global_module, ONLY: iprint_init, rcellx, rcelly, rcellz, area_general, ni_in_cell, numprocs, species_glob
+    use global_module, ONLY: iprint_init, rcellx, rcelly, rcellz, area_general, ni_in_cell, numprocs, &
+         species_glob, io_lun
     use numbers, ONLY: zero, one, two, pi, very_small
     use GenComms, ONLY: cq_abort, gcopy, myid
     use fdf, ONLY: fdf_integer, fdf_block, fdf_boolean, fdf_double, fdf_defined
@@ -1476,15 +1494,15 @@ contains
           block_size_c = block_size_r
        end if
        if(iprint_init>1) then
-          write(*,2) block_size_r, block_size_c
-          write(*,3) proc_rows, proc_cols
+          write(io_lun,2) block_size_r, block_size_c
+          write(io_lun,3) proc_rows, proc_cols
        end if
        ! Read k-point mesh type
        mp_mesh = fdf_boolean('Diag.MPMesh',.false.)
        if(.NOT.mp_mesh) then
           ! Read k-point number and allocate
           nkp = fdf_integer('Diag.NumKpts',1)
-          if(iprint_init>1) write(*,*) 'Number of Kpoints: ',nkp
+          if(iprint_init>1) write(io_lun,*) 'Number of Kpoints: ',nkp
           if(nkp<1) call cq_abort("Need to specify how many kpoints !",nkp)
           allocate(kk(3,nkp),wtk(nkp),STAT=stat)
           if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp)
@@ -1502,7 +1520,7 @@ contains
              end do
              wtk = wtk/sum
           else ! Force gamma point dependence
-             write(*,4)
+             write(io_lun,4)
              nkp = 1
              kk(1,1) = zero
              kk(2,1) = zero
@@ -1513,10 +1531,10 @@ contains
           ! Read Monkhorst-Pack mesh coefficients
           ! Default is Gamma point only 
           if(iprint_init>0) then
-             write(*,*)
-             write(*,*) 'Reading Monkhorst-Pack Kpoint mesh'
-             write(*,*) '----------------------------------'
-             write(*,*)
+             write(io_lun,*)
+             write(io_lun,*) 'Reading Monkhorst-Pack Kpoint mesh'
+             write(io_lun,*) '----------------------------------'
+             write(io_lun,*)
           end if
           ! giving up on "MPMesh i j k" for the moment
           ! mp_string = fdf_string('MPMesh','1 1 1')
@@ -1530,36 +1548,36 @@ contains
           mp(1) = fdf_integer('Diag.MPMeshX',1)
           mp(2) = fdf_integer('Diag.MPMeshY',1)
           mp(3) = fdf_integer('Diag.MPMeshZ',1) 
-          if(iprint_init>0) write(*,'(a, 3i3)') ' Monkhorst-Pack mesh: ', (mp(i), i=1,3)
+          if(iprint_init>0) write(io_lun,'(a, 3i3)') ' Monkhorst-Pack mesh: ', (mp(i), i=1,3)
           if (mp(1) <= 0) call cq_abort('K-points: number of k-points must be > 0!')
           if (mp(2) <= 0) call cq_abort('K-points: number of k-points must be > 0!')
           if (mp(3) <= 0) call cq_abort('K-points: number of k-points must be > 0!')
           nkp_tmp = mp(1)*mp(2)*mp(3)
-          if(iprint_init>0) write(*,'(a, i4)') ' Number of k-points: ',nkp_tmp
+          if(iprint_init>0) write(io_lun,'(a, i4)') ' Number of k-points: ',nkp_tmp
           ! Read k-point shift, default (0.0 0.0 0.0)
           mp_shift(1) = fdf_double('Diag.MPShiftX',zero)
           mp_shift(2) = fdf_double('Diag.MPShiftY',zero)
           mp_shift(3) = fdf_double('Diag.MPShiftZ',zero)
           if (mp_shift(1) >= one) then
-             write(*,9)
+             write(io_lun,9)
              mp_shift(1) = mp_shift(1) - one
           end if
           if (mp_shift(2) >= one) then
-             write(*,9)
+             write(io_lun,9)
              mp_shift(2) = mp_shift(2) - one
           end if
           if (mp_shift(3) >= one) then
-             write(*,9)
+             write(io_lun,9)
              mp_shift(3) = mp_shift(3) - one
           end if
-          if(iprint_init>0) write(*,'(a, 3f11.6)') ' Monkhorst-Pack mesh shift:  ', (mp_shift(i), i=1,3)
+          if(iprint_init>0) write(io_lun,'(a, 3f11.6)') ' Monkhorst-Pack mesh shift:  ', (mp_shift(i), i=1,3)
           ! Allocate
           allocate(kk_tmp(3,nkp_tmp),wtk_tmp(nkp_tmp),STAT=stat)
           if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp_tmp)
           call reg_alloc_mem(area_general,4*nkp_tmp,type_dbl)
           ! All k-points have weight 1 for now
           wtk_tmp(1:nkp_tmp) = one
-          if(iprint_init>0) write(*,*)
+          if(iprint_init>0) write(io_lun,*)
           ! Generate fractional k-point coordinates plus shift
           ! Assume orthorhombic cell for now
           do i = 0, mp(1) -1 ! x axis 
@@ -1574,9 +1592,9 @@ contains
           end do
           ! Write out fractional k-points
           if(iprint_init>0) then
-             write(*,7) nkp_tmp
+             write(io_lun,7) nkp_tmp
              do i=1,nkp_tmp
-                write(*,'(i5,3f15.6,f12.3)') i,kk_tmp(1,i),kk_tmp(2,i),kk_tmp(3,i),wtk_tmp(i)
+                write(io_lun,'(i5,3f15.6,f12.3)') i,kk_tmp(1,i),kk_tmp(2,i),kk_tmp(3,i),wtk_tmp(i)
              end do
           end if
           ! Check if k = -k and weed out equivalent k-points. Adjust wtk accordingly.
@@ -1624,10 +1642,10 @@ contains
           deallocate(kk_tmp,wtk_tmp,STAT=stat)
           if(stat/=0) call cq_abort('FindEvals: couldnt deallocate kpoints',nkp_tmp)
           if(iprint_init>0) then
-             write(*,*)
-             write(*,10) nkp
+             write(io_lun,*)
+             write(io_lun,10) nkp
              do i=1,nkp
-                write(*,'(i5,3f15.6,f12.3)') i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
+                write(io_lun,'(i5,3f15.6,f12.3)') i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
              end do
           end if
 
@@ -1640,18 +1658,18 @@ contains
 
        ! Write out k-points
        if(iprint_init>0) then
-          write(*,*)
-          write(*,51) nkp
-          write(*,52)
+          write(io_lun,*)
+          write(io_lun,51) nkp
+          write(io_lun,52)
           do i=1,nkp
-             write(*,'(i5,3f15.6,f12.3)') i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
+             write(io_lun,'(i5,3f15.6,f12.3)') i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
           end do
-          write(*,*)
-          write(*,*) 'Finished reading Kpoints'
-          write(*,*)
+          write(io_lun,*)
+          write(io_lun,*) 'Finished reading Kpoints'
+          write(io_lun,*)
        end if
        kT = fdf_double('Diag.kT',0.001_double)
-       if(iprint_init>0) write(*,'(10x,"Temperature used for smearing: ",f10.6)') kT
+       if(iprint_init>0) write(io_lun,'(10x,"Temperature used for smearing: ",f10.6)') kT
     end if ! myid==0
 
     ! Distribute data to all processors
@@ -1669,10 +1687,10 @@ contains
     call gcopy(wtk,nkp)
     call gcopy(kT)
     if(iprint_init>=5.AND.myid/=0) then
-       write(*,*) 'Proc: ',myid
-       write(*,5)
+       write(io_lun,*) 'Proc: ',myid
+       write(io_lun,5)
        do i=1,nkp
-          write(*,6) nkp,kk(1,i),kk(2,i),kk(3,i),wtk(i)
+          write(io_lun,6) nkp,kk(1,i),kk(2,i),kk(3,i),wtk(i)
        end do
     end if
     return
@@ -1715,8 +1733,8 @@ contains
 !%%!        proc_rows = fdf_integer('ProcRows',0)
 !%%!        proc_cols = fdf_integer('ProcCols',0)
 !%%!        if(iprint_init>1) then
-!%%!           write(*,2) block_size_r, block_size_c
-!%%!           write(*,3) proc_rows, proc_cols
+!%%!           write(io_lun,2) block_size_r, block_size_c
+!%%!           write(io_lun,3) proc_rows, proc_cols
 !%%!        end if
 !%%!        if(proc_rows*proc_cols==0) call cq_abort('FindEval: error in proc grid',proc_rows,proc_cols)
 !%%!        ! Read k-point number and allocate
@@ -1735,7 +1753,7 @@ contains
 !%%!              kk(3,i) = two*pi*kk(3,i)/rcellz
 !%%!           end do
 !%%!        else ! Force gamma point dependence
-!%%!           write(*,4)
+!%%!           write(io_lun,4)
 !%%!           nkp = 1
 !%%!           kk(1,1) = 0.0_double
 !%%!           kk(2,1) = 0.0_double
@@ -1744,9 +1762,9 @@ contains
 !%%!        end if
 !%%!        ! Write out k-points
 !%%!        if(iprint_init>0) then
-!%%!           write(*,'(2x,i4," Kpoints in Cartesian (inverse Angstrom) form: ")') nkp
+!%%!           write(io_lun,'(2x,i4," Kpoints in Cartesian (inverse Angstrom) form: ")') nkp
 !%%!           do i=1,nkp
-!%%!              write(*,6) nkp,kk(1,i),kk(2,i),kk(3,i),wtk(i)
+!%%!              write(io_lun,6) nkp,kk(1,i),kk(2,i),kk(3,i),wtk(i)
 !%%!           end do
 !%%!        end if
 !%%!     end if
@@ -1764,10 +1782,10 @@ contains
 !%%!     call gcopy(kk,3,nkp)
 !%%!     call gcopy(wtk,nkp)
 !%%!     if(iprint_init>=5.AND.myid/=0) then
-!%%!        write(*,*) 'Proc: ',myid
-!%%!        write(*,5)
+!%%!        write(io_lun,*) 'Proc: ',myid
+!%%!        write(io_lun,5)
 !%%!        do i=1,nkp
-!%%!           write(*,6) nkp,kk(1,i),kk(2,i),kk(3,i),wtk(i)
+!%%!           write(io_lun,6) nkp,kk(1,i),kk(2,i),kk(3,i),wtk(i)
 !%%!        end do
 !%%!     end if
 !%%!     return

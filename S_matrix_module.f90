@@ -24,11 +24,14 @@
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2008/02/01 17:53 dave
+!!    Changes for output to file not stdout
 !!  SOURCE
 !!
 module S_matrix_module
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   implicit none
 
@@ -104,10 +107,10 @@ contains
     integer :: np, ni, iprim
     ! Project support functions onto grid
     if(flag_basis_set==blips) then
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Doing blip-to-support ',supportfns
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Doing blip-to-support ',supportfns
        call blip_to_support_new(inode-1, supportfns)
 
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Doing integration ',supportfns
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Doing integration ',supportfns
        ! Integrate
        call get_matrix_elements_new(inode-1,rem_bucket(1),matS,supportfns,supportfns)
        ! Do the onsite elements analytically
@@ -126,15 +129,15 @@ contains
     else if(flag_basis_set==PAOs) then
        ! Get S matrix with assemble
        if(flag_vary_basis) then
-          if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Calling assemble_2 for S, dS: ',matS,matdS
+          if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Calling assemble_2 for S, dS: ',matS,matdS
           call assemble_2(Srange, matS,1,matdS)
           !call dump_matrix("NS",matS,inode)
           !call dump_matrix("NdS",matdS,inode)
        else
-          if(inode==ionode.AND.iprint_ops>2) write(*,*) 'Calling assemble_2 for S: ',matS
+          if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Calling assemble_2 for S: ',matS
           call assemble_2(Srange, matS,1)
        end if
-       if(inode==ionode.AND.iprint_ops>2) write(*,*) 'PAO to grid ',supportfns
+       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'PAO to grid ',supportfns
        ! Also generate support with a call to PAO_to_grid
        call PAO_to_grid(inode-1,supportfns)
     end if
@@ -233,21 +236,21 @@ contains
           n_orbs = n_orbs + real(nsf_species(species(i)),double)
        end do
        ! First construct the identity
-       if (inode.eq.ionode.and.output_level>=2) write(*,*) 'Zeroing data'
+       if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'Zeroing data'
        call matrix_scale(zero,matT1)
        call matrix_scale(zero,matI)
        call matrix_scale(zero,matT)
        call matrix_scale(zero,matTold)
        call matrix_scale(zero,matTM)
-       if (inode.eq.ionode.and.output_level>=2) write(*,*) 'Creating I'
+       if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'Creating I'
        ip = 1
        nb = 1
        do np = 1,bundle%groups_on_node
           if(bundle%nm_nodgroup(np)>0) then
              do i=1,bundle%nm_nodgroup(np)
-                !write(*,*) inode,' part, prim, spec: ',np,i,ip,bundle%species(ip)
+                !write(io_lun,*) inode,' part, prim, spec: ',np,i,ip,bundle%species(ip)
                 do j = 1, nsf_species(bundle%species(ip))
-                   !write(*,*) inode,' part, atom, spec: ',np,i,ip,j
+                   !write(io_lun,*) inode,' part, atom, spec: ',np,i,ip,j
                    call store_matrix_value(matT,np,i,ip,nb,j,j,one,1)
                    call store_matrix_value(matI,np,i,ip,nb,j,j,one,1)
                 enddo
@@ -280,29 +283,29 @@ contains
        enddo
        call gsum(tot)
        eps = 1.0_double/(tot)
-       if(output_level>1.and.inode==ionode) write(*,*) 'Eps, tot: ',eps,tot
+       if(output_level>1.and.inode==ionode) write(io_lun,*) 'Eps, tot: ',eps,tot
        call matrix_scale(zero,matT)
        call matrix_sum(zero,matT,eps,matS)
 
        ! and evaluate the current value of the functional and its gradient
        deltaomega = zero
        oldomega = zero
-       if (inode==ionode.and.output_level>=2) write(*,*) 'Starting loop'
+       if (inode==ionode.and.output_level>=2) write(io_lun,*) 'Starting loop'
        do n_iterations=1,n_L_iterations
           if (inode==ionode.and.output_level>=2) &
-               write(6,2) n_iterations
+               write(io_lun,2) n_iterations
           deltaomega = deltaomega * half
           ! check for convergence
           if(n_iterations<3.or.abs(deltaomega)>tolerance) then
              call HotInvS_mm( matI, matS, matT, matT1, matTM, omega,n_iterations)
              deltaomega = omega - oldomega
              if(inode==ionode.and.output_level>=1) then
-                write(*,*) 'Omega is ',omega/n_orbs
-                if(omega>zero) write(*,*) 'R is ',sqrt(omega)/n_orbs
-                write(*,*) 'deltaomega is ',n_iterations,deltaomega
+                write(io_lun,*) 'Omega is ',omega/n_orbs
+                if(omega>zero) write(io_lun,*) 'R is ',sqrt(omega)/n_orbs
+                write(io_lun,*) 'deltaomega is ',n_iterations,deltaomega
              endif
              if ( omega>oldomega.and.oldomega/=0.0_double) then
-                if(inode==ionode) write(*,*) 'Truncation error reached !'
+                if(inode==ionode) write(io_lun,*) 'Truncation error reached !'
                 call matrix_sum(zero,matT,one,matTold)
                 exit
              endif
@@ -315,7 +318,7 @@ contains
        end do
        ! If this isn't a good guess, then reset to I
        if((omega/n_orbs)>InvSTolerance) then
-          if(inode==ionode) write(*,*) 'Setting InvS to I'
+          if(inode==ionode) write(io_lun,*) 'Setting InvS to I'
           call matrix_scale(zero,matT)
           ip = 1
           nb = 1
@@ -393,36 +396,36 @@ contains
     !     Local Variables
     integer :: matT0S, matGrad
 
-    !write(*,*) 'Allocating temp matrices'
+    !write(io_lun,*) 'Allocating temp matrices'
     matT0S = allocate_temp_matrix(TSrange,0)
     matGrad = allocate_temp_matrix(Trange,0)
 
-    !write(*,*) 'matrix_scale'
+    !write(io_lun,*) 'matrix_scale'
     call matrix_scale(zero,matT0S)
     call matrix_scale(zero,matGrad)
     ! Create T0.S
-    !write(*,*) 'matrix_product T_S_TS ',matT0,matS,matT0S
+    !write(io_lun,*) 'matrix_product T_S_TS ',matT0,matS,matT0S
     call matrix_product(matT0, matS, matT0S, mult( T_S_TS ) )
     ! Now A=I-TS, as a diagnostic
     call my_barrier()
-    !write(*,*) 'matrix_sum A=I'
+    !write(io_lun,*) 'matrix_sum A=I'
     call matrix_sum(zero,matA,one,matI)
-    !write(*,*) 'matrix_sum A=I-TS'
+    !write(io_lun,*) 'matrix_sum A=I-TS'
     call matrix_sum(one,matA,-one,matT0S)
     ! Create T0S.T0
-    !write(*,*) 'matrix_product TS_T_T'
+    !write(io_lun,*) 'matrix_product TS_T_T'
     call matrix_product(matT0S, matT0, matGrad, mult( TS_T_T ) )
     !call dump_matrix("NTST",matGrad,inode)
     !call my_barrier
-    !write(*,*) 'Done writing T0S'
+    !write(io_lun,*) 'Done writing T0S'
     !stop
     ! T1 = 2T0 - Grad
-    !write(*,*) 'matrix_sum T1=2T0'
+    !write(io_lun,*) 'matrix_sum T1=2T0'
     call matrix_sum(zero,matT1,two,matT0)
-    !write(*,*) 'matrix_sum T1=2T0 - Grad'
+    !write(io_lun,*) 'matrix_sum T1=2T0 - Grad'
     call matrix_sum(one,matT1,-one,matGrad)
     omega = matrix_product_trace(matA,matA)
-    !write(*,*) 'Freeing temp matrices'
+    !write(io_lun,*) 'Freeing temp matrices'
     call free_temp_matrix(matGrad)
     call free_temp_matrix(matT0S)
 

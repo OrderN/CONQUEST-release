@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: pseudopotential.module.f90,v 1.10.2.2 2006/03/31 13:06:06 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module pseudopotential_data
 ! ------------------------------------------------------------------------------
@@ -34,11 +34,14 @@
 !!    Various small changes
 !!   09:39, 11/11/2004 dave 
 !!    Removed N_ATOMS_MAX reference and changed to mx_icell
+!!   2008/02/06 08:34 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module pseudopotential_data
 
   use datatypes
+  use global_module, ONLY: io_lun
   use pseudopotential_common, ONLY: pseudopotential, core_radius, non_local
   use GenComms, ONLY: cq_abort
   use species_module, ONLY: non_local_species
@@ -46,7 +49,7 @@ module pseudopotential_data
   implicit none
   save
   ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id: pseudopotential.module.f90,v 1.10.2.2 2006/03/31 13:06:06 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
   real(double), allocatable, dimension(:) :: core_radius_2, radius_max, radius_max_2, ps_exponent, &
        spherical_harmonic_norm, loc_radius
@@ -431,7 +434,7 @@ contains
 
                 enddo ! l-components :
 
-                if(icheck == 0) write(*,*) 'Node ',inode,' no grid points in the block &
+                if(icheck == 0) write(io_lun,*) 'Node ',inode,' no grid points in the block &
                      & touch the atom ',iblock,ipart,iatom,xatom,yatom,zatom,xblock,yblock,zblock &
                      ,' r_from_i = ',r_from_i
                 no_of_ib_ia = no_of_ib_ia + the_ncf*n_pts_in_block
@@ -450,7 +453,7 @@ contains
     coulomb_potential = 0
     call hartree( pseudo_density, coulomb_potential, maxngrid, coulomb_energy )
 
-    write(*,*) ' Done hartree for Node ',inode
+    write(io_lun,*) ' Done hartree for Node ',inode
     ! now add the two contributions together
 
     call axpy( n_my_grid_points, -one, coulomb_potential, 1, &
@@ -845,7 +848,7 @@ contains
                    enddo ! l-components :
 
                    if(icheck == 0) &
-                        write(*,*) 'Node ',inode&
+                        write(io_lun,*) 'Node ',inode&
                         ,' No grid points in the block touch the atom ' &
                         ,iblock,ipart,iatom,xatom,yatom,zatom,xblock,yblock,zblock &
                         ,' r_from_i = ',r_from_i
@@ -938,7 +941,7 @@ contains
           call io_assign(lun)
           open( unit=lun, file=ps_file(n), iostat=ios )
           if ( ios .ne. 0 ) then
-             write(*,1) ps_file(n)
+             write(io_lun,1) ps_file(n)
              call cq_abort('read_pseudopotential: file error')
           end if
           read(lun,*) n_points_max(n)
@@ -991,12 +994,12 @@ contains
     allocate(nl_pseudopotential(npts_max,nl_max,n_species))
     allocate(d2_nl_pseudopotential(npts_max,nl_max,n_species))
     if(inode==ionode) then
-       if(inode==ionode.AND.iprint_pseudo>=2) write(*,2)
+       if(inode==ionode.AND.iprint_pseudo>=2) write(io_lun,2)
        do n=1, n_species
           call io_assign(lun)
           open( unit=lun, file=ps_file(n), iostat=ios )
           if ( ios .ne. 0 ) then
-             write(*,1) ps_file(n)
+             write(io_lun,1) ps_file(n)
              call cq_abort('read_pseudopotential: file error')
           end if
           read(lun,*) i
@@ -1055,7 +1058,7 @@ contains
        end do
        n_projectors(n) = n_l
        nlpf_species(n) = n_l
-       if (inode==ionode.AND.iprint_pseudo>=2) write(*,3) n, ps_exponent(n)
+       if (inode==ionode.AND.iprint_pseudo>=2) write(io_lun,3) n, ps_exponent(n)
     end do
 1   format(10x,'An error occurred while trying to open file ', &
          a40,/,10x,'File does not exist or contains less data than needed')

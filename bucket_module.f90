@@ -35,10 +35,13 @@
 !!    Added RCS tags and ROBODoc header
 !!   07:49, 08/01/2003 dave
 !!    Added routines to deallocate bucket structures
+!!   2008/02/04 08:34 dave
+!!    Changed for output to file not stdout
 !!***
 module bucket_module
 
   use datatypes
+  use global_module, ONLY: io_lun
   use naba_blk_module, ONLY:naba_atm_of_blk
 
   implicit none
@@ -173,7 +176,7 @@ contains
     allocate(set%ibegin_pair_orb(set%mx_recv_node),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to local_bucket(ibegin_pair_orb) !')
     allocate(set%i_h2d(set%no_halo_atom2,set%no_halo_atom1),STAT=stat)
-!    write(*,*) ' allocation for loc_bucket%i_h2d', set%no_halo_atom2,set%no_halo_atom1
+!    write(io_lun,*) ' allocation for loc_bucket%i_h2d', set%no_halo_atom2,set%no_halo_atom1
     if(stat/=0) call cq_abort('Error allocating memory to local_bucket(i_h2d) !')
     call reg_alloc_mem(area_index,3*set%mx_recv_node+set%no_halo_atom2*set%no_halo_atom1,type_int)
     return
@@ -223,15 +226,15 @@ contains
     set%mx_send_node=mx_node_in
     set%mx_pair_comm=mx_pair_in
 
-!    write(*,*) 'remote_bucket%list_send_node',set%mx_send_node
+!    write(io_lun,*) 'remote_bucket%list_send_node',set%mx_send_node
     allocate(set%list_send_node(set%mx_send_node),STAT=stat)
     if(stat/=0) call cq_abort('Err alloc memory to remote_bucket(list_send_node) !')
-!    write(*,*) 'remote_bucket%no_of_pair',set%mx_send_node
+!    write(io_lun,*) 'remote_bucket%no_of_pair',set%mx_send_node
     allocate(set%no_of_pair(set%mx_send_node),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to remote_bucket(no_of_pair) !')
     allocate(set%no_of_pair_orbs(set%mx_send_node),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to remote_bucket(no_of_pair_orbs) !')
-!    write(*,*) 'remote_bucket%bucket',set%mx_pair_comm,set%mx_send_node
+!    write(io_lun,*) 'remote_bucket%bucket',set%mx_pair_comm,set%mx_send_node
     allocate(set%bucket(set%mx_pair_comm,set%mx_send_node),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to remote_bucket(bucket) !')
     call reg_alloc_mem(area_index,3*set%mx_send_node+set%mx_pair_comm*set%mx_send_node,type_int)

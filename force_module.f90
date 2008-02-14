@@ -43,11 +43,14 @@
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2008/02/06 08:14 dave
+!!    Changed for output to file not stdout
 !!  SOURCE
 !!
 module force_module
 
   use datatypes
+  use global_module, ONLY: io_lun
 
   implicit none
   save
@@ -219,8 +222,8 @@ contains
     call get_KE_force( KE_force, ni_in_cell)
     max_force = 0.0_double
     if (inode==ionode.AND.write_forces) then
-       write(*,fmt='(/,20x,"Forces on atoms (",a2,"/",a2,")"/)') en_units(energy_units), d_units(dist_units)
-       write(*,fmt='(18x,"    Atom   X              Y              Z")')
+       write(io_lun,fmt='(/,20x,"Forces on atoms (",a2,"/",a2,")"/)') en_units(energy_units), d_units(dist_units)
+       write(io_lun,fmt='(18x,"    Atom   X              Y              Z")')
     end if
     do i = 1, ni_in_cell
        do j=1,3
@@ -242,32 +245,32 @@ contains
        enddo
        if (inode==ionode) then
           if(iprint_MD>2) then
-             write(*,101) i
-             write(*,102) (for_conv*HF_force(j,i),j=1,3)
-             write(*,112) (for_conv*HF_NL_force(j,i),j=1,3)
-             write(*,103) (for_conv*p_force(j,i),j=1,3)
-             write(*,104) (for_conv*KE_force(j,i),j=1,3)
-             write(*,106) (for_conv*ewald_force(j,i),j=1,3)
+             write(io_lun,101) i
+             write(io_lun,102) (for_conv*HF_force(j,i),j=1,3)
+             write(io_lun,112) (for_conv*HF_NL_force(j,i),j=1,3)
+             write(io_lun,103) (for_conv*p_force(j,i),j=1,3)
+             write(io_lun,104) (for_conv*KE_force(j,i),j=1,3)
+             write(io_lun,106) (for_conv*ewald_force(j,i),j=1,3)
              if(flag_self_consistent) then
-                write(*,105) (for_conv*tot_force(j,i),j=1,3)
+                write(io_lun,105) (for_conv*tot_force(j,i),j=1,3)
              else
-                write(*,107) (for_conv*nonSC_force(j,i),j=1,3)
-                write(*,105) (for_conv*tot_force(j,i),j=1,3)
+                write(io_lun,107) (for_conv*nonSC_force(j,i),j=1,3)
+                write(io_lun,105) (for_conv*tot_force(j,i),j=1,3)
              end if
           else if(write_forces) then
              if(flag_self_consistent) then
-                write(*,fmt='(20x,i6,3f15.10)') i,(for_conv*tot_force(j,i),j=1,3)
+                write(io_lun,fmt='(20x,i6,3f15.10)') i,(for_conv*tot_force(j,i),j=1,3)
              else
-                write(*,fmt='(20x,i6,3f15.10)') i,(for_conv*tot_force(j,i),j=1,3)
+                write(io_lun,fmt='(20x,i6,3f15.10)') i,(for_conv*tot_force(j,i),j=1,3)
              end if
           end if
        end if
     enddo
     call my_barrier()
     if(inode==ionode) &
-         write(*,fmt='(4x,"Maximum force : ",f15.8,"(",a2,"/",a2,") on atom, component ",2i5)') &
+         write(io_lun,fmt='(4x,"Maximum force : ",f15.8,"(",a2,"/",a2,") on atom, component ",2i5)') &
          for_conv*max_force, en_units(energy_units), d_units(dist_units), max_atom, max_compt
-    if(inode==ionode.AND.iprint_MD>1.AND.write_forces) write(*,fmt='(4x,"Finished force")')
+    if(inode==ionode.AND.iprint_MD>1.AND.write_forces) write(io_lun,fmt='(4x,"Finished force")')
     deallocate(p_force,KE_force,HF_force,HF_NL_force, nonSC_force,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating forces: ",ni_in_cell)
     call reg_dealloc_mem(area_moveatoms, 5*3*ni_in_cell,type_dbl)
@@ -422,7 +425,7 @@ contains
 
     ! the force due to the change in T matrix elements is done differently...
     mat_tmp = allocate_temp_matrix(Srange,0)
-    if(inode==ionode.AND.iprint_MD>2) write(*,fmt='(4x,"Starting pulay_force()")')
+    if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(4x,"Starting pulay_force()")')
     p_force = zero
 
     ! first, lets make sure we have everything up to date. 
@@ -465,7 +468,7 @@ contains
     ! now we can evaluate support_gradient (into workspace_support)
     call get_support_gradient(inode, ionode)
     t1 = mtime()
-    if(inode==ionode.AND.iprint_MD>3) write(*,fmt='(4x,"get_support_gradient time: ",f12.5)') t1-t0
+    if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(4x,"get_support_gradient time: ",f12.5)') t1-t0
     t0 = t1
 
 
@@ -483,7 +486,7 @@ contains
              call cq_abort("pulay_force: basis set undefined ",flag_basis_set)
           end if
           t1 = mtime()
-          if(inode==ionode.AND.iprint_MD>3) write(*,fmt='(10x,"Phi Pulay grad ",i4," time: ",f12.5)') direction,t1-t0
+          if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(10x,"Phi Pulay grad ",i4," time: ",f12.5)') direction,t1-t0
           t0 = t1
 
 
@@ -514,7 +517,7 @@ contains
 
           call get_matrix_elements_new(inode-1,rem_bucket(sf_sf_rem),mat_tmp, H_on_supportfns, tmp_fn)
           t1 = mtime()
-          if(inode==ionode.AND.iprint_MD>3) write(*,fmt='(10x,"Phi Pulay int ",i4," time: ",f12.5)') direction,t1-t0
+          if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(10x,"Phi Pulay int ",i4," time: ",f12.5)') direction,t1-t0
           t0 = t1
 
           iprim=0
@@ -535,7 +538,7 @@ contains
              endif ! if the partition has atoms
           enddo ! np
           t1 = mtime()
-          if(inode==ionode.AND.iprint_MD>3) write(*,fmt='(10x,"Phi Pulay sum ",i4," time: ",f12.5)') direction,t1-t0
+          if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(10x,"Phi Pulay sum ",i4," time: ",f12.5)') direction,t1-t0
           t0 = t1
 
        enddo ! direction
@@ -575,7 +578,7 @@ contains
              end if
           end do
           t1 = mtime()
-          if(inode==ionode.AND.iprint_MD>3) write(*,*) 'S Pulay ',direction,' time: ',t1-t0
+          if(inode==ionode.AND.iprint_MD>3) write(io_lun,*) 'S Pulay ',direction,' time: ',t1-t0
           t0 = t1
        end do ! direction
     end if
@@ -703,7 +706,6 @@ contains
 !            db * local_pseudopotential(i+1,the_species) + &
 !            dc * d2_local_pseudopotential(i,the_species) +  &
 !            dd * d2_local_pseudopotential(i+1,the_species)
-!       write(20+inode,fmt='(3f20.12)') r,local_potential,derivative
 !    enddo
     ! get Hartree potential
     call hartree( density, h_potential, maxngrid, h_energy )
@@ -762,7 +764,6 @@ contains
                          dx=dcellx_grid*(ix-1)
                          dy=dcelly_grid*(iy-1)
                          dz=dcellz_grid*(iz-1)
-!                         write(20+inode,fmt='(a15,i4,3f12.4)') 'Grid point:    ',igrid,xblock+dx,yblock+dy,zblock+dz
                          rx=xblock+dx-xatom
                          ry=yblock+dy-yatom
                          rz=zblock+dz-zatom
@@ -798,7 +799,6 @@ contains
                                  dc * d2_local_pseudopotential(j,the_species) +  &
                                  dd * d2_local_pseudopotential(j+1,the_species)
 
-!                            write(20+inode,fmt='(a15,i4,4f12.4)') 'Atom, x, y, z: ',ig_atom,x,y,z,derivative
                             ! This is a little obscure, but the multiples below have had 
                             ! the minus sign which should be there removed to correct an 
                             ! earlier on dropped in the da, db, dc, dd expressions.DRB 27.11.97
@@ -822,8 +822,6 @@ contains
                          HF_force(1,ig_atom) = HF_force(1,ig_atom) + fx_2
                          HF_force(2,ig_atom) = HF_force(2,ig_atom) + fy_2
                          HF_force(3,ig_atom) = HF_force(3,ig_atom) + fz_2
-!                         write(20+inode,fmt='(a15,2i5,3f12.4)') 'Force:         ',igrid,ig_atom,HF_force(1,ig_atom), &
-!                              HF_force(2,ig_atom),HF_force(3,ig_atom)
                       enddo !ix
                    enddo  !iy
                 enddo   !iz
@@ -840,7 +838,6 @@ contains
 !       x_point = (grid_point_x(n) - 1) * x_grid
 !       y_point = (grid_point_y(n) - 1) * y_grid
 !       z_point = (grid_point_z(n) - 1) * z_grid
-!!         write(20+inode,fmt='(a15,i4,3f12.4)') 'Grid point:    ',n,x_point,y_point,z_point
 !       do i=1, n_atoms
 !          q = charge(species(i))
 !          alpha = exponent(species(i))
@@ -867,7 +864,6 @@ contains
 !                y = zero
 !                z = zero
 !             end if
-!!               write(20+inode,*) 'Atom, x, y, z: ',i,x,y,z
 !             ! now we construct the derivative of the local part of the 
 !             ! pseudopotential by spline interpolation from a table
 !             step = radius_max(species(i)) / &
@@ -890,7 +886,6 @@ contains
 !                  dc * d2_local_pseudopotential(j,species(i)) +  &
 !                  dd * d2_local_pseudopotential(j+1,species(i))
 !
-!!               write(20+inode,fmt='(a15,i4,4f12.4)') 'Atom, x, y, z: ',i,x,y,z,derivative
 !             ! This is a little obscure, but the multiples below have had 
 !             ! the minus sign which should be there removed to correct an 
 !             ! earlier on dropped in the da, db, dc, dd expressions.DRB 27.11.97
@@ -917,19 +912,16 @@ contains
 !          HF_force(1,i) = HF_force(1,i) + fx_2
 !          HF_force(2,i) = HF_force(2,i) + fy_2
 !          HF_force(3,i) = HF_force(3,i) + fz_2
-!!            if ( r2 .lt. core_radius_2(species(i)) ) then
-!!               write(20+inode,fmt='(a15,2i5,3f12.4)') 'Force:         ',n,i,HF_force(1,i),HF_force(2,i),HF_force(3,i)
-!!            end if
 !       end do
 !    end do
 
     ! and add contributions from all nodes
 !    do i = 1, n_atoms
-!       write(*,*) inode,i,(HF_force(j,i),j=1,3)
+!       write(io_lun,*) inode,i,(HF_force(j,i),j=1,3)
 !    enddo
     call gsum(HF_force,3,n_atoms)
 !    do i = 1, n_atoms
-!       write(*,*) inode,i,(HF_force(j,i),j=1,3)
+!       write(io_lun,*) inode,i,(HF_force(j,i),j=1,3)
 !    enddo
     return    
   end subroutine get_HF_force
