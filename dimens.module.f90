@@ -120,6 +120,8 @@ contains
 !!    Added scan for separate InvSrange to allow larger radii.
 !!   2007/04/17 09:42 dave
 !!    Removed rcut_dens
+!!   2008/03/03 18:44 dave
+!!    Changed float to real
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -251,9 +253,9 @@ contains
     grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
     one_over_grid_point_volume = one / grid_point_volume
     !support_grid_volume = support_grid_spacing**3
-    x_grid = one / float ( n_grid_x )
-    y_grid = one / float ( n_grid_y )
-    z_grid = one / float ( n_grid_z )
+    x_grid = one / real( n_grid_x, double)
+    y_grid = one / real( n_grid_y, double)
+    z_grid = one / real( n_grid_z, double)
     ! Grid points in a block
     n_pts_in_block = in_block_x * in_block_y * in_block_z
     return

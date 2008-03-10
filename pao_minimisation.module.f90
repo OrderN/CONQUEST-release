@@ -404,7 +404,7 @@ contains
        call writeout_support_functions(inode,ionode)
        ! Find change in energy for convergence
        diff = total_energy_last - total_energy_0
-       if (dabs(diff/total_energy_0) .le. energy_tolerance) then
+       if (abs(diff/total_energy_0) .le. energy_tolerance) then
           if (inode .eq. ionode) write(io_lun,18) total_energy_0
           convergence_flag = .true.
           total_energy_last = total_energy_0
@@ -653,7 +653,7 @@ contains
        call writeout_support_functions(inode,ionode)
        diff = total_energy_last - total_energy_0
        total_energy_last = total_energy_0
-       if (dabs(diff/total_energy_0) .le. energy_tolerance) then
+       if (abs(diff/total_energy_0) .le. energy_tolerance) then
           if (inode .eq. ionode) write(io_lun,18) total_energy_0
           convergence_flag = .true.
           total_energy_last = total_energy_0

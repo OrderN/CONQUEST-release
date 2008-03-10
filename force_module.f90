@@ -629,6 +629,8 @@ contains
 !!    Included in force_module
 !!   2004/10/05 drb
 !!    Added hartree_module use
+!!   2008/03/03 18:46 dave
+!!    Changed float to real
 !!  TODO
 !!    Fix this so that it doesn't loop over all processors ! Follow set_pseudo 13/05/2002 dave
 !!  SOURCE
@@ -685,10 +687,10 @@ contains
     HF_force = 0
 
 !    the_species = 1
-!    step = radius_max(1)/float(n_points_max(1)-1)
+!    step = radius_max(1)/real(n_points_max(1)-1,double)
 !    do i=1,n_points_max(1)-1
 !       r = i*step+0.5*step
-!       a = ( real(i+1)*step - r ) / step
+!       a = ( real(i+1,double)*step - r ) / step
 !       b = one - a
 !       c = a * ( a * a - one ) * step * step / six
 !       d = b * ( b * b - one ) * step * step / six
@@ -749,7 +751,7 @@ contains
                 q =charge(the_species)
                 alpha = ps_exponent(the_species)
                 beta = (alpha / pi)**1.5_double * grid_point_volume
-                step = radius_max(the_species)/float(n_points_max(the_species)-1)
+                step = radius_max(the_species)/real(n_points_max(the_species)-1,double)
                 ipoint=0
                 do iz=1,nz_in_block
                    do iy=1,ny_in_block
@@ -786,7 +788,7 @@ contains
                             if(j > n_points_max(the_species)-1) then
                                call cq_abort('set_ps: overrun problem',j)
                             endif
-                            r = real(j) * step
+                            r = real(j,double) * step
                             a = ( r - r_from_i ) / step
                             b = one - a
                             da = -one / step
@@ -854,7 +856,7 @@ contains
 !          r2 = rx * rx + ry * ry + rz * rz
 !          gauss = dexp( -alpha * r2 )
 !          if ( r2 .lt. core_radius_2(species(i)) ) then
-!             r_from_i = dsqrt( r2 )
+!             r_from_i = sqrt( r2 )
 !             if ( r_from_i .gt. zero ) then
 !                x = rx / r_from_i
 !                y = ry / r_from_i
@@ -867,13 +869,13 @@ contains
 !             ! now we construct the derivative of the local part of the 
 !             ! pseudopotential by spline interpolation from a table
 !             step = radius_max(species(i)) / &
-!                  float( n_points_max(species(i)) - 1 )
+!                  real( n_points_max(species(i)) - 1, double)
 !             j = aint( r_from_i / step ) + 1
 !
 !             ! with this we can now use the spline interpolation tables to 
 !             ! construct the derivative of the local part of the 
 !             ! pseudopotential on the grid
-!             r = float(j) * step
+!             r = real(j,double) * step
 !             a = ( r - r_from_i ) / step
 !             b = one - a
 !             da = -one / step
@@ -1635,6 +1637,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2007/11/16 12:10 dave
 !!    Bug fix: sign of ninth*(two*s+r)*rs term in dv_correlation was wrong
+!!   2008/03/03 18:34 dave
+!!    Removed dsqrt
 !!  SOURCE
 !!
   subroutine get_dxc_potential(density,dxc_potential,size )
@@ -1689,7 +1693,7 @@ contains
        else
           rs = zero
        end if
-       sq_rs = dsqrt(rs)
+       sq_rs = sqrt(rs)
        if (rs>=one) then
           denominator = one / (one + beta_1 * sq_rs + beta_2 * rs)
           vnumerator = one + seven_sixths * beta_1 * sq_rs +  &
@@ -1843,7 +1847,8 @@ contains
 !!  CREATION DATE
 !!   30/01/06
 !!  MODIFICATION HISTORY
-!!
+!!   2008/03/03 18:34 dave
+!!    Removed dsqrt
 !!  SOURCE
 !!
   subroutine get_dxc_potential_LDA_PW92(density,dxc_potential,size, &
@@ -1928,7 +1933,7 @@ contains
        else
           rs = zero
        end if
-       sq_rs = dsqrt(rs)
+       sq_rs = sqrt(rs)
 
        prefactor = k02 + k03*rs
        denominator = sq_rs * ( k04 + sq_rs * ( k05 + sq_rs * ( k06 + k07 * sq_rs)))

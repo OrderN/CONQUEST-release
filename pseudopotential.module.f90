@@ -160,6 +160,8 @@ contains
 !!    Added RCS Id and Log tags and GenComms
 !!   12:21, 04/02/2003 drb 
 !!    Small changes: improved definition of gauss and zeroed offset_position
+!!   2008/03/03 18:37 dave
+!!    Removed dsqrt, changed float to real
 !!  SOURCE
 !!
   subroutine set_pseudopotential()
@@ -272,7 +274,7 @@ contains
                 the_species = species_glob(ig_atom)
                 q =charge(the_species)
                 alpha = ps_exponent(the_species)
-                step = radius_max(the_species)/float(n_points_max(the_species)-1)
+                step = radius_max(the_species)/real(n_points_max(the_species)-1,double)
                 non_local_flag = non_local_species(the_species)
                 ! pseudofunction(n_pts_in_block,ncf,naba_atm,iblock)
                 !  ncf is fixed for all atoms in this version,
@@ -336,7 +338,7 @@ contains
                             ! projections and store them in 'pseudofunctions'
                             if(r2 < core_radius_2(the_species)) then
                                icheck=1
-                               r_from_i = dsqrt( r2 )
+                               r_from_i = sqrt( r2 )
                                j = aint( r_from_i / step ) + 1
                                ! check j (j+1 =< n_points_max)
                                if(j > n_points_max(the_species)) then
@@ -346,7 +348,7 @@ contains
                                ! the local part of the pseudopotl and 
                                ! pseudo-functions involved
                                ! in the non-local part on the grid
-                               rr = float(j) * step
+                               rr = real(j,double) * step
                                a = ( rr - r_from_i ) / step
                                b = one - a
                                c = a * ( a * a - one ) * step * step / six
@@ -493,6 +495,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   12/06/2001 dave
 !!    Included in pseudopotential_data and added ROBODoc header
+!!   2008/03/03 18:38 dave
+!!    Removed dsqrt, changed float to real
 !!  SOURCE
 !!
   subroutine pseudopotential_derivatives(direction, dpseudofns )
@@ -585,7 +589,7 @@ contains
 
                 the_species = species_glob(ig_atom)
                 !the_species=species(ig_atom)
-                step = radius_max(the_species)/float(n_points_max(the_species)-1)
+                step = radius_max(the_species)/real(n_points_max(the_species)-1,double)
                 non_local_flag = non_local_species(the_species)
                 !the_ncf= ncf !!   This part should be changed when we consider
                 !             !!   multiple ncf cases.
@@ -642,7 +646,7 @@ contains
                                if(r2 < core_radius_2(the_species)) then
                                   icheck=1
 
-                                  r_from_i = dsqrt( r2 )
+                                  r_from_i = sqrt( r2 )
                                   j = aint( r_from_i / step ) + 1
 
                                   ! OLD version : the following lines are
@@ -651,7 +655,7 @@ contains
                                           j, n_points_max(the_species)-1)
                                   endif
                                   ! use splines to find derivatives
-                                  rr = float(j) * step
+                                  rr = real(j,double) * step
 
                                   a = ( rr - r_from_i ) / step
                                   b = one - a
@@ -1103,6 +1107,8 @@ contains
 !!    F90, ROBODoc, indented
 !!   11/06/2001 dave
 !!    Included in pseudopotential_data
+!!   2008/03/03 18:54 dave
+!!    Changed float to real
 !!  SOURCE
 !!
   subroutine spline_pseudopotential()
@@ -1141,7 +1147,7 @@ contains
     ! loop over species and do the interpolation
     do n=1, n_species
        ! do the splining for the local part of the pseudopotential
-       delta_r = radius_max(n) / float( n_points_max(n) - 1 )
+       delta_r = radius_max(n) / real( n_points_max(n) - 1, double)
        d_origin = ( local_pseudopotential(2,n) -  &
             local_pseudopotential(1,n) ) / delta_r
        d_end = ( local_pseudopotential(n_points_max(n),n) - &
@@ -1154,7 +1160,7 @@ contains
           ! spline purposes; d_origin and d_end are the 1st derivatives at
           ! the origin and the end of the table respectively. These are 
           ! approximated in order to get continuous potentials
-          delta_r = radius_max(n) / float( n_points_max(n) - 1 )
+          delta_r = radius_max(n) / real( n_points_max(n) - 1, double)
           do n_l=1, n_l_components(n)
              d_origin = ( nl_pseudopotential(2,n_l,n) -  &
                   nl_pseudopotential(1,n_l,n) ) / delta_r

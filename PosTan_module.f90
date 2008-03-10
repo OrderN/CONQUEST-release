@@ -77,7 +77,8 @@ contains
 !!  CREATION DATE
 !!   14/06/2001 dave
 !!  MODIFICATION HISTORY
-!! 
+!!   2008/03/03 18:34 dave
+!!    Removed dlog, dabs
 !!  SOURCE
 !!
   subroutine fit_coeff(C, beta, E, R, n)
@@ -105,14 +106,14 @@ contains
        ndelta = n-1
        LastE = E(n)
        do i=1,ndelta
-          SCE(i) = dabs(E(i)-LastE)
+          SCE(i) = abs(E(i)-LastE)
        enddo
        nkeep=0
        do i=1,ndelta
-          if(SCE(i)>eprec*dabs(LastE))then
+          if(SCE(i)>eprec*abs(LastE))then
              nkeep = nkeep+1
-             SCR(i) = dlog(R(i))
-             SCE(i) = dlog(SCE(i))
+             SCR(i) = log(R(i))
+             SCE(i) = log(SCE(i))
           endif
        enddo
     endif

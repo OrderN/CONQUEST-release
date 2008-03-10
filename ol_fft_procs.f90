@@ -20,7 +20,7 @@ module fft_procedures
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: ol_fft_procs.f90,v 1.3 2005/05/26 08:36:27 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -280,7 +280,8 @@ contains
 !!  CREATION DATE
 !!   24/07/03
 !!  MODIFICATION HISTORY
-!!
+!!   2008/03/03 18:47 dave
+!!    Changed float to real
 !!  SOURCE
 !!
   subroutine cosft(y,n,isign)
@@ -329,7 +330,7 @@ contains
        end do
        enfo = two*(even-odd)
        sumo = y(1)-enfo
-       sume = (two*odd/float(n))-sumo
+       sume = (two*odd/real(n,double))-sumo
        y(1) = half*enfo
        y(2) = y(2)-sume
        do i=3,n-1,2

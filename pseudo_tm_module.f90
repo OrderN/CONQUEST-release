@@ -389,6 +389,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2007/07/30 08:06 dave
 !!    Tidied up cutoff finding: re-using core_radius instead of finding max every time
+!!   2008/03/03 18:50 dave
+!!    Changed float to real
 !!  SOURCE
 !!
   subroutine set_tm_pseudo
@@ -619,7 +621,7 @@ contains
                          !  cutoff for this function might be smaller
                          !  than cut off used in check_block
                          if(j+1 <= pseudo(the_species)%chlocal%n) then
-                            rr = float(j) * step
+                            rr = real(j,double) * step
                             a = ( rr - r_from_i ) / step
                             b = one - a
                             c = a * ( a * a - one ) * step * step / six
@@ -680,7 +682,7 @@ contains
                          !  cutoff for this function might be smaller
                          !  than cut off used in check_block
                          if(j+1 <= pseudo(the_species)%pjnl(nl)%n) then
-                            rr = float(j) * step
+                            rr = real(j,double) * step
                             a = ( rr - r_from_i ) / step
                             b = one - a
                             c = a * ( a * a - one ) * step * step / six
@@ -1014,7 +1016,7 @@ contains
                          end if ! j+1<pseudo(the_species)%chlocal%n
                       else
                          if(j+1 <= pseudo(the_species)%chlocal%n) then
-                            rr = real(j) * step
+                            rr = real(j,double) * step
                             a = ( rr - r_from_i ) / step
                             b = one - a
                             !c = a * ( a * a - one ) * step * step / six
@@ -1498,7 +1500,8 @@ contains
 !!  CREATION DATE
 !!   08/07/2002
 !!  MODIFICATION HISTORY
-!!  
+!!   2008/03/03 18:51 dave
+!!    Changed float to real
 !!  SOURCE
 !!
   subroutine get_energy_shift(e_core)
@@ -1587,7 +1590,7 @@ contains
     enddo
 
     do ispecies=1, n_species
-       e_core = e_core + float( n_atoms_of_species(ispecies) ) *  &
+       e_core = e_core + real( n_atoms_of_species(ispecies), double ) *  &
             eshift(ispecies)
     end do
     !  I (TM) am not sure whether number_of_electrons should be
@@ -1726,13 +1729,13 @@ contains
             ! z or zcore?
             ! eshift = eshift + (vlocal + z ) * four *pi * rr * wos(imesh)
             !erf eshift = eshift +  four *pi * rr * wos(imesh) * &
-            !erf            (vlocal + zcore * derf(dsqrt(beta) *rr) )
+            !erf            (vlocal + zcore * erf(sqrt(beta) *rr) )
             erfarg = one - erfc(sqrt(beta) *rr)
             !erfarg = derf(sqrt(beta) *rr)
-            !write(52,*) rr, derf(dsqrt(beta) *rr), erfarg
+            !write(52,*) rr, erf(sqrt(beta) *rr), erfarg
             intvloc = intvloc +  four *pi * rr * wos(imesh) * &
                  (vlocal + z * erfarg )
-            !(vlocal + z * derf(dsqrt(beta) *rr) )
+            !(vlocal + z * erf(sqrt(beta) *rr) )
             if(imesh==nmesh_vloc.AND.inode==ionode.AND.iprint_pseudo>1) &
                  write(io_lun,fmt='(2x,"Sum of local potential and core charge: ",3f12.8)') &
                  vlocal + z, vlocal, z
@@ -1833,7 +1836,7 @@ contains
             ! z or zcore?
             ! eshift = eshift + (vlocal + z ) * four *pi * rr * wos(imesh)
             !erf eshift = eshift +  four *pi * rr * wos(imesh) * &
-            !erf            (vlocal + zcore * derf(dsqrt(beta) *rr) )
+            !erf            (vlocal + zcore * erf(sqrt(beta) *rr) )
             if(imesh==nmesh_vloc.AND.inode==ionode.AND.iprint_pseudo>1) &
                  write(io_lun,fmt='(2x,"Sum of local potential and core charge: ",3f8.3)') &
                  vlocal + zcore, vlocal, zcore
@@ -1915,7 +1918,8 @@ contains
 !!  CREATION DATE
 !!   Jul. 2002
 !!  MODIFICATION HISTORY
-!!
+!!   2008/03/03 18:37 dave
+!!    Removed dsqrt
 !!  SOURCE
 !!
   subroutine check_block &
@@ -1969,7 +1973,7 @@ contains
 
              if(r2 < rcut2) then
                 npoint=npoint+1
-                r_from_i = dsqrt( r2 )
+                r_from_i = sqrt( r2 )
 
                 ! direction cosines needed for spher harms
                 if ( r_from_i > very_small ) then

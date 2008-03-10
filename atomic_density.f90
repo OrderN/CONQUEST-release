@@ -235,6 +235,8 @@ contains
 !!    Changed iprint level at which 2001 point table printed out...
 !!   2007/11/16 10:19 dave
 !!    Changed linear interpolation to spline interpolation to fix forces problem
+!!   2008/03/03 18:40 dave
+!!    Changed float to real()
 !!  SOURCE
 !!
   subroutine make_atomic_density_from_paos(inode,ionode,n_species)
@@ -303,7 +305,7 @@ contains
        end do
        ! Find spacing of table
        density_deltar = atomic_density_table(n_sp)%cutoff/&
-            &float(atomic_density_table(n_sp)%length-1)
+            &real(atomic_density_table(n_sp)%length-1,double)
        ! Write out info and check angular momentum
        if((inode == ionode).and.(iprint_SC >= 2)) &
             write(unit=io_lun,fmt='(/10x," greatest ang. mom. for making density from PAOs:",i3)') &
@@ -318,7 +320,7 @@ contains
              do n_zeta = 1, pao(n_sp)%angmom(n_am)%n_zeta_in_angmom
                 if(pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length > 1) then
                    pao_deltar = pao(n_sp)%angmom(n_am)%zeta(n_zeta)%cutoff/&
-                        &float(pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length-1)
+                        &real(pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length-1,double)
                    do nt = 1, atomic_density_table(n_sp)%length
                       r = (nt-1)*density_deltar
                       i = one + very_small + r/pao_deltar

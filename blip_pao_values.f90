@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: blip_pao_values.f90,v 1.2 2002/08/12 13:54:00 mjg Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module blip_pao_values
 ! ------------------------------------------------------------------------------
@@ -37,7 +37,7 @@ module blip_pao_values
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: blip_pao_values.f90,v 1.2 2002/08/12 13:54:00 mjg Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
 !!***
 
@@ -76,7 +76,8 @@ contains
 !!  CREATION DATE
 !!   22/6/02
 !!  MODIFICATION HISTORY
-!!
+!!   2008/03/03 18:42 dave
+!!    Changed float to real
 !!  SOURCE
   subroutine b_value(nu_int,bv)
     use datatypes
@@ -87,7 +88,7 @@ contains
     integer :: nu
     real(double) :: deltax, x, f1, f2
 
-    deltax = one/float(nu_int)
+    deltax = one/real(nu_int,double)
 
     do nu = 1, nu_int-1
        x = nu*deltax
@@ -306,7 +307,8 @@ contains
 !!  CREATION DATE
 !!   22/6/02
 !!  MODIFICATION HISTORY
-!!
+!!   2008/03/03 18:42 dave
+!!    Changed float to real
 !!  SOURCE
   subroutine f2_value(sym_type,n_sp,n_am,n_zeta,nu_int,&
        &delta_ig,n_blip,bv,y0,z,fv2)
@@ -334,7 +336,7 @@ contains
     ! constants
     n_b_int_in_diam = n_blip + 3
     n_b_int_in_radius = n_b_int_in_diam/2
-    deltax = one/float(nu_int)
+    deltax = one/real(nu_int,double)
     b_int = nu_int*delta_ig
 
     ! compute and assemble contributions to scalar products
@@ -391,7 +393,8 @@ contains
 !!  CREATION DATE
 !!   22/6/02
 !!  MODIFICATION HISTORY
-!!
+!!   2008/03/03 18:42 dave
+!!    Changed float to real
 !!  SOURCE
   subroutine f3_value(sym_type,n_sp,n_am,n_zeta,nu_int,&
        &delta_ig,n_blip,bv,z0,fv3)
@@ -419,7 +422,7 @@ contains
     ! constants
     n_b_int_in_diam = n_blip + 3
     n_b_int_in_radius = n_b_int_in_diam/2
-    deltax = one/float(nu_int)
+    deltax = one/real(nu_int,double)
     b_int = nu_int*delta_ig
 
     ! compute and assemble contributions to scalar products

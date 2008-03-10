@@ -557,6 +557,8 @@ contains
 !!    Changed loop to be over primary set and added species dependence
 !!   2006/11/01 17:06 dave
 !!    Included in blip
+!!   2008/03/03 18:41 dave
+!!    Changed float to real (probably unnecessary)
 !!  SOURCE
 !!
   subroutine gauss2blip
@@ -617,9 +619,9 @@ contains
           nx = blip_info(spec)%blip_location( 1, n_blip )
           ny = blip_info(spec)%blip_location( 2, n_blip )
           nz = blip_info(spec)%blip_location( 3, n_blip )
-          x = float( nx ) * SupportGridSpacing(spec)
-          y = float( ny ) * SupportGridSpacing(spec)
-          z = float( nz ) * SupportGridSpacing(spec)
+          x = real( nx, double ) * SupportGridSpacing(spec)
+          y = real( ny, double ) * SupportGridSpacing(spec)
+          z = real( nz, double ) * SupportGridSpacing(spec)
           r2 = x * x + y * y + z * z
           gauss_1 = exp( - alpha * r2)
           gauss_2 = exp( - beta * r2)

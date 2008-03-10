@@ -81,6 +81,8 @@ contains
 !!    Changed default normalisation option to 1 - i.e. normalisation of PAOs is done by default
 !!   08:19, 2004/07/27 dave
 !!    Added lines to work out maximum value for npao
+!!   2008/03/03 18:54 dave
+!!    Changed float to real
 !!  SOURCE
 !!
   subroutine read_pao(inode,ionode,n_species)
@@ -218,7 +220,7 @@ contains
           do n_zeta = 1, pao(n_sp)%angmom(n_am)%n_zeta_in_angmom
 
              deltar = pao(n_sp)%angmom(n_am)%zeta(n_zeta)%cutoff / &
-                  &float(pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length - 1)
+                  &real(pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length - 1, double)
              limit = pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length
 
              allocate(pao(n_sp)%angmom(n_am)%zeta(n_zeta)%table2(limit),STAT=alls)
@@ -256,7 +258,7 @@ contains
                       end if
                    else
                       deltar = pao(n_sp)%angmom(n_am)%zeta(n_zeta)%cutoff / &
-                           &float(pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length - 1)
+                           &real(pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length - 1, double)
                       sum = zero
                       limit = (pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length - 1) / 2
                       limit = 1 + 2*limit

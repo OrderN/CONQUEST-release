@@ -93,6 +93,8 @@ contains
 !!   14/08/2002 mjg
 !!    Call to read_pao_info removed, because reading of pao's
 !!    is now done elsewhere by the routine get_ionic_data
+!!   2008/03/03 18:48 dave
+!!    Changed float to real
 !!  SOURCE
   subroutine make_blips_from_paos(inode,ionode,n_species)
 
@@ -345,7 +347,7 @@ contains
        if((inode == ionode).and.(iprint_basis >= 2)) then
           write(unit=io_lun,fmt='(/" values of 4 sectors of blip function",&
                &" on integration grid:"/)')
-          deltax = one/float(nu_int)
+          deltax = one/real(nu_int,double)
           do n = 1, nu_int
              x = n*deltax  
              write(unit=io_lun,fmt='(i3,2x,f12.6,2x,4e15.6)') n, x, &
@@ -616,8 +618,8 @@ contains
 !!  CREATION DATE
 !!   22/6/02
 !!  MODIFICATION HISTORY
-!!
-!!
+!!   2008/03/03 18:48 dave
+!!    Changed float to real
 !!  SOURCE
   subroutine blips_in_star(inode,ionode,sym_type,&
        &n_sp,n_am,n_zeta,nu_int,n_b_half,b_int,region_bound_single,&
@@ -660,8 +662,8 @@ contains
     n_blip_squared = n_blip*n_blip
     n_b_int_in_radius = n_b_half + 2
     n_b_int_in_diam = 2*n_b_int_in_radius
-    delta_ig = b_int/float(nu_int)
-    deltax = one/float(nu_int)
+    delta_ig = b_int/real(nu_int,double)
+    deltax = one/real(nu_int,double)
 
     ! check enough blips for requested symmetry
     if(n_b_half < 0) then
@@ -847,6 +849,8 @@ contains
 !!    i) All pao tables changed so that enumeration starts from one not zero
 !!    ii) All radial tables changed so that the expectation is that they are divided by
 !!    r**l (in line with Siesta radial tables and spherical harmonic conventions)
+!!   2008/03/03 18:48 dave
+!!    Changed float to real
 !!  SOURCE
   subroutine deviation(inode,ionode,n_sp,n_sup,nu_int,&
        &n_b_half,reg_rad,b_int,region_bound_single,region_bound_double,&
@@ -886,7 +890,7 @@ contains
     eg_a_norm = sqrt(fifteen/(sixteen*pi))
     eg_b_norm = sqrt(five/(sixteen*pi))
 
-    delta_ig = b_int/float(nu_int)
+    delta_ig = b_int/real(nu_int,double)
     n_int_grid = int(very_small + reg_rad/delta_ig)
     k = 2*n_int_grid + 1
     if(k > (2*bas+11)*max_blip_nu_int) then
@@ -1040,8 +1044,8 @@ contains
     end do
 
     ! calculate r.m.s. deviation and normalise it
-    phi_rms = sqrt(acc_phi_squared/float(n_int_points))
-    dphi_rms = sqrt(acc_dphi_squared/float(n_int_points))
+    phi_rms = sqrt(acc_phi_squared/real(n_int_points,double))
+    dphi_rms = sqrt(acc_dphi_squared/real(n_int_points,double))
     if((inode == ionode).and.(iprint_basis >= 1)) then
        write(unit=io_lun,fmt='(/" species:",i3," support fn no:",i3,&
             &", normalised rms deviation:",e15.6)') n_sp, n_sup, &

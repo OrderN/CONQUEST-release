@@ -527,7 +527,7 @@ contains
        n_s = n_s+1
        if(inode==ionode) &
             write(io_lun,*) 'Iteration ',n_s,' in brentMin, x,Rx: ',x,fx
-       tol1 = tol*dabs(x)+zeps
+       tol1 = tol*abs(x)+zeps
        tol2 = two*tol1
        if(fx<Rb) then ! Not part of the original Brent criterion !
           done = .true.
@@ -542,11 +542,11 @@ contains
           p = (x-v)*q-(x-w)*r
           q = two*(q-r)
           if(q>0) p=-p
-          q = dabs(q)
+          q = abs(q)
           etemp = e
           e = d
           ! Test parabolic fit
-          if(dabs(p)<dabs(half*q*etemp).OR.p>q*(a-x).OR.p<q*(b-x)) then
+          if(abs(p)<abs(half*q*etemp).OR.p>q*(a-x).OR.p<q*(b-x)) then
              d=p/q
              u=x+d
              if(u-a<tol2.OR.b-u<tol2) d=sign(tol1,xm-x)
@@ -567,7 +567,7 @@ contains
           d = C*e
        endif
        ! Check that the step isn't too small
-       if(dabs(d)>=tol1) then
+       if(abs(d)>=tol1) then
           u=x+d
        else
           u=x+sign(tol1,d)

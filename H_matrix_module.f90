@@ -971,6 +971,8 @@ contains
 !!    Added calculation of correction term to band energy
 !!   11:49, 30/09/2003 drb
 !!    Added comments to make separate testing of X and C easier
+!!   2008/03/03 18:32 dave
+!!    Removed dsqrt
 !!  SOURCE
 !!
   subroutine get_xc_potential(density,xc_potential,xc_energy,size )
@@ -1023,7 +1025,7 @@ contains
        else
           rs = zero
        end if
-       sq_rs = dsqrt(rs)
+       sq_rs = sqrt(rs)
        if (rs>=one) then
           denominator = one / (one + beta_1 * sq_rs + beta_2 * rs)
           numerator = one + seven_sixths * beta_1 * sq_rs +  &
@@ -1197,7 +1199,8 @@ contains
 !!  CREATION DATE
 !!   01/11/05
 !!  MODIFICATION HISTORY
-!!
+!!   2008/03/03 18:32 dave
+!!    Removed dsqrt
 !!  SOURCE
 !!
   subroutine get_xc_potential_LDA_PW92(density,xc_potential,xc_energy_total,size,xc_energy)
@@ -1274,7 +1277,7 @@ contains
        else
           rs = zero
        end if
-       sq_rs = dsqrt(rs)
+       sq_rs = sqrt(rs)
 
        prefactor = k02 + k03*rs
        denominator = sq_rs * ( k04 + sq_rs * ( k05 + sq_rs * ( k06 + k07 * sq_rs)))

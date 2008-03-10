@@ -323,6 +323,8 @@ contains
   !!    Added ROBODoc header and incorporated into ewald_module
   !!   2005/10/06 09:56 dave
   !!    Bug fix: was checking rij2 not r2_min
+  !!   2008/03/03 18:44 dave
+  !!    Changed float to real
   !!  TODO 
   !!   Update for non-orthorhombic cells and to use partitions DRB 14/05/01
   !!  SOURCE
@@ -537,9 +539,9 @@ contains
                    ! find out the modulus of this vector and see if it 
                    ! contributes
                    n_vectors = n_vectors + 1
-                   vec_x = float(nx) * b_x
-                   vec_y = float(ny) * b_y
-                   vec_z = float(nz) * b_z
+                   vec_x = real(nx,double) * b_x
+                   vec_y = real(ny,double) * b_y
+                   vec_z = real(nz,double) * b_z
                    g2 = vec_x*vec_x + vec_y*vec_y + vec_z*vec_z
                    if ( g2<=g2_min ) g2_min = g2
                 end if ! abs(nx)==n_shell etc
@@ -588,9 +590,9 @@ contains
                    gx(n_g_vectors) = real( k, double ) * b_x
                    gy(n_g_vectors) = real( l, double ) * b_y
                    gz(n_g_vectors) = real( m, double ) * b_z
-                   g2 = float( k * k ) * b_x * b_x + &
-                        float( l * l ) * b_y * b_y + &
-                        float( m * m ) * b_z * b_z
+                   g2 =  real( k * k, double) * b_x * b_x + &
+                        &real( l * l, double) * b_y * b_y + &
+                        &real( m * m, double) * b_z * b_z
                    argument = - g2 / ( four * gamma * gamma )
                    g_factor(n_g_vectors) = exp( argument ) / g2
                 end if

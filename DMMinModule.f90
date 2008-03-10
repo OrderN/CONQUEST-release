@@ -344,7 +344,7 @@ contains
           if(inode==ionode.AND.iprint_DM>=1) write(io_lun,1) n_iter+1, energy0, g0
           if((inode==ionode).AND.(iprint_DM>=2)) &
                write(io_lun,*) 'Linearity satisfied - calling PulayL'
-          !if(dabs(delta_E)<tolerance) then
+          !if(abs(delta_E)<tolerance) then
           !  if((inode==ionode).AND.(iprint_DM>=2)) &
           !    write(io_lun,*) 'Tolerance also achieved'
           !  done = .true.
@@ -410,6 +410,8 @@ contains
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2008/03/03 18:32 dave
+!!    Removed dsqrt
 !!  SOURCE
 !!
   subroutine lateDM(ndone, n_L_iterations, done, deltaE, &
@@ -524,7 +526,7 @@ contains
        end if
        ! Find the residual (i.e. the gradient)
        gg = matrix_product_trace(matM3,matSM3)
-       if(inode==ionode.AND.iprint_DM>=2) write(io_lun,*) 'R2 is ',dsqrt(gg)
+       if(inode==ionode.AND.iprint_DM>=2) write(io_lun,*) 'R2 is ',sqrt(gg)
        call matrix_sum(zero,mat_SGstore(npmod),-one,matSM3)
        call matrix_sum(zero,mat_Gstore(npmod),-one,matM3)
        call matrix_sum(zero,mat_Lstore(npmod),one,matL)

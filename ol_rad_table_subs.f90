@@ -1180,6 +1180,7 @@ end subroutine unnorm_siesta_tbl
   subroutine ran2(x,idum)
                                                                                 
     use datatypes
+    use GenComms, ONLY: cq_abort
                                                                                 
     implicit none
                                                                                 
@@ -1207,7 +1208,7 @@ end subroutine unnorm_siesta_tbl
 !       write(io_lun,11) idum,iy,iff,m,j,1+(97*iy)/m
     j=1+(97*iy)/m
  11 format('idum,iy,iff,m,old j,new j in ran2= ',6i12)
-    if((j.gt.97).or.(j.lt.1)) pause
+    if((j.gt.97).or.(j.lt.1)) call cq_abort("Error in ran2: ",j)
     iy=ir(j)
     x=iy*rm
     idum=mod(ia*idum+ic,m)
