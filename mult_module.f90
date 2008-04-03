@@ -1696,6 +1696,53 @@ contains
   end function matrix_trace
 !!***
 
+!! Atom-by-atom matrix_product_trace e.g. for atom charges
+!!   Call as atom_trace(A,B,prim%n_prim,res) where A and B are matrix labels (e.g. matK, matS),
+!!   len is bundle%n_prim and res is a real(double) array of size len passed in.
+!! D.R. Bowler, 2008/03/21
+!!
+  subroutine atom_trace(A,B,len,res)
+
+    use datatypes
+    use numbers, ONLY: zero
+    use matrix_data, ONLY: mat
+    use primary_module, ONLY: bundle
+    use GenBlas, ONLY: dot
+
+    implicit none
+
+    ! Input variables 
+    integer :: A,B, len
+    real(double), dimension(len) :: res
+
+    ! Local variables
+    integer :: iprim, np, i, l, Ah, ist
+
+    res = zero
+    Ah = matrix_index(A)
+    iprim = 0
+    if(matrix_index(A)==matrix_index(B)) then           ! The matrices are the same range
+       do np = 1,bundle%groups_on_node                  ! Loop over partitions on processor
+          if(bundle%nm_nodgroup(np)>0) then              ! if there are atoms in partition
+             do i=1,bundle%nm_nodgroup(np)                ! loop over atoms in partition
+                iprim = iprim + 1   ! count no. of atoms
+                ist = mat(np,Ah)%nd_offset + mat(np,Ah)%i_nd_acc(i)
+                if(i<bundle%nm_nodgroup(np)) then         ! if still going through partition atoms:
+                   l = mat(np,Ah)%i_nd_acc(i+1) - mat(np,Ah)%i_nd_acc(i)
+                else                                      ! if finished all atoms in partition
+                   l = mat(np,Ah)%part_nd_nabs - mat(np,Ah)%i_nd_acc(i) + 1
+                end if
+                ! atomic charge for iprim atom:
+                res(iprim) = dot(l,mat_p(A)%matrix(ist:ist+l-1),1,mat_p(B)%matrix(ist:ist+l-1),1)
+             end do
+          end if
+       end do ! recovered the charges per processor, need to gsum
+    end if
+
+  end subroutine atom_trace
+!!***
+
+
   real(double) function matrix_product_trace(A,B)
 
     use datatypes

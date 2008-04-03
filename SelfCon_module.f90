@@ -38,6 +38,8 @@
 !!    Made parameters user-definable
 !!   2008/02/04 08:23 dave
 !!    Changed for output to file not stdout
+!!   2008/04/02  M. Todorovic
+!!    Added atomic charge calculation
 !!  SOURCE
 !!
 module SelfCon
@@ -63,6 +65,7 @@ module SelfCon
   logical :: earlyL
   logical, parameter :: MixLin = .true.
   integer :: n_exact
+  logical :: atomch_output
 
   real(double), save :: A
   real(double), save :: q0
@@ -1456,5 +1459,73 @@ contains
 
   end subroutine PulayMixSCB
 
+!!****f* SelfCon_module/get_atomic_charge *
+!!
+!!  NAME 
+!!   get_atomic_charge
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   Computes and prints atomic charges (Mulliken analysis)
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   M. Todorovic
+!!  CREATION DATE
+!!   2008/04/02
+!!
+!!  MODIFICATION HISTORY
+!!
+subroutine get_atomic_charge()
+
+  use datatypes
+  use numbers, ONLY: zero, one, two
+  use global_module, ONLY: ni_in_cell
+  use primary_module, ONLY: bundle
+  use matrix_data, ONLY: Srange
+  use mult_module, ONLY: matK, matS, atom_trace, matrix_sum, allocate_temp_matrix, free_temp_matrix
+  use atoms, ONLY: atoms_on_node
+  use GenComms, ONLY: gsum, inode, ionode, cq_abort
+
+  implicit none
+
+  ! Local variables
+  integer :: chun, stat, n,l, glob_ind, temp_mat
+  real(double), allocatable, dimension(:) :: charge, node_charge
+
+  ! prepare arrays and suitable matrices
+  l = bundle%n_prim
+  allocate(charge(ni_in_cell), node_charge(l), STAT=stat)
+  if(stat/=0) call cq_abort("Error allocating charge arrays in get_atomic_charge.")
+  node_charge = zero
+  charge = zero
+  temp_mat = allocate_temp_matrix(Srange, 0)
+  call matrix_sum(zero,temp_mat,one,matK) 
+
+  ! perform charge summation  
+  call atom_trace(temp_mat,matS,l,node_charge)  !automatically called on each node
+  ! sum from the node_charge into the total charge array
+  do n=1,l
+     glob_ind = atoms_on_node(n,inode)
+     charge(glob_ind) = two*node_charge(n)
+  end do
+  call gsum(charge,ni_in_cell)
+
+  ! output
+  if (inode==ionode) then
+     write(*,*) 'Writing charge on individual atoms...'
+     open(unit=chun,file='AtomCharge.dat')
+     do n=1,ni_in_cell
+        write(unit=chun,fmt='(f15.10)') charge(n)
+     end do
+     close(unit=chun)
+  end if
+
+  deallocate(charge,node_charge)
+  call free_temp_matrix(temp_mat)
+
+end subroutine get_atomic_charge
+!!***
 
 end module SelfCon

@@ -87,7 +87,7 @@ contains
     use datatypes
     use force_module, ONLY : force
     use DMMin, ONLY: FindMinDM
-    use SelfCon, ONLY: new_SC_potl
+    use SelfCon, ONLY: new_SC_potl, atomch_output, get_atomic_charge
     use global_module, ONLY: flag_vary_basis, flag_self_consistent, flag_basis_set, blips, PAOs
     use energy, ONLY: get_energy
     use GenComms, ONLY: cq_abort, inode, ionode
@@ -137,6 +137,7 @@ contains
        call FindMinDM(n_L_iterations, number_of_bands, vary_mu, L_tolerance, mu, inode, ionode, reset_L, .false.)
        call get_energy(total_energy)
     end if
+    if(atomch_output) call get_atomic_charge()
     if(find_forces) call force(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, &
          sc_tolerance, mu, total_energy, expected_reduction, write_forces)
     return

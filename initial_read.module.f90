@@ -1,3 +1,4 @@
+
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
@@ -321,12 +322,12 @@ contains
 !TM
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT, flag_angular_new
     use SelfCon, ONLY: A, flag_linear_mixing, EndLinearMixing, q0, n_exact, maxitersSC, maxearlySC, &
-        maxpulaySC
+        maxpulaySC, atomch_output
     use atomic_density, ONLY: read_atomic_density_file, atomic_density_method
     use S_matrix_module, ONLY: InvSTolerance
     use blip, ONLY: SupportGridSpacing, BlipWidth, init_blip_flag, alpha, beta
     use maxima_module, ONLY: maxnsf
-    use control, ONLY: MDn_steps, MDfreq, MDtimestep, MDcgtol
+    use control, ONLY: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset
     use ewald_module, ONLY: ewald_accuracy, flag_old_ewald
     use minimise, ONLY: UsePulay, n_L_iterations, n_support_iterations, L_tolerance, sc_tolerance, &
          energy_tolerance, expected_reduction
@@ -339,6 +340,7 @@ contains
     use io_module, ONLY: pdb_format, pdb_altloc, append_coords, pdb_output, banner
     use group_module, ONLY : part_method, HILBERT, PYTHON
     use energy, ONLY: flag_check_DFT
+    use H_matrix_module, ONLY: locps_output, locps_choice
 
     implicit none
 
@@ -413,6 +415,9 @@ contains
        iprint_pseudo = fdf_integer('IO.Iprint_pseudo',iprint)
        iprint_basis  = fdf_integer('IO.Iprint_basis',iprint)
        iprint_intgn  = fdf_integer('IO.Iprint_intgn',iprint)
+       locps_output = fdf_boolean('IO.LocalPotOutput', .false.)
+       locps_choice = fdf_integer('IO.LocalPotChoice', 8)
+       atomch_output = fdf_boolean('IO.AtomChargeOutput', .false.)
        tmp = fdf_string('General.MemoryUnits','MB')
        if(leqi(tmp(1:2),'kB')) then
           m_units = kbytes
@@ -628,6 +633,7 @@ contains
        flag_buffer_old = fdf_boolean('AtomMove.OldBuffer',.false.)
        AtomMove_buffer = fdf_double('AtomMove.BufferSize',4.0_double)
        flag_pulay_simpleStep = fdf_boolean('AtomMove.PulaySimpleStep',.false.)
+       CGreset = fdf_boolean('AtomMove.ResetCG',.false.)
        MDn_steps = fdf_integer('AtomMove.NumSteps',100)
        MDfreq = fdf_integer('AtomMove.OutputFreq',50)
        MDtimestep = fdf_double('AtomMove.Timestep',0.5_double)

@@ -43,6 +43,7 @@ module control
   integer :: MDfreq 
   real(double) :: MDtimestep 
   real(double) :: MDcgtol 
+  logical :: CGreset
 
   ! RCS tag for object file identification
   character(len=80), save, private :: RCSid = "$Id$"
@@ -226,6 +227,14 @@ contains
           gamma = 0.0_double
        else
           gamma = gg/ggold
+       end if
+       if(inode==ionode.AND.iprint_MD>2) write(io_lun,*) ' CHECK :: Force Residual = ', for_conv*sqrt(gg)/ni_in_cell
+       if(inode==ionode.AND.iprint_MD>2) write(io_lun,*) ' CHECK :: gamma = ', gamma
+       if(CGreset) then
+          if(gamma>one) then
+             if(node==ionode) write(io_lun,*) ' CG direction is reset! '
+             gamma=0.0_double
+          end if
        end if
        if(myid==0) write(io_lun,fmt='(/4x,"Atomic relaxation CG iteration: ",i5)') iter
        ggold = gg

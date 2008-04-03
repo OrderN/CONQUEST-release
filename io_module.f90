@@ -2808,28 +2808,31 @@ hc2:    do
 !!  CREATION DATE
 !!   10:58, 15/10/2002 drb 
 !!  MODIFICATION HISTORY
+!!   2008/04/02  M. Todorovic
+!!     Added stub name into function
 !!
 !!  SOURCE
 !!
-  subroutine dump_locps(locps,size,inode)
+  subroutine dump_locps(stub,locps,size,inode)
 
     use datatypes
 
     ! Passed variables
     integer :: size, inode
     real(double), dimension(size) :: locps
+    character(len=*) :: stub
 
     ! Local variables
     integer :: lun, nhund, ntens, nunit, n1, block, n_point, n_i, n
     character(len=11) :: digitstr = "01234567890"
-    character(len=10) :: filename
+    character(len=16) :: filename
 
     ! Build a filename based on node number
     nhund = aint(real(inode/100))+1
     n1 = inode - (100*nhund) + 100
     ntens = aint(real(n1/10))+1
     nunit = n1 - 10*ntens + 11
-    filename = 'locps.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    filename = 'locps'//stub//'.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -2864,28 +2867,31 @@ hc2:    do
 !!  CREATION DATE
 !!   10:58, 15/10/2002 drb 
 !!  MODIFICATION HISTORY
+!!   2008/04/02  M. Todorovic
+!!     Added stub name into function
 !!
 !!  SOURCE
 !!
-  subroutine grab_locps(locps,size,inode)
+  subroutine grab_locps(stub,locps,size,inode)
 
     use datatypes
 
     ! Passed variables
     integer :: size, inode
     real(double), dimension(size) :: locps
+    character(len=*) :: stub
 
     ! Local variables
     integer :: lun, nhund, ntens, nunit, n1, block, n_point, n_i, n
     character(len=11) :: digitstr = "01234567890"
-    character(len=10) :: filename
+    character(len=16) :: filename
 
     ! Build a filename based on node number
     nhund = aint(real(inode/100))+1
     n1 = inode - (100*nhund) + 100
     ntens = aint(real(n1/10))+1
     nunit = n1 - 10*ntens + 11
-    filename = 'locps.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    filename = 'locps'//stub//'.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)

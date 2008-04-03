@@ -62,6 +62,8 @@ module H_matrix_module
 
   ! RCS tag for object file identification
   character(len=80), save, private :: RCSid = "$Id$"
+  logical :: locps_output
+  integer :: locps_choice
 
 !!***
 
@@ -246,6 +248,8 @@ contains
 !!    Added hartree_module use
 !!   13:58, 2006/07/17
 !!    Added functional type selector
+!!   2008/04/02  M. Todorovic
+!!    Added local potential output
 !!  SOURCE
 !!
   subroutine get_h_on_support( output_level, fixed_potential, electrons, rho, size)
@@ -284,10 +288,11 @@ contains
     real(double), dimension(size) :: rho
 
     ! Local variables
-    integer :: n, m, nb, atom, nsf1, point, stat, i
+    integer :: n, m, nb, atom, nsf1, point, stat, i, pot_flag
     ! Allocated arrays
     real(double) :: fften
     real(double), allocatable, dimension(:) :: xc_potential, h_potential
+    logical :: dump_pot(4)
 
     complex(double_cplx), allocatable, dimension(:) :: chdenr, locpotr
 
@@ -350,6 +355,25 @@ contains
        call copy( n_my_grid_points, h_potential, 1, potential, 1 )
        call axpy( n_my_grid_points, one, xc_potential, 1, potential, 1 )
        call axpy( n_my_grid_points, one, pseudopotential, 1, potential, 1 )
+    end if
+
+    ! Print potential, if necessary
+    if (locps_output) then
+       dump_pot = (/.false.,.false.,.false.,.false./)
+       if (locps_choice<0.OR.locps_choice>15) then           
+          if (inode==ionode) write (io_lun,*) 'Bad choice for local potential printout: no output.'    
+       else
+          if (inode==ionode) write (io_lun,*) 'Writing local potential to file(s).' 
+          do i=4,1,-1 
+             pot_flag = mod(locps_choice/(2**(i-1)),2)
+             if (pot_flag>0) dump_pot(i) = .true. 
+             locps_choice = locps_choice - pot_flag*(2**(i-1))
+          end do
+       end if
+       if (dump_pot(1)) call dump_locps("Hartree",h_potential,size,inode)
+       if (dump_pot(2)) call dump_locps("XC",xc_potential,size,inode)
+       if (dump_pot(3)) call dump_locps("PS",pseudopotential,size,inode)
+       if (dump_pot(4)) call dump_locps("Total",potential,size,inode)
     end if
 
     ! get the pseudopotential energy
