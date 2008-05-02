@@ -170,11 +170,11 @@ contains
     use numbers
     use units
     use global_module, ONLY: iprint_gen, ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell, id_glob, &
-         atom_coord, rcellx, rcelly, rcellz, area_general
+         atom_coord, rcellx, rcelly, rcellz, area_general, iprint_MD
     use group_module, ONLY: parts
     use minimise, ONLY: get_E_and_F
     use move_atoms, ONLY: safemin
-    use GenComms, ONLY: gsum, myid
+    use GenComms, ONLY: gsum, myid, inode, ionode
     use GenBlas, ONLY: dot
     use force_module, ONLY: tot_force
     use io_module, ONLY: write_atomic_positions, pdb_template
@@ -232,7 +232,7 @@ contains
        if(inode==ionode.AND.iprint_MD>2) write(io_lun,*) ' CHECK :: gamma = ', gamma
        if(CGreset) then
           if(gamma>one) then
-             if(node==ionode) write(io_lun,*) ' CG direction is reset! '
+             if(inode==ionode) write(io_lun,*) ' CG direction is reset! '
              gamma=0.0_double
           end if
        end if
