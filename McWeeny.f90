@@ -362,14 +362,18 @@ contains
 
     ! Local variable
     integer :: matBA
+    real(double) :: xx
 
     matBA = allocate_temp_matrix(THrange,0)
     call matrix_product(matB, matA, matBA, mult( T_H_TH ))
-    if(inode.eq.ionode.AND.iprint_DM>=2) write(io_lun,*) 'Trace of BA: ',matrix_trace(matBA)
+    if(iprint_DM >= 2) xx=matrix_trace(matBA)
+    if(inode.eq.ionode.AND.iprint_DM>=2) write(io_lun,*) 'Trace of BA: ',xx
     call matrix_product(matBA, matB, matBAB, mult( TH_T_L ))
-    if(inode.eq.ionode.AND.iprint_DM>=2) write(io_lun,*) 'Trace of BAB: ',matrix_trace(matBAB)
+    if(iprint_DM >= 2) xx=matrix_trace(matBAB)
+    if(inode.eq.ionode.AND.iprint_DM>=2) write(io_lun,*) 'Trace of BAB: ',xx
     call matrix_sum(zero, mat_temp, one, matBAB)
-    if(inode.eq.ionode.AND.iprint_DM>=2) write(io_lun,*) 'Trace of BAB: ',matrix_trace(mat_temp)
+    if(iprint_DM >= 2) xx=matrix_trace(mat_temp)
+    if(inode.eq.ionode.AND.iprint_DM>=2) write(io_lun,*) 'Trace of BAB: ',xx
     call free_temp_matrix(matBA)
 
   End Subroutine McWXHX
