@@ -150,7 +150,7 @@ contains
 
      ! The actual pseudopotential is read in here
      do i=1,psp_comp
-        read(lun,fmt=*, iostat=stat), readin_psp(i)%nmesh, &
+        read(lun,fmt=*, iostat=stat)  readin_psp(i)%nmesh, &
                                       readin_psp(i)%amesh
         readin_psp(i)%lmesh = log(readin_psp(i)%amesh)
 
@@ -161,7 +161,7 @@ contains
         allocate(readin_psp(i)%v2(readin_psp(i)%nmesh), STAT=stat)
 
         do j=1, readin_psp(i)%nmesh
-           read(lun,fmt=*, iostat=stat), &
+           read(lun,fmt=*, iostat=stat) &
                junk_int, readin_psp(i)%r(j), readin_psp(i)%u(j), readin_psp(i)%v(j)
         end do
 

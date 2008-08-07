@@ -48,6 +48,8 @@
 !!   17/06/2002 dave
 !!    Split main_matrix_multiply into sensible small routines (like getK, getDOmega)
 !!    Change immi so that the multiplication initialisation is done by a subroutine and call it many times
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
 module mult_module
@@ -57,6 +59,7 @@ module mult_module
   use matrix_data, ONLY: mx_matrices, matrix_pointer
   use global_module, ONLY: sf, nlpf, paof, io_lun
   use GenComms, ONLY: cq_abort
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
 
   implicit none
   save
@@ -143,6 +146,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   08/06/2001 dave
 !!    Added ROBODoc header
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine immi(parts,prim,gcs,myid,partial)
@@ -171,11 +176,14 @@ contains
     integer :: stat,i,j
     real(double) :: ra,rc
 
+!    call start_timer(tmr_std_matrices)
     max_matrices = mx_matrices + 100 ! Leave plenty of room for temporary matrices
     if(.not.allocated(mat_p)) then
+       call start_timer(tmr_std_allocation)
        allocate(mat_p(max_matrices), matrix_index(max_matrices), trans_index(max_matrices), STAT=stat)
        if(stat/=0) call cq_abort("Error allocating matrix indexing ",max_matrices,stat)
        call reg_alloc_mem(area_matrices,2*max_matrices,type_int)
+       call stop_timer(tmr_std_allocation)
        do i=1,max_matrices
           mat_p(i)%length = 0
           nullify(mat_p(i)%matrix)
@@ -184,12 +192,16 @@ contains
        end do
     end if    
     if(.not.allocated(mat)) then
+       call start_timer(tmr_std_allocation)
        allocate(mat(maxpartsproc,mx_matrices), STAT=stat)
        if(stat/=0) call cq_abort("Error allocating matrix type ",mx_matrices,maxpartsproc)
+       call stop_timer(tmr_std_allocation)
     end if
     if(.not.allocated(halo)) then
+       call start_timer(tmr_std_allocation)
        allocate(halo(mx_matrices), STAT=stat)
        if(stat/=0) call cq_abort("Error allocating halo type ",mx_matrices,stat)
+       call stop_timer(tmr_std_allocation)
     end if
     mat%sf1_type = sf
     mat%sf2_type = sf
@@ -253,8 +265,10 @@ contains
        call associate_matrices 
     !endif
     call find_neighbour_procs(parts,halo(LSLrange))
+    call start_timer(tmr_std_allocation)
     allocate(pairs(maxnabaprocs+1,mx_trans),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating pairs in immi: ",maxnabaprocs+1,mx_trans)
+    call stop_timer(tmr_std_allocation)
     do i=1,mx_trans
        do j=1,maxnabaprocs+1
           nullify(pairs(j,i)%submat)
@@ -621,6 +635,7 @@ contains
     mult(TL_T_L)%gcs => gcs
     call mult_ini(mult(TL_T_L),TTrmatind,myid-1,prim%n_prim,parts)
     !endif
+!    call stop_timer(tmr_std_matrices)
   end subroutine immi
 !!***
 
@@ -647,6 +662,8 @@ contains
 !!    Added nullify calls - probably a little fussy, but can't harm
 !!   14:57, 16/11/2004 dave 
 !!    Removed TS_TS_T and S_TS_T - not needed
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine fmmi(prim)
@@ -665,7 +682,8 @@ contains
     ! Local variables
     integer :: i,j
 
-    ! Multiplications
+!    call start_timer(tmr_std_matrices)
+   ! Multiplications
     nullify(mult(H_SP_SP)%amat,mult(H_SP_SP)%bmat,mult(H_SP_SP)%cmat,&
     mult(H_SP_SP)%ahalo,mult(H_SP_SP)%chalo,mult(H_SP_SP)%ltrans,&
     mult(H_SP_SP)%bindex,mult(H_SP_SP)%parts,mult(H_SP_SP)%prim,&
@@ -807,6 +825,7 @@ contains
     call end_ops(prim,TSrange,TSmatind)
     call end_ops(prim,THrange,THmatind)
     call end_ops(prim,TLrange,TLmatind)
+!    call stop_timer(tmr_std_matrices)
     return
   end subroutine fmmi
 !!***
@@ -845,9 +864,10 @@ contains
 
     use numbers
     use datatypes
-    use global_module, ONLY: iprint_mat
+    use global_module, ONLY: iprint_mat, IPRINT_TIME_THRES3
     use matrix_data, ONLY: LHrange, SLSrange,LSLrange, Lrange, Srange, Hrange
     use GenComms, ONLY: gsum, inode, ionode, my_barrier, gmax,mtime
+    use timer_module
 
     implicit none
 
@@ -857,10 +877,15 @@ contains
     integer :: mat_M12, mat_M3, mat_M4, mat_phi
     logical :: doK, doM1, doM2, doM3, doM4, dophi, doE
 
+    ! This routine is basically calls to matrix operations,
+    !   so these are timed within the routines themselves
+
     ! Local variables
     real(double) :: electrons_1, electrons_2, t0, t1
     integer :: matLH, matHL, matLHL, matHLS, matSLH, matA, matSLS, matLSL, matLHLSL, matLSLHL, matB, matC, matSLSLS, matLSLSL
+    type(cq_timer) :: tmr_l_tmp1
 
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     if((doM1.OR.doM2).AND.mat_M12==0) call cq_abort("LNVmm needs proper matrix for M12")
     if(doM3.AND.mat_M3==0) call cq_abort("LNVmm needs proper matrix for M3")
     if(doM4.AND.mat_M4==0) call cq_abort("LNVmm needs proper matrix for M4")
@@ -1112,6 +1137,7 @@ contains
         t1 = mtime()
         if(inode==ionode) write(io_lun,*) 'dealloc time: ',t1-t0
      end if
+     call stop_print_timer(tmr_l_tmp1,"LNV_matrix_multiply",IPRINT_TIME_THRES3)
      return
   end subroutine LNV_matrix_multiply
 !!***
@@ -1230,7 +1256,8 @@ contains
 !!  CREATION DATE
 !!   2006/01/25 17:04 dave
 !!  MODIFICATION HISTORY
-!! 
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine associate_matrices
@@ -1376,20 +1403,26 @@ contains
     do i=1,current_matrix
        if(mat_p(i)%length==0) then
           mat_p(i)%length = mat(1,matrix_index(i))%length
+          call start_timer(tmr_std_allocation)
           allocate(mat_p(i)%matrix(mat_p(i)%length),STAT=stat)
           if(stat/=0) call cq_abort("Error allocating matrix ",i,mat_p(i)%length)
           call reg_alloc_mem(area_matrices,mat_p(i)%length,type_dbl)
+          call stop_timer(tmr_std_allocation)
           mat_p(i)%matrix = zero
        !else if(mat(1,matrix_index(i))%length>mat_p(i)%length) then
        else !if(mat(1,matrix_index(i))%length/=mat_p(i)%length) then
+          call start_timer(tmr_std_allocation)
           deallocate(mat_p(i)%matrix,STAT=stat)
           if(stat/=0) call cq_abort("Error allocating matrix ",i,mat_p(i)%length)
           nullify(mat_p(i)%matrix)
           call reg_dealloc_mem(area_matrices,mat_p(i)%length,type_dbl)
+          call stop_timer(tmr_std_allocation)
           mat_p(i)%length = mat(1,matrix_index(i))%length
+          call start_timer(tmr_std_allocation)
           allocate(mat_p(i)%matrix(mat_p(i)%length),STAT=stat)
           if(stat/=0) call cq_abort("Error allocating matrix ",i,mat_p(i)%length)
           call reg_alloc_mem(area_matrices,mat_p(i)%length,type_dbl)
+          call stop_timer(tmr_std_allocation)
           mat_p(i)%matrix = zero
        end if
     end do
@@ -1427,6 +1460,7 @@ contains
 
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     deallocate(mat_p(matdS )%matrix,STAT=stat) !19
     if(stat/=0) call cq_abort("Error deallocating matrix dH ",mat_p(matdS)%length)
     deallocate(mat_p(matdH )%matrix,STAT=stat) !18
@@ -1465,6 +1499,7 @@ contains
     if(stat/=0) call cq_abort("Error deallocating matrix H ",mat_p(matH)%length)
     deallocate(mat_p(matS  )%matrix,STAT=stat) !1
     if(stat/=0) call cq_abort("Error deallocating matrix S ",mat_p(matS)%length)
+    call stop_timer(tmr_std_allocation)
   end subroutine dissociate_matrices
 
 !!****f* mult_module/mult_wrap *
@@ -1491,6 +1526,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   08/06/2001 dave
 !!    Added ROBODoc header
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine matrix_product(A, B, C, mult,debug)
@@ -1507,6 +1544,7 @@ contains
     integer, OPTIONAL :: debug
     type(matrix_mult) :: mult
 
+!    call start_timer(tmr_std_matrices)
     ! Type one does 3=1.2 - result to 3
     ! Type two does 1=3.2^T
     !write(io_lun,*) 'Length of A: ',size(mat_p(A)%matrix),mat_p(A)%length,A
@@ -1530,7 +1568,8 @@ contains
           call mat_mult(myid,mat_p(C)%matrix,mat_p(C)%length,mat_p(B)%matrix,mat_p(B)%length, &
                mat_p(A)%matrix,mat_p(A)%length,mult)
        endif
-     end if
+    end if
+!    call stop_timer(tmr_std_matrices)
   end subroutine matrix_product
 !!***
 
@@ -1553,6 +1592,7 @@ contains
     integer  :: nreqs(1:1000), isend, ii, ierr=0
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
 
+!    call start_timer(tmr_std_matrices)
     ! Allocate temporary matrix to receive local transpose
     if(mat_p(A)%sf2_type/=sf.OR.mat_p(A)%sf1_type/=sf) then
        mat_temp = allocate_temp_matrix(matrix_index(A),0,mat_p(A)%sf2_type,mat_p(A)%sf1_type)
@@ -1578,6 +1618,7 @@ contains
        if(ierr/=0) call cq_abort("Error in mat_trans: waiting for send to finish",ii)
     enddo
     call free_temp_matrix(mat_temp)
+!    call stop_timer(tmr_std_matrices)
     return
 
   end subroutine matrix_transpose
@@ -1598,6 +1639,7 @@ contains
     integer :: A, B
     real(double) :: alpha, beta
 
+!    call start_timer(tmr_std_matrices)
     !write(io_lun,*) 'Summing matrices, ranges: ',A,B,matrix_index(A),matrix_index(B)
     if(matrix_index(A)==matrix_index(B)) then ! The matrices are the same range
        !write(io_lun,*) myid,' Scaling ',size(mat_p(A)%matrix),mat_p(A)%length
@@ -1612,6 +1654,7 @@ contains
        call matrix_add(alpha,mat_p(A)%matrix,mat_p(A)%length,mat(:,matrix_index(A)), &
             beta,mat_p(B)%matrix,mat_p(B)%length,mat(:,matrix_index(B)),bundle,myid)
     end if
+!    call stop_timer(tmr_std_matrices)
     return
   end subroutine matrix_sum
 
@@ -1625,11 +1668,13 @@ contains
     integer :: A
     real(double) :: alpha
 
+!    call start_timer(tmr_std_matrices)
     ! We could do this with a call to scal (the BLAS routine)
     if(A<1.OR.A>current_matrix) call cq_abort("Error in matrix_scale: ",A,mx_matrices)
     !write(io_lun,*) 'Scaling: ',A,alpha,size(mat_p(A)%matrix)
     call scal(mat_p(A)%length,alpha,mat_p(A)%matrix,1)
     !mat_p(A)%matrix = alpha*mat_p(A)%matrix
+!    call stop_timer(tmr_std_matrices)
 
   end subroutine matrix_scale
 
@@ -1657,6 +1702,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   22/06/2001 dave
 !!    Changed MPI_allreduce to gsum
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   real(double) function matrix_trace(A)
@@ -1675,6 +1722,7 @@ contains
     ! Local variables
     integer :: np,i,j, ierr, iprim, sf1, loc, Ah
 
+!    call start_timer(tmr_std_matrices)
     Ah = matrix_index(A)
     matrix_trace = zero
     iprim = 0
@@ -1693,6 +1741,7 @@ contains
        endif ! End if atoms in partition
     enddo ! End loop over partitions on processor
     call gsum(matrix_trace) ! Global sum
+!    call stop_timer(tmr_std_matrices)
   end function matrix_trace
 !!***
 
@@ -1718,6 +1767,7 @@ contains
     ! Local variables
     integer :: iprim, np, i, l, Ah, ist
 
+!    call start_timer(tmr_std_matrices)
     res = zero
     Ah = matrix_index(A)
     iprim = 0
@@ -1738,6 +1788,7 @@ contains
           end if
        end do ! recovered the charges per processor, need to gsum
     end if
+!    call stop_timer(tmr_std_matrices)
 
   end subroutine atom_trace
 !!***
@@ -1758,12 +1809,14 @@ contains
     ! Local variables
     integer :: np,i,j, ierr
 
+!    call start_timer(tmr_std_matrices)
     if(matrix_index(A)==matrix_index(B)) then ! The matrices are the same range
        if(mat_p(A)%length/=mat_p(B)%length) call cq_abort("Length error in mat_prod_tr: ",mat_p(A)%length,mat_p(B)%length)
        matrix_product_trace = vdot(mat_p(A)%length,mat_p(A)%matrix,1,mat_p(B)%matrix,1)
     else ! For now I'm going to abort; we could have (say) optional argument giving the mult-type and range of the product
        call cq_abort("Matrix product for two different ranges not implemented")
     endif
+!    call stop_timer(tmr_std_matrices)
   end function matrix_product_trace
 
   integer function return_matrix_len(A)
@@ -1793,6 +1846,7 @@ contains
     ! Local variables
     integer :: Ah, pos, jnp, jni, j, sf1
 
+!    call start_timer(tmr_std_matrices)
     Ah = matrix_index(A)
     sf1 = mat(np,Ah)%ndimi(ni)
     if(PRESENT(onsite)) then
@@ -1806,6 +1860,7 @@ contains
     ! In future we'll just have matrix_pos here
     if((f2-1)*sf1+f1-1+pos>mat_p(A)%length) call cq_abort("Error in return_matrix_value",(f2-1)*sf1+f1-1+pos,mat_p(A)%length)
     return_matrix_value = mat_p(A)%matrix((f2-1)*sf1+f1-1+pos)
+!    call stop_timer(tmr_std_matrices)
     !if(pos/=posin) write(io_lun,*) 'Pos: ',pos,posin,i,j,halo(Ah)%i_halo(j),Ah
   end function return_matrix_value
 
@@ -1819,6 +1874,7 @@ contains
     ! Passed variables
     integer, intent(in) :: A, i
 
+!    call start_timer(tmr_std_matrices)
     if(i>mat_p(A)%length) call cq_abort("Matrix overrun in return_matrix_value_pos: ",i,A)
     ! In future we'll just have matrix_pos here
     return_matrix_value_pos = mat_p(A)%matrix(i)
@@ -1835,9 +1891,11 @@ contains
     integer :: A, i,size
     real(double), dimension(size) :: val
 
+!    call start_timer(tmr_std_matrices)
     if(i+size-1>mat_p(A)%length) call cq_abort("Matrix overrun in return_matrix_value_pos: ",i,A)
     ! In future we'll just have matrix_pos here
     val(1:size) = mat_p(A)%matrix(i:i+size-1)
+!    call stop_timer(tmr_std_matrices)
   end subroutine return_matrix_block_pos
 
   integer function matrix_pos(A,iprim,j_in_halo,f1,f2)
@@ -1854,6 +1912,7 @@ contains
     ! Local variables
     integer :: Ah, sf1
 
+!    call start_timer(tmr_std_matrices)
     if(A<1) call cq_abort("Error in matrix_pos: matrix number illegal: ",A)
     Ah = matrix_index(A)
 
@@ -1866,6 +1925,7 @@ contains
     end if
     ! Some length check here ?
     if(matrix_pos>mat_p(A)%length) call cq_abort("Overrun error in matrix_pos: ",matrix_pos,mat_p(A)%length)
+!    call stop_timer(tmr_std_matrices)
   end function matrix_pos
 
   subroutine scale_matrix_value(A,np,ni,ip,nabj,f1,f2,val,onsite)
@@ -1884,6 +1944,7 @@ contains
     ! Local variables
     integer :: Ah, pos, j, jnp, jni, sf1
 
+!    call start_timer(tmr_std_matrices)
     Ah = matrix_index(A)
     sf1 = halo(Ah)%ndimi(ip)
     if(PRESENT(onsite)) then
@@ -1898,6 +1959,7 @@ contains
     if(f1-1+(f2-1)*sf1+pos>mat_p(A)%length) call cq_abort("Overrun error in scale_matrix_value: ",&
          f1-1+(f2-1)*sf1+pos,mat_p(A)%length)
     mat_p(A)%matrix(f1-1+(f2-1)*sf1+pos) = mat_p(A)%matrix(f1-1+(f2-1)*sf1+pos)*val
+!    call stop_timer(tmr_std_matrices)
   end subroutine scale_matrix_value
 
   subroutine store_matrix_value(A,np,ni,ip,nabj,f1,f2,val,onsite)
@@ -1917,6 +1979,7 @@ contains
     ! Local variables
     integer :: Ah, pos, j, jnp, jni, sf1
 
+!    call start_timer(tmr_std_matrices)
     Ah = matrix_index(A)
     sf1 = halo(Ah)%ndimi(ip)
     if(PRESENT(onsite)) then
@@ -1931,6 +1994,7 @@ contains
          f1-1+(f2-1)*sf1+pos,mat_p(A)%length)
     ! In future we'll just have matrix_pos here
     mat_p(A)%matrix(f1-1+(f2-1)*sf1+pos) = mat_p(A)%matrix(f1-1+(f2-1)*sf1+pos) + val
+!    call stop_timer(tmr_std_matrices)
   end subroutine store_matrix_value
 
   subroutine store_matrix_value_pos(A,i,val)
@@ -1944,11 +2008,13 @@ contains
     integer, intent(in) :: A, i
     real(double), intent(in) :: val
 
+!    call start_timer(tmr_std_matrices)
     if(A<1) call cq_abort("Error in matrix_pos: matrix number illegal: ",A)
     if(i>mat_p(A)%length.OR.i<1) call cq_abort("Matrix overrun in store_matrix_value_pos: ",i,mat_p(A)%length)
     !if(abs(val)>100.0_double) write(io_lun,*) 'Error: ',A,i,val
     ! In future we'll just have matrix_pos here
     mat_p(A)%matrix(i) = mat_p(A)%matrix(i) + val
+!    call stop_timer(tmr_std_matrices)
     !if(abs(mat_p(A)%matrix(i))>100.0_double) write(io_lun,*) 'Error: ',A,i,val
   end subroutine store_matrix_value_pos
 
@@ -1965,8 +2031,10 @@ contains
     integer :: A, i, size
     real(double) :: val(size)
 
+!    call start_timer(tmr_std_matrices)
     if(i+size-1>mat_p(A)%length) call cq_abort("Matrix overrun in store_matrix_value_pos: ",i+size-1,mat_p(A)%length)
     call axpy(size,one,val,1,mat_p(A)%matrix(i:),1)
+!    call stop_timer(tmr_std_matrices)
   end subroutine store_matrix_block_pos
 
 !  subroutine store_onsite_matrix_value(A,np,i,f1,f2,val)
@@ -2020,8 +2088,10 @@ contains
        mat_p(current_matrix)%sf2_type = sf
     end if
     mat_p(current_matrix)%length = mat(1,range)%length
+    call start_timer(tmr_std_allocation)
     allocate(mat_p(current_matrix)%matrix( mat_p(current_matrix)%length),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating matrix ",current_matrix,mat_p(current_matrix)%length)
+    call stop_timer(tmr_std_allocation)
     !call scal(mat_p(current_matrix)%length,zero,mat_p(current_matrix)%matrix,1)
     do i=1,mat_p(current_matrix)%length
        mat_p(current_matrix)%matrix(i) = zero
@@ -2047,8 +2117,10 @@ contains
     call reg_dealloc_mem(area_matrices,mat_p(current_matrix)%length,type_dbl)
     if(A/=current_matrix) call cq_abort("Out-of-order deallocation of matrices ",A,current_matrix)
     if(iprint_mat>4.AND.myid==0) write(io_lun,*) '(D)Current matrix is: ',current_matrix,mat_p(current_matrix)%length
+    call start_timer(tmr_std_allocation)
     deallocate(mat_p(current_matrix)%matrix,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating matrix ",current_matrix,mat_p(current_matrix)%length)
+    call stop_timer(tmr_std_allocation)
     mat_p(current_matrix)%length = 0
     matrix_index(current_matrix) = 0
     current_matrix = current_matrix - 1

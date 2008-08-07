@@ -46,6 +46,8 @@
 !!    Small changes: check for log(0) in erfc and wrap lines to less than 132
 !!   2008/02/04 17:23 dave
 !!    Changes for output to file not stdout
+!!   2008/07/18 ast
+!!    Added timers
 !!  SOURCE
 !!
 module ewald_module
@@ -124,8 +126,10 @@ contains
     use dimens
     use species_module, ONLY: charge, species
     use GenComms, ONLY: gsum, my_barrier, inode, ionode
-    use global_module, ONLY: atom_coord, ni_in_cell, iprint_gen, area_general, species_glob
+    use global_module, ONLY: atom_coord, ni_in_cell, iprint_gen, area_general, &
+                             species_glob, IPRINT_TIME_THRES3
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
 
     implicit none
 
@@ -138,7 +142,9 @@ contains
          q_i, q_j, rij, rij2, rxij, ryij, rzij,&
          sine, sum, sum_x, sum_y, sum_z, total_charge
     real(double), allocatable, dimension(:,:) :: c1_force, c2_force
+    type(cq_timer) :: tmr_l_tmp1
 
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     allocate(c1_force(3,ni_in_cell),c2_force(3,ni_in_cell),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating c1_force in ewald: ",ni_in_cell,stat)
     call reg_alloc_mem(area_general,6*ni_in_cell,type_dbl)
@@ -288,6 +294,7 @@ contains
     deallocate(c2_force,c1_force,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating c1_force in ewald: ",ni_in_cell,stat)
     call reg_dealloc_mem(area_general,6*ni_in_cell,type_dbl)
+    call stop_print_timer(tmr_l_tmp1,"ewald",IPRINT_TIME_THRES3)
 1   format(/20x,'E_coulomb = ',f25.17,' ',a2,/,&
          20x,'E_real = ',f25.17,' ',a2,/,&
          20x,'E_recipr. = ',f25.17,' ',a2,/,&
@@ -1560,13 +1567,14 @@ contains
     use cover_module, ONLY : ewald_CS
     use datatypes
     use GenComms, ONLY : gsum, cq_abort, inode, ionode
-    use global_module, ONLY : id_glob, iprint_gen, species_glob, ni_in_cell, area_general
+    use global_module, ONLY : id_glob, iprint_gen, species_glob, ni_in_cell, area_general, IPRINT_TIME_THRES3
     use group_module, ONLY : parts
     use maxima_module, ONLY : maxatomsproc
     use numbers
     use primary_module, ONLY : bundle
     use species_module, ONLY : charge, species
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
 
     implicit none
 
@@ -1577,9 +1585,10 @@ contains
          &ewald_intra_force_x, ewald_intra_force_y, ewald_intra_force_z, &
          &ewald_inter_force_x, ewald_inter_force_y, ewald_inter_force_z
     real(double), allocatable, dimension(:) :: ewald_total_force_x, ewald_total_force_y, ewald_total_force_z
-
+    type(cq_timer) :: tmr_l_tmp1
 
     ! --- Ewald reciprocal-space energy and forces  --------------------------------
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     allocate(ewald_recip_force_x(maxatomsproc),ewald_recip_force_y(maxatomsproc), &
          ewald_recip_force_z(maxatomsproc), ewald_intra_force_x(maxatomsproc), &
          ewald_intra_force_y(maxatomsproc), ewald_intra_force_z(maxatomsproc), &
@@ -1879,6 +1888,7 @@ contains
          ewald_inter_force_z,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating ewald forces: ",maxatomsproc)
     call reg_dealloc_mem(area_general,9*maxatomsproc,type_dbl)
+    call stop_print_timer(tmr_l_tmp1,"mikes_ewald",IPRINT_TIME_THRES3)
 
   end subroutine mikes_ewald
   ! =============================================================================

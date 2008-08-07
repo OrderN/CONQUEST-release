@@ -38,12 +38,15 @@
 !!    matrix routines
 !!   2008/02/06 08:24 dave
 !!    Changed for output to file not stdout
+!!   2008/05/25
+!!    Added timers
 !!  SOURCE
 !!
 module move_atoms
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_moveatoms,tmr_std_indexing,tmr_std_allocation
 
   ! Useful physical constants
   real(double), parameter:: amu = 1.660566e-27_double
@@ -147,6 +150,8 @@ contains
 !!    Changed position to x_atom_cell
 !!   2007/08/16 15:40 dave
 !!    Bug fix for indexing of force
+!!   2008/05/25
+!!    Added timers
 !!  TODO
 !!   Proper buffer zones for matrix mults so initialisation doesn't have
 !!   to be done at every step 03/07/2001 dave
@@ -174,6 +179,7 @@ contains
     integer :: part, memb, atom, speca, k, gatom
     real(double) :: massa, acc
 
+    call start_timer(tmr_std_moveatoms)
     if(myid==0.AND.iprint_MD>0) write(io_lun,1) step,quenchflag
 1   format(4x,'In velocityVerlet, timestep is ',f10.5/&
          'Quench is ',l3)
@@ -226,6 +232,7 @@ contains
 !Update atom_coord : TM 27Aug2003
     call update_atom_coord
 !Update atom_coord : TM 27Aug2003
+    call stop_timer(tmr_std_moveatoms)
     return
   end subroutine velocityVerlet
 !!***
@@ -270,7 +277,8 @@ contains
 !!   07/11/2007 vb
 !!    Added cq_abort when the trial step in safemin gets too small
 !!    Changed output format for energies and brackets so that the numbers are not out of range
-!!    
+!!   2008/05/25
+!!    Added timers
 !!  SOURCE
 !!
   subroutine safemin(start_x,start_y,start_z,direction,energy_in,energy_out,&
@@ -282,7 +290,7 @@ contains
     use units
     use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, &
          flag_vary_basis, atom_coord, ni_in_cell, rcellx, rcelly, rcellz, flag_self_consistent, &
-         flag_reset_dens_on_atom_move
+         flag_reset_dens_on_atom_move, IPRINT_TIME_THRES1
     use minimise, ONLY: get_E_and_F, sc_tolerance, L_tolerance, n_L_iterations
     use GenComms, ONLY: my_barrier, myid, inode, ionode, cq_abort
     use SelfCon, ONLY: new_SC_potl
@@ -291,6 +299,7 @@ contains
     use io_module, ONLY: write_atomic_positions, pdb_template
     use density_module, ONLY: density, set_density, flag_no_atomic_densities
     use maxima_module, ONLY: maxngrid
+    use timer_module
 
     implicit none
 
@@ -314,7 +323,9 @@ contains
     integer :: i,j, iter, lun
     logical :: reset_L = .false.
     logical :: done
+    type(cq_timer) :: tmr_l_iter,tmr_l_tmp1
 
+    call start_timer(tmr_std_moveatoms)
     !allocate(store_density(maxngrid))
     e0 = total_energy
     if(inode==ionode.AND.iprint_MD>0) &
@@ -359,6 +370,7 @@ contains
     done = .false.
     ! Loop to find a bracketing triplet
     do while(.NOT.done)!e3<=e2)
+       call start_timer(tmr_l_iter,WITH_LEVEL)
        !if (k2==k0) then
        !   !k3 = 0.001_double
        !   !if(abs(kmin) < very_small) then
@@ -389,6 +401,7 @@ contains
        !%%!   density = store_density - density
        !%%!end if
        ! Move atoms
+       call start_timer(tmr_l_tmp1,WITH_LEVEL)
        do i=1,ni_in_cell
           x_atom_cell(i) = start_x(i) + k3*direction(1,i)
           y_atom_cell(i) = start_y(i) + k3*direction(2,i)
@@ -413,6 +426,7 @@ contains
           call write_atomic_positions("UpdatedAtoms_tmp.dat",trim(pdb_template))
        end if
        if(flag_reset_dens_on_atom_move) call set_density()
+       call stop_print_timer(tmr_l_tmp1,"atom updates",IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
        if(flag_vary_basis) then
           call new_SC_potl( .false., sc_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
@@ -444,7 +458,9 @@ contains
           done = .true.
        endif
        if (k3 <= very_small) call cq_abort("Step too small: safemin failed!")
+       call stop_print_timer(tmr_l_iter,"a safemin iteration",IPRINT_TIME_THRES1)
     end do
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)  ! Final interpolation and updates
     if(inode==ionode) write(io_lun,fmt='(/4x,"Interpolating minimum"/)')
     ! Interpolate to find minimum.
     if(inode==ionode.AND.iprint_MD>1) &
@@ -486,6 +502,7 @@ contains
        call write_atomic_positions("UpdatedAtoms_tmp.dat",trim(pdb_template))
     end if
     if(flag_reset_dens_on_atom_move) call set_density()
+    call stop_print_timer(tmr_l_tmp1,"safemin - Final interpolation and updates",IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
     if(flag_vary_basis) then
        call new_SC_potl( .false., sc_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
@@ -501,6 +518,7 @@ contains
          write(io_lun,fmt='(4x,"In safemin, Interpolation step and energy are ",f15.10,f20.10" ",a2)') &
          kmin,en_conv*energy_out,en_units(energy_units)
     if (energy_out>e2.AND.abs(bottom)>very_small) then ! The interpolation failed - go back
+       call start_timer(tmr_l_tmp1,WITH_LEVEL) 
        if(inode==ionode) write(io_lun,fmt='(/4x,"Interpolation failed; reverting"/)')
        kmin = k2
        !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
@@ -529,6 +547,7 @@ contains
           call write_atomic_positions("UpdatedAtoms_tmp.dat",trim(pdb_template))
        end if
        if(flag_reset_dens_on_atom_move) call set_density()
+       call stop_print_timer(tmr_l_tmp1,"safemin - Failed interpolation + Retry",IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
        if(flag_vary_basis) then
           call new_SC_potl( .false., sc_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
@@ -551,6 +570,7 @@ contains
             en_conv*energy_out,en_units(energy_units)
     end if
     !deallocate(store_density)
+    call stop_timer(tmr_std_moveatoms)
     return
   end subroutine safemin
 !!***
@@ -578,6 +598,8 @@ contains
 !!MODIFICATION HISTORY
 !! 20/07/2001 dave
 !!  Changed so that loops only go over primary set atoms
+!! 2008/05/25
+!!  Added timers
 !!SOURCE
 !!
   subroutine pulayStep(posnStore,forceStore,x_atom_cell,y_atom_cell,z_atom_cell,mx_pulay,pul_mx)
@@ -606,6 +628,7 @@ contains
     real(double), dimension(mx_pulay,mx_pulay) :: Aij
     real(double), dimension(mx_pulay) :: alph
 
+    call start_timer(tmr_std_moveatoms)
     length = 3*ni_in_cell
     Aij = zero
     do i=1,pul_mx
@@ -629,6 +652,7 @@ contains
           z_atom_cell(j) = z_atom_cell(j) + alph(i)*posnStore(3,j,i)
        enddo
     enddo
+    call stop_timer(tmr_std_moveatoms)
     return
   end subroutine pulayStep
 !!***
@@ -671,6 +695,8 @@ contains
 !!    as these ideas are not rigorously tested
 !!   2006/09/08 07:59 dave
 !!    Various changes for dynamic allocation
+!!   2008/05/25
+!!    Added timers
 !!  TODO
 !!   Think about updating radius component of matrix derived type, or eliminating it !
 !!  SOURCE
@@ -684,7 +710,7 @@ contains
     use group_module, ONLY: parts
     use cover_module, ONLY : BCS_parts, DCS_parts, ewald_CS
     use primary_module, ONLY : bundle
-    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell
+    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, IPRINT_TIME_THRES2
     use matrix_data, ONLY: Hrange, mat, rcut
     use maxima_module, ONLY: maxpartsproc
     use set_blipgrid_module, ONLY: set_blipgrid
@@ -696,6 +722,7 @@ contains
     use ewald_module, ONLY: flag_old_ewald
     use blip, ONLY: Extent
     use numbers
+    use timer_module
 
     implicit none
 
@@ -710,7 +737,9 @@ contains
     ! Local variables
     logical :: check
     integer :: i,k,stat
+    type(cq_timer) :: tmr_l_tmp1,tmr_l_tmp2
 
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     ! Update positions in primary and covering sets
     call primary_update(x_atom_cell, y_atom_cell, z_atom_cell, bundle, parts, myid)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, BCS_parts, parts)
@@ -723,6 +752,7 @@ contains
     call gsum(check)
     ! There's also an option for the user to force it via matrix_update (which could be set to every n iterations ?)
     if(check.OR.matrix_update) then
+       call start_timer(tmr_l_tmp2,WITH_LEVEL)
        ! Deallocate all matrix storage
        ! finish blip-grid indexing
        call finish_blipgrid
@@ -735,9 +765,11 @@ contains
        !call set_blipgrid(myid,r_h,sqrt(r_core_squared))
        call set_bucket(myid)
        call associate_fn_on_grid
+       call stop_print_timer(tmr_l_tmp2,"matrix reindexing",IPRINT_TIME_THRES2)
     end if
     ! Rebuild S, n(r) and hamiltonian based on new positions
     call update_H(fixed_potential, number_of_bands)
+    call stop_print_timer(tmr_l_tmp1,"indices update",IPRINT_TIME_THRES2)
     return
   end subroutine updateIndices
 !!***
@@ -854,10 +886,11 @@ contains
     use pseudo_tm_module, ONLY: set_tm_pseudo
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT, core_correction
     use logicals
-    use global_module, ONLY: iprint_MD, flag_self_consistent
+    use global_module, ONLY: iprint_MD, flag_self_consistent, IPRINT_TIME_THRES2
     use density_module, ONLY: set_density, flag_no_atomic_densities, density
     use GenComms, ONLY: cq_abort, inode, ionode
     use maxima_module, ONLY: maxngrid
+    use timer_module
     
     implicit none
 
@@ -868,7 +901,9 @@ contains
 
     ! Local variables
     real(double) :: tmp
+    type(cq_timer) :: tmr_l_tmp1
 
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     ! (1) Get S matrix (includes blip-to-grid transform)
     call get_S_matrix(inode, ionode)
 
@@ -899,6 +934,7 @@ contains
     end if
     ! (5) Now generate a new H matrix, including a new charge density
     call get_H_matrix(.true., fixed_potential, tmp, density, maxngrid)
+    call stop_print_timer(tmr_l_tmp1, "update_H", IPRINT_TIME_THRES2)
     return
   end subroutine update_H
 !!***
@@ -933,7 +969,8 @@ contains
 !!  CREATION DATE
 !!   09:19, 2003/01/29 dave
 !!  MODIFICATION HISTORY
-!!
+!!   2008/07/18 ast
+!!     Added timers
 !!  SOURCE
 !!
   subroutine checkBonds(newAtom,prim,gcs,amat,partsproc,rcut)
@@ -941,6 +978,8 @@ contains
     use datatypes
     use basic_types, ONLY: primary_set, cover_set
     use matrix_module, ONLY: matrix
+    use global_module, ONLY: IPRINT_TIME_THRES2
+    use timer_module
 
     implicit none
 
@@ -956,7 +995,9 @@ contains
     real(double) :: rcutsq, dx, dy, dz
     real(double) :: tol = 1.0e-8_double
     integer :: inp, nn, j, np, ni, ist, n_nab
+    type(cq_timer) :: tmr_l_tmp1
 
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     rcutsq=rcut*rcut
     ! loop over all atom pairs (atoms in primary set, max. cover set) -
     inp=1  ! Indexes primary atoms
@@ -989,6 +1030,7 @@ contains
           enddo ! End prim%nm_nodgroup
        endif ! End if(prim%nm_nodgroup>0)
     enddo ! End part_on_node
+    call stop_print_timer(tmr_l_tmp1,"checking bonds",IPRINT_TIME_THRES2)
     return
   end subroutine checkBonds
 !!***
@@ -1016,14 +1058,16 @@ contains
 !!  CREATION DATE
 !!   07:41, 2003/01/29 dave (from ParaDens)
 !!  MODIFICATION HISTORY
-!!
+!!   2008/07/18 ast
+!!     Added timers
 !!  SOURCE
 !!
   subroutine primary_update(x_position,y_position,z_position,prim,groups,myid)
 
     use datatypes
     use basic_types
-    use global_module, ONLY: ni_in_cell, rcellx, rcelly, rcellz
+    use global_module, ONLY: ni_in_cell, rcellx, rcelly, rcellz, IPRINT_TIME_THRES3
+    use timer_module
 
     implicit none
 
@@ -1037,7 +1081,10 @@ contains
     integer :: ng, ind_group, nx, ny, nz, nx1, ny1, nz1, nnd, n_prim, ni
     real(double) :: dcellx, dcelly, dcellz
     real(double) :: xadd, yadd, zadd
+    type(cq_timer) :: tmr_l_tmp1
 
+    call start_timer(tmr_std_indexing)    ! NOTE: This will be annotated in area 8
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     n_prim = 0
     nnd = myid+1
     dcellx=rcellx/groups%ngcellx
@@ -1066,6 +1113,8 @@ contains
           end do ! Atoms in partition
        end if ! If atoms in partition
     end do ! Groups on node
+    call stop_print_timer(tmr_l_tmp1,"primary update",IPRINT_TIME_THRES3)
+    call stop_timer(tmr_std_indexing)
   end subroutine primary_update
 !!***
 
@@ -1098,16 +1147,18 @@ contains
 !!  CREATION DATE
 !!   07:41, 2003/01/29 dave (from ParaDens)
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/25
+!!    Added timers
 !!  SOURCE
 !!
   subroutine cover_update(x_position,y_position,z_position,set,groups)
 
     use datatypes
     use basic_types
-    use global_module, ONLY: ni_in_cell, rcellx, rcelly, rcellz
+    use global_module, ONLY: ni_in_cell, rcellx, rcelly, rcellz, IPRINT_TIME_THRES3
     use cover_module, ONLY: indexx
     use GenComms, ONLY: cq_abort, myid
+    use timer_module
 
     implicit none
 
@@ -1122,6 +1173,7 @@ contains
     integer :: cover_part, ind_qart
     real(double) :: dcellx, dcelly, dcellz
     real(double) :: xadd, yadd, zadd
+    type(cq_timer) :: tmr_l_tmp1
 
     integer :: nrepx(groups%mx_gedge)
     integer :: nrepy(groups%mx_gedge)
@@ -1140,9 +1192,13 @@ contains
     integer :: minz,ngcz,ng_in_min,ind,ino, stat, ng_in_cell
     integer :: nrx,nry,nrz, nnd
 
+    call start_timer(tmr_std_indexing)    ! NOTE: This will be annotated in area 8
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     nnd = myid+1
+    call start_timer(tmr_std_allocation)
     allocate(nx_in_cover(set%ng_cover),ny_in_cover(set%ng_cover),nz_in_cover(set%ng_cover),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating nx_in_cover: ",set%ng_cover,stat)
+    call stop_timer(tmr_std_allocation)
     ! Conversion factors from unit cell lengths->groups
     dcellx=rcellx/real(groups%ngcellx,double)
     dcelly=rcelly/real(groups%ngcelly,double)
@@ -1270,8 +1326,12 @@ contains
                z_position(groups%icell_beg(ind_qart)+ni-1)+zadd
        end do
     end do
+    call start_timer(tmr_std_allocation)
     deallocate(nx_in_cover,ny_in_cover,nz_in_cover,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating nx_in_cover: ",set%ng_cover,stat)
+    call stop_timer(tmr_std_allocation)
+    call stop_print_timer(tmr_l_tmp1,"cover update",IPRINT_TIME_THRES3)
+    call stop_timer(tmr_std_indexing)
   end subroutine cover_update
 !!***
 
@@ -1299,22 +1359,27 @@ contains
 !!  CREATION DATE
 !!   27 Aug 2003
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/25
+!!    Added timers
 !!  SOURCE
 !!
   subroutine update_atom_coord
     
     use datatypes
     use global_module, ONLY: x_atom_cell, y_atom_cell, z_atom_cell, &
-         id_glob, atom_coord, ni_in_cell, io_lun, iprint_MD
+         id_glob, atom_coord, ni_in_cell, io_lun, iprint_MD, IPRINT_TIME_THRES2
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use group_module, ONLY: parts
+    use timer_module
 
     implicit none
 
     integer :: ni, id_global
     real(double) :: dx, dy, dz
+    type(cq_timer) :: tmr_l_tmp1
     
+    call start_timer(tmr_std_indexing)    ! NOTE: This will be annotated in area 8
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     dx = r_super_x/parts%ngcellx
     dy = r_super_y/parts%ngcelly
     dz = r_super_z/parts%ngcellz
@@ -1336,6 +1401,8 @@ contains
        atom_coord(2, id_global)= y_atom_cell(ni)
        atom_coord(3, id_global)= z_atom_cell(ni)
     enddo
+    call stop_print_timer(tmr_l_tmp1,"coordinates update",IPRINT_TIME_THRES2)
+    call stop_timer(tmr_std_indexing)
     return
   end subroutine update_atom_coord
 !!***

@@ -52,6 +52,8 @@
 !!    Changes from TM incorporated to find max recvs/sends
 !!   2008/02/06 08:36 dave
 !!    Changed for output to file not stdout
+!!   2008/05/16
+!!    Added timers
 !!  SOURCE
 !!
 module set_bucket_module
@@ -60,6 +62,7 @@ module set_bucket_module
   use bucket_module
   use numbers, ONLY: very_small
   use matrix_module, ONLY: matrix_halo
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_indexing
 
   implicit none
 
@@ -141,6 +144,7 @@ contains
     !Automatic Array
     integer :: buff_npair(numprocs), buff_npair_orb(numprocs)
 
+    call start_timer(tmr_std_indexing)
     !cutoff radius for matrix
     rcut_S = rcut(Srange)
     rcut_SP= rcut(SPrange)
@@ -238,6 +242,7 @@ contains
 
     deallocate(isend_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating isend_array in set_bucket: ",stat)
+    call stop_timer(tmr_std_indexing)
     return
 !!***
 
@@ -269,6 +274,7 @@ contains
 !!  CREATION DATE
 !!   19/10/2006
 !!  MODIFICATION HISTORY
+!!
 !!  SOURCE
 !!
     subroutine calc_mx_nodes_bucket(myid,comBG,mx_recv_BRnode, mx_send_DRnode)

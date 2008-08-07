@@ -5,6 +5,7 @@
 
 #General variables
 TARGET = Conquest
+UTILITIES = tools
 default: $(TARGET)
 .SUFFIXES: .f .f90
 COMMENT = verstr.f90
@@ -14,6 +15,9 @@ DATE = `date +"%b%d%y"`
 TARNAME = "CQ_VarNSF_"$(DATE)"_"`date +"%H%M"`".tar"
 ECHOSTR = @echo -e
 SHELL = /bin/sh
+NOTIMERS_DIR = altver_notimers
+NOSTDTIMERS_DIR = altver_nostdtimers
+NOLOCTIMERS_DIR = altver_noloctimers
 
 #Include system-dependent variables
 include system.make
@@ -102,6 +106,58 @@ list:
 	$(ECHOSTR) $(SOURCES)
 	$(ECHOSTR) $(HTMLXREFS)
 	$(ECHOSTR) $(HTMLDOCS)
+
+tools:
+	( cd utilities; make )
+
+notimers:
+	@if [ ! -d $(NOTIMERS_DIR) ]; \
+	then \
+	  mkdir $(NOTIMERS_DIR); \
+	fi
+	@for sourcefile in *.f90; \
+	do \
+	  grep -vi 'timer_' $${sourcefile}|grep -vi '_timer'|grep -vi 'init_timing_system'|\
+	  grep -vi time_report|grep -vi time_threshold|grep -vi tmr_rmv001 > $(NOTIMERS_DIR)/$${sourcefile}; \
+	done
+	@for objectfile in *.obj; \
+	do \
+	  grep -vi 'timer_' $${objectfile} > $(NOTIMERS_DIR)/$${objectfile}; \
+	done
+	@rm -f $(NOTIMERS_DIR)/timer_*.f90
+	@cp -pfr fdf FFT Makefile Makefile.Doc utilities *.f makemake system.make $(NOTIMERS_DIR)/
+	@echo "New sources without timers are in $(NOTIMERS_DIR)"
+
+nostdtimers:
+	@if [ ! -d $(NOSTDTIMERS_DIR) ]; \
+	then \
+	  mkdir $(NOSTDTIMERS_DIR); \
+	fi
+	@for sourcefile in *.f90; \
+	do \
+	  grep -vi '_stdclocks_' $${sourcefile}|grep -vi 'time_report'|\
+	  grep -vi 'tmr_std' > $(NOSTDTIMERS_DIR)/$${sourcefile};\
+	done
+	@for objectfile in *.obj; \
+	do \
+	  grep -vi 'timer_std' $${objectfile} > $(NOSTDTIMERS_DIR)/$${objectfile}; \
+	done
+	@rm -f ${NOSTDTIMERS_DIR}/timer_std*.f90
+	@cp -pfr fdf FFT Makefile Makefile.Doc utilities *.f makemake system.make $(NOSTDTIMERS_DIR)/
+	@echo "New sources without standard timers are in $(NOSTDTIMERS_DIR)"
+
+noloctimers:
+	@if [ ! -d $(NOLOCTIMERS_DIR) ]; \
+	then \
+	  mkdir $(NOLOCTIMERS_DIR); \
+	fi
+	@for sourcefile in *.f90; \
+	do \
+	  grep -vi 'tmr_l' $${sourcefile} > $(NOLOCTIMERS_DIR)/$${sourcefile}; \
+	done
+	@cp -pfr fdf FFT Makefile Makefile.Doc utilities *.f *.obj makemake system.make $(NOLOCTIMERS_DIR)/
+	@echo "New sources without local timers are in $(NOLOCTIMERS_DIR)"
+
 
 SRC2 = basic_types.f90 datatypes.module.f90 matrix_data_module.f90 \
   numbers.module.f90

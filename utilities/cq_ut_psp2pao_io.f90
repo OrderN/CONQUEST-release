@@ -101,14 +101,14 @@ contains
  
      do i=1,gl_points_mesh
         if(gl_psp_in%partial_core) then
-          write(format1, '(a,i3,a)'),'(',4+gl_no_orbitals+gl_psp_in%psp_comp,'e18.10e2)'
+          write(format1, '(a,i3,a)') '(',4+gl_no_orbitals+gl_psp_in%psp_comp,'e18.10e2)'
           write(lun, fmt=format1) gl_r(i), &
                     (gl_ul(i+j*gl_points_mesh)/gl_r(i), j=0,gl_no_orbitals-1), &
                     gl_rho(i)+gl_rho(i+gl_points_mesh), gl_rhopc(i), &
                     gl_v_nuclear(i), &
                     (gl_v_nonlocal(i+j*gl_points_mesh),j=0,gl_psp_in%psp_comp-1)
         else
-          write(format1, '(a,i3,a)'),'(',3+gl_no_orbitals+gl_psp_in%psp_comp,'e18.10e2)'
+          write(format1, '(a,i3,a)') '(',3+gl_no_orbitals+gl_psp_in%psp_comp,'e18.10e2)'
           write(lun, fmt=format1) gl_r(i), &
                     (gl_ul(i+j*gl_points_mesh)/gl_r(i), j=0,gl_no_orbitals-1), &
                     gl_rho(i)+gl_rho(i+gl_points_mesh), &
@@ -429,7 +429,7 @@ contains
  
      do i=1,gl_basis%points_mesh
         if(gl_basis%partial_core) then
-          write(format1, '(a,i3,a)'),'(',4+gl_basis%no_orbitals+gl_basis%psp_comp,'e18.10e2)'
+          write(format1, '(a,i3,a)') '(',4+gl_basis%no_orbitals+gl_basis%psp_comp,'e18.10e2)'
           write(lun, fmt=format1) gl_basis%r(i), &
                     (gl_basis%orb_ul(j, i), j=1,gl_basis%no_orbitals), &
                     gl_basis%rho(i)+gl_basis%rho(i+gl_basis%points_mesh), &
@@ -438,7 +438,7 @@ contains
                     (gl_basis%v_nonlocal(i+j*gl_basis%points_mesh), &
                     j=0,gl_basis%psp_comp-1)
         else
-          write(format1, '(a,i3,a)'),'(',3+gl_basis%no_orbitals+gl_basis%psp_comp,'e18.10e2)'
+          write(format1, '(a,i3,a)') '(',3+gl_basis%no_orbitals+gl_basis%psp_comp,'e18.10e2)'
           write(lun, fmt=format1) gl_basis%r(i), &
                     (gl_basis%orb_ul(j, i), j=1,gl_basis%no_orbitals), &
                     gl_basis%rho(i)+gl_basis%rho(i+gl_basis%points_mesh), &

@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: linear_equation_solver.f90,v 1.1 2002/07/05 11:39:02 mjg Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module linear_equation_solver
 ! ------------------------------------------------------------------------------
@@ -29,7 +29,7 @@ module linear_equation_solver
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: linear_equation_solver.f90,v 1.1 2002/07/05 11:39:02 mjg Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
 !!***
 

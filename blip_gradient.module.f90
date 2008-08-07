@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: blip_gradient.module.f90,v 1.4.2.3 2006/03/31 12:09:07 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module blip_gradient
 ! ------------------------------------------------------------------------------
@@ -20,14 +20,18 @@
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
 module blip_gradient
 
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_eminimisation,tmr_std_allocation,tmr_std_matrices
+
   implicit none
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: blip_gradient.module.f90,v 1.4.2.3 2006/03/31 12:09:07 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 !!***
 
 contains
@@ -74,6 +78,8 @@ contains
 !!    Tidied use of GenBlas
 !!   2006/09/19 08:22 dave
 !!    Use temporary support fn on grid
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine get_blip_gradient(inode, ionode)
@@ -110,6 +116,7 @@ contains
     integer :: i, direction, np, nn, n1, n2, this_nsf, tmp_fn
 
 
+    call start_timer(tmr_std_eminimisation)
     !
     ! first, get the gradient of energy wrt the support functions.
     ! this does NOT include the change in energy due to the change in the
@@ -148,13 +155,20 @@ contains
     ! and as we do so, clear the diagonal blocks of data K
     i = 1
     this_nsf = bundle%species(1)
+    call start_timer(tmr_std_allocation)
     allocate(this_data_K(this_nsf,this_nsf))
+    call stop_timer(tmr_std_allocation)
+    call start_timer(tmr_std_matrices)
     do np = 1, bundle%groups_on_node
        do nn = 1,bundle%nm_nodgroup(np)
           if(nsf_species(bundle%species(i))/=this_nsf) then
+             call start_timer(tmr_std_allocation)
              deallocate(this_data_K)
+             call stop_timer(tmr_std_allocation)
              this_nsf = nsf_species(bundle%species(i))
+             call start_timer(tmr_std_allocation)
              allocate(this_data_K(this_nsf,this_nsf))
+             call stop_timer(tmr_std_allocation)
           end if
           this_data_K = zero
           call return_matrix_block_pos(matK,mat(np,Hrange)%onsite(nn),this_data_K,this_nsf*this_nsf)
@@ -167,7 +181,10 @@ contains
           i = i+1
        enddo
     end do
+    call stop_timer(tmr_std_matrices)
+    call start_timer(tmr_std_allocation)
     deallocate(this_data_K)
+    call stop_timer(tmr_std_allocation)
     ! Now, for the offsite part, done one the integration grid.
     ! to do the KE bit we need to blip_to_grad transform, act with K,
     ! and inverse_blip_grad_transform back (this routine ACCUMULATES onto
@@ -194,6 +211,7 @@ contains
     end do
     call free_temp_fn_on_grid(tmp_fn)
     return
+    call stop_timer(tmr_std_eminimisation)
   end subroutine get_blip_gradient
 !!***
 
@@ -472,6 +490,8 @@ contains
 !!    Simplified call
 !!   08:17, 2003/04/04 dave
 !!    Included into blip_gradient
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine get_onsite_KE_gradient( this_data_blip,this_data_K,this_blip_grad, this_nsf, spec)
@@ -503,11 +523,13 @@ contains
 
     integer :: dx, dy, dz, offset, l, at, nsf1, nsf2, stat
 
+    call start_timer(tmr_std_allocation)
     allocate(work1(FullArraySize(spec)*this_nsf),work2(FullArraySize(spec)*this_nsf),work3(FullArraySize(spec)*this_nsf), &
          work4(FullArraySize(spec)*this_nsf),work5(FullArraySize(spec)*this_nsf),work6(FullArraySize(spec)*this_nsf), &
          STAT=stat)
     if(stat/=0) call cq_abort("Error allocating arrays for onsite KE blip grad: ",FullArraySize(spec),this_nsf)
     call reg_alloc_mem(area_minE,6*FullArraySize(spec)*this_nsf,type_dbl)
+    call stop_timer(tmr_std_allocation)
     ! first, we copy the blip functions for this atom onto a cubic grid;
     ! we make this grid 'too big' in order to have a fast routine below.
     !
@@ -643,9 +665,11 @@ contains
        end do
     end do
 
+    call start_timer(tmr_std_allocation)
     deallocate(work1,work2,work3, work4,work5,work6, STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating arrays for onsite KE blip grad: ",FullArraySize(spec),this_nsf)
     call reg_dealloc_mem(area_minE,6*FullArraySize(spec)*this_nsf,type_dbl)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine get_onsite_KE_gradient
 !!***

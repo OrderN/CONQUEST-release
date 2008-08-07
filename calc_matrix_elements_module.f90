@@ -30,11 +30,14 @@
 !!    Changing in preparation for variable NSF
 !!   2008/02/04 16:57 dave
 !!    Changed for output to file not stdout
+!!   2008/05/23 ast
+!!    Added timers
 !!  SOURCE
 !!
 module calc_matrix_elements_module
 
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_integration,tmr_std_allocation,tmr_std_matrices
 
   implicit none
   ! -------------------------------------------------------
@@ -105,6 +108,8 @@ contains
 !!    Various preparations and changes for variable NSF
 !!   2006/09/29 17:44 dave
 !!    Small correction to force size(send_array) into integer
+!!   2008/05/23 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine get_matrix_elements_new(myid,rem_bucket,matM,gridone,gridtwo)
@@ -142,6 +147,7 @@ contains
 
     !acc_block = zero
 
+    call start_timer(tmr_std_integration)
     ! pointer
     loc_bucket => rem_bucket%locbucket
     naba_atm1  => naba_atm(loc_bucket%ind_left)
@@ -250,6 +256,7 @@ contains
     deallocate(send_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating send_array in get_matrix_elements: ",size_send_array)
     call reg_dealloc_mem(area_integn,size_send_array,type_dbl)
+    call stop_timer(tmr_std_integration)
     return
 !!***
   contains
@@ -331,6 +338,7 @@ contains
          allocate(recv_array(msize),STAT=stat)
          if(stat/=0) call cq_abort("Error allocating recv_array in put_matrix_elements: ",msize)
          call reg_alloc_mem(area_integn,msize,type_dbl)
+         call start_timer(tmr_std_matrices)
          do jnode=1,rem_bucket%no_send_node  ! Loop over sending nodes
             nnd_rem=rem_bucket%list_send_node(jnode)
             nsize=rem_bucket%no_of_pair_orbs(jnode)
@@ -371,6 +379,7 @@ contains
                enddo        ! Loop over sent pairs
             end if
          enddo        ! Loop over sending nodes
+         call stop_timer(tmr_std_matrices)
          deallocate(recv_array,STAT=stat)
          if(stat/=0) call cq_abort("Error deallocating recv_array in put_matrix_elements: ",msize)
          call reg_dealloc_mem(area_integn,msize,type_dbl)
@@ -440,6 +449,7 @@ contains
     integer      :: nsf1,nsf2,ii,stat
     real(double) :: factor_M
 
+    call start_timer(tmr_std_integration)
     !(pointer)
     !  This structure is introduced to keep the strict connection
     !  of remote_bucket <-> local_bucket <-> naba_atm_of_blk.
@@ -513,6 +523,7 @@ contains
     deallocate(send_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating send_array in act_on_vectors: ",loc_bucket%no_pair_orb)
     call reg_dealloc_mem(area_integn,loc_bucket%no_pair_orb,type_dbl)
+    call stop_timer(tmr_std_integration)
 
     return
   contains
@@ -607,6 +618,7 @@ contains
          if(stat/=0) call cq_abort("Error allocating recv_array in collect_matrix_elements: ",msize)
          call reg_alloc_mem(area_integn,msize,type_dbl)
          off = 0
+         call start_timer(tmr_std_matrices)
          do jnode=1,rem_bucket%no_send_node  ! Loop over receiving nodes
             recv_array = zero
             nnd_rem=rem_bucket%list_send_node(jnode)
@@ -649,6 +661,7 @@ contains
                off = off+nsize
             end if
          enddo        ! Loop over sending nodes
+         call stop_timer(tmr_std_matrices)
       endif   !(rem_bucket%no_send_node > 0) 
 
       !Check whether MPI_irecv has been finished.

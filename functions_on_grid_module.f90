@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: functions_on_grid_module.f90,v 1.1.2.2 2006/03/31 12:17:35 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module 
 ! ------------------------------------------------------------------------------
@@ -19,12 +19,15 @@
 !!   2006/03/04
 !!  MODIFICATION HISTORY
 !!   Added overflow checks and headers
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
 module functions_on_grid
 
   use datatypes
   use global_module, ONLY: sf, nlpf, paof
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
 
   implicit none
   save
@@ -60,7 +63,7 @@ module functions_on_grid
   !real(double), target, dimension(SUPPORT_SIZE*NSF) :: support, workspace_support, workspace2_support
   
   ! RCS tag for object file identification
-  character(len=80), private :: RCSid = "$Id: functions_on_grid_module.f90,v 1.1.2.2 2006/03/31 12:17:35 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
 contains
 
@@ -84,6 +87,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2007/02/01 14:02 dave
 !!    Added if checks for zero size to stop underflow errors on Hitachi
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!  
   subroutine associate_fn_on_grid
@@ -97,6 +102,7 @@ contains
 
     integer :: stat, i
 
+    call start_timer(tmr_std_allocation)
     if(.not.allocated(gridfunctions)) then
        allocate(gridfunctions(mx_fns_on_grid),STAT=stat)
        if(stat/=0) call cq_abort("Error allocating gridfunctions ",mx_fns_on_grid)
@@ -137,6 +143,7 @@ contains
     else
        current_fn_on_grid = 2
     end if
+    call stop_timer(tmr_std_allocation)
   end subroutine associate_fn_on_grid
 !!***
 
@@ -160,6 +167,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2007/02/01 14:02 dave
 !!    Added if checks for zero size to stop underflow errors on Hitachi
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!  
   subroutine dissociate_fn_on_grid
@@ -172,6 +181,7 @@ contains
 
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     ! Support functions
     call reg_dealloc_mem(area_index,size(gridfunctions(supportfns)%griddata),type_dbl)
     deallocate(gridfunctions(supportfns)%griddata)
@@ -184,6 +194,7 @@ contains
        deallocate(gridfunctions(pseudofns)%griddata)
     end if
     current_fn_on_grid = 0
+    call stop_timer(tmr_std_allocation)
   end subroutine dissociate_fn_on_grid
 !!***
 
@@ -207,6 +218,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2007/02/01 14:02 dave
 !!    Added if checks for zero size to stop underflow errors on Hitachi
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!  
   integer function allocate_temp_fn_on_grid(type)
@@ -223,6 +236,7 @@ contains
     ! Local variables
     integer :: size, stat, i
 
+    call start_timer(tmr_std_allocation)
     ! Increment variable
     current_fn_on_grid = current_fn_on_grid + 1
     if(current_fn_on_grid>mx_fns_on_grid) call cq_abort("allocate_temp_fn: increase fns on grid ",&
@@ -242,6 +256,7 @@ contains
     gridfunctions(current_fn_on_grid)%size = size
     gridfunctions(current_fn_on_grid)%type = type
     allocate_temp_fn_on_grid = current_fn_on_grid
+    call stop_timer(tmr_std_allocation)
   end function allocate_temp_fn_on_grid
 !!***
 
@@ -265,6 +280,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2007/02/01 14:02 dave
 !!    Added if checks for zero size to stop underflow errors on Hitachi
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!  
   subroutine free_temp_fn_on_grid(num)
@@ -278,12 +295,14 @@ contains
     ! Passed variables
     integer :: num
 
+    call start_timer(tmr_std_allocation)
     if(num/=current_fn_on_grid) call cq_abort("Out-of-order deallocation of temp grid fn",num)
     call reg_dealloc_mem(area_index,gridfunctions(current_fn_on_grid)%size,type_dbl)
     deallocate(gridfunctions(current_fn_on_grid)%griddata)
     gridfunctions(current_fn_on_grid)%size = 0
     gridfunctions(current_fn_on_grid)%type = 0
     current_fn_on_grid = current_fn_on_grid - 1
+    call stop_timer(tmr_std_allocation)
   end subroutine free_temp_fn_on_grid
 !!***
 

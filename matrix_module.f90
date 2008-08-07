@@ -32,6 +32,8 @@
 !!    Added TM's debugging changes
 !!   2008/02/06 08:23 dave
 !!    Changed for output to file not stdout
+!!   2008/05/22 ast
+!!    Added timers
 !!***
 module matrix_module
 
@@ -40,6 +42,7 @@ module matrix_module
   use global_module, ONLY: io_lun
   use basic_types
   use GenComms, ONLY: cq_abort
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
 
   implicit none
 
@@ -401,6 +404,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    Added ROBODoc header
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine set_trans_pointers(apairind,atrans_rem,apairs)
@@ -431,7 +436,9 @@ contains
        posn = posn+atrans_rem%n_pair(nr)
        !write(io_lun,*) 'About to dealloc submat'
        !if(associated(apairs(nr)%submat)) deallocate(apairs(nr)%submat)
+       call start_timer(tmr_std_allocation)
        allocate(apairs(nr)%submat(atrans_rem%n_pair(nr)))
+       call stop_timer(tmr_std_allocation)
        if(posn>lenind) call cq_abort('Pairs overflow: ',posn,lenind)
     enddo
     !!   ADD AN OVERFLOW CHECK HERE !
@@ -466,6 +473,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    Added ROBODoc header and cq_abort
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine allocate_matrix(mat,part_on_node,mx_part)
@@ -475,6 +484,7 @@ contains
     integer :: mx_part,i,part_on_node,stat
     type(matrix), dimension(:)  :: mat
 
+    call start_timer(tmr_std_allocation)
     do i=1,part_on_node
        allocate(mat(i)%radius(mx_part*mat(i)%mx_abs),STAT=stat)
        if(stat/=0) then
@@ -497,6 +507,7 @@ contains
           call cq_abort('alloc_mat: error allocating memory to ndimi')
        endif
     enddo
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine allocate_matrix
 !!***
@@ -521,6 +532,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    Added ROBODoc header and cq_abort
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine allocate_trans(trans,mx_iprim)
@@ -530,6 +543,7 @@ contains
     integer :: mx_iprim,stat
     type(matrix_trans)::trans
 
+    call start_timer(tmr_std_allocation)
     allocate(trans%i_prim(mx_iprim*trans%mx_nab),STAT=stat)
     if(stat/=0) then
        call cq_abort('alloc_trans: error allocating memory to i_prim')
@@ -542,6 +556,7 @@ contains
     if(stat/=0) then
        call cq_abort('alloc_trans: error allocating memory to i_hnab')
     endif
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine allocate_trans
 !!***
@@ -566,6 +581,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    Added ROBODoc header and cq_abort
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine allocate_halo(halo,mx_iprim,mx_icover,mx_pcover)
@@ -578,6 +595,7 @@ contains
     integer :: mx_iprim,mx_icover,mx_pcover,stat
     type(matrix_halo):: halo
 
+    call start_timer(tmr_std_allocation)
     allocate(halo%nh_part(halo%mx_part),STAT=stat)
     if(stat/=0) then
        call cq_abort('alloc_halo: error allocating nh_part')
@@ -618,6 +636,7 @@ contains
     if(stat/=0) then
        call cq_abort('alloc_halo: error allocating ndimi')
     endif
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine allocate_halo
 !!***
@@ -642,6 +661,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    Added ROBODoc header and cq_abort
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine allocate_trans_rem(data,mx_neighbour_nodes,size)
@@ -655,6 +676,7 @@ contains
     ! Local variables
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     allocate(data%list_rem_node(mx_neighbour_nodes+1),STAT=stat)
     if(stat/=0) then
        call cq_abort('trans_rem: error allocating memory(1)')
@@ -679,6 +701,7 @@ contains
     if(stat/=0) then
        call cq_abort('trans_rem: error allocating memory(6)')
     endif
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine allocate_trans_rem
 !!***
@@ -703,6 +726,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    Added ROBODoc header and cq_abort
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine deallocate_matrix(mat,part_on_node)
@@ -712,6 +737,7 @@ contains
     integer :: i,part_on_node,stat
     type(matrix), dimension(:) :: mat
 
+    call start_timer(tmr_std_allocation)
     do i=part_on_node,1,-1
        deallocate(mat(i)%ndimi,STAT=stat)
        if(stat/=0) then
@@ -734,6 +760,7 @@ contains
           call cq_abort('dealloc_matrix: error deallocating memory(3)')
        endif
     enddo
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine deallocate_matrix
 !!***
@@ -758,6 +785,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    Added ROBODoc header and cq_abort
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine deallocate_trans(trans)
@@ -767,6 +796,7 @@ contains
     type(matrix_trans):: trans
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     deallocate(trans%n_hnab,STAT=stat)
     if(stat/=0) then
        call cq_abort('dealloc_trans: error deallocating memory(1)')
@@ -779,6 +809,7 @@ contains
     if(stat/=0) then
        call cq_abort('dealloc_trans: error deallocating memory(3)')
     endif
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine deallocate_trans
 !!***
@@ -804,6 +835,8 @@ contains
 !!   21/06/2001 dave
 !!    Added ROBODoc header and cq_abort
 !!    Bug fix - added missing bracket
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine deallocate_halo(halo)
@@ -834,6 +867,7 @@ contains
     !if(stat/=0) call cq_abort('dealloc_halo: error deallocating memory(6)')
     !if(associated(halo%nh_part)) deallocate(halo%nh_part,STAT=stat)
     !if(stat/=0) call cq_abort('dealloc_halo: error deallocating memory(7)')
+    call start_timer(tmr_std_allocation)
     deallocate(halo%ndimi,STAT=stat)
     if(stat/=0) call cq_abort('dealloc_halo: error deallocating memory from ndimi',stat)
     deallocate(halo%ndimj,STAT=stat)
@@ -854,6 +888,7 @@ contains
     if(stat/=0) call cq_abort('dealloc_halo: error deallocating memory(6)')
     deallocate(halo%nh_part,STAT=stat)
     if(stat/=0) call cq_abort('dealloc_halo: error deallocating memory(7)')
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine deallocate_halo
 !!***
@@ -878,6 +913,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    Added ROBODoc header and cq_abort
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine deallocate_trans_rem(data)
@@ -888,11 +925,13 @@ contains
     ! Local variables
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     deallocate(data%itran_addr,data%rem_pair_addr,data%i_pair_addr,data%i_nd_pair_addr, &
          data%n_pair,data%nhp_for_node,data%list_rem_node,STAT=stat)
     if(stat/=0) then
        call cq_abort('dealloc_trans_rem: error deallocating')
     endif
+    call stop_timer(tmr_std_allocation)
 
     return
   end subroutine deallocate_trans_rem
@@ -918,6 +957,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    Added ROBODoc header and cq_abort
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine allocate_comms_data(a_b_c,mx_part,mx_nab_nodes,mx_nponn)
@@ -930,6 +971,8 @@ contains
 
     ! Local variables
     integer :: stat
+
+    call start_timer(tmr_std_allocation)
     allocate(a_b_c%np_send(mx_nab_nodes),STAT=stat) 
     if(stat/=0) then
        call cq_abort('alloc_comms_data: error allocating memory(1)')
@@ -954,6 +997,7 @@ contains
     if(stat/=0) then
        call cq_abort('alloc_comms_data: error allocating memory(6)')
     endif
+    call stop_timer(tmr_std_allocation)
   end subroutine allocate_comms_data
 !!***
 

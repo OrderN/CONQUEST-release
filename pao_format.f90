@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: pao_format.f90,v 1.4.2.1 2006/03/31 13:04:12 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module pao_format
 ! ------------------------------------------------------------------------------
@@ -57,7 +57,7 @@ module pao_format
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: pao_format.f90,v 1.4.2.1 2006/03/31 13:04:12 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
   type table
      integer :: length

@@ -22,11 +22,14 @@
 !!    matrix routines
 !!   2008/02/04 08:27 dave
 !!    Changed for output to file not stdout
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
 module blip_minimisation
 
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
 
   implicit none
 
@@ -80,6 +83,8 @@ contains
 !!   2007/03/29 08:20 dave and tsuyoshi
 !!   2007/04/17 09:36 dave
 !!    Added n_L_iterations
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine vary_support( n_support_iterations, fixed_potential, vary_mu, n_L_iterations, &
@@ -142,13 +147,16 @@ contains
     integer indexy, return_ok, jj, n_blip, k, nx, ny, nz, i, j
     integer n,k2,j2, spec, stat
 
+    call start_timer(tmr_std_basis)
     if(inode==ionode) write(io_lun,fmt='(/6x,"Starting blip-coefficient variation",/)')
     if(inode==ionode.AND.iprint_basis>0) &
          write(io_lun,fmt='(6x,"Performing at most ",i4," iterations with a tolerance of ",e12.5,/)') &
          n_support_iterations, energy_tolerance
+    call start_timer(tmr_std_allocation)
     allocate(search_direction(coeff_array_size), last_sd(coeff_array_size), Psd(coeff_array_size),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating search directions in vary_support: ",coeff_array_size)
     call reg_alloc_mem(area_basis,3*coeff_array_size,type_dbl)
+    call stop_timer(tmr_std_allocation)
     ! Set tolerances for self-consistency and L minimisation
     con_tolerance = SCC*expected_reduction**SCBeta
     tolerance = PulayC*(0.1_double*expected_reduction)**PulayBeta
@@ -230,7 +238,9 @@ contains
           call my_barrier()
           do i=1,bundle%n_prim
              spec = bundle%species(i)
+             call start_timer(tmr_std_allocation)
              allocate(sum(supports_on_atom(i)%nsuppfuncs))
+             call stop_timer(tmr_std_allocation)
              do j=1,NBlipsRegion(spec) ! In future, base on species
                 sum=zero
                 do k=1,NBlipsRegion(spec) ! Again, base on species
@@ -243,7 +253,9 @@ contains
                 enddo
              enddo
              offset = offset + supports_on_atom(i)%nsuppfuncs*NBlipsRegion(spec)
+             call start_timer(tmr_std_allocation)
              deallocate(sum)
+             call stop_timer(tmr_std_allocation)
           enddo
           if(inode==ionode.AND.iprint_basis>3) write(io_lun,fmt='(6x,"Preconditioned !")')
           call my_barrier()
@@ -321,9 +333,12 @@ contains
        total_energy_last = total_energy_0
 
     end do
+    call start_timer(tmr_std_allocation)
     deallocate(search_direction, last_sd, Psd,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating search directions in vary_support: ",coeff_array_size)
     call reg_dealloc_mem(area_basis,3*coeff_array_size,type_dbl)
+    call stop_timer(tmr_std_allocation)
+    call stop_timer(tmr_std_basis)
 
 1   format(20x,'mu = ',f10.7,'start energy = ',f15.7)
 2   format(/20x,'Current Total Energy : ',f15.7,' a.u. ')
@@ -379,6 +394,8 @@ contains
 !!    Changed to use blip_gradient for get_blip_gradient and get_electron_gradient
 !!   09:14, 2003/04/10 dave
 !!    Completely rewrote in a more transparent way (closely based on safemin in move_atoms.module)
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine line_minimise_support( search_direction, lengthBlip, fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -422,9 +439,11 @@ contains
     integer :: i,j, iter, stat
 
     if(inode==ionode.AND.iprint_basis>2) write(io_lun,fmt='(6x,"On entry to blip line_min, dE is ",e12.5)') dE
+    call start_timer(tmr_std_allocation)
     allocate(data_blip0(lengthBlip), STAT=stat)
     if(stat/=0) call cq_abort("LinMinBlip: Error allocating blip storage: ",lengthBlip)
     call reg_alloc_mem(area_basis,lengthBlip,type_dbl)
+    call stop_timer(tmr_std_allocation)
     call copy( lengthBlip, coefficient_array, 1, data_blip0, 1)
     ! We're assuming that we've ALREADY gone to a self-consistent ground state before arriving here
     iter = 1
@@ -534,9 +553,11 @@ contains
     dE = total_energy_0 - energy_out
     if(inode==ionode.AND.iprint_basis>2) write(io_lun,fmt='(6x,"On exit from blip line_min, dE is ",f15.10)') dE
     total_energy_0 = energy_out
+    call start_timer(tmr_std_allocation)
     deallocate(data_blip0, STAT=stat)
     if(stat/=0) call cq_abort("LinMinBlip: Error allocating blip storage: ",lengthBlip)
     call reg_dealloc_mem(area_basis,lengthBlip,type_dbl)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine line_minimise_support
 !!***

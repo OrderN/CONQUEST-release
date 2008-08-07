@@ -49,6 +49,8 @@
 !!    Added output unit (output to file rather than stdout)
 !!   12:19, 14/02/2008 drb 
 !!    Added flag for Pulay relaxation algorithm
+!!   2008/07/16 ast
+!!    New iprint levels for timing 
 !!  SOURCE
 !!
 module global_module
@@ -149,7 +151,13 @@ module global_module
   integer, parameter :: area_basis = 11
   integer, parameter :: area_integn = 12
   integer :: iprint_init, iprint_mat, iprint_ops, iprint_DM, iprint_SC, iprint_minE, &
-       iprint_MD, iprint_index, iprint_gen, iprint_pseudo, iprint_basis, iprint_intgn
+             iprint_MD, iprint_index, iprint_gen, iprint_pseudo, iprint_basis, &
+             iprint_intgn, iprint_time
+
+  integer, parameter :: IPRINT_TIME_THRES0 = 0  ! Always print
+  integer, parameter :: IPRINT_TIME_THRES1 = 2  ! Important local timers
+  integer, parameter :: IPRINT_TIME_THRES2 = 4  ! Not that important
+  integer, parameter :: IPRINT_TIME_THRES3 = 6  ! For special purposes
   
 end module global_module
 !!***

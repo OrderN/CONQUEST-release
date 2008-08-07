@@ -25,12 +25,15 @@
 !!    matrix routines
 !!   2008/02/06 08:31 dave
 !!    Changed for output to file not stdout
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
 module pao_minimisation
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation,tmr_std_matrices
 
   implicit none
 
@@ -88,6 +91,8 @@ contains
 !!    Changed to use pao_gradient for get_pao_gradient and get_electron_gradient
 !!   2007/04/26 12:08 dave
 !!    Changed TestPAOGrads to TestBasisGrads (to allow both blip and PAO testing with same flag)
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine vary_pao( n_support_iterations, fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -152,10 +157,12 @@ contains
     logical :: my_atom
 
     reset_L = .true.
+    call start_timer(tmr_std_allocation)
     allocate(search_direction(coeff_array_size),last_sd(coeff_array_size), Psd(coeff_array_size))
     if(TestBasisGrads) then
        allocate(grad_copy(coeff_array_size),grad_copy_dH(coeff_array_size),grad_copy_dS(coeff_array_size))
     end if
+    call stop_timer(tmr_std_allocation)
     ! Set tolerances for self-consistency and L minimisation
     con_tolerance = SCC*expected_reduction**SCBeta
     tolerance = PulayC*(0.1_double*expected_reduction)**PulayBeta
@@ -314,7 +321,9 @@ contains
              enddo
           enddo
        enddo
+       call start_timer(tmr_std_allocation)
        deallocate(grad_copy,grad_copy_dH,grad_copy_dS)
+       call stop_timer(tmr_std_allocation)
     end if ! TestBasisGrads
     ! What about preconditioning ?       
     call my_barrier()
@@ -508,7 +517,9 @@ contains
     real(double) :: data_paostore(coeff_array_size,mx_pulay)
 
 
+    call start_timer(tmr_std_allocation)
     allocate(search_direction(coeff_array_size),last_sd(coeff_array_size), Psd(coeff_array_size))
+    call stop_timer(tmr_std_allocation)
     ! Set tolerances for self-consistency and L minimisation
     con_tolerance = SCC*expected_reduction**SCBeta
     tolerance = PulayC*(0.1_double*expected_reduction)**PulayBeta
@@ -716,6 +727,8 @@ contains
 !!    Changed to use pao_gradient for get_pao_gradient and get_electron_gradient
 !!   09:14, 2003/04/10 dave
 !!    Completely rewrote in a more transparent way (closely based on safemin in move_atoms.module)
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine line_minimise_pao( search_direction, fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -777,7 +790,9 @@ contains
     !   end do
     !end do
     ! First, make a copy of the coefficients FOR THIS PRIMARY SET
+    call start_timer(tmr_std_allocation)
     allocate(data_PAO0(lengthBlip))
+    call stop_timer(tmr_std_allocation)
     data_PAO0 = coefficient_array
     ! We're assuming that we've ALREADY gone to a self-consistent ground state before arriving here
     iter = 1
@@ -934,6 +949,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2006/06/21 08:18 dave
 !!    Changed for variable NSF and new basis storage scheme
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
 
@@ -969,6 +986,7 @@ contains
     ! We should have the elements built by H_matrix_module and S_matrix_module
     ! Now we take the sum over j\beta (nsf2 = \beta; neigh = j)
     iprim = 0
+    call start_timer(tmr_std_matrices)
     do part = 1, bundle%groups_on_node
        if(bundle%nm_nodgroup(part) > 0) then
           do memb=1,bundle%nm_nodgroup(part) ! Select i
@@ -987,10 +1005,12 @@ contains
              if(iprint_minE>2) write(io_lun,*) 'S_nd_nabs: ', S_nd_nabs, mat(part,Srange)%n_nab(memb)
              S_nd_nabs = S_nd_nabs/nsfi
              if(iprint_minE>2) write(io_lun,*) 'S_nd_nabs: ', S_nd_nabs, mat(part,Srange)%n_nab(memb)
+             call start_timer(tmr_std_allocation)
              allocate(tmpS(nsfi*S_nd_nabs))
              allocate(tmpM12(nsfi*S_nd_nabs))
              allocate(tmpM4(nsfi*S_nd_nabs))
              allocate(tmpdS(npaoi*S_nd_nabs))
+             call stop_timer(tmr_std_allocation)
              if(memb<bundle%nm_nodgroup(part)) then
                 H_nd_nabs = mat(part,Hrange)%i_nd_acc(memb+1)-mat(part,Hrange)%i_nd_acc(memb)
              else if(bundle%nm_nodgroup(part)>1) then
@@ -1001,8 +1021,10 @@ contains
              if(iprint_minE>2) write(io_lun,*) myid,' H_nd_nabs: ', H_nd_nabs, mat(part,Hrange)%n_nab(memb)
              H_nd_nabs = H_nd_nabs/nsfi
              if(iprint_minE>2) write(io_lun,*) myid,' H_nd_nabs: ', H_nd_nabs, mat(part,Hrange)%n_nab(memb)
+             call start_timer(tmr_std_allocation)
              allocate(tmpK(nsfi*H_nd_nabs))
              allocate(tmpdH(npaoi*H_nd_nabs))
+             call stop_timer(tmr_std_allocation)
              tmpS = zero
              tmpM12 = zero
              tmpM4 = zero
@@ -1093,11 +1115,14 @@ contains
                    end if
                 end do ! i2=npao
              end do ! i1 = nsf
+             call start_timer(tmr_std_allocation)
              deallocate(tmpS, tmpM12,tmpM4,tmpK,tmpdS,tmpdH)
+             call stop_timer(tmr_std_allocation)
              !call cq_abort("Stopping now")
           end do ! memb=bundle%nm_nodgroup(part)
        end if
     end do ! part=bundle%groups_on_node    
+    call stop_timer(tmr_std_matrices)
     if(flag_paos_atoms_in_cell) then
        call my_barrier
        call gsum(grad_coeff_array,coeff_array_size)

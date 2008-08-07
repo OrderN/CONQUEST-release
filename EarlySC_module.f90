@@ -43,6 +43,7 @@ module EarlySCMod
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_chargescf
 
   implicit none
 
@@ -785,7 +786,9 @@ subroutine get_new_rho( record, reset_L, fixed_potential, vary_mu, &
   !end if
   Ltol = tolerance
   ! Find minimum density matrix
+  call stop_timer(tmr_std_chargescf)
   call FindMinDM(n_CG_L_iterations, number_of_bands, vary_mu, Ltol, mu, inode, ionode, reset_L, record)
+  call start_timer(tmr_std_chargescf)
 
   ! If we're using O(N), we only have L, and we need K - if diagonalisation, we have K
   if(.NOT.diagon) call LNV_matrix_multiply(electrons, total_energy_1,  &
@@ -799,7 +802,9 @@ subroutine get_new_rho( record, reset_L, fixed_potential, vary_mu, &
 
   ! And get that density
   temp_supp_fn = allocate_temp_fn_on_grid(sf)
+  call stop_timer(tmr_std_chargescf)      ! This routine is always call within area 5
   call get_electronic_density(rhoout, electrons, supportfns, temp_supp_fn, inode, ionode, size)
+  call start_timer(tmr_std_chargescf)  
   call free_temp_fn_on_grid(temp_supp_fn)
 
   !For DFT energy with charge density constructed by density matrix   --  TM  Nov2007

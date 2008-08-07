@@ -24,11 +24,14 @@
 !!    Changed to use new blip minimisation scheme
 !!   2006/09/25 17:15 dave
 !!    Added option to use pulay for SF minimisation
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
 module minimise
 
   use datatypes
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_eminimisation
 
   implicit none
 
@@ -80,6 +83,8 @@ contains
 !!    Added new flags to test for finding and/or writing forces
 !!   2007/04/17 09:34 dave
 !!    Passed no. of L iterations to vary_support
+!!   2008/05/25 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, total_energy, find_forces, write_forces)
@@ -88,11 +93,13 @@ contains
     use force_module, ONLY : force
     use DMMin, ONLY: FindMinDM
     use SelfCon, ONLY: new_SC_potl, atomch_output, get_atomic_charge
-    use global_module, ONLY: flag_vary_basis, flag_self_consistent, flag_basis_set, blips, PAOs
+    use global_module, ONLY: flag_vary_basis, flag_self_consistent, flag_basis_set, blips, PAOs, &
+                             IPRINT_TIME_THRES1
     use energy, ONLY: get_energy
     use GenComms, ONLY: cq_abort, inode, ionode
     use blip_minimisation, ONLY: vary_support
     use pao_minimisation, ONLY: vary_pao, pulay_min_pao
+    use timer_module
 
     implicit none
 
@@ -109,8 +116,11 @@ contains
     ! Local variables
     logical :: reset_L
     real(double) :: electrons
+    type(cq_timer) :: tmr_l_energy, tmr_l_force
 
+    call start_timer(tmr_std_eminimisation)
     reset_L = .true.
+    call start_timer(tmr_l_energy,WITH_LEVEL)      ! Start timing the energy calculation
     ! Now choose what we vary
     if(flag_vary_basis) then ! Vary everything: DM, charge density, basis set
        if(flag_basis_set==blips) then
@@ -137,9 +147,16 @@ contains
        call FindMinDM(n_L_iterations, number_of_bands, vary_mu, L_tolerance, mu, inode, ionode, reset_L, .false.)
        call get_energy(total_energy)
     end if
+    call stop_print_timer(tmr_l_energy, "calculating ENERGY", IPRINT_TIME_THRES1)
     if(atomch_output) call get_atomic_charge()
-    if(find_forces) call force(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, &
-         sc_tolerance, mu, total_energy, expected_reduction, write_forces)
+    if(find_forces) then 
+      call start_timer(tmr_l_force,WITH_LEVEL)    ! Start timing the force calculation
+      call force(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, &
+                 sc_tolerance, mu, total_energy, expected_reduction, write_forces)
+      call stop_print_timer(tmr_l_force, "calculating FORCE", IPRINT_TIME_THRES1)   ! Stop timing the force calculation
+    endif
+    !  Print results of local timers
+    call stop_timer(tmr_std_eminimisation)
     return
   end subroutine get_E_and_F
 !!***

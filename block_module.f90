@@ -48,12 +48,15 @@
 !!    Removed grid_point_volume (to be found in dimens.module.f90)
 !!   2008/02/04 08:30 dave
 !!    Changed for output to file not stdout
+!!   2008/05/15 ast
+!!    Added some timers
 !!  SOURCE
 !!
 module block_module
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_indexing,tmr_std_allocation
 
   implicit none
   save
@@ -140,7 +143,8 @@ contains
 !!  CREATION DATE
 !!   2004/11/10
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine set_blocks_from_new()
@@ -154,7 +158,11 @@ contains
   ! Local variables
   integer :: icount, iblock, ind_group, stat
 
+  call start_timer(tmr_std_indexing)
+
+  call start_timer(tmr_std_allocation)
   allocate(ind_block_x(maxblocks),ind_block_y(maxblocks),ind_block_z(maxblocks),STAT=stat)
+  call stop_timer(tmr_std_allocation)
   if(stat/=0) call cq_abort("Error allocating ind_block_x: ",maxblocks,stat)
   icount = 0
   n_blocks = blocks%ng_on_node(inode)
@@ -166,6 +174,7 @@ contains
      ind_block_z(icount) = ind_group - &
           (ind_block_x(icount)-1)*blocks%ngcelly*blocks%ngcellz - (ind_block_y(icount)-1)*blocks%ngcellz
   end do
+  call stop_timer(tmr_std_indexing)
   end subroutine set_blocks_from_new
 !!***
 
@@ -204,6 +213,8 @@ contains
 !!    Added lines to write out block distribution for Hilbert partitioner
 !!   2008/01/21 Veronika
 !!    Changed write format "Minimum blocs/proc ..."
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine set_blocks_from_old(n_grid_x, n_grid_y, n_grid_z)
@@ -233,6 +244,7 @@ contains
 
     integer, dimension(:), allocatable :: blocks_per_proc, proc_block, proc_which_block
 
+    call start_timer(tmr_std_indexing)
     !--- find numbers of blocks in each direction
     n_block_x = n_grid_x/in_block_x
     n_block_y = n_grid_y/in_block_y
@@ -427,7 +439,10 @@ contains
        blocks%nm_group(ind_block)=n_pts_in_block
        blocks%icell_beg(ind_block)=(ind_block-1)*n_pts_in_block+1
     enddo
+    call stop_timer(tmr_std_indexing)
     !--- make_cc2
+    ! This already times for indexing
+    ! That's why the timer is stopped above
     call make_cc2(blocks,numprocs)
 
     return
@@ -462,6 +477,8 @@ contains
 !!    Added RCS Id and Log tags and cq_abort
 !!   2006/11/21 17:20 dave
 !!    Included in block_module
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine set_domains( inode)
@@ -481,6 +498,7 @@ contains
     integer :: n_pts, nb,  &
          n0_x, n0_y, n0_z, nx, ny, nz, stat
 
+    call start_timer(tmr_std_indexing)
     ! This subroutine replaces a previous version in which grid-points
     ! were distributed according to x-columns. 
 
@@ -507,6 +525,7 @@ contains
           enddo
        enddo
     enddo
+    call stop_timer(tmr_std_indexing)
     return
   end subroutine set_domains
 !!***

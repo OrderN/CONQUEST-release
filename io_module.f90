@@ -60,11 +60,14 @@
 !!    written out
 !!   2008/02/06 08:07 dave
 !!    Changed for output to file not stdout
+!!   2008/07/31 ast
+!!    Added timers
 !!***
 module io_module
 
   use global_module, ONLY: io_lun
   use GenComms, ONLY: cq_abort, gcopy
+  use timer_stdclocks_module, ONLY: start_timer, stop_timer, tmr_std_matrices
 
   implicit none
 
@@ -400,6 +403,8 @@ second:   do
 !!  MODIFICATION HISTORY
 !!   20/11/2006 Veronika
 !!   Added option for writing out pdb files
+!!   2008/07/18
+!!     Added timers
 !!  SOURCE
 !!
   subroutine write_atomic_positions(filename,pdb_temp)
@@ -410,10 +415,12 @@ second:   do
     use global_module, ONLY: x_atom_cell, y_atom_cell, z_atom_cell, &
          ni_in_cell, flag_fractional_atomic_coords, &
          rcellx, rcelly, rcellz, iprint_init, &
-         atom_coord, species_glob, flag_move_atom, area_init
+         atom_coord, species_glob, flag_move_atom, area_init, &
+         IPRINT_TIME_THRES3
     use species_module, ONLY: species, species_label
     use GenComms, ONLY: inode, ionode, cq_abort
     use units, ONLY: BohrToAng
+    use timer_module
 
     ! Passed variables
     character(len=*) :: filename, pdb_temp
@@ -425,10 +432,12 @@ second:   do
     character(len=80) :: pdb_line
     character(len=2) :: atom_name
     real(double), dimension(3) :: coords
+    type(cq_timer) :: tmr_l_tmp1
 
     logical, external :: leqi
 
     if(inode==ionode) then
+       call start_timer(tmr_l_tmp1,WITH_LEVEL)
        if (pdb_output) then
           if (iprint_init > 2) write(io_lun,*) 'Writing write_atomic_positions'
           call io_assign(lun)
@@ -511,6 +520,7 @@ second:   do
           end do
           call io_close(lun)
        end if ! pdb_output
+       call stop_print_timer(tmr_l_tmp1,"writing atomic positions",IPRINT_TIME_THRES3)
     end if
     return
   end subroutine write_atomic_positions
@@ -2659,10 +2669,12 @@ hc2:    do
     open(unit=lun,file=filename)
     len = return_matrix_len(matA)
     ! Grab matrix
+    call start_timer(tmr_std_matrices)
     do element=1,len
        read(unit=lun,fmt='(g13.6)') val!matrix(nf2,nf1,element)
        call store_matrix_value_pos(matA,element,val)
     end do
+    call stop_timer(tmr_std_matrices)
     call io_close(lun)
     return
   end subroutine grab_matrix
@@ -3195,6 +3207,7 @@ hc2:    do
       nmodx=1+set%ncoverx/parts%ngcellx
       nmody=1+set%ncovery/parts%ngcelly
       nmodz=1+set%ncoverz/parts%ngcellz
+      call start_timer(tmr_std_matrices)
       do np=1,parts%ng_on_node(nnd)
         ind_part=parts%ngnode(parts%inode_beg(nnd)+np-1)
         ncx=1+(ind_part-1)/(parts%ngcelly*parts%ngcellz)
@@ -3240,6 +3253,7 @@ hc2:    do
           enddo ! nc_nodpart
         endif ! nc_nodpart.gt.0
       enddo ! np_on_node
+      call stop_timer(tmr_std_matrices)
     endif ! n_prim.gt.0
     close(unit=unit2)
     return

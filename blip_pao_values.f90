@@ -28,6 +28,8 @@
 !!    i) All pao tables changed so that enumeration starts from one not zero
 !!    ii) All radial tables changed so that the expectation is that they are divided by
 !!    r**l (in line with Siesta radial tables and spherical harmonic conventions)
+!!   2008/06/01 ast
+!!    Added timers
 !!  SOURCE
 module blip_pao_values
 
@@ -395,12 +397,16 @@ contains
 !!  MODIFICATION HISTORY
 !!   2008/03/03 18:42 dave
 !!    Changed float to real
+!!   2008/06/01 ast
+!!    Added timers
 !!  SOURCE
   subroutine f3_value(sym_type,n_sp,n_am,n_zeta,nu_int,&
        &delta_ig,n_blip,bv,z0,fv3)
     use datatypes
     use numbers
     use GenComms, ONLY: cq_abort
+    use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis
+
     implicit none
 
     character(len=*), intent(in) :: sym_type
@@ -414,6 +420,7 @@ contains
     real(double), dimension(nu_int,n_blip) :: fv2
     real(double), dimension(4,4,n_blip) :: store
 
+    call start_timer(tmr_std_basis)
     ! check that n_blip is odd
     if(2*(n_blip/2) == n_blip) then
        call cq_abort('f3_value: n_blip must be odd',n_blip)
@@ -454,6 +461,7 @@ contains
           end if
        end do
     end do
+    call stop_timer(tmr_std_basis)
 
     return
 

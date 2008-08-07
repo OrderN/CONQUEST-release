@@ -31,11 +31,14 @@
 !!    Tidying up timing calls throughout
 !!   2008/02/01 17:45 dave
 !!    Changes to write output to file not stdout
+!!   2008/05/28 ast
+!!    Added timers
 !!  SOURCE
 !!
 module PAO_grid_transform_module
 
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
 
   implicit none
 
@@ -70,6 +73,8 @@ contains
 !!    Changed writes, removed stop
 !!   2006/06/19 07:57 dave
 !!    Made variable-NSF compatible
+!!   2008/05/28 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine PAO_to_grid(myid, support)
@@ -79,10 +84,11 @@ contains
     use primary_module, ONLY: bundle
     use GenComms, ONLY: my_barrier, cq_abort, mtime
     use blip_grid_transform_module, ONLY: distribute_result
-    use global_module, ONLY: iprint_basis
+    use global_module, ONLY: iprint_basis, IPRINT_TIME_THRES2
     use functions_on_grid, ONLY: gridfunctions
     use species_module, ONLY: nsf_species
     use support_spec_format, ONLY: flag_paos_atoms_in_cell
+    use timer_module
 
     implicit none
 
@@ -93,7 +99,10 @@ contains
     integer :: iprim, nsf_send
     integer :: ii
     real(double) :: now, nthen
+    type(cq_timer) :: tmr_l_tmp1
 
+    call start_timer(tmr_std_basis)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     gridfunctions(support)%griddata = zero
 
     nthen = mtime()
@@ -122,6 +131,8 @@ contains
           end if
        end do
     end if
+    call stop_print_timer(tmr_l_tmp1,"PAO to grid transform",IPRINT_TIME_THRES2)
+    call stop_timer(tmr_std_basis)
     return
   end subroutine PAO_to_grid
 !!***
@@ -154,6 +165,8 @@ contains
 !!    Changed calls, now works
 !!   07:57, 2004/07/27 dave
 !!    Changed to use new PAO/SF structure
+!!   2008/05/28 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine do_PAO_transform(iprim,this_nsf)
@@ -213,9 +226,11 @@ contains
     ncover_yz=BCS_blocks%ncovery*BCS_blocks%ncoverz
     igrid=0
 
+    call start_timer(tmr_std_allocation)
     allocate(send_array(naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block*this_nsf),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating send_array in do_PAO_grid: ",&
          naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block*this_nsf)
+    call stop_timer(tmr_std_allocation)
     send_array(:) = zero
 
     ! Loop over neighbour blocks
@@ -319,6 +334,8 @@ contains
 !!    Changed write statements, removed stop
 !!   02:30, 2003/11/13 dave
 !!    Added direction to call to do_PAO_grad
+!!   2008/05/28 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine PAO_to_grad(myid, direction, support)
@@ -342,6 +359,7 @@ contains
     integer :: ii
     real(double) :: now, nthen
 
+    call start_timer(tmr_std_basis)
     gridfunctions(support)%griddata = zero
 
     nthen = mtime()
@@ -354,7 +372,7 @@ contains
           if( iprim <= bundle%n_prim ) then
              nsf_send = nsf_species(bundle%species(iprim))
              call do_PAO_grad_transform(direction,iprim,nsf_send)
-             if(iprint_basis>1) then
+		     if(iprint_basis>1) then
                 now = mtime()
                 write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grad transform (in ms): ",f15.8)') myid,now - nthen
                 nthen = now
@@ -370,6 +388,7 @@ contains
           end if
        end do
     end if
+    call stop_timer(tmr_std_basis)
     return
   end subroutine PAO_to_grad
 !!***
@@ -402,6 +421,8 @@ contains
 !!    Added direction
 !!   07:57, 2004/07/27 dave
 !!    Changed to use new PAO/SF structure
+!!   2008/05/28 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine do_PAO_grad_transform(direction,iprim,this_nsf)
@@ -462,9 +483,11 @@ contains
     ncover_yz=BCS_blocks%ncovery*BCS_blocks%ncoverz
     igrid=0
 
+    call start_timer(tmr_std_allocation)
     allocate(send_array(naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block*this_nsf))
     if(stat/=0) call cq_abort("Error allocating send_array in do_PAO_grad: ",&
          naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block*this_nsf)
+    call stop_timer(tmr_std_allocation)
     send_array(:) = zero
 
     ! Loop over neighbour blocks
@@ -561,6 +584,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2006/06/20 08:24 dave
 !!    Various changes for variable NSF
+!!   2008/05/28 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine PAO_to_grid_global(myid, support)
@@ -616,8 +641,10 @@ contains
     if(.NOT.flag_paos_atoms_in_cell) call cq_abort("Calling global PAO-to-grid with local PAO storage")
     call my_barrier()
 
+    call start_timer(tmr_std_allocation)
     allocate(ip_store(n_pts_in_block),x_store(n_pts_in_block),y_store(n_pts_in_block),z_store(n_pts_in_block), &
          r_store(n_pts_in_block))
+    call stop_timer(tmr_std_allocation)
     ! --  Start of subroutine  ---
 
     dcellx_block=rcellx/blocks%ngcellx
@@ -674,7 +701,9 @@ contains
 
                 the_species=species_glob(ig_atom)
                 this_nsf = nsf_species(the_species)
+                call start_timer(tmr_std_allocation)
                 allocate(sfsum(this_nsf))
+                call stop_timer(tmr_std_allocation)
                 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
@@ -733,14 +762,18 @@ contains
                       end do ! nsf
                    enddo ! ip=1,npoint
                 endif! (npoint > 0) then
+                call start_timer(tmr_std_allocation)
                 deallocate(sfsum)
+                call stop_timer(tmr_std_allocation)
                 no_of_ib_ia = no_of_ib_ia + this_nsf*n_pts_in_block
              enddo ! naba_atoms
           enddo ! naba_part
        endif !(naba_atm(sf)%no_of_part(iblock) > 0) !naba atoms?
     enddo ! iblock : primary set of blocks
     call my_barrier()
+    call start_timer(tmr_std_allocation)
     deallocate(ip_store,x_store,y_store,z_store,r_store)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine PAO_to_grid_global
 !!***
@@ -766,6 +799,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2006/06/20 08:28 dave
 !!    Various changes for variable NSF
+!!   2008/05/28 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine single_PAO_to_grid(support)
@@ -814,8 +849,11 @@ contains
     real(double) :: r1, r2, r3, r4, core_charge, gauss_charge
     real(double) :: val, theta, phi, r_tmp
 
+    call start_timer(tmr_std_basis)
+    call start_timer(tmr_std_allocation)
     allocate(ip_store(n_pts_in_block),x_store(n_pts_in_block),y_store(n_pts_in_block),z_store(n_pts_in_block), &
          r_store(n_pts_in_block))
+    call stop_timer(tmr_std_allocation)
     ! --  Start of subroutine  ---
 
     dcellx_block=rcellx/blocks%ngcellx
@@ -913,7 +951,10 @@ contains
        endif !(naba_atm(paof)%no_of_part(iblock) > 0) !naba atoms?
     enddo ! iblock : primary set of blocks
     call my_barrier()
+    call start_timer(tmr_std_allocation)
     deallocate(ip_store,x_store,y_store,z_store,r_store)
+    call stop_timer(tmr_std_allocation)
+    call stop_timer(tmr_std_basis)
     return
   end subroutine Single_PAO_to_grid
 !!***
@@ -940,6 +981,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2006/06/20 08:30 dave
 !!    Variable NSF preparation, tidying, name change
+!!   2008/05/28 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine PAO_to_grad_global(myid, direction, support)
@@ -993,9 +1036,11 @@ contains
     real(double) :: val, theta, phi, r_tmp
     real(double), dimension(:), allocatable :: sfsum
 
+    call start_timer(tmr_std_allocation)
     allocate(ip_store(n_pts_in_block),x_store(n_pts_in_block),y_store(n_pts_in_block),z_store(n_pts_in_block), &
          r_store(n_pts_in_block), STAT=stat)
     if(stat /= 0) call cq_abort(' Error allocating store in PAO_to_grad_global: ',n_pts_in_block)
+    call stop_timer(tmr_std_allocation)
     ! --  Start of subroutine  ---
 
     dcellx_block=rcellx/blocks%ngcellx
@@ -1044,7 +1089,9 @@ contains
 
                 the_species=species_glob(ig_atom)
                 this_nsf = nsf_species(the_species)
+                call start_timer(tmr_std_allocation)
                 allocate(sfsum(this_nsf))
+                call stop_timer(tmr_std_allocation)
 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
@@ -1101,14 +1148,18 @@ contains
                       end do ! nsf
                    enddo ! ip=1,npoint
                 endif! (npoint > 0) then
+                call start_timer(tmr_std_allocation)
                 deallocate(sfsum)
+                call stop_timer(tmr_std_allocation)
                 no_of_ib_ia = no_of_ib_ia + this_nsf*n_pts_in_block
              enddo ! naba_atoms
           enddo ! naba_part
        endif !(naba_atm(sf)%no_of_part(iblock) > 0) !naba atoms?
     enddo ! iblock : primary set of blocks
+    call start_timer(tmr_std_allocation)
     deallocate(ip_store,x_store,y_store,z_store, r_store, STAT=stat)
     if(stat /= 0) call cq_abort(' Error in deallocation in PAO_to_grad_global')
+    call stop_timer(tmr_std_allocation)
     call my_barrier()
     return
   end subroutine PAO_to_grad_global

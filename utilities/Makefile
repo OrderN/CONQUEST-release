@@ -4,27 +4,29 @@
 
 # General variables and targets
 
-.SUFFIXES: .f .f90
+.SUFFIXES: .f .f90 .cpp
 CQ_UT_PSP2PAO = cq_ut_psp2pao
-FDF=libfdf.a
+CQ_UT_HTMTREE = cq_ut_htmtree
+FDF_UT=libfdf_ut.a
 CURRENT_WD=$(PWD)
-
+CPP = g++
 
 # Default target
 
-default: $(CQ_UT_PSP2PAO)
+default: all
 
+all: $(CQ_UT_PSP2PAO) $(CQ_UT_HTMTREE)
 
 # Include system dependent variables
 
-include system.make
+include ../system.make
 
 
-## LISTS OF OBJECTS
+#### LISTS OF OBJECTS
 
-# cq_ut_psp2pao
+### cq_ut_psp2pao
 
-OBJ_LIST_PSP2PAO = $(FDF) \
+OBJ_LIST_PSP2PAO = $(FDF_UT) \
                       cq_ut_psp2pao_types.o \
                       cq_ut_psp2pao_global.o \
                       cq_ut_psp2pao_alloc.o \
@@ -74,7 +76,7 @@ cq_ut_psp2pao_initialise.o: cq_ut_psp2pao_global.o \
 cq_ut_psp2pao_io.o:         cq_ut_psp2pao_global.o \
                             cq_ut_psp2pao_types.o \
                             cq_ut_psp2pao_alloc.o
-cq_ut_psp2pao_main.o:       $(FDF) \
+cq_ut_psp2pao_main.o:       $(FDF_UT) \
                             cq_ut_psp2pao_types.o \
                             cq_ut_psp2pao_initialise.o \
                             cq_ut_psp2pao_scf.o \
@@ -104,18 +106,36 @@ cq_ut_psp2pao_xc.o:         cq_ut_psp2pao_types.o \
                             cq_ut_psp2pao_global.o \
                             cq_ut_psp2pao_numeric.o
 
+### cq_ut_htmtree
+
+OBJ_LIST_HTMTREE = cq_ut_htmtree_main.o \
+                   cq_ut_general_cTimerRegister.o \
+                   cq_ut_general_cTimerList.o
+
+# Dependencies                   
+
+cq_ut_htmtree_main.o :        cq_ut_general_cTimerRegister.o \
+                              cq_ut_general_cTimerList.o
+cq_ut_general_cTimerList.o:    cq_ut_general_cTimerRegister.o
+
+
 # General compilation rules
 
 %.o: %.f90
 	$(FC) $(COMPFLAGS) -c $<
 
+.cpp.o:
+	$(CPP) $(COMPFLAGS_CPP) -c $<
+
 ## TARGETS
+
+libfdf_ut.a: fdf_ut
 
 # FDF Module
 
-fdf:
+fdf_ut:
 	@echo $(CURRENT_WD)
-	(cd ../fdf; make; cp *.mod $(CURRENT_WD); cp libfdf.a $(CURRENT_WD))
+	(cd ../fdf; make; cp *.mod $(CURRENT_WD); cp libfdf.a $(CURRENT_WD)/$(FDF_UT))
 
 #	@echo $(CURRENT_WD)
 #	(cd ../fdf; $(MAKE) "FC=$(FC)" "FFLAGS=$(COMPFLAGS)" module; cp *.mod $(CURRENT_WD); cp libfdf.a $(CURRENT_WD))
@@ -123,9 +143,14 @@ fdf:
 # PAO basis generator from pseudopotentials (cq_ut_psp2pao)
 
 $(CQ_UT_PSP2PAO): $(OBJ_LIST_PSP2PAO)
-	$(FC) $(LINKFLAGS) -o $(CQ_UT_PSP2PAO) $(OBJ_LIST_PSP2PAO) $(FDF)
+	$(FC) $(LINKFLAGS) -o $(CQ_UT_PSP2PAO) $(OBJ_LIST_PSP2PAO) $(FDF_UT)
+
+# Utility to get timing information in html from a Conquest_out
+
+$(CQ_UT_HTMTREE): $(OBJ_LIST_HTMTREE)
+	$(CPP) $(LINKFLAGS) -o $(CQ_UT_HTMTREE) $(OBJ_LIST_HTMTREE)
 
 clean:
 #	( cd ../fdf; make clean )
 #	rm -f *.o *.mod libfdf.a *~
-	rm -f *.o *~
+	rm -f *.o *~ *.mod libfdf_ut.a

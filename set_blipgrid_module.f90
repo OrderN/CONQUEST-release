@@ -28,6 +28,8 @@
 !!    Various changes for variable NSF, and consolidation of different local orbital definitions
 !!   2008/02/06 08:35 dave
 !!    Changed for output to file not stdout
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
 module set_blipgrid_module
@@ -38,6 +40,8 @@ module set_blipgrid_module
        alloc_comm_in_BG1, alloc_comm_in_BG2, alloc_naba_blk, alloc_naba_atm, alloc_halo_atm
 
   use comm_array_module, ONLY:isend_array,irecv_array
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_indexing,tmr_std_allocation
+
   !check_commarray_int!,check_commarray_real
 
   implicit none
@@ -100,6 +104,8 @@ contains
 !!    Added use atomic_density to get rcut_dens
 !!   2006/07/06 08:27 dave
 !!    Various changes including use of cq_abort
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine set_blipgrid(myid,rcut_supp,rcut_proj,Extent)
@@ -126,6 +132,7 @@ contains
     integer :: thisextent,i
     logical :: warn
 
+    call start_timer(tmr_std_indexing)
     ! Find maxima and allocate derived types
     call get_naba_BCSblk_max(rcut_supp, max_naba_blk, max_recv_node_BG)
     call alloc_comm_in_BG1(comBG,bundle%mx_iprim,max_recv_node_BG)
@@ -226,6 +233,7 @@ contains
     !making tables showing where to put sent BG transformed supp. func.
     ! Now make_table_BG is in <make_table_BG.f90>.
     call make_table_BG(myid,comBG)
+    call stop_timer(tmr_std_indexing)
     return
   end subroutine set_blipgrid
 !!***
@@ -972,7 +980,8 @@ contains
 !!  CREATION DATE
 !!   July 2000 and 2006/09/06
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine get_naba_DCSprt_max(rcut,max_naba_prt,max_naba_atm,max_halo_part,max_halo_nodes)
@@ -1007,8 +1016,10 @@ contains
     do ia=1,n_species
        rcutsq(ia)=rcut(ia)*rcut(ia)
     end do
+    call start_timer(tmr_std_allocation)
     allocate(ihalo(DCS_parts%mx_mcover),STAT=ierr)
     if(ierr/=0) call cq_abort("Error allocating icover in getDCSprtmax: ",DCS_parts%mx_mcover,ierr)
+    call stop_timer(tmr_std_allocation)
     dcellx_block=rcellx/blocks%ngcellx
     dcelly_block=rcelly/blocks%ngcelly
     dcellz_block=rcellz/blocks%ngcellz
@@ -1090,8 +1101,10 @@ contains
           end if
        endif ! Are there atoms in the partition ?
     enddo  ! end do loop over partitions of DCS_parts
+    call start_timer(tmr_std_allocation)
     deallocate(ihalo,STAT=ierr)
     if(ierr/=0) call cq_abort("Error deallocating icover in getDCSprtmax: ",DCS_parts%mx_mcover,ierr)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine get_naba_DCSprt_max
 !!***
@@ -1328,7 +1341,8 @@ contains
 !!  CREATION DATE
 !!   June 2000 and 2006/09/06
 !!  MODIFICATION HISTORY
-!! 
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine make_sendinfo_BG_max(myid,naba_supp,max_send_node,max_sent_pairs,max_recv_call)
@@ -1362,12 +1376,14 @@ contains
     max_recv_call = 0
     max_send_node = 0
     max_sent_pairs = 0
+    call start_timer(tmr_std_allocation)
     allocate(no_send_node(bundle%mx_iprim),STAT=ierr)
     if(ierr/=0) call cq_abort("Error allocating no_send_node in BGmax: ",bundle%mx_iprim,ierr)
     allocate(list_send_node(numprocs,bundle%mx_iprim),STAT=ierr)
     if(ierr/=0) call cq_abort("Error allocating list_send_node in BGmax: ",bundle%mx_iprim,numprocs)
     allocate(no_sent_pairs(numprocs,bundle%mx_iprim),STAT=ierr)
     if(ierr/=0) call cq_abort("Error allocating no_sent_pairs in BGmax: ",bundle%mx_iprim,numprocs)
+    call stop_timer(tmr_std_allocation)
     no_send_node = 0
     list_send_node = 0
     no_sent_pairs=0
@@ -1420,8 +1436,10 @@ contains
        endif ! (no_send_node(iprim) > 0) then
        max_recv_call = max_recv_call + no_send_node(iprim)
     end do
+    call start_timer(tmr_std_allocation)
     deallocate(no_sent_pairs, list_send_node, no_send_node,STAT=ierr)
     if(ierr/=0) call cq_abort("Error deallocating no_sent_pairs in BGmax: ",bundle%mx_iprim,numprocs)
+    call stop_timer(tmr_std_allocation)
     return 
   end subroutine make_sendinfo_BG_max
 !!***
@@ -1510,8 +1528,10 @@ contains
        ! receiving MPI calls might be changed before other nodes have
        ! not finished receiving this array.
        if(allocated(isend_array)) then
+          call start_timer(tmr_std_allocation)
           deallocate(isend_array,STAT=stat)
           if(stat/=0) call cq_abort("Error deallocating isend_array in send_array_BG: ",stat)
+          call stop_timer(tmr_std_allocation)
        end if
     enddo
     return
@@ -1553,8 +1573,10 @@ contains
           write(io_lun,*) mynode,' send_array alloc: ',size(isend_array)
           call cq_abort('Problem with send_array !')
        end if
+       call start_timer(tmr_std_allocation)
        allocate(isend_array(tmpsize),STAT=stat)
        if(stat/=0) call cq_abort("Error allocating isend_array in send_array_BG: ",tmpsize)
+       call stop_timer(tmr_std_allocation)
        do inode=1,nnodes
           nnd=comBG%list_recv_node(inode,iprim)
           if(inode == 1) then
@@ -1626,8 +1648,10 @@ contains
           if(inode > nnodes) call cq_abort('WARNING!!   in recv_array_BG', inode,nnodes)
           nnd_rem=comBG%list_send_node(inode,iprim)
           recv_size=comBG%no_sent_pairs(inode,iprim)*2+1
+          call start_timer(tmr_std_allocation)
           allocate(irecv_array(recv_size),STAT=stat)
           if(stat/=0) call cq_abort("Error allocating irecv_array in recv_array_BG: ",recv_size)
+          call stop_timer(tmr_std_allocation)
           if(nnd_rem /= mynode) then
              call MPI_recv(irecv_array,recv_size,MPI_INTEGER,nnd_rem-1, &
                   tag,MPI_COMM_WORLD,nrecv_stat(:,inode),ierr(inode))
@@ -1652,8 +1676,10 @@ contains
           if(isend > comBG%mx_recv_call) call cq_abort(' ERROR in recv_array_BG  : mx_recv_call,isend =',&
                   comBG%mx_recv_call,isend)
           call make_table(mynode,nnd_rem,npair,isend,iprim)
+          call start_timer(tmr_std_allocation)
           deallocate(irecv_array,STAT=stat)
           if(stat/=0) call cq_abort("Error deallocating irecv_array in recv_array_BG: ",recv_size)
+          call stop_timer(tmr_std_allocation)
 
        enddo
     endif
@@ -1810,12 +1836,15 @@ contains
 !!  MODIFICATION HISTORY
 !!   11:53, 04/02/2003 drb 
 !!    Bug fix - removed extraneous bracket
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine free_blipgrid
 
     use naba_blk_module, ONLY: dealloc_halo_atm, dealloc_naba_atm, dealloc_naba_blk, dealloc_comm_in_BG
 
+!    call start_timer(tmr_std_allocation)
     call dealloc_halo_atm(halo_atm(dens))
     call dealloc_halo_atm(halo_atm(paof))
     call dealloc_halo_atm(halo_atm(nlpf))
@@ -1826,6 +1855,7 @@ contains
     call dealloc_naba_atm(naba_atm(sf))
     call dealloc_naba_blk(naba_blk_supp)
     call dealloc_comm_in_BG(comBG)
+!    call stop_timer(tmr_std_allocation)
     return
   end subroutine free_blipgrid
 !!***

@@ -33,6 +33,8 @@ module pseudo_tm_module
   use pseudopotential_common, ONLY: pseudopotential, &
        core_radius, flag_angular_new
   use global_module, ONLY: iprint_pseudo, io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_pseudopot,tmr_std_basis,tmr_std_allocation
+
   implicit none
 
   !arrays
@@ -123,6 +125,8 @@ contains
     ! For PreConquest or calcluates maximum  16/05/2003 TM
     integer, intent(out), OPTIONAL :: ncf_out
     logical :: flag_calc_max = .false.
+
+    call start_timer(tmr_std_pseudopot)
     if(PRESENT(ncf_out)) then
        flag_calc_max = .true.
     else
@@ -145,10 +149,14 @@ contains
     call setup_core_radius         !contained in this subroutine
     if(flag_calc_max) then
        call deallocate_pseudo_tm  !contained in this module
+       call stop_timer(tmr_std_pseudopot)    ! This is timed inside set_tm_pseudo
        return
     endif
+    call stop_timer(tmr_std_pseudopot)    ! This is timed inside set_tm_pseudo
     call set_tm_pseudo         !contained in this module
+    call start_timer(tmr_std_pseudopot)
     call get_energy_shift(ecore)   !contained in this module
+    call stop_timer(tmr_std_pseudopot)
     return
 
   contains
@@ -204,6 +212,7 @@ contains
       !allocate(pseudopotential(N_GRID_MAX), STAT=stat)
       ! if(stat /= 0) call cq_abort &
       !   ('ERROR! init_pseudo: alloc pseudopotential', stat, N_GRID_MAX)
+      call start_timer(tmr_std_allocation)
       if(.NOT.allocated(core_radius)) then
          allocate(core_radius(nspecies), STAT=stat)
          if(stat /= 0) call cq_abort ('ERROR! init_pseudo: alloc core_radius', stat, nspecies)
@@ -237,6 +246,7 @@ contains
          if(stat /= 0) call cq_abort &
               ('ERROR! init_pseudo: alloc for calc_max', stat)
       endif
+      call stop_timer(tmr_std_allocation)
       return
     end subroutine allocate_pseudo_tm
 
@@ -346,6 +356,7 @@ contains
 
     !deallocate(spherical_harmonic_norm, STAT=stat)
     !if(stat /= 0) call cq_abort('ERROR! init_pseudo: dealloc spherical_harmonic_norm', stat)
+    call start_timer(tmr_std_allocation)
     deallocate(offset_mcomp, STAT=stat)
     if(stat /= 0) call cq_abort('ERROR! init_pseudo: dealloc offset_mcomp', stat)
     deallocate(ip_store, STAT=stat)
@@ -358,6 +369,7 @@ contains
     if(stat /= 0) call cq_abort('ERROR! init_pseudo: dealloc z_store', stat)
     deallocate(r_store, STAT=stat)
     if(stat /= 0) call cq_abort('ERROR! init_pseudo: dealloc r_store', stat)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine deallocate_pseudo_tm
   !!***
@@ -398,7 +410,7 @@ contains
     use datatypes
     use numbers
     use global_module, ONLY: rcellx,rcelly,rcellz,id_glob, ni_in_cell, iprint_pseudo, species_glob, nlpf, sf, &
-         flag_basis_set, blips
+         flag_basis_set, blips, IPRINT_TIME_THRES3
     use species_module, ONLY: species, nlpf_species, n_species
     !  At present, these arrays are dummy arguments.
     use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, &
@@ -414,6 +426,7 @@ contains
     use functions_on_grid, ONLY: gridfunctions, pseudofns
     use dimens, ONLY: n_my_grid_points
     use maxima_module, ONLY: maxngrid
+    use timer_module, ONLY: cq_timer, start_timer, stop_print_timer, WITH_LEVEL
 
     implicit none 
     !local
@@ -436,13 +449,16 @@ contains
     !allocatable
     real(double),allocatable :: chlocal_density(:), coulomb_potential(:)
     logical :: local_charge = .false.
-
+    type(cq_timer) :: tmr_l_tmp1
 
     ! --  Start of subroutine  ---
+    call start_timer(tmr_std_pseudopot)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     do i=1,n_species
        if(pseudo(i)%tm_loc_pot==loc_chg) local_charge = .true.
     end do
     !allocates allocatable arrays
+    call start_timer(tmr_std_allocation)
     allocate(chlocal_density(maxngrid), STAT=stat)
     if(stat/=0) call cq_abort('set_ps: alloc c_d ', stat)
     if(.NOT.local_charge) then
@@ -450,6 +466,7 @@ contains
        if(stat/=0) call cq_abort('set_ps: alloc c_p ', stat)
     end if
     if(stat/=0) call cq_abort('set_ps: alloc c_d ', stat)
+    call stop_timer(tmr_std_allocation)
     chlocal_density   = zero
 
     pseudopotential = zero
@@ -780,15 +797,21 @@ contains
        call hartree( chlocal_density, coulomb_potential, maxngrid, coulomb_energy )
        call axpy( n_my_grid_points, -one, coulomb_potential, 1, &
             pseudopotential, 1 )
+       call start_timer(tmr_std_allocation)
        deallocate(coulomb_potential, STAT=stat)
        if(stat/=0) call cq_abort('set_ps: dealloc c_p ', stat)
+       call stop_timer(tmr_std_allocation)
     end if
 
     !deallocates allocatable arrays
+    call start_timer(tmr_std_allocation)
     deallocate(chlocal_density, STAT=stat)
     if(stat/=0) call cq_abort('set_ps: dealloc c_d ', stat)
+    call stop_timer(tmr_std_allocation)
 
     call my_barrier()
+    call stop_print_timer(tmr_l_tmp1,"initialising pseudopotential (TM)",IPRINT_TIME_THRES3)
+    call stop_timer(tmr_std_pseudopot)
     return
   end subroutine set_tm_pseudo
 !!***
@@ -871,6 +894,7 @@ contains
     ! allocatable
     real(double),allocatable :: h_potential(:)
 
+    call start_timer(tmr_std_pseudopot)
     if(iprint_pseudo>2.AND.inode==ionode) write(io_lun,fmt='(4x,"Doing TM force with pseudotype: ",i3)') pseudo(1)%tm_loc_pot
     ! the structure of this subroutine is similar to set_tm_pseudo et.
     HF_force = 0
@@ -880,9 +904,11 @@ contains
     dcellz_block=rcellz/blocks%ngcellz
 
     ! get Hartree potential
+    call start_timer(tmr_std_allocation)
     allocate(h_potential(maxngrid),STAT=stat)
     if(stat /= 0) call cq_abort &
          ('loc_pp_derivative_tm: alloc h_potential',stat)
+    call stop_timer(tmr_std_allocation)
 
     call hartree( density, h_potential, maxngrid, h_energy )
 
@@ -1062,9 +1088,12 @@ contains
     !    Tsuyoshi Miyazaki
     call gsum(HF_force,3,ni_in_cell)
     ! Deallocate added by TM, 2005/08/11
+    call start_timer(tmr_std_allocation)
     deallocate(h_potential,STAT=stat)
     if(stat /= 0) call cq_abort &
          ('loc_pp_derivative_tm: dealloc h_potential',stat)
+    call stop_timer(tmr_std_allocation)
+    call stop_timer(tmr_std_pseudopot)
 
     return
   end subroutine loc_pp_derivative_tm
@@ -1146,6 +1175,7 @@ contains
     ! The structure of this subroutine is almost the same as in
     ! set_pseudopotential_tm
     
+    call start_timer(tmr_std_pseudopot)
     gridfunctions(dpseudofns)%griddata = zero
 
     dcellx_block=rcellx/blocks%ngcellx
@@ -1307,8 +1337,12 @@ contains
                                   do m = -the_l, the_l
                                      !i = 0
                                      !call pp_elem_derivative(direction,nl_potential_new,& 
+                                     ! Timing in area 11 (basis) is necessary here, 
+                                     !   to avoid double start of timer
+                                     call start_timer(tmr_std_basis)
                                      call pp_gradient(direction,nl_potential_new,&
                                           &nl_potential_derivative_new,x,y,z,r_from_i,the_l,m,val)
+                                     call stop_timer(tmr_std_basis)
                                      gridfunctions(dpseudofns)%griddata(position+i*n_pts_in_block) = val
                                      i = i+1
                                      !RC for s/p value comparisons
@@ -1472,6 +1506,7 @@ contains
           enddo ! naba_part
        endif !(naba_atm(nlpf)%no_of_part(iblock) > 0) !naba atoms?
     enddo ! iblock : primary set of blocks
+    call stop_timer(tmr_std_pseudopot)
     
     return
   end subroutine nonloc_pp_derivative_tm
@@ -1530,12 +1565,14 @@ contains
     integer :: n_atoms
      n_atoms = ni_in_cell
 
+    call start_timer(tmr_std_allocation)
     allocate(n_atoms_of_species(n_species), STAT=stat)
     if(stat /= 0) call cq_abort &
          ('Error in allocating n_atoms_of_species',stat, n_species)
     allocate(eshift(n_species), STAT=stat)
     if(stat /= 0) call cq_abort &
          ('Error in allocating eshift',stat, n_species)
+    call stop_timer(tmr_std_allocation)
 
     ! first calculate the number of atoms of each species
     n_atoms_of_species = 0
@@ -1604,9 +1641,11 @@ contains
 
     e_core = e_core *  number_of_electrons / volume
 
+    call start_timer(tmr_std_allocation)
     deallocate(n_atoms_of_species,eshift, STAT=stat)
     if(stat /= 0) call cq_abort &
          ('deallocation in get_energy_shift',stat)
+    call stop_timer(tmr_std_allocation)
     return
   contains
 
@@ -1689,8 +1728,10 @@ contains
          intvloc = zero
          nmesh = pseudo%vlocal%n
          nmesh_vloc = (nmesh-1) * nfac + 1
+         call start_timer(tmr_std_allocation)
          allocate(wos(nmesh_vloc), STAT = stat)
          if(stat /= 0) call cq_abort ('ERROR in allocating wos in calc_energy_shift', stat)
+         call stop_timer(tmr_std_allocation)
          step = pseudo%vlocal%delta
          step_fine = pseudo%vlocal%cutoff/(nmesh_vloc-1)
          call set_wos(nmesh_vloc, step_fine, wos)
@@ -1740,8 +1781,10 @@ contains
                  write(io_lun,fmt='(2x,"Sum of local potential and core charge: ",3f12.8)') &
                  vlocal + z, vlocal, z
          enddo
+         call start_timer(tmr_std_allocation)
          deallocate(wos, STAT = stat)
          if(stat /= 0) call cq_abort ('ERROR in deallocating wos in calc_energy_shift', stat)
+         call stop_timer(tmr_std_allocation)
          !write(io_lun,*) 'Int. vloc: ',intvloc
          !intvloc = intvloc + pi*z/beta
          if(PRESENT(vlocG0)) vlocG0 = intvloc
@@ -1753,7 +1796,9 @@ contains
          call rad_alloc(func1, nmesh_vloc)
          call rad_alloc(func2, nmesh_vloc)
 
+         call start_timer(tmr_std_allocation)
          allocate(wos(nmesh_vloc), STAT = stat)
+         call stop_timer(tmr_std_allocation)
          !check the integral of chlocal ---------------
          call set_wos(nmesh, pseudo%chlocal%delta, wos)
          rho = zero
@@ -1847,9 +1892,11 @@ contains
 
          call rad_dealloc(func1)
          call rad_dealloc(func2)
+         call start_timer(tmr_std_allocation)
          deallocate(wos, STAT = stat)
          if(stat /= 0) call cq_abort &
               ('ERROR in deallocating wos in calc_energy_shift', stat)
+         call stop_timer(tmr_std_allocation)
          !write(io_lun,*) 'Int. vloc, eshift: ',intvloc,eshift
       end if ! tm_loc_pot == loc_pot
       return

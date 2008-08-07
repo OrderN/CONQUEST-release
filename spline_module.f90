@@ -1,4 +1,4 @@
-! $Id: spline_module.f90,v 1.8 2003/12/19 14:06:45 drb Exp $
+! $Id$
 ! -----------------------------------------------------------
 ! Module spline_module
 ! -----------------------------------------------------------
@@ -27,7 +27,7 @@ module spline_module
   implicit none
 
   ! RCS tag for object file identification 
-  character(len=80), save, private :: RCSid = "$Id: spline_module.f90,v 1.8 2003/12/19 14:06:45 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
 contains
 

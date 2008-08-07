@@ -33,12 +33,15 @@
 !!    matrix routines
 !!   2008/02/06 11:03 dave
 !!    Changed for output to file not stdout
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
 module test_force_module
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_moveatoms,tmr_std_allocation
 
   implicit none
 
@@ -67,7 +70,8 @@ contains
 !!  CREATION DATE
 !!   07:49, 2003/09/03
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine test_forces(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu,&
@@ -115,6 +119,7 @@ contains
     real(double), dimension(3,ni_in_cell) :: HF_force
     logical :: reset_L = .false.
 
+    call start_timer(tmr_std_moveatoms)
     if(inode==ionode) write(io_lun,fmt='(2x,"******************"/,2x,"* Testing Forces *"/,2x,"******************"/)')
     if(TF_atom_moved>ni_in_cell) then
        write(io_lun,fmt='(2x,"Error: specified atom out-of-range: ",2i8)') TF_atom_moved, ni_in_cell
@@ -400,6 +405,7 @@ contains
        !kinetic_energy  = K0  
        !band_energy     = B0
     end if
+    call stop_timer(tmr_std_moveatoms)
   end subroutine test_forces
 !!***
 
@@ -637,7 +643,9 @@ contains
     real(double), dimension(:), allocatable :: density_out
 
     ! We're coming in from initial_H: assume that initial E found
+    call start_timer(tmr_std_allocation)
     allocate(density_out(maxngrid), STAT=stat)
+    call stop_timer(tmr_std_allocation)
     ! Warn user that we're NOT getting just HF with PAOs !
     if(flag_basis_set==PAOs) then
        if(myid==0) write(io_lun,fmt='(2x,"********************************************************")')
@@ -1357,7 +1365,9 @@ contains
 
     ! We're coming in from initial_H: assume that initial E found
     write(io_lun,*) 'Allocating density_out'
+    call start_timer(tmr_std_allocation)
     allocate(density_out(maxngrid), STAT=stat)
+    call stop_timer(tmr_std_allocation)
     call get_electronic_density(   density_out, electrons, supportfns, H_on_supportfns, &
          inode, ionode, maxngrid)
     ! Find force
@@ -1389,7 +1399,9 @@ contains
     ! Find force
     call get_nonSC_correction_force( nonSC_force, potential, density_out, &
          inode, ionode, ni_in_cell, maxngrid)
+    call start_timer(tmr_std_allocation)
     deallocate(density_out)
+    call stop_timer(tmr_std_allocation)
     E1 = band_energy + delta_E_hartree + delta_E_xc
     F1 = nonSC_force(TF_direction,TF_atom_moved)
     if(inode==ionode) write(io_lun,fmt='(2x,"Final energy   : ",f20.12,/,2x,"Final NSC force: ",f20.12)') E1, F1

@@ -91,9 +91,9 @@ program cq_ut_psp2pao
       if((read_option .eqv. .true.) .and. (no_orbs /= no_read)) then
         read_option = .false.
         write(*,*)
-        write(*,'(a,i3,a)'), 'WARNING: The wavefunction set ',no_set,&
+        write(*,'(a,i3,a)')  'WARNING: The wavefunction set ',no_set,&
                              ' will NOT be read from file, as requested'
-        write(*,'(a)'), '         because extra orbitals need to be calculated'
+        write(*,'(a)')  '         because extra orbitals need to be calculated'
       end if
  
       if(.not.read_option) then

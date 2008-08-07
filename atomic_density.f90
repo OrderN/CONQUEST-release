@@ -30,12 +30,15 @@
 !!    spline problem fixed
 !!   2008/02/04 08:21 dave
 !!    Changed for output to file not stdout
+!!   2008/05/23 ast
+!!    Added timers
 !!  SOURCE
 !!
 module atomic_density
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_chargescf,tmr_std_allocation
 
   implicit none
   save
@@ -99,6 +102,8 @@ contains
 !!    Added rcut_dens to keep track of maximum cutoff on atomic charge density
 !!   2006/09/20 17:19 dave
 !!    Moved read of file to initial_read
+!!   2008/05/23 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine read_atomic_density(inode,ionode,n_species)
@@ -122,6 +127,7 @@ contains
     integer :: alls ! status indicator for allocations
     real(double) :: r_dummy
 
+    call start_timer(tmr_std_chargescf)
     if(inode == ionode) then
        if(iprint_SC >= 1) then
           write(unit=io_lun,fmt='(//10x,50("+")/10x,"read_atomic_density: &
@@ -146,6 +152,7 @@ contains
     end if
 
     ! allocate memory for atomic density tables
+    call start_timer(tmr_std_allocation)
     if(allocated(atomic_density_table)) then
        do i=1,size(atomic_density_table)
           deallocate(atomic_density_table(i)%table)
@@ -158,6 +165,7 @@ contains
     allocate(rcut_dens(n_species),STAT=alls)
     if (alls /= 0) call cq_abort('read_atomic_density: error allocating rcut_dens ',n_species)
     call reg_alloc_mem(area_SC, n_species, type_dbl)
+    call stop_timer(tmr_std_allocation)
     rcut_dens = 0.0_double
     do n_sp = 1, n_species
 
@@ -176,10 +184,12 @@ contains
        rcut_dens(n_sp) = atomic_density_table(n_sp)%cutoff
        !if(atomic_density_table(n_sp)%cutoff>rcut_dens) rcut_dens=atomic_density_table(n_sp)%cutoff
 
+       call start_timer(tmr_std_allocation)
        allocate(atomic_density_table(n_sp)%table(atomic_density_table(n_sp)%length),stat = alls)
        if(alls /= 0) call cq_abort('read_atomic_density: &
             &failed to allocate atomic_density_table(n_sp)%table')
        call reg_alloc_mem(area_SC,atomic_density_table(n_sp)%length, type_dbl)
+       call stop_timer(tmr_std_allocation)
 
        if(atomic_density_table(n_sp)%length > 0) then
 
@@ -202,6 +212,7 @@ contains
          end do
       end if
    end if
+   call stop_timer(tmr_std_chargescf)
   end subroutine read_atomic_density
 !!***
   
@@ -237,6 +248,8 @@ contains
 !!    Changed linear interpolation to spline interpolation to fix forces problem
 !!   2008/03/03 18:40 dave
 !!    Changed float to real()
+!!   2008/05/23 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine make_atomic_density_from_paos(inode,ionode,n_species)
@@ -258,6 +271,8 @@ contains
     real(double) :: alpha, cutoff, density_deltar, pao_deltar, r, rn_am, val
     logical :: range_flag
 
+    call start_timer(tmr_std_chargescf)
+    call start_timer(tmr_std_allocation)
     if(allocated(atomic_density_table)) then
        do i=1,size(atomic_density_table)
           deallocate(atomic_density_table(i)%table)
@@ -270,6 +285,7 @@ contains
     allocate(rcut_dens(n_species),STAT=alls)
     call reg_alloc_mem(area_SC, n_species, type_dbl)
     if (alls /= 0) call cq_abort('make_atomic_density_from_paos: error allocating rcut_dens ',n_species)
+    call stop_timer(tmr_std_allocation)
     rcut_dens = 0.0_double
     do n_sp = 1, n_species
        ! By default, use max PAO cut-off radius as density cut-off
@@ -294,10 +310,12 @@ contains
             &call cq_abort('make_atomic_density_from_paos: table length must be >= 2',&
             &atomic_density_table(n_sp)%length)
        ! Allocate space for atomic density
+       call start_timer(tmr_std_allocation)
        allocate(atomic_density_table(n_sp)%table(atomic_density_table(n_sp)%length),STAT = alls)
        if(alls /= 0) call cq_abort('make_atomic_density_from_paos: &
             &failed to allocate atomic_density_table(n_sp)%table()')
        call reg_alloc_mem(area_SC,atomic_density_table(n_sp)%length, type_dbl)
+       call stop_timer(tmr_std_allocation)
 
        ! initiate to zero table of atomic density for current species and calculate table spacing
        do nt = 1, atomic_density_table(n_sp)%length
@@ -359,6 +377,7 @@ contains
        if(inode == ionode.AND.iprint_SC>2) &
             write(io_lun,fmt='(10x,"Atomic density cutoff for species ",i4," : ",f15.8)') n_sp,rcut_dens(n_sp)
     end do
+    call stop_timer(tmr_std_chargescf)
   end subroutine make_atomic_density_from_paos
 !!***
 
@@ -386,6 +405,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   17:27, 2003/06/10 tm
 !!    Fixed over-run problem with splining
+!!   2008/05/23 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine spline_atomic_density(n_species)
@@ -408,11 +429,14 @@ contains
     real(double) :: d_end, d_origin, delta_r, r, local_density, derivative
     logical :: range_flag
 
+    call start_timer(tmr_std_chargescf)
     ! loop over species and do the interpolation
     do n=1, n_species
+       call start_timer(tmr_std_allocation)
        allocate(atomic_density_table(n)%d2_table(atomic_density_table(n)%length), STAT=stat)
        if(stat/=0) call cq_abort('spline_atomic_density: error allocating d2_table ! ',stat)
        call reg_alloc_mem(area_SC,atomic_density_table(n)%length, type_dbl)
+       call stop_timer(tmr_std_allocation)
        ! do the splining for the table
        delta_r = atomic_density_table(n)%cutoff/real(atomic_density_table(n)%length-1,double)
        d_origin = (atomic_density_table(n)%table(2)- atomic_density_table(n)%table(1))/delta_r
@@ -444,6 +468,7 @@ contains
           end do
        end if
     end do
+    call stop_timer(tmr_std_chargescf)
     return
   end subroutine spline_atomic_density
 !!***

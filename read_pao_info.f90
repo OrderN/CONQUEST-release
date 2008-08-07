@@ -25,10 +25,13 @@
 !!    Changed reading to follow new derived types: occupation numbers outside table
 !!   2008/02/06 08:09 dave
 !!    Changed for output to file not stdout
+!!   2008/02/23 ast
+!!    Added timers
 !!  SOURCE
 module read_pao_info
 
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_initialisation
 
   implicit none
 
@@ -83,6 +86,8 @@ contains
 !!    Added lines to work out maximum value for npao
 !!   2008/03/03 18:54 dave
 !!    Changed float to real
+!!   2008/02/23 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine read_pao(inode,ionode,n_species)
@@ -101,6 +106,7 @@ contains
     integer :: count
     real(double) :: deltar, norm_factor, r, sum, yp1, ypn
 
+    call start_timer(tmr_std_initialisation)
     if(inode == ionode) then
 
        if(iprint_init >= 0) then
@@ -290,6 +296,7 @@ contains
             &write(unit=io_lun,fmt='(/" read_pao: normalisation of PAOs done")')
 
     end if
+    call stop_timer(tmr_std_initialisation)
 
     return
 

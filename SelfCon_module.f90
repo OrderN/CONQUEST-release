@@ -46,6 +46,7 @@ module SelfCon
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_chargescf,tmr_std_allocation
 
   implicit none
 
@@ -126,7 +127,7 @@ contains
     use PosTan, ONLY: PulayC, PulayBeta, SCC, SCBeta, pos_tan, &
          max_iters, SCE, SCR, fit_coeff
     use numbers
-    use global_module, ONLY: iprint_SC, flag_self_consistent, flag_SCconverged
+    use global_module, ONLY: iprint_SC, flag_self_consistent, flag_SCconverged, IPRINT_TIME_THRES2
     use H_matrix_module, ONLY: get_H_matrix
     use DMMin, ONLY: FindMinDM
     use energy, ONLY: get_energy
@@ -134,6 +135,7 @@ contains
     use dimens, ONLY: n_my_grid_points
     use density_module, ONLY: density
     use maxima_module, ONLY: maxngrid
+    use timer_module
 
     implicit none
 
@@ -151,12 +153,20 @@ contains
     integer :: mod_early, ndone, i, nkeep, ndelta, stat
     logical :: done, problem, early
     real(double) :: SC_tol, DMM_tol, LastE, electrons
+    type(cq_timer) :: tmr_l_tmp1
 
+    call start_timer(tmr_std_chargescf)
     ! Build H matrix *with NL and KE*
     call get_H_matrix(.true., fixed_potential, electrons, density, maxngrid)
+    ! The H matrix build is already timed on its own, so I leave out of the SC preliminaries (open to discussion)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     if(.NOT.flag_self_consistent) then
+       call stop_timer(tmr_std_chargescf)
        call FindMinDM(n_L_iterations, number_of_bands, vary_mu, L_tol, mu, inode, ionode, reset_L, .false.)
+       call start_timer(tmr_std_chargescf)
        call get_energy(total_energy)
+       call stop_print_timer(tmr_l_tmp1, "new_SC_potl (except H build)", IPRINT_TIME_THRES2)
+       call stop_timer(tmr_std_chargescf)
        return
     end if
     if(inode==ionode) write(io_lun,fmt='(8x,"Starting self-consistency.  Tolerance: ",e12.5,/)') self_tol
@@ -183,8 +193,10 @@ contains
        if(EarlyRecord(i)==0) early = .true.
        if(inode.eq.ionode.AND.iprint_SC>1) write(io_lun,*) 'early: ',i,EarlyRecord(i)
     enddo
+    call stop_print_timer(tmr_l_tmp1,"SCF preliminaries (except H build)",IPRINT_TIME_THRES2)
     ! Loop until self-consistent
     do while(.NOT.done)
+       call start_timer(tmr_l_tmp1,WITH_LEVEL)
        if(flag_linear_mixing) then
           !call LinearMixSC(done,ndone, SC_tol, &
           call PulayMixSCA(done,ndone, SC_tol, reset_L, fixed_potential, vary_mu, n_L_iterations, &
@@ -200,12 +212,15 @@ contains
           mod_early = 1+mod(earlyIters,maxearlySC)
           if(earlyL) EarlyRecord(mod_early) = 1
        endif
+       call stop_print_timer(tmr_l_tmp1,"SCF iteration - Early",IPRINT_TIME_THRES2)
        if(.NOT.done) then ! Late stage strategy
+          call start_timer(tmr_l_tmp1,WITH_LEVEL)
           reset_L = .true. !.false.
           if(inode==ionode.AND.iprint_SC>0) write(io_lun,*) '********** LateSC **********'
           call lateSC(record,done,ndone, SC_tol, reset_L, fixed_potential, vary_mu, n_L_iterations, &
                number_of_bands, DMM_tol, mu, total_energy, density, maxngrid)
           problem = .true.  ! This catches returns from lateSC when not done
+          call stop_print_timer(tmr_l_tmp1,"SCF iteration - Late",IPRINT_TIME_THRES2)
        endif
        ! Now decide whether we need to bother going to early
        early = .false.
@@ -214,6 +229,7 @@ contains
           if(inode.eq.ionode.AND.iprint_SC>1) write(io_lun,*) 'early: ',i,EarlyRecord(i)
        enddo
     enddo
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     if(record) then ! Fit the C and beta coefficients
        if(inode==ionode.AND.iprint_SC>1) then
           write(io_lun,*) '  List of residuals and energies'
@@ -226,6 +242,8 @@ contains
        call fit_coeff(SCC, SCBeta, SCE, SCR, ndone)
        if(inode==ionode.AND.iprint_SC>1) write(io_lun,6) SCC,SCBeta
     endif
+    call stop_print_timer(tmr_l_tmp1,"finishing SCF (fitting coefficients)",IPRINT_TIME_THRES2)
+    call stop_timer(tmr_std_chargescf)
 6   format(8x,'dE to dR parameters - C: ',f15.8,' beta: ',f15.8)
 7   format(8x,i4,2f15.8)
     return
@@ -1494,10 +1512,13 @@ subroutine get_atomic_charge()
   integer :: chun, stat, n,l, glob_ind, temp_mat
   real(double), allocatable, dimension(:) :: charge, node_charge
 
+  call start_timer(tmr_std_chargescf)
   ! prepare arrays and suitable matrices
   l = bundle%n_prim
+  call start_timer(tmr_std_allocation)
   allocate(charge(ni_in_cell), node_charge(l), STAT=stat)
   if(stat/=0) call cq_abort("Error allocating charge arrays in get_atomic_charge.")
+  call stop_timer(tmr_std_allocation)
   node_charge = zero
   charge = zero
   temp_mat = allocate_temp_matrix(Srange, 0)
@@ -1522,8 +1543,11 @@ subroutine get_atomic_charge()
      close(unit=chun)
   end if
 
+  call start_timer(tmr_std_allocation)
   deallocate(charge,node_charge)
+  call stop_timer(tmr_std_allocation)
   call free_temp_matrix(temp_mat)
+  call stop_timer(tmr_std_chargescf)
 
 end subroutine get_atomic_charge
 !!***

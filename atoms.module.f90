@@ -23,12 +23,15 @@
 !!    Changed dimensions to use global and mx_, and added allocation call
 !!   2008/02/04 08:24 dave
 !!    Changed for output to file not stdout
+!!   2008/05/16 ast
+!!    Added some timers
 !!  SOURCE
 !!
 module atoms
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,start_timer, stop_timer, tmr_std_indexing,tmr_std_allocation
 
   implicit none
   save
@@ -83,6 +86,8 @@ contains
 !!    inside atoms.module
 !!   11:23, 12/11/2004 dave 
 !!    Added allocation call
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine distribute_atoms(inode, ionode) 
@@ -99,6 +104,8 @@ contains
     integer :: n_per_node, n_first, ia, node_doing, i, ni, np
     integer :: ind_part
 
+
+    call start_timer(tmr_std_indexing)
 
     if(iprint_init>1.AND.inode==ionode) write(io_lun,fmt='(10x,"Allocating memory for distribute_atom")')
     call allocate_distribute_atom
@@ -130,6 +137,7 @@ contains
     do i = 1, n_my_atoms 
        index_my_atoms(i) = atoms_on_node(i, INODE) 
     enddo
+    call stop_timer(tmr_std_indexing)
     return 
   end subroutine distribute_atoms
 !!*** 
@@ -161,6 +169,8 @@ contains
 !!    Added ROBODoc header
 !!   11:23, 12/11/2004 dave 
 !!    Removed from distribute_atom
+!!   2008/05/15 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine allocate_distribute_atom
@@ -175,6 +185,8 @@ contains
     ! Local variables
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
+
     allocate(index_my_atoms(bundle%mx_iprim),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to index_my_atoms !')
     call reg_alloc_mem(area_index, bundle%mx_iprim, type_int)
@@ -184,6 +196,7 @@ contains
     allocate(node_doing_atom(ni_in_cell), atom_number_on_node(ni_in_cell), n_atoms_on_node(numprocs), STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to node_doing_atom !')
     call reg_alloc_mem(area_index, 2*ni_in_cell+numprocs, type_int)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine allocate_distribute_atom
 !!***

@@ -49,12 +49,15 @@
 !!    Changed recip_vector to be (n,3) for speed
 !!   2008/02/04 17:30 dave
 !!    Changed for output to file not stdout
+!!   2008/05/23
+!!    Added timers
 !!  SOURCE
 !!
 module fft_module
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
 
   implicit none
 
@@ -203,9 +206,11 @@ contains
        ! Allocate space for trigonometric "twiddle" factors
        ! Note that the size of trigs_? is at least 2*(2^p+3^q+5^r), where n_grid_? factors 
        ! as 2^p*3^q*5^r.  If we set the size of trigs_? to 2*n_grid_? we'll be safe.
+       call start_timer(tmr_std_allocation)
        allocate(trigs_x(2*n_grid_x),trigs_y(2*n_grid_y),trigs_z(2*n_grid_z),STAT=stat)
        if(stat/=0) call cq_abort("fft3: error allocating trigs ",stat)
        call reg_alloc_mem(area_SC,2*n_grid_x+2*n_grid_y+2*n_grid_z,type_dbl)
+       call stop_timer(tmr_std_allocation)
        call fftx(cdata,maxngrid,1,n_grid_x,0)
        call ffty(cdata,maxngrid,1,n_grid_y,0)
        call fftz(cdata,maxngrid,1,n_grid_z,0)
@@ -243,6 +248,8 @@ contains
 !!    Added use GenComms, and changed zmexch to exch
 !!   2006/08/03 08:19 dave
 !!    Passed in size of cdata
+!!   2008/05/23
+!!    Added timers
 !!  SOURCE
 !!
   subroutine rearrange_data( cdata, size, pack, psend, pr, unpack )
@@ -263,9 +270,11 @@ contains
     ! Local variables
     integer :: I, stat
 
+    call start_timer(tmr_std_allocation)
     allocate(send(maxngrid), recv(maxngrid), STAT=stat)
     if(stat/=0) call cq_abort("Allocation error in rearrange_data: ",size,stat)
     call reg_alloc_mem(area_SC,4*maxngrid,type_dbl)
+    call stop_timer(tmr_std_allocation)
     ! pack data into sending format
     do I = 1, psend(numprocs+1)-1
        send(pack(I)) = cdata(I)
@@ -279,9 +288,11 @@ contains
     do I = 1, pr(numprocs+1)-1
        cdata(I) = recv(unpack(I))
     end do
+    call start_timer(tmr_std_allocation)
     deallocate(send, recv, STAT=stat)
     if(stat/=0) call cq_abort("Deallocation error in rearrange_data: ",size,stat)
     call reg_dealloc_mem(area_SC,4*maxngrid,type_dbl)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine rearrange_data
 !!***
@@ -316,6 +327,8 @@ contains
 !!    Individual trigs used
 !!   2006/08/03 08:19 dave
 !!    Passed in size of cdata
+!!   2008/05/23
+!!    Added timers
 !!  SOURCE
 !!
   subroutine fftx( cdata, size, cols, len, isign )
@@ -336,9 +349,11 @@ contains
     integer :: I,j, stat
     real(double), allocatable, dimension(:) :: a,b
 
+    call start_timer(tmr_std_allocation)
     allocate(a(len),b(len),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating space in fftx: ",len)
     call reg_alloc_mem(area_SC,2*len,type_dbl)
+    call stop_timer(tmr_std_allocation)
     scale = one/REAL(len,double)
     scale = SQRT(scale)
     if(isign==0) then
@@ -355,9 +370,11 @@ contains
           end do
        end do
     endif
+    call start_timer(tmr_std_allocation)
     deallocate(a,b,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating space in fftx: ",len)
     call reg_dealloc_mem(area_SC,2*len,type_dbl)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine fftx
 !!***
@@ -392,6 +409,8 @@ contains
 !!    Individual trigs used
 !!   2006/08/03 08:19 dave
 !!    Passed in size of cdata
+!!   2008/05/23
+!!    Added timers
 !!  SOURCE
 !!
   subroutine ffty( cdata, size, cols, len, isign )
@@ -412,9 +431,11 @@ contains
     integer :: I,j, stat
     real(double), allocatable, dimension(:) :: a,b
 
+    call start_timer(tmr_std_allocation)
     allocate(a(len),b(len),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating space in ffty: ",len)
     call reg_alloc_mem(area_SC,2*len,type_dbl)
+    call stop_timer(tmr_std_allocation)
     scale = one/REAL(len,double)
     scale = SQRT(scale)
     if(isign==0) then
@@ -431,9 +452,11 @@ contains
           end do
        end do
     endif
+    call start_timer(tmr_std_allocation)
     deallocate(a,b,STAT=stat)
     if(stat/=0) call cq_abort("Error allocating space in ffty: ",len)
     call reg_dealloc_mem(area_SC,2*len,type_dbl)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine ffty
 !!***
@@ -468,6 +491,8 @@ contains
 !!    Individual trigs used
 !!   2006/08/03 08:19 dave
 !!    Passed in size of cdata
+!!   2008/05/23
+!!    Added timers
 !!  SOURCE
 !!
   subroutine fftz( cdata, size, cols, len, isign )
@@ -488,9 +513,11 @@ contains
     integer :: I,j, stat
     real(double), allocatable, dimension(:) :: a,b
 
+    call start_timer(tmr_std_allocation)
     allocate(a(len),b(len),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating space in fftz: ",len)
     call reg_alloc_mem(area_SC,2*len,type_dbl)
+    call stop_timer(tmr_std_allocation)
     scale = one/REAL(len,double)
     scale = SQRT(scale)
     if(isign==0) then
@@ -507,9 +534,11 @@ contains
           end do
        end do
     endif
+    call start_timer(tmr_std_allocation)
     deallocate(a,b,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating space in fftz: ",len)
     call reg_dealloc_mem(area_SC,2*len,type_dbl)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine fftz
 !!***
@@ -583,6 +612,8 @@ contains
 !!    Also changed check for zero (used to be r2.NE.0, now r2>very_small)
 !!   15:54, 27/04/2007 drb 
 !!    Changed recip_vector for consistency
+!!   2008/05/23
+!!    Added timers
 !!  SOURCE
 !!
   subroutine set_fft_map ( )
@@ -613,6 +644,7 @@ contains
          temp_kl
 
     ! Allocate variables
+    call start_timer(tmr_std_allocation)
     allocate(prbx(numprocs+1), prxb(numprocs+1), prxy(numprocs+1), pryx(numprocs+1), &
          pryz(numprocs+1), przy(numprocs+1), STAT=ierr)
     if(ierr/=0) call cq_abort("Allocation error for pr in set_fft: ",numprocs+1,ierr)
@@ -635,6 +667,7 @@ contains
          temp_kl(maxngrid),STAT=ierr)
     if(ierr/=0) call cq_abort("Allocation error for remote grids in set_fft: ",maxngrid,ierr)
     call reg_alloc_mem(area_SC,4*maxngrid,type_int)
+    call stop_timer(tmr_std_allocation)
     ! Map the equivalent pointers onto their arrays
     unpackxb => packbx
     unpackbx => packxb
@@ -948,15 +981,19 @@ contains
           end do
        end do
     end do
+    call start_timer(tmr_std_allocation)
     allocate(kerker_list(size_kl),STAT=ierr)
     if(ierr/=0) call cq_abort("Error allocating kerker_list: ",size_kl,ierr)
     call reg_alloc_mem(area_SC,size_kl,type_int)
+    call stop_timer(tmr_std_allocation)
     do n=1,size_kl
        kerker_list(n) = temp_kl(n)
     end do
+    call start_timer(tmr_std_allocation)
     deallocate(temp_kl,remote_grid_point_x,remote_grid_point_y,remote_grid_point_z,STAT=ierr)
     if(ierr/=0) call cq_abort("Deallocation error for remote grids in set_fft: ",maxngrid,ierr)
     call reg_dealloc_mem(area_SC,4*maxngrid,type_int)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine set_fft_map
 !!***

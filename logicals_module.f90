@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: logicals_module.f90,v 1.2 2002/04/19 14:00:38 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module logicals
 ! ------------------------------------------------------------------------------
@@ -28,7 +28,7 @@ module logicals
   implicit none
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: logicals_module.f90,v 1.2 2002/04/19 14:00:38 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
   logical, parameter :: doK = .true. 
   logical, parameter :: dontK = .false. 

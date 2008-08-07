@@ -45,11 +45,14 @@
 !!    Removed prune, graft routines (no longer used) and small tidying in preparation for variable NSF
 !!   2008/02/06 08:26 dave
 !!    Changed for output to file not stdout
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
 module multiply_module
 
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
 
   implicit none
 
@@ -92,6 +95,8 @@ contains
 !!    Changed size of nreqs (temporary fix)
 !!   09:19, 11/05/2005 dave 
 !!    Removed unnecessary MPI_Wait (second one on nreqs)
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine mat_mult(myid,a,lena,b,lenb,c,lenc,a_b_c,debug)
@@ -147,6 +152,7 @@ contains
     logical flag,call_flag
     real(double) :: t0,t1
 
+    call start_timer(tmr_std_allocation)
     if(iprint_mat>3.AND.myid==0) t0 = mtime()    
     ! Allocate memory for the elements
     allocate(ibpart_rem(a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs),STAT=stat)
@@ -154,6 +160,7 @@ contains
     !allocate(atrans(a_b_c%amat(1)%length),STAT=stat)
     allocate(atrans(lena),STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error allocating atrans')
+    call stop_timer(tmr_std_allocation)
     !write(io_lun,*) 'Sizes: ',a_b_c%comms%mx_dim3*a_b_c%comms%mx_dim2*a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs,&
     !     a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs,a_b_c%comms%mx_dim3*a_b_c%comms%mx_dim1* &
     !     a_b_c%prim%mx_iprim*a_b_c%amat(1)%mx_nab
@@ -165,8 +172,10 @@ contains
           end do
        end if
     end do
+    call start_timer(tmr_std_allocation)
     allocate(nreqs(sends*2),STAT=stat)
     if(stat/=0) call cq_abort("mat_mult: Error allocating nreqs",sends,stat)
+    call stop_timer(tmr_std_allocation)
     sends = 0
     ! For type 1, form local transpose of my data (a_halo) and zero C-matrix 
     invdir=0
@@ -245,7 +254,9 @@ contains
           else
              lenb_rem = a_b_c%comms%ilen3rec(ipart,nnode)
           end if
+          call start_timer(tmr_std_allocation)
           allocate(b_rem(lenb_rem))
+          call stop_timer(tmr_std_allocation)
           call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,icall,& 
                n_cont,part_array,a_b_c%bindex,b_rem,lenb_rem,b,myid,ilen2,&
                mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs)
@@ -316,7 +327,9 @@ contains
        !   call cq_abort('mat_mult: error in check_mkm ',kpart)
        !endif
     enddo ! End of the kpart=1,ahalo%np_in_halo loop !
+    call start_timer(tmr_std_allocation)
     if(allocated(b_rem)) deallocate(b_rem)
+    call stop_timer(tmr_std_allocation)
     ! --------------------------------------------------
     ! End of the main loop over partitions in the A-halo
     ! --------------------------------------------------
@@ -330,8 +343,10 @@ contains
        end do
     end if
     call my_barrier
+    call start_timer(tmr_std_allocation)
     deallocate(nreqs,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating nreqs')
+    call stop_timer(tmr_std_allocation)
     call my_barrier
     ! --- for type 2, make backward local transpose of A-matrix -----------
     if(a_b_c%mult_type.eq.2) then
@@ -339,11 +354,15 @@ contains
        call loc_trans( a_b_c%ltrans, a_b_c%ahalo,a,lena,atrans,lena,invdir)
     endif
     call my_barrier
+    call start_timer(tmr_std_allocation)
     deallocate(atrans,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating atrans')
+    call stop_timer(tmr_std_allocation)
     call my_barrier
+    call start_timer(tmr_std_allocation)
     deallocate(ibpart_rem,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating ibpart_rem')
+    call stop_timer(tmr_std_allocation)
     call my_barrier
     !deallocate(b_rem,STAT=stat)
     !if(stat/=0) call cq_abort('mat_mult: error deallocating b_rem')

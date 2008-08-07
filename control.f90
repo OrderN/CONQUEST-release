@@ -170,7 +170,7 @@ contains
     use numbers
     use units
     use global_module, ONLY: iprint_gen, ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell, id_glob, &
-         atom_coord, rcellx, rcelly, rcellz, area_general, iprint_MD
+         atom_coord, rcellx, rcelly, rcellz, area_general, iprint_MD, IPRINT_TIME_THRES1
     use group_module, ONLY: parts
     use minimise, ONLY: get_E_and_F
     use move_atoms, ONLY: safemin
@@ -179,6 +179,7 @@ contains
     use force_module, ONLY: tot_force
     use io_module, ONLY: write_atomic_positions, pdb_template
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use timer_module
 
     implicit none
 
@@ -195,6 +196,7 @@ contains
     real(double) :: energy0, energy1, max, g0, dE, gg, ggold, gamma
     integer :: i,j,k,iter,length, jj, lun, stat
     logical :: done
+    type(cq_timer) :: tmr_l_iter
 
     allocate(cg(3,ni_in_cell),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating cg in control: ",ni_in_cell,stat)
@@ -216,6 +218,7 @@ contains
     ggold = 0.0_double
     energy1 = energy0
     do while(.NOT.done)
+       call start_timer(tmr_l_iter,WITH_LEVEL)
        ! Construct ratio for conjugacy
        gg = 0.0_double
        do j=1,ni_in_cell
@@ -282,6 +285,7 @@ contains
           done = .true.
           if(myid==0) write(io_lun,fmt='(4x,"Maximum force below threshold: ",f12.5)') max
        end if
+       call stop_print_timer(tmr_l_iter,"a CG iteration",IPRINT_TIME_THRES1)
     enddo
     ! Output final positions
 !    if(myid==0) call write_positions(parts)

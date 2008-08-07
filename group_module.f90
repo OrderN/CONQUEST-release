@@ -1,4 +1,4 @@
-! $Id: group_module.f90,v 1.2 2002/03/12 14:50:18 drb Exp $
+! $Id$
 ! -----------------------------------------------------------
 ! Module group_module
 ! -----------------------------------------------------------
@@ -21,6 +21,8 @@
 !!    Added ROBODoc headers
 !!   20/06/2001 dave
 !!    Added RCS Id and Log tags and used cq_abort throughout
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
 module group_module
@@ -28,6 +30,7 @@ module group_module
   ! Module usage
   use datatypes
   use basic_types
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_indexing,tmr_std_allocation
 
   implicit none
   save
@@ -64,6 +67,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   30/05/2001 dave
 !!    Added ROBODoc header
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine make_cc2(groups,numprocs)
@@ -81,6 +86,7 @@ contains
     ! Local variables
     integer :: nnd,np,ind_group
 
+    call start_timer(tmr_std_indexing)
     do nnd=1,numprocs  ! Loop over processors
       if(groups%ng_on_node(nnd).gt.0) then  
         do np=1,groups%ng_on_node(nnd)  ! Loop over groups on the node
@@ -90,6 +96,7 @@ contains
         enddo
       endif
     enddo   
+    call stop_timer(tmr_std_indexing)
   end subroutine make_cc2
 !!***
 
@@ -113,6 +120,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   30/05/2001 dave
 !!    Added ROBODoc header
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine allocate_group_set(groups,mx_node)
@@ -131,6 +140,7 @@ contains
     ! Local variables
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     allocate(groups%ng_on_node(mx_node),STAT=stat)
     if(stat/=0) then
        call cq_abort('alloc_gp: error allocating memory to ng_on_node !')
@@ -163,6 +173,7 @@ contains
     if(stat/=0) then
        call cq_abort('alloc_gp: error allocating memory to inv_ngnode !')
     endif
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine allocate_group_set
 !!***
@@ -187,6 +198,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   30/05/2001 dave
 !!    Added ROBODoc header
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine deallocate_group_set(groups)
@@ -202,12 +215,14 @@ contains
     ! Local variables
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     deallocate(groups%inv_ngnode,groups%icell_beg,groups%i_cc2seq, &
          groups%i_cc2node,groups%ngnode,groups%inode_beg, &
          groups%ng_on_node,STAT=stat)
     if(stat/=0) then
        call cq_abort('dealloc_gp: error deallocating group_set !')
     endif
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine deallocate_group_set
 !!***

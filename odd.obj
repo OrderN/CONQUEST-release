@@ -7,5 +7,7 @@ ODD_OBJS = datestamp.o fft_module.o \
            units.module.o \
            logicals_module.o \
            memory_module.o \
-           mpi.o
+           mpi.o \
+           timer_module.o \
+           timer_stdclocks_module.o
 

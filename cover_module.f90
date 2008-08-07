@@ -53,6 +53,8 @@
 !!    Added RCS Id tag and improved headers a little
 !!   2008/02/04 17:12 dave
 !!    Changes for output to file not stdoutx
+!!   2008/05/16 ast
+!!    Added some timers
 !!  SOURCE
 !!
 module cover_module
@@ -61,6 +63,7 @@ module cover_module
   use datatypes
   use global_module, ONLY: io_lun
   use basic_types
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_indexing, tmr_std_allocation
 
   implicit none
   save
@@ -114,6 +117,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    Added ROBODoc header and cq_abort
+!!   2008/05/16 ast
+!!    Added some timers
 !!  SOURCE
 !!
   subroutine make_cs(myid,gr_rcut,set,groups,prim, mx_mcell,x_mem_cell,y_mem_cell,z_mem_cell)
@@ -163,6 +168,7 @@ contains
     real(double) :: dcellx,dcelly,dcellz,xadd,yadd,zadd
     logical :: members
 
+    call start_timer(tmr_std_indexing)
     ! This determines whether or not we find information about all 
     ! the members of the groups in the covering set
     members = (PRESENT(mx_mcell).AND.PRESENT(x_mem_cell).AND.&
@@ -178,9 +184,11 @@ contains
     set%ng_cover=set%ncoverx*set%ncovery*set%ncoverz
     set%mx_gcover = set%ng_cover
     call allocate_cs(set,numprocs,members)
+    call start_timer(tmr_std_allocation)
     allocate(nx_in_cover(set%ng_cover),ny_in_cover(set%ng_cover),nz_in_cover(set%ng_cover),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating nx_in_cover: ",set%ng_cover,stat)
     call reg_alloc_mem(area_index, 3*set%ng_cover,type_int)
+    call stop_timer(tmr_std_allocation)
     !if(set%ng_cover>set%mx_gcover) then
     !   call cq_abort('make_cs: too many groups in GCS',&
     !        set%ng_cover,set%mx_gcover)
@@ -259,6 +267,7 @@ contains
     enddo
     ! sort minimum CS by nodes 
     call indexx(groups%mx_gcell,ng_in_min,ind_min,min_sort)
+
     ! go over all GCS groups in node-periodic-grouped order 
     ind_cover=0
     do ind=1,ng_in_min
@@ -336,6 +345,7 @@ contains
        if(inode==ionode.AND.iprint_index>1) write(io_lun,*) 'Members in covering set: ',nm_in_cover
        if(members) set%icover_ibeg(1)=1
        set%mx_mcover = nm_in_cover
+       call start_timer(tmr_std_allocation)
        allocate(set%xcover(set%mx_mcover),STAT=stat)
        if(stat/=0) call cq_abort('Error allocating cover set members x: ',set%mx_mcover,stat)
        allocate(set%ycover(set%mx_mcover),STAT=stat)
@@ -343,6 +353,7 @@ contains
        allocate(set%zcover(set%mx_mcover),STAT=stat)
        if(stat/=0) call cq_abort('Error allocating cover set members z: ',set%mx_mcover,stat)
        call reg_alloc_mem(area_index, 3*set%mx_mcover,type_dbl)
+       call stop_timer(tmr_std_allocation)
        do ind_cover=1,set%ng_cover
           nsx=nx_in_cover(ind_cover)
           nsy=ny_in_cover(ind_cover)
@@ -392,9 +403,12 @@ contains
     !      endif
     !   enddo
     !endif ! (members)
+    call start_timer(tmr_std_allocation)
     deallocate(nx_in_cover,ny_in_cover,nz_in_cover,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating nx_in_cover: ",set%ng_cover,stat)
     call reg_dealloc_mem(area_index, 3*set%ng_cover,type_int)
+    call stop_timer(tmr_std_allocation)
+    call stop_timer(tmr_std_indexing)
     return
   end subroutine make_cs
 !!***
@@ -423,6 +437,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    Added ROBODoc header and cq_abort
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine make_iprim(set,prim,nnd)
@@ -442,10 +458,13 @@ contains
     ! Local variables
     integer :: pr,i,nsx,nsy,nsz,ind_group,j,irc,ierr, stat
 
+    call start_timer(tmr_std_indexing)
     if(.NOT.ASSOCIATED(set%iprim_group)) then
+       call start_timer(tmr_std_allocation)
        allocate(set%iprim_group(prim%mx_iprim),STAT=stat)
        if(stat/=0) call cq_abort('make_iprim: error allocating memory')
        call reg_alloc_mem(area_index,prim%mx_iprim,type_int)
+       call stop_timer(tmr_std_allocation)
     endif
     pr = 0 ! Indexes primary members
     do i=1,prim%groups_on_node
@@ -462,6 +481,7 @@ contains
           enddo
        endif ! (prim%nm_nodgroup(i) > 0) then
     enddo
+    call stop_timer(tmr_std_indexing)
   end subroutine make_iprim
 !!***
 
@@ -707,6 +727,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave 
 !!    Added ROBODoc header and used cq_abort
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine allocate_cs(set,mx_node,members)
@@ -727,6 +749,7 @@ contains
     ! Local variables
     integer :: stat,irc,ierr
 
+    call start_timer(tmr_std_allocation)
     allocate(set%lab_cell(set%mx_gcover),STAT=stat)
     if(stat/=0) then
        call cq_abort('allocate_cs: error(1)')
@@ -775,6 +798,7 @@ contains
        nullify(set%n_ing_cover,set%icover_ibeg, &
             set%xcover,set%ycover,set%zcover)
     endif
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine allocate_cs
 !!***
@@ -799,6 +823,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    Added ROBODoc header and cq_abort
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine deallocate_cs(set)
@@ -817,6 +843,7 @@ contains
     ! Local variables
     integer :: stat,irc,ierr
 
+    call start_timer(tmr_std_allocation)
     call reg_dealloc_mem(area_index,2*set%mx_gcover,type_int)
     call reg_dealloc_mem(area_index,3*set%mx_gcover,type_int)
     call reg_dealloc_mem(area_index,size(set%ncover_rem),type_int)
@@ -833,6 +860,7 @@ contains
     if(stat/=0) then
        call cq_abort('deallocate_cs: error(2)')
     endif
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine deallocate_cs
 !!***
@@ -865,6 +893,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    Added ROBODoc header and used cq_abort
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine indexx(mx_nsort,nsort,iarr,indx)

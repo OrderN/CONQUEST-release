@@ -29,13 +29,16 @@
 !!    Added flag for PAOs to choose whether we're storing coefficients for all atoms in cell or just primary
 !!    set (storage space vs communication choice - as always)
 !!   2008/02/06 10:59 dave
-!!!   Changed for output to file not stdout
+!!    Changed for output to file not stdout
+!!   2008/05/28 ast
+!!    Added timers
 !!  SOURCE
 !!
 module support_spec_format
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
 
   implicit none
 
@@ -100,6 +103,7 @@ contains
     ! Local variables
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     if(allocated(coefficient_array)) then
        deallocate(coefficient_array)
        if(inode==ionode) write(io_lun,*) 'WARNING ! Allocate call for coefficient_array when allocated !'
@@ -131,6 +135,7 @@ contains
        if(stat/=0) call cq_abort("Error allocating coefficient_array_remote: ",stat,size)
        call reg_alloc_mem(area_basis, size, type_dbl)
     end if
+    call stop_timer(tmr_std_allocation)
   end subroutine allocate_supp_coeff_array
   
   subroutine deallocate_supp_coeff_array
@@ -144,6 +149,7 @@ contains
     integer :: sizearr
 
     sizearr = size(coefficient_array)
+    call start_timer(tmr_std_allocation)
     if(allocated(coefficient_array)) then
        call reg_dealloc_mem(area_basis, sizearr,type_dbl)
        deallocate(coefficient_array)
@@ -160,6 +166,7 @@ contains
        call reg_dealloc_mem(area_basis, sizearr,type_dbl)
        deallocate(coefficient_array_remote)
     end if
+    call stop_timer(tmr_std_allocation)
   end subroutine deallocate_supp_coeff_array
 
   subroutine associate_supp_coeff_array(supp_struc,n_atoms,array,length)

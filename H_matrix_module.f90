@@ -49,6 +49,8 @@
 !!    Removing passed arrays support, workspace_support
 !!   2008/02/01 17:47 dave
 !!    Changes for output to file not stdout
+!!   2008/05/22 ast
+!!    Added timers
 !!  TODO
 !!   08:28, 2003/09/22 dave
 !!    Understand and document onsite_T
@@ -57,6 +59,7 @@
 module H_matrix_module
 
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_hmatrix,tmr_std_allocation,tmr_std_matrices
 
   implicit none
 
@@ -113,6 +116,8 @@ contains
 !!    Removed find_chdens argument and writing out of energies and
 !!    added flag to force or not the rebuilding of data_NL and data_KE
 !!  (the non-local and kinetic energy contributions to the H matrix)
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, rho, size)
@@ -126,7 +131,7 @@ contains
     use set_bucket_module, ONLY: rem_bucket, sf_H_sf_rem, pao_H_sf_rem
     use calc_matrix_elements_module, ONLY: get_matrix_elements_new
     use GenComms, ONLY: gsum, end_comms, my_barrier, inode, ionode
-    use global_module, ONLY: iprint_ops, flag_vary_basis, flag_basis_set, PAOs, sf, paof
+    use global_module, ONLY: iprint_ops, flag_vary_basis, flag_basis_set, PAOs, sf, paof, IPRINT_TIME_THRES1
     use PAO_grid_transform_module, ONLY: single_PAO_to_grid
     use functions_on_grid, ONLY: supportfns, H_on_supportfns, &
          allocate_temp_fn_on_grid, free_temp_fn_on_grid, gridfunctions, fn_on_grid
@@ -138,6 +143,7 @@ contains
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
     !use io_module, ONLY: dump_matrix, write_matrix
+    use timer_module            ! This is used to declare a local timer
 
     implicit none
 
@@ -151,8 +157,11 @@ contains
     ! local variables
     real(double) :: kinetic_energy, nl_energy
     integer :: pao_support
-
     integer :: length, stat, paolength, matwork
+    type(cq_timer) :: tmr_l_hmatrix
+
+    call start_timer(tmr_std_hmatrix)                ! Total
+    call start_timer(tmr_l_hmatrix,WITH_LEVEL)   ! Just this call
 
     if(inode==ionode.AND.iprint_ops>3) write(io_lun,fmt='(10x,"Entering get_H_matrix")')
     if(flag_vary_basis.AND.flag_basis_set==PAOs) matwork = allocate_temp_matrix(dHrange,0,paof,sf)
@@ -205,6 +214,10 @@ contains
     call matrix_sum(one,matH,one,matNL)
     if(iprint_ops>2) call dump_matrix("NS",matS,inode)
     if(iprint_ops>2) call dump_matrix("NH",matH,inode)
+
+    call stop_print_timer(tmr_l_hmatrix, "get_H_matrix", IPRINT_TIME_THRES1)
+    call stop_timer(tmr_std_hmatrix)
+
     return
   end subroutine get_H_matrix
 !!***
@@ -314,9 +327,11 @@ contains
     !write(io_lun,*) 'Energy via FFT: ',fften
     !call fft3( pseudopotential, locpotr, size, 1 )
     !deallocate(chdenr, locpotr, STAT=stat)
+    call start_timer(tmr_std_allocation)
     allocate(xc_potential(n_my_grid_points), h_potential(maxngrid), STAT=stat)
     if(stat/=0) call cq_abort("Error allocating potentials in H: ",n_my_grid_points, stat)
     call reg_alloc_mem(area_ops, n_my_grid_points+maxngrid,type_dbl)
+    call stop_timer(tmr_std_allocation)
     !     first initialise some arrays
     gridfunctions(H_on_supportfns)%griddata = zero
     potential = zero
@@ -582,6 +597,7 @@ contains
 
       ! Loop over the i elements and apply the appropriate scaling factor
       ip = 0
+      call start_timer(tmr_std_matrices)
       do np = 1,bundle%groups_on_node
          if(bundle%nm_nodgroup(np)>0) then
             do i = 1,bundle%nm_nodgroup(np)
@@ -613,6 +629,7 @@ contains
             enddo ! i=bundle%nm_nodgroup
          endif ! bundle%nm_nodgroup>0
       enddo ! np=bundle%groups_on_node
+      call stop_timer(tmr_std_matrices)
       return
     end subroutine matrix_scale_diag_tm
 
@@ -932,12 +949,14 @@ contains
     temp = zero
     call gemm('n','t',this_nsf,this_nsf,OneArraySize(spec)*OneArraySize(spec)*OneArraySize(spec), &
          one,work1,this_nsf,work6,this_nsf,zero,temp,this_nsf )
+    call start_timer(tmr_std_matrices)
     do i1 = 1,this_nsf
        do i2=1,this_nsf
           call scale_matrix_value(matKE,np,nn,ip,0,i2,i1,zero,1)
           call store_matrix_value(matKE,np,nn,ip,0,i2,i1,SupportGridSpacing(spec)*temp(i2,i1),1)
        end do
     end do
+    call stop_timer(tmr_std_matrices)
     deallocate(work1,work2,work3, work4,work5,work6, STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating arrays for onsite KE blip elements: ",FullArraySize(spec),this_nsf)
     call reg_dealloc_mem(area_ops, 6*this_nsf*FullArraySize(spec),type_dbl)
@@ -1410,7 +1429,7 @@ contains
 
     ! Passed variables
     integer size
-
+ 
     real(double) :: xc_energy
     real(double) :: density(size), xc_potential(size)
 
@@ -1897,6 +1916,7 @@ contains
 
     ! Loop over the i elements and apply the appropriate scaling factor
     ip = 0
+    call start_timer(tmr_std_matrices)
     do np = 1,bundle%groups_on_node
        if(bundle%nm_nodgroup(np)>0) then
           do i = 1,bundle%nm_nodgroup(np)
@@ -1919,6 +1939,7 @@ contains
           enddo ! End do i=bundle%nm_nodgroup(np)
        endif ! End if(bundle%nm_nodgroup>0)
     enddo ! End do np=bundle%groups_on_node
+    call stop_timer(tmr_std_matrices)
     return
   end subroutine matrix_scale_diag
 !!***

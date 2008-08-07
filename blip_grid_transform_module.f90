@@ -40,11 +40,14 @@
 !!    Changing to variable NSF
 !!   2008/02/04 08:25 dave
 !!    Changing for output to file not stdout
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 module blip_grid_transform_module
 
  use datatypes
  use global_module, ONLY: iprint_basis, io_lun
+ use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
 
  implicit none
 
@@ -78,6 +81,8 @@ contains
 !!    Added ROBODoc header
 !!   11/06/2001 dave
 !!    Added GenComms
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine blip_to_support_new(myid, support)
@@ -100,6 +105,7 @@ contains
     integer :: iprim, nsf_send, spec
     integer :: ii
 
+    call start_timer(tmr_std_basis)
     gridfunctions(support)%griddata = zero
 
     if(bundle%mx_iprim < 1) then
@@ -124,6 +130,7 @@ contains
 
     !call time_barrier('after transform',15)
 
+    call stop_timer(tmr_std_basis)
     return
   end subroutine blip_to_support_new
 !!***
@@ -150,6 +157,8 @@ contains
 !!    The rank of data_blip has been changed.
 !!   17/05/2001 dave
 !!    Added ROBODoc header, indented and removed NSF=4 dependence
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine do_blip_transform_new( iprim, blip_number, bliparraysize, data_blip, support_grid_spacing,  &
@@ -248,13 +257,17 @@ contains
     endif
     if(ierr /= 0) call cq_abort('do_blip ',ierr)
 
+    call start_timer(tmr_std_allocation)
     allocate(inter_1(nsf,-bliparraysize:bliparraysize,-bliparraysize:bliparraysize,2*extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_1 !',stat)
     call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
+    call stop_timer(tmr_std_allocation)
     inter_1=zero
+    call start_timer(tmr_std_allocation)
     allocate(inter_2(nsf,-bliparraysize:bliparraysize,   2*extent+1 ,2*extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_2 !',bliparraysize,extent)
     call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call stop_timer(tmr_std_allocation)
     inter_2=zero
 
     !x,y,z are used for integration grids
@@ -389,10 +402,12 @@ contains
     ncover_yz=BCS_blocks%ncovery*BCS_blocks%ncoverz
     igrid=0
 
+    call start_timer(tmr_std_allocation)
     allocate(send_array(naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating send_array in do_blip_transform: ",&
          naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block)
     call reg_alloc_mem(area_basis,naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block,type_dbl)
+    call stop_timer(tmr_std_allocation)
     send_array(:) = zero
     DO naba_blk=1,naba_blk_supp%no_naba_blk(iprim)! naba blks in NOPG order
        ! iprim : primary seq. no. of the atom
@@ -447,10 +462,12 @@ contains
           enddo    ! y-direction in a block
        enddo    ! z-direction in a block
     END DO    ! Loop over naba blocks for this primary atom
+    call start_timer(tmr_std_allocation)
     deallocate(inter_1,inter_2,STAT=stat)
     if(stat/=0) call cq_abort('Error deallocating memory to inter_1 !',stat)
     call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
     call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine do_blip_transform_new
 !!***
@@ -547,9 +564,11 @@ contains
           nsf_recv = nsf_species(species_glob(atoms_on_node(iprim,nnd_rem)))
           nunit_recv = nsf_recv*n_pts_in_block
           nsize=comBG%no_sent_pairs(jnode,iprim)*nunit_recv
+          call start_timer(tmr_std_allocation)
           allocate(recv_array(nsize),STAT=stat)
           if(stat/=0) call cq_abort("Error allocating recv_array in distribute_result: ",nsize)
           call reg_alloc_mem(area_basis,nsize,type_dbl)
+          call stop_timer(tmr_std_allocation)
           if(nnd_rem == mynode) then
              if(nsize < 1) call cq_abort('ERROR recv_size in distribute_result',nsize)
 
@@ -612,9 +631,11 @@ contains
              !!------ TRANSPOSE
 
           enddo ! loop over pairs of block and atoms
+          call start_timer(tmr_std_allocation)
           deallocate(recv_array,STAT=stat)
           if(stat/=0) call cq_abort("Error deallocating recv_array in distribute_result: ",nsize)
           call reg_dealloc_mem(area_basis,nsize,type_dbl)
+          call stop_timer(tmr_std_allocation)
        enddo ! loop over sending nodes
     endif ! if there are sending nodes
 
@@ -632,9 +653,11 @@ contains
 
     call my_barrier()
     if(allocated(send_array)) then
+       call start_timer(tmr_std_allocation)
        call reg_dealloc_mem(area_basis,size(send_array),type_dbl)
        deallocate(send_array,STAT=stat)
        if(stat/=0) call cq_abort("Error deallocating send_array in do_blip_transform: ",stat)
+       call stop_timer(tmr_std_allocation)
     end if
     return
   end subroutine distribute_result
@@ -663,6 +686,8 @@ contains
 !!    Added ROBODoc header, removed unnecessary passed arguments
 !!   11/06/2001 dave
 !!    Added GenComms
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine blip_to_grad_new(myid, direction, support)
@@ -685,6 +710,7 @@ contains
     integer :: iprim, nsf_send, spec
     integer :: ii
 
+    call start_timer(tmr_std_basis)
     gridfunctions(support)%griddata = zero
 
     if(bundle%mx_iprim < 1) call cq_abort('ERROR in blip_to_grad_new: no primary atoms')
@@ -701,6 +727,7 @@ contains
        endif
        call distribute_result(myid,iprim,nsf_send,support)
     end do
+    call stop_timer(tmr_std_basis)
     return
   end subroutine blip_to_grad_new
 !!***
@@ -725,6 +752,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   17/05/2001 dave
 !!    Added ROBODoc header, indented and removed NSF=4 dependency
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine do_blip_grad_transform_new(direction, iprim, blip_number, bliparraysize, data_blip, &
@@ -820,13 +849,17 @@ contains
        ierr=1
     endif
     if(ierr /= 0) call cq_abort('ERROR in do_blip_grad_transform')
+    call start_timer(tmr_std_allocation)
     allocate(inter_1(NSF,-bliparraysize:bliparraysize,-bliparraysize:bliparraysize,2*extent+1),STAT=stat)
     if(stat/=0) call cq_abort('ERROR in do_blip_grad_transform: allocation of inter_1')
     call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
+    call stop_timer(tmr_std_allocation)
     inter_1=zero
+    call start_timer(tmr_std_allocation)
     allocate(inter_2(NSF,-bliparraysize:bliparraysize,   2*extent+1 ,2*extent+1),STAT=stat)
     if(stat/=0) call cq_abort('ERROR in do_blip_grad_transform: allocation of inter_2')
     call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call stop_timer(tmr_std_allocation)
     inter_2=zero
 
     !x,y,z are used for integration grids
@@ -986,10 +1019,12 @@ contains
     igrid=0
 
 
+    call start_timer(tmr_std_allocation)
     allocate(send_array(naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating send_array in do_blip_grad_transform: ",&
          naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block)
     call reg_alloc_mem(area_basis,naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block,type_dbl)
+    call stop_timer(tmr_std_allocation)
     send_array(:) = 0
     DO naba_blk=1,naba_blk_supp%no_naba_blk(iprim)! naba blks in NOPG order
        ! iprim : primary seq. no. of the atom
@@ -1008,7 +1043,7 @@ contains
           z=nblkz*(nz_blk-1)+iz-1
           iz_grid=z-nzmin_grid+1
           if(iz_grid > 2*extent+1) then
-             call cq_abort(' ERROR in do_blip_transform_new iz_grid = ', iz_grid,2*extent+1)
+             call cq_abort(' ERROR in do_blip_grad_transform_new iz_grid = ', iz_grid,2*extent+1)
           endif
 
           imin=imin_for_z(iz_grid)
@@ -1041,10 +1076,12 @@ contains
           enddo    ! y-direction in a block
        enddo    ! z-direction in a block
     END DO    ! Loop over naba blocks for this primary atom
+    call start_timer(tmr_std_allocation)
     deallocate(inter_1,inter_2,STAT=stat)
     if(stat/=0) call cq_abort('ERROR deallocating memory of inter_1&2 !',stat)
     call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
     call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine do_blip_grad_transform_new
 !!***
@@ -1074,6 +1111,8 @@ contains
 !!    Added GenComms
 !!   2006/03/04 06:55 dave
 !!    Changed to use new version of distribute result
+!!   2008/06/10 ast
+!!    Added timers
 !!  TODO
 !!   I think this subroutine can include the work by 
 !!   blip_to_grad_transform TM
@@ -1104,6 +1143,7 @@ contains
     integer :: iprim, nsf_send, spec
     integer :: ii
 
+    call start_timer(tmr_std_basis)
     ! Sets n_d
     n_d=0
     n_d(direction1) = 1
@@ -1125,6 +1165,7 @@ contains
        call my_barrier()
        call distribute_result(myid,iprim,nsf_send,gg_support)
     end do
+    call stop_timer(tmr_std_basis)
     return
   end subroutine blip_to_gradgrad_new
 !!***
@@ -1149,6 +1190,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   17/05/2001 dave
 !!    Removed NSF=4 dependencies
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine do_blip_gradgrad_transform_new(n_d, iprim, blip_number, bliparraysize, data_blip, &
@@ -1245,13 +1288,17 @@ contains
        ierr=1
     endif
     if(ierr /= 0) call cq_abort('do_blip_gradgrad_transform ',ierr)
+    call start_timer(tmr_std_allocation)
     allocate(inter_1(NSF,-bliparraysize:bliparraysize,-bliparraysize:bliparraysize,2*extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_1 !',stat)
     call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
+    call stop_timer(tmr_std_allocation)
     inter_1=zero
+    call start_timer(tmr_std_allocation)
     allocate(inter_2(NSF,-bliparraysize:bliparraysize,   2*extent+1 ,2*extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_2 !',stat)
     call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call stop_timer(tmr_std_allocation)
     inter_2=zero
 
     !x,y,z are used for integration grids
@@ -1425,10 +1472,12 @@ contains
     igrid=0
 
  
+    call start_timer(tmr_std_allocation)
     allocate(send_array(naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating send_array in do_blip_gradgrad_transform: ",&
          naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block)
     call reg_alloc_mem(area_basis,naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block,type_dbl)
+    call stop_timer(tmr_std_allocation)
     send_array(:) = zero
     DO naba_blk=1,naba_blk_supp%no_naba_blk(iprim)! naba blks in NOPG order
        ! iprim : primary seq. no. of the atom
@@ -1481,10 +1530,12 @@ contains
           enddo    ! y-direction in a block
        enddo    ! z-direction in a block
     END DO    ! Loop over naba blocks for this primary atom
+    call start_timer(tmr_std_allocation)
     deallocate(inter_1,inter_2,STAT=stat)
     if(stat/=0) call cq_abort(' ERROR in do_blip_gradgrad_transform_new: deallocation')
     call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
     call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine do_blip_gradgrad_transform_new
 !!***
@@ -1512,6 +1563,8 @@ contains
 !!    Added ROBODoc header, stripped variables list
 !!   11/06/2001 dave
 !!    Added GenComms
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine inverse_blip_transform_new(myid,dsupport, data_dblip, n_prim)
@@ -1535,6 +1588,7 @@ contains
     ! local variables
     integer :: iprim, nsf_recv, spec
 
+    call start_timer(tmr_std_basis)
     do iprim = 1, bundle%mx_iprim
        !  dsupport shows values on integration grids
        !  Bundle responsible nodes accumulates their 
@@ -1559,6 +1613,7 @@ contains
                nsf_recv, Extent(spec))
        endif
     end do
+    call stop_timer(tmr_std_basis)
     return
   end subroutine inverse_blip_transform_new
 !!***
@@ -1586,6 +1641,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   17/05/2001 dave
 !!    Removed NSF=4 dependencies
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine do_inverse_blip_new( myid, iprim, blip_number, bliparraysize,data_dblip, &
@@ -1649,13 +1706,17 @@ contains
     !**************************************************************************
     !     Start of subroutine
 
+    call start_timer(tmr_std_allocation)
     allocate(inter_1(NSF,-bliparraysize:bliparraysize,-bliparraysize:bliparraysize,2*extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_1 !',stat)
     call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
+    call stop_timer(tmr_std_allocation)
     inter_1=zero
+    call start_timer(tmr_std_allocation)
     allocate(inter_2(NSF,-bliparraysize:bliparraysize,   2*extent+1 ,2*extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_2 !',stat)
     call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call stop_timer(tmr_std_allocation)
     inter_2=zero
 
     rec_sgs = one / support_grid_spacing
@@ -1852,6 +1913,7 @@ contains
           END DO
        END DO
     END DO
+    call start_timer(tmr_std_allocation)
     deallocate(inter_1,inter_2,STAT=stat)
     if(stat/=0) call cq_abort('Error deallocating memory to inter_1 !',stat)
     call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
@@ -1859,6 +1921,7 @@ contains
     call reg_dealloc_mem(area_basis,size(send_array),type_dbl)
     deallocate(send_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating send_array in do_inverse_blip: ",stat)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine do_inverse_blip_new
 !!***
@@ -1940,13 +2003,17 @@ contains
           nsize = nsize+comBG%no_naba_blk(inode,iprim)
        enddo
        !write(io_lun,*) 'Allocating send_array: ',nsize
+       call start_timer(tmr_std_allocation)
        allocate(send_array(nsize*nunit_recv),STAT=stat)
        if(stat/=0) call cq_abort("Error allocating send_array in collect_result: ", nsize,nunit_recv)
        call reg_alloc_mem(area_basis,nsize*nunit_recv,type_dbl)
+       call stop_timer(tmr_std_allocation)
        send_array(:)=zero
+       call start_timer(tmr_std_allocation)
        allocate(nrecv_req(comBG%no_recv_node(iprim)), STAT=ierr)
        if(ierr/=0) call cq_abort("Error allocating nrecv_req in collect_result: ",comBG%no_recv_node(iprim),ierr)
        call reg_alloc_mem(area_basis,comBG%no_recv_node(iprim),type_int)
+       call stop_timer(tmr_std_allocation)
        do inode=1,comBG%no_recv_node(iprim)
           nnd_rem=comBG%list_recv_node(inode,iprim)
           if(inode == 1) then
@@ -1978,9 +2045,11 @@ contains
           msize=max(msize,comBG%no_sent_pairs(jnode,iprim)*nunit_send)
        end do
        !write(io_lun,*) 'Allocating recv_array: ',nsize
+       call start_timer(tmr_std_allocation)
        allocate(recv_array(msize),STAT=stat)
        if(stat/=0) call cq_abort("Error allocating recv_array in collect_result: ",nsize)
        call reg_alloc_mem(area_basis,msize,type_dbl)
+       call stop_timer(tmr_std_allocation)
        isend=comBG%ibeg_recv_call(iprim)-1
        off = 0
        do jnode=1,comBG%no_send_node(iprim)
@@ -2066,16 +2135,20 @@ contains
              endif
           endif      ! if it is remote...
        enddo      ! Loop over remote nodes
+       call start_timer(tmr_std_allocation)
        deallocate(nrecv_req, STAT=ierr)
        if(ierr/=0) call cq_abort("Error deallocating nrecv_req in collect_result: ",comBG%no_recv_node(iprim),ierr)
        call reg_dealloc_mem(area_basis,comBG%no_recv_node(iprim),type_int)
+       call stop_timer(tmr_std_allocation)
     endif       ! if there are sending nodes for iprim...
     if(comBG%no_send_node(iprim)>0) then
        if(allocated(recv_array)) then
+          call start_timer(tmr_std_allocation)
           nullify(recv_ptr)
           deallocate(recv_array,STAT=stat)
           if(stat/=0) call cq_abort("Error deallocating recv_array in collect_result: ",nsize)
           call reg_dealloc_mem(area_basis,msize,type_dbl)
+          call stop_timer(tmr_std_allocation)
        else
           write(io_lun,fmt='(2x,"Possible problem in collect_result: recv_array not allocated")')
        end if
@@ -2177,6 +2250,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   17/05/2001 dave
 !!    Removed the NSF=4 dependencies
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine do_inverse_blip_to_grad_new( myid, direction, iprim, blip_number, bliparraysize,data_dblip, &
@@ -2233,13 +2308,17 @@ contains
     !!     this variables should be passed from (blocks)
     integer :: nblkx,nblky,nblkz
 
+    call start_timer(tmr_std_allocation)
     allocate(inter_1(NSF,-bliparraysize:bliparraysize,-bliparraysize:bliparraysize,2*extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_1 !',stat)
     call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
+    call stop_timer(tmr_std_allocation)
     inter_1=zero
+    call start_timer(tmr_std_allocation)
     allocate(inter_2(NSF,-bliparraysize:bliparraysize,   2*extent+1 ,2*extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_2 !',stat)
     call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call stop_timer(tmr_std_allocation)
     inter_2=zero
 
     rec_sgs = one / support_grid_spacing
@@ -2482,6 +2561,7 @@ contains
           END DO
        END DO
     END DO
+    call start_timer(tmr_std_allocation)
     deallocate(inter_1,inter_2,STAT=stat)
     if(stat/=0) call cq_abort('Error deallocating memory to inter_1 !',stat)
     call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
@@ -2489,6 +2569,7 @@ contains
     call reg_dealloc_mem(area_basis,size(send_array),type_dbl)
     deallocate(send_array,STAT=stat)
     if(stat/=0) call cq_abort('Error deallocating send_array in inverse_blip_to_grad !',stat)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine do_inverse_blip_to_grad_new
 !!***

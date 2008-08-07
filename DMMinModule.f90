@@ -41,12 +41,15 @@
 !!    Various small changes throughout code: mainly bug fixes
 !!   2008/02/01 17:46 dave
 !!    Changes to write output to file not stdout
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
 module DMMin
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_densitymat
 
   integer :: maxpulayDMM
   real(double) :: LinTol_DMM
@@ -102,6 +105,8 @@ contains
 !!    Added dump_matrix call at the end of minimisation
 !!   16:43, 10/05/2005 dave 
 !!    Added local dataM3
+!!   2008/05/22 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine FindMinDM(n_L_iterations, number_of_bands,  &
@@ -109,7 +114,7 @@ contains
 
     use datatypes
     use numbers
-    use global_module, ONLY: iprint_DM
+    use global_module, ONLY: iprint_DM,IPRINT_TIME_THRES1
     use mult_module, ONLY: matrix_transpose, matT, matTtran, matL, matK, matrix_sum
     use McWeeny, ONLY: InitMcW, McWMin
     use PosTan, ONLY: max_iters, cscale, PulayE, PulayR, &
@@ -117,6 +122,7 @@ contains
     use DiagModule, ONLY: FindEvals, diagon
     use io_module, ONLY: dump_matrix
     use energy, ONLY: entropy
+    use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
 
     implicit none
 
@@ -131,10 +137,13 @@ contains
     real(double) :: LastE
     real(double), parameter :: eprec = 1.0e-12_double
     real(double), save :: delta_e
+    type(cq_timer) :: tmr_l_iter
 
+    call start_timer(tmr_std_densitymat)
     entropy = zero
     if(diagon) then ! Use exact diagonalisation to get K
        call FindEvals(2.0_double*number_of_bands)
+       call stop_timer(tmr_std_densitymat)
        return
     end if
     if(inode==ionode) write(io_lun,*) 'Welcome to FindDMMin, tol: ',tolerance, n_L_iterations
@@ -147,6 +156,7 @@ contains
     ! Now minimise the energy
     ndone = 0
     do while(.NOT.done)
+       call start_timer(tmr_l_iter,WITH_LEVEL)
        if(resetL.OR.inflex) then ! Reset L to McW
           call InitMcW(number_of_bands,inode,ionode)
           call McWMin( n_L_iterations, delta_e ) 
@@ -164,6 +174,7 @@ contains
        endif
        if(problem) resetL = .true.
        problem = .true. ! If we're not done, then this kicks us back to early
+       call stop_print_timer(tmr_l_iter,"FindMinDM iteration",IPRINT_TIME_THRES1)
     enddo ! end of do while (.NOT.done)
     ! *** Add frequency of output here *** !
     call dump_matrix("L",matL,inode)
@@ -177,6 +188,7 @@ contains
        call fit_coeff(PulayC, PulayBeta,PulayE, PulayR,ndone)
        if(inode==ionode) write(io_lun,6) PulayC,PulayBeta
     endif
+    call stop_timer(tmr_std_densitymat)
 6   format(2x,'dE to dR parameters - C: ',f15.8,' beta: ',f15.8)
 7   format(2x,i4,2f15.8)
 8   format(2x,'Welcome to minimise_energy. Tolerance is ',f15.8)
@@ -235,7 +247,8 @@ contains
     use primary_module, ONLY: bundle
     use PosTan, ONLY: PulayR, PulayE
     use GenComms, ONLY: cq_abort, gsum
-    use global_module, ONLY: iprint_DM
+    use global_module, ONLY: iprint_DM,IPRINT_TIME_THRES1
+    use timer_module, ONLY: cq_timer,start_timer, stop_print_timer, WITH_LEVEL
 
     implicit none
 
@@ -249,7 +262,9 @@ contains
     real(double) :: g0, interpG, g1, zeta
     real(double) :: e_dot_n, n_dot_n, energy0, energy1, electrons
     integer :: matM3, matSM3, matSphi, mat_temp, mat_search
+    type(cq_timer) :: tmr_l_tmp1, tmr_l_iter
 
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     matM3 = allocate_temp_matrix(Lrange,0)
     matSM3 = allocate_temp_matrix(Lrange,0)
     matSphi = allocate_temp_matrix(Lrange,0)
@@ -281,11 +296,13 @@ contains
        call matrix_sum(one,mat_search,(e_dot_n)/(n_dot_n),matSphi)
        ! Here, we can't alter M3 directly: lineMinL expects REAL gradient
     endif
+    call stop_print_timer(tmr_l_tmp1,"earlyDM - Preliminaries",IPRINT_TIME_THRES1)
     !-----------!
     ! MAIN LOOP !
     !-----------!
     delta_e = zero
     do n_iter = 1,n_L_iterations
+       call start_timer(tmr_l_iter,WITH_LEVEL)
        ! Gradient before line min
        g0 = matrix_product_trace(matM3,matSM3)
        if(inode==ionode.AND.iprint_DM>=1) write(io_lun,1) n_iter, energy0, g0
@@ -301,6 +318,7 @@ contains
           call free_temp_matrix(matSphi)
           call free_temp_matrix(matSM3)
           call free_temp_matrix(matM3)
+          call stop_print_timer(tmr_l_iter,"an earlyDM iteration",IPRINT_TIME_THRES1)
           return !This is a panic sign !
        endif
        ! Gradient after line min - assumes main_matrix_mult at end of lineMinL
@@ -355,6 +373,7 @@ contains
           call free_temp_matrix(matSphi)
           call free_temp_matrix(matSM3)
           call free_temp_matrix(matM3)
+          call stop_print_timer(tmr_l_iter,"an earlyDM iteration",IPRINT_TIME_THRES1)
           return
        !else if(abs(delta_E)<tolerance) then
        !   if(inode==ionode.AND.iprint_DM>=1) write(io_lun,1) n_iter, energy0, g0
@@ -364,6 +383,7 @@ contains
        !   ndone = n_iter
        !   return
        endif
+       call stop_print_timer(tmr_l_iter,"an earlyDM iteration",IPRINT_TIME_THRES1)
     enddo ! End of main loop
     call free_temp_matrix(mat_search)
     call free_temp_matrix(mat_temp)
@@ -426,7 +446,8 @@ contains
     use Pulay
     use PosTan, ONLY: PulayR, PulayE, max_iters
     use GenComms, ONLY: cq_abort, gsum
-    use global_module, ONLY: iprint_DM
+    use global_module, ONLY: iprint_DM,IPRINT_TIME_THRES1
+    use timer_module, ONLY: cq_timer,start_timer, stop_print_timer, WITH_LEVEL
 
     implicit none
 
@@ -443,7 +464,9 @@ contains
     real(double) :: Aij(maxpulayDMM, maxpulayDMM), alph(maxpulayDMM)
     real(double) :: Aij1(maxpulayDMM*maxpulayDMM)
     integer :: n_iter, i,j, pul_mx, npmod
+    type(cq_timer) :: tmr_l_tmp1,tmr_l_iter
 
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     if(ndone>n_L_iterations) call cq_abort('lateDM: too many L iterations', &
          ndone, n_L_iterations)
     do i=1,maxpulayDMM
@@ -481,11 +504,13 @@ contains
     call matrix_sum(zero,mat_SGstore(1),-one,matSM3)
     call matrix_sum(zero,mat_Gstore(1),-one,matM3)
     call matrix_sum(zero,mat_Lstore(1),one,matL)
+    call stop_print_timer(tmr_l_tmp1,"lateDM - Preliminaries",IPRINT_TIME_THRES1)
     !-----------!
     ! MAIN LOOP !
     !-----------!
     g0 = matrix_product_trace(matM3,matSM3)
     do n_iter = 1,n_L_iterations
+       call start_timer(tmr_l_iter,WITH_LEVEL)
        if(inode==ionode.AND.iprint_DM>=1) write(io_lun,1) n_iter, energy0, g0
 1      format('Iteration: ',i3,' Energy: ',e20.12,' Residual: ',e20.12)
        ! Storage for pulay DMs/residuals
@@ -586,6 +611,7 @@ contains
              call free_temp_matrix(mat_Gstore(i))
              call free_temp_matrix(mat_Lstore(i))
           end do
+          call stop_print_timer(tmr_l_iter,"a lateDM iteration",IPRINT_TIME_THRES1)
           return
        else if(g1>2.0_double*g0) then
           if(inode==ionode) write(io_lun,*) 'Panic ! Residual increase in lateDM'
@@ -600,6 +626,7 @@ contains
              call free_temp_matrix(mat_Gstore(i))
              call free_temp_matrix(mat_Lstore(i))
           end do
+          call stop_print_timer(tmr_l_iter,"a lateDM iteration",IPRINT_TIME_THRES1)
           return
        endif
        ! Replace step with real L
@@ -608,6 +635,7 @@ contains
        call matrix_sum(zero,mat_Lstore(npmod),one,matL)
        g0 = g1
        energy0 = energy1
+       call stop_print_timer(tmr_l_iter,"a lateDM iteration",IPRINT_TIME_THRES1)
     enddo
     if(g1<tolerance*100.0_double) done = .true.
     call free_temp_matrix(mat_temp)

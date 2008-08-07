@@ -492,7 +492,7 @@ contains
           if( (l_table_kept%no_l(l) .le. 0) .or. (l_table_kept%occ_l(l) .le. 0) ) then
             write(*,'(a,i2,a)') "WARNING: In 'MaximumZetaPerChannel', channel l = ", l, &
                                 " user-defined zeta value will be ignored"
-            write(*,'(a)'), "         There are no occupied orbitals for that channel" 
+            write(*,'(a)') "         There are no occupied orbitals for that channel" 
           else 
             if(l_table_kept%no_l(l) .le. maximum_zeta) then
               l_expected%no_l(l)=maximum_zeta
@@ -509,7 +509,7 @@ contains
           if( (l_table_kept%no_l(l) .ge. 1) .or. (l_table_kept%occ_l(l) .ge. 1) ) then
             write(*,'(a,i2,a)') "WARNING: In 'MaximumZetaPerPolChannel', channel l = ", l, &
                                 " user-defined zeta value will be ignored"
-            write(*,'(a)'), "         This is not a polarisation channel" 
+            write(*,'(a)') "         This is not a polarisation channel" 
           else 
             if(l_table_kept%no_l(l) .le. maximum_zeta) then
               l_expected%no_l(l)=maximum_zeta

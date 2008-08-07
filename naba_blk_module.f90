@@ -26,11 +26,14 @@
 !!    Added ROBODoc headers
 !!   13:52, 10/02/2003 drb 
 !!    Added deallocation routines (or at least tidied them)
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
 module naba_blk_module
 
   use datatypes
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
 
   implicit none
 
@@ -197,7 +200,8 @@ contains
 !!  CREATION DATE
 !!   July 2000
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine alloc_naba_blk(set,mx1,mx2)
@@ -212,6 +216,7 @@ contains
     type(naba_blk_of_atm),intent(out)::set
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     set%mx_iprim=mx1 ; set%mx_naba_blk=mx2
     allocate(set%no_naba_blk(mx1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to no_naba_blk !',stat)
@@ -234,6 +239,7 @@ contains
     allocate(set%offset_naba_blk(mx2,mx1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to offset_naba_blk !',stat)
     call reg_alloc_mem(area_integn, 7*mx1+3*mx1*mx2,type_int)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine alloc_naba_blk
 !!***
@@ -258,6 +264,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2006/10/20 09:56 dave
 !!    Changed attribute of set
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine dealloc_naba_blk(set)
@@ -271,11 +279,13 @@ contains
     type(naba_blk_of_atm),intent(inout)::set
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     call reg_dealloc_mem(area_integn, 7*set%mx_iprim+3*set%mx_iprim*set%mx_naba_blk,type_int)
     deallocate(set%offset_naba_blk, set%send_naba_blk, set%list_naba_blk,&
          set%nzmax, set%nzmin, set%nymax, set%nymin, set%nxmax, set%nxmin,&
          set%no_naba_blk, STAT=stat)
     if(stat /= 0) call cq_abort(' ERROR in deallocating naba_blk ',stat)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine dealloc_naba_blk
 !!***
@@ -300,6 +310,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2006/07/04 08:14 dave
 !!    Added allocates for variable NSF arrays
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine alloc_naba_atm(set,mx1,mx2,mx3)
@@ -314,6 +326,7 @@ contains
     type(naba_atm_of_blk),intent(out)::set
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     set%mx_iprim_blk=mx1 
     set%mx_part=mx2
     set%mx_atom=mx3
@@ -340,6 +353,7 @@ contains
     allocate(set%list_atom_by_halo(mx3,mx1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to list_atom_by_halo !',stat)
     call reg_alloc_mem(area_integn,5*mx1+3*mx2*mx1+3*mx3*mx1,type_int)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine alloc_naba_atm
 !!***
@@ -366,6 +380,8 @@ contains
 !!    Added deallocate for new variable NSF arrays
 !!   2006/10/20 09:56 dave
 !!    Changed attribute of set
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine dealloc_naba_atm(set)
@@ -379,12 +395,14 @@ contains
     type(naba_atm_of_blk),intent(inout)::set
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     call reg_dealloc_mem(area_integn,5*set%mx_iprim_blk+3*set%mx_part*set%mx_iprim_blk+&
          3*set%mx_atom*set%mx_iprim_blk,type_int)
     deallocate(set%list_atom_by_halo, set%list_atom, set%ibeg_orb_atom, set%ibegin_part, &
          set%no_atom_on_part, set%list_part, set%ibegin_blk, set%ibegin_blk_orb, &
          set%no_of_orb, set%no_of_atom, set%no_of_part, STAT=stat)
     if(stat /= 0) call cq_abort('ERROR in deallocating naba_atm',stat)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine dealloc_naba_atm
 !!***
@@ -407,7 +425,8 @@ contains
 !!  CREATION DATE
 !!   July 2000
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine alloc_halo_atm(set,mx1,mx2,mx3)
@@ -422,6 +441,7 @@ contains
     type(halo_atm_of_blk),intent(out)::set
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     set%mx_node=mx1 
     set%mx_part=mx2
     set%mx_mcover=mx3
@@ -435,6 +455,7 @@ contains
     allocate(set%norb(mx3),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to norb !',stat)
     call reg_alloc_mem(area_integn,mx1+mx2+2*mx3,type_int)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine alloc_halo_atm
 !!***
@@ -459,6 +480,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2006/10/20 09:56 dave
 !!    Changed attribute of set
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine dealloc_halo_atm(set)
@@ -472,9 +495,11 @@ contains
     type(halo_atm_of_blk),intent(inout)::set
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     call reg_dealloc_mem(area_integn,set%mx_node+set%mx_part+2*set%mx_mcover,type_int)
     deallocate(set%norb,set%ihalo, set%list_of_part, set%list_of_node, STAT=stat)
     if(stat /= 0) call cq_abort('ERROR in deallocating halo_atm',stat)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine dealloc_halo_atm
 !!***
@@ -497,7 +522,8 @@ contains
 !!  CREATION DATE
 !!   July 2000 and 2006/09/05
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine alloc_comm_in_BG1(set,mx1,mx2)
@@ -513,6 +539,7 @@ contains
     set%mx_iprim=mx1
     set%mx_recv_node=mx2
 
+    call start_timer(tmr_std_allocation)
     allocate(set%no_recv_node(mx1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to no_recv_node !',stat)
     allocate(set%list_recv_node(mx2,mx1),STAT=stat)
@@ -523,6 +550,7 @@ contains
     if(stat/=0) call cq_abort('Error allocating memory to no_send_node !',stat)
     allocate(set%ibeg_recv_call(mx1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to ibeg_recv_call !',stat)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine alloc_comm_in_BG1
 !!***
@@ -545,7 +573,8 @@ contains
 !!  CREATION DATE
 !!   July 2000 and 2006/09/05
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine alloc_comm_in_BG2(set,mx3,mx4,mx5)
@@ -562,6 +591,7 @@ contains
     set%mx_pair     =mx4
     set%mx_recv_call=mx5
 
+    call start_timer(tmr_std_allocation)
     allocate(set%list_send_node(mx3,set%mx_iprim),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to list_send_node !',stat)
     allocate(set%no_sent_pairs(mx3,set%mx_iprim),STAT=stat)
@@ -570,6 +600,7 @@ contains
     if(stat/=0) call cq_abort('Error allocating memory to table_blk !',stat)
     allocate(set%table_pair(mx4,mx5),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to table_pair !',stat)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine alloc_comm_in_BG2
 !!***
@@ -594,6 +625,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2006/10/20 09:56 dave
 !!    Changed attribute of set
+!!   2008/05/16 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine dealloc_comm_in_BG(set)
@@ -605,11 +638,13 @@ contains
     type(comm_in_BG),intent(inout) :: set
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     deallocate(set%ibeg_recv_call, set%table_pair, set%table_blk, &
          set%no_sent_pairs, set%list_send_node, set% no_send_node, &
          set%no_naba_blk, set%list_recv_node, &
          set%no_recv_node, STAT=stat)
     if(stat /= 0) call cq_abort(' ERROR in deallocating comBG ',stat)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine dealloc_comm_in_BG
 !!***

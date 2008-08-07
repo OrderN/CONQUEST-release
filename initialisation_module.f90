@@ -19,12 +19,16 @@
 !!  MODIFICATION HISTORY
 !!   2008/02/06 08:06 dave
 !!    Changed for output to file not stdout
+!!   2008/05/15 ast
+!!    Added some timers
 !!  SOURCE
 !!
 module initialisation
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_initialisation,tmr_std_densitymat,tmr_std_matrices
+  use timer_module, ONLY: init_timing_system
 
   implicit none
 
@@ -82,6 +86,8 @@ contains
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2008/05/15 ast
+!!    Added some timers
 !!  SOURCE
 !!
   subroutine initialise(vary_mu, fixed_potential, number_of_bands, mu, total_energy)
@@ -109,6 +115,9 @@ contains
 
     character(len=40) :: restart_file
 
+    call init_timing_system(inode)
+    call start_timer(tmr_std_initialisation)
+
     ! Read input
     call init_reg_mem
     call read_and_write(start, start_L,&
@@ -130,6 +139,8 @@ contains
     call initial_phis( mu, restart_file, read_phi, vary_mu, start)
 
     call initial_H( start, start_L, find_chdens, fixed_potential, vary_mu, number_of_bands, mu, total_energy)
+
+    call stop_timer(tmr_std_initialisation)
     return
   end subroutine initialise
 !!***
@@ -224,6 +235,7 @@ contains
     integer :: iblock, ipoint,igrid,ix,iy,iz
     real(double) :: xblock,yblock,zblock,dcellx_block,dcelly_block,dcellz_block
     real(double) :: dx,dy,dz,dcellx_grid,dcelly_grid,dcellz_grid
+
     ! Set organisation of blocks of grid-points.
     ! set_blocks determines the number of blocks on this node,
     ! and makes a list of these blocks.    
@@ -535,6 +547,7 @@ contains
           !     write(io_lun,*) 'S matrix for normalisation on Node= ',inode
           call get_matrix_elements_new(inode-1,rem_bucket(1),matS,supportfns,supportfns)
           iprim=0
+          call start_timer(tmr_std_matrices)
           do np=1,bundle%groups_on_node
              if(bundle%nm_nodgroup(np) > 0) then
                 do ni=1,bundle%nm_nodgroup(np)
@@ -554,6 +567,7 @@ contains
                 enddo ! ni
              endif ! if the partition has atoms
           enddo ! np
+          call stop_timer(tmr_std_matrices)
           call my_barrier()
           if(inode==ionode.AND.iprint_init>1) &
                write(io_lun,fmt='(10x,"Completed normalise_support")')
@@ -687,8 +701,12 @@ contains
        call initial_L( )
        call my_barrier()
        if (inode.eq.ionode.AND.iprint_init>1) write(io_lun,*) 'Got L matrix'
-       if(vary_mu) &
+       if(vary_mu) then
+            ! This cannot be timed within the routine
+            call start_timer(tmr_std_densitymat)
             call correct_electron_number( iprint_init, number_of_bands, inode, ionode)
+            call stop_timer(tmr_std_densitymat)
+       end if
     end if
     if(restart_L) call grab_matrix("L",matL,inode)
 

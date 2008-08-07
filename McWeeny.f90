@@ -29,10 +29,13 @@
 !!    Changed iprint statements
 !!   2008/02/01 17:48 dave
 !!    Changes for output to file not stdout
+!!   2008/07/31 ast
+!!    Added timers
 !!***
 module McWeeny
 
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer, stop_timer, tmr_std_matrices
 
   implicit none
 
@@ -63,6 +66,7 @@ contains
 !!    Tidied and indented
 !!   10:38, 16/05/2007 drb 
 !!    Moved matrix_sum to stop error at end
+
 !!  SOURCE
 !!
   subroutine McWMin( n_L_iterations, deltaE)
@@ -71,8 +75,9 @@ contains
     use numbers
     use matrix_data, ONLY: Lrange
     use mult_module, ONLY: allocate_temp_matrix, matrix_sum, free_temp_matrix, matL, matH, matS, matT, symmetrise_L
-    use global_module, ONLY: iprint_DM
+    use global_module, ONLY: iprint_DM, IPRINT_TIME_THRES1, IPRINT_TIME_THRES2
     use GenComms, ONLY: inode, ionode
+    use timer_module, ONLY: cq_timer, start_timer, stop_print_timer, WITH_LEVEL
 
     implicit none
 
@@ -83,14 +88,16 @@ contains
     ! Local variables
     integer :: n_iterations
     integer :: matRhoNew, mat_oldL
-
     real(double) :: cn, oldE, omega1, c_old
+    type(cq_timer) :: tmr_l_tmp1,tmr_l_tmp2
 
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     oldE = 1.0e30_double
     mat_oldL = allocate_temp_matrix(Lrange,0)
     matRhoNew = allocate_temp_matrix(Lrange,0)
     call matrix_sum(zero,mat_oldL,one,matL)
     do n_iterations=1,n_L_iterations
+       call start_timer(tmr_l_tmp2,WITH_LEVEL)
        if (inode==ionode.and.iprint_DM>=1) write(io_lun,2) n_iterations
 
        ! find new rho and energy
@@ -99,6 +106,7 @@ contains
        if(omega1.GT.oldE.OR.cn.GT.one.OR.cn.LT.zero) then
           if(inode==ionode.AND.iprint_DM>0) write(io_lun,4) c_old, oldE, cn,omega1
 4         format(2x,'Rounding error found: ',4f15.6)
+          call stop_print_timer(tmr_l_tmp2,"a McWeeny iteration",IPRINT_TIME_THRES2)
           exit
        endif
        deltaE = omega1 - oldE
@@ -108,11 +116,13 @@ contains
        if(inode==ionode.AND.iprint_DM>=0) write(io_lun,5) oldE,c_old
 5      format(3x,'Energy: ',f15.6,' Mid-point: ',f15.6)
        call symmetrise_L()
+       call stop_print_timer(tmr_l_tmp2,"a McWeeny iteration",IPRINT_TIME_THRES2)
     end do
     if(n_iterations<3) call matrix_sum(zero,matL,one,mat_oldL)
     call free_temp_matrix(matRhoNew)
     call free_temp_matrix(mat_oldL)
     if (inode.eq.ionode.and.iprint_DM.ge.1) write(io_lun,3) n_iterations, omega1
+    call stop_print_timer(tmr_l_tmp1,"MCWEENY",IPRINT_TIME_THRES1)
 2   format(/,20x,'McWeeny L iteration:',i5)
 3   format(/,20x,'Functional value reached after ',i5,' L iterations: ', &
          /,20x,' Omega: ', f15.7)
@@ -158,13 +168,14 @@ contains
 
     use datatypes
     use numbers
-    use global_module, ONLY: iprint_DM, ni_in_cell
+    use global_module, ONLY: iprint_DM, ni_in_cell, IPRINT_TIME_THRES1
     use species_module, ONLY: species, nsf_species
     use mult_module, ONLY: allocate_temp_matrix, matH, matS, matT, matL, mult, &
          matrix_trace, matrix_product_trace, matrix_product, T_S_TS, free_temp_matrix
     use matrix_data, ONLY: Lrange, Srange, TSrange
     use GenBlas
     use GenComms, ONLY: gsum, my_barrier, gmin, gmax
+    use timer_module, ONLY: cq_timer,start_timer, stop_print_timer, WITH_LEVEL
 
     implicit none
 
@@ -177,7 +188,9 @@ contains
     real(double) :: A, mu1, mu2, mubar, lambda
     integer :: matXHX, mat_temp, matTS
     integer :: length, i
+    type(cq_timer) :: tmr_l_tmp1
 
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     if(inode==ionode.AND.iprint_DM>1) write(io_lun,1)
 1   format(1x,'Welcome to InitMcW')
     ! We must first initialise rho
@@ -225,6 +238,7 @@ contains
     call free_temp_matrix(matTS)
     call free_temp_matrix(mat_temp)
     call free_temp_matrix(matXHX)
+    call stop_print_timer(tmr_l_tmp1,"McWeeny initialisation",IPRINT_TIME_THRES1)
     return
   end subroutine InitMcW
 !!***
@@ -343,7 +357,7 @@ contains
   End Subroutine McW_matrix_multiply
 !!***
 
-! sbrt McWXHX: Pre- and post- multiplies H by S^-1, and returns the result 
+! sbrt McWXHX: Pre- and post- multiplies H by S^-1, and returns the result
 ! to both L range (bab) and S range (tm)
   Subroutine McWXHX(matA, matB, matBAB, mat_temp)
 
@@ -430,6 +444,7 @@ contains
     iprim = 0
     allocate(Hmin(maxnsf),Hmax(maxnsf),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating in GetHLimits: ",stat,nsfi)
+    call start_timer(tmr_std_matrices)
     do np = 1, bundle%groups_on_node
        if(bundle%nm_nodgroup(np)>0) then
           do nat = 1,bundle%nm_nodgroup(np)
@@ -472,6 +487,7 @@ contains
           end do ! nat = bundle%nm_nodgroup
        endif
     enddo
+    call stop_timer(tmr_std_matrices)
     deallocate(Hmin,Hmax)
     return
   end subroutine GetHLimits

@@ -67,11 +67,14 @@
 !!    Removed inappropriate common nsf declaration
 !!   2008/02/04 08:23 dave
 !!    Changed for output to file not stdout
+!!   2008/05/19 ast
+!!    Added timers
 !!  SOURCE
 !!
 module ScalapackFormat
 
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
 
   implicit none
 
@@ -234,6 +237,8 @@ contains
 !!    Added ROBODoc header, removed extraneous write statements
 !!   16/04/2002 dave
 !!    Added salutation at start of subroutine
+!!   2008/05/19 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine allocate_arrays
@@ -255,6 +260,7 @@ contains
     maxrow = aint(real(blocks_r/proc_rows))+1
     maxcol = aint(real(blocks_c/proc_cols))+1
     if(iprint_DM>1) write(io_lun,*) 'maxrow, maxcol: ',maxrow,maxcol
+    call start_timer(tmr_std_allocation)
     allocate(mapx(numprocs,maxrow,maxcol),mapy(numprocs,maxrow,maxcol),STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc map",stat)
     allocate(procid(proc_rows,proc_cols),STAT=stat)
@@ -271,6 +277,7 @@ contains
     allocate(CC_to_SC(maxpartscell,maxatomspart,maxnsf),CQ2SC_row_info(matrix_size),&
          my_row(matrix_size),proc_start(numprocs), STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc CC2SC, CQ2SC",stat)
+    call stop_timer(tmr_std_allocation)
     return
 1   format(2x,'AllocArr: block sizes are: ',2i5)
   end subroutine allocate_arrays
@@ -295,6 +302,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   17/06/2002 dave
 !!    Added ROBODoc header
+!!   2008/05/19 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine deallocate_arrays
@@ -308,6 +317,7 @@ contains
     integer :: stat
 
     if(iprint_DM>2) write(io_lun,*) myid,' Starting Deallocate Arrays'
+    call start_timer(tmr_std_allocation)
     deallocate(CC_to_SC,CQ2SC_row_info, my_row,proc_start, STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not dealloc CC2SC, CQ2SC",stat)
     deallocate(ref_row_block_atom,&
@@ -323,6 +333,7 @@ contains
     if(stat/=0) call cq_abort("ScalapackFormat: Could not dealloc procid",stat)
     deallocate(mapx,mapy,STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not dealloc map",stat)
+    call stop_timer(tmr_std_allocation)
     return
 1   format(2x,'AllocArr: block sizes are: ',2i5)
   end subroutine deallocate_arrays
@@ -354,6 +365,8 @@ contains
 !!    Added salutation at start of subroutine
 !!   01/05/2002 dave
 !!    Changed so that Scalapack grid is only written by one processor
+!!   2008/05/19 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine ref_to_SC_blocks 
@@ -369,6 +382,7 @@ contains
     ! Construct processor ids
     n = 1
     if(iprint_DM>1.AND.myid==0) write(io_lun,fmt="(2x,'Scalapack Processor Grid')") 
+
     do i=1,proc_rows
        do j=1,proc_cols
           procid(i,j) = n
@@ -451,6 +465,8 @@ contains
 !!    Significantly increased description of purpose, removed
 !!    a few unnecessary comments, tidied and rearranged and
 !!    added comments.
+!!   2008/05/19 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine make_maps 
@@ -583,6 +599,8 @@ contains
 !!    number of support functions on atom i
 !!   16/04/2002 dave
 !!    Added salutation at start of subroutine
+!!   2008/05/19 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine find_SC_row_atoms 
@@ -688,6 +706,8 @@ contains
 !!    row-by-row (i.e. by support function) rather than atom-by-atom
 !!   16/04/2002 dave
 !!    Added salutation at start of subroutine
+!!   2008/05/19 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine find_ref_row_atoms 
@@ -773,6 +793,8 @@ contains
 !!    atom-by-atom to row-by-row (i.e. by individual support functions)
 !!   16/04/2002 dave
 !!    Added salutation at start of subroutine
+!!   2008/05/19 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine find_SC_col_atoms  

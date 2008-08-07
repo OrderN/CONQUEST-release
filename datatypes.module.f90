@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: datatypes.module.f90,v 1.2 2002/04/19 13:56:24 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module datatypes
 ! ------------------------------------------------------------------------------
@@ -27,7 +27,7 @@
 module datatypes
 
   ! RCS tag for object file identification 
-  character(len=80), save, private :: RCSid = "$Id: datatypes.module.f90,v 1.2 2002/04/19 13:56:24 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
   ! This picks a the most memory efficient integer kind
   ! that can hold number from -10**6 to 10**6. This

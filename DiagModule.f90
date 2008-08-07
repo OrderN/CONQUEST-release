@@ -75,6 +75,8 @@
 !!    for E_Fermi
 !!   2008/02/01 17:46 dave
 !!    Changes for output to file not stdout
+!!   2008/07/31 ast
+!!    Added timers
 !!***
 module DiagModule
 
@@ -82,6 +84,7 @@ module DiagModule
   use global_module, ONLY: io_lun
   use GenComms, ONLY: cq_abort
   use numbers, ONLY: zero
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_matrices
 
   implicit none
 
@@ -1238,6 +1241,7 @@ contains
     recv_proc = myid
     ! Distribute data: loop over processors and issue sends and receives as appropriate
     SCmat = zero
+    call start_timer(tmr_std_matrices)
     do i=1,numprocs
        if(iprint_DM>=4) write(io_lun,1) myid,i,send_proc,recv_proc
        ! Sizes
@@ -1363,6 +1367,7 @@ contains
        if(recv_proc.LT.0) recv_proc = numprocs-1
        call my_barrier()
     end do ! End loop over processors
+    call stop_timer(tmr_std_matrices)
     return
 1   format(10x,'Proc: ',i5,' Iter: ',i5,' Send/Recv: ',2i5)
 2   format(10x,'Proc: ',i5,' done send/recv',i5)
@@ -1888,6 +1893,7 @@ contains
     logical :: flag
     integer :: FSCpart, ipart
 
+    call start_timer(tmr_std_matrices)
     if(iprint_DM>=2.AND.myid==0) write(io_lun,fmt='(10x,"Entering buildK ",i4)') matA
     ! Allocate data and zero arrays
     allocate(ints(numprocs,bundle%mx_iprim),current_loc_atoms(numprocs),atom_list(numprocs,bundle%mx_iprim),&
@@ -2125,6 +2131,7 @@ contains
              RecvBuffer(j,1:recv_info(recv_proc+1)%orbs) = RecvBuffer(j,1:recv_info(recv_proc+1)%orbs)*0.5_double*occs(j)
           end do
           orb_count = 0
+          call start_timer(tmr_std_matrices)
           do atom = 1,current_loc_atoms(recv_proc+1)
              locatom = mapchunk(atom)
              if(iprint_DM>=4) write(io_lun,*) 'Atom, loc: ',atom,locatom,recv_info(recv_proc+1)%ints(locatom)
@@ -2158,6 +2165,7 @@ contains
              ! Careful - we only want to increment after ALL interactions done
              orb_count = orb_count + recv_info(recv_proc+1)%ndimj(locatom)
           end do ! atom=current_loc_atoms
+          call stop_timer(tmr_std_matrices)
        end if ! recv_size>0
        if(iprint_DM>=4) write(io_lun,*) 'Calling MPI_Wait'
        if(send_size>0.AND.myid/=send_proc) then
@@ -2193,6 +2201,7 @@ contains
     deallocate(ints,current_loc_atoms,atom_list,LocalAtom,send_prim,num_send,norb_send,STAT=stat)
     if(stat/=0) call cq_abort('buildK: Error allocating ints etc !',stat)
     !    write(io_lun,*) 'Returning'
+    call stop_timer(tmr_std_matrices)
     return
 1   format(10x,'Processor: ',i5,' Partition: ',i5)
 2   format(10x,'Processor: ',i5,' Atom: ',i5)

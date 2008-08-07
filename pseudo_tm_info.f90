@@ -25,6 +25,8 @@
 !!  MODIFICATION HISTORY
 !!   2008/02/06 08:32 dave
 !!    Changed for output to file not stdout
+!!   2008/05/25
+!!    Added timers
 !!  SOURCE
 !!
 module pseudo_tm_info
@@ -32,6 +34,7 @@ module pseudo_tm_info
   use datatypes, ONLY: double
   use GenComms, ONLY: cq_abort
   use global_module, ONLY: area_pseudo, io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
 
   implicit none
 
@@ -103,7 +106,8 @@ contains
 !!  CREATION DATE
 !!   18/06/2002
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/25
+!!    Added timers
 !!  SOURCE
 !!
   subroutine setup_pseudo_info(nspecies, species_label)
@@ -131,10 +135,12 @@ contains
     if(allocated(pseudo)) then
        if(iprint_pseudo>2) write(io_lun,fmt='(10x," setup_pseudo_info is skipped because it is already called")')
     else
+       call start_timer(tmr_std_allocation)
        allocate(pseudo(nspecies),STAT=stat)
        if(stat /= 0) call cq_abort ('allocating pseudo in setup_pseudo_info',stat)
        allocate(pao(nspecies),STAT=stat)
        if(stat /= 0) call cq_abort ('allocating pao in setup_pseudo_info',stat)
+       call stop_timer(tmr_std_allocation)
        do ispecies=1,nspecies
           if(pseudo_type==SIESTA) then
              pseudo(ispecies)%tm_loc_pot = loc_chg
@@ -212,7 +218,8 @@ contains
 !!  CREATION DATE
 !!   May 2003
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/25
+!!    Added timers
 !!  SOURCE
 !!
   subroutine alloc_pseudo_info(ps_info,n)
@@ -227,6 +234,7 @@ contains
     integer :: stat
 
     ps_info%n_pjnl = n
+    call start_timer(tmr_std_allocation)
     allocate(ps_info%pjnl(n), STAT=stat)  
     if(stat /= 0) call cq_abort('alloc pjnl in alloc_pseudo_info',stat)
     allocate(ps_info%pjnl_l(n), ps_info%pjnl_n(n), STAT=stat)  
@@ -235,6 +243,7 @@ contains
     allocate(ps_info%pjnl_ekb(n), STAT=stat)  
     if(stat /= 0) call cq_abort('alloc pjnl_ekb in alloc_pseudo_info',stat)
     call reg_alloc_mem(area_pseudo,n,type_dbl)
+    call stop_timer(tmr_std_allocation)
 
     return
   end subroutine alloc_pseudo_info
@@ -263,7 +272,8 @@ contains
 !!  CREATION DATE
 !! 
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/25
+!!    Added timers
 !!  SOURCE
 !!
   subroutine rad_alloc(func,n)
@@ -277,9 +287,11 @@ contains
     integer :: stat
 
     func%n = n
+    call start_timer(tmr_std_allocation)
     allocate(func%f(n),func%d2(n),STAT=stat)
     if(stat /= 0) call cq_abort('allocating radial func in rad_alloc',stat)
     call reg_alloc_mem(area_pseudo,2*n,type_dbl)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine rad_alloc
 !!***
@@ -306,7 +318,8 @@ contains
 !!  CREATION DATE
 !! 
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/25
+!!    Added timers
 !!  SOURCE
 !!
   subroutine rad_dealloc(func)
@@ -319,10 +332,12 @@ contains
 
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     deallocate(func%f,func%d2,STAT=stat)
     if(stat /= 0) call cq_abort('deallocating radial func in rad_alloc',stat)
     call reg_dealloc_mem(area_pseudo,2*func%n,type_dbl)
     nullify(func%f, func%d2)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine rad_dealloc
 !!***
@@ -471,6 +486,8 @@ contains
 !!    More tweaks for local potential (particularly short/long range division)
 !!   09:30, 27/11/2007 drb 
 !!    Added calculation of prefac on all processors for local potential
+!!   2008/05/25
+!!    Added timers
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -509,7 +526,9 @@ contains
 
        call read_header_tmp(n_orbnl,lmax,n_pjnl, zval, lun)
        call alloc_pseudo_info(ps_info, n_pjnl)
+       call start_timer(tmr_std_allocation)
        allocate(dummy_rada(n_orbnl),thisl(n_orbnl),thisz(n_orbnl),thispop(n_orbnl),zl(0:lmax))
+       call stop_timer(tmr_std_allocation)
 
        ps_info%zval = zval
 
@@ -535,7 +554,9 @@ contains
        end do
        ! Now store data
        pao_info%greatest_angmom = lmax
+       call start_timer(tmr_std_allocation)
        allocate(pao_info%angmom(0:lmax),STAT=alls)
+       call stop_timer(tmr_std_allocation)
        count = 0
        if(alls/=0) call cq_abort('Failed to allocate PAOs')
        if(iprint_pseudo>3) write(io_lun,fmt='(10x,"Storing PAOs lmax: ",i5)') lmax
@@ -543,8 +564,10 @@ contains
           pao_info%angmom(l)%n_zeta_in_angmom = zl(l)
           if(iprint_pseudo>3) write(io_lun,fmt='(10x,"l, zl: ",2i5)') l,zl(l)
           if(zl(l)>0) then
+             call start_timer(tmr_std_allocation)
              allocate(pao_info%angmom(l)%zeta(zl(l)),pao_info%angmom(l)%occ(zl(l)),STAT=alls)
              if(alls/=0) call cq_abort('Failed to allocate PAOs zeta')
+             call stop_timer(tmr_std_allocation)
              count = count + zl(l)*(2*l+1)
              do nzeta = 1,zl(l)
                 i = indexlz(nzeta,l)
@@ -553,13 +576,17 @@ contains
                 pao_info%angmom(l)%zeta(nzeta)%cutoff = dummy_rada(i)%cutoff
                 pao_info%angmom(l)%occ(nzeta) = thispop(i)
                 if(pao_info%angmom(l)%zeta(nzeta)%length>=1) then
+                   call start_timer(tmr_std_allocation)
                    allocate(pao_info%angmom(l)%zeta(nzeta)%table(pao_info%angmom(l)%zeta(nzeta)%length),STAT=alls)
                    if(alls/=0) call cq_abort('Failed to allocate PAOs zeta')
                    call reg_alloc_mem(area_pseudo,pao_info%angmom(l)%zeta(nzeta)%length,type_dbl)
+                   call stop_timer(tmr_std_allocation)
                    pao_info%angmom(l)%zeta(nzeta)%table(1:dummy_rada(i)%n) = dummy_rada(i)%f(1:dummy_rada(i)%n)
+                   call start_timer(tmr_std_allocation)
                    allocate(pao_info%angmom(l)%zeta(nzeta)%table2(pao_info%angmom(l)%zeta(nzeta)%length),STAT=alls)
                    if(alls/=0) call cq_abort('Failed to allocate PAOs zeta')
                    call reg_alloc_mem(area_pseudo,pao_info%angmom(l)%zeta(nzeta)%length,type_dbl)
+                   call stop_timer(tmr_std_allocation)
                 end if
                 yp1 = (pao_info%angmom(l)%zeta(nzeta)%table(2)-pao_info%angmom(l)%zeta(nzeta)%table(1))/ &
                      dummy_rada(i)%delta
@@ -657,8 +684,10 @@ contains
           tzl = pao_info%angmom(l)%n_zeta_in_angmom
           if(tzl>0) then
              if(inode/=ionode) then
+                call start_timer(tmr_std_allocation)
                 allocate(pao_info%angmom(l)%zeta(tzl),pao_info%angmom(l)%occ(tzl),STAT=alls)
                 if(alls/=0) call cq_abort('Failed to allocate PAOs zeta')
+                call stop_timer(tmr_std_allocation)
              end if
              count = count + tzl*(2*l+1)
              do nzeta = 1,tzl
@@ -667,6 +696,7 @@ contains
                 call gcopy(pao_info%angmom(l)%occ(nzeta))
                 if(inode/=ionode) then
                    if(pao_info%angmom(l)%zeta(nzeta)%length>=1) then
+                      call start_timer(tmr_std_allocation)
                       allocate(pao_info%angmom(l)%zeta(nzeta)%table(pao_info%angmom(l)%zeta(nzeta)%length),STAT=alls)
                       if(alls/=0) call cq_abort('Failed to allocate PAOs zeta',pao_info%angmom(l)%zeta(nzeta)%length)
                       call reg_alloc_mem(area_pseudo,pao_info%angmom(l)%zeta(nzeta)%length,type_dbl)
@@ -674,6 +704,7 @@ contains
                       allocate(pao_info%angmom(l)%zeta(nzeta)%table2(pao_info%angmom(l)%zeta(nzeta)%length),STAT=alls)
                       if(alls/=0) call cq_abort('Failed to allocate PAOs zeta ',pao_info%angmom(l)%zeta(nzeta)%length)
                       call reg_alloc_mem(area_pseudo,pao_info%angmom(l)%zeta(nzeta)%length,type_dbl)
+                      call stop_timer(tmr_std_allocation)
                    end if
                 end if
                 call gcopy(pao_info%angmom(l)%zeta(nzeta)%table,pao_info%angmom(l)%zeta(nzeta)%length)

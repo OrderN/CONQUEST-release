@@ -26,12 +26,15 @@
 !!    matrix routines
 !!   2008/02/01 17:53 dave
 !!    Changes for output to file not stdout
+!!   2008/05/22 ast
+!!    Added timers
 !!  SOURCE
 !!
 module S_matrix_module
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_smatrix
 
   implicit none
 
@@ -78,6 +81,8 @@ contains
 !!    Changed call to assemble
 !!   08:31, 2004/07/23 dave
 !!    Added call to allow calculation of derivative of S wrt PAO coefficient
+!!   2008/05/22 ast
+!!    Added timer
 !!  TODO
 !!    Find out why on-site evaluation gave problems
 !!  SOURCE
@@ -85,7 +90,8 @@ contains
   subroutine get_S_matrix(inode, ionode)
 
     use datatypes
-    use global_module, only: iprint_ops, flag_basis_set, blips, PAOs, flag_vary_basis, ni_in_cell
+    use global_module, only: iprint_ops, flag_basis_set, blips, PAOs, flag_vary_basis, &
+                             ni_in_cell, IPRINT_TIME_THRES1
     use matrix_data, ONLY: Srange
     use mult_module, ONLY: matS, matdS
     use set_bucket_module, ONLY: rem_bucket
@@ -97,6 +103,7 @@ contains
     use PAO_grid_transform_module, ONLY: PAO_to_grid
     use functions_on_grid, ONLY: supportfns
     use io_module, ONLY: dump_matrix
+    use timer_module, ONLY: cq_timer, start_timer, stop_print_timer, WITH_LEVEL
 
     implicit none
 
@@ -105,6 +112,10 @@ contains
     
     ! Local variables
     integer :: np, ni, iprim
+    type(cq_timer) :: tmr_l_tmp1
+
+    call start_timer(tmr_std_smatrix)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     ! Project support functions onto grid
     if(flag_basis_set==blips) then
        if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Doing blip-to-support ',supportfns
@@ -144,6 +155,8 @@ contains
     !call dump_matrix("NS",matS,inode)    
     ! get the new InvS matrix
     call  Iter_Hott_InvS( iprint_ops, 100, 0.0001_double,ni_in_cell, inode, ionode)
+    call stop_print_timer(tmr_l_tmp1,"get_S_matrix",IPRINT_TIME_THRES1)
+    call stop_timer(tmr_std_smatrix)
     return
   end subroutine get_S_matrix
 !!***
@@ -191,6 +204,7 @@ contains
 
     use datatypes
     use numbers
+    use global_module, ONLY: IPRINT_TIME_THRES1
     use matrix_data, ONLY: Trange, TSrange, mat, Srange
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, store_matrix_value, matrix_scale, matrix_sum, &
          matT, matS, return_matrix_value
@@ -198,6 +212,7 @@ contains
     use GenComms, ONLY: gsum, my_barrier
     use DiagModule, ONLY: diagon
     use species_module, ONLY: nsf_species, species
+    use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
 
     implicit none
 
@@ -209,7 +224,7 @@ contains
     integer :: n_iterations, nn, np, nb, ist, ip, i,j,nsf1,nsf2
     integer :: matI, matT1, matTM, matTold
     real(double) :: step, tot, eps, x, omega, oldomega, deltaomega, n_orbs
-
+    type(cq_timer) :: tmr_l_tmp1
 
     matI = allocate_temp_matrix(TSrange,0)
     matT1 = allocate_temp_matrix(Trange,0)
@@ -231,6 +246,7 @@ contains
           end if ! bundle%nm_nodgroup(np)>0
        enddo
     else
+       call start_timer(tmr_l_tmp1,WITH_LEVEL)
        n_orbs = zero
        do i=1,n_atoms
           n_orbs = n_orbs + real(nsf_species(species(i)),double)
@@ -286,12 +302,13 @@ contains
        if(output_level>1.and.inode==ionode) write(io_lun,*) 'Eps, tot: ',eps,tot
        call matrix_scale(zero,matT)
        call matrix_sum(zero,matT,eps,matS)
-
+       call stop_print_timer(tmr_l_tmp1,"inverse S preliminaries",IPRINT_TIME_THRES1)
        ! and evaluate the current value of the functional and its gradient
        deltaomega = zero
        oldomega = zero
        if (inode==ionode.and.output_level>=2) write(io_lun,*) 'Starting loop'
        do n_iterations=1,n_L_iterations
+          call start_timer(tmr_l_tmp1,WITH_LEVEL)
           if (inode==ionode.and.output_level>=2) &
                write(io_lun,2) n_iterations
           deltaomega = deltaomega * half
@@ -313,8 +330,10 @@ contains
              call matrix_sum(zero,matTold,one,matT)
              call matrix_sum(zero,matT,one,matT1)
           else
+             call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
              exit  ! Leave the do loop
           endif
+          call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
        end do
        ! If this isn't a good guess, then reset to I
        if((omega/n_orbs)>InvSTolerance) then

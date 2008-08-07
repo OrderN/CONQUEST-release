@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: numbers.module.f90,v 1.4 2003/10/22 15:05:09 mjg Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module numbers
 ! ------------------------------------------------------------------------------
@@ -36,7 +36,7 @@ module numbers
   implicit none      
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id: numbers.module.f90,v 1.4 2003/10/22 15:05:09 mjg Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
 
 

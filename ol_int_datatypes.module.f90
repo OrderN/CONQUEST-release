@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: ol_int_datatypes.module.f90,v 1.2 2003/12/19 14:01:34 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module ol_int_datatypes
 ! ------------------------------------------------------------------------------
@@ -49,7 +49,7 @@ module ol_int_datatypes
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id: ol_int_datatypes.module.f90,v 1.2 2003/12/19 14:01:34 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
 
   !datatypes used in calculating overlap integrals

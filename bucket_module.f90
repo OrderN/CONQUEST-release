@@ -37,12 +37,15 @@
 !!    Added routines to deallocate bucket structures
 !!   2008/02/04 08:34 dave
 !!    Changed for output to file not stdout
+!!   2008/05/16 ast
+!!    Added timers
 !!***
 module bucket_module
 
   use datatypes
   use global_module, ONLY: io_lun
   use naba_blk_module, ONLY:naba_atm_of_blk
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
 
   implicit none
 
@@ -136,6 +139,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   22/03/2002 dave
 !!    Added ROBODoc headers
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
 !  subroutine set_local_bucket(set,rcut_in,mx_node_in,mx_pair_in,ind_left,ind_right)
@@ -169,6 +174,7 @@ contains
     set%no_halo_atom1=no_halo_left ; set%no_halo_atom2=no_halo_right
     set%mx_recv_node=mx_node_in    !; set%mx_pair=mx_pair_in
 
+    call start_timer(tmr_std_allocation)
     allocate(set%list_recv_node(set%mx_recv_node),STAT=stat)
     if(stat/=0) call cq_abort('Error alloc memory to local_bucket(list_recv_node) !')
     allocate(set%ibegin_pair(set%mx_recv_node),STAT=stat)
@@ -179,6 +185,7 @@ contains
 !    write(io_lun,*) ' allocation for loc_bucket%i_h2d', set%no_halo_atom2,set%no_halo_atom1
     if(stat/=0) call cq_abort('Error allocating memory to local_bucket(i_h2d) !')
     call reg_alloc_mem(area_index,3*set%mx_recv_node+set%no_halo_atom2*set%no_halo_atom1,type_int)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine set_local_bucket
 !!***
@@ -205,6 +212,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   22/03/2002 dave
 !!    Added ROBODoc headers
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine set_remote_bucket(set,mx_node_in,mx_pair_in)
@@ -226,6 +235,7 @@ contains
     set%mx_send_node=mx_node_in
     set%mx_pair_comm=mx_pair_in
 
+    call start_timer(tmr_std_allocation)
 !    write(io_lun,*) 'remote_bucket%list_send_node',set%mx_send_node
     allocate(set%list_send_node(set%mx_send_node),STAT=stat)
     if(stat/=0) call cq_abort('Err alloc memory to remote_bucket(list_send_node) !')
@@ -238,6 +248,7 @@ contains
     allocate(set%bucket(set%mx_pair_comm,set%mx_send_node),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to remote_bucket(bucket) !')
     call reg_alloc_mem(area_index,3*set%mx_send_node+set%mx_pair_comm*set%mx_send_node,type_int)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine set_remote_bucket
 !!***
@@ -253,9 +264,11 @@ contains
 
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     deallocate(set%bucket,STAT=stat)
     allocate(set%bucket(set%mx_pair_comm,set%mx_send_node),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to remote_bucket(bucket) !')
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine reset_remote_bucket
 
@@ -281,7 +294,8 @@ contains
 !!  CREATION DATE
 !!   2003/01/08
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine free_local_bucket(set)
@@ -306,8 +320,10 @@ contains
     set%no_halo_atom1=0 ; set%no_halo_atom2=0
     set%mx_recv_node=0    !; set%mx_pair=0
     ! Deallocate memory
+    call start_timer(tmr_std_allocation)
     deallocate(set%i_h2d,set%ibegin_pair_orb,set%ibegin_pair,set%list_recv_node,STAT=stat)
     if(stat/=0) call cq_abort('Error deallocating memory from local_bucket !')
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine free_local_bucket
 !!***
@@ -334,7 +350,8 @@ contains
 !!  CREATION DATE
 !!   2003/01/08
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/16 ast
+!!    Added timer
 !!  SOURCE
 !!
   subroutine free_remote_bucket(set)
@@ -351,10 +368,12 @@ contains
     ! Local variables
     integer :: stat
 
+    call start_timer(tmr_std_allocation)
     call reg_dealloc_mem(area_index,3*set%mx_send_node+set%mx_pair_comm*set%mx_send_node,type_int)
     ! Deallocate memory
     deallocate(set%bucket,set%no_of_pair_orbs,set%no_of_pair,set%list_send_node,STAT=stat)
     if(stat/=0) call cq_abort('Error deallocating memory from remote_bucket !')
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine free_remote_bucket
 !!***

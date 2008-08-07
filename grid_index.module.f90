@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: grid_index.module.f90,v 1.3 2004/11/12 02:38:31 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module grid_index
 ! ------------------------------------------------------------------------------
@@ -35,7 +35,7 @@ module grid_index
   save
 
   ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id: grid_index.module.f90,v 1.3 2004/11/12 02:38:31 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
   integer, allocatable, dimension(:) :: grid_point_x, grid_point_y, grid_point_z, grid_point_block, &
           grid_point_position

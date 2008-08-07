@@ -26,7 +26,7 @@ module pseudopotential_common
             OLDPS, SIESTA, STATE, ABINIT, core_correction
 
   ! RCS tag for object file identification
-  character(len=80), private :: RCSid = "$Id: pseudopotential_common.f90,v 1.1.2.1 2006/03/07 07:36:46 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
   logical :: non_local
   logical :: flag_angular_new

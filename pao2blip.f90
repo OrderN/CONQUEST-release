@@ -31,10 +31,13 @@
 !!    Removed maxima from common
 !!   2008/02/06 08:09 dave
 !!    Changed for output to file not stdout
+!!   2008/05/25
+!!    Added timers
 !!  SOURCE
 module pao2blip
 
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
 
   implicit none
   save
@@ -95,6 +98,8 @@ contains
 !!    is now done elsewhere by the routine get_ionic_data
 !!   2008/03/03 18:48 dave
 !!    Changed float to real
+!!   2008/05/25
+!!    Added timers
 !!  SOURCE
   subroutine make_blips_from_paos(inode,ionode,n_species)
 
@@ -139,6 +144,8 @@ contains
 
     type(scan_pao), dimension(:), allocatable :: this_scan
 
+
+    call start_timer(tmr_std_basis)
     if((inode == ionode).and.(iprint_basis >= 2)) then
        write(unit=io_lun,fmt='(//" make_blips_from_paos: sbrt entered")')
     end if
@@ -148,8 +155,10 @@ contains
        write(unit=io_lun,fmt='(//" make_paos_from_blips:&
             & no. of species:",i5)') n_species
     end if
+    call start_timer(tmr_std_allocation)
     allocate(blip_coeff(n_species),n_b_half(n_species), STAT=stat)
     if(stat/=0) call cq_abort("Error allocating blip_coeff in pao2blip: ",n_sp)
+    call stop_timer(tmr_std_allocation)
 
     ! N.B. This should be species-dependent
     ! Message to the future code developer:
@@ -174,8 +183,10 @@ contains
 
     ! loop over species
     do n_sp = 1, n_species
+       call start_timer(tmr_std_allocation)
        allocate(blip_coeff(n_sp)%coeff(NBlipsRegion(n_sp), maxnsf),STAT=stat)
        if(stat/=0) call cq_abort("Error allocating blip_coeff in pao2blip: ",NBlipsRegion(n_sp),maxnsf)
+       call stop_timer(tmr_std_allocation)
        if((inode == ionode).and.(iprint_basis >= 1)) then
           write(unit=io_lun,fmt='(//" make_blips_from_paos: region and&
                & blip data for species no.",&
@@ -269,8 +280,10 @@ contains
     ! -------------------------------------------------------------
     !   loop over species
     ! -------------------------------------------------------------
+    call start_timer(tmr_std_allocation)
     allocate(this_scan(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating this_scan in pao2blip ",n_species)
+    call stop_timer(tmr_std_allocation)
     do n_sp = 1, n_species
        n_zeta = 0
        min_ac = 1
@@ -279,9 +292,11 @@ contains
           min_ac = max_ac + 1
           if(pao(n_sp)%angmom(n_am)%n_zeta_in_angmom>n_zeta) n_zeta = pao(n_sp)%angmom(n_am)%n_zeta_in_angmom
        end do
+       call start_timer(tmr_std_allocation)
        allocate(this_scan(n_sp)%n_support(max_ac,n_zeta),STAT=stat)
        allocate(this_scan(n_sp)%which_support(max_ac,n_zeta,maxnsf),STAT=stat)
        allocate(this_scan(n_sp)%coeff(max_ac,n_zeta,maxnsf),STAT=stat)
+       call stop_timer(tmr_std_allocation)
        ! initialise scan table to zero
        min_ac = 1
        do n_am = 0, pao(n_sp)%greatest_angmom
@@ -368,12 +383,14 @@ contains
           end do
        end do
 
+       call start_timer(tmr_std_allocation)
        allocate(n_cube2sphere((BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+1)/2),STAT=stat)
        if(stat/=0) call cq_abort("Error allocating n_cube2sphere: ",(BlipArraySize(n_sp)+1))
        allocate(scal_prod_sym((BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+1)/2),STAT=stat)
        if(stat/=0) call cq_abort("Error allocating scal_prod_sym: ",(BlipArraySize(n_sp)+1))
        allocate(blip_contrib(NBlipsRegion(n_sp)), STAT=stat)
        if(stat/=0) call cq_abort("Error allocating blip_contrib in pao2blip: ",NBlipsRegion(n_sp))
+       call stop_timer(tmr_std_allocation)
        ! ... loop over angular momenta ...............................
        do n_am = 0, pao(n_sp)%greatest_angmom
           if(pao(n_sp)%angmom(n_am)%n_zeta_in_angmom > 0) then
@@ -504,12 +521,14 @@ contains
           end if
        end do
        ! ... end loop over angular momenta ...........................
+       call start_timer(tmr_std_allocation)
        deallocate(n_cube2sphere,STAT=stat)
        if(stat/=0) call cq_abort("Error deallocating n_cube2sphere: ",(BlipArraySize(n_sp)+1))
        deallocate(scal_prod_sym,STAT=stat)
        if(stat/=0) call cq_abort("Error deallocating scal_prod_sym: ",(BlipArraySize(n_sp)+1))
        deallocate(blip_contrib, STAT=stat)
        if(stat/=0) call cq_abort("Error deallocating blip_contrib in pao2blip: ",NBlipsRegion(n_sp))
+       call stop_timer(tmr_std_allocation)
 
        ! for current species, loop over support functions, and for
        ! each support function determine deviation of blip-fn repn from
@@ -539,11 +558,14 @@ contains
           end do
        end do
     end do
+    call start_timer(tmr_std_allocation)
     do n_sp=1,n_species
        deallocate(this_scan(n_sp)%n_support,this_scan(n_sp)%which_support,this_scan(n_sp)%coeff)
        deallocate(blip_coeff(n_sp)%coeff)
     end do
     deallocate(blip_coeff,this_scan,n_b_half)
+    call stop_timer(tmr_std_allocation)
+    call stop_timer(tmr_std_basis)
   end subroutine make_blips_from_paos
 !!*** 
 

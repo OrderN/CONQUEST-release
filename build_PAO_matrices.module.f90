@@ -27,11 +27,14 @@
 !!    matrix routines
 !!   2008/02/04 08:35 dave
 !!    Changed for output to file not stdout
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
 module build_PAO_matrices
 
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_matrices
 
   implicit none
 
@@ -74,13 +77,15 @@ contains
 !!    MAJOR bug fix: species were being done all wrong
 !!   2004/11/10 drb
 !!    Changed nsf association from common to maxima (as it should be !)
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine assemble_2(range,matA,flag,matAD)
     
     use datatypes
     use numbers
-    use global_module, ONLY: iprint_basis, id_glob, species_glob
+    use global_module, ONLY: iprint_basis, id_glob, species_glob, IPRINT_TIME_THRES2
     use species_module, ONLY: species
     use GenComms, ONLY: myid, cq_abort, gcopy, my_barrier
     use matrix_module, ONLY: matrix, matrix_halo
@@ -90,6 +95,7 @@ contains
     use support_spec_format, ONLY: flag_paos_atoms_in_cell
     use mult_module, ONLY: matrix_scale
     use matrix_data, ONLY: mat, halo
+    use timer_module
     
     implicit none
 
@@ -106,8 +112,10 @@ contains
     integer :: gcspart, wheremat, nsf_i, nsf_j, acz_i, acz_j
     integer :: l1, m1, l2, m2, i1, i2, i3, j1, j2 , j3
     real(double) :: dx, dy, dz, mat_val, tmp1, dtmp1,delt
-    
+    type(cq_timer) :: tmr_l_tmp1   
 
+    call start_timer(tmr_std_basis)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     if(iprint_basis>=5) write(io_lun,fmt='(6x,i5," Zeroing S")') myid
     call matrix_scale(zero,matA)
     !write(io_lun,*) 'Zeroing dS: ',PRESENT(matAD)
@@ -115,6 +123,7 @@ contains
     if(iprint_basis>=5) write(io_lun,fmt='(6x,i5," Done Zeroing")') 
     iprim = 0; ip = 0
     if(flag_paos_atoms_in_cell.OR.flag==3) then
+       call start_timer(tmr_std_matrices)
        do part = 1,bundle%groups_on_node ! Loop over primary set partitions
           if(iprint_basis>=6) write(io_lun,fmt='(6x,"Processor, partition: ",2i6)') myid,part
           if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
@@ -161,9 +170,12 @@ contains
              end do ! End do memb =1,nm_nodgroup
           end if ! End if nm_nodgroup > 0
        end do ! End do part=1,groups_on_node
+       call stop_timer(tmr_std_matrices)
     else
        call cq_abort("Storage of PAOs on primary-set processors not implemented yet")
     end if    
+    call stop_print_timer(tmr_l_tmp1,"S matrix assembly",IPRINT_TIME_THRES2)
+    call stop_timer(tmr_std_basis)
   end subroutine assemble_2
 !!***
   
@@ -346,6 +358,8 @@ contains
 !!    MAJOR bug fix: species were being done all wrong, and wrong gradient being called
 !!   2004/11/10 drb
 !!    Changed nsf association from common to maxima (as it should be !)
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine assemble_deriv_2(direction,range,matA,flag)
@@ -380,6 +394,8 @@ contains
     
     logical :: paoloop ! Use new loop or old loop ?
     
+    call start_timer(tmr_std_matrices)
+    call start_timer(tmr_std_basis)
     call matrix_scale(zero,matA)
     iprim = 0; ip = 0
     if(flag_paos_atoms_in_cell.OR.flag==3) then
@@ -426,6 +442,8 @@ contains
     else
        call cq_abort("Storage of PAOs on primary-set processors not implemented yet")
     end if
+    call stop_timer(tmr_std_basis)
+    call stop_timer(tmr_std_matrices)
   end subroutine assemble_deriv_2
 !!***
 

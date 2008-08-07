@@ -46,12 +46,15 @@
 !!    Added alpha, beta and gauss2blip
 !!   2008/02/04 08:28 dave
 !!    Changed for output to file not stdout
+!!   2008/05/28 ast
+!!    Added timers
 !!  SOURCE
 !!
 module blip
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
 
   implicit none
 
@@ -125,6 +128,8 @@ contains
 !!    Added memory registration and fixed small bug (stat not passed to allocate)
 !!   2006/10/20 14:00 dave
 !!    Included into blip
+!!   2008/05/28 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine make_pre(inode, ionode) 
@@ -152,15 +157,20 @@ contains
     real(double), parameter :: k0=1.3229425_double
     integer :: n_blips,info,stat, spec
 
+    call start_timer(tmr_std_basis)
     if(flag_precondition_blips) then
        stat=0
+       call start_timer(tmr_std_allocation)
        allocate(PreCond(n_species),STAT=stat)
        if(stat/=0) call cq_abort('ERROR allocating PreCond: ',n_species)
+       call stop_timer(tmr_std_allocation)
        do spec = 1,n_species
+          call start_timer(tmr_std_allocation)
           allocate(PreCond(spec)%coeffs(NBlipsRegion(spec),NBlipsRegion(spec)), &
                Kmat(NBlipsRegion(spec),NBlipsRegion(spec)),STAT=stat)
           if(stat/=0) call cq_abort('ERROR allocating PreCond and Kmat: ',NBlipsRegion(spec))
           call reg_alloc_mem(area_basis,2*NBlipsRegion(spec)*NBlipsRegion(spec),type_dbl)
+          call stop_timer(tmr_std_allocation)
           PreCond(spec)%size = NBlipsRegion(spec)
           PreCond(spec)%coeffs = zero
           Kmat = zero
@@ -247,6 +257,7 @@ contains
        !   enddo
        !enddo
     endif
+    call stop_timer(tmr_std_basis)
     return
   end subroutine make_pre
 !!***
@@ -309,6 +320,8 @@ contains
 !!    Code added to create arrays region_single and region_double 
 !!   2006/10/20 14:00 dave
 !!    Included into blip
+!!   2008/05/28 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine set_blip_index(inode,ionode)
@@ -335,11 +348,13 @@ contains
     real(double) :: a2, b2, dx, dy, dz, r2_over_b2
 
 
+    call start_timer(tmr_std_basis)
     if((inode == ionode).and.(iprint_init >= 2)) then
        write(unit=io_lun,fmt='(//10x,65("*")/25x,"REPORT FROM SET_BLIP_INDEX"/&
             &10x,65("*"))')
     end if
 
+    call start_timer(tmr_std_allocation)
     allocate(BlipArraySize(n_species), STAT=stat)
     if(stat/=0) call cq_abort("Error allocating blip_info (1): ",n_species)
     allocate(NBlipsRegion(n_species),STAT=stat)
@@ -355,6 +370,7 @@ contains
     allocate(FourOnBlipWidth(n_species), STAT=stat)
     if(stat/=0) call cq_abort("Error allocating blip_info (7): ",n_species)
     call reg_alloc_mem(area_basis,6*n_species,type_dbl)
+    call stop_timer(tmr_std_allocation)
     do spec = 1, n_species
        ! It is required that the full width of the B-spline blip-function
        ! be exactly four times the blip-grid spacing. This condition
@@ -395,10 +411,12 @@ contains
        !if(bliparraysize > MAXBAS) then
        !   call cq_abort('set_blip_index: MAXBAS too small',bliparraysize,MAXBAS)
        !end if
+       call start_timer(tmr_std_allocation)
        allocate(blip_info(spec)%region_single(0:BlipArraySize(spec)),&
             blip_info(spec)%region_double(0:BlipArraySize(spec),0:BlipArraySize(spec)),STAT=stat)
        if(stat/=0) call cq_abort('Error allocating region_single and region_double: ',BlipArraySize(spec))
        call reg_alloc_mem(area_basis,(BlipArraySize(spec)+1)*(BlipArraySize(spec)+2),type_int)
+       call stop_timer(tmr_std_allocation)
        ! Calculate the index arrays region_single, region_double
        do na = 0, BlipArraySize(spec)
           a2 = (na+2)*(na+2)
@@ -425,15 +443,19 @@ contains
        ! is initialised to zero here to maintain compatibility with
        ! the original version of the code.
 
+       call start_timer(tmr_std_allocation)
        allocate(blip_info(spec)%blip_number(-BlipArraySize(spec):BlipArraySize(spec),&
             -BlipArraySize(spec):BlipArraySize(spec),-BlipArraySize(spec):BlipArraySize(spec)),STAT=stat)
        if(stat/=0) call cq_abort('Error allocating blip_number: ',BlipArraySize(spec))
        call reg_alloc_mem(area_basis,(2*BlipArraySize(spec)+1)*(2*BlipArraySize(spec)+1)*(2*BlipArraySize(spec)+1),type_int)
+       call stop_timer(tmr_std_allocation)
        blip_info(spec)%blip_number = 0
 
+       call start_timer(tmr_std_allocation)
        allocate(blip_info(spec)%blip_location(3,n_blips),STAT=stat)
        if(stat/=0) call cq_abort('Error allocating blip_number and blip_location: ',n_blips)
        call reg_alloc_mem(area_basis,3*n_blips,type_int)
+       call stop_timer(tmr_std_allocation)
        NBlipsRegion(spec) = n_blips
        n_blips = 0
        do nz = -BlipArraySize(spec), BlipArraySize(spec)
@@ -487,15 +509,19 @@ contains
     end do ! Loop over species
     ! Set up data storage for atoms on this processor
     size = 0
+    call start_timer(tmr_std_allocation)
     allocate(supports_on_atom(bundle%n_prim),support_gradient(bundle%n_prim),support_elec_gradient(bundle%n_prim))
+    call stop_timer(tmr_std_allocation)
     do i=1,bundle%n_prim
        ! Check on species
        spec = bundle%species(i)
        this_nsf = nsf_species(spec)
        size = size + this_nsf*NBlipsRegion(spec)
        supports_on_atom(i)%nsuppfuncs = this_nsf
+       call start_timer(tmr_std_allocation)
        allocate(supports_on_atom(i)%supp_func(this_nsf),support_gradient(i)%supp_func(this_nsf),&
             support_elec_gradient(i)%supp_func(this_nsf))
+       call stop_timer(tmr_std_allocation)
        supports_on_atom(i)%supp_func(:)%ncoeffs = NBlipsRegion(spec)
        support_gradient(i)%nsuppfuncs = this_nsf
        support_gradient(i)%supp_func(:)%ncoeffs = NBlipsRegion(spec)
@@ -508,6 +534,7 @@ contains
     call associate_supp_coeff_array(support_gradient,bundle%n_prim,grad_coeff_array,size)
     call associate_supp_coeff_array(support_elec_gradient,bundle%n_prim,elec_grad_coeff_array,size)
 
+    call stop_timer(tmr_std_basis)
     return
 
   end subroutine set_blip_index
@@ -559,6 +586,8 @@ contains
 !!    Included in blip
 !!   2008/03/03 18:41 dave
 !!    Changed float to real (probably unnecessary)
+!!   2008/05/28 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine gauss2blip
@@ -593,6 +622,7 @@ contains
     ! error if the condition is not satisfied, and the
     ! calculation is aborted.
 
+    call start_timer(tmr_std_basis)
     if((inode == ionode).and.(iprint_basis >= 0)) then
        write(unit=io_lun,fmt='(/10x," gauss2blip: sbrt entered")')
     end if
@@ -646,6 +676,7 @@ contains
           end if
        end do
     end do
+    call stop_timer(tmr_std_basis)
     return
   end subroutine gauss2blip
 !!***

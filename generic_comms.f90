@@ -1900,16 +1900,23 @@ contains
 !!  CREATION DATE
 !!   07/06/2001 dave
 !!  MODIFICATION HISTORY
-!!
+!!   2008/07/24 ast
+!!     Added timers
 !!  SOURCE
 !!
   subroutine my_barrier()
+
+    use global_module, ONLY: IPRINT_TIME_THRES3
+    use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
     
     implicit none
 
     integer :: ierr
+    type(cq_timer) :: tmr_l_tmp1
 
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     call MPI_barrier(MPI_COMM_WORLD, ierr)
+    call stop_print_timer(tmr_l_tmp1,"my_barrier",IPRINT_TIME_THRES3)
     if(ierr/=MPI_success) call cq_abort('my_barrier: problem with MPI_barrier')
     return
   end subroutine my_barrier

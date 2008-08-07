@@ -51,6 +51,7 @@ module force_module
 
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation,tmr_std_matrices
 
   implicit none
   save
@@ -133,13 +134,14 @@ contains
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT
     use pseudo_tm_module, ONLY: loc_pp_derivative_tm
     use global_module, ONLY: flag_self_consistent, flag_move_atom, id_glob, WhichPulay, BothPulay, PhiPulay, &
-         flag_basis_set, PAOs, blips, ni_in_cell, iprint_MD, area_moveatoms
+         flag_basis_set, PAOs, blips, ni_in_cell, iprint_MD, IPRINT_TIME_THRES2, area_moveatoms
     use density_module, ONLY: get_electronic_density, density
     use functions_on_grid,  ONLY: supportfns, H_on_supportfns
     use dimens, ONLY: n_my_grid_points
     use potential_module, ONLY: potential
     use maxima_module, ONLY: maxngrid
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use timer_module
 
     implicit none
 
@@ -160,11 +162,14 @@ contains
     real(double), dimension(:), allocatable :: density_out
     real(double) :: electrons, max_force
     integer :: i,j,ii, stat, max_atom, max_compt
+    type(cq_timer) :: tmr_l_tmp1
 
+    call start_timer(tmr_std_allocation)
     allocate(p_force(3,ni_in_cell),KE_force(3,ni_in_cell),HF_force(3,ni_in_cell),HF_NL_force(3,ni_in_cell),&
          nonSC_force(3,ni_in_cell),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating forces: ",ni_in_cell)
     call reg_alloc_mem(area_moveatoms, 5*3*ni_in_cell,type_dbl)
+    call stop_timer(tmr_std_allocation)
     ! The 'pulay force' is the force due to the change in energy caused
     ! by the change in the basis functions as the atoms move. 
     p_force = zero
@@ -175,19 +180,28 @@ contains
     tot_force = zero
     WhichPulay=BothPulay
     ! This ASSUMES that workspace_support contains h_on_support
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     call pulay_force( p_force, fixed_potential, vary_mu, n_cg_L_iterations, &
          number_of_bands, tolerance, con_tolerance, mu, total_energy, &
          expected_reduction, ni_in_cell)
+    call stop_print_timer(tmr_l_tmp1,"Pulay force",IPRINT_TIME_THRES2)
     ! Different forces depending on whether we're doing Harris-Foulkes or self-consistent
     if(.NOT.flag_self_consistent) then
+       call start_timer(tmr_std_allocation)
        allocate(density_out(maxngrid), STAT=stat)
        if(stat/=0) call cq_abort("Error allocating output density: ",maxngrid)
+       call stop_timer(tmr_std_allocation)
        call reg_alloc_mem(area_moveatoms, maxngrid,type_dbl)
+       call start_timer(tmr_l_tmp1,WITH_LEVEL)
        call get_electronic_density(density_out, electrons, supportfns, H_on_supportfns, &
             inode, ionode, maxngrid)
+       call stop_print_timer(tmr_l_tmp1,"get_electronic_density",IPRINT_TIME_THRES2)
+       call start_timer(tmr_l_tmp1,WITH_LEVEL)
        call get_nonSC_correction_force( nonSC_force, potential, density_out, &
             inode, ionode, ni_in_cell, maxngrid)
+       call stop_print_timer(tmr_l_tmp1,"NSC force",IPRINT_TIME_THRES2)
        ! Local HF force
+       call start_timer(tmr_l_tmp1,WITH_LEVEL)
        select case(pseudo_type)
        case(OLDPS)
           call get_HF_force( hf_force, density_out, ni_in_cell, maxngrid)
@@ -196,11 +210,15 @@ contains
        case(ABINIT)
           call loc_pp_derivative_tm(hf_force, density_out, maxngrid)
        end select
+       call stop_print_timer(tmr_l_tmp1,"local pseudopotential force",IPRINT_TIME_THRES2)
+       call start_timer(tmr_std_allocation)
        deallocate(density_out,STAT=stat)
        if(stat/=0) call cq_abort("Error deallocating output density: ",maxngrid)
        call reg_dealloc_mem(area_moveatoms, maxngrid,type_dbl)
+       call stop_timer(tmr_std_allocation)
     else
        ! Local HF force
+       call start_timer(tmr_l_tmp1,WITH_LEVEL)
        select case(pseudo_type)
        case(OLDPS)
           call get_HF_force( hf_force, density, ni_in_cell, maxngrid)
@@ -209,17 +227,22 @@ contains
        case(ABINIT)
           call loc_pp_derivative_tm(hf_force, density, maxngrid)
        end select
+       call stop_print_timer(tmr_l_tmp1,"local pseudopotential force",IPRINT_TIME_THRES2)
     end if
 
     ! This routine deals with the movement of the nonlocal pseudopotential.
     if (non_local) then
+       call start_timer(tmr_l_tmp1,WITH_LEVEL)
        call get_HF_non_local_force( HF_NL_force, HF_and_Pulay, ni_in_cell)
+       call stop_print_timer(tmr_l_tmp1,"nonlocal pseudopotential force",IPRINT_TIME_THRES2)
     else
        HF_NL_force = 0.0_double
     end if
 
     ! Get the kinetic energy force component
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     call get_KE_force( KE_force, ni_in_cell)
+    call stop_print_timer(tmr_l_tmp1,"kinetic energy force",IPRINT_TIME_THRES2)
     max_force = 0.0_double
     if (inode==ionode.AND.write_forces) then
        write(io_lun,fmt='(/,20x,"Forces on atoms (",a2,"/",a2,")"/)') en_units(energy_units), d_units(dist_units)
@@ -271,9 +294,11 @@ contains
          write(io_lun,fmt='(4x,"Maximum force : ",f15.8,"(",a2,"/",a2,") on atom, component ",2i5)') &
          for_conv*max_force, en_units(energy_units), d_units(dist_units), max_atom, max_compt
     if(inode==ionode.AND.iprint_MD>1.AND.write_forces) write(io_lun,fmt='(4x,"Finished force")')
+    call start_timer(tmr_std_allocation)
     deallocate(p_force,KE_force,HF_force,HF_NL_force, nonSC_force,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating forces: ",ni_in_cell)
     call reg_dealloc_mem(area_moveatoms, 5*3*ni_in_cell,type_dbl)
+    call stop_timer(tmr_std_allocation)
     return
 101 format('Force on atom ',i4)
 102 format('Force H-F  : ',3f15.10)
@@ -456,7 +481,6 @@ contains
             dontK, doM1, doM2, dontM3, dontM4, dontphi, dontE, matM12,0,0,0)
     endif
 
-
     t0 = mtime()
     ! for the energy wrt support function we need  M1 and M2...
     ! If we're diagonalising, we've already build data_M12
@@ -521,6 +545,7 @@ contains
           t0 = t1
 
           iprim=0
+          call start_timer(tmr_std_matrices)
           do np=1,bundle%groups_on_node
              if(bundle%nm_nodgroup(np) > 0) then
                 do ni=1,bundle%nm_nodgroup(np)
@@ -537,6 +562,7 @@ contains
                 enddo ! ni
              endif ! if the partition has atoms
           enddo ! np
+          call stop_timer(tmr_std_matrices)
           t1 = mtime()
           if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(10x,"Phi Pulay sum ",i4," time: ",f12.5)') direction,t1-t0
           t0 = t1
@@ -551,6 +577,7 @@ contains
           call assemble_deriv_2(direction,Srange, mat_tmp,1)
           ! For each primary set atom, we want \sum_j dS_ij G_ij (I think)
           iprim=0
+          call start_timer(tmr_std_matrices)
           do np=1,bundle%groups_on_node
              if(bundle%nm_nodgroup(np) > 0) then
                 do ni=1,bundle%nm_nodgroup(np)
@@ -577,6 +604,7 @@ contains
                 end do
              end if
           end do
+          call stop_timer(tmr_std_matrices)
           t1 = mtime()
           if(inode==ionode.AND.iprint_MD>3) write(io_lun,*) 'S Pulay ',direction,' time: ',t1-t0
           t0 = t1
@@ -1226,6 +1254,7 @@ contains
     ! Now, for the offsite part, done on the integration grid.
     if(flag_basis_set==blips) then
        tmp_fn = allocate_temp_fn_on_grid(sf)
+       call start_timer(tmr_std_matrices)
        do grad_direction = 1, 3 
 
           ! get the Grad_{\beta} psi_j term        
@@ -1268,11 +1297,13 @@ contains
              enddo !np =bundle%groups_on_node
           end do ! force directions
        end do ! grad directions
+       call stop_timer(tmr_std_matrices)
        call free_temp_fn_on_grid(tmp_fn)
     else if(flag_basis_set==PAOs) then
        do force_direction = 1, 3
           ! Build derivatives
           call assemble_deriv_2(force_direction,Hrange, mat_grad_T,2)
+          call start_timer(tmr_std_matrices)
           iprim = 0
           do np = 1,bundle%groups_on_node
              if(bundle%nm_nodgroup(np) > 0) then
@@ -1301,6 +1332,7 @@ contains
                 enddo
              endif  ! (bundle%nm_nodgroup(np) > 0)
           enddo
+          call stop_timer(tmr_std_matrices)
        end do ! force directions
     end if
     call gsum(KE_force, 3, n_atoms)
@@ -1365,6 +1397,7 @@ contains
     integer :: iprim, np, i, j, atom,element, n1,n2, ist, gcspart
 
     iprim = 0
+    call start_timer(tmr_std_matrices)
     do np = 1,bundle%groups_on_node
        if(bundle%nm_nodgroup(np) > 0) then
           do i=1,bundle%nm_nodgroup(np)
@@ -1384,6 +1417,7 @@ contains
           enddo
        endif  !  (bundle%nm_nodgroup(np) > 0)
     enddo
+    call stop_timer(tmr_std_matrices)
     return
   end subroutine matrix_diagonal
 !!***
@@ -1430,7 +1464,7 @@ contains
     use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell,species_glob, dens, &
                              flag_functional_type, functional_lda_pz81, &
                              functional_lda_gth96, functional_lda_pw92, &
-                             functional_gga_pbe96, area_moveatoms
+                             functional_gga_pbe96, area_moveatoms, IPRINT_TIME_THRES3
     use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
     use group_module, ONLY : blocks, parts
     use primary_module, ONLY: domain
@@ -1445,6 +1479,8 @@ contains
     use hartree_module, ONLY: hartree
     use maxima_module, ONLY: maxngrid
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use timer_module, ONLY: cq_timer,start_timer,stop_timer,print_timer, &
+                            stop_print_timer,WITH_LEVEL,TIME_ACCUMULATE_NO,TIME_ACCUMULATE_YES
 
     implicit none
 
@@ -1469,6 +1505,7 @@ contains
     real(double) :: dx,dy,dz, loc_cutoff, loc_cutoff2, electrons, v
 
     logical :: range_flag
+    type(cq_timer) :: tmr_l_tmp1,tmr_l_tmp2
 
     ! Automatic
     real(double), allocatable, dimension(:) :: h_potential 
@@ -1481,16 +1518,21 @@ contains
     ! We need a potential-like array containing the appropriate differences (between VHa for input and output 
     ! charge densities and between Vxc' for input and output densities)
     ! Something like this:
+    call start_timer(tmr_std_allocation)
     allocate(h_potential(size), STAT=stat)
     if(stat/=0) call cq_abort('Error allocating h_potential in get_nonSC_force ',size,stat)
     call reg_alloc_mem(area_moveatoms, size,type_dbl)
+    call stop_timer(tmr_std_allocation)
     ! First the PAD n(r), density
+    call start_timer(tmr_l_tmp2) 
     potential = 0.0_double
     h_potential = 0.0_double
     call hartree( density, h_potential, maxngrid, h_energy )
     call axpy(size, one, h_potential, 1, potential, 1)
 !    h_potential = 0.0_double
+    call stop_timer(tmr_l_tmp2,TIME_ACCUMULATE_NO)      ! This restarts the count for this timer
 
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     select case(flag_functional_type)
        case (functional_lda_pz81)
           call get_dxc_potential( density, h_potential, maxngrid )
@@ -1514,14 +1556,17 @@ contains
          potential(i) = potential(i)-density_out(i)*h_potential(i)
       end do
     end if
+    call stop_print_timer(tmr_l_tmp1,"NSC force - XC",IPRINT_TIME_THRES3)
 
+    call start_timer(tmr_l_tmp2,WITH_LEVEL)   ! Restart of the timer; level assigned here
     h_potential = 0.0_double
     call hartree( density_out, h_potential, maxngrid, h_energy )
     call axpy(maxngrid, -one, h_potential, 1, potential, 1)
+    call stop_print_timer(tmr_l_tmp2,"NSC force - Hartree",IPRINT_TIME_THRES3,TIME_ACCUMULATE_YES)
 
     call my_barrier()
 
-
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     do iblock = 1, domain%groups_on_node ! primary set of blocks
        xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
@@ -1598,10 +1643,15 @@ contains
           enddo ! naba_part
        endif !(naba_atm(dens)%no_of_part(iblock) > 0) !naba atoms?
     enddo ! iblock : primary set of blocks
+    call stop_print_timer(tmr_l_tmp1,"NSC force - Orbital part",IPRINT_TIME_THRES3)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     call gsum(HF_force,3,n_atoms)
+    call stop_print_timer(tmr_l_tmp1,"NSC force - Compilation",IPRINT_TIME_THRES3)
+    call start_timer(tmr_std_allocation)
     deallocate(h_potential,STAT=stat)
     if(stat/=0) call cq_abort('Error deallocating h_potential in get_nonSC_force ',stat)
     call reg_dealloc_mem(area_moveatoms, size,type_dbl)
+    call stop_timer(tmr_std_allocation)
     return    
   end subroutine get_nonSC_correction_force
 !!***

@@ -36,6 +36,8 @@
 !!    Removed N_ATOMS_MAX reference and changed to mx_icell
 !!   2008/02/06 08:34 dave
 !!    Changed for output to file not stdout
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
 module pseudopotential_data
@@ -45,6 +47,7 @@ module pseudopotential_data
   use pseudopotential_common, ONLY: pseudopotential, core_radius, non_local
   use GenComms, ONLY: cq_abort
   use species_module, ONLY: non_local_species
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_pseudopot,tmr_std_allocation
 
   implicit none
   save
@@ -86,21 +89,29 @@ contains
 !!  CREATION DATE
 !!   11/06/2001 dave
 !!  MODIFICATION HISTORY
-!!
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine init_pseudo(number_of_bands, e_core)
 
     use datatypes
+    use global_module, ONLY: IPRINT_TIME_THRES3
     use species_module, ONLY: ps_file
+    use timer_module
     
     ! Passed variables
     real(double) :: e_core
     real(double) :: number_of_bands
+    type(cq_timer) :: tmr_l_tmp1
 
+    call start_timer(tmr_std_pseudopot)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     call spline_pseudopotential()
     call set_pseudopotential()
     call get_core_correction(number_of_bands, e_core)
+    call stop_print_timer(tmr_l_tmp1,"initialising pseudopotentials",IPRINT_TIME_THRES3)
+    call stop_timer(tmr_std_pseudopot)
     return
   end subroutine init_pseudo
 !!***
@@ -162,6 +173,8 @@ contains
 !!    Small changes: improved definition of gauss and zeroed offset_position
 !!   2008/03/03 18:37 dave
 !!    Removed dsqrt, changed float to real
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine set_pseudopotential()
@@ -206,8 +219,10 @@ contains
     real(double) :: coulomb_energy
     ! --  Start of subroutine  ---
 
+    call start_timer(tmr_std_allocation)
     allocate(pseudo_density(maxngrid),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating pseudo_density: ",maxngrid,stat)
+    call stop_timer(tmr_std_allocation)
 
     pseudopotential = zero
     pseudo_density = zero
@@ -461,8 +476,10 @@ contains
     call axpy( n_my_grid_points, -one, coulomb_potential, 1, &
          pseudopotential, 1 )
 
+    call start_timer(tmr_std_allocation)
     deallocate(pseudo_density, STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating pseudo_density: ",n_my_grid_points,stat)
+    call stop_timer(tmr_std_allocation)
     call my_barrier()
     return
   end subroutine set_pseudopotential
@@ -497,6 +514,8 @@ contains
 !!    Included in pseudopotential_data and added ROBODoc header
 !!   2008/03/03 18:38 dave
 !!    Removed dsqrt, changed float to real
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine pseudopotential_derivatives(direction, dpseudofns )
@@ -536,6 +555,7 @@ contains
     integer :: position,iatom,icheck
     real(double) :: alpha,beta,gamma,delta
 
+    call start_timer(tmr_std_pseudopot)
     gridfunctions(dpseudofns)%griddata = zero
 
     dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
@@ -865,6 +885,7 @@ contains
     enddo ! iblock : primary set of blocks
 
     call my_barrier()
+    call stop_timer(tmr_std_pseudopot)
     return
   end subroutine pseudopotential_derivatives
 !!***
@@ -903,6 +924,8 @@ contains
 !!    Changed raw open/close to io_assign and io_close from FDF
 !!   12:20, 04/02/2003 drb 
 !!    Small changes: reversed arguments to gcopy and initialised lcore to zero
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine read_pseudopotential( inode, ionode)
@@ -924,10 +947,12 @@ contains
     real(double), parameter :: ln10 = 2.302585092994_double
     real(double) :: tmpr
 
+    call start_timer(tmr_std_pseudopot)
     ! loop over the different species of atoms in the simulation box,
     ! and for each species read the relevant pseudopotential data
     ! we only do this in the ionode; the remaining nodes receive the data
     ! from this one
+    call start_timer(tmr_std_allocation)
     allocate(n_projectors(n_species) )
     allocate(n_points_max(n_species) )
     allocate(n_l_components(n_species) )
@@ -937,6 +962,7 @@ contains
     allocate(radius_max(n_species) )      
     allocate(radius_max_2(n_species) )      
     allocate(ps_exponent(n_species) )      
+    call stop_timer(tmr_std_allocation)
     n_projectors = 0
     if(inode==ionode) then
        nl_max = 0
@@ -989,6 +1015,7 @@ contains
     call gcopy(loc_radius, n_species )      
     call gcopy(radius_max, n_species )      
     call gcopy(n_l_components, n_species )
+    call start_timer(tmr_std_allocation)
     allocate(l_core(nl_max,n_species))
     allocate(l_component(nl_max, n_species ))
     allocate(recip_scale(nl_max, n_species ))
@@ -997,6 +1024,7 @@ contains
     allocate(d2_local_pseudopotential(npts_max, n_species ))
     allocate(nl_pseudopotential(npts_max,nl_max,n_species))
     allocate(d2_nl_pseudopotential(npts_max,nl_max,n_species))
+    call stop_timer(tmr_std_allocation)
     if(inode==ionode) then
        if(inode==ionode.AND.iprint_pseudo>=2) write(io_lun,2)
        do n=1, n_species
@@ -1064,6 +1092,7 @@ contains
        nlpf_species(n) = n_l
        if (inode==ionode.AND.iprint_pseudo>=2) write(io_lun,3) n, ps_exponent(n)
     end do
+    call stop_timer(tmr_std_pseudopot)
 1   format(10x,'An error occurred while trying to open file ', &
          a40,/,10x,'File does not exist or contains less data than needed')
 2   format(2x,'Reading pseudopotentials'/)
@@ -1109,6 +1138,8 @@ contains
 !!    Included in pseudopotential_data
 !!   2008/03/03 18:54 dave
 !!    Changed float to real
+!!   2008/05/25 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine spline_pseudopotential()
@@ -1128,8 +1159,10 @@ contains
 
     ! first of all construct the spherical_harmonic_norm() array
 
+    call start_timer(tmr_std_allocation)
     allocate(spherical_harmonic_norm(9),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating spherical harmonic nrom: ",stat)
+    call stop_timer(tmr_std_allocation)
     ! norm for the l=0, m=0
     spherical_harmonic_norm(1) = one / sqrt( four * pi )
     ! norm for the x, y and z type functions
@@ -1237,7 +1270,9 @@ contains
     integer, allocatable, dimension(:) :: n_atoms_of_species
 
     ! first calculate the number of atoms of each species
+    call start_timer(tmr_std_allocation)
     allocate(n_atoms_of_species(n_species))
+    call stop_timer(tmr_std_allocation)
     n_atoms_of_species = 0
     do i=1, ni_in_cell
        n_atoms_of_species(species(i)) =  &
@@ -1250,7 +1285,9 @@ contains
        e_core = e_core + real( n_atoms_of_species(n),double ) * charge(n) / ps_exponent(n)
     end do
     e_core = e_core * pi * two * number_of_bands / volume
+    call start_timer(tmr_std_allocation)
     deallocate(n_atoms_of_species)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine get_core_correction
 !!***

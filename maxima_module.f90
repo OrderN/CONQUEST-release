@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: maxima_module.f90,v 1.4 2003/06/11 09:08:17 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module maxima_module
 ! ------------------------------------------------------------------------------
@@ -33,7 +33,7 @@ module maxima_module
   implicit none
 
   ! RCS tag for object file identification 
-  character(len=80), save, private :: RCSid = "$Id: maxima_module.f90,v 1.4 2003/06/11 09:08:17 drb Exp $"
+  character(len=80), save, private :: RCSid = "$Id$"
 
   !include 'maxima.inc'
 

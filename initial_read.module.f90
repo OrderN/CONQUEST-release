@@ -40,9 +40,13 @@
 !!    Added option for reading pdb files
 !!   2008/02/01 03:43 dave
 !!    Changes to give output to file not stdout
+!!   2008/05/23 ast
+!!    Added timers
 !!  SOURCE
 !!
 module initial_read
+
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
 
   implicit none
 
@@ -284,6 +288,8 @@ contains
 !!    Changed the default of General.ManyProcessors to .true.
 !!   12:18, 14/02/2008 drb 
 !!    Added options for buffer around primary and covering sets
+!!   2008/07/16 ast
+!!    New keywords for timers
 !!  TODO
 !!   Think about single node read and broadcast 10/05/2002 dave
 !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
@@ -302,7 +308,7 @@ contains
          flag_fractional_atomic_coords, flag_old_partitions, ne_in_cell, max_L_iterations, flag_read_blocks, &
          flag_functional_type, functional_description, functional_lda_pz81, functional_lda_gth96, &
          functional_lda_pw92, functional_gga_pbe96, flag_reset_dens_on_atom_move, flag_continue_on_SC_fail, &
-         iprint_init, iprint_mat, iprint_ops, iprint_DM, iprint_SC, iprint_minE, &
+         iprint_init, iprint_mat, iprint_ops, iprint_DM, iprint_SC, iprint_minE, iprint_time, &
          iprint_MD, iprint_index, iprint_gen, iprint_pseudo, iprint_basis, iprint_intgn, area_general, &
          global_maxatomspart, load_balance, many_processors, flag_assign_blocks, io_lun, &
          flag_pulay_simpleStep
@@ -341,6 +347,7 @@ contains
     use group_module, ONLY : part_method, HILBERT, PYTHON
     use energy, ONLY: flag_check_DFT
     use H_matrix_module, ONLY: locps_output, locps_choice
+    use timer_module, ONLY: time_threshold,lun_tmr
 
     implicit none
 
@@ -358,9 +365,11 @@ contains
     type(parsed_line), pointer :: p ! Pointer to a line broken into tokens by fdf
 
     integer :: i, j, lun, stat
+    integer :: nhund, ntens, nunit, n1
     character(len=20) :: def
-    character(len=80) :: coordfile, line
+    character(len=80) :: coordfile, line, timefile, timefileroot
     character(len=10) :: basis_string, part_mode, tmp2
+    character(len=11) :: digitstr = "01234567890"
     character(len=6)  :: method ! To find whether we diagonalise or use O(N)
     character(len=5)  :: ps_type !To find which pseudo we use
     character(len=8)  :: tmp
@@ -398,6 +407,20 @@ contains
     else
        io_lun = 6
     end if
+    ! Where will the timers will be written?
+    if(fdf_boolean('IO.WriteTimeFile',.true.)) then                                                            ! tmr_rmv001
+       timefileroot = fdf_string('IO.TimeFileRoot',"time")                                                     ! tmr_rmv001
+       nhund = aint(real(inode/100))+1                                                                         ! tmr_rmv001
+       n1 = inode - (100*nhund) + 100                                                                          ! tmr_rmv001
+       ntens = aint(real(n1/10))+1                                                                             ! tmr_rmv001
+       nunit = n1 - 10*ntens + 11                                                                              ! tmr_rmv001
+       timefile = trim(timefileroot)//'.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit) ! tmr_rmv001
+       call io_assign(lun_tmr)                                                                                 ! tmr_rmv001
+       open(unit=lun_tmr,file=timefile,iostat=stat)                                                            ! tmr_rmv001
+       if(stat/=0) call cq_abort("Failed to open time file",stat)                                              ! tmr_rmv001
+    else                                                                                                       ! tmr_rmv001
+       lun_tmr = io_lun                                                                                        ! tmr_rmv001
+    end if                                                                                                     ! tmr_rmv001
     if(inode==ionode) call banner
     new_format = fdf_boolean('IO.NewFormat',.true.)
     if(new_format) then
@@ -415,6 +438,7 @@ contains
        iprint_pseudo = fdf_integer('IO.Iprint_pseudo',iprint)
        iprint_basis  = fdf_integer('IO.Iprint_basis',iprint)
        iprint_intgn  = fdf_integer('IO.Iprint_intgn',iprint)
+       iprint_time   = fdf_integer('IO.Iprint_time',iprint)
        locps_output = fdf_boolean('IO.LocalPotOutput', .false.)
        locps_choice = fdf_integer('IO.LocalPotChoice', 8)
        atomch_output = fdf_boolean('IO.AtomChargeOutput', .false.)
@@ -429,6 +453,7 @@ contains
           m_units = gbytes
           mem_conv = GB
        end if
+       time_threshold = fdf_double('General.TimeThreshold',0.001_double)
        ! Read run title
        titles = fdf_string('IO.Title',def)
        ! Is this a restart run ? **NB NOT AVAILABLE RIGHT NOW**
@@ -1081,6 +1106,7 @@ contains
     ! Local variables
     integer :: stat
     
+    call start_timer(tmr_std_allocation)
     allocate(RadiusSupport(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating RadiusSupport in allocate_species_vars: ",n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
@@ -1132,6 +1158,7 @@ contains
     allocate(InvSRange(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating InvSRange in allocate_species_vars: ",n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
+    call stop_timer(tmr_std_allocation)
     return
   end subroutine allocate_species_vars
 

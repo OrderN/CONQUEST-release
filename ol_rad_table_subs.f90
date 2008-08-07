@@ -4,7 +4,7 @@
 ! ------------------------------------------------------------------------------
 ! Module make_rad_tables
 ! ------------------------------------------------------------------------------
-! Area 11: basis functions
+! Code area 11: basis functions
 ! ------------------------------------------------------------------------------
 
 !!****h* Conquest/make_rad_tables *
@@ -19,10 +19,13 @@
 !!  MODIFICATION HISTORY
 !!   2008/02/06 08:29 dave
 !!    Changed for output to file not stdout
+!!   2008/02/10 ast
+!!    Added timers
 !!  SOURCE
 module make_rad_tables
 
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
 
   implicit none
 
@@ -63,6 +66,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   09:29, 27/11/2007 drb 
 !!    Bug fix: zero dummy1bt and dummy2bt before use
+!!   2008/02/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine make_rad_table_nlpfpao(npts1,l1,delr1,npts2,l2,delr2&
@@ -105,16 +110,20 @@ contains
     !ld+1 is now radial table multiplicity i.e. no. of 'l3' values permitted
     ld = min(l1,l2)
     stat=0
+    call start_timer(tmr_std_allocation)
     allocate(fullradtbl(n12/4,ld+1),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating fullradtbl in make_rad_table: ",n12/4,ld+1)
     allocate(rad_tables_nlpf_pao(count)%rad_tbls(ld+1),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating rad_tables in make_rad_table: ",ld+1)
+    call stop_timer(tmr_std_allocation)
     rcut1 = delr1*(npts1-1)
     rcut2 = delr2*(npts2-1)
+    call start_timer(tmr_std_allocation)
     allocate(dummy1(n12),dummy2(n12),dummy1bt(n12/2),dummy2bt(n12/2),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating dummy in make_rad_table: ",n12)
     allocate(dummyprod(n12/2),dumout(n12/4),ol_out(n12/4),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating dummpy outs in make_rad_table: ",n12/4)
+    call stop_timer(tmr_std_allocation)
     rcut1_fake = (n12-1)*d12
     !RC have a problem with k space arrays not having sufficient size here.
     dummy1(1:npts1) = table1(1:npts1)
@@ -148,12 +157,14 @@ contains
     del_r = twopi/(kcut+deltak)
     
     call store_nlpf_pao_tables(npts,del_r,ld,fullradtbl,n12/4,count)
+    call start_timer(tmr_std_allocation)
     deallocate(ol_out,dumout,dummyprod,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating dummpy outs in make_rad_table: ",n12/4)
     deallocate(dummy2bt, dummy1bt,dummy2,dummy1,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating rad_tables in make_rad_table: ",ld+1)
     deallocate(fullradtbl,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating fullradtbl in make_rad_table: ",n12/4,ld+1)
+    call stop_timer(tmr_std_allocation)
   end subroutine make_rad_table_nlpfpao
   !!***
   
@@ -192,6 +203,8 @@ contains
 !!    and pao_ke_pao radial tables without option flag
 !!   09:29, 27/11/2007 drb 
 !!    Bug fix: zero dummy1bt and dummy2bt before use
+!!   2008/02/10 ast
+!!    Added timers
 !!  SOURCE
 !!  
   subroutine make_rad_table_supp_ke(npts1,l1,delr1,npts2,l2,delr2&
@@ -226,16 +239,20 @@ contains
     !ld+1 is now radial table multiplicity i.e. no. of 'l3' values permitted
     ld = min(l1,l2)
     !allocate(fullradtbl(ld+1,n12/4),fullradtbl_ke(ld+1,n12/4))
+    call start_timer(tmr_std_allocation)
     allocate(fullradtbl(n12/4,ld+1),fullradtbl_ke(n12/4,ld+1),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating fullradtbl in make_rad_table: ",n12/4,ld+1)
     allocate(rad_tables(count)%rad_tbls(ld+1), rad_tables_ke(count)%rad_tbls(ld+1),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating rad_tables in make_rad_table: ",ld+1)
+    call stop_timer(tmr_std_allocation)
     rcut1 = delr1*(npts1-1)
     rcut2 = delr2*(npts2-1)
+    call start_timer(tmr_std_allocation)
     allocate(dummy1(n12),dummy2(n12),dummy1bt(n12/2),dummy2bt(n12/2),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating dummy in make_rad_table: ",n12)
     allocate(dummyprod(n12/2),dummyprod_ke(n12/2),dumout(n12/4),ol_out(n12/4),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating dummpy outs in make_rad_table: ",n12/4)
+    call stop_timer(tmr_std_allocation)
     rcut1_fake = (n12-1)*d12
     !RC have a problem with k space arrays not having sufficient size here.
     dummy1(1:npts1) = table1(1:npts1)
@@ -277,12 +294,14 @@ contains
     del_r = twopi/(kcut+deltak) 
     
     call store_supp_ke_tables(npts,del_r,ld,fullradtbl,fullradtbl_ke,n12/4,count)
+    call start_timer(tmr_std_allocation)
     deallocate(ol_out,dumout,dummyprod_ke,dummyprod,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating dummpy outs in make_rad_table: ",n12/4)
     deallocate(dummy2bt, dummy1bt,dummy2,dummy1,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating rad_tables in make_rad_table: ",ld+1)
     deallocate(fullradtbl_ke,fullradtbl,STAT=stat)    
     if(stat/=0) call cq_abort("Error deallocating fullradtbl in make_rad_table: ",n12/4,ld+1)
+    call stop_timer(tmr_std_allocation)
   end subroutine make_rad_table_supp_ke
   !!***
 
@@ -309,7 +328,8 @@ contains
 !!  CREATION DATE
 !!   24/07/03
 !!  MODIFICATION HISTORY
-!!
+!!   2008/02/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   
@@ -334,10 +354,12 @@ contains
     enddo
     
     do i = 1, num_l+1
+       call start_timer(tmr_std_allocation)
        allocate(rad_tables(count)%rad_tbls(i)%arr_vals(1:npnts),&
             &rad_tables_ke(count)%rad_tbls(i)%arr_vals(1:npnts))
        allocate(rad_tables(count)%rad_tbls(i)%arr_vals2(1:npnts),&
             &rad_tables_ke(count)%rad_tbls(i)%arr_vals2(1:npnts))
+       call stop_timer(tmr_std_allocation)
 
        rad_tables(count)%rad_tbls(i)%arr_vals(1:npnts) = fullradtbl(1:npnts,i)
        rad_tables_ke(count)%rad_tbls(i)%arr_vals(1:npnts) = fullradtbl_ke(1:npnts,i)
@@ -390,7 +412,8 @@ contains
 !!  CREATION DATE
 !!   24/07/03
 !!  MODIFICATION HISTORY
-!!
+!!   2008/02/10 ast
+!!    Added timers
 !!  SOURCE
 !!
 
@@ -413,8 +436,10 @@ contains
     enddo
     
     do i = 1, num_l+1
+       call start_timer(tmr_std_allocation)
        allocate(rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals(1:npnts),&
             &rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals2(1:npnts))
+       call stop_timer(tmr_std_allocation)
       
        rad_tables_nlpf_pao(count)%rad_tbls(i)%arr_vals(1:npnts) = fullradtbl(1:npnts,i)
        
@@ -458,7 +483,8 @@ contains
 !!  CREATION DATE
 !!   24/07/03
 !!  MODIFICATION HISTORY
-!!
+!!   2008/02/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   
@@ -478,10 +504,13 @@ contains
     real(double) :: del1,del2,del
     real(double), pointer, dimension(:) :: fire1,fire2
     
+    call start_timer(tmr_std_basis)
     !RC fixing routine to read in k space parameters
     call get_max_paoparams(lmax,nzmax)
     nspecies = size(pao)
+    call start_timer(tmr_std_allocation)
     allocate(ol_index(nspecies,nspecies,1:nzmax,1:nzmax,0:lmax,0:lmax))
+    call stop_timer(tmr_std_allocation)
     !write(io_lun,*) lmax,nzmax, 'ol_index allocated'
     count = 1
     do i=1,2
@@ -503,17 +532,23 @@ contains
                             del2 = pao(nsp2)%angmom(l2)%zeta(nz2)%cutoff/&
                               &(pao(nsp2)%angmom(l2)%zeta(nz2)%length-1)
                             
+                            call start_timer(tmr_std_allocation)
                             allocate(fire1(n1),fire2(n2))
+                            call stop_timer(tmr_std_allocation)
                             !RATHIN switching off for Gaussian testing
                             call unnorm_siesta_tbl(fire1,fire2,n1,n2,&
                                  &pao(nsp1)%angmom(l1)%zeta(nz1)%table,pao(nsp2)%angmom(l2)&
                                  &%zeta(nz2)%table,del1,del2,l1,l2)
                             call make_rad_table_supp_ke(n1,l1,del1,n2,l2,del2,fire1,fire2,&
                                  &count,del_k,kcut)
+                            call start_timer(tmr_std_allocation)
                             deallocate(fire1,fire2)
+                            call stop_timer(tmr_std_allocation)
                             !RC N.B. WE HAVE NOT DONE THE BELOW FOR KE TABLES!
                             rad_tables(count)%no_of_lvals = min(l1,l2)+1
+                            call start_timer(tmr_std_allocation)
                             allocate(rad_tables(count)%l_values(min(l1,l2)+1))
+                            call stop_timer(tmr_std_allocation)
                             smallcount = 1
                             do k=abs(l1-l2),l1+l2,2
                                rad_tables(count)%l_values(smallcount)=k
@@ -529,14 +564,17 @@ contains
        enddo
        if(i.eq.1) then
           !write(io_lun,*) 'now allocating rad_tables(ke) storage type', ' count =', count
+          call start_timer(tmr_std_allocation)
           allocate(rad_tables(count))
           allocate(rad_tables_ke(count))
+          call stop_timer(tmr_std_allocation)
           count = 1
        else
           continue
        endif
     enddo !corresponding to the i counter
     !all radial tables have now been generated for pao_pao and pao_ke_pao
+    call stop_timer(tmr_std_basis)
   end subroutine gen_rad_tables
   !!***
   
@@ -563,7 +601,8 @@ contains
 !!  CREATION DATE
 !!   24/07/03
 !!  MODIFICATION HISTORY
-!!
+!!   2008/02/10 ast
+!!    Added timers
 !!  SOURCE
 !!
 
@@ -582,11 +621,14 @@ contains
     real(double) :: del1,del2,del
     real(double), pointer, dimension(:) :: fire1,fire2
     
+    call start_timer(tmr_std_basis)
     !setting allocation bounds for indexing array
     call get_max_pao_nlpfparams(lmax,nzmax)
     nspecies = size(pao)
     !write(io_lun,*) 'allocating indexing array'
+    call start_timer(tmr_std_allocation)
     allocate(ol_index_nlpf_pao(nspecies,nspecies,1:nzmax,1:nzmax,0:lmax,0:lmax))
+    call stop_timer(tmr_std_allocation)
     !write(io_lun,*) lmax,nzmax, 'ol_index_nlpf_pao allocated'
     
     count = 1
@@ -614,16 +656,22 @@ contains
                                  &(pao(nsp1)%angmom(l1)%zeta(nz1)%length-1)
                             del2 = pseudo(nsp2)%pjnl(i_pfnl)%delta
                             
+                            call start_timer(tmr_std_allocation)
                             allocate(fire1(n1),fire2(n2))
+                            call stop_timer(tmr_std_allocation)
                             call unnorm_siesta_tbl(fire1,fire2,n1,n2,&
                                  &pao(nsp1)%angmom(l1)%zeta(nz1)%table,pseudo(nsp2)%&
                                  &pjnl(i_pfnl)%f,del1,del2,l1,l2)
                             call make_rad_table_nlpfpao(n1,l1,del1,n2,l2,del2,fire1,fire2,count,del_k&
                                  &,kcut)
                             call my_barrier()
+                            call start_timer(tmr_std_allocation)
                             deallocate(fire1,fire2)
+                            call stop_timer(tmr_std_allocation)
                             rad_tables_nlpf_pao(count)%no_of_lvals = min(l1,l2)+1
+                            call start_timer(tmr_std_allocation)
                             allocate(rad_tables_nlpf_pao(count)%l_values(min(l1,l2)+1))
+                            call stop_timer(tmr_std_allocation)
                             smallcount = 1
                             do k=abs(l1-l2),l1+l2,2
                             rad_tables_nlpf_pao(count)%l_values(smallcount)=k
@@ -639,12 +687,15 @@ contains
        enddo
        if(i.eq.1) then
           !write(io_lun,*) 'now allocating rad_tables storage type', 'count =', count
+          call start_timer(tmr_std_allocation)
           allocate(rad_tables_nlpf_pao(count))
+          call stop_timer(tmr_std_allocation)
           count = 1
        else
           continue
        endif
     enddo !corresponding to the i counter
+    call stop_timer(tmr_std_basis)
     
   end subroutine gen_nlpf_supp_tbls
   !!***
@@ -853,6 +904,8 @@ end subroutine unnorm_siesta_tbl
 !!    Changing allocation of support function coefficients
 !!   2006/06/13 16:58 dave
 !!    Changing coefficient defaults, adding check for basis set sanity
+!!   2008/02/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine get_support_pao_rep(inode,ionode)
@@ -877,6 +930,7 @@ end subroutine unnorm_siesta_tbl
     logical :: warn_flag
     !integer, external :: time
     
+    call start_timer(tmr_std_basis)
     warn_flag = .false.
     if(inode==ionode.AND.iprint_basis>1) &
          write(io_lun,*) 'Flag for all pao coeffs on all procs is ',flag_paos_atoms_in_cell
@@ -887,9 +941,11 @@ end subroutine unnorm_siesta_tbl
        ! This is TEMPORARY !
        call cq_abort("Hard Failure in get_support_pao_rep: MUST store ALL PAO coefficients.")
     end if
+    call start_timer(tmr_std_allocation)
     allocate(supports_on_atom(mx_pao_coeff_atoms))
     allocate(support_gradient(mx_pao_coeff_atoms))
     allocate(support_elec_gradient(mx_pao_coeff_atoms))
+    call stop_timer(tmr_std_allocation)
     total_size = 0
     do i = 1, mx_pao_coeff_atoms
        if(flag_paos_atoms_in_cell) then
@@ -900,14 +956,22 @@ end subroutine unnorm_siesta_tbl
        n_sup = nsf_species(species_i)
        if(iprint_basis>2) write(io_lun,*) 'atom, supp: ',i,species_i,n_sup
        supports_on_atom(i)%nsuppfuncs = n_sup
+       call start_timer(tmr_std_allocation)
        allocate(supports_on_atom(i)%supp_func(n_sup))
+       call stop_timer(tmr_std_allocation)
        support_gradient(i)%nsuppfuncs = n_sup
+       call start_timer(tmr_std_allocation)
        allocate(support_gradient(i)%supp_func(n_sup))
+       call stop_timer(tmr_std_allocation)
        support_elec_gradient(i)%nsuppfuncs = n_sup
+       call start_timer(tmr_std_allocation)
        allocate(support_elec_gradient(i)%supp_func(n_sup))
+       call stop_timer(tmr_std_allocation)
        if(iprint_basis>2) write(io_lun,*) 'atom, lmax: ',i,pao(species_i)%greatest_angmom
        supports_on_atom(i)%lmax = pao(species_i)%greatest_angmom
+       call start_timer(tmr_std_allocation)
        allocate(supports_on_atom(i)%naczs(0:supports_on_atom(i)%lmax))
+       call stop_timer(tmr_std_allocation)
        count = 0
        do l = 0, supports_on_atom(i)%lmax
           supports_on_atom(i)%naczs(l) = pao(species_i)%angmom(l)%n_zeta_in_angmom
@@ -1127,6 +1191,7 @@ end subroutine unnorm_siesta_tbl
        call writeout_support_functions(inode,ionode)
     end if
     call my_barrier
+    call stop_timer(tmr_std_basis)
     
   end subroutine get_support_pao_rep
 !!***

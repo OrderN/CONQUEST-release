@@ -91,6 +91,7 @@ program Conquest
   use block_module, ONLY: nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
   use memory_module
   use minimise
+  use timer_stdclocks_module
 
   implicit none
 
@@ -123,6 +124,7 @@ program Conquest
   if(inode==ionode.AND.iprint_gen>0) write(io_lun,'(4x,"Finished control")')
 
   call write_mem_use
+  call print_time_report
   ! Wrap up
   call my_barrier()
   !call save_state( inode, ionode, mu, expected_reduction, n_run, output_file)

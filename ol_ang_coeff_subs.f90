@@ -24,6 +24,8 @@
 !!    included prefac and fact arrays
 !!   2008/02/06 08:27 dave
 !!    Changed for output to file not stdout
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
 
@@ -32,6 +34,7 @@ module angular_coeff_routines
   use datatypes
   use global_module, ONLY: io_lun
   use bessel_integrals, ONLY: fact, lmax_fact
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
 
   implicit none
 
@@ -363,7 +366,8 @@ contains
 !!  CREATION DATE
 !!   24/07/03
 !!  MODIFICATION HISTORY
-!!
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine make_ang_coeffs
@@ -380,10 +384,13 @@ contains
     integer :: tot,no_m_combs,ncount,m_combo,l,m,n,k,mtot,nzmax
     real(double) :: int_val,coeff,index
         
+    call start_timer(tmr_std_basis)
     call get_max_pao_nlpfparams(lmax,nzmax)
     !allocating array to hold angular coefficients information..
     call get_ang_coeffparams(lmax,tot_l_trips) !size for coefficients array
+    call start_timer(tmr_std_allocation)
     allocate(coefficients(tot_l_trips))
+    call stop_timer(tmr_std_allocation)
     !now calculate and store angular coefficients
     ncount=1
     do l1=0,lmax
@@ -396,7 +403,9 @@ contains
              if(ncount>tot_l_trips) write(io_lun,*) 'ERROR ! Coefficients overrun: ',ncount,tot_l_trips
              coefficients(ncount)%n_m_combs=no_m_combs
              
+             call start_timer(tmr_std_allocation)
              allocate(coefficients(ncount)%m_combs(no_m_combs))
+             call stop_timer(tmr_std_allocation)
              m_combo=1
              do m2=-l2,l2
                 do m1=-l1,l1
@@ -417,6 +426,7 @@ contains
        enddo
     enddo
     ncount = ncount-1 !size of coefficients array to be passed
+    call stop_timer(tmr_std_basis)
   end subroutine make_ang_coeffs
 !!***
 
@@ -780,7 +790,8 @@ contains
 !!  CREATION DATE
 !!   30/09/03
 !!  MODIFICATION HISTORY
-!!
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
 
@@ -793,6 +804,7 @@ contains
     integer, intent(in) :: l,m
     real(double) :: x,y,z,theta,phi,r_my
 
+    call start_timer(tmr_std_basis)
     !unnormalizing direction cosines
     x = x_n*r
     y = y_n*r
@@ -803,6 +815,7 @@ contains
     !call test_rotation(l,m,theta)
     val = 0.0_double
     val = f_r*re_sph_hrmnc(l,m,theta,phi)
+    call stop_timer(tmr_std_basis)
   end subroutine pp_elem
   !!***
 
@@ -1748,7 +1761,8 @@ contains
 !!  CREATION DATE
 !!   2005 sometime
 !!  MODIFICATION HISTORY
-!!
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine set_prefac
@@ -1761,6 +1775,7 @@ contains
     integer :: ll, mm
     real(double) :: g, h
 
+    call start_timer(tmr_std_basis)
     prefac(:,:) = one
     do ll = 0, lmax_prefac
        do mm = -ll, ll
@@ -1769,6 +1784,7 @@ contains
           prefac(ll,mm) = sqrt(g*h)
        enddo
     enddo
+    call stop_timer(tmr_std_basis)
     return
   end subroutine set_prefac
 !!***
@@ -1791,7 +1807,8 @@ contains
 !!  CREATION DATE
 !!   2005 sometime
 !!  MODIFICATION HISTORY
-!!
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine set_prefac_real
@@ -1804,6 +1821,7 @@ contains
     integer :: ll, mm
     real(double) :: g, h
 
+    call start_timer(tmr_std_basis)
     prefac_real(:,:) = one
     do ll = 0, lmax_prefac
        do mm = -ll, ll
@@ -1818,6 +1836,7 @@ contains
           !write(io_lun,*) 'pfr: ',ll,mm,ll-mm,ll+mm,2*ll+1,prefac_real(ll,mm)
        enddo
     enddo
+    call stop_timer(tmr_std_basis)
     return
   end subroutine set_prefac_real
 !!***
@@ -1923,7 +1942,8 @@ contains
 !!  CREATION DATE
 !!   2005 sometime
 !!  MODIFICATION HISTORY
-!!
+!!   2008/06/10 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine set_fact
@@ -1933,11 +1953,13 @@ contains
     real(double) :: xx
     integer :: ii
 
+    call start_timer(tmr_std_basis)
     fact(-1:lmax_fact) = one
     do ii=1, lmax_fact
        xx = real(ii,double)
        fact(ii)=fact(ii-1)* xx
     enddo
+    call stop_timer(tmr_std_basis)
     return
   end subroutine set_fact
 !!***

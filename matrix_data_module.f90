@@ -1,6 +1,6 @@
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
-! $Id: matrix_data_module.f90,v 1.8.2.2 2006/03/31 12:22:49 drb Exp $
+! $Id$
 ! ------------------------------------------------------------------------------
 ! Module matrix_data
 ! ------------------------------------------------------------------------------
@@ -103,6 +103,6 @@ module matrix_data
 !!***
 
   ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id: matrix_data_module.f90,v 1.8.2.2 2006/03/31 12:22:49 drb Exp $"
+  character(len=80), private :: RCSid = "$Id$"
 
 end module matrix_data

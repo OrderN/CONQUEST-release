@@ -29,11 +29,14 @@
 !!    Added get_electronic_density
 !!   2008/02/04 17:13 dave
 !!    Changdes for output to file not stdout
+!!   2008/05/23 ast
+!!    Added timers
 !!  SOURCE
 module density_module
   
   use datatypes
   use global_module, ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_chargescf
 
   implicit none
   save
@@ -84,13 +87,16 @@ contains
 !!    Bug fix for species
 !!   2007/05/08 17:00 dave
 !!    Added scaling to fix electron number (specifically to ensure correct charge in cell)
+!!   2008/05/23 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine set_density()
 
     use datatypes
     use numbers, ONLY: zero, one
-    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell, iprint_SC, species_glob, dens, ne_in_cell
+    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell, iprint_SC, &
+                             species_glob, dens, ne_in_cell, IPRINT_TIME_THRES3
     use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
     use group_module, ONLY : blocks, parts
     use primary_module, ONLY: domain
@@ -101,6 +107,7 @@ contains
     use spline_module, ONLY: splint
     use dimens, ONLY: n_my_grid_points, grid_point_volume
     use GenBlas, ONLY: rsum, scal
+    use timer_module
 
     implicit none
 
@@ -117,11 +124,14 @@ contains
     real(double):: xblock,yblock,zblock, alpha
     real(double) :: dx,dy,dz,rx,ry,rz,r2,r_from_i
     real(double) :: local_density !local charge density returned from splint routine
+    type(cq_timer) :: tmr_l_tmp1
 
     logical :: range_flag ! logical flag to warn if splint routine called out of the tabulated range.
 
     if(inode==ionode.AND.iprint_SC>=2) write(io_lun,fmt='(2x,"Entering set_density")')
 
+    call start_timer(tmr_std_chargescf)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     density = zero  ! initialize density
     !write(io_lun,*) 'Size of density: ',size(density)
     !call scal(n_my_grid_points,zero,density,1)
@@ -236,6 +246,8 @@ contains
     density = density_scale*density
     if(inode.eq.ionode.AND.iprint_SC>0) write(io_lun,*) 'In set_density, electrons: ',density_scale*local_density
     call my_barrier()
+    call stop_print_timer(tmr_l_tmp1,"set_density",IPRINT_TIME_THRES3)
+    call stop_timer(tmr_std_chargescf)
     return
   end subroutine set_density
 !!***
@@ -277,6 +289,8 @@ contains
 !!    matrix routines
 !!   2006/03/04 09:08 dave
 !!    Changed to use new grid ideas, put into density_module
+!!   2008/05/23 ast
+!!    Added timers
 !!  SOURCE
 !!
   subroutine get_electronic_density(denout, electrons, support, support_K, inode, ionode, size)
@@ -308,6 +322,7 @@ contains
 
     integer :: blk, i_count_alpha, n, n_i, n_point 
 
+    call start_timer(tmr_std_chargescf)
     if(inode==ionode.AND.iprint_SC>=2) write(io_lun,fmt='(2x,"Entering get_electronic_density")')
     gridfunctions(support_K)%griddata = zero
     call act_on_vectors_new(inode-1,rem_bucket(sf_H_sf_rem),matK,support_K,support)
@@ -358,6 +373,7 @@ contains
     ! support_K is using the same memory as h_on_support, so lets be safe
     ! and set it back to zero
     gridfunctions(support_K)%griddata = zero
+    call stop_timer(tmr_std_chargescf)
 
     return
   end subroutine get_electronic_density
