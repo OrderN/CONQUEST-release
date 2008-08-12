@@ -506,6 +506,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   21/06/2001 dave
 !!    ROBODoc header and changed to gsum
+!!   2008/08/12 10:49 dave
+!!    Tidying: removed unnecessary variable ncovers and allocate/deallocate calls
 !!  SOURCE
 !!
 ! =====================================================================
@@ -526,18 +528,13 @@ contains
     integer :: nnd ! Node no. starting from one
 
     ! Local variables
-    integer, allocatable, dimension(:) :: ncovers
     integer :: ierr,i,stat
 
-    allocate(ncovers(3*numprocs),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating ncovers: ",stat,numprocs)
     set%ncover_rem = 0
     set%ncover_rem(3*(nnd-1)+1) = set%ncoverx
     set%ncover_rem(3*(nnd-1)+2) = set%ncovery
     set%ncover_rem(3*(nnd-1)+3) = set%ncoverz
     call gsum(set%ncover_rem, 3*numprocs)
-    deallocate(ncovers,STAT=stat)
-    if(stat/=0) call cq_abort("Error deallocating ncovers: ",stat,numprocs)
     return
   end subroutine send_ncover
 !!***

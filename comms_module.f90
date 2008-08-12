@@ -307,6 +307,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   24/06/2002 drb
 !!    Added bounds on the copy for a_store and atrans
+!!   2008/08/12 10:46 dave
+!!    Bug fix: amount copied on-processor was wrong (changed argument of source array to len not n)
 !!  SOURCE
 !!
   subroutine fetch_trans_data(a_store,atrans,data,len,nr,mynode,mx_iprim)
@@ -333,7 +335,7 @@ contains
     if(nnd_rem/=mynode.AND.len>0) then
        call MPI_recv(a_store,len,MPI_DOUBLE_PRECISION, nnd_rem-1,tag,MPI_COMM_WORLD,nrstat,ierr)
     else
-       a_store(1:len) = atrans(data%i_pair_addr(nr):data%i_pair_addr(nr)+n-1)
+       a_store(1:len) = atrans(data%i_pair_addr(nr):data%i_pair_addr(nr)+len-1)
     endif
     return
   end subroutine fetch_trans_data
