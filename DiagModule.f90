@@ -2131,7 +2131,6 @@ contains
              RecvBuffer(j,1:recv_info(recv_proc+1)%orbs) = RecvBuffer(j,1:recv_info(recv_proc+1)%orbs)*0.5_double*occs(j)
           end do
           orb_count = 0
-          call start_timer(tmr_std_matrices)
           do atom = 1,current_loc_atoms(recv_proc+1)
              locatom = mapchunk(atom)
              if(iprint_DM>=4) write(io_lun,*) 'Atom, loc: ',atom,locatom,recv_info(recv_proc+1)%ints(locatom)
@@ -2165,7 +2164,6 @@ contains
              ! Careful - we only want to increment after ALL interactions done
              orb_count = orb_count + recv_info(recv_proc+1)%ndimj(locatom)
           end do ! atom=current_loc_atoms
-          call stop_timer(tmr_std_matrices)
        end if ! recv_size>0
        if(iprint_DM>=4) write(io_lun,*) 'Calling MPI_Wait'
        if(send_size>0.AND.myid/=send_proc) then

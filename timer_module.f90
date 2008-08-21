@@ -46,13 +46,6 @@ module timer_module
   ! Printing tolerance (the minimum time for a timer to be printed)
   DOUBLE PRECISION, save :: time_threshold
 
-  ! Dummy initialiser
-  logical,target,private :: used  ! This is a dummy variable, used to avoid explicit initialisations
-                                  !   of the "objects" of type cq_timer (see its declaration below)
-                                  ! The advantage of using this method is that using a flag implies
-                                  !   that it has to be initialised before being used/checked.
-                                  !   But we want to know if we need to initialise, so that doesn't
-                                  !   work (it might contain garbage when used first)
   ! Level indicator (basically, the number of timers started and not stopped)
   !   This is mainly intended for private use
   integer :: cq_timer_level = 0
@@ -60,7 +53,7 @@ module timer_module
   type cq_timer
       logical :: have_ini         ! Signals whether an initial time mark has been obtained yet
       logical :: errors           ! True if errors, e.g. stop_timer without starting it
-      logical,pointer :: p_used   ! If associated to the dummy var used, it means "object initialised"
+      logical :: first_use=.true.
       integer :: level
       DOUBLE PRECISION :: t_ini
       DOUBLE PRECISION :: t_end
@@ -144,17 +137,12 @@ contains
     ! Passed variables
     type(cq_timer)   :: t   ! The timer to be used
 
-    ! If myself is already associated, this is a sign that this subroutine has already been 
-    !   called without the corresponding call to an end-time routine
-    ! This is not, strictly speaking, an error, but in principle is never necessary
-    if(.not.associated(t%p_used)) then
-      t%have_ini=.false.
-      t%p_used=>used         ! Now we now it has been initialised
-      t%t_ini=0.0
-      t%t_end=0.0
-      t%t_tot=0.0
-      t%errors=.false.
-    end if
+    t%first_use = .false.
+    t%have_ini=.false.
+    t%t_ini=0.0
+    t%t_end=0.0
+    t%t_tot=0.0
+    t%errors=.false.
 
     return
   end subroutine initialise_timer
@@ -195,7 +183,7 @@ contains
     type(cq_timer) :: t      ! The timer to be used
     logical,optional :: l    ! Do we want to assign a level? Ignored if already initialised
 
-    if(.not.associated(t%p_used)) then    ! First time to be used
+    if(t%first_use) then
        call initialise_timer(t)
     end if
 
@@ -270,9 +258,13 @@ contains
     !  1) We have actually initialised the timer (if not, do it, but complain)
     !  2) An initial time mark is actually available (t%have_ini==.true.)
     ! If any of those are false, complain 
-    if(associated(t%p_used) .and. (t%have_ini .eqv. .true.)) then
-      if(present(accumulate).and.(accumulate.eqv.TIME_ACCUMULATE_NO)) then  ! Don't accumulate times
-        t%t_tot=t%t_end-t%t_ini
+    if(.not.t%first_use .and. (t%have_ini .eqv. .true.)) then
+      if(present(accumulate)) then
+        if(accumulate.eqv.TIME_ACCUMULATE_NO) then  ! Don't accumulate times
+          t%t_tot=t%t_end-t%t_ini
+        else
+          t%t_tot=t%t_tot+(t%t_end-t%t_ini) 
+        end if
       else  
         t%t_tot=t%t_tot+(t%t_end-t%t_ini) 
       end if
@@ -281,7 +273,7 @@ contains
          cq_timer_level = cq_timer_level - 1               ! And we go up one level in the hierarchy
       endif                                                !   so we have to ask for a level again, if needed
     else
-      if(.not.associated(t%p_used))  call initialise_timer(t)
+      if(t%first_use)  call initialise_timer(t)
       t%errors=.true.
       if(iprint >= 3) then
          write(unit=lun_tmr,&

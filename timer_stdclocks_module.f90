@@ -36,19 +36,19 @@ module timer_stdclocks_module
   ! RCS tag for object file identification
   character(len=80), save, private :: RCSid = "$Id:$"
 
-  type(cq_timer) :: tmr_std_initialisation   ! Code area: 1
-  type(cq_timer) :: tmr_std_matrices         ! Code area: 2
-  type(cq_timer) :: tmr_std_hmatrix          ! Code area: 3
-  type(cq_timer) :: tmr_std_smatrix          ! Code area: 3
-  type(cq_timer) :: tmr_std_densitymat       ! Code area: 4
-  type(cq_timer) :: tmr_std_chargescf        ! Code area: 5
-  type(cq_timer) :: tmr_std_eminimisation    ! Code area: 6
-  type(cq_timer) :: tmr_std_moveatoms        ! Code area: 7
-  type(cq_timer) :: tmr_std_indexing         ! Code area: 8
-  type(cq_timer) :: tmr_std_pseudopot        ! Code area: 10
-  type(cq_timer) :: tmr_std_basis            ! Code area: 11
-  type(cq_timer) :: tmr_std_integration      ! Code area: 12
-  type(cq_timer) :: tmr_std_allocation
+  type(cq_timer),save :: tmr_std_initialisation   ! Code area: 1
+  type(cq_timer),save :: tmr_std_matrices         ! Code area: 2
+  type(cq_timer),save :: tmr_std_hmatrix          ! Code area: 3
+  type(cq_timer),save :: tmr_std_smatrix          ! Code area: 3
+  type(cq_timer),save :: tmr_std_densitymat       ! Code area: 4
+  type(cq_timer),save :: tmr_std_chargescf        ! Code area: 5
+  type(cq_timer),save :: tmr_std_eminimisation    ! Code area: 6
+  type(cq_timer),save :: tmr_std_moveatoms        ! Code area: 7
+  type(cq_timer),save :: tmr_std_indexing         ! Code area: 8
+  type(cq_timer),save :: tmr_std_pseudopot        ! Code area: 10
+  type(cq_timer),save :: tmr_std_basis            ! Code area: 11
+  type(cq_timer),save :: tmr_std_integration      ! Code area: 12
+  type(cq_timer),save :: tmr_std_allocation
 
 contains
 
