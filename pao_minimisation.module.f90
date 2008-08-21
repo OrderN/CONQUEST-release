@@ -164,8 +164,8 @@ contains
     end if
     call stop_timer(tmr_std_allocation)
     ! Set tolerances for self-consistency and L minimisation
-    con_tolerance = SCC*expected_reduction**SCBeta
-    tolerance = PulayC*(0.1_double*expected_reduction)**PulayBeta
+    con_tolerance = zero ! SCC*expected_reduction**SCBeta
+    tolerance = zero ! PulayC*(0.1_double*expected_reduction)**PulayBeta
     if (con_tolerance<sc_tolerance) con_tolerance = sc_tolerance
     if (con_tolerance<10.0_double*tolerance) tolerance = 0.1_double*con_tolerance
     con_tolerance = sc_tolerance
@@ -177,6 +177,7 @@ contains
 
     search_direction = 0.0_double
     Psd = 0.0_double
+    last_sd = 0.0_double ! TO
 
     total_energy_0 = total_energy_last
     if(total_energy_last.eq.0.0_double) total_energy_0 = expected_reduction
@@ -185,6 +186,8 @@ contains
     ! We need to assemble the gradient
     grad_coeff_array = zero
     elec_grad_coeff_array = zero
+    ! call get _H_matrix before calling build_PAO_coeff ! TM
+    call get_H_matrix(.true., fixed_potential, electrons, density, maxngrid)
     call build_PAO_coeff_grad(full)
     if(TestBasisGrads) then
        grad_copy = grad_coeff_array
@@ -773,6 +776,9 @@ contains
     real(double) :: e0, e1, e2, e3, electrons, tmp, energy_out, sum
     integer :: i,j, iter, part, memb, nsf1, npao1, iprim,l1,acz,m1
 
+    logical :: done = .false. ! flag of line minimisation
+    real(double), save :: kmin_last = 0.0_double
+
     write(io_lun,*) 'On entry to pao line_min, dE is ',dE, total_energy_0
     if(flag_paos_atoms_in_cell) then
        n_atoms = ni_in_cell
@@ -804,22 +810,15 @@ contains
     lambda = 2.0_double
 
     ! Loop to find a bracketing triplet
-    do while(e3<=e2)
-       if (k2==0.0_double) then
-          k3 = 0.001_double
-          ! DRB 2004/03/03
-          if(abs(dE)<very_small) then
-             k3 = 0.008_double
-             dE = tmp*k3
-             !k3 = 0.05_double!/g_dot_sd
-          else
-             k3 = 0.5_double*dE/tmp!g_dot_sd
-          end if
-!       elseif (k2==0.01_double) then
-!          k3 = 0.01_double
-       else
-          k3 = lambda*k2          
-       endif
+    if(dE== 0.0_double.or.kmin_last==0.0_double) then
+      k3=8.0_double
+    else
+      !k3=0.5_double*dE/g_dot_sd
+      k3=kmin_last
+    endif
+
+    done = .false.
+    do while(.NOT.done)
        call copy( lengthBlip, data_PAO0, 1, coefficient_array, 1)
        call axpy( lengthBlip, k3, search_direction, 1, coefficient_array, 1 )
        ! Normalise
@@ -851,20 +850,19 @@ contains
           e1 = e2
           k2 = k3
           e2 = e3
+          k3 = k3 * lambda  
           iter=iter+1
-       else if(k3<0.0006_double.AND.k2==0.0_double) then ! We're at the start, and E has increased
-          write(io_lun,*) 'Error ! Energy went up: making k3 negative'
-          k3 = -k3
-          k2 = k3
-          e3 = e2
        else if(k2==0.0_double) then
-          dE = 0.5_double*dE
-          e3 = e2
+          k3 = k3 / lambda
+       else
+          done = .true.
        endif
+       if(k3 < very_small) call cq_abort('Step too small: line_minimise_pao failed!')
     end do
     ! Turn  basis variation back on
     ! Interpolate to find minimum.
     kmin = 0.5_double*(((k1*k1-k3*k3)*(e1-e2)-(k1*k1-k2*k2)*(e1-e3))/((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3)))
+    kmin_last = kmin
     if(inode==ionode) write(io_lun,*) 'In pao_min, bracketed - min from extrap: ',k1,k2,k3,kmin
     if(inode==ionode) write(io_lun,*) 'In pao_min, bracketed - energies: ',e1,e2,e3
     ! Change blips: start from blip0
@@ -921,6 +919,7 @@ contains
     dE = total_energy_0 - energy_out
     write(io_lun,*) 'On exit from pao line_min, dE is ',dE,total_energy_0,energy_out
     total_energy_0 = energy_out
+    deallocate(data_PAO0)
     return
   end subroutine line_minimise_pao
 !!***
