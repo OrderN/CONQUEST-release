@@ -324,7 +324,7 @@ contains
          fdf_string, fdf_double, fdf_defined, fdf_bline, destroy
     use parse, ONLY: parsed_line, digest, search, reals, names, destroy, integers
     use DiagModule, ONLY: diagon, maxefermi
-    use DMMin, ONLY: maxpulayDMM, LinTol_DMM
+    use DMMin, ONLY: maxpulayDMM, LinTol_DMM, n_dumpL
 !TM
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT, flag_angular_new
     use SelfCon, ONLY: A, flag_linear_mixing, EndLinearMixing, q0, n_exact, maxitersSC, maxearlySC, &
@@ -347,6 +347,7 @@ contains
     use group_module, ONLY : part_method, HILBERT, PYTHON
     use energy, ONLY: flag_check_DFT
     use H_matrix_module, ONLY: locps_output, locps_choice
+    use pao_minimisation, ONLY: InitStep_paomin
     use timer_module, ONLY: time_threshold,lun_tmr
 
     implicit none
@@ -482,6 +483,7 @@ contains
        ! Number of different iterations - not well defined
        n_L_iterations = fdf_integer('DM.LVariations',50)
        max_L_iterations = n_L_iterations
+       n_dumpL = fdf_integer('DM.n_dumpL',n_L_iterations+1)
        n_support_iterations = fdf_integer('minE.SupportVariations',10)
        ! Initial expected drop in energy
        expected_reduction = fdf_double('minE.ExpectedEnergyReduction',zero)
@@ -669,6 +671,7 @@ contains
        else 
           flag_precondition_blips = fdf_boolean('minE.PreconditionBlips',.true.)
        end if
+       InitStep_paomin = fdf_double('minE.InitStep_paomin',5.0_double)
        flag_self_consistent = fdf_boolean('minE.SelfConsistent',.true.)
        ! Tweak 2007/03/23 DRB Make Pulay mixing default
        flag_linear_mixing = fdf_boolean('SC.LinearMixingSC',.true.)

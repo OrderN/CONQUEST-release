@@ -1166,9 +1166,10 @@ contains
           rho_pul(j,i) = rho(j)
        end do
        ! Generate new charge and find residual
+       if(iprint_SC>1) call dump_charge(rho,size,inode)
        call get_new_rho(.false., reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
             total_energy, rho, rho1, size)
-       if(iprint_SC>1) call dump_charge(rho,size,inode)
+       !OLD if(iprint_SC>1) call dump_charge(rho,size,inode)
        !call dump_charge2('ch'//digitstr(m:m),rho,size,inode)
        do j=1,n_my_grid_points
           resid(j) = rho1(j) - rho(j)

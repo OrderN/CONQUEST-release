@@ -740,12 +740,30 @@ contains
     endif
     reset_L = .true.
     if(flag_self_consistent) then ! Vary only DM and charge density
+       !OLD call new_SC_potl( .true., SC_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
+       !OLD      number_of_bands, L_tolerance, mu, total_energy)
+      if(restart_L) then
+       reset_L=.false.
        call new_SC_potl( .true., SC_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
             number_of_bands, L_tolerance, mu, total_energy)
+      else
+       reset_L=.true.
+       call get_H_matrix(.true., fixed_potential, electrons, density, maxngrid)
+       call FindMinDM(n_L_iterations, number_of_bands, vary_mu, &
+            L_tolerance, mu, inode, ionode, reset_L, .false.)
+       reset_L=.false.
+       call new_SC_potl( .true., SC_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
+            number_of_bands, L_tolerance, mu, total_energy)
+      endif
     else ! Ab initio TB: vary only DM
        call get_H_matrix(.true., fixed_potential, electrons, density, maxngrid)
-       if(.NOT.restart_L) call FindMinDM(n_L_iterations, number_of_bands, vary_mu, &
-            L_tolerance, mu, inode, ionode, reset_L, .false.)
+       !OLD if(.NOT.restart_L) call FindMinDM(n_L_iterations, number_of_bands, vary_mu, &
+       !OLD      L_tolerance, mu, inode, ionode, reset_L, .false.)
+       if(.NOT.restart_L) then
+        call FindMinDM(n_L_iterations, number_of_bands, vary_mu, L_tolerance, mu, inode, ionode, reset_L, .false.)
+       else
+        call FindMinDM(n_L_iterations, number_of_bands, vary_mu, L_tolerance, mu, inode, ionode, .false., .false.)
+       endif
        call get_energy(total_energy)
     end if
     ! Do we want to just test the forces ?

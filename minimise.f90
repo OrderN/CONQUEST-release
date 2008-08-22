@@ -119,7 +119,8 @@ contains
     type(cq_timer) :: tmr_l_energy, tmr_l_force
 
     call start_timer(tmr_std_eminimisation)
-    reset_L = .true.
+    ! reset_L = .true.  ! changed by TM, Aug 2008 
+    reset_L = .false.
     call start_timer(tmr_l_energy,WITH_LEVEL)      ! Start timing the energy calculation
     ! Now choose what we vary
     if(flag_vary_basis) then ! Vary everything: DM, charge density, basis set

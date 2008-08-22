@@ -43,6 +43,7 @@ module pao_minimisation
   integer, parameter :: full = 3
   !real(double), save  :: PAOprecond(npao,npao,mx_at_prim*mx_tnab)
   !real(double), save  :: PAOprecond2(npao)
+  real(double), save :: InitStep_paomin = 5.0_double
 
   ! RCS tag for object file identification
   character(len=80), save, private :: RCSid = "$Id$"
@@ -811,7 +812,7 @@ contains
 
     ! Loop to find a bracketing triplet
     if(dE== 0.0_double.or.kmin_last==0.0_double) then
-      k3=8.0_double
+      k3=InitStep_paomin
     else
       !k3=0.5_double*dE/g_dot_sd
       k3=kmin_last
