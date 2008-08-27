@@ -52,6 +52,7 @@ module DMMin
   use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_densitymat
 
   integer :: maxpulayDMM
+  integer,save :: n_dumpL = 5
   real(double) :: LinTol_DMM
   !integer, parameter :: mx_pulay = 5
   !real(double), parameter :: LinTol = 0.1_double
@@ -448,6 +449,7 @@ contains
     use GenComms, ONLY: cq_abort, gsum
     use global_module, ONLY: iprint_DM,IPRINT_TIME_THRES1
     use timer_module, ONLY: cq_timer,start_timer, stop_print_timer, WITH_LEVEL
+    use io_module, ONLY: dump_matrix
 
     implicit none
 
@@ -597,6 +599,9 @@ contains
           PulayR(ndone+n_iter) = g1
           PulayE(ndone+n_iter) = energy1
        end if
+       
+       if(mod(n_iter, n_dumpL) == 0) call dump_matrix("L",matL,inode)
+
        if(g1<tolerance) then 
           done = .true.
           ndone = n_iter
