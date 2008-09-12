@@ -741,7 +741,7 @@ contains
     integer :: stat,pr, neigh_spec
 
     allocate(ahalo%i_halo(gcs%mx_mcover),STAT=stat)
-    if(stat/=0) write(io_lun,*) 'Error allocating ihalo !'
+    if(stat/=0) call cq_abort('Error allocating ihalo !')
     ! initialise flag for every part and atom in covering set
     do np=1,gcs%ng_cover
        if(gcs%n_ing_cover(np).gt.0) then
@@ -783,7 +783,7 @@ contains
     ahalo%mx_halo = max_atoms_halo
     ! Dellocate memory
     deallocate(ahalo%i_halo,STAT=stat)
-    if(stat/=0) write(io_lun,*) 'Error allocating ihalo !'    
+    if(stat/=0) call cq_abort('Error deallocating ihalo !')
     return
   end subroutine make_halo_max
 !!***

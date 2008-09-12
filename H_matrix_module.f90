@@ -180,8 +180,8 @@ contains
           if(inode==ionode.AND.iprint_ops>3) write(io_lun,fmt='(2x,"Rebuilding NL")')
           call get_HNL_matrix(matNL)
        end if
-       if(iprint_ops>2) call dump_matrix("NNL",matNL,inode)
-       if(iprint_ops>2) call dump_matrix("NKE",matKE,inode)
+       if(iprint_ops>4) call dump_matrix("NNL",matNL,inode)
+       if(iprint_ops>4) call dump_matrix("NKE",matKE,inode)
     end if
     ! from here on, workspace support becomes h_on_support...
     ! in fact, what we are getting here is (H_local - T) acting on support
@@ -212,8 +212,8 @@ contains
     ! add the kinetic energy and non-local matrices to give the complete H matrix
     call matrix_sum(one,matH,half,matKE)
     call matrix_sum(one,matH,one,matNL)
-    if(iprint_ops>2) call dump_matrix("NS",matS,inode)
-    if(iprint_ops>2) call dump_matrix("NH",matH,inode)
+    if(iprint_ops>4) call dump_matrix("NS",matS,inode)
+    if(iprint_ops>4) call dump_matrix("NH",matH,inode)
 
     call stop_print_timer(tmr_l_hmatrix, "get_H_matrix", IPRINT_TIME_THRES1)
     call stop_timer(tmr_std_hmatrix)
@@ -584,6 +584,7 @@ contains
       use species_module, ONLY: species
       use pseudo_tm_info, ONLY: pseudo
       use mult_module, ONLY: scale_matrix_value, store_matrix_value
+      use GenComms, ONLY: inode, ionode
 
       implicit none
 
@@ -617,7 +618,7 @@ contains
                            n_proj=n_proj+1
                            do nsf1=1,mat(np,range)%ndimi(i)
                               call scale_matrix_value(matSC,np,i,ip,nb,nsf1,n_proj,pseudo(species_k)%pjnl_ekb(nl))
-                              if(abs(pseudo(species_k)%pjnl_ekb(nl)) < very_small) &
+                              if(abs(pseudo(species_k)%pjnl_ekb(nl)) < very_small.AND.inode==ionode) &
                                    write(io_lun,*) 'ekb = 0!!   for nl, species_k, ekb = ', &
                                    nl, species_k, pseudo(species_k)%pjnl_ekb(nl)
                            enddo !nsf1=1,nonef

@@ -186,7 +186,7 @@ contains
        end if
        info = 0
        call sytri('U',n,Aij,max_n,ipiv,work,info)  
-       if(info/=0) write(io_lun,*) 'info is ',info
+       if(inode==ionode.AND.info/=0) write(io_lun,*) 'info is ',info
        if(inode==ionode.AND.info/=0) write(io_lun,*) ' sytri: info is ',info
        ! Only a triangle is returned, so complete Aij
        do i=1,n

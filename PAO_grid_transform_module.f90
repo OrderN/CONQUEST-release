@@ -117,7 +117,7 @@ contains
              call do_PAO_transform(iprim,nsf_send)
              if(iprint_basis>1) then
                 now = mtime()
-                write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grid transform (in ms): ",f15.8)') myid,now-nthen
+                if(myid==0) write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grid transform (in ms): ",f15.8)') myid,now-nthen
                 nthen = now
              end if
           else
@@ -126,7 +126,7 @@ contains
           call distribute_result(myid,iprim,nsf_send,support)
           if(iprint_basis>1) then
              now = mtime()
-             write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grid distribute (in ms): ",f15.8)') myid,now - nthen
+             if(myid==0) write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grid distribute (in ms): ",f15.8)') myid,now - nthen
              nthen = now
           end if
        end do
@@ -235,7 +235,6 @@ contains
 
     ! Loop over neighbour blocks
     DO naba_blk=1,naba_blk_supp%no_naba_blk(iprim)! naba blks in NOPG order
-       if(iprint_basis>=6) write(50+myid,*) '+++ Block: ',naba_blk
        ! iprim : primary seq. no. of the atom
        ind_blk=naba_blk_supp%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
        ind_blk=ind_blk-1
@@ -243,12 +242,10 @@ contains
        nx_blk=ind_blk/ncover_yz
        ny_blk=(ind_blk-nx_blk*ncover_yz)/BCS_blocks%ncoverz
        nz_blk=ind_blk-nx_blk*ncover_yz-ny_blk*BCS_blocks%ncoverz
-       if(iprint_basis>=6) write(50+myid,*) ' Blocks: ',nx_blk,ny_blk,nz_blk
 
        nx_blk=nx_blk-BCS_blocks%nspanlx+BCS_blocks%nx_origin
        ny_blk=ny_blk-BCS_blocks%nspanly+BCS_blocks%ny_origin
        nz_blk=nz_blk-BCS_blocks%nspanlz+BCS_blocks%nz_origin
-       if(iprint_basis>=6) write(50+myid,*) ' Blocks: ',nx_blk,ny_blk,nz_blk
 
        do iz=1,nblkz    ! z-direction in a block
           z=nblkz*(nz_blk-1)+iz-1
@@ -256,7 +253,6 @@ contains
              y=nblky*(ny_blk-1)+iy-1
              do ix=1,nblkx    ! x-direction in a block
                 x=nblkx*(nx_blk-1)+ix-1
-                if(iprint_basis>=6) write(50+myid,*) ' xyz: ',x,y,z
                 ! I want to find the position of the grid point relative to the atom in its primary set.
                 ! The grid-point position _would_ be x + xadd, with xadd = origin + cover block x - FSC block x
                 ! cover block x is nx_blk BEFORE the manipulation above
@@ -272,20 +268,13 @@ contains
                 dy = y*dcelly_grid - bundle%yprim(iprim)
                 dz = z*dcellz_grid - bundle%zprim(iprim)
                 if(dx*dx+dy*dy+dz*dz<r_h*r_h) then
-                   if(iprint_basis>=6) write(50+myid,*) ' xyz: ',x*dcellx_grid,y*dcelly_grid,z*dcellz_grid
-                   if(iprint_basis>=6) write(50+myid,*) ' dxyz: ',dx,dy,dz
-                   if(iprint_basis>=6) write(50+myid,*) ' prim: ',bundle%xprim(iprim),bundle%yprim(iprim),bundle%zprim(iprim)
-                   if(iprint_basis>=6) write(50+myid,*) ' dist: ',sqrt(dx*dx+dy*dy+dz*dz)
                    ! loop over PAOs
                    dsum = zero
                    count1 = 1
                    do l1 = 0,supports_on_atom(this_atom)%lmax
                       do acz = 1,supports_on_atom(this_atom)%naczs(l1)
                          do m1=-l1,l1
-                            if(iprint_basis>=6) write(50+myid,*) ' spec, l,m: ',atom_species,l1,m1
                             call evaluate_pao(atom_species,l1,1,m1,dx,dy,dz,val)
-                            if(iprint_basis>=6) write(50+myid,*) ' val: ', &
-                                 val,supports_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)
                             do nsf1 = 1,supports_on_atom(this_atom)%nsuppfuncs
                                dsum(nsf1) = dsum(nsf1) + &
                                     supports_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
@@ -297,7 +286,6 @@ contains
                    ! store in send_array
                    do nsf1 = 1,this_nsf
                       send_array(this_nsf*igrid-this_nsf+nsf1) = dsum(nsf1)
-                      if(iprint_basis>=6) write(50+myid,*) ' val: ',dsum(nsf1)
                    enddo ! nsf1=this_nsf
                 end if ! if(dx*dx...<r_h*r_h)
              enddo    ! x-direction in a block
@@ -374,7 +362,7 @@ contains
              call do_PAO_grad_transform(direction,iprim,nsf_send)
 		     if(iprint_basis>1) then
                 now = mtime()
-                write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grad transform (in ms): ",f15.8)') myid,now - nthen
+                if(myid==0) write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grad transform (in ms): ",f15.8)') myid,now - nthen
                 nthen = now
              end if
           else
@@ -383,7 +371,7 @@ contains
           call distribute_result(myid,iprim,nsf_send,support)
           if(iprint_basis>1) then
              now = mtime()
-             write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grad distribute (in ms): ",f15.8)') myid,now - nthen
+             if(myid==0) write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grad distribute (in ms): ",f15.8)') myid,now - nthen
              nthen = now
           end if
        end do
@@ -492,7 +480,6 @@ contains
 
     ! Loop over neighbour blocks
     DO naba_blk=1,naba_blk_supp%no_naba_blk(iprim)! naba blks in NOPG order
-       !write(50+myid,*) '+++ Block: ',naba_blk
        ! iprim : primary seq. no. of the atom
        ind_blk=naba_blk_supp%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
        ind_blk=ind_blk-1
@@ -500,12 +487,10 @@ contains
        nx_blk=ind_blk/ncover_yz
        ny_blk=(ind_blk-nx_blk*ncover_yz)/BCS_blocks%ncoverz
        nz_blk=ind_blk-nx_blk*ncover_yz-ny_blk*BCS_blocks%ncoverz
-       !write(50+myid,*) ' Blocks: ',nx_blk,ny_blk,nz_blk
 
        nx_blk=nx_blk-BCS_blocks%nspanlx+BCS_blocks%nx_origin
        ny_blk=ny_blk-BCS_blocks%nspanly+BCS_blocks%ny_origin
        nz_blk=nz_blk-BCS_blocks%nspanlz+BCS_blocks%nz_origin
-       !write(50+myid,*) ' Blocks: ',nx_blk,ny_blk,nz_blk
 
        do iz=1,nblkz    ! z-direction in a block
           z=nblkz*(nz_blk-1)+iz-1
@@ -529,20 +514,13 @@ contains
                 dy = y*dcelly_grid - bundle%yprim(iprim)
                 dz = z*dcellz_grid - bundle%zprim(iprim)
                 if(dx*dx+dy*dy+dz*dz<r_h*r_h) then
-                   if(iprint_basis>=6) write(50+myid,*) ' xyz: ',x*dcellx_grid,y*dcelly_grid,z*dcellz_grid
-                   if(iprint_basis>=6) write(50+myid,*) ' dxyz: ',dx,dy,dz
-                   if(iprint_basis>=6) write(50+myid,*) ' prim: ',bundle%xprim(iprim),bundle%yprim(iprim),bundle%zprim(iprim)
-                   if(iprint_basis>=6) write(50+myid,*) ' dist: ',sqrt(dx*dx+dy*dy+dz*dz)
                    ! loop over PAOs
                    dsum = zero
                    count1 = 1
                    do l1 = 0,supports_on_atom(this_atom)%lmax
                       do acz = 1,supports_on_atom(this_atom)%naczs(l1)
                          do m1=-l1,l1
-                            if(iprint_basis>=6) write(50+myid,*) ' spec, l,m: ',atom_species,l1,m1
                             call pao_elem_derivative_2(direction,atom_species,l1,acz,m1,dx,dy,dz,val)
-                            if(iprint_basis>=6) write(50+myid,*) ' val: ', &
-                                 val,supports_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)
                             do nsf1 = 1,supports_on_atom(this_atom)%nsuppfuncs
                                dsum(nsf1) = dsum(nsf1) + &
                                     supports_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
@@ -710,14 +688,8 @@ contains
                 rcut = r_h+very_small
                 call check_block (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
-                r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
-                     (zatom-zblock)**2 )
-                if(npoint == 0 .and. iprint_basis > 4) &
-                     write(io_lun,1001) inode,iblock,ipart, iatom, &
-                     xatom, yatom, zatom, xblock, yblock, zblock, r_from_i
-1001            format ('Node ',i3,' no grid points in the block &
-                     & touch the atom ',3i6/,' atom',3d12.3,' block', 3d12.3, &
-                     ' r_from_i = ',d12.5)
+                !r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
+                !     (zatom-zblock)**2 )
 
                 if(npoint > 0) then
                    !offset_position = (no_of_ib_ia-1) * this_nsf * n_pts_in_block
@@ -735,24 +707,19 @@ contains
                       sfsum = zero
                       ! For this point-atom offset, we loop over ALL PAOs, and accumulate each PAO multiplied by
                       ! the appropriate coefficient in a local store before putting it in place later
-                      if(r_from_i<r_h) then ! Isn't this redundant ?
-                         count1 = 1
-                         do l1 = 0,supports_on_atom(ig_atom)%lmax
-                            do acz = 1,supports_on_atom(ig_atom)%naczs(l1)
-                               do m1=-l1,l1
-                                  if(iprint_basis>=6) write(50+myid,*) ' spec, l,m: ',the_species,l1,m1
-                                  call evaluate_pao(the_species,l1,acz,m1,x,y,z,val)
-                                  !if(iprint_basis>=6) write(50+myid,*) ' val: ', &
-                                  do nsf1 = 1,supports_on_atom(ig_atom)%nsuppfuncs
-                                     sfsum(nsf1) = sfsum(nsf1) + &
-                                          supports_on_atom(ig_atom)%supp_func(nsf1)%coefficients(count1)* val
-                                  end do ! nsf1
-                                  !write(50+myid,*) ' val: ', count1, val,sfsum(nsf1)
-                                  count1 = count1+1
-                               end do ! m1
-                            end do ! acz
-                         end do ! l1
-                      end if !(r_from_i<r_h)
+                      count1 = 1
+                      do l1 = 0,supports_on_atom(ig_atom)%lmax
+                         do acz = 1,supports_on_atom(ig_atom)%naczs(l1)
+                            do m1=-l1,l1
+                               call evaluate_pao(the_species,l1,acz,m1,x,y,z,val)
+                               do nsf1 = 1,supports_on_atom(ig_atom)%nsuppfuncs
+                                  sfsum(nsf1) = sfsum(nsf1) + &
+                                       supports_on_atom(ig_atom)%supp_func(nsf1)%coefficients(count1)* val
+                               end do ! nsf1
+                               count1 = count1+1
+                            end do ! m1
+                         end do ! acz
+                      end do ! l1
                       ! Now store data
                       if(position+(this_nsf-1)*n_pts_in_block > gridfunctions(support)%size) &
                            call cq_abort('PAO_to_grid_global: position error 2 ', &
@@ -907,12 +874,6 @@ contains
                      npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
                 r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
                      (zatom-zblock)**2 )
-                if(npoint == 0 .and. iprint_basis > 4) &
-                     write(io_lun,1001) inode,iblock,ipart, iatom, &
-                     xatom, yatom, zatom, xblock, yblock, zblock, r_from_i
-1001            format ('Node ',i3,' no grid points in the block &
-                     & touch the atom ',3i6/,' atom',3d12.3,' block', 3d12.3, &
-                     ' r_from_i = ',d12.5)
 
                 if(npoint > 0) then
                    !offset_position = (no_of_ib_ia-1) * npao * n_pts_in_block
@@ -928,21 +889,19 @@ contains
                       y = y_store(ip)
                       z = z_store(ip)
                       ! For this point-atom offset, we accumulate the PAO on the grid
-                      if(r_from_i<r_h) then ! Redundant ?
-                         count1 = 1
-                         do l1 = 0,supports_on_atom(ig_atom)%lmax
-                            do acz = 1,supports_on_atom(ig_atom)%naczs(l1)
-                               do m1=-l1,l1
-                                  call evaluate_pao(the_species,l1,acz,m1,x,y,z,val)
-                                  if(position+(count1-1)*n_pts_in_block > gridfunctions(support)%size) &
-                                       call cq_abort('single_pao_to_grid: position error ', &
-                                       position, gridfunctions(support)%size)
-                                  gridfunctions(support)%griddata(position+(count1-1)*n_pts_in_block) = val
-                                  count1 = count1+1
-                               end do ! m1
-                            end do ! acz
-                         end do ! l1
-                      end if
+                      count1 = 1
+                      do l1 = 0,supports_on_atom(ig_atom)%lmax
+                         do acz = 1,supports_on_atom(ig_atom)%naczs(l1)
+                            do m1=-l1,l1
+                               call evaluate_pao(the_species,l1,acz,m1,x,y,z,val)
+                               if(position+(count1-1)*n_pts_in_block > gridfunctions(support)%size) &
+                                    call cq_abort('single_pao_to_grid: position error ', &
+                                    position, gridfunctions(support)%size)
+                               gridfunctions(support)%griddata(position+(count1-1)*n_pts_in_block) = val
+                               count1 = count1+1
+                            end do ! m1
+                         end do ! acz
+                      end do ! l1
                    enddo ! ip=1,npoint
                 endif! (npoint > 0) then
                 no_of_ib_ia = no_of_ib_ia + npao_species(the_species)*n_pts_in_block
@@ -1100,12 +1059,6 @@ contains
                      npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
                 r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
                      (zatom-zblock)**2 )
-                if(npoint == 0 .and. iprint_basis > 4) &
-                     write(io_lun,1001) inode,iblock,ipart, iatom, &
-                     xatom, yatom, zatom, xblock, yblock, zblock, r_from_i
-1001            format ('Node ',i3,' no grid points in the block &
-                     & touch the atom ',3i6/,' atom',3d12.3,' block', 3d12.3, &
-                     ' r_from_i = ',d12.5)
 
                 if(npoint > 0) then
                    !offset_position = (no_of_ib_ia-1) * nsf * n_pts_in_block
@@ -1124,24 +1077,19 @@ contains
                       ! For this point-atom offset, we loop over ALL PAOs, and accumulate each PAO multiplied by
                       ! the appropriate coefficient in a local store before putting it in place later
                       ! Actually, the zeta should be *inside* the l loop
-                      if(r_from_i<r_h) then
-                         count1 = 1
-                         do l1 = 0,supports_on_atom(ig_atom)%lmax
-                            do acz = 1,supports_on_atom(ig_atom)%naczs(l1)
-                               do m1=-l1,l1
-                                  if(iprint_basis>=6) write(50+myid,*) ' spec, l,m: ',the_species,l1,m1
-                                  call pao_elem_derivative_2(direction,the_species,l1,acz,m1,x,y,z,val)
-                                  if(iprint_basis>=6) write(50+myid,*) ' val: ', &
-                                       val,supports_on_atom(ig_atom)%supp_func(nsf1)%coefficients(count1)
-                                  do nsf1 = 1,supports_on_atom(ig_atom)%nsuppfuncs
-                                     sfsum(nsf1) = sfsum(nsf1) + &
-                                          supports_on_atom(ig_atom)%supp_func(nsf1)%coefficients(count1)* val
-                                  end do ! nsf1
-                                  count1 = count1+1
-                               end do ! m1
-                            end do ! acz
-                         end do ! l1
-                      end if
+                      count1 = 1
+                      do l1 = 0,supports_on_atom(ig_atom)%lmax
+                         do acz = 1,supports_on_atom(ig_atom)%naczs(l1)
+                            do m1=-l1,l1
+                               call pao_elem_derivative_2(direction,the_species,l1,acz,m1,x,y,z,val)
+                               do nsf1 = 1,supports_on_atom(ig_atom)%nsuppfuncs
+                                  sfsum(nsf1) = sfsum(nsf1) + &
+                                       supports_on_atom(ig_atom)%supp_func(nsf1)%coefficients(count1)* val
+                               end do ! nsf1
+                               count1 = count1+1
+                            end do ! m1
+                         end do ! acz
+                      end do ! l1
                       ! Now store data
                       do nsf1 = 1,this_nsf
                          gridfunctions(support)%griddata(position+(nsf1-1)*n_pts_in_block) = sfsum(nsf1)

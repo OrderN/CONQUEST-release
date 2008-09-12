@@ -13,7 +13,7 @@ COMMENT = verstr.f90
 #Useful variables
 DATE = `date +"%b%d%y"`
 TARNAME = "CQ_VarNSF_"$(DATE)"_"`date +"%H%M"`".tar"
-ECHOSTR = @echo -e
+ECHOSTR = @echo 
 SHELL = /bin/sh
 NOTIMERS_DIR = altver_notimers
 NOSTDTIMERS_DIR = altver_nostdtimers
@@ -42,13 +42,18 @@ SRCS = $(NODE_OBJECTS:.o=.f90) basic_types.f90 datatypes.module.f90 matrix_data_
 
 #Dependency rule
 deps.obj.inc: $(SRCS)
+	touch $(COMMENT)
+	$(ECHOSTR) "module datestamp" > datestamp.f90
+	$(ECHOSTR) "  implicit none" >> datestamp.f90
+	$(ECHOSTR) '  character(len=*), parameter :: datestr="'`date`'"' >> datestamp.f90
+	cat $(COMMENT) >> datestamp.f90
+	$(ECHOSTR) "end module datestamp" >> datestamp.f90
 	./makemake
 	sed /"^mpi.o"/D makemake_deps > deps.obj.inc
-	touch $(COMMENT)
 
 #Target
 $(TARGET) : $(NODE_OBJECTS) 
-	$(FC) $(LINKFLAGS) -o $(TARGET) $(NODE_OBJECTS) $(FDF) $(LIBS) 
+	$(FC) $(LINKFLAGS) -o $(TARGET) $(NODE_OBJECTS) $(LIBS) 
 
 #.f90.o:
 %.o: %.f90
@@ -65,21 +70,20 @@ $(NODE_OBJECTS):
 initial_read.module.o:initial_read.module.f90
 	$(FC) $(COMPFLAGS) -c $<
 
-datestamp.f90: $(COMMENT)
-	$(ECHOSTR) "module datestamp\n" > datestamp.f90
-	$(ECHOSTR) "  implicit none\n" >> datestamp.f90
-	$(ECHOSTR) '  character(len=*), parameter :: datestr="'`date`'"' >> datestamp.f90
-	cat $(COMMENT) >> datestamp.f90
-	$(ECHOSTR) "\nend module datestamp" >> datestamp.f90
-	$(FC) $(COMPFLAGS) -c datestamp.f90
+#datestamp.f90: $(COMMENT)
+#	$(ECHOSTR) "module datestamp\n" > datestamp.f90
+#	$(ECHOSTR) "  implicit none\n" >> datestamp.f90
+#	$(ECHOSTR) '  character(len=*), parameter :: datestr="'`date`'"' >> datestamp.f90
+#	cat $(COMMENT) >> datestamp.f90
+#	$(ECHOSTR) "\nend module datestamp" >> datestamp.f90
+#	$(FC) $(COMPFLAGS) -c datestamp.f90
 
 tar:
-	tar cvf ../$(TARNAME) *.f *.f90 *.obj Makefile* makemake system.make system/*.make fdf/*.f fdf/Makefile fdf/*.h fdf/README FFT/*.f FFT/Makefile template* utilities/*f90 utilities/Makefile
+	tar cvf ../$(TARNAME) *.f *.f90 *.obj Makefile* makemake system.make system/*.make FFT/*.f FFT/Makefile template* utilities/*f90 utilities/Makefile
 	gzip ../$(TARNAME)
 
 clean:
-	rm -f *.o *.mod *~ libfdf.a libgpfa.a *.d work.pc*
-	(cd fdf; make -k clean)
+	rm -f *.o *.mod *~ libgpfa.a *.d work.pc*
 	(cd FFT; make -k clean)
 	(cd utilities; make -k clean)
 
@@ -125,7 +129,7 @@ notimers:
 	  grep -vi 'timer_' $${objectfile} > $(NOTIMERS_DIR)/$${objectfile}; \
 	done
 	@rm -f $(NOTIMERS_DIR)/timer_*.f90
-	@cp -pfr fdf FFT Makefile Makefile.Doc utilities *.f makemake system.make $(NOTIMERS_DIR)/
+	@cp -pfr FFT Makefile Makefile.Doc utilities *.f makemake system.make $(NOTIMERS_DIR)/
 	@echo "New sources without timers are in $(NOTIMERS_DIR)"
 
 nostdtimers:
@@ -143,7 +147,7 @@ nostdtimers:
 	  grep -vi 'timer_std' $${objectfile} > $(NOSTDTIMERS_DIR)/$${objectfile}; \
 	done
 	@rm -f ${NOSTDTIMERS_DIR}/timer_std*.f90
-	@cp -pfr fdf FFT Makefile Makefile.Doc utilities *.f makemake system.make $(NOSTDTIMERS_DIR)/
+	@cp -pfr FFT Makefile Makefile.Doc utilities *.f makemake system.make $(NOSTDTIMERS_DIR)/
 	@echo "New sources without standard timers are in $(NOSTDTIMERS_DIR)"
 
 noloctimers:
@@ -155,7 +159,7 @@ noloctimers:
 	do \
 	  grep -vi 'tmr_l' $${sourcefile} > $(NOLOCTIMERS_DIR)/$${sourcefile}; \
 	done
-	@cp -pfr fdf FFT Makefile Makefile.Doc utilities *.f *.obj makemake system.make $(NOLOCTIMERS_DIR)/
+	@cp -pfr FFT Makefile Makefile.Doc utilities *.f *.obj makemake system.make $(NOLOCTIMERS_DIR)/
 	@echo "New sources without local timers are in $(NOLOCTIMERS_DIR)"
 
 

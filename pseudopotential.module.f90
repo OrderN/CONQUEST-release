@@ -451,9 +451,6 @@ contains
 
                 enddo ! l-components :
 
-                if(icheck == 0) write(io_lun,*) 'Node ',inode,' no grid points in the block &
-                     & touch the atom ',iblock,ipart,iatom,xatom,yatom,zatom,xblock,yblock,zblock &
-                     ,' r_from_i = ',r_from_i
                 no_of_ib_ia = no_of_ib_ia + the_ncf*n_pts_in_block
              enddo ! naba_atoms
           enddo ! naba_part
@@ -470,7 +467,6 @@ contains
     coulomb_potential = 0
     call hartree( pseudo_density, coulomb_potential, maxngrid, coulomb_energy )
 
-    write(io_lun,*) ' Done hartree for Node ',inode
     ! now add the two contributions together
 
     call axpy( n_my_grid_points, -one, coulomb_potential, 1, &
@@ -871,12 +867,6 @@ contains
 
                    enddo ! l-components :
 
-                   if(icheck == 0) &
-                        write(io_lun,*) 'Node ',inode&
-                        ,' No grid points in the block touch the atom ' &
-                        ,iblock,ipart,iatom,xatom,yatom,zatom,xblock,yblock,zblock &
-                        ,' r_from_i = ',r_from_i
-
                 endif ! if this atom has non-local parts
                 no_of_ib_ia = no_of_ib_ia + the_ncf*n_pts_in_block
              enddo ! naba_atoms
@@ -926,6 +916,8 @@ contains
 !!    Small changes: reversed arguments to gcopy and initialised lcore to zero
 !!   2008/05/25 ast
 !!    Added timers
+!!   2008/09/01 08:21 dave
+!!    Added io_ routines from input_module
 !!  SOURCE
 !!
   subroutine read_pseudopotential( inode, ionode)
@@ -935,6 +927,7 @@ contains
     use global_module, ONLY: iprint_pseudo
     use species_module, ONLY: n_species, nlpf_species, ps_file
     use GenComms, ONLY: gcopy, cq_abort
+    use input_module, ONLY: io_assign, io_close
 
     implicit none
 

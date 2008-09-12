@@ -122,7 +122,7 @@ contains
     call start_timer(tmr_std_moveatoms)
     if(inode==ionode) write(io_lun,fmt='(2x,"******************"/,2x,"* Testing Forces *"/,2x,"******************"/)')
     if(TF_atom_moved>ni_in_cell) then
-       write(io_lun,fmt='(2x,"Error: specified atom out-of-range: ",2i8)') TF_atom_moved, ni_in_cell
+       if(inode==ionode) write(io_lun,fmt='(2x,"Error: specified atom out-of-range: ",2i8)') TF_atom_moved, ni_in_cell
        TF_atom_moved = 1
     end if
     ! Here we want to back up the state of the system by saving H, K, density, blips, chis, local ps
@@ -504,7 +504,8 @@ contains
     ! Store local energy
 !    E0 = hartree_energy + xc_energy + local_ps_energy
     ! Find out direction and atom for displacement
-    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    if(myid==0) write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') &
+         TF_atom_moved, TF_direction,TF_delta
     F0 = p_force(TF_direction,TF_atom_moved)+HF_NL_force(TF_direction,TF_atom_moved)+KE_force(TF_direction,TF_atom_moved)
     if(inode==ionode) write(io_lun,fmt='(2x,"Initial energy      : ",f20.12,/,2x,"Initial pulay force: ",f20.12)') E0, F0
     ! Move the specified atom 
@@ -686,12 +687,15 @@ contains
        call get_HF_non_local_force( HF_NL_force, HF, ni_in_cell)
     end if
     ! Find out direction and atom for displacement
-    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    if(inode==ionode) write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') &
+         TF_atom_moved, TF_direction,TF_delta
     Fnl0 = HF_NL_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(io_lun,fmt='(2x,"Initial NL energy: ",f20.12,/,2x,"Initial NL force : ",f20.12)') Enl0, Fnl0
+    if(inode==ionode) write(io_lun,fmt='(2x,"Initial NL energy: ",f20.12,/,2x,"Initial NL force : ",f20.12)') &
+         Enl0, Fnl0
     F0 = HF_NL_force(TF_direction,TF_atom_moved)+HF_force(TF_direction,TF_atom_moved)
     F0 = HF_force(TF_direction,TF_atom_moved)
-    if(inode==ionode) write(io_lun,fmt='(2x,"Initial band energy: ",f20.12,/,2x,"Initial HF force : ",f20.12)') E0, F0
+    if(inode==ionode) &
+         write(io_lun,fmt='(2x,"Initial band energy: ",f20.12,/,2x,"Initial HF force : ",f20.12)') E0, F0
     ! Move the specified atom 
     if(TF_direction==1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
@@ -853,7 +857,8 @@ contains
     ! Store local energy
     E0 = nl_energy
     ! Find out direction and atom for displacement
-    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    if(inode==ionode) write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') &
+         TF_atom_moved, TF_direction,TF_delta
     F0 = HF_NL_force(TF_direction,TF_atom_moved)
     if(inode==ionode) write(io_lun,fmt='(2x,"Initial NL energy: ",f20.12,/,2x,"Initial NL force : ",f20.12)') E0, F0
     ! Move the specified atom 
@@ -973,7 +978,8 @@ contains
     ! Store local energy
     E0 = kinetic_energy
     ! Find out direction and atom for displacement
-    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    if(inode==ionode) write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') &
+         TF_atom_moved, TF_direction,TF_delta
     F0 = KE_force(TF_direction,TF_atom_moved)
     if(inode==ionode) write(io_lun,fmt='(2x,"Initial KE energy: ",f20.12,/,2x,"Initial KE force : ",f20.12)') E0, F0
     ! Move the specified atom 
@@ -1097,7 +1103,8 @@ contains
 !    E0 = hartree_energy + xc_energy + local_ps_energy
     E0 = band_energy
     ! Find out direction and atom for displacement
-    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    if(inode==ionode) write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') &
+         TF_atom_moved, TF_direction,TF_delta
     F0 = p_force(TF_direction,TF_atom_moved)
     if(inode==ionode) write(io_lun,fmt='(2x,"Initial energy         : ",f20.12,/,2x,"Initial phi Pulay force : ",f20.12)') E0, F0
     ! Move the specified atom 
@@ -1222,7 +1229,8 @@ contains
 !    E0 = hartree_energy + xc_energy + local_ps_energy
     E0 = band_energy
     ! Find out direction and atom for displacement
-    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    if(inode==ionode) write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') &
+         TF_atom_moved, TF_direction,TF_delta
     F0 = p_force(TF_direction,TF_atom_moved)
     if(inode==ionode) write(io_lun,fmt='(2x,"Initial energy      : ",f20.12,/,2x,"Initial S-pulay force: ",f20.12)') E0, F0
     ! Move the specified atom 
@@ -1364,7 +1372,7 @@ contains
     real(double), dimension(:), allocatable :: density_out
 
     ! We're coming in from initial_H: assume that initial E found
-    write(io_lun,*) 'Allocating density_out'
+    if(inode==ionode) write(io_lun,*) 'Allocating density_out'
     call start_timer(tmr_std_allocation)
     allocate(density_out(maxngrid), STAT=stat)
     call stop_timer(tmr_std_allocation)
@@ -1375,7 +1383,8 @@ contains
     ! Store local energy
     E0 = band_energy + delta_E_hartree + delta_E_xc
     ! Find out direction and atom for displacement
-    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    if(inode==ionode) write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') &
+         TF_atom_moved, TF_direction,TF_delta
     F0 = nonSC_force(TF_direction,TF_atom_moved)
     if(inode==ionode) write(io_lun,fmt='(2x,"Initial energy   : ",f20.12,/,2x,"Initial NSC force: ",f20.12)') E0, F0
     ! Move the specified atom 
@@ -1496,7 +1505,8 @@ contains
     call force( fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu,  &
          total_energy, expected_reduction,.true.)
     ! Find out direction and atom for displacement
-    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    if(inode==ionode) write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') &
+         TF_atom_moved, TF_direction,TF_delta
     F0 = tot_force(TF_direction,TF_atom_moved)
     if(inode==ionode) write(io_lun,fmt='(2x,"Initial energy: ",f20.12,/,2x,"Initial force : ",f20.12)') E0, F0
     ! Move the specified atom 

@@ -14,7 +14,7 @@
 !!PURPOSE
 !! Main routine of the PAO basis generator
 !!USES
-!!  fdf
+!!  cq_ut_psp2pao_input
 !!  cq_ut_psp2pao_types
 !!  cq_ut_psp2pao_initialise
 !!  cq_ut_psp2pao_scf
@@ -34,7 +34,7 @@
 !!
 program cq_ut_psp2pao
 
-   use fdf
+   use cq_ut_psp2pao_input
    use cq_ut_psp2pao_types
    use cq_ut_psp2pao_initialise
    use cq_ut_psp2pao_scf, ONLY : scf_loop
@@ -56,7 +56,8 @@ program cq_ut_psp2pao
    real(double) :: sigma
    integer :: no_orbs, no_read
 
-   call fdf_init('input_psp2pao', 'fdf.out')
+!   call fdf_init('input_psp2pao', 'fdf.out')
+   call load_input
 
 !*ast*   no_wf_sets = fdf_integer('NumberWavefunctionSets', 1)
    ! Determine the list of orbitals to be calculated and 
@@ -105,7 +106,7 @@ program cq_ut_psp2pao
 
         write(wf_file,'(a,i0)') 'wf.dat.',no_set
         write(label,'(a,i0)') 'WavefunctionFile',no_set
-        wf_file = fdf_string(trim(label), wf_file)
+        wf_file = fdf_string(80,trim(label), wf_file)
         write(*,*)
         write(*,'(2a)') 'Writing wavefunction file: ', wf_file
         call write_wavefunctions(wf_file)
@@ -118,7 +119,7 @@ program cq_ut_psp2pao
       else
         write(wf_file,'(a,i0)') 'wf.dat.',no_set
         write(label,'(a,i0)') 'WavefunctionFile',no_set
-        wf_file = fdf_string(trim(label), wf_file)
+        wf_file = fdf_string(80,trim(label), wf_file)
         write(*,*)
         write(*,'(a,i3,2a)') 'Reading wavefunction set ', no_set, ' from file ', trim(wf_file)
         call read_wavefunctions(wf_file)
@@ -149,13 +150,13 @@ program cq_ut_psp2pao
 
    call get_rho_basis
 
-   wf_file = fdf_string("BasisFile", "atom.ion")
+   wf_file = fdf_string(80,"BasisFile", "atom.ion")
    write(*,*)
    write(*,'(2a)') 'Writing basis file: ', wf_file
 !   call write_basis_plato(wf_file)
    call write_basis(wf_file)
 
-   call fdf_shutdown
+!   call fdf_shutdown
 
    call deallocate_wavefunction_sets(no_wf_sets)
    call deallocate_basis(gl_basis%partial_core)

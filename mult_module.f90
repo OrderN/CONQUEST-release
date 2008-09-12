@@ -1271,7 +1271,7 @@ contains
 !%%!         data_LS, data_SL, data_SC, data_CS, data_K, data_M4, data_U, data_phi, &
 !%%!         data_M12, data_UT, data_KE, data_NL, Srange, Hrange, Lrange, Trange, PSrange,&
 !%%!         LSrange, SPrange, SLrange, dSrange, dHrange, data_dH, data_dS, mat,TTrrange
-
+    use GenComms, ONLY: inode, ionode
 
     implicit none
 
@@ -1426,7 +1426,7 @@ contains
           mat_p(i)%matrix = zero
        end if
     end do
-    if(iprint_mat>3) then
+    if(iprint_mat>3.AND.inode==ionode) then
        do stat=1,current_matrix
           write(io_lun,fmt='(2x,"Proc: ",i5," Matrix no., length: ",i4,i8)') stat,mat_p(stat)%length
        end do

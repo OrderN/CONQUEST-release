@@ -854,7 +854,7 @@ contains
   subroutine partition_distance(pd_init,aa,beta,rr,distance)
 
     use numbers
-    use GenComms, ONLY: cq_abort
+    use GenComms, ONLY: cq_abort, myid
 
     implicit none
 
@@ -940,7 +940,7 @@ contains
     x2 = (beta(2,1)*rr(1) + beta(2,2)*rr(2) + beta(2,3)*rr(3))/b2_dot_b2
     x3 = (beta(3,1)*rr(1) + beta(3,2)*rr(2) + beta(3,3)*rr(3))/b3_dot_b3
 
-    if(abs(x1)>1e5) then
+    if(abs(x1)>1e5.AND.myid==0) then
        write(io_lun,*) 'Error: betas, rs: ',beta(1,:),rr(1)
        write(io_lun,*) 'Error: betas, rs: ',beta(2,:),rr(2)
        write(io_lun,*) 'Error: betas, rs: ',beta(3,:),rr(3)
@@ -1053,7 +1053,7 @@ contains
     real(double), dimension(3) :: abs_sep, rel_sep
     real(double), dimension(3,3) :: real_cell_vec, recip_cell_vec, part_cell_vec, part_cell_dual
 
-    if(inode == ionode.AND.iprint_gen>1) write(io_lun,fmt='(/" edge lengths of orthorhombic supercell:", &
+    if(inode == ionode.AND.iprint_gen>1) write(io_lun,fmt='(/8x," edge lengths of orthorhombic supercell:", &
          &3f12.6," a.u.")') r_super_x, r_super_y, r_super_z
 
     ! --- setting primitive translation vectors of cell ----------------------------
@@ -1074,10 +1074,10 @@ contains
     real_cell_vec(3,2) = zero
     real_cell_vec(3,3) = r_super_z
     if(inode == ionode.AND.iprint_gen>1) then
-       write(io_lun,fmt='(/" mikes_set_ewald: cartesian components of real-cell &
+       write(io_lun,fmt='(/8x," mikes_set_ewald: cartesian components of real-cell &
             &primitive translations vectors:"/)')
        do n = 1, 3
-          write(io_lun,fmt='(" vector no:",i3,":",3f12.6)') n, (real_cell_vec(n,i), i = 1, 3)
+          write(io_lun,fmt='(8x," vector no:",i3,":",3f12.6)') n, (real_cell_vec(n,i), i = 1, 3)
        end do
     end if
 
@@ -1091,7 +1091,7 @@ contains
          &real_cell_vec(2,2)*real_cell_vec(3,1))
     ewald_real_cell_volume = abs(ewald_real_cell_volume)
     if(inode==ionode.AND.iprint_gen>1) &
-         write(io_lun,fmt='(/" volume of real-space cell:",f12.6)') ewald_real_cell_volume
+         write(io_lun,fmt='(/8x," volume of real-space cell:",f12.6)') ewald_real_cell_volume
 
     ! --- quantities needed for calculation of Ewald gamma, and real_space and recip-space cutoffs
     total_charge = zero
@@ -1115,10 +1115,10 @@ contains
          &(const_zeta_1*ewald_accuracy)/(real(ni_in_cell,double)**five_sixths))
     const_phi_1 = sqrt(-log(argument))
     if(inode == ionode.AND.iprint_gen>1) then
-       write(unit=io_lun,fmt='(/" const_zeta_0:",e20.12," const_zeta_1:",e20.12/&
-            &" const_phi_0:",e20.12," const_phi_1:",e20.12/&
-            &" total charge:",e20.12," mean-square charge:",e20.12/&
-            &" mean number density:",e20.12," mean interparticle distance:",e20.12)') &
+       write(unit=io_lun,fmt='(/8x," const_zeta_0:",e20.12," const_zeta_1:",e20.12/&
+            &8x," const_phi_0:",e20.12," const_phi_1:",e20.12/&
+            &8x," total charge:",e20.12," mean-square charge:",e20.12/&
+            &8x," mean number density:",e20.12," mean interparticle distance:",e20.12)') &
             &const_zeta_0, const_zeta_1, const_phi_0, const_phi_1, total_charge, mean_square_charge, &
             &mean_number_density, mean_interparticle_distance
     endif
@@ -1154,10 +1154,10 @@ contains
          &(real_cell_vec(1,1)*real_cell_vec(2,2) - real_cell_vec(1,2)*real_cell_vec(2,1))
 
     if(inode==ionode.AND.iprint_gen>1) then
-       write(unit=io_lun,fmt='(/" cartesian components of reciprocal-space &
+       write(unit=io_lun,fmt='(/8x," cartesian components of reciprocal-space &
             &primitive vectors:"/)')
        do n = 1, 3
-          write(unit=io_lun,fmt='(" basis vector no:",i3,":",3f12.6)') &
+          write(unit=io_lun,fmt='(8x," basis vector no:",i3,":",3f12.6)') &
                &n, (recip_cell_vec(n,i), i = 1, 3)
        enddo
     end if
@@ -1171,10 +1171,10 @@ contains
     dummy3 = pi/sqrt(recip_cell_vec(3,1)**2 + recip_cell_vec(3,2)**2 + &
          &recip_cell_vec(3,3)**2)
     lambda = min(dummy1,dummy2,dummy3)
-    if(inode==ionode.AND.iprint_gen>1) write(unit=io_lun,fmt='(/" radius of sphere inscribed in real-space cell:",&
+    if(inode==ionode.AND.iprint_gen>1) write(unit=io_lun,fmt='(/8x," radius of sphere inscribed in real-space cell:",&
          &f12.6)') lambda
 
-    if(inode == ionode.AND.iprint_gen>1) write(unit=io_lun,fmt='(/" no. of atoms in cell:",i5)') ni_in_cell
+    if(inode == ionode.AND.iprint_gen>1) write(unit=io_lun,fmt='(/8x," no. of atoms in cell:",i5)') ni_in_cell
 
     if(ni_in_cell > 1) then
        do np1 = 1, ni_in_cell-1
@@ -1202,7 +1202,7 @@ contains
        enddo
     endif
     if(inode == ionode.AND.iprint_gen>1) &
-         write(unit=io_lun,fmt='(/" lower bound on inter-particle separation:",f12.6)') lambda
+         write(unit=io_lun,fmt='(/8x," lower bound on inter-particle separation:",f12.6)') lambda
 
     run_mode = 0
     select case(run_mode)
@@ -1225,7 +1225,7 @@ contains
     end select
 
     if(inode == ionode.AND.iprint_gen>1) then
-       write(unit=io_lun,fmt='(/" run_mode:",i3/" Ewald gamma:",e20.12/&
+       write(unit=io_lun,fmt='(/8x," run_mode:",i3/" Ewald gamma:",e20.12/&
             &" Ewald real_space cutoff distance:",e20.12/" Ewald recip-space cutoff wavevector:",e20.12)') &
             &run_mode, ewald_gamma, ewald_real_cutoff, ewald_recip_cutoff
     endif
@@ -1234,7 +1234,7 @@ contains
     ewald_gaussian_self_energy = -sqrt(ewald_gamma/pi)*real(ni_in_cell,double)*mean_square_charge
     ewald_net_charge_energy = -(pi/(two*ewald_real_cell_volume*ewald_gamma))*total_charge*total_charge
     if(inode == ionode.AND.iprint_gen>1) &
-         write(unit=io_lun,fmt='(/" mikes_set_ewald: Ewald Gaussian self-energy:",e20.12,&
+         write(unit=io_lun,fmt='(/8x," mikes_set_ewald: Ewald Gaussian self-energy:",e20.12,&
          &" Ewald net-charge energy:",e20.12)') ewald_gaussian_self_energy, ewald_net_charge_energy
 
     ! --- limits for recip-space covering set
@@ -1245,7 +1245,7 @@ contains
     rec_lim_3 = int(ewald_recip_cutoff*&
          &sqrt(real_cell_vec(3,1)**2 + real_cell_vec(3,2)**2 + real_cell_vec(3,3)**2)/(two*pi))
     if(inode == ionode.AND.iprint_gen>1) &
-         write(unit=io_lun,fmt='(/" integer limits for recip-space covering set:",3i5)') &
+         write(unit=io_lun,fmt='(/8x," integer limits for recip-space covering set:",3i5)') &
          &rec_lim_1, rec_lim_2, rec_lim_3
 
     ! --- determine and store wavevectors to be included in recip-space sum
@@ -1307,7 +1307,7 @@ contains
 
     ! +++ test printing of complementary error function
     if(inode == ionode.AND.iprint_gen>=6) then
-       write(unit=io_lun,fmt='(/" +++ test printing of complementary error function calculated by 2 routines"/)')
+       write(unit=io_lun,fmt='(/8x," +++ test printing of complementary error function calculated by 2 routines"/)')
        do n = 0, 100
           dummy1 = real(n,double) * 0.1_double
           dummy2 = obsolete_erfcc(dummy1)
@@ -1318,7 +1318,7 @@ contains
     ! +++
 
     ! --- primitive translation vectors for partition
-    if(inode == ionode.AND.iprint_gen>1) write(unit=io_lun,fmt='(/" nos of partitions in cell edges:",3i5)') &
+    if(inode == ionode.AND.iprint_gen>1) write(unit=io_lun,fmt='(/8x," nos of partitions in cell edges:",3i5)') &
          &parts%ngcellx, parts%ngcelly, parts%ngcellz
     do i = 1, 3
        part_cell_vec(1,i) = real_cell_vec(1,i) / real(parts%ngcellx,double)
@@ -1326,9 +1326,9 @@ contains
        part_cell_vec(3,i) = real_cell_vec(3,i) / real(parts%ngcellz,double)
     enddo
     if(inode == ionode.AND.iprint_gen>1) then
-       write(unit=io_lun,fmt='(/" partition cell vectors:"/)')
+       write(unit=io_lun,fmt='(/8x," partition cell vectors:"/)')
        do n = 1, 3
-          write(unit=io_lun,fmt='(" partition cell vector no:",i5,3x,3f12.6)') n, (part_cell_vec(n,i), i = 1, 3)
+          write(unit=io_lun,fmt='(8x," partition cell vector no:",i5,3x,3f12.6)') n, (part_cell_vec(n,i), i = 1, 3)
        enddo
     endif
 
@@ -1349,17 +1349,17 @@ contains
        enddo
     enddo
     partition_diameter = two*sqrt(partition_radius_squared)
-    if(inode == ionode.AND.iprint_gen>1) write(unit=io_lun,fmt='(/" diameter of sphere circumscribed round &
+    if(inode == ionode.AND.iprint_gen>1) write(unit=io_lun,fmt='(/8x," diameter of sphere circumscribed round &
          &partition cell:",f12.6)') partition_diameter 
 
     ! --- make Ewald covering set
     call make_cs(inode-1,ewald_real_cutoff,ewald_CS,parts,bundle,ni_in_cell, x_atom_cell,y_atom_cell,z_atom_cell)
     ! +++
     if(inode == ionode.AND.iprint_gen>1) then
-       write(unit=io_lun,fmt='(/"+++ ng_cover:",i10)') ewald_CS%ng_cover
-       write(unit=io_lun,fmt='("+++ ncoverx, y, z:",3i8)') ewald_CS%ncoverx, ewald_CS%ncovery, ewald_CS%ncoverz
-       write(unit=io_lun,fmt='("+++ nspanlx, y, z:",3i8)') ewald_CS%nspanlx, ewald_CS%nspanly, ewald_CS%nspanlz
-       write(unit=io_lun,fmt='("+++ nx_origin, y, z:",3i8)') ewald_CS%nx_origin, ewald_CS%ny_origin, ewald_CS%nz_origin
+       write(unit=io_lun,fmt='(/8x,"+++ ng_cover:",i10)') ewald_CS%ng_cover
+       write(unit=io_lun,fmt='(8x,"+++ ncoverx, y, z:",3i8)') ewald_CS%ncoverx, ewald_CS%ncovery, ewald_CS%ncoverz
+       write(unit=io_lun,fmt='(8x,"+++ nspanlx, y, z:",3i8)') ewald_CS%nspanlx, ewald_CS%nspanly, ewald_CS%nspanlz
+       write(unit=io_lun,fmt='(8x,"+++ nx_origin, y, z:",3i8)') ewald_CS%nx_origin, ewald_CS%ny_origin, ewald_CS%nz_origin
     endif
     ! +++
 
@@ -1505,21 +1505,21 @@ contains
 
 
     ! >>>>>>
-    do ip = 1, bundle%groups_on_node
-       if(inode /= ionode.AND.iprint_gen>=6) write(unit=io_lun,fmt='(/" node:",i3," primary-set partition no:",i3," contains",i3,&
-            &" atoms")') inode, ip, bundle%nm_nodgroup(ip)
-       if(bundle%nm_nodgroup(ip) > 0) then
-          do ni = 1, bundle%nm_nodgroup(ip)
-             x = bundle%xprim(bundle%nm_nodbeg(ip)+ni-1)
-             y = bundle%yprim(bundle%nm_nodbeg(ip)+ni-1)
-             z = bundle%zprim(bundle%nm_nodbeg(ip)+ni-1)
-             i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
-             !q_i = charge(species(i))
-             q_i = charge(bundle%species(bundle%nm_nodbeg(ip)+ni-1))
-             if(inode /= ionode.AND.iprint_gen>=6) write(unit=io_lun,fmt='(2x,2i3,2x,3e15.6,2x,f12.6)') ni, i, x, y, z, q_i
-          enddo
-       endif
-    enddo
+    !do ip = 1, bundle%groups_on_node
+    !   if(inode /= ionode.AND.iprint_gen>=6) write(unit=io_lun,fmt='(/" node:",i3," primary-set partition no:",i3," contains",i3,&
+    !        &" atoms")') inode, ip, bundle%nm_nodgroup(ip)
+    !   if(bundle%nm_nodgroup(ip) > 0) then
+    !      do ni = 1, bundle%nm_nodgroup(ip)
+    !         x = bundle%xprim(bundle%nm_nodbeg(ip)+ni-1)
+    !         y = bundle%yprim(bundle%nm_nodbeg(ip)+ni-1)
+    !         z = bundle%zprim(bundle%nm_nodbeg(ip)+ni-1)
+    !         i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
+    !         !q_i = charge(species(i))
+    !         q_i = charge(bundle%species(bundle%nm_nodbeg(ip)+ni-1))
+    !         if(inode /= ionode.AND.iprint_gen>=6) write(unit=io_lun,fmt='(2x,2i3,2x,3e15.6,2x,f12.6)') ni, i, x, y, z, q_i
+    !      enddo
+    !   endif
+    !enddo
     ! <<<<<<
 
     do n = 1, number_of_g_vectors
@@ -1658,22 +1658,22 @@ contains
        endif
     enddo
 
-    if(inode /= ionode.AND.iprint_gen>=6) then
-       write(unit=io_lun,fmt='(/" Ewald recip-space info from node:",i3)') inode
-       write(unit=io_lun,fmt='(/" Ewald recip-space energy:",e20.12)') &
-            &ewald_recip_energy
-       write(unit=io_lun,fmt='(/" Ewald recip-space forces:"/)')
-       do ip = 1, bundle%groups_on_node
-          if(bundle%nm_nodgroup(ip) > 0) then
-             do ni = 1, bundle%nm_nodgroup(ip)
-                i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
-                write(unit=io_lun,fmt='(2x,3i5,2x,3e20.12)') ip, ni, i, &
-                     &ewald_recip_force_x(bundle%nm_nodbeg(ip)+ni-1), ewald_recip_force_y(bundle%nm_nodbeg(ip)+ni-1), &
-                     &ewald_recip_force_z(bundle%nm_nodbeg(ip)+ni-1)
-             enddo
-          endif
-       enddo
-    endif
+    !if(inode /= ionode.AND.iprint_gen>=6) then
+    !   write(unit=io_lun,fmt='(/" Ewald recip-space info from node:",i3)') inode
+    !   write(unit=io_lun,fmt='(/" Ewald recip-space energy:",e20.12)') &
+    !        &ewald_recip_energy
+    !   write(unit=io_lun,fmt='(/" Ewald recip-space forces:"/)')
+    !   do ip = 1, bundle%groups_on_node
+    !      if(bundle%nm_nodgroup(ip) > 0) then
+    !         do ni = 1, bundle%nm_nodgroup(ip)
+    !            i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
+    !            write(unit=io_lun,fmt='(2x,3i5,2x,3e20.12)') ip, ni, i, &
+    !                 &ewald_recip_force_x(bundle%nm_nodbeg(ip)+ni-1), ewald_recip_force_y(bundle%nm_nodbeg(ip)+ni-1), &
+    !                 &ewald_recip_force_z(bundle%nm_nodbeg(ip)+ni-1)
+    !         enddo
+    !      endif
+    !   enddo
+    !endif
 
     ! --- Ewald real-space sum -----------------------------------------------------
 
@@ -1836,7 +1836,7 @@ contains
     endif
 
     ewald_real_energy = ewald_real_sum_intra + half*ewald_real_sum_inter
-    if(inode == ionode.AND.iprint_gen>0) write(unit=io_lun,fmt='(/" ++++++ Ewald real-space energy:",e20.12)') &
+    if(inode == ionode.AND.iprint_gen>0) write(unit=io_lun,fmt='(/8x," ++++++ Ewald real-space energy:",e20.12)') &
          &ewald_real_energy
 
     ! --- add all contributions to total Ewald energy and forces
@@ -1872,11 +1872,11 @@ contains
     end do
     if(inode == ionode.AND.iprint_gen>=2) then
        !write(unit=io_lun,fmt='(/" Ewald total energy and forces from node:",i3)') inode 
-       write(unit=io_lun,fmt='(/" Ewald total energy:",e20.12)') ewald_total_energy
+       write(unit=io_lun,fmt='(/8x," Ewald total energy:",e20.12)') ewald_total_energy
        if(inode == ionode.AND.iprint_gen>=4) then
-          write(unit=io_lun,fmt='(/" Ewald total forces:"/)')
+          write(unit=io_lun,fmt='(/8x," Ewald total forces:"/)')
           do i = 1, ni_in_cell
-             write(unit=io_lun,fmt='(2x,i5,2x,3e20.12)') i, ewald_total_force_x(i), ewald_total_force_y(i), ewald_total_force_z(i)
+             write(unit=io_lun,fmt='(10x,i5,2x,3e20.12)') i, ewald_total_force_x(i), ewald_total_force_y(i), ewald_total_force_z(i)
           enddo
        end if
     endif

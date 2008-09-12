@@ -14,7 +14,7 @@
 !!PURPOSE
 !! Initialisation  of the job
 !!USES
-!!  fdf
+!!  cq_ut_psp2pao_input
 !!  cq_ut_psp2pao_global
 !!  cq_ut_psp2pao_types
 !!  cq_ut_psp2pao_psp
@@ -27,7 +27,8 @@
 !!CREATION DATE
 !! 23/02/2006
 !!MODIFICATION HISTORY
-!!
+!! 2008/09/03 ast
+!!   New input module by Dave
 !!SOURCE
 !!
 module cq_ut_psp2pao_initialise
@@ -65,7 +66,7 @@ contains
 !!
   subroutine initialise_orbital_list(no_wf_sets)
 
-     use fdf
+     use cq_ut_psp2pao_input
      use cq_ut_psp2pao_types
      use cq_ut_psp2pao_global
      use cq_ut_psp2pao_alloc
@@ -79,7 +80,7 @@ contains
      character(len=200) :: label
      character(len=200) :: pseudopotential_file
      character(len=200) :: wf_file
-     character(len=250) :: line
+     character(len=250) :: l_line
 
      logical :: is_multiple_zeta, is_polarised
      integer stat, i, j, k, l, lun, fdf_file
@@ -100,7 +101,7 @@ contains
      ! Constants
      real(double), parameter :: huge_value = 1.0e30_double
 
-     zeta_method=fdf_string('MultipleZetaMethod', 'eigenstates')
+     zeta_method=fdf_string(80,'MultipleZetaMethod', 'eigenstates')
      if(zeta_method == 'eigenstates') then
        no_wf_sets = 1
        is_multiple_zeta = .false.
@@ -174,7 +175,7 @@ contains
 
        ! Open the pseudopotential file to get some data
        write(label,'(a,i0)') 'Pseudopotential',i
-       pseudopotential_file = fdf_string(trim(label), '')
+       pseudopotential_file = fdf_string(80,trim(label), '')
        if(pseudopotential_file == '') then
           write(*,'(a,i4,a)') 'Error: A name for the pseudopotential file ',i, &
                               ' is required'
@@ -187,7 +188,7 @@ contains
        open(unit=lun,file=pseudopotential_file,status='old')
 
        ! Read first line and discard
-       read(lun,fmt=*, iostat=stat) line
+       read(lun,fmt=*, iostat=stat) l_line
 
        ! Read atom number and valence electrons
        read(lun,fmt=*, iostat=stat) wf_descr(i)%zatom, wf_descr(i)%zion
@@ -200,7 +201,7 @@ contains
        if(read_option) then
          write(wf_file,'(a,i0)') 'wf.dat.',i
          write(label,'(a,i0)') 'WavefunctionFile',i
-         wf_file = fdf_string(trim(label), wf_file)
+         wf_file = fdf_string(80,trim(label), wf_file)
 
          call io_assign(lun)
          open(unit=lun,file=wf_file,status='old')
@@ -258,7 +259,7 @@ contains
        no_orbitals = fdf_integer(trim(label), 1)
  
        write(label,'(a,i0)') 'OrbitalInformation',i
-       if(fdf_block(trim(label),fdf_file)) then
+       if(fdf_block(trim(label))) then
          ! Read n, l and occupancy for each orbital
          ! IMPORTANT If spin is allowed, two separate occupancies should be read 
          !           (NOT IMPLEMENTED YET)
@@ -485,7 +486,7 @@ contains
      end do
 
      ! Create table of expected zeta values for each occupied l
-     if(fdf_block('MaximumZetaPerChannel',fdf_file)) then
+     if(fdf_block('MaximumZetaPerChannel')) then
        write(*,'(a,i2,a)') 'Expected exactly ',zeta_levels,' l channels in block MaximumZetaPerChannel'
        do i=1,zeta_levels
           read(fdf_file,*) l, maximum_zeta
@@ -502,7 +503,7 @@ contains
      end if
 
      ! Create table of expected zeta values for polarisations orbitals
-     if(fdf_block('MaximumZetaPerPolChannel',fdf_file) .and. polarisation_level .ge. 1) then
+     if(fdf_block('MaximumZetaPerPolChannel') .and. polarisation_level .ge. 1) then
        write(*,'(a,i2,a)') 'Expected exactly ',polarisation_level,' l channels in block MaximumZetaPerPolChannel'
        do i=1,polarisation_level
           read(fdf_file,*) l, maximum_zeta
@@ -642,7 +643,7 @@ contains
 !!INPUTS
 !!
 !!USES
-!!  fdf
+!!  cq_ut_psp2pao_input
 !!  cq_ut_psp2pao_global
 !!  cq_ut_psp2pao_types
 !!  cq_ut_psp2pao_psp
@@ -660,7 +661,7 @@ contains
 !!
   subroutine initialise(wf_set_no)
 
-     use fdf
+     use cq_ut_psp2pao_input
      use cq_ut_psp2pao_global
      use cq_ut_psp2pao_types
      use cq_ut_psp2pao_psp
@@ -697,7 +698,7 @@ contains
 
      !! Read  name of pseudopotential file
      write(label,'(a,i0)') 'Pseudopotential',wf_set_no
-     pseudopotential_file = fdf_string(trim(label), def)
+     pseudopotential_file = fdf_string(80,trim(label), def)
 
 
      !! Read grid information

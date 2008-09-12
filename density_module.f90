@@ -244,7 +244,7 @@ contains
     ! Correct electron density
     density_scale = ne_in_cell/local_density
     density = density_scale*density
-    if(inode.eq.ionode.AND.iprint_SC>0) write(io_lun,*) 'In set_density, electrons: ',density_scale*local_density
+    if(inode.eq.ionode.AND.iprint_SC>0) write(io_lun,fmt='(10x,"In set_density, electrons: ",f20.12)') density_scale*local_density
     call my_barrier()
     call stop_print_timer(tmr_l_tmp1,"set_density",IPRINT_TIME_THRES3)
     call stop_timer(tmr_std_chargescf)

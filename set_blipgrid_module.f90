@@ -161,8 +161,8 @@ contains
        call alloc_halo_atm(halo_atm(nlpf), max_recv_node_BG,max_halo_part,DCS_parts%mx_mcover)
     else
        ! Note: this is a problem because max_recv_node_BG isn't defined
-       write(io_lun,*) ' WARNING !! '
-       write(io_lun,*) ' before alloc_halo_atm : rcut_supp < rcut_proj '
+       if(myid==0) write(io_lun,*) ' WARNING !! '
+       if(myid==0) write(io_lun,*) ' before alloc_halo_atm : rcut_supp < rcut_proj '
        call alloc_halo_atm(halo_atm(nlpf), numprocs,max_halo_part,DCS_parts%mx_mcover)
     endif
     ! Densities
@@ -285,7 +285,7 @@ contains
     use cover_module,   ONLY: BCS_blocks,DCS_parts
     use global_module,  ONLY: rcellx,rcelly,rcellz,numprocs
     use block_module,   ONLY: nx_in_block,ny_in_block,nz_in_block
-    use GenComms, ONLY: cq_abort
+    use GenComms, ONLY: cq_abort, myid
     use species_module, ONLY: n_species
 
     implicit none
@@ -467,7 +467,7 @@ contains
                 endif ! (distsq < rcutsq)
 
              enddo ! iblock in covering sets
-             if(iprint_index>3) write(io_lun,101) inp,naba_blk%nxmin(inp),naba_blk%nxmax(inp),&
+             if(iprint_index>3.AND.myid==0) write(io_lun,101) inp,naba_blk%nxmin(inp),naba_blk%nxmax(inp),&
                   naba_blk%nymin(inp),naba_blk%nymax(inp),&
                   naba_blk%nzmin(inp),naba_blk%nzmax(inp)
 101          format('inp =',i4,' nxmin,max= ',2i6,' ny ',2i6,' nz ',2i6)

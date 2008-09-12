@@ -660,7 +660,7 @@ contains
              supports_on_atom(i)%supp_func(2)%coefficients(n_blip) = x * gauss_2
              supports_on_atom(i)%supp_func(3)%coefficients(n_blip) = y * gauss_2
              supports_on_atom(i)%supp_func(4)%coefficients(n_blip) = z * gauss_2
-             if(iprint_basis>2) then
+             if(iprint_basis>2.AND.inode==ionode) then
                 write(io_lun,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 1, n_blip, &
                      supports_on_atom(i)%supp_func(1)%coefficients(n_blip)
                 write(io_lun,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 2, n_blip, &

@@ -264,9 +264,7 @@ contains
        do np = 1,bundle%groups_on_node
           if(bundle%nm_nodgroup(np)>0) then
              do i=1,bundle%nm_nodgroup(np)
-                !write(io_lun,*) inode,' part, prim, spec: ',np,i,ip,bundle%species(ip)
                 do j = 1, nsf_species(bundle%species(ip))
-                   !write(io_lun,*) inode,' part, atom, spec: ',np,i,ip,j
                    call store_matrix_value(matT,np,i,ip,nb,j,j,one,1)
                    call store_matrix_value(matI,np,i,ip,nb,j,j,one,1)
                 enddo
@@ -415,36 +413,23 @@ contains
     !     Local Variables
     integer :: matT0S, matGrad
 
-    !write(io_lun,*) 'Allocating temp matrices'
     matT0S = allocate_temp_matrix(TSrange,0)
     matGrad = allocate_temp_matrix(Trange,0)
 
-    !write(io_lun,*) 'matrix_scale'
     call matrix_scale(zero,matT0S)
     call matrix_scale(zero,matGrad)
     ! Create T0.S
-    !write(io_lun,*) 'matrix_product T_S_TS ',matT0,matS,matT0S
     call matrix_product(matT0, matS, matT0S, mult( T_S_TS ) )
     ! Now A=I-TS, as a diagnostic
     call my_barrier()
-    !write(io_lun,*) 'matrix_sum A=I'
     call matrix_sum(zero,matA,one,matI)
-    !write(io_lun,*) 'matrix_sum A=I-TS'
     call matrix_sum(one,matA,-one,matT0S)
     ! Create T0S.T0
-    !write(io_lun,*) 'matrix_product TS_T_T'
     call matrix_product(matT0S, matT0, matGrad, mult( TS_T_T ) )
-    !call dump_matrix("NTST",matGrad,inode)
-    !call my_barrier
-    !write(io_lun,*) 'Done writing T0S'
-    !stop
     ! T1 = 2T0 - Grad
-    !write(io_lun,*) 'matrix_sum T1=2T0'
     call matrix_sum(zero,matT1,two,matT0)
-    !write(io_lun,*) 'matrix_sum T1=2T0 - Grad'
     call matrix_sum(one,matT1,-one,matGrad)
     omega = matrix_product_trace(matA,matA)
-    !write(io_lun,*) 'Freeing temp matrices'
     call free_temp_matrix(matGrad)
     call free_temp_matrix(matT0S)
 

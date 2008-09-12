@@ -371,7 +371,7 @@ contains
                            ii=ii+1
                         enddo
                      enddo
-                  else
+                  else 
                      write(io_lun,*) 'ERROR? in remote_bucket',ipair,myid
                      write(io_lun,*) ' a pair of two atoms in a domain partial node &
                           & is not a neighbour pair in a bundle node. ??? '

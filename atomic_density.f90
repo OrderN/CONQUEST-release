@@ -104,6 +104,8 @@ contains
 !!    Moved read of file to initial_read
 !!   2008/05/23 ast
 !!    Added timers
+!!   2008/09/01 08:21 dave
+!!    Added io_ routines from input_module
 !!  SOURCE
 !!
   subroutine read_atomic_density(inode,ionode,n_species)
@@ -113,6 +115,7 @@ contains
     use GenComms, ONLY: gcopy, cq_abort
     use numbers
     use memory_module, ONLY: reg_alloc_mem, type_dbl
+    use input_module, ONLY: io_assign, io_close
 
     implicit none
 
@@ -169,8 +172,8 @@ contains
     rcut_dens = 0.0_double
     do n_sp = 1, n_species
 
-       if(iprint_SC >= 2) write(unit=io_lun,fmt='(/10x," reading atomic density data for species no:",i3)') n_sp
        if(inode == ionode) then
+          if(iprint_SC >= 2) write(unit=io_lun,fmt='(/10x," reading atomic density data for species no:",i3)') n_sp
           read(lun,fmt=*) atomic_density_table(n_sp)%length
           read(lun,fmt=*) atomic_density_table(n_sp)%cutoff
           if(iprint_SC >= 2) then

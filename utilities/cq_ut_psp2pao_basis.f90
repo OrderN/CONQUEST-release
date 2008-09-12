@@ -115,7 +115,7 @@ contains
 !!
   subroutine fill_wf_set(no_set)
 
-     use fdf
+!     use input_module, ONLY: io_assign, io_close
      use cq_ut_psp2pao_global
      use cq_ut_psp2pao_types
      use cq_ut_psp2pao_psp
@@ -269,7 +269,7 @@ contains
 !!
   subroutine calculate_basis(no_sets)
 
-     use fdf
+!     use input_module, ONLY: io_assign, io_close
      use cq_ut_psp2pao_global
      use cq_ut_psp2pao_types
      use cq_ut_psp2pao_psp

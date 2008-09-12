@@ -446,7 +446,7 @@ contains
     enddo
 108 format('Residual after golden section ',i5,': ',e15.6)
     if(n_s>=mx_SCiters) then
-       write(io_lun,*) 'Attempted to reduce residual via golden search, but failed'
+       if(inode==ionode) write(io_lun,*) 'Attempted to reduce residual via golden search, but failed'
     endif
   end subroutine searchMin
 !!***

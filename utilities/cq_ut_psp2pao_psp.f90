@@ -52,6 +52,7 @@ contains
 !!  cq_ut_psp2pao_types
 !!  cq_ut_psp2pao_numeric
 !!  cq_ut_psp2pao_alloc
+!!  cq_ut_psp2pao_input
 !!AUTHOR
 !! Antonio S. Torralba
 !!CREATION DATE
@@ -68,6 +69,7 @@ contains
      use cq_ut_psp2pao_numeric, ONLY: spline, spline_interpolation, &
                                       simpson_integral_prod, very_small, zero, big
      use cq_ut_psp2pao_alloc
+     use cq_ut_psp2pao_input, ONLY: io_assign,io_close
 
      implicit none
 

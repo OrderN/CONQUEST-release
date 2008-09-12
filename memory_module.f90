@@ -74,6 +74,7 @@ contains
 
     use units, ONLY: m_units, mem_units, mem_conv
     use global_module, ONLY: iprint_gen
+    use GenComms, ONLY: myid
 
     implicit none
 
@@ -82,7 +83,7 @@ contains
     integer, intent(in) :: amount
     integer, intent(in) :: type
 
-    if(iprint_gen>4) write(io_lun,fmt='(10x,"Allocating in area ",i3,f10.3," ",a2)') &
+    if(iprint_gen>4.AND.myid==0) write(io_lun,fmt='(10x,"Allocating in area ",i3,f10.3," ",a2)') &
          area, real(amount*no_bytes(type),double)*mem_conv,mem_units(m_units)
     tot_alloc_area(area) = tot_alloc_area(area) + amount*no_bytes(type)
     max_alloc_area(area) = max(max_alloc_area(area),tot_alloc_area(area))

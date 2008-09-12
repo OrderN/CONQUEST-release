@@ -244,7 +244,7 @@ contains
     a_b_c%comms%ncomm = 0
     a_b_c%comms%inode = 0
     ! Now loop over partitions and work out where to get data from/send data to
-    if(a_b_c%ahalo%np_in_halo>a_b_c%ahalo%mx_part) write(io_lun,*) 'ERROR in HALO'
+    if(a_b_c%ahalo%np_in_halo>a_b_c%ahalo%mx_part) call cq_abort('ERROR in HALO',a_b_c%ahalo%np_in_halo,a_b_c%ahalo%mx_part)
     do kpart=1,a_b_c%ahalo%np_in_halo
        new = .true.
        ind_part=a_b_c%ahalo%lab_hcell(kpart)
@@ -413,7 +413,7 @@ contains
        endif
     enddo
     if(maxnabaprocs==0) maxnabaprocs = 1
-    if(iprint_mat>2) write(io_lun,fmt='(2x,"Proc: ",i5," has ",i5," neighbour processors")') myid+1,maxnabaprocs
+    if(iprint_mat>2.AND.myid==0) write(io_lun,fmt='(2x,"Proc: ",i5," has ",i5," neighbour processors")') myid+1,maxnabaprocs
   end subroutine find_neighbour_procs
 !!***
 end module matrix_comms_module

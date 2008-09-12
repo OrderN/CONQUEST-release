@@ -624,7 +624,7 @@ contains
          r_super_x_squared, r_super_y_squared, r_super_z_squared, &
          r_super_x, r_super_y, r_super_z
     use grid_index, ONLY: grid_point_x, grid_point_y, grid_point_z
-    use GenComms, ONLY: gcopy_diff, exch, cq_abort, my_barrier, inode
+    use GenComms, ONLY: gcopy_diff, exch, cq_abort, my_barrier, inode, myid
     use maxima_module, ONLY: maxngrid
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
 
@@ -698,9 +698,9 @@ contains
     psendbx(1) = 1
     do I = 1, numprocs
        psendbx(I+1) = psendbx(I) + send_count(I)
-       if(iprint_SC>3) write(io_lun,*) inode," proc sending bx to ",I,send_count(I)
+       if(iprint_SC>3.AND.myid==0) write(io_lun,*) inode," proc sending bx to ",I,send_count(I)
     end do
-    if(iprint_SC>3) write(io_lun,*) inode," bx total: ",psendbx(numprocs)+send_count(numprocs)
+    if(iprint_SC>3.AND.myid==0) write(io_lun,*) inode," bx total: ",psendbx(numprocs)+send_count(numprocs)
 
 
     ! Make the packbx
@@ -722,7 +722,7 @@ contains
        prbx(I+1) = prbx(I) + get_count(I)  
     end do
     x_columns_node(inode) = (prbx(numprocs)+get_count(numprocs))/n_grid_x
-    if(iprint_SC>3) write(io_lun,*) inode," xcols: ",prbx(numprocs)+get_count(numprocs),x_columns_node(inode)
+    if(iprint_SC>3.AND.myid==0) write(io_lun,*) inode," xcols: ",prbx(numprocs)+get_count(numprocs),x_columns_node(inode)
     if (prbx(numprocs)+get_count(numprocs)>maxngrid+1) &
          call cq_abort("Grid overflow (bx) in FFT: ",prbx(numprocs)+get_count(numprocs), maxngrid)
 
@@ -736,7 +736,7 @@ contains
        sx_columns_node(i) = x_columns_node(inode)
     enddo
     call exch(sx_columns_node, x_columns_node,1)
-    if(iprint_SC>3) write(io_lun,*) inode," x columns: ",x_columns_node
+    if(iprint_SC>3.AND.myid==0) write(io_lun,*) inode," x columns: ",x_columns_node
 
     ! now we need to figure out the unpacking.
     ! for each node, JNODE, we loop over all points and identify the ones which
@@ -783,9 +783,9 @@ contains
     psendxy(1) = 1
     do I = 1, numprocs
        psendxy(I+1) = psendxy(I) + send_count(I)
-       if(iprint_SC>3) write(io_lun,*) inode," proc sending xy to ",I,send_count(I)
+       if(iprint_SC>3.AND.myid==0) write(io_lun,*) inode," proc sending xy to ",I,send_count(I)
     end do
-    if(iprint_SC>3) write(io_lun,*) inode," xy total: ",psendbx(numprocs)+send_count(numprocs)
+    if(iprint_SC>3.AND.myid==0) write(io_lun,*) inode," xy total: ",psendbx(numprocs)+send_count(numprocs)
 
     ! now we can make the packxy
     do n = 1, x_columns_node(inode)
@@ -819,7 +819,7 @@ contains
        sx_columns_node(i) = y_columns_node(inode)
     end do
     call exch(sx_columns_node, y_columns_node,1)
-    if(iprint_SC>3) write(io_lun,*) inode," y columns: ",y_columns_node
+    if(iprint_SC>3.AND.myid==0) write(io_lun,*) inode," y columns: ",y_columns_node
 
     ! now we need to figure out the unpacking.
     cnt = 0
@@ -861,9 +861,9 @@ contains
     psendyz(1) = 1
     do I = 1, numprocs
        psendyz(I+1) = psendyz(I) + send_count(I)
-       if(iprint_SC>3) write(io_lun,*) inode," proc sending yz to ",I,send_count(I)
+       if(iprint_SC>3.AND.myid==0) write(io_lun,*) inode," proc sending yz to ",I,send_count(I)
     end do
-    if(iprint_SC>3) write(io_lun,*) inode," yz total: ",psendbx(numprocs)+send_count(numprocs)
+    if(iprint_SC>3.AND.myid==0) write(io_lun,*) inode," yz total: ",psendbx(numprocs)+send_count(numprocs)
 
     ! now we can make the packyz
     do n = 1, y_columns_node(inode)
@@ -886,7 +886,7 @@ contains
        pryz(I+1) = pryz(I) + get_count(I)  
     end do
     z_columns_node(inode) = (pryz(numprocs)+get_count(numprocs))/n_grid_z
-    if(iprint_SC>3) write(io_lun,*) inode," z column: ",z_columns_node(inode)
+    if(iprint_SC>3.AND.myid==0) write(io_lun,*) inode," z column: ",z_columns_node(inode)
     if (pryz(numprocs)+get_count(numprocs)>maxngrid+1) &
          call cq_abort("Grid overflow (yz) in FFT: ",pryz(numprocs)+get_count(numprocs), maxngrid)
 
@@ -898,7 +898,7 @@ contains
        sx_columns_node(i) = z_columns_node(inode)
     end do
     call exch(sx_columns_node, z_columns_node, 1)
-    if(iprint_SC>3) write(io_lun,*) inode," z columns: ",z_columns_node
+    if(iprint_SC>3.AND.myid==0) write(io_lun,*) inode," z columns: ",z_columns_node
 
     ! Base kerker cutoff on shortest cell side and quarter
     if(r_super_x<r_super_y) then

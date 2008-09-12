@@ -19,7 +19,10 @@
 !!  CREATION DATE
 !!   23/04/2008
 !!  MODIFICATION HISTORY
-!!
+!!   2008/09/08 07:46 dave
+!!    Changed variable types
+!!   2008/09/08 12:11 dave & ast
+!!    Added TimingOn flag
 !!  TODO
 !!
 !!  SOURCE
@@ -27,6 +30,7 @@
 module timer_module
 
   use mpi
+  use datatypes
   use global_module, ONLY: iprint, iprint_time
 
   implicit none
@@ -39,12 +43,16 @@ module timer_module
   logical, parameter :: TIME_ACCUMULATE_NO  = .false.
   logical, parameter :: WITH_LEVEL = .true.
 
+  ! Flag to test for timers
+  logical :: TimingOn
+  logical :: TimersWriteOut ! This switches on output ON LOCAL PROCESSOR
+
   ! Node information
   integer, save :: mynode
   integer :: lun_tmr
 
   ! Printing tolerance (the minimum time for a timer to be printed)
-  DOUBLE PRECISION, save :: time_threshold
+  real(double), save :: time_threshold
 
   ! Level indicator (basically, the number of timers started and not stopped)
   !   This is mainly intended for private use
@@ -55,9 +63,9 @@ module timer_module
       logical :: errors           ! True if errors, e.g. stop_timer without starting it
       logical :: first_use=.true.
       integer :: level
-      DOUBLE PRECISION :: t_ini
-      DOUBLE PRECISION :: t_end
-      DOUBLE PRECISION :: t_tot   
+      real(double) :: t_ini
+      real(double) :: t_end
+      real(double) :: t_tot   
   end type cq_timer
 
 !!***
@@ -183,16 +191,15 @@ contains
     type(cq_timer) :: t      ! The timer to be used
     logical,optional :: l    ! Do we want to assign a level? Ignored if already initialised
 
+    if(.NOT.TimingOn) return
     if(t%first_use) then
        call initialise_timer(t)
     end if
 
     ! This subroutine is not, in principle, called again without calling a final-time routine,
     !   so, if it is, issue a warning
-    if(t%have_ini .eqv. .true.) then
-       if(iprint >= 3) then
-          write(unit=lun_tmr,fmt='("start_timer: Warning: Second call in a row at node ", i3)') mynode
-       end if
+    if(t%have_ini.AND.TimersWriteOut.AND.iprint >= 3) then
+       write(unit=lun_tmr,fmt='("start_timer: Warning: Second call in a row at node ", i3)') mynode
     else
        t%have_ini=.true.   ! The timer is now started
        if(PRESENT(l)) then
@@ -249,6 +256,8 @@ contains
     type(cq_timer) :: t                ! The timer to be used
     logical, optional :: accumulate    ! Do we want to accumulate or restart
 
+    ! This check is officially allowed ! 
+    if(.NOT.TimingOn) return
     ! First things first: Get the time
     !   Don't EVER think of doing anything before this line
     !   You don't want to overestimate the time, do you?
@@ -275,7 +284,7 @@ contains
     else
       if(t%first_use)  call initialise_timer(t)
       t%errors=.true.
-      if(iprint >= 3) then
+      if(TimersWriteOut.AND.iprint >= 3) then
          write(unit=lun_tmr,&
          fmt='("stop_timer: Error  : Tried to calculate time difference without initial time mark at node", i3)') mynode
       end if
@@ -321,7 +330,8 @@ contains
 
 !    write(unit=lun_tmr,fmt='("Time resolution = ", e18.10e2)') MPI_WTICK()
 
-    if(t%t_tot > time_threshold)  then
+    if(.NOT.TimingOn) return
+    if(TimersWriteOut.AND.t%t_tot > time_threshold)  then
       message=trim(m)
       if(t%level >= 0) then             ! Print the level if assigned
         write(unit=lun_tmr,fmt='("Timing: Level ",i3," - Proc ",i6,": Time spent in ", a," = ", f12.5," s")') &
@@ -373,11 +383,12 @@ contains
     ! Local variables
     logical :: accumulate
 
+    if(.NOT.TimingOn) return
     accumulate = TIME_ACCUMULATE_NO
     if(PRESENT(a))  accumulate = a
 
     call stop_timer(t, accumulate) 
-    if(iprint_time >= i) then
+    if(TimersWriteOut.AND.iprint_time >= i) then
        call print_timer(t,m)
     endif
 

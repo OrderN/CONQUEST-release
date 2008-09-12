@@ -84,7 +84,8 @@ contains
 !!  CREATION DATE
 !!  22/6/02
 !!  MODIFICATION HISTORY
-!!
+!!   2008/09/01 08:21 dave
+!!    Added io_ routines from input_module
 !!  SOURCE
   subroutine read_support(inode,ionode,n_species)
 
@@ -94,6 +95,7 @@ contains
     use species_module, ONLY: nsf_species, npao_species
     use maxima_module, ONLY: maxnsf
     use numbers, ONLY: one
+    use input_module, ONLY: io_assign, io_close
 
     implicit none
 

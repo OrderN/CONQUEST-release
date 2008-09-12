@@ -7,7 +7,6 @@
 .SUFFIXES: .f .f90 .cpp
 CQ_UT_PSP2PAO = cq_ut_psp2pao
 CQ_UT_HTMTREE = cq_ut_htmtree
-FDF_UT=libfdf_ut.a
 CURRENT_WD=$(PWD)
 CPP = g++
 
@@ -26,8 +25,8 @@ include ../system.make
 
 ### cq_ut_psp2pao
 
-OBJ_LIST_PSP2PAO = $(FDF_UT) \
-                      cq_ut_psp2pao_types.o \
+OBJ_LIST_PSP2PAO =    cq_ut_psp2pao_types.o \
+                      cq_ut_psp2pao_input.o \
                       cq_ut_psp2pao_global.o \
                       cq_ut_psp2pao_alloc.o \
                       cq_ut_psp2pao_numeric.o \
@@ -68,6 +67,7 @@ cq_ut_psp2pao_hartree.o:    cq_ut_psp2pao_types.o \
                             cq_ut_psp2pao_numeric.o 
 cq_ut_psp2pao_initialise.o: cq_ut_psp2pao_global.o \
                             cq_ut_psp2pao_types.o \
+                            cq_ut_psp2pao_input.o \
                             cq_ut_psp2pao_psp.o \
                             cq_ut_psp2pao_numeric.o \
                             cq_ut_psp2pao_hartree.o \
@@ -75,9 +75,10 @@ cq_ut_psp2pao_initialise.o: cq_ut_psp2pao_global.o \
                             cq_ut_psp2pao_alloc.o
 cq_ut_psp2pao_io.o:         cq_ut_psp2pao_global.o \
                             cq_ut_psp2pao_types.o \
-                            cq_ut_psp2pao_alloc.o
-cq_ut_psp2pao_main.o:       $(FDF_UT) \
-                            cq_ut_psp2pao_types.o \
+                            cq_ut_psp2pao_alloc.o \
+                            cq_ut_psp2pao_input.o
+cq_ut_psp2pao_main.o:       cq_ut_psp2pao_types.o \
+                            cq_ut_psp2pao_input.o \
                             cq_ut_psp2pao_initialise.o \
                             cq_ut_psp2pao_scf.o \
                             cq_ut_psp2pao_density.o \
@@ -94,7 +95,8 @@ cq_ut_psp2pao_orbital.o:    cq_ut_psp2pao_types.o \
 cq_ut_psp2pao_psp.o:        cq_ut_psp2pao_global.o \
                             cq_ut_psp2pao_types.o \
                             cq_ut_psp2pao_numeric.o \
-                            cq_ut_psp2pao_alloc.o
+                            cq_ut_psp2pao_alloc.o \
+                            cq_ut_psp2pao_input.o
 cq_ut_psp2pao_scf.o:        cq_ut_psp2pao_global.o \
                             cq_ut_psp2pao_types.o \
                             cq_ut_psp2pao_solve.o \
@@ -129,17 +131,6 @@ cq_ut_general_cTimerList.o:    cq_ut_general_cTimerRegister.o
 
 ## TARGETS
 
-libfdf_ut.a: fdf_ut
-
-# FDF Module
-
-fdf_ut:
-	@echo $(CURRENT_WD)
-	(cd ../fdf; make; cp *.mod $(CURRENT_WD); cp libfdf.a $(CURRENT_WD)/$(FDF_UT))
-
-#	@echo $(CURRENT_WD)
-#	(cd ../fdf; $(MAKE) "FC=$(FC)" "FFLAGS=$(COMPFLAGS)" module; cp *.mod $(CURRENT_WD); cp libfdf.a $(CURRENT_WD))
-
 # PAO basis generator from pseudopotentials (cq_ut_psp2pao)
 
 $(CQ_UT_PSP2PAO): $(OBJ_LIST_PSP2PAO)
@@ -153,4 +144,4 @@ $(CQ_UT_HTMTREE): $(OBJ_LIST_HTMTREE)
 clean:
 #	( cd ../fdf; make clean )
 #	rm -f *.o *.mod libfdf.a *~
-	rm -f *.o *~ *.mod libfdf_ut.a
+	rm -f *.o *~ *.mod 

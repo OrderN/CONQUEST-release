@@ -215,6 +215,8 @@ contains
 !!    Changed write format "Minimum blocs/proc ..."
 !!   2008/05/16 ast
 !!    Added timers
+!!   2008/09/01 08:21 dave
+!!    Added io_ routines from input_module
 !!  SOURCE
 !!
   subroutine set_blocks_from_old(n_grid_x, n_grid_y, n_grid_z)
@@ -227,6 +229,7 @@ contains
     use group_module,  ONLY: blocks, allocate_group_set, make_cc2, parts
     use maxima_module, ONLY: maxngrid, maxblocks
     use GenComms, ONLY: inode, ionode, cq_abort
+    use input_module, ONLY: io_assign, io_close
 
     implicit none
 

@@ -133,7 +133,7 @@ contains
     integer :: ii
 
     if(allocated(pseudo)) then
-       if(iprint_pseudo>2) write(io_lun,fmt='(10x," setup_pseudo_info is skipped because it is already called")')
+       if(iprint_pseudo>2.AND.inode==ionode) write(io_lun,fmt='(10x," setup_pseudo_info is skipped because it is already called")')
     else
        call start_timer(tmr_std_allocation)
        allocate(pseudo(nspecies),STAT=stat)
@@ -150,7 +150,7 @@ contains
              call cq_abort("Error in pseudopotential type: ",pseudo_type)
           end if
           write(filename,'(a,a)') trim(species_label(ispecies)), ".ion"
-          if(iprint_pseudo>3) write(io_lun,fmt='(10x,"ispecies = ",i5," file = ",a)') ispecies,filename
+          if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"ispecies = ",i5," file = ",a)') ispecies,filename
           pseudo(ispecies)%filename = filename
           call read_ion_ascii_tmp(pseudo(ispecies),pao(ispecies))
           npao_species(ispecies) = pao(ispecies)%count
@@ -488,6 +488,8 @@ contains
 !!    Added calculation of prefac on all processors for local potential
 !!   2008/05/25
 !!    Added timers
+!!   2008/09/01 08:21 dave
+!!    Added io_ routines from input_module
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -499,6 +501,7 @@ contains
     use spline_module, ONLY : spline
     use memory_module, ONLY: reg_alloc_mem, type_dbl    
     use ewald_module, ONLY: erfc
+    use input_module, ONLY: io_assign, io_close
 
     implicit none
 
@@ -535,7 +538,7 @@ contains
        read(lun,*)
        zl = 0
        maxz = 0
-       if(iprint_pseudo>3) write(io_lun,fmt='(10x,"Reading PAOs")')
+       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading PAOs")')
        do i=1,n_orbnl
           read(lun,*) i1,i2,i3,i4, dummy
           thisl(i)=i1
@@ -543,14 +546,14 @@ contains
           thispop(i)=dummy
           if(thisz(i)>zl(thisl(i))) zl(thisl(i))=thisz(i)
           maxz = max(maxz,thisz(i))
-          if(iprint_pseudo>3) write(io_lun,fmt='(10x,"l: ",i3," z: ",i3)') i1,i3
+          if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"l: ",i3," z: ",i3)') i1,i3
           call radial_read_ascii(dummy_rada(i),lun)
        enddo
        allocate(indexlz(maxz,0:lmax))
        indexlz = 0
        do i=1,n_orbnl
           indexlz(thisz(i),thisl(i)) = i
-          if(iprint_pseudo>3) write(io_lun,fmt='(10x,"indexlz: ",3i5)') thisz(i),thisl(i),i
+          if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"indexlz: ",3i5)') thisz(i),thisl(i),i
        end do
        ! Now store data
        pao_info%greatest_angmom = lmax
@@ -559,10 +562,10 @@ contains
        call stop_timer(tmr_std_allocation)
        count = 0
        if(alls/=0) call cq_abort('Failed to allocate PAOs')
-       if(iprint_pseudo>3) write(io_lun,fmt='(10x,"Storing PAOs lmax: ",i5)') lmax
+       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Storing PAOs lmax: ",i5)') lmax
        do l=0,lmax
           pao_info%angmom(l)%n_zeta_in_angmom = zl(l)
-          if(iprint_pseudo>3) write(io_lun,fmt='(10x,"l, zl: ",2i5)') l,zl(l)
+          if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"l, zl: ",2i5)') l,zl(l)
           if(zl(l)>0) then
              call start_timer(tmr_std_allocation)
              allocate(pao_info%angmom(l)%zeta(zl(l)),pao_info%angmom(l)%occ(zl(l)),STAT=alls)
@@ -571,7 +574,7 @@ contains
              count = count + zl(l)*(2*l+1)
              do nzeta = 1,zl(l)
                 i = indexlz(nzeta,l)
-                if(iprint_pseudo>3) write(io_lun,fmt='(10x,"i,z,l: ",3i5)') i,nzeta,l
+                if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"i,z,l: ",3i5)') i,nzeta,l
                 pao_info%angmom(l)%zeta(nzeta)%length = dummy_rada(i)%n
                 pao_info%angmom(l)%zeta(nzeta)%cutoff = dummy_rada(i)%cutoff
                 pao_info%angmom(l)%occ(nzeta) = thispop(i)
@@ -606,7 +609,7 @@ contains
        deallocate(dummy_rada,thisl,thisz,thispop,zl)
 
        ! KBs
-       if(iprint_pseudo>3) write(io_lun,fmt='(10x,"Reading KB projectors ")')
+       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading KB projectors ")')
        read(lun,*)
        ps_info%lmax = 0
        do i=1,ps_info%n_pjnl
@@ -614,20 +617,20 @@ contains
                ps_info%pjnl_l(i), ps_info%pjnl_n(i), ps_info%pjnl_ekb(i)
           !!   25/Jul/2002 TM : Rydberg units -> Hartree units
           ps_info%pjnl_ekb(i) = half* ps_info%pjnl_ekb(i)
-          if(iprint_pseudo>1) write(io_lun,fmt='(10x,"PSEUDO_TM: i, l,n, ekb = ",2i3,f22.16)') &
+          if(iprint_pseudo>1.AND.inode==ionode) write(io_lun,fmt='(10x,"PSEUDO_TM: i, l,n, ekb = ",2i3,f22.16)') &
                ps_info%pjnl_l(i), ps_info%pjnl_n(i),ps_info%pjnl_ekb(i)
           if(ps_info%pjnl_l(i)>ps_info%lmax) ps_info%lmax = ps_info%pjnl_l(i)
           call radial_read_ascii(ps_info%pjnl(i),lun)
        enddo
        !Vlocal
-       if(iprint_pseudo>3) write(io_lun,fmt='(10x,"Reading Vlocal ")')
+       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading Vlocal ")')
        read(lun,*)
        ! Read and store local potential; it may be local part of pseudo, or neutral atom
        call radial_read_ascii(ps_info%vlocal,lun)
        !call radial_read_ascii(dummy_rad,lun)
        !call rad_dealloc(dummy_rad)
        !Chlocal
-       if(iprint_pseudo>3) write(io_lun,fmt='(10x,"Reading Chlocal ")')
+       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading Chlocal ")')
        read(lun,*)
        call radial_read_ascii(ps_info%chlocal,lun)
        !sets up gaussian which is used to calculate G=0 term
@@ -659,7 +662,7 @@ contains
        ps_info%flag_pcc = .false.
        ! I *really* don't like this, but we'll stay with it for now
        read(lun,*,end=9999)
-       if(iprint_pseudo>3) write(io_lun,fmt='(10x,"Reading pcc ")')
+       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading pcc ")')
        call radial_read_ascii(ps_info%chpcc,lun)
        ps_info%flag_pcc = .true.
 
@@ -679,7 +682,7 @@ contains
     if(numprocs>1) then
        count = 0
        do l=0,lmax
-          if(iprint_pseudo>3) write(io_lun,fmt='(10x," l is ",i5)') l
+          if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x," l is ",i5)') l
           call gcopy(pao_info%angmom(l)%n_zeta_in_angmom)
           tzl = pao_info%angmom(l)%n_zeta_in_angmom
           if(tzl>0) then

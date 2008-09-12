@@ -22,8 +22,3 @@ LIBS = $(FFT) -L/scratch/drb/lib -lscalapack -lmpiblacsF77init -lmpiblacs -lacml
 FFT=libgpfa.a
 $(FFT):
 	(cd FFT; $(MAKE) "FC=$(F77)" "FFLAGS=$(COMPFLAGS_F77)" "ARFL=$(ARFLAGS)")
-
-#Input library
-FDF=libfdf.a
-$(FDF):
-	(cd fdf; $(MAKE) "FC=$(FC)" "F77=$(F77)" "FFLAGS=-g " "ARFL=$(ARFLAGS)" module)

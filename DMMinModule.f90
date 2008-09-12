@@ -752,7 +752,7 @@ contains
     if (SQ.LT.0) then
        ! point of inflexion - problem !
        if (inode .eq. ionode) write (*,*) 'Inflexion  approximation:'
-       write(io_lun,*) 'A, B, C, D: ',A, B, C, D
+       if(inode==ionode) write(io_lun,*) 'A, B, C, D: ',A, B, C, D
        inflex = .true.
        call free_temp_matrix(matM3old)
        return
@@ -802,7 +802,7 @@ contains
        zeta = (interpG - ig1_step)/(ig0-ig1_step)
     end if
     interpG = zeta
-    if(INODE.EQ.IONODE.and.output_level>=2) write(io_lun,*) 'energy_1 is ',energy_1
+    if(inode.EQ.ionode.and.output_level>=2) write(io_lun,*) 'energy_1 is ',energy_1
     !    if(INODE.EQ.IONODE) write(io_lun,*) 'diff is ',energy_1-energy_out
     call free_temp_matrix(matM3old)
     return
@@ -949,7 +949,7 @@ contains
 
        call matrix_sum(one,matL,truestep-step,matSphi)
        if(truestep==step)then
-          write(io_lun,*) 'Still in linear loop'
+          if(inode==ionode) write(io_lun,*) 'Still in linear loop'
           ! check that electron number is correct
           call LNV_matrix_multiply(electrons2,energy, &
                dontK, dontM1, dontM2, dontM3, dontM4, dophi, dontE,0,0,0,matphi)
@@ -1077,7 +1077,7 @@ contains
 
        SolveCubic = S1 + S2 - A/3.0_double
        if(abs(SolveCubic)>10.0_double*abs(guess)) then
-          write(io_lun,*) 'Step too large: linear guess was: ',SolveCubic, guess
+          if(inode==ionode) write(io_lun,*) 'Step too large: linear guess was: ',SolveCubic, guess
           SolveCubic = guess
        end if
 

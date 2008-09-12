@@ -208,7 +208,6 @@ contains
     call McWXHX(matH, matT, matXHX, mat_temp)
     call matrix_product(matT,matS,matTS, mult( T_S_TS ))
     SX = matrix_trace(matTS)
-    write(io_lun,*) 'Trace of temp: ',matrix_trace(mat_temp)
     SXHX = matrix_product_trace(matS,mat_temp)
     call my_barrier()
     if(inode==ionode.AND.iprint_DM>1) write(io_lun,*) 'SX, SXHX are ',SX,SXHX

@@ -425,7 +425,7 @@ contains
     lenind = size(apairind)
     posn = 0
     do nr=1,atrans_rem%n_rem_node
-       if(atrans_rem%n_pair(nr) <= 0) write(io_lun,*) 'nr, n_pair ',nr, atrans_rem%n_pair(nr)
+       if(atrans_rem%n_pair(nr) <= 0) call cq_abort('nr, n_pair ',nr, atrans_rem%n_pair(nr))
        apairs(nr)%ipart_a => apairind(posn+1:posn+atrans_rem%n_pair(nr))
        posn = posn+atrans_rem%n_pair(nr)
        apairs(nr)%iseq_a  => apairind(posn+1:posn+atrans_rem%n_pair(nr))

@@ -62,12 +62,15 @@
 !!    Changed for output to file not stdout
 !!   2008/07/31 ast
 !!    Added timers
+!!   2008/09/01 08:20 dave
+!!    Added new Conquest input routines
 !!***
 module io_module
 
   use global_module, ONLY: io_lun
   use GenComms, ONLY: cq_abort, gcopy
   use timer_stdclocks_module, ONLY: start_timer, stop_timer, tmr_std_matrices
+  use input_module, ONLY: leqi, io_assign, io_close
 
   implicit none
 
@@ -142,7 +145,6 @@ contains
     integer :: lun, i, spec, stat
     real(double) :: x, y, z
     logical :: movex, movey, movez
-    logical, external :: leqi
     real(double), dimension(3) :: cell
     ! Local variables for reading pdb files
     integer :: ios, j
@@ -434,8 +436,6 @@ second:   do
     real(double), dimension(3) :: coords
     type(cq_timer) :: tmr_l_tmp1
 
-    logical, external :: leqi
-
     if(inode==ionode) then
        call start_timer(tmr_l_tmp1,WITH_LEVEL)
        if (pdb_output) then
@@ -690,7 +690,7 @@ second:   do
     use maxima_module, ONLY: maxpartsproc, maxatomspart, maxatomsproc, maxpartscell
     use basic_types
     use construct_module, ONLY: init_group
-    use GenComms, ONLY: cq_abort
+    use GenComms, ONLY: cq_abort, myid
 
     implicit none
 
@@ -704,7 +704,7 @@ second:   do
     integer :: irc,ierr,np_in_cell, lun, glob_count, map, ios
     integer :: ind_global, ntmpx, ntmpy, ntmpz, ntmp1, ntmp2, ntmp3, mx_tmp_edge
 
-    if(iprint_init>2) write(io_lun,*) 'Entering read_partitions'
+    if(iprint_init>2.AND.myid==0) write(io_lun,*) 'Entering read_partitions'
     call io_assign(lun)
 
     open(unit=lun, file=part_file, status='old', iostat=ios)
@@ -751,7 +751,7 @@ second:   do
        endif ! if(parts%ng_on_node>0)
        if(ntmp3>maxatomsproc) maxatomsproc = ntmp3
     enddo ! nnd = 1,nnode
-    if(iprint_init>3) write(io_lun,*) 'Atoms proc max: ',maxatomsproc, maxpartsproc
+    if(iprint_init>3.AND.myid==0) write(io_lun,*) 'Atoms proc max: ',maxatomsproc, maxpartsproc
     call init_group(parts, maxpartsproc, mx_tmp_edge, np_in_cell, maxatomspart, numprocs)
     maxpartscell = np_in_cell
     close(unit=lun)
@@ -761,14 +761,14 @@ second:   do
     !open(unit=lun,file=part_file)
     ! Read and check partitions along cell sides
     read(lun,*) parts%ngcellx,parts%ngcelly,parts%ngcellz
-    if(iprint_init>0) write(io_lun,102) parts%ngcellx,parts%ngcelly,parts%ngcellz
+    if(iprint_init>0.AND.myid==0) write(io_lun,102) parts%ngcellx,parts%ngcelly,parts%ngcellz
     if(max(parts%ngcellx,parts%ngcelly,parts%ngcellz)>parts%mx_gedge) then
        call cq_abort('read_partitions: too many parts edge ', &
             max(parts%ngcellx,parts%ngcelly,parts%ngcellz),parts%mx_gedge)
     endif
     ! Read and check number of processors
     read(lun,*) nnode
-    if(iprint_init>0) write(io_lun,110) nnode
+    if(iprint_init>0.AND.myid==0) write(io_lun,110) nnode
     if((nnode<1).or.(nnode>numprocs)) then
        call cq_abort('read_partitions: nodes wrong ',nnode,numprocs)
     endif
@@ -779,7 +779,7 @@ second:   do
     do nnd=1,nnode
        ! First node number, partitions and starting pointer
        read(lun,*) nnd1,parts%ng_on_node(nnd),parts%inode_beg(nnd)
-       if(iprint_init>0) write(io_lun,111) nnd1,parts%ng_on_node(nnd),parts%inode_beg(nnd)
+       if(iprint_init>0.AND.myid==0) write(io_lun,111) nnd1,parts%ng_on_node(nnd),parts%inode_beg(nnd)
 !       if(iprint_init==1) write(io_lun,*) '   Partn        x              y              z        Species   Proc'
        if(nnd1/=nnd) then
           call cq_abort('read_partitions: node label wrong ',nnd1,nnd)
@@ -813,7 +813,7 @@ second:   do
              parts%ngnode(parts%inode_beg(nnd)+np-1)=ind_part
              parts%nm_group(ind_part)=n_cont
              parts%icell_beg(ind_part)=n_beg
-             if(iprint_init>1) write(io_lun,113) ind_part,np1,n_cont,n_beg
+             if(iprint_init>1.AND.myid==0) write(io_lun,113) ind_part,np1,n_cont,n_beg
              ! Read atoms
              if(n_cont>0) then
                 ! Check maxima
@@ -834,7 +834,7 @@ second:   do
                    id_glob(parts%icell_beg(ind_part)+ni-1) = map
                    ! Map from coord file to partition number
                    id_glob_inv(map) = parts%icell_beg(ind_part)+ni-1
-                   write(io_lun,*) ' Global map: ',parts%icell_beg(ind_part)+ni-1,map
+                   !write(io_lun,*) ' Global map: ',parts%icell_beg(ind_part)+ni-1,map
                 enddo
              endif
           enddo ! Loop over np = parts%ng_on_node
@@ -842,16 +842,16 @@ second:   do
     enddo ! nnd = 1,nnode
     call io_close(lun)
     ! Format statements placed here to improve readability of code
-101 format(/2x,'cell lengths:',3f12.6)
-102 format(/2x,'partitions along cell sides',3i5)
-110 format(/'no. of processors (i.e. no. of partition bundles):',i5/)
-111 format(/'processor no:',i5/'no. of partitions:',i5,&
+101 format(/8x,'cell lengths:',3f12.6)
+102 format(/8x,'partitions along cell sides',3i5)
+110 format(/8x,'no. of processors (i.e. no. of partition bundles):',i5/)
+111 format(/8x,'processor no:',i5/8x,'no. of partitions:',i5,&
          ' initial partition:',i5)
-112 format(/'partitions on current processor:')
-113 format(/1x,'Partn no: ',i5,' Local no: ',i5,2x,'contains ',i5,&
+112 format(/8x,'partitions on current processor:')
+113 format(/9x,'Partn no: ',i5,' Local no: ',i5,2x,'contains ',i5,&
          ' atoms, starting at: ',i5/)
-114 format(2x,i5,2x,i5,2x,3e15.6,i5)
-1141 format(3x,i4,2x,3e15.6,4x,i2,3x,i6)
+114 format(10x,i5,2x,i5,2x,3e15.6,i5)
+1141 format(11xx,i4,2x,3e15.6,4x,i2,3x,i6)
     return
   end subroutine read_partitions
 !!***
@@ -1132,7 +1132,7 @@ hc2:    do
           if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array H (Hilbert)')
           allocate (sfc_sequence(0:no_hc-1), STAT = stat)
           if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array sfc_sequence')
-          allocate (map(0:no_hc-1,1:global_maxatomspart*4), STAT = stat)
+          allocate (map(0:no_hc-1,1:global_maxatomspart), STAT = stat)
           if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array map')
          
           parts_edge = 2**b 
@@ -1360,7 +1360,7 @@ hc2:    do
         if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array H (Hilbert)')
         allocate (sfc_sequence(0:no_hc-1), STAT = stat)
         if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array sfc_sequence')
-        allocate (map(0:no_hc-1,1:global_maxatomspart*4), STAT = stat)
+        allocate (map(0:no_hc-1,1:global_maxatomspart), STAT = stat)
         if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array map')
         allocate (cc_part_id(0:no_hc-1), cc_to_H(no_hc), STAT = stat)
         if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array cc_part_id')
@@ -1401,25 +1401,30 @@ hc2:    do
  
           atom_sfc_id(i) = Hilbert
           sfc_sequence(Hilbert) = sfc_sequence(Hilbert) + 1
-          if(sfc_sequence(Hilbert)>2*global_maxatomspart) write(io_lun,*) 'Warning ! ',sfc_sequence(Hilbert),2*global_maxatomspart
+          !if(sfc_sequence(Hilbert)>2*global_maxatomspart) write(io_lun,*) 'Warning ! ',sfc_sequence(Hilbert),2*global_maxatomspart
+          if(sfc_sequence(Hilbert)>global_maxatomspart) then
+             refine = .true. ! We use the refine switch to flag early exit
+             exit
+          end if
           map(Hilbert,sfc_sequence(Hilbert)) = i
   
           if (iprint_init > 3.AND.myid==0) write(io_lun,'(a,i5,a,i5)') "Atom number", i, " HC cube", Hilbert
           if (iprint_init > 3.AND.myid==0) write(io_lun,'(a,3i3,i7)') "Result:", X(0), X(1), X(2), Hilbert
   
         end do
-        do tmp = 1, ni_in_cell
-           if (atom_sfc_id(tmp) == -1) call cq_abort('Atom not assigned to a partition! Aborting job.')
-        end do
-  
-        do i = 0, no_hc - 1
-          if (iprint_init > 3.AND.myid==0) write(io_lun,'(a,i5,a,i5,a)') "Sfc_sequence(",i,") =",sfc_sequence(i)," finished"
-          if (sfc_sequence(i) > global_maxatomspart) then
-            refine = .true.
-            exit 
-          end if
-        end do
- 
+        if(.not.refine) then
+           do tmp = 1, ni_in_cell
+              if (atom_sfc_id(tmp) == -1) call cq_abort('Atom not assigned to a partition! Aborting job.')
+           end do
+
+           do i = 0, no_hc - 1
+              if (iprint_init > 3.AND.myid==0) write(io_lun,'(a,i5,a,i5,a)') "Sfc_sequence(",i,") =",sfc_sequence(i)," finished"
+              if (sfc_sequence(i) > global_maxatomspart) then
+                 refine = .true.
+                 exit 
+              end if
+           end do
+        end if
         if (.not.refine) exit
   
         deallocate(H,STAT = stat)
@@ -1650,7 +1655,7 @@ hc2:    do
 
 
         do i = 0, numprocs - 1
-           if (iprint_init > 4.AND.myid==0) &
+           if (iprint_init > 1.AND.myid==0) &
                 write(io_lun,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
            ! Probably unnecessary - was done earlier
            if (no_atoms_proc(i) == 0) then
@@ -1659,7 +1664,7 @@ hc2:    do
            end if
         end do
 
-      end if
+     end if
 
       ! Statistics
       ! allocate(histogram(proc_atoms_min:proc_atoms_max), STAT = stat)
@@ -1735,8 +1740,7 @@ hc2:    do
     ! Ditto
     if (total_no_parts /= no_hc) call cq_abort('Creafe_sfc_partitions: Partition number does not match')
 
-    ! Delete later
-    if (iprint_init > 3.AND.myid==0) then
+    if (iprint_init > 1.AND.myid==0) then
       do i = 0, numprocs -1
         write(io_lun,'(a,i3,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
       end do
@@ -2199,7 +2203,8 @@ hc2:    do
 !!  CREATION DATE
 !!   12:03, 15/11/2004 dave 
 !!  MODIFICATION HISTORY
-!! 
+!!   2008/09/11 08:09 dave
+!!    Rewritten to do I/O on one processor only
 !!  SOURCE
 !!
   subroutine read_blocks(blocks)
@@ -2213,6 +2218,8 @@ hc2:    do
     use group_module,  ONLY: make_cc2
     use block_module, ONLY : in_block_x, in_block_y, in_block_z, n_pts_in_block, set_block_module
     use dimens, ONLY: n_grid_x, n_grid_y, n_grid_z
+    use GenComms, ONLY: inode, ionode
+    use input_module, ONLY: fdf_string
 
     implicit none
 
@@ -2224,8 +2231,9 @@ hc2:    do
     integer :: irc,ierr,np_in_cell, lun, glob_count, map
     integer :: ind_global, ntmpx, ntmpy, ntmpz, nmyblocks,ntmp1, ntmp2
     integer:: n_block_x, n_block_y, n_block_z, maxtmp
+    character(len=80) :: blk_coord_file, def
 
-    if(iprint_init>2) write(io_lun,*) 'Entering read_blocks ', in_block_x,in_block_y,in_block_z
+    if(inode==ionode.AND.iprint_init>2) write(io_lun,*) 'Entering read_blocks ', in_block_x,in_block_y,in_block_z
     !--- find numbers of blocks in each direction
     n_block_x = n_grid_x/in_block_x
     n_block_y = n_grid_y/in_block_y
@@ -2237,97 +2245,123 @@ hc2:    do
     blocks%ngcelly=n_block_y
     blocks%ngcellz=n_block_z
     call set_block_module
-    call io_assign(lun)
-    open(unit=lun,file='make_blk.dat')
-    ! Read and check blocks along cell sides
-    read(lun,*) ntmpx, ntmpy, ntmpz
-    if(ntmpx/=n_block_x.OR.ntmpy/=n_block_y.OR.ntmpz/=n_block_z) then
-       write(io_lun,fmt='(2x,"In input, ReadBlocks T has been set, so the distribution of blocks is ")')
-       write(io_lun,fmt='(2x,"read from a file.  There is an error specifying numbers of blocks.  ")')
-       write(io_lun,fmt='(2x,"Found from the file: ",3i6)') ntmpx, ntmpy, ntmpz
-       write(io_lun,fmt='(2x,"Calculated from input using grid points: ",3i6)') n_block_x, n_block_y, n_block_z
-       call cq_abort("Aborting ! Please bring block input file and overall input file together.")
+    if(inode==ionode) then
+       call io_assign(lun)
+       def = 'make_blk.dat'
+       blk_coord_file = fdf_string(80,'IO.Blocks',def)
+       open(unit=lun,file=blk_coord_file)
+       ! Read and check blocks along cell sides
+       read(lun,*) ntmpx, ntmpy, ntmpz
+       if(ntmpx/=n_block_x.OR.ntmpy/=n_block_y.OR.ntmpz/=n_block_z) then
+          write(io_lun,fmt='(2x,"In input, ReadBlocks T has been set, so the distribution of blocks is ")')
+          write(io_lun,fmt='(2x,"read from a file.  There is an error specifying numbers of blocks.  ")')
+          write(io_lun,fmt='(2x,"Found from the file: ",3i6)') ntmpx, ntmpy, ntmpz
+          write(io_lun,fmt='(2x,"Calculated from input using grid points: ",3i6)') n_block_x, n_block_y, n_block_z
+          call cq_abort("Aborting ! Please bring block input file and overall input file together.")
+       end if
+       ! Find and check total number of blocks
+       np_in_cell=ntmpx* ntmpy* ntmpz
+       if(np_in_cell<=0) call cq_abort('read_blocks: no blocks in cell ',np_in_cell)
+       ! Read and check number of processors
+       read(lun,*) nnode
+       if((nnode<1).or.(nnode>numprocs)) then
+          call cq_abort('read_blocks: nodes wrong ',nnode,numprocs)
+       endif
+       ! Read in block information to find maxima
+       maxblocks = 0
+       do nnd=1,nnode
+          ! First node number, blocks and starting pointer
+          read(lun,*) nnd1,ntmp1,ntmp2 
+          if(nnd1/=nnd) call cq_abort('read_blocks: node label wrong ',nnd1,nnd)
+          ! Check for correct numbers of blocks
+          if(ntmp1<0) call cq_abort('read_blocks: too many blocks on proc ', nmyblocks)
+          if(ntmp1>maxblocks) maxblocks = ntmp1
+          ! If there are blocks, read them in
+          if(ntmp1>0) then
+             do np=1,ntmp1
+                read(lun,*) np1,ind_part!,n_cont,n_beg
+             enddo ! Loop over np = blocks%ng_on_node
+          endif ! if(blocks%ng_on_node>0)
+       enddo ! nnd = 1,nnode
+       close(unit=lun)
     end if
-    ! Find and check total number of blocks
-    np_in_cell=ntmpx* ntmpy* ntmpz
-    if(np_in_cell<=0) call cq_abort('read_blocks: no blocks in cell ',np_in_cell)
-    ! Read and check number of processors
-    read(lun,*) nnode
-    if((nnode<1).or.(nnode>numprocs)) then
-       call cq_abort('read_blocks: nodes wrong ',nnode,numprocs)
-    endif
-    ! Read in block information to find maxima
-    maxblocks = 0
-    do nnd=1,nnode
-       ! First node number, blocks and starting pointer
-       read(lun,*) nnd1,ntmp1,ntmp2 
-       if(nnd1/=nnd) call cq_abort('read_blocks: node label wrong ',nnd1,nnd)
-       ! Check for correct numbers of blocks
-       if(ntmp1<0) call cq_abort('read_blocks: too many blocks on proc ', nmyblocks)
-       if(ntmp1>maxblocks) maxblocks = ntmp1
-       ! If there are blocks, read them in
-       if(ntmp1>0) then
-          do np=1,ntmp1
-             read(lun,*) np1,ind_part!,n_cont,n_beg
-          enddo ! Loop over np = blocks%ng_on_node
-       endif ! if(blocks%ng_on_node>0)
-    enddo ! nnd = 1,nnode
-    close(unit=lun)
     ! Now initialise block derived type
+    call gcopy(ntmpx)
+    call gcopy(ntmpy)
+    call gcopy(ntmpz)
     ntmp1=max(ntmpx,ntmpy,ntmpz)
+    np_in_cell=ntmpx* ntmpy* ntmpz
+    call gcopy(maxblocks)
     call init_group(blocks, maxblocks, ntmp1, np_in_cell, n_pts_in_block, numprocs)
-    open(unit=lun,file='make_blk.dat')
-    ! Read and check blocks along cell sides
-    read(lun,*) blocks%ngcellx,blocks%ngcelly,blocks%ngcellz
-    !if(iprint_init>0) write(io_lun,102) blocks%ngcellx,blocks%ngcelly,blocks%ngcellz
-    ! Find and check total number of blocks
-    np_in_cell=blocks%ngcellx*blocks%ngcelly*blocks%ngcellz
-    ! Read and check number of processors
-    read(lun,*) nnode
-    !if(iprint_init>=0) write(io_lun,110) nnode
-    ! Loop over nodes, reading bundle information
-    glob_count = 0
-    do nnd=1,nnode
-       ! First node number, blocks and starting pointer
-       read(lun,*) nnd1,blocks%ng_on_node(nnd),blocks%inode_beg(nnd)
-       !if(iprint_init>0) write(io_lun,111) nnd1,blocks%ng_on_node(nnd),blocks%inode_beg(nnd)
-       if(nnd1/=nnd) then
-          call cq_abort('read_blocks: node label wrong ',nnd1,nnd)
-       endif
-       ! Check for correct numbers of blocks
-       if((blocks%ng_on_node(nnd)<0).or.&
-            (blocks%ng_on_node(nnd)>maxblocks)) then
-          call cq_abort('read_blocks: too many blocks on proc ',&
-               blocks%ng_on_node(nnd),maxblocks)
-       endif
-       ! If there are blocks, read them in
-       if(blocks%ng_on_node(nnd)>0) then
-          ! Check for correct maxima
-          if(blocks%inode_beg(nnd)+blocks%ng_on_node(nnd)-1>np_in_cell) then
-             call cq_abort('read_blocks: too many blocks in cell ',&
-                  blocks%inode_beg(nnd)+blocks%ng_on_node(nnd)-1, np_in_cell)
+    if(inode==ionode) then
+       open(unit=lun,file=blk_coord_file)
+       ! Read and check blocks along cell sides
+       read(lun,*) blocks%ngcellx,blocks%ngcelly,blocks%ngcellz
+       !if(iprint_init>0) write(io_lun,102) blocks%ngcellx,blocks%ngcelly,blocks%ngcellz
+       ! Find and check total number of blocks
+       np_in_cell=blocks%ngcellx*blocks%ngcelly*blocks%ngcellz
+       ! Read and check number of processors
+       read(lun,*) nnode
+       !if(iprint_init>=0) write(io_lun,110) nnode
+       ! Loop over nodes, reading bundle information
+       glob_count = 0
+       do nnd=1,nnode
+          ! First node number, blocks and starting pointer
+          read(lun,*) nnd1,blocks%ng_on_node(nnd),blocks%inode_beg(nnd)
+          !if(iprint_init>0) write(io_lun,111) nnd1,blocks%ng_on_node(nnd),blocks%inode_beg(nnd)
+          if(nnd1/=nnd) then
+             call cq_abort('read_blocks: node label wrong ',nnd1,nnd)
           endif
-          ! Loop over blocks on processor
+          ! Check for correct numbers of blocks
+          if((blocks%ng_on_node(nnd)<0).or.&
+               (blocks%ng_on_node(nnd)>maxblocks)) then
+             call cq_abort('read_blocks: too many blocks on proc ',&
+                  blocks%ng_on_node(nnd),maxblocks)
+          endif
+          ! If there are blocks, read them in
+          if(blocks%ng_on_node(nnd)>0) then
+             ! Check for correct maxima
+             if(blocks%inode_beg(nnd)+blocks%ng_on_node(nnd)-1>np_in_cell) then
+                call cq_abort('read_blocks: too many blocks in cell ',&
+                     blocks%inode_beg(nnd)+blocks%ng_on_node(nnd)-1, np_in_cell)
+             endif
+             ! Loop over blocks on processor
+             do np=1,blocks%ng_on_node(nnd)
+                read(lun,*) np1,ind_part!,n_cont,n_beg
+                ! Check for maxima
+                if(ind_part>np_in_cell) then
+                   call cq_abort('read_blocks: bad block label ', &
+                        ind_part,np_in_cell)
+                endif
+                ! Check for ordering of blocks
+                if(np1/=np) then
+                   call cq_abort('read_blocks: block label error ',np1,np)
+                endif
+                ! Assign and write out
+                blocks%ngnode(blocks%inode_beg(nnd)+np-1)=ind_part
+                ! These next two lines are essentially meaningless, but added for completeness
+                blocks%nm_group(ind_part)=n_pts_in_block!n_cont
+                blocks%icell_beg(ind_part)=(ind_part-1)*n_pts_in_block+1!n_beg
+                !if(iprint_init>1) write(io_lun,113) ind_part,np1,n_cont,n_beg
+             enddo ! Loop over np = blocks%ng_on_node
+          endif ! if(blocks%ng_on_node>0)
+       enddo ! nnd = 1,nnode
+    end if
+    call gcopy(blocks%ngcellx)
+    call gcopy(blocks%ngcelly)
+    call gcopy(blocks%ngcellz)
+    call gcopy(blocks%ng_on_node,numprocs)
+    call gcopy(blocks%inode_beg,numprocs)
+    call gcopy(blocks%ngnode,np_in_cell)
+    if(inode/=ionode) then
+       do nnd=1,numprocs
           do np=1,blocks%ng_on_node(nnd)
-             read(lun,*) np1,ind_part!,n_cont,n_beg
-             ! Check for maxima
-             if(ind_part>np_in_cell) then
-                call cq_abort('read_blocks: bad block label ', &
-                     ind_part,np_in_cell)
-             endif
-             ! Check for ordering of blocks
-             if(np1/=np) then
-                call cq_abort('read_blocks: block label error ',np1,np)
-             endif
-             ! Assign and write out
-             blocks%ngnode(blocks%inode_beg(nnd)+np-1)=ind_part
-             ! These next two lines are essentially meaningless, but added for completeness
+             ind_part = blocks%ngnode(blocks%inode_beg(nnd)+np-1)
              blocks%nm_group(ind_part)=n_pts_in_block!n_cont
              blocks%icell_beg(ind_part)=(ind_part-1)*n_pts_in_block+1!n_beg
-             !if(iprint_init>1) write(io_lun,113) ind_part,np1,n_cont,n_beg
-          enddo ! Loop over np = blocks%ng_on_node
-       endif ! if(blocks%ng_on_node>0)
-    enddo ! nnd = 1,nnode
+          end do
+       end do
+    end if
     ! Define maximum number of grid points on any processor for FFTs
     maxngrid = n_pts_in_block * maxblocks
     ! FFT check
@@ -2611,7 +2645,7 @@ hc2:    do
     len = return_matrix_len(matA)
     ! Dump matrix
     do element=1,len
-       write(unit=lun,fmt='(g13.6)') return_matrix_value_pos(matA,element)
+       write(unit=lun,fmt='(f25.18)') return_matrix_value_pos(matA,element)
     end do
     call io_close(lun)
     return
@@ -3413,3 +3447,30 @@ hc2:    do
   end subroutine write_positions
 !!***
 end module io_module
+
+! Hopefully we'll never need this kludgy but portable way of flushing buffers !
+!  subroutine force_buffers(lun)
+!
+!    use GenComms, ONLY: inode, ionode
+!
+!    implicit none
+!
+!    integer :: lun
+!
+!    integer :: i, len
+!    character(len=255) :: fname
+!
+!    if(inode==ionode) then
+!       inquire(unit=lun,name=fname)
+!       if(fname(1:1)==' ') return
+!       do i=1,255
+!          if(fname(i:i)==' ') then
+!             len=i
+!             exit
+!          end if
+!       end do
+!       close(lun)
+!       open(unit=lun,file=fname(1:len),position='APPEND')
+!    end if
+!    return
+!  end subroutine force_buffers

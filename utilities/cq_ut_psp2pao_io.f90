@@ -50,6 +50,7 @@ contains
 !!  cq_ut_psp2pao_global
 !!  cq_ut_psp2pao_types
 !!  cq_ut_psp2pao_alloc
+!!  cq_ut_psp2pao_input
 !!AUTHOR
 !! Antonio S. Torralba
 !!CREATION DATE
@@ -63,12 +64,13 @@ contains
      use cq_ut_psp2pao_global
      use cq_ut_psp2pao_types
      use cq_ut_psp2pao_alloc
+     use cq_ut_psp2pao_input, ONLY: io_assign, io_close
 
      implicit none
 
      !! Passed variables
 
-     character(len=*) :: filename	
+     character(len=*) :: filename
 
      !! Local variables
 
@@ -144,6 +146,7 @@ contains
 !!  cq_ut_psp2pao_global
 !!  cq_ut_psp2pao_types
 !!  cq_ut_psp2pao_alloc
+!!  cq_ut_psp2pao_input
 !!AUTHOR
 !! Antonio S. Torralba
 !!CREATION DATE
@@ -157,12 +160,13 @@ contains
      use cq_ut_psp2pao_global
      use cq_ut_psp2pao_types
      use cq_ut_psp2pao_alloc
+     use cq_ut_psp2pao_input, ONLY: io_assign, io_close
 
      implicit none
 
      !! Passed variables
 
-     character(len=*) :: filename	
+     character(len=*) :: filename
 
      !! Local variables
 
@@ -275,12 +279,13 @@ contains
      use cq_ut_psp2pao_global
      use cq_ut_psp2pao_types
      use cq_ut_psp2pao_alloc
+     use cq_ut_psp2pao_input, ONLY : io_assign, io_close
 
      implicit none
 
      !! Passed variables
 
-     character(len=*) :: filename	
+     character(len=*) :: filename
 
      !! Local variables
 
@@ -373,6 +378,7 @@ contains
 !!USES
 !!  cq_ut_psp2pao_global
 !!  cq_ut_psp2pao_types
+!!  cq_ut_psp2pao_input
 !!
 !!AUTHOR
 !! Antonio S. Torralba
@@ -386,12 +392,13 @@ contains
 
      use cq_ut_psp2pao_global
      use cq_ut_psp2pao_types
+     use cq_ut_psp2pao_input, ONLY : io_assign, io_close
 
      implicit none
 
      !! Passed variables
 
-     character(len=*) :: filename	
+     character(len=*) :: filename
 
      !! Local variables
 
@@ -485,6 +492,7 @@ contains
      use cq_ut_psp2pao_global
      use cq_ut_psp2pao_types
      use cq_ut_psp2pao_numeric
+     use cq_ut_psp2pao_input, ONLY : io_assign, io_close
 
      implicit none
 

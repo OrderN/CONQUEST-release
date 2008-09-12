@@ -88,6 +88,8 @@ contains
 !!    Changed float to real
 !!   2008/02/23 ast
 !!    Added timer
+!!   2008/09/01 08:21 dave
+!!    Added io_ routines from input_module
 !!  SOURCE
 !!
   subroutine read_pao(inode,ionode,n_species)
@@ -98,6 +100,7 @@ contains
     use spline_module, ONLY : spline
     use pao_format
     use memory_module, ONLY: reg_alloc_mem, type_dbl
+    use input_module, ONLY: io_assign, io_close
 
     implicit none
 

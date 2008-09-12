@@ -133,6 +133,7 @@ contains
     use GenComms, ONLY: cq_abort
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, ABINIT
     use block_module, ONLY: in_block_x, in_block_y, in_block_z, n_pts_in_block, n_blocks
+    use input_module, ONLY: leqi
 
     implicit none
 
@@ -143,7 +144,6 @@ contains
     real(double) :: HNL_fac, core_radius(:)
 
     ! Local variables
-    logical, external :: leqi
     integer :: max_extent, n, stat
     real(double) :: r_core, r_t
 
@@ -176,8 +176,8 @@ contains
     !    end if
     if(non_local.and.(inode==ionode).and.iprint_init>0) then
        write(io_lun,2) r_core
-2      format(2x,'This calculation includes non-local pseudopotentials,'/&
-            3x,'with a maximum core radius of ',f15.8)
+2      format(8x,'This calculation includes non-local pseudopotentials,'/&
+            9x,'with a maximum core radius of ',f15.8)
     end if
     if (r_core>r_h) then
        call cq_abort('set_dimens: r_core > r_support')
@@ -191,7 +191,7 @@ contains
     ! Set range of S matrix
     r_s = r_h
     if(two*r_s>r_c) then
-       if(inode==ionode) write(io_lun,*) 'WARNING ! S range greater than L !'
+       if(inode==ionode) write(io_lun,fmt='(8x,"WARNING ! S range greater than L !")')
        !r_s = r_c
        !r_h = r_c 
     endif
@@ -244,7 +244,7 @@ contains
           write(io_lun,1) mat_name(n),rcut(n)
        enddo
     endif
-1   format(2x,'Matrix ',a3,' has range ',f15.8)
+1   format(8x,'Matrix ',a3,' has range ',f15.8)
     ! Various useful parameters
     r_super_x_squared = r_super_x * r_super_x
     r_super_y_squared = r_super_y * r_super_y

@@ -906,6 +906,8 @@ end subroutine unnorm_siesta_tbl
 !!    Changing coefficient defaults, adding check for basis set sanity
 !!   2008/02/10 ast
 !!    Added timers
+!!   2008/09/01 08:21 dave
+!!    Added io_ routines from input_module
 !!  SOURCE
 !!
   subroutine get_support_pao_rep(inode,ionode)
@@ -920,6 +922,7 @@ end subroutine unnorm_siesta_tbl
          coefficient_array,grad_coeff_array, elec_grad_coeff_array, coeff_array_size, &
          read_option, symmetry_breaking, support_pao_file
     use pao_format, ONLY: pao
+    use input_module, ONLY: io_assign, io_close
 
     implicit none
     !code to allocate latest support_pao data structure
@@ -954,7 +957,7 @@ end subroutine unnorm_siesta_tbl
           species_i = bundle%species(i)
        end if
        n_sup = nsf_species(species_i)
-       if(iprint_basis>2) write(io_lun,*) 'atom, supp: ',i,species_i,n_sup
+       if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'atom, supp: ',i,species_i,n_sup
        supports_on_atom(i)%nsuppfuncs = n_sup
        call start_timer(tmr_std_allocation)
        allocate(supports_on_atom(i)%supp_func(n_sup))
@@ -967,7 +970,7 @@ end subroutine unnorm_siesta_tbl
        call start_timer(tmr_std_allocation)
        allocate(support_elec_gradient(i)%supp_func(n_sup))
        call stop_timer(tmr_std_allocation)
-       if(iprint_basis>2) write(io_lun,*) 'atom, lmax: ',i,pao(species_i)%greatest_angmom
+       if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'atom, lmax: ',i,pao(species_i)%greatest_angmom
        supports_on_atom(i)%lmax = pao(species_i)%greatest_angmom
        call start_timer(tmr_std_allocation)
        allocate(supports_on_atom(i)%naczs(0:supports_on_atom(i)%lmax))
@@ -1030,22 +1033,22 @@ end subroutine unnorm_siesta_tbl
        if(flag_paos_atoms_in_cell) then ! We can read EVERYTHING in and broadcast
           do i = 1, mx_pao_coeff_atoms
              if(inode==ionode) then
-                if(iprint_basis>2) write(io_lun,*) 'Atom: ',i
+                if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'Atom: ',i
                 read(lun,*) n_sup
                 if(supports_on_atom(i)%nsuppfuncs/=n_sup) &
                      call cq_abort("n_sup mismatch in PAO reading: ",supports_on_atom(i)%nsuppfuncs,n_sup)
-                if(iprint_basis>2) write(io_lun,*) 'N_sup: ',n_sup
+                if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'N_sup: ',n_sup
                 read(lun,*) lmax
                 if(supports_on_atom(i)%lmax/=lmax) &
                      call cq_abort("lmax mismatch in PAO reading: ",supports_on_atom(i)%lmax,lmax)
-                if(iprint_basis>2) write(io_lun,*) 'lmax: ',lmax
+                if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'lmax: ',lmax
                 count = 0
                 do l = 0, supports_on_atom(i)%lmax
                    read(lun,*) nacz
                    if(supports_on_atom(i)%naczs(l)/=nacz) &
                         call cq_abort("zeta mismatch in PAO reading: ",supports_on_atom(i)%naczs(l),nacz)
                    count = count + (2*l+1)*supports_on_atom(i)%naczs(l)
-                   if(iprint_basis>2) write(io_lun,*) 'zeta: ',l,nacz,count
+                   if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'zeta: ',l,nacz,count
                 enddo
                 do k = 1, supports_on_atom(i)%nsuppfuncs
                    if(count/=supports_on_atom(i)%supp_func(k)%ncoeffs) &
@@ -1065,7 +1068,8 @@ end subroutine unnorm_siesta_tbl
                             read(lun,*) supports_on_atom(i)%supp_func(k)%coefficients(count)
                             sum = sum + supports_on_atom(i)%supp_func(k)%coefficients(count)* &
                                  supports_on_atom(i)%supp_func(k)%coefficients(count)
-                            if(iprint_basis>2) write(io_lun,*) 'Coeff: ',count,supports_on_atom(i)%supp_func(k)%coefficients(count)
+                            if(iprint_basis>2.AND.inode==ionode) &
+                                 write(io_lun,*) 'Coeff: ',count,supports_on_atom(i)%supp_func(k)%coefficients(count)
                             count = count+1
                          enddo ! m=-l,l
                       enddo ! acz=1,supports_on_atom(i)%naczetas(l)
@@ -1080,22 +1084,22 @@ end subroutine unnorm_siesta_tbl
           call cq_abort("This option not implemented")
           do i = 1, ni_in_cell ! We need ALL atoms read in
              if(inode==ionode) then
-                if(iprint_basis>2) write(io_lun,*) 'Atom: ',i
+                if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'Atom: ',i
                 read(lun,*) n_sup
                 if(supports_on_atom(i)%nsuppfuncs/=n_sup) &
                      call cq_abort("n_sup mismatch in PAO reading: ",supports_on_atom(i)%nsuppfuncs,n_sup)
-                if(iprint_basis>2) write(io_lun,*) 'N_sup: ',n_sup
+                if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'N_sup: ',n_sup
                 read(lun,*) lmax
                 if(supports_on_atom(i)%lmax/=lmax) &
                      call cq_abort("lmax mismatch in PAO reading: ",supports_on_atom(i)%lmax,lmax)
-                if(iprint_basis>2) write(io_lun,*) 'lmax: ',lmax
+                if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'lmax: ',lmax
                 count = 0
                 do l = 0, supports_on_atom(i)%lmax
                    read(lun,*) nacz
                    if(supports_on_atom(i)%naczs(l)/=nacz) &
                         call cq_abort("zeta mismatch in PAO reading: ",supports_on_atom(i)%naczs(l),nacz)
                    count = count + (2*l+1)*supports_on_atom(i)%naczs(l)
-                   if(iprint_basis>2) write(io_lun,*) 'zeta: ',l,nacz,count
+                   if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'zeta: ',l,nacz,count
                 enddo
                 do k = 1, supports_on_atom(i)%nsuppfuncs
                    if(count/=supports_on_atom(i)%supp_func(k)%ncoeffs) &
@@ -1115,7 +1119,8 @@ end subroutine unnorm_siesta_tbl
                             read(lun,*) supports_on_atom(i)%supp_func(k)%coefficients(count)
                             sum = sum + supports_on_atom(i)%supp_func(k)%coefficients(count)* &
                                  supports_on_atom(i)%supp_func(k)%coefficients(count)
-                            if(iprint_basis>2) write(io_lun,*) 'Coeff: ',count,supports_on_atom(i)%supp_func(k)%coefficients(count)
+                            if(iprint_basis>2.AND.inode==ionode) &
+                                 write(io_lun,*) 'Coeff: ',count,supports_on_atom(i)%supp_func(k)%coefficients(count)
                             count = count+1
                          enddo ! m=-l,l
                       enddo ! acz=1,supports_on_atom(i)%naczetas(l)
@@ -1202,7 +1207,10 @@ end subroutine unnorm_siesta_tbl
     use global_module, ONLY: ni_in_cell !this is our total no of atoms
     use GenComms, ONLY : gcopy, my_barrier
     use species_module, ONLY : n_species
+    use input_module, ONLY: io_assign, io_close
+
     implicit none
+
     !code to write out latest support_pao data structure
     integer, intent(in) :: inode, ionode
     integer :: i,j,k,l,m,n,myflag,aczeta,count,lun,ios

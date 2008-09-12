@@ -89,6 +89,7 @@ contains
     use make_rad_tables, ONLY : get_support_pao_rep
     use pseudopotential_common, ONLY: pseudo_type, SIESTA, ABINIT
     use blip, ONLY: init_blip_flag
+    use input_module, ONLY: leqi
 
     implicit none
 
@@ -99,7 +100,6 @@ contains
     ! Local variables
     character(len=10) :: init_blip_method
     logical :: flag_blips_from_pao!, flag_atomic_density_from_pao
-    logical, external :: leqi ! External subroutine from Siesta FDF
     
     ! Decide whether blips are to be initialised from PAOs
     flag_blips_from_pao = .false.

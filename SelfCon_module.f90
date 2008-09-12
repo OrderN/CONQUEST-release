@@ -722,7 +722,7 @@ contains
           else
              rho(1:n_my_grid_points) = rho_pul(1:n_my_grid_points, pul_mx)
           endif
-          write(io_lun,*) 'PANIC ! Residual increase !'
+          if(inode==ionode)write(io_lun,*) 'PANIC ! Residual increase !'
        endif
        R0 = R1
        if(R0<self_tol) then
@@ -967,10 +967,10 @@ contains
              if(ii==j) Aij(j,ii) = Aij(j,ii) !+ 0.0001_double ! w_0 = 0.01
           enddo
        enddo
-       write(io_lun,*) 'A is ',Aij
+       if(inode==ionode) write(io_lun,*) 'A is ',Aij
        ! Solve to get alphas
        call DoPulay2D(Aij,alph,pul_mx,maxpulaySC,inode,ionode)
-       write(io_lun,*) 'A is ',Aij
+       if(inode==ionode) write(io_lun,*) 'A is ',Aij
        alph = zero
        do j=1,pul_mx
           R = dot(n_my_grid_points, delta_R(:,j),1,resid(:),1)
@@ -1089,7 +1089,7 @@ contains
        rho_pul(j,1) = rho(j)
        if(rho(j)<zero) max_neg = max(max_neg,abs(rho(j)))
     end do
-    if(max_neg>0.0_double.AND.iprint_SC>3) &
+    if(inode==ionode.AND.max_neg>0.0_double.AND.iprint_SC>3) &
          write(io_lun,fmt='(8x,"Init Max negative dens on node ",i5," is ",f8.3)') inode,max_neg
     call get_new_rho(.false., reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
          total_energy, rho, rho1, size)
@@ -1145,7 +1145,7 @@ contains
        !   rho(j) = 0.0_double
        end if
     end do
-    if(max_neg>0.0_double.AND.iprint_SC>1) write(io_lun,*) 'First Max negative dens on node ',inode,max_neg
+    if(max_neg>0.0_double.AND.iprint_SC>1.AND.inode==ionode) write(io_lun,*) 'First Max negative dens on node ',inode,max_neg
     ! Store deltarho
     n_iters = n_iters+1
  !Reset Pulay Iterations  -- introduced by TM, Nov2007
@@ -1243,7 +1243,7 @@ contains
              if(-rho(j)>max_neg) max_neg = -rho(j)
           end if
        end do
-       if(max_neg>0.0_double.AND.iprint_SC>2) write(io_lun,*) i,' premix Max negative dens on node ',inode,max_neg
+       if(max_neg>0.0_double.AND.iprint_SC>2.AND.inode==ionode) write(io_lun,*) i,' premix Max negative dens on node ',inode,max_neg
        n_iters = n_iters+1
      !Reset Pulay Iterations  -- introduced by TM, Nov2007
       if(reset_Pulay) then
@@ -1339,7 +1339,7 @@ contains
     do j=1,n_my_grid_points
        rho_pul(j,1) = rho(j)
     end do
-    if(max_neg>0.0_double) write(io_lun,*) 'Init Max negative dens on node ',inode,max_neg
+    if(inode==ionode.AND.max_neg>0.0_double) write(io_lun,*) 'Init Max negative dens on node ',inode,max_neg
     call get_new_rho(.false., reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
          total_energy, rho, rho1, size)
     ! Evaluate residual
@@ -1420,14 +1420,14 @@ contains
        end if
        ! now build new rho
        Aij = zero
-       write(io_lun,*) 'A is :'
+       if(inode==ionode) write(io_lun,*) 'A is :'
        do ii=1,pul_mx
           do j=1,pul_mx
              R1 = dot(n_my_grid_points, R(:,ii), 1, R(:,j),1)
              call gsum(R1)
              Aij(j,ii) = R1
           enddo
-          write(io_lun,fmt='(5f16.12)') Aij(:,ii)
+          if(inode==ionode) write(io_lun,fmt='(5f16.12)') Aij(:,ii)
        enddo
        !if(minA/maxA<0.001_double) then
        !   write(io_lun,*) '
@@ -1448,7 +1448,7 @@ contains
        end do
        tmp = grid_point_volume*rsum(n_my_grid_points,rho,1)
        call gsum(tmp)
-       write(io_lun,*) 'Sum of rho1: ',tmp
+       if(inode==ionode)write(io_lun,*) 'Sum of rho1: ',tmp
        rho = ne_in_cell*rho/tmp
        !rho = rho*ne_in_cell/tmp
        !do j=1,n_my_grid_points
@@ -1457,7 +1457,7 @@ contains
           !   rho(j) = 0.0_double
           !end if
        !end do
-       if(max_neg>0.0_double) write(io_lun,*) i,' premix Max negative dens on node ',inode,max_neg
+       if(max_neg>0.0_double.AND.inode==ionode) write(io_lun,*) i,' premix Max negative dens on node ',inode,max_neg
        n_iters = n_iters+1
     end do
     ndone = n_iters

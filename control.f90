@@ -100,6 +100,7 @@ contains
     use force_module, ONLY: tot_force
     use minimise, ONLY: get_E_and_F
     use global_module, ONLY: runtype
+    use input_module, ONLY: leqi
 
     implicit none
 
@@ -111,8 +112,6 @@ contains
 
     ! Local variables
     logical :: NoMD
-    logical, external :: leqi
-
     integer :: i,j
 
     real(double) :: spr, e_r_OLD
@@ -574,7 +573,7 @@ contains
        ! Book-keeping
        npmod = mod(iter, mx_pulay)+1
        pul_mx = min(iter+1, mx_pulay)
-       if(iprint_MD>2) write(io_lun,*) 'npmod: ',npmod,pul_mx
+       if(myid==0.AND.iprint_MD>2) write(io_lun,*) 'npmod: ',npmod,pul_mx
        x_atom_cell = zero
        y_atom_cell = zero
        z_atom_cell = zero
@@ -604,7 +603,7 @@ contains
        !call velocityVerlet(bundle,MDtimestep,temp,KE, &
        !     .false.,velocity,tot_force)
        if(flag_pulay_simpleStep) then
-          write(io_lun,*) 'Step is ',MDtimestep
+          if(myid==0) write(io_lun,*) 'Step is ',MDtimestep
           do i=1,ni_in_cell
              jj = id_glob(i)
              x_atom_cell(i) = x_atom_cell(i) + MDtimestep*tot_force(1,jj)

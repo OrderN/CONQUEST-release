@@ -115,14 +115,17 @@ contains
 
     character(len=40) :: restart_file
 
-    call init_timing_system(inode)
-    call start_timer(tmr_std_initialisation)
-
     ! Read input
     call init_reg_mem
     call read_and_write(start, start_L,&
          inode, ionode, restart_file, vary_mu, mu,&
          find_chdens, read_phi, number_of_bands)
+
+    ! IMPORTANT!!!!! No timers allowed before this point
+    !                We need to know if the user wants them or not
+    !                  before actually starting one
+    call init_timing_system(inode)
+    call start_timer(tmr_std_initialisation)
 
     ! Call routines to read or make data for isolated ions
     flag_no_atomic_densities = .false.
@@ -474,6 +477,7 @@ contains
     use read_support_spec, ONLY: read_support
     use functions_on_grid, ONLY: supportfns
     use support_spec_format, ONLY: supports_on_atom, coefficient_array, coeff_array_size, read_option
+    use input_module, ONLY: leqi
 
     implicit none
 
@@ -489,7 +493,6 @@ contains
     integer :: isf, np, ni, iprim, n_blip, n_run
     real(double) :: mu_copy
     real(double) :: factor
-    logical, external :: leqi
 
     ! Used by pseudopotentials as well as PAOs
     if(flag_basis_set==blips) then
@@ -824,6 +827,7 @@ contains
     use dimens, ONLY: RadiusSupport
     use pseudopotential_common, ONLY: core_radius
     use blip, ONLY: Extent
+    use input_module, ONLY: leqi
 
     implicit none
     integer,intent(in)      :: myid
@@ -831,19 +835,18 @@ contains
 
     !Local variables
     ! Temporary
-    logical, external :: leqi
     real(double) :: rcut_max,r_core
 
     !-- Start of the subroutine (set_grid_new)
     if(myid == 0.AND.iprint_index>1) write(io_lun,*) 'setgrid_new starts'
-    if(iprint_index > 4) write(io_lun,*) ' setgrid_new starts for myid= ',myid
+    !if(iprint_index > 4) write(io_lun,*) ' setgrid_new starts for myid= ',myid
 
     !Sets up domain
     call init_primary(domain, n_pts_in_block*maxblocks, maxblocks, .false.)
-    if(iprint_index > 4) write(io_lun,*) 'init_primary end for myid = ',myid,' par = ',n_pts_in_block, maxblocks
+    !if(iprint_index > 4) write(io_lun,*) 'init_primary end for myid = ',myid,' par = ',n_pts_in_block, maxblocks
     ! call my_barrier()  !TMP
     call make_prim(blocks, domain, myid)
-    if(iprint_index > 4) write(io_lun,*) 'make_prim end for myid = ',myid
+    !if(iprint_index > 4) write(io_lun,*) 'make_prim end for myid = ',myid
     !Sets up DCS_parts& BCS_blocks
     r_core=sqrt(r_core_squared)
     ! No longer necessary as this is done in dimens_module
@@ -852,35 +855,36 @@ contains
     !else
     !   rcut_max=1.1_double*(max(r_core,r_h)+very_small)
     !endif
-    if(iprint_index > 4) write(io_lun,*) ' rcut_max for DCS_parts and BCS_blocks = ',rcut_max, r_core, r_h
+    !if(iprint_index > 4) write(io_lun,*) ' rcut_max for DCS_parts and BCS_blocks = ',rcut_max, r_core, r_h
 
     call make_cs(myid,rcut_max, DCS_parts , parts , domain, ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell)
-    if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done make_DCSparts'
+    !if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done make_DCSparts'
     call make_cs(myid,rcut_max, BCS_blocks, blocks, bundle)
-    if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done make_BCSblocks'
+    !if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done make_BCSblocks'
 
     !call make_iprim(DCS_parts,bundle,myid) !primary number for members
     !  write(io_lun,*) 'Node ',myid+1,' Done make_iprim'
     call my_barrier
 
     call send_ncover(DCS_parts,myid+1)
-    if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done send_ncover for DCS_parts'
+    !if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done send_ncover for DCS_parts'
     call my_barrier
     call send_ncover(BCS_blocks,myid+1)
-    if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done send_ncover for BCS_blocks'
+    !if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done send_ncover for BCS_blocks'
 
-    if(iprint_index > 4) call check_setgrid
+    ! Commented out DRB 2008/09/10: if we really need this, then uncomment and recompile
+    !if(iprint_index > 4) call check_setgrid
 
-    if(iprint_index > 4) write(io_lun,*) ' DCS & BCS has been prepared for myid = ',myid
+    !if(iprint_index > 4) write(io_lun,*) ' DCS & BCS has been prepared for myid = ',myid
     !Makes variables used in Blip-Grid transforms
     ! See (naba_blk_module.f90), (set_blipgrid_module.f90), (make_table.f90)
     call set_blipgrid(myid,RadiusSupport,core_radius,Extent)
-    if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done set_blipgrid'
+    !if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done set_blipgrid'
 
     !Makes variables used in calculation (integration) of matrix elements
     ! See (bucket_module.f90) and (set_bucket_module.f90)
     call set_bucket(myid)
-    if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done set_bucket'
+    !if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done set_bucket'
 
     return
   end subroutine setgrid
@@ -903,7 +907,7 @@ contains
     integer :: ierror=0
 
     !FOR DEBUGGING
-    if(iprint_index > 4) then
+    if(iprint_index > 6) then
        call my_barrier()
        !-- CHECK -- bundle
        dcellx=rcellx/parts%ngcellx
