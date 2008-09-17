@@ -588,6 +588,8 @@ contains
 !!    Changed float to real (probably unnecessary)
 !!   2008/05/28 ast
 !!    Added timers
+!!   2008/09/17 10:01 dave
+!!    Added nsf=1 case 
 !!  SOURCE
 !!
   subroutine gauss2blip
@@ -627,10 +629,10 @@ contains
        write(unit=io_lun,fmt='(/10x," gauss2blip: sbrt entered")')
     end if
 
-    if((inode == ionode) .AND. (iprint_basis >= 0)) then
-       write(unit=io_lun,fmt='(10x," gauss2blip: support-grid spacing:",f20.12)') &
-            &SupportGridSpacing(spec)
-    end if
+    !if((inode == ionode) .AND. (iprint_basis >= 0)) then
+    !   write(unit=io_lun,fmt='(10x," gauss2blip: support-grid spacing:",f20.12)') &
+    !        &SupportGridSpacing(spec)
+    !end if
 
     ! data_blip is the array holding the blip coeffs for the support
     ! support functions of atoms in the primary set of my processor. T
@@ -670,8 +672,14 @@ contains
                 write(io_lun,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 4, n_blip, &
                      supports_on_atom(i)%supp_func(4)%coefficients(n_blip)
              end if
+          else if (supports_on_atom(i)%nsuppfuncs==1) then
+             supports_on_atom(i)%supp_func(1)%coefficients(n_blip) = gauss_1
+             if(iprint_basis>2.AND.inode==ionode) then
+                write(io_lun,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 1, n_blip, &
+                     supports_on_atom(i)%supp_func(1)%coefficients(n_blip)
+             end if
           else
-             call cq_abort("With this version of Conquest, gaussian initialisation needs 4 support functions ",&
+             call cq_abort("With this version of Conquest, gaussian initialisation needs 1 or 4 support functions ",&
                   supports_on_atom(i)%nsuppfuncs)
           end if
        end do

@@ -122,6 +122,8 @@ contains
 !!    Removed rcut_dens
 !!   2008/03/03 18:44 dave
 !!    Changed float to real
+!!   2008/03/12 06:13 dave
+!!    Added loop to find longest range matrix
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -145,7 +147,7 @@ contains
 
     ! Local variables
     integer :: max_extent, n, stat
-    real(double) :: r_core, r_t
+    real(double) :: r_core, r_t, rcutmax
 
     !n_my_grid_points = n_pts_in_block * n_blocks    
     ! decide if the flag non_local needs to be set to true
@@ -226,6 +228,21 @@ contains
     rcut(TSrange)  = (rcut(Trange)+rcut(Srange))
     rcut(THrange)  = (rcut(Trange)+rcut(Hrange))
     rcut(TLrange)  = (rcut(Trange)+rcut(Lrange))
+    rcut(PSrange)  = rcut(SPrange)
+    rcut(LTrrange) = rcut(Lrange)
+    rcut(SLrange) = rcut(LSrange)
+    rcut(TTrrange) = rcut(Trange)
+    rcut(dSrange) = rcut(Srange)
+    rcut(dHrange) = rcut(Hrange)
+    rcut(PAOPrange) = rcut(SPrange)
+    rcut(HLrange) = rcut(LHrange)
+    rcutmax = zero
+    do n=1,mx_matrices
+       if(rcut(n)>rcutmax) then
+          max_range = n
+          rcutmax = rcut(n)
+       end if
+    enddo
     ! Seemingly trivial, but may be quite useful - matrix names
     mat_name(Srange)   = "S  "
     mat_name(Lrange)   = "L  "

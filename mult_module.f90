@@ -261,10 +261,8 @@ contains
     mat(1:prim%groups_on_node,PAOPrange)%sf2_type = nlpf
     call matrix_ini(parts,prim,gcs,mat(1:prim%groups_on_node,PAOPrange), &
          PAOPmatind, rcut(SPrange),myid-1,halo(PAOPrange),ltrans(PAOPrange))
-    !if(.NOT.PRESENT(partial)) then
-       call associate_matrices 
-    !endif
-    call find_neighbour_procs(parts,halo(LSLrange))
+    call associate_matrices 
+    call find_neighbour_procs(parts,halo(max_range))
     call start_timer(tmr_std_allocation)
     allocate(pairs(maxnabaprocs+1,mx_trans),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating pairs in immi: ",maxnabaprocs+1,mx_trans)
@@ -860,7 +858,8 @@ contains
 !!    Changed iprint_mult to iprint_mat (global variable)
 !!  SOURCE
 !!
-  subroutine LNV_matrix_multiply(electrons, energy, doK, doM1, doM2, doM3, doM4, dophi, doE, mat_M12, mat_M3, mat_M4, mat_phi)
+  subroutine LNV_matrix_multiply(electrons, energy, doK, doM1, doM2, doM3, doM4, dophi, doE, mat_M12, &
+       mat_M3, mat_M4, mat_phi)
 
     use numbers
     use datatypes

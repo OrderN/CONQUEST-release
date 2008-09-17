@@ -196,7 +196,7 @@ contains
     use cover_module, ONLY : BCS_parts, make_cs, make_iprim, send_ncover
     use mult_module, ONLY: immi
     use construct_module
-    use matrix_data, ONLY: rcut, Lrange, Srange, mx_matrices
+    use matrix_data, ONLY: rcut, Lrange, Srange, mx_matrices, max_range
     use ewald_module, ONLY: set_ewald, mikes_set_ewald, flag_old_ewald
     use atoms, ONLY: distribute_atoms
     use dimens, ONLY: n_grid_x, n_grid_y, n_grid_z, r_core_squared,&
@@ -282,10 +282,11 @@ contains
     ! Create a covering set
     call my_barrier
     !Define rcut_BCS  !TM 26/Jun/2003
-    rcut_BCS= 2.0_double*rcut(Lrange)+rcut(Srange)
-    do i=1, mx_matrices
-       if(rcut_BCS < rcut(i)) rcut_BCS= rcut(i)
-    enddo !  i=1, mx_matrices
+    !rcut_BCS= 2.0_double*rcut(Lrange)+rcut(Srange)
+    !do i=1, mx_matrices
+    !   if(rcut_BCS < rcut(i)) rcut_BCS= rcut(i)
+    !enddo !  i=1, mx_matrices
+    rcut_BCS = rcut(max_range)
     if(inode==ionode.AND.iprint_init>1) write(io_lun,*) ' rcut for BCS_parts =',rcut_BCS
 
     call make_cs(inode-1,rcut_BCS, BCS_parts,parts,bundle,ni_in_cell,x_atom_cell, y_atom_cell, z_atom_cell)

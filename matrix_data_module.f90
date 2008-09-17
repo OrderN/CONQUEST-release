@@ -40,6 +40,8 @@
 !!    all data_ variables targets
 !!   2006/08/30 08:12 dave
 !!    Finalised conversion of matrix indexing to allocatable
+!!   2008/03/12 06:12 dave
+!!    Added max_range parameter to find longest range matrix
 !!  SOURCE
 !!
 module matrix_data
@@ -84,6 +86,8 @@ module matrix_data
   integer, parameter :: dHrange  = 18   ! K,LSLSL
   integer, parameter :: PAOPrange= 19  ! PS,U   ! Maybe rename ?
   integer, parameter :: HLrange = 20
+
+  integer :: max_range ! Indexes matrix with largest range
 !!***
 
 !!****s* multiply_module/matrix_pointer *
