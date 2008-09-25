@@ -92,8 +92,8 @@ contains
     real(double) :: r
 
     call io_assign(lun)
-    open(unit=lun,file='Conquest_input',iostat=stat,status='old')
-    if(stat/=0) write(*,*) "We need Conquest_input to run !"
+    open(unit=lun,file='input_psp2pao',iostat=stat,status='old')
+    if(stat/=0) write(*,*) "We need input_psp2pao to run !"
     input_lines = 0
     done = .false.
     do while(.NOT.done)
@@ -118,7 +118,7 @@ contains
     close(lun)
     ! Allocate array
     allocate(input_array(input_lines))
-    open(unit=lun,file='Conquest_input',iostat=stat,status='old')
+    open(unit=lun,file='input_psp2pao',iostat=stat,status='old')
     l = 1
     done = .false.
     do while(.NOT.done)
