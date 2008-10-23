@@ -322,6 +322,7 @@ contains
              if ( omega>oldomega.and.oldomega/=0.0_double) then
                 if(inode==ionode) write(io_lun,*) 'Truncation error reached !'
                 call matrix_sum(zero,matT,one,matTold)
+                call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
                 exit
              endif
              oldomega = omega 

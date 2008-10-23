@@ -34,7 +34,7 @@
 !!***
 module matrix_elements_module
 
-  use global_module, ONLY: io_lun
+  use global_module, ONLY: io_lun,iprint_index
 
   implicit none
 
@@ -96,10 +96,13 @@ contains
     ! Local variables
     integer :: nnd,nr,posn
     integer :: irc,ierr
+    integer :: index_size
+    integer, dimension(:), allocatable :: part_offset
 
     nnd = myid+1
     if(prim%n_prim.gt.0) then ! If we actually HAVE a primary set
-       call get_naba_max(prim,gcs,amat,rcut)
+       if(.not.allocated(part_offset)) allocate(part_offset(prim%groups_on_node))
+       call get_naba_max(prim,gcs,amat,rcut,index_size,part_offset)
        ! The matrix maxima MUST be global across processors !
        call gmax(amat(1)%mx_nab)
        amat(2:prim%groups_on_node)%mx_nab = amat(1)%mx_nab
@@ -107,11 +110,13 @@ contains
        amat(2:prim%groups_on_node)%mx_abs = amat(1)%mx_abs
        !write(io_lun,*) 'Matrix maxima: ',amat(1)%mx_nab, amat(1)%mx_abs
        !write(io_lun,*) 'Index length: ',parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs)
-       allocate(aind(parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs)),STAT=ierr)
-       if(ierr/=0) call cq_abort("Error allocating matrix index: ", &
-            parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs),ierr)
+       !allocate(aind(parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs)),STAT=ierr)
+       !if(iprint_index > 1) write(io_lun,*) 'Matrix index: Processor ',myid,'Size ',index_size
+       allocate(aind(index_size),STAT=ierr)
+       if(ierr/=0) call cq_abort("Error allocating matrix index: ", index_size,ierr)
+            !parts%mx_ngonn*(3*parts%mx_mem_grp+5*parts%mx_mem_grp*amat(1)%mx_abs),ierr)
        aind = 0
-       call set_matrix_pointers(prim%nm_nodgroup,amat, aind, prim%groups_on_node,parts%mx_mem_grp)
+       call set_matrix_pointers(prim%nm_nodgroup,amat, aind, prim%groups_on_node,parts%mx_mem_grp,part_offset)
        call allocate_matrix(amat, prim%groups_on_node,parts%mx_mem_grp)
        call get_naba(prim,gcs,amat,rcut)
        ! Now that we know neighbour numbers, sort out the pointers
@@ -306,12 +311,12 @@ contains
              cumu_ndims = 0
              do np=1,gcs%ng_cover  ! Loop over partitions in GCS
                 if(gcs%n_ing_cover(np).gt.0) then  ! Are there atoms ?
-                   if(gcs%icover_ibeg(np)+gcs%n_ing_cover(np)-1.gt.&
-                        gcs%mx_mcover) then
-                      call cq_abort('get_naba: overran gcs mx_mcover: ', &
-                           gcs%icover_ibeg(np)+gcs%n_ing_cover(np)-1, &
-                           gcs%mx_mcover)
-                   endif
+!                   if(gcs%icover_ibeg(np)+gcs%n_ing_cover(np)-1.gt.&
+!                        gcs%mx_mcover) then
+!                      call cq_abort('get_naba: overran gcs mx_mcover: ', &
+!                           gcs%icover_ibeg(np)+gcs%n_ing_cover(np)-1, &
+!                           gcs%mx_mcover)
+!                   endif
                    do ni=1,gcs%n_ing_cover(np)
                       dx=gcs%xcover(gcs%icover_ibeg(np)+ni-1)-prim%xprim(inp)
                       dy=gcs%ycover(gcs%icover_ibeg(np)+ni-1)-prim%yprim(inp)
@@ -399,7 +404,7 @@ contains
 !!
 !!  SOURCE
 !!
-  subroutine get_naba_max(prim,gcs,amat,rcut)
+  subroutine get_naba_max(prim,gcs,amat,rcut,index_size,part_offset)
 
     ! Module usage
     use datatypes
@@ -417,6 +422,8 @@ contains
     type(cover_set) :: gcs
     real(double) :: rcut
     type(matrix) :: amat(:)
+    integer, dimension(:) :: part_offset
+    integer :: index_size
 
     ! Local variables
     integer :: irc,ierr,inp, cumu_ndims, neigh_spec
@@ -436,18 +443,23 @@ contains
     tot_nabs = 0
     nabs_of_atom = 0
     mx_abs_nabs = 0
+    index_size = 0
+    part_offset = 0
+    part_offset(1) = 0
     do nn=1,prim%groups_on_node ! Partitions in primary set
        if(prim%nm_nodgroup(nn).gt.0) then  ! Are there atoms ?
+          ! Here accumulate 3*nm_nodgroup
+          index_size = index_size + 3*prim%nm_nodgroup(nn)
           do j=1,prim%nm_nodgroup(nn)  ! Loop over atoms in partition
              nabs_of_atom = 0
              do np=1,gcs%ng_cover  ! Loop over partitions in GCS
                 if(gcs%n_ing_cover(np).gt.0) then  ! Are there atoms ?
-                   if(gcs%icover_ibeg(np)+gcs%n_ing_cover(np)-1.gt.&
-                        gcs%mx_mcover) then
-                      call cq_abort('get_naba: overran gcs mx_mcover: ', &
-                           gcs%icover_ibeg(np)+gcs%n_ing_cover(np)-1, &
-                           gcs%mx_mcover)
-                   endif
+!                   if(gcs%icover_ibeg(np)+gcs%n_ing_cover(np)-1.gt.&
+!                        gcs%mx_mcover) then
+!                      call cq_abort('get_naba: overran gcs mx_mcover: ', &
+!                           gcs%icover_ibeg(np)+gcs%n_ing_cover(np)-1, &
+!                           gcs%mx_mcover)
+!                   endif
                    do ni=1,gcs%n_ing_cover(np)
                       dx=gcs%xcover(gcs%icover_ibeg(np)+ni-1)-prim%xprim(inp)
                       dy=gcs%ycover(gcs%icover_ibeg(np)+ni-1)-prim%yprim(inp)
@@ -461,8 +473,15 @@ contains
              enddo ! End np_cover
              if(nabs_of_atom>mx_abs_nabs) mx_abs_nabs = nabs_of_atom
              inp=inp+1  ! Indexes primary-set atoms
+             ! Accumulate 5 times nabs_of_atom 
+             index_size = index_size + 5*nabs_of_atom
           enddo ! End prim%nm_nodgroup
+       else
+          ! Accumulate 3 + 5
+          index_size = index_size + 8
        endif ! End if(prim%nm_nodgroup>0)
+       ! Store offset for next partition
+       if(nn<prim%groups_on_node) part_offset(nn+1) = index_size
     enddo ! End part_on_node
     amat(1:prim%groups_on_node)%mx_nab = (tot_nabs+prim%mx_iprim-1)/prim%mx_iprim 
     amat(1:prim%groups_on_node)%mx_abs = mx_abs_nabs

@@ -249,39 +249,47 @@ contains
 !!    Added TM's debugging changes
 !!  SOURCE
 !!
-  subroutine set_matrix_pointers(atoms,mat,ind,part_on_node,mx_part)
+  subroutine set_matrix_pointers(atoms,mat,ind,part_on_node,mx_part,part_offset)
 
     ! Passed variables
     integer :: part_on_node, mx_part
     ! Original type(matrix), dimension(part_on_node) :: mat
     type(matrix), dimension(:) :: mat
     integer, dimension(:),target :: ind
-    integer, dimension(:) :: atoms
+    integer, dimension(:) :: atoms, part_offset
 
     ! Local variables
     integer :: offset, i
     !For debugging
-    integer :: size
+    integer :: isize, isize2
 
     offset = 0
     do i=1,part_on_node
+       offset = part_offset(i)
        if(atoms(i)>mx_part) call cq_abort('set_matrix_pointers: ',i,mx_part)
        if(atoms(i) > 0) then
-          size= atoms(i)
+          isize= atoms(i)
+          if(i<part_on_node) then
+             isize2 = (part_offset(i+1) - part_offset(i) - 3*isize)/5
+          else
+             isize2 = (size(ind) - part_offset(i) - 3*isize)/5
+          end if
        elseif(atoms(i) == 0) then
-          size=1
+          isize=1
+          isize2 = 5
        else
           call cq_abort('set_matrix_pointers : size ', atoms(i))
        endif
-       mat(i)%n_nab => ind(offset+1:offset+size)
-       offset = offset+size
-       mat(i)%i_acc => ind(offset+1:offset+size)
-       offset = offset+size
-       mat(i)%i_nd_acc => ind(offset+1:offset+size)
-       offset = offset+size
-       mat(i)%i_seq => ind(offset+1:offset+mx_part*mat(i)%mx_abs)
+       mat(i)%n_nab => ind(offset+1:offset+isize)
+       offset = offset+isize
+       mat(i)%i_acc => ind(offset+1:offset+isize)
+       offset = offset+isize
+       mat(i)%i_nd_acc => ind(offset+1:offset+isize)
+       offset = offset+isize
+       mat(i)%i_seq => ind(offset+1:offset+isize2)!mx_part*mat(i)%mx_abs)
        ! Now point at the start of the next data
-       offset = i*(3*mx_part+5*mx_part*mat(i)%mx_abs)
+       ! CHANGED drb 2008/10/06
+       !offset = i*(3*mx_part+5*mx_part*mat(i)%mx_abs)
     enddo
     return
   end subroutine set_matrix_pointers
@@ -329,9 +337,9 @@ contains
     ! For debugging
     integer :: size1, size2, maxlen
 
-    maxlen = size(ind)
-    if(maxlen<part_on_node*(3*mx_part + 5*mx_part*mat(1)%mx_abs)) &
-         call cq_abort('Overrun: ',maxlen,part_on_node*(3*mx_part + 5*mx_part*mat(1)%mx_abs))
+!    maxlen = size(ind)
+!    if(maxlen<part_on_node*(3*mx_part + 5*mx_part*mat(1)%mx_abs)) &
+!         call cq_abort('Overrun: ',maxlen,part_on_node*(3*mx_part + 5*mx_part*mat(1)%mx_abs))
     offset = 0
     do i=1,part_on_node
        !write(io_lun,*) 'Part: ',i
@@ -377,7 +385,8 @@ contains
        mat(i)%ndimj => ind(offset+1:offset+size2)
        offset = offset+size2
        ! Now point offset to the start of the next partition's data
-       offset = i*(3*mx_part+5*mx_part*mat(i)%mx_abs)
+       ! Actually it already points to it
+       !offset = i*(3*mx_part+5*mx_part*mat(i)%mx_abs)
        ! Add an overflow check ?
     enddo
     return

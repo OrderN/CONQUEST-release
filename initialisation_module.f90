@@ -115,6 +115,7 @@ contains
 
     character(len=40) :: restart_file
 
+    call init_timing_system(inode)
     ! Read input
     call init_reg_mem
     call read_and_write(start, start_L,&
@@ -124,7 +125,6 @@ contains
     ! IMPORTANT!!!!! No timers allowed before this point
     !                We need to know if the user wants them or not
     !                  before actually starting one
-    call init_timing_system(inode)
     call start_timer(tmr_std_initialisation)
 
     ! Call routines to read or make data for isolated ions
