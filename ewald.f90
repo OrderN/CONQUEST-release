@@ -1021,6 +1021,9 @@ contains
   end subroutine partition_distance
   ! ==========================================================
 
+!!   2009/07/08 16:58 dave
+!!    Removed double loop over all atoms to find lambda as it's not used
+
   ! ==========================================================
   subroutine mikes_set_ewald(inode,ionode)
 
@@ -1176,7 +1179,7 @@ contains
 
     if(inode == ionode.AND.iprint_gen>1) write(unit=io_lun,fmt='(/8x," no. of atoms in cell:",i5)') ni_in_cell
 
-    if(ni_in_cell > 1) then
+    if(.false.) then ! ni_in_cell > 1) then
        do np1 = 1, ni_in_cell-1
           do np2 = np1+1, ni_in_cell
              abs_sep(1) = x_atom_cell(np1) - x_atom_cell(np2)

@@ -233,6 +233,8 @@ contains
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2009/07/08 16:41 dave
+!!    Introduced atom-based tolerance (just divide by ni_in_cell)
 !!  SOURCE
 !!
   subroutine earlyDM(ndone, n_L_iterations, &
@@ -248,7 +250,7 @@ contains
     use primary_module, ONLY: bundle
     use PosTan, ONLY: PulayR, PulayE
     use GenComms, ONLY: cq_abort, gsum
-    use global_module, ONLY: iprint_DM,IPRINT_TIME_THRES1
+    use global_module, ONLY: iprint_DM,IPRINT_TIME_THRES1,ni_in_cell,flag_global_tolerance
     use timer_module, ONLY: cq_timer,start_timer, stop_print_timer, WITH_LEVEL
 
     implicit none
@@ -305,7 +307,11 @@ contains
     do n_iter = 1,n_L_iterations
        call start_timer(tmr_l_iter,WITH_LEVEL)
        ! Gradient before line min
-       g0 = matrix_product_trace(matM3,matSM3)
+       if(flag_global_tolerance) then
+          g0 = matrix_product_trace(matM3,matSM3)
+       else
+          g0 = matrix_product_trace(matM3,matSM3)/real(ni_in_cell,double)
+       end if
        if(inode==ionode.AND.iprint_DM>=1) write(io_lun,1) n_iter, energy0, g0
 1      format('Iteration: ',i3,' Energy: ',e20.12,' Residual: ',e20.12)
        call lineMinL(iprint_DM, matM3, mat_search, mat_temp,matSM3,&
@@ -326,7 +332,11 @@ contains
        ! Pre- and post-multiply M3 by S^-1 so that it is contravariant
        call matrix_product(matT, matM3, mat_temp,mult(T_L_TL))
        call matrix_product(mat_temp, matT, matSM3,mult(TL_T_L))       
-       g1 = matrix_product_trace(matM3,matSM3)
+       if(flag_global_tolerance) then
+          g1 = matrix_product_trace(matM3,matSM3)
+       else
+          g1 = matrix_product_trace(matM3,matSM3)/real(ni_in_cell,double)
+       end if
        ! Test for linearity or convergence
        !zeta = (interpG - g1)/(g0)
        ! DRB 2004/09/28 Now zeta returned by lineMinL
@@ -353,7 +363,11 @@ contains
           call matrix_sum(one,mat_search,(e_dot_n)/(n_dot_n),matSphi)
           ! Here, we can't alter M3 directly: lineMinL expects REAL gradient
        end if
-       g0 = matrix_product_trace(matM3,matSM3)
+       if(flag_global_tolerance) then
+          g0 = matrix_product_trace(matM3,matSM3)
+       else
+          g0 = matrix_product_trace(matM3,matSM3)/real(ni_in_cell,double)
+       end if
        PulayR(ndone+n_iter) = g0
        PulayE(ndone+n_iter) = energy0
        if(abs(zeta)<LinTol_DMM) then ! We're linear
@@ -433,6 +447,8 @@ contains
 !!    matrix routines
 !!   2008/03/03 18:32 dave
 !!    Removed dsqrt
+!!   2009/07/08 16:41 dave
+!!    Introduced atom-based tolerance (just divide by ni_in_cell)
 !!  SOURCE
 !!
   subroutine lateDM(ndone, n_L_iterations, done, deltaE, &
@@ -447,7 +463,7 @@ contains
     use Pulay
     use PosTan, ONLY: PulayR, PulayE, max_iters
     use GenComms, ONLY: cq_abort, gsum
-    use global_module, ONLY: iprint_DM,IPRINT_TIME_THRES1
+    use global_module, ONLY: iprint_DM,IPRINT_TIME_THRES1,ni_in_cell, flag_global_tolerance
     use timer_module, ONLY: cq_timer,start_timer, stop_print_timer, WITH_LEVEL
     use io_module, ONLY: dump_matrix
 
@@ -510,7 +526,11 @@ contains
     !-----------!
     ! MAIN LOOP !
     !-----------!
-    g0 = matrix_product_trace(matM3,matSM3)
+    if(flag_global_tolerance) then
+       g0 = matrix_product_trace(matM3,matSM3)
+    else
+       g0 = matrix_product_trace(matM3,matSM3)/real(ni_in_cell,double)
+    end if
     do n_iter = 1,n_L_iterations
        call start_timer(tmr_l_iter,WITH_LEVEL)
        if(inode==ionode.AND.iprint_DM>=1) write(io_lun,1) n_iter, energy0, g0
@@ -519,7 +539,11 @@ contains
        npmod = mod(n_iter, maxpulayDMM)+1
        pul_mx = min(n_iter+1, maxpulayDMM)
        ! Take a step - maybe correct electron number after
-       step = deltaE/g0 ! Base step on present gradient and expected dE
+       if(flag_global_tolerance) then
+          step = deltaE/(g0) ! Base step on present gradient and expected dE
+       else
+          step = deltaE/(real(ni_in_cell,double)*g0) ! Base step on present gradient and expected dE
+       end if
        ! We don't want the step to be too small or too big
        if(abs(step)<0.001_double) step = 0.001_double
        if(abs(step)>0.1_double) step = 0.1_double
@@ -552,7 +576,11 @@ contains
           call matrix_sum(one,matM3,-(e_dot_n)/(n_dot_n),matphi)
        end if
        ! Find the residual (i.e. the gradient)
-       gg = matrix_product_trace(matM3,matSM3)
+       if(flag_global_tolerance) then
+          gg = matrix_product_trace(matM3,matSM3)
+       else
+          gg = matrix_product_trace(matM3,matSM3)/real(ni_in_cell,double)
+       end if
        if(inode==ionode.AND.iprint_DM>=2) write(io_lun,*) 'R2 is ',sqrt(gg)
        call matrix_sum(zero,mat_SGstore(npmod),-one,matSM3)
        call matrix_sum(zero,mat_Gstore(npmod),-one,matM3)
@@ -581,7 +609,11 @@ contains
             dontK, dontM1, dontM2, doM3, dontM4, dophi, doE,0,matM3,0,matphi  )
        call matrix_product(matT,matM3,mat_temp,mult(T_L_TL))
        call matrix_product(mat_temp,matT,matSM3,mult(TL_T_L))
-       g1 = matrix_product_trace(matM3,matSM3)
+       if(flag_global_tolerance) then
+          g1 = matrix_product_trace(matM3,matSM3)
+       else
+          g1 = matrix_product_trace(matM3,matSM3)/real(ni_in_cell,double)
+       end if
        if(inode==ionode.and.iprint_DM>=3) write(io_lun,*) 'Residual before electron gradient correction: ',g1
        if (vary_mu) then
           call matrix_product(matT,matphi,mat_temp,mult(T_L_TL))
@@ -593,7 +625,11 @@ contains
        end if
        deltaE = energy1 - energy0
        ! Find the residual
-       g1 = matrix_product_trace(matM3,matSM3)
+       if(flag_global_tolerance) then
+          g1 = matrix_product_trace(matM3,matSM3)
+       else
+          g1 = matrix_product_trace(matM3,matSM3)/real(ni_in_cell,double)
+       end if
        if(inode==ionode.and.iprint_DM>=2) write(io_lun,*) 'New residual: ',g1
        if(ndone+n_iter<max_iters) then
           PulayR(ndone+n_iter) = g1

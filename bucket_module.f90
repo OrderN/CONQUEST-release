@@ -191,6 +191,7 @@ contains
 !!***
 
 ! ------------------------------------------------------------------------------
+! Subroutine set_remote_bucket
 ! ------------------------------------------------------------------------------
 
 !!****f* bucket_module/set_remote_bucket *
@@ -214,6 +215,8 @@ contains
 !!    Added ROBODoc headers
 !!   2008/05/16 ast
 !!    Added timer
+!!   2009/07/08 16:43 dave
+!!    Added error sizes
 !!  SOURCE
 !!
   subroutine set_remote_bucket(set,mx_node_in,mx_pair_in)
@@ -238,21 +241,49 @@ contains
     call start_timer(tmr_std_allocation)
 !    write(io_lun,*) 'remote_bucket%list_send_node',set%mx_send_node
     allocate(set%list_send_node(set%mx_send_node),STAT=stat)
-    if(stat/=0) call cq_abort('Err alloc memory to remote_bucket(list_send_node) !')
+    if(stat/=0) call cq_abort('Err alloc memory to remote_bucket(list_send_node) ! ',set%mx_send_node)
 !    write(io_lun,*) 'remote_bucket%no_of_pair',set%mx_send_node
     allocate(set%no_of_pair(set%mx_send_node),STAT=stat)
-    if(stat/=0) call cq_abort('Error allocating memory to remote_bucket(no_of_pair) !')
+    if(stat/=0) call cq_abort('Error allocating memory to remote_bucket(no_of_pair) ! ',set%mx_send_node)
     allocate(set%no_of_pair_orbs(set%mx_send_node),STAT=stat)
-    if(stat/=0) call cq_abort('Error allocating memory to remote_bucket(no_of_pair_orbs) !')
+    if(stat/=0) call cq_abort('Error allocating memory to remote_bucket(no_of_pair_orbs) ! ',set%mx_send_node)
 !    write(io_lun,*) 'remote_bucket%bucket',set%mx_pair_comm,set%mx_send_node
     allocate(set%bucket(set%mx_pair_comm,set%mx_send_node),STAT=stat)
-    if(stat/=0) call cq_abort('Error allocating memory to remote_bucket(bucket) !')
+    if(stat/=0) call cq_abort('Error allocating memory to remote_bucket(bucket) !',set%mx_pair_comm,set%mx_send_node)
     call reg_alloc_mem(area_index,3*set%mx_send_node+set%mx_pair_comm*set%mx_send_node,type_int)
     call stop_timer(tmr_std_allocation)
     return
   end subroutine set_remote_bucket
 !!***
 
+! ------------------------------------------------------------------------------
+! Subroutine reset_remote_bucket
+! ------------------------------------------------------------------------------
+
+!!****f* bucket_module/reset_remote_bucket *
+!!
+!!  NAME 
+!!   reset_remote_bucket
+!! 
+!!  PURPOSE
+!!   Reallocates remove bucket derived type
+!!  INPUTS
+!! 
+!! 
+!!  USES
+!!   GenComms
+!!  AUTHOR
+!!   T.Miyazaki
+!!  CREATION DATE
+!!   23/05/2000
+!!  MODIFICATION HISTORY
+!!   2008/05/16 ast
+!!    Added timer
+!!   2009/07/08 16:43 dave
+!!    Added ROBODoc headers
+!!    Added error sizes
+!!  SOURCE
+!!
   subroutine reset_remote_bucket(set)
 
     use GenComms, ONLY: cq_abort
@@ -267,10 +298,11 @@ contains
     call start_timer(tmr_std_allocation)
     deallocate(set%bucket,STAT=stat)
     allocate(set%bucket(set%mx_pair_comm,set%mx_send_node),STAT=stat)
-    if(stat/=0) call cq_abort('Error allocating memory to remote_bucket(bucket) !')
+    if(stat/=0) call cq_abort('Error allocating memory to remote_bucket(bucket) !',set%mx_pair_comm,set%mx_send_node)
     call stop_timer(tmr_std_allocation)
     return
   end subroutine reset_remote_bucket
+!!***
 
 ! ------------------------------------------------------------------------------
 ! Subroutine free_local_bucket

@@ -124,6 +124,8 @@ contains
 !!    Changed float to real
 !!   2008/03/12 06:13 dave
 !!    Added loop to find longest range matrix
+!!   2009/07/08 16:40 dave
+!!    Zero r_t
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -165,6 +167,7 @@ contains
     ! we need to decide which is the largest core radius
     r_core = zero
     r_h = zero
+    r_t = zero
     !    if(non_local) then
     do n=1, n_species
        r_core = max(r_core,core_radius(n))

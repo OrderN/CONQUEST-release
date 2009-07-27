@@ -79,6 +79,8 @@ contains
 !!    Changed nsf association from common to maxima (as it should be !)
 !!   2008/06/10 ast
 !!    Added timers
+!!   2009/07/08 16:48 dave
+!!    Added code for one-to-one PAO to SF assignment
 !!  SOURCE
 !!
   subroutine assemble_2(range,matA,flag,matAD)
@@ -92,7 +94,7 @@ contains
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
-    use support_spec_format, ONLY: flag_paos_atoms_in_cell
+    use support_spec_format, ONLY: flag_paos_atoms_in_cell, flag_one_to_one
     use mult_module, ONLY: matrix_scale
     use matrix_data, ONLY: mat, halo
     use timer_module
@@ -122,7 +124,7 @@ contains
     if(PRESENT(matAD)) call matrix_scale(zero,matAD)
     if(iprint_basis>=5.AND.myid==0) write(io_lun,fmt='(6x,i5," Done Zeroing")') 
     iprim = 0; ip = 0
-    if(flag_paos_atoms_in_cell.OR.flag==3) then
+    if(flag_paos_atoms_in_cell.OR.flag==3.OR.flag_one_to_one) then
        call start_timer(tmr_std_matrices)
        do part = 1,bundle%groups_on_node ! Loop over primary set partitions
           if(iprint_basis>=6.AND.myid==0) write(io_lun,fmt='(6x,"Processor, partition: ",2i6)') myid,part
@@ -147,6 +149,10 @@ contains
                    neigh_global_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist)) 
                    neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,range)%i_seq(ist)-1)
                    neigh_species = species_glob(neigh_global_num)
+                   if(flag_one_to_one) then
+                      ip = atom_spec
+                      neigh_global_num = neigh_species
+                   end if
                    if(iprint_basis>=6.AND.myid==0) write(io_lun,'(6x,"Processor, neighbour, spec: ",3i6)') myid,neigh,neigh_species
                    ! Now loop over support functions and PAOs and call routine
                    if(flag<3) then
@@ -179,12 +185,14 @@ contains
   end subroutine assemble_2
 !!***
   
+!!   2009/07/08 16:48 dave
+!!    Added code for one-to-one PAO to SF assignment
   subroutine loop_12(matA,iprim,j_in_halo,atom_i,atom_j,dx,dy,dz,flag&
        &,atom_spec,neigh_species,deriv_flag,direction,matAD)
 
     use datatypes
     use support_spec_format, ONLY: supports_on_atom, flag_paos_atoms_in_cell, supports_on_atom_remote, &
-         support_function
+         support_function, flag_one_to_one
     use angular_coeff_routines, ONLY: calc_mat_elem_gen, grad_mat_elem_gen2_prot
     use GenComms, ONLY: myid, cq_abort
     use mult_module, ONLY: store_matrix_value_pos, matrix_pos, return_matrix_value_pos
@@ -228,24 +236,34 @@ contains
                          call grad_mat_elem_gen2_prot(direction,flag,atom_spec,l1,nacz1,m1,neigh_species, &
                               l2,nacz2,m2,dx,dy,dz,mat_val)
                       endif
-                      do n_support1 = 1, supports_on_atom(atom_i)%nsuppfuncs
-                         do n_support2 = 1, supports_on_atom_j(atom_j)%nsuppfuncs
-                            !--------------------------------------------------------!
-                            !     Now multiply by corresponding pao coefficients     !
-                            !--------------------------------------------------------!
-                            coeff_j = supports_on_atom_j(atom_j)%supp_func(n_support2)%coefficients(count2)
-                            mat_val_dummy = mat_val* &
-                                 supports_on_atom(atom_i)%supp_func(n_support1)%coefficients(count1)*coeff_j
-                            wheremat = matrix_pos(matA,iprim,j_in_halo,n_support1,n_support2)
-                            call store_matrix_value_pos(matA,wheremat,mat_val_dummy)
-                            if(PRESENT(matAD).AND.n_support1==1) then
-                               mat_val_dummy = mat_val*coeff_j
-                               wheremat = matrix_pos(matAD,iprim,j_in_halo,count1,n_support2)
-                               call store_matrix_value_pos(matAD,wheremat,mat_val_dummy)
-                               
-                            end if
-                         enddo ! nsupport2
-                      enddo ! nsupport1
+                      if(flag_one_to_one) then
+                         mat_val_dummy = mat_val
+                         wheremat = matrix_pos(matA,iprim,j_in_halo,count1,count2)
+                         call store_matrix_value_pos(matA,wheremat,mat_val)
+                         if(PRESENT(matAD).AND.count1==1) then
+                            wheremat = matrix_pos(matAD,iprim,j_in_halo,count1,count2)
+                            call store_matrix_value_pos(matAD,wheremat,mat_val)
+
+                         end if
+                      else
+                         do n_support1 = 1, supports_on_atom(atom_i)%nsuppfuncs
+                            do n_support2 = 1, supports_on_atom_j(atom_j)%nsuppfuncs
+                               !--------------------------------------------------------!
+                               !     Now multiply by corresponding pao coefficients     !
+                               !--------------------------------------------------------!
+                               coeff_j = supports_on_atom_j(atom_j)%supp_func(n_support2)%coefficients(count2)
+                               mat_val_dummy = mat_val* &
+                                    supports_on_atom(atom_i)%supp_func(n_support1)%coefficients(count1)*coeff_j
+                               wheremat = matrix_pos(matA,iprim,j_in_halo,n_support1,n_support2)
+                               call store_matrix_value_pos(matA,wheremat,mat_val_dummy)
+                               if(PRESENT(matAD).AND.n_support1==1) then
+                                  mat_val_dummy = mat_val*coeff_j
+                                  wheremat = matrix_pos(matAD,iprim,j_in_halo,count1,n_support2)
+                                  call store_matrix_value_pos(matAD,wheremat,mat_val_dummy)
+                               end if
+                            enddo ! nsupport2
+                         enddo ! nsupport1
+                      end if
                       count2 = count2 +1
                    enddo ! m2
                 enddo ! nacz2
@@ -257,12 +275,14 @@ contains
     nullify(supports_on_atom_j)
   end subroutine loop_12
   
+!!   2009/07/08 16:48 dave
+!!    Added code for one-to-one PAO to SF assignment
   subroutine loop_3(matA,iprim,j_in_halo,atom_i,atom_j,dx,dy,dz&
        &,atom_spec,neigh_species,deriv_flag,direction,matAD)
 
     use datatypes
     use pseudo_tm_info, ONLY: pseudo
-    use support_spec_format, ONLY: supports_on_atom !contains all info on support-pao representation
+    use support_spec_format, ONLY: supports_on_atom, flag_one_to_one !contains all info on support-pao representation
     use angular_coeff_routines, ONLY: calc_mat_elem_gen, grad_mat_elem_gen2_prot
     use GenComms, ONLY: myid, cq_abort
     use mult_module, ONLY: store_matrix_value_pos, matrix_pos, return_matrix_value_pos
@@ -311,16 +331,20 @@ contains
                    !end if
                    index_j = part_index_j + (m2+l2+1)
                    if(supports_on_atom(atom_i)%nsuppfuncs > 0) then
-                      do n_support1 = 1, supports_on_atom(atom_i)%nsuppfuncs
-                         mat_val_dummy = mat_val*supports_on_atom(atom_i)%supp_func(n_support1)%coefficients(count1)
-                         wheremat = matrix_pos(matA,iprim,j_in_halo,n_support1,index_j)
-                         call store_matrix_value_pos(matA,wheremat,mat_val_dummy)
-                      enddo ! n_support1
+                      if(flag_one_to_one) then
+                         wheremat = matrix_pos(matA,iprim,j_in_halo,count1,index_j)
+                         call store_matrix_value_pos(matA,wheremat,mat_val)
+                      else
+                         do n_support1 = 1, supports_on_atom(atom_i)%nsuppfuncs
+                            mat_val_dummy = mat_val*supports_on_atom(atom_i)%supp_func(n_support1)%coefficients(count1)
+                            wheremat = matrix_pos(matA,iprim,j_in_halo,n_support1,index_j)
+                            call store_matrix_value_pos(matA,wheremat,mat_val_dummy)
+                         enddo ! n_support1
+                      end if
                    endif
                    if(PRESENT(matAD)) then
                       wheremat = matrix_pos(matAD,iprim,j_in_halo,count1,index_j)
                       call store_matrix_value_pos(matAD,wheremat,mat_val)
-                      !write(18+myid,*) count1,index_j,atom_i,atom_j,wheremat,mat_val_dummy,return_matrix_value_pos(matAD,wheremat)
                    end if
                 enddo ! m2
                 ! Fix DRB 2007/03/22
@@ -360,6 +384,8 @@ contains
 !!    Changed nsf association from common to maxima (as it should be !)
 !!   2008/06/10 ast
 !!    Added timers
+!!   2009/07/08 16:48 dave
+!!    Added code for one-to-one PAO to SF assignment
 !!  SOURCE
 !!
   subroutine assemble_deriv_2(direction,range,matA,flag)
@@ -377,7 +403,7 @@ contains
     !use angular_coeff_routines, ONLY: numerical_ol_gradient
     use matrix_data, ONLY: mat, halo
     use mult_module, ONLY: matrix_scale, store_matrix_value_pos, matrix_pos
-    use support_spec_format, ONLY: flag_paos_atoms_in_cell
+    use support_spec_format, ONLY: flag_paos_atoms_in_cell, flag_one_to_one
     
     implicit none
 
@@ -398,7 +424,7 @@ contains
     call start_timer(tmr_std_basis)
     call matrix_scale(zero,matA)
     iprim = 0; ip = 0
-    if(flag_paos_atoms_in_cell.OR.flag==3) then
+    if(flag_paos_atoms_in_cell.OR.flag==3.OR.flag_one_to_one) then
        do part = 1,bundle%groups_on_node ! Loop over primary set partitions
           if(iprint_basis>=6.AND.myid==0) write(io_lun,fmt='(6x,"Processor, partition: ",2i6)') myid,part
           if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
@@ -423,6 +449,10 @@ contains
                    neigh_global_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist)) 
                    neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,range)%i_seq(ist)-1)
                    neigh_species = species_glob(neigh_global_num)
+                   if(flag_one_to_one) then
+                      ip = atom_spec
+                      neigh_global_num = neigh_species
+                   end if
                    ! Where to put the result - this will become matrix_pos
                    wheremat = matrix_pos(matA,iprim,halo(range)%i_halo(gcspart))
                    ! Now loop over support functions and PAOs and call routine

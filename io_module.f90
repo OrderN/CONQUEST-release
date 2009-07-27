@@ -884,6 +884,8 @@ second:   do
 !!    Added further check for no atoms on a processor and corrected small bug
 !!   28/01/2008 Veronika & Milica
 !!    Fixed memory allocation and deallocation
+!!   2009/07/08 16:56 dave
+!!    Formatting tweak
 !!  SOURCE
 !!  
   subroutine create_sfc_partitions(myid, parts)
@@ -1034,7 +1036,7 @@ second:   do
 
     end if
 
-    if (myid==0.AND.iprint_init>2) write(io_lun,'(a,f14.10)') "Time for min-max", mtime()-time0
+    if (myid==0.AND.iprint_init>2) write(io_lun,'(a,f18.10)') "Time for min-max", mtime()-time0
 
     do i = 1, 3
       occupied_cell(i) = minmax_coords(i) - minmax_coords(-i)

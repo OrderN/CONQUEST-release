@@ -51,6 +51,8 @@
 !!    Added flag for Pulay relaxation algorithm
 !!   2008/07/16 ast
 !!    New iprint levels for timing 
+!!   2009/07/24 16:41 dave
+!!    Added new flag for global or per atom tolerances
 !!  SOURCE
 !!
 module global_module
@@ -104,6 +106,7 @@ module global_module
   logical :: flag_SCconverged
   logical :: UseGemm
   logical :: flag_pulay_simpleStep
+  logical :: flag_global_tolerance
 
   ! How should blocks be assigned ? See block_module.f90
   integer :: flag_assign_blocks

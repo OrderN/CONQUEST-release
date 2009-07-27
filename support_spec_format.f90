@@ -32,6 +32,8 @@
 !!    Changed for output to file not stdout
 !!   2008/05/28 ast
 !!    Added timers
+!!   2009/07/08 16:46 dave
+!!    Added flag for one-to-one PAO to SF assignment
 !!  SOURCE
 !!
 module support_spec_format
@@ -65,6 +67,7 @@ module support_spec_format
   integer :: mx_pao_coeff_atoms ! max atoms coefficients stored for
   logical :: read_option, symmetry_breaking
   logical :: TestBasisGrads, TestTot, TestBoth, TestS, TestH
+  logical :: flag_one_to_one
 
   character(len=80) :: support_pao_file
   

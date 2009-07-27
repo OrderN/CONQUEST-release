@@ -1,4 +1,3 @@
-
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
@@ -290,6 +289,8 @@ contains
 !!    Added options for buffer around primary and covering sets
 !!   2008/07/16 ast
 !!    New keywords for timers
+!!   2009/07/08 16:47 dave
+!!    Added keyword for one-to-one PAO to SF assigment
 !!  TODO
 !!   Think about single node read and broadcast 10/05/2002 dave
 !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
@@ -311,7 +312,7 @@ contains
          iprint_init, iprint_mat, iprint_ops, iprint_DM, iprint_SC, iprint_minE, iprint_time, &
          iprint_MD, iprint_index, iprint_gen, iprint_pseudo, iprint_basis, iprint_intgn, area_general, &
          global_maxatomspart, load_balance, many_processors, flag_assign_blocks, io_lun, &
-         flag_pulay_simpleStep
+         flag_pulay_simpleStep, flag_global_tolerance
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff, &
          n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport, NonLocalFactor, InvSRange, min_blip_sp, &
          flag_buffer_old, AtomMove_buffer
@@ -336,7 +337,7 @@ contains
          energy_tolerance, expected_reduction
     use pao_format, ONLY: kcut, del_k
     use support_spec_format, ONLY : flag_paos_atoms_in_cell, read_option, symmetry_breaking, support_pao_file, &
-         TestBasisGrads, TestTot, TestBoth, TestS, TestH
+         TestBasisGrads, TestTot, TestBoth, TestS, TestH, flag_one_to_one
     use read_pao_info, ONLY: pao_info_file, pao_norm_flag
     use read_support_spec, ONLY: support_spec_file, flag_read_support_spec
     use test_force_module, ONLY: flag_test_all_forces, flag_which_force, TF_direction, TF_atom_moved, TF_delta
@@ -672,6 +673,7 @@ contains
           enddo
        endif
        !blip_width = support_grid_spacing * fdf_double('blip_width_over_support_grid_spacing',four)
+       flag_global_tolerance = fdf_boolean('minE.GlobalTolerance',.true.)
        L_tolerance = fdf_double('minE.LTolerance',1.0e-7_double)
        sc_tolerance  = fdf_double('minE.SCTolerance',1.0e-6_double)
        maxpulayDMM = fdf_integer('DM.MaxPulay',5)
@@ -729,6 +731,7 @@ contains
        del_k = fdf_double('Basis.PaoKspaceOlGridspace',0.1_double)
        kcut = fdf_double('Basis.PaoKspaceOlCutoff', 1000.0_double)
        flag_paos_atoms_in_cell = fdf_boolean('Basis.PAOs_StoreAllAtomsInCell',.true.)
+       flag_one_to_one = fdf_boolean('Basis.PAOs_OneToOne',.false.)
        symmetry_breaking = fdf_boolean('Basis.SymmetryBreaking',.false.)
        support_pao_file = fdf_string(80,'Basis.SupportPaoFile','supp_pao.dat')
        pao_info_file = fdf_string(80,'Basis.PaoInfoFile','pao.dat')

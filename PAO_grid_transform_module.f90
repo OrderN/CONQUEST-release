@@ -167,6 +167,8 @@ contains
 !!    Changed to use new PAO/SF structure
 !!   2008/05/28 ast
 !!    Added timers
+!!   2009/07/08 16:48 dave
+!!    Added code for one-to-one PAO to SF assignment
 !!  SOURCE
 !!
   subroutine do_PAO_transform(iprim,this_nsf)
@@ -180,7 +182,7 @@ contains
     use set_blipgrid_module, ONLY: naba_blk_supp
     use comm_array_module,   ONLY: send_array
     use block_module,    ONLY: nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
-    use support_spec_format, ONLY: supports_on_atom, flag_paos_atoms_in_cell
+    use support_spec_format, ONLY: supports_on_atom, flag_paos_atoms_in_cell, flag_one_to_one
     use GenComms, ONLY: myid, cq_abort
     use dimens, ONLY: r_h
     use angular_coeff_routines, ONLY: evaluate_pao
@@ -210,10 +212,14 @@ contains
     ! Species of atom
     atom_species = bundle%species(iprim)
     ! How are we storing PAO coefficients ?
-    if(flag_paos_atoms_in_cell) then
-       this_atom = bundle%ig_prim(iprim)
+    if(flag_one_to_one) then
+       this_atom = atom_species
     else
-       this_atom = iprim
+       if(flag_paos_atoms_in_cell) then
+          this_atom = bundle%ig_prim(iprim)
+       else
+          this_atom = iprim
+       end if
     end if
     nblkx=nx_in_block
     nblky=ny_in_block
@@ -275,10 +281,14 @@ contains
                       do acz = 1,supports_on_atom(this_atom)%naczs(l1)
                          do m1=-l1,l1
                             call evaluate_pao(atom_species,l1,1,m1,dx,dy,dz,val)
-                            do nsf1 = 1,supports_on_atom(this_atom)%nsuppfuncs
-                               dsum(nsf1) = dsum(nsf1) + &
-                                    supports_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
-                            end do ! nsf
+                            if(flag_one_to_one) then
+                                  dsum(count1) = dsum(count1) + val
+                            else
+                               do nsf1 = 1,supports_on_atom(this_atom)%nsuppfuncs
+                                  dsum(nsf1) = dsum(nsf1) + &
+                                       supports_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
+                               end do ! nsf
+                            end if
                             count1 = count1+1
                          end do ! m1
                       end do ! acz
@@ -411,6 +421,8 @@ contains
 !!    Changed to use new PAO/SF structure
 !!   2008/05/28 ast
 !!    Added timers
+!!   2009/07/08 16:48 dave
+!!    Added code for one-to-one PAO to SF assignment
 !!  SOURCE
 !!
   subroutine do_PAO_grad_transform(direction,iprim,this_nsf)
@@ -424,7 +436,7 @@ contains
     use set_blipgrid_module, ONLY: naba_blk_supp
     use comm_array_module,   ONLY: send_array
     use block_module,    ONLY: nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
-    use support_spec_format, ONLY: supports_on_atom, flag_paos_atoms_in_cell
+    use support_spec_format, ONLY: supports_on_atom, flag_paos_atoms_in_cell, flag_one_to_one
     use GenComms, ONLY: myid, cq_abort
     use dimens, ONLY: r_h
     use angular_coeff_routines, ONLY: pao_elem_derivative_2, evaluate_pao
@@ -454,12 +466,15 @@ contains
     ! Species of atom
     atom_species = bundle%species(iprim)
     ! How are we storing PAO coefficients ?
-    if(flag_paos_atoms_in_cell) then
-       this_atom = bundle%ig_prim(iprim)
+    if(flag_one_to_one) then
+       this_atom = atom_species
     else
-       this_atom = iprim
+       if(flag_paos_atoms_in_cell) then
+          this_atom = bundle%ig_prim(iprim)
+       else
+          this_atom = iprim
+       end if
     end if
-
     nblkx=nx_in_block
     nblky=ny_in_block
     nblkz=nz_in_block
@@ -521,10 +536,14 @@ contains
                       do acz = 1,supports_on_atom(this_atom)%naczs(l1)
                          do m1=-l1,l1
                             call pao_elem_derivative_2(direction,atom_species,l1,acz,m1,dx,dy,dz,val)
-                            do nsf1 = 1,supports_on_atom(this_atom)%nsuppfuncs
-                               dsum(nsf1) = dsum(nsf1) + &
-                                    supports_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
-                            end do ! nsf
+                            if(flag_one_to_one) then
+                               dsum(count1) = dsum(count1) + val
+                            else
+                               do nsf1 = 1,supports_on_atom(this_atom)%nsuppfuncs
+                                  dsum(nsf1) = dsum(nsf1) + &
+                                       supports_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
+                               end do ! nsf
+                            end if
                             count1 = count1+1
                          end do ! m1
                       end do ! acz
@@ -564,6 +583,8 @@ contains
 !!    Various changes for variable NSF
 !!   2008/05/28 ast
 !!    Added timers
+!!   2009/07/08 16:48 dave
+!!    Added code for one-to-one PAO to SF assignment
 !!  SOURCE
 !!
   subroutine PAO_to_grid_global(myid, support)
@@ -584,7 +605,7 @@ contains
     use cover_module, ONLY: DCS_parts
     use set_blipgrid_module, ONLY : naba_atm
     use angular_coeff_routines, ONLY : evaluate_pao
-    use support_spec_format, ONLY: supports_on_atom, flag_paos_atoms_in_cell
+    use support_spec_format, ONLY: supports_on_atom, flag_paos_atoms_in_cell, flag_one_to_one
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
 
     implicit none 
@@ -594,7 +615,7 @@ contains
 
     !local
     real(double):: dcellx_block,dcelly_block,dcellz_block
-    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom
+    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom, this_atom
     real(double):: xatom,yatom,zatom,alpha,step
     real(double):: xblock,yblock,zblock
     integer :: the_species
@@ -690,7 +711,11 @@ contains
                      npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
                 !r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
                 !     (zatom-zblock)**2 )
-
+                if(flag_one_to_one) then
+                   this_atom = the_species
+                else
+                   this_atom = ig_atom
+                end if
                 if(npoint > 0) then
                    !offset_position = (no_of_ib_ia-1) * this_nsf * n_pts_in_block
                    offset_position = no_of_ib_ia
@@ -708,14 +733,18 @@ contains
                       ! For this point-atom offset, we loop over ALL PAOs, and accumulate each PAO multiplied by
                       ! the appropriate coefficient in a local store before putting it in place later
                       count1 = 1
-                      do l1 = 0,supports_on_atom(ig_atom)%lmax
-                         do acz = 1,supports_on_atom(ig_atom)%naczs(l1)
+                      do l1 = 0,supports_on_atom(this_atom)%lmax
+                         do acz = 1,supports_on_atom(this_atom)%naczs(l1)
                             do m1=-l1,l1
                                call evaluate_pao(the_species,l1,acz,m1,x,y,z,val)
-                               do nsf1 = 1,supports_on_atom(ig_atom)%nsuppfuncs
-                                  sfsum(nsf1) = sfsum(nsf1) + &
-                                       supports_on_atom(ig_atom)%supp_func(nsf1)%coefficients(count1)* val
-                               end do ! nsf1
+                               if(flag_one_to_one) then
+                                  sfsum(count1) = sfsum(count1) + val
+                               else
+                                  do nsf1 = 1,supports_on_atom(this_atom)%nsuppfuncs
+                                     sfsum(nsf1) = sfsum(nsf1) + &
+                                          supports_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
+                                  end do ! nsf1
+                               end if
                                count1 = count1+1
                             end do ! m1
                          end do ! acz
@@ -768,6 +797,8 @@ contains
 !!    Various changes for variable NSF
 !!   2008/05/28 ast
 !!    Added timers
+!!   2009/07/08 16:48 dave
+!!    Added code for one-to-one PAO to SF assignment
 !!  SOURCE
 !!
   subroutine single_PAO_to_grid(support)
@@ -787,7 +818,7 @@ contains
     use cover_module, ONLY: DCS_parts
     use set_blipgrid_module, ONLY : naba_atm
     use angular_coeff_routines, ONLY : evaluate_pao
-    use support_spec_format, ONLY: supports_on_atom
+    use support_spec_format, ONLY: supports_on_atom, flag_one_to_one
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
 
     implicit none 
@@ -795,7 +826,7 @@ contains
 
     !local
     real(double):: dcellx_block,dcelly_block,dcellz_block
-    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom
+    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom, this_atom
     real(double):: xatom,yatom,zatom,alpha,step
     real(double):: xblock,yblock,zblock
     integer :: the_species
@@ -875,6 +906,11 @@ contains
                 r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
                      (zatom-zblock)**2 )
 
+                if(flag_one_to_one) then
+                   this_atom = the_species
+                else
+                   this_atom = ig_atom
+                end if
                 if(npoint > 0) then
                    !offset_position = (no_of_ib_ia-1) * npao * n_pts_in_block
                    offset_position = no_of_ib_ia
@@ -890,8 +926,8 @@ contains
                       z = z_store(ip)
                       ! For this point-atom offset, we accumulate the PAO on the grid
                       count1 = 1
-                      do l1 = 0,supports_on_atom(ig_atom)%lmax
-                         do acz = 1,supports_on_atom(ig_atom)%naczs(l1)
+                      do l1 = 0,supports_on_atom(this_atom)%lmax
+                         do acz = 1,supports_on_atom(this_atom)%naczs(l1)
                             do m1=-l1,l1
                                call evaluate_pao(the_species,l1,acz,m1,x,y,z,val)
                                if(position+(count1-1)*n_pts_in_block > gridfunctions(support)%size) &
@@ -942,6 +978,8 @@ contains
 !!    Variable NSF preparation, tidying, name change
 !!   2008/05/28 ast
 !!    Added timers
+!!   2009/07/08 16:48 dave
+!!    Added code for one-to-one PAO to SF assignment
 !!  SOURCE
 !!
   subroutine PAO_to_grad_global(myid, direction, support)
@@ -962,7 +1000,7 @@ contains
     use cover_module, ONLY: DCS_parts
     use set_blipgrid_module, ONLY : naba_atm
     use angular_coeff_routines, ONLY : pao_elem_derivative_2
-    use support_spec_format, ONLY: supports_on_atom
+    use support_spec_format, ONLY: supports_on_atom, flag_one_to_one
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
 
     implicit none 
@@ -973,7 +1011,7 @@ contains
 
     !local
     real(double):: dcellx_block,dcelly_block,dcellz_block
-    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom
+    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom, this_atom
     real(double):: xatom,yatom,zatom,alpha,step
     real(double):: xblock,yblock,zblock
     integer :: the_species
@@ -1059,6 +1097,11 @@ contains
                      npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
                 r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
                      (zatom-zblock)**2 )
+                if(flag_one_to_one) then
+                   this_atom = the_species
+                else
+                   this_atom = ig_atom
+                end if
 
                 if(npoint > 0) then
                    !offset_position = (no_of_ib_ia-1) * nsf * n_pts_in_block
@@ -1078,14 +1121,18 @@ contains
                       ! the appropriate coefficient in a local store before putting it in place later
                       ! Actually, the zeta should be *inside* the l loop
                       count1 = 1
-                      do l1 = 0,supports_on_atom(ig_atom)%lmax
-                         do acz = 1,supports_on_atom(ig_atom)%naczs(l1)
+                      do l1 = 0,supports_on_atom(this_atom)%lmax
+                         do acz = 1,supports_on_atom(this_atom)%naczs(l1)
                             do m1=-l1,l1
                                call pao_elem_derivative_2(direction,the_species,l1,acz,m1,x,y,z,val)
-                               do nsf1 = 1,supports_on_atom(ig_atom)%nsuppfuncs
-                                  sfsum(nsf1) = sfsum(nsf1) + &
-                                       supports_on_atom(ig_atom)%supp_func(nsf1)%coefficients(count1)* val
-                               end do ! nsf1
+                               if(flag_one_to_one) then
+                                  sfsum(count1) = sfsum(count1) + val
+                               else
+                                  do nsf1 = 1,supports_on_atom(this_atom)%nsuppfuncs
+                                     sfsum(nsf1) = sfsum(nsf1) + &
+                                          supports_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
+                                  end do ! nsf1
+                               end if
                                count1 = count1+1
                             end do ! m1
                          end do ! acz

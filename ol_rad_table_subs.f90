@@ -908,6 +908,8 @@ end subroutine unnorm_siesta_tbl
 !!    Added timers
 !!   2008/09/01 08:21 dave
 !!    Added io_ routines from input_module
+!!   2009/07/08 16:48 dave
+!!    Added code for one-to-one PAO to SF assignment
 !!  SOURCE
 !!
   subroutine get_support_pao_rep(inode,ionode)
@@ -916,11 +918,11 @@ end subroutine unnorm_siesta_tbl
     use global_module, ONLY: ni_in_cell, species_glob, iprint_basis
     use primary_module, ONLY: bundle
     use GenComms, ONLY : gcopy, my_barrier, cq_abort
-    use species_module, ONLY : nsf_species, npao_species
+    use species_module, ONLY : nsf_species, npao_species, n_species
     use support_spec_format, ONLY : supports_on_atom, flag_paos_atoms_in_cell, mx_pao_coeff_atoms, &
          allocate_supp_coeff_array, associate_supp_coeff_array, support_gradient, support_elec_gradient, &
          coefficient_array,grad_coeff_array, elec_grad_coeff_array, coeff_array_size, &
-         read_option, symmetry_breaking, support_pao_file
+         read_option, symmetry_breaking, support_pao_file, flag_one_to_one
     use pao_format, ONLY: pao
     use input_module, ONLY: io_assign, io_close
 
@@ -937,12 +939,16 @@ end subroutine unnorm_siesta_tbl
     warn_flag = .false.
     if(inode==ionode.AND.iprint_basis>1) &
          write(io_lun,*) 'Flag for all pao coeffs on all procs is ',flag_paos_atoms_in_cell
-    if(flag_paos_atoms_in_cell) then
-       mx_pao_coeff_atoms = ni_in_cell
+    if(flag_one_to_one) then
+       mx_pao_coeff_atoms = n_species
     else
-       mx_pao_coeff_atoms = bundle%n_prim
-       ! This is TEMPORARY !
-       call cq_abort("Hard Failure in get_support_pao_rep: MUST store ALL PAO coefficients.")
+       if(flag_paos_atoms_in_cell) then
+          mx_pao_coeff_atoms = ni_in_cell
+       else
+          mx_pao_coeff_atoms = bundle%n_prim
+          ! This is TEMPORARY !
+          call cq_abort("Hard Failure in get_support_pao_rep: MUST store ALL PAO coefficients.")
+       end if
     end if
     call start_timer(tmr_std_allocation)
     allocate(supports_on_atom(mx_pao_coeff_atoms))
@@ -951,10 +957,14 @@ end subroutine unnorm_siesta_tbl
     call stop_timer(tmr_std_allocation)
     total_size = 0
     do i = 1, mx_pao_coeff_atoms
-       if(flag_paos_atoms_in_cell) then
-          species_i = species_glob(i)
+       if(flag_one_to_one) then
+          species_i = i
        else
-          species_i = bundle%species(i)
+          if(flag_paos_atoms_in_cell) then
+             species_i = species_glob(i)
+          else
+             species_i = bundle%species(i)
+          end if
        end if
        n_sup = nsf_species(species_i)
        if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'atom, supp: ',i,species_i,n_sup
@@ -1136,27 +1146,37 @@ end subroutine unnorm_siesta_tbl
        if(inode==ionode) call io_close(lun)
     else ! Initialise from PAO structures
        do i = 1, mx_pao_coeff_atoms
-          if(flag_paos_atoms_in_cell) then
-             species_i = species_glob(i)
+          if(flag_one_to_one) then
+             species_i = i
           else
-             species_i = bundle%species(i)
+             if(flag_paos_atoms_in_cell) then
+                species_i = species_glob(i)
+             else
+                species_i = bundle%species(i)
+             end if
           end if
           if(nsf_species(species_i)==npao_species(species_i)) then ! We have one-to-one
-             do k = 1, supports_on_atom(i)%nsuppfuncs
-                count = 1
-                do l = 0, supports_on_atom(i)%lmax
-                   do acz = 1, supports_on_atom(i)%naczs(l)
-                      do m = -l,l
-                         if(k==count) then
-                            supports_on_atom(i)%supp_func(k)%coefficients(count) = one
-                         else
-                            supports_on_atom(i)%supp_func(k)%coefficients(count) = zero
-                         end if
-                         count = count+1
-                      enddo ! m=-l,l
-                   enddo ! acz=1,supports_on_atom(i)%naczetas(l)
-                enddo ! do l=0,lmax
-             enddo ! k=1,nsuppfuncs
+             if(flag_one_to_one) then
+                do k = 1, supports_on_atom(i)%nsuppfuncs
+                   supports_on_atom(i)%supp_func(k)%coefficients(:) = one
+                end do
+             else
+                do k = 1, supports_on_atom(i)%nsuppfuncs
+                   count = 1
+                   do l = 0, supports_on_atom(i)%lmax
+                      do acz = 1, supports_on_atom(i)%naczs(l)
+                         do m = -l,l
+                            if(k==count) then
+                               supports_on_atom(i)%supp_func(k)%coefficients(count) = one
+                            else
+                               supports_on_atom(i)%supp_func(k)%coefficients(count) = zero
+                            end if
+                            count = count+1
+                         enddo ! m=-l,l
+                      enddo ! acz=1,supports_on_atom(i)%naczetas(l)
+                   enddo ! do l=0,lmax
+                enddo ! k=1,nsuppfuncs
+             end if
           else
              do k = 1, supports_on_atom(i)%nsuppfuncs
                 count_pao = 1 ! which PAO 
@@ -1201,9 +1221,11 @@ end subroutine unnorm_siesta_tbl
   end subroutine get_support_pao_rep
 !!***
   
+!!   2009/07/08 16:48 dave
+!!    Added code for one-to-one PAO to SF assignment
   subroutine writeout_support_functions(inode,ionode)
     use datatypes
-    use support_spec_format, ONLY : supports_on_atom, support_pao_file
+    use support_spec_format, ONLY : supports_on_atom, support_pao_file, flag_one_to_one
     use global_module, ONLY: ni_in_cell !this is our total no of atoms
     use GenComms, ONLY : gcopy, my_barrier
     use species_module, ONLY : n_species
@@ -1215,6 +1237,7 @@ end subroutine unnorm_siesta_tbl
     integer, intent(in) :: inode, ionode
     integer :: i,j,k,l,m,n,myflag,aczeta,count,lun,ios
     
+    if(flag_one_to_one) return
     !write(io_lun,*) "Entering writeout ",inode
     if(inode == ionode) then
        call io_assign(lun)
