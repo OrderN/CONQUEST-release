@@ -64,6 +64,9 @@
 !!    Added timers
 !!   2008/09/01 08:20 dave
 !!    Added new Conquest input routines
+!!   2009/07/24 ast
+!!    Filenames based on node/iteration number are now not limited to 3 figures
+!!    New routine get_file_name takes care of creating a sufficiently long string
 !!***
 module io_module
 
@@ -1036,7 +1039,7 @@ second:   do
 
     end if
 
-    if (myid==0.AND.iprint_init>2) write(io_lun,'(a,f18.10)') "Time for min-max", mtime()-time0
+    if (myid==0.AND.iprint_init>2) write(io_lun,'(a,f23.10)') "Time for min-max", mtime()-time0
 
     do i = 1, 3
       occupied_cell(i) = minmax_coords(i) - minmax_coords(-i)
@@ -1525,7 +1528,7 @@ hc2:    do
           write(io_lun,*)
           write(io_lun,*) "Maxatomsproc_tmp =", maxatomsproc_tmp
           do i = 0, numprocs -1
-            write(io_lun,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+            write(io_lun,'(a,i7,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
           end do
         end if
 
@@ -1583,8 +1586,8 @@ hc2:    do
             if (iprint_init > 4.AND.myid==0) write(io_lun,*) "Loop: Maxatomsproc_tmp =", maxatomsproc_tmp
             do i = 0, numprocs - 1
               if (iprint_init > 4.AND.myid==0) &
-                   write(io_lun,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
-              if (no_atoms_proc(i) == 0) write(io_lun,*) "WARNING: Processor", i," has no atoms! Too many processors?"
+                   write(io_lun,'(a,i7,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+              if (no_atoms_proc(i) == 0) write(io_lun,'(a,i7,a)') "WARNING: Processor", i," has no atoms! Too many processors?"
               ! Statistics
               ! proc_atoms_min = ni_in_cell
               ! proc_atoms_max = 0
@@ -1606,10 +1609,10 @@ hc2:    do
       end do 
       do i = 0, numprocs - 1
          if (iprint_init > 4.AND.myid==0) &
-              write(io_lun,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+              write(io_lun,'(a,i7,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
          ! The following needs to stay here because the reshuffling part relies on all processors having atoms
          if (no_atoms_proc(i) == 0) then
-            write(io_lun,*) "WARNING: Processor", i," has no atoms! Too many processors?"
+            write(io_lun,'(a,i7,a)') "WARNING: Processor", i," has no atoms! Too many processors?"
             call cq_abort("Automatic partitioner requires all processors to have atoms")
          end if
       end do
@@ -1658,10 +1661,10 @@ hc2:    do
 
         do i = 0, numprocs - 1
            if (iprint_init > 1.AND.myid==0) &
-                write(io_lun,'(a,i6,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+                write(io_lun,'(a,i7,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
            ! Probably unnecessary - was done earlier
            if (no_atoms_proc(i) == 0) then
-              write(io_lun,*) "WARNING: Processor", i," has no atoms! Too many processors?"
+              write(io_lun,'(a,i7,a)') "WARNING: Processor", i," has no atoms! Too many processors?"
               call cq_abort("Automatic partitioner requires all processors to have atoms")
            end if
         end do
@@ -1744,7 +1747,7 @@ hc2:    do
 
     if (iprint_init > 1.AND.myid==0) then
       do i = 0, numprocs -1
-        write(io_lun,'(a,i3,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
+        write(io_lun,'(a,i7,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
       end do
     end if
 
@@ -2424,6 +2427,7 @@ hc2:    do
     use datatypes
     use block_module, ONLY: n_pts_in_block
     use primary_module, ONLY: domain
+    use global_module, ONLY: numprocs
     !use set_blipgrid_module, ONLY: naba_atm, supp
 
     ! Passed variables
@@ -2431,16 +2435,11 @@ hc2:    do
     real(double), dimension(size) :: density
 
     ! Local variables
-    integer :: lun, nhund, ntens, nunit, n1, block, n_point, n_i, n
-    character(len=11) :: digitstr = "01234567890"
+    integer :: lun, block, n_point, n_i, n
     character(len=10) :: filename
 
     ! Build a filename based on node number
-    nhund = aint(real(inode/100))+1
-    n1 = inode - (100*nhund) + 100
-    ntens = aint(real(n1/10))+1
-    nunit = n1 - 10*ntens + 11
-    filename = 'chden.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    call get_file_name('chden',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -2466,6 +2465,7 @@ hc2:    do
     use datatypes
     use block_module, ONLY: n_pts_in_block
     use primary_module, ONLY: domain
+    use global_module, ONLY: numprocs
     !use set_blipgrid_module, ONLY: naba_atm, supp
 
     ! Passed variables
@@ -2474,16 +2474,11 @@ hc2:    do
     character(len=*) :: stub
 
     ! Local variables
-    integer :: lun, nhund, ntens, nunit, n1, block, n_point, n_i, n
-    character(len=11) :: digitstr = "01234567890"
+    integer :: lun, block, n_point, n_i, n
     character(len=18) :: filename
 
     ! Build a filename based on node number
-    nhund = aint(real(inode/100))+1
-    n1 = inode - (100*nhund) + 100
-    ntens = aint(real(n1/10))+1
-    nunit = n1 - 10*ntens + 11
-    filename = stub//'den.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    call get_file_name(stub//'den',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -2533,6 +2528,7 @@ hc2:    do
     use datatypes
     use block_module, ONLY: n_pts_in_block
     use primary_module, ONLY: domain
+    use global_module, ONLY: numprocs
     !use set_blipgrid_module, ONLY: naba_atm, supp
 
     ! Passed variables
@@ -2540,16 +2536,11 @@ hc2:    do
     real(double), dimension(size) :: density
 
     ! Local variables
-    integer :: lun, nhund, ntens, nunit, n1, block, n_point, n_i, n
-    character(len=11) :: digitstr = "01234567890"
+    integer :: lun, block, n_point, n_i, n
     character(len=10) :: filename
 
     ! Build a filename based on node number
-    nhund = aint(real(inode/100))+1
-    n1 = inode - (100*nhund) + 100
-    ntens = aint(real(n1/10))+1
-    nunit = n1 - 10*ntens + 11
-    filename = 'chden.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    call get_file_name('chden',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -2603,24 +2594,19 @@ hc2:    do
     use group_module, ONLY: parts
     use matrix_data, ONLY: mat
     use cover_module, ONLY: BCS_parts
-    use global_module, ONLY: id_glob
+    use global_module, ONLY: id_glob, numprocs
 
     ! Passed variables
     integer :: inode, matA
     character(len=*) :: stub
 
     ! Local variables
-    integer :: lun, nhund, ntens, nunit, n1, element, nf1, nf2,len
+    integer :: lun, element, nf1, nf2,len
     integer :: np, ni, iprim,i, jsf, neigh, ist, gcspart,isf, Ah, globno
-    character(len=11) :: digitstr = "01234567890"
     character(len=15) :: filename
 
     ! Build a filename based on node number
-    nhund = aint(real(inode/100))+1
-    n1 = inode - (100*nhund) + 100
-    ntens = aint(real(n1/10))+1
-    nunit = n1 - 10*ntens + 11
-    filename = stub//'matrix.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    call get_file_name(stub//'matrix',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -2683,23 +2669,19 @@ hc2:    do
 
     use datatypes
     use mult_module, ONLY: store_matrix_value_pos, return_matrix_len
+    use global_module, ONLY: numprocs
 
     ! Passed variables
     integer :: inode, matA
     character(len=*) :: stub
 
     ! Local variables
-    integer :: lun, nhund, ntens, nunit, n1, element, nf1, nf2,len
+    integer :: lun, element, nf1, nf2,len
     real(double) :: val
-    character(len=11) :: digitstr = "01234567890"
     character(len=15) :: filename
 
     ! Build a filename based on node number
-    nhund = aint(real(inode/100))+1
-    n1 = inode - (100*nhund) + 100
-    ntens = aint(real(n1/10))+1
-    nunit = n1 - 10*ntens + 11
-    filename = stub//'matrix.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    call get_file_name(stub//'matrix',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -2745,6 +2727,7 @@ hc2:    do
 
     use datatypes
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
+    use global_module, ONLY: numprocs
 
     implicit none
     
@@ -2753,16 +2736,11 @@ hc2:    do
     character(len=*) :: stub
 
     ! Local variables
-    integer :: lun, nhund, ntens, nunit, n1, element, nf1, nf2
-    character(len=11) :: digitstr = "01234567890"
+    integer :: lun, element, nf1, nf2
     character(len=15) :: filename
 
     ! Build a filename based on node number
-    nhund = aint(real(inode/100))+1
-    n1 = inode - (100*nhund) + 100
-    ntens = aint(real(n1/10))+1
-    nunit = n1 - 10*ntens + 11
-    filename = stub//'grid.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    call get_file_name(stub//'grid',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -2804,6 +2782,7 @@ hc2:    do
 
     use datatypes
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
+    use global_module, ONLY: numprocs
 
     implicit none
 
@@ -2812,16 +2791,11 @@ hc2:    do
     character(len=*) :: stub
 
     ! Local variables
-    integer :: lun, nhund, ntens, nunit, n1, element, nf1, nf2
-    character(len=11) :: digitstr = "01234567890"
+    integer :: lun, element, nf1, nf2
     character(len=15) :: filename
 
     ! Build a filename based on node number
-    nhund = aint(real(inode/100))+1
-    n1 = inode - (100*nhund) + 100
-    ntens = aint(real(n1/10))+1
-    nunit = n1 - 10*ntens + 11
-    filename = stub//'grid.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    call get_file_name(stub//'grid',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -2864,6 +2838,7 @@ hc2:    do
   subroutine dump_locps(stub,locps,size,inode)
 
     use datatypes
+    use global_module, ONLY: numprocs
 
     ! Passed variables
     integer :: size, inode
@@ -2871,16 +2846,11 @@ hc2:    do
     character(len=*) :: stub
 
     ! Local variables
-    integer :: lun, nhund, ntens, nunit, n1, block, n_point, n_i, n
-    character(len=11) :: digitstr = "01234567890"
+    integer :: lun, block, n_point, n_i, n
     character(len=16) :: filename
 
     ! Build a filename based on node number
-    nhund = aint(real(inode/100))+1
-    n1 = inode - (100*nhund) + 100
-    ntens = aint(real(n1/10))+1
-    nunit = n1 - 10*ntens + 11
-    filename = 'locps'//stub//'.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    call get_file_name('locps'//stub,numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -2923,6 +2893,7 @@ hc2:    do
   subroutine grab_locps(stub,locps,size,inode)
 
     use datatypes
+    use global_module, ONLY: numprocs
 
     ! Passed variables
     integer :: size, inode
@@ -2930,16 +2901,11 @@ hc2:    do
     character(len=*) :: stub
 
     ! Local variables
-    integer :: lun, nhund, ntens, nunit, n1, block, n_point, n_i, n
-    character(len=11) :: digitstr = "01234567890"
+    integer :: lun, block, n_point, n_i, n
     character(len=16) :: filename
 
     ! Build a filename based on node number
-    nhund = aint(real(inode/100))+1
-    n1 = inode - (100*nhund) + 100
-    ntens = aint(real(n1/10))+1
-    nunit = n1 - 10*ntens + 11
-    filename = 'locps'//stub//'.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    call get_file_name('locps'//stub,numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -2980,22 +2946,18 @@ hc2:    do
   subroutine dump_projs(projs,size,inode)
 
     use datatypes
+    use global_module, ONLY: numprocs
 
     ! Passed variables
     integer :: size, inode
     real(double), dimension(size) :: projs
 
     ! Local variables
-    integer :: lun, nhund, ntens, nunit, n1, block, n_point, n_i, n
-    character(len=11) :: digitstr = "01234567890"
+    integer :: lun, block, n_point, n_i, n
     character(len=10) :: filename
 
     ! Build a filename based on node number
-    nhund = aint(real(inode/100))+1
-    n1 = inode - (100*nhund) + 100
-    ntens = aint(real(n1/10))+1
-    nunit = n1 - 10*ntens + 11
-    filename = 'projs.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    call get_file_name('projs',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -3036,22 +2998,18 @@ hc2:    do
   subroutine grab_projs(projs,size,inode)
 
     use datatypes
+    use global_module, ONLY: numprocs
 
     ! Passed variables
     integer :: size, inode
     real(double), dimension(size) :: projs
 
     ! Local variables
-    integer :: lun, nhund, ntens, nunit, n1, block, n_point, n_i, n
-    character(len=11) :: digitstr = "01234567890"
+    integer :: lun, block, n_point, n_i, n
     character(len=10) :: filename
 
     ! Build a filename based on node number
-    nhund = aint(real(inode/100))+1
-    n1 = inode - (100*nhund) + 100
-    ntens = aint(real(n1/10))+1
-    nunit = n1 - 10*ntens + 11
-    filename = 'projs.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    call get_file_name('projs',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -3093,22 +3051,18 @@ hc2:    do
   subroutine dump_blip_coeffs(data_blip,size,inode)
 
     use datatypes
+    use global_module, ONLY: numprocs
     
     ! Passed variables
     integer :: inode, size
     real(double) :: data_blip(size)
 
     ! Local variables
-    integer :: lun, nhund, ntens, nunit, n1, i,j,k, nf1, nf2
-    character(len=11) :: digitstr = "01234567890"
+    integer :: lun, i,j,k, nf1, nf2
     character(len=18) :: filename
 
     ! Build a filename based on node number
-    nhund = aint(real(inode/100))+1
-    n1 = inode - (100*nhund) + 100
-    ntens = aint(real(n1/10))+1
-    nunit = n1 - 10*ntens + 11
-    filename = 'blip_coeffs.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    call get_file_name('blip_coeffs',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -3150,22 +3104,18 @@ hc2:    do
   subroutine grab_blip_coeffs(data_blip,size,inode)
 
     use datatypes
+    use global_module, ONLY: numprocs
 
     ! Passed variables
     integer :: inode, size
     real(double) :: data_blip(size)
 
     ! Local variables
-    integer :: lun, nhund, ntens, nunit, n1, i,j,k, nf1, nf2
-    character(len=11) :: digitstr = "01234567890"
+    integer :: lun, i,j,k, nf1, nf2
     character(len=18) :: filename
 
     ! Build a filename based on node number
-    nhund = aint(real(inode/100))+1
-    n1 = inode - (100*nhund) + 100
-    ntens = aint(real(n1/10))+1
-    nunit = n1 - 10*ntens + 11
-    filename = 'blip_coeffs.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+    call get_file_name('blip_coeffs',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -3399,17 +3349,12 @@ hc2:    do
 
     ! Local variables
     integer :: nnd, np, ind_part, ni
-    integer :: lun, nhund, n1, ntens,nunit
+    integer :: lun
     character(len=20) :: filename
-    character(len=11) :: digitstr = "01234567890"
 
     if(num>0) then
        ! Build a filename based on iteration number
-       nhund = aint(real(num/100))+1
-       n1 = num - (100*nhund) + 100
-       ntens = aint(real(n1/10))+1
-       nunit = n1 - 10*ntens + 11
-       filename = "make_prt.out_"//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)
+       call get_file_name('make_prt.out',4,num,filename)
     else
        filename = "make_prt.out"
     end if
@@ -3448,7 +3393,6 @@ hc2:    do
     return
   end subroutine write_positions
 !!***
-end module io_module
 
 ! Hopefully we'll never need this kludgy but portable way of flushing buffers !
 !  subroutine force_buffers(lun)
@@ -3476,3 +3420,64 @@ end module io_module
 !    end if
 !    return
 !  end subroutine force_buffers
+
+!!****f* io_module/get_file_name *
+!!
+!!  NAME
+!!   get_file_name - creates a file name with a process number in it
+!!  USAGE
+!!   get_file_name(fileroot,numprocs,inode,filename)
+!!  PURPOSE
+!!   Returns a file name with proper formating, including 
+!!   node identification number an zero padding to reflect 
+!!   the total number of processes. It appends a dot after the root
+!!  INPUTS
+!!   character(lem=*) :: fileroot  ! The root of the filename, e.g. chden
+!!   integer :: numprocs           ! Number of processes; determines zero padding
+!!   integer :: inode              ! Who am I ?
+!!  OUTPUTS
+!!   character(len=*) :: filanem   ! The formatted filename
+!!  USES
+!!
+!!  AUTHOR
+!!   A.S. Torralba
+!!  CREATION DATE
+!!   23/07/2009
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine get_file_name(fileroot,numprocs,inode,filename)
+
+    use datatypes
+
+    implicit none
+
+    ! Passed variables
+    character(len=*), intent(in) :: fileroot
+    integer, intent(in) :: numprocs
+    integer, intent(in) :: inode
+    character(len=*), intent(out) :: filename
+
+    ! Parameters
+    integer, parameter :: maxlen=80
+
+    ! Local variables
+    integer :: i
+    integer :: padzeros
+    character(len=maxlen) :: num
+
+    if(LEN_TRIM(fileroot)+1 > maxlen)                         call cq_abort('get_file_name: error : string overflow')
+    filename=TRIM(fileroot)//'.'
+    padzeros=MAX(3,FLOOR(1.0+LOG10(REAL(numprocs,kind=double))))-FLOOR(1.0+LOG10(REAL(inode,kind=double)))
+    write(num,'(i80)') inode
+    num=ADJUSTL(num)
+    if(LEN_TRIM(fileroot)+padzeros+LEN_TRIM(num)+1 > maxlen)  call cq_abort('get_file_name: error : string overflow')
+    do i=1,padzeros
+      filename=TRIM(filename)//'0'
+    end do
+    filename=TRIM(filename)//num
+  end subroutine get_file_name
+!!***
+end module io_module
+

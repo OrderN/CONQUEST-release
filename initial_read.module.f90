@@ -291,6 +291,10 @@ contains
 !!    New keywords for timers
 !!   2009/07/08 16:47 dave
 !!    Added keyword for one-to-one PAO to SF assigment
+!!   2009/07/23 ast
+!!    More general routine to name timer files, so that they are not 
+!!    to a maximum number of processes, as it was the case before,
+!!    with only three figures (max. 999 processes)
 !!  TODO
 !!   Think about single node read and broadcast 10/05/2002 dave
 !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
@@ -312,7 +316,7 @@ contains
          iprint_init, iprint_mat, iprint_ops, iprint_DM, iprint_SC, iprint_minE, iprint_time, &
          iprint_MD, iprint_index, iprint_gen, iprint_pseudo, iprint_basis, iprint_intgn, area_general, &
          global_maxatomspart, load_balance, many_processors, flag_assign_blocks, io_lun, &
-         flag_pulay_simpleStep, flag_global_tolerance
+         flag_pulay_simpleStep, flag_global_tolerance, numprocs
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff, &
          n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport, NonLocalFactor, InvSRange, min_blip_sp, &
          flag_buffer_old, AtomMove_buffer
@@ -341,7 +345,7 @@ contains
     use read_pao_info, ONLY: pao_info_file, pao_norm_flag
     use read_support_spec, ONLY: support_spec_file, flag_read_support_spec
     use test_force_module, ONLY: flag_test_all_forces, flag_which_force, TF_direction, TF_atom_moved, TF_delta
-    use io_module, ONLY: pdb_format, pdb_altloc, append_coords, pdb_output, banner
+    use io_module, ONLY: pdb_format, pdb_altloc, append_coords, pdb_output, banner, get_file_name
     use group_module, ONLY : part_method, HILBERT, PYTHON
     use energy, ONLY: flag_check_DFT
     use H_matrix_module, ONLY: locps_output, locps_choice
@@ -365,11 +369,9 @@ contains
     !type(parsed_line), pointer :: p ! Pointer to a line broken into tokens by fdf
 
     integer :: i, j, k, lun, stat
-    integer :: nhund, ntens, nunit, n1
     character(len=20) :: def
     character(len=80) :: coordfile, timefile, timefileroot
     character(len=10) :: basis_string, part_mode, tmp2
-    character(len=11) :: digitstr = "01234567890"
     character(len=6)  :: method ! To find whether we diagonalise or use O(N)
     character(len=5)  :: ps_type !To find which pseudo we use
     character(len=8)  :: tmp
@@ -413,11 +415,7 @@ contains
        if(fdf_boolean('IO.TimeAllProcessors',.false.)) then                                                             ! tmr_rmv001
           TimersWriteOut = .true.                                                                                       ! tmr_rmv001
           timefileroot = fdf_string(80,'IO.TimeFileRoot',"time")                                                        ! tmr_rmv001
-          nhund = aint(real(inode/100))+1                                                                               ! tmr_rmv001
-          n1 = inode - (100*nhund) + 100                                                                                ! tmr_rmv001
-          ntens = aint(real(n1/10))+1                                                                                   ! tmr_rmv001
-          nunit = n1 - 10*ntens + 11                                                                                    ! tmr_rmv001
-          timefile = trim(timefileroot)//'.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit)       ! tmr_rmv001
+          call get_file_name(timefileroot,numprocs,inode,timefile)                                                      ! tmr_rmv001
           call io_assign(lun_tmr)                                                                                       ! tmr_rmv001
           open(unit=lun_tmr,file=timefile,iostat=stat)                                                                  ! tmr_rmv001
           if(stat/=0) call cq_abort("Failed to open time file",stat)                                                    ! tmr_rmv001
@@ -427,11 +425,7 @@ contains
              TimersWriteOut = .true.                                                                                    ! tmr_rmv001
              if(fdf_boolean('IO.WriteTimeFile',.true.)) then                                                            ! tmr_rmv001
                 timefileroot = fdf_string(80,'IO.TimeFileRoot',"time")                                                  ! tmr_rmv001
-                nhund = aint(real(inode/100))+1                                                                         ! tmr_rmv001
-                n1 = inode - (100*nhund) + 100                                                                          ! tmr_rmv001
-                ntens = aint(real(n1/10))+1                                                                             ! tmr_rmv001
-                nunit = n1 - 10*ntens + 11                                                                              ! tmr_rmv001
-                timefile = trim(timefileroot)//'.'//digitstr(Nhund:Nhund)//digitstr(Ntens:Ntens)//digitstr(Nunit:Nunit) ! tmr_rmv001
+                call get_file_name(timefileroot,numprocs,inode,timefile)                                                ! tmr_rmv001
                 call io_assign(lun_tmr)                                                                                 ! tmr_rmv001
                 open(unit=lun_tmr,file=timefile,iostat=stat)                                                            ! tmr_rmv001
                 if(stat/=0) call cq_abort("Failed to open time file",stat)                                              ! tmr_rmv001

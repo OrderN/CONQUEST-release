@@ -1094,7 +1094,7 @@ contains
          &real_cell_vec(2,2)*real_cell_vec(3,1))
     ewald_real_cell_volume = abs(ewald_real_cell_volume)
     if(inode==ionode.AND.iprint_gen>1) &
-         write(io_lun,fmt='(/8x," volume of real-space cell:",f12.6)') ewald_real_cell_volume
+         write(io_lun,fmt='(/8x," volume of real-space cell:",f19.6)') ewald_real_cell_volume
 
     ! --- quantities needed for calculation of Ewald gamma, and real_space and recip-space cutoffs
     total_charge = zero

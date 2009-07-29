@@ -291,7 +291,7 @@ contains
     enddo
     call my_barrier()
     if(inode==ionode) &
-         write(io_lun,fmt='(4x,"Maximum force : ",f15.8,"(",a2,"/",a2,") on atom, component ",2i5)') &
+         write(io_lun,fmt='(4x,"Maximum force : ",f15.8,"(",a2,"/",a2,") on atom, component ",2i9)') &
          for_conv*max_force, en_units(energy_units), d_units(dist_units), max_atom, max_compt
     if(inode==ionode.AND.iprint_MD>1.AND.write_forces) write(io_lun,fmt='(4x,"Finished force")')
     call start_timer(tmr_std_allocation)
@@ -300,7 +300,7 @@ contains
     call reg_dealloc_mem(area_moveatoms, 5*3*ni_in_cell,type_dbl)
     call stop_timer(tmr_std_allocation)
     return
-101 format('Force on atom ',i4)
+101 format('Force on atom ',i9)
 102 format('Force H-F  : ',3f15.10)
 112 format('Force H-Fnl: ',3f15.10)
 103 format('Force pulay: ',3f15.10)

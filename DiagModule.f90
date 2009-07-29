@@ -1124,17 +1124,17 @@ contains
     deallocate(sendlist,STAT=stat)
     if(stat/=0) call cq_abort("DiagModule: Failed to alloc sendto",stat)
     return
-1   format(10x,'Processor: ',i5,' Partition: ',i5)
-2   format(10x,'Processor: ',i5,' Atom: ',i5)
-3   format(10x,'Processor: ',i5,' Neighbour: ',i5)
-4   format(10x,'Processor: ',i5,' Recv: ',i5,' SC blocks: ',2i5)
-5   format(10x,'Processor: ',i5,' FSC part, seq: ',2i5)
-6   format(10x,'Processor: ',i5,' Neigh xyz: ',3f15.10)
-7   format(10x,'Processor: ',i5,' Recv Proc: ',i5,' PS Atom j,k,loc: ',5i5,' dr: ',3f10.5)
-8   format(10x,'Processor: ',i5,' Recv Proc: ',i5,' First row, col: ',2i5)
-9   format(10x,'Processor: ',i5,' Recv Proc: ',i5,' SC block, atom, size: ',3i5,' firstcol: ',i5)
-10  format(10x,'Processor: ',i5,' Maxr,c: ',2i5,' Maxrow,col: ',2i5)
-11  format(10x,'Processor: ',i5,' PrepSend to : ',i5,' Atom, Supfn: ',2i5)
+1   format(10x,'Processor: ',i7,' Partition: ',i5)
+2   format(10x,'Processor: ',i7,' Atom: ',i9)
+3   format(10x,'Processor: ',i7,' Neighbour: ',i5)
+4   format(10x,'Processor: ',i7,' Recv: ',i5,' SC blocks: ',2i5)
+5   format(10x,'Processor: ',i7,' FSC part, seq: ',2i5)
+6   format(10x,'Processor: ',i7,' Neigh xyz: ',3f15.10)
+7   format(10x,'Processor: ',i7,' Recv Proc: ',i7,' PS Atom j,k,loc: ',5i5,' dr: ',3f10.5)
+8   format(10x,'Processor: ',i7,' Recv Proc: ',i7,' First row, col: ',2i5)
+9   format(10x,'Processor: ',i7,' Recv Proc: ',i7,' SC block, atom, size: ',3i5,' firstcol: ',i5)
+10  format(10x,'Processor: ',i7,' Maxr,c: ',2i5,' Maxrow,col: ',2i5)
+11  format(10x,'Processor: ',i7,' PrepSend to : ',i7,' Atom, Supfn: ',2i9)
   end subroutine PrepareSend
 !!***
 
