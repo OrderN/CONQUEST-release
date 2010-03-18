@@ -83,6 +83,8 @@ contains
 !!    Added call to allow calculation of derivative of S wrt PAO coefficient
 !!   2008/05/22 ast
 !!    Added timer
+!!   2009/10/27 07:10 dave
+!!    Analytic on-site integrals added
 !!  TODO
 !!    Find out why on-site evaluation gave problems
 !!  SOURCE
@@ -91,7 +93,7 @@ contains
 
     use datatypes
     use global_module, only: iprint_ops, flag_basis_set, blips, PAOs, flag_vary_basis, &
-                             ni_in_cell, IPRINT_TIME_THRES1
+                             ni_in_cell, IPRINT_TIME_THRES1, flag_onsite_blip_ana
     use matrix_data, ONLY: Srange
     use mult_module, ONLY: matS, matdS
     use set_bucket_module, ONLY: rem_bucket
@@ -104,6 +106,8 @@ contains
     use functions_on_grid, ONLY: supportfns
     use io_module, ONLY: dump_matrix
     use timer_module, ONLY: cq_timer, start_timer, stop_print_timer, WITH_LEVEL
+    use support_spec_format, ONLY: supports_on_atom
+    use species_module, ONLY: nsf_species
 
     implicit none
 
@@ -111,7 +115,7 @@ contains
     integer :: inode, ionode
     
     ! Local variables
-    integer :: np, ni, iprim
+    integer :: np, ni, iprim, spec, this_nsf
     type(cq_timer) :: tmr_l_tmp1
 
     call start_timer(tmr_std_smatrix)
@@ -125,18 +129,19 @@ contains
        ! Integrate
        call get_matrix_elements_new(inode-1,rem_bucket(1),matS,supportfns,supportfns)
        ! Do the onsite elements analytically
-       ! iprim=0
-       !    if(flag_basis_set==blips) then
-       !       do np=1,bundle%groups_on_node
-       !          if(bundle%nm_nodgroup(np) > 0) then
-       !             do ni=1,bundle%nm_nodgroup(np)
-       !                iprim=iprim+1
-       !                call get_onsite_S(data_blip(1,1,iprim), data_S(1,1,mat(np,Srange)%onsite(ni)), &
-       !                     inode, ionode,nsf_species(bundle%speices(iprim), MAX_N_BLIPS)
-       !             end do
-       !          end if
-       !       end do
-       !    end if
+       if(flag_onsite_blip_ana) then
+          iprim=0
+          do np=1,bundle%groups_on_node
+             if(bundle%nm_nodgroup(np) > 0) then
+                do ni=1,bundle%nm_nodgroup(np)
+                   iprim=iprim+1
+                   spec = bundle%species(iprim)
+                   this_nsf = nsf_species(spec)
+                   call get_onsite_S(supports_on_atom(iprim), matS, np, ni, iprim, this_nsf, spec)
+                end do
+             end if
+          end do
+       end if
     else if(flag_basis_set==PAOs) then
        ! Get S matrix with assemble
        if(flag_vary_basis) then
@@ -462,11 +467,11 @@ contains
 !!  CREATION DATE
 !!   16:03, 04/02/2003 drb 
 !!  MODIFICATION HISTORY
-!! 
+!!   2009/10/27 07:10 dave
+!!    Correctly coded
 !!  SOURCE
 !!
-  subroutine get_onsite_S(blip_co, resulting_submatrix, &
-       inode, ionode,this_nsf, spec)
+  subroutine get_onsite_S(blip_co, matS, np, nn, ip, this_nsf, spec)
 
     use datatypes
     use numbers
@@ -474,26 +479,27 @@ contains
     use blip, ONLY: blip_info, BlipArraySize, OneArraySize, FullArraySize, SupportGridSpacing
     use support_spec_format, ONLY: support_function
     use GenComms, ONLY: cq_abort
+    use mult_module, ONLY: store_matrix_value, scale_matrix_value, return_matrix_value
 
     implicit none
 
     ! Shared Variables
-    integer :: this_nsf, spec, inode, ionode
+    integer :: this_nsf, spec, np, nn, ip, matS
 
     type(support_function) :: blip_co
-    real(double) :: resulting_submatrix(this_nsf,this_nsf)
+
     ! Local Variables
     integer, parameter :: MAX_D = 3
 
-    real(double) ::  FAC(0:MAX_D), D2FAC(0:MAX_D)
+    real(double) ::  FAC(0:MAX_D)
 
     real(double), allocatable, dimension(:) :: work1, work2, work3, work4, work5, work6
+    real(double) :: temp(this_nsf,this_nsf)
 
-    integer :: dx, dy, dz, offset, l, at, nsf1, stat
+    integer :: dx, dy, dz, offset, l, at, nsf1, stat, i1, i2
 
-    allocate(work1(FullArraySize(spec)*this_nsf),work2(FullArraySize(spec)*this_nsf),work3(FullArraySize(spec)*this_nsf), &
-         work4(FullArraySize(spec)*this_nsf),work5(FullArraySize(spec)*this_nsf),work6(FullArraySize(spec)*this_nsf), &
-         STAT=stat)
+    allocate(work1(FullArraySize(spec)*this_nsf),work2(FullArraySize(spec)*this_nsf), &
+         work4(FullArraySize(spec)*this_nsf),work6(FullArraySize(spec)*this_nsf), STAT=stat)
     if(stat/=0) call cq_abort("Error allocating arrays for onsite S elements: ",FullArraySize(spec),this_nsf)
     ! first, we copy the blip functions for this atom onto a cubic grid;
     ! we make this grid 'too big' in order to have a fast routine below.
@@ -502,10 +508,6 @@ contains
     FAC(1) = 1191.0_double/2240.0_double
     FAC(2) = 3.0_double/56.0_double
     FAC(3) = 1.0_double/2240.0_double
-    D2FAC(0) = 3.0_double/2.0_double
-    D2FAC(1) = -9.0_double/32.0_double
-    D2FAC(2) = -18.0_double/40.0_double
-    D2FAC(3) = -3.0_double/160.0_double
 
     work1 = zero
     offset = BlipArraySize(spec)+1
@@ -539,17 +541,6 @@ contains
             work1(1+offset:), 1, work2(1:), 1 )
     end do
 
-!    call copy(FullArraySize(spec)*this_nsf,work1,1,work3,1)
-!    call scal(FullArraySize(spec)*this_nsf,FAC(0),work3,1)
-!    do dz = 1, MAX_D
-!       offset = dz * OneArraySize(spec) * OneArraySize(spec) * this_nsf
-!       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dz), &
-!            work1(1:), 1, work3(1+offset:), 1 )
-!       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dz), &
-!            work1(1+offset:), 1, work3(1:), 1 )
-!    end do
-
-
     ! now do y : put blip(y).blip(z) in 4,
     ! blip(y).del2blip(z) + del2blip(y).blip(z)  in 5
 
@@ -563,36 +554,6 @@ contains
             work2(1+offset:), 1, work4(1:), 1 )
     end do
 
-!    call copy(FullArraySize(spec)*this_nsf,work2,1,work5,1)
-!    call scal(FullArraySize(spec)*this_nsf,FAC(0),work5,1)
-!    do dy = 1, MAX_D
-!       offset = dy * OneArraySize(spec) * this_nsf
-!       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dy), &
-!            work2(1:), 1, work5(1+offset:), 1 )
-!       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dy), &
-!            work2(1+offset:), 1, work5(1:), 1 )
-!    end do
-
-!    call axpy(FullArraySize(spec)*this_nsf,FAC(0),work3,1,work5,1)
-!    do dy = 1, MAX_D
-!       offset = dy * OneArraySize(spec) * this_nsf
-!       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dy), &
-!            work3(1:), 1, work5(1+offset:), 1 )
-!       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dy), &
-!            work3(1+offset:), 1, work5(1:), 1 )
-!    end do
-!
-!    ! and x - put it all into 6
-!
-!    call copy(FullArraySize(spec)*this_nsf,work5,1,work6,1)
-!    call scal(FullArraySize(spec)*this_nsf,FAC(0),work6,1)
-!    do dx = 1, MAX_D
-!       offset = dx * this_nsf
-!       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dx), &
-!            work5(1:), 1, work6(1+offset:), 1 )
-!       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dx), &
-!            work5(1+offset:), 1, work6(1:), 1 )
-!    end do
     work6 = zero
     call axpy(FullArraySize(spec)*this_nsf,FAC(0),work4,1,work6,1)
     do dx = 1, MAX_D
@@ -605,10 +566,17 @@ contains
 
     ! and now get the matrix elements by multiplication...
 
+    temp = zero
     call gemm('n','t',this_nsf,this_nsf,OneArraySize(spec)*OneArraySize(spec)*OneArraySize(spec), &
-         one,work1,this_nsf,work6,this_nsf,zero,resulting_submatrix,this_nsf )
-    call scal(this_nsf*this_nsf,SupportGridSpacing(spec),resulting_submatrix,1)
-    deallocate(work1,work2,work3, work4,work5,work6, STAT=stat)
+         one,work1,this_nsf,work6,this_nsf,zero,temp,this_nsf )
+    do i1 = 1,this_nsf
+       do i2=1,this_nsf
+          call scale_matrix_value(matS,np,nn,ip,0,i2,i1,zero,1)
+          call store_matrix_value(matS,np,nn,ip,0,i2,i1, &
+               SupportGridSpacing(spec)*SupportGridSpacing(spec)*SupportGridSpacing(spec)*temp(i2,i1),1)
+       end do
+    end do
+    deallocate(work1,work2, work4,work6, STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating arrays for onsite S blip elements: ",FullArraySize(spec),this_nsf)
     return
   end subroutine get_onsite_S

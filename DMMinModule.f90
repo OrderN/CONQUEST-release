@@ -449,6 +449,8 @@ contains
 !!    Removed dsqrt
 !!   2009/07/08 16:41 dave
 !!    Introduced atom-based tolerance (just divide by ni_in_cell)
+!!   2010/03/18 14:08 dave
+!!    Added code for mixed L and SCF minimisation
 !!  SOURCE
 !!
   subroutine lateDM(ndone, n_L_iterations, done, deltaE, &
@@ -463,9 +465,13 @@ contains
     use Pulay
     use PosTan, ONLY: PulayR, PulayE, max_iters
     use GenComms, ONLY: cq_abort, gsum
-    use global_module, ONLY: iprint_DM,IPRINT_TIME_THRES1,ni_in_cell, flag_global_tolerance
+    use global_module, ONLY: iprint_DM,IPRINT_TIME_THRES1,ni_in_cell, flag_global_tolerance, flag_mix_L_SC_min
     use timer_module, ONLY: cq_timer,start_timer, stop_print_timer, WITH_LEVEL
     use io_module, ONLY: dump_matrix
+    use functions_on_grid, ONLY: supportfns, H_on_supportfns
+    use H_matrix_module, ONLY: get_H_matrix
+    use density_module, ONLY: density, get_electronic_density
+    use maxima_module, ONLY: maxngrid
 
     implicit none
 
@@ -499,6 +505,13 @@ contains
     !if (vary_mu) then
     !   call correct_electron_number( iprint_DM, number_of_bands,inode, ionode)
     !endif
+    ! Update the charge density if flag is set
+    if(flag_mix_L_SC_min) then
+       call LNV_matrix_multiply(electrons, energy1, &
+            doK, dontM1, dontM2, dontM3, dontM4, dophi, doE,0,matM3,0,matphi  )
+       call get_electronic_density(density, electrons, supportfns, H_on_supportfns, inode, ionode, maxngrid)
+       call get_H_matrix(.true.,.false.,electrons,density,maxngrid)
+    end if
     ! Get the gradient at the starting point (?)
     call LNV_matrix_multiply(electrons, energy0, &
          dontK, dontM1, dontM2, doM3, dontM4, dophi, doE,0,matM3,0,matphi  )
@@ -604,6 +617,12 @@ contains
        if (vary_mu) then
           call correct_electron_number( iprint_DM, number_of_bands,inode, ionode)
        endif
+       if(flag_mix_L_SC_min) then
+          call LNV_matrix_multiply(electrons, energy1, &
+               doK, dontM1, dontM2, dontM3, dontM4, dophi, doE,0,matM3,0,matphi  )
+          call get_electronic_density(density, electrons, supportfns, H_on_supportfns, inode, ionode, maxngrid)
+          call get_H_matrix(.true.,.false.,electrons,density,maxngrid)
+       end if
        ! re-evaluate the gradient and energy at new position
        call LNV_matrix_multiply(electrons, energy1, &
             dontK, dontM1, dontM2, doM3, dontM4, dophi, doE,0,matM3,0,matphi  )
@@ -654,7 +673,7 @@ contains
           end do
           call stop_print_timer(tmr_l_iter,"a lateDM iteration",IPRINT_TIME_THRES1)
           return
-       else if(g1>2.0_double*g0) then
+       else if((.NOT.flag_mix_L_SC_min).AND.(g1>2.0_double*g0)) then
           if(inode==ionode) write(io_lun,*) 'Panic ! Residual increase in lateDM'
           if(inode==ionode) write(io_lun,*) 'Final energy and residual: ',energy1,g1
           ndone = n_iter

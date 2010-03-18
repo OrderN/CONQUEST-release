@@ -1,1 +1,1 @@
-  character(len=*), parameter :: commentver="Version beta 0.33 (r78): File names valid for any number of processes, 20090729"
+  character(len=*), parameter :: commentver="beta 0.34 (r79): Switch for analytic onsites, mixed L and SC minimisation 20100318"

@@ -22,6 +22,8 @@
 !!    matrix routines
 !!   2008/05/25 ast
 !!    Added timers
+!!   26/10/09 drb
+!!    Various changes to allow selection of on-site analytics or not
 !!  SOURCE
 !!
 module blip_gradient
@@ -80,6 +82,8 @@ contains
 !!    Use temporary support fn on grid
 !!   2008/05/25 ast
 !!    Added timers
+!!   2009/10/27 07:12 dave
+!!    Added flag for on-site analytic elements
 !!  SOURCE
 !!
   subroutine get_blip_gradient(inode, ionode)
@@ -88,8 +92,8 @@ contains
     use numbers
     use dimens, ONLY: grid_point_volume
     use primary_module, ONLY : bundle
-    use matrix_data, ONLY : mat, Hrange
-    use mult_module, ONLY: matK, scale_matrix_value, return_matrix_block_pos
+    use matrix_data, ONLY : mat, Hrange, Srange
+    use mult_module, ONLY: matK, matM12, scale_matrix_value, return_matrix_block_pos
     use GenBlas, ONLY: scal, copy
     use pseudopotential_data, ONLY: non_local
     use support_spec_format, ONLY: supports_on_atom, support_gradient
@@ -99,7 +103,7 @@ contains
     use blip_grid_transform_module, ONLY: blip_to_grad_new,&
          inverse_blip_transform_new,&
          inverse_blip_to_grad_new
-    use global_module, ONLY: WhichPulay, BothPulay, sf
+    use global_module, ONLY: WhichPulay, BothPulay, sf, flag_onsite_blip_ana
     use functions_on_grid, ONLY: H_on_supportfns, gridfunctions, fn_on_grid, &
          allocate_temp_fn_on_grid, free_temp_fn_on_grid
 
@@ -137,6 +141,33 @@ contains
     ! so use workspace2_support as working area...
     ! This returns the support_gradient in workspace_support
     WhichPulay = BothPulay
+    ! Do on-site if we have this
+    if(flag_onsite_blip_ana) then
+       i = 1
+       this_nsf = nsf_species(bundle%species(i))
+       allocate(this_data_K(this_nsf,this_nsf))
+       call start_timer(tmr_std_matrices)
+       do np = 1, bundle%groups_on_node
+          do nn = 1,bundle%nm_nodgroup(np)
+             if(nsf_species(bundle%species(i))/=this_nsf) then
+                deallocate(this_data_K)
+                this_nsf = nsf_species(bundle%species(i))
+                allocate(this_data_K(this_nsf,this_nsf))
+             end if
+             this_data_K = zero
+             call return_matrix_block_pos(matM12,mat(np,Srange)%onsite(nn),this_data_K,this_nsf*this_nsf)
+             call get_onsite_S_gradient( supports_on_atom(i),this_data_K, support_gradient(i), this_nsf, bundle%species(i))
+             do n1 = 1,this_nsf
+                do n2 = 1,this_nsf
+                   call scale_matrix_value(matM12,np,nn,i,0,n1,n2,zero,1)
+                end do
+             end do
+             i = i+1
+          enddo
+       end do
+       call stop_timer(tmr_std_matrices)
+       deallocate(this_data_K)
+    end if
     call get_support_gradient( inode, ionode)
 
     ! now we need to accumulate the 'type 1' gradient of the non-local energy
@@ -153,38 +184,40 @@ contains
 
     ! Kinetic Energy; first, the change in onsite T matrix elements,
     ! and as we do so, clear the diagonal blocks of data K
-    i = 1
-    this_nsf = bundle%species(1)
-    call start_timer(tmr_std_allocation)
-    allocate(this_data_K(this_nsf,this_nsf))
-    call stop_timer(tmr_std_allocation)
-    call start_timer(tmr_std_matrices)
-    do np = 1, bundle%groups_on_node
-       do nn = 1,bundle%nm_nodgroup(np)
-          if(nsf_species(bundle%species(i))/=this_nsf) then
-             call start_timer(tmr_std_allocation)
-             deallocate(this_data_K)
-             call stop_timer(tmr_std_allocation)
-             this_nsf = nsf_species(bundle%species(i))
-             call start_timer(tmr_std_allocation)
-             allocate(this_data_K(this_nsf,this_nsf))
-             call stop_timer(tmr_std_allocation)
-          end if
-          this_data_K = zero
-          call return_matrix_block_pos(matK,mat(np,Hrange)%onsite(nn),this_data_K,this_nsf*this_nsf)
-          call get_onsite_KE_gradient( supports_on_atom(i),this_data_K, support_gradient(i), this_nsf, bundle%species(i))
-          do n1 = 1,this_nsf
-             do n2 = 1,this_nsf
-                call scale_matrix_value(matK,np,nn,i,0,n1,n2,zero,1)
+    if(flag_onsite_blip_ana) then
+       i = 1
+       this_nsf = nsf_species(bundle%species(i))
+       call start_timer(tmr_std_allocation)
+       allocate(this_data_K(this_nsf,this_nsf))
+       call stop_timer(tmr_std_allocation)
+       call start_timer(tmr_std_matrices)
+       do np = 1, bundle%groups_on_node
+          do nn = 1,bundle%nm_nodgroup(np)
+             if(nsf_species(bundle%species(i))/=this_nsf) then
+                call start_timer(tmr_std_allocation)
+                deallocate(this_data_K)
+                call stop_timer(tmr_std_allocation)
+                this_nsf = nsf_species(bundle%species(i))
+                call start_timer(tmr_std_allocation)
+                allocate(this_data_K(this_nsf,this_nsf))
+                call stop_timer(tmr_std_allocation)
+             end if
+             this_data_K = zero
+             call return_matrix_block_pos(matK,mat(np,Hrange)%onsite(nn),this_data_K,this_nsf*this_nsf)
+             call get_onsite_KE_gradient( supports_on_atom(i),this_data_K, support_gradient(i), this_nsf, bundle%species(i))
+             do n1 = 1,this_nsf
+                do n2 = 1,this_nsf
+                   call scale_matrix_value(matK,np,nn,i,0,n1,n2,zero,1)
+                end do
              end do
-          end do
-          i = i+1
-       enddo
-    end do
-    call stop_timer(tmr_std_matrices)
-    call start_timer(tmr_std_allocation)
-    deallocate(this_data_K)
-    call stop_timer(tmr_std_allocation)
+             i = i+1
+          enddo
+       end do
+       call stop_timer(tmr_std_matrices)
+       call start_timer(tmr_std_allocation)
+       deallocate(this_data_K)
+       call stop_timer(tmr_std_allocation)
+    end if
     ! Now, for the offsite part, done one the integration grid.
     ! to do the KE bit we need to blip_to_grad transform, act with K,
     ! and inverse_blip_grad_transform back (this routine ACCUMULATES onto
@@ -672,6 +705,169 @@ contains
     call stop_timer(tmr_std_allocation)
     return
   end subroutine get_onsite_KE_gradient
+!!***
+
+
+!!****f* blip_gradient/get_onsite_S_gradient *
+!!
+!!  NAME 
+!!   get_onsite_S_gradient
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   This routine accumulates onto the blip gradient the derivative in
+!!   energy due to the change in onsite S wrt the blip coefficients
+!!  INPUTS
+!! 
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler
+!!  CREATION DATE
+!!   26/10/09
+!!  MODIFICATION HISTORY
+!!   
+!!  SOURCE
+!!
+  subroutine get_onsite_S_gradient( this_data_blip,this_data_M,this_blip_grad, this_nsf, spec)
+
+    use datatypes
+    use numbers
+    use GenBlas, ONLY: axpy, copy, scal
+    use blip, ONLY: blip_info, BlipArraySize, OneArraySize, FullArraySize, SupportGridSpacing
+    use support_spec_format, ONLY: support_function
+    use GenComms, ONLY: cq_abort
+    use global_module, ONLY: area_minE
+    use memory_module, ONLY: reg_alloc_mem, type_dbl, reg_dealloc_mem
+
+    implicit none
+
+    ! Passed Variables
+    integer :: this_nsf, spec
+
+    real(double) :: this_data_M(this_nsf*this_nsf) ! N.B. Here NSF is for ONE site only so is OK
+    type(support_function) :: this_data_blip, this_blip_grad
+
+    ! Local Variables
+
+    integer, parameter :: MAX_D=3
+
+    real(double) ::  FAC(0:MAX_D)
+
+    real(double), allocatable, dimension(:) :: work1, work2, work4, work6
+
+    integer :: dx, dy, dz, offset, l, at, nsf1, nsf2, stat
+    real(double) :: sum
+
+    call start_timer(tmr_std_allocation)
+    allocate(work1(FullArraySize(spec)*this_nsf),work2(FullArraySize(spec)*this_nsf),&
+         work4(FullArraySize(spec)*this_nsf),work6(FullArraySize(spec)*this_nsf), STAT=stat)
+    work1 = zero
+    work2 = zero
+    work4 = zero
+    work6 = zero
+    if(stat/=0) call cq_abort("Error allocating arrays for onsite KE blip grad: ",FullArraySize(spec),this_nsf)
+    call reg_alloc_mem(area_minE,4*FullArraySize(spec)*this_nsf,type_dbl)
+    call stop_timer(tmr_std_allocation)
+    ! first, we copy the blip functions for this atom onto a cubic grid;
+    ! we make this grid 'too big' in order to have a fast routine below.
+    !
+    ! To get gradients, we start by acting with the K matrix upon the
+    ! coefficients
+
+    FAC(0) = 151.0_double/140.0_double
+    FAC(1) = 1191.0_double/2240.0_double
+    FAC(2) = 3.0_double/56.0_double
+    FAC(3) = 1.0_double/2240.0_double
+
+    work1 = zero
+    offset = BlipArraySize(spec)+1
+
+    do dx = -BlipArraySize(spec), BlipArraySize(spec)
+       do dy = -BlipArraySize(spec), BlipArraySize(spec)
+          do dz = -BlipArraySize(spec), BlipArraySize(spec)
+             l = blip_info(spec)%blip_number(dx,dy,dz)
+             if (l.ne.0) then
+                at = (((dz+offset)*OneArraySize(spec) + (dy+offset))*OneArraySize(spec) + &
+                     (dx+offset)) * this_nsf
+                do nsf1 = 1,this_nsf
+                   work1(nsf1+at) = zero
+                   do nsf2 = 1,this_nsf
+                      work1(nsf1+at) = work1(nsf1+at) + &
+                           this_data_M((nsf2-1)*this_nsf+nsf1)*this_data_blip%supp_func(nsf2)%coefficients(l)
+                   enddo
+                enddo
+             end if
+          end do
+       end do
+    end do
+
+    ! now, for each direction in turn, we need to apply a number of
+    ! 'spreading operations'. Do z first... put blip(z) in 2, and
+    ! del2blip(z) in 3
+
+    call copy(FullArraySize(spec)*this_nsf,work1,1,work2,1)
+    call scal(FullArraySize(spec)*this_nsf,FAC(0),work2,1)
+    do dz = 1, MAX_D
+       offset = dz * OneArraySize(spec) * OneArraySize(spec) * this_nsf
+       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dz), &
+            work1(1:), 1, work2(1+offset:), 1 )
+       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dz), &
+            work1(1+offset:), 1, work2(1:), 1 )
+    end do
+
+    ! now do y : put blip(y).blip(z) in 4,
+
+    call copy(FullArraySize(spec)*this_nsf,work2,1,work4,1)
+    call scal(FullArraySize(spec)*this_nsf,FAC(0),work4,1)
+    do dy = 1, MAX_D
+       offset = dy * OneArraySize(spec) * this_nsf
+       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dy), &
+            work2(1:), 1, work4(1+offset:), 1 )
+       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dy), &
+            work2(1+offset:), 1, work4(1:), 1 )
+    end do
+
+    ! and x - put it all into 6
+
+    call copy(FullArraySize(spec)*this_nsf,work4,1,work6,1)
+    call scal(FullArraySize(spec)*this_nsf,FAC(0),work6,1)
+    do dx = 1, MAX_D
+       offset = dx * this_nsf
+       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dx), &
+            work4(1:), 1, work6(1+offset:), 1 )
+       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dx), &
+            work4(1+offset:), 1, work6(1:), 1 )
+    end do
+
+    ! now accumulate work6 onto the gradient
+
+    call scal(FullArraySize(spec)*this_nsf, &
+         -four*SupportGridSpacing(spec)*SupportGridSpacing(spec)*SupportGridSpacing(spec),work6,1)
+    offset = BlipArraySize(spec) + 1
+    do dx = -BlipArraySize(spec), BlipArraySize(spec)
+       do dy = -BlipArraySize(spec), BlipArraySize(spec)
+          do dz = -BlipArraySize(spec), BlipArraySize(spec)
+             l = blip_info(spec)%blip_number(dx,dy,dz)
+             if (l.ne.0) then
+                at = (((dz+offset)*OneArraySize(spec) + (dy+offset))*OneArraySize(spec) + &
+                     (dx+offset)) * this_nsf
+                do nsf1 = 1,this_nsf
+                   this_blip_grad%supp_func(nsf1)%coefficients(l) = &
+                        this_blip_grad%supp_func(nsf1)%coefficients(l) + work6(nsf1+at)
+                enddo
+             end if
+          end do
+       end do
+    end do
+    call start_timer(tmr_std_allocation)
+    deallocate(work1,work2, work4,work6, STAT=stat)
+    if(stat/=0) call cq_abort("Error deallocating arrays for onsite S blip grad: ",FullArraySize(spec),this_nsf)
+    call reg_dealloc_mem(area_minE,6*FullArraySize(spec)*this_nsf,type_dbl)
+    call stop_timer(tmr_std_allocation)
+    return
+  end subroutine get_onsite_S_gradient
 !!***
 
 end module blip_gradient

@@ -107,6 +107,8 @@ module global_module
   logical :: UseGemm
   logical :: flag_pulay_simpleStep
   logical :: flag_global_tolerance
+  logical :: flag_mix_L_SC_min
+  logical :: flag_onsite_blip_ana
 
   ! How should blocks be assigned ? See block_module.f90
   integer :: flag_assign_blocks

@@ -1,5 +1,5 @@
 module datestamp
   implicit none
-  character(len=*), parameter :: datestr="Thu Oct 23 10:05:34 JST 2008"
-  character(len=*), parameter :: commentver="Version beta 0.32 (r72): adding max_range for matrices, 20080917"
+  character(len=*), parameter :: datestr="Thu Mar 18 16:12:22 JST 2010"
+  character(len=*), parameter :: commentver="beta 0.34 (r79): Switch for analytic onsites, mixed L and SC minimisation 20100318"
 end module datestamp

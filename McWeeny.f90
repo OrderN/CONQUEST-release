@@ -103,7 +103,7 @@ contains
        ! find new rho and energy
        call McW_matrix_multiply( matH, matS, matL, matT, matRhoNew, omega1, cn  )
        ! If new energy is lower, copy new rho into old rho and repeat
-       if(omega1.GT.oldE.OR.cn.GT.one.OR.cn.LT.zero) then
+       if(omega1.GT.oldE.OR.(abs(omega1-oldE)<1.0e-8).OR.cn.GT.one.OR.cn.LT.zero) then
           if(inode==ionode.AND.iprint_DM>0) write(io_lun,4) c_old, oldE, cn,omega1
 4         format(2x,'Rounding error found: ',4f15.6)
           call stop_print_timer(tmr_l_tmp2,"a McWeeny iteration",IPRINT_TIME_THRES2)
@@ -353,6 +353,7 @@ contains
     call free_temp_matrix(mat_top)
     call free_temp_matrix(matLSLSL)
     call free_temp_matrix(matLSL)
+    if(abs(c2)<1e-6) c = -0.01_double
   End Subroutine McW_matrix_multiply
 !!***
 

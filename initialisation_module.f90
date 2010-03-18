@@ -462,17 +462,17 @@ contains
     use dimens, ONLY: grid_point_volume, r_h
     !use fdf, ONLY : fdf_boolean
     use GenComms, ONLY: cq_abort, my_barrier, gcopy, inode, ionode
-    use global_module, ONLY: iprint_init, flag_basis_set, blips, PAOs
+    use global_module, ONLY: iprint_init, flag_basis_set, blips, PAOs, flag_onsite_blip_ana
     use matrix_data, ONLY : Srange,mat
     use numbers, ONLY: zero, very_small, one
     use pao2blip, ONLY: make_blips_from_paos
     use primary_module , ONLY : bundle
     use set_bucket_module, ONLY : rem_bucket
-    use species_module, ONLY: n_species
+    use species_module, ONLY: n_species, nsf_species
     use io_module, ONLY: grab_blip_coeffs, dump_matrix
     use mult_module, ONLY: return_matrix_value, matS
     ! Temp
-    use S_matrix_module, ONLY: get_onsite_S
+    use S_matrix_module, ONLY: get_onsite_S, get_S_matrix
     use make_rad_tables, ONLY: gen_rad_tables, gen_nlpf_supp_tbls, get_support_pao_rep
     use angular_coeff_routines, ONLY: make_ang_coeffs, set_fact, set_prefac, set_prefac_real
     use read_support_spec, ONLY: read_support
@@ -491,7 +491,7 @@ contains
 
     ! Local variables
 
-    integer :: isf, np, ni, iprim, n_blip, n_run
+    integer :: isf, np, ni, iprim, n_blip, n_run, spec, this_nsf
     real(double) :: mu_copy
     real(double) :: factor
 
@@ -550,6 +550,20 @@ contains
           !          NSF, SUPPORT_SIZE, MAX_N_BLIPS)
           !     write(io_lun,*) 'S matrix for normalisation on Node= ',inode
           call get_matrix_elements_new(inode-1,rem_bucket(1),matS,supportfns,supportfns)
+          ! Do the onsite elements analytically
+          if(flag_onsite_blip_ana) then
+             iprim=0
+             do np=1,bundle%groups_on_node
+                if(bundle%nm_nodgroup(np) > 0) then
+                   do ni=1,bundle%nm_nodgroup(np)
+                      iprim=iprim+1
+                      spec = bundle%species(iprim)
+                      this_nsf = nsf_species(spec)
+                      call get_onsite_S(supports_on_atom(iprim), matS, np, ni, iprim, this_nsf, spec)
+                   end do
+                end if
+             end do
+          end if
           iprim=0
           call start_timer(tmr_std_matrices)
           do np=1,bundle%groups_on_node
@@ -577,6 +591,20 @@ contains
                write(io_lun,fmt='(10x,"Completed normalise_support")')
           call blip_to_support_new(inode-1, supportfns)
           call get_matrix_elements_new(inode-1,rem_bucket(1),matS,supportfns,supportfns)
+          ! Do the onsite elements analytically
+          if(flag_onsite_blip_ana) then
+             iprim=0
+             do np=1,bundle%groups_on_node
+                if(bundle%nm_nodgroup(np) > 0) then
+                   do ni=1,bundle%nm_nodgroup(np)
+                      iprim=iprim+1
+                      spec = bundle%species(iprim)
+                      this_nsf = nsf_species(spec)
+                      call get_onsite_S(supports_on_atom(iprim), matS, np, ni, iprim, this_nsf, spec)
+                   end do
+                end if
+             end do
+          end if
           !call dump_matrix("NS",matS,inode)
        else
           if(inode==ionode.AND.iprint_init>1) &
@@ -773,7 +801,7 @@ contains
     ! Do we want to just test the forces ?
     if(flag_test_forces) then
        call test_forces(fixed_potential, vary_mu, n_L_iterations, &
-            number_of_bands, L_tolerance, L_tolerance, mu, &
+            number_of_bands, L_tolerance, SC_tolerance, mu, &
             total_energy, expected_reduction)
        call end_comms
        stop

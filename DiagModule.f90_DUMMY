@@ -49,6 +49,10 @@ module DiagModule
   integer :: nkp
   real(double), allocatable, dimension(:,:) :: kk
   real(double), allocatable, dimension(:) :: wtk
+  ! 2007/08/13 dave changed this to be set by user
+  real(double) :: kT
+  ! Max number of iterations when searching for E_Fermi
+  integer :: maxefermi
 
   logical :: diagon ! Do we diagonalise or use O(N) ?
   ! -------------------------------------------------------

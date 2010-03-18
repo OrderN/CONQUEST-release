@@ -704,6 +704,8 @@ contains
 !!    Added basis set flag selection; tidied (removed ELEMENTS dependencies)
 !!   16:00, 30/10/2003 drb 
 !!    Added PAO assembly call
+!!   2010/03/18 14:27 dave
+!!    Added flag for on-site analytics
 !!  SOURCE
 !!
   subroutine get_T_matrix(matKE)
@@ -716,7 +718,7 @@ contains
     use blip_grid_transform_module, ONLY: blip_to_grad_new
     use GenComms, ONLY: gsum, cq_abort, myid
     use GenBlas, ONLY: axpy
-    use global_module, ONLY: flag_basis_set, PAOs, blips, flag_vary_basis, paof, sf
+    use global_module, ONLY: flag_basis_set, PAOs, blips, flag_vary_basis, paof, sf, flag_onsite_blip_ana
     use build_PAO_matrices, ONLY: assemble_2
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matdH, matrix_sum
     use functions_on_grid, ONLY: H_on_supportfns
@@ -740,17 +742,19 @@ contains
           call matrix_sum(one,matKE,one,matwork)
        end do
        ! replace the onsite blocks with the analytic values...
-       i = 1
-       do np = 1,bundle%groups_on_node
-          if(bundle%nm_nodgroup(np)>0) then
-             do nn=1,bundle%nm_nodgroup(np)
-                spec = bundle%species(i)
-                this_nsf = nsf_species(spec)
-                call get_onsite_T(supports_on_atom(i), matKE, np,nn, i,this_nsf,spec)
-                i = i+1
-             end do
-          endif
-       end do
+       if(flag_onsite_blip_ana) then
+          i = 1
+          do np = 1,bundle%groups_on_node
+             if(bundle%nm_nodgroup(np)>0) then
+                do nn=1,bundle%nm_nodgroup(np)
+                   spec = bundle%species(i)
+                   this_nsf = nsf_species(spec)
+                   call get_onsite_T(supports_on_atom(i), matKE, np,nn, i,this_nsf,spec)
+                   i = i+1
+                end do
+             endif
+          end do
+       end if
     else if(flag_basis_set==PAOs) then
        ! Use assemble to generate matrix elements
        if(flag_vary_basis) then

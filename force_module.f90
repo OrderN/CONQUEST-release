@@ -391,9 +391,9 @@ contains
     use matrix_module, ONLY: matrix, matrix_halo
     use matrix_data, ONLY: mat, Srange, halo
     use mult_module, ONLY: LNV_matrix_multiply, matM12, allocate_temp_matrix, free_temp_matrix, &
-         return_matrix_value, matrix_pos
-    use global_module, ONLY: iprint_MD, WhichPulay, BothPulay, PhiPulay, SPulay, flag_basis_set, blips, PAOs, sf
-
+         return_matrix_value, matrix_pos, scale_matrix_value
+    use global_module, ONLY: iprint_MD, WhichPulay, BothPulay, PhiPulay, SPulay, flag_basis_set, blips, PAOs, sf, &
+         flag_onsite_blip_ana
     use set_bucket_module, ONLY: rem_bucket, sf_sf_rem
     use blip_grid_transform_module, ONLY: blip_to_support_new, &
          blip_to_grad_new
@@ -428,7 +428,7 @@ contains
     ! Local variables
     logical :: test
 
-    integer :: direction, count, nb, na, nsf1, point, place, i, neigh, ist,wheremat, jsf, gcspart, tmp_fn
+    integer :: direction, count, nb, na, nsf1, point, place, i, neigh, ist,wheremat, jsf, gcspart, tmp_fn, n1, n2, this_nsf
 
     real(double) :: electrons, energy_in, t0, t1
 
@@ -490,6 +490,21 @@ contains
     t0 = t1
     ! N.B. IT IS VITAL TO HAVE h_on_support in workspace_support !
     ! now we can evaluate support_gradient (into workspace_support)
+    ! If we are doing analytic on-site integrals, then zero the elements of M12 (the energy matrix) first
+    if(flag_basis_set==blips.AND.flag_onsite_blip_ana) then
+       iprim = 0
+       do np = 1, bundle%groups_on_node
+          do ni = 1,bundle%nm_nodgroup(np)
+             iprim = iprim+1
+             this_nsf = nsf_species(bundle%species(iprim))
+             do n1 = 1,this_nsf
+                do n2 = 1,this_nsf
+                   call scale_matrix_value(matM12,np,ni,iprim,0,n1,n2,zero,1)
+                end do
+             end do
+          enddo
+       end do
+    end if
     call get_support_gradient(inode, ionode)
     t1 = mtime()
     if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(4x,"get_support_gradient time: ",f12.5)') t1-t0
@@ -1232,7 +1247,7 @@ contains
     use blip_grid_transform_module, ONLY: blip_to_grad_new, &
          blip_to_gradgrad_new
     use GenComms, ONLY: my_barrier, gsum, inode, ionode
-    use global_module, ONLY: iprint_MD, flag_basis_set, blips, PAOs, sf
+    use global_module, ONLY: iprint_MD, flag_basis_set, blips, PAOs, sf, flag_onsite_blip_ana
     use build_PAO_matrices, ONLY: assemble_deriv_2
     use functions_on_grid, ONLY: H_on_supportfns, allocate_temp_fn_on_grid, free_temp_fn_on_grid
 
@@ -1280,7 +1295,7 @@ contains
                          ist = mat(np,Hrange)%i_acc(i)+j-1
                          gcspart = BCS_parts%icover_ibeg(mat(np,Hrange)%i_part(ist))+mat(np,Hrange)%i_seq(ist)-1
                          element = matrix_pos(matK,iprim,halo(Hrange)%i_halo(gcspart),1,1)
-                         if(element/=mat(np,Hrange)%onsite(i)) then
+                         if((.NOT.flag_onsite_blip_ana).OR.element/=mat(np,Hrange)%onsite(i)) then
                             do n1=1,mat(np,Hrange)%ndimj(ist)
                                do n2=1,mat(np,Hrange)%ndimi(i)
                                   KE_force(force_direction,atom) = KE_force(force_direction,atom) + &

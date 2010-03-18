@@ -148,7 +148,7 @@ contains
     ! Full forces
     if(flag_test_all_forces.OR.flag_which_force==1) then
        if(inode==ionode) write(io_lun,*) '*** Full ***'
-       call test_full(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
+       call test_full(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu, &
             total_energy, expected_reduction)
        !call grab_blips("O",supportfns,inode)
        !call grab_locps(pseudopotential,n_my_grid_points,inode)
@@ -189,7 +189,7 @@ contains
     ! *** Hellmann-Feynman ***
     if(flag_test_all_forces.OR.flag_which_force==2) then
        if(inode==ionode) write(io_lun,*) '*** Full HF ***'
-       call test_HF(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
+       call test_HF(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu, &
             total_energy, expected_reduction)
        if(flag_test_all_forces) then
           call update_H( fixed_potential, number_of_bands)
@@ -221,7 +221,7 @@ contains
     ! *** Total Pulay ***
     if(flag_test_all_forces.OR.flag_which_force==3) then
        if(inode==ionode) write(io_lun,*) '*** Full Pulay ***'
-       call test_FullPulay(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
+       call test_FullPulay(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu, &
             total_energy, expected_reduction)
        if(flag_test_all_forces) then
           call update_H( fixed_potential, number_of_bands)
@@ -258,7 +258,7 @@ contains
           delta_E_hartree = dH0  
           delta_E_xc      = dXC0 
           call set_density()
-          call test_nonSC(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
+          call test_nonSC(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu, &
                total_energy, expected_reduction)
           if(flag_test_all_forces) then
              call update_H( fixed_potential, number_of_bands)
@@ -280,7 +280,7 @@ contains
     ! *** phi Pulay Non-local ***
     if(flag_test_all_forces.OR.flag_which_force==5) then
        if(inode==ionode) write(io_lun,*) '*** Non-local phi Pulay ***'
-       call test_PhiPulay_nonlocal(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
+       call test_PhiPulay_nonlocal(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu, &
             total_energy, expected_reduction)
        if(flag_test_all_forces) then
           call update_H( fixed_potential, number_of_bands)
@@ -311,7 +311,7 @@ contains
     ! *** phi Pulay KE ***
     if(flag_test_all_forces.OR.flag_which_force==6) then
        if(inode==ionode) write(io_lun,*) '*** KE phi Pulay ***'
-       call test_PhiPulay_KE(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
+       call test_PhiPulay_KE(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu, &
             total_energy, expected_reduction)
        if(flag_test_all_forces) then
           call update_H( fixed_potential, number_of_bands)
@@ -345,7 +345,7 @@ contains
     ! *** phi Pulay local ***
     if(flag_test_all_forces.OR.flag_which_force==7) then
        if(inode==ionode) write(io_lun,*) '*** Local (Ha, XC, loc ps) phi Pulay ***'
-       call test_PhiPulay_Local(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
+       call test_PhiPulay_Local(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu, &
             total_energy, expected_reduction)
        if(flag_test_all_forces) then
           call update_H( fixed_potential, number_of_bands)
@@ -376,7 +376,7 @@ contains
     ! *** S Pulay ***
     if(flag_test_all_forces.OR.flag_which_force==8) then
        if(inode==ionode) write(io_lun,*) '*** S Pulay ***'
-       call test_SPulay(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, L_tolerance, mu, &
+       call test_SPulay(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu, &
             total_energy, expected_reduction)
        if(flag_test_all_forces) then
           call update_H( fixed_potential, number_of_bands)

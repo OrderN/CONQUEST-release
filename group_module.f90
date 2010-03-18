@@ -122,6 +122,8 @@ contains
 !!    Added ROBODoc header
 !!   2008/05/16 ast
 !!    Added timer
+!!   2009/11/03 16:43 dave
+!!    Added memory registration
 !!  SOURCE
 !!
   subroutine allocate_group_set(groups,mx_node)
@@ -130,6 +132,8 @@ contains
     use datatypes
     use basic_types
     use GenComms, ONLY: cq_abort
+    use memory_module, ONLY: reg_alloc_mem, type_int
+    use global_module, ONLY: area_index
 
     implicit none
 
@@ -149,6 +153,7 @@ contains
     if(stat/=0) then
        call cq_abort('alloc_gp: error allocating memory to inode_beg !')
     endif
+    call reg_alloc_mem(area_index,2*mx_node,type_int)
     allocate(groups%ngnode(groups%mx_gcell),STAT=stat)
     if(stat/=0) then
        call cq_abort('alloc_gp: error allocating memory to ngnode !')
@@ -173,6 +178,7 @@ contains
     if(stat/=0) then
        call cq_abort('alloc_gp: error allocating memory to inv_ngnode !')
     endif
+    call reg_alloc_mem(area_index,6*groups%mx_gcell,type_int)
     call stop_timer(tmr_std_allocation)
     return
   end subroutine allocate_group_set
@@ -200,12 +206,16 @@ contains
 !!    Added ROBODoc header
 !!   2008/05/16 ast
 !!    Added timer
+!!   2009/11/03 16:43 dave
+!!    Added memory registration
 !!  SOURCE
 !!
   subroutine deallocate_group_set(groups)
 
     use basic_types
     use GenComms, ONLY: cq_abort
+    use memory_module, ONLY: reg_dealloc_mem, type_int
+    use global_module, ONLY: area_index
 
     implicit none
 
@@ -222,6 +232,7 @@ contains
     if(stat/=0) then
        call cq_abort('dealloc_gp: error deallocating group_set !')
     endif
+    call reg_dealloc_mem(area_index,6*groups%mx_gcell,type_int)
     call stop_timer(tmr_std_allocation)
     return
   end subroutine deallocate_group_set
