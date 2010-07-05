@@ -139,6 +139,7 @@ contains
     use GenComms, ONLY: inode, ionode, cq_abort
     use memory_module, ONLY: reg_alloc_mem, type_dbl, type_int
     use units, ONLY: AngToBohr
+    use units, ONLY: dist_units, ang
     use numbers, ONLY: very_small, zero
 
     ! Passed variables
@@ -327,6 +328,14 @@ second:   do
           read(lun,*) x,r_super_y, y
           read(lun,*) x,y,r_super_z
           read(lun,*) ni_in_cell
+         !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
+          if(dist_units == ang) then
+            r_super_x = r_super_x*AngToBohr
+            r_super_y = r_super_y*AngToBohr
+            r_super_z = r_super_z*AngToBohr
+          endif
+         !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
+
           allocate(flag_move_atom(3,ni_in_cell),atom_coord(3,ni_in_cell),species_glob(ni_in_cell),STAT=stat)
           if(stat/=0) call cq_abort("Failure to allocate coordinates: ",ni_in_cell)
           call reg_alloc_mem(area_init, 3*ni_in_cell,type_dbl)
@@ -362,6 +371,10 @@ second:   do
              if(iprint_init>0) write(io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)') i,atom_coord(1:3,i), &
                   species_glob(i),flag_move_atom(1:3,i)
           end do
+          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
+             if(.not.flag_fractional_atomic_coords .and. dist_units == ang) &
+              atom_coord(:,:)=atom_coord(:,:)*AngToBohr
+          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
           call io_close(lun)
        end if pdb
     end if
@@ -3479,5 +3492,124 @@ hc2:    do
     filename=TRIM(filename)//num
   end subroutine get_file_name
 !!***
+
+!!****f* io_module/write_velocity *
+!!
+!!  NAME
+!!   write_velocity - prints out velocities of the atoms 
+!!  USAGE
+!!   write_velocity 
+!!  PURPOSE
+!!   
+!!  INPUTS
+!!   character(len=*) :: filename  ! The formatted filename
+!!   real(double) :: velocity(1:3, ni_in_cell)
+!!  OUTPUTS
+!!
+!!  USES
+!!
+!!  AUTHOR
+!!   T. Miyazaki
+!!  CREATION DATE
+!!   15/06/2010  TM
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine write_velocity(velocity, filename)
+    use numbers
+    use global_module, ONLY: id_glob, ni_in_cell,id_glob_inv
+    use GenComms, ONLY: inode, ionode, cq_abort, gcopy
+
+    implicit none
+
+    ! Passed variables
+    real(double), intent(in) :: velocity(1:3, ni_in_cell)
+    character(len=20),intent(in) :: filename
+
+    ! Local variables
+    integer :: id_global, ni 
+    integer :: lun
+
+   if(inode == ionode) then
+    call io_assign(lun)
+    open(unit=lun,file=filename)
+    rewind lun
+    do id_global=1,ni_in_cell
+       ni=id_glob_inv(id_global)
+        if(id_glob(ni) /= id_global) &
+         call cq_abort(' ERROR in global labelling ',id_global,id_glob(ni))
+       write(lun,101) id_global, ni, velocity(1:3, ni)
+       101 format(2i8,3e20.12)
+    enddo
+    call io_close(lun)
+   endif  ! (inode == ionode) then
+
+   return
+  end subroutine write_velocity
+!!***
+
+!!****f* io_module/read_velocity *
+!!
+!!  NAME
+!!   read_velocity - reads velocities of the atoms from the file, and
+!!                  send them to all processors
+!!  USAGE
+!!   read_velocity 
+!!  PURPOSE
+!!   
+!!  INPUTS
+!!   character(len=*) :: filename  ! The formatted filename
+!!  OUTPUTS
+!!   real(double) :: velocity(1:3, ni_in_cell)
+!!
+!!  USES
+!!
+!!  AUTHOR
+!!   T. Miyazaki
+!!  CREATION DATE
+!!   15/06/2010  TM
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine read_velocity(velocity, filename)
+    use numbers
+    use global_module, ONLY: id_glob, ni_in_cell,id_glob_inv
+    use GenComms, ONLY: inode, ionode, cq_abort, gcopy
+
+    implicit none
+
+    ! Passed variables
+    real(double), intent(out) :: velocity(1:3, ni_in_cell)
+    character(len=20),intent(in) :: filename
+
+    ! Local variables
+    integer :: id_global, ni , ni2, id_tmp
+    integer :: lun
+
+   if(inode == ionode) then
+    call io_assign(lun)
+    open(unit=lun,file=filename)
+    rewind lun
+    do id_global=1,ni_in_cell
+       ni=id_glob_inv(id_global)
+        if(id_glob(ni) /= id_global) &
+         call cq_abort(' ERROR in global labelling ',id_global,id_glob(ni))
+       read(lun,101) id_tmp, ni2, velocity(1:3, ni)
+       if(ni2 /= ni) write(io_lun,*) &
+         ' Order of atom has changed for global id (file_labelling) = ',id_global, &
+         ' : corresponding labelling (NOprt labelling) used to be ',ni2,&
+         ' : but now it is ',ni
+       101 format(2i8,3e20.12)
+    enddo
+    call io_close(lun)
+   endif  ! (inode == ionode) then
+   call gcopy(velocity,3,ni_in_cell)
+
+   return
+  end subroutine read_velocity
+!!***
+
 end module io_module
 

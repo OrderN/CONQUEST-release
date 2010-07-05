@@ -316,7 +316,7 @@ contains
          iprint_init, iprint_mat, iprint_ops, iprint_DM, iprint_SC, iprint_minE, iprint_time, &
          iprint_MD, iprint_index, iprint_gen, iprint_pseudo, iprint_basis, iprint_intgn, area_general, &
          global_maxatomspart, load_balance, many_processors, flag_assign_blocks, io_lun, &
-         flag_pulay_simpleStep, flag_global_tolerance, numprocs, flag_mix_L_SC_min, flag_onsite_blip_ana
+         flag_pulay_simpleStep, flag_global_tolerance, numprocs, flag_mix_L_SC_min, flag_onsite_blip_ana, flag_read_velocity, flag_quench_MD, temp_ion
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff, &
          n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport, NonLocalFactor, InvSRange, min_blip_sp, &
          flag_buffer_old, AtomMove_buffer
@@ -723,6 +723,9 @@ contains
            UseGemm = .false.
         endif
        flag_check_DFT=fdf_boolean('General.CheckDFT',.false.)
+       flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
+       flag_quench_MD = fdf_boolean('AtomMove.QuenchMD',.false.)
+       temp_ion = fdf_double('AtomMove.IonTemperature',300.0_double)
 
        del_k = fdf_double('Basis.PaoKspaceOlGridspace',0.1_double)
        kcut = fdf_double('Basis.PaoKspaceOlCutoff', 1000.0_double)

@@ -56,6 +56,9 @@ module move_atoms
 !  real(double), parameter:: ev = 1.602189e-19_double
   real(double), parameter:: ev = 2.0_double*13.6058_double*1.602189e-19_double
   real(double), parameter:: fac = amu*ang*ang/(tscale*tscale*ev)
+  real(double), parameter:: kB = 1.3806503e-23_double
+  real(double), parameter:: fac_Kelvin2Hartree = kB/ev
+  !real(double), parameter:: fac_Kelvin2Hartree = 2.92126269e-6_double
 
   ! -------------------------------------------------------
   ! RCS ident string for object file id
@@ -157,18 +160,23 @@ contains
 !!   to be done at every step 03/07/2001 dave
 !!  SOURCE
 !!
-  subroutine velocityVerlet(prim, step,T,KE,quenchflag,velocity,force)
+  subroutine velocityVerlet(fixed_potential, number_of_bands, &
+                            prim, step,T,KE,quenchflag,velocity,force)
 
     use datatypes
     use basic_types
-    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell, id_glob
+    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell, id_glob, flag_reset_dens_on_atom_move, flag_move_atom
     use species_module, ONLY: species, mass
     use numbers
     use GenComms, ONLY: myid
+    use density_module, ONLY: set_density
 
     implicit none
 
     ! Passed variables
+    logical,intent(in) :: fixed_potential
+    real(double),intent(in) :: number_of_bands
+
     real(double) :: step, T, KE
     type(primary_set) :: prim
     real(double), dimension(3,ni_in_cell) :: velocity
@@ -178,6 +186,8 @@ contains
     ! Local variables
     integer :: part, memb, atom, speca, k, gatom
     real(double) :: massa, acc
+    logical :: flagx,flagy,flagz
+
 
     call start_timer(tmr_std_moveatoms)
     if(myid==0.AND.iprint_MD>0) write(io_lun,1) step,quenchflag
@@ -187,6 +197,9 @@ contains
        speca = species(atom) 
        massa = mass(speca)*fac
        gatom = id_glob(atom)
+       flagx = flag_move_atom(1,gatom)
+       flagy = flag_move_atom(2,gatom)
+       flagz = flag_move_atom(3,gatom)
        if(quenchflag) then
           do k=1,3
              if(velocity(k,atom)*force(k,gatom)<zero) &
@@ -200,38 +213,59 @@ contains
                   step*force(k,gatom)/(two*massa)
           enddo
        endif
+       !Now, we assume forces are forced to be zero, when
+       ! flagx, y or z is false. But, I(TM) think we should
+       ! have the followings, in the future. 
+       !if(.not.flagx) velocity(1,atom) = zero
+       !if(.not.flagy) velocity(2,atom) = zero
+       !if(.not.flagz) velocity(3,atom) = zero
     end do
     ! Maybe fiddle with KE
     KE = 0.0_double
     do atom = 1, ni_in_cell
        speca = species(atom) 
        massa = mass(speca)*fac
+      do k=1,3
        KE = KE + half*massa*velocity(k,atom)*velocity(k,atom)
+      enddo
     end do
     ! Update positions and velocities
     do atom = 1, ni_in_cell
        gatom = id_glob(atom)
        speca = species(atom) 
        massa = mass(speca)*fac
+       flagx = flag_move_atom(1,gatom)
+       flagy = flag_move_atom(2,gatom)
+       flagz = flag_move_atom(3,gatom)
        ! X
-       acc = force(1,gatom)/massa
-       x_atom_cell(atom) = x_atom_cell(atom) + &
-            step*velocity(1,atom) + half*step*step*acc
-       velocity(1,atom) = velocity(1,atom)+half*step*acc
+       if(flagx) then
+        acc = force(1,gatom)/massa
+        x_atom_cell(atom) = x_atom_cell(atom) + &
+             step*velocity(1,atom) + half*step*step*acc
+        velocity(1,atom) = velocity(1,atom)+half*step*acc
+       endif
        ! Y
-       acc = force(2,gatom)/massa
-       y_atom_cell(atom) = y_atom_cell(atom) + &
-            step*velocity(2,atom) + half*step*step*acc
-       velocity(2,atom) = velocity(2,atom)+half*step*acc
+       if(flagy) then
+        acc = force(2,gatom)/massa
+        y_atom_cell(atom) = y_atom_cell(atom) + &
+             step*velocity(2,atom) + half*step*step*acc
+        velocity(2,atom) = velocity(2,atom)+half*step*acc
+       endif
        ! Z
-       acc = force(3,gatom)/massa
-       z_atom_cell(atom) = z_atom_cell(atom) + &
-            step*velocity(3,atom) + half*step*step*acc
-       velocity(3,atom) = velocity(3,atom)+half*step*acc
+       if(flagz) then
+        acc = force(3,gatom)/massa
+        z_atom_cell(atom) = z_atom_cell(atom) + &
+             step*velocity(3,atom) + half*step*step*acc
+        velocity(3,atom) = velocity(3,atom)+half*step*acc
+       endif
     end do
 !Update atom_coord : TM 27Aug2003
     call update_atom_coord
 !Update atom_coord : TM 27Aug2003
+! 25/Jun/2010 TM : calling set_density for SCF-MD
+    call updateIndices(.true.,fixed_potential, number_of_bands)
+    if(flag_reset_dens_on_atom_move) call set_density()
+! 25/Jun/2010 TM : calling set_density for SCF-MD
     call stop_timer(tmr_std_moveatoms)
     return
   end subroutine velocityVerlet
@@ -1406,4 +1440,152 @@ contains
     return
   end subroutine update_atom_coord
 !!***
+
+!!****f*  move_atoms/init_velocity *
+!!
+!!  NAME 
+!!   pulay_relax
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Performs pulay relaxation
+!!  INPUTS
+!!   ni_in_cell : no. of atoms in the cell
+!!   velocity(3, ni_in_cell) : velocity in (fs * Ha/bohr)/amu unit
+!!   temp_ion  : temperature for atoms (ions)
+!!  USES
+!!   datatypes, numbers, species_module, global_module
+!!  AUTHOR
+!!   T. Miyazaki
+!!  CREATION DATE
+!!   2010/6/30 
+!!  MODIFICATION HISTORY
+!!    
+!!  SOURCE
+!!
+ subroutine init_velocity(ni_in_cell, temp, velocity)
+  use datatypes, ONLY: double
+  use numbers, ONLY: three,two,twopi, zero, one, very_small, half
+  use species_module, ONLY: species, mass
+  use global_module, ONLY: id_glob_inv, flag_move_atom, species_glob
+  use GenComms, ONLY: cq_abort
+  implicit none
+  integer,intent(in) :: ni_in_cell
+  real(double),intent(in) :: temp
+  real(double),intent(out):: velocity(3,ni_in_cell)
+  integer, parameter :: initial_roulette=30
+  integer :: ii, iroulette , ia, iglob
+  real(double) :: xx, yy, zz, u0, ux, uy, uz, v0
+  real(double) :: massa, KE
+  integer :: speca
+   
+  KE = zero
+  write(io_lun,*) ' Welcome to init_velocity', ' fac = ',fac
+  velocity(:,:) = zero
+  iroulette=0
+  do ii=1,initial_roulette
+   call ran2(xx,iroulette)
+  enddo
+  
+  !  We would like to use the order of global labelling in the following.
+  !(since we use random numbers, the order of atoms is probably relevant
+  ! if we want to have a same distribution of velocities as in other codes.)
+
+  do iglob=1,ni_in_cell
+      ia= id_glob_inv(iglob)
+   !speca= species_glob(iglob) 
+   speca= species(ia)
+   massa= mass(speca)
+   if(ia < 1 .or. ia > ni_in_cell) &
+    call cq_abort('ERROR in init_velocity : ia,iglob ',ia,iglob)
+
+   !call ran2(u0,iroulette)
+    call ran2(ux,iroulette)
+    call ran2(uy,iroulette)
+    call ran2(uz,iroulette)
+
+   !write(*,1) u0,ux,uy,uz
+   !1 format(' u0,ux,uy,uz = ',f12.5)
+
+    xx = twopi*ux
+    yy = twopi*uy
+    zz = twopi*uz
+   ! -- (Important Notes) ----
+   ! it is tricky, but velocity is in the unit, bohr/fs, transforming from
+   ! (fs * Har/bohr)/ amu, with the factor (fac) defined in the beginning of 
+   ! this module.  This factor comes from that v is calculated as (dt*F/mass), 
+   ! and we want to express dt in femtosecond, force in Hartree/bohr, 
+   ! and m in atomic mass units. 
+   ! (it should be equivalent to express dt and m in atomic units, I think.)
+   ! Kinetic Energy is calculated as m/2*v^2 *fac in Hartree unit, and
+   ! Positions are calculated as v*dt in bohr unit. (m in amu, dt in fs)
+
+    v0 = sqrt(temp*fac_Kelvin2Hartree/(massa*fac)) 
+
+     call ran2(u0,iroulette)
+     if(u0 >= one)  call cq_abort('ERROR in init_velocity 1',u0)
+     if(u0 < very_small)  call cq_abort('ERROR in init_velocity 2',u0)
+    velocity(1,ia) = v0* sqrt(-two*log(u0))*cos(xx)
+     call ran2(u0,iroulette)
+     if(u0 >= one)  call cq_abort('ERROR in init_velocity 1',u0)
+     if(u0 < very_small)  call cq_abort('ERROR in init_velocity 2',u0)
+    velocity(2,ia) = v0* sqrt(-two*log(u0))*cos(yy)
+     call ran2(u0,iroulette)
+     if(u0 >= one)  call cq_abort('ERROR in init_velocity 1',u0)
+     if(u0 < very_small)  call cq_abort('ERROR in init_velocity 2',u0)
+    velocity(3,ia) = v0* sqrt(-two*log(u0))*cos(zz)
+    KE = KE+ half * (velocity(1,ia)**2+velocity(2,ia)**2+velocity(3,ia)**2) *massa*fac
+    !ORI if(flag_move_atom(1,ia)) velocity(1,ia) = v0*cos(xx)
+    !ORI if(flag_move_atom(2,ia)) velocity(2,ia) = v0*cos(yy)
+    !ORI if(flag_move_atom(3,ia)) velocity(3,ia) = v0*cos(zz)
+  enddo
+    KE = KE/(three/two)
+    KE = KE/dfloat(ni_in_cell)/fac_Kelvin2Hartree
+    write(io_lun,*) ' init_velocity: Kinetic Energy in K = ',KE
+  
+  return
+ end subroutine init_velocity
+! =====================================================================
+!   sbrt ran2: generates uniform random numbers in the
+!   interval [0,1]. Following Numerical Recipes, 1st edition,
+!   page 197.
+! ---------------------------------------------------------------------
+  subroutine ran2(x,idum)
+
+    use numbers, ONLY: double
+
+    implicit none
+    integer, parameter :: m=714025,ia=1366,ic=150889
+    real(double), parameter :: rm=1.0_double/m
+
+    integer,save :: ir(97) !! I add save statement 13/1/2000 TM
+    integer,save :: iff=0
+    integer,save :: j,iy   !! I add save statement 13/1/2000 TM
+    integer :: idum
+    real(double) :: x
+
+!    data iff/0/
+
+    if((idum.lt.0).or.(iff.eq.0)) then
+      iff=1
+      idum=mod(ic-idum,m)
+      do j=1,97
+        idum=mod(ia*idum+ic,m)
+        ir(j)=idum
+      enddo
+      idum=mod(ia*idum+ic,m)
+      iy=idum
+    endif
+!       write(*,11) idum,iy,iff,m,j,1+(97*iy)/m
+    j=1+(97*iy)/m
+ 11 format('idum,iy,iff,m,old j,new j in ran2= ',6i12)
+    if((j.gt.97).or.(j.lt.1)) pause
+    iy=ir(j)
+    x=iy*rm
+    idum=mod(ia*idum+ic,m)
+    ir(j)=idum
+    return
+  end subroutine ran2
+!!***
+
 end module move_atoms

@@ -94,12 +94,13 @@ contains
     use DMMin, ONLY: FindMinDM
     use SelfCon, ONLY: new_SC_potl, atomch_output, get_atomic_charge
     use global_module, ONLY: flag_vary_basis, flag_self_consistent, flag_basis_set, blips, PAOs, &
-                             IPRINT_TIME_THRES1
+                             IPRINT_TIME_THRES1, runtype
     use energy, ONLY: get_energy
     use GenComms, ONLY: cq_abort, inode, ionode
     use blip_minimisation, ONLY: vary_support
     use pao_minimisation, ONLY: vary_pao, pulay_min_pao
     use timer_module
+    use input_module, ONLY: leqi
 
     implicit none
 
@@ -120,7 +121,11 @@ contains
 
     call start_timer(tmr_std_eminimisation)
     ! reset_L = .true.  ! changed by TM, Aug 2008 
-    reset_L = .false.
+    if(leqi(runtype,'static')) then
+     reset_L = .false.
+    else
+     reset_L = .true.   ! temporary for atom movements
+    endif
     call start_timer(tmr_l_energy,WITH_LEVEL)      ! Start timing the energy calculation
     ! Now choose what we vary
     if(flag_vary_basis) then ! Vary everything: DM, charge density, basis set

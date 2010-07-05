@@ -109,6 +109,9 @@ module global_module
   logical :: flag_global_tolerance
   logical :: flag_mix_L_SC_min
   logical :: flag_onsite_blip_ana
+  logical :: flag_read_velocity   ! 16/06/2010 TM
+  logical :: flag_quench_MD       ! 25/06/2010 TM
+  real(double) :: temp_ion        ! 25/06/2010 TM
 
   ! How should blocks be assigned ? See block_module.f90
   integer :: flag_assign_blocks

@@ -311,6 +311,7 @@ contains
 !! 
 !!  PURPOSE
 !!   Does a QUENCHED MD run
+!!   Now, this can also employ NVE-MD
 !!  INPUTS
 !! 
 !! 
@@ -328,16 +329,18 @@ contains
 
     ! Module usage
     use numbers
-    use global_module, ONLY: iprint_gen, ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell, area_general
+    use global_module, ONLY: iprint_gen, ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell, area_general, flag_read_velocity, flag_quench_MD, temp_ion
     use group_module, ONLY: parts
     use primary_module, ONLY : bundle
     use minimise, ONLY: get_E_and_F
-    use move_atoms, ONLY: velocityVerlet, updateIndices
-    use GenComms, ONLY: gsum, myid, my_barrier
+    use move_atoms, ONLY: velocityVerlet, updateIndices, init_velocity
+    use GenComms, ONLY: gsum, myid, my_barrier, inode, ionode, gcopy
     use GenBlas, ONLY: dot
     use force_module, ONLY: tot_force
-    use io_module, ONLY: write_positions
+    use io_module, ONLY: write_positions, read_velocity, write_velocity
+    use io_module, ONLY: write_atomic_positions, pdb_template
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use move_atoms, ONLY: fac_Kelvin2Hartree
 
     implicit none
 
@@ -352,11 +355,24 @@ contains
     real(double), allocatable, dimension(:,:) :: velocity
     integer ::  iter, i, k, length, stat
     real(double) :: temp, KE, energy1, energy0, dE, max, g0
+    real(double) :: energy_md
+    character(20):: file_velocity='velocity.dat'
+
 
     allocate(velocity(3,ni_in_cell),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating velocity in md_run: ",ni_in_cell,stat)
     call reg_alloc_mem(area_general,3*ni_in_cell,type_dbl)
     velocity = 0.0_double
+    if(flag_read_velocity) then
+     call read_velocity(velocity,file_velocity)
+    else
+     if( temp_ion > very_small) then
+      if(inode == ionode) call init_velocity(ni_in_cell, temp_ion, velocity)
+      call gcopy(velocity,3,ni_in_cell)
+     else
+      velocity = 0.0_double
+     endif
+    endif
     energy0 = 0.0_double
     energy1 = 0.0_double
     dE = 0.0_double
@@ -364,18 +380,24 @@ contains
     if(myid==0.AND.iprint_gen>0) write(io_lun,2) MDn_steps
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, energy0, .true., .false.)
+       energy_md = energy0
     do iter = 1,MDn_steps
        if(myid==0) write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
-       call velocityVerlet(bundle,MDtimestep,temp,KE,.true.,velocity,tot_force)
-       if(myid==0) write(io_lun,fmt='(4x,"Kinetic Energy          : ",f15.8)') KE
+       call velocityVerlet(fixed_potential, number_of_bands, &
+                           bundle,MDtimestep,temp,KE,flag_quench_MD,velocity,tot_force)
+       if(myid==0) write(io_lun,fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
+                        KE/(three/two*ni_in_cell)/fac_Kelvin2Hartree
+       if(myid==0) write(io_lun,8) iter, KE, energy_md, KE+energy_md
        ! Output positions
        if(myid==0.AND.iprint_gen>1) then
           do i=1,ni_in_cell
              write(io_lun,1) i,x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
           end do
        end if
-       call updateIndices(.false.,fixed_potential, number_of_bands)
+       !Now, updateIndices and update_atom_coord are done in velocityVerlet 
+       !call updateIndices(.false.,fixed_potential, number_of_bands) 
        call get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, energy1, .true., .false.)
+        energy_md=energy1
        ! Analyse forces
        g0 = dot(length,tot_force,1,tot_force,1)
        max = 0.0_double
@@ -393,6 +415,10 @@ contains
        energy1 = abs(dE)
        if(myid==0.AND.mod(iter,MDfreq)==0) call write_positions(iter,parts)
        call my_barrier
+     !to check IO of velocity files
+       call write_velocity(velocity,file_velocity)
+       call write_atomic_positions("UpdatedAtoms.dat",trim(pdb_template))
+     !to check IO of velocity files
     end do
     deallocate(velocity,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating velocity in md_run: ",ni_in_cell,stat)
@@ -404,6 +430,7 @@ contains
 4   format(4x,'Energy change           : ',f15.8)
 5   format(4x,'Force Residual          : ',f15.8)
 6   format(4x,'Maximum force component : ',f15.8)
+8   format(4x,'*** MD step ',i4,' KE: ',f14.8,' IntEnergy',f14.8,' TotalEnergy',f14.8)
   end subroutine md_run
 !!***
 
@@ -703,4 +730,3 @@ contains
 !!***
 
 end module control
-
