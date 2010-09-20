@@ -165,7 +165,8 @@ contains
 
     use datatypes
     use basic_types
-    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell, id_glob, flag_reset_dens_on_atom_move, flag_move_atom
+    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell, id_glob, flag_reset_dens_on_atom_move, &
+         flag_move_atom
     use species_module, ONLY: species, mass
     use numbers
     use GenComms, ONLY: myid

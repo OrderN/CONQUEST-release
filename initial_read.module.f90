@@ -316,7 +316,8 @@ contains
          iprint_init, iprint_mat, iprint_ops, iprint_DM, iprint_SC, iprint_minE, iprint_time, &
          iprint_MD, iprint_index, iprint_gen, iprint_pseudo, iprint_basis, iprint_intgn, area_general, &
          global_maxatomspart, load_balance, many_processors, flag_assign_blocks, io_lun, &
-         flag_pulay_simpleStep, flag_global_tolerance, numprocs, flag_mix_L_SC_min, flag_onsite_blip_ana, flag_read_velocity, flag_quench_MD, temp_ion
+         flag_pulay_simpleStep, flag_global_tolerance, numprocs, flag_mix_L_SC_min, flag_onsite_blip_ana, flag_read_velocity, &
+         flag_quench_MD, temp_ion
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff, &
          n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport, NonLocalFactor, InvSRange, min_blip_sp, &
          flag_buffer_old, AtomMove_buffer

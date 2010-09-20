@@ -329,7 +329,8 @@ contains
 
     ! Module usage
     use numbers
-    use global_module, ONLY: iprint_gen, ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell, area_general, flag_read_velocity, flag_quench_MD, temp_ion
+    use global_module, ONLY: iprint_gen, ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell, area_general, flag_read_velocity, &
+         flag_quench_MD, temp_ion
     use group_module, ONLY: parts
     use primary_module, ONLY : bundle
     use minimise, ONLY: get_E_and_F
