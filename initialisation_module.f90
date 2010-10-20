@@ -189,7 +189,7 @@ contains
 
     use datatypes
     use global_module, ONLY: iprint_init, flag_read_blocks, x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell, &
-         area_init, area_index
+         area_init, area_index, flag_Becke_weights
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
     use group_module, ONLY: parts
     use primary_module, ONLY : bundle
@@ -208,7 +208,7 @@ contains
     use pseudo_tm_module, ONLY: init_pseudo_tm
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT, core_correction, pseudopotential
     ! Troullier-Martin pseudos    15/11/2002 TM
-    use density_module, ONLY: set_density, density
+    use density_module, ONLY: set_density, density, atomcharge, build_Becke_weights, build_Becke_charges
     use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, n_pts_in_block, &
          set_blocks_from_new, set_blocks_from_old, set_domains, n_blocks
     use grid_index, ONLY: grid_point_x, grid_point_y, grid_point_z, grid_point_block, grid_point_position
@@ -364,6 +364,11 @@ contains
        call init_pseudo_tm(core_correction)
     end select
     if(.NOT.find_chdens) call set_density
+    if(flag_Becke_weights) then
+       allocate(atomcharge(ni_in_cell))
+       call build_Becke_weights
+       call build_Becke_charges(density,maxngrid)
+    end if
     if(inode==ionode.AND.iprint_init>1) write(io_lun,*) 'Done init_pseudo '
 
     return

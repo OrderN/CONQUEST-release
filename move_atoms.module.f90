@@ -745,7 +745,7 @@ contains
     use group_module, ONLY: parts
     use cover_module, ONLY : BCS_parts, DCS_parts, ewald_CS
     use primary_module, ONLY : bundle
-    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, IPRINT_TIME_THRES2
+    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, IPRINT_TIME_THRES2, flag_Becke_weights
     use matrix_data, ONLY: Hrange, mat, rcut
     use maxima_module, ONLY: maxpartsproc
     use set_blipgrid_module, ONLY: set_blipgrid
@@ -758,6 +758,7 @@ contains
     use blip, ONLY: Extent
     use numbers
     use timer_module
+    use density_module, ONLY: build_Becke_weights
 
     implicit none
 
@@ -802,6 +803,7 @@ contains
        call associate_fn_on_grid
        call stop_print_timer(tmr_l_tmp2,"matrix reindexing",IPRINT_TIME_THRES2)
     end if
+    if(flag_Becke_weights) call build_Becke_weights
     ! Rebuild S, n(r) and hamiltonian based on new positions
     call update_H(fixed_potential, number_of_bands)
     call stop_print_timer(tmr_l_tmp1,"indices update",IPRINT_TIME_THRES2)
@@ -818,7 +820,7 @@ contains
     use group_module, ONLY: parts
     use cover_module, ONLY : BCS_parts, DCS_parts, ewald_CS
     use primary_module, ONLY : bundle
-    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell
+    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, flag_Becke_weights
     use matrix_data, ONLY: Hrange, mat, rcut
     use maxima_module, ONLY: maxpartsproc
     use set_blipgrid_module, ONLY: set_blipgrid
@@ -829,6 +831,7 @@ contains
     use functions_on_grid, ONLY: associate_fn_on_grid
     use ewald_module, ONLY: flag_old_ewald
     use blip, ONLY: Extent
+    use density_module, ONLY: build_Becke_weights
     use numbers
 
     implicit none
@@ -871,6 +874,7 @@ contains
        call set_bucket(myid)
        call associate_fn_on_grid
     end if
+    if(flag_Becke_weights) call build_Becke_weights
     ! Rebuild S, n(r) and hamiltonian based on new positions
     call update_H(fixed_potential, number_of_bands)
     return

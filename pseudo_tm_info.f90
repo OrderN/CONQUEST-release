@@ -62,6 +62,7 @@ module pseudo_tm_info
      integer :: lmax                 ! maximum of the angular momentum
      integer :: n_pjnl               ! number of projector functions
      logical :: flag_pcc             ! flag for partial core correction
+     integer :: z                    ! atomic weight
      real(double) :: zval            ! number of valence electrons
      real(double) :: alpha           ! exponent of gaussian for long range term
      ! of local pseudopotential (might not be used)
@@ -117,7 +118,7 @@ contains
     use pao_format, ONLY: pao
     use species_module, ONLY: npao_species, nsf_species, type_species
     use global_module, ONLY: iprint_pseudo
-    use dimens, ONLY: RadiusSupport
+    use dimens, ONLY: RadiusSupport, atomicrad
     use GenComms, ONLY: inode, ionode, cq_abort
     use pseudopotential_common, ONLY: pseudo_type, SIESTA, ABINIT
 
@@ -154,6 +155,7 @@ contains
           pseudo(ispecies)%filename = filename
           call read_ion_ascii_tmp(pseudo(ispecies),pao(ispecies))
           npao_species(ispecies) = pao(ispecies)%count
+          atomicrad(ispecies) = pseudo(ispecies)%z
           !For Ghost atoms
           if(type_species(ispecies) < 0) then
             pseudo(ispecies)%zval = zero
@@ -511,7 +513,7 @@ contains
     type(rad_func) :: dummy_rad
 
     character(len=20) :: filename
-    integer :: i, lun , i1, i2, i3, i4
+    integer :: i, lun , i1, i2, i3, i4, z
     real(double) :: dummy, a, r
     integer :: n_orbnl, n_pjnl
     real(double) :: zval, yp1, ypn, erfarg, tmpv
@@ -527,12 +529,13 @@ contains
        open(lun,file=filename,status='old',form='formatted')
        rewind(lun)
 
-       call read_header_tmp(n_orbnl,lmax,n_pjnl, zval, lun)
+       call read_header_tmp(n_orbnl,lmax,n_pjnl, zval, z, lun)
        call alloc_pseudo_info(ps_info, n_pjnl)
        call start_timer(tmr_std_allocation)
        allocate(dummy_rada(n_orbnl),thisl(n_orbnl),thisz(n_orbnl),thispop(n_orbnl),zl(0:lmax))
        call stop_timer(tmr_std_allocation)
 
+       ps_info%z = z
        ps_info%zval = zval
 
        read(lun,*)
@@ -764,21 +767,21 @@ contains
     end if ! numprocs>1
   contains
 
-    subroutine read_header_tmp(n_orbnl, lmax_basis, n_pjnl, zval, unit)
+    subroutine read_header_tmp(n_orbnl, lmax_basis, n_pjnl, zval, z, unit)
 
       use global_module, ONLY: iprint_pseudo
 
       implicit none
 
       integer, intent(in)         :: unit
-      integer, intent(out) :: n_orbnl, n_pjnl
+      integer, intent(out) :: n_orbnl, n_pjnl, z
       real(double), intent(out) :: zval
 
       character(len=78) :: line
 
       character(len=2)  :: symbol
       character(len=20) :: label
-      integer :: z, lmax_basis, lmax_projs, zval_int
+      integer :: lmax_basis, lmax_projs, zval_int
       real(double) :: mass, self_energy
 
       read(unit,'(a)') line

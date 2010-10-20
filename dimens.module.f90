@@ -60,6 +60,7 @@ module dimens
   !real(double) ::  blip_width, four_on_blip_width, fobw2, fobw3
 
   real(double), allocatable, dimension(:) :: RadiusSupport, NonLocalFactor, InvSRange
+  integer, allocatable, dimension(:) :: atomicrad
 
   integer :: n_grid_x, n_grid_y, n_grid_z, n_my_grid_points
 

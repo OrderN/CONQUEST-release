@@ -1467,6 +1467,8 @@ contains
 !!    Added hartree_module use
 !!   14:08, 2006/07/17
 !!    Added functional type selector and PBE force
+!!   2008/11/13
+!!    Added new PBE functional types (revPBE, RPBE)
 !!  SOURCE
 !!
   subroutine get_nonSC_correction_force( hf_force, potential, density_out, &
@@ -1479,7 +1481,8 @@ contains
     use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell,species_glob, dens, &
                              flag_functional_type, functional_lda_pz81, &
                              functional_lda_gth96, functional_lda_pw92, &
-                             functional_gga_pbe96, area_moveatoms, IPRINT_TIME_THRES3
+                             functional_gga_pbe96, functional_gga_pbe96_rev98, &
+                             functional_gga_pbe96_r99, area_moveatoms, IPRINT_TIME_THRES3
     use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
     use group_module, ONLY : blocks, parts
     use primary_module, ONLY: domain
@@ -1555,13 +1558,19 @@ contains
           call get_GTH_dxc_potential( density, h_potential, maxngrid )
        case (functional_lda_pw92)
           call get_dxc_potential_LDA_PW92( density, h_potential, maxngrid )
-       case (functional_gga_pbe96)
+       case (functional_gga_pbe96)                      ! Original PBE
           call get_dxc_potential_GGA_PBE( density, density_out, potential, maxngrid )
+       case (functional_gga_pbe96_rev98)                ! PBE with kappa of PRL 80, 890 (1998)
+          call get_dxc_potential_GGA_PBE( density, density_out, potential, maxngrid, functional_gga_pbe96_rev98 )
+       case (functional_gga_pbe96_r99)                  ! PBE with form of PRB 59, 7413 (1999)
+          call get_dxc_potential_GGA_PBE( density, density_out, potential, maxngrid, functional_gga_pbe96_r99 )
        case default
           call get_dxc_potential( density, h_potential, maxngrid )
     end select
 
-    if(flag_functional_type /= functional_gga_pbe96) then
+    if((flag_functional_type /= functional_gga_pbe96) &
+    .and.(flag_functional_type /= functional_gga_pbe96_rev98) &
+    .and.(flag_functional_type /= functional_gga_pbe96_r99) ) then
       do i=1,n_my_grid_points
          potential(i) = potential(i)+density(i)*h_potential(i)
       end do
@@ -2103,13 +2112,16 @@ contains
 !!  MODIFICATION HISTORY
 !!   15:54, 27/04/2007 drb 
 !!    Changed recip_vector, grad_density and tmp2, tmp3 to (n,3) for speed
+!!   2008/11/13 ast
+!!    Added new PBE functional types
 !!  SOURCE
 !!
-  subroutine get_dxc_potential_GGA_PBE(density,density_out, dxc_potential, size )
+  subroutine get_dxc_potential_GGA_PBE(density,density_out, dxc_potential, size, flavour )
 
     use datatypes
     use numbers
-    use global_module, ONLY: rcellx, rcelly, rcellz
+    use global_module, ONLY: rcellx, rcelly, rcellz, &
+                             functional_gga_pbe96_rev98, functional_gga_pbe96_r99
     use dimens, ONLY: grid_point_volume, one_over_grid_point_volume, &
          n_my_grid_points, n_grid_x, n_grid_y, n_grid_z
     use GenComms, ONLY: gsum, myid
@@ -2124,10 +2136,11 @@ contains
     real(double) :: density(size)
     real(double) :: density_out(size)
     real(double) :: dxc_potential(size)
-
+    integer, optional :: flavour
 
     !     Local variables
     integer n, i
+    integer selector
 
     real(double) :: grad_density(size), grad_density_xyz(size,3)
     real(double) :: rho, grad_rho, rho1_3, rho1_6
@@ -2150,15 +2163,21 @@ contains
     real(double) :: d2num1_dgrad2, d2den1_dgrad2, d2fl_dgrad2
     real(double) :: d2t_drho_dgrad, d2num1_drho_dgrad, d2den1_drho_dgrad
     real(double) :: d2fl_drho_dgrad
+
+    real(double) :: kappa, mu_kappa
    
     !     From Phys. Rev. Lett. 77, 3865 (1996)
     real(double), parameter :: mu = 0.21951_double
-    real(double), parameter :: kappa = 0.804_double
     real(double), parameter :: beta = 0.066725_double
     real(double), parameter :: gamma = 0.031091_double
+    real(double), parameter :: kappa_ori = 0.804_double
+
+    !     From Phys. Rev. Lett. 80, 890 (1998)
+    real(double), parameter :: kappa_alt = 1.245_double
 
     !     Precalculated constants
-    real(double), parameter :: mu_kappa = 0.27302_double         ! mu/kappa
+    real(double), parameter :: mu_kappa_ori = 0.27302_double     ! mu/kappa_ori
+    real(double), parameter :: mu_kappa_alt = 0.17631_double     ! mu/kappa_alt
     real(double), parameter :: beta_gamma = 2.146119_double      ! beta/gamma
     real(double), parameter :: beta_X_gamma = 0.002074546_double ! beta*gamma
     real(double), parameter :: k01 = 0.16162045967_double        ! 1/(2*(3*pi*pi)**(1/3))
@@ -2170,6 +2189,43 @@ contains
     real(double), parameter :: third = 0.333333333_double        ! 1/3
     real(double), parameter :: eight = 8.0_double
     real(double), parameter :: eight_thirds = 8.0_double / 3.0_double
+
+    !      Selector options
+    integer, parameter :: fx_original    = 1                     ! Used in PBE and revPBE
+    integer, parameter :: fx_alternative = 2                     ! Used in RPBE
+
+    ! Choose between PBE or revPBE parameters
+    if(PRESENT(flavour)) then
+      if(flavour==functional_gga_pbe96_rev98) then
+        kappa=kappa_alt
+        mu_kappa=mu_kappa_alt
+      else
+        kappa=kappa_ori
+        mu_kappa=mu_kappa_ori
+      end if
+    else
+      kappa=kappa_ori
+      mu_kappa=mu_kappa_ori
+    end if
+
+!*ast* AT PRESENT IGNORED
+    ! Choose functional form
+    if(PRESENT(flavour)) then
+      if(flavour==functional_gga_pbe96_r99) then
+        selector=fx_alternative
+      else
+        selector=fx_original
+      end if
+    else
+      selector=fx_original
+    end if
+
+!*ast* AT PRESENT, NOT IMPLEMENTED
+if(selector == fx_alternative) then
+  print *,"!!!!!!!!WARNING!!!!!!!!!!!"
+  print *,"WARNING: TO DO !!!!!!!!! RPBE NSC Forces NOT IMPLEMENTED YET. The values will be for standard PBE"
+  print *,"!!!!!!!!WARNING!!!!!!!!!!!"
+end if
 
     ! Build the gradient of the density
     call build_gradient (density, grad_density, grad_density_xyz, size)

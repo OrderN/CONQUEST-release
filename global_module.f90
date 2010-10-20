@@ -107,6 +107,8 @@ module global_module
   logical :: UseGemm
   logical :: flag_pulay_simpleStep
   logical :: flag_global_tolerance
+  logical :: flag_Becke_weights
+  logical :: flag_Becke_atomic_radii
   logical :: flag_mix_L_SC_min
   logical :: flag_onsite_blip_ana
   logical :: flag_read_velocity   ! 16/06/2010 TM
@@ -127,10 +129,12 @@ module global_module
   ! Numerical flag choosing functional type
   integer :: flag_functional_type
   character(len=15) :: functional_description 
-  integer, parameter :: functional_lda_pz81  = 1
-  integer, parameter :: functional_lda_gth96 = 2
-  integer, parameter :: functional_lda_pw92  = 3
-  integer, parameter :: functional_gga_pbe96 = 101
+  integer, parameter :: functional_lda_pz81        = 1
+  integer, parameter :: functional_lda_gth96       = 2
+  integer, parameter :: functional_lda_pw92        = 3
+  integer, parameter :: functional_gga_pbe96       = 101  ! Standard PBE
+  integer, parameter :: functional_gga_pbe96_rev98 = 102  ! revPBE (PBE + Zhang-Yang 1998)
+  integer, parameter :: functional_gga_pbe96_r99   = 103  ! RPBE (PBE + Hammer-Hansen-Norskov 1999)
 
   ! Switch for variation of blips in get_support_gradient
   integer :: WhichPulay

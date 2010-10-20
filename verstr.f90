@@ -1,1 +1,1 @@
-  character(len=*), parameter :: commentver="beta 0.34 (r83): Changes made for NVE-MD 20100705 (bugfix 20100920)"
+  character(len=*), parameter :: commentver="beta 0.35 (r85): Additional PBEs, process info output and Becke charges"

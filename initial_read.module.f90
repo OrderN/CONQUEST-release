@@ -1,3 +1,4 @@
+
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
@@ -107,7 +108,7 @@ contains
 
     use datatypes
     use numbers
-    use io_module, ONLY: read_mult, read_atomic_positions, pdb_template, pdb_format
+    use io_module, ONLY: read_mult, read_atomic_positions, pdb_template, pdb_format, print_process_info
     use group_module, ONLY : parts, part_method, HILBERT, PYTHON
     use construct_module, ONLY : init_group, init_primary
     use maxima_module, ONLY: maxpartsproc, maxatomsproc
@@ -168,6 +169,7 @@ contains
     def = 'make_prt.dat'
     part_coord_file = fdf_string(80,'IO.Partitions',def)
     call read_atomic_positions(trim(atom_coord_file))
+    if(iprint_init>4) call print_process_info()
     ! By now, we'll have unit cell sizes and grid cutoff
     call find_grid
     if(diagon) call readDiagInfo
@@ -312,12 +314,14 @@ contains
          runtype, restart_L, restart_rho, flag_basis_set, blips, PAOs, flag_test_forces, UseGemm, &
          flag_fractional_atomic_coords, flag_old_partitions, ne_in_cell, max_L_iterations, &
          flag_functional_type, functional_description, functional_lda_pz81, functional_lda_gth96, &
-         functional_lda_pw92, functional_gga_pbe96, flag_reset_dens_on_atom_move, flag_continue_on_SC_fail, &
+         functional_lda_pw92, functional_gga_pbe96, functional_gga_pbe96_rev98, functional_gga_pbe96_r99, &
+         flag_reset_dens_on_atom_move, flag_continue_on_SC_fail, &
          iprint_init, iprint_mat, iprint_ops, iprint_DM, iprint_SC, iprint_minE, iprint_time, &
          iprint_MD, iprint_index, iprint_gen, iprint_pseudo, iprint_basis, iprint_intgn, area_general, &
          global_maxatomspart, load_balance, many_processors, flag_assign_blocks, io_lun, &
-         flag_pulay_simpleStep, flag_global_tolerance, numprocs, flag_mix_L_SC_min, flag_onsite_blip_ana, flag_read_velocity, &
-         flag_quench_MD, temp_ion
+         flag_pulay_simpleStep, flag_Becke_weights, flag_Becke_atomic_radii, flag_global_tolerance, &
+         flag_mix_L_SC_min, flag_onsite_blip_ana, flag_read_velocity, flag_quench_MD, temp_ion, &
+         numprocs
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff, &
          n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport, NonLocalFactor, InvSRange, min_blip_sp, &
          flag_buffer_old, AtomMove_buffer
@@ -541,6 +545,8 @@ contains
        flag_onsite_blip_ana = fdf_boolean('Basis.OnsiteBlipsAnalytic',.true.)
        if(read_option.AND.flag_basis_set==blips) restart_file = fdf_string(40,'Basis.LoadBlipFile',' ')
        find_chdens = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
+       flag_Becke_weights = fdf_boolean('SC.BeckeWeights',.false.)
+       flag_Becke_atomic_radii = fdf_boolean('SC.BeckeAtomicRadii',.false.)
        ! Number of species
        n_species = fdf_integer('General.NumberOfSpecies',1)
        call allocate_species_vars
@@ -767,6 +773,10 @@ contains
           functional_description = 'LDA PW92'
        case (functional_gga_pbe96)
           functional_description = 'GGA PBE96'
+       case (functional_gga_pbe96_rev98)            ! This is PBE with the parameter correction
+          functional_description = 'GGA revPBE98'   !   in Zhang & Yang, PRL 80:4, 890 (1998)
+       case (functional_gga_pbe96_r99)              ! This is PBE with the functional form redefinition
+          functional_description = 'GGA RPBE99'     !   in Hammer et al., PRB 59:11, 7413-7421 (1999)
        case default
           functional_description = 'LDA PZ81'
        end select
@@ -1122,7 +1132,7 @@ contains
 
   subroutine allocate_species_vars
 
-    use dimens, ONLY: RadiusSupport, NonLocalFactor, InvSRange
+    use dimens, ONLY: RadiusSupport, NonLocalFactor, InvSRange, atomicrad
     use blip, ONLY: SupportGridSpacing, BlipWidth, Extent
     use memory_module, ONLY: reg_alloc_mem, type_dbl
     use species_module, ONLY: nsf_species, nlpf_species, npao_species, charge, mass, non_local_species, &
@@ -1136,7 +1146,7 @@ contains
     integer :: stat
     
     call start_timer(tmr_std_allocation)
-    allocate(RadiusSupport(n_species),STAT=stat)
+    allocate(RadiusSupport(n_species),atomicrad(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating RadiusSupport in allocate_species_vars: ",n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(Extent(n_species),STAT=stat)

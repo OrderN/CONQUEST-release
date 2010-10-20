@@ -131,11 +131,12 @@ contains
     use set_bucket_module, ONLY: rem_bucket, sf_H_sf_rem, pao_H_sf_rem
     use calc_matrix_elements_module, ONLY: get_matrix_elements_new
     use GenComms, ONLY: gsum, end_comms, my_barrier, inode, ionode
-    use global_module, ONLY: iprint_ops, flag_vary_basis, flag_basis_set, PAOs, sf, paof, IPRINT_TIME_THRES1
+    use global_module, ONLY: iprint_ops, flag_vary_basis, flag_basis_set, PAOs, &
+         sf, paof, IPRINT_TIME_THRES1,iprint_SC
     use PAO_grid_transform_module, ONLY: single_PAO_to_grid
     use functions_on_grid, ONLY: supportfns, H_on_supportfns, &
          allocate_temp_fn_on_grid, free_temp_fn_on_grid, gridfunctions, fn_on_grid
-    use io_module, ONLY: dump_matrix, dump_blips, dump_charge, write_matrix
+    use io_module, ONLY: dump_matrix, dump_blips, dump_charge, write_matrix, dump_charge
     use potential_module, ONLY: potential
     use dimens, ONLY: n_my_grid_points
 
@@ -214,6 +215,7 @@ contains
     call matrix_sum(one,matH,one,matNL)
     if(iprint_ops>4) call dump_matrix("NS",matS,inode)
     if(iprint_ops>4) call dump_matrix("NH",matH,inode)
+    if(iprint_SC>2) call dump_charge(rho,size,inode)
 
     call stop_print_timer(tmr_l_hmatrix, "get_H_matrix", IPRINT_TIME_THRES1)
     call stop_timer(tmr_std_hmatrix)
@@ -272,7 +274,8 @@ contains
     use global_module, ONLY: sf, &
                              flag_functional_type, functional_lda_pz81, &
                              functional_lda_gth96, functional_lda_pw92, &
-                             functional_gga_pbe96, area_ops
+                             functional_gga_pbe96, functional_gga_pbe96_rev98, &
+                             functional_gga_pbe96_r99, area_ops
     use GenBlas, ONLY: copy, axpy, dot, rsum
     use dimens, ONLY: grid_point_volume, n_my_grid_points, n_grid_z
     use block_module, ONLY: n_blocks, n_pts_in_block
@@ -360,6 +363,10 @@ contains
        case (functional_gga_pbe96)
           !ORI call get_xc_potential_GGA_PBE( rho, xc_potential, xc_energy, n_my_grid_points )
           call get_xc_potential_GGA_PBE( rho, xc_potential, xc_energy, size )
+       case (functional_gga_pbe96_rev98)
+          call get_xc_potential_GGA_PBE( rho, xc_potential, xc_energy, size, functional_gga_pbe96_rev98 )
+       case (functional_gga_pbe96_r99)
+          call get_xc_potential_GGA_PBE( rho, xc_potential, xc_energy, size, functional_gga_pbe96_r99 )
        case default
           !ORI call get_xc_potential( rho, xc_potential, xc_energy, n_my_grid_points )
           call get_xc_potential( rho, xc_potential, xc_energy, size )
@@ -1401,6 +1408,10 @@ contains
 !!
 !!   Note that this is the functional described in
 !!   Phys. Rev. Lett. 77, 3865 (1996)
+!!
+!!   It is also (depending on an optional parameter)
+!!     either revPBE, Phys. Rev. Lett. 80, 890 (1998), 
+!!     or RPBE, Phys. Rev. B 59, 7413 (1999)
 !!  INPUTS
 !!
 !!
@@ -1416,17 +1427,20 @@ contains
 !!            rgradient(1,:) + rgradient(2,:) + rgradient(3,:)
 !!          (this was less efficient)
 !!   15:55, 27/04/2007 drb 
-!!    Changed recip_vector, grad_density to (n,3) for speed
+!!     Changed recip_vector, grad_density to (n,3) for speed
+!!   2008/11/13 ast
+!!     Added revPBE and RPBE
 !!  SOURCE
 !!
-  subroutine get_xc_potential_GGA_PBE(density,xc_potential,xc_energy,size )
+  subroutine get_xc_potential_GGA_PBE(density,xc_potential,xc_energy,size,flavour)
 
     use datatypes
     use numbers
-    use global_module, ONLY: rcellx, rcelly, rcellz
+    use global_module, ONLY: rcellx, rcelly, rcellz, &
+                             functional_gga_pbe96_rev98, functional_gga_pbe96_r99
     use dimens, ONLY: grid_point_volume, one_over_grid_point_volume, &
          n_my_grid_points, n_grid_x, n_grid_y, n_grid_z
-    use GenComms, ONLY: gsum
+    use GenComms, ONLY: gsum, cq_abort
     use energy, ONLY: delta_E_xc
     use fft_module, ONLY: fft3, recip_vector
 
@@ -1437,13 +1451,16 @@ contains
  
     real(double) :: xc_energy
     real(double) :: density(size), xc_potential(size)
+    integer, optional :: flavour
 
 
     !     Local variables
     integer n
+    integer selector
 
     !ORI real(double)  :: grad_density(size), grad_density_xyz(3, size)
-    real(double)  :: grad_density(size), grad_density_xyz(size,3)
+    real(double),allocatable,dimension(:) :: grad_density
+    real(double),allocatable,dimension(:,:) :: grad_density_xyz
     real(double)  :: rho, grad_rho, rho1_3, rho1_6, &
                      ks, s, s2, &
                      t, t2, A, At2, &
@@ -1455,35 +1472,77 @@ contains
                      ddenominator1_dt2, ddenominator1_dA, &
                      dfactor2_dt2, dfactor2_dnumerator1, dfactor2_ddenominator1, &
                      dfactor2_drho, dfactor3_dfactor2, dfactor3_drho
-    real(double) :: xc_energy_lda_total, xc_energy_lda(size), xc_potential_lda(size), &
+    real(double) :: xc_energy_lda_total, &
                     e_correlation_lda, &
                     de_correlation_lda, &
                     e_exchange, e_correlation, &
                     de_exchange, de_correlation, &
                     dde_exchange, dde_correlation
+    real(double),allocatable,dimension(:) :: xc_energy_lda, xc_potential_lda
     real(double) :: df_dgrad_rho
+    real(double) :: kappa, mu_kappa
+    real(double) :: rpbe_exp
 
-    !ORIcomplex(double_cplx), dimension(3,size) :: rgradient      ! Gradient in reciprocal space
-    complex(double_cplx), dimension(size,3) :: rgradient      ! Gradient in reciprocal space
+    complex(double_cplx), allocatable, dimension(:,:) :: rgradient      ! Gradient in reciprocal space
 
     !     From Phys. Rev. Lett. 77, 3865 (1996)
     real(double), parameter :: mu = 0.21951_double
-    real(double), parameter :: kappa = 0.804_double
     real(double), parameter :: beta = 0.066725_double
     real(double), parameter :: gamma = 0.031091_double
+    real(double), parameter :: kappa_ori = 0.804_double
+
+    !     From Phys. Rev. Lett. 80, 890 (1998)
+    real(double), parameter :: kappa_alt = 1.245_double
 
     !     Precalculated constants
-    real(double), parameter :: mu_kappa = 0.27302_double         ! mu/kappa
+    real(double), parameter :: mu_kappa_ori = 0.27302_double     ! mu/kappa_ori
+    real(double), parameter :: mu_kappa_alt = 0.17631_double     ! mu/kappa_alt
+    real(double), parameter :: two_mu = 0.43902_double           ! 2*mu
     real(double), parameter :: beta_gamma = 2.146119_double      ! beta/gamma
     real(double), parameter :: beta_X_gamma = 0.002074546_double ! beta*gamma
     real(double), parameter :: k01 = 0.16162045967_double        ! 1/(2*(3*pi*pi)**(1/3))
-    real(double), parameter :: k02 = -0.16212105381_double       ! -3*mu*((4*pi/3)**3)/(2*pi*alpha)
+    real(double), parameter :: k02 = -0.16212105381_double       ! -3*mu*((4*pi/3)**(1/3))/(2*pi*alpha)
                                                                  ! =mu*k00*k01(LDA_PW92)=mu*k04
     real(double), parameter :: k03 = 1.98468639_double           ! ((4/pi)*(3*pi*pi)**(1/3))**(1/2)
-    real(double), parameter :: k04 = -0.738558852965_double      ! -3*((4*pi/3)**3)/(2*pi*alpha) = k00*k01 in LDA_PW92
+    real(double), parameter :: k04 = -0.738558852965_double      ! -3*((4*pi/3)**(1/3))/(2*pi*alpha) = k00*k01 in LDA_PW92
     real(double), parameter :: k05 = 0.05240415_double           ! -2*k01*k02
+    real(double), parameter :: k06 = -0.593801317784_double      ! k04*kappa_ori
+    real(double), parameter :: k07 = -0.984745137287_double      ! 4*k04/3
     real(double), parameter :: third = 0.333333333_double        ! 1/3
     real(double), parameter :: seven_thirds = 2.333333333_double ! 7/3
+
+    integer :: stat
+    !      Selector options
+    integer, parameter :: fx_original    = 1                     ! Used in PBE and revPBE
+    integer, parameter :: fx_alternative = 2                     ! Used in RPBE
+
+    ! Choose between PBE or revPBE parameters
+    if(PRESENT(flavour)) then
+      if(flavour==functional_gga_pbe96_rev98) then
+        kappa=kappa_alt
+        mu_kappa=mu_kappa_alt
+      else
+        kappa=kappa_ori
+        mu_kappa=mu_kappa_ori
+      end if 
+    else
+      kappa=kappa_ori
+      mu_kappa=mu_kappa_ori
+    end if
+
+    allocate(grad_density(size), grad_density_xyz(size,3), &
+      xc_energy_lda(size), xc_potential_lda(size), rgradient(size,3),STAT = stat)
+    if(stat/=0) call cq_abort("Error allocating arrays for PBE functional: ",stat)
+    ! Choose functional form
+    if(PRESENT(flavour)) then
+      if(flavour==functional_gga_pbe96_r99) then
+        selector=fx_alternative
+      else
+        selector=fx_original
+      end if
+    else
+      selector=fx_original
+    end if
 
     ! Build the gradient of the density
     call build_gradient (density, grad_density, grad_density_xyz, size)
@@ -1506,13 +1565,18 @@ contains
           rho1_6 = sqrt (rho1_3)
           s = k01 * grad_rho / (rho ** four_thirds)
           s2 = s * s
-          denominator0 = 1.0 / (1.0 + mu_kappa * s2)
-          factor0 = k02 * rho1_3
-          factor1 = s2 * denominator0
-          ! NOTE: This doesn't look like in Phys. Rev. Lett. 77:18, 3865 (1996)
-          !       because the 1 in Fx, has been multiplied by Ex-LDA and is implicit
-          !       in xc_energy_lda(n), in the total energy below
-          e_exchange = factor0 * factor1
+          if(selector == fx_alternative) then           ! RPBE
+            rpbe_exp = exp(-mu_kappa * s2)
+            e_exchange = k06*rho1_3*(1.0_double-rpbe_exp)
+          else                                          ! PBE, revPBE
+            denominator0 = 1.0 / (1.0 + mu_kappa * s2)
+            factor0 = k02 * rho1_3
+            factor1 = s2 * denominator0
+            ! NOTE: This doesn't look like in Phys. Rev. Lett. 77:18, 3865 (1996)
+            !       because the 1 in Fx, has been multiplied by Ex-LDA and is implicit
+            !       in xc_energy_lda(n), in the total energy below
+            e_exchange = factor0 * factor1
+          end if
        else
           e_exchange = zero
        end if
@@ -1569,7 +1633,11 @@ contains
        ! Exchange
 
        if (rho > very_small) then
-          de_exchange = four_thirds * factor0 * factor1 * ( 1 - 2* denominator0 )
+          if(selector == fx_alternative) then           ! RPBE
+            de_exchange = k07 * rho1_3 * (kappa - (two_mu * s2 + kappa) * rpbe_exp)
+          else                                          ! PBE, revPBE
+            de_exchange = four_thirds * factor0 * factor1 * ( 1 - 2* denominator0 )
+          end if
        else
           de_exchange = zero
        end if
@@ -1623,7 +1691,11 @@ contains
        ! Exchange
 
        if (rho > very_small) then
-          dde_exchange = -k05 * s * denominator0 * denominator0!factor1 * denominator0
+          if(selector == fx_alternative) then           ! RPBE
+             dde_exchange = -k05 * s * rpbe_exp
+          else                                          ! PBE, revPBE
+             dde_exchange = -k05 * s * denominator0 * denominator0!factor1 * denominator0
+          end if 
        else
           dde_exchange = zero
        end if
@@ -1713,6 +1785,27 @@ contains
     call gsum(delta_E_xc)
     ! and 'integrate' the energy over the volume of the grid point
     delta_E_xc = delta_E_xc * grid_point_volume
+
+    if(allocated(grad_density)) then
+       deallocate(grad_density,STAT=stat)
+       if(stat/=0) call cq_abort("Error deallocating grad_density",stat)
+    end if
+    if(allocated(grad_density_xyz)) then
+       deallocate(grad_density_xyz,STAT=stat)
+       if(stat/=0) call cq_abort("Error deallocating grad_density_xyz",stat)
+    end if
+    if(allocated(xc_energy_lda)) then
+       deallocate(xc_energy_lda,STAT=stat)
+       if(stat/=0) call cq_abort("Error deallocating xc_energy_lda",stat)
+    end if
+    if(allocated(xc_potential_lda)) then
+       deallocate(xc_potential_lda,STAT=stat)
+       if(stat/=0) call cq_abort("Error deallocating xc_potential_lda",stat)
+    end if
+    if(allocated(rgradient)) then
+       deallocate(rgradient,STAT=stat)
+       if(stat/=0) call cq_abort("Error deallocating rgradient",stat)
+    end if
 
     return
   end subroutine get_xc_potential_GGA_PBE

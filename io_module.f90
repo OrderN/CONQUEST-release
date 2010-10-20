@@ -3493,6 +3493,91 @@ hc2:    do
   end subroutine get_file_name
 !!***
 
+!!****f* io_module/print_process_info *
+!!
+!!  NAME
+!!   print_process_info - prints MPI and unix PIDs and hostname
+!!  USAGE
+!!   get_file_name()
+!!  PURPOSE
+!!   Prints a line matching MPI ID to process ID and host,
+!!   so that output files can be identified. Useful to compare
+!!   memory use, for example.
+!!  INPUTS
+!!
+!!  OUTPUTS
+!!
+!!  USES
+!!
+!!  AUTHOR
+!!   A.S. Torralba
+!!  CREATION DATE
+!!   05/08/2009
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine print_process_info()
+
+    use global_module, ONLY: numprocs
+    use GenComms, ONLY: inode,ionode
+    use mpi
+
+    implicit none
+
+    ! Parameters
+    integer, parameter :: hostlen=80
+
+    ! Local variables
+    integer :: mypid
+    integer :: getpid        ! Intrinsic
+    character(len=hostlen) :: myhost
+    character(len=hostlen), allocatable :: hostnames(:)
+    integer, allocatable, dimension(:) :: pids
+    integer :: stat, i
+    integer :: mpistat(MPI_STATUS_SIZE), ierr
+
+    ! Get process ID and hostname for this process
+    mypid=getpid()
+    call hostnm(myhost)
+
+    ! Communicate the information to the ionode, so it can print
+    if(inode==ionode) then
+      allocate(hostnames(numprocs),STAT=stat)
+      if(stat/=0) call cq_abort('Error allocating hostnames !')
+      allocate(pids(numprocs),STAT=stat)
+      if(stat/=0) call cq_abort('Error allocating pids !')
+
+      do i=1,numprocs
+        if(i /= ionode) then
+           call MPI_recv(hostnames(i),hostlen,MPI_CHARACTER,i-1,1,MPI_COMM_WORLD,mpistat,ierr)
+           if(ierr /= MPI_SUCCESS) call cq_abort('Error receiving hostnames ! ',i,ierr)
+           call MPI_recv(pids(i),1,MPI_INTEGER,i-1,1,MPI_COMM_WORLD,mpistat,ierr)
+           if(ierr /= MPI_SUCCESS) call cq_abort('Error receiving pids ! ',i,ierr)
+        else
+          hostnames(i)=myhost
+          pids(i)=mypid
+        end if
+      end do
+
+      write(io_lun,*)
+      do i=1,numprocs
+         write(io_lun,'(a,i9,a,i9,2a)') 'ID-Info: MPI = ',i,'    Process = ',pids(i),'    Host = ',hostnames(i)
+      end do
+      write(io_lun,*)
+
+      deallocate(hostnames)
+      deallocate(pids)
+    else
+      call MPI_send(myhost,hostlen,MPI_CHARACTER,ionode-1,1,MPI_COMM_WORLD,ierr)
+      if(ierr /= MPI_SUCCESS) call cq_abort('Error sending hostnames ! ',i,ierr)
+      call MPI_send(mypid,1,MPI_INTEGER,ionode-1,1,MPI_COMM_WORLD,ierr)
+      if(ierr /= MPI_SUCCESS) call cq_abort('Error sending pids ! ',i,ierr)
+    end if
+
+  end subroutine print_process_info
+!!***
+
 !!****f* io_module/write_velocity *
 !!
 !!  NAME

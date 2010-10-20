@@ -47,6 +47,7 @@ module numbers
   real(double), parameter :: four = 4.0_double 
   real(double), parameter :: five = 5.0_double 
   real(double), parameter :: six = 6.0_double 
+  real(double), parameter :: seven = 7.0_double
   real(double), parameter :: fifteen = 15.0_double
   real(double), parameter :: sixteen = 16.0_double
   real(double), parameter :: minus_four = -4.0_double 

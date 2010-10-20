@@ -31,6 +31,8 @@
 !!    Changdes for output to file not stdout
 !!   2008/05/23 ast
 !!    Added timers
+!!   2009/01/23 14:16 dave
+!!    Added Becke weights and Becke atomic charges
 !!  SOURCE
 module density_module
   
@@ -46,6 +48,11 @@ module density_module
   real(double), allocatable, dimension(:) :: density ! values at gridpoints, to be calculated.
   real(double) :: density_scale ! Scaling factor for atomic densities
 
+  ! Becke weights
+  real(double), allocatable, dimension(:) :: bw, bwgrid
+  real(double), allocatable, dimension(:) :: atomcharge
+  logical :: weights_set = .false.
+  real(double), dimension(35) :: atrad
   ! RCS tag for object file identification
   character(len=80), private :: RCSid = "$Id$"
 
@@ -306,7 +313,7 @@ contains
     use primary_module, ONLY: domain
     use set_blipgrid_module, ONLY: naba_atm
     use GenComms, ONLY: gsum
-    use global_module, ONLY: iprint_SC, sf
+    use global_module, ONLY: iprint_SC, sf, ni_in_cell, flag_Becke_weights
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
 
     implicit none
@@ -369,7 +376,7 @@ contains
 
     call gsum(electrons)
     if(inode.eq.ionode.AND.iprint_SC>1) write(io_lun,*) 'Electrons: ',electrons
-
+    if(flag_Becke_weights) call build_Becke_charges(denout,size)
     ! support_K is using the same memory as h_on_support, so lets be safe
     ! and set it back to zero
     gridfunctions(support_K)%griddata = zero
@@ -377,6 +384,698 @@ contains
 
     return
   end subroutine get_electronic_density
+!!***
+
+!!****f* / *
+!!
+!!  NAME 
+!!   
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   
+!!  INPUTS
+!!   
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   
+!!  CREATION DATE
+!!   
+!!  MODIFICATION HISTORY
+!!  
+!!  SOURCE
+!!  
+  subroutine build_Becke_weights!(chden,size)
+
+    use datatypes
+    use GenBlas, ONLY: scal, rsum
+    use numbers, ONLY: zero, very_small, two, one, half
+    use block_module, ONLY: n_pts_in_block 
+    use primary_module, ONLY: domain
+    use set_blipgrid_module, ONLY: naba_atm
+    use GenComms, ONLY: gsum, cq_abort, inode, ionode
+    use global_module, ONLY: rcellx,rcelly,rcellz,iprint_SC, sf, ni_in_cell, species_glob, id_glob, io_lun, &
+         flag_Becke_atomic_radii
+    use cover_module, ONLY: DCS_parts
+    use group_module, ONLY : blocks, parts
+    use dimens, ONLY: RadiusSupport, atomicrad
+    use maxima_module, ONLY: maxngrid
+
+    implicit none
+
+    !! Passed variables
+    !integer :: size
+    !real(double), dimension(size) :: chden
+
+    ! Local variables
+
+    integer :: blk, no_of_ib_ia, n, n_i, ipos, jpos, stat, at, atomi, atomj, point
+    integer, dimension(:), allocatable :: npoint, globatom
+    integer, dimension(:,:), allocatable :: ip_store
+    real(double) :: sum, mu, sij, sji, Rij
+    real(double), dimension(:), allocatable :: xatom, yatom, zatom, rcut, rad
+    real(double), dimension(:,:), allocatable :: r_store, x_store, y_store, z_store
+
+    real(double):: dcellx_block,dcelly_block,dcellz_block
+    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom, iatom, iblock, the_species
+    real(double):: xblock,yblock,zblock, aij, chi, uij, nu
+
+    call start_timer(tmr_std_chargescf)
+    if(inode==ionode.AND.iprint_SC>=2) write(io_lun,fmt='(2x,"Entering build_Becke_weights")')
+    if(.NOT.weights_set) then
+       call assign_atomic_radii
+       weights_set = .true.
+    end if
+    no_of_ib_ia=0
+    if(allocated(bw)) deallocate(bw)
+    if(allocated(bwgrid)) deallocate(bwgrid)
+    do blk=1, domain%groups_on_node
+       no_of_ib_ia = no_of_ib_ia + naba_atm(sf)%no_of_atom(blk)
+    end do
+    no_of_ib_ia = no_of_ib_ia * n_pts_in_block
+    allocate(bw(no_of_ib_ia),STAT=stat)
+    allocate(bwgrid(maxngrid),STAT=stat)
+    bw = -one
+    no_of_ib_ia=0
+    dcellx_block=rcellx/blocks%ngcellx
+    dcelly_block=rcelly/blocks%ngcelly
+    dcellz_block=rcellz/blocks%ngcellz
+    atomcharge = zero
+    do blk=1, domain%groups_on_node
+       !write(io_lun,*) 'Block: ', blk,naba_atm(sf)%no_of_atom(blk)
+       xblock=(domain%idisp_primx(blk)+domain%nx_origin-1)*dcellx_block
+       yblock=(domain%idisp_primy(blk)+domain%ny_origin-1)*dcelly_block
+       zblock=(domain%idisp_primz(blk)+domain%nz_origin-1)*dcellz_block
+       if(naba_atm(sf)%no_of_atom(blk) > 0) then  
+          allocate(xatom(naba_atm(sf)%no_of_atom(blk)), yatom(naba_atm(sf)%no_of_atom(blk)), &
+               zatom(naba_atm(sf)%no_of_atom(blk)), rcut(naba_atm(sf)%no_of_atom(blk)), &
+               npoint(naba_atm(sf)%no_of_atom(blk)), globatom(naba_atm(sf)%no_of_atom(blk)), &
+               ip_store(n_pts_in_block,naba_atm(sf)%no_of_atom(blk)), rad(naba_atm(sf)%no_of_atom(blk)),&
+               x_store(n_pts_in_block,naba_atm(sf)%no_of_atom(blk)), &
+               y_store(n_pts_in_block,naba_atm(sf)%no_of_atom(blk)), &
+               z_store(n_pts_in_block,naba_atm(sf)%no_of_atom(blk)), &
+               r_store(n_pts_in_block,naba_atm(sf)%no_of_atom(blk)),STAT=stat)
+          ip_store = 0
+          x_store = zero
+          y_store = zero
+          z_store = zero
+          r_store = zero
+          ! Replace this with part/atom loop !
+          at = 0
+          do ipart=1,naba_atm(sf)%no_of_part(blk)
+             jpart=naba_atm(sf)%list_part(ipart,blk)
+             if(jpart > DCS_parts%mx_gcover) then 
+                call cq_abort('PAO_to_grid_global: JPART ERROR ',ipart,jpart)
+             endif
+             ind_part=DCS_parts%lab_cell(jpart)
+             do ia=1,naba_atm(sf)%no_atom_on_part(ipart,blk)
+                at=at+1
+                ii = naba_atm(sf)%list_atom(at,blk)
+                icover= DCS_parts%icover_ibeg(jpart)+ii-1
+                ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
+                xatom(at)=DCS_parts%xcover(icover)
+                yatom(at)=DCS_parts%ycover(icover)
+                zatom(at)=DCS_parts%zcover(icover)
+                the_species=species_glob(ig_atom)
+                globatom(at) = ig_atom
+                rcut(at) = RadiusSupport(the_species)
+                rad(at) = atomicrad(the_species)
+             end do
+          end do
+          ! ** NEED rcut ** ! 
+          !write(55,*) blk
+          call check_block(xblock,yblock,zblock,xatom,yatom,zatom,rcut,&
+               npoint,ip_store, x_store, y_store, z_store,r_store,n_pts_in_block,naba_atm(sf)%no_of_atom(blk))
+          do point = 1, n_pts_in_block
+             ! Sum is normalisation for grid point, Z = \sum_i bw_i
+             sum = zero
+             ! Actually we want a flag set in check_block so that this whole double loop
+             ! is skipped if r_in criterion is met and the normalisation
+             ! if(flag) then set weight for atom = 1, others = 0
+             ! else
+             do atomi = 1, naba_atm(sf)%no_of_atom(blk)
+                ipos = no_of_ib_ia + n_pts_in_block*(atomi-1)
+                if(ip_store(point,atomi)>0) then
+                   ! Here we accumulate bw which is \prod_{j\ne i} s(mu_{ij})
+                   if(naba_atm(sf)%no_of_atom(blk)==1) then
+                      bw(ipos+point) = one
+                   else
+                      do atomj = atomi+1,naba_atm(sf)%no_of_atom(blk)
+                         jpos = no_of_ib_ia + n_pts_in_block*(atomj-1)
+                         if(ip_store(point,atomj)>0) then
+                            ! Do we want a pre-calculated set of these ?
+                            Rij = sqrt((xatom(atomi)-xatom(atomj))*(xatom(atomi)-xatom(atomj)) + &
+                                 (yatom(atomi)-yatom(atomj))*(yatom(atomi)-yatom(atomj)) + &
+                                 (zatom(atomi)-zatom(atomj))*(zatom(atomi)-zatom(atomj)))
+                            ! make mu
+                            mu = (r_store(point,atomi) - r_store(point,atomj))/Rij
+                            if(flag_Becke_atomic_radii) then
+                               chi = rad(atomi)/rad(atomj)
+                               uij = (chi-one)/(chi+one)
+                               aij = uij/(uij*uij-one)
+                               if(aij<-half) aij = -half
+                               if(aij>half) aij = half
+                               !sij = s(mu)
+                               nu = mu+aij*(1-mu*mu)
+                               sij = s(nu)
+                               sji = s(-nu)
+                            else
+                               sij = s(mu)
+                               sji = s(-mu)
+                            end if
+                            if(bw(ipos+point)<zero) bw(ipos+point) = one
+                            if(bw(jpos+point)<zero) bw(jpos+point) = one
+                            bw(ipos+point) = bw(ipos+point)*sij
+                            !write(54,fmt='(2i8,3f20.12)') ipos,point,mu,sij,bw(ipos+point)
+                            bw(jpos+point) = bw(jpos+point)*sji
+                         else
+                            bw(jpos+point) = zero
+                         end if
+                      end do ! atomj
+                      if(bw(ipos+point)<zero) bw(ipos+point) = zero
+                   end if
+                   ! Accumulate w_i into p
+                   sum = sum + bw(ipos+point)
+                else
+                   bw(ipos+point) = zero
+                end if ! ip_store(point,atomi)>0
+             end do ! atomi
+             !write(52,fmt='(2x,f20.12)') sum
+             do atomi = 1, naba_atm(sf)%no_of_atom(blk)
+                ipos = no_of_ib_ia + n_pts_in_block*(atomi-1)
+                ! Normalise w
+                if(abs(sum)>1.0e-8_double) bw(ipos+point) = bw(ipos+point)/sum
+                ! ALEX: change constraint to appropriate array and uncomment lines below
+                ! if(constraint(globatom(atomi))) bwgrid(point+(blk-1)*n_pts_in_block) = &
+                !    bwgrid(point+(blk-1)*n_pts_in_block) + bw(ipos+point)
+             end do ! atomi
+             ! end if
+          end do ! point
+          no_of_ib_ia = no_of_ib_ia + n_pts_in_block*naba_atm(sf)%no_of_atom(blk)
+          deallocate(xatom, yatom, zatom, rcut, npoint, globatom, ip_store, &
+               x_store, y_store, z_store, r_store, rad, STAT=stat)
+       endif !(naba_atm(sf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
+    end do ! blk
+    !!write(*,*) 'Done blocks'
+    !atomcharge = atomcharge*grid_point_volume
+    !call gsum(atomcharge,ni_in_cell)
+    !!write(*,*) 'Done gsum'
+    !if(inode==ionode) then
+    !   do blk = 1, ni_in_cell
+    !      write(io_lun,fmt='(2x,"Atom ",i4," Becke charge ",f20.12)') blk,atomcharge(blk)
+    !   end do
+    !end if
+  end subroutine build_Becke_weights
+!!***
+
+!!****f* / *
+!!
+!!  NAME 
+!!   
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   
+!!  INPUTS
+!!   
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   
+!!  CREATION DATE
+!!   
+!!  MODIFICATION HISTORY
+!!  
+!!  SOURCE
+!!  
+  subroutine build_Becke_weight_forces(weight_force,chden,size)
+
+    use datatypes
+    use GenBlas, ONLY: scal, rsum
+    use numbers, ONLY: zero, very_small, two, one
+    use block_module, ONLY: n_pts_in_block 
+    use primary_module, ONLY: domain
+    use set_blipgrid_module, ONLY: naba_atm
+    use GenComms, ONLY: gsum, cq_abort, inode, ionode
+    use global_module, ONLY: rcellx,rcelly,rcellz,iprint_SC, sf, ni_in_cell, species_glob, id_glob, io_lun
+    use cover_module, ONLY: DCS_parts
+    use group_module, ONLY : blocks, parts
+    use dimens, ONLY: RadiusSupport, grid_point_volume
+    use maxima_module, ONLY: maxngrid
+
+    implicit none
+
+    ! Passed variables
+    real(double), dimension(3,ni_in_cell) :: weight_force
+    integer :: size
+    real(double), dimension(size) :: chden
+
+    ! Local variables
+
+    integer :: blk, no_of_ib_ia, n, n_i, ipos, jpos, stat, at, atomi, atomj, point
+    integer, dimension(:), allocatable :: npoint, globatom
+    integer, dimension(:,:), allocatable :: ip_store
+    real(double) :: sum, mu, sij, sji, Rij, dwjbydix, dwjbydiy, dwjbydiz, elec_here
+    real(double), dimension(:), allocatable :: xatom, yatom, zatom, rcut
+    real(double), dimension(:,:), allocatable :: r_store, x_store, y_store, z_store, &
+         sum1x,sum2x,sum1y,sum2y,sum1z,sum2z,dmux,dmuy,dmuz,tij
+
+    real(double):: dcellx_block,dcelly_block,dcellz_block
+    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom, iatom, iblock, the_species
+    real(double):: xblock,yblock,zblock
+
+    call start_timer(tmr_std_chargescf)
+    if(inode==ionode.AND.iprint_SC>=2) write(io_lun,fmt='(2x,"Entering build_Becke_weights")')
+    no_of_ib_ia=0
+    if(allocated(bw)) deallocate(bw)
+    if(allocated(bwgrid)) deallocate(bwgrid)
+    do blk=1, domain%groups_on_node
+       no_of_ib_ia = no_of_ib_ia + naba_atm(sf)%no_of_atom(blk)
+    end do
+    no_of_ib_ia = no_of_ib_ia * n_pts_in_block
+    allocate(bw(no_of_ib_ia),STAT=stat)
+    allocate(bwgrid(maxngrid),STAT=stat)
+    bw = -one
+    no_of_ib_ia=0
+    dcellx_block=rcellx/blocks%ngcellx
+    dcelly_block=rcelly/blocks%ngcelly
+    dcellz_block=rcellz/blocks%ngcellz
+    atomcharge = zero
+    do blk=1, domain%groups_on_node
+       !write(io_lun,*) 'Block: ', blk,naba_atm(sf)%no_of_atom(blk)
+       xblock=(domain%idisp_primx(blk)+domain%nx_origin-1)*dcellx_block
+       yblock=(domain%idisp_primy(blk)+domain%ny_origin-1)*dcelly_block
+       zblock=(domain%idisp_primz(blk)+domain%nz_origin-1)*dcellz_block
+       if(naba_atm(sf)%no_of_atom(blk) > 0) then  
+          allocate(xatom(naba_atm(sf)%no_of_atom(blk)), yatom(naba_atm(sf)%no_of_atom(blk)), &
+               zatom(naba_atm(sf)%no_of_atom(blk)), rcut(naba_atm(sf)%no_of_atom(blk)), &
+               npoint(naba_atm(sf)%no_of_atom(blk)), globatom(naba_atm(sf)%no_of_atom(blk)), &
+               ip_store(n_pts_in_block,naba_atm(sf)%no_of_atom(blk)), &
+               x_store(n_pts_in_block,naba_atm(sf)%no_of_atom(blk)), &
+               y_store(n_pts_in_block,naba_atm(sf)%no_of_atom(blk)), &
+               z_store(n_pts_in_block,naba_atm(sf)%no_of_atom(blk)), &
+               r_store(n_pts_in_block,naba_atm(sf)%no_of_atom(blk)),STAT=stat)
+          ip_store = 0
+          r_store = zero
+          ! Replace this with part/atom loop !
+          if(naba_atm(sf)%no_of_atom(blk)>1) then ! If there's only one atom there's no force
+             at = 0
+             do ipart=1,naba_atm(sf)%no_of_part(blk)
+                jpart=naba_atm(sf)%list_part(ipart,blk)
+                if(jpart > DCS_parts%mx_gcover) then 
+                   call cq_abort('PAO_to_grid_global: JPART ERROR ',ipart,jpart)
+                endif
+                ind_part=DCS_parts%lab_cell(jpart)
+                do ia=1,naba_atm(sf)%no_atom_on_part(ipart,blk)
+                   at=at+1
+                   ii = naba_atm(sf)%list_atom(at,blk)
+                   icover= DCS_parts%icover_ibeg(jpart)+ii-1
+                   ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
+                   xatom(at)=DCS_parts%xcover(icover)
+                   yatom(at)=DCS_parts%ycover(icover)
+                   zatom(at)=DCS_parts%zcover(icover)
+                   the_species=species_glob(ig_atom)
+                   globatom(at) = ig_atom
+                   rcut(at) = RadiusSupport(the_species)
+                end do
+             end do
+             ! ** NEED rcut ** ! 
+             !write(55,*) blk
+             call check_block(xblock,yblock,zblock,xatom,yatom,zatom,rcut,&
+                  npoint,ip_store, x_store, y_store, z_store,r_store,n_pts_in_block,naba_atm(sf)%no_of_atom(blk))
+             allocate(sum1x(naba_atm(sf)%no_of_atom(blk),naba_atm(sf)%no_of_atom(blk)), &
+                  sum1y(naba_atm(sf)%no_of_atom(blk),naba_atm(sf)%no_of_atom(blk)), &
+                  sum1z(naba_atm(sf)%no_of_atom(blk),naba_atm(sf)%no_of_atom(blk)), &
+                  sum2x(naba_atm(sf)%no_of_atom(blk),naba_atm(sf)%no_of_atom(blk)), &
+                  sum2y(naba_atm(sf)%no_of_atom(blk),naba_atm(sf)%no_of_atom(blk)), &
+                  sum2z(naba_atm(sf)%no_of_atom(blk),naba_atm(sf)%no_of_atom(blk)), &
+                  dmux(naba_atm(sf)%no_of_atom(blk),naba_atm(sf)%no_of_atom(blk)), &
+                  dmuy(naba_atm(sf)%no_of_atom(blk),naba_atm(sf)%no_of_atom(blk)), &
+                  dmuz(naba_atm(sf)%no_of_atom(blk),naba_atm(sf)%no_of_atom(blk)), &
+                  tij(naba_atm(sf)%no_of_atom(blk),naba_atm(sf)%no_of_atom(blk)))
+             do point = 1, n_pts_in_block
+                elec_here = density(n_pts_in_block*(blk-1)+point) * grid_point_volume
+                ! Actually we want a flag set in check_block so that this whole double loop
+                ! is skipped if r_in criterion is met and the normalisation
+                ! if(flag) then set weight for atom = 1, others = 0
+                ! else
+                sum1x = zero
+                sum1y = zero
+                sum1z = zero
+                sum2x = zero
+                sum2y = zero
+                sum2z = zero
+                dmux = zero
+                dmuy = zero
+                dmuz = zero
+                tij = zero
+                ! First time around we need to store the sums over t and \nabla \mu
+                ! as well as storing t and nabla
+                do atomi = 1, naba_atm(sf)%no_of_atom(blk)
+                   ipos = no_of_ib_ia + n_pts_in_block*(atomi-1)
+                   if(ip_store(point,atomi)>0) then
+                      ! Here we accumulate bw which is \prod_{j\ne i} s(mu_{ij})
+                      do atomj = 1,naba_atm(sf)%no_of_atom(blk)
+                         if(atomj/=atomi) then
+                            jpos = no_of_ib_ia + n_pts_in_block*(atomj-1)
+                            if(ip_store(point,atomj)>0) then
+                               ! Do we want a pre-calculated set of these ?
+                               Rij = sqrt((xatom(atomi)-xatom(atomj))*(xatom(atomi)-xatom(atomj)) + &
+                                    (yatom(atomi)-yatom(atomj))*(yatom(atomi)-yatom(atomj)) + &
+                                    (zatom(atomi)-zatom(atomj))*(zatom(atomi)-zatom(atomj)))
+                               ! make mu
+                               mu = (r_store(point,atomi) - r_store(point,atomj))/Rij
+                               dmux(atomi,atomj) = x_store(point,atomi)/Rij - (xatom(atomi)-xatom(atomj))*mu/Rij
+                               dmuy(atomi,atomj) = y_store(point,atomi)/Rij - (yatom(atomi)-yatom(atomj))*mu/Rij
+                               dmuz(atomi,atomj) = z_store(point,atomi)/Rij - (zatom(atomi)-zatom(atomj))*mu/Rij
+                               tij(atomi,atomj) = t(mu)
+                               tij(atomj,atomi) = t(-mu)
+                               sum1x(atomi,atomj) = sum1x(atomi,atomj) + tij(atomi,atomj)*dmux(atomi,atomj)
+                               sum1y(atomi,atomj) = sum1y(atomi,atomj) + tij(atomi,atomj)*dmuy(atomi,atomj)
+                               sum1z(atomi,atomj) = sum1z(atomi,atomj) + tij(atomi,atomj)*dmuz(atomi,atomj)
+                               sum2x(atomi,atomj) = sum2x(atomi,atomj) + bw(jpos+point)*tij(atomj,atomi)*dmux(atomi,atomj)
+                               sum2y(atomi,atomj) = sum2y(atomi,atomj) + bw(jpos+point)*tij(atomj,atomi)*dmuy(atomi,atomj)
+                               sum2z(atomi,atomj) = sum2z(atomi,atomj) + bw(jpos+point)*tij(atomj,atomi)*dmuz(atomi,atomj)
+                            end if
+                         end if
+                      end do ! atomj
+                      if(bw(ipos+point)<zero) bw(ipos+point) = zero
+                   end if
+                end do ! atomi
+                ! Now accumulate \nabla_i w_j
+                do atomi = 1, naba_atm(sf)%no_of_atom(blk)
+                   ipos = no_of_ib_ia + n_pts_in_block*(atomi-1)
+                   if(ip_store(point,atomi)>0) then
+                      ! Here we accumulate bw which is \prod_{j\ne i} s(mu_{ij})
+                      do atomj = 1,naba_atm(sf)%no_of_atom(blk)
+                         !if(constraint(globatom(j))) then
+                         jpos = no_of_ib_ia + n_pts_in_block*(atomj-1)
+                         if(ip_store(point,atomj)>0) then
+                            dwjbydix = -bw(jpos+point)*tij(atomj,atomi)*dmux(atomi,atomj) - &
+                                 bw(jpos+point)*(bw(ipos+point)*sum1x(atomi,atomj) - sum2x(atomi,atomj))
+                            dwjbydiy = -bw(jpos+point)*tij(atomj,atomi)*dmuy(atomi,atomj) - &
+                                 bw(jpos+point)*(bw(ipos+point)*sum1y(atomi,atomj) - sum2y(atomi,atomj))
+                            dwjbydiz = -bw(jpos+point)*tij(atomj,atomi)*dmuz(atomi,atomj) - &
+                                 bw(jpos+point)*(bw(ipos+point)*sum1z(atomi,atomj) - sum2z(atomi,atomj))
+                            weight_force(1,globatom(atomi)) = weight_force(1,globatom(atomi)) + elec_here * dwjbydix
+                            weight_force(2,globatom(atomi)) = weight_force(2,globatom(atomi)) + elec_here * dwjbydiy
+                            weight_force(3,globatom(atomi)) = weight_force(3,globatom(atomi)) + elec_here * dwjbydiz
+                         end if
+                         !end if
+                      end do
+                   end if
+                end do
+             end do ! point
+          end if
+          no_of_ib_ia = no_of_ib_ia + n_pts_in_block*naba_atm(sf)%no_of_atom(blk)
+          deallocate(xatom, yatom, zatom, rcut, npoint, globatom, ip_store, r_store,STAT=stat)
+       endif !(naba_atm(sf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
+    end do ! blk
+    call gsum(weight_force,3,ni_in_cell)
+  end subroutine build_Becke_weight_forces
+!!***
+
+  subroutine build_Becke_weight_matrix
+
+    use datatypes
+    use numbers
+    use global_module, ONLY: sf
+    use block_module, ONLY: n_blocks, n_pts_in_block
+    use primary_module, ONLY: domain
+    use set_blipgrid_module, ONLY: naba_atm
+    use functions_on_grid, ONLY: gridfunctions, fn_on_grid, H_on_supportfns, supportfns
+    use calc_matrix_elements_module, ONLY: norb
+    use set_bucket_module, ONLY: rem_bucket, sf_H_sf_rem, pao_H_sf_rem
+    use calc_matrix_elements_module, ONLY: get_matrix_elements_new
+    use GenComms, ONLY: inode, ionode
+
+    implicit none
+
+    integer :: n, m, nb, atom, nsf1, point, matW
+
+    ! Create w_c(r)|chi_j>
+    gridfunctions(H_on_supportfns)%griddata = zero
+    n = 0
+    m = 0
+    do nb=1,domain%groups_on_node
+       if(naba_atm(sf)%no_of_atom(nb)>0) then
+          do atom = 1, naba_atm(sf)%no_of_atom(nb)
+             do nsf1 = 1, norb(naba_atm(sf),atom,nb)
+                do point = 1, n_pts_in_block
+                   n = n + 1
+                   gridfunctions(H_on_supportfns)%griddata(n) = &
+                        gridfunctions(supportfns)%griddata(n)*bwgrid(m+point)
+                end do
+             end do
+          end do
+       end if ! (naba_atm(sf)%no_of_atom(nb)>0)
+       m = m + n_pts_in_block
+    end do
+    call get_matrix_elements_new(inode-1,rem_bucket(sf_H_sf_rem),matW,supportfns,H_on_supportfns)
+
+  end subroutine build_Becke_weight_matrix
+
+  subroutine build_Becke_charges(chden,size)
+
+    use datatypes
+    use GenComms, ONLY: gsum, cq_abort, inode, ionode
+    use numbers, ONLY: zero, very_small, two, one
+    use global_module, ONLY: sf, ni_in_cell, id_glob, io_lun
+    use primary_module, ONLY: domain
+    use set_blipgrid_module, ONLY: naba_atm
+    use cover_module, ONLY: DCS_parts
+    use dimens, ONLY: grid_point_volume
+    use block_module, ONLY: n_pts_in_block 
+    use group_module, ONLY : parts
+
+    implicit none
+
+    ! Passed variables
+    integer :: size
+    real(double), dimension(size) :: chden
+
+    ! Local variables
+
+    integer :: blk, no_of_ib_ia, at, point, ipos
+    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom, iatom, iblock, the_species
+
+    atomcharge = zero
+    no_of_ib_ia=0
+    do blk=1, domain%groups_on_node
+       if(naba_atm(sf)%no_of_atom(blk) > 0) then  
+          at = 0
+          do ipart=1,naba_atm(sf)%no_of_part(blk)
+             jpart=naba_atm(sf)%list_part(ipart,blk)
+             if(jpart > DCS_parts%mx_gcover) then 
+                call cq_abort('PAO_to_grid_global: JPART ERROR ',ipart,jpart)
+             endif
+             ind_part=DCS_parts%lab_cell(jpart)
+             do ia=1,naba_atm(sf)%no_atom_on_part(ipart,blk)
+                at=at+1
+                ii = naba_atm(sf)%list_atom(at,blk)
+                icover= DCS_parts%icover_ibeg(jpart)+ii-1
+                ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
+                do point = 1, n_pts_in_block
+                   ipos = no_of_ib_ia + n_pts_in_block*(at-1)
+                   atomcharge(ig_atom) = atomcharge(ig_atom) + &
+                        bw(ipos+point)*chden(point+(blk-1)*n_pts_in_block)
+                end do ! point
+             end do ! ia
+          end do ! ipart
+          no_of_ib_ia = no_of_ib_ia + n_pts_in_block*naba_atm(sf)%no_of_atom(blk)
+       endif !(naba_atm(sf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
+    end do ! blk
+    !write(*,*) 'Done blocks'
+    atomcharge = atomcharge*grid_point_volume
+    call gsum(atomcharge,ni_in_cell)
+    if(inode==ionode) then
+       do blk = 1, ni_in_cell
+          write(io_lun,fmt='(2x,"Atom ",i4," Becke charge ",f20.12)') blk,atomcharge(blk)
+       end do
+    end if
+  end subroutine build_Becke_charges
+
+!!****f* / *
+!!
+!!  NAME 
+!!   
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   
+!!  INPUTS
+!!   
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   
+!!  CREATION DATE
+!!   
+!!  MODIFICATION HISTORY
+!!  
+!!  SOURCE
+!!  
+  real(double) function s(mu)
+
+    use numbers, only: zero, half, one
+
+    implicit none
+
+    real(double) :: mu, mua, mua2
+    real(double), parameter :: a = 0.64_double
+    real(double), parameter :: c1 = 2.1875_double
+    real(double), parameter :: c3 = 2.1875_double
+    real(double), parameter :: c5 = 1.3125_double
+    real(double), parameter :: c7 = 0.3125_double
+
+    if(mu<-a) then
+       s = one
+    else if(mu>a) then
+       s = zero
+    else
+       mua = mu/a
+       mua2 = mua*mua
+       s = half*(one -  mua*(c1 - mua2*(c3 - mua2*(c5 - c7*mua2))))
+    end if
+  end function s
+ !!***
+   
+  real(double) function t(mu)
+
+    use numbers, only: zero, half, one, three, five, seven
+
+    implicit none
+
+    real(double) :: mu, mua, mua2, s
+    real(double), parameter :: a = 0.64_double
+    real(double), parameter :: reca = 1.5625_double
+    real(double), parameter :: c1 = 2.1875_double
+    real(double), parameter :: c3 = 2.1875_double
+    real(double), parameter :: c5 = 1.3125_double
+    real(double), parameter :: c7 = 0.3125_double
+
+    if(mu<-a) then
+       t = zero
+    else if(mu>a) then
+       t = zero
+    else
+       mua = mu/a
+       mua2 = mua*mua
+       t = -half*(reca*c1 - mua2*(three*reca*c3 - mua2*(five*reca*c5 - seven*reca*c7*mua2)))
+       s = half*(one -  mua*(c1 - mua2*(c3 - mua2*(c5 - c7*mua2))))
+       t = t/s
+    end if
+  end function t
+
+  ! Assigns atomic radii; these are from J. C. Slater, J. Chem. Phys. 41, 3199 (1964)
+  ! H altered to 0.35 A, F to 0.9 A
+  subroutine assign_atomic_radii
+
+    use datatypes
+    use units, ONLY: AngToBohr
+
+    implicit none
+
+    atrad(1)=0.35_double*AngToBohr
+
+    atrad(3)=1.45_double*AngToBohr
+    atrad(4)=1.05_double*AngToBohr
+    atrad(5)=0.85_double*AngToBohr
+
+    atrad(6)=0.70_double*AngToBohr
+    atrad(7)=0.65_double*AngToBohr
+    atrad(8)=0.60_double*AngToBohr
+    atrad(9)=0.90_double*AngToBohr
+
+
+    atrad(11)=1.80_double*AngToBohr
+    atrad(12)=1.50_double*AngToBohr
+    atrad(13)=1.25_double*AngToBohr
+    atrad(14)=1.10_double*AngToBohr
+    atrad(15)=1.00_double*AngToBohr
+    atrad(16)=1.00_double*AngToBohr
+    atrad(17)=1.00_double*AngToBohr
+
+
+    atrad(32)=1.25_double*AngToBohr
+    atrad(33)=1.15_double*AngToBohr
+    atrad(34)=1.15_double*AngToBohr
+    atrad(35)=1.15_double*AngToBohr
+
+  end subroutine assign_atomic_radii
+
+  subroutine check_block &
+       (xblock,yblock,zblock,xatom,yatom,zatom,rcut, &
+       npoint, ip_store, x_store, y_store, z_store, r_store,blocksize,natoms) 
+
+    use numbers
+    use global_module, ONLY: rcellx,rcelly,rcellz
+    use group_module,  ONLY: blocks
+    use block_module,  ONLY: nx_in_block,ny_in_block,nz_in_block!, &
+!         n_pts_in_block
+
+
+    implicit none
+    !Passed 
+    integer :: blocksize, natoms
+    real(double), intent(in):: xblock, yblock, zblock
+    real(double), intent(in), dimension(natoms):: xatom, yatom, zatom, rcut
+    integer, intent(out) :: npoint(natoms), ip_store(blocksize,natoms)
+    real(double), dimension(blocksize,natoms), intent(out) :: r_store, x_store, y_store, z_store
+    !Local
+    real(double):: dcellx_block,dcelly_block,dcellz_block
+    real(double):: dcellx_grid, dcelly_grid, dcellz_grid
+    real(double):: dx, dy, dz
+    integer :: ipoint, iz, iy, ix, at
+    real(double) ::  r2, r_from_i, rx, ry, rz, x, y, z, rcut2
+
+
+    dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
+    dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
+    dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nz_in_block
+
+    ! Add loop to find R_in (shortest atom-atom distance)
+
+    ipoint=0
+    npoint=0
+    do iz=1,nz_in_block
+       do iy=1,ny_in_block
+          do ix=1,nx_in_block
+             ipoint=ipoint+1
+
+             dx=dcellx_grid*(ix-1)
+             dy=dcelly_grid*(iy-1)
+             dz=dcellz_grid*(iz-1)
+             do at = 1,natoms
+                rcut2 = rcut(at)* rcut(at)
+                rx=xblock+dx-xatom(at)
+                ry=yblock+dy-yatom(at)
+                rz=zblock+dz-zatom(at)
+                r2 = rx * rx + ry * ry + rz * rz
+                ! Add test and flag to find points within 0.18*R_in of atom ?
+                if(r2 < rcut2) then
+                   npoint(at)=npoint(at)+1
+                   !ip_store(npoint(at),at)=ipoint
+                   ip_store(ipoint,at) = npoint(at)
+                   x_store(ipoint,at) = rx
+                   y_store(ipoint,at) = ry
+                   z_store(ipoint,at) = rz
+                   r_store(ipoint,at)=sqrt(r2)
+                   !write(55,*) ipoint,at,r_store(ipoint,at)
+                else
+                   ip_store(ipoint,at) = 0
+                   r_store(ipoint,at)=zero
+                endif  ! (r2 < rcut2) then
+             end do! at = 1,natoms
+          enddo ! ix=1,nx_in_block
+       enddo ! iy=1,ny_in_block
+    enddo ! iz=1,nz_in_block
+    return
+  end subroutine check_block
 !!***
 
 end module density_module
