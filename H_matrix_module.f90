@@ -331,9 +331,11 @@ contains
     !call fft3( pseudopotential, locpotr, size, 1 )
     !deallocate(chdenr, locpotr, STAT=stat)
     call start_timer(tmr_std_allocation)
-    allocate(xc_potential(n_my_grid_points), h_potential(maxngrid), STAT=stat)
+    !OLD allocate(xc_potential(n_my_grid_points), h_potential(maxngrid), STAT=stat)
+    allocate(xc_potential(size), h_potential(size), STAT=stat)
     if(stat/=0) call cq_abort("Error allocating potentials in H: ",n_my_grid_points, stat)
-    call reg_alloc_mem(area_ops, n_my_grid_points+maxngrid,type_dbl)
+    !OLD call reg_alloc_mem(area_ops, n_my_grid_points+maxngrid,type_dbl)
+    call reg_alloc_mem(area_ops, 2*maxngrid,type_dbl)
     call stop_timer(tmr_std_allocation)
     !     first initialise some arrays
     gridfunctions(H_on_supportfns)%griddata = zero
@@ -423,7 +425,8 @@ contains
 114 format(20x,'Electron Count         : ',f30.15)
     deallocate(xc_potential,h_potential, STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating potentials in H: ",n_my_grid_points, stat)
-    call reg_dealloc_mem(area_ops, n_my_grid_points+maxngrid,type_dbl)
+    !OLD call reg_dealloc_mem(area_ops, n_my_grid_points+maxngrid,type_dbl)
+    call reg_dealloc_mem(area_ops, 2*maxngrid,type_dbl)
     return
   end subroutine get_h_on_support
 !!***
@@ -1264,20 +1267,20 @@ contains
     use numbers
     use dimens, ONLY: grid_point_volume, one_over_grid_point_volume, &
          n_my_grid_points
-    use GenComms, ONLY: gsum
+    use GenComms, ONLY: gsum, inode, ionode
     use energy, ONLY: delta_E_xc
 
     implicit none
 
     ! Passed variables
-    integer size
+    integer :: size
 
     real(double) :: xc_energy_total
     real(double), optional :: xc_energy(size)
     real(double) :: density(size), xc_potential(size)
 
     !     Local variables
-    integer n
+    integer :: n
     real(double) :: prefactor, postfactor, denominator, &
                     e_correlation, e_exchange, &
                     rcp_rs, rho, rs, sq_rs, &
@@ -1440,23 +1443,23 @@ contains
                              functional_gga_pbe96_rev98, functional_gga_pbe96_r99
     use dimens, ONLY: grid_point_volume, one_over_grid_point_volume, &
          n_my_grid_points, n_grid_x, n_grid_y, n_grid_z
-    use GenComms, ONLY: gsum, cq_abort
+    use GenComms, ONLY: gsum, cq_abort, inode, ionode
     use energy, ONLY: delta_E_xc
     use fft_module, ONLY: fft3, recip_vector
 
     implicit none
 
     ! Passed variables
-    integer size
+    integer,intent(in) :: size
  
-    real(double) :: xc_energy
-    real(double) :: density(size), xc_potential(size)
+    real(double),intent(out) :: xc_energy
+    real(double),intent(inout) :: density(size), xc_potential(size)
     integer, optional :: flavour
 
 
     !     Local variables
-    integer n
-    integer selector
+    integer :: n
+    integer :: selector
 
     !ORI real(double)  :: grad_density(size), grad_density_xyz(3, size)
     real(double),allocatable,dimension(:) :: grad_density
@@ -1548,6 +1551,7 @@ contains
     call build_gradient (density, grad_density, grad_density_xyz, size)
 
     ! Get the LDA part of the functional
+     !xc_potential_lda = zero; xc_energy_lda = zero  ! For removing SIGFPE  2010.10.25 TM
     call get_xc_potential_LDA_PW92(density, xc_potential_lda, xc_energy_lda_total, size, xc_energy_lda)
 
     xc_energy = zero
@@ -1713,7 +1717,11 @@ contains
        ! Normalisation (modulus of gradient)
 
        !*ast* TEST-POINT 3
+       if(abs(grad_density(n)) > very_small) then  !DEBUG
        df_dgrad_rho = (dde_exchange + dde_correlation) / grad_density(n)
+       else                 !DEBUG
+       df_dgrad_rho = zero   !DEBUG
+       endif                !DEBUG
        ! Only LDA part
        !df_dgrad_rho = 0.0
        ! LDA + exchange
@@ -1757,6 +1765,7 @@ contains
 
     ! Fourier transform the gradient, component by component
 
+    rgradient(:,:) = zero   ! Initialisation for removing SIGFPE  TM (2010.10.25)
     call fft3(grad_density_xyz(:,1), rgradient(:,1), size, -1 )
     call fft3(grad_density_xyz(:,2), rgradient(:,2), size, -1 )
     call fft3(grad_density_xyz(:,3), rgradient(:,3), size, -1 )
@@ -1836,7 +1845,7 @@ contains
 !!  MODIFICATION HISTORY
 !!   15:55, 27/04/2007 drb 
 !!    Changed recip_vector, grad_density to (n,3) for speed
-!!  SOURCE
+
 !!
   subroutine build_gradient (density, grad_density, grad_density_xyz, size)
 
@@ -1845,22 +1854,28 @@ contains
     use global_module, ONLY: rcellx, rcelly, rcellz
     use dimens, ONLY: n_my_grid_points, n_grid_x, n_grid_y, n_grid_z
     use fft_module, ONLY: fft3, recip_vector
+    use GenComms, ONLY: cq_abort
 
     implicit none
 
     ! Passed variables
-    integer size
+    integer,intent(in) :: size
     real(double), intent(inout), dimension(size) :: density
     real(double), intent(out), dimension(size) :: grad_density
     !ORI real(double), intent(out), dimension(3, size) :: grad_density_xyz
     real(double), intent(out), dimension(size,3) :: grad_density_xyz
 
     ! Local variables
-    complex(double_cplx), dimension(size) :: rdensity      ! Density in reciprocal space
-    complex(double_cplx), dimension(size) :: rdensity_tmp  ! Temporal reciprocal density
+    complex(double_cplx), allocatable :: rdensity(:)      ! Density in reciprocal space
+    complex(double_cplx), allocatable :: rdensity_tmp(:)  ! Temporal reciprocal density
+    integer :: stat
 
     !local recip_vec_tm
      
+    allocate(rdensity(size), rdensity_tmp(size), STAT=stat)
+    if(stat /= 0) call cq_abort('ERROR in build_gradient : stat,size = ',stat,size)
+    grad_density_xyz = zero               ! to remove SIGFPE   2010.Oct.25 TM
+    rdensity = zero ; rdensity_tmp = zero ! to remove SIGFPE   2010.Oct.25 TM
 
     ! Fourier transform the density
     call fft3( density, rdensity, size, -1 )

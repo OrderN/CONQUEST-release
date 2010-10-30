@@ -920,6 +920,9 @@ contains
     i0 = 0
     ! now we need to figure out the unpacking.
     cnt = 0
+! 2010.Oct.25 TM
+    recip_vector = zero
+! 2010.Oct.25 TM
     do JNODE = 1, numprocs
        ! for each y-column stored on JNODE
        do n = 1, y_columns_node(JNODE)

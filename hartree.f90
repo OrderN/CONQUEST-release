@@ -184,6 +184,7 @@ contains
        q02 = q0*q0
     endif
     facmin = 1.0e8_double
+    fac = 1.0_double   !2010.10.25 TM
     ! FFT residual
     allocate(chdenr(size), STAT=stat)
     if(stat/=0) call cq_abort("Error allocating chdenr in kerker: ",size,stat)
@@ -192,12 +193,12 @@ contains
     call fft3( resid, chdenr, size, -1 )
     !write(io_lun,*) 'Called fft3'
     do i = 1, z_columns_node(inode)*n_grid_z
-       if(hartree_factor(i)>very_small) then
-          fac = 1.0_double
+       !if(hartree_factor(i)>very_small) then
+       !   fac = 1.0_double
           !if(hartree_factor(i)<cutoff) fac = (1.0_double + hartree_factor(i)*q02)
           fac = 1.0_double/(1.0_double + hartree_factor(i)*q02)
           facmin = min(fac,facmin)
-       end if
+       !end if
        chdenr(i) = chdenr(i)*fac
     end do
     !!   kerker_list stores indices of points within reciprocal cutoff

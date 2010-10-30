@@ -1,1 +1,1 @@
-  character(len=*), parameter :: commentver="beta 0.35 (r85): Additional PBEs, process info output and Becke charges"
+  character(len=*), parameter :: commentver="beta 0.35 (r86): Bug fixed before changing H_matrix_module"
