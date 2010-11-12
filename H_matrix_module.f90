@@ -265,6 +265,9 @@ contains
 !!    Added functional type selector
 !!   2008/04/02  M. Todorovic
 !!    Added local potential output
+!!   2010/11/10  TM
+!!    Moved the parts of the calculation of delta_E_xc from subroutines get_**_xc_potential 
+!!    to get_h_on_support for the implementation of PCC (partial core correction).
 !!  SOURCE
 !!
   subroutine get_h_on_support( output_level, fixed_potential, electrons, rho, size)
@@ -292,13 +295,14 @@ contains
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use fft_module, ONLY: fft3, hartree_factor, z_columns_node, i0
     use io_module, ONLY: dump_locps
+    use energy, ONLY: delta_E_xc
 
     implicit none
 
     ! Shared variables
     logical :: fixed_potential
 
-    integer :: output_level, size
+    integer :: output_level, size, igrid
 
     real(double) :: electrons
     real(double), dimension(size) :: rho
@@ -308,6 +312,7 @@ contains
     ! Allocated arrays
     real(double) :: fften
     real(double), allocatable, dimension(:) :: xc_potential, h_potential
+    real(double), allocatable, dimension(:) :: xc_epsilon   ! energy_density of XC 
     logical :: dump_pot(4)
 
     complex(double_cplx), allocatable, dimension(:) :: chdenr, locpotr
@@ -331,11 +336,11 @@ contains
     !call fft3( pseudopotential, locpotr, size, 1 )
     !deallocate(chdenr, locpotr, STAT=stat)
     call start_timer(tmr_std_allocation)
-    !OLD allocate(xc_potential(n_my_grid_points), h_potential(maxngrid), STAT=stat)
-    allocate(xc_potential(size), h_potential(size), STAT=stat)
+    !old allocate(xc_potential(n_my_grid_points), h_potential(maxngrid), STAT=stat)
+    allocate(xc_potential(size), xc_epsilon(size), h_potential(size), STAT=stat)
     if(stat/=0) call cq_abort("Error allocating potentials in H: ",n_my_grid_points, stat)
-    !OLD call reg_alloc_mem(area_ops, n_my_grid_points+maxngrid,type_dbl)
-    call reg_alloc_mem(area_ops, 2*maxngrid,type_dbl)
+    !oldcall reg_alloc_mem(area_ops, n_my_grid_points+maxngrid,type_dbl)
+    call reg_alloc_mem(area_ops, 3*maxngrid,type_dbl)
     call stop_timer(tmr_std_allocation)
     !     first initialise some arrays
     gridfunctions(H_on_supportfns)%griddata = zero
@@ -354,25 +359,31 @@ contains
 
     select case(flag_functional_type)
        case (functional_lda_pz81)
-          !ORI call get_xc_potential( rho, xc_potential, xc_energy, n_my_grid_points )
-          call get_xc_potential( rho, xc_potential, xc_energy, size )
+          call get_xc_potential( rho, xc_potential, xc_epsilon, xc_energy, size )
        case (functional_lda_gth96)
-          !ORI call get_GTH_xc_potential( rho, xc_potential, xc_energy, n_my_grid_points )
-          call get_GTH_xc_potential( rho, xc_potential, xc_energy, size )
+          call get_GTH_xc_potential( rho, xc_potential, xc_epsilon, xc_energy, size )
        case (functional_lda_pw92)
-          !ORI call get_xc_potential_LDA_PW92( rho, xc_potential, xc_energy, n_my_grid_points )
-          call get_xc_potential_LDA_PW92( rho, xc_potential, xc_energy, size )
+          call get_xc_potential_LDA_PW92( rho, xc_potential, xc_epsilon, xc_energy, size )
        case (functional_gga_pbe96)
-          !ORI call get_xc_potential_GGA_PBE( rho, xc_potential, xc_energy, n_my_grid_points )
-          call get_xc_potential_GGA_PBE( rho, xc_potential, xc_energy, size )
+          call get_xc_potential_GGA_PBE( rho, xc_potential, xc_epsilon, xc_energy, size )
        case (functional_gga_pbe96_rev98)
-          call get_xc_potential_GGA_PBE( rho, xc_potential, xc_energy, size, functional_gga_pbe96_rev98 )
+          call get_xc_potential_GGA_PBE( rho, xc_potential, xc_epsilon, xc_energy, size, functional_gga_pbe96_rev98 )
        case (functional_gga_pbe96_r99)
-          call get_xc_potential_GGA_PBE( rho, xc_potential, xc_energy, size, functional_gga_pbe96_r99 )
+          call get_xc_potential_GGA_PBE( rho, xc_potential, xc_epsilon, xc_energy, size, functional_gga_pbe96_r99 )
        case default
           !ORI call get_xc_potential( rho, xc_potential, xc_energy, n_my_grid_points )
-          call get_xc_potential( rho, xc_potential, xc_energy, size )
+          call get_xc_potential( rho, xc_potential, xc_epsilon, xc_energy, size )
     end select
+    ! Calculation of delta_E_xc     ---- 2010.Oct.30 TM 
+    !    moved from get_xc_... to here,  by introducing 
+    !    xc_epsilon(size) [XC energy density, not potential] 
+
+    delta_E_xc = zero
+     do igrid=1,n_my_grid_points
+       delta_E_xc = delta_E_xc + (xc_epsilon(igrid)-xc_potential(igrid))*rho(igrid)
+     enddo
+    call gsum(delta_E_xc)
+    delta_E_xc = delta_E_xc*grid_point_volume
 
     ! Make total potential
     if (.not.fixed_potential) then
@@ -425,8 +436,8 @@ contains
 114 format(20x,'Electron Count         : ',f30.15)
     deallocate(xc_potential,h_potential, STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating potentials in H: ",n_my_grid_points, stat)
-    !OLD call reg_dealloc_mem(area_ops, n_my_grid_points+maxngrid,type_dbl)
-    call reg_dealloc_mem(area_ops, 2*maxngrid,type_dbl)
+    !old call reg_dealloc_mem(area_ops, n_my_grid_points+maxngrid,type_dbl)
+    call reg_dealloc_mem(area_ops, 3*maxngrid,type_dbl)
     return
   end subroutine get_h_on_support
 !!***
@@ -1033,22 +1044,21 @@ contains
 !!    Removed dsqrt
 !!  SOURCE
 !!
-  subroutine get_xc_potential(density,xc_potential,xc_energy,size )
+  subroutine get_xc_potential(density,xc_potential,xc_epsilon, xc_energy,size )
 
     use datatypes
     use numbers
     use dimens, ONLY: grid_point_volume, one_over_grid_point_volume, &
          n_my_grid_points
     use GenComms, ONLY: gsum
-    use energy, ONLY: delta_E_xc
 
     implicit none
 
     ! Passed variables
-    integer :: size
-
-    real(double) :: xc_energy
-    real(double) :: density(size), xc_potential(size)
+    integer,intent(in) :: size
+    real(double),intent(in) :: density(size)
+    real(double),intent(out) :: xc_potential(size), xc_epsilon(size)
+    real(double),intent(out) :: xc_energy
 
     !     Local variables
     integer n
@@ -1068,7 +1078,6 @@ contains
 
 
     xc_energy = zero
-    delta_E_xc = zero
     do n=1,n_my_grid_points ! loop over grid pts and store potl on each
        rho = density(n)
        if (rho>very_small) then ! Find radius of hole
@@ -1103,26 +1112,20 @@ contains
        ! Both X and C
        xc_energy = xc_energy+(e_exchange+e_correlation)*density(n)
        xc_potential(n) = v_exchange + v_correlation
+       xc_epsilon(n)=e_exchange+e_correlation
        ! These two for testing
        ! Just C
        !xc_energy = xc_energy+e_correlation*density(n)
        !xc_potential(n) = v_correlation
+       !xc_epsilon(n) = e_correlation
        ! Just X
        !xc_energy = xc_energy+e_exchange*density(n)
        !xc_potential(n) = v_exchange
-       ! Both X and C
-       delta_E_xc = delta_E_xc + (e_exchange+e_correlation-xc_potential(n))*density(n)
-       ! These two for testing
-       ! Just C
-       !delta_E_xc = delta_E_xc + (e_correlation-v_correlation)*density(n)
-       ! Just X
-       !delta_E_xc = delta_E_xc + (e_exchange-v_exchange)*density(n)
+       !xc_epsilon(n) = e_exchange
     end do ! do n_my_grid_points
     call gsum(xc_energy)
-    call gsum(delta_E_xc)
     ! and 'integrate' the energy over the volume of the grid point
     xc_energy = xc_energy * grid_point_volume
-    delta_E_xc = delta_E_xc * grid_point_volume
     return
   end subroutine get_xc_potential
 !!***
@@ -1159,22 +1162,21 @@ contains
 !!
 !!  SOURCE
 !!
-  subroutine get_GTH_xc_potential(density,xc_potential,xc_energy,size )
+  subroutine get_GTH_xc_potential(density,xc_potential,xc_epsilon,xc_energy,size )
 
     use datatypes
     use numbers
     use dimens, ONLY: grid_point_volume, one_over_grid_point_volume, &
          n_my_grid_points
     use GenComms, ONLY: gsum
-    use energy, ONLY: delta_E_xc
 
     implicit none
 
     ! Passed variables
-    integer :: size
-
-    real(double) :: xc_energy
-    real(double) :: density(size), xc_potential(size)      
+    integer,intent(in) :: size
+    real(double),intent(in) :: density(size)
+    real(double),intent(out) :: xc_potential(size),xc_epsilon(size)
+    real(double),intent(out) :: xc_energy
 
     !     Local variables
     integer n
@@ -1193,7 +1195,6 @@ contains
     real(double), parameter :: third = 1.0_double/3.0_double
 
     xc_energy = zero
-    delta_E_xc = zero
     do n=1,n_my_grid_points ! loop over grid pts and store potl on each
        rho = density(n) 
        if (rho>very_small) then ! Find radius of hole
@@ -1213,16 +1214,14 @@ contains
           dt2 = b1 + rs * (2.0 * b2 + rs * (3.0 * b3 + rs * 4.0 * b4))
           xc_energy = xc_energy - (t1/t2)*rho
           xc_potential(n) = -(t1/t2) + rho*drs_dRho * (-dt1 / t2 + t1 * dt2 / (t2 * t2))
-          delta_E_xc = delta_E_xc + (-(t1/t2)-xc_potential(n))*rho
+          xc_epsilon(n) = -t1/t2   ! 2010.Oct.30 TM  
        else
           xc_potential(n) = zero
        end if
     end do ! do n_my_grid_points
     call gsum(xc_energy)
-    call gsum(delta_E_xc)
     ! and 'integrate' the energy over the volume of the grid point
     xc_energy = xc_energy * grid_point_volume
-    delta_E_xc = delta_E_xc * grid_point_volume
     return
   end subroutine get_GTH_xc_potential
 !!***
@@ -1261,23 +1260,21 @@ contains
 !!    Removed dsqrt
 !!  SOURCE
 !!
-  subroutine get_xc_potential_LDA_PW92(density,xc_potential,xc_energy_total,size,xc_energy)
+  subroutine get_xc_potential_LDA_PW92(density,xc_potential,xc_epsilon, xc_energy_total,size)
 
     use datatypes
     use numbers
     use dimens, ONLY: grid_point_volume, one_over_grid_point_volume, &
          n_my_grid_points
     use GenComms, ONLY: gsum, inode, ionode
-    use energy, ONLY: delta_E_xc
 
     implicit none
 
     ! Passed variables
-    integer :: size
-
-    real(double) :: xc_energy_total
-    real(double), optional :: xc_energy(size)
-    real(double) :: density(size), xc_potential(size)
+    integer,intent(in) :: size
+    real(double),intent(in) :: density(size)
+    real(double),intent(out) :: xc_epsilon(size), xc_potential(size)
+    real(double),intent(out) :: xc_energy_total
 
     !     Local variables
     integer :: n
@@ -1314,7 +1311,6 @@ contains
     real(double), parameter :: third = 0.333333333_double   ! 1/3
 
     xc_energy_total = zero
-    delta_E_xc = zero
     do n=1,n_my_grid_points ! loop over grid pts and store potl on each
        rho = density(n)
 
@@ -1349,12 +1345,8 @@ contains
 
        ! Both exchange and correlation
 
-       if(present(xc_energy)) then
-          xc_energy(n) = e_exchange + e_correlation
-          xc_energy_total = xc_energy_total + xc_energy(n)*rho
-       else
-          xc_energy_total = xc_energy_total + (e_exchange + e_correlation)*rho
-       end if
+        xc_epsilon(n) = e_exchange + e_correlation
+        xc_energy_total = xc_energy_total + xc_epsilon(n)*rho
 
        ! POTENTIAL
 
@@ -1379,14 +1371,11 @@ contains
 
        xc_potential(n) = v_exchange + v_correlation
 
-       delta_E_xc = delta_E_xc + (e_exchange + e_correlation - xc_potential(n))*rho
 
     end do ! do n_my_grid_points
     call gsum(xc_energy_total)
-    call gsum(delta_E_xc)
     ! and 'integrate' the energy over the volume of the grid point
     xc_energy_total = xc_energy_total * grid_point_volume
-    delta_E_xc = delta_E_xc * grid_point_volume
 
     return
   end subroutine get_xc_potential_LDA_PW92
@@ -1435,7 +1424,7 @@ contains
 !!     Added revPBE and RPBE
 !!  SOURCE
 !!
-  subroutine get_xc_potential_GGA_PBE(density,xc_potential,xc_energy,size,flavour)
+  subroutine get_xc_potential_GGA_PBE(density,xc_potential,xc_epsilon, xc_energy,size,flavour)
 
     use datatypes
     use numbers
@@ -1444,24 +1433,22 @@ contains
     use dimens, ONLY: grid_point_volume, one_over_grid_point_volume, &
          n_my_grid_points, n_grid_x, n_grid_y, n_grid_z
     use GenComms, ONLY: gsum, cq_abort, inode, ionode
-    use energy, ONLY: delta_E_xc
     use fft_module, ONLY: fft3, recip_vector
 
     implicit none
 
     ! Passed variables
     integer,intent(in) :: size
- 
+    real(double),intent(in) :: density(size)
+    real(double),intent(out) :: xc_potential(size), xc_epsilon(size)
     real(double),intent(out) :: xc_energy
-    real(double),intent(inout) :: density(size), xc_potential(size)
-    integer, optional :: flavour
+    integer,intent(in), optional :: flavour
 
 
     !     Local variables
     integer :: n
     integer :: selector
 
-    !ORI real(double)  :: grad_density(size), grad_density_xyz(3, size)
     real(double),allocatable,dimension(:) :: grad_density
     real(double),allocatable,dimension(:,:) :: grad_density_xyz
     real(double)  :: rho, grad_rho, rho1_3, rho1_6, &
@@ -1481,7 +1468,6 @@ contains
                     e_exchange, e_correlation, &
                     de_exchange, de_correlation, &
                     dde_exchange, dde_correlation
-    real(double),allocatable,dimension(:) :: xc_energy_lda, xc_potential_lda
     real(double) :: df_dgrad_rho
     real(double) :: kappa, mu_kappa
     real(double) :: rpbe_exp
@@ -1533,8 +1519,10 @@ contains
       mu_kappa=mu_kappa_ori
     end if
 
-    allocate(grad_density(size), grad_density_xyz(size,3), &
-      xc_energy_lda(size), xc_potential_lda(size), rgradient(size,3),STAT = stat)
+    allocate(grad_density(size), grad_density_xyz(size,3),rgradient(size,3),STAT = stat)
+    !initialisation  2010.Oct.30 TM
+     grad_density(:)=zero; grad_density_xyz(:,:)=zero; rgradient(:,:) = zero
+     xc_epsilon(:) = zero; xc_potential(:) = zero
     if(stat/=0) call cq_abort("Error allocating arrays for PBE functional: ",stat)
     ! Choose functional form
     if(PRESENT(flavour)) then
@@ -1551,11 +1539,9 @@ contains
     call build_gradient (density, grad_density, grad_density_xyz, size)
 
     ! Get the LDA part of the functional
-     !xc_potential_lda = zero; xc_energy_lda = zero  ! For removing SIGFPE  2010.10.25 TM
-    call get_xc_potential_LDA_PW92(density, xc_potential_lda, xc_energy_lda_total, size, xc_energy_lda)
+    call get_xc_potential_LDA_PW92(density, xc_potential, xc_epsilon, xc_energy_lda_total, size)
 
     xc_energy = zero
-    delta_E_xc = zero
     do n=1,n_my_grid_points ! loop over grid pts and store potl on each
        rho = density(n)
        grad_rho = grad_density(n)
@@ -1588,7 +1574,7 @@ contains
        ! Correlation
 
        if (rho > very_small) then
-          e_correlation_lda = xc_energy_lda(n) - k04 * rho1_3
+          e_correlation_lda = xc_epsilon(n) - k04 * rho1_3
 
           ! t=grad_rho/(2*rho*ks); ks=sqrt(4*kf/pi); kf=(3*pi*pi*rho)**(1/3); s=grad_rho/(2*rho*kf)
           ks = k03 * rho1_6
@@ -1618,15 +1604,15 @@ contains
 
        !*ast* TEST-POINT 1
        ! Both exchange and correlation
-       xc_energy = xc_energy + (xc_energy_lda(n) + e_exchange + e_correlation)*rho
+       xc_energy = xc_energy + (xc_epsilon(n) + e_exchange + e_correlation)*rho
        ! Only LDA part
-       !xc_energy = xc_energy + (xc_energy_lda(n))*rho
+       !xc_energy = xc_energy + (xc_epsilon(n))*rho
        ! LDA + exchange
-       !xc_energy = xc_energy + (xc_energy_lda(n) + e_exchange)*rho
+       !xc_energy = xc_energy + (xc_epsilon(n) + e_exchange)*rho
        ! Only exchange
        !xc_energy = xc_energy + (e_exchange)*rho
        ! LDA + correlation
-       !xc_energy = xc_energy + (xc_energy_lda(n) + e_correlation)*rho
+       !xc_energy = xc_energy + (xc_epsilon(n) + e_correlation)*rho
        ! Only correlation
        !xc_energy = xc_energy + (e_correlation)*rho
 
@@ -1649,7 +1635,7 @@ contains
        ! Correlation
 
        if (rho > very_small) then
-          de_correlation_lda = ( xc_potential_lda(n) &
+          de_correlation_lda = ( xc_potential(n) &
                                - four_thirds * k04 * rho1_3 &
                                - e_correlation_lda ) / rho
 
@@ -1678,15 +1664,15 @@ contains
        end if
 
        !*ast* TEST-POINT 2
-       xc_potential(n) = xc_potential_lda(n) + de_exchange + de_correlation
+       xc_potential(n) = xc_potential(n) + de_exchange + de_correlation
        ! Only LDA part
-       !xc_potential(n) = xc_potential_lda(n)
+       !xc_potential(n) = xc_potential(n)
        ! LDA + exchange
-       !xc_potential(n) = xc_potential_lda(n) + de_exchange
+       !xc_potential(n) = xc_potential(n) + de_exchange
        ! Only exchange
        !xc_potential(n) = de_exchange
        ! LDA + correlation
-       !xc_potential(n) = xc_potential_lda(n) + de_correlation
+       !xc_potential(n) = xc_potential(n) + de_correlation
        ! Only correlation
        !xc_potential(n) = de_correlation
 
@@ -1740,16 +1726,18 @@ contains
        grad_density_xyz(n,2) = grad_density_xyz(n,2)*df_dgrad_rho
        grad_density_xyz(n,3) = grad_density_xyz(n,3)*df_dgrad_rho
 
+       !xc_epsilon  !2010.Oct.30 TM
+       xc_epsilon(n) = xc_epsilon(n) + e_exchange + e_correlation
        !*ast* TEST-POINT 4
-       delta_E_xc = delta_E_xc + (xc_energy_lda(n) + e_exchange + e_correlation)*rho
+       !TM delta_E_xc = delta_E_xc + (xc_epsilon(n) + e_exchange + e_correlation)*rho
        ! Only LDA part
-       !delta_E_xc = delta_E_xc + (xc_energy_lda(n))*rho
+       !delta_E_xc = delta_E_xc + (xc_epsilon(n))*rho
        ! LDA + exchange
-       !delta_E_xc = delta_E_xc + (xc_energy_lda(n) + e_exchange)*rho
+       !delta_E_xc = delta_E_xc + (xc_epsilon(n) + e_exchange)*rho
        ! Only exchange
        !delta_E_xc = delta_E_xc + (e_exchange)*rho
        ! LDA + correlation
-       !delta_E_xc = delta_E_xc + (xc_energy_lda(n) + e_correlation)*rho
+       !delta_E_xc = delta_E_xc + (xc_epsilon(n) + e_correlation)*rho
        ! Only correlation
        !delta_E_xc = delta_E_xc + (e_correlation)*rho
 
@@ -1765,7 +1753,6 @@ contains
 
     ! Fourier transform the gradient, component by component
 
-    rgradient(:,:) = zero   ! Initialisation for removing SIGFPE  TM (2010.10.25)
     call fft3(grad_density_xyz(:,1), rgradient(:,1), size, -1 )
     call fft3(grad_density_xyz(:,2), rgradient(:,2), size, -1 )
     call fft3(grad_density_xyz(:,3), rgradient(:,3), size, -1 )
@@ -1789,31 +1776,23 @@ contains
 
     do n=1,n_my_grid_points
         xc_potential(n) = xc_potential(n) - grad_density(n)
-        delta_E_xc = delta_E_xc - xc_potential(n)*density(n)
     end do
-    call gsum(delta_E_xc)
-    ! and 'integrate' the energy over the volume of the grid point
-    delta_E_xc = delta_E_xc * grid_point_volume
 
-    if(allocated(grad_density)) then
-       deallocate(grad_density,STAT=stat)
-       if(stat/=0) call cq_abort("Error deallocating grad_density",stat)
+    ! I changed the order of deallocation, because I was told that deallocation 
+    ! of the latest allocated array should be done first. 
+    ! (though I am not sure whether it is true or not)   2010.Oct.30 TM
+     
+    if(allocated(rgradient)) then
+       deallocate(rgradient,STAT=stat)
+       if(stat/=0) call cq_abort("Error deallocating rgradient",stat)
     end if
     if(allocated(grad_density_xyz)) then
        deallocate(grad_density_xyz,STAT=stat)
        if(stat/=0) call cq_abort("Error deallocating grad_density_xyz",stat)
     end if
-    if(allocated(xc_energy_lda)) then
-       deallocate(xc_energy_lda,STAT=stat)
-       if(stat/=0) call cq_abort("Error deallocating xc_energy_lda",stat)
-    end if
-    if(allocated(xc_potential_lda)) then
-       deallocate(xc_potential_lda,STAT=stat)
-       if(stat/=0) call cq_abort("Error deallocating xc_potential_lda",stat)
-    end if
-    if(allocated(rgradient)) then
-       deallocate(rgradient,STAT=stat)
-       if(stat/=0) call cq_abort("Error deallocating rgradient",stat)
+    if(allocated(grad_density)) then
+       deallocate(grad_density,STAT=stat)
+       if(stat/=0) call cq_abort("Error deallocating grad_density",stat)
     end if
 
     return
@@ -1860,7 +1839,7 @@ contains
 
     ! Passed variables
     integer,intent(in) :: size
-    real(double), intent(inout), dimension(size) :: density
+    real(double), intent(in), dimension(size) :: density
     real(double), intent(out), dimension(size) :: grad_density
     !ORI real(double), intent(out), dimension(3, size) :: grad_density_xyz
     real(double), intent(out), dimension(size,3) :: grad_density_xyz
