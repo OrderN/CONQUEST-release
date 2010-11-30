@@ -2675,7 +2675,8 @@ hc2:    do
 !!  CREATION DATE
 !!   16:12, 15/10/2002 drb 
 !!  MODIFICATION HISTORY
-!!
+!!   2010/11/30 15:39 dave
+!!    Fixed formatting mismatch between dump_matrix and grab_matrix
 !!  SOURCE
 !!
   subroutine grab_matrix(stub,matA,inode)
@@ -2702,7 +2703,7 @@ hc2:    do
     ! Grab matrix
     call start_timer(tmr_std_matrices)
     do element=1,len
-       read(unit=lun,fmt='(g13.6)') val!matrix(nf2,nf1,element)
+       read(unit=lun,fmt='(f25.18)') val!matrix(nf2,nf1,element)
        call store_matrix_value_pos(matA,element,val)
     end do
     call stop_timer(tmr_std_matrices)
