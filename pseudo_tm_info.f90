@@ -27,13 +27,15 @@
 !!    Changed for output to file not stdout
 !!   2008/05/25
 !!    Added timers
+!!   2011/03/30 19:07 M.Arita
+!!    Added statements for P.C.C.
 !!  SOURCE
 !!
 module pseudo_tm_info
 
   use datatypes, ONLY: double
   use GenComms, ONLY: cq_abort
-  use global_module, ONLY: area_pseudo, io_lun
+  use global_module, ONLY: area_pseudo, io_lun, flag_pcc_global
   use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
 
   implicit none
@@ -109,6 +111,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2008/05/25
 !!    Added timers
+!!   2011/03/30 M.Arita
+!!    Added statements for P.C.C.
 !!  SOURCE
 !!
   subroutine setup_pseudo_info(nspecies, species_label)
@@ -119,7 +123,7 @@ contains
     use species_module, ONLY: npao_species, nsf_species, type_species
     use global_module, ONLY: iprint_pseudo
     use dimens, ONLY: RadiusSupport, atomicrad
-    use GenComms, ONLY: inode, ionode, cq_abort
+    use GenComms, ONLY: inode, ionode, cq_abort, gcopy
     use pseudopotential_common, ONLY: pseudo_type, SIESTA, ABINIT
 
     implicit none
@@ -142,6 +146,7 @@ contains
        allocate(pao(nspecies),STAT=stat)
        if(stat /= 0) call cq_abort ('allocating pao in setup_pseudo_info',stat)
        call stop_timer(tmr_std_allocation)
+       flag_pcc_global = .false.
        do ispecies=1,nspecies
           if(pseudo_type==SIESTA) then
              pseudo(ispecies)%tm_loc_pot = loc_chg
@@ -156,6 +161,8 @@ contains
           call read_ion_ascii_tmp(pseudo(ispecies),pao(ispecies))
           npao_species(ispecies) = pao(ispecies)%count
           atomicrad(ispecies) = pseudo(ispecies)%z
+          ! For P.C.C.
+          if (pseudo(ispecies)%flag_pcc) flag_pcc_global = .true.
           !For Ghost atoms
           if(type_species(ispecies) < 0) then
             pseudo(ispecies)%zval = zero
@@ -194,6 +201,8 @@ contains
           endif
        enddo
     endif
+    call gcopy(flag_pcc_global)
+    if (iprint_pseudo>0 .AND. inode==ionode .AND. (flag_pcc_global .EQ. .true.)) write (io_lun,fmt='(10x,a)') "P.C.C. is taken into account."
     return
   end subroutine setup_pseudo_info
 !!***
@@ -784,11 +793,25 @@ contains
       integer :: lmax_basis, lmax_projs, zval_int
       real(double) :: mass, self_energy
 
+      ! For judging P.C.C.
+      character(len=2) :: symbol2, xc
+      character(len=3) :: rel
+      character(len=4) :: pcc
+
+      ! Judge if P.C.C. is considered
       read(unit,'(a)') line
       if (trim(line) .eq. '<preamble>') then
          read(unit,'(a)') line
          do while(trim(line) .ne. '</preamble>')
             read(unit,'(a)') line
+            if (trim(line) .EQ. '<preamble>') then
+              read (unit, '(1x,a2,1x,a2,1x,a3,1x,a4)') symbol2, xc, rel, pcc
+              if (pcc .EQ. 'pcec') then
+                ps_info%flag_pcc = .true.
+              elseif (pcc .NE. 'pcec') then
+                ps_info%flag_pcc = .false.
+              endif
+            endif
          end do
       endif
 

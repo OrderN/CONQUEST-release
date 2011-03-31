@@ -1,1 +1,1 @@
-  character(len=*), parameter :: commentver="beta 0.35 (r87): Bug fix in io_module"
+  character(len=*), parameter :: commentver="beta 0.36 (r90): PCC routines are introduced (Arita&TM) 2011.03.31"

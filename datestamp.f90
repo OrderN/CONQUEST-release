@@ -1,5 +1,5 @@
 module datestamp
   implicit none
-  character(len=*), parameter :: datestr="Wed Oct 20 19:25:22 JST 2010"
-  character(len=*), parameter :: commentver="beta 0.35 (r85): Additional PBEs, process info output and Becke charges"
+  character(len=*), parameter :: datestr="2011年 3月 7日 月曜日 19時08分06秒 JST"
+  character(len=*), parameter :: commentver="beta 0.35 (r87): Bug fix in io_module"
 end module datestamp

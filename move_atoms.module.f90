@@ -314,6 +314,8 @@ contains
 !!    Changed output format for energies and brackets so that the numbers are not out of range
 !!   2008/05/25
 !!    Added timers
+!!   2011/03/31 M.Arita
+!!    Added the statements to recall set_density_pcc as atoms move.
 !!  SOURCE
 !!
   subroutine safemin(start_x,start_y,start_z,direction,energy_in,energy_out,&
@@ -325,14 +327,16 @@ contains
     use units
     use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, &
          flag_vary_basis, atom_coord, ni_in_cell, rcellx, rcelly, rcellz, flag_self_consistent, &
-         flag_reset_dens_on_atom_move, IPRINT_TIME_THRES1
+         flag_reset_dens_on_atom_move, IPRINT_TIME_THRES1, &
+         flag_pcc_global
     use minimise, ONLY: get_E_and_F, sc_tolerance, L_tolerance, n_L_iterations
     use GenComms, ONLY: my_barrier, myid, inode, ionode, cq_abort
     use SelfCon, ONLY: new_SC_potl
     use GenBlas, ONLY: dot
     use force_module, ONLY: tot_force
     use io_module, ONLY: write_atomic_positions, pdb_template
-    use density_module, ONLY: density, set_density, flag_no_atomic_densities
+    use density_module, ONLY: density, set_density, flag_no_atomic_densities, &
+                              set_density_pcc
     use maxima_module, ONLY: maxngrid
     use timer_module
 
@@ -461,6 +465,7 @@ contains
           call write_atomic_positions("UpdatedAtoms_tmp.dat",trim(pdb_template))
        end if
        if(flag_reset_dens_on_atom_move) call set_density()
+       if (flag_pcc_global) call set_density_pcc()
        call stop_print_timer(tmr_l_tmp1,"atom updates",IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
        if(flag_vary_basis) then
@@ -537,6 +542,7 @@ contains
        call write_atomic_positions("UpdatedAtoms_tmp.dat",trim(pdb_template))
     end if
     if(flag_reset_dens_on_atom_move) call set_density()
+    if (flag_pcc_global) call set_density_pcc()
     call stop_print_timer(tmr_l_tmp1,"safemin - Final interpolation and updates",IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
     if(flag_vary_basis) then
@@ -582,6 +588,7 @@ contains
           call write_atomic_positions("UpdatedAtoms_tmp.dat",trim(pdb_template))
        end if
        if(flag_reset_dens_on_atom_move) call set_density()
+       if (flag_pcc_global) call set_density_pcc()
        call stop_print_timer(tmr_l_tmp1,"safemin - Failed interpolation + Retry",IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
        if(flag_vary_basis) then
@@ -912,6 +919,8 @@ contains
 !!    Corrected Tm pseudo updating (alloc/dealloc not needed)
 !!   13:12, 22/10/2003 mjg & drb 
 !!    Added old/new ewald calls
+!!   12:13  31/03/2011 M.Arita
+!!    Added the statement to recall sbrt: set_density_pcc for NSC cg calculations
 !!  SOURCE
 !!
   subroutine update_H(fixed_potential, number_of_bands)
@@ -925,8 +934,8 @@ contains
     use pseudo_tm_module, ONLY: set_tm_pseudo
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT, core_correction
     use logicals
-    use global_module, ONLY: iprint_MD, flag_self_consistent, IPRINT_TIME_THRES2
-    use density_module, ONLY: set_density, flag_no_atomic_densities, density
+    use global_module, ONLY: iprint_MD, flag_self_consistent, IPRINT_TIME_THRES2, flag_pcc_global
+    use density_module, ONLY: set_density, flag_no_atomic_densities, density, set_density_pcc
     use GenComms, ONLY: cq_abort, inode, ionode
     use maxima_module, ONLY: maxngrid
     use timer_module
@@ -968,6 +977,7 @@ contains
     ! Now we call set_density if we're using atomic densities
     if((.NOT.flag_self_consistent).AND.(.NOT.flag_no_atomic_densities)) then
        call set_density
+       if (flag_pcc_global) call set_density_pcc
     else if((.NOT.flag_self_consistent).AND.(flag_no_atomic_densities)) then
        call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
     end if

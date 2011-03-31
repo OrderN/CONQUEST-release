@@ -266,8 +266,10 @@ contains
 !!   2008/04/02  M. Todorovic
 !!    Added local potential output
 !!   2010/11/10  TM
-!!    Moved the parts of the calculation of delta_E_xc from subroutines get_**_xc_potential 
+!!    Moved the parts of the calculation of delta_E_xc from subroutines get_**_xc_potential
 !!    to get_h_on_support for the implementation of PCC (partial core correction).
+!!   2011/03/31  M.Arita
+!!    Added the contribution from P.C.C.
 !!  SOURCE
 !!
   subroutine get_h_on_support( output_level, fixed_potential, electrons, rho, size)
@@ -278,12 +280,13 @@ contains
                              flag_functional_type, functional_lda_pz81, &
                              functional_lda_gth96, functional_lda_pw92, &
                              functional_gga_pbe96, functional_gga_pbe96_rev98, &
-                             functional_gga_pbe96_r99, area_ops
+                             functional_gga_pbe96_r99, area_ops, flag_pcc_global
     use GenBlas, ONLY: copy, axpy, dot, rsum
     use dimens, ONLY: grid_point_volume, n_my_grid_points, n_grid_z
     use block_module, ONLY: n_blocks, n_pts_in_block
     use primary_module, ONLY: domain
     use set_blipgrid_module, ONLY: naba_atm
+    use density_module, ONLY : density_pcc
     use GenComms, ONLY: gsum, inode, ionode, cq_abort
     use energy, ONLY: hartree_energy, xc_energy, local_ps_energy, delta_E_hartree
     use hartree_module, ONLY: hartree
@@ -313,6 +316,7 @@ contains
     real(double) :: fften
     real(double), allocatable, dimension(:) :: xc_potential, h_potential
     real(double), allocatable, dimension(:) :: xc_epsilon   ! energy_density of XC 
+    real(double), allocatable, dimension(:) :: density_wk   ! rho(:)+density_pcc(:)
     logical :: dump_pot(4)
 
     complex(double_cplx), allocatable, dimension(:) :: chdenr, locpotr
@@ -357,31 +361,74 @@ contains
     ! Correction term
     delta_E_hartree = -hartree_energy
 
+    ! for P.C.C.
+    if (flag_pcc_global) then
+      allocate(density_wk(size))
+      !density_wk = zero
+      density_wk = rho + density_pcc
+    endif
+
     select case(flag_functional_type)
        case (functional_lda_pz81)
-          call get_xc_potential( rho, xc_potential, xc_epsilon, xc_energy, size )
+          if (flag_pcc_global) then
+            call get_xc_potential( density_wk, xc_potential, xc_epsilon, xc_energy, size )
+          else
+            call get_xc_potential( rho, xc_potential, xc_epsilon, xc_energy, size )
+          endif
        case (functional_lda_gth96)
-          call get_GTH_xc_potential( rho, xc_potential, xc_epsilon, xc_energy, size )
+          if (flag_pcc_global) then
+            call get_GTH_xc_potential( density_wk, xc_potential, xc_epsilon, xc_energy, size )
+          else
+            call get_GTH_xc_potential( rho, xc_potential, xc_epsilon, xc_energy, size )
+          endif
        case (functional_lda_pw92)
-          call get_xc_potential_LDA_PW92( rho, xc_potential, xc_epsilon, xc_energy, size )
+          if (flag_pcc_global) then
+            call get_xc_potential_LDA_PW92( density_wk, xc_potential, xc_epsilon, xc_energy, size )
+          else
+            call get_xc_potential_LDA_PW92( rho, xc_potential, xc_epsilon, xc_energy, size )
+          endif
        case (functional_gga_pbe96)
-          call get_xc_potential_GGA_PBE( rho, xc_potential, xc_epsilon, xc_energy, size )
+          if (flag_pcc_global) then
+            call get_xc_potential_GGA_PBE( density_wk, xc_potential, xc_epsilon, xc_energy, size )
+          else
+            call get_xc_potential_GGA_PBE( rho, xc_potential, xc_epsilon, xc_energy, size )
+          endif
        case (functional_gga_pbe96_rev98)
-          call get_xc_potential_GGA_PBE( rho, xc_potential, xc_epsilon, xc_energy, size, functional_gga_pbe96_rev98 )
+          if (flag_pcc_global) then
+            call get_xc_potential_GGA_PBE( density_wk, xc_potential, xc_epsilon, xc_energy, size, functional_gga_pbe96_rev98 )
+          else
+            call get_xc_potential_GGA_PBE( rho, xc_potential, xc_epsilon, xc_energy, size, functional_gga_pbe96_rev98 )
+          endif
        case (functional_gga_pbe96_r99)
-          call get_xc_potential_GGA_PBE( rho, xc_potential, xc_epsilon, xc_energy, size, functional_gga_pbe96_r99 )
+          if (flag_pcc_global) then
+            call get_xc_potential_GGA_PBE( density_wk, xc_potential, xc_epsilon, xc_energy, size, functional_gga_pbe96_r99 )
+          else
+            call get_xc_potential_GGA_PBE( rho, xc_potential, xc_epsilon, xc_energy, size, functional_gga_pbe96_r99 )
+          endif
        case default
           !ORI call get_xc_potential( rho, xc_potential, xc_energy, n_my_grid_points )
-          call get_xc_potential( rho, xc_potential, xc_epsilon, xc_energy, size )
+          if (flag_pcc_global) then
+            call get_xc_potential( density_wk, xc_potential, xc_epsilon, xc_energy, size )
+          else
+            call get_xc_potential( rho, xc_potential, xc_epsilon, xc_energy, size )
+          endif
     end select
     ! Calculation of delta_E_xc     ---- 2010.Oct.30 TM 
     !    moved from get_xc_... to here,  by introducing 
     !    xc_epsilon(size) [XC energy density, not potential] 
 
+    ! delta_E_xc 
     delta_E_xc = zero
-     do igrid=1,n_my_grid_points
-       delta_E_xc = delta_E_xc + (xc_epsilon(igrid)-xc_potential(igrid))*rho(igrid)
-     enddo
+     if (flag_pcc_global) then
+       do igrid = 1, n_my_grid_points
+         delta_E_xc = delta_E_xc + density_wk(igrid) * xc_epsilon(igrid) - rho(igrid) * &
+                      xc_potential(igrid)
+       enddo
+     else
+       do igrid=1,n_my_grid_points
+         delta_E_xc = delta_E_xc + (xc_epsilon(igrid)-xc_potential(igrid))*rho(igrid)
+       enddo
+     endif
     call gsum(delta_E_xc)
     delta_E_xc = delta_E_xc*grid_point_volume
 
@@ -436,6 +483,10 @@ contains
 114 format(20x,'Electron Count         : ',f30.15)
     deallocate(xc_potential,h_potential, STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating potentials in H: ",n_my_grid_points, stat)
+    if (flag_pcc_global) then
+      deallocate(density_wk, STAT=stat)
+      if (stat .NE. 0) call cq_abort("Error deallocating density_wk: ", n_my_grid_points, stat)
+    endif
     !old call reg_dealloc_mem(area_ops, n_my_grid_points+maxngrid,type_dbl)
     call reg_dealloc_mem(area_ops, 3*maxngrid,type_dbl)
     return

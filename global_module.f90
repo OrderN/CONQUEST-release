@@ -53,6 +53,8 @@
 !!    New iprint levels for timing 
 !!   2009/07/24 16:41 dave
 !!    Added new flag for global or per atom tolerances
+!!   2011/03/30 18:59 M.Arita
+!!    Added new flag for for P.C.C.
 !!  SOURCE
 !!
 module global_module
@@ -170,6 +172,9 @@ module global_module
   integer, parameter :: IPRINT_TIME_THRES1 = 2  ! Important local timers
   integer, parameter :: IPRINT_TIME_THRES2 = 4  ! Not that important
   integer, parameter :: IPRINT_TIME_THRES3 = 6  ! For special purposes
+
+  ! For P.C.C.
+  logical :: flag_pcc_global = .false.
   
 end module global_module
 !!***

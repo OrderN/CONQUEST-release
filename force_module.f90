@@ -45,6 +45,8 @@
 !!    matrix routines
 !!   2008/02/06 08:14 dave
 !!    Changed for output to file not stdout
+!!   2011/03/31 11:52 M.Arita
+!!    Added sbrt get_pcc_force and modified sbrt get_nonSC_correction for P.C.C. 
 !!  SOURCE
 !!
 module force_module
@@ -119,6 +121,8 @@ contains
 !!    Added density_out variable to store output density for non-SC calculations and changed call to 
 !!    get_nonSC_correction_force.  Also added call to get_electronic_density.  Also placed pulay_force call 
 !!    FIRST (as it needs h_on_support in workspace_support).
+!!   12:00, 31/03/2011 M.Arita
+!!    Added the contributions from P.C.C.
 !!  SOURCE
 !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, number_of_bands, tolerance, con_tolerance, mu,  &
@@ -134,7 +138,8 @@ contains
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT
     use pseudo_tm_module, ONLY: loc_pp_derivative_tm
     use global_module, ONLY: flag_self_consistent, flag_move_atom, id_glob, WhichPulay, BothPulay, PhiPulay, &
-         flag_basis_set, PAOs, blips, ni_in_cell, iprint_MD, IPRINT_TIME_THRES2, area_moveatoms
+         flag_basis_set, PAOs, blips, ni_in_cell, iprint_MD, IPRINT_TIME_THRES2, area_moveatoms, &
+         flag_pcc_global
     use density_module, ONLY: get_electronic_density, density
     use functions_on_grid,  ONLY: supportfns, H_on_supportfns
     use dimens, ONLY: n_my_grid_points
@@ -159,14 +164,20 @@ contains
     real(double), dimension(:,:), allocatable :: HF_NL_force
     real(double), dimension(:,:), allocatable :: KE_force
     real(double), dimension(:,:), allocatable :: nonSC_force
+    real(double), dimension(:,:), allocatable :: pcc_force
     real(double), dimension(:), allocatable :: density_out
     real(double) :: electrons, max_force
     integer :: i,j,ii, stat, max_atom, max_compt
     type(cq_timer) :: tmr_l_tmp1
 
     call start_timer(tmr_std_allocation)
-    allocate(p_force(3,ni_in_cell),KE_force(3,ni_in_cell),HF_force(3,ni_in_cell),HF_NL_force(3,ni_in_cell),&
-         nonSC_force(3,ni_in_cell),STAT=stat)
+    if (flag_pcc_global) then
+      allocate(p_force(3,ni_in_cell),KE_force(3,ni_in_cell),HF_force(3,ni_in_cell),HF_NL_force(3,ni_in_cell),&
+           nonSC_force(3,ni_in_cell),pcc_force(3,ni_in_cell),STAT=stat)
+    else
+      allocate(p_force(3,ni_in_cell),KE_force(3,ni_in_cell),HF_force(3,ni_in_cell),HF_NL_force(3,ni_in_cell),&
+           nonSC_force(3,ni_in_cell),STAT=stat)
+    endif
     if(stat/=0) call cq_abort("Error allocating forces: ",ni_in_cell)
     call reg_alloc_mem(area_moveatoms, 5*3*ni_in_cell,type_dbl)
     call stop_timer(tmr_std_allocation)
@@ -177,6 +188,7 @@ contains
     HF_force = zero
     HF_NL_force = zero
     nonSC_force = zero
+    if (flag_pcc_global) pcc_force = zero ! for P.C.C.
     tot_force = zero
     WhichPulay=BothPulay
     ! This ASSUMES that workspace_support contains h_on_support
@@ -197,6 +209,8 @@ contains
             inode, ionode, maxngrid)
        call stop_print_timer(tmr_l_tmp1,"get_electronic_density",IPRINT_TIME_THRES2)
        call start_timer(tmr_l_tmp1,WITH_LEVEL)
+       ! for P.C.C.
+       if (flag_pcc_global) call get_pcc_force(pcc_force, inode, ionode, ni_in_cell, maxngrid)
        call get_nonSC_correction_force( nonSC_force, potential, density_out, &
             inode, ionode, ni_in_cell, maxngrid)
        call stop_print_timer(tmr_l_tmp1,"NSC force",IPRINT_TIME_THRES2)
@@ -216,9 +230,11 @@ contains
        if(stat/=0) call cq_abort("Error deallocating output density: ",maxngrid)
        call reg_dealloc_mem(area_moveatoms, maxngrid,type_dbl)
        call stop_timer(tmr_std_allocation)
-    else
+    else ! for SCF
        ! Local HF force
        call start_timer(tmr_l_tmp1,WITH_LEVEL)
+       ! for P.C.C.
+       if (flag_pcc_global) call get_pcc_force(pcc_force, inode, ionode, ni_in_cell, maxngrid)
        select case(pseudo_type)
        case(OLDPS)
           call get_HF_force( hf_force, density, ni_in_cell, maxngrid)
@@ -248,54 +264,106 @@ contains
        write(io_lun,fmt='(/,20x,"Forces on atoms (",a2,"/",a2,")"/)') en_units(energy_units), d_units(dist_units)
        write(io_lun,fmt='(18x,"    Atom   X              Y              Z")')
     end if
-    do i = 1, ni_in_cell
-       do j=1,3
-          if(flag_self_consistent) then
-             tot_force(j,i) = HF_force(j,i)+HF_NL_force(j,i)+p_force(j,i) &
-                  +KE_force(j,i)+ewald_force(j,i)
-          else
-             tot_force(j,i) = HF_force(j,i)+HF_NL_force(j,i)+p_force(j,i) &
-                  +KE_force(j,i)+ewald_force(j,i)+nonSC_force(j,i)
-          end if
-          if(.NOT.flag_move_atom(j,i)) then 
-             tot_force(j,i) = 0.0_double
-          end if
-          if(abs(tot_force(j,i))>max_force) then
-             max_force = abs(tot_force(j,i))
-             max_atom = i
-             max_compt = j
-          end if
-       enddo
-       if (inode==ionode) then
-          if(iprint_MD>2) then
-             write(io_lun,101) i
-             write(io_lun,102) (for_conv*HF_force(j,i),j=1,3)
-             write(io_lun,112) (for_conv*HF_NL_force(j,i),j=1,3)
-             write(io_lun,103) (for_conv*p_force(j,i),j=1,3)
-             write(io_lun,104) (for_conv*KE_force(j,i),j=1,3)
-             write(io_lun,106) (for_conv*ewald_force(j,i),j=1,3)
-             if(flag_self_consistent) then
-                write(io_lun,105) (for_conv*tot_force(j,i),j=1,3)
-             else
-                write(io_lun,107) (for_conv*nonSC_force(j,i),j=1,3)
-                write(io_lun,105) (for_conv*tot_force(j,i),j=1,3)
-             end if
-          else if(write_forces) then
-             if(flag_self_consistent) then
-                write(io_lun,fmt='(20x,i6,3f15.10)') i,(for_conv*tot_force(j,i),j=1,3)
-             else
-                write(io_lun,fmt='(20x,i6,3f15.10)') i,(for_conv*tot_force(j,i),j=1,3)
-             end if
-          end if
-       end if
-    enddo
+
+    ! with P.C.C.
+    if (flag_pcc_global) then
+      do i = 1, ni_in_cell
+         do j=1,3
+            if(flag_self_consistent) then
+               tot_force(j,i) = HF_force(j,i)+HF_NL_force(j,i)+p_force(j,i) &
+                    +KE_force(j,i)+ewald_force(j,i) + pcc_force(j, i)
+            else
+               tot_force(j,i) = HF_force(j,i)+HF_NL_force(j,i)+p_force(j,i) &
+                    +KE_force(j,i)+ewald_force(j,i)+nonSC_force(j,i) + pcc_force(j, i)
+            end if
+            if(.NOT.flag_move_atom(j,i)) then 
+               tot_force(j,i) = 0.0_double
+            end if
+            if(abs(tot_force(j,i))>max_force) then
+               max_force = abs(tot_force(j,i))
+               max_atom = i
+               max_compt = j
+            end if
+         enddo
+         if (inode==ionode) then
+            if(iprint_MD>2) then
+               write(io_lun,101) i
+               write(io_lun,102) (for_conv*HF_force(j,i),j=1,3)
+               write(io_lun,112) (for_conv*HF_NL_force(j,i),j=1,3)
+               write(io_lun,103) (for_conv*p_force(j,i),j=1,3)
+               write(io_lun,104) (for_conv*KE_force(j,i),j=1,3)
+               write(io_lun,106) (for_conv*ewald_force(j,i),j=1,3)
+               write(io_lun,108) (for_conv*pcc_force(j,i),j=1,3)
+               if(flag_self_consistent) then
+                  write(io_lun,105) (for_conv*tot_force(j,i),j=1,3)
+               else
+                  write(io_lun,107) (for_conv*nonSC_force(j,i),j=1,3)
+                  write(io_lun,105) (for_conv*tot_force(j,i),j=1,3)
+               end if
+            else if(write_forces) then
+               if(flag_self_consistent) then
+                  write(io_lun,fmt='(20x,i6,3f15.10)') i,(for_conv*tot_force(j,i),j=1,3)
+               else
+                  write(io_lun,fmt='(20x,i6,3f15.10)') i,(for_conv*tot_force(j,i),j=1,3)
+               end if
+            end if
+         end if
+      enddo
+    ! without P.C.C.
+    else
+      do i = 1, ni_in_cell
+         do j=1,3
+            if(flag_self_consistent) then
+               tot_force(j,i) = HF_force(j,i)+HF_NL_force(j,i)+p_force(j,i) &
+                    +KE_force(j,i)+ewald_force(j,i)
+            else
+               tot_force(j,i) = HF_force(j,i)+HF_NL_force(j,i)+p_force(j,i) &
+                    +KE_force(j,i)+ewald_force(j,i)+nonSC_force(j,i)
+            end if
+            if(.NOT.flag_move_atom(j,i)) then 
+               tot_force(j,i) = 0.0_double
+            end if
+            if(abs(tot_force(j,i))>max_force) then
+               max_force = abs(tot_force(j,i))
+               max_atom = i
+               max_compt = j
+            end if
+         enddo
+         if (inode==ionode) then
+            if(iprint_MD>2) then
+               write(io_lun,101) i
+               write(io_lun,102) (for_conv*HF_force(j,i),j=1,3)
+               write(io_lun,112) (for_conv*HF_NL_force(j,i),j=1,3)
+               write(io_lun,103) (for_conv*p_force(j,i),j=1,3)
+               write(io_lun,104) (for_conv*KE_force(j,i),j=1,3)
+               write(io_lun,106) (for_conv*ewald_force(j,i),j=1,3)
+               if(flag_self_consistent) then
+                  write(io_lun,105) (for_conv*tot_force(j,i),j=1,3)
+               else
+                  write(io_lun,107) (for_conv*nonSC_force(j,i),j=1,3)
+                  write(io_lun,105) (for_conv*tot_force(j,i),j=1,3)
+               end if
+            else if(write_forces) then
+               if(flag_self_consistent) then
+                  write(io_lun,fmt='(20x,i6,3f15.10)') i,(for_conv*tot_force(j,i),j=1,3)
+               else
+                  write(io_lun,fmt='(20x,i6,3f15.10)') i,(for_conv*tot_force(j,i),j=1,3)
+               end if
+            end if
+         end if
+      enddo
+    endif ! flag_pcc_global
     call my_barrier()
     if(inode==ionode) &
          write(io_lun,fmt='(4x,"Maximum force : ",f15.8,"(",a2,"/",a2,") on atom, component ",2i9)') &
          for_conv*max_force, en_units(energy_units), d_units(dist_units), max_atom, max_compt
     if(inode==ionode.AND.iprint_MD>1.AND.write_forces) write(io_lun,fmt='(4x,"Finished force")')
     call start_timer(tmr_std_allocation)
-    deallocate(p_force,KE_force,HF_force,HF_NL_force, nonSC_force,STAT=stat)
+    if (flag_pcc_global) then
+      deallocate(p_force,KE_force,HF_force,HF_NL_force, nonSC_force, pcc_force, STAT=stat)
+    else
+      deallocate(p_force,KE_force,HF_force,HF_NL_force, nonSC_force, STAT=stat)
+    endif
     if(stat/=0) call cq_abort("Error deallocating forces: ",ni_in_cell)
     call reg_dealloc_mem(area_moveatoms, 5*3*ni_in_cell,type_dbl)
     call stop_timer(tmr_std_allocation)
@@ -307,6 +375,7 @@ contains
 104 format('Force KE   : ',3f15.10)
 106 format('Force Ewald: ',3f15.10)
 107 format('Force nonSC: ',3f15.10)
+108 format('Force PCC  : ',3f15.10)
 105 format('Force Total: ',3f15.10)
   end subroutine force
 !!***
@@ -1469,6 +1538,8 @@ contains
 !!    Added functional type selector and PBE force
 !!   2008/11/13
 !!    Added new PBE functional types (revPBE, RPBE)
+!!   2011/03/31 M.Arita
+!!    Added the contribution from P.C.C.
 !!  SOURCE
 !!
   subroutine get_nonSC_correction_force( hf_force, potential, density_out, &
@@ -1482,7 +1553,8 @@ contains
                              flag_functional_type, functional_lda_pz81, &
                              functional_lda_gth96, functional_lda_pw92, &
                              functional_gga_pbe96, functional_gga_pbe96_rev98, &
-                             functional_gga_pbe96_r99, area_moveatoms, IPRINT_TIME_THRES3
+                             functional_gga_pbe96_r99, area_moveatoms, IPRINT_TIME_THRES3, &
+                             flag_pcc_global
     use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
     use group_module, ONLY : blocks, parts
     use primary_module, ONLY: domain
@@ -1490,10 +1562,11 @@ contains
     use set_blipgrid_module, ONLY : naba_atm
     use GenComms, ONLY: my_barrier, cq_abort
     use atomic_density, ONLY: atomic_density_table
+    use pseudo_tm_info, ONLY: pseudo
     use spline_module, ONLY: dsplint
     use dimens, ONLY: grid_point_volume, n_my_grid_points
     use GenBlas, ONLY: axpy
-    use density_module, ONLY: density, density_scale
+    use density_module, ONLY: density, density_scale, density_pcc
     use hartree_module, ONLY: hartree
     use maxima_module, ONLY: maxngrid
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
@@ -1521,12 +1594,17 @@ contains
     real(double):: xatom,yatom,zatom, fx_1, fy_1, fz_1
     real(double):: xblock,yblock,zblock
     real(double) :: dx,dy,dz, loc_cutoff, loc_cutoff2, electrons, v
+    real(double) :: pcc_cutoff, pcc_cutoff2, step_pcc, x_pcc, y_pcc, z_pcc, &
+                    derivative_pcc, v_pcc, fx_pcc, fy_pcc, fz_pcc, pot_here_pcc
 
     logical :: range_flag
     type(cq_timer) :: tmr_l_tmp1,tmr_l_tmp2
 
     ! Automatic
     real(double), allocatable, dimension(:) :: h_potential 
+    real(double), allocatable, dimension(:) :: h_potential_in  ! only for GGA with P.C.C. 
+    real(double), allocatable, dimension(:) :: wk_grid
+    real(double), allocatable, dimension(:) :: density_out_GGA ! only for GGA with P.C.C.
 
     HF_force = zero
     dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
@@ -1550,24 +1628,97 @@ contains
 !    h_potential = 0.0_double
     call stop_timer(tmr_l_tmp2,TIME_ACCUMULATE_NO)      ! This restarts the count for this timer
 
+    ! for P.C.C.
+    if (flag_pcc_global) then
+      allocate(wk_grid(size), STAT=stat)
+      if (stat .NE. 0) call cq_abort('Error allocating wk_grid in get_nonSC_correction ', size, stat)
+      wk_grid = density + density_pcc
+      ! only for GGA
+      if ( (flag_functional_type .EQ. functional_gga_pbe96) .OR. &
+           (flag_functional_type .EQ. functional_gga_pbe96_rev98) .OR. &
+           (flag_functional_type .EQ. functional_gga_pbe96_r99) ) then
+        allocate(density_out_GGA(size), STAT=stat)
+        density_out_GGA = density_out + density_pcc
+        if (stat .NE. 0) call cq_abort('Error allocating density_out_GGA in get_nonSC_force ', size, stat)
+        allocate(h_potential_in(size), STAT=stat)
+        if (stat .NE. 0) call cq_abort('Error allocating h_potential_in in get_nonSC_force ', size, stat)
+        h_potential_in = h_potential
+      endif
+    endif
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     select case(flag_functional_type)
        case (functional_lda_pz81)
-          call get_dxc_potential( density, h_potential, maxngrid )
+         if (flag_pcc_global) then
+           call get_dxc_potential( wk_grid, h_potential, maxngrid )
+         else
+           call get_dxc_potential( density, h_potential, maxngrid )
+         endif
        case (functional_lda_gth96)
-          call get_GTH_dxc_potential( density, h_potential, maxngrid )
+         if (flag_pcc_global) then
+           call get_GTH_dxc_potential( wk_grid, h_potential, maxngrid )
+         else
+           call get_GTH_dxc_potential( density, h_potential, maxngrid )
+         endif
        case (functional_lda_pw92)
-          call get_dxc_potential_LDA_PW92( density, h_potential, maxngrid )
+         if (flag_pcc_global) then
+           call get_dxc_potential_LDA_PW92( wk_grid, h_potential, maxngrid )
+         else
+           call get_dxc_potential_LDA_PW92( density, h_potential, maxngrid )
+         endif
        case (functional_gga_pbe96)                      ! Original PBE
-          call get_dxc_potential_GGA_PBE( density, density_out, potential, maxngrid )
+         if (flag_pcc_global) then
+            call get_dxc_potential_GGA_PBE( wk_grid, density_out_GGA, potential, maxngrid )
+         else
+            call get_dxc_potential_GGA_PBE( density, density_out, potential, maxngrid )
+         endif
        case (functional_gga_pbe96_rev98)                ! PBE with kappa of PRL 80, 890 (1998)
-          call get_dxc_potential_GGA_PBE( density, density_out, potential, maxngrid, functional_gga_pbe96_rev98 )
+         if (flag_pcc_global) then
+           call get_dxc_potential_GGA_PBE( wk_grid, density_out, potential, maxngrid, functional_gga_pbe96_rev98 )
+         else
+           call get_dxc_potential_GGA_PBE( density, density_out, potential, maxngrid, functional_gga_pbe96_rev98 )
+         endif
        case (functional_gga_pbe96_r99)                  ! PBE with form of PRB 59, 7413 (1999)
-          call get_dxc_potential_GGA_PBE( density, density_out, potential, maxngrid, functional_gga_pbe96_r99 )
+         if (flag_pcc_global) then
+           call get_dxc_potential_GGA_PBE( wk_grid, density_out, potential, maxngrid, functional_gga_pbe96_r99 )
+         else
+           call get_dxc_potential_GGA_PBE( density, density_out, potential, maxngrid, functional_gga_pbe96_r99 )
+         endif
        case default
-          call get_dxc_potential( density, h_potential, maxngrid )
+         if (flag_pcc_global) then
+           call get_dxc_potential( wk_grid, h_potential, maxngrid )
+         else
+           call get_dxc_potential( density, h_potential, maxngrid )
+         endif
     end select
-
+    ! deallocating density_out_GGA: only for P.C.C.
+    if (flag_pcc_global)  then
+      if ( (flag_functional_type .EQ. functional_gga_pbe96) .OR. &
+           (flag_functional_type .EQ. functional_gga_pbe96_rev98) .OR. &
+           (flag_functional_type .EQ. functional_gga_pbe96_r99) ) then
+        deallocate(density_out_GGA, STAT=stat)
+        if(stat/=0) call cq_abort('Error deallocating density_out_GGA in get_nonSC_force ',stat)
+      endif
+    endif !flag_pcc_global
+    ! initialise wk_grid and reuse it for dxc_potential
+    ! for LDA
+    if ((flag_pcc_global .EQ. .true.) .AND. &
+        (flag_functional_type .NE. functional_gga_pbe96) .AND. &
+        (flag_functional_type .NE. functional_gga_pbe96_rev98) .AND. &
+        (flag_functional_type .NE. functional_gga_pbe96_r99) ) then
+      wk_grid = 0.0_double
+      do i = 1, n_my_grid_points
+        wk_grid(i) = h_potential(i)
+      enddo
+    ! for GGA
+    elseif ( (flag_pcc_global .EQ. .true.) .AND. &
+             ( (flag_functional_type .EQ. functional_gga_pbe96) .OR. &
+               (flag_functional_type .EQ. functional_gga_pbe96_rev98) .OR. &
+               (flag_functional_type .EQ. functional_gga_pbe96_r99) ) ) then 
+      ! used in the contribution from the core charge density
+      wk_grid = 0.0_double
+      call axpy(size, one, potential, 1, wk_grid, 1)
+    endif ! LDA/GGA
+   
     if((flag_functional_type /= functional_gga_pbe96) &
     .and.(flag_functional_type /= functional_gga_pbe96_rev98) &
     .and.(flag_functional_type /= functional_gga_pbe96_r99) ) then
@@ -1579,13 +1730,14 @@ contains
       do i=1,n_my_grid_points
          potential(i) = potential(i)-density_out(i)*h_potential(i)
       end do
-    end if
+    end if ! for LDA
     call stop_print_timer(tmr_l_tmp1,"NSC force - XC",IPRINT_TIME_THRES3)
 
     call start_timer(tmr_l_tmp2,WITH_LEVEL)   ! Restart of the timer; level assigned here
     h_potential = 0.0_double
     call hartree( density_out, h_potential, maxngrid, h_energy )
     call axpy(maxngrid, -one, h_potential, 1, potential, 1)
+    ! now, potential = - delta V_{H} - ( n_{out}-n_{in} ) * dxc_potential
     call stop_print_timer(tmr_l_tmp2,"NSC force - Hartree",IPRINT_TIME_THRES3,TIME_ACCUMULATE_YES)
 
     call my_barrier()
@@ -1668,17 +1820,356 @@ contains
        endif !(naba_atm(dens)%no_of_part(iblock) > 0) !naba atoms?
     enddo ! iblock : primary set of blocks
     call stop_print_timer(tmr_l_tmp1,"NSC force - Orbital part",IPRINT_TIME_THRES3)
+
+
+    ! only called for P.C.C.
+    ! compute - int d^3r ( delta n_{v}*dxc(n_{c}+n_{v})*dn_{c} )
+    if (flag_pcc_global) then
+      if((flag_functional_type /= functional_gga_pbe96) &
+         .and.(flag_functional_type /= functional_gga_pbe96_rev98) &
+         .and.(flag_functional_type /= functional_gga_pbe96_r99) ) then
+           potential = 0.0_double ! initialisation
+           do i = 1, n_my_grid_points
+             !potential(i) = (density_out(i) - density(i)) * wk_grid(i)
+             potential(i) = (density(i) - density_out(i)) * wk_grid(i) ! (n_{in} - n_{out})*dxc_potential
+           enddo
+      elseif ( (flag_functional_type .EQ. functional_gga_pbe96) .OR. &
+               (flag_functional_type .EQ. functional_gga_pbe96_rev98) .OR. &
+               (flag_functional_type .EQ. functional_gga_pbe96_r99) ) then 
+           ! for GGA
+           potential = 0.0_double
+           do i = 1, n_my_grid_points
+             potential(i) = wk_grid(i) - h_potential_in(i) ! -delta n * dxc_potential
+           enddo
+      endif
+      call start_timer(tmr_l_tmp1,WITH_LEVEL)
+      !HF_force = 0.0_double
+      do iblock = 1, domain%groups_on_node ! primary set of blocks
+         xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
+         yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
+         zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
+         if(naba_atm(dens)%no_of_part(iblock) > 0) then ! if there are naba atoms
+            iatom=0
+            do ipart=1,naba_atm(dens)%no_of_part(iblock)
+               jpart=naba_atm(dens)%list_part(ipart,iblock)
+               if(jpart > DCS_parts%mx_gcover) call cq_abort('set_ps: JPART ERROR ',ipart,jpart)
+               ind_part=DCS_parts%lab_cell(jpart)
+               do ia=1,naba_atm(dens)%no_atom_on_part(ipart,iblock)
+                  iatom=iatom+1
+                  ii = naba_atm(dens)%list_atom(iatom,iblock)
+                  icover= DCS_parts%icover_ibeg(jpart)+ii-1
+                  ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
+                  the_species = species_glob(ig_atom)
+                  !the_species=species(ig_atom)
+                  ! for P.C.C. treatment
+                  if (.NOT. pseudo(the_species)%flag_pcc) cycle
+                  if(parts%icell_beg(ind_part) + ii-1 > ni_in_cell) &
+                       call cq_abort('set_ps: globID ERROR ', ii,parts%icell_beg(ind_part))
+                  if(icover > DCS_parts%mx_mcover) &
+                       call cq_abort('set_ps: icover ERROR ', icover,DCS_parts%mx_mcover)
+                  xatom=DCS_parts%xcover(icover)
+                  yatom=DCS_parts%ycover(icover)
+                  zatom=DCS_parts%zcover(icover)
+                  pcc_cutoff = pseudo(the_species)%chpcc%cutoff
+                  pcc_cutoff2 = pcc_cutoff * pcc_cutoff
+                  step_pcc = pseudo(the_species)%chpcc%delta
+                  ipoint=0
+                  do iz=1,nz_in_block
+                     do iy=1,ny_in_block
+                        do ix=1,nx_in_block
+                           ipoint=ipoint+1
+                           igrid=n_pts_in_block*(iblock-1)+ipoint
+                           if(igrid > n_my_grid_points) call cq_abort('get_nonSC_force: igrid error ',igrid,n_my_grid_points)
+                           pot_here_pcc = potential(igrid) * grid_point_volume
+                           dx=dcellx_grid*(ix-1)
+                           dy=dcelly_grid*(iy-1)
+                           dz=dcellz_grid*(iz-1)
+                           rx=xblock+dx-xatom
+                           ry=yblock+dy-yatom
+                           rz=zblock+dz-zatom
+                           r2 = rx * rx + ry * ry + rz * rz
+                           if(r2 < pcc_cutoff2) then
+                              r_from_i = sqrt( r2 )
+                              if ( r_from_i > very_small ) then
+                                 x_pcc = rx / r_from_i
+                                 y_pcc = ry / r_from_i
+                                 z_pcc = rz / r_from_i
+                              else
+                                 x_pcc = zero
+                                 y_pcc = zero
+                                 z_pcc = zero
+                              end if
+                              call dsplint(step_pcc, pseudo(the_species)%chpcc%f(:), & 
+                                           pseudo(the_species)%chpcc%d2(:), &
+                                           pseudo(the_species)%chpcc%n, & 
+                                           r_from_i, v_pcc, derivative_pcc, range_flag)
+                              if(range_flag) call cq_abort('get_nonSC_force: overrun problem')
+                              fx_pcc = -x_pcc * derivative_pcc * density_scale
+                              fy_pcc = -y_pcc * derivative_pcc * density_scale 
+                              fz_pcc = -z_pcc * derivative_pcc * density_scale 
+                           else
+                              fx_pcc = zero
+                              fy_pcc = zero
+                              fz_pcc = zero
+                           end if
+                           HF_force(1,ig_atom) = HF_force(1,ig_atom) + fx_pcc * pot_here_pcc 
+                           HF_force(2,ig_atom) = HF_force(2,ig_atom) + fy_pcc * pot_here_pcc
+                           HF_force(3,ig_atom) = HF_force(3,ig_atom) + fz_pcc * pot_here_pcc
+                        enddo !ix
+                     enddo  !iy
+                  enddo   !iz
+               enddo ! naba_atoms
+            enddo ! naba_part
+         endif !(naba_atm(dens)%no_of_part(iblock) > 0) !naba atoms?
+      enddo ! iblock : primary set of blocks
+    endif ! (flag_pcc_global)
+
+
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     call gsum(HF_force,3,n_atoms)
     call stop_print_timer(tmr_l_tmp1,"NSC force - Compilation",IPRINT_TIME_THRES3)
     call start_timer(tmr_std_allocation)
     deallocate(h_potential,STAT=stat)
     if(stat/=0) call cq_abort('Error deallocating h_potential in get_nonSC_force ',stat)
+    if (flag_pcc_global) then
+      deallocate(wk_grid, STAT=stat)
+      if (stat .NE. 0) call cq_abort('Error deallocating wk_grid in get_nonSC_force ', stat)
+      if ( (flag_functional_type .EQ. functional_gga_pbe96) .OR. &
+           (flag_functional_type .EQ. functional_gga_pbe96_rev98) .OR. &
+           (flag_functional_type .EQ. functional_gga_pbe96_r99) ) then
+        deallocate(h_potential_in, STAT=stat)
+        if (stat .NE. 0) call cq_abort('Error deallocating h_potential_in in get_nonSC_force ', stat)
+      endif ! for GGA
+    endif
     call reg_dealloc_mem(area_moveatoms, size,type_dbl)
     call stop_timer(tmr_std_allocation)
+
     return    
   end subroutine get_nonSC_correction_force
 !!***
+
+! -----------------------------------------------------------
+! Subroutine get_pcc_force
+! -----------------------------------------------------------
+
+!!****f* force_module/get_pcc_force *
+!!
+!!  NAME 
+!!   get_pcc_force
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   Gets the P.C.C. force in the case where the partial core correction is taken into account.
+!!   This contribution works on both SCF/NSC calculations.
+!!  INPUTS
+!! 
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   M.Arita
+!!  CREATION DATE
+!!   12:03, 2011/03/31 M.Arita
+!!  SOURCE
+!!
+!!
+
+  subroutine get_pcc_force( pcc_force, inode, ionode, n_atoms, size )
+
+    use datatypes
+    use numbers
+    use species_module, ONLY: species
+    use GenComms, ONLY: gsum
+    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell,species_glob, dens, &
+                             flag_functional_type, functional_lda_pz81, &
+                             functional_lda_gth96, functional_lda_pw92, &
+                             functional_gga_pbe96, functional_gga_pbe96_rev98, &
+                             functional_gga_pbe96_r99, area_moveatoms, IPRINT_TIME_THRES3
+    use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
+    use group_module, ONLY : blocks, parts
+    use primary_module, ONLY: domain
+    use cover_module, ONLY: DCS_parts
+    use set_blipgrid_module, ONLY : naba_atm
+    use GenComms, ONLY: my_barrier, cq_abort
+    use pseudo_tm_info, ONLY: pseudo
+    use spline_module, ONLY: dsplint
+    use dimens, ONLY: grid_point_volume, n_my_grid_points
+    use GenBlas, ONLY: axpy
+    use density_module, ONLY: density, density_scale, density_pcc
+    use H_matrix_module, ONLY: get_xc_potential, get_GTH_xc_potential, &
+                               get_xc_potential_LDA_PW92, &
+                               get_xc_potential_GGA_PBE
+    use maxima_module, ONLY: maxngrid
+    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use timer_module, ONLY: cq_timer,start_timer,stop_timer,print_timer, &
+                            stop_print_timer,WITH_LEVEL,TIME_ACCUMULATE_NO,TIME_ACCUMULATE_YES
+
+    implicit none
+
+    ! Passed variables
+    integer :: n_atoms, size
+    integer :: inode, ionode
+    real(double) :: pcc_force(3, n_atoms)
+
+    ! Local variables
+    integer :: i, j, my_block, n, the_species, iatom
+    integer :: ix,iy,iz,iblock,ipoint,igrid,stat
+    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom
+
+    real(double) :: derivative_pcc, xc_energy, rx, ry, rz, r2, r_from_i, &
+                    x_pcc, y_pcc, z_pcc, step_pcc, pot_here_pcc
+    real(double):: dcellx_block,dcelly_block,dcellz_block
+    real(double):: dcellx_grid, dcelly_grid, dcellz_grid
+    real(double):: xatom,yatom,zatom, fx_pcc, fy_pcc, fz_pcc
+    real(double):: xblock,yblock,zblock
+    real(double) :: dx,dy,dz, pcc_cutoff, pcc_cutoff2, electrons, v_pcc
+
+    logical :: range_flag
+    type(cq_timer) :: tmr_l_tmp1,tmr_l_tmp2
+
+    ! Automatic
+    real(double), allocatable, dimension(:) :: xc_potential
+    real(double), allocatable, dimension(:) :: xc_epsilon ! not used directly
+    real(double), allocatable, dimension(:) :: density_wk
+
+    pcc_force = zero
+    dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
+    dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
+    dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nz_in_block
+
+    ! We need a xc_potential array 
+    call start_timer(tmr_std_allocation)
+    allocate(xc_potential(size), xc_epsilon(size), STAT=stat)
+    if(stat/=0) call cq_abort('Error allocating xc_potential and xc_epsilon in get_pcc_force ',size,stat)
+    call reg_alloc_mem(area_moveatoms, size,type_dbl)
+    call stop_timer(tmr_std_allocation)
+    call start_timer(tmr_l_tmp2) 
+    xc_potential = 0.0_double
+    xc_epsilon = 0.0_double
+
+    ! prepare an array for n_{v} + n_{c}
+    allocate (density_wk(size), STAT=stat)
+    if (stat .NE. 0) call cq_abort('Error allocating density_wk in get_pcc_force', size, stat)
+    call reg_alloc_mem(area_moveatoms, size, type_dbl)
+    
+    density_wk = density + density_pcc
+
+    select case(flag_functional_type)
+       case (functional_lda_pz81)
+          call get_xc_potential( density_wk, xc_potential, xc_epsilon, xc_energy, size )
+       case (functional_lda_gth96)
+          call get_GTH_xc_potential( density_wk, xc_potential, xc_epsilon, xc_energy, size )
+       case (functional_lda_pw92)
+          call get_xc_potential_LDA_PW92( density_wk, xc_potential, xc_epsilon, xc_energy, size )
+       case (functional_gga_pbe96)                      ! Original PBE
+          call get_xc_potential_GGA_PBE( density_wk, xc_potential, xc_epsilon, xc_energy, size )
+       case (functional_gga_pbe96_rev98)                ! PBE with kappa of PRL 80, 890 (1998)
+          call get_xc_potential_GGA_PBE( density_wk, xc_potential, xc_epsilon, xc_energy, size )
+       case (functional_gga_pbe96_r99)                  ! PBE with form of PRB 59, 7413 (1999)
+          call get_xc_potential_GGA_PBE( density_wk, xc_potential, xc_epsilon, xc_energy, size )
+       case default
+          call get_xc_potential( density_wk, xc_potential, xc_epsilon, xc_energy, size )
+    end select
+
+    deallocate(xc_epsilon, STAT=stat)
+    if (stat .NE. 0) call cq_abort("Error deallocating xc_epsilon: ", n_my_grid_points, stat)
+
+    call stop_timer(tmr_l_tmp2,TIME_ACCUMULATE_NO)      ! This restarts the count for this timer
+
+    call my_barrier()
+
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
+    do iblock = 1, domain%groups_on_node ! primary set of blocks
+       xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
+       yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
+       zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
+       if(naba_atm(dens)%no_of_part(iblock) > 0) then ! if there are naba atoms
+          iatom=0
+          do ipart=1,naba_atm(dens)%no_of_part(iblock)
+             jpart=naba_atm(dens)%list_part(ipart,iblock)
+             if(jpart > DCS_parts%mx_gcover) call cq_abort('set_ps: JPART ERROR ',ipart,jpart)
+             ind_part=DCS_parts%lab_cell(jpart)
+             do ia=1,naba_atm(dens)%no_atom_on_part(ipart,iblock)
+                iatom=iatom+1
+                ii = naba_atm(dens)%list_atom(iatom,iblock)
+                icover= DCS_parts%icover_ibeg(jpart)+ii-1
+                ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
+                the_species = species_glob(ig_atom)
+                !the_species=species(ig_atom)
+                ! for P.C.C. treatment
+                if (.NOT. pseudo(the_species)%flag_pcc) cycle
+                if(parts%icell_beg(ind_part) + ii-1 > ni_in_cell) &
+                     call cq_abort('set_ps: globID ERROR ', ii,parts%icell_beg(ind_part))
+                if(icover > DCS_parts%mx_mcover) &
+                     call cq_abort('set_ps: icover ERROR ', icover,DCS_parts%mx_mcover)
+                xatom=DCS_parts%xcover(icover)
+                yatom=DCS_parts%ycover(icover)
+                zatom=DCS_parts%zcover(icover)
+                pcc_cutoff = pseudo(the_species)%chpcc%cutoff
+                pcc_cutoff2 = pcc_cutoff * pcc_cutoff
+                step_pcc = pseudo(the_species)%chpcc%delta
+                ipoint=0
+                do iz=1,nz_in_block
+                   do iy=1,ny_in_block
+                      do ix=1,nx_in_block
+                         ipoint=ipoint+1
+                         igrid=n_pts_in_block*(iblock-1)+ipoint
+                         if(igrid > n_my_grid_points) call cq_abort('get_nonSC_force: igrid error ',igrid,n_my_grid_points)
+                         pot_here_pcc = xc_potential(igrid) * grid_point_volume
+                         dx=dcellx_grid*(ix-1)
+                         dy=dcelly_grid*(iy-1)
+                         dz=dcellz_grid*(iz-1)
+                         rx=xblock+dx-xatom
+                         ry=yblock+dy-yatom
+                         rz=zblock+dz-zatom
+                         r2 = rx * rx + ry * ry + rz * rz
+                         if(r2 < pcc_cutoff2) then
+                            r_from_i = sqrt( r2 )
+                            if ( r_from_i > very_small ) then
+                               x_pcc = rx / r_from_i
+                               y_pcc = ry / r_from_i
+                               z_pcc = rz / r_from_i
+                            else
+                               x_pcc = zero
+                               y_pcc = zero
+                               z_pcc = zero
+                            end if
+                            call dsplint(step_pcc, pseudo(the_species)%chpcc%f(:), & 
+                                 pseudo(the_species)%chpcc%d2(:), &
+                                 pseudo(the_species)%chpcc%n, & 
+                                 r_from_i, v_pcc, derivative_pcc, range_flag)
+                            if(range_flag) call cq_abort('get_pcc_force: overrun problem')
+                            fx_pcc = x_pcc * derivative_pcc
+                            fy_pcc = y_pcc * derivative_pcc
+                            fz_pcc = z_pcc * derivative_pcc
+                         else
+                            fx_pcc = zero
+                            fy_pcc = zero
+                            fz_pcc = zero
+                         end if
+                         pcc_force(1,ig_atom) = pcc_force(1,ig_atom) + fx_pcc * pot_here_pcc 
+                         pcc_force(2,ig_atom) = pcc_force(2,ig_atom) + fy_pcc * pot_here_pcc
+                         pcc_force(3,ig_atom) = pcc_force(3,ig_atom) + fz_pcc * pot_here_pcc
+                      enddo !ix
+                   enddo  !iy
+                enddo   !iz
+             enddo ! naba_atoms
+          enddo ! naba_part
+       endif !(naba_atm(dens)%no_of_part(iblock) > 0) !naba atoms?
+    enddo ! iblock : primary set of blocks
+    call stop_print_timer(tmr_l_tmp1,"PCC force - Orbital part",IPRINT_TIME_THRES3)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
+    call gsum(pcc_force,3,n_atoms)
+    call stop_print_timer(tmr_l_tmp1,"PCC force - Compilation",IPRINT_TIME_THRES3)
+    call start_timer(tmr_std_allocation)
+    deallocate(xc_potential,STAT=stat)
+    if(stat/=0) call cq_abort('Error deallocating xc_potential in get_pcc_force ',stat)
+    deallocate(density_wk, STAT=stat)
+    if(stat/=0) call cq_abort('Error deallocating density_wk in get_pcc_force ',stat)
+    call reg_dealloc_mem(area_moveatoms, size,type_dbl)
+    call stop_timer(tmr_std_allocation)
+    return    
+  end subroutine get_pcc_force
 
 ! -----------------------------------------------------------
 ! Subroutine get_dxc_potential
@@ -2293,9 +2784,9 @@ end if
                          * (df1_dgrad * (one - two * denominator0) &
                          - two * factor1 * dden0_dgrad)
 
+
        !!   First derivative wrt gradient
        de_dgrad(n) = rho * factor0 * df1_dgrad
-
 
 
        !!!!   CORRELATION
@@ -2392,6 +2883,7 @@ end if
        end if
        d2e_drho2 = d2e_drho2 + gamma*(two*dfl_drho/fl - rho*((dfl_drho/fl)**2) + rho*d2fl_drho2/fl);
 
+
        !!   First derivative with respect to grad
 
        if(rho > very_small) then 
@@ -2463,6 +2955,7 @@ end if
                         + diff_rho(n) * (d2e_drho2 + dxc_potential_lda(n))
 
     end do ! do n_my_grid_points
+
 
     ! Fourier transform the difference of densities
      tmp1(:)=cmplx(zero,zero,double_cplx)  !TM
