@@ -998,9 +998,18 @@ contains
             &(one-abs(asig3))*aa(3,2)
        edg_b(3) = (one-abs(asig1))*aa(1,3) + (one-abs(asig2))*aa(2,3) + &
             &(one-abs(asig3))*aa(3,3)
-       distance = sqrt(edg_a(1)*edg_a(1) + edg_a(2)*edg_a(2) + edg_a(3)*edg_a(3) - &
+       !ORIdistance = sqrt(edg_a(1)*edg_a(1) + edg_a(2)*edg_a(2) + edg_a(3)*edg_a(3) - &
+       !ORI     &((edg_a(1)*edg_b(1) + edg_a(2)*edg_b(2) + edg_a(3)*edg_b(3))**2) / &
+       !ORI     &(edg_b(1)*edg_b(1) + edg_b(2)*edg_b(2) + edg_b(3)*edg_b(3)))
+       distance = edg_a(1)*edg_a(1) + edg_a(2)*edg_a(2) + edg_a(3)*edg_a(3) - &
             &((edg_a(1)*edg_b(1) + edg_a(2)*edg_b(2) + edg_a(3)*edg_b(3))**2) / &
-            &(edg_b(1)*edg_b(1) + edg_b(2)*edg_b(2) + edg_b(3)*edg_b(3)))
+            &(edg_b(1)*edg_b(1) + edg_b(2)*edg_b(2) + edg_b(3)*edg_b(3))
+       if(distance > very_small) then 
+           distance = sqrt(distance)
+       else
+           distance = zero
+       endif
+
        ! --- face: only one non-zero signature
     case(1)
        q_vec(1) = half*(asig1*beta(1,1) + asig2*beta(2,1) + asig3*beta(3,1))

@@ -1,1 +1,1 @@
-  character(len=*), parameter :: commentver="beta 0.36 (r90): PCC routines are introduced (Arita&TM) 2011.03.31"
+  character(len=*), parameter :: commentver="beta 0.37 (r91): changed ewald, DMM by TM 2011.03.31"

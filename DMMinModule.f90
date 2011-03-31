@@ -139,6 +139,9 @@ contains
     real(double), parameter :: eprec = 1.0e-12_double
     real(double), save :: delta_e
     type(cq_timer) :: tmr_l_iter
+!TM 2010.Nov.06
+    integer :: niter = 0
+    integer, parameter :: niter_max=10
 
     call start_timer(tmr_std_densitymat)
     entropy = zero
@@ -156,12 +159,14 @@ contains
     call matrix_transpose(matT,matTtran)
     ! Now minimise the energy
     ndone = 0
+    niter = 0
     do while(.NOT.done)
        call start_timer(tmr_l_iter,WITH_LEVEL)
        if(resetL.OR.inflex) then ! Reset L to McW
           call InitMcW(number_of_bands,inode,ionode)
           call McWMin( n_L_iterations, delta_e ) 
           early = .true.
+          resetL = .false.    !2010.Nov.06 TM
        endif
        if(early.OR.problem) then
           inflex = .false.
@@ -173,8 +178,13 @@ contains
           call lateDM(ndone, n_L_iterations, done, delta_e, &
                vary_mu, mu, inode, ionode, number_of_bands, tolerance, record)
        endif
+       niter=niter+1
        if(problem) resetL = .true.
-       problem = .true. ! If we're not done, then this kicks us back to early
+       !ORI problem = .true. ! If we're not done, then this kicks us back to early
+       if(niter > niter_max) then
+         problem = .true. ! If we're not done, then this kicks us back to early
+         niter = 0
+       endif
        call stop_print_timer(tmr_l_iter,"FindMinDM iteration",IPRINT_TIME_THRES1)
     enddo ! end of do while (.NOT.done)
     ! *** Add frequency of output here *** !
@@ -472,6 +482,9 @@ contains
     use H_matrix_module, ONLY: get_H_matrix
     use density_module, ONLY: density, get_electronic_density
     use maxima_module, ONLY: maxngrid
+   !Prints out charge density -- 2010.Nov.06 TM
+    use io_module, ONLY: dump_charge
+    use dimens, ONLY: n_my_grid_points
 
     implicit none
 
@@ -489,6 +502,11 @@ contains
     real(double) :: Aij1(maxpulayDMM*maxpulayDMM)
     integer :: n_iter, i,j, pul_mx, npmod
     type(cq_timer) :: tmr_l_tmp1,tmr_l_iter
+!TM
+    integer :: iter_stuck = 0
+    integer,parameter :: mx_stuck = 5
+
+    iter_stuck=0
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     if(ndone>n_L_iterations) call cq_abort('lateDM: too many L iterations', &
@@ -661,33 +679,31 @@ contains
           done = .true.
           ndone = n_iter
           if(inode==ionode) write(io_lun,*) 'Achieved tolerance in lateDM'
-          if(inode==ionode) write(io_lun,fmt='("Final energy and residual: ",2f15.9)') energy1,g1
-          call free_temp_matrix(mat_temp)
-          call free_temp_matrix(matSphi)
-          call free_temp_matrix(matSM3)
-          call free_temp_matrix(matM3)
-          do i=maxpulayDMM,1,-1
-             call free_temp_matrix(mat_SGstore(i))
-             call free_temp_matrix(mat_Gstore(i))
-             call free_temp_matrix(mat_Lstore(i))
-          end do
+          if(inode==ionode) write(io_lun,fmt='("Final energy and residual: ",f24.9,f15.9)') energy1,g1
+          call dealloc_lateDM
           call stop_print_timer(tmr_l_iter,"a lateDM iteration",IPRINT_TIME_THRES1)
           return
        else if((.NOT.flag_mix_L_SC_min).AND.(g1>2.0_double*g0)) then
           if(inode==ionode) write(io_lun,*) 'Panic ! Residual increase in lateDM'
           if(inode==ionode) write(io_lun,*) 'Final energy and residual: ',energy1,g1
           ndone = n_iter
-          call free_temp_matrix(mat_temp)
-          call free_temp_matrix(matSphi)
-          call free_temp_matrix(matSM3)
-          call free_temp_matrix(matM3)
-          do i=maxpulayDMM,1,-1
-             call free_temp_matrix(mat_SGstore(i))
-             call free_temp_matrix(mat_Gstore(i))
-             call free_temp_matrix(mat_Lstore(i))
-          end do
+          call dealloc_lateDM
           call stop_print_timer(tmr_l_iter,"a lateDM iteration",IPRINT_TIME_THRES1)
           return
+!2011.11.15 TM
+       !OLD else if((.NOT.flag_mix_L_SC_min).AND.(g1>0.99_double*g0)) then
+       else if(g1>0.99_double*g0) then
+          iter_stuck=iter_stuck+1
+         if(iter_stuck > mx_stuck) then
+          done = .false.
+          ndone = n_iter
+          if(inode==ionode) write(io_lun,*) 'Fail in reducing Residual in lateDM'
+          if(inode==ionode) write(io_lun,fmt='("      energy and residual: ",f24.9,f15.9)') energy1,g1
+          call dealloc_lateDM
+          call stop_print_timer(tmr_l_iter,"a lateDM iteration",IPRINT_TIME_THRES1)
+          return
+         endif ! (iter_stuck > mx_stuck) 
+!2011.11.15 TM
        endif
        ! Replace step with real L
        call matrix_sum(zero,mat_SGstore(npmod),-one,matSM3)
@@ -697,16 +713,26 @@ contains
        energy0 = energy1
        call stop_print_timer(tmr_l_iter,"a lateDM iteration",IPRINT_TIME_THRES1)
     enddo
-    if(g1<tolerance*100.0_double) done = .true.
-    call free_temp_matrix(mat_temp)
-    call free_temp_matrix(matSphi)
-    call free_temp_matrix(matSM3)
-    call free_temp_matrix(matM3)
-    do i=maxpulayDMM,1,-1
-       call free_temp_matrix(mat_SGstore(i))
-       call free_temp_matrix(mat_Gstore(i))
-       call free_temp_matrix(mat_Lstore(i))
-    end do
+   !Commented out : 2010.12.26 TM
+   ! if(g1<tolerance*100.0_double) done = .true.
+   !Prints out charge density -- 2010.Nov.06 TM
+    if(flag_mix_L_SC_min) then
+       call dump_charge(density,n_my_grid_points,inode)
+    endif  ! (flag_mix_L_SC_min) then
+    call dealloc_lateDM
+    return
+   contains
+    subroutine dealloc_lateDM
+     call free_temp_matrix(mat_temp)
+     call free_temp_matrix(matSphi)
+     call free_temp_matrix(matSM3)
+     call free_temp_matrix(matM3)
+     do i=maxpulayDMM,1,-1
+        call free_temp_matrix(mat_SGstore(i))
+        call free_temp_matrix(mat_Gstore(i))
+        call free_temp_matrix(mat_Lstore(i))
+     end do
+    end subroutine dealloc_lateDM
   end subroutine lateDM
 !!***
 
@@ -948,7 +974,7 @@ contains
     matSphi2 = allocate_temp_matrix(Lrange,0)
     ! get electron number and gradient
     call matrix_transpose(matT, matTtran)
-    do while(.NOT.done.AND.(iter<20)) ! Was 20 !
+   do while(.NOT.done.AND.(iter<20)) ! Was 20 !
     call LNV_matrix_multiply( electrons,energy, dontK, dontM1, dontM2, dontM3, dontM4, dophi, dontE,0,0,0,matphi)
     call matrix_product(matT,matphi,matTL,mult(T_L_TL))
     call matrix_product(matTL, matTtran,matSphi,mult(TL_T_L))
@@ -982,7 +1008,8 @@ contains
        call matrix_product(matT,matphi2,matTL,mult(T_L_TL))
        call matrix_product(matTL, matTtran,matSphi2,mult(TL_T_L))
 
-       g1 = matrix_product_trace(matphi,matSphi2)
+       g1 = matrix_product_trace(matphi,matSphi2) 
+
        if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'g1, elec2 are ',g1,electrons2
 
        ! get coefficients of polynomial
@@ -1016,7 +1043,8 @@ contains
 
           if (inode .eq. ionode.and.output_level>=2) write(io_lun,2) electrons2
           dne = abs(electrons2 - electrons_0)
-          if((dne/electrons_0)<1e-6_double) done = .true.
+          !ORI if((dne/electrons_0)<1e-6_double) done = .true.
+          if((dne)<1e-4_double) done = .true.
           iter = iter+1
        else
           done = .true.
@@ -1035,7 +1063,7 @@ contains
        !     dontK, dontM1, dontM2, dontM3, dontM4, dophi, dontE,0,0,0,matphi)
        !if (inode .eq. ionode.and.output_level>=2) write(io_lun,2) electrons2
     endif
-    enddo
+   enddo
     call free_temp_matrix(matSphi2)
     call free_temp_matrix(matSphi)
     call free_temp_matrix(matphi2)
