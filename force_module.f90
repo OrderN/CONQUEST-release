@@ -1701,7 +1701,7 @@ contains
     endif !flag_pcc_global
     ! initialise wk_grid and reuse it for dxc_potential
     ! for LDA
-    if ((flag_pcc_global .EQ. .true.) .AND. &
+    if (flag_pcc_global .AND. &
         (flag_functional_type .NE. functional_gga_pbe96) .AND. &
         (flag_functional_type .NE. functional_gga_pbe96_rev98) .AND. &
         (flag_functional_type .NE. functional_gga_pbe96_r99) ) then
@@ -1710,7 +1710,7 @@ contains
         wk_grid(i) = h_potential(i)
       enddo
     ! for GGA
-    elseif ( (flag_pcc_global .EQ. .true.) .AND. &
+    elseif ( flag_pcc_global .AND. &
              ( (flag_functional_type .EQ. functional_gga_pbe96) .OR. &
                (flag_functional_type .EQ. functional_gga_pbe96_rev98) .OR. &
                (flag_functional_type .EQ. functional_gga_pbe96_r99) ) ) then 

@@ -1099,7 +1099,8 @@ contains
 ! Change distances here: we now use displacement between supercells
 !                      FSCpart = BCS_parts%lab_cell(mat(part,range)%i_part(ist))!gcspart)
 ! Here we assume that j_0 is in the FSC, as is i_0             
-!                      write(io_lun,*) myid,' FSCpart, atom and xyz: ',FSCpart,parts%icell_beg(FSCpart)+mat(part,range)%i_seq(ist)-1,&
+!                      write(io_lun,*) myid,' FSCpart, atom and xyz: ',FSCpart,&
+!                           parts%icell_beg(FSCpart)+mat(part,range)%i_seq(ist)-1,&
 !                           x_atom_cell(parts%icell_beg(FSCpart)+mat(part,range)%i_seq(ist)-1),&
 !                           y_atom_cell(parts%icell_beg(FSCpart)+mat(part,range)%i_seq(ist)-1),&
 !                           z_atom_cell(parts%icell_beg(FSCpart)+mat(part,range)%i_seq(ist)-1)

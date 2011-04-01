@@ -202,7 +202,8 @@ contains
        enddo
     endif
     call gcopy(flag_pcc_global)
-    if (iprint_pseudo>0 .AND. inode==ionode .AND. (flag_pcc_global .EQ. .true.)) write (io_lun,fmt='(10x,a)') "P.C.C. is taken into account."
+    if (iprint_pseudo>0.AND.inode==ionode .AND.flag_pcc_global) &
+         write (io_lun,fmt='(10x,a)') "P.C.C. is taken into account."
     return
   end subroutine setup_pseudo_info
 !!***

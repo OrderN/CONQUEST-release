@@ -1811,7 +1811,8 @@ hc2:    do
 !%%!       counter = counter + sfc_sequence(cc_to_H(i))
 !%%!       if(sfc_sequence(cc_to_H(i))>0) then
 !%%!          do j=1,sfc_sequence(cc_to_H(i))
-!%%!             write(io_lun,'(a,6i3)') 'Part, seq, map: ',i,j,map(cc_to_H(i),j),cc_to_H(i),parts%icell_beg(i),parts%icell_beg(i)+j-1
+!%%!             write(io_lun,'(a,6i3)') 'Part, seq, map: ',i,j,map(cc_to_H(i),j),cc_to_H(i),parts%icell_beg(i),&
+!%%!                  parts%icell_beg(i)+j-1
 !%%!             id_glob(parts%icell_beg(i)+j-1) = map(cc_to_H(i),j)
 !%%!             id_glob_inv(map(cc_to_H(i),j)) = parts%icell_beg(i)+j-1
 !%%!          end do
