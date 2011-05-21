@@ -40,6 +40,8 @@
 !!    Changed for output to file not stdout
 !!   2008/04/02  M. Todorovic
 !!    Added atomic charge calculation
+!!   2011/05/20 ast
+!!    Request unit number before opening the atomic charges file
 !!  SOURCE
 !!
 module SelfCon
@@ -1506,6 +1508,7 @@ subroutine get_atomic_charge()
   use mult_module, ONLY: matK, matS, atom_trace, matrix_sum, allocate_temp_matrix, free_temp_matrix
   use atoms, ONLY: atoms_on_node
   use GenComms, ONLY: gsum, inode, ionode, cq_abort
+  use input_module, ONLY: io_assign, io_close
 
   implicit none
 
@@ -1537,11 +1540,12 @@ subroutine get_atomic_charge()
   ! output
   if (inode==ionode) then
      write(*,*) 'Writing charge on individual atoms...'
+     call io_assign(chun)
      open(unit=chun,file='AtomCharge.dat')
      do n=1,ni_in_cell
         write(unit=chun,fmt='(f15.10)') charge(n)
      end do
-     close(unit=chun)
+     call io_close(chun)
   end if
 
   call start_timer(tmr_std_allocation)
