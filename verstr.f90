@@ -1,1 +1,1 @@
-  character(len=*), parameter :: commentver="beta 0.37 (r92): changed ewald, DMM by TM 2011.03.31 (bug fix DRB)"
+  character(len=*), parameter :: commentver="Version beta 0.38 (r98): changes for metals (diag, MP smearing) LT, DRB 2011.05.26"

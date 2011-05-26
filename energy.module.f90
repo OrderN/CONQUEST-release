@@ -47,6 +47,12 @@ module energy
   real(double) :: entropy=zero
 
   logical :: flag_check_DFT=.false.
+
+  ! To avoid cyclic dependancy with DiagModule, the local variables here record information needed 
+  ! from DiagModule
+  logical :: flag_check_Diag=.false.
+  integer :: SmearingType, MPOrder
+
   ! RCS tag for object file identification
   character(len=80), save, private :: RCSid = "$Id$"
 !!*** energy
@@ -88,7 +94,7 @@ contains
     use GenComms, ONLY: myid
     use global_module, ONLY: iprint_gen
     use ewald_module, ONLY: ewald_energy
-    use pseudopotential_common, ONLY: core_correction    
+    use pseudopotential_common, ONLY: core_correction  
 
     implicit none
 
@@ -112,12 +118,12 @@ contains
     print_DFT=.false.
     print_Harris = .true.
     if(PRESENT(printDFT)) then
-      if(printDFT) print_Harris = .false.
-      print_DFT=printDFT
+       if(printDFT) print_Harris = .false.
+       print_DFT=printDFT
     else
-      if(iprint_gen>=2) print_DFT=.true.
+       if(iprint_gen>=2) print_DFT=.true.
     endif
-
+    
     ! Find energies
     nl_energy = two*matrix_product_trace(matK,matNL)
     kinetic_energy = matrix_product_trace(matK,matKE)
@@ -125,29 +131,39 @@ contains
     total_energy = band_energy + delta_E_hartree + delta_E_xc + ewald_energy + core_correction
     ! Write out data
     if(myid==0) then
-     if(print_Harris) then
-       !if(iprint_gen>=1) write(io_lun,2) electrons
-       if(iprint_gen>=1) write(io_lun,1) en_conv*band_energy, en_units(energy_units)
-       if(iprint_gen>=1) write(io_lun,3) en_conv*hartree_energy, en_units(energy_units)
-       if(iprint_gen>=1) write(io_lun,4) en_conv*xc_energy, en_units(energy_units)
-       if(iprint_gen>=1) write(io_lun,5) en_conv*local_ps_energy, en_units(energy_units)
-       if(iprint_gen>=1) write(io_lun,6) en_conv*core_correction, en_units(energy_units)
-       if(iprint_gen>=1) write(io_lun,7) en_conv*nl_energy, en_units(energy_units)
-       if(iprint_gen>=1) write(io_lun,8) en_conv*kinetic_energy, en_units(energy_units)
-       if(iprint_gen>=1) write(io_lun,9) en_conv*ewald_energy, en_units(energy_units)
-       if(iprint_gen>=1) write(io_lun,11) en_conv*delta_E_hartree, en_units(energy_units)
-       if(iprint_gen>=1) write(io_lun,12) en_conv*delta_E_xc, en_units(energy_units)
-      if(entropy >= very_small) then
-       if(iprint_gen>=0) write(io_lun,10) en_conv*total_energy, en_units(energy_units)
-       if(iprint_gen>=0) write(io_lun,14) en_conv*(total_energy- half*entropy), en_units(energy_units)
-       if(iprint_gen>=1) write(io_lun,15) en_conv*(total_energy - entropy), en_units(energy_units)
-      elseif(abs(entropy) < very_small) then
-       if(iprint_gen>=0) write(io_lun,10) en_conv*total_energy, en_units(energy_units)
-       if(iprint_gen>=0) write(io_lun,*) '  (TS=0 as O(N) or entropic contribution is negligible) '
-      else
-       write(io_lun,*) ' WARNING !!!!    entropy < 0??? ', entropy
-      endif
-     endif ! (print_Harris)
+       if(print_Harris) then
+          !if(iprint_gen>=1) write(io_lun,2) electrons
+          if(iprint_gen>=1) write(io_lun,1) en_conv*band_energy, en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,3) en_conv*hartree_energy, en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,4) en_conv*xc_energy, en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,5) en_conv*local_ps_energy, en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,6) en_conv*core_correction, en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,7) en_conv*nl_energy, en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,8) en_conv*kinetic_energy, en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,9) en_conv*ewald_energy, en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,11) en_conv*delta_E_hartree, en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,12) en_conv*delta_E_xc, en_units(energy_units)
+          if(abs(entropy) >= very_small) then
+             if(iprint_gen>=0) write(io_lun,10) en_conv*total_energy, en_units(energy_units)
+             if(flag_check_Diag) then
+                select case (SmearingType)
+                case (0) ! Fermi smearing
+                   if(entropy < zero) write(io_lun,*) ' WARNING !!!!    entropy < 0??? ', entropy
+                   if(iprint_gen>=0) write(io_lun,14) en_conv*(total_energy- half*entropy), en_units(energy_units)
+                case (1) ! Methfessel-Paxton smearing
+                   if(iprint_gen>=0) write(io_lun,16) &
+                        en_conv*(total_energy - (real(MPOrder+1,double)/real(MPOrder+2,double))*entropy), &
+                        en_units(energy_units)
+                end select
+             else 
+                if(iprint_gen>=0) write(io_lun,14) en_conv*(total_energy- half*entropy), en_units(energy_units)
+             end if
+             if(iprint_gen>=1) write(io_lun,15) en_conv*(total_energy - entropy), en_units(energy_units)
+          else
+             if(iprint_gen>=0) write(io_lun,10) en_conv*total_energy, en_units(energy_units)
+             if(iprint_gen>=0) write(io_lun,*) '  (TS=0 as O(N) or entropic contribution is negligible) '
+          endif
+       endif ! (print_Harris)
     end if
     ! Check on validity of band energy
     if(print_DFT) then
@@ -167,6 +183,7 @@ contains
 9   format(10x,'Ewald Energy                     : ',f25.15,' ',a2)
 10  format(10x,'Harris-Foulkes Energy            : ',f25.15,' ',a2)
 14  format(10x,'GroundState Energy (E-(1/2)TS)   : ',f25.15,' ',a2)
+16  format(10x,'GroundState Energy (kT --> 0)    : ',f25.15,' ',a2)
 15  format(10x,'Free Energy (E-TS)               : ',f25.15,' ',a2)
 13  format(10x,'DFT Total Energy                 : ',f25.15,' ',a2)
 11  format(10x,'Ha Correction                    : ',f25.15,' ',a2)

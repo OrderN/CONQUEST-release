@@ -40,8 +40,6 @@
 !!    Changed for output to file not stdout
 !!   2008/04/02  M. Todorovic
 !!    Added atomic charge calculation
-!!   2011/05/20 ast
-!!    Request unit number before opening the atomic charges file
 !!  SOURCE
 !!
 module SelfCon
@@ -70,8 +68,12 @@ module SelfCon
   integer :: n_exact
   logical :: atomch_output
 
+  logical, save :: flag_Kerker
+  logical, save :: flag_wdmetric
+
   real(double), save :: A
   real(double), save :: q0
+  real(double), save :: q1
   logical, save :: flag_linear_mixing
   real(double), save :: EndLinearMixing
 
@@ -201,7 +203,9 @@ contains
        call start_timer(tmr_l_tmp1,WITH_LEVEL)
        if(flag_linear_mixing) then
           !call LinearMixSC(done,ndone, SC_tol, &
-          call PulayMixSCA(done,ndone, SC_tol, reset_L, fixed_potential, vary_mu, n_L_iterations, &
+          !call PulayMixSCA(done,ndone, SC_tol, reset_L, fixed_potential, vary_mu, n_L_iterations, &
+          !     number_of_bands, DMM_tol, mu, total_energy, density, maxngrid)
+          call PulayMixSCC (done,ndone, SC_tol, reset_L, fixed_potential, vary_mu, n_L_iterations, &
                number_of_bands, DMM_tol, mu, total_energy, density, maxngrid)
        else if(early.OR.problem) then ! Early stage strategy
           earlyL = .false.
@@ -1151,9 +1155,9 @@ contains
     ! Store deltarho
     n_iters = n_iters+1
  !Reset Pulay Iterations  -- introduced by TM, Nov2007
-      R0_old = R0
-      IterPulayReset=1
-      icounter_fail = 0
+    R0_old = R0
+    IterPulayReset=1
+    icounter_fail = 0
     do m=2,maxitersSC
        ! calculate i (cyclical index for storing history) and pul_mx
        !ORI i = mod(m, maxpulaySC)
@@ -1256,7 +1260,7 @@ contains
       endif
       reset_Pulay = .false.
      !Reset Pulay Iterations  -- introduced by TM, Nov2007
-    end do
+   end do
     ndone = n_iters
     call dealloc_PulayMixSCA
     return
@@ -1480,6 +1484,395 @@ contains
 
   end subroutine PulayMixSCB
 
+
+!!****f* SelfCon_module/PulayMixSCC *
+!!
+!!  NAME 
+!!   PulayMixSCC -- PulayMixSC version C, Lianheng's version
+!!  USAGE
+!!   CALL PulayMixSCC(done,ndone,self_tol, reset_L, fixed_potential, vary_mu, n_L_iterations, &
+!!                    number_of_bands, L_tol, mu, total_energy,rho, size)
+!!  PURPOSE
+!!   Performs Pulay mixing of charge density with Kerker preconditioning and wave dependent metric in Conquest
+!!  INPUTS
+!!
+!!  USES
+!! 
+!!  AUTHOR
+!!   Lianheng Tong
+!!  CREATION DATE
+!!   2010/07/27
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine PulayMixSCC (done,ndone,self_tol, reset_L, fixed_potential, vary_mu, n_L_iterations, &
+       number_of_bands, L_tol, mu, total_energy,rho, size)
+    use datatypes
+    use numbers
+    use PosTan
+    use Pulay, ONLY: DoPulay2D
+    use GenBlas
+    use dimens, ONLY: n_my_grid_points, grid_point_volume
+    use EarlySCMod, ONLY: get_new_rho, mixtwo
+    use GenComms, ONLY: gsum, cq_abort, inode, ionode
+    use io_module, ONLY: dump_charge, dump_charge2
+    use hartree_module, ONLY: kerker, kerker_and_wdmetric, wdmetric
+    use global_module, ONLY: ne_in_cell, iprint_SC, area_SC, flag_continue_on_SC_fail, flag_SCconverged
+    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use maxima_module, ONLY: maxngrid
+
+    implicit none
+    
+    ! Passed variables
+    logical :: done, vary_mu, fixed_potential, reset_L
+    integer :: size, ndone, n_L_iterations
+    real(double) :: self_tol, number_of_bands, L_tol, mixing, mu, total_energy
+    real(double), dimension(size) :: rho
+
+    ! Local variables
+    integer :: n_iters, pul_mx, i, j, ii, m, stat
+    real(double) :: R0, R1
+    real(double), allocatable, dimension(:,:) :: rho_pul, R_pul
+    real(double), allocatable, dimension(:) :: rho_out, resid
+    real(double), allocatable, dimension(:,:) :: Aij
+    real(double), allocatable, dimension(:) :: alpha    
+    ! Kerker only
+    real(double), allocatable, dimension(:,:) :: KR_pul
+    ! wdmetric only
+    real(double), allocatable, dimension(:) :: resid_cov
+    real(double), allocatable, dimension(:,:) :: Rcov_pul
+
+    !Reset Pulay Iterations  -- introduced by TM, Nov2007
+    integer, parameter :: mx_fail = 3
+    integer :: IterPulayReset=1, icounter_fail=0
+    logical :: reset_Pulay=.false.
+    real(double) :: R0_old
+
+    allocate (rho_pul(maxngrid,maxpulaySC), R_pul(maxngrid,maxpulaySC), rho_out(maxngrid), &
+         resid(maxngrid), Aij(maxpulaySC, maxpulaySC), alpha(maxpulaySC), STAT=stat)
+    if (stat /= 0) call cq_abort ("SelfCon/PulayMixSCC: Allocation error: ", maxngrid, maxpulaySC)
+    call reg_alloc_mem (area_SC, 2*maxngrid*maxpulaySC+2*maxngrid+maxpulaySC*(maxpulaySC+1), type_dbl)
+    rho_pul = zero
+    R_pul = zero
+    rho_out = zero
+    resid = zero
+    Aij = zero
+    alpha = zero
+    ! for Kerker preconditioning
+    if (flag_Kerker) then
+       allocate (KR_pul(maxngrid,maxpulaySC), STAT=stat)
+       if (stat /= 0) call cq_abort ("SelfCon/PulayMixSCC: Allocation error, KR_pul: ", maxngrid, maxpulaySC)
+       call reg_alloc_mem (area_SC, maxngrid*maxpulaySC, type_dbl)
+       KR_pul = zero
+    end if
+    ! for wave dependent metric method
+    if (flag_wdmetric) then
+       allocate (Rcov_pul(maxngrid,maxpulaySC), resid_cov(maxngrid), STAT=stat)
+       if (stat /= 0) call cq_abort ("SelfCon/PulayMixSCC: Allocation error, Rcov_pul, resid_cov: ",maxngrid, maxpulaySC)
+       call reg_alloc_mem (area_SC, maxngrid*(maxpulaySC+1), type_dbl)
+       Rcov_pul = zero
+       resid_cov = zero
+    end if
+
+    ! write out start information
+    if (inode == ionode) then 
+       write (io_lun, fmt='(8x,"Starting Pulay mixing, A = ",f6.3)') A
+       if (flag_Kerker) write (io_lun, fmt='(10x,"with Kerker preconditioning, q0 = ", f6.3)') q0
+       if (flag_wdmetric) write (io_lun, fmt='(10x,"with wave dependent metric, q1 = ", f6.3)') q1
+    end if
+
+    done = .false.
+    n_iters = ndone
+    m = 1
+    if (n_iters >= maxitersSC) then
+       if (.NOT.flag_continue_on_SC_fail) call cq_abort ('SelfCon/PulayMixSCC: too many SCF iterations: ', n_iters, maxitersSC)
+       flag_SCconverged = .false.
+       done = .true.
+       return
+    end if
+    
+    ! store the first rho_in in pulay history
+    do j = 1, n_my_grid_points
+       rho_pul(j,1) = rho(j)
+    end do
+    ! from rho_in, get rho_out 
+    call get_new_rho (.false., reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
+         total_energy, rho, rho_out, size)
+    ! Evaluate residue resid = rho_out - rho_in
+    do j = 1, n_my_grid_points
+       resid(j) = rho_out(j) - rho(j)
+    end do
+    ! calculate the norm of residue
+    R0 = dot (n_my_grid_points, resid, 1, resid, 1)
+    ! gather for all processor nodes
+    call gsum (R0)
+    ! normalise
+    R0 = sqrt (grid_point_volume*R0)/ne_in_cell
+    if (R0 < self_tol) then
+       if (inode == ionode) write (io_lun, fmt='(8x,"Reached self-consistency tolerance")')
+       done = .true.
+       call dealloc_PulayMiXSCC
+       return
+    end if
+    if (R0 < EndLinearMixing) then
+       if (inode == ionode) write (io_lun, fmt='(8x,"Reached transition to LateSC")')
+       call dealloc_PulayMiXSCC
+       return
+    end if
+    if (inode == ionode) write (io_lun, fmt='(8x,"Pulay iteration ",i5," Residual is ",e12.5,/)') m, R0
+    ! store resid to pulay history
+    do j = 1, n_my_grid_points
+       R_pul(j,1) = resid(j)
+    end do
+    ! do Kerker preconditioning if required
+    if (flag_Kerker) then
+       ! get wave dependent metric convariant R as well if required
+       if (flag_wdmetric) then
+          call kerker_and_wdmetric (resid, resid_cov, maxngrid, q0, q1)
+          ! store the preconditioned and covariant version of residue to histiry
+          do  j = 1, n_my_grid_points
+             KR_pul(j,1) = resid(j)
+             Rcov_pul(j,1) = resid_cov(j)
+          end do
+       else
+          call kerker (resid, maxngrid, q0)
+          ! store the precondiioned residue to history
+          do j = 1, n_my_grid_points
+             KR_pul(j,1) = resid(j)
+          end do
+       end if
+    else 
+       ! do wave dependent metric without kerker preconditioning if required 
+       if (flag_wdmetric) then
+          call wdmetric (resid, resid_cov, maxngrid, q1)
+          ! store the covariant version of residue
+          do j = 1, n_my_grid_points
+             Rcov_pul(j,1) = resid_cov(j)
+          end do
+       end if
+    end if
+    ! Do mixing
+    call axpy (n_my_grid_points, A, resid, 1, rho, 1)
+    
+    ! finished the first SCF iteration
+    n_iters = n_iters + 1
+    ! Routines for Resetting Pulay Iterations (TM)
+    R0_old = R0
+    IterPulayReset = 1
+    icounter_fail = 0
+    ! Start SCF loop from second iteration
+    SCF: do m = 2, maxitersSC
+       ! calculate i (cyclical index for storing history), including TM's Pulay reset
+       i = mod (m-IterPulayReset+1, maxpulaySC)
+       if (i == 0) i = maxpulaySC
+       ! calculated the number of pulay histories stored
+       pul_mx = min (m-IterPulayReset+1, maxpulaySC)
+       ! store the updated density from the previous step to history
+       do j = 1, n_my_grid_points
+          rho_pul(j,i) = rho(j)
+       end do
+       ! print out charge
+       if (iprint_SC>1) call dump_charge (rho,size,inode)
+       ! genertate new charge density
+       call get_new_rho (.false., reset_L, fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tol, mu, &
+            total_energy, rho, rho_out, size)
+       ! get residue
+       do j = 1, n_my_grid_points
+          resid(j) = rho_out(j) - rho(j)
+       end do
+       R0 = dot (n_my_grid_points, resid, 1, resid, 1)
+       call gsum(R0)
+       R0 = sqrt (grid_point_volume*R0)/ne_in_cell
+       ! print out SC iteration information
+       if (inode == ionode) write (io_lun, fmt='(8x,"Pulay iteration ",i5," Residual is ",e12.5,/)') m, R0
+       ! check if Pulay SC has converged
+       if (R0 < self_tol) then
+          if (inode == ionode) write (io_lun, fmt='(8x,"Reached self-consistent tolerance")')
+          done = .true.
+          call dealloc_PulayMiXSCC
+          return
+       end if
+       if (R0 < EndLinearMixing) then
+          if (inode == ionode) write (io_lun, fmt='(8x,"Reached transition to LateSC")')
+          call dealloc_PulayMixSCC
+          return
+       end if
+       ! check if Pulay SC needs to be reset
+       if (R0 > R0_old) icounter_fail = icounter_fail+1
+       if (icounter_fail > mx_fail) then 
+          if (inode == ionode) write(io_lun, *) ' Pulay iteration is reset !!  at ', m, '  th iteration'
+          reset_Pulay = .true.
+       endif
+       R0_old = R0
+       ! continue on with SC, store resid to history
+       ! but before doing so, remember the old R_pul(j,i) to takeaway from Kerker_sum, Kerker only
+       do j = 1, n_my_grid_points
+          R_pul(j,i) = resid(j)
+       end do
+       ! calculate new rho  
+       ! with kerker preconditioning
+       if (flag_Kerker) then
+          ! with wave dependent metric
+          if (flag_wdmetric) then
+             call kerker_and_wdmetric (resid, resid_cov, maxngrid, q0, q1)
+             ! store preconditioned and covariant residue to history
+             do j = 1, n_my_grid_points
+                KR_pul(j,i) = resid(j)
+                Rcov_pul(j,i) = resid_cov(j)
+             end do
+             ! get alpha_i
+             Aij = zero
+             do ii = 1, pul_mx
+                ! diagonal elements of Aij
+                R1 = dot (n_my_grid_points, Rcov_pul(:,ii), 1, R_pul(:,ii), 1)
+                call gsum (R1)
+                Aij(ii,ii) = R1
+                ! the rest
+                if (ii > 1) then
+                   do j = 1, ii-1
+                      R1 = dot (n_my_grid_points, Rcov_pul(:,ii), 1, R_pul(:,j), 1)
+                      call gsum (R1)
+                      Aij(ii,j) = R1
+                      ! Aij is symmetric even with wave dependent metric
+                      Aij(j,ii) = R1
+                   end do
+                end if
+             end do
+          else  ! If no wave dependent metric 
+             call kerker (resid, maxngrid, q0)
+             ! store preconditioned residue to history
+             do j = 1, n_my_grid_points
+                KR_pul(j,i) = resid(j)
+             end do
+             ! get alpha_i
+             Aij = zero
+             do ii = 1, pul_mx
+                ! diagonal elements of Aij
+                R1 = dot (n_my_grid_points, R_pul(:,ii), 1, R_pul(:,ii), 1)
+                call gsum (R1)
+                Aij(ii,ii) = R1
+                ! the rest
+                if (ii > 1) then
+                   do j = 1, ii-1
+                      R1 = dot (n_my_grid_points, R_pul(:,ii), 1, R_pul(:,j), 1)
+                      call gsum (R1)
+                      Aij(ii,j) = R1
+                      Aij(j,ii) = R1
+                   end do
+                end if
+             end do
+          end if ! if (flag_wdmetric)
+          ! solve alpha(i) = sum_j Aji^-1 / sum_ij Aji^-1
+          call DoPulay2D (Aij, alpha, pul_mx, maxpulaySC, inode, ionode)
+          ! Do mixing
+          rho = zero
+          do ii = 1, pul_mx
+             call axpy (n_my_grid_points, alpha(ii), rho_pul(:,ii), 1, rho, 1)
+             call axpy (n_my_grid_points, alpha(ii)*A, KR_pul(:,ii), 1, rho, 1)
+          end do
+       else  ! if no Kerker
+          ! do wave dependent metric without kerker preconditioning if required 
+          if (flag_wdmetric) then
+             call wdmetric (resid, resid_cov, maxngrid, q1)
+             ! store the covariant version of residue to history
+             do j = 1, n_my_grid_points
+                Rcov_pul(j,i) = resid_cov(j)
+             end do
+             ! get alpha_i
+             Aij = zero
+             do ii = 1, pul_mx
+                ! diagonal elements of Aij
+                R1 = dot (n_my_grid_points, Rcov_pul(:,ii), 1, R_pul(:,ii), 1)
+                call gsum (R1)
+                Aij(ii,ii) = R1
+                ! the rest
+                if (ii > 1) then
+                   do j = 1, ii-1
+                      R1 = dot (n_my_grid_points, Rcov_pul(:,ii), 1, R_pul(:,j), 1)
+                      call gsum (R1)
+                      Aij(ii,j) = R1
+                      ! Aij is symmetric even with wave dependent metric
+                      Aij(j,ii) = R1
+                   end do
+                end if
+             end do
+          else ! if no Kerker and no wave dependent metric
+             ! get alpha_i
+             Aij = zero
+             do ii = 1, pul_mx
+                ! diagonal elements of Aij
+                R1 = dot (n_my_grid_points, R_pul(:,ii), 1, R_pul(:,ii), 1)
+                call gsum (R1)
+                Aij(ii,ii) = R1
+                ! the rest
+                if (ii > 1) then
+                   do j = 1, ii-1
+                      R1 = dot (n_my_grid_points, R_pul(:,ii), 1, R_pul(:,j), 1)
+                      call gsum (R1)
+                      Aij(ii,j) = R1
+                      ! Aij is symmetric even with wave dependent metric
+                      Aij(j,ii) = R1
+                   end do
+                end if
+             end do
+          end if ! if (flag_wdmetric)
+          ! solve alpha(i) = sum_j Aji^-1 / sum_ij Aji^-1
+          call DoPulay2D (Aij, alpha, pul_mx, maxpulaySC, inode, ionode)
+          ! Do mixing
+          rho = zero
+          do ii = 1, pul_mx
+             call axpy (n_my_grid_points, alpha(ii), rho_pul(:,ii), 1, rho, 1)
+             call axpy (n_my_grid_points, alpha(ii)*A, R_pul(:,ii), 1, rho, 1)
+          end do
+       end if ! if (flag_Kerker)
+       n_iters = n_iters + 1
+       ! Reset Pulay iterations if required
+       if (reset_Pulay) then
+          rho_pul(1:n_my_grid_points, 1) = rho_pul(1:n_my_grid_points, i)
+          R_pul(1:n_my_grid_points, 1) = R_pul(1:n_my_grid_points, i)
+          if (flag_Kerker) KR_pul(1:n_my_grid_points, 1) = KR_pul(1:n_my_grid_points, i)
+          if (flag_wdmetric) Rcov_pul(1:n_my_grid_points, 1) = Rcov_pul(1:n_my_grid_points, i)
+          IterPulayReset = m
+          icounter_fail = 0
+       end if
+       reset_Pulay = .false.
+    end do SCF
+    ndone = n_iters
+    call dealloc_PulayMixSCC
+    return
+    
+  contains
+    
+    subroutine dealloc_PulayMixSCC
+
+      implicit none
+      integer :: stat
+
+      deallocate (rho_pul, R_pul, rho_out, resid, Aij, alpha, STAT=stat)
+      if (stat /= 0) call cq_abort ("Deallocation error in PulayMixSCC: ", maxngrid, maxpulaySC)
+      call reg_dealloc_mem (area_SC, 2*maxngrid*maxpulaySC+2*maxngrid+maxpulaySC*(maxpulaySC+1), type_dbl)
+
+      if (flag_Kerker) then
+         deallocate (KR_pul, STAT=stat)
+         if (stat /= 0) call cq_abort ("SelfCon/dealloc_PulayMixSCC: Deallocation error, KR_pul: ", maxngrid, maxpulaySC)
+         call reg_dealloc_mem (area_SC, maxngrid*maxpulaySC, type_dbl)
+      end if
+
+      if (flag_wdmetric) then
+         deallocate (Rcov_pul, resid_cov, STAT=stat)
+         if (stat /= 0) call cq_abort ("SelfCon/dealloc_PulayMixSCC: Deallocation error, Rcov_pul, resid_cov: ", &
+              maxngrid, maxpulaySC)
+         call reg_dealloc_mem (area_SC, maxngrid*(maxpulaySC+1), type_dbl)
+      end if
+
+      return
+
+    end subroutine dealloc_PulayMixSCC
+
+  end subroutine PulayMixSCC
+
+  
 !!****f* SelfCon_module/get_atomic_charge *
 !!
 !!  NAME 
@@ -1497,7 +1890,8 @@ contains
 !!   2008/04/02
 !!
 !!  MODIFICATION HISTORY
-!!
+!!   2011/05/25 17:00 dave/ast
+!!    Changed assignment of unit to Conquest standard
 subroutine get_atomic_charge()
 
   use datatypes
@@ -1539,7 +1933,7 @@ subroutine get_atomic_charge()
 
   ! output
   if (inode==ionode) then
-     write(*,*) 'Writing charge on individual atoms...'
+     !write(*,*) 'Writing charge on individual atoms...'
      call io_assign(chun)
      open(unit=chun,file='AtomCharge.dat')
      do n=1,ni_in_cell

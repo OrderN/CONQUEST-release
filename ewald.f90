@@ -709,7 +709,8 @@ contains
   !!   14/05/01 DRB
   !!    Put into Conquest by MJG 10/2003, various tidying done at this time
   !!  TODO
-  !! 
+  !!  COMMENT
+  !!    Lianheng: This function only works for x>0. A modified verion that works for all x is in Diag_module
   !!  SOURCE
   !!
   real(double) function erfc(x)

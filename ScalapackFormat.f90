@@ -69,6 +69,8 @@
 !!    Changed for output to file not stdout
 !!   2008/05/19 ast
 !!    Added timers
+!!   2011/02/13 L.Tong
+!!    Added k-point parallelisation
 !!  SOURCE
 !!
 module ScalapackFormat
@@ -150,6 +152,14 @@ module ScalapackFormat
   integer :: matrix_size
   ! Block sizes (not necessarily square)
   integer :: block_size_r, block_size_c
+  ! Processor group
+  integer :: proc_groups, pgid  ! proc_goups = tota number of process-groups and pgid = the local group id
+  integer, dimension(:), allocatable :: pgroup ! proc_group index of a given process
+  integer, dimension(:), allocatable :: N_procs_in_pg  ! number of processes in a given group
+  integer, dimension(:), allocatable :: N_kpoints_in_pg  ! number of k-points in a given group
+  integer, dimension(:,:), allocatable :: pg_procs  ! given a proc_group, stores the list of proc ids in the group
+  integer, dimension(:,:), allocatable :: pg_kpoints  ! given a proc_group, strores the list of k-points in the group
+  integer :: nprocs_max, nkpoints_max  ! max number of procs and kpoints can be in a group
   ! Processor grid size
   integer :: proc_rows, proc_cols
   ! Numbers of blocks, max blocks for processor, processors
@@ -166,8 +176,8 @@ module ScalapackFormat
   ! -------------------------------------------------------
   ! Allocatable variables
   ! -------------------------------------------------------
-  ! Map from processor grid to processors
-  integer, allocatable, dimension(:,:) :: procid
+  ! Map from processor grid to processors, for each k-point process-group
+  integer, allocatable, dimension(:,:,:) :: procid
   ! On-processor map giving reference position for a block
   ! (i.e. for any block on a processor, give x and y in ref format)
   integer, allocatable, dimension(:,:,:) :: mapx,mapy
@@ -180,8 +190,8 @@ module ScalapackFormat
   integer, allocatable, dimension(:,:) :: SC_to_refx, SC_to_refy
   ! Map from reference block to SC block number
   integer, allocatable, dimension(:,:) :: ref_to_SCx, ref_to_SCy
-  ! Who owns which block (linear processor number)
-  integer, allocatable, dimension(:,:) :: proc_block
+  ! Who owns which block (linear processor number), for each process-group
+  integer, allocatable, dimension(:,:,:) :: proc_block
 
 
   ! -------------------------------------------------------
@@ -241,7 +251,7 @@ contains
 !!    Added timer
 !!  SOURCE
 !!
-  subroutine allocate_arrays
+  subroutine allocate_arrays (nkp)
 
     use global_module, ONLY: iprint_DM, numprocs
     use GenComms, ONLY: cq_abort, myid
@@ -249,10 +259,14 @@ contains
 
     implicit none
 
+    ! passed variables 
+    integer, intent(in) :: nkp  ! total number of k-points, used as input to avoid circular dependency with DiagModule
+
     ! Local variables
     integer :: stat
 
     if(iprint_DM>2.AND.myid==0) write(io_lun,*) myid,' Starting Allocate Arrays'
+
     ! Calculate maximum numbers of blocks in different directions
     blocks_r = (matrix_size/block_size_r)
     blocks_c = (matrix_size/block_size_c)
@@ -263,11 +277,11 @@ contains
     call start_timer(tmr_std_allocation)
     allocate(mapx(numprocs,maxrow,maxcol),mapy(numprocs,maxrow,maxcol),STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc map",stat)
-    allocate(procid(proc_rows,proc_cols),STAT=stat)
+    allocate(procid(proc_groups, proc_rows,proc_cols),STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc procid",stat)
     allocate(SC_to_refx(blocks_r,blocks_c),SC_to_refy(blocks_r,blocks_c),&
          ref_to_SCx(blocks_r,blocks_c),ref_to_SCy(blocks_r,blocks_c),&
-         proc_block(blocks_r,blocks_c),STAT=stat)
+         proc_block(proc_groups,blocks_r,blocks_c),STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc bxb var",stat)
     allocate(ref_row_block_atom(block_size_r,blocks_r),&
          ref_col_block_atom(block_size_c,blocks_c),&
@@ -277,6 +291,14 @@ contains
     allocate(CC_to_SC(maxpartscell,maxatomspart,maxnsf),CQ2SC_row_info(matrix_size),&
          my_row(matrix_size),proc_start(numprocs), STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc CC2SC, CQ2SC",stat)
+    nprocs_max = aint(real(numprocs/proc_groups))+1
+    nkpoints_max = aint(real(nkp/proc_groups))+1
+    allocate(pg_procs(proc_groups,nprocs_max),pg_kpoints(proc_groups,nkpoints_max),STAT=stat)
+    if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc pg_procs, pg_kpoints",stat)
+    allocate(N_procs_in_pg(proc_groups),N_kpoints_in_pg(proc_groups),STAT=stat)
+    if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc N_procs_in_pg, N_kpoints_pg",stat)
+    allocate(pgroup(numprocs),STAT=stat)
+    if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc pgroup",stat)
     call stop_timer(tmr_std_allocation)
     return
 1   format(2x,'AllocArr: block sizes are: ',2i5)
@@ -333,11 +355,101 @@ contains
     if(stat/=0) call cq_abort("ScalapackFormat: Could not dealloc procid",stat)
     deallocate(mapx,mapy,STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not dealloc map",stat)
+    deallocate(N_procs_in_pg,N_kpoints_in_pg,STAT=stat)
+    if(stat/=0) call cq_abort("ScalapackFormat: Could not dealloc N_procs_in_pg, N_kpoints_in_pg",stat)
+    deallocate(pg_procs,pg_kpoints,STAT=stat)
+    if(stat/=0) call cq_abort("ScalapackFormat: Could not dealloc pg_procs, pg_kpoints",stat)
+    deallocate(pgroup,STAT=stat)
+    if(stat/=0) call cq_abort("ScalapackFormat: Could not dealloc pgroup",stat)
     call stop_timer(tmr_std_allocation)
     return
 1   format(2x,'AllocArr: block sizes are: ',2i5)
   end subroutine deallocate_arrays
 !!***
+
+!!****f* ScalapackFormat/pg_initialise *
+!!
+!!  NAME
+!!   pg_initialise
+!!  USAGE 
+!!   pg_initialise
+!!  PURPOSE
+!!   Distribute the processes and kpoints into proc_groups. 
+!!  INPUTS
+!!
+!!  USES
+!!  
+!!  AUTHOUR
+!!   L.Tong
+!!  CREATION DATE 
+!!   13th Feburary 2011
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine pg_initialise (nkp)
+    
+    use GenComms, ONLY: cq_abort, inode
+    use global_module, ONLY: iprint_DM, numprocs
+  
+    implicit none
+    
+    ! passed variables
+    integer, intent(in) :: nkp  ! number of k-points, use as input to avoid circular dependencies with DiagModule
+    
+    ! local variables
+    integer :: stat
+    integer :: ng, np, nk
+    integer, dimension(:), allocatable :: counter
+    
+    pgid = mod ((inode - 1), proc_groups) + 1  ! get the local proc_group id
+  
+    ! temporary limitation, the process-groups must have same number of processes
+    if (mod (numprocs, proc_groups) > 0) &
+         call cq_abort ('pg_initialise: the number of processes in each group must be the same.', mod (numprocs, proc_groups)) 
+
+    do ng = 1, proc_groups
+       ! calculate the total number of members in proc_group ng
+       if (ng <= mod (numprocs, proc_groups)) then
+          N_procs_in_pg(ng) = nprocs_max  ! nprocs_max is worked out in subroutine allocate_array
+       else
+          N_procs_in_pg(ng) = nprocs_max - 1
+       end if
+       ! calculate the total number of kpoints assigned to proc_group ng
+       if (ng <= mod (nkp, proc_groups)) then
+          N_kpoints_in_pg(ng) = nkpoints_max
+       else
+          N_kpoints_in_pg(ng) = nkpoints_max - 1
+       end if
+    end do
+    
+    ! temporary limitation: the total number of processes in each group must equal to proc_rows*proc_cols
+    if (N_procs_in_pg(pgid) /= proc_rows*proc_cols) &
+         call cq_abort ('pg_initialise: Number of nodes in each proc_group must equal to proc_rows*proc_cols', &
+         N_procs_in_pg(pgid), proc_rows*proc_cols)
+    
+    allocate (counter(proc_groups), STAT=stat)
+    if (stat /= 0) call cq_abort ("ScalapackFormat, deallocate_arryays: Failed to allocate counter",stat)
+    counter = 1
+    pg_procs = 0
+    do np = 1, numprocs 
+       pgroup(np) = mod ((np - 1), proc_groups) + 1
+       ng = pgroup(np)
+       pg_procs(ng, counter(ng)) = np
+       counter(ng) = counter(ng) + 1
+    end do
+
+    counter = 1
+    pg_kpoints = 0
+    do nk = 1, nkp
+       ng = mod ((nk - 1), proc_groups) + 1
+       pg_kpoints(ng, counter(ng)) = nk
+       counter(ng) = counter(ng) + 1
+    end do
+    deallocate (counter, STAT=stat)
+    if (stat /= 0) call cq_abort ("ScalapackFormat, deallocate_arryays: Failed to deallocate counter",stat)
+    return
+  end subroutine pg_initialise
 
 !!****f* ScalapackFormat/ref_to_SC_blocks *
 !!
@@ -377,37 +489,42 @@ contains
     implicit none
 
     integer :: i, j, n, nrow, ncol, prow, pcol, proc
+    integer :: ng
 
     if(iprint_DM>2.AND.myid==0) write(io_lun,*) myid,' Starting Ref To SC Blocks'
     ! Construct processor ids
-    n = 1
     if(iprint_DM>1.AND.myid==0) write(io_lun,fmt="(2x,'Scalapack Processor Grid')") 
-
-    do i=1,proc_rows
-       do j=1,proc_cols
-          procid(i,j) = n
-          if(n>numprocs) call cq_abort('Ref2SC: Too many processors ',n,numprocs)
-          n = n+1
+    do ng = 1, proc_groups
+       n = 1
+       do i=1,proc_rows
+          do j=1,proc_cols
+             procid(ng, i, j) = pg_procs(ng, n)
+             if(n>N_procs_in_pg(ng)) call cq_abort('Ref2SC: Too many processors in group',ng,n)
+             n = n + 1
+          end do
+          if(iprint_DM>1.AND.myid==0) write(io_lun,*) (procid(ng,i,j),j=1,proc_cols)
        end do
-       if(iprint_DM>1.AND.myid==0) write(io_lun,*) (procid(i,j),j=1,proc_cols)
     end do
     ! now build list of blocks and where they go
     if(iprint_DM>3.AND.myid==0) &
          write(io_lun,fmt="(2x,'Map from local block on processor (first three) to reference block (last two)')")
     if(iprint_DM>3.AND.myid==0) write(io_lun,fmt="(27x,'Proc Nrow Ncol Mapx Mapy')") 
-    do i=1,blocks_r                          ! Rows of blocks in ref format
-       prow = mod(i-1,proc_rows)+1             ! Processor row for this row
-       nrow = aint(real((i-1)/proc_rows))+1    ! Which row on the processor 
-       do j=1,blocks_c                       ! Cols of blocks in ref format
-          pcol = mod(j-1,proc_cols)+1          ! Processor col for this row
-          ncol = aint(real((j-1)/proc_cols))+1 ! Which col on the processor
-          ! Which processor (linear number) is this ?
-          proc = procid(prow,pcol)
-          ! Map from block on processor to reference format
-          mapx(proc,nrow,ncol) = i
-          mapy(proc,nrow,ncol) = j
-          proc_block(i,j) = proc ! Owner of block (linear number)
-          if(iprint_DM>3.AND.myid==0) write(io_lun,fmt="(2x,'Proc: ',i5,' Mapx and y: ',5i5)") myid,proc,nrow,ncol,i,j
+    do ng = 1, proc_groups
+       do i=1,blocks_r                          ! Rows of blocks in ref format
+          prow = mod(i-1,proc_rows)+1             ! Processor row for this row
+          nrow = aint(real((i-1)/proc_rows))+1    ! Which row on the processor 
+          do j=1,blocks_c                       ! Cols of blocks in ref format
+             pcol = mod(j-1,proc_cols)+1          ! Processor col for this row
+             ncol = aint(real((j-1)/proc_cols))+1 ! Which col on the processor
+             ! Which processor (linear number) is this ?
+             proc = procid(ng, prow, pcol)
+             ! Map from block on processor to reference format
+             mapx(proc,nrow,ncol) = i
+             mapy(proc,nrow,ncol) = j
+             proc_block(ng, i, j) = proc ! Owner of block (linear number)
+             if(iprint_DM>3.AND.myid==0) &
+                  write(io_lun,fmt="(2x,'Proc: ',i5,'Mapx and y: ',6i5)") myid,ng,proc,nrow,ncol,i,j
+          end do
        end do
     end do
     return
@@ -468,6 +585,8 @@ contains
 !!    added comments.
 !!   2008/05/19 ast
 !!    Added timer
+!!   2011/02/13 L.Tong
+!!    Added modification required for k-point parallelisation
 !!  SOURCE
 !!
   subroutine make_maps 
@@ -477,7 +596,7 @@ contains
 
     implicit none
 
-    integer :: i,j,m,n,row,col,proc
+    integer :: i,j,m,n,row,col,proc,ng
     integer :: row_max_n, col_max_n, loc_max_row, loc_max_col
 
     if(iprint_DM>1.AND.myid==0) write(io_lun,3)
@@ -488,29 +607,48 @@ contains
     if(iprint_DM>1.AND.myid==0) write(io_lun,*) 'N for row, col: ',row_max_n, col_max_n
     if(iprint_DM>1.AND.myid==0) write(io_lun,*) 'Loc_max_row, col: ',&
          aint(real(blocks_r/proc_rows)),aint(real(blocks_c/proc_cols))
-    ! n and m are row and column block in SC format
-    m = 1
-    n = 1
     my_row = 0
-    do i=1,proc_rows ! Rows in processor grid
+    ! first record proc_start(:)%rows and %cols map, this is proc proc dependent
+    ! n is block row in global SC format
+    n = 1
+    do i = 1, proc_rows ! looping over proc-grid rows
        if(i<=row_max_n) then
           loc_max_row = aint(real(blocks_r/proc_rows))+1
        else
           loc_max_row = aint(real(blocks_r/proc_rows))
        end if
-       do row = 1,loc_max_row ! Block rows on processor row
-          do j=1,proc_cols ! Cols in processor grid
-             if(j<=col_max_n) then
+       do row = 1, loc_max_row ! looping over local SC format block rows
+          do j = 1, proc_cols ! looping over proc-grid cols
+             if (j <= col_max_n) then
                 loc_max_col = aint(real(blocks_c/proc_cols))+1
              else
                 loc_max_col = aint(real(blocks_c/proc_cols))
              end if
-             proc = procid(i,j)
-             if(proc==myid+1) my_row(n) = 1  ! This is for receiving data
-             ! Record rows and columns on this processor
-             proc_start(proc)%rows = loc_max_row
-             proc_start(proc)%cols = loc_max_col
-             do col = 1,loc_max_col
+             do ng = 1, proc_groups
+                proc = procid(ng, i, j)
+                if(proc == myid + 1) my_row(n) = 1  ! This is for receiving data
+                ! Record rows and columns on this processor
+                proc_start(proc)%rows = loc_max_row
+                proc_start(proc)%cols = loc_max_col
+             end do
+          end do
+          if (iprint_DM>3.AND.myid==0) write(io_lun,2) myid,n,blocks_r,my_row(n)
+          n = n + 1 ! accumulate global SC block row counter
+          if (n > blocks_r) n = 1       
+       end do
+    end do
+    
+    ! now make the SC_to_ref and ref_to_SC maps that are identical to all groups, 
+    ! hence only needs to work on one group
+    ! n and m are row and column block in SC format, reset
+    n = 1
+    m = 1
+    ng = 1  ! using the first proc_group
+    do i = 1, proc_rows ! looping over proc-grid
+       do row = 1, proc_start(proc)%rows  ! looping over local SC block row
+          do j = 1, proc_cols
+             proc = procid(ng, i, j) ! get global proc id
+             do col = 1, proc_start(proc)%cols  ! looping over local SC block col
                 ! For this SC block, record reference block coordinates
                 SC_to_refx(n,m) = mapx(proc,row,col)
                 SC_to_refy(n,m) = mapy(proc,row,col)
@@ -519,13 +657,12 @@ contains
                 ref_to_SCy(mapx(proc,row,col),mapy(proc,row,col)) = m
                 ! Write out if necessary
                 if(iprint_DM>3.AND.myid==0) write(io_lun,1) proc,row,col,mapx(proc,row,col),mapy(proc,row,col),n,m
-                m = m+1
-                if(m>blocks_c) m=1
+                m = m + 1
+                if(m>blocks_c) m=1 ! this is need so that the counter restarts for every block row
              end do
           end do
-          if(iprint_DM>3.AND.myid==0) write(io_lun,2) myid,n,blocks_r,my_row(n)
-          n = n+1
-          if(n>blocks_r) n=1
+          n = n + 1
+          if(n>blocks_r) n=1             
        end do
     end do
     return

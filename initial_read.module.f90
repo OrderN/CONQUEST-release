@@ -1,4 +1,3 @@
-
 ! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
@@ -42,6 +41,8 @@
 !!    Changes to give output to file not stdout
 !!   2008/05/23 ast
 !!    Added timers
+!!   2010/07/23 Lianheng
+!!    Added flags for Methfessel-Paxton smearing and associated Ef search method
 !!  SOURCE
 !!
 module initial_read
@@ -297,6 +298,13 @@ contains
 !!    More general routine to name timer files, so that they are not 
 !!    to a maximum number of processes, as it was the case before,
 !!    with only three figures (max. 999 processes)
+!!   2010/06/18 lt
+!!    Added control flags for Methfessel-Paxton smearing method
+!!   2010/07/22 15.53 Lianheng
+!!    Moved control flags associated with Diagonalisation method from 
+!!    here to readDiagInfo() subroutine. Added Methfessel-Paxton 
+!!    smearing and related control flags. Changed SC.MaxEfIter to 
+!!    Diag.MaxEfIter (moved to readDiagInfo()) for greater consistency
 !!  TODO
 !!   Think about single node read and broadcast 10/05/2002 dave
 !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
@@ -319,7 +327,7 @@ contains
          iprint_init, iprint_mat, iprint_ops, iprint_DM, iprint_SC, iprint_minE, iprint_time, &
          iprint_MD, iprint_index, iprint_gen, iprint_pseudo, iprint_basis, iprint_intgn, area_general, &
          global_maxatomspart, load_balance, many_processors, flag_assign_blocks, io_lun, &
-         flag_pulay_simpleStep, flag_Becke_weights, flag_Becke_atomic_radii, flag_global_tolerance, &
+         flag_pulay_simpleStep, flag_Becke_weights, flag_Becke_atomic_radii, flag_global_tolerance, & 
          flag_mix_L_SC_min, flag_onsite_blip_ana, flag_read_velocity, flag_quench_MD, temp_ion, &
          numprocs
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff, &
@@ -330,12 +338,13 @@ contains
          species, ps_file, ch_file, phi_file, nsf_species, nlpf_species, npao_species, &
          non_local_species, type_species
     use GenComms, ONLY: gcopy, my_barrier, cq_abort, inode, ionode
-    use DiagModule, ONLY: diagon, maxefermi
+    use DiagModule, ONLY: diagon
+    use energy, ONLY: flag_check_Diag
     use DMMin, ONLY: maxpulayDMM, LinTol_DMM, n_dumpL
 !TM
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT, flag_angular_new
-    use SelfCon, ONLY: A, flag_linear_mixing, EndLinearMixing, q0, n_exact, maxitersSC, maxearlySC, &
-        maxpulaySC, atomch_output
+    use SelfCon, ONLY: A, flag_linear_mixing, EndLinearMixing, q0, q1, n_exact, maxitersSC, maxearlySC, &
+        maxpulaySC, atomch_output, flag_Kerker, flag_wdmetric
     use atomic_density, ONLY: read_atomic_density_file, atomic_density_method
     use S_matrix_module, ONLY: InvSTolerance
     use blip, ONLY: SupportGridSpacing, BlipWidth, init_blip_flag, alpha, beta
@@ -531,8 +540,10 @@ contains
        method = fdf_string(6,'DM.SolutionMethod','ordern') ! Default is O(N)
        if(leqi(method,'diagon')) then
           diagon = .true.
+          flag_check_Diag = .true.
        else
           diagon = .false.
+          flag_check_Diag = .false.
        end if
        ! Read basis set
        basis_string = fdf_string(10,'Basis.BasisSet','PAOs')
@@ -703,14 +714,16 @@ contains
        flag_linear_mixing = fdf_boolean('SC.LinearMixingSC',.true.)
        A = fdf_double('SC.LinearMixingFactor',0.5_double)
        EndLinearMixing = fdf_double('SC.LinearMixingEnd',sc_tolerance)
+       flag_Kerker = fdf_boolean('SC.KerkerPreCondition',.false.)
        q0 = fdf_double('SC.KerkerFactor',0.1_double)
+       flag_wdmetric = fdf_boolean('SC.WaveDependentMetric',.false.)
+       q1 = fdf_double('SC.MetricFactor',0.1_double)
        n_exact = fdf_integer('SC.LateStageReset',5)
        flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
        flag_continue_on_SC_fail = fdf_boolean('SC.ContinueOnSCFail',.false.)
        maxitersSC = fdf_integer('SC.MaxIters',50)
        maxearlySC = fdf_integer('SC.MaxEarly',3)
        maxpulaySC = fdf_integer('SC.MaxPulay',5)
-       maxefermi = fdf_integer('SC.MaxEfIter',50)
        read_atomic_density_file = fdf_string(80,'SC.ReadAtomicDensityFile','read_atomic_density.dat')
        ! Read atomic density initialisation flag
        atomic_density_method = fdf_string(10,'SC.AtomicDensityFlag','pao')
@@ -1147,7 +1160,7 @@ contains
     
     call start_timer(tmr_std_allocation)
     allocate(RadiusSupport(n_species),atomicrad(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating RadiusSupport in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating RadiusSupport, atomicrad in allocate_species_vars: ",n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(Extent(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating Extent in allocate_species_vars: ",n_species,stat)
@@ -1233,6 +1246,8 @@ contains
 !!    Added write out for solution method
 !!   14:47, 2006/07/17
 !!    Added description of the functional
+!!   2010/06/18 17:00 lt
+!!    Added information on the type of smearing used if using Diagonalsation method
 !!  SOURCE
 !!
   subroutine write_info(number_of_bands, titles, mu, vary_mu, find_chdens, read_phi,HNL_fac, NODES)
@@ -1245,7 +1260,7 @@ contains
     use species_module, ONLY: n_species, species_label, mass, charge, &
          ps_file, ch_file, phi_file, species, nsf_species
     use pseudopotential_data, ONLY: core_radius, non_local_species
-    use DiagModule, ONLY: diagon
+    use DiagModule, ONLY: diagon, flag_smear_type, iMethfessel_Paxton
     use blip, ONLY: SupportGridSpacing, BlipWidth
     use global_module, ONLY: flag_basis_set, PAOs,blips, functional_description, &
          flag_precondition_blips, io_lun
@@ -1280,6 +1295,12 @@ contains
 
     if(diagon) then
        write(io_lun,30) 'diagonalisation '
+       select case (flag_smear_type)
+       case (0)
+          write(io_lun,'(/,10x,"Using Fermi-Dirac smearing")')
+       case (1)
+          write(io_lun,'(/,10x,"Using order ",i2," Methfessel-Paxton smearing")') iMethfessel_Paxton
+       end select
     else
        write(io_lun,30) 'order N with LNV'   
     end if
@@ -1447,6 +1468,7 @@ contains
            /,10x,'L-matrix convergence tolerance:        ',f10.8, &
            /,10x,'Self consistent convergence tolerance: ',f10.8)
 30  format(/,10x,'Solving for the K matrix using ',a16)
+
     return
   end subroutine write_info
 !!***
@@ -1482,6 +1504,12 @@ contains
 !!    Removed fdf_init (now all Conquest input is done via fdf)
 !!   2006/09/22 08:20 dave
 !!    Relocated into initial_read
+!!   2010/07/22 15.53 Lianheng
+!!    moved control flags associated with Diagonalisation method from the main read_input() subroutine to here.
+!!    added Methfessel-Paxton smearing and related control flags. Changed SC.MaxEfIter to Diag.MaxEfIter for 
+!!    greater consistency
+!!   2011/02/13 L.Tong
+!!    added Diag.KProcGroups for k-point parallelisation
 !!  SOURCE
 !!
   subroutine readDiagInfo
@@ -1492,8 +1520,10 @@ contains
     use numbers, ONLY: zero, one, two, pi, very_small
     use GenComms, ONLY: cq_abort, gcopy, myid
     use input_module
-    use ScalapackFormat, ONLY: proc_rows, proc_cols, block_size_r, block_size_c
-    use DiagModule, ONLY: nkp, kk, wtk, kT
+    use ScalapackFormat, ONLY: proc_rows, proc_cols, block_size_r, block_size_c, proc_groups
+    use DiagModule, ONLY: nkp, kk, wtk, kT, maxefermi, flag_smear_type, iMethfessel_Paxton, max_brkt_iterations, &
+         gaussian_height, finess, NElec_less
+    use energy, ONLY: SmearingType, MPOrder
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use species_module, ONLY: nsf_species
 
@@ -1512,6 +1542,20 @@ contains
     integer :: counter
     
     if(myid==0) then
+       ! Read Control Flags associated to diagonalisation method
+       maxefermi = fdf_integer('Diag.MaxEfIter',50)
+       kT = fdf_double('Diag.kT',0.001_double)
+       ! Method to approximate step function for occupation number
+       flag_smear_type = fdf_integer('Diag.SmearingType',0)
+       SmearingType = flag_smear_type
+       iMethfessel_Paxton = fdf_integer('Diag.MPOrder',0)
+       MPOrder = iMethfessel_Paxton
+       max_brkt_iterations = fdf_integer('Diag.MaxBrktSteps',50)
+       gaussian_height = fdf_double('Diag.GaussianHeight',0.1_double)
+       finess = fdf_double('Diag.EfStepFiness',1.0_double)
+       NElec_less = fdf_double('Diag.NElecLess',10.0_double)
+       ! Read k-point parallelisation process-group incormation
+       proc_groups = fdf_integer ('Diag.KProcGroups', 1)
        ! Read/choose ScaLAPACK processor grid dimensions
        if(fdf_defined('Diag.ProcRows')) then
           proc_rows = fdf_integer('Diag.ProcRows',0)
@@ -1737,13 +1781,15 @@ contains
           end do
           write(io_lun,fmt='(/8x,"Finished reading Kpoints"/)')
        end if
-       kT = fdf_double('Diag.kT',0.001_double)
+       
+       ! Write out smearing temperature
        if(iprint_init>0) write(io_lun,'(10x,"Temperature used for smearing: ",f10.6)') kT
     end if ! myid==0
 
     ! Distribute data to all processors
     call gcopy(block_size_r)
     call gcopy(block_size_c)
+    call gcopy (proc_groups)
     call gcopy(proc_rows)
     call gcopy(proc_cols)
     call gcopy(nkp)
@@ -1755,6 +1801,15 @@ contains
     call gcopy(kk,3,nkp)
     call gcopy(wtk,nkp)
     call gcopy(kT)
+    call gcopy (maxefermi)
+    call gcopy (flag_smear_type)
+    call gcopy (SmearingType)
+    call gcopy (iMethfessel_Paxton)
+    call gcopy (MPOrder)
+    call gcopy (max_brkt_iterations)
+    call gcopy (gaussian_height)
+    call gcopy (finess)
+    call gcopy (NElec_less)
     !if(iprint_init>=5.AND.myid/=0) then
     !   write(io_lun,*) 'Proc: ',myid
     !   write(io_lun,5)
