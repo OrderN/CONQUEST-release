@@ -448,6 +448,8 @@ contains
 !!    Added use statement for blip_gradient (get_support_gradient moved)
 !!   08:06, 2003/10/01 dave
 !!    Added basic structure for PAO basis set
+!!   2011/06/15 13:04 dave
+!!    Added definition of WhichPulay before get_support_gradient call as check
 !!  SOURCE
 !!
   subroutine pulay_force( p_force, fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -574,6 +576,7 @@ contains
           enddo
        end do
     end if
+    WhichPulay = BothPulay
     call get_support_gradient(inode, ionode)
     t1 = mtime()
     if(inode==ionode.AND.iprint_MD>3) write(io_lun,fmt='(4x,"get_support_gradient time: ",f12.5)') t1-t0

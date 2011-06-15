@@ -314,6 +314,8 @@ contains
 !!    Added entropy calculation
 !!   2010/02/13 L.Tong
 !!    Added k-point parallelisation
+!!   2011/06/14 16:41 dave
+!!    Small tweak to remove unnecessary gcopy calls and introduce local group kpt scaling as variable
 !!  SOURCE
 !!
   subroutine FindEvals(electrons)
@@ -322,7 +324,7 @@ contains
     use numbers, ONLY: zero, half, one, two, very_small
     use units
     use global_module, ONLY: iprint_DM, ni_in_cell, numprocs, area_DM
-    use GenComms, ONLY: my_barrier, cq_abort, mtime, gsum, gcopy, myid
+    use GenComms, ONLY: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, ONLY: matrix_size, proc_rows, proc_cols, deallocate_arrays, &
          block_size_r, block_size_c, my_row, pg_kpoints, proc_groups, nkpoints_max, pgid, N_procs_in_pg, N_kpoints_in_pg
     use mult_module, ONLY: matH, matS, matK, matM12, matrix_scale, matrix_product_trace
@@ -338,7 +340,7 @@ contains
     real(double) :: electrons
     
     ! Local variables
-    real(double) :: bandE, abstol, a, time0, time1, vl, vu, orfac, locc
+    real(double) :: bandE, abstol, a, time0, time1, vl, vu, orfac, locc, scale
     real(double), external :: dlamch
     complex(double_cplx), dimension(:,:), allocatable :: expH
     integer :: merow, mecol, info, lwork, stat, row_size, nump, il, iu
@@ -371,7 +373,7 @@ contains
     
     ! Initialise - start BLACS, sort out matrices, allocate memory
     call initDiag (desca, descb, descz, lwork, lrwork, liwork)
-
+    scale = one/real(N_procs_in_pg(pgid),double)
     !my_row = 0
     ! -------------------------------------------------------------------------------------------------
     ! Start diagonalisation
@@ -401,7 +403,7 @@ contains
           !     work,lwork,rwork,iwork,ifail,info)
           if(info/=0) call cq_abort("FindEvals: pzheev failed !",info)
           ! Copy local_w into appropriate place in w
-          w(1:matrix_size, pg_kpoints(pgid,i)) = 1.0_double/real(N_procs_in_pg(pgid)) * local_w(1:matrix_size)
+          w(1:matrix_size, pg_kpoints(pgid,i)) = scale * local_w(1:matrix_size)
        end if ! End if (i<=N_kpoints_in_pg(pgid))
     end do ! End do i = 1, nkpoints_max
     ! sum the w on each node together to give the whole w on each node, note that
@@ -413,8 +415,8 @@ contains
     ! Find Fermi level, given the eigenvalues at all k-points (in w)
     ! if(me<proc_rows*proc_cols) then
     call findFermi(electrons,w,matrix_size,nkp,Efermi)
-    call gcopy(Efermi)
-    call gcopy(occ,matrix_size,nkp)
+    !call gcopy(Efermi)
+    !call gcopy(occ,matrix_size,nkp)
     ! else
     !   call gcopy(Efermi)
     !   call gcopy(occ,matrix_size,nkp)
