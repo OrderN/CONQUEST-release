@@ -44,6 +44,8 @@
 !!    variables etc.
 !!   2008/02/06 08:25 dave
 !!    Changed for output to file not stdout
+!!   2011/06/17 ast
+!!    nreqs in matrix_transpose is now allocatable
 !!  TODO
 !!   17/06/2002 dave
 !!    Split main_matrix_multiply into sensible small routines (like getK, getDOmega)
@@ -1575,7 +1577,7 @@ contains
   subroutine matrix_transpose(A, AT)
 
     use mpi
-    use GenComms, ONLY: myid
+    use GenComms, ONLY: myid, cq_abort
     use matrix_data, ONLY: halo
     use global_module, ONLY: sf
     use maxima_module, ONLY: maxatomsproc, maxnabaprocs
@@ -1588,10 +1590,14 @@ contains
     integer :: A, AT
     ! Local variables
     integer :: mat_temp
-    integer  :: nreqs(1:1000), isend, ii, ierr=0
+    integer, allocatable, dimension(:)  :: nreqs
+    integer  :: isend, ii, ierr=0, stat
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
 
 !    call start_timer(tmr_std_matrices)
+    ! Allocate number of requests
+    allocate(nreqs(maxnabaprocs+1), STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating number of maximum requests in matrix_transpose: ",maxnabaprocs, stat)
     ! Allocate temporary matrix to receive local transpose
     if(mat_p(A)%sf2_type/=sf.OR.mat_p(A)%sf1_type/=sf) then
        mat_temp = allocate_temp_matrix(matrix_index(A),0,mat_p(A)%sf2_type,mat_p(A)%sf1_type)
@@ -1617,6 +1623,9 @@ contains
        if(ierr/=0) call cq_abort("Error in mat_trans: waiting for send to finish",ii)
     enddo
     call free_temp_matrix(mat_temp)
+    ! Free the array of requests
+    deallocate(nreqs, STAT=stat)
+    if(stat/=0) call cq_abort("Error deallocating requests in matrix_transpose: ", stat)
 !    call stop_timer(tmr_std_matrices)
     return
 
