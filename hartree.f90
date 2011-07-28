@@ -247,6 +247,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2010/07/30  Lianheng Tong  
 !!     Based on kerker_obsolete written by dave. 
+!!   2011/07/28 14:20 dave and umberto
+!!     Fix problem with AND statement referencing hartree_factor with index 0
 !!  TODO
 !!
 !!  SOURCE
@@ -294,8 +296,10 @@ contains
     ! do q=0 point separately (if q=0 is on one of the grid point)
     ! note that if q=0 point is not on the discrete reciporical grid for FFT, then i0=0
     ! q=0 is only on one of processor node need to make sure we are doing the correct point
-    if ((i0 > 0) .AND. (hartree_factor(i0) <= very_small)) then
-       FR_kerker(i0) = zero
+    if ((i0 > 0)) then
+       if((hartree_factor(i0) <= very_small)) then
+          FR_kerker(i0) = zero
+       end if
     end if
     ! FFT back
     call fft3 (resid, FR_kerker, size, +1)
@@ -331,6 +335,8 @@ contains
 !!  CREATION DATE
 !!   2010/07/30
 !!  MODIFICATION HISTORY
+!!   2011/07/28 14:20 dave and umberto
+!!     Fix problem with AND statement referencing hartree_factor with index 0
 !!
 !!  TODO
 !!
@@ -386,8 +392,10 @@ contains
     ! do q=0 point separately (if q=0 is on one of the grid point)
     ! note that if q=0 point is not on the discrete reciporical grid for FFT, then i0=0
     ! q=0 is only on one of processor node need to make sure we are doing the correct point
-    if ((i0 > 0) .AND. (hartree_factor(i0) <= very_small)) then
-       FR_wdmetric(i0) = FR_wdmetric(i0)*facmax
+    if ((i0 > 0)) then
+       if((hartree_factor(i0) <= very_small)) then
+          FR_wdmetric(i0) = FR_wdmetric(i0)*facmax
+       end if
     end if
     ! FFT back
     call fft3 (resid_cov, FR_wdmetric, size, +1)
@@ -426,6 +434,8 @@ contains
 !!  CREATION DATE
 !!   2010/07/30
 !!  MODIFICATION HISTORY
+!!   2011/07/28 14:20 dave and umberto
+!!     Fix problem with AND statement referencing hartree_factor with index 0
 !!
 !!  TODO
 !!
@@ -492,9 +502,11 @@ contains
     ! do q=0 point separately (if q=0 is on one of the grid point)
     ! note that if q=0 point is not on the discrete reciporical grid for FFT, then i0=0
     ! q=0 is only on one of processor node need to make sure we are doing the correct point
-    if ((i0 > 0) .AND. (hartree_factor(i0) <= very_small)) then
-       FR_kerker(i0) = zero
-       FR_wdmetric(i0) = FR_wdmetric(i0)*facmax
+    if ((i0 > 0)) then
+       if((hartree_factor(i0) <= very_small)) then
+          FR_kerker(i0) = zero
+          FR_wdmetric(i0) = FR_wdmetric(i0)*facmax
+       end if
     end if
     ! FFT back
     call fft3 (resid, FR_kerker, size, +1)
