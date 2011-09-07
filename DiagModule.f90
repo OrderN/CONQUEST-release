@@ -325,9 +325,12 @@ contains
     use units
     use global_module, ONLY: iprint_DM, ni_in_cell, numprocs, area_DM
     use GenComms, ONLY: my_barrier, cq_abort, mtime, gsum, myid
-    use ScalapackFormat, ONLY: matrix_size, proc_rows, proc_cols, deallocate_arrays, &
-         block_size_r, block_size_c, my_row, pg_kpoints, proc_groups, nkpoints_max, pgid, N_procs_in_pg, N_kpoints_in_pg
-    use mult_module, ONLY: matH, matS, matK, matM12, matrix_scale, matrix_product_trace
+    use ScalapackFormat, ONLY: matrix_size, proc_rows, proc_cols,&
+         & deallocate_arrays, block_size_r, block_size_c, my_row,&
+         & pg_kpoints, proc_groups, nkpoints_max, pgid,&
+         & N_procs_in_pg, N_kpoints_in_pg
+    use mult_module, ONLY: matH, matS, matK, matM12, matrix_scale,&
+         & matrix_product_trace
     use matrix_data, ONLY: Hrange, Srange
     use primary_module, ONLY: bundle
     use species_module, ONLY: species, nsf_species

@@ -35,10 +35,11 @@ include pao2blip.obj
 include pseudo_tm.obj
 
 #List of all object files
-NODE_OBJECTS = main.o $(MATRIX_OBJS) $(COMM_OBJS) $(ODD_OBJS) $(OVERLAP_OBJS) $(ENERGY_OBJS) $(IONICS_OBJS) $(FORCES_OBJS) $(SETGRID_NEW_OBJS) $(PAO2BLIP_OBJS) $(PS_TM_OBJS)
-SRCS = $(NODE_OBJECTS:.o=.f90) basic_types.f90 datatypes.module.f90 matrix_data_module.f90 \
-  numbers.module.f90
-
+NODE_OBJECTS = main.o datatypes.module.o numbers.module.o                               \
+               $(MATRIX_OBJS) $(COMM_OBJS) $(ODD_OBJS) $(OVERLAP_OBJS) $(ENERGY_OBJS)   \
+               $(IONICS_OBJS) $(FORCES_OBJS) $(SETGRID_NEW_OBJS) $(PAO2BLIP_OBJS)       \
+               $(PS_TM_OBJS)
+SRCS = $(NODE_OBJECTS:.o=.f90) basic_types.f90 datatypes.module.f90 matrix_data_module.f90 numbers.module.f90
 
 #Dependency rule
 deps.obj.inc: $(SRCS)

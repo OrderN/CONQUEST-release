@@ -1,5 +1,5 @@
 # -*- mode: Makefile -*-
-# $Id: energy.obj,v 1.14.2.1 2006/03/07 07:36:42 drb Exp $
+# $Id$
 #
 #
 ENERGY_OBJS = H_matrix_module.o \

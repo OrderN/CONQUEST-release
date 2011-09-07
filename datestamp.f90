@@ -1,5 +1,5 @@
 module datestamp
   implicit none
-  character(len=*), parameter :: datestr="Fri 1 Apr 2011 11:28:23 JST"
-  character(len=*), parameter :: commentver="beta 0.37 (r91): changed ewald, DMM by TM 2011.03.31"
+  character(len=*), parameter :: datestr="Mon Sep 5 17:43:29 BST 2011"
+  character(len=*), parameter :: commentver="Version beta 0.38 (r100): bug fix to metals DRB 2011.06.15"
 end module datestamp

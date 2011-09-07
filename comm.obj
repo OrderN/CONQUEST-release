@@ -1,4 +1,4 @@
 # -*- mode: Makefile -*-
-# $Id: comm.obj,v 1.1.1.1 2001/06/11 13:28:11 drb Exp $
+# $Id$
 #
 COMM_OBJS = generic_comms.o

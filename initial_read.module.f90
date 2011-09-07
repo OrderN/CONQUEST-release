@@ -1505,11 +1505,22 @@ contains
 !!   2006/09/22 08:20 dave
 !!    Relocated into initial_read
 !!   2010/07/22 15.53 Lianheng
-!!    moved control flags associated with Diagonalisation method from the main read_input() subroutine to here.
-!!    added Methfessel-Paxton smearing and related control flags. Changed SC.MaxEfIter to Diag.MaxEfIter for 
-!!    greater consistency
+!!    moved control flags associated with Diagonalisation method from
+!!    the main read_input() subroutine to here.  added
+!!    Methfessel-Paxton smearing and related control flags. Changed
+!!    SC.MaxEfIter to Diag.MaxEfIter for greater consistency
 !!   2011/02/13 L.Tong
 !!    added Diag.KProcGroups for k-point parallelisation
+!!    IMPORTANT: for now Diag.KProcGroups must be an integer factor
+!!    of the total number of processes. In other words each group
+!!    must contain the same number of processes.
+!!   2011/09/02 L.Tong
+!!    Corrected Conquest default values for ScaLAPACK processor grid
+!!    definitions when k-point parallelisation is on. 
+!!    Added local variable proc_per_group
+!!   2011/09/05 L.Tong
+!!    Added print out input information for k-point parallelisation
+!!    related parameters
 !!  SOURCE
 !!
   subroutine readDiagInfo
@@ -1532,6 +1543,7 @@ contains
     ! Local variables
     integer :: stat, iunit, i, j, k, matrix_size
     real(double) :: a, sum
+    integer :: proc_per_group
     ! k-point mesh type
     logical :: mp_mesh, done
     real(double), dimension(1:3) :: mp_shift
@@ -1554,27 +1566,33 @@ contains
        gaussian_height = fdf_double('Diag.GaussianHeight',0.1_double)
        finess = fdf_double('Diag.EfStepFiness',1.0_double)
        NElec_less = fdf_double('Diag.NElecLess',10.0_double)
-       ! Read k-point parallelisation process-group incormation
+       ! Read k-point parallelisation process-group incormation, default is 1
        proc_groups = fdf_integer ('Diag.KProcGroups', 1)
+       if (iprint_init > 0) write (io_lun, 11) proc_groups 
        ! Read/choose ScaLAPACK processor grid dimensions
        if(fdf_defined('Diag.ProcRows')) then
           proc_rows = fdf_integer('Diag.ProcRows',0)
           proc_cols = fdf_integer('Diag.ProcCols',0)
           if(proc_rows*proc_cols==0) call cq_abort('Diag: proc grid product is zero: ',proc_rows,proc_cols)
-          if(proc_rows*proc_cols>numprocs) &
-               call cq_abort('Diag: proc grid product is too large: ',proc_rows*proc_cols,numprocs)
+          ! 2011/09/02 L.Tong: now checks correctly if we have more than one k-point groups
+          proc_per_group = numprocs / proc_groups
+          if(proc_rows*proc_cols > proc_per_group) &
+               call cq_abort('Diag: proc grid product is too large: ', proc_rows*proc_cols, proc_per_group) 
        else
+          ! default values
           if(numprocs<9) then ! Recommended by ScaLapack User Guide
              proc_rows = 1
-             proc_cols = numprocs
+             proc_cols = numprocs / proc_groups
           else
              done = .false.
-             a = sqrt(real(numprocs,double))
+             ! 2011/09/02 L.Tong, now works properly for more than one k-point groups
+             proc_per_group = numprocs / proc_groups
+             a = sqrt(real(proc_per_group, double))
              proc_rows = aint(a)+1
              do while(.NOT.done.AND.proc_rows>1) 
                 proc_rows = proc_rows - 1
-                proc_cols = aint(real(numprocs,double)/real(proc_rows,double))
-                if(numprocs-proc_rows*proc_cols==0) done = .true.
+                proc_cols = aint(real(proc_per_group,double) / real(proc_rows,double))
+                if(proc_per_group - proc_rows*proc_cols == 0) done = .true.
              end do
           end if
        end if
@@ -1829,6 +1847,7 @@ contains
 8   format(/8x,'***WARNING***',/,8x,'No Kpoint mesh found - defaulting to Gamma point')
 9   format(/8x,'***WARNING***',/,8x,'Specified Kpoint mesh shift in fractional coords >= 1.0.')
 10  format(8x,i4,' symmetry inequivalent Kpoints in fractional coordinates: ')
+11  format(8x, 'Number of processor groups for k-point parallelisation: ', i5)
   end subroutine readDiagInfo
 !!***
 

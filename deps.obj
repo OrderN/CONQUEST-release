@@ -1,5 +1,5 @@
 # -*- mode: Makefile -*-
-# $Id: deps.obj,v 1.27 2003/10/30 12:19:40 drb Exp $
+# $Id$
 #
 initial_read.module.o: $(FDF)
 fft_module.o hartree.o: $(FFT)

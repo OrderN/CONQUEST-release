@@ -249,6 +249,8 @@ contains
 !!    Added salutation at start of subroutine
 !!   2008/05/19 ast
 !!    Added timer
+!!   2011/02/13 L.Tong
+!!    Added k-point parallelisation
 !!  SOURCE
 !!
   subroutine allocate_arrays (nkp)
@@ -326,6 +328,8 @@ contains
 !!    Added ROBODoc header
 !!   2008/05/19 ast
 !!    Added timer
+!!   2011/02/13 L.Tong
+!!    Added k-point parallelisation
 !!  SOURCE
 !!
   subroutine deallocate_arrays
