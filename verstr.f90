@@ -1,1 +1,1 @@
-  character(len=*), parameter :: commentver="Version beta 0.38 (r100): bug fix to metals DRB 2011.06.15"
+  character(len=*), parameter :: commentver="Version beta 0.39 (rRRR): small bug fixes (atrad, species_label) DRB 2011.09.16"

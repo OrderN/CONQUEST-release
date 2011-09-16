@@ -36,6 +36,8 @@
 !!    Changes for output to file not stdout
 !!   12:15, 14/02/2008 drb 
 !!    Added variables for buffer around primary and covering sets
+!!   2011/09/16 11:04 dave
+!!    Changed variable atomicrad to atomicnum
 !!  SOURCE
 module dimens
 
@@ -60,7 +62,7 @@ module dimens
   !real(double) ::  blip_width, four_on_blip_width, fobw2, fobw3
 
   real(double), allocatable, dimension(:) :: RadiusSupport, NonLocalFactor, InvSRange
-  integer, allocatable, dimension(:) :: atomicrad
+  integer, allocatable, dimension(:) :: atomicnum
 
   integer :: n_grid_x, n_grid_y, n_grid_z, n_my_grid_points
 

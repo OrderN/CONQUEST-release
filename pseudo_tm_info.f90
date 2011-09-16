@@ -113,24 +113,23 @@ contains
 !!    Added timers
 !!   2011/03/30 M.Arita
 !!    Added statements for P.C.C.
+!!   2011/09/16 11:00 dave
+!!    Changed to use n_species and species_label from species_module, and changed atomicrad to atomicnum
 !!  SOURCE
 !!
-  subroutine setup_pseudo_info(nspecies, species_label)
+  subroutine setup_pseudo_info
 
     use datatypes
     use numbers, ONLY: zero
     use pao_format, ONLY: pao
-    use species_module, ONLY: npao_species, nsf_species, type_species
+    use species_module, ONLY: npao_species, nsf_species, type_species, species_label, n_species
     use global_module, ONLY: iprint_pseudo
-    use dimens, ONLY: RadiusSupport, atomicrad
+    use dimens, ONLY: RadiusSupport, atomicnum
     use GenComms, ONLY: inode, ionode, cq_abort, gcopy
     use pseudopotential_common, ONLY: pseudo_type, SIESTA, ABINIT
 
     implicit none
 
-    !dummy arguments
-    integer, intent(in) :: nspecies
-    character(len=10),intent(in) :: species_label(nspecies)
     !local
     integer :: stat, ispecies, l, zeta
     real(double) :: cutoff
@@ -141,13 +140,13 @@ contains
        if(iprint_pseudo>2.AND.inode==ionode) write(io_lun,fmt='(10x," setup_pseudo_info is skipped because it is already called")')
     else
        call start_timer(tmr_std_allocation)
-       allocate(pseudo(nspecies),STAT=stat)
+       allocate(pseudo(n_species),STAT=stat)
        if(stat /= 0) call cq_abort ('allocating pseudo in setup_pseudo_info',stat)
-       allocate(pao(nspecies),STAT=stat)
+       allocate(pao(n_species),STAT=stat)
        if(stat /= 0) call cq_abort ('allocating pao in setup_pseudo_info',stat)
        call stop_timer(tmr_std_allocation)
        flag_pcc_global = .false.
-       do ispecies=1,nspecies
+       do ispecies=1,n_species
           if(pseudo_type==SIESTA) then
              pseudo(ispecies)%tm_loc_pot = loc_chg
           else if(pseudo_type==ABINIT) then
@@ -160,7 +159,7 @@ contains
           pseudo(ispecies)%filename = filename
           call read_ion_ascii_tmp(pseudo(ispecies),pao(ispecies))
           npao_species(ispecies) = pao(ispecies)%count
-          atomicrad(ispecies) = pseudo(ispecies)%z
+          atomicnum(ispecies) = pseudo(ispecies)%z
           ! For P.C.C.
           if (pseudo(ispecies)%flag_pcc) flag_pcc_global = .true.
           !For Ghost atoms

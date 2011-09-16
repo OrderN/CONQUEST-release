@@ -35,6 +35,8 @@
 !!    Added Becke weights and Becke atomic charges
 !!   2011/03/30 19:15 M.Arita
 !!    Added the charge density for core electrons
+!!   2011/09/16 11:16 dave
+!!    Update and bug fix for atomic radii in Becke weights
 !!  SOURCE
 module density_module
   
@@ -55,7 +57,7 @@ module density_module
   real(double), allocatable, dimension(:) :: bw, bwgrid
   real(double), allocatable, dimension(:) :: atomcharge
   logical :: weights_set = .false.
-  real(double), dimension(35) :: atrad
+  real(double), dimension(95) :: atrad
   ! RCS tag for object file identification
   character(len=80), private :: RCSid = "$Id$"
 
@@ -581,25 +583,26 @@ contains
   end subroutine get_electronic_density
 !!***
 
-!!****f* / *
+!!****f* density_module/build_Becke_weights *
 !!
 !!  NAME 
-!!   
+!!   build_Becke_weights
 !!  USAGE
 !!   
 !!  PURPOSE
-!!   
+!!   Builds Becke weights on grid for atoms (for assigning charges to atoms)
 !!  INPUTS
 !!   
 !!   
 !!  USES
 !!   
 !!  AUTHOR
-!!   
+!!   D. R. Bowler
 !!  CREATION DATE
-!!   
+!!   2009
 !!  MODIFICATION HISTORY
-!!  
+!!   2011/09/16 11:12 dave
+!!    Added header, corrected bug with atomic radius
 !!  SOURCE
 !!  
   subroutine build_Becke_weights!(chden,size)
@@ -615,7 +618,7 @@ contains
          flag_Becke_atomic_radii
     use cover_module, ONLY: DCS_parts
     use group_module, ONLY : blocks, parts
-    use dimens, ONLY: RadiusSupport, atomicrad
+    use dimens, ONLY: RadiusSupport, atomicnum
     use maxima_module, ONLY: maxngrid
 
     implicit none
@@ -696,7 +699,7 @@ contains
                 the_species=species_glob(ig_atom)
                 globatom(at) = ig_atom
                 rcut(at) = RadiusSupport(the_species)
-                rad(at) = atomicrad(the_species)
+                rad(at) = atrad(atomicnum(the_species))
              end do
           end do
           ! ** NEED rcut ** ! 
@@ -1038,7 +1041,7 @@ contains
     use datatypes
     use GenComms, ONLY: gsum, cq_abort, inode, ionode
     use numbers, ONLY: zero, very_small, two, one
-    use global_module, ONLY: sf, ni_in_cell, id_glob, io_lun
+    use global_module, ONLY: sf, ni_in_cell, id_glob, io_lun, iprint_SC
     use primary_module, ONLY: domain
     use set_blipgrid_module, ONLY: naba_atm
     use cover_module, ONLY: DCS_parts
@@ -1086,30 +1089,31 @@ contains
     !write(*,*) 'Done blocks'
     atomcharge = atomcharge*grid_point_volume
     call gsum(atomcharge,ni_in_cell)
-    if(inode==ionode) then
+    if(inode==ionode.AND.iprint_SC>2) then
        do blk = 1, ni_in_cell
           write(io_lun,fmt='(2x,"Atom ",i4," Becke charge ",f20.12)') blk,atomcharge(blk)
        end do
     end if
   end subroutine build_Becke_charges
+!!***
 
-!!****f* / *
+!!****f* density_module/s *
 !!
 !!  NAME 
-!!   
+!!   s
 !!  USAGE
 !!   
 !!  PURPOSE
-!!   
+!!   Calculates s function for Becke weights
 !!  INPUTS
 !!   
 !!   
 !!  USES
 !!   
 !!  AUTHOR
-!!   
+!!   D. R. Bowler
 !!  CREATION DATE
-!!   
+!!   2009
 !!  MODIFICATION HISTORY
 !!  
 !!  SOURCE
@@ -1137,8 +1141,29 @@ contains
        s = half*(one -  mua*(c1 - mua2*(c3 - mua2*(c5 - c7*mua2))))
     end if
   end function s
- !!***
+!!***
    
+!!****f* density_module/t *
+!!
+!!  NAME 
+!!   t
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Calculates t function for Becke weights
+!!  INPUTS
+!!   
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   D. R. Bowler
+!!  CREATION DATE
+!!   2009
+!!  MODIFICATION HISTORY
+!!  
+!!  SOURCE
+!!  
   real(double) function t(mu)
 
     use numbers, only: zero, half, one, three, five, seven
@@ -1165,43 +1190,145 @@ contains
        t = t/s
     end if
   end function t
+!!***
 
-  ! Assigns atomic radii; these are from J. C. Slater, J. Chem. Phys. 41, 3199 (1964)
-  ! H altered to 0.35 A, F to 0.9 A
+!!****f* density_module/assign_atomic_radii *
+!!
+!!  NAME 
+!!   assign_atomic_radii
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Assigns atomic radii; these are from J. C. Slater, J. Chem. Phys. 41, 3199 (1964)
+!!   H altered to 0.35 A following Becke, J. Chem. Phys. 88, 2547 (1988)
+!!   Noble gas and At, Rn, Fr radii from Dalton Trans., 2008, 2832 (we may want to use all from here ?)
+!!  INPUTS
+!!   
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   D. R. Bowler
+!!  CREATION DATE
+!!   2009
+!!  MODIFICATION HISTORY
+!!   2011/07/20 17:47 dave
+!!    Extended table list significantly
+!!  SOURCE
+!!  
   subroutine assign_atomic_radii
 
     use datatypes
+    use numbers, ONLY: zero
     use units, ONLY: AngToBohr
 
     implicit none
 
+    atrad = zero
     atrad(1)=0.35_double*AngToBohr
+    atrad(2)=0.28_double*AngToBohr
 
-    atrad(3)=1.45_double*AngToBohr
+    atrad(3)=1.45_double*AngToBohr ! Li
     atrad(4)=1.05_double*AngToBohr
     atrad(5)=0.85_double*AngToBohr
-
     atrad(6)=0.70_double*AngToBohr
     atrad(7)=0.65_double*AngToBohr
     atrad(8)=0.60_double*AngToBohr
-    atrad(9)=0.90_double*AngToBohr
+    atrad(9)=0.50_double*AngToBohr ! F
+    atrad(10)=0.58_double*AngToBohr 
 
-
-    atrad(11)=1.80_double*AngToBohr
+    atrad(11)=1.80_double*AngToBohr ! Na
     atrad(12)=1.50_double*AngToBohr
     atrad(13)=1.25_double*AngToBohr
     atrad(14)=1.10_double*AngToBohr
     atrad(15)=1.00_double*AngToBohr
     atrad(16)=1.00_double*AngToBohr
-    atrad(17)=1.00_double*AngToBohr
+    atrad(17)=1.00_double*AngToBohr ! Cl
+    atrad(18)=1.06_double*AngToBohr
 
-
+    atrad(19)=2.20_double*AngToBohr ! K
+    atrad(20)=1.80_double*AngToBohr
+    atrad(21)=1.60_double*AngToBohr
+    atrad(22)=1.40_double*AngToBohr
+    atrad(23)=1.35_double*AngToBohr
+    atrad(24)=1.40_double*AngToBohr
+    atrad(25)=1.40_double*AngToBohr
+    atrad(26)=1.40_double*AngToBohr ! Fe
+    atrad(27)=1.35_double*AngToBohr
+    atrad(28)=1.35_double*AngToBohr
+    atrad(29)=1.35_double*AngToBohr
+    atrad(30)=1.35_double*AngToBohr
+    atrad(31)=1.30_double*AngToBohr ! Ga
     atrad(32)=1.25_double*AngToBohr
     atrad(33)=1.15_double*AngToBohr
     atrad(34)=1.15_double*AngToBohr
-    atrad(35)=1.15_double*AngToBohr
+    atrad(35)=1.15_double*AngToBohr ! Br
+    atrad(36)=1.16_double*AngToBohr
 
+    atrad(37)=2.35_double*AngToBohr ! Rb
+    atrad(38)=2.00_double*AngToBohr
+    atrad(39)=1.80_double*AngToBohr
+    atrad(40)=1.55_double*AngToBohr ! Zr
+    atrad(41)=1.45_double*AngToBohr
+    atrad(42)=1.45_double*AngToBohr
+    atrad(43)=1.35_double*AngToBohr
+    atrad(44)=1.30_double*AngToBohr ! Ru
+    atrad(45)=1.35_double*AngToBohr
+    atrad(46)=1.40_double*AngToBohr
+    atrad(47)=1.60_double*AngToBohr ! Ag
+    atrad(48)=1.55_double*AngToBohr
+    atrad(49)=1.55_double*AngToBohr ! In
+    atrad(50)=1.45_double*AngToBohr
+    atrad(51)=1.45_double*AngToBohr
+    atrad(52)=1.40_double*AngToBohr
+    atrad(53)=1.40_double*AngToBohr ! I
+    atrad(54)=1.40_double*AngToBohr
+
+    atrad(55)=2.60_double*AngToBohr ! Cs
+    atrad(56)=2.15_double*AngToBohr
+    atrad(57)=1.95_double*AngToBohr ! La
+    atrad(58)=1.85_double*AngToBohr
+    atrad(59)=1.85_double*AngToBohr
+    atrad(60)=1.85_double*AngToBohr 
+    atrad(61)=1.85_double*AngToBohr
+    atrad(62)=1.85_double*AngToBohr
+    atrad(63)=1.85_double*AngToBohr ! Eu
+    atrad(64)=1.80_double*AngToBohr 
+    atrad(65)=1.75_double*AngToBohr
+    atrad(66)=1.75_double*AngToBohr
+    atrad(67)=1.75_double*AngToBohr 
+    atrad(68)=1.75_double*AngToBohr
+    atrad(69)=1.75_double*AngToBohr 
+    atrad(70)=1.75_double*AngToBohr 
+    atrad(71)=1.75_double*AngToBohr ! Lu
+    atrad(72)=1.55_double*AngToBohr
+    atrad(73)=1.45_double*AngToBohr
+    atrad(74)=1.35_double*AngToBohr ! W
+    atrad(75)=1.35_double*AngToBohr
+    atrad(76)=1.30_double*AngToBohr
+    atrad(77)=1.35_double*AngToBohr ! Ir
+    atrad(78)=1.35_double*AngToBohr
+    atrad(79)=1.35_double*AngToBohr 
+    atrad(80)=1.50_double*AngToBohr ! Hg
+    atrad(81)=1.90_double*AngToBohr
+    atrad(82)=1.80_double*AngToBohr
+    atrad(83)=1.60_double*AngToBohr
+    atrad(84)=1.90_double*AngToBohr ! Po
+    atrad(85)=1.50_double*AngToBohr
+    atrad(86)=1.50_double*AngToBohr
+
+    atrad(87)=2.60_double*AngToBohr
+    atrad(88)=2.15_double*AngToBohr ! Ra
+    atrad(89)=1.95_double*AngToBohr
+    atrad(90)=1.80_double*AngToBohr
+    atrad(91)=1.80_double*AngToBohr
+    atrad(92)=1.75_double*AngToBohr
+    atrad(93)=1.75_double*AngToBohr
+    atrad(94)=1.75_double*AngToBohr
+    atrad(95)=1.75_double*AngToBohr
+    return
   end subroutine assign_atomic_radii
+!!***
 
   subroutine check_block &
        (xblock,yblock,zblock,xatom,yatom,zatom,rcut, &

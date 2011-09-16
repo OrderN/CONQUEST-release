@@ -305,8 +305,9 @@ contains
 !!    here to readDiagInfo() subroutine. Added Methfessel-Paxton 
 !!    smearing and related control flags. Changed SC.MaxEfIter to 
 !!    Diag.MaxEfIter (moved to readDiagInfo()) for greater consistency
+!!   2011/09/16 11:08 dave
+!!    Bug fix to say when species block not read
 !!  TODO
-!!   Think about single node read and broadcast 10/05/2002 dave
 !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
 !!   Fix rigid shift 10/05/2002 dave
 !!  SOURCE
@@ -669,6 +670,8 @@ contains
                 end if
              end if
              call fdf_endblock
+          else
+             call cq_abort("Failure to read data for species_label: "//species_label(i))
           end if
           if(nsf_species(i)==0) call cq_abort("Number of supports not specified for species ",i)
           if(flag_basis_set==blips.AND.SupportGridSpacing(i)<very_small) &
@@ -1143,9 +1146,31 @@ contains
 ! Subroutine allocate_species_vars
 ! ------------------------------------------------------------------------------
 
+!!****f* initial_read/allocate_species_vars *
+!!
+!!  NAME 
+!!   allocate_species_vars
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Allocates variables which depend on number of species
+!!  INPUTS
+!! 
+!! 
+!!  USES
+!!   
+!!  AUTHOR
+!!   D. R. Bowler
+!!  CREATION DATE
+!!   Unknown
+!!  MODIFICATION HISTORY
+!!   2011/09/16 11:10 dave
+!!    Added header and changed atomicrad to atomicnum
+!!  SOURCE
+!!
   subroutine allocate_species_vars
 
-    use dimens, ONLY: RadiusSupport, NonLocalFactor, InvSRange, atomicrad
+    use dimens, ONLY: RadiusSupport, NonLocalFactor, InvSRange, atomicnum
     use blip, ONLY: SupportGridSpacing, BlipWidth, Extent
     use memory_module, ONLY: reg_alloc_mem, type_dbl
     use species_module, ONLY: nsf_species, nlpf_species, npao_species, charge, mass, non_local_species, &
@@ -1159,8 +1184,8 @@ contains
     integer :: stat
     
     call start_timer(tmr_std_allocation)
-    allocate(RadiusSupport(n_species),atomicrad(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating RadiusSupport, atomicrad in allocate_species_vars: ",n_species,stat)
+    allocate(RadiusSupport(n_species),atomicnum(n_species),STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating RadiusSupport, atomicnum in allocate_species_vars: ",n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(Extent(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating Extent in allocate_species_vars: ",n_species,stat)
@@ -1213,7 +1238,7 @@ contains
     call stop_timer(tmr_std_allocation)
     return
   end subroutine allocate_species_vars
-
+!!***
 
 ! ------------------------------------------------------------------------------
 ! Subroutine write_info
@@ -1429,7 +1454,7 @@ contains
          '   #   Label     Mass (a.u.)   Charge (e)  NLPF Rad (',a2,')   NSF  ',/,6x, &
          '------------------------------------------------------------------')
 
-19  format(6x,i4,3x,a10,3f11.5,9x,i3)
+19  format(6x,i4,3x,a30,3f11.5,9x,i3)
 
 20  format(6x, &
          '------------------------------------------------------------------',/)
@@ -1438,7 +1463,7 @@ contains
 211 format(20x,a10,10x,a40)
 212 format(20x,a10,10x,a40)
 
-22  format(20x,a10,10x,a10) 
+22  format(20x,a30,10x,a10) 
 
 23  format(/,10x, &
          '-------------------------------------------------------',/, &

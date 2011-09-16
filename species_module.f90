@@ -33,6 +33,8 @@
 !!    Added nsf_species
 !!   2006/07/14 19:09 dave
 !!    Made all arrays (apart from species) allocatable
+!!   2011/09/16 10:58 dave
+!!    Changed species_label to length 30
 !!  SOURCE
 !!
 module species_module
@@ -55,7 +57,7 @@ module species_module
   character(len=50), allocatable, dimension(:) :: ps_file
   character(len=40), allocatable, dimension(:) :: ch_file
   character(len=40), allocatable, dimension(:) :: phi_file
-  character(len=10), allocatable, dimension(:) :: species_label
+  character(len=30), allocatable, dimension(:) :: species_label
 
   logical, allocatable, dimension(:) :: non_local_species
 

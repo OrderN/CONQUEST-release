@@ -1568,6 +1568,7 @@ contains
   subroutine ran2(x,idum)
 
     use numbers, ONLY: double
+    use GenComms, ONLY: cq_abort
 
     implicit none
     integer, parameter :: m=714025,ia=1366,ic=150889
@@ -1594,7 +1595,7 @@ contains
 !       write(*,11) idum,iy,iff,m,j,1+(97*iy)/m
     j=1+(97*iy)/m
  11 format('idum,iy,iff,m,old j,new j in ran2= ',6i12)
-    if((j.gt.97).or.(j.lt.1)) pause
+    if((j.gt.97).or.(j.lt.1)) call cq_abort("Error in ran2 for index j (outside bounds 1-97): ",j)
     iy=ir(j)
     x=iy*rm
     idum=mod(ia*idum+ic,m)

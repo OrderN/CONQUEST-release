@@ -101,6 +101,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   18:25, 2003/02/27 dave
 !!    Added ROBODoc header
+!!   2011/09/16 11:01 dave
+!!    Tidied to use species_module variables only
 !!  SOURCE
 !!
   subroutine init_pseudo_tm(ecore, ncf_out) 
@@ -113,7 +115,6 @@ contains
     
     implicit none
 
-    integer :: nspecies
     real(double), intent(out) :: ecore
 
     integer :: ncf_max   ! calculated ncf
@@ -133,9 +134,8 @@ contains
        flag_calc_max = .false.
     endif
 
-    nspecies=n_species
     if(myid==0.AND.iprint_pseudo>2) write(io_lun,fmt='(10x,"Entering init_pseudo_tm")')
-    call setup_pseudo_info(nspecies, species_label)
+    call setup_pseudo_info
     ! in the moduel pseudo_tm_info
     if(flag_calc_max) then
        call calc_max                 !contained in this subroutine
@@ -164,7 +164,7 @@ contains
     !sbrt check_max  -------------------------------
     subroutine check_max
       ncf_max = 1; nl_max=1 ; lcomp_max = 0
-      do ispecies = 1, nspecies
+      do ispecies = 1, n_species
          nl_max = max(nl_max, pseudo(ispecies)%n_pjnl)
          nlm =  0  ! # of projector functions
         if(pseudo(ispecies)%n_pjnl>0) then
@@ -183,10 +183,10 @@ contains
     !sbrt calc_max  -------------------------------
     subroutine calc_max
       !calculates ncf_max, nl_max, lcomp_max
-      if(nspecies <= 0 ) call cq_abort ('calc_max in init_pseudo: nspecies error',nspecies)
+      if(n_species <= 0 ) call cq_abort ('calc_max in init_pseudo: n_species error',n_species)
       !ncf_max, nl_max, lcomp_max
       ncf_max = 1; nl_max=1 ; lcomp_max = 0
-      do ispecies = 1, nspecies
+      do ispecies = 1, n_species
          nl_max = max(nl_max, pseudo(ispecies)%n_pjnl)
          nlm =  0  ! # of projector functions
         if(pseudo(ispecies)%n_pjnl > 0) then
@@ -214,16 +214,16 @@ contains
       !   ('ERROR! init_pseudo: alloc pseudopotential', stat, N_GRID_MAX)
       call start_timer(tmr_std_allocation)
       if(.NOT.allocated(core_radius)) then
-         allocate(core_radius(nspecies), STAT=stat)
-         if(stat /= 0) call cq_abort ('ERROR! init_pseudo: alloc core_radius', stat, nspecies)
+         allocate(core_radius(n_species), STAT=stat)
+         if(stat /= 0) call cq_abort ('ERROR! init_pseudo: alloc core_radius', stat, n_species)
       end if
 
       !%%! allocate(spherical_harmonic_norm(n_mcomp), STAT=stat)
       !%%! if(stat /= 0) call cq_abort &
       !%%!      ('ERROR! init_pseudo: alloc spherical_harmonic_norm', stat, n_mcomp)
-      allocate(offset_mcomp(nl_max,nspecies), STAT=stat)
+      allocate(offset_mcomp(nl_max,n_species), STAT=stat)
       if(stat /= 0) call cq_abort &
-           ('ERROR! init_pseudo: alloc offset_mcomp', stat, nl_max*nspecies)
+           ('ERROR! init_pseudo: alloc offset_mcomp', stat, nl_max*n_species)
       if(.not.flag_calc_max) then
          allocate(ip_store(n_pts_in_block), STAT=stat)
          if(stat /= 0) call cq_abort &
@@ -281,7 +281,7 @@ contains
 
     !sbrt setup_offset_mcomp  -------------------------------
     subroutine setup_offset_mcomp
-      do ispecies = 1, nspecies
+      do ispecies = 1, n_species
          nlm =  0  ! # of projector functions
          offset_mcomp(1, ispecies) = 0
          if(pseudo(ispecies)%n_pjnl > 1) then
@@ -299,7 +299,7 @@ contains
     subroutine setup_core_radius
       use numbers, ONLY: zero
       real(double) :: rcutmax
-      do ispecies = 1, nspecies
+      do ispecies = 1, n_species
          rcutmax = zero
          if(pseudo(ispecies)%tm_loc_pot==loc_pot) then
             rcutmax = max(rcutmax, pseudo(ispecies)%vlocal%cutoff)
