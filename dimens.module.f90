@@ -52,7 +52,7 @@ module dimens
 
   real(double) :: r_super_x, r_super_y, r_super_z, volume
   real(double) :: r_super_x_squared, r_super_y_squared, r_super_z_squared
-  real(double) :: r_s, r_h, r_c, r_core_squared
+  real(double) :: r_s, r_h, r_c, r_core_squared, r_dft_d2
   real(double) :: grid_point_volume, one_over_grid_point_volume
   real(double) :: support_grid_volume
   real(double) :: GridCutoff, min_blip_sp
@@ -129,13 +129,15 @@ contains
 !!    Added loop to find longest range matrix
 !!   2009/07/08 16:40 dave
 !!    Zero r_t
+!!   2011/09/29 M. Arita
+!!    Set the cutoff for DFT-D2
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
 
     use datatypes
     use numbers
-    use global_module, ONLY: iprint_init, flag_basis_set, blips, runtype
+    use global_module, ONLY: iprint_init, flag_basis_set, blips, runtype, flag_dft_d2
     use matrix_data
     use GenComms, ONLY: cq_abort
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, ABINIT
@@ -209,11 +211,13 @@ contains
           r_c = 1.1_double * r_c
           r_h = 1.1_double * r_h
           r_core = 1.1_double * r_core
+          if (flag_dft_d2) r_dft_d2 = 1.1_double * r_dft_d2 ! for DFT-D2
        else
           r_s = AtomMove_buffer +  r_s
           r_c = AtomMove_buffer +  r_c
           r_h = AtomMove_buffer +  r_h
           r_core = AtomMove_buffer +  r_core
+          if (flag_dft_d2) r_dft_d2 = AtomMove_buffer + r_dft_d2 ! for DFT-D2
        end if
      endif
 

@@ -139,7 +139,7 @@ contains
     use pseudo_tm_module, ONLY: loc_pp_derivative_tm
     use global_module, ONLY: flag_self_consistent, flag_move_atom, id_glob, WhichPulay, BothPulay, PhiPulay, &
          flag_basis_set, PAOs, blips, ni_in_cell, iprint_MD, IPRINT_TIME_THRES2, area_moveatoms, &
-         flag_pcc_global
+         flag_pcc_global, flag_dft_d2
     use density_module, ONLY: get_electronic_density, density
     use functions_on_grid,  ONLY: supportfns, H_on_supportfns
     use dimens, ONLY: n_my_grid_points
@@ -147,6 +147,7 @@ contains
     use maxima_module, ONLY: maxngrid
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
+    use DFT_D2, ONLY: disp_force
 
     implicit none
 
@@ -276,6 +277,7 @@ contains
                tot_force(j,i) = HF_force(j,i)+HF_NL_force(j,i)+p_force(j,i) &
                     +KE_force(j,i)+ewald_force(j,i)+nonSC_force(j,i) + pcc_force(j, i)
             end if
+            if (flag_dft_d2) tot_force(j, i) = tot_force(j, i) + disp_force(j, i)
             if(.NOT.flag_move_atom(j,i)) then 
                tot_force(j,i) = 0.0_double
             end if
@@ -294,6 +296,7 @@ contains
                write(io_lun,104) (for_conv*KE_force(j,i),j=1,3)
                write(io_lun,106) (for_conv*ewald_force(j,i),j=1,3)
                write(io_lun,108) (for_conv*pcc_force(j,i),j=1,3)
+               if (flag_dft_d2) write (io_lun, 109) (for_conv*disp_force(j,i),j=1,3)
                if(flag_self_consistent) then
                   write(io_lun,105) (for_conv*tot_force(j,i),j=1,3)
                else
@@ -320,6 +323,7 @@ contains
                tot_force(j,i) = HF_force(j,i)+HF_NL_force(j,i)+p_force(j,i) &
                     +KE_force(j,i)+ewald_force(j,i)+nonSC_force(j,i)
             end if
+            if (flag_dft_d2) tot_force(j, i) = tot_force(j, i) + disp_force(j, i)
             if(.NOT.flag_move_atom(j,i)) then 
                tot_force(j,i) = 0.0_double
             end if
@@ -337,6 +341,7 @@ contains
                write(io_lun,103) (for_conv*p_force(j,i),j=1,3)
                write(io_lun,104) (for_conv*KE_force(j,i),j=1,3)
                write(io_lun,106) (for_conv*ewald_force(j,i),j=1,3)
+               if (flag_dft_d2) write (io_lun, 109) (for_conv*disp_force(j,i),j=1,3)
                if(flag_self_consistent) then
                   write(io_lun,105) (for_conv*tot_force(j,i),j=1,3)
                else
@@ -377,6 +382,7 @@ contains
 107 format('Force nonSC: ',3f15.10)
 108 format('Force PCC  : ',3f15.10)
 105 format('Force Total: ',3f15.10)
+109 format('Force disp : ',3f15.10)
   end subroutine force
 !!***
 

@@ -54,7 +54,9 @@
 !!   2009/07/24 16:41 dave
 !!    Added new flag for global or per atom tolerances
 !!   2011/03/30 18:59 M.Arita
-!!    Added new flag for for P.C.C.
+!!    Added new flag for P.C.C.
+!!   2011/09/29 14:51 M. Arita
+!!    Added new flags for DFT-D2
 !!  SOURCE
 !!
 module global_module
@@ -175,6 +177,11 @@ module global_module
 
   ! For P.C.C.
   logical :: flag_pcc_global = .false.
+
+  ! For DFT-D2
+  logical :: flag_dft_d2
+  logical :: flag_SCconverged_D2 = .false.
+  logical :: flag_only_dispersion
   
 end module global_module
 !!***

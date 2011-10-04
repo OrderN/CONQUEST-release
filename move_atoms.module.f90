@@ -739,6 +739,8 @@ contains
 !!    Various changes for dynamic allocation
 !!   2008/05/25
 !!    Added timers
+!!   2011/09/29 16:48 M. Arita
+!!    CS is updated for DFT-D2
 !!  TODO
 !!   Think about updating radius component of matrix derived type, or eliminating it !
 !!  SOURCE
@@ -750,9 +752,10 @@ contains
     use mult_module, ONLY: fmmi, immi
     use matrix_module, ONLY: allocate_matrix, deallocate_matrix, set_matrix_pointers2, matrix
     use group_module, ONLY: parts
-    use cover_module, ONLY : BCS_parts, DCS_parts, ewald_CS
+    use cover_module, ONLY : BCS_parts, DCS_parts, ewald_CS, D2_CS
     use primary_module, ONLY : bundle
-    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, IPRINT_TIME_THRES2, flag_Becke_weights
+    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, IPRINT_TIME_THRES2, flag_Becke_weights, &
+                             flag_dft_d2
     use matrix_data, ONLY: Hrange, mat, rcut
     use maxima_module, ONLY: maxpartsproc
     use set_blipgrid_module, ONLY: set_blipgrid
@@ -789,6 +792,7 @@ contains
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, DCS_parts, parts)
     if(.NOT.flag_old_ewald) call cover_update(x_atom_cell, y_atom_cell, &
          z_atom_cell, ewald_CS, parts)
+    if (flag_dft_d2) call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, D2_CS, parts)
     ! If there's a new interaction of Hamiltonian range, then we REALLY need to rebuild the matrices etc
     call checkBonds(check,bundle,BCS_parts,mat(1,Hrange),maxpartsproc,rcut(Hrange))
     ! If one processor gets a new bond, they ALL need to redo the indices
@@ -825,9 +829,10 @@ contains
     use mult_module, ONLY: fmmi, immi
     use matrix_module, ONLY: allocate_matrix, deallocate_matrix, set_matrix_pointers2, matrix
     use group_module, ONLY: parts
-    use cover_module, ONLY : BCS_parts, DCS_parts, ewald_CS
+    use cover_module, ONLY : BCS_parts, DCS_parts, ewald_CS, D2_CS
     use primary_module, ONLY : bundle
-    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, flag_Becke_weights
+    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, flag_Becke_weights, &
+                             flag_dft_d2
     use matrix_data, ONLY: Hrange, mat, rcut
     use maxima_module, ONLY: maxpartsproc
     use set_blipgrid_module, ONLY: set_blipgrid
@@ -861,6 +866,7 @@ contains
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, DCS_parts, parts)
     if(.NOT.flag_old_ewald) call cover_update(x_atom_cell, y_atom_cell, &
          z_atom_cell, ewald_CS, parts)
+    if (flag_dft_d2) call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, D2_CS, parts)
     check = .false.
     ! If there's a new interaction of Hamiltonian range, then we REALLY need to rebuild the matrices etc
     call checkBonds(check,bundle,BCS_parts,mat(1,Hrange),maxpartsproc,rcut(Hrange))
@@ -921,6 +927,8 @@ contains
 !!    Added old/new ewald calls
 !!   12:13  31/03/2011 M.Arita
 !!    Added the statement to recall sbrt: set_density_pcc for NSC cg calculations
+!!   2011/09/29 16:50 M. Arita
+!!    Dispersions are calculated with a new set of atoms
 !!  SOURCE
 !!
   subroutine update_H(fixed_potential, number_of_bands)
@@ -934,11 +942,13 @@ contains
     use pseudo_tm_module, ONLY: set_tm_pseudo
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT, core_correction
     use logicals
-    use global_module, ONLY: iprint_MD, flag_self_consistent, IPRINT_TIME_THRES2, flag_pcc_global
+    use global_module, ONLY: iprint_MD, flag_self_consistent, IPRINT_TIME_THRES2, flag_pcc_global, &
+                             flag_dft_d2
     use density_module, ONLY: set_density, flag_no_atomic_densities, density, set_density_pcc
     use GenComms, ONLY: cq_abort, inode, ionode
     use maxima_module, ONLY: maxngrid
     use timer_module
+    use DFT_D2, ONLY: dispersion_D2
     
     implicit none
 
@@ -965,7 +975,9 @@ contains
     else
        call mikes_ewald
     end if
-    ! (4) Pseudopotentials: choose correct form
+    ! (4) Find the dispersion for the initial set of atoms
+    if (flag_dft_d2) call dispersion_D2
+    ! (5) Pseudopotentials: choose correct form
     select case(pseudo_type) 
     case(OLDPS)
        call init_pseudo(number_of_bands, core_correction)
@@ -981,7 +993,7 @@ contains
     else if((.NOT.flag_self_consistent).AND.(flag_no_atomic_densities)) then
        call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
     end if
-    ! (5) Now generate a new H matrix, including a new charge density
+    ! (6) Now generate a new H matrix, including a new charge density
     call get_H_matrix(.true., fixed_potential, tmp, density, maxngrid)
     call stop_print_timer(tmr_l_tmp1, "update_H", IPRINT_TIME_THRES2)
     return

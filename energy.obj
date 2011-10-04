@@ -24,4 +24,5 @@ ENERGY_OBJS = H_matrix_module.o \
 	      initial_read.module.o \
 	      energy.module.o \
               test_force_module.o\
-              functions_on_grid_module.o
+              functions_on_grid_module.o \
+              DFT_D2_module.o 

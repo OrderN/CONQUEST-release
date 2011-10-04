@@ -92,9 +92,10 @@ contains
     use units
     use mult_module, ONLY: matrix_product_trace, matH, matK, matKE, matNL
     use GenComms, ONLY: myid
-    use global_module, ONLY: iprint_gen
+    use global_module, ONLY: iprint_gen, flag_dft_d2, flag_SCconverged_D2, flag_self_consistent
     use ewald_module, ONLY: ewald_energy
     use pseudopotential_common, ONLY: core_correction  
+    use DFT_D2, ONLY: disp_energy
 
     implicit none
 
@@ -129,6 +130,8 @@ contains
     kinetic_energy = matrix_product_trace(matK,matKE)
     band_energy = two*matrix_product_trace(matK,matH)
     total_energy = band_energy + delta_E_hartree + delta_E_xc + ewald_energy + core_correction
+    ! for DFT-D2
+    if (flag_dft_d2) total_energy = total_energy + disp_energy
     ! Write out data
     if(myid==0) then
        if(print_Harris) then
@@ -143,6 +146,9 @@ contains
           if(iprint_gen>=1) write(io_lun,9) en_conv*ewald_energy, en_units(energy_units)
           if(iprint_gen>=1) write(io_lun,11) en_conv*delta_E_hartree, en_units(energy_units)
           if(iprint_gen>=1) write(io_lun,12) en_conv*delta_E_xc, en_units(energy_units)
+          if (flag_dft_d2) then
+            if (iprint_gen>=1) write(io_lun,17) en_conv*disp_energy, en_units(energy_units)
+          endif
           if(abs(entropy) >= very_small) then
              if(iprint_gen>=0) write(io_lun,10) en_conv*total_energy, en_units(energy_units)
              if(flag_check_Diag) then
@@ -169,6 +175,10 @@ contains
     if(print_DFT) then
        total_energy2 = hartree_energy + xc_energy + local_ps_energy + &
             nl_energy + kinetic_energy + core_correction + ewald_energy
+       if (flag_dft_d2) then
+         total_energy2 = hartree_energy + xc_energy + local_ps_energy + &
+              nl_energy + kinetic_energy + core_correction + ewald_energy + disp_energy
+       endif
        if(myid==0) write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
     end if
     return
@@ -188,6 +198,7 @@ contains
 13  format(10x,'DFT Total Energy                 : ',f25.15,' ',a2)
 11  format(10x,'Ha Correction                    : ',f25.15,' ',a2)
 12  format(10x,'XC Correction                    : ',f25.15,' ',a2)
+17  format(10x,'dispersion (DFT-D2)              : ',f25.15,' ',a2)
   end subroutine get_energy
 !!*** get_energy
 

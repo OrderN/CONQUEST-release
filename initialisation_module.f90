@@ -88,16 +88,25 @@ contains
 !!    matrix routines
 !!   2008/05/15 ast
 !!    Added some timers
+!!   2011/09/29 M. Arita
+!!    Statements were added for calculating only disperions
 !!  SOURCE
 !!
   subroutine initialise(vary_mu, fixed_potential, number_of_bands, mu, total_energy)
 
     use datatypes
-    use GenComms, ONLY: inode, ionode, my_barrier
+    use global_module, ONLY: x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell, &
+                             flag_only_dispersion
+    use GenComms, ONLY: inode, ionode, my_barrier, end_comms
     use initial_read, ONLY: read_and_write
     use ionic_data, ONLY : get_ionic_data
     use density_module, ONLY: flag_no_atomic_densities
     use memory_module, ONLY: init_reg_mem
+    use group_module, ONLY: parts
+    use primary_module, ONLY: bundle
+    use cover_module, ONLY: make_cs, D2_CS
+    use dimens, ONLY: r_dft_d2
+    use DFT_D2
 
     implicit none
 
@@ -126,6 +135,16 @@ contains
     !                We need to know if the user wants them or not
     !                  before actually starting one
     call start_timer(tmr_std_initialisation)
+
+    ! Only calculate the dispersion
+    if (flag_only_dispersion) then
+      call make_cs(inode-1, r_dft_d2, D2_CS, parts, bundle, ni_in_cell, &
+                   x_atom_cell, y_atom_cell, z_atom_cell)
+      call read_para_D2
+      call dispersion_D2
+      call end_comms()
+      stop
+    endif
 
     ! Call routines to read or make data for isolated ions
     flag_no_atomic_densities = .false.
@@ -185,24 +204,26 @@ contains
 !!    Changed to get nodes from GenComms not common
 !!   03/30/2011 19:22 M.Arita
 !!    Added the contribution from P.C.C.
+!!   29/09/2011 16:24 M. Arita
+!!    Generate the covering set for DT-D2
 !!  SOURCE
 !!
   subroutine set_up(find_chdens, number_of_bands)
 
     use datatypes
     use global_module, ONLY: iprint_init, flag_read_blocks, x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell, &
-         area_init, area_index, flag_Becke_weights, flag_pcc_global
+         area_init, area_index, flag_Becke_weights, flag_pcc_global, flag_dft_d2, iprint_gen
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
     use group_module, ONLY: parts
     use primary_module, ONLY : bundle
-    use cover_module, ONLY : BCS_parts, make_cs, make_iprim, send_ncover
+    use cover_module, ONLY : BCS_parts, make_cs, make_iprim, send_ncover, D2_CS
     use mult_module, ONLY: immi
     use construct_module
     use matrix_data, ONLY: rcut, Lrange, Srange, mx_matrices, max_range
     use ewald_module, ONLY: set_ewald, mikes_set_ewald, flag_old_ewald
     use atoms, ONLY: distribute_atoms
     use dimens, ONLY: n_grid_x, n_grid_y, n_grid_z, r_core_squared,&
-         r_h, r_super_x, r_super_y, r_super_z, RadiusSupport, n_my_grid_points
+         r_h, r_super_x, r_super_y, r_super_z, RadiusSupport, n_my_grid_points, r_dft_d2
     use fft_module,ONLY: set_fft_map, fft3
     use GenComms, ONLY: cq_abort, my_barrier, inode, ionode
     use pseudopotential_data, ONLY: init_pseudo
@@ -224,6 +245,7 @@ contains
     use blip, ONLY: Extent
     use species_module, ONLY: n_species
     use angular_coeff_routines, ONLY: set_fact, set_prefac, set_prefac_real
+    use DFT_D2, ONLY: read_para_D2
 
     implicit none
 
@@ -352,6 +374,24 @@ contains
     ! +++
     call my_barrier
     if(inode==ionode.AND.iprint_init>1) write(io_lun,*) 'Completed set_ewald()'
+
+    ! Generate D2CS
+    if (flag_dft_d2) then
+      if ( (inode .EQ. ionode) .AND. (iprint_gen .GT. 1) ) write (io_lun, '(/1x,"The dispersion is considered &
+                                                                  in the DFT-D2 level.")')
+      call make_cs(inode-1, r_dft_d2, D2_CS, parts, bundle, ni_in_cell, &
+                   x_atom_cell, y_atom_cell, z_atom_cell)
+      if ( (inode .EQ. ionode) .AND. (iprint_gen .GT. 1) ) then
+        write (io_lun, '(/8x,"+++ D2_CS%ng_cover:",i10)') D2_CS%ng_cover
+        write (io_lun, '(8x,"+++ D2_CS%ncoverx, y, z:",3i8)') D2_CS%ncoverx, D2_CS%ncovery, D2_CS%ncoverz
+        write (io_lun, '(8x,"+++ D2_CS%nspanlx, y, z:",3i8)') D2_CS%nspanlx, D2_CS%nspanly, D2_CS%nspanlz
+        write (io_lun, '(8x,"+++ D2_CS%nx_origin, y, z:",3i8)') D2_CS%nx_origin, D2_CS%ny_origin, D2_CS%nz_origin
+      endif
+      call read_para_D2
+      if (inode .EQ. ionode) then                                                            !! DEBUG !!
+        write (io_lun, '(a, f10.5)') "Sbrt: make_cs for DFT-D2, the cutoff is ", r_dft_d2    !! DEBUG !!
+      endif                                                                                  !! DEBUG !!
+    endif
 
     ! external potential - first set up angular momentum bits
     call set_fact
@@ -696,6 +736,8 @@ contains
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   29/09/2011 16:26 M. Arita
+!!    Calculate te dispersion in the DFT-D2 level
 !!  SOURCE
 !!
   subroutine initial_H( start, start_L, find_chdens, fixed_potential, vary_mu, number_of_bands, mu, total_energy)
@@ -706,7 +748,7 @@ contains
     use mult_module, ONLY: LNV_matrix_multiply, matL, matphi
     use SelfCon, ONLY: new_SC_potl
     use global_module, ONLY: iprint_init, flag_self_consistent, flag_basis_set, blips, PAOs, flag_vary_basis, &
-         restart_L, restart_rho, flag_test_forces
+         restart_L, restart_rho, flag_test_forces, flag_dft_d2
     use ewald_module, ONLY: ewald, mikes_ewald, flag_old_ewald
     use S_matrix_module, ONLY: get_S_matrix
     use GenComms, ONLY: my_barrier, end_comms, inode, ionode
@@ -721,6 +763,7 @@ contains
     use dimens, ONLY: n_my_grid_points
     use maxima_module, ONLY: maxngrid
     use minimise, ONLY: SC_tolerance, L_tolerance, n_L_iterations, expected_reduction
+    use DFT_D2, ONLY: dispersion_D2
 
     implicit none
 
@@ -779,10 +822,15 @@ contains
        call mikes_ewald
     end if
     ! +++
+    ! (6) Find the dispersion energy for the initial set of atoms
+    if (flag_dft_d2) then
+      if ( (inode .EQ. ionode) .AND. (iprint_init .GT. 1) ) write (io_lun, *) "Calling DFT-D2"
+      call dispersion_D2
+    endif
     call my_barrier
 
     if(inode==ionode.AND.iprint_init>2) write(io_lun,*) 'Find_chdens is ',find_chdens
-    ! (6) Make a self-consistent H matrix and potential
+    ! (7) Make a self-consistent H matrix and potential
     if(find_chdens) then
        call get_electronic_density(density, electrons, supportfns, H_on_supportfns, inode, ionode, maxngrid)
        if(inode==ionode.AND.iprint_init>1) write(io_lun,*) 'In initial_H, electrons: ',electrons

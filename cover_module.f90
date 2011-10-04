@@ -74,6 +74,7 @@ module cover_module
   type(cover_set) :: BCS_blocks
   type(cover_set) :: BCS_parts
   type(cover_set) :: ewald_CS
+  type(cover_set) :: D2_CS ! for DFT-D2
 
   ! -------------------------------------------------------
   ! RCS ident string for object file id

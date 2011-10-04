@@ -98,6 +98,8 @@ contains
 !!    Added calculation of number of electrons in cell
 !!   2007/05/08 17:00 dave
 !!    Added net charge on cell to number_of_bands for consistency
+!!   2011/09/29 15:06 M. Arita
+!!    Slight modification is added for DFT-D2
 !!  TODO
 !!   Improve calculation of number of bands 28/05/2001 dave
 !!   Change input so that appropriate variables are taken from modules 10/05/2002 dave
@@ -115,7 +117,7 @@ contains
     use maxima_module, ONLY: maxpartsproc, maxatomsproc
     use global_module, ONLY: id_glob,x_atom_cell,y_atom_cell, &
          z_atom_cell, numprocs, iprint_init, rcellx,rcelly,rcellz,flag_old_partitions, &
-         ne_in_cell, ni_in_cell, area_moveatoms, io_lun
+         ne_in_cell, ni_in_cell, area_moveatoms, io_lun, flag_only_dispersion
     use memory_module, ONLY: reg_alloc_mem, type_dbl
     use primary_module, ONLY: bundle, make_prim
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, &
@@ -188,6 +190,9 @@ contains
     ! Create primary set for atoms: bundle of partitions
     call init_primary(bundle, maxatomsproc, maxpartsproc, .true.)
     call make_prim(parts, bundle, inode-1,id_glob,x_atom_cell, y_atom_cell, z_atom_cell, species)
+
+    ! Skip the following statement if only calculating the dispersion
+    if (flag_only_dispersion) return
 
     !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done primary")') inode
     ! Read pseudopotential data
@@ -330,10 +335,10 @@ contains
          global_maxatomspart, load_balance, many_processors, flag_assign_blocks, io_lun, &
          flag_pulay_simpleStep, flag_Becke_weights, flag_Becke_atomic_radii, flag_global_tolerance, & 
          flag_mix_L_SC_min, flag_onsite_blip_ana, flag_read_velocity, flag_quench_MD, temp_ion, &
-         numprocs
+         numprocs, flag_dft_d2, flag_only_dispersion
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff, &
          n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport, NonLocalFactor, InvSRange, min_blip_sp, &
-         flag_buffer_old, AtomMove_buffer
+         flag_buffer_old, AtomMove_buffer, r_dft_d2
     use block_module, ONLY: in_block_x, in_block_y, in_block_z, blocks_raster, blocks_hilbert
     use species_module, ONLY: species_label, charge, mass, n_species, &
          species, ps_file, ch_file, phi_file, nsf_species, nlpf_species, npao_species, &
@@ -839,6 +844,9 @@ contains
        many_processors = fdf_boolean('General.ManyProcessors',.true.)
        global_maxatomspart = fdf_integer('General.MaxAtomsPartition', 34)
        append_coords = fdf_boolean('AtomMove.AppendCoords',.true.)
+       flag_dft_d2 = fdf_boolean('General.DFT_D2', .false.)                   ! for DFT-D2
+       if (flag_dft_d2) r_dft_d2 = fdf_double('DFT-D2_range',23.0_double)     ! for DFT-D2
+       flag_only_dispersion = fdf_boolean('General.only_Dispersion',.false.)  ! for DFT-D2
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")
 !%%!else
