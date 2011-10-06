@@ -1,23 +1,21 @@
 # -*- mode: makefile; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 #
-# $Id: system.make,v 1.2 2010/06/19 22:07:21 lt Exp $
+# $Id$
 #
 # Conquest example system.make
 #
 #
-FC = ftn
-F77 = ftn
+FC = mpif90
+F77 = mpif77
 # If you need 64-bit flags for compiling, add them for linking
 LINKFLAGS = 
-# COMPFLAGS = -g
-COMPFLAGS = -fastsse
-# COMPFLAGS_F77 = -g
-COMPFLAGS_F77 = -fastsse
+COMPFLAGS = -g -O2 -fbounds-check
+COMPFLAGS_F77 = -O2 
 ARFLAGS = 
 
 # This line is for systems with ScaLAPACK, BLACS and diagonalisation
-BLACS = 
-LIBS = $(FFT) 
+LIBS = $(FFT) /usr/local/lib/libscalapack.a /usr/local/lib/libblacs.a /usr/local/lib/libblacsF77init.a -framework accelerate
+#LIBS = $(FFT) -L/scratch/drb/lib -lscalapack -lmpiblacsF77init -lmpiblacs -lacml $(FFT)
 # This line is for systems with NO ScaLAPACK and BLAS - replace DiagModule.f90 with DiagModule.f90_DUMMY
 #LIBS = $(FFT) -llapack -lblas $(FFT)
 

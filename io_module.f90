@@ -3306,6 +3306,9 @@ hc2:    do
          '     Antonio Torralba         Veronika Brazdova       ',/,12x, &
          '          (UCL)                    (UCL)              ',/,12x, &
          '                                                      ',/,12x, &
+         '      Lianheng Tong            Michiaki Arita         ',/,12x, &
+         '          (UCL)                    (NIMS)             ',/,12x, &
+         '                                                      ',/,12x, &
          '     Rathin Choudhury           Mike Gillan           ',/,12x, &
          '          (UCL)                    (UCL)              ',/,12x, &
          '                                                      ',/,12x, &
@@ -3696,6 +3699,58 @@ hc2:    do
 
    return
   end subroutine read_velocity
+!!***
+
+!!****f* io_module/check_stop *
+!!
+!!  NAME 
+!!   check_stop
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Checks for a CQ.stop file for user-requested stop
+!!  INPUTS
+!!   logical :: flag_userstop
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   D. R. Bowler
+!!  CREATION DATE
+!!   2011/10/05
+!!  MODIFICATION HISTORY
+!!  
+!!  SOURCE
+!!  
+  subroutine check_stop(flag_userstop,iter)
+
+    use GenComms, ONLY: inode, ionode, gsum
+
+    implicit none
+
+    ! Passed variables
+    logical :: flag_userstop
+    integer, OPTIONAL :: iter
+
+    ! Local variables
+    integer :: lun, ios
+
+    flag_userstop = .false.
+    if(inode==ionode) then
+       call io_assign(lun)
+       open(unit=lun,file='CQ.stop',status='old',iostat=ios)
+       if(ios==0) flag_userstop = .true.
+       if(flag_userstop) then
+          if(PRESENT(iter)) then
+             write(io_lun,fmt='(4x,"User requested stop at ieration ",i4)') iter
+          else
+             write(io_lun,fmt='(4x,"User requested stop")')
+          end if
+       end if
+    endif
+    call gsum(flag_userstop)
+    return
+  end subroutine check_stop
 !!***
 
 end module io_module

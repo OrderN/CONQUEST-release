@@ -85,15 +85,17 @@ contains
 !!    Added timer
 !!   2009/10/27 07:10 dave
 !!    Analytic on-site integrals added
+!!   2011/07/21 11:48 dave
+!!    Changes for cDFT (added call to Becke weight matrix)
 !!  TODO
-!!    Find out why on-site evaluation gave problems
+!!    
 !!  SOURCE
 !!
   subroutine get_S_matrix(inode, ionode)
 
     use datatypes
     use global_module, only: iprint_ops, flag_basis_set, blips, PAOs, flag_vary_basis, &
-                             ni_in_cell, IPRINT_TIME_THRES1, flag_onsite_blip_ana
+                             ni_in_cell, IPRINT_TIME_THRES1, flag_onsite_blip_ana, flag_perform_cdft
     use matrix_data, ONLY: Srange
     use mult_module, ONLY: matS, matdS
     use set_bucket_module, ONLY: rem_bucket
@@ -108,6 +110,8 @@ contains
     use timer_module, ONLY: cq_timer, start_timer, stop_print_timer, WITH_LEVEL
     use support_spec_format, ONLY: supports_on_atom
     use species_module, ONLY: nsf_species
+    use density_module, ONLY: build_Becke_weight_matrix
+    use cdft_module, ONLY: make_weights
 
     implicit none
 
@@ -160,6 +164,7 @@ contains
     !call dump_matrix("NS",matS,inode)    
     ! get the new InvS matrix
     call  Iter_Hott_InvS( iprint_ops, 100, 0.0001_double,ni_in_cell, inode, ionode)
+    if(flag_perform_cdft) call make_weights
     call stop_print_timer(tmr_l_tmp1,"get_S_matrix",IPRINT_TIME_THRES1)
     call stop_timer(tmr_std_smatrix)
     return

@@ -35,6 +35,8 @@
 !!    Changed for output to file not stdout
 !!   2008/05/25 ast
 !!    Added timers
+!!   2011/10/06 13:55 dave
+!!    Changes for cDFT and forces
 !!  SOURCE
 !!
 module test_force_module
@@ -72,6 +74,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2008/05/25 ast
 !!    Added timers
+!!   2011/10/06 13:55 dave
+!!    Added call to test cDFT forces
 !!  SOURCE
 !!
   subroutine test_forces(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu,&
@@ -82,7 +86,7 @@ contains
     use group_module, ONLY: parts
     use cover_module, ONLY : BCS_parts, DCS_parts
     use primary_module, ONLY : bundle
-    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, id_glob_inv
+    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, id_glob_inv, flag_perform_cDFT
     use GenComms, ONLY: myid, inode, ionode
     use io_module, ONLY: dump_charge, grab_charge, dump_matrix, grab_matrix, dump_blips, grab_blips, &
          grab_locps, dump_locps, grab_projs, dump_projs
@@ -404,6 +408,27 @@ contains
        !nl_energy       = NL0 
        !kinetic_energy  = K0  
        !band_energy     = B0
+    end if
+    ! *** cDFT *** 
+    if(flag_test_all_forces.OR.flag_which_force==9) then
+       if(inode==ionode) write(io_lun,*) '*** cDFT ***'
+       call test_cdft(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu, &
+            total_energy, expected_reduction)
+       if(flag_test_all_forces) then
+          call update_H( fixed_potential, number_of_bands)
+          if(flag_self_consistent) then ! Vary only DM and charge density
+             reset_L = .true.
+             call new_SC_potl( .true., tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
+                  number_of_bands, L_tolerance, mu, total_energy)
+          else ! Ab initio TB: vary only DM
+             call get_H_matrix(.true., fixed_potential, electrons, density, maxngrid)
+             call FindMinDM(n_L_iterations, number_of_bands, vary_mu, &
+                  L_tolerance, mu, inode, ionode, reset_L, .false.)
+             call get_energy(total_energy)
+          end if
+          !call force( fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu,  &
+          !     total_energy, expected_reduction,.true.)
+       end if
     end if
     call stop_timer(tmr_std_moveatoms)
   end subroutine test_forces
@@ -1559,6 +1584,124 @@ contains
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, DCS_parts, parts)
   end subroutine test_full
+!!***
+
+!!****f* test_force_module/test_cdft *
+!!
+!!  NAME 
+!!   test_cdft
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   Tests the cdft force
+!!
+!!   
+!!  INPUTS
+!! 
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler
+!!  CREATION DATE
+!!   14:15, 02/09/2003
+!!  MODIFICATION HISTORY
+!!   08:20, 2003/09/03 dave
+!!    Changed to use the change in 2Tr[K.H].
+!!  SOURCE
+!!
+  subroutine test_cdft(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, tolerance, mu,&
+       total_energy, expected_reduction)
+
+    use datatypes
+    use move_atoms, ONLY: primary_update, cover_update, update_atom_coord
+    use group_module, ONLY: parts
+    use cover_module, ONLY : BCS_parts, DCS_parts
+    use primary_module, ONLY : bundle
+    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, id_glob_inv, flag_self_consistent, ni_in_cell
+    use energy, ONLY: local_ps_energy, hartree_energy, xc_energy, get_energy, band_energy, cdft_energy
+    use GenComms, ONLY: myid, inode, ionode
+    use H_matrix_module, ONLY: get_H_matrix
+    use S_matrix_module, ONLY: get_S_matrix
+    use global_module, ONLY: WhichPulay, SPulay, flag_basis_set, blips, PAOs
+    use SelfCon, ONLY: new_SC_potl
+    use DMMin, ONLY: FindMinDM
+    use density_module, ONLY: density, build_Becke_weight_forces, build_Becke_weights, get_cdft_constraint
+    use maxima_module, ONLY: maxngrid
+    use cdft_module, ONLY: make_weights
+
+    implicit none
+
+    ! Passed variables
+    logical :: vary_mu, find_chdens, fixed_potential
+    logical :: start, start_L
+
+    integer :: n_L_iterations
+
+    real(double) :: tolerance, L_tolerance
+    real(double) :: number_of_bands, expected_reduction, mu
+    real(double) :: total_energy
+
+    ! Local variables
+    real(double) ::  E0, F0, E1, F1, analytic_force, numerical_force, electrons
+    real(double), dimension(3,ni_in_cell) :: c_force
+    logical :: reset_L
+
+    ! We're coming in from initial_H: assume that initial E found
+    ! Find force
+    call get_S_matrix(inode, ionode)
+    call get_energy(total_energy)
+
+    call build_Becke_weight_forces(c_force,density,maxngrid)
+
+    E0 = cdft_energy
+    ! Find out direction and atom for displacement
+    write(io_lun,fmt='(2x,"Moving atom ",i5," in direction ",i2," by ",f10.6," bohr")') TF_atom_moved, TF_direction,TF_delta
+    F0 = c_force(TF_direction,TF_atom_moved)
+    if(inode==ionode) write(io_lun,fmt='(2x,"Initial cDFT energy      : ",f20.12,/,2x,"Initial cDFT force: ",f20.12)') E0, F0
+    ! Move the specified atom 
+    if(TF_direction==1) then
+       x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
+    else if(TF_direction==2) then
+       y_atom_cell(id_glob_inv(TF_atom_moved)) = y_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
+    else if(TF_direction==3) then
+       z_atom_cell(id_glob_inv(TF_atom_moved)) = z_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
+    end if
+    call update_atom_coord
+    ! Update positions and indices
+    call primary_update(x_atom_cell, y_atom_cell, z_atom_cell, bundle, parts, myid)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, BCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, DCS_parts, parts)
+    ! Regenerate W
+    call build_Becke_weights
+    call make_weights
+    call get_cdft_constraint
+    call get_energy(total_energy)! Gets the new constraint energy before Vc changes
+    call build_Becke_weight_forces(c_force,density,maxngrid)
+    E1 = cdft_energy
+    F1 = c_force(TF_direction,TF_atom_moved)
+
+    if(inode==ionode) write(io_lun,fmt='(2x,"Final cDFT energy      : ",f20.12,/,2x,"Final cDFT force: ",f20.12)') E1, F1
+    numerical_force = -(E1-E0)/TF_delta
+    analytic_force = 0.5_double*(F1+F0)
+    if(inode==ionode) write(io_lun,fmt='(2x,"Numerical cDFT Force: ",f20.12,/,2x,"Analytic cDFT Force : ",f20.12)') &
+         numerical_force, analytic_force
+    if(inode==ionode) write(io_lun,fmt='(2x,"cDFT Force error: ",e20.12)') numerical_force - analytic_force
+    ! Move the specified atom back
+    if(TF_direction==1) then
+       x_atom_cell(id_glob_inv(TF_atom_moved)) = x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
+    else if(TF_direction==2) then
+       y_atom_cell(id_glob_inv(TF_atom_moved)) = y_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
+    else if(TF_direction==3) then
+       z_atom_cell(id_glob_inv(TF_atom_moved)) = z_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
+    end if
+    call update_atom_coord
+    ! Update positions and indices
+    call primary_update(x_atom_cell, y_atom_cell, z_atom_cell, bundle, parts, myid)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, BCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, DCS_parts, parts)
+    call get_S_matrix(inode, ionode) !Builds new weight matrix automatically.
+  end subroutine test_cdft
 !!***
 
 end module test_force_module

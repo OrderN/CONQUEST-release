@@ -47,6 +47,8 @@
 !!    Changed for output to file not stdout
 !!   2011/03/31 11:52 M.Arita
 !!    Added sbrt get_pcc_force and modified sbrt get_nonSC_correction for P.C.C. 
+!!   2011/10/03 08:17 dave
+!!    Adding cDFT forces
 !!  SOURCE
 !!
 module force_module
@@ -123,6 +125,8 @@ contains
 !!    FIRST (as it needs h_on_support in workspace_support).
 !!   12:00, 31/03/2011 M.Arita
 !!    Added the contributions from P.C.C.
+!!   2011/10/03 08:17 dave
+!!    Calls for cDFT
 !!  SOURCE
 !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, number_of_bands, tolerance, con_tolerance, mu,  &
@@ -139,8 +143,8 @@ contains
     use pseudo_tm_module, ONLY: loc_pp_derivative_tm
     use global_module, ONLY: flag_self_consistent, flag_move_atom, id_glob, WhichPulay, BothPulay, PhiPulay, &
          flag_basis_set, PAOs, blips, ni_in_cell, iprint_MD, IPRINT_TIME_THRES2, area_moveatoms, &
-         flag_pcc_global, flag_dft_d2
-    use density_module, ONLY: get_electronic_density, density
+         flag_pcc_global, flag_perform_cdft, flag_dft_d2
+    use density_module, ONLY: get_electronic_density, density, build_Becke_weight_forces
     use functions_on_grid,  ONLY: supportfns, H_on_supportfns
     use dimens, ONLY: n_my_grid_points
     use potential_module, ONLY: potential
@@ -161,6 +165,7 @@ contains
 
     ! Local variables (automatic arrays)
     real(double), dimension(:,:), allocatable :: p_force
+    real(double), dimension(:,:), allocatable :: cdft_force
     real(double), dimension(:,:), allocatable :: HF_force
     real(double), dimension(:,:), allocatable :: HF_NL_force
     real(double), dimension(:,:), allocatable :: KE_force
@@ -181,6 +186,12 @@ contains
     endif
     if(stat/=0) call cq_abort("Error allocating forces: ",ni_in_cell)
     call reg_alloc_mem(area_moveatoms, 5*3*ni_in_cell,type_dbl)
+    if(flag_perform_cdft) then
+       allocate(cdft_force(3,ni_in_cell),STAT=stat)
+       if(stat/=0) call cq_abort("Error allocating cdft_force: ",ni_in_cell)
+       call reg_alloc_mem(area_moveatoms, 3*ni_in_cell,type_dbl)
+       cdft_force=zero
+    end if
     call stop_timer(tmr_std_allocation)
     ! The 'pulay force' is the force due to the change in energy caused
     ! by the change in the basis functions as the atoms move. 
@@ -198,6 +209,12 @@ contains
          number_of_bands, tolerance, con_tolerance, mu, total_energy, &
          expected_reduction, ni_in_cell)
     call stop_print_timer(tmr_l_tmp1,"Pulay force",IPRINT_TIME_THRES2)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
+    if(flag_perform_cdft) then
+       call build_Becke_weight_forces(cdft_force,density,maxngrid)
+    end if
+    call stop_print_timer(tmr_l_tmp1,"cDFT force",IPRINT_TIME_THRES2)
+    
     ! Different forces depending on whether we're doing Harris-Foulkes or self-consistent
     if(.NOT.flag_self_consistent) then
        call start_timer(tmr_std_allocation)
@@ -277,7 +294,8 @@ contains
                tot_force(j,i) = HF_force(j,i)+HF_NL_force(j,i)+p_force(j,i) &
                     +KE_force(j,i)+ewald_force(j,i)+nonSC_force(j,i) + pcc_force(j, i)
             end if
-            if (flag_dft_d2) tot_force(j, i) = tot_force(j, i) + disp_force(j, i)
+            if(flag_perform_cdft) tot_force(j,i) = tot_force(j,i) + cdft_force(j,i)
+            if(flag_dft_d2) tot_force(j, i) = tot_force(j, i) + disp_force(j, i)
             if(.NOT.flag_move_atom(j,i)) then 
                tot_force(j,i) = 0.0_double
             end if
@@ -297,6 +315,7 @@ contains
                write(io_lun,106) (for_conv*ewald_force(j,i),j=1,3)
                write(io_lun,108) (for_conv*pcc_force(j,i),j=1,3)
                if (flag_dft_d2) write (io_lun, 109) (for_conv*disp_force(j,i),j=1,3)
+               if(flag_perform_cdft) write(io_lun,fmt='("Force cDFT : ",3f15.10)') (for_conv*cdft_force(j,i),j=1,3)
                if(flag_self_consistent) then
                   write(io_lun,105) (for_conv*tot_force(j,i),j=1,3)
                else
@@ -323,7 +342,8 @@ contains
                tot_force(j,i) = HF_force(j,i)+HF_NL_force(j,i)+p_force(j,i) &
                     +KE_force(j,i)+ewald_force(j,i)+nonSC_force(j,i)
             end if
-            if (flag_dft_d2) tot_force(j, i) = tot_force(j, i) + disp_force(j, i)
+            if(flag_perform_cdft) tot_force(j,i) = tot_force(j,i) + cdft_force(j,i)
+            if(flag_dft_d2) tot_force(j, i) = tot_force(j, i) + disp_force(j, i)
             if(.NOT.flag_move_atom(j,i)) then 
                tot_force(j,i) = 0.0_double
             end if
@@ -342,6 +362,7 @@ contains
                write(io_lun,104) (for_conv*KE_force(j,i),j=1,3)
                write(io_lun,106) (for_conv*ewald_force(j,i),j=1,3)
                if (flag_dft_d2) write (io_lun, 109) (for_conv*disp_force(j,i),j=1,3)
+               if(flag_perform_cdft) write(io_lun,fmt='("Force cDFT : ",3f15.10)') (for_conv*cdft_force(j,i),j=1,3)
                if(flag_self_consistent) then
                   write(io_lun,105) (for_conv*tot_force(j,i),j=1,3)
                else

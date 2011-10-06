@@ -57,6 +57,8 @@
 !!    Added new flag for P.C.C.
 !!   2011/09/29 14:51 M. Arita
 !!    Added new flags for DFT-D2
+!!   2011/07/21 16:35 dave
+!!    Flags for cDFT
 !!  SOURCE
 !!
 module global_module
@@ -87,6 +89,7 @@ module global_module
   real(double), dimension(:,:), allocatable :: atom_coord ! Atomic coordinates
   integer, dimension(:,:), allocatable :: sorted_coord ! Atom IDs of atoms sorted according to x, y, z coords
   logical, dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
+  integer, dimension(:), allocatable :: flag_cdft_atom
   logical :: restart_L, restart_rho
 
   integer :: global_maxatomspart ! Maximum atoms per partition, if exceeded, triggers partitioning refinement
@@ -113,6 +116,7 @@ module global_module
   logical :: flag_global_tolerance
   logical :: flag_Becke_weights
   logical :: flag_Becke_atomic_radii
+  logical :: flag_perform_cDFT
   logical :: flag_mix_L_SC_min
   logical :: flag_onsite_blip_ana
   logical :: flag_read_velocity   ! 16/06/2010 TM

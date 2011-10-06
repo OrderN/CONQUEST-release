@@ -176,7 +176,7 @@ contains
     use GenComms, ONLY: gsum, myid, inode, ionode
     use GenBlas, ONLY: dot
     use force_module, ONLY: tot_force
-    use io_module, ONLY: write_atomic_positions, pdb_template
+    use io_module, ONLY: write_atomic_positions, pdb_template, check_stop
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
 
@@ -285,6 +285,7 @@ contains
           if(myid==0) write(io_lun,fmt='(4x,"Maximum force below threshold: ",f12.5)') max
        end if
        call stop_print_timer(tmr_l_iter,"a CG iteration",IPRINT_TIME_THRES1)
+       if(.NOT.done) call check_stop(done,iter)
     enddo
     ! Output final positions
 !    if(myid==0) call write_positions(parts)
@@ -339,7 +340,7 @@ contains
     use GenBlas, ONLY: dot
     use force_module, ONLY: tot_force
     use io_module, ONLY: write_positions, read_velocity, write_velocity
-    use io_module, ONLY: write_atomic_positions, pdb_template
+    use io_module, ONLY: write_atomic_positions, pdb_template, check_stop
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use move_atoms, ONLY: fac_Kelvin2Hartree
 
@@ -358,7 +359,7 @@ contains
     real(double) :: temp, KE, energy1, energy0, dE, max, g0
     real(double) :: energy_md
     character(20):: file_velocity='velocity.dat'
-
+    logical :: done
 
     allocate(velocity(3,ni_in_cell),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating velocity in md_run: ",ni_in_cell,stat)
@@ -420,6 +421,8 @@ contains
        call write_velocity(velocity,file_velocity)
        call write_atomic_positions("UpdatedAtoms.dat",trim(pdb_template))
      !to check IO of velocity files
+       call check_stop(done,iter)
+       if(done) exit
     end do
     deallocate(velocity,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating velocity in md_run: ",ni_in_cell,stat)
@@ -539,7 +542,7 @@ contains
     use GenComms, ONLY: gsum, myid
     use GenBlas, ONLY: dot
     use force_module, ONLY: tot_force
-    use io_module, ONLY: write_atomic_positions, pdb_template
+    use io_module, ONLY: write_atomic_positions, pdb_template, check_stop
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use primary_module, ONLY: bundle
 
@@ -710,6 +713,7 @@ contains
           jj = id_glob(i)
          forceStore(:,i,npmod) = tot_force(:,jj)
        end do       
+       if(.NOT.done) call check_stop(done,iter)
        iter = iter + 1
        energy0 = energy1
     enddo

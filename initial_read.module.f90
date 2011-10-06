@@ -43,6 +43,8 @@
 !!    Added timers
 !!   2010/07/23 Lianheng
 !!    Added flags for Methfessel-Paxton smearing and associated Ef search method
+!!   2011/07/21 16:50 dave
+!!    Changes for cDFT
 !!  SOURCE
 !!
 module initial_read
@@ -310,6 +312,8 @@ contains
 !!    here to readDiagInfo() subroutine. Added Methfessel-Paxton 
 !!    smearing and related control flags. Changed SC.MaxEfIter to 
 !!    Diag.MaxEfIter (moved to readDiagInfo()) for greater consistency
+!!   2011/07/21 16:50 dave
+!!    Added input flags for cDFT
 !!   2011/09/16 11:08 dave
 !!    Bug fix to say when species block not read
 !!  TODO
@@ -335,7 +339,7 @@ contains
          global_maxatomspart, load_balance, many_processors, flag_assign_blocks, io_lun, &
          flag_pulay_simpleStep, flag_Becke_weights, flag_Becke_atomic_radii, flag_global_tolerance, & 
          flag_mix_L_SC_min, flag_onsite_blip_ana, flag_read_velocity, flag_quench_MD, temp_ion, &
-         numprocs, flag_dft_d2, flag_only_dispersion
+         numprocs, flag_dft_d2, flag_only_dispersion, flag_perform_cDFT
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff, &
          n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport, NonLocalFactor, InvSRange, min_blip_sp, &
          flag_buffer_old, AtomMove_buffer, r_dft_d2
@@ -372,6 +376,8 @@ contains
     use pao_minimisation, ONLY: InitStep_paomin
     use timer_module, ONLY: time_threshold,lun_tmr, TimingOn, TimersWriteOut
     use input_module!, ONLY: load_input, input_array, block_start, block_end, fd
+    use cdft_data, ONLY: cDFT_Type, cDFT_MaxIterations, cDFT_NAtoms, cDFT_Target, cDFT_Tolerance, &
+         cDFT_NumberAtomGroups, cDFT_AtomList, cDFT_BlockLabel, cDFT_Vc
 
     implicit none
 
@@ -735,6 +741,41 @@ contains
        read_atomic_density_file = fdf_string(80,'SC.ReadAtomicDensityFile','read_atomic_density.dat')
        ! Read atomic density initialisation flag
        atomic_density_method = fdf_string(10,'SC.AtomicDensityFlag','pao')
+       ! cDFT flags
+       flag_perform_cDFT = fdf_boolean('cDFT.Perform_cDFT',.false.)
+       if(flag_perform_cDFT) then
+          if(.NOT.flag_Becke_weights) then
+             flag_Becke_weights = .true.
+             write(io_lun,fmt='(2x,"Warning: we require Becke  weights for cDFT ! Setting to true")')
+          end if
+          cDFT_Type = fdf_integer('cDFT.Type',2) ! Default to D-A charge diff
+          cDFT_MaxIterations = fdf_integer('cDFT.MaxIterations',50)
+          cDFT_Tolerance = fdf_double('cDFT.Tolerance',0.001_double)
+          !cDFT_Target = fdf_double('cDFT.Target',1.0_double)
+          cDFT_NumberAtomGroups = fdf_integer('cDFT.NumberAtomGroups',1)
+          allocate(cDFT_NAtoms(cDFT_NumberAtomGroups),cDFT_Target(cDFT_NumberAtomGroups), &
+               cDFT_AtomList(cDFT_NumberAtomGroups),cDFT_BlockLabel(cDFT_NumberAtomGroups))
+          if(fdf_block('cDFT.AtomGroups')) then
+             !write(*,*) input_array(block_start+i-1:block_start+i+10)
+             do i=1,cDFT_NumberAtomGroups
+                read(unit=input_array(block_start+i-1),fmt=*) j,cDFT_NAtoms(i),cDFT_Target(i),cDFT_BlockLabel(i)
+             end do
+             call fdf_endblock
+          else
+             call cq_abort('Must define block cDFT.AtomGroups')
+          end if
+          do i=1,cDFT_NumberAtomGroups
+             if(fdf_block(cDFT_BlockLabel(i))) then
+                allocate(cDFT_AtomList(i)%Numbers(cDFT_NAtoms(i)))
+                do j=1,cDFT_NAtoms(i)
+                   read(unit=input_array(block_start+j-1),fmt=*) cDFT_AtomList(i)%Numbers(j)
+                enddo
+             else
+                call cq_abort('cDFT block not defined: '//cDFT_BlockLabel(i))
+             end if
+             call fdf_endblock
+          end do
+       end if
        InvSTolerance = fdf_double('DM.InvSTolerance',1e-2_double)
        basis_string = fdf_string(10,'General.BlockAssign','Hilbert')
        if(leqi(basis_string,'Raster')) then

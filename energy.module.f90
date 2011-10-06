@@ -44,6 +44,7 @@ module energy
   real(double) :: kinetic_energy
   real(double) :: delta_E_hartree
   real(double) :: delta_E_xc
+  real(double) :: cdft_energy
   real(double) :: entropy=zero
 
   logical :: flag_check_DFT=.false.
@@ -83,6 +84,8 @@ contains
 !!   2007/08/16 15:31 dave
 !!    Changed output format for energy, added Free Energy for smeared electron distribution
 !!    and Gillan E-0.5*TS kT=0 extrapolation (see J. Phys.:Condens. Matter 1, 689 (1989)
+!!   2011/08/02 13:52 dave
+!!    Changes for cDFT
 !!  SOURCE
 !!
   subroutine get_energy(total_energy,printDFT)
@@ -92,7 +95,7 @@ contains
     use units
     use mult_module, ONLY: matrix_product_trace, matH, matK, matKE, matNL
     use GenComms, ONLY: myid
-    use global_module, ONLY: iprint_gen, flag_dft_d2, flag_SCconverged_D2, flag_self_consistent
+    use global_module, ONLY: iprint_gen, flag_dft_d2, flag_SCconverged_D2, flag_self_consistent, flag_perform_cdft
     use ewald_module, ONLY: ewald_energy
     use pseudopotential_common, ONLY: core_correction  
     use DFT_D2, ONLY: disp_energy
@@ -130,6 +133,7 @@ contains
     kinetic_energy = matrix_product_trace(matK,matKE)
     band_energy = two*matrix_product_trace(matK,matH)
     total_energy = band_energy + delta_E_hartree + delta_E_xc + ewald_energy + core_correction
+    if(flag_perform_cdft) total_energy = total_energy + cdft_energy
     ! for DFT-D2
     if (flag_dft_d2) total_energy = total_energy + disp_energy
     ! Write out data
@@ -146,9 +150,11 @@ contains
           if(iprint_gen>=1) write(io_lun,9) en_conv*ewald_energy, en_units(energy_units)
           if(iprint_gen>=1) write(io_lun,11) en_conv*delta_E_hartree, en_units(energy_units)
           if(iprint_gen>=1) write(io_lun,12) en_conv*delta_E_xc, en_units(energy_units)
-          if (flag_dft_d2) then
-            if (iprint_gen>=1) write(io_lun,17) en_conv*disp_energy, en_units(energy_units)
-          endif
+          if(iprint_gen>=1.AND.flag_perform_cdft) &
+               write(io_lun,fmt='(10x,"cDFT Energy, 2Tr[K.W]            : ",f25.15," ",a2)') &
+               en_conv*cdft_energy,en_units(energy_units)
+          if(iprint_gen>=1.AND.flag_dft_d2) &
+               write(io_lun,17) en_conv*disp_energy, en_units(energy_units)
           if(abs(entropy) >= very_small) then
              if(iprint_gen>=0) write(io_lun,10) en_conv*total_energy, en_units(energy_units)
              if(flag_check_Diag) then
@@ -175,10 +181,8 @@ contains
     if(print_DFT) then
        total_energy2 = hartree_energy + xc_energy + local_ps_energy + &
             nl_energy + kinetic_energy + core_correction + ewald_energy
-       if (flag_dft_d2) then
-         total_energy2 = hartree_energy + xc_energy + local_ps_energy + &
-              nl_energy + kinetic_energy + core_correction + ewald_energy + disp_energy
-       endif
+       if(flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
+       if (flag_dft_d2) total_energy2 = total_energy2 + disp_energy
        if(myid==0) write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
     end if
     return
@@ -201,5 +205,6 @@ contains
 17  format(10x,'dispersion (DFT-D2)              : ',f25.15,' ',a2)
   end subroutine get_energy
 !!*** get_energy
+
 
 end module energy

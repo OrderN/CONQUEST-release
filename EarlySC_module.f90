@@ -730,6 +730,8 @@ contains
 !!    matrix routines
 !!   2006/03/06 05:27 dave
 !!    Tidied calls to get_energy and get_H_matrix
+!!   2011/10/06 13:53 dave
+!!    Added call for cDFT
 !!  SOURCE
 !!
 subroutine get_new_rho( record, reset_L, fixed_potential, vary_mu, &
@@ -740,14 +742,15 @@ subroutine get_new_rho( record, reset_L, fixed_potential, vary_mu, &
   use logicals
   use mult_module, ONLY: LNV_matrix_multiply
   use DMMin, ONLY: FindMinDM
-  use global_module, ONLY: iprint_SC, sf
+  use global_module, ONLY: iprint_SC, sf, flag_perform_cDFT
   use H_matrix_module, ONLY: get_H_matrix
   use DiagModule, ONLY: diagon
   use energy, ONLY: get_energy, flag_check_DFT
   use functions_on_grid, ONLY: supportfns, allocate_temp_fn_on_grid, free_temp_fn_on_grid
   use density_module, ONLY: get_electronic_density
   use GenComms, ONLY: inode, ionode
-  
+  use cdft_module, ONLY: cdft_min
+
   implicit none
   
   ! Passed Variables
@@ -769,36 +772,40 @@ subroutine get_new_rho( record, reset_L, fixed_potential, vary_mu, &
   ! get new H matrix 
   total_energy_1 = total_energy
   call get_H_matrix( .false., fixed_potential, electrons, rhoin, size)
-
-  ! ** Useful, but not rigorous **
-  !new_BE = 2.0_double*vdot(nsf*nsf*mat(1,Hrange)%length,data_K,1,data_H,1)
-  !if(inode==ionode) write(io_lun,*) 'Old and new BE are: ',start_BE, new_BE
-  !if(reset_L) then
-  !   if(abs(new_BE-start_BE)<0.5.AND.abs(new_BE-start_BE)>1.0e-10_double) then
-  !      reset_L = .false.
-  !      Ltol = 0.05_double * tolerance
-  !   else
-  !      reset_L = .true.
-  !      Ltol = tolerance
-  !   end if
-  !else
-  !   Ltol = 0.05_double * tolerance
-  !end if
-  Ltol = tolerance
-  ! Find minimum density matrix
-  call stop_timer(tmr_std_chargescf)
-  call FindMinDM(n_CG_L_iterations, number_of_bands, vary_mu, Ltol, mu, inode, ionode, reset_L, record)
-  call start_timer(tmr_std_chargescf)
-
-  ! If we're using O(N), we only have L, and we need K - if diagonalisation, we have K
-  if(.NOT.diagon) call LNV_matrix_multiply(electrons, total_energy_1,  &
-       doK, dontM1, dontM2, dontM3, dontM4, dontphi, dontE,0,0,0,0)
-  ! Get total energy
-  if(flag_check_DFT) then
-   call get_energy(total_energy,.false.)
+  if(flag_perform_cDFT) then
+     call cdft_min(reset_L, fixed_potential, vary_mu, &
+          n_CG_L_iterations, number_of_bands, tolerance, mu, total_energy)
   else
-   call get_energy(total_energy)
-  endif
+     ! ** Useful, but not rigorous **
+     !new_BE = 2.0_double*vdot(nsf*nsf*mat(1,Hrange)%length,data_K,1,data_H,1)
+     !if(inode==ionode) write(io_lun,*) 'Old and new BE are: ',start_BE, new_BE
+     !if(reset_L) then
+     !   if(abs(new_BE-start_BE)<0.5.AND.abs(new_BE-start_BE)>1.0e-10_double) then
+     !      reset_L = .false.
+     !      Ltol = 0.05_double * tolerance
+     !   else
+     !      reset_L = .true.
+     !      Ltol = tolerance
+     !   end if
+     !else
+     !   Ltol = 0.05_double * tolerance
+     !end if
+     Ltol = tolerance
+     ! Find minimum density matrix
+     call stop_timer(tmr_std_chargescf)
+     call FindMinDM(n_CG_L_iterations, number_of_bands, vary_mu, Ltol, mu, inode, ionode, reset_L, record)
+     call start_timer(tmr_std_chargescf)
+
+     ! If we're using O(N), we only have L, and we need K - if diagonalisation, we have K
+     if(.NOT.diagon) call LNV_matrix_multiply(electrons, total_energy_1,  &
+          doK, dontM1, dontM2, dontM3, dontM4, dontphi, dontE,0,0,0,0)
+     ! Get total energy
+     if(flag_check_DFT) then
+        call get_energy(total_energy,.false.)
+     else
+        call get_energy(total_energy)
+     endif
+  end if
 
   ! And get that density
   temp_supp_fn = allocate_temp_fn_on_grid(sf)

@@ -118,6 +118,8 @@ contains
 !!  (the non-local and kinetic energy contributions to the H matrix)
 !!   2008/05/22 ast
 !!    Added timers
+!!   2011/10/06 13:51 dave
+!!    Added cDFT call to store H without constraint
 !!  SOURCE
 !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, rho, size)
@@ -132,7 +134,7 @@ contains
     use calc_matrix_elements_module, ONLY: get_matrix_elements_new
     use GenComms, ONLY: gsum, end_comms, my_barrier, inode, ionode
     use global_module, ONLY: iprint_ops, flag_vary_basis, flag_basis_set, PAOs, &
-         sf, paof, IPRINT_TIME_THRES1,iprint_SC
+         sf, paof, IPRINT_TIME_THRES1,iprint_SC, flag_perform_cDFT
     use PAO_grid_transform_module, ONLY: single_PAO_to_grid
     use functions_on_grid, ONLY: supportfns, H_on_supportfns, &
          allocate_temp_fn_on_grid, free_temp_fn_on_grid, gridfunctions, fn_on_grid
@@ -145,6 +147,7 @@ contains
     use cover_module, ONLY: BCS_parts
     !use io_module, ONLY: dump_matrix, write_matrix
     use timer_module            ! This is used to declare a local timer
+    use cdft_data, ONLY: matHzero,cDFT_NumberAtomGroups,cDFT_Vc,matWc
 
     implicit none
 
@@ -216,6 +219,10 @@ contains
     if(iprint_ops>4) call dump_matrix("NS",matS,inode)
     if(iprint_ops>4) call dump_matrix("NH",matH,inode)
     if(iprint_SC>2) call dump_charge(rho,size,inode)
+    ! Store the new H matrix for cDFT
+    if(flag_perform_cDFT) then
+       call matrix_sum(zero,matHzero,one,matH)
+    endif
 
     call stop_print_timer(tmr_l_hmatrix, "get_H_matrix", IPRINT_TIME_THRES1)
     call stop_timer(tmr_std_hmatrix)

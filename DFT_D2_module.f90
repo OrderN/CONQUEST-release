@@ -263,8 +263,8 @@ contains
 
 !!****f* DFT_D2/read_para_D2 *
 !!
-!! NAME
-!!  read_para_D2
+!!  NAME
+!!    read_para_D2
 !!  USAGE
 !!
 !!  PURPOSE
@@ -278,7 +278,9 @@ contains
 !!    M. Arita
 !!  CREATION DATE
 !!    11/06/09
-!!  MODIFICATION
+!!  MODIFICATION HISTORY
+!!    2011/10/06 14:01 dave
+!!     Bug fixes
 !!  SOURCE
 !!
   subroutine read_para_D2
@@ -305,50 +307,32 @@ contains
 
     allocate( atm_disp_coeff(n_species), vdW_rad(n_species), STAT=stat )
     if (stat .NE. 0) call cq_abort("Error allocating DFT-D2 parameters: ",n_species)
-
-    call io_assign(lun)
-    open (unit=lun, file='para_D2.dat', status='old', action = 'read', &
-          iostat=ios)
-    if (ios .GT. 0) call cq_abort("Reading para_D2.dat: file error")
-
-    call my_barrier()
-
     ! Fetch and store the parameters
-    if (inode .EQ. ionode) then
-      do i = 1, n_species
-        read  (lun, *) dummy
-        do while ( trim(dummy) .NE. "</parameters>" )
-          read (lun, '(a)')  dummy
-        enddo !while
-        do j = 1, 55
-          read  (lun, *) kind, coeff, radius
-          if ( trim(kind) .EQ. species_label(i) ) then
-            atm_disp_coeff(i) = coeff * trans1 ![Ha bohr^6]
-            vdW_rad(i) = radius * trans2          ![bohr]
-            exit
-          endif
-        enddo !(do, j)
-        rewind (lun)
-      enddo !(i, n_species)
+    if (inode==ionode) then
+       call io_assign(lun)
+       open (unit=lun, file='para_D2.dat', status='old', action = 'read', &
+            iostat=ios)
+       if (ios>0) call cq_abort("Reading para_D2.dat: file error")
+       do i = 1, n_species
+          read  (lun, *) dummy
+          do while ( trim(dummy)/="</parameters>" )
+             read (lun, '(a)')  dummy
+          enddo !while
+          do j = 1, 55
+             read  (lun, *) kind, coeff, radius
+             if ( trim(kind) .EQ. species_label(i) ) then
+                atm_disp_coeff(i) = coeff * trans1 ![Ha bohr^6]
+                vdW_rad(i) = radius * trans2          ![bohr]
+                exit
+             endif
+          enddo !(do, j)
+          rewind (lun)
+       enddo !(i, n_species)
+       call io_close(lun)
     endif
 
-    ! See if this sbrt is called. --> OK
-    write (io_lun, '(a, i5)') "DFT-D2, n_species: ", n_species
-
-    call io_close(lun)
     call gcopy(atm_disp_coeff, n_species)
     call gcopy(vdW_rad, n_species)
-
-    !! DEBUG: See if the parameters are transcended among nodes
-    call get_file_name('parameters', numprocs, inode, filename)
-    call io_assign(lun_para)
-    open (unit=lun_para, file=filename)
-    do i = 1, n_species
-      write (unit=lun_para, fmt='(a, a, i5, 2f15.10)') "D2_parameters: ", species_label(i), inode, &
-                                                       atm_disp_coeff(i), vdW_rad(i)
-    enddo
-    call io_close(lun_para)
-    !! DEBUG: See if the parameters are transcended among nodes
 
     allocate ( disp_force(3, ni_in_cell), STAT = stat )
     if (stat .NE. 0) call cq_abort("Error allocating disp_force: ", ni_in_cell)

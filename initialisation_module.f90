@@ -204,6 +204,8 @@ contains
 !!    Changed to get nodes from GenComms not common
 !!   03/30/2011 19:22 M.Arita
 !!    Added the contribution from P.C.C.
+!!   2011/07/21 17:41 dave
+!!    Initialisation for cDFT
 !!   29/09/2011 16:24 M. Arita
 !!    Generate the covering set for DT-D2
 !!  SOURCE
@@ -212,7 +214,7 @@ contains
 
     use datatypes
     use global_module, ONLY: iprint_init, flag_read_blocks, x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell, &
-         area_init, area_index, flag_Becke_weights, flag_pcc_global, flag_dft_d2, iprint_gen
+         area_init, area_index, flag_Becke_weights, flag_pcc_global, flag_dft_d2, iprint_gen, flag_perform_cDFT
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
     use group_module, ONLY: parts
     use primary_module, ONLY : bundle
@@ -245,6 +247,7 @@ contains
     use blip, ONLY: Extent
     use species_module, ONLY: n_species
     use angular_coeff_routines, ONLY: set_fact, set_prefac, set_prefac_real
+    use cDFT_module, ONLY: init_cdft
     use DFT_D2, ONLY: read_para_D2
 
     implicit none
@@ -418,6 +421,9 @@ contains
     endif
 
     if(.NOT.find_chdens) call set_density
+    if(flag_perform_cDFT) then
+       call init_cdft
+    end if
     if(flag_Becke_weights) then
        allocate(atomcharge(ni_in_cell))
        call build_Becke_weights

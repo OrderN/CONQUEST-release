@@ -1895,31 +1895,19 @@ contains
     real(double), intent(in) :: theta
     real(double) :: sph_hrmnc_z,part
     
-    if(l.lt.0) then
-       return
-    else
-       continue
-    endif
-    if(abs(m).gt.l) then
-       sph_hrmnc_z = zero
-    else
-       continue
+    sph_hrmnc_z = zero
+    if(l<0) return
+    if(abs(m)<=l) then
        if(m==0) then
           part = sqrt((two*l+one)/(four*pi))
-          
           if(abs(theta).lt.0.0001_double) then !theta roughly zero
              sph_hrmnc_z = part
           else
              !theta is in vicinity of pi
              if(theta.lt.pi+0.0001_double.and.theta.gt.pi-0.0001_double) then
                 sph_hrmnc_z = ((-1)**l)*part
-             else
-                continue
              endif
           endif
-          
-       else
-          sph_hrmnc_z = zero
        endif
     endif
     
