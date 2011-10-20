@@ -3603,7 +3603,8 @@ hc2:    do
 !!  CREATION DATE
 !!   15/06/2010  TM
 !!  MODIFICATION HISTORY
-!!
+!!   2011/10/20 09:59 dave
+!!    Syntax correction for rewind
 !!  SOURCE
 !!
   subroutine write_velocity(velocity, filename)
@@ -3624,7 +3625,7 @@ hc2:    do
    if(inode == ionode) then
     call io_assign(lun)
     open(unit=lun,file=filename)
-    rewind lun
+    rewind(unit=lun)
     do id_global=1,ni_in_cell
        ni=id_glob_inv(id_global)
         if(id_glob(ni) /= id_global) &
@@ -3660,7 +3661,8 @@ hc2:    do
 !!  CREATION DATE
 !!   15/06/2010  TM
 !!  MODIFICATION HISTORY
-!!
+!!   2011/10/20 09:59 dave
+!!    Syntax correction for rewind
 !!  SOURCE
 !!
   subroutine read_velocity(velocity, filename)
@@ -3681,7 +3683,7 @@ hc2:    do
    if(inode == ionode) then
     call io_assign(lun)
     open(unit=lun,file=filename)
-    rewind lun
+    rewind(unit=lun)
     do id_global=1,ni_in_cell
        ni=id_glob_inv(id_global)
         if(id_glob(ni) /= id_global) &
@@ -3719,7 +3721,8 @@ hc2:    do
 !!  CREATION DATE
 !!   2011/10/05
 !!  MODIFICATION HISTORY
-!!  
+!!   2011/10/20 09:58 dave
+!!    Bug fix to call io_close
 !!  SOURCE
 !!  
   subroutine check_stop(flag_userstop,iter)
@@ -3747,6 +3750,7 @@ hc2:    do
              write(io_lun,fmt='(4x,"User requested stop")')
           end if
        end if
+       call io_close(lun)
     endif
     call gsum(flag_userstop)
     return
