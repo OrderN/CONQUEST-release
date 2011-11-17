@@ -741,6 +741,8 @@ contains
 !!    Added timers
 !!   2011/09/29 16:48 M. Arita
 !!    CS is updated for DFT-D2
+!!   2011/11/17 10:18 dave
+!!    Updated call to set_blipgrid
 !!  TODO
 !!   Think about updating radius component of matrix derived type, or eliminating it !
 !!  SOURCE
@@ -765,7 +767,6 @@ contains
     use GenComms, ONLY: myid, cq_abort, gsum
     use functions_on_grid, ONLY: associate_fn_on_grid
     use ewald_module, ONLY: flag_old_ewald
-    use blip, ONLY: Extent
     use numbers
     use timer_module
     use density_module, ONLY: build_Becke_weights
@@ -808,7 +809,7 @@ contains
        ! Reallocate and find new indices
        call immi(parts,bundle,BCS_parts,myid+1)
        ! Reallocate for blip grid
-       call set_blipgrid(myid,RadiusSupport,core_radius,Extent)
+       call set_blipgrid(myid,RadiusSupport,core_radius)
        !call set_blipgrid(myid,r_h,sqrt(r_core_squared))
        call set_bucket(myid)
        call associate_fn_on_grid
@@ -842,7 +843,6 @@ contains
     use GenComms, ONLY: myid, cq_abort, gsum
     use functions_on_grid, ONLY: associate_fn_on_grid
     use ewald_module, ONLY: flag_old_ewald
-    use blip, ONLY: Extent
     use density_module, ONLY: build_Becke_weights
     use numbers
 
@@ -882,7 +882,7 @@ contains
        ! Reallocate and find new indices
        call immi(parts,bundle,BCS_parts,myid+1,1)
        ! Reallocate for blip grid
-       call set_blipgrid(myid,RadiusSupport,core_radius,Extent)
+       call set_blipgrid(myid,RadiusSupport,core_radius)
        !call set_blipgrid(myid,r_h,sqrt(r_core_squared))
        call set_bucket(myid)
        call associate_fn_on_grid

@@ -316,6 +316,8 @@ contains
 !!    Added input flags for cDFT
 !!   2011/09/16 11:08 dave
 !!    Bug fix to say when species block not read
+!!   2011/11/17 10:36 dave
+!!    Changes for new blip data
 !!  TODO
 !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
 !!   Fix rigid shift 10/05/2002 dave
@@ -357,7 +359,7 @@ contains
         maxpulaySC, atomch_output, flag_Kerker, flag_wdmetric
     use atomic_density, ONLY: read_atomic_density_file, atomic_density_method
     use S_matrix_module, ONLY: InvSTolerance
-    use blip, ONLY: SupportGridSpacing, BlipWidth, init_blip_flag, alpha, beta
+    use blip, ONLY: blip_info, init_blip_flag, alpha, beta
     use maxima_module, ONLY: maxnsf
     use control, ONLY: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset
     use ewald_module, ONLY: ewald_accuracy, flag_old_ewald
@@ -645,7 +647,7 @@ contains
           RadiusSupport(i) = r_h
           NonLocalFactor(i) = HNL_fac
           InvSRange(i) = r_t
-          SupportGridSpacing(i) = zero
+          blip_info(i)%SupportGridSpacing = zero
           if(pseudo_type==SIESTA.OR.pseudo_type==ABINIT) non_local_species(i) = .true.
           ! This is new-style fdf_block
           !nullify(bp)
@@ -665,9 +667,9 @@ contains
                 if(NonLocalFactor(i)>one) NonLocalFactor(i) = one
                 if(NonLocalFactor(i)<zero) NonLocalFactor(i) = zero
              end if
-             SupportGridSpacing(i) = fdf_double('Atom.SupportGridSpacing',zero)
-             min_blip_sp = min(SupportGridSpacing(i),min_blip_sp)
-             BlipWidth(i) = four*SupportGridSpacing(i)
+             blip_info(i)%SupportGridSpacing = fdf_double('Atom.SupportGridSpacing',zero)
+             min_blip_sp = min(blip_info(i)%SupportGridSpacing,min_blip_sp)
+             blip_info(i)%BlipWidth = four*blip_info(i)%SupportGridSpacing
              if(pseudo_type==OLDPS.and.fdf_defined('Atom.Pseudopotential')) then
                 non_local_species(i) = fdf_defined('Atom.NonLocal')
                 if(non_local_species(i)) then
@@ -685,7 +687,7 @@ contains
              call cq_abort("Failure to read data for species_label: "//species_label(i))
           end if
           if(nsf_species(i)==0) call cq_abort("Number of supports not specified for species ",i)
-          if(flag_basis_set==blips.AND.SupportGridSpacing(i)<very_small) &
+          if(flag_basis_set==blips.AND.blip_info(i)%SupportGridSpacing<very_small) &
                call cq_abort("Error: for a blip basis set you must set SupportGridSpacing for all species")
           maxnsf = max(maxnsf,nsf_species(i))
           if(RadiusSupport(i)<very_small) &
@@ -1215,12 +1217,14 @@ contains
 !!  MODIFICATION HISTORY
 !!   2011/09/16 11:10 dave
 !!    Added header and changed atomicrad to atomicnum
+!!   2011/11/16 15:51 dave
+!!    Changes for new blip data
 !!  SOURCE
 !!
   subroutine allocate_species_vars
 
     use dimens, ONLY: RadiusSupport, NonLocalFactor, InvSRange, atomicnum
-    use blip, ONLY: SupportGridSpacing, BlipWidth, Extent
+    use blip, ONLY: blip_info
     use memory_module, ONLY: reg_alloc_mem, type_dbl
     use species_module, ONLY: nsf_species, nlpf_species, npao_species, charge, mass, non_local_species, &
          ps_file, ch_file, phi_file, species_label, n_species, type_species
@@ -1236,11 +1240,8 @@ contains
     allocate(RadiusSupport(n_species),atomicnum(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating RadiusSupport, atomicnum in allocate_species_vars: ",n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
-    allocate(Extent(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating Extent in allocate_species_vars: ",n_species,stat)
-    call reg_alloc_mem(area_general,n_species,type_dbl)
-    allocate(SupportGridSpacing(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating SupportGridSpacing in allocate_species_vars: ",n_species,stat)
+    allocate(blip_info(n_species),STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating blip_info in allocate_species_vars: ",n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(NonLocalFactor(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating NonLocalFactor in allocate_species_vars: ",n_species,stat)
@@ -1277,9 +1278,6 @@ contains
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(type_species(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating type_species in allocate_species_vars: ",n_species,stat)
-    call reg_alloc_mem(area_general,n_species,type_dbl)
-    allocate(BlipWidth(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating BlipWidth in allocate_species_vars: ",n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(InvSRange(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating InvSRange in allocate_species_vars: ",n_species,stat)
@@ -1335,7 +1333,7 @@ contains
          ps_file, ch_file, phi_file, species, nsf_species
     use pseudopotential_data, ONLY: core_radius, non_local_species
     use DiagModule, ONLY: diagon, flag_smear_type, iMethfessel_Paxton
-    use blip, ONLY: SupportGridSpacing, BlipWidth
+    use blip, ONLY: blip_info
     use global_module, ONLY: flag_basis_set, PAOs,blips, functional_description, &
          flag_precondition_blips, io_lun
     use minimise, ONLY: energy_tolerance, L_tolerance, sc_tolerance, &
@@ -1398,8 +1396,8 @@ contains
           else
              write(io_lun,'(/13x,"Blip basis - no preconditioning")') 
           end if
-          write(io_lun,14) dist_conv*SupportGridSpacing(n), d_units(dist_units),&
-               dist_conv*BlipWidth(n),d_units(dist_units)
+          write(io_lun,14) dist_conv*blip_info(n)%SupportGridSpacing, d_units(dist_units),&
+               dist_conv*blip_info(n)%BlipWidth,d_units(dist_units)
        else
           write(io_lun,'(13x,"PAO basis")') 
        end if

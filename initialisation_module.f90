@@ -208,6 +208,8 @@ contains
 !!    Initialisation for cDFT
 !!   29/09/2011 16:24 M. Arita
 !!    Generate the covering set for DT-D2
+!!   2011/11/16 15:52 dave
+!!    Removing call to set up Extent (part of blip data changes)
 !!  SOURCE
 !!
   subroutine set_up(find_chdens, number_of_bands)
@@ -244,7 +246,6 @@ contains
     use functions_on_grid, ONLY: associate_fn_on_grid
     use potential_module, ONLY: potential
     use maxima_module, ONLY: maxngrid
-    use blip, ONLY: Extent
     use species_module, ONLY: n_species
     use angular_coeff_routines, ONLY: set_fact, set_prefac, set_prefac_real
     use cDFT_module, ONLY: init_cdft
@@ -260,7 +261,6 @@ contains
     ! Local variables
     complex(double_cplx), allocatable, dimension(:) :: chdenr 
     integer :: i, stat, spec
-    integer :: xextent, yextent, zextent
     real(double) :: rcut_BCS  !TM 26/Jun/2003
 
     integer :: iblock, ipoint,igrid,ix,iy,iz
@@ -296,13 +296,6 @@ contains
     call my_barrier()
     if (inode==ionode.AND.iprint_init>1) write(io_lun,*) 'Completed set_domains()'
 
-    do spec = 1, n_species
-       xextent = int((RadiusSupport(spec)*n_grid_x/r_super_x)+0.5)
-       yextent = int((RadiusSupport(spec)*n_grid_y/r_super_y)+0.5)
-       zextent = int((RadiusSupport(spec)*n_grid_z/r_super_z)+0.5)
-       Extent(spec) = MAX(xextent,MAX(yextent,zextent))
-       if(inode==ionode.AND.iprint_init>2) write(io_lun,*) 'Extent is: ',Extent(spec)
-    end do
     ! Sorts out which processor owns which atoms
     call distribute_atoms(inode, ionode)
     call my_barrier
@@ -380,8 +373,8 @@ contains
 
     ! Generate D2CS
     if (flag_dft_d2) then
-      if ( (inode .EQ. ionode) .AND. (iprint_gen .GT. 1) ) write (io_lun, '(/1x,"The dispersion is considered &
-                                                                  in the DFT-D2 level.")')
+      if ( (inode .EQ. ionode) .AND. (iprint_gen .GT. 1) ) &
+           write (io_lun, '(/1x,"The dispersion is considered in the DFT-D2 level.")')
       call make_cs(inode-1, r_dft_d2, D2_CS, parts, bundle, ni_in_cell, &
                    x_atom_cell, y_atom_cell, z_atom_cell)
       if ( (inode .EQ. ionode) .AND. (iprint_gen .GT. 1) ) then
@@ -909,6 +902,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   09:33, 11/05/2005 dave 
 !!    Added ROBODoc header, indented code, added 1.1 factor to rcut_max
+!!   2011/11/16 15:53 dave
+!!    Removed Extent from set_blipgrid call
 !!  SOURCE
 !!
   subroutine setgrid(myid,r_core_squared,r_h)
@@ -928,7 +923,6 @@ contains
     use GenComms, ONLY: my_barrier
     use dimens, ONLY: RadiusSupport
     use pseudopotential_common, ONLY: core_radius
-    use blip, ONLY: Extent
     use input_module, ONLY: leqi
 
     implicit none
@@ -980,7 +974,7 @@ contains
     !if(iprint_index > 4) write(io_lun,*) ' DCS & BCS has been prepared for myid = ',myid
     !Makes variables used in Blip-Grid transforms
     ! See (naba_blk_module.f90), (set_blipgrid_module.f90), (make_table.f90)
-    call set_blipgrid(myid,RadiusSupport,core_radius,Extent)
+    call set_blipgrid(myid,RadiusSupport,core_radius)
     !if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done set_blipgrid'
 
     !Makes variables used in calculation (integration) of matrix elements

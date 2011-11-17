@@ -696,6 +696,8 @@ second:   do
 !!    Added filename for partitions (defaults to make_prt.dat)
 !!   2007/06/28 21:16 mt + drb
 !!    Added check for partition file access error.
+!!   2011/11/17 10:19 dave
+!!    Bug fix to format for 1141
 !!  SOURCE
 !!
   subroutine read_partitions(parts,part_file)
@@ -867,7 +869,7 @@ second:   do
 113 format(/9x,'Partn no: ',i5,' Local no: ',i5,2x,'contains ',i5,&
          ' atoms, starting at: ',i5/)
 114 format(10x,i5,2x,i5,2x,3e15.6,i5)
-1141 format(11xx,i4,2x,3e15.6,4x,i2,3x,i6)
+1141 format(11x,i4,2x,3e15.6,4x,i2,3x,i6)
     return
   end subroutine read_partitions
 !!***

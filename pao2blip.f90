@@ -100,10 +100,12 @@ contains
 !!    Changed float to real
 !!   2008/05/25
 !!    Added timers
+!!   2011/11/15 16:54 dave
+!!    Changing blip data
 !!  SOURCE
   subroutine make_blips_from_paos(inode,ionode,n_species)
 
-    use blip, ONLY: NBlipsRegion, SupportGridSpacing, BlipArraySize, blip_info
+    use blip, ONLY: blip_info
     use blip_pao_values
     use datatypes
     use dimens, ONLY : RadiusSupport
@@ -184,8 +186,8 @@ contains
     ! loop over species
     do n_sp = 1, n_species
        call start_timer(tmr_std_allocation)
-       allocate(blip_coeff(n_sp)%coeff(NBlipsRegion(n_sp), maxnsf),STAT=stat)
-       if(stat/=0) call cq_abort("Error allocating blip_coeff in pao2blip: ",NBlipsRegion(n_sp),maxnsf)
+       allocate(blip_coeff(n_sp)%coeff(blip_info(n_sp)%NBlipsRegion, maxnsf),STAT=stat)
+       if(stat/=0) call cq_abort("Error allocating blip_coeff in pao2blip: ",blip_info(n_sp)%NBlipsRegion,maxnsf)
        call stop_timer(tmr_std_allocation)
        if((inode == ionode).and.(iprint_basis >= 1)) then
           write(unit=io_lun,fmt='(//" make_blips_from_paos: region and&
@@ -193,7 +195,7 @@ contains
                &i3,":"/)') n_sp
           write(unit=io_lun,fmt='(" region radius:",f12.6)') RadiusSupport(n_sp)
           write(unit=io_lun,fmt='(" length of blip-grid interval:",f12.6)') &
-               &SupportGridSpacing(n_sp)
+               &blip_info(n_sp)%SupportGridSpacing
           write(unit=io_lun,fmt='(" no. of integration-grid intervals in",&
                &" blip-grid interval:",i5)') nu_int
        end if
@@ -207,7 +209,7 @@ contains
        end if
        ! check that there are enough blip intervals in region radius
        r2_over_b2 = (RadiusSupport(n_sp)*RadiusSupport(n_sp))/&
-            &(SupportGridSpacing(n_sp)*SupportGridSpacing(n_sp))
+            &(blip_info(n_sp)%SupportGridSpacing*blip_info(n_sp)%SupportGridSpacing)
        if(r2_over_b2 <= 12.0_double) then
           call cq_abort('make_blips_from_paos: support region too&
                & small to hold one blip')
@@ -218,9 +220,9 @@ contains
           write(unit=io_lun,fmt='(" no. of entire blips in region diameter:",&
                &i5)') n_blip
        end if
-       if(n_b_half(n_sp) > BlipArraySize(n_sp)) then
+       if(n_b_half(n_sp) > blip_info(n_sp)%BlipArraySize) then
           call cq_abort('make_blips_from_paos: value of n_b_half&
-               & gives too many blips',n_b_half(n_sp),BlipArraySize(n_sp))
+               & gives too many blips',n_b_half(n_sp),blip_info(n_sp)%BlipArraySize)
        end if
     end do
 
@@ -374,22 +376,24 @@ contains
        if((inode == ionode).and.(iprint_basis >= 1)) then
           write(unit=io_lun,fmt='(/" make_blips_from_paos: total no. of &
                &blips wholly within region:", &
-               & i5)') NBlipsRegion(n_sp)
+               & i5)') blip_info(n_sp)%NBlipsRegion
        end if
        ! initialise blip coefficients to zero
        do ns = 1, nsf_species(n_sp)
-          do n = 1, NBlipsRegion(n_sp)
+          do n = 1, blip_info(n_sp)%NBlipsRegion
              blip_coeff(n_sp)%coeff(n,ns) = 0.0_double
           end do
        end do
 
        call start_timer(tmr_std_allocation)
-       allocate(n_cube2sphere((BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+1)/2),STAT=stat)
-       if(stat/=0) call cq_abort("Error allocating n_cube2sphere: ",(BlipArraySize(n_sp)+1))
-       allocate(scal_prod_sym((BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+1)/2),STAT=stat)
-       if(stat/=0) call cq_abort("Error allocating scal_prod_sym: ",(BlipArraySize(n_sp)+1))
-       allocate(blip_contrib(NBlipsRegion(n_sp)), STAT=stat)
-       if(stat/=0) call cq_abort("Error allocating blip_contrib in pao2blip: ",NBlipsRegion(n_sp))
+       allocate(n_cube2sphere((blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*&
+            (blip_info(n_sp)%BlipArraySize+1)/2),STAT=stat)
+       if(stat/=0) call cq_abort("Error allocating n_cube2sphere: ",(blip_info(n_sp)%BlipArraySize+1))
+       allocate(scal_prod_sym((blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*&
+            (blip_info(n_sp)%BlipArraySize+1)/2),STAT=stat)
+       if(stat/=0) call cq_abort("Error allocating scal_prod_sym: ",(blip_info(n_sp)%BlipArraySize+1))
+       allocate(blip_contrib(blip_info(n_sp)%NBlipsRegion), STAT=stat)
+       if(stat/=0) call cq_abort("Error allocating blip_contrib in pao2blip: ",blip_info(n_sp)%NBlipsRegion)
        call stop_timer(tmr_std_allocation)
        ! ... loop over angular momenta ...............................
        do n_am = 0, pao(n_sp)%greatest_angmom
@@ -407,18 +411,18 @@ contains
                    if(this_scan(n_sp)%n_support(1,n_zeta) > 0) then
                       call blips_in_star(inode,ionode,"a1g",&
                            &n_sp,n_am,n_zeta,nu_int,&
-                           &n_b_half(n_sp),SupportGridSpacing(n_sp),&
+                           &n_b_half(n_sp),blip_info(n_sp)%SupportGridSpacing,&
                            &blip_info(n_sp)%region_single,blip_info(n_sp)%region_double,&
                            &bv,n_cube2sphere,scal_prod_sym)
                       n_ac = 1
                       call star2sphere("a1g",n_ac,n_b_half(n_sp),&
-                           &NBlipsRegion(n_sp),blip_info(n_sp)%blip_location,&
+                           &blip_info(n_sp)%NBlipsRegion,blip_info(n_sp)%blip_location,&
                            &n_cube2sphere,scal_prod_sym,&
                            &blip_contrib)
                       do ns = 1, this_scan(n_sp)%n_support(n_ac,n_zeta)
                          n_sup = this_scan(n_sp)%which_support(n_ac,n_zeta,ns)
                          c = this_scan(n_sp)%coeff(n_ac,n_zeta,ns)
-                         do n = 1, NBlipsRegion(n_sp)
+                         do n = 1, blip_info(n_sp)%NBlipsRegion
                             blip_coeff(n_sp)%coeff(n,n_sup) = &
                                  &blip_coeff(n_sp)%coeff(n,n_sup) + &
                                  &c*blip_contrib(n)
@@ -435,19 +439,19 @@ contains
                         (this_scan(n_sp)%n_support(4,n_zeta) > 0)) then
                       call blips_in_star(inode,ionode,"t1u",&
                            &n_sp,n_am,n_zeta,nu_int,&
-                           &n_b_half(n_sp),SupportGridSpacing(n_sp),&
+                           &n_b_half(n_sp),blip_info(n_sp)%SupportGridSpacing,&
                            &blip_info(n_sp)%region_single,blip_info(n_sp)%region_double,&
                            &bv,n_cube2sphere,scal_prod_sym)
                       do n_ac = 2, 4
                          if(this_scan(n_sp)%n_support(n_ac,n_zeta) > 0) then
                             call star2sphere("t1u",n_ac,n_b_half(n_sp),&
-                                 &NBlipsRegion(n_sp),blip_info(n_sp)%blip_location,&
+                                 &blip_info(n_sp)%NBlipsRegion,blip_info(n_sp)%blip_location,&
                                  &n_cube2sphere,scal_prod_sym,&
                                  &blip_contrib)
                             do ns = 1, this_scan(n_sp)%n_support(n_ac,n_zeta)
                                n_sup = this_scan(n_sp)%which_support(n_ac,n_zeta,ns)
                                c = this_scan(n_sp)%coeff(n_ac,n_zeta,ns)
-                               do n = 1, NBlipsRegion(n_sp)
+                               do n = 1, blip_info(n_sp)%NBlipsRegion
                                   blip_coeff(n_sp)%coeff(n,n_sup) = &
                                        &blip_coeff(n_sp)%coeff(n,n_sup) + &
                                        &c*blip_contrib(n)
@@ -466,19 +470,19 @@ contains
                         (this_scan(n_sp)%n_support(7,n_zeta) > 0)) then
                       call blips_in_star(inode,ionode,"t2g",&
                            &n_sp,n_am,n_zeta,nu_int,&
-                           &n_b_half(n_sp),SupportGridSpacing(n_sp),&
+                           &n_b_half(n_sp),blip_info(n_sp)%SupportGridSpacing,&
                            &blip_info(n_sp)%region_single,blip_info(n_sp)%region_double,&
                            &bv,n_cube2sphere,scal_prod_sym)
                       do n_ac = 5, 7
                          if(this_scan(n_sp)%n_support(n_ac,n_zeta) > 0) then
                             call star2sphere("t2g",n_ac,n_b_half(n_sp),&
-                                 &NBlipsRegion(n_sp),blip_info(n_sp)%blip_location,&
+                                 &blip_info(n_sp)%NBlipsRegion,blip_info(n_sp)%blip_location,&
                                  &n_cube2sphere,scal_prod_sym,&
                                  &blip_contrib)
                             do ns = 1, this_scan(n_sp)%n_support(n_ac,n_zeta)
                                n_sup = this_scan(n_sp)%which_support(n_ac,n_zeta,ns)
                                c = this_scan(n_sp)%coeff(n_ac,n_zeta,ns)
-                               do n = 1, NBlipsRegion(n_sp)
+                               do n = 1, blip_info(n_sp)%NBlipsRegion
                                   blip_coeff(n_sp)%coeff(n,n_sup) = &
                                        &blip_coeff(n_sp)%coeff(n,n_sup) + &
                                        &c*blip_contrib(n)
@@ -491,19 +495,19 @@ contains
                         (this_scan(n_sp)%n_support(9,n_zeta) > 0)) then
                       call blips_in_star(inode,ionode,"eg",&
                            &n_sp,n_am,n_zeta,nu_int,&
-                           &n_b_half(n_sp),SupportGridSpacing(n_sp),&
+                           &n_b_half(n_sp),blip_info(n_sp)%SupportGridSpacing,&
                            &blip_info(n_sp)%region_single,blip_info(n_sp)%region_double,&
                            &bv,n_cube2sphere,scal_prod_sym)
                       do n_ac = 8, 9
                          if(this_scan(n_sp)%n_support(n_ac,n_zeta) > 0) then
                             call star2sphere("eg",n_ac,n_b_half(n_sp),&
-                                 &NBlipsRegion(n_sp),blip_info(n_sp)%blip_location,&
+                                 &blip_info(n_sp)%NBlipsRegion,blip_info(n_sp)%blip_location,&
                                  &n_cube2sphere,scal_prod_sym,&
                                  &blip_contrib)
                             do ns = 1, this_scan(n_sp)%n_support(n_ac,n_zeta)
                                n_sup = this_scan(n_sp)%which_support(n_ac,n_zeta,ns)
                                c = this_scan(n_sp)%coeff(n_ac,n_zeta,ns)
-                               do n = 1, NBlipsRegion(n_sp)
+                               do n = 1, blip_info(n_sp)%NBlipsRegion
                                   blip_coeff(n_sp)%coeff(n,n_sup) = &
                                        &blip_coeff(n_sp)%coeff(n,n_sup) + &
                                        &c*blip_contrib(n)
@@ -523,11 +527,11 @@ contains
        ! ... end loop over angular momenta ...........................
        call start_timer(tmr_std_allocation)
        deallocate(n_cube2sphere,STAT=stat)
-       if(stat/=0) call cq_abort("Error deallocating n_cube2sphere: ",(BlipArraySize(n_sp)+1))
+       if(stat/=0) call cq_abort("Error deallocating n_cube2sphere: ",(blip_info(n_sp)%BlipArraySize+1))
        deallocate(scal_prod_sym,STAT=stat)
-       if(stat/=0) call cq_abort("Error deallocating scal_prod_sym: ",(BlipArraySize(n_sp)+1))
+       if(stat/=0) call cq_abort("Error deallocating scal_prod_sym: ",(blip_info(n_sp)%BlipArraySize+1))
        deallocate(blip_contrib, STAT=stat)
-       if(stat/=0) call cq_abort("Error deallocating blip_contrib in pao2blip: ",NBlipsRegion(n_sp))
+       if(stat/=0) call cq_abort("Error deallocating blip_contrib in pao2blip: ",blip_info(n_sp)%NBlipsRegion)
        call stop_timer(tmr_std_allocation)
 
        ! for current species, loop over support functions, and for
@@ -535,9 +539,9 @@ contains
        ! original pao repn.
        do n_sup = 1, nsf_species(n_sp)
           call deviation(inode,ionode,n_sp,n_sup,nu_int,&
-               &n_b_half(n_sp),RadiusSupport(n_sp),SupportGridSpacing(n_sp),&
+               &n_b_half(n_sp),RadiusSupport(n_sp),blip_info(n_sp)%SupportGridSpacing,&
                &blip_info(n_sp)%region_single,blip_info(n_sp)%region_double,&
-               &blip_info(n_sp)%blip_number,BlipArraySize(n_sp),bv,blip_coeff(n_sp)%coeff)
+               &blip_info(n_sp)%blip_number,blip_info(n_sp)%BlipArraySize,bv,blip_coeff(n_sp)%coeff)
        end do
 
     end do ! n_sp
@@ -553,7 +557,7 @@ contains
        n_sp = bundle%species(i)
        do n_sup = 1, nsf_species(n_sp)
           ! loop over blip functions in the support region of this species
-          do n = 1, NBlipsRegion(n_sp)
+          do n = 1, blip_info(n_sp)%NBlipsRegion
              supports_on_atom(i)%supp_func(n_sup)%coefficients(n) = blip_coeff(n_sp)%coeff(n,n_sup)
           end do
        end do
@@ -647,7 +651,7 @@ contains
        &n_sp,n_am,n_zeta,nu_int,n_b_half,b_int,region_bound_single,&
        &region_bound_double,bv,n_cube2sphere,scal_prod_sym)
     use blip_pao_values
-    use blip, ONLY: BlipArraySize
+    use blip, ONLY: blip_info
     use maxima_module, ONLY : max_blip_nu_int
     use datatypes
     use GenComms, ONLY: cq_abort
@@ -670,14 +674,23 @@ contains
     integer :: i, i_store, j, j_add, j_store, kb_min, kb_max, &
          &m, mult, n, n1, n2, n3, n_b_int_in_radius, n_b_int_in_diam, &
          &n_blip, n_blip_squared, n_star_in_cube, n_star_in_sphere
-    integer, dimension((BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+2)/2) :: xsite, ysite, zsite
+    integer, allocatable, dimension(:) :: xsite, ysite, zsite
     real(double) :: delta_ig, deltax, sum, z0
-    real(double), dimension((BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+2)/2) :: coeff
-    real(double), dimension(4,4,2*BlipArraySize(n_sp)+1,2*BlipArraySize(n_sp)+1) :: store
-    real(double), dimension((2*BlipArraySize(n_sp)+1)*(2*BlipArraySize(n_sp)+1)*(2*BlipArraySize(n_sp)+1)) :: scal_prod
-    real(double), dimension((BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+2)/2,&
-         (BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+2)/2) :: amat
-    real(double), dimension(max_blip_nu_int,2*BlipArraySize(n_sp)+1,2*BlipArraySize(n_sp)+1) :: fv3
+    real(double), allocatable, dimension(:) :: coeff, scal_prod
+    real(double), allocatable, dimension(:,:) :: amat
+    real(double), allocatable, dimension(:,:,:) :: fv3
+    real(double), allocatable, dimension(:,:,:,:) :: store
+
+    allocate(xsite((blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+2)/2))
+    allocate(ysite((blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+2)/2))
+    allocate(zsite((blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+2)/2))
+    allocate(coeff((blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+2)/2))
+    allocate(store(4,4,2*blip_info(n_sp)%BlipArraySize+1,2*blip_info(n_sp)%BlipArraySize+1))
+    allocate(scal_prod((2*blip_info(n_sp)%BlipArraySize+1)*(2*blip_info(n_sp)%BlipArraySize+1)* &
+         (2*blip_info(n_sp)%BlipArraySize+1)))
+    allocate(amat((blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+2)/2,&
+         (blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+2)/2))
+    allocate(fv3(max_blip_nu_int,2*blip_info(n_sp)%BlipArraySize+1,2*blip_info(n_sp)%BlipArraySize+1))
 
     ! constants
     n_blip = 1 + 2*n_b_half
@@ -696,7 +709,7 @@ contains
        call cq_abort('blips_in_star: value of n_b_half gives too few&
             & blips for requested symmetry',n_b_half)
     end if
-    if(n_b_half > BlipArraySize(n_sp)) then
+    if(n_b_half > blip_info(n_sp)%BlipArraySize) then
        call cq_abort('blips_in_star: n_b_half too big',n_b_half)
     end if
 
@@ -719,9 +732,10 @@ contains
        write(unit=io_lun,fmt='(/" number of stars in cubic region:",i5)') &
             & n_star_in_cube
     end if
-    if(n_star_in_cube > (BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+2)/2) then
+    if(n_star_in_cube > (blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)* &
+         (blip_info(n_sp)%BlipArraySize+2)/2) then
        call cq_abort('blips_in_star: too many stars',n_star_in_cube,&
-            &(BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+1)*(BlipArraySize(n_sp)+2)/2)
+            &(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+1)*(blip_info(n_sp)%BlipArraySize+2)/2)
     end if
 
     ! do analysis of stars of blip-grid points

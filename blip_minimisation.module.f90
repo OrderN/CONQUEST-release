@@ -85,6 +85,8 @@ contains
 !!    Added n_L_iterations
 !!   2008/06/10 ast
 !!    Added timers
+!!   2011/11/17 10:21 dave
+!!    Changes to blip data
 !!  SOURCE
 !!
   subroutine vary_support( n_support_iterations, fixed_potential, vary_mu, n_L_iterations, &
@@ -98,7 +100,7 @@ contains
     use mult_module, ONLY: LNV_matrix_multiply, matM12, matM4
     use GenBlas, ONLY: dot, copy, axpy
     use PosTan, ONLY: PulayC, PulayBeta, SCC, SCBeta
-    use blip, ONLY: PreCond, NBlipsRegion
+    use blip, ONLY: PreCond, blip_info
     use GenComms, ONLY: my_barrier, gsum, inode, ionode, cq_abort
     use DiagModule, ONLY: diagon
     use blip_gradient, ONLY: get_blip_gradient, get_electron_gradient
@@ -241,18 +243,19 @@ contains
              call start_timer(tmr_std_allocation)
              allocate(sum(supports_on_atom(i)%nsuppfuncs))
              call stop_timer(tmr_std_allocation)
-             do j=1,NBlipsRegion(spec) ! In future, base on species
+             do j=1,blip_info(spec)%NBlipsRegion ! In future, base on species
                 sum=zero
-                do k=1,NBlipsRegion(spec) ! Again, base on species
+                do k=1,blip_info(spec)%NBlipsRegion ! Again, base on species
                    do n=1,supports_on_atom(i)%nsuppfuncs
-                      sum(n) = sum(n) + PreCond(spec)%coeffs(j,k)*search_direction(offset + (n-1)*NBlipsRegion(spec) + k)
+                      sum(n) = sum(n) + &
+                           PreCond(spec)%coeffs(j,k)*search_direction(offset + (n-1)*blip_info(spec)%NBlipsRegion + k)
                    enddo
                 enddo
                 do n=1,supports_on_atom(i)%nsuppfuncs
-                   Psd(offset + (n-1)*NBlipsRegion(spec) + j) = sum(n)
+                   Psd(offset + (n-1)*blip_info(spec)%NBlipsRegion + j) = sum(n)
                 enddo
              enddo
-             offset = offset + supports_on_atom(i)%nsuppfuncs*NBlipsRegion(spec)
+             offset = offset + supports_on_atom(i)%nsuppfuncs*blip_info(spec)%NBlipsRegion
              call start_timer(tmr_std_allocation)
              deallocate(sum)
              call stop_timer(tmr_std_allocation)

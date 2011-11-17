@@ -474,6 +474,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2009/10/27 07:10 dave
 !!    Correctly coded
+!!   2011/11/15 08:03 dave
+!!    Changes to blip data
 !!  SOURCE
 !!
   subroutine get_onsite_S(blip_co, matS, np, nn, ip, this_nsf, spec)
@@ -481,7 +483,7 @@ contains
     use datatypes
     use numbers
     use GenBlas, ONLY: axpy, copy, scal, gemm
-    use blip, ONLY: blip_info, BlipArraySize, OneArraySize, FullArraySize, SupportGridSpacing
+    use blip, ONLY: blip_info
     use support_spec_format, ONLY: support_function
     use GenComms, ONLY: cq_abort
     use mult_module, ONLY: store_matrix_value, scale_matrix_value, return_matrix_value
@@ -503,9 +505,12 @@ contains
 
     integer :: dx, dy, dz, offset, l, at, nsf1, stat, i1, i2
 
-    allocate(work1(FullArraySize(spec)*this_nsf),work2(FullArraySize(spec)*this_nsf), &
-         work4(FullArraySize(spec)*this_nsf),work6(FullArraySize(spec)*this_nsf), STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating arrays for onsite S elements: ",FullArraySize(spec),this_nsf)
+    allocate(work1(blip_info(spec)%FullArraySize*this_nsf), &
+         work2(blip_info(spec)%FullArraySize*this_nsf), &
+         work4(blip_info(spec)%FullArraySize*this_nsf), &
+         work6(blip_info(spec)%FullArraySize*this_nsf), STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating arrays for onsite S elements: ", &
+         blip_info(spec)%FullArraySize,this_nsf)
     ! first, we copy the blip functions for this atom onto a cubic grid;
     ! we make this grid 'too big' in order to have a fast routine below.
 
@@ -515,14 +520,14 @@ contains
     FAC(3) = 1.0_double/2240.0_double
 
     work1 = zero
-    offset = BlipArraySize(spec)+1
+    offset = blip_info(spec)%BlipArraySize+1
 
-    do dx = -BlipArraySize(spec), BlipArraySize(spec)
-       do dy = -BlipArraySize(spec), BlipArraySize(spec)
-          do dz = -BlipArraySize(spec), BlipArraySize(spec)
+    do dx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+       do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              l = blip_info(spec)%blip_number(dx,dy,dz)
              if (l.ne.0) then
-                at = (((dz+offset)*OneArraySize(spec) + (dy+offset))*OneArraySize(spec) + &
+                at = (((dz+offset)*blip_info(spec)%OneArraySize + (dy+offset))*blip_info(spec)%OneArraySize + &
                      (dx+offset)) * this_nsf
                 do nsf1 = 1,this_nsf
                    work1(nsf1+at) = blip_co%supp_func(nsf1)%coefficients(l)
@@ -536,53 +541,56 @@ contains
     ! 'spreading operations'. Do z first... put blip(z) in 2, and
     ! del2blip(z) in 3
 
-    call copy(FullArraySize(spec)*this_nsf,work1,1,work2,1)
-    call scal(FullArraySize(spec)*this_nsf,FAC(0),work2,1)
+    call copy(blip_info(spec)%FullArraySize*this_nsf,work1,1,work2,1)
+    call scal(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work2,1)
     do dz = 1, MAX_D
-       offset = dz * OneArraySize(spec) * OneArraySize(spec) * this_nsf
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dz), &
+       offset = dz * blip_info(spec)%OneArraySize * blip_info(spec)%OneArraySize * this_nsf
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dz), &
             work1(1:), 1, work2(1+offset:), 1 )
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dz), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dz), &
             work1(1+offset:), 1, work2(1:), 1 )
     end do
 
     ! now do y : put blip(y).blip(z) in 4,
     ! blip(y).del2blip(z) + del2blip(y).blip(z)  in 5
 
-    call copy(FullArraySize(spec)*this_nsf,work2,1,work4,1)
-    call scal(FullArraySize(spec)*this_nsf,FAC(0),work4,1)
+    call copy(blip_info(spec)%FullArraySize*this_nsf,work2,1,work4,1)
+    call scal(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work4,1)
     do dy = 1, MAX_D
-       offset = dy * OneArraySize(spec) * this_nsf
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dy), &
+       offset = dy * blip_info(spec)%OneArraySize * this_nsf
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dy), &
             work2(1:), 1, work4(1+offset:), 1 )
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dy), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dy), &
             work2(1+offset:), 1, work4(1:), 1 )
     end do
 
     work6 = zero
-    call axpy(FullArraySize(spec)*this_nsf,FAC(0),work4,1,work6,1)
+    call axpy(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work4,1,work6,1)
     do dx = 1, MAX_D
        offset = dx * this_nsf
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dx), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dx), &
             work4(1:), 1, work6(1+offset:), 1 )
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dx), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dx), &
             work4(1+offset:), 1, work6(1:), 1 )
     end do
 
     ! and now get the matrix elements by multiplication...
 
     temp = zero
-    call gemm('n','t',this_nsf,this_nsf,OneArraySize(spec)*OneArraySize(spec)*OneArraySize(spec), &
+    call gemm('n','t',this_nsf,this_nsf,&
+         blip_info(spec)%OneArraySize*blip_info(spec)%OneArraySize*blip_info(spec)%OneArraySize, &
          one,work1,this_nsf,work6,this_nsf,zero,temp,this_nsf )
     do i1 = 1,this_nsf
        do i2=1,this_nsf
           call scale_matrix_value(matS,np,nn,ip,0,i2,i1,zero,1)
           call store_matrix_value(matS,np,nn,ip,0,i2,i1, &
-               SupportGridSpacing(spec)*SupportGridSpacing(spec)*SupportGridSpacing(spec)*temp(i2,i1),1)
+               blip_info(spec)%SupportGridSpacing*blip_info(spec)%SupportGridSpacing* &
+               blip_info(spec)%SupportGridSpacing*temp(i2,i1),1)
        end do
     end do
     deallocate(work1,work2, work4,work6, STAT=stat)
-    if(stat/=0) call cq_abort("Error deallocating arrays for onsite S blip elements: ",FullArraySize(spec),this_nsf)
+    if(stat/=0) call cq_abort("Error deallocating arrays for onsite S blip elements: ",&
+         blip_info(spec)%FullArraySize,this_nsf)
     return
   end subroutine get_onsite_S
 !!***
@@ -593,7 +601,7 @@ contains
 !%%!    use datatypes
 !%%!    use numbers
 !%%!    use GenBlas
-!%%!    use blip, ONLY: blip_info(spec)%blip_number, BlipArraySize(spec)
+!%%!    use blip, ONLY: blip_info(spec)%blip_number, blip_info(spec)%BlipArraySize
 !%%!    use dimens, ONLY: support_grid_spacing
 !%%!
 !%%!    implicit none
@@ -604,10 +612,10 @@ contains
 !%%!
 !%%!    ! Local variables
 !%%!    real(double) :: FAC(-3:3)
-!%%!    real(double) :: work1(this_nsf,-BlipArraySize(spec)-3:BlipArraySize(spec)+3,&
-!%%!         -BlipArraySize(spec)-3:BlipArraySize(spec)+3,-BlipArraySize(spec)-3:BlipArraySize(spec)+3), &
-!%%!         work2(this_nsf,-BlipArraySize(spec)-3:BlipArraySize(spec)+3,&
-!%%!         -BlipArraySize(spec)-3:BlipArraySize(spec)+3,-BlipArraySize(spec)-3:BlipArraySize(spec)+3)
+!%%!    real(double) :: work1(this_nsf,-blip_info(spec)%BlipArraySize-3:blip_info(spec)%BlipArraySize+3,&
+!%%!         -blip_info(spec)%BlipArraySize-3:blip_info(spec)%BlipArraySize+3,-blip_info(spec)%BlipArraySize-3:blip_info(spec)%BlipArraySize+3), &
+!%%!         work2(this_nsf,-blip_info(spec)%BlipArraySize-3:blip_info(spec)%BlipArraySize+3,&
+!%%!         -blip_info(spec)%BlipArraySize-3:blip_info(spec)%BlipArraySize+3,-blip_info(spec)%BlipArraySize-3:blip_info(spec)%BlipArraySize+3)
 !%%!    integer :: dx,dy,dz,nx,nx1,l,l1,nsf1,ny,ny1,nz,nz1,nsf2
 !%%!
 !%%!    FAC(-3) = 1.0_double/2240.0_double
@@ -622,9 +630,9 @@ contains
 !%%!
 !%%!    ! x first
 !%%!    work1 = zero
-!%%!    do dx = -BlipArraySize(spec), BlipArraySize(spec)
-!%%!       do dy = -BlipArraySize(spec), BlipArraySize(spec)
-!%%!          do dz = -BlipArraySize(spec), BlipArraySize(spec)
+!%%!    do dx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+!%%!       do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+!%%!          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
 !%%!             do nx = -3,3
 !%%!                nx1 = nx+dx
 !%%!                l = blip_info(spec)%blip_number(dx,dy,dz)
@@ -639,9 +647,9 @@ contains
 !%%!    end do
 !%%!    ! Now y
 !%%!    work2 = zero
-!%%!    do dx = -BlipArraySize(spec)-3, BlipArraySize(spec)+3
-!%%!       do dy = -BlipArraySize(spec), BlipArraySize(spec)
-!%%!          do dz = -BlipArraySize(spec), BlipArraySize(spec)
+!%%!    do dx = -blip_info(spec)%BlipArraySize-3, blip_info(spec)%BlipArraySize+3
+!%%!       do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+!%%!          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
 !%%!             do ny = -3,3
 !%%!                ny1 = ny+dy
 !%%!                do nsf1 = 1,this_nsf
@@ -653,9 +661,9 @@ contains
 !%%!    end do
 !%%!    ! Finally z
 !%%!    work1 = zero
-!%%!    do dx = -BlipArraySize(spec)-3, BlipArraySize(spec)+3
-!%%!       do dy = -BlipArraySize(spec)-3, BlipArraySize(spec)+3
-!%%!          do dz = -BlipArraySize(spec), BlipArraySize(spec)
+!%%!    do dx = -blip_info(spec)%BlipArraySize-3, blip_info(spec)%BlipArraySize+3
+!%%!       do dy = -blip_info(spec)%BlipArraySize-3, blip_info(spec)%BlipArraySize+3
+!%%!          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
 !%%!             do nz = -3,3
 !%%!                nz1 = nz+dz
 !%%!                do nsf1 = 1,this_nsf
@@ -668,9 +676,9 @@ contains
 !%%!    ! Now work1 holds a complete convolution of one set of blip coefficients with integrals (blipcon in Cquest)
 !%%!    ! So sum over blip values
 !%%!    resulting_submatrix = zero
-!%%!    do dx = -BlipArraySize(spec), BlipArraySize(spec)
-!%%!       do dy = -BlipArraySize(spec), BlipArraySize(spec)
-!%%!          do dz = -BlipArraySize(spec), BlipArraySize(spec)
+!%%!    do dx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+!%%!       do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+!%%!          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
 !%%!             l = blip_info(spec)%blip_number(dx,dy,dz)
 !%%!             if (l/=0) then
 !%%!                do nsf1 = 1,this_nsf

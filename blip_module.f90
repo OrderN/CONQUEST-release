@@ -48,6 +48,8 @@
 !!    Changed for output to file not stdout
 !!   2008/05/28 ast
 !!    Added timers
+!!   2011/11/15 07:59 dave
+!!    Updating the derived type for blips
 !!  SOURCE
 !!
 module blip
@@ -63,17 +65,19 @@ module blip
   ! RCS tag for object file identification 
   character(len=80), private :: RCSid = "$Id$"
 
-  ! variables related to blip functions
-  real(double), allocatable, dimension(:) :: SupportGridSpacing
-  real(double), allocatable, dimension(:) :: BlipWidth, FourOnBlipWidth
-
   real(double) :: alpha, beta
-
-  integer, allocatable, dimension(:) :: BlipArraySize, NBlipsRegion, OneArraySize, FullArraySize, Extent
 
   type blip_data
      integer, pointer, dimension(:,:) :: blip_location ! dim( 3, n_blips)
      integer, pointer, dimension(:,:,:) :: blip_number ! dim(-bliparraysize:bliparraysize x3 )
+     integer :: BlipArraySize
+     integer :: NBlipsRegion
+     integer :: OneArraySize, FullArraySize
+     integer :: Extent
+     real(double) :: SupportGridSpacing, RegionRadius
+     real(double) :: BlipWidth
+     real(double) :: FourOnBlipWidth
+     ! These last two are temporary and will be removed once G2B is working
      integer, pointer, dimension(:) :: region_single   ! (0:bliparraysize)
      integer, pointer, dimension(:,:) :: region_double ! (0:bliparraysize,0:bliparraysize)
   end type blip_data
@@ -166,16 +170,16 @@ contains
        call stop_timer(tmr_std_allocation)
        do spec = 1,n_species
           call start_timer(tmr_std_allocation)
-          allocate(PreCond(spec)%coeffs(NBlipsRegion(spec),NBlipsRegion(spec)), &
-               Kmat(NBlipsRegion(spec),NBlipsRegion(spec)),STAT=stat)
-          if(stat/=0) call cq_abort('ERROR allocating PreCond and Kmat: ',NBlipsRegion(spec))
-          call reg_alloc_mem(area_basis,2*NBlipsRegion(spec)*NBlipsRegion(spec),type_dbl)
+          allocate(PreCond(spec)%coeffs(blip_info(spec)%NBlipsRegion,blip_info(spec)%NBlipsRegion), &
+               Kmat(blip_info(spec)%NBlipsRegion,blip_info(spec)%NBlipsRegion),STAT=stat)
+          if(stat/=0) call cq_abort('ERROR allocating PreCond and Kmat: ',blip_info(spec)%NBlipsRegion)
+          call reg_alloc_mem(area_basis,2*blip_info(spec)%NBlipsRegion*blip_info(spec)%NBlipsRegion,type_dbl)
           call stop_timer(tmr_std_allocation)
-          PreCond(spec)%size = NBlipsRegion(spec)
+          PreCond(spec)%size = blip_info(spec)%NBlipsRegion
           PreCond(spec)%coeffs = zero
           Kmat = zero
           if(inode==ionode.AND.iprint_basis>0) write(io_lun,fmt='(6x,"Applying preconditioning")')
-          asq = one/(k0*k0*SupportGridSpacing(spec)*SupportGridSpacing(spec))
+          asq = one/(k0*k0*blip_info(spec)%SupportGridSpacing*blip_info(spec)%SupportGridSpacing)
           ! Set up the coefficients for the blip multiples
           p0(0)=151.0_double/140.0_double
           p0(1)=1191.0_double/2240.0_double
@@ -191,8 +195,8 @@ contains
           p2(3)=y0(3)/p0(3)
           ! Build the approximate Hessian
           call my_barrier()
-          do n_blip1 = 1, NBlipsRegion(spec)
-             do n_blip2 = 1, NBlipsRegion(spec)
+          do n_blip1 = 1, blip_info(spec)%NBlipsRegion
+             do n_blip2 = 1, blip_info(spec)%NBlipsRegion
 
                 nx1 = blip_info(spec)%blip_location( 1, n_blip1 )
                 ny1 = blip_info(spec)%blip_location( 2, n_blip1 )
@@ -217,38 +221,38 @@ contains
           ! Cholesky decomposition
           call my_barrier()
           info = 0
-          do n_blip1 = 1,NBlipsRegion(spec)
-             do n_blip2 = 1,NBlipsRegion(spec)
+          do n_blip1 = 1,blip_info(spec)%NBlipsRegion
+             do n_blip2 = 1,blip_info(spec)%NBlipsRegion
                 PreCond(spec)%coeffs(n_blip1,n_blip2) = Kmat(n_blip1,n_blip2)
              enddo
           enddo
-          call potrf('U',NBlipsRegion(spec),Kmat,NBlipsRegion(spec),info)
+          call potrf('U',blip_info(spec)%NBlipsRegion,Kmat,blip_info(spec)%NBlipsRegion,info)
           if(info/=0) call cq_abort("Problem with potrf in preconditioning: ",info)
           ! Inversion
           call my_barrier()
           info = 0
-          call potri('U',NBlipsRegion(spec),Kmat,NBlipsRegion(spec),info)
+          call potri('U',blip_info(spec)%NBlipsRegion,Kmat,blip_info(spec)%NBlipsRegion,info)
           if(info/=0) call cq_abort("Problem with potri in preconditioning: ",info)
           ! Now make the upper triangle a full matrix
           call my_barrier()
-          do n_blip1 = 1, NBlipsRegion(spec)
-             do n_blip2 = n_blip1, NBlipsRegion(spec)
+          do n_blip1 = 1, blip_info(spec)%NBlipsRegion
+             do n_blip2 = n_blip1, blip_info(spec)%NBlipsRegion
                 Kmat(n_blip2,n_blip1) = Kmat(n_blip1,n_blip2)
              enddo
           enddo
-          do n_blip1 = 1, NBlipsRegion(spec)
-             do n_blip2 = 1, NBlipsRegion(spec)
+          do n_blip1 = 1, blip_info(spec)%NBlipsRegion
+             do n_blip2 = 1, blip_info(spec)%NBlipsRegion
                 PreCond(spec)%coeffs(n_blip1,n_blip2) = Kmat(n_blip1,n_blip2)
              enddo
           enddo
           deallocate(Kmat)
-          call reg_dealloc_mem(area_basis,NBlipsRegion(spec)*NBlipsRegion(spec),type_dbl)
+          call reg_dealloc_mem(area_basis,blip_info(spec)%NBlipsRegion*blip_info(spec)%NBlipsRegion,type_dbl)
        end do
     else
        if(inode==ionode.AND.iprint_basis>0) &
             write(io_lun,fmt='(6x,"Not applying preconditioning")') 
-       !do n_blip1 = 1, NBlipsRegion(spec)
-       !   do n_blip2 = 1, NBlipsRegion(spec)
+       !do n_blip1 = 1, blip_info(spec)%NBlipsRegion
+       !   do n_blip2 = 1, blip_info(spec)%NBlipsRegion
        !      if(n_blip1.EQ.n_blip2) then
        !         PreCond(spec)%coeffs(n_blip1,n_blip2) = one
        !      else
@@ -322,6 +326,8 @@ contains
 !!    Included into blip
 !!   2008/05/28 ast
 !!    Added timers
+!!   2011/11/17 10:38 dave
+!!    Changes for new blip data (removing allocation)
 !!  SOURCE
 !!
   subroutine set_blip_index(inode,ionode)
@@ -354,31 +360,14 @@ contains
             &10x,65("*"))')
     end if
 
-    call start_timer(tmr_std_allocation)
-    allocate(BlipArraySize(n_species), STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating blip_info (1): ",n_species)
-    allocate(NBlipsRegion(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating blip_info (2): ",n_species)
-    allocate(OneArraySize(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating blip_info (3): ",n_species)
-    allocate(FullArraySize(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating blip_info (4): ",n_species)
-    !allocate(Extent(n_species),STAT=stat)
-    !if(stat/=0) call cq_abort("Error allocating blip_info (5): ",n_species)
-    allocate(blip_info(n_species), STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating blip_info (6): ",n_species)
-    allocate(FourOnBlipWidth(n_species), STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating blip_info (7): ",n_species)
-    call reg_alloc_mem(area_basis,6*n_species,type_dbl)
-    call stop_timer(tmr_std_allocation)
     do spec = 1, n_species
        ! It is required that the full width of the B-spline blip-function
        ! be exactly four times the blip-grid spacing. This condition
        ! is checked here, and the calculation stops if the condition
        ! is not satisfied:
-       !BlipWidth(spec) = four*SupportGridSpacing(spec)
-       if(inode==ionode.AND.iprint_init>2) write(io_lun,fmt='(10x,"Blip width: ",f20.12)') BlipWidth(spec)
-       FourOnBlipWidth(spec) = four/BlipWidth(spec)
+       !blip_info(spec)%BlipWidth = four*blip_info(spec)%SupportGridSpacing
+       if(inode==ionode.AND.iprint_init>2) write(io_lun,fmt='(10x,"Blip width: ",f20.12)') blip_info(spec)%BlipWidth
+       blip_info(spec)%FourOnBlipWidth = four/blip_info(spec)%BlipWidth
        !if(abs(blip_width - four*support_grid_spacing) > very_small) then
        !   call cq_abort('set_blip_index: blip width must be exactly four &
        !        &times blip-grid spacing')
@@ -388,7 +377,8 @@ contains
        ! spacing is such that at least one blip function is
        ! wholly contained within the region (RadiusSupport(spec) is support-region radius,
        ! support_grid_spacing is blip-grid spacing):
-       r2_over_b2 = (RadiusSupport(spec)*RadiusSupport(spec))/(SupportGridSpacing(spec)*SupportGridSpacing(spec))
+       r2_over_b2 = (RadiusSupport(spec)*RadiusSupport(spec))/ &
+            (blip_info(spec)%SupportGridSpacing*blip_info(spec)%SupportGridSpacing)
        if(r2_over_b2 < 12.0_double) then
           call cq_abort('set_blip_grid: support region too small to hold&
                & one blip function')
@@ -397,28 +387,31 @@ contains
        ! For the meaning of the integer bliparraysize, see header. Here,
        ! bliparraysize is calculated by formula, printed, and
        ! tested against the relevant array bound:
-       BlipArraySize(spec) = sqrt(r2_over_b2 - 8.0_double) - 2.0_double
+       blip_info(spec)%BlipArraySize = sqrt(r2_over_b2 - 8.0_double) - 2.0_double
        if((inode == ionode).and.(iprint_init >= 2)) then
           write(unit=io_lun,fmt='(/10x," set_blip_index: bliparraysize:",i5/10x&
                &"(This is the smallest integer such that for all blip functions"/10x&
                &" wholly contained within the support region, these blip"/10x&
                &" functions being centred on sites (nx,ny,nz), the absolute"/10x&
                &" values of nx, ny and nz never exceed this integer)")') &
-               &BlipArraySize(spec)
+               &blip_info(spec)%BlipArraySize
        end if
-       OneArraySize(spec) = 1 + 2*(BlipArraySize(spec)+4)
-       FullArraySize(spec) = OneArraySize(spec)*OneArraySize(spec)*OneArraySize(spec)
+       blip_info(spec)%OneArraySize = 1 + 2*(blip_info(spec)%BlipArraySize+4)
+       blip_info(spec)%FullArraySize = blip_info(spec)%OneArraySize*blip_info(spec)%OneArraySize*&
+            blip_info(spec)%OneArraySize
        !if(bliparraysize > MAXBAS) then
        !   call cq_abort('set_blip_index: MAXBAS too small',bliparraysize,MAXBAS)
        !end if
        call start_timer(tmr_std_allocation)
-       allocate(blip_info(spec)%region_single(0:BlipArraySize(spec)),&
-            blip_info(spec)%region_double(0:BlipArraySize(spec),0:BlipArraySize(spec)),STAT=stat)
-       if(stat/=0) call cq_abort('Error allocating region_single and region_double: ',BlipArraySize(spec))
-       call reg_alloc_mem(area_basis,(BlipArraySize(spec)+1)*(BlipArraySize(spec)+2),type_int)
+       allocate(blip_info(spec)%region_single(0:blip_info(spec)%BlipArraySize),&
+            blip_info(spec)%region_double(0:blip_info(spec)%BlipArraySize,0:blip_info(spec)%BlipArraySize),&
+            STAT=stat)
+       if(stat/=0) call cq_abort('Error allocating region_single and region_double: ',&
+            blip_info(spec)%BlipArraySize)
+       call reg_alloc_mem(area_basis,(blip_info(spec)%BlipArraySize+1)*(blip_info(spec)%BlipArraySize+2),type_int)
        call stop_timer(tmr_std_allocation)
        ! Calculate the index arrays region_single, region_double
-       do na = 0, BlipArraySize(spec)
+       do na = 0, blip_info(spec)%BlipArraySize
           a2 = (na+2)*(na+2)
           blip_info(spec)%region_single(na) = sqrt(r2_over_b2 - a2 - 4.0_double) - 2.0_double
           do nb = 0, blip_info(spec)%region_single(na)
@@ -428,26 +421,28 @@ contains
        end do
 
        n_blips = 0
-       do nz = -BlipArraySize(spec), BlipArraySize(spec)
+       do nz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
           dz = 2 + abs(nz)
-          do ny = -BlipArraySize(spec), BlipArraySize(spec)
+          do ny = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              dy = 2 + abs(ny)
-             do nx = -BlipArraySize(spec), BlipArraySize(spec)
+             do nx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
                 dx = 2 + abs(nx)
                 if (dx*dx + dy*dy + dz*dz <= r2_over_b2) n_blips = n_blips + 1
              end do
           end do
        end do
-       ! For meaning of the array blip_number(nx,ny,nz), see description
+       ! For meaning of the array blip_info(nx,ny,nz), see description
        ! at head of routine. The entire array
        ! is initialised to zero here to maintain compatibility with
        ! the original version of the code.
 
        call start_timer(tmr_std_allocation)
-       allocate(blip_info(spec)%blip_number(-BlipArraySize(spec):BlipArraySize(spec),&
-            -BlipArraySize(spec):BlipArraySize(spec),-BlipArraySize(spec):BlipArraySize(spec)),STAT=stat)
-       if(stat/=0) call cq_abort('Error allocating blip_number: ',BlipArraySize(spec))
-       call reg_alloc_mem(area_basis,(2*BlipArraySize(spec)+1)*(2*BlipArraySize(spec)+1)*(2*BlipArraySize(spec)+1),type_int)
+       allocate(blip_info(spec)%blip_number(-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,&
+            -blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,&
+            -blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize),STAT=stat)
+       if(stat/=0) call cq_abort('Error allocating blip_number: ',blip_info(spec)%BlipArraySize)
+       call reg_alloc_mem(area_basis,(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%BlipArraySize+1)*&
+            (2*blip_info(spec)%BlipArraySize+1),type_int)
        call stop_timer(tmr_std_allocation)
        blip_info(spec)%blip_number = 0
 
@@ -456,13 +451,13 @@ contains
        if(stat/=0) call cq_abort('Error allocating blip_number and blip_location: ',n_blips)
        call reg_alloc_mem(area_basis,3*n_blips,type_int)
        call stop_timer(tmr_std_allocation)
-       NBlipsRegion(spec) = n_blips
+       blip_info(spec)%NBlipsRegion = n_blips
        n_blips = 0
-       do nz = -BlipArraySize(spec), BlipArraySize(spec)
+       do nz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
           dz = 2 + abs(nz)
-          do ny = -BlipArraySize(spec), BlipArraySize(spec)
+          do ny = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              dy = 2 + abs(ny)
-             do nx = -BlipArraySize(spec), BlipArraySize(spec)
+             do nx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
                 dx = 2 + abs(nx)
                 if (dx*dx + dy*dy + dz*dz <= r2_over_b2) then
                    n_blips = n_blips + 1
@@ -477,31 +472,31 @@ contains
        if((inode == ionode).and.(iprint_init >= 2)) then
           write(unit=io_lun,fmt='(/10x," set_blip_index: total number of blip &
                &functions wholly contained within support region:",i5)') &
-               &NBlipsRegion(spec)
+               &blip_info(spec)%NBlipsRegion
        end if
 
        if((inode == ionode).and.(iprint_init > 2)) then
           write(unit=io_lun,fmt='(/10x," set_blip_index: index array region_single:"/)')
-          do na = 0, BlipArraySize(spec)
+          do na = 0, blip_info(spec)%BlipArraySize
              write(unit=io_lun,fmt='(10x,i5,3x,i5)') na, blip_info(spec)%region_single(na)
           end do
           write(unit=io_lun,fmt='(/10x," set_blip_index: index array region_double:"/)')
-          do na = 0, BlipArraySize(spec)
+          do na = 0, blip_info(spec)%BlipArraySize
              do nb = 0, blip_info(spec)%region_single(na)
                 write(unit=io_lun,fmt='(10x,2i5,3x,i5)') na, nb, blip_info(spec)%region_double(na,nb)
              end do
           end do
           write(unit=io_lun,fmt='(/10x," set_blip_index: index array blip_number:"/)')
-          do nz = -BlipArraySize(spec), BlipArraySize(spec)
-             do ny = -BlipArraySize(spec), BlipArraySize(spec)
-                do nx = -BlipArraySize(spec), BlipArraySize(spec)
+          do nz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+             do ny = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+                do nx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
                    write(unit=io_lun,fmt='(10x,3i5,3x,i5)') nx, ny, nz, &
                         &blip_info(spec)%blip_number(nx,ny,nz)
                 end do
              end do
           end do
           write(unit=io_lun,fmt='(/10x," set_blip_index: index array blip_location:"/)')
-          do i = 1, NBlipsRegion(spec)
+          do i = 1, blip_info(spec)%NBlipsRegion
              write(unit=io_lun,fmt='(10x,i5,3x,3i5)') i, blip_info(spec)%blip_location(1,i), &
                   &blip_info(spec)%blip_location(2,i), blip_info(spec)%blip_location(3,i)
           end do
@@ -516,17 +511,17 @@ contains
        ! Check on species
        spec = bundle%species(i)
        this_nsf = nsf_species(spec)
-       size = size + this_nsf*NBlipsRegion(spec)
+       size = size + this_nsf*blip_info(spec)%NBlipsRegion
        supports_on_atom(i)%nsuppfuncs = this_nsf
        call start_timer(tmr_std_allocation)
        allocate(supports_on_atom(i)%supp_func(this_nsf),support_gradient(i)%supp_func(this_nsf),&
             support_elec_gradient(i)%supp_func(this_nsf))
        call stop_timer(tmr_std_allocation)
-       supports_on_atom(i)%supp_func(:)%ncoeffs = NBlipsRegion(spec)
+       supports_on_atom(i)%supp_func(:)%ncoeffs = blip_info(spec)%NBlipsRegion
        support_gradient(i)%nsuppfuncs = this_nsf
-       support_gradient(i)%supp_func(:)%ncoeffs = NBlipsRegion(spec)
+       support_gradient(i)%supp_func(:)%ncoeffs = blip_info(spec)%NBlipsRegion
        support_elec_gradient(i)%nsuppfuncs = this_nsf
-       support_elec_gradient(i)%supp_func(:)%ncoeffs = NBlipsRegion(spec)
+       support_elec_gradient(i)%supp_func(:)%ncoeffs = blip_info(spec)%NBlipsRegion
     end do
     coeff_array_size = size
     call allocate_supp_coeff_array(size)
@@ -614,8 +609,8 @@ contains
     !   blip_info(spec)%blip_location:  blip
     !   data_blip:                      blip
     !   iprint:                         global module
-    !   NBlipsRegion(spec):             blip
-    !   SupportGridSpacing(spec):       blip
+    !   blip_info(spec)%NBlipsRegion:             blip
+    !   blip_info(spec)%SupportGridSpacing:       blip
     ! -------------------------------------------
 
     ! since the initialisation method provided in this routine
@@ -631,7 +626,7 @@ contains
 
     !if((inode == ionode) .AND. (iprint_basis >= 0)) then
     !   write(unit=io_lun,fmt='(10x," gauss2blip: support-grid spacing:",f20.12)') &
-    !        &SupportGridSpacing(spec)
+    !        &blip_info(spec)%SupportGridSpacing
     !end if
 
     ! data_blip is the array holding the blip coeffs for the support
@@ -647,13 +642,13 @@ contains
     ! have the same support region and the same blip grid.
     do i = 1, bundle%n_prim
        spec = bundle%species(i)
-       do n_blip = 1, NBlipsRegion(spec)
+       do n_blip = 1, blip_info(spec)%NBlipsRegion
           nx = blip_info(spec)%blip_location( 1, n_blip )
           ny = blip_info(spec)%blip_location( 2, n_blip )
           nz = blip_info(spec)%blip_location( 3, n_blip )
-          x = real( nx, double ) * SupportGridSpacing(spec)
-          y = real( ny, double ) * SupportGridSpacing(spec)
-          z = real( nz, double ) * SupportGridSpacing(spec)
+          x = real( nx, double ) * blip_info(spec)%SupportGridSpacing
+          y = real( ny, double ) * blip_info(spec)%SupportGridSpacing
+          z = real( nz, double ) * blip_info(spec)%SupportGridSpacing
           r2 = x * x + y * y + z * z
           gauss_1 = exp( - alpha * r2)
           gauss_2 = exp( - beta * r2)

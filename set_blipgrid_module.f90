@@ -106,9 +106,11 @@ contains
 !!    Various changes including use of cq_abort
 !!   2008/05/16 ast
 !!    Added timers
+!!   2011/11/17 10:41 dave
+!!    Changes for new blip data (principally only defining Extent in this routine)
 !!  SOURCE
 !!
-  subroutine set_blipgrid(myid,rcut_supp,rcut_proj,Extent)
+  subroutine set_blipgrid(myid,rcut_supp,rcut_proj)
     use datatypes
     use global_module,ONLY:numprocs, sf, nlpf, paof
     use primary_module,ONLY: bundle, domain
@@ -117,19 +119,19 @@ contains
     use GenComms, ONLY: cq_abort
     use functions_on_grid, ONLY: gridsize
     use block_module, ONLY: n_pts_in_block, nx_in_block,ny_in_block,nz_in_block
-    !use blip, ONLY: Extent
+    use blip, ONLY: blip_info
     use species_module, ONLY: n_species
     !use pseudopotential_common
+    use dimens, ONLY: n_grid_x, n_grid_y, n_grid_z, r_super_x, r_super_y, r_super_z
     
     implicit none
     integer,intent(in)      ::myid
     real(double),intent(in), dimension(n_species) ::rcut_supp,rcut_proj
-    integer, dimension(n_species) :: Extent
 
     integer :: iprim,max_naba_blk,max_naba_atm,max_naba_part, max_halo_part
     integer :: nxmin_grid, nxmax_grid,  nymin_grid, nymax_grid, nzmin_grid, nzmax_grid, xextent, yextent, zextent
     integer :: max_recv_node_BG, max_send_node, max_sent_pairs, max_recv_call
-    integer :: thisextent,i
+    integer :: thisextent,i, spec
     logical :: warn
 
     call start_timer(tmr_std_indexing)
@@ -175,6 +177,13 @@ contains
     !make lists of neighbour blocks of primary atoms and
     ! information for sending blip-grid transformed support functions
     call get_naba_BCSblk(rcut_supp,naba_blk_supp,comBG)
+    ! Calculate likely extents
+    do spec = 1,n_species
+       xextent = int((rcut_supp(spec)*n_grid_x/r_super_x)+0.5)
+       yextent = int((rcut_supp(spec)*n_grid_y/r_super_y)+0.5)
+       zextent = int((rcut_supp(spec)*n_grid_z/r_super_z)+0.5)
+       blip_info(spec)%Extent = MAX(xextent,MAX(yextent,zextent))
+    end do
     do iprim=1,bundle%n_prim
     !do iprim=1,bundle%mx_iprim
        thisextent = 0
@@ -200,7 +209,8 @@ contains
           zextent=max(zextent,(nzmax_grid-nzmin_grid+1)/2)
        end if
        thisextent = max(zextent,max(yextent,xextent))
-       Extent(bundle%species(iprim)) = max(thisextent,Extent(bundle%species(iprim)))
+       spec = bundle%species(iprim)
+       blip_info(spec)%Extent = max(thisextent,blip_info(spec)%Extent)
     enddo
     !make lists of neighbour and halo atoms of primary blocks
     ! for support and projector functions

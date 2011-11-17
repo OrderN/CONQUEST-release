@@ -42,6 +42,8 @@
 !!    Changing for output to file not stdout
 !!   2008/06/10 ast
 !!    Added timers
+!!   2011/11/15 16:58 dave
+!!    Changes throughout to use new blip data structure
 !!  SOURCE
 module blip_grid_transform_module
 
@@ -83,13 +85,14 @@ contains
 !!    Added GenComms
 !!   2008/06/10 ast
 !!    Added timers
+!!   2011/11/15 17:00 dave
+!!    Removed blip module and variables passed to transform
 !!  SOURCE
 !!
   subroutine blip_to_support_new(myid, support)
 
     use datatypes
     use numbers, ONLY: zero
-    use blip, ONLY: blip_info, BlipArraySize, Extent, BlipWidth, SupportGridSpacing, FourOnBlipWidth
     use primary_module, ONLY: bundle
     use GenComms, ONLY: my_barrier, cq_abort
     use functions_on_grid, ONLY: gridfunctions
@@ -121,9 +124,7 @@ contains
        if( iprim <= bundle%n_prim ) then
           spec = bundle%species(iprim)
           nsf_send = nsf_species(spec)
-          call do_blip_transform_new(iprim, blip_info(spec)%blip_number, BlipArraySize(spec), &
-               supports_on_atom(iprim), SupportGridSpacing(spec), BlipWidth(spec), FourOnBlipWidth(spec), &
-               nsf_send, Extent(spec))
+          call do_blip_transform_new(iprim, supports_on_atom(iprim), nsf_send)
        else
           nsf_send = 0
        endif
@@ -166,8 +167,7 @@ contains
 !!    Added timers
 !!  SOURCE
 !!
-  subroutine do_blip_transform_new( iprim, blip_number, bliparraysize, data_blip, support_grid_spacing,  &
-       blip_width, four_on_blip_width, nsf, extent)
+  subroutine do_blip_transform_new( iprim, data_blip, nsf)
 
     use datatypes
     use numbers
@@ -181,6 +181,7 @@ contains
     use GenComms, ONLY: cq_abort, myid
     use support_spec_format, ONLY: support_function
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use blip, ONLY: blip_info
 
     ! checking
     !use common, ONLY: inode
@@ -188,26 +189,21 @@ contains
     implicit none
 
     integer,intent(in)     :: iprim
-    integer,intent(in)     :: bliparraysize, extent
-    integer,intent(in)     :: blip_number(-bliparraysize:bliparraysize,-bliparraysize:bliparraysize, &
-         -bliparraysize:bliparraysize)
     integer,intent(in)     :: nsf
     type(support_function),intent(in):: data_blip
-    real(double),intent(in):: support_grid_spacing, blip_width, four_on_blip_width
 
     ! Local variables
     real(double),allocatable:: inter_1(:,:,:,:)
     real(double),allocatable:: inter_2(:,:,:,:)
     real(double):: rec_sgs, dx, dy, dz, dxxx, dyyy, dzzz
     integer     :: x, y, z, bx, by, bz 
-    integer     :: imin,imax, nsf1
+    integer     :: imin,imax, nsf1, spec
 
-    real(double):: splines( -bliparraysize:bliparraysize )
     real(double):: ys, yss, dsum(nsf)
 
     !NEW VARIABLES introduced by TM
-    real(double):: splines_for_z(-bliparraysize:bliparraysize,1:2*extent+1)
-    integer     :: imin_for_z(2*extent+1),imax_for_z(2*extent+1)
+    real(double), allocatable, dimension(:) :: splines
+    real(double), allocatable, dimension(:,:) :: splines_for_z
     integer     :: ierr
     integer     :: ix_grid,iy_grid,iz_grid,ix,iy,iz
     integer     :: nblkx,nblky,nblkz  ! nos. of integ. pts in a block 
@@ -221,13 +217,14 @@ contains
     integer     :: ncover_yz
     integer     :: stat=0,ii
 
-    integer:: ierr_z(1:2*extent+1)
+    integer, allocatable, dimension(:) :: imin_for_z, imax_for_z
     ! inter_1,inter_2,splines,splines_for_z,imin_for_z,imax_for_z
     ! are dynamically allocated variables.
     !**************************************************************************
     !     Start of subroutine
 
-    rec_sgs = one / support_grid_spacing
+    spec = bundle%species(iprim)
+    rec_sgs = one / blip_info(spec)%SupportGridSpacing
     nblkx=nx_in_block
     nblky=ny_in_block
     nblkz=nz_in_block
@@ -245,46 +242,59 @@ contains
     nzmax_grid= naba_blk_supp%nzmax(iprim)*nblkz-1
     !check extent
     ierr=0
-    if(2*extent < nxmax_grid-nxmin_grid) then
+    if(2*blip_info(spec)%Extent < nxmax_grid-nxmin_grid) then
        write(io_lun,*) myid,' ERROR in do_blip : extent for x dir ::', &
-            ' extent nxmin_grid nxmax_grid = ',extent,nxmin_grid,nxmax_grid
+            ' extent nxmin_grid nxmax_grid = ',blip_info(spec)%Extent,nxmin_grid,nxmax_grid
        ierr=1
     endif
-    if(2*extent < nymax_grid-nymin_grid) then
+    if(2*blip_info(spec)%Extent < nymax_grid-nymin_grid) then
        write(io_lun,*) myid,' ERROR in do_blip : extent for y dir ::', &
-            ' extent nymin_grid nymax_grid = ',extent,nymin_grid,nymax_grid
+            ' extent nymin_grid nymax_grid = ',blip_info(spec)%Extent,nymin_grid,nymax_grid
        ierr=1
     endif
-    if(2*extent < nzmax_grid-nzmin_grid) then
+    if(2*blip_info(spec)%Extent < nzmax_grid-nzmin_grid) then
        write(io_lun,*) myid,' ERROR in do_blip : extent for z dir ::', &
-            ' extent nymin_grid nymax_grid = ',extent,nzmin_grid,nzmax_grid
+            ' extent nymin_grid nymax_grid = ',blip_info(spec)%Extent,nzmin_grid,nzmax_grid
        ierr=1
     endif
     if(ierr /= 0) call cq_abort('do_blip ',ierr)
 
     call start_timer(tmr_std_allocation)
-    allocate(inter_1(nsf,-bliparraysize:bliparraysize,-bliparraysize:bliparraysize,2*extent+1),STAT=stat)
+    allocate(inter_1(nsf,-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize, &
+         -blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,2*blip_info(spec)%Extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_1 !',stat)
-    call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
+    call reg_alloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%BlipArraySize+1) &
+         *(2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     inter_1=zero
     call start_timer(tmr_std_allocation)
-    allocate(inter_2(nsf,-bliparraysize:bliparraysize,   2*extent+1 ,2*extent+1),STAT=stat)
-    if(stat/=0) call cq_abort('Error allocating memory to inter_2 !',bliparraysize,extent)
-    call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    allocate(inter_2(nsf,-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize, &
+         2*blip_info(spec)%Extent+1 ,2*blip_info(spec)%Extent+1),STAT=stat)
+    if(stat/=0) call cq_abort('Error allocating memory to inter_2 !',blip_info(spec)%BlipArraySize,blip_info(spec)%Extent)
+    call reg_alloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1)*(2*blip_info(spec)%Extent+1),type_dbl)
+    allocate(splines( -blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize ), &
+         splines_for_z(-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,1:2*blip_info(spec)%Extent+1))
+    call reg_alloc_mem(area_basis,(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%Extent+2),type_dbl)
+    allocate(imin_for_z(2*blip_info(spec)%Extent+1),imax_for_z(2*blip_info(spec)%Extent+1),STAT=stat)
+    call reg_alloc_mem(area_basis,2*(2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     inter_2=zero
+    imin_for_z = 0
+    imax_for_z = 0
+    splines = zero
+    splines_for_z = zero
 
     !x,y,z are used for integration grids
     !bx,by,bz are used for support grids
     DO x = nxmin_grid, nxmax_grid
        ix_grid=x-nxmin_grid+1
        dxxx=x*dcellx_grid-bundle%xprim(iprim) ! = dxx+dx in old version
-       imin = MAX(-bliparraysize,int((dxxx-blip_width*half)*rec_sgs))
-       imax = MIN( bliparraysize,int((dxxx+blip_width*half)*rec_sgs))
+       imin = MAX(-blip_info(spec)%BlipArraySize,int((dxxx-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax = MIN( blip_info(spec)%BlipArraySize,int((dxxx+blip_info(spec)%BlipWidth*half)*rec_sgs))
 
-       if(imin >  bliparraysize) imin= bliparraysize
-       if(imax < -bliparraysize) imax=-bliparraysize
+       if(imin >  blip_info(spec)%BlipArraySize) imin= blip_info(spec)%BlipArraySize
+       if(imax < -blip_info(spec)%BlipArraySize) imax=-blip_info(spec)%BlipArraySize
 
        !OLD dx = rionxi*n_grid_x
        !OLD dx = (- dx + anint(dx))*x_grid*r_super_x
@@ -292,12 +302,12 @@ contains
        !NEW dx+dxx=dxxx
        ! I (TM) think the following expresseion is enough for imin, 
        ! but the difference of the efficiency is small.
-       !  imin = MAX(-bliparraysize,
-       !              int((dxx+dx-blip_width*half)*rec_sgs+one-very_small))
+       !  imin = MAX(-blip_info(spec)%BlipArraySize,
+       !              int((dxx+dx-blip_info(spec)%BlipWidth*half)*rec_sgs+one-very_small))
        DO bx = imin, imax
-          yss = dxxx - bx * support_grid_spacing 
+          yss = dxxx - bx * blip_info(spec)%SupportGridSpacing 
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
           IF( ys .LE. one ) THEN
              splines( bx ) = one + &
                   ys * ys * ( 0.75_double * ys - 1.5_double )
@@ -308,11 +318,11 @@ contains
              splines( bx ) = zero
           END IF
        END DO
-       DO bz = -bliparraysize, bliparraysize
-          DO by = -bliparraysize, bliparraysize
+       DO bz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+          DO by = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              dsum = zero
              DO bx = imin,imax
-                ind_blip = blip_number(bx,by,bz)
+                ind_blip = blip_info(spec)%blip_number(bx,by,bz)
                 IF( ind_blip .NE. 0 ) THEN
                    ys = splines( bx )
                    do nsf1 = 1,nsf
@@ -330,15 +340,15 @@ contains
     DO y = nymin_grid, nymax_grid
        iy_grid=y-nymin_grid+1
        dyyy=y*dcelly_grid-bundle%yprim(iprim)
-       imin = MAX(-bliparraysize,int((dyyy-blip_width*half)*rec_sgs))
-       imax = MIN( bliparraysize,int((dyyy+blip_width*half)*rec_sgs))
-       if(imin >  bliparraysize) imin= bliparraysize
-       if(imax < -bliparraysize) imax=-bliparraysize
+       imin = MAX(-blip_info(spec)%BlipArraySize,int((dyyy-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax = MIN( blip_info(spec)%BlipArraySize,int((dyyy+blip_info(spec)%BlipWidth*half)*rec_sgs))
+       if(imin >  blip_info(spec)%BlipArraySize) imin= blip_info(spec)%BlipArraySize
+       if(imax < -blip_info(spec)%BlipArraySize) imax=-blip_info(spec)%BlipArraySize
 
        DO by = imin,imax
-          yss = dyyy - by * support_grid_spacing 
+          yss = dyyy - by * blip_info(spec)%SupportGridSpacing 
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
           IF( ys .LE. one ) THEN
              splines( by ) = one +  &
                   ys * ys * ( 0.75_double * ys - 1.5_double )
@@ -351,10 +361,10 @@ contains
        END DO
        DO x = nxmin_grid, nxmax_grid
           ix_grid=x-nxmin_grid+1
-          DO bz = -bliparraysize, bliparraysize
+          DO bz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              dsum = zero
              DO by = imin,imax
-                !DO by = -bliparraysize,bliparraysize
+                !DO by = -blip_info(spec)%BlipArraySize,blip_info(spec)%BlipArraySize
                 ys = splines( by )
                 do nsf1 = 1,nsf
                    dsum(nsf1) = dsum(nsf1)+ys*inter_1( nsf1, by, bz, ix_grid)
@@ -373,25 +383,22 @@ contains
        iz_grid=z-nzmin_grid+1
        !dzz = z * r_super_z * z_grid
        dzzz=z*dcellz_grid-bundle%zprim(iprim)
-       imin_for_z(iz_grid) = MAX(-bliparraysize,&
-            int((dzzz-blip_width*half)*rec_sgs))
-       imax_for_z(iz_grid) = MIN( bliparraysize,&
-            int((dzzz+blip_width*half)*rec_sgs))
+       imin_for_z(iz_grid) = MAX(-blip_info(spec)%BlipArraySize,&
+            int((dzzz-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax_for_z(iz_grid) = MIN( blip_info(spec)%BlipArraySize,&
+            int((dzzz+blip_info(spec)%BlipWidth*half)*rec_sgs))
 
-       ierr_z(iz_grid)=0
-       if(imin_for_z(iz_grid) >  bliparraysize) then
-          imin_for_z(iz_grid)= bliparraysize
-          ierr_z(iz_grid)=1
+       if(imin_for_z(iz_grid) >  blip_info(spec)%BlipArraySize) then
+          imin_for_z(iz_grid)= blip_info(spec)%BlipArraySize
        endif
-       if(imax_for_z(iz_grid) < -bliparraysize) then
-          imax_for_z(iz_grid)=-bliparraysize
-          ierr_z(iz_grid)=1
+       if(imax_for_z(iz_grid) < -blip_info(spec)%BlipArraySize) then
+          imax_for_z(iz_grid)=-blip_info(spec)%BlipArraySize
        endif
 
        DO bz = imin_for_z(iz_grid),imax_for_z(iz_grid)
-          yss = dzzz - bz * support_grid_spacing 
+          yss = dzzz - bz * blip_info(spec)%SupportGridSpacing 
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
           IF( ys .LE. one ) THEN
              splines_for_z(bz,iz_grid) = one +                      &
                   ys * ys * ( 0.75_double * ys - 1.5_double )
@@ -430,8 +437,8 @@ contains
        do iz=1,nblkz    ! z-direction in a block
           z=nblkz*(nz_blk-1)+iz-1
           iz_grid=z-nzmin_grid+1
-          if(iz_grid > 2*extent+1) then
-             call cq_abort(' ERROR in do_blip_transform_new iz_grid = ', iz_grid,2*extent+1)
+          if(iz_grid > 2*blip_info(spec)%Extent+1) then
+             call cq_abort(' ERROR in do_blip_transform_new iz_grid = ', iz_grid,2*blip_info(spec)%Extent+1)
           endif
 
           imin=imin_for_z(iz_grid)
@@ -440,21 +447,21 @@ contains
           do iy=1,nblky    ! y-direction in a block
              y=nblky*(ny_blk-1)+iy-1
              iy_grid=y-nymin_grid+1
-             if(iy_grid > 2*extent+1) then
-                call cq_abort(' ERROR in do_blip_transform_new iy_grid = ', iy_grid,2*extent+1)
+             if(iy_grid > 2*blip_info(spec)%Extent+1) then
+                call cq_abort(' ERROR in do_blip_transform_new iy_grid = ', iy_grid,2*blip_info(spec)%Extent+1)
              endif
 
              do ix=1,nblkx    ! x-direction in a block
                 x=nblkx*(nx_blk-1)+ix-1
                 ix_grid=x-nxmin_grid+1
-                if(ix_grid > 2*extent+1) then
-                   call cq_abort(' ERROR in do_blip_transform_new ix_grid = ', ix_grid,2*extent+1)
+                if(ix_grid > 2*blip_info(spec)%Extent+1) then
+                   call cq_abort(' ERROR in do_blip_transform_new ix_grid = ', ix_grid,2*blip_info(spec)%Extent+1)
                 endif
 
                 igrid=igrid+1  ! seq. no. of integration grids
                 dsum = zero
                 DO bz = imin,imax
-                   !DO bz = -bliparraysize,bliparraysize
+                   !DO bz = -blip_info(spec)%BlipArraySize,blip_info(spec)%BlipArraySize
                    ys = splines_for_z(bz,iz_grid)
                    do nsf1 = 1,nsf
                       dsum(nsf1)=dsum(nsf1)+ys*inter_2(nsf1,bz,ix_grid,iy_grid)
@@ -470,8 +477,15 @@ contains
     call start_timer(tmr_std_allocation)
     deallocate(inter_1,inter_2,STAT=stat)
     if(stat/=0) call cq_abort('Error deallocating memory to inter_1 !',stat)
-    call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
-    call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call reg_dealloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1),type_dbl)
+    call reg_dealloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1)*(2*blip_info(spec)%Extent+1),type_dbl)
+    deallocate(splines,splines_for_z,STAT=stat)
+    call reg_dealloc_mem(area_basis,(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%Extent+2),type_dbl)
+    if(stat/=0) call cq_abort('Error deallocating memory to splines !',stat)
+    deallocate(imin_for_z,imax_for_z,STAT=stat)
+    call reg_dealloc_mem(area_basis,2*(2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     return
   end subroutine do_blip_transform_new
@@ -693,13 +707,15 @@ contains
 !!    Added GenComms
 !!   2008/06/10 ast
 !!    Added timers
+!!   2011/11/15 17:00 dave
+!!    Removed blip module and variables passed to transform
 !!  SOURCE
 !!
   subroutine blip_to_grad_new(myid, direction, support)
 
     use datatypes
     use numbers
-    use blip, ONLY: blip_info, BlipArraySize, Extent, BlipWidth, SupportGridSpacing, FourOnBlipWidth
+    use blip, ONLY: blip_info
     use primary_module, ONLY: bundle
     use GenComms, ONLY: my_barrier, cq_abort
     use functions_on_grid, ONLY: gridfunctions
@@ -724,9 +740,7 @@ contains
        if( iprim <= bundle%n_prim ) then
           spec = bundle%species(iprim)
           nsf_send = nsf_species(spec)
-          call do_blip_grad_transform_new(direction, iprim, blip_info(spec)%blip_number, BlipArraySize(spec), &
-               supports_on_atom(iprim), SupportGridSpacing(spec), BlipWidth(spec), FourOnBlipWidth(spec), &
-               nsf_send, Extent(spec))
+          call do_blip_grad_transform_new(direction, iprim, supports_on_atom(iprim), nsf_send)
        else
           nsf_send = 0
        endif
@@ -761,8 +775,7 @@ contains
 !!    Added timers
 !!  SOURCE
 !!
-  subroutine do_blip_grad_transform_new(direction, iprim, blip_number, bliparraysize, data_blip, &
-       support_grid_spacing, blip_width, four_on_blip_width, nsf, extent)
+  subroutine do_blip_grad_transform_new(direction, iprim, data_blip, nsf)
 
     use datatypes
     use numbers
@@ -776,32 +789,28 @@ contains
     use GenComms,        ONLY: cq_abort
     use support_spec_format, ONLY: support_function
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use blip, ONLY: blip_info
 
     implicit none
 
     integer,intent(in)     :: direction
     integer,intent(in)     :: iprim
-    integer,intent(in)     :: extent
-    integer,intent(in)     :: bliparraysize
-    integer,intent(in)     :: blip_number(-bliparraysize:bliparraysize,-bliparraysize:bliparraysize, &
-         -bliparraysize:bliparraysize)
     integer,intent(in)     :: NSF
     type(support_function),intent(in):: data_blip
-    real(double),intent(in):: support_grid_spacing, blip_width, four_on_blip_width
 
     ! Local variables
     real(double),allocatable:: inter_1(:,:,:,:)
     real(double),allocatable:: inter_2(:,:,:,:)
     real(double):: rec_sgs, dx, dy, dz, dxxx, dyyy, dzzz
     integer     :: x, y, z, bx, by, bz 
-    integer     :: imin,imax, nsf1
+    integer     :: imin,imax, nsf1, spec
 
-    REAL(double):: splines( -bliparraysize:bliparraysize )
     real(double):: ys, yss, dsum(NSF)
 
     !NEW VARIABLES introduced by TM
-    real(double):: splines_for_z(-bliparraysize:bliparraysize,1:2*extent+1)
-    integer     :: imin_for_z(2*extent+1),imax_for_z(2*extent+1)
+    real(double), allocatable, dimension(:) :: splines
+    real(double), allocatable, dimension(:,:) :: splines_for_z
+    integer, allocatable, dimension(:) :: imin_for_z, imax_for_z
     integer     :: ierr
     integer     :: ix_grid,iy_grid,iz_grid,ix,iy,iz
     integer     :: nblkx,nblky,nblkz  ! nos. of integ. pts in a block 
@@ -821,7 +830,8 @@ contains
     ! inter_1,inter_2,splines,splines_for_z,imin_for_z,imax_for_z
     ! are dynamically allocated variables.
 
-    rec_sgs = one / support_grid_spacing
+    spec = bundle%species(iprim)
+    rec_sgs = one / blip_info(spec)%SupportGridSpacing
     nblkx=nx_in_block
     nblky=ny_in_block
     nblkz=nz_in_block
@@ -838,42 +848,55 @@ contains
     nzmax_grid= naba_blk_supp%nzmax(iprim)*nblkz-1
     !check extent & MAXBAS.
     ierr=0
-    if(2*extent < nxmax_grid-nxmin_grid) then
+    if(2*blip_info(spec)%Extent < nxmax_grid-nxmin_grid) then
        write(io_lun,*) ' ERROR in do_blip_transform : extent for x direction ::', &
-            ' extent nxmin_grid nxmax_grid = ',extent,nxmin_grid,nxmax_grid
+            ' extent nxmin_grid nxmax_grid = ',blip_info(spec)%Extent,nxmin_grid,nxmax_grid
        ierr=1
     endif
-    if(2*extent < nymax_grid-nymin_grid) then
+    if(2*blip_info(spec)%Extent < nymax_grid-nymin_grid) then
        write(io_lun,*) ' ERROR in do_blip_transform : extent for y direction ::', &
-            ' extent nymin_grid nymax_grid = ',extent,nymin_grid,nymax_grid
+            ' extent nymin_grid nymax_grid = ',blip_info(spec)%Extent,nymin_grid,nymax_grid
        ierr=1
     endif
-    if(2*extent < nzmax_grid-nzmin_grid) then
+    if(2*blip_info(spec)%Extent < nzmax_grid-nzmin_grid) then
        write(io_lun,*) ' ERROR in do_blip_transform : extent for z direction ::', &
-            ' extent nymin_grid nymax_grid = ',extent,nzmin_grid,nzmax_grid
+            ' extent nymin_grid nymax_grid = ',blip_info(spec)%Extent,nzmin_grid,nzmax_grid
        ierr=1
     endif
     if(ierr /= 0) call cq_abort('ERROR in do_blip_grad_transform')
     call start_timer(tmr_std_allocation)
-    allocate(inter_1(NSF,-bliparraysize:bliparraysize,-bliparraysize:bliparraysize,2*extent+1),STAT=stat)
+    allocate(inter_1(NSF,-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,&
+         -blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,2*blip_info(spec)%Extent+1),STAT=stat)
     if(stat/=0) call cq_abort('ERROR in do_blip_grad_transform: allocation of inter_1')
-    call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
+    call reg_alloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     inter_1=zero
     call start_timer(tmr_std_allocation)
-    allocate(inter_2(NSF,-bliparraysize:bliparraysize,   2*extent+1 ,2*extent+1),STAT=stat)
+    allocate(inter_2(NSF,-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,&
+         2*blip_info(spec)%Extent+1,2*blip_info(spec)%Extent+1),STAT=stat)
     if(stat/=0) call cq_abort('ERROR in do_blip_grad_transform: allocation of inter_2')
-    call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call reg_alloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1)*(2*blip_info(spec)%Extent+1),type_dbl)
+    allocate(splines( -blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize ), &
+         splines_for_z(-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,1:2*blip_info(spec)%Extent+1))
+    call reg_alloc_mem(area_basis,(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%Extent+2),type_dbl)
+    allocate(imin_for_z(2*blip_info(spec)%Extent+1),imax_for_z(2*blip_info(spec)%Extent+1),STAT=stat)
+    call reg_alloc_mem(area_basis,2*(2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     inter_2=zero
+    imin_for_z = 0
+    imax_for_z = 0
+    splines = zero
+    splines_for_z = zero
 
     !x,y,z are used for integration grids
     !bx,by,bz are used for support grids
     DO x = nxmin_grid, nxmax_grid
        ix_grid=x-nxmin_grid+1
        dxxx=x*dcellx_grid-bundle%xprim(iprim) ! = dxx+dx in old version
-       imin = MAX(-bliparraysize,int((dxxx-blip_width*half)*rec_sgs))
-       imax = MIN( bliparraysize,int((dxxx+blip_width*half)*rec_sgs))
+       imin = MAX(-blip_info(spec)%BlipArraySize,int((dxxx-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax = MIN( blip_info(spec)%BlipArraySize,int((dxxx+blip_info(spec)%BlipWidth*half)*rec_sgs))
 
        !OLD dx = rionxi*n_grid_x
        !OLD dx = (- dx + anint(dx))*x_grid*r_super_x
@@ -881,16 +904,16 @@ contains
        !NEW dx+dxx=dxxx
        ! I (TM) think the following expresseion is enough for imin, 
        ! but the difference of the efficiency is small.
-       !  imin = MAX(-bliparraysize,
-       !              int((dxx+dx-blip_width*half)*rec_sgs+one-very_small))
+       !  imin = MAX(-blip_info(spec)%BlipArraySize,
+       !              int((dxx+dx-blip_info(spec)%BlipWidth*half)*rec_sgs+one-very_small))
        DO bx = imin, imax
-          yss = dxxx - bx * support_grid_spacing 
+          yss = dxxx - bx * blip_info(spec)%SupportGridSpacing 
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
           if (yss.ge.zero) then
-             yss = four_on_blip_width
+             yss = blip_info(spec)%FourOnBlipWidth
           else
-             yss = -four_on_blip_width
+             yss = -blip_info(spec)%FourOnBlipWidth
           end if
           IF( ys .LE. one ) THEN
              if (direction.ne.1) then
@@ -912,11 +935,11 @@ contains
              splines( bx ) = zero
           END IF
        END DO
-       DO bz = -bliparraysize, bliparraysize
-          DO by = -bliparraysize, bliparraysize
+       DO bz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+          DO by = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              dsum = zero
              DO bx = imin,imax
-                ind_blip = blip_number(bx,by,bz)
+                ind_blip = blip_info(spec)%blip_number(bx,by,bz)
                 IF( ind_blip .NE. 0 ) THEN
                    ys = splines( bx )
                    do nsf1 = 1,NSF
@@ -935,16 +958,16 @@ contains
        iy_grid=y-nymin_grid+1
        !dyy = y * r_super_y * y_grid
        dyyy=y*dcelly_grid-bundle%yprim(iprim)
-       imin = MAX(-bliparraysize,int((dyyy-blip_width*half)*rec_sgs))
-       imax = MIN( bliparraysize,int((dyyy+blip_width*half)*rec_sgs))
+       imin = MAX(-blip_info(spec)%BlipArraySize,int((dyyy-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax = MIN( blip_info(spec)%BlipArraySize,int((dyyy+blip_info(spec)%BlipWidth*half)*rec_sgs))
        DO by = imin,imax
-          yss = dyyy - by * support_grid_spacing 
+          yss = dyyy - by * blip_info(spec)%SupportGridSpacing 
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
           if (yss.ge.zero) then
-             yss = four_on_blip_width
+             yss = blip_info(spec)%FourOnBlipWidth
           else
-             yss = -four_on_blip_width
+             yss = -blip_info(spec)%FourOnBlipWidth
           end if
           IF( ys .LE. one ) THEN
              if (direction.ne.2) then
@@ -966,7 +989,7 @@ contains
        END DO
        DO x = nxmin_grid, nxmax_grid
           ix_grid=x-nxmin_grid+1
-          DO bz = -bliparraysize, bliparraysize
+          DO bz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              dsum = zero
              DO by = imin,imax
                 ys = splines( by )
@@ -985,18 +1008,18 @@ contains
        iz_grid=z-nzmin_grid+1
        !dzz = z * r_super_z * z_grid
        dzzz=z*dcellz_grid-bundle%zprim(iprim)
-       imin_for_z(iz_grid) = MAX(-bliparraysize,&
-            int((dzzz-blip_width*half)*rec_sgs))
-       imax_for_z(iz_grid) = MIN( bliparraysize,&
-            int((dzzz+blip_width*half)*rec_sgs))
+       imin_for_z(iz_grid) = MAX(-blip_info(spec)%BlipArraySize,&
+            int((dzzz-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax_for_z(iz_grid) = MIN( blip_info(spec)%BlipArraySize,&
+            int((dzzz+blip_info(spec)%BlipWidth*half)*rec_sgs))
        DO bz = imin_for_z(iz_grid),imax_for_z(iz_grid)
-          yss = dzzz - bz * support_grid_spacing 
+          yss = dzzz - bz * blip_info(spec)%SupportGridSpacing 
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
           if (yss.ge.zero) then
-             yss = four_on_blip_width
+             yss = blip_info(spec)%FourOnBlipWidth
           else
-             yss = -four_on_blip_width
+             yss = -blip_info(spec)%FourOnBlipWidth
           end if
           IF( ys .LE. one ) THEN
              if (direction.ne.3) then
@@ -1047,8 +1070,8 @@ contains
        do iz=1,nblkz    ! z-direction in a block
           z=nblkz*(nz_blk-1)+iz-1
           iz_grid=z-nzmin_grid+1
-          if(iz_grid > 2*extent+1) then
-             call cq_abort(' ERROR in do_blip_grad_transform_new iz_grid = ', iz_grid,2*extent+1)
+          if(iz_grid > 2*blip_info(spec)%Extent+1) then
+             call cq_abort(' ERROR in do_blip_grad_transform_new iz_grid = ', iz_grid,2*blip_info(spec)%Extent+1)
           endif
 
           imin=imin_for_z(iz_grid)
@@ -1056,15 +1079,15 @@ contains
           do iy=1,nblky    ! y-direction in a block
              y=nblky*(ny_blk-1)+iy-1
              iy_grid=y-nymin_grid+1
-             if(iy_grid > 2*extent+1) then
-                call cq_abort(' ERROR in do_blip_grad_transform_new iy_grid = ', iy_grid,2*extent+1)
+             if(iy_grid > 2*blip_info(spec)%Extent+1) then
+                call cq_abort(' ERROR in do_blip_grad_transform_new iy_grid = ', iy_grid,2*blip_info(spec)%Extent+1)
              endif
 
              do ix=1,nblkx    ! x-direction in a block
                 x=nblkx*(nx_blk-1)+ix-1
                 ix_grid=x-nxmin_grid+1
-                if(ix_grid > 2*extent+1) then
-                   call cq_abort(' ERROR in do_blip_grad_transform_new ix_grid = ', ix_grid,2*extent+1)
+                if(ix_grid > 2*blip_info(spec)%Extent+1) then
+                   call cq_abort(' ERROR in do_blip_grad_transform_new ix_grid = ', ix_grid,2*blip_info(spec)%Extent+1)
                 endif
                 igrid=igrid+1  ! seq. no. of integration grids
                 dsum = zero
@@ -1084,8 +1107,15 @@ contains
     call start_timer(tmr_std_allocation)
     deallocate(inter_1,inter_2,STAT=stat)
     if(stat/=0) call cq_abort('ERROR deallocating memory of inter_1&2 !',stat)
-    call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
-    call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call reg_dealloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1),type_dbl)
+    call reg_dealloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1)*(2*blip_info(spec)%Extent+1),type_dbl)
+    deallocate(splines,splines_for_z,STAT=stat)
+    call reg_dealloc_mem(area_basis,(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%Extent+2),type_dbl)
+    if(stat/=0) call cq_abort('Error deallocating memory to splines !',stat)
+    deallocate(imin_for_z,imax_for_z,STAT=stat)
+    call reg_dealloc_mem(area_basis,2*(2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     return
   end subroutine do_blip_grad_transform_new
@@ -1118,6 +1148,8 @@ contains
 !!    Changed to use new version of distribute result
 !!   2008/06/10 ast
 !!    Added timers
+!!   2011/11/15 17:00 dave
+!!    Removed blip module and variables passed to transform
 !!  TODO
 !!   I think this subroutine can include the work by 
 !!   blip_to_grad_transform TM
@@ -1127,7 +1159,7 @@ contains
 
     use datatypes
     use numbers
-    use blip, ONLY: blip_info, BlipArraySize, Extent, BlipWidth, SupportGridSpacing, FourOnBlipWidth
+    use blip, ONLY: blip_info
     use primary_module, ONLY: bundle
     use GenComms, ONLY: my_barrier
     use functions_on_grid, ONLY: gridfunctions
@@ -1161,9 +1193,7 @@ contains
        if( iprim <= bundle%n_prim ) then
           spec = bundle%species(iprim)
           nsf_send = nsf_species(spec)
-          call do_blip_gradgrad_transform_new( n_d, iprim, blip_info(spec)%blip_number, BlipArraySize(spec), &
-               supports_on_atom(iprim), SupportGridSpacing(spec), BlipWidth(spec), FourOnBlipWidth(spec), &
-               nsf_send, Extent(spec))
+          call do_blip_gradgrad_transform_new( n_d, iprim, supports_on_atom(iprim), nsf_send)
        else
           nsf_send = 0
        endif
@@ -1199,8 +1229,7 @@ contains
 !!    Added timers
 !!  SOURCE
 !!
-  subroutine do_blip_gradgrad_transform_new(n_d, iprim, blip_number, bliparraysize, data_blip, &
-       support_grid_spacing, blip_width, four_on_blip_width, nsf, extent)
+  subroutine do_blip_gradgrad_transform_new(n_d, iprim, data_blip, nsf)
 
     use datatypes
     use numbers
@@ -1214,33 +1243,28 @@ contains
     use GenComms,        ONLY: cq_abort
     use support_spec_format, ONLY: support_function
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use blip, ONLY: blip_info
 
     implicit none
 
     integer,intent(in)     :: n_d(3)
     integer,intent(in)     :: iprim
-    integer,intent(in)     :: extent
-    integer,intent(in)     :: bliparraysize
-    integer,intent(in)     :: blip_number(-bliparraysize:bliparraysize,-bliparraysize:bliparraysize, &
-         -bliparraysize:bliparraysize)
     integer,intent(in)     :: NSF
     type(support_function),intent(in):: data_blip
-    real(double),intent(in):: support_grid_spacing, blip_width,&
-         four_on_blip_width
 
     ! Local variables
     real(double),allocatable:: inter_1(:,:,:,:)
     real(double),allocatable:: inter_2(:,:,:,:)
     real(double):: rec_sgs, dx, dy, dz, dxxx, dyyy, dzzz
     integer     :: x, y, z, bx, by, bz 
-    integer     :: imin,imax, nsf1
+    integer     :: imin,imax, nsf1, spec
 
-    REAL(double):: splines( -bliparraysize:bliparraysize )
     real(double):: ys, yss, dsum(NSF)
 
     !NEW VARIABLES introduced by TM
-    real(double):: splines_for_z(-bliparraysize:bliparraysize,1:2*extent+1)
-    integer     :: imin_for_z(2*extent+1),imax_for_z(2*extent+1)
+    real(double), allocatable, dimension(:) :: splines
+    real(double), allocatable, dimension(:,:) :: splines_for_z
+    integer, allocatable, dimension(:) :: imin_for_z, imax_for_z
     integer     :: ierr
     integer     :: ix_grid,iy_grid,iz_grid,ix,iy,iz
     integer     :: nblkx,nblky,nblkz  ! nos. of integ. pts in a block 
@@ -1260,7 +1284,8 @@ contains
     ! inter_1,inter_2,splines,splines_for_z,imin_for_z,imax_for_z
     ! are dynamically allocated variables.
 
-    rec_sgs = one / support_grid_spacing
+    spec = bundle%species(iprim)
+    rec_sgs = one / blip_info(spec)%SupportGridSpacing
     nblkx=nx_in_block
     nblky=ny_in_block
     nblkz=nz_in_block
@@ -1277,55 +1302,68 @@ contains
     nzmax_grid= naba_blk_supp%nzmax(iprim)*nblkz-1
     !check extent
     ierr=0
-    if(2*extent < nxmax_grid-nxmin_grid) then
+    if(2*blip_info(spec)%Extent < nxmax_grid-nxmin_grid) then
        write(io_lun,*) ' ERROR in do_blip_transform : extent for x direction ::', &
-            ' extent nxmin_grid nxmax_grid = ',extent,nxmin_grid,nxmax_grid
+            ' extent nxmin_grid nxmax_grid = ',blip_info(spec)%Extent,nxmin_grid,nxmax_grid
        ierr=1
     endif
-    if(2*extent < nymax_grid-nymin_grid) then
+    if(2*blip_info(spec)%Extent < nymax_grid-nymin_grid) then
        write(io_lun,*) ' ERROR in do_blip_transform : extent for y direction ::', &
-            ' extent nymin_grid nymax_grid = ',extent,nymin_grid,nymax_grid
+            ' extent nymin_grid nymax_grid = ',blip_info(spec)%Extent,nymin_grid,nymax_grid
        ierr=1
     endif
-    if(2*extent < nzmax_grid-nzmin_grid) then
+    if(2*blip_info(spec)%Extent < nzmax_grid-nzmin_grid) then
        write(io_lun,*) ' ERROR in do_blip_transform : extent for z direction ::', &
-            ' extent nymin_grid nymax_grid = ',extent,nzmin_grid,nzmax_grid
+            ' extent nymin_grid nymax_grid = ',blip_info(spec)%Extent,nzmin_grid,nzmax_grid
        ierr=1
     endif
     if(ierr /= 0) call cq_abort('do_blip_gradgrad_transform ',ierr)
     call start_timer(tmr_std_allocation)
-    allocate(inter_1(NSF,-bliparraysize:bliparraysize,-bliparraysize:bliparraysize,2*extent+1),STAT=stat)
+    allocate(inter_1(NSF,-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize, &
+         -blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,2*blip_info(spec)%Extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_1 !',stat)
-    call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
+    call reg_alloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     inter_1=zero
     call start_timer(tmr_std_allocation)
-    allocate(inter_2(NSF,-bliparraysize:bliparraysize,   2*extent+1 ,2*extent+1),STAT=stat)
+    allocate(inter_2(NSF,-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,&
+         2*blip_info(spec)%Extent+1,2*blip_info(spec)%Extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_2 !',stat)
-    call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call reg_alloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1)*(2*blip_info(spec)%Extent+1),type_dbl)
+    allocate(splines( -blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize ), &
+         splines_for_z(-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,1:2*blip_info(spec)%Extent+1))
+    call reg_alloc_mem(area_basis,(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%Extent+2),type_dbl)
+    allocate(imin_for_z(2*blip_info(spec)%Extent+1),imax_for_z(2*blip_info(spec)%Extent+1),STAT=stat)
+    call reg_alloc_mem(area_basis,2*(2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     inter_2=zero
+    imin_for_z = 0
+    imax_for_z = 0
+    splines = zero
+    splines_for_z = zero
 
     !x,y,z are used for integration grids
     !bx,by,bz are used for support grids
     DO x = nxmin_grid, nxmax_grid
        ix_grid=x-nxmin_grid+1
        dxxx=x*dcellx_grid-bundle%xprim(iprim) ! = dxx+dx in old version
-       imin = MAX(-bliparraysize,int((dxxx-blip_width*half)*rec_sgs))
-       imax = MIN( bliparraysize,int((dxxx+blip_width*half)*rec_sgs))
+       imin = MAX(-blip_info(spec)%BlipArraySize,int((dxxx-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax = MIN( blip_info(spec)%BlipArraySize,int((dxxx+blip_info(spec)%BlipWidth*half)*rec_sgs))
 
-       if(imin > bliparraysize) imin= bliparraysize
-       if(imax <-bliparraysize) imax=-bliparraysize
+       if(imin > blip_info(spec)%BlipArraySize) imin= blip_info(spec)%BlipArraySize
+       if(imax <-blip_info(spec)%BlipArraySize) imax=-blip_info(spec)%BlipArraySize
 
        DO bx = imin, imax
-          yss = dxxx - bx * support_grid_spacing 
+          yss = dxxx - bx * blip_info(spec)%SupportGridSpacing 
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
 
           if (yss.ge.zero) then
-             yss = four_on_blip_width
+             yss = blip_info(spec)%FourOnBlipWidth
           else
-             yss = -four_on_blip_width
+             yss = -blip_info(spec)%FourOnBlipWidth
           end if
           IF( ys .LE. one ) THEN
              if (n_d(1) == 0) then
@@ -1349,11 +1387,11 @@ contains
              splines( bx ) = zero
           END IF
        END DO
-       DO bz = -bliparraysize, bliparraysize
-          DO by = -bliparraysize, bliparraysize
+       DO bz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+          DO by = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              dsum = zero
              DO bx = imin,imax
-                ind_blip = blip_number(bx,by,bz)
+                ind_blip = blip_info(spec)%blip_number(bx,by,bz)
                 IF( ind_blip .NE. 0 ) THEN
                    ys = splines( bx )
                    do nsf1 = 1,NSF
@@ -1371,21 +1409,21 @@ contains
     DO y = nymin_grid, nymax_grid
        iy_grid=y-nymin_grid+1
        dyyy=y*dcelly_grid-bundle%yprim(iprim)
-       imin = MAX(-bliparraysize,int((dyyy-blip_width*half)*rec_sgs))
-       imax = MIN( bliparraysize,int((dyyy+blip_width*half)*rec_sgs))
+       imin = MAX(-blip_info(spec)%BlipArraySize,int((dyyy-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax = MIN( blip_info(spec)%BlipArraySize,int((dyyy+blip_info(spec)%BlipWidth*half)*rec_sgs))
 
-       if(imin > bliparraysize) imin= bliparraysize
-       if(imax <-bliparraysize) imax=-bliparraysize
+       if(imin > blip_info(spec)%BlipArraySize) imin= blip_info(spec)%BlipArraySize
+       if(imax <-blip_info(spec)%BlipArraySize) imax=-blip_info(spec)%BlipArraySize
 
        DO by = imin,imax
-          yss = dyyy - by * support_grid_spacing 
+          yss = dyyy - by * blip_info(spec)%SupportGridSpacing 
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
 
           if (yss.ge.zero) then
-             yss = four_on_blip_width
+             yss = blip_info(spec)%FourOnBlipWidth
           else
-             yss = -four_on_blip_width
+             yss = -blip_info(spec)%FourOnBlipWidth
           end if
 
           IF( ys .LE. one ) THEN
@@ -1411,7 +1449,7 @@ contains
        END DO
        DO x = nxmin_grid, nxmax_grid
           ix_grid=x-nxmin_grid+1
-          DO bz = -bliparraysize, bliparraysize
+          DO bz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              dsum = zero
              DO by = imin,imax
                 ys = splines( by )
@@ -1429,24 +1467,24 @@ contains
     DO z = nzmin_grid, nzmax_grid
        iz_grid=z-nzmin_grid+1
        dzzz=z*dcellz_grid-bundle%zprim(iprim)
-       imin_for_z(iz_grid) = MAX(-bliparraysize,&
-            int((dzzz-blip_width*half)*rec_sgs))
-       imax_for_z(iz_grid) = MIN( bliparraysize,&
-            int((dzzz+blip_width*half)*rec_sgs))
+       imin_for_z(iz_grid) = MAX(-blip_info(spec)%BlipArraySize,&
+            int((dzzz-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax_for_z(iz_grid) = MIN( blip_info(spec)%BlipArraySize,&
+            int((dzzz+blip_info(spec)%BlipWidth*half)*rec_sgs))
 
-       if(imin_for_z(iz_grid) > bliparraysize) &
-            imin_for_z(iz_grid) = bliparraysize
-       if(imax_for_z(iz_grid) <-bliparraysize) &
-            imax_for_z(iz_grid) =-bliparraysize
+       if(imin_for_z(iz_grid) > blip_info(spec)%BlipArraySize) &
+            imin_for_z(iz_grid) = blip_info(spec)%BlipArraySize
+       if(imax_for_z(iz_grid) <-blip_info(spec)%BlipArraySize) &
+            imax_for_z(iz_grid) =-blip_info(spec)%BlipArraySize
 
        DO bz = imin_for_z(iz_grid),imax_for_z(iz_grid)
-          yss = dzzz - bz * support_grid_spacing 
+          yss = dzzz - bz * blip_info(spec)%SupportGridSpacing 
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
           if (yss.ge.zero) then
-             yss = four_on_blip_width
+             yss = blip_info(spec)%FourOnBlipWidth
           else
-             yss =-four_on_blip_width
+             yss =-blip_info(spec)%FourOnBlipWidth
           end if
           IF( ys .LE. one ) THEN
              if (n_d(3) == 0) then
@@ -1500,8 +1538,8 @@ contains
        do iz=1,nblkz    ! z-direction in a block
           z=nblkz*(nz_blk-1)+iz-1
           iz_grid=z-nzmin_grid+1
-          if(iz_grid > 2*extent+1) then
-             call cq_abort(' ERROR in do_blip_gradgrad_transform_new iz_grid = ', iz_grid,2*extent+1)
+          if(iz_grid > 2*blip_info(spec)%Extent+1) then
+             call cq_abort(' ERROR in do_blip_gradgrad_transform_new iz_grid = ', iz_grid,2*blip_info(spec)%Extent+1)
           endif
 
           imin=imin_for_z(iz_grid)
@@ -1509,15 +1547,15 @@ contains
           do iy=1,nblky    ! y-direction in a block
              y=nblky*(ny_blk-1)+iy-1
              iy_grid=y-nymin_grid+1
-             if(iy_grid > 2*extent+1) then
-                call cq_abort(' ERROR in do_blip_gradgrad_transform_new iy_grid = ', iy_grid,2*extent+1)
+             if(iy_grid > 2*blip_info(spec)%Extent+1) then
+                call cq_abort(' ERROR in do_blip_gradgrad_transform_new iy_grid = ', iy_grid,2*blip_info(spec)%Extent+1)
              endif
 
              do ix=1,nblkx    ! x-direction in a block
                 x=nblkx*(nx_blk-1)+ix-1
                 ix_grid=x-nxmin_grid+1
-                if(ix_grid > 2*extent+1) then
-                   call cq_abort(' ERROR in do_blip_gradgrad_transform_new ix_grid = ', ix_grid,2*extent+1)
+                if(ix_grid > 2*blip_info(spec)%Extent+1) then
+                   call cq_abort(' ERROR in do_blip_gradgrad_transform_new ix_grid = ', ix_grid,2*blip_info(spec)%Extent+1)
                 endif
 
                 igrid=igrid+1  ! seq. no. of integration grids
@@ -1538,8 +1576,15 @@ contains
     call start_timer(tmr_std_allocation)
     deallocate(inter_1,inter_2,STAT=stat)
     if(stat/=0) call cq_abort(' ERROR in do_blip_gradgrad_transform_new: deallocation')
-    call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
-    call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call reg_dealloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1),type_dbl)
+    call reg_dealloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1)*(2*blip_info(spec)%Extent+1),type_dbl)
+    deallocate(splines,splines_for_z,STAT=stat)
+    call reg_dealloc_mem(area_basis,(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%Extent+2),type_dbl)
+    if(stat/=0) call cq_abort('Error deallocating memory to splines !',stat)
+    deallocate(imin_for_z,imax_for_z,STAT=stat)
+    call reg_dealloc_mem(area_basis,2*(2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     return
   end subroutine do_blip_gradgrad_transform_new
@@ -1570,6 +1615,8 @@ contains
 !!    Added GenComms
 !!   2008/06/10 ast
 !!    Added timers
+!!   2011/11/15 17:00 dave
+!!    Removed blip module and variables passed to transform
 !!  SOURCE
 !!
   subroutine inverse_blip_transform_new(myid,dsupport, data_dblip, n_prim)
@@ -1580,7 +1627,7 @@ contains
     use comm_array_module, ONLY: send_array
     use set_blipgrid_module, ONLY:naba_blk_supp,comBG
     use block_module,        ONLY: n_pts_in_block  ! = blocks%nm_group(:)
-    use blip, ONLY: blip_info, BlipArraySize, Extent, BlipWidth, SupportGridSpacing, FourOnBlipWidth
+    use blip, ONLY: blip_info
     use GenComms, ONLY: my_barrier
     use species_module, ONLY: nsf_species
     use support_spec_format, ONLY: support_function
@@ -1613,9 +1660,7 @@ contains
        call my_barrier()   ! this is not needed.
 
        if(iprim <= bundle%n_prim) then
-          call do_inverse_blip_new ( myid, iprim, blip_info(spec)%blip_number, BlipArraySize(spec), &
-               data_dblip(iprim), SupportGridSpacing(spec), BlipWidth(spec), FourOnBlipWidth(spec), &
-               nsf_recv, Extent(spec))
+          call do_inverse_blip_new ( myid, iprim, data_dblip(iprim), nsf_recv)
        endif
     end do
     call stop_timer(tmr_std_basis)
@@ -1650,8 +1695,7 @@ contains
 !!    Added timers
 !!  SOURCE
 !!
-  subroutine do_inverse_blip_new( myid, iprim, blip_number, bliparraysize,data_dblip, &
-       support_grid_spacing, blip_width, four_on_blip_width, nsf, extent)
+  subroutine do_inverse_blip_new( myid, iprim, data_dblip, nsf)
 
     ! modules
     use datatypes
@@ -1667,31 +1711,27 @@ contains
     use GenComms, ONLY: cq_abort
     use support_spec_format, ONLY: support_function
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use blip, ONLY: blip_info
 
     ! Shared variable
     implicit none
 
     integer,intent(in):: iprim,myid
-    integer,intent(in):: nsf, extent
-    integer,intent(in):: bliparraysize
-    integer,intent(in):: blip_number(-bliparraysize:bliparraysize,-bliparraysize:bliparraysize, &
-         -bliparraysize:bliparraysize)
-    real(double),intent(in) :: support_grid_spacing, blip_width, &
-         four_on_blip_width
+    integer,intent(in):: nsf
     type(support_function),intent(out):: data_dblip
 
     ! Local variables
     real(double),allocatable:: inter_1(:,:,:,:)
     real(double),allocatable:: inter_2(:,:,:,:)
     real(double):: rec_sgs, dxxx, dyyy, dzzz
-    integer     :: x, y, z, bx, by, bz, imin, imax, nsf1
+    integer     :: x, y, z, bx, by, bz, imin, imax, nsf1, spec
     integer     :: nxmin_grid,nxmax_grid
     integer     :: nymin_grid,nymax_grid
     integer     :: nzmin_grid,nzmax_grid
-    integer     :: imin_for_z(2*extent+1),imax_for_z(2*extent+1)
+    integer, allocatable, dimension(:) :: imin_for_z, imax_for_z
 
-    real(double):: splines( -bliparraysize:bliparraysize )
-    real(double):: splines_for_z(-bliparraysize:bliparraysize,2*extent+1)
+    real(double), allocatable, dimension(:) :: splines
+    real(double), allocatable, dimension(:,:) :: splines_for_z
     real(double):: ys, yss, dsum(NSF)
 
     integer     :: ierr,stat
@@ -1711,20 +1751,34 @@ contains
     !**************************************************************************
     !     Start of subroutine
 
+    spec = bundle%species(iprim)
     call start_timer(tmr_std_allocation)
-    allocate(inter_1(NSF,-bliparraysize:bliparraysize,-bliparraysize:bliparraysize,2*extent+1),STAT=stat)
+    allocate(inter_1(NSF,-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,&
+         -blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,2*blip_info(spec)%Extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_1 !',stat)
-    call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
+    call reg_alloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     inter_1=zero
     call start_timer(tmr_std_allocation)
-    allocate(inter_2(NSF,-bliparraysize:bliparraysize,   2*extent+1 ,2*extent+1),STAT=stat)
+    allocate(inter_2(NSF,-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,&
+         2*blip_info(spec)%Extent+1 ,2*blip_info(spec)%Extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_2 !',stat)
-    call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call reg_alloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1)*(2*blip_info(spec)%Extent+1),type_dbl)
+    allocate(splines( -blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize ), &
+         splines_for_z(-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,1:2*blip_info(spec)%Extent+1))
+    call reg_alloc_mem(area_basis,(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%Extent+2),type_dbl)
+    allocate(imin_for_z(2*blip_info(spec)%Extent+1),imax_for_z(2*blip_info(spec)%Extent+1),STAT=stat)
+    call reg_alloc_mem(area_basis,2*(2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     inter_2=zero
+    imin_for_z = 0
+    imax_for_z = 0
+    splines = zero
+    splines_for_z = zero
 
-    rec_sgs = one / support_grid_spacing
+    rec_sgs = one / blip_info(spec)%SupportGridSpacing
     nblkx=nx_in_block
     nblky=ny_in_block
     nblkz=nz_in_block
@@ -1742,40 +1796,40 @@ contains
 
     !check extent
     ierr=0
-    if(2*extent < nxmax_grid-nxmin_grid) then
+    if(2*blip_info(spec)%Extent < nxmax_grid-nxmin_grid) then
        write(io_lun,*) myid,' ERROR in do_inverse_blip : extent for x dir ::', &
-            ' extent nxmin_grid nxmax_grid = ',extent,nxmin_grid,nxmax_grid
+            ' extent nxmin_grid nxmax_grid = ',blip_info(spec)%Extent,nxmin_grid,nxmax_grid
        ierr=1
     endif
-    if(2*extent < nymax_grid-nymin_grid) then
+    if(2*blip_info(spec)%Extent < nymax_grid-nymin_grid) then
        write(io_lun,*) myid,' ERROR in do_inverse_blip : extent for y dir ::', &
-            ' extent nymin_grid nymax_grid = ',extent,nymin_grid,nymax_grid
+            ' extent nymin_grid nymax_grid = ',blip_info(spec)%Extent,nymin_grid,nymax_grid
        ierr=1
     endif
-    if(2*extent < nzmax_grid-nzmin_grid) then
+    if(2*blip_info(spec)%Extent < nzmax_grid-nzmin_grid) then
        write(io_lun,*) myid,' ERROR in do_inverse_blip : extent for z dir ::', &
-            ' extent nymin_grid nymax_grid = ',extent,nzmin_grid,nzmax_grid
+            ' extent nymin_grid nymax_grid = ',blip_info(spec)%Extent,nzmin_grid,nzmax_grid
        ierr=1
     endif
     if(ierr /= 0) call cq_abort('do_inverse_blip ',ierr)
     DO z = nzmin_grid , nzmax_grid
        iz_grid=z-nzmin_grid+1
        dzzz=z*dcellz_grid-bundle%zprim(iprim)
-       imin_for_z(iz_grid)=MAX(-bliparraysize, &
-            int((dzzz-blip_width*half)*rec_sgs))
-       imax_for_z(iz_grid)=MIN( bliparraysize, &
-            int((dzzz+blip_width*half)*rec_sgs))
-       if(imin_for_z(iz_grid) > bliparraysize) then
-          imin_for_z(iz_grid)=bliparraysize
+       imin_for_z(iz_grid)=MAX(-blip_info(spec)%BlipArraySize, &
+            int((dzzz-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax_for_z(iz_grid)=MIN( blip_info(spec)%BlipArraySize, &
+            int((dzzz+blip_info(spec)%BlipWidth*half)*rec_sgs))
+       if(imin_for_z(iz_grid) > blip_info(spec)%BlipArraySize) then
+          imin_for_z(iz_grid)=blip_info(spec)%BlipArraySize
        endif
-       if(imax_for_z(iz_grid) < -bliparraysize) then
-          imax_for_z(iz_grid)=-bliparraysize
+       if(imax_for_z(iz_grid) < -blip_info(spec)%BlipArraySize) then
+          imax_for_z(iz_grid)=-blip_info(spec)%BlipArraySize
        endif
 
        DO bz = imin_for_z(iz_grid), imax_for_z(iz_grid)
-          yss = dzzz - bz * support_grid_spacing 
+          yss = dzzz - bz * blip_info(spec)%SupportGridSpacing 
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
           IF( ys .LE. one ) THEN
              splines_for_z(bz,iz_grid) = one +                     &
                   ys * ys * ( 0.75_double * ys - 1.5_double )
@@ -1845,14 +1899,14 @@ contains
     DO y = nymin_grid, nymax_grid
        iy_grid=y-nymin_grid+1
        dyyy=y*dcelly_grid-bundle%yprim(iprim)
-       imin = MAX(-bliparraysize,int((dyyy-blip_width*half)*rec_sgs))
-       imax = MIN( bliparraysize,int((dyyy+blip_width*half)*rec_sgs))
-       if(imin >  bliparraysize) imin= bliparraysize
-       if(imax < -bliparraysize) imax=-bliparraysize
+       imin = MAX(-blip_info(spec)%BlipArraySize,int((dyyy-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax = MIN( blip_info(spec)%BlipArraySize,int((dyyy+blip_info(spec)%BlipWidth*half)*rec_sgs))
+       if(imin >  blip_info(spec)%BlipArraySize) imin= blip_info(spec)%BlipArraySize
+       if(imax < -blip_info(spec)%BlipArraySize) imax=-blip_info(spec)%BlipArraySize
        DO by = imin, imax
-          yss = dyyy - by * support_grid_spacing 
+          yss = dyyy - by * blip_info(spec)%SupportGridSpacing 
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
           IF( ys .LE. one ) THEN
              splines( by ) = one +  &
                   ys * ys * ( 0.75_double * ys - 1.5_double )
@@ -1865,7 +1919,7 @@ contains
        END DO
        DO x = nxmin_grid, nxmax_grid
           ix_grid=x-nxmin_grid+1
-          DO bz = -bliparraysize, bliparraysize
+          DO bz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              do nsf1 = 1,NSF
                 dsum(nsf1) = inter_2(nsf1,bz,ix_grid,iy_grid )
              enddo
@@ -1882,14 +1936,14 @@ contains
     DO x = nxmin_grid, nxmax_grid
        ix_grid=x-nxmin_grid+1
        dxxx=x*dcellx_grid-bundle%xprim(iprim)
-       imin = MAX(-bliparraysize,int((dxxx-blip_width*half)*rec_sgs))
-       imax = MIN( bliparraysize,int((dxxx+blip_width*half)*rec_sgs))
-       if(imin >  bliparraysize) imin= bliparraysize
-       if(imax < -bliparraysize) imax=-bliparraysize
+       imin = MAX(-blip_info(spec)%BlipArraySize,int((dxxx-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax = MIN( blip_info(spec)%BlipArraySize,int((dxxx+blip_info(spec)%BlipWidth*half)*rec_sgs))
+       if(imin >  blip_info(spec)%BlipArraySize) imin= blip_info(spec)%BlipArraySize
+       if(imax < -blip_info(spec)%BlipArraySize) imax=-blip_info(spec)%BlipArraySize
        DO bx =imin, imax
-          yss = dxxx - bx * support_grid_spacing
+          yss = dxxx - bx * blip_info(spec)%SupportGridSpacing
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
           IF( ys .LE. one ) THEN
              splines( bx ) = one +  &
                   ys * ys * ( 0.75_double * ys - 1.5_double )
@@ -1900,13 +1954,13 @@ contains
              splines( bx ) = zero
           END IF
        END DO
-       DO bz = -bliparraysize, bliparraysize
-          DO by = -bliparraysize, bliparraysize
+       DO bz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+          DO by = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              do nsf1 = 1,NSF
                 dsum(nsf1) = inter_1( nsf1,by,bz,ix_grid)
              enddo
              DO bx = imin, imax
-                ind_blip = blip_number(bx,by,bz)
+                ind_blip = blip_info(spec)%blip_number(bx,by,bz)
                 IF(ind_blip /= 0 ) THEN
                    ys = splines( bx )
                    do nsf1 = 1,NSF
@@ -1921,11 +1975,18 @@ contains
     call start_timer(tmr_std_allocation)
     deallocate(inter_1,inter_2,STAT=stat)
     if(stat/=0) call cq_abort('Error deallocating memory to inter_1 !',stat)
-    call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
-    call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call reg_dealloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1),type_dbl)
+    call reg_dealloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1)*(2*blip_info(spec)%Extent+1),type_dbl)
     call reg_dealloc_mem(area_basis,size(send_array),type_dbl)
+    deallocate(splines,splines_for_z,STAT=stat)
+    call reg_dealloc_mem(area_basis,(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%Extent+2),type_dbl)
+    if(stat/=0) call cq_abort('Error deallocating memory to splines !',stat)
     deallocate(send_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating send_array in do_inverse_blip: ",stat)
+    deallocate(imin_for_z,imax_for_z,STAT=stat)
+    call reg_dealloc_mem(area_basis,2*(2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     return
   end subroutine do_inverse_blip_new
@@ -2186,12 +2247,14 @@ contains
 !!    Added ROBODoc, removed subroutine calls
 !!   11/06/2001 dave
 !!    Added GenComms
+!!   2011/11/15 17:00 dave
+!!    Removed blip module and variables passed to transform
 !!  SOURCE
 !!
   subroutine inverse_blip_to_grad_new(myid, direction, dsupport, data_dblip, n_prim)
 
     use datatypes
-    use blip, ONLY: blip_info, BlipArraySize, Extent, BlipWidth, SupportGridSpacing, FourOnBlipWidth
+    use blip, ONLY: blip_info
     use numbers
     use primary_module, ONLY:bundle
     use set_blipgrid_module, ONLY:naba_blk_supp,comBG
@@ -2226,9 +2289,7 @@ contains
 
        call my_barrier()
        if(iprim <= bundle%n_prim) then
-          call do_inverse_blip_to_grad_new (myid, direction, iprim, blip_info(spec)%blip_number, BlipArraySize(spec), &
-               data_dblip(iprim), SupportGridSpacing(spec), BlipWidth(spec), FourOnBlipWidth(spec), &
-               nsf_recv, Extent(spec))
+          call do_inverse_blip_to_grad_new (myid, direction, iprim, data_dblip(iprim), nsf_recv)
        endif
     end do
     return
@@ -2259,8 +2320,7 @@ contains
 !!    Added timers
 !!  SOURCE
 !!
-  subroutine do_inverse_blip_to_grad_new( myid, direction, iprim, blip_number, bliparraysize,data_dblip, &
-       support_grid_spacing, blip_width, four_on_blip_width, NSF, extent)
+  subroutine do_inverse_blip_to_grad_new( myid, direction, iprim,data_dblip, NSF)
 
     use datatypes
     use numbers
@@ -2275,31 +2335,27 @@ contains
     use GenComms, ONLY: cq_abort
     use support_spec_format, ONLY: support_function
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use blip, ONLY: blip_info
 
     ! Shared variable
     implicit none
 
     integer,intent(in):: iprim,myid,direction
-    integer,intent(in):: nsf, extent
-    integer,intent(in):: bliparraysize
-    integer,intent(in):: blip_number(-bliparraysize:bliparraysize,-bliparraysize:bliparraysize, &
-         -bliparraysize:bliparraysize)
-    real(double),intent(in) :: support_grid_spacing, blip_width, &
-         four_on_blip_width
+    integer,intent(in):: nsf
     type(support_function),intent(out):: data_dblip
 
     ! Local variables
     real(double),allocatable:: inter_1(:,:,:,:)
     real(double),allocatable:: inter_2(:,:,:,:)
     real(double):: rec_sgs, dxxx, dyyy, dzzz
-    integer     :: x, y, z, bx, by, bz, imin, imax, nsf1
+    integer     :: x, y, z, bx, by, bz, imin, imax, nsf1, spec
     integer     :: nxmin_grid,nxmax_grid
     integer     :: nymin_grid,nymax_grid
     integer     :: nzmin_grid,nzmax_grid
-    integer     :: imin_for_z(2*extent+1),imax_for_z(2*extent+1)
+    integer, allocatable, dimension(:) :: imin_for_z, imax_for_z
 
-    real(double):: splines( -bliparraysize:bliparraysize )
-    real(double):: splines_for_z(-bliparraysize:bliparraysize,2*extent+1)
+    real(double), allocatable, dimension(:) :: splines
+    real(double), allocatable, dimension(:,:) :: splines_for_z
     real(double):: ys, dsum(NSF), yss
 
     integer     :: ierr,stat
@@ -2313,20 +2369,34 @@ contains
     !!     this variables should be passed from (blocks)
     integer :: nblkx,nblky,nblkz
 
+    spec = bundle%species(iprim)
     call start_timer(tmr_std_allocation)
-    allocate(inter_1(NSF,-bliparraysize:bliparraysize,-bliparraysize:bliparraysize,2*extent+1),STAT=stat)
+    allocate(inter_1(NSF,-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,&
+         -blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,2*blip_info(spec)%Extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_1 !',stat)
-    call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
+    call reg_alloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     inter_1=zero
     call start_timer(tmr_std_allocation)
-    allocate(inter_2(NSF,-bliparraysize:bliparraysize,   2*extent+1 ,2*extent+1),STAT=stat)
+    allocate(inter_2(NSF,-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,&
+         2*blip_info(spec)%Extent+1,2*blip_info(spec)%Extent+1),STAT=stat)
     if(stat/=0) call cq_abort('Error allocating memory to inter_2 !',stat)
-    call reg_alloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call reg_alloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1)*(2*blip_info(spec)%Extent+1),type_dbl)
+    allocate(splines( -blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize ), &
+         splines_for_z(-blip_info(spec)%BlipArraySize:blip_info(spec)%BlipArraySize,1:2*blip_info(spec)%Extent+1))
+    call reg_alloc_mem(area_basis,(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%Extent+2),type_dbl)
+    allocate(imin_for_z(2*blip_info(spec)%Extent+1),imax_for_z(2*blip_info(spec)%Extent+1),STAT=stat)
+    call reg_alloc_mem(area_basis,2*(2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     inter_2=zero
+    imin_for_z = 0
+    imax_for_z = 0
+    splines = zero
+    splines_for_z = zero
 
-    rec_sgs = one / support_grid_spacing
+    rec_sgs = one / blip_info(spec)%SupportGridSpacing
     nblkx=nx_in_block
     nblky=ny_in_block
     nblkz=nz_in_block
@@ -2344,45 +2414,45 @@ contains
 
     !check extent
     ierr=0
-    if(2*extent < nxmax_grid-nxmin_grid) then
+    if(2*blip_info(spec)%Extent < nxmax_grid-nxmin_grid) then
        write(io_lun,*) myid,' ERROR in do_inverse_blip : extent for x dir ::', &
-            ' extent nxmin_grid nxmax_grid = ',extent,nxmin_grid,nxmax_grid
+            ' extent nxmin_grid nxmax_grid = ',blip_info(spec)%Extent,nxmin_grid,nxmax_grid
        ierr=1
     endif
-    if(2*extent < nymax_grid-nymin_grid) then
+    if(2*blip_info(spec)%Extent < nymax_grid-nymin_grid) then
        write(io_lun,*) myid,' ERROR in do_inverse_blip : extent for y dir ::', &
-            ' extent nymin_grid nymax_grid = ',extent,nymin_grid,nymax_grid
+            ' extent nymin_grid nymax_grid = ',blip_info(spec)%Extent,nymin_grid,nymax_grid
        ierr=1
     endif
-    if(2*extent < nzmax_grid-nzmin_grid) then
+    if(2*blip_info(spec)%Extent < nzmax_grid-nzmin_grid) then
        write(io_lun,*) myid,' ERROR in do_inverse_blip : extent for z dir ::', &
-            ' extent nymin_grid nymax_grid = ',extent,nzmin_grid,nzmax_grid
+            ' extent nymin_grid nymax_grid = ',blip_info(spec)%Extent,nzmin_grid,nzmax_grid
        ierr=1
     endif
     if(ierr /= 0) call cq_abort('do_inverse_blip ',ierr)
     DO z = nzmin_grid , nzmax_grid
        iz_grid=z-nzmin_grid+1
        dzzz=z*dcellz_grid-bundle%zprim(iprim)
-       imin_for_z(iz_grid)=MAX(-bliparraysize, &
-            int((dzzz-blip_width*half)*rec_sgs))
-       imax_for_z(iz_grid)=MIN( bliparraysize, &
-            int((dzzz+blip_width*half)*rec_sgs))
-       if(imin_for_z(iz_grid) > bliparraysize) then
-          imin_for_z(iz_grid)=bliparraysize
+       imin_for_z(iz_grid)=MAX(-blip_info(spec)%BlipArraySize, &
+            int((dzzz-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax_for_z(iz_grid)=MIN( blip_info(spec)%BlipArraySize, &
+            int((dzzz+blip_info(spec)%BlipWidth*half)*rec_sgs))
+       if(imin_for_z(iz_grid) > blip_info(spec)%BlipArraySize) then
+          imin_for_z(iz_grid)=blip_info(spec)%BlipArraySize
        endif
-       if(imax_for_z(iz_grid) < -bliparraysize) then
-          imax_for_z(iz_grid)=-bliparraysize
+       if(imax_for_z(iz_grid) < -blip_info(spec)%BlipArraySize) then
+          imax_for_z(iz_grid)=-blip_info(spec)%BlipArraySize
        endif
 
        DO bz = imin_for_z(iz_grid), imax_for_z(iz_grid)
-          yss = dzzz - bz * support_grid_spacing 
+          yss = dzzz - bz * blip_info(spec)%SupportGridSpacing 
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
 
           if (yss.ge.zero) then
-             yss = four_on_blip_width
+             yss = blip_info(spec)%FourOnBlipWidth
           else
-             yss = -four_on_blip_width
+             yss = -blip_info(spec)%FourOnBlipWidth
           end if
 
           IF( ys .LE. one ) THEN
@@ -2463,19 +2533,19 @@ contains
     DO y = nymin_grid, nymax_grid
        iy_grid=y-nymin_grid+1
        dyyy=y*dcelly_grid-bundle%yprim(iprim)
-       imin = MAX(-bliparraysize,int((dyyy-blip_width*half)*rec_sgs))
-       imax = MIN( bliparraysize,int((dyyy+blip_width*half)*rec_sgs))
-       if(imin >  bliparraysize) imin= bliparraysize
-       if(imax < -bliparraysize) imax=-bliparraysize
+       imin = MAX(-blip_info(spec)%BlipArraySize,int((dyyy-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax = MIN( blip_info(spec)%BlipArraySize,int((dyyy+blip_info(spec)%BlipWidth*half)*rec_sgs))
+       if(imin >  blip_info(spec)%BlipArraySize) imin= blip_info(spec)%BlipArraySize
+       if(imax < -blip_info(spec)%BlipArraySize) imax=-blip_info(spec)%BlipArraySize
        DO by = imin, imax
-          yss = dyyy - by * support_grid_spacing 
+          yss = dyyy - by * blip_info(spec)%SupportGridSpacing 
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
 
           if (yss.ge.zero) then
-             yss = four_on_blip_width
+             yss = blip_info(spec)%FourOnBlipWidth
           else
-             yss =-four_on_blip_width
+             yss =-blip_info(spec)%FourOnBlipWidth
           end if
 
           IF( ys .LE. one ) THEN
@@ -2498,7 +2568,7 @@ contains
        END DO
        DO x = nxmin_grid, nxmax_grid
           ix_grid=x-nxmin_grid+1
-          DO bz = -bliparraysize, bliparraysize
+          DO bz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              do nsf1 = 1,NSF
                 dsum(nsf1) = inter_2(nsf1,bz,ix_grid,iy_grid )
              enddo
@@ -2515,19 +2585,19 @@ contains
     DO x = nxmin_grid, nxmax_grid
        ix_grid=x-nxmin_grid+1
        dxxx=x*dcellx_grid-bundle%xprim(iprim)
-       imin = MAX(-bliparraysize,int((dxxx-blip_width*half)*rec_sgs))
-       imax = MIN( bliparraysize,int((dxxx+blip_width*half)*rec_sgs))
-       if(imin >  bliparraysize) imin= bliparraysize
-       if(imax < -bliparraysize) imax=-bliparraysize
+       imin = MAX(-blip_info(spec)%BlipArraySize,int((dxxx-blip_info(spec)%BlipWidth*half)*rec_sgs))
+       imax = MIN( blip_info(spec)%BlipArraySize,int((dxxx+blip_info(spec)%BlipWidth*half)*rec_sgs))
+       if(imin >  blip_info(spec)%BlipArraySize) imin= blip_info(spec)%BlipArraySize
+       if(imax < -blip_info(spec)%BlipArraySize) imax=-blip_info(spec)%BlipArraySize
        DO bx =imin, imax
-          yss = dxxx - bx * support_grid_spacing
+          yss = dxxx - bx * blip_info(spec)%SupportGridSpacing
           ys = ABS( yss )
-          ys = ys * four_on_blip_width
+          ys = ys * blip_info(spec)%FourOnBlipWidth
 
           if (yss.ge.zero) then
-             yss = four_on_blip_width
+             yss = blip_info(spec)%FourOnBlipWidth
           else
-             yss =-four_on_blip_width
+             yss =-blip_info(spec)%FourOnBlipWidth
           end if
 
           IF( ys .LE. one ) THEN
@@ -2548,13 +2618,13 @@ contains
              splines( bx ) = zero
           END IF
        END DO
-       DO bz = -bliparraysize, bliparraysize
-          DO by = -bliparraysize, bliparraysize
+       DO bz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+          DO by = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              do nsf1 = 1,NSF
                 dsum(nsf1) = inter_1( nsf1,by,bz,ix_grid)
              enddo
              DO bx = imin, imax
-                ind_blip = blip_number(bx,by,bz)
+                ind_blip = blip_info(spec)%blip_number(bx,by,bz)
                 IF(ind_blip /= 0 ) THEN
                    ys = splines( bx )
                    do nsf1 = 1,NSF
@@ -2569,11 +2639,19 @@ contains
     call start_timer(tmr_std_allocation)
     deallocate(inter_1,inter_2,STAT=stat)
     if(stat/=0) call cq_abort('Error deallocating memory to inter_1 !',stat)
-    call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*bliparraysize+1)*(2*extent+1),type_dbl)
-    call reg_dealloc_mem(area_basis,nsf*(2*bliparraysize+1)*(2*extent+1)*(2*extent+1),type_dbl)
+    call reg_dealloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%Extent+1),type_dbl)
+    call reg_dealloc_mem(area_basis,nsf*(2*blip_info(spec)%BlipArraySize+1)*&
+         (2*blip_info(spec)%Extent+1)*(2*blip_info(spec)%Extent+1),type_dbl)
     call reg_dealloc_mem(area_basis,size(send_array),type_dbl)
+    deallocate(splines,splines_for_z,STAT=stat)
+    call reg_dealloc_mem(area_basis,(2*blip_info(spec)%BlipArraySize+1)*(2*blip_info(spec)%Extent+2),type_dbl)
+    if(stat/=0) call cq_abort('Error deallocating memory to splines !',stat)
+
     deallocate(send_array,STAT=stat)
     if(stat/=0) call cq_abort('Error deallocating send_array in inverse_blip_to_grad !',stat)
+    deallocate(imin_for_z,imax_for_z,STAT=stat)
+    call reg_dealloc_mem(area_basis,2*(2*blip_info(spec)%Extent+1),type_dbl)
     call stop_timer(tmr_std_allocation)
     return
   end subroutine do_inverse_blip_to_grad_new

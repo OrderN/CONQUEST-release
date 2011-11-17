@@ -532,7 +532,7 @@ contains
     use datatypes
     use numbers
     use GenBlas, ONLY: axpy, copy, scal
-    use blip, ONLY: blip_info, BlipArraySize, OneArraySize, FullArraySize, SupportGridSpacing
+    use blip, ONLY: blip_info
     use support_spec_format, ONLY: support_function
     use GenComms, ONLY: cq_abort
     use global_module, ONLY: area_minE
@@ -557,11 +557,16 @@ contains
     integer :: dx, dy, dz, offset, l, at, nsf1, nsf2, stat
 
     call start_timer(tmr_std_allocation)
-    allocate(work1(FullArraySize(spec)*this_nsf),work2(FullArraySize(spec)*this_nsf),work3(FullArraySize(spec)*this_nsf), &
-         work4(FullArraySize(spec)*this_nsf),work5(FullArraySize(spec)*this_nsf),work6(FullArraySize(spec)*this_nsf), &
+    allocate(work1(blip_info(spec)%FullArraySize*this_nsf), &
+         work2(blip_info(spec)%FullArraySize*this_nsf), &
+         work3(blip_info(spec)%FullArraySize*this_nsf), &
+         work4(blip_info(spec)%FullArraySize*this_nsf), &
+         work5(blip_info(spec)%FullArraySize*this_nsf), &
+         work6(blip_info(spec)%FullArraySize*this_nsf), &
          STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating arrays for onsite KE blip grad: ",FullArraySize(spec),this_nsf)
-    call reg_alloc_mem(area_minE,6*FullArraySize(spec)*this_nsf,type_dbl)
+    if(stat/=0) call cq_abort("Error allocating arrays for onsite KE blip grad: ", &
+         blip_info(spec)%FullArraySize,this_nsf)
+    call reg_alloc_mem(area_minE,6*blip_info(spec)%FullArraySize*this_nsf,type_dbl)
     call stop_timer(tmr_std_allocation)
     ! first, we copy the blip functions for this atom onto a cubic grid;
     ! we make this grid 'too big' in order to have a fast routine below.
@@ -579,14 +584,14 @@ contains
     D2FAC(3) = -3.0_double/160.0_double
 
     work1 = zero
-    offset = BlipArraySize(spec)+1
+    offset = blip_info(spec)%BlipArraySize+1
 
-    do dx = -BlipArraySize(spec), BlipArraySize(spec)
-       do dy = -BlipArraySize(spec), BlipArraySize(spec)
-          do dz = -BlipArraySize(spec), BlipArraySize(spec)
+    do dx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+       do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              l = blip_info(spec)%blip_number(dx,dy,dz)
              if (l.ne.0) then
-                at = (((dz+offset)*OneArraySize(spec) + (dy+offset))*OneArraySize(spec) + &
+                at = (((dz+offset)*blip_info(spec)%OneArraySize + (dy+offset))*blip_info(spec)%OneArraySize + &
                      (dx+offset)) * this_nsf
                 do nsf1 = 1,this_nsf
                    work1(nsf1+at) = zero
@@ -604,90 +609,91 @@ contains
     ! 'spreading operations'. Do z first... put blip(z) in 2, and
     ! del2blip(z) in 3
 
-    call copy(FullArraySize(spec)*this_nsf,work1,1,work2,1)
-    call scal(FullArraySize(spec)*this_nsf,FAC(0),work2,1)
+    call copy(blip_info(spec)%FullArraySize*this_nsf,work1,1,work2,1)
+    call scal(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work2,1)
     do dz = 1, MAX_D
-       offset = dz * OneArraySize(spec) * OneArraySize(spec) * this_nsf
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dz), &
+       offset = dz * blip_info(spec)%OneArraySize * &
+blip_info(spec)%OneArraySize * this_nsf
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dz), &
             work1(1:), 1, work2(1+offset:), 1 )
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dz), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dz), &
             work1(1+offset:), 1, work2(1:), 1 )
     end do
 
-    call copy(FullArraySize(spec)*this_nsf,work1,1,work3,1)
-    call scal(FullArraySize(spec)*this_nsf,D2FAC(0),work3,1)
+    call copy(blip_info(spec)%FullArraySize*this_nsf,work1,1,work3,1)
+    call scal(blip_info(spec)%FullArraySize*this_nsf,D2FAC(0),work3,1)
     do dz = 1, MAX_D
-       offset = dz * OneArraySize(spec) * OneArraySize(spec) * this_nsf
-       call axpy((FullArraySize(spec)*this_nsf-offset), D2FAC(dz), &
+       offset = dz * blip_info(spec)%OneArraySize * blip_info(spec)%OneArraySize * this_nsf
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), D2FAC(dz), &
             work1(1:), 1, work3(1+offset:), 1 )
-       call axpy((FullArraySize(spec)*this_nsf-offset), D2FAC(dz), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), D2FAC(dz), &
             work1(1+offset:), 1, work3(1:), 1 )
     end do
 
     ! now do y : put blip(y).blip(z) in 4,
     ! blip(y).del2blip(z) + del2blip(y).blip(z)  in 5
 
-    call copy(FullArraySize(spec)*this_nsf,work2,1,work4,1)
-    call scal(FullArraySize(spec)*this_nsf,FAC(0),work4,1)
+    call copy(blip_info(spec)%FullArraySize*this_nsf,work2,1,work4,1)
+    call scal(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work4,1)
     do dy = 1, MAX_D
-       offset = dy * OneArraySize(spec) * this_nsf
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dy), &
+       offset = dy * blip_info(spec)%OneArraySize * this_nsf
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dy), &
             work2(1:), 1, work4(1+offset:), 1 )
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dy), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dy), &
             work2(1+offset:), 1, work4(1:), 1 )
     end do
 
-    call copy(FullArraySize(spec)*this_nsf,work2,1,work5,1)
-    call scal(FullArraySize(spec)*this_nsf,D2FAC(0),work5,1)
+    call copy(blip_info(spec)%FullArraySize*this_nsf,work2,1,work5,1)
+    call scal(blip_info(spec)%FullArraySize*this_nsf,D2FAC(0),work5,1)
     do dy = 1, MAX_D
-       offset = dy * OneArraySize(spec) * this_nsf
-       call axpy((FullArraySize(spec)*this_nsf-offset), D2FAC(dy), &
+       offset = dy * blip_info(spec)%OneArraySize * this_nsf
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), D2FAC(dy), &
             work2(1:), 1, work5(1+offset:), 1 )
-       call axpy((FullArraySize(spec)*this_nsf-offset), D2FAC(dy), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), D2FAC(dy), &
             work2(1+offset:), 1, work5(1:), 1 )
     end do
 
-    call axpy(FullArraySize(spec)*this_nsf,FAC(0),work3,1,work5,1)
+    call axpy(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work3,1,work5,1)
     do dy = 1, MAX_D
-       offset = dy * OneArraySize(spec) * this_nsf
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dy), &
+       offset = dy * blip_info(spec)%OneArraySize * this_nsf
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dy), &
             work3(1:), 1, work5(1+offset:), 1 )
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dy), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dy), &
             work3(1+offset:), 1, work5(1:), 1 )
     end do
 
     ! and x - put it all into 6
 
-    call copy(FullArraySize(spec)*this_nsf,work5,1,work6,1)
-    call scal(FullArraySize(spec)*this_nsf,FAC(0),work6,1)
+    call copy(blip_info(spec)%FullArraySize*this_nsf,work5,1,work6,1)
+    call scal(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work6,1)
     do dx = 1, MAX_D
        offset = dx * this_nsf
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dx), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dx), &
             work5(1:), 1, work6(1+offset:), 1 )
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dx), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dx), &
             work5(1+offset:), 1, work6(1:), 1 )
     end do
 
-    call axpy(FullArraySize(spec)*this_nsf,D2FAC(0),work4,1,work6,1)
+    call axpy(blip_info(spec)%FullArraySize*this_nsf,D2FAC(0),work4,1,work6,1)
     do dx = 1, MAX_D
        offset = dx * this_nsf
-       call axpy((FullArraySize(spec)*this_nsf-offset), D2FAC(dx), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), D2FAC(dx), &
             work4(1:), 1, work6(1+offset:), 1 )
-       call axpy((FullArraySize(spec)*this_nsf-offset), D2FAC(dx), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), D2FAC(dx), &
             work4(1+offset:), 1, work6(1:), 1 )
     end do
 
     ! now accumulate work6 onto the gradient
 
-    call scal(FullArraySize(spec)*this_nsf, two*SupportGridSpacing(spec),work6,1)
+    call scal(blip_info(spec)%FullArraySize*this_nsf, two*blip_info(spec)%SupportGridSpacing,work6,1)
 
-    offset = BlipArraySize(spec) + 1
-    do dx = -BlipArraySize(spec), BlipArraySize(spec)
-       do dy = -BlipArraySize(spec), BlipArraySize(spec)
-          do dz = -BlipArraySize(spec), BlipArraySize(spec)
+    offset = blip_info(spec)%BlipArraySize + 1
+    do dx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+       do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              l = blip_info(spec)%blip_number(dx,dy,dz)
              if (l.ne.0) then
-                at = (((dz+offset)*OneArraySize(spec) + (dy+offset))*OneArraySize(spec) + &
+                at = (((dz+offset)*blip_info(spec)%OneArraySize + (dy+offset))*blip_info(spec)%OneArraySize + &
                      (dx+offset)) * this_nsf
                 do nsf1 = 1,this_nsf
                    this_blip_grad%supp_func(nsf1)%coefficients(l) = &
@@ -700,8 +706,9 @@ contains
 
     call start_timer(tmr_std_allocation)
     deallocate(work1,work2,work3, work4,work5,work6, STAT=stat)
-    if(stat/=0) call cq_abort("Error deallocating arrays for onsite KE blip grad: ",FullArraySize(spec),this_nsf)
-    call reg_dealloc_mem(area_minE,6*FullArraySize(spec)*this_nsf,type_dbl)
+    if(stat/=0) call cq_abort("Error deallocating arrays for onsite KE blip grad: ", &
+         blip_info(spec)%FullArraySize,this_nsf)
+    call reg_dealloc_mem(area_minE,6*blip_info(spec)%FullArraySize*this_nsf,type_dbl)
     call stop_timer(tmr_std_allocation)
     return
   end subroutine get_onsite_KE_gradient
@@ -727,7 +734,8 @@ contains
 !!  CREATION DATE
 !!   26/10/09
 !!  MODIFICATION HISTORY
-!!   
+!!   2011/11/15 08:04 dave
+!!    Changes to blip data
 !!  SOURCE
 !!
   subroutine get_onsite_S_gradient( this_data_blip,this_data_M,this_blip_grad, this_nsf, spec)
@@ -735,7 +743,7 @@ contains
     use datatypes
     use numbers
     use GenBlas, ONLY: axpy, copy, scal
-    use blip, ONLY: blip_info, BlipArraySize, OneArraySize, FullArraySize, SupportGridSpacing
+    use blip, ONLY: blip_info
     use support_spec_format, ONLY: support_function
     use GenComms, ONLY: cq_abort
     use global_module, ONLY: area_minE
@@ -761,14 +769,17 @@ contains
     real(double) :: sum
 
     call start_timer(tmr_std_allocation)
-    allocate(work1(FullArraySize(spec)*this_nsf),work2(FullArraySize(spec)*this_nsf),&
-         work4(FullArraySize(spec)*this_nsf),work6(FullArraySize(spec)*this_nsf), STAT=stat)
+    allocate(work1(blip_info(spec)%FullArraySize*this_nsf),&
+         work2(blip_info(spec)%FullArraySize*this_nsf),&
+         work4(blip_info(spec)%FullArraySize*this_nsf),&
+         work6(blip_info(spec)%FullArraySize*this_nsf), STAT=stat)
     work1 = zero
     work2 = zero
     work4 = zero
     work6 = zero
-    if(stat/=0) call cq_abort("Error allocating arrays for onsite KE blip grad: ",FullArraySize(spec),this_nsf)
-    call reg_alloc_mem(area_minE,4*FullArraySize(spec)*this_nsf,type_dbl)
+    if(stat/=0) call cq_abort("Error allocating arrays for onsite KE blip grad: ", &
+         blip_info(spec)%FullArraySize,this_nsf)
+    call reg_alloc_mem(area_minE,4*blip_info(spec)%FullArraySize*this_nsf,type_dbl)
     call stop_timer(tmr_std_allocation)
     ! first, we copy the blip functions for this atom onto a cubic grid;
     ! we make this grid 'too big' in order to have a fast routine below.
@@ -782,14 +793,15 @@ contains
     FAC(3) = 1.0_double/2240.0_double
 
     work1 = zero
-    offset = BlipArraySize(spec)+1
+    offset = blip_info(spec)%BlipArraySize+1
 
-    do dx = -BlipArraySize(spec), BlipArraySize(spec)
-       do dy = -BlipArraySize(spec), BlipArraySize(spec)
-          do dz = -BlipArraySize(spec), BlipArraySize(spec)
+    do dx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+       do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              l = blip_info(spec)%blip_number(dx,dy,dz)
              if (l.ne.0) then
-                at = (((dz+offset)*OneArraySize(spec) + (dy+offset))*OneArraySize(spec) + &
+                at = (((dz+offset)*blip_info(spec)%OneArraySize + &
+                     (dy+offset))*blip_info(spec)%OneArraySize + &
                      (dx+offset)) * this_nsf
                 do nsf1 = 1,this_nsf
                    work1(nsf1+at) = zero
@@ -807,51 +819,52 @@ contains
     ! 'spreading operations'. Do z first... put blip(z) in 2, and
     ! del2blip(z) in 3
 
-    call copy(FullArraySize(spec)*this_nsf,work1,1,work2,1)
-    call scal(FullArraySize(spec)*this_nsf,FAC(0),work2,1)
+    call copy(blip_info(spec)%FullArraySize*this_nsf,work1,1,work2,1)
+    call scal(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work2,1)
     do dz = 1, MAX_D
-       offset = dz * OneArraySize(spec) * OneArraySize(spec) * this_nsf
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dz), &
+       offset = dz * blip_info(spec)%OneArraySize * blip_info(spec)%OneArraySize * this_nsf
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dz), &
             work1(1:), 1, work2(1+offset:), 1 )
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dz), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dz), &
             work1(1+offset:), 1, work2(1:), 1 )
     end do
 
     ! now do y : put blip(y).blip(z) in 4,
 
-    call copy(FullArraySize(spec)*this_nsf,work2,1,work4,1)
-    call scal(FullArraySize(spec)*this_nsf,FAC(0),work4,1)
+    call copy(blip_info(spec)%FullArraySize*this_nsf,work2,1,work4,1)
+    call scal(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work4,1)
     do dy = 1, MAX_D
-       offset = dy * OneArraySize(spec) * this_nsf
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dy), &
+       offset = dy * blip_info(spec)%OneArraySize * this_nsf
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dy), &
             work2(1:), 1, work4(1+offset:), 1 )
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dy), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dy), &
             work2(1+offset:), 1, work4(1:), 1 )
     end do
 
     ! and x - put it all into 6
 
-    call copy(FullArraySize(spec)*this_nsf,work4,1,work6,1)
-    call scal(FullArraySize(spec)*this_nsf,FAC(0),work6,1)
+    call copy(blip_info(spec)%FullArraySize*this_nsf,work4,1,work6,1)
+    call scal(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work6,1)
     do dx = 1, MAX_D
        offset = dx * this_nsf
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dx), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dx), &
             work4(1:), 1, work6(1+offset:), 1 )
-       call axpy((FullArraySize(spec)*this_nsf-offset), FAC(dx), &
+       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dx), &
             work4(1+offset:), 1, work6(1:), 1 )
     end do
 
     ! now accumulate work6 onto the gradient
 
-    call scal(FullArraySize(spec)*this_nsf, &
-         -four*SupportGridSpacing(spec)*SupportGridSpacing(spec)*SupportGridSpacing(spec),work6,1)
-    offset = BlipArraySize(spec) + 1
-    do dx = -BlipArraySize(spec), BlipArraySize(spec)
-       do dy = -BlipArraySize(spec), BlipArraySize(spec)
-          do dz = -BlipArraySize(spec), BlipArraySize(spec)
+    call scal(blip_info(spec)%FullArraySize*this_nsf, &
+         -four*blip_info(spec)%SupportGridSpacing*blip_info(spec)%SupportGridSpacing*&
+         blip_info(spec)%SupportGridSpacing, work6,1)
+    offset = blip_info(spec)%BlipArraySize + 1
+    do dx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+       do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              l = blip_info(spec)%blip_number(dx,dy,dz)
              if (l.ne.0) then
-                at = (((dz+offset)*OneArraySize(spec) + (dy+offset))*OneArraySize(spec) + &
+                at = (((dz+offset)*blip_info(spec)%OneArraySize + (dy+offset))*blip_info(spec)%OneArraySize + &
                      (dx+offset)) * this_nsf
                 do nsf1 = 1,this_nsf
                    this_blip_grad%supp_func(nsf1)%coefficients(l) = &
@@ -863,8 +876,9 @@ contains
     end do
     call start_timer(tmr_std_allocation)
     deallocate(work1,work2, work4,work6, STAT=stat)
-    if(stat/=0) call cq_abort("Error deallocating arrays for onsite S blip grad: ",FullArraySize(spec),this_nsf)
-    call reg_dealloc_mem(area_minE,6*FullArraySize(spec)*this_nsf,type_dbl)
+    if(stat/=0) call cq_abort("Error deallocating arrays for onsite S blip grad: ", &
+         blip_info(spec)%FullArraySize,this_nsf)
+    call reg_dealloc_mem(area_minE,6*blip_info(spec)%FullArraySize*this_nsf,type_dbl)
     call stop_timer(tmr_std_allocation)
     return
   end subroutine get_onsite_S_gradient
