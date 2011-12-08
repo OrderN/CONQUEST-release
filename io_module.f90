@@ -904,6 +904,9 @@ second:   do
 !!    Fixed memory allocation and deallocation
 !!   2009/07/08 16:56 dave
 !!    Formatting tweak
+!!   2011/12/08 15:47 dave
+!!    Bug fix: changed criterion for slab or line from very_small to 0.1 (following COR suggestion)
+!!    Also changed many processor scheme to NOT wrap atoms on partition boundary down one partition
 !!  SOURCE
 !!  
   subroutine create_sfc_partitions(myid, parts)
@@ -983,7 +986,7 @@ second:   do
     ! av_atom_part = 13
     min_atoms_part = 5
     if(min_atoms_part>ni_in_cell) min_atoms_part = ni_in_cell
-    max_atoms_part = 20
+    max_atoms_part = global_maxatomspart !20
 
     maxpartscell = 0 ! max number of partitions in the unit cell
 
@@ -1068,20 +1071,20 @@ second:   do
 
     dims = three
 
-    if (occupied_cell(1) < very_small) then
-       tmp_parts(1) = 1
+    if (occupied_cell(1) < 0.1_double) then!very_small) then
+       tmp_parts(1) = one
        dims = dims - one
     else
        tmp_parts(1) = r_super_x / occupied_cell(1) 
     end if
-    if (occupied_cell(2) < very_small) then
-       tmp_parts(2) = 1
+    if (occupied_cell(2) < 0.1_double) then!very_small) then
+       tmp_parts(2) = one
        dims = dims - one
     else
        tmp_parts(2) = r_super_y / occupied_cell(2) 
     end if
-    if (occupied_cell(3) < very_small) then
-       tmp_parts(3) = 1
+    if (occupied_cell(3) < 0.1_double) then!very_small) then
+       tmp_parts(3) = one
        dims = dims - one 
     else
        tmp_parts(3) = r_super_z / occupied_cell(3) 
@@ -1089,8 +1092,8 @@ second:   do
     if (dims < very_small) dims = one ! if dims is 0, we only have one atom
 
     if (iprint_init > 3.AND.myid==0) write(io_lun,'(a,3f12.6)') "Tmp_parts:", tmp_parts(1), tmp_parts(2), tmp_parts(3)
-    real_min_parts = tmp_parts(1) * tmp_parts(2) * tmp_parts(3) * min_parts_occ
-    real_max_parts = tmp_parts(1) * tmp_parts(2) * tmp_parts(3) * max_parts_occ
+    real_min_parts = min_parts_occ*(tmp_parts(1) * tmp_parts(2) * tmp_parts(3))**(one/dims)
+    real_max_parts = max_parts_occ*(tmp_parts(1) * tmp_parts(2) * tmp_parts(3))**(one/dims) 
 
     if (iprint_init > 3.AND.myid==0) write(io_lun,'("Min parts = ",f14.5)') real_min_parts
     if (iprint_init > 3.AND.myid==0) write(io_lun,'("Max parts = ",f14.5)') real_max_parts
@@ -1147,14 +1150,13 @@ hc2:    do
           end do
          
           no_hc = 2**(3*b)
-         
+          
           allocate (H(1:3*b), STAT = stat)
           if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array H (Hilbert)')
           allocate (sfc_sequence(0:no_hc-1), STAT = stat)
           if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array sfc_sequence')
           allocate (map(0:no_hc-1,1:global_maxatomspart), STAT = stat)
           if (stat /= 0) call cq_abort('Create_sfc_partitions: error allocating array map')
-         
           parts_edge = 2**b 
          
           hc_edge(1) = r_super_x / parts_edge
@@ -1233,7 +1235,7 @@ hc2:    do
                             " coord =", atom_coord(1,sorted_coord(1,i3))
                      if ((atom_coord(1,sorted_coord(1,i3)) > (hc_edge(1) * (i0 + 1)))) then
                        if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,i5)') "Atom over x:", sorted_coord(1,i3) 
-                         coord_end(1) = i3
+                       coord_end(1) = i3
                        exit
                      end if
          
@@ -1397,11 +1399,11 @@ hc2:    do
           ! Assign atom to part of real space and
           ! check if it is on a boundary
           X(0) = floor(atom_coord(1,i) / hc_edge(1))
-          if ((X(0) /= 0) .and. ((atom_coord(1,i) / hc_edge(1)) == real(X(0)))) X(0) = X(0) - 1
+          !if ((X(0) /= 0) .and. ((atom_coord(1,i) / hc_edge(1)) == real(X(0)))) X(0) = X(0) - 1
           X(1) = floor(atom_coord(2,i) / hc_edge(2))
-          if ((X(1) /= 0) .and. ((atom_coord(2,i) / hc_edge(2)) == real(X(1)))) X(1) = X(1) - 1
+          !if ((X(1) /= 0) .and. ((atom_coord(2,i) / hc_edge(2)) == real(X(1)))) X(1) = X(1) - 1
           X(2) = floor(atom_coord(3,i) / hc_edge(3))
-          if ((X(2) /= 0) .and. ((atom_coord(3,i) / hc_edge(3)) == real(X(2)))) X(2) = X(2) - 1
+          !if ((X(2) /= 0) .and. ((atom_coord(3,i) / hc_edge(3)) == real(X(2)))) X(2) = X(2) - 1
           ! Get the Hilbert coordinates
           call axes_to_transpose(X, b, 3)
   
@@ -1421,7 +1423,6 @@ hc2:    do
  
           atom_sfc_id(i) = Hilbert
           sfc_sequence(Hilbert) = sfc_sequence(Hilbert) + 1
-          !if(sfc_sequence(Hilbert)>2*global_maxatomspart) write(io_lun,*) 'Warning ! ',sfc_sequence(Hilbert),2*global_maxatomspart
           if(sfc_sequence(Hilbert)>global_maxatomspart) then
              refine = .true. ! We use the refine switch to flag early exit
              exit

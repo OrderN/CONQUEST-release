@@ -1320,6 +1320,8 @@ contains
 !!    Added description of the functional
 !!   2010/06/18 17:00 lt
 !!    Added information on the type of smearing used if using Diagonalsation method
+!!   2011/12/06 17:02 dave
+!!    Small bug fix on formatting numbers
 !!  SOURCE
 !!
   subroutine write_info(number_of_bands, titles, mu, vary_mu, find_chdens, read_phi,HNL_fac, NODES)
@@ -1484,9 +1486,9 @@ contains
 14  format(/10x,'Support-grid spacing =   ',f7.4,' ',a2,' ',/, &
          10x,'Width of (3D) b-spline = ',f7.4,' ',a2)
 
-15  format(/10x,'integration grid spacing along x ',f7.5,' ',a2,/, &
-         10x,'integration grid spacing along y ',f7.5,' ',a2,/, &
-         10x,'integration grid spacing along z ',f7.5,' ',a2)
+15  format(/10x,'integration grid spacing along x ',f9.5,' ',a2,/, &
+         10x,'integration grid spacing along y ',f9.5,' ',a2,/, &
+         10x,'integration grid spacing along z ',f9.5,' ',a2)
 
 16  format(/10x,'The Chemical Potential mu is :',f7.4)
 
@@ -1536,9 +1538,9 @@ contains
            f10.7,/,10x,'Exponent for the p-type support functions: ', &
            f10.7)
 
-29  format(/,10x,'Energy tolerance required:             ',f10.8, &
-           /,10x,'L-matrix convergence tolerance:        ',f10.8, &
-           /,10x,'Self consistent convergence tolerance: ',f10.8)
+29  format(/,10x,'Energy tolerance required:             ',f12.8, &
+           /,10x,'L-matrix convergence tolerance:        ',f12.8, &
+           /,10x,'Self consistent convergence tolerance: ',f12.8)
 30  format(/,10x,'Solving for the K matrix using ',a16)
 
     return

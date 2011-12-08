@@ -194,6 +194,8 @@ contains
 !!    Added GenComms
 !!   2008/02/11 16:55 dave
 !!    Added MPI_Wait calls for non-blocking sends
+!!   2011/12/06 17:05 dave
+!!    Bug fix for arrays passed as nrstat
 !!  SOURCE
 !!
   subroutine init_mult_comms(parts,a_b_c,myid)
@@ -283,15 +285,15 @@ contains
        ! Now do the blocking gets - we need to have this data
        do i=1,a_b_c%comms%inode
           call MPI_recv(a_b_c%comms%np_send(i),1,MPI_INTEGER, &
-               a_b_c%comms%ncomm(i)-1,1,MPI_COMM_WORLD,nrstat(1,i*2-1),ierr)
+               a_b_c%comms%ncomm(i)-1,1,MPI_COMM_WORLD,nrstat(1:MPI_STATUS_SIZE,i*2-1),ierr)
           call MPI_recv(a_b_c%comms%pl_send(1,i),a_b_c%comms%np_send(i),&
                MPI_INTEGER,a_b_c%comms%ncomm(i)-1,2,&
-               MPI_COMM_WORLD,nrstat(1,i*2),ierr)
+               MPI_COMM_WORLD,nrstat(1:MPI_STATUS_SIZE,i*2),ierr)
        enddo
        ! Add MPI_Wait calls
        do i=1,a_b_c%comms%inode
-          call MPI_Wait(nreq(i*2-1),nrstat(1,1),ierr)
-          call MPI_Wait(nreq(i*2),nrstat(1,2),ierr)
+          call MPI_Wait(nreq(i*2-1),nrstat(1:MPI_STATUS_SIZE,1),ierr)
+          call MPI_Wait(nreq(i*2),nrstat(1:MPI_STATUS_SIZE,2),ierr)
        end do
        ! The next two send/recv pairs are for the ilen2 parameter - this
        ! is the sum of the number of B neighbours for all atoms in a 
@@ -333,18 +335,18 @@ contains
        do i=1,a_b_c%comms%inode
           call MPI_recv(a_b_c%comms%ilen2rec(1,i),parts%mx_ngonn,&
                MPI_INTEGER,a_b_c%comms%ncomm(i)-1,3,&
-               MPI_COMM_WORLD,nrstat(1,i*2),ierr)
+               MPI_COMM_WORLD,nrstat(1:MPI_STATUS_SIZE,i*2),ierr)
           call MPI_recv(a_b_c%comms%ilen3rec(1,i),parts%mx_ngonn,&
                MPI_INTEGER,a_b_c%comms%ncomm(i)-1,4,&
-               MPI_COMM_WORLD,nrstat(1,i*2),ierr)
+               MPI_COMM_WORLD,nrstat(1:MPI_STATUS_SIZE,i*2),ierr)
           call MPI_recv(a_b_c%comms%istart(1,i),parts%mx_ngonn,&
                MPI_INTEGER,a_b_c%comms%ncomm(i)-1,5,&
-               MPI_COMM_WORLD,nrstat(1,i*2),ierr)
+               MPI_COMM_WORLD,nrstat(1:MPI_STATUS_SIZE,i*2),ierr)
        enddo
        do i=1,a_b_c%comms%inode
-          call MPI_Wait(nreq(i*3-2),nrstat(1,1),ierr)
-          call MPI_Wait(nreq(i*3-1),nrstat(1,2),ierr)
-          call MPI_Wait(nreq(i*3),nrstat(1,3),ierr)
+          call MPI_Wait(nreq(i*3-2),nrstat(1:MPI_STATUS_SIZE,1),ierr)
+          call MPI_Wait(nreq(i*3-1),nrstat(1:MPI_STATUS_SIZE,2),ierr)
+          call MPI_Wait(nreq(i*3),nrstat(1:MPI_STATUS_SIZE,3),ierr)
        end do
     end if !(a_b_c%comms%inode > 0)
     call MPI_Barrier(MPI_COMM_WORLD, ierr)

@@ -8,6 +8,7 @@ MATRIX_OBJS  =  atoms.module.o \
                 matrix_elements_module.o \
                 comms_module.o \
                 matrix_comms_module.o \
+                basic_types.o \
                 group_module.o \
                 mult_init_module.o \
                 trans_module.o \

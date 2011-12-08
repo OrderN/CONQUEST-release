@@ -316,6 +316,8 @@ contains
 !!    Added timers
 !!   2011/03/31 M.Arita
 !!    Added the statements to recall set_density_pcc as atoms move.
+!!   2011/12/06 17:03 dave
+!!    Bug fix for format statement
 !!  SOURCE
 !!
   subroutine safemin(start_x,start_y,start_z,direction,energy_in,energy_out,&
@@ -608,7 +610,7 @@ contains
        write(io_lun,fmt='(4x,"In safemin, exit after ",i4," iterations with energy ",f20.10," ",a2)') &
             iter,en_conv*energy_out,en_units(energy_units)
     else if(inode==ionode) then
-       write(io_lun,fmt='(/4x,"Final energy: ",f20.10," ",a2)/') &
+       write(io_lun,fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
             en_conv*energy_out,en_units(energy_units)
     end if
     !deallocate(store_density)
