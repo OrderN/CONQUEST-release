@@ -403,6 +403,8 @@ contains
 !!    Tidied up cutoff finding: re-using core_radius instead of finding max every time
 !!   2008/03/03 18:50 dave
 !!    Changed float to real
+!!   2011/12/22 13:55 dave
+!!    Removed calculation of pseudo_functions for analytic blips
 !!  SOURCE
 !!
   subroutine set_tm_pseudo
@@ -410,7 +412,7 @@ contains
     use datatypes
     use numbers
     use global_module, ONLY: rcellx,rcelly,rcellz,id_glob, ni_in_cell, iprint_pseudo, species_glob, nlpf, sf, &
-         flag_basis_set, blips, IPRINT_TIME_THRES3
+         flag_basis_set, blips, IPRINT_TIME_THRES3, flag_analytic_blip_int
     use species_module, ONLY: species, nlpf_species, n_species
     !  At present, these arrays are dummy arguments.
     use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, &
@@ -470,7 +472,7 @@ contains
     chlocal_density   = zero
 
     pseudopotential = zero
-    if(flag_basis_set==blips) then
+    if(flag_basis_set==blips.AND.(.NOT.flag_analytic_blip_int)) then
        gridfunctions(pseudofns)%griddata = zero
     end if
 
@@ -662,7 +664,7 @@ contains
                 !  by using species-dependent core radius.
                 !  (needs to be checked!  01/07/2002 TM)
 
-                if(flag_basis_set==blips.AND.npoint > 0) then
+                if(flag_basis_set==blips.AND.npoint > 0.AND.(.NOT.flag_analytic_blip_int)) then
                    do nl= 1, pseudo(the_species)%n_pjnl
 
                       the_l=pseudo(the_species)%pjnl_l(nl)

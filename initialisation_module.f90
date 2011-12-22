@@ -263,9 +263,6 @@ contains
     integer :: i, stat, spec
     real(double) :: rcut_BCS  !TM 26/Jun/2003
 
-    integer :: iblock, ipoint,igrid,ix,iy,iz
-    real(double) :: xblock,yblock,zblock,dcellx_block,dcelly_block,dcellz_block
-    real(double) :: dx,dy,dz,dcellx_grid,dcelly_grid,dcellz_grid
 
     ! Set organisation of blocks of grid-points.
     ! set_blocks determines the number of blocks on this node,
@@ -509,6 +506,8 @@ contains
 !!    Changed to get number of coefficients for blips from support_function structure 
 !!   2007/05/01 08:31 dave
 !!    Changed start_blip into read_option for unified naming
+!!   2011/11/28 07:55 dave
+!!    Added call for representing NLPFs with blips
 !!  SOURCE
 !!
   subroutine initial_phis( mu, restart_file, read_phi, vary_mu, start)
@@ -520,7 +519,7 @@ contains
     use dimens, ONLY: grid_point_volume, r_h
     !use fdf, ONLY : fdf_boolean
     use GenComms, ONLY: cq_abort, my_barrier, gcopy, inode, ionode
-    use global_module, ONLY: iprint_init, flag_basis_set, blips, PAOs, flag_onsite_blip_ana
+    use global_module, ONLY: iprint_init, flag_basis_set, blips, PAOs, flag_onsite_blip_ana, flag_analytic_blip_int
     use matrix_data, ONLY : Srange,mat
     use numbers, ONLY: zero, very_small, one
     use pao2blip, ONLY: make_blips_from_paos
@@ -537,6 +536,7 @@ contains
     use functions_on_grid, ONLY: supportfns
     use support_spec_format, ONLY: supports_on_atom, coefficient_array, coeff_array_size, read_option
     use input_module, ONLY: leqi
+    use nlpf2blip, ONLY: make_blips_from_nlpfs
 
     implicit none
 
@@ -580,6 +580,8 @@ contains
        if((inode == ionode).AND.(iprint_init > 0)) then
           write(unit=io_lun,fmt='(10x,"initial_phis: initial blip coeffs created")')
        end if
+       ! Create blip representation of non-local projector functions
+       if(flag_analytic_blip_int) call make_blips_from_nlpfs
 
        ! Length scale Preconditioning.
        call make_pre(inode, ionode)

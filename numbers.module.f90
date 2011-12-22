@@ -54,6 +54,7 @@ module numbers
   real(double), parameter :: quarter = 0.25_double
   real(double), parameter :: half = 0.5_double 
   real(double), parameter :: three_quarters = 0.75_double
+  real(double), parameter :: nine_quarters = 2.25_double
   real(double), parameter :: three_halves = 1.5_double
   real(double), parameter :: one_third = 1.0_double/3.0_double
   real(double), parameter :: two_thirds = 2.0_double/3.0_double

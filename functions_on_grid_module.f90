@@ -94,7 +94,7 @@ contains
   subroutine associate_fn_on_grid
 
     use GenComms, ONLY: cq_abort
-    use global_module, ONLY: flag_basis_set, blips, area_index
+    use global_module, ONLY: flag_basis_set, blips, area_index, flag_analytic_blip_int
     use memory_module, ONLY: reg_alloc_mem, type_dbl
     use numbers, ONLY: zero
 
@@ -127,7 +127,7 @@ contains
     end if
     call reg_alloc_mem(area_index,gridsize(sf),type_dbl)
     gridfunctions(H_on_supportfns)%type = sf
-    if(flag_basis_set==blips) then
+    if(flag_basis_set==blips.AND.(.NOT.flag_analytic_blip_int)) then
        ! Non-local projector functions
        gridfunctions(pseudofns)%size = gridsize(nlpf)
        allocate(gridfunctions(pseudofns)%griddata(gridsize(nlpf)))
@@ -174,7 +174,7 @@ contains
   subroutine dissociate_fn_on_grid
 
     use GenComms, ONLY: cq_abort
-    use global_module, ONLY: flag_basis_set, blips, area_index
+    use global_module, ONLY: flag_basis_set, blips, area_index, flag_analytic_blip_int
     use memory_module, ONLY: reg_dealloc_mem, type_dbl
 
     implicit none
@@ -188,7 +188,7 @@ contains
     ! H acting on support functions 
     call reg_dealloc_mem(area_index,size(gridfunctions(H_on_supportfns)%griddata),type_dbl)
     deallocate(gridfunctions(H_on_supportfns)%griddata)
-    if(flag_basis_set==blips) then
+    if(flag_basis_set==blips.AND.(.NOT.flag_analytic_blip_int)) then
        ! Non-local projector functions
        call reg_dealloc_mem(area_index,size(gridfunctions(pseudofns)%griddata),type_dbl)
        deallocate(gridfunctions(pseudofns)%griddata)

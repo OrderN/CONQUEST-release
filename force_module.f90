@@ -1125,13 +1125,15 @@ contains
 !!    Added flag to select HF or Pulay or both (for easier force testing)
 !!   08:12, 2003/10/01 dave
 !!    Added structure to prepare for PAO basis set
+!!   2011/12/12 17:26 dave
+!!    Added force calculation for analytic blips
 !!  SOURCE
 !!
   subroutine get_HF_non_local_force(HF_NL_force, what_force, n_atoms)
 
     use datatypes
     use numbers
-    use matrix_data, ONLY: SPrange, PSrange
+    use matrix_data, ONLY: SPrange, PSrange, mat, halo
     use mult_module, ONLY: SP_trans, mult, H_SP_SP, matrix_product, matrix_scale, matrix_transpose, &
          allocate_temp_matrix, free_temp_matrix, matU, matUT, matCS, matSC, matK
     use dimens
@@ -1146,7 +1148,8 @@ contains
  ! TM new pseudo
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT
     use pseudo_tm_module, ONLY: nonloc_pp_derivative_tm
-    use global_module, ONLY: iprint_MD, flag_basis_set, blips, PAOs, sf, nlpf
+    use global_module, ONLY: iprint_MD, flag_basis_set, blips, PAOs, sf, nlpf, &
+         id_glob, species_glob, flag_analytic_blip_int
 ! TEMP
     use PAO_grid_transform_module, ONLY: PAO_to_grad
     use build_PAO_matrices, ONLY: assemble_deriv_2
@@ -1157,6 +1160,13 @@ contains
 
     use functions_on_grid, ONLY: allocate_temp_fn_on_grid, free_temp_fn_on_grid, &
          supportfns, H_on_supportfns,pseudofns
+    use nlpf2blip, ONLY: get_dSP, nlpf_on_atom
+    use primary_module , ONLY : bundle
+    use support_spec_format, ONLY: supports_on_atom
+    use group_module, ONLY: parts
+    use primary_module, ONLY: bundle
+    use cover_module, ONLY: BCS_parts
+    use species_module, ONLY: nsf_species, nlpf_species
 
     implicit none
 
@@ -1172,20 +1182,51 @@ contains
     !  this trans is same as the one used in U => UT
     !     Tsuyoshi Miyazaki 28/12/2000
     integer, dimension(3) :: matdSC, matdCS
-    integer :: direction, k, stat, dpseudofns
+    integer :: direction, k, stat, dpseudofns, np, nn, i, i1, i2, spec, this_nsf, this_nlpf, ni
+    integer :: iprim, gcspart, ist, nab, neigh_global_num, neigh_global_part, neigh_species, wheremat
+    real(double):: dx, dy, dz
 
     do k=1,3
        matdSC(k) = allocate_temp_matrix(SPrange,SP_trans,sf,nlpf)
        matdCS(k) = allocate_temp_matrix(PSrange,SP_trans,nlpf,sf)
     end do
-    if(flag_basis_set==blips) dpseudofns = allocate_temp_fn_on_grid(nlpf)
+    if(flag_basis_set==blips.AND.(.NOT.flag_analytic_blip_int)) dpseudofns = allocate_temp_fn_on_grid(nlpf)
     HF_NL_force = zero
 
     ! to save memory we do each direction in turn...
     do direction = 1, 3
        call matrix_scale(zero,matdSC(direction))
        call matrix_scale(zero,matdCS(direction))
-       if(flag_basis_set==blips) then
+       if((flag_basis_set==blips).AND.flag_analytic_blip_int) then
+          iprim=0
+          do np=1,bundle%groups_on_node
+             if(bundle%nm_nodgroup(np) > 0) then
+                do ni=1,bundle%nm_nodgroup(np)
+                   iprim=iprim+1
+                   spec = bundle%species(iprim)
+                   do nab = 1, mat(np,SPrange)%n_nab(ni) ! Loop over neighbours of atom
+                      ist = mat(np,SPrange)%i_acc(ni)+nab-1
+                      ! Build the distances between atoms - needed for phases 
+                      gcspart = BCS_parts%icover_ibeg(mat(np,SPrange)%i_part(ist))+mat(np,SPrange)%i_seq(ist)-1
+                      ! Displacement vector
+                      dx = BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                      dy = BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                      dz = BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
+                      ! We need to know the species of neighbour
+                      neigh_global_part = BCS_parts%lab_cell(mat(np,SPrange)%i_part(ist)) 
+                      neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(np,SPrange)%i_seq(ist)-1)
+                      neigh_species = species_glob(neigh_global_num)
+                      if((dx*dx + dy*dy + dz*dz)>very_small) then
+                         call get_dSP(supports_on_atom(iprim), nlpf_on_atom(neigh_species), matdSC(direction), iprim, &
+                              halo(SPrange)%i_halo(gcspart), dx, dy, dz, spec, neigh_species,direction)
+                      end if
+                   end do
+                end do
+             end if
+          end do
+          call matrix_transpose(matdSC(direction),matdCS(direction))
+          call matrix_scale(-one,matdSC(direction))
+       else if(flag_basis_set==blips.AND.(.NOT.flag_analytic_blip_int)) then
           ! first of all construct the directional derivatives of the core
           ! functions on the grid
           select case(pseudo_type)
@@ -1227,7 +1268,7 @@ contains
           call cq_abort("get_HF_NL_force: basis set undefined ",flag_basis_set)
        end if
     enddo ! Now end the direction loop
-    if(flag_basis_set==blips) call free_temp_fn_on_grid(dpseudofns)
+    if(flag_basis_set==blips.AND.(.NOT.flag_analytic_blip_int)) call free_temp_fn_on_grid(dpseudofns)
     ! First of all, find U (=K.SC)
     call matrix_transpose(matSC,matCS)
     call matrix_product(matK,matCS,matU,mult(H_SP_SP))

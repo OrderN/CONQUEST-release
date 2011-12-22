@@ -103,7 +103,7 @@ contains
     use blip_grid_transform_module, ONLY: blip_to_grad_new,&
          inverse_blip_transform_new,&
          inverse_blip_to_grad_new
-    use global_module, ONLY: WhichPulay, BothPulay, sf, flag_onsite_blip_ana
+    use global_module, ONLY: WhichPulay, BothPulay, sf, flag_onsite_blip_ana, flag_analytic_blip_int
     use functions_on_grid, ONLY: H_on_supportfns, gridfunctions, fn_on_grid, &
          allocate_temp_fn_on_grid, free_temp_fn_on_grid
 
@@ -172,7 +172,7 @@ contains
 
     ! now we need to accumulate the 'type 1' gradient of the non-local energy
     ! (see notes, 3/1/97)
-    if (non_local) call get_non_local_gradient( H_on_supportfns, inode, ionode)
+    if (non_local.AND.(.NOT.flag_analytic_blip_int)) call get_non_local_gradient( H_on_supportfns, inode, ionode)
 
     ! now we need to transform this into the blip basis
     ! first, apply the scaling for grid size,
@@ -182,6 +182,8 @@ contains
     ! and then 
     call inverse_blip_transform_new(inode-1, H_on_supportfns, support_gradient, bundle%n_prim)
 
+    if (non_local.AND.(flag_analytic_blip_int)) call get_non_local_gradient( H_on_supportfns, inode, ionode)
+    
     ! Kinetic Energy; first, the change in onsite T matrix elements,
     ! and as we do so, clear the diagonal blocks of data K
     if(flag_onsite_blip_ana) then
@@ -467,23 +469,40 @@ contains
 !!    Changed to use temp_TCS (problem with transposes if NSF/=NCF)
 !!   08:15, 2003/04/04 dave
 !!    Included into blip_gradient
+!!   2011/12/13 07:53 dave
+!!    Added analytic evaluation of blip integrals
 !!  SOURCE
 !!
-  subroutine get_non_local_gradient(support_gradient, inode, ionode)
+  subroutine get_non_local_gradient(support_grad_grid, inode, ionode)
 
     use datatypes
     Use mult_module, ONLY: H_SP_SP, SP_trans, mult, matrix_product, matrix_scale, matrix_transpose, &
-         matSC, matCS, matU, matK
-    use numbers, ONLY: zero, minus_four
+         matSC, matCS, matU, matK, return_matrix_block_pos, matrix_pos
+    use numbers, ONLY: zero, minus_four, one
     use set_bucket_module, ONLY: rem_bucket
     use calc_matrix_elements_module, ONLY: act_on_vectors_new
     use functions_on_grid, ONLY: pseudofns
+    use nlpf2blip, ONLY: get_blipP, nlpf_on_atom
+    use primary_module , ONLY : bundle
+    use support_spec_format, ONLY: supports_on_atom, support_gradient
+    use group_module, ONLY: parts
+    use primary_module, ONLY: bundle
+    use cover_module, ONLY: BCS_parts
+    use matrix_data, ONLY: mat, SPrange, halo
+    use species_module, ONLY: nsf_species, nlpf_species
+    use global_module, ONLY: id_glob, species_glob, flag_analytic_blip_int
 
     implicit none
 
     ! Passed variables
     integer :: inode, ionode
-    integer :: support_gradient
+    integer :: support_grad_grid
+
+    ! Local variables
+    integer :: iprim, np, nn, spec, nab, ist, gcspart, neigh_global_part, neigh_global_num, neigh_species
+    integer :: wheremat, this_nsf, this_nlpf, j_in_halo
+    real(double) :: dx, dy, dz
+    real(double), dimension(:,:), allocatable :: dataU
 
     ! First of all, find U (=K.SC)
     call matrix_transpose(matSC,matCS)
@@ -491,8 +510,40 @@ contains
     call matrix_scale(minus_four,matU)
 
     ! Finally, act on the non-local projectors with the scaled U
-    call act_on_vectors_new(inode-1,rem_bucket(2),matU,support_gradient,pseudofns)
-
+    if(flag_analytic_blip_int) then
+       iprim = 0
+       do np = 1, bundle%groups_on_node
+          do nn = 1,bundle%nm_nodgroup(np)
+             iprim=iprim+1
+             spec = bundle%species(iprim)
+             this_nsf = nsf_species(spec)
+             do nab = 1, mat(np,SPrange)%n_nab(nn) ! Loop over neighbours of atom
+                ist = mat(np,SPrange)%i_acc(nn)+nab-1
+                ! Build the distances between atoms - needed for phases 
+                gcspart = BCS_parts%icover_ibeg(mat(np,SPrange)%i_part(ist))+mat(np,SPrange)%i_seq(ist)-1
+                ! Displacement vector
+                dx = BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                dy = BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                dz = BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
+                ! We need to know the species of neighbour
+                neigh_global_part = BCS_parts%lab_cell(mat(np,SPrange)%i_part(ist)) 
+                neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(np,SPrange)%i_seq(ist)-1)
+                neigh_species = species_glob(neigh_global_num)
+                this_nlpf = nlpf_species(neigh_species)
+                j_in_halo = halo(SPrange)%i_halo(gcspart)
+                allocate(dataU(this_nsf,this_nlpf))
+                dataU = zero
+                wheremat = matrix_pos(matSC,iprim,j_in_halo,1,1)
+                call return_matrix_block_pos(matU,wheremat,dataU,this_nsf*this_nlpf)
+                call get_blipP(support_gradient(iprim), nlpf_on_atom(neigh_species), dataU, iprim, &
+                     j_in_halo, dx, dy, dz, spec, neigh_species)
+                deallocate(dataU)
+             end do
+          end do
+       end do
+    else
+       call act_on_vectors_new(inode-1,rem_bucket(2),matU,support_grad_grid,pseudofns)
+    end if
     return
   end subroutine get_non_local_gradient
 !!***

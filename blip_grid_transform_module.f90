@@ -44,6 +44,8 @@
 !!    Added timers
 !!   2011/11/15 16:58 dave
 !!    Changes throughout to use new blip data structure
+!!   2011/11/17 15:19 dave
+!!    Adding local blip-to-grid and grid-to-blip transforms
 !!  SOURCE
 module blip_grid_transform_module
 
@@ -2656,4 +2658,387 @@ contains
     return
   end subroutine do_inverse_blip_to_grad_new
 !!***
+
+!!****f* blip_grid_transform_module/do_local_blip_to_grid *
+!!
+!!  NAME 
+!!   do_local_blip_to_grid
+!!  USAGE
+!!   Note: the blip coefficients are NOT passed as part of a derived type as for the normal 
+!!   blip-to-grid transform above: they are simply a 2D array.  This allows us to use the
+!!   routine for simple, local transforms (if necessary, the appropriate portion of coefficient_array
+!!   and other arrays can be passed - see blip module and support_spec_format for more details)
+!!  PURPOSE
+!!   Performs a blip transform onto a local grid
+!!  INPUTS
+!!   type(blip_data) :: blip_inf                       The blip_data structure for the blip coefficients
+!!   real(double), dimension(size,nsf) :: coeff_array  An array holding the blip coefficients
+!!   real(double), dimension(ngrid,nsf) :: local_grid  The local grid for the blip transform
+!!  USES
+!! 
+!!  AUTHOR
+!!   D. R. Bowler
+!!  CREATION DATE
+!!   2011/11/17
+!!  MODIFICATION HISTORY
+!!   
+!!  SOURCE
+!!
+  subroutine do_local_blip_to_grid(blip_inf, nsf, coeff_array, size, local_grid, ngrid, grid_spacing)
+
+    use datatypes
+    use numbers
+    use global_module,   ONLY: area_basis
+    use GenComms, ONLY: cq_abort, myid
+    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use blip, ONLY: blip_data
+
+    implicit none
+
+    type(blip_data) :: blip_inf
+    integer,intent(in)     :: nsf
+    real(double),intent(in):: grid_spacing
+    integer :: size, ngrid
+    real(double), dimension(size,nsf) :: coeff_array
+    real(double), dimension(ngrid, ngrid, ngrid, nsf) :: local_grid
+
+
+    ! Local variables
+    real(double),allocatable:: inter_1(:,:,:,:)
+    real(double),allocatable:: inter_2(:,:,:,:)
+    real(double), allocatable, dimension(:) :: splines
+    real(double):: rec_sgs, dx, dy, dz, dxxx, dyyy, dzzz
+    integer     :: x, y, z, bx, by, bz 
+    integer     :: imin,imax, nsf1, ind_blip
+
+    real(double):: ys, yss, dsum(nsf)
+
+    !NEW VARIABLES introduced by TM
+    integer, allocatable, dimension(:) :: imin_for_z, imax_for_z
+    integer     :: ierr
+    integer     :: ix_grid,iy_grid,iz_grid,ix,iy,iz
+
+    integer     :: stat=0,ii
+
+    rec_sgs = one / blip_inf%SupportGridSpacing
+
+    call start_timer(tmr_std_allocation)
+    allocate(inter_1(nsf,-blip_inf%BlipArraySize:blip_inf%BlipArraySize,&
+         -blip_inf%BlipArraySize:blip_inf%BlipArraySize,2*blip_inf%Extent+1),STAT=stat)
+    if(stat/=0) call cq_abort('Error allocating memory to inter_1 !',stat)
+    call reg_alloc_mem(area_basis,nsf*(2*blip_inf%BlipArraySize+1)*(2*blip_inf%BlipArraySize+1)* &
+         (2*blip_inf%Extent+1),type_dbl)
+    inter_1=zero
+    allocate(inter_2(nsf,-blip_inf%BlipArraySize:blip_inf%BlipArraySize,2*blip_inf%Extent+1,2*blip_inf%Extent+1),STAT=stat)
+    if(stat/=0) call cq_abort('Error allocating memory to inter_2 !',blip_inf%BlipArraySize,blip_inf%Extent)
+    call reg_alloc_mem(area_basis,nsf*(2*blip_inf%BlipArraySize+1)*(2*blip_inf%Extent+1)*(2*blip_inf%Extent+1),type_dbl)
+    inter_2=zero
+    allocate(splines( -blip_inf%BlipArraySize:blip_inf%BlipArraySize ),STAT=stat)
+    call reg_alloc_mem(area_basis,(2*blip_inf%BlipArraySize+1),type_dbl)
+    allocate(imin_for_z(2*blip_inf%Extent+1),imax_for_z(2*blip_inf%Extent+1),STAT=stat)
+    call reg_alloc_mem(area_basis,2*(2*blip_inf%Extent+1),type_dbl)
+    call stop_timer(tmr_std_allocation)
+
+    !x,y,z are used for integration grids
+    !bx,by,bz are used for support grids
+    DO x = -blip_inf%Extent, blip_inf%Extent
+       ix_grid=x+blip_inf%Extent+1
+       DO bx = -blip_inf%BlipArraySize, blip_inf%BlipArraySize
+          yss = x*grid_spacing - bx * blip_inf%SupportGridSpacing 
+          ys = ABS( yss )
+          ys = ys * blip_inf%FourOnBlipWidth
+          IF( ys .LE. one ) THEN
+             splines( bx ) = one + &
+                  ys * ys * ( 0.75_double * ys - 1.5_double )
+          ELSE IF( ys .LE. two ) THEN
+             splines( bx ) = 0.25_double * ( two - ys ) *  &
+                  ( two - ys ) * ( two - ys ) 
+          ELSE
+             splines( bx ) = zero
+          END IF
+       END DO
+       DO bz = -blip_inf%BlipArraySize, blip_inf%BlipArraySize
+          DO by = -blip_inf%BlipArraySize, blip_inf%BlipArraySize
+             dsum = zero
+             DO bx = -blip_inf%BlipArraySize, blip_inf%BlipArraySize
+                ind_blip = blip_inf%blip_number(bx,by,bz)
+                IF( ind_blip/= 0 ) THEN
+                   ys = splines( bx )
+                   do nsf1 = 1,nsf
+                      dsum(nsf1) = dsum(nsf1) + ys * &
+                           coeff_array(ind_blip,nsf1)
+                   enddo
+                END IF
+             END DO
+             do nsf1 = 1,nsf
+                inter_1( nsf1,by,bz, ix_grid ) = dsum(nsf1)
+             enddo
+          END DO
+       END DO
+    END DO
+
+    do y = -blip_inf%Extent,blip_inf%Extent
+       iy_grid=y+blip_inf%Extent+1
+       do by = -blip_inf%BlipArraySize, blip_inf%BlipArraySize
+          yss = y*grid_spacing - by * blip_inf%SupportGridSpacing 
+          ys = abs( yss )
+          ys = ys * blip_inf%FourOnBlipWidth
+          if( ys .le. one ) then
+             splines( by ) = one +  &
+                  ys * ys * ( 0.75_double * ys - 1.5_double )
+          else if( ys .le. two ) then
+             splines( by ) = 0.25_double * ( two - ys ) *  &
+                  ( two - ys ) * ( two - ys )  
+          else
+             splines( by ) = zero
+          end if
+       end do
+       do x = -blip_inf%Extent, blip_inf%Extent
+          ix_grid=x+blip_inf%Extent+1
+          do bz = -blip_inf%BlipArraySize, blip_inf%BlipArraySize
+             dsum = zero
+             do by = -blip_inf%BlipArraySize,blip_inf%BlipArraySize
+                ys = splines( by )
+                do nsf1 = 1,nsf
+                   dsum(nsf1) = dsum(nsf1)+ys*inter_1( nsf1, by, bz, ix_grid)
+                enddo
+             end do
+             do nsf1 = 1,nsf
+                inter_2( nsf1, bz,ix_grid,iy_grid) = dsum(nsf1)
+             enddo
+          end do
+       end do
+    end do ! y = nymin_grid, nymax_grid
+    ! Now do local transform
+    do z= -blip_inf%Extent, blip_inf%Extent
+       iz_grid=z+blip_inf%Extent+1
+       do bz = -blip_inf%BlipArraySize, blip_inf%BlipArraySize
+          yss = z*grid_spacing - bz * blip_inf%SupportGridSpacing 
+          ys = abs( yss )
+          ys = ys * blip_inf%FourOnBlipWidth
+          if( ys .le. one ) then
+             splines( bz ) = one +  &
+                  ys * ys * ( 0.75_double * ys - 1.5_double )
+          else if( ys .le. two ) then
+             splines( bz ) = 0.25_double * ( two - ys ) *  &
+                  ( two - ys ) * ( two - ys )  
+          else
+             splines( bz ) = zero
+          end if
+       end do
+       do y = -blip_inf%Extent, blip_inf%Extent
+          iy_grid=y+blip_inf%Extent+1
+          do x = -blip_inf%Extent, blip_inf%Extent
+             ix_grid=x+blip_inf%Extent+1
+             dsum = zero
+             do bz = -blip_inf%BlipArraySize,blip_inf%BlipArraySize
+                ys = splines( bz )
+                do nsf1 = 1,nsf
+                   dsum(nsf1) = dsum(nsf1)+ys*inter_2( nsf1, bz, ix_grid, iy_grid)
+                enddo
+             end do
+             do nsf1 = 1,nsf
+                local_grid( ix_grid, iy_grid, iz_grid, nsf1) = dsum(nsf1)
+             enddo
+          end do
+       end do
+    end do ! z=nzmin_grid, nzmax_grid
+    deallocate(inter_1,inter_2,STAT=stat)
+    if(stat/=0) call cq_abort('Error allocating memory to inter_1 !',stat)
+    call reg_dealloc_mem(area_basis,nsf*(2*blip_inf%BlipArraySize+1)*(2*blip_inf%BlipArraySize+1)*(2*blip_inf%Extent+1),type_dbl)
+    call reg_dealloc_mem(area_basis,nsf*(2*blip_inf%BlipArraySize+1)*(2*blip_inf%Extent+1)*(2*blip_inf%Extent+1),type_dbl)
+    return
+  end subroutine do_local_blip_to_grid
+
+  subroutine do_local_grid_to_blip(blip_inf, nsf, coeff_array, local_grid, ngrid, k02)
+
+    ! modules
+    use datatypes
+    use numbers
+    use blip, ONLY: blip_data, blip_FFT_size, blip_FFT_off
+    use global_module,       ONLY:area_basis
+    use GenComms, ONLY:  myid, cq_abort
+    use support_spec_format, ONLY: support_function
+    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use fft_module, ONLY: fft3_SF
+    
+    ! Shared variable
+    implicit none
+
+    !integer,intent(in):: iprim
+    type(blip_data) :: blip_inf
+    integer,intent(in):: nsf
+    integer :: size, ngrid
+    real(double), OPTIONAL :: k02
+    real(double), dimension(blip_inf%NBlipsRegion*nsf) :: coeff_array
+    real(double), dimension(ngrid,ngrid,ngrid,nsf) :: local_grid
+
+    ! Local variables
+    complex(double),allocatable, dimension(:,:,:) :: FFTblip, FFTgrid
+    real(double) :: x, y, z, scale, dx, dy, dz, fac, kx, ky, kz, k2, dg, dg2, kv
+    integer     :: nsf1, i, j, k, n, ig, jg, kg, nsize
+
+    integer     :: ierr,stat
+    logical :: flag_dopc=.false.
+    !**************************************************************************
+    !     Start of subroutine
+
+    if(present(k02)) flag_dopc = .true.
+    dg = pi/(blip_inf%SupportGridSpacing*real(blip_inf%BlipArraySize,double))
+    dg2 = dg*dg
+    ! Create FFT of blip on blipgrid
+    nsize = blip_FFT_size!2*blip_inf%BlipArraySize+1
+    scale = real(nsize*nsize*nsize,double)
+    allocate(FFTblip(nsize,nsize,nsize),FFTgrid(nsize,nsize,nsize),STAT=stat)
+    FFTblip = zero
+    do k=-1,1
+       if(k==0) then
+          z = 1.0_double
+       else
+          z = 0.25_double
+       end if
+       if(k==-1) then
+          kg = blip_FFT_size!inf%BlipArraySize+1
+       else
+          kg = k+1
+       end if
+       do j=-1,1
+          if(j==0) then
+             y = 1.0_double
+          else
+             y = 0.25_double
+          end if
+          if(j==-1) then
+             jg = blip_FFT_size!inf%BlipArraySize+1
+          else
+             jg = j+1
+          end if
+          do i=-1,1
+             if(i==0) then
+                x = 1.0_double
+             else
+                x = 0.25_double
+             end if
+             if(i==-1) then
+                ig = blip_FFT_size!inf%BlipArraySize+1
+             else
+                ig = i+1
+             end if
+             FFTblip(ig,jg,kg)  = cmplx(x*y*z,zero)
+          end do
+       end do
+    end do
+    !write(*,*) 'Calling blip FFT'
+    !do kg=1,nsize
+    !   do jg=1,nsize
+    !      do ig=1,nsize
+    !         write(24,*) real(FFTblip(ig,jg,kg))
+    !      end do
+    !   end do
+    !end do
+    call fft3_SF(FFTblip,nsize,-1)
+    !do kg=1,nsize
+    !   do jg=1,nsize
+    !      do ig=1,nsize
+    !         write(25,*) real(FFTblip(ig,jg,kg))
+    !      end do
+    !   end do
+    !end do
+    !write(*,*) 'Returned'
+    do nsf1 = 1, nsf
+       FFTgrid = zero
+       do k=1,nsize!2*blip_inf%BlipArraySize+1
+          kg = k+blip_FFT_off
+          if(k>blip_FFT_off+1) kg = k-blip_FFT_off-1
+          do j=1,nsize!2*blip_inf%BlipArraySize+1
+             jg = j+blip_FFT_off
+             if(j>blip_FFT_off+1) jg = j-blip_FFT_off-1
+             do i=1,nsize!2*blip_inf%BlipArraySize+1
+                ig = i+blip_FFT_off
+                if(i>blip_FFT_off+1) ig = i-blip_FFT_off-1
+                FFTgrid(i,j,k) = cmplx(local_grid(ig,jg,kg,nsf1),zero)
+             end do
+          end do
+       end do
+       !do kg=1,nsize
+       !   do jg=1,nsize
+       !      do ig=1,nsize
+       !         write(35+nsf1,*) real(FFTgrid(ig,jg,kg)),local_grid(ig,jg,kg,nsf1)
+       !      end do
+       !   end do
+       !end do
+       call fft3_SF(FFTgrid,nsize,-1)
+       !do kg=1,nsize
+       !   do jg=1,nsize
+       !      do ig=1,nsize
+       !         write(25+nsf1,*) real(FFTgrid(ig,jg,kg))
+       !      end do
+       !   end do
+       !end do
+       ! Convert from IG to BG and store in FFT structure
+       fac = one
+       do k=1,blip_FFT_size
+          !if(k<=(blip_FFT_off+1)) then
+          !   kz = real(k-1,double) 
+          !else
+          !   kz = real(k-1-blip_FFT_size,double) 
+          !end if
+          do j=1,blip_FFT_size
+             !if(j<=(blip_FFT_off+1)) then
+             !   ky = real(j-1,double)
+             !else
+             !   ky = real(j-1-blip_FFT_size,double)
+             !end if
+             do i=1,blip_FFT_size
+                !if(i<=(blip_FFT_off+1)) then
+                !   kx = real(i-1,double)
+                !else
+                !   kx = real(i-1-blip_FFT_size,double)
+                !end if
+                !k2 = kx*kx+ky*ky+kz*kz
+                !if(flag_dopc) fac = one+dg2*k2/k02
+                FFTgrid(i,j,k) = fac*FFTgrid(i,j,k)/(FFTblip(i,j,k))!/fac)
+             end do
+          end do
+       end do
+       ! IFFT
+       !write(*,*) 'Calling grid FFT',nsize
+       call fft3_SF(FFTgrid,nsize,+1)
+       !do kg=nsize,1,-1
+       !   do jg=nsize,1,-1
+       !      do ig=nsize,1,-1
+       !         write(45+nsf1,*) real(FFTgrid(ig,jg,kg))/scale
+       !      end do
+       !   end do
+       !end do
+       !write(*,*) 'Returned'
+       ! Store
+       do n=1,blip_inf%NBlipsRegion
+          i = blip_inf%blip_location( 1, n )+1
+          if(i<1) then
+             i = i+nsize!2*blip_FFT_off+1
+          endif
+          !i=1+nsize-i
+          j = blip_inf%blip_location( 2, n )+1
+          if(j<1) then
+             j = j+nsize!2*blip_FFT_off+1
+          endif
+          !j=1+nsize-j
+          k = blip_inf%blip_location( 3, n )+1
+          if(k<1) then
+             k = k+nsize!2*blip_FFT_off+1
+          endif
+          !k=1+nsize-k
+          coeff_array(n + (nsf1-1)*blip_inf%NBlipsRegion) = real(FFTgrid(i,j,k),double)/scale
+          !write(70+nsf1,*) coeff_array(n + (nsf1-1)*blip_inf%NBlipsRegion)
+       end do
+       !write(70+nsf1,*) "&"
+       !flush(70+nsf1)
+    end do
+    !write(*,*) 'About to deallocate',size(FFTblip),size(FFTgrid)
+    deallocate(FFTblip,FFTgrid)
+    return
+
+  end subroutine do_local_grid_to_blip
+
 end module blip_grid_transform_module

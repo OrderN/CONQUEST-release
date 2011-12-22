@@ -551,20 +551,29 @@ contains
 
     use datatypes
     use numbers
-    use matrix_data, ONLY: mat, SPrange, PAOPrange, dHrange
+    use matrix_data, ONLY: mat, SPrange, PAOPrange, dHrange, halo
     use mult_module, ONLY: mult, SP_PS_H, PAOP_PS_H, SP_trans, matCS, matdH, matSC, &
-         allocate_temp_matrix, free_temp_matrix, matrix_product, matrix_sum, matrix_transpose
+         allocate_temp_matrix, free_temp_matrix, matrix_product, matrix_sum, matrix_transpose, &
+         matrix_scale
     use pseudopotential_data, ONLY: n_projectors, l_core, recip_scale
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT
     use species_module, ONLY: species
     use set_bucket_module, ONLY: rem_bucket, sf_nlpf_rem
     use calc_matrix_elements_module, ONLY: get_matrix_elements_new
-    use global_module, ONLY: flag_basis_set, PAOs, blips, flag_vary_basis, paof, nlpf, sf, iprint_ops
+    use global_module, ONLY: flag_basis_set, PAOs, blips, flag_vary_basis, paof, nlpf, sf, iprint_ops, &
+         id_glob, species_glob, flag_analytic_blip_int
     use GenComms, ONLY: cq_abort, myid, inode, ionode
     use GenBlas, ONLY: axpy
     use build_PAO_matrices, ONLY: assemble_2
     use functions_on_grid, ONLY: supportfns, pseudofns
     use io_module, ONLY: dump_matrix
+    use nlpf2blip, ONLY: get_SP, nlpf_on_atom
+    use primary_module , ONLY : bundle
+    use support_spec_format, ONLY: supports_on_atom
+    use group_module, ONLY: parts
+    use primary_module, ONLY: bundle
+    use cover_module, ONLY: BCS_parts
+    use species_module, ONLY: nsf_species, nlpf_species
 
     implicit none
 
@@ -572,7 +581,9 @@ contains
     integer :: matNL
 
     ! Local variables
-    integer :: stat, matdSC, matdCNL, matSCtmp
+    integer :: stat, matdSC, matdCNL, matSCtmp, np, ni, iprim, spec, this_nsf, this_nlpf, nab, ist, gcspart, n1, n2
+    integer :: neigh_global_part, neigh_global_num, neigh_species, i1, i2, wheremat
+    real(double) :: dx, dy, dz
 
     if(flag_vary_basis.AND.flag_basis_set==PAOs) then
        matdSC = allocate_temp_matrix(PAOPrange,SP_trans,paof,nlpf)
@@ -582,7 +593,45 @@ contains
     ! first, get the overlap of support functions with core pseudowavefunctions
     if(flag_basis_set==blips) then
        if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Calling get_matrix_elements'
-       call get_matrix_elements_new(myid,rem_bucket(sf_nlpf_rem),matSC,supportfns,pseudofns)
+       if(flag_analytic_blip_int) then
+          call matrix_scale(zero,matSC)
+          iprim=0
+          do np=1,bundle%groups_on_node
+             if(bundle%nm_nodgroup(np) > 0) then
+                do ni=1,bundle%nm_nodgroup(np)
+                   iprim=iprim+1
+                   spec = bundle%species(iprim)
+                   write(60,*) "#Atom ",iprim
+                   do nab = 1, mat(np,SPrange)%n_nab(ni) ! Loop over neighbours of atom
+                      ist = mat(np,SPrange)%i_acc(ni)+nab-1
+                      ! Build the distances between atoms - needed for phases 
+                      gcspart = BCS_parts%icover_ibeg(mat(np,SPrange)%i_part(ist))+mat(np,SPrange)%i_seq(ist)-1
+                      ! Displacement vector
+                      dx = BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                      dy = BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                      dz = BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
+                      ! We need to know the species of neighbour
+                      neigh_global_part = BCS_parts%lab_cell(mat(np,SPrange)%i_part(ist)) 
+                      neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(np,SPrange)%i_seq(ist)-1)
+                      write(60,*) "#Nab no and glob: ",nab,neigh_global_num,dx,dy,dz
+                      neigh_species = species_glob(neigh_global_num)
+                      !write(io_lun,fmt='(2x,"Offset: ",3f7.2,4i4)') dx, dy, dz, iprim,neigh_global_num, spec,neigh_species
+                      !do n1=1,nsf_species(spec)
+                      !   do n2=1,nlpf_species(neigh_species)
+                      !      call scale_matrix_value(matSC,np,ni,iprim,nab,n1,n2,zero)
+                      !   end do
+                      !end do
+                      call get_SP(supports_on_atom(iprim), nlpf_on_atom(neigh_species), matSC, iprim, &
+                           halo(SPrange)%i_halo(gcspart), dx, dy, dz, spec, neigh_species)
+                   end do
+                   write(60,*) "&"
+                end do
+             end if
+          end do
+          !call dump_matrix("NSC2",matSC,inode)
+       else
+          call get_matrix_elements_new(myid,rem_bucket(sf_nlpf_rem),matSC,supportfns,pseudofns)
+       end if
        !call dump_matrix("NSC",matSC,inode)
     else if(flag_basis_set==PAOs) then
        ! Use assemble to generate matrix elements

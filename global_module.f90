@@ -59,6 +59,8 @@
 !!    Added new flags for DFT-D2
 !!   2011/07/21 16:35 dave
 !!    Flags for cDFT
+!!   2011/12/12 17:26 dave
+!!    Flag for analytic blip integrals
 !!  SOURCE
 !!
 module global_module
@@ -103,6 +105,7 @@ module global_module
   logical :: flag_vary_basis, flag_self_consistent, flag_residual_done
   ! Logical flags controlling preconditioning
   logical :: flag_precondition_blips
+  logical :: flag_analytic_blip_int
   ! Logical flag controlling atomic coordinate format
   logical :: flag_fractional_atomic_coords
   logical :: flag_old_partitions

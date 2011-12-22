@@ -318,6 +318,8 @@ contains
 !!    Bug fix to say when species block not read
 !!   2011/11/17 10:36 dave
 !!    Changes for new blip data
+!!   2011/12/12 17:27 dave
+!!    Added flag for analytic blip integrals
 !!  TODO
 !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
 !!   Fix rigid shift 10/05/2002 dave
@@ -341,7 +343,7 @@ contains
          global_maxatomspart, load_balance, many_processors, flag_assign_blocks, io_lun, &
          flag_pulay_simpleStep, flag_Becke_weights, flag_Becke_atomic_radii, flag_global_tolerance, & 
          flag_mix_L_SC_min, flag_onsite_blip_ana, flag_read_velocity, flag_quench_MD, temp_ion, &
-         numprocs, flag_dft_d2, flag_only_dispersion, flag_perform_cDFT
+         numprocs, flag_dft_d2, flag_only_dispersion, flag_perform_cDFT, flag_analytic_blip_int
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff, &
          n_grid_x, n_grid_y, n_grid_z, r_h, r_c, RadiusSupport, NonLocalFactor, InvSRange, min_blip_sp, &
          flag_buffer_old, AtomMove_buffer, r_dft_d2
@@ -568,6 +570,7 @@ contains
        end if
        read_option = fdf_boolean('Basis.LoadCoeffs',.false.)
        flag_onsite_blip_ana = fdf_boolean('Basis.OnsiteBlipsAnalytic',.true.)
+       flag_analytic_blip_int = fdf_boolean('Basis.AnalyticBlipIntegrals',.false.)
        if(read_option.AND.flag_basis_set==blips) restart_file = fdf_string(40,'Basis.LoadBlipFile',' ')
        find_chdens = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        flag_Becke_weights = fdf_boolean('SC.BeckeWeights',.false.)

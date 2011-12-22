@@ -5,7 +5,7 @@ FFLAGS?= -fast $(CFLAGS)
 LDFLAGS?= $(CFLAGS)
 ARFL?=
 
-OBJS =	gpfa.o setgpfa.o gpfa2f.o gpfa3f.o gpfa5f.o
+OBJS =	gpfa.o setgpfa.o gpfa2f.o gpfa3f.o gpfa5f.o gpfft3.o
 
 libgpfa.a: $(OBJS)
 	ar $(ARFL) rv libgpfa.a $(OBJS)

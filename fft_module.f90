@@ -104,6 +104,10 @@ module fft_module
   real(double), allocatable, dimension(:,:) :: recip_vector
 
   real(double), dimension(:), allocatable :: trigs_x, trigs_y, trigs_z
+  ! Arrays for local blip FFT
+  real(double), dimension(:,:), allocatable :: lb_trigs
+  integer :: lb_size
+  logical :: lb_set = .false.
 
   integer :: i0 ! Gamma point location
   integer, allocatable, dimension(:) :: kerker_list
@@ -1000,5 +1004,39 @@ contains
     return
   end subroutine set_fft_map
 !!***
+
+  subroutine set_SF_fft(size)
+
+    use numbers, ONLY : zero
+
+    implicit none
+
+    integer :: size
+
+    lb_size = size
+    ! Allocate trigs
+    allocate(lb_trigs(2*size,3))
+    lb_trigs = zero
+    ! Set up trigs
+    call setgpfa(lb_trigs(1,1),size)
+    lb_trigs(1:2*size,2) = lb_trigs(1:2*size,1)
+    lb_trigs(1:2*size,3) = lb_trigs(1:2*size,1)
+  end subroutine set_SF_fft
+
+  subroutine fft3_SF(c,nsize,is)
+
+    use datatypes
+
+    implicit none
+
+    integer :: nsize, is
+    complex(double_cplx), dimension(nsize,nsize,nsize) :: c
+
+    integer, dimension(3) :: nn
+
+    nn(:) = nsize
+    ! call gpfft
+    call GPF3D(c,lb_trigs,2*nsize,nsize,nn,is)
+  end subroutine fft3_SF
 
 end module fft_module

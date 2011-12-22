@@ -90,6 +90,14 @@ module blip
   type(blip_data), allocatable, dimension(:) :: blip_info
   type(blip_precon), allocatable, dimension(:) :: PreCond !(n_blips_region, n_blips_region )
   character(len=10) :: init_blip_flag
+
+  integer :: blip_FFT_size, blip_FFT_off
+  !integer, parameter :: nfft = 30
+  !integer, dimension(nfft), parameter :: blip_FFT_grids = (/ &
+  !     2, 3, 4, 5, 6, 8, 9, 10, 12, 15, 16, 18, 20, 24, 25, 27, 30, 32, 36, 40, 45, 48, 50, 54, 60, 64, 72, 75, 80, 81/)
+  integer, parameter :: nfft = 9
+  integer, dimension(nfft), parameter :: blip_FFT_grids = (/ &
+       3, 5, 9, 15, 25, 27, 45, 75, 81/)
 !!***
 
 contains
@@ -343,6 +351,7 @@ contains
     use primary_module, ONLY: bundle
     use dimens, ONLY: RadiusSupport
     use memory_module, ONLY: reg_alloc_mem, type_dbl, type_int
+    use fft_module, ONLY: set_SF_fft
 
     implicit none
 
@@ -350,7 +359,7 @@ contains
     integer, intent(in) :: inode, ionode
 
     ! Local variables
-    integer :: i, n_blips, na, nb, nx, ny, nz, stat, size, this_nsf, spec
+    integer :: i, n_blips, na, nb, nx, ny, nz, stat, size, this_nsf, spec, maxsize
     real(double) :: a2, b2, dx, dy, dz, r2_over_b2
 
 
@@ -360,6 +369,7 @@ contains
             &10x,65("*"))')
     end if
 
+    maxsize=0
     do spec = 1, n_species
        ! It is required that the full width of the B-spline blip-function
        ! be exactly four times the blip-grid spacing. This condition
@@ -399,6 +409,7 @@ contains
        blip_info(spec)%OneArraySize = 1 + 2*(blip_info(spec)%BlipArraySize+4)
        blip_info(spec)%FullArraySize = blip_info(spec)%OneArraySize*blip_info(spec)%OneArraySize*&
             blip_info(spec)%OneArraySize
+       if(blip_info(spec)%BlipArraySize>maxsize) maxsize = blip_info(spec)%BlipArraySize
        !if(bliparraysize > MAXBAS) then
        !   call cq_abort('set_blip_index: MAXBAS too small',bliparraysize,MAXBAS)
        !end if
@@ -502,6 +513,17 @@ contains
           end do
        end if
     end do ! Loop over species
+    blip_FFT_size = 2*(maxsize+4)+1
+    do i=1,nfft
+       if(blip_FFT_size==blip_FFT_grids(i)) then
+          exit
+       else if(blip_FFT_size<blip_FFT_grids(i)) then
+          blip_FFT_size=blip_FFT_grids(i)
+          exit
+       end if
+    end do
+    blip_FFT_off = (blip_FFT_size-1)/2
+    call set_SF_fft(blip_FFT_size)!2*(maxsize+4)+1)
     ! Set up data storage for atoms on this processor
     size = 0
     call start_timer(tmr_std_allocation)

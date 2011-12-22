@@ -175,6 +175,8 @@ contains
 !!    Removed dsqrt, changed float to real
 !!   2008/05/25 ast
 !!    Added timers
+!!   2011/12/12 17:26 dave
+!!    Removed calculation of pseudofunctions for analytic blips
 !!  SOURCE
 !!
   subroutine set_pseudopotential()
@@ -183,7 +185,7 @@ contains
     use GenBlas, ONLY: axpy
     use numbers
     use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell, species_glob, nlpf, &
-         flag_basis_set, blips
+         flag_basis_set, blips, flag_analytic_blip_int
     use species_module, ONLY: charge, species, nlpf_species
     !  At present, these arrays are dummy arguments.
     use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, &
@@ -226,7 +228,7 @@ contains
 
     pseudopotential = zero
     pseudo_density = zero
-    if(flag_basis_set==blips) then
+    if(flag_basis_set==blips.AND.(.NOT.flag_analytic_blip_int)) then
        gridfunctions(pseudofns)%griddata = zero
     end if
 
@@ -333,11 +335,13 @@ contains
                          do ix=1,nx_in_block
                             ipoint=ipoint+1
                             igrid=n_pts_in_block*(iblock-1)+ipoint
-                            position= offset_position + ipoint
-                            if(position > gridfunctions(pseudofns)%size) then
-                               call cq_abort('set_ps: position error ', &
-                                    position, gridfunctions(pseudofns)%size)
-                            endif
+                            if(.NOT.flag_analytic_blip_int) then
+                               position= offset_position + ipoint
+                               if(position > gridfunctions(pseudofns)%size) then
+                                  call cq_abort('set_ps: position error ', &
+                                       position, gridfunctions(pseudofns)%size)
+                               endif
+                            end if
                             if(igrid > n_my_grid_points) then
                                call cq_abort('set_ps: igrid error ', &
                                     igrid, n_my_grid_points)
@@ -369,7 +373,7 @@ contains
                                c = a * ( a * a - one ) * step * step / six
                                d = b * ( b * b - one ) * step * step / six
                                !--- NONLOCAL PART START ---------
-                               if(the_l >= 0) then  ! NONLOCAL case
+                               if((the_l >= 0).AND.(.NOT.flag_analytic_blip_int)) then  ! NONLOCAL case
                                   ! direction cosines needed for spher harms
                                   if ( r_from_i .gt. very_small ) then
                                      x = rx / r_from_i

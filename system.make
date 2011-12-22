@@ -10,7 +10,7 @@ F77 = mpif77
 # If you need 64-bit flags for compiling, add them for linking
 LINKFLAGS = 
 COMPFLAGS = -g -O2 -fbounds-check
-COMPFLAGS_F77 = -O2 
+COMPFLAGS_F77 = -O2 -g -fbounds-check
 ARFLAGS = 
 
 # This line is for systems with ScaLAPACK, BLACS and diagonalisation
