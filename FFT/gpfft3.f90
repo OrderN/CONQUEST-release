@@ -1,15 +1,15 @@
-C
-C GPF3D The basic 3D complex FFT.
-C
+!
+! GPF3D The basic 3D complex FFT.
+!
 
-C
-C Arguments
-C
-C COMPLEX C(ID,NN(2),NN(3))
-C ID first dimension of data array.  
-C NN(3) Dimensions of 3D complex data.
-C IS Forward (+1)/Reverse (-1)
-C
+!
+! Arguments
+!
+! COMPLEX C(ID,NN(2),NN(3))
+! ID first dimension of data array.  
+! NN(3) Dimensions of 3D complex data.
+! IS Forward (+1)/Reverse (-1)
+!
       subroutine GPF3D(c,trigs,size,id,nn,is)
       parameter (NMAX=256)
       complex*16 c(id,id,id)

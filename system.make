@@ -22,4 +22,4 @@ LIBS = $(FFT) /usr/local/lib/libscalapack.a /usr/local/lib/libblacs.a /usr/local
 # Default FFT (GPFA) - replace as necessary
 FFT=libgpfa.a
 $(FFT):
-	(cd FFT; $(MAKE) "FC=$(F77)" "FFLAGS=$(COMPFLAGS_F77)" "ARFL=$(ARFLAGS)")
+	(cd FFT; $(MAKE) "FC=$(F77)" "F90=$(F90)" "FFLAGS=$(COMPFLAGS_F77)" "ARFL=$(ARFLAGS)")

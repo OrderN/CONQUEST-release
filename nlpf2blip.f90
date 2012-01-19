@@ -16,17 +16,12 @@ module nlpf2blip
 
   type projector_function
      integer :: nsuppfuncs
-     type(proj_function), allocatable, dimension(:) :: proj_func ! coefficients for a sf, dimension nsuppfuncs
+     type(proj_function), pointer, dimension(:) :: proj_func ! coefficients for a sf, dimension nsuppfuncs
   end type projector_function
 
   !type(projector_function), allocatable, dimension(:), target :: nlpf_on_atom ! Dimension mx_atoms (flag above)
   type(support_function), allocatable, dimension(:), target :: nlpf_on_atom
   real(double), allocatable, dimension(:), target :: nlpf_array
-  real(double) ::  a1g_norm = sqrt(one/(four*pi))
-  real(double) ::  t1u_norm = sqrt(three/(four*pi))
-  real(double) ::  t2g_norm = sqrt(fifteen/(four*pi))
-  real(double) ::  eg_a_norm = sqrt(fifteen/(sixteen*pi))
-  real(double) ::  eg_b_norm = sqrt(five/(sixteen*pi))
 
 
   ! -------------------------------------------------------
@@ -59,12 +54,17 @@ contains
     real(double) :: c, deltax, r2_over_b2, x, y, z, r, step, rr, a, b, d, r1, r2, r3, r4, nl_potential, val, xg, yg, zg, ang_fac
     real(double), allocatable, dimension(:,:) :: local_blip
     real(double), allocatable, dimension(:,:,:,:) :: local_grid
+    real(double) :: a1g_norm, t1u_norm, t2g_norm, eg_a_norm, eg_b_norm
 
     call start_timer(tmr_std_basis)
     if((inode == ionode).and.(iprint_basis >= 2)) then
        write(unit=io_lun,fmt='(//" make_blips_from_nlpfs: sbrt entered")')
     end if
-
+    a1g_norm = sqrt(one/(four*pi))
+    t1u_norm = sqrt(three/(four*pi))
+    t2g_norm = sqrt(fifteen/(four*pi))
+    eg_a_norm = sqrt(fifteen/(sixteen*pi))
+    eg_b_norm = sqrt(five/(sixteen*pi))
     ! number of species
     if((inode == ionode).and.(iprint_basis >= 1)) then
        write(unit=io_lun,fmt='(//" make_nlpfs_from_blips:&
@@ -935,7 +935,7 @@ contains
        !write(55,*) '# ',nbg,xmin,xmax,n
        do i=1,n
           x = xmin + real(i-1,double)*delta
-          sum = sum + blip(x)*blip(x-dx-real(nbg,double))
+          sum = sum + blipf(x)*blipf(x-dx-real(nbg,double))
           !write(60+nbg,*) x,blip(x),blip(x-dx-real(nbg,double))
        end do
        FAC(nbg,1) = delta*sum
@@ -952,7 +952,7 @@ contains
        !write(55,*) '# ',nbg,xmin,xmax,n
        do i=1,n
           x = xmin + real(i-1,double)*delta
-          sum = sum + blip(x)*blip(x-dy-real(nbg,double))
+          sum = sum + blipf(x)*blipf(x-dy-real(nbg,double))
        end do
        FAC(nbg,2) = delta*sum
        !write(55,*) nbg,FAC(nbg,1)
@@ -966,7 +966,7 @@ contains
        !write(55,*) '# ',nbg,xmin,xmax,n
        do i=1,n
           x = xmin + real(i-1,double)*delta
-          sum = sum + blip(x)*blip(x-dz-real(nbg,double))
+          sum = sum + blipf(x)*blipf(x-dz-real(nbg,double))
        end do
        FAC(nbg,3) = delta*sum
        !write(55,*) nbg,FAC(nbg,1)
@@ -994,7 +994,7 @@ contains
        !write(55,*) '# ',nbg,xmin,xmax
        do i=1,n
           x = xmin + real(i-1,double)*delta
-          sum = sum + dblip(x)*blip(x-dx-real(nbg,double))
+          sum = sum + dblipf(x)*blipf(x-dx-real(nbg,double))
           !write(60+nbg,*) x,blip(x),blip(x-dx-real(nbg,double))
        end do
        FAC(nbg,1) = delta*sum
@@ -1010,7 +1010,7 @@ contains
        sum = zero
        do i=1,n
           x = xmin + real(i-1,double)*delta
-          sum = sum + dblip(x)*blip(x-dy-real(nbg,double))
+          sum = sum + dblipf(x)*blipf(x-dy-real(nbg,double))
        end do
        FAC(nbg,2) = delta*sum
     end do
@@ -1022,7 +1022,7 @@ contains
        sum = zero
        do i=1,n
           x = xmin + real(i-1,double)*delta
-          sum = sum + dblip(x)*blip(x-dz-real(nbg,double))
+          sum = sum + dblipf(x)*blipf(x-dz-real(nbg,double))
        end do
        FAC(nbg,3) = delta*sum
     end do
@@ -1049,7 +1049,7 @@ contains
        !write(55,*) '# ',nbg,xmin,xmax
        do i=1,n
           x = xmin + real(i-1,double)*delta
-          sum = sum + d2blip(x)*blip(x-dx-real(nbg,double))
+          sum = sum + d2blipf(x)*blipf(x-dx-real(nbg,double))
           !write(60+nbg,*) x,blip(x),blip(x-dx-real(nbg,double))
        end do
        FAC(nbg,1) = -delta*sum
@@ -1065,7 +1065,7 @@ contains
        sum = zero
        do i=1,n
           x = xmin + real(i-1,double)*delta
-          sum = sum + d2blip(x)*blip(x-dy-real(nbg,double))
+          sum = sum + d2blipf(x)*blipf(x-dy-real(nbg,double))
        end do
        FAC(nbg,2) = -delta*sum
     end do
@@ -1077,7 +1077,7 @@ contains
        sum = zero
        do i=1,n
           x = xmin + real(i-1,double)*delta
-          sum = sum + d2blip(x)*blip(x-dz-real(nbg,double))
+          sum = sum + d2blipf(x)*blipf(x-dz-real(nbg,double))
        end do
        FAC(nbg,3) = -delta*sum
     end do
@@ -1104,7 +1104,7 @@ contains
        !write(55,*) '# ',nbg,xmin,xmax,n
        do i=1,n
           x = xmin + real(i-1,double)*delta
-          sum = sum + d2blip(x)*dblip(x-dx-real(nbg,double))
+          sum = sum + d2blipf(x)*dblipf(x-dx-real(nbg,double))
           !write(60+nbg,*) x,blip(x),blip(x-dx-real(nbg,double))
        end do
        FAC(nbg,1) = -delta*sum
@@ -1121,7 +1121,7 @@ contains
        !write(55,*) '# ',nbg,xmin,xmax,n
        do i=1,n
           x = xmin + real(i-1,double)*delta
-          sum = sum + d2blip(x)*dblip(x-dy-real(nbg,double))
+          sum = sum + d2blipf(x)*dblipf(x-dy-real(nbg,double))
        end do
        FAC(nbg,2) = -delta*sum
        !write(55,*) nbg,FAC(nbg,1)
@@ -1135,7 +1135,7 @@ contains
        !write(55,*) '# ',nbg,xmin,xmax,n
        do i=1,n
           x = xmin + real(i-1,double)*delta
-          sum = sum + d2blip(x)*dblip(x-dz-real(nbg,double))
+          sum = sum + d2blipf(x)*dblipf(x-dz-real(nbg,double))
        end do
        FAC(nbg,3) = -delta*sum
        !write(55,*) nbg,FAC(nbg,1)
@@ -1143,7 +1143,7 @@ contains
     return
   end subroutine do_d3blip_integrals
 
-  real(double) function blip(x)
+  real(double) function blipf(x)
 
     use datatypes
     use numbers
@@ -1155,15 +1155,15 @@ contains
     y = x
     if(x<0) y = -y
     if(y>two) then
-       blip = zero
+       blipf = zero
     else if(y<one) then
-       blip = one-three_halves*y*y+three_quarters*y*y*y
+       blipf = one-three_halves*y*y+three_quarters*y*y*y
     else
-       blip = quarter*(two-y)*(two-y)*(two-y)
+       blipf = quarter*(two-y)*(two-y)*(two-y)
     end if
-  end function blip
+  end function blipf
 
-  real(double) function dblip(x)
+  real(double) function dblipf(x)
 
     use datatypes
     use numbers
@@ -1175,16 +1175,16 @@ contains
     y = x
     if(x<0) y = -y
     if(y>two) then
-       dblip = zero
+       dblipf = zero
     else if(y<one) then
-       dblip = -three*y+nine_quarters*y*y
+       dblipf = -three*y+nine_quarters*y*y
     else
-       dblip = -three_quarters*(two-y)*(two-y)
+       dblipf = -three_quarters*(two-y)*(two-y)
     end if
-    if(x<0) dblip = -dblip
-  end function dblip
+    if(x<0) dblipf = -dblipf
+  end function dblipf
 
-  real(double) function d2blip(x)
+  real(double) function d2blipf(x)
 
     use datatypes
     use numbers
@@ -1196,12 +1196,12 @@ contains
     y = x
     if(x<0) y = -y
     if(y>two) then
-       d2blip = zero
+       d2blipf = zero
     else if(y<one) then
-       d2blip = three*(three_halves*y-one) ! -three+three*three_halves*y
+       d2blipf = three*(three_halves*y-one) ! -three+three*three_halves*y
     else
-       d2blip = three_halves*(two-y)
+       d2blipf = three_halves*(two-y)
     end if
-  end function d2blip
+  end function d2blipf
 
 end module nlpf2blip

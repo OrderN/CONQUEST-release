@@ -1,5 +1,6 @@
 # Compile flags
-FC?=pgf77
+FC?=mpif77
+F90?=mpif90
 CFLAGS=
 FFLAGS?= -fast $(CFLAGS)
 LDFLAGS?= $(CFLAGS)
@@ -13,6 +14,8 @@ libgpfa.a: $(OBJS)
 
 .f.o:	
 	$(FC) $(FFLAGS) -c $<
+%.o: %.f90
+	$(F90) $(FFLAGS) -c $<
 
 clean:
 	rm -f *.o *.a
