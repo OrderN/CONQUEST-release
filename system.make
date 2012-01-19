@@ -9,8 +9,8 @@ FC = mpif90
 F77 = mpif77
 # If you need 64-bit flags for compiling, add them for linking
 LINKFLAGS = 
-COMPFLAGS = -g -O2 -fbounds-check
-COMPFLAGS_F77 = -O2 -g -fbounds-check
+COMPFLAGS = -g -O2 
+COMPFLAGS_F77 = -O2 -g 
 ARFLAGS = 
 
 # This line is for systems with ScaLAPACK, BLACS and diagonalisation
@@ -22,4 +22,4 @@ LIBS = $(FFT) /usr/local/lib/libscalapack.a /usr/local/lib/libblacs.a /usr/local
 # Default FFT (GPFA) - replace as necessary
 FFT=libgpfa.a
 $(FFT):
-	(cd FFT; $(MAKE) "FC=$(F77)" "F90=$(F90)" "FFLAGS=$(COMPFLAGS_F77)" "ARFL=$(ARFLAGS)")
+	(cd FFT; $(MAKE) "FC=$(F77)" "F90=$(FC)" "FFLAGS=$(COMPFLAGS_F77)" "ARFL=$(ARFLAGS)")
