@@ -85,16 +85,19 @@ contains
 !!    Passed no. of L iterations to vary_support
 !!   2008/05/25 ast
 !!    Added timer
+!!   2011/12/07 L.Tong
+!!    Removed redundant parameter number_of_bands
 !!  SOURCE
 !!
-  subroutine get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, total_energy, find_forces, write_forces)
+  subroutine get_E_and_F (fixed_potential, vary_mu, mu, total_energy, &
+       find_forces, write_forces)
 
     use datatypes
     use force_module, ONLY : force
     use DMMin, ONLY: FindMinDM
     use SelfCon, ONLY: new_SC_potl, atomch_output, get_atomic_charge
-    use global_module, ONLY: flag_vary_basis, flag_self_consistent, flag_basis_set, blips, PAOs, &
-                             IPRINT_TIME_THRES1, runtype
+    use global_module, ONLY: flag_vary_basis, flag_self_consistent, &
+         flag_basis_set, blips, PAOs, IPRINT_TIME_THRES1, runtype
     use energy, ONLY: get_energy
     use GenComms, ONLY: cq_abort, inode, ionode
     use blip_minimisation, ONLY: vary_support
@@ -106,12 +109,9 @@ contains
 
     ! Shared variables
     logical :: vary_mu, fixed_potential, find_forces, write_forces
-
     integer :: n_save_freq, n_run
-
     character(len=40) :: output_file
-
-    real(double) :: number_of_bands, mu
+    real(double) :: mu
     real(double) :: total_energy
 
     ! Local variables
@@ -119,50 +119,60 @@ contains
     real(double) :: electrons
     type(cq_timer) :: tmr_l_energy, tmr_l_force
 
-    call start_timer(tmr_std_eminimisation)
+    call start_timer (tmr_std_eminimisation)
     ! reset_L = .true.  ! changed by TM, Aug 2008 
-    if(leqi(runtype,'static')) then
+    if (leqi(runtype,'static')) then
      reset_L = .false.
     else
      reset_L = .true.   ! temporary for atom movements
     endif
-    call start_timer(tmr_l_energy,WITH_LEVEL)      ! Start timing the energy calculation
+    ! Start timing the energy calculation
+    call start_timer (tmr_l_energy, WITH_LEVEL)
     ! Now choose what we vary
-    if(flag_vary_basis) then ! Vary everything: DM, charge density, basis set
-       if(flag_basis_set==blips) then
-          call vary_support( n_support_iterations, fixed_potential, vary_mu, n_L_iterations, &
-               number_of_bands, L_tolerance, sc_tolerance, energy_tolerance, mu, total_energy, &
-               expected_reduction)
-       else if(flag_basis_set==PAOs) then
-          if(UsePulay) then
-             call pulay_min_pao( n_support_iterations, fixed_potential, vary_mu, n_L_iterations, &
-                  number_of_bands, L_tolerance, sc_tolerance, energy_tolerance, mu, total_energy, &
-                  expected_reduction)
+    if (flag_vary_basis) then ! Vary everything: DM, charge density, basis set
+       if (flag_basis_set == blips) then
+          call vary_support (n_support_iterations, fixed_potential, &
+               vary_mu, n_L_iterations, L_tolerance, sc_tolerance, &
+               energy_tolerance, mu, total_energy, expected_reduction)
+       else if (flag_basis_set == PAOs) then
+          if (UsePulay) then
+             call pulay_min_pao (n_support_iterations, &
+                  fixed_potential, vary_mu, n_L_iterations, &
+                  L_tolerance, sc_tolerance, energy_tolerance, mu, &
+                  total_energy, expected_reduction)
           else
-             call vary_pao( n_support_iterations, fixed_potential, vary_mu, n_L_iterations, &
-                  number_of_bands, L_tolerance, sc_tolerance, energy_tolerance, mu, total_energy, &
-                  expected_reduction)
+             call vary_pao (n_support_iterations, fixed_potential, &
+                  vary_mu, n_L_iterations, L_tolerance, sc_tolerance, &
+                  energy_tolerance, mu, total_energy, expected_reduction)
           end if
        else 
-          call cq_abort("get_E_and_F: basis set undefined: ",flag_basis_set)
+          call cq_abort ("get_E_and_F: basis set undefined: ", &
+               flag_basis_set)
        end if
-    else if(flag_self_consistent) then ! Vary only DM and charge density
-       call new_SC_potl( .false., sc_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
-            number_of_bands, L_tolerance, mu, total_energy)
+    else if (flag_self_consistent) then ! Vary only DM and charge density
+       call new_SC_potl (.false., sc_tolerance, reset_L, &
+            fixed_potential, vary_mu, n_L_iterations, L_tolerance, mu,&
+            total_energy)
     else ! Ab initio TB: vary only DM
-       call FindMinDM(n_L_iterations, number_of_bands, vary_mu, L_tolerance, mu, inode, ionode, reset_L, .false.)
-       call get_energy(total_energy)
+       call FindMinDM (n_L_iterations, vary_mu, L_tolerance, mu, &
+            inode, ionode, reset_L, .false.)
+       call get_energy (total_energy)
     end if
-    call stop_print_timer(tmr_l_energy, "calculating ENERGY", IPRINT_TIME_THRES1)
-    if(atomch_output) call get_atomic_charge()
-    if(find_forces) then 
-      call start_timer(tmr_l_force,WITH_LEVEL)    ! Start timing the force calculation
-      call force(fixed_potential, vary_mu, n_L_iterations, number_of_bands, L_tolerance, &
-                 sc_tolerance, mu, total_energy, expected_reduction, write_forces)
-      call stop_print_timer(tmr_l_force, "calculating FORCE", IPRINT_TIME_THRES1)   ! Stop timing the force calculation
+    call stop_print_timer (tmr_l_energy, "calculating ENERGY", &
+         IPRINT_TIME_THRES1)
+    if (atomch_output) call get_atomic_charge ()
+    if (find_forces) then 
+       ! Start timing the force calculation
+      call start_timer (tmr_l_force, WITH_LEVEL)
+      call force (fixed_potential, vary_mu, n_L_iterations, &
+           L_tolerance, sc_tolerance, mu, total_energy, &
+           expected_reduction, write_forces)
+      ! Stop timing the force calculation
+      call stop_print_timer (tmr_l_force, "calculating FORCE", &
+           IPRINT_TIME_THRES1)
     endif
     !  Print results of local timers
-    call stop_timer(tmr_std_eminimisation)
+    call stop_timer (tmr_std_eminimisation)
     return
   end subroutine get_E_and_F
 !!***

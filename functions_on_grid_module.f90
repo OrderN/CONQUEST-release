@@ -40,6 +40,14 @@ module functions_on_grid
   !!   Contains data relating to functions on grid
   !!  AUTHOR
   !!   D.R.Bowler
+  !!  MODIFICATION HISTORY
+  !!   2011/09/19 L.Tong
+  !!     Added new function on grid H_dn_on_supportfns As the name
+  !!     suggests it should be used to store the spin down component
+  !!     of H acting on supportfns.  Because pseudofns is optional,
+  !!     H_dn_on_supportfns will not be set as a parameter, but
+  !!     instead will be set as 3 or 4 depending on whether pseudofns
+  !!     is present or not
   !!  SOURCE
   !!
   type fn_on_grid
@@ -57,6 +65,7 @@ module functions_on_grid
   integer, parameter :: supportfns = 1
   integer, parameter :: H_on_supportfns = 2
   integer, parameter :: pseudofns = 3
+  integer :: H_dn_on_supportfns
   integer :: current_fn_on_grid
   integer, parameter :: mx_fns_on_grid = 20
 
@@ -89,12 +98,17 @@ contains
 !!    Added if checks for zero size to stop underflow errors on Hitachi
 !!   2008/05/16 ast
 !!    Added timer
+!!   2011/09/19 L.Tong
+!!    Added routines for H_dn_on_supportfns, this is used only if
+!!    doing spin polarised calculations. Note that H_dn_on_supportfns
+!!    = 3 if pseudofns not present, otherwise it is set to be 4
 !!  SOURCE
 !!  
   subroutine associate_fn_on_grid
 
     use GenComms, ONLY: cq_abort
-    use global_module, ONLY: flag_basis_set, blips, area_index, flag_analytic_blip_int
+    use global_module, ONLY: flag_basis_set, blips, area_index, &
+                             flag_spin_polarisation, flag_analytic_blip_int
     use memory_module, ONLY: reg_alloc_mem, type_dbl
     use numbers, ONLY: zero
 
@@ -143,6 +157,24 @@ contains
     else
        current_fn_on_grid = 2
     end if
+    ! H_dn acting on support functions
+    if (flag_spin_polarisation) then
+       H_dn_on_supportfns = current_fn_on_grid + 1
+       gridfunctions(H_dn_on_supportfns)%size = gridsize(sf)
+       allocate (gridfunctions(H_dn_on_supportfns)%griddata(gridsize(sf)))
+       if (gridsize(sf) > 0) then
+          do i = 1, gridsize(sf)
+             gridfunctions(H_dn_on_supportfns)%griddata(i) = zero
+          end do
+       end if
+       call reg_alloc_mem (area_index, gridsize(sf), type_dbl)
+       gridfunctions(H_dn_on_supportfns)%type = sf
+       current_fn_on_grid = H_dn_on_supportfns
+    else
+       ! if not spin polarised calculation, H_dn_on_supportfns is not used
+       ! in this case, set this to be same as H_on_supportfns
+       H_dn_on_supportfns = H_on_supportfns
+    end if
     call stop_timer(tmr_std_allocation)
   end subroutine associate_fn_on_grid
 !!***
@@ -169,12 +201,15 @@ contains
 !!    Added if checks for zero size to stop underflow errors on Hitachi
 !!   2008/05/16 ast
 !!    Added timer
+!!   2011/09/19 L.Tong
+!!    Added routines for H_dn_on_supportfns 
 !!  SOURCE
 !!  
   subroutine dissociate_fn_on_grid
 
     use GenComms, ONLY: cq_abort
-    use global_module, ONLY: flag_basis_set, blips, area_index, flag_analytic_blip_int
+    use global_module, ONLY: flag_basis_set, blips, area_index, &
+                             flag_spin_polarisation, flag_analytic_blip_int
     use memory_module, ONLY: reg_dealloc_mem, type_dbl
 
     implicit none
@@ -183,15 +218,29 @@ contains
 
     call start_timer(tmr_std_allocation)
     ! Support functions
-    call reg_dealloc_mem(area_index,size(gridfunctions(supportfns)%griddata),type_dbl)
     deallocate(gridfunctions(supportfns)%griddata)
+    call reg_dealloc_mem (area_index,                               &
+                          size(gridfunctions(supportfns)%griddata), &
+                          type_dbl)
     ! H acting on support functions 
-    call reg_dealloc_mem(area_index,size(gridfunctions(H_on_supportfns)%griddata),type_dbl)
     deallocate(gridfunctions(H_on_supportfns)%griddata)
-    if(flag_basis_set==blips.AND.(.NOT.flag_analytic_blip_int)) then
+    call reg_dealloc_mem (area_index,                                    &
+                          size(gridfunctions(H_on_supportfns)%griddata), &
+                          type_dbl)
+    if (flag_basis_set == blips .and. &
+        (.not. flag_analytic_blip_int)) then
        ! Non-local projector functions
-       call reg_dealloc_mem(area_index,size(gridfunctions(pseudofns)%griddata),type_dbl)
        deallocate(gridfunctions(pseudofns)%griddata)
+       call reg_dealloc_mem(area_index,                              &
+                            size(gridfunctions(pseudofns)%griddata), &
+                            type_dbl)
+    end if
+    if (flag_spin_polarisation) then
+       ! H_dn_on_support_functions
+       deallocate(gridfunctions(H_dn_on_supportfns)%griddata)
+       call reg_dealloc_mem(area_index,                                       &
+                            size(gridfunctions(H_dn_on_supportfns)%griddata), &
+                            type_dbl)
     end if
     current_fn_on_grid = 0
     call stop_timer(tmr_std_allocation)

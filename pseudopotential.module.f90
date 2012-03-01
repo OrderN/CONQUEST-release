@@ -91,9 +91,11 @@ contains
 !!  MODIFICATION HISTORY
 !!   2008/05/25 ast
 !!    Added timers
+!!   2011/12/09 L.Tong
+!!    Removed obsolete parameter number_of_bands
 !!  SOURCE
 !!
-  subroutine init_pseudo(number_of_bands, e_core)
+  subroutine init_pseudo (e_core)
 
     use datatypes
     use global_module, ONLY: IPRINT_TIME_THRES3
@@ -102,16 +104,16 @@ contains
     
     ! Passed variables
     real(double) :: e_core
-    real(double) :: number_of_bands
     type(cq_timer) :: tmr_l_tmp1
 
-    call start_timer(tmr_std_pseudopot)
-    call start_timer(tmr_l_tmp1,WITH_LEVEL)
-    call spline_pseudopotential()
-    call set_pseudopotential()
-    call get_core_correction(number_of_bands, e_core)
-    call stop_print_timer(tmr_l_tmp1,"initialising pseudopotentials",IPRINT_TIME_THRES3)
-    call stop_timer(tmr_std_pseudopot)
+    call start_timer (tmr_std_pseudopot)
+    call start_timer (tmr_l_tmp1, WITH_LEVEL)
+    call spline_pseudopotential ()
+    call set_pseudopotential ()
+    call get_core_correction (e_core)
+    call stop_print_timer (tmr_l_tmp1, "initialising pseudopotentials", &
+         IPRINT_TIME_THRES3)
+    call stop_timer (tmr_std_pseudopot)
     return
   end subroutine init_pseudo
 !!***
@@ -184,8 +186,9 @@ contains
     use datatypes
     use GenBlas, ONLY: axpy
     use numbers
-    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell, species_glob, nlpf, &
-         flag_basis_set, blips, flag_analytic_blip_int
+    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell, &
+                             species_glob, nlpf, flag_basis_set,      &
+                             blips, flag_analytic_blip_int
     use species_module, ONLY: charge, species, nlpf_species
     !  At present, these arrays are dummy arguments.
     use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, &
@@ -1246,30 +1249,32 @@ contains
 !!    Stripped subroutine call
 !!   11/06/2001 dave
 !!    Included in pseudopotential_data
+!!   2011/12/09 L.Tong
+!!    Removed obsolete parameter number_of_bands, replaced two *
+!!    number_of_bands by ne_in_cell
 !!  SOURCE
 !!
-  subroutine get_core_correction(number_of_bands, e_core)
+  subroutine get_core_correction (e_core)
 
     use datatypes
     use numbers
     use dimens, ONLY: volume
     use species_module, ONLY: charge, species, n_species
-    use global_module, ONLY: ni_in_cell
+    use global_module, ONLY: ni_in_cell, ne_in_cell
 
     implicit none
 
     ! Passed variables
     real(double), intent(OUT) :: e_core
-    real(double), intent(IN) :: number_of_bands
 
     ! Local variables
     integer :: i, n
     integer, allocatable, dimension(:) :: n_atoms_of_species
 
     ! first calculate the number of atoms of each species
-    call start_timer(tmr_std_allocation)
-    allocate(n_atoms_of_species(n_species))
-    call stop_timer(tmr_std_allocation)
+    call start_timer (tmr_std_allocation)
+    allocate (n_atoms_of_species(n_species))
+    call stop_timer (tmr_std_allocation)
     n_atoms_of_species = 0
     do i=1, ni_in_cell
        n_atoms_of_species(species(i)) =  &
@@ -1279,12 +1284,13 @@ contains
     ! loop over species and calculate the correction factor for each one
     e_core = zero
     do n=1, n_species
-       e_core = e_core + real( n_atoms_of_species(n),double ) * charge(n) / ps_exponent(n)
+       e_core = e_core + real (n_atoms_of_species(n), double) * &
+            charge(n) / ps_exponent(n)
     end do
-    e_core = e_core * pi * two * number_of_bands / volume
-    call start_timer(tmr_std_allocation)
-    deallocate(n_atoms_of_species)
-    call stop_timer(tmr_std_allocation)
+    e_core = e_core * pi * ne_in_cell / volume
+    call start_timer (tmr_std_allocation)
+    deallocate (n_atoms_of_species)
+    call stop_timer (tmr_std_allocation)
     return
   end subroutine get_core_correction
 !!***

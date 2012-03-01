@@ -15,6 +15,8 @@
 !!  MODIFICATION HISTORY
 !!   2011/07/21 16:41 dave
 !!    Preparing for inclusion in main trunk
+!!   2011/12/10 L.Tong
+!!    Added matHzero_dn for spin polarised calculation
 !!  SOURCE
 !!
 module cdft_data
@@ -28,10 +30,11 @@ module cdft_data
   integer, parameter :: cDFT_Fix_ChargeDifference = 2
   integer :: cDFT_MaxIterations
   integer :: cDFT_NumberAtomGroups
-  integer :: matHzero
+  integer :: matHzero, matHzero_dn
   integer, dimension(:), allocatable :: cDFT_NAtoms
   integer, dimension(:), allocatable :: matWc
-  real(double), dimension(:), allocatable :: cDFT_Target ! Either charge on atoms or charge difference
+  ! Either charge on atoms or charge difference
+  real(double), dimension(:), allocatable :: cDFT_Target 
   real(double) :: cDFT_Tolerance
   real(double), dimension(:), allocatable :: cDFT_Vc, cDFT_W
   character(len=10), allocatable, dimension(:) :: cDFT_BlockLabel

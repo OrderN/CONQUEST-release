@@ -11,14 +11,16 @@
 !!  NAME
 !!   blip_gradient
 !!  PURPOSE
-!!   Contains all subroutines relating to finding the gradient of energy etc with respect to blips
+!!   Contains all subroutines relating to finding the gradient of
+!!   energy etc with respect to blips
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
 !!   08:25, 2003/04/03 dave
 !!  MODIFICATION HISTORY
 !!   10:09, 13/02/2006 drb 
-!!    Removed all explicit references to data_ variables and rewrote in terms of new 
+!!    Removed all explicit references to data_ variables and rewrote
+!!    in terms of new
 !!    matrix routines
 !!   2008/05/25 ast
 !!    Added timers
@@ -28,7 +30,8 @@
 !!
 module blip_gradient
 
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_eminimisation,tmr_std_allocation,tmr_std_matrices
+  use timer_stdclocks_module, ONLY: start_timer, stop_timer,&
+       tmr_std_eminimisation, tmr_std_allocation, tmr_std_matrices
 
   implicit none
 
@@ -73,7 +76,8 @@ contains
 !!   23/05/2001 dave
 !!    Shortened subroutine call
 !!   08:10, 31/07/2002 dave
-!!    Changed call to get_support_gradient not to pass data_M12 - it's now used from matrix_data
+!!    Changed call to get_support_gradient not to pass data_M12 - it's
+!!    now used from matrix_data
 !!   08:26, 2003/04/03 dave
 !!    Included in blip_gradient
 !!   08:34, 2003/04/03 dave
@@ -84,43 +88,53 @@ contains
 !!    Added timers
 !!   2009/10/27 07:12 dave
 !!    Added flag for on-site analytic elements
+!!   2011/11/29 L.Tong
+!!    Added spin polarisation
 !!  SOURCE
 !!
-  subroutine get_blip_gradient(inode, ionode)
+  subroutine get_blip_gradient (inode, ionode)
 
     use datatypes
     use numbers
     use dimens, ONLY: grid_point_volume
     use primary_module, ONLY : bundle
     use matrix_data, ONLY : mat, Hrange, Srange
-    use mult_module, ONLY: matK, matM12, scale_matrix_value, return_matrix_block_pos
+    use mult_module, ONLY: matK, matM12, matK_dn, matM12_dn, &
+         scale_matrix_value, return_matrix_block_pos
     use GenBlas, ONLY: scal, copy
     use pseudopotential_data, ONLY: non_local
     use support_spec_format, ONLY: supports_on_atom, support_gradient
     use species_module, ONLY: nsf_species
     use set_bucket_module, ONLY: rem_bucket
     use calc_matrix_elements_module, ONLY: act_on_vectors_new
-    use blip_grid_transform_module, ONLY: blip_to_grad_new,&
-         inverse_blip_transform_new,&
-         inverse_blip_to_grad_new
-    use global_module, ONLY: WhichPulay, BothPulay, sf, flag_onsite_blip_ana, flag_analytic_blip_int
-    use functions_on_grid, ONLY: H_on_supportfns, gridfunctions, fn_on_grid, &
-         allocate_temp_fn_on_grid, free_temp_fn_on_grid
+    use blip_grid_transform_module, ONLY: blip_to_grad_new,           &
+                                          inverse_blip_transform_new, &
+                                          inverse_blip_to_grad_new
+    use global_module, ONLY: WhichPulay, BothPulay, sf,         &
+                             flag_onsite_blip_ana,              &
+                             flag_spin_polarisation, area_minE, &
+                             flag_analytic_blip_int
+    use functions_on_grid, ONLY: H_on_supportfns, gridfunctions,       &
+                                 fn_on_grid, allocate_temp_fn_on_grid, &
+                                 free_temp_fn_on_grid
+    use memory_module, ONLY: reg_alloc_mem, type_dbl, reg_dealloc_mem
+    use GenComms, ONLY: cq_abort
 
     implicit none
 
     ! Passed variables
     integer :: inode, ionode
 
-    !     local variables
+    ! local variables
 
     real(double) ::  ke, ke2, tmp
     real(double), allocatable, dimension(:,:) :: this_data_K
+    ! for spin polarisation
+    real(double), allocatable, dimension(:,:) :: this_data_K_dn
+    integer :: i, direction, np, nn, n1, n2, this_nsf, tmp_fn, stat
 
-    integer :: i, direction, np, nn, n1, n2, this_nsf, tmp_fn
 
-
-    call start_timer(tmr_std_eminimisation)
+    call start_timer (tmr_std_eminimisation)
     !
     ! first, get the gradient of energy wrt the support functions.
     ! this does NOT include the change in energy due to the change in the
@@ -142,83 +156,172 @@ contains
     ! This returns the support_gradient in workspace_support
     WhichPulay = BothPulay
     ! Do on-site if we have this
-    if(flag_onsite_blip_ana) then
+    if (flag_onsite_blip_ana) then
        i = 1
        this_nsf = nsf_species(bundle%species(i))
-       allocate(this_data_K(this_nsf,this_nsf))
-       call start_timer(tmr_std_matrices)
+       allocate (this_data_K(this_nsf, this_nsf), STAT=stat)
+       if (stat /= 0) call cq_abort ("get_blip_gradient: failed to &
+            &allocate this_data_K", this_nsf, stat)
+       call reg_alloc_mem (area_minE, this_nsf * this_nsf, type_dbl)
+       if (flag_spin_polarisation) then
+          allocate (this_data_K_dn(this_nsf, this_nsf), STAT=stat)
+          if (stat /= 0) call cq_abort ("get_blip_gradient: failed to &
+               &allocate this_data_K_dn", this_nsf, stat)
+          call reg_alloc_mem (area_minE, this_nsf * this_nsf, type_dbl)
+       end if
+       call start_timer (tmr_std_matrices)
        do np = 1, bundle%groups_on_node
-          do nn = 1,bundle%nm_nodgroup(np)
-             if(nsf_species(bundle%species(i))/=this_nsf) then
-                deallocate(this_data_K)
+          do nn = 1, bundle%nm_nodgroup(np)
+             if (nsf_species(bundle%species(i)) /= this_nsf) then
+                deallocate (this_data_K)
                 this_nsf = nsf_species(bundle%species(i))
-                allocate(this_data_K(this_nsf,this_nsf))
+                allocate (this_data_K(this_nsf, this_nsf))
+                if (flag_spin_polarisation) then
+                   deallocate (this_data_K_dn)
+                   allocate (this_data_K_dn(this_nsf, this_nsf))
+                end if
              end if
              this_data_K = zero
-             call return_matrix_block_pos(matM12,mat(np,Srange)%onsite(nn),this_data_K,this_nsf*this_nsf)
-             call get_onsite_S_gradient( supports_on_atom(i),this_data_K, support_gradient(i), this_nsf, bundle%species(i))
+             call return_matrix_block_pos (matM12, &
+                  mat(np,Srange)%onsite(nn), this_data_K, &
+                  this_nsf * this_nsf)
+             if (flag_spin_polarisation) then 
+                this_data_K_dn = zero
+                call return_matrix_block_pos (matM12_dn, &
+                     mat(np,Srange)%onsite(nn), this_data_K_dn, &
+                     this_nsf * this_nsf)
+             end if
+             call get_onsite_S_gradient (supports_on_atom(i), &
+                  this_data_K, support_gradient(i), this_nsf, &
+                  bundle%species(i))
              do n1 = 1,this_nsf
                 do n2 = 1,this_nsf
-                   call scale_matrix_value(matM12,np,nn,i,0,n1,n2,zero,1)
+                   call scale_matrix_value (matM12, np, nn, i, 0, &
+                        n1 , n2, zero, 1)
                 end do
              end do
-             i = i+1
-          enddo
-       end do
-       call stop_timer(tmr_std_matrices)
-       deallocate(this_data_K)
+             if (flag_spin_polarisation) then
+                ! accumulate contribution from this_data_K_dn to
+                ! support_gradient
+                call get_onsite_S_gradient (supports_on_atom(i), &
+                     this_data_K_dn, support_gradient(i), this_nsf, &
+                     bundle%species(i))
+                do n1 = 1,this_nsf
+                   do n2 = 1,this_nsf
+                      call scale_matrix_value (matM12_dn, np, nn, i, 0, &
+                           n1 , n2, zero, 1)
+                   end do
+                end do
+             end if
+             i = i + 1
+          enddo ! do nn = 1, bundle%nm_nodgroup(np)
+       end do ! do np = 1, bundle%groups_on_node
+       call stop_timer (tmr_std_matrices)
+       deallocate (this_data_K)
+       if (flag_spin_polarisation) then
+          deallocate (this_data_K_dn)
+       end if
     end if
-    call get_support_gradient( inode, ionode)
-
-    ! now we need to accumulate the 'type 1' gradient of the non-local energy
-    ! (see notes, 3/1/97)
-    if (non_local.AND.(.NOT.flag_analytic_blip_int)) call get_non_local_gradient( H_on_supportfns, inode, ionode)
-
-    ! now we need to transform this into the blip basis
-    ! first, apply the scaling for grid size,
-
-    call scal( gridfunctions(H_on_supportfns)%size, grid_point_volume, gridfunctions(H_on_supportfns)%griddata, 1 )
+    call get_support_gradient(inode, ionode)
+    ! now we need to accumulate the 'type 1' gradient of the non-local
+    ! energy (see notes, 3/1/97)
+    if (non_local .and. (.not. flag_analytic_blip_int)) &
+         call get_non_local_gradient(H_on_supportfns, inode, ionode)
+    
+    ! now we need to transform this into the blip basis first, apply
+    ! the scaling for grid size,
+    call scal(gridfunctions(H_on_supportfns)%size, grid_point_volume,&
+              gridfunctions(H_on_supportfns)%griddata, 1)
 
     ! and then 
-    call inverse_blip_transform_new(inode-1, H_on_supportfns, support_gradient, bundle%n_prim)
+    call inverse_blip_transform_new(inode-1, H_on_supportfns, &
+                                    support_gradient, bundle%n_prim)
 
-    if (non_local.AND.(flag_analytic_blip_int)) call get_non_local_gradient( H_on_supportfns, inode, ionode)
+    if (non_local .and. (flag_analytic_blip_int)) &
+         call get_non_local_gradient(H_on_supportfns, inode, ionode)
     
     ! Kinetic Energy; first, the change in onsite T matrix elements,
     ! and as we do so, clear the diagonal blocks of data K
-    if(flag_onsite_blip_ana) then
+    if (flag_onsite_blip_ana) then
        i = 1
        this_nsf = nsf_species(bundle%species(i))
-       call start_timer(tmr_std_allocation)
-       allocate(this_data_K(this_nsf,this_nsf))
-       call stop_timer(tmr_std_allocation)
-       call start_timer(tmr_std_matrices)
+       call start_timer (tmr_std_allocation)
+       allocate (this_data_K(this_nsf,this_nsf), STAT=stat)
+       if (stat /= 0) &
+            call cq_abort ("get_blip_gradient: failed to allocate this_data_K",&
+            this_nsf, this_nsf)
+       call reg_alloc_mem (area_minE, this_nsf * this_nsf, type_dbl)
+       if (flag_spin_polarisation) then
+          allocate (this_data_K_dn(this_nsf,this_nsf), STAT=stat)
+          if (stat /= 0) &
+               call cq_abort ("get_blip_gradient: failed to allocate &
+               &this_data_K_dn", this_nsf, this_nsf)
+          call reg_alloc_mem (area_minE, this_nsf * this_nsf, type_dbl)
+       end if
+       call stop_timer (tmr_std_allocation)
+       call start_timer (tmr_std_matrices)
        do np = 1, bundle%groups_on_node
           do nn = 1,bundle%nm_nodgroup(np)
-             if(nsf_species(bundle%species(i))/=this_nsf) then
+             if (nsf_species(bundle%species(i)) /= this_nsf) then
                 call start_timer(tmr_std_allocation)
-                deallocate(this_data_K)
-                call stop_timer(tmr_std_allocation)
+                deallocate (this_data_K)
+                call stop_timer (tmr_std_allocation)
                 this_nsf = nsf_species(bundle%species(i))
-                call start_timer(tmr_std_allocation)
-                allocate(this_data_K(this_nsf,this_nsf))
-                call stop_timer(tmr_std_allocation)
+                call start_timer (tmr_std_allocation)
+                allocate (this_data_K(this_nsf, this_nsf))
+                call stop_timer (tmr_std_allocation)
+                if (flag_spin_polarisation) then
+                   call start_timer(tmr_std_allocation)
+                   deallocate (this_data_K_dn)
+                   call stop_timer (tmr_std_allocation)
+                   call stop_timer (tmr_std_allocation) 
+                   allocate (this_data_K_dn(this_nsf, this_nsf))
+                   call stop_timer (tmr_std_allocation)
+                end if
              end if
              this_data_K = zero
-             call return_matrix_block_pos(matK,mat(np,Hrange)%onsite(nn),this_data_K,this_nsf*this_nsf)
-             call get_onsite_KE_gradient( supports_on_atom(i),this_data_K, support_gradient(i), this_nsf, bundle%species(i))
+             call return_matrix_block_pos (matK, mat(np,Hrange)%onsite(nn),&
+                  this_data_K, this_nsf * this_nsf)
+             call get_onsite_KE_gradient (supports_on_atom(i),&
+                  this_data_K, support_gradient(i), this_nsf, &
+                  bundle%species(i))
              do n1 = 1,this_nsf
                 do n2 = 1,this_nsf
-                   call scale_matrix_value(matK,np,nn,i,0,n1,n2,zero,1)
+                   call scale_matrix_value (matK, np, nn, i, 0, n1,&
+                        n2, zero, 1)
                 end do
              end do
-             i = i+1
+             if (flag_spin_polarisation) then
+                this_data_K_dn = zero
+                call return_matrix_block_pos (matK_dn, &
+                     mat(np,Hrange)%onsite(nn), this_data_K_dn, &
+                     this_nsf * this_nsf)
+                call get_onsite_KE_gradient (supports_on_atom(i),&
+                     this_data_K_dn, support_gradient(i), this_nsf,&
+                     bundle%species(i))
+                do n1 = 1,this_nsf
+                   do n2 = 1,this_nsf
+                      call scale_matrix_value (matK_dn, np, nn, i, 0, &
+                           n1, n2, zero, 1)
+                   end do
+                end do
+             end if
+             i = i + 1
           enddo
        end do
-       call stop_timer(tmr_std_matrices)
-       call start_timer(tmr_std_allocation)
-       deallocate(this_data_K)
-       call stop_timer(tmr_std_allocation)
+       call stop_timer (tmr_std_matrices)
+       call start_timer (tmr_std_allocation)
+       deallocate (this_data_K, STAT=stat)
+       if (stat /= 0) call cq_abort ("get_blip_gradient: failed to &
+            &deallocate this_data_K", stat)
+       call reg_dealloc_mem (area_minE, this_nsf * this_nsf, type_dbl)
+       if (flag_spin_polarisation) then
+          deallocate (this_data_K_dn, STAT=stat)
+          if (stat /= 0) call cq_abort ("get_blip_gradient: failed to &
+               &deallocate this_data_K_dn", stat)
+          call reg_dealloc_mem (area_minE, this_nsf * this_nsf, type_dbl)
+       end if
+       call stop_timer (tmr_std_allocation)
     end if
     ! Now, for the offsite part, done one the integration grid.
     ! to do the KE bit we need to blip_to_grad transform, act with K,
@@ -230,23 +333,32 @@ contains
     ! onsite parts of the K matrix (because KE = Tr[KT], this is
     ! equivalent to removing the onsite parts of T, and somewhat easier!
     !
-    !
     ! first, for x: do the blip_grad transform into workspace_support 
     tmp_fn = allocate_temp_fn_on_grid(sf)
     do direction = 1, 3 
-       call blip_to_grad_new(inode-1, direction, H_on_supportfns)
+       call blip_to_grad_new (inode-1, direction, H_on_supportfns)
        ! now act with K - result into workspace2_support
        gridfunctions(tmp_fn)%griddata = zero
-       call act_on_vectors_new(inode-1,rem_bucket(3),matK, tmp_fn,H_on_supportfns)
-
-       ! apply the appropriate scaling factor
-       call scal( gridfunctions(tmp_fn)%size, -two*grid_point_volume, &
-            gridfunctions(tmp_fn)%griddata, 1 )
-       call inverse_blip_to_grad_new(inode-1,direction, tmp_fn, support_gradient,bundle%n_prim)
+       call act_on_vectors_new (inode-1, rem_bucket(3), matK, tmp_fn, &
+            H_on_supportfns)
+       if (flag_spin_polarisation) then
+          ! accumulate the contribution from matK_dn to tmp_fn
+          call act_on_vectors_new (inode-1, rem_bucket(3), matK_dn, tmp_fn, &
+               H_on_supportfns)
+          ! apply the appropriate scaling factor
+          call scal (gridfunctions(tmp_fn)%size, - grid_point_volume, &
+               gridfunctions(tmp_fn)%griddata, 1)
+       else
+          ! apply the appropriate scaling factor
+          call scal (gridfunctions(tmp_fn)%size, - two * &
+               grid_point_volume, gridfunctions(tmp_fn)%griddata, 1)
+       end if
+       call inverse_blip_to_grad_new (inode-1, direction, tmp_fn, &
+            support_gradient, bundle%n_prim)
     end do
-    call free_temp_fn_on_grid(tmp_fn)
+    call free_temp_fn_on_grid (tmp_fn)
+    call stop_timer (tmr_std_eminimisation)
     return
-    call stop_timer(tmr_std_eminimisation)
   end subroutine get_blip_gradient
 !!***
 
@@ -293,9 +405,12 @@ contains
 !!    Included in blip_gradient
 !!   08:34, 2003/04/03 dave
 !!    Tidied use of GenBlas
+!!   2011/12/05 L.Tong
+!!    Added spin polarisation
 !!  SOURCE
 !!
-  subroutine get_electron_gradient(support, electron_gradient, inode, ionode)
+  subroutine get_electron_gradient (support, electron_gradient, inode,&
+       ionode)
 
     use datatypes
     use numbers
@@ -304,23 +419,32 @@ contains
     use set_bucket_module, ONLY: rem_bucket
     use calc_matrix_elements_module, ONLY: act_on_vectors_new
     use blip_grid_transform_module, ONLY: inverse_blip_transform_new
-    use mult_module, ONLY: matM4
+    use mult_module, ONLY: matM4, matM4_dn
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
     use primary_module, ONLY : bundle
     use support_spec_format, ONLY: support_elec_gradient
+    use global_module, ONLY: flag_spin_polarisation
 
     implicit none
 
     ! Passed variables
     integer :: inode, ionode
-
     integer :: support, electron_gradient
 
     gridfunctions(electron_gradient)%griddata = zero
-    call act_on_vectors_new(inode-1,rem_bucket(1),matM4,electron_gradient,support)
-    call scal( gridfunctions(electron_gradient)%size, -one * grid_point_volume, &
-         gridfunctions(electron_gradient)%griddata, 1 )
-    call inverse_blip_transform_new(inode-1,electron_gradient, support_elec_gradient, bundle%n_prim)
+    call act_on_vectors_new (inode-1, rem_bucket(1), matM4, &
+         electron_gradient, support)
+    if (flag_spin_polarisation) then
+       ! accumulate the contribution from matM4_dn to
+       ! electron_gradient
+       call act_on_vectors_new (inode-1, rem_bucket(1), matM4_dn, &
+         electron_gradient, support)
+    end if
+    call scal (gridfunctions(electron_gradient)%size, - one * &
+         grid_point_volume, gridfunctions(electron_gradient)%griddata,&
+         1)
+    call inverse_blip_transform_new (inode-1, electron_gradient, &
+         support_elec_gradient, bundle%n_prim)
     return
   end subroutine get_electron_gradient
 !!***
@@ -339,7 +463,7 @@ contains
 !!   This subroutine obtains the gradient of the total
 !!   energy with respect to the support functions on
 !!   the grid. The gradient of E with respect to
-!! |phi_i> at grid point n is given by
+!!   |phi_i> at grid point n is given by
 !!
 !!    dE/d|phi_i(n)> = 4 sum_j 
 !!            (      Kij H +          <- Type I
@@ -355,9 +479,10 @@ contains
 !!    respectively.
 !!
 !!    Notes 4/6/94, section 11.2 (pp24-34)
-!!    The Hamiltonian matrix here is the complete matrix, but the Hamiltonian
-!!    operator is (H_local - T); the non-local type I derivative and the
-!!    kinetic type I derivative have to be done seperately. 
+!!    The Hamiltonian matrix here is the complete matrix, but the
+!!    Hamiltonian operator is (H_local - T); the non-local type I
+!!    derivative and the kinetic type I derivative have to be done
+!!    seperately.
 !!    See Notes 24/2/96 pp9-10 and Conquest paper IV for KE discussion,
 !!        Notes 31/1/97 pp1-5 for Non-Local energy
 !! 
@@ -387,19 +512,30 @@ contains
 !!    Included in blip_gradient
 !!   08:34, 2003/04/03 dave
 !!    Tidied use of GenBlas
+!!   2011/09/19 L.Tong
+!!    - Added spin polarisation
+!!    - Relies on both H_on_supportfns and H_dn_on_supportfns containing
+!!      the correct values upon entry to the subroutine.
+!!    - Upon exit, H_on_supportfns stores the TOTAL gradient.
+!!                 H_dn_on_supportfns stores the gradient for spin down component
 !!  SOURCE
 !!
-  subroutine get_support_gradient( inode, ionode)
+  subroutine get_support_gradient(inode, ionode)
 
     use datatypes
     use numbers
-    use mult_module, ONLY: matM12, matK
+    use mult_module, ONLY: matM12, matM12_dn, matK, matK_dn
     use GenBlas, ONLY: axpy, copy, scal
-    use set_bucket_module,     ONLY: rem_bucket
+    use set_bucket_module, ONLY: rem_bucket
     use calc_matrix_elements_module, ONLY: act_on_vectors_new
-    use global_module, ONLY: flag_basis_set, PAOs, blips, WhichPulay, PhiPulay, BothPulay, SPulay, sf
-    use functions_on_grid, ONLY: gridfunctions, fn_on_grid, supportfns, H_on_supportfns, &
-         allocate_temp_fn_on_grid, free_temp_fn_on_grid
+    use global_module, ONLY: flag_basis_set, PAOs, blips, WhichPulay, &
+                             PhiPulay, BothPulay, SPulay, sf, &
+                             flag_spin_polarisation
+    use functions_on_grid, ONLY: gridfunctions, fn_on_grid, &
+                                 supportfns, H_on_supportfns, &
+                                 H_dn_on_supportfns, &
+                                 allocate_temp_fn_on_grid, &
+                                 free_temp_fn_on_grid
 
     implicit none
 
@@ -408,30 +544,85 @@ contains
 
     ! Local variables
     integer :: tmp_fn
+    real(double) :: scale_factor
 
     tmp_fn = allocate_temp_fn_on_grid(sf)
+
+    ! 2011/09/20 L.Tong
+    ! This subroutine is called on the premise that both H_on_supportfns
+    ! and H_dn_on_supportfns (for spin polarised calculations) alreay contain
+    ! the correct values upon entry.
+
     ! first, act on workspace_support (which holds h_on_support on entry)
     ! with the K matrix) to get type I variation
+    ! L.Tong: in act_on_vectors_new the output (gridone) is not
+    ! initialised, hence must initialise tmp_fn before calling
+    ! act_on_vectors_new
     gridfunctions(tmp_fn)%griddata = zero
-    if(WhichPulay==PhiPulay.OR.WhichPulay==BothPulay) then
-       call act_on_vectors_new(inode-1,rem_bucket(3),matK,tmp_fn, H_on_supportfns)
-
-    ! store the result in workspace_support (which will hold support_gradient
-    ! on exit)
-
-       call copy( gridfunctions(H_on_supportfns)%size, gridfunctions(tmp_fn)%griddata,1, &
-            gridfunctions(H_on_supportfns)%griddata,1)
+    if (WhichPulay == PhiPulay .or. WhichPulay == BothPulay) then
+       call act_on_vectors_new(inode-1, rem_bucket(3), matK, tmp_fn, &
+                               H_on_supportfns)
+       ! store the result in workspace_support (which will hold
+       ! support_gradient on exit)
+       call copy(gridfunctions(H_on_supportfns)%size, &
+                 gridfunctions(tmp_fn)%griddata, 1, &
+                 gridfunctions(H_on_supportfns)%griddata, 1)
     else
        gridfunctions(H_on_supportfns)%griddata = zero
     end if
     ! now act with M12 on support to get type II variation
     gridfunctions(tmp_fn)%griddata = zero
-    if(flag_basis_set==blips.AND.(WhichPulay==SPulay.OR.WhichPulay==BothPulay)) then
-       call act_on_vectors_new (inode-1,rem_bucket(1),matM12,tmp_fn,supportfns)
-       call axpy( gridfunctions(H_on_supportfns)%size, one,gridfunctions(tmp_fn)%griddata,1, &
-            gridfunctions(H_on_supportfns)%griddata, 1)
+    if (flag_basis_set == blips .and. &
+        (WhichPulay == SPulay .or. WhichPulay == BothPulay)) then
+       call act_on_vectors_new(inode-1, rem_bucket(1), matM12, tmp_fn,&
+                               supportfns)
+       call axpy(gridfunctions(H_on_supportfns)%size, one, &
+                 gridfunctions(tmp_fn)%griddata, 1, &
+                 gridfunctions(H_on_supportfns)%griddata, 1)
     end if
-    call scal( gridfunctions(H_on_supportfns)%size, minus_four, gridfunctions(H_on_supportfns)%griddata, 1 )
+    if (flag_spin_polarisation) then
+       scale_factor = minus_two
+    else
+       scale_factor = minus_four
+    end if
+    call scal(gridfunctions(H_on_supportfns)%size, scale_factor, &
+              gridfunctions(H_on_supportfns)%griddata, 1)
+
+    ! now for spin polarised calculations also need to add contribution
+    ! from spin down components
+    if (flag_spin_polarisation) then
+       ! must initialise tmp_fn before act_on_vectors_new
+       gridfunctions(tmp_fn)%griddata = zero
+       if (WhichPulay == PhiPulay .or. WhichPulay == BothPulay) then
+          call act_on_vectors_new(inode-1, rem_bucket(3), matK_dn, &
+                                  tmp_fn, H_dn_on_supportfns)
+          ! store the result in workspace_support (which will hold
+          ! support_gradient on exit)
+          call copy(gridfunctions(H_dn_on_supportfns)%size, &
+                    gridfunctions(tmp_fn)%griddata, 1, &
+                    gridfunctions(H_dn_on_supportfns)%griddata, 1)
+       else
+          gridfunctions(H_dn_on_supportfns)%griddata = zero
+       end if
+       ! now act with M12 on support to get type II variation
+       gridfunctions(tmp_fn)%griddata = zero
+       if (flag_basis_set == blips .and.&
+           (WhichPulay == SPulay .or. WhichPulay == BothPulay)) then
+          call act_on_vectors_new(inode-1, rem_bucket(1), matM12_dn, &
+                                  tmp_fn, supportfns)
+          call axpy(gridfunctions(H_dn_on_supportfns)%size, one, &
+                    gridfunctions(tmp_fn)%griddata, 1, &
+                    gridfunctions(H_dn_on_supportfns)%griddata, 1)
+       end if
+       call scal(gridfunctions(H_dn_on_supportfns)%size, minus_two, &
+                 gridfunctions(H_dn_on_supportfns)%griddata, 1)
+       ! now sum the gradient contributions from both contributions
+       ! and store in H_on_supportfns
+       call axpy(gridfunctions(H_on_supportfns)%size, one, &
+                 gridfunctions(H_dn_on_supportfns)%griddata, 1, &
+                 gridfunctions(H_on_supportfns)%griddata, 1)
+    end if
+
     call free_temp_fn_on_grid(tmp_fn)
     return
   end subroutine get_support_gradient
@@ -469,6 +660,10 @@ contains
 !!    Changed to use temp_TCS (problem with transposes if NSF/=NCF)
 !!   08:15, 2003/04/04 dave
 !!    Included into blip_gradient
+!!   2011/11/29 L.Tong
+!!    Added spin polarisation
+!!    - Upon exit, support_gradient stores the accumulative TOTAL gradient
+!!      contributions from BOTH spin components
 !!   2011/12/13 07:53 dave
 !!    Added analytic evaluation of blip integrals
 !!  SOURCE
@@ -476,9 +671,11 @@ contains
   subroutine get_non_local_gradient(support_grad_grid, inode, ionode)
 
     use datatypes
-    Use mult_module, ONLY: H_SP_SP, SP_trans, mult, matrix_product, matrix_scale, matrix_transpose, &
-         matSC, matCS, matU, matK, return_matrix_block_pos, matrix_pos
-    use numbers, ONLY: zero, minus_four, one
+    Use mult_module, ONLY: H_SP_SP, SP_trans, mult, matrix_product, &
+                           matrix_scale, matrix_transpose, matSC,   &
+                           matCS, matU, matU_dn, matK, matK_dn,     &
+                           return_matrix_block_pos, matrix_pos
+    use numbers
     use set_bucket_module, ONLY: rem_bucket
     use calc_matrix_elements_module, ONLY: act_on_vectors_new
     use functions_on_grid, ONLY: pseudofns
@@ -490,7 +687,8 @@ contains
     use cover_module, ONLY: BCS_parts
     use matrix_data, ONLY: mat, SPrange, halo
     use species_module, ONLY: nsf_species, nlpf_species
-    use global_module, ONLY: id_glob, species_glob, flag_analytic_blip_int
+    use global_module, ONLY: flag_spin_polarisation, id_glob, &
+                             species_glob, flag_analytic_blip_int
 
     implicit none
 
@@ -499,50 +697,83 @@ contains
     integer :: support_grad_grid
 
     ! Local variables
-    integer :: iprim, np, nn, spec, nab, ist, gcspart, neigh_global_part, neigh_global_num, neigh_species
-    integer :: wheremat, this_nsf, this_nlpf, j_in_halo
+    integer :: iprim, np, nn, spec, nab, ist, gcspart,             &
+               neigh_global_part, neigh_global_num, neigh_species, &
+               wheremat, this_nsf, this_nlpf, j_in_halo
     real(double) :: dx, dy, dz
     real(double), dimension(:,:), allocatable :: dataU
 
     ! First of all, find U (=K.SC)
-    call matrix_transpose(matSC,matCS)
-    call matrix_product(matK,matCS,matU,mult(H_SP_SP))
-    call matrix_scale(minus_four,matU)
+    call matrix_transpose (matSC,matCS)
+    if (flag_spin_polarisation) then
+       call matrix_product (matK, matCS, matU, mult(H_SP_SP))
+       call matrix_product (matK_dn, matCS, matU_dn, mult(H_SP_SP))
+       call matrix_scale (minus_two, matU)
+       call matrix_scale (minus_two, matU_dn)
+    else
+       call matrix_product (matK, matCS, matU, mult(H_SP_SP))
+       call matrix_scale (minus_four,matU)
+    end if
 
     ! Finally, act on the non-local projectors with the scaled U
-    if(flag_analytic_blip_int) then
+    if (flag_analytic_blip_int) then
        iprim = 0
        do np = 1, bundle%groups_on_node
-          do nn = 1,bundle%nm_nodgroup(np)
-             iprim=iprim+1
+          do nn = 1, bundle%nm_nodgroup(np)
+             iprim = iprim + 1
              spec = bundle%species(iprim)
              this_nsf = nsf_species(spec)
              do nab = 1, mat(np,SPrange)%n_nab(nn) ! Loop over neighbours of atom
-                ist = mat(np,SPrange)%i_acc(nn)+nab-1
+                ist = mat(np,SPrange)%i_acc(nn) + nab - 1
                 ! Build the distances between atoms - needed for phases 
-                gcspart = BCS_parts%icover_ibeg(mat(np,SPrange)%i_part(ist))+mat(np,SPrange)%i_seq(ist)-1
+                gcspart = &
+                     BCS_parts%icover_ibeg(mat(np,SPrange)%i_part(ist)) + &
+                     mat(np,SPrange)%i_seq(ist) - 1
                 ! Displacement vector
-                dx = BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
-                dy = BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
-                dz = BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
+                dx = BCS_parts%xcover(gcspart) - bundle%xprim(iprim)
+                dy = BCS_parts%ycover(gcspart) - bundle%yprim(iprim)
+                dz = BCS_parts%zcover(gcspart) - bundle%zprim(iprim)
                 ! We need to know the species of neighbour
-                neigh_global_part = BCS_parts%lab_cell(mat(np,SPrange)%i_part(ist)) 
-                neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(np,SPrange)%i_seq(ist)-1)
+                neigh_global_part = &
+                     BCS_parts%lab_cell(mat(np,SPrange)%i_part(ist)) 
+                neigh_global_num  = &
+                     id_glob(parts%icell_beg(neigh_global_part) + &
+                             mat(np,SPrange)%i_seq(ist) - 1)
                 neigh_species = species_glob(neigh_global_num)
                 this_nlpf = nlpf_species(neigh_species)
                 j_in_halo = halo(SPrange)%i_halo(gcspart)
-                allocate(dataU(this_nsf,this_nlpf))
+                wheremat = matrix_pos(matSC, iprim, j_in_halo, 1, 1)
+                allocate(dataU(this_nsf, this_nlpf))
                 dataU = zero
-                wheremat = matrix_pos(matSC,iprim,j_in_halo,1,1)
-                call return_matrix_block_pos(matU,wheremat,dataU,this_nsf*this_nlpf)
-                call get_blipP(support_gradient(iprim), nlpf_on_atom(neigh_species), dataU, iprim, &
-                     j_in_halo, dx, dy, dz, spec, neigh_species)
+                call return_matrix_block_pos(matU, wheremat, dataU, &
+                                             this_nsf * this_nlpf)
+                call get_blipP(support_gradient(iprim),             &
+                               nlpf_on_atom(neigh_species), dataU,  &
+                               iprim, j_in_halo, dx, dy, dz, spec,  &
+                               neigh_species)
+                ! also need to accumulate the spin down component
+                if (flag_spin_polarisation) then
+                   dataU = zero
+                   call return_matrix_block_pos(matU_dn, wheremat,    &
+                                                dataU, this_nsf *     &
+                                                this_nlpf)
+                   call get_blipP(support_gradient(iprim),            &
+                                  nlpf_on_atom(neigh_species), dataU, &
+                                  iprim, j_in_halo, dx, dy, dz, spec, &
+                                  neigh_species)
+                end if
                 deallocate(dataU)
              end do
           end do
        end do
     else
-       call act_on_vectors_new(inode-1,rem_bucket(2),matU,support_grad_grid,pseudofns)
+       call act_on_vectors_new(inode-1, rem_bucket(2), matU, &
+                               support_grad_grid, pseudofns)
+       if (flag_spin_polarisation) then
+          ! accumulate matU_dn.pseudofns
+          call act_on_vectors_new(inode-1, rem_bucket(2), matU_dn, &
+                                  support_grad_grid, pseudofns)
+       end if
     end if
     return
   end subroutine get_non_local_gradient
@@ -576,9 +807,12 @@ contains
 !!    Included into blip_gradient
 !!   2008/05/25 ast
 !!    Added timers
+!!   2012/02/20 L.Tong
+!!    Added spin polarisation
 !!  SOURCE
 !!
-  subroutine get_onsite_KE_gradient( this_data_blip,this_data_K,this_blip_grad, this_nsf, spec)
+  subroutine get_onsite_KE_gradient (this_data_blip, this_data_K, &
+       this_blip_grad, this_nsf, spec)
 
     use datatypes
     use numbers
@@ -586,15 +820,15 @@ contains
     use blip, ONLY: blip_info
     use support_spec_format, ONLY: support_function
     use GenComms, ONLY: cq_abort
-    use global_module, ONLY: area_minE
+    use global_module, ONLY: area_minE, flag_spin_polarisation
     use memory_module, ONLY: reg_alloc_mem, type_dbl, reg_dealloc_mem
 
     implicit none
 
     ! Passed Variables
     integer :: this_nsf, spec
-
-    real(double) :: this_data_K(this_nsf*this_nsf) ! N.B. Here NSF is for ONE site only so is OK
+    ! N.B. Here NSF is for ONE site only so is OK
+    real(double) :: this_data_K(this_nsf*this_nsf)
     type(support_function) :: this_data_blip, this_blip_grad
 
     ! Local Variables
@@ -603,7 +837,8 @@ contains
 
     real(double) ::  FAC(0:MAX_D), D2FAC(0:MAX_D)
 
-    real(double), allocatable, dimension(:) :: work1, work2, work3, work4, work5, work6
+    real(double), allocatable, dimension(:) :: work1, work2, work3, &
+         work4, work5, work6
 
     integer :: dx, dy, dz, offset, l, at, nsf1, nsf2, stat
 
@@ -615,10 +850,11 @@ contains
          work5(blip_info(spec)%FullArraySize*this_nsf), &
          work6(blip_info(spec)%FullArraySize*this_nsf), &
          STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating arrays for onsite KE blip grad: ", &
-         blip_info(spec)%FullArraySize,this_nsf)
-    call reg_alloc_mem(area_minE,6*blip_info(spec)%FullArraySize*this_nsf,type_dbl)
-    call stop_timer(tmr_std_allocation)
+    if (stat /= 0) call cq_abort("Error allocating arrays for onsite &
+         &KE blip grad: ", blip_info(spec)%FullArraySize,this_nsf)
+    call reg_alloc_mem (area_minE, 6 * blip_info(spec)%FullArraySize *&
+         this_nsf, type_dbl)
+    call stop_timer (tmr_std_allocation)
     ! first, we copy the blip functions for this atom onto a cubic grid;
     ! we make this grid 'too big' in order to have a fast routine below.
     !
@@ -641,14 +877,16 @@ contains
        do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
           do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              l = blip_info(spec)%blip_number(dx,dy,dz)
-             if (l.ne.0) then
-                at = (((dz+offset)*blip_info(spec)%OneArraySize + (dy+offset))*blip_info(spec)%OneArraySize + &
-                     (dx+offset)) * this_nsf
+             if (l .ne. 0) then
+                at = (((dz + offset) * blip_info(spec)%OneArraySize + &
+                     (dy + offset)) * blip_info(spec)%OneArraySize + &
+                     (dx + offset)) * this_nsf
                 do nsf1 = 1,this_nsf
-                   work1(nsf1+at) = zero
-                   do nsf2 = 1,this_nsf
-                      work1(nsf1+at) = work1(nsf1+at) + &
-                           this_data_K((nsf2-1)*this_nsf+nsf1)*this_data_blip%supp_func(nsf2)%coefficients(l)
+                   work1(nsf1 + at) = zero
+                   do nsf2 = 1, this_nsf
+                      work1(nsf1 + at) = work1(nsf1 + at) + &
+                           this_data_K((nsf2 - 1) * this_nsf + nsf1) *&
+                           this_data_blip%supp_func(nsf2)%coefficients(l)
                    enddo
                 enddo
              end if
@@ -660,107 +898,130 @@ contains
     ! 'spreading operations'. Do z first... put blip(z) in 2, and
     ! del2blip(z) in 3
 
-    call copy(blip_info(spec)%FullArraySize*this_nsf,work1,1,work2,1)
-    call scal(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work2,1)
+    call copy (blip_info(spec)%FullArraySize * this_nsf, work1, 1, &
+         work2, 1)
+    call scal (blip_info(spec)%FullArraySize * this_nsf, FAC(0), &
+         work2, 1)
     do dz = 1, MAX_D
        offset = dz * blip_info(spec)%OneArraySize * &
-blip_info(spec)%OneArraySize * this_nsf
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dz), &
-            work1(1:), 1, work2(1+offset:), 1 )
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dz), &
-            work1(1+offset:), 1, work2(1:), 1 )
+            blip_info(spec)%OneArraySize * this_nsf
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf - offset),&
+            FAC(dz), work1(1:), 1, work2(1 + offset:), 1 )
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf - offset),&
+            FAC(dz), work1(1 + offset:), 1, work2(1:), 1 )
     end do
 
-    call copy(blip_info(spec)%FullArraySize*this_nsf,work1,1,work3,1)
-    call scal(blip_info(spec)%FullArraySize*this_nsf,D2FAC(0),work3,1)
+    call copy (blip_info(spec)%FullArraySize * this_nsf, work1, 1, &
+         work3, 1)
+    call scal (blip_info(spec)%FullArraySize * this_nsf, D2FAC(0), &
+         work3, 1)
     do dz = 1, MAX_D
-       offset = dz * blip_info(spec)%OneArraySize * blip_info(spec)%OneArraySize * this_nsf
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), D2FAC(dz), &
-            work1(1:), 1, work3(1+offset:), 1 )
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), D2FAC(dz), &
-            work1(1+offset:), 1, work3(1:), 1 )
+       offset = dz * blip_info(spec)%OneArraySize * &
+            blip_info(spec)%OneArraySize * this_nsf
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf - offset),&
+            D2FAC(dz), work1(1:), 1, work3(1 + offset:), 1)
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf - offset),&
+            D2FAC(dz), work1(1 + offset:), 1, work3(1:), 1)
     end do
 
     ! now do y : put blip(y).blip(z) in 4,
     ! blip(y).del2blip(z) + del2blip(y).blip(z)  in 5
 
-    call copy(blip_info(spec)%FullArraySize*this_nsf,work2,1,work4,1)
-    call scal(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work4,1)
+    call copy (blip_info(spec)%FullArraySize * this_nsf, work2, 1, &
+         work4, 1)
+    call scal (blip_info(spec)%FullArraySize * this_nsf, FAC(0), &
+         work4, 1)
     do dy = 1, MAX_D
        offset = dy * blip_info(spec)%OneArraySize * this_nsf
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dy), &
-            work2(1:), 1, work4(1+offset:), 1 )
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dy), &
-            work2(1+offset:), 1, work4(1:), 1 )
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf - offset),&
+            FAC(dy), work2(1:), 1, work4(1 + offset:), 1 )
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf - offset),&
+            FAC(dy), work2(1 + offset:), 1, work4(1:), 1 )
     end do
 
-    call copy(blip_info(spec)%FullArraySize*this_nsf,work2,1,work5,1)
-    call scal(blip_info(spec)%FullArraySize*this_nsf,D2FAC(0),work5,1)
+    call copy (blip_info(spec)%FullArraySize * this_nsf, work2, 1, &
+         work5, 1)
+    call scal (blip_info(spec)%FullArraySize * this_nsf, D2FAC(0), &
+         work5, 1)
     do dy = 1, MAX_D
        offset = dy * blip_info(spec)%OneArraySize * this_nsf
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), D2FAC(dy), &
-            work2(1:), 1, work5(1+offset:), 1 )
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), D2FAC(dy), &
-            work2(1+offset:), 1, work5(1:), 1 )
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf - offset),&
+            D2FAC(dy), work2(1:), 1, work5(1 + offset:), 1 )
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf-offset), &
+            D2FAC(dy), work2(1 + offset:), 1, work5(1:), 1 )
     end do
 
-    call axpy(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work3,1,work5,1)
+    call axpy (blip_info(spec)%FullArraySize * this_nsf, FAC(0), &
+         work3, 1, work5, 1)
     do dy = 1, MAX_D
        offset = dy * blip_info(spec)%OneArraySize * this_nsf
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dy), &
-            work3(1:), 1, work5(1+offset:), 1 )
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dy), &
-            work3(1+offset:), 1, work5(1:), 1 )
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf - offset),&
+            FAC(dy), work3(1:), 1, work5(1 + offset:), 1)
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf - offset),&
+            FAC(dy), work3(1 + offset:), 1, work5(1:), 1)
     end do
 
     ! and x - put it all into 6
 
-    call copy(blip_info(spec)%FullArraySize*this_nsf,work5,1,work6,1)
-    call scal(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work6,1)
+    call copy (blip_info(spec)%FullArraySize * this_nsf, work5, 1, &
+         work6, 1)
+    call scal (blip_info(spec)%FullArraySize * this_nsf, FAC(0), &
+         work6, 1)
     do dx = 1, MAX_D
        offset = dx * this_nsf
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dx), &
-            work5(1:), 1, work6(1+offset:), 1 )
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dx), &
-            work5(1+offset:), 1, work6(1:), 1 )
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf - offset),&
+            FAC(dx), work5(1:), 1, work6(1 + offset:), 1)
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf - offset),&
+            FAC(dx), work5(1 + offset:), 1, work6(1:), 1)
     end do
 
-    call axpy(blip_info(spec)%FullArraySize*this_nsf,D2FAC(0),work4,1,work6,1)
+    call axpy (blip_info(spec)%FullArraySize * this_nsf, D2FAC(0), &
+         work4, 1, work6, 1)
     do dx = 1, MAX_D
        offset = dx * this_nsf
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), D2FAC(dx), &
-            work4(1:), 1, work6(1+offset:), 1 )
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), D2FAC(dx), &
-            work4(1+offset:), 1, work6(1:), 1 )
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf - offset),&
+            D2FAC(dx), work4(1:), 1, work6(1 + offset:), 1)
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf - offset),&
+            D2FAC(dx), work4(1 + offset:), 1, work6(1:), 1)
     end do
 
     ! now accumulate work6 onto the gradient
 
-    call scal(blip_info(spec)%FullArraySize*this_nsf, two*blip_info(spec)%SupportGridSpacing,work6,1)
+    if (flag_spin_polarisation) then
+       call scal (blip_info(spec)%FullArraySize * this_nsf, &
+            blip_info(spec)%SupportGridSpacing, work6, 1)
+    else
+       call scal (blip_info(spec)%FullArraySize * this_nsf, two * &
+            blip_info(spec)%SupportGridSpacing, work6, 1)
+    end if
 
     offset = blip_info(spec)%BlipArraySize + 1
-    do dx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-       do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-             l = blip_info(spec)%blip_number(dx,dy,dz)
-             if (l.ne.0) then
-                at = (((dz+offset)*blip_info(spec)%OneArraySize + (dy+offset))*blip_info(spec)%OneArraySize + &
-                     (dx+offset)) * this_nsf
-                do nsf1 = 1,this_nsf
+    do dx = - blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+       do dy = - blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+          do dz = - blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+             l = blip_info(spec)%blip_number(dx, dy, dz)
+             if (l .ne. 0) then
+                at = (((dz + offset) * blip_info(spec)%OneArraySize + &
+                     (dy + offset)) * blip_info(spec)%OneArraySize + &
+                     (dx + offset)) * this_nsf
+                do nsf1 = 1, this_nsf
                    this_blip_grad%supp_func(nsf1)%coefficients(l) = &
-                        this_blip_grad%supp_func(nsf1)%coefficients(l) - work6(nsf1+at)
+                        this_blip_grad%supp_func(nsf1)%coefficients(l) - &
+                        work6(nsf1 + at)
                 enddo
              end if
           end do
        end do
     end do
 
-    call start_timer(tmr_std_allocation)
-    deallocate(work1,work2,work3, work4,work5,work6, STAT=stat)
-    if(stat/=0) call cq_abort("Error deallocating arrays for onsite KE blip grad: ", &
+    call start_timer (tmr_std_allocation)
+    deallocate (work1, work2, work3, work4, work5, work6, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort ("Error deallocating arrays for onsite KE blip grad: ", &
          blip_info(spec)%FullArraySize,this_nsf)
-    call reg_dealloc_mem(area_minE,6*blip_info(spec)%FullArraySize*this_nsf,type_dbl)
-    call stop_timer(tmr_std_allocation)
+    call reg_dealloc_mem (area_minE, 6 * blip_info(spec)%FullArraySize * &
+         this_nsf, type_dbl)
+    call stop_timer (tmr_std_allocation)
     return
   end subroutine get_onsite_KE_gradient
 !!***
@@ -787,9 +1048,12 @@ blip_info(spec)%OneArraySize * this_nsf
 !!  MODIFICATION HISTORY
 !!   2011/11/15 08:04 dave
 !!    Changes to blip data
+!!   2012/02/20 L.Tong
+!!    Added spin polarisation
 !!  SOURCE
 !!
-  subroutine get_onsite_S_gradient( this_data_blip,this_data_M,this_blip_grad, this_nsf, spec)
+  subroutine get_onsite_S_gradient (this_data_blip, this_data_M, &
+       this_blip_grad, this_nsf, spec)
 
     use datatypes
     use numbers
@@ -797,30 +1061,26 @@ blip_info(spec)%OneArraySize * this_nsf
     use blip, ONLY: blip_info
     use support_spec_format, ONLY: support_function
     use GenComms, ONLY: cq_abort
-    use global_module, ONLY: area_minE
+    use global_module, ONLY: area_minE, flag_spin_polarisation
     use memory_module, ONLY: reg_alloc_mem, type_dbl, reg_dealloc_mem
 
     implicit none
 
     ! Passed Variables
     integer :: this_nsf, spec
-
-    real(double) :: this_data_M(this_nsf*this_nsf) ! N.B. Here NSF is for ONE site only so is OK
+    ! N.B. Here NSF is for ONE site only so is OK
+    real(double) :: this_data_M(this_nsf*this_nsf)
     type(support_function) :: this_data_blip, this_blip_grad
 
     ! Local Variables
-
     integer, parameter :: MAX_D=3
-
     real(double) ::  FAC(0:MAX_D)
-
     real(double), allocatable, dimension(:) :: work1, work2, work4, work6
-
     integer :: dx, dy, dz, offset, l, at, nsf1, nsf2, stat
     real(double) :: sum
 
-    call start_timer(tmr_std_allocation)
-    allocate(work1(blip_info(spec)%FullArraySize*this_nsf),&
+    call start_timer (tmr_std_allocation)
+    allocate (work1(blip_info(spec)%FullArraySize*this_nsf),&
          work2(blip_info(spec)%FullArraySize*this_nsf),&
          work4(blip_info(spec)%FullArraySize*this_nsf),&
          work6(blip_info(spec)%FullArraySize*this_nsf), STAT=stat)
@@ -828,37 +1088,41 @@ blip_info(spec)%OneArraySize * this_nsf
     work2 = zero
     work4 = zero
     work6 = zero
-    if(stat/=0) call cq_abort("Error allocating arrays for onsite KE blip grad: ", &
-         blip_info(spec)%FullArraySize,this_nsf)
-    call reg_alloc_mem(area_minE,4*blip_info(spec)%FullArraySize*this_nsf,type_dbl)
-    call stop_timer(tmr_std_allocation)
+    if (stat /= 0) &
+         call cq_abort ("Error allocating arrays for onsite KE blip grad: ", &
+         blip_info(spec)%FullArraySize, this_nsf)
+    call reg_alloc_mem (area_minE, 4 * blip_info(spec)%FullArraySize * &
+         this_nsf, type_dbl)
+    call stop_timer (tmr_std_allocation)
+
     ! first, we copy the blip functions for this atom onto a cubic grid;
     ! we make this grid 'too big' in order to have a fast routine below.
     !
     ! To get gradients, we start by acting with the K matrix upon the
     ! coefficients
 
-    FAC(0) = 151.0_double/140.0_double
-    FAC(1) = 1191.0_double/2240.0_double
-    FAC(2) = 3.0_double/56.0_double
-    FAC(3) = 1.0_double/2240.0_double
+    FAC(0) = 151.0_double / 140.0_double
+    FAC(1) = 1191.0_double / 2240.0_double
+    FAC(2) = 3.0_double / 56.0_double
+    FAC(3) = 1.0_double / 2240.0_double
 
     work1 = zero
     offset = blip_info(spec)%BlipArraySize+1
 
-    do dx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-       do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+    do dx = - blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+       do dy = - blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+          do dz = - blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              l = blip_info(spec)%blip_number(dx,dy,dz)
-             if (l.ne.0) then
-                at = (((dz+offset)*blip_info(spec)%OneArraySize + &
-                     (dy+offset))*blip_info(spec)%OneArraySize + &
-                     (dx+offset)) * this_nsf
-                do nsf1 = 1,this_nsf
-                   work1(nsf1+at) = zero
-                   do nsf2 = 1,this_nsf
-                      work1(nsf1+at) = work1(nsf1+at) + &
-                           this_data_M((nsf2-1)*this_nsf+nsf1)*this_data_blip%supp_func(nsf2)%coefficients(l)
+             if (l .ne. 0) then
+                at = (((dz + offset) * blip_info(spec)%OneArraySize + &
+                     (dy + offset)) * blip_info(spec)%OneArraySize + &
+                     (dx + offset)) * this_nsf
+                do nsf1 = 1, this_nsf
+                   work1(nsf1 + at) = zero
+                   do nsf2 = 1, this_nsf
+                      work1(nsf1 + at) = work1(nsf1 + at) + &
+                           this_data_M((nsf2-1) * this_nsf + nsf1) * &
+                           this_data_blip%supp_func(nsf2)%coefficients(l)
                    enddo
                 enddo
              end if
@@ -870,67 +1134,80 @@ blip_info(spec)%OneArraySize * this_nsf
     ! 'spreading operations'. Do z first... put blip(z) in 2, and
     ! del2blip(z) in 3
 
-    call copy(blip_info(spec)%FullArraySize*this_nsf,work1,1,work2,1)
-    call scal(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work2,1)
+    call copy (blip_info(spec)%FullArraySize * this_nsf, work1, 1, work2, 1)
+    call scal (blip_info(spec)%FullArraySize * this_nsf, FAC(0), work2, 1)
     do dz = 1, MAX_D
-       offset = dz * blip_info(spec)%OneArraySize * blip_info(spec)%OneArraySize * this_nsf
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dz), &
-            work1(1:), 1, work2(1+offset:), 1 )
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dz), &
-            work1(1+offset:), 1, work2(1:), 1 )
+       offset = dz * blip_info(spec)%OneArraySize * &
+            blip_info(spec)%OneArraySize * this_nsf
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf-offset), &
+            FAC(dz), work1(1:), 1, work2(1+offset:), 1 )
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf-offset), &
+            FAC(dz), work1(1+offset:), 1, work2(1:), 1 )
     end do
 
     ! now do y : put blip(y).blip(z) in 4,
 
-    call copy(blip_info(spec)%FullArraySize*this_nsf,work2,1,work4,1)
-    call scal(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work4,1)
+    call copy (blip_info(spec)%FullArraySize * this_nsf, work2, 1, work4, 1)
+    call scal (blip_info(spec)%FullArraySize * this_nsf, FAC(0), work4, 1)
     do dy = 1, MAX_D
        offset = dy * blip_info(spec)%OneArraySize * this_nsf
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dy), &
-            work2(1:), 1, work4(1+offset:), 1 )
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dy), &
-            work2(1+offset:), 1, work4(1:), 1 )
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf-offset), &
+            FAC(dy), work2(1:), 1, work4(1+offset:), 1)
+       call axpy ((blip_info(spec)%FullArraySize * this_nsf-offset), &
+            FAC(dy), work2(1+offset:), 1, work4(1:), 1)
     end do
 
     ! and x - put it all into 6
 
-    call copy(blip_info(spec)%FullArraySize*this_nsf,work4,1,work6,1)
-    call scal(blip_info(spec)%FullArraySize*this_nsf,FAC(0),work6,1)
+    call copy (blip_info(spec)%FullArraySize * this_nsf, work4, 1, work6, 1)
+    call scal (blip_info(spec)%FullArraySize * this_nsf, FAC(0), work6, 1)
     do dx = 1, MAX_D
        offset = dx * this_nsf
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dx), &
-            work4(1:), 1, work6(1+offset:), 1 )
-       call axpy((blip_info(spec)%FullArraySize*this_nsf-offset), FAC(dx), &
-            work4(1+offset:), 1, work6(1:), 1 )
+       call axpy((blip_info(spec)%FullArraySize * this_nsf-offset), &
+            FAC(dx), work4(1:), 1, work6(1+offset:), 1 )
+       call axpy((blip_info(spec)%FullArraySize * this_nsf-offset), &
+            FAC(dx), work4(1+offset:), 1, work6(1:), 1 )
     end do
 
     ! now accumulate work6 onto the gradient
+    if (flag_spin_polarisation) then
+       call scal (blip_info(spec)%FullArraySize * this_nsf, - two * &
+            blip_info(spec)%SupportGridSpacing * &
+            blip_info(spec)%SupportGridSpacing * &
+            blip_info(spec)%SupportGridSpacing, work6, 1)
+    else
+       call scal (blip_info(spec)%FullArraySize * this_nsf, - four * &
+            blip_info(spec)%SupportGridSpacing * &
+            blip_info(spec)%SupportGridSpacing * &
+            blip_info(spec)%SupportGridSpacing, work6, 1)
+    end if
 
-    call scal(blip_info(spec)%FullArraySize*this_nsf, &
-         -four*blip_info(spec)%SupportGridSpacing*blip_info(spec)%SupportGridSpacing*&
-         blip_info(spec)%SupportGridSpacing, work6,1)
     offset = blip_info(spec)%BlipArraySize + 1
-    do dx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-       do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+    do dx = - blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+       do dy = - blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
+          do dz = - blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
              l = blip_info(spec)%blip_number(dx,dy,dz)
-             if (l.ne.0) then
-                at = (((dz+offset)*blip_info(spec)%OneArraySize + (dy+offset))*blip_info(spec)%OneArraySize + &
-                     (dx+offset)) * this_nsf
-                do nsf1 = 1,this_nsf
+             if (l .ne. 0) then
+                at = (((dz + offset) * blip_info(spec)%OneArraySize + &
+                     (dy + offset)) * blip_info(spec)%OneArraySize + &
+                     (dx + offset)) * this_nsf
+                do nsf1 = 1, this_nsf
                    this_blip_grad%supp_func(nsf1)%coefficients(l) = &
-                        this_blip_grad%supp_func(nsf1)%coefficients(l) + work6(nsf1+at)
+                        this_blip_grad%supp_func(nsf1)%coefficients(l) + &
+                        work6(nsf1 + at)
                 enddo
              end if
           end do
        end do
     end do
-    call start_timer(tmr_std_allocation)
-    deallocate(work1,work2, work4,work6, STAT=stat)
-    if(stat/=0) call cq_abort("Error deallocating arrays for onsite S blip grad: ", &
-         blip_info(spec)%FullArraySize,this_nsf)
-    call reg_dealloc_mem(area_minE,6*blip_info(spec)%FullArraySize*this_nsf,type_dbl)
-    call stop_timer(tmr_std_allocation)
+    call start_timer (tmr_std_allocation)
+    deallocate (work1, work2, work4, work6, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort ("Error deallocating arrays for onsite S blip grad: ", &
+         blip_info(spec)%FullArraySize, this_nsf)
+    call reg_dealloc_mem (area_minE, 6 * blip_info(spec)%FullArraySize * &
+         this_nsf, type_dbl)
+    call stop_timer (tmr_std_allocation)
     return
   end subroutine get_onsite_S_gradient
 !!***

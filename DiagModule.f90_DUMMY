@@ -54,6 +54,17 @@ module DiagModule
   ! Max number of iterations when searching for E_Fermi
   integer :: maxefermi
 
+  ! Flags controlling Methfessel-Paxton approximation to step-function
+  integer :: flag_smear_type, iMethfessel_Paxton
+
+  ! Flags controlling the algorithms for finding Fermi Energy when using Methfessel-Paxton smearing
+  real(double) :: gaussian_height, finess, NElec_less
+
+  ! Maximum number of steps in the bracking search allowed before halfing incEf 
+  ! (introduced guarantee success in the very rare case that Methfessel-Paxton 
+  ! approximation may casue the bracket search algorithm to fail.)
+  integer :: max_brkt_iterations
+
   logical :: diagon ! Do we diagonalise or use O(N) ?
   ! -------------------------------------------------------
   ! RCS ident string for object file id

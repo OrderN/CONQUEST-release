@@ -27,6 +27,14 @@
 !!    Added static RCS id and more to header
 !!   04/07/2002 mike
 !!    Added fifteen, sixteen, three_quarters and three_halves
+!!   22/03/2011 L.Tong
+!!    Added third
+!!   2011/09/19 L.Tong
+!!    Added minus_two
+!!   2011/11/13 L.Tong
+!!    Added eight and twelve
+!!   2012/02/26 L.Tong
+!!    Added minus_one and nine
 !!  SOURCE
 !!
 module numbers
@@ -38,8 +46,6 @@ module numbers
   ! RCS tag for object file identification
   character(len=80), save, private :: RCSid = "$Id$"
 
-
-
   real(double), parameter :: zero = 0.0_double 
   real(double), parameter :: one = 1.0_double 
   real(double), parameter :: two = 2.0_double 
@@ -48,11 +54,17 @@ module numbers
   real(double), parameter :: five = 5.0_double 
   real(double), parameter :: six = 6.0_double 
   real(double), parameter :: seven = 7.0_double
+  real(double), parameter :: eight = 8.0_double
+  real(double), parameter :: nine = 9.0_double
+  real(double), parameter :: twelve = 12.0_double
   real(double), parameter :: fifteen = 15.0_double
   real(double), parameter :: sixteen = 16.0_double
+  real(double), parameter :: minus_one = -1.0_double
+  real(double), parameter :: minus_two = -2.0_double
   real(double), parameter :: minus_four = -4.0_double 
   real(double), parameter :: quarter = 0.25_double
   real(double), parameter :: half = 0.5_double 
+  real(double), parameter :: third = 0.33333333333333333333_double
   real(double), parameter :: three_quarters = 0.75_double
   real(double), parameter :: nine_quarters = 2.25_double
   real(double), parameter :: three_halves = 1.5_double

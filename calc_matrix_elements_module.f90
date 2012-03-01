@@ -415,6 +415,8 @@ contains
 !     nonef -> nonef(ia) ia: naba atm
 !     calculation of ibegin_blk in set_blipgrid_module
 !
+! The subroutine accumulates for gridone
+! it calculates gridone = gridone + matM gridtwo
   subroutine act_on_vectors_new(myid,rem_bucket,matM,gridone,gridtwo)
     ! Modules and Dummy arguments
     use datatypes

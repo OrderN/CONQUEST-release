@@ -343,8 +343,8 @@ contains
     use atoms
     use dimens
     use GenComms, ONLY: cq_abort
-    use global_module, ONLY: x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell, &
-         atom_coord, iprint_gen, area_general
+    use global_module, ONLY: x_atom_cell, y_atom_cell, z_atom_cell, &
+         ni_in_cell, atom_coord, iprint_gen, area_general
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
@@ -435,8 +435,8 @@ contains
                          rij2 = rxij * rxij * r_super_x_squared + &
                               ryij * ryij * r_super_y_squared + &
                               rzij * rzij * r_super_z_squared
-                         !                         if ( ( rij2<=r2_min ) .and. &
-                         !                              ( rij2>zero ) ) r2_min = rij2
+                         ! if ( ( rij2<=r2_min ) .and. &
+                         !      ( rij2>zero ) ) r2_min = rij2
                          if (rij2<=r2_min) r2_min = rij2
                       end do
                    end do
@@ -458,9 +458,12 @@ contains
           end do ! ny 
        end do ! nx
     end do ! while contributing shell
-    allocate(supercell_vec_x(n_supercells), supercell_vec_y(n_supercells), &
-         supercell_vec_z(n_supercells), STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating supercells in set_ewald: ",n_supercells, stat)
+    allocate (supercell_vec_x(n_supercells), &
+         supercell_vec_y(n_supercells), supercell_vec_z(n_supercells),&
+         STAT=stat)
+    if(stat/=0) &
+         call cq_abort("Error allocating supercells in set_ewald: ", &
+         n_supercells, stat)
     call reg_alloc_mem(area_general,3*n_supercells,type_dbl)
     ! now find out which supercells contribute to the real-space sum 
     n_supercells = 0
@@ -501,8 +504,8 @@ contains
                          rij2 = rxij * rxij * r_super_x_squared + &
                               ryij * ryij * r_super_y_squared + &
                               rzij * rzij * r_super_z_squared
-                         !                         if ( ( rij2<=r2_min ) .and. &
-                         !                              ( rij2>zero ) ) r2_min = rij2
+                         ! if ( ( rij2<=r2_min ) .and. &
+                         !      ( rij2>zero ) ) r2_min = rij2
                          if (rij2<=r2_min) r2_min = rij2
                       end do
                    end do
@@ -527,8 +530,9 @@ contains
           end do ! ny 
        end do ! nx
     end do ! while contributing shell
-    ! now find out which is the maximum reciprocal lattice vector modulus
-    ! that we need to include in the sum to include terms bigger than ewald_accuracy
+    ! now find out which is the maximum reciprocal lattice vector
+    ! modulus that we need to include in the sum to include terms
+    ! bigger than ewald_accuracy
     n_shell = 1
     contributing_shell = .true.
     do while ( contributing_shell )
@@ -580,9 +584,12 @@ contains
           end do ! l=-i,i
        end do ! m=-i,i
     end do ! i=1,n_shell
-    allocate(gx(n_g_vectors), gy(n_g_vectors), gz(n_g_vectors), g_factor(n_g_vectors), structure2(n_g_vectors), &
+    allocate(gx(n_g_vectors), gy(n_g_vectors), gz(n_g_vectors), &
+         g_factor(n_g_vectors), structure2(n_g_vectors), &
          cstructure(n_g_vectors), STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating gx, gy etc in set_ewald: ",n_g_vectors,stat)
+    if(stat/=0) &
+         call cq_abort("Error allocating gx, gy etc in set_ewald: ", &
+         n_g_vectors,stat)
     call reg_alloc_mem(area_general,6*n_g_vectors,type_dbl)
     ! now use this information to construct the actual G vectors
     n_g_vectors = 0
@@ -608,18 +615,22 @@ contains
        end do ! m=-i,i
     end do ! i=1,n_shell
     allocate(ewald_force(3,ni_in_cell),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating ewald_force in set_ewald: ",ni_in_cell,stat)
+    if(stat/=0) &
+         call cq_abort("Error allocating ewald_force in set_ewald: ", &
+         ni_in_cell, stat)
     call reg_alloc_mem(area_general,3*ni_in_cell,type_dbl)
     ! write out some information
     if ( inode .eq. ionode .AND.iprint_gen>0)  &
          write(io_lun,1) ewald_accuracy, gamma, n_supercells, n_g_vectors
-1   format(/10x,'PrecisionQ required of the Ewald summation = ',g15.7, &
+    
+1   format (/10x,'PrecisionQ required of the Ewald summation = ',g15.7, &
          /10x,'Ewald parameter gamma = ',f10.5, &
          /10x,'With this choice of ewald_accuracy and gamma we have that', &
          /10x,i5,' direct space supercells and ', &
          /10x,i5,' reciprocal lattice vectors ', &
          /10x,'need to be included in the direct and reciprocal parts' &
          /10x,'of the Ewald sumation respectively.'/)
+    
     ! all done so return
     return
   end subroutine set_ewald
@@ -1043,7 +1054,8 @@ contains
     use dimens
     use GenComms, ONLY : cq_abort, my_barrier
     use group_module, ONLY : parts
-    use global_module, ONLY : x_atom_cell, y_atom_cell, z_atom_cell, iprint_gen, ni_in_cell, area_general
+    use global_module, ONLY : x_atom_cell, y_atom_cell, z_atom_cell, &
+         iprint_gen, ni_in_cell, area_general
     use numbers
     use primary_module, ONLY : bundle
     use species_module, ONLY : charge, species
@@ -1054,29 +1066,36 @@ contains
 
     integer, intent(in) :: inode, ionode
 
-    integer :: i, ind_part, ip, m_limit_1, m_limit_2, m_limit_3, m1, m2, m3, n, nc, nccx, nccy, nccz, ni,&
-         &np, nppx, nppy, nppz, np1, np2, rec_lim_1, rec_lim_2, rec_lim_3, run_mode, stat
-    real(double) :: ewald_recip_cutoff_squared, mean_number_density, mean_interparticle_distance, &
-         &mean_square_charge, partition_radius_squared, partition_diameter, total_charge
-    real(double) :: argument, const_phi_0, const_phi_1, const_zeta_0, const_zeta_1, distance, &
-         &dummy1, dummy2, dummy3, g1, g2, g3, g_squared, lambda, rsq, sep, vol_prefac, v1, v2, v3
+    integer :: i, ind_part, ip, m_limit_1, m_limit_2, m_limit_3, m1, &
+         m2, m3, n, nc, nccx, nccy, nccz, ni, np, nppx, nppy, nppz, &
+         np1, np2, rec_lim_1, rec_lim_2, rec_lim_3, run_mode, stat
+    real(double) :: ewald_recip_cutoff_squared, mean_number_density, &
+         mean_interparticle_distance, mean_square_charge, &
+         partition_radius_squared, partition_diameter, total_charge
+    real(double) :: argument, const_phi_0, const_phi_1, const_zeta_0, &
+         const_zeta_1, distance, dummy1, dummy2, dummy3, g1, g2, g3, &
+         g_squared, lambda, rsq, sep, vol_prefac, v1, v2, v3
     real(double), dimension(3) :: rr, vert
 !    real(double), dimension(3,3) :: abs_sep, rel_sep
 ! 16:52, 2003/10/22 dave Changed to allow compilation under ifc
     real(double), dimension(3) :: abs_sep, rel_sep
-    real(double), dimension(3,3) :: real_cell_vec, recip_cell_vec, part_cell_vec, part_cell_dual
+    real(double), dimension(3,3) :: real_cell_vec, recip_cell_vec, &
+         part_cell_vec, part_cell_dual
 
-    if(inode == ionode.AND.iprint_gen>1) write(io_lun,fmt='(/8x," edge lengths of orthorhombic supercell:", &
+    if(inode == ionode.AND.iprint_gen>1) &
+         write(io_lun,fmt='(/8x," edge lengths of orthorhombic supercell:", &
          &3f12.6," a.u.")') r_super_x, r_super_y, r_super_z
 
-    ! --- setting primitive translation vectors of cell ----------------------------
-    !   At time of writing, Conquest is restricted to orthorhombic cells. However
-    !   the present Ewald routine is written for general cells. The variables
-    !   r_super_x, r_super_y, r_super_z are the edge lengths of the orthorhombic
-    !   cell. These are used to make the general real-space primitive translation vectors, which in
-    !   turn are used to make the reciprocal-space vectors. Here, real_cell_vec(n,i) and
-    !   recip_cell_vec(n,i) are the Cartesian components (labelled by i) of the real- and reciprocal-space
-    !   vectors (labelled by n).
+    ! ------------ setting primitive translation vectors of cell ------------
+    !   At time of writing, Conquest is restricted to orthorhombic
+    !   cells. However the present Ewald routine is written for
+    !   general cells. The variables r_super_x, r_super_y, r_super_z
+    !   are the edge lengths of the orthorhombic cell. These are used
+    !   to make the general real-space primitive translation vectors,
+    !   which in turn are used to make the reciprocal-space
+    !   vectors. Here, real_cell_vec(n,i) and recip_cell_vec(n,i) are
+    !   the Cartesian components (labelled by i) of the real- and
+    !   reciprocal-space vectors (labelled by n).
     real_cell_vec(1,1) = r_super_x
     real_cell_vec(1,2) = zero
     real_cell_vec(1,3) = zero
@@ -1087,38 +1106,42 @@ contains
     real_cell_vec(3,2) = zero
     real_cell_vec(3,3) = r_super_z
     if(inode == ionode.AND.iprint_gen>1) then
-       write(io_lun,fmt='(/8x," mikes_set_ewald: cartesian components of real-cell &
-            &primitive translations vectors:"/)')
+       write(io_lun,fmt='(/8x," mikes_set_ewald: cartesian components &
+            &of real-cell primitive translations vectors:"/)')
        do n = 1, 3
-          write(io_lun,fmt='(8x," vector no:",i3,":",3f12.6)') n, (real_cell_vec(n,i), i = 1, 3)
+          write(io_lun,fmt='(8x," vector no:",i3,":",3f12.6)') &
+               n, (real_cell_vec(n,i), i = 1, 3)
        end do
     end if
 
     ! --- volume of real-space unit cell ------------------------------
     ewald_real_cell_volume = &
-         &real_cell_vec(1,1)*(real_cell_vec(2,2)*real_cell_vec(3,3) - &
-         &real_cell_vec(2,3)*real_cell_vec(3,2)) + &
-         &real_cell_vec(1,2)*(real_cell_vec(2,3)*real_cell_vec(3,1) - &
-         &real_cell_vec(2,1)*real_cell_vec(3,3)) + &
-         &real_cell_vec(1,3)*(real_cell_vec(2,1)*real_cell_vec(3,2) - &
-         &real_cell_vec(2,2)*real_cell_vec(3,1))
+         real_cell_vec(1,1)*(real_cell_vec(2,2)*real_cell_vec(3,3) - &
+         real_cell_vec(2,3)*real_cell_vec(3,2)) + &
+         real_cell_vec(1,2)*(real_cell_vec(2,3)*real_cell_vec(3,1) - &
+         real_cell_vec(2,1)*real_cell_vec(3,3)) + &
+         real_cell_vec(1,3)*(real_cell_vec(2,1)*real_cell_vec(3,2) - &
+         real_cell_vec(2,2)*real_cell_vec(3,1))
     ewald_real_cell_volume = abs(ewald_real_cell_volume)
     if(inode==ionode.AND.iprint_gen>1) &
-         write(io_lun,fmt='(/8x," volume of real-space cell:",f19.6)') ewald_real_cell_volume
+         write(io_lun,fmt='(/8x," volume of real-space cell:",f19.6)')&
+         ewald_real_cell_volume
 
     ! --- quantities needed for calculation of Ewald gamma, and real_space and recip-space cutoffs
     total_charge = zero
     mean_square_charge = zero
     do np = 1, ni_in_cell
        total_charge = total_charge + charge(species(np))
-       mean_square_charge = mean_square_charge + charge(species(np))*charge(species(np))
+       mean_square_charge = mean_square_charge + &
+            charge(species(np))*charge(species(np))
     enddo
     mean_square_charge = mean_square_charge/real(ni_in_cell,double)
     mean_number_density = real(ni_in_cell,double)/ewald_real_cell_volume
     mean_interparticle_distance = (three/(four*pi*mean_number_density))**one_third
     ! Rescale ewald_accuracy to a dimensionless number
     ewald_accuracy = ewald_accuracy*mean_interparticle_distance/mean_square_charge
-    ! --- miscellaneous constants used for making Ewald gamma and the real-space and recip-space cutoffs
+    ! --- miscellaneous constants used for making Ewald gamma and
+    ! the real-space and recip-space cutoffs
     const_zeta_0 = (pi**five_sixths)/(six**one_third)
     const_zeta_1 = (two**two_thirds)*(pi**five_sixths)/(three**one_third)
     argument = min(exp(-one),&
@@ -1128,66 +1151,70 @@ contains
          &(const_zeta_1*ewald_accuracy)/(real(ni_in_cell,double)**five_sixths))
     const_phi_1 = sqrt(-log(argument))
     if(inode == ionode.AND.iprint_gen>1) then
-       write(unit=io_lun,fmt='(/8x," const_zeta_0:",e20.12," const_zeta_1:",e20.12/&
+       write (unit=io_lun, &
+            fmt='(/8x," const_zeta_0:",e20.12," const_zeta_1:",e20.12/&
             &8x," const_phi_0:",e20.12," const_phi_1:",e20.12/&
             &8x," total charge:",e20.12," mean-square charge:",e20.12/&
-            &8x," mean number density:",e20.12," mean interparticle distance:",e20.12)') &
-            &const_zeta_0, const_zeta_1, const_phi_0, const_phi_1, total_charge, mean_square_charge, &
-            &mean_number_density, mean_interparticle_distance
+            &8x," mean number density:",e20.12," mean interparticle &
+            &distance:",e20.12)') &
+            const_zeta_0, const_zeta_1, const_phi_0, const_phi_1, &
+            total_charge, mean_square_charge, mean_number_density, &
+            mean_interparticle_distance
     endif
 
+    ! *************************************************************************
+    !              SET-UP INFORMATION FOR EWALD RECIPROCAL-SPACE SUM
+    ! *************************************************************************
 
-
-    ! *************************************************************************************************
-    !                          SET-UP INFORMATION FOR EWALD RECIPROCAL-SPACE SUM
-    ! *************************************************************************************************
-
-    ! --- reciprocal-lattice vectors ----------------------------------
+    ! --- reciprocal-lattice vectors -------------------
     vol_prefac = 2.0_double*pi/ewald_real_cell_volume  
 
-    recip_cell_vec(1,1) = vol_prefac*& 
-         &(real_cell_vec(2,2)*real_cell_vec(3,3) - real_cell_vec(2,3)*real_cell_vec(3,2))
-    recip_cell_vec(1,2) = vol_prefac*& 
-         &(real_cell_vec(2,3)*real_cell_vec(3,1) - real_cell_vec(2,1)*real_cell_vec(3,3))
-    recip_cell_vec(1,3) = vol_prefac*& 
-         &(real_cell_vec(2,1)*real_cell_vec(3,2) - real_cell_vec(2,2)*real_cell_vec(3,1))
+    recip_cell_vec(1,1) = vol_prefac * (real_cell_vec(2,2) * &
+         real_cell_vec(3,3) - real_cell_vec(2,3)*real_cell_vec(3,2))
+    recip_cell_vec(1,2) = vol_prefac * (real_cell_vec(2,3) * &
+         real_cell_vec(3,1) - real_cell_vec(2,1)*real_cell_vec(3,3))
+    recip_cell_vec(1,3) = vol_prefac * (real_cell_vec(2,1) * &
+         real_cell_vec(3,2) - real_cell_vec(2,2)*real_cell_vec(3,1))
 
-    recip_cell_vec(2,1) = vol_prefac*& 
-         &(real_cell_vec(3,2)*real_cell_vec(1,3) - real_cell_vec(3,3)*real_cell_vec(1,2))
-    recip_cell_vec(2,2) = vol_prefac*& 
-         &(real_cell_vec(3,3)*real_cell_vec(1,1) - real_cell_vec(3,1)*real_cell_vec(1,3))
-    recip_cell_vec(2,3) = vol_prefac*& 
-         &(real_cell_vec(3,1)*real_cell_vec(1,2) - real_cell_vec(3,2)*real_cell_vec(1,1))
+    recip_cell_vec(2,1) = vol_prefac * (real_cell_vec(3,2) * &
+         real_cell_vec(1,3) - real_cell_vec(3,3)*real_cell_vec(1,2))
+    recip_cell_vec(2,2) = vol_prefac * (real_cell_vec(3,3) * &
+         real_cell_vec(1,1) - real_cell_vec(3,1)*real_cell_vec(1,3))
+    recip_cell_vec(2,3) = vol_prefac * (real_cell_vec(3,1) * &
+         real_cell_vec(1,2) - real_cell_vec(3,2)*real_cell_vec(1,1))
 
-    recip_cell_vec(3,1) = vol_prefac*& 
-         &(real_cell_vec(1,2)*real_cell_vec(2,3) - real_cell_vec(1,3)*real_cell_vec(2,2))
-    recip_cell_vec(3,2) = vol_prefac*& 
-         &(real_cell_vec(1,3)*real_cell_vec(2,1) - real_cell_vec(1,1)*real_cell_vec(2,3))
-    recip_cell_vec(3,3) = vol_prefac*& 
-         &(real_cell_vec(1,1)*real_cell_vec(2,2) - real_cell_vec(1,2)*real_cell_vec(2,1))
+    recip_cell_vec(3,1) = vol_prefac * (real_cell_vec(1,2) * &
+         real_cell_vec(2,3) - real_cell_vec(1,3)*real_cell_vec(2,2))
+    recip_cell_vec(3,2) = vol_prefac * (real_cell_vec(1,3) * &
+         real_cell_vec(2,1) - real_cell_vec(1,1)*real_cell_vec(2,3))
+    recip_cell_vec(3,3) = vol_prefac * (real_cell_vec(1,1) * &
+         real_cell_vec(2,2) - real_cell_vec(1,2)*real_cell_vec(2,1))
 
     if(inode==ionode.AND.iprint_gen>1) then
-       write(unit=io_lun,fmt='(/8x," cartesian components of reciprocal-space &
-            &primitive vectors:"/)')
+       write(unit=io_lun,fmt='(/8x," cartesian components of &
+            &reciprocal-space primitive vectors:"/)')
        do n = 1, 3
           write(unit=io_lun,fmt='(8x," basis vector no:",i3,":",3f12.6)') &
-               &n, (recip_cell_vec(n,i), i = 1, 3)
+               n, (recip_cell_vec(n,i), i = 1, 3)
        enddo
     end if
 
     ! ++++++ temporary code to calculate lower bound on inter-particle separation
     ! --- radius of sphere inscribed in real-space cell --------------
-    dummy1 = pi/sqrt(recip_cell_vec(1,1)**2 + recip_cell_vec(1,2)**2 + &
-         &recip_cell_vec(1,3)**2)
-    dummy2 = pi/sqrt(recip_cell_vec(2,1)**2 + recip_cell_vec(2,2)**2 + &
-         &recip_cell_vec(2,3)**2)
-    dummy3 = pi/sqrt(recip_cell_vec(3,1)**2 + recip_cell_vec(3,2)**2 + &
-         &recip_cell_vec(3,3)**2)
+    dummy1 = pi/sqrt(recip_cell_vec(1,1)**2 + recip_cell_vec(1,2)**2 +&
+         recip_cell_vec(1,3)**2)
+    dummy2 = pi/sqrt(recip_cell_vec(2,1)**2 + recip_cell_vec(2,2)**2 +&
+         recip_cell_vec(2,3)**2)
+    dummy3 = pi/sqrt(recip_cell_vec(3,1)**2 + recip_cell_vec(3,2)**2 +&
+         recip_cell_vec(3,3)**2)
     lambda = min(dummy1,dummy2,dummy3)
-    if(inode==ionode.AND.iprint_gen>1) write(unit=io_lun,fmt='(/8x," radius of sphere inscribed in real-space cell:",&
-         &f12.6)') lambda
+    if(inode==ionode.AND.iprint_gen>1) &
+         write(unit=io_lun,fmt='(/8x," radius of sphere inscribed in &
+         &real-space cell:",f12.6)') lambda
 
-    if(inode == ionode.AND.iprint_gen>1) write(unit=io_lun,fmt='(/8x," no. of atoms in cell:",i5)') ni_in_cell
+    if(inode == ionode.AND.iprint_gen>1) &
+         write(unit=io_lun,fmt='(/8x," no. of atoms in cell:",i5)') &
+         ni_in_cell
 
     if(.false.) then ! ni_in_cell > 1) then
        do np1 = 1, ni_in_cell-1
@@ -1215,51 +1242,61 @@ contains
        enddo
     endif
     if(inode == ionode.AND.iprint_gen>1) &
-         write(unit=io_lun,fmt='(/8x," lower bound on inter-particle separation:",f12.6)') lambda
+         write(unit=io_lun,fmt='(/8x," lower bound on inter-particle &
+         &separation:",f12.6)') lambda
 
     run_mode = 0
     select case(run_mode)
 
     case(0)
-       ewald_gamma = (pi*(mean_number_density**two_thirds)/real(ni_in_cell,double)**one_third)*&
-            &(const_phi_0/const_phi_1)
-       argument = min(exp(-one),&
-            &(ewald_accuracy*ewald_gamma)/(two*sqrt(pi)*mean_interparticle_distance*mean_number_density))
-       ewald_real_cutoff = (one/sqrt(ewald_gamma))*sqrt(-log(argument))
-       argument = min(exp(-one),&
-            &(pi*ewald_accuracy)/(mean_interparticle_distance*real(ni_in_cell,double)*sqrt(ewald_gamma)))
+       ewald_gamma = (pi*(mean_number_density**two_thirds)/&
+            real(ni_in_cell,double)**one_third)* (const_phi_0/&
+            const_phi_1)
+       argument = min(exp(-one), (ewald_accuracy*ewald_gamma)/(two*&
+            sqrt(pi)*mean_interparticle_distance*mean_number_density))
+       ewald_real_cutoff = (one/sqrt(ewald_gamma))*sqrt(-&
+            log(argument))
+       argument = min(exp(-one), (pi*ewald_accuracy)/&
+            (mean_interparticle_distance*real(ni_in_cell,double)*&
+            sqrt(ewald_gamma)))
        ewald_recip_cutoff = two*sqrt(ewald_gamma)*sqrt(-log(argument))
 
     case(1)
        ewald_gamma = (one/lambda**2)*log(one/ewald_accuracy) 
        ewald_real_cutoff = lambda
-       ewald_recip_cutoff = sqrt(four*ewald_gamma*log(one/ewald_accuracy))
+       ewald_recip_cutoff = sqrt(four*ewald_gamma*log(one/&
+            ewald_accuracy))
 
     end select
 
     if(inode == ionode.AND.iprint_gen>1) then
-       write(unit=io_lun,fmt='(/8x," run_mode:",i3/" Ewald gamma:",e20.12/&
-            &" Ewald real_space cutoff distance:",e20.12/" Ewald recip-space cutoff wavevector:",e20.12)') &
-            &run_mode, ewald_gamma, ewald_real_cutoff, ewald_recip_cutoff
+       write(unit=io_lun,fmt='(/8x," run_mode:",i3/" Ewald gamma:",&
+            &e20.12/" Ewald real_space cutoff distance:",e20.12/" &
+            &Ewald recip-space cutoff wavevector:",e20.12)') run_mode,&
+            ewald_gamma, ewald_real_cutoff, ewald_recip_cutoff
     endif
 
     ! --- Gaussian self-energy and net charge contributions to the Ewald energy
-    ewald_gaussian_self_energy = -sqrt(ewald_gamma/pi)*real(ni_in_cell,double)*mean_square_charge
-    ewald_net_charge_energy = -(pi/(two*ewald_real_cell_volume*ewald_gamma))*total_charge*total_charge
+    ewald_gaussian_self_energy = -sqrt(ewald_gamma/pi)*&
+         real(ni_in_cell,double)*mean_square_charge
+    ewald_net_charge_energy = -(pi/(two*ewald_real_cell_volume*&
+         ewald_gamma))*total_charge*total_charge
     if(inode == ionode.AND.iprint_gen>1) &
-         write(unit=io_lun,fmt='(/8x," mikes_set_ewald: Ewald Gaussian self-energy:",e20.12,&
-         &" Ewald net-charge energy:",e20.12)') ewald_gaussian_self_energy, ewald_net_charge_energy
+         write(unit=io_lun,fmt='(/8x," mikes_set_ewald: Ewald &
+         &Gaussian self-energy:",e20.12," Ewald net-charge energy:",&
+         &e20.12)') ewald_gaussian_self_energy, &
+         ewald_net_charge_energy
 
     ! --- limits for recip-space covering set
-    rec_lim_1 = int(ewald_recip_cutoff*&
-         &sqrt(real_cell_vec(1,1)**2 + real_cell_vec(1,2)**2 + real_cell_vec(1,3)**2)/(two*pi))
-    rec_lim_2 = int(ewald_recip_cutoff*&
-         &sqrt(real_cell_vec(2,1)**2 + real_cell_vec(2,2)**2 + real_cell_vec(2,3)**2)/(two*pi))
-    rec_lim_3 = int(ewald_recip_cutoff*&
-         &sqrt(real_cell_vec(3,1)**2 + real_cell_vec(3,2)**2 + real_cell_vec(3,3)**2)/(two*pi))
-    if(inode == ionode.AND.iprint_gen>1) &
-         write(unit=io_lun,fmt='(/8x," integer limits for recip-space covering set:",3i5)') &
-         &rec_lim_1, rec_lim_2, rec_lim_3
+    rec_lim_1 = int(ewald_recip_cutoff* sqrt(real_cell_vec(1,1)**2 + &
+         real_cell_vec(1,2)**2 + real_cell_vec(1,3)**2)/(two*pi))
+    rec_lim_2 = int(ewald_recip_cutoff* sqrt(real_cell_vec(2,1)**2 + &
+         real_cell_vec(2,2)**2 + real_cell_vec(2,3)**2)/(two*pi))
+    rec_lim_3 = int(ewald_recip_cutoff* sqrt(real_cell_vec(3,1)**2 + &
+         real_cell_vec(3,2)**2 + real_cell_vec(3,3)**2)/(two*pi))
+    if(inode == ionode.AND.iprint_gen>1) write(unit=io_lun,fmt='(/8x,&
+         &" integer limits for recip-space covering set:",3i5)') &
+         rec_lim_1, rec_lim_2, rec_lim_3
 
     ! --- determine and store wavevectors to be included in recip-space sum
     ewald_recip_cutoff_squared = ewald_recip_cutoff*ewald_recip_cutoff
@@ -1268,9 +1305,12 @@ contains
        do m2 = -rec_lim_2, rec_lim_2
           do m3 = -rec_lim_3, rec_lim_3
              if(m1*m1+m2*m2+m3*m3 /= 0) then
-                g1 = m1*recip_cell_vec(1,1) + m2*recip_cell_vec(2,1) + m3*recip_cell_vec(3,1)
-                g2 = m1*recip_cell_vec(1,2) + m2*recip_cell_vec(2,2) + m3*recip_cell_vec(3,2)
-                g3 = m1*recip_cell_vec(1,3) + m2*recip_cell_vec(2,3) + m3*recip_cell_vec(3,3)
+                g1 = m1*recip_cell_vec(1,1) + m2*recip_cell_vec(2,1) +&
+                     m3*recip_cell_vec(3,1)
+                g2 = m1*recip_cell_vec(1,2) + m2*recip_cell_vec(2,2) +&
+                     m3*recip_cell_vec(3,2)
+                g3 = m1*recip_cell_vec(1,3) + m2*recip_cell_vec(2,3) +&
+                     m3*recip_cell_vec(3,3)
                 if(g1*g1 + g2*g2 + g3*g3 < ewald_recip_cutoff_squared) then
                    number_of_g_vectors = number_of_g_vectors + 1
                 endif
@@ -1280,9 +1320,13 @@ contains
     enddo
     ! Now we have number_of_g_vectors
     ! Allocate ewald_g_vector, g_factor
-    allocate(ewald_g_vector_x(number_of_g_vectors),ewald_g_vector_y(number_of_g_vectors), &
-         ewald_g_vector_z(number_of_g_vectors),ewald_g_factor(number_of_g_vectors),STAT=stat)
-    if(stat/=0) call cq_abort("set_ewald: error allocating ewald_g_vector ",number_of_g_vectors,stat)
+    allocate(ewald_g_vector_x(number_of_g_vectors),&
+         ewald_g_vector_y(number_of_g_vectors), &
+         ewald_g_vector_z(number_of_g_vectors),&
+         ewald_g_factor(number_of_g_vectors),STAT=stat)
+    if(stat/=0) &
+         call cq_abort("set_ewald: error allocating ewald_g_vector ",&
+         number_of_g_vectors,stat)
     call reg_alloc_mem(area_general,4*number_of_g_vectors,type_dbl)
     ! Zero because we use it to count
     number_of_g_vectors = 0
@@ -1290,16 +1334,20 @@ contains
        do m2 = -rec_lim_2, rec_lim_2
           do m3 = -rec_lim_3, rec_lim_3
              if(m1*m1+m2*m2+m3*m3 /= 0) then
-                g1 = m1*recip_cell_vec(1,1) + m2*recip_cell_vec(2,1) + m3*recip_cell_vec(3,1)
-                g2 = m1*recip_cell_vec(1,2) + m2*recip_cell_vec(2,2) + m3*recip_cell_vec(3,2)
-                g3 = m1*recip_cell_vec(1,3) + m2*recip_cell_vec(2,3) + m3*recip_cell_vec(3,3)
+                g1 = m1*recip_cell_vec(1,1) + m2*recip_cell_vec(2,1) +&
+                     m3*recip_cell_vec(3,1)
+                g2 = m1*recip_cell_vec(1,2) + m2*recip_cell_vec(2,2) +&
+                     m3*recip_cell_vec(3,2)
+                g3 = m1*recip_cell_vec(1,3) + m2*recip_cell_vec(2,3) +&
+                     m3*recip_cell_vec(3,3)
                 if(g1*g1 + g2*g2 + g3*g3 < ewald_recip_cutoff_squared) then
                    number_of_g_vectors = number_of_g_vectors + 1
                    g_squared = g1*g1 + g2*g2 + g3*g3
                    ewald_g_vector_x(number_of_g_vectors) = g1
                    ewald_g_vector_y(number_of_g_vectors) = g2
                    ewald_g_vector_z(number_of_g_vectors) = g3
-                   ewald_g_factor(number_of_g_vectors) = exp(-g_squared/(four*ewald_gamma))/g_squared
+                   ewald_g_factor(number_of_g_vectors) = &
+                        exp(-g_squared/(four*ewald_gamma))/g_squared
                 endif
              endif
           enddo
@@ -1314,25 +1362,28 @@ contains
     !       enddo
     !    endif
 
-    ! *************************************************************************************************
-    !                          SET-UP INFORMATION FOR EWALD REAL-SPACE SUM
-    ! *************************************************************************************************
+    ! ********************************************************************
+    !              SET-UP INFORMATION FOR EWALD REAL-SPACE SUM
+    ! ********************************************************************
 
     ! +++ test printing of complementary error function
     if(inode == ionode.AND.iprint_gen>=6) then
-       write(unit=io_lun,fmt='(/8x," +++ test printing of complementary error function calculated by 2 routines"/)')
+       write(unit=io_lun,fmt='(/8x," +++ test printing of &
+            &complementary error function calculated by 2 routines"/)')
        do n = 0, 100
           dummy1 = real(n,double) * 0.1_double
           dummy2 = obsolete_erfcc(dummy1)
           dummy3 = erfc(dummy1)
-          write(unit=io_lun,fmt='(3x,i5,1x,f12.6,2x,2e20.12)') n, dummy1, dummy2, dummy3
+          write(unit=io_lun,fmt='(3x,i5,1x,f12.6,2x,2e20.12)') &
+               n, dummy1, dummy2, dummy3
        enddo
     endif
     ! +++
 
     ! --- primitive translation vectors for partition
-    if(inode == ionode.AND.iprint_gen>1) write(unit=io_lun,fmt='(/8x," nos of partitions in cell edges:",3i5)') &
-         &parts%ngcellx, parts%ngcelly, parts%ngcellz
+    if(inode == ionode.AND.iprint_gen>1) &
+         write(unit=io_lun,fmt='(/8x," nos of partitions in cell edges:",3i5)') &
+         parts%ngcellx, parts%ngcelly, parts%ngcellz
     do i = 1, 3
        part_cell_vec(1,i) = real_cell_vec(1,i) / real(parts%ngcellx,double)
        part_cell_vec(2,i) = real_cell_vec(2,i) / real(parts%ngcelly,double)
@@ -1341,7 +1392,9 @@ contains
     if(inode == ionode.AND.iprint_gen>1) then
        write(unit=io_lun,fmt='(/8x," partition cell vectors:"/)')
        do n = 1, 3
-          write(unit=io_lun,fmt='(8x," partition cell vector no:",i5,3x,3f12.6)') n, (part_cell_vec(n,i), i = 1, 3)
+          write(unit=io_lun,&
+               fmt='(8x," partition cell vector no:",i5,3x,3f12.6)') &
+               n, (part_cell_vec(n,i), i = 1, 3)
        enddo
     endif
 
@@ -1353,26 +1406,35 @@ contains
           v2 = real(m2,double) - half
           do m3 = 0, 1
              v3 = real(m3,double) - half
-             vert(1) = v1*part_cell_vec(1,1) + v2*part_cell_vec(2,1) + v3*part_cell_vec(3,1)
-             vert(2) = v1*part_cell_vec(1,2) + v2*part_cell_vec(2,2) + v3*part_cell_vec(3,2)
-             vert(3) = v1*part_cell_vec(1,3) + v2*part_cell_vec(2,3) + v3*part_cell_vec(3,3)
+             vert(1) = v1*part_cell_vec(1,1) + v2*part_cell_vec(2,1) +&
+                  v3*part_cell_vec(3,1)
+             vert(2) = v1*part_cell_vec(1,2) + v2*part_cell_vec(2,2) +&
+                  v3*part_cell_vec(3,2)
+             vert(3) = v1*part_cell_vec(1,3) + v2*part_cell_vec(2,3) +&
+                  v3*part_cell_vec(3,3)
              rsq = vert(1)*vert(1) + vert(2)*vert(2) + vert(3)*vert(3)
              if(rsq > partition_radius_squared) partition_radius_squared = rsq
           enddo
        enddo
     enddo
     partition_diameter = two*sqrt(partition_radius_squared)
-    if(inode == ionode.AND.iprint_gen>1) write(unit=io_lun,fmt='(/8x," diameter of sphere circumscribed round &
+    if(inode == ionode.AND.iprint_gen>1) &
+         write(unit=io_lun,fmt='(/8x," diameter of sphere circumscribed round &
          &partition cell:",f12.6)') partition_diameter 
 
     ! --- make Ewald covering set
-    call make_cs(inode-1,ewald_real_cutoff,ewald_CS,parts,bundle,ni_in_cell, x_atom_cell,y_atom_cell,z_atom_cell)
+    call make_cs(inode-1,ewald_real_cutoff,ewald_CS,parts,bundle,&
+         ni_in_cell, x_atom_cell,y_atom_cell,z_atom_cell)
     ! +++
     if(inode == ionode.AND.iprint_gen>1) then
-       write(unit=io_lun,fmt='(/8x,"+++ ng_cover:",i10)') ewald_CS%ng_cover
-       write(unit=io_lun,fmt='(8x,"+++ ncoverx, y, z:",3i8)') ewald_CS%ncoverx, ewald_CS%ncovery, ewald_CS%ncoverz
-       write(unit=io_lun,fmt='(8x,"+++ nspanlx, y, z:",3i8)') ewald_CS%nspanlx, ewald_CS%nspanly, ewald_CS%nspanlz
-       write(unit=io_lun,fmt='(8x,"+++ nx_origin, y, z:",3i8)') ewald_CS%nx_origin, ewald_CS%ny_origin, ewald_CS%nz_origin
+       write(unit=io_lun,fmt='(/8x,"+++ ng_cover:",i10)') &
+            ewald_CS%ng_cover
+       write(unit=io_lun,fmt='(8x,"+++ ncoverx, y, z:",3i8)') &
+            ewald_CS%ncoverx, ewald_CS%ncovery, ewald_CS%ncoverz
+       write(unit=io_lun,fmt='(8x,"+++ nspanlx, y, z:",3i8)') &
+            ewald_CS%nspanlx, ewald_CS%nspanly, ewald_CS%nspanlz
+       write(unit=io_lun,fmt='(8x,"+++ nx_origin, y, z:",3i8)') &
+            ewald_CS%nx_origin, ewald_CS%ny_origin, ewald_CS%nz_origin
     endif
     ! +++
 
@@ -1402,8 +1464,10 @@ contains
        ! --- unpack the Cartesian-composite index to obtain the Cartesian integer indices of current
        !     partition nc in Ewald covering set
        nccx = 1 + (ind_part - 1)/(ewald_CS%ncovery * ewald_CS%ncoverz)
-       nccy = 1 + (ind_part - 1 - (nccx-1) * ewald_CS%ncovery * ewald_CS%ncoverz)/ewald_CS%ncoverz
-       nccz = ind_part - (nccx-1) * ewald_CS%ncovery * ewald_CS%ncoverz - (nccy-1) * ewald_CS%ncoverz
+       nccy = 1 + (ind_part - 1 - (nccx-1) * ewald_CS%ncovery * &
+            ewald_CS%ncoverz)/ewald_CS%ncoverz
+       nccz = ind_part - (nccx-1) * ewald_CS%ncovery * ewald_CS%ncoverz - &
+            (nccy-1) * ewald_CS%ncoverz
        ! --- integer triplet specifying offset of covering-set partition from primary-set partition
        m1 = nccx - nppx
        m2 = nccy - nppy
@@ -1415,9 +1479,12 @@ contains
           v1 = real(m1,double)
           v2 = real(m2,double)
           v3 = real(m3,double)
-          rr(1) = half*(v1*part_cell_vec(1,1) + v2*part_cell_vec(2,1) + v3*part_cell_vec(3,1))
-          rr(2) = half*(v1*part_cell_vec(1,2) + v2*part_cell_vec(2,2) + v3*part_cell_vec(3,2))
-          rr(3) = half*(v1*part_cell_vec(1,3) + v2*part_cell_vec(2,3) + v3*part_cell_vec(3,3))
+          rr(1) = half*(v1*part_cell_vec(1,1) + v2*part_cell_vec(2,1) &
+               + v3*part_cell_vec(3,1))
+          rr(2) = half*(v1*part_cell_vec(1,2) + v2*part_cell_vec(2,2) &
+               + v3*part_cell_vec(3,2))
+          rr(3) = half*(v1*part_cell_vec(1,3) + v2*part_cell_vec(2,3) &
+               + v3*part_cell_vec(3,3))
           call partition_distance(.false.,part_cell_vec,part_cell_dual,rr,distance)
           distance = two*distance
           if(distance < ewald_real_cutoff) then
@@ -1426,51 +1493,70 @@ contains
        endif
     enddo
     ! Allocate memory
-    allocate(ewald_partition_neighbour_list(bundle%groups_on_node,n_ewald_partition_neighbours), STAT=stat)
-    if(stat/=0) call cq_abort("set_ewald: error allocating partition_neighbour_list ", &
+    allocate(ewald_partition_neighbour_list(bundle%groups_on_node,&
+         n_ewald_partition_neighbours), STAT=stat)
+    if(stat/=0) &
+         call cq_abort("set_ewald: error allocating partition_neighbour_list ", &
          bundle%groups_on_node,n_ewald_partition_neighbours)
-    call reg_alloc_mem(area_general,bundle%groups_on_node*n_ewald_partition_neighbours,type_dbl)
+    call reg_alloc_mem(area_general,bundle%groups_on_node*&
+         n_ewald_partition_neighbours,type_dbl)
 
     do ip = 1, bundle%groups_on_node
 
-       ! --- Cartesian integer indices of current primary-set partition with respect
-       !     to left of Ewald covering set (to be more precise: for a hypothetical primary-set 
-       !     partition in bottom left-hand corner of covering set, all the following
-       !     indices nppx, nppy, nppz would be equal to one).
+       ! --- Cartesian integer indices of current primary-set
+       !     partition with respect to left of Ewald covering set (to
+       !     be more precise: for a hypothetical primary-set partition
+       !     in bottom left-hand corner of covering set, all the
+       !     following indices nppx, nppy, nppz would be equal to
+       !     one).
        nppx = 1 + bundle%idisp_primx(ip) + ewald_CS%nspanlx
        nppy = 1 + bundle%idisp_primy(ip) + ewald_CS%nspanly
        nppz = 1 + bundle%idisp_primz(ip) + ewald_CS%nspanlz
 
        n_ewald_partition_neighbours = 0
-       ! --- loop over partitions in Ewald covering set in node-periodic grouped order
+       ! --- loop over partitions in Ewald covering set in
+       !      node-periodic grouped order
        do nc = 1, ewald_CS%ng_cover
-          ! --- for current partition nc in Ewald covering set, get the Cartesian-composite index
+          ! --- for current partition nc in Ewald covering set, get
+          !     the Cartesian-composite index
           ind_part = ewald_CS%lab_cover(nc)
-          ! --- unpack the Cartesian-composite index to obtain the Cartesian integer indices of current
-          !     partition nc in Ewald covering set
+          ! --- unpack the Cartesian-composite index to obtain the
+          !     Cartesian integer indices of current partition nc in
+          !     Ewald covering set
           nccx = 1 + (ind_part - 1)/(ewald_CS%ncovery * ewald_CS%ncoverz)
-          nccy = 1 + (ind_part - 1 - (nccx-1) * ewald_CS%ncovery * ewald_CS%ncoverz)/ewald_CS%ncoverz
-          nccz = ind_part - (nccx-1) * ewald_CS%ncovery * ewald_CS%ncoverz - (nccy-1) * ewald_CS%ncoverz
-          ! --- integer triplet specifying offset of covering-set partition from primary-set partition
+          nccy = 1 + (ind_part - 1 - (nccx-1) * ewald_CS%ncovery * &
+               ewald_CS%ncoverz)/ewald_CS%ncoverz
+          nccz = ind_part - (nccx-1) * ewald_CS%ncovery * ewald_CS%ncoverz - &
+               (nccy-1) * ewald_CS%ncoverz
+          ! --- integer triplet specifying offset of covering-set
+          !     partition from primary-set partition
           m1 = nccx - nppx
           m2 = nccy - nppy
           m3 = nccz - nppz
           ! --- exclude from list if all components of offset are zero
           if(m1*m1 + m2*m2 + m3*m3 /= 0) then
-             ! --- calculate distance (in a.u.) between centre of primary-set partition and the point
-             !     mid-way between the primary- and covering-set partitions
+             ! --- calculate distance (in a.u.) between centre of
+             !     primary-set partition and the point mid-way between
+             !     the primary- and covering-set partitions
              v1 = real(m1,double)
              v2 = real(m2,double)
              v3 = real(m3,double)
-             rr(1) = half*(v1*part_cell_vec(1,1) + v2*part_cell_vec(2,1) + v3*part_cell_vec(3,1))
-             rr(2) = half*(v1*part_cell_vec(1,2) + v2*part_cell_vec(2,2) + v3*part_cell_vec(3,2))
-             rr(3) = half*(v1*part_cell_vec(1,3) + v2*part_cell_vec(2,3) + v3*part_cell_vec(3,3))
-             call partition_distance(.false.,part_cell_vec,part_cell_dual,rr,distance)
+             rr(1) = half*(v1*part_cell_vec(1,1) + v2*part_cell_vec(2,1) + &
+                  v3*part_cell_vec(3,1))
+             rr(2) = half*(v1*part_cell_vec(1,2) + v2*part_cell_vec(2,2) + &
+                  v3*part_cell_vec(3,2))
+             rr(3) = half*(v1*part_cell_vec(1,3) + v2*part_cell_vec(2,3) + &
+                  v3*part_cell_vec(3,3))
+             call partition_distance(.false.,part_cell_vec,&
+                  part_cell_dual,rr,distance)
              distance = two*distance
              if(distance < ewald_real_cutoff) then
                 n_ewald_partition_neighbours = n_ewald_partition_neighbours + 1
-                ! --- for current primary-set partition ip, record the PG index nc of latest covering-set partition within cutoff
-                ewald_partition_neighbour_list(ip,n_ewald_partition_neighbours) = nc
+                ! --- for current primary-set partition ip, record the
+                !     PG index nc of latest covering-set partition
+                !     within cutoff
+                ewald_partition_neighbour_list(ip,&
+                     n_ewald_partition_neighbours) = nc
              endif
           endif
        enddo

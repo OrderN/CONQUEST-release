@@ -12,7 +12,8 @@
 !!   2004/10/05
 !!  MODIFICATION HISTORY
 !!   2004/10/29 drb
-!!    Note: this was a subroutine, but was incorporated into a module to add kerker preconditioning
+!!    Note: this was a subroutine, but was incorporated into a module
+!!    to add kerker preconditioning
 !!   2008/02/06 08:17 dave
 !!    Changed for output to file not stdout
 !!  SOURCE

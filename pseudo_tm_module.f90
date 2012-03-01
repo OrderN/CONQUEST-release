@@ -111,7 +111,8 @@ contains
     use global_module, ONLY: iprint_pseudo
     use block_module, ONLY : n_pts_in_block
     use GenComms, ONLY: cq_abort, myid, inode, ionode
-    use species_module, ONLY: species, n_species, species_label, nlpf_species
+    use species_module, ONLY: species, n_species, species_label, &
+         nlpf_species
     
     implicit none
 
@@ -134,7 +135,8 @@ contains
        flag_calc_max = .false.
     endif
 
-    if(myid==0.AND.iprint_pseudo>2) write(io_lun,fmt='(10x,"Entering init_pseudo_tm")')
+    if(myid==0.AND.iprint_pseudo>2) &
+         write(io_lun,fmt='(10x,"Entering init_pseudo_tm")')
     call setup_pseudo_info
     ! in the moduel pseudo_tm_info
     if(flag_calc_max) then
@@ -183,7 +185,9 @@ contains
     !sbrt calc_max  -------------------------------
     subroutine calc_max
       !calculates ncf_max, nl_max, lcomp_max
-      if(n_species <= 0 ) call cq_abort ('calc_max in init_pseudo: n_species error',n_species)
+      if(n_species <= 0 ) &
+           call cq_abort ('calc_max in init_pseudo: n_species error',&
+           n_species)
       !ncf_max, nl_max, lcomp_max
       ncf_max = 1; nl_max=1 ; lcomp_max = 0
       do ispecies = 1, n_species
@@ -215,7 +219,9 @@ contains
       call start_timer(tmr_std_allocation)
       if(.NOT.allocated(core_radius)) then
          allocate(core_radius(n_species), STAT=stat)
-         if(stat /= 0) call cq_abort ('ERROR! init_pseudo: alloc core_radius', stat, n_species)
+         if(stat /= 0) &
+              call cq_abort ('ERROR! init_pseudo: alloc core_radius', &
+              stat, n_species)
       end if
 
       !%%! allocate(spherical_harmonic_norm(n_mcomp), STAT=stat)
@@ -411,8 +417,10 @@ contains
 
     use datatypes
     use numbers
-    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob, ni_in_cell, iprint_pseudo, species_glob, nlpf, sf, &
-         flag_basis_set, blips, IPRINT_TIME_THRES3, flag_analytic_blip_int
+    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob, ni_in_cell, &
+                             iprint_pseudo, species_glob, nlpf, sf,    &
+                             flag_basis_set, blips,                    &
+                             IPRINT_TIME_THRES3, flag_analytic_blip_int
     use species_module, ONLY: species, nlpf_species, n_species
     !  At present, these arrays are dummy arguments.
     use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, &

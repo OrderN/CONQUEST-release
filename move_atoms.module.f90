@@ -20,7 +20,8 @@
 !!   07:39, 2003/01/29 dave
 !!    Added constants for movement, velocity Verlet, primary and cover update
 !!   08:55, 2003/02/05 dave
-!!    Created update_H to reproject blips, build S, reproject pseudos, build n(r) and H
+!!    Created update_H to reproject blips, build S, reproject pseudos,
+!!    build n(r) and H
 !!   14:41, 26/02/2003 drb 
 !!    Added n_atoms to safemin, gsum on check to updateIndices
 !!   15:57, 27/02/2003 drb & tm 
@@ -34,7 +35,8 @@
 !!   13:27, 22/09/2003 drb 
 !!    Added TM's changes to update positions in different arrays
 !!   10:09, 13/02/2006 drb 
-!!    Removed all explicit references to data_ variables and rewrote in terms of new 
+!!    Removed all explicit references to data_ variables and rewrote
+!!    in terms of new
 !!    matrix routines
 !!   2008/02/06 08:24 dave
 !!    Changed for output to file not stdout
@@ -155,18 +157,21 @@ contains
 !!    Bug fix for indexing of force
 !!   2008/05/25
 !!    Added timers
+!!   2011/12/09 L.Tong
+!!    Removed redundant parameter number_of_bands
 !!  TODO
 !!   Proper buffer zones for matrix mults so initialisation doesn't have
 !!   to be done at every step 03/07/2001 dave
 !!  SOURCE
 !!
-  subroutine velocityVerlet(fixed_potential, number_of_bands, &
-                            prim, step,T,KE,quenchflag,velocity,force)
+  subroutine velocityVerlet (fixed_potential, prim, step, T, KE, &
+       quenchflag, velocity, force)
 
     use datatypes
     use basic_types
-    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell, id_glob, flag_reset_dens_on_atom_move, &
-         flag_move_atom
+    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, &
+         z_atom_cell, ni_in_cell, id_glob, &
+         flag_reset_dens_on_atom_move, flag_move_atom
     use species_module, ONLY: species, mass
     use numbers
     use GenComms, ONLY: myid
@@ -176,8 +181,6 @@ contains
 
     ! Passed variables
     logical,intent(in) :: fixed_potential
-    real(double),intent(in) :: number_of_bands
-
     real(double) :: step, T, KE
     type(primary_set) :: prim
     real(double), dimension(3,ni_in_cell) :: velocity
@@ -188,7 +191,6 @@ contains
     integer :: part, memb, atom, speca, k, gatom
     real(double) :: massa, acc
     logical :: flagx,flagy,flagz
-
 
     call start_timer(tmr_std_moveatoms)
     if(myid==0.AND.iprint_MD>0) write(io_lun,1) step,quenchflag
@@ -264,8 +266,8 @@ contains
     call update_atom_coord
 !Update atom_coord : TM 27Aug2003
 ! 25/Jun/2010 TM : calling set_density for SCF-MD
-    call updateIndices(.true.,fixed_potential, number_of_bands)
-    if(flag_reset_dens_on_atom_move) call set_density()
+    call updateIndices (.true., fixed_potential)
+    if (flag_reset_dens_on_atom_move) call set_density ()
 ! 25/Jun/2010 TM : calling set_density for SCF-MD
     call stop_timer(tmr_std_moveatoms)
     return
@@ -295,50 +297,66 @@ contains
 !!   07:50, 2003/01/29 dave
 !!  MODIFICATION HISTORY
 !!   08:07, 2003/02/04 dave
-!!    Added calls to get_E_and_F and added passed variables for get_E_and_F
+!!    Added calls to get_E_and_F and added passed variables for
+!!    get_E_and_F
 !!   08:57, 2003/02/05 dave
 !!    Sorted out arguments to pass to updateIndices
 !!   14:41, 26/02/2003 drb 
 !!    Added n_atoms from atoms
 !!   08:50, 11/05/2005 dave 
-!!    Added code to write out atomic positions during minimisation; also added code to subtract off atomic
-!!    densities for old atomic positions and add it back on for new ones after atoms moved; this is commented
-!!    out as it's not been tested or checked rigorously
+!!    Added code to write out atomic positions during minimisation;
+!!    also added code to subtract off atomic densities for old atomic
+!!    positions and add it back on for new ones after atoms moved;
+!!    this is commented out as it's not been tested or checked
+!!    rigorously
 !!   09:51, 25/10/2005 drb 
-!!    Added correction so that the present energy is passed to get_E_and_F for blip minimisation loop
+!!    Added correction so that the present energy is passed to
+!!    get_E_and_F for blip minimisation loop
 !!   15:13, 27/04/2007 drb 
-!!    Reworked minimiser to be more robust; added (but not implemented) corrections
-!!    to permit VERY SIMPLE charge density prediction
+!!    Reworked minimiser to be more robust; added (but not
+!!    implemented) corrections to permit VERY SIMPLE charge density
+!!    prediction
 !!   07/11/2007 vb
 !!    Added cq_abort when the trial step in safemin gets too small
-!!    Changed output format for energies and brackets so that the numbers are not out of range
+!!    Changed output format for energies and brackets so that the
+!!    numbers are not out of range
 !!   2008/05/25
 !!    Added timers
 !!   2011/03/31 M.Arita
 !!    Added the statements to recall set_density_pcc as atoms move.
+!!   2011/12/07 L.Tong
+!!    - Removed redundant dependency of density from density_module, as
+!!      all usage of density are commented out. (So no spin polarisation
+!!      modifications are needed.)
+!!    - Changed 0.0_double to zero from numbers module
+!!    - Updated calls to get_E_and_F and new_SC_potl
 !!   2011/12/06 17:03 dave
 !!    Bug fix for format statement
+!!   2011/12/09 L.Tong
+!!    Removed redundant parameter number_of_bands
 !!  SOURCE
 !!
-  subroutine safemin(start_x,start_y,start_z,direction,energy_in,energy_out,&
-       fixed_potential, vary_mu, number_of_bands, mu, total_energy)
+  subroutine safemin (start_x, start_y, start_z, direction, energy_in,&
+       energy_out, fixed_potential, vary_mu, mu, total_energy)
 
     ! Module usage
     use datatypes
     use numbers
     use units
-    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, &
-         flag_vary_basis, atom_coord, ni_in_cell, rcellx, rcelly, rcellz, flag_self_consistent, &
+    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, &
+         z_atom_cell, flag_vary_basis, atom_coord, ni_in_cell, rcellx,&
+         rcelly, rcellz, flag_self_consistent, &
          flag_reset_dens_on_atom_move, IPRINT_TIME_THRES1, &
          flag_pcc_global
-    use minimise, ONLY: get_E_and_F, sc_tolerance, L_tolerance, n_L_iterations
+    use minimise, ONLY: get_E_and_F, sc_tolerance, L_tolerance, &
+         n_L_iterations
     use GenComms, ONLY: my_barrier, myid, inode, ionode, cq_abort
     use SelfCon, ONLY: new_SC_potl
     use GenBlas, ONLY: dot
     use force_module, ONLY: tot_force
     use io_module, ONLY: write_atomic_positions, pdb_template
-    use density_module, ONLY: density, set_density, flag_no_atomic_densities, &
-                              set_density_pcc
+    use density_module, ONLY: density, set_density, &
+         flag_no_atomic_densities, set_density_pcc
     use maxima_module, ONLY: maxngrid
     use timer_module
 
@@ -353,12 +371,12 @@ contains
 
     character(len=40) :: output_file
 
-    real(double) :: number_of_bands, mu
+    real(double) :: mu
     real(double) :: total_energy
 
     ! Local variables
     real(double) :: k0, k1, k2, k3, lambda, k3old
-    real(double), save :: kmin = 0.0_double, dE = 0.0_double
+    real(double), save :: kmin = zero, dE = zero
     real(double) :: e0, e1, e2, e3, tmp, bottom
     real(double), dimension(:), allocatable :: store_density
     integer :: i,j, iter, lun
@@ -373,7 +391,7 @@ contains
          write(io_lun,fmt='(4x,"In safemin, initial energy is ",f20.10," ",a2)') en_conv*energy_in,en_units(energy_units)
     if(inode==ionode) write(io_lun,fmt='(/4x,"Seeking bracketing triplet of points"/)')
     ! Unnecessary and over cautious !
-    k0 = 0.0_double
+    k0 = zero
     !do i=1,ni_in_cell
     !   x_atom_cell(i) = start_x(i) + k0*direction(1,i)
     !   y_atom_cell(i) = start_y(i) + k0*direction(2,i)
@@ -394,12 +412,12 @@ contains
     !     e0, potential, pseudopotential, density, expected_reduction, N_GRID_MAX)
 
     iter = 1
-    k1 = 0.0_double
+    k1 = zero
     e1 = energy_in
     k2 = k0
     e2 = e0
     e3 = e2
-    !k3 = 0.0_double
+    !k3 = zero
     !k3old = k3
     if(kmin<1.0e-3) then
        kmin = 0.7_double
@@ -407,7 +425,7 @@ contains
        kmin = 0.75_double*kmin
     end if
     k3 = kmin
-    lambda = 2.0_double
+    lambda = two
     done = .false.
     ! Loop to find a bracketing triplet
     do while(.NOT.done)!e3<=e2)
@@ -454,7 +472,7 @@ contains
        !Update atom_coord : TM 27Aug2003
        ! Update indices and find energy and forces
        !call updateIndices(.false.,fixed_potential, number_of_bands)
-       call updateIndices(.true.,fixed_potential, number_of_bands)
+       call updateIndices (.true., fixed_potential)
        ! These lines add back on the atomic densities for NEW atomic positions
        !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
           ! Add on atomic densities
@@ -471,10 +489,12 @@ contains
        call stop_print_timer(tmr_l_tmp1,"atom updates",IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
        if(flag_vary_basis) then
-          call new_SC_potl( .false., sc_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
-               number_of_bands, L_tolerance, mu, e3)
+          call new_SC_potl (.false., sc_tolerance, reset_L, &
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, mu, e3)
        end if
-       call get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, e3, .false., .false.)
+       call get_E_and_F (fixed_potential, vary_mu, mu, e3, .false., &
+            .false.)
        if(inode==ionode.AND.iprint_MD>1) &
             write(io_lun,fmt='(4x,"In safemin, iter ",i3," step and energy are ",2f20.10" ",a2)') &
             iter,k3,en_conv*e3,en_units(energy_units)
@@ -486,7 +506,7 @@ contains
           ! New DRB 2007/04/18
           k3 = lambda*k3
           iter=iter+1
-       else if(k2==0.0_double) then ! We've gone too far
+       else if(k2==zero) then ! We've gone too far
           !k3old = k3
           !if(abs(dE)<very_small) then 
           !   k3 = k3old/2.0_double
@@ -533,7 +553,7 @@ contains
     !Update atom_coord : TM 27Aug2003
     ! Check minimum: update indices and find energy and forces
     !call updateIndices(.false.,fixed_potential, number_of_bands)
-    call updateIndices(.true.,fixed_potential, number_of_bands)
+    call updateIndices (.true., fixed_potential)
     !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
        ! Add on atomic densities
        !store_density = density
@@ -548,14 +568,15 @@ contains
     call stop_print_timer(tmr_l_tmp1,"safemin - Final interpolation and updates",IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
     if(flag_vary_basis) then
-       call new_SC_potl( .false., sc_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
-            number_of_bands, L_tolerance, mu, e3)
+       call new_SC_potl (.false., sc_tolerance, reset_L, &
+            fixed_potential, vary_mu, n_L_iterations, L_tolerance, mu,&
+            e3)
     end if
     energy_out = e3
     if(iprint_MD>0) then
-       call get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, energy_out, .true., .true.)
+       call get_E_and_F(fixed_potential, vary_mu, mu, energy_out, .true., .true.)
     else
-       call get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, energy_out, .true., .false.)
+       call get_E_and_F(fixed_potential, vary_mu, mu, energy_out, .true., .false.)
     end if
     if(inode==ionode.AND.iprint_MD>1) &
          write(io_lun,fmt='(4x,"In safemin, Interpolation step and energy are ",f15.10,f20.10" ",a2)') &
@@ -578,7 +599,7 @@ contains
 !Update atom_coord : TM 27Aug2003
        call update_atom_coord
 !Update atom_coord : TM 27Aug2003
-       call updateIndices(.true.,fixed_potential, number_of_bands)
+       call updateIndices(.true., fixed_potential)
        !call updateIndices(.false.,fixed_potential, number_of_bands)
        !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
           ! Add on atomic densities
@@ -594,14 +615,17 @@ contains
        call stop_print_timer(tmr_l_tmp1,"safemin - Failed interpolation + Retry",IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
        if(flag_vary_basis) then
-          call new_SC_potl( .false., sc_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
-               number_of_bands, L_tolerance, mu, e3)
+          call new_SC_potl( .false., sc_tolerance, reset_L, &
+               fixed_potential, vary_mu, n_L_iterations, L_tolerance, &
+               mu, e3)
        end if
        energy_out = e3
        if(iprint_MD>0) then
-          call get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, energy_out, .true., .true.)
+          call get_E_and_F(fixed_potential, vary_mu, mu, energy_out, &
+               .true., .true.)
        else
-          call get_E_and_F(fixed_potential, vary_mu, number_of_bands, mu, energy_out, .true., .false.)
+          call get_E_and_F(fixed_potential, vary_mu, mu, energy_out, &
+               .true., .false.)
        end if
     end if
     dE = e0 - energy_out
@@ -653,7 +677,7 @@ contains
     use numbers
     use GenBlas, ONLY: dot, axpy
     use GenComms, ONLY: gsum, myid
-    use Pulay, ONLY: DoPulay2D
+    use Pulay, ONLY: DoPulay
     use primary_module, ONLY: bundle
 
     implicit none
@@ -684,7 +708,7 @@ contains
        enddo
     enddo
     !call gsum(Aij,mx_pulay,mx_pulay)
-    call DoPulay2D(Aij,alph,pul_mx,mx_pulay,myid,0)
+    call DoPulay(Aij,alph,pul_mx,mx_pulay,myid,0)
     if(myid==0.AND.iprint_MD>2) write(io_lun,*) 'Alpha: ', alph
     x_atom_cell(:) = 0.0_double
     y_atom_cell(:) = 0.0_double
@@ -745,21 +769,25 @@ contains
 !!    CS is updated for DFT-D2
 !!   2011/11/17 10:18 dave
 !!    Updated call to set_blipgrid
+!!   2011/12/09 L.Tong
+!!    Removed redundant parameter number_of_bands
 !!  TODO
 !!   Think about updating radius component of matrix derived type, or eliminating it !
 !!  SOURCE
 !!
-  subroutine updateIndices(matrix_update,fixed_potential, number_of_bands)
+  subroutine updateIndices (matrix_update, fixed_potential)
 
     ! Module usage
     use datatypes
     use mult_module, ONLY: fmmi, immi
-    use matrix_module, ONLY: allocate_matrix, deallocate_matrix, set_matrix_pointers2, matrix
+    use matrix_module, ONLY: allocate_matrix, deallocate_matrix, &
+         set_matrix_pointers2, matrix
     use group_module, ONLY: parts
     use cover_module, ONLY : BCS_parts, DCS_parts, ewald_CS, D2_CS
     use primary_module, ONLY : bundle
-    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, IPRINT_TIME_THRES2, flag_Becke_weights, &
-                             flag_dft_d2
+    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, &
+         z_atom_cell, IPRINT_TIME_THRES2, flag_Becke_weights, &
+         flag_dft_d2
     use matrix_data, ONLY: Hrange, mat, rcut
     use maxima_module, ONLY: maxpartsproc
     use set_blipgrid_module, ONLY: set_blipgrid
@@ -780,8 +808,6 @@ contains
 
     ! Shared variables needed by get_H_matrix for now (!)
     logical :: fixed_potential
-
-    real(double) :: number_of_bands
 
     ! Local variables
     logical :: check
@@ -819,23 +845,38 @@ contains
     end if
     if(flag_Becke_weights) call build_Becke_weights
     ! Rebuild S, n(r) and hamiltonian based on new positions
-    call update_H(fixed_potential, number_of_bands)
+    call update_H (fixed_potential)
     call stop_print_timer(tmr_l_tmp1,"indices update",IPRINT_TIME_THRES2)
     return
   end subroutine updateIndices
 !!***
 
-  subroutine updateIndices2(matrix_update,fixed_potential, number_of_bands)
+
+!!****f* move_atoms/updateIndices2 *
+!! PURPOSE
+!! INPUTS
+!! OUTPUT
+!! RETURN VALUE
+!! AUTHOR
+!!   David Bowler
+!! CREATION DATE 
+!! MODIFICATION HISTORY
+!!   2011/12/09 L.Tong
+!!     Removed redundant parameter number_of_bands
+!! SOURCE
+!!
+  subroutine updateIndices2 (matrix_update, fixed_potential)
 
     ! Module usage
     use datatypes
     use mult_module, ONLY: fmmi, immi
-    use matrix_module, ONLY: allocate_matrix, deallocate_matrix, set_matrix_pointers2, matrix
+    use matrix_module, ONLY: allocate_matrix, deallocate_matrix, &
+         set_matrix_pointers2, matrix
     use group_module, ONLY: parts
     use cover_module, ONLY : BCS_parts, DCS_parts, ewald_CS, D2_CS
     use primary_module, ONLY : bundle
-    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, flag_Becke_weights, &
-                             flag_dft_d2
+    use global_module, ONLY: iprint_MD, x_atom_cell, y_atom_cell, &
+         z_atom_cell, flag_Becke_weights, flag_dft_d2
     use matrix_data, ONLY: Hrange, mat, rcut
     use maxima_module, ONLY: maxpartsproc
     use set_blipgrid_module, ONLY: set_blipgrid
@@ -856,8 +897,6 @@ contains
     ! Shared variables needed by get_H_matrix for now (!)
     logical :: fixed_potential
 
-    real(double) :: number_of_bands
-
     ! Local variables
     logical :: check
     integer :: i,k,stat
@@ -868,13 +907,16 @@ contains
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, DCS_parts, parts)
     if(.NOT.flag_old_ewald) call cover_update(x_atom_cell, y_atom_cell, &
          z_atom_cell, ewald_CS, parts)
-    if (flag_dft_d2) call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, D2_CS, parts)
+    if (flag_dft_d2) call cover_update(x_atom_cell, y_atom_cell, &
+         z_atom_cell, D2_CS, parts)
     check = .false.
-    ! If there's a new interaction of Hamiltonian range, then we REALLY need to rebuild the matrices etc
+    ! If there's a new interaction of Hamiltonian range, then we
+    ! REALLY need to rebuild the matrices etc
     call checkBonds(check,bundle,BCS_parts,mat(1,Hrange),maxpartsproc,rcut(Hrange))
     ! If one processor gets a new bond, they ALL need to redo the indices
     call gsum(check)
-    ! There's also an option for the user to force it via matrix_update (which could be set to every n iterations ?)
+    ! There's also an option for the user to force it via
+    ! matrix_update (which could be set to every n iterations ?)
     if(check.OR.matrix_update) then
        ! Deallocate all matrix storage
        ! finish blip-grid indexing
@@ -891,9 +933,10 @@ contains
     end if
     if(flag_Becke_weights) call build_Becke_weights
     ! Rebuild S, n(r) and hamiltonian based on new positions
-    call update_H(fixed_potential, number_of_bands)
+    call update_H (fixed_potential)
     return
   end subroutine updateIndices2
+!!*****
 
 
 ! --------------------------------------------------------------------
@@ -931,9 +974,13 @@ contains
 !!    Added the statement to recall sbrt: set_density_pcc for NSC cg calculations
 !!   2011/09/29 16:50 M. Arita
 !!    Dispersions are calculated with a new set of atoms
+!!   2011/11/28 L.Tong
+!!    Added spin polarisation
+!!   2011/12/09 L.Tong
+!!    Removed redundant parameter number_of_bands
 !!  SOURCE
 !!
-  subroutine update_H(fixed_potential, number_of_bands)
+  subroutine update_H (fixed_potential)
 
     use S_matrix_module, ONLY: get_S_matrix
     use H_matrix_module, ONLY: get_H_matrix
@@ -942,11 +989,14 @@ contains
     use ewald_module, ONLY: ewald, mikes_ewald, flag_old_ewald
     use pseudopotential_data, ONLY: init_pseudo
     use pseudo_tm_module, ONLY: set_tm_pseudo
-    use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT, core_correction
+    use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, &
+         STATE, ABINIT, core_correction
     use logicals
-    use global_module, ONLY: iprint_MD, flag_self_consistent, IPRINT_TIME_THRES2, flag_pcc_global, &
-                             flag_dft_d2
-    use density_module, ONLY: set_density, flag_no_atomic_densities, density, set_density_pcc
+    use global_module, ONLY: iprint_MD, flag_self_consistent, &
+         IPRINT_TIME_THRES2, flag_pcc_global, flag_dft_d2, &
+         flag_spin_polarisation
+    use density_module, ONLY: set_density, flag_no_atomic_densities, &
+         density, density_up, density_dn, set_density_pcc
     use GenComms, ONLY: cq_abort, inode, ionode
     use maxima_module, ONLY: maxngrid
     use timer_module
@@ -957,19 +1007,25 @@ contains
     ! Shared variables needed by get_H_matrix for now (!)
     logical :: fixed_potential
 
-    real(double) :: number_of_bands
-
     ! Local variables
-    real(double) :: tmp
+    real(double) :: tmp, tmp_dn
     type(cq_timer) :: tmr_l_tmp1
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     ! (1) Get S matrix (includes blip-to-grid transform)
-    call get_S_matrix(inode, ionode)
+    call get_S_matrix (inode, ionode)
 
     ! (2) get K matrix if O(N)
-    if(.NOT.diagon) then 
-       call LNV_matrix_multiply(tmp, tmp, doK, dontM1, dontM2, dontM3, dontM4, dontphi, dontE,0,0,0,0)
+    if(.NOT.diagon) then
+       if (flag_spin_polarisation) then
+          call LNV_matrix_multiply (tmp, tmp, doK, dontM1, dontM2, &
+               dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0, spin=1)
+          call LNV_matrix_multiply (tmp, tmp, doK, dontM1, dontM2, &
+               dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0, spin=2)
+       else
+          call LNV_matrix_multiply (tmp, tmp, doK, dontM1, dontM2, &
+               dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0)
+       end if
     end if
     ! (3) Find the Ewald energy for the initial set of atoms
     if(flag_old_ewald) then
@@ -982,7 +1038,7 @@ contains
     ! (5) Pseudopotentials: choose correct form
     select case(pseudo_type) 
     case(OLDPS)
-       call init_pseudo(number_of_bands, core_correction)
+       call init_pseudo (core_correction)
     case(SIESTA)
        call set_tm_pseudo
     case(ABINIT)
@@ -996,7 +1052,12 @@ contains
        call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
     end if
     ! (6) Now generate a new H matrix, including a new charge density
-    call get_H_matrix(.true., fixed_potential, tmp, density, maxngrid)
+    if (flag_spin_polarisation) then
+       call get_H_matrix (.true., fixed_potential, tmp, tmp_dn, &
+            density_up, density_dn, maxngrid)
+    else
+       call get_H_matrix (.true., fixed_potential, tmp, density, maxngrid)
+    end if
     call stop_print_timer(tmr_l_tmp1, "update_H", IPRINT_TIME_THRES2)
     return
   end subroutine update_H

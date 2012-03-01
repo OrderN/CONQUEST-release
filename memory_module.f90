@@ -17,6 +17,8 @@
 !!  MODIFICATION HISTORY
 !!   2008/02/06 08:24 dave
 !!    Changed for output to file not stdout
+!!   2011/12/01 L.Tong
+!!    Added type_cplx, and no_bytes associated to it
 !!  SOURCE
 !!
 module memory_module
@@ -30,9 +32,10 @@ module memory_module
   integer, allocatable, dimension(:) :: max_alloc_area, tot_alloc_area
   integer :: tot_alloc, max_alloc
 
-  integer, parameter, dimension(2) :: no_bytes = (/4,8/)
+  integer, parameter, dimension(3) :: no_bytes = (/4,8,16/)
   integer, parameter :: type_int = 1
   integer, parameter :: type_dbl = 2
+  integer, parameter :: type_cplx = 3
   
   interface reg_dealloc_mem
      module procedure reg_dealloc_mem_32
@@ -205,9 +208,11 @@ contains
 
     if(inode==ionode) then
        do i=1,n_areas
-          write(io_lun,'(2x,"Max mem use for area ",i4," is ",f10.3," ",a2)') i,real(max_alloc_area(i))*mem_conv,mem_units(m_units)
+          write(io_lun,'(2x,"Max mem use for area ",i4," is ",f10.3," ",a2)')&
+               i,real(max_alloc_area(i))*mem_conv,mem_units(m_units)
        end do
-       write(io_lun,'(2x,"Max total mem use is ",f10.3," ",a2)') real(max_alloc)*mem_conv,mem_units(m_units)
+       write(io_lun,'(2x,"Max total mem use is ",f10.3," ",a2)')&
+            real(max_alloc)*mem_conv,mem_units(m_units)
     end if
   end subroutine write_mem_use
 

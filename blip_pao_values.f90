@@ -40,7 +40,6 @@ module blip_pao_values
   ! RCS ident string for object file id
   ! -------------------------------------------------------
   character(len=80), private :: RCSid = "$Id$"
-
 !!***
 
 contains

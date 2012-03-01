@@ -1621,13 +1621,13 @@ contains
 !!    Removed blip module and variables passed to transform
 !!  SOURCE
 !!
-  subroutine inverse_blip_transform_new(myid,dsupport, data_dblip, n_prim)
+  subroutine inverse_blip_transform_new(myid, dsupport, data_dblip, n_prim)
 
     use datatypes
     use numbers
-    use primary_module, ONLY:bundle
+    use primary_module, ONLY: bundle
     use comm_array_module, ONLY: send_array
-    use set_blipgrid_module, ONLY:naba_blk_supp,comBG
+    use set_blipgrid_module, ONLY: naba_blk_supp, comBG
     use block_module,        ONLY: n_pts_in_block  ! = blocks%nm_group(:)
     use blip, ONLY: blip_info
     use GenComms, ONLY: my_barrier

@@ -19,7 +19,8 @@
 !!  CREATION DATE
 !!   2006/08/02 17:28 dave
 !!  MODIFICATION HISTORY
-!! 
+!!   2011/04/01 L.Tong
+!!    Added potential_dn for spin polarisaed calculations
 !!  SOURCE
 !!
 module potential_module
@@ -33,6 +34,9 @@ module potential_module
   character(len=80), private :: RCSid = "$Id$"
 
   real(double), allocatable, dimension(:) :: potential
+  ! for spin polarisation
+  real(double), allocatable, dimension(:) :: potential_up
+  real(double), allocatable, dimension(:) :: potential_dn
 
 !!***
 

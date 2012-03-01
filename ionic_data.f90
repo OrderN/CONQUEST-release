@@ -81,7 +81,8 @@ contains
 
     use datatypes
     use read_pao_info, ONLY : read_pao
-    use atomic_density, ONLY: read_atomic_density, make_atomic_density_from_paos, spline_atomic_density, &
+    use atomic_density, ONLY: read_atomic_density, &
+         make_atomic_density_from_paos, spline_atomic_density, &
          flag_atomic_density_from_pao, atomic_density_method
     use species_module, ONLY : n_species
     use GenComms, ONLY: cq_abort

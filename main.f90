@@ -51,6 +51,9 @@
 !!    Added use pseudopotential_common
 !!   2008/02/06 08:21 dave
 !!    Changed for output to file not stdout
+!!   2011/12/11 L.Tong
+!!    Removed redundant variable number_of_bands, use ne_in_cell
+!!    instead
 !!  SOURCE
 !!
 program Conquest
@@ -79,7 +82,7 @@ program Conquest
   use species_module
   use fft_module
   use GenComms
-  use density_module, ONLY: density
+  use density_module, ONLY: density, density_up, density_dn
   use control, ONLY: control_run
   use support_spec_format
   use ol_int_datatypes
@@ -87,8 +90,10 @@ program Conquest
   use ewald_module
   use DiagModule
   use ScalapackFormat
-  use atomic_density, ONLY: atomic_density_table, rcut_dens, flag_atomic_density_from_pao
-  use block_module, ONLY: nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
+  use atomic_density, ONLY: atomic_density_table, rcut_dens, &
+       flag_atomic_density_from_pao
+  use block_module, ONLY: nx_in_block,ny_in_block,nz_in_block, &
+       n_pts_in_block
   use memory_module
   use minimise
   use timer_stdclocks_module
@@ -104,7 +109,7 @@ program Conquest
 
   ! Energies and electrons
   real(double) :: total_energy
-  real(double) :: number_of_bands
+  ! real(double) :: number_of_bands
   
   ! Chemical potential
   real(double) :: mu
@@ -112,23 +117,25 @@ program Conquest
 
   fixed_potential = .false.
   ! identify what node we are on
-  call init_comms(myid,numprocs)
-!  if(inode==ionode) call banner
+  call init_comms (myid, numprocs)
+  !  if(inode==ionode) call banner
 
   ! Initialise reads in data and finds an initial, self-consistent Hamiltonian
-  call initialise(vary_mu, fixed_potential, number_of_bands, mu, total_energy)
-  if(inode==ionode.AND.iprint_gen>0) write(io_lun,'(4x,"Finished initialise")')
+  call initialise (vary_mu, fixed_potential, mu, total_energy)
+  if (inode == ionode .AND. iprint_gen > 0) &
+       write (io_lun, '(4x,"Finished initialise")')
 
   ! control does (at the moment) blip minimisation and simple MD
-  call control_run(fixed_potential, vary_mu, number_of_bands, mu, total_energy)
-  if(inode==ionode.AND.iprint_gen>0) write(io_lun,'(4x,"Finished control")')
+  call control_run (fixed_potential, vary_mu, mu, total_energy)
+  if (inode == ionode .AND. iprint_gen > 0) &
+       write (io_lun, '(4x,"Finished control")')
 
   call write_mem_use
   call print_time_report
   ! Wrap up
-  call my_barrier()
+  call my_barrier ()
   !call save_state( inode, ionode, mu, expected_reduction, n_run, output_file)
   !call save_blip(inode, ionode)
-  call end_comms()
+  call end_comms ()
 end program Conquest
 !!*****

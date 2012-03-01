@@ -574,13 +574,15 @@ second:   do
   subroutine read_mult(myid,parts,part_file)
 
     use datatypes
-    use global_module, ONLY: numprocs, iprint_init, id_glob, ni_in_cell, &
-         x_atom_cell, y_atom_cell, z_atom_cell, atom_coord, id_glob_inv, species_glob
+    use global_module, ONLY: numprocs, iprint_init, id_glob, &
+         ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell, &
+         atom_coord, id_glob_inv, species_glob
     use group_module, ONLY: make_cc2, part_method, PYTHON, HILBERT
     use basic_types
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use species_module, ONLY: species
-    use maxima_module, ONLY: maxpartsproc, maxatomspart, maxatomsproc, maxpartscell
+    use maxima_module, ONLY: maxpartsproc, maxatomspart, maxatomsproc,&
+         maxpartscell
     use construct_module, ONLY: init_group
 
     implicit none
@@ -2436,10 +2438,16 @@ hc2:    do
 !!  CREATION DATE
 !!   10:58, 15/10/2002 drb 
 !!  MODIFICATION HISTORY
-!!
+!!   2011/04/13 L.Tong
+!!     Added optional flag controlling whether to dump total charge
+!!     density (spin = 0) or the up/down components (spin = 1 and 2
+!!     respectively)
+!!   2011/12/19 L.Tong
+!!     Changed filename length from 10 to 20, to accommodate the added
+!!     length of spin dependent file names
 !!  SOURCE
 !!
-  subroutine dump_charge(density,size,inode)
+  subroutine dump_charge(density,size,inode,spin)
 
     use datatypes
     use block_module, ONLY: n_pts_in_block
@@ -2450,13 +2458,28 @@ hc2:    do
     ! Passed variables
     integer :: size, inode
     real(double), dimension(size) :: density
+    integer, optional :: spin
 
     ! Local variables
     integer :: lun, block, n_point, n_i, n
-    character(len=10) :: filename
+    character(len=20) :: filename
 
     ! Build a filename based on node number
-    call get_file_name('chden',numprocs,inode,filename)
+    if (present(spin)) then
+       select case (spin)
+       case (0)
+          call get_file_name ('chden', numprocs, inode, filename)
+       case (1)
+          call get_file_name ('chden_up', numprocs, inode, filename)
+       case (2)
+          call get_file_name ('chden_dn', numprocs, inode, filename)
+       case default
+          call cq_abort ("dump_charge: unrecagonised value for spin &
+               &output flag, must be 0, 1, or 2, but is ", spin)
+       end select
+    else
+       call get_file_name('chden',numprocs,inode,filename)
+    end if
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -2477,7 +2500,26 @@ hc2:    do
   end subroutine dump_charge
 !!***
 
-  subroutine dump_charge2(stub,density,size,inode)
+!!****f* 
+!! PURPOSE
+!! INPUTS
+!! OUTPUT
+!! RETURN VALUE
+!! AUTHOR
+!!   David Bowler
+!! CREATION DATE 
+!!   
+!! MODIFICATION HISTORY
+!!   2011/08/30 L.Tong
+!!     Added spin polarisation
+!!     - optional integer parameter spin: 0 = total, 1 = up, 2 = dn
+!!     - if spin is not present, then assume spin non-polarised
+!!       calculation
+!! SOURCE
+!!
+   
+!!***** io_module/dump_charge2
+  subroutine dump_charge2 (stub, density, size, inode, spin)
 
     use datatypes
     use block_module, ONLY: n_pts_in_block
@@ -2489,29 +2531,42 @@ hc2:    do
     integer :: size, inode
     real(double), dimension(size) :: density
     character(len=*) :: stub
+    integer, optional :: spin 
 
     ! Local variables
     integer :: lun, block, n_point, n_i, n
     character(len=18) :: filename
 
     ! Build a filename based on node number
-    call get_file_name(stub//'den',numprocs,inode,filename)
+    if (present (spin)) then
+       select case (spin)
+       case (0)
+          call get_file_name (stub//'den', numprocs, inode, filename)
+       case (1)
+          call get_file_name (stub//'den_up', numprocs, inode, filename)
+       case (2)
+          call get_file_name (stub//'den_dn', numprocs, inode, filename)
+       end select
+    else
+       call get_file_name (stub//'den', numprocs, inode, filename)
+    end if
     ! Open file
-    call io_assign(lun)
-    open(unit=lun,file=filename)
+    call io_assign (lun)
+    open (unit = lun, file = filename)
     ! Dump charge density
-    !do block=1, domain%groups_on_node
+    ! do block=1, domain%groups_on_node
     !   n_point = (block - 1) * n_pts_in_block
-    !   do n_i=1, naba_atm(supp)%no_of_atom(block)*NSF*n_pts_in_block, n_pts_in_block
+    !   do n_i=1, naba_atm(supp)%no_of_atom(block) * NSF * n_pts_in_block, &
+    !        n_pts_in_block
     !      do n=1, n_pts_in_block
     !         write(unit=lun,fmt='(f30.15)') density(n_point+n)
     !      end do
     !   end do
-    !end do
-    do n=1, domain%groups_on_node*n_pts_in_block
-       write(unit=lun,fmt='(g13.6)') density(n)
+    ! end do
+    do n=1, domain%groups_on_node * n_pts_in_block
+       write (unit=lun, fmt='(g13.6)') density(n)
     end do
-    call io_close(lun)
+    call io_close (lun)
     return
   end subroutine dump_charge2
 
@@ -2537,10 +2592,11 @@ hc2:    do
 !!  CREATION DATE
 !!   10:58, 15/10/2002 drb 
 !!  MODIFICATION HISTORY
-!!
+!!   2011/11/27 L.Tong
+!!     Added spin polarisation
 !!  SOURCE
 !!
-  subroutine grab_charge(density,size,inode)
+  subroutine grab_charge (density, size, inode, spin)
 
     use datatypes
     use block_module, ONLY: n_pts_in_block
@@ -2551,13 +2607,25 @@ hc2:    do
     ! Passed variables
     integer :: size, inode
     real(double), dimension(size) :: density
+    integer, optional :: spin
 
     ! Local variables
     integer :: lun, block, n_point, n_i, n
     character(len=10) :: filename
 
     ! Build a filename based on node number
-    call get_file_name('chden',numprocs,inode,filename)
+    if (present(spin)) then
+       select case (spin)
+       case (0)
+          call get_file_name ('chden', numprocs, inode, filename)
+       case (1)
+          call get_file_name ('chden_up', numprocs, inode, filename)
+       case (2)
+          call get_file_name ('chden_down', numprocs, inode, filename)
+       end select
+    else
+       call get_file_name ('chden', numprocs, inode, filename)
+    end if
     ! Open file
     call io_assign(lun)
     open(unit=lun,file=filename)
@@ -2620,7 +2688,7 @@ hc2:    do
     ! Local variables
     integer :: lun, element, nf1, nf2,len
     integer :: np, ni, iprim,i, jsf, neigh, ist, gcspart,isf, Ah, globno
-    character(len=15) :: filename
+    character(len=20) :: filename
 
     ! Build a filename based on node number
     call get_file_name(stub//'matrix',numprocs,inode,filename)
@@ -3468,7 +3536,7 @@ hc2:    do
 !!
 !!  SOURCE
 !!
-  subroutine get_file_name(fileroot,numprocs,inode,filename)
+  subroutine get_file_name (fileroot, numprocs, inode, filename)
 
     use datatypes
 
@@ -3488,16 +3556,20 @@ hc2:    do
     integer :: padzeros
     character(len=maxlen) :: num
 
-    if(LEN_TRIM(fileroot)+1 > maxlen)                         call cq_abort('get_file_name: error : string overflow')
-    filename=TRIM(fileroot)//'.'
-    padzeros=MAX(3,FLOOR(1.0+LOG10(REAL(numprocs,kind=double))))-FLOOR(1.0+LOG10(REAL(inode,kind=double)))
-    write(num,'(i80)') inode
-    num=ADJUSTL(num)
-    if(LEN_TRIM(fileroot)+padzeros+LEN_TRIM(num)+1 > maxlen)  call cq_abort('get_file_name: error : string overflow')
-    do i=1,padzeros
-      filename=TRIM(filename)//'0'
+    if (LEN_TRIM (fileroot) + 1 > maxlen) &
+         call cq_abort('get_file_name: error : string overflow')
+    filename = TRIM (fileroot)//'.'
+    padzeros = MAX (3, &
+         FLOOR (1.0 + LOG10 (REAL (numprocs, kind=double)))) - &
+         FLOOR (1.0 + LOG10(REAL (inode, kind=double)))
+    write (num,'(i80)') inode
+    num = ADJUSTL (num)
+    if (LEN_TRIM(fileroot) + padzeros + LEN_TRIM (num) + 1 > maxlen) &
+         call cq_abort ('get_file_name: error : string overflow')
+    do i = 1, padzeros
+      filename = TRIM (filename)//'0'
     end do
-    filename=TRIM(filename)//num
+    filename = TRIM (filename)//num
   end subroutine get_file_name
 !!***
 

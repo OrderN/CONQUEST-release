@@ -82,20 +82,26 @@ contains
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
 !!   2007/08/16 15:31 dave
-!!    Changed output format for energy, added Free Energy for smeared electron distribution
-!!    and Gillan E-0.5*TS kT=0 extrapolation (see J. Phys.:Condens. Matter 1, 689 (1989)
+!!    Changed output format for energy, added Free Energy for smeared
+!!    electron distribution and Gillan E-0.5*TS kT=0 extrapolation
+!!    (see J. Phys.:Condens. Matter 1, 689 (1989)
+!!   2011/08/29 L.Tong
+!!    Added spin polarisation
 !!   2011/08/02 13:52 dave
 !!    Changes for cDFT
 !!  SOURCE
 !!
-  subroutine get_energy(total_energy,printDFT)
+  subroutine get_energy (total_energy, printDFT)
 
     use datatypes
     use numbers
     use units
-    use mult_module, ONLY: matrix_product_trace, matH, matK, matKE, matNL
+    use mult_module, ONLY: matrix_product_trace, matH, matH_dn, matK,&
+         & matK_dn, matKE, matNL
     use GenComms, ONLY: myid
-    use global_module, ONLY: iprint_gen, flag_dft_d2, flag_SCconverged_D2, flag_self_consistent, flag_perform_cdft
+    use global_module, ONLY: iprint_gen, flag_spin_polarisation,&
+         & flag_dft_d2, flag_SCconverged_D2, flag_self_consistent,&
+         & flag_perform_cdft
     use ewald_module, ONLY: ewald_energy
     use pseudopotential_common, ONLY: core_correction  
     use DFT_D2, ONLY: disp_energy
@@ -129,27 +135,49 @@ contains
     endif
     
     ! Find energies
-    nl_energy = two*matrix_product_trace(matK,matNL)
-    kinetic_energy = matrix_product_trace(matK,matKE)
-    band_energy = two*matrix_product_trace(matK,matH)
-    total_energy = band_energy + delta_E_hartree + delta_E_xc + ewald_energy + core_correction
-    if(flag_perform_cdft) total_energy = total_energy + cdft_energy
+    if (flag_spin_polarisation) then
+       nl_energy = matrix_product_trace (matK, matNL)
+       nl_energy = nl_energy + matrix_product_trace (matK_dn, matNL)
+       band_energy = matrix_product_trace (matK, matH)
+       band_energy = band_energy + matrix_product_trace (matK_dn, matH_dn)
+       kinetic_energy = half * matrix_product_trace (matK, matKE)
+       kinetic_energy = kinetic_energy&
+            & + half * matrix_product_trace (matK_dn, matKE)
+    else
+       nl_energy = two*matrix_product_trace(matK,matNL)
+       band_energy = two*matrix_product_trace(matK,matH)
+       ! note that matKE is < phi_i | - grad^2 | phi_j >
+       kinetic_energy = matrix_product_trace (matK, matKE)
+    end if
+    total_energy = band_energy + delta_E_hartree + delta_E_xc +&
+         & ewald_energy + core_correction
+    if (flag_perform_cdft) total_energy = total_energy + cdft_energy
     ! for DFT-D2
     if (flag_dft_d2) total_energy = total_energy + disp_energy
     ! Write out data
     if(myid==0) then
        if(print_Harris) then
           !if(iprint_gen>=1) write(io_lun,2) electrons
-          if(iprint_gen>=1) write(io_lun,1) en_conv*band_energy, en_units(energy_units)
-          if(iprint_gen>=1) write(io_lun,3) en_conv*hartree_energy, en_units(energy_units)
-          if(iprint_gen>=1) write(io_lun,4) en_conv*xc_energy, en_units(energy_units)
-          if(iprint_gen>=1) write(io_lun,5) en_conv*local_ps_energy, en_units(energy_units)
-          if(iprint_gen>=1) write(io_lun,6) en_conv*core_correction, en_units(energy_units)
-          if(iprint_gen>=1) write(io_lun,7) en_conv*nl_energy, en_units(energy_units)
-          if(iprint_gen>=1) write(io_lun,8) en_conv*kinetic_energy, en_units(energy_units)
-          if(iprint_gen>=1) write(io_lun,9) en_conv*ewald_energy, en_units(energy_units)
-          if(iprint_gen>=1) write(io_lun,11) en_conv*delta_E_hartree, en_units(energy_units)
-          if(iprint_gen>=1) write(io_lun,12) en_conv*delta_E_xc, en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,1) en_conv*band_energy, &
+               en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,3) en_conv*hartree_energy, &
+               en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,4) en_conv*xc_energy, &
+               en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,5) en_conv*local_ps_energy, &
+               en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,6) en_conv*core_correction, &
+               en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,7) en_conv*nl_energy, &
+               en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,8) en_conv*kinetic_energy, &
+               en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,9) en_conv*ewald_energy, &
+               en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,11) en_conv*delta_E_hartree, &
+               en_units(energy_units)
+          if(iprint_gen>=1) write(io_lun,12) en_conv*delta_E_xc, &
+               en_units(energy_units)
           if(iprint_gen>=1.AND.flag_perform_cdft) &
                write(io_lun,fmt='(10x,"cDFT Energy, 2Tr[K.W]            : ",f25.15," ",a2)') &
                en_conv*cdft_energy,en_units(energy_units)
@@ -163,9 +191,10 @@ contains
                    if(entropy < zero) write(io_lun,*) ' WARNING !!!!    entropy < 0??? ', entropy
                    if(iprint_gen>=0) write(io_lun,14) en_conv*(total_energy- half*entropy), en_units(energy_units)
                 case (1) ! Methfessel-Paxton smearing
-                   if(iprint_gen>=0) write(io_lun,16) &
-                        en_conv*(total_energy - (real(MPOrder+1,double)/real(MPOrder+2,double))*entropy), &
-                        en_units(energy_units)
+                   if(iprint_gen>=0) write(io_lun,16) en_conv&
+                        &*(total_energy - (real(MPOrder+1,double)&
+                        &/real(MPOrder+2,double))*entropy),&
+                        & en_units(energy_units)
                 end select
              else 
                 if(iprint_gen>=0) write(io_lun,14) en_conv*(total_energy- half*entropy), en_units(energy_units)

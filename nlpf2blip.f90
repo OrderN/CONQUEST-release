@@ -35,7 +35,7 @@ contains
 
     use datatypes
     use numbers
-    use blip, ONLY: blip_info, blip_FFT_size, blip_FFT_off
+    use blip!, ONLY: blip_data, blip_info, blip_FFT_size, blip_FFT_off
     use dimens, ONLY : RadiusSupport
     use GenComms, ONLY : cq_abort, gcopy, myid, my_barrier, inode, ionode
     use global_module, ONLY : iprint_basis
@@ -657,7 +657,21 @@ contains
     return
   end subroutine get_dSP
 
-  subroutine get_blipP(blip_grad, nlpf_co, dataU, ip, j_in_halo, dx, dy, dz, speci, specj)
+
+!!****f* 
+!! PURPOSE
+!! INPUTS
+!! OUTPUT
+!! RETURN VALUE
+!! AUTHOR
+!!   David Bowler
+!! CREATION DATE 
+!!   2012/02/27
+!! MODIFICATION HISTORY
+!! SOURCE
+!!  
+  subroutine get_blipP(blip_grad, nlpf_co, dataU, ip, j_in_halo, dx, &
+                       dy, dz, speci, specj)
 
     use datatypes
     use numbers
@@ -914,6 +928,7 @@ contains
 
     return
   end subroutine get_blipP
+!!*****
 
   subroutine do_blip_integrals(FAC,dx, dy, dz)
 

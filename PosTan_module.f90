@@ -51,7 +51,6 @@ module PosTan
 
   ! RCS tag for object file identification
   character(len=80), save, private :: RCSid = "$Id$"
-
 !!***
 
 contains

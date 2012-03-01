@@ -15,8 +15,8 @@
 !!   Also defines parameters relating to the various matrix
 !!   multiplications done
 !!  USES
-!!   basic_types, common, datatypes, GenBlas, GenComms, matrix_comms_module, 
-!!   matrix_data, matrix_elements_module, matrix_module, maxima_module, 
+!!   basic_types, common, datatypes, GenBlas, GenComms, matrix_comms_module,
+!!   matrix_data, matrix_elements_module, matrix_module, maxima_module,
 !!   mult_init_module, multiply_module, numbers, primary_module
 !!  AUTHOR
 !!   D.R.Bowler
@@ -27,20 +27,20 @@
 !!    Added ROBODoc header and RCS Id and Log tags, and changed
 !!    throughout to use GenComms
 !!   30/05/2002 dave
-!!    Made all long-range (LH or more) matrices allocatable in main_matrix_multiply and 
+!!    Made all long-range (LH or more) matrices allocatable in main_matrix_multiply and
 !!    improved headers slightly.  Also added RCS static object.
-!!   12:29, 04/02/2003 drb 
+!!   12:29, 04/02/2003 drb
 !!    Added Trace
-!!   13:51, 10/02/2003 drb 
+!!   13:51, 10/02/2003 drb
 !!    Added end_ops and fmmi to deallocate at the end of a run
-!!   14:45, 26/02/2003 drb 
+!!   14:45, 26/02/2003 drb
 !!    Added implicit none
-!!   10:42, 06/03/2003 drb 
+!!   10:42, 06/03/2003 drb
 !!    Changed prim to bundle in main_matrix_multiply (ifc problem with aliasing)
-!!   14:28, 16/11/2004 dave 
+!!   14:28, 16/11/2004 dave
 !!    Removed TS_TS_T multiply (problematic !)
-!!   10:58, 13/02/2006 drb 
-!!    Complete new style of matrix manipulation which hides matrix data from rest of code: new routines, 
+!!   10:58, 13/02/2006 drb
+!!    Complete new style of matrix manipulation which hides matrix data from rest of code: new routines,
 !!    variables etc.
 !!   2008/02/06 08:25 dave
 !!    Changed for output to file not stdout
@@ -52,6 +52,12 @@
 !!    Change immi so that the multiplication initialisation is done by a subroutine and call it many times
 !!   2008/05/22 ast
 !!    Added timers
+!!   2011/03/28 L.Tong
+!!    Added matH_dn, matdH_dn, matL_dn, matK_dn, matphi_dn
+!!   2011/09/19 L.Tong
+!!    Added matM4_dn, matM12_dn
+!!   2011/11/24 L.Tong
+!!    Added matU_dn, matUT_dn
 !!  SOURCE
 !!
 module mult_module
@@ -96,7 +102,7 @@ module mult_module
   integer(integ), parameter :: S_trans   = 1
   integer(integ), parameter :: L_trans   = 2
   integer(integ), parameter :: T_trans   = 3
-  integer(integ), parameter :: SP_trans  = 4 
+  integer(integ), parameter :: SP_trans  = 4
   integer(integ), parameter :: LS_trans  = 5
   integer(integ), parameter :: LH_trans  = 6
   integer(integ), parameter :: LSL_trans = 7
@@ -111,9 +117,13 @@ module mult_module
 
   type(matrix_pointer), allocatable, dimension(:) :: mat_p
   integer :: max_matrices, current_matrix
-  integer, public :: matS, matH, matL, matT, matTtran, matLS, matSL, matSC, matCS, matK, matM4, matU, matphi, matM12, &
-       matUT, matKE, matNL, matdH, matdS
-  integer, allocatable, dimension(:), public :: matrix_index, trans_index
+  integer, public :: matS, matH, matH_dn, matL, matL_dn, matT, &
+       matTtran, matLS, matL_dnS, matSL, matSL_dn, matSC, matCS, matK,&
+       matK_dn, matM4, matM4_dn, matU, matU_dn, matphi, matphi_dn, &
+       matM12, matM12_dn, matUT, matUT_dn, matKE, matNL, matdH, &
+       matdH_dn, matdS
+  integer, allocatable, dimension(:), public :: matrix_index, &
+       trans_index
 
   ! -------------------------------------------------------
   ! RCS ident string for object file id
@@ -124,14 +134,14 @@ contains
 
 !!****f* mult_module/immi *
 !!
-!!  NAME 
+!!  NAME
 !!   immi - initialise matrix multiplication
 !!  USAGE
-!!   immi(Partition structure, Primary set structure, 
+!!   immi(Partition structure, Primary set structure,
 !!    Covering set structure, processor id)
 !!   immi(parts,prim,gcs,myid)
 !!  PURPOSE
-!!   Initialises all the indexing needed to perform 
+!!   Initialises all the indexing needed to perform
 !!   matrix multiplication within Conquest
 !!  INPUTS
 !!   type(group_set) :: parts
@@ -192,7 +202,7 @@ contains
           matrix_index(i) = 0
           trans_index(i) = 0
        end do
-    end if    
+    end if
     if(.not.allocated(mat)) then
        call start_timer(tmr_std_allocation)
        allocate(mat(maxpartsproc,mx_matrices), STAT=stat)
@@ -263,7 +273,7 @@ contains
     mat(1:prim%groups_on_node,PAOPrange)%sf2_type = nlpf
     call matrix_ini(parts,prim,gcs,mat(1:prim%groups_on_node,PAOPrange), &
          PAOPmatind, rcut(SPrange),myid-1,halo(PAOPrange),ltrans(PAOPrange))
-    call associate_matrices 
+    call associate_matrices
     call find_neighbour_procs(parts,halo(max_range))
     call start_timer(tmr_std_allocation)
     allocate(pairs(maxnabaprocs+1,mx_trans),STAT=stat)
@@ -293,9 +303,9 @@ contains
     ! Somewhere, we need to set mult_type 1/2 - probably here !
     ! 1-5
     ! (a) We need to arrange a global transpose before a type 2 mult
-    ! (b) mult_wrap is passed A,B,C  - and send mat_mult C,B,A for a 
+    ! (b) mult_wrap is passed A,B,C  - and send mat_mult C,B,A for a
     !     type 2 mult
-    ! (c) HotInvS_mm does TS_T_S as type two, and sends mult_wrap 
+    ! (c) HotInvS_mm does TS_T_S as type two, and sends mult_wrap
     !     TS, T, S
     mult(H_SP_SP)%mult_type = 2
     mult(H_SP_SP)%amat => mat(1:prim%groups_on_node,SPrange)
@@ -641,7 +651,7 @@ contains
 
 !!****f* mult_module/fmmi *
 !!
-!!  NAME 
+!!  NAME
 !!   fmmi - finish matrix multiplication indexing
 !!  USAGE
 !!   fmmi
@@ -649,10 +659,10 @@ contains
 !!   Deallocates all memory associated with matrix multiplication
 !!   indexing
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -660,7 +670,7 @@ contains
 !!  MODIFICATION HISTORY
 !!   10/08/2001 dave
 !!    Added nullify calls - probably a little fussy, but can't harm
-!!   14:57, 16/11/2004 dave 
+!!   14:57, 16/11/2004 dave
 !!    Removed TS_TS_T and S_TS_T - not needed
 !!   2008/05/22 ast
 !!    Added timers
@@ -832,17 +842,17 @@ contains
 
 !!****f* mult_module/LNV_matrix_multiply *
 !!
-!!  NAME 
+!!  NAME
 !!   main_matrix_multiply
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Performs most matrix multiplications
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   CMG/EHH/IJB/D.R.Bowler
 !!  CREATION DATE
@@ -852,16 +862,36 @@ contains
 !!    Added ROBODoc header and changed to use GenComms
 !!   30/05/2002 dave
 !!    Made all long-range (LH or more) matrices allocatable
-!!   10:43, 06/03/2003 drb 
+!!   10:43, 06/03/2003 drb
 !!    Removed alias of prim to bundle (ifc problem)
-!!   16:28, 10/05/2005 dave 
-!!    Added timing calls and a LOCAL iprint_mult to activate them: we can make this global later
+!!   16:28, 10/05/2005 dave
+!!    Added timing calls and a LOCAL iprint_mult to activate them: we
+!!    can make this global later
 !!   2006/10/19 16:04 dave
 !!    Changed iprint_mult to iprint_mat (global variable)
+!!   Thursday, 2011/07/28  L.Tong
+!!    Adding spin dependent calculations, adding an optional parameter
+!!    "spin" to control which spin channel is to be calculated
+!!    If "spin" parameter is present then the subroutine assumes spin
+!!    polarised calculation and only calculates the relevant
+!!    quantities for the particular spin channel indicated by "spin".
+!!    If "spin" is not present then the subroutine assumes spin
+!!    non-polarised calculation and calculates the relevant quantities
+!!    (with exception to M12) for the TOTAL electron density, which
+!!    has factor of two.
+!!   Wednesday, 2011/08/03 L.Tong
+!!    Fixed the bug caused by the conditional if (present (spin)
+!!    .and. spin == 2), on some compilers which does not short circuit
+!!    and evaluates both sides of .and. and when the subroutine is
+!!    called without the optional spin parameter, then spin == 2 gives
+!!    a segmentation fault. Fixed this by introducing logical variable
+!!    do_spin_down, we work out this variable correctly first, and
+!!    then apply conditional on it in place of the previous present
+!!    (spin) .and. spin == 2 conditional.
 !!  SOURCE
 !!
-  subroutine LNV_matrix_multiply(electrons, energy, doK, doM1, doM2, doM3, doM4, dophi, doE, mat_M12, &
-       mat_M3, mat_M4, mat_phi)
+  subroutine LNV_matrix_multiply (electrons, energy, doK, doM1, doM2, &
+       doM3, doM4, dophi, doE, mat_M12, mat_M3, mat_M4, mat_phi, spin)
 
     use numbers
     use datatypes
@@ -873,289 +903,455 @@ contains
     implicit none
 
     ! Passed variables
-    real(double) :: electrons,energy
+    real(double) :: electrons, energy
     integer :: myid
     integer :: mat_M12, mat_M3, mat_M4, mat_phi
     logical :: doK, doM1, doM2, doM3, doM4, dophi, doE
+    integer, optional :: spin ! 1 = spin up and 2 = spin down
 
     ! This routine is basically calls to matrix operations,
     !   so these are timed within the routines themselves
 
     ! Local variables
     real(double) :: electrons_1, electrons_2, t0, t1
-    integer :: matLH, matHL, matLHL, matHLS, matSLH, matA, matSLS, matLSL, matLHLSL, matLSLHL, matB, matC, matSLSLS, matLSLSL
+    integer :: matLH, matHL, matLHL, matHLS, matSLH, matA, matSLS, &
+         matLSL, matLHLSL, matLSLHL, matB, matC, matSLSLS, matLSLSL
     type(cq_timer) :: tmr_l_tmp1
+    logical :: do_spin_down
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
-    if((doM1.OR.doM2).AND.mat_M12==0) call cq_abort("LNVmm needs proper matrix for M12")
-    if(doM3.AND.mat_M3==0) call cq_abort("LNVmm needs proper matrix for M3")
-    if(doM4.AND.mat_M4==0) call cq_abort("LNVmm needs proper matrix for M4")
-    if(dophi.AND.mat_phi==0) call cq_abort("LNVmm needs proper matrix for phi")
-     myid = inode-1
-     if(iprint_mat>3) t0 = mtime()
-     call matrix_product(matL, matS, matLS, mult(L_S_LS))
-     if(iprint_mat>3) then
-        t1 = mtime()
-        if(inode==ionode) write(io_lun,*) 'LS time: ',t1-t0
-        t0 = t1
-     end if
-     call matrix_transpose(matLS, matSL)
-     if(iprint_mat>3) then
-        t1 = mtime()
-        if(inode==ionode) write(io_lun,*) 'LS trans time: ',t1-t0
-        t0 = t1
-     end if
-     if(doM1.OR.doM2.OR.doM3) then
-        matLH = allocate_temp_matrix(LHrange,LH_trans)
-        matHL = allocate_temp_matrix(LHrange,LH_trans)
-        if(iprint_mat>3) then
+
+    ! set the control variable do_spin_down
+    do_spin_down = .false.
+    if (present (spin)) then
+       if (spin == 2)  do_spin_down = .true.
+    end if
+
+    if ((doM1 .OR. doM2) .AND. mat_M12 == 0) &
+         call cq_abort("LNVmm needs proper matrix for M12")
+    if (doM3 .AND. mat_M3 == 0) &
+         call cq_abort("LNVmm needs proper matrix for M3")
+    if (doM4 .AND. mat_M4 == 0) &
+         call cq_abort("LNVmm needs proper matrix for M4")
+    if (dophi .AND. mat_phi == 0) &
+         call cq_abort("LNVmm needs proper matrix for phi")
+     myid = inode - 1
+     if (iprint_mat > 3) t0 = mtime()
+     if (do_spin_down) then
+        call matrix_product(matL_dn, matS, matL_dnS, mult(L_S_LS))
+        if (iprint_mat>3) then
            t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'LH alloc time: ',t1-t0
+           if (inode == ionode) write (io_lun, *) 'LS time: ', t1 - t0
            t0 = t1
         end if
-        call matrix_product(matL,matH,matLH,mult(L_H_LH))
-        if(iprint_mat>3) then
+        call matrix_transpose(matL_dnS, matSL_dn)
+        if (iprint_mat > 3) then
            t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'LH time: ',t1-t0
+           if (inode == ionode) write (io_lun, *) 'LS trans time: ', t1 - t0
            t0 = t1
         end if
+     else
+        call matrix_product(matL, matS, matLS, mult(L_S_LS))
+        if (iprint_mat > 3) then
+           t1 = mtime()
+           if (inode == ionode) write (io_lun, *) 'LS time: ', t1 - t0
+           t0 = t1
+        end if
+        call matrix_transpose(matLS, matSL)
+        if (iprint_mat > 3) then
+           t1 = mtime()
+           if (inode == ionode) write (io_lun, *) 'LS trans time: ', t1 - t0
+           t0 = t1
+        end if
+     end if
+     if (doM1 .OR. doM2 .OR. doM3) then
+        matLH = allocate_temp_matrix(LHrange, LH_trans)
+        matHL = allocate_temp_matrix(LHrange, LH_trans)
+        if (iprint_mat > 3) then
+           t1 = mtime()
+           if (inode == ionode) write (io_lun, *) 'LH alloc time: ', t1 - t0
+           t0 = t1
+        end if
+        if (do_spin_down) then
+           call matrix_product(matL_dn, matH_dn, matLH, mult(L_H_LH))
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'LH time: ', t1 - t0
+              t0 = t1
+           end if
+        else
+           call matrix_product(matL, matH, matLH, mult(L_H_LH))
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'LH time: ', t1 - t0
+              t0 = t1
+           end if
+        endif
         call matrix_transpose(matLH, matHL)
-        if(iprint_mat>3) then
+        if (iprint_mat > 3) then
            t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'LH trans time: ',t1-t0
+           if (inode == ionode) write (io_lun, *) 'LH trans time: ', t1 - t0
            t0 = t1
         end if
-     endif
-     if(doM1.OR.doM2) then ! This is type 1 or 2 depending on H
+     end if
+     if (doM1 .OR. doM2) then ! This is type 1 or 2 depending on H
         matLHL = allocate_temp_matrix(SLSrange, 0)
-        call matrix_product(matLH, matL, matLHL,mult(LH_L_SLS))
+        if (do_spin_down) then
+           call matrix_product(matLH, matL_dn, matLHL, mult(LH_L_SLS))
+        else
+           call matrix_product(matLH, matL, matLHL, mult(LH_L_SLS))
+        end if
      endif
-     if(doM2) then
+     if (doM2) then
         matLHLSL = allocate_temp_matrix(Srange, S_trans)
         matLSLHL = allocate_temp_matrix(Srange, S_trans)
-        call matrix_product(matLHL, matLS, matLHLSL, mult(LHL_SL_S))
-        call matrix_transpose(matLHLSL, matLSLHL)
+        if (do_spin_down) then
+           call matrix_product(matLHL, matL_dnS, matLHLSL, mult(LHL_SL_S))
+        else
+           call matrix_product(matLHL, matLS, matLHLSL, mult(LHL_SL_S))
+        end if
+        call matrix_transpose (matLHLSL, matLSLHL)
      endif
-     if(doM3) then
-        if(iprint_mat>3) t0 = mtime()
-        matHLS = allocate_temp_matrix(LSLrange,LSL_trans)
-        matSLH = allocate_temp_matrix(LSLrange,LSL_trans)
-        matA = allocate_temp_matrix(LSLrange,LSL_trans)
-        matB = allocate_temp_matrix(Lrange,L_trans)
-        matC = allocate_temp_matrix(Lrange,L_trans)
-        if(iprint_mat>3) then
+     if (doM3) then
+        if (iprint_mat > 3) t0 = mtime()
+        matHLS = allocate_temp_matrix(LSLrange, LSL_trans)
+        matSLH = allocate_temp_matrix(LSLrange, LSL_trans)
+        matA = allocate_temp_matrix(LSLrange, LSL_trans)
+        matB = allocate_temp_matrix(Lrange, L_trans)
+        matC = allocate_temp_matrix(Lrange, L_trans)
+        if (iprint_mat > 3) then
            t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'Alloc time: ',t1-t0
+           if (inode == ionode) write (io_lun, *) 'Alloc time: ', t1 - t0
            t0 = t1
         end if
         call matrix_product(matHL, matS, matHLS, mult(HL_S_LSL))
-        if(iprint_mat>3) then
+        if (iprint_mat > 3) then
            t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'HLS time: ',t1-t0
+           if (inode == ionode) write (io_lun, *) 'HLS time: ', t1 - t0
+           t0 = t1
+        end if
+        call matrix_product(matHL, matS, matHLS, mult(HL_S_LSL))
+        if (iprint_mat > 3) then
+           t1 = mtime()
+           if (inode == ionode) write (io_lun, *) 'HLS time: ', t1 - t0
            t0 = t1
         end if
         call matrix_transpose(matHLS, matSLH)
-        if(iprint_mat>3) then
+        if (iprint_mat > 3) then
            t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'HLS trans time: ',t1-t0
+           if (inode == ionode) write (io_lun, *) 'HLS trans time: ', t1 - t0
            t0 = t1
         end if
-        call matrix_sum(zero,matA,two,matHLS)
-        call matrix_sum(one,matA,one,matSLH)
-        if(iprint_mat>3) then
+        call matrix_sum(zero, matA, two, matHLS)
+        call matrix_sum(one, matA, one, matSLH)
+        if (iprint_mat > 3) then
            t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'A time: ',t1-t0
+           if (inode == ionode) write (io_lun, *) 'A time: ', t1 - t0
            t0 = t1
         end if
-        call matrix_product(matA, matSL, matB, mult(HLS_LS_L))
-        if(iprint_mat>3) then
-           t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'B time: ',t1-t0
-           t0 = t1
+        if (do_spin_down) then
+           call matrix_product(matA, matSL_dn, matB, mult(HLS_LS_L))
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'B time: ', t1 - t0
+              t0 = t1
+           end if
+        else
+           call matrix_product(matA, matSL, matB, mult(HLS_LS_L))
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'B time: ', t1 - t0
+              t0 = t1
+           end if
         end if
         call matrix_transpose(matB, matC)
-        if(iprint_mat>3) then
+        if (iprint_mat > 3) then
            t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'B trans time: ',t1-t0
+           if (inode == ionode) write (io_lun, *) 'B trans time: ', t1 - t0
            t0 = t1
         end if
      endif
-     if(dophi) then
-        if(iprint_mat>3) t0 = mtime()
-        matSLS = allocate_temp_matrix(SLSrange,0)
-        matSLSLS = allocate_temp_matrix(Lrange,0)
-        if(iprint_mat>3) then
+     if (dophi) then
+        if (iprint_mat > 3) t0 = mtime()
+        matSLS = allocate_temp_matrix(SLSrange, 0)
+        matSLSLS = allocate_temp_matrix(Lrange, 0)
+        if (iprint_mat > 3) then
            t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'SLS alloc time: ',t1-t0
+           if (inode == ionode) write (io_lun, *) 'SLS alloc time: ', t1 - t0
            t0 = t1
         end if
-        call matrix_product(matSL,matS,matSLS,mult(SL_S_SLS))
-        if(iprint_mat>3) then
-           t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'SLS time: ',t1-t0
-           t0 = t1
+        if (do_spin_down) then
+           call matrix_product(matSL_dn, matS, matSLS, mult(SL_S_SLS))
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'SLS time: ', t1 - t0
+              t0 = t1
+           end if
+           call matrix_product(matSLS, matSL_dn, matSLSLS, mult(SLS_LS_L))
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'SLSLS time: ', t1 - t0
+              t0 = t1
+           end if
+        else
+           call matrix_product(matSL, matS, matSLS, mult(SL_S_SLS))
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'SLS time: ', t1 - t0
+              t0 = t1
+           end if
+           call matrix_product(matSLS, matSL, matSLSLS, mult(SLS_LS_L))
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'SLSLS time: ', t1 - t0
+              t0 = t1
+           end if
         end if
-        call matrix_product(matSLS,matSL,matSLSLS,mult(SLS_LS_L))
-        if(iprint_mat>3) then
-           t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'SLSLS time: ',t1-t0
-           t0 = t1
-        end if
-     endif
-     if(doK.OR.doE.OR.doM4) then
-        if(iprint_mat>3) t0 = mtime()
-        matLSL = allocate_temp_matrix(LSLrange,0)
-        matLSLSL = allocate_temp_matrix(Hrange,0)
-        if(iprint_mat>3) then
-           t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'LSL alloc time: ',t1-t0
-           t0 = t1
-        end if
-        call matrix_product(matLS,matL,matLSL,mult(LS_L_LSL))
-        if(iprint_mat>3) then
-           t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'LSL time: ',t1-t0
-           t0 = t1
-        end if
-        call matrix_product(matLSL,matLS,matLSLSL,mult(LSL_SL_H))
-        if(iprint_mat>3) then
-           t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'LSLSL time: ',t1-t0
-           t0 = t1
-        end if
-     endif
-     if(doK.OR.doE) then
-        call matrix_sum(zero,matK,three,matLSL)
-        call matrix_sum(one,matK,-two,matLSLSL)
-        if(iprint_mat>3) then
-           t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'K time: ',t1-t0
-           t0 = t1
-        end if
-     endif
-     if(doM4) then
-        call matrix_sum(zero,mat_M4,24.0_double,matLSL)
-        call matrix_sum(one,mat_M4,-24.0_double,matLSLSL)
      end if
-     if(doE) then
-        if(iprint_mat>3) t0 = mtime()
-        energy = two*matrix_product_trace(matH,matK)
-        if(iprint_mat>3) then
+     if (doK .OR. doE .OR. doM4) then
+        if (iprint_mat > 3) t0 = mtime()
+        matLSL = allocate_temp_matrix(LSLrange, 0)
+        matLSLSL = allocate_temp_matrix(Hrange, 0)
+        if (iprint_mat > 3) then
            t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'energy dot time: ',t1-t0
+           if (inode == ionode) write (io_lun, *) 'LSL alloc time: ', t1 - t0
+           t0 = t1
+        end if
+        if (do_spin_down) then
+           call matrix_product(matL_dnS, matL_dn, matLSL, mult(LS_L_LSL))
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'LSL time: ', t1 - t0
+              t0 = t1
+           end if
+           call matrix_product(matLSL, matL_dnS, matLSLSL, mult(LSL_SL_H))
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'LSLSL time: ', t1 - t0
+              t0 = t1
+           end if
+        else
+           call matrix_product(matLS, matL, matLSL, mult(LS_L_LSL))
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'LSL time: ', t1 - t0
+              t0 = t1
+           end if
+           call matrix_product(matLSL, matLS, matLSLSL, mult(LSL_SL_H))
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'LSLSL time: ', t1 - t0
+              t0 = t1
+           end if
+        end if
+     endif
+     if (doK .OR. doE) then
+        ! work out matK or matK_dn
+        if (do_spin_down) then
+           call matrix_sum(zero, matK_dn, three, matLSL)
+           call matrix_sum(one, matK_dn, -two, matLSLSL)
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'K time: ', t1 - t0
+              t0 = t1
+           end if
+        else
+           call matrix_sum(zero, matK, three, matLSL)
+           call matrix_sum(one, matK, -two, matLSLSL)
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'K time: ', t1 - t0
+              t0 = t1
+           end if
+        end if
+     endif
+     if (doM4) then
+        ! if spin parameter is present, means we are doing spin
+        ! polarised calculations, and we do not have the factor
+        ! of two used in spin non-polarised case.
+        if (present(spin)) then
+           call matrix_sum(zero, mat_M4, 12.0_double, matLSL)
+           call matrix_sum(one, mat_M4, -12.0_double, matLSLSL)
+        else
+           call matrix_sum(zero ,mat_M4, 24.0_double, matLSL)
+           call matrix_sum(one, mat_M4, -24.0_double, matLSLSL)
+        end if
+     end if
+     if (doE) then
+        if (iprint_mat > 3) t0 = mtime()
+        if (present(spin)) then
+           ! this is the energy for the individual spin channel
+           if (do_spin_down) then
+              energy = matrix_product_trace(matH_dn, matK_dn)
+           else
+              energy = matrix_product_trace(matH, matK)
+           end if
+        else
+           ! this is the total energy in spin non-polarised case
+           energy = two * matrix_product_trace(matH, matK)
+        end if
+        if (iprint_mat > 3) then
+           t1 = mtime()
+           if (inode == ionode) write (io_lun, *) 'energy dot time: ', t1 - t0
            t0 = t1
         end if
      endif
-     if(doM1.AND.doM2) then
-        call matrix_sum(zero,mat_M12,three,matLHL)
-        call matrix_sum(one,mat_M12,-two,matLHLSL)
-        call matrix_sum(one,mat_M12,-two,matLSLHL)
+     if (doM1 .AND. doM2) then
+        call matrix_sum(zero, mat_M12, three, matLHL)
+        call matrix_sum(one, mat_M12, -two, matLHLSL)
+        call matrix_sum(one, mat_M12, -two, matLSLHL)
      endif
-     if(doM3) then
-        if(iprint_mat>3) t0 = mtime()
-        call matrix_sum(zero,mat_M3,six,matHLS)
-        if(iprint_mat>3) then
-           t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'M3 time: ',t1-t0
-           t0 = t1
-        end if
-        call matrix_sum(one,mat_M3,six,matSLH)
-        if(iprint_mat>3) then
-           t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'M3 add time: ',t1-t0
-           t0 = t1
-        end if
-        call matrix_sum(one,mat_M3,-two,matB)
-        if(iprint_mat>3) then
-           t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'M3 axpy B time: ',t1-t0
-           t0 = t1
-        end if
-        call matrix_sum(one,mat_M3,-two,matC)
-        if(iprint_mat>3) then
-           t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'M3 axpy C time: ',t1-t0
-           t0 = t1
+     if (doM3) then
+        if (iprint_mat > 3) t0 = mtime()
+        if (present(spin)) then
+           call matrix_sum(zero, mat_M3, three, matHLS)
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'M3 time: ', t1 - t0
+              t0 = t1
+           end if
+           call matrix_sum(one, mat_M3, three, matSLH)
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'M3 add time: ', t1 - t0
+              t0 = t1
+           end if
+           call matrix_sum(one, mat_M3, -one, matB)
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'M3 axpy B time: ', t1 - t0
+              t0 = t1
+           end if
+           call matrix_sum(one, mat_M3, -one, matC)
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'M3 axpy C time: ', t1 - t0
+              t0 = t1
+           end if
+        else  ! spin non-polarised calculation
+           call matrix_sum(zero, mat_M3, six, matHLS)
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'M3 time: ', t1 - t0
+              t0 = t1
+           end if
+           call matrix_sum(one, mat_M3, six, matSLH)
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'M3 add time: ', t1 - t0
+              t0 = t1
+           end if
+           call matrix_sum(one, mat_M3, -two, matB)
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'M3 axpy B time: ', t1 - t0
+              t0 = t1
+           end if
+           call matrix_sum(one, mat_M3, -two, matC)
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'M3 axpy C time: ', t1 - t0
+              t0 = t1
+           end if
         end if
      endif
-     if(dophi) then
-        if(iprint_mat>3) t0 = mtime()
-        call matrix_sum(zero,mat_phi,one,matSLS)
-        if(iprint_mat>3) then
+     if (dophi) then
+        if (iprint_mat > 3) t0 = mtime()
+        call matrix_sum(zero, mat_phi, one, matSLS)
+        if (iprint_mat > 3) then
            t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'SLS prune time: ',t1-t0
+           if (inode == ionode) write (io_lun, *) 'SLS prune time: ', t1 - t0
            t0 = t1
         end if
-        electrons_1 = matrix_product_trace(matL,mat_phi)
-        electrons_2 = matrix_product_trace(matL,matSLSLS)
-        electrons = 6.0_double * electrons_1 - four * electrons_2
-        if(iprint_mat>3) then
-           t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'electrons dot time: ',t1-t0
-           t0 = t1
+        if (do_spin_down) then
+           electrons_1 = matrix_product_trace(matL_dn, mat_phi)
+           electrons_2 = matrix_product_trace(matL_dn, matSLSLS)
+        else
+           electrons_1 = matrix_product_trace(matL, mat_phi)
+           electrons_2 = matrix_product_trace(matL, matSLSLS)
         end if
-        if(iprint_mat>3) then
-           t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'electrons gsum time: ',t1-t0
-           t0 = t1
-        end if
-        call matrix_sum(12.0_double,mat_phi,-12.0_double,matSLSLS)
-        if(iprint_mat>3) then
-           t1 = mtime()
-           if(inode==ionode) write(io_lun,*) 'phi time: ',t1-t0
-           t0 = t1
-        end if
-     endif
+        if (present(spin)) then
+           electrons = three * electrons_1 - two * electrons_2
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) &
+                   write (io_lun, *) 'electrons dot time: ', t1 - t0
+              t0 = t1
+           end if
+           call matrix_sum(six, mat_phi, -six, matSLSLS)
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'phi time: ', t1 - t0
+              t0 = t1
+           end if
+        else 
+           ! spin unpolarised calculation, where we calculate total mat_phi instead
+           electrons = six * electrons_1 - four * electrons_2
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) &
+                   write (io_lun, *) 'electrons dot time: ', t1 - t0
+              t0 = t1
+           end if
+           call matrix_sum(12.0_double, mat_phi, -12.0_double, matSLSLS)
+           if (iprint_mat > 3) then
+              t1 = mtime()
+              if (inode == ionode) write (io_lun, *) 'phi time: ', t1 - t0
+              t0 = t1
+           end if
+        end if ! if (present (spin)) then
+     endif ! if(dophi) then
      call my_barrier
-     if(iprint_mat>3) t0 = mtime()
-     if(doK.OR.doE.OR.doM4) then
+     if (iprint_mat > 3) t0 = mtime()
+     if (doK .OR. doE .OR. doM4) then
         call free_temp_matrix(matLSLSL)
         call free_temp_matrix(matLSL)
      end if
-     if(dophi) then
+     if (dophi) then
         call free_temp_matrix(matSLSLS)
         call free_temp_matrix(matSLS)
      end if
-     if(doM3) then
+     if (doM3) then
         call free_temp_matrix(matC)
         call free_temp_matrix(matB)
         call free_temp_matrix(matA)
         call free_temp_matrix(matSLH)
         call free_temp_matrix(matHLS)
      end if
-     if(doM2) then 
+     if (doM2) then
         call free_temp_matrix(matLSLHL)
         call free_temp_matrix(matLHLSL)
      end if
-     if(doM1.OR.doM2) then 
+     if (doM1 .OR. doM2) then
         call free_temp_matrix(matLHL)
      end if
-     if(doM1.OR.doM2.OR.doM3) then
+     if (doM1 .OR. doM2 .OR. doM3) then
         call free_temp_matrix(matHL)
         call free_temp_matrix(matLH)
      end if
-     if(iprint_mat>3) then
+     if (iprint_mat > 3) then
         t1 = mtime()
-        if(inode==ionode) write(io_lun,*) 'dealloc time: ',t1-t0
+        if (inode == ionode) write (io_lun, *) 'dealloc time: ', t1 - t0
      end if
-     call stop_print_timer(tmr_l_tmp1,"LNV_matrix_multiply",IPRINT_TIME_THRES3)
+     call stop_print_timer(tmr_l_tmp1, "LNV_matrix_multiply", IPRINT_TIME_THRES3)
      return
-  end subroutine LNV_matrix_multiply
+   end subroutine LNV_matrix_multiply
 !!***
+
 
 !!****f* mult_module/symmetrise_L *
 !!
-!!  NAME 
+!!  NAME
 !!   symmetrise_L
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Ensures that L is symmetric
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   CMG/D.R.Bowler
 !!  CREATION DATE
@@ -1163,9 +1359,11 @@ contains
 !!  MODIFICATION HISTORY
 !!   08/06/2001 dave
 !!    Added ROBODoc header, used BLAS routines
+!!   Tuesday, 2011/08/02 L.Tong
+!!    Added support for spin
 !!  SOURCE
 !!
-  subroutine symmetrise_L()
+  subroutine symmetrise_L (spin)
 
     use datatypes
     use numbers
@@ -1173,20 +1371,33 @@ contains
 
     implicit none
 
+    ! Passed variables
+    integer, optional :: spin ! spin = 1 for up, spin = 2 for dn, not used = no spin
+
     ! Local variables
     integer :: length
     integer :: mattmp
 
     mattmp = allocate_temp_matrix(Lrange, L_trans)
-    call matrix_transpose(matL,mattmp)
-    call matrix_sum(half,matL,half,mattmp)
-    call free_temp_matrix(mattmp)
+    if (present (spin)) then
+       if (spin == 2) then
+          call matrix_transpose (matL_dn, mattmp)
+          call matrix_sum (half, matL_dn, half, mattmp)
+       else
+          call matrix_transpose (matL, mattmp)
+          call matrix_sum (half, matL, half, mattmp)
+       end if
+    else
+       call matrix_transpose (matL, mattmp)
+       call matrix_sum (half, matL, half, mattmp)
+    end if
+    call free_temp_matrix (mattmp)
   end subroutine symmetrise_L
 !!***
 
 !!****f* mult_module/end_ops *
 !!
-!!  NAME 
+!!  NAME
 !!   end_ops
 !!  USAGE
 !!   end_ops(matrix range, global transpose)
@@ -1196,7 +1407,7 @@ contains
 !!   integer :: range - matrix to deallocate
 !!   integer, OPTIONAL :: gtran - global transpose to deallocate
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -1209,9 +1420,9 @@ contains
 
     use basic_types
     use matrix_data, ONLY: mat, halo
-    
+
     implicit none
-    
+
     ! Passed variables
     type(primary_set) :: prim
     integer :: range
@@ -1239,19 +1450,19 @@ contains
 
 !!****f* mult_module/associate_matrices *
 !!
-!!  NAME 
+!!  NAME
 !!   associate_matrices
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Associates the matrix pointers in private type with actual matrices in matrix_data
 !!
 !!   I realise that this is ugly; it does, however, mean that we can test the new matrix routines
 !!   without too many changes
 !!  INPUTS
-!! 
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -1259,6 +1470,12 @@ contains
 !!  MODIFICATION HISTORY
 !!   2008/05/22 ast
 !!    Added timers
+!!   2011/03/28 L.Tong
+!!    Added assignment indices for matrices:
+!!    matH_dn, matL_dn, matK_dn, matdH_dn, matSL_dn, matL_dnS and matphi_dn
+!!   2011/11/24 L.Tong
+!!    Added assignment indices for matrices:
+!!    matU_dn and matUT_dn
 !!  SOURCE
 !!
   subroutine associate_matrices
@@ -1266,7 +1483,7 @@ contains
     use numbers, ONLY: zero
     use matrix_data, ONLY: Srange, Hrange, Lrange, Trange, PSrange,&
          LSrange, SPrange, SLrange, dSrange, dHrange, TTrrange, mat
-    use global_module, ONLY: area_matrices, iprint_mat
+    use global_module, ONLY: area_matrices, iprint_mat, flag_spin_polarisation
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 !%%!    use matrix_data, ONLY: data_S, data_H, data_L, data_T, data_Ttran, &
 !%%!         data_LS, data_SL, data_SC, data_CS, data_K, data_M4, data_U, data_phi, &
@@ -1298,7 +1515,24 @@ contains
     matNL    = 17
     matdH    = 18
     matdS    = 19
-    current_matrix = 19
+    matH_dn    = 20
+    matL_dn    = 21
+    matK_dn    = 22
+    matdH_dn   = 23
+    matL_dnS   = 24
+    matSL_dn   = 25
+    matphi_dn  = 26
+    matU_dn    = 27
+    matUT_dn   = 28
+    matM12_dn  = 29
+    matM4_dn   = 30
+
+    ! we do not need the _2 matrices for spin unpolarised calculations
+    if (flag_spin_polarisation) then
+       current_matrix = 30
+    else
+       current_matrix = 19
+    end if
 !%%!    ! Now associate pointers with correct arrays
 !%%!    mat_p(matS  )%matrix => data_S
 !%%!    mat_p(matH  )%matrix => data_H
@@ -1321,65 +1555,98 @@ contains
 !%%!    mat_p(matdS  )%matrix => data_dS
     ! Set the dimensions of the arrays
     ! Type for f1
-    mat_p(matS  )%sf1_type = sf
-    mat_p(matH  )%sf1_type = sf
-    mat_p(matL  )%sf1_type = sf
-    mat_p(matT  )%sf1_type = sf
+    mat_p(matS)%sf1_type = sf
+    mat_p(matH)%sf1_type = sf
+    mat_p(matH_dn)%sf1_type = sf
+    mat_p(matL)%sf1_type = sf
+    mat_p(matL_dn)%sf1_type = sf
+    mat_p(matT)%sf1_type = sf
     mat_p(matTtran)%sf1_type = sf
-    mat_p(matLS )%sf1_type = sf
-    mat_p(matSL )%sf1_type = sf
-    mat_p(matSC )%sf1_type = sf
-    mat_p(matCS )%sf1_type = nlpf
-    mat_p(matK  )%sf1_type = sf
-    mat_p(matM4 )%sf1_type = sf
-    mat_p(matU  )%sf1_type = sf
+    mat_p(matLS)%sf1_type = sf
+    mat_p(matL_dnS)%sf1_type = sf
+    mat_p(matSL)%sf1_type = sf
+    mat_p(matSL_dn)%sf1_type = sf
+    mat_p(matSC)%sf1_type = sf
+    mat_p(matCS)%sf1_type = nlpf
+    mat_p(matK)%sf1_type = sf
+    mat_p(matK_dn)%sf1_type = sf
+    mat_p(matM4)%sf1_type = sf
+    mat_p(matM4_dn)%sf1_type = sf
+    mat_p(matU)%sf1_type = sf
+    mat_p(matU_dn)%sf1_type = sf
     mat_p(matphi)%sf1_type = sf
+    mat_p(matphi_dn)%sf1_type = sf
     mat_p(matM12)%sf1_type = sf
-    mat_p(matUT )%sf1_type = nlpf
-    mat_p(matKE )%sf1_type = sf
-    mat_p(matNL )%sf1_type = sf
-    mat_p(matdS )%sf1_type = paof
-    mat_p(matdH )%sf1_type = paof
+    mat_p(matM12_dn)%sf1_type = sf
+    mat_p(matUT)%sf1_type = nlpf
+    mat_p(matUT_dn)%sf1_type = nlpf
+    mat_p(matKE)%sf1_type = sf
+    mat_p(matNL)%sf1_type = sf
+    mat_p(matdS)%sf1_type = paof
+    mat_p(matdH)%sf1_type = paof
+    mat_p(matdH_dn)%sf1_type = paof
     ! Type for f2
-    mat_p(matS  )%sf2_type = sf
-    mat_p(matH  )%sf2_type = sf
-    mat_p(matL  )%sf2_type = sf
-    mat_p(matT  )%sf2_type = sf
+    mat_p(matS)%sf2_type = sf
+    mat_p(matH)%sf2_type = sf
+    mat_p(matH_dn)%sf2_type = sf
+    mat_p(matL)%sf2_type = sf
+    mat_p(matL_dn)%sf2_type = sf
+    mat_p(matT)%sf2_type = sf
     mat_p(matTtran)%sf2_type = sf
-    mat_p(matLS )%sf2_type = sf
-    mat_p(matSL )%sf2_type = sf
-    mat_p(matSC )%sf2_type = nlpf
-    mat_p(matCS )%sf2_type = sf
-    mat_p(matK  )%sf2_type = sf
-    mat_p(matM4 )%sf2_type = sf
-    mat_p(matU  )%sf2_type = nlpf
+    mat_p(matLS)%sf2_type = sf
+    mat_p(matL_dnS)%sf2_type = sf
+    mat_p(matSL)%sf2_type = sf
+    mat_p(matSL_dn)%sf2_type = sf
+    mat_p(matSC)%sf2_type = nlpf
+    mat_p(matCS)%sf2_type = sf
+    mat_p(matK)%sf2_type = sf
+    mat_p(matK_dn)%sf2_type = sf
+    mat_p(matM4)%sf2_type = sf
+    mat_p(matM4_dn)%sf2_type = sf
+    mat_p(matU)%sf2_type = nlpf
+    mat_p(matU_dn)%sf2_type = nlpf
     mat_p(matphi)%sf2_type = sf
+    mat_p(matphi_dn)%sf2_type = sf
     mat_p(matM12)%sf2_type = sf
-    mat_p(matUT )%sf2_type = sf
-    mat_p(matKE )%sf2_type = sf
-    mat_p(matNL )%sf2_type = sf
-    mat_p(matdS )%sf2_type = sf
-    mat_p(matdH )%sf2_type = sf
+    mat_p(matM12_dn)%sf2_type = sf
+    mat_p(matUT)%sf2_type = sf
+    mat_p(matUT_dn)%sf2_type = sf
+    mat_p(matKE)%sf2_type = sf
+    mat_p(matNL)%sf2_type = sf
+    mat_p(matdS)%sf2_type = sf
+    mat_p(matdH)%sf2_type = sf
+    mat_p(matdH_dn)%sf2_type = sf
     ! Set up index translation for ranges
-    matrix_index(matS  ) = Srange  
-    matrix_index(matH  ) = Hrange  
-    matrix_index(matL  ) = Lrange  
-    matrix_index(matT  ) = Trange  
-    matrix_index(matTtran) = TTrrange  
-    matrix_index(matLS ) = LSrange 
-    matrix_index(matSL ) = SLrange 
-    matrix_index(matSC ) = SPrange 
-    matrix_index(matCS ) = PSrange 
-    matrix_index(matK  ) = Hrange  
-    matrix_index(matM4 ) = Srange  
-    matrix_index(matU  ) = SPrange 
-    matrix_index(matphi) = Lrange  
-    matrix_index(matM12) = Srange  
-    matrix_index(matUT ) = PSrange 
-    matrix_index(matKE ) = Hrange  
-    matrix_index(matNL ) = Hrange  
-    matrix_index(matdS  ) = dSrange 
-    matrix_index(matdH  ) = dHrange 
+    matrix_index(matS) = Srange
+    matrix_index(matH) = Hrange
+    matrix_index(matH_dn) = Hrange
+    matrix_index(matL) = Lrange
+    matrix_index(matL_dn) = Lrange
+    matrix_index(matT) = Trange
+    matrix_index(matTtran) = TTrrange
+    matrix_index(matLS) = LSrange
+    matrix_index(matL_dnS) = LSrange
+    matrix_index(matSL) = SLrange
+    matrix_index(matSL_dn) = SLrange
+    matrix_index(matSC) = SPrange
+    matrix_index(matCS) = PSrange
+    matrix_index(matK) = Hrange
+    matrix_index(matK_dn) = Hrange
+    matrix_index(matM4) = Srange
+    matrix_index(matM4_dn) = Srange
+    matrix_index(matU) = SPrange
+    matrix_index(matU_dn) = SPrange
+    matrix_index(matphi) = Lrange
+    matrix_index(matphi_dn) = Lrange
+    matrix_index(matM12) = Srange
+    matrix_index(matM12_dn) = Srange
+    matrix_index(matUT) = PSrange
+    matrix_index(matUT_dn) = PSrange
+    matrix_index(matKE ) = Hrange
+    matrix_index(matNL ) = Hrange
+    matrix_index(matdS  ) = dSrange
+    matrix_index(matdH  ) = dHrange
+    matrix_index(matdH_dn ) = dHrange
     ! Real lengths
     ! Length
 !%%!    mat_p(matS  )%length = nsf*nsf*mx_at_prim*mx_snab
@@ -1401,6 +1668,8 @@ contains
 !%%!    mat_p(matNL )%length = nsf*nsf*mx_at_prim*mx_hnab
 !%%!    mat_p(matdS  )%length = npao*nsf*mx_at_prim*mx_snab
 !%%!    mat_p(matdH  )%length = npao*nsf*mx_at_prim*mx_hnab
+
+    ! Allocalting the core matrices
     do i=1,current_matrix
        if(mat_p(i)%length==0) then
           mat_p(i)%length = mat(1,matrix_index(i))%length
@@ -1414,7 +1683,7 @@ contains
        else !if(mat(1,matrix_index(i))%length/=mat_p(i)%length) then
           call start_timer(tmr_std_allocation)
           deallocate(mat_p(i)%matrix,STAT=stat)
-          if(stat/=0) call cq_abort("Error allocating matrix ",i,mat_p(i)%length)
+          if(stat/=0) call cq_abort("Error deallocating matrix ",i,mat_p(i)%length)
           nullify(mat_p(i)%matrix)
           call reg_dealloc_mem(area_matrices,mat_p(i)%length,type_dbl)
           call stop_timer(tmr_std_allocation)
@@ -1433,39 +1702,104 @@ contains
        end do
     end if
     ! Set up index translation for transposes
-    trans_index(matS  ) = S_trans 
-    trans_index(matH  ) = 0
-    trans_index(matL  ) = L_trans 
-    trans_index(matT  ) = T_trans 
-    trans_index(matTtran) = T_trans 
-    trans_index(matLS ) = LS_trans
-    trans_index(matSL ) = LS_trans
-    trans_index(matSC ) = SP_trans
-    trans_index(matCS ) = SP_trans
-    trans_index(matK  ) = 0
-    trans_index(matM4 ) = S_trans 
-    trans_index(matU  ) = SP_trans
-    trans_index(matphi) = L_trans 
-    trans_index(matM12) = S_trans 
-    trans_index(matUT ) = SP_trans
-    trans_index(matKE ) = 0
-    trans_index(matNL ) = 0
-    trans_index(matdS  ) = 0
-    trans_index(matdH  ) = 0
+    trans_index(matS) = S_trans
+    trans_index(matH) = 0
+    trans_index(matH_dn) = 0
+    trans_index(matL) = L_trans
+    trans_index(matL_dn) = L_trans
+    trans_index(matT) = T_trans
+    trans_index(matTtran) = T_trans
+    trans_index(matLS) = LS_trans
+    trans_index(matL_dnS) = LS_trans
+    trans_index(matSL) = LS_trans
+    trans_index(matSL_dn) = LS_trans
+    trans_index(matSC) = SP_trans
+    trans_index(matCS) = SP_trans
+    trans_index(matK) = 0
+    trans_index(matK_dn) = 0
+    trans_index(matM4) = S_trans
+    trans_index(matM4_dn) = S_trans
+    trans_index(matU) = SP_trans
+    trans_index(matU_dn) = SP_trans
+    trans_index(matphi) = L_trans
+    trans_index(matphi_dn) = L_trans
+    trans_index(matM12) = S_trans
+    trans_index(matM12_dn) = S_trans
+    trans_index(matUT) = SP_trans
+    trans_index(matUT_dn) = SP_trans
+    trans_index(matKE) = 0
+    trans_index(matNL) = 0
+    trans_index(matdS) = 0
+    trans_index(matdH) = 0
+    trans_index(matdH_dn) = 0
+
+    return
   end subroutine associate_matrices
 !!***
 
+
+!!****f* mult_module/dissociate_matrices
+!! PURPOSE
+!!   Deallocate memories
+!! INPUTS
+!! OUTPUT
+!! RETURN VALUE
+!! AUTHOR
+!!   drb
+!! CREATION DATE
+!!
+!! MODIFICATION HISTORY
+!!   2011/07/19 L.Tong
+!!     Added lines for spin polarisation
+!! SOURCE
+!!
   subroutine dissociate_matrices
 
+    use global_module, only: flag_spin_polarisation
     implicit none
 
     integer :: stat
 
     call start_timer(tmr_std_allocation)
+    if (flag_spin_polarisation) then
+       deallocate(mat_p(matM4_dn)%matrix,STAT=stat) !30
+       if(stat/=0) call cq_abort("Error deallocating matrix M4_dn&
+            & ",mat_p(matM4_dn)%length)
+       deallocate(mat_p(matM12_dn)%matrix,STAT=stat) !29
+       if(stat/=0) call cq_abort("Error deallocating matrix M12_dn&
+            & ",mat_p(matM12_dn)%length)
+       deallocate(mat_p(matUT_dn)%matrix,STAT=stat) !28
+       if(stat/=0) call cq_abort("Error deallocating matrix UT_dn&
+            & ",mat_p(matU_dn)%length)
+       deallocate(mat_p(matphi_dn)%matrix,STAT=stat) !27
+       if(stat/=0) call cq_abort("Error deallocating matrix U_dn&
+            & ",mat_p(matphi_dn)%length)
+       deallocate(mat_p(matphi_dn)%matrix,STAT=stat) !26
+       if(stat/=0) call cq_abort("Error deallocating matrix phi_dn&
+            & ",mat_p(matphi_dn)%length)
+       deallocate(mat_p(matSL_dn )%matrix,STAT=stat) !25
+       if(stat/=0) call cq_abort("Error deallocating matrix SL_dn&
+            & ",mat_p(matSL_dn)%length)
+       deallocate(mat_p(matL_dnS )%matrix,STAT=stat) !24
+       if(stat/=0) call cq_abort("Error deallocating matrix L_dnS&
+            & ",mat_p(matL_dnS)%length)
+       deallocate(mat_p(matdH_dn)%matrix,STAT=stat) !23
+       if(stat/=0) call cq_abort("Error deallocating matrix dH_dn&
+            & ",mat_p(matdH_dn)%length)
+       deallocate(mat_p(matK_dn)%matrix,STAT=stat) !22
+       if(stat/=0) call cq_abort("Error deallocating matrix K_dn&
+            & ",mat_p(matK_dn)%length)
+       deallocate(mat_p(matL_dn)%matrix,STAT=stat) !21
+       if(stat/=0) call cq_abort("Error deallocating matrix L_dn&
+            & ",mat_p(matL_dn)%length)
+       deallocate(mat_p(matH_dn)%matrix,STAT=stat) !20
+       if(stat/=0) call cq_abort("Error deallocating matrix H_dn&
+            & ",mat_p(matH_dn)%length)
+    end if
     deallocate(mat_p(matdS )%matrix,STAT=stat) !19
-    if(stat/=0) call cq_abort("Error deallocating matrix dH ",mat_p(matdS)%length)
+    if(stat/=0) call cq_abort("Error deallocating matrix dS ",mat_p(matdS)%length)
     deallocate(mat_p(matdH )%matrix,STAT=stat) !18
-    if(stat/=0) call cq_abort("Error deallocating matrix dS ",mat_p(matdH)%length)
+    if(stat/=0) call cq_abort("Error deallocating matrix dH ",mat_p(matdH)%length)
     deallocate(mat_p(matNL )%matrix,STAT=stat) !17
     if(stat/=0) call cq_abort("Error deallocating matrix NL ",mat_p(matNL)%length)
     deallocate(mat_p(matKE )%matrix,STAT=stat) !16
@@ -1491,7 +1825,8 @@ contains
     deallocate(mat_p(matLS )%matrix,STAT=stat) !6
     if(stat/=0) call cq_abort("Error deallocating matrix LS ",mat_p(matLS)%length)
     deallocate(mat_p(matTtran)%matrix,STAT=stat) !5
-    if(stat/=0) call cq_abort("Error deallocating matrix Ttran ",mat_p(matTtran)%length)
+    if(stat/=0) call cq_abort("Error deallocating matrix Ttran ",&
+         mat_p(matTtran)%length)
     deallocate(mat_p(matT  )%matrix,STAT=stat) !4
     if(stat/=0) call cq_abort("Error deallocating matrix T ",mat_p(matT)%length)
     deallocate(mat_p(matL  )%matrix,STAT=stat) !3
@@ -1502,24 +1837,26 @@ contains
     if(stat/=0) call cq_abort("Error deallocating matrix S ",mat_p(matS)%length)
     call stop_timer(tmr_std_allocation)
   end subroutine dissociate_matrices
+!!*****
+
 
 !!****f* mult_module/mult_wrap *
 !!
-!!  NAME 
+!!  NAME
 !!   mult_wrap
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   sbrt mult_wrap: Acts as a wrapper for matrix multiply to reorder the
-!!   arguments - so we can make the same call for strong and weak 
-!!   extension or reduction - either way (provided B or B^T is passed 
+!!   arguments - so we can make the same call for strong and weak
+!!   extension or reduction - either way (provided B or B^T is passed
 !!   correctly) the result of the operation is C=A.B.  N.B. trans depends
 !!   on mult type - if 1, Atrans, if 2, Ctrans
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -1640,7 +1977,7 @@ contains
     use primary_module, ONLY: bundle
     use GenComms, ONLY: myid
     use GenBlas, ONLY: axpy, scal
-    
+
     implicit none
 
     ! Passed variables
@@ -1652,7 +1989,7 @@ contains
     if(matrix_index(A)==matrix_index(B)) then ! The matrices are the same range
        !write(io_lun,*) myid,' Scaling ',size(mat_p(A)%matrix),mat_p(A)%length
        call scal(mat_p(A)%length,alpha,mat_p(A)%matrix,1)
-       !mat_p(A)%matrix = alpha*mat_p(A)%matrix 
+       !mat_p(A)%matrix = alpha*mat_p(A)%matrix
        !write(io_lun,*) myid,' Adding ',size(mat_p(A)%matrix),size(mat_p(B)%matrix),mat_p(A)%length,mat_p(B)%length
        call axpy(mat_p(A)%length,beta,mat_p(B)%matrix,1,mat_p(A)%matrix,1)
     else
@@ -1688,7 +2025,7 @@ contains
 
 !!****f* mult_module/Trace *
 !!
-!!  NAME 
+!!  NAME
 !!   Trace
 !!  USAGE
 !!   Trace(matrix)
@@ -1702,11 +2039,11 @@ contains
 !!  INPUTS
 !!   integer :: A (matrix index)
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
-!! 
+!!
 !!  MODIFICATION HISTORY
 !!   22/06/2001 dave
 !!    Changed MPI_allreduce to gsum
@@ -1768,7 +2105,7 @@ contains
 
     implicit none
 
-    ! Input variables 
+    ! Input variables
     integer :: A,B, len
     real(double), dimension(len) :: res
 
@@ -1802,7 +2139,22 @@ contains
 !!***
 
 
-  real(double) function matrix_product_trace(A,B)
+!!****f* mult_module/matrix_product_trace
+!! PURPOSE
+!!   Calculate Tr(AB)
+!! INPUTS
+!! OUTPUT
+!! RETURN VALUE
+!! AUTHOR
+!!   D. Bowler
+!! CREATION DATE 
+!!   
+!! MODIFICATION HISTORY
+!!   2012/02/08 L.Tong
+!!   - Added intent(in) attribute for A and B.
+!! SOURCE
+!!
+  function matrix_product_trace(A, B)
 
     use datatypes
     use numbers
@@ -1811,34 +2163,44 @@ contains
 
     implicit none
 
+    ! results
+    real(double) :: matrix_product_trace
+    
     ! Passed variables
-    integer :: A,B
+    integer, intent(in) :: A, B
 
     ! Local variables
-    integer :: np,i,j, ierr
+    integer :: np, i, j, ierr
 
 !    call start_timer(tmr_std_matrices)
-    if(matrix_index(A)==matrix_index(B)) then ! The matrices are the same range
-       if(mat_p(A)%length/=mat_p(B)%length) call cq_abort("Length error in mat_prod_tr: ",mat_p(A)%length,mat_p(B)%length)
-       matrix_product_trace = vdot(mat_p(A)%length,mat_p(A)%matrix,1,mat_p(B)%matrix,1)
-    else ! For now I'm going to abort; we could have (say) optional argument giving the mult-type and range of the product
+    ! If the matrices are the same range
+    if (matrix_index(A) == matrix_index(B)) then
+       if (mat_p(A)%length /= mat_p(B)%length) &
+            call cq_abort("Length error in mat_prod_tr: ", &
+                          mat_p(A)%length, mat_p(B)%length)
+       matrix_product_trace = &
+            vdot(mat_p(A)%length, mat_p(A)%matrix, 1, mat_p(B)%matrix, 1)
+    else
+       ! For now I'm going to abort; we could have (say) optional
+       ! argument giving the mult-type and range of the product
        call cq_abort("Matrix product for two different ranges not implemented")
     endif
 !    call stop_timer(tmr_std_matrices)
   end function matrix_product_trace
+  
+!!*****
 
-  integer function return_matrix_len(A)
-
+  function return_matrix_len(A)
     implicit none
-
     ! Passed variable
+    integer :: return_matrix_len
     integer :: A
     return_matrix_len = mat_p(A)%length
   end function return_matrix_len
 
   ! i is the primary set number
   ! j is gcs%icover_ibeg(np)+ni - 1
-  real(double) function return_matrix_value(A,np,ni,ip,nabj,f1,f2, onsite)
+  function return_matrix_value(A,np,ni,ip,nabj,f1,f2, onsite)
 
     use datatypes
     use basic_types, ONLY: primary_set, cover_set
@@ -1848,8 +2210,10 @@ contains
 
     implicit none
 
+    ! result
+    real(double) :: return_matrix_value
     ! Passed variables
-    integer :: A, np, ni, ip, nabj, f1, f2 
+    integer :: A, np, ni, ip, nabj, f1, f2
     integer, OPTIONAL :: onsite
     ! Local variables
     integer :: Ah, pos, jnp, jni, j, sf1
@@ -1872,13 +2236,16 @@ contains
     !if(pos/=posin) write(io_lun,*) 'Pos: ',pos,posin,i,j,halo(Ah)%i_halo(j),Ah
   end function return_matrix_value
 
-  real(double) function return_matrix_value_pos(A,i)
+
+  function return_matrix_value_pos(A,i)
 
     use datatypes
     use GenComms, ONLY: cq_abort
 
     implicit none
 
+    ! result
+    real(double) :: return_matrix_value_pos
     ! Passed variables
     integer, intent(in) :: A, i
 
@@ -1906,7 +2273,7 @@ contains
 !    call stop_timer(tmr_std_matrices)
   end subroutine return_matrix_block_pos
 
-  integer function matrix_pos(A,iprim,j_in_halo,f1,f2)
+  function matrix_pos(A,iprim,j_in_halo,f1,f2)
 
     use matrix_module, ONLY: matrix_halo
     use matrix_data, ONLY: halo
@@ -1914,6 +2281,8 @@ contains
 
     implicit none
 
+    ! Result
+    integer  :: matrix_pos
     ! Passed variables
     integer, intent(in) :: A, iprim, j_in_halo
     integer, OPTIONAL, intent(in) :: f1, f2
@@ -2065,7 +2434,7 @@ contains
 !    mat_p(A)%matrix(f1,f2,pos) = val
 !  end subroutine store_onsite_matrix_value
 
-  integer function allocate_temp_matrix(range, trans_range, f1_type, f2_type)
+  function allocate_temp_matrix(range, trans_range, f1_type, f2_type)
 
     use matrix_data, ONLY: mat
     use GenComms, ONLY: cq_abort, myid
@@ -2075,7 +2444,9 @@ contains
     use memory_module, ONLY: reg_alloc_mem, type_dbl
 
     implicit none
-
+    
+    ! Result
+    integer :: allocate_temp_matrix
     ! Passed variables
     integer :: range, trans_range
     integer, optional :: f1_type, f2_type

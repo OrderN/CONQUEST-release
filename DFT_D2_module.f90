@@ -67,10 +67,11 @@ contains
     use datatypes
     use units
     use dimens
-    use GenComms, ONLY: cq_abort, gcopy, inode, ionode, gsum, my_barrier
+    use GenComms, ONLY: cq_abort, gcopy, inode, ionode, gsum, &
+         my_barrier
     use group_module, ONLY: parts
-    use global_module, ONLY: io_lun, numprocs, flag_functional_type, ni_in_cell, species_glob, &
-                             id_glob, flag_only_dispersion
+    use global_module, ONLY: io_lun, numprocs, flag_functional_type, &
+         ni_in_cell, species_glob, id_glob, flag_only_dispersion
     use numbers
     use primary_module, ONLY: bundle
     use io_module, ONLY: get_file_name
@@ -81,12 +82,15 @@ contains
     ! local variables
     integer :: i, j, ip, ia, jp, ja, ia_glob
     integer :: stat
-    integer :: nppx, nppy, nppz, ind_part, nccx, nccy, nccz, m1, m2, m3, m, ig_atom_beg
+    integer :: nppx, nppy, nppz, ind_part, nccx, nccy, nccz, m1, m2, &
+         m3, m, ig_atom_beg
     integer, parameter :: d = 20.0_double
     integer, allocatable :: neighbour_part(:)
-    real(double) :: s_6, real_cell_vec(3, 3), part_cell_vec(3, 3), v1, v2, v3, rr(3), part_cell_dual(3, 3), &
-                    distance, x_ia, y_ia, z_ia, x_ja, y_ja, z_ja, rijx, rijy, rijz, rij, rij2, rij6, power, &
-                    f_damp, denominator, emp_energy, emp_force, unit_vec_x, unit_vec_y, unit_vec_z
+    real(double) :: s_6, real_cell_vec(3, 3), part_cell_vec(3, 3), v1,&
+         v2, v3, rr(3), part_cell_dual(3, 3), distance, x_ia, y_ia, &
+         z_ia, x_ja, y_ja, z_ja, rijx, rijy, rijz, rij, rij2, rij6, &
+         power, f_damp, denominator, emp_energy, emp_force, &
+         unit_vec_x, unit_vec_y, unit_vec_z
     real(double) :: C_i, C_j, C_ij, r_vdW_i, r_vdW_j, R_r
 
     ! Determine the s_6 value

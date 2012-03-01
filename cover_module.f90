@@ -122,13 +122,15 @@ contains
 !!    Added some timers
 !!  SOURCE
 !!
-  subroutine make_cs(myid,gr_rcut,set,groups,prim, mx_mcell,x_mem_cell,y_mem_cell,z_mem_cell)
+  subroutine make_cs (myid,gr_rcut,set,groups,prim, mx_mcell,&
+       x_mem_cell,y_mem_cell,z_mem_cell)
 
     ! Module usage
     use global_module
     use basic_types
     use GenComms, ONLY: cq_abort, inode, ionode
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_int, type_dbl
+    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_int,&
+         type_dbl
 
     implicit none
 

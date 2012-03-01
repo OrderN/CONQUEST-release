@@ -84,19 +84,22 @@ contains
 !!   11:03, 24/03/2003 drb 
 !!    Simplified call to read_and_write, removed initial_phi
 !!   10:09, 13/02/2006 drb 
-!!    Removed all explicit references to data_ variables and rewrote in terms of new 
+!!    Removed all explicit references to data_ variables and rewrote
+!!    in terms of new
 !!    matrix routines
 !!   2008/05/15 ast
 !!    Added some timers
 !!   2011/09/29 M. Arita
 !!    Statements were added for calculating only disperions
+!!   2011/12/11 L.Tong
+!!    Removed redundant parameter number_of_bands
 !!  SOURCE
 !!
-  subroutine initialise(vary_mu, fixed_potential, number_of_bands, mu, total_energy)
+  subroutine initialise (vary_mu, fixed_potential, mu, total_energy)
 
     use datatypes
-    use global_module, ONLY: x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell, &
-                             flag_only_dispersion
+    use global_module, ONLY: x_atom_cell, y_atom_cell, z_atom_cell, &
+         ni_in_cell, flag_only_dispersion
     use GenComms, ONLY: inode, ionode, my_barrier, end_comms
     use initial_read, ONLY: read_and_write
     use ionic_data, ONLY : get_ionic_data
@@ -112,11 +115,9 @@ contains
 
     ! Passed variables
     logical :: vary_mu, find_chdens, fixed_potential
-
     character(len=40) :: output_file
-
     real(double) :: mu
-    real(double) :: number_of_bands, total_energy
+    real(double) :: total_energy
 
     ! Local variables
     logical :: start, start_L
@@ -124,43 +125,42 @@ contains
 
     character(len=40) :: restart_file
 
-    call init_timing_system(inode)
+    call init_timing_system (inode)
     ! Read input
     call init_reg_mem
-    call read_and_write(start, start_L,&
-         inode, ionode, restart_file, vary_mu, mu,&
-         find_chdens, read_phi, number_of_bands)
+    call read_and_write (start, start_L, inode, ionode, restart_file, &
+         vary_mu, mu, find_chdens, read_phi)
 
     ! IMPORTANT!!!!! No timers allowed before this point
     !                We need to know if the user wants them or not
     !                  before actually starting one
-    call start_timer(tmr_std_initialisation)
+    call start_timer (tmr_std_initialisation)
 
     ! Only calculate the dispersion
     if (flag_only_dispersion) then
-      call make_cs(inode-1, r_dft_d2, D2_CS, parts, bundle, ni_in_cell, &
+      call make_cs (inode-1, r_dft_d2, D2_CS, parts, bundle, ni_in_cell, &
                    x_atom_cell, y_atom_cell, z_atom_cell)
       call read_para_D2
       call dispersion_D2
-      call end_comms()
+      call end_comms ()
       stop
     endif
 
     ! Call routines to read or make data for isolated ions
     flag_no_atomic_densities = .false.
-    call get_ionic_data(inode,ionode,flag_no_atomic_densities)
-    if(flag_no_atomic_densities.AND.(.NOT.find_chdens)) then
-       if(inode==ionode) write(io_lun,*) 'No initial charge density specified - building from initial K'
+    call get_ionic_data (inode, ionode, flag_no_atomic_densities)
+    if (flag_no_atomic_densities .AND. (.NOT. find_chdens)) then
+       if (inode == ionode) &
+            write (io_lun, *) 'No initial charge density specified - &
+            &building from initial K'
        find_chdens = .true.
     end if
 
-    call set_up(find_chdens, number_of_bands)
-
+    call set_up (find_chdens)
     call my_barrier
-
-    call initial_phis( mu, restart_file, read_phi, vary_mu, start)
-
-    call initial_H( start, start_L, find_chdens, fixed_potential, vary_mu, number_of_bands, mu, total_energy)
+    call initial_phis (mu, restart_file, read_phi, vary_mu, start)
+    call initial_H (start, start_L, find_chdens, fixed_potential, &
+         vary_mu, mu, total_energy)
 
     call stop_timer(tmr_std_initialisation)
     return
@@ -204,50 +204,69 @@ contains
 !!    Changed to get nodes from GenComms not common
 !!   03/30/2011 19:22 M.Arita
 !!    Added the contribution from P.C.C.
+!!   2011/04/01 L.Tong
+!!    Added implementation for Spin polarisation: allocation for
+!!    density_dn and potential_dn Added numbers module dependence,
+!!    replacing for example 0.0_double to zero
 !!   2011/07/21 17:41 dave
 !!    Initialisation for cDFT
 !!   29/09/2011 16:24 M. Arita
 !!    Generate the covering set for DT-D2
 !!   2011/11/16 15:52 dave
 !!    Removing call to set up Extent (part of blip data changes)
+!!   2011/12/09 L.Tong
+!!    Removed redundant parameter number_of_bands
 !!  SOURCE
 !!
-  subroutine set_up(find_chdens, number_of_bands)
+  subroutine set_up (find_chdens)
 
     use datatypes
-    use global_module, ONLY: iprint_init, flag_read_blocks, x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell, &
-         area_init, area_index, flag_Becke_weights, flag_pcc_global, flag_dft_d2, iprint_gen, flag_perform_cDFT
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
+    use global_module, ONLY: iprint_init, flag_read_blocks, &
+         x_atom_cell, y_atom_cell, z_atom_cell, ni_in_cell, area_init,&
+         area_index, flag_Becke_weights, flag_pcc_global, flag_dft_d2,&
+         iprint_gen, flag_perform_cDFT, flag_spin_polarisation
+    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl,&
+         type_int
     use group_module, ONLY: parts
     use primary_module, ONLY : bundle
-    use cover_module, ONLY : BCS_parts, make_cs, make_iprim, send_ncover, D2_CS
+    use cover_module, ONLY : BCS_parts, make_cs, make_iprim, &
+         send_ncover, D2_CS
     use mult_module, ONLY: immi
     use construct_module
-    use matrix_data, ONLY: rcut, Lrange, Srange, mx_matrices, max_range
+    use matrix_data, ONLY: rcut, Lrange, Srange, mx_matrices, &
+         max_range
     use ewald_module, ONLY: set_ewald, mikes_set_ewald, flag_old_ewald
     use atoms, ONLY: distribute_atoms
-    use dimens, ONLY: n_grid_x, n_grid_y, n_grid_z, r_core_squared,&
-         r_h, r_super_x, r_super_y, r_super_z, RadiusSupport, n_my_grid_points, r_dft_d2
+    use dimens, ONLY: n_grid_x, n_grid_y, n_grid_z, r_core_squared, &
+         r_h, r_super_x, r_super_y, r_super_z, RadiusSupport, &
+         n_my_grid_points, r_dft_d2
     use fft_module,ONLY: set_fft_map, fft3
     use GenComms, ONLY: cq_abort, my_barrier, inode, ionode
     use pseudopotential_data, ONLY: init_pseudo
     ! Troullier-Martin pseudos    15/11/2002 TM
     use pseudo_tm_module, ONLY: init_pseudo_tm
-    use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, STATE, ABINIT, core_correction, pseudopotential
+    use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, &
+         STATE, ABINIT, core_correction, pseudopotential
     ! Troullier-Martin pseudos    15/11/2002 TM
-    use density_module, ONLY: set_density, density, atomcharge, build_Becke_weights, build_Becke_charges, &
-                              set_density_pcc, density_pcc
-    use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, n_pts_in_block, &
-         set_blocks_from_new, set_blocks_from_old, set_domains, n_blocks
-    use grid_index, ONLY: grid_point_x, grid_point_y, grid_point_z, grid_point_block, grid_point_position
+    use density_module, ONLY: set_density, density, density_up, &
+         density_dn, atomcharge, atomcharge_up, atomcharge_dn, &
+         build_Becke_weights, build_Becke_charges, set_density_pcc, &
+         density_pcc
+    use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, &
+         n_pts_in_block, set_blocks_from_new, set_blocks_from_old, &
+         set_domains, n_blocks
+    use grid_index, ONLY: grid_point_x, grid_point_y, grid_point_z, &
+         grid_point_block, grid_point_position
     use primary_module, ONLY: domain
     use group_module, ONLY : blocks
     use io_module, ONLY: read_blocks
     use functions_on_grid, ONLY: associate_fn_on_grid
-    use potential_module, ONLY: potential
+    use potential_module, ONLY: potential, potential_up, potential_dn
     use maxima_module, ONLY: maxngrid
     use species_module, ONLY: n_species
-    use angular_coeff_routines, ONLY: set_fact, set_prefac, set_prefac_real
+    use angular_coeff_routines, ONLY: set_fact, set_prefac, &
+         set_prefac_real
+    use numbers, ONLY: zero
     use cDFT_module, ONLY: init_cdft
     use DFT_D2, ONLY: read_para_D2
 
@@ -256,47 +275,67 @@ contains
     ! Passed variables
     logical :: find_chdens 
 
-    real(double) :: number_of_bands
-
     ! Local variables
     complex(double_cplx), allocatable, dimension(:) :: chdenr 
     integer :: i, stat, spec
     real(double) :: rcut_BCS  !TM 26/Jun/2003
 
-
     ! Set organisation of blocks of grid-points.
     ! set_blocks determines the number of blocks on this node,
     ! and makes a list of these blocks.    
-    if(flag_read_blocks) then
-       call read_blocks(blocks)
+    if (flag_read_blocks) then
+       call read_blocks (blocks)
     else
-       call set_blocks_from_old( n_grid_x, n_grid_y, n_grid_z )
+       call set_blocks_from_old (n_grid_x, n_grid_y, n_grid_z)
     endif
-    call set_blocks_from_new()
+    call set_blocks_from_new ()
     ! Allocate ? 
     !call set_blocks(inode, ionode)
-    if (inode==ionode.AND.iprint_init>1) write(io_lun,*) 'Completed set_blocks()'
+    if (inode==ionode.AND.iprint_init>1) &
+         write(io_lun,*) 'Completed set_blocks()'
     n_my_grid_points = n_blocks*n_pts_in_block
-    !allocate(grid_point_x(n_my_grid_points),grid_point_y(n_my_grid_points),grid_point_z(n_my_grid_points), &
-    !     grid_point_block(n_my_grid_points),grid_point_position(n_my_grid_points),STAT=stat)
-    allocate(grid_point_x(maxngrid),grid_point_y(maxngrid),grid_point_z(maxngrid), &
-         grid_point_block(maxngrid),grid_point_position(maxngrid),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating grid_point variables: ",maxngrid,stat)
+    ! allocate(grid_point_x(n_my_grid_points),&
+    !      grid_point_y(n_my_grid_points),&
+    !      grid_point_z(n_my_grid_points), &
+    !      grid_point_block(n_my_grid_points),&
+    !      grid_point_position(n_my_grid_points),STAT=stat)
+    allocate(grid_point_x(maxngrid),grid_point_y(maxngrid),&
+         grid_point_z(maxngrid), grid_point_block(maxngrid),&
+         grid_point_position(maxngrid),STAT=stat)
+    if (stat/=0) &
+         call cq_abort("Error allocating grid_point variables: ", &
+         maxngrid,stat)
     call reg_alloc_mem(area_index,5*maxngrid,type_int)
     ! Construct list of grid-points in each domain (i.e. grid-points belonging
     ! to each node). In present version, grid-points are organised into
     ! blocks, with each node responsible for a cluster of blocks.
-    call set_domains( inode)
-    allocate(density(maxngrid), potential(maxngrid), pseudopotential(maxngrid), STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating grids: ",maxngrid,stat)
-    call reg_alloc_mem(area_index,3*maxngrid,type_dbl)
+    call set_domains (inode)
+    if (flag_spin_polarisation) then
+       allocate (density_up(maxngrid), density_dn(maxngrid), &
+            potential_up(maxngrid), potential_dn(maxngrid), STAT=stat)
+       if (stat/=0) call cq_abort ("Error allocating grids: ", &
+            maxngrid, stat)
+       call reg_alloc_mem (area_index, 4*maxngrid, type_dbl)
+    else
+       allocate (density(maxngrid), potential(maxngrid), STAT=stat)
+       if (stat/=0) call cq_abort ("Error allocating grids: ", &
+            maxngrid, stat)
+       call reg_alloc_mem(area_index,2*maxngrid,type_dbl)
+    end if
+    allocate (pseudopotential(maxngrid), STAT=stat)
+    if (stat/=0) &
+         call cq_abort("Error allocating grids: ", maxngrid, stat)
+    call reg_alloc_mem (area_index, maxngrid, type_dbl)
+    ! extra local potential for second spin channel for spin polarised calculation
     call my_barrier()
-    if (inode==ionode.AND.iprint_init>1) write(io_lun,*) 'Completed set_domains()'
+    if (inode==ionode.AND.iprint_init>1) &
+         write(io_lun,*) 'Completed set_domains()'
 
     ! Sorts out which processor owns which atoms
     call distribute_atoms(inode, ionode)
     call my_barrier
-    if(inode==ionode.AND.iprint_init>1) write(io_lun,*) 'Completed distribute_atoms()'
+    if(inode==ionode.AND.iprint_init>1) &
+         write(io_lun,*) 'Completed distribute_atoms()'
     ! Create a covering set
     call my_barrier
     !Define rcut_BCS  !TM 26/Jun/2003
@@ -305,9 +344,11 @@ contains
     !   if(rcut_BCS < rcut(i)) rcut_BCS= rcut(i)
     !enddo !  i=1, mx_matrices
     rcut_BCS = rcut(max_range)
-    if(inode==ionode.AND.iprint_init>1) write(io_lun,*) ' rcut for BCS_parts =',rcut_BCS
+    if(inode==ionode.AND.iprint_init>1) &
+         write(io_lun,*) ' rcut for BCS_parts =', rcut_BCS
 
-    call make_cs(inode-1,rcut_BCS, BCS_parts,parts,bundle,ni_in_cell,x_atom_cell, y_atom_cell, z_atom_cell)
+    call make_cs(inode-1,rcut_BCS, BCS_parts,parts,bundle,ni_in_cell,&
+         x_atom_cell, y_atom_cell, z_atom_cell)
     call my_barrier
     call make_iprim(BCS_parts,bundle,inode-1)
     call send_ncover(BCS_parts, inode)
@@ -320,7 +361,8 @@ contains
     ! matrix range interactions and hamiltonian range interactions
     ! associated with any atom being handled by this processor.
     call immi(parts, bundle, BCS_parts, inode)
-    if(inode==ionode.AND.iprint_init>1) write(io_lun,*) 'Completed immi()'
+    if(inode==ionode.AND.iprint_init>1) &
+         write(io_lun,*) 'Completed immi()'
 
     ! set up all the data block by block for atoms overlapping any 
     ! point on block and similar
@@ -334,21 +376,35 @@ contains
 
     call associate_fn_on_grid
     call my_barrier()
-    if (inode==ionode.AND.iprint_init>1) write(io_lun,*) 'Completed associate_fn_on_grid()'
+    if (inode==ionode.AND.iprint_init>1) &
+         write(io_lun,*) 'Completed associate_fn_on_grid()'
 
     ! The FFT requires the data to be reorganised into columns parallel to
     ! each axis in turn. The data for this organisation is help in map.inc,
     ! and is initialised by set_fft_map.
     !
-    ! Thee FFT calls themselves require value tables, which are held in
+    ! The FFT calls themselves require value tables, which are held in
     ! ffttable.inc, and are initialised by calling fft3 with isign=0.
+    ! 
+    ! this is just for initialising fft, no need to do it again for
+    ! other spin component.
     call set_fft_map ( )
-    density = 0.0_double
+    if (flag_spin_polarisation) then
+       density_up = zero
+       density_dn = zero
+    else
+       density = zero
+    end if
+    ! chdenr is the temporary storage for Fourier transform of density
     allocate(chdenr(maxngrid),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating chdenr: ",maxngrid,stat)
     call reg_alloc_mem(area_init,maxngrid,type_dbl)
-    call fft3( density, chdenr, maxngrid, 0 )
-    deallocate(chdenr)
+    if (flag_spin_polarisation) then
+       call fft3 (density_up, chdenr, maxngrid, 0)
+    else
+       call fft3 (density, chdenr, maxngrid, 0)
+    end if
+    deallocate(chdenr,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating chdenr: ",maxngrid,stat)
     call reg_dealloc_mem(area_init,maxngrid,type_dbl)
     call my_barrier()
@@ -366,63 +422,89 @@ contains
     end if
     ! +++
     call my_barrier
-    if(inode==ionode.AND.iprint_init>1) write(io_lun,*) 'Completed set_ewald()'
+    if(inode==ionode.AND.iprint_init>1) &
+         write(io_lun,*) 'Completed set_ewald()'
 
     ! Generate D2CS
     if (flag_dft_d2) then
       if ( (inode .EQ. ionode) .AND. (iprint_gen .GT. 1) ) &
-           write (io_lun, '(/1x,"The dispersion is considered in the DFT-D2 level.")')
+           write (io_lun, '(/1x,"The dispersion is considered in the &
+           &DFT-D2 level.")')
       call make_cs(inode-1, r_dft_d2, D2_CS, parts, bundle, ni_in_cell, &
                    x_atom_cell, y_atom_cell, z_atom_cell)
       if ( (inode .EQ. ionode) .AND. (iprint_gen .GT. 1) ) then
-        write (io_lun, '(/8x,"+++ D2_CS%ng_cover:",i10)') D2_CS%ng_cover
-        write (io_lun, '(8x,"+++ D2_CS%ncoverx, y, z:",3i8)') D2_CS%ncoverx, D2_CS%ncovery, D2_CS%ncoverz
-        write (io_lun, '(8x,"+++ D2_CS%nspanlx, y, z:",3i8)') D2_CS%nspanlx, D2_CS%nspanly, D2_CS%nspanlz
-        write (io_lun, '(8x,"+++ D2_CS%nx_origin, y, z:",3i8)') D2_CS%nx_origin, D2_CS%ny_origin, D2_CS%nz_origin
+        write (io_lun, '(/8x,"+++ D2_CS%ng_cover:",i10)') &
+             D2_CS%ng_cover
+        write (io_lun, '(8x,"+++ D2_CS%ncoverx, y, z:",3i8)') &
+             D2_CS%ncoverx, D2_CS%ncovery, D2_CS%ncoverz
+        write (io_lun, '(8x,"+++ D2_CS%nspanlx, y, z:",3i8)') &
+             D2_CS%nspanlx, D2_CS%nspanly, D2_CS%nspanlz
+        write (io_lun, '(8x,"+++ D2_CS%nx_origin, y, z:",3i8)') &
+             D2_CS%nx_origin, D2_CS%ny_origin, D2_CS%nz_origin
       endif
       call read_para_D2
-      if (inode .EQ. ionode) then                                                            !! DEBUG !!
-        write (io_lun, '(a, f10.5)') "Sbrt: make_cs for DFT-D2, the cutoff is ", r_dft_d2    !! DEBUG !!
-      endif                                                                                  !! DEBUG !!
-    endif
-
-    ! external potential - first set up angular momentum bits
-    call set_fact
-    call set_prefac
-    call set_prefac_real
+      if (inode .EQ. ionode) then                             !! DEBUG !!
+         write (io_lun, '(a, f10.5)') &                       !! DEBUG !!
+              "Sbrt: make_cs for DFT-D2, the cutoff is ", &   !! DEBUG !!
+              r_dft_d2                                        !! DEBUG !!         
+      endif                                                   !! DEBUG !!
+   endif
+   
+   ! external potential - first set up angular momentum bits
+   call set_fact
+   call set_prefac
+   call set_prefac_real
     !  TM's pseudo or not : 15/11/2002 TM
-    select case(pseudo_type) 
-    case(OLDPS)
-       call init_pseudo(number_of_bands, core_correction)
-    case(SIESTA)
-       call init_pseudo_tm(core_correction)
-    case(ABINIT)
-       call init_pseudo_tm(core_correction)
-    end select
-
-    ! For P.C.C.
-    if (flag_pcc_global) then
+   select case (pseudo_type) 
+   case(OLDPS)
+      call init_pseudo (core_correction)
+   case(SIESTA)
+      call init_pseudo_tm (core_correction)
+   case(ABINIT)
+      call init_pseudo_tm (core_correction)
+   end select
+   
+   ! For P.C.C.
+   if (flag_pcc_global) then
       allocate(density_pcc(maxngrid), STAT=stat)
       call set_density_pcc
       if (stat/=0) then
-        call cq_abort("ERROR allocating grids: ", maxngrid, stat)
-        call reg_alloc_mem(area_init, maxngrid, type_dbl)
+         call cq_abort("ERROR allocating grids: ", maxngrid, stat)
+         call reg_alloc_mem(area_init, maxngrid, type_dbl)
       endif
-    endif
+   endif
 
-    if(.NOT.find_chdens) call set_density
-    if(flag_perform_cDFT) then
-       call init_cdft
-    end if
-    if(flag_Becke_weights) then
-       allocate(atomcharge(ni_in_cell))
-       call build_Becke_weights
-       call build_Becke_charges(density,maxngrid)
-    end if
-    if(inode==ionode.AND.iprint_init>1) write(io_lun,*) 'Done init_pseudo '
+   if(.NOT.find_chdens) call set_density
+   if(flag_perform_cDFT) then
+      call init_cdft
+   end if
+   if(flag_Becke_weights) then
+      if (flag_spin_polarisation) then
+         allocate (atomcharge_up(ni_in_cell), &
+              atomcharge_dn(ni_in_cell), STAT=stat)
+         if (stat /= 0) call cq_abort("Error allocating&
+              & atomcharge_up and dn: ", ni_in_cell, stat)
+         call reg_alloc_mem (area_init, 2 * ni_in_cell, type_dbl)
+      else
+         allocate (atomcharge(ni_in_cell))
+         if (stat /= 0) call cq_abort("Error allocating atomcharge: ",&
+              & ni_in_cell,stat)
+         call reg_alloc_mem(area_init,ni_in_cell,type_dbl)
+      end if
+      call build_Becke_weights
+      if (flag_spin_polarisation) then
+         ! get atomcharge and atomcharge_dn
+         call build_Becke_charges (atomcharge_up, density_up, maxngrid, spin=1)
+         call build_Becke_charges (atomcharge_dn, density_dn, maxngrid, spin=2)
+      else ! if (flag_spin_polarisation)
+         ! get atomcharge, this time density is total with factor of 2
+         call build_Becke_charges (atomcharge, density, maxngrid)
+      end if
+   end if
+   if(inode==ionode.AND.iprint_init>1) write(io_lun,*) 'Done init_pseudo '
 
-    return
-  end subroutine set_up
+   return
+ end subroutine set_up
 !!***
 
 !!****f* initialisation/initial_phis *
@@ -513,13 +595,15 @@ contains
   subroutine initial_phis( mu, restart_file, read_phi, vary_mu, start)
 
     use datatypes
-    use blip, ONLY: init_blip_flag, make_pre, set_blip_index, gauss2blip
+    use blip, ONLY: init_blip_flag, make_pre, set_blip_index, &
+         gauss2blip
     use blip_grid_transform_module, ONLY: blip_to_support_new
     use calc_matrix_elements_module, ONLY: get_matrix_elements_new
     use dimens, ONLY: grid_point_volume, r_h
     !use fdf, ONLY : fdf_boolean
     use GenComms, ONLY: cq_abort, my_barrier, gcopy, inode, ionode
-    use global_module, ONLY: iprint_init, flag_basis_set, blips, PAOs, flag_onsite_blip_ana, flag_analytic_blip_int
+    use global_module, ONLY: iprint_init, flag_basis_set, blips, PAOs, &
+                             flag_onsite_blip_ana, flag_analytic_blip_int
     use matrix_data, ONLY : Srange,mat
     use numbers, ONLY: zero, very_small, one
     use pao2blip, ONLY: make_blips_from_paos
@@ -530,11 +614,15 @@ contains
     use mult_module, ONLY: return_matrix_value, matS
     ! Temp
     use S_matrix_module, ONLY: get_onsite_S, get_S_matrix
-    use make_rad_tables, ONLY: gen_rad_tables, gen_nlpf_supp_tbls, get_support_pao_rep
-    use angular_coeff_routines, ONLY: make_ang_coeffs, set_fact, set_prefac, set_prefac_real
+    use make_rad_tables, ONLY: gen_rad_tables, gen_nlpf_supp_tbls, &
+                               get_support_pao_rep
+    use angular_coeff_routines, ONLY: make_ang_coeffs, set_fact, &
+                                      set_prefac, set_prefac_real
     use read_support_spec, ONLY: read_support
     use functions_on_grid, ONLY: supportfns
-    use support_spec_format, ONLY: supports_on_atom, coefficient_array, coeff_array_size, read_option
+    use support_spec_format, ONLY: supports_on_atom,  &
+                                   coefficient_array, &
+                                   coeff_array_size, read_option
     use input_module, ONLY: leqi
     use nlpf2blip, ONLY: make_blips_from_nlpfs
 
@@ -737,19 +825,32 @@ contains
 !!   10:09, 13/02/2006 drb 
 !!    Removed all explicit references to data_ variables and rewrote in terms of new 
 !!    matrix routines
+!!   2011/07/18 L.Tong
+!!    Added Spin polarisation
+!!    Added grab matrix for L_dn if spin polarised
+!!    Implemented Spin polarisation for calcuating K and Phi
+!!   2011/09/19 L.Tong
+!!    Removed some dependence on number_of_bands as no longer required
+!!    by some updated subroutines
 !!   29/09/2011 16:26 M. Arita
 !!    Calculate te dispersion in the DFT-D2 level
+!!   2011/12/09 L.Tong
+!!    Removed redundant parameter number_of_bands
 !!  SOURCE
 !!
-  subroutine initial_H( start, start_L, find_chdens, fixed_potential, vary_mu, number_of_bands, mu, total_energy)
+  subroutine initial_H (start, start_L, find_chdens, fixed_potential, &
+       vary_mu, mu, total_energy)
 
     use datatypes
     use numbers
     use logicals
-    use mult_module, ONLY: LNV_matrix_multiply, matL, matphi
+    use mult_module, ONLY: LNV_matrix_multiply, matL, matL_dn, matphi,&
+         matphi_dn
     use SelfCon, ONLY: new_SC_potl
-    use global_module, ONLY: iprint_init, flag_self_consistent, flag_basis_set, blips, PAOs, flag_vary_basis, &
-         restart_L, restart_rho, flag_test_forces, flag_dft_d2
+    use global_module, ONLY: iprint_init, flag_self_consistent, &
+         flag_basis_set, blips, PAOs, flag_vary_basis, restart_L, &
+         restart_rho, flag_test_forces, flag_dft_d2, &
+         flag_spin_polarisation
     use ewald_module, ONLY: ewald, mikes_ewald, flag_old_ewald
     use S_matrix_module, ONLY: get_S_matrix
     use GenComms, ONLY: my_barrier, end_comms, inode, ionode
@@ -759,11 +860,13 @@ contains
     use test_force_module, ONLY: test_forces
     use io_module, ONLY: grab_matrix, grab_charge
     use DiagModule, ONLY: diagon
-    use density_module, ONLY: get_electronic_density, density
+    use density_module, ONLY: get_electronic_density, density, &
+         density_up, density_dn
     use functions_on_grid, ONLY: supportfns, H_on_supportfns
     use dimens, ONLY: n_my_grid_points
     use maxima_module, ONLY: maxngrid
-    use minimise, ONLY: SC_tolerance, L_tolerance, n_L_iterations, expected_reduction
+    use minimise, ONLY: SC_tolerance, L_tolerance, n_L_iterations, &
+         expected_reduction
     use DFT_D2, ONLY: dispersion_D2
 
     implicit none
@@ -771,14 +874,14 @@ contains
     ! Passed variables
     logical :: vary_mu, find_chdens, fixed_potential
     logical :: start, start_L
-
-    real(double) :: number_of_bands, mu
+    real(double) :: mu
     real(double) :: total_energy
 
     ! Local
     logical :: reset_L, charge, store
     integer :: force_to_test, stat
     real(double) :: electrons, bandE
+    real(double) :: electrons_up, electrons_dn, energy_up, energy_dn
     ! Dummy vars for MMM
 
     total_energy = zero
@@ -793,23 +896,41 @@ contains
     ! to modify L so that the electron number is correct. (not done now)
     !start_L = .false.
     if (.NOT.diagon.AND.find_chdens.AND.(start .or. start_L)) then
-       call initial_L( )
-       call my_barrier()
-       if (inode.eq.ionode.AND.iprint_init>1) write(io_lun,*) 'Got L matrix'
+       call initial_L ()
+       call my_barrier ()
+       if (inode.eq.ionode.AND.iprint_init>1) &
+            write(io_lun,*) 'Got L (and L_dn if spin polarised) matrix'
        if(vary_mu) then
             ! This cannot be timed within the routine
             call start_timer(tmr_std_densitymat)
-            call correct_electron_number( iprint_init, number_of_bands, inode, ionode)
+            call correct_electron_number (iprint_init, inode, ionode)
             call stop_timer(tmr_std_densitymat)
        end if
     end if
-    if(restart_L) call grab_matrix("L",matL,inode)
+    if (restart_L) then
+       call grab_matrix("L",matL,inode)
+       if (flag_spin_polarisation) call grab_matrix ("L_dn", matL_dn, inode)
+    end if
 
-    ! (3) get K matrix
+    ! (3) get K matrix (and also get phi matrix)
     if(.NOT.diagon.AND.(find_chdens.OR.restart_L)) then
-       call LNV_matrix_multiply(electrons, total_energy, &
-            doK, dontM1, dontM2, dontM3, dontM4, dophi, dontE,0,0,0,matphi)
-       if(inode==ionode.AND.iprint_init>1) write(io_lun,*) 'Got elect: ',electrons
+       if (flag_spin_polarisation) then
+          call LNV_matrix_multiply (electrons_up, energy_up, doK,&
+               & dontM1, dontM2, dontM3, dontM4, dophi, dontE, 0, 0,&
+               & 0, matphi, spin = 1)
+          call LNV_matrix_multiply (electrons_dn, energy_dn, doK,&
+               & dontM1, dontM2, dontM3, dontM4, dophi, dontE, 0, 0,&
+               & 0, matphi_dn, spin = 2)
+          electrons = electrons_up + electrons_dn
+          if(inode==ionode.AND.iprint_init>1) write(io_lun,*) 'Got&
+               & elect: (Nup, Ndn, Ntotal) ', electrons_up,&
+               & electrons_dn, electrons
+       else 
+          call LNV_matrix_multiply(electrons, total_energy, &
+               doK, dontM1, dontM2, dontM3, dontM4, dophi, dontE,0,0,0,matphi)
+          if(inode==ionode.AND.iprint_init>1) write(io_lun,*) 'Got&
+               & elect: ',electrons
+       end if
     end if
 
     ! (4) get the core correction to the pseudopotential energy
@@ -825,52 +946,100 @@ contains
     ! +++
     ! (6) Find the dispersion energy for the initial set of atoms
     if (flag_dft_d2) then
-      if ( (inode .EQ. ionode) .AND. (iprint_init .GT. 1) ) write (io_lun, *) "Calling DFT-D2"
+      if ( (inode .EQ. ionode) .AND. (iprint_init .GT. 1) ) write&
+           & (io_lun, *) "Calling DFT-D2"
       call dispersion_D2
     endif
     call my_barrier
 
-    if(inode==ionode.AND.iprint_init>2) write(io_lun,*) 'Find_chdens is ',find_chdens
+    if (inode==ionode .AND. iprint_init>2) write (io_lun,*)&
+         & 'Find_chdens is ', find_chdens
     ! (7) Make a self-consistent H matrix and potential
-    if(find_chdens) then
-       call get_electronic_density(density, electrons, supportfns, H_on_supportfns, inode, ionode, maxngrid)
-       if(inode==ionode.AND.iprint_init>1) write(io_lun,*) 'In initial_H, electrons: ',electrons
+    if (find_chdens) then
+       if (flag_spin_polarisation) then
+          call get_electronic_density (density_up, electrons_up,&
+               & supportfns, H_on_supportfns, ionode, ionode,&
+               & maxngrid, spin = 1)
+          ! note this makes H_on_supportfns to have values of K (up)
+          ! acting on support functions, i.e. used as a temp storage
+          call get_electronic_density (density_dn, electrons_dn,&
+               & supportfns, H_on_supportfns, ionode, ionode,&
+               & maxngrid, spin = 2)
+          !! IMPORTANT, H_on_supports now only contains K_dn acting on
+          !! support functions, but this is okay since H_on_supports
+          !! is only used here in the subroutine, and as a temporary
+          !! memory work space
+          electrons = electrons_up + electrons_dn
+       else
+          ! in spin non-polarised case get_electronic_density
+          ! calculates the TOTAL density (= 2Tr(KS)) and electron
+          ! numbers
+          call get_electronic_density (density, electrons,&
+               & supportfns, H_on_supportfns, inode, ionode, maxngrid)
+       end if
+       if (inode == ionode .AND. iprint_init > 1) &
+            write (io_lun, *) 'In initial_H, electrons: ', electrons
     else if(restart_rho) then
-       call grab_charge(density,n_my_grid_points,inode)
+       if (flag_spin_polarisation) then
+          call grab_charge (density_up, n_my_grid_points, inode, spin=1)
+          call grab_charge (density_dn, n_my_grid_points, inode, spin=2)
+       else
+          call grab_charge (density, n_my_grid_points, inode)
+       end if
     endif
     reset_L = .true.
     if(flag_self_consistent) then ! Vary only DM and charge density
        !OLD call new_SC_potl( .true., SC_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
        !OLD      number_of_bands, L_tolerance, mu, total_energy)
-      if(restart_L) then
-       reset_L=.false.
-       call new_SC_potl( .true., SC_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
-            number_of_bands, L_tolerance, mu, total_energy)
-      else
-       reset_L=.true.
-       call get_H_matrix(.true., fixed_potential, electrons, density, maxngrid)
-       call FindMinDM(n_L_iterations, number_of_bands, vary_mu, &
-            L_tolerance, mu, inode, ionode, reset_L, .false.)
-       reset_L=.false.
-       call new_SC_potl( .true., SC_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
-            number_of_bands, L_tolerance, mu, total_energy)
-      endif
+       if(restart_L) then
+          reset_L=.false.
+          call new_SC_potl( .true., SC_tolerance, reset_L, &
+               fixed_potential, vary_mu, n_L_iterations, L_tolerance, &
+               mu, total_energy)
+       else
+          reset_L=.true.
+          if (flag_spin_polarisation) then
+             call get_H_matrix(.true., fixed_potential, &
+                  electrons_up, electrons_dn, density_up, density_dn, &
+                  maxngrid)
+             electrons = electrons_up + electrons_dn
+          else
+             call get_H_matrix(.true., fixed_potential, electrons, &
+                  density, maxngrid)
+          end if
+          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, mu, &
+               inode, ionode, reset_L, .false.)
+          reset_L=.false.
+          call new_SC_potl(.true., SC_tolerance, reset_L, &
+               fixed_potential, vary_mu, n_L_iterations, L_tolerance, &
+               mu, total_energy)
+       endif
     else ! Ab initio TB: vary only DM
-       call get_H_matrix(.true., fixed_potential, electrons, density, maxngrid)
+       if (flag_spin_polarisation) then
+          call get_H_matrix(.true., fixed_potential, &
+               electrons_up, electrons_dn, density_up, density_dn, &
+               maxngrid)
+          electrons = electrons_up + electrons_dn
+       else
+          call get_H_matrix(.true., fixed_potential, electrons, &
+               density, maxngrid)
+       end if
        !OLD if(.NOT.restart_L) call FindMinDM(n_L_iterations, number_of_bands, vary_mu, &
        !OLD      L_tolerance, mu, inode, ionode, reset_L, .false.)
        if(.NOT.restart_L) then
-        call FindMinDM(n_L_iterations, number_of_bands, vary_mu, L_tolerance, mu, inode, ionode, reset_L, .false.)
+          call FindMinDM (n_L_iterations, vary_mu, L_tolerance, mu,&
+               & inode, ionode, reset_L, .false.)
        else
-        call FindMinDM(n_L_iterations, number_of_bands, vary_mu, L_tolerance, mu, inode, ionode, .false., .false.)
+          call FindMinDM (n_L_iterations, vary_mu, L_tolerance, mu,&
+               & inode, ionode, .false., .false.)
        endif
        call get_energy(total_energy)
     end if
     ! Do we want to just test the forces ?
     if(flag_test_forces) then
-       call test_forces(fixed_potential, vary_mu, n_L_iterations, &
-            number_of_bands, L_tolerance, SC_tolerance, mu, &
-            total_energy, expected_reduction)
+       call test_forces (fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, SC_tolerance, mu, total_energy, &
+            expected_reduction)
        call end_comms
        stop
     end if
@@ -1205,7 +1374,6 @@ contains
 !!   Finds initial L (set equal to 1/2 S^-1)
 !!  INPUTS
 !! 
-!! 
 !!  USES
 !! 
 !!  AUTHOR
@@ -1220,23 +1388,30 @@ contains
 !!   12:20, 2004/06/09 dave
 !!    Fixed bug: Srange not Trange in final option
 !!   10:09, 13/02/2006 drb 
-!!    Removed all explicit references to data_ variables and rewrote in terms of new 
+!!    Removed all explicit references to data_ variables and rewrote
+!!    in terms of new
 !!    matrix routines
 !!   2006/11/14 07:58 dave
 !!    Included in initialisation
+!!   2011/07/01 L.Tong
+!!    Added initialisation for matL_dn, for spin polarisation
 !!  SOURCE
 !!
-  subroutine initial_L( )
+  subroutine initial_L ()
 
     use datatypes
     use numbers, ONLY: half, zero
-    use mult_module, ONLY: matL, matT, matrix_sum
+    use mult_module, ONLY: matL, matL_dn, matT, matrix_sum
+    use global_module, ONLY: flag_spin_polarisation
 
     implicit none
 
-    ! Local variables
-
-    call matrix_sum(zero,matL,half,matT)
+    call matrix_sum (zero, matL, half, matT)
+    if (flag_spin_polarisation) then
+       ! set L for the second spin component also equal to 1/2 S^-1
+       call matrix_sum (zero, matL_dn, half, matT)
+    end if
+    
     return
   end subroutine initial_L
 !!***

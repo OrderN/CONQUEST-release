@@ -54,7 +54,16 @@
 !!   2009/07/24 16:41 dave
 !!    Added new flag for global or per atom tolerances
 !!   2011/03/30 18:59 M.Arita
-!!    Added new flag for P.C.C.
+!!    Added new flag for for P.C.C.
+!!   2011/04/01 L.Tong
+!!    Added flag_spin_polarisation as a switch for spin polarised calculation
+!!    Added flag functional_lsda_pw92 for LSDA
+!!   2011/07/26 L.Tong
+!!    Added flag_fix_spin_population as switch for fixing spin population
+!!   Friday, 2011/08/05 L.Tong
+!!    Added initial (fixed) electron numbers for spin up and down
+!!    channels, used when flag_fix_spin_population is true
+!!    Moved all new variables for spin polarisation calculations together
 !!   2011/09/29 14:51 M. Arita
 !!    Added new flags for DFT-D2
 !!   2011/07/21 16:35 dave
@@ -85,7 +94,7 @@ module global_module
   real(double), allocatable, dimension(:) :: z_atom_cell
   integer, allocatable, dimension(:) :: coord_to_glob
   integer :: ni_in_cell ! Atoms in cell
-  integer :: ne_in_cell ! Electrons in cell
+  real(double) :: ne_in_cell ! Electrons in cell
   ! atom_coord : Use global labelling, in the future this array should
   ! be used instead of x, y, z_atom_cell. by T. Miyazaki
   real(double), dimension(:,:), allocatable :: atom_coord ! Atomic coordinates
@@ -146,6 +155,7 @@ module global_module
   integer, parameter :: functional_gga_pbe96       = 101  ! Standard PBE
   integer, parameter :: functional_gga_pbe96_rev98 = 102  ! revPBE (PBE + Zhang-Yang 1998)
   integer, parameter :: functional_gga_pbe96_r99   = 103  ! RPBE (PBE + Hammer-Hansen-Norskov 1999)
+  integer, parameter :: functional_lsda_pw92       = 201  ! PRB 45, 13244 (1992) + PRL 45, 566 (1980) with spin
 
   ! Switch for variation of blips in get_support_gradient
   integer :: WhichPulay
@@ -184,6 +194,15 @@ module global_module
 
   ! For P.C.C.
   logical :: flag_pcc_global = .false.
+
+  !! For Spin polarised calculations (L.Tong)
+  ! Logical flag controlling spin polarized run 
+  logical :: flag_spin_polarisation
+  ! Logical flag determine if spin populations are fixed (fixed magnetic moment) 
+  logical :: flag_fix_spin_population
+  ! fixed electron numbers for different spin channels, used when
+  ! flag_fix_spin_population is true
+  real(double) :: ne_up_in_cell, ne_dn_in_cell
 
   ! For DFT-D2
   logical :: flag_dft_d2
