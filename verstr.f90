@@ -1,1 +1,1 @@
-  character(len=*), parameter :: commentver="Version beta 0.41 (rRRR): non-local projectors as blips bugfix DRB 2012/01/19"
+  character(len=*), parameter :: commentver="Version beta 0.42 (rRRR): spin implementation LT and DRB 2012/03/02"

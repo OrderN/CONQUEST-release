@@ -474,7 +474,7 @@ contains
      real(double) :: tolerance, mu, total_energy
 
      ! Local variables
-     real(double) :: electrons, energy, start_BE, new_BE, Ltol
+     real(double) :: electrons, total_energy_1, start_BE, new_BE, Ltol
      integer :: i, temp_supp_fn
 
      ! Change the Hamiltonian
@@ -503,12 +503,12 @@ contains
         ! electrons and energy are used as dump for electrons and
         ! energies calculated from LNV_matrix_multipy
         ! total_energy is calculated from get_energy below
-        call LNV_matrix_multiply (electrons, energy, doK, dontM1, &
+        call LNV_matrix_multiply (electrons, total_energy_1, doK, dontM1, &
              dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0, spin=1)
-        call LNV_matrix_multiply (electrons, energy, doK, dontM1, &
+        call LNV_matrix_multiply (electrons, total_energy_1, doK, dontM1, &
              dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0, spin=2)
      else
-        call LNV_matrix_multiply (electrons, energy, doK, dontM1, &
+        call LNV_matrix_multiply (electrons, total_energy_1, doK, dontM1, &
              dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0)
      end if
      ! Get total energy
