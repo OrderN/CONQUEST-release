@@ -494,8 +494,8 @@ contains
     end do
     electrons_tot = spin_factor * sum(electrons(:))
     if (inode == ionode .and. output_level >= 1) then
-       write (io_lun, '10x,"Electron Count, up, down and total : ",&
-                       &f25.15,/,47x,f25.15,/,47x,f25.15') &
+       write (io_lun, '(10x,"Electron Count, up, down and total : ",&
+                       &f25.15,/,47x,f25.15,/,47x,f25.15)') &
              electrons(1), electrons(nspin), electrons_tot
     end if
 

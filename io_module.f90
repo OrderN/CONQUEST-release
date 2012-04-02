@@ -1399,7 +1399,8 @@ second:   do
 
                                            ! If z coord is > the HC z boundries, exit
                                            if (atom_coord(3,sorted_coord(3,i5)) > (hc_edge(3) * (i2 + 1))) then
-                                              if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,i5)') "    Atom over z:", sorted_coord(3,i5)
+                                              if (iprint_init > 4.AND.myid==0) write(io_lun,'(a,i5)') "    Atom over z:", &
+                                                   sorted_coord(3,i5)
                                               exit
                                            end if
 
@@ -1415,25 +1416,32 @@ second:   do
                                                  if (sfc_sequence(Hilbert) > global_maxatomspart) then
                                                     refine = .true.
                                                     deallocate(H,STAT = stat)
-                                                    if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array H (Hilbert)')
+
+                                                    if (stat /= 0) call &
+                                                         cq_abort('Create_sfc_partitions: error deallocating array H (Hilbert)')
                                                     deallocate(sfc_sequence,STAT = stat)
-                                                    if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array sfc_sequence')
+                                                    if (stat /= 0) call &
+                                                         cq_abort('Create_sfc_partitions: error deallocating array sfc_sequence')
                                                     deallocate(map,STAT = stat)
-                                                    if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array sfc_sequence')
+                                                    if (stat /= 0) call &
+                                                         cq_abort('Create_sfc_partitions: error deallocating array sfc_sequence')
                                                     deallocate(cc_to_H,cc_part_id,STAT = stat)
-                                                    if (stat /= 0) call cq_abort('Create_sfc_partitions: error deallocating array cc_part_id')
+                                                    if (stat /= 0) call &
+                                                         cq_abort('Create_sfc_partitions: error deallocating array cc_part_id')
                                                     exit hc2
                                                  end if
                                                  map(Hilbert,sfc_sequence(Hilbert)) = sorted_coord(1,i3)
                                                  if (iprint_init > 4.AND.myid==0) &
                                                       write(io_lun,'(a,i5,a)') "    Atom", sorted_coord(1,i3), " matches"
                                                  if (iprint_init > 4.AND.myid==0) &
-                                                      write(io_lun,'(a,i5,a,i5)') "    Sequence(", Hilbert,") atoms:",sfc_sequence(Hilbert)
+                                                      write(io_lun,'(a,i5,a,i5)') &
+                                                      "    Sequence(", Hilbert,") atoms:",sfc_sequence(Hilbert)
                                                  if (maxatomspart < sfc_sequence(Hilbert)) maxatomspart = sfc_sequence(Hilbert)
                                                  exit
                                               else
                                                  if (iprint_init > 4.AND.myid==0) &
-                                                      write(io_lun,'(a,i5,a)') "    Z range, atom",sorted_coord(3,i5)," does not match"
+                                                      write(io_lun,'(a,i5,a)') "    Z range, atom", &
+                                                      sorted_coord(3,i5)," does not match"
                                                  exit
                                               end if
                                            end if

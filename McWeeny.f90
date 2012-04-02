@@ -164,7 +164,7 @@ contains
                 
              end if
           end do
-          if (done(1) == .true. .and. done(nspin) == .true.) then
+          if (done(1) .eqv. .true. .and. done(nspin) .eqv. .true.) then
              if (inode == ionode .and. iprint_DM > 0) then
                 do spin = 1, nspin
                    write (io_lun, 2) spin, c_old(spin), oldE(spin),&
@@ -378,8 +378,8 @@ contains
     call matrix_product(matT, matS, matTS, mult(T_S_TS))
     SX = direct_sum_factor * matrix_trace(matTS)
     if (inode == ionode .and. iprint_DM > 1) then 
-       write (io_lun, '2x,"SX is    ",f25.15') SX
-       write (io_lun, '2x,"SX/no is ",f25.15') SX / n_o
+       write (io_lun, fmt='(2x,"SX is    ",f25.15)') SX
+       write (io_lun, fmt='(2x,"SX/no is ",f25.15)') SX / n_o
     end if
 
     SXHX_ds = zero
@@ -390,11 +390,11 @@ contains
        SXHX(spin) = matrix_product_trace(matS, mat_temp(spin))
        SXHX_ds = SXHX_ds + spin_factor * SXHX(spin)
        if (inode == ionode .and. iprint_DM > 1) &
-            write (io_lun, '2x,"SXHX(spin=",i1,") = ",f25.15') &
+            write (io_lun, '(2x,"SXHX(spin=",i1,") = ",f25.15)') &
                   spin, SXHX(spin)
     end do
     if (inode == ionode .and. iprint_DM > 1) &
-            write (io_lun, '2x,"SXHX_ds = ",f25.15') &
+            write (io_lun, '(2x,"SXHX_ds = ",f25.15)') &
                   SXHX_ds    
 
     call my_barrier()
@@ -424,7 +424,7 @@ contains
                       (n_o * A / (n_o - ne(spin)) - one)
           if (inode == ionode) &
                write (io_lun, &
-                      '2x,"Mu1, Mu2, for spin = ",i1," are: ",2f25.15') &
+                      '(2x,"Mu1, Mu2, for spin = ",i1," are: ",2f25.1)') &
                      spin, mu1(spin), mu2(spin)
           if ((mu1(spin) < hmax(spin) .and. mu1(spin) > hmin(spin)) .and. &
               (abs(ne(spin) / (hmax(spin) - mu1(spin))) < &
@@ -437,7 +437,7 @@ contains
           endif
           if (inode == ionode .and. iprint_DM > 1) &
                write (io_lun, &
-                      '2x,"mubar, lambda for spin = ",i1," are: ",2f25.15') &
+                      '(2x,"mubar, lambda for spin = ",i1," are: ",2f25.1)') &
                      spin, mubar(spin), lambda(spin)
        end do
        ! Calculate L0. 
@@ -451,7 +451,7 @@ contains
        mu2(:) = (hmin_ds * A * n_e / (n_o - n_e) - SXHX_ds / n_o) / &
                 (n_o * A / (n_o - n_e) - one)
        if (inode == ionode) &
-            write (io_lun, '2x,"Mu1, Mu2: ",2f25.15') mu1(1), mu2(1)
+            write (io_lun, '(2x,"Mu1, Mu2: ",2f25.15)') mu1(1), mu2(1)
        if ((mu1(1) < hmax_ds .and. mu1(1) > hmin_ds) .and. &
             (abs(n_e / (hmax_ds - mu1(1))) < &
              abs((n_o - n_e) / (mu2(1) - hmin_ds)))) then
@@ -463,7 +463,7 @@ contains
        endif
        if (inode == ionode .and. iprint_DM > 1) then
           write (io_lun, 6) mubar(1)
-          write (io_lun, '2x,"lambda is ",f25.15') lambda(1)
+          write (io_lun, '(2x,"lambda is ",f25.15)') lambda(1)
        end if
        ! Calculate L0. 
        do spin = 1, nspin
@@ -582,12 +582,12 @@ contains
        call matrix_sum(one,  mat_top(spin), -one, matLSLSL(spin))
        c1(spin) = matrix_product_trace(matS, mat_top(spin))
        if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '2x,"S.top (spin=",i1,") is  ",f25.15') &
+            write (io_lun, '(2x,"S.top (spin=",i1,") is  ",f25.15)') &
                   spin, c1(spin)
        call matrix_sum(zero, mat_bottom(spin), one, matL(spin))
        c1(spin) = matrix_product_trace(matS, mat_bottom(spin))
        if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '2x,"N_e (spin=",i1,") is  ",f25.15') &
+            write (io_lun, '(2x,"N_e (spin=",i1,") is  ",f25.15)') &
                   spin, c1(spin)
        call matrix_sum(one, mat_bottom(spin), -one, matLSL(spin))
        c1(spin) = matrix_product_trace(matS, mat_top(spin))
@@ -599,7 +599,7 @@ contains
        endif
        c(spin) = cn(spin)
        if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '2x,"c, c1, c2 (spin=",i1,") are ",3f25.15') &
+            write (io_lun, '(2x,"c, c1, c2 (spin=",i1,") are ",3f25.15)') &
                   spin, cn(spin), c1(spin), c2(spin)                              
        ! Shorten LSL and LSLSL to range L
        call matrix_scale(zero, matRhoNew(spin))
@@ -634,12 +634,12 @@ contains
        call matrix_sum(zero, mat_bottom(spin), one, matRhoNew(spin))
        energy(spin) = matrix_product_trace(mat_bottom(spin), matH(spin))
        if (inode == ionode .and. iprint_DM >= 3) &
-            write (io_lun, '2x,"energy (spin=",i1,") is ",f25.15') &
+            write (io_lun, '(2x,"energy (spin=",i1,") is ",f25.15)') &
                   spin, energy(spin)
        call matrix_sum(zero, mat_top(spin), one, matRhoNew(spin))
        c1(spin) = matrix_product_trace(mat_top(spin), matS)
        if (inode == ionode .and. iprint_DM >= 3) &
-            write (io_lun, '2x,"N_e(2) (spin=",i1,") is ",f25.15') &
+            write (io_lun, '(2x,"N_e(2) (spin=",i1,") is ",f25.15)') &
                   spin, c1(spin)
        ! note that N_e is printed without factor of two here even for
        ! spin un-polarised results.
@@ -733,11 +733,11 @@ contains
        call matrix_sum(one,  mat_top(spin), -one, matLSLSL(spin))
        tmp = matrix_product_trace(matS, mat_top(spin))
        if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '2x,"S.top (spin=",i1,") is ",f25.15') spin, tmp
+            write (io_lun, '(2x,"S.top (spin=",i1,") is ",f25.15)') spin, tmp
        call matrix_sum(zero, mat_bottom(spin), one, matL(spin))
        tmp = matrix_product_trace(matS, mat_bottom(spin))
        if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '2x,"N_e (spin=",i1,") is ",f25.15') spin, tmp
+            write (io_lun, '(2x,"N_e (spin=",i1,") is ",f25.15)') spin, tmp
        ! get the real mat_bottom for spin up
        call matrix_sum(one, mat_bottom(spin), -one, matLSL(spin))
        ! c1 and c2 calculated
@@ -753,7 +753,7 @@ contains
        call cq_abort('McW_matrix_multiply_ds: c2 is zero')
     end if
     if (inode == ionode .and. iprint_DM >= 2) &
-         write (io_lun, '2x,"c_total, c1, c2 are ",3f25.15') &
+         write (io_lun, '(2x,"c_total, c1, c2 are ",3f25.15)') &
                c_total, c1, c2
     ! Shorten LSL and LSLSL to range L
     do spin = 1, nspin
@@ -772,12 +772,12 @@ contains
                       matrix_product_trace(mat_bottom(spin), matH(spin))
     end do ! spin
     if (inode == ionode .and. iprint_DM >= 3) &
-         write (io_lun, '2x,"energy_total: ",f25.15') energy_total
+         write (io_lun, '(2x,"energy_total: ",f25.15)') energy_total
     do spin = 1, nspin
        call matrix_sum(zero, mat_top(spin), one, matRhoNew(spin))
        tmp = matrix_product_trace(mat_top(spin), matS)
        if (inode == ionode .and. iprint_DM >= 3) &
-            write (io_lun, '2x,"N_e (spin=",i1,") is ",f25.15') &
+            write (io_lun, '(2x,"N_e (spin=",i1,") is ",f25.15)') &
                   spin, tmp
     end do ! spin
 
@@ -833,15 +833,15 @@ contains
     call matrix_product(matB, matA, matBA, mult(T_H_TH))
     if (iprint_DM >= 2) xx = matrix_trace(matBA)
     if (inode == ionode .and. iprint_DM >= 2) &
-         write (io_lun, '2x,"Trace of BA:            ",f25.15') xx
+         write (io_lun, '(2x,"Trace of BA:            ",f25.15)') xx
     call matrix_product(matBA, matB, matBAB, mult(TH_T_L))
     if (iprint_DM >= 2) xx = matrix_trace(matBAB)
     if (inode == ionode .and. iprint_DM >= 2) &
-         write (io_lun, '2x,"Trace of BAB (L range): ",f25.15') xx
+         write (io_lun, '(2x,"Trace of BAB (L range): ",f25.15)') xx
     call matrix_sum(zero, mat_temp, one, matBAB)
     if (iprint_DM >= 2) xx = matrix_trace(mat_temp)
     if (inode == ionode .and. iprint_DM >= 2) &
-         write (io_lun, '2x,"Trace of BAB (S range): ",f25.15') xx
+         write (io_lun, '(2x,"Trace of BAB (S range): ",f25.15)') xx
     call free_temp_matrix(matBA)
     return
   end Subroutine McWXHX
@@ -874,12 +874,12 @@ contains
 
     tmp = (l*m+n_e)/n_o
     if (inode == ionode .and. iprint_DM >= 2) &
-         write (io_lun, '2x,"l, m, n_e, n_o and tmp are ",5f25.15') &
+         write (io_lun, '(2x,"l, m, n_e, n_o and tmp are ",5f25.15)') &
                l, m, n_e, n_o, tmp
     call matrix_sum(zero, matA, tmp, matB)
     tmp = -l/n_o
     if (inode == ionode .and. iprint_DM >= 2) &
-         write (io_lun, '2x,"tmp is ",f25.15') tmp
+         write (io_lun, '(2x,"tmp is ",f25.15)') tmp
     call matrix_sum(one, matA, tmp, matC)
     return
   end Subroutine McWRho0

@@ -395,8 +395,8 @@ contains
           n_dot_n(spin) = matrix_product_trace(matSphi(spin), matphi(spin))
           n_dot_n_tot = n_dot_n_tot + spin_factor * n_dot_n(spin)
           if (inode == ionode .and. iprint_DM >= 2) then
-             write (io_lun, '2x,"e.n (spin=",i1,") ",f25.15') spin, e_dot_n(spin)
-             write (io_lun, '2x,"n.n (spin=",i1,") ",f25.15') spin, n_dot_n(spin)
+             write (io_lun, '(2x,"e.n (spin=",i1,") ",f25.15)') spin, e_dot_n(spin)
+             write (io_lun, '(2x,"n.n (spin=",i1,") ",f25.15)') spin, n_dot_n(spin)
           end if
        end do
        ! Correct search direction so that it is tangent to
@@ -513,7 +513,7 @@ contains
        if (inode == ionode .and. iprint_DM >= 2) &
             write (io_lun, 2) delta_e, zeta
        if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '2x,"zeta...: ",3e25.15') g0, g1, interpG
+            write (io_lun, '(2x,"zeta...: ",3e25.15)') g0, g1, interpG
 
        ! Correct L_n_iter+1 again to get electron numbers correct
        if (vary_mu) then
@@ -600,7 +600,7 @@ contains
           if (inode == ionode .and. iprint_DM >= 1) &
                write (io_lun, 1) n_iter + 1, energy0_tot, g0
           if ((inode == ionode).and. (iprint_DM >= 2)) &
-               write (io_lun, '"Linearity satisfied - calling PulayL"') 
+               write (io_lun, '("Linearity satisfied - calling PulayL")') 
           ndone = n_iter
           do spin = nspin, 1, -1
              call free_temp_matrix(mat_search(spin))
@@ -627,7 +627,7 @@ contains
 
     return
 
-1   format('Iteration: ',i3,' Energy: ',e20.12,' Residual: ',e20.12,)
+1   format('Iteration: ',i3,' Energy: ',e20.12,' Residual: ',e20.12)
 2   format(2x,'Change in energy: ',e20.12,' Linearity: ',e20.12)
 
   end subroutine earlyDM
@@ -799,9 +799,9 @@ contains
           e_dot_n(spin) = matrix_product_trace(matSM3(spin), matphi(spin))
           n_dot_n(spin) = matrix_product_trace(matSphi(spin), matphi(spin))
           if (inode == ionode .and. iprint_DM >= 2) then
-             write (io_lun, '2x,"e_dot_n (spin=",i1"): ",f25.15') &
+             write (io_lun, '(2x,"e_dot_n (spin=",i1"): ",f25.15)') &
                    spin, e_dot_n(spin)
-             write (io_lun, '2x,"n_dot_n (spin=",i1"): ",f25.15') &
+             write (io_lun, '(2x,"n_dot_n (spin=",i1"): ",f25.15)') &
                    spin, n_dot_n(spin)
           end if
        end do
@@ -875,7 +875,7 @@ contains
        if (abs(step) < 0.001_double) step = 0.001_double
        if (abs(step) > 0.1_double) step = 0.1_double
        if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '2x,"npmod, pul_mx and step: ",i3,i3,f25.15') &
+            write (io_lun, '(2x,"npmod, pul_mx and step: ",i3,i3,f25.15)') &
                   npmod, pul_mx, step
        ! take L_n+1 = L_n + step * G_n
        if (npmod > 1) then
@@ -943,7 +943,7 @@ contains
           end do
        end if
        if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '2x,"R2 is ",e25.15') sqrt(gg)
+            write (io_lun, '(2x,"R2 is ",e25.15)') sqrt(gg)
        ! recored the Pulay histories
        do spin = 1, nspin
           call matrix_sum(zero, mat_SGstore(npmod,spin), -one, matSM3(spin))
@@ -1012,8 +1012,8 @@ contains
           end do
        end if
        if (inode == ionode .and. iprint_DM >= 3) &
-            write (io_lun, '2x,"Residual before electron gradient &
-                            &correction: ",e25.15') g1
+            write (io_lun, '(2x,"Residual before electron gradient &
+                            &correction: ",e25.15)') g1
        if (vary_mu) then
           do spin = 1, nspin
              call matrix_product(matT, matphi(spin), &
@@ -1057,7 +1057,7 @@ contains
           end do
        end if
        if (inode == ionode .and. iprint_DM >= 2) &
-            write (io_lun, '2x,"New residual: ",e25.15') g1
+            write (io_lun, '(2x,"New residual: ",e25.15)') g1
        if ((ndone + n_iter) < max_iters) then
           PulayR(ndone + n_iter) = g1
           PulayE(ndone + n_iter) = energy1_tot
@@ -1087,7 +1087,7 @@ contains
           if (inode == ionode) &
                write (io_lun, *) 'Panic ! Residual increase in lateDM'
           if (inode == ionode) &
-               write (io_lun, '"Final energy and residual: ",f24.9,f15.9') &
+               write (io_lun, '("Final energy and residual: ",f24.9,f15.9)') &
                      energy1_tot, g1
           ndone = n_iter
           call dealloc_lateDM
@@ -1100,9 +1100,9 @@ contains
              done = .false.
              ndone = n_iter
              if (inode == ionode) &
-                  write (io_lun, '"Fail in reducing Residual in lateDM"')
+                  write (io_lun, '("Fail in reducing Residual in lateDM")')
              if (inode == ionode) &
-                  write (io_lun, '"energy and residual: ",f24.9,f15.9')&
+                  write (io_lun, '("energy and residual: ",f24.9,f15.9)')&
                         energy1_tot, g1
              call dealloc_lateDM
              call stop_print_timer(tmr_l_iter, "a lateDM iteration", &
@@ -1276,7 +1276,7 @@ contains
     if (abs(step) < 1.0e-2_double) step = 0.01_double
     if (abs(step) > 0.1_double)    step = 0.1_double
     if (inode == ionode .and. output_level >= 2) &
-         write (io_lun, '2x,"Step is ",f25.15') step
+         write (io_lun, '(2x,"Step is ",f25.15)') step
 
     ! now we take the step in the direction D
     do spin = 1, nspin
@@ -1350,7 +1350,7 @@ contains
        end if
     end if ! if (SQ < 0) then
     if (inode == ionode .and. output_level >= 2) &
-         write (io_lun, '2x,"True Step is ",f25.15') truestep
+         write (io_lun, '(2x,"True Step is ",f25.15)') truestep
 
     !TM 09/09/2003
     if (truestep < 1.e-04_double) truestep = 1.e-04_double
@@ -1409,10 +1409,10 @@ contains
 
     if (inode == ionode .and. output_level >= 2) then
        do spin = 1, nspin
-          write (io_lun, '2x,"energy_1 for spin = ",i1," is: ",f25.15') &
+          write (io_lun, '(2x,"energy_1 for spin = ",i1," is: ",f25.15)') &
                 spin, energy_1_spin(spin)
        end do
-       write (io_lun, '2x,"energy_1 overall           is ",f25.15') energy_1
+       write (io_lun, '(2x,"energy_1 overall           is ",f25.15)') energy_1
     end if
 
     ! deallocate matrix
@@ -1524,8 +1524,8 @@ contains
                                    dontM2, dontM3, dontM4, dophi, dontE, &
                                    mat_phi=matphi, spin=spin)
           if (inode == ionode .and. output_level >= 2) &
-               write (io_lun, '2x,"electron number (spin=",i1,") before &
-                               &correction: ",f25.15') spin, electrons(spin)
+               write (io_lun, '(2x,"electron number (spin=",i1,") before &
+                               &correction: ",f25.15)') spin, electrons(spin)
           call matrix_product(matT, matphi(spin), matTL(spin), mult(T_L_TL))
           call matrix_product(matTL(spin), matTtran, matSphi(spin), mult(TL_T_L))
           g0 = matrix_product_trace(matSphi(spin), matphi(spin))
@@ -1533,7 +1533,7 @@ contains
           step1 = (electrons_0(spin) - electrons(spin)) / g0
           step = 0.1_double
           if (inode == ionode .and. output_level >= 2) &
-               write (io_lun, '2x,"g0, step1 (spin=",i1,") are ",2f25.15') &
+               write (io_lun, '(2x,"g0, step1 (spin=",i1,") are ",2f25.15)') &
                      spin, g0, step1
           if (abs(electrons_0(spin) - electrons(spin)) < 1.0e-9_double) then
              call matrix_sum(one, matL(spin), step1, matSphi(spin))
@@ -1544,8 +1544,8 @@ contains
                                          dophi, dontE, mat_phi=matphi,   &
                                          spin=spin)
                 if (inode == ionode) &
-                     write (io_lun, '2x,"electron number (spin=",i1,") &
-                                     &after correction: ",f25.15') &
+                     write (io_lun, '(2x,"electron number (spin=",i1,") &
+                                     &after correction: ",f25.15)') &
                            spin, electrons_2(spin)
              end if
              done = .true.
@@ -1563,7 +1563,7 @@ contains
                                  matSphi2(spin), mult(TL_T_L))
              g1 = matrix_product_trace(matphi(spin), matSphi2(spin))
              if (inode == ionode .and. output_level >= 2) &
-                  write (io_lun, '2x,"g1, elec2 (spin=",i1,") are ",2f25.15') &
+                  write (io_lun, '(2x,"g1, elec2 (spin=",i1,") are ",2f25.15)') &
                         spin, g1, electrons_2(spin)
              ! get coefficients of polynomial
              D = electrons(spin) - electrons_0(spin)
@@ -1578,19 +1578,19 @@ contains
              D = D * recA
              truestep = SolveCubic(B, C, D, step, inode, ionode)
              if (inode .eq. ionode .and. output_level >= 2) &
-                  write (io_lun, '2x,"Step, truestep (spin=",i1,") are ",2f25.15') &
+                  write (io_lun, '(2x,"Step, truestep (spin=",i1,") are ",2f25.15)') &
                         spin, step, truestep
              call matrix_sum(one, matL(spin), truestep - step, matSphi(spin))
              if (truestep == step) then
-                if (inode == ionode) write (io_lun, '2x,"Still in linear loop"')
+                if (inode == ionode) write (io_lun, '(2x,"Still in linear loop")')
                 ! check that electron number is correct
                 call LNV_matrix_multiply(electrons_2, energy, dontK, &
                                          dontM1, dontM2, dontM3,     &
                                          dontM4, dophi, dontE,       &
                                          mat_phi=matphi, spin=spin)
                 if (inode == ionode .and. output_level >= 2) &
-                     write (io_lun, '2x,"electron number (spin=",i1,") &
-                                     &after correction",f25.15') &
+                     write (io_lun, '(2x,"electron number (spin=",i1,") &
+                                     &after correction",f25.15)') &
                            spin, electrons_2(spin)
                 dne = abs(electrons_2(spin) - electrons_0(spin))
                 if (dne < 1e-4_double) done = .true.
@@ -1602,8 +1602,8 @@ contains
                                          dontM4, dophi, dontE,       &
                                          mat_phi=matphi, spin=spin)
                 if (inode == ionode .and. output_level >= 2) &
-                     write (io_lun, '2x,"electron number (spin=",i1,") &
-                                     &after correction: ",f25.15') &
+                     write (io_lun, '(2x,"electron number (spin=",i1,") &
+                                     &after correction: ",f25.15)') &
                            spin, electrons_2(spin)
              end if ! (truestep == step)
           end if ! (abs(electrons_0(spin) - electrons(spin)) < 1.0e-9_double)
@@ -1718,7 +1718,7 @@ contains
        step1 = (electrons_0 - electrons) / g0
        step = 0.1_double
        if (inode == ionode .and. output_level >= 2) &
-            write (io_lun, '2x,"g0, step1 are ",2f25.15') g0, step1
+            write (io_lun, '(2x,"g0, step1 are ",2f25.15)') g0, step1
   
        ! if we are within 0.1% of the correct number, linear will do.
        if (abs(electrons_0 - electrons) < 1.0e-9_double) then
@@ -1748,9 +1748,9 @@ contains
                   matrix_product_trace(matphi(spin), matSphi2(spin))
           end do
           if (inode == ionode .and. output_level >= 2)               &
-               write (io_lun, '2x,"g1, elec_up, elec_dn, elec2 are ",&
+               write (io_lun, '(2x,"g1, elec_up, elec_dn, elec2 are ",&
                                &f25.15/,34x,f25.15/,34x,f25.15/,&
-                               &34x,f25.15')                         &
+                               &34x,f25.15)')                         &
                      g1, electrons_spin(1), electrons_spin(nspin),   &
                      electrons2
 
@@ -1773,7 +1773,7 @@ contains
 
           truestep = SolveCubic(B, C, D, step, inode, ionode)
           if (inode == ionode .and. output_level >= 2) &
-               write (io_lun, '2x,"Step, truestep are ",2f25.15') &
+               write (io_lun, '(2x,"Step, truestep are ",2f25.15)') &
                      step, truestep
           
           do spin = 1, nspin
@@ -1782,7 +1782,7 @@ contains
 
           if (truestep == step) then
 
-             if (inode == ionode) write (io_lun, '2x,"Still in linear loop"')
+             if (inode == ionode) write (io_lun, '(2x,"Still in linear loop")')
 
              ! check that electron number is correct
              call LNV_matrix_multiply(electrons_spin, energy_spin,   &
@@ -1912,7 +1912,7 @@ contains
        SolveCubic = S1 + S2 - A/3.0_double
        if(abs(SolveCubic)>10.0_double*abs(guess)) then
           if(inode==ionode) &
-               write (io_lun, '2x,"Step too large: linear guess was: ",2e25.15') &
+               write (io_lun, '(2x,"Step too large: linear guess was: ",2e25.15)') &
                      SolveCubic, guess
           SolveCubic = guess
        end if

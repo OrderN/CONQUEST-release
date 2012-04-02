@@ -375,7 +375,7 @@ contains
     ! write out alphas
     if (inode == ionode .and. write_out) then
        do spin = 1, nspin
-          write (io_lun, '1x,"Alpha for spin = ",i1," are:"') spin
+          write (io_lun, '(1x,"Alpha for spin = ",i1," are:")') spin
           if (n == 2) write (io_lun, 211) (alpha(ii,spin), ii = 1, n)
           if (n == 3) write (io_lun, 212) (alpha(ii,spin), ii = 1, n)
           if (n == 4) write (io_lun, 213) (alpha(ii,spin), ii = 1, n)

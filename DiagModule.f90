@@ -1062,7 +1062,7 @@ contains
     if (stat /= 0) call cq_abort("endDiag: failed to deallocate gap", stat)
     call reg_dealloc_mem(area_DM, proc_rows * proc_cols, type_dbl)
 
-    deallocate(work(lwork), rwork(lrwork), STAT=stat)
+    deallocate(work, rwork, STAT=stat)
     if (stat /= 0) &
          call cq_abort ('endDiag: failed to deallocate work and rwork', stat)
     call reg_dealloc_mem(area_DM, lwork + lrwork, type_cplx)
@@ -2248,7 +2248,7 @@ contains
     end if
 
     ! find the correct bracket trapping Ef
-    spin: do spin = 1, nspin
+    labspin: do spin = 1, nspin
 
        if (iprint_DM >= 2 .and. nspin == 2 .and. inode == ionode) &
             write (io_lun, 3) myid, spin
@@ -2418,7 +2418,7 @@ contains
           end if
        end if
 
-    end do spin
+    end do labspin
 
     return
 
@@ -2756,7 +2756,7 @@ contains
     end if
 
     electrons = zero
-    spin: do ss = ss_start, ss_end
+    labspin: do ss = ss_start, ss_end
        kp: do ikp = 1, nkp
           band: do iband = 1, nbands
              select case (flag_smear_type)
@@ -2771,7 +2771,7 @@ contains
              electrons(ss) = electrons(ss) + occu(iband,ikp,ss)
           end do band
        end do kp
-    end do spin
+    end do labspin
 
     if (iprint_DM >=5 .and. (inode == ionode)) then
        if (nspin == 1) then

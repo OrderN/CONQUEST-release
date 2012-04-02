@@ -367,8 +367,8 @@ contains
              call gsum(local_density)
              if (inode == ionode) &
                   write (io_lun, &
-                         '10x,"In set_density, electrons &
-                          &for spin=",i1," : ",f20.12') &
+                         '(10x,"In set_density, electrons &
+                          &for spin=",i1," : ",f20.12)') &
                         spin, local_density
           end do ! spin
        end if
@@ -739,7 +739,7 @@ contains
        call gsum(electrons(spin))
        
        if (inode == ionode .and. iprint_SC > 1) &
-            write (io_lun, '2x,"Electrons (spin=",i1,"): ",f25.15') &
+            write (io_lun, '(2x,"Electrons (spin=",i1,"): ",f25.15)') &
                   spin, electrons(spin)
     end do ! spin
     
