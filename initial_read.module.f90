@@ -49,123 +49,135 @@
 !!
 module initial_read
 
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
+  use timer_stdclocks_module, only: start_timer, stop_timer, &
+                                    tmr_std_allocation
 
   implicit none
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id$"
+  character(len=80), save, private :: &
+       RCSid = "$Id$"
 !!***
 
 contains
 
-! ------------------------------------------------------------------------------
-! Subroutine read_and_write
-! ------------------------------------------------------------------------------
-
-!!****f* initial_read/read_and_write *
-!!
-!!  NAME 
-!!   read_and_write
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Reads the input data and writes out the parameters for the run
-!!  INPUTS
-!!   Many and varied - mainly things to be read in
-!!  USES
-!!   datatypes, numbers, io_module, group_module, construct_module,
-!!   maxima_module, global_module, primary_module, atoms, dimens,
-!!   species_module, GenComms, pseudopotential_data
-!!  AUTHOR
-!!   D.R.Bowler
-!!  CREATION DATE
-!!   Late 1998, I think
-!!  MODIFICATION HISTORY
-!!   28/05/2001 dave
-!!    Added ROBODoc header, indented, stripped subroutine calls and
-!!    overall argument list
-!!   08/06/2001 dave
-!!    Added RCS Id and Log tags and GenComms for my_barrier and cq_abort
-!!   13/06/2001 dave
-!!    Changed call to set_dimensions and to use pseudopotential_data
-!!   10/05/2002 dave
-!!    Incorporated into initial_read module
-!!   31/05/2002 dave
-!!    Bug fix (TM) - changed np to ind_part in loop to build atom
-!!    positions from make_prt.dat
-!!   11:02, 24/03/2003 drb 
-!!    Removed variables associated with old phi initialisation
-!!   14:52, 2003/06/09 dave
-!!    Removed atomic coordinate fiddling
-!!   14:59, 02/05/2005 dave 
-!!    Added calculation of number of electrons in cell
-!!   2007/05/08 17:00 dave
-!!    Added net charge on cell to number_of_bands for consistency
-!!   2011/09/19 L.Tong
-!!    Added calculation of ne_up_in_cell and ne_dn_in_cell for spin
-!!    polarised calculations
-!!   2011/09/29 15:06 M. Arita
-!!    Slight modification is added for DFT-D2
-!!   2011/12/11 L.Tong
-!!    Removed number_of_bands, it is obsolete, and use ne_in_cell
-!!    instead
-!!  TODO
-!!   Improve calculation of number of bands 28/05/2001 dave Change
-!!   input so that appropriate variables are taken from modules
-!!   10/05/2002 dave
-!!  SOURCE
-!!
-  subroutine read_and_write (start, start_L, inode, ionode, &
-       restart_file, vary_mu, mu, find_chdens, read_phi)
+  ! ------------------------------------------------------------------------------
+  ! Subroutine read_and_write
+  ! ------------------------------------------------------------------------------
+  
+  !!****f* initial_read/read_and_write *
+  !!
+  !!  NAME 
+  !!   read_and_write
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Reads the input data and writes out the parameters for the run
+  !!  INPUTS
+  !!   Many and varied - mainly things to be read in
+  !!  USES
+  !!   datatypes, numbers, io_module, group_module, construct_module,
+  !!   maxima_module, global_module, primary_module, atoms, dimens,
+  !!   species_module, GenComms, pseudopotential_data
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   Late 1998, I think
+  !!  MODIFICATION HISTORY
+  !!   28/05/2001 dave
+  !!    Added ROBODoc header, indented, stripped subroutine calls and
+  !!    overall argument list
+  !!   08/06/2001 dave
+  !!    Added RCS Id and Log tags and GenComms for my_barrier and cq_abort
+  !!   13/06/2001 dave
+  !!    Changed call to set_dimensions and to use pseudopotential_data
+  !!   10/05/2002 dave
+  !!    Incorporated into initial_read module
+  !!   31/05/2002 dave
+  !!    Bug fix (TM) - changed np to ind_part in loop to build atom
+  !!    positions from make_prt.dat
+  !!   11:02, 24/03/2003 drb 
+  !!    Removed variables associated with old phi initialisation
+  !!   14:52, 2003/06/09 dave
+  !!    Removed atomic coordinate fiddling
+  !!   14:59, 02/05/2005 dave 
+  !!    Added calculation of number of electrons in cell
+  !!   2007/05/08 17:00 dave
+  !!    Added net charge on cell to number_of_bands for consistency
+  !!   2011/09/19 L.Tong
+  !!    Added calculation of ne_up_in_cell and ne_dn_in_cell for spin
+  !!    polarised calculations
+  !!   2011/09/29 15:06 M. Arita
+  !!    Slight modification is added for DFT-D2
+  !!   2011/12/11 L.Tong
+  !!    Removed number_of_bands, it is obsolete, and use ne_in_cell
+  !!    instead
+  !!   2012/03/27 L.Tong
+  !!   - Changed spin implementation
+  !!  TODO
+  !!   Improve calculation of number of bands 28/05/2001 dave Change
+  !!   input so that appropriate variables are taken from modules
+  !!   10/05/2002 dave
+  !!  SOURCE
+  !!
+  subroutine read_and_write(start, start_L, inode, ionode,          &
+                            restart_file, vary_mu, mu, find_chdens, &
+                            read_phi)
 
     use datatypes
     use numbers
-    use io_module, ONLY: read_mult, read_atomic_positions, &
-         pdb_template, pdb_format, print_process_info
-    use group_module, ONLY : parts, part_method, HILBERT, PYTHON
-    use construct_module, ONLY : init_group, init_primary
-    use maxima_module, ONLY: maxpartsproc, maxatomsproc
-    use global_module, ONLY: id_glob,x_atom_cell,y_atom_cell, &
-         z_atom_cell, numprocs, iprint_init, rcellx, rcelly, rcellz, &
-         flag_old_partitions, flag_spin_polarisation, &
-         flag_fix_spin_population, ne_in_cell, ne_up_in_cell, &
-         ne_dn_in_cell, ni_in_cell, area_moveatoms, io_lun, &
-         flag_only_dispersion
-    use memory_module, ONLY: reg_alloc_mem, type_dbl
-    use primary_module, ONLY: bundle, make_prim
-    use dimens, ONLY: r_super_x, r_super_y, r_super_z, x_grid, y_grid,&
-         z_grid, r_h, set_dimensions, find_grid
-    use block_module, ONLY: in_block_x, in_block_y, in_block_z
-    use species_module, ONLY: n_species, species, charge, &
-         non_local_species
-    use GenComms, ONLY: my_barrier, cq_abort
-    use pseudopotential_data, ONLY: non_local, read_pseudopotential
-    use pseudopotential_common, ONLY: core_radius, pseudo_type, OLDPS,&
-         SIESTA, ABINIT
-    use pseudo_tm_module, ONLY: init_pseudo_tm
-    use input_module, ONLY: fdf_string
-    use force_module, ONLY: tot_force
-    use DiagModule, ONLY: diagon
+    use io_module,              only: read_mult,                       &
+                                      read_atomic_positions,           &
+                                      pdb_template, pdb_format,        &
+                                      print_process_info
+    use group_module,           only: parts, part_method, HILBERT,     &
+                                      PYTHON
+    use construct_module,       only: init_group, init_primary
+    use maxima_module,          only: maxpartsproc, maxatomsproc
+    use global_module,          only: id_glob,x_atom_cell,y_atom_cell, &
+                                      z_atom_cell, numprocs,           &
+                                      iprint_init, rcellx, rcelly,     &
+                                      rcellz, flag_old_partitions,     &
+                                      nspin, spin_factor,              &
+                                      flag_fix_spin_population,        &
+                                      ne_in_cell, ne_spin_in_cell,     &
+                                      ni_in_cell, area_moveatoms,      &
+                                      io_lun, flag_only_dispersion
+    use memory_module,          only: reg_alloc_mem, type_dbl
+    use primary_module,         only: bundle, make_prim
+    use dimens,                 only: r_super_x, r_super_y, r_super_z, &
+                                      x_grid, y_grid, z_grid, r_h,     &
+                                      set_dimensions, find_grid
+    use block_module,           only: in_block_x, in_block_y,          &
+                                      in_block_z
+    use species_module,         only: n_species, species, charge,      &
+                                      non_local_species
+    use GenComms,               only: my_barrier, cq_abort
+    use pseudopotential_data,   only: non_local, read_pseudopotential
+    use pseudopotential_common, only: core_radius, pseudo_type, OLDPS, &
+                                      SIESTA, ABINIT
+    use pseudo_tm_module,       only: init_pseudo_tm
+    use input_module,           only: fdf_string
+    use force_module,           only: tot_force
+    use DiagModule,             only: diagon
 
     implicit none
 
     ! Passed variables
-    logical :: vary_mu, start, start_L, read_phi
-    logical :: find_chdens
-    character(len=40) restart_file
-    integer :: inode, ionode
-    real(double) :: mu
+    logical           :: vary_mu, start, start_L, read_phi
+    logical           :: find_chdens
+    character(len=40) :: restart_file
+    integer           :: inode, ionode
+    real(double)      :: mu
 
     ! Local variables
-    character(len=80) titles,def
-    character(len=80) atom_coord_file
-    character(len=80) part_coord_file
+    character(len=80) :: titles, def
+    character(len=80) :: atom_coord_file
+    character(len=80) :: part_coord_file
 
-    integer :: i,ierr, nnd, np, ni, ind_part
-    integer :: ncf_tmp
+    integer      :: i, ierr, nnd, np, ni, ind_part
+    integer      :: ncf_tmp
     real(double) :: ecore_tmp
-
     real(double) :: HNL_fac
 
     ! for checking the sum of electrons of spin channels
@@ -173,8 +185,8 @@ contains
 
     ! read input data: parameters for run
     find_chdens = .true.
-    call read_input (start, start_L, titles, restart_file, vary_mu, &
-         mu, find_chdens, read_phi,HNL_fac)
+    call read_input(start, start_L, titles, restart_file, vary_mu, mu,&
+                    find_chdens, read_phi,HNL_fac)
 
     ! Initialise group data for partitions and read in partitions and atoms
     call my_barrier()
@@ -195,9 +207,13 @@ contains
     if(inode==ionode.AND.iprint_init>1) &
          write(io_lun,fmt='(10x,"Partitioning method: ",i2)') part_method
     call read_mult(inode-1,parts,part_coord_file)
-    !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done read_mult: ",2i5)') inode,maxatomsproc,maxpartsproc
+    !if(iprint_init>4) &
+    !     write(io_lun,fmt='(10x,"Proc: ",i4," done read_mult: ",2i5)') &
+    !          inode,maxatomsproc,maxpartsproc
     if(allocated(tot_force)) then
-       write(io_lun,fmt='(10x,"WARNING! Proc: ",i4," tot_force already allocated: ",i7)')  size(tot_force)
+       write (io_lun,fmt='(10x,"WARNING! Proc: ",i4," tot_force &
+                          &already allocated: ",i7)') &
+             size(tot_force)
        deallocate(tot_force)
     end if
     allocate(tot_force(3,ni_in_cell))
@@ -206,8 +222,8 @@ contains
 
     ! Create primary set for atoms: bundle of partitions
     call init_primary(bundle, maxatomsproc, maxpartsproc, .true.)
-    call make_prim(parts, bundle, inode-1,id_glob,x_atom_cell, &
-         y_atom_cell, z_atom_cell, species)
+    call make_prim(parts, bundle, inode-1, id_glob, x_atom_cell, &
+                   y_atom_cell, z_atom_cell, species)
 
     ! Skip the following statement if only calculating the dispersion
     if (flag_only_dispersion) return
@@ -215,7 +231,7 @@ contains
     !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done primary")') inode
     ! Read pseudopotential data
     if(pseudo_type == OLDPS) then
-       call read_pseudopotential (inode, ionode)
+       call read_pseudopotential(inode, ionode)
     elseif(pseudo_type == SIESTA.OR.pseudo_type==ABINIT) then
        !just for setting core_radius in pseudopotential_common
        ! allocation and deallocation will be performed.
@@ -233,151 +249,155 @@ contains
     end do
 
     ! Calculate the number of electrons in the spin channels
-    if (flag_spin_polarisation) then
-       if (flag_fix_spin_population) then
-          sum_elecN_spin = ne_up_in_cell + ne_dn_in_cell
-          if (sum_elecN_spin /= ne_in_cell) then
-             call cq_abort ('read_and_write: sum of number of&
-                  & electrons in spin channels is different from&
-                  & total number of electrons. ', sum_elecN_spin, &
-                  ne_in_cell)
-          end if
-       else
-          ne_up_in_cell = half * ne_in_cell
-          ne_dn_in_cell = ne_up_in_cell
+    if (flag_fix_spin_population) then
+       sum_elecN_spin = ne_spin_in_cell(1) + ne_spin_in_cell(2)
+       if (sum_elecN_spin /= ne_in_cell) then
+          call cq_abort('read_and_write: sum of number of electrons &
+                         &in spin channels is different from total &
+                         &number of electrons. ', &
+                        sum_elecN_spin, ne_in_cell)
        end if
+    else
+       ! if spin population are not fixed, then set
+       ! ne_spin_in_cell(1/2) to half of the total electron
+       ! number. Note that ne_spin_in_cell define the initial electron
+       ! population, and has no effect for the case of variable
+       ! electron number
+       ne_spin_in_cell(:) = half * ne_in_cell
     end if
 
     ! Set up various lengths, volumes, reciprocals etc. for convenient use
-    call set_dimensions (inode, ionode,HNL_fac, non_local, n_species, &
-         non_local_species, core_radius)
+    call set_dimensions(inode, ionode,HNL_fac, non_local, n_species, &
+                        non_local_species, core_radius)
 
     ! write out some information on the run
     if (inode == ionode) &
-         call write_info (titles, mu, vary_mu, find_chdens, read_phi,&
-         HNL_fac, numprocs)
+         call write_info(titles, mu, vary_mu, find_chdens, read_phi, &
+                         HNL_fac, numprocs)
 
     call my_barrier()
 
     return
   end subroutine read_and_write
-!!***
+  !!***
 
-! ------------------------------------------------------------------------------
-! Subroutine read_input
-! ------------------------------------------------------------------------------
 
-!!****f* initial_read/read_input *
-!!
-!!  NAME 
-!!   read_input
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   reads the input file
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!!   datatypes, global_module, atoms, dimens, species_module, pseudopotential_data, GenComms,
-!!   fdf, parse
-!!  AUTHOR
-!!   E.H.Hernandez
-!!  CREATION DATE
-!!   08/05/95
-!!  MODIFICATION HISTORY
-!!   29/10/97 by Dave Bowler to add chdens reading
-!!   19/11/97 by Dave Bowler to add phi reading
-!!   28/05/2001 dave
-!!    Stripped argument list, added ROBODoc header, indented
-!!   08/06/2001 dave
-!!    Added RCS Id and Log tags and GenComms for my_barrier, cq_abort
-!!   09/05/2002 drb
-!!    Converted to fdf formatting
-!!   10/05/2002 dave
-!!    Incorporated into initial_read module
-!!   29/05/2002 dave
-!!    Added scan for SolutionMethod tag
-!!   15:54, 25/09/2002 mjg & drb 
-!!    Added scan for make_initial_charge_from_K (which sets find_chdens)
-!!   16:31, 2003/02/03 dave
-!!    Added scans for type of run (e.g. MD, CG etc)
-!!   07:49, 2003/02/04 dave
-!!    Added boolean variables to control run (vary blips, self-consistency)
-!!   10:41, 06/03/2003 drb 
-!!    Added tags for linear mixing in self-consistency
-!!   10:09, 12/03/2003 drb 
-!!    Added an end tag
-!!   14:52, 2003/06/09 dave
-!!    Added new way to read atomic coordinates and preconditioning flag
-!!   08:31, 2003/10/01 dave
-!!    Changed flag_vary_blips to flag_vary_basis
-!!   13:15, 03/10/2003 drb 
-!!    Bug fix - missing .
-!!   2004/10/29 drb
-!!    Added various new flags for self consistency
-!!   14:59, 02/05/2005 dave 
-!!    Added call to check for net charge - initialises ne_in_cell
-!!   09:14, 11/05/2005 dave 
-!!    Store max_L_iterations in global variable
-!!   13:34, 2006/07/09 ast
-!!    Added flag for functional
-!!   2007/04/02 07:53 dave
-!!    Changed defaults
-!!   2007/05/18 15:18 dave
-!!    Added nullify for bp to stop g95 crash
-!!   2007/10/15 Veronika
-!!    Added keyword MaxEfIter to stop infinite loop in findFermi
-!!   2008/01/24 Veronika
-!!    Changed the default of General.ManyProcessors to .true.
-!!   12:18, 14/02/2008 drb 
-!!    Added options for buffer around primary and covering sets
-!!   2008/07/16 ast
-!!    New keywords for timers
-!!   2009/07/08 16:47 dave
-!!    Added keyword for one-to-one PAO to SF assigment
-!!   2009/07/23 ast
-!!    More general routine to name timer files, so that they are not 
-!!    to a maximum number of processes, as it was the case before,
-!!    with only three figures (max. 999 processes)
-!!   2010/06/18 lt
-!!    Added control flags for Methfessel-Paxton smearing method
-!!   2010/07/22 15.53 Lianheng
-!!    Moved control flags associated with Diagonalisation method from 
-!!    here to readDiagInfo() subroutine. Added Methfessel-Paxton 
-!!    smearing and related control flags. Changed SC.MaxEfIter to 
-!!    Diag.MaxEfIter (moved to readDiagInfo()) for greater consistency
-!!   2011/07/21 16:50 dave
-!!    Added input flags for cDFT
-!!   2011/09/16 11:08 dave
-!!    Bug fix to say when species block not read
-!!   2011/09/19 L.Tong
-!!    - Added flag_spin_polarisation and flag_fix_spin_population
-!!    - Added ne_up_in_cell and ne_dn_in_cell, for fixed spin pupulation
-!!      calculations.
-!!    - Added A_dn as mixing parameter for spin down component (and A is
-!!      for up) for spin polarised calculations. The default (if A_dn
-!!      is missing from input) is A_dn = A
-!!    - Added functional_lsda_pw92 for LSDA
-!!   2011/11/17 10:36 dave
-!!    Changes for new blip data
-!!   2011/12/12 17:27 dave
-!!    Added flag for analytic blip integrals
-!!  TODO
-!!   Fix reading of start flags (change to block ?) 10/05/2002 dave
-!!   Fix rigid shift 10/05/2002 dave
-!!  SOURCE
-!!
-  subroutine read_input (start, start_L, titles, restart_file, &
-       vary_mu, mu, find_chdens, read_phi,HNL_fac)
+  ! ------------------------------------------------------------------------------
+  ! Subroutine read_input
+  ! ------------------------------------------------------------------------------
+  
+  !!****f* initial_read/read_input *
+  !!
+  !!  NAME 
+  !!   read_input
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   reads the input file
+  !!  INPUTS
+  !! 
+  !! 
+  !!  USES
+  !!   datatypes, global_module, atoms, dimens, species_module,
+  !!   pseudopotential_data, GenComms, fdf, parse
+  !!  AUTHOR
+  !!   E.H.Hernandez
+  !!  CREATION DATE
+  !!   08/05/95
+  !!  MODIFICATION HISTORY
+  !!   29/10/97 by Dave Bowler to add chdens reading
+  !!   19/11/97 by Dave Bowler to add phi reading
+  !!   28/05/2001 dave
+  !!    Stripped argument list, added ROBODoc header, indented
+  !!   08/06/2001 dave
+  !!    Added RCS Id and Log tags and GenComms for my_barrier, cq_abort
+  !!   09/05/2002 drb
+  !!    Converted to fdf formatting
+  !!   10/05/2002 dave
+  !!    Incorporated into initial_read module
+  !!   29/05/2002 dave
+  !!    Added scan for SolutionMethod tag
+  !!   15:54, 25/09/2002 mjg & drb 
+  !!    Added scan for make_initial_charge_from_K (which sets find_chdens)
+  !!   16:31, 2003/02/03 dave
+  !!    Added scans for type of run (e.g. MD, CG etc)
+  !!   07:49, 2003/02/04 dave
+  !!    Added boolean variables to control run (vary blips, self-consistency)
+  !!   10:41, 06/03/2003 drb 
+  !!    Added tags for linear mixing in self-consistency
+  !!   10:09, 12/03/2003 drb 
+  !!    Added an end tag
+  !!   14:52, 2003/06/09 dave
+  !!    Added new way to read atomic coordinates and preconditioning flag
+  !!   08:31, 2003/10/01 dave
+  !!    Changed flag_vary_blips to flag_vary_basis
+  !!   13:15, 03/10/2003 drb 
+  !!    Bug fix - missing .
+  !!   2004/10/29 drb
+  !!    Added various new flags for self consistency
+  !!   14:59, 02/05/2005 dave 
+  !!    Added call to check for net charge - initialises ne_in_cell
+  !!   09:14, 11/05/2005 dave 
+  !!    Store max_L_iterations in global variable
+  !!   13:34, 2006/07/09 ast
+  !!    Added flag for functional
+  !!   2007/04/02 07:53 dave
+  !!    Changed defaults
+  !!   2007/05/18 15:18 dave
+  !!    Added nullify for bp to stop g95 crash
+  !!   2007/10/15 Veronika
+  !!    Added keyword MaxEfIter to stop infinite loop in findFermi
+  !!   2008/01/24 Veronika
+  !!    Changed the default of General.ManyProcessors to .true.
+  !!   12:18, 14/02/2008 drb 
+  !!    Added options for buffer around primary and covering sets
+  !!   2008/07/16 ast
+  !!    New keywords for timers
+  !!   2009/07/08 16:47 dave
+  !!    Added keyword for one-to-one PAO to SF assigment
+  !!   2009/07/23 ast
+  !!    More general routine to name timer files, so that they are not 
+  !!    to a maximum number of processes, as it was the case before,
+  !!    with only three figures (max. 999 processes)
+  !!   2010/06/18 lt
+  !!    Added control flags for Methfessel-Paxton smearing method
+  !!   2010/07/22 15.53 Lianheng
+  !!    Moved control flags associated with Diagonalisation method from 
+  !!    here to readDiagInfo() subroutine. Added Methfessel-Paxton 
+  !!    smearing and related control flags. Changed SC.MaxEfIter to 
+  !!    Diag.MaxEfIter (moved to readDiagInfo()) for greater consistency
+  !!   2011/07/21 16:50 dave
+  !!    Added input flags for cDFT
+  !!   2011/09/16 11:08 dave
+  !!    Bug fix to say when species block not read
+  !!   2011/09/19 L.Tong
+  !!    - Added flag_spin_polarisation and flag_fix_spin_population
+  !!    - Added ne_up_in_cell and ne_dn_in_cell, for fixed spin pupulation
+  !!      calculations.
+  !!    - Added A_dn as mixing parameter for spin down component (and A is
+  !!      for up) for spin polarised calculations. The default (if A_dn
+  !!      is missing from input) is A_dn = A
+  !!    - Added functional_lsda_pw92 for LSDA
+  !!   2011/11/17 10:36 dave
+  !!    Changes for new blip data
+  !!   2011/12/12 17:27 dave
+  !!    Added flag for analytic blip integrals
+  !!   2012/03/27 L.Tong
+  !!   - Changed spin implementation
+  !!  TODO
+  !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
+  !!   Fix rigid shift 10/05/2002 dave
+  !!  SOURCE
+  !!
+  subroutine read_input(start, start_L, titles, restart_file, vary_mu,&
+                        mu, find_chdens, read_phi,HNL_fac)
 
     use datatypes
     use numbers
     use units
-    use global_module, ONLY: iprint, flag_vary_basis,                  &
+    use global_module, only: iprint, flag_vary_basis,                  &
                              flag_self_consistent,                     &
                              flag_precondition_blips,                  &
-                             flag_spin_polarisation,                   &
                              flag_fix_spin_population,                 &
                              flag_fractional_atomic_coords,            &
                              flag_old_partitions, ne_in_cell,          &
@@ -387,7 +407,7 @@ contains
                              flag_test_forces, UseGemm,                &
                              flag_fractional_atomic_coords,            &
                              flag_old_partitions, ne_in_cell,          &
-                             ne_up_in_cell, ne_dn_in_cell,             &
+                             ne_spin_in_cell, nspin, spin_factor,      &
                              max_L_iterations, flag_functional_type,   &
                              functional_description,                   &
                              functional_lda_pz81,                      &
@@ -414,62 +434,61 @@ contains
                              flag_quench_MD, temp_ion, numprocs,       &
                              flag_dft_d2, flag_only_dispersion,        &
                              flag_perform_cDFT, flag_analytic_blip_int
-    use dimens, ONLY: r_super_x, r_super_y, r_super_z, GridCutoff,   &
+    use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
                       RadiusSupport, NonLocalFactor, InvSRange,      &
                       min_blip_sp, flag_buffer_old, AtomMove_buffer, &
                       r_dft_d2
-    use block_module, ONLY: in_block_x, in_block_y, in_block_z, &
+    use block_module, only: in_block_x, in_block_y, in_block_z, &
                             blocks_raster, blocks_hilbert
-    use species_module, ONLY: species_label, charge, mass, n_species,  &
+    use species_module, only: species_label, charge, mass, n_species,  &
                               species, ps_file, ch_file, phi_file,     &
                               nsf_species, nlpf_species, npao_species, &
                               non_local_species, type_species
-    use GenComms, ONLY: gcopy, my_barrier, cq_abort, inode, ionode
-    use DiagModule, ONLY: diagon
-    use energy, ONLY: flag_check_Diag
-    use DMMin, ONLY: maxpulayDMM, LinTol_DMM, n_dumpL
+    use GenComms, only: gcopy, my_barrier, cq_abort, inode, ionode
+    use DiagModule, only: diagon
+    use energy, only: flag_check_Diag
+    use DMMin, only: maxpulayDMM, LinTol_DMM, n_dumpL
 !TM
-    use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, &
+    use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, &
                                       STATE, ABINIT, flag_angular_new
-    use SelfCon, ONLY: A, A_dn, flag_linear_mixing, EndLinearMixing, &
-                       q0, q1, n_exact, maxitersSC, maxearlySC,      &
-                       maxpulaySC, atomch_output, flag_Kerker,       &
-                       flag_wdmetric
-    use atomic_density, ONLY: read_atomic_density_file, &
+    use SelfCon, only: A, flag_linear_mixing, EndLinearMixing, q0, q1,&
+                       n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
+                       atomch_output, flag_Kerker, flag_wdmetric
+    use atomic_density, only: read_atomic_density_file, &
                               atomic_density_method
-    use S_matrix_module, ONLY: InvSTolerance
-    use blip, ONLY: blip_info, init_blip_flag, alpha, beta
-    use maxima_module, ONLY: maxnsf
-    use control, ONLY: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset
-    use ewald_module, ONLY: ewald_accuracy, flag_old_ewald
-    use minimise, ONLY: UsePulay, n_L_iterations,          &
+    use S_matrix_module, only: InvSTolerance
+    use blip, only: blip_info, init_blip_flag, alpha, beta
+    use maxima_module, only: maxnsf
+    use control, only: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset
+    use ewald_module, only: ewald_accuracy, flag_old_ewald
+    use minimise, only: UsePulay, n_L_iterations,          &
                         n_support_iterations, L_tolerance, &
                         sc_tolerance, energy_tolerance,    &
                         expected_reduction
-    use pao_format, ONLY: kcut, del_k
-    use support_spec_format, ONLY : flag_paos_atoms_in_cell,          &
+    use pao_format, only: kcut, del_k
+    use support_spec_format, only : flag_paos_atoms_in_cell,          &
                                     read_option, symmetry_breaking,   &
                                     support_pao_file, TestBasisGrads, &
                                     TestTot, TestBoth, TestS, TestH,  &
                                     flag_one_to_one
-    use read_pao_info, ONLY: pao_info_file, pao_norm_flag
-    use read_support_spec, ONLY: support_spec_file, &
+    use read_pao_info, only: pao_info_file, pao_norm_flag
+    use read_support_spec, only: support_spec_file, &
                                  flag_read_support_spec
-    use test_force_module, ONLY: flag_test_all_forces,           &
+    use test_force_module, only: flag_test_all_forces,           &
                                  flag_which_force, TF_direction, &
                                  TF_atom_moved, TF_delta
-    use io_module, ONLY: pdb_format, pdb_altloc, append_coords, &
+    use io_module, only: pdb_format, pdb_altloc, append_coords, &
                          pdb_output, banner, get_file_name
-    use group_module, ONLY : part_method, HILBERT, PYTHON
-    use energy, ONLY: flag_check_DFT
-    use H_matrix_module, ONLY: locps_output, locps_choice
-    use pao_minimisation, ONLY: InitStep_paomin
-    use timer_module, ONLY: time_threshold,lun_tmr, TimingOn, &
+    use group_module, only : part_method, HILBERT, PYTHON
+    use energy, only: flag_check_DFT
+    use H_matrix_module, only: locps_output, locps_choice
+    use pao_minimisation, only: InitStep_paomin
+    use timer_module, only: time_threshold,lun_tmr, TimingOn, &
                             TimersWriteOut
-    use input_module!, ONLY: load_input, input_array, block_start,
+    use input_module!, only: load_input, input_array, block_start,
     ! block_end, fd
-    use cdft_data, ONLY: cDFT_Type, cDFT_MaxIterations, cDFT_NAtoms, &
+    use cdft_data, only: cDFT_Type, cDFT_MaxIterations, cDFT_NAtoms, &
                          cDFT_Target, cDFT_Tolerance,                &
                          cDFT_NumberAtomGroups, cDFT_AtomList,       &
                          cDFT_BlockLabel, cDFT_Vc
@@ -477,30 +496,31 @@ contains
     implicit none
 
     ! Passed variables
-    logical :: vary_mu, find_chdens
-    logical :: start, start_L, read_phi
-
+    logical           :: vary_mu, find_chdens
+    logical           :: start, start_L, read_phi
+    real(double)      :: mu, HNL_fac
     character(len=40) :: restart_file
     character(len=80) :: titles
-
-    real(double) :: mu, HNL_fac
 
     ! Local variables
     !type(block), pointer :: bp      ! Pointer to a block read by fdf
     !type(parsed_line), pointer :: p ! Pointer to a line broken into tokens by fdf
 
-    integer :: i, j, k, lun, stat
+    integer           :: i, j, k, lun, stat
     character(len=20) :: def
     character(len=80) :: coordfile, timefile, timefileroot
     character(len=10) :: basis_string, part_mode, tmp2
     character(len=6)  :: method ! To find whether we diagonalise or use O(N)
     character(len=5)  :: ps_type !To find which pseudo we use
     character(len=8)  :: tmp
-    logical :: new_format
+    logical           :: new_format
     !logical, external :: leqi
-    real(double) :: r_t
+    real(double)      :: r_t
 
     logical :: flag_ghost, find_species
+
+    ! spin polarisation
+    logical :: flag_spin_polarisation
 
     ! Set defaults
     vary_mu = .true.
@@ -510,21 +530,22 @@ contains
     !*** WHO READS AND BROADCASTS ? ***!
 
     ! Test for existence of input file
-    if(inode==ionode) then
+    if (inode == ionode) then
        stat = 0
        open(unit=20,file='Conquest_input',iostat=stat,status='old')
-       if(stat/=0) call cq_abort("We need Conquest_input to run !")
+       if (stat /= 0) call cq_abort("We need Conquest_input to run !")
        close(20)
     end if
     ! Start fdf reading from the file Conquest_input
     call load_input
     ! Here we need to read output file name, and open it.
-    if(fdf_boolean('IO.WriteOutToFile',.true.)) then
-       if(inode==ionode) then
+    if (fdf_boolean('IO.WriteOutToFile',.true.)) then
+       if (inode == ionode) then
           coordfile = fdf_string(80,'IO.OutputFile',"Conquest_out")
           call io_assign(io_lun)
           open(unit=io_lun,file=coordfile,iostat=stat)
-          if(stat/=0) call cq_abort("Failed to open Conquest output file",stat)
+          if (stat /= 0) &
+               call cq_abort("Failed to open Conquest output file", stat)
        end if
        call gcopy(io_lun)
     else
@@ -608,15 +629,23 @@ contains
        flag_fractional_atomic_coords = fdf_boolean('IO.FractionalAtomicCoords',.true.)
        call my_barrier()
        ! Spin polarised calculation - if we are doing spin polarised calculations or not
-       flag_spin_polarisation = fdf_boolean ('Spin.SpinPolarised', .false.) 
-       flag_fix_spin_population = fdf_boolean ('Spin.FixSpin', .false.)
-       if (flag_fix_spin_population) then
-          ne_up_in_cell = fdf_double ('Spin.NeUP', zero)
-          ne_dn_in_cell = fdf_double ('Spin.NeDN', zero)
+       flag_spin_polarisation = fdf_boolean('Spin.SpinPolarised', .false.) 
+       flag_fix_spin_population = fdf_boolean('Spin.FixSpin', .false.)
+       if (flag_spin_polarisation) then
+          nspin = 2
+          spin_factor = one
+          if (flag_fix_spin_population) then
+             ne_spin_in_cell(1) = fdf_double('Spin.NeUP', zero)
+             ne_spin_in_cell(2) = fdf_double('Spin.NeDN', zero)
+             ! ne_spin_in_cell are to be calculated later for spin
+             ! non-polarised calculations
+          end if
        end if
        !blip_width = fdf_double('blip_width',zero)
        !support_grid_spacing = fdf_double('support_grid_spacing',zero)
-       GridCutoff = fdf_double('Grid.GridCutoff',25.0_double) ! Default to 25 Ha or 50 Ry cutoff for grid
+
+       ! Default to 25 Ha or 50 Ry cutoff for grid
+       GridCutoff = fdf_double('Grid.GridCutoff',25.0_double)
        ! Grid points
        n_grid_x = fdf_integer('Grid.PointsAlongX',0)
        n_grid_y = fdf_integer('Grid.PointsAlongY',0)
@@ -669,7 +698,8 @@ contains
        read_option = fdf_boolean('Basis.LoadCoeffs',.false.)
        flag_onsite_blip_ana = fdf_boolean('Basis.OnsiteBlipsAnalytic',.true.)
        flag_analytic_blip_int = fdf_boolean('Basis.AnalyticBlipIntegrals',.false.)
-       if(read_option.AND.flag_basis_set==blips) restart_file = fdf_string(40,'Basis.LoadBlipFile',' ')
+       if(read_option.AND.flag_basis_set==blips) &
+            restart_file = fdf_string(40,'Basis.LoadBlipFile',' ')
        find_chdens = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        flag_Becke_weights = fdf_boolean('SC.BeckeWeights',.false.)
        flag_Becke_atomic_radii = fdf_boolean('SC.BeckeAtomicRadii',.false.)
@@ -681,20 +711,28 @@ contains
        ps_type = fdf_string(5,'General.PseudopotentialType','abinit') 
        ! Write out pseudopotential type
        if(leqi(ps_type,'siest')) then
-          if(inode==ionode.AND.iprint_init>0) write(io_lun,fmt='(10x,"SIESTA pseudopotential will be used. ")')
+          if(inode==ionode.AND.iprint_init>0) &
+               write(io_lun,fmt='(10x,"SIESTA pseudopotential will be used. ")')
           pseudo_type = SIESTA
        else if(leqi(ps_type,'plato').OR.leqi(ps_type,'abini')) then
-          if(inode==ionode.AND.iprint_init>0) write(io_lun,fmt='(10x,"ABINIT pseudopotential will be used. ")')
+          if(inode==ionode.AND.iprint_init>0) &
+               write(io_lun,fmt='(10x,"ABINIT pseudopotential will be used. ")')
           pseudo_type = ABINIT
        else
-          if(inode==ionode.AND.iprint_init>0) write(io_lun,fmt='(10x,"OLD pseudopotential will be used. ")')
+          if(inode==ionode.AND.iprint_init>0) &
+               write(io_lun,fmt='(10x,"OLD pseudopotential will be used. ")')
           pseudo_type = OLDPS
        endif
-       if((.NOT.flag_angular_new).AND.(pseudo_type==SIESTA.OR.pseudo_type==ABINIT).AND.inode==ionode) then
-          write(io_lun,fmt='(10x,"Setting FlagNewAngular to T for Siesta/Abinit pseudopotentials")') 
+       if((.NOT.flag_angular_new).AND.&
+          (pseudo_type==SIESTA.OR.pseudo_type==ABINIT).AND.&
+          inode==ionode) then
+          write(io_lun,&
+                fmt='(10x,"Setting FlagNewAngular to T for Siesta/&
+                      &Abinit pseudopotentials")') 
           flag_angular_new = .true.
        end if
-       ! Read, using old-style fdf_block, the information about the different species
+       ! Read, using old-style fdf_block, the information about the
+       ! different species
        !if(fdf_block('ChemicalSpeciesLabel',lun)) then
        ! flag_ghost=.false.
        !   do i=1,n_species
@@ -706,9 +744,11 @@ contains
        if(fdf_block('ChemicalSpeciesLabel')) then
           flag_ghost=.false.
           if(1+block_end-block_start<n_species) & 
-               call cq_abort("Too few species in ChemicalSpeciesLabel: ",1+block_end-block_start,n_species)
+               call cq_abort("Too few species in ChemicalSpeciesLabel: ",&
+                             1+block_end-block_start,n_species)
           do i=1,n_species
-             read(unit=input_array(block_start+i-1),fmt=*) j,mass(i),species_label(i)
+             read (unit=input_array(block_start+i-1),fmt=*) &
+                  j,mass(i),species_label(i)
              if(mass(i) < -very_small) flag_ghost=.true.
              type_species(i)=i
           end do
@@ -719,27 +759,31 @@ contains
        if(flag_ghost) then
           do i=1, n_species
              if(mass(i) < -very_small) then
-              find_species=.false.
-               do j=1,n_species
-                if(j == i) cycle
-                if(species_label(i) == species_label(j)) then
-                 type_species(i)=-j; find_species=.true.
-                 exit
+                find_species=.false.
+                do j=1,n_species
+                   if(j == i) cycle
+                   if(species_label(i) == species_label(j)) then
+                      type_species(i)=-j; find_species=.true.
+                      exit
+                   endif
+                enddo
+                if(.not.find_species) then 
+                   type_species(i) = -i
                 endif
-               enddo
-              if(.not.find_species) then 
-                 type_species(i) = -i
-              endif
              elseif(mass(i) > very_small) then
-                 type_species(i) = i
+                type_species(i) = i
              else
-                if(inode==ionode) write(io_lun,*) ' There are chemical species which have zero mass ',i,mass(i),species_label(i)
-                 type_species(i) = 0    !  Vacancy sites
+                if(inode==ionode) &
+                     write (io_lun,*) &
+                           ' There are chemical species which have zero mass ',&
+                           i,mass(i),species_label(i)
+                type_species(i) = 0    !  Vacancy sites
              endif
           enddo
        endif
         
-       ! Read charge, mass, pseudopotential and starting charge and blip models for the individual species
+       ! Read charge, mass, pseudopotential and starting charge and
+       ! blip models for the individual species
        maxnsf = 0
        min_blip_sp = 1.0e8_double
        do i=1,n_species
@@ -763,8 +807,10 @@ contains
              NonLocalFactor(i) = fdf_double('Atom.NonLocalFactor',HNL_fac)
              if(NonLocalFactor(i)>one.OR.NonLocalFactor(i)<zero) then
                 if(inode==ionode) &
-                     write(io_lun,fmt='(10x,"Warning: Atom.NonLocalFactor must lie between 0.0 and 1.0: ",f9.5)') &
-                     NonLocalFactor(i)
+                     write(io_lun,&
+                           fmt='(10x,"Warning: Atom.NonLocalFactor &
+                                 &must lie between 0.0 and 1.0: ",f9.5)') &
+                          NonLocalFactor(i)
                 if(NonLocalFactor(i)>one) NonLocalFactor(i) = one
                 if(NonLocalFactor(i)<zero) NonLocalFactor(i) = zero
              end if
@@ -779,20 +825,25 @@ contains
                    if(fdf_defined('Atom.Local')) then
                       ps_file(i) = fdf_string(50,'Atom.Local',def)
                    else
-                      call cq_abort('read_input: no local/non-local specification for pseudopotential !')
+                      call cq_abort('read_input: no local/non-local &
+                                     &specification for pseudopotential !')
                    end if
                 end if
              end if
              call fdf_endblock
           else
-             call cq_abort("Failure to read data for species_label: "//species_label(i))
+             call cq_abort("Failure to read data for species_label: "&
+                           //species_label(i))
           end if
-          if(nsf_species(i)==0) call cq_abort("Number of supports not specified for species ",i)
+          if(nsf_species(i)==0) &
+               call cq_abort("Number of supports not specified for species ",i)
           if(flag_basis_set==blips.AND.blip_info(i)%SupportGridSpacing<very_small) &
-               call cq_abort("Error: for a blip basis set you must set SupportGridSpacing for all species")
+               call cq_abort("Error: for a blip basis set you must &
+                              &set SupportGridSpacing for all species")
           maxnsf = max(maxnsf,nsf_species(i))
           if(RadiusSupport(i)<very_small) &
-               call cq_abort("Radius of support too small for species; increase SupportFunctionRange ",i)
+               call cq_abort("Radius of support too small for &
+                              &species; increase SupportFunctionRange ",i)
        end do
        ! For ghost atoms
        if(flag_ghost) then
@@ -802,7 +853,8 @@ contains
              endif
           enddo
        endif
-       !blip_width = support_grid_spacing * fdf_double('blip_width_over_support_grid_spacing',four)
+       !blip_width = support_grid_spacing *
+       !             fdf_double('blip_width_over_support_grid_spacing',four)
        flag_global_tolerance = fdf_boolean('minE.GlobalTolerance',.true.)
        L_tolerance = fdf_double('minE.LTolerance',1.0e-7_double)
        sc_tolerance  = fdf_double('minE.SCTolerance',1.0e-6_double)
@@ -829,9 +881,9 @@ contains
        flag_mix_L_SC_min = fdf_boolean('minE.MixedLSelfConsistent',.false.)
        ! Tweak 2007/03/23 DRB Make Pulay mixing default
        flag_linear_mixing = fdf_boolean('SC.LinearMixingSC',.true.)
-       A = fdf_double('SC.LinearMixingFactor', 0.5_double)
+       A(1) = fdf_double('SC.LinearMixingFactor', 0.5_double)
        ! 2011/09/19 L.Tong, for spin polarised calculation
-       A_dn = fdf_double('SC.LinearMixingFactor_SpinDown', A)
+       A(2) = fdf_double('SC.LinearMixingFactor_SpinDown', A(1))
        ! end 2011/09/19 L.Tong
        EndLinearMixing = fdf_double('SC.LinearMixingEnd',sc_tolerance)
        flag_Kerker = fdf_boolean('SC.KerkerPreCondition',.false.)
@@ -844,7 +896,8 @@ contains
        maxitersSC = fdf_integer('SC.MaxIters',50)
        maxearlySC = fdf_integer('SC.MaxEarly',3)
        maxpulaySC = fdf_integer('SC.MaxPulay',5)
-       read_atomic_density_file = fdf_string(80,'SC.ReadAtomicDensityFile','read_atomic_density.dat')
+       read_atomic_density_file = &
+            fdf_string(80,'SC.ReadAtomicDensityFile','read_atomic_density.dat')
        ! Read atomic density initialisation flag
        atomic_density_method = fdf_string(10,'SC.AtomicDensityFlag','pao')
        ! cDFT flags
@@ -890,13 +943,14 @@ contains
           flag_assign_blocks = blocks_hilbert
        end if
        flag_read_blocks = fdf_boolean('Grid.ReadBlocks',.false.)
-       ewald_accuracy = fdf_double('General.EwaldAccuracy',1.0e-10_double) ! Default value of 10^-10 Ha per atom
+       ! Default value of 10^-10 Ha per atom
+       ewald_accuracy = fdf_double('General.EwaldAccuracy',1.0e-10_double)
        flag_old_ewald = fdf_boolean('General.FlagOldEwald',.false.)
        UseGemm = fdf_boolean('MM.UseGemm',.false.)
-        if(flag_ghost) then
-           if(inode==ionode) write(io_lun,*) ' As ghost atoms are included, UseGemm must be false.'
-           UseGemm = .false.
-        endif
+       if(flag_ghost) then
+          if(inode==ionode) write(io_lun,*) ' As ghost atoms are included, UseGemm must be false.'
+          UseGemm = .false.
+       endif
        flag_check_DFT=fdf_boolean('General.CheckDFT',.false.)
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        flag_quench_MD = fdf_boolean('AtomMove.QuenchMD',.false.)
@@ -922,11 +976,14 @@ contains
        if(.NOT.flag_test_all_forces) then ! Test one force component
           flag_which_force = fdf_integer('AtomMove.TestSpecificForce',1)
           if(flag_which_force>8.OR.flag_which_force<0.AND.inode==ionode) &
-               write(io_lun,fmt='(10x,"Warning ! TestSpecificForce must lie between 1 and 8: ",i3)') flag_which_force
+               write (io_lun,fmt='(10x,"Warning ! TestSpecificForce &
+                                  &must lie between 1 and 8: ",i3)') &
+                     flag_which_force
        end if
        TF_direction = fdf_integer('AtomMove.TestForceDirection',1)
        if(TF_direction>3.OR.TF_direction<0.AND.inode==ionode) then
-          write(io_lun,fmt='(10x,"Warning ! TestForceDirection must lie between 1 and 3: ",i3)') TF_direction
+          write (io_lun,fmt='(10x,"Warning ! TestForceDirection must &
+                              &lie between 1 and 3: ",i3)') TF_direction
           TF_direction = 1
        end if
        TF_atom_moved = fdf_integer('AtomMove.TestForceAtom',1)
@@ -986,7 +1043,8 @@ contains
           part_method = HILBERT
        else
           part_method = HILBERT
-          if(inode==ionode) write(io_lun,*) 'WARNING: Unrecognised partitioning method'
+          if(inode==ionode) &
+               write(io_lun,*) 'WARNING: Unrecognised partitioning method'
        end if
        tmp2 = fdf_string(10,'General.LoadBalance','atoms')
        if (leqi (tmp2(1:10),'partitions')) then
@@ -1303,7 +1361,7 @@ contains
     call my_barrier
     return
   end subroutine read_input
-!!***
+  !!***
 
 ! ------------------------------------------------------------------------------
 ! Subroutine allocate_species_vars
@@ -1335,13 +1393,13 @@ contains
 !!
   subroutine allocate_species_vars
 
-    use dimens, ONLY: RadiusSupport, NonLocalFactor, InvSRange, atomicnum
-    use blip, ONLY: blip_info
-    use memory_module, ONLY: reg_alloc_mem, type_dbl
-    use species_module, ONLY: nsf_species, nlpf_species, npao_species, charge, mass, non_local_species, &
+    use dimens, only: RadiusSupport, NonLocalFactor, InvSRange, atomicnum
+    use blip, only: blip_info
+    use memory_module, only: reg_alloc_mem, type_dbl
+    use species_module, only: nsf_species, nlpf_species, npao_species, charge, mass, non_local_species, &
          ps_file, ch_file, phi_file, species_label, n_species, type_species
-    use global_module, ONLY: area_general
-    use GenComms, ONLY: cq_abort
+    use global_module, only: area_general
+    use GenComms, only: cq_abort
 
     implicit none
 
@@ -1399,63 +1457,70 @@ contains
   end subroutine allocate_species_vars
 !!***
 
-! ------------------------------------------------------------------------------
-! Subroutine write_info
-! ------------------------------------------------------------------------------
-
-!!****f* initial_read/write_info *
-!!
-!!  NAME 
-!!   write_info
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Writes out information about the run
-!!  INPUTS
-!!   Many - all the things read in
-!!  USES
-!!   datatypes, dimes, species_module, pseudopotential_data, atoms
-!!  AUTHOR
-!!   E.H.Hernandez
-!!  CREATION DATE
-!!   9/11/93 (!)
-!!  MODIFICATION HISTORY
-!!   10/8/01 DRB 
-!!    Changed to F90 format and tidied
-!!   10/05/2002 dave
-!!    Changed titles to be a single line
-!!   10/05/2002 dave
-!!    Imported into initial_read
-!!   29/05/2002 dave
-!!    Added write out for solution method
-!!   14:47, 2006/07/17
-!!    Added description of the functional
-!!   2010/06/18 17:00 lt
-!!    Added information on the type of smearing used if using Diagonalsation method
-!!   2011/12/06 17:02 dave
-!!    Small bug fix on formatting numbers
-!!   2011/12/11 L.Tong
-!!    Removed obsolete parameter number_of_bands
-!!  SOURCE
-!!
-  subroutine write_info (titles, mu, vary_mu, find_chdens, read_phi,&
-       HNL_fac, NODES)
+  ! ------------------------------------------------------------------------------
+  ! Subroutine write_info
+  ! ------------------------------------------------------------------------------
+  
+  !!****f* initial_read/write_info *
+  !!
+  !!  NAME 
+  !!   write_info
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Writes out information about the run
+  !!  INPUTS
+  !!   Many - all the things read in
+  !!  USES
+  !!   datatypes, dimes, species_module, pseudopotential_data, atoms
+  !!  AUTHOR
+  !!   E.H.Hernandez
+  !!  CREATION DATE
+  !!   9/11/93 (!)
+  !!  MODIFICATION HISTORY
+  !!   10/8/01 DRB 
+  !!    Changed to F90 format and tidied
+  !!   10/05/2002 dave
+  !!    Changed titles to be a single line
+  !!   10/05/2002 dave
+  !!    Imported into initial_read
+  !!   29/05/2002 dave
+  !!    Added write out for solution method
+  !!   14:47, 2006/07/17
+  !!    Added description of the functional
+  !!   2010/06/18 17:00 lt
+  !!    Added information on the type of smearing used if using
+  !!    Diagonalsation method
+  !!   2011/12/06 17:02 dave
+  !!    Small bug fix on formatting numbers
+  !!   2011/12/11 L.Tong
+  !!    Removed obsolete parameter number_of_bands
+  !!  SOURCE
+  !!
+  subroutine write_info(titles, mu, vary_mu, find_chdens, read_phi, &
+                        HNL_fac, NODES)
 
     use datatypes
     use units
-    use dimens, ONLY: r_super_x, r_super_y, r_super_z, &
-         n_grid_x, n_grid_y, n_grid_z, r_h, r_c
-    use block_module, ONLY: in_block_x, in_block_y, in_block_z
-    use species_module, ONLY: n_species, species_label, mass, charge, &
-         ps_file, ch_file, phi_file, species, nsf_species
-    use pseudopotential_data, ONLY: core_radius, non_local_species
-    use DiagModule, ONLY: diagon, flag_smear_type, iMethfessel_Paxton
-    use blip, ONLY: blip_info
-    use global_module, ONLY: flag_basis_set, PAOs,blips, functional_description, &
-         flag_precondition_blips, io_lun
-    use minimise, ONLY: energy_tolerance, L_tolerance, sc_tolerance, &
-         n_support_iterations, n_L_iterations
-    use datestamp, ONLY: datestr, commentver
+    use dimens,               only: r_super_x, r_super_y, r_super_z,   &
+                                    n_grid_x, n_grid_y, n_grid_z, r_h, &
+                                    r_c
+    use block_module,         only: in_block_x, in_block_y, in_block_z
+    use species_module,       only: n_species, species_label, mass,    &
+                                    charge, ps_file, ch_file,          &
+                                    phi_file, species, nsf_species
+    use pseudopotential_data, only: core_radius, non_local_species
+    use DiagModule,           only: diagon, flag_smear_type,           &
+                                    iMethfessel_Paxton
+    use blip,                 only: blip_info
+    use global_module,        only: flag_basis_set, PAOs,blips,        &
+                                    functional_description,            &
+                                    flag_precondition_blips, io_lun
+    use minimise,             only: energy_tolerance, L_tolerance,     &
+                                    sc_tolerance,                      &
+                                    n_support_iterations,              &
+                                    n_L_iterations
+    use datestamp,            only: datestr, commentver
 
     implicit none
 
@@ -1472,8 +1537,11 @@ contains
     character(len=10) :: today, the_time
 
     call date_and_time(today, the_time)
-    write(io_lun,3) today(1:4), today(5:6), today(7:8), the_time(1:2), the_time(3:4)
-    write(io_lun,'(/10x,"Code compiled on: ",a,/10x,"Version comment: ",/10x,a)') datestr,commentver
+    write(io_lun,3) today(1:4), today(5:6), today(7:8), the_time(1:2),&
+                    the_time(3:4)
+    write(io_lun,&
+          '(/10x,"Code compiled on: ",a,/10x,"Version comment: ",/10x,a)') &
+         datestr, commentver
     
     write(io_lun,1)
     write(io_lun,2) titles
@@ -1484,33 +1552,38 @@ contains
        case (0)
           write(io_lun,'(/,10x,"Using Fermi-Dirac smearing")')
        case (1)
-          write(io_lun,'(/,10x,"Using order ",i2," Methfessel-Paxton smearing")') iMethfessel_Paxton
+          write(io_lun,&
+                '(/,10x,"Using order ",i2," Methfessel-Paxton smearing")') &
+               iMethfessel_Paxton
        end select
     else
        write(io_lun,30) 'order N with LNV'   
     end if
-    write(io_lun,4) dist_conv*r_super_x, dist_conv*r_super_y, dist_conv*r_super_z,d_units(dist_units)
+    write(io_lun,4) dist_conv*r_super_x, dist_conv*r_super_y, &
+                    dist_conv*r_super_z,d_units(dist_units)
 
     write(io_lun,9) n_grid_x, n_grid_y, n_grid_z
 
     write(io_lun,17) in_block_x, in_block_y, in_block_z
 
-    write(io_lun,15) dist_conv*(r_super_x/n_grid_x),d_units(dist_units), &
-         dist_conv*(r_super_y/n_grid_y), d_units(dist_units),&
-         dist_conv*(r_super_z/n_grid_z),d_units(dist_units)
+    write(io_lun,15) dist_conv*(r_super_x/n_grid_x), d_units(dist_units), &
+                     dist_conv*(r_super_y/n_grid_y), d_units(dist_units), &
+                     dist_conv*(r_super_z/n_grid_z), d_units(dist_units)
 
     write(io_lun,18) n_species, d_units(dist_units)
 
     do n=1, n_species
-       write(io_lun,19) n, species_label(n), mass(n), charge(n), dist_conv*core_radius(n), nsf_species(n)
+       write(io_lun,19) n, species_label(n), mass(n), charge(n), &
+                        dist_conv*core_radius(n), nsf_species(n)
        if(flag_basis_set==blips) then 
           if(flag_precondition_blips) then
              write(io_lun,'(/13x,"Blip basis with preconditioning")') 
           else
              write(io_lun,'(/13x,"Blip basis - no preconditioning")') 
           end if
-          write(io_lun,14) dist_conv*blip_info(n)%SupportGridSpacing, d_units(dist_units),&
-               dist_conv*blip_info(n)%BlipWidth,d_units(dist_units)
+          write(io_lun,14) &
+               dist_conv*blip_info(n)%SupportGridSpacing, d_units(dist_units), &
+               dist_conv*blip_info(n)%BlipWidth,          d_units(dist_units)
        else
           write(io_lun,'(13x,"PAO basis")') 
        end if
@@ -1559,96 +1632,73 @@ contains
 
     write(io_lun,11) n_support_iterations, n_L_iterations
 
-    write(io_lun,13) dist_conv*r_h, d_units(dist_units),dist_conv*r_c,d_units(dist_units)
+    write(io_lun,13) dist_conv*r_h, d_units(dist_units), &
+                     dist_conv*r_c, d_units(dist_units)
     do n=1, n_species
-       write(io_lun,131) n,dist_conv*r_h+core_radius(n)*HNL_fac,d_units(dist_units)
-    enddo
+       write(io_lun,131) n, dist_conv*r_h+core_radius(n) * HNL_fac, &
+                         d_units(dist_units)
+    end do
 
 1   format(/10x,'Job title: ')
 2   format(10x,a80)
-
 3   format(/10x,'This job was run on ',a4,'/',a2,'/',a2,' at ',a2,':',a2,/)
-
 4   format(/10x,'The simulation box has the following dimensions',/, &
-         10x,'a = ',f11.5,' b = ',f11.5,' c = ',f11.5,' 'a2)
-
+           10x,'a = ',f11.5,' b = ',f11.5,' c = ',f11.5,' 'a2)
 5   format(/10x,'The simulation box contains ',i7,' atoms.')
-
 ! 6   format(/10x,'The number of bands is ',f8.2)
-
 7   format(/10x,'The calculation will be performed on ',i5,' processors')
-
 8   format(/10x, 'The functional used will be ', a15)
-
 9   format(/10x,'The number of cell grid points in each direction is :',/, &
-         20x,i5,' cell grid points along x',/, &
-         20x,i5,' cell grid points along y',/, &
-         20x,i5,' cell grid points along z')
-
+           20x,i5,' cell grid points along x',/, &
+           20x,i5,' cell grid points along y',/, &
+           20x,i5,' cell grid points along z')
 11  format(/10x,'The maximum number of support iterations will be ',i5, &
-         ' consisting of:',/, &
-         20x,i5,' L matrix variations.')
-
+           ' consisting of:',/, &
+           20x,i5,' L matrix variations.')
 13  format(/10x,'Support region radius = ',f7.4,' ',a2,' ',/, &
-         10x,'Density Matrix range  = ',f7.4,' ',a2)
+           10x,'Density Matrix range  = ',f7.4,' ',a2)
 131 format(/10x,'Species ',i2,' Non-local Hamiltonian radius = ', &
-         f7.4,' ',a2)
-
+           f7.4,' ',a2)
 14  format(/10x,'Support-grid spacing =   ',f7.4,' ',a2,' ',/, &
-         10x,'Width of (3D) b-spline = ',f7.4,' ',a2)
-
+           10x,'Width of (3D) b-spline = ',f7.4,' ',a2)
 15  format(/10x,'integration grid spacing along x ',f9.5,' ',a2,/, &
-         10x,'integration grid spacing along y ',f9.5,' ',a2,/, &
-         10x,'integration grid spacing along z ',f9.5,' ',a2)
-
+           10x,'integration grid spacing along y ',f9.5,' ',a2,/, &
+           10x,'integration grid spacing along z ',f9.5,' ',a2)
 16  format(/10x,'The Chemical Potential mu is :',f7.4)
-
 17  format(/10x,'The number of cell grid points in each block is :',/, &
-         20x,i5,' cell grid points along x',/, &
-         20x,i5,' cell grid points along y',/, &
-         20x,i5,' cell grid points along z')
-
+           20x,i5,' cell grid points along x',/, &
+           20x,i5,' cell grid points along y',/, &
+           20x,i5,' cell grid points along z')
 18  format(/10x,'The number of atomic species in the system is :', &
-         i5,/,/,6x, &
-         '------------------------------------------------------------------',/,6x, &
-         '   #   Label     Mass (a.u.)   Charge (e)  NLPF Rad (',a2,')   NSF  ',/,6x, &
-         '------------------------------------------------------------------')
-
+           i5,/,/,6x, &
+           '------------------------------------------------------------------',/,6x, &
+           '   #   Label     Mass (a.u.)   Charge (e)  NLPF Rad (',a2,')   NSF  ',/,6x, &
+           '------------------------------------------------------------------')
 19  format(6x,i4,3x,a30,3f11.5,9x,i3)
-
 20  format(6x, &
          '------------------------------------------------------------------',/)
-
 21  format(20x,a10,10x,a40)
 211 format(20x,a10,10x,a40)
 212 format(20x,a10,10x,a40)
-
 22  format(20x,a30,10x,a10) 
-
 23  format(/,10x, &
          '-------------------------------------------------------',/, &
          10x,'   Atom No.    Species      rx        ry       rz       ' &
          ,/,10x,'-------------------------------------------------------')
-
 24  format(12x,i5,10x,a5,3f10.5)
-
 25  format(/, &
          10x,'-------------------------------------------------------')
-
 26  format(/,10x,'The pseudopotential data is read from:',/, &
          15x,'  Species ',12x,'  File  ')
 261 format(/,10x,'The initial charge density data is read from:',/, &
          15x,'  Species ',12x,'  File  ')
 262 format(/,10x,'The initial support function data is read from:',/, &
          15x,'  Species ',12x,'  File  ')
-
 27  format(/,10x,'The pseudopotentials are of type:',/, &
            15x,'  Species ',12x,'  Type  ')
-
 28  format(/,10x,'Exponent for the s-type support functions: ', &
            f10.7,/,10x,'Exponent for the p-type support functions: ', &
            f10.7)
-
 29  format(/,10x,'Energy tolerance required:             ',f12.8, &
            /,10x,'L-matrix convergence tolerance:        ',f12.8, &
            /,10x,'Self consistent convergence tolerance: ',f12.8)
@@ -1660,83 +1710,90 @@ contains
 
 
 
-! -----------------------------------------------------------------------------
-! Subroutine readDiagInfo
-! -----------------------------------------------------------------------------
-
-!!****f* DiagModule/readDiagInfo *
-!!
-!!  NAME 
-!!   readDiagInfo
-!!  USAGE
-!!   readDiagInfo(Number of Kpts, proc grid rows, proc grid cols, row block size, col block size)
-!!  PURPOSE
-!!   Reads in data to do with diagonalisation, allocates memory for data and broadcasts to all
-!!   processors
-!!  INPUTS
-!!   integer, intent(OUT) :: proc_rows, proc_cols - rows and columns in processor grid
-!!   integer, intent(OUT) :: block_size_r, block_size_c - block sizes for rows and columns of matrix
-!!  USES
-!!   GenComms, fdf, global_module, numbers
-!!  AUTHOR
-!!   D.R.Bowler
-!!  CREATION DATE
-!!   16/04/2002
-!!  MODIFICATION HISTORY
-!!   22/04/2002 dave
-!!    Added weight of 1.0 to default k-point set (i.e. gamma point only)
-!!   29/05/2002 dave
-!!    Removed fdf_init (now all Conquest input is done via fdf)
-!!   2006/09/22 08:20 dave
-!!    Relocated into initial_read
-!!   2010/07/22 15.53 Lianheng
-!!    moved control flags associated with Diagonalisation method from
-!!    the main read_input() subroutine to here.  added
-!!    Methfessel-Paxton smearing and related control flags. Changed
-!!    SC.MaxEfIter to Diag.MaxEfIter for greater consistency
-!!   2011/02/13 L.Tong
-!!    added Diag.KProcGroups for k-point parallelisation
-!!    IMPORTANT: for now Diag.KProcGroups must be an integer factor
-!!    of the total number of processes. In other words each group
-!!    must contain the same number of processes.
-!!   2011/09/02 L.Tong
-!!    Corrected Conquest default values for ScaLAPACK processor grid
-!!    definitions when k-point parallelisation is on. 
-!!    Added local variable proc_per_group
-!!   2011/09/05 L.Tong
-!!    Added print out input information for k-point parallelisation
-!!    related parameters
-!!  SOURCE
-!!
+  ! -----------------------------------------------------------------------------
+  ! Subroutine readDiagInfo
+  ! -----------------------------------------------------------------------------
+  
+  !!****f* DiagModule/readDiagInfo *
+  !!
+  !!  NAME 
+  !!   readDiagInfo
+  !!  USAGE
+  !!   readDiagInfo(Number of Kpts, proc grid rows, proc grid cols,
+  !!   row block size, col block size)
+  !!  PURPOSE
+  !!   Reads in data to do with diagonalisation, allocates memory for
+  !!   data and broadcasts to all processors
+  !!  INPUTS
+  !!   integer, intent(OUT) :: proc_rows, proc_cols - rows and columns in
+  !!                                                  processor grid
+  !!   integer, intent(OUT) :: block_size_r, block_size_c - block sizes for
+  !!                                                        rows and columns
+  !!                                                        of matrix
+  !!  USES
+  !!   GenComms, fdf, global_module, numbers
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   16/04/2002
+  !!  MODIFICATION HISTORY
+  !!   22/04/2002 dave
+  !!    Added weight of 1.0 to default k-point set (i.e. gamma point only)
+  !!   29/05/2002 dave
+  !!    Removed fdf_init (now all Conquest input is done via fdf)
+  !!   2006/09/22 08:20 dave
+  !!    Relocated into initial_read
+  !!   2010/07/22 15.53 Lianheng
+  !!    moved control flags associated with Diagonalisation method from
+  !!    the main read_input() subroutine to here.  added
+  !!    Methfessel-Paxton smearing and related control flags. Changed
+  !!    SC.MaxEfIter to Diag.MaxEfIter for greater consistency
+  !!   2011/02/13 L.Tong
+  !!    added Diag.KProcGroups for k-point parallelisation
+  !!    IMPORTANT: for now Diag.KProcGroups must be an integer factor
+  !!    of the total number of processes. In other words each group
+  !!    must contain the same number of processes.
+  !!   2011/09/02 L.Tong
+  !!    Corrected Conquest default values for ScaLAPACK processor grid
+  !!    definitions when k-point parallelisation is on. 
+  !!    Added local variable proc_per_group
+  !!   2011/09/05 L.Tong
+  !!    Added print out input information for k-point parallelisation
+  !!    related parameters
+  !!  SOURCE
+  !!
   subroutine readDiagInfo
 
     use datatypes
-    use global_module, ONLY: iprint_init, rcellx, rcelly, rcellz, &
-         area_general, ni_in_cell, numprocs, species_glob, io_lun
-    use numbers, ONLY: zero, one, two, pi, very_small
-    use GenComms, ONLY: cq_abort, gcopy, myid
+    use global_module,   only: iprint_init, rcellx, rcelly, rcellz,  &
+                               area_general, ni_in_cell, numprocs,   &
+                               species_glob, io_lun
+    use numbers,         only: zero, one, two, pi, very_small
+    use GenComms,        only: cq_abort, gcopy, myid
     use input_module
-    use ScalapackFormat, ONLY: proc_rows, proc_cols, block_size_r, &
-         block_size_c, proc_groups
-    use DiagModule, ONLY: nkp, kk, wtk, kT, maxefermi, &
-         flag_smear_type, iMethfessel_Paxton, max_brkt_iterations, &
-         gaussian_height, finess, NElec_less
-    use energy, ONLY: SmearingType, MPOrder
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use species_module, ONLY: nsf_species
+    use ScalapackFormat, only: proc_rows, proc_cols, block_size_r,   &
+                               block_size_c, proc_groups
+    use DiagModule,      only: nkp, kk, wtk, kT, maxefermi,          &
+                               flag_smear_type, iMethfessel_Paxton,  &
+                               max_brkt_iterations, gaussian_height, &
+                               finess, NElec_less
+    use energy,          only: SmearingType, MPOrder
+    use memory_module,   only: reg_alloc_mem, reg_dealloc_mem,       &
+                               type_dbl
+    use species_module,  only: nsf_species
 
     implicit none
 
     ! Local variables
-    integer :: stat, iunit, i, j, k, matrix_size
+    integer      :: stat, iunit, i, j, k, matrix_size
     real(double) :: a, sum
-    integer :: proc_per_group
+    integer      :: proc_per_group
     ! k-point mesh type
-    logical :: mp_mesh, done
+    logical      :: mp_mesh, done
+    integer,      dimension(1:3) :: mp
     real(double), dimension(1:3) :: mp_shift
     real(double), allocatable, dimension(:,:) :: kk_tmp
-    real(double), allocatable, dimension(:) :: wtk_tmp
-    integer, dimension(1:3) :: mp
+    real(double), allocatable, dimension(:)   :: wtk_tmp
     integer :: nkp_tmp
     integer :: counter
     
@@ -1760,11 +1817,15 @@ contains
        if(fdf_defined('Diag.ProcRows')) then
           proc_rows = fdf_integer('Diag.ProcRows',0)
           proc_cols = fdf_integer('Diag.ProcCols',0)
-          if(proc_rows*proc_cols==0) call cq_abort('Diag: proc grid product is zero: ',proc_rows,proc_cols)
-          ! 2011/09/02 L.Tong: now checks correctly if we have more than one k-point groups
+          if(proc_rows*proc_cols==0) &
+               call cq_abort('Diag: proc grid product is zero: ',&
+                             proc_rows,proc_cols)
+          ! 2011/09/02 L.Tong: now checks correctly if we have more
+          ! than one k-point groups
           proc_per_group = numprocs / proc_groups
           if(proc_rows*proc_cols > proc_per_group) &
-               call cq_abort('Diag: proc grid product is too large: ', proc_rows*proc_cols, proc_per_group) 
+               call cq_abort('Diag: proc grid product is too large: ', &
+                             proc_rows*proc_cols, proc_per_group) 
        else
           ! default values
           if(numprocs<9) then ! Recommended by ScaLapack User Guide
@@ -1772,14 +1833,17 @@ contains
              proc_cols = numprocs / proc_groups
           else
              done = .false.
-             ! 2011/09/02 L.Tong, now works properly for more than one k-point groups
+             ! 2011/09/02 L.Tong, now works properly for more than one
+             ! k-point groups
              proc_per_group = numprocs / proc_groups
              a = sqrt(real(proc_per_group, double))
              proc_rows = aint(a)+1
              do while(.NOT.done.AND.proc_rows>1) 
                 proc_rows = proc_rows - 1
-                proc_cols = aint(real(proc_per_group,double) / real(proc_rows,double))
-                if(proc_per_group - proc_rows*proc_cols == 0) done = .true.
+                proc_cols = aint(real(proc_per_group,double) / &
+                                 real(proc_rows,double))
+                if(proc_per_group - proc_rows*proc_cols == 0) &
+                     done = .true.
              end do
           end if
        end if
@@ -1793,10 +1857,12 @@ contains
           block_size_c = fdf_integer('Diag.BlockSizeC',1)
           a = real(matrix_size)/real(block_size_r)
           if(a - real(floor(a))>1e-8_double) &
-               call cq_abort('block_size_r not a factor of matrix size ! ',matrix_size, block_size_r)
+               call cq_abort('block_size_r not a factor of matrix size ! ',&
+                             matrix_size, block_size_r)
           a = real(matrix_size)/real(block_size_c)
           if(a - real(floor(a))>1e-8_double) &
-               call cq_abort('block_size_c not a factor of matrix size ! ',matrix_size, block_size_c)
+               call cq_abort('block_size_c not a factor of matrix size ! ',&
+                             matrix_size, block_size_c)
        else
           done = .false.
           block_size_r = matrix_size/max(proc_rows,proc_cols)+1
@@ -1831,9 +1897,11 @@ contains
           sum = zero
           ! Read k-points
           if(fdf_block('Diag.Kpoints'))then
-             if(1+block_end-block_start<nkp) call cq_abort("Kpoint error: ",1+block_end-block_start,nkp)
+             if(1+block_end-block_start<nkp) &
+                  call cq_abort("Kpoint error: ",1+block_end-block_start,nkp)
              do i=1,nkp
-                read(unit=input_array(block_start+i-1),fmt=*) kk(1,i),kk(2,i),kk(3,i),wtk(i)
+                read (unit=input_array(block_start+i-1),fmt=*) &
+                     kk(1,i),kk(2,i),kk(3,i),wtk(i)
                 ! Assume fractional kpoints and orthorhombic cell for now
                 kk(1,i) = two*pi*kk(1,i)/rcellx
                 kk(2,i) = two*pi*kk(2,i)/rcelly
@@ -1868,12 +1936,18 @@ contains
           mp(1) = fdf_integer('Diag.MPMeshX',1)
           mp(2) = fdf_integer('Diag.MPMeshY',1)
           mp(3) = fdf_integer('Diag.MPMeshZ',1) 
-          if(iprint_init>0) write(io_lun,fmt='(8x,a, 3i3)') ' Monkhorst-Pack mesh: ', (mp(i), i=1,3)
-          if (mp(1) <= 0) call cq_abort('K-points: number of k-points must be > 0!')
-          if (mp(2) <= 0) call cq_abort('K-points: number of k-points must be > 0!')
-          if (mp(3) <= 0) call cq_abort('K-points: number of k-points must be > 0!')
+          if(iprint_init>0) &
+               write (io_lun,fmt='(8x,a, 3i3)') &
+                     ' Monkhorst-Pack mesh: ', (mp(i), i=1,3)
+          if (mp(1) <= 0) &
+               call cq_abort('K-points: number of k-points must be > 0!')
+          if (mp(2) <= 0) &
+               call cq_abort('K-points: number of k-points must be > 0!')
+          if (mp(3) <= 0) &
+               call cq_abort('K-points: number of k-points must be > 0!')
           nkp_tmp = mp(1)*mp(2)*mp(3)
-          if(iprint_init>0) write(io_lun,fmt='(8x,a, i4)') ' Number of k-points: ',nkp_tmp
+          if(iprint_init>0) &
+               write(io_lun,fmt='(8x,a, i4)') ' Number of k-points: ',nkp_tmp
           ! Read k-point shift, default (0.0 0.0 0.0)
           mp_shift(1) = fdf_double('Diag.MPShiftX',zero)
           mp_shift(2) = fdf_double('Diag.MPShiftY',zero)
@@ -1890,10 +1964,14 @@ contains
              write(io_lun,9)
              mp_shift(3) = mp_shift(3) - one
           end if
-          if(iprint_init>0) write(io_lun,fmt='(8x,a, 3f11.6)') ' Monkhorst-Pack mesh shift:  ', (mp_shift(i), i=1,3)
+          if(iprint_init>0) &
+               write (io_lun,fmt='(8x,a, 3f11.6)') &
+                     ' Monkhorst-Pack mesh shift:  ', &
+                     (mp_shift(i), i=1,3)
           ! Allocate
           allocate(kk_tmp(3,nkp_tmp),wtk_tmp(nkp_tmp),STAT=stat)
-          if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp_tmp)
+          if(stat/=0) &
+               call cq_abort('FindEvals: couldnt allocate kpoints',nkp_tmp)
           call reg_alloc_mem(area_general,4*nkp_tmp,type_dbl)
           ! All k-points have weight 1 for now
           wtk_tmp(1:nkp_tmp) = one
@@ -1904,9 +1982,12 @@ contains
              do j = 0, mp(2) -1 ! y axis
                 do k = 1, mp(3) ! z axis
                    counter = k + j * mp(3) + i * mp(2) * mp(3)
-                   kk_tmp(1,counter) = ( (two * (i+1) - mp(1) - 1) / (2 * mp(1)) ) + mp_shift(1)
-                   kk_tmp(2,counter) = ( (two * (j+1) - mp(2) - 1) / (2 * mp(2)) ) + mp_shift(2)
-                   kk_tmp(3,counter) = ( (two * k - mp(3) - 1) / (2 * mp(3)) ) + mp_shift(3)
+                   kk_tmp(1,counter) = &
+                        ((two * (i+1) - mp(1) - 1) / (2 * mp(1))) + mp_shift(1)
+                   kk_tmp(2,counter) = &
+                        ((two * (j+1) - mp(2) - 1) / (2 * mp(2))) + mp_shift(2)
+                   kk_tmp(3,counter) = &
+                        ((two * k - mp(3) - 1) / (2 * mp(3))) + mp_shift(3)
                 end do
              end do
           end do
@@ -1914,16 +1995,19 @@ contains
           if(iprint_init>0) then
              write(io_lun,7) nkp_tmp
              do i=1,nkp_tmp
-                write(io_lun,fmt='(8x,i5,3f15.6,f12.3)') i,kk_tmp(1,i),kk_tmp(2,i),kk_tmp(3,i),wtk_tmp(i)
+                write(io_lun,fmt='(8x,i5,3f15.6,f12.3)')&
+                      i,kk_tmp(1,i),kk_tmp(2,i),kk_tmp(3,i),wtk_tmp(i)
              end do
           end if
-          ! Check if k = -k and weed out equivalent k-points. Adjust wtk accordingly.
+          ! Check if k = -k and weed out equivalent k-points. Adjust
+          ! wtk accordingly.
           do i = nkp_tmp, 1, -1 ! to get most coords > 0
              if (wtk_tmp(i) > zero) then
                 do j = nkp_tmp, 1, -1
                    if (i /= j) then
-                      if ((kk_tmp(1,i) == -kk_tmp(1,j)) .and. (kk_tmp(2,i) == -kk_tmp(2,j)) &
-                           .and. (kk_tmp(3,i) == -kk_tmp(3,j))) then
+                      if ((kk_tmp(1,i) == -kk_tmp(1,j)) .and. &
+                          (kk_tmp(2,i) == -kk_tmp(2,j)) .and. &
+                          (kk_tmp(3,i) == -kk_tmp(3,j))) then
                          wtk_tmp(j) = zero
                          wtk_tmp(i) = wtk_tmp(i) + one
                       end if
@@ -1944,7 +2028,8 @@ contains
           end do
           ! Fill in the real k-point array
           allocate(kk(3,nkp),wtk(nkp),STAT=stat)
-          if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp)
+          if(stat/=0) &
+               call cq_abort('FindEvals: couldnt allocate kpoints',nkp)
           call reg_alloc_mem(area_general,4*nkp,type_dbl)
           counter = 0
           do i = 1, nkp_tmp
@@ -1957,15 +2042,19 @@ contains
                 wtk(counter) = wtk_tmp(i)/sum
              end if
           end do
-          if(counter>nkp) call cq_abort("Error in kpt symmetry ! ",counter,nkp)
+          if(counter>nkp) &
+               call cq_abort("Error in kpt symmetry ! ",counter,nkp)
           call reg_dealloc_mem(area_general,4*nkp_tmp,type_dbl)
           deallocate(kk_tmp,wtk_tmp,STAT=stat)
-          if(stat/=0) call cq_abort('FindEvals: couldnt deallocate kpoints',nkp_tmp)
+          if(stat/=0) &
+               call cq_abort('FindEvals: couldnt deallocate kpoints',&
+                             nkp_tmp)
           if(iprint_init>0) then
              write(io_lun,*)
              write(io_lun,10) nkp
              do i=1,nkp
-                write(io_lun,fmt='(8x,i5,3f15.6,f12.3)') i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
+                write (io_lun,fmt='(8x,i5,3f15.6,f12.3)') &
+                      i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
              end do
           end if
 
@@ -1982,19 +2071,21 @@ contains
           write(io_lun,51) nkp
           write(io_lun,52)
           do i=1,nkp
-             write(io_lun,fmt='(8x,i5,3f15.6,f12.3)') i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
+             write (io_lun,fmt='(8x,i5,3f15.6,f12.3)') &
+                   i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
           end do
           write(io_lun,fmt='(/8x,"Finished reading Kpoints"/)')
        end if
        
        ! Write out smearing temperature
-       if(iprint_init>0) write(io_lun,'(10x,"Temperature used for smearing: ",f10.6)') kT
+       if(iprint_init>0) &
+            write (io_lun,'(10x,"Temperature used for smearing: ",f10.6)') kT
     end if ! myid==0
 
     ! Distribute data to all processors
     call gcopy(block_size_r)
     call gcopy(block_size_c)
-    call gcopy (proc_groups)
+    call gcopy(proc_groups)
     call gcopy(proc_rows)
     call gcopy(proc_cols)
     call gcopy(nkp)
@@ -2023,31 +2114,36 @@ contains
     !   end do
     !end if
     return
+
 2   format(8x,'Block size (row, col): ',2i5)
 3   format(8x,'Proc grid (row, col): ',2i5)
-4   format(/8x,'***WARNING***',/,2x,'No Kpoints block found - defaulting to Gamma point')
+4   format(/8x,'***WARNING***',/,2x,&
+           'No Kpoints block found - defaulting to Gamma point')
 5   format(8x,i4,' Kpoints in Cartesian (inverse Angstrom) form: ')
 51  format(8x,i4,' symmetry inequivalent Kpoints in Cartesian ')
 52  format(12x,' (inverse Angstrom) form: ')
 6   format(8x,'Kpt: ',i4,' : ',3f12.8,' Weight: ',f10.6)
 7   format(8x,' All ',i4,' Kpoints in fractional coordinates: ')
-8   format(/8x,'***WARNING***',/,8x,'No Kpoint mesh found - defaulting to Gamma point')
-9   format(/8x,'***WARNING***',/,8x,'Specified Kpoint mesh shift in fractional coords >= 1.0.')
+8   format(/8x,'***WARNING***',/,8x,&
+           'No Kpoint mesh found - defaulting to Gamma point')
+9   format(/8x,'***WARNING***',/,8x,&
+           'Specified Kpoint mesh shift in fractional coords >= 1.0.')
 10  format(8x,i4,' symmetry inequivalent Kpoints in fractional coordinates: ')
 11  format(8x, 'Number of processor groups for k-point parallelisation: ', i5)
+
   end subroutine readDiagInfo
-!!***
+  !!***
 
 !%%!   subroutine readDiagInfo
 !%%! 
 !%%!     use datatypes
-!%%!     use global_module, ONLY: iprint_init, rcellx, rcelly, rcellz, area_general
-!%%!     use numbers, ONLY: two, pi
-!%%!     use GenComms, ONLY: cq_abort, gcopy, myid
-!%%!     use fdf, ONLY: fdf_integer, fdf_block
-!%%!     use ScalapackFormat, ONLY: proc_rows, proc_cols, block_size_r, block_size_c
-!%%!     use DiagModule, ONLY: nkp, kk, wtk
-!%%!     use memory_module, ONLY: reg_alloc_mem, type_dbl
+!%%!     use global_module, only: iprint_init, rcellx, rcelly, rcellz, area_general
+!%%!     use numbers, only: two, pi
+!%%!     use GenComms, only: cq_abort, gcopy, myid
+!%%!     use fdf, only: fdf_integer, fdf_block
+!%%!     use ScalapackFormat, only: proc_rows, proc_cols, block_size_r, block_size_c
+!%%!     use DiagModule, only: nkp, kk, wtk
+!%%!     use memory_module, only: reg_alloc_mem, type_dbl
 !%%! 
 !%%! 
 !%%!     implicit none

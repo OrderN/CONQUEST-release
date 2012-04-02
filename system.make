@@ -9,7 +9,7 @@ FC = mpif90
 F77 = mpif77
 # If you need 64-bit flags for compiling, add them for linking
 LINKFLAGS = 
-COMPFLAGS = -fast -tp k8-64
+ COMPFLAGS = -fast -tp k8-64
 # COMPFLAGS = -g
 COMPFLAGS_F77 = -fast -tp k8-64
 # COMPFLAGS_F77 = -g

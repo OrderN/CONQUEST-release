@@ -43,16 +43,20 @@
 module pseudopotential_data
 
   use datatypes
-  use global_module, ONLY: io_lun
-  use pseudopotential_common, ONLY: pseudopotential, core_radius, non_local
-  use GenComms, ONLY: cq_abort
-  use species_module, ONLY: non_local_species
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_pseudopot,tmr_std_allocation
+  use global_module,          only: io_lun
+  use pseudopotential_common, only: pseudopotential, core_radius, &
+                                    non_local
+  use GenComms,               only: cq_abort
+  use species_module,         only: non_local_species
+  use timer_stdclocks_module, only: start_timer,stop_timer,       &
+                                    tmr_std_pseudopot,            &
+                                    tmr_std_allocation
 
   implicit none
   save
   ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id$"
+  character(len=80), private :: &
+       RCSid = "$Id$"
 
   real(double), allocatable, dimension(:) :: core_radius_2, radius_max, radius_max_2, ps_exponent, &
        spherical_harmonic_norm, loc_radius
@@ -95,25 +99,25 @@ contains
 !!    Removed obsolete parameter number_of_bands
 !!  SOURCE
 !!
-  subroutine init_pseudo (e_core)
+  subroutine init_pseudo(e_core)
 
     use datatypes
-    use global_module, ONLY: IPRINT_TIME_THRES3
-    use species_module, ONLY: ps_file
+    use global_module,  only: IPRINT_TIME_THRES3
+    use species_module, only: ps_file
     use timer_module
     
     ! Passed variables
-    real(double) :: e_core
+    real(double)   :: e_core
     type(cq_timer) :: tmr_l_tmp1
 
-    call start_timer (tmr_std_pseudopot)
-    call start_timer (tmr_l_tmp1, WITH_LEVEL)
-    call spline_pseudopotential ()
-    call set_pseudopotential ()
-    call get_core_correction (e_core)
-    call stop_print_timer (tmr_l_tmp1, "initialising pseudopotentials", &
+    call start_timer(tmr_std_pseudopot)
+    call start_timer(tmr_l_tmp1, WITH_LEVEL)
+    call spline_pseudopotential()
+    call set_pseudopotential()
+    call get_core_correction(e_core)
+    call stop_print_timer(tmr_l_tmp1, "initialising pseudopotentials", &
          IPRINT_TIME_THRES3)
-    call stop_timer (tmr_std_pseudopot)
+    call stop_timer(tmr_std_pseudopot)
     return
   end subroutine init_pseudo
 !!***
@@ -184,24 +188,24 @@ contains
   subroutine set_pseudopotential()
 
     use datatypes
-    use GenBlas, ONLY: axpy
+    use GenBlas, only: axpy
     use numbers
-    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell, &
+    use global_module, only: rcellx,rcelly,rcellz,id_glob,ni_in_cell, &
                              species_glob, nlpf, flag_basis_set,      &
                              blips, flag_analytic_blip_int
-    use species_module, ONLY: charge, species, nlpf_species
+    use species_module, only: charge, species, nlpf_species
     !  At present, these arrays are dummy arguments.
-    use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, &
+    use block_module, only : nx_in_block, ny_in_block, nz_in_block, &
          n_pts_in_block
-    use group_module, ONLY : blocks, parts
-    use primary_module, ONLY: domain
-    use cover_module, ONLY: DCS_parts
-    use set_blipgrid_module, ONLY : naba_atm
-    use GenComms, ONLY: my_barrier, cq_abort, inode,ionode
-    use hartree_module, ONLY: hartree
-    use functions_on_grid, ONLY: gridfunctions, pseudofns
-    use dimens, ONLY: n_my_grid_points
-    use maxima_module, ONLY: maxngrid
+    use group_module, only : blocks, parts
+    use primary_module, only: domain
+    use cover_module, only: DCS_parts
+    use set_blipgrid_module, only : naba_atm
+    use GenComms, only: my_barrier, cq_abort, inode, ionode
+    use hartree_module, only: hartree
+    use functions_on_grid, only: gridfunctions, pseudofns
+    use dimens, only: n_my_grid_points
+    use maxima_module, only: maxngrid
 
     implicit none
 
@@ -525,18 +529,18 @@ contains
 
     use datatypes
     use numbers
-    use species_module, ONLY: species, nlpf_species
-    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell, species_glob, nlpf
+    use species_module, only: species, nlpf_species
+    use global_module, only: rcellx,rcelly,rcellz,id_glob,ni_in_cell, species_glob, nlpf
     !  At present, these arrays are dummy arguments.
-    use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, &
+    use block_module, only : nx_in_block,ny_in_block,nz_in_block, &
          n_pts_in_block
-    use group_module, ONLY : blocks, parts
-    use primary_module, ONLY: domain
-    use cover_module, ONLY: DCS_parts
-    use set_blipgrid_module, ONLY : naba_atm
-    use functions_on_grid, ONLY: gridfunctions, fn_on_grid
-    use dimens, ONLY: n_my_grid_points
-    use GenComms, ONLY: my_barrier, cq_abort, inode,ionode
+    use group_module, only : blocks, parts
+    use primary_module, only: domain
+    use cover_module, only: DCS_parts
+    use set_blipgrid_module, only : naba_atm
+    use functions_on_grid, only: gridfunctions, fn_on_grid
+    use dimens, only: n_my_grid_points
+    use GenComms, only: my_barrier, cq_abort, inode,ionode
 
     implicit none
     ! dummy arguments
@@ -927,14 +931,14 @@ contains
 !!    Added io_ routines from input_module
 !!  SOURCE
 !!
-  subroutine read_pseudopotential( inode, ionode)
+  subroutine read_pseudopotential(inode, ionode)
 
     use datatypes
     use numbers
-    use global_module, ONLY: iprint_pseudo
-    use species_module, ONLY: n_species, nlpf_species, ps_file
-    use GenComms, ONLY: gcopy, cq_abort
-    use input_module, ONLY: io_assign, io_close
+    use global_module, only: iprint_pseudo
+    use species_module, only: n_species, nlpf_species, ps_file
+    use GenComms, only: gcopy, cq_abort
+    use input_module, only: io_assign, io_close
 
     implicit none
 
@@ -1146,8 +1150,8 @@ contains
 
     use datatypes
     use numbers
-    use species_module, ONLY:  n_species, species
-    use spline_module, ONLY: spline
+    use species_module, only:  n_species, species
+    use spline_module, only: spline
 
     implicit none
 
@@ -1254,13 +1258,13 @@ contains
 !!    number_of_bands by ne_in_cell
 !!  SOURCE
 !!
-  subroutine get_core_correction (e_core)
+  subroutine get_core_correction(e_core)
 
     use datatypes
     use numbers
-    use dimens, ONLY: volume
-    use species_module, ONLY: charge, species, n_species
-    use global_module, ONLY: ni_in_cell, ne_in_cell
+    use dimens, only: volume
+    use species_module, only: charge, species, n_species
+    use global_module, only: ni_in_cell, ne_in_cell
 
     implicit none
 

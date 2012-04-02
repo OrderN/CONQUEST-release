@@ -20,12 +20,14 @@
 !!   17/06/2002 dave
 !!    Added headers (ROBODoc for module)
 !!   10:38, 06/03/2003 drb 
-!!    Corrected array slice pass in act_on_vectors_new (speed problem under ifc)
+!!    Corrected array slice pass in act_on_vectors_new (speed problem
+!!    under ifc)
 !!   10:09, 13/02/2006 drb 
-!!    Removed all explicit references to data_ variables and rewrote in terms of new 
-!!    matrix routines
+!!    Removed all explicit references to data_ variables and rewrote
+!!    in terms of new matrix routines
 !!   2006/03/04 06:14 dave
-!!    Added use association for function-on-grid data, removed reference to size
+!!    Added use association for function-on-grid data, removed
+!!    reference to size
 !!   2006/06/15 08:24 dave
 !!    Changing in preparation for variable NSF
 !!   2008/02/04 16:57 dave
@@ -36,15 +38,20 @@
 !!
 module calc_matrix_elements_module
 
-  use global_module, ONLY: io_lun
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_integration,tmr_std_allocation,tmr_std_matrices
+  use global_module,          only: io_lun
+  use timer_stdclocks_module, only: start_timer, stop_timer, &
+                                    tmr_std_integration,     &
+                                    tmr_std_allocation,      &
+                                    tmr_std_matrices
 
   implicit none
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), save, private :: RCSid = "$Id$"
+  character(len=80), save, private :: &
+       RCSid = "$Id$"
 !!***
+
 contains
 
 !!****f* calc_matrix_elements_module/norb *
@@ -71,7 +78,7 @@ contains
 !!
   integer function norb(naba_atm, naba, iprim_blk)
 
-    use naba_blk_module,  ONLY:naba_atm_of_blk
+    use naba_blk_module, only: naba_atm_of_blk
 
     implicit none
 
@@ -79,10 +86,13 @@ contains
     integer :: naba, iprim_blk
 
     if(naba == naba_atm%no_of_atom(iprim_blk)) then
-       norb = naba_atm%no_of_orb(iprim_blk)- naba_atm%ibeg_orb_atom(naba,iprim_blk)+1
+       norb = naba_atm%no_of_orb(iprim_blk) - &
+              naba_atm%ibeg_orb_atom(naba,iprim_blk) + 1
     else
-       norb = naba_atm%ibeg_orb_atom(naba+1,iprim_blk)- naba_atm%ibeg_orb_atom(naba,iprim_blk)
-    endif
+       norb = naba_atm%ibeg_orb_atom(naba+1,iprim_blk) - &
+              naba_atm%ibeg_orb_atom(naba,iprim_blk)
+    end if
+    
   end function norb
 !!***
 

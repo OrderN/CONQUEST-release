@@ -2,9 +2,10 @@ module nlpf2blip
 
   use datatypes
   use numbers
-  use global_module, ONLY: io_lun
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
-  use support_spec_format, ONLY: support_function
+  use global_module,          only: io_lun
+  use timer_stdclocks_module, only: start_timer, stop_timer, &
+                                    tmr_std_basis, tmr_std_allocation
+  use support_spec_format,    only: support_function
 
   implicit none
   save
@@ -35,23 +36,28 @@ contains
 
     use datatypes
     use numbers
-    use blip!, ONLY: blip_data, blip_info, blip_FFT_size, blip_FFT_off
-    use dimens, ONLY : RadiusSupport
-    use GenComms, ONLY : cq_abort, gcopy, myid, my_barrier, inode, ionode
-    use global_module, ONLY : iprint_basis
+    use blip!, only: blip_data, blip_info, blip_FFT_size, blip_FFT_off
+    use dimens, only: RadiusSupport
+    use GenComms, only: cq_abort, gcopy, myid, my_barrier, inode, ionode
+    use global_module, only: iprint_basis
     use pseudo_tm_info
-    use species_module, ONLY: nlpf_species, n_species
-    use blip_grid_transform_module, ONLY: do_local_grid_to_blip, do_local_blip_to_grid
-    use io_module, ONLY: grab_blip_coeffs
+    use species_module, only: nlpf_species, n_species
+    use blip_grid_transform_module, only: do_local_grid_to_blip, &
+                                          do_local_blip_to_grid
+    use io_module, only: grab_blip_coeffs
     
     implicit none
 
-    integer :: i, i_stop, n, na, nb, nx, ny, nz, ns, n_ac, n_acz, n_am, &
-         &n_s, n_sp, n_sup, n_zeta, min_ac, max_ac, l, m, count, marker, size
+    integer :: i, i_stop, n, na, nb, nx, ny, nz, ns, n_ac, n_acz, &
+               n_am, n_s, n_sp, n_sup, n_zeta, min_ac, max_ac, l, m, &
+               count, marker, size
     integer :: n_blip, nu_int, stat, max_nlpf, the_l, nsf_send
-    integer :: iblock, ipart, ia, no_of_ib_ia, pos, ip, lenx, nl, mval, j, off, offx, offy, offz
+    integer :: iblock, ipart, ia, no_of_ib_ia, pos, ip, lenx, nl, &
+               mval, j, off, offx, offy, offz
     integer, allocatable, dimension(:) :: n_cube2sphere, n_b_half
-    real(double) :: c, deltax, r2_over_b2, x, y, z, r, step, rr, a, b, d, r1, r2, r3, r4, nl_potential, val, xg, yg, zg, ang_fac
+    real(double) :: c, deltax, r2_over_b2, x, y, z, r, step, rr, a, b,&
+                    d, r1, r2, r3, r4, nl_potential, val, xg, yg, zg, &
+                    ang_fac
     real(double), allocatable, dimension(:,:) :: local_blip
     real(double), allocatable, dimension(:,:,:,:) :: local_grid
     real(double) :: a1g_norm, t1u_norm, t2g_norm, eg_a_norm, eg_b_norm
@@ -213,16 +219,19 @@ contains
   end subroutine make_blips_from_nlpfs
 !!*** 
 
-  subroutine get_SP(blip_co, nlpf_co, matSP, ip, j_in_halo, dx, dy, dz, speci, specj)
+  subroutine get_SP(blip_co, nlpf_co, matSP, ip, j_in_halo, dx, dy, &
+                    dz, speci, specj)
 
     use datatypes
     use numbers
-    use GenBlas, ONLY: axpy, copy, scal, gemm
-    use blip, ONLY: blip_info
-    use support_spec_format, ONLY: support_function
-    use GenComms, ONLY: cq_abort, mtime, inode, ionode
-    use mult_module, ONLY: store_matrix_value, scale_matrix_value, return_matrix_value_pos, store_matrix_value_pos, matrix_pos
-    use species_module, ONLY: nsf_species, nlpf_species
+    use GenBlas, only: axpy, copy, scal, gemm
+    use blip, only: blip_info
+    use support_spec_format, only: support_function
+    use GenComms, only: cq_abort, mtime, inode, ionode
+    use mult_module, only: store_matrix_value, scale_matrix_value, &
+                           return_matrix_value_pos, &
+                           store_matrix_value_pos, matrix_pos
+    use species_module, only: nsf_species, nlpf_species
 
     implicit none
 
@@ -239,12 +248,14 @@ contains
 
     real(double) ::  FAC(-MAX_D:MAX_D,3)
 
-    real(double), allocatable, dimension(:) :: work1, work2, work3, work4, work5, work6
+    real(double), allocatable, dimension(:) :: work1, work2, work3, &
+                                               work4, work5, work6
     real(double), allocatable, dimension(:,:) :: temp
     real(double) :: tmp, facx, facy, facz, factot, t0, t1, mat_val
 
-    integer :: ix, iy, iz, offset, l, at, nsf1, stat, i1, i2, m, x,y,z, xmin, xmax, ymin, ymax, zmin, zmax, &
-         idx, idy, idz, wheremat
+    integer :: ix, iy, iz, offset, l, at, nsf1, stat, i1, i2, m, x,y,&
+               z, xmin, xmax, ymin, ymax, zmin, zmax, idx, idy, idz, &
+               wheremat
 
     this_nsf = nsf_species(speci)
     this_nlpf = nlpf_species(specj)
@@ -415,21 +426,26 @@ contains
     return
   end subroutine get_SP
 
-  subroutine get_dSP(blip_co, nlpf_co, matSP, ip, j_in_halo, dx, dy, dz, speci, specj,dir)
+
+  subroutine get_dSP(blip_co, nlpf_co, matSP, ip, j_in_halo, dx, dy, &
+                     dz, speci, specj,dir)
 
     use datatypes
     use numbers
-    use GenBlas, ONLY: axpy, copy, scal, gemm
-    use blip, ONLY: blip_info
-    use support_spec_format, ONLY: support_function
-    use GenComms, ONLY: cq_abort, mtime, inode, ionode
-    use mult_module, ONLY: store_matrix_value, scale_matrix_value, return_matrix_value_pos, store_matrix_value_pos, matrix_pos
-    use species_module, ONLY: nsf_species, nlpf_species
+    use GenBlas, only: axpy, copy, scal, gemm
+    use blip, only: blip_info
+    use support_spec_format, only: support_function
+    use GenComms, only: cq_abort, mtime, inode, ionode
+    use mult_module, only: store_matrix_value, scale_matrix_value, &
+                           return_matrix_value_pos, &
+                           store_matrix_value_pos, matrix_pos
+    use species_module, only: nsf_species, nlpf_species
 
     implicit none
 
     ! Shared Variables
-    integer :: this_nsf, this_nlpf, speci, specj, np, nn, ip, matSP, j_in_halo, dir
+    integer :: this_nsf, this_nlpf, speci, specj, np, nn, ip, matSP, &
+               j_in_halo, dir
 
     type(support_function) :: blip_co
     type(support_function) :: nlpf_co
@@ -441,12 +457,14 @@ contains
 
     real(double) ::  FAC(-MAX_D:MAX_D,3), DFAC(-MAX_D:MAX_D,3)
 
-    real(double), allocatable, dimension(:) :: work1, work2, work3, work4, work5, work6
+    real(double), allocatable, dimension(:) :: work1, work2, work3, &
+                                               work4, work5, work6
     real(double), allocatable, dimension(:,:) :: temp
     real(double) :: tmp, facx, facy, facz, factot, t0, t1, mat_val
 
-    integer :: ix, iy, iz, offset, l, at, nsf1, stat, i1, i2, m, x,y,z, xmin, xmax, ymin, ymax, zmin, zmax, &
-         idx, idy, idz, wheremat
+    integer :: ix, iy, iz, offset, l, at, nsf1, stat, i1, i2, m, x,y,&
+               z, xmin, xmax, ymin, ymax, zmin, zmax, idx, idy, idz, &
+               wheremat
 
     this_nsf = nsf_species(speci)
     this_nlpf = nlpf_species(specj)
@@ -658,29 +676,32 @@ contains
   end subroutine get_dSP
 
 
-!!****f* 
-!! PURPOSE
-!! INPUTS
-!! OUTPUT
-!! RETURN VALUE
-!! AUTHOR
-!!   David Bowler
-!! CREATION DATE 
-!!   2012/02/27
-!! MODIFICATION HISTORY
-!! SOURCE
-!!  
+  !!****f* 
+  !! PURPOSE
+  !! INPUTS
+  !! OUTPUT
+  !! RETURN VALUE
+  !! AUTHOR
+  !!   David Bowler
+  !! CREATION DATE 
+  !!   2012/02/27
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!  
   subroutine get_blipP(blip_grad, nlpf_co, dataU, ip, j_in_halo, dx, &
                        dy, dz, speci, specj)
 
     use datatypes
     use numbers
-    use GenBlas, ONLY: axpy, copy, scal, gemm
-    use blip, ONLY: blip_info
-    use support_spec_format, ONLY: support_function
-    use GenComms, ONLY: cq_abort, mtime, inode, ionode
-    use mult_module, ONLY: store_matrix_value, scale_matrix_value, return_matrix_value_pos, store_matrix_value_pos, matrix_pos
-    use species_module, ONLY: nsf_species, nlpf_species
+    use GenBlas,             only: axpy, copy, scal, gemm
+    use blip,                only: blip_info
+    use support_spec_format, only: support_function
+    use GenComms,            only: cq_abort, mtime, inode, ionode
+    use mult_module,         only: store_matrix_value,      &
+                                   scale_matrix_value,      &
+                                   return_matrix_value_pos, &
+                                   store_matrix_value_pos, matrix_pos
+    use species_module,      only: nsf_species, nlpf_species
 
     implicit none
 
@@ -698,12 +719,14 @@ contains
 
     real(double) ::  FAC(-MAX_D:MAX_D,3)
 
-    real(double), allocatable, dimension(:) :: work1, work2, work3, work4, work5, work6
+    real(double), allocatable, dimension(:) :: work1, work2, work3, &
+                                               work4, work5, work6
     real(double), allocatable, dimension(:,:) :: temp
     real(double) :: tmp, facx, facy, facz, factot, t0, t1, mat_val
 
-    integer :: ix, iy, iz, offset, l, at, nsf1, stat, i1, i2, m, x,y,z, xmin, xmax, ymin, ymax, zmin, zmax, &
-         idx, idy, idz, wheremat, nlpf1
+    integer :: ix, iy, iz, offset, l, at, nsf1, stat, i1, i2, m, x,y,&
+               z, xmin, xmax, ymin, ymax, zmin, zmax, idx, idy, idz, &
+               wheremat, nlpf1
 
     this_nsf = nsf_species(speci)
     this_nlpf = nlpf_species(specj)
@@ -925,12 +948,11 @@ contains
     !   end do
     !end do
 
-
     return
   end subroutine get_blipP
-!!*****
+  !!*****
 
-  subroutine do_blip_integrals(FAC,dx, dy, dz)
+  subroutine do_blip_integrals(FAC, dx, dy, dz)
 
     use datatypes
     use numbers
@@ -989,7 +1011,8 @@ contains
     return
   end subroutine do_blip_integrals
 
-  subroutine do_dblip_integrals(FAC,dx, dy, dz)
+
+  subroutine do_dblip_integrals(FAC, dx, dy, dz)
 
     use datatypes
     use numbers
@@ -1044,7 +1067,8 @@ contains
     return
   end subroutine do_dblip_integrals
 
-  subroutine do_d2blip_integrals(FAC,dx, dy, dz)
+
+  subroutine do_d2blip_integrals(FAC, dx, dy, dz)
 
     use datatypes
     use numbers
@@ -1099,7 +1123,8 @@ contains
     return
   end subroutine do_d2blip_integrals
 
-  subroutine do_d3blip_integrals(FAC,dx, dy, dz)
+
+  subroutine do_d3blip_integrals(FAC, dx, dy, dz)
 
     use datatypes
     use numbers
@@ -1158,6 +1183,7 @@ contains
     return
   end subroutine do_d3blip_integrals
 
+
   real(double) function blipf(x)
 
     use datatypes
@@ -1177,6 +1203,7 @@ contains
        blipf = quarter*(two-y)*(two-y)*(two-y)
     end if
   end function blipf
+
 
   real(double) function dblipf(x)
 
@@ -1198,6 +1225,7 @@ contains
     end if
     if(x<0) dblipf = -dblipf
   end function dblipf
+
 
   real(double) function d2blipf(x)
 

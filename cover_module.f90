@@ -61,11 +61,14 @@ module cover_module
 
   ! Module use
   use datatypes
-  use global_module, ONLY: io_lun
-  use basic_types
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_indexing, tmr_std_allocation
+  use basic_types  
+  use global_module,          ONLY: io_lun
+  use timer_stdclocks_module, ONLY: start_timer, stop_timer, &
+                                    tmr_std_indexing, &
+                                    tmr_std_allocation
 
   implicit none
+
   save
 
   ! DCS = domain CS; BCS = bundle CS
@@ -79,7 +82,8 @@ module cover_module
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id$"
+  character(len=80), private :: &
+       RCSid = "$Id$"
 
 !!***
 contains
@@ -122,8 +126,8 @@ contains
 !!    Added some timers
 !!  SOURCE
 !!
-  subroutine make_cs (myid,gr_rcut,set,groups,prim, mx_mcell,&
-       x_mem_cell,y_mem_cell,z_mem_cell)
+  subroutine make_cs(myid, gr_rcut, set, groups, prim, mx_mcell, &
+                     x_mem_cell, y_mem_cell, z_mem_cell)
 
     ! Module usage
     use global_module

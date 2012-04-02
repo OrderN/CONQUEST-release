@@ -94,24 +94,30 @@ contains
   subroutine get_S_matrix(inode, ionode)
 
     use datatypes
-    use global_module, only: iprint_ops, flag_basis_set, blips, PAOs, flag_vary_basis, &
-                             ni_in_cell, IPRINT_TIME_THRES1, flag_onsite_blip_ana, flag_perform_cdft
-    use matrix_data, ONLY: Srange
-    use mult_module, ONLY: matS, matdS
-    use set_bucket_module, ONLY: rem_bucket
-    use calc_matrix_elements_module, ONLY: get_matrix_elements_new
-    use blip_grid_transform_module, ONLY: blip_to_support_new
-    use primary_module , ONLY : bundle
-    use build_PAO_matrices, ONLY: assemble_2
-    use species_module, ONLY: n_species
-    use PAO_grid_transform_module, ONLY: PAO_to_grid
-    use functions_on_grid, ONLY: supportfns
-    use io_module, ONLY: dump_matrix
-    use timer_module, ONLY: cq_timer, start_timer, stop_print_timer, WITH_LEVEL
-    use support_spec_format, ONLY: supports_on_atom
-    use species_module, ONLY: nsf_species
-    use density_module, ONLY: build_Becke_weight_matrix
-    use cdft_module, ONLY: make_weights
+    use global_module,               only: iprint_ops, flag_basis_set, &
+                                           blips, PAOs,                &
+                                           flag_vary_basis,            &
+                                           ni_in_cell,                 &
+                                           IPRINT_TIME_THRES1,         &
+                                           flag_onsite_blip_ana,       &
+                                           flag_perform_cdft
+    use matrix_data,                 only: Srange
+    use mult_module,                 only: matS, matdS
+    use set_bucket_module,           only: rem_bucket
+    use calc_matrix_elements_module, only: get_matrix_elements_new
+    use blip_grid_transform_module,  only: blip_to_support_new
+    use primary_module ,             only: bundle
+    use build_PAO_matrices,          only: assemble_2
+    use species_module,              only: n_species
+    use PAO_grid_transform_module,   only: PAO_to_grid
+    use functions_on_grid,           only: supportfns
+    use io_module,                   only: dump_matrix
+    use timer_module,                only: cq_timer, start_timer,      &
+                                           stop_print_timer,           &
+                                           WITH_LEVEL
+    use support_spec_format,         only: supports_on_atom
+    use species_module,              only: nsf_species
+    use cdft_module,                 only: make_weights
 
     implicit none
 
@@ -125,47 +131,57 @@ contains
     call start_timer(tmr_std_smatrix)
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     ! Project support functions onto grid
-    if(flag_basis_set==blips) then
-       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Doing blip-to-support ',supportfns
+    if (flag_basis_set == blips) then
+       if (inode == ionode .and. iprint_ops > 2) &
+            write (io_lun, *) 'Doing blip-to-support ', supportfns
        call blip_to_support_new(inode-1, supportfns)
 
-       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Doing integration ',supportfns
+       if (inode == ionode .and. iprint_ops > 2) &
+            write (io_lun, *) 'Doing integration ', supportfns
        ! Integrate
-       call get_matrix_elements_new(inode-1,rem_bucket(1),matS,supportfns,supportfns)
+       call get_matrix_elements_new(inode-1, rem_bucket(1), matS, &
+                                    supportfns, supportfns)
        ! Do the onsite elements analytically
-       if(flag_onsite_blip_ana) then
-          iprim=0
-          do np=1,bundle%groups_on_node
-             if(bundle%nm_nodgroup(np) > 0) then
-                do ni=1,bundle%nm_nodgroup(np)
-                   iprim=iprim+1
+       if (flag_onsite_blip_ana) then
+          iprim = 0
+          do np = 1, bundle%groups_on_node
+             if (bundle%nm_nodgroup(np) > 0) then
+                do ni = 1, bundle%nm_nodgroup(np)
+                   iprim = iprim + 1
                    spec = bundle%species(iprim)
                    this_nsf = nsf_species(spec)
-                   call get_onsite_S(supports_on_atom(iprim), matS, np, ni, iprim, this_nsf, spec)
+                   call get_onsite_S(supports_on_atom(iprim), matS, &
+                                     np, ni, iprim, this_nsf, spec)
                 end do
              end if
           end do
        end if
-    else if(flag_basis_set==PAOs) then
+    else if (flag_basis_set == PAOs) then
        ! Get S matrix with assemble
-       if(flag_vary_basis) then
-          if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Calling assemble_2 for S, dS: ',matS,matdS
-          call assemble_2(Srange, matS,1,matdS)
+       if (flag_vary_basis) then
+          if (inode == ionode .and. iprint_ops > 2) &
+               write (io_lun, *) 'Calling assemble_2 for S, dS: ', &
+                     matS, matdS
+          call assemble_2(Srange, matS, 1, matdS)
           !call dump_matrix("NS",matS,inode)
           !call dump_matrix("NdS",matdS,inode)
        else
-          if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'Calling assemble_2 for S: ',matS
-          call assemble_2(Srange, matS,1)
+          if (inode == ionode .and. iprint_ops > 2) &
+               write (io_lun, *) 'Calling assemble_2 for S: ', matS
+          call assemble_2(Srange, matS, 1)
        end if
-       if(inode==ionode.AND.iprint_ops>2) write(io_lun,*) 'PAO to grid ',supportfns
+       if (inode == ionode .and. iprint_ops > 2) &
+            write (io_lun, *) 'PAO to grid ', supportfns
        ! Also generate support with a call to PAO_to_grid
-       call PAO_to_grid(inode-1,supportfns)
+       call PAO_to_grid(inode-1, supportfns)
     end if
     !call dump_matrix("NS",matS,inode)    
     ! get the new InvS matrix
-    call  Iter_Hott_InvS( iprint_ops, 100, 0.0001_double,ni_in_cell, inode, ionode)
-    if(flag_perform_cdft) call make_weights
-    call stop_print_timer(tmr_l_tmp1,"get_S_matrix",IPRINT_TIME_THRES1)
+    call  Iter_Hott_InvS(iprint_ops, 100, 0.0001_double, ni_in_cell, &
+                         inode, ionode)
+    if (flag_perform_cdft) call make_weights
+    call stop_print_timer(tmr_l_tmp1, "get_S_matrix", &
+                          IPRINT_TIME_THRES1)
     call stop_timer(tmr_std_smatrix)
     return
   end subroutine get_S_matrix

@@ -31,150 +31,159 @@
 module minimise
 
   use datatypes
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_eminimisation
+  use timer_stdclocks_module, only: start_timer, stop_timer, &
+                                    tmr_std_eminimisation
 
   implicit none
 
   save
 
-  logical :: UsePulay   
-
-  integer :: n_L_iterations, n_support_iterations
-  real(double) :: L_tolerance, sc_tolerance, energy_tolerance, expected_reduction
+  logical      :: UsePulay
+  integer      :: n_L_iterations, n_support_iterations
+  real(double) :: L_tolerance, sc_tolerance, energy_tolerance, &
+                  expected_reduction
 
   ! RCS tag for object file identification
-  character(len=80), private :: RCSid = "$Id$"
+  character(len=80), private :: &
+       RCSid = "$Id$"
 !!***
 
 contains
 
-!!****f* minimise/get_E_and_F *
-!!
-!!  NAME 
-!!   get_E_and_F
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Finds the ground-state energy and force
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   D.R.Bowler
-!!  CREATION DATE
-!!   1998 sometime I think
-!!  MODIFICATION HISTORY
-!!   24/05/2001 dave
-!!    ROBODoc header, indentation and stripping calls
-!!   13/06/2001 dave
-!!    Adapted to use force_module and added RCS Id and Log tags
-!!   07:43, 2003/02/04 dave
-!!    Changed call to minimise to pick and choose between full run (varying DM, self-consistency and blips), 
-!!    self-consistent run (varying DM, self-consistency) and simple TB (varying DM only)
-!!   14:39, 26/02/2003 drb 
-!!    Added call to get_H_matrix to build new H and charge
-!!   08:35, 2003/03/12 dave
-!!    Added call to get_energy after FindMinDM
-!!   08:30, 2003/10/01 dave
-!!    Changed flag_vary_blips to basis and added basis switch for outer loop minimiser
-!!   2006/11/13 18:20 dave
-!!    Added new flags to test for finding and/or writing forces
-!!   2007/04/17 09:34 dave
-!!    Passed no. of L iterations to vary_support
-!!   2008/05/25 ast
-!!    Added timer
-!!   2011/12/07 L.Tong
-!!    Removed redundant parameter number_of_bands
-!!  SOURCE
-!!
-  subroutine get_E_and_F (fixed_potential, vary_mu, mu, total_energy, &
-       find_forces, write_forces)
+  !!****f* minimise/get_E_and_F *
+  !!
+  !!  NAME 
+  !!   get_E_and_F
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Finds the ground-state energy and force
+  !!  INPUTS
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   1998 sometime I think
+  !!  MODIFICATION HISTORY
+  !!   24/05/2001 dave
+  !!    ROBODoc header, indentation and stripping calls
+  !!   13/06/2001 dave
+  !!    Adapted to use force_module and added RCS Id and Log tags
+  !!   07:43, 2003/02/04 dave
+  !!    Changed call to minimise to pick and choose between full run
+  !!    (varying DM, self-consistency and blips), self-consistent run
+  !!    (varying DM, self-consistency) and simple TB (varying DM only)
+  !!   14:39, 26/02/2003 drb 
+  !!    Added call to get_H_matrix to build new H and charge
+  !!   08:35, 2003/03/12 dave
+  !!    Added call to get_energy after FindMinDM
+  !!   08:30, 2003/10/01 dave
+  !!    Changed flag_vary_blips to basis and added basis switch for
+  !!    outer loop minimiser
+  !!   2006/11/13 18:20 dave
+  !!    Added new flags to test for finding and/or writing forces
+  !!   2007/04/17 09:34 dave
+  !!    Passed no. of L iterations to vary_support
+  !!   2008/05/25 ast
+  !!    Added timer
+  !!   2011/12/07 L.Tong
+  !!    Removed redundant parameter number_of_bands
+  !!   2012/03/26 L.Tong
+  !!   - Removed redundant input parameter real(double) mu
+  !!  SOURCE
+  !!
+  subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
+                         find_forces, write_forces)
 
     use datatypes
-    use force_module, ONLY : force
-    use DMMin, ONLY: FindMinDM
-    use SelfCon, ONLY: new_SC_potl, atomch_output, get_atomic_charge
-    use global_module, ONLY: flag_vary_basis, flag_self_consistent, &
-         flag_basis_set, blips, PAOs, IPRINT_TIME_THRES1, runtype
-    use energy, ONLY: get_energy
-    use GenComms, ONLY: cq_abort, inode, ionode
-    use blip_minimisation, ONLY: vary_support
-    use pao_minimisation, ONLY: vary_pao, pulay_min_pao
+    use force_module,      only: force
+    use DMMin,             only: FindMinDM
+    use SelfCon,           only: new_SC_potl, atomch_output,           &
+                                 get_atomic_charge
+    use global_module,     only: flag_vary_basis,                      &
+                                 flag_self_consistent, flag_basis_set, &
+                                 blips, PAOs, IPRINT_TIME_THRES1,      &
+                                 runtype
+    use energy,            only: get_energy
+    use GenComms,          only: cq_abort, inode, ionode
+    use blip_minimisation, only: vary_support
+    use pao_minimisation,  only: vary_pao, pulay_min_pao
     use timer_module
-    use input_module, ONLY: leqi
+    use input_module,      only: leqi
 
     implicit none
 
     ! Shared variables
-    logical :: vary_mu, fixed_potential, find_forces, write_forces
-    integer :: n_save_freq, n_run
+    logical           :: vary_mu, fixed_potential, find_forces, &
+                         write_forces
+    integer           :: n_save_freq, n_run
     character(len=40) :: output_file
-    real(double) :: mu
-    real(double) :: total_energy
+    real(double)      :: total_energy
 
     ! Local variables
-    logical :: reset_L
-    real(double) :: electrons
+    logical        :: reset_L
     type(cq_timer) :: tmr_l_energy, tmr_l_force
 
-    call start_timer (tmr_std_eminimisation)
+    call start_timer(tmr_std_eminimisation)
     ! reset_L = .true.  ! changed by TM, Aug 2008 
     if (leqi(runtype,'static')) then
      reset_L = .false.
     else
      reset_L = .true.   ! temporary for atom movements
-    endif
+    end if
     ! Start timing the energy calculation
-    call start_timer (tmr_l_energy, WITH_LEVEL)
+    call start_timer(tmr_l_energy, WITH_LEVEL)
     ! Now choose what we vary
     if (flag_vary_basis) then ! Vary everything: DM, charge density, basis set
        if (flag_basis_set == blips) then
-          call vary_support (n_support_iterations, fixed_potential, &
-               vary_mu, n_L_iterations, L_tolerance, sc_tolerance, &
-               energy_tolerance, mu, total_energy, expected_reduction)
+          call vary_support(n_support_iterations, fixed_potential, &
+                            vary_mu, n_L_iterations, L_tolerance,  &
+                            sc_tolerance, energy_tolerance,        &
+                            total_energy, expected_reduction)
        else if (flag_basis_set == PAOs) then
           if (UsePulay) then
-             call pulay_min_pao (n_support_iterations, &
-                  fixed_potential, vary_mu, n_L_iterations, &
-                  L_tolerance, sc_tolerance, energy_tolerance, mu, &
-                  total_energy, expected_reduction)
+             call pulay_min_pao(n_support_iterations, fixed_potential,&
+                                vary_mu, n_L_iterations, L_tolerance, &
+                                sc_tolerance, energy_tolerance,       &
+                                total_energy, expected_reduction)
           else
-             call vary_pao (n_support_iterations, fixed_potential, &
-                  vary_mu, n_L_iterations, L_tolerance, sc_tolerance, &
-                  energy_tolerance, mu, total_energy, expected_reduction)
+             call vary_pao(n_support_iterations, fixed_potential, &
+                           vary_mu, n_L_iterations, L_tolerance,  &
+                           sc_tolerance, energy_tolerance,        &
+                           total_energy, expected_reduction)
           end if
        else 
-          call cq_abort ("get_E_and_F: basis set undefined: ", &
-               flag_basis_set)
+          call cq_abort("get_E_and_F: basis set undefined: ", &
+                        flag_basis_set)
        end if
     else if (flag_self_consistent) then ! Vary only DM and charge density
-       call new_SC_potl (.false., sc_tolerance, reset_L, &
-            fixed_potential, vary_mu, n_L_iterations, L_tolerance, mu,&
-            total_energy)
+       call new_SC_potl(.false., sc_tolerance, reset_L,           &
+                        fixed_potential, vary_mu, n_L_iterations, &
+                        L_tolerance, total_energy)
     else ! Ab initio TB: vary only DM
-       call FindMinDM (n_L_iterations, vary_mu, L_tolerance, mu, &
-            inode, ionode, reset_L, .false.)
-       call get_energy (total_energy)
+       call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
+                      ionode, reset_L, .false.)
+       call get_energy(total_energy)
     end if
-    call stop_print_timer (tmr_l_energy, "calculating ENERGY", &
-         IPRINT_TIME_THRES1)
-    if (atomch_output) call get_atomic_charge ()
+    call stop_print_timer(tmr_l_energy, "calculating ENERGY", &
+                          IPRINT_TIME_THRES1)
+    if (atomch_output) call get_atomic_charge()
     if (find_forces) then 
        ! Start timing the force calculation
-      call start_timer (tmr_l_force, WITH_LEVEL)
-      call force (fixed_potential, vary_mu, n_L_iterations, &
-           L_tolerance, sc_tolerance, mu, total_energy, &
-           expected_reduction, write_forces)
+      call start_timer(tmr_l_force, WITH_LEVEL)
+      call force(fixed_potential, vary_mu, n_L_iterations, &
+                 L_tolerance, sc_tolerance, total_energy,  &
+                 expected_reduction, write_forces)
       ! Stop timing the force calculation
-      call stop_print_timer (tmr_l_force, "calculating FORCE", &
-           IPRINT_TIME_THRES1)
-    endif
+      call stop_print_timer(tmr_l_force, "calculating FORCE", &
+                            IPRINT_TIME_THRES1)
+    end if
     !  Print results of local timers
-    call stop_timer (tmr_std_eminimisation)
+    call stop_timer(tmr_std_eminimisation)
     return
   end subroutine get_E_and_F
-!!***
+  !!***
 
 end module minimise

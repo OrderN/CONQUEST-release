@@ -50,13 +50,15 @@
 module blip_grid_transform_module
 
  use datatypes
- use global_module, ONLY: iprint_basis, io_lun
- use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
+ use global_module,          only: iprint_basis, io_lun
+ use timer_stdclocks_module, only: start_timer, stop_timer, &
+                                   tmr_std_basis, tmr_std_allocation
 
  implicit none
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id$"
+  character(len=80), save, private :: &
+       RCSid = "$Id$"
 !!***
 
 contains
@@ -169,7 +171,7 @@ contains
 !!    Added timers
 !!  SOURCE
 !!
-  subroutine do_blip_transform_new( iprim, data_blip, nsf)
+  subroutine do_blip_transform_new(iprim, data_blip, nsf)
 
     use datatypes
     use numbers
@@ -1697,7 +1699,7 @@ contains
 !!    Added timers
 !!  SOURCE
 !!
-  subroutine do_inverse_blip_new( myid, iprim, data_dblip, nsf)
+  subroutine do_inverse_blip_new(myid, iprim, data_dblip, nsf)
 
     ! modules
     use datatypes

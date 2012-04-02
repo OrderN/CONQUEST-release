@@ -21,8 +21,8 @@ module cdft_module
 
   use datatypes
   use cdft_data
-  use global_module, ONLY: io_lun, iprint_SC
-  use GenComms, ONLY: inode, ionode
+  use global_module, only: io_lun, iprint_SC
+  use GenComms, only: inode, ionode
 
   implicit none
 
@@ -33,115 +33,119 @@ module cdft_module
 
 contains
 
-!!****f* cdt_module/init_cdft *
-!!
-!!  NAME 
-!!   init_cdft
-!!  USAGE
-!!   
-!!  PURPOSE
-!!   Initialises cDFT
-!!  INPUTS
-!!   
-!!   
-!!  USES
-!!   
-!!  AUTHOR
-!!   DRB
-!!  CREATION DATE
-!!   2011/08
-!!  MODIFICATION HISTORY
-!!   2011/12/10 L.Tong
-!!     Added spin polarisation: initialisation for matHzero_dn
-!!  SOURCE
-!!  
+  !!****f* cdt_module/init_cdft *
+  !!
+  !!  NAME 
+  !!   init_cdft
+  !!  USAGE
+  !!   
+  !!  PURPOSE
+  !!   Initialises cDFT
+  !!  INPUTS
+  !!   
+  !!   
+  !!  USES
+  !!   
+  !!  AUTHOR
+  !!   DRB
+  !!  CREATION DATE
+  !!   2011/08
+  !!  MODIFICATION HISTORY
+  !!   2011/12/10 L.Tong
+  !!     Added spin polarisation: initialisation for matHzero_dn
+  !!   2012/03/18 L.Tong
+  !!     Changed spin implementation
+  !!  SOURCE
+  !!  
   subroutine init_cdft
     
     use datatypes
     use numbers
-    use global_module, ONLY: ni_in_cell, flag_cdft_atom, &
-         flag_spin_polarisation
-    use mult_module, ONLY: allocate_temp_matrix
-    use matrix_data, ONLY: Hrange
-    use density_module, ONLY: bwgrid
-    use maxima_module, ONLY: maxngrid
-    use GenComms, ONLY: cq_abort
+    use global_module,  only: ni_in_cell, flag_cdft_atom, &
+                              nspin
+    use mult_module,    only: allocate_temp_matrix
+    use matrix_data,    only: Hrange
+    use density_module, only: bwgrid
+    use maxima_module,  only: maxngrid
+    use GenComms,       only: cq_abort
 
     implicit none
 
-    integer :: i, j, stat
+    integer :: i, j, stat, spin
 
     if (cDFT_NumberAtomGroups > 2) then
-       call cq_abort ("Maximum of two groups permitted for cDFT (for &
-            &charge difference)", cDFT_NumberAtomGroups)
+       call cq_abort("Maximum of two groups permitted for cDFT (for &
+                      &charge difference)", cDFT_NumberAtomGroups)
     else if (cDFT_NumberAtomGroups > 1 .AND. &
          cDFT_Type == cDFT_Fix_Charge) then
-       call cq_abort ("Maximum of one group permitted for cDFT (for &
-            &charge fixed)", cDFT_NumberAtomGroups)
+       call cq_abort("Maximum of one group permitted for cDFT (for &
+                      &charge fixed)", cDFT_NumberAtomGroups)
     end if
     allocate (matWc(cDFT_NumberAtomGroups), &
          cDFT_Vc(cDFT_NumberAtomGroups), &
          cDFT_W(cDFT_NumberAtomGroups), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Failure to allocate matWc and cDFT_Vc: ", &
-         cDFT_NumberAtomGroups)
+                       cDFT_NumberAtomGroups)
     cDFT_Vc = zero
     do i = 1, cDFT_NumberAtomGroups
        matWc(i) = allocate_temp_matrix(Hrange, 0)
     end do
-    allocate (flag_cdft_atom(ni_in_cell), STAT=stat)
+    allocate(flag_cdft_atom(ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Failure to allocate flag_cdft_atom: ", &
-         ni_in_cell)
+                       ni_in_cell)
     flag_cdft_atom = 0
-    allocate (bwgrid(maxngrid, cDFT_NumberAtomGroups), STAT=stat)
+    allocate(bwgrid(maxngrid, cDFT_NumberAtomGroups), STAT=stat)
     do i = 1, cDFT_NumberAtomGroups
        if (inode == ionode .AND. iprint_SC >= 0) &
             write (io_lun, fmt='(6x,"cDFT Atom Group ",i4," Target: ",f12.5)') &
-            i, cDFT_Target(i)
+                  i, cDFT_Target(i)
        do j = 1, cDFT_NAtoms(i)
           flag_cdft_atom(cDFT_AtomList(i)%Numbers(j)) = i
           if (inode == ionode .AND. iprint_SC > 1) &
                write (io_lun, fmt='(4x,"Atom ",2i8)') &
-               j, cDFT_AtomList(i)%Numbers(j)
+                      j, cDFT_AtomList(i)%Numbers(j)
        enddo
     end do
-    matHzero = allocate_temp_matrix(Hrange, 0)
-    if (flag_spin_polarisation) then
-       matHzero_dn = allocate_temp_matrix(Hrange, 0)
-    end if
+    allocate(matHzero(nspin), STAT=stat)
+    if (stat /= 0) call cq_abort('init_cdft: failed to allocate matHzero', stat)
+    do spin = 1, nspin
+       matHzero(spin) = allocate_temp_matrix(Hrange, 0)
+    end do
+
     return
   end subroutine init_cdft
-!!***
+  !!***
 
-!!****f* cdt_module/make_weights *
-!!
-!!  NAME 
-!!   make_weights
-!!  USAGE
-!!   
-!!  PURPOSE
-!!   This subroutine abstracts the process of making the weight matrix
-!!   However it's only ever called when the support functions change
-!!  INPUTS
-!!   
-!!   
-!!  USES
-!!   
-!!  AUTHOR
-!!   DRB
-!!  CREATION DATE
-!!   2011/08
-!!  MODIFICATION HISTORY
-!!  
-!!  SOURCE
-!!  
+  !!****f* cdt_module/make_weights *
+  !!
+  !!  NAME 
+  !!   make_weights
+  !!  USAGE
+  !!   
+  !!  PURPOSE
+  !!   This subroutine abstracts the process of making the weight matrix
+  !!   However it's only ever called when the support functions change
+  !!  INPUTS
+  !!   
+  !!   
+  !!  USES
+  !!   
+  !!  AUTHOR
+  !!   DRB
+  !!  CREATION DATE
+  !!   2011/08
+  !!  MODIFICATION HISTORY
+  !!  
+  !!  SOURCE
+  !!  
   subroutine make_weights
 
     use numbers
-    use mult_module, ONLY: matrix_sum, matrix_scale
-    use density_module, ONLY: build_Becke_weight_matrix
-    use io_module, ONLY: dump_matrix
+    use mult_module, only: matrix_sum, matrix_scale
+    use density_module, only: build_Becke_weight_matrix
+    use io_module, only: dump_matrix
 
     implicit none
 
@@ -156,60 +160,66 @@ contains
     end if
     
   end subroutine make_weights
-!!***
+  !!***
 
-!!****f* cdft_module/cdft_min *
-!!
-!!  NAME 
-!!   cdft_min
-!!  USAGE
-!!   
-!!  PURPOSE
-!!   Finds the correct value of the constraining potential, Vc, to minimise the cDFT constraint
-!!   Uses a simple root finder from Numerical Reciples
-!!
-!!   N.B. As it stands, this really only works for ONE constraint (charge difference between two
-!!   groups counts as one).  It should be possible to implement multiple constraints in principle,
-!!   but fairly extensive tests suggest that this is hard without gradients (i.e. we would require
-!!   more than the simple root finder used here).
-!!  INPUTS
-!!   
-!!   
-!!  USES
-!!   
-!!  AUTHOR
-!!   DRB
-!!  CREATION DATE
-!!   2011/08
-!!  MODIFICATION HISTORY
-!!   2011/12/10 L.Tong
-!!     Removed redundant parameter number_of_bands
-!!  SOURCE
-!!  
+  !!****f* cdft_module/cdft_min *
+  !!
+  !!  NAME 
+  !!   cdft_min
+  !!  USAGE
+  !!   
+  !!  PURPOSE
+  !!   Finds the correct value of the constraining potential, Vc, to
+  !!   minimise the cDFT constraint Uses a simple root finder from
+  !!   Numerical Reciples
+  !!
+  !!   N.B. As it stands, this really only works for ONE constraint
+  !!   (charge difference between two groups counts as one).  It should
+  !!   be possible to implement multiple constraints in principle, but
+  !!   fairly extensive tests suggest that this is hard without
+  !!   gradients (i.e. we would require more than the simple root finder
+  !!   used here).
+  !!  INPUTS
+  !!   
+  !!   
+  !!  USES
+  !!   
+  !!  AUTHOR
+  !!   DRB
+  !!  CREATION DATE
+  !!   2011/08
+  !!  MODIFICATION HISTORY
+  !!   2011/12/10 L.Tong
+  !!     Removed redundant parameter number_of_bands
+  !!   2012/03/18 L.Tong
+  !!   - Removed redundant input parameter real(double) mu
+  !!  SOURCE
+  !!  
   subroutine cdft_min(reset_L, fixed_potential, vary_mu, &
-       n_CG_L_iterations, tolerance, mu, total_energy)
+                      n_CG_L_iterations, tolerance, total_energy)
 
     use datatypes
     use numbers
-    use global_module, ONLY: iprint_SC, sf,iprint_SC,io_lun
-    use GenComms, ONLY: cq_abort
-    use energy, ONLY: cdft_energy, get_energy
-    use density_module, ONLY: get_cdft_constraint
+    use global_module,  only: iprint_SC, sf,iprint_SC,io_lun
+    use GenComms,       only: cq_abort
+    use energy,         only: cdft_energy, get_energy
+    use density_module, only: get_cdft_constraint
 
     implicit none
 
     ! Passed Variables
-    logical :: reset_L, fixed_potential, vary_mu
-    integer :: n_CG_L_iterations
-    real(double) :: tolerance, mu, total_energy
+    logical      :: reset_L, fixed_potential, vary_mu
+    integer      :: n_CG_L_iterations
+    real(double) :: tolerance, total_energy
 
     ! Local variables
-    real(double),dimension(:), allocatable :: ax,bx,cx,fa,fb,fc, ax_lo, cx_hi, fa_lo,fc_hi
-    real(double) :: gold,glimit,tiny,m, P, S, T
-    real(double) :: dum,fu,q,r,u,ulim, inc
-    integer :: i, isum, iaim, stat, ngroups, n_iter
-    logical :: done
-    logical, dimension(:), allocatable :: notdone
+    real(double) :: gold, glimit, tiny, m, P, S, T
+    real(double) :: dum, fu, q, r, u, ulim, inc
+    integer      :: i, isum, iaim, stat, ngroups, n_iter
+    logical      :: done
+    logical,      dimension(:), allocatable :: notdone
+    real(double), dimension(:), allocatable :: ax, bx, cx, fa, fb, fc,&
+                                               ax_lo, cx_hi, fa_lo,fc_hi
 
     if(cDFT_Type==cDFT_Fix_ChargeDifference) then
        ngroups = 1
@@ -229,7 +239,7 @@ contains
     end do
     reset_L = .true.
     call evaluate_cdft_function(reset_L, fixed_potential, vary_mu, &
-         n_CG_L_iterations, tolerance, mu, total_energy)
+         n_CG_L_iterations, tolerance, total_energy)
     do i=1,ngroups
        fa(i) = cDFT_W(i)
        if(abs(fa(i))<cDFT_Tolerance) then
@@ -261,7 +271,7 @@ contains
     end do
     reset_L = .true.
     call evaluate_cdft_function(reset_L, fixed_potential, vary_mu, &
-         n_CG_L_iterations, tolerance, mu, total_energy)
+         n_CG_L_iterations, tolerance, total_energy)
     do i=1,ngroups
        if(notdone(i)) then
           fc(i) = cDFT_W(i)
@@ -322,7 +332,7 @@ contains
        end do
        reset_L = .true.
        call evaluate_cdft_function(reset_L, fixed_potential, vary_mu, &
-            n_CG_L_iterations, tolerance, mu, total_energy)
+            n_CG_L_iterations, tolerance, total_energy)
        do i=1,ngroups
           if(notdone(i)) then
              fb(i) = cDFT_W(i)
@@ -361,7 +371,7 @@ contains
        cDFT_Vc(1) = bx(1)
        reset_L = .true.
        call evaluate_cdft_function(reset_L, fixed_potential, vary_mu, &
-            n_CG_L_iterations, tolerance, mu, total_energy)
+            n_CG_L_iterations, tolerance, total_energy)
        do i=1,ngroups
           if(notdone(i)) then
              fb(i) = cDFT_W(i)
@@ -382,7 +392,7 @@ contains
        cDFT_Vc(1) = T
        reset_L = .true.
        call evaluate_cdft_function(reset_L, fixed_potential, vary_mu, &
-            n_CG_L_iterations, tolerance, mu, total_energy)
+            n_CG_L_iterations, tolerance, total_energy)
        do i=1,ngroups
           if(notdone(i)) then
              fc_hi(i) = cDFT_W(i)
@@ -426,101 +436,97 @@ contains
     deallocate(ax,bx,cx,fa,fb,fc, ax_lo,cx_hi,fa_lo,fc_hi,notdone)
     return
   end subroutine cdft_min
-!!***
-
-!!****f* cdft_module/evaluate_cdft_function *
-!!
-!!  NAME 
-!!   evaluate_cdft_function
-!!  USAGE
-!!  PURPOSE
-!!   Evaluates the cDFT energy functional by finding ground state DM
-!!   after applying potential
-!!  INPUTS
-!!  USES
-!!  AUTHOR
-!!   DRB
-!!  CREATION DATE
-!!   2011/08
-!!  MODIFICATION HISTORY
-!!   2011/12/09 L.Tong
-!!     - Removed redundant parameter number_of_bands
-!!     - Added spin polarisation: we assume constraint potantial is
-!!       the same for both spin components (components in the direct
-!!       sum)
-!!  SOURCE
-!!  
-   subroutine evaluate_cdft_function (reset_L, fixed_potential, &
-        vary_mu, n_CG_L_iterations, tolerance, mu, total_energy)
+  !!***
+  
+  !!****f* cdft_module/evaluate_cdft_function *
+  !!
+  !!  NAME 
+  !!   evaluate_cdft_function
+  !!  USAGE
+  !!  PURPOSE
+  !!   Evaluates the cDFT energy functional by finding ground state DM
+  !!   after applying potential
+  !!  INPUTS
+  !!  USES
+  !!  AUTHOR
+  !!   DRB
+  !!  CREATION DATE
+  !!   2011/08
+  !!  MODIFICATION HISTORY
+  !!   2011/12/09 L.Tong
+  !!     - Removed redundant parameter number_of_bands
+  !!     - Added spin polarisation: we assume constraint potantial is
+  !!       the same for both spin components (components in the direct
+  !!       sum)
+  !!   2012/03/18 L.Tong
+  !!     - Rewrite for change in spin implementation
+  !!     - Removed redundant input parameter real(double) mu
+  !!  SOURCE
+  !!  
+  subroutine evaluate_cdft_function(reset_L, fixed_potential,   &
+                                    vary_mu, n_CG_L_iterations, &
+                                    tolerance, total_energy)
 
      use datatypes
      use numbers
      use logicals
-     use mult_module, ONLY: LNV_matrix_multiply, matH, matH_dn, &
-          matrix_sum
-     use DMMin, ONLY: FindMinDM
-     use global_module, ONLY: iprint_SC, sf, iprint_SC, io_lun, &
-          flag_spin_polarisation
-     use DiagModule, ONLY: diagon
-     use energy, ONLY: get_energy
-     use GenComms, ONLY: inode, ionode
-     use density_module, ONLY: get_cdft_constraint
+     use mult_module,    only: LNV_matrix_multiply, matH, matrix_sum
+     use DMMin,          only: FindMinDM
+     use global_module,  only: iprint_SC, sf, iprint_SC, io_lun, &
+                               nspin, spin_factor
+     use DiagModule,     only: diagon
+     use energy,         only: get_energy
+     use GenComms,       only: inode, ionode
+     use density_module, only: get_cdft_constraint
 
      implicit none
 
      ! Passed Variables
      logical ::  reset_L, fixed_potential, vary_mu
      integer :: n_CG_L_iterations
-     real(double) :: tolerance, mu, total_energy
+     real(double) :: tolerance, total_energy
 
      ! Local variables
-     real(double) :: electrons, total_energy_1, start_BE, new_BE, Ltol
-     integer :: i, temp_supp_fn
+     real(double), dimension(nspin) :: electrons, tmp_energy
+     real(double) :: start_BE, new_BE, Ltol
+     integer :: i, temp_supp_fn, spin
 
      ! Change the Hamiltonian
-     call matrix_sum (zero, matH, one, matHzero)
-     if (flag_spin_polarisation) then
-        ! matHzero is just a zero matrix
-        call matrix_sum (zero, matH_dn, one, matHzero_dn)
-     end if
+     do spin = 1, nspin
+        call matrix_sum(zero, matH(spin), one, matHzero(spin))
+     end do
+     
      do i = 1, cDFT_NumberAtomGroups
-        call matrix_sum (one, matH, cDFT_Vc(i), matWc(i))
-        if (flag_spin_polarisation) then
-           call matrix_sum (one, matH_dn, cDFT_Vc(i), matWc(i))
-        end if
+        do spin = 1, nspin
+           call matrix_sum(one, matH(spin), cDFT_Vc(i), matWc(i))
+        end do
         if (inode == ionode .AND. iprint_SC > 2) &
              write (io_lun,fmt='(4x,"Group ",i4," Vc ",f12.5)') &
-             i, cDFT_Vc(i)
+                   i, cDFT_Vc(i)
      end do
      ! Find minimum density matrix
      Ltol = tolerance
      !reset_L = .true.
-     call FindMinDM (n_CG_L_iterations, vary_mu, Ltol, mu, inode, &
-          ionode, reset_L, .false.)
+     call FindMinDM(n_CG_L_iterations, vary_mu, Ltol, inode, ionode, &
+                    reset_L, .false.)
      ! If we're using O(N), we only have L, and we need K - if
      ! diagonalisation, we have K
-     if (.NOT. diagon) then
-        ! electrons and energy are used as dump for electrons and
+     if (.not. diagon) then
+        ! electrons and tmp_energy are used as dump for electrons and
         ! energies calculated from LNV_matrix_multipy
         ! total_energy is calculated from get_energy below
-        call LNV_matrix_multiply (electrons, total_energy_1, doK, dontM1, &
-             dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0, spin=1)
-        call LNV_matrix_multiply (electrons, total_energy_1, doK, dontM1, &
-             dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0, spin=2)
-     else
-        call LNV_matrix_multiply (electrons, total_energy_1, doK, dontM1, &
-             dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0)
+        call LNV_matrix_multiply(electrons, tmp_energy, doK, dontM1, &
+                                 dontM2, dontM3, dontM4, dontphi, dontE)
      end if
      ! Get total energy
-     call matrix_sum (zero, matH, one, matHzero)
-     if (flag_spin_polarisation) then
-        call matrix_sum (zero, matH_dn, one, matHzero_dn)
-     end if
-     call get_energy (total_energy)
+     do spin = 1, nspin
+        call matrix_sum(zero, matH(spin), one, matHzero(spin))
+     end do
+     call get_energy(total_energy)
      call get_cdft_constraint
      return
    end subroutine evaluate_cdft_function
-!!***
+   !!***
 
 end module cdft_module
 

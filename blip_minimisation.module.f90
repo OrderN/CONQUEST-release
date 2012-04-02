@@ -28,167 +28,159 @@
 !!
 module blip_minimisation
 
-  use global_module, ONLY: io_lun
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
+  use global_module,          only: io_lun
+  use timer_stdclocks_module, only: start_timer, stop_timer, &
+                                    tmr_std_basis, tmr_std_allocation
 
   implicit none
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id$"
+  character(len=80), save, private :: &
+       RCSid = "$Id$"
 !!***
 
 contains
 
-!!****f* blip_minimisation/vary_support *
-!!
-!!  NAME 
-!!   vary_support
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Performs the minimisation with respect to the 
-!!    support functions. The method used is CG. This
-!!    subroutine follows closely the strategy of the
-!!    original konquest program. (Wow)
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!!   blip, common, datatypes, DiagModule, GenBlas, GenComms, logicals,
-!!   matrix_data, maxima_module, mult_module, numbers, PosTan
-!!  AUTHOR
-!!   D.R.Bowler/E.H.Hernandez
-!!  CREATION DATE
-!!   03/04/95
-!!  MODIFICATION HISTORY
-!!   updated to make use of blip functions.
-!!   updated to include electron gradient
-!!   25/1/96 CMG/EHE line minimisation moved out
-!!   19/5/97 DRB added HeadGordon
-!!   23/05/2001 dave
-!!    Shortened calls to get_blip_gradient and get_electron_gradient
-!!    and added ROBODoc header
-!!   23/05/2001 dave
-!!    Shortened call to line_minimise_support
-!!   08/06/2001 dave
-!!    Added RCS Id and Log tags and changed to use GenComms
-!!   17/06/2002 dave
-!!    Tidied headers, added check for solution method
-!!   09:18, 2003/03/24 dave
-!!    Included in blip_minimisation
-!!   08:29, 2003/04/03 dave
-!!    Changed to use blip_gradient for get_blip_gradient and
-!!    get_electron_gradient
-!!   11:30, 12/11/2004 dave 
-!!    Changed to use mx_at_prim from maxima
-!!   2007/03/29 08:20 dave and tsuyoshi
-!!   2007/04/17 09:36 dave
-!!    Added n_L_iterations
-!!   2008/06/10 ast
-!!    Added timers
-!!   2011/11/17 10:21 dave
-!!    Changes to blip data
-!!   2011/11/29 L.Tong
-!!    Added spin polarisation
-!!   2011/12/05 L.Tong
-!!    - Changed the temp array sum to summ to avoid potential confusion
-!!      with the intrinsic function sum
-!!    - Removed redundant parameter number_of_bands
-!!   2012/03/01 L.Tong
-!!    Fixed a bug associated to pulay forces. It is solved by putting
-!!    an loop around the calculation of the gradient at the end of the
-!!    support variation loop, so that if we have eached the end of the
-!!    blip minimisation cycle (without convergence) the gradient and
-!!    density don't get called for the one last time (which is
-!!    intended to prepare for the next iteration).
-!!  SOURCE
-!!
-  subroutine vary_support (n_support_iterations, fixed_potential, &
-       vary_mu, n_L_iterations, L_tolerance, sc_tolerance, &
-       energy_tolerance, mu, total_energy_last, expected_reduction)
+  !!****f* blip_minimisation/vary_support *
+  !!
+  !!  NAME 
+  !!   vary_support
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Performs the minimisation with respect to the 
+  !!    support functions. The method used is CG. This
+  !!    subroutine follows closely the strategy of the
+  !!    original konquest program. (Wow)
+  !!  INPUTS
+  !! 
+  !! 
+  !!  USES
+  !!   blip, common, datatypes, DiagModule, GenBlas, GenComms, logicals,
+  !!   matrix_data, maxima_module, mult_module, numbers, PosTan
+  !!  AUTHOR
+  !!   D.R.Bowler/E.H.Hernandez
+  !!  CREATION DATE
+  !!   03/04/95
+  !!  MODIFICATION HISTORY
+  !!   updated to make use of blip functions.
+  !!   updated to include electron gradient
+  !!   25/1/96 CMG/EHE line minimisation moved out
+  !!   19/5/97 DRB added HeadGordon
+  !!   23/05/2001 dave
+  !!    Shortened calls to get_blip_gradient and get_electron_gradient
+  !!    and added ROBODoc header
+  !!   23/05/2001 dave
+  !!    Shortened call to line_minimise_support
+  !!   08/06/2001 dave
+  !!    Added RCS Id and Log tags and changed to use GenComms
+  !!   17/06/2002 dave
+  !!    Tidied headers, added check for solution method
+  !!   09:18, 2003/03/24 dave
+  !!    Included in blip_minimisation
+  !!   08:29, 2003/04/03 dave
+  !!    Changed to use blip_gradient for get_blip_gradient and
+  !!    get_electron_gradient
+  !!   11:30, 12/11/2004 dave 
+  !!    Changed to use mx_at_prim from maxima
+  !!   2007/03/29 08:20 dave and tsuyoshi
+  !!   2007/04/17 09:36 dave
+  !!    Added n_L_iterations
+  !!   2008/06/10 ast
+  !!    Added timers
+  !!   2011/11/17 10:21 dave
+  !!    Changes to blip data
+  !!   2011/11/29 L.Tong
+  !!    Added spin polarisation
+  !!   2011/12/05 L.Tong
+  !!    - Changed the temp array sum to summ to avoid potential confusion
+  !!      with the intrinsic function sum
+  !!    - Removed redundant parameter number_of_bands
+  !!   2012/03/01 L.Tong
+  !!    Fixed a bug associated to pulay forces. It is solved by putting
+  !!    an loop around the calculation of the gradient at the end of the
+  !!    support variation loop, so that if we have eached the end of the
+  !!    blip minimisation cycle (without convergence) the gradient and
+  !!    density don't get called for the one last time (which is
+  !!    intended to prepare for the next iteration).
+  !!   2012/03/23 L.Tong
+  !!   - Changed spin implementation
+  !!   - Removed redundant input parameter real(double) mu
+  !!  SOURCE
+  !!
+  subroutine vary_support(n_support_iterations, fixed_potential, &
+                          vary_mu, n_L_iterations, L_tolerance,  &
+                          sc_tolerance, energy_tolerance,        &
+                          total_energy_last, expected_reduction)
 
     use datatypes
     use logicals
     use numbers
     use units
-    use mult_module, ONLY: LNV_matrix_multiply, matM12, matM4, &
-         matM12_dn, matM4_dn
-    use GenBlas, ONLY: dot, copy, axpy
-    use PosTan, ONLY: PulayC, PulayBeta, SCC, SCBeta
-    use blip, ONLY: PreCond, blip_info
-    use GenComms, ONLY: my_barrier, gsum, inode, ionode, cq_abort
-    use DiagModule, ONLY: diagon
-    use blip_gradient, ONLY: get_blip_gradient, get_electron_gradient
-    use global_module, ONLY: flag_precondition_blips, iprint_basis, &
-         area_basis, flag_spin_polarisation
-    use io_module, ONLY: dump_blip_coeffs
-    use functions_on_grid, ONLY: supportfns, H_on_supportfns, &
-         gridfunctions, fn_on_grid
-    use support_spec_format, ONLY: coefficient_array, &
-         coeff_array_size, grad_coeff_array, elec_grad_coeff_array, &
-         supports_on_atom
-    use primary_module, ONLY: bundle
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use mult_module,         only: LNV_matrix_multiply, matM12, matM4
+    use GenBlas,             only: dot, copy, axpy
+    use PosTan,              only: PulayC, PulayBeta, SCC, SCBeta
+    use blip,                only: PreCond, blip_info
+    use GenComms,            only: my_barrier, gsum, inode, ionode, cq_abort
+    use DiagModule,          only: diagon
+    use blip_gradient,       only: get_blip_gradient, get_electron_gradient
+    use global_module,       only: flag_precondition_blips, iprint_basis, &
+                                   area_basis, nspin, spin_factor
+    use io_module,           only: dump_blip_coeffs
+    use functions_on_grid,   only: supportfns, H_on_supportfns,           &
+                                   gridfunctions, fn_on_grid
+    use support_spec_format, only: coefficient_array,                     &
+                                   coeff_array_size, grad_coeff_array,    &
+                                   elec_grad_coeff_array,                 &
+                                   supports_on_atom
+    use primary_module,      only: bundle
+    use memory_module,       only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
     !     Shared variables
-    logical :: vary_mu, fixed_potential
-    integer :: n_L_iterations
-    real(double) :: mu
-    integer :: n_support_iterations
-    real(double) :: expected_reduction
-    real(double) :: total_energy_last, energy_tolerance, L_tolerance, &
-         sc_tolerance
-    logical convergence_flag
+    logical      :: vary_mu, fixed_potential, convergence_flag
+    integer      :: n_L_iterations
+    integer      :: n_support_iterations
+    real(double) :: expected_reduction, total_energy_last, &
+                    energy_tolerance, L_tolerance, sc_tolerance
 
-    !     Local variables
-    real(double) ::  tolerance, con_tolerance
-    integer :: length, n_iterations, n_tries, offset
-    logical :: notredone, reduced
-    real(double) :: dgg, gamma, gg, electrons, lambda,  &
-         step, step_0, step_1, sum_0, sum_1, diff,  &
-         total_energy_0, total_energy_test, &
-         energy_in, en_dot_el, el_dot_el, kinetic_energy, e_dot_e
-    real(double) :: electrons_up, electrons_dn, energy_in_up, &
-         energy_in_dn
+    ! Local variables
+    real(double) :: tolerance, con_tolerance, dgg, gamma, gg, &
+                    electrons_tot, sum_0, diff, total_energy_0, &
+                    energy_in_tot, last_step, dN_dot_de, dN_dot_dN
+    integer      :: length, n_iterations, n_tries, offset
+    integer      :: k, i, j, n, spec, stat, spin
+    logical      :: notredone, reduced
     real(double), parameter :: gamma_max = 6.0_double !! TM 2007.03.29
+    real(double), dimension(nspin)            :: electrons, energy_in
+    real(double), dimension(coeff_array_size) :: search_direction, &
+                                                 last_sd, Psd
+    real(double), allocatable, dimension(:)   :: summ
 
-    real(double), allocatable, dimension(:) :: search_direction
-    real(double), allocatable, dimension(:) :: last_sd
-    real(double), allocatable, dimension(:) :: Psd
-    real(double) :: temp,den_del,del_del, last_step, dN_dot_de, dN_dot_dN
-    real(double), allocatable, dimension(:) :: summ
-    integer indexy, return_ok, jj, n_blip, k, nx, ny, nz, i, j
-    integer n,k2,j2, spec, stat
 
     call start_timer(tmr_std_basis)
-    if (inode == ionode) write(io_lun,fmt='(/6x,"Starting blip-&
-         &coefficient variation",/)')
-    if (inode == ionode .AND. iprint_basis > 0) &
-         write(io_lun,fmt='(6x,"Performing at most ",i4," iterations &
-         &with a tolerance of ",e12.5,/)') n_support_iterations, &
-         energy_tolerance
-    call start_timer(tmr_std_allocation)
-    allocate (search_direction(coeff_array_size), &
-         last_sd(coeff_array_size), Psd(coeff_array_size), STAT=stat)
-    if (stat /= 0) &
-         call cq_abort ("Error allocating search directions in &
-         &vary_support: ", coeff_array_size)
-    call reg_alloc_mem (area_basis, 3 * coeff_array_size, type_dbl)
-    call stop_timer (tmr_std_allocation)
+
+    if (inode == ionode) &
+         write (io_lun, fmt='(/6x,"Starting blip-coefficient variation",/)')
+    if (inode == ionode .and. iprint_basis > 0) &
+         write (io_lun, &
+                fmt='(6x,"Performing at most ",i4," iterations &
+                      &with a tolerance of ",e12.5,/)') &
+               n_support_iterations, energy_tolerance
+
     ! Set tolerances for self-consistency and L minimisation
-    con_tolerance = SCC*expected_reduction**SCBeta
+    con_tolerance = SCC * expected_reduction**SCBeta
     tolerance = PulayC * (0.1_double * expected_reduction)**PulayBeta
     if (con_tolerance < sc_tolerance) con_tolerance = sc_tolerance
-    if (con_tolerance < 10.0_double * tolerance) tolerance = &
-         0.1_double * con_tolerance
+    if (con_tolerance < ten * tolerance) &
+         tolerance = 0.1_double * con_tolerance
     con_tolerance = sc_tolerance
     tolerance = L_tolerance
 
-    if (inode == ionode .AND. iprint_basis > 1) &
-         write(io_lun,fmt='(6x,"L, SC tolerances: ",2f20.12)') &
-         con_tolerance, tolerance
+    if (inode == ionode .and. iprint_basis > 1) &
+         write (io_lun, fmt='(6x,"L, SC tolerances: ",2f20.12)') &
+               con_tolerance, tolerance
 
     length = coeff_array_size
     search_direction = zero
@@ -196,45 +188,36 @@ contains
     grad_coeff_array = zero
     elec_grad_coeff_array = zero
 
-    !     evaluate the action of H on the support functions, calculate
-    !     the corresponding matrix elements in the 'support representation'
-    !     and calculate the start-point energy
+    ! evaluate the action of H on the support functions, calculate the
+    ! corresponding matrix elements in the 'support representation'
+    ! and calculate the start-point energy
 
     total_energy_0 = total_energy_last
-    if (total_energy_last .eq. zero) &
+    if (total_energy_last == zero) &
          total_energy_0 = expected_reduction
-    call my_barrier ()
+    call my_barrier()
     total_energy_last = total_energy_0
 
-    !     now obtain the gradient of the energy with respect to support functions
-    ! For diagonalisation, this is already stored
-    if (inode == ionode .AND. iprint_basis > 2) &
-         write(io_lun,fmt='(6x, "Finding gradient")')
-    if (.NOT. diagon) then
-       if (flag_spin_polarisation) then
-          call LNV_matrix_multiply (electrons_up, energy_in_up, doK, doM1, &
-               doM2, dontM3, doM4, dontphi, dontE, matM12, 0, matM4, &
-               0, spin=1)
-          call LNV_matrix_multiply (electrons_dn, energy_in_dn, doK, doM1, &
-               doM2, dontM3, doM4, dontphi, dontE, matM12_dn, 0, matM4_dn, &
-               0, spin=2)
-       else
-          call LNV_matrix_multiply (electrons, energy_in, doK, doM1, &
-               doM2, dontM3, doM4, dontphi, dontE, matM12, 0, matM4, &
-               0)
-       end if
+    ! now obtain the gradient of the energy with respect to support
+    ! functions. For diagonalisation, this is already stored
+    if (inode == ionode .and. iprint_basis > 2) &
+         write (io_lun, fmt='(6x, "Finding gradient")')
+    if (.not. diagon) then
+       call LNV_matrix_multiply(electrons, energy_in, doK, doM1, doM2,&
+                                dontM3, doM4, dontphi, dontE,         &
+                                mat_M12=matM12, mat_M4=matM4)
     end if
-    call get_blip_gradient (inode, ionode)
-    if (inode == ionode .AND. iprint_basis > 2) &
+    call get_blip_gradient(inode, ionode)
+    if (inode == ionode .and. iprint_basis > 2) &
          write (io_lun, fmt='(6x,"Got blip gradient")')
-    call my_barrier ()
+    call my_barrier()
     ! The density matrix is effectively idempotent during
     ! diagonalisation
     if (diagon) then
-       gridfunctions(H_on_supportfns)%griddata = zero
+       gridfunctions(H_on_supportfns(1))%griddata = zero
     else
-       call get_electron_gradient (supportfns, H_on_supportfns, inode, &
-            ionode)
+       call get_electron_gradient(supportfns, H_on_supportfns(1), &
+                                  inode, ionode)
        call my_barrier()
        if (inode == ionode .AND. iprint_basis > 2) &
             write (*,fmt='(6x,"Got electron gradient")')
@@ -251,60 +234,61 @@ contains
           if (iprint_basis > 0) then
              write (io_lun, 7) n_iterations
           else 
-             write (io_lun, fmt='(6x,"Support variation: ",i5)') n_iterations
+             write (io_lun, fmt='(6x,"Support variation: ",i5)') &
+                   n_iterations
           end if
        end if
        ! We need the last search direction for CG manipulations
-       call copy (length, search_direction, 1, last_sd, 1)
+       call copy(length, search_direction, 1, last_sd, 1)
 
        ! The basis for searching is data_dblip
-       call copy (length, grad_coeff_array, 1, search_direction, 1)
+       call copy(length, grad_coeff_array, 1, search_direction, 1)
        ! Now project dblip tangential to the constant Ne hyperplane
-       if (.NOT. diagon) then
-          dN_dot_de = dot (length, grad_coeff_array, 1, &
-               elec_grad_coeff_array, 1)
-          dN_dot_dN = dot (length, elec_grad_coeff_array, 1, &
-               elec_grad_coeff_array, 1)
-          call gsum (dN_dot_de)
-          call gsum (dN_dot_dN)
-          if (inode == ionode .AND. iprint_basis > 2) &
-               write (io_lun, fmt='(6x,"dN.de, dN.dN ",2f20.12)')&
-               dN_dot_de, dN_dot_dN
-          call axpy (length, - (dN_dot_de / dN_dot_dN), &
-               elec_grad_coeff_array, 1, search_direction, 1 )      
+       if (.not. diagon) then
+          dN_dot_de = dot(length, grad_coeff_array, 1, &
+                          elec_grad_coeff_array, 1)
+          dN_dot_dN = dot(length, elec_grad_coeff_array, 1, &
+                          elec_grad_coeff_array, 1)
+          call gsum(dN_dot_de)
+          call gsum(dN_dot_dN)
+          if (inode == ionode .and. iprint_basis > 2) &
+               write (io_lun, fmt='(6x,"dN.de, dN.dN ",2f20.12)') &
+                     dN_dot_de, dN_dot_dN
+          call axpy(length, - (dN_dot_de / dN_dot_dN), &
+                    elec_grad_coeff_array, 1, search_direction, 1 )      
        end if
        ! Precondition if we need to
        if (flag_precondition_blips) then
           offset = 0
-          if (inode == ionode .AND. iprint_basis > 3) &
+          if (inode == ionode .and. iprint_basis > 3) &
                write (io_lun, fmt='(6x,"Preconditioning !")')
-          call my_barrier ()
+          call my_barrier()
           do i = 1, bundle%n_prim
              spec = bundle%species(i)
-             call start_timer (tmr_std_allocation)
-             allocate (summ(supports_on_atom(i)%nsuppfuncs))
-             call stop_timer (tmr_std_allocation)
+             call start_timer(tmr_std_allocation)
+             allocate(summ(supports_on_atom(i)%nsuppfuncs))
+             call stop_timer(tmr_std_allocation)
              do j = 1, blip_info(spec)%NBlipsRegion ! In future, base on species
                 summ = zero
                 do k = 1, blip_info(spec)%NBlipsRegion ! Again, base on species
                    do n = 1, supports_on_atom(i)%nsuppfuncs
                       summ(n) = summ(n) + PreCond(spec)%coeffs(j,k) * &
-                           search_direction(offset + (n-1) * &
-                           blip_info(spec)%NBlipsRegion + k)
-                   enddo
-                enddo
+                                search_direction(offset + (n-1) *     &
+                                blip_info(spec)%NBlipsRegion + k)
+                   end do
+                end do
                 do n = 1, supports_on_atom(i)%nsuppfuncs
-                   Psd(offset + (n - 1) * blip_info(spec)%NBlipsRegion + j) =&
+                   Psd(offset + (n - 1) * blip_info(spec)%NBlipsRegion + j) = &
                         summ(n)
-                enddo
-             enddo
+                end do
+             end do
              offset = offset + supports_on_atom(i)%nsuppfuncs * &
-                  blip_info(spec)%NBlipsRegion
-             call start_timer (tmr_std_allocation)
-             deallocate (summ)
-             call stop_timer (tmr_std_allocation)
-          enddo
-          if (inode == ionode .AND. iprint_basis > 3) &
+                      blip_info(spec)%NBlipsRegion
+             call start_timer(tmr_std_allocation)
+             deallocate(summ)
+             call stop_timer(tmr_std_allocation)
+          end do
+          if (inode == ionode .and. iprint_basis > 3) &
                write (io_lun, fmt='(6x,"Preconditioned !")')
           call my_barrier()
        else
@@ -312,232 +296,224 @@ contains
        end if
        ! Now determine conjugate directions
        gg = dgg
-       dgg = dot (length, search_direction, 1, Psd, 1)
-       call gsum (dgg)
-       if (inode == ionode .AND. iprint_basis > 2) &
+       dgg = dot(length, search_direction, 1, Psd, 1)
+       call gsum(dgg)
+       if (inode == ionode .and. iprint_basis > 2) &
             write (io_lun, fmt='(6x,"dgg is ",f20.12)') dgg
 
-       if (gg .ne. zero) then
+       if (gg /= zero) then
           gamma = dgg / gg
        else
           gamma = zero
        end if
        if(gamma > gamma_max) then
-         if (inode == ionode) write(io_lun,*) &
-              ' Warning: CG direction is reset! '
+         if (inode == ionode) &
+              write(io_lun,*) ' Warning: CG direction is reset! '
          gamma = zero
-       endif
-       if (inode == ionode .AND. iprint_basis > 2) &
+       end if
+       if (inode == ionode .and. iprint_basis > 2) &
             write (io_lun, fmt='(6x,"Gamma is ",f20.12)') gamma
 
        ! Construct the actual search direction
-       call copy (length, Psd, 1, search_direction, 1)
-       call axpy (length, gamma, last_sd, 1, search_direction, 1)
+       call copy(length, Psd, 1, search_direction, 1)
+       call axpy(length, gamma, last_sd, 1, search_direction, 1)
        ! And project perpendicular to electron gradient
-       if (.NOT. diagon) then
-          dN_dot_de = dot (length, search_direction, 1, &
-               elec_grad_coeff_array, 1)
-          dN_dot_dN = dot (length, elec_grad_coeff_array, 1, &
-               elec_grad_coeff_array, 1)
+       if (.not. diagon) then
+          dN_dot_de = dot(length, search_direction, 1, &
+                          elec_grad_coeff_array, 1)
+          dN_dot_dN = dot(length, elec_grad_coeff_array, 1, &
+                          elec_grad_coeff_array, 1)
           call gsum (dN_dot_de)
           call gsum (dN_dot_dN)
-          if (inode == ionode .AND. iprint_basis > 3) &
+          if (inode == ionode .and. iprint_basis > 3) &
                write (io_lun, fmt='(6x,"dN.de, dN.dN ",2f20.12)') &
-               dN_dot_de, dN_dot_dN
-          call axpy (length, - (dN_dot_de / dN_dot_dN), &
-               elec_grad_coeff_array, 1, search_direction, 1)
+                     dN_dot_de, dN_dot_dN
+          call axpy(length, - (dN_dot_de / dN_dot_dN), &
+                    elec_grad_coeff_array, 1, search_direction, 1)
        end if
-       sum_0 = dot (length, grad_coeff_array, 1, search_direction, 1)
-       call gsum (sum_0)
-       if (inode == ionode .AND. iprint_basis > 3) &
+       sum_0 = dot(length, grad_coeff_array, 1, search_direction, 1)
+       call gsum(sum_0)
+       if (inode == ionode .and. iprint_basis > 3) &
             write (io_lun, fmt='(6x,"sum_0 is ",f20.12)') sum_0
        call my_barrier()
        ! minimise the energy (approximately) in this direction.
 
-       if (inode == ionode .AND. iprint_basis > 2) &
+       if (inode == ionode .and. iprint_basis > 2) &
             write (io_lun, fmt='(6x,"Calling minimise")')
-       call my_barrier ()
-       call line_minimise_support (search_direction, length, &
-            fixed_potential, vary_mu, n_L_iterations, tolerance, &
-            con_tolerance, mu, total_energy_0, expected_reduction, &
-            last_step)
+
+       call my_barrier()
+
+       call line_minimise_support(search_direction, length,      &
+                                  fixed_potential, vary_mu,      &
+                                  n_L_iterations, tolerance,     &
+                                  con_tolerance, total_energy_0, &
+                                  expected_reduction, last_step)
        if (inode == ionode .AND. iprint_basis > 2) &
-            write (io_lun,'(6x,"Returned !")')
-       call dump_blip_coeffs (coefficient_array, coeff_array_size, &
-            inode)
+            write (io_lun,fmt='(6x,"Returned !")')
+       call dump_blip_coeffs(coefficient_array, coeff_array_size, &
+                             inode)
        ! Find change in energy for convergence
        diff = total_energy_last - total_energy_0
-       if (abs (diff / total_energy_0) .le. energy_tolerance) then
+       if (abs(diff / total_energy_0) <= energy_tolerance) then
           if (inode == ionode) &
                write (io_lun, 18) total_energy_0 * en_conv, &
-               en_units(energy_units)
+                                  en_units(energy_units)
           convergence_flag = .true.
           total_energy_last = total_energy_0
           return
        end if
 
-       ! return_ok tells us how the line minimisation went.
-
        ! prepare for next iteration
        if (n_iterations < n_support_iterations) then
-          if (.NOT. diagon) then
-             if (flag_spin_polarisation) then
-                call LNV_matrix_multiply(electrons_up, energy_in_up, doK, &
-                     doM1, doM2, dontM3, doM4, dontphi, dontE, matM12, 0, &
-                     matM4, 0, spin=1)
-                call LNV_matrix_multiply(electrons_dn, energy_in_dn, doK, &
-                     doM1, doM2, dontM3, doM4, dontphi, dontE, matM12_dn, 0,&
-                     matM4_dn, 0, spin=2)
-                electrons = electrons_up + electrons_dn
-                energy_in = energy_in_up + energy_in_dn
-             else
-                call LNV_matrix_multiply(electrons, energy_in, doK, doM1, &
-                     doM2, dontM3, doM4, dontphi, dontE, matM12, 0, matM4, 0)
-             end if
+          if (.not. diagon) then
+             call LNV_matrix_multiply(electrons, energy_in, doK, doM1, &
+                                      doM2, dontM3, doM4, dontphi,     &
+                                      dontE, mat_M12=matM12, mat_M4=matM4)
           end if
-          grad_coeff_array = zero   !! TSUYOSHI MIYAZAKI 2007 Mar 29
+          grad_coeff_array = zero        !! TSUYOSHI MIYAZAKI 2007 Mar 29
           elec_grad_coeff_array = zero   !! TSUYOSHI MIYAZAKI 2007 Mar 29
-          call get_blip_gradient (inode, ionode)
+          call get_blip_gradient(inode, ionode)
           
           ! The density matrix is effectively idempotent during
           ! diagonalisation
           if (diagon) then
-             gridfunctions(H_on_supportfns)%griddata = zero
+             gridfunctions(H_on_supportfns(1))%griddata = zero
           else
-             call get_electron_gradient (supportfns, H_on_supportfns, &
-                  inode, ionode)
+             call get_electron_gradient(supportfns,                &
+                                        H_on_supportfns(1), inode, &
+                                        ionode)
           end if
        end if
 
        total_energy_last = total_energy_0
 
-    end do
-    call start_timer (tmr_std_allocation)
-    deallocate (search_direction, last_sd, Psd, STAT=stat)
-    if (stat /= 0) call cq_abort ("Error deallocating search &
-         &directions in vary_support: ", coeff_array_size)
-    call reg_dealloc_mem (area_basis, 3 * coeff_array_size, type_dbl)
-    call stop_timer (tmr_std_allocation)
+    end do ! n_iterations
+    
     call stop_timer (tmr_std_basis)
 
-1   format(20x,'mu = ',f10.7,'start energy = ',f15.7)
-2   format(/20x,'Current Total Energy : ',f15.7,' a.u. ')
-3   format(20x,'Previous Total Energy: ',f15.7,' a.u. ')
-4   format(20x,'Difference           : ',f15.7,' a.u. ')
-5   format(20x,'Required difference  : ',f15.7,' a.u. '/)
+    return
+
+! 1   format(20x,'mu = ',f10.7,'start energy = ',f15.7)
+! 2   format(/20x,'Current Total Energy : ',f15.7,' a.u. ')
+! 3   format(20x,'Previous Total Energy: ',f15.7,' a.u. ')
+! 4   format(20x,'Difference           : ',f15.7,' a.u. ')
+! 5   format(20x,'Required difference  : ',f15.7,' a.u. '/)
 7   format(/20x,'------------ Support Variation #: ',i5,' ------------',/)
 18  format(///20x,'The blip minimisation has converged to a total energy:', &
          //20x,' Total energy = ',f15.7,' ',a2)
 
-    return
   end subroutine vary_support
-!!***
+  !!***
 
-!!****f* blip_minimisation/line_minimise_support *
-!!
-!!  NAME 
-!!   line_minimise_support
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Performs a line minimisation on the support functions
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!!   atoms, blip_grid_transform_module, blip, calc_matrix_elements_module, common,
-!!   datatypes, DiagModule, dimens, GenBlas, GenComms, logicals, matrix_data, maxima_module,
-!!   mult_module, numbers, SelfCon, set_bucket_module, S_matrix_module
-!!  AUTHOR
-!!   D.R.Bowler
-!!  CREATION DATE
-!!   13/01/98
-!!  MODIFICATION HISTORY
-!!   18/05/2001 dave
-!!    ROBODoc header, changed new_SC_potl call
-!!   24/05/2001 dave
-!!    Shortened call to get_blip_gradient
-!!    Shortened subroutine call
-!!   25/05/2001 dave
-!!    Used get_S_matrix from S_matrix_module
-!!   11/06/2001 dave
-!!    Added RCS Id and Log tags and GenComms dependencies
-!!   17/06/2002 dave
-!!    Added flag to only get K if OrderN solution method is used (and tweaked headers)
-!!   31/07/2002 dave
-!!    Changed to use data_M12 from matrix_data and not pass to subsidiary routines
-!!   13:52, 04/02/2003 drb 
-!!    Further changes related to diagonalisation (where M12 comes from etc)
-!!   09:20, 2003/03/24 dave
-!!    Included in blip_minimisation
-!!   08:29, 2003/04/03 dave
-!!    Changed to use blip_gradient for get_blip_gradient and get_electron_gradient
-!!   09:14, 2003/04/10 dave
-!!    Completely rewrote in a more transparent way (closely based on safemin in move_atoms.module)
-!!   2008/06/10 ast
-!!    Added timers
-!!   2011/12/05 L.Tong
-!!    - Added spin polarisation
-!!    - Removed redundant parameter number_of_bands
-!!  SOURCE
-!!
-  subroutine line_minimise_support (search_direction, lengthBlip, &
-       fixed_potential, vary_mu, n_cg_L_iterations, tolerance, &
-       con_tolerance, mu, total_energy_0, expected_reduction, &
-       last_step)
+
+  !!****f* blip_minimisation/line_minimise_support *
+  !!
+  !!  NAME 
+  !!   line_minimise_support
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Performs a line minimisation on the support functions
+  !!  INPUTS
+  !! 
+  !! 
+  !!  USES
+  !!   atoms, blip_grid_transform_module, blip,
+  !!   calc_matrix_elements_module, common, datatypes, DiagModule,
+  !!   dimens, GenBlas, GenComms, logicals, matrix_data,
+  !!   maxima_module, mult_module, numbers, SelfCon,
+  !!   set_bucket_module, S_matrix_module
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   13/01/98
+  !!  MODIFICATION HISTORY
+  !!   18/05/2001 dave
+  !!    ROBODoc header, changed new_SC_potl call
+  !!   24/05/2001 dave
+  !!    Shortened call to get_blip_gradient
+  !!    Shortened subroutine call
+  !!   25/05/2001 dave
+  !!    Used get_S_matrix from S_matrix_module
+  !!   11/06/2001 dave
+  !!    Added RCS Id and Log tags and GenComms dependencies
+  !!   17/06/2002 dave
+  !!    Added flag to only get K if OrderN solution method is used
+  !!    (and tweaked headers)
+  !!   31/07/2002 dave
+  !!    Changed to use data_M12 from matrix_data and not pass to
+  !!    subsidiary routines
+  !!   13:52, 04/02/2003 drb 
+  !!    Further changes related to diagonalisation (where M12 comes
+  !!    from etc)
+  !!   09:20, 2003/03/24 dave
+  !!    Included in blip_minimisation
+  !!   08:29, 2003/04/03 dave
+  !!    Changed to use blip_gradient for get_blip_gradient and
+  !!    get_electron_gradient
+  !!   09:14, 2003/04/10 dave
+  !!    Completely rewrote in a more transparent way (closely based
+  !!    on safemin in move_atoms.module)
+  !!   2008/06/10 ast
+  !!    Added timers
+  !!   2011/12/05 L.Tong
+  !!   - Added spin polarisation
+  !!   - Removed redundant parameter number_of_bands
+  !!   2012/03/23 L.Tong
+  !!   - Changed spin implementation
+  !!   - removed redundant input parameter real(double) mu
+  !!  SOURCE
+  !!
+  subroutine line_minimise_support(search_direction, lengthBlip,  &
+                                   fixed_potential, vary_mu,      &
+                                   n_cg_L_iterations, tolerance,  &
+                                   con_tolerance, total_energy_0, &
+                                   expected_reduction, last_step)
 
     use datatypes
     use numbers
     use logicals
-    use global_module, ONLY: iprint_basis, area_basis, &
-         flag_spin_polarisation
-    use mult_module, ONLY: LNV_matrix_multiply, matM12, matM12_dn, &
-         matM4, matM4_dn
-    use GenBlas, ONLY: dot, axpy, copy, vdot
-    use SelfCon, ONLY: new_SC_potl
-    use dimens, ONLY: n_my_grid_points
-    use S_matrix_module, ONLY: get_S_matrix
-    use GenComms, ONLY: gsum, my_barrier, cq_abort, inode, ionode
+    use global_module,       only: iprint_basis, area_basis, nspin,    &
+                                   spin_factor
+    use mult_module,         only: LNV_matrix_multiply, matM12, matM4
+    use GenBlas,             only: dot, axpy, copy, vdot
+    use SelfCon,             only: new_SC_potl
+    use dimens,              only: n_my_grid_points
+    use S_matrix_module,     only: get_S_matrix
+    use GenComms,            only: gsum, my_barrier, cq_abort, inode,  &
+                                   ionode
     ! Check on whether we need K found from L or whether we have it
     ! exactly
-    use DiagModule, ONLY: diagon
-    use support_spec_format, ONLY: coefficient_array, &
-         coeff_array_size, grad_coeff_array, elec_grad_coeff_array
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use DiagModule,          only: diagon
+    use support_spec_format, only: coefficient_array,                  &
+                                   coeff_array_size, grad_coeff_array, &
+                                   elec_grad_coeff_array
+    use memory_module,       only: reg_alloc_mem, reg_dealloc_mem,     &
+                                   type_dbl
 
     implicit none
 
     ! Passed variables
-
-    logical :: vary_mu, fixed_potential, reset_L
-
-    integer :: lengthBlip
-    integer :: n_cg_L_iterations
-
-    real(double) :: tolerance, con_tolerance, mu
+    logical      :: vary_mu, fixed_potential, reset_L
+    integer      :: lengthBlip, n_cg_L_iterations
+    real(double) :: tolerance, con_tolerance
     real(double) :: total_energy_0
     real(double) :: expected_reduction, last_step
-    real(double), dimension(lengthBlip) :: search_direction
+    real(double), dimension(:) :: search_direction
 
     ! Local variables
+    integer      :: i, j, iter, stat, spin
+    real(double) :: k0, k1, k2, k3, kmin, lambda, tmp
+    real(double) :: e0, e1, e2, e3, energy_out
     real(double), save :: dE = zero ! Use this to guess initial step ?
-    real(double), allocatable, dimension(:) :: data_blip0
-    real(double) :: k0, k1, k2, k3, kmin, lambda
-    real(double) :: e0, e1, e2, e3, electrons, tmp, energy_out
-    real(double) :: electrons_up, electrons_dn
-    integer :: i,j, iter, stat
+    real(double), dimension(lengthBlip) :: data_blip0
+    real(double), dimension(nspin)      :: electrons, energy_tmp
 
-    if (inode == ionode .AND. iprint_basis > 2) &
-         write (io_lun, fmt='(6x,"On entry to blip line_min, dE is ",e12.5)') &
-         dE
-    call start_timer (tmr_std_allocation)
-    allocate (data_blip0(lengthBlip), STAT=stat)
-    if (stat /= 0) &
-         call cq_abort ("LinMinBlip: Error allocating blip storage: ", &
-         lengthBlip)
-    call reg_alloc_mem (area_basis, lengthBlip, type_dbl)
-    call stop_timer (tmr_std_allocation)
-    call copy (lengthBlip, coefficient_array, 1, data_blip0, 1)
+    if (inode == ionode .and. iprint_basis > 2) &
+         write (io_lun, &
+                fmt='(6x,"On entry to blip line_min, dE is ",e12.5)') dE
+    
+    call copy(lengthBlip, coefficient_array, 1, data_blip0, 1)
     ! We're assuming that we've ALREADY gone to a self-consistent
     ! ground state before arriving here
     iter = 1
@@ -548,61 +524,56 @@ contains
     e3 = e2
     lambda = two
     ! Loop to find a bracketing triplet
-    if (inode == ionode .AND. iprint_basis > 0) then
+    if (inode == ionode .and. iprint_basis > 0) then
        write (io_lun, fmt='(6x,"Seeking bracketing triplet of points")')
-    else if (inode == ionode .AND. iprint_basis == 0) then
+    else if (inode == ionode .and. iprint_basis == 0) then
        write (io_lun, fmt='(6x,"Bracketing")')
     end if
     do while (e3 <= e2)
        if (k2 == zero) then
           k3 = 0.001_double
           ! DRB 2004/03/03
-          tmp = vdot (lengthBlip, search_direction, 1, grad_coeff_array, 1)
+          tmp = vdot(lengthBlip, search_direction, 1, grad_coeff_array, 1)
           if (abs(dE) < very_small) then
              k3 = 0.008_double
              dE = tmp * k3
           else
              k3 = half * dE / tmp
           end if
-!       elseif (k2==0.01_double) then
-!          k3 = 0.01_double
+          ! elseif (k2==0.01_double) then
+          !   k3 = 0.01_double
        else
           k3 = lambda * k2          
-       endif
+       end if
        ! Change blips: start from blip0
-       call copy (lengthBlip, data_blip0, 1, coefficient_array, 1)
-       call axpy (lengthBlip, k3, search_direction, 1, coefficient_array, 1)
+       call copy(lengthBlip, data_blip0, 1, coefficient_array, 1)
+       call axpy(lengthBlip, k3, search_direction, 1, coefficient_array, 1)
        ! Find new self-consistent energy 
        ! 1. Get new S matrix (includes blip-to-grid transform)
-       call get_S_matrix (inode, ionode)
+       call get_S_matrix(inode, ionode)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-       if (.NOT. diagon) then
-          if (flag_spin_polarisation) then
-             call LNV_matrix_multiply (electrons_up, tmp, doK, dontM1, &
-                  dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0, &
-                  spin=1)
-             call LNV_matrix_multiply (electrons_dn, tmp, doK, dontM1, &
-                  dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0, &
-                  spin=2)
-             electrons = electrons_up + electrons_dn
-          else
-             call LNV_matrix_multiply (electrons, tmp, doK, dontM1, &
-                  dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0)
-          end if
+       if (.not. diagon) then
+          call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
+                                   dontM2, dontM3, dontM4, dontphi,   &
+                                   dontE)
        end if
        reset_L = .true.
        ! 3. Get a new self-consistent potential and Hamiltonian
        ! I've not put a call to get_H_matrix here because it's
        ! currently in new_SC_potl
-       call new_SC_potl (.false., con_tolerance, reset_L, &
-            fixed_potential, vary_mu, n_cg_L_iterations, &
-            tolerance, mu, e3)
-       if (inode == ionode .AND. iprint_basis > 2) &
-            write (io_lun, fmt='(6x,"In blip_min, iter ",i3," step &
-            &and energy are ",2f12.6)') iter, k3, e3
-       if (inode == ionode .AND. iprint_basis > 2) &
-            write (io_lun, fmt='(6x," iter=", i3," k0, k1, k2, k3, &
-            &kmin = ",5f12.6)') iter, k0, k1, k2, k3, kmin
+       call new_SC_potl(.false., con_tolerance, reset_L,             &
+                        fixed_potential, vary_mu, n_cg_L_iterations, &
+                        tolerance, e3)
+       if (inode == ionode .and. iprint_basis > 2) &
+            write (io_lun, &
+                   fmt='(6x,"In blip_min, iter ",i3," step &
+                        &and energy are ",2f12.6)') &
+                  iter, k3, e3
+       if (inode == ionode .and. iprint_basis > 2) &
+            write (io_lun, &
+                   fmt='(6x," iter=", i3," k0, k1, k2, k3, &
+                        &kmin = ",5f12.6)') &
+                  iter, k0, k1, k2, k3, kmin
        if (e3 < e2) then ! We're still going down hill
           k1 = k2
           e1 = e2
@@ -612,102 +583,81 @@ contains
        else if (k2 == zero) then
           dE = half * dE
           e3 = e2
-       endif
+       end if
     end do
     ! Interpolate to find minimum.
-    kmin = half * (((k1 * k1 - k3 * k3) * (e1 - e2) - (k1 * k1 - k2 * &
-         k2) * (e1 - e3)) / ((k1 - k3) * (e1 - e2) - (k1 - k2) * (e1 -&
-         e3)))
-    if (inode == ionode .AND. iprint_basis > 1) &
-         write (io_lun, fmt='(6x,"In blip_min, bracketed - min from &
-         &extrap: ",4f12.6)') k1, k2, k3, kmin
-    if (inode == ionode .AND. iprint_basis > 0) then
-       write (io_lun, fmt='(6x,"In blip_min, bracketed - energies: ",&
-            &3f15.6)') e1, e2, e3
-    else if (inode == ionode .AND. iprint_basis == 0) then
+    kmin = half * (((k1 * k1 - k3 * k3) * (e1 - e2) - &
+                    (k1 * k1 - k2 * k2) * (e1 - e3)) / &
+                   ((k1 - k3) * (e1 - e2) - (k1 - k2) * (e1 - e3)))
+    if (inode == ionode .and. iprint_basis > 1) &
+         write (io_lun, &
+                fmt='(6x,"In blip_min, bracketed - min from &
+                     &extrap: ",4f12.6)') &
+               k1, k2, k3, kmin
+    if (inode == ionode .and. iprint_basis > 0) then
+       write (io_lun, &
+              fmt='(6x,"In blip_min, bracketed - energies: ",3f15.6)') &
+             e1, e2, e3
+    else if (inode == ionode .and. iprint_basis == 0) then
        write (io_lun, fmt='(6x,"Interpolating minimum")')
     end if
     ! Change blips: start from blip0
-    call copy (lengthBlip, data_blip0, 1, coefficient_array, 1)
-    call axpy (lengthBlip, kmin, search_direction, 1, coefficient_array, 1)
+    call copy(lengthBlip, data_blip0, 1, coefficient_array, 1)
+    call axpy(lengthBlip, kmin, search_direction, 1, coefficient_array, 1)
     ! Find new self-consistent energy 
     ! 1. Get new S matrix (includes blip-to-grid transform)
-    call get_S_matrix (inode, ionode)
+    call get_S_matrix(inode, ionode)
     ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-    if (.NOT. diagon) then
-       if (flag_spin_polarisation) then
-          call LNV_matrix_multiply (electrons_up, tmp, doK, dontM1, &
-               dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0, &
-               spin=1)
-          call LNV_matrix_multiply (electrons_dn, tmp, doK, dontM1, &
-               dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0, &
-               spin=2)
-          electrons = electrons_up + electrons_dn
-       else
-          call LNV_matrix_multiply (electrons, tmp, doK, dontM1, &
-               dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0)
-       end if
+    if (.not. diagon) then
+       call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1, &
+                                dontM2, dontM3, dontM4, dontphi,    &
+                                dontE)
     end if
     reset_L = .true.
     ! 3. Get a new self-consistent potential and Hamiltonian
     ! I've not put a call to get_H_matrix here because it's currently
     ! in new_SC_potl
-    call new_SC_potl (.false., con_tolerance, reset_L, &
-         fixed_potential, vary_mu, n_cg_L_iterations, tolerance, mu, &
-         energy_out)
+    call new_SC_potl(.false., con_tolerance, reset_L, fixed_potential,&
+                     vary_mu, n_cg_L_iterations, tolerance, energy_out)
     ! If the interpolation failed, go back to the previous "minimum"
     if (energy_out > e2) then 
        kmin = k2
        ! Change blips: start from blip0
-       call copy (lengthBlip, data_blip0, 1, coefficient_array, 1)
-       call axpy (lengthBlip, kmin, search_direction, 1, coefficient_array, 1)
+       call copy(lengthBlip, data_blip0, 1, coefficient_array, 1)
+       call axpy(lengthBlip, kmin, search_direction, 1, &
+                 coefficient_array, 1)
        ! Find new self-consistent energy 
        ! 1. Get new S matrix (includes blip-to-grid transform)
-       call get_S_matrix (inode, ionode)
+       call get_S_matrix(inode, ionode)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-       if (.NOT. diagon) then
-          if (flag_spin_polarisation) then
-             call LNV_matrix_multiply (electrons_up, tmp, doK, dontM1, &
-                  dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0, &
-                  spin=1)
-             call LNV_matrix_multiply (electrons_dn, tmp, doK, dontM1, &
-                  dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0, &
-                  spin=2)
-             electrons = electrons_up + electrons_dn
-          else
-             call LNV_matrix_multiply (electrons, tmp, doK, dontM1, &
-                  dontM2, dontM3, dontM4, dontphi, dontE, 0, 0, 0, 0)
-          end if
+       if (.not. diagon) then
+          call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
+                                   dontM2, dontM3, dontM4, dontphi,   &
+                                   dontE)
        end if
        reset_L = .true.
        ! 3. Get a new self-consistent potential and Hamiltonian
        ! I've not put a call to get_H_matrix here because it's
        ! currently in new_SC_potl
-       call new_SC_potl (.false., con_tolerance, reset_L, &
-            fixed_potential, vary_mu, n_cg_L_iterations, &
-            tolerance, mu, energy_out)
+       call new_SC_potl(.false., con_tolerance, reset_L,             &
+                        fixed_potential, vary_mu, n_cg_L_iterations, &
+                        tolerance, energy_out)
     end if
-    if (inode == ionode .AND. iprint_basis > 0) then
+    if (inode == ionode .and. iprint_basis > 0) then
        write (io_lun, fmt='(6x,"In blip_min, at exit energy is ",f15.10)') &
-            energy_out
-    else if (inode == ionode .AND. iprint_basis == 0) then
-       write (io_lun, fmt='(6x,"Final Energy: ",f15.10)') &
-            energy_out
-    endif
+             energy_out
+    else if (inode == ionode .and. iprint_basis == 0) then
+       write (io_lun, fmt='(6x,"Final Energy: ",f15.10)') energy_out
+    end if
     dE = total_energy_0 - energy_out
-    if (inode == ionode .AND. iprint_basis > 2) &
-         write (io_lun, fmt='(6x,"On exit from blip line_min, dE is ",f15.10)') &
-         dE
+    if (inode == ionode .and. iprint_basis > 2) &
+         write (io_lun, &
+                fmt='(6x,"On exit from blip line_min, dE is ",f15.10)') &
+               dE
     total_energy_0 = energy_out
-    call start_timer (tmr_std_allocation)
-    deallocate (data_blip0, STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("LinMinBlip: Error allocating blip storage: ", &
-         lengthBlip)
-    call reg_dealloc_mem (area_basis, lengthBlip, type_dbl)
-    call stop_timer (tmr_std_allocation)
+    
     return
   end subroutine line_minimise_support
-!!***
+  !!***
 
 end module blip_minimisation

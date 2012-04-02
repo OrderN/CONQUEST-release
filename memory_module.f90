@@ -24,7 +24,7 @@
 module memory_module
 
   use datatypes
-  use global_module, ONLY: io_lun
+  use global_module, only: io_lun
 
   implicit none
   save
@@ -36,48 +36,49 @@ module memory_module
   integer, parameter :: type_int = 1
   integer, parameter :: type_dbl = 2
   integer, parameter :: type_cplx = 3
-  
+
   interface reg_dealloc_mem
      module procedure reg_dealloc_mem_32
      module procedure reg_dealloc_mem_64
   end interface
 
   ! RCS tag for object file identification
-  character(len=80), private :: RCSid = "$Id$"
+  character(len=80), private :: &
+       RCSid = "$Id$"
 !!***
 
 contains
 
-! -----------------------------------------------------------
-! Subroutine reg_alloc_mem
-! -----------------------------------------------------------
+  ! -----------------------------------------------------------
+  ! Subroutine reg_alloc_mem
+  ! -----------------------------------------------------------
 
-!!****f* memory_module/reg_alloc_mem *
-!!
-!!  NAME 
-!!   reg_alloc_mem
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Registers the allocation of memory in a particular code area
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   D. R. Bowler
-!!  CREATION DATE
-!!   2006/09/27
-!!  MODIFICATION HISTORY
-!!
-!!  SOURCE
-!!
+  !!****f* memory_module/reg_alloc_mem *
+  !!
+  !!  NAME
+  !!   reg_alloc_mem
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Registers the allocation of memory in a particular code area
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2006/09/27
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
   subroutine reg_alloc_mem(area, amount, type)
 
-    use units, ONLY: m_units, mem_units, mem_conv
-    use global_module, ONLY: iprint_gen
-    use GenComms, ONLY: myid
+    use units,         only: m_units, mem_units, mem_conv
+    use global_module, only: iprint_gen
+    use GenComms,      only: myid
 
     implicit none
 
@@ -86,42 +87,44 @@ contains
     integer, intent(in) :: amount
     integer, intent(in) :: type
 
-    if(iprint_gen>4.AND.myid==0) write(io_lun,fmt='(10x,"Allocating in area ",i3,f10.3," ",a2)') &
-         area, real(amount*no_bytes(type),double)*mem_conv,mem_units(m_units)
+    if (iprint_gen>4 .and. myid == 0) &
+         write (io_lun,fmt='(10x,"Allocating in area ",i3,f10.3," ",a2)') &
+               area, real(amount*no_bytes(type),double) * mem_conv, &
+               mem_units(m_units)
     tot_alloc_area(area) = tot_alloc_area(area) + amount*no_bytes(type)
     max_alloc_area(area) = max(max_alloc_area(area),tot_alloc_area(area))
     tot_alloc = tot_alloc + amount*no_bytes(type)
     max_alloc = max(max_alloc, tot_alloc)
 
   end subroutine reg_alloc_mem
-!!***
+  !!***
 
-! -----------------------------------------------------------
-! Subroutine reg_dealloc_mem
-! -----------------------------------------------------------
+  ! -----------------------------------------------------------
+  ! Subroutine reg_dealloc_mem
+  ! -----------------------------------------------------------
 
-!!****f* memory_module/reg_dealloc_mem *
-!!
-!!  NAME 
-!!   reg_dealloc_mem
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Registers the deallocation of memory in a particular code area
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   D. R. Bowler
-!!  CREATION DATE
-!!   2006/09/27
-!!  MODIFICATION HISTORY
-!!
-!!  SOURCE
-!!
-  subroutine reg_dealloc_mem_32(area, amount,type)
+  !!****f* memory_module/reg_dealloc_mem *
+  !!
+  !!  NAME
+  !!   reg_dealloc_mem
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Registers the deallocation of memory in a particular code area
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2006/09/27
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine reg_dealloc_mem_32(area, amount, type)
 
     implicit none
 
@@ -135,7 +138,7 @@ contains
 
   end subroutine reg_dealloc_mem_32
 
-  subroutine reg_dealloc_mem_64(area, amount,type)
+  subroutine reg_dealloc_mem_64(area, amount, type)
 
     implicit none
 
@@ -148,37 +151,37 @@ contains
     tot_alloc = tot_alloc - amount*no_bytes(type)
 
   end subroutine reg_dealloc_mem_64
-!!***
+  !!***
 
-! -----------------------------------------------------------
-! Subroutine init_reg_mem
-! -----------------------------------------------------------
+  ! -----------------------------------------------------------
+  ! Subroutine init_reg_mem
+  ! -----------------------------------------------------------
 
-!!****f* memory_module/init_reg_mem *
-!!
-!!  NAME 
-!!   init_reg_mem
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Initialises variables used in tracking memory allocation
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   D. R. Bowler
-!!  CREATION DATE
-!!   2006/09/27
-!!  MODIFICATION HISTORY
-!!
-!!  SOURCE
-!!
+  !!****f* memory_module/init_reg_mem *
+  !!
+  !!  NAME
+  !!   init_reg_mem
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Initialises variables used in tracking memory allocation
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2006/09/27
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
   subroutine init_reg_mem
 
-    use global_module, ONLY: n_areas
-    use GenComms, ONLY: cq_abort
+    use global_module, only: n_areas
+    use GenComms,      only: cq_abort
 
     implicit none
 
@@ -186,34 +189,38 @@ contains
     integer :: stat
 
     allocate(max_alloc_area(n_areas), tot_alloc_area(n_areas), STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating max_alloc_area: ",n_areas)
+    if (stat /= 0) &
+         call cq_abort("Error allocating max_alloc_area: ", n_areas)
     max_alloc_area = 0
     tot_alloc_area = 0
     max_alloc = 0
     tot_alloc = 0
+
     return
   end subroutine init_reg_mem
-!!***
+  !!***
 
   subroutine write_mem_use
 
     use datatypes
-    use global_module, ONLY: n_areas
-    use units, ONLY: m_units, mem_units, mem_conv
-    use GenComms, ONLY: inode, ionode
+    use global_module, only: n_areas
+    use units,         only: m_units, mem_units, mem_conv
+    use GenComms,      only: inode, ionode
 
     implicit none
 
     integer :: i
 
-    if(inode==ionode) then
-       do i=1,n_areas
-          write(io_lun,'(2x,"Max mem use for area ",i4," is ",f10.3," ",a2)')&
-               i,real(max_alloc_area(i))*mem_conv,mem_units(m_units)
+    if (inode == ionode) then
+       do i = 1, n_areas
+          write (io_lun, '(2x,"Max mem use for area ",i4," is ",f10.3," ",a2)')&
+                i, real(max_alloc_area(i)) * mem_conv, mem_units(m_units)
        end do
-       write(io_lun,'(2x,"Max total mem use is ",f10.3," ",a2)')&
-            real(max_alloc)*mem_conv,mem_units(m_units)
+       write (io_lun, '(2x,"Max total mem use is ",f10.3," ",a2)') &
+             real(max_alloc)*mem_conv,mem_units(m_units)
     end if
+
   end subroutine write_mem_use
+
 
 end module memory_module

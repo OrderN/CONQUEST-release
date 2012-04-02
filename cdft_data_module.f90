@@ -17,6 +17,9 @@
 !!    Preparing for inclusion in main trunk
 !!   2011/12/10 L.Tong
 !!    Added matHzero_dn for spin polarised calculation
+!!   2012/03/13 L.Tong
+!!    Changed matHzero and matHzero_dn pair to matHzero(:) array,
+!!    with index denoting spin channel
 !!  SOURCE
 !!
 module cdft_data
@@ -30,7 +33,7 @@ module cdft_data
   integer, parameter :: cDFT_Fix_ChargeDifference = 2
   integer :: cDFT_MaxIterations
   integer :: cDFT_NumberAtomGroups
-  integer :: matHzero, matHzero_dn
+  integer, dimension(:), allocatable :: matHzero
   integer, dimension(:), allocatable :: cDFT_NAtoms
   integer, dimension(:), allocatable :: matWc
   ! Either charge on atoms or charge difference

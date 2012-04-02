@@ -54,6 +54,9 @@
 !!   2011/12/11 L.Tong
 !!    Removed redundant variable number_of_bands, use ne_in_cell
 !!    instead
+!!   2012/03/27 L.Tong
+!!   - Changed spin implementation
+!!   - updated some calls that no longer passes mu
 !!  SOURCE
 !!
 program Conquest
@@ -70,30 +73,30 @@ program Conquest
   use mult_module
   use pseudopotential_data
   use pseudopotential_common
-  use pseudo_tm_info, ONLY: pseudo
-  use pao_format, ONLY: pao
+  use pseudo_tm_info, only: pseudo
+  use pao_format,     only: pao
   use initialisation
   use potential_module
   use global_module
-  use force_module, ONLY: tot_force
-!  use io_module, ONLY: banner
+  use force_module,   only: tot_force
+! use io_module,      only: banner
   use grid_index
   use atoms
   use species_module
   use fft_module
   use GenComms
-  use density_module, ONLY: density, density_up, density_dn
-  use control, ONLY: control_run
+  use density_module, only: density
+  use control,        only: control_run
   use support_spec_format
   use ol_int_datatypes
   use functions_on_grid
   use ewald_module
   use DiagModule
   use ScalapackFormat
-  use atomic_density, ONLY: atomic_density_table, rcut_dens, &
-       flag_atomic_density_from_pao
-  use block_module, ONLY: nx_in_block,ny_in_block,nz_in_block, &
-       n_pts_in_block
+  use atomic_density, only: atomic_density_table, rcut_dens, &
+                            flag_atomic_density_from_pao
+  use block_module,   only: nx_in_block,ny_in_block,nz_in_block, &
+                            n_pts_in_block
   use memory_module
   use minimise
   use timer_stdclocks_module
@@ -101,7 +104,8 @@ program Conquest
   implicit none
 
   ! RCS tag for object file identification 
-  character(len=80), save :: CQid = "$Id$"
+  character(len=80), save :: &
+       CQid = "$Id$"
 
   ! Global variables (for now !)
 
@@ -113,29 +117,32 @@ program Conquest
   
   ! Chemical potential
   real(double) :: mu
-  logical :: vary_mu
+  logical      :: vary_mu
 
   fixed_potential = .false.
   ! identify what node we are on
-  call init_comms (myid, numprocs)
-  !  if(inode==ionode) call banner
+  call init_comms(myid, numprocs)
+  ! if (inode == ionode) call banner
 
-  ! Initialise reads in data and finds an initial, self-consistent Hamiltonian
-  call initialise (vary_mu, fixed_potential, mu, total_energy)
-  if (inode == ionode .AND. iprint_gen > 0) &
+  ! Initialise reads in data and finds an initial, self-consistent
+  ! Hamiltonian
+  call initialise(vary_mu, fixed_potential, mu, total_energy)
+  if (inode == ionode .and. iprint_gen > 0) &
        write (io_lun, '(4x,"Finished initialise")')
 
   ! control does (at the moment) blip minimisation and simple MD
-  call control_run (fixed_potential, vary_mu, mu, total_energy)
-  if (inode == ionode .AND. iprint_gen > 0) &
+  call control_run(fixed_potential, vary_mu, total_energy)
+  if (inode == ionode .and. iprint_gen > 0) &
        write (io_lun, '(4x,"Finished control")')
 
   call write_mem_use
   call print_time_report
+
   ! Wrap up
   call my_barrier ()
   !call save_state( inode, ionode, mu, expected_reduction, n_run, output_file)
   !call save_blip(inode, ionode)
   call end_comms ()
+
 end program Conquest
 !!*****

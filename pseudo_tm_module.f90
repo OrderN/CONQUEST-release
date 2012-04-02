@@ -28,12 +28,12 @@
 !!
 module pseudo_tm_module
 
-  use datatypes, ONLY: double
-  use pseudo_tm_info, ONLY: pseudo_info, pseudo, setup_pseudo_info, loc_pot, loc_chg
-  use pseudopotential_common, ONLY: pseudopotential, &
+  use datatypes, only: double
+  use pseudo_tm_info, only: pseudo_info, pseudo, setup_pseudo_info, loc_pot, loc_chg
+  use pseudopotential_common, only: pseudopotential, &
        core_radius, flag_angular_new
-  use global_module, ONLY: iprint_pseudo, io_lun
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_pseudopot,tmr_std_basis,tmr_std_allocation
+  use global_module, only: iprint_pseudo, io_lun
+  use timer_stdclocks_module, only: start_timer,stop_timer,tmr_std_pseudopot,tmr_std_basis,tmr_std_allocation
 
   implicit none
 
@@ -72,7 +72,8 @@ module pseudo_tm_module
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id$"
+  character(len=80), private :: &
+       RCSid = "$Id$"
   !!***
 
 contains
@@ -107,11 +108,11 @@ contains
 !!
   subroutine init_pseudo_tm(ecore, ncf_out) 
     
-    use datatypes, ONLY: double
-    use global_module, ONLY: iprint_pseudo
-    use block_module, ONLY : n_pts_in_block
-    use GenComms, ONLY: cq_abort, myid, inode, ionode
-    use species_module, ONLY: species, n_species, species_label, &
+    use datatypes, only: double
+    use global_module, only: iprint_pseudo
+    use block_module, only : n_pts_in_block
+    use GenComms, only: cq_abort, myid, inode, ionode
+    use species_module, only: species, n_species, species_label, &
          nlpf_species
     
     implicit none
@@ -303,7 +304,7 @@ contains
 
     !sbrt setup_core_radius  -------------------------------
     subroutine setup_core_radius
-      use numbers, ONLY: zero
+      use numbers, only: zero
       real(double) :: rcutmax
       do ispecies = 1, n_species
          rcutmax = zero
@@ -354,7 +355,7 @@ contains
 !!
   subroutine deallocate_pseudo_tm
 
-    use GenComms, ONLY: cq_abort
+    use GenComms, only: cq_abort
 
     implicit none
 
@@ -417,26 +418,26 @@ contains
 
     use datatypes
     use numbers
-    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob, ni_in_cell, &
+    use global_module, only: rcellx,rcelly,rcellz,id_glob, ni_in_cell, &
                              iprint_pseudo, species_glob, nlpf, sf,    &
                              flag_basis_set, blips,                    &
                              IPRINT_TIME_THRES3, flag_analytic_blip_int
-    use species_module, ONLY: species, nlpf_species, n_species
+    use species_module, only: species, nlpf_species, n_species
     !  At present, these arrays are dummy arguments.
-    use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, &
+    use block_module, only : nx_in_block,ny_in_block,nz_in_block, &
          n_pts_in_block
-    use group_module, ONLY : blocks, parts
-    use primary_module, ONLY: domain
-    use cover_module, ONLY: DCS_parts
-    use set_blipgrid_module, ONLY : naba_atm
-    use GenBlas, ONLY: axpy, copy
-    use GenComms, ONLY: my_barrier, cq_abort, inode, ionode, myid
-    use angular_coeff_routines, ONLY : pp_elem
-    use hartree_module, ONLY: hartree
-    use functions_on_grid, ONLY: gridfunctions, pseudofns
-    use dimens, ONLY: n_my_grid_points
-    use maxima_module, ONLY: maxngrid
-    use timer_module, ONLY: cq_timer, start_timer, stop_print_timer, WITH_LEVEL
+    use group_module, only : blocks, parts
+    use primary_module, only: domain
+    use cover_module, only: DCS_parts
+    use set_blipgrid_module, only : naba_atm
+    use GenBlas, only: axpy, copy
+    use GenComms, only: my_barrier, cq_abort, inode, ionode, myid
+    use angular_coeff_routines, only : pp_elem
+    use hartree_module, only: hartree
+    use functions_on_grid, only: gridfunctions, pseudofns
+    use dimens, only: n_my_grid_points
+    use maxima_module, only: maxngrid
+    use timer_module, only: cq_timer, start_timer, stop_print_timer, WITH_LEVEL
 
     implicit none 
     !local
@@ -856,18 +857,18 @@ contains
 
     use datatypes
     use numbers
-    use dimens, ONLY: grid_point_volume, n_my_grid_points
-    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, species_glob, nlpf,ni_in_cell, sf
-    use block_module, ONLY : n_pts_in_block
-    use group_module, ONLY : blocks, parts
-    use primary_module, ONLY: domain
-    use cover_module, ONLY: DCS_parts
-    use set_blipgrid_module, ONLY : naba_atm
+    use dimens, only: grid_point_volume, n_my_grid_points
+    use global_module, only: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, species_glob, nlpf,ni_in_cell, sf
+    use block_module, only : n_pts_in_block
+    use group_module, only : blocks, parts
+    use primary_module, only: domain
+    use cover_module, only: DCS_parts
+    use set_blipgrid_module, only : naba_atm
 
-    use species_module, ONLY: species
-    use GenComms, ONLY: gsum, cq_abort, inode, ionode
-    use hartree_module, ONLY: hartree
-    use maxima_module, ONLY: maxngrid
+    use species_module, only: species
+    use GenComms, only: gsum, cq_abort, inode, ionode
+    use hartree_module, only: hartree
+    use maxima_module, only: maxngrid
 
     implicit none   
 
@@ -1128,20 +1129,20 @@ contains
   subroutine nonloc_pp_derivative_tm(direction, dpseudofns)
 
     use datatypes
-    use GenComms, ONLY: inode,ionode
+    use GenComms, only: inode,ionode
     use numbers
-    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell,iprint_pseudo, species_glob, nlpf
-    use species_module, ONLY: species, nlpf_species
+    use global_module, only: rcellx,rcelly,rcellz,id_glob,ni_in_cell,iprint_pseudo, species_glob, nlpf
+    use species_module, only: species, nlpf_species
     !  At present, these arrays are dummy arguments.
-    use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, &
+    use block_module, only : nx_in_block,ny_in_block,nz_in_block, &
          n_pts_in_block
-    use group_module, ONLY : blocks, parts
-    use primary_module, ONLY: domain
-    use cover_module, ONLY: DCS_parts
-    use set_blipgrid_module, ONLY : naba_atm
-    use GenComms, ONLY: my_barrier, cq_abort
-    use angular_coeff_routines, ONLY : pp_gradient
-    use functions_on_grid, ONLY: gridfunctions, fn_on_grid
+    use group_module, only : blocks, parts
+    use primary_module, only: domain
+    use cover_module, only: DCS_parts
+    use set_blipgrid_module, only : naba_atm
+    use GenComms, only: my_barrier, cq_abort
+    use angular_coeff_routines, only : pp_gradient
+    use functions_on_grid, only: gridfunctions, fn_on_grid
 
     implicit none 
 
@@ -1537,11 +1538,11 @@ contains
 
     use datatypes
     use numbers
-    use GenComms, ONLY: inode,ionode
-    use dimens, ONLY: volume
-    use species_module, ONLY: species, n_species, type_species
-    use global_module, ONLY: ni_in_cell, iprint_pseudo
-    use GenComms, ONLY: cq_abort
+    use GenComms, only: inode,ionode
+    use dimens, only: volume
+    use species_module, only: species, n_species, type_species
+    use global_module, only: ni_in_cell, iprint_pseudo
+    use GenComms, only: cq_abort
 
     implicit none
 
@@ -1648,10 +1649,10 @@ contains
 
       use datatypes
       use numbers
-      use GenComms, ONLY: inode, ionode
-      use pseudo_tm_info, ONLY: rad_func, rad_alloc, rad_dealloc
-      use global_module, ONLY: iprint_pseudo
-      use ewald_module, ONLY: erfc
+      use GenComms, only: inode, ionode
+      use pseudo_tm_info, only: rad_func, rad_alloc, rad_dealloc
+      use global_module, only: iprint_pseudo
+      use ewald_module, only: erfc
 
       implicit none
 
@@ -1968,9 +1969,9 @@ contains
        npoint, ip_store, r_store, x_store, y_store, z_store) 
 
     use numbers
-    use global_module, ONLY: rcellx,rcelly,rcellz
-    use group_module,  ONLY: blocks
-    use block_module,  ONLY: nx_in_block,ny_in_block,nz_in_block, &
+    use global_module, only: rcellx,rcelly,rcellz
+    use group_module,  only: blocks
+    use block_module,  only: nx_in_block,ny_in_block,nz_in_block, &
          n_pts_in_block
 
 

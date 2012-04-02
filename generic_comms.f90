@@ -59,7 +59,8 @@ module GenComms
   implicit none
 
   ! RCS tag for object file identification 
-  character(len=80), save, private :: RCSid = "$Id$"
+  character(len=80), save, private :: &
+       RCSid = "$Id$"
 
   integer, save :: myid, root
   integer, save :: inode, ionode

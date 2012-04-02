@@ -20,7 +20,7 @@
 !!
 module hartree_module
 
-  use global_module, ONLY: io_lun
+  use global_module, only: io_lun
 
   implicit none
 
@@ -32,71 +32,72 @@ module hartree_module
 contains
 
 
-!!****f* hartree_module/hartree *
-!!
-!!  NAME 
-!!   hartree
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Takes the charge density on the grid, normalised such that
-!!   the sum over all points is equal to the number of electrons,
-!!   and evaluates the hartree energy and potential. Assumes that
-!!   set_fft_map has been called, and the fft tables have been initialised
-!!  INPUTS
-!!   real(double), dimension(N_GRID_MAX) :: chden - charge density
-!!   real(double), dimension(N_GRID_MAX) :: potential - resulting potential
-!!   real(double) :: energy - hartee energy due to charge
-!!  USES
-!! 
-!!  AUTHOR
-!!   C.M.Goringe
-!!  CREATION DATE
-!!   06/03/95
-!!  MODIFICATION HISTORY
-!!   31/05/2001 dave
-!!    ROBODoc header, indented, added RCS Id tag
-!!   01/06/2001 dave
-!!    Fixed bug and added RCS Log tag as a test
-!!    Added comments and tidied
-!!   06/06/2001 dave
-!!    Added dependence on fft_module
-!!    Corrected dependence by adding z_columns node
-!!   08/06/2001 dave
-!!    Changed to use gsum from GenComms
-!!   14:09, 29/07/2003 drb 
-!!    Removed n_nodes from common use line
-!!   11:38, 12/11/2004 dave 
-!!    Removed grid_index use
-!!  TODO
-!!   Make absolutely sure about the following:
-!!
-!!   Originally, the subroutine started by scaling chden by 
-!!   grid_point_volume (as the density is in e/au^3) at the
-!!   start, kept factors of one_over_grid_point_volume through
-!!   the routine (for dumr and dumi) and removed the factors from
-!!   energy calculation, and then rescaled the charge at the end.
-!!   I removed this, which adds a grid_point_volume multiple to
-!!   the energy only. 31/05/2001 dave
-!!  SOURCE
-!!
-  subroutine hartree( chden, potential, size, energy )
+  !!****f* hartree_module/hartree *
+  !!
+  !!  NAME 
+  !!   hartree
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Takes the charge density on the grid, normalised such that
+  !!   the sum over all points is equal to the number of electrons,
+  !!   and evaluates the hartree energy and potential. Assumes that
+  !!   set_fft_map has been called, and the fft tables have been initialised
+  !!  INPUTS
+  !!   real(double), dimension(N_GRID_MAX) :: chden - charge density
+  !!   real(double), dimension(N_GRID_MAX) :: potential - resulting potential
+  !!   real(double) :: energy - hartee energy due to charge
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   C.M.Goringe
+  !!  CREATION DATE
+  !!   06/03/95
+  !!  MODIFICATION HISTORY
+  !!   31/05/2001 dave
+  !!    ROBODoc header, indented, added RCS Id tag
+  !!   01/06/2001 dave
+  !!    Fixed bug and added RCS Log tag as a test
+  !!    Added comments and tidied
+  !!   06/06/2001 dave
+  !!    Added dependence on fft_module
+  !!    Corrected dependence by adding z_columns node
+  !!   08/06/2001 dave
+  !!    Changed to use gsum from GenComms
+  !!   14:09, 29/07/2003 drb 
+  !!    Removed n_nodes from common use line
+  !!   11:38, 12/11/2004 dave 
+  !!    Removed grid_index use
+  !!  TODO
+  !!   Make absolutely sure about the following:
+  !!
+  !!   Originally, the subroutine started by scaling chden by 
+  !!   grid_point_volume (as the density is in e/au^3) at the
+  !!   start, kept factors of one_over_grid_point_volume through
+  !!   the routine (for dumr and dumi) and removed the factors from
+  !!   energy calculation, and then rescaled the charge at the end.
+  !!   I removed this, which adds a grid_point_volume multiple to
+  !!   the energy only. 31/05/2001 dave
+  !!  SOURCE
+  !!
+  subroutine hartree(chden, potential, size, energy)
 
     use datatypes
-    use dimens, ONLY: grid_point_volume, one_over_grid_point_volume, n_grid_z
-    use numbers
-    use fft_module, ONLY: fft3, hartree_factor, z_columns_node, i0
-    use GenComms, ONLY: gsum,  inode, cq_abort
-    use global_module, ONLY: area_SC
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use numbers    
+    use dimens,        only: grid_point_volume, &
+                             one_over_grid_point_volume, n_grid_z
+    use fft_module,    only: fft3, hartree_factor, z_columns_node, i0
+    use GenComms,      only: gsum,  inode, cq_abort
+    use global_module, only: area_SC
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
     ! Passed variables
-    integer :: size
-    real(double), dimension(size), intent(in) :: chden
-    real(double), dimension(size), intent(out) :: potential
+    integer      :: size
     real(double) :: energy
+    real(double), dimension(size), intent(in)  :: chden
+    real(double), dimension(size), intent(out) :: potential
 
     ! Local variables
     integer :: i, stat
@@ -113,12 +114,13 @@ contains
     real(double), parameter :: harcon = refcoul/pi
 
     allocate(chdenr(size), STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating chdenr in hartree: ",size,stat)
-    call reg_alloc_mem(area_SC,size,type_dbl)
+    if (stat /= 0) &
+         call cq_abort("Error allocating chdenr in hartree: ", size, stat)
+    call reg_alloc_mem(area_SC, size, type_dbl)
     ! N.B. The comment below is irrelevant, I think 01/06/2001 dave
     ! the density is in e/au^3, so convert to e/grid_point
     ! call scal( N_GRID_MAX, grid_point_volume, chden, 1 )
-    call fft3( chden, chdenr, size, -1 )
+    call fft3(chden, chdenr, size, -1)
     !write(io_lun,*) 'G=0 component is: ',chdenr(i0)
     energy = zero
     do i = 1, z_columns_node(inode)*n_grid_z
@@ -129,38 +131,41 @@ contains
        !energy = energy + dumr*dble(chdenr(i)) + dumi*dimag(chdenr(i))
        ! dumr = dble(chdenr(i))*hartree_factor(i)*harcon 
        ! dumi = dimag(chdenr(i))*hartree_factor(i)*harcon
-       t = chdenr(i)*minus_i
-       rp = real(chdenr(i),double)
+       t = chdenr(i) * minus_i
+       rp = real(chdenr(i), double)
        ! Alternative would be ip = aimag(chdenr(i))
-       ip = real(t,double)
-       dumr = rp*hartree_factor(i)*harcon 
-       dumi = ip*hartree_factor(i)*harcon
+       ip = real(t, double)
+       dumr = rp * hartree_factor(i) * harcon 
+       dumi = ip * hartree_factor(i) * harcon
        ! I could probably move the gpv lower 01/06/2001 dave
        energy = energy +  &
-            grid_point_volume*dumr*rp +  &
-            grid_point_volume*dumi*ip
+                grid_point_volume*dumr * rp +  &
+                grid_point_volume*dumi * ip
        chdenr(i) = cmplx(dumr, dumi, double_cplx)
     end do
-    call fft3( potential, chdenr, size, +1 )
+    call fft3(potential, chdenr, size, +1)
     ! call scal( N_GRID_MAX, one_over_grid_point_volume, chden, 1 )
     call gsum(energy)
     energy = energy * half
     deallocate(chdenr, STAT=stat)
-    if(stat/=0) call cq_abort("Error deallocating chdenr in hartree: ",size,stat)
-    call reg_dealloc_mem(area_SC,size,type_dbl)
+    if (stat /= 0) &
+         call cq_abort("Error deallocating chdenr in hartree: ", size, stat)
+    call reg_dealloc_mem(area_SC, size, type_dbl)
     return
   end subroutine hartree
-!!***
+  !!***
 
   subroutine kerker_obsolete(resid,size,q0)
 
     use datatypes
-    use dimens, ONLY: grid_point_volume, one_over_grid_point_volume, n_grid_z
+    use dimens,        only: grid_point_volume,                        &
+                             one_over_grid_point_volume, n_grid_z
     use numbers
-    use fft_module, ONLY: fft3, hartree_factor, z_columns_node, i0, kerker_list, size_kl
-    use GenComms, ONLY: gsum, gmin, inode, cq_abort
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use global_module, ONLY: area_SC
+    use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, &
+                             kerker_list, size_kl
+    use GenComms,      only: gsum, gmin, inode, cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use global_module, only: area_SC
 
     implicit none
 
@@ -190,7 +195,7 @@ contains
     if(stat/=0) call cq_abort("Error allocating chdenr in kerker: ",size,stat)
     call reg_alloc_mem(area_SC,2*size,type_dbl)
     !write(io_lun,*) 'Calling fft3'
-    call fft3( resid, chdenr, size, -1 )
+    call fft3(resid, chdenr, size, -1)
     !write(io_lun,*) 'Called fft3'
     do i = 1, z_columns_node(inode)*n_grid_z
        if(hartree_factor(i)>very_small) then
@@ -214,7 +219,7 @@ contains
        chdenr(i0) = -chdenr(i0)*facmin
     end if
     !write(io_lun,*) 'Calling fft3'
-    call fft3( resid, chdenr, size, +1 )
+    call fft3(resid, chdenr, size, +1)
     !write(io_lun,*) 'Called fft3'
     deallocate(chdenr)
     if(stat/=0) call cq_abort("Error deallocating chdenr in kerker: ",size,stat)
@@ -223,58 +228,61 @@ contains
   end subroutine kerker_obsolete
 
 
-
-
-!!****f* hartree_module/kerker *
-!!
-!!  NAME 
-!!   kerker
-!!  USAGE
-!! 
-!!  PURPOSE 
-!!   take charge density residue from real space grid, fourier
-!!   transform and then add kerker preconditioning factor
-!!   correspodingly and fourier transform back
-!!  INPUTS
-!!   real(double), dimension(size) :: resid      - residue and results in Kerker preconditioned residue
-!!   integer                       :: size       - maximum size of resid and resid_cov array
-!!   real(double)                  :: q0         - Kerker preconditioning factor
-!!  USES
-!! 
-!!  AUTHOR
-!!   David Bowler, Lianheng Tong
-!!  CREATION DATE
-!!   2010/07/30
-!!  MODIFICATION HISTORY
-!!   2010/07/30  Lianheng Tong  
-!!     Based on kerker_obsolete written by dave. 
-!!   2011/07/28 14:20 dave and umberto
-!!     Fix problem with AND statement referencing hartree_factor with index 0
-!!  TODO
-!!
-!!  SOURCE
-!!  
-  subroutine kerker (resid, size, q0)
+  !!****f* hartree_module/kerker *
+  !!
+  !!  NAME 
+  !!   kerker
+  !!  USAGE
+  !! 
+  !!  PURPOSE 
+  !!   take charge density residue from real space grid, fourier
+  !!   transform and then add kerker preconditioning factor
+  !!   correspodingly and fourier transform back
+  !!  INPUTS
+  !!   real(double), dimension(size) :: resid  - residue and results in Kerker
+  !!                                             preconditioned  residue
+  !!   integer                       :: size   - maximum size of
+  !!                                             resid and resid_cov array
+  !!   real(double)                  :: q0     - Kerker preconditioning factor
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   David Bowler, Lianheng Tong
+  !!  CREATION DATE
+  !!   2010/07/30
+  !!  MODIFICATION HISTORY
+  !!   2010/07/30  Lianheng Tong  
+  !!     Based on kerker_obsolete written by dave. 
+  !!   2011/07/28 14:20 dave and umberto
+  !!     Fix problem with AND statement referencing hartree_factor
+  !!     with index 0
+  !!  TODO
+  !!
+  !!  SOURCE
+  !!  
+  subroutine kerker(resid, size, q0)
     
     use datatypes
-    use dimens, ONLY: grid_point_volume, one_over_grid_point_volume, n_grid_z
-    use numbers, ONLY: very_small, zero, one
-    use fft_module, ONLY: fft3, hartree_factor, z_columns_node, i0, kerker_list, size_kl
-    use GenComms, ONLY: gsum, inode, cq_abort
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use global_module, ONLY: area_SC
+    use dimens,        only: grid_point_volume,                        &
+                             one_over_grid_point_volume, n_grid_z
+    use numbers,       only: very_small, zero, one
+    use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, &
+                             kerker_list, size_kl
+    use GenComms,      only: gsum, inode, cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use global_module, only: area_SC
 
     implicit none
     
     ! Passed variables
-    integer :: size
-    real(double), dimension(size) :: resid
+    integer,      intent(in) :: size
     real(double), intent(in) :: q0
+    real(double), dimension(size) :: resid
 
     ! Local variables
-    integer :: i, stat
-    complex(double_cplx), allocatable, dimension(:) :: FR_kerker
+    integer      :: i, stat
     real(double) :: fac, q02
+    complex(double_cplx), allocatable, dimension(:) :: FR_kerker
     
     if (abs(q0) < very_small) then
        return
@@ -282,12 +290,15 @@ contains
        q02 = q0*q0
     endif
     ! FFT residue
-    allocate (FR_kerker(size), STAT=stat)
-    if (stat /= 0) call cq_abort ("hartree_module/kerker: Error allocating FR_kerker: ", size, stat)
-    call reg_alloc_mem (area_SC, size, type_dbl)
-    call fft3 (resid, FR_kerker, size, -1)
+    allocate(FR_kerker(size), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("hartree_module/kerker: Error allocating FR_kerker: ", &
+                       size, stat)
+    call reg_alloc_mem(area_SC, size, type_dbl)
+    call fft3(resid, FR_kerker, size, -1)
     do i = 1, z_columns_node(inode)*n_grid_z
-       ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q) = 0 for q = 0, calculated in fft module
+       ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q)
+       ! = 0 for q = 0, calculated in fft module
        ! excluding q=0 point, treating it separately
        if (hartree_factor(i) > very_small) then 
           fac = one / (one + hartree_factor(i)*q02)
@@ -295,76 +306,86 @@ contains
        end if
     end do
     ! do q=0 point separately (if q=0 is on one of the grid point)
-    ! note that if q=0 point is not on the discrete reciporical grid for FFT, then i0=0
-    ! q=0 is only on one of processor node need to make sure we are doing the correct point
+    ! note that if q=0 point is not on the discrete reciporical grid
+    ! for FFT, then i0=0
+    ! q=0 is only on one of processor node need to make sure we are
+    ! doing the correct point
     if ((i0 > 0)) then
        if((hartree_factor(i0) <= very_small)) then
           FR_kerker(i0) = zero
        end if
     end if
     ! FFT back
-    call fft3 (resid, FR_kerker, size, +1)
+    call fft3(resid, FR_kerker, size, +1)
     ! deallocate array
-    deallocate (FR_kerker, STAT=stat)
-    if (stat /= 0) call cq_abort ("hartree_module/kerker: Error deallocating FR_kerker: ", size, stat)
-    call reg_dealloc_mem (area_SC, size, type_dbl)
+    deallocate(FR_kerker, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("hartree_module/kerker: Error deallocating FR_kerker: ", &
+                       size, stat)
+    call reg_dealloc_mem(area_SC, size, type_dbl)
 
     return
 
   end subroutine kerker
+  !*****
 
 
-!!****f* hartree_module/wdmetric *
-!!
-!!  NAME 
-!!   wdmetric
-!!  USAGE
-!! 
-!!  PURPOSE 
-!!   take charge density residue from real space grid, fourier
-!!   transform and then add wave-dependent-metric factor correspodingly and
-!!   fourier transform back to an different array
-!!  INPUTS
-!!   real(double), dimension(size) :: resid      - residue input
-!!   real(double), dimension(size) :: resid_cov  - results covariant residue for wave-dependent-metric
-!!   integer                       :: size       - maximum size of resid and resid_cov array
-!!   real(double)                  :: q1         - wave-dependent-metric factor
-!!  USES
-!! 
-!!  AUTHOR
-!!   Lianheng Tong
-!!  CREATION DATE
-!!   2010/07/30
-!!  MODIFICATION HISTORY
-!!   2011/07/28 14:20 dave and umberto
-!!     Fix problem with AND statement referencing hartree_factor with index 0
-!!
-!!  TODO
-!!
-!!  SOURCE
-!!  
-  subroutine wdmetric (resid, resid_cov, size, q1)
+  !!****f* hartree_module/wdmetric *
+  !!
+  !!  NAME 
+  !!   wdmetric
+  !!  USAGE
+  !! 
+  !!  PURPOSE 
+  !!   take charge density residue from real space grid, fourier
+  !!   transform and then add wave-dependent-metric factor
+  !!   correspodingly and fourier transform back to an different array
+  !!  INPUTS
+  !!   real(double), dimension(size) :: resid      - residue input
+  !!   real(double), dimension(size) :: resid_cov  - results covariant
+  !!                                                 residue for wave-
+  !!                                                 dependent-metric
+  !!   integer                       :: size       - maximum size of
+  !!                                                 resid and resid_cov array
+  !!   real(double)                  :: q1         - wave-dependent-metric factor
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   Lianheng Tong
+  !!  CREATION DATE
+  !!   2010/07/30
+  !!  MODIFICATION HISTORY
+  !!   2011/07/28 14:20 dave and umberto
+  !!     Fix problem with AND statement referencing hartree_factor
+  !!     with index 0
+  !!  TODO
+  !!
+  !!  SOURCE
+  !!  
+  subroutine wdmetric(resid, resid_cov, size, q1)
     
     use datatypes
-    use dimens, ONLY: grid_point_volume, one_over_grid_point_volume, n_grid_z
-    use numbers, ONLY: very_small, zero, one
-    use fft_module, ONLY: fft3, hartree_factor, z_columns_node, i0, kerker_list, size_kl
-    use GenComms, ONLY: gsum, gmax, inode, cq_abort
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use global_module, ONLY: area_SC
+    use dimens,        only: grid_point_volume,                        &
+                             one_over_grid_point_volume, n_grid_z
+    use numbers,       only: very_small, zero, one
+    use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, &
+                             kerker_list, size_kl
+    use GenComms,      only: gsum, gmax, inode, cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use global_module, only: area_SC
 
     implicit none
     
     ! Passed variables
-    integer :: size
-    real(double), dimension(size), intent(in) :: resid
-    real(double), dimension(size), intent(out) :: resid_cov
+    integer,      intent(in) :: size
     real(double), intent(in) :: q1
+    real(double), dimension(size), intent(in)  :: resid
+    real(double), dimension(size), intent(out) :: resid_cov
 
     ! Local variables
-    integer :: i, stat
-    complex(double_cplx), allocatable, dimension(:) :: FR_wdmetric
+    integer      :: i, stat
     real(double) :: fac, facmax, q12
+    complex(double_cplx), allocatable, dimension(:) :: FR_wdmetric
     
     if (abs (q1) < very_small) then
        ! copy resid to resid_cov 
@@ -375,35 +396,42 @@ contains
     end if
     facmax = zero
     ! FFT residue
-    allocate (FR_wdmetric(size), STAT=stat)
-    if (stat /= 0) call cq_abort ("hartree_module/wdmetric: Error allocating FR_wdmetric: ", size, stat)
-    call reg_alloc_mem (area_SC, size, type_dbl)
-    call fft3 (resid, FR_wdmetric, size, -1)
+    allocate(FR_wdmetric(size), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("hartree_module/wdmetric: Error allocating FR_wdmetric: ",&
+                       size, stat)
+    call reg_alloc_mem(area_SC, size, type_dbl)
+    call fft3(resid, FR_wdmetric, size, -1)
     do i = 1, z_columns_node(inode)*n_grid_z
-       ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q) = 0 for q = 0, calculated in fft module
-       ! excluding q=0 point, treating it separately
+       ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q)
+       ! = 0 for q = 0, calculated in fft module excluding q=0 point,
+       ! treating it separately
        if (hartree_factor(i) > very_small) then 
           fac = one + hartree_factor(i)*q12
-          facmax = max (fac, facmax)
+          facmax = max(fac, facmax)
           FR_wdmetric(i) = FR_wdmetric(i)*fac
        end if
     end do
     ! find the global maximum for fac
-    call gmax (facmax)
+    call gmax(facmax)
     ! do q=0 point separately (if q=0 is on one of the grid point)
-    ! note that if q=0 point is not on the discrete reciporical grid for FFT, then i0=0
-    ! q=0 is only on one of processor node need to make sure we are doing the correct point
+    ! note that if q=0 point is not on the discrete reciporical grid
+    ! for FFT, then i0=0
+    ! q=0 is only on one of processor node need to make sure we are
+    ! doing the correct point
     if ((i0 > 0)) then
        if((hartree_factor(i0) <= very_small)) then
-          FR_wdmetric(i0) = FR_wdmetric(i0)*facmax
+          FR_wdmetric(i0) = FR_wdmetric(i0) * facmax
        end if
     end if
     ! FFT back
-    call fft3 (resid_cov, FR_wdmetric, size, +1)
+    call fft3(resid_cov, FR_wdmetric, size, +1)
     ! deallocate arrays
-    deallocate (FR_wdmetric, STAT=stat)
-    if (stat /= 0) call cq_abort ("hartree_module/wdmetric: Error deallocating FR_wdmetric: ", size, stat)
-    call reg_dealloc_mem (area_SC, size, type_dbl)
+    deallocate(FR_wdmetric, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("hartree_module/wdmetric: Error deallocating FR_wdmetric: ",&
+                       size, stat)
+    call reg_dealloc_mem(area_SC, size, type_dbl)
 
     return
 
@@ -411,67 +439,73 @@ contains
 
 
 
-!!****f* hartree_module/kerker_and_wdmetric *
-!!
-!!  NAME 
-!!   kerker_and_wdmetric
-!!  USAGE
-!! 
-!!  PURPOSE 
-!!   take charge density residue from real space grid, fourier
-!!   transform and then add kerker preconditioning and wave-dependent-metric
-!!   factor correspodingly (stored to a different array) and fourier
-!!   transform back
-!!  INPUTS
-!!   real(double), dimension(size) :: resid      - residue and results in Kerker preconditioned residue
-!!   real(double), dimension(size) :: resid_cov  - results covariant residue for wave-dependent-metric
-!!   integer                       :: size       - maximum size of resid and resid_cov array
-!!   real(double)                  :: q0         - Kerker preconditioning factor
-!!   real(double)                  :: q1         - wave-dependent-metric factor
-!!  USES
-!! 
-!!  AUTHOR
-!!   Lianheng Tong
-!!  CREATION DATE
-!!   2010/07/30
-!!  MODIFICATION HISTORY
-!!   2011/07/28 14:20 dave and umberto
-!!     Fix problem with AND statement referencing hartree_factor with index 0
-!!
-!!  TODO
-!!
-!!  SOURCE
-!!  
-  subroutine kerker_and_wdmetric (resid, resid_cov, size, q0, q1)
+  !!****f* hartree_module/kerker_and_wdmetric *
+  !!
+  !!  NAME 
+  !!   kerker_and_wdmetric
+  !!  USAGE
+  !! 
+  !!  PURPOSE 
+  !!   take charge density residue from real space grid, fourier
+  !!   transform and then add kerker preconditioning and wave-dependent-metric
+  !!   factor correspodingly (stored to a different array) and fourier
+  !!   transform back
+  !!  INPUTS
+  !!   real(double), dimension(size) :: resid      - residue and results
+  !!                                                 in Kerker preconditioned
+  !!                                                 residue
+  !!   real(double), dimension(size) :: resid_cov  - results covariant residue
+  !!                                                 for wave-dependent-metric
+  !!   integer                       :: size       - maximum size of resid and
+  !!                                                 resid_cov array
+  !!   real(double)                  :: q0         - Kerker preconditioning factor
+  !!   real(double)                  :: q1         - wave-dependent-metric factor
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   Lianheng Tong
+  !!  CREATION DATE
+  !!   2010/07/30
+  !!  MODIFICATION HISTORY
+  !!   2011/07/28 14:20 dave and umberto
+  !!     Fix problem with AND statement referencing hartree_factor
+  !!     with index 0
+  !!  TODO
+  !!
+  !!  SOURCE
+  !!  
+  subroutine kerker_and_wdmetric(resid, resid_cov, size, q0, q1)
     
     use datatypes
-    use dimens, ONLY: grid_point_volume, one_over_grid_point_volume, n_grid_z
-    use numbers, ONLY: very_small, zero, one
-    use fft_module, ONLY: fft3, hartree_factor, z_columns_node, i0, kerker_list, size_kl
-    use GenComms, ONLY: gsum, gmax, inode, cq_abort
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use global_module, ONLY: area_SC
+    use dimens,        only: grid_point_volume,                        &
+                             one_over_grid_point_volume, n_grid_z
+    use numbers,       only: very_small, zero, one
+    use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, &
+                             kerker_list, size_kl
+    use GenComms,      only: gsum, gmax, inode, cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use global_module, only: area_SC
 
     implicit none
     
     ! Passed variables
-    integer :: size
-    real(double), dimension(size) :: resid
-    real(double), dimension(size), intent(out) :: resid_cov
+    integer,      intent(in) :: size
     real(double), intent(in) :: q0
     real(double), intent(in) :: q1
+    real(double), dimension(size) :: resid
+    real(double), dimension(size), intent(out) :: resid_cov
 
     ! Local variables
-    integer :: i, stat
-    complex(double_cplx), allocatable, dimension(:) :: FR_kerker, FR_wdmetric
+    integer      :: i, stat
     real(double) :: fac, fac2, facmax, q02, q12
+    complex(double_cplx), allocatable, dimension(:) :: FR_kerker, FR_wdmetric
     
     if (abs(q0) < very_small) then
        return
     else
        q02 = q0*q0
     endif
-    if (abs (q1) < very_small) then
+    if (abs(q1) < very_small) then
        ! copy resid to resid_cov 
        resid_cov = resid
        return
@@ -480,29 +514,35 @@ contains
     end if
     facmax = zero
     ! FFT residue
-    allocate (FR_kerker(size), FR_wdmetric(size), STAT=stat)
-    if (stat /= 0) call cq_abort ("hartree_module/kerker_and_wdmetric: Error allocating FR_kerker, FR_wdmetric: ", size, stat)
-    call reg_alloc_mem (area_SC, 2*size, type_dbl)
-    call fft3 (resid, FR_kerker, size, -1)
+    allocate(FR_kerker(size), FR_wdmetric(size), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("hartree_module/kerker_and_wdmetric: Error &
+                        &allocating FR_kerker, FR_wdmetric: ",    &
+                       size, stat)
+    call reg_alloc_mem(area_SC, 2*size, type_dbl)
+    call fft3(resid, FR_kerker, size, -1)
     FR_wdmetric = FR_kerker
     do i = 1, z_columns_node(inode)*n_grid_z
-       ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q) = 0 for q = 0, calculated in fft module
-       ! excluding q=0 point, treating it separately
+       ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q)
+       ! = 0 for q = 0, calculated in fft module excluding q=0 point,
+       ! treating it separately
        if (hartree_factor(i) > very_small) then 
           ! Kerker factor
           fac = one / (one + hartree_factor(i)*q02)
           FR_kerker(i) = FR_kerker(i)*fac
           ! wave-dependent-metric factor
           fac2 = one + hartree_factor(i)*q12
-          facmax = max (fac2, facmax)
+          facmax = max(fac2, facmax)
           FR_wdmetric(i) = FR_wdmetric(i)*fac2
        end if
     end do
     ! find the global maximum for fac
-    call gmax (facmax)
+    call gmax(facmax)
     ! do q=0 point separately (if q=0 is on one of the grid point)
-    ! note that if q=0 point is not on the discrete reciporical grid for FFT, then i0=0
-    ! q=0 is only on one of processor node need to make sure we are doing the correct point
+    ! note that if q=0 point is not on the discrete reciporical grid
+    ! for FFT, then i0=0
+    ! q=0 is only on one of processor node need to make sure we are
+    ! doing the correct point
     if ((i0 > 0)) then
        if((hartree_factor(i0) <= very_small)) then
           FR_kerker(i0) = zero
@@ -510,20 +550,18 @@ contains
        end if
     end if
     ! FFT back
-    call fft3 (resid, FR_kerker, size, +1)
-    call fft3 (resid_cov, FR_wdmetric, size, +1)
+    call fft3(resid, FR_kerker, size, +1)
+    call fft3(resid_cov, FR_wdmetric, size, +1)
     ! deallocate arrays
-    deallocate (FR_kerker, FR_wdmetric, STAT=stat)
-    if (stat /= 0) call cq_abort ("hartree_module/kerker_and_wdmetric: Error deallocating FR_kerker, FR_wdmetric: ", &
-         size, stat)
-    call reg_dealloc_mem (area_SC, 2*size, type_dbl)
+    deallocate(FR_kerker, FR_wdmetric, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("hartree_module/kerker_and_wdmetric: Error &
+                        &deallocating FR_kerker, FR_wdmetric: ",  &
+                        size, stat)
+    call reg_dealloc_mem(area_SC, 2*size, type_dbl)
 
     return
 
   end subroutine kerker_and_wdmetric
-
-  
-
-
 
 end module hartree_module

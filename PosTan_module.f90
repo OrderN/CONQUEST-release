@@ -42,15 +42,16 @@ module PosTan
   real(double), parameter :: eprec = 1.0e-12_double
   real(double), parameter :: cscale = 0.01_double
 
-  real(double) :: PulayE(max_iters),PulayR(max_iters)
-  real(double) :: SCE(max_iters),SCR(max_iters)
-  real(double) :: SupFnE(max_iters),SupFnR(max_iters)
+  real(double) :: PulayE(max_iters), PulayR(max_iters)
+  real(double) :: SCE(max_iters), SCR(max_iters)
+  real(double) :: SupFnE(max_iters), SupFnR(max_iters)
   real(double) :: PulayC, PulayBeta
-  real(double) :: SCC,SCBeta
+  real(double) :: SCC, SCBeta
   real(double) :: SupFnC, SupFnBeta
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id$"
+  character(len=80), save, private :: &
+       RCSid = "$Id$"
 !!***
 
 contains

@@ -70,17 +70,30 @@
 !!    Flags for cDFT
 !!   2011/12/12 17:26 dave
 !!    Flag for analytic blip integrals
+!!   2012/03/07 L.Tong
+!!    Added some more flags for spin polarisation, and uses numbers module
+!!   2012/03/27 L.Tong
+!!   - Added variable nspin
+!!   - Added variable ne_spin_in_cell(nspin). This replaces
+!!     ne_up_in_cell and ne_dn_in_dell
+!!   - Added variable spin_factor
+!!   - Default values are:
+!!     nspin = 1
+!!     spin_factor = two
+!!   - removed now obsolete flag: flag_spin_polarisation
 !!  SOURCE
 !!
 module global_module
 
   ! Module usage
   use datatypes
+  use numbers
 
   implicit none
 
   ! RCS tag for object file identification 
-  character(len=80), save, private :: RCSid = "$Id$"
+  character(len=80), save, private :: &
+       RCSid = "$Id$"
 
   integer :: iprint                 ! Level of output
   integer :: io_lun                 ! Output unit
@@ -183,9 +196,10 @@ module global_module
   integer, parameter :: area_pseudo = 10
   integer, parameter :: area_basis = 11
   integer, parameter :: area_integn = 12
-  integer :: iprint_init, iprint_mat, iprint_ops, iprint_DM, iprint_SC, iprint_minE, &
-             iprint_MD, iprint_index, iprint_gen, iprint_pseudo, iprint_basis, &
-             iprint_intgn, iprint_time
+  integer :: iprint_init, iprint_mat, iprint_ops, iprint_DM, &
+             iprint_SC, iprint_minE, iprint_MD, iprint_index, &
+             iprint_gen, iprint_pseudo, iprint_basis, iprint_intgn, &
+             iprint_time
 
   integer, parameter :: IPRINT_TIME_THRES0 = 0  ! Always print
   integer, parameter :: IPRINT_TIME_THRES1 = 2  ! Important local timers
@@ -196,13 +210,15 @@ module global_module
   logical :: flag_pcc_global = .false.
 
   !! For Spin polarised calculations (L.Tong)
-  ! Logical flag controlling spin polarized run 
-  logical :: flag_spin_polarisation
+  ! default to spin nonpolarised calculation
+  ! number of spin channels
+  integer      :: nspin = 1
+  real(double) :: spin_factor = two
   ! Logical flag determine if spin populations are fixed (fixed magnetic moment) 
-  logical :: flag_fix_spin_population
-  ! fixed electron numbers for different spin channels, used when
-  ! flag_fix_spin_population is true
-  real(double) :: ne_up_in_cell, ne_dn_in_cell
+  logical      :: flag_fix_spin_population = .false.
+  ! fixed electron numbers for different spin channels. This is used
+  ! even for spin non-polarised case
+  real(double), dimension(2) :: ne_spin_in_cell ! 1 = up, 2 = down
 
   ! For DFT-D2
   logical :: flag_dft_d2

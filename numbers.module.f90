@@ -34,7 +34,7 @@
 !!   2011/11/13 L.Tong
 !!    Added eight and twelve
 !!   2012/02/26 L.Tong
-!!    Added minus_one and nine
+!!    Added minus_one, nine and ten
 !!  SOURCE
 !!
 module numbers
@@ -44,7 +44,8 @@ module numbers
   implicit none      
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id$"
+  character(len=80), save, private :: &
+       RCSid = "$Id$"
 
   real(double), parameter :: zero = 0.0_double 
   real(double), parameter :: one = 1.0_double 
@@ -56,9 +57,12 @@ module numbers
   real(double), parameter :: seven = 7.0_double
   real(double), parameter :: eight = 8.0_double
   real(double), parameter :: nine = 9.0_double
+  real(double), parameter :: ten = 10.0_double
+  real(double), parameter :: eleven = 11.0_double
   real(double), parameter :: twelve = 12.0_double
   real(double), parameter :: fifteen = 15.0_double
   real(double), parameter :: sixteen = 16.0_double
+  real(double), parameter :: eighteen = 18.0_double
   real(double), parameter :: minus_one = -1.0_double
   real(double), parameter :: minus_two = -2.0_double
   real(double), parameter :: minus_four = -4.0_double 

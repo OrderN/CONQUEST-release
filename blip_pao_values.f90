@@ -25,9 +25,10 @@
 !!   22/6/02
 !!  MODIFICATION HISTORY
 !!   12/08/2002 mjg
-!!    i) All pao tables changed so that enumeration starts from one not zero
-!!    ii) All radial tables changed so that the expectation is that they are divided by
-!!    r**l (in line with Siesta radial tables and spherical harmonic conventions)
+!!    i)  All pao tables changed so that enumeration starts from one not zero
+!!    ii) All radial tables changed so that the expectation is that
+!!        they are divided by r**l (in line with Siesta radial tables
+!!        and spherical harmonic conventions)
 !!   2008/06/01 ast
 !!    Added timers
 !!  SOURCE
@@ -39,7 +40,8 @@ module blip_pao_values
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
-  character(len=80), private :: RCSid = "$Id$"
+  character(len=80), private :: &
+       RCSid = "$Id$"
 !!***
 
 contains
@@ -399,12 +401,13 @@ contains
 !!   2008/06/01 ast
 !!    Added timers
 !!  SOURCE
-  subroutine f3_value(sym_type,n_sp,n_am,n_zeta,nu_int,&
-       &delta_ig,n_blip,bv,z0,fv3)
+  subroutine f3_value(sym_type, n_sp, n_am, n_zeta, nu_int, delta_ig, &
+                      n_blip, bv, z0, fv3)
     use datatypes
     use numbers
-    use GenComms, ONLY: cq_abort
-    use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis
+    use GenComms,               only: cq_abort
+    use timer_stdclocks_module, only: start_timer, stop_timer, &
+                                      tmr_std_basis
 
     implicit none
 
