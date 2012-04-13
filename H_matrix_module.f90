@@ -1867,7 +1867,11 @@ contains
           rho_spin(spin) = density(n,spin)
        end do
        rho = rho_spin(1) + rho_spin(nspin)
-       zeta = (rho_spin(1) - rho_spin(nspin)) / rho
+       if (rho > very_small) then
+          zeta = (rho_spin(1) - rho_spin(nspin)) / rho
+       else
+          zeta = zero
+       end if
        
        ! find the radius of hole
        if (rho > very_small) then
