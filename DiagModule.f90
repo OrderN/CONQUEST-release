@@ -2270,7 +2270,7 @@ contains
           if (thisElec(spin) < electrons(spin)) then ! found a lower bound
 
              if (iprint_DM >= 4 .and. (inode == ionode)) &
-                  write (io_lun, 3) myid, Ef(spin)
+                  write (io_lun, 4) myid, Ef(spin)
              lowEf(spin) = Ef(spin)
              lowElec(spin) = thisElec(spin)
              highEf(spin) = lowEf(spin) + incEf(spin)
@@ -2332,7 +2332,7 @@ contains
 
           ! Fill the bands for the first (electrons-NElec_less) electrons
           if (NElec_less >= electrons(spin)) then
-             if (inode == ionode) write (io_lun, 7), myid, spin
+             if (inode == ionode) write (io_lun, 7) myid, spin
              NELec_less = electrons(spin)
           end if
           thisElec(spin) = zero
@@ -2369,7 +2369,7 @@ contains
           ! now that we have a lower-bound, find upper bound
           ! get gaussian width
           if (gaussian_height >= one) then
-             if (myid == 0) write (io_lun, 9)
+             if (myid == 0) write (io_lun, 9) myid
              gaussian_height = 0.1_double
           end if
           gaussian_width = two * sqrt(-log(gaussian_height)) * kT
@@ -2542,7 +2542,7 @@ contains
           end do
        else ! found upper bound
           if (iprint_DM >= 4 .and. inode == ionode) &
-               write (io_lun, 4) myid, Ef(1)
+               write (io_lun, 6) myid, Ef(1)
           highEf(:) = Ef(:)
           highElec = thisElec
           lowEf(:) = highEf(:) - incEf(:)

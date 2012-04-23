@@ -1011,8 +1011,8 @@ contains
 
     do ss = ss_start, ss_end
  
-      if (iprint_mat > 3 .and. nspin == 2) then
-          if (inode == ionode) write (io_lun, *) 'For spin = ', ss, ":" 
+       if (iprint_mat > 3 .and. nspin == 2) then
+          if (inode == ionode) write (io_lun, '(1x,"For spin = ",i1," :")') ss
        end if
        call matrix_product(matL(ss), matS, matLS(ss), mult(L_S_LS))
        if (iprint_mat > 3) then
@@ -1462,14 +1462,18 @@ contains
     implicit none
 
     integer :: stat, i, spin
+    logical :: allocated_tags = .false.
 
     ! Allocate spin dependent matrices
-    allocate(matH(nspin), matL(nspin), matLS(nspin), matSL(nspin), &
-             matK(nspin), matphi(nspin), matM12(nspin), matM4(nspin), &
-             matU(nspin), matUT(nspin), matdH(nspin), STAT=stat)
-    if (stat /= 0) &
-         call cq_abort('associate_matrices: failed to allocate spin &
-                        &depdendent matrix tags', nspin, stat)
+    if (.not. allocated_tags) then
+       allocate(matH(nspin), matL(nspin), matLS(nspin), matSL(nspin),    &
+                matK(nspin), matphi(nspin), matM12(nspin), matM4(nspin), &
+                matU(nspin), matUT(nspin), matdH(nspin), STAT=stat)
+       if (stat /= 0) &
+            call cq_abort('associate_matrices: failed to allocate spin &
+                           &depdendent matrix tags', nspin, stat)
+       allocated_tags = .true.
+    end if
 
     ! Assign indices for the matrices that we need
     matS      = 1

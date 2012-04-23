@@ -164,7 +164,7 @@ contains
                 
              end if
           end do
-          if (done(1) .eqv. .true. .and. done(nspin) .eqv. .true.) then
+          if (done(1) .and. done(nspin)) then
              if (inode == ionode .and. iprint_DM > 0) then
                 do spin = 1, nspin
                    write (io_lun, 2) spin, c_old(spin), oldE(spin),&
