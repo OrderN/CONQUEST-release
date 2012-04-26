@@ -225,7 +225,7 @@ contains
     ! now we need to accumulate the 'type 1' gradient of the non-local
     ! energy (see notes, 3/1/97)
     if (non_local) call get_non_local_gradient(H_on_supportfns(1), inode, ionode)
-    
+
     ! now we need to transform this into the blip basis first, apply
     ! the scaling for grid size,
     call scal(gridfunctions(H_on_supportfns(1))%size, grid_point_volume,&
@@ -784,6 +784,8 @@ contains
   !!   2012/03/22 L.Tong
   !!   - Changed spin implementation
   !!   - Changed this_data_K to a 2D array.
+  !!   2012/04/26 17:04 dave
+  !!    Small bug fix in indexing of this_data_K
   !!  SOURCE
   !!
   subroutine get_onsite_KE_gradient(this_data_blip, this_data_K, &
@@ -804,7 +806,7 @@ contains
     integer                :: this_nsf, spec
     type(support_function) :: this_data_blip, this_blip_grad
     ! N.B. Here NSF is for ONE site only so is OK
-    real(double), dimension(:,:) :: this_data_K
+    real(double), dimension(this_nsf,this_nsf) :: this_data_K
 
     ! Local Variables
     integer, parameter :: MAX_D=3
@@ -856,7 +858,7 @@ contains
                    work1(nsf1 + at) = zero
                    do nsf2 = 1, this_nsf
                       work1(nsf1 + at) = work1(nsf1 + at) + &
-                           this_data_K((nsf2 - 1),nsf1) *&
+                           this_data_K(nsf2,nsf1) *&
                            this_data_blip%supp_func(nsf2)%coefficients(l)
                    enddo
                 enddo
@@ -1017,6 +1019,8 @@ contains
   !!    Added spin polarisation
   !!   2012/03/22 L.Tong
   !!   - Changed spin implementation
+  !!   2012/04/26 17:04 dave
+  !!    Small bug fix in indexing of this_data_M
   !!  SOURCE
   !!
   subroutine get_onsite_S_gradient(this_data_blip, this_data_M, &
@@ -1036,7 +1040,7 @@ contains
     ! Passed Variables
     integer :: this_nsf, spec
     ! N.B. Here NSF is for ONE site only so is OK
-    real(double) :: this_data_M(this_nsf*this_nsf)
+    real(double) :: this_data_M(this_nsf,this_nsf)
     type(support_function) :: this_data_blip, this_blip_grad
 
     ! Local Variables
@@ -1088,7 +1092,7 @@ contains
                    work1(nsf1 + at) = zero
                    do nsf2 = 1, this_nsf
                       work1(nsf1 + at) = work1(nsf1 + at) + &
-                           this_data_M((nsf2-1) * this_nsf + nsf1) * &
+                           this_data_M(nsf2,nsf1) * &
                            this_data_blip%supp_func(nsf2)%coefficients(l)
                    enddo
                 enddo

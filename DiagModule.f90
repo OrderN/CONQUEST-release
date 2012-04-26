@@ -2425,7 +2425,7 @@ contains
 1   format(10x, 'Proc: ', i5, ' findFermi_fixspin: searching for Ne: ' f12.5)
 2   format(10x, 'Proc: ', i5, &
          ' findFermi_fixspin: searching for Ne (up, dn, total): ' 3f12.5)
-3   format(10x, 'Proc: ', i5, ' findFermi_fixspin: Finding Ef for spin = ', i1)
+3   format(10x, 'Proc: ', i5, ' findFermi_fixspin: Finding Ef for spin = ', f12.5)
 4   format(10x, 'Proc: ', i5, ' findFermi_fixspin: found lower bound', f12.5)
 5   format(10x, 'Proc: ', i5, ' findFermi_fixspin: level, Ne: ', 2f12.5)
 6   format(10x, 'Proc: ', i5, ' findFermi_fixspin: found upper bound', f12.5)
