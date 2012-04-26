@@ -42,12 +42,14 @@
 !!    Finalised conversion of matrix indexing to allocatable
 !!   2008/03/12 06:12 dave
 !!    Added max_range parameter to find longest range matrix
+!!   2012/01/18 16:55 dave
+!!    Added blip transfer type for analytic blip integration
 !!  SOURCE
 !!
 module matrix_data
 
   use datatypes
-  use matrix_module, ONLY: matrix, matrix_halo ! Think about this - how do we want to arrange ?
+  use matrix_module, ONLY: matrix, matrix_halo, blip_transfer ! Think about this - how do we want to arrange ?
   
   implicit none
   save
@@ -88,6 +90,8 @@ module matrix_data
   integer, parameter :: HLrange = 20
 
   integer :: max_range ! Indexes matrix with largest range
+
+  type(blip_transfer) :: blip_trans
 !!***
 
 !!****s* multiply_module/matrix_pointer *

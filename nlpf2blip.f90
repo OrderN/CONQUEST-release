@@ -969,30 +969,23 @@ contains
        xmax = min(two,two+dx+real(nbg,double))
        n = floor((xmax-xmin)/delta) + 1
        sum = zero
-       !write(55,*) '# ',nbg,xmin,xmax,n
        do i=1,n
           x = xmin + real(i-1,double)*delta
           sum = sum + blipf(x)*blipf(x-dx-real(nbg,double))
-          !write(60+nbg,*) x,blip(x),blip(x-dx-real(nbg,double))
        end do
        FAC(nbg,1) = delta*sum
-       !write(55,*) nbg,FAC(nbg,1)
     end do
-    !call flush(55)
-    !call flush(60+nbg)!56)
     ! y
     do nbg = -4,4
        xmin = max(-two,-two+dy+real(nbg,double))
        xmax = min(two,two+dy+real(nbg,double))
        n = floor((xmax-xmin)/delta) + 1
        sum = zero
-       !write(55,*) '# ',nbg,xmin,xmax,n
        do i=1,n
           x = xmin + real(i-1,double)*delta
           sum = sum + blipf(x)*blipf(x-dy-real(nbg,double))
        end do
        FAC(nbg,2) = delta*sum
-       !write(55,*) nbg,FAC(nbg,1)
     end do
     ! z
     do nbg = -4,4
@@ -1000,13 +993,11 @@ contains
        xmax = min(two,two+dz+real(nbg,double))
        n = floor((xmax-xmin)/delta) + 1
        sum = zero
-       !write(55,*) '# ',nbg,xmin,xmax,n
        do i=1,n
           x = xmin + real(i-1,double)*delta
           sum = sum + blipf(x)*blipf(x-dz-real(nbg,double))
        end do
        FAC(nbg,3) = delta*sum
-       !write(55,*) nbg,FAC(nbg,1)
     end do
     return
   end subroutine do_blip_integrals
@@ -1029,17 +1020,12 @@ contains
        xmax = min(two,two+dx+real(nbg,double))
        n = floor((xmax-xmin)/delta) + 1
        sum = zero
-       !write(55,*) '# ',nbg,xmin,xmax
        do i=1,n
           x = xmin + real(i-1,double)*delta
           sum = sum + dblipf(x)*blipf(x-dx-real(nbg,double))
-          !write(60+nbg,*) x,blip(x),blip(x-dx-real(nbg,double))
        end do
        FAC(nbg,1) = delta*sum
-       !write(55,*) nbg,FAC(nbg,1)
     end do
-    !call flush(55)
-    !call flush(60+nbg)!56)
     ! y
     do nbg = -4,4
        xmin = max(-two,-two+dy+real(nbg,double))
@@ -1085,17 +1071,12 @@ contains
        xmax = min(two,two+dx+real(nbg,double))
        n = floor((xmax-xmin)/delta) + 1
        sum = zero
-       !write(55,*) '# ',nbg,xmin,xmax
        do i=1,n
           x = xmin + real(i-1,double)*delta
           sum = sum + d2blipf(x)*blipf(x-dx-real(nbg,double))
-          !write(60+nbg,*) x,blip(x),blip(x-dx-real(nbg,double))
        end do
-       FAC(nbg,1) = -delta*sum
-       !write(55,*) nbg,FAC(nbg,1)
+       FAC(nbg,1) = delta*sum
     end do
-    !call flush(55)
-    !call flush(60+nbg)!56)
     ! y
     do nbg = -4,4
        xmin = max(-two,-two+dy+real(nbg,double))
@@ -1106,7 +1087,7 @@ contains
           x = xmin + real(i-1,double)*delta
           sum = sum + d2blipf(x)*blipf(x-dy-real(nbg,double))
        end do
-       FAC(nbg,2) = -delta*sum
+       FAC(nbg,2) = delta*sum
     end do
     ! z
     do nbg = -4,4
@@ -1118,12 +1099,14 @@ contains
           x = xmin + real(i-1,double)*delta
           sum = sum + d2blipf(x)*blipf(x-dz-real(nbg,double))
        end do
-       FAC(nbg,3) = -delta*sum
+       FAC(nbg,3) = delta*sum
     end do
     return
   end subroutine do_d2blip_integrals
 
 
+! NB The minus sign on delta*sum is there because we should really differentiate
+! the blip on the atom but we can't because this becomes discontinuous
   subroutine do_d3blip_integrals(FAC, dx, dy, dz)
 
     use datatypes
@@ -1134,37 +1117,30 @@ contains
 
     integer :: i, n, nbg
 
-    delta = 0.0001_double
+    delta = 0.001_double
     ! x 
     do nbg = -4,4
        xmin = max(-two,-two+dx+real(nbg,double))
        xmax = min(two,two+dx+real(nbg,double))
        n = floor((xmax-xmin)/delta) + 1
        sum = zero
-       !write(55,*) '# ',nbg,xmin,xmax,n
        do i=1,n
           x = xmin + real(i-1,double)*delta
           sum = sum + d2blipf(x)*dblipf(x-dx-real(nbg,double))
-          !write(60+nbg,*) x,blip(x),blip(x-dx-real(nbg,double))
        end do
        FAC(nbg,1) = -delta*sum
-       !write(55,*) nbg,FAC(nbg,1)
     end do
-    !call flush(55)
-    !call flush(60+nbg)!56)
     ! y
     do nbg = -4,4
        xmin = max(-two,-two+dy+real(nbg,double))
        xmax = min(two,two+dy+real(nbg,double))
        n = floor((xmax-xmin)/delta) + 1
        sum = zero
-       !write(55,*) '# ',nbg,xmin,xmax,n
        do i=1,n
           x = xmin + real(i-1,double)*delta
           sum = sum + d2blipf(x)*dblipf(x-dy-real(nbg,double))
        end do
        FAC(nbg,2) = -delta*sum
-       !write(55,*) nbg,FAC(nbg,1)
     end do
     ! z
     do nbg = -4,4
@@ -1172,13 +1148,11 @@ contains
        xmax = min(two,two+dz+real(nbg,double))
        n = floor((xmax-xmin)/delta) + 1
        sum = zero
-       !write(55,*) '# ',nbg,xmin,xmax,n
        do i=1,n
           x = xmin + real(i-1,double)*delta
           sum = sum + d2blipf(x)*dblipf(x-dz-real(nbg,double))
        end do
        FAC(nbg,3) = -delta*sum
-       !write(55,*) nbg,FAC(nbg,1)
     end do
     return
   end subroutine do_d3blip_integrals

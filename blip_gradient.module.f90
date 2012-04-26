@@ -26,6 +26,8 @@
 !!    Added timers
 !!   26/10/09 drb
 !!    Various changes to allow selection of on-site analytics or not
+!!   2012/04/02 17:15 dave
+!!    Changes for analytic S and KE matrices
 !!  SOURCE
 !!
 module blip_gradient
@@ -94,6 +96,8 @@ contains
   !!    Added spin polarisation
   !!   2012/03/22 L.Tong
   !!   - changed spin implementation
+  !!   2012/04/26 16:15 dave
+  !!    Changes for analytic S and KE matrices
   !!  SOURCE
   !!
   subroutine get_blip_gradient(inode, ionode)
@@ -109,7 +113,7 @@ contains
     use GenBlas,                     only: scal, copy
     use pseudopotential_data,        only: non_local
     use support_spec_format,         only: supports_on_atom,               &
-                                           support_gradient
+                                           support_gradient, grad_coeff_array
     use species_module,              only: nsf_species
     use set_bucket_module,           only: rem_bucket
     use calc_matrix_elements_module, only: act_on_vectors_new
@@ -120,7 +124,7 @@ contains
                                            flag_onsite_blip_ana,           &
                                            nspin, spin_factor,             &
                                            area_minE,                      &
-                                           flag_analytic_blip_int
+                                           flag_analytic_blip_int, PhiPulay
     use functions_on_grid,           only: H_on_supportfns, gridfunctions, &
                                            fn_on_grid,                     &
                                            allocate_temp_fn_on_grid,       &
@@ -161,7 +165,7 @@ contains
     ! This returns the support_gradient in workspace_support
     WhichPulay = BothPulay
     ! Do on-site if we have this
-    if (flag_onsite_blip_ana) then
+    if ((.NOT.flag_analytic_blip_int).AND.flag_onsite_blip_ana) then
        i = 1
        this_nsf = nsf_species(bundle%species(i))
 
@@ -215,13 +219,12 @@ contains
                           stat)
        call reg_dealloc_mem(area_minE, this_nsf * this_nsf * nspin, type_dbl)
     end if
-
+    if(flag_analytic_blip_int) WhichPulay = PhiPulay
     ! use H_on_supportfns(1) as work storage for support gradient
     call get_support_gradient(H_on_supportfns(1), inode, ionode)
     ! now we need to accumulate the 'type 1' gradient of the non-local
     ! energy (see notes, 3/1/97)
-    if (non_local .and. (.not. flag_analytic_blip_int)) &
-         call get_non_local_gradient(H_on_supportfns(1), inode, ionode)
+    if (non_local) call get_non_local_gradient(H_on_supportfns(1), inode, ionode)
     
     ! now we need to transform this into the blip basis first, apply
     ! the scaling for grid size,
@@ -232,12 +235,9 @@ contains
     call inverse_blip_transform_new(inode-1, H_on_supportfns(1), &
                                     support_gradient, bundle%n_prim)
 
-    if (non_local .and. (flag_analytic_blip_int)) &
-         call get_non_local_gradient(H_on_supportfns(1), inode, ionode)
-    
     ! Kinetic Energy; first, the change in onsite T matrix elements,
     ! and as we do so, clear the diagonal blocks of data K
-    if (flag_onsite_blip_ana) then
+    if (flag_onsite_blip_ana.AND.(.NOT.flag_analytic_blip_int)) then
        i = 1
        this_nsf = nsf_species(bundle%species(i))
 
@@ -311,25 +311,27 @@ contains
     ! equivalent to removing the onsite parts of T, and somewhat easier!
     !
     ! first, for x: do the blip_grad transform into workspace_support 
-    tmp_fn = allocate_temp_fn_on_grid(sf)
-    do direction = 1, 3 
-       call blip_to_grad_new(inode-1, direction, H_on_supportfns(1))
-       ! now act with K - result into workspace2_support
-       gridfunctions(tmp_fn)%griddata = zero
-       do spin = 1, nspin
-          ! accumulate the contribution from matK(spin) to tmp_fn
-          call act_on_vectors_new(inode-1, rem_bucket(3), matK(spin), &
-                                  tmp_fn, H_on_supportfns(1))
-       end do
-       ! apply the appropriate scaling factor
-       call scal(gridfunctions(tmp_fn)%size,        &
-                 - spin_factor * grid_point_volume, &
-                 gridfunctions(tmp_fn)%griddata, 1)
+    if(.NOT.flag_analytic_blip_int) then
+       tmp_fn = allocate_temp_fn_on_grid(sf)
+       do direction = 1, 3 
+          call blip_to_grad_new(inode-1, direction, H_on_supportfns(1))
+          ! now act with K - result into workspace2_support
+          gridfunctions(tmp_fn)%griddata = zero
+          do spin = 1, nspin
+             ! accumulate the contribution from matK(spin) to tmp_fn
+             call act_on_vectors_new(inode-1, rem_bucket(3), matK(spin), &
+                  tmp_fn, H_on_supportfns(1))
+          end do
+          ! apply the appropriate scaling factor
+          call scal(gridfunctions(tmp_fn)%size,        &
+               - spin_factor * grid_point_volume, &
+               gridfunctions(tmp_fn)%griddata, 1)
 
-       call inverse_blip_to_grad_new(inode-1, direction, tmp_fn, &
-                                     support_gradient, bundle%n_prim)
-    end do
-    call free_temp_fn_on_grid(tmp_fn)
+          call inverse_blip_to_grad_new(inode-1, direction, tmp_fn, &
+               support_gradient, bundle%n_prim)
+       end do
+       call free_temp_fn_on_grid(tmp_fn)
+    end if
     call stop_timer(tmr_std_eminimisation)
 
     return
@@ -580,7 +582,6 @@ contains
                  gridfunctions(tmp_fn(spin))%griddata, 1,           &
                  gridfunctions(support_gradient)%griddata, 1)
     end do
-       
     ! free tmp_fn
     do spin = nspin, 1, -1
        call free_temp_fn_on_grid(tmp_fn(spin))

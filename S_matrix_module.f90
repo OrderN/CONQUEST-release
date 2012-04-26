@@ -87,6 +87,8 @@ contains
 !!    Analytic on-site integrals added
 !!   2011/07/21 11:48 dave
 !!    Changes for cDFT (added call to Becke weight matrix)
+!!   2012/04/03 11:57 dave
+!!    Analytic integrals for S and KE added
 !!  TODO
 !!    
 !!  SOURCE
@@ -94,15 +96,19 @@ contains
   subroutine get_S_matrix(inode, ionode)
 
     use datatypes
+    use numbers
     use global_module,               only: iprint_ops, flag_basis_set, &
                                            blips, PAOs,                &
                                            flag_vary_basis,            &
                                            ni_in_cell,                 &
                                            IPRINT_TIME_THRES1,         &
                                            flag_onsite_blip_ana,       &
-                                           flag_perform_cdft
-    use matrix_data,                 only: Srange
-    use mult_module,                 only: matS, matdS
+                                           flag_perform_cdft, id_glob, &
+                                           species_glob, flag_analytic_blip_int, nspin
+    use matrix_data,                 only: Srange, halo, blip_trans, mat
+    use mult_module,                 only: matS, matdS, ltrans, matrix_scale, &
+                                           matK, matM12, return_matrix_block_pos,&
+                                           matKE, matrix_pos
     use set_bucket_module,           only: rem_bucket
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use blip_grid_transform_module,  only: blip_to_support_new
@@ -115,9 +121,17 @@ contains
     use timer_module,                only: cq_timer, start_timer,      &
                                            stop_print_timer,           &
                                            WITH_LEVEL
-    use support_spec_format,         only: supports_on_atom
+    use support_spec_format,         only: supports_on_atom, support_function, &
+                                           coefficient_array, support_gradient, &
+                                           grad_coeff_array
     use species_module,              only: nsf_species
     use cdft_module,                 only: make_weights
+    use comms_module,                ONLY: start_blip_transfer, fetch_blips
+    use group_module,                ONLY: parts
+    use blip,                        ONLY: blip_info
+    use cover_module,                ONLY: BCS_parts
+    use GenComms,                    ONLY: myid, cq_abort, my_barrier, mtime
+    use mpi
 
     implicit none
 
@@ -125,8 +139,17 @@ contains
     integer :: inode, ionode
     
     ! Local variables
-    integer :: np, ni, iprim, spec, this_nsf
+    integer :: np, ni, iprim, spec, this_nsf, icall, jpart, ind_part, j_in_halo, pb_len, ist, nab
+    integer :: i, j,jseq,specj,i_in_prim,speci, pb_st, nblipsj, gcspart, nod, nsfj,sends,ierr, spin
+    integer :: neigh_global_num, neigh_global_part, neigh_species, neigh_prim, wheremat, this_nsfi, this_nsfj
+    integer, allocatable, dimension(:) :: nreqs
+    real(double) :: dx, dy, dz, time0, time1
+    real(double), allocatable, dimension(:), target :: part_blips
     type(cq_timer) :: tmr_l_tmp1
+    type(support_function) :: supp_on_j
+    integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
+    real(double), allocatable, dimension(:,:,:) :: this_data_K
+    real(double), allocatable, dimension(:,:,:) :: this_data_M12
 
     call start_timer(tmr_std_smatrix)
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
@@ -139,22 +162,120 @@ contains
        if (inode == ionode .and. iprint_ops > 2) &
             write (io_lun, *) 'Doing integration ', supportfns
        ! Integrate
-       call get_matrix_elements_new(inode-1, rem_bucket(1), matS, &
-                                    supportfns, supportfns)
-       ! Do the onsite elements analytically
-       if (flag_onsite_blip_ana) then
-          iprim = 0
-          do np = 1, bundle%groups_on_node
-             if (bundle%nm_nodgroup(np) > 0) then
-                do ni = 1, bundle%nm_nodgroup(np)
-                   iprim = iprim + 1
-                   spec = bundle%species(iprim)
-                   this_nsf = nsf_species(spec)
-                   call get_onsite_S(supports_on_atom(iprim), matS, &
-                                     np, ni, iprim, this_nsf, spec)
+       if(flag_analytic_blip_int) then
+          call matrix_scale(zero,matS)
+          call matrix_scale(zero,matKE)
+          grad_coeff_array = zero
+          allocate(nreqs(blip_trans%npart_send))
+          ! For speed, we should have a blip_trans%max_len and max_nsf and allocate once
+          time0 = mtime()
+          call start_blip_transfer(nreqs,sends,parts%mx_ngonn)
+          time1 = mtime()
+          do jpart=1,halo(Srange)%np_in_halo
+             pb_len = blip_trans%len_recv(jpart)
+             ind_part = halo(Srange)%lab_hcell(jpart)
+             nod = parts%i_cc2node(ind_part)
+             ! Fetch remote blip coefficients for partition
+             ! or copy local blip coefficients
+             time0 = mtime()
+             if(jpart>1) then
+                if(ind_part/=halo(Srange)%lab_hcell(jpart-1)) then
+                   allocate(part_blips(pb_len))
+                   part_blips = zero
+                   if(nod==myid+1) then
+                      pb_st = blip_trans%partst(parts%i_cc2seq(ind_part))
+                      part_blips(1:pb_len) = coefficient_array(pb_st:pb_st+pb_len-1)
+                   else
+                      call fetch_blips(part_blips,pb_len,nod-1,(myid)*parts%mx_ngonn + parts%i_cc2seq(ind_part))
+                   end if
+                end if
+             else
+                allocate(part_blips(pb_len))
+                part_blips = zero
+                if(nod==myid+1) then
+                   pb_st = blip_trans%partst(parts%i_cc2seq(ind_part))
+                   part_blips(1:pb_len) = coefficient_array(pb_st:pb_st+pb_len-1)
+                else
+                   call fetch_blips(part_blips,pb_len,nod-1,(myid)*parts%mx_ngonn + parts%i_cc2seq(ind_part))
+                end if
+             endif
+             time1 = mtime()
+             gcspart = halo(Srange)%i_hbeg(halo(Srange)%lab_hcover(jpart))
+             pb_st = 1
+             time0 = mtime()
+             do j=1,halo(Srange)%nh_part(jpart) ! Loop over atoms j in partition
+                j_in_halo = halo(Srange)%j_beg(jpart)+j-1
+                jseq = halo(Srange)%j_seq(j_in_halo)
+                specj = species_glob( id_glob( parts%icell_beg(halo(Srange)%lab_hcell(jpart))+jseq-1) )
+                nblipsj = blip_info(specj)%NBlipsRegion
+                this_nsfj = nsf_species(specj)
+                allocate(supp_on_j%supp_func(this_nsfj))
+                do nsfj=1,this_nsfj
+                   supp_on_j%supp_func(nsfj)%ncoeffs = nblipsj
+                   supp_on_j%supp_func(nsfj)%coefficients => part_blips(pb_st:pb_st+nblipsj-1)
+                   pb_st = pb_st+nblipsj
                 end do
+                do i=1,ltrans(Srange)%n_hnab(j_in_halo) ! Loop over atoms i: primary set neighbours of j
+                   i_in_prim=ltrans(Srange)%i_prim(ltrans(Srange)%i_beg(j_in_halo)+i-1)
+                   speci = bundle%species(i_in_prim)
+                   this_nsfi = nsf_species(speci)
+                   dx = BCS_parts%xcover(gcspart+jseq-1)-bundle%xprim(i_in_prim)
+                   dy = BCS_parts%ycover(gcspart+jseq-1)-bundle%yprim(i_in_prim)
+                   dz = BCS_parts%zcover(gcspart+jseq-1)-bundle%zprim(i_in_prim)
+                   allocate(this_data_K(this_nsfi,this_nsfj,nspin),this_data_M12(this_nsfi,this_nsfj,nspin))
+                   this_data_K = zero
+                   this_data_M12 = zero
+                   do spin=1,nspin
+                      wheremat = matrix_pos(matK(spin),i_in_prim,j_in_halo,1,1)
+                      call return_matrix_block_pos(matK(spin),wheremat,this_data_K(:,:,spin),this_nsfi*this_nsfj)
+                      wheremat = matrix_pos(matM12(spin),i_in_prim,j_in_halo,1,1)
+                      call return_matrix_block_pos(matM12(spin),wheremat,this_data_M12(:,:,spin),this_nsfi*this_nsfj)
+                   end do
+                   call get_S_analytic(supports_on_atom(i_in_prim),supp_on_j,support_gradient(i_in_prim), &
+                        matS,matKE,this_data_M12,this_data_K, i_in_prim, &
+                        j_in_halo,dx,dy,dz,speci,specj,this_nsfi,this_nsfj)
+                   deallocate(this_data_M12,this_data_K)
+                end do
+                do nsfj=1,this_nsfj
+                   nullify(supp_on_j%supp_func(nsfj)%coefficients)
+                end do
+                deallocate(supp_on_j%supp_func)
+             end do
+             if(jpart<halo(Srange)%np_in_halo) then
+                if(ind_part/=halo(Srange)%lab_hcell(jpart+1)) then
+                   deallocate(part_blips)
+                end if
+             else
+                deallocate(part_blips)
              end if
+             time1 = mtime()
           end do
+          if(sends>0) then
+             do i=1,sends
+                call MPI_Wait(nreqs(i),mpi_stat,ierr)
+                if(ierr/=0) call cq_abort("Error waiting for blip send to finish",i)
+             end do
+          end if
+          call my_barrier
+          deallocate(nreqs)
+       else
+          call get_matrix_elements_new(inode-1, rem_bucket(1), matS, &
+               supportfns, supportfns)
+          ! Do the onsite elements analytically
+          if (flag_onsite_blip_ana) then
+             iprim = 0
+             do np = 1, bundle%groups_on_node
+                if (bundle%nm_nodgroup(np) > 0) then
+                   do ni = 1, bundle%nm_nodgroup(np)
+                      iprim = iprim + 1
+                      spec = bundle%species(iprim)
+                      this_nsf = nsf_species(spec)
+                      call get_onsite_S(supports_on_atom(iprim), matS, &
+                           np, ni, iprim, this_nsf, spec)
+                   end do
+                end if
+             end do
+          end if
        end if
     else if (flag_basis_set == PAOs) then
        ! Get S matrix with assemble
@@ -467,7 +588,7 @@ contains
 ! Subroutine get_onsite_S
 ! -----------------------------------------------------------
 
-!!****f* H_matrix_module/get_onsite_S *
+!!****f* S_matrix_module/get_onsite_S *
 !!
 !!  NAME 
 !!   get_onsite_S
@@ -611,104 +732,589 @@ contains
   end subroutine get_onsite_S
 !!***
 
-!%%!  subroutine basic_get_onsite_S(blip_co, resulting_submatrix, &
-!%%!       inode, ionode,this_nsf, MAX_N_BLIPS)
-!%%!
-!%%!    use datatypes
-!%%!    use numbers
-!%%!    use GenBlas
-!%%!    use blip, ONLY: blip_info(spec)%blip_number, blip_info(spec)%BlipArraySize
-!%%!    use dimens, ONLY: support_grid_spacing
-!%%!
-!%%!    implicit none
-!%%!
-!%%!    ! Passed Variables
-!%%!    integer :: this_nsf, MAX_N_BLIPS, inode, ionode
-!%%!    real(double) :: blip_co(this_nsf,MAX_N_BLIPS), resulting_submatrix(this_nsf,this_nsf)
-!%%!
-!%%!    ! Local variables
-!%%!    real(double) :: FAC(-3:3)
-!%%!    real(double) :: work1(this_nsf,-blip_info(spec)%BlipArraySize-3:blip_info(spec)%BlipArraySize+3,&
-!%%!         -blip_info(spec)%BlipArraySize-3:blip_info(spec)%BlipArraySize+3,-blip_info(spec)%BlipArraySize-3:blip_info(spec)%BlipArraySize+3), &
-!%%!         work2(this_nsf,-blip_info(spec)%BlipArraySize-3:blip_info(spec)%BlipArraySize+3,&
-!%%!         -blip_info(spec)%BlipArraySize-3:blip_info(spec)%BlipArraySize+3,-blip_info(spec)%BlipArraySize-3:blip_info(spec)%BlipArraySize+3)
-!%%!    integer :: dx,dy,dz,nx,nx1,l,l1,nsf1,ny,ny1,nz,nz1,nsf2
-!%%!
-!%%!    FAC(-3) = 1.0_double/2240.0_double
-!%%!    FAC(-2) = 3.0_double/56.0_double
-!%%!    FAC(-1) = 1191.0_double/2240.0_double
-!%%!    FAC(0) = 151.0_double/140.0_double
-!%%!    FAC(1) = 1191.0_double/2240.0_double
-!%%!    FAC(2) = 3.0_double/56.0_double
-!%%!    FAC(3) = 1.0_double/2240.0_double
-!%%!
-!%%!    ! Start by convolving blip coefficients with integrals
-!%%!
-!%%!    ! x first
-!%%!    work1 = zero
-!%%!    do dx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-!%%!       do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-!%%!          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-!%%!             do nx = -3,3
-!%%!                nx1 = nx+dx
-!%%!                l = blip_info(spec)%blip_number(dx,dy,dz)
-!%%!                if (l/=0) then
-!%%!                   do nsf1 = 1,this_nsf
-!%%!                      work1(nsf1,dz,dy,nx1) = work1(nsf1,dz,dy,nx1)+FAC(nx)*blip_co(nsf1,l)
-!%%!                   enddo
-!%%!                end if
-!%%!             end do
-!%%!          end do
-!%%!       end do
-!%%!    end do
-!%%!    ! Now y
-!%%!    work2 = zero
-!%%!    do dx = -blip_info(spec)%BlipArraySize-3, blip_info(spec)%BlipArraySize+3
-!%%!       do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-!%%!          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-!%%!             do ny = -3,3
-!%%!                ny1 = ny+dy
-!%%!                do nsf1 = 1,this_nsf
-!%%!                   work2(nsf1,dz,ny1,dx) = work2(nsf1,dz,ny1,dx)+FAC(ny)*work1(nsf1,dz,dy,dx)
-!%%!                enddo
-!%%!             end do
-!%%!          end do
-!%%!       end do
-!%%!    end do
-!%%!    ! Finally z
-!%%!    work1 = zero
-!%%!    do dx = -blip_info(spec)%BlipArraySize-3, blip_info(spec)%BlipArraySize+3
-!%%!       do dy = -blip_info(spec)%BlipArraySize-3, blip_info(spec)%BlipArraySize+3
-!%%!          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-!%%!             do nz = -3,3
-!%%!                nz1 = nz+dz
-!%%!                do nsf1 = 1,this_nsf
-!%%!                   work1(nsf1,nz1,dy,dx) = work1(nsf1,nz1,dy,dx)+FAC(nz)*work2(nsf1,dz,dy,dx)
-!%%!                enddo
-!%%!             end do
-!%%!          end do
-!%%!       end do
-!%%!    end do
-!%%!    ! Now work1 holds a complete convolution of one set of blip coefficients with integrals (blipcon in Cquest)
-!%%!    ! So sum over blip values
-!%%!    resulting_submatrix = zero
-!%%!    do dx = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-!%%!       do dy = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-!%%!          do dz = -blip_info(spec)%BlipArraySize, blip_info(spec)%BlipArraySize
-!%%!             l = blip_info(spec)%blip_number(dx,dy,dz)
-!%%!             if (l/=0) then
-!%%!                do nsf1 = 1,this_nsf
-!%%!                   do nsf2 = 1,this_nsf
-!%%!                      resulting_submatrix(nsf1,nsf2) = resulting_submatrix(nsf1,nsf2) + &
-!%%!                           work1(nsf1,dz,dy,dx)*blip_co(nsf2,l)
-!%%!                   end do
-!%%!                end do
-!%%!             end if
-!%%!          end do
-!%%!       end do
-!%%!    end do
-!%%!    call scal(this_nsf*this_nsf,support_grid_spacing,resulting_submatrix,1)
-!%%!    return
-!%%!  end subroutine basic_get_onsite_S
+!!****f* S_matrix_module/get_S_analytic *
+!!
+!!  NAME 
+!!   get_S_analytic
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Calculates various matrix elements and gradients analytically from blips.  The overlap
+!!   and kinetic energy matrix elements and the associated contributions to the gradient of 
+!!   energy wrt blip coefficients are found (if integrals are performed numerically, these 
+!!   are found in different places: S is found in this module, KE in H_matrix_module, and the
+!!   gradients in blip_gradient.module and specifically the S pulay term (in get_support_gradient)
+!!   and the KE term.
+!!  INPUTS
+!!   
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   D. R. Bowler
+!!  CREATION DATE
+!!   2012/02 (roughly)
+!!  MODIFICATION HISTORY
+!!  
+!!  SOURCE
+!!  
+  subroutine get_S_analytic(blipL_co, blipR_co, blip_grad, matS, matT, dataM12, dataK, ip, j_in_halo, &
+       dx, dy, dz, speci, specj,this_nsfL,this_nsfR)
 
+    use datatypes
+    use numbers
+    use global_module, ONLY: nspin, spin_factor
+    use GenBlas, ONLY: axpy, copy, scal, gemm
+    use blip, ONLY: blip_info
+    use support_spec_format, ONLY: support_function
+    use GenComms, ONLY: cq_abort, mtime, inode, ionode
+    use mult_module, ONLY: store_matrix_value, scale_matrix_value, return_matrix_value_pos, store_matrix_value_pos, matrix_pos
+    use species_module, ONLY: nsf_species
+    use nlpf2blip, ONLY: do_blip_integrals, do_d2blip_integrals
+
+    implicit none
+
+    ! Shared Variables
+    integer :: speci, specj, np, nn, ip, matS, j_in_halo,num, matT
+
+    type(support_function) :: blipL_co
+    type(support_function) :: blipR_co
+    type(support_function) :: blip_grad
+    real(double) :: dx, dy, dz
+    integer ::  this_nsfL, this_nsfR
+    real(double), dimension(this_nsfL, this_nsfR,nspin) :: dataK, dataM12
+
+    ! Local Variables
+    integer, parameter :: MAX_D = 4
+
+    real(double) ::  FAC(-MAX_D:MAX_D,3), D2FAC(-MAX_D:MAX_D,3)
+
+    real(double), allocatable, dimension(:) :: work1, work2, work3, work4, work5, work6
+    real(double), allocatable, dimension(:,:) :: temp, temp2, temp3
+    real(double) :: tmp, facx, facy, facz, factot, t0, t1, mat_val, bgv
+
+    integer :: ix, iy, iz, offset, l, at, nsf1, nsf2, stat, i1, i2, m, x,y,z, xmin, xmax, ymin, ymax, zmin, zmax, &
+         idx, idy, idz, wheremat, nx, ny, nz, ir, spin
+
+    bgv = blip_info(speci)%SupportGridSpacing*blip_info(speci)%SupportGridSpacing*blip_info(speci)%SupportGridSpacing
+    dx=-dx
+    dy=-dy
+    dz=-dz
+    allocate(temp(this_nsfR,this_nsfL),temp2(this_nsfR,this_nsfL))
+    temp = zero
+    temp2 = zero
+    idx = floor(abs(dx/blip_info(speci)%SupportGridSpacing))
+    if(dx<zero) then
+       idx=-idx
+       if(abs(dx-real(idx,double)*blip_info(speci)%SupportGridSpacing)>half*blip_info(speci)%SupportGridSpacing) idx=idx-1
+    else
+       if(abs(dx-real(idx,double)*blip_info(speci)%SupportGridSpacing)>half*blip_info(speci)%SupportGridSpacing) idx=idx+1
+    end if
+    idy = floor(abs(dy/blip_info(speci)%SupportGridSpacing))
+    if(dy<zero) then
+       idy=-idy
+       if(abs(dy-real(idy,double)*blip_info(speci)%SupportGridSpacing)>half*blip_info(speci)%SupportGridSpacing) idy=idy-1
+    else
+       if(abs(dy-real(idy,double)*blip_info(speci)%SupportGridSpacing)>half*blip_info(speci)%SupportGridSpacing) idy=idy+1
+    end if
+    idz = floor(abs(dz/blip_info(speci)%SupportGridSpacing))
+    if(dz<zero) then
+       idz=-idz
+       if(abs(dz-real(idz,double)*blip_info(speci)%SupportGridSpacing)>half*blip_info(speci)%SupportGridSpacing) idz=idz-1
+    else
+       if(abs(dz-real(idz,double)*blip_info(speci)%SupportGridSpacing)>half*blip_info(speci)%SupportGridSpacing) idz=idz+1
+    end if
+    call do_blip_integrals(FAC,dx/blip_info(speci)%SupportGridSpacing-real(idx,double), &
+         dy/blip_info(speci)%SupportGridSpacing-real(idy,double),dz/blip_info(speci)%SupportGridSpacing-real(idz,double))
+    call do_d2blip_integrals(D2FAC,dx/blip_info(speci)%SupportGridSpacing-real(idx,double), &
+         dy/blip_info(speci)%SupportGridSpacing-real(idy,double),dz/blip_info(speci)%SupportGridSpacing-real(idz,double))
+    allocate(work1(blip_info(speci)%FullArraySize*this_nsfR),work2(blip_info(speci)%FullArraySize*this_nsfR), &
+         work3(blip_info(speci)%FullArraySize*this_nsfR),work4(blip_info(speci)%FullArraySize*this_nsfR), &
+         work5(blip_info(speci)%FullArraySize*this_nsfR),work6(blip_info(speci)%FullArraySize*this_nsfR), STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating arrays for onsite S elements: ",blip_info(speci)%FullArraySize,this_nsfR)
+
+    ! first, we copy the blip functions for this atom onto a cubic grid;
+    ! we make this grid 'too big' in order to have a fast routine below.
+    work1 = zero
+    offset = blip_info(speci)%BlipArraySize+1+3
+    xmin = -blip_info(specj)%BlipArraySize
+    xmax =  blip_info(specj)%BlipArraySize
+    ymin = -blip_info(specj)%BlipArraySize
+    ymax =  blip_info(specj)%BlipArraySize
+    zmin = -blip_info(specj)%BlipArraySize
+    zmax =  blip_info(specj)%BlipArraySize
+    do ix = xmin,xmax
+       do iy = ymin,ymax
+          do iz = zmin,zmax
+             l = blip_info(specj)%blip_number(ix,iy,iz)
+             if (l.ne.0) then
+                at = (((iz+offset)*blip_info(speci)%OneArraySize + (iy+offset))*blip_info(speci)%OneArraySize + &
+                     (ix+offset)) * this_nsfR
+                do nsf1 = 1,this_nsfR
+                   work1(nsf1+at) = blipR_co%supp_func(nsf1)%coefficients(l)
+                enddo
+             end if
+          end do
+       end do
+    end do
+    
+    ! now, for each direction in turn, we need to apply a number of
+    ! 'spreading operations'. Do z first... put blip(z) in 2, blip.d2blip into 3
+    call copy(blip_info(speci)%FullArraySize*this_nsfR,work1,1,work2,1)
+    call scal(blip_info(speci)%FullArraySize*this_nsfR,FAC(0,3),work2,1)
+    call copy(blip_info(speci)%FullArraySize*this_nsfR,work1,1,work3,1)
+    call scal(blip_info(speci)%FullArraySize*this_nsfR,D2FAC(0,3),work3,1)
+    do iz = 1, MAX_D
+       offset = iz * blip_info(speci)%OneArraySize * blip_info(speci)%OneArraySize * this_nsfR
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), FAC(iz,3), &
+            work1(1:), 1, work2(1+offset:), 1 )
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), FAC(-iz,3), &
+            work1(1+offset:), 1, work2(1:), 1 )
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), D2FAC(iz,3), &
+            work1(1:), 1, work3(1+offset:), 1 )
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), D2FAC(-iz,3), &
+            work1(1+offset:), 1, work3(1:), 1 )
+    end do
+    ! now do y : put blip(y).blip(z) in 4blip.d2blip into 5
+    call copy(blip_info(speci)%FullArraySize*this_nsfR,work2,1,work4,1)
+    call scal(blip_info(speci)%FullArraySize*this_nsfR,FAC(0,2),work4,1)
+    call copy(blip_info(speci)%FullArraySize*this_nsfR,work2,1,work5,1)
+    call scal(blip_info(speci)%FullArraySize*this_nsfR,D2FAC(0,2),work5,1)
+    call axpy(blip_info(speci)%FullArraySize*this_nsfR,FAC(0,2),work3,1,work5,1)    
+    do iy = 1, MAX_D
+       offset = iy * blip_info(speci)%OneArraySize * this_nsfR
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), FAC(iy,2), &
+            work2(1:), 1, work4(1+offset:), 1 )
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), FAC(-iy,2), &
+            work2(1+offset:), 1, work4(1:), 1 )
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), D2FAC(iy,2), &
+            work2(1:), 1, work5(1+offset:), 1 )
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), D2FAC(-iy,2), &
+            work2(1+offset:), 1, work5(1:), 1 )
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), FAC(iy,2), &
+            work3(1:), 1, work5(1+offset:), 1 )
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), FAC(-iy,2), &
+            work3(1+offset:), 1, work5(1:), 1 )
+    end do
+    ! Now x
+    work6 = zero
+    call axpy(blip_info(speci)%FullArraySize*this_nsfR,FAC(0,1),work4,1,work6,1)    
+    ! Reuse array space for kinetic energy
+    work3 = zero
+    call axpy(blip_info(speci)%FullArraySize*this_nsfR,FAC(0,1),work5,1,work3,1)    
+    call axpy(blip_info(speci)%FullArraySize*this_nsfR,D2FAC(0,1),work4,1,work3,1)    
+    do ix = 1, MAX_D
+       offset = ix * this_nsfR
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), FAC(ix,1), &
+            work4(1:), 1, work6(1+offset:), 1 )
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), FAC(-ix,1), &
+            work4(1+offset:), 1, work6(1:), 1 )
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), FAC(ix,1), &
+            work5(1:), 1, work3(1+offset:), 1 )
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), FAC(-ix,1), &
+            work5(1+offset:), 1, work3(1:), 1 )
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), D2FAC(ix,1), &
+            work4(1:), 1, work3(1+offset:), 1 )
+       call axpy((blip_info(speci)%FullArraySize*this_nsfR-offset), D2FAC(-ix,1), &
+            work4(1+offset:), 1, work3(1:), 1 )
+    end do
+    ! work6 now holds the results of S integral, work3 holds the results of the T integral
+    ! and now get the matrix elements by multiplication...
+    ! Now set work1 to left SF coeffs
+    deallocate(work1)
+    allocate(work1(blip_info(speci)%FullArraySize*this_nsfL))
+    work1 = zero
+    offset = blip_info(speci)%BlipArraySize+1+3
+    xmin = -blip_info(specj)%BlipArraySize
+    xmax =  blip_info(specj)%BlipArraySize
+    ymin = -blip_info(specj)%BlipArraySize
+    ymax =  blip_info(specj)%BlipArraySize
+    zmin = -blip_info(specj)%BlipArraySize
+    zmax =  blip_info(specj)%BlipArraySize
+    if(idx<0) then 
+       xmin = xmin -3
+    else if(idx>0) then 
+       xmax = xmax +3
+    end if
+    if(idy<0) then 
+       ymin = ymin -3
+    else if(idy>0) then 
+       ymax = ymax +3
+    end if
+    if(idz<0) then 
+       zmin = zmin -3
+    else if(idz>0) then 
+       zmax = zmax +3
+    end if
+    ! Set coeffs for left SF and calculate blip grad contribution at the same time
+    do ix = xmin,xmax
+       do iy = ymin,ymax
+          do iz = zmin,zmax
+             if(abs(ix-idx)<=blip_info(specj)%BlipArraySize.AND.abs(iy-idy)<=blip_info(specj)%BlipArraySize.AND. &
+                  abs(iz-idz)<=blip_info(specj)%BlipArraySize) then
+                l = blip_info(specj)%blip_number(ix-idx,iy-idy,iz-idz)
+             else
+                l = 0
+             end if
+             if (l/=0) then
+                at = (((iz+offset)*blip_info(specj)%OneArraySize + (iy+offset))*blip_info(specj)%OneArraySize + &
+                     (ix+offset)) * this_nsfL
+                do nsf1 = 1,this_nsfL
+                   work1(nsf1+at) = blipL_co%supp_func(nsf1)%coefficients(l)
+                enddo
+                !if((abs(dx)>very_small).AND.(abs(dy)>very_small).AND.(abs(dz)>very_small)) then
+                at = (((iz+offset)*blip_info(specj)%OneArraySize + (iy+offset))*blip_info(specj)%OneArraySize + &
+                     (ix+offset)) * this_nsfR
+                do nsf2 =1,this_nsfR
+                   do nsf1 = 1,this_nsfL
+                      do spin=1,nspin
+                         blip_grad%supp_func(nsf1)%coefficients(l) = &
+                              blip_grad%supp_func(nsf1)%coefficients(l) &
+                              -two*bgv*spin_factor*dataM12(nsf1,nsf2,spin)*work6(nsf2+at) &
+                              +blip_info(speci)%SupportGridSpacing*spin_factor*dataK(nsf1,nsf2,spin)*work3(nsf2+at)
+                      end do
+                   end do
+                enddo
+                !end if
+             end if
+          end do
+       end do
+    end do
+    call gemm('n','t',this_nsfR,this_nsfL,blip_info(speci)%OneArraySize*blip_info(speci)%OneArraySize* &
+         blip_info(speci)%OneArraySize, one,work6,this_nsfR,work1,this_nsfL,zero,temp,this_nsfR )
+    call gemm('n','t',this_nsfR,this_nsfL,blip_info(specj)%OneArraySize*blip_info(specj)%OneArraySize* &
+         blip_info(specj)%OneArraySize, one,work3,this_nsfR,work1,this_nsfL,zero,temp2,this_nsfR )
+    do i1 = 1,this_nsfL
+       do i2=1,this_nsfR
+          wheremat = matrix_pos(matS,ip,j_in_halo,i1,i2)
+          mat_val = bgv*temp(i2,i1)
+          call store_matrix_value_pos(matS,wheremat,mat_val)
+          wheremat = matrix_pos(matT,ip,j_in_halo,i1,i2)
+          ! Minus sign for KE: half is put in H_matrix_module
+          mat_val = -blip_info(speci)%SupportGridSpacing*temp2(i2,i1)
+          call store_matrix_value_pos(matT,wheremat,mat_val)
+       end do
+    end do
+    deallocate(work1,work2,work3,work4,work5,work6, STAT=stat)
+    if(stat/=0) call cq_abort("Error deallocating arrays for onsite S blip elements: ",blip_info(specj)%FullArraySize,this_nsfL)
+    return
+  end subroutine get_S_analytic
+!!***
+
+!!****f* S_matrix_module/get_dS_analytic_oneL *
+!!
+!!  NAME 
+!!   get_S_analytic
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Calculates force contribution for S and KE matrices one direction at a time (hence one in name)
+!!  INPUTS
+!!   
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   
+!!  CREATION DATE
+!!   
+!!  MODIFICATION HISTORY
+!!  
+!!  SOURCE
+!!  
+  subroutine get_dS_analytic_oneL(blipL_co, blipR_co, forS, forT, dataM12, dataK, ip, j_in_halo, &
+       dx, dy, dz, speci, specj,this_nsfL,this_nsfR,direction)
+
+    use datatypes
+    use numbers
+    use global_module, ONLY: nspin, spin_factor
+    use GenBlas, ONLY: axpy, copy, scal, gemm
+    use blip, ONLY: blip_info
+    use support_spec_format, ONLY: support_function
+    use GenComms, ONLY: cq_abort, mtime, inode, ionode
+    use mult_module, ONLY: store_matrix_value, scale_matrix_value, return_matrix_value_pos, store_matrix_value_pos, matrix_pos
+    use species_module, ONLY: nsf_species
+    use nlpf2blip, ONLY: do_blip_integrals, do_dblip_integrals, do_d2blip_integrals, do_d3blip_integrals
+
+    implicit none
+
+    ! Shared Variables
+    integer :: speci, specj, np, nn, ip, j_in_halo,num, direction
+
+    type(support_function) :: blipL_co
+    type(support_function) :: blipR_co
+    real(double) :: dx, dy, dz
+    real(double) :: forS, forT
+    integer ::  this_nsfL, this_nsfR
+    real(double), dimension(this_nsfL, this_nsfR,nspin) :: dataK, dataM12
+
+    ! Local Variables
+    integer, parameter :: MAX_D = 4
+
+    real(double) ::  FAC(-MAX_D:MAX_D,3), DFAC(-MAX_D:MAX_D,3), D2FAC(-MAX_D:MAX_D,3), D3FAC(-MAX_D:MAX_D,3)
+
+    real(double), allocatable, dimension(:) :: work1, work2, work3, work4, work5, work6
+    real(double), allocatable, dimension(:,:) :: temp, temp2
+    real(double) :: tmp, facx, facy, facz, factot, t0, t1, mat_val
+
+    integer :: ix, iy, iz, offset, l, at, nsf1, nsf2, stat, i1, i2, m, x,y,z, xmin, xmax, ymin, ymax, zmin, zmax, &
+         idx, idy, idz, wheremat, nx, ny, nz, ir, dir, spin
+
+    allocate(temp(this_nsfR,this_nsfL),temp2(this_nsfR,this_nsfL))
+    temp = zero
+    temp2 = zero
+    idx = floor(abs(dx/blip_info(speci)%SupportGridSpacing))
+    if(dx<zero) then
+       idx=-idx
+       if(abs(dx-real(idx,double)*blip_info(speci)%SupportGridSpacing)>half*blip_info(speci)%SupportGridSpacing) idx=idx-1
+    else
+       if(abs(dx-real(idx,double)*blip_info(speci)%SupportGridSpacing)>half*blip_info(speci)%SupportGridSpacing) idx=idx+1
+    end if
+    idy = floor(abs(dy/blip_info(speci)%SupportGridSpacing))
+    if(dy<zero) then
+       idy=-idy
+       if(abs(dy-real(idy,double)*blip_info(speci)%SupportGridSpacing)>half*blip_info(speci)%SupportGridSpacing) idy=idy-1
+    else
+       if(abs(dy-real(idy,double)*blip_info(speci)%SupportGridSpacing)>half*blip_info(speci)%SupportGridSpacing) idy=idy+1
+    end if
+    idz = floor(abs(dz/blip_info(speci)%SupportGridSpacing))
+    if(dz<zero) then
+       idz=-idz
+       if(abs(dz-real(idz,double)*blip_info(speci)%SupportGridSpacing)>half*blip_info(speci)%SupportGridSpacing) idz=idz-1
+    else
+       if(abs(dz-real(idz,double)*blip_info(speci)%SupportGridSpacing)>half*blip_info(speci)%SupportGridSpacing) idz=idz+1
+    end if
+    call do_blip_integrals(FAC,dx/blip_info(speci)%SupportGridSpacing-real(idx,double), &
+         dy/blip_info(speci)%SupportGridSpacing-real(idy,double),dz/blip_info(speci)%SupportGridSpacing-real(idz,double))
+    call do_dblip_integrals(DFAC,dx/blip_info(speci)%SupportGridSpacing-real(idx,double), &
+         dy/blip_info(speci)%SupportGridSpacing-real(idy,double),dz/blip_info(speci)%SupportGridSpacing-real(idz,double))
+    call do_d2blip_integrals(D2FAC,dx/blip_info(speci)%SupportGridSpacing-real(idx,double), &
+         dy/blip_info(speci)%SupportGridSpacing-real(idy,double),dz/blip_info(speci)%SupportGridSpacing-real(idz,double))
+    call do_d3blip_integrals(D3FAC,dx/blip_info(speci)%SupportGridSpacing-real(idx,double), &
+         dy/blip_info(speci)%SupportGridSpacing-real(idy,double),dz/blip_info(speci)%SupportGridSpacing-real(idz,double))
+    allocate(work1(blip_info(speci)%FullArraySize*this_nsfL),work2(blip_info(speci)%FullArraySize*this_nsfL), &
+         work3(blip_info(speci)%FullArraySize*this_nsfL),work4(blip_info(speci)%FullArraySize*this_nsfL), &
+         work5(blip_info(speci)%FullArraySize*this_nsfL),work6(blip_info(speci)%FullArraySize*this_nsfL), STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating arrays for onsite S elements: ",blip_info(speci)%FullArraySize,this_nsfL)
+    ! first, we copy the blip functions for this atom onto a cubic grid;
+    ! we make this grid 'too big' in order to have a fast routine below.
+    work1 = zero
+    offset = blip_info(speci)%BlipArraySize+1+3
+    xmin = -blip_info(specj)%BlipArraySize
+    xmax =  blip_info(specj)%BlipArraySize
+    ymin = -blip_info(specj)%BlipArraySize
+    ymax =  blip_info(specj)%BlipArraySize
+    zmin = -blip_info(specj)%BlipArraySize
+    zmax =  blip_info(specj)%BlipArraySize
+    do ix = xmin,xmax
+       do iy = ymin,ymax
+          do iz = zmin,zmax
+             l = blip_info(specj)%blip_number(ix,iy,iz)
+             if (l.ne.0) then
+                at = (((iz+offset)*blip_info(speci)%OneArraySize + (iy+offset))*blip_info(speci)%OneArraySize + &
+                     (ix+offset)) * this_nsfL
+                do nsf1 = 1,this_nsfL
+                   work1(nsf1+at) = blipL_co%supp_func(nsf1)%coefficients(l)
+                enddo
+             end if
+          end do
+       end do
+    end do
+    ! now, for each direction in turn, we need to apply a number of
+    ! 'spreading operations'. Do z first... put blip(z) in 2, and
+    ! del2blip(z) in 3
+    if(direction==3) then
+       call copy(blip_info(speci)%FullArraySize*this_nsfL,work1,1,work2,1)
+       call scal(blip_info(speci)%FullArraySize*this_nsfL,DFAC(0,3),work2,1)
+       call copy(blip_info(speci)%FullArraySize*this_nsfL,work1,1,work3,1)
+       call scal(blip_info(speci)%FullArraySize*this_nsfL,D3FAC(0,3),work3,1)
+       do iz = 1, MAX_D
+          offset = iz * blip_info(speci)%OneArraySize * blip_info(speci)%OneArraySize * this_nsfL
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), DFAC(iz,3), &
+               work1(1:), 1, work2(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), DFAC(-iz,3), &
+               work1(1+offset:), 1, work2(1:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), D3FAC(iz,3), &
+               work1(1:), 1, work3(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), D3FAC(-iz,3), &
+               work1(1+offset:), 1, work3(1:), 1 )
+       end do
+    else
+       call copy(blip_info(speci)%FullArraySize*this_nsfL,work1,1,work2,1)
+       call scal(blip_info(speci)%FullArraySize*this_nsfL,FAC(0,3),work2,1)
+       call copy(blip_info(speci)%FullArraySize*this_nsfL,work1,1,work3,1)
+       call scal(blip_info(speci)%FullArraySize*this_nsfL,D2FAC(0,3),work3,1)
+       do iz = 1, MAX_D
+          offset = iz * blip_info(speci)%OneArraySize * blip_info(speci)%OneArraySize * this_nsfL
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), FAC(iz,3), &
+               work1(1:), 1, work2(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), FAC(-iz,3), &
+               work1(1+offset:), 1, work2(1:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), D2FAC(iz,3), &
+               work1(1:), 1, work3(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), D2FAC(-iz,3), &
+               work1(1+offset:), 1, work3(1:), 1 )
+       end do
+    end if
+    ! now do y : put blip(y).blip(z) in 4,
+    ! blip(y).del2blip(z) + del2blip(y).blip(z)  in 5
+    if(direction==2) then
+       call copy(blip_info(speci)%FullArraySize*this_nsfL,work2,1,work4,1)
+       call scal(blip_info(speci)%FullArraySize*this_nsfL,DFAC(0,2),work4,1)
+       call copy(blip_info(speci)%FullArraySize*this_nsfL,work2,1,work5,1)
+       call scal(blip_info(speci)%FullArraySize*this_nsfL,D3FAC(0,2),work5,1)
+       call axpy(blip_info(speci)%FullArraySize*this_nsfL,DFAC(0,2),work3,1,work5,1)    
+       do iy = 1, MAX_D
+          offset = iy * blip_info(speci)%OneArraySize * this_nsfL
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), DFAC(iy,2), &
+               work2(1:), 1, work4(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), DFAC(-iy,2), &
+               work2(1+offset:), 1, work4(1:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), D3FAC(iy,2), &
+               work2(1:), 1, work5(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), D3FAC(-iy,2), &
+               work2(1+offset:), 1, work5(1:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), DFAC(iy,2), &
+               work3(1:), 1, work5(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), DFAC(-iy,2), &
+               work3(1+offset:), 1, work5(1:), 1 )
+       end do
+    else
+       call copy(blip_info(speci)%FullArraySize*this_nsfL,work2,1,work4,1)
+       call scal(blip_info(speci)%FullArraySize*this_nsfL,FAC(0,2),work4,1)
+       call copy(blip_info(speci)%FullArraySize*this_nsfL,work2,1,work5,1)
+       call scal(blip_info(speci)%FullArraySize*this_nsfL,D2FAC(0,2),work5,1)
+       call axpy(blip_info(speci)%FullArraySize*this_nsfL,FAC(0,2),work3,1,work5,1)    
+       do iy = 1, MAX_D
+          offset = iy * blip_info(speci)%OneArraySize * this_nsfL
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), FAC(iy,2), &
+               work2(1:), 1, work4(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), FAC(-iy,2), &
+               work2(1+offset:), 1, work4(1:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), D2FAC(iy,2), &
+               work2(1:), 1, work5(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), D2FAC(-iy,2), &
+               work2(1+offset:), 1, work5(1:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), FAC(iy,2), &
+               work3(1:), 1, work5(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), FAC(-iy,2), &
+               work3(1+offset:), 1, work5(1:), 1 )
+       end do
+    end if
+    ! Now x
+    work6 = zero  ! x
+    ! Reuse array space for kinetic energy
+    work3 = zero  ! w6,  x
+    if(direction==1) then
+       call axpy(blip_info(speci)%FullArraySize*this_nsfL,DFAC(0,1),work4,1,work6,1)    
+       call axpy(blip_info(speci)%FullArraySize*this_nsfL,DFAC(0,1),work5,1,work3,1)    
+       call axpy(blip_info(speci)%FullArraySize*this_nsfL,D3FAC(0,1),work4,1,work3,1)    
+       do ix = 1, MAX_D
+          offset = ix * this_nsfL
+          ! dS
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), DFAC(ix,1), &
+               work4(1:), 1, work6(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), DFAC(-ix,1), &
+               work4(1+offset:), 1, work6(1:), 1 )
+          ! dT
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), DFAC(ix,1), &
+               work5(1:), 1, work3(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), DFAC(-ix,1), &
+               work5(1+offset:), 1, work3(1:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), D3FAC(ix,1), &
+               work4(1:), 1, work3(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), D3FAC(-ix,1), &
+               work4(1+offset:), 1, work3(1:), 1 )
+       end do
+    else
+       call axpy(blip_info(speci)%FullArraySize*this_nsfL,FAC(0,1),work4,1,work6,1)    
+       call axpy(blip_info(speci)%FullArraySize*this_nsfL,FAC(0,1),work5,1,work3,1)    
+       call axpy(blip_info(speci)%FullArraySize*this_nsfL,D2FAC(0,1),work4,1,work3,1)    
+       do ix = 1, MAX_D
+          offset = ix * this_nsfL
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), FAC(ix,1), &
+               work4(1:), 1, work6(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), FAC(-ix,1), &
+               work4(1+offset:), 1, work6(1:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), FAC(ix,1), &
+               work5(1:), 1, work3(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), FAC(-ix,1), &
+               work5(1+offset:), 1, work3(1:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), D2FAC(ix,1), &
+               work4(1:), 1, work3(1+offset:), 1 )
+          call axpy((blip_info(speci)%FullArraySize*this_nsfL-offset), D2FAC(-ix,1), &
+               work4(1+offset:), 1, work3(1:), 1 )
+       end do
+    end if
+    ! work6 now holds the results of S integral, work3 holds the results of the T integral
+    ! and now get the matrix elements by multiplication...
+    ! Now set work1 to Projector coeffs
+    deallocate(work1)
+    allocate(work1(blip_info(speci)%FullArraySize*this_nsfR))
+    work1 = zero
+    offset = blip_info(speci)%BlipArraySize+1+3
+    xmin = -blip_info(specj)%BlipArraySize
+    xmax =  blip_info(specj)%BlipArraySize
+    ymin = -blip_info(specj)%BlipArraySize
+    ymax =  blip_info(specj)%BlipArraySize
+    zmin = -blip_info(specj)%BlipArraySize
+    zmax =  blip_info(specj)%BlipArraySize
+    if(idx<0) then 
+       xmin = xmin -3
+    else if(idx>0) then 
+       xmax = xmax +3
+    end if
+    if(idy<0) then 
+       ymin = ymin -3
+    else if(idy>0) then 
+       ymax = ymax +3
+    end if
+    if(idz<0) then 
+       zmin = zmin -3
+    else if(idz>0) then 
+       zmax = zmax +3
+    end if
+    do ix = xmin,xmax
+       do iy = ymin,ymax
+          do iz = zmin,zmax
+             if(abs(ix-idx)<=blip_info(specj)%BlipArraySize.AND.abs(iy-idy)<=blip_info(specj)%BlipArraySize.AND. &
+                  abs(iz-idz)<=blip_info(specj)%BlipArraySize) then
+                l = blip_info(specj)%blip_number(ix-idx,iy-idy,iz-idz)
+             else
+                l = 0
+             end if
+             if (l/=0) then
+                at = (((iz+offset)*blip_info(specj)%OneArraySize + (iy+offset))*blip_info(specj)%OneArraySize + &
+                     (ix+offset)) * this_nsfR
+                do nsf1 = 1,this_nsfR
+                   work1(nsf1+at) = blipR_co%supp_func(nsf1)%coefficients(l)
+                enddo
+             end if
+          end do
+       end do
+    end do
+    call gemm('n','t',this_nsfR,this_nsfL,blip_info(speci)%OneArraySize*blip_info(speci)%OneArraySize* &
+         blip_info(speci)%OneArraySize, one,work1,this_nsfR,work6,this_nsfL,zero,temp(:,:),this_nsfR )
+    call gemm('n','t',this_nsfR,this_nsfL,blip_info(specj)%OneArraySize*blip_info(specj)%OneArraySize* &
+         blip_info(specj)%OneArraySize, one,work1,this_nsfR,work3,this_nsfL,zero,temp2(:,:),this_nsfR )
+    forS = zero
+    forT = zero
+    t1 = mtime()
+    t0 = t1
+    tmp = zero
+    do i1 = 1,this_nsfL
+       do i2=1,this_nsfR
+          do spin =1,nspin
+             forS = forS -two*blip_info(speci)%SupportGridSpacing*blip_info(speci)%SupportGridSpacing* &
+                  temp(i2,i1)*spin_factor*dataM12(i1,i2,spin)
+             forT = forT +temp2(i2,i1)*spin_factor*dataK(i1,i2,spin)
+          end do
+       end do
+    end do
+    deallocate(work1,work2,work3,work4,work5,work6, STAT=stat)
+    deallocate(temp,temp2, STAT=stat)
+    if(stat/=0) call cq_abort("Error deallocating arrays for onsite S blip elements: ",blip_info(specj)%FullArraySize,this_nsfL)
+    return
+  end subroutine get_dS_analytic_oneL
+!!***
 end module S_matrix_module

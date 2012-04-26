@@ -26,6 +26,8 @@
 !!    altered fetch_trans_data to make array copy explicit
 !!   2008/02/04 17:05 dave
 !!    Changed for output to file not stdout
+!!   2012/01/17 17:05 dave
+!!    Added routines for blip coefficient transfer (analytic blip integrals)
 !!  SOURCE
 !!
 module comms_module
@@ -340,4 +342,126 @@ contains
     return
   end subroutine fetch_trans_data
 !!***
+
+! ---------------------------------------------------------------------
+!   sbrt start_blip_transfer
+! ---------------------------------------------------------------------
+
+!!****f* comms_module/start_blip_transfer *
+!!
+!!  NAME 
+!!   start_blip_transfer
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   Posts non-blocking sends for blip coefficient transfers
+!!  INPUTS
+!! 
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler
+!!  CREATION DATE
+!!   2012/01/12
+!!  MODIFICATION HISTORY
+!!    
+!!  SOURCE
+!!
+  subroutine start_blip_transfer(nreq,sends,mxng)
+
+    use matrix_data, ONLY: blip_trans
+    use mpi
+    use GenComms, ONLY: cq_abort, myid
+    use support_spec_format, ONLY : coefficient_array
+    
+    implicit none
+
+    ! Passed
+    integer :: nreq(:)
+    integer :: sends,mxng
+
+    ! Local
+    integer :: i,j,tag, ind_part, ierr
+    logical :: get
+
+    sends = 0
+    nreq = 0
+    do i=1,blip_trans%nproc  ! Loop over neighbour nodes
+       do j=1,blip_trans%np_send(i) ! Loop over partitions to send
+          ind_part = blip_trans%pl_send(j,i)
+          get = .false.
+          if(j>1) then
+             if(ind_part/=blip_trans%pl_send(j-1,i)) then
+                get = .true.
+             end if
+          else if (j==1) then
+             get = .true.
+          end if
+          if(get.AND.blip_trans%partlen(ind_part)>0) then
+             sends = sends + 1
+             ! This defines a unique tag for each message sent by this node
+             tag = (blip_trans%ncomm(i)-1)*mxng + ind_part
+             call MPI_issend(coefficient_array(blip_trans%partst(ind_part)),blip_trans%partlen(ind_part),MPI_DOUBLE_PRECISION, &
+                  blip_trans%ncomm(i)-1,tag,MPI_COMM_WORLD,nreq(sends),ierr)
+             if(ierr/=0) call cq_abort('Error sending blip coefficients for part: ',j,ierr)
+          end if
+       end do
+    end do
+    return
+  end subroutine start_blip_transfer
+!!***
+
+! ---------------------------------------------------------------------
+!   sbrt fetch_blips
+! ---------------------------------------------------------------------
+
+!!****f* comms_module/fetch_blips *
+!!
+!!  NAME 
+!!   fetch_blips
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   Fetches blip coefficients for a partition
+!!  INPUTS
+!! 
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler
+!!  CREATION DATE
+!!   2012/01/12
+!!  MODIFICATION HISTORY
+!!    
+!!  SOURCE
+!!
+  subroutine fetch_blips(part_blips,part_len,send_proc,tag)
+  
+    use mpi
+    use datatypes
+    use GenComms, ONLY: cq_abort, myid
+    use support_spec_format, ONLY : coefficient_array
+
+    implicit none
+  
+    ! Passed
+    integer :: part_len, send_proc, tag
+    real(double), dimension(part_len) :: part_blips
+  
+    ! Local
+    integer :: ierr, stat
+    integer :: nrstat(MPI_STATUS_SIZE)
+  
+    ierr = 0
+    !tag = myid
+    if(part_len>0) then!send_proc/=myid+1.AND.part_len>0) then
+       call MPI_recv(part_blips,part_len,MPI_DOUBLE_PRECISION,send_proc, tag, MPI_COMM_WORLD, nrstat, ierr) 
+       if(ierr/=0) call cq_abort('Error receiving blip coefficients: ',ierr)
+    end if
+    return
+  end subroutine fetch_blips
+!!***
+
 end module comms_module

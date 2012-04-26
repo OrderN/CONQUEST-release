@@ -34,6 +34,8 @@
 !!    Changed for output to file not stdout
 !!   2008/05/22 ast
 !!    Added timers
+!!   2012/01/18 16:52 dave
+!!    Added blip transfer derived type
 !!***
 module matrix_module
 
@@ -151,6 +153,29 @@ module matrix_module
      integer :: inode                       ! Number of neig proc
      integer :: int_win, ele_win  ! These are the windows for MPI2
   end type comms_data
+!!***
+
+!!****s* matrix_module/blip_transfer *
+!!  NAME
+!!   blip_transfer
+!!  PURPOSE
+!!   Communication data for a blip transfers (used in analytic blip integration)
+!!  AUTHOR
+!!   D.R.Bowler
+!!  SOURCE
+!!
+  type blip_transfer
+     integer :: nproc                   ! Number of processes to communicate with
+     integer :: npart_send              ! Total number of partitions to send
+     integer, pointer :: ncomm(:)       ! Processes to communicate with
+     integer, pointer :: np_send(:)     ! Number of partitions to send
+     integer, pointer :: neigh_pl(:)    ! List of processors for partitions
+     integer, pointer :: pl_send(:,:)   ! List of partitions to send
+     integer, pointer :: partst(:)      ! Start of data for partition in coefficient_array 
+     integer, pointer :: partlen(:)     ! Size of data in partition 
+     integer, pointer :: len_send(:,:)  ! Length to send
+     integer, pointer :: len_recv(:)  ! Length to receive
+  end type blip_transfer
 !!***
 
 !!****s* matrix_module/matrix_mult *

@@ -557,6 +557,8 @@ contains
   !!   2012/03/27 L.Tong
   !!   - Changed spin implementation
   !!   - removed redundant input parameter real(double) mu
+  !!  2012/04/03 10:13 dave
+  !!   Update for analytic blips
   !!  SOURCE
   !!
   subroutine test_FullPulay(fixed_potential, vary_mu, n_L_iterations, &
@@ -574,7 +576,7 @@ contains
                                z_atom_cell, id_glob_inv, WhichPulay, &
                                BothPulay, flag_self_consistent,      &
                                flag_basis_set, PAOs, blips,          &
-                               ni_in_cell, nspin
+                               ni_in_cell, nspin, flag_analytic_blip_int
     use energy,          only: local_ps_energy, hartree_energy,      &
                                xc_energy, get_energy, band_energy
     use force_module,    only: pulay_force, Pulay, HF_and_Pulay,     &
@@ -632,7 +634,7 @@ contains
     E0 = total_energy
     ! Find force
     WhichPulay = BothPulay
-    call pulay_force(p_force, fixed_potential, vary_mu,      &
+    call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
     ! This routine deals with the movement of the nonlocal
@@ -650,7 +652,7 @@ contains
     end do
     ! get_KE_force changes matK, that is why we need to use matKold to
     ! get back the correct matK
-    call get_KE_force(KE_force, ni_in_cell)
+    if(.NOT.flag_analytic_blip_int) call get_KE_force(KE_force, ni_in_cell)
     do spin = 1, nspin
        call matrix_sum(zero, matK(spin), one, matKold(spin))
     end do
@@ -707,7 +709,7 @@ contains
     !                   density, pseudopotential, N_GRID_MAX)
     ! call get_energy(total_energy)
     ! Find force
-    call pulay_force(p_force, fixed_potential, vary_mu,      &
+    call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
     if (flag_basis_set == PAOs) then
@@ -720,7 +722,7 @@ contains
     do spin = 1, nspin
        call matrix_sum(zero, matKold(spin), one, matK(spin))
     end do
-    call get_KE_force(KE_force, ni_in_cell)
+    if(.NOT.flag_analytic_blip_int) call get_KE_force(KE_force, ni_in_cell)
     do spin = 1, nspin
        call matrix_sum(zero, matK(spin), one, matKold(spin))
     end do
@@ -1255,6 +1257,8 @@ contains
   !!  2012/03/27 L.Tong
   !!  - Changed spin implementation
   !!  - Removed redundant input parameter real(double) mu
+  !!  2012/04/03 10:13 dave
+  !!   Update for analytic blips
   !!  SOURCE
   !!
   subroutine test_PhiPulay_KE(fixed_potential, vary_mu,               &
@@ -1273,9 +1277,9 @@ contains
                                           y_atom_cell, z_atom_cell, &
                                           id_glob_inv, flag_basis_set,&
                                           blips, ni_in_cell, &
-                                          nspin
+                                          nspin, flag_analytic_blip_int
     use energy,                     only: kinetic_energy, get_energy
-    use force_module,               only: get_KE_force
+    use force_module,               only: get_KE_force, pulay_force
     use GenComms,                   only: myid, inode, ionode
     use H_matrix_module,            only: get_H_matrix
     use blip_grid_transform_module, only: blip_to_support_new
@@ -1302,7 +1306,7 @@ contains
     real(double) ::  E0, F0, E1, F1, analytic_force, numerical_force
     integer,      dimension(nspin)        :: matKold
     real(double), dimension(nspin)        :: electrons
-    real(double), dimension(3,ni_in_cell) :: KE_force
+    real(double), dimension(3,ni_in_cell) :: KE_force, p_force
 
     ! We're coming in from initial_H: assume that initial E found
     ! Find force
@@ -1310,7 +1314,13 @@ contains
        matKold(spin) = allocate_temp_matrix(Hrange,0)
        call matrix_sum(zero, matKold(spin), one, matK(spin))
     end do
-    call get_KE_force(KE_force, ni_in_cell)
+    if(flag_analytic_blip_int) then
+       call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
+            n_L_iterations, L_tolerance, tolerance, &
+            total_energy, expected_reduction, ni_in_cell)       
+    else
+       call get_KE_force(KE_force, ni_in_cell)
+    end if
     do spin = 1, nspin
        call matrix_sum(zero, matK(spin), one, matKold(spin))
     end do
@@ -1357,7 +1367,13 @@ contains
                       maxngrid)
     call get_energy (total_energy)
     ! Find force
-    call get_KE_force(KE_force, ni_in_cell)
+    if(flag_analytic_blip_int) then
+       call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
+            n_L_iterations, L_tolerance, tolerance, &
+            total_energy, expected_reduction, ni_in_cell)       
+    else
+       call get_KE_force(KE_force, ni_in_cell)
+    end if
     E1 = kinetic_energy
     F1 = KE_force(TF_direction,TF_atom_moved)
     if (inode == ionode) &
@@ -1478,7 +1494,7 @@ contains
     ! Local variables
     real(double) ::  E0, F0, E1, F1, analytic_force, numerical_force
     real(double), dimension(nspin)        :: electrons
-    real(double), dimension(3,ni_in_cell) :: p_force
+    real(double), dimension(3,ni_in_cell) :: p_force, KE_force
 
     ! We're coming in from initial_H: assume that initial E found
     ! Find force
@@ -1486,7 +1502,7 @@ contains
                       maxngrid)
 
     WhichPulay = PhiPulay
-    call pulay_force(p_force, fixed_potential, vary_mu,      &
+    call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
     ! Store local energy
@@ -1533,7 +1549,7 @@ contains
                       maxngrid)
     call get_energy(total_energy)
     ! Find force
-    call pulay_force(p_force, fixed_potential, vary_mu,      &
+    call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
 !    E1 = hartree_energy + xc_energy + local_ps_energy
@@ -1650,13 +1666,13 @@ contains
 
     ! Local variables
     real(double) ::  E0, F0, E1, F1, analytic_force, numerical_force
-    real(double), dimension(3,ni_in_cell) :: p_force
+    real(double), dimension(3,ni_in_cell) :: p_force, KE_force
     logical :: reset_L
 
     ! We're coming in from initial_H: assume that initial E found
     ! Find force
     WhichPulay = SPulay
-    call pulay_force(p_force, fixed_potential, vary_mu,      &
+    call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
     ! Store local energy
@@ -1731,7 +1747,7 @@ contains
        call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                          DCS_parts, parts)
     end if
-    call pulay_force(p_force, fixed_potential, vary_mu,      &
+    call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
 !    E1 = hartree_energy + xc_energy + local_ps_energy

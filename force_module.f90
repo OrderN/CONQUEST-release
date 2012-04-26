@@ -56,6 +56,8 @@
 !!    for P.C.C.
 !!   2011/10/03 08:17 dave
 !!    Adding cDFT forces
+!!   2012/04/03 09:38 dave
+!!    Changes for analytic blips
 !!  SOURCE
 !!
 module force_module
@@ -152,6 +154,8 @@ contains
   !!   2012/03/26 L.Tong
   !!   - Changed spin implementation
   !!   - removed redundant input parameter real(double) mu
+  !!   2012/04/03 09:39 dave
+  !!    Added KE force to pulay force call (for analytic blips)
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -178,7 +182,7 @@ contains
                                       IPRINT_TIME_THRES2,              &
                                       area_moveatoms, flag_pcc_global, &
                                       flag_perform_cdft, flag_dft_d2,  &
-                                      nspin, spin_factor
+                                      nspin, spin_factor, flag_analytic_blip_int
     use density_module,         only: get_electronic_density, density, &
                                       build_Becke_weight_forces
     use functions_on_grid,      only: supportfns, H_on_supportfns
@@ -253,7 +257,7 @@ contains
     ! This ASSUMES that H_on_supportfns contains the values of H
     ! acting on support functions
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
-    call pulay_force(p_force, fixed_potential, vary_mu,           &
+    call pulay_force(p_force, KE_force, fixed_potential, vary_mu, &
                      n_cg_L_iterations, tolerance, con_tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
     call stop_print_timer(tmr_l_tmp1, "Pulay force", IPRINT_TIME_THRES2)
@@ -346,7 +350,7 @@ contains
     end if
     ! Get the kinetic energy force component
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
-    call get_KE_force(KE_force, ni_in_cell)
+    if(.NOT.flag_analytic_blip_int) call get_KE_force(KE_force, ni_in_cell)
     call stop_print_timer(tmr_l_tmp1, "kinetic energy force", &
                           IPRINT_TIME_THRES2)
 
@@ -595,9 +599,11 @@ contains
   !!   2012/03/25 L.Tong
   !!   - Changed spin implementation
   !!   - removed redundant input parameter real(double) mu
+  !!   2012/04/03 09:41 dave
+  !!    Added code for analytic blip integrals
   !!  SOURCE
   !!
-  subroutine pulay_force(p_force, fixed_potential, vary_mu,  &
+  subroutine pulay_force(p_force, KE_force, fixed_potential, vary_mu,  &
                          n_cg_L_iterations, L_tol, self_tol, &
                          total_energy, expected_reduction, n_atoms)
 
@@ -606,25 +612,27 @@ contains
     use numbers
     use primary_module,              only: bundle
     use matrix_module,               only: matrix, matrix_halo
-    use matrix_data,                 only: mat, Srange, halo
+    use matrix_data,                 only: mat, Srange, halo, blip_trans
     use mult_module,                 only: LNV_matrix_multiply,      &
                                            matM12,                   &
                                            allocate_temp_matrix,     &
                                            free_temp_matrix,         &
                                            return_matrix_value,      &
                                            matrix_pos,               &
-                                           scale_matrix_value
+                                           scale_matrix_value, ltrans, &
+                                           matK, return_matrix_block_pos
     use global_module,               only: iprint_MD, WhichPulay,    &
                                            BothPulay, PhiPulay,      &
                                            SPulay, flag_basis_set,   &
                                            blips, PAOs, sf,          &
                                            flag_onsite_blip_ana,     &
-                                           nspin, spin_factor
+                                           nspin, spin_factor,       &
+                                           flag_analytic_blip_int, id_glob, species_glob
     use set_bucket_module,           only: rem_bucket, sf_sf_rem
     use blip_grid_transform_module,  only: blip_to_support_new,      &
                                            blip_to_grad_new
     use calc_matrix_elements_module, only: get_matrix_elements_new
-    use S_matrix_module,             only: get_S_matrix
+    use S_matrix_module,             only: get_S_matrix, get_dS_analytic_oneL
     use H_matrix_module,             only: get_H_matrix
     use GenComms,                    only: gsum, cq_abort, mtime,    &
                                            inode, ionode
@@ -644,7 +652,14 @@ contains
     use density_module,              only: get_electronic_density,   &
                                            density
     use maxima_module,               only: maxngrid
-
+    use comms_module,                ONLY: start_blip_transfer, fetch_blips
+    use group_module,                ONLY: parts
+    use blip,                        ONLY: blip_info
+    use cover_module,                ONLY: BCS_parts
+    use GenComms,                    ONLY: myid, cq_abort, my_barrier, mtime
+    use mpi
+    use support_spec_format,         ONLY: support_function, coefficient_array, &
+                                           supports_on_atom
     implicit none
 
     ! Passed variables
@@ -652,16 +667,27 @@ contains
     integer      :: n_atoms
     integer      :: n_cg_L_iterations
     real(double) :: L_tol, self_tol, total_energy, expected_reduction
-    real(double), dimension(3,n_atoms) :: p_force
+    real(double), dimension(3,n_atoms) :: p_force, KE_force
 
     ! Local variables
     logical      :: test
     integer      :: direction, count, nb, na, nsf1, point, place, i, &
                     neigh, ist, wheremat, jsf, gcspart, tmp_fn, n1,  &
                     n2, this_nsf, spin
+    integer :: spec, icall, jpart, ind_part, j_in_halo, pb_len, nab
+    integer :: j,jseq,specj,i_in_prim,speci, pb_st, nblipsj, nod, nsfj,sends,ierr
+    integer :: neigh_global_num, neigh_global_part, neigh_species, neigh_prim, this_nsfi, this_nsfj
+    integer, allocatable, dimension(:) :: nreqs
+
     real(double) :: energy_in, t0, t1
     real(double), dimension(nspin) :: electrons, energy_tmp
-
+    real(double) :: dx, dy, dz, time0, time1
+    real(double), allocatable, dimension(:), target :: part_blips
+    type(support_function) :: supp_on_j
+    integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
+    real(double), allocatable, dimension(:,:,:) :: this_data_K
+    real(double), allocatable, dimension(:,:,:) :: this_data_M12
+    real(double) :: forS, forKE
 
     ! Workarray for New Version
     !    I am not sure the present way for calculating p_force is the right way.
@@ -684,7 +710,7 @@ contains
     mat_tmp = allocate_temp_matrix(Srange, 0)
     if (inode == ionode .and. iprint_MD > 2) &
          write (io_lun, fmt='(4x,"Starting pulay_force()")')
-    p_force = zero
+    !p_force = zero
 
     ! first, lets make sure we have everything up to date. 
     ! Update H will give us support, S, K, H
@@ -718,7 +744,7 @@ contains
           ! and dontE)
        end if
     end if ! if (test)
-    
+
     t0 = mtime()
     ! for the energy wrt support function we need  M1 and M2...
     ! If we're diagonalising, we've already build data_M12
@@ -736,25 +762,128 @@ contains
     ! Now we can evaluate support_gradient (into H_on_supportfns(1))
     ! If we are doing analytic on-site integrals, then zero the
     ! elements of M12 (the energy matrix) first
-    if (flag_basis_set == blips .and. flag_onsite_blip_ana) then
-       iprim = 0
-       do np = 1, bundle%groups_on_node
-          do ni = 1, bundle%nm_nodgroup(np)
-             iprim = iprim+1
-             this_nsf = nsf_species(bundle%species(iprim))
-             do n1 = 1, this_nsf
-                do n2 = 1, this_nsf
-                   do spin = 1, nspin
-                      call scale_matrix_value(matM12(spin), np, ni, &
-                                              iprim, 0, n1, n2, zero, 1)
-                   end do ! spin
-                end do ! n2
-             end do ! n1
-          end do ! ni
-       end do ! np
+    if(flag_basis_set == blips .and. flag_analytic_blip_int) then
+       allocate(nreqs(blip_trans%npart_send))
+       ! For speed, we should have a blip_trans%max_len and max_nsf and allocate once
+       time0 = mtime()
+       call start_blip_transfer(nreqs,sends,parts%mx_ngonn)
+       time1 = mtime()
+       do jpart=1,halo(Srange)%np_in_halo
+          pb_len = blip_trans%len_recv(jpart)
+          ind_part = halo(Srange)%lab_hcell(jpart)
+          nod = parts%i_cc2node(ind_part)
+          ! Fetch remote blip coefficients for partition
+          ! or copy local blip coefficients
+          time0 = mtime()
+          if(jpart>1) then
+             if(ind_part/=halo(Srange)%lab_hcell(jpart-1)) then
+                allocate(part_blips(pb_len))
+                part_blips = zero
+                if(nod==myid+1) then
+                   pb_st = blip_trans%partst(parts%i_cc2seq(ind_part))
+                   part_blips(1:pb_len) = coefficient_array(pb_st:pb_st+pb_len-1)
+                else
+                   call fetch_blips(part_blips,pb_len,nod-1,(myid)*parts%mx_ngonn + parts%i_cc2seq(ind_part))
+                end if
+             end if
+          else
+             allocate(part_blips(pb_len))
+             part_blips = zero
+             if(nod==myid+1) then
+                pb_st = blip_trans%partst(parts%i_cc2seq(ind_part))
+                part_blips(1:pb_len) = coefficient_array(pb_st:pb_st+pb_len-1)
+             else
+                call fetch_blips(part_blips,pb_len,nod-1,(myid)*parts%mx_ngonn + parts%i_cc2seq(ind_part))
+             end if
+          endif
+          time1 = mtime()
+          gcspart = halo(Srange)%i_hbeg(halo(Srange)%lab_hcover(jpart))
+          pb_st = 1
+          time0 = mtime()
+          do j=1,halo(Srange)%nh_part(jpart) ! Loop over atoms j in partition
+             j_in_halo = halo(Srange)%j_beg(jpart)+j-1
+             jseq = halo(Srange)%j_seq(j_in_halo)
+             specj = species_glob( id_glob( parts%icell_beg(halo(Srange)%lab_hcell(jpart))+jseq-1) )
+             nblipsj = blip_info(specj)%NBlipsRegion
+             this_nsfj = nsf_species(specj)
+             allocate(supp_on_j%supp_func(this_nsfj))
+             do nsfj=1,this_nsfj
+                supp_on_j%supp_func(nsfj)%ncoeffs = nblipsj
+                supp_on_j%supp_func(nsfj)%coefficients => part_blips(pb_st:pb_st+nblipsj-1)
+                pb_st = pb_st+nblipsj
+             end do
+             do i=1,ltrans(Srange)%n_hnab(j_in_halo) ! Loop over atoms i: primary set neighbours of j
+                i_in_prim=ltrans(Srange)%i_prim(ltrans(Srange)%i_beg(j_in_halo)+i-1)
+                speci = bundle%species(i_in_prim)
+                this_nsfi = nsf_species(speci)
+                dx = BCS_parts%xcover(gcspart+jseq-1)-bundle%xprim(i_in_prim)
+                dy = BCS_parts%ycover(gcspart+jseq-1)-bundle%yprim(i_in_prim)
+                dz = BCS_parts%zcover(gcspart+jseq-1)-bundle%zprim(i_in_prim)
+                if((dx*dx + dy*dy + dz*dz)>very_small) then
+                   allocate(this_data_K(this_nsfi,this_nsfj,nspin),this_data_M12(this_nsfi,this_nsfj,nspin))
+                   this_data_K = zero
+                   this_data_M12 = zero
+                   do spin=1,nspin
+                      wheremat = matrix_pos(matK(spin),i_in_prim,j_in_halo,1,1)
+                      call return_matrix_block_pos(matK(spin),wheremat,this_data_K(:,:,spin),this_nsfi*this_nsfj)
+                      wheremat = matrix_pos(matM12(spin),i_in_prim,j_in_halo,1,1)
+                      call return_matrix_block_pos(matM12(spin),wheremat,this_data_M12(:,:,spin),this_nsfi*this_nsfj)
+                   end do
+                   do direction = 1,3
+                      call get_dS_analytic_oneL(supports_on_atom(i_in_prim),supp_on_j, &
+                           forS,forKE,this_data_M12,this_data_K, i_in_prim, &
+                           j_in_halo,dx,dy,dz,speci,specj,this_nsfi,this_nsfj,direction)
+                      p_force(direction,bundle%ig_prim(i_in_prim)) = p_force(direction,bundle%ig_prim(i_in_prim)) &
+                           - forS!(direction)
+                      KE_force(direction,bundle%ig_prim(i_in_prim)) = KE_force(direction,bundle%ig_prim(i_in_prim)) &
+                           - forKE!(direction)
+                   end do
+                   deallocate(this_data_M12,this_data_K)
+                end if
+             end do
+             do nsfj=1,this_nsfj
+                nullify(supp_on_j%supp_func(nsfj)%coefficients)
+             end do
+             deallocate(supp_on_j%supp_func)
+          end do
+          if(jpart<halo(Srange)%np_in_halo) then
+             if(ind_part/=halo(Srange)%lab_hcell(jpart+1)) then
+                deallocate(part_blips)
+             end if
+          else
+             deallocate(part_blips)
+          end if
+          time1 = mtime()
+       end do
+       if(sends>0) then
+          do i=1,sends
+             call MPI_Wait(nreqs(i),mpi_stat,ierr)
+             if(ierr/=0) call cq_abort("Error waiting for blip send to finish",i)
+          end do
+       end if
+       call my_barrier
+       deallocate(nreqs)
+       WhichPulay = PhiPulay
+    else
+       if (flag_basis_set == blips .and. flag_onsite_blip_ana) then
+          iprim = 0
+          do np = 1, bundle%groups_on_node
+             do ni = 1, bundle%nm_nodgroup(np)
+                iprim = iprim+1
+                this_nsf = nsf_species(bundle%species(iprim))
+                do n1 = 1, this_nsf
+                   do n2 = 1, this_nsf
+                      do spin = 1, nspin
+                         call scale_matrix_value(matM12(spin), np, ni, &
+                              iprim, 0, n1, n2, zero, 1)
+                      end do ! spin
+                   end do ! n2
+                end do ! n1
+             end do ! ni
+          end do ! np
+       end if
+       WhichPulay = BothPulay
     end if
-    WhichPulay = BothPulay
-
     call get_support_gradient(H_on_supportfns(1), inode, ionode)
 
     t1 = mtime()
@@ -916,7 +1045,7 @@ contains
     !  In principle, the summation below is not needed.
     !  p_force should be calculated only for my primary set of atoms.
     call gsum(p_force, 3, n_atoms)
-
+    if(flag_analytic_blip_int) call gsum (KE_force, 3, n_atoms)
     call free_temp_matrix(mat_tmp)
 
     return

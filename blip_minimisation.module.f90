@@ -24,6 +24,8 @@
 !!    Changed for output to file not stdout
 !!   2008/06/10 ast
 !!    Added timers
+!!   2012/04/02 17:21 dave
+!!    Changes for analytic blip integration
 !!  SOURCE
 !!
 module blip_minimisation
@@ -106,6 +108,8 @@ contains
   !!   2012/03/23 L.Tong
   !!   - Changed spin implementation
   !!   - Removed redundant input parameter real(double) mu
+  !!   2012/04/02 17:22 dave
+  !!    Update for analytic blip integration
   !!  SOURCE
   !!
   subroutine vary_support(n_support_iterations, fixed_potential, &
@@ -125,7 +129,7 @@ contains
     use DiagModule,          only: diagon
     use blip_gradient,       only: get_blip_gradient, get_electron_gradient
     use global_module,       only: flag_precondition_blips, iprint_basis, &
-                                   area_basis, nspin, spin_factor
+                                   area_basis, nspin, spin_factor, flag_analytic_blip_int
     use io_module,           only: dump_blip_coeffs
     use functions_on_grid,   only: supportfns, H_on_supportfns,           &
                                    gridfunctions, fn_on_grid
@@ -135,6 +139,7 @@ contains
                                    supports_on_atom
     use primary_module,      only: bundle
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use S_matrix_module, ONLY: get_S_matrix
 
     implicit none
 
@@ -207,6 +212,7 @@ contains
                                 dontM3, doM4, dontphi, dontE,         &
                                 mat_M12=matM12, mat_M4=matM4)
     end if
+    if(flag_analytic_blip_int) call get_S_matrix(inode, ionode)
     call get_blip_gradient(inode, ionode)
     if (inode == ionode .and. iprint_basis > 2) &
          write (io_lun, fmt='(6x,"Got blip gradient")')
@@ -370,7 +376,11 @@ contains
                                       doM2, dontM3, doM4, dontphi,     &
                                       dontE, mat_M12=matM12, mat_M4=matM4)
           end if
-          grad_coeff_array = zero        !! TSUYOSHI MIYAZAKI 2007 Mar 29
+          if(flag_analytic_blip_int) then
+             call get_S_matrix(inode, ionode)
+          else
+             grad_coeff_array = zero        !! TSUYOSHI MIYAZAKI 2007 Mar 29
+          end if
           elec_grad_coeff_array = zero   !! TSUYOSHI MIYAZAKI 2007 Mar 29
           call get_blip_gradient(inode, ionode)
           

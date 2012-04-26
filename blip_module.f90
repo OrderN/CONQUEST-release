@@ -57,7 +57,7 @@ module blip
   use datatypes
   use global_module, ONLY: io_lun
   use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
-
+  
   implicit none
 
   save
@@ -336,6 +336,10 @@ contains
 !!    Added timers
 !!   2011/11/17 10:38 dave
 !!    Changes for new blip data (removing allocation)
+!!   2012/01/18 16:56 dave
+!!    Initialisation for blip coefficient transfer
+!!   2012/04/26 16:18 dave
+!!    More changes for analytic blips
 !!  SOURCE
 !!
   subroutine set_blip_index(inode,ionode)
@@ -352,6 +356,7 @@ contains
     use dimens, ONLY: RadiusSupport
     use memory_module, ONLY: reg_alloc_mem, type_dbl, type_int
     use fft_module, ONLY: set_SF_fft
+    use matrix_data, ONLY: blip_trans
 
     implicit none
 
@@ -359,7 +364,7 @@ contains
     integer, intent(in) :: inode, ionode
 
     ! Local variables
-    integer :: i, n_blips, na, nb, nx, ny, nz, stat, size, this_nsf, spec, maxsize
+    integer :: i, n_blips, na, nb, nx, ny, nz, stat, size, this_nsf, spec, maxsize, ni, np
     real(double) :: a2, b2, dx, dy, dz, r2_over_b2
 
 
@@ -528,33 +533,132 @@ contains
     size = 0
     call start_timer(tmr_std_allocation)
     allocate(supports_on_atom(bundle%n_prim),support_gradient(bundle%n_prim),support_elec_gradient(bundle%n_prim))
+    allocate(blip_trans%partst(bundle%groups_on_node),blip_trans%partlen(bundle%groups_on_node))
     call stop_timer(tmr_std_allocation)
-    do i=1,bundle%n_prim
-       ! Check on species
-       spec = bundle%species(i)
-       this_nsf = nsf_species(spec)
-       size = size + this_nsf*blip_info(spec)%NBlipsRegion
-       supports_on_atom(i)%nsuppfuncs = this_nsf
-       call start_timer(tmr_std_allocation)
-       allocate(supports_on_atom(i)%supp_func(this_nsf),support_gradient(i)%supp_func(this_nsf),&
-            support_elec_gradient(i)%supp_func(this_nsf))
-       call stop_timer(tmr_std_allocation)
-       supports_on_atom(i)%supp_func(:)%ncoeffs = blip_info(spec)%NBlipsRegion
-       support_gradient(i)%nsuppfuncs = this_nsf
-       support_gradient(i)%supp_func(:)%ncoeffs = blip_info(spec)%NBlipsRegion
-       support_elec_gradient(i)%nsuppfuncs = this_nsf
-       support_elec_gradient(i)%supp_func(:)%ncoeffs = blip_info(spec)%NBlipsRegion
+    i=0
+    !do i=1,bundle%n_prim
+    blip_trans%partst = 0
+    blip_trans%partlen = 0
+    blip_trans%partst(1) = 1
+    do np=1,bundle%groups_on_node
+       blip_trans%partlen(np) = 0 
+       if(bundle%nm_nodgroup(np) > 0) then
+          do ni=1,bundle%nm_nodgroup(np)
+             i=i+1
+             ! Check on species
+             spec = bundle%species(i)
+             this_nsf = nsf_species(spec)
+             size = size + this_nsf*blip_info(spec)%NBlipsRegion
+             blip_trans%partlen(np)=blip_trans%partlen(np)+ this_nsf*blip_info(spec)%NBlipsRegion
+             supports_on_atom(i)%nsuppfuncs = this_nsf
+             call start_timer(tmr_std_allocation)
+             allocate(supports_on_atom(i)%supp_func(this_nsf),support_gradient(i)%supp_func(this_nsf),&
+                  support_elec_gradient(i)%supp_func(this_nsf))
+             call stop_timer(tmr_std_allocation)
+             supports_on_atom(i)%supp_func(:)%ncoeffs = blip_info(spec)%NBlipsRegion
+             support_gradient(i)%nsuppfuncs = this_nsf
+             support_gradient(i)%supp_func(:)%ncoeffs = blip_info(spec)%NBlipsRegion
+             support_elec_gradient(i)%nsuppfuncs = this_nsf
+             support_elec_gradient(i)%supp_func(:)%ncoeffs = blip_info(spec)%NBlipsRegion
+          end do
+       end if
+       if(np>1) then 
+          blip_trans%partst(np) = blip_trans%partst(np-1)+blip_trans%partlen(np-1)
+       end if
     end do
     coeff_array_size = size
     call allocate_supp_coeff_array(size)
     call associate_supp_coeff_array(supports_on_atom,bundle%n_prim,coefficient_array,size)
     call associate_supp_coeff_array(support_gradient,bundle%n_prim,grad_coeff_array,size)
     call associate_supp_coeff_array(support_elec_gradient,bundle%n_prim,elec_grad_coeff_array,size)
-
+    call setup_blip_transfer
     call stop_timer(tmr_std_basis)
     return
 
   end subroutine set_blip_index
+!!***
+
+!!****f* blip/setup_blip_transfer *
+!!
+!!  NAME 
+!!   setup_blip_transfer
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   Creates arrays needed for transfer of blip coefficients for analytic blip integrals
+!!  INPUTS
+!!   
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   D. R. Bowler
+!!  CREATION DATE
+!!   2012/01/12
+!!  MODIFICATION HISTORY
+!!   
+!!  SOURCE
+!!
+  subroutine setup_blip_transfer
+
+    use matrix_data, ONLY: halo, Srange, blip_trans
+    use mult_module, ONLY: mult, LHL_SL_S
+    use group_module, ONLY: parts
+    use global_module, ONLY: species_glob, id_glob
+    use species_module, ONLY: nsf_species
+
+    implicit none
+
+    ! Local variables
+    integer :: i, j, kpart, jpart, partlen, part, iproc, thisproc, gcspartlab, ni, specj, jseq, j_in_halo, &
+         maxps, maxpr
+
+    blip_trans%nproc = mult(LHL_SL_S)%comms%inode
+    if(blip_trans%nproc>0) then
+       maxps = 0
+       do i=1,blip_trans%nproc
+          if(mult(LHL_SL_S)%comms%np_send(i)>maxps) maxps = mult(LHL_SL_S)%comms%np_send(i)
+       end do
+       allocate(blip_trans%np_send(blip_trans%nproc),blip_trans%pl_send(maxps,blip_trans%nproc+1), &
+            blip_trans%neigh_pl(halo(Srange)%np_in_halo),blip_trans%ncomm(blip_trans%nproc), &
+            blip_trans%len_recv(halo(Srange)%np_in_halo))
+       blip_trans%npart_send = 0
+       do i=1,blip_trans%nproc
+          blip_trans%np_send(i) = mult(LHL_SL_S)%comms%np_send(i)
+          blip_trans%npart_send = blip_trans%npart_send + blip_trans%np_send(i)
+          blip_trans%ncomm(i) = mult(LHL_SL_S)%comms%ncomm(i)
+          do kpart=1,blip_trans%np_send(i)
+             blip_trans%pl_send(kpart,i) = mult(LHL_SL_S)%comms%pl_send(kpart,i)
+             ! The length and start are blip_trans%partst and blip_trans%partlen, accessed by pl_send(kpart,i) 
+             ! and defined in blip_module
+          end do
+       end do
+    else
+       allocate(blip_trans%neigh_pl(halo(Srange)%np_in_halo), &
+            blip_trans%len_recv(halo(Srange)%np_in_halo), blip_trans%pl_send(halo(Srange)%np_in_halo,1))
+       do i=1,halo(Srange)%np_in_halo
+          blip_trans%pl_send(i,1) = parts%i_cc2seq(halo(Srange)%lab_hcell(i))
+       end do
+    end if
+    do jpart=1,halo(Srange)%np_in_halo
+       partlen = 0
+       blip_trans%neigh_pl(jpart) =  mult(LHL_SL_S)%comms%neigh_node_list(jpart)
+       gcspartlab = halo(Srange)%i_hbeg(halo(Srange)%lab_hcover(jpart))
+       do j=1,halo(Srange)%nh_part(jpart)
+          j_in_halo = halo(Srange)%j_beg(jpart) + j-1
+          jseq = halo(Srange)%j_seq(j_in_halo)
+          specj = species_glob( id_glob( parts%icell_beg(halo(Srange)%lab_hcell(jpart))+jseq-1) )
+          !partlen = partlen + halo(Srange)%ndimj(j_in_halo)*blip_info(specj)%NBlipsRegion
+       end do
+       ! Store partlen
+       do j=1,parts%nm_group(halo(Srange)%lab_hcell(jpart))
+          specj = species_glob( id_glob( parts%icell_beg(halo(Srange)%lab_hcell(jpart))+j-1) )
+          partlen = partlen + nsf_species(specj)*blip_info(specj)%NBlipsRegion
+       end do
+       blip_trans%len_recv(jpart) = partlen 
+    end do
+    return
+  end subroutine setup_blip_transfer
 !!***
 
 !!****f* blip/gauss2blip *

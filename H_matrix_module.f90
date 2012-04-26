@@ -138,6 +138,8 @@ contains
   !!    subroutine
   !!  - Renamed the new subroutine get_H_matrix as it used to be.
   !!    Deleted het_H_matrix interface.
+  !!  2012/04/26 16:13 dave
+  !!   Changes for analytic evaluation of KE
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -166,7 +168,7 @@ contains
                                            iprint_SC,                   &
                                            flag_perform_cDFT,           &
                                            area_ops, nspin,             &
-                                           spin_factor
+                                           spin_factor, flag_analytic_blip_int, blips
     use PAO_grid_transform_module,   only: single_PAO_to_grid
     use functions_on_grid,           only: supportfns, H_on_supportfns, &
                                            allocate_temp_fn_on_grid,    &
@@ -221,10 +223,10 @@ contains
        if (inode == ionode .and. iprint_ops > 3)&
             & write(io_lun, fmt='(2x,"Rebuilding KE")')
        ! both matKE and matNL are independent of spin (only XC is spin dependent)
-       call matrix_scale(zero, matKE)
+       if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) call matrix_scale(zero, matKE)
        call matrix_scale(zero, matNL)
        ! get the T matrix and the kinetic energy...
-       call get_T_matrix(matKE)
+       if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) call get_T_matrix(matKE)
        ! now, we do the non-local part (if we are doing it)
        if (non_local) then
           if (inode == ionode .and. iprint_ops > 3) &
