@@ -249,21 +249,17 @@ contains
     end do
 
     ! Calculate the number of electrons in the spin channels
-    if (flag_fix_spin_population) then
-       sum_elecN_spin = ne_spin_in_cell(1) + ne_spin_in_cell(2)
-       if (sum_elecN_spin /= ne_in_cell) then
+    ! if (flag_fix_spin_population) then
+    sum_elecN_spin = ne_spin_in_cell(1) + ne_spin_in_cell(2)
+    if (sum_elecN_spin /= ne_in_cell) then
+       if (nspin == 2 .and. flag_fix_spin_population) then
           call cq_abort('read_and_write: sum of number of electrons &
                          &in spin channels is different from total &
                          &number of electrons. ', &
-                        sum_elecN_spin, ne_in_cell)
+                         sum_elecN_spin, ne_in_cell)
+       else
+          ne_spin_in_cell(:) = half * ne_in_cell
        end if
-    else
-       ! if spin population are not fixed, then set
-       ! ne_spin_in_cell(1/2) to half of the total electron
-       ! number. Note that ne_spin_in_cell define the initial electron
-       ! population, and has no effect for the case of variable
-       ! electron number
-       ne_spin_in_cell(:) = half * ne_in_cell
     end if
 
     ! Set up various lengths, volumes, reciprocals etc. for convenient use
@@ -384,6 +380,10 @@ contains
   !!    Added flag for analytic blip integrals
   !!   2012/03/27 L.Tong
   !!   - Changed spin implementation
+  !!   2012/05/29 L.Tong
+  !!   - Added Checks for functional types. Makes sure for spin non-
+  !!     polarised calculations only the one that has spin implemented
+  !!     can be used.
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -416,7 +416,6 @@ contains
                              functional_gga_pbe96,                     &
                              functional_gga_pbe96_rev98,               &
                              functional_gga_pbe96_r99,                 &
-                             functional_lsda_pw92,                     &
                              flag_reset_dens_on_atom_move,             &
                              flag_continue_on_SC_fail, iprint_init,    &
                              iprint_mat, iprint_ops, iprint_DM,        &
@@ -433,7 +432,8 @@ contains
                              flag_onsite_blip_ana, flag_read_velocity, &
                              flag_quench_MD, temp_ion, numprocs,       &
                              flag_dft_d2, flag_only_dispersion,        &
-                             flag_perform_cDFT, flag_analytic_blip_int
+                             flag_perform_cDFT, flag_analytic_blip_int,&
+                             flag_vdWDFT, vdW_LDA_functional
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
                       RadiusSupport, NonLocalFactor, InvSRange,      &
@@ -626,20 +626,18 @@ contains
        ! Is there a net charge on the cell ?
        ne_in_cell = fdf_double('General.NetCharge',zero)
        ! Read coordinates file 
-       flag_fractional_atomic_coords = fdf_boolean('IO.FractionalAtomicCoords',.true.)
+       flag_fractional_atomic_coords = &
+            fdf_boolean('IO.FractionalAtomicCoords',.true.)
        call my_barrier()
-       ! Spin polarised calculation - if we are doing spin polarised calculations or not
+       ! Spin polarised calculation
+       ! - if we are doing spin polarised calculations or not
        flag_spin_polarisation = fdf_boolean('Spin.SpinPolarised', .false.) 
        flag_fix_spin_population = fdf_boolean('Spin.FixSpin', .false.)
        if (flag_spin_polarisation) then
           nspin = 2
           spin_factor = one
-          if (flag_fix_spin_population) then
-             ne_spin_in_cell(1) = fdf_double('Spin.NeUP', zero)
-             ne_spin_in_cell(2) = fdf_double('Spin.NeDN', zero)
-             ! ne_spin_in_cell are to be calculated later for spin
-             ! non-polarised calculations
-          end if
+          ne_spin_in_cell(1) = fdf_double('Spin.NeUP', zero)
+          ne_spin_in_cell(2) = fdf_double('Spin.NeDN', zero)
        end if
        !blip_width = fdf_double('blip_width',zero)
        !support_grid_spacing = fdf_double('support_grid_spacing',zero)
@@ -737,7 +735,7 @@ contains
        ! flag_ghost=.false.
        !   do i=1,n_species
        !      read(lun,*) j,mass(i),species_label(i)
-       !      if(mass(i) < -very_small) flag_ghost=.true.
+       !      if(mass(i) < -RD_ERR) flag_ghost=.true.
        !      type_species(i)=i
        !   end do
        !end if
@@ -749,7 +747,7 @@ contains
           do i=1,n_species
              read (unit=input_array(block_start+i-1),fmt=*) &
                   j,mass(i),species_label(i)
-             if(mass(i) < -very_small) flag_ghost=.true.
+             if(mass(i) < -RD_ERR) flag_ghost=.true.
              type_species(i)=i
           end do
           call fdf_endblock
@@ -758,7 +756,7 @@ contains
        ! for vacancy sites.   Nov. 14, 2007 
        if(flag_ghost) then
           do i=1, n_species
-             if(mass(i) < -very_small) then
+             if(mass(i) < -RD_ERR) then
                 find_species=.false.
                 do j=1,n_species
                    if(j == i) cycle
@@ -770,7 +768,7 @@ contains
                 if(.not.find_species) then 
                    type_species(i) = -i
                 endif
-             elseif(mass(i) > very_small) then
+             elseif(mass(i) > RD_ERR) then
                 type_species(i) = i
              else
                 if(inode==ionode) &
@@ -803,7 +801,7 @@ contains
              nsf_species(i) = fdf_integer('Atom.NumberOfSupports',0)
              RadiusSupport(i) = fdf_double('Atom.SupportFunctionRange',r_h)
              InvSRange = fdf_double('Atom.InvSRange',zero)
-             if(InvSRange(i)<very_small) InvSRange(i) = RadiusSupport(i)
+             if(InvSRange(i)<RD_ERR) InvSRange(i) = RadiusSupport(i)
              NonLocalFactor(i) = fdf_double('Atom.NonLocalFactor',HNL_fac)
              if(NonLocalFactor(i)>one.OR.NonLocalFactor(i)<zero) then
                 if(inode==ionode) &
@@ -837,11 +835,11 @@ contains
           end if
           if(nsf_species(i)==0) &
                call cq_abort("Number of supports not specified for species ",i)
-          if(flag_basis_set==blips.AND.blip_info(i)%SupportGridSpacing<very_small) &
+          if(flag_basis_set==blips.AND.blip_info(i)%SupportGridSpacing<RD_ERR) &
                call cq_abort("Error: for a blip basis set you must &
                               &set SupportGridSpacing for all species")
           maxnsf = max(maxnsf,nsf_species(i))
-          if(RadiusSupport(i)<very_small) &
+          if(RadiusSupport(i)<RD_ERR) &
                call cq_abort("Radius of support too small for &
                               &species; increase SupportFunctionRange ",i)
        end do
@@ -988,15 +986,31 @@ contains
        end if
        TF_atom_moved = fdf_integer('AtomMove.TestForceAtom',1)
        TF_delta = fdf_double('AtomMove.TestForceDelta',0.00001_double)
-       flag_functional_type = fdf_integer('General.FunctionalType', 1)   ! LDA PZ81
+       flag_functional_type = fdf_integer('General.FunctionalType', 3)   ! LDA PW92
+       ! check if functional types are set correctly
+       if (flag_spin_polarisation) then
+          if (flag_functional_type == functional_lda_pz81 .or. &
+              flag_functional_type == functional_lda_gth96) then
+             if (inode == ionode) &
+                  write (io_lun,'(/,a,/)') &
+                        '*** WARNING: the chosen xc-functional is not &
+                        &implemented for spin polarised calculation, &
+                        &reverting to LDA-PW92. ***'
+             flag_functional_type = functional_lda_pw92
+          end if
+          if (.not. flag_self_consistent .and. &
+              (flag_functional_type /= functional_lda_pw92)) then
+             call cq_abort('Non self-consistent forces are at the moment &
+                            &only implemented for LDA-PW92 for spin &
+                            &polarised calculations.')
+          end if
+       end if
        select case(flag_functional_type)
        case (functional_lda_pz81)
           functional_description = 'LDA PZ81'
        case (functional_lda_gth96)
           functional_description = 'LDA GTH96'
        case (functional_lda_pw92)
-          functional_description = 'LDA PW92'
-       case (functional_lsda_pw92)
           functional_description = 'LSDA PW92'
        case (functional_gga_pbe96)
           functional_description = 'GGA PBE96'
@@ -1005,13 +1019,7 @@ contains
        case (functional_gga_pbe96_r99)              ! This is PBE with the functional form redefinition
           functional_description = 'GGA RPBE99'     !   in Hammer et al., PRB 59:11, 7413-7421 (1999)
        case default
-          ! flag_spin_polarisation is already set above in the
-          ! subroutine
-          if (flag_spin_polarisation) then
-             functional_description = 'LSDA PW92'
-          else
-             functional_description = 'LDA PZ81'
-          end if
+          functional_description = 'LSDA PW92'
        end select
        tmp = fdf_string(8,'General.EnergyUnits','Ha')
        if(leqi(tmp(1:2),'Ha')) then
@@ -1060,6 +1068,11 @@ contains
        flag_dft_d2 = fdf_boolean('General.DFT_D2', .false.)                   ! for DFT-D2
        if (flag_dft_d2) r_dft_d2 = fdf_double('DFT-D2_range',23.0_double)     ! for DFT-D2
        flag_only_dispersion = fdf_boolean('General.only_Dispersion',.false.)  ! for DFT-D2
+       ! vdW XC functional flags
+       flag_vdWDFT = fdf_boolean('General.vdWDFT', .false.)
+       if (flag_vdWDFT) then
+          vdW_LDA_functional = fdf_integer('vdWDFT.LDAFunctionalType', 3)
+       end if
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")
 !%%!else
@@ -1207,7 +1220,7 @@ contains
 !%%!               nsf_species(i) = integers(p,1)
 !%%!            else if(search(p,'SupportFunctionRange',j)) then            ! Support radius
 !%%!               RadiusSupport(i) = reals(p,1)
-!%%!               if(InvSRange(i)<very_small) InvSRange(i) = RadiusSupport(i)
+!%%!               if(InvSRange(i)<RD_ERR) InvSRange(i) = RadiusSupport(i)
 !%%!               !if(r_c<two*RadiusSupport(i)) r_c = two*RadiusSupport(i)
 !%%!            else if(search(p,'InvSRange',j)) then            ! Support radius
 !%%!               InvSRange(i) = reals(p,1)
@@ -1235,10 +1248,10 @@ contains
 !%%!      end if
 !%%!      call destroy(bp)    ! Remove storage
 !%%!      if(nsf_species(i)==0) call cq_abort("Number of supports not specified for species ",i)
-!%%!      if(flag_basis_set==blips.AND.SupportGridSpacing(i)<very_small) &
+!%%!      if(flag_basis_set==blips.AND.SupportGridSpacing(i)<RD_ERR) &
 !%%!           call cq_abort("Error: for a blip basis set you must set SupportGridSpacing for all species")
 !%%!      maxnsf = max(maxnsf,nsf_species(i))
-!%%!      if(RadiusSupport(i)<very_small) &
+!%%!      if(RadiusSupport(i)<RD_ERR) &
 !%%!           call cq_abort("Radius of support too small for species; increase SupportFunctionRange ",i)
 !%%!   end do
 !%%!   !blip_width = support_grid_spacing * fdf_double('blip_width_over_support_grid_spacing',four)
@@ -1768,7 +1781,7 @@ contains
     use global_module,   only: iprint_init, rcellx, rcelly, rcellz,  &
                                area_general, ni_in_cell, numprocs,   &
                                species_glob, io_lun
-    use numbers,         only: zero, one, two, pi, very_small
+    use numbers,         only: zero, one, two, pi, RD_ERR
     use GenComms,        only: cq_abort, gcopy, myid
     use input_module
     use ScalapackFormat, only: proc_rows, proc_cols, block_size_r,   &
@@ -2021,7 +2034,7 @@ contains
           ! DRB fix 
           sum = zero
           do i = 1, nkp_tmp
-             if (wtk_tmp(i) > very_small ) then
+             if (wtk_tmp(i) > RD_ERR ) then
                 nkp = nkp + 1 
                 sum = sum + wtk_tmp(i)
              end if
@@ -2033,7 +2046,7 @@ contains
           call reg_alloc_mem(area_general,4*nkp,type_dbl)
           counter = 0
           do i = 1, nkp_tmp
-             if (wtk_tmp(i) > very_small ) then
+             if (wtk_tmp(i) > RD_ERR ) then
                 counter = counter + 1
                 kk(1,counter) = kk_tmp(1,i)
                 kk(2,counter) = kk_tmp(2,i)

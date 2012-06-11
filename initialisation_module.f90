@@ -612,7 +612,7 @@ contains
                                            PAOs, flag_onsite_blip_ana, &
                                            flag_analytic_blip_int
     use matrix_data,                 only: Srange, mat
-    use numbers,                     only: zero, very_small, one
+    use numbers,                     only: zero, RD_ERR, one
     use pao2blip,                    only: make_blips_from_paos
     use primary_module ,             only: bundle
     use set_bucket_module,           only: rem_bucket
@@ -736,7 +736,7 @@ contains
                    iprim=iprim+1
                    do isf=1,mat(np,Srange)%ndimi(ni)
                       factor = return_matrix_value(matS,np,ni,iprim,0,isf,isf,1)
-                      if(factor>very_small) then
+                      if(factor>RD_ERR) then
                          factor=one/sqrt(factor)
                       else
                          factor = zero

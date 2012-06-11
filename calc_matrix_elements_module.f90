@@ -125,37 +125,38 @@ contains
   subroutine get_matrix_elements_new(myid,rem_bucket,matM,gridone,gridtwo)
 
     use datatypes
-    use numbers,          ONLY:zero,one,very_small
-    use primary_module,   ONLY:domain,bundle
-    use naba_blk_module,  ONLY:naba_atm_of_blk
-    use bucket_module,    ONLY:local_bucket,remote_bucket
-    use GenBlas,          ONLY:gemm
-    use comm_array_module,ONLY:send_array
-    use block_module,     ONLY:n_pts_in_block
-    use set_blipgrid_module, ONLY: naba_atm
-    use functions_on_grid, ONLY: gridfunctions, fn_on_grid
-    use GenComms, ONLY: cq_abort
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use global_module, ONLY: area_integn
+    use numbers,             only: zero, one
+    use primary_module,      only: domain, bundle
+    use naba_blk_module,     only: naba_atm_of_blk
+    use bucket_module,       only: local_bucket, remote_bucket
+    use GenBlas,             only: gemm
+    use comm_array_module,   only: send_array
+    use block_module,        only: n_pts_in_block
+    use set_blipgrid_module, only: naba_atm
+    use functions_on_grid,   only: gridfunctions, fn_on_grid
+    use GenComms,            only: cq_abort
+    use memory_module,       only: reg_alloc_mem, reg_dealloc_mem, &
+                                   type_dbl
+    use global_module,       only: area_integn
 
     implicit none
 
-    type(remote_bucket),intent(in)         :: rem_bucket
-    integer, intent(in) :: myid
-    integer, intent(in) :: gridone,gridtwo
-    integer :: matM
+    type(remote_bucket), intent(in) :: rem_bucket
+    integer,             intent(in) :: myid
+    integer,             intent(in) :: gridone,gridtwo
+    integer,             intent(in) :: matM ! matM is just ID tag for matrix
 
     ! Local variables
     real(double), dimension(:), allocatable :: acc_block
-    type(local_bucket),pointer    :: loc_bucket
-    type(naba_atm_of_blk),pointer :: naba_atm1,naba_atm2
+    type(local_bucket),    pointer :: loc_bucket
+    type(naba_atm_of_blk), pointer :: naba_atm1, naba_atm2
 
-    integer     :: iprim_blk,n_dim_one,n_dim_two,i_beg_one,i_beg_two
-    integer     :: naba1,naba2,ind_halo1,ind_halo2,nsf1,nsf2
-    integer     :: nonef, ntwof,bucket,where,ii, stat
-    integer     :: size_send_array
+    integer :: iprim_blk, n_dim_one, n_dim_two, i_beg_one, i_beg_two
+    integer :: naba1, naba2, ind_halo1, ind_halo2, nsf1, nsf2
+    integer :: nonef, ntwof, bucket, where, ii, stat
+    integer :: size_send_array
 
-    !acc_block = zero
+    ! acc_block = zero
 
     call start_timer(tmr_std_integration)
     ! pointer
@@ -163,14 +164,16 @@ contains
     naba_atm1  => naba_atm(loc_bucket%ind_left)
     naba_atm2  => naba_atm(loc_bucket%ind_right)
 
-    size_send_array=loc_bucket%no_pair_orb
+    size_send_array = loc_bucket%no_pair_orb
     if(allocated(send_array)) then 
        size_send_array = size(send_array)
-       call cq_abort("Error: send_array allocated: ",size_send_array)
+       call cq_abort("Error: send_array allocated: ", size_send_array)
     end if
-    allocate(send_array(1:size_send_array),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating send_array in get_matrix_elements: ",size_send_array)
-    call reg_alloc_mem(area_integn,size_send_array,type_dbl)
+    allocate(send_array(1:size_send_array), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error allocating send_array in get_matrix_elements: ", &
+                       size_send_array)
+    call reg_alloc_mem(area_integn, size_send_array, type_dbl)
     send_array(1:size_send_array) = zero
 
     ! loop over blocks in this node, calculating the contributions 
@@ -281,81 +284,87 @@ contains
     !  20/June/2003 T. MIYAZAKI
     !   We should consider the case where some of the domains have 
     !   no neighbour atoms. (surface with large vacuum area.)
-
-    subroutine put_matrix_elements (myid, loc_bucket, rem_bucket, matM)
+    subroutine put_matrix_elements(myid, loc_bucket, rem_bucket, matM)
 
       use datatypes
       use numbers
       use mpi
-      use bucket_module, ONLY : local_bucket,remote_bucket
-      use dimens, ONLY : grid_point_volume
-      use comm_array_module, ONLY: send_array, recv_array
-      use mult_module, ONLY: matrix_scale, store_matrix_block_pos, store_matrix_value_pos, matrix_pos, matrix_index
-      use GenComms, ONLY: cq_abort
-      use matrix_module, ONLY:matrix_halo
-      use matrix_data, ONLY: halo
+      use bucket_module,     only: local_bucket,remote_bucket
+      use dimens,            only: grid_point_volume
+      use comm_array_module, only: send_array, recv_array
+      use mult_module,       only: matrix_scale, store_matrix_block_pos, &
+                                   store_matrix_value_pos, matrix_pos,   &
+                                   matrix_index
+      use GenComms,          only: cq_abort
+      use matrix_module,     only: matrix_halo
+      use matrix_data,       only: halo
 
       implicit none
 
-      type(local_bucket), intent(in) :: loc_bucket
-      type(remote_bucket),intent(in) :: rem_bucket
-      integer, intent(in) :: myid
-      integer :: matM
+      type(local_bucket),  intent(in) :: loc_bucket
+      type(remote_bucket), intent(in) :: rem_bucket
+      integer,             intent(in) :: myid
+      integer,             intent(in) :: matM ! matM is just an ID tag for matrix
 
-      real(double),pointer :: recv_ptr(:)
+      real(double), pointer :: recv_ptr(:)
       real(double) :: tmp
-      integer :: mynode,myid_ibegin, size_send_array
+      integer :: mynode, myid_ibegin, size_send_array
       integer :: nunit
-      integer :: inode,nnd_rem,ibegin,nsize
-      integer :: ierr,irc,nsend_req(loc_bucket%mx_recv_node), &
-           nrecv_stat(MPI_STATUS_SIZE),nwait_stat(MPI_STATUS_SIZE)
-      integer,parameter :: tag=1
-      integer :: jnode,ipair,loc1,loc2,ii,isf1,isf2, stat, msize
-
-      mynode=myid+1
-      ierr=0 
+      integer :: inode, nnd_rem, ibegin, nsize
+      integer :: ierr, irc, nsend_req(loc_bucket%mx_recv_node)
+      integer :: jnode, ipair, loc1, loc2, ii, isf1, isf2, stat, msize
+      integer, dimension(MPI_STATUS_SIZE) :: nrecv_stat, nwait_stat
+      integer, parameter :: tag = 1
+            
+      mynode = myid + 1
+      ierr = 0 
       size_send_array = size(send_array)
-      call matrix_scale(zero,matM)
-      if(loc_bucket%no_recv_node >0) then
-         do inode=1,loc_bucket%no_recv_node ! Loop over recv nodes
-            nnd_rem=loc_bucket%list_recv_node(inode)
-            if(inode ==1) then
-               ibegin=1
+      call matrix_scale(zero, matM)
+      if (loc_bucket%no_recv_node > 0) then
+         do inode = 1, loc_bucket%no_recv_node ! Loop over recv nodes
+            nnd_rem = loc_bucket%list_recv_node(inode)
+            if (inode == 1) then
+               ibegin = 1
             else
-               ibegin=loc_bucket%ibegin_pair_orb(inode)
-            endif
-            if(inode == loc_bucket%no_recv_node) then
-               nsize=loc_bucket%no_pair_orb-loc_bucket%ibegin_pair_orb(inode)+1
+               ibegin = loc_bucket%ibegin_pair_orb(inode)
+            end if
+            if (inode == loc_bucket%no_recv_node) then
+               nsize = loc_bucket%no_pair_orb - &
+                       loc_bucket%ibegin_pair_orb(inode) + 1
             else
-               nsize=loc_bucket%ibegin_pair_orb(inode+1) - loc_bucket%ibegin_pair_orb(inode)
-            endif
+               nsize = loc_bucket%ibegin_pair_orb(inode + 1) - &
+                       loc_bucket%ibegin_pair_orb(inode)
+            end if
             !SENDING or KEEPING the First Address 
-            if(nnd_rem == mynode) then
-               myid_ibegin=ibegin
-            else if(nsize>0) then
-               call MPI_issend(send_array(ibegin),nsize,MPI_DOUBLE_PRECISION,&
-                    nnd_rem-1,tag,MPI_COMM_WORLD,nsend_req(inode),ierr)
-               if(ierr /= 0) call cq_abort('ERROR in MPI_issend in put_matrix_elements',ierr)
-            endif
-         enddo
-      endif ! (loc_bucket%no_recv_node >0) 
+            if (nnd_rem == mynode) then
+               myid_ibegin = ibegin
+            else if (nsize > 0) then
+               call MPI_issend(send_array(ibegin), nsize,            &
+                               MPI_DOUBLE_PRECISION, nnd_rem-1, tag, &
+                               MPI_COMM_WORLD, nsend_req(inode), ierr)
+               if (ierr /= 0) &
+                    call cq_abort('ERROR in MPI_issend in put_matrix_elements', &
+                                  ierr)
+            end if
+         end do
+      end if ! (loc_bucket%no_recv_node >0) 
 
-      if(rem_bucket%no_send_node >0) then
+      if (rem_bucket%no_send_node > 0) then
          msize = 0
          do jnode=1,rem_bucket%no_send_node  ! Loop over sending nodes
             msize = max(msize,rem_bucket%no_of_pair_orbs(jnode))
          end do
          allocate(recv_array(msize),STAT=stat)
-         if(stat/=0) call cq_abort("Error allocating recv_array in put_matrix_elements: ",msize)
+         if (stat/=0) call cq_abort("Error allocating recv_array in put_matrix_elements: ",msize)
          call reg_alloc_mem(area_integn,msize,type_dbl)
          call start_timer(tmr_std_matrices)
          do jnode=1,rem_bucket%no_send_node  ! Loop over sending nodes
             nnd_rem=rem_bucket%list_send_node(jnode)
             nsize=rem_bucket%no_of_pair_orbs(jnode)
-            if(nsize>0) then
+            if (nsize>0) then
                recv_array = zero
-               if(nnd_rem == mynode) then
-                  if(myid_ibegin+nsize-1<=size_send_array) then
+               if (nnd_rem == mynode) then
+                  if (myid_ibegin+nsize-1<=size_send_array) then
                      recv_ptr => send_array(myid_ibegin:myid_ibegin+nsize-1)
                   else
                      call cq_abort("Overflow in put_matrix_elements: ",myid_ibegin+nsize-1,size_send_array)
@@ -363,52 +372,52 @@ contains
                else
                   call MPI_recv(recv_array,nsize,MPI_DOUBLE_PRECISION,nnd_rem-1, &
                        tag,MPI_COMM_WORLD,nrecv_stat,ierr)
-                  if(ierr /= 0) call cq_abort('ERROR in MPI_recv in put_matrix_elements',ierr)
+                  if (ierr /= 0) call cq_abort('ERROR in MPI_recv in put_matrix_elements',ierr)
                   recv_ptr => recv_array
-               endif
+               end if
                do ipair=1,rem_bucket%no_of_pair(jnode)
                   loc2=rem_bucket%bucket(ipair,jnode)%ibegin_pair!(ipair-1)*nunit
                   loc1=matrix_pos(matM,rem_bucket%bucket(ipair,jnode)%iprim,rem_bucket%bucket(ipair,jnode)%jhalo)
-                  if(loc1 /= 0) then
+                  if (loc1 /= 0) then
                      !call store_matrix_block_pos(matM,loc1,recv_ptr(loc2+1:loc2+nunit)*grid_point_volume,nunit)
                      ! VarNSF: change nunit to use orbitals from iprim/jhalo
                      ii=0
                      do isf2 = 1,halo(matrix_index(matM))%ndimj(rem_bucket%bucket(ipair,jnode)%jhalo)
                         do isf1 = 1,halo(matrix_index(matM))%ndimi(rem_bucket%bucket(ipair,jnode)%iprim)
-                           if(loc2+ii>nsize) call cq_abort("Overflow error ! ",nsize,loc2+ii)
+                           if (loc2+ii>nsize) call cq_abort("Overflow error ! ",nsize,loc2+ii)
                            tmp = recv_ptr(loc2+ii)*grid_point_volume
                            call store_matrix_value_pos(matM,loc1+ii,tmp)
                            ii=ii+1
-                        enddo
-                     enddo
+                        end do
+                     end do
                   else 
                      write(io_lun,*) 'ERROR? in remote_bucket',ipair,myid
                      write(io_lun,*) ' a pair of two atoms in a domain partial node &
                           & is not a neighbour pair in a bundle node. ??? '
-                  endif
-               enddo        ! Loop over sent pairs
+                  end if
+               end do        ! Loop over sent pairs
             end if
-         enddo        ! Loop over sending nodes
+         end do        ! Loop over sending nodes
          call stop_timer(tmr_std_matrices)
          deallocate(recv_array,STAT=stat)
-         if(stat/=0) call cq_abort("Error deallocating recv_array in put_matrix_elements: ",msize)
+         if (stat/=0) call cq_abort("Error deallocating recv_array in put_matrix_elements: ",msize)
          call reg_dealloc_mem(area_integn,msize,type_dbl)
-      endif !(rem_bucket%no_send_node >0) 
+      end if !(rem_bucket%no_send_node >0) 
 
-      if(loc_bucket%no_recv_node >0) then
+      if (loc_bucket%no_recv_node >0) then
          do inode=1,loc_bucket%no_recv_node
-            if(inode == loc_bucket%no_recv_node) then
+            if (inode == loc_bucket%no_recv_node) then
                nsize=loc_bucket%no_pair_orb-loc_bucket%ibegin_pair_orb(inode)+1
             else
                nsize=loc_bucket%ibegin_pair_orb(inode+1) - loc_bucket%ibegin_pair_orb(inode)
-            endif
+            end if
             nnd_rem=loc_bucket%list_recv_node(inode)
-            if(nnd_rem /= mynode.AND.nsize>0) then
+            if (nnd_rem /= mynode.AND.nsize>0) then
                call MPI_WAIT(nsend_req(inode),nwait_stat,ierr)
-               if(ierr /= 0) call cq_abort('ERROR in MPI_WAIT in put_matrix_elements',ierr)
-            endif
-         enddo
-      endif  ! (loc_bucket%no_recv_node >0)
+               if (ierr /= 0) call cq_abort('ERROR in MPI_WAIT in put_matrix_elements',ierr)
+            end if
+         end do
+      end if  ! (loc_bucket%no_recv_node >0)
       return
 
     end subroutine put_matrix_elements
@@ -431,48 +440,49 @@ contains
     ! Modules and Dummy arguments
     use datatypes
     use numbers
-    use primary_module,    ONLY:domain
-    use naba_blk_module,   ONLY:naba_atm_of_blk
-    use set_blipgrid_module, ONLY: naba_atm
-    use bucket_module,     ONLY:local_bucket,remote_bucket
-    use GenBlas,           ONLY:axpy
-    use comm_array_module, ONLY:send_array
-    use block_module,      ONLY:n_pts_in_block
-    use functions_on_grid, ONLY: gridfunctions, fn_on_grid
-    use GenComms, ONLY: cq_abort
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use global_module, ONLY: area_integn
+    use primary_module,    only:domain
+    use naba_blk_module,   only:naba_atm_of_blk
+    use set_blipgrid_module, only: naba_atm
+    use bucket_module,     only:local_bucket,remote_bucket
+    use GenBlas,           only:axpy
+    use comm_array_module, only:send_array
+    use block_module,      only:n_pts_in_block
+    use functions_on_grid, only: gridfunctions, fn_on_grid
+    use GenComms, only: cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use global_module, only: area_integn
 
     implicit none
 
     !type(naba_atm_of_blk),intent(in),target:: naba_atm1,naba_atm2
     !type(local_bucket),intent(in)          :: loc_bucket
-    type(remote_bucket),intent(in),target  :: rem_bucket
-    integer, intent(in) :: myid
+    type(remote_bucket), target, intent(in) :: rem_bucket
+    integer,                     intent(in) :: myid
     integer :: matM
-    integer  :: gridone, gridtwo   ! a set of left and right functions
+    integer :: gridone, gridtwo   ! a set of left and right functions
 
     ! Local variables
-    type(naba_atm_of_blk),pointer:: naba_atm1,naba_atm2
-    type(local_bucket),   pointer:: loc_bucket
-    integer      :: iprim_blk,n_dim_one,n_dim_two
-    integer      :: naba1,naba2,ind_halo1,ind_halo2,bucket
+    type(naba_atm_of_blk), pointer :: naba_atm1, naba_atm2
+    type(local_bucket),    pointer :: loc_bucket
+    integer      :: iprim_blk, n_dim_one, n_dim_two
+    integer      :: naba1, naba2, ind_halo1, ind_halo2, bucket
     integer      :: nonef, ntwof, ind1,ind2
-    integer      :: nsf1,nsf2,ii,stat
+    integer      :: nsf1, nsf2, ii, stat
     real(double) :: factor_M
 
     call start_timer(tmr_std_integration)
     !(pointer)
     !  This structure is introduced to keep the strict connection
     !  of remote_bucket <-> local_bucket <-> naba_atm_of_blk.
-    !    
     loc_bucket => rem_bucket%locbucket
     naba_atm1  => naba_atm(loc_bucket%ind_left)
     naba_atm2  => naba_atm(loc_bucket%ind_right)
 
-    allocate(send_array(loc_bucket%no_pair_orb),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating send_array in act_on_vectors: ",loc_bucket%no_pair_orb)
-    call reg_alloc_mem(area_integn,loc_bucket%no_pair_orb,type_dbl)
+    allocate(send_array(loc_bucket%no_pair_orb), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error allocating send_array in act_on_vectors: ", &
+                       loc_bucket%no_pair_orb)
+    call reg_alloc_mem(area_integn, loc_bucket%no_pair_orb, type_dbl)
     ! collects matrix elements and store them in send_array
     call collect_matrix_elements(myid, loc_bucket, rem_bucket, matM)
 
@@ -488,14 +498,14 @@ contains
        ! the neighbour atoms of the block.
        !  In this case, the loops ovre nsf1 & nsf2 have to be
        ! deleted.
-       n_dim_one     = naba_atm1%no_of_orb(iprim_blk) !left
-       n_dim_two     = naba_atm2%no_of_orb(iprim_blk) !right
+       n_dim_one = naba_atm1%no_of_orb(iprim_blk) !left
+       n_dim_two = naba_atm2%no_of_orb(iprim_blk) !right
 
        ! IN (get_matrix_elements)
        !  if (n_dim_two.ne.0)  &
        !   call gemm (...)
 
-       if(n_dim_one*n_dim_two /= 0) then
+       if (n_dim_one*n_dim_two /= 0) then
           ! I HAVE TO BE CAREFUL about WHICH ONE IS LEFT
           do naba1=1, naba_atm1%no_of_atom(iprim_blk)    ! left atom
              ind_halo1 = naba_atm1%list_atom_by_halo(naba1,iprim_blk)
@@ -563,16 +573,16 @@ contains
     !  20/June/2003 T. MIYAZAKI
     !   We should consider the case where some of the domains have 
     !   no neighbour atoms. (surface with large vacuum area.)
-
     subroutine collect_matrix_elements(myid, loc_bucket, rem_bucket, matM)
 
       use datatypes
       use mpi
-      use bucket_module, ONLY : local_bucket,remote_bucket
-      use comm_array_module, ONLY: send_array, recv_array
-      use GenComms, ONLY: my_barrier, cq_abort
-      use mult_module, ONLY: return_matrix_value_pos, matrix_pos, matrix_index
-      use matrix_data, ONLY: halo
+      use bucket_module,     only: local_bucket,remote_bucket
+      use comm_array_module, only: send_array, recv_array
+      use GenComms,          only: my_barrier, cq_abort
+      use mult_module,       only: return_matrix_value_pos, &
+                                   matrix_pos, matrix_index
+      use matrix_data,       only: halo
 
       implicit none
 
@@ -586,8 +596,8 @@ contains
       integer :: inode,nnd_rem,ibegin,nsize,msize
       integer :: jnode,ipair,loc1,loc2,ii,isf1,isf2, off
       integer :: ierr,irc,stat
-      integer ::nrecv_req(loc_bucket%mx_recv_node)
-      integer ::nwait_stat(MPI_STATUS_SIZE)
+      integer :: nrecv_req(loc_bucket%mx_recv_node)
+      integer :: nwait_stat(MPI_STATUS_SIZE)
       integer,parameter :: tag=1
 
       mynode=myid+1

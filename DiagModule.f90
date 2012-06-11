@@ -28,7 +28,7 @@
 !!  CREATION DATE
 !!   15/02/2002
 !!  MODIFICATION HISTORY
-!!   19/02/2002 dave 
+!!   19/02/2002 dave
 !!    Happy 1st Birthday Christopher !
 !!    Added more detail to rough outlining
 !!   04/03/2002 dave
@@ -56,7 +56,7 @@
 !!   23/04/2002 dave
 !!    Defined a new derived type to hold arrays relating to
 !!    distribution - this will allow easy incorporation into Conquest
-!!   01/05/2002 drb 
+!!   01/05/2002 drb
 !!    Imported to Conquest
 !!   17/06/2002 dave
 !!    Fixed bugs, tidied (moved initialisation into separate routine
@@ -65,7 +65,7 @@
 !!   31/07/2002 dave
 !!    Added calculation for the matrix M12 which makes the Pulay force
 !!    (contribution to dE/dphi_i for the variation of S)
-!!   15:37, 03/02/2003 drb 
+!!   15:37, 03/02/2003 drb
 !!    Various bits of tidying, increase of precision and general
 !!    improvement
 !!   08:20, 2003/07/28 dave
@@ -73,7 +73,7 @@
 !!    to fold into one SC element.  New derived type (element),
 !!    renamed and reworked parts of DistributeData type, reworked
 !!    PrepareSend and DistributeCQ_to_SC to reflect all this.
-!!   11:48, 30/09/2003 drb 
+!!   11:48, 30/09/2003 drb
 !!    Changed iprint levels throughout
 !!   2007/08/13 17:27 dave
 !!    Changed kT to be user-set parameter in input file (Diag.kT keyword)
@@ -85,7 +85,7 @@
 !!   2008/07/31 ast
 !!    Added timers
 !!   2010/06/14 21:53 lt
-!!    Added flags for Methfessel-Paxton approximation for step-function 
+!!    Added flags for Methfessel-Paxton approximation for step-function
 !!    and a further flag to choose smearing type
 !!   2010/06/15 17:03 lt
 !!    Added the max_brkt_iterations flag so that in the bracket search
@@ -124,7 +124,7 @@ module DiagModule
 
   implicit none
 
-  save 
+  save
 
   !!****s* DiagModule/location *
   !!  NAME
@@ -135,7 +135,7 @@ module DiagModule
   !!   need to know where in data_H a given row and column of the matrix
   !!   are, along with support function positions in that block.  This
   !!   is stored in loc.
-  !! 
+  !!
   !!   Now holds the distance between the atoms (true distance, not FSC)
   !!   for general use with k-points (16/04/2002 dave)
   !!  AUTHOR
@@ -285,13 +285,13 @@ contains
   ! -------------------------------------------------------------------
   ! Subroutine FindEvals
   ! -------------------------------------------------------------------
-  
+
   !!****f* DiagModule/FindEvals *
   !!
-  !!  NAME 
+  !!  NAME
   !!   FindEvals - finds the eigenvalues
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Call the ScalapackFormat routines and DiagModule routines to find
   !!   the eigenvalues by exact diagonalisation.  See the Conquest notes
@@ -299,7 +299,7 @@ contains
   !!   detailed discussion of this routine.
   !!
   !!   Note added 31/07/2002 on Pulay force (drb)
-  !! 
+  !!
   !!   The Pulay contribution to the force (which is also the rate of
   !!   change of the total energy with respect to a given support
   !!   function) requires the matrix M12 (which has range S).  When
@@ -355,15 +355,15 @@ contains
   !!    allocation of memory) to initDiag
   !!   31/07/2002 dave
   !!    Added Pulay force calculation (see comments for discussion)
-  !!   13:49, 24/01/2003 drb 
+  !!   13:49, 24/01/2003 drb
   !!    Moved location of -M12 shift and tidied
   !!   2004/10/29 drb
   !!    Added check on size of Distrib before deallocating
   !!   2004/11/10 drb
   !!    Changed nsf to come from maxima, not common
-  !!   09:10, 11/05/2005 dave 
+  !!   09:10, 11/05/2005 dave
   !!    Added check on block sizes and matrix size
-  !!   10:09, 13/02/2006 drb 
+  !!   10:09, 13/02/2006 drb
   !!    Removed all explicit references to data_ variables and rewrote
   !!    in terms of new
   !!    matrix routines
@@ -425,7 +425,7 @@ contains
 
     ! Passed variables
     real(double), dimension(:), intent(in) :: electrons
-    
+
     ! Local variables
     real(double)                   :: abstol, a, time0, time1, vl, vu, &
                                       orfac, scale, entropy_total,     &
@@ -436,7 +436,7 @@ contains
     integer :: info, stat, il, iu, i, j, m, mz, prim_size, ng, &
                print_info, kp, spin
     integer, dimension(50) :: desca, descz, descb
-    
+
     vl = zero
     vu = zero
     orfac = -one
@@ -456,7 +456,7 @@ contains
     do i = 1, bundle%n_prim
        prim_size = prim_size + nsf_species(bundle%species(i))
     end do
-    
+
     ! Check for block size factoring into matrix size
     a = real(matrix_size, double) / real(block_size_r, double)
     if (a - real(floor(a), double) > 1e-8_double) &
@@ -466,10 +466,10 @@ contains
     if (a - real(floor(a), double) > 1e-8_double) &
          call cq_abort('block_size_c not a factor of matrix size ! ', &
                        matrix_size, block_size_c)
-    
+
     ! Initialise - start BLACS, sort out matrices, allocate memory
     call initDiag(desca, descb, descz)
-    
+
     scale = one / real(N_procs_in_pg(pgid), double)
 
     ! ------------------------------------------------------------------------
@@ -479,13 +479,13 @@ contains
     time0 = mtime ()
     abstol = 1e-30_double ! pdlamch (context,'U')
 
-    ! zero the global and local eigenvalues
-    w = zero
-    local_w = zero
-
     if (iprint_DM >= 2 .and. (inode == ionode)) &
          write (io_lun, fmt='(10x,"In FindEvals, tolerance is ", g20.12)') &
                abstol
+
+    ! zero the global and local eigenvalues
+    w = zero
+    local_w = zero
 
     do spin = 1, nspin
        do i = 1, nkpoints_max ! Loop over the kpoints within each process
@@ -522,7 +522,7 @@ contains
        ! proc_group is taken care of by the additional factor
        ! 1 / N_procs_in_pg
        call gsum(w(:,:,spin), matrix_size, nkp)
-    end do
+    end do ! spin
 
     time1 = mtime()
     if (iprint_DM >= 2 .AND. myid == 0) &
@@ -536,7 +536,7 @@ contains
     ! else
     !   call gcopy(Efermi)
     !   call gcopy(occ,matrix_size,nkp)
-    ! end if    
+    ! end if
 
     ! Now write out eigenvalues and occupancies
     if (iprint_DM >= 3 .AND. myid == 0) then
@@ -545,7 +545,7 @@ contains
           write (io_lun, 7) i, kk(1,i), kk(2,i), kk(3,i)
           do spin = 1, nspin
              if (nspin == 2) &
-                  write (io_lun, *) 'For spin = ', spin
+                  write (io_lun, '(10x,"For spin = ",i1)') spin
              do j = 1, matrix_size, 3
                 if (j == matrix_size) then
                    write (io_lun, 8) w(j,i,spin), occ(j,i,spin)
@@ -567,7 +567,7 @@ contains
              write (io_lun, &
                     fmt='("Sum of eigenvalues for spin = ", &
                           &i1, ": ", f18.11," ", a2)') &
-                   spin, en_conv * bandE(spin), en_units(energy_units)             
+                   spin, en_conv * bandE(spin), en_units(energy_units)
           end do ! spin
           if (nspin == 2) then
              write (io_lun, &
@@ -601,7 +601,7 @@ contains
                write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
           call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
           ! Form the overlap for this k-point and send it to appropriate
-          ! processors, this needs to be redone since previous call to 
+          ! processors, this needs to be redone since previous call to
           ! pzhegvx have changed both SCHmat and SCSmat (and the spin
           ! down conterparts)
           if (iprint_DM >= 3 .and. inode == ionode) &
@@ -633,7 +633,7 @@ contains
           ! a time
           do ng = 1, proc_groups
              if (i <= N_kpoints_in_pg(ng)) then
-                kp = pg_kpoints(ng, i) 
+                kp = pg_kpoints(ng, i)
                 call DistributeSC_to_ref(DistribH, ng, z(:,:,spin), &
                                          expH(:,:,spin))
                 ! Build K and K_dn from the eigenvectors
@@ -655,8 +655,8 @@ contains
                    ! Calculate entropic contribution to electronic energy
                    select case (flag_smear_type)
                    case (0) ! Fermi smearing
-                      if (occ(j,kp,spin) > very_small .and. &
-                           (wtk(kp) - occ(j,kp,spin)) > very_small) then
+                      if (occ(j,kp,spin) > RD_ERR .and. &
+                           (wtk(kp) - occ(j,kp,spin)) > RD_ERR) then
                          locc(spin) = occ(j,kp,spin) / wtk(kp)
                          entropy_local(spin) = &
                               locc(spin) * log(locc(spin)) + &
@@ -682,10 +682,10 @@ contains
                 ! hence scaling occs by eps allows reuse of buildK)
                 call buildK(Srange, matM12(spin), occ(:,kp,spin), &
                             kk(:,kp), wtk(kp), expH(:,:,spin))
-             end if ! End if (i <= N_kpoints_in_pg(ng)) then          
+             end if ! End if (i <= N_kpoints_in_pg(ng)) then
           end do ! End do ng = 1, proc_groups
        end do ! End do i = 1, nkpoints_max
-    end do ! spin         
+    end do ! spin
 
     if (iprint_DM > 3 .and. inode == ionode) &
          write (io_lun, *) "Entropy, TS: ", entropy, kT * entropy
@@ -694,7 +694,7 @@ contains
     time1 = mtime()
     if (iprint_DM >= 2 .and. inode == ionode) &
          write (io_lun, 3) myid, time1 - time0
-    
+
     ! -------------------------------------------------------------
     ! End diagonalisation
     ! -------------------------------------------------------------
@@ -740,7 +740,7 @@ contains
     end if ! iprint_DM >= 1
 
     call my_barrier()
-    
+
     ! deallocate
     ! local
     deallocate(expH, STAT=stat)
@@ -763,10 +763,10 @@ contains
 11  format(10x,'Proc: ',i5,' Diagonalising for eigenvectors')
 12  format(10x,'Proc: ',i5,' row, col size: ',2i5)
 13  format(10x,'Fermi energy for spin = ',i1,' is ',f18.11,' ',a2)
-14  format(10x,'Energies Tr[K.H_up], Tr[K.H_down], and their sum: ',f18.11, &
-           ' ',a2, ' ',f18.11,' ',a2,' ',f18.11,' ',a2)
-15  format(10x,'Tr[K.G_up], Tr[K.G_down], and their sum: ',f18.11, &
-           ' ',a2,' ',f18.11,' ',a2,' ',f18.11,' ',a2)
+14  format(10x,'Energies Tr[K.H_up], Tr[K.H_down], and their sum: ',&
+           f18.11,' ',a2,/,60x,f18.11,' ',a2,/,60x,f18.11,' ',a2)
+15  format(19x,'Tr[K.G_up], Tr[K.G_down], and their sum: ',&
+           f18.11,' ',a2,/,60x,f18.11,' ',a2,/,60x,f18.11,' ',a2)
   end subroutine FindEvals
   !!***
 
@@ -774,10 +774,10 @@ contains
   ! -----------------------------------------------------------------------------
   ! Subroutine initDiag
   ! -----------------------------------------------------------------------------
-  
+
   !!****f* DiagModule/initDiag *
   !!
-  !!  NAME 
+  !!  NAME
   !!   initDiag
   !!  USAGE
   !!   call initDiag (desca, descb, descz)
@@ -849,8 +849,8 @@ contains
     call pg_initialise(nkp) ! defined the process group parameters
     call ref_to_SC_blocks
     call make_maps
-    call find_SC_row_atoms  
-    call find_ref_row_atoms  
+    call find_SC_row_atoms
+    call find_ref_row_atoms
     call find_SC_col_atoms
     ! Now that's done, we can prepare to distribute things
     ! For Hamiltonian
@@ -864,7 +864,7 @@ contains
     ! rows and columns do we have ? only works if the rows are exact
     ! integer multiples of block rows
 
-    ! Sizes of local "chunk", used to initialise submatrix info for ScaLAPACK 
+    ! Sizes of local "chunk", used to initialise submatrix info for ScaLAPACK
     row_size = proc_start(myid+1)%rows * block_size_r
     col_size = proc_start(myid+1)%cols * block_size_c
     if (iprint_DM >= 3 .AND. myid == 0) &
@@ -915,7 +915,7 @@ contains
     ! that each context is local to the node, which associates to the
     ! map of the group the node belongs to
     imap(1:proc_rows, 1:proc_cols) = &
-         procid(pgid, 1:proc_rows, 1:proc_cols) - 1 
+         procid(pgid, 1:proc_rows, 1:proc_cols) - 1
 
     ! get the default system context
     call blacs_get(0, 0, context)
@@ -923,7 +923,7 @@ contains
     call blacs_gridmap(context, imap, proc_rows, proc_rows, proc_cols)
 
     ! imap is no longer required
-    deallocate(imap, STAT=stat) 
+    deallocate(imap, STAT=stat)
     if (stat /= 0) call cq_abort('initDiag: Failed to deallocate imap', stat)
     call reg_dealloc_mem(area_DM, proc_rows * proc_cols, type_int)
 
@@ -948,12 +948,12 @@ contains
                   block_size_c, 0, 0, context, row_size, info)
     ! Find scratch space requirements for ScaLAPACk
     if (info /= 0) call cq_abort("initDiag: descinit(z) failed !", info)
-    
+
     allocate(ifail(matrix_size), iclustr(2 * proc_rows * proc_cols), STAT=stat)
     if (stat /= 0) &
          call cq_abort("initDiag: failed to allocate ifail and iclustr", stat)
     call reg_alloc_mem(area_DM, matrix_size + 2 * proc_rows * proc_cols, type_int)
-    
+
     allocate(gap(proc_rows * proc_cols), STAT=stat)
     if (stat /= 0) call cq_abort("initDiag: failed to allocate gap", stat)
     call reg_alloc_mem(area_DM, proc_rows * proc_cols, type_dbl)
@@ -1120,21 +1120,21 @@ contains
   ! -----------------------------------------------------------------------------
   ! Subroutine PrepareRecv
   ! -----------------------------------------------------------------------------
-  
+
   !!****f* DiagModule/PrepareRecv *
   !!
-  !!  NAME 
+  !!  NAME
   !!   PrepareRecv
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Prepares to receive data for Scalapack diagonalisation.
   !!
   !!   Scalapack has its own format (discussed in more detail in
   !!   ScalapackFormat module) and we need to distribute the Conquest
   !!   data (stored by row, compressed) to the appropriate processors
-  !!   in order to perform Scalapack work.  This routine works out 
-  !!   how much data we're getting from each processor, and allocates              
+  !!   in order to perform Scalapack work.  This routine works out
+  !!   how much data we're getting from each processor, and allocates
   !!   memory to store that data.
   !!  INPUTS
   !!   type(DistributeData) :: Distrib - holds arrays created here
@@ -1186,7 +1186,7 @@ contains
     Distrib%num_rows = 0
     count = 1
     i = 1
-    ! looping over the local SC rows responsible by local node 
+    ! looping over the local SC rows responsible by local node
     do rowblock=1,blocks_r
        if(my_row(rowblock)>0) then ! If this row block is part of my chunk
           do row = 1,block_size_r
@@ -1213,10 +1213,10 @@ contains
   ! -----------------------------------------------------------------------------
   ! Subroutine PrepareSend
   ! -----------------------------------------------------------------------------
-  
+
   !!****f* DiagModule/PrepareSend *
   !!
-  !!  NAME 
+  !!  NAME
   !!   PrepareSend
   !!  USAGE
   !!   PrepareSend(matrix structure of matrix to send)
@@ -1254,7 +1254,7 @@ contains
   !!   05/04/2002 dave
   !!    Many changes, mainly aimed at making it work properly (!).  Now works
   !!    row-by-row (rather than atom-by-atom) so that blocks not equal to nsf
-  !!    and variable nsf can be used.  Not convinced that the first loop is 
+  !!    and variable nsf can be used.  Not convinced that the first loop is
   !!    quite necessary in its current form.
   !!   15/04/2002 dave
   !!    Updated the early stages where we're trying to work out which
@@ -1283,7 +1283,7 @@ contains
   !!    Added check on size of n_elements before allocating Distrib
   !!   2004/11/10 drb
   !!    Changed nsf to come from maxima, not common
-  !!   09:09, 11/05/2005 dave 
+  !!   09:09, 11/05/2005 dave
   !!    Added check on j,k dimensions
   !!   2011/02/13 L.Tong
   !!    Added k-point parallelisation modifications
@@ -1336,7 +1336,7 @@ contains
     ! Zero
     sendto = 0
     Distrib%firstrow = 0
-    firstcol = 0 
+    firstcol = 0
     sendlist = 0
     ! Part (i)
     if(iprint_DM>=2.AND.myid==0) write(io_lun,*) 'Part i ',myid
@@ -1358,7 +1358,7 @@ contains
                 do i=1,blocks_c
                    do ng = 1, proc_groups ! loop over the process groups
                       ! get proc id of the proc responsible for the SC element
-                      proc = proc_block(ng, SC_to_refx(SCblockr,i), SC_to_refy(SCblockr,i)) 
+                      proc = proc_block(ng, SC_to_refx(SCblockr,i), SC_to_refy(SCblockr,i))
                       sendlist(supfn_r,atom_num,proc) = 1
                       ! If this is the first row and column sent to this processor, then record where data starts
                       if(sendto(proc)==0) then
@@ -1438,7 +1438,7 @@ contains
                          proc = proc_block(ng, SC_to_refx(SCblockr,SCblockc), &
                               SC_to_refy(SCblockr,SCblockc))
                          ! Create atom numbers and store posn in array at point
-                         j = row-Distrib%firstrow(proc)+1  
+                         j = row-Distrib%firstrow(proc)+1
                          k = (SCblockc-1)*block_size_c + SCrowc-firstcol(proc)+1
                          if(j>maxr.OR.k>maxc.OR.proc>numprocs) then
                             write(io_lun,*) 'Error ! Maxr/c exceeded: ',j,maxr,k,maxc,proc,numprocs
@@ -1531,7 +1531,7 @@ contains
                          proc = proc_block(ng, SC_to_refx(SCblockr,SCblockc), SC_to_refy(SCblockr,SCblockc))
                          if(iprint_DM>=5.AND.myid==0) write(io_lun,4) myid,proc,SCblockr,SCblockc
                          ! Create atom numbers and store posn in array at point
-                         j = row-Distrib%firstrow(proc)+1  
+                         j = row-Distrib%firstrow(proc)+1
                          k = (SCblockc-1)*block_size_c + SCrowc-firstcol(proc)+1
                          if(iprint_DM>=5.AND.myid==0) write(io_lun,9) myid,proc,SCblockc,SCrowc,block_size_c,firstcol(proc)
                          ! Create location
@@ -1544,7 +1544,7 @@ contains
                          Distrib%images(proc,j,k)%where(Distrib%images(proc,j,k)%n_elements)%locj = halo(range)%i_halo(gcspart)
                          Distrib%images(proc,j,k)%where(Distrib%images(proc,j,k)%n_elements)%supfn_row = supfn_r
                          Distrib%images(proc,j,k)%where(Distrib%images(proc,j,k)%n_elements)%supfn_col = supfn_c
-                         ! Build the distances between atoms - needed for phases 
+                         ! Build the distances between atoms - needed for phases
                          Distrib%images(proc,j,k)%where(Distrib%images(proc,j,k)%n_elements)%dx = &
                               BCS_parts%xcover(gcspart)-bundle%xprim(atom_num)
                          Distrib%images(proc,j,k)%where(Distrib%images(proc,j,k)%n_elements)%dy = &
@@ -1553,7 +1553,7 @@ contains
                               BCS_parts%zcover(gcspart)-bundle%zprim(atom_num)
                          ! Change distances here: we now use displacement between supercells
                          !                      FSCpart = BCS_parts%lab_cell(mat(part,range)%i_part(ist))!gcspart)
-                         ! Here we assume that j_0 is in the FSC, as is i_0             
+                         ! Here we assume that j_0 is in the FSC, as is i_0
                          !                      write(io_lun,*) myid,' FSCpart, atom and xyz: ', &
                          !                           FSCpart,parts%icell_beg(FSCpart)+mat(part,range)%i_seq(ist)-1,&
                          !                           x_atom_cell(parts%icell_beg(FSCpart)+mat(part,range)%i_seq(ist)-1),&
@@ -1598,24 +1598,24 @@ contains
   ! -----------------------------------------------------------------------------
   ! Subroutine DistributeCQ_to_SC
   ! -----------------------------------------------------------------------------
-  
+
   !!****f* DiagModule/DistributeCQ_to_SC *
   !!
-  !!  NAME 
+  !!  NAME
   !!   DistributeCQ_to_SC
   !!  USAGE
   !!   DistributeCQ_to_SC(matrix maximum, matrix)
   !!  PURPOSE
-  !!   Distributes data stored in Conquest compressed row format to 
+  !!   Distributes data stored in Conquest compressed row format to
   !!   processors ready for a Scalapack operation (e.g. diagonalisation)
   !!
   !!   Operates cyclically - each processor starts by redistributing local
   !!   data, then increments the processor they send to and decrements the
-  !!   processor they receive from at each iteration.  This is an N^2 
+  !!   processor they receive from at each iteration.  This is an N^2
   !!   process, but we're going to diagonalise, which is N^3, so it's not
   !!   really very important.
   !!  INPUTS
-  !!   integer :: matrix maximum 
+  !!   integer :: matrix maximum
   !!   integer :: matrix - matrix to be sent
   !!  USES
   !!   datatypes, common, global_module, mpi, numbers,
@@ -1666,7 +1666,7 @@ contains
   !!    various checks
   !!   2004/11/10 drb
   !!    Changed nsf to come from maxima, not common
-  !!   10:09, 13/02/2006 drb 
+  !!   10:09, 13/02/2006 drb
   !!    Removed all explicit references to data_ variables and rewrote
   !!    in terms of new matrix routines
   !!  SOURCE
@@ -1683,7 +1683,7 @@ contains
     use GenComms,        only: my_barrier, myid
     use GenBlas,         only: copy
     use mult_module,     only: return_matrix_value_pos, matrix_pos
-    
+
     implicit none
 
     ! Passed variables
@@ -1731,19 +1731,19 @@ contains
           ! Zero RecvBuffer
           RecvBuffer = cmplx(zero,zero,double_cplx)
        end if
-       
+
        ! On-site
-       if(send_proc==myid.AND.recv_proc==myid) then 
+       if(send_proc==myid.AND.recv_proc==myid) then
           ! no need to send and receive data to and from onsite processor
           if (pgk <= N_kpoints_in_pg(pgid)) then
              if(iprint_DM>=5.AND.myid==0) write(io_lun,*) 'num_rows, send_rows: ',Distrib%num_rows(myid+1),Distrib%send_rows(myid+1)
              if(iprint_DM>=5.AND.myid==0) write(io_lun,11) myid,srow_size,scol_size,send_size,rrow_size,rcol_size,recv_size
              ! Fill local copy of SCmat
-             do j=1,srow_size     ! loop over the send buffer rows and cols (i.e. elements), 
+             do j=1,srow_size     ! loop over the send buffer rows and cols (i.e. elements),
                 do k=1,scol_size  ! the content destined for send buffer goes directly to SCmat
                    if(Distrib%images(send_proc+1,j,k)%n_elements>0) then  ! if the element is a part of atom that is on neighbourlist
                       do l=1,Distrib%images(send_proc+1,j,k)%n_elements   ! loop over the periodic images of the element
-                         wheremat = matrix_pos(matA,Distrib%images(send_proc+1,j,k)%where(l)%loci, &  
+                         wheremat = matrix_pos(matA,Distrib%images(send_proc+1,j,k)%where(l)%loci, &
                               Distrib%images(send_proc+1,j,k)%where(l)%locj,&
                               Distrib%images(send_proc+1,j,k)%where(l)%supfn_row,&
                               Distrib%images(send_proc+1,j,k)%where(l)%supfn_col) ! work out where is the (image) element located on local node
@@ -1764,7 +1764,7 @@ contains
              end do ! j=1,srow_size
              if(iprint_DM>=5.AND.myid==0) write(io_lun,8) myid,Distrib%start_row(recv_proc+1)
              if(iprint_DM>=4.AND.myid==0) write(io_lun,*) '  Done on-proc'
-             deallocate(RecvBuffer,STAT=stat)  ! the send and recv buffer sizes are different for different remote processors 
+             deallocate(RecvBuffer,STAT=stat)  ! the send and recv buffer sizes are different for different remote processors
              deallocate(SendBuffer,STAT=stat)  ! so we need to allocate and deallocate for every proc in the i loop.
              ! Send and receive data to/from remote processors
           end if ! End if (pgk <= N_kpoints_in_pg(pgid)) then
@@ -1878,10 +1878,10 @@ contains
   ! -----------------------------------------------------------------------------
   ! Subroutine DistributeSC_to_ref
   ! -----------------------------------------------------------------------------
-  
+
   !!****f* DiagModule/DistributeSC_to_ref *
   !!
-  !!  NAME 
+  !!  NAME
   !!   DistributeSC_to_ref - send data back to processors for reference format
   !!  USAGE
   !!   DistributeSC_to_ref(Scalapack formatted eigenvector chunk,
@@ -1907,11 +1907,11 @@ contains
   !!  INPUTS
   !!   real(double), dimension(:,:) :: SCeig - the piece of eigenvector
   !!                                           matrix created by Scalapack
-  !!   real(double), dimension(:,:) :: localEig - local storage for 
+  !!   real(double), dimension(:,:) :: localEig - local storage for
   !!                                              eigenvector coefficients
   !!                                              for atoms
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -1936,7 +1936,7 @@ contains
   !!  SOURCE
   !!
   subroutine DistributeSC_to_ref(Distrib,ng,SCeig,localEig)
-  
+
     use datatypes
     use global_module,   only: numprocs, iprint_DM
     use mpi
@@ -1966,16 +1966,16 @@ contains
     ! Distribute data: loop over processors and issue sends and
     ! receives as appropriate. We are only going to receive data from
     ! process group ng, but will send to all processors
-    localEig = zero  
+    localEig = zero
     send_size = 0
     recv_size = 0
     do i=1,numprocs
        if(iprint_DM>=4.AND.myid==0) write(io_lun,1) myid,i,send_proc,recv_proc
        ! Sizes
        if (pgroup(recv_proc+1) == ng) then ! we only need to receive from group ng
-          ! note that the number of rows to receive from remote is the same as number 
-          ! of rows sent to remote 
-          rrow_size = Distrib%send_rows(recv_proc+1)                    ! number of rows to receive from remote 
+          ! note that the number of rows to receive from remote is the same as number
+          ! of rows sent to remote
+          rrow_size = Distrib%send_rows(recv_proc+1)                    ! number of rows to receive from remote
           rcol_size = proc_start(recv_proc+1)%cols*block_size_c         ! number of cols to receive from remote
           recv_size = rrow_size*rcol_size                               ! RecvBuffer size
           allocate(RecvBuffer(rrow_size,rcol_size),STAT=stat)
@@ -1993,11 +1993,11 @@ contains
           ! Zero SendBuffer
           SendBuffer = cmplx(zero,zero,double_cplx)
        end if
-       
+
        if(iprint_DM>=5.AND.myid==0) write(io_lun,8) myid,Distrib%start_row(recv_proc+1)
 
        ! On-site
-       if(send_proc==myid.AND.recv_proc==myid) then 
+       if(send_proc==myid.AND.recv_proc==myid) then
           if(iprint_DM>=5.AND.myid==0) write(io_lun,*) 'num_rows, send_rows: ',Distrib%num_rows(myid+1),Distrib%send_rows(myid+1)
           if(iprint_DM>=5.AND.myid==0) write(io_lun,11) myid,srow_size,scol_size,send_size,rrow_size,rcol_size,recv_size
           ! Fill send buffer
@@ -2032,7 +2032,7 @@ contains
           ! Fill SendBuffer
           ! ---------------
           if (pgid == ng)  then ! we only send if local is one of processes in proc_group ng
-             if(send_size>0) then  
+             if(send_size>0) then
                 do j=1,srow_size
                    SendBuffer(j,1:scol_size) = SCeig(Distrib%start_row(send_proc+1)+j-1,1:scol_size)
                 end do
@@ -2054,8 +2054,8 @@ contains
                 ! we need to send Distrib%start_row to send_proc because the remote need to know this info to get roff
                 call MPI_isend(SendBuffer,send_size,MPI_DOUBLE_COMPLEX,send_proc,sendtag+1,MPI_COMM_WORLD,req2,ierr)
              end if
-          end if ! End if (pgid == ng) 
-          
+          end if ! End if (pgid == ng)
+
           if (pgroup(recv_proc + 1) == ng) then ! we only receive from procs in proc_group ng
              ! MPI tags
              recvtag = recv_proc + myid*2*numprocs
@@ -2118,12 +2118,12 @@ contains
   ! -----------------------------------------------------------------------------
   ! Subroutine findFermi
   ! -----------------------------------------------------------------------------
-  
+
   !!****f* DiagModule/findFermi
   !! PURPOSE
   !!   Finds the fermi level given a set of eigenvalues at a number of k
   !!   points.
-  !!   
+  !!
   !!   This is replaces the original findFermi subroutine by D.Bowler
   !! USAGE
   !!   call findFermi(electrons, eig, nbands, nkp, Ef, occ)
@@ -2132,7 +2132,7 @@ contains
   !!   integer nkp                        : number of kpoints
   !!   real(double) eig(nbands,nkp,nspin) : eigenvalues
   !!   real(double) electrons(nspin)      : number of electrons in each spin
-  !!                                        channel which the fermi energy is 
+  !!                                        channel which the fermi energy is
   !!                                        required to get.
   !! OUTPUT
   !!   real(double) Ef(nspin) : Fermi energy for each spin channel
@@ -2197,7 +2197,7 @@ contains
   !!   integer nkp                        : number of kpoints
   !!   real(double) eig(nbands,nkp,nspin) : eigenvalues
   !!   real(double) electrons(nspin)      : number of electrons in each spin
-  !!                                        channel which the fermi energy is 
+  !!                                        channel which the fermi energy is
   !!                                        required to get.
   !! OUTPUT
   !!   real(double) Ef(nspin)             : Fermi energy for each spin channel
@@ -2262,6 +2262,7 @@ contains
           ne(spin) = int(electrons(spin))
           if (ne(spin) < 1) ne(spin) = 1
           Ef(spin) = eig(ne(spin),1,spin)
+
           ! occupy for a single spin channel
           call occupy(occ, eig, Ef, thisElec, nbands, nkp, spin=spin)
           ! Find two values than bracket true Ef
@@ -2283,7 +2284,7 @@ contains
                    highEf(spin) = Ef(spin)  ! start from begining
                    highElec(spin) = thisElec(spin)
                    ! half the searching step-size
-                   incEf(spin) = half * incEf(spin) 
+                   incEf(spin) = half * incEf(spin)
                 end if
                 ! increase upper bound
                 lowEf(spin) = highEf(spin)
@@ -2425,7 +2426,7 @@ contains
 1   format(10x, 'Proc: ', i5, ' findFermi_fixspin: searching for Ne: ' f12.5)
 2   format(10x, 'Proc: ', i5, &
          ' findFermi_fixspin: searching for Ne (up, dn, total): ' 3f12.5)
-3   format(10x, 'Proc: ', i5, ' findFermi_fixspin: Finding Ef for spin = ', f12.5)
+3   format(10x, 'Proc: ', i5, ' findFermi_fixspin: Finding Ef for spin = ', i2)
 4   format(10x, 'Proc: ', i5, ' findFermi_fixspin: found lower bound', f12.5)
 5   format(10x, 'Proc: ', i5, ' findFermi_fixspin: level, Ne: ', 2f12.5)
 6   format(10x, 'Proc: ', i5, ' findFermi_fixspin: found upper bound', f12.5)
@@ -2446,7 +2447,7 @@ contains
 
   end subroutine findFermi_fixspin
   !!*****
-  
+
 
   !!****f* DiagModule/findFermi_varspin
   !! PURPOSE
@@ -2460,7 +2461,7 @@ contains
   !!   integer nkp                        : number of kpoints
   !!   real(double) eig(nbands,nkp,nspin) : eigenvalues
   !!   real(double) electrons_total       : total number of electrons
-  !!                                        which the fermi energy is 
+  !!                                        which the fermi energy is
   !!                                        required to get.
   !! OUTPUT
   !!   real(double) Ef(nspin)             : Fermi energy for each spin channel
@@ -2501,7 +2502,7 @@ contains
     case (0) ! Fermi smearing
 
        if (iprint_DM >= 2 .AND. inode == ionode) &
-            write (io_lun, 5) myid, electrons_total
+            write (io_lun, 1) myid, electrons_total
        ! Take first guess as double filling each band at first k point
        ne = int(electrons_total / two)
        if (ne < 1) ne = 1
@@ -2655,7 +2656,7 @@ contains
           lowEf(:) = Ef(:)
        end if
        Ef(:) = half * (lowEf(:) + highEf(:))
-       call occupy (occ, eig, Ef, electrons, nbands, nkp)
+       call occupy(occ, eig, Ef, electrons, nbands, nkp)
        thisElec = spin_factor * sum(electrons(:))
     end do
 
@@ -2683,10 +2684,10 @@ contains
   ! -----------------------------------------------------------------------------
   ! Subroutine occupy
   ! -----------------------------------------------------------------------------
-  
+
   !!****f* DiagModule/occupy *
   !!
-  !!  NAME 
+  !!  NAME
   !!   occupy - occupy eigenstates
   !!  USAGE
   !!   occupy()
@@ -2718,7 +2719,7 @@ contains
   !!     - If spin is present then only the occupancy for the (single)
   !!       given spin channel is calculated.
   !!   2012/03/04 L.Tong
-  !!    Major rewrite of the spin implementation. 
+  !!    Major rewrite of the spin implementation.
   !!    - occu(nbands,nkp,nspin), ebands(nbands,nkp,nspin), Ef(nspin),
   !!      electrons(nspin) should only store the corresponding values in
   !!      a single spin channel. This is also the case for spin
@@ -2804,10 +2805,10 @@ contains
   ! -----------------------------------------------------------------------------
   ! Function fermi
   ! -----------------------------------------------------------------------------
-  
+
   !!****f* DiagModule/fermi *
   !!
-  !!  NAME 
+  !!  NAME
   !!   fermi - evaluate fermi function
   !!  USAGE
   !!   fermi(E,kT)
@@ -2819,7 +2820,7 @@ contains
   !!   certainly the limit if E and kT are equal and heading to zero, or if
   !!   E is smaller than kT and both head for zero.
   !!  INPUTS
-  !!   real(double), intent(in) :: E - energy          
+  !!   real(double), intent(in) :: E - energy
   !!   real(double), intent(in) :: kT - smearing energy
   !!  USES
   !!   datatypes, numbers
@@ -2837,12 +2838,12 @@ contains
   !!  SOURCE
   !!
   function fermi(E,kT)
-    
+
     use datatypes
     use numbers, only: zero, one, half
-    
+
     implicit none
-    
+
     ! result
     real(double) :: fermi
 
@@ -2870,7 +2871,7 @@ contains
        fermi = one
       else
        fermi = one/(one + exp(x))
-      endif 
+      endif
     end if
   end function fermi
   !!***
@@ -2879,10 +2880,10 @@ contains
   ! -----------------------------------------------------------------------------
   ! Function MP_step
   ! -----------------------------------------------------------------------------
-  
+
   !!****f* DiagModule/MP_step *
   !!
-  !!  NAME 
+  !!  NAME
   !!   MP_step - evaluate Methfessel-Paxton step function
   !!  USAGE
   !!   MP_step(E,order,smear)
@@ -2890,16 +2891,16 @@ contains
   !!   Evaluates the order (order) Methfessel-Paxton approximation to
   !!   step function
   !!  INPUTS
-  !!   real(double), intent(in) :: E - energy   
+  !!   real(double), intent(in) :: E - energy
   !!   integer, intent(in) :: order - order of Methfessel expansion
-  !!   real(double), intent(in) :: smear - smearing energy, nothing to 
+  !!   real(double), intent(in) :: smear - smearing energy, nothing to
   !!                               do with physical temperature
   !!  USES
   !!   datatypes, numbers
   !!  AUTHOR
   !!   L.Tong (lt)
   !!  CREATION DATE
-  !!   2010/06/15 00:17 
+  !!   2010/06/15 00:17
   !!  MODIFICATION HISTORY
   !!   2012/01/22 L.Tong
   !!     - Small change to use FORTRAN 90 function declaration notation
@@ -2910,7 +2911,7 @@ contains
 
     use datatypes
     use numbers, only: zero, one, half, two, four, pi
-    
+
     implicit none
 
     ! Result
@@ -2938,7 +2939,7 @@ contains
        x = E/smear
        if(order==0) then
           MP_step = half*erfc(x)
-       else 
+       else
           x2 = x*x
           A = one/sqrt(pi)
           H0 = one
@@ -2965,10 +2966,10 @@ contains
   ! -----------------------------------------------------------------------------
   ! Function MP_entropy
   ! -----------------------------------------------------------------------------
-  
+
   !!****f* DiagModule/MP_entropy *
   !!
-  !!  NAME 
+  !!  NAME
   !!   MP_entropy - evaluate the function SN(x) = 0.5*A_N*H_2N(x)*exp(-x^2)
   !!                where A_N = (-1)^N / (N!*4^N*sqrt(PI))
   !!  USAGE
@@ -2977,14 +2978,14 @@ contains
   !!   Evaluate the function SN(x) = 0.5*A_N*H_2N(x)*exp(-x^2)
   !!                where A_N = (-1)^N / (N!*4^N*sqrt(PI))
   !!  INPUTS
-  !!   real(double), intent(in) :: x   
+  !!   real(double), intent(in) :: x
   !!   integer, intent(in) :: order - order of Methfessel expansion
   !!  USES
   !!   datatypes, numbers
   !!  AUTHOR
   !!   L.Tong (lt)
   !!  CREATION DATE
-  !!   2010/07/21 13:50 
+  !!   2010/07/21 13:50
   !!  MODIFICATION HISTORY
   !!  SOURCE
   !!
@@ -2992,7 +2993,7 @@ contains
 
     use datatypes
     use numbers, only: one, two, half, four, pi
-    
+
     implicit none
 
     ! Passed variables
@@ -3006,7 +3007,7 @@ contains
 
     if(order==0) then
        MP_entropy = exp(-(x*x))/sqrt(pi)
-    else 
+    else
        ! Evaluate A_n and Hermite Polynomial order 2n
        A = one/(sqrt(pi)*(-four))
        H1 = two*x
@@ -3034,7 +3035,7 @@ contains
 
   !!****f* DiagModle/erfc *
   !!
-  !!  NAME 
+  !!  NAME
   !!   erfc
   !!  USAGE
   !!   erfc(x)
@@ -3052,16 +3053,16 @@ contains
   !!
   real(double) function erfc(x)
     use datatypes
-    use numbers,  only: very_small, one, zero, half, two
+    use numbers,  only: RD_ERR, one, zero, half, two
     use GenComms, only: cq_abort
-    
+
     real(double), parameter :: erfc_delta = 1.0e-12_double, &
          erfc_gln = 0.5723649429247447e0_double, &
          erfc_fpmax = 1.e30_double
     integer, parameter:: erfc_iterations = 10000
 
     real(double), intent(in) :: x
-    
+
     ! local variables
     real(double) :: y, y2
     real(double) :: ap, sum, del
@@ -3069,13 +3070,13 @@ contains
     integer :: i
 
     if(x < zero) then
-       y = -x 
+       y = -x
     else
        y = x
     end if
     ! This expects y^2
     y2 = y*y
-    if(y<very_small) then
+    if(y<RD_ERR) then
        erfc = one
        return
     end if
@@ -3102,7 +3103,7 @@ contains
           c = b + an / c
           d = one / d
           del = d * c
-          sum = sum * del         
+          sum = sum * del
           if (abs(del - one) < erfc_delta) exit
        end do
        erfc = sum * exp(-y2 + half * log(y2) - erfc_gln)
@@ -3115,10 +3116,10 @@ contains
 
   !!****f* DiagModule/buildK *
   !!
-  !!  NAME 
-  !!   buildK - makes K 
+  !!  NAME
+  !!   buildK - makes K
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Builds K from eigenvectors - this involves working out which
   !!   processors we're going to need which eigenvectors from, fetching
@@ -3129,10 +3130,10 @@ contains
   !!   which conjugates the FIRST vector.  Really we should conjugate
   !!   the second, but as K is real, it shouldn't matter.
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -3144,7 +3145,7 @@ contains
   !!    unnecessary rubbish
   !!   2004/11/10 drb
   !!    Changed nsf to come from maxima, not common
-  !!   10:09, 13/02/2006 drb 
+  !!   10:09, 13/02/2006 drb
   !!    Removed all explicit references to data_ variables and rewrote
   !!    in terms of new matrix routines
   !!   2006/10/02 17:52 dave
@@ -3177,7 +3178,7 @@ contains
     use global_module,   only: numprocs, iprint_DM, id_glob,         &
                                ni_in_cell, x_atom_cell, y_atom_cell, &
                                z_atom_cell
-    use numbers,         only: very_small
+    use numbers,         only: RD_ERR
     use mpi
     use GenBlas,         only: dot
     use GenComms,        only: myid
@@ -3223,7 +3224,7 @@ contains
     call start_timer(tmr_std_matrices)
     if(iprint_DM>=2.AND.myid==0) write(io_lun,fmt='(10x,"Entering &
          &buildK ",i4)') matA
-   
+
     ! get occ_correction
     occ_correction = one
 
@@ -3377,7 +3378,7 @@ contains
                      recv_info(owning_proc)%orbs = recv_info(owning_proc)%orbs + mat(part,range)%ndimj(ist)
                 recv_info(owning_proc)%prim_atom(recv_info(owning_proc)%ints(locatom),locatom) = prim_atom
                 recv_info(owning_proc)%locj(recv_info(owning_proc)%ints(locatom),locatom) = halo(range)%i_halo(gcspart)
-                ! Build the distances between atoms - needed for phases 
+                ! Build the distances between atoms - needed for phases
                 FSCpart = BCS_parts%lab_cell(mat(part,range)%i_part(ist))!gcspart)
                 recv_info(owning_proc)%dx(recv_info(owning_proc)%ints(locatom),locatom) = &
                      BCS_parts%xcover(gcspart)-bundle%xprim(prim_atom)
@@ -3392,7 +3393,7 @@ contains
     ! Work out length
     len = 0
     do i=1,matrix_size
-       if(abs(occs(i))>very_small) then
+       if(abs(occs(i))>RD_ERR) then
           len = len+1
           if(myid==0.AND.iprint_DM>=4) write(io_lun,*) 'Occ is ',occs(i)
        end if
@@ -3488,7 +3489,7 @@ contains
                 do row_sup = 1,recv_info(recv_proc+1)%ndimj(locatom)
                    do col_sup = 1,nsf_species(bundle%species(prim))
                       whereMat = matrix_pos(matA,recv_info(recv_proc+1)%prim_atom(inter,locatom), &
-                           recv_info(recv_proc+1)%locj(inter,locatom),col_sup,row_sup) 
+                           recv_info(recv_proc+1)%locj(inter,locatom),col_sup,row_sup)
                       zsum = dot(len,localEig(1:len,prim_orbs(prim)+col_sup),1,RecvBuffer(1:len,orb_count+row_sup),1)
                       call store_matrix_value_pos(matA,whereMat,real(zsum*cmplx(rfac,ifac,double_cplx),double))
                    end do ! col_sup=nsf
@@ -3505,7 +3506,7 @@ contains
        end if
        if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Calling dealloc'
        deallocate(RecvBuffer,STAT=stat)
-       if(stat/=0) call cq_abort("buildK: Failed to dealloc buffer",stat) 
+       if(stat/=0) call cq_abort("buildK: Failed to dealloc buffer",stat)
        if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Calling dealloc'
        deallocate(SendBuffer,STAT=stat)
        if(stat/=0) call cq_abort("buildK: Failed to dealloc buffer",stat)

@@ -15,6 +15,8 @@
 !!  MODIFICATION HISTORY
 !!   2011/07/21 16:41 dave
 !!    Preparing for inclusion in main trunk
+!!   2012/04/21 L.Tong
+!!   - Moved get_cdft_constraint from density module to here
 !!  SOURCE
 !!
 module cdft_module
@@ -203,7 +205,6 @@ contains
     use global_module,  only: iprint_SC, sf,iprint_SC,io_lun
     use GenComms,       only: cq_abort
     use energy,         only: cdft_energy, get_energy
-    use density_module, only: get_cdft_constraint
 
     implicit none
 
@@ -477,7 +478,6 @@ contains
      use DiagModule,     only: diagon
      use energy,         only: get_energy
      use GenComms,       only: inode, ionode
-     use density_module, only: get_cdft_constraint
 
      implicit none
 
@@ -527,6 +527,71 @@ contains
      return
    end subroutine evaluate_cdft_function
    !!***
+
+
+   !!****f* cdft_module/get_cdft_constraint *
+   !!
+   !!  NAME 
+   !!   get_cdft_constraint
+   !!  USAGE
+   !!   
+   !!  PURPOSE
+   !!   Gets constraint for cDFT
+   !!  INPUTS
+   !!   
+   !!  USES
+   !!   
+   !!  AUTHOR
+   !!   DRB and Alex Sena
+   !!  CREATION DATE
+   !!   2009
+   !!  MODIFICATION HISTORY
+   !!   2011/08 and 2011/09
+   !!    Incorporated into new trunk
+   !!   2011/12/10 L.Tong
+   !!    Removed redundant dependence on matHzero from cdft_data module
+   !!   2012/03/13 L.Tong
+   !!    Added spin polarisation
+   !!  SOURCE
+   !!  
+   subroutine get_cdft_constraint
+
+     use numbers
+     use mult_module,   only: matH, matK, matrix_sum,               &
+                              matrix_product_trace
+     use cdft_data,     only: cDFT_Type, cDFT_Fix_Charge,           &
+                              cDFT_Fix_ChargeDifference,            &
+                              cDFT_NumberAtomGroups, cDFT_W, matWc, &
+                              cDFT_Target, cDFT_Vc
+     use energy,        only: cdft_energy
+     use GenComms,      only: inode, ionode
+     use global_module, only: nspin, spin_factor
+
+     implicit none
+     
+     integer :: i, spin
+
+     cdft_energy = zero
+     if (cDFT_Type == cDFT_Fix_Charge .or. &
+          cDFT_Type == cDFT_Fix_ChargeDifference) then
+        do i = 1, cDFT_NumberAtomGroups
+           cDFT_W(i) = zero
+           do spin = 1, nspin
+              cDFT_W(i) = cDFT_W(i) + spin_factor * &
+                          matrix_product_trace(matK(spin), matWc(i)) - &
+                          cDFT_Target(i)
+           end do
+           cdft_energy = cdft_energy + cDFT_Vc(i) * cDFT_W(i)
+           if (inode == ionode .and. iprint_SC > 2) &
+                write (io_lun, fmt='(4x,"Group ",i3,"Vc, W, E: ",3f20.12)') &
+                i, cDFT_Vc(i), cDFT_W(i), cDFT_Vc(i) * cDFT_W(i)
+        end do
+     end if
+     ! Other cDFT types go above
+     return
+   end subroutine get_cdft_constraint
+   !!***
+
 
 end module cdft_module
 

@@ -655,7 +655,7 @@ contains
 
   subroutine convert_basis(x,y,z,r,thet,phi)
     use datatypes
-    use numbers, ONLY: pi, half, very_small, three_halves, zero
+    use numbers, ONLY: pi, half, RD_ERR, three_halves, zero
     implicit none
     !routine to convert Cartesian displacements into displacements
     !in spherical polar coordinates
@@ -668,20 +668,20 @@ contains
     z2 = z*z
     mod_r = sqrt(x2+y2+z2)
     mod_r_plane = sqrt(x2+y2)
-    if(mod_r<very_small) then
+    if(mod_r<RD_ERR) then
        r = zero
        thet = zero
        phi = zero
        return
     end if
 
-    if(abs(z)<very_small) then
+    if(abs(z)<RD_ERR) then
        thet = half*pi
     else
        thet = acos(z/mod_r) !need to make sure this ratio doesn't disappear as well..
     endif
 
-    if(abs(x2)<very_small.and.abs(y2)<very_small) then
+    if(abs(x2)<RD_ERR.and.abs(y2)<RD_ERR) then
        phi = zero
     else
        if(x<zero) then
@@ -864,7 +864,7 @@ contains
     !along specified Cartesian unit vector
     r_my = sqrt((x_i*x_i)+(y_i*y_i)+(z_i*z_i))
     call pao_rad_vals_fetch(spec,l,nzeta,m,r_my,f_r,df_r)
-    if(r_my>very_small) then 
+    if(r_my>RD_ERR) then 
        x_n = x_i/r_my; y_n = y_i/r_my; z_n = z_i/r_my
     else
        x_n = zero; y_n = zero; z_n = zero

@@ -310,6 +310,14 @@ contains
   !!    sum.
   !!   2012/03/08 L.Tong
   !!    Rewrote spin implementation
+  !!   2012/05/27 L.Tong
+  !!   - Added check for the case ne(spin) > n_o(spin), i.e. the
+  !!     number of electrons requested by the user at initialisation
+  !!     in one spin channel exceeds the number of orbitals avaliable
+  !!     for that spin channel. The end result of this is that
+  !!     eigenvalues of the L will no longer be contained within 0 and
+  !!     1, due to forced double occupancy of a same spin orbital. A
+  !!     warning will be produced if this happens.
   !!  SOURCE
   !!
   subroutine InitMcW(inode, ionode)
@@ -366,6 +374,20 @@ contains
        n_o = n_o + direct_sum_factor * nsf_species(species(i))
     end do
     
+    ! check if we have enough orbitals for the given electron
+    ! populations for the initialisation procedure to work properly.
+    do spin = 1, nspin
+       if (ne(spin) / n_o * direct_sum_factor > one) then
+          write (io_lun, '(/,2x,a,i1,a,i1,a,f12.6,a,f12.6,a,/)')      &
+               '*** WARNING!!! You have too few number of support &
+                &functions for the calculation. The number of &
+                &electrons in spin = ', spin, ' is greater than the &
+                &number of orbitals!. ne(', spin, ') = ', ne(spin),   &
+                ', n_o for spin channel = ', n_o / direct_sum_factor, &
+                ' ***'
+       end if
+    end do
+
     if (nspin == 2) then
        if (inode == ionode .and. iprint_DM > 1) &
             write (io_lun, 3) ne(1), ne(2), n_o
@@ -424,7 +446,7 @@ contains
                       (n_o * A / (n_o - ne(spin)) - one)
           if (inode == ionode) &
                write (io_lun, &
-                      '(2x,"Mu1, Mu2, for spin = ",i1," are: ",2f25.1)') &
+                      '(2x,"Mu1, Mu2, for spin = ",i1," are: ",2f25.15)') &
                      spin, mu1(spin), mu2(spin)
           if ((mu1(spin) < hmax(spin) .and. mu1(spin) > hmin(spin)) .and. &
               (abs(ne(spin) / (hmax(spin) - mu1(spin))) < &
@@ -437,7 +459,7 @@ contains
           endif
           if (inode == ionode .and. iprint_DM > 1) &
                write (io_lun, &
-                      '(2x,"mubar, lambda for spin = ",i1," are: ",2f25.1)') &
+                      '(2x,"mubar, lambda for spin = ",i1," are: ",2f25.15)') &
                      spin, mubar(spin), lambda(spin)
        end do
        ! Calculate L0. 
@@ -479,7 +501,8 @@ contains
     end do
     call free_temp_matrix(matTS)
 
-    call stop_print_timer(tmr_l_tmp1, "McWeeny initialisation", IPRINT_TIME_THRES1)
+    call stop_print_timer(tmr_l_tmp1, "McWeeny initialisation", &
+                          IPRINT_TIME_THRES1)
 
 1   format(1x,'Welcome to InitMcW')
 2   format(2x,'Electrons: ',f15.6,' Orbitals: ',f15.6)

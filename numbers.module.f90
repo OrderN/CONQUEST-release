@@ -35,6 +35,9 @@
 !!    Added eight and twelve
 !!   2012/02/26 L.Tong
 !!    Added minus_one, nine and ten
+!!   2012/05/27 L.Tong
+!!    Added RD_ERR, a tiny number that if any number N with abs(N) <
+!!    RD_ERR, then N is regarded as zero.
 !!  SOURCE
 !!
 module numbers
@@ -85,6 +88,8 @@ module numbers
   real(double), parameter :: sqrt_pi = 1.77245385090551588192_double
   real(double), parameter :: very_small = 1.0e-8_double
   real(double), parameter :: BIG = 1.0e12_double 
+  ! if a abs(number) is smaller than RD_ERR then it is considered to be zero
+  real(double), parameter :: RD_ERR = 1.0e-8_double
 
   complex(double_cplx), parameter :: minus_i = (0.0_double_cplx, -1.0_double_cplx)
 

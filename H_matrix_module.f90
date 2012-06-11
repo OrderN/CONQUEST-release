@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: svn -*-
+! -*- mode: F90; mode: font-lock; vc-back-end: svn -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -63,9 +63,11 @@
 !!
 module H_matrix_module
 
-  use global_module, only: io_lun
+  use global_module,          only: io_lun
   use timer_stdclocks_module, only: start_timer, stop_timer, &
-       tmr_std_hmatrix, tmr_std_allocation, tmr_std_matrices
+                                    tmr_std_hmatrix,         &
+                                    tmr_std_allocation,      &
+                                    tmr_std_matrices
 
   implicit none
 
@@ -81,7 +83,7 @@ contains
   ! ------------------------------------------------------------------------------
   ! Subroutine get_H_matrix
   ! ------------------------------------------------------------------------------
-  
+
   !!****f* H_matrix_module/get_H_matrix_nospin *
   !!
   !! NAME
@@ -138,6 +140,8 @@ contains
   !!    subroutine
   !!  - Renamed the new subroutine get_H_matrix as it used to be.
   !!    Deleted het_H_matrix interface.
+  !!  2012/04/16 L.Tong
+  !!  - Moved all the XC functionals and related subroutines to XC_module
   !!  2012/04/26 16:13 dave
   !!   Changes for analytic evaluation of KE
   !! SOURCE
@@ -223,10 +227,12 @@ contains
        if (inode == ionode .and. iprint_ops > 3)&
             & write(io_lun, fmt='(2x,"Rebuilding KE")')
        ! both matKE and matNL are independent of spin (only XC is spin dependent)
-       if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) call matrix_scale(zero, matKE)
+       if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) &
+            call matrix_scale(zero, matKE)
        call matrix_scale(zero, matNL)
        ! get the T matrix and the kinetic energy...
-       if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) call get_T_matrix(matKE)
+       if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) &
+            call get_T_matrix(matKE)
        ! now, we do the non-local part (if we are doing it)
        if (non_local) then
           if (inode == ionode .and. iprint_ops > 3) &
@@ -342,7 +348,7 @@ contains
   ! -----------------------------------------------------------
   ! Subroutine get_h_on_support
   ! -----------------------------------------------------------
-  
+
   !!****f* H_matrix_module/get_h_on_support_nospin *
   !!
   !!  NAME
@@ -399,6 +405,11 @@ contains
   !!   - Renamed back to get_h_on_support
   !!   - removed input parameter hOnSupportFns, use module variable
   !!     H_on_supportfns from functions_on_grid instead.
+  !!   2012/05/29 L.Tong
+  !!   - Changed output level and format of electron number information
+  !!   2012/05/29 L.Tong
+  !!   - Cleaned up xc-functonal selector. Now spin and non-spin
+  !!     calculations share the same calls more or less.
   !!  SOURCE
   !!
   subroutine get_h_on_support(output_level, fixed_potential, &
@@ -406,43 +417,51 @@ contains
 
     use datatypes
     use numbers
-    use global_module, only: sf, flag_functional_type, nspin,        &
-                             spin_factor, flag_pcc_global, area_ops, &
-                             functional_lda_pz81,                    &
-                             functional_lda_gth96,                   &
-                             functional_lda_pw92,                    &
-                             functional_gga_pbe96,                   &
-                             functional_gga_pbe96_rev98,             &
-                             functional_gga_pbe96_r99,               &
-                             functional_lsda_pw92 
-    use GenBlas, only: copy, axpy, dot, rsum
-    use dimens, only: grid_point_volume, n_my_grid_points, n_grid_z
-    use block_module, only: n_blocks, n_pts_in_block
-    use primary_module, only: domain
-    use set_blipgrid_module, only: naba_atm
-    use density_module, only : density_pcc
-    use GenComms, only: gsum, inode, ionode, cq_abort
-    use energy, only: hartree_energy, xc_energy, local_ps_energy,    &
-                      delta_E_hartree
-    use hartree_module, only: hartree
-    use functions_on_grid, only: gridfunctions, fn_on_grid,          &
-                                 supportfns, H_on_supportfns
+    use global_module,               only: sf, flag_functional_type,   &
+                                           nspin, spin_factor,         &
+                                           flag_pcc_global, area_ops,  &
+                                           functional_lda_pz81,        &
+                                           functional_lda_gth96,       &
+                                           functional_lda_pw92,        &
+                                           functional_gga_pbe96,       &
+                                           functional_gga_pbe96_rev98, &
+                                           functional_gga_pbe96_r99
+    use XC_module,                   only: get_xc_potential,           &
+                                           get_GTH_xc_potential,       &
+                                           get_xc_potential_LSDA_PW92, &
+                                           get_xc_potential_GGA_PBE
+    use GenBlas,                     only: copy, axpy, dot, rsum
+    use dimens,                      only: grid_point_volume,          &
+                                           n_my_grid_points, n_grid_z
+    use block_module,                only: n_blocks, n_pts_in_block
+    use primary_module,              only: domain
+    use set_blipgrid_module,         only: naba_atm
+    use density_module,              only: density_pcc
+    use GenComms,                    only: gsum, inode, ionode, cq_abort
+    use energy,                      only: hartree_energy, xc_energy,  &
+                                           local_ps_energy,            &
+                                           delta_E_hartree
+    use hartree_module,              only: hartree
+    use functions_on_grid,           only: gridfunctions, fn_on_grid,  &
+                                           supportfns, H_on_supportfns
     use calc_matrix_elements_module, only: norb
-    use pseudopotential_common, only: pseudopotential
-    use potential_module, only: potential
-    use maxima_module, only: maxngrid
-    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use fft_module, only: fft3, hartree_factor, z_columns_node, i0
-    use io_module, only: dump_locps
-    use energy, only: delta_E_xc
+    use pseudopotential_common,      only: pseudopotential
+    use potential_module,            only: potential
+    use maxima_module,               only: maxngrid
+    use memory_module,               only: reg_alloc_mem,              &
+                                           reg_dealloc_mem, type_dbl
+    use fft_module,                  only: fft3, hartree_factor,       &
+                                           z_columns_node, i0
+    use io_module,                   only: dump_locps
+    use energy,                      only: delta_E_xc
 
     implicit none
 
     ! Passed variables
-    integer :: output_level, size
-    logical :: fixed_potential
-    real(double), dimension(:)   :: electrons
-    real(double), dimension(:,:) :: rho
+    integer, intent(in) :: output_level, size
+    logical, intent(in) :: fixed_potential
+    real(double), dimension(:,:), intent(in)  :: rho
+    real(double), dimension(:),   intent(out) :: electrons
 
     ! Local variables
     integer :: n, m, nb, atom, nsf1, point, stat, i, pot_flag, igrid, spin
@@ -450,8 +469,8 @@ contains
     logical     , dimension(4)    :: dump_pot
     real(double), dimension(size) :: xc_epsilon ! energy_density of XC
     real(double), dimension(size) :: h_potential
-    real(double), dimension(size) :: rho_tot 
-    real(double), dimension(size,nspin) :: xc_potential    
+    real(double), dimension(size) :: rho_tot
+    real(double), dimension(size,nspin) :: xc_potential
     real(double), dimension(:,:), allocatable :: density_wk ! rho + density_pcc
     real(double), dimension(:),   allocatable :: density_wk_tot
     complex(double_cplx), dimension(:), allocatable :: chdenr, locpotr
@@ -480,7 +499,7 @@ contains
     !call fft3(pseudopotential, locpotr, size, 1)
     !deallocate(chdenr, locpotr, STAT=stat)
 
-    
+
     ! first initialise some arrays
     h_potential = zero
     do spin = 1, nspin
@@ -495,10 +514,11 @@ contains
        call gsum(electrons(spin))
     end do
     electrons_tot = spin_factor * sum(electrons(:))
-    if (inode == ionode .and. output_level >= 1) then
-       write (io_lun, '(10x,"Electron Count, up, down and total : ",&
-                       &f25.15,/,47x,f25.15,/,47x,f25.15)') &
-             electrons(1), electrons(nspin), electrons_tot
+    if (inode == ionode .and. output_level >= 2) then
+       write (io_lun, '(10x,a)') &
+            'get_h_on_support: Electron Count, up, down and total:'
+       write (io_lun, '(10x, 3f25.15)') &
+            electrons(1), electrons(nspin), electrons_tot
     end if
 
     ! now calculate the hartree potential on the grid
@@ -519,94 +539,71 @@ contains
        end do
        density_wk_tot = rho_tot + density_pcc
     end if
-
-    if (nspin == 1) then
-
-       select case(flag_functional_type)
-       case (functional_lda_pz81)
-          if (flag_pcc_global) then
-             call get_xc_potential(density_wk_tot, xc_potential(:,1), &
-                                   xc_epsilon, xc_energy, size)
-          else
-             call get_xc_potential(rho_tot, xc_potential(:,1), &
-                                   xc_epsilon, xc_energy, size)
-          endif
-       case (functional_lda_gth96)
-          if (flag_pcc_global) then
-             call get_GTH_xc_potential(density_wk_tot, xc_potential(:,1), &
-                                       xc_epsilon, xc_energy, size)
-          else
-             call get_GTH_xc_potential(rho_tot, xc_potential(:,1), &
-                                       xc_epsilon, xc_energy, size)
-          endif
-       case (functional_lda_pw92)
-          if (flag_pcc_global) then
-             call get_xc_potential_LDA_PW92(density_wk_tot, xc_potential(:,1), &
-                                            xc_epsilon, xc_energy, size)
-          else
-             call get_xc_potential_LDA_PW92(rho_tot, xc_potential(:,1), &
-                                            xc_epsilon, xc_energy, size)
-          endif
-       case (functional_gga_pbe96)
-          if (flag_pcc_global) then
-             call get_xc_potential_GGA_PBE(density_wk_tot, xc_potential(:,1),&
-                                           xc_epsilon, xc_energy, size)
-          else
-             call get_xc_potential_GGA_PBE(rho_tot, xc_potential(:,1), &
-                                           xc_epsilon, xc_energy, size)
-          endif
-       case (functional_gga_pbe96_rev98)
-          if (flag_pcc_global) then
-             call get_xc_potential_GGA_PBE(density_wk_tot, xc_potential(:,1), &
-                                           xc_epsilon, xc_energy, size, &
-                                           functional_gga_pbe96_rev98)
-          else
-             call get_xc_potential_GGA_PBE(rho_tot, xc_potential(:,1), &
-                                           xc_epsilon, xc_energy, size, &
-                                           functional_gga_pbe96_rev98)
-          endif
-       case (functional_gga_pbe96_r99)
-          if (flag_pcc_global) then
-             call get_xc_potential_GGA_PBE(density_wk_tot, xc_potential(:,1), &
-                                           xc_epsilon, xc_energy, size, &
-                                           functional_gga_pbe96_r99)
-          else
-             call get_xc_potential_GGA_PBE(rho_tot, xc_potential(:,1), &
-                                           xc_epsilon, xc_energy, size, &
-                                           functional_gga_pbe96_r99)
-          endif
-       case default
-          if (flag_pcc_global) then
-             call get_xc_potential(density_wk_tot, xc_potential(:,1), xc_epsilon, &
-                                   xc_energy, size)
-          else
-             call get_xc_potential(rho_tot, xc_potential(:,1), xc_epsilon, &
-                                   xc_energy, size)
-          endif
-       end select
-
-    else if (nspin == 2) then
-
-       select case (flag_functional_type)
-       case (functional_lsda_pw92)
-          if (flag_pcc_global) then
-             call get_xc_potential_LSDA_PW92(density_wk, xc_potential, &
-                                             xc_epsilon, xc_energy, size)
-          else
-             call get_xc_potential_LSDA_PW92(rho, xc_potential, &
-                                             xc_epsilon, xc_energy, size)
-          end if
-       case default
-          if (flag_pcc_global) then
-             call get_xc_potential_LSDA_PW92(density_wk, xc_potential, &
-                                             xc_epsilon, xc_energy, size)
-          else
-             call get_xc_potential_LSDA_PW92(rho, xc_potential, &
-                                             xc_epsilon, xc_energy, size)
-          end if
-       end select
-
-    end if ! (nspin == 2)
+       
+    select case(flag_functional_type)
+    case (functional_lda_pz81)
+       ! NOT SPIN POLARISED
+       if (flag_pcc_global) then
+          call get_xc_potential(density_wk_tot, xc_potential(:,1), &
+                                xc_epsilon, xc_energy, size)
+       else
+          call get_xc_potential(rho_tot, xc_potential(:,1), &
+                                xc_epsilon, xc_energy, size)
+       end if
+    case (functional_lda_gth96)
+       ! NOT SPIN POLARISED
+       if (flag_pcc_global) then
+          call get_GTH_xc_potential(density_wk_tot, xc_potential(:,1), &
+                                    xc_epsilon, xc_energy, size)
+       else
+          call get_GTH_xc_potential(rho_tot, xc_potential(:,1), &
+                                    xc_epsilon, xc_energy, size)
+       end if
+    case (functional_lda_pw92)
+       if (flag_pcc_global) then
+          call get_xc_potential_LSDA_PW92(density_wk, xc_potential, &
+                                          xc_epsilon, xc_energy, size)
+       else
+          call get_xc_potential_LSDA_PW92(rho, xc_potential, &
+                                          xc_epsilon, xc_energy, size)
+       end if
+    case (functional_gga_pbe96)
+       if (flag_pcc_global) then
+          call get_xc_potential_GGA_PBE(density_wk, xc_potential,&
+                                        xc_epsilon, xc_energy, size)
+       else
+          call get_xc_potential_GGA_PBE(rho, xc_potential, &
+                                        xc_epsilon, xc_energy, size)
+       end if
+    case (functional_gga_pbe96_rev98)
+       if (flag_pcc_global) then
+          call get_xc_potential_GGA_PBE(density_wk, xc_potential, &
+                                        xc_epsilon, xc_energy, size, &
+                                        functional_gga_pbe96_rev98)
+       else
+          call get_xc_potential_GGA_PBE(rho, xc_potential, &
+                                        xc_epsilon, xc_energy, size, &
+                                        functional_gga_pbe96_rev98)
+       end if
+    case (functional_gga_pbe96_r99)
+       if (flag_pcc_global) then
+          call get_xc_potential_GGA_PBE(density_wk, xc_potential, &
+                                        xc_epsilon, xc_energy, size, &
+                                        functional_gga_pbe96_r99)
+       else
+          call get_xc_potential_GGA_PBE(rho, xc_potential, &
+                                        xc_epsilon, xc_energy, size, &
+                                        functional_gga_pbe96_r99)
+       end if
+    case default
+       if (flag_pcc_global) then
+          call get_xc_potential_LSDA_PW92(density_wk, xc_potential, &
+                                          xc_epsilon, xc_energy, size)
+       else
+          call get_xc_potential_LSDA_PW92(rho, xc_potential, &
+                                          xc_epsilon, xc_energy, size)
+       end if
+    end select
 
     ! Calculation of delta_E_xc
     delta_E_xc = zero
@@ -715,11 +712,10 @@ contains
   !!***
 
 
-
   ! -----------------------------------------------------------
   ! Subroutine get_HNL_matrix
   ! -----------------------------------------------------------
-  
+
   !!****f* H_matrix_module/get_HNL_matrix *
   !!
   !!  NAME
@@ -840,7 +836,7 @@ contains
                    ! Loop over neighbours of atom
                    do nab = 1, mat(np,SPrange)%n_nab(ni)
                       ist = mat(np,SPrange)%i_acc(ni) + nab - 1
-                      ! Build the distances between atoms - needed for phases 
+                      ! Build the distances between atoms - needed for phases
                       gcspart = &
                            BCS_parts%icover_ibeg(mat(np,SPrange)%i_part(ist)) + &
                            mat(np,SPrange)%i_seq(ist) - 1
@@ -850,7 +846,7 @@ contains
                       dz = BCS_parts%zcover(gcspart) - bundle%zprim(iprim)
                       ! We need to know the species of neighbour
                       neigh_global_part = &
-                           BCS_parts%lab_cell(mat(np,SPrange)%i_part(ist)) 
+                           BCS_parts%lab_cell(mat(np,SPrange)%i_part(ist))
                       neigh_global_num  = &
                            id_glob(parts%icell_beg(neigh_global_part) + &
                                    mat(np,SPrange)%i_seq(ist) - 1)
@@ -968,7 +964,7 @@ contains
 
       ! Module usage
       use datatypes,      only: double
-      use numbers,        only: very_small, zero
+      use numbers,        only: RD_ERR, zero
       use group_module,   only: parts
       use primary_module, only: bundle
       use cover_module,   only: BCS_parts
@@ -1013,7 +1009,7 @@ contains
                                    matSC, np, i, ip, nb, nsf1, n_proj, &
                                    pseudo(species_k)%pjnl_ekb(nl))
                               if (abs(pseudo(species_k)%pjnl_ekb(nl)) < &
-                                  very_small .and. inode == ionode) &
+                                  RD_ERR .and. inode == ionode) &
                                    write (io_lun, *) &
                                    'ekb = 0!!   for nl, species_k, ekb = ', &
                                    nl, species_k, pseudo(species_k)%pjnl_ekb(nl)
@@ -1036,7 +1032,7 @@ contains
   ! -----------------------------------------------------------
   ! Subroutine get_T_matrix
   ! -----------------------------------------------------------
-  
+
   !!****f* H_matrix_module/get_T_matrix *
   !!
   !!  NAME
@@ -1226,13 +1222,13 @@ contains
 
     use datatypes
     use numbers
-    use GenBlas, only: axpy, copy, scal, gemm
-    use blip, only: blip_info
-    use mult_module, only: store_matrix_value, scale_matrix_value
+    use GenBlas,             only: axpy, copy, scal, gemm
+    use blip,                only: blip_info
+    use mult_module,         only: store_matrix_value, scale_matrix_value
     use support_spec_format, only: support_function
-    use GenComms, only: cq_abort
-    use global_module, only: area_ops
-    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use GenComms,            only: cq_abort
+    use global_module,       only: area_ops
+    use memory_module,       only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -1388,1257 +1384,47 @@ contains
   end subroutine get_onsite_T
 !!***
 
-! -----------------------------------------------------------
-! Subroutine get_xc_potential
-! -----------------------------------------------------------
 
-!!****f* H_matrix_module/get_xc_potential *
-!!
-!!  NAME
-!!   get_xc_potential
-!!  USAGE
-!!
-!!  PURPOSE
-!!   Calculates the exchange-correlation potential
-!!   on the grid within LDA using the Ceperley-Alder
-!!   interpolation formula. It also calculates the
-!!   total exchange-correlation energy.
-!!
-!!   Note that this is the Perdew-Zunger parameterisation of the Ceperley-Alder
-!!   results for a homogeneous electron gas, as described in Phys. Rev. B 23, 5048 (1981),
-!!   with Ceperley-Alder in Phys. Rev. Lett. 45, 566 (1980)
-!!  INPUTS
-!!
-!!
-!!  USES
-!!
-!!  AUTHOR
-!!   E.H.Hernandez
-!!  CREATION DATE
-!!   02/03/95
-!!  MODIFICATION HISTORY
-!!   01/11/2005 Antonio
-!!    Bibliography:
-!!       Exchange energy: It can be found in:
-!!                        Phys. Rev. B 45, 13244 (1992)
-!!                      **See Eq. 26
-!!       Correlation energy: The correlation functional is PZ-81
-!!                           Phys. Rev. B 23, 5048 (1981)
-!!                         **See Appendix C, and specially Table XII,
-!!                             Eq. C1 for the xc hole (rs),
-!!                             Eqs. C3 & C4, for rs > 1 and
-!!                             Eqs. C5 & C6, for rs < 1
-!!   17/05/2001 dave
-!!    Converted to F90, added ROBODoc header, shortened call
-!!   08/06/2001 dave
-!!    Changed to use gsum from GenComms and added RCS Id and Log tags
-!!   21/06/2001 dave
-!!    Included in H_matrix_module
-!!   08:00, 2003/03/12 dave
-!!    Added calculation of correction term to band energy
-!!   11:49, 30/09/2003 drb
-!!    Added comments to make separate testing of X and C easier
-!!   2008/03/03 18:32 dave
-!!    Removed dsqrt
-!!   2011/12/12 L.Tong
-!!    Removed third, it is now defined in numbers module
-!!  SOURCE
-!!
-  subroutine get_xc_potential(density, xc_potential, xc_epsilon, &
-                              xc_energy,size )
+  ! -----------------------------------------------------------
+  ! Subroutine matrix_scale_diag
+  ! -----------------------------------------------------------
+
+  !!****f* H_matrix_module/matrix_scale_diag *
+  !!
+  !!  NAME
+  !!   matrix_scale_diag
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Scales the projector-localised orbital scalar
+  !!   product matrix
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   25/6/98
+  !!  MODIFICATION HISTORY
+  !!   21/06/2001 dave
+  !!    Included into H_matrix_module and reduced use list
+  !!   24/06/2002 dave
+  !!    Added explicit loop over NSF and an if clause for second (zeroing) loop
+  !!    Also added comments to end of if and do statements to make more readable
+  !!  SOURCE
+  !!
+  subroutine matrix_scale_diag(matSC, species, n_projectors, l_core, &
+                               recip_scale, range)
 
     use datatypes
-    use numbers
-    use dimens, only: grid_point_volume, one_over_grid_point_volume, &
-         n_my_grid_points
-    use GenComms, only: gsum
-
-    implicit none
-
-    ! Passed variables
-    integer,intent(in) :: size
-    real(double),intent(in) :: density(size)
-    real(double),intent(out) :: xc_potential(size), xc_epsilon(size)
-    real(double),intent(out) :: xc_energy
-
-    !     Local variables
-    integer n
-    real(double) :: denominator, e_correlation, &
-         e_exchange, ln_rs, numerator, &
-         rcp_rs, rho, rs, rs_ln_rs, &
-         sq_rs, v_correlation, v_exchange
-    real(double), parameter :: alpha = -0.45817_double
-    real(double), parameter :: beta_1 = 1.0529_double
-    real(double), parameter :: beta_2 = 0.3334_double
-    real(double), parameter :: gamma = - 0.1423_double
-    real(double), parameter :: p = 0.0311_double
-    real(double), parameter :: q = - 0.048_double
-    real(double), parameter :: r = 0.0020_double
-    real(double), parameter :: s = - 0.0116_double
-
-    xc_energy = zero
-    do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
-       if (rho>very_small) then ! Find radius of hole
-          rcp_rs = ( four_thirds * pi * rho )**(third)
-       else
-          rcp_rs = zero
-       end if
-       e_exchange = alpha * rcp_rs
-       v_exchange = four_thirds * e_exchange
-       if (rcp_rs>zero) then
-          rs = one/rcp_rs
-       else
-          rs = zero
-       end if
-       sq_rs = sqrt(rs)
-       if (rs>=one) then
-          denominator = one / (one + beta_1 * sq_rs + beta_2 * rs)
-          numerator = one + seven_sixths * beta_1 * sq_rs +  &
-               four_thirds * beta_2 * rs
-          e_correlation = gamma * denominator
-          v_correlation = gamma * numerator * denominator * denominator
-       else if ((rs<one).and.(rs>very_small)) then
-          ln_rs = log(rs)
-          rs_ln_rs = rs * ln_rs
-          e_correlation = p * ln_rs + q  + r * rs_ln_rs + s * rs
-          v_correlation = e_correlation -  &
-               third * (p + s * rs + r * (rs_ln_rs + rs))
-       else
-          e_correlation = zero
-          v_correlation = zero
-       end if
-       ! Both X and C
-       xc_energy = xc_energy+(e_exchange+e_correlation)*density(n)
-       xc_potential(n) = v_exchange + v_correlation
-       xc_epsilon(n)=e_exchange+e_correlation
-       ! These two for testing
-       ! Just C
-       !xc_energy = xc_energy+e_correlation*density(n)
-       !xc_potential(n) = v_correlation
-       !xc_epsilon(n) = e_correlation
-       ! Just X
-       !xc_energy = xc_energy+e_exchange*density(n)
-       !xc_potential(n) = v_exchange
-       !xc_epsilon(n) = e_exchange
-    end do ! do n_my_grid_points
-    call gsum(xc_energy)
-    ! and 'integrate' the energy over the volume of the grid point
-    xc_energy = xc_energy * grid_point_volume
-    return
-  end subroutine get_xc_potential
-!!***
-
-! -----------------------------------------------------------
-! Subroutine get_GTH_xc_potential
-! -----------------------------------------------------------
-
-!!****f* H_matrix_module/get_GTH_xc_potential *
-!!
-!!  NAME
-!!   get_xc_potential
-!!  USAGE
-!!
-!!  PURPOSE
-!!   Calculates the exchange-correlation potential
-!!   on the grid within LDA using the Ceperley-Alder
-!!   interpolation formula. It also calculates the
-!!   total exchange-correlation energy.
-!!
-!!   Note that this is the Goedecker/Teter/Hutter formula which
-!!   involves only ratios of polynomials, and is rather easy to
-!!   differentiate.  See PRB 54, 1703 (1996)
-!!  INPUTS
-!!
-!!
-!!  USES
-!!
-!!  AUTHOR
-!!   D.R.Bowler
-!!  CREATION DATE
-!!   14:45, 25/03/2003
-!!  MODIFICATION HISTORY
-!!   2011/12/12 L.Tong
-!!     Removed third, it is now defined in numbers module
-!!  SOURCE
-!!
-  subroutine get_GTH_xc_potential(density,xc_potential,xc_epsilon,xc_energy,size )
-
-    use datatypes
-    use numbers
-    use dimens, only: grid_point_volume, one_over_grid_point_volume, &
-         n_my_grid_points
-    use GenComms, only: gsum
-
-    implicit none
-
-    ! Passed variables
-    integer,intent(in) :: size
-    real(double),intent(in) :: density(size)
-    real(double),intent(out) :: xc_potential(size),xc_epsilon(size)
-    real(double),intent(out) :: xc_energy
-
-    !     Local variables
-    integer n
-    real(double) :: denominator, e_correlation, &
-         e_exchange, ln_rs, numerator, &
-         rcp_rs, rho, rs, rs_ln_rs, &
-         sq_rs, v_correlation, v_exchange, drs_dRho, t1, t2, dt1, dt2
-    real(double), parameter :: a0=0.4581652932831429_double
-    real(double), parameter :: a1=2.217058676663745_double
-    real(double), parameter :: a2=0.7405551735357053_double
-    real(double), parameter :: a3=0.01968227878617998_double
-    real(double), parameter :: b1=1.000000000000000_double
-    real(double), parameter :: b2=4.504130959426697_double
-    real(double), parameter :: b3=1.110667363742916_double
-    real(double), parameter :: b4=0.02359291751427506_double
-
-    xc_energy = zero
-    do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
-       if (rho>very_small) then ! Find radius of hole
-          rcp_rs = ( four*third * pi * rho )**(third)
-          rs = one/rcp_rs
-          if(rs<0.01_double) write(io_lun,*) 'rs out of range ',n
-       else
-          rcp_rs = zero
-          rs = zero
-          write(io_lun,*) 'rho out of range ',n
-       end if
-       if(rs>zero) then
-          drs_dRho = -rs / (3.0 * rho)
-          t1 = a0 + rs*(a1 + rs * (a2 + rs * a3))
-          t2 = rs * (b1 + rs * (b2 + rs * (b3 + rs * b4)))
-          dt1 = a1 + rs * (2.0 * a2 + rs * 3.0 * a3)
-          dt2 = b1 + rs * (2.0 * b2 + rs * (3.0 * b3 + rs * 4.0 * b4))
-          xc_energy = xc_energy - (t1/t2)*rho
-          xc_potential(n) = -(t1/t2) + rho*drs_dRho * (-dt1 / t2 + t1 * dt2 / (t2 * t2))
-          xc_epsilon(n) = -t1/t2   ! 2010.Oct.30 TM
-       else
-          xc_potential(n) = zero
-       end if
-    end do ! do n_my_grid_points
-    call gsum(xc_energy)
-    ! and 'integrate' the energy over the volume of the grid point
-    xc_energy = xc_energy * grid_point_volume
-    return
-  end subroutine get_GTH_xc_potential
-!!***
-
-
-! -----------------------------------------------------------
-! Subroutine get_xc_potential_LDA_PW92
-! -----------------------------------------------------------
-
-!!****f* H_matrix_module/get_xc_potential_LDA_PW92 *
-!!
-!!  NAME
-!!   get_xc_potential_LDA_PW92
-!!  USAGE
-!!
-!!  PURPOSE
-!!   Calculates the exchange-correlation potential
-!!   on the grid within LDA using the Ceperley-Alder
-!!   interpolation formula. It also calculates the
-!!   total exchange-correlation energy.
-!!
-!!   Note that this is the Perdew-Wang parameterisation of the Ceperley-Alder
-!!   results for a homogeneous electron gas, as described in Phys. Rev. B 45, 13244 (1992),
-!!   with Ceperley-Alder in Phys. Rev. Lett. 45, 566 (1980)
-!!  INPUTS
-!!
-!!
-!!  USES
-!!
-!!  AUTHOR
-!!   A.S. Torralba
-!!  CREATION DATE
-!!   01/11/05
-!!  MODIFICATION HISTORY
-!!   2008/03/03 18:32 dave
-!!    Removed dsqrt
-!!   2011/03/22 L.Tong
-!!    Removed local definition of third, it is now defined in numbers module
-!!    Changed 1 to one in the log() functions
-!!  SOURCE
-!!
-  subroutine get_xc_potential_LDA_PW92(density,xc_potential,xc_epsilon, xc_energy_total,size)
-
-    use datatypes
-    use numbers
-    use dimens, only: grid_point_volume, one_over_grid_point_volume, &
-         n_my_grid_points
-    use GenComms, only: gsum, inode, ionode
-
-    implicit none
-
-    ! Passed variables
-    integer,intent(in) :: size
-    real(double),intent(in) :: density(size)
-    real(double),intent(out) :: xc_epsilon(size), xc_potential(size)
-    real(double),intent(out) :: xc_energy_total
-
-    !     Local variables
-    integer :: n
-    real(double) :: prefactor, postfactor, denominator, &
-                    e_correlation, e_exchange, &
-                    rcp_rs, rho, rs, sq_rs, &
-                    v_correlation, v_exchange, &
-                    delta_prefactor, delta_postfactor
-
-
-    !     From Table I, Phys. Rev. B 45, 13244 (1992), for reference
-    real(double), parameter :: alpha  = 1.0421234_double
-    real(double), parameter :: alpha1 = 0.21370_double
-    real(double), parameter :: beta1  = 7.5957_double
-    real(double), parameter :: beta2  = 3.5876_double
-    real(double), parameter :: beta3  = 1.6382_double
-    real(double), parameter :: beta4  = 0.49294_double
-    real(double), parameter :: A      = 0.031091_double
-
-    !     Precalculated constants
-    real(double), parameter :: k00 = 1.611991954_double     ! (4*pi/3)**(1/3)
-    real(double), parameter :: k01 = -0.458165347_double    ! -3/(2*pi*alpha)
-    real(double), parameter :: k02 = -0.062182_double       ! -2*A
-    real(double), parameter :: k03 = -0.0132882934_double   ! -2*A*alpha1
-    real(double), parameter :: k04 = 0.4723158174_double    ! 2*A*beta1
-    real(double), parameter :: k05 = 0.2230841432_double    ! 2*A*beta2
-    real(double), parameter :: k06 = 0.1018665524_double    ! 2*A*beta3
-    real(double), parameter :: k07 = 0.03065199508_double   ! 2*A*beta4
-    real(double), parameter :: k08 = -0.008858862267_double ! 2*k03/3
-    real(double), parameter :: k09 = 0.0787193029_double    ! k04/6
-    real(double), parameter :: k10 = 0.074361381067_double  ! k05/3
-    real(double), parameter :: k11 = 0.0509332762_double    ! k06/2
-    real(double), parameter :: k12 = 0.0204346633867_double ! 2*k07/3
-
-    xc_energy_total = zero
-    do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
-
-       if (rho > very_small) then ! Find radius of hole
-          rcp_rs = k00 * ( rho**third )
-       else
-          rcp_rs = zero
-       end if
-
-       ! ENERGY
-
-       ! Exchange
-       e_exchange = k01 * rcp_rs
-
-       ! Correlation
-       if (rcp_rs > zero) then
-          rs = one/rcp_rs
-       else
-          rs = zero
-       end if
-       sq_rs = sqrt(rs)
-
-       prefactor = k02 + k03*rs
-       denominator = sq_rs * ( k04 + sq_rs * ( k05 + sq_rs * ( k06 + k07 * sq_rs)))
-       if (denominator > zero) then
-          postfactor = log( one + one/denominator )
-       else
-          postfactor = 0
-       end if
-
-       e_correlation = prefactor * postfactor
-
-       ! Both exchange and correlation
-
-        xc_epsilon(n) = e_exchange + e_correlation
-        xc_energy_total = xc_energy_total + xc_epsilon(n)*rho
-
-       ! POTENTIAL
-
-       ! Exchange
-
-       v_exchange = four_thirds * e_exchange
-
-       ! Correlation
-       !   (derivative of rho * e_correlation)
-
-       ! NOTE: delta_prefactor is actually the derivative of rho*prefactor
-       !       delta_postfactor is rho times the derivative of postfactor
-       delta_prefactor  = k02 + k08*rs
-       if (sq_rs > zero) then
-          delta_postfactor = sq_rs * ( k09 + sq_rs*(k10 + sq_rs*( k11 + k12 * sq_rs ))) &
-                           / ( denominator * ( 1 + denominator ) )
-       else
-          delta_postfactor = 0
-       end if
-
-       v_correlation = delta_prefactor * postfactor + prefactor * delta_postfactor
-
-       xc_potential(n) = v_exchange + v_correlation
-
-
-    end do ! do n_my_grid_points
-    call gsum(xc_energy_total)
-    ! and 'integrate' the energy over the volume of the grid point
-    xc_energy_total = xc_energy_total * grid_point_volume
-
-    return
-  end subroutine get_xc_potential_LDA_PW92
-!!***
-
-
-! -----------------------------------------------------------
-! Subroutine get_xc_potential_LSDA_PW92
-! -----------------------------------------------------------
-
-!!****f* H_matrix_module/get_xc_potential_LSDA_PW92 *
-!!
-!!  NAME
-!!   get_xc_potential_LSDA_PW92
-!!  USAGE
-!!
-!!  PURPOSE
-!!   Calculates the spin polarized exchange-correlation
-!!   potential on the grid within LDA using the Ceperley-Alder
-!!   interpolation formula. It also calculates the total
-!!   exchange-correlation energy.
-!!
-!!   Note that this is the Perdew-Wang parameterisation of the
-!!   Ceperley-Alder results for a homogeneous electron gas, as
-!!   described in Phys. Rev. B 45, 13244 (1992), with Ceperley-Alder
-!!   in Phys. Rev. Lett. 45, 566 (1980) INPUTS
-!!
-!!  USES
-!!
-!!  AUTHOR
-!!   L. Tong
-!!  CREATION DATE
-!!   22/03/2011
-!!  MODIFICATION HISTORY
-!!   2012/03/14 L.Tong
-!!   - Changed spin implementation
-!!  SOURCE
-!!
-  subroutine get_xc_potential_LSDA_PW92(density, xc_potential,       &
-                                        xc_epsilon, xc_energy_total, &
-                                        size)
-
-    use datatypes
-    use numbers
-    use dimens,        only: grid_point_volume, &
-                             one_over_grid_point_volume, &
-                             n_my_grid_points
-    use GenComms,      only: gsum, inode, ionode, cq_abort
-    use global_module, only: nspin, spin_factor
-
-    implicit none
-
-    ! Passed variables
-    ! size of the real space grid
-    integer,                      intent(in)  :: size
-    real(double), dimension(:,:), intent(in)  :: density
-    real(double), dimension(:,:), intent(out) :: xc_potential
-    real(double), dimension(:),   intent(out) :: xc_epsilon
-    real(double), intent(out)                 :: xc_energy_total
-
-    ! Local variables
-    integer      :: n, spin
-    real(double) :: e_correlation, e_correlation0, e_correlation1,    &
-                    alpha_c, de_correlation_drs, de_correlation0_drs, &
-                    de_correlation1_drs, de_correlation_dzeta,        &
-                    dalpha_c_drs, rho, zeta, rs, sq_rs, rcp_rs,       &
-                    rcp_sq_rs, f_function, df_function, Q0, dQ0, Q1,  &
-                    dQ1, logfactor, fraction_term
-    real(double), dimension(nspin) :: rho_spin
-
-    ! Fitting parameters used together with Table I, Phys. Rev. B 45,
-    !  13244 (1992)
-    real(double) :: alpha, alpha1, beta1, beta2, beta3, beta4, A
-    ! Temporary variables
-    real(double) :: k00, k01, k02, k03, k04, k05, k06, k07, k08, k09, &
-                    k10, k11, k12, k13, k14
-
-    if (nspin == 1) call cq_abort('Wrong LDA functional choosen, for &
-                                   &spin non-polarised calculation, &
-                                   &use PW92-LDA instead of LSDA')
-
-    xc_energy_total = zero
-    alpha = 1.042123522395696_double  ! 2*(9*pi/4)**(-1/3)
-    k00 = 1.61199195401647_double     ! (4*pi/3)**(1/3)
-    k01 = -0.458165293283143_double   ! -3/(2*pi*alpha)
-
-    do n = 1, n_my_grid_points ! loop over the grid points and store
-                               ! potential on each
-       do spin = 1, nspin
-          rho_spin(spin) = density(n,spin)
-       end do
-       rho = rho_spin(1) + rho_spin(nspin)
-       if (rho > very_small) then
-          zeta = (rho_spin(1) - rho_spin(nspin)) / rho
-       else
-          zeta = zero
-       end if
-       
-       ! find the radius of hole
-       if (rho > very_small) then
-          rcp_rs = k00*(rho**third)  ! this calculates 1/rs
-          rs = one/rcp_rs ! this calculates rs
-       else
-          rs = zero
-          rcp_rs = zero
-       end if
-       sq_rs = sqrt(rs)
-       rcp_sq_rs = sqrt(rcp_rs)
-       
-       k02 = one + zeta
-       k03 = one - zeta
-       k09 = k02**third
-       k10 = k03**third
-       k04 = k02 * k09
-       k05 = k03 * k10
-       k06 = k04 + k05  ! (1 + zeta)**4/3 + (1 - zeta)**4/3
-       k11 = k09 - k10  ! (1 + zeta)**1/3 - (1 - zeta)**1/3
-       k12 = zeta**3
-       k08 = zeta*k12   ! zeta**4
-
-       ! exchange
-       ! energy per electron
-       ! equation 26, Phys. Rev. B 45, 13244 (1992) spin dependent
-       xc_epsilon(n) = half * k01 * rcp_rs * k06  
-          
-       ! potential
-       xc_potential(n,1) = four_thirds * (xc_epsilon(n) + k03 * &
-                                          k01 * rcp_rs * half * k11)
-       xc_potential(n,nspin) = four_thirds * (xc_epsilon(n) - k02 * &
-                                              k01 * rcp_rs * half * k11) 
-          
-       ! correlation
-       ! e_correlation0, de_correlation0_drs
-       ! fitting parameters taken from Table I, Phys. Rev. B 45, 13244 (1992)
-       A = 0.031091_double
-       alpha1 = 0.21370_double
-       beta1 = 7.5957_double
-       beta2 = 3.5876_double
-       beta3 = 1.6382_double
-       beta4 = 0.49294_double
-       ! ---
-       k07 = two*A ! 2*A
-       Q0 = -k07*(one + alpha1*rs)
-       dQ0 = -k07*alpha1
-       Q1 = k07*sq_rs*(beta1 + sq_rs*(beta2 + beta3*sq_rs + beta4*rs))
-       dQ1 = A*(beta1*rcp_sq_rs + beta2 + three*beta3*sq_rs + four*beta4*rs)
-       if (Q1 > zero) then
-          logfactor = log (one + one/Q1)
-          fraction_term = (Q0*dQ1) / (Q1*(Q1 + one))
-       else
-          logfactor = zero
-          fraction_term = zero
-       end if
-       ! for energy per electron: e_correlation0
-       e_correlation0 = Q0*logfactor
-       ! for spin dependent potential: de_correlation0_drs
-       de_correlation0_drs = dQ0*logfactor - fraction_term
-
-       ! e_correlation1, de_correlation1_drs
-       ! fitting parameters taken from Table I, Phys. Rev. B 45, 13244 (1992)
-       A = 0.015545_double
-       alpha1 = 0.20548_double
-       beta1 = 14.1189_double
-       beta2 = 6.1977_double
-       beta3 = 3.3662_double
-       beta4 = 0.62517_double
-       ! ---
-       k07 = two*A ! 2*A
-       Q0 = -k07*(one + alpha1*rs)
-       dQ0 = -k07*alpha1
-       Q1 = k07*sq_rs*(beta1 + sq_rs*(beta2 + beta3*sq_rs + beta4*rs))
-       dQ1 = A*(beta1*rcp_sq_rs + beta2 + three*beta3*sq_rs + four*beta4*rs)
-       if (Q1 > zero) then
-          logfactor = log (one + one/Q1)
-          fraction_term = (Q0*dQ1) / (Q1*(Q1 + one))
-       else
-          logfactor = zero
-          fraction_term = zero
-       end if
-       ! for energy per electron: e_correlation1
-       e_correlation1 = Q0*logfactor
-       ! for spin dependent potential: de_correlation1_drs
-       de_correlation1_drs = dQ0*logfactor - fraction_term
-
-       ! alpha_c, dalpha_c_drs
-       ! fitting parameters taken from Table I, Phys. Rev. B 45, 13244 (1992)
-       A = 0.016887_double
-       alpha1 = 0.11125_double
-       beta1 = 10.357_double
-       beta2 = 3.6231_double
-       beta3 = 0.88026_double
-       beta4 = 0.49671_double
-       ! ---
-       k07 = two*A ! 2*A
-       Q0 = -k07*(one + alpha1*rs)
-       dQ0 = -k07*alpha1
-       Q1 = k07*sq_rs*(beta1 + sq_rs*(beta2 + beta3*sq_rs + beta4*rs))
-       dQ1 = A*(beta1*rcp_sq_rs + beta2 + three*beta3*sq_rs + four*beta4*rs)
-       if (Q1 > zero) then
-          logfactor = log (one + one/Q1)
-          fraction_term = (Q0*dQ1) / (Q1*(Q1 + one))
-       else
-          logfactor = zero
-          fraction_term = zero
-       end if
-       ! for energy per electron: alpha_c
-       alpha_c = Q0*logfactor
-       ! for spin dependent potential: dalpha_c_drs
-       dalpha_c_drs = dQ0*logfactor - fraction_term
-       ! f_function, eq (8) Phys. Rev. B 45, 13244 (1992), and df_function
-       f_function = 1.923661050931538_double*(k06 - two)
-       df_function = 2.564881401242051_double*k11
-       ! de_correlation_drs
-       k13 = 0.58482233974552_double*dalpha_c_drs  ! dalpha_c_drs /
-       !  f''(0)
-       de_correlation_drs = de_correlation0_drs + f_function*(k08 *     &
-                            (de_correlation1_drs -                      &
-                             de_correlation0_drs - k13) + k13)
-       ! de_correlation_dzeta
-       k14 = 0.58482233974552_double*alpha_c  ! alpha_c / f''(0)
-       de_correlation_dzeta = (four*k12 + df_function*k08) *            &
-                              (e_correlation1 - e_correlation0 - k14) + &
-                              df_function *k14
-       ! e_correlation
-       e_correlation = e_correlation0 + f_function*(k14*(one - k08) +   &
-                      (e_correlation1 - e_correlation0)*k08)
-       ! gather exchange and correlation together
-       xc_epsilon(n) = xc_epsilon(n) + e_correlation
-       xc_energy_total = xc_energy_total + xc_epsilon(n)*rho
-       ! spin dependent potential
-       xc_potential(n,1) = xc_potential(n,1) + e_correlation -         &
-                           third*rs*de_correlation_drs +               &
-                           k03*de_correlation_dzeta
-       xc_potential(n,nspin) = xc_potential(n,nspin) + e_correlation - &
-                               third*rs*de_correlation_drs -           &
-                               k02*de_correlation_dzeta
-    end do ! do n = 1, n_my_grid_points
-    ! sum over the contribution from all processors
-    call gsum(xc_energy_total)
-    ! and 'integrate' the energy over the volume of the grid point
-    xc_energy_total = xc_energy_total * grid_point_volume
-
-    return
-
-  end subroutine get_xc_potential_LSDA_PW92
-!!***
-
-
-! -----------------------------------------------------------
-! Subroutine get_xc_potential_GGA_PBE
-! -----------------------------------------------------------
-
-!!****f* H_matrix_module/get_xc_potential_GGA_PBE *
-!!
-!!  NAME
-!!   get_xc_potential_GGA_PBE
-!!  USAGE
-!!
-!!  PURPOSE
-!!   Calculates the exchange-correlation potential
-!!   on the grid within GGA using the
-!!   Perdew-Burke-Ernzerhof. It also calculates the
-!!   total exchange-correlation energy.
-!!
-!!   Note that this is the functional described in
-!!   Phys. Rev. Lett. 77, 3865 (1996)
-!!
-!!   It is also (depending on an optional parameter)
-!!     either revPBE, Phys. Rev. Lett. 80, 890 (1998),
-!!     or RPBE, Phys. Rev. B 59, 7413 (1999)
-!!  INPUTS
-!!
-!!
-!!  USES
-!!
-!!  AUTHOR
-!!   A.S. Torralba
-!!  CREATION DATE
-!!   11/11/05
-!!  MODIFICATION HISTORY
-!!   17/07/06 rgradient(1,:) used for storage of final result, before transform,
-!!            instead of direct transform of the sum
-!!            rgradient(1,:) + rgradient(2,:) + rgradient(3,:)
-!!          (this was less efficient)
-!!   15:55, 27/04/2007 drb
-!!     Changed recip_vector, grad_density to (n,3) for speed
-!!   2008/11/13 ast
-!!     Added revPBE and RPBE
-!!   2011/12/12 L.Tong
-!!     Removed third, it is now defined in numbers_module
-!!  SOURCE
-!!
-  subroutine get_xc_potential_GGA_PBE(density,xc_potential,xc_epsilon, xc_energy,size,flavour)
-
-    use datatypes
-    use numbers
-    use global_module, only: rcellx, rcelly, rcellz, &
-                             functional_gga_pbe96_rev98, functional_gga_pbe96_r99
-    use dimens, only: grid_point_volume, one_over_grid_point_volume, &
-         n_my_grid_points, n_grid_x, n_grid_y, n_grid_z
-    use GenComms, only: gsum, cq_abort, inode, ionode
-    use fft_module, only: fft3, recip_vector
-
-    implicit none
-
-    ! Passed variables
-    integer,intent(in) :: size
-    real(double),intent(in) :: density(size)
-    real(double),intent(out) :: xc_potential(size), xc_epsilon(size)
-    real(double),intent(out) :: xc_energy
-    integer,intent(in), optional :: flavour
-
-
-    !     Local variables
-    integer :: n
-    integer :: selector
-
-    real(double),allocatable,dimension(:) :: grad_density
-    real(double),allocatable,dimension(:,:) :: grad_density_xyz
-    real(double)  :: rho, grad_rho, rho1_3, rho1_6, &
-                     ks, s, s2, &
-                     t, t2, A, At2, &
-                     factor0, factor1, factor2, factor3, factor4, &
-                     denominator0, numerator1, denominator1, num_den1, numerator2, &
-                     dt2_drho, dA_drho, &
-                     dnumerator1_drho, ddenominator1_drho, &
-                     dnumerator1_dt2, dnumerator1_dA, &
-                     ddenominator1_dt2, ddenominator1_dA, &
-                     dfactor2_dt2, dfactor2_dnumerator1, dfactor2_ddenominator1, &
-                     dfactor2_drho, dfactor3_dfactor2, dfactor3_drho
-    real(double) :: xc_energy_lda_total, &
-                    e_correlation_lda, &
-                    de_correlation_lda, &
-                    e_exchange, e_correlation, &
-                    de_exchange, de_correlation, &
-                    dde_exchange, dde_correlation
-    real(double) :: df_dgrad_rho
-    real(double) :: kappa, mu_kappa
-    real(double) :: rpbe_exp
-
-    complex(double_cplx), allocatable, dimension(:,:) :: rgradient      ! Gradient in reciprocal space
-
-    !     From Phys. Rev. Lett. 77, 3865 (1996)
-    real(double), parameter :: mu = 0.21951_double
-    real(double), parameter :: beta = 0.066725_double
-    real(double), parameter :: gamma = 0.031091_double
-    real(double), parameter :: kappa_ori = 0.804_double
-
-    !     From Phys. Rev. Lett. 80, 890 (1998)
-    real(double), parameter :: kappa_alt = 1.245_double
-
-    !     Precalculated constants
-    real(double), parameter :: mu_kappa_ori = 0.27302_double     ! mu/kappa_ori
-    real(double), parameter :: mu_kappa_alt = 0.17631_double     ! mu/kappa_alt
-    real(double), parameter :: two_mu = 0.43902_double           ! 2*mu
-    real(double), parameter :: beta_gamma = 2.146119_double      ! beta/gamma
-    real(double), parameter :: beta_X_gamma = 0.002074546_double ! beta*gamma
-    real(double), parameter :: k01 = 0.16162045967_double        ! 1/(2*(3*pi*pi)**(1/3))
-    real(double), parameter :: k02 = -0.16212105381_double       ! -3*mu*((4*pi/3)**(1/3))/(2*pi*alpha)
-                                                                 ! =mu*k00*k01(LDA_PW92)=mu*k04
-    real(double), parameter :: k03 = 1.98468639_double           ! ((4/pi)*(3*pi*pi)**(1/3))**(1/2)
-    real(double), parameter :: k04 = -0.738558852965_double      ! -3*((4*pi/3)**(1/3))/(2*pi*alpha) = k00*k01 in LDA_PW92
-    real(double), parameter :: k05 = 0.05240415_double           ! -2*k01*k02
-    real(double), parameter :: k06 = -0.593801317784_double      ! k04*kappa_ori
-    real(double), parameter :: k07 = -0.984745137287_double      ! 4*k04/3
-    real(double), parameter :: seven_thirds = 2.333333333_double ! 7/3
-
-    integer :: stat
-    !      Selector options
-    integer, parameter :: fx_original    = 1                     ! Used in PBE and revPBE
-    integer, parameter :: fx_alternative = 2                     ! Used in RPBE
-
-    ! Choose between PBE or revPBE parameters
-    if(PRESENT(flavour)) then
-      if(flavour==functional_gga_pbe96_rev98) then
-        kappa=kappa_alt
-        mu_kappa=mu_kappa_alt
-      else
-        kappa=kappa_ori
-        mu_kappa=mu_kappa_ori
-      end if
-    else
-      kappa=kappa_ori
-      mu_kappa=mu_kappa_ori
-    end if
-
-    allocate(grad_density(size), grad_density_xyz(size,3),rgradient(size,3),STAT = stat)
-    !initialisation  2010.Oct.30 TM
-     grad_density(:)=zero; grad_density_xyz(:,:)=zero; rgradient(:,:) = zero
-     xc_epsilon(:) = zero; xc_potential(:) = zero
-    if(stat/=0) call cq_abort("Error allocating arrays for PBE functional: ",stat)
-    ! Choose functional form
-    if(PRESENT(flavour)) then
-      if(flavour==functional_gga_pbe96_r99) then
-        selector=fx_alternative
-      else
-        selector=fx_original
-      end if
-    else
-      selector=fx_original
-    end if
-
-    ! Build the gradient of the density
-    call build_gradient (density, grad_density, grad_density_xyz, size)
-
-    ! Get the LDA part of the functional
-    call get_xc_potential_LDA_PW92(density, xc_potential, xc_epsilon, xc_energy_lda_total, size)
-
-    xc_energy = zero
-    do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
-       grad_rho = grad_density(n)
-
-       !!!!!!   XC GGA ENERGY
-
-       ! Exchange
-
-       if (rho > very_small) then
-          rho1_3 = rho ** third
-          rho1_6 = sqrt (rho1_3)
-          s = k01 * grad_rho / (rho ** four_thirds)
-          s2 = s * s
-          if(selector == fx_alternative) then           ! RPBE
-            rpbe_exp = exp(-mu_kappa * s2)
-            e_exchange = k06*rho1_3*(1.0_double-rpbe_exp)
-          else                                          ! PBE, revPBE
-            denominator0 = 1.0 / (1.0 + mu_kappa * s2)
-            factor0 = k02 * rho1_3
-            factor1 = s2 * denominator0
-            ! NOTE: This doesn't look like in Phys. Rev. Lett. 77:18, 3865 (1996)
-            !       because the 1 in Fx, has been multiplied by Ex-LDA and is implicit
-            !       in xc_energy_lda(n), in the total energy below
-            e_exchange = factor0 * factor1
-          end if
-       else
-          e_exchange = zero
-       end if
-
-       ! Correlation
-
-       if (rho > very_small) then
-          e_correlation_lda = xc_epsilon(n) - k04 * rho1_3
-
-          ! t=grad_rho/(2*rho*ks); ks=sqrt(4*kf/pi); kf=(3*pi*pi*rho)**(1/3); s=grad_rho/(2*rho*kf)
-          ks = k03 * rho1_6
-          t = grad_rho / ( 2 * ks * rho )
-          t2 = t * t
-
-          A = exp(-e_correlation_lda / gamma) - 1.0
-          if (A > very_small) then
-             A = beta_gamma / A
-          else
-             A = beta_gamma * BIG
-          end if
-
-          At2 = A * t2
-          numerator1 = 1.0 + At2
-          denominator1 = 1.0 + At2 + At2 * At2
-          num_den1 = numerator1 / denominator1
-
-          factor2 = t2 * num_den1
-          factor3 = gamma * log(one + beta_gamma * factor2)
-
-          e_correlation = factor3;  !gamma * log( 1.0 + beta_gamma * t2 * num_den1 )
-       else
-          e_correlation = zero
-       end if
-
-
-       !*ast* TEST-POINT 1
-       ! Both exchange and correlation
-       xc_energy = xc_energy + (xc_epsilon(n) + e_exchange + e_correlation)*rho
-       ! Only LDA part
-       !xc_energy = xc_energy + (xc_epsilon(n))*rho
-       ! LDA + exchange
-       !xc_energy = xc_energy + (xc_epsilon(n) + e_exchange)*rho
-       ! Only exchange
-       !xc_energy = xc_energy + (e_exchange)*rho
-       ! LDA + correlation
-       !xc_energy = xc_energy + (xc_epsilon(n) + e_correlation)*rho
-       ! Only correlation
-       !xc_energy = xc_energy + (e_correlation)*rho
-
-       !!!!!!   POTENTIAL
-
-       !!!   Terms due to df/drho
-
-       ! Exchange
-
-       if (rho > very_small) then
-          if(selector == fx_alternative) then           ! RPBE
-            de_exchange = k07 * rho1_3 * (kappa - (two_mu * s2 + kappa) * rpbe_exp)
-          else                                          ! PBE, revPBE
-            de_exchange = four_thirds * factor0 * factor1 * ( 1 - 2* denominator0 )
-          end if
-       else
-          de_exchange = zero
-       end if
-
-       ! Correlation
-
-       if (rho > very_small) then
-          de_correlation_lda = ( xc_potential(n) &
-                               - four_thirds * k04 * rho1_3 &
-                               - e_correlation_lda ) / rho
-
-          dt2_drho = -seven_thirds * t2 / rho
-          dA_drho  = A * A * exp(-e_correlation_lda / gamma ) * de_correlation_lda / beta
-          dnumerator1_dt2   = A
-          dnumerator1_dA    = t2
-          factor4 = 1.0 + 2 * At2
-          ddenominator1_dt2 = A * factor4
-          ddenominator1_dA  = t2 * factor4
-          dnumerator1_drho   = dnumerator1_dt2 * dt2_drho &
-                             + dnumerator1_dA * dA_drho
-          ddenominator1_drho = ddenominator1_dt2 * dt2_drho &
-                             + ddenominator1_dA * dA_drho
-          dfactor2_dt2 = num_den1
-          dfactor2_dnumerator1   = t2 / denominator1
-          dfactor2_ddenominator1 = -factor2 / denominator1
-          dfactor2_drho = dfactor2_dt2 * dt2_drho &
-                        + dfactor2_dnumerator1 * dnumerator1_drho &
-                        + dfactor2_ddenominator1 * ddenominator1_drho
-          dfactor3_dfactor2 = beta / ( 1.0 + beta_gamma * factor2 )
-          dfactor3_drho = dfactor3_dfactor2 * dfactor2_drho
-          de_correlation = factor3 + rho * dfactor3_drho
-       else
-          de_correlation = zero
-       end if
-
-       !*ast* TEST-POINT 2
-       xc_potential(n) = xc_potential(n) + de_exchange + de_correlation
-       ! Only LDA part
-       !xc_potential(n) = xc_potential(n)
-       ! LDA + exchange
-       !xc_potential(n) = xc_potential(n) + de_exchange
-       ! Only exchange
-       !xc_potential(n) = de_exchange
-       ! LDA + correlation
-       !xc_potential(n) = xc_potential(n) + de_correlation
-       ! Only correlation
-       !xc_potential(n) = de_correlation
-
-       !!!   Terms due to df/d|grad_rho|
-
-       ! Exchange
-
-       if (rho > very_small) then
-          if(selector == fx_alternative) then           ! RPBE
-             dde_exchange = -k05 * s * rpbe_exp
-          else                                          ! PBE, revPBE
-             dde_exchange = -k05 * s * denominator0 * denominator0!factor1 * denominator0
-          end if
-       else
-          dde_exchange = zero
-       end if
-
-       ! Correlation
-
-       if (rho > very_small) then
-          numerator2 = beta_X_gamma * t * ( 1.0 + 2.0 * At2 ) &
-                     / (( gamma * denominator1 + beta * t2 * numerator1 ) * denominator1)
-          dde_correlation = numerator2 / ks;
-       else
-          dde_correlation = zero
-       end if
-
-       ! Normalisation (modulus of gradient)
-
-       !*ast* TEST-POINT 3
-       if(abs(grad_density(n)) > very_small) then  !DEBUG
-       df_dgrad_rho = (dde_exchange + dde_correlation) / grad_density(n)
-       else                 !DEBUG
-       df_dgrad_rho = zero   !DEBUG
-       endif                !DEBUG
-       ! Only LDA part
-       !df_dgrad_rho = 0.0
-       ! LDA + exchange
-       !df_dgrad_rho = dde_exchange / grad_density(n)
-       ! Only exchange
-       !df_dgrad_rho = dde_exchange / grad_density(n)
-       ! LDA + correlation
-       !df_dgrad_rho = dde_correlation / grad_density(n)
-       ! Only correlation
-       !df_dgrad_rho = dde_correlation / grad_density(n)
-
-
-       ! Gradient times derivative of energy
-
-       grad_density_xyz(n,1) = grad_density_xyz(n,1)*df_dgrad_rho
-       grad_density_xyz(n,2) = grad_density_xyz(n,2)*df_dgrad_rho
-       grad_density_xyz(n,3) = grad_density_xyz(n,3)*df_dgrad_rho
-
-       !xc_epsilon  !2010.Oct.30 TM
-       xc_epsilon(n) = xc_epsilon(n) + e_exchange + e_correlation
-       !*ast* TEST-POINT 4
-       !TM delta_E_xc = delta_E_xc + (xc_epsilon(n) + e_exchange + e_correlation)*rho
-       ! Only LDA part
-       !delta_E_xc = delta_E_xc + (xc_epsilon(n))*rho
-       ! LDA + exchange
-       !delta_E_xc = delta_E_xc + (xc_epsilon(n) + e_exchange)*rho
-       ! Only exchange
-       !delta_E_xc = delta_E_xc + (e_exchange)*rho
-       ! LDA + correlation
-       !delta_E_xc = delta_E_xc + (xc_epsilon(n) + e_correlation)*rho
-       ! Only correlation
-       !delta_E_xc = delta_E_xc + (e_correlation)*rho
-
-    end do ! do n_my_grid_points
-
-
-    !!!   Final steps of the energy calculation
-
-    ! Add the energies and 'integrate' over the volume of the grid points
-
-    call gsum(xc_energy)
-    xc_energy = xc_energy * grid_point_volume
-
-    ! Fourier transform the gradient, component by component
-
-    call fft3(grad_density_xyz(:,1), rgradient(:,1), size, -1 )
-    call fft3(grad_density_xyz(:,2), rgradient(:,2), size, -1 )
-    call fft3(grad_density_xyz(:,3), rgradient(:,3), size, -1 )
-
-    !!!   Get the second term of the potential by taking derivatives
-
-    ! First, get the scalar product of the (normalised) gradient and the wave vector (times i)
-
-    rgradient(:,1) = -rgradient(:,1)*minus_i*recip_vector(:,1)
-    rgradient(:,1) = rgradient(:,1) - rgradient(:,2)*minus_i*recip_vector(:,2)
-    rgradient(:,1) = rgradient(:,1) - rgradient(:,3)*minus_i*recip_vector(:,3)
-
-    ! Add terms of the scalar product and then Fourier transform back the resultant vector
-    ! NOTE: Store the result in the modulus of the gradient (not needed anymore) to save memory
-
-    call fft3( grad_density, rgradient(:,1), size, 1 )
-
-    ! Finally, get the potential
-    ! NOTE that here grad_density is NOT the modulus of the gradient,
-    !      but a term of the potential (see Fourier transform above)
-
-    do n=1,n_my_grid_points
-        xc_potential(n) = xc_potential(n) - grad_density(n)
-    end do
-
-    ! I changed the order of deallocation, because I was told that deallocation
-    ! of the latest allocated array should be done first.
-    ! (though I am not sure whether it is true or not)   2010.Oct.30 TM
-
-    if(allocated(rgradient)) then
-       deallocate(rgradient,STAT=stat)
-       if(stat/=0) call cq_abort("Error deallocating rgradient",stat)
-    end if
-    if(allocated(grad_density_xyz)) then
-       deallocate(grad_density_xyz,STAT=stat)
-       if(stat/=0) call cq_abort("Error deallocating grad_density_xyz",stat)
-    end if
-    if(allocated(grad_density)) then
-       deallocate(grad_density,STAT=stat)
-       if(stat/=0) call cq_abort("Error deallocating grad_density",stat)
-    end if
-
-    return
-  end subroutine get_xc_potential_GGA_PBE
-!!***
-
-
-! -----------------------------------------------------------
-! Subroutine build_gradient
-! -----------------------------------------------------------
-
-!!****f* H_matrix_module/build_gradient *
-!!
-!!  NAME
-!!   build_gradient
-!!  USAGE
-!!
-!!  PURPOSE
-!!   Calculates the gradient of the density, and its modulus
-!!  INPUTS
-!!
-!!
-!!  USES
-!!
-!!  AUTHOR
-!!   A.S. Torralba
-!!  CREATION DATE
-!!   11/11/05
-!!  MODIFICATION HISTORY
-!!   15:55, 27/04/2007 drb
-!!    Changed recip_vector, grad_density to (n,3) for speed
-
-!!
-  subroutine build_gradient (density, grad_density, grad_density_xyz, size)
-
-    use datatypes
-    use numbers
-    use global_module, only: rcellx, rcelly, rcellz
-    use dimens, only: n_my_grid_points, n_grid_x, n_grid_y, n_grid_z
-    use fft_module, only: fft3, recip_vector
-    use GenComms, only: cq_abort
-
-    implicit none
-
-    ! Passed variables
-    integer,intent(in) :: size
-    real(double), intent(in), dimension(size) :: density
-    real(double), intent(out), dimension(size) :: grad_density
-    !ORI real(double), intent(out), dimension(3, size) :: grad_density_xyz
-    real(double), intent(out), dimension(size,3) :: grad_density_xyz
-
-    ! Local variables
-    complex(double_cplx), allocatable :: rdensity(:)      ! Density in reciprocal space
-    complex(double_cplx), allocatable :: rdensity_tmp(:)  ! Temporal reciprocal density
-    integer :: stat
-
-    !local recip_vec_tm
-
-    allocate(rdensity(size), rdensity_tmp(size), STAT=stat)
-    if(stat /= 0) call cq_abort('ERROR in build_gradient : stat,size = ',stat,size)
-    grad_density_xyz = zero               ! to remove SIGFPE   2010.Oct.25 TM
-    rdensity = zero ; rdensity_tmp = zero ! to remove SIGFPE   2010.Oct.25 TM
-
-    ! Fourier transform the density
-    call fft3( density, rdensity, size, -1 )
-
-
-    ! Compute the derivative with respect to x
-    rdensity_tmp = -rdensity*minus_i*recip_vector(:,1)!*rcellx/n_grid_x
-    call fft3( grad_density_xyz(:,1), rdensity_tmp, size, 1 )
-
-    ! Compute the derivative with respect to y
-    rdensity_tmp = -rdensity*minus_i*recip_vector(:,2)!*rcelly/n_grid_y
-    call fft3( grad_density_xyz(:,2), rdensity_tmp, size, 1 )
-
-    ! Compute the derivative with respect to z
-    rdensity_tmp = -rdensity*minus_i*recip_vector(:,3)!*rcellz/n_grid_z
-    call fft3( grad_density_xyz(:,3), rdensity_tmp, size, 1 )
-
-    ! Calculate the modulus of the gradient
-    grad_density = sqrt(grad_density_xyz(:,1)**2 + grad_density_xyz(:,2)**2 + grad_density_xyz(:,3)**2)
-
-
-    return
-  end subroutine build_gradient
-!!***
-
-
-! -----------------------------------------------------------
-! Subroutine map_density
-! -----------------------------------------------------------
-
-!!****f* H_matrix_module/map_density *
-!!
-!!  NAME
-!!   map_density
-!!  USAGE
-!!
-!!  PURPOSE
-!!   Map cartesian coordinates to density index
-!! (Only for one processor and old arrangement of the density)
-!! (x,y,z) starts at (1,1,1)
-!!  INPUTS
-!!
-!!
-!!  USES
-!!
-!!  AUTHOR
-!!   A.S. Torralba
-!!  CREATION DATE
-!!   21/11/05
-!!  MODIFICATION HISTORY
-!!
-!!  SOURCE
-!!
-  subroutine map_density (x, y, z, n)
-
-    use block_module, only: nx_in_block, ny_in_block, nz_in_block
-    use group_module, only: blocks
-
-    implicit none
-
-    ! Passed variables
-    integer, intent(in) :: x, y, z
-    integer, intent(out) :: n
-
-    ! Local variables
-    integer :: gx, gy, gz, bx, by, bz, n_block
-
-    if((x > (nx_in_block * blocks%ngcellx)).OR.&
-       (y > (ny_in_block * blocks%ngcelly)).OR.&
-       (z > (nz_in_block * blocks%ngcellz))) &
-    then
-        n = -1
-        return
-    end if
-
-    gx=1+mod(x-1, nx_in_block)
-    gy=1+mod(y-1, ny_in_block)
-    gz=1+mod(z-1, nz_in_block)
-
-    bx=1+(x-1)/nx_in_block
-    by=1+(y-1)/ny_in_block
-    bz=1+(z-1)/nz_in_block
-
-    if(mod(by+bz, 2) == 1) then
-        bx = blocks%ngcellx - bx + 1
-    end if
-
-    if(mod(bz, 2) == 0) then
-        by = blocks%ngcelly - by + 1
-    end if
-
-    n_block = bx + blocks%ngcellx*((by-1) + blocks%ngcelly*(bz-1))
-
-    n = nx_in_block*ny_in_block*nz_in_block*(n_block-1) + &
-        gx + nx_in_block*((gy-1) + ny_in_block*(gz-1))
-
-    return
-  end subroutine map_density
-!!***
-
-
-! -----------------------------------------------------------
-! Subroutine matrix_scale_diag
-! -----------------------------------------------------------
-
-!!****f* H_matrix_module/matrix_scale_diag *
-!!
-!!  NAME
-!!   matrix_scale_diag
-!!  USAGE
-!!
-!!  PURPOSE
-!!   Scales the projector-localised orbital scalar
-!!   product matrix
-!!  INPUTS
-!!
-!!
-!!  USES
-!!
-!!  AUTHOR
-!!   D.R.Bowler
-!!  CREATION DATE
-!!   25/6/98
-!!  MODIFICATION HISTORY
-!!   21/06/2001 dave
-!!    Included into H_matrix_module and reduced use list
-!!   24/06/2002 dave
-!!    Added explicit loop over NSF and an if clause for second (zeroing) loop
-!!    Also added comments to end of if and do statements to make more readable
-!!  SOURCE
-!!
-  subroutine matrix_scale_diag(matSC, species, n_projectors, l_core, recip_scale, range)
-
-    use datatypes
-    use numbers, only: zero
-    use group_module, only: parts
+    use numbers,        only: zero
+    use group_module,   only: parts
     use primary_module, only: bundle
-    use cover_module, only: BCS_parts
-    use matrix_data, only : mat
-    use mult_module, only: scale_matrix_value
+    use cover_module,   only: BCS_parts
+    use matrix_data,    only: mat
+    use mult_module,    only: scale_matrix_value
 
     implicit none
 
@@ -2667,7 +1453,10 @@ contains
                    do n = 1, n_projectors(species_k)
                       l2 = l_core( n, species_k )
                       do nsf1 = 1,mat(np,range)%ndimi(i)
-                         call scale_matrix_value(matSC,np,i,ip,nb,nsf1,n,recip_scale( l2, species_k ))
+                         call scale_matrix_value(matSC, np, i, ip, nb, &
+                                                 nsf1, n,              &
+                                                 recip_scale(l2,       &
+                                                 species_k))
                       end do ! End do nsf1
                    enddo ! End do n=n_projectors
                 enddo ! End do nb=mat%n_nab(i)
@@ -2678,6 +1467,6 @@ contains
     call stop_timer(tmr_std_matrices)
     return
   end subroutine matrix_scale_diag
-!!***
+  !!***
 
 end module H_matrix_module

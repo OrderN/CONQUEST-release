@@ -28,10 +28,10 @@
 !!    Updated to use GenComms
 !!   20/06/2001 dave
 !!    Moved fitting of PosTan coefficients to fit_coeff
-!!   16:01, 04/02/2003 drb 
+!!   16:01, 04/02/2003 drb
 !!    Small changes: made residuals square roots of dot product (as
 !!    they should be)
-!!   10:35, 06/03/2003 drb 
+!!   10:35, 06/03/2003 drb
 !!    Added simple linear mixing and one or two other small changes
 !!   2006/03/06 05:57 dave
 !!    Rewrote calls to entire module to simplify
@@ -97,35 +97,35 @@ contains
 
   !!****f* SelfCon_module/new_SC_potl *
   !!
-  !!  NAME 
+  !!  NAME
   !!   new_SC_potl
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   This controls the switch from early-stage to late-stage mixing.
-  !!   We can also select whether to record the variation of dE vs R for 
+  !!   We can also select whether to record the variation of dE vs R for
   !!   the positive tangent code which gives sliding tolerances
-  !! 
-  !!   N.B. We want the charge density in the variable density which is 
-  !!   stored in density_module.  So on entry, we assume that the incoming 
+  !!
+  !!   N.B. We want the charge density in the variable density which is
+  !!   stored in density_module.  So on entry, we assume that the incoming
   !!   density is stored in that variable, and the final density will be
   !!   left there
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
-  !! 
+  !!
   !!  MODIFICATION HISTORY
   !!   18/05/2001 dave
   !!    Added ROBODoc header and continued to strip subroutine calls
   !!    Stripped subroutine call
   !!   20/06/2001 dave
   !!    Removed fitting of C and beta to PosTan and called fit_coeff
-  !!   10:37, 06/03/2003 drb 
+  !!   10:37, 06/03/2003 drb
   !!    Added call to simple linear mixing
   !!   2007/04/17 09:37 dave
   !!    Changed tolerance for non-self-consistent call to DMM minimisation
@@ -242,7 +242,7 @@ contains
                                fixed_potential, vary_mu,              &
                                n_L_iterations, DMM_tol, total_energy, &
                                density, maxngrid)
-          
+
        else if (early .or. problem) then ! Early stage strategy
           earlyL = .false.
           reset_L = .true.
@@ -287,9 +287,9 @@ contains
                write (io_lun, *) 'early: ', i, EarlyRecord(i)
        end do
     end do ! while
-    
+
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
-    
+
     if (record) then ! Fit the C and beta coefficients
        if (inode == ionode .and. iprint_SC > 1) then
           write (io_lun, *) '  List of residuals and energies'
@@ -303,13 +303,13 @@ contains
        if (inode == ionode .and. iprint_SC > 1) &
             write (io_lun, 6) SCC, SCBeta
     end if
-    
+
     call stop_print_timer(tmr_l_tmp1, "finishing SCF (fitting coefficients)", &
                           IPRINT_TIME_THRES2)
     call stop_timer(tmr_std_chargescf)
 
     return
-    
+
 6   format(8x,'dE to dR parameters - C: ',f15.8,' beta: ',f15.8)
 7   format(8x,i4,2f15.8)
 
@@ -319,32 +319,32 @@ contains
 
   !!****f* SelfCon_module/earlySC *
   !!
-  !!  NAME 
+  !!  NAME
   !!   earlySC
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Does the early-stage charge mixing.  This takes a pessimistic view of
   !!   the procedure, and simply performs successive line minimisations until
-  !!   the change in the residual is linear in the change in charge (to a 
+  !!   the change in the residual is linear in the change in charge (to a
   !!   specified tolerance) before switching to late-stage mixing.
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
   !!   EarlySC_module
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
-  !! 
+  !!
   !!  MODIFICATION HISTORY
   !!   18/05/2001 dave
   !!    Reduced subroutine calls to get_new_rho, reduceLambda, bracketMin
   !!   08/06/2001 dave
   !!    Changed to use GenComms and gsum
-  !!   10:36, 06/03/2003 drb 
+  !!   10:36, 06/03/2003 drb
   !!    Commented out sqrt for R0 as it seems incompatible with EarlySC definitions
-  !!   15:01, 02/05/2005 dave 
+  !!   15:01, 02/05/2005 dave
   !!    Changed definition of residual in line with SelfConsistency notes
   !!   2011/09/13 L.Tong
   !!    Removed absolete dependence on number_of_bands
@@ -409,7 +409,7 @@ contains
        return
     end if
     ! Decide on whether or not to record dE vs R for L min
-    if (record) then 
+    if (record) then
        Lrec = .true.
     else
        Lrec = .false.
@@ -431,7 +431,7 @@ contains
          dot(n_my_grid_points, resid0(:,1), 1, resid0(:,nspin), 1)
     call gsum(R0)
     R0 = sqrt(grid_point_volume * R0) / ne_in_cell
-    
+
     if (inode == ionode) write (io_lun, *) 'In EarlySC, R0 is ', R0
     if (R0 < self_tol) then
        done = .true.
@@ -455,7 +455,7 @@ contains
 
        if (inode == ionode) &
             write (io_lun, *) '********** Early iter ', n_iters
-       
+
        R1 = getR2(MixLin, lambda_1, reset_L, fixed_potential, vary_mu,&
                   n_L_iterations, L_tol, total_energy, rho, rho1,     &
                   residb, maxngrid)
@@ -469,13 +469,13 @@ contains
        Rcross = Rcross + dot(n_my_grid_points, residb(:,nspin), 1, resid0(:,1), 1)
        call gsum(Rcross)
        Rcross = sqrt(grid_point_volume * Rcross) / ne_in_cell
-       
+
        if (R0 < self_tol) then
           done = .true.
           if (inode == ionode) write (io_lun, *) 'Done ! Self-consistent'
           exit
        end if
-       
+
        ! Test for acceptable reduction
        if (inode == ionode) write (io_lun, *) 'In EarlySC, R1 is ', R1
        if (R1 <= thresh * R0) then
@@ -556,7 +556,7 @@ contains
                         residb, maxngrid)
        end if ! end if(reduced)
 
-       if (abs(lambda_a) > abs(lambda_c)) then 
+       if (abs(lambda_a) > abs(lambda_c)) then
           Rcrossup = Rcross_a
           lambda_up = lambda_a
           Rup = Ra
@@ -639,31 +639,31 @@ contains
 
   !!****f* SelfCon_module/lateSC *
   !!
-  !!  NAME 
+  !!  NAME
   !!   lateSC
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
-  !!   This implements late-stage mixing (using the GR-Pulay algorithm as 
+  !!   This implements late-stage mixing (using the GR-Pulay algorithm as
   !!   described in Chem. Phys. Lett. 325, 796 (2000) and embellished according
   !!   to the Conquest notes mentioned above).
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
-  !! 
+  !!
   !!  MODIFICATION HISTORY
   !!   18/05/2001 dave
   !!    Stripped subroutine calls to get_new_rho
   !!   08/06/2001 dave
   !!    Changed to use GenComms and gsum
-  !!   15:02, 02/05/2005 dave 
+  !!   15:02, 02/05/2005 dave
   !!    Changed definition of residual in line with SelfConsistency notes
-  !!   10:34, 13/02/2006 drb 
+  !!   10:34, 13/02/2006 drb
   !!    Removed unnecessary reference to data_H, data_K
   !!   2011/09/13 L.Tong
   !!    Removed absolete dependence on number_of_bands
@@ -721,16 +721,6 @@ contains
     real(double), dimension(maxpulaySC,maxpulaySC,nspin) :: Aij
     real(double), dimension(maxpulaySC,nspin) :: alph
     real(double), dimension(nspin) :: R, tmp
-    real(double), dimension(:,:), allocatable :: ne_pul
-
-    
-    if (nspin == 2 .and. (.not. flag_fix_spin_population)) then
-       allocate(ne_pul(maxpulaySC,nspin), STAT=stat)
-       if (stat /= 0) &
-            call cq_abort("lateSC: Allocation error for ne_pul: ", stat)
-       call reg_alloc_mem(area_SC, nspin * maxpulaySC, type_dbl)
-       ne_pul = zero
-    end if
 
     done = .false.
     linear = .true.
@@ -743,22 +733,16 @@ contains
        done = .true.
        return
     end if
-    
+
     ! Compute residual of initial density
     do spin = 1, nspin
        rho_pul(1:n_my_grid_points,1,spin) = rho(1:n_my_grid_points,spin)
-       if (nspin == 2 .and. (.not. flag_fix_spin_population)) then
-          ! store electron number history
-          ne_pul(1,spin) = grid_point_volume * &
-                           rsum(n_my_grid_points, rho(:,spin), 1)
-          call gsum(ne_pul(1,spin))
-       end if
     end do
-    
+
     call get_new_rho(.false., reset_L, fixed_potential, vary_mu,     &
                      n_L_iterations, L_tol, total_energy, rho, rho1, &
                      maxngrid)
-    
+
     R0 = zero
     do spin = 1, nspin
        resid_pul(1:n_my_grid_points,1,spin) = &
@@ -802,11 +786,11 @@ contains
     ! Now loop until we achieve SC or something goes wrong
     n_pulay = 0
     do while ((.not. done) .and. (linear) .and. (n_iters < maxitersSC))
-       
+
        if (R0 < one) reset_L = .false.
-       
+
        n_iters = n_iters + 1
- 
+
        if (inode == ionode) &
             write (io_lun, *) '********** Late iter ', n_iters
 
@@ -817,7 +801,7 @@ contains
        pul_mx = min(n_pulay + 1, maxpulaySC)
        if (inode == ionode) &
             write (io_lun, *) 'npmod, pul_mx: ', npmod, pul_mx
-       
+
        ! For the present output, find the residual (i.e. R_n^\prime)
        call get_new_rho(.false., reset_L, fixed_potential, vary_mu, &
                         n_L_iterations, L_tol, total_energy, rho,   &
@@ -825,12 +809,6 @@ contains
 
        do spin = 1, nspin
           rho_pul(1:n_my_grid_points,npmod,spin) = rho(1:n_my_grid_points,spin)
-          if (nspin == 2 .and. (.not. flag_fix_spin_population)) then
-             ! store electron number history
-             ne_pul(npmod,spin) = grid_point_volume * &
-                                  rsum(n_my_grid_points, rho(:,spin), 1)
-             call gsum(ne_pul(npmod,spin))
-          end if
           resid_pul(1:n_my_grid_points,npmod,spin) = &
                rho1(1:n_my_grid_points,spin) - rho(1:n_my_grid_points,spin)
           call kerker(resid_pul(:,npmod,spin), maxngrid, q0)
@@ -857,13 +835,10 @@ contains
              end if ! (i > 1)
           end do ! i
        end do ! spin
-       ! Solve to get alphas
-       if (nspin == 1 .or. flag_fix_spin_population) then
-          call DoPulay(Aij, alph, pul_mx, maxpulaySC, inode, ionode)
-       else
-          call DoPulay(Aij, alph, pul_mx, maxpulaySC, inode, ionode, ne_pul)
-       end if
-       
+
+       call DoPulay(npmod, Aij, alph, pul_mx, maxpulaySC, inode, &
+                    ionode)
+
        do spin = 1, nspin
           if (inode == ionode) &
                write (io_lun, *) 'alph (spin=', spin, '): ', &
@@ -931,7 +906,7 @@ contains
                 end do
              end do
           end if
-          
+
           R1 = zero
           do spin = 1, nspin
              R1 = R1 + spin_factor * &
@@ -946,11 +921,11 @@ contains
           R1 = sqrt(grid_point_volume * R1) / ne_in_cell
           if (inode == ionode) &
                write (io_lun, fmt='(8x,"Predicted residual is ",f20.12)') R1
-          
+
           call get_new_rho(.false., reset_L, fixed_potential, vary_mu,&
                            n_L_iterations, L_tol, total_energy, rho,  &
                            rho1, maxngrid)
-          
+
           R1 = zero
           do spin = 1, nspin
              resid_pul(1:n_my_grid_points,npmod,spin) = &
@@ -974,7 +949,7 @@ contains
                   rho(1:n_my_grid_points,spin) + &
                   resid_pul(1:n_my_grid_points,npmod,spin)
           end do
-          
+
           ! normalise rho
           do spin = 1, nspin
              tmp(spin) = grid_point_volume * rsum(n_my_grid_points, rho(:,spin), 1)
@@ -1083,7 +1058,7 @@ contains
           end if
           if (inode == ionode) write (io_lun, *) 'PANIC ! Residual increase !'
        end if
-       
+
        R0 = R1
        if (R0 < self_tol) then
           done = .true.
@@ -1095,48 +1070,39 @@ contains
           SCR(n_iters) = R0
        end if
     end do
-    
+
     ndone = n_iters
 
     if (inode == ionode) &
          write(io_lun, *) 'Finishing lateSC after ', ndone, &
                           'iterations with residual of ', R0
 
-    ! deallocate
-    if (nspin == 2 .and. (.not. flag_fix_spin_population)) then
-       deallocate(ne_pul, STAT=stat)
-       if (stat /= 0) &
-            call cq_abort("dealloc_PulayMixSC_spin: Deallocation error: ", &
-                          stat)
-       call reg_dealloc_mem(area_SC, nspin * maxpulaySC, type_dbl)
-    end if
-
-    return    
+    return
   end subroutine lateSC
   !!***
 
 
   !!****f* SelfCon_module/LinearMixSC *
   !!
-  !!  NAME 
+  !!  NAME
   !!   LinearMixSC - simple linear mixing
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Performs simple linear mixing of charge density in Conquest
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
   !!   16:52, 2003/03/04
   !!  MODIFICATION HISTORY
-  !!   10:11, 12/03/2003 drb 
+  !!   10:11, 12/03/2003 drb
   !!    Made terminating point a parameter
-  !!   15:05, 02/05/2005 dave 
+  !!   15:05, 02/05/2005 dave
   !!    Changed definition of residual in line with SelfConsistency notes
   !!   2011/09/13 L.Tong
   !!    Removed obsolete dependence on number_of_bands
@@ -1177,7 +1143,7 @@ contains
     real(double) :: L_tol
     real(double) :: total_energy
     real(double), dimension(:,:) :: rho
-    
+
     ! Local variables
     integer      :: n_iters, stat, spin
     real(double) :: R0
@@ -1278,7 +1244,7 @@ contains
        end do
 
        n_iters = n_iters + 1
-       
+
        ! print out charge
        if (iprint_SC > 1) then
           if (nspin == 1) then
@@ -1291,7 +1257,7 @@ contains
        end if
 
     end do ! while
-    
+
     ! deallocate arrays
     if (flag_wdmetric) then
        deallocate(resid_cov, STAT=stat)
@@ -1313,8 +1279,8 @@ contains
   ! !! RETURN VALUE
   ! !! AUTHOR
   ! !!   David Bowler
-  ! !! CREATION DATE 
-  ! !!   
+  ! !! CREATION DATE
+  ! !!
   ! !! MODIFICATION HISTORY
   ! !!   2011/09/13 L.Tong
   ! !!     Removed obsolete dependence on number_of_bands
@@ -1396,7 +1362,7 @@ contains
   !   call axpy(n_my_grid_points,A,resid,1,delta_rho(:,1),1)
   !   !call axpy(n_my_grid_points,A,Kresid,1,delta_rho(:,1),1)
   !   n_iters = n_iters+1
-  !   call dump_charge(rho,size,inode)    
+  !   call dump_charge(rho,size,inode)
   !   do m=2,maxitersSC
   !      ! calculate i (cyclical index for storing history) and pul_mx
   !      i = mod(m-2, maxpulaySC)+1
@@ -1427,7 +1393,7 @@ contains
   !      end if
   !      ! Build deltaR(i)
   !      delta_R(:,i) = zero
-  !      call axpy(n_my_grid_points,one,resid,1,delta_R(:,i),1) 
+  !      call axpy(n_my_grid_points,one,resid,1,delta_R(:,i),1)
   !      call axpy(n_my_grid_points,-one,old_resid,1,delta_R(:,i),1)
   !      !call kerker(resid,n_my_grid_points,q0)
   !      ! Normalise
@@ -1502,8 +1468,8 @@ contains
   ! !! RETURN VALUE
   ! !! AUTHOR
   ! !!   David Bowler
-  ! !! CREATION DATE 
-  ! !!   
+  ! !! CREATION DATE
+  ! !!
   ! !! MODIFICATION HISTORY
   ! !!   2011/09/13 L.Tong
   ! !!     Removed obsolete dependence on number_of_bands
@@ -1681,7 +1647,7 @@ contains
   !      !call dump_locps(resid,size,inode)
   !      !Reset Pulay Iterations
   !      if(R0 > R0_old ) icounter_fail = icounter_fail+1
-  !      if(icounter_fail > mx_fail) then 
+  !      if(icounter_fail > mx_fail) then
   !         if(inode == ionode) write(io_lun,*) ' Pulay iteration is reset !!  at ',m,'  th iteration'
   !         reset_Pulay = .true.
   !      endif
@@ -1732,7 +1698,7 @@ contains
   !              alph(ii)*(rho_pul(1:n_my_grid_points,ii) + A*Kresid(1:n_my_grid_points))
   !         !else
   !         ! rho(1:n_my_grid_points) = rho(1:n_my_grid_points) + &
-  !         !      alph(ii)*rho_pul(1:n_my_grid_points,ii) 
+  !         !      alph(ii)*rho_pul(1:n_my_grid_points,ii)
   !         !endif
   !      end do
   !      do j=1,n_my_grid_points
@@ -1780,8 +1746,8 @@ contains
   ! !! RETURN VALUE
   ! !! AUTHOR
   ! !!   David Bowler
-  ! !! CREATION DATE 
-  ! !!   
+  ! !! CREATION DATE
+  ! !!
   ! !! MODIFICATION HISTORY
   ! !!   2011/09/13 L.Tong
   ! !!     Removed obsolete dependence on number_of_bands
@@ -1996,7 +1962,7 @@ contains
 
   ! !!****f* SelfCon_module/PulayMixSCC *
   ! !!
-  ! !!  NAME 
+  ! !!  NAME
   ! !!   PulayMixSCC -- PulayMixSC version C, Lianheng's version
   ! !!  USAGE
   ! !!   CALL PulayMixSCC (done,ndone,self_tol, reset_L, fixed_potential, &
@@ -2008,7 +1974,7 @@ contains
   ! !!  INPUTS
   ! !!
   ! !!  USES
-  ! !! 
+  ! !!
   ! !!  AUTHOR
   ! !!   Lianheng Tong
   ! !!  CREATION DATE
@@ -2050,7 +2016,7 @@ contains
   !   real(double), allocatable, dimension(:,:) :: rho_pul, R_pul
   !   real(double), allocatable, dimension(:) :: rho_out, resid
   !   real(double), allocatable, dimension(:,:) :: Aij
-  !   real(double), allocatable, dimension(:) :: alpha    
+  !   real(double), allocatable, dimension(:) :: alpha
   !   ! Kerker only
   !   real(double), allocatable, dimension(:,:) :: KR_pul
   !   ! wdmetric only
@@ -2090,7 +2056,7 @@ contains
   !   end if
 
   !   ! write out start information
-  !   if (inode == ionode) then 
+  !   if (inode == ionode) then
   !      write (io_lun, fmt='(8x,"Starting Pulay mixing, A = ",f6.3)') A
   !      if (flag_Kerker) write (io_lun, fmt='(10x,"with Kerker preconditioning, q0 = ", f6.3)') q0
   !      if (flag_wdmetric) write (io_lun, fmt='(10x,"with wave dependent metric, q1 = ", f6.3)') q1
@@ -2110,7 +2076,7 @@ contains
   !   do j = 1, n_my_grid_points
   !      rho_pul(j,1) = rho(j)
   !   end do
-  !   ! from rho_in, get rho_out 
+  !   ! from rho_in, get rho_out
   !   call get_new_rho (.false., reset_L, fixed_potential, vary_mu, &
   !        n_L_iterations, L_tol, mu, total_energy, rho, rho_out, size)
   !   ! Evaluate residue resid = rho_out - rho_in
@@ -2160,9 +2126,9 @@ contains
   !            KR_pul(j,1) = resid(j)
   !         end do
   !      end if
-  !   else 
+  !   else
   !      ! do wave dependent metric without kerker preconditioning if
-  !      ! required 
+  !      ! required
   !      if (flag_wdmetric) then
   !         call wdmetric (resid, resid_cov, maxngrid, q1)
   !         ! store the covariant version of residue
@@ -2223,7 +2189,7 @@ contains
   !      end if
   !      ! check if Pulay SC needs to be reset
   !      if (R0 > R0_old) icounter_fail = icounter_fail+1
-  !      if (icounter_fail > mx_fail) then 
+  !      if (icounter_fail > mx_fail) then
   !         if (inode == ionode) write(io_lun, *) ' Pulay iteration is  &
   !              &              reset !!  at ', m, '  th iteration'
   !         reset_Pulay = .true.
@@ -2235,7 +2201,7 @@ contains
   !      do j = 1, n_my_grid_points
   !         R_pul(j,i) = resid(j)
   !      end do
-  !      ! calculate new rho  
+  !      ! calculate new rho
   !      ! with kerker preconditioning
   !      if (flag_Kerker) then
   !         ! with wave dependent metric
@@ -2268,7 +2234,7 @@ contains
   !                  end do
   !               end if
   !            end do
-  !         else  ! If no wave dependent metric 
+  !         else  ! If no wave dependent metric
   !            call kerker (resid, maxngrid, q0)
   !            ! store preconditioned residue to history
   !            do j = 1, n_my_grid_points
@@ -2307,7 +2273,7 @@ contains
   !         end do
   !      else  ! if no Kerker
   !         ! do wave dependent metric without kerker preconditioning
-  !         ! if required 
+  !         ! if required
   !         if (flag_wdmetric) then
   !            call wdmetric (resid, resid_cov, maxngrid, q1)
   !            ! store the covariant version of residue to history
@@ -2438,7 +2404,7 @@ contains
   !!   should be calculated from the total Residual R = R^up + R^dn and
   !!   the total density rho = rho^up + rho^dn. This is because for
   !!   Pulay method to work the alpha(i) are constrained so that
-  !! 
+  !!
   !!             \sum_i \alpha(i) = 1
   !!
   !!   This conserves the electron numbers IF the input densities
@@ -2446,18 +2412,18 @@ contains
   !!   where the spin populations are allowed to change, rho^up and
   !!   rho^dn no longer conserve electron numbers. Hence if we have
   !!   separate alpha's for different spin channels. The constriant
-  !! 
+  !!
   !!            \sum_i \alpha^sigma(i) = 1
-  !!   
+  !!
   !!   is no longer sufficient for fixing electron numbers in each spin
   !!   channels and the total electron number may vary as a result.
-  !! 
+  !!
   !! INPUTS
   !! OUTPUT
   !! RETURN VALUE
   !! AUTHOR
   !!   L.Tong
-  !! CREATION DATE 
+  !! CREATION DATE
   !!   2011/08/30
   !! MODIFICATION HISTORY
   !!  2011/09/13 L.Tong
@@ -2470,10 +2436,15 @@ contains
   !!  - Removed redundant input parameter real(double) mu
   !!  - Made R0 to be the total magnitude including both spin
   !!    channels (note the cross term)
+  !!  2012/05/25 L.Tong
+  !!  - Major rewrite of the subroutine
+  !!  - The pulay mixing step (calculation of alpha) are now put into
+  !!    a separate subroutine
+  !!  -
   !! SOURCE
   !!
-  subroutine PulayMixSC_spin(done, ndone, self_tol, reset_L,           &
-                             fixed_potential, vary_mu, n_L_iterations, &
+  subroutine PulayMixSC_spin(done, ndone, self_tol, reset_L, &
+                             fixed_potential, vary_mu, n_L_iterations,&
                              L_tol, total_energy, rho, size)
     use datatypes
     use numbers
@@ -2502,21 +2473,15 @@ contains
     real(double), dimension(:,:) :: rho
 
     ! Local variables
-    integer      :: n_iters, pul_mx, i, j, ii, m, stat
+    integer      :: n_iters, pul_mx, ii, iter, iPulay
     real(double) :: R0
-    real(double), dimension(nspin)                       :: R1
-    real(double), dimension(maxngrid)                    :: rho_tot
-    real(double), dimension(maxngrid,maxpulaySC,nspin)   :: rho_pul, R_pul
-    real(double), dimension(maxngrid,nspin)              :: rho_out, resid
-    real(double), dimension(maxpulaySC,maxpulaySC,nspin) :: Aij
-    real(double), dimension(maxpulaySC,nspin)            :: alpha       
-    ! variable spin only
-    real(double), allocatable, dimension(:,:)   :: ne_pul
+    real(double), dimension(maxngrid)                          :: rho_tot
+    real(double), dimension(maxngrid,maxpulaySC,nspin)         :: rho_pul
+    real(double), dimension(maxngrid,maxpulaySC,nspin), target :: R_pul
     ! Kerker only
-    real(double), allocatable, dimension(:,:,:) :: KR_pul
+    real(double), pointer,     dimension(:,:,:) :: KR_pul
     ! wdmetric only
-    real(double), allocatable, dimension(:,:)   :: resid_cov
-    real(double), allocatable, dimension(:,:,:) :: Rcov_pul
+    real(double), pointer,     dimension(:,:,:) :: Rcov_pul
 
     !Reset Pulay Iterations  -- introduced by TM, Nov2007
     integer, parameter :: mx_fail = 3
@@ -2529,62 +2494,35 @@ contains
     ! initialise
     rho_pul = zero
     R_pul = zero
-    rho_out = zero
-    resid = zero
-    Aij = zero
-    alpha = zero
 
-    ! allocate the spin population histories if not fixing spin populations
-    if (nspin == 2 .and. (.not. flag_fix_spin_population)) then
-       allocate(ne_pul(maxpulaySC,nspin), STAT=stat)
-       if (stat /= 0) &
-            call cq_abort("SelfCon/PulayMixSC_spin: Allocation error &
-                           &for ne_pul: ", stat)
-       call reg_alloc_mem(area_SC, nspin * maxpulaySC, type_dbl)
-       ne_pul = zero
-    end if
-
-    ! for Kerker preconditioning
-    if (flag_Kerker) then
-       allocate(KR_pul(maxngrid,maxpulaySC,nspin), STAT=stat)
-       if (stat /= 0) &
-            call cq_abort("SelfCon/PulayMixSCC: Allocation error, KR_pul: ", &
-                          stat)
-       call reg_alloc_mem(area_SC, nspin * maxngrid * maxpulaySC, type_dbl)
-       KR_pul = zero
-    end if
-
-    ! for wave dependent metric method
-    if (flag_wdmetric) then
-       allocate(Rcov_pul(maxngrid,maxpulaySC,nspin), &
-                resid_cov(maxngrid,nspin), STAT=stat)
-       if (stat /= 0) &
-            call cq_abort("SelfCon/PulayMixSCC: Allocation error, &
-                           &Rcov_pul, resid_cov: ", stat)
-       call reg_alloc_mem(area_SC, nspin * maxngrid * (maxpulaySC + 1), &
-                          type_dbl)
-       Rcov_pul = zero
-       resid_cov = zero
-    end if
+    ! allocate memories
+    call allocate_PulayMixSC_spin
 
     ! write out start information
     if (inode == ionode) then
-       write (io_lun, fmt='(8x,"Starting Pulay mixing, A_up = ",&
-                           & f6.3, ", A_dn =  ", f6.3)') &
-             A(1), A(2)
-       if (flag_fix_spin_population) &
-            write (io_lun, fmt='(10x, "Spin populations are fixed.")')
+       write (io_lun, '(8x,a,f6.3,a,f6.3)') &
+             'Starting Pulay mixing, A_up = ', A(1), ' A_dn = ', A(2)
+       if (nspin == 2) then
+          if (flag_fix_spin_population) then
+             write (io_lun, '(8x,"Spin populations are fixed.")')
+          else
+             write (io_lun, '(8x,"Spin populations are to be relaxed.")')
+          end if
+       else
+          write (io_lun, '(8x,"Spin non-polarised calculation.")')
+       end if
        if (flag_Kerker) &
-            write (io_lun, fmt='(10x,"with Kerker preconditioning, q0 &
-                                 &= ", f6.3)') q0
+            write (io_lun, '(10x,a,f6.3)') &
+                  'with Kerker preconditioning, q0 = ', q0
        if (flag_wdmetric) &
-            write (io_lun, fmt='(10x,"with wave dependent metric, q1 =&
-                                 & ", f6.3)') q1
+            write (io_lun, '(10x,a,f6.3)') &
+                  'with wave dependent metric, q1 = ', q1
     end if
 
+    ! set counters
     done = .false.
     n_iters = ndone
-    m = 1
+    iter = 1
     if (n_iters >= maxitersSC) then
        if (.not. flag_continue_on_SC_fail) &
             call cq_abort('SelfCon/PulayMixSC_spin: too many SCF iterations: ', &
@@ -2594,128 +2532,68 @@ contains
        return
     end if
 
-    do spin = 1, nspin
-       ! store the first rho_in in pulay history
-       do j = 1, n_my_grid_points
-          rho_pul(j,1,spin) = rho(j,spin)
-       end do
-       ! calculate electron number and store in pulay history
-       if (nspin == 2 .and. (.not. flag_fix_spin_population)) then
-          ne_pul(1,spin) = grid_point_volume * &
-                           rsum(n_my_grid_points, rho(:,spin), 1)
-          call gsum(ne_pul(1,spin))
-       end if
-    end do
+    ! store rho and calculate residuals and store in pulay history slot 1
+    call update_pulay_history(1, rho, reset_L, fixed_potential,     &
+                              vary_mu, n_L_iterations, L_tol,       &
+                              total_energy, rho_pul, R_pul, KR_pul, &
+                              Rcov_pul)
 
-    ! from rho_in, get rho_out 
-    call get_new_rho(.false., reset_L, fixed_potential, vary_mu, &
-                     n_L_iterations, L_tol, total_energy, rho,   &
-                     rho_out, size)
-    ! Evaluate residue resid = rho_out - rho_in
+    ! Evaluate magnitute of residual, note do not include cross terms
     R0 = zero
     do spin = 1, nspin
-       do j = 1, n_my_grid_points
-          resid(j,spin) = rho_out(j,spin) - rho(j,spin)
-       end do
-       ! calculate the norm of residue (total)
        R0 = R0 + spin_factor * &
-            dot(n_my_grid_points, resid(:,spin), 1, resid(:,spin), 1)
-    end do ! spin
+            dot(n_my_grid_points, R_pul(:,1,spin), 1, R_pul(:,1,spin), 1)
+    end do
     ! cross term
-    R0 = R0 + two * &
-         dot(n_my_grid_points, resid(:,1), 1, resid(:,nspin), 1)
+    ! R0 = R0 + two * &
+    !      dot(n_my_grid_points, R_pul(:,1,1), 1, R_pul(:,1,nspin), 1)
     call gsum(R0)
-    R0 = sqrt(grid_point_volume * R0) / ne_in_cell   
+    R0 = sqrt(grid_point_volume * R0) / ne_in_cell
+
+    ! print residual information
+    if (inode == ionode) then
+       write (io_lun, '(8x,a,i5,a,e12.5)') &
+             'Pulay iteration ', iter, ' Residual is ', R0
+    end if
 
     ! check if they have reached tolerance
     if (R0 < self_tol) then
        if (inode == ionode) &
-            write (io_lun, fmt='(8x,"Reached self-consistency tolerance")')
+            write (io_lun, '(8x,"Reached self-consistency tolerance")')
        done = .true.
-       call dealloc_PulayMiXSC_spin
+       call deallocate_PulayMiXSC_spin
        return
     end if
     if (R0 < EndLinearMixing) then
        if (inode == ionode) &
-            write (io_lun, fmt='(8x,"Reached transition to LateSC")')
-       call dealloc_PulayMiXSC_spin
+            write (io_lun, '(8x,"Reached transition to LateSC")')
+       call deallocate_PulayMiXSC_spin
        return
     end if
 
-    ! print residual information
-    if (inode == ionode) then
-       write (io_lun, fmt='(8x,"Pulay iteration ",i5," Residual &
-                            &is ",e12.5,/)') m, R0
-    end if
-
+    ! Do linear mixing
     do spin = 1, nspin
-       ! store resid to pulay history
-       do j = 1, n_my_grid_points
-          R_pul(j,1,spin) = resid(j,spin)
-       end do
-       
-       ! do Kerker preconditioning if required
-       if (flag_Kerker) then
-          ! get wave dependent metric convariant R as well if required
-          if (flag_wdmetric) then
-             call kerker_and_wdmetric(resid(:,spin), resid_cov(:,&
-                                      spin), maxngrid, q0, q1)
-             ! store the preconditioned and covariant version of residue to histiry
-             do  j = 1, n_my_grid_points
-                KR_pul(j,1,spin) = resid(j,spin)
-                Rcov_pul(j,1,spin) = resid_cov(j,spin)
-             end do
-          else
-             call kerker(resid(:,spin), maxngrid, q0)
-             ! store the precondiioned residue to history
-             do j = 1, n_my_grid_points
-                KR_pul(j,1,spin) = resid(j,spin)
-             end do
-          end if
-       else
-          ! do wave dependent metric without kerker preconditioning if required 
-          if (flag_wdmetric) then
-             call wdmetric(resid(:,spin), resid_cov(:,spin), maxngrid, q1)
-             ! store the covariant version of residue
-             do j = 1, n_my_grid_points
-                Rcov_pul(j,1,spin) = resid_cov(j,spin)
-             end do
-          end if
-       end if ! (flag_Kerker)
-       ! Do mixing
-       call axpy(n_my_grid_points, A(spin), resid(:,spin), 1, rho(:,spin), 1)
-    end do ! spin
+       call axpy(n_my_grid_points, A(spin), KR_pul(:,1,spin), 1, &
+                 rho(:,spin), 1)
+    end do
 
-    ! finished the first SCF iteration
+    ! finished the first SCF iteration (no need to optimise)
     n_iters = n_iters + 1
-    
-    ! Routines for Resetting Pulay Iterations (TM)
+
+    ! Record Pulay Resetting information
     R0_old = R0
     IterPulayReset = 1
     icounter_fail = 0
-    ! Start SCF loop from second iteration
-    SCF: do m = 2, maxitersSC
 
-       ! calculate i (cyclical index for storing history), including
-       ! TM's Pulay reset
-       i = mod(m - IterPulayReset + 1, maxpulaySC)
-       if (i == 0) i = maxpulaySC
+    ! do SCF loop
+    do iter = 2, maxitersSC
+
+       ! calculate cyclic index for storing pulay history
+       iPulay = mod(iter - IterPulayReset + 1, maxpulaySC)
+       if (iPulay == 0) iPulay = maxpulaySC
        ! calculated the number of pulay histories stored
-       pul_mx = min(m - IterPulayReset + 1, maxpulaySC)
+       pul_mx = min(iter - IterPulayReset + 1, maxpulaySC)
 
-       do spin = 1, nspin
-          ! store the updated density from the previous step to history
-          do j = 1, n_my_grid_points
-             rho_pul(j,i,spin) = rho(j,spin)
-          end do
-          ! store the updated spin populations from the previous steps to history
-          if (nspin == 2 .and. (.not. flag_fix_spin_population)) then
-             ne_pul(i,spin) = grid_point_volume * &
-                              rsum(n_my_grid_points, rho(:,spin), 1)
-             call gsum(ne_pul(i,spin))
-          end if
-       end do ! spin
-       
        ! print out charge
        if (iprint_SC > 1) then
           if (nspin == 1) then
@@ -2726,296 +2604,333 @@ contains
              call dump_charge(rho(:,2), n_my_grid_points, inode, spin=2)
           end if
        end if
-       
-       ! genertate new charge density
-       call get_new_rho(.false., reset_L, fixed_potential, vary_mu, &
-                        n_L_iterations, L_tol, total_energy, rho,   &
-                        rho_out, size)
-       ! get residue
+
+       ! Calcualate residuals and update pulay history (store in iPulay-th slot)
+       call update_pulay_history(iPulay, rho, reset_L, fixed_potential, &
+                                 vary_mu, n_L_iterations, L_tol,        &
+                                 total_energy, rho_pul, R_pul, KR_pul,  &
+                                 Rcov_pul)
+
+       ! Evaluate magnitute of residual, note no cross terms
        R0 = zero
        do spin = 1, nspin
-          do j = 1, n_my_grid_points
-             resid(j,spin) = rho_out(j,spin) - rho(j,spin)
-          end do
           R0 = R0 + spin_factor * &
-               dot(n_my_grid_points, resid(:,spin), 1, resid(:,spin), 1)
-       end do ! spin
+               dot(n_my_grid_points, R_pul(:,iPulay,spin), 1, &
+                   R_pul(:,iPulay,spin), 1)
+       end do
        ! cross term
-       R0 = R0 + two * &
-            dot(n_my_grid_points, resid(:,1), 1, resid(:,nspin), 1)
+       ! R0 = R0 + two * &
+       !      dot(n_my_grid_points, R_pul(:,1,1), 1, R_pul(:,1,nspin), 1)
        call gsum(R0)
        R0 = sqrt(grid_point_volume * R0) / ne_in_cell
 
-       ! print out SC iteration information
+       ! print residual information
        if (inode == ionode) then
-          write (io_lun, fmt='(8x,"Pulay iteration ",i5," Residual &
-                               &is ",e12.5,/)') m, R0
+          write (io_lun, '(8x,a,i5,a,e12.5)') &
+               'Pulay iteration ', iter, ' Residual is ', R0
        end if
-       
-       ! check if Pulay SC has converged
+
+       ! check if they have reached tolerance
        if (R0 < self_tol) then
           if (inode == ionode) &
-               write (io_lun, fmt='(8x,"Reached self-consistent tolerance")')
+               write (io_lun, '(8x,"Reached self-consistency tolerance")')
           done = .true.
-          call dealloc_PulayMiXSC_spin
+          call deallocate_PulayMiXSC_spin
           return
        end if
        if (R0 < EndLinearMixing) then
           if (inode == ionode) &
-               write (io_lun, fmt='(8x,"Reached transition to LateSC")')
-          call dealloc_PulayMixSC_spin
+               write (io_lun, '(8x,"Reached transition to LateSC")')
+          call deallocate_PulayMiXSC_spin
           return
        end if
+
        ! check if Pulay SC needs to be reset
        if (R0 > R0_old) &
             icounter_fail = icounter_fail + 1
-       if (icounter_fail > mx_fail) then 
+       if (icounter_fail > mx_fail) then
           if (inode == ionode) &
-               write (io_lun, *) ' Pulay iteration is reset !!  at ', m, &
+               write (io_lun, *) ' Pulay iteration is reset !!  at ', iter, &
                                  ' th iteration'
           reset_Pulay = .true.
        end if
        R0_old = R0
-       ! continue on with SC, store resid to history but before doing
-       ! so, remember the old R_pul(j,i,spin) to takeaway from
-       ! Kerker_sum, Kerker only
-       do spin = 1, nspin
-          R_pul(1:n_my_grid_points,i,spin) = resid(1:n_my_grid_points,spin)
-       end do
-       ! calculate new rho  
-       ! with kerker preconditioning
-       if (flag_Kerker) then
-          ! with wave dependent metric
-          if (flag_wdmetric) then
-             do spin = 1, nspin
-                call kerker_and_wdmetric(resid(:,spin), resid_cov(:,spin), &
-                                         maxngrid, q0, q1)
-                ! store preconditioned and covariant residue to history
-                KR_pul(1:n_my_grid_points,i,spin) = &
-                     resid(1:n_my_grid_points,spin)
-                Rcov_pul(1:n_my_grid_points,i,spin) = &
-                     resid_cov(1:n_my_grid_points,spin)
-                ! get alpha_i
-                ! first get Aij
-                Aij(:,:,spin) = zero
-                do ii = 1, pul_mx
-                   ! diagonal elements of Aij
-                   R1(spin) = dot(n_my_grid_points, Rcov_pul(:,ii,spin), &
-                                  1, R_pul(:,ii,spin), 1)
-                   call gsum(R1(spin))
-                   Aij(ii,ii,spin) = R1(spin)
-                   ! the rest
-                   if (ii > 1) then
-                      do j = 1, ii - 1
-                         R1(spin) = dot(n_my_grid_points, Rcov_pul(:,ii,spin),&
-                              1, R_pul(:,j,spin), 1)
-                         call gsum(R1(spin))
-                         Aij(ii,j,spin) = R1(spin)
-                         ! Aij is symmetric even with wave dependent metric
-                         Aij(j,ii,spin) = R1(spin)
-                      end do ! j
-                   end if !! (ii < 1)
-                end do ! ii
-             end do ! spin
-          else  ! If no wave dependent metric
-             do spin = 1, nspin
-                call kerker(resid(:,spin), maxngrid, q0)
-                ! store preconditioned residue to history
-                KR_pul(1:n_my_grid_points,i,spin) = &
-                     resid(1:n_my_grid_points,spin)
-                ! get alpha_i
-                Aij(:,:,spin) = zero
-                do ii = 1, pul_mx
-                   ! diagonal elements of Aij
-                   R1(spin) = dot(n_my_grid_points, R_pul(:,ii,spin), &
-                                  1, R_pul(:,ii,spin), 1)
-                   call gsum(R1(spin))
-                   Aij(ii,ii,spin) = R1(spin)
-                   ! the rest
-                   if (ii > 1) then
-                      do j = 1, ii - 1
-                         R1(spin) = dot(n_my_grid_points, R_pul(:,ii,spin), &
-                                        1, R_pul(:,j,spin), 1)
-                         call gsum(R1(spin))
-                         Aij(ii,j,spin) = R1(spin)
-                         Aij(j,ii,spin) = R1(spin)
-                      end do ! j
-                   end if ! (ii > 1)
-                end do ! ii
-             end do ! spin
-          end if ! if (flag_wdmetric)
-          
-          ! solve alpha_spin(i)
-          if (nspin == 1 .or. flag_fix_spin_population) then
-             call DoPulay(Aij, alpha, pul_mx, maxpulaySC, inode, ionode)
-          else
-             call DoPulay(Aij, alpha, pul_mx, maxpulaySC, inode, ionode, ne_pul)
-          end if
-          
-          ! Do mixing
-          rho = zero
-          do spin = 1, nspin
-             do ii = 1, pul_mx
-                call axpy(n_my_grid_points, alpha(ii,spin),           &
-                          rho_pul(:,ii,spin), 1, rho(:,spin), 1)
-                call axpy(n_my_grid_points, A(spin) * alpha(ii,spin), &
-                          KR_pul(:,ii,spin), 1, rho(:,spin), 1)
-             end do
-          end do
-       else  ! if no Kerker
-          ! do wave dependent metric without kerker preconditioning if required 
-          if (flag_wdmetric) then
-             do spin = 1, nspin
-                call wdmetric(resid(:,spin), resid_cov(:,spin), maxngrid, q1)
-                ! store the covariant version of residue to history
-                Rcov_pul(1:n_my_grid_points,i,spin) = &
-                     resid_cov(1:n_my_grid_points,spin)
-                ! get alpha_i
-                Aij(:,:,spin) = zero
-                do ii = 1, pul_mx
-                   ! diagonal elements of Aij
-                   R1(spin) = dot(n_my_grid_points, Rcov_pul(:,ii,spin), &
-                                  1, R_pul(:,ii,spin), 1)
-                   call gsum(R1(spin))
-                   Aij(ii,ii,spin) = R1(spin)
-                   ! the rest
-                   if (ii > 1) then
-                      do j = 1, ii - 1
-                         R1(spin) = dot(n_my_grid_points, Rcov_pul(:,ii,spin), &
-                                        1, R_pul(:,j,spin), 1)
-                         call gsum(R1(spin))
-                         Aij(ii,j,spin) = R1(spin)
-                         ! Aij is symmetric even with wave dependent metric
-                         Aij(j,ii,spin) = R1(spin)
-                      end do
-                   end if
-                end do ! ii
-             end do ! spin
-          else ! if no Kerker and no wave dependent metric
-             do spin = 1, nspin
-                ! get alpha_i
-                Aij(:,:,spin) = zero
-                do ii = 1, pul_mx
-                   ! diagonal elements of Aij
-                   R1(spin) = dot(n_my_grid_points, R_pul(:,ii,spin), 1, &
-                                  R_pul(:,ii,spin), 1)
-                   call gsum(R1(spin))
-                   Aij(ii,ii,spin) = R1(spin)
-                   ! the rest
-                   if (ii > 1) then
-                      do j = 1, ii - 1
-                         R1(spin) = dot(n_my_grid_points, R_pul(:,ii,spin), &
-                                        1, R_pul(:,j,spin), 1)
-                         call gsum(R1(spin))
-                         Aij(ii,j,spin) = R1(spin)
-                         Aij(j,ii,spin) = R1(spin)
-                      end do
-                   end if ! (ii > 1)
-                end do ! ii
-             end do ! spin
-          end if ! if (flag_wdmetric)
-          
-          ! solve alpha_spin(i)
-          if (nspin == 1 .or. flag_fix_spin_population) then
-             call DoPulay(Aij, alpha, pul_mx, maxpulaySC, inode, &
-                          ionode)
-          else
-             call DoPulay(Aij, alpha, pul_mx, maxpulaySC, inode, &
-                          ionode, Nstore=ne_pul)
-          end if
 
-          ! Do mixing
-          rho = zero
-          do spin = 1, nspin
-             do ii = 1, pul_mx
-                call axpy(n_my_grid_points, alpha(ii,spin), &
-                          rho_pul(:,ii,spin), 1, rho(:,spin), 1)
-                call axpy(n_my_grid_points, A(spin) * alpha(ii,spin), &
-                          R_pul(:,ii,spin), 1, rho(:,spin), 1)
-             end do
-          end do
-       end if ! if (flag_Kerker)
+       ! get optimum rho mixed from rho_pul, R_pul and Rcov_pul
+       call get_pulay_optimal_rho(iPulay, rho, pul_mx, A, rho_pul, &
+                                  R_pul, KR_pul, Rcov_pul)
+
+       ! increment iteration counter
        n_iters = n_iters + 1
+
        ! Reset Pulay iterations if required
        if (reset_Pulay) then
           do spin = 1, nspin
-             rho_pul(1:n_my_grid_points,1,spin) = &
-                  rho_pul(1:n_my_grid_points,i,spin)
-             R_pul(1:n_my_grid_points,1,spin) = &
-                  R_pul(1:n_my_grid_points,i,spin)
+             rho_pul(1:n_my_grid_points,1,spin) =             &
+                  rho_pul(1:n_my_grid_points,iPulay,spin)
+             R_pul(1:n_my_grid_points,1,spin) =               &
+                  R_pul(1:n_my_grid_points,iPulay,spin)
              if (flag_Kerker) then
-                KR_pul(1:n_my_grid_points,1,spin) = &
-                     KR_pul(1:n_my_grid_points,i,spin)
+                KR_pul(1:n_my_grid_points,1,spin) =           &
+                     KR_pul(1:n_my_grid_points,iPulay,spin)
              end if
              if (flag_wdmetric) then
-                Rcov_pul(1:n_my_grid_points,1,spin) = &
-                     Rcov_pul(1:n_my_grid_points,i,spin)
-             end if
-             if (nspin == 2 .and. (.not. flag_fix_spin_population)) then
-                ne_pul(1,spin) = grid_point_volume * &
-                                 rsum(n_my_grid_points, rho_pul(:,i,spin), 1)
-                call gsum(ne_pul(1,spin))
+                Rcov_pul(1:n_my_grid_points,1,spin) =         &
+                     Rcov_pul(1:n_my_grid_points,iPulay,spin)
              end if
           end do ! spin
-          IterPulayReset = m
+          IterPulayReset = iter
           icounter_fail = 0
+          reset_Pulay = .false.
        end if
-       reset_Pulay = .false.
-    end do SCF
+
+    end do ! iter (SCF)
+
     ndone = n_iters
-    call dealloc_PulayMixSC_spin
+    call deallocate_PulayMixSC_spin
     return
 
   contains
 
-    subroutine dealloc_PulayMixSC_spin
+    subroutine allocate_PulayMixSC_spin
       implicit none
       integer :: stat
-
-      if (nspin == 2 .and. (.not. flag_fix_spin_population)) then
-         deallocate(ne_pul, STAT=stat)
-         if (stat /= 0) &
-              call cq_abort("dealloc_PulayMixSC_spin: Deallocation error: ", &
-                            stat)
-         call reg_dealloc_mem(area_SC, nspin * maxpulaySC, type_dbl)
-      end if
-
+      ! for Kerker preconditioning
       if (flag_Kerker) then
-         deallocate(KR_pul, STAT=stat) 
+         allocate(KR_pul(maxngrid,maxpulaySC,nspin), STAT=stat)
+         if (stat /= 0) &
+              call cq_abort("SelfCon/PulayMixSCC: Allocation error, KR_pul: ", &
+                            stat)
+         call reg_alloc_mem(area_SC, nspin * maxngrid * maxpulaySC, type_dbl)
+         KR_pul = zero
+      else
+         KR_pul => R_pul
+      end if
+      ! for wave dependent metric method
+      if (flag_wdmetric) then
+         allocate(Rcov_pul(maxngrid,maxpulaySC,nspin), STAT=stat)
+         if (stat /= 0) &
+              call cq_abort("SelfCon/PulayMixSCC: Allocation error, &
+                            &Rcov_pul: ", stat)
+         call reg_alloc_mem(area_SC, nspin * maxngrid * maxpulaySC, &
+                            type_dbl)
+         Rcov_pul = zero
+      else
+         Rcov_pul => R_pul
+      end if
+    end subroutine allocate_PulayMixSC_spin
+
+
+    subroutine deallocate_PulayMixSC_spin
+      implicit none
+      integer :: stat
+      ! For Kerker preconditioning
+      if (flag_Kerker) then
+         deallocate(KR_pul, STAT=stat)
          if (stat /= 0) &
               call cq_abort("dealloc_PulayMixSC_spin: Deallocation error, &
                              &KR_pul ", stat)
          call reg_dealloc_mem(area_SC, nspin * maxngrid * maxpulaySC, type_dbl)
       end if
-
+      ! For wave dependent metric
       if (flag_wdmetric) then
-         deallocate (Rcov_pul, resid_cov, STAT=stat)
+         deallocate(Rcov_pul, STAT=stat)
          if (stat /= 0) &
               call cq_abort ("dealloc_PulayMixSC_spin:&
-                              & Deallocation error, Rcov_pul,&
-                              & resid_cov: ", stat)
+                              & Deallocation error, Rcov_pul", stat)
          call reg_dealloc_mem(area_SC, nspin * maxngrid * (maxpulaySC + 1), &
                               type_dbl)
       end if
-      
-      return
-    end subroutine dealloc_PulayMixSC_spin
-    
+    end subroutine deallocate_PulayMixSC_spin
+
   end subroutine PulayMixSC_spin
-  !!*****
+  !*****
+
+
+  !!****f* SelfCon_module/get_pulay_optimal
+  !! PURPOSE
+  !!   From a given pulay history calculated optimised and mixed
+  !!   density
+  !! USAGE
+  !! INPUTS
+  !! OUTPUT
+  !! RETURN VALUE
+  !! AUTHOR
+  !!   L.Tong
+  !! CREATION DATE
+  !!   2012/05/21
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine get_pulay_optimal_rho(iPulay, rho_opt, pul_max,       &
+                                   mix_factor, rho_pul, resid_pul, &
+                                   k_resid_pul, cov_resid_pul)
+    use datatypes
+    use GenBlas
+    use global_module,  only: nspin, flag_fix_spin_population
+    use GenComms,       only: gsum, inode, ionode
+    use Pulay,          only: DoPulay
+    use dimens,         only: n_my_grid_points
+    use maxima_module,  only: maxngrid
+
+    implicit none
+    ! Passed parameters
+    integer, intent(in) :: pul_max, iPulay
+    real(double), dimension(nspin),          intent(in)  :: mix_factor
+    real(double), dimension(maxngrid,nspin), intent(out) :: rho_opt
+    real(double), dimension(maxngrid,maxpulaySC,nspin),  intent(in)  :: &
+         rho_pul, resid_pul, k_resid_pul, cov_resid_pul
+    ! Local variables
+    integer      :: spin, ii, jj
+    real(double) :: ne, RR
+    real(double), dimension(maxpulaySC,maxpulaySC,nspin) :: Aij
+    real(double), dimension(maxpulaySC,nspin) :: alpha
+
+    ! calculated Aij
+    Aij = zero
+    do spin = 1, nspin
+       do ii = 1, pul_max
+          ! diagonal elements of Aij
+          RR = dot(n_my_grid_points, cov_resid_pul(:,ii,spin), 1, &
+                   resid_pul(:,ii,spin), 1)
+          call gsum(RR)
+          Aij(ii,ii,spin) = RR
+          ! the rest
+          if (ii > 1) then
+             do jj = 1, ii - 1
+                RR = dot(n_my_grid_points, cov_resid_pul(:,ii,spin), 1, &
+                         resid_pul(:,jj,spin), 1)
+                call gsum(RR)
+                Aij(ii,jj,spin) = RR
+                ! Aij is symmetric even with wave-dependent metric
+                Aij(jj,ii,spin) = RR
+             end do ! jj
+          end if ! (ii > 1)
+       end do ! ii
+    end do ! spin
+
+    ! solve for alpha
+    call DoPulay(iPulay, Aij, alpha, pul_max, maxpulaySC, inode, &
+                 ionode)
+
+    ! Compute the optimal rho and do mixing
+    do spin = 1, nspin
+       rho_opt(:,spin) = zero
+       do ii = 1, pul_max
+          call axpy(n_my_grid_points, alpha(ii,spin), &
+                    rho_pul(:,ii,spin), 1, rho_opt(:,spin), 1)
+          call axpy(n_my_grid_points, mix_factor(spin) * alpha(ii,spin), &
+                    k_resid_pul(:,ii,spin), 1, rho_opt(:,spin), 1)
+       end do
+    end do
+
+  end subroutine get_pulay_optimal_rho
+  !*****
+
+
+  !!****f* SelfCon_module/update_pulay_history
+  !! PURPOSE
+  !!   From input rho_in, calculated the corresponding residual and
+  !!   electron numbers and store in iPulay slot of the pulay history,
+  !!   replacing the original content in the slot.
+  !! USAGE
+  !! INPUTS
+  !! OUTPUT
+  !! RETURN VALUE
+  !! AUTHOR
+  !!   L.Tong
+  !! CREATION DATE
+  !!   2012/05/22
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine update_pulay_history(iPulay, rho_in, reset_L,             &
+                                  fixed_potential, vary_mu,            &
+                                  n_L_iterations, L_tol, total_energy, &
+                                  rho_pul, resid_pul, k_resid_pul,     &
+                                  cov_resid_pul)
+    use datatypes
+    use GenBlas
+    use dimens,         only: n_my_grid_points, grid_point_volume
+    use EarlySCMod,     only: get_new_rho
+    use GenComms,       only: gsum
+    use hartree_module, only: kerker, kerker_and_wdmetric, wdmetric
+    use global_module,  only: nspin, flag_fix_spin_population
+    use maxima_module,  only: maxngrid
+
+    implicit none
+
+    ! Passed parameters
+    integer,      intent(in)  :: iPulay, n_L_iterations
+    logical,      intent(in)  :: reset_L, fixed_potential, vary_mu
+    real(double), intent(in)  :: L_tol
+    real(double), intent(out) :: total_energy
+    real(double), dimension(maxngrid,nspin),             intent(in)    :: &
+         rho_in
+    real(double), dimension(maxngrid,maxpulaySC,nspin),  intent(inout) :: &
+         rho_pul, resid_pul, k_resid_pul, cov_resid_pul
+    ! local variables
+    integer :: spin
+    real(double), dimension(maxngrid,nspin) :: rho_out, resid
+
+    ! store rho_in to history
+    do spin = 1, nspin
+       rho_pul(1:n_my_grid_points,iPulay,spin) = &
+            rho_in(1:n_my_grid_points,spin)
+    end do
+
+    ! calculate residual of rho_in
+    rho_out = zero
+    resid = zero
+    call get_new_rho(.false., reset_L, fixed_potential, vary_mu,   &
+                     n_L_iterations, L_tol, total_energy, rho_in, &
+                     rho_out, maxngrid)
+    do spin = 1, nspin
+       resid(1:n_my_grid_points,spin) = &
+            rho_out(1:n_my_grid_points,spin) - &
+            rho_in(1:n_my_grid_points,spin)
+       ! replace the resid_pul history at iPulay to new value
+       resid_pul(1:n_my_grid_points,iPulay,spin) = &
+            resid(1:n_my_grid_points,spin)
+    end do
+
+    ! calculate the Kerker preconditioned or wave-dependent metric
+    ! covarient residuals if requires to
+    do spin = 1, nspin
+       if (flag_Kerker) then
+          if (flag_wdmetric) then
+             call kerker_and_wdmetric(resid(:,spin), &
+                                      cov_resid_pul(:,iPulay,spin), &
+                                      maxngrid, q0, q1)
+          else
+             call kerker(resid(:,spin), maxngrid, q0)
+          end if
+          ! replace the k_resid_pul history at iPulay to new value
+          k_resid_pul(1:n_my_grid_points,iPulay,spin) = &
+               resid(1:n_my_grid_points,spin)
+       else
+          if (flag_wdmetric) then
+             call wdmetric(resid(:,spin), cov_resid_pul(:,iPulay,spin), &
+                           maxngrid, q1)
+          end if
+       end if ! flag_Kerker
+    end do ! spin
+
+  end subroutine update_pulay_history
+  !*****
 
 
   !!****f* SelfCon_module/get_atomic_charge *
   !!
-  !!  NAME 
+  !!  NAME
   !!   get_atomic_charge
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Computes and prints atomic charges (Mulliken analysis)
-  !! 
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   M. Todorovic
   !!  CREATION DATE
@@ -3091,17 +3006,17 @@ contains
     end if
 
     call start_timer(tmr_std_allocation)
-    
+
     deallocate(node_charge, STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error deallocating charge arrays in get_atomic_charge.", &
                        stat)
     call reg_dealloc_mem(area_SC, nspin * l, type_dbl)
-    
+
     do spin = nspin, 1, -1
        call free_temp_matrix(temp_mat(spin))
     end do
-    
+
     call stop_timer (tmr_std_allocation)
     call stop_timer (tmr_std_chargescf)
 

@@ -119,15 +119,18 @@ module GenComms
   end interface
 !!***
 
-!!****m* GenComms/gcopy *
-!!  NAME
-!!   gcopy
-!!  PURPOSE
-!!   Interface to different gcopy routines
-!!  AUTHOR
-!!   D. R. Bowler
-!!  SOURCE
-!!  
+  !!****m* GenComms/gcopy *
+  !!  NAME
+  !!   gcopy
+  !!  PURPOSE
+  !!   Interface to different gcopy routines
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  MODIFICATION HISTORY
+  !!   2012/04/03 L.Tong
+  !!   - Added interface for double_four_copy
+  !!  SOURCE
+  !!  
   interface gcopy ! Copy data from root processor to all
      module procedure int_copy
      module procedure int_one_copy
@@ -136,12 +139,13 @@ module GenComms
      module procedure double_one_copy
      module procedure double_two_copy
      module procedure double_three_copy
+     module procedure double_four_copy
      module procedure char_one_copy
      module procedure logical_copy
      module procedure logical_one_copy
      module procedure logical_two_copy
   end interface
-!!***
+  !!***
 
 !!****m* GenComms/gcopy_diff *
 !!  NAME
@@ -1638,6 +1642,55 @@ contains
     return
   end subroutine double_three_copy
 !!***
+
+
+  !!****f* GenComms/double_four_copy *
+  !!
+  !!  NAME 
+  !!   double_four_copy
+  !!  USAGE
+  !!   call double_four_copy(vector, len1, len2, len3)
+  !!  PURPOSE
+  !!   Copies the 4D real(double) vector vec from root processor to
+  !!   all other processors via MPI bcast
+  !!  INPUTS
+  !!   integer :: len1, len2, len3, len4
+  !!   real(double), dimension(length) :: vec
+  !!  USES
+  !!   datatypes
+  !!  AUTHOR
+  !!   L.Tong
+  !!  CREATION DATE
+  !!   2012/04/03 L.Tong
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine double_four_copy(vec, len1, len2, len3, len4)
+
+    use datatypes
+
+    implicit none
+
+    ! Passed variables
+    integer :: len1, len2, len3, len4
+    real(double), dimension(len1,len2,len3,len4) :: vec
+
+    ! Local variables
+    integer :: ierror
+
+    if (len1 <= 0) call cq_abort('double_three_copy: invalid vector len1')
+    if (len2 <= 0) call cq_abort('double_three_copy: invalid vector len2')
+    if (len3 <= 0) call cq_abort('double_three_copy: invalid vector len3')
+    if (len4 <= 0) call cq_abort('double_three_copy: invalid vector len4')
+    call MPI_bcast(vec, len1*len2*len3*len4, MPI_Double_precision, &
+                   root, MPI_comm_world, ierror)
+    if (ierror /= MPI_success) &
+         call cq_abort('double_four_copy: error in MPI_bcast')
+    return
+  end subroutine double_four_copy
+  !!***
+
 
 !!****f* GenComms/char_one_copy *
 !!

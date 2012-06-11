@@ -61,7 +61,8 @@ module dimens
   !real(double) :: support_grid_spacing, support_grid_volume
   !real(double) ::  blip_width, four_on_blip_width, fobw2, fobw3
 
-  real(double), allocatable, dimension(:) :: RadiusSupport, NonLocalFactor, InvSRange
+  real(double), allocatable, dimension(:) :: RadiusSupport, &
+                                             NonLocalFactor, InvSRange
   integer, allocatable, dimension(:) :: atomicnum
 
   integer :: n_grid_x, n_grid_y, n_grid_z, n_my_grid_points
@@ -118,7 +119,8 @@ contains
 !!   20/06/2001 dave
 !!    Used cq_abort instead of stop
 !!   15:57, 04/02/2003 drb 
-!!    Changed scan over core radii to be for ALL cases: we need this for local pseudos too
+!!    Changed scan over core radii to be for ALL cases: we need this
+!!    for local pseudos too
 !!   12:17, 2004/06/09 dave
 !!    Added scan for separate InvSrange to allow larger radii.
 !!   2007/04/17 09:42 dave

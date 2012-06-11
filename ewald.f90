@@ -367,7 +367,8 @@ contains
     logical :: contributing_shell
 
     ! +++
-    if(inode == ionode.AND.iprint_gen>1) write(io_lun,fmt='(//"+++ entering original Hernandez set_ewald +++"//)')
+    if(inode == ionode.AND.iprint_gen>1) &
+         write(io_lun,fmt='(//"+++ entering original Hernandez set_ewald +++"//)')
     ! +++
 
     ! first set up the reciprocal lattice vectors
@@ -605,8 +606,8 @@ contains
                    gy(n_g_vectors) = real( l, double ) * b_y
                    gz(n_g_vectors) = real( m, double ) * b_z
                    g2 =  real( k * k, double) * b_x * b_x + &
-                        &real( l * l, double) * b_y * b_y + &
-                        &real( m * m, double) * b_z * b_z
+                         real( l * l, double) * b_y * b_y + &
+                         real( m * m, double) * b_z * b_z
                    argument = - g2 / ( four * gamma * gamma )
                    g_factor(n_g_vectors) = exp( argument ) / g2
                 end if
@@ -726,11 +727,12 @@ contains
   !!
   real(double) function erfc(x)
     use datatypes
-    use numbers, ONLY: very_small, one
+    use numbers, ONLY: RD_ERR, one
     use GenComms, ONLY: cq_abort
 
-    real(double), parameter :: erfc_delta = 1.0e-12_double, erfc_gln = 0.5723649429247447e0_double, &
-         &erfc_fpmax =1.e30_double
+    real(double), parameter :: erfc_delta = 1.0e-12_double,              &
+                               erfc_gln   = 0.5723649429247447e0_double, &
+                               erfc_fpmax = 1.e30_double
     integer, parameter:: erfc_iterations = 10000
 
     real(double), intent(in)::x
@@ -744,8 +746,8 @@ contains
 
     ! This expects x^2...
     x2 = x*x
-    !if(x2<very_small) call cq_abort("Error in ewald: x2 small")
-    if(x<very_small) then
+    !if(x2<RD_ERR) call cq_abort("Error in ewald: x2 small")
+    if(x<RD_ERR) then
        erfc = one
        return
     end if
@@ -1016,7 +1018,7 @@ contains
        distance = edg_a(1)*edg_a(1) + edg_a(2)*edg_a(2) + edg_a(3)*edg_a(3) - &
             &((edg_a(1)*edg_b(1) + edg_a(2)*edg_b(2) + edg_a(3)*edg_b(3))**2) / &
             &(edg_b(1)*edg_b(1) + edg_b(2)*edg_b(2) + edg_b(3)*edg_b(3))
-       if(distance > very_small) then 
+       if(distance > RD_ERR) then 
            distance = sqrt(distance)
        else
            distance = zero

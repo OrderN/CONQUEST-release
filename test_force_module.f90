@@ -2171,10 +2171,9 @@ contains
     use SelfCon,         only: new_SC_potl
     use DMMin,           only: FindMinDM
     use density_module,  only: build_Becke_weight_forces,           &
-                               build_Becke_weights,                 &
-                               get_cdft_constraint
+                               build_Becke_weights
     use maxima_module,   only: maxngrid
-    use cdft_module,     only: make_weights
+    use cdft_module,     only: make_weights, get_cdft_constraint
 
     implicit none
 

@@ -125,7 +125,7 @@ module mult_module
                                     SPpairind, LSpairind, LHpairind, &
                                     LSLpairind
 
-  type(matrix_trans), target :: ltrans(mx_matrices)
+  type(matrix_trans), dimension(mx_matrices), target :: ltrans
   type(trans_remote) :: gtrans(mx_trans)
 
   type(matrix_pointer), allocatable, dimension(:) :: mat_p
@@ -984,7 +984,7 @@ contains
                                  matLSLSL
     type(cq_timer)            :: tmr_l_tmp1
     integer                   :: ss, ss_start, ss_end
-    
+
     ! This routine is basically calls to matrix operations, so these
     ! are timed within the routines themselves
 
@@ -1021,6 +1021,7 @@ contains
           t0 = t1
        end if
        call matrix_transpose(matLS(ss), matSL(ss))
+
        if (iprint_mat > 3) then
           t1 = mtime()
           if (inode == ionode) write (io_lun, *) 'LS trans time: ', t1 - t0
@@ -1120,14 +1121,14 @@ contains
              t0 = t1
           end if
           call matrix_product(matSL(ss), matS, matSLS(ss), &
-               mult(SL_S_SLS))
+                              mult(SL_S_SLS))
           if (iprint_mat > 3) then
              t1 = mtime()
              if (inode == ionode) write (io_lun, *) 'SLS time: ', t1 - t0
              t0 = t1
           end if
-          call matrix_product(matSLS(ss), matSL(ss), &
-               matSLSLS(ss), mult(SLS_LS_L))
+          call matrix_product(matSLS(ss), matSL(ss), matSLSLS(ss), &
+                              mult(SLS_LS_L))
           if (iprint_mat > 3) then
              t1 = mtime()
              if (inode == ionode) write (io_lun, *) 'SLSLS time: ', t1 - t0

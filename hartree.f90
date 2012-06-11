@@ -25,7 +25,8 @@ module hartree_module
   implicit none
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id$"
+  character(len=80), save, private :: &
+       RCSid = "$Id$"
 
 !!***
 
@@ -184,7 +185,7 @@ contains
     real(double) :: q02
 
     !write(io_lun,*) 'In kerker with q0: ',q0,size
-    if(abs(q0)<1.0e-8_double) then
+    if(abs(q0)<RD_ERR) then
        return
     else
        q02 = q0*q0
@@ -198,7 +199,7 @@ contains
     call fft3(resid, chdenr, size, -1)
     !write(io_lun,*) 'Called fft3'
     do i = 1, z_columns_node(inode)*n_grid_z
-       if(hartree_factor(i)>very_small) then
+       if(hartree_factor(i)>RD_ERR) then
           fac = 1.0_double
           !if(hartree_factor(i)<cutoff) fac = (1.0_double + hartree_factor(i)*q02)
           fac = 1.0_double/(1.0_double + hartree_factor(i)*q02)
@@ -265,7 +266,7 @@ contains
     use datatypes
     use dimens,        only: grid_point_volume,                        &
                              one_over_grid_point_volume, n_grid_z
-    use numbers,       only: very_small, zero, one
+    use numbers,       only: RD_ERR, zero, one
     use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, &
                              kerker_list, size_kl
     use GenComms,      only: gsum, inode, cq_abort
@@ -284,7 +285,7 @@ contains
     real(double) :: fac, q02
     complex(double_cplx), allocatable, dimension(:) :: FR_kerker
     
-    if (abs(q0) < very_small) then
+    if (abs(q0) < RD_ERR) then
        return
     else
        q02 = q0*q0
@@ -300,7 +301,7 @@ contains
        ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q)
        ! = 0 for q = 0, calculated in fft module
        ! excluding q=0 point, treating it separately
-       if (hartree_factor(i) > very_small) then 
+       if (hartree_factor(i) > RD_ERR) then 
           fac = one / (one + hartree_factor(i)*q02)
           FR_kerker(i) = FR_kerker(i)*fac
        end if
@@ -311,7 +312,7 @@ contains
     ! q=0 is only on one of processor node need to make sure we are
     ! doing the correct point
     if ((i0 > 0)) then
-       if((hartree_factor(i0) <= very_small)) then
+       if((hartree_factor(i0) <= RD_ERR)) then
           FR_kerker(i0) = zero
        end if
     end if
@@ -367,7 +368,7 @@ contains
     use datatypes
     use dimens,        only: grid_point_volume,                        &
                              one_over_grid_point_volume, n_grid_z
-    use numbers,       only: very_small, zero, one
+    use numbers,       only: RD_ERR, zero, one
     use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, &
                              kerker_list, size_kl
     use GenComms,      only: gsum, gmax, inode, cq_abort
@@ -387,7 +388,7 @@ contains
     real(double) :: fac, facmax, q12
     complex(double_cplx), allocatable, dimension(:) :: FR_wdmetric
     
-    if (abs (q1) < very_small) then
+    if (abs (q1) < RD_ERR) then
        ! copy resid to resid_cov 
        resid_cov = resid
        return
@@ -406,7 +407,7 @@ contains
        ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q)
        ! = 0 for q = 0, calculated in fft module excluding q=0 point,
        ! treating it separately
-       if (hartree_factor(i) > very_small) then 
+       if (hartree_factor(i) > RD_ERR) then 
           fac = one + hartree_factor(i)*q12
           facmax = max(fac, facmax)
           FR_wdmetric(i) = FR_wdmetric(i)*fac
@@ -420,7 +421,7 @@ contains
     ! q=0 is only on one of processor node need to make sure we are
     ! doing the correct point
     if ((i0 > 0)) then
-       if((hartree_factor(i0) <= very_small)) then
+       if((hartree_factor(i0) <= RD_ERR)) then
           FR_wdmetric(i0) = FR_wdmetric(i0) * facmax
        end if
     end if
@@ -479,7 +480,7 @@ contains
     use datatypes
     use dimens,        only: grid_point_volume,                        &
                              one_over_grid_point_volume, n_grid_z
-    use numbers,       only: very_small, zero, one
+    use numbers,       only: RD_ERR, zero, one
     use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, &
                              kerker_list, size_kl
     use GenComms,      only: gsum, gmax, inode, cq_abort
@@ -500,12 +501,12 @@ contains
     real(double) :: fac, fac2, facmax, q02, q12
     complex(double_cplx), allocatable, dimension(:) :: FR_kerker, FR_wdmetric
     
-    if (abs(q0) < very_small) then
+    if (abs(q0) < RD_ERR) then
        return
     else
        q02 = q0*q0
     endif
-    if (abs(q1) < very_small) then
+    if (abs(q1) < RD_ERR) then
        ! copy resid to resid_cov 
        resid_cov = resid
        return
@@ -526,7 +527,7 @@ contains
        ! hartree_factor(q) = 1/q**2 for q /= 0, and hartree_factor(q)
        ! = 0 for q = 0, calculated in fft module excluding q=0 point,
        ! treating it separately
-       if (hartree_factor(i) > very_small) then 
+       if (hartree_factor(i) > RD_ERR) then 
           ! Kerker factor
           fac = one / (one + hartree_factor(i)*q02)
           FR_kerker(i) = FR_kerker(i)*fac
@@ -544,7 +545,7 @@ contains
     ! q=0 is only on one of processor node need to make sure we are
     ! doing the correct point
     if ((i0 > 0)) then
-       if((hartree_factor(i0) <= very_small)) then
+       if((hartree_factor(i0) <= RD_ERR)) then
           FR_kerker(i0) = zero
           FR_wdmetric(i0) = FR_wdmetric(i0)*facmax
        end if

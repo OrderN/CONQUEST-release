@@ -326,18 +326,17 @@ contains
     ! Passed variables
     type(cq_timer) :: t               ! The timer to be used
     character(len=*) :: m             ! Label for the printout
-    character(len=50) :: message      ! Label for the printout
+    ! character(len=50) :: message      ! Label for the printout
 
 !    write(unit=lun_tmr,fmt='("Time resolution = ", e18.10e2)') MPI_WTICK()
 
     if(.NOT.TimingOn) return
     if(TimersWriteOut.AND.t%t_tot > time_threshold)  then
-      message=trim(m)
       if(t%level >= 0) then             ! Print the level if assigned
         write(unit=lun_tmr,fmt='("Timing: Level ",i3," - Proc ",i6,": Time spent in ", a," = ", f12.5," s")') &
-              t%level,mynode,message, t%t_tot
+              t%level, mynode, trim(m), t%t_tot
       else
-        write(unit=lun_tmr,fmt='("Timing: Proc ",i6,": Time spent in ", a," = ", f12.5," s")') mynode, message, t%t_tot
+        write(unit=lun_tmr,fmt='("Timing: Proc ",i6,": Time spent in ", a," = ", f12.5," s")') mynode, trim(m), t%t_tot
       endif
     endif
 

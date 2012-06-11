@@ -962,7 +962,7 @@ contains
                 do nsf1 = 1,this_nsfL
                    work1(nsf1+at) = blipL_co%supp_func(nsf1)%coefficients(l)
                 enddo
-                !if((abs(dx)>very_small).AND.(abs(dy)>very_small).AND.(abs(dz)>very_small)) then
+                !if((abs(dx)>RD_ERR).AND.(abs(dy)>RD_ERR).AND.(abs(dz)>RD_ERR)) then
                 at = (((iz+offset)*blip_info(specj)%OneArraySize + (iy+offset))*blip_info(specj)%OneArraySize + &
                      (ix+offset)) * this_nsfR
                 do nsf2 =1,this_nsfR

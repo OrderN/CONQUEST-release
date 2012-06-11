@@ -608,7 +608,7 @@ contains
 
                             !write(51,*) 'Pseudo: ',igrid,r_from_i,j,a * r1 + b * r2 + c * r3 + d * r4
                             pseudopotential(igrid) =  pseudopotential(igrid)  + a * r1 + b * r2 + c * r3 + d * r4
-                            !if(r_from_i>very_small) then
+                            !if(r_from_i>RD_ERR) then
                             !   pseudopotential(igrid) = pseudopotential(igrid) + &
                             !        pseudo(the_species)%zval * derf(sqrt(pseudo(the_species)%alpha)*r_from_i)/r_from_i
                             !else
@@ -721,7 +721,7 @@ contains
                             if(the_l > 0) then
                                nl_potential= nl_potential *  r_from_i**(real(the_l,double))
                             endif
-                            ! for r_from_i < very_small
+                            ! for r_from_i < RD_ERR
                             !   x, y, z are set to be 0 in check_block
                              
                             !RC putting in call for alternative Y_lm's here
@@ -1289,7 +1289,7 @@ contains
                             !   d(chi_ln(r))/dr = r**l d(chi_ln(r)/r**l)/dr + 
                             !                      l*r**(l-1) (chi_ln(r)/r**l)
 
-                            if(r_from_i > very_small) then
+                            if(r_from_i > RD_ERR) then
                                !OLD if(the_l == 1) then
                                !OLD    nl_potential_derivative = r_from_i * nl_potential_derivative &
                                !OLD         + nl_potential
@@ -1305,7 +1305,7 @@ contains
                             else
                                nl_potential_derivative = zero
                                nl_potential= zero   !!   03032003TM
-                               r_from_i = very_small
+                               r_from_i = RD_ERR
                             endif
                             
                             !RC putting in call to new spherical harmonic scheme here;
@@ -1598,24 +1598,36 @@ contains
           call calc_energy_shift(pseudo(ispecies),nfac2, eshift2, vlocG0_2)
           call calc_energy_shift(pseudo(ispecies),nfac3, eshift3, vlocG0_3)
           !if(abs(eshift2-eshift3) > eps) write(io_lun,fmt='(10x,"WARNING!!!   eshift")')
-          if(inode == ionode.AND.iprint_pseudo>0) &
-               write(io_lun,fmt="(10x,'ispecies = ',i2,2x,'eshift for ',3i3,&
-               &' times fine mesh = ',3d15.7,3x,' diff = ',d15.5)") ispecies,nfac1, nfac2, nfac3,&
-               eshift1,eshift2,eshift3, eshift2-eshift3
-          if(inode == ionode.AND.iprint_pseudo>0) &
-               write(io_lun,fmt="(10x,'ispecies = ',i2,2x,'eshift for ',3i3,&
-               &' times fine mesh = ',3d15.7,3x,' diff = ',d15.5)") ispecies,nfac1, nfac2, nfac3,&
-               vlocG0_1,vlocG0_2,vlocG0_3, vlocG0_2-vlocG0_3
+          if(inode == ionode.AND.iprint_pseudo>0) then
+             write (io_lun, &
+                    '(10x,a11,i2,a12,3i3,a19,d15.7,/,63x,d15.7,/,63x,d15.7)') &
+                   'ispecies = ', ispecies, '  eshift for', &
+                   nfac1, nfac2, nfac3, ' times fine mesh = ', &
+                   eshift1, eshift2, eshift3
+             write (io_lun,'(55x,a8,d15.7)') ' diff = ', eshift2 - eshift3
+          end if
+          if(inode == ionode.AND.iprint_pseudo>0) then
+             write (io_lun, &
+                    '(10x,a11,i2,a12,3i3,a19,d15.7,/,63x,d15.7,/,63x,d15.7)') &
+                   'ispecies = ', ispecies, '  eshift for', &
+                   nfac1, nfac2, nfac3, ' times fine mesh = ', &
+                   vlocG0_1, vlocG0_2, vlocG0_3
+             write (io_lun,'(55x,a8,d15.7)') ' diff = ', vlocG0_2 - vlocG0_3
+          end if
           eshift(ispecies) = eshift3 - vlocG0_3
        else
           call calc_energy_shift(pseudo(ispecies),nfac1, eshift1)
           call calc_energy_shift(pseudo(ispecies),nfac2, eshift2)
           call calc_energy_shift(pseudo(ispecies),nfac3, eshift3)
           !if(abs(eshift2-eshift3) > eps) write(io_lun,fmt='(10x,"WARNING!!!   eshift")')
-          if(inode == ionode.AND.iprint_pseudo>0) &
-               write(io_lun,fmt="(10x,'ispecies = ',i2,2x,'eshift for ',3i3,&
-               &' times fine mesh = ',3d15.7,3x,' diff = ',d15.5)") ispecies,nfac1, nfac2, nfac3,&
-               eshift1,eshift2,eshift3, eshift2-eshift3
+          if(inode == ionode.AND.iprint_pseudo>0) then
+             write (io_lun, &
+                    '(10x,a11,i2,a12,3i3,a19,d15.7,/,63x,d15.7,/,63x,d15.7)') &
+                   'ispecies = ', ispecies, '  eshift for', &
+                   nfac1, nfac2, nfac3, ' times fine mesh = ', &
+                   eshift1, eshift2, eshift3
+             write (io_lun,'(55x,a8,d15.7)') ' diff = ', eshift2 - eshift3
+          end if
           eshift(ispecies) = eshift3
        end if
      endif ! (type_species(ispecies) > 0) 
@@ -1751,7 +1763,7 @@ contains
                vlocal = pseudo%vlocal%f(imesh_rr)
             endif
             ! We need to scale by r
-            if(rr > very_small) then
+            if(rr > RD_ERR) then
                vlocal = vlocal*rr
             else
                vlocal=zero
@@ -1864,7 +1876,7 @@ contains
                   vlocal = vlocal + func2%f(imesh_int) *rr * wos(imesh_int)
                endif
             enddo
-            !if(rr>very_small) then
+            !if(rr>RD_ERR) then
             !   write(51,*) rr,vlocal/rr
             !else
             !   write(51,*) rr,func2%f(1)*wos(1)
@@ -2018,13 +2030,13 @@ contains
                 r_from_i = sqrt( r2 )
 
                 ! direction cosines needed for spher harms
-                if ( r_from_i > very_small ) then
+                if ( r_from_i > RD_ERR ) then
                    x = rx / r_from_i
                    y = ry / r_from_i
                    z = rz / r_from_i
                 else
                    x = zero ; y = zero ; z = zero
-                   !!   r_from_i = very_small !!   04/07/2002 TM
+                   !!   r_from_i = RD_ERR !!   04/07/2002 TM
                 end if
                 ip_store(npoint)=ipoint
                 r_store(npoint)=r_from_i

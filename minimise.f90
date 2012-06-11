@@ -92,6 +92,10 @@ contains
   !!    Removed redundant parameter number_of_bands
   !!   2012/03/26 L.Tong
   !!   - Removed redundant input parameter real(double) mu
+  !!   2012/04/29 L.Tong
+  !!   - Added calculations for vdWDF xc-energy correction
+  !!   2012/05/29 L.Tong
+  !!   - Added timer for vdWDFT energy correction
   !!  SOURCE
   !!
   subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -105,13 +109,16 @@ contains
     use global_module,     only: flag_vary_basis,                      &
                                  flag_self_consistent, flag_basis_set, &
                                  blips, PAOs, IPRINT_TIME_THRES1,      &
-                                 runtype
-    use energy,            only: get_energy
+                                 runtype, flag_vdWDFT, io_lun
+    use energy,            only: get_energy, xc_energy
     use GenComms,          only: cq_abort, inode, ionode
     use blip_minimisation, only: vary_support
     use pao_minimisation,  only: vary_pao, pulay_min_pao
     use timer_module
     use input_module,      only: leqi
+    use vdWDFT_module,     only: vdWXC_energy, vdWXC_energy_slow
+    use density_module,    only: density
+    use units
 
     implicit none
 
@@ -124,7 +131,12 @@ contains
 
     ! Local variables
     logical        :: reset_L
-    type(cq_timer) :: tmr_l_energy, tmr_l_force
+    type(cq_timer) :: tmr_l_energy, tmr_l_force, tmr_vdW
+    real(double)   :: vdW_energy_correction, vdW_xc_energy
+
+! LT_debug 2012/04/30 begin
+!    logical :: flag_vdWDFT_slow
+! LT_debug 2012/04/30 end 
 
     call start_timer(tmr_std_eminimisation)
     ! reset_L = .true.  ! changed by TM, Aug 2008 
@@ -167,6 +179,47 @@ contains
                       ionode, reset_L, .false.)
        call get_energy(total_energy)
     end if
+    ! calculate vdW energy correction to xc energy
+    if (flag_vdWDFT) then
+       call get_energy(total_energy)
+       if (inode == ionode) &
+            write (io_lun, '(/,10x,a,/)') &
+                   'Calculating van der Waals correction...'
+       call start_timer(tmr_vdW, WITH_LEVEL)
+       call vdWXC_energy(density, vdW_xc_energy)
+       vdW_energy_correction = vdW_xc_energy - xc_energy
+       call stop_print_timer(tmr_vdW, "calculating vdW energy correction", &
+                             IPRINT_TIME_THRES1)
+       if (inode == ionode) then
+          write (io_lun, '(10x,a,f25.15," ",a2)') &
+                'van der Waals correction to XC-energy : ', &
+                vdW_energy_correction * en_conv, en_units(energy_units)
+          write (io_lun, '(10x,a,f25.15," ",a2)') &
+                'Harris-Foulkes Energy after vdW correction : ', &
+                (total_energy + vdW_energy_correction) * en_conv, &
+                en_units(energy_units)
+       end if
+! LT_debug 2012/04/30 begin
+!        flag_vdWDFT_slow = .false.
+!        if (flag_vdWDFT_slow) then
+!           if (inode == ionode) &
+!                write (io_lun, '(/,8x,a,/)') &
+!                      'Calculating van der Waals correction the slow way...'
+!           call vdWXC_energy_slow(density, vdW_xc_energy)
+!           vdW_energy_correction = vdW_xc_energy - xc_energy
+!           if (inode == ionode) then
+!              write (io_lun, '(10x,a,f25.15," ",a2)') &
+!                    'van der Waals correction to XC-energy : ', &
+!                    vdW_energy_correction * en_conv, en_units(energy_units)
+!              write (io_lun, '(10x,a,f25.15," ",a2)') &
+!                    'Harris-Foulkes Energy after vdW correction : ', &
+!                    (total_energy + vdW_energy_correction) * en_conv, &
+!                    en_units(energy_units)
+!           end if
+!        end if 
+! LT_debug 2012/04/30 end 
+    end if
+
     call stop_print_timer(tmr_l_energy, "calculating ENERGY", &
                           IPRINT_TIME_THRES1)
     if (atomch_output) call get_atomic_charge()

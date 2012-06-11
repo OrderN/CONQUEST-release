@@ -22,10 +22,10 @@
 !!    density_read_module.f90
 !!   14/08/2002 drb and mjg
 !!    changed naba table to supp from proj and added header
-!!   15:21, 25/09/2002 mjg & drb 
+!!   15:21, 25/09/2002 mjg & drb
 !!    Tidied and updated to use dens tables from set_blipgrid, and
 !!    changed to linear interpolation (for now)
-!!   15:25, 27/02/2003 drb & tm 
+!!   15:25, 27/02/2003 drb & tm
 !!    Added flag_no_atomic_densities
 !!   2006/03/04 09:10 dave
 !!    Added get_electronic_density
@@ -53,9 +53,15 @@
 !!    and down components, which are allocated at the start for spin
 !!    polarised calculations. For spin non-polarised calculations,
 !!    only density is allocated at the start
+!!   2012/04/21 L.Tong
+!!   - Moved get_cdft_constraint to cdft_module, since it actually
+!!     does not use variables in density module. And this removes
+!!     energy module dependence here.
+!!   2012/05/29 L.Tong
+!!   - Added subroutine for calculating electron numbers
 !!  SOURCE
 module density_module
-  
+
   use datatypes
   use global_module,          only: io_lun, iprint_SC
   use timer_stdclocks_module, only: start_timer, stop_timer, &
@@ -103,22 +109,22 @@ contains
   ! -----------------------------------------------------------
   ! Subroutine set_density
   ! -----------------------------------------------------------
-  
+
   !!****f* density_module/set_density *
   !!
-  !!  NAME 
+  !!  NAME
   !!   set_density
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Puts the local charge density on the grid points belonging
   !!   to this processor.  Based largely on the set_pseudopotential
   !!   routine from pseudopotential.module.f90
   !!  INPUTS
   !! (none)
-  !! 
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   L.K.Dash
   !!  CREATION DATE
@@ -128,7 +134,7 @@ contains
   !!    Changed naba table to be use table based on support region radius
   !!   08:14, 2003/03/19 dave
   !!    Tidied and re-instated splint call
-  !!   11:50, 30/09/2003 drb 
+  !!   11:50, 30/09/2003 drb
   !!    Added entry print statement
   !!   2004/10/29 drb
   !!    Bug fix for species
@@ -141,7 +147,7 @@ contains
   !!    - Added spin polarisation
   !!    - For fixed spin case the densities are renormalised to give the
   !!      spin populations, which sums to give total electrons in cell
-  !!    - For variable spin case the densities are renormalised to give the 
+  !!    - For variable spin case the densities are renormalised to give the
   !!      total electrons in cell
   !!   2012/03/13 L.Tong
   !!    - Rewriting spin implementation. Now the spin non-polarised
@@ -192,7 +198,7 @@ contains
 
     ! logical flag to warn if splint routine called out of the
     ! tabulated range.
-    logical :: range_flag 
+    logical :: range_flag
 
     if (inode == ionode .and. iprint_SC >= 2) &
          write (io_lun, fmt='(2x,"Entering set_density")')
@@ -203,7 +209,7 @@ contains
     density = zero
     !write(io_lun,*) 'Size of density: ',size(density)
     !call scal(n_my_grid_points,zero,density,1)
-    
+
     ! determine the block and grid spacing
     dcellx_block = rcellx / blocks%ngcellx
     dcelly_block = rcelly / blocks%ngcelly
@@ -211,9 +217,9 @@ contains
     dcellx_grid = dcellx_block / nx_in_block
     dcelly_grid = dcelly_block / ny_in_block
     dcellz_grid = dcellz_block / nz_in_block
-    
+
     ! loop around grid points in this domain, and for each
-    ! point, get contributions to the charge density from atoms which are 
+    ! point, get contributions to the charge density from atoms which are
     ! within the cutoff distance to that grid point
 
     call my_barrier()
@@ -230,7 +236,7 @@ contains
           ! loop over neighbour partitions of this block
           do ipart = 1, naba_atm(dens)%no_of_part(iblock)
              jpart = naba_atm(dens)%list_part(ipart,iblock)
-             if (jpart > DCS_parts%mx_gcover) then 
+             if (jpart > DCS_parts%mx_gcover) then
                 call cq_abort('set_ps: JPART ERROR ', ipart, jpart)
              endif
              ind_part = DCS_parts%lab_cell(jpart)
@@ -323,9 +329,9 @@ contains
           end do ! end loop over partitions
        end if ! end if there are neighbour atoms
     end do ! end loop over blocks
-    
+
     ! renormalise density
-    if (nspin == 1 .or. flag_fix_spin_population) then
+    ! if (nspin == 1 .or. flag_fix_spin_population) then
        do spin = 1, nspin
           ! integrate the density in spin channel
           local_density = zero
@@ -342,38 +348,38 @@ contains
                fmt='(10x,"In set_density, electrons (spin=",i1,"): ",f20.12)') &
                spin, density_scale(spin) * local_density
        end do ! spin
-    else ! for variable spin
-       local_density = zero
-       do spin = 1, nspin
-          do iz = 1, n_my_grid_points
-             local_density = local_density + spin_factor * density(iz,spin)
-          end do
-       end do
-       local_density = local_density * grid_point_volume
-       call gsum (local_density)
-       ! Correct electron density
-       do spin = 1, nspin
-          density_scale(spin) = ne_in_cell / local_density
-          density(:,spin) = density_scale(spin) * density(:,spin)
-       end do
-       
-       if (iprint_SC > 0) then
-          do spin = 1, nspin
-             local_density = zero
-             do iz = 1, n_my_grid_points
-                local_density = local_density + &
-                                density(iz,spin) * grid_point_volume
-             end do
-             call gsum(local_density)
-             if (inode == ionode) &
-                  write (io_lun, &
-                         '(10x,"In set_density, electrons &
-                          &for spin=",i1," : ",f20.12)') &
-                        spin, local_density
-          end do ! spin
-       end if
-    end if ! (nspin == 1 .or. flag_fix_spin_population)
-    
+    ! else ! for variable spin
+    !    local_density = zero
+    !    do spin = 1, nspin
+    !       do iz = 1, n_my_grid_points
+    !          local_density = local_density + spin_factor * density(iz,spin)
+    !       end do
+    !    end do
+    !    local_density = local_density * grid_point_volume
+    !    call gsum (local_density)
+    !    ! Correct electron density
+    !    do spin = 1, nspin
+    !       density_scale(spin) = ne_in_cell / local_density
+    !       density(:,spin) = density_scale(spin) * density(:,spin)
+    !    end do
+
+    !    if (iprint_SC > 0) then
+    !       do spin = 1, nspin
+    !          local_density = zero
+    !          do iz = 1, n_my_grid_points
+    !             local_density = local_density + &
+    !                             density(iz,spin) * grid_point_volume
+    !          end do
+    !          call gsum(local_density)
+    !          if (inode == ionode) &
+    !               write (io_lun, &
+    !                      '(10x,"In set_density, electrons &
+    !                       &for spin=",i1," : ",f20.12)') &
+    !                     spin, local_density
+    !       end do ! spin
+    !    end if
+    ! end if ! (nspin == 1 .or. flag_fix_spin_population)
+
     call my_barrier()
     call stop_print_timer(tmr_l_tmp1, "set_density", IPRINT_TIME_THRES3)
     call stop_timer(tmr_std_chargescf)
@@ -384,13 +390,13 @@ contains
   ! -----------------------------------------------------------
   ! Subroutine set_density_pcc
   ! -----------------------------------------------------------
-  
+
   !!****f* density_module/set_densityi_pcc *
   !!
-  !!  NAME 
+  !!  NAME
   !!   set_density_pcc
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Puts the P.C.C. charge density on the grid points belonging
   !!   to this processor.  Based largely on the set_pseudopotential
@@ -398,9 +404,9 @@ contains
   !!   This subroutine is based upon sbrt: set_density.
   !!  INPUTS
   !! (none)
-  !! 
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   M.Arita
   !!  CREATION DATE
@@ -456,14 +462,14 @@ contains
     density_pcc = zero  ! initialize density
     ! write(io_lun,*) 'Size of density: ',size(density)
     ! call scal(n_my_grid_points,zero,density,1)
-    
+
     ! determine the block and grid spacing
     dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
     dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
     dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nz_in_block
 
     ! loop around grid points in this domain, and for each
-    ! point, get contributions to the charge density from atoms which are 
+    ! point, get contributions to the charge density from atoms which are
     ! within the cutoff distance to that grid point
 
     call my_barrier()
@@ -479,7 +485,7 @@ contains
           ! loop over neighbour partitions of this block
           do ipart=1,naba_atm(dens)%no_of_part(iblock)   !for now, dens is used even for P.C.C.
              jpart=naba_atm(dens)%list_part(ipart,iblock)
-             if(jpart > DCS_parts%mx_gcover) then 
+             if(jpart > DCS_parts%mx_gcover) then
                 call cq_abort('set_ps: JPART ERROR ',ipart,jpart)
              endif
              ind_part=DCS_parts%lab_cell(jpart)
@@ -570,7 +576,7 @@ contains
              enddo ! end loop over atoms in this partition
           enddo ! end loop over partitions
        endif ! end if there are neighbour atoms
-    enddo ! end loop over blocks    
+    enddo ! end loop over blocks
     ! local_density = zero
     ! do iz=1,n_my_grid_points
     !   local_density = local_density + density(iz)
@@ -595,20 +601,20 @@ contains
   ! -----------------------------------------------------------
   ! Subroutine get_electronic_density
   ! -----------------------------------------------------------
-  
+
   !!****f* density_module/get_electronic_density *
   !!
-  !!  NAME 
+  !!  NAME
   !!   get_electronic_density
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Gets electronic density on grid
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   E.H.Hernandez
   !!  CREATION DATE
@@ -620,15 +626,15 @@ contains
   !!    Converted to F90 and ROBODoc and reduced passed variables
   !!   11/06/2001 dave
   !!    Added RCS Id and Log tags and GenComms dependence
-  !!   15:00, 12/03/2003 drb 
+  !!   15:00, 12/03/2003 drb
   !!    Removed reference to workspace module
-  !!   14:40, 29/07/2003 drb 
+  !!   14:40, 29/07/2003 drb
   !!    Changed density = 0 to density = 0.0_double
   !!   13:53, 2003/09/22 dave
   !!    Removed references to old variables MAX_?_ELEMENTS
-  !!   11:57, 30/09/2003 drb 
+  !!   11:57, 30/09/2003 drb
   !!    Added print statement on entry
-  !!   10:09, 13/02/2006 drb 
+  !!   10:09, 13/02/2006 drb
   !!    Removed all explicit references to data_ variables and rewrote
   !!    in terms of new matrix routines
   !!   2006/03/04 09:08 dave
@@ -642,7 +648,7 @@ contains
   !!    as test for present (spin), this will give a segmentation fault
   !!    if spin is not present with some compilers. Moved the spin == 2
   !!    conditional inside the present (spin) conditional
-  !!   2011/08/25 L.Tong 
+  !!   2011/08/25 L.Tong
   !!    Removed the dependence on global module variable
   !!    flag_spin_polarisation, and uses present (spin) to determine if
   !!    we are in spin polarisation mode.
@@ -662,11 +668,11 @@ contains
                                     support_K, inode, ionode, size)
 
     use datatypes
+    use numbers
     use GenBlas,                     only: scal, rsum
-    use numbers,                     only: zero, very_small, two
     use mult_module,                 only: matK
     use dimens,                      only: n_my_grid_points, grid_point_volume
-    use block_module,                only: n_pts_in_block 
+    use block_module,                only: n_pts_in_block
     use set_bucket_module,           only: rem_bucket, sf_H_sf_rem
     use calc_matrix_elements_module, only: act_on_vectors_new
     use primary_module,              only: domain
@@ -721,15 +727,15 @@ contains
              end do
           end if !(naba_atm(sf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
        end do ! blk
-       
+
        ! FOR DEBUGGING   T. MIYAZAKI 30/Jun/2003
        !do n=1, size
-       !   if (denout(n,spin) < -very_small) then
+       !   if (denout(n,spin) < -RD_ERR) then
        !      write(io_lun,*) ' WARNING!!!   density < 0 ',n, size, denout(n,spin)
        !   endif
        !enddo
        ! FOR DEBUGGING   T. MIYAZAKI 30/Jun/2003
-       
+
        ! and calculate the electron number, note in the spin_polarised case
        ! the electrons corresponds to the number of electrons corresponding
        ! to different spin components. In the spin non-polarised form electrons
@@ -737,20 +743,20 @@ contains
        electrons(spin) = grid_point_volume * &
                          rsum(n_my_grid_points, denout(:,spin), 1)
        call gsum(electrons(spin))
-       
+
        if (inode == ionode .and. iprint_SC > 1) &
             write (io_lun, '(2x,"Electrons (spin=",i1,"): ",f25.15)') &
                   spin, electrons(spin)
     end do ! spin
-    
+
     if (flag_Becke_weights) &
          call build_Becke_charges(atomcharge, denout, size)
-       
+
     ! support_K is using the same memory as h_on_support, (in other
     ! words we are using h_on_support as temorary storage), so lets be
     ! safe and set it back to zero
     gridfunctions(support_K)%griddata = zero
-    
+
     call stop_timer(tmr_std_chargescf)
 
     return
@@ -761,20 +767,20 @@ contains
   ! -----------------------------------------------------------
   ! Subroutine build_Becke_weights
   ! -----------------------------------------------------------
-  
+
   !!****f* density_module/build_Becke_weights *
   !!
-  !!  NAME 
+  !!  NAME
   !!   build_Becke_weights
   !!  USAGE
-  !!   
+  !!
   !!  PURPOSE
   !!   Builds Becke weights on grid for atoms
   !!  INPUTS
-  !!   
-  !!   
+  !!
+  !!
   !!  USES
-  !!   
+  !!
   !!  AUTHOR
   !!   D. R. Bowler & A. M. P. Sena
   !!  CREATION DATE
@@ -783,13 +789,13 @@ contains
   !!   2011/08/03 10:44 dave
   !!    Moving all detailed cDFT work into cdft_module
   !!  SOURCE
-  !!  
+  !!
   subroutine build_Becke_weights
 
     use datatypes
     use GenBlas,             only: scal, rsum
-    use numbers,             only: zero, very_small, one, half
-    use block_module,        only: n_pts_in_block 
+    use numbers,             only: zero, RD_ERR, one, half
+    use block_module,        only: n_pts_in_block
     use primary_module,      only: domain
     use set_blipgrid_module, only: naba_atm
     use GenComms,            only: gsum, cq_abort, inode, ionode
@@ -844,7 +850,7 @@ contains
        xblock=(domain%idisp_primx(blk)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(blk)+domain%ny_origin-1)*dcelly_block
        zblock=(domain%idisp_primz(blk)+domain%nz_origin-1)*dcellz_block
-       if(naba_atm(sf)%no_of_atom(blk) > 0) then  
+       if(naba_atm(sf)%no_of_atom(blk) > 0) then
           allocate(xatom(naba_atm(sf)%no_of_atom(blk)), &
                yatom(naba_atm(sf)%no_of_atom(blk)), &
                zatom(naba_atm(sf)%no_of_atom(blk)), rcut(naba_atm(sf)%&
@@ -865,7 +871,7 @@ contains
           at = 0
           do ipart=1,naba_atm(sf)%no_of_part(blk)
              jpart=naba_atm(sf)%list_part(ipart,blk)
-             if(jpart > DCS_parts%mx_gcover) then 
+             if(jpart > DCS_parts%mx_gcover) then
                 call cq_abort('build_Becke_weights: JPART ERROR ',ipart,jpart)
              endif
              ind_part=DCS_parts%lab_cell(jpart)
@@ -982,44 +988,44 @@ contains
   ! -----------------------------------------------------------
   ! Subroutine build_Becke_weight_forces
   ! -----------------------------------------------------------
-  
+
   !!****f* density_module/build_Becke_weight_forces *
   !!
-  !!  NAME 
+  !!  NAME
   !!   build_Becke_weight_forces
   !!  USAGE
-  !!   
+  !!
   !!  PURPOSE
   !!   Builds contributions to forces from cDFT using Becke weights
   !!  INPUTS
-  !!   
-  !!   
+  !!
+  !!
   !!  USES
-  !!   
+  !!
   !!  AUTHOR
   !!   D. R. Bowler and A. M. P. Sena
   !!  CREATION DATE
   !!   2009
   !!  MODIFICATION HISTORY
   !!    2011/05/20 L.Tong
-  !!      * Removed input chden and size, redundant, as the density data is 
-  !!        read from the module variable density.  
+  !!      * Removed input chden and size, redundant, as the density data is
+  !!        read from the module variable density.
   !!      * Added correction for spin polarisation: for spin polarisation
-  !!      density is contribution from spin up and density_dn is contribution 
-  !!      from spin down and hence elec_here should be the sum of both 
-  !!      spin components. 
+  !!      density is contribution from spin up and density_dn is contribution
+  !!      from spin down and hence elec_here should be the sum of both
+  !!      spin components.
   !!   2011/10/06 13:58 dave
   !!    Completed correct force form
   !!   2012/03/13 L.Tong
   !!    Rewrote spin implementation
   !!  SOURCE
-  !!  
+  !!
   subroutine build_Becke_weight_forces(weight_force)
 
     use datatypes
     use GenBlas,             only: scal, rsum
-    use numbers,             only: zero, very_small, two, one, half
-    use block_module,        only: n_pts_in_block 
+    use numbers,             only: zero, RD_ERR, two, one, half
+    use block_module,        only: n_pts_in_block
     use primary_module,      only: domain
     use set_blipgrid_module, only: naba_atm
     use GenComms,            only: gsum, cq_abort, inode, ionode
@@ -1058,7 +1064,7 @@ contains
     real(double), dimension(:,:), allocatable :: r_store, x_store,     &
                                                  y_store, z_store
     real(double), dimension(:),   allocatable :: sum0x, sum0y, sum0z
-    
+
 
 
     call start_timer(tmr_std_chargescf)
@@ -1074,7 +1080,7 @@ contains
        xblock = (domain%idisp_primx(blk) + domain%nx_origin-1) * dcellx_block
        yblock = (domain%idisp_primy(blk) + domain%ny_origin-1) * dcelly_block
        zblock = (domain%idisp_primz(blk) + domain%nz_origin-1) * dcellz_block
-       if (naba_atm(sf)%no_of_atom(blk) > 0) then  
+       if (naba_atm(sf)%no_of_atom(blk) > 0) then
           allocate(xatom(naba_atm(sf)%no_of_atom(blk)),                   &
                    yatom(naba_atm(sf)%no_of_atom(blk)),                   &
                    zatom(naba_atm(sf)%no_of_atom(blk)),                   &
@@ -1099,7 +1105,7 @@ contains
              at = 0
              do ipart = 1, naba_atm(sf)%no_of_part(blk)
                 jpart = naba_atm(sf)%list_part(ipart,blk)
-                if (jpart > DCS_parts%mx_gcover) then 
+                if (jpart > DCS_parts%mx_gcover) then
                    call cq_abort('build_Becke_weight_forces: JPART ERROR ', &
                                  ipart, jpart)
                 endif
@@ -1169,8 +1175,8 @@ contains
                             if (atomj /= atomi) then
                                jpos = no_of_ib_ia + n_pts_in_block*(atomj-1)
                                if (ip_store(point,atomj) > 0) then
-                                  if (abs (bw(jpos+point) - one) < 1.0e-8_double .or. &
-                                      abs (bw(jpos+point)) < 1.0e-8_double) then
+                                  if (abs(bw(jpos+point)-one) < 1.0e-8_double .or. &
+                                      abs(bw(jpos+point))<1.0e-8_double) then
                                      sum0x(atomj) = zero
                                      sum0y(atomj) = zero
                                      sum0z(atomj) = zero
@@ -1322,33 +1328,33 @@ contains
     call gsum(weight_force, 3, ni_in_cell)
     return
   end subroutine build_Becke_weight_forces
-!!***
+  !!***
 
   ! -----------------------------------------------------------
   ! Subroutine build_Becke_weight_matrix
   ! -----------------------------------------------------------
-  
+
   !!****f* density_module/build_Becke_weight_matrix *
   !!
-  !!  NAME 
+  !!  NAME
   !!   build_Becke_weight_matrix
   !!  USAGE
-  !!   
+  !!
   !!  PURPOSE
   !!   Builds cDFT weight matrix for constrained atoms using Becke weights
   !!  INPUTS
-  !!   
-  !!   
+  !!
+  !!
   !!  USES
-  !!   
+  !!
   !!  AUTHOR
   !!   D. R. Bowler and A. M. P. Sena
   !!  CREATION DATE
   !!   2009
   !!  MODIFICATION HISTORY
-  !!  
+  !!
   !!  SOURCE
-  !!  
+  !!
   subroutine build_Becke_weight_matrix(matWc, ngroups)
 
     use datatypes
@@ -1399,92 +1405,23 @@ contains
   end subroutine build_Becke_weight_matrix
   !!***
 
-
-  ! -----------------------------------------------------------
-  ! Subroutine get_cdft_constraint
-  ! -----------------------------------------------------------
-  
-  !!****f* density_module/get_cdft_constraint *
-  !!
-  !!  NAME 
-  !!   get_cdft_constraint
-  !!  USAGE
-  !!   
-  !!  PURPOSE
-  !!   Gets constraint for cDFT
-  !!  INPUTS
-  !!   
-  !!   
-  !!  USES
-  !!   
-  !!  AUTHOR
-  !!   DRB and Alex Sena
-  !!  CREATION DATE
-  !!   2009
-  !!  MODIFICATION HISTORY
-  !!   2011/08 and 2011/09
-  !!    Incorporated into new trunk
-  !!   2011/12/10 L.Tong
-  !!    Removed redundant dependence on matHzero from cdft_data module
-  !!   2012/03/13 L.Tong
-  !!    Added spin polarisation
-  !!  SOURCE
-  !!  
-  subroutine get_cdft_constraint
-
-    use numbers
-    use mult_module,   only: matH, matK, matrix_sum,               &
-                             matrix_product_trace
-    use cdft_data,     only: cDFT_Type, cDFT_Fix_Charge,           &
-                             cDFT_Fix_ChargeDifference,            &
-                             cDFT_NumberAtomGroups, cDFT_W, matWc, &
-                             cDFT_Target, cDFT_Vc
-    use energy,        only: cdft_energy
-    use GenComms,      only: inode, ionode
-    use global_module, only: nspin, spin_factor
-
-    implicit none
-
-    integer :: i, spin
-
-    cdft_energy = zero
-    if (cDFT_Type == cDFT_Fix_Charge .or. &
-         cDFT_Type == cDFT_Fix_ChargeDifference) then
-       do i = 1, cDFT_NumberAtomGroups
-          cDFT_W(i) = zero
-          do spin = 1, nspin
-             cDFT_W(i) = cDFT_W(i) + spin_factor * &
-                         matrix_product_trace(matK(spin), matWc(i)) - &
-                         cDFT_Target(i)
-          end do
-          cdft_energy = cdft_energy + cDFT_Vc(i) * cDFT_W(i)
-          if (inode == ionode .and. iprint_SC > 2) &
-               write (io_lun, fmt='(4x,"Group ",i3,"Vc, W, E: ",3f20.12)') &
-               i, cDFT_Vc(i), cDFT_W(i), cDFT_Vc(i) * cDFT_W(i)
-       end do
-    end if
-    ! Other cDFT types go above
-    return
-  end subroutine get_cdft_constraint
-  !!***
-
   ! -----------------------------------------------------------
   ! Subroutine build_Becke_charges
   ! -----------------------------------------------------------
-  
+
   !!****f* density_module/build_Becke_charges *
   !!
-  !!  NAME 
+  !!  NAME
   !!   build_Becke_charges
   !!  USAGE
-  !!   
+  !!
   !!  PURPOSE
   !!   Builds Becke charges for atoms
   !!  INPUTS
-  !!   
-  !!   
+  !!
+  !!
   !!  USES
-  !!   
+  !!
   !!  AUTHOR
   !!   D. R. Bowler
   !!  CREATION DATE
@@ -1516,19 +1453,19 @@ contains
   !!      non-polarised case is treated just as the single spin up
   !!      channel in fixed spin population case.
   !!  SOURCE
-  !!  
+  !!
   subroutine build_Becke_charges(atomch, chden, size)
 
     use datatypes
     use GenComms,            only: gsum, cq_abort, inode, ionode
-    use numbers,             only: zero, very_small, two, one
+    use numbers,             only: zero, RD_ERR, two, one
     use global_module,       only: sf, ni_in_cell, id_glob, io_lun, &
                                    iprint_SC, nspin
     use primary_module,      only: domain
     use set_blipgrid_module, only: naba_atm
     use cover_module,        only: DCS_parts
     use dimens,              only: grid_point_volume
-    use block_module,        only: n_pts_in_block 
+    use block_module,        only: n_pts_in_block
     use group_module,        only: parts
 
     implicit none
@@ -1547,11 +1484,11 @@ contains
     atomch = zero
     no_of_ib_ia = 0
     do blk = 1, domain%groups_on_node
-       if (naba_atm(sf)%no_of_atom(blk) > 0) then  
+       if (naba_atm(sf)%no_of_atom(blk) > 0) then
           at = 0
           do ipart = 1, naba_atm(sf)%no_of_part(blk)
              jpart = naba_atm(sf)%list_part(ipart, blk)
-             if (jpart > DCS_parts%mx_gcover) then 
+             if (jpart > DCS_parts%mx_gcover) then
                 call cq_abort('PAO_to_grid_global: JPART ERROR ', &
                               ipart, jpart)
              endif
@@ -1589,37 +1526,36 @@ contains
           end do
        end if
     end do ! spin
-    
+
     return
   end subroutine build_Becke_charges
   !!***
-  
 
-! -----------------------------------------------------------
-! Function s
-! -----------------------------------------------------------
+  ! -----------------------------------------------------------
+  ! Function s
+  ! -----------------------------------------------------------
 
-!!****f* density_module/s *
-!!
-!!  NAME 
-!!   s
-!!  USAGE
-!!   
-!!  PURPOSE
-!!   Calculates s function for Becke weights
-!!  INPUTS
-!!   
-!!   
-!!  USES
-!!   
-!!  AUTHOR
-!!   D. R. Bowler
-!!  CREATION DATE
-!!   2009
-!!  MODIFICATION HISTORY
-!!  
-!!  SOURCE
-!!  
+  !!****f* density_module/s *
+  !!
+  !!  NAME
+  !!   s
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Calculates s function for Becke weights
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2009
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
   real(double) function s(mu)
 
     use numbers, only: zero, half, one
@@ -1643,36 +1579,36 @@ contains
        s = half*(one -  mua*(c1 - mua2*(c3 - mua2*(c5 - c7*mua2))))
     end if
   end function s
- !!***
-   
-! -----------------------------------------------------------
-! Function t
-! -----------------------------------------------------------
+  !!***
 
-!!****f* density_module/t *
-!!
-!!  NAME 
-!!   t
-!!  USAGE
-!!   
-!!  PURPOSE
-!!   Calculates t function for Becke weights
-!!  INPUTS
-!!   
-!!   
-!!  USES
-!!   
-!!  AUTHOR
-!!   D. R. Bowler
-!!  CREATION DATE
-!!   2009
-!!  MODIFICATION HISTORY
-!!  
-!!  SOURCE
-!!  
- real(double) function t(mu)
+  ! -----------------------------------------------------------
+  ! Function t
+  ! -----------------------------------------------------------
 
-    use numbers, only: zero, half, one, three, five, seven, very_small
+  !!****f* density_module/t *
+  !!
+  !!  NAME
+  !!   t
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Calculates t function for Becke weights
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2009
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  real(double) function t(mu)
+
+    use numbers, only: zero, half, one, three, five, seven, RD_ERR
 
     implicit none
 
@@ -1691,9 +1627,10 @@ contains
     else
        mua = mu/a
        mua2 = mua*mua
-       t = -half*(reca*c1 - mua2*(three*reca*c3 - mua2*(five*reca*c5 - seven*reca*c7*mua2)))
+       t = -half*(reca*c1 - mua2*(three*reca*c3 -&
+           mua2*(five*reca*c5 - seven*reca*c7*mua2)))
        s = half*(one -  mua*(c1 - mua2*(c3 - mua2*(c5 - c7*mua2))))
-       !if(abs(s)<very_small) then
+       !if(abs(s)<RD_ERR) then
        !   write(io_lun,fmt='(2x,"Warning: s too small in t(mu)",2f12.5)') s,mu
        !   t = zero
        !else
@@ -1701,24 +1638,25 @@ contains
        !end if
     end if
   end function t
-!!***
+  !!***
 
 
   !!****f* density_module/assign_atomic_radii *
   !!
-  !!  NAME 
+  !!  NAME
   !!   assign_atomic_radii
   !!  USAGE
-  !!   
+  !!
   !!  PURPOSE
-  !!   Assigns atomic radii; these are from J. C. Slater, J. Chem. Phys. 41, 3199 (1964)
-  !!   H altered to 0.35 A following Becke, J. Chem. Phys. 88, 2547 (1988)
-  !!   Noble gas and At, Rn, Fr radii from Dalton Trans., 2008, 2832 (we may want to use all from here ?)
+  !!   Assigns atomic radii; these are from J. C. Slater,
+  !!   J. Chem. Phys. 41, 3199 (1964) H altered to 0.35 A following
+  !!   Becke, J. Chem. Phys. 88, 2547 (1988) Noble gas and At, Rn, Fr
+  !!   radii from Dalton Trans., 2008, 2832 (we may want to use all
+  !!   from here ?)
   !!  INPUTS
-  !!   
-  !!   
+  !!
   !!  USES
-  !!   
+  !!
   !!  AUTHOR
   !!   D. R. Bowler
   !!  CREATION DATE
@@ -1727,7 +1665,7 @@ contains
   !!   2011/07/20 17:47 dave
   !!    Extended table list significantly
   !!  SOURCE
-  !!  
+  !!
   subroutine assign_atomic_radii
 
     use datatypes
@@ -1747,7 +1685,7 @@ contains
     atrad(7)=0.65_double*AngToBohr
     atrad(8)=0.60_double*AngToBohr
     atrad(9)=0.50_double*AngToBohr ! F
-    atrad(10)=0.58_double*AngToBohr 
+    atrad(10)=0.58_double*AngToBohr
 
     atrad(11)=1.80_double*AngToBohr ! Na
     atrad(12)=1.50_double*AngToBohr
@@ -1801,17 +1739,17 @@ contains
     atrad(57)=1.95_double*AngToBohr ! La
     atrad(58)=1.85_double*AngToBohr
     atrad(59)=1.85_double*AngToBohr
-    atrad(60)=1.85_double*AngToBohr 
+    atrad(60)=1.85_double*AngToBohr
     atrad(61)=1.85_double*AngToBohr
     atrad(62)=1.85_double*AngToBohr
     atrad(63)=1.85_double*AngToBohr ! Eu
-    atrad(64)=1.80_double*AngToBohr 
+    atrad(64)=1.80_double*AngToBohr
     atrad(65)=1.75_double*AngToBohr
     atrad(66)=1.75_double*AngToBohr
-    atrad(67)=1.75_double*AngToBohr 
+    atrad(67)=1.75_double*AngToBohr
     atrad(68)=1.75_double*AngToBohr
-    atrad(69)=1.75_double*AngToBohr 
-    atrad(70)=1.75_double*AngToBohr 
+    atrad(69)=1.75_double*AngToBohr
+    atrad(70)=1.75_double*AngToBohr
     atrad(71)=1.75_double*AngToBohr ! Lu
     atrad(72)=1.55_double*AngToBohr
     atrad(73)=1.45_double*AngToBohr
@@ -1820,7 +1758,7 @@ contains
     atrad(76)=1.30_double*AngToBohr
     atrad(77)=1.35_double*AngToBohr ! Ir
     atrad(78)=1.35_double*AngToBohr
-    atrad(79)=1.35_double*AngToBohr 
+    atrad(79)=1.35_double*AngToBohr
     atrad(80)=1.50_double*AngToBohr ! Hg
     atrad(81)=1.90_double*AngToBohr
     atrad(82)=1.80_double*AngToBohr
@@ -1842,67 +1780,71 @@ contains
   end subroutine assign_atomic_radii
   !!***
 
-! -----------------------------------------------------------
-! Subroutine check_block
-! -----------------------------------------------------------
+  ! -----------------------------------------------------------
+  ! Subroutine check_block
+  ! -----------------------------------------------------------
 
-!!****f* density_module/check_block *
-!!
-!!  NAME 
-!!   check_block
-!!  USAGE
-!!   
-!!  PURPOSE
-!!   Checks distances for blocks
-!!   N.B. This has been constructed for THIS MODULE and specifically
-!!   for the Becke weight scheme; the minus sign in the x, y, z below
-!!   are needed for this.
-!!  INPUTS
-!!   
-!!   
-!!  USES
-!!   
-!!  AUTHOR
-!!   TM
-!!  CREATION DATE
-!!   2005 ? 
-!!  MODIFICATION HISTORY
-!!   2011/10/06 14:00 dave
-!!    Finalising for cDFT
-!!  SOURCE
-!!  
-  subroutine check_block &
-       (xblock,yblock,zblock,xatom,yatom,zatom,rcut, &
-       npoint, ip_store, x_store, y_store, z_store, r_store,blocksize,natoms) 
+  !!****f* density_module/check_block *
+  !!
+  !!  NAME
+  !!   check_block
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Checks distances for blocks
+  !!   N.B. This has been constructed for THIS MODULE and specifically
+  !!   for the Becke weight scheme; the minus sign in the x, y, z below
+  !!   are needed for this.
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   TM
+  !!  CREATION DATE
+  !!   2005 ?
+  !!  MODIFICATION HISTORY
+  !!   2011/10/06 14:00 dave
+  !!    Finalising for cDFT
+  !!  SOURCE
+  !!
+  subroutine check_block(xblock, yblock, zblock, xatom, yatom, zatom, &
+                         rcut, npoint, ip_store, x_store, y_store,    &
+                         z_store, r_store, blocksize, natoms)
 
     use numbers
     use global_module, only: rcellx,rcelly,rcellz
     use group_module,  only: blocks
-    use block_module,  only: nx_in_block,ny_in_block,nz_in_block!, &
-!         n_pts_in_block
-
+    use block_module,  only: nx_in_block, ny_in_block, nz_in_block!, &
+    ! n_pts_in_block
 
     implicit none
-    !Passed 
+
+    ! Passed
     integer :: blocksize, natoms
-    real(double), intent(in):: xblock, yblock, zblock
-    real(double), intent(in), dimension(natoms):: xatom, yatom, zatom, rcut
+    real(double), intent(in) :: xblock, yblock, zblock
     integer, intent(out) :: npoint(natoms), ip_store(blocksize,natoms)
-    real(double), dimension(blocksize,natoms), intent(out) :: r_store, x_store, y_store, z_store
-    !Local
-    real(double):: dcellx_block,dcelly_block,dcellz_block
-    real(double):: dcellx_grid, dcelly_grid, dcellz_grid
-    real(double):: dx, dy, dz
-    integer :: ipoint, iz, iy, ix, at
-    real(double) ::  r2, r_from_i, rx, ry, rz, x, y, z, rcut2
+    real(double), dimension(natoms), intent(in)  :: &
+         xatom, yatom, zatom, rcut
+    real(double), dimension(blocksize,natoms), intent(out) :: &
+         r_store, x_store, y_store, z_store
+    ! Local
+    real(double) :: dcellx_block, dcelly_block, dcellz_block
+    real(double) :: dcellx_grid, dcelly_grid, dcellz_grid
+    real(double) :: dx, dy, dz
+    integer      :: ipoint, iz, iy, ix, at
+    real(double) :: r2, r_from_i, rx, ry, rz, x, y, z, rcut2
 
+    dcellx_block=rcellx/blocks%ngcellx
+    dcelly_block=rcelly/blocks%ngcelly
+    dcellz_block=rcellz/blocks%ngcellz
 
-    dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
-    dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
-    dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nz_in_block
+    dcellx_grid=dcellx_block/nx_in_block
+    dcelly_grid=dcelly_block/ny_in_block
+    dcellz_grid=dcellz_block/nz_in_block
 
     ! Add loop to find R_in (shortest atom-atom distance)
-
     ipoint=0
     npoint=0
     do iz=1,nz_in_block
@@ -1935,15 +1877,48 @@ contains
                    x_store(ipoint,at)=zero
                    y_store(ipoint,at)=zero
                    z_store(ipoint,at)=zero
-                endif  ! (r2 < rcut2) then
+                end if  ! (r2 < rcut2) then
              end do! at = 1,natoms
-          enddo ! ix=1,nx_in_block
-       enddo ! iy=1,ny_in_block
-    enddo ! iz=1,nz_in_block
+          end do ! ix=1,nx_in_block
+       end do ! iy=1,ny_in_block
+    end do ! iz=1,nz_in_block
     return
   end subroutine check_block
-!!***
+  !!***
 
+  !!****f* density_module/electron_number
+  !! PURPOSE
+  !!   calculates electron number. If optional spin component exsists
+  !!   then calculate the electron number of the given spin component
+  !! USAGE
+  !! INPUTS
+  !! OUTPUT
+  !! RETURN VALUE
+  !! AUTHOR
+  !!   L.Tong
+  !! CREATION DATE
+  !!   2012/05/29
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine electron_number(electrons)
+    use datatypes
+    use numbers
+    use global_module, only: nspin
+    use dimens,        only: grid_point_volume, n_my_grid_points
+    use GenComms,      only: gsum
+    use GenBlas,       only: rsum
+    implicit none
+    ! passed parameters
+    real(double), dimension(nspin), intent(out) :: electrons
+    ! local variables
+    integer :: spin
+    do spin = 1, nspin
+       electrons(spin) = grid_point_volume * &
+                         rsum(n_my_grid_points, density(:,spin), 1)
+       call gsum(electrons(spin))
+    end do
+  end subroutine electron_number
+  !!*****
+  
 end module density_module
-
-

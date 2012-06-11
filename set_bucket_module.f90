@@ -60,7 +60,7 @@ module set_bucket_module
 
   use global_module, ONLY: io_lun
   use bucket_module
-  use numbers, ONLY: very_small
+  use numbers, ONLY: RD_ERR
   use matrix_module, ONLY: matrix_halo
   use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_indexing
 
@@ -485,7 +485,7 @@ contains
     subroutine make_pair_DCSpart(loc_bucket,max_pair)
 
       use datatypes
-      use numbers,        ONLY: very_small
+      use numbers,        ONLY: RD_ERR
       use global_module,  ONLY: numprocs, id_glob, species_glob, sf, nlpf, paof
       use species_module, ONLY: nsf_species, nlpf_species, npao_species
       use group_module,   ONLY: parts
@@ -519,7 +519,7 @@ contains
       norb = 0
       !TM VARNSF: END
       rcutsq=loc_bucket%rcut*loc_bucket%rcut
-      if(rcutsq < very_small) call cq_abort('ERROR in make_pair_DCSpart : rcutsq= ',rcutsq)
+      if(rcutsq < RD_ERR) call cq_abort('ERROR in make_pair_DCSpart : rcutsq= ',rcutsq)
 
       !local bucket should identify left and right functions
       !-- Now the following two lines have already been done 
@@ -1058,7 +1058,7 @@ contains
 
       use mpi
       use datatypes 
-      use numbers, ONLY: very_small
+      use numbers, ONLY: RD_ERR
       use group_module,ONLY  :parts
       use primary_module,ONLY:bundle
       use cover_module,ONLY  :BCS_parts

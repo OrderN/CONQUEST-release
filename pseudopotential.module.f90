@@ -382,7 +382,7 @@ contains
                                !--- NONLOCAL PART START ---------
                                if((the_l >= 0).AND.(.NOT.flag_analytic_blip_int)) then  ! NONLOCAL case
                                   ! direction cosines needed for spher harms
-                                  if ( r_from_i .gt. very_small ) then
+                                  if ( r_from_i .gt. RD_ERR ) then
                                      x = rx / r_from_i
                                      y = ry / r_from_i
                                      z = rz / r_from_i
@@ -695,13 +695,13 @@ contains
                                   delta = step * ( three * b * b - one ) / six
 
                                   ! direction cosines for spherical harmonics
-                                  if ( r_from_i .gt. very_small ) then
+                                  if ( r_from_i .gt. RD_ERR ) then
                                      x = rx / r_from_i
                                      y = ry / r_from_i
                                      z = rz / r_from_i
                                   else
                                      x = zero ; y = zero ; z = zero
-                                     r_from_i = very_small
+                                     r_from_i = RD_ERR
                                   end if
 
                                   nl_potential =  &

@@ -31,17 +31,17 @@
 !!    ROBODoc header, RCS Id and Log tags and changed all stops
 !!    to cq_abort calls
 !!   06/06/2001 dave
-!!    Bug fixes - added temp_M to use matrix_data and closed 
+!!    Bug fixes - added temp_M to use matrix_data and closed
 !!    brackets on cq_abort call
 !!   08/06/2001 dave
 !!    Changed all occurences of dgsum to gsum
 !!   29/05/2002 dave
 !!    Minor changes to shift H back after DM minimisation, and to
 !!    switch between O(N) and diagonalisation
-!!   14:23, 26/02/2003 drb 
+!!   14:23, 26/02/2003 drb
 !!    Added electron number check to linear part of
 !!    correct_electron_number
-!!   16:43, 10/05/2005 dave 
+!!   16:43, 10/05/2005 dave
 !!    Various small changes throughout code: mainly bug fixes
 !!   2008/02/01 17:46 dave
 !!    Changes to write output to file not stdout
@@ -63,7 +63,7 @@ module DMMin
   real(double)      :: LinTol_DMM
   !integer, parameter :: mx_pulay = 5
   !real(double), parameter :: LinTol = 0.1_double
-  
+
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
@@ -76,19 +76,19 @@ contains
   ! -----------------------------------------------------------
   ! Subroutine FindMinDM
   ! -----------------------------------------------------------
-  
+
   !!****f* DMMin/FindMinDM *
   !!
-  !!  NAME 
+  !!  NAME
   !!   FindMinDM - control routine for energy minimisation wrt DM
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Controls the minimisation of energy with respect to the
   !!   density matrix.  Calls McWeeny for initialisation, and
   !!   early and late stage techniques for minimisation.
   !!
-  !!   If the early stage finds an inflexion during exact line 
+  !!   If the early stage finds an inflexion during exact line
   !!   minimisation, then the code immediately bounces back to
   !!   McWeeny initialisation.  If the residual increases during
   !!   GRP minimisation (which it shouldn't !) early stage is then
@@ -174,9 +174,11 @@ contains
        return
     end if
 
-    if(inode == ionode) &
-         write(io_lun,*) 'Welcome to FindDMMin, tol: ', &
-                         tolerance, n_L_iterations
+    if (inode == ionode) then
+       write (io_lun,'(1x,a,f15.10,2x,a,i5)') &
+             'Welcome to FindDMMin, tol: ', tolerance, &
+             'number of L iterations: ', n_L_iterations
+    end if
 
     problem = .false.
     inflex = .false.
@@ -193,7 +195,7 @@ contains
        call start_timer(tmr_l_iter, WITH_LEVEL)
        if (resetL .or. inflex) then ! Reset L to McW
           call InitMcW(inode, ionode)
-          call McWMin(n_L_iterations, delta_e) 
+          call McWMin(n_L_iterations, delta_e)
           early = .true.
           resetL = .false.    !2010.Nov.06 TM
        end if
@@ -236,9 +238,9 @@ contains
        call fit_coeff(PulayC, PulayBeta, PulayE, PulayR, ndone)
        if (inode == ionode) write (io_lun, 6) PulayC, PulayBeta
     end if
-    
+
     call stop_timer(tmr_std_densitymat)
-    
+
     return
 
 6   format(2x,'dE to dR parameters - C: ',f15.8,' beta: ',f15.8)
@@ -251,23 +253,23 @@ contains
   ! -----------------------------------------------------------
   ! Subroutine earlyDM
   ! -----------------------------------------------------------
-  
+
   !!****f* DMMin/earlyDM *
   !!
-  !!  NAME 
+  !!  NAME
   !!   earlyDM - early stage DM min
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Performs steepest descent minimisation of energy wrt density
   !!   matrix elements, until the change in gradient is linear in
   !!   density matrix (at which point CG or GR-Pulay - late stage in
   !!   other words) can be used
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -282,7 +284,7 @@ contains
   !!    minimisation
   !!   2004/10/28 drb
   !!    Removed shift of H
-  !!   10:09, 13/02/2006 drb 
+  !!   10:09, 13/02/2006 drb
   !!    Removed all explicit references to data_ variables and rewrote
   !!    in terms of new matrix routines
   !!   2009/07/08 16:41 dave
@@ -339,7 +341,7 @@ contains
 
     ! integer :: matM3, matSM3, matSphi, mat_temp, mat_search
     ! integer :: matM3_dn, matSM3_dn, mat_search_dn, matSphi_dn
-    ! real(double) :: energy0, energy0_up, energy0_dn 
+    ! real(double) :: energy0, energy0_up, energy0_dn
     ! real(double) :: energy1, energy1_up, energy1_dn
     ! real(double) :: electrons, electrons_up, electrons_dn
     ! real(double) :: e_dot_n, e_dot_n_up, e_dot_n_dn
@@ -349,7 +351,7 @@ contains
     ! type(cq_timer) :: tmr_l_tmp1, tmr_l_iter
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
-    
+
     ! allocate temp matrices
     do spin = 1, nspin
        matM3(spin) = allocate_temp_matrix(Lrange,0)
@@ -365,21 +367,20 @@ contains
 
     if (vary_mu) then
        call correct_electron_number(iprint_DM, inode, ionode)
-    end if    
+    end if
 
     call LNV_matrix_multiply(electrons, energy0, dontK, dontM1, &
                              dontM2, doM3, dontM4, dophi, doE,  &
                              mat_M3=matM3, mat_phi=matphi)
     electrons_tot = spin_factor * sum(electrons(:))
     energy0_tot = spin_factor * sum(energy0(:))
-    
+
     do spin = 1, nspin
        ! Pre- and post-multiply M3 by S^-1 so that it is contravariant
        call matrix_product(matT, matM3(spin), mat_temp(spin), mult(T_L_TL))
        call matrix_product(mat_temp(spin), matT, matSM3(spin), mult(TL_T_L))
        ! Project gradient perpendicular to electron gradient
        call matrix_sum(zero, mat_search(spin), -one, matSM3(spin))
-
     end do
 
     if (vary_mu) then
@@ -395,8 +396,10 @@ contains
           n_dot_n(spin) = matrix_product_trace(matSphi(spin), matphi(spin))
           n_dot_n_tot = n_dot_n_tot + spin_factor * n_dot_n(spin)
           if (inode == ionode .and. iprint_DM >= 2) then
-             write (io_lun, '(2x,"e.n (spin=",i1,") ",f25.15)') spin, e_dot_n(spin)
-             write (io_lun, '(2x,"n.n (spin=",i1,") ",f25.15)') spin, n_dot_n(spin)
+             write (io_lun, '(2x,"e.n (spin=",i1,") ",f25.15)') &
+                  spin, e_dot_n(spin)
+             write (io_lun, '(2x,"n.n (spin=",i1,") ",f25.15)') &
+                  spin, n_dot_n(spin)
           end if
        end do
        ! Correct search direction so that it is tangent to
@@ -404,36 +407,42 @@ contains
        ! one fixes spin populations or not
        ! If spin population is fixed then (x denote spin)
        !
-       !                     tr(dE/dL^x * dN/dL^x) 
+       !                     tr(dE/dL^x * dN/dL^x)
        !   G^x = - dE/dL^x + --------------------- dN/dL^x
        !                     tr(dN/dL^x * dN/dL^x)
        !
        ! If only the total electron number is fixed then
        !
-       !                       sum_x tr(dE/dL^x * dN/dL^x) 
-       !   direct_sum_factor = --------------------------- 
+       !                       sum_x tr(dE/dL^x * dN/dL^x)
+       !   direct_sum_factor = ---------------------------
        !                       sum_x tr(dN/dL_x * dN/dL^x)
        !
        !   G^x = - dE/dL^x + direct_sum_factor * dN/dL^x
        !
        if (nspin == 1 .or. flag_fix_spin_population) then
           do spin = 1, nspin
-             call matrix_sum(one, mat_search(spin), &
-                             (e_dot_n(spin)) / (n_dot_n(spin)), &
-                             matSphi(spin))
+             ! if gradient of N w.r.t. L is zero then no correction needed
+             if (abs(n_dot_n(spin)) > RD_ERR) then
+                call matrix_sum(one, mat_search(spin), &
+                                e_dot_n(spin) / n_dot_n(spin), &
+                                matSphi(spin))
+             end if
           end do
        else ! variable spin
-          direct_sum_factor = e_dot_n_tot / n_dot_n_tot
-          do spin = 1, nspin
-             call matrix_sum(one, mat_search(spin), direct_sum_factor,&
-                             matSphi(spin))
-          end do
+          ! if gradient of N w.r.t. L is zero then no correction needed
+          if (abs(n_dot_n_tot) > RD_ERR) then
+             direct_sum_factor = e_dot_n_tot / n_dot_n_tot
+             do spin = 1, nspin
+                call matrix_sum(one, mat_search(spin), direct_sum_factor,&
+                                matSphi(spin))
+             end do
+          end if
        end if ! (nspin == 1 .or. flag_fix_spin_population)
     end if ! (vary_mu)
-    
+
     call stop_print_timer(tmr_l_tmp1, "earlyDM - Preliminaries", &
                           IPRINT_TIME_THRES1)
-    
+
     !-----------!
     ! MAIN LOOP !
     !-----------!
@@ -476,12 +485,12 @@ contains
              call free_temp_matrix(matSphi(spin))
              call free_temp_matrix(matSM3(spin))
              call free_temp_matrix(matM3(spin))
-          end do  
+          end do
           call stop_print_timer(tmr_l_iter, 'an earlyDM iteration', &
                                 IPRINT_TIME_THRES1)
           return !This is a panic sign !
        end if ! inflex
-       
+
        ! Gradient after line min - assumes LVN_matrix_mult at end
        ! of lineMinL
        ! Pre- and post-multiply M3 by S^-1 so that it is
@@ -490,7 +499,7 @@ contains
           call matrix_product (matT, matM3(spin), mat_temp(spin), mult(T_L_TL))
           call matrix_product (mat_temp(spin), matT, matSM3(spin), mult(TL_T_L))
        end do
-       
+
        ! g1 = tr(matM3(L_n_iter+1) * matSM3(L_n_iter+1))
        if(flag_global_tolerance) then
           g1 = zero
@@ -506,7 +515,7 @@ contains
                   real(ni_in_cell, double)
           end do
        end if
-       
+
        ! Test for linearity or convergence
        ! zeta is returned by lineMinL
        zeta = interpG
@@ -521,7 +530,7 @@ contains
        endif
 
        ! recalculate the quantities after L_n_iter+1 is updated
-       ! 2011/08/24 L.Tong: 
+       ! 2011/08/24 L.Tong:
        !   The orignal implementation uses energy0 as input for
        !   LNV_matrix_multiply, but I think this is incorrect and
        !   should be energy1
@@ -530,7 +539,7 @@ contains
                                 mat_M3=matM3, mat_phi=matphi)
        electrons_tot = spin_factor * sum(electrons(:))
        energy1_tot = spin_factor * sum(energy1(:))
-       
+
        ! Pre- and post-multiply M3 by S^-1 so that it is contravariant
        do spin = 1, nspin
           call matrix_product(matT, matM3(spin), mat_temp(spin), mult(T_L_TL))
@@ -550,8 +559,10 @@ contains
           e_dot_n_tot = zero
           n_dot_n_tot = zero
           do spin = 1, nspin
-             call matrix_product(matT, matphi(spin), mat_temp(spin), mult(T_L_TL))
-             call matrix_product(mat_temp(spin), matT, matSphi(spin), mult(TL_T_L))
+             call matrix_product(matT, matphi(spin), mat_temp(spin), &
+                                 mult(T_L_TL))
+             call matrix_product(mat_temp(spin), matT, matSphi(spin), &
+                                 mult(TL_T_L))
              e_dot_n(spin) = matrix_product_trace(matSM3(spin), matphi(spin))
              e_dot_n_tot = e_dot_n_tot + spin_factor * e_dot_n(spin)
              n_dot_n(spin) = matrix_product_trace(matSphi(spin), matphi(spin))
@@ -559,20 +570,26 @@ contains
           end do
           if (nspin == 1 .or. flag_fix_spin_population) then
              do spin = 1, nspin
-                call matrix_sum(one, mat_search(spin), &
-                                e_dot_n(spin) / n_dot_n(spin), &
-                                matSphi(spin))
+                ! if gradient of N w.r.t. L is zero then no correction needed
+                if (abs(n_dot_n(spin)) > RD_ERR) then
+                   call matrix_sum(one, mat_search(spin), &
+                                   e_dot_n(spin) / n_dot_n(spin), &
+                                   matSphi(spin))
+                end if
              end do
           else
-             direct_sum_factor = e_dot_n_tot / n_dot_n_tot
-             do spin = 1, nspin
-                call matrix_sum(one, mat_search(spin), &
-                                direct_sum_factor, matSphi(spin))
-             end do
+             ! if gradient of N w.r.t. L is zero then no correction needed
+             if (abs(n_dot_n_tot) > RD_ERR) then
+                direct_sum_factor = e_dot_n_tot / n_dot_n_tot
+                do spin = 1, nspin
+                   call matrix_sum(one, mat_search(spin), &
+                                   direct_sum_factor, matSphi(spin))
+                end do
+             end if
           end if
           ! Here, we can't alter M3 directly: lineMinL expects REAL gradient
        end if
-       
+
        if (flag_global_tolerance) then
           g0 = zero
           do spin = 1, nspin
@@ -593,14 +610,14 @@ contains
        PulayE(ndone + n_iter) = energy0_tot
 
        ! test if we are linear
-       if (abs (zeta) < LinTol_DMM) then
+       if (abs(zeta) < LinTol_DMM) then
           ! We're linear Added +1 to n_iter for cosmetic reasons (this
           ! is true since at this stage g0 and energy0_tot etc are already
           ! prepared for n_iter+1 step)
           if (inode == ionode .and. iprint_DM >= 1) &
                write (io_lun, 1) n_iter + 1, energy0_tot, g0
           if ((inode == ionode).and. (iprint_DM >= 2)) &
-               write (io_lun, '("Linearity satisfied - calling PulayL")') 
+               write (io_lun, '("Linearity satisfied - calling PulayL")')
           ndone = n_iter
           do spin = nspin, 1, -1
              call free_temp_matrix(mat_search(spin))
@@ -637,24 +654,24 @@ contains
   ! -----------------------------------------------------------
   ! Subroutine lateDM
   ! -----------------------------------------------------------
-  
+
   !!****f* DMMin/lateDM *
   !!
-  !!  NAME 
+  !!  NAME
   !!   lateDM
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Performs late-stage (linear) minimisation of energy wrt density
-  !!   matrix elements.  Uses the GR-Pulay scheme (described in Chem Phys Lett 
+  !!   matrix elements.  Uses the GR-Pulay scheme (described in Chem Phys Lett
   !!   325, 796 (2000)).  If the residual (given by the squared norm of the
   !!   gradient) increases, this is taken as a sign that linearity has been
   !!   broken, and the scheme exits to earlyDM
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -663,11 +680,11 @@ contains
   !!   05/06/2001 dave
   !!    Added ROBODoc header and removed stop commands (for cq_abort)
   !!   08/06/2001 dave
-  !!    Added my_barrier to GenComms use list 
+  !!    Added my_barrier to GenComms use list
   !!    Removed my_barrier call (unnecessary) and changed dgsum to gsum
   !!   2004/10/28 drb
   !!    Small tidying
-  !!   10:09, 13/02/2006 drb 
+  !!   10:09, 13/02/2006 drb
   !!    Removed all explicit references to data_ variables and rewrote
   !!    in terms of new matrix routines
   !!   2008/03/03 18:32 dave
@@ -686,7 +703,7 @@ contains
   !!
   subroutine lateDM(ndone, n_L_iterations, done, deltaE, vary_mu, &
                     inode, ionode, tolerance, record)
-    
+
     use datatypes
     use numbers
     use logicals
@@ -722,7 +739,7 @@ contains
     integer      :: n_L_iterations, inode, ionode, length, ndone
     logical      :: vary_mu, done, record
     real(double) :: tolerance, deltaE
-    
+
     ! Local variables
     integer, dimension(maxpulayDMM,nspin) :: mat_Lstore, mat_Gstore, mat_SGstore
     integer, dimension(nspin) :: matM3, matSM3, matSphi, mat_temp
@@ -742,12 +759,12 @@ contains
     integer, parameter :: mx_stuck = 5
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
-    
+
     iter_stuck = 0
 
     if (ndone > n_L_iterations) &
          call cq_abort('lateDM: too many L iterations', ndone, n_L_iterations)
-    
+
     do spin = 1, nspin
        do i = 1, maxpulayDMM
           mat_Lstore(i,spin) = allocate_temp_matrix(Lrange,0)
@@ -762,13 +779,13 @@ contains
 
     ! Update the charge density if flag is set
     if (flag_mix_L_SC_min) then
-       ! 2011/08/29 L.Tong: 
+       ! 2011/08/29 L.Tong:
        ! original also calculates matphi, (dophi), but I think
        ! this is redundant. So set dontphi. Only doK.
        call LNV_matrix_multiply(electrons, energy1, doK, dontM1, &
                                 dontM2, dontM3, dontM4, dontphi, doE)
        energy1_tot = spin_factor * sum(energy1(:))
-       
+
        ! note H_on_supportfns(1) is used just as a temp working array
        call get_electronic_density(density, electrons, supportfns, &
                                    H_on_supportfns(1), inode, ionode, &
@@ -780,7 +797,7 @@ contains
     ! and matphi
     call LNV_matrix_multiply(electrons, energy0, dontK, dontM1, &
                              dontM2, doM3, dontM4, dophi, doE,  &
-                             mat_M3=matM3, mat_phi= matphi)
+                             mat_M3=matM3, mat_phi=matphi)
     electrons_tot = spin_factor * sum(electrons)
     energy0_tot = spin_factor * sum(energy0)
 
@@ -789,7 +806,7 @@ contains
        call matrix_product(matT, matM3(spin), mat_temp(spin), mult(T_L_TL))
        call matrix_product(mat_temp(spin), matT, matSM3(spin), mult(TL_T_L))
     end do
-    
+
     ! Project electron gradient out
     if (vary_mu) then
        ! update matSphi from matphi
@@ -812,18 +829,24 @@ contains
        ! to be an exact gradient
        if (nspin == 1 .or. flag_fix_spin_population) then
           do spin = 1, nspin
-             dsum_factor = e_dot_n(spin) / n_dot_n(spin)
-             call matrix_sum(one, matSM3(spin), -dsum_factor, matSphi(spin))
-             call matrix_sum(one, matM3(spin), -dsum_factor, matphi(spin))
+             ! if gradient of N w.r.t. L is zero then no correction needed
+             if (abs(n_dot_n(spin)) > RD_ERR) then
+                dsum_factor = e_dot_n(spin) / n_dot_n(spin)
+                call matrix_sum(one, matSM3(spin), -dsum_factor, matSphi(spin))
+                call matrix_sum(one, matM3(spin), -dsum_factor, matphi(spin))
+             end if
           end do
        else
           e_dot_n_tot = spin_factor * sum(e_dot_n)
           n_dot_n_tot = spin_factor * sum(n_dot_n)
-          dsum_factor = e_dot_n_tot / n_dot_n_tot
-          do spin = 1, nspin
-             call matrix_sum(one, matSM3(spin), -dsum_factor, matSphi(spin))
-             call matrix_sum(one, matM3(spin), -dsum_factor, matphi(spin))
-          end do
+          ! if gradient of N w.r.t. L is zero then no correction needed
+          if (abs(n_dot_n_tot) > RD_ERR) then
+             dsum_factor = e_dot_n_tot / n_dot_n_tot
+             do spin = 1, nspin
+                call matrix_sum(one, matSM3(spin), -dsum_factor, matSphi(spin))
+                call matrix_sum(one, matM3(spin), -dsum_factor, matphi(spin))
+             end do
+          end if
        end if
     end if ! (vary_mu)
     ! Store initial gradient (these are search directions G and L)
@@ -832,16 +855,15 @@ contains
        call matrix_sum(zero, mat_Gstore(1,spin), -one, matM3(spin))
        call matrix_sum (zero, mat_Lstore(1,spin), one, matL(spin))
     end do
-    
+
     ! timer
     call stop_print_timer (tmr_l_tmp1, "lateDM - Preliminaries", &
                            IPRINT_TIME_THRES1)
 
-
     !-----------!
     ! MAIN LOOP !
     !-----------!
-    
+
     if (flag_global_tolerance) then
        g0 = zero
        do spin = 1, nspin
@@ -866,10 +888,10 @@ contains
        ! Take a step - maybe correct electron number after
        if (flag_global_tolerance) then
           ! Base step on present gradient and expected dE
-          step = deltaE / g0 
+          step = deltaE / (g0 + RD_ERR)
        else
           ! Base step on present gradient and expected dE
-          step = deltaE / (real(ni_in_cell, double) * g0) 
+          step = deltaE / (real(ni_in_cell, double) * g0 + RD_ERR)
        end if
        ! We don't want the step to be too small or too big
        if (abs(step) < 0.001_double) step = 0.001_double
@@ -906,25 +928,37 @@ contains
        if (vary_mu) then
           ! update matSphi
           do spin = 1, nspin
-             call matrix_product(matT, matphi(spin), mat_temp(spin), mult(T_L_TL))
-             call matrix_product(mat_temp(spin), matT, matSphi(spin), mult(TL_T_L))
+             call matrix_product(matT, matphi(spin), mat_temp(spin), &
+                                 mult(T_L_TL))
+             call matrix_product(mat_temp(spin), matT, matSphi(spin), &
+                                 mult(TL_T_L))
              e_dot_n(spin) = matrix_product_trace(matSM3(spin), matphi(spin))
              n_dot_n(spin) = matrix_product_trace(matSphi(spin), matphi(spin))
           end do
           if (flag_fix_spin_population) then
              do spin = 1, nspin
-                dsum_factor = e_dot_n(spin) / n_dot_n(spin)
-                call matrix_sum(one, matSM3(spin), -dsum_factor, matSphi(spin))
-                call matrix_sum(one, matM3(spin), -dsum_factor, matphi(spin))
+                ! if gradient of N w.r.t. L is zero then no correction needed
+                if (abs(n_dot_n(spin)) > RD_ERR) then
+                   dsum_factor = e_dot_n(spin) / n_dot_n(spin)
+                   call matrix_sum(one, matSM3(spin), -dsum_factor, &
+                                   matSphi(spin))
+                   call matrix_sum(one, matM3(spin), -dsum_factor, &
+                                   matphi(spin))
+                end if
              end do
           else
              e_dot_n_tot = spin_factor * sum(e_dot_n)
-             n_dot_n_tot = spin_factor * sum(n_dot_n)           
-             dsum_factor = e_dot_n_tot / n_dot_n_tot
-             do spin = 1, nspin
-                call matrix_sum (one, matSM3(spin), -dsum_factor, matSphi(spin))
-                call matrix_sum (one, matM3(spin), -dsum_factor, matphi(spin))
-             end do
+             n_dot_n_tot = spin_factor * sum(n_dot_n)
+             ! if gradient of N w.r.t. L is zero then no correction needed
+             if (abs(n_dot_n_tot > RD_ERR)) then
+                dsum_factor = e_dot_n_tot / n_dot_n_tot
+                do spin = 1, nspin
+                   call matrix_sum (one, matSM3(spin), -dsum_factor, &
+                                    matSphi(spin))
+                   call matrix_sum (one, matM3(spin), -dsum_factor, &
+                                    matphi(spin))
+                end do
+             end if
           end if
        end if
        ! Find the residual (i.e. the gradient)
@@ -944,7 +978,7 @@ contains
        end if
        if (inode == ionode .and. iprint_DM >= 2) &
             write (io_lun, '(2x,"R2 is ",e25.15)') sqrt(gg)
-       ! recored the Pulay histories
+       ! record Pulay histories
        do spin = 1, nspin
           call matrix_sum(zero, mat_SGstore(npmod,spin), -one, matSM3(spin))
           call matrix_sum(zero, mat_Gstore(npmod,spin), -one, matM3(spin))
@@ -965,7 +999,7 @@ contains
           end do ! j
        end do ! i
        ! Solve to get alphas
-       call DoPulay(Aij, alph, pul_mx, maxpulayDMM, inode, ionode)
+       call DoPulay(npmod, Aij, alph, pul_mx, maxpulayDMM, inode, ionode)
        ! Make new L matrix from Pulay sum
        do spin = 1, nspin
           call matrix_scale(zero, matL(spin))
@@ -1025,18 +1059,28 @@ contains
           end do
           if (flag_fix_spin_population) then
              do spin = 1, nspin
-                dsum_factor = e_dot_n(spin) / n_dot_n(spin)
-                call matrix_sum(one, matSM3(spin), -dsum_factor, matSphi(spin))
-                call matrix_sum(one, matM3(spin), -dsum_factor, matphi(spin))
+                ! if gradient of N w.r.t. L is zero then no correction needed
+                if (abs(n_dot_n(spin)) > RD_ERR) then
+                   dsum_factor = e_dot_n(spin) / n_dot_n(spin)
+                   call matrix_sum(one, matSM3(spin), -dsum_factor, &
+                                   matSphi(spin))
+                   call matrix_sum(one, matM3(spin), -dsum_factor, &
+                                   matphi(spin))
+                end if
              end do
           else
              e_dot_n_tot = spin_factor * sum(e_dot_n)
              n_dot_n_tot = spin_factor * sum(n_dot_n)
-             dsum_factor = e_dot_n_tot / n_dot_n_tot
-             do spin = 1, nspin
-                call matrix_sum(one, matSM3(spin), -dsum_factor, matSphi(spin))
-                call matrix_sum(one, matM3(spin), -dsum_factor, matphi(spin))
-             end do
+             ! if gradient of N w.r.t. L is zero then no correction needed
+             if (abs(n_dot_n_tot) > RD_ERR) then
+                dsum_factor = e_dot_n_tot / n_dot_n_tot
+                do spin = 1, nspin
+                   call matrix_sum(one, matSM3(spin), -dsum_factor, &
+                                   matSphi(spin))
+                   call matrix_sum(one, matM3(spin), -dsum_factor, &
+                                   matphi(spin))
+                end do
+             end if
           end if
        end if
        ! get deltaE
@@ -1072,7 +1116,7 @@ contains
           end if
        end if
        ! check if tolerance is reached
-       if (g1 < tolerance) then 
+       if (g1 < tolerance) then
           done = .true.
           ndone = n_iter
           if (inode == ionode) write (io_lun, *) 'Achieved tolerance in lateDM'
@@ -1108,7 +1152,7 @@ contains
              call stop_print_timer(tmr_l_iter, "a lateDM iteration", &
                                    IPRINT_TIME_THRES1)
              return
-          end if ! (iter_stuck > mx_stuck) 
+          end if ! (iter_stuck > mx_stuck)
        end if
        ! Replace step with that calculated from real L, and prepare
        ! for next step
@@ -1122,7 +1166,7 @@ contains
        call stop_print_timer(tmr_l_iter, "a lateDM iteration", &
                              IPRINT_TIME_THRES1)
     end do
-    
+
     !Prints out charge density
     if (flag_mix_L_SC_min) then
        if (nspin == 1) then
@@ -1133,15 +1177,15 @@ contains
           call dump_charge(density(:,2), n_my_grid_points, inode, spin=2)
        end if
     endif  ! (flag_mix_L_SC_min) then
-              
+
     call dealloc_lateDM
-    
+
 1   format('Iteration: ',i3,' Energy: ',e20.12,'   Residual: ',e20.12)
-    
+
     return
-    
+
   contains
-    
+
     subroutine dealloc_lateDM
       do spin = nspin, 1, -1
          call free_temp_matrix(mat_temp(spin))
@@ -1168,21 +1212,21 @@ contains
 
   !!****f* DMMin/lineMinL_nospin *
   !!
-  !!  NAME 
+  !!  NAME
   !!   lineMinL_nospin
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
-  !!   Performs an analytical line minimisation in the direction given by 
+  !!   Performs an analytical line minimisation in the direction given by
   !!   mat_D.  Uses energy and gradient at 0 and step (where step is given by
   !!   the previous energy change) as the four pieces of information needed to
   !!   get the cubic coefficients analytically.  If the cubic has imaginary
   !!   maxima and minima, the solution is a point of inflexion, and we panic
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler (based on original by CMG and EHH)
   !!  CREATION DATE
@@ -1195,7 +1239,7 @@ contains
   !!   2004/10/28 drb
   !!    Fixed (partly ?) definition of linearity and changed to return
   !!    zeta in interpG
-  !!   10:09, 13/02/2006 drb 
+  !!   10:09, 13/02/2006 drb
   !!    Removed all explicit references to data_ variables and
   !!    rewrote in terms of new matrix routines
   !!   2011/08/23 L.Tong
@@ -1214,7 +1258,7 @@ contains
   subroutine lineMinL(output_level, matM3, mat_D, mat_temp, matSM3,  &
                       energy_in, energy_out, delta_e, inode, ionode, &
                       inflex, interpG)
-    
+
     use datatypes
     use numbers
     use logicals
@@ -1230,11 +1274,11 @@ contains
     implicit none
 
     ! Passed variables
-    integer               :: inode, ionode, output_level 
+    integer               :: inode, ionode, output_level
     integer, dimension(:) :: matM3, matSM3, mat_D, mat_temp
     logical               :: inflex
     real(double)          :: delta_e, energy_in, energy_out, interpG
-    
+
     ! Local variables
     integer,      dimension(nspin) :: matM3old
     real(double), dimension(nspin) :: electrons_spin, energy_1_spin, energy_2_spin
@@ -1320,7 +1364,7 @@ contains
     end do
     ! remember the content of ig1 as it will be used to store other values
     ig1_step = ig1
-    
+
     ! the cubic is then given by Ax^3+Bx^2+Cx+D with
     D = energy_0
     C = g0
@@ -1339,7 +1383,7 @@ contains
        end do
        return
     else ! Solve cubic
-       if (abs(A) > 1.0d-14) then
+       if (abs(A) > RD_ERR) then
           truestep = (-two * B + SQRT(SQ)) / (six * A)
        else
           if (inode == ionode) write (*, *) 'Local quadratic approximation:'
@@ -1355,13 +1399,13 @@ contains
     !TM 09/09/2003
     if (truestep < 1.e-04_double) truestep = 1.e-04_double
     !TM 09/09/2003
-    
+
     ! update value of matL
     directsum_step = truestep - step
     do spin = 1, nspin
        call matrix_sum(one, matL(spin), directsum_step, mat_D(spin))
     end do
-    
+
     ! matrix symmetric: this avoids the creeping in of asymmetries due
     ! to accumulation of errors
     call symmetrise_L()
@@ -1419,7 +1463,7 @@ contains
     do spin = nspin, 1, -1
        call free_temp_matrix(matM3old(spin))
     end do
-    
+
     return
   end subroutine lineMinL
   !!***
@@ -1433,7 +1477,7 @@ contains
   !! RETURN VALUE
   !! AUTHOR
   !!   L.Tong
-  !! CREATION DATE 
+  !! CREATION DATE
   !!   2011/08/11
   !! MODIFICATION HISTORY
   !!   2012/03/12 L.Tong
@@ -1446,7 +1490,7 @@ contains
     use global_module, only: nspin, flag_fix_spin_population
 
     implicit none
-    
+
     ! Passed variables
     integer :: inode, ionode, output_level
 
@@ -1470,7 +1514,7 @@ contains
   !! RETURN VALUE
   !! AUTHOR
   !!   L.Tong
-  !! CREATION DATE 
+  !! CREATION DATE
   !!   2011/08/11
   !! MODIFICATION HISTORY
   !!   2012/03/11 L.Tong
@@ -1479,7 +1523,7 @@ contains
   !! SOURCE
   !!
   subroutine correct_electron_number_fixspin(output_level, inode, ionode)
-  
+
     use datatypes
     use logicals
     use numbers
@@ -1505,10 +1549,10 @@ contains
     real(double), dimension(nspin) :: electrons_0, electrons_2, &
                                       electrons, energy
     integer,      dimension(nspin) :: matTL, matphi2, matSphi, matSphi2
-    
+
     ! set electrons_0 to the correct electron number
     electrons_0(1:nspin) = ne_spin_in_cell(1:nspin)
-        
+
     call matrix_transpose(matT, matTtran)
     do spin = 1, nspin
        done = .false.
@@ -1652,7 +1696,7 @@ contains
   !!  SOURCE
   !!
   subroutine correct_electron_number_varspin(output_level, inode, ionode)
-    
+
     use datatypes
     use logicals
     use numbers
@@ -1694,7 +1738,7 @@ contains
 
     ! get electron number and gradient
     call matrix_transpose(matT, matTtran)
-    
+
     do while (.not. done .and. (iter < 20)) ! Was 20 !
 
        call LNV_matrix_multiply(electrons_spin, energy_spin, dontK, &
@@ -1715,17 +1759,17 @@ contains
        end do
 
        ! initial guess is linear correction...
-       step1 = (electrons_0 - electrons) / g0
+       step1 = (electrons_0 - electrons) / (g0 + RD_ERR)
        step = 0.1_double
        if (inode == ionode .and. output_level >= 2) &
             write (io_lun, '(2x,"g0, step1 are ",2f25.15)') g0, step1
-  
+
        ! if we are within 0.1% of the correct number, linear will do.
        if (abs(electrons_0 - electrons) < 1.0e-9_double) then
           do spin = 1, nspin
              call matrix_sum(one, matL(spin), step1, matSphi(spin))
           end do
-          done = .true.          
+          done = .true.
        else
           step = step1
           ! Take a step along the electron gradient
@@ -1775,7 +1819,7 @@ contains
           if (inode == ionode .and. output_level >= 2) &
                write (io_lun, '(2x,"Step, truestep are ",2f25.15)') &
                      step, truestep
-          
+
           do spin = 1, nspin
              call matrix_sum(one, matL(spin), truestep - step, matSphi(spin))
           end do
@@ -1833,18 +1877,18 @@ contains
 
 !!****f* DMMin/SolveCubic *
 !!
-!!  NAME 
+!!  NAME
 !!   SolveCubic
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Solves a cubic: x^3+Ax^2+Bx+C
 !!   Taken from NR, 2nd Edition (p179)
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   E.H.Hernandez
 !!  CREATION DATE

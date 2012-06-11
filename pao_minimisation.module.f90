@@ -778,7 +778,7 @@ contains
           end do
        end do
        ! Solve to get alphas
-       call DoPulay(Aij, alph, pul_mx, mx_pulay, inode, ionode)
+       call DoPulay(npmod, Aij, alph, pul_mx, mx_pulay, inode, ionode)
        if (inode == ionode) write (io_lun, *) 'Alph: ', alph
        ! Make new supports
        coefficient_array = zero

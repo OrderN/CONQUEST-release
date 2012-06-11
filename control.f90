@@ -418,7 +418,7 @@ contains
     if (flag_read_velocity) then
        call read_velocity(velocity, file_velocity)
     else
-       if(temp_ion > very_small) then
+       if(temp_ion > RD_ERR) then
           if(inode == ionode) &
                call init_velocity(ni_in_cell, temp_ion, velocity)
           call gcopy(velocity, 3, ni_in_cell)
@@ -788,8 +788,8 @@ contains
           jj = id_glob(i)
           forceStore(:,i,npmod) = tot_force(:,jj)
        end do
-       call pulayStep(posnStore, forceStore, x_atom_cell, y_atom_cell,&
-                      z_atom_cell, mx_pulay, pul_mx)
+       call pulayStep(npmod, posnStore, forceStore, x_atom_cell, &
+                      y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
        !call gsum(x_atom_cell,ni_in_cell)
        !call gsum(y_atom_cell,ni_in_cell)
        !call gsum(z_atom_cell,ni_in_cell)

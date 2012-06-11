@@ -128,7 +128,7 @@ contains
                 y = yg*real(ny,double)
                 z = zg*real(nz,double)
                 r = sqrt(x*x+y*y+z*z)
-                if(r>very_small) then
+                if(r>RD_ERR) then
                    x=x/r
                    y=y/r
                    z=z/r
@@ -407,7 +407,7 @@ contains
           !write(io_lun,fmt='(2x,"Spread SP: ",2i4,f20.12)') i1,i2, mat_val
           wheremat = matrix_pos(matSP,ip,j_in_halo,i1,i2)
           !write(io_lun,fmt='(2x,"Grid SP  : ",2i4,f20.12)') i1,i2, return_matrix_value_pos(matSP,wheremat)
-          !if(abs(return_matrix_value_pos(matSP,wheremat))>very_small) &
+          !if(abs(return_matrix_value_pos(matSP,wheremat))>RD_ERR) &
           !     write(30+ip,fmt='(f20.12)') mat_val - return_matrix_value_pos(matSP,wheremat)
           !if(abs(mat_val - return_matrix_value_pos(matSP,wheremat))>tmp) &
           !     tmp = abs(mat_val - return_matrix_value_pos(matSP,wheremat))
@@ -657,7 +657,7 @@ contains
           wheremat = matrix_pos(matSP,ip,j_in_halo,i1,i2)
           !write(io_lun,fmt='(2x,"Spread dSP: ",2i4,2f20.12)') i1,i2, mat_val, return_matrix_value_pos(matSP,wheremat)
           !write(io_lun,fmt='(2x,"Grid dSP  : ",2i4,f20.12)') i1,i2, return_matrix_value_pos(matSP,wheremat)
-          !if(abs(return_matrix_value_pos(matSP,wheremat))>very_small) &
+          !if(abs(return_matrix_value_pos(matSP,wheremat))>RD_ERR) &
           !     write(30+ip,fmt='(f20.12)') mat_val - return_matrix_value_pos(matSP,wheremat)
           !if(abs(mat_val - return_matrix_value_pos(matSP,wheremat))>tmp) &
           !     tmp = abs(mat_val - return_matrix_value_pos(matSP,wheremat))

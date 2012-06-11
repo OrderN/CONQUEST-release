@@ -544,7 +544,7 @@ contains
           k3 = 0.001_double
           ! DRB 2004/03/03
           tmp = vdot(lengthBlip, search_direction, 1, grad_coeff_array, 1)
-          if (abs(dE) < very_small) then
+          if (abs(dE) < RD_ERR) then
              k3 = 0.008_double
              dE = tmp * k3
           else

@@ -706,7 +706,7 @@ contains
                 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
-                rcut = r_h+very_small
+                rcut = r_h + RD_ERR
                 call check_block (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
                 !r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
@@ -900,7 +900,7 @@ contains
 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
-                rcut = r_h+very_small
+                rcut = r_h + RD_ERR
                 call check_block (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
                 r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
@@ -1092,7 +1092,7 @@ contains
 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
-                rcut = r_h+very_small
+                rcut = r_h + RD_ERR
                 call check_block (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
                 r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
@@ -1256,13 +1256,13 @@ contains
                 r_from_i = sqrt( r2 )
 
 !                ! direction cosines needed for spher harms
-!                if ( r_from_i > very_small ) then
+!                if ( r_from_i > RD_ERR ) then
 !                   x = rx / r_from_i
 !                   y = ry / r_from_i
 !                   z = rz / r_from_i
 !                else
 !                   x = zero ; y = zero ; z = zero
-!                   !!   r_from_i = very_small !!   04/07/2002 TM
+!                   !!   r_from_i = RD_ERR !!   04/07/2002 TM
 !                end if
                 x = rx
                 y = ry

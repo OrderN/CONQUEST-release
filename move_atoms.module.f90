@@ -446,9 +446,9 @@ contains
        call start_timer(tmr_l_iter, WITH_LEVEL)
        !if (k2==k0) then
        !   !k3 = 0.001_double
-       !   !if(abs(kmin) < very_small) then
-       !   if(abs(dE) < very_small) then
-       !      if(k3<very_small) then ! First guess
+       !   !if(abs(kmin) < RD_ERR) then
+       !   if(abs(dE) < RD_ERR) then
+       !      if(k3<RD_ERR) then ! First guess
        !         k3 = 0.70_double!k3old/lambda
        !      end if
        !   else
@@ -528,7 +528,7 @@ contains
           iter = iter + 1
        else if (k2 == zero) then ! We've gone too far
           !k3old = k3
-          !if(abs(dE)<very_small) then 
+          !if(abs(dE)<RD_ERR) then 
           !   k3 = k3old/2.0_double
           !   dE = 1.0_double
           !else
@@ -550,7 +550,7 @@ contains
             write (io_lun, fmt='(4x,"In safemin, brackets are: ",6f18.10)') &
                   k1, e1, k2, e2, k3, e3
     bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
-    if (abs(bottom) > very_small) then
+    if (abs(bottom) > RD_ERR) then
        kmin = 0.5_double * (((k1*k1 - k3*k3)*(e1 - e2) -    &
                              (k1*k1 - k2*k2) * (e1 - e3)) / &
                             ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
@@ -610,7 +610,7 @@ contains
                 fmt='(4x,"In safemin, Interpolation step and energy &
                       &are ",f15.10,f20.10" ",a2)') &
                kmin, en_conv*energy_out, en_units(energy_units)
-    if (energy_out > e2 .and. abs(bottom) > very_small) then
+    if (energy_out > e2 .and. abs(bottom) > RD_ERR) then
        ! The interpolation failed - go back
        call start_timer(tmr_l_tmp1,WITH_LEVEL) 
        if (inode == ionode) &
@@ -705,16 +705,18 @@ contains
   !!  Changed so that loops only go over primary set atoms
   !! 2008/05/25
   !!  Added timers
+  !! 2012/05/26 L.Tong
+  !! - Added input npmod, this is used by the new version of DoPulay
   !!SOURCE
   !!
-  subroutine pulayStep(posnStore, forceStore, x_atom_cell, &
+  subroutine pulayStep(npmod, posnStore, forceStore, x_atom_cell, &
                        y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
 
     use datatypes
     use global_module,  only: iprint_MD, ni_in_cell
     use numbers
     use GenBlas,        only: dot, axpy
-    use GenComms,       only: gsum, myid
+    use GenComms,       only: gsum, myid, inode, ionode
     use Pulay,          only: DoPulay
     use primary_module, only: bundle
 
@@ -726,7 +728,7 @@ contains
     real(double), dimension(ni_in_cell)            :: x_atom_cell
     real(double), dimension(ni_in_cell)            :: y_atom_cell
     real(double), dimension(ni_in_cell)            :: z_atom_cell
-    integer :: mx_pulay, pul_mx
+    integer :: npmod, mx_pulay, pul_mx
 
     ! Local variables
     integer      :: i,j, length
@@ -746,7 +748,7 @@ contains
        enddo
     enddo
     !call gsum(Aij,mx_pulay,mx_pulay)
-    call DoPulay(Aij,alph,pul_mx,mx_pulay,myid,0)
+    call DoPulay(npmod,Aij,alph,pul_mx,mx_pulay,inode,ionode)
     if(myid==0.AND.iprint_MD>2) write(io_lun,*) 'Alpha: ', alph
     x_atom_cell(:) = 0.0_double
     y_atom_cell(:) = 0.0_double
@@ -1627,7 +1629,7 @@ contains
   !!
   subroutine init_velocity(ni_in_cell, temp, velocity)
     use datatypes, only: double
-    use numbers, only: three,two,twopi, zero, one, very_small, half
+    use numbers, only: three,two,twopi, zero, one, RD_ERR, half
     use species_module, only: species, mass
     use global_module, only: id_glob_inv, flag_move_atom, species_glob
     use GenComms, only: cq_abort
@@ -1686,15 +1688,15 @@ contains
 
        call ran2(u0,iroulette)
        if(u0 >= one)  call cq_abort('ERROR in init_velocity 1',u0)
-       if(u0 < very_small)  call cq_abort('ERROR in init_velocity 2',u0)
+       if(u0 < RD_ERR)  call cq_abort('ERROR in init_velocity 2',u0)
        velocity(1,ia) = v0* sqrt(-two*log(u0))*cos(xx)
        call ran2(u0,iroulette)
        if(u0 >= one)  call cq_abort('ERROR in init_velocity 1',u0)
-       if(u0 < very_small)  call cq_abort('ERROR in init_velocity 2',u0)
+       if(u0 < RD_ERR)  call cq_abort('ERROR in init_velocity 2',u0)
        velocity(2,ia) = v0* sqrt(-two*log(u0))*cos(yy)
        call ran2(u0,iroulette)
        if(u0 >= one)  call cq_abort('ERROR in init_velocity 1',u0)
-       if(u0 < very_small)  call cq_abort('ERROR in init_velocity 2',u0)
+       if(u0 < RD_ERR)  call cq_abort('ERROR in init_velocity 2',u0)
        velocity(3,ia) = v0* sqrt(-two*log(u0))*cos(zz)
        KE = KE + half *(velocity(1,ia)**2 + velocity(2,ia)**2 + &
                         velocity(3,ia)**2) * massa * fac

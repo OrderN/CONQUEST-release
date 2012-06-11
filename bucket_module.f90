@@ -11,7 +11,8 @@
 !!  NAME
 !! 
 !!  PURPOSE
-!!   this module is for definition of the derived types <local_bucket> and <remote_bucket>
+!!   this module is for definition of the derived types <local_bucket>
+!!   and <remote_bucket>
 !!    set maximum number
 !!    allocation some variables in the above derived types
 !!    deallocation some variables 
@@ -50,7 +51,8 @@ module bucket_module
   implicit none
 
   ! RCS tag for object file identification 
-  character(len=80), save, private :: RCSid = "$Id$"
+  character(len=80), save, private :: &
+       RCSid = "$Id$"
 
 !!****s* bucket_module/local_bucket *
 !!  NAME
@@ -68,17 +70,17 @@ module bucket_module
      integer      :: ind_left      ! shows index of left function
      integer      :: ind_right     ! shows index of right function
      integer      :: mx_recv_node  ! no. of remote nodes which will receive
-     integer      :: no_recv_node  !  my domain partial contribution
+     integer      :: no_recv_node  ! my domain partial contribution
      integer      :: no_halo_atom1 ! no. of halo atoms for a left function
      integer      :: no_halo_atom2 ! no. of halo atoms for a right function
-     !integer      :: mx_pair       ! no. of pairs (mu,nu) which touch
-     integer      :: no_pair       !   some of my prim blks & R(mu,nu)<rcut
-     integer      :: no_pair_orb   !   some of my prim blks & R(mu,nu)<rcut
+!    integer      :: mx_pair       ! no. of pairs (mu,nu) which touch
+     integer      :: no_pair       ! some of my prim blks & R(mu,nu)<rcut
+     integer      :: no_pair_orb   ! some of my prim blks & R(mu,nu)<rcut
      ! the next three variables should be kept during a simulation
-     integer,pointer :: list_recv_node(:) ! (mx_recv_node)
-     integer,pointer :: ibegin_pair(:)    ! (mx_recv_node)
-     integer,pointer :: ibegin_pair_orb(:)! (mx_recv_node)
-     integer,pointer :: i_h2d(:,:)        ! (no_halo_atom1,no_halo_atom2)
+     integer, pointer :: list_recv_node(:) ! (mx_recv_node)
+     integer, pointer :: ibegin_pair(:)    ! (mx_recv_node)
+     integer, pointer :: ibegin_pair_orb(:)! (mx_recv_node)
+     integer, pointer :: i_h2d(:,:)        ! (no_halo_atom1,no_halo_atom2)
   end type local_bucket
 !!***
 

@@ -383,7 +383,7 @@ contains
        !blip_info(spec)%BlipWidth = four*blip_info(spec)%SupportGridSpacing
        if(inode==ionode.AND.iprint_init>2) write(io_lun,fmt='(10x,"Blip width: ",f20.12)') blip_info(spec)%BlipWidth
        blip_info(spec)%FourOnBlipWidth = four/blip_info(spec)%BlipWidth
-       !if(abs(blip_width - four*support_grid_spacing) > very_small) then
+       !if(abs(blip_width - four*support_grid_spacing) > RD_ERR) then
        !   call cq_abort('set_blip_index: blip width must be exactly four &
        !        &times blip-grid spacing')
        !end if

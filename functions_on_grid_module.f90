@@ -11,8 +11,9 @@
 !!  NAME
 !!   functions_on_grid
 !!  PURPOSE
-!!   Holds various variables relating to functions (e.g. support functions, NL pseudopotential projectors, PAOs) 
-!!   on the grid and all associated routines and variables (like sizes etc)
+!!   Holds various variables relating to functions (e.g. support
+!!   functions, NL pseudopotential projectors, PAOs) on the grid and
+!!   all associated routines and variables (like sizes etc)
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -29,9 +30,9 @@ module functions_on_grid
   use global_module,          only: sf, nlpf, paof
   use timer_stdclocks_module, only: start_timer, stop_timer, &
                                     tmr_std_allocation
-
   implicit none
   save
+
 !!***
 
   !!****s* functions_on_grid/fn_on_grid *

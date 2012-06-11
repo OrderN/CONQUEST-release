@@ -7,7 +7,7 @@
 ! Code area 9: general
 ! ------------------------------------------------------------------------------
 
-!!****h* Conquest/energy 
+!!****h* Conquest/energy
 !!  NAME
 !!   energy
 !!  PURPOSE
@@ -15,17 +15,19 @@
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
-!!   17:17, 2003/03/10 
+!!   17:17, 2003/03/10
 !!  MODIFICATION HISTORY
-!!   13:21, 22/09/2003 drb 
+!!   13:21, 22/09/2003 drb
 !!    Added band_energy
-!!   10:09, 13/02/2006 drb 
-!!    Removed all explicit references to data_ variables and rewrote in terms of new 
+!!   10:09, 13/02/2006 drb
+!!    Removed all explicit references to data_ variables and rewrote in terms of new
 !!    matrix routines
 !!   2007/08/14 17:31 dave
 !!    Added entropy, free energy output
 !!   2008/02/04 17:16 dave
 !!    Changes for output to file not stdout
+!!   2012/04/16 L.Tong
+!!   - Added vdW_xc_energy
 !!  SOURCE
 !!
 module energy
@@ -49,7 +51,7 @@ module energy
 
   logical :: flag_check_DFT = .false.
 
-  ! To avoid cyclic dependancy with DiagModule, the local variables here record information needed 
+  ! To avoid cyclic dependancy with DiagModule, the local variables here record information needed
   ! from DiagModule
   logical :: flag_check_Diag = .false.
   integer :: SmearingType, MPOrder
@@ -61,39 +63,43 @@ module energy
 
 contains
 
-!!****f* energy/get_energy 
-!!
-!!  NAME 
-!!   get_energy
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Builds and writes out total energy from 2Tr[KH] and appropriate corrections
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   D.R.Bowler
-!!  CREATION DATE
-!!   17:20, 2003/03/10
-!!  MODIFICATION HISTORY
-!!   10:09, 13/02/2006 drb 
-!!    Removed all explicit references to data_ variables and rewrote
-!!    in terms of new matrix routines
-!!   2007/08/16 15:31 dave
-!!    Changed output format for energy, added Free Energy for smeared
-!!    electron distribution and Gillan E-0.5*TS kT=0 extrapolation
-!!    (see J. Phys.:Condens. Matter 1, 689 (1989)
-!!   2011/08/29 L.Tong
-!!    Added spin polarisation
-!!   2011/08/02 13:52 dave
-!!    Changes for cDFT
-!!   2012/03/18 L.Tong
-!!    Rewrite for changed in spin implementation
-!!  SOURCE
-!!
+  !!****f* energy/get_energy
+  !!
+  !!  NAME
+  !!   get_energy
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Builds and writes out total energy from 2Tr[KH] and appropriate corrections
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   17:20, 2003/03/10
+  !!  MODIFICATION HISTORY
+  !!   10:09, 13/02/2006 drb
+  !!    Removed all explicit references to data_ variables and rewrote
+  !!    in terms of new matrix routines
+  !!   2007/08/16 15:31 dave
+  !!    Changed output format for energy, added Free Energy for smeared
+  !!    electron distribution and Gillan E-0.5*TS kT=0 extrapolation
+  !!    (see J. Phys.:Condens. Matter 1, 689 (1989)
+  !!   2011/08/29 L.Tong
+  !!    Added spin polarisation
+  !!   2011/08/02 13:52 dave
+  !!    Changes for cDFT
+  !!   2012/03/18 L.Tong
+  !!    Rewrite for changed in spin implementation
+  !!   2012/05/29 L.Tong
+  !!   - Changed myid == 0 to inode == ionode for consistency
+  !!   - Added output for total spin polarisation for spin polarised
+  !!     calculations
+  !!  SOURCE
+  !!
   subroutine get_energy(total_energy, printDFT)
 
     use datatypes
@@ -101,15 +107,17 @@ contains
     use units
     use mult_module,            only: matrix_product_trace, matH,     &
                                       matK, matKE, matNL
-    use GenComms,               only: myid
+    use GenComms,               only: inode, ionode
     use global_module,          only: iprint_gen, nspin, spin_factor, &
                                       flag_dft_d2,                    &
                                       flag_SCconverged_D2,            &
                                       flag_self_consistent,           &
-                                      flag_perform_cdft
+                                      flag_perform_cdft,              &
+                                      flag_vdWDFT
     use ewald_module,           only: ewald_energy
-    use pseudopotential_common, only: core_correction  
+    use pseudopotential_common, only: core_correction
     use DFT_D2,                 only: disp_energy
+    use density_module,         only: electron_number
 
     implicit none
 
@@ -121,15 +129,18 @@ contains
     integer      :: spin
     logical      :: print_Harris, print_DFT
     real(double) :: total_energy2
+    ! electron number information
+    real(double), dimension(nspin) :: electrons
+    real(double) :: electrons_tot
 
-    ! For Now, 
-    ! If printDFT does not exist (as in the previous version), 
+    ! For Now,
+    ! If printDFT does not exist (as in the previous version),
     !  DFT energy will be printed out if iprint_gen >= 2
     !
     ! If it exists,
     !  printDFT = .true.  -> prints out only DFT energy
     !  printDFT = .false. -> prints out Energies except DFT energy
-    !  
+    !
     print_DFT = .false.
     print_Harris = .true.
     if (present(printDFT)) then
@@ -138,7 +149,7 @@ contains
     else
        if (iprint_gen >= 2) print_DFT = .true.
     end if
-    
+
     ! Find energies
     nl_energy = zero
     band_energy = zero
@@ -157,8 +168,9 @@ contains
     if (flag_perform_cdft) total_energy = total_energy + cdft_energy
     ! for DFT-D2
     if (flag_dft_d2) total_energy = total_energy + disp_energy
+
     ! Write out data
-    if (myid == 0) then
+    if (inode == ionode) then
        if(print_Harris) then
           !if(iprint_gen>=1) write(io_lun,2) electrons
           if (iprint_gen >= 1) &
@@ -187,7 +199,7 @@ contains
                      en_conv*cdft_energy, en_units(energy_units)
           if (iprint_gen >= 1 .and. flag_dft_d2) &
                write (io_lun,17) en_conv*disp_energy, en_units(energy_units)
-          if (abs(entropy) >= very_small) then
+          if (abs(entropy) >= RD_ERR) then
              if (iprint_gen >= 0) &
                   write(io_lun,10) en_conv*total_energy, en_units(energy_units)
              if (flag_check_Diag) then
@@ -207,7 +219,7 @@ contains
                                           real(MPOrder+2,double))*entropy), &
                               en_units(energy_units)
                 end select
-             else 
+             else
                 if (iprint_gen >= 0) &
                      write (io_lun,14) en_conv*(total_energy-half*entropy), &
                                        en_units(energy_units)
@@ -231,9 +243,27 @@ contains
                        ewald_energy
        if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
        if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
-       if (myid == 0) &
-            write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
+       if (inode == ionode) then
+          write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
+       end if
     end if
+    ! print electron number and spin polarisation information
+    if (iprint_gen >= 0) then
+       call electron_number(electrons)
+       if (inode == ionode) then
+          if (iprint_gen >= 1) then
+             electrons_tot = electrons(1) + electrons(nspin)
+             write (io_lun,18) electrons_tot
+             if (nspin == 2) then
+                write (io_lun,19) electrons(1)
+                write (io_lun,20) electrons(2)
+             end if
+          end if
+          if (nspin == 2) &
+               write (io_lun,21) electrons(1) - electrons(2)
+       end if
+    end if
+
     return
 1   format(10x,'Band Energy, 2Tr[K.H]            : ',f25.15,' ',a2)
 2   format(10x,'Electron Count                   : ',f25.15,' ',a2)
@@ -252,6 +282,10 @@ contains
 11  format(10x,'Ha Correction                    : ',f25.15,' ',a2)
 12  format(10x,'XC Correction                    : ',f25.15,' ',a2)
 17  format(10x,'dispersion (DFT-D2)              : ',f25.15,' ',a2)
+18  format(10x,'Total number of electrons        : ',f25.15)
+19  format(10x,'Number of electrons spin up      : ',f25.15)
+20  format(10x,'Number of electrons spin down    : ',f25.15)
+21  format(10x,'Spin polarisation (NeUP - NeDN)  : ',f25.15)
   end subroutine get_energy
   !!*** get_energy
 

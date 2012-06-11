@@ -149,7 +149,7 @@ contains
     use memory_module,  only: reg_alloc_mem, type_dbl, type_int
     use units,          only: AngToBohr
     use units,          only: dist_units, ang
-    use numbers,        only: very_small, zero
+    use numbers,        only: RD_ERR, zero
 
     ! Passed variables
     character(len=*) :: filename
@@ -268,7 +268,7 @@ second:   do
                       read (pdb_line(61:66),'(f6.0)') num_move_atom_real
                       num_move_atom = floor(num_move_atom_real)
                       if (num_move_atom_real - (real(num_move_atom)) > &
-                          very_small ) &
+                          RD_ERR ) &
                            call cq_abort('The constraints on atom(s) &
                                           &have not been set. Check the pdb file.')
                       if (num_move_atom > 7) & 
@@ -316,7 +316,7 @@ second:   do
                    flag_move_atom(:,i) = .false.
                    read (pdb_line(61:66),'(f6.0)') num_move_atom_real
                    num_move_atom = floor(num_move_atom_real)
-                   if (num_move_atom_real - (real(num_move_atom)) > very_small ) &
+                   if (num_move_atom_real - (real(num_move_atom)) > RD_ERR ) &
                         call cq_abort('The constraints on atom(s) &
                                        &have not been set. Check the pdb file.')
                    if (num_move_atom > 7) & 
@@ -982,7 +982,7 @@ second:   do
   !!   2009/07/08 16:56 dave
   !!    Formatting tweak
   !!   2011/12/08 15:47 dave
-  !!    Bug fix: changed criterion for slab or line from very_small to
+  !!    Bug fix: changed criterion for slab or line from RD_ERR to
   !!    0.1 (following COR suggestion) Also changed many processor
   !!    scheme to NOT wrap atoms on partition boundary down one
   !!    partition
@@ -1000,7 +1000,7 @@ second:   do
                                 maxatomsproc, maxpartscell
     use basic_types,      only: group_set
     use group_module,     only: make_cc2
-    use numbers,          only: very_small, one, two, three
+    use numbers,          only: RD_ERR, one, two, three
     use dimens,           only: r_super_x, r_super_y, r_super_z
     use construct_module, only: init_group
     use GenComms,         only: my_barrier, mtime
@@ -1169,25 +1169,25 @@ second:   do
 
     dims = three
 
-    if (occupied_cell(1) < 0.1_double) then!very_small) then
+    if (occupied_cell(1) < 0.1_double) then!RD_ERR) then
        tmp_parts(1) = one
        dims = dims - one
     else
        tmp_parts(1) = r_super_x / occupied_cell(1) 
     end if
-    if (occupied_cell(2) < 0.1_double) then!very_small) then
+    if (occupied_cell(2) < 0.1_double) then!RD_ERR) then
        tmp_parts(2) = one
        dims = dims - one
     else
        tmp_parts(2) = r_super_y / occupied_cell(2) 
     end if
-    if (occupied_cell(3) < 0.1_double) then!very_small) then
+    if (occupied_cell(3) < 0.1_double) then!RD_ERR) then
        tmp_parts(3) = one
        dims = dims - one 
     else
        tmp_parts(3) = r_super_z / occupied_cell(3) 
     end if
-    if (dims < very_small) dims = one ! if dims is 0, we only have one atom
+    if (dims < RD_ERR) dims = one ! if dims is 0, we only have one atom
 
     if (iprint_init > 3.AND.myid==0) &
          write(io_lun,'(a,3f12.6)') "Tmp_parts:", tmp_parts(1), &

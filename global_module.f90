@@ -81,6 +81,9 @@
 !!     nspin = 1
 !!     spin_factor = two
 !!   - removed now obsolete flag: flag_spin_polarisation
+!!   2012/05/29 L.Tong
+!!   - removed functional_lsda_pw92, now redundant. Just use
+!!     functional_lda_pw92 for PW92 LDA.
 !!  SOURCE
 !!
 module global_module
@@ -164,11 +167,10 @@ module global_module
   character(len=15) :: functional_description 
   integer, parameter :: functional_lda_pz81        = 1
   integer, parameter :: functional_lda_gth96       = 2
-  integer, parameter :: functional_lda_pw92        = 3
+  integer, parameter :: functional_lda_pw92        = 3    ! PRB 45, 13244 (1992) + PRL 45, 566 (1980)
   integer, parameter :: functional_gga_pbe96       = 101  ! Standard PBE
   integer, parameter :: functional_gga_pbe96_rev98 = 102  ! revPBE (PBE + Zhang-Yang 1998)
   integer, parameter :: functional_gga_pbe96_r99   = 103  ! RPBE (PBE + Hammer-Hansen-Norskov 1999)
-  integer, parameter :: functional_lsda_pw92       = 201  ! PRB 45, 13244 (1992) + PRL 45, 566 (1980) with spin
 
   ! Switch for variation of blips in get_support_gradient
   integer :: WhichPulay
@@ -224,6 +226,10 @@ module global_module
   logical :: flag_dft_d2
   logical :: flag_SCconverged_D2 = .false.
   logical :: flag_only_dispersion
+
+  ! For vdwDFT
+  logical :: flag_vdWDFT          ! selector for turning on vdW energy correction
+  integer :: vdW_LDA_functional   ! selector for LDA functional
   
 end module global_module
 !!***

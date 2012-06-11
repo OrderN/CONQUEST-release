@@ -56,6 +56,8 @@
 !!    for P.C.C.
 !!   2011/10/03 08:17 dave
 !!    Adding cDFT forces
+!!   2012/04/16 L.Tong
+!!   - Moved all the dxc_potential subroutines to XC_module
 !!   2012/04/03 09:38 dave
 !!    Changes for analytic blips
 !!  SOURCE
@@ -320,7 +322,9 @@ contains
                           maxngrid)
        call reg_dealloc_mem(area_moveatoms, maxngrid * (nspin + 1), type_dbl)
        call stop_timer(tmr_std_allocation)
+
     else ! for SCF
+
        ! Local HF force
        call start_timer(tmr_l_tmp1, WITH_LEVEL)
        ! for P.C.C.
@@ -355,6 +359,8 @@ contains
                           IPRINT_TIME_THRES2)
 
     max_force = zero
+    max_atom = 0
+    max_compt = 0
     if (inode == ionode .and. write_forces) then
        write (io_lun, fmt='(/,20x,"Forces on atoms (",a2,"/",a2,")"/)') &
              en_units(energy_units), d_units(dist_units)
@@ -363,119 +369,121 @@ contains
 
     ! with P.C.C.
     if (flag_pcc_global) then
-      do i = 1, ni_in_cell
-         do j = 1, 3
-            ! note that ewald_force is already calculated by ewald()
-            ! when ewald energy is being calculated
-            if (flag_self_consistent) then
-               tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
-                                p_force(j,i) + KE_force(j,i) +     &
-                                ewald_force(j,i) + pcc_force(j, i)
-            else
-               tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) +    &
-                                p_force(j,i) + KE_force(j,i) +        &
-                                ewald_force(j,i) + nonSC_force(j,i) + &
-                                pcc_force(j, i)
-            end if
-            if (flag_perform_cdft) &
-                 tot_force(j,i) = tot_force(j,i) + cdft_force(j,i)
-            if (flag_dft_d2) &
-                 tot_force(j,i) = tot_force(j,i) + disp_force(j,i)
-            if (.not. flag_move_atom(j,i)) then 
-               tot_force(j,i) = zero
-            end if
-            if (abs (tot_force(j,i)) > max_force) then
-               max_force = abs (tot_force(j,i))
-               max_atom = i
-               max_compt = j
-            end if
-         end do
-         if (inode == ionode) then
-            if(iprint_MD > 2) then
-               write(io_lun, 101) i
-               write(io_lun, 102) (for_conv * HF_force(j,i), j = 1, 3)
-               write(io_lun, 112) (for_conv * HF_NL_force(j,i), j = 1, 3)
-               write(io_lun, 103) (for_conv * p_force(j,i), j = 1, 3)
-               write(io_lun, 104) (for_conv * KE_force(j,i), j = 1, 3)
-               write(io_lun, 106) (for_conv * ewald_force(j,i), j = 1, 3)
-               write(io_lun, 108) (for_conv * pcc_force(j,i), j = 1, 3)
-               if (flag_dft_d2) &
-                    write (io_lun, 109) (for_conv * disp_force(j,i), j = 1, 3)
-               if (flag_perform_cdft) &
-                    write (io_lun, fmt='("Force cDFT : ",3f15.10)') &
-                    (for_conv*cdft_force(j,i),j=1,3)
-               if (flag_self_consistent) then
-                  write (io_lun, 105) (for_conv * tot_force(j,i), j = 1, 3)
-               else
-                  write (io_lun, 107) (for_conv * nonSC_force(j,i), j = 1, 3)
-                  write (io_lun, 105) (for_conv * tot_force(j,i), j = 1, 3)
-               end if
-            else if (write_forces) then
-               if (flag_self_consistent) then
-                  write (io_lun,fmt='(20x,i6,3f15.10)') &
-                       i, (for_conv * tot_force(j,i), j = 1, 3)
-               else
-                  write (io_lun, fmt='(20x,i6,3f15.10)') &
-                       i, (for_conv * tot_force(j,i), j = 1, 3)
-               end if
-            end if ! (iprint_MD > 2)
-         end if ! (inode == ionode)
-      end do ! i
-   else  ! without P.C.C.
-      do i = 1, ni_in_cell
-         do j = 1, 3
-            if (flag_self_consistent) then
-               tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
-                                p_force(j,i) + KE_force(j,i) +     &
-                                ewald_force(j,i)
-            else
-               tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
-                                p_force(j,i) + KE_force(j,i) +     &
-                                ewald_force(j,i) + nonSC_force(j,i)
-            end if
-            if (flag_perform_cdft) &
-                 tot_force(j,i) = tot_force(j,i) + cdft_force(j,i)
-            if (flag_dft_d2) &
-                 tot_force(j,i) = tot_force(j,i) + disp_force(j,i)
-            if (.not. flag_move_atom(j,i)) then 
-               tot_force(j,i) = zero
-            end if
-            if (abs(tot_force(j,i)) > max_force) then
-               max_force = abs(tot_force(j,i))
-               max_atom = i
-               max_compt = j
-            end if
-         end do ! j
-         if (inode == ionode) then
-            if (iprint_MD > 2) then
-               write (io_lun, 101) i
-               write (io_lun, 102) (for_conv * HF_force(j,i), j = 1, 3)
-               write (io_lun, 112) (for_conv * HF_NL_force(j,i), j = 1, 3)
-               write (io_lun, 103) (for_conv * p_force(j,i), j = 1, 3)
-               write (io_lun, 104) (for_conv * KE_force(j,i), j = 1, 3)
-               write (io_lun, 106) (for_conv * ewald_force(j,i), j = 1, 3)
-               if (flag_dft_d2) write (io_lun, 109) &
-                    (for_conv * disp_force(j,i), j = 1, 3)
-               if (flag_perform_cdft) &
-                    write (io_lun,fmt='("Force cDFT : ",3f15.10)') &
-                          (for_conv * cdft_force(j,i), j = 1, 3)
-               if (flag_self_consistent) then
-                  write (io_lun, 105) (for_conv*tot_force(j,i), j = 1, 3)
-               else
-                  write (io_lun, 107) (for_conv * nonSC_force(j,i), j = 1, 3)
-                  write (io_lun, 105) (for_conv * tot_force(j,i), j = 1, 3)
-               end if
-            else if (write_forces) then
-               if (flag_self_consistent) then
-                  write (io_lun, fmt='(20x,i6,3f15.10)') &
-                        i, (for_conv*tot_force(j,i), j = 1, 3)
-               else
-                  write (io_lun,fmt='(20x,i6,3f15.10)') &
-                        i, (for_conv*tot_force(j,i), j = 1, 3)
-               end if
-            end if
-         end if
-      end do ! i
+       do i = 1, ni_in_cell
+          do j = 1, 3
+             ! note that ewald_force is already calculated by ewald()
+             ! when ewald energy is being calculated
+             if (flag_self_consistent) then
+                tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
+                                 p_force(j,i) + KE_force(j,i) +     &
+                                 ewald_force(j,i) + pcc_force(j, i)
+             else
+                tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) +    &
+                                 p_force(j,i) + KE_force(j,i) +        &
+                                 ewald_force(j,i) + nonSC_force(j,i) + &
+                                 pcc_force(j, i)
+             end if
+             if (flag_perform_cdft) &
+                  tot_force(j,i) = tot_force(j,i) + cdft_force(j,i)
+             if (flag_dft_d2) &
+                  tot_force(j,i) = tot_force(j,i) + disp_force(j,i)
+             if (.not. flag_move_atom(j,i)) then 
+                tot_force(j,i) = zero
+             end if
+             if (abs (tot_force(j,i)) > max_force) then
+                max_force = abs (tot_force(j,i))
+                max_atom = i
+                max_compt = j
+             end if
+          end do ! j
+          if (inode == ionode) then
+             if(iprint_MD > 2) then
+                write(io_lun, 101) i
+                write(io_lun, 102) (for_conv * HF_force(j,i), j = 1, 3)
+                write(io_lun, 112) (for_conv * HF_NL_force(j,i), j = 1, 3)
+                write(io_lun, 103) (for_conv * p_force(j,i), j = 1, 3)
+                write(io_lun, 104) (for_conv * KE_force(j,i), j = 1, 3)
+                write(io_lun, 106) (for_conv * ewald_force(j,i), j = 1, 3)
+                write(io_lun, 108) (for_conv * pcc_force(j,i), j = 1, 3)
+                if (flag_dft_d2) &
+                     write (io_lun, 109) (for_conv * disp_force(j,i), j = 1, 3)
+                if (flag_perform_cdft) &
+                     write (io_lun, fmt='("Force cDFT : ",3f15.10)') &
+                           (for_conv*cdft_force(j,i),j=1,3)
+                if (flag_self_consistent) then
+                   write (io_lun, 105) (for_conv * tot_force(j,i), j = 1, 3)
+                else
+                   write (io_lun, 107) (for_conv * nonSC_force(j,i), j = 1, 3)
+                   write (io_lun, 105) (for_conv * tot_force(j,i), j = 1, 3)
+                end if
+             else if (write_forces) then
+                if (flag_self_consistent) then
+                   write (io_lun,fmt='(20x,i6,3f15.10)') &
+                         i, (for_conv * tot_force(j,i), j = 1, 3)
+                else
+                   write (io_lun, fmt='(20x,i6,3f15.10)') &
+                         i, (for_conv * tot_force(j,i), j = 1, 3)
+                end if
+             end if ! (iprint_MD > 2)
+          end if ! (inode == ionode)
+       end do ! i
+       
+    else  ! without P.C.C.
+       
+       do i = 1, ni_in_cell
+          do j = 1, 3
+             if (flag_self_consistent) then
+                tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
+                                 p_force(j,i) + KE_force(j,i) +     &
+                                 ewald_force(j,i)
+             else
+                tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
+                                 p_force(j,i) + KE_force(j,i) +     &
+                                 ewald_force(j,i) + nonSC_force(j,i)
+             end if
+             if (flag_perform_cdft) &
+                  tot_force(j,i) = tot_force(j,i) + cdft_force(j,i)
+             if (flag_dft_d2) &
+                  tot_force(j,i) = tot_force(j,i) + disp_force(j,i)
+             if (.not. flag_move_atom(j,i)) then 
+                tot_force(j,i) = zero
+             end if
+             if (abs(tot_force(j,i)) > max_force) then
+                max_force = abs(tot_force(j,i))
+                max_atom = i
+                max_compt = j
+             end if
+          end do ! j
+          if (inode == ionode) then
+             if (iprint_MD > 2) then
+                write (io_lun, 101) i
+                write (io_lun, 102) (for_conv * HF_force(j,i), j = 1, 3)
+                write (io_lun, 112) (for_conv * HF_NL_force(j,i), j = 1, 3)
+                write (io_lun, 103) (for_conv * p_force(j,i), j = 1, 3)
+                write (io_lun, 104) (for_conv * KE_force(j,i), j = 1, 3)
+                write (io_lun, 106) (for_conv * ewald_force(j,i), j = 1, 3)
+                if (flag_dft_d2) write (io_lun, 109) &
+                     (for_conv * disp_force(j,i), j = 1, 3)
+                if (flag_perform_cdft) &
+                     write (io_lun,fmt='("Force cDFT : ",3f15.10)') &
+                           (for_conv * cdft_force(j,i), j = 1, 3)
+                if (flag_self_consistent) then
+                   write (io_lun, 105) (for_conv*tot_force(j,i), j = 1, 3)
+                else
+                   write (io_lun, 107) (for_conv * nonSC_force(j,i), j = 1, 3)
+                   write (io_lun, 105) (for_conv * tot_force(j,i), j = 1, 3)
+                end if
+             else if (write_forces) then
+                if (flag_self_consistent) then
+                   write (io_lun, fmt='(20x,i6,3f15.10)') &
+                         i, (for_conv*tot_force(j,i), j = 1, 3)
+                else
+                   write (io_lun,fmt='(20x,i6,3f15.10)') &
+                         i, (for_conv*tot_force(j,i), j = 1, 3)
+                end if
+             end if
+          end if
+       end do ! i
     end if ! flag_pcc_global
     
     call my_barrier()
@@ -819,7 +827,7 @@ contains
                 dx = BCS_parts%xcover(gcspart+jseq-1)-bundle%xprim(i_in_prim)
                 dy = BCS_parts%ycover(gcspart+jseq-1)-bundle%yprim(i_in_prim)
                 dz = BCS_parts%zcover(gcspart+jseq-1)-bundle%zprim(i_in_prim)
-                if((dx*dx + dy*dy + dz*dz)>very_small) then
+                if((dx*dx + dy*dy + dz*dz)>RD_ERR) then
                    allocate(this_data_K(this_nsfi,this_nsfj,nspin),this_data_M12(this_nsfi,this_nsfj,nspin))
                    this_data_K = zero
                    this_data_M12 = zero
@@ -1248,7 +1256,7 @@ contains
                          if (r2 < core_radius_2(the_species)) then
                             r_from_i = sqrt( r2 )
                             !if ( r_from_i > zero ) then
-                            if (r_from_i > very_small) then
+                            if (r_from_i > RD_ERR) then
                                x = rx / r_from_i
                                y = ry / r_from_i
                                z = rz / r_from_i
@@ -1320,7 +1328,7 @@ contains
        end if !(naba_atm(nlpf)%no_of_part(iblock) > 0) !naba atoms?
     end do ! iblock : primary set of blocks
     
-!    ! now loop over grid points and accumulate HF part of the force
+!    ! now loop over grid points and accumulate HF part of the force
 !    do n=1, n_my_grid_points
 !       my_block = grid_point_block(n)
 !       elec_here = density(n) * grid_point_volume
@@ -1586,7 +1594,7 @@ contains
                            id_glob(parts%icell_beg(neigh_global_part) + &
                                    mat(np,SPrange)%i_seq(ist) - 1)
                       neigh_species = species_glob(neigh_global_num)
-                      if ((dx*dx + dy*dy + dz*dz) > very_small) then
+                      if ((dx*dx + dy*dy + dz*dz) > RD_ERR) then
                          call get_dSP(supports_on_atom(iprim),         &
                                       nlpf_on_atom(neigh_species),     &
                                       matdSC(direction), iprim,        &
@@ -2098,6 +2106,10 @@ contains
   !!      get_nonSC_correction_force_spin
   !!    - renamed subroutine name back to get_nonSC_correction_force
   !!    - deleted the interface get_nonSC_correction_force
+  !!   2012/05/29 L.Tong
+  !!    - Cleaned up xc-functonal selector. Now spin and non-spin
+  !!      calculations share the same calls. However so far only case
+  !!      that works for spin polarised calculations is for LSDA-PW92.
   !!  SOURCE
   !!
   subroutine get_nonSC_correction_force(hf_force, density_out, inode, &
@@ -2116,9 +2128,12 @@ contains
                                    functional_gga_pbe96,               &
                                    functional_gga_pbe96_rev98,         &
                                    functional_gga_pbe96_r99,           &
-                                   functional_lsda_pw92,               &
                                    area_moveatoms, IPRINT_TIME_THRES3, &
                                    flag_pcc_global, nspin, spin_factor
+    use XC_module,           only: get_dxc_potential,                  &
+                                   get_GTH_dxc_potential,              &
+                                   get_dxc_potential_LSDA_PW92,        &
+                                   get_dxc_potential_GGA_PBE
     use block_module,        only: nx_in_block, ny_in_block,           &
                                    nz_in_block, n_pts_in_block
     use group_module,        only: blocks, parts
@@ -2250,92 +2265,73 @@ contains
     
     call start_timer (tmr_l_tmp1, WITH_LEVEL)
     
-    if (nspin == 1) then
-
-       select case (flag_functional_type)
-       case (functional_lda_pz81)
-          if (flag_pcc_global) then
-             call get_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), size)
-          else
-             call get_dxc_potential(density_total, dVxc_drho(:,1,1), size)
-          end if
-       case (functional_lda_gth96)
-          if (flag_pcc_global) then
-             call get_GTH_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), size)
-          else
-             call get_GTH_dxc_potential(density_total, dVxc_drho(:,1,1), size)
-          end if
-       case (functional_lda_pw92)
-          if (flag_pcc_global) then
-             call get_dxc_potential_LDA_PW92(wk_grid_total,        &
-                                             dVxc_drho(:,1,1), size)
-          else
-             call get_dxc_potential_LDA_PW92(density_total,        &
-                                             dVxc_drho(:,1,1), size)
-          end if
-       case (functional_gga_pbe96) ! Original PBE
-          if (flag_pcc_global) then
-             call get_dxc_potential_GGA_PBE(wk_grid_total,         &
-                                            density_out_GGA_total, &
-                                            potential(:,1), size)
-          else
-             call get_dxc_potential_GGA_PBE(density_total,         &
-                                            density_out_total,     &
-                                            potential(:,1), size)
-          end if
-       case (functional_gga_pbe96_rev98)
-          ! PBE with kappa of PRL 80, 890 (1998)
-          if (flag_pcc_global) then
-             call get_dxc_potential_GGA_PBE(wk_grid_total,         &
-                                            density_out_total,     &
-                                            potential(:,1), size,  &
-                                            functional_gga_pbe96_rev98)
-          else
-             call get_dxc_potential_GGA_PBE(density_total,         &
-                                            density_out_total,     &
-                                            potential(:,1), size,  &
-                                            functional_gga_pbe96_rev98)
-          end if
-       case (functional_gga_pbe96_r99)
-          ! PBE with form of PRB 59, 7413 (1999)
-          if (flag_pcc_global) then
-             call get_dxc_potential_GGA_PBE(wk_grid_total,         &
-                                            density_out_total,     &
-                                            potential(:,1), size,  &
-                                            functional_gga_pbe96_r99)
-          else
-             call get_dxc_potential_GGA_PBE(density_total,         &
-                                            density_out_total,     &
-                                            potential(:,1), size,  &
-                                            functional_gga_pbe96_r99)
-          end if
-       case default
-          if (flag_pcc_global) then
-             call get_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), size)
-          else
-             call get_dxc_potential(density_total, dVxc_drho(:,1,1), size)
-          end if
-       end select
-
-    else ! if doing spin polarised calculations
-
-       select case (flag_functional_type)
-       case (functional_lsda_pw92)
-          ! LSDA with spin polarisation, PW92 call
-          if (flag_pcc_global) then
-             call get_dxc_potential_LSDA_PW92(wk_grid, dVxc_drho, size)
-          else
-             call get_dxc_potential_LSDA_PW92(density, dVxc_drho, size)
-          end if
-       case default
-          if (flag_pcc_global) then
-             call get_dxc_potential_LSDA_PW92(wk_grid, dVxc_drho, size)
-          else
-             call get_dxc_potential_LSDA_PW92(density, dVxc_drho, size)
-          end if
-       end select
-       
-    end if ! (nspin == 1)
+    select case (flag_functional_type)
+    case (functional_lda_pz81)
+       ! NON SPIN POLARISED CALCULATION ONLY
+       if (flag_pcc_global) then
+          call get_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), size)
+       else
+          call get_dxc_potential(density_total, dVxc_drho(:,1,1), size)
+       end if
+    case (functional_lda_gth96)
+       ! NON SPIN POLARISED CALCULATION ONLY
+       if (flag_pcc_global) then
+          call get_GTH_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), size)
+       else
+          call get_GTH_dxc_potential(density_total, dVxc_drho(:,1,1), size)
+       end if
+    case (functional_lda_pw92)
+       if (flag_pcc_global) then
+          call get_dxc_potential_LSDA_PW92(wk_grid, dVxc_drho, size)
+       else
+          call get_dxc_potential_LSDA_PW92(density, dVxc_drho, size)
+       end if
+    case (functional_gga_pbe96) ! Original PBE
+       ! NON SPIN POLARISED CALCULATION ONLY
+       if (flag_pcc_global) then
+          call get_dxc_potential_GGA_PBE(wk_grid_total,         &
+                                         density_out_GGA_total, &
+                                         potential(:,1), size)
+       else
+          call get_dxc_potential_GGA_PBE(density_total,         &
+                                         density_out_total,     &
+                                         potential(:,1), size)
+       end if
+    case (functional_gga_pbe96_rev98)
+       ! PBE with kappa of PRL 80, 890 (1998)
+       ! NON SPIN POLARISED CALCULATION ONLY
+       if (flag_pcc_global) then
+          call get_dxc_potential_GGA_PBE(wk_grid_total,         &
+                                         density_out_total,     &
+                                         potential(:,1), size,  &
+                                         functional_gga_pbe96_rev98)
+       else
+          call get_dxc_potential_GGA_PBE(density_total,         &
+                                         density_out_total,     &
+                                         potential(:,1), size,  &
+                                         functional_gga_pbe96_rev98)
+       end if
+    case (functional_gga_pbe96_r99)
+       ! PBE with form of PRB 59, 7413 (1999)
+       ! NON SPIN POLARISED CALCULATION ONLY
+       if (flag_pcc_global) then
+          call get_dxc_potential_GGA_PBE(wk_grid_total,         &
+                                         density_out_total,     &
+                                         potential(:,1), size,  &
+                                         functional_gga_pbe96_r99)
+       else
+          call get_dxc_potential_GGA_PBE(density_total,         &
+                                         density_out_total,     &
+                                         potential(:,1), size,  &
+                                         functional_gga_pbe96_r99)
+       end if
+    case default
+       if (flag_pcc_global) then
+          call get_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), size)
+       else
+          call get_dxc_potential(density_total, dVxc_drho(:,1,1), size)
+       end if
+    end select
     
     ! deallocating density_out_GGA: only for P.C.C.
     if (flag_pcc_global)  then
@@ -2452,7 +2448,7 @@ contains
                          r2 = rx * rx + ry * ry + rz * rz
                          if (r2 < loc_cutoff2) then
                             r_from_i = sqrt(r2)
-                            if (r_from_i > very_small) then
+                            if (r_from_i > RD_ERR) then
                                x = rx / r_from_i
                                y = ry / r_from_i
                                z = rz / r_from_i
@@ -2599,7 +2595,7 @@ contains
                             r2 = rx * rx + ry * ry + rz * rz
                             if (r2 < pcc_cutoff2) then
                                r_from_i = sqrt( r2 )
-                               if ( r_from_i > very_small ) then
+                               if ( r_from_i > RD_ERR ) then
                                   x_pcc = rx / r_from_i
                                   y_pcc = ry / r_from_i
                                   z_pcc = rz / r_from_i
@@ -2730,6 +2726,9 @@ contains
   !!       xc_potential + xc_potential_dn
   !!   2012/03/25 L.Tong
   !!   - Changed spin implementation
+  !!   2012/05/29 L.Tong
+  !!   - Cleaned up xc-functonal selector. Now spin and non-spin
+  !!     calculations share the same calls more or less.
   !!  SOURCE
   !!
   subroutine get_pcc_force(pcc_force, inode, ionode, n_atoms, size)
@@ -2748,8 +2747,7 @@ contains
                                    functional_gga_pbe96_rev98,         &
                                    functional_gga_pbe96_r99,           &
                                    area_moveatoms, IPRINT_TIME_THRES3, &
-                                   nspin, spin_factor,                 &
-                                   functional_lsda_pw92
+                                   nspin, spin_factor
     use block_module,        only: nx_in_block,ny_in_block,            &
                                    nz_in_block, n_pts_in_block
     use group_module,        only: blocks, parts
@@ -2762,9 +2760,8 @@ contains
     use dimens,              only: grid_point_volume, n_my_grid_points
     use GenBlas,             only: axpy
     use density_module,      only: density, density_scale, density_pcc
-    use H_matrix_module,     only: get_xc_potential,                   &
+    use XC_module,           only: get_xc_potential,                   &
                                    get_GTH_xc_potential,               &
-                                   get_xc_potential_LDA_PW92,          &
                                    get_xc_potential_GGA_PBE,           &
                                    get_xc_potential_LSDA_PW92
     use maxima_module,       only: maxngrid
@@ -2821,47 +2818,37 @@ contains
     end do
     density_wk_tot = spin_factor * sum(density_wk, 2)
 
-    if (nspin == 1) then ! spin non-polarised calculation
-       select case (flag_functional_type)
-       case (functional_lda_pz81)
-          call get_xc_potential(density_wk_tot, xc_potential(:,1),     &
-                                xc_epsilon, xc_energy, size)
-       case (functional_lda_gth96)
-          call get_GTH_xc_potential(density_wk_tot, xc_potential(:,1), &
-                                    xc_epsilon, xc_energy, size)
-       case (functional_lda_pw92)
-          call get_xc_potential_LDA_PW92(density_wk_tot,               &
-                                         xc_potential(:,1),            &
-                                         xc_epsilon, xc_energy, size)
-       case (functional_gga_pbe96)
-          ! Original PBE
-          call get_xc_potential_GGA_PBE(density_wk_tot,                &
-                                        xc_potential(:,1), xc_epsilon, &
-                                        xc_energy, size)
-       case (functional_gga_pbe96_rev98) 
-          ! PBE with kappa of PRL 80, 890 (1998)
-          call get_xc_potential_GGA_PBE(density_wk_tot,                &
-                                        xc_potential(:,1), xc_epsilon, &
-                                        xc_energy, size)
-       case (functional_gga_pbe96_r99)
-          ! PBE with form of PRB 59, 7413 (1999)
-          call get_xc_potential_GGA_PBE(density_wk_tot,                &
-                                        xc_potential(:,1), xc_epsilon, &
-                                        xc_energy, size)
-       case default
-          call get_xc_potential(density_wk_tot, xc_potential(:,1),     &
-                                xc_epsilon, xc_energy, size)
-       end select
-    else
-       select case (flag_functional_type)
-       case (functional_lsda_pw92)
-          call get_xc_potential_LSDA_PW92(density_wk, xc_potential,    &
-                                          xc_epsilon, xc_energy, size)
-       case default
-          call get_xc_potential_LSDA_PW92(density_wk, xc_potential,    &
-                                          xc_epsilon, xc_energy, size)
-       end select
-    end if ! (nspin == 1)
+    select case (flag_functional_type)
+    case (functional_lda_pz81)
+       ! NOT SPIN POLARISED
+       call get_xc_potential(density_wk_tot, xc_potential(:,1),     &
+                             xc_epsilon, xc_energy, size)
+    case (functional_lda_gth96)
+       ! NOT SPIN POLARISED
+       call get_GTH_xc_potential(density_wk_tot, xc_potential(:,1), &
+                                 xc_epsilon, xc_energy, size)
+    case (functional_lda_pw92)
+       call get_xc_potential_LSDA_PW92(density_wk, xc_potential,    &
+                                       xc_epsilon, xc_energy, size)
+    case (functional_gga_pbe96)
+       ! Original PBE
+       call get_xc_potential_GGA_PBE(density_wk,                &
+                                     xc_potential, xc_epsilon, &
+                                     xc_energy, size)
+    case (functional_gga_pbe96_rev98) 
+       ! PBE with kappa of PRL 80, 890 (1998)
+       call get_xc_potential_GGA_PBE(density_wk,                &
+                                     xc_potential, xc_epsilon, &
+                                     xc_energy, size)
+    case (functional_gga_pbe96_r99)
+       ! PBE with form of PRB 59, 7413 (1999)
+       call get_xc_potential_GGA_PBE(density_wk,                &
+                                     xc_potential, xc_epsilon, &
+                                     xc_energy, size)
+    case default
+       call get_xc_potential_LSDA_PW92(density_wk, xc_potential,    &
+                                       xc_epsilon, xc_energy, size)
+    end select
     
     ! This restarts the count for this timer
     call stop_timer(tmr_l_tmp2, TIME_ACCUMULATE_NO)      
@@ -2923,7 +2910,7 @@ contains
                          r2 = rx * rx + ry * ry + rz * rz
                          if (r2 < pcc_cutoff2) then
                             r_from_i = sqrt(r2)
-                            if (r_from_i > very_small) then
+                            if (r_from_i > RD_ERR) then
                                x_pcc = rx / r_from_i
                                y_pcc = ry / r_from_i
                                z_pcc = rz / r_from_i
@@ -2981,1186 +2968,5 @@ contains
     return    
   end subroutine get_pcc_force
   !*****
-
-
-! -----------------------------------------------------------
-! Subroutine get_dxc_potential
-! -----------------------------------------------------------
-
-!!****f* force_module/get_dxc_potential *
-!!
-!!  NAME 
-!!   get_dxc_potential
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Calculates the derivative of the exchange-correlation potential
-!!   on the grid within LDA using the Ceperley-Alder
-!!   interpolation formula. This is only for non self-consistent 
-!!   calculations (Harris-Foulkes), for the forces.
-!!
-!!   Note that this is the Perdew-Zunger parameterisation of the Ceperley-Alder 
-!!   results for a homogeneous electron gas, as described in Phys. Rev. B 23, 5048 (1981), 
-!!   with Ceperley-Alder in Phys. Rev. Lett. 45, 566 (1980)
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   D.R.Bowler
-!!  CREATION DATE
-!!   09:36, 2003/03/20 dave
-!!  MODIFICATION HISTORY
-!!   2007/11/16 12:10 dave
-!!    Bug fix: sign of ninth*(two*s+r)*rs term in dv_correlation was wrong
-!!   2008/03/03 18:34 dave
-!!    Removed dsqrt
-!!   2011/12/13 L.Tong
-!!    Removed third, as it is now defined in numbers module
-!!  SOURCE
-!!
-  subroutine get_dxc_potential(density,dxc_potential,size )
-
-    use datatypes
-    use numbers
-    use dimens, only: grid_point_volume, one_over_grid_point_volume, &
-         n_my_grid_points
-    use GenComms, only: gsum
-
-    implicit none
-
-    ! Passed variables
-    integer size
-
-    real(double) :: density(size), dxc_potential(size)      
-
-    !     Local variables
-    integer n
-    real(double) :: denominator, e_correlation, &
-         e_exchange, ln_rs, vnumerator, &
-         rcp_rs, rho, rs, rs_ln_rs, &
-         sq_rs, dv_correlation, dv_exchange, dfirst, dsecond
-    real(double), parameter :: alpha = -0.45817_double
-    real(double), parameter :: beta_1 = 1.0529_double
-    real(double), parameter :: beta_2 = 0.3334_double
-    real(double), parameter :: gamma = - 0.1423_double 
-    real(double), parameter :: p = 0.0311_double
-    real(double), parameter :: q = - 0.048_double
-    real(double), parameter :: r = 0.0020_double
-    real(double), parameter :: s = - 0.0116_double
-    real(double), parameter :: ninth = 1.0_double/9.0_double
-    real(double), parameter :: sixth = 1.0_double/6.0_double
-
-    do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n) 
-       if (rho>very_small) then ! Find radius of hole
-          rcp_rs = ( four_thirds * pi * rho )**(third)
-       else
-          rcp_rs = zero
-       end if
-       ! First, the easy part: exchange
-       e_exchange = alpha * rcp_rs
-       if(rho>very_small) then
-          dv_exchange = four*ninth * e_exchange/rho
-       else
-          dv_exchange = zero
-       end if
-       if (rcp_rs>zero) then
-          rs = one/rcp_rs
-       else
-          rs = zero
-       end if
-       sq_rs = sqrt(rs)
-       if (rs>=one) then
-          denominator = one / (one + beta_1 * sq_rs + beta_2 * rs)
-          vnumerator = one + seven_sixths * beta_1 * sq_rs +  &
-               four_thirds * beta_2 * rs
-          dfirst = (one + beta_1 * sq_rs + beta_2 * rs)*(-seven_thirtysixths*beta_1*sq_rs - four*ninth*beta_2*rs)
-          dsecond = -two*vnumerator*(-sixth*beta_1*sq_rs-third*beta_2*rs)
-          if(rho>very_small) then
-             dv_correlation = gamma * (dfirst+dsecond) * denominator * denominator * denominator / rho
-          else
-             dv_correlation = zero
-          end if
-       else if ((rs<one).and.(rs>very_small)) then
-          ln_rs = log(rs)
-          rs_ln_rs = rs * ln_rs
-          if(rho>very_small) then
-             ! DRB 2007/11/16 Changed sign of ninth to PLUS to correct error
-             dv_correlation = -(third*p+two*ninth*r*rs_ln_rs+ninth*(two*s+r)*rs)/rho
-          else
-             dv_correlation = zero
-          end if
-       else 
-          dv_correlation = zero
-       end if
-       ! Both X and C
-       dxc_potential(n) = (dv_exchange + dv_correlation)
-       ! Just C 
-       !dxc_potential(n) = dv_correlation
-       ! Just X
-       !dxc_potential(n) = dv_exchange
-    end do ! do n_my_grid_points
-    return
-  end subroutine get_dxc_potential
-!!***
-
-! -----------------------------------------------------------
-! Subroutine get_GTH_dxc_potential
-! -----------------------------------------------------------
-
-!!****f* force_module/get_GTH_dxc_potential *
-!!
-!!  NAME 
-!!   get_GTH_dxc_potential
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Calculates the derivative of the exchange-correlation potential
-!!   on the grid within LDA using the Ceperley-Alder
-!!   interpolation formula. This is only for non self-consistent 
-!!   calculations (Harris-Foulkes), for the forces.
-!!
-!!   Note that this is the Goedecker/Teter/Hutter parameterisation - 
-!!   see PRB 54, 1703 (1996)
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   D.R.Bowler
-!!  CREATION DATE
-!!   14:54, 25/03/2003 drb 
-!!  MODIFICATION HISTORY
-!!   2011/12/13 L.Tong
-!!    Removed third, it is now defined in numbers module
-!!  SOURCE
-!!
-  subroutine get_GTH_dxc_potential(density,dxc_potential,size )
-
-    use datatypes
-    use numbers
-    use dimens, only: grid_point_volume, one_over_grid_point_volume, &
-         n_my_grid_points
-    use GenComms, only: gsum
-
-    implicit none
-
-    ! Passed variables
-    integer size
-
-    real(double) :: density(size), dxc_potential(size)      
-
-    !     Local variables
-    integer n
-    real(double) :: denominator, e_correlation, &
-         e_exchange, ln_rs, vnumerator, &
-         rcp_rs, rho, rs, rs_ln_rs,t1, t2, dt1, dt2, d2t1, d2t2, &
-         sq_rs, dv_correlation, dv_exchange, dfirst, dsecond, drs_dRho, d2rs_dRho2
-    real(double), parameter :: a0=0.4581652932831429_double
-    real(double), parameter :: a1=2.217058676663745_double
-    real(double), parameter :: a2=0.7405551735357053_double
-    real(double), parameter :: a3=0.01968227878617998_double
-    real(double), parameter :: b1=1.000000000000000_double
-    real(double), parameter :: b2=4.504130959426697_double
-    real(double), parameter :: b3=1.110667363742916_double
-    real(double), parameter :: b4=0.02359291751427506_double    
-
-    do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n) 
-       if (rho>very_small) then ! Find radius of hole
-          rcp_rs = ( 4.0_double*third * pi * rho )**(third)
-          rs = one/rcp_rs
-       else
-          rcp_rs = zero
-          rs = zero
-          rho = zero
-       end if
-       if(rs>zero) then
-          drs_dRho = -rs / (3.0_double * rho)
-          d2rs_dRho2 = 4.0_double * rs / (9.0_double * rho * rho)
-          t1 = a0 + rs * (a1 + rs * (a2 + rs * a3))
-          t2 = rs * (b1 + rs * (b2 + rs * (b3 + rs * b4)))
-          dt1 = a1 + rs * (2.0_double * a2 + rs * 3.0_double * a3)
-          dt2 = b1 + rs * (2.0_double * b2 + rs * (3.0_double * b3 + rs * 4.0_double * b4))
-          d2t1 = 2.0_double * a2 + 6.0_double * a3 * rs
-          d2t2 = 2.0_double * b2 + rs * (6.0_double * b3 + rs * 12.0_double * b4)
-          dxc_potential(n) = 2.0_double*drs_dRho * (-dt1 / t2 + t1 * dt2 / (t2 * t2)) + &
-               rho* &
-               (drs_dRho*drs_dRho*(2.0_double*dt1*dt2/(t2*t2)-d2t1/t2-2.0_double*t1*dt2*dt2/(t2*t2*t2)+d2t2*t1/(t2*t2)) + &
-               d2rs_dRho2*(-dt1 / t2 + t1 * dt2 / (t2 * t2)))
-       else
-          dxc_potential(n) = zero
-       end if
-    end do ! do n_my_grid_points
-    return
-  end subroutine get_GTH_dxc_potential
-!!***
-
-
-!!****f* H_matrix_module/get_dxc_potential_LDA_PW92 *
-!!
-!!  NAME
-!!   get_dxc_potential_LDA_PW92
-!!  USAGE
-!!
-!!  PURPOSE
-!!   Calculates the derivative of the exchange-correlation potential
-!!   on the grid within LDA using the Ceperley-Alder
-!!   interpolation formula. This is only for non self-consistent
-!!   calculations (Harris-Foulkes), for the forces.
-!!
-!!   Note that this is the Perdew-Wang parameterisation of the Ceperley-Alder
-!!   results for a homogeneous electron gas, as described in Phys. Rev. B 45, 13244 (1992),
-!!   with Ceperley-Alder in Phys. Rev. Lett. 45, 566 (1980)
-!!  INPUTS
-!!
-!!
-!!  USES
-!!
-!!  AUTHOR
-!!   A.S. Torralba
-!!  CREATION DATE
-!!   30/01/06
-!!  MODIFICATION HISTORY
-!!   2008/03/03 18:34 dave
-!!    Removed dsqrt
-!!   2011/10/17 L.Tong
-!!    Corrected (changed) 1 to one in log (1 + 1/denominator)
-!!   2011/12/13 L.Tong
-!     Removed third, it is now defined in numbers module
-!!  SOURCE
-!!
-  subroutine get_dxc_potential_LDA_PW92(density,dxc_potential,size, &
-             eclda,declda_drho,d2eclda_drho2)
-
-    use datatypes
-    use numbers
-    use dimens, only: grid_point_volume, one_over_grid_point_volume, &
-         n_my_grid_points
-    use GenComms, only: gsum
-
-    implicit none
-
-    ! Passed variables
-    integer :: size
-
-    real(double) :: density(size), dxc_potential(size)
-    real(double), optional :: eclda(size)
-    real(double), optional :: declda_drho(size)
-    real(double), optional :: d2eclda_drho2(size)
-
-    !     Local variables
-    integer n
-    real(double) :: prefactor, postfactor, denominator, &
-                    e_correlation, e_exchange, &
-                    rcp_rs, rho, rs, sq_rs, &
-                    v_correlation, v_exchange, &
-                    delta_prefactor, delta_postfactor, &
-                    dv_exchange, dv_correlation, &
-                    denominator2, dnumrho_drho, &
-                    dden_drho, rho4_3, &
-                    dprefactor_drho, d2prefactor_drho2, &
-                    dposfactor_drho, d2posfactor_drho2, &
-                    dec_drho, d2ec_drho2
-
-
-    !     From Table I, Phys. Rev. B 45, 13244 (1992), for reference
-    real(double), parameter :: alpha  = 1.0421234_double
-    real(double), parameter :: alpha1 = 0.21370_double
-    real(double), parameter :: beta1  = 7.5957_double
-    real(double), parameter :: beta2  = 3.5876_double
-    real(double), parameter :: beta3  = 1.6382_double
-    real(double), parameter :: beta4  = 0.49294_double
-    real(double), parameter :: A      = 0.031091_double
-
-    !     Precalculated constants
-    real(double), parameter :: k00 = 1.611991954_double     ! (4*pi/3)**(1/3)
-    real(double), parameter :: k01 = -0.458165347_double    ! -3/(2*pi*alpha)
-    real(double), parameter :: k02 = -0.062182_double       ! -2*A
-    real(double), parameter :: k03 = -0.0132882934_double   ! -2*A*alpha1
-    real(double), parameter :: k04 = 0.4723158174_double    ! 2*A*beta1
-    real(double), parameter :: k05 = 0.2230841432_double    ! 2*A*beta2
-    real(double), parameter :: k06 = 0.1018665524_double    ! 2*A*beta3
-    real(double), parameter :: k07 = 0.03065199508_double   ! 2*A*beta4
-    real(double), parameter :: k08 = -0.008858862267_double ! 2*k03/3
-    real(double), parameter :: k09 = 0.0787193029_double    ! k04/6
-    real(double), parameter :: k10 = 0.074361381067_double  ! k05/3
-    real(double), parameter :: k11 = 0.0509332762_double    ! k06/2
-    real(double), parameter :: k12 = 0.0204346633867_double ! 2*k07/3
-    real(double), parameter :: four_ninths = 4.0_double/9.0_double
-    real(double), parameter :: minus_four_thirds = -4.0_double/3.0_double
-    real(double), parameter :: k13 = 0.0027477997778_double ! (k08-k03)/k00
-
-    do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
-
-       !!!!   EXCHANGE
-       if (rho > very_small) then ! Find radius of hole
-          rcp_rs = k00 * ( rho**third )
-          dv_exchange = four_ninths * k01 * rcp_rs / rho    ! 4*e_exchange/(9*rho)
-       else
-          rcp_rs = zero
-          dv_exchange = zero
-       end if
-
-       e_exchange = k01*rcp_rs
-
-       !!!!   CORRELATION
-       if (rcp_rs > zero) then
-          rs = one/rcp_rs
-       else
-          rs = zero
-       end if
-       sq_rs = sqrt(rs)
-
-       prefactor = k02 + k03*rs
-       denominator = sq_rs * ( k04 + sq_rs * ( k05 + sq_rs * ( k06 + k07 * sq_rs)))
-       if (denominator > zero) then
-          postfactor = log (one + one/denominator)
-       else
-          postfactor = zero
-       end if
-
-       ! Return correlation energy if requested
-       ! NOTE: This "energy" is not the actual integrand, but the integrand divided by rho
-       if(present(eclda)) then
-         eclda(n) = prefactor*postfactor
-       end if
-
-
-       ! NOTE: delta_prefactor is actually the derivative of rho*prefactor
-       !       delta_postfactor is rho times the derivative of postfactor
-       delta_prefactor  = k02 + k08*rs
-       if (sq_rs > zero) then
-          denominator2 = ( denominator * ( 1 + denominator ) )
-          delta_postfactor = sq_rs * ( k09 + sq_rs*(k10 + sq_rs*( k11 + k12 * sq_rs ))) &
-                           / denominator2
-
-          dnumrho_drho = -sq_rs *( 7.0*k09/6.0 + sq_rs * ( 4.0*k10/3.0 + sq_rs * ( 3.0*k11/2.0 +sq_rs*5.0*k12/3.0)))
-          dden_drho = -sq_rs*(k04/6.0 +sq_rs*(third*k05 + sq_rs*(half*k06 + sq_rs*2.0*k07/3.0)))
-       else
-          delta_postfactor = 0
-
-          dnumrho_drho = zero
-          dden_drho = zero
-       end if
-
-       if(rho > very_small) then
-          rho4_3 = rho**minus_four_thirds
-          dprefactor_drho   = k13*rho4_3
-          d2prefactor_drho2 = minus_four_thirds*dprefactor_drho/rho
-
-          dposfactor_drho   = delta_postfactor/rho
-          d2posfactor_drho2 = (dnumrho_drho &
-                            - delta_postfactor * ( 1 + 2*denominator) * dden_drho)/(denominator2 * rho *rho)
-       else
-          rho4_3 = zero
-          dprefactor_drho   = zero
-          d2prefactor_drho2 = zero
-
-          dposfactor_drho   = zero
-          d2posfactor_drho2 = zero
-       end if
-
-       dec_drho = postfactor*dprefactor_drho + prefactor*dposfactor_drho
-
-       ! Return derivative of correlation energy (see note above) if requested
-       if(present(declda_drho)) then
-          declda_drho(n) = dec_drho
-       end if
-
-
-       d2ec_drho2 = 2*dposfactor_drho*dprefactor_drho &
-                  + postfactor*d2prefactor_drho2 + prefactor*d2posfactor_drho2
-
-       ! Return second derivative of correlation energy (see note above) if requested
-       if(present(d2eclda_drho2)) then
-          d2eclda_drho2(n) = d2ec_drho2
-       end if
-
-       dv_correlation = 2*dec_drho + rho*d2ec_drho2
-
-       dxc_potential(n) = dv_exchange + dv_correlation
-    end do ! do n_my_grid_points
-
-    return
-  end subroutine get_dxc_potential_LDA_PW92
-!!***
-
-
-! -----------------------------------------------------------
-! Subroutine get_dxc_potential_GGA_PBE
-! -----------------------------------------------------------
-
-!!****f* H_matrix_module/get_dxc_potential_GGA_PBE *
-!!
-!!  NAME
-!!   get_dxc_potential_GGA_PBE
-!!  USAGE
-!!
-!!  PURPOSE
-!!   Calculates the potential needed for the non-self-consistent 
-!!   within GGA using the Perdew-Burke-Ernzerhof.
-!!
-!!   Note that this is the functional described in
-!!   Phys. Rev. Lett. 77, 3865 (1996)
-!!  INPUTS
-!!
-!!
-!!  USES
-!!
-!!  AUTHOR
-!!   A.S. Torralba
-!!  CREATION DATE
-!!   31/01/05
-!!  MODIFICATION HISTORY
-!!   15:54, 27/04/2007 drb 
-!!    Changed recip_vector, grad_density and tmp2, tmp3 to (n,3) for speed
-!!   2008/11/13 ast
-!!    Added new PBE functional types
-!!   2011/12/13 L.Tong
-!!    Removed third, and eight, they are now defined in numbers module
-!!  SOURCE
-!!
-  subroutine get_dxc_potential_GGA_PBE(density,density_out, dxc_potential, size, flavour )
-
-    use datatypes
-    use numbers
-    use global_module, only: rcellx, rcelly, rcellz, &
-                             functional_gga_pbe96_rev98, functional_gga_pbe96_r99
-    use dimens, only: grid_point_volume, one_over_grid_point_volume, &
-         n_my_grid_points, n_grid_x, n_grid_y, n_grid_z
-    use GenComms, only: gsum, myid
-    use energy, only: delta_E_xc
-    use fft_module, only: fft3, recip_vector
-    use H_matrix_module, only: build_gradient, get_xc_potential_LDA_PW92
-
-    implicit none
-
-    ! Passed variables
-    integer size
-    real(double) :: density(size)
-    real(double) :: density_out(size)
-    real(double) :: dxc_potential(size)
-    integer, optional :: flavour
-
-    !     Local variables
-    integer n, i
-    integer selector
-
-    real(double) :: grad_density(size), grad_density_xyz(size,3)
-    real(double) :: rho, grad_rho, rho1_3, rho1_6
-    real(double) :: e_exchange
-    real(double) :: xc_energy_lda_total, dxc_potential_lda(size), &
-                    eclda(size), declda_drho(size), d2eclda_drho2(size)
-    real(double) :: de_dgrad(size)
-    real(double) :: s, s2, factor0, factor1, denominator0, denominator0_2
-    real(double) :: d2e_drho2, d2e_dgrad2(size), d2e_dgrad_drho(size)
-    real(double) :: dden0_drho, df0f1_drho, ds_grad, dden0_dgrad, ds_dgrad, df1_dgrad
-    real(double) :: diff_rho(size)
-    complex(double_cplx) :: tmp1(size), tmp2(size,3)
-    real(double) :: tmp3(size,3), tmp_factor
-
-    real(double) :: a, a2, t, t2, t3, t4, num1, den1, den1_2, fl
-    real(double) :: factor_exp, factor_exp2, factor_exp3
-    real(double) :: dt_drho, da_drho, dnum1_drho, dden1_drho, dfl_drho, dec_drho
-    real(double) :: dt_dgrad, dnum1_dgrad, dden1_dgrad, dfl_dgrad
-    real(double) :: d2t_drho2, d2a_drho2, d2num1_drho2, d2den1_drho2, d2fl_drho2
-    real(double) :: d2num1_dgrad2, d2den1_dgrad2, d2fl_dgrad2
-    real(double) :: d2t_drho_dgrad, d2num1_drho_dgrad, d2den1_drho_dgrad
-    real(double) :: d2fl_drho_dgrad
-
-    real(double) :: kappa, mu_kappa
-   
-    !     From Phys. Rev. Lett. 77, 3865 (1996)
-    real(double), parameter :: mu = 0.21951_double
-    real(double), parameter :: beta = 0.066725_double
-    real(double), parameter :: gamma = 0.031091_double
-    real(double), parameter :: kappa_ori = 0.804_double
-
-    !     From Phys. Rev. Lett. 80, 890 (1998)
-    real(double), parameter :: kappa_alt = 1.245_double
-
-    !     Precalculated constants
-    real(double), parameter :: mu_kappa_ori = 0.27302_double     ! mu/kappa_ori
-    real(double), parameter :: mu_kappa_alt = 0.17631_double     ! mu/kappa_alt
-    real(double), parameter :: beta_gamma = 2.146119_double      ! beta/gamma
-    real(double), parameter :: beta_X_gamma = 0.002074546_double ! beta*gamma
-    real(double), parameter :: k01 = 0.16162045967_double        ! 1/(2*(3*pi*pi)**(1/3))
-    real(double), parameter :: k02 = -0.16212105381_double       ! -3*mu*((4*pi/3)**3)/(2*pi*alpha)
-                                                                 ! = mu*k00*k01(LDA_PW92)=mu*k04
-    real(double), parameter :: k03 = 1.98468639_double           ! ((4/pi)*(3*pi*pi)**(1/3))**(1/2)
-    real(double), parameter :: k04 = -0.738558852965_double      ! -3*((4*pi/3)**3)/(2*pi*alpha) = k00*k01 in LDA_PW92
-    real(double), parameter :: k05 = 0.05240415_double           ! -2*k01*k02
-    real(double), parameter :: eight_thirds = 8.0_double / 3.0_double
-
-    !      Selector options
-    integer, parameter :: fx_original    = 1                     ! Used in PBE and revPBE
-    integer, parameter :: fx_alternative = 2                     ! Used in RPBE
-
-    ! Choose between PBE or revPBE parameters
-    if(PRESENT(flavour)) then
-      if(flavour==functional_gga_pbe96_rev98) then
-        kappa=kappa_alt
-        mu_kappa=mu_kappa_alt
-      else
-        kappa=kappa_ori
-        mu_kappa=mu_kappa_ori
-      end if
-    else
-      kappa=kappa_ori
-      mu_kappa=mu_kappa_ori
-    end if
-
-!*ast* AT PRESENT IGNORED
-    ! Choose functional form
-    if(PRESENT(flavour)) then
-      if(flavour==functional_gga_pbe96_r99) then
-        selector=fx_alternative
-      else
-        selector=fx_original
-      end if
-    else
-      selector=fx_original
-    end if
-
-!*ast* AT PRESENT, NOT IMPLEMENTED
-if(selector == fx_alternative) then
-  print *,"!!!!!!!!WARNING!!!!!!!!!!!"
-  print *,"WARNING: TO DO !!!!!!!!! RPBE NSC Forces NOT IMPLEMENTED YET. The values will be for standard PBE"
-  print *,"!!!!!!!!WARNING!!!!!!!!!!!"
-end if
-
-    ! Build the gradient of the density
-    call build_gradient (density, grad_density, grad_density_xyz, size)
-
-    ! Get the LDA part of the functional
-
-    call get_dxc_potential_LDA_PW92(density, dxc_potential_lda, size, &
-                                    eclda, declda_drho, d2eclda_drho2)
-
-    do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
-       grad_rho = grad_density(n)
-
-       diff_rho(n) = density(n) - density_out(n)
-
-       !!!!   EXCHANGE
-
-       !!   Energy factors
-
-       if (rho > very_small) then
-          rho1_3 = rho ** third
-          rho1_6 = sqrt (rho1_3)
-          s = k01 * grad_rho / (rho ** four_thirds)
-          s2 = s * s
-          denominator0 = one / (one + mu_kappa * s2)
-          denominator0_2 = denominator0 * denominator0
-          factor0 = k02 * rho1_3
-          factor1 = s2 * denominator0
-          ! NOTE: This doesn't look like in Phys. Rev. Lett. 77:18, 3865 (1996)
-          !       because the 1 in Fx, has been multiplied by Ex-LDA and is implicit
-          !       in xc_energy_lda(n), in the total energy below
-          e_exchange = factor0 * factor1
-       else
-          s  = 0.0_double              
-          s2 = 0.0_double
-          denominator0 = 0.0_double
-          denominator0_2 = 0.0_double 
-          factor0 = 0.0_double
-          factor1 = 0.0_double
-          e_exchange = zero
-       end if
-
-       !!   Second derivative of Ex wrt rho
-       if (rho > very_small) then
-          dden0_drho = mu_kappa * eight_thirds * denominator0_2 * s2 /rho
-          df0f1_drho = third * e_exchange * (one - eight * denominator0) / rho
-          d2e_drho2 = four_thirds * (df0f1_drho * (one - two * denominator0) &
-                    - two * e_exchange * dden0_drho)
-       else
-          d2e_drho2 = 0.0_double
-       end if
-
-       !!   Second derivative of Ex wrt grad
-       ds_dgrad = 0.0_double
-       if(rho > very_small) ds_dgrad = k01 * rho**(-four_thirds)
-       dden0_dgrad = -two * mu_kappa * denominator0_2 * s * ds_dgrad 
-
-       d2e_dgrad2(n) = two * rho * factor0 * ds_dgrad * (ds_dgrad * denominator0_2 &
-                     + two * s * denominator0 * dden0_dgrad)
-
-       !!   Second derivative of Ex wrt grad and rho
-       df1_dgrad = two * s * denominator0_2 * ds_dgrad
-
-       d2e_dgrad_drho(n) = (four_thirds) * factor0 &
-                         * (df1_dgrad * (one - two * denominator0) &
-                         - two * factor1 * dden0_dgrad)
-
-
-       !!   First derivative wrt gradient
-       de_dgrad(n) = rho * factor0 * df1_dgrad
-
-
-       !!!!   CORRELATION
-
-       !!   Energy terms
-       factor_exp = exp(-eclda(n)/gamma)
-       a = factor_exp - one
-       if(a > very_small) then
-         a = beta_gamma / a
-       else 
-         a = beta_gamma * BIG
-       end if
-       a2 = a * a
-
-       if(rho > very_small) then       
-         t = grad_rho/(two*k03*(rho**seven_sixths))
-       else
-         t = 0.0_double
-       end if
-       t2 = t * t
-       t3 = t2 * t
-       t4 = t2 * t2
-       num1 = one + a*t2;
-       den1 = num1 + a2*t4;
-       den1_2 = den1*den1;
-       if(den1 > very_small) then
-         fl = one + beta_gamma * t2 * num1 / den1;
-       else
-         fl = one
-       end if
-
-
-       !!   First derivative wrt rho
-       
-       if(rho > very_small) then 
-         dt_drho = -seven_sixths*t/rho
-       else
-         dt_drho = 0.0_double
-       end if
-    !TM 2007_10_18  
-    ! eclda(n) = 0 -> factor_exp = one -> zero**(-2) !!!
-    !ORI   factor_exp2 = (factor_exp - one)**(-two)
-     if(abs(factor_exp-one) > very_small) then
-       factor_exp2 = one/(factor_exp - one)
-       factor_exp2 = factor_exp2**2
-     else
-       factor_exp2 = 0.0_double
-     end if
-
-       da_drho = beta_gamma * factor_exp * factor_exp2 * declda_drho(n)/gamma
-       dnum1_drho = da_drho * t2 + two*a*t*dt_drho
-       dden1_drho = dnum1_drho + two*a*t4*da_drho + four*a2*t3*dt_drho
-       if(den1 > very_small) then
-         dfl_drho = beta_gamma*((two*t*num1*dt_drho + t2*dnum1_drho)/den1 - t2*num1*dden1_drho/den1_2)
-       else
-         dfl_drho = 0.0_double
-       end if
-       dec_drho = gamma * (log(fl) + rho * dfl_drho / fl)
-
-       !!   Second derivative with respect to rho
-
-       if(rho > very_small) then
-         d2t_drho2 = seven_sixths*(t/(rho*rho) - dt_drho/rho)
-       else
-         d2t_drho2 = 0.0_double
-       end if
-       factor_exp3 = factor_exp * factor_exp2
-      if(abs(factor_exp-one) > very_small) then
-       d2a_drho2 = (beta_gamma/gamma)*( ( ( (two * factor_exp / (factor_exp - one)) - one )&
-                 * factor_exp3 * declda_drho(n)**2) /gamma &
-                 + factor_exp3 * d2eclda_drho2(n))
-      else
-       d2a_drho2 = zero
-      end if
-
-       d2num1_drho2 = d2a_drho2*t2 + four*t*da_drho*dt_drho &
-                    + two*a*((dt_drho**2) + t*d2t_drho2)
-       d2den1_drho2 = d2num1_drho2 + two*((da_drho*t2)**2) &
-                    + two*a*d2a_drho2*t4 &
-                    + 16.0_double*a*t3*da_drho*dt_drho &
-                    + 12.0_double*((a*t*dt_drho)**2) &
-                    + four*a2*t3*d2t_drho2
-       if(den1 > very_small) then
-         d2fl_drho2 = beta_gamma*(two*num1*(dt_drho**2) &
-                    + t*(four*(dnum1_drho*dt_drho &
-                    - num1*dden1_drho*dt_drho/den1) &
-                    + two*num1*d2t_drho2) &
-                    + t2*(d2num1_drho2 &
-                    + two*(num1*((dden1_drho/den1)**2) &
-                    - dnum1_drho*dden1_drho/den1) &
-                    - num1*d2den1_drho2/den1))/den1
-       else
-         d2fl_drho2 = 0.0_double
-       end if
-       d2e_drho2 = d2e_drho2 + gamma*(two*dfl_drho/fl - rho*((dfl_drho/fl)**2) + rho*d2fl_drho2/fl);
-
-
-       !!   First derivative with respect to grad
-
-       if(rho > very_small) then 
-         dt_dgrad = one/(two*k03*(rho**seven_sixths))
-       else
-         dt_dgrad = 0.0_double
-       end if
-       dnum1_dgrad = two*a*t*dt_dgrad
-       dden1_dgrad = two*a*t*dt_dgrad + four*a2*t3*dt_dgrad
-       if(den1 > very_small) then
-          dfl_dgrad = two*beta_gamma*t*num1*dt_dgrad/den1 + beta_gamma*t2*dnum1_dgrad/den1  &
-                 - beta_gamma*t2*num1*dden1_dgrad/den1_2
-       else
-          dfl_dgrad = 0.0_double
-       end if
-       de_dgrad(n) = de_dgrad(n) + gamma * rho * dfl_dgrad / fl
- 
- 
-       !!   Second derivative with respect to grad
- 
-       d2num1_dgrad2 = two*a*(dt_dgrad**2)
-       d2den1_dgrad2 = d2num1_dgrad2 + 12.0*((a*t*dt_dgrad)**2)
-       if(den1 > very_small) then
-        d2fl_dgrad2 = beta_gamma*(two*num1*(dt_dgrad**2)/den1 &
-                    + four*t*dnum1_dgrad*dt_dgrad/den1 &
-                    - two*t*num1*dden1_dgrad*dt_dgrad/den1_2 &
-                    + t2*d2num1_dgrad2/den1 &
-                    - t2*dden1_dgrad*dnum1_dgrad/den1_2 &
-                    - two*t*num1*dden1_dgrad*dt_dgrad/den1_2 &
-                    - t2*dnum1_dgrad*dden1_dgrad/den1_2 &
-                    + two*t2*num1*(dden1_dgrad**2)/(den1_2*den1) &
-                    - t2*num1*d2den1_dgrad2/den1_2)
-       else
-        d2fl_dgrad2 = zero
-       end if
-       d2e_dgrad2(n) = d2e_dgrad2(n) + gamma*rho*(d2fl_dgrad2/fl - (dfl_dgrad**2)/(fl*fl))
- 
-       !!   Second derivative with respect to rho and grad
-
-       ! if((grad_rho > very_small ) .or. (rho > very_small)) then  ! Changed by TM 19Oct2007
-       if((grad_rho > very_small ) .and. (rho > very_small)) then 
-         d2t_drho_dgrad = -seven_sixths*t/(grad_rho*rho)
-       else
-         d2t_drho_dgrad = 0.0_double
-       end if      
-       d2num1_drho_dgrad = two*(t*da_drho*dt_dgrad + a*dt_drho*dt_dgrad + a*t*d2t_drho_dgrad)
-       d2den1_drho_dgrad = d2num1_drho_dgrad + 8.0*a*t3*da_drho*dt_dgrad + 12.0*a2*t2*dt_drho*dt_dgrad &
-                         + four*a2*t3*d2t_drho_dgrad
-       if(den1 > very_small) then
-          d2fl_drho_dgrad = beta_gamma*(two*(dt_drho*dt_dgrad*num1 &
-                          + t*(dnum1_drho*dt_dgrad &
-                          + num1*(d2t_drho_dgrad &
-                          - (dden1_drho*dt_dgrad &
-                          + dt_drho*dden1_dgrad)/den1) &
-                          + dnum1_dgrad*dt_drho &
-                         + t*num1*dden1_drho*dden1_dgrad/den1_2)) &
-                         + t2*(d2num1_drho_dgrad &
-                         - (dnum1_dgrad*dden1_drho &
-                         + dnum1_drho*dden1_dgrad &
-                         + num1*d2den1_drho_dgrad)/den1))/den1
-       else
-         d2fl_drho_dgrad = 0.0_double
-       end if
-        d2e_dgrad_drho(n) = d2e_dgrad_drho(n) + gamma*(dfl_dgrad + rho*(d2fl_drho_dgrad - dfl_drho*dfl_dgrad/fl))/fl
- 
- 
-       !!   Add term L1 to the potential
-       dxc_potential(n) = dxc_potential(n) &
-                        + diff_rho(n) * (d2e_drho2 + dxc_potential_lda(n))
-
-    end do ! do n_my_grid_points
-
-
-    ! Fourier transform the difference of densities
-     tmp1(:)=cmplx(zero,zero,double_cplx)  !TM
-    call fft3(diff_rho, tmp1, size, -1)
-
-    !do n=1, n_my_grid_points  ! debugged 25Oct2007 TM
-    do n=1, size        
-       ! Product by reciprocal vector stored for later use
-       tmp2(n,1) = -minus_i*recip_vector(n,1)*tmp1(n)
-       tmp2(n,2) = -minus_i*recip_vector(n,2)*tmp1(n)
-       tmp2(n,3) = -minus_i*recip_vector(n,3)*tmp1(n)
-    end do
-
-    ! Fourier transform the vector back to the grid
-    call fft3(tmp3(:,1), tmp2(:,1), size, 1)
-    call fft3(tmp3(:,2), tmp2(:,2), size, 1)
-    call fft3(tmp3(:,3), tmp2(:,3), size, 1)
-
-    ! Add term L3 to potential
-    do n=1, n_my_grid_points
-       do i=1,3 
-          if(grad_density(n) > very_small) then
-            dxc_potential(n) = dxc_potential(n) + (tmp3(n,i) &
-                                                * d2e_dgrad_drho(n) &
-                                                * grad_density_xyz(n,i) )/grad_density(n)
-          end if
-       end do
-    end do
-
-    ! Term L4
-    do n=1, n_my_grid_points
-       if(grad_density(n) > very_small) then
-         tmp_factor =(tmp3(n,1) * grad_density_xyz(n,1) &
-                    + tmp3(n,2) * grad_density_xyz(n,2) &
-                    + tmp3(n,3) * grad_density_xyz(n,3)) &
-                    * (d2e_dgrad2(n) &
-                    - de_dgrad(n)/grad_density(n) ) / (grad_density(n)*grad_density(n))
-       else
-         tmp_factor = zero
-       end if
-       ! Reuse tmp3
-       do i=1,3
-          if(grad_density(n) > very_small) then
-            tmp3(n,i) = tmp_factor * grad_density_xyz(n,i) &
-                      + de_dgrad(n) * tmp3(n,i)/grad_density(n)
-          else
-            tmp3(n,i) = zero
-          end if
-       end do
-    end do
-
-    ! Terms L2 and L5 (using L4)
-    do n=1, n_my_grid_points
-       do i=1,3
-          if(grad_density(n) > very_small) then
-            tmp3(n,i) = tmp3(n,i) &
-                      + diff_rho(n) * d2e_dgrad_drho(n)* grad_density_xyz(n,i) &
-                      / grad_density(n)
-          else
-            tmp3(n,i) = zero
-          end if
-       end do
-    end do
-
-    tmp2(:,:) = cmplx(zero,zero,double_cplx) ! 25Oct2007 TM
-    call fft3(tmp3(:,1), tmp2(:,1), size, -1)
-    call fft3(tmp3(:,2), tmp2(:,2), size, -1)
-    call fft3(tmp3(:,3), tmp2(:,3), size, -1)
-
-    !do n=1, n_my_grid_points  ! debugged 25Oct2007 TM
-    do n=1, size
-       ! Product by reciprocal vector stored for later use
-       tmp1(n) = -minus_i &
-               *(recip_vector(n,1)*tmp2(n,1) &
-               + recip_vector(n,2)*tmp2(n,2) &
-               + recip_vector(n,3)*tmp2(n,3))
-    end do
-
-    ! Use first component of tmp3 to store final vector
-    call fft3(tmp3(:,1), tmp1, size, 1)    
-
-    do n=1, n_my_grid_points
-       dxc_potential(n) = dxc_potential(n) - tmp3(n,1)
-    end do
-
-    return
-  end subroutine get_dxc_potential_GGA_PBE
-!!***
-
-
-  !!****f* force_module/get_dxc_potential_LSDA_PW92
-  !! PURPOSE
-  !!   Calculates the derivative of the exchange-correlation potential
-  !!   on the grid within LSDA using the Ceperley-Alder interpolation
-  !!   formula. This is only for non self-consistent calcuations
-  !!   (Harris-Foulkes), for the forces.
-  !!   
-  !!   The functional is given by Phys. Rev. B 45, 13244
-  !! INPUTS
-  !! OUTPUT
-  !! RETURN VALUE
-  !! AUTHOR
-  !!   L.Tong
-  !! CREATION DATE 
-  !!   2011/10/18
-  !! MODIFICATION HISTORY
-  !!   2012/03/26 L.Tong
-  !!   - Changed spin implementation
-  !!   - density is now array of (maxngrid,nspin)
-  !!   - dxc_potential_ddensity is now array of
-  !!   - (maxngrid,nspin,nspin), so
-  !!     dxc_potential_ddensity(n,spin1,spin2) corresponds to
-  !!     dVxc(spin1) / drho(spin2) at grid point n.
-  !! SOURCE
-  !!
-  subroutine get_dxc_potential_LSDA_PW92 (density,                &
-                                          dxc_potential_ddensity, &
-                                          size)
-    use datatypes
-    use numbers
-    use dimens,        only: grid_point_volume,          &
-                             one_over_grid_point_volume, &
-                             n_my_grid_points
-    use GenComms,      only: gsum
-    use global_module, only: nspin, spin_factor
-
-    implicit none
-    
-    ! passed variables
-    integer :: size
-    real(double), dimension(:,:)   :: density
-    real(double), dimension(:,:,:) :: dxc_potential_ddensity
-    
-    ! local variables
-    integer      :: n, spin, spin_2
-    real(double) :: rho_tot, rs, rcp_rs, zeta, sq_rs, Q0, Q0p, Q1,     &
-                    Q1p, Q1pp, e_c0, e_c1, malpha_c, f, de_c0_drs,     &
-                    de_c1_drs, dmalpha_c_drs, df_dzeta, d2e_c0_drs2,   &
-                    d2e_c1_drs2, d2malpha_c_drs2, d2f_dzeta2,          &
-                    de_c_drs, de_c_dzeta, d2e_c_drs2, d2e_c_drs_dzeta, &
-                    d2e_c_dzeta2, d2malpha_drs, df2_dzeta2, factor
-    real(double), dimension(nspin)       :: rho, drs_drho, dzeta_drho
-    real(double), dimension(nspin,nspin) :: dVx_drho, dVc_drho
-    
-    ! tabulated parameters
-    real(double) :: alpha1, beta1, beta2, beta3, beta4, p, A
-
-    ! precalculated parameters
-    real(double), parameter :: k00 =  1.611991954_double ! (4*pi/3)**(1/3)
-    real(double), parameter :: k01 = -0.413566994_double ! -(2/pi)**(1/3)/3**(2/3)
-    real(double), parameter :: K02 =  1.923661051_double ! 1 / (2**(4/3)-2)
-    real(double), parameter :: K03 =  0.584822362_double ! 1 / f''(0)
-
-    ! loop over grid points
-    do n = 1, n_my_grid_points
-       rho_tot = zero
-       do spin = 1, nspin
-          rho(spin) = density(n,spin)
-          rho_tot = rho_tot + spin_factor * rho(spin)
-       end do
-       if (rho_tot > very_small) then
-          rcp_rs = k00 * rho_tot**third
-          zeta = (rho(1) - rho(nspin)) / rho_tot
-       else
-          rcp_rs = zero
-          zeta = zero
-       end if
-
-       ! exchange (worked out from Mathematica)
-       do spin = 1, nspin
-          if (rho(spin) > very_small) then
-             dVx_drho(spin,spin) = k01 / ((rho(spin))**two_thirds)
-          else
-             dVx_drho(spin,spin) = zero
-          end if
-       end do
-       if (nspin == 2) then
-          dVx_drho(1,2) = zero ! dVx_drho(1,2) = dVx_up_drho_dn
-          dVx_drho(2,1) = zero ! dVx_drho(2,1) = dVx_dn_drho_up
-       end if
-
-       ! correlation
-       if (rcp_rs > very_small) then
-          rs = one / rcp_rs
-       else
-          rs = zero
-       end if
-       sq_rs = sqrt(rs)
-
-       ! e_c0 and de_c0_drs
-       ! from table 1 of Phys. Rev. B 45, 13244
-       A = 0.031091_double
-       alpha1 = 0.21370_double
-       beta1 = 7.5957_double
-       beta2 = 3.5876_double
-       beta3 = 1.6382_double
-       beta4 = 0.49294_double
-       p = one
-        
-       Q0 = -two * A * (one + alpha1 * rs)
-       Q1 = two * A * (beta1 * sq_rs + beta2 * rs + beta3 * sq_rs**three + &
-            beta4 * rs**(p + one))
-       Q0p = -two * A * alpha1
-       if (sq_rs > very_small) then
-          Q1p = A * (beta1 / sq_rs + two * beta2 + three * beta3 * &
-               sq_rs + two * (p + one) * beta4 * rs**p)
-          Q1pp = half * A * (-beta1 / (sq_rs**three) + three * beta3 /&
-               sq_rs + eight * beta4)
-       else
-          Q1p = zero
-          Q1pp = zero
-       end if
-       
-       if (Q1 > very_small) then
-          e_c0 = Q0 * log (one + one / Q1)
-          de_c0_drs = Q0p * log (one + one / Q1) - (Q0 * Q1p) / (Q1 * &
-               (Q1 + one))
-          d2e_c0_drs2 = - (two * Q0p * Q1p + Q0 * Q1pp) / (Q1 * (Q1 + &
-               one)) + Q1p * (two * Q1 + one) * Q0 * Q1p / ((Q1 * (Q1 &
-               + one))**two)
-       else
-          e_c0 = zero
-          de_c0_drs = zero
-          d2e_c0_drs2 = zero
-       end if
-
-       ! e_c1 and de_c1_drs
-       ! from table 1 of Phys. Rev. B 45, 13244
-       A = 0.015545_double
-       alpha1 = 0.20548_double
-       beta1 = 14.1189_double
-       beta2 = 6.1977_double
-       beta3 = 3.3662_double
-       beta4 = 0.62517_double
-       p = one
-
-       Q0 = -two * A * (one + alpha1 * rs)
-       Q1 = two * A * (beta1 * sq_rs + beta2 * rs + beta3 * sq_rs**three + &
-            beta4 * rs**(p + one))
-       Q0p = -two * A * alpha1
-       if (sq_rs > very_small) then
-          Q1p = A * (beta1 / sq_rs + two * beta2 + three * beta3 * &
-               sq_rs + two * (p + one) * beta4 * rs**p)
-          Q1pp = half * A * (-beta1 / (sq_rs**three) + three * beta3 /&
-               sq_rs + eight * beta4)
-       else
-          Q1p = zero
-          Q1pp = zero
-       end if
-       
-       if (Q1 > very_small) then
-          e_c1 = Q0 * log (one + one / Q1)
-          de_c1_drs = Q0p * log (one + one / Q1) - (Q0 * Q1p) / (Q1 * &
-               (Q1 + one))
-          d2e_c1_drs2 = - (two * Q0p * Q1p + Q0 * Q1pp) / (Q1 * (Q1 + &
-               one)) + Q1p * (two * Q1 + one) * Q0 * Q1p / ((Q1 * (Q1 &
-               + one))**two)
-       else
-          e_c1 = zero
-          de_c1_drs = zero
-          d2e_c1_drs2 = zero
-       end if
-
-       ! malpha_c and dmalpha_c_drs
-       ! from table 1 of Phys. Rev. B 45, 13244
-       A = 0.016887_double
-       alpha1 = 0.11125_double
-       beta1 = 10.357_double
-       beta2 = 3.6231_double
-       beta3 = 0.88026_double
-       beta4 = 0.49671_double
-       p = one
-
-       Q0 = - two * A * (one + alpha1 * rs)
-       Q1 = two * A * (beta1 * sq_rs + beta2 * rs + beta3 * sq_rs**three + &
-            beta4 * rs**(p + one))
-       Q0p = -two * A * alpha1
-       if (sq_rs > very_small) then
-          Q1p = A * (beta1 / sq_rs + two * beta2 + three * beta3 * &
-               sq_rs + two * (p + one) * beta4 * rs**p)
-          Q1pp = half * A * (-beta1 / (sq_rs**three) + three * beta3 /&
-               sq_rs + eight * beta4)
-       else
-          Q1p = zero
-          Q1pp = zero
-       end if
-
-       if (Q1 > very_small) then
-          malpha_c = Q0 * log (one + one / Q1)
-          dmalpha_c_drs = -two * A * alpha1 * log (one + one / Q1) - &
-               (Q0 * Q1p) / (Q1 * (Q1 + one))
-          d2malpha_c_drs2 = - (two * Q0p * Q1p + Q0 * Q1pp) / (Q1 * &
-               (Q1 + one)) + Q1p * (two * Q1 + one) * Q0 * Q1p / ((Q1 &
-               * (Q1 + one))**two)
-       else
-          malpha_c = zero
-          dmalpha_c_drs = zero
-          d2malpha_c_drs2 = zero
-       end if
-        
-       ! f and df_dzeta
-       f = K02 * ((one + zeta)**four_thirds + (one - zeta)**four_thirds - two)
-       df_dzeta = four_thirds * K02 * ((one + zeta)**one_third &
-            - (one - zeta)**one_third)
-       df2_dzeta2 = one_third * four_thirds * K02 * &
-            ((one + zeta)**(-two_thirds) + (one - zeta)**(-two_thirds))
-
-       ! drs_drho
-       do spin = 1, nspin
-          if (rho(spin) > very_small) then
-             drs_drho(spin) = - third * rs / rho_tot
-             dzeta_drho(spin) = ((-one)**(spin+1) - zeta) / rho_tot
-          else
-             drs_drho(spin) = zero
-             dzeta_drho(spin) = zero
-          end if
-       end do
-
-       ! first order derivatives
-       de_c_drs = de_c0_drs * (one - f * zeta**4) + de_c1_drs * f * &
-            zeta**4 + d2malpha_drs * K03 * f * (zeta**4 - one)
-       de_c_dzeta = four * zeta**3 * f * (e_c1 - e_c0 + K03 * &
-            malpha_c) + df_dzeta * (zeta**4 * e_c1 - zeta**4 * e_c0 + &
-            (zeta**4 - one) * K03 * malpha_c)
-
-       ! second order derivatives
-       ! d2e_c_drs2
-       d2e_c_drs2 = d2e_c0_drs2 * (one - f * zeta**4) + d2e_c1_drs2 * &
-            f * zeta**4 + d2malpha_c_drs2 * K03 * f * (zeta**4 - one)
-       
-       ! d2e_c_drs_dzeta
-       d2e_c_drs_dzeta = four * zeta**3 * f * (de_c1_drs - de_c0_drs +&
-            K03 * dmalpha_c_drs) + df_dzeta * (zeta **4 * de_c1_drs - &
-            zeta**4 * de_c0_drs + (zeta**4 - one) * K03 * &
-            dmalpha_c_drs)
-
-       ! d2e_c_dzeta2
-       d2e_c_dzeta2 = (twelve * zeta * zeta * f + eight * zeta**3 * &
-            df_dzeta) * (e_c1 - e_c0 + K03 * malpha_c) + d2f_dzeta2 * &
-            (zeta**4 * e_c1 - zeta**4 * e_c0 + (zeta**4 - one) * K03 *&
-            malpha_c)
-
-       ! finally get the derivatives of the correlation potentials
-       do spin = 1, nspin
-          do spin_2 = 1, nspin
-             factor = zeta + (-one)**spin
-             dVc_drho(spin,spin_2) = &
-                  (two_thirds * de_c_drs - &
-                   one_third * rs * d2e_c_drs2 - &
-                   factor * d2e_c_drs_dzeta) * &
-                  drs_drho(spin_2) - &
-                  (one_third * rs * d2e_c_drs_dzeta + &
-                   factor * d2e_c_dzeta2) * &
-                  dzeta_drho(spin_2)
-          end do
-       end do
-
-       ! dVc_drho(1,1) = (two_thirds * de_c_drs - one_third * rs * &
-       !      d2e_c_drs2 - (zeta - one) * d2e_c_drs_dzeta) * &
-       !      drs_drho_up - (one_third * rs * d2e_c_drs_dzeta + (zeta - &
-       !      one) * d2e_c_dzeta2) * dzeta_drho_up
-       
-       ! dVc_up_drho_dn = (two_thirds * de_c_drs - one_third * rs * &
-       !      d2e_c_drs2 - (zeta - one) * d2e_c_drs_dzeta) * &
-       !      drs_drho_dn - (one_third * rs * d2e_c_drs_dzeta + (zeta - &
-       !      one) * d2e_c_dzeta2) * dzeta_drho_dn
-
-       ! dVc_dn_drho_up = (two_thirds * de_c_drs - one_third * rs * &
-       !      d2e_c_drs2 - (zeta + one) * d2e_c_drs_dzeta) * &
-       !      drs_drho_up - (one_third * rs * d2e_c_drs_dzeta + (zeta + &
-       !      one) * d2e_c_dzeta2) * dzeta_drho_up
-
-       ! dVc_dn_drho_dn = (two_thirds * de_c_drs - one_third * rs * &
-       !      d2e_c_drs2 - (zeta + one) * d2e_c_drs_dzeta) * &
-       !      drs_drho_dn - (one_third * rs * d2e_c_drs_dzeta + (zeta + &
-       !      one) * d2e_c_dzeta2) * dzeta_drho_dn
-
-       ! collect things together
-       do spin = 1, nspin
-          do spin_2 = 1, nspin
-             dxc_potential_ddensity(n,spin,spin_2) = &
-                  dVx_drho(spin,spin_2) + dVc_drho(spin,spin_2)
-          end do
-       end do
-              
-    end do ! n = 1, n_my_grid_points
-
-    return
-  end subroutine get_dxc_potential_LSDA_PW92
-  !!*****
 
 end module force_module

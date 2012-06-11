@@ -190,7 +190,7 @@ contains
                 rij2 = rijx*rijx + rijy*rijy + rijz*rijz
                 ! If the interatomic distance is smaller than the cutoff, culculate the dispersion,
                 ! but exclude the situation in which "ia" = "ja".
-                if ( (rij2 .GT. very_small) .AND. (rij2 .LE. r_dft_d2*r_dft_d2) ) then
+                if ( (rij2 .GT. RD_ERR) .AND. (rij2 .LE. r_dft_d2*r_dft_d2) ) then
                   ig_atom_beg = parts%icell_beg(D2_CS%lab_cell(jp))
                   ! Calculate the molecular dispersion coefficient and vdW radius
                   C_i = atm_disp_coeff(bundle%species(bundle%nm_nodbeg(ip) + ia - 1))
@@ -498,7 +498,7 @@ contains
        distance = edg_a(1)*edg_a(1) + edg_a(2)*edg_a(2) + edg_a(3)*edg_a(3) - &
             &((edg_a(1)*edg_b(1) + edg_a(2)*edg_b(2) + edg_a(3)*edg_b(3))**2) / &
             &(edg_b(1)*edg_b(1) + edg_b(2)*edg_b(2) + edg_b(3)*edg_b(3))
-       if(distance > very_small) then 
+       if(distance > RD_ERR) then 
            distance = sqrt(distance)
        else
            distance = zero

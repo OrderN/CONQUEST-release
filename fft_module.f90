@@ -98,7 +98,7 @@ module fft_module
   integer, dimension(:), pointer :: unpackyz, unpackzy
   integer, dimension(:), pointer :: psendyz, psendzy
   integer, allocatable, dimension(:) :: x_columns_node, y_columns_node, &
-       z_columns_node
+                                        z_columns_node
 
   real(double), allocatable, dimension(:) :: hartree_factor
   real(double), allocatable, dimension(:,:) :: recip_vector
@@ -613,7 +613,7 @@ contains
 !!
 !!    Note: this routine ASSUMES orthorhombic cells
 !!   11:06, 14/11/2005 drb 
-!!    Also changed check for zero (used to be r2.NE.0, now r2>very_small)
+!!    Also changed check for zero (used to be r2.NE.0, now r2>RD_ERR)
 !!   15:54, 27/04/2007 drb 
 !!    Changed recip_vector for consistency
 !!   2008/05/23
@@ -973,14 +973,14 @@ contains
                 recip_vector(site,2) = two*pi*ymin
                 recip_vector(site,3) = two*pi*zmin
                 r2 = xmin2+ymin2+zmin2
-                if (r2>very_small) then 
+                if (r2>RD_ERR) then 
                    tmp_r2 = one/r2
                 else
                    tmp_r2 = zero
                    i0 = site ! Store location of gamma point
                 end if
                 hartree_factor(site) = tmp_r2 
-                if(tmp_r2<cutoff.AND.tmp_r2>very_small) then
+                if(tmp_r2<cutoff.AND.tmp_r2>RD_ERR) then
                    size_kl = size_kl + 1
                    temp_kl(size_kl) = site
                 end if
