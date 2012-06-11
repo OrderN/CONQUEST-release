@@ -2625,7 +2625,7 @@ contains
     call stop_print_timer(tmr_int_E_vdW, &
                           "vdW: integrate to get non local vdW energy", &
                           IPRINT_TIME_THRES2)
-    
+
     ! calculate other energy terms
     E_gga_x = zero
     E_lda_c = zero
@@ -2673,7 +2673,7 @@ contains
                           IPRINT_TIME_THRES2)
 
     E_vdW_nl = E_vdW_nl + E_vdW_dusp
-    
+
 ! LT_debug 2012/04/30 begin
 !     if (inode == ionode) then
 !        print *, "LT: E_vdW_nl = ", E_vdW_nl * en_conv, en_units(energy_units)
@@ -3060,8 +3060,10 @@ contains
 
     ! Get exchange part of GGA and correlation part of LDA
     E_vdWXC = zero
-    E_gga_x = zero
-    E_lda_c = zero
+! LT_debug 2012/06/11 begin
+    ! E_gga_x = zero
+    ! E_lda_c = zero
+! LT_debug 2012/06/11 end
     do r1 = 1, n_my_grid_points
        rho_r(1:nspin) = rho(r1,1:nspin)
        do ix = 1, 3
@@ -3071,22 +3073,28 @@ contains
                                 rho_r, grho_r, eps_x=eps_gga_x)
        call Vxc_of_r_LSDA_PW92(nspin, rho_r, eps_c=eps_lda_c)
        E_vdWXC = E_vdWXC + rho_tot(r1) * (eps_gga_x + eps_lda_c)
-       E_gga_x = E_gga_x + rho_tot(r1) * eps_gga_x
-       E_lda_c = E_lda_c + rho_tot(r1) * eps_lda_c
+! LT_debug 2012/06/11 begin
+       ! E_gga_x = E_gga_x + rho_tot(r1) * eps_gga_x
+       ! E_lda_c = E_lda_c + rho_tot(r1) * eps_lda_c
+! LT_debug 2012/06/11 end
     end do
     call gsum(E_vdWXC)
     E_vdWXC = E_vdWXC * grid_point_volume
-    call gsum(E_gga_x)
-    E_gga_x = E_gga_x * grid_point_volume
-    call gsum(E_lda_c)
-    E_lda_c = E_lda_c * grid_point_volume
+! LT_debug 2012/06/11 begin
+    ! call gsum(E_gga_x)
+    ! E_gga_x = E_gga_x * grid_point_volume
+    ! call gsum(E_lda_c)
+    ! E_lda_c = E_lda_c * grid_point_volume
+! LT_debug 2012/06/11 end
 
     ! Add contribution from E_vdW_nl
     E_vdWXC = E_vdWXC + E_vdW_nl
 
-    print *, "LT: E_vdW_nl = ", E_vdW_nl * en_conv, en_units(energy_units)
-    print *, "LT: E_gga_x = ", E_gga_x * en_conv, en_units(energy_units)
-    print *, "LT: E_lda_c = ", E_lda_c * en_conv, en_units(energy_units)
+! LT_debug 2012/06/11 begin
+!     print *, "LT: E_vdW_nl = ", E_vdW_nl * en_conv, en_units(energy_units)
+!     print *, "LT: E_gga_x = ", E_gga_x * en_conv, en_units(energy_units)
+!     print *, "LT: E_lda_c = ", E_lda_c * en_conv, en_units(energy_units)
+! LT_debug 2012/06/11 end
 
   end subroutine vdWXC_energy_slow
   !!*****
