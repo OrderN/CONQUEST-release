@@ -950,7 +950,7 @@ contains
              e_dot_n_tot = spin_factor * sum(e_dot_n)
              n_dot_n_tot = spin_factor * sum(n_dot_n)
              ! if gradient of N w.r.t. L is zero then no correction needed
-             if (abs(n_dot_n_tot > RD_ERR)) then
+             if (abs(n_dot_n_tot) > RD_ERR) then
                 dsum_factor = e_dot_n_tot / n_dot_n_tot
                 do spin = 1, nspin
                    call matrix_sum (one, matSM3(spin), -dsum_factor, &

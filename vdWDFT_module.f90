@@ -2305,7 +2305,7 @@ contains
                     k, phi0, phi2, phis, q1, q2, rs
     real(double), dimension(1:nr) :: phi, r
 
-    if (kcut_set == .true.) return   ! Work alredy done
+    if (kcut_set) return   ! Work alredy done
     if (.not. qmesh_set) call set_qmesh()
 
     ! This is the radial grid for phi's, (unrelated to the main 3D FFT grid)
