@@ -1075,6 +1075,8 @@ contains
   !!    Added ROBODoc header and indented
   !!   08/06/2001 dave
   !!    Changed dgsum to gsum
+  !!   2012/06/18 L.Tong
+  !!   - intialised the sum*s to zero, it used to be non-initialised.
   !!  SOURCE
   !!
   subroutine mixtwo(len, linear, lambda, rho0, rho1, rhomix)
@@ -1098,7 +1100,12 @@ contains
     real(double) :: eta, phi, minc, c0, c1, adiffc, sumc
     real(double), parameter :: tol = 0.01_double
 
+    sum0 = zero
+    sum1 = zero
+    sumc = zero
+    summix = zero
     rhomix = zero
+
     ! Linear mixing
     if(linear.OR.(lambda>zero.AND.lambda<one)) then
        call axpy(len, lambda, rho1, 1, rhomix, 1)

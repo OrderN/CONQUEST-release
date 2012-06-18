@@ -282,6 +282,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2008/03/03 18:47 dave
 !!    Changed float to real
+!!   2012/06/17 L.Tong
+!!   - Changed y to intent(inout), it was intent(out) which was incorrect
 !!  SOURCE
 !!
   subroutine cosft(y,n,isign)
@@ -292,7 +294,7 @@ contains
     implicit none
 
     integer, intent(in) :: n,isign
-    real(double), dimension(n), intent(out) :: y
+    real(double), dimension(n), intent(inout) :: y
 
     real(double) wr,wi,wpr,wpi,wtemp,theta
     real(double) sum,y1,y2,even,odd,enfo,sumo,sume

@@ -742,7 +742,7 @@ contains
     call get_new_rho(.false., reset_L, fixed_potential, vary_mu,     &
                      n_L_iterations, L_tol, total_energy, rho, rho1, &
                      maxngrid)
-
+    E0 = total_energy
     R0 = zero
     do spin = 1, nspin
        resid_pul(1:n_my_grid_points,1,spin) = &
@@ -914,9 +914,9 @@ contains
                       resid_pul(:,npmod,spin), 1)
           end do
           ! cross term
-          R1 = R1 + two * &
-               dot(n_my_grid_points, resid_pul(:,npmod,1), 1, &
-                      resid_pul(:,npmod,nspin), 1)
+          ! R1 = R1 + two * &
+          !      dot(n_my_grid_points, resid_pul(:,npmod,1), 1, &
+          !             resid_pul(:,npmod,nspin), 1)
           call gsum(R1)
           R1 = sqrt(grid_point_volume * R1) / ne_in_cell
           if (inode == ionode) &
@@ -936,9 +936,9 @@ contains
                        resid_pul(:,npmod,spin), 1)
           end do
           ! cross term
-          R1 = R1 + two * &
-               dot(n_my_grid_points, resid_pul(:,npmod,1), 1, &
-                   resid_pul(:,npmod,nspin), 1)
+          ! R1 = R1 + two * &
+          !      dot(n_my_grid_points, resid_pul(:,npmod,1), 1, &
+          !          resid_pul(:,npmod,nspin), 1)
           call gsum(R1)
           R1 = sqrt(grid_point_volume * R1) / ne_in_cell
           if (inode == ionode) &
@@ -1037,9 +1037,9 @@ contains
                dot(n_my_grid_points, resid_pul(:,npmod,spin), 1, &
                    resid_pul(:,npmod,spin), 1)
        end do
-       R1 = R1 + two * &
-            dot(n_my_grid_points, resid_pul(:,npmod,1), 1, &
-                resid_pul(:,npmod,nspin), 1)
+       ! R1 = R1 + two * &
+       !      dot(n_my_grid_points, resid_pul(:,npmod,1), 1, &
+       !          resid_pul(:,npmod,nspin), 1)
        call gsum(R1)
        R1 = sqrt(grid_point_volume * R1) / ne_in_cell
 

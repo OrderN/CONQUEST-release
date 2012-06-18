@@ -396,6 +396,9 @@ contains
   !!   - electrons now an array of dimension nspin, which stores the
   !!     required constraint in each spin channel.
   !!   - Moved most memory deallocations to subroutine endDiag.
+  !!   2012/06/17 L.Tong
+  !!   - Found print_info was undefined when used in condition
+  !!     (print_info == 0), so initialise it to 0 at beginning
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -437,6 +440,7 @@ contains
                print_info, kp, spin
     integer, dimension(50) :: desca, descz, descb
 
+    print_info = 0
     vl = zero
     vu = zero
     orfac = -one
@@ -1289,9 +1293,15 @@ contains
   !!    Added k-point parallelisation modifications
   !!   2011/12/01 L.Tong
   !!    Removed the redundant parameter matA, it is not used in the subroutine
+  !!   2012/06/17 L.Tong
+  !!   - Since Distrib contains members that has been allocated
+  !!     outside this subrouint, it cannot be set to intent(out) in
+  !!     this subroutine, because otherwise Distrib becomes undefined
+  !!     upon entering this subroutine, and the array members all
+  !!     becomes undefined and unallocated. So set this to intent(inout)
   !!  SOURCE
   !!
-  subroutine PrepareSend (range,Distrib)
+  subroutine PrepareSend(range,Distrib)
 
     use global_module,   only: numprocs, iprint_DM, x_atom_cell,     &
                                y_atom_cell, z_atom_cell
@@ -1312,7 +1322,7 @@ contains
 
     ! Passed variables
     integer :: range
-    type(DistributeData), intent(out) :: Distrib
+    type(DistributeData), intent(inout) :: Distrib
 
     ! Local variables
     integer, allocatable, dimension(:,:,:) :: sendlist
@@ -2597,9 +2607,9 @@ contains
        if ((electrons_total - lowElec) < two) then
           if (inode == ionode) write (io_lun, 8) lowElec, NElec_less
           ! find the lowest energy and start from there
-          ! for spin up
           lband = 1
           lkp = 1
+          lspin = 1
           do spin = 1, nspin
              do iband = 1, nbands
                 do ikp = 1, nkp

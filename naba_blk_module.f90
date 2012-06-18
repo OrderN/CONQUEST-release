@@ -533,7 +533,7 @@ contains
     implicit none
 
     integer,intent(in)::mx1,mx2
-    type(comm_in_BG),intent(out) :: set
+    type(comm_in_BG),intent(inout) :: set
     integer :: stat
 
     set%mx_iprim=mx1
@@ -575,6 +575,10 @@ contains
 !!  MODIFICATION HISTORY
 !!   2008/05/16 ast
 !!    Added timers
+!!   2012/06/17 L.Tong
+!!   - Changed set from intent(out) to intent(inout). Otherwise
+!!     member mx_iprim becomes undefined upon entering the subroutine,
+!!     and is not defined anywhere within the subroutine.
 !!  SOURCE
 !!
   subroutine alloc_comm_in_BG2(set,mx3,mx4,mx5)
@@ -584,7 +588,7 @@ contains
     implicit none
 
     integer,intent(in)::mx3,mx4,mx5
-    type(comm_in_BG),intent(out) :: set
+    type(comm_in_BG),intent(inout) :: set
     integer :: stat
 
     set%mx_send_node=mx3

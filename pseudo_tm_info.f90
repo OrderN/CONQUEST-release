@@ -376,7 +376,11 @@ contains
 !!  CREATION DATE
 !!
 !!  MODIFICATION HISTORY
-!!
+!!    2012/06/17 L.Tong
+!!    - Changed func to intent(inout) from intent(out). If set to out,
+!!      then all members of func upon entering the subroutine
+!!      becomes undefined! This means f and d2 becomes disassociated
+!!      and non-allocated.
 !!  SOURCE
 !!
   subroutine init_rad(func)
@@ -384,7 +388,7 @@ contains
     use numbers, only: zero
     implicit none
 
-    type(rad_func), intent(out)    :: func
+    type(rad_func), intent(inout)    :: func
 
     func%n = 0
     func%cutoff = zero

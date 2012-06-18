@@ -1465,7 +1465,7 @@ contains
     end if
 
     if (present(c_epsilon)) then
-       allocate(ex_lda(size), STAT=stat)
+       allocate(ec_lda(size), STAT=stat)
        if (stat /= 0) &
             call cq_abort("Error allocating ec_lda for PBE functional ", stat)
     end if
@@ -2867,7 +2867,7 @@ end if
                     de_c1_drs, dmalpha_c_drs, df_dzeta, d2e_c0_drs2,   &
                     d2e_c1_drs2, d2malpha_c_drs2, d2f_dzeta2,          &
                     de_c_drs, de_c_dzeta, d2e_c_drs2, d2e_c_drs_dzeta, &
-                    d2e_c_dzeta2, d2malpha_drs, df2_dzeta2, factor
+                    d2e_c_dzeta2, factor
     real(double), dimension(nspin)       :: rho, drs_drho, dzeta_drho
     real(double), dimension(nspin,nspin) :: dVx_drho, dVc_drho
 
@@ -3031,7 +3031,7 @@ end if
        f = K02 * ((one + zeta)**four_thirds + (one - zeta)**four_thirds - two)
        df_dzeta = four_thirds * K02 * ((one + zeta)**one_third &
             - (one - zeta)**one_third)
-       df2_dzeta2 = one_third * four_thirds * K02 *            &
+       d2f_dzeta2 = one_third * four_thirds * K02 *            &
             ((one + zeta)**(-two_thirds) + (one - zeta)**(-two_thirds))
 
        ! drs_drho
@@ -3047,7 +3047,7 @@ end if
 
        ! first order derivatives
        de_c_drs = de_c0_drs * (one - f * zeta**4) + de_c1_drs * f *   &
-            zeta**4 + d2malpha_drs * K03 * f * (zeta**4 - one)
+            zeta**4 + dmalpha_c_drs * K03 * f * (zeta**4 - one)
        de_c_dzeta = four * zeta**3 * f * (e_c1 - e_c0 + K03 *         &
             malpha_c) + df_dzeta * (zeta**4 * e_c1 - zeta**4 * e_c0 + &
             (zeta**4 - one) * K03 * malpha_c)

@@ -239,7 +239,7 @@ contains
      end do
 
      if (inode == ionode .and. iprint_DM >= 1) then
-        write (io_lun, 6), n_iterations
+        write (io_lun, 6) n_iterations
         if (nspin == 1 .or. flag_fix_spin_population) then
            do spin = 1, nspin
               write (io_lun, 7) spin, omega1(spin)

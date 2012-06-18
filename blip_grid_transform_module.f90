@@ -1697,6 +1697,10 @@ contains
 !!    Removed NSF=4 dependencies
 !!   2008/06/10 ast
 !!    Added timers
+!!   2012/06/17 L.Tong
+!!   - Set data_dblip from intent(out) to intent(inout) because if
+!!     set to intent(out) then EVERY member of data_dblip becomes
+!!     undefined, and array members becomes unallocated.
 !!  SOURCE
 !!
   subroutine do_inverse_blip_new(myid, iprim, data_dblip, nsf)
@@ -1722,7 +1726,7 @@ contains
 
     integer,intent(in):: iprim,myid
     integer,intent(in):: nsf
-    type(support_function),intent(out):: data_dblip
+    type(support_function),intent(inout):: data_dblip
 
     ! Local variables
     real(double),allocatable:: inter_1(:,:,:,:)
@@ -2322,9 +2326,14 @@ contains
 !!    Removed the NSF=4 dependencies
 !!   2008/06/10 ast
 !!    Added timers
+!!   2012/06/17 L.Tong
+!!   - Changed data_dblip from intent(out) to intent(inout), since if
+!!     set to out then all of its members becomes undefined upon
+!!     entering the subroutine, this includes all the array members,
+!!     which becomes unallocated
 !!  SOURCE
 !!
-  subroutine do_inverse_blip_to_grad_new( myid, direction, iprim,data_dblip, NSF)
+  subroutine do_inverse_blip_to_grad_new(myid, direction, iprim, data_dblip, NSF)
 
     use datatypes
     use numbers
@@ -2346,7 +2355,7 @@ contains
 
     integer,intent(in):: iprim,myid,direction
     integer,intent(in):: nsf
-    type(support_function),intent(out):: data_dblip
+    type(support_function),intent(inout):: data_dblip
 
     ! Local variables
     real(double),allocatable:: inter_1(:,:,:,:)

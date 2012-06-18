@@ -487,7 +487,8 @@ contains
     igrid=0
 
     call start_timer(tmr_std_allocation)
-    allocate(send_array(naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block*this_nsf))
+    allocate(send_array(naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block*this_nsf),&
+             STAT=stat)
     if(stat/=0) call cq_abort("Error allocating send_array in do_PAO_grad: ",&
          naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block*this_nsf)
     call stop_timer(tmr_std_allocation)

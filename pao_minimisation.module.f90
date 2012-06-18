@@ -914,6 +914,8 @@ contains
   !!   2012/03/24 L.Tong
   !!   - Changed spin implementation
   !!   - removed redundant input parameter real(double) mu
+  !!   2012/06/18 L.Tong
+  !!   - removed unused variable k0
   !!  SOURCE
   !!
   subroutine line_minimise_pao(search_direction, fixed_potential,     &
@@ -956,7 +958,7 @@ contains
     integer      :: lengthBlip, n_atoms, stat
     integer      :: i, j, iter, part, memb, nsf1, npao1, iprim, l1, &
                     acz, m1
-    real(double) :: k0, k1, k2, k3, kmin, lambda
+    real(double) :: k1, k2, k3, kmin, lambda
     real(double) :: e0, e1, e2, e3, energy_out, summ, tmp
     real(double), dimension(coeff_array_size) :: data_PAO0
     real(double), dimension(nspin)            :: electrons, energy_tmp
@@ -1045,9 +1047,9 @@ contains
                   iter, k3, e3
        if (inode == ionode) &
             write (io_lun, &
-                   fmt='(" iter=", i3," k0, k1, k2, k3, &
-                        &kmin = ", 5f15.8)') &
-                  iter, k0, k1, k2, k3, kmin
+                   fmt='(" iter=", i3," k1, k2, k3, &
+                        &= ", 5f15.8)') &
+                  iter, k1, k2, k3
        if (e3 < e2) then ! We're still going down hill
           k1 = k2
           e1 = e2

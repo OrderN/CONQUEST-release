@@ -528,7 +528,7 @@ contains
 
     ! for P.C.C.
     if (flag_pcc_global) then
-       allocate(density_wk(size,nspin), density_wk_tot(size))
+       allocate(density_wk(size,nspin), density_wk_tot(size), STAT=stat)
        if (stat /= 0) &
             call cq_abort("Error allocating density_wk, density_wk_tot: ", &
                           stat)

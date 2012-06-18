@@ -472,6 +472,8 @@ contains
   !!   2012/03/23 L.Tong
   !!   - Changed spin implementation
   !!   - removed redundant input parameter real(double) mu
+  !!   2012/06/18 L.Tong
+  !!   - removed k0, it seemed not used and redundant
   !!  SOURCE
   !!
   subroutine line_minimise_support(search_direction, lengthBlip,  &
@@ -513,7 +515,7 @@ contains
 
     ! Local variables
     integer      :: i, j, iter, stat, spin
-    real(double) :: k0, k1, k2, k3, kmin, lambda, tmp
+    real(double) :: k1, k2, k3, kmin, lambda, tmp
     real(double) :: e0, e1, e2, e3, energy_out
     real(double), save :: dE = zero ! Use this to guess initial step ?
     real(double), dimension(lengthBlip) :: data_blip0
@@ -581,9 +583,9 @@ contains
                   iter, k3, e3
        if (inode == ionode .and. iprint_basis > 2) &
             write (io_lun, &
-                   fmt='(6x," iter=", i3," k0, k1, k2, k3, &
-                        &kmin = ",5f12.6)') &
-                  iter, k0, k1, k2, k3, kmin
+                   fmt='(6x," iter=", i3," k1, k2, k3, &
+                        &= ",3f12.6)') &
+                  iter, k1, k2, k3
        if (e3 < e2) then ! We're still going down hill
           k1 = k2
           e1 = e2

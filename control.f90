@@ -513,6 +513,8 @@ contains
   !!     Removed redundant parameter number_of_bands
   !!   2012/03/27 L.Tong
   !!   - Removed redundant input parameter real(double) mu
+  !!   2012/06/18 L.Tong
+  !!   - Removed unused variable velocity
   !! SOURCE
   !!
   subroutine dummy_run(fixed_potential, vary_mu, total_energy)
@@ -538,7 +540,6 @@ contains
     real(double) :: total_energy
     
     ! Local variables
-    real(double), allocatable, dimension(:,:) :: velocity
     integer      :: iter, i, k, length, stat
     real(double) :: temp, KE, energy1, energy0, dE, max, g0
 
@@ -579,9 +580,7 @@ contains
             call write_positions(iter, parts)
        call my_barrier
     end do
-    if (stat/=0) &
-         call cq_abort("Error deallocating velocity in md_run: ", &
-                       ni_in_cell, stat)
+    
     return
 1   format(4x,'Atom ',i4,' Position ',3f15.8)
 2   format(4x,'Welcome to dummy_run. Doing ',i4,' steps')
