@@ -2597,7 +2597,7 @@ contains
        ! print out charge
        if (iprint_SC > 1) then
           if (nspin == 1) then
-             rho_tot = spin_factor * sum(rho, 2)
+             rho_tot(:) = spin_factor * rho(:,1)
              call dump_charge(rho_tot, n_my_grid_points, inode, spin=0)
           else
              call dump_charge(rho(:,1), n_my_grid_points, inode, spin=1)

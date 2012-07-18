@@ -125,6 +125,8 @@ contains
   !!   2012/03/08 L.Tong
   !!    - Major rewrite of spin implementation
   !!    - Removed redundant input parameter real(double) mu
+  !!   2012/06/24 L.Tong
+  !!    - Added control of whether to dump L using flag_dump_L
   !!  SOURCE
   !!
   subroutine FindMinDM(n_L_iterations, vary_mu, tolerance, inode, &
@@ -134,7 +136,7 @@ contains
     use numbers
     use global_module, only: iprint_DM, IPRINT_TIME_THRES1,             &
                              nspin, flag_fix_spin_population,           &
-                             ne_in_cell, ne_spin_in_cell
+                             ne_in_cell, ne_spin_in_cell, flag_dump_L
     use mult_module,   only: matrix_transpose, matT, matTtran, matL,    &
                              matrix_sum
     use McWeeny,       only: InitMcW, McWMin
@@ -220,12 +222,14 @@ contains
     end do ! end of do while (.not. done)
 
     ! *** Add frequency of output here *** !
-
-    if (nspin == 1) then
-       call dump_matrix("L", matL(1), inode)
-    else
-       call dump_matrix("L_up", matL(1), inode)
-       call dump_matrix("L_dn", matL(2), inode)
+ 
+    if (flag_dump_L) then
+       if (nspin == 1) then
+          call dump_matrix("L", matL(1), inode)
+       else
+          call dump_matrix("L_up", matL(1), inode)
+          call dump_matrix("L_dn", matL(2), inode)
+       end if
     end if
 
     if (record) then
@@ -699,6 +703,8 @@ contains
   !!   2012/03/12 L.Tong
   !!    - Major rewrite for change in spin implementation
   !!    - Removed redundant input paramter mu (real, double)
+  !!   2012/06/24 L.Tong
+  !!    - Added control of whether to dump L using flag_dump_L
   !!  SOURCE
   !!
   subroutine lateDM(ndone, n_L_iterations, done, deltaE, vary_mu, &
@@ -721,7 +727,7 @@ contains
                                  ni_in_cell, flag_global_tolerance,    &
                                  flag_mix_L_SC_min,                    &
                                  flag_fix_spin_population, nspin,      &
-                                 spin_factor
+                                 spin_factor, flag_dump_L
     use timer_module,      only: cq_timer,start_timer,                 &
                                  stop_print_timer, WITH_LEVEL
     use io_module,         only: dump_matrix
@@ -1107,12 +1113,14 @@ contains
           PulayE(ndone + n_iter) = energy1_tot
        end if
        ! dump the L matrix if required
-       if (mod (n_iter, n_dumpL) == 0) then
-          if (nspin == 1) then
-             call dump_matrix("L", matL(1), inode)
-          else
-             call dump_matrix("L_up", matL(1), inode)
-             call dump_matrix("L_dn", matL(2), inode)
+       if (flag_dump_L) then
+          if (mod (n_iter, n_dumpL) == 0) then
+             if (nspin == 1) then
+                call dump_matrix("L", matL(1), inode)
+             else
+                call dump_matrix("L_up", matL(1), inode)
+                call dump_matrix("L_dn", matL(2), inode)
+             end if
           end if
        end if
        ! check if tolerance is reached

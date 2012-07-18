@@ -384,6 +384,9 @@ contains
   !!   - Added Checks for functional types. Makes sure for spin non-
   !!     polarised calculations only the one that has spin implemented
   !!     can be used.
+  !!   2012/06/24 L.Tong
+  !!   - Added input for flag_dump_L, which controls whether matL is
+  !!     dumped or not
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -433,7 +436,8 @@ contains
                              flag_quench_MD, temp_ion, numprocs,       &
                              flag_dft_d2, flag_only_dispersion,        &
                              flag_perform_cDFT, flag_analytic_blip_int,&
-                             flag_vdWDFT, vdW_LDA_functional
+                             flag_vdWDFT, vdW_LDA_functional,          &
+                             flag_dump_L
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
                       RadiusSupport, NonLocalFactor, InvSRange,      &
@@ -595,6 +599,7 @@ contains
        iprint_basis  = fdf_integer('IO.Iprint_basis',iprint)
        iprint_intgn  = fdf_integer('IO.Iprint_intgn',iprint)
        iprint_time   = fdf_integer('IO.Iprint_time',iprint)
+       flag_dump_L   = fdf_boolean('IO.DumpL', .true.)
        locps_output = fdf_boolean('IO.LocalPotOutput', .false.)
        locps_choice = fdf_integer('IO.LocalPotChoice', 8)
        atomch_output = fdf_boolean('IO.AtomChargeOutput', .false.)

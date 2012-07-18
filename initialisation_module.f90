@@ -987,9 +987,15 @@ contains
           call grab_charge(density(:,1), n_my_grid_points, inode, spin=1)
           call grab_charge(density(:,2), n_my_grid_points, inode, spin=2)
        else
+          ! grab_charge without spin optional variable should fetch
+          ! chden.* which should contain the total charge
+          ! density. However density(:,1) should only contain the spin
+          ! up component of the charge density. Therefore one need to
+          ! divide by the factor of spin_factor
           call grab_charge(density(:,1), n_my_grid_points, inode)
+          density = density / spin_factor
        end if
-    endif
+    end if
     reset_L = .true.
     if (flag_self_consistent) then ! Vary only DM and charge density
        !OLD call new_SC_potl( .true., SC_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &

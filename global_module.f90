@@ -84,6 +84,8 @@
 !!   2012/05/29 L.Tong
 !!   - removed functional_lsda_pw92, now redundant. Just use
 !!     functional_lda_pw92 for PW92 LDA.
+!!   2012/06/24 L.Tong
+!!   - Added flag flag_dump_L for controlling if L is to be dumped
 !!  SOURCE
 !!
 module global_module
@@ -230,6 +232,9 @@ module global_module
   ! For vdwDFT
   logical :: flag_vdWDFT          ! selector for turning on vdW energy correction
   integer :: vdW_LDA_functional   ! selector for LDA functional
+
+  ! Flag to control if matrix L is dumped to files
+  logical :: flag_dump_L
   
 end module global_module
 !!***

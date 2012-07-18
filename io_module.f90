@@ -2719,8 +2719,11 @@ second:   do
   !! 
   !!  PURPOSE
   !!   Grabs the charge density (dumped by dump_charge)
+  !!   - Note that this subroutine simply graps the list data from a
+  !!     file and stores in the array density. Any post processing of
+  !!     the data should be done after the call and outside of this
+  !!     subroutine.
   !!  INPUTS
-  !! 
   !! 
   !!  USES
   !! 
@@ -2730,7 +2733,7 @@ second:   do
   !!   10:58, 15/10/2002 drb 
   !!  MODIFICATION HISTORY
   !!   2011/11/27 L.Tong
-  !!     Added spin polarisation
+  !!   - Added spin polarisation
   !!  SOURCE
   !!
   subroutine grab_charge(density, size, inode, spin)
@@ -2767,14 +2770,15 @@ second:   do
     call io_assign(lun)
     open(unit=lun, file=filename)
     ! Grab charge density
-    !do block=1, domain%groups_on_node
+    ! do block = 1, domain%groups_on_node
     !   n_point = (block - 1) * n_pts_in_block
-    !   do n_i=1, naba_atm(supp)%no_of_atom(block)*NSF*n_pts_in_block, n_pts_in_block
+    !   do n_i = 1, naba_atm(supp)%no_of_atom(block) * NSF * n_pts_in_block, &
+    !            n_pts_in_block
     !      do n=1, n_pts_in_block
     !         read(unit=lun,fmt='(f30.15)') density(n_point+n)
     !      end do
     !   end do
-    !end do
+    ! end do
     do n = 1, domain%groups_on_node * n_pts_in_block
        read (unit=lun, fmt='(g13.6)') density(n)
     end do
