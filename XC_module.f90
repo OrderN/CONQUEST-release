@@ -2927,26 +2927,27 @@ end if
        p = one
 
        Q0 = -two * A * (one + alpha1 * rs)
-       Q1 = two * A * (beta1 * sq_rs + beta2 * rs + beta3 * sq_rs**three + &
-            beta4 * rs**(p + one))
+       Q1 = two * A * (beta1 * sq_rs + beta2 * rs + &
+                       beta3 * sq_rs**3 + beta4 * rs**(p + one))
        Q0p = -two * A * alpha1
        if (sq_rs > RD_ERR) then
-          Q1p = A * (beta1 / sq_rs + two * beta2 + three * beta3 * &
-               sq_rs + two * (p + one) * beta4 * rs**p)
-          Q1pp = half * A * (-beta1 / (sq_rs**three) + three * beta3 /&
-               sq_rs + eight * beta4)
+          Q1p = A * (beta1 / sq_rs + two * beta2 + &
+                     three * beta3 * sq_rs + four * beta4 * rs)
+          Q1pp = half * A * (-beta1 / (sq_rs**3) + &
+                             three * beta3 / sq_rs + eight * beta4)
        else
           Q1p = zero
           Q1pp = zero
        end if
 
        if (Q1 > RD_ERR) then
-          e_c0 = Q0 * log (one + one / Q1)
-          de_c0_drs = Q0p * log (one + one / Q1) - (Q0 * Q1p) / (Q1 * &
-               (Q1 + one))
-          d2e_c0_drs2 = - (two * Q0p * Q1p + Q0 * Q1pp) / (Q1 * (Q1 + &
-               one)) + Q1p * (two * Q1 + one) * Q0 * Q1p / ((Q1 * (Q1 &
-               + one))**two)
+          e_c0 = Q0 * log(one + one / Q1)
+          de_c0_drs = Q0p * log(one + one / Q1) -           &
+                      (Q0 * Q1p) / (Q1 * (Q1 + one))
+          d2e_c0_drs2 = - (two * Q0p * Q1p + Q0 * Q1pp) /   &
+                        (Q1 * (Q1 + one)) +                 &
+                        Q1p * (two * Q1 + one) * Q0 * Q1p / &
+                        ((Q1 * (Q1 + one))**2)
        else
           e_c0 = zero
           de_c0_drs = zero
@@ -3029,10 +3030,11 @@ end if
 
        ! f and df_dzeta
        f = K02 * ((one + zeta)**four_thirds + (one - zeta)**four_thirds - two)
-       df_dzeta = four_thirds * K02 * ((one + zeta)**one_third &
-            - (one - zeta)**one_third)
-       d2f_dzeta2 = one_third * four_thirds * K02 *            &
-            ((one + zeta)**(-two_thirds) + (one - zeta)**(-two_thirds))
+       df_dzeta = four_thirds * K02 * ((one + zeta)**one_third - &
+                                       (one - zeta)**one_third)
+       d2f_dzeta2 = one_third * four_thirds * K02 * &
+                    ((one + zeta)**(-two_thirds) +  &
+                     (one - zeta)**(-two_thirds))
 
        ! drs_drho
        do spin = 1, nspin

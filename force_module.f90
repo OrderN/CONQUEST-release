@@ -37,15 +37,15 @@
 !!   31/07/2002 dave
 !!    Changed pulay_force to use data_M12 from matrix_data and not to
 !!    pass it to get_support_gradient
-!!   15:42, 08/04/2003 drb 
+!!   15:42, 08/04/2003 drb
 !!    Bug fixes (factor of 1/3 in XC, sign in nonSC), added nonSC
 !!    forces and differential of GTH XC LDA parameterisation
-!!   14:20, 02/09/2003 drb 
+!!   14:20, 02/09/2003 drb
 !!    Added parameters to allow the non-local routine to find HF, phi
 !!    Pulay or both.
 !!   11:51, 30/09/2003 drb
 !!    Mainly changes to correct non-SC forces
-!!   10:09, 13/02/2006 drb 
+!!   10:09, 13/02/2006 drb
 !!    Removed all explicit references to data_ variables and rewrote
 !!    in terms of new
 !!    matrix routines
@@ -92,16 +92,16 @@ contains
   ! ------------------------------------------------------------------------------
   ! Subroutine force
   ! ------------------------------------------------------------------------------
-  
+
   !!****f* force_module/force *
   !!
-  !!  NAME 
+  !!  NAME
   !!   force
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Collects all force calculations in one place
-  !! 
+  !!
   !! ********************
   !! ** IMPORTANT NOTE **
   !! ********************
@@ -114,9 +114,9 @@ contains
   !!   should LAST !
   !!
   !!  INPUTS
-  !! 
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -129,7 +129,7 @@ contains
   !!    Reduced call to pulay_force
   !!   22/05/2001 dave
   !!    Bug fixes
-  !!    Shortened overall subroutine call and comments 
+  !!    Shortened overall subroutine call and comments
   !!    before subroutine calls
   !!   08/06/2001 dave
   !!    Added GenComms for my_barrier and RCS Id and Log tags
@@ -137,7 +137,7 @@ contains
   !!    Included in force_module
   !!   13/05/2002 dave
   !!    Tidied format statements
-  !!   11:52, 30/09/2003 drb 
+  !!   11:52, 30/09/2003 drb
   !!    Added density_out variable to store output density for non-SC
   !!    calculations and changed call to get_nonSC_correction_force.
   !!    Also added call to get_electronic_density.  Also placed
@@ -247,7 +247,7 @@ contains
     density_total = spin_factor * sum(density, 2)
 
     ! The 'pulay force' is the force due to the change in energy caused
-    ! by the change in the basis functions as the atoms move. 
+    ! by the change in the basis functions as the atoms move.
     p_force = zero
     KE_force = zero
     HF_force = zero
@@ -255,7 +255,7 @@ contains
     nonSC_force = zero
     if (flag_pcc_global) pcc_force = zero ! for P.C.C.
     tot_force = zero
-    WhichPulay = BothPulay    
+    WhichPulay = BothPulay
     ! This ASSUMES that H_on_supportfns contains the values of H
     ! acting on support functions
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
@@ -268,7 +268,7 @@ contains
        call build_Becke_weight_forces(cdft_force)
     end if
     call stop_print_timer(tmr_l_tmp1, "cDFT force", IPRINT_TIME_THRES2)
-    
+
     ! Different forces depending on whether we're doing Harris-Foulkes
     ! or self-consistent
     if (.not. flag_self_consistent) then
@@ -301,7 +301,7 @@ contains
                                        inode, ionode, ni_in_cell, &
                                        maxngrid)
        call stop_print_timer(tmr_l_tmp1, "NSC force", IPRINT_TIME_THRES2)
-       
+
        ! Local HF force
        call start_timer(tmr_l_tmp1, WITH_LEVEL)
        select case (pseudo_type)
@@ -387,7 +387,7 @@ contains
                   tot_force(j,i) = tot_force(j,i) + cdft_force(j,i)
              if (flag_dft_d2) &
                   tot_force(j,i) = tot_force(j,i) + disp_force(j,i)
-             if (.not. flag_move_atom(j,i)) then 
+             if (.not. flag_move_atom(j,i)) then
                 tot_force(j,i) = zero
              end if
              if (abs (tot_force(j,i)) > max_force) then
@@ -427,9 +427,9 @@ contains
              end if ! (iprint_MD > 2)
           end if ! (inode == ionode)
        end do ! i
-       
+
     else  ! without P.C.C.
-       
+
        do i = 1, ni_in_cell
           do j = 1, 3
              if (flag_self_consistent) then
@@ -445,7 +445,7 @@ contains
                   tot_force(j,i) = tot_force(j,i) + cdft_force(j,i)
              if (flag_dft_d2) &
                   tot_force(j,i) = tot_force(j,i) + disp_force(j,i)
-             if (.not. flag_move_atom(j,i)) then 
+             if (.not. flag_move_atom(j,i)) then
                 tot_force(j,i) = zero
              end if
              if (abs(tot_force(j,i)) > max_force) then
@@ -485,7 +485,7 @@ contains
           end if
        end do ! i
     end if ! flag_pcc_global
-    
+
     call my_barrier()
     if (inode == ionode) &
          write (io_lun,                                      &
@@ -524,7 +524,7 @@ contains
 108 format('Force PCC  : ',3f15.10)
 105 format('Force Total: ',3f15.10)
 109 format('Force disp : ',3f15.10)
-    
+
   end subroutine force
   !!***
 
@@ -532,13 +532,13 @@ contains
   ! -----------------------------------------------------------
   ! Subroutine pulay_force
   ! -----------------------------------------------------------
-  
+
   !!****f* force_module/pulay_force *
   !!
-  !!  NAME 
+  !!  NAME
   !!   pulay_force
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Evaluates the Pulay contribution to the forces on
   !!   the atoms. This is the change in energy due to
@@ -553,17 +553,17 @@ contains
   !!   the gradient of energy wrt change in support functions, which is
   !!   given by the subroutine get_support_gradient.
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   C.M.Goringe
   !!  CREATION DATE
   !!   13/09/95
   !!  MODIFICATION HISTORY
   !!   24/4/96 Chris Goringe
-  !!    We have changed the data format, and these changes are required to 
+  !!    We have changed the data format, and these changes are required to
   !!    deal with it. blip_to_gradsupport is now replaced by the general
   !!    blip_transform routine
   !!
@@ -571,7 +571,7 @@ contains
   !!    Quite a lot of other changes have occured in the code, in particular
   !!    we no longer ever get the grad of the support functions; we just
   !!    get it one component at a time.
-  !!  
+  !!
   !!    workspace_support  is used to hold the gradient of energy wrt
   !!                       support functions
   !!    workspace2_support is used to hold gradient of support functions
@@ -720,13 +720,13 @@ contains
          write (io_lun, fmt='(4x,"Starting pulay_force()")')
     !p_force = zero
 
-    ! first, lets make sure we have everything up to date. 
+    ! first, lets make sure we have everything up to date.
     ! Update H will give us support, S, K, H
     ! and h(local)_on_support [in workspace_support]
 
-    ! This should be checked and changed: we don't want to do all this 
-    ! again if we can avoid it !  Probably we will (a) have the data 
-    ! already, or can (b) try get_SC_potl/get_new_rho or even just 
+    ! This should be checked and changed: we don't want to do all this
+    ! again if we can avoid it !  Probably we will (a) have the data
+    ! already, or can (b) try get_SC_potl/get_new_rho or even just
     ! get_H_matrix...
     test = .false.
     if (test) then
@@ -900,7 +900,7 @@ contains
              t1 - t0
     end if
     t0 = t1
-    
+
     if (WhichPulay == BothPulay .or. WhichPulay == PhiPulay .or. &
         (WhichPulay == SPulay .and. flag_basis_set == blips)) then
        tmp_fn = allocate_temp_fn_on_grid(sf)
@@ -919,7 +919,7 @@ contains
                write (io_lun, fmt='(10x,"Phi Pulay grad ",i4," time: ",f12.5)')&
                      direction, t1 - t0
           t0 = t1
-          
+
           !       ! and do the integration
           !       count = 0
           !       ! loop over all grid points
@@ -987,9 +987,9 @@ contains
        call free_temp_fn_on_grid(tmp_fn)
     end if ! if (WhichPulay == BothPulay .OR. WhichPulay == PhiPulay .OR.&
            !  & (WhichPulay == SPulay .AND. flag_basis_set == blips)) then
-    
+
     if (flag_basis_set == PAOs .and. &
-        (WhichPulay == BothPulay .or. WhichPulay == SPulay)) then 
+        (WhichPulay == BothPulay .or. WhichPulay == SPulay)) then
        ! We need to do the S-pulay term
        ! now for each direction in turn
        do direction = 1, 3
@@ -1066,19 +1066,19 @@ contains
 
 !!****f* force_module/get_HF_force *
 !!
-!!  NAME 
+!!  NAME
 !!   get_HF_force
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
-!!   Gets the Hellman-Feynman contribution to the 
+!!   Gets the Hellman-Feynman contribution to the
 !!   atomic forces. For this both the electron density
 !!   and Hartree potential are needed.
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   E.H.Hernandez
 !!  CREATION DATE
@@ -1134,7 +1134,7 @@ contains
     ! Passed variables
     integer :: n_atoms, size
 
-    real(double), dimension(:,:) :: hf_force 
+    real(double), dimension(:,:) :: hf_force
     real(double), dimension(:) :: density
 
     ! Local variables
@@ -1154,7 +1154,7 @@ contains
     integer :: ix, iy, iz, iblock, ipoint, igrid
 
     ! Automatic
-    real(double) :: h_potential(size) 
+    real(double) :: h_potential(size)
 
 !    the_species = 1
 !    step = radius_max(1)/real(n_points_max(1)-1,double)
@@ -1182,17 +1182,17 @@ contains
 
     ! get Hartree potential
     HF_force = zero
-    
+
     call hartree (density, h_potential, maxngrid, h_energy)
 
     dcellx_block = rcellx / blocks%ngcellx
     dcelly_block = rcelly / blocks%ngcelly
     dcellz_block = rcellz / blocks%ngcellz
-    
+
     dcellx_grid = dcellx_block / nx_in_block
-    dcelly_grid = dcelly_block / ny_in_block    
+    dcelly_grid = dcelly_block / ny_in_block
     dcellz_grid = dcellz_block / nz_in_block
-    
+
     call my_barrier()
 
     do iblock = 1, domain%groups_on_node ! primary set of blocks
@@ -1207,7 +1207,7 @@ contains
           iatom = 0
           do ipart = 1, naba_atm(nlpf)%no_of_part(iblock)
              jpart = naba_atm(nlpf)%list_part(ipart, iblock)
-             if(jpart > DCS_parts%mx_gcover) then 
+             if(jpart > DCS_parts%mx_gcover) then
                 call cq_abort ('set_ps: JPART ERROR ', ipart, jpart)
              end if
              ind_part = DCS_parts%lab_cell(jpart)
@@ -1292,8 +1292,8 @@ contains
                             ! an earlier on dropped in the da, db, dc,
                             ! dd expressions.DRB 27.11.97
                             fx_1 = x * derivative
-                            fy_1 = y * derivative 
-                            fz_1 = z * derivative 
+                            fy_1 = y * derivative
+                            fz_1 = z * derivative
                             fx_2 = two * alpha * beta * rx * gauss * &
                                    h_potential(igrid) * q
                             fy_2 = two * alpha * beta * ry * gauss * &
@@ -1309,7 +1309,7 @@ contains
                             fz_2 = zero
                          end if ! if (r2 < core_radius_2(the_species)) then
                          HF_force(1,ig_atom) = HF_force(1,ig_atom) + &
-                                fx_1 * elec_here 
+                                fx_1 * elec_here
                          HF_force(2,ig_atom) = HF_force(2,ig_atom) + &
                                 fy_1 * elec_here
                          HF_force(3,ig_atom) = HF_force(3,ig_atom) + &
@@ -1327,7 +1327,7 @@ contains
           end do ! naba_part
        end if !(naba_atm(nlpf)%no_of_part(iblock) > 0) !naba atoms?
     end do ! iblock : primary set of blocks
-    
+
 !    ! now loop over grid points and accumulate HF part of the force
 !    do n=1, n_my_grid_points
 !       my_block = grid_point_block(n)
@@ -1339,7 +1339,7 @@ contains
 !          q = charge(species(i))
 !          alpha = exponent(species(i))
 !          beta = (alpha / pi)**1.5_double * grid_point_volume
-!          rx = ( x_point - rionx(i) ) 
+!          rx = ( x_point - rionx(i) )
 !          ry = ( y_point - riony(i) )
 !          rz = ( z_point - rionz(i) )
 !          rx = rx - anint(rx)
@@ -1361,14 +1361,14 @@ contains
 !                y = zero
 !                z = zero
 !             end if
-!             ! now we construct the derivative of the local part of the 
+!             ! now we construct the derivative of the local part of the
 !             ! pseudopotential by spline interpolation from a table
 !             step = radius_max(species(i)) / &
 !                  real( n_points_max(species(i)) - 1, double)
 !             j = aint( r_from_i / step ) + 1
 !
-!             ! with this we can now use the spline interpolation tables to 
-!             ! construct the derivative of the local part of the 
+!             ! with this we can now use the spline interpolation tables to
+!             ! construct the derivative of the local part of the
 !             ! pseudopotential on the grid
 !             r = real(j,double) * step
 !             a = ( r - r_from_i ) / step
@@ -1383,12 +1383,12 @@ contains
 !                  dc * d2_local_pseudopotential(j,species(i)) +  &
 !                  dd * d2_local_pseudopotential(j+1,species(i))
 !
-!             ! This is a little obscure, but the multiples below have had 
-!             ! the minus sign which should be there removed to correct an 
+!             ! This is a little obscure, but the multiples below have had
+!             ! the minus sign which should be there removed to correct an
 !             ! earlier on dropped in the da, db, dc, dd expressions.DRB 27.11.97
 !             fx_1 = x * derivative
-!             fy_1 = y * derivative 
-!             fz_1 = z * derivative 
+!             fy_1 = y * derivative
+!             fz_1 = z * derivative
 !             fx_2 = two * alpha * beta * rx * gauss * h_potential( n ) * q
 !             fy_2 = two * alpha * beta * ry * gauss * h_potential( n ) * q
 !             fz_2 = two * alpha * beta * rz * gauss * h_potential( n ) * q
@@ -1400,7 +1400,7 @@ contains
 !             fy_2 = zero
 !             fz_2 = zero
 !          end if
-!          HF_force(1,i) = HF_force(1,i) + fx_1 * elec_here 
+!          HF_force(1,i) = HF_force(1,i) + fx_1 * elec_here
 !          HF_force(2,i) = HF_force(2,i) + fy_1 * elec_here
 !          HF_force(3,i) = HF_force(3,i) + fz_1 * elec_here
 !!            fx_2 = two * alpha * beta * rx * gauss * h_potential( n ) * q
@@ -1421,43 +1421,43 @@ contains
 !       write(io_lun,*) inode,i,(HF_force(j,i),j=1,3)
 !    end do
 
-    return    
+    return
   end subroutine get_HF_force
 !!***
 
   ! -----------------------------------------------------------
   ! Subroutine get_HF_non_local_force
   ! -----------------------------------------------------------
-  
+
   !!****f* force_module/get_HF_non_local_force *
   !!
-  !!  NAME 
+  !!  NAME
   !!   get_HF_non_local_force
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Gets the non-local part of the HF force
-  !! 
+  !!
   !!   There is a little wrangling about this - it's not entirely clear
-  !!   whether it's a Hellmann-Feynman force or a Pulay force. Whatever 
-  !!   it's called, it is due to the change in the support/projector 
+  !!   whether it's a Hellmann-Feynman force or a Pulay force. Whatever
+  !!   it's called, it is due to the change in the support/projector
   !!   overlap matrix with no dependence on the charge density.
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   E.H.Hernandez
   !!  CREATION DATE
-  !!   29/4/96 
+  !!   29/4/96
   !!  MODIFICATION HISTORY
-  !!   24/2/97 CMG 
+  !!   24/2/97 CMG
   !!    We no longer carry grad support around, it needs to be generated on the fly
   !!   04/09/2000 TM
-  !!    new get_matrix_elements  
+  !!    new get_matrix_elements
   !!   15/01/2001 TM
-  !!    new blip_to_grad  
+  !!    new blip_to_grad
   !!   11/05/01 and 14/05/01 DRB
   !!    Removed many of the arguments passed and redundant local variables
   !!   17/05/2001 dave
@@ -1475,7 +1475,7 @@ contains
   !!   21/06/2001 dave
   !!    Removed use matrix_diag (now in this module)
   !!    Removed matrix_scaling
-  !!   14:20, 02/09/2003 drb 
+  !!   14:20, 02/09/2003 drb
   !!    Added flag to select HF or Pulay or both (for easier force testing)
   !!   08:12, 2003/10/01 dave
   !!    Added structure to prepare for PAO basis set
@@ -1579,7 +1579,7 @@ contains
                    ! Loop over neighbours of atom
                    do nab = 1, mat(np,SPrange)%n_nab(ni)
                       ist = mat(np,SPrange)%i_acc(ni) + nab - 1
-                      ! Build the distances between atoms - needed for phases 
+                      ! Build the distances between atoms - needed for phases
                       gcspart = &
                            BCS_parts%icover_ibeg(mat(np,SPrange)%i_part(ist)) + &
                            mat(np,SPrange)%i_seq(ist) - 1
@@ -1589,7 +1589,7 @@ contains
                       dz = BCS_parts%zcover(gcspart) - bundle%zprim(iprim)
                       ! We need to know the species of neighbour
                       neigh_global_part = &
-                           BCS_parts%lab_cell(mat(np,SPrange)%i_part(ist)) 
+                           BCS_parts%lab_cell(mat(np,SPrange)%i_part(ist))
                       neigh_global_num  = &
                            id_glob(parts%icell_beg(neigh_global_part) + &
                                    mat(np,SPrange)%i_seq(ist) - 1)
@@ -1625,7 +1625,7 @@ contains
           !else
           !   continue
           !end if
-          ! now calculate overlap between these derivatives and support functions 
+          ! now calculate overlap between these derivatives and support functions
           ! New get_matrix_elements  TSUYOSHI MIYAZAKI 28/Dec/2000
           call get_matrix_elements_new(inode-1,                       &
                                        rem_bucket(sf_nlpf_rem),       &
@@ -1650,7 +1650,7 @@ contains
           ! support functions
           call assemble_deriv_2(direction, SPrange, matdSC(direction), 3)
           call matrix_scale(-one, matdSC(direction))
-          
+
           ! Get matrix elements between projectors and derivative of
           ! support functions BY TRANSPOSE. This is fine (I think)
           ! because the transpose ought to be exact
@@ -1708,7 +1708,7 @@ contains
        call free_temp_matrix(matdCS(k))
        call free_temp_matrix(matdSC(k))
     end do
-    
+
     return
   end subroutine get_HF_non_local_force
   !!***
@@ -1716,13 +1716,13 @@ contains
   ! -----------------------------------------------------------
   ! Subroutine get_KE_force
   ! -----------------------------------------------------------
-  
+
   !!****f* force_module/get_KE_force *
   !!
-  !!  NAME 
+  !!  NAME
   !!   get_KE_force
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Evaluates the force due to the change in the kinetic
   !!   energy matrix when an atom moves. This is therefore
@@ -1735,8 +1735,8 @@ contains
   !!   The gradient of the energy when atom i moves in direction \alpha
   !!   is given by a sum over atoms j, directions \beta and the grid
   !!
-  !! (d/dR_{i\alpha}) KE = 2 \sum_j \sum_{\beta} \sum_{grid} 
-  !!                         Grad_{\beta} psi_j  * 
+  !! (d/dR_{i\alpha}) KE = 2 \sum_j \sum_{\beta} \sum_{grid}
+  !!                         Grad_{\beta} psi_j  *
   !!                       (d/dR_{i\alpha}) Grad_{\beta} psi_i  *
   !!                         K_{ij}   * grid_point_volume             [i!=j]
   !!
@@ -1747,7 +1747,7 @@ contains
   !!   where
   !!
   !! (d/dR_{i\alpha}) T_{ij} = 2 \sum_{\beta} \sum_{grid}
-  !!                             grid_point_volume * Grad_{\beta} psi_j  * 
+  !!                             grid_point_volume * Grad_{\beta} psi_j  *
   !!                           (d/dR_{i\alpha}) Grad_{\beta} psi_i
   !!
   !!   So within the loop over direction (for the force) we need a loop
@@ -1759,10 +1759,10 @@ contains
   !!   accumulate the force due to that interaction onto the atom i.
   !!
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   C.M.Goringe
   !!  CREATION DATE
@@ -1770,7 +1770,7 @@ contains
   !!  MODIFICATION HISTORY
   !!   15/08/2000 TM
   !!    New get_matrix_elements
-  !!   15/01/2001 TM 
+  !!   15/01/2001 TM
   !!    New blip_to_grad
   !!   15/05/2001 dave
   !!    ROBODoc headers, new get_matrix_elements
@@ -1829,24 +1829,24 @@ contains
                spin
 
 
-!    ! First, clear the diagonal blocks of data K; this is the easiest way 
+!    ! First, clear the diagonal blocks of data K; this is the easiest way
 !    ! to avoid doing the onsite terms
     KE_force = zero
     mat_grad_T = allocate_temp_matrix(Hrange,0)
     ! Now, for the offsite part, done on the integration grid.
     if (flag_basis_set == blips) then
-       
+
        tmp_fn = allocate_temp_fn_on_grid(sf)
        call start_timer(tmr_std_matrices)
-       do grad_direction = 1, 3 
+       do grad_direction = 1, 3
 
-          ! get the Grad_{\beta} psi_j term        
+          ! get the Grad_{\beta} psi_j term
           call blip_to_grad_new(inode-1, grad_direction, H_on_supportfns(1))
           do force_direction = 1, 3
-             ! get the (d/dR_{i\alpha}) Grad_{\beta} psi_i term        
+             ! get the (d/dR_{i\alpha}) Grad_{\beta} psi_i term
              call blip_to_gradgrad_new(inode-1, grad_direction, &
                                        force_direction, tmp_fn)
-             ! now get the (d/dR_{i\alpha}) T_{ij} term from the above 
+             ! now get the (d/dR_{i\alpha}) T_{ij} term from the above
              !new matrix_elements
              call get_matrix_elements_new(inode-1,                 &
                                           rem_bucket(sf_H_sf_rem), &
@@ -1949,7 +1949,7 @@ contains
           call stop_timer(tmr_std_matrices)
        end do ! force directions
     end if ! (flag_basis_set == blips)
-    
+
     call gsum(KE_force, 3, n_atoms)
 
     call free_temp_matrix(mat_grad_T)
@@ -1965,24 +1965,24 @@ contains
 
 !!****f* force_module/matrix_diagonal *
 !!
-!!  NAME 
+!!  NAME
 !!   matrix_diagonal
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
-!!   Basically, this is designed for the non-local contribution to the 
+!!   Basically, this is designed for the non-local contribution to the
 !!   forces, and does sum_k one_ik.two^T_ki as sum_k one_ik two_ik
-!!   We're being _very_ bad, and assuming that i_elements is sorted on 
+!!   We're being _very_ bad, and assuming that i_elements is sorted on
 !!   atom on node, so that the first n entries are for atom one on this
 !!   node, etc.
-!! 
+!!
 !!   Now (a) complies with new matrix mults and (b) is used by lots of
 !!   the force routines
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -2043,29 +2043,29 @@ contains
   ! -----------------------------------------------------------
   ! Subroutine get_nonSC_correction_force
   ! -----------------------------------------------------------
-  
+
   !!****f* force_module/get_nonSC_correction_force_nospin *
   !!
-  !!  NAME 
+  !!  NAME
   !!   get_nonSC_correction_force_nospin
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Gets the correction to the forces for when we're doing
   !!   Harris-Foulkes (i.e. non self-consistent ab initio tight binding)
   !!   calculations.  Operates in exactly the same manner as the
   !!   Hellmann-Feynman forces for the local part of the pseudopotential
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
-  !!   16:12, 20/03/2003 drb 
+  !!   16:12, 20/03/2003 drb
   !!  MODIFICATION HISTORY
-  !!   11:53, 30/09/2003 drb 
+  !!   11:53, 30/09/2003 drb
   !!    Removed get_electronic_density (done above in force) and
   !!    simplified subroutine call
   !!   2004/10/05 drb
@@ -2114,7 +2114,7 @@ contains
   !!
   subroutine get_nonSC_correction_force(hf_force, density_out, inode, &
                                         ionode, n_atoms, size)
-    
+
     use datatypes
     use numbers
     use species_module,      only: species
@@ -2188,16 +2188,16 @@ contains
                                                  fz_pcc, pot_here_pcc
     real(double), dimension(size,nspin,nspin) :: dVxc_drho
 
-                                 
-    ! only for GGA with P.C.C. 
+
+    ! only for GGA with P.C.C.
     real(double), allocatable, dimension(:)   :: h_potential_in,       &
                                                  wk_grid_total,        &
                                                  density_out_GGA_total
     real(double), allocatable, dimension(:,:) :: wk_grid,              &
                                                  density_out_GGA
-    
+
     HF_force = zero
-    
+
     dcellx_block = rcellx / blocks%ngcellx
     dcelly_block = rcelly / blocks%ngcelly
     dcellz_block = rcellz / blocks%ngcellz
@@ -2205,14 +2205,14 @@ contains
     dcellx_grid = dcellx_block / nx_in_block
     dcelly_grid = dcelly_block / ny_in_block
     dcellz_grid = dcellz_block / nz_in_block
-    
+
     ! We need a potential-like array containing the appropriate
     ! differences (between VHa for input and output charge densities
     ! and between Vxc' for input and output densities) Something like
     ! this:
-    
+
     ! First the PAD n(r), density
-    call start_timer(tmr_l_tmp2) 
+    call start_timer(tmr_l_tmp2)
 
     h_potential = zero
     potential = zero
@@ -2220,13 +2220,11 @@ contains
     density_out_total = spin_factor * sum(density_out, 2)
 
     call hartree(density_total, h_potential, size, h_energy)
-
     do spin = 1, nspin
        call axpy(size, one, h_potential, 1, potential(:,spin), 1)
     end do
-
     call stop_timer(tmr_l_tmp2, TIME_ACCUMULATE_NO)
-    
+
     ! for P.C.C.
     if (flag_pcc_global) then
        allocate(wk_grid_total(size), wk_grid(size,nspin), STAT=stat)
@@ -2251,7 +2249,7 @@ contains
           do spin = 1, nspin
              density_out_GGA(:,spin) = density_out(:,spin) + &
                                        half * density_pcc(:)
-          end do          
+          end do
           density_out_GGA_total = spin_factor * sum(density_out_GGA, 2)
           ! copy hartree potential
           allocate(h_potential_in(size), STAT=stat)
@@ -2262,9 +2260,8 @@ contains
           h_potential_in = h_potential
        end if
     end if
-    
+
     call start_timer (tmr_l_tmp1, WITH_LEVEL)
-    
     select case (flag_functional_type)
     case (functional_lda_pz81)
        ! NON SPIN POLARISED CALCULATION ONLY
@@ -2332,7 +2329,7 @@ contains
           call get_dxc_potential(density_total, dVxc_drho(:,1,1), size)
        end if
     end select
-    
+
     ! deallocating density_out_GGA: only for P.C.C.
     if (flag_pcc_global)  then
        if ((flag_functional_type == functional_gga_pbe96) .or.       &
@@ -2351,7 +2348,7 @@ contains
     if (flag_pcc_global .and.                                      &
         ((flag_functional_type == functional_gga_pbe96) .or.       &
          (flag_functional_type == functional_gga_pbe96_rev98) .or. &
-         (flag_functional_type == functional_gga_pbe96_r99))) then 
+         (flag_functional_type == functional_gga_pbe96_r99))) then
        ! make a copy of potential at this point
        ! use wk_grid as a temporary storage
        do spin = 1, nspin
@@ -2362,7 +2359,7 @@ contains
        !    call axpy(size, one, potential(:,spin), 1, wk_grid(:,spin), 1)
        ! end do
     end if
-    
+
     ! for LDA
     if ((flag_functional_type /= functional_gga_pbe96) .and.       &
         (flag_functional_type /= functional_gga_pbe96_rev98) .and. &
@@ -2379,12 +2376,12 @@ contains
           end do ! spin_2
        end do ! spin
     end if ! for LDA
-    
+
     call stop_print_timer(tmr_l_tmp1, "NSC force - XC", IPRINT_TIME_THRES3)
-    
+
     ! Restart of the timer; level assigned here
     call start_timer(tmr_l_tmp2, WITH_LEVEL)
-    h_potential = zero  
+    h_potential = zero
     call hartree(density_out_total, h_potential, size, h_energy)
     do spin = 1, nspin
        call axpy(size, -one, h_potential, 1, potential(:,spin), 1)
@@ -2393,7 +2390,7 @@ contains
     call stop_print_timer(tmr_l_tmp2, "NSC force - Hartree", &
                           IPRINT_TIME_THRES3, TIME_ACCUMULATE_YES)
     call my_barrier()
-    call start_timer(tmr_l_tmp1, WITH_LEVEL) 
+    call start_timer(tmr_l_tmp1, WITH_LEVEL)
     do iblock = 1, domain%groups_on_node ! primary set of blocks
        xblock = (domain%idisp_primx(iblock) + domain%nx_origin - 1) * dcellx_block
        yblock = (domain%idisp_primy(iblock) + domain%ny_origin - 1) * dcelly_block
@@ -2465,10 +2462,15 @@ contains
                                  r_from_i, v, derivative, range_flag)
                             if (range_flag) &
                                  call cq_abort('get_nonSC_force: overrun problem')
-                            ! the factor of half here is because spin
-                            ! up or dn densities were constructed as
-                            ! half of the sum of atomic densities
-                            derivative = half * derivative
+                            ! note that here atomic densities are
+                            ! TOTAL densities for spin non-polairsed
+                            ! atoms. The factor of half that should be
+                            ! multiplied to the derivative for
+                            ! contribution to each spin component is
+                            ! already correct taken care of by
+                            ! density_scale. This is consistent
+                            ! because density = density_scale *
+                            ! atomic_density at initialisation.
                             do spin = 1, nspin
                                fx_1(spin) = -x * derivative * density_scale(spin)
                                fy_1(spin) = -y * derivative * density_scale(spin)
@@ -2502,10 +2504,10 @@ contains
           end do ! naba_part
        end if !(naba_atm(dens)%no_of_part(iblock) > 0) !naba atoms?
     end do ! iblock : primary set of blocks
-    
+
     call stop_print_timer(tmr_l_tmp1, "NSC force - Orbital part", &
                           IPRINT_TIME_THRES3)
-    
+
     ! only called for P.C.C.
     ! compute - int d^3r ( delta n_{v} * dxc(n_{c} + n_{v} ) * dn_{c} )
     if (flag_pcc_global) then
@@ -2523,7 +2525,7 @@ contains
                         (density(i,spin_2) - density_out(i,spin_2)) * &
                         dVxc_drho(i,spin_2,spin)
                 end do
-             end do          
+             end do
           end do
        else if ((flag_functional_type == functional_gga_pbe96) .or.       &
                 (flag_functional_type == functional_gga_pbe96_rev98) .or. &
@@ -2537,7 +2539,7 @@ contains
              end do
           end do
        end if
-       
+
        call start_timer(tmr_l_tmp1, WITH_LEVEL)
        do iblock = 1, domain%groups_on_node ! primary set of blocks
           xblock = (domain%idisp_primx(iblock) + domain%nx_origin - 1) * &
@@ -2552,7 +2554,7 @@ contains
                 jpart = naba_atm(dens)%list_part(ipart, iblock)
                 if (jpart > DCS_parts%mx_gcover) &
                      call cq_abort('set_ps: JPART ERROR ', ipart, jpart)
-                ind_part = DCS_parts%lab_cell(jpart) 
+                ind_part = DCS_parts%lab_cell(jpart)
                 do ia = 1, naba_atm(dens)%no_atom_on_part(ipart, iblock)
                    iatom = iatom + 1
                    ii = naba_atm(dens)%list_atom(iatom, iblock)
@@ -2613,12 +2615,15 @@ contains
                                if (range_flag) &
                                     call cq_abort('get_nonSC_force: &
                                                   &overrun problem')
-                               ! there is a factor of half for
-                               ! derivative_pcc, because I assume the
-                               ! contribution from the pcc density
-                               ! correction to each spin channel is
-                               ! half of the total.
-                               derivative_pcc = half * derivative_pcc
+                               ! note that here atomic densities are
+                               ! TOTAL densities for spin non-polairsed
+                               ! atoms. The factor of half that should be
+                               ! multiplied to the derivative for
+                               ! contribution to each spin component is
+                               ! already correct taken care of by
+                               ! density_scale. This is consistent
+                               ! because density = density_scale *
+                               ! atomic_density at initialisation.
                                do spin = 1, nspin
                                   fx_pcc(spin) = -x_pcc * derivative_pcc * &
                                                  density_scale(spin)
@@ -2684,31 +2689,31 @@ contains
        end if ! for GGA
     end if ! flag_pcc_global
     call stop_timer(tmr_std_allocation)
-   
+
     return
   end subroutine get_nonSC_correction_force
   !!***
- 
+
 
   ! -----------------------------------------------------------
   ! Subroutine get_pcc_force
   ! -----------------------------------------------------------
-  
+
   !!****f* force_module/get_pcc_force *
   !!
-  !!  NAME 
+  !!  NAME
   !!   get_pcc_force
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Gets the P.C.C. force in the case where the partial core
   !!   correction is taken into account.  This contribution works on
   !!   both SCF/NSC calculations.
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   M.Arita
   !!  CREATION DATE
@@ -2810,8 +2815,8 @@ contains
     dcellx_grid = dcellx_block / nx_in_block
     dcelly_grid = dcelly_block / ny_in_block
     dcellz_grid = dcellz_block / nz_in_block
-        
-    call start_timer (tmr_l_tmp2) 
+
+    call start_timer (tmr_l_tmp2)
 
     do spin = 1, nspin
        density_wk(:,spin) = density(:,spin) + half * density_pcc(:)
@@ -2835,7 +2840,7 @@ contains
        call get_xc_potential_GGA_PBE(density_wk,                &
                                      xc_potential, xc_epsilon, &
                                      xc_energy, size)
-    case (functional_gga_pbe96_rev98) 
+    case (functional_gga_pbe96_rev98)
        ! PBE with kappa of PRL 80, 890 (1998)
        call get_xc_potential_GGA_PBE(density_wk,                &
                                      xc_potential, xc_epsilon, &
@@ -2849,12 +2854,12 @@ contains
        call get_xc_potential_LSDA_PW92(density_wk, xc_potential,    &
                                        xc_epsilon, xc_energy, size)
     end select
-    
+
     ! This restarts the count for this timer
-    call stop_timer(tmr_l_tmp2, TIME_ACCUMULATE_NO)      
-    
+    call stop_timer(tmr_l_tmp2, TIME_ACCUMULATE_NO)
+
     call my_barrier()
-    
+
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     do iblock = 1, domain%groups_on_node ! primary set of blocks
        xblock = (domain%idisp_primx(iblock) + domain%nx_origin - 1) * dcellx_block
@@ -2965,7 +2970,7 @@ contains
     call gsum(pcc_force, 3, n_atoms)
     call stop_print_timer(tmr_l_tmp1, "PCC force - Compilation", &
                           IPRINT_TIME_THRES3)
-    return    
+    return
   end subroutine get_pcc_force
   !*****
 

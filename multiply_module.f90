@@ -1749,7 +1749,7 @@ contains
              else if(bmat(nn)%i_part(marker)==amat(nn)%i_part(apos_arr) &
                   .AND.bmat(nn)%i_seq(marker)==amat(nn)%i_seq(apos_arr)) &
                   then
-                ! We've found a match - decide which matrix to store result in
+                ! We have found a match - decide which matrix to store result in
                 if(dr==0) then
                    a(aposn:aposn+bsize-1)= &
                         alpha*a(aposn:aposn+bsize-1)+beta*b(bposn:bposn+bsize-1)

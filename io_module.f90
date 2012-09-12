@@ -1737,12 +1737,19 @@ second:   do
                    end if
                 end do
 
-                if (iprint_init > 4.AND.myid==0) write(io_lun,*) "Numprocs =", numprocs
-                if (iprint_init > 4.AND.myid==0) write(io_lun,*) "Loop: Maxatomsproc_tmp =", maxatomsproc_tmp
+                if (iprint_init > 4.AND.myid==0) &
+                     write (io_lun,*) "Numprocs =", numprocs
+                if (iprint_init > 4.AND.myid==0) &
+                     write (io_lun,*) "Loop: Maxatomsproc_tmp =", maxatomsproc_tmp
                 do i = 0, numprocs - 1
-                   if (iprint_init > 4.AND.myid==0) &
-                        write(io_lun,'(a,i7,a,i4,a,i5)') "Processor",i, "  Atoms", no_atoms_proc(i), "  Partitions", parts_inode_tmp(i)
-                   if (no_atoms_proc(i) == 0) write(io_lun,'(a,i7,a)') "WARNING: Processor", i," has no atoms! Too many processors?"
+                   if (iprint_init > 4.AND.myid==0)                        &
+                        write (io_lun,'(a,i7,a,i4,a,i5)')                  &
+                              "Processor", i, "  Atoms", no_atoms_proc(i), &
+                              "  Partitions", parts_inode_tmp(i)
+                   if (no_atoms_proc(i) == 0)          &
+                        write (io_lun,'(a,i7,a)')      &
+                              "WARNING: Processor", i, &
+                              " has no atoms! Too many processors?"
                    ! Statistics
                    ! proc_atoms_min = ni_in_cell
                    ! proc_atoms_max = 0
