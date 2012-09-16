@@ -1,0 +1,8 @@
+CQ_USRBIN=$(HOME)/bin
+
+CC=gcc
+CFLAGS=-pthread -arch i386
+INCDIRS=-I/sw/include/mesa -I/sw/include/python2.6
+LIBDIRS=-L/sw/lib/mesa -L/sw/lib/python2.6/config
+LIBS=-lGL -lGLU -lglut -lpython2.6
+

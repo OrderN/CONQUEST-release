@@ -1,0 +1,1791 @@
+\documentclass[a4paper,notitlepage,11pt]{article}
+\usepackage{times}
+\usepackage{fullpage}
+%\usepackage[numbers,sort]{natbib}
+\usepackage{fancyhdr}
+\usepackage{makeidx}
+\usepackage{hyperref}
+\addtolength{\headheight}{\baselineskip}
+\addtolength{\headsep}{\baselineskip}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\sectionmark}[1]{\markboth{Section \thesection :\ #1}{}}
+\renewcommand{\subsectionmark}[1]{\markright{#1}{}}
+\newcommand{\appendixmark}[1]{\markboth{Appendix \thesection :\ #1}{}}
+\fancyhf[HL]{Conqtour Manual}
+\fancyhf[HR]{\leftmark}
+\fancyhf[FL]{User Manual}
+\fancyhf[FC]{}
+\fancyhf[FR]{\thepage}
+\renewcommand{\headrulewidth}{0.1pt}
+\renewcommand{\footrulewidth}{0.2pt}
+\fancypagestyle{plain}{%
+  \fancyhf{}
+  \fancyhf[FL]{User Manual}
+  \fancyhf[FC]{}
+  \fancyhf[FR]{\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+  \renewcommand{\footrulewidth}{0.1pt}
+}
+\fancypagestyle{appendix}{%
+  \fancyhf{}
+  \fancyhf[HL]{Conquest Documentation}
+  \fancyhf[HR]{Appendix \thesection}
+\fancyhf[FL]{Conqtour Manual}
+  \fancyhf[FC]{}
+  \fancyhf[FR]{\thepage}
+  \renewcommand{\headrulewidth}{0.1pt}
+  \renewcommand{\footrulewidth}{0.2pt}
+}
+\fancypagestyle{index}{%
+  \fancyhf{}
+  \fancyhf[HL]{Conquest Documentation}
+  \fancyhf[HR]{Index}
+  \fancyhf[FL]{Conqtour Manual}
+  \fancyhf[FC]{}
+  \fancyhf[FR]{\thepage}
+  \renewcommand{\headrulewidth}{0.1pt}
+  \renewcommand{\footrulewidth}{0.2pt}
+}
+\setcounter{secnumdepth}{4}
+
+\def\CQ{\textsc{Conquest}}
+\def\Conqtour{\textsc{Conqtour}}
+
+\makeindex
+\title{\textsc{Conqtour}: User Manual}
+\author{A. S. Torralba$^{1,2,3}$, and the rest of the \CQ\ team (see \CQ\ manual)\\
+~\\
+%  \large
+$^1$London Centre for Nanotechnology, UCL, 17-19 Gordon St, London WC1H
+0AH, UK\\
+$^2$Department of Physics \& Astronomy, UCL, Gower St, London, WC1E 6BT,
+UK\\ 
+$^3$National Institute for Materials Science, 1-2-1 Sengen, Tsukuba,
+Ibaraki 305-0047, Japan\\
+~\\
+\texttt{http://www.conquest.ucl.ac.uk/}}
+
+\date{\today}
+\begin{document}
+
+\thispagestyle{plain}
+\maketitle
+\begin{abstract}
+This manual describes how to build and use \Conqtour, a \CQ\ utility
+for visualising \CQ\ density files. It also helps in creating input files 
+for \CQ, as well as in converting between several standard file formats.
+\Conqtour\ is written in OpenGL and provides a python interface to make
+scripting easy.
+\end{abstract}
+\tableofcontents
+
+\pagebreak
+
+\section{Introduction}
+\label{sec:introduction}
+
+\subsection{Purpose}
+\label{sec:purpose}
+
+The linear scaling Density Functional Theory (DFT) code \CQ\ achieves efficient paralelisation 
+by, among other things, carefully distributing functions on a grid among computer processes. As a result, memory dumps
+of the charge density are scrambled and need to be rearranged for visualisation. Furthermore, 
+many visualisation programs, such as VMD, understand a limited number of standard 3D data formats, 
+so conversions of \CQ\ output files are necessary. As a further complication,
+the information required to perform such conversions is stored in several \CQ\ input and output files, 
+making the task more cumbersome for the user. A number of external tools exist that plot 3D data, 
+but for quick visualisation of \CQ\ results a lightweight application is desirable.
+
+\Conqtour\ aims at providing a fast and as transparent as possible tool for visualisation of 
+\CQ\ charge densities and other volumetric data. It tries to gather information from configuration
+and output files without user intervention, so that charge density files can be loaded immediately.
+Users can explore the data using a mouse and keyboard, or they can introduce commands in a python 
+terminal to interact with the display. Scripts can be executed to automate common tasks, either at statup
+or at any later time. The display is written in OpenGL and GLUT, to improve portability.
+
+\subsection{Functionality}
+\label{sec:functionality}
+\index{Functionality}
+
+\Conqtour\ provides the following functions:
+
+\begin{itemize}
+\item Slicing of the density, by clicking on three atoms.
+\item Navigation along a direction using the cursor keys.
+\item Intuitive navigation using a mouse.
+\item Basic image export (into a ppm file).
+\item Several colouring schemes.
+\item Through the python terminal (pyCQ), \Conqtour:
+  \begin{itemize}
+  \item Reads 3D Data files in CQ or xplor formats (the latter, also from the command line).
+  \item Reads coordinates in xyz (also from the command line).
+  \item Sets the view orientation in a precise fashion.
+  \end{itemize}
+\end{itemize}
+
+\noindent Planned features (a.k.a wish list):
+\index{Wish List}
+
+\begin{itemize}
+\item Import/export of PDB coordinate files
+\item More flexible colouring of data (including manual intervals)
+\item Load pdb files from the command line
+\item Forgetful mode, so that only one density slice is stored at a time (useful in systems with limited memory).
+\item Flexible resolution of image files
+\item Direct output of png images (using libpng)
+\end{itemize}
+
+%  \begin{eqnarray}
+%    \label{eq:1}
+%    \hat{H}_{KS} |\psi_{n\mathbf{k}}\rangle &=& \epsilon_{n\mathbf{k}} |\psi_{n\mathbf{k}}\rangle \\
+%    \hat{H}_{KS} &=& \hat{T} + \hat{V}_{\mathrm{e-I}} +
+%    \hat{V}_{\mathrm{Hartree}} + \hat{V}_{\mathrm{XC}}\\
+%    E_{KS} &=& E_{\rm KE} + E_{\rm ps} + E_{\rm H} + E_{\rm xc} + E_{\rm M},
+%  \end{eqnarray}
+%
+%  \begin{equation}
+%    \label{eq:5}
+%    \phi_{i\alpha}(\mathbf{r}) = \sum_s d^s_{i\alpha} \chi_s(\mathbf{r})
+%  \end{equation}
+
+\section{Building and running}
+\label{sec:building}
+\index{Installation}
+
+\Conqtour\ is written in C and uses standard libraries. It has been tested in unix systems (Mac OS, Linux), but
+it should compile in other systems, provided that the dependencies are met. It is part of the \CQ\ distribution
+and it can be found in the \texttt{utilities} directory. System parameters are stored in a \texttt{system.make} file, similar 
+to the one used for the main code.
+
+\subsection{Dependencies}
+\label{sec:dependencies}
+\index{Installation!Dependecies}
+
+\Conqtour\ requires the following libraries:
+
+\begin{itemize}
+\item An OpenGL implementation (e.g. mesa), including GLU and GLUT
+\item Posix threads (pthreads)
+\item A python installation, with accessible Python.h (readline module recommended)
+\end{itemize}
+
+\subsection{Preparing the \texttt{system.make} File and Compiling}
+\label{sec:compiling}
+\index{Installation!Compilation}
+
+Configuration parameters are stored in \texttt{system.make} files, that are selected according to
+the environment variable CQ\_SYSTEM, i.e. the \texttt{Makefile} will import \texttt{system.make.\$(CQ\_SYSTEM)}, 
+if defined, or just \texttt{system.make}, if not. 
+The user may need to modify one of the existing files, if the required 
+libraries are not in standard locations.
+
+A basic \texttt{system.make} file may look like the following:
+
+\begin{verbatim}
+        CQ_USRBIN=$(HOME)/bin
+
+        CC=gcc
+        CFLAGS=-pthread
+        INCDIRS=-I/usr/include/ -I/usr/include/python2.6
+        LIBDIRS=-L/usr/lib/
+        LIBS=-lGL -lGLU -lglut -lpython2.6
+\end{verbatim}
+
+To build the tool, just go into the source code directory 
+(\texttt{utilities/cq\_ut\_conqtour} in the \CQ\ source code distribution) and say
+
+\begin{verbatim}
+CQ_SYSTEM=<your_system> make
+\end{verbatim}
+
+\noindent where \texttt{<your\_system>} could be something like \texttt{linux-x86\_64-py26-usr}.
+Check the source code installation to find other examples.
+
+If the environment variable \texttt{CQ\_USRBIN} is defined, 
+the binary (\texttt{cq\_ut\_conqtour}) will be copied there. 
+For convenience, this should be in your \texttt{PATH}.
+
+\subsection{Command Line}
+\label{sec:command}
+\index{Command Line}
+
+The \Conqtour\ command line is as follows:
+
+\begin{verbatim}
+cq_ut_conqtour [-v] [-d xplor_density_file] [-c xyz_coordinates]
+               [python scripts...]
+\end{verbatim}
+
+\noindent After running the command, a python terminal and, if a density was loaded, a display window, will open. 
+If \Conqtour\ is run without options, the display will be innactive until a 3D data file is loaded from the python
+terminal. Loading a coordinates file prepares a molecule, but is not enough to activate the display.
+At present, molecules are drawn in a very crude way, only as a reference to navigate \CQ\ densities.
+
+\Conqtour\ will always try to collect as much information about a \CQ\ run as possible. For this reason, 
+it is best to run the command from within a directory that contains configuration and output files.
+However, this is not necessary and much of the required information can be provided manually from the 
+python terminal (pyCQ) at a later time. This is explained in section \ref{sec:cq-info}. 
+
+The optional parameters are:
+
+\begin{itemize}
+\item \texttt{-v}: Make the output verbose. Among other things, information about a \CQ\ run will be listed as it is collected.
+\item \texttt{-d}: Preload an xplor density file.
+\item \texttt{-c}: Preload an xyz coordinates file.
+\item Python scripts: Any other parameters will be interpreted as python scripts and will be run in the order given.
+\end{itemize} 
+
+
+\section{Display and Navigation}
+\label{sec:navigation}
+\index{Display}
+
+The display window will not open until a 3D data file is loaded, even when coordinates
+are available. Xplor density \index{xplor files} files and xyz \index{xyz
+files} coordinates files can be loaded directly at start-up, using
+command line options (section \ref{sec:command}). Other files, including \CQ\
+densities, can be loaded later from the python terminal. Only one molecule can be displayed. Atoms are represented as spheres. 
+Every time a density is loaded, it replaces the previous one in the memory, and a slice\index{Density Slice} at the
+center of the new bounding box is calculated and displayed. The slice can be moved along the normal
+of the original plane, or a new normal can be calculated be selecting 
+(double-clicking) three atoms to define a new plane.
+This is often convenient to display the density on the plane of a molecule or chemical group.
+It is also possible to recalculate the slice with the functions \texttt{cq\_view\_pick\_atoms\_slice} or
+\texttt{cq\_view\_set\_reference\_plane}.
+
+\subsection{Objects}
+\label{sec:objects}
+\index{Objects}
+
+The display window may contain several objects whose visibility can be toggled\index{Toggles},
+either using a key or a command. The display becomes active once a 3D data file is loaded.
+
+\begin{tabular}{llc}
+\\
+\hline \hline
+Object&Command&Key\\
+\hline
+Axes&\texttt{cq\_toggle\_axes}&x\\
+Bounding box&\texttt{cq\_toggle\_box}&b\\
+Legend&\texttt{cq\_toggle\_legend}&l\\
+Molecule&\texttt{cq\_toggle\_molecule}&m\\
+\hline \hline
+\\
+\end{tabular}
+
+\index{Objects!Density Slice}
+\index{Density Slice}
+The {\bf density slice} (not listed above, as for the moment it is always visible) 
+is probably the most important object in \Conqtour.
+It displays 3D data on a polygon (triangle to hexagon) within the bounding box
+and can be moved with the arrow keys or 
+recalculated by selecting three atoms. Slices are calculated in steps 
+(which depend on the available grid points and are set automatically) along a
+given direction. The initial direction is the z-axis. Because slices can intercept
+the bounding box near the vertices, sometimes they are very small. If the slice
+seems to be missing, try moving it with the arrow keys. Keep in mind that each new
+slice is stored in an index, until the direction is reset, so memory could be exhausted
+for very large data sets. To save memory, it is possible to choose directly one of the slices calling 
+\texttt{cq\_view\_set\_slice} from the python terminal (see section \ref{sec:conqtour-info}).
+
+\index{Objects!Bounding box}
+\index{Bounding box}
+The {\bf bounding box} encloses all the 3D data, but not necessarily all the atoms in the molecule.
+
+\index{Objects!Axes}
+\index{Axes}
+The {\bf axes} are represented in a very simple way, with three lines for X (red), Y (green) and Z (blue) at the 
+centre of the box. This is just for orientation and it is not intended to be very sofisticated. The axes are disabled
+by default.
+
+\index{Objects!Legend}
+\index{Legend}
+The {\bf legend} is active by default and gives information about the colours used to represent the data.
+Several methods exist to customise it from the python terminal (see section \ref{sec:custom-legend}). In general, 
+positive and negative values are treated separately and values out of range (both underflow and overflow) 
+are represented in the bar with a striped pattern. The goal is to give a sense of \emph{actual} values in the data set.
+The legend covers all data in the file, and cannot (at least at present) be restricted to a subinterval. Hence, if a
+logarithmic method is used, all orders of magnitude present in the file are shown.
+
+\index{Objects!Molecule}
+\index{Molecule}
+The {\bf molecule}, if loaded and if the display is active, is represented with spheres of several sizes that 
+can be controlled with the left and right arrow keys. Atoms are clickable, and selecting three of them 
+will redraw the density slice\index{Density Slice}. If the central atom is within the bounding box, the
+slice will go through it; otherwise, the center of the box will be used.
+
+\subsection{Mouse Controls and Window Areas}
+\label{sec:areas}
+\index{Controls!Mouse}
+\index{Mouse}
+
+The view can be controlled with a three-button mouse. Alternatively, 
+if you have only two buttons (or even just one!), holding a modifier key
+while pressing the left button will emulate the others.
+
+\begin{tabular}{lcl}
+\\
+\hline \hline
+Button&Modifier key&Action\\
+\hline
+Left&None&Rotate\\
+Middle&Shift&Translate center\\
+Right&Control&Zoom in and out\\
+\hline \hline
+\\
+\end{tabular}
+ 
+\noindent Translation and scaling are fairly intuitive. Rotation is similar to other visualisation 
+tools and also quite straightforward. Perhaps it requires some explanation. 
+The display window is divided in two areas: 
+
+\begin{itemize}
+\index{Display!Areas}
+\item The central area is a circle that spans 95\% 
+of the height of the window. You may think of this area as the surface of a 
+spheric world map. If you press your finger against the surface and move it, the map
+will rotate accordingly. This movement is convenient to orient the view in any direction, 
+but tends to slant the cell.
+
+\item The area outside of the central circle behaves in a simpler way: movements of the mouse
+rotate the whole system \emph{around the normal to the screen}. This is useful to correct 
+the ``slant'' or to orient some relevant part of the system in line with your eyes.
+\end{itemize}
+
+If you get lost, you can always reset the view to something sensible by
+pressing Shift+r. If a molecule is present and displayed, double-clicking any
+atom will ``select it''. The atom will then be shown in yellow. Selecting three atoms will trigger a recalculation of the density slice plane \index{Density Slice}.
+Or you can run the commands \texttt{cq\_view\_pick\_atoms\_slice}, for the same effect, and 
+\texttt{cq\_view\_set\_reference\_plane}, to set the plane manually with a point and vector.
+
+\subsection{Keyboard Controls}
+\label{sec:keyboard}
+\index{Controls!Keyboard}
+\index{Keyboard}
+
+Several keys provide shortcuts for some functionality. The up and down cursor keys move the density 
+slice\index{Density Slice} within the bounding box, whereas the right and left keys increase or decrease the radius 
+of the atoms when a molecule is displayed. This is useful to see local details of the density
+while keeping a reference to the atom centres. 
+Keys to toggle objects were introduced in section \ref{sec:objects}
+
+A full list of active keys is listed below.
+
+\begin{tabular}{cl}
+\\
+\hline \hline
+Key&Action\\
+\hline
+Up arrow&Move slice ``up'' in the direction of slice normal\\
+Down arrow&Move slice ``down'' in the direction of slice normal\\
+Left arrow&Decrease the size of the atomic spheres\\
+Right arrow&Increase the size of the atomic spheres\\
+s&Equivalent to ``Up arrow''\\
+a&Equivalent to ``Down arrow''\\
+\hline
+R&Reset the view, to make the slice parallel to the screen and to show the whole cell\\
+c&Recenter the view\\
+C&Recenter the view and make the slice parallel to the screen\\
+\hline
+i&Write an image (screenshot), in ppm format\\
+p&Write a python script$^1$ that can be run in PyMol to display the slice\\
+\hline
+b&Show/hide the bounding box\\
+l&Show/hide the legend\\
+m&Show/hide the molecule\\
+x&Show/hide the XYZ axes (red, green and blue lines at the center of the box)\\
+r&Show/hide a rectangle containing the slice (for debugging, mainly)\\
+\hline
+ESC&Exit the tool\\
+\hline \hline
+\multicolumn{2}{l}{$^1$ The name of the file is \texttt{slice.py}}
+\end{tabular}
+
+
+\section{Python Command Line and Scripting}
+\label{sec:scripting}
+\index{Command Line!Python Terminal}
+\index{Python Terminal}
+
+\Conqtour\ provides a flexible way for interacting with the display via a python terminal.
+An embeded module, \texttt{conqtour}, defines an interface to the display and other
+functionality that can be used as part of a general python script. This is convenient
+for automating frequent tasks or as a means to log a work session.
+
+\begin{description}
+\item[HINT] \emph{Saving your session}\\
+  \\
+  If module \texttt{readline} is available (\Conqtour\ will try to load it at start-up), you can say:
+  \begin{verbatim}
+  pyCQ> readline.write_history_file("mylog.py")
+  \end{verbatim} 
+  This will store your command history (including the \texttt{readline}... command, which you could edit out).
+  Then, you can re-execute the log from the \Conqtour\ command line (\ref{sec:command}) 
+  or, within a session, you can do
+  \begin{verbatim}
+  pyCQ> execfile("mylog.py")
+  \end{verbatim}
+\end{description}
+
+\noindent The terminal will have autocompletion if your python distribution 
+includes the \texttt{readline} and \texttt{rlcomplete} modules. In that case,
+just type \texttt{cq\_} and then Tab. \Conqtour\ will display a list of all the 
+\texttt{conqtour} functions (section \ref{sec:py-functions}). Similarly, 
+a number of helper lists start with a \texttt{CQ\_} prefix (section \ref{sec:py-lists}).
+
+Commands are grouped by areas, e.g. \CQ\ information can be obtained and manipulated using 
+functions starting with \texttt{cq\_info\_}. The following sections describe the most 
+important interface functions. The rest are listed in appendix \ref{sec:py-module}.
+
+\subsection{Getting and setting \Conqtour\ Parameters}
+\label{sec:conqtour-info}
+\index{Python Terminal!\Conqtour\ Parameters}
+
+A number of parameters, mostly related to the current view of the display, can
+be accessed or modified from the command line. For example, if a molecule is
+loaded, a call to the function \linebreak \texttt{cq\_get\_number\_atoms()} returns the
+number of atoms of the molecule.
+
+Some of these functions are very convenient for scripting. See, for instance,
+the example for \texttt{cq\_get\_number\_slices} (section
+\ref{sec:py-function-state-general}).
+
+Among the most important functions are \texttt{cq\_view\_get} and
+\texttt{cq\_view\_set}, which control the current view in an accurate way.
+\texttt{cq\_view\_get} returns a structure (a list of lists) that provides
+complete information of the current orientation of the displayed objects. This
+structure can be stored and reused later, or it can be modified and used to show
+a different view. For example, one could get closer to the box by doing:
+
+\begin{verbatim}
+  pyCQ> view=cq_view_get()
+  pyCQ> view[3][0] -= 5     # Move 5 angstroms closer
+  pyCQ> cq_view_set(view)   # Do it
+\end{verbatim}
+
+Also important are the functions to choose a slice. You can do this using three
+atom numbers as a reference, e.g. \texttt{cq\_view\_pick\_atoms\_slice(1,10,3)},
+or you can set a completely arbitrary plane, defined by a normal vector and a point,
+with \texttt{cq\_view\_set\_reference\_plane}. To get the number of an atom,
+select it (double-click it) and the number will be shown in the python terminal.
+To deselect, double-click some empty space.
+
+\subsection{Getting and setting \CQ\ Information}
+\label{sec:cq-info}
+\index{Python Terminal!\CQ\ Information}
+\index{\CQ\ Information}
+
+\Conqtour\ is about handling \CQ\ data in as transparent a way as possible.
+Because of this, if you run it in a directory containing the configuration and
+output files of a \CQ\ run, most of the neccessary information to load a density and an
+atomic structure will be gathered automatically. In most cases, you should be
+able to run \texttt{cq\_load\_cq\_density()} and
+\texttt{cq\_load\_cq\_coordinates()} without any further intervention.
+
+If, for some reason, some files or parameters where missing when you started
+\Conqtour, you can always try to find the parameters again using
+\texttt{cq\_info\_find}. But keep in mind that all previous parameters will be
+kept, so it you need a fresh start, do run
+\texttt{cq\_info\_reset}. If you need to actually see the current information,
+turn on verbosity (\texttt{cq\_toggle\_verbosity} or start with the
+\texttt{-v} command line option).
+
+However, in some situations you will want to change some parameters by hand.
+Imagine, for instance, that you have
+several alternative input files with non-standard names and you want to select
+one of them. Then you can use \texttt{cq\_info\_set\_input\_file} to give the
+name splicitly, instead of using the default.
+
+Another possibility is that you run \Conqtour\ in an arbitrary directory,
+where you may have some \texttt{.xplor} \index{xplor files} and \texttt{.xyz}
+\index{xyz files} files. In this case, \CQ\ information is not available, but
+if you want to ``cut'' a piece of your system (see Appendix \ref{sec:step-tasks}), you might have to set the cell
+dimensions explicitly, with \texttt{cq\_info\_set\_cell\_dimensions}. For more
+details, see \texttt{cq\_write\_cq\_coordinates} in section
+\ref{sec:py-function-io-general}.
+
+A complete reference of these functions is in \ref{sec:py-function-cqinfo}.
+
+\subsection{Customising the Legend}
+\label{sec:custom-legend}
+\index{Python Terminal!Legend}
+\index{Legend}
+
+\Conqtour\ provides several colouring schemes to hopefully make the data easier
+to understand. In the future, more flexible methods may be provided, but for the
+moment the main idea behind the legend is that it should cover \emph{all} the
+data, and it should also
+give an idea of the orders of magnitude spanned.
+
+It is not an easy task to emphasise the most relevant aspects of the data. Our
+experience is that it is easy to get almost monochromatic plots that say little
+about the details of the system. Our approach is to divide the data in colour
+intervals (which in principle could be arbitrary, but for the moment are only
+conventionally equispaced). Each color interval extreme
+is assigned a colour and points within an interval are interpolated. These three
+aspects (\emph{interval, interpolation, and colour}) can be handled separately
+in \Conqtour. In addition, one can choose different ways to tick the legend. The
+interpolation, ticking and interval-generation methods can also be treated
+collectively, in a more conventional way, whereas the colouring method has to be
+chosen separately.
+
+In the simplest approach, just set a global and color method: 
+
+\begin{verbatim}
+  pyCQ> CQ_LEGEND_METHOD
+  ['linear','log']
+  pyCQ> cq_legend_set_method('linear')
+  pyCQ> CQ_LEGEND_COLORS
+  ['redblue', 'rb', 'redgreenblue', 'rgb', 'rainbow']
+  pyCQ> cq_legend_set_method('rainbow')
+\end{verbatim}
+
+You can choose among the methods listed in a relevant python list (e.g. 
+\texttt{CQ\_LEGEND\_METHOD} for the collective method). For a complete
+reference, see sections \ref{sec:py-function-state-legend} and \ref{sec:py-lists}.
+
+As an example, if you choose the \texttt{'log'} method, intervals are
+calculated using the logarithm of the absolute value of the data, times the sign
+of the original datum. This allows for negative numbers to be represented, but
+obviously excludes zero. 
+
+It is important to understand exactly how this works:
+
+\begin{itemize}
+  \item When the data are loaded, four extremes are found: the maximum and
+  minimum positive and negative values present in the file.
+  \item Intervals are created for positive and negative values separately.
+  \item Zero (i.e. underflow values) are excluded, and will be represented in a
+  striped pattern
+  \item If the method is logarithmic, the minimum and maximum orders of
+  magnitude are found, separately for negative and positive numbers.
+  \item \emph{All} orders of magnitude are represented in the legend. This means
+  that if you see \texttt{1.0e-8}, it means you have values of that order of
+  magnitude in your data, and if you don't see \texttt{1.0e2}, it means that you
+  don't have e.g. 103.
+\end{itemize}
+
+In the future, a mechanism might be provided to restrict the range of data shown
+in the legend, but for the moment this is a fixed feature.
+
+There is more flexibility than just using a collective method. A typical case is
+when you want e.g. linear intervals and ticks, but you want colours to be
+constant within each interval, so that flat colour areas are shown, instead of
+smooth gradients. This is useful to distinguish boundaries between colour
+intervals. To do just that, set the collective method as above, and then do:
+
+\begin{verbatim}
+  pyCQ> cq_legend_set_interpolation_method('constant')
+\end{verbatim}
+
+You could also choose e.g. linear intervals with log interpolation. Sometimes
+these weird combinations help the eye, so it is up to you to play the options.
+
+TO DO: In the future, a way to set precise colour intervals (and extreme
+colours) manually will be provided. That is likely to be helpful to focus on particular
+intervals of interest (e.g. creating more subintervals within a particular
+range).
+
+\subsection{Input and Output}
+\label{sec:input-output}
+\index{Python Terminal!Input/Output}
+\index{Input/Output}
+
+\CQ\ is usually run in parallel and it generates separate files for each MPI
+process. \Conqtour\ attempts to facilitate exploring and managing these files,
+by gathering as much information about a run as possible (section
+\ref{sec:cq-info}). In many instances, \Conqtour\ will be able
+to load density files in one go, if the necessary files are in the current
+directory, just by calling the parameter-less function
+\texttt{cq\_load\_cq\_density()}. Similarly, to load an atomic structure from a
+\CQ\ coordinates file, it is usually enough to call
+\texttt{cq\_load\_cq\_coordinates()}.
+
+Since the systems that \CQ\ can handle can be quite large, it is sometimes
+convenient to filter the input somehow, so as to be able to make data fit in the
+available local memory, or to make visualisation faster. In order to achieve
+this goal, \Conqtour\ provides a set of limits, that determine the exact data that
+will be loaded (or written). The next section describes these limits, that will
+condition how files (section \ref{sec:files}) are handled and converted to
+other formats.
+
+\subsubsection{Limits}
+\label{sec:limits}
+\index{Python Terminal!Input/Output!Limits}
+\index{Input/Output!Limits}
+\index{Limits}
+
+\Conqtour\ limits are a set of parameters that reduce the amount of data to be
+read or written. There are two types of limits: grid limits and real limits.
+Grid limits refer to grid points, whereas real limits refer to space dimensions.
+They are used differently: grid limits usually affect I/O operations
+on densities; real limits change the way coordinates are treated. Both kinds
+are, of course, not entirely independent.
+
+\vspace{10pt}
+\noindent {\bf Grid limits} are defined by a grid window, a grid shift and a
+stride.
+\vspace{5pt}
+
+The {\bf stride} is a vector of integers that defines the periodicity with which
+grid points will be read (or written). Thus, a \texttt{[1,1,1]} stride means all
+points will be read, whereas \texttt{[1,2,3]} means all points will be read in the X direction, but only one
+every 2 or 3, in the Y and Z directions, respectively. You can change the value
+of this vector with \texttt{cq\_limits\_set\_grid\_stride}. Read section
+\ref{sec:py-function-io-limits} for more details.
+
+The {\bf grid window} is the number of points to be read or written in an I/O
+operation. This number is \emph{after applying the stride}, so it does not refer
+to the number of points in a file. To get this, you must check the file itself,
+or, for \CQ\ files, use the \texttt{cq\_info\_find} function. To change this
+window, use \texttt{cq\_limits\_set\_grid\_window}.
+
+The {\bf grid shift} is the origin of points to be read/written. Together with
+the other grid limits, it determines the range of data that will be considered.
+The grid shift is useful to choose a piece of data for closer inspection. It can
+be set with \texttt{cq\_limits\_set\_grid\_shift}.
+
+\vspace{10pt}
+\noindent {\bf Real limits} are only a real window and a real shift, always in
+\AA ngstrom. A stride does not make sense for real limits.
+\vspace{5pt}
+
+The {\bf real window} determines the atoms that will be loaded from or written
+to a coordinates file. It will generally agree with the grid window ``in the \CQ\
+sense'', i.e. only if enough information (cell dimensions, grid points\ldots) is
+known, as reported by \texttt{cq\_info\_find}. To change it, use
+\texttt{cq\_limits\_set\_real\_window}.
+
+The {\bf real shift} is just a real vector that sets the origin of the window.
+In this case, it is completely independent of the grid shift, in all cases. This
+is so that the real shift can be used to store a reference of the original shift
+that was used to load a set of data. 
+
+If \CQ\ information is available the \texttt{cq\_limits\ldots} functions
+can carry out some consistency checks, such as for agreement between real and
+grid windows. But note that these checks will not be performed if the only
+available information comes from a loaded density or coordinates file. This
+is because the limits do not describe in-memory data, and for example a grid window could be larger than the
+current number of loaded density grid points, but it cannot be larger than the
+potential number of grid points to be loaded from \CQ\ density files. If you are
+trying to load data from other formats, you should probably reset the \CQ\
+information with \texttt{cq\_info\_reset}. And {\bf always check the current
+limits with \texttt{cq\_limits\_get}} before loading or writing files: many
+functions modify the limits without (much) notice. Read section
+\ref{sec:py-function-io-limits} for the specific behaviour of each function.
+
+
+\subsubsection{Files}
+\label{sec:files}
+\index{Python Terminal!Input and Output!Files}
+\index{Files}
+
+\Conqtour\ can handle several formats (and hopefully more in the future) for
+both densities (or 3D data in general) and coordinates. For specific functions
+to handle them, see section \ref{sec:py-function-io-general}. Of course, the
+most important formats in this tool are those that \CQ\ uses, but there are
+many situations when you might prefer or need other formats.
+
+For instance, usually you will want to load the density files from a \CQ\ run,
+perhaps applying some limits (\ref{sec:limits}), visualise the data and then
+write all or part of the density into an \texttt{.xplor} file, to use it in e.g.
+VMD or PyMol.
+
+Conversely, you may have a model in XYZ format and you may need to generate the
+\CQ\ coordinates file for a run. You could just read in the \texttt{.xyz} file with
+\texttt{cq\_read\_xyz\_coordinates} and then write out the structure with
+\texttt{cq\_write\_cq\_coordinates}. As you probably know, \CQ\ coordinates 
+files do not contain all the necessary information to create the atomic
+structure. In particular, coordinates can be fractional or absolute (depending
+on a flag in the \CQ\ input file), and the atoms are listed with a reference 
+number that corresponds to the labels in the \texttt{ChemicalSpeciesLabel} block
+in the input file. \texttt{cq\_write\_cq\_coordinates} will generate
+these few pieces of information from your XYZ coordinates, so that the flags are
+easy to cut and paste into the \texttt{Conquest\_input} file.
+
+Step-by-step examples of common situations can be found in Appendix
+\ref{sec:step-tasks}.
+
+\pagebreak
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                            %
+%   A  P  P  E  N  D  I  X   %
+%                            %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\appendix
+\pagestyle{appendix}
+
+\section{The \texttt{conqtour} python module}
+\label{sec:py-module}
+\index{\texttt{conqtour} Python Module}
+
+This section is the complete reference to the \texttt{conqtour} module, which is embedded
+in \Conqtour\ and provides and interface to the display. It also handles input/output 
+operations. A number of helper lists help call some of the functions. Help for any 
+function can be obtained from the terminal with the usual python \texttt{help} function.
+Note that some of the functions are only active when certain kinds of data (3D, coordinates...)
+are loaded.
+
+\subsection{Functions}
+\label{sec:py-functions}
+\index{\texttt{conqtour} Python Module!Functions}
+
+\subsubsection{Display}
+\label{sec:py-functions-display}
+\index{Display}
+\index{Display!Python Functions}
+
+%The functions in this section modify the display (excluding the legend and toggle functions). 
+%For functions that report on the status of the display, without altering it, see section \ref{sec:py-functions-state}.
+%For toggles, see section \ref{sec:py-function-toggles}.
+
+\begin{description}
+\item[\texttt{cq\_view\_get}]\index{\texttt{conqtour} Python Module!Functions!cq\_view\_get}: Get the parameters of the current view \\
+  \emph{Input} : None\\
+  \emph{Output} : A list of the form [[center],[up],[normal],[distance,field,near,far]]\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : A view is defined by a center and two directions, relative to the screen and provided as separate sublists,
+  plus the distance to the center, a visual field angle, and distances to two clipping planes, near and far
+  (at present, hard-coded, but this may change in the future).\\
+  \\
+  \emph{Example} : Store the view and restore it later
+  \begin{verbatim}
+  pyCQ> view=cq_view_get()   # Now change the view using the mouse
+  pyCQ> cq_view_set(view)    # This restores the previous view
+  \end{verbatim}
+\end{description}
+ 
+\begin{description}
+\item[\texttt{cq\_view\_pick\_atoms\_slice}]\index{\texttt{conqtour} Python Module!Functions!cq\_view\_pick\_atoms\_slice}: Recalculate the slice using three atoms as a reference\\
+  \emph{Input} : Three atom numbers (as three parameters,  not one tuple)\\
+  \emph{Output} : None\\
+  \emph{Requires} : Coordinates and 3D Data\\
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_view\_recenter}]\index{\texttt{conqtour} Python Module!Functions!cq\_view\_recenter}: Restore the center of the view \\
+  \emph{Input} : None\\
+  \emph{Output} : The new center as a list\\
+  \emph{Requires} : 3D Data\\
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_view\_rotate}]\index{\texttt{conqtour} Python Module!Functions!cq\_view\_rotate}: Rotate the view around the up vector \\
+  \emph{Input} : Angle in degrees\\
+  \emph{Output} : None\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : The slice is rotated with the rest of the objects. To keep the slice parallel to the screen, use 
+  \texttt{cq\_view\_rotate\_reslice}\\
+  \\
+  \emph{Example} : Turn around the view once
+  \begin{verbatim}
+  # While this loop is running, 
+  # the display is still responsive to the mouse
+  pyCQ> for i in range(360):
+  .....   cq_rotate(1)
+  .....
+  \end{verbatim}
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_view\_rotate\_reslice}]\index{\texttt{conqtour} Python Module!Functions!cq\_view\_rotate\_reslice}: Rotate the view and keep the slice facing you \\
+  \emph{Input} : Angle in degrees\\
+  \emph{Output} : None\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : The slice is recalculated to keep it parallel to the screen (non-tracking mode).\\
+  \\
+  \emph{Example} : Turn around the view once
+  \begin{verbatim}
+  # While this loop is running,
+  # the display is still responsive to the mouse
+  pyCQ> for i in range(360):
+  .....   cq_view_rotate_reslice(1)
+  .....
+  \end{verbatim}
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_view\_set}]\index{\texttt{conqtour} Python Module!Functions!cq\_view\_set}: Set the current view \\
+  \emph{Input} : A list of the form [[center],[up],[normal],[distance,field,near,far]]\\
+  \emph{Output} : None\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : See \texttt{cq\_view\_get} for an explanation of the input list and an example.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_view\_set\_center}]\index{\texttt{conqtour} Python Module!Functions!cq\_view\_set\_center}: Set the center of the view \\
+  \emph{Input} : A list or tuple with the center coordinates (not three coordinates)\\
+  \emph{Output} : None\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : The function \texttt{cq\_view\_recenter} returns a list of the expected form.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_view\_set\_reference\_plane}]\index{\texttt{conqtour} Python Module!Functions!cq\_view\_set\_reference\_plane}: Set the plane of a new slice by hand\\
+  \emph{Input} : A list of the form [[normal],[in-plane point]]\\
+  \emph{Output} : None\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : If the point is outside of the bounding box, the centre of the box will be used.
+  To get the current normal and point, use \texttt{cq\_get\_slice\_plane}\\
+  \\
+  \emph{Example} : Show a slice on the XZ plane
+  \begin{verbatim}
+  pyCQ> cq_view_set_reference_plane([[0,1,0],[7,7,7]])
+  \end{verbatim}
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_view\_set\_slice}]\index{\texttt{conqtour} Python Module!Functions!cq\_view\_set\_slice}: Set the slice number \\
+  \emph{Input} : The slice number, starting at 0\\
+  \emph{Output} : None\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : The get the number of slices in the current direction, use \texttt{cq\_get\_number\_slices}.\\
+  \\
+  \emph{Example} : See \texttt{cq\_get\_number\_slices} in section \ref{sec:py-function-state-general}.
+\end{description}
+
+
+\subsubsection{\Conqtour\ State}
+\label{sec:py-functions-state}
+\index{\Conqtour\ State}
+
+\paragraph{General}
+\label{sec:py-function-state-general}
+\index{\Conqtour\ State!General}
+
+\begin{description}
+\item[\texttt{cq\_get\_current\_slice}]\index{\texttt{conqtour} Python Module!Functions!cq\_get\_current\_slice}: Get the index of the slice on display\\
+  \emph{Input} : None\\
+  \emph{Output} : The slice index\\
+  \emph{Requires} : 3D Data\\
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_get\_number\_atoms}]\index{\texttt{conqtour} Python Module!Functions!cq\_get\_number\_atoms}: Get the number of atoms of the molecule\\
+  \emph{Input} : None\\
+  \emph{Output} : The number of atoms\\
+  \emph{Requires} : Coordinates\\
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_get\_number\_slices}]\index{\texttt{conqtour} Python Module!Functions!cq\_get\_number\_slices}: Get the number of slices that can be created along the current direction\\
+  \emph{Input} : None\\
+  \emph{Output} : The maximum number of slices\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : The slice index starts at zero, so the maximum returned by this function is not allowed\\
+  \\
+  \emph{Example} : View all slices, write ppm files and make a movie
+  \begin{verbatim}
+  # NOTE: To create the movie, you need ImageMagick
+  #       and mencoder in your system!!
+  import os
+  
+  i=0
+  while i < cq_get_number_slices():
+    # Show (and calculate if necessary) slice i
+    cq_view_set_slice(i)
+    # Write an image file
+    frame=str(i).zfill(5)
+    cq_write_ppm_image("scripted"+frame+".ppm")
+    # Convert the image ppm to png (more useful) with ImageMagick
+    os.system("convert scripted"+frame+".ppm scripted"+frame+".png")
+    os.system("rm scripted"+frame+".ppm")
+    i += 1
+    print "Frame "+frame
+  # Merge the images into a movie, and delete the image files
+  os.system("mencoder mf://scripted0*.png -mf fps=25:type=png \
+    -ovc copy -oac copy -o video.avi")
+  os.system("rm scripted0*.png")
+
+  \end{verbatim}
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_get\_slice\_plane}]\index{\texttt{conqtour} Python Module!Functions!cq\_get\_slice\_plane}: Get a point in the slice and a normal to it\\
+  \emph{Input} : None\\
+  \emph{Output} : A list of the form [[normal to slice][point in slice]]\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : To set a new slice direction and plane, use \texttt{cq\_view\_set\_reference\_plane}
+\end{description}
+
+\paragraph{Legend}
+\label{sec:py-function-state-legend}
+\index{\Conqtour\ State!Legend}
+\index{Legend}
+  
+\begin{description}
+\item[\texttt{cq\_legend\_get\_label\_format}]\index{\texttt{conqtour} Python Module!Functions!cq\_legend\_get\_label\_format}: Get the current format of the legend labels\\
+  \emph{Input} : None\\
+  \emph{Output} : A string with a C-style \texttt{printf} format\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : To set the format, use \texttt{cq\_legend\_set\_label\_format}
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_legend\_set\_color\_method}]\index{\texttt{conqtour} Python Module!Functions!cq\_legend\_set\_color\_method}: Change the method to assign colours to colour intervals\\
+  \emph{Input} : One of the strings listed in \texttt{CQ\_LEGEND\_COLORS}\\
+  \emph{Output} : None\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Example} : Get the list of methods and choose one
+  \begin{verbatim}
+  pyCQ> CQ_LEGEND_COLORS # List the valid method identifiers
+  ['redblue', 'rb', 'rainbow'] # This may be different
+  pyCQ> cq_legend_set_color_method('rb')                # One way
+  pyCQ> cq_legend_set_color_method(CQ_LEGEND_COLORS[0]) # Another
+  \end{verbatim}
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_legend\_set\_interpolation\_method}]\index{\texttt{conqtour} Python Module!Functions!cq\_legend\_set\_interpolation\_method}: Change the method to interpolate colours in colour intervals\\
+  \emph{Input} : One of the strings listed in \texttt{CQ\_LEGEND\_INTERPOLATION}\\
+  \emph{Output} : None\\
+  \emph{Requires} : 3D Data\\
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_legend\_set\_interval\_method}]\index{\texttt{conqtour} Python Module!Functions!cq\_legend\_set\_interval\_method}: Change the method to create colour intervals\\
+  \emph{Input} : One of the strings listed in \texttt{CQ\_LEGEND\_INTERVALS}\\
+  \emph{Output} : None\\
+  \emph{Requires} : 3D Data\\
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_legend\_set\_label\_format}]\index{\texttt{conqtour} Python Module!Functions!cq\_legend\_set\_label\_format}: Set the current format of the legend labels\\
+  \emph{Input} : A string with a C-style \texttt{printf} format\\
+  \emph{Output} : None\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : To get the format, use \texttt{cq\_legend\_get\_label\_format}
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_legend\_set\_method}]\index{\texttt{conqtour} Python Module!Functions!cq\_legend\_set\_method}: Change the general method to create a legend\\
+  \emph{Input} : One of the strings listed in \texttt{CQ\_LEGEND\_METHOD}\\
+  \emph{Output} : None\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : The general method sets in one go the ticks, interval and interpolation methods.
+  Ticks will be recalculated using default values.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_legend\_set\_tick\_method}]\index{\texttt{conqtour} Python Module!Functions!cq\_legend\_set\_tick\_method}: Change the method to tick the legend\\
+  \emph{Input} : One of the strings listed in \texttt{CQ\_LEGEND\_TICKS}\\
+  \emph{Output} : None\\
+  \emph{Requires} : 3D Data\\
+\end{description}
+
+
+\paragraph{Toggles}
+\label{sec:py-function-toggles}
+\index{\Conqtour\ State!Toggles}
+\index{Toggles}
+
+\begin{description}
+\item[\texttt{cq\_toggle\_axes}]\index{\texttt{conqtour} Python Module!Functions!cq\_toggle\_axes}: Toggle the visibility of the axes\\
+  \emph{Input} : None\\
+  \emph{Output} : The state after the call (True/False)\\
+  \emph{Requires} : 3D Data\\
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_toggle\_box}]\index{\texttt{conqtour} Python Module!Functions!cq\_toggle\_box}: Toggle the visibility of the bounding box\\
+  \emph{Input} : None\\
+  \emph{Output} : The state after the call (True/False)\\
+  \emph{Requires} : 3D Data\\
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_toggle\_coordinates\_shift}]\index{\texttt{conqtour} Python Module!Functions!cq\_toggle\_coordinates\_shift}: Toggle the shifting method for coordinates\\
+  \emph{Input} : None\\
+  \emph{Output} : The state after the call (True/False)\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : Coordinates can be shifted or not according the the real shift of the limits 
+  (see \ref{sec:limits}). The real shift will always be used to shift the I/O window, but the coordinates may be left 
+  unchanged, depending on this toggle.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_toggle\_legend}]\index{\texttt{conqtour} Python Module!Functions!cq\_toggle\_legend}: Hide/Show the legend\\
+  \emph{Input} : None\\
+  \emph{Output} : The state after the call (True/False)\\
+  \emph{Requires} : 3D Data\\
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_toggle\_molecule}]\index{\texttt{conqtour} Python Module!Functions!cq\_toggle\_molecule}: Toggle the visibility of the molecule\\
+  \emph{Input} : None\\
+  \emph{Output} : The state after the call (True/False)\\
+  \emph{Requires} : Coordinates\\
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_toggle\_verbosity}]\index{\texttt{conqtour} Python Module!Functions!cq\_toggle\_verbosity}: Toggle the level of output\\
+  \emph{Input} : None\\
+  \emph{Output} : The verbosity level (for the moment 0 or 1, but this may change)\\
+  \emph{Requires} : Nothing\\
+\end{description}
+
+\subsubsection{\CQ\ Information}
+\label{sec:py-function-cqinfo}
+\index{\CQ\ Information}
+
+\begin{description}
+\item[\texttt{cq\_info\_find}]\index{\texttt{conqtour} Python Module!Functions!cq\_info\_find}: Gather information about a \CQ\ run\\
+  \emph{Input} : None\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : Unless otherwise specified, it will search for files in the current directory.
+  If the output is verbose (change with \texttt{cq\_toggle\_verbosity}), it will print a summary
+  of what it finds. If some information was available from a previous call or from the user, it will keep it.
+  For this reason, if you want a fresh set of parameters from the files in your directory, call \texttt{cq\_info\_reset}
+  before, to clear all values.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_info\_reset}]\index{\texttt{conqtour} Python Module!Functions!cq\_info\_reset}: Forget all the known information about a \CQ\ run\\
+  \emph{Input} : None\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : This function forces \texttt{cq\_info\_find} to get all the information afresh, 
+  so if you are getting confused about the behaviour of \Conqtour, it is probably a good idea to call it.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_info\_set\_block\_points}]\index{\texttt{conqtour} Python Module!Functions!cq\_info\_set\_block\_points}: Set the number of grid points per block\\
+  \emph{Input} : A tuple containing (non-negative) values for all three axis.\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : To unset the value for any componenet, so that \texttt{cq\_info\_find} will update it, use 0.\\
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_info\_set\_blocks\_file}]\index{\texttt{conqtour} Python Module!Functions!cq\_info\_set\_blocks\_file}: Set the blocks file associated to a \CQ\ run\\
+  \emph{Input} : The file name.\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : Typical names look like \texttt{make\_blk.dat}.\\
+  Use the empty string to force \texttt{cq\_info\_find} to update it.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_info\_set\_cell\_dimensions}]\index{\texttt{conqtour} Python Module!Functions!cq\_info\_set\_cell\_dimensions}: Set the cell dimensions associated to a \CQ\ run\\
+  \emph{Input} : A tuple containing the new dimensions (the modules of the lattice vectors).\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : This is \emph{not} the actual value after the data is loaded, which depends on the limits (\ref{sec:limits}, 
+  \ref{sec:py-function-io-limits}), but the dimensions found in the coordinates file.
+  To unset the value for any component, so that \texttt{cq\_info\_find} will update it, use 0.0.\\
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_info\_set\_coordinates\_file}]\index{\texttt{conqtour} Python Module!Functions!cq\_info\_set\_cordinates\_file}: Set the file name of the coordinates for a \CQ\ run\\
+  \emph{Input} : A file name.\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : Use the empty string to force \texttt{cq\_info\_find} to update it.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_info\_set\_cores}]\index{\texttt{conqtour} Python Module!Functions!cq\_info\_set\_cores}: Set the number of cores used in a particular \CQ\ run\\
+  \emph{Input} : A non-negative integer.\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : Use 0 to force \texttt{cq\_info\_find} to update it.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_info\_set\_density\_stub}]\index{\texttt{conqtour} Python Module!Functions!cq\_info\_set\_density\_stub}: Set the stub for the density files of a \CQ\ run\\
+  \emph{Input} : A string.\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : Use the empty string to force \texttt{cq\_info\_find} to update it.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_info\_set\_fractional\_coordinates}]\index{\texttt{conqtour}
+Python Module!Functions!cq\_info\_set\_fractional\_coordinates}: Set whether
+\CQ\ coordinates are fractional\\ 
+\emph{Input} : A True or False python object.\\
+\emph{Output} : None\\
+\emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : True objects include True and 1; false objects include
+  False and 0.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_info\_set\_grid\_points}]\index{\texttt{conqtour} Python Module!Functions!cq\_info\_set\_grid\_points}: Set the number of grid points associated to a \CQ\ run\\
+  \emph{Input} : A tuple containing three non-negative integers\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : This is \emph{not} the number of grid points that will be loaded, which depends on the limits 
+  (\ref{sec:limits}, \ref{sec:py-function-io-limits}).
+  Use 0 for any component to force \texttt{cq\_info\_find} to update it.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_info\_set\_input\_file}]\index{\texttt{conqtour} Python Module!Functions!cq\_info\_set\_input\_file}: Set the parameter (input) file for a \CQ\ run\\
+  \emph{Input} : A string.\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : This is likely to be \texttt{Conquest\_input}. 
+  Use the empty string to force \texttt{cq\_info\_find} to update it.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_info\_set\_output\_file}]\index{\texttt{conqtour} Python Module!Functions!cq\_info\_set\_output\_file}: Set the output file for a \CQ\ run\\
+  \emph{Input} : A string.\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : This file is most useful to get cell dimensions and the numbers of cores and grid points of a run.
+  It is a good idea to set this right and then try \texttt{cq\_info\_find}.
+  A call with the empty string will force \texttt{cq\_info\_find} to search this name in the input file.
+\end{description}
+
+
+\subsubsection{Input/Output}
+\label{sec:py-functions-io}
+\index{Input/Output}
+
+\paragraph{General}
+\label{sec:py-function-io-general}
+\index{Input/Output!General}
+
+\begin{description}
+\item[\texttt{cq\_load\_cq\_coordinates}]\index{\texttt{conqtour} Python
+Module!Functions!cq\_load\_cqcoordinates}: Load the coordinates associated to a \CQ\ run \\ 
+\emph{Input} : None\\ 
+\emph{Output} : None, or an IOError exception if there was a problem\\
+  \emph{Requires} : The name of the file and whether coordinates are
+  fractional. This information is gathered from a \CQ\ run (see
+  \texttt{cq\_info\_find}) or manually set by the user (\ref{sec:py-function-cqinfo})\\
+  \\
+  \emph{Comments} : Only atoms within limits will be loaded. The real shift
+  and window limits are used to decide about that. The real shift will also be
+  used to move coordinates back to the origin, if the last call to
+  \texttt{cq\_toggle\_coordinates\_shift} returned \texttt{True}. If an atom is
+  outside of the simulation cell (because of periodic boundary conditions), it will be wrapped into the cell. \\
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_load\_cq\_density}]\index{\texttt{conqtour} Python Module!Functions!cq\_load\_cq\_density}: Load a density from a \CQ\ run \\
+  \emph{Input} : None\\
+  \emph{Output} : None, or an IOError exception if there was a problem\\
+  \emph{Requires} : Consistent information, gathered from a \CQ\ run (see \texttt{cq\_info\_find}) 
+  or manually set by the user (\ref{sec:py-function-cqinfo})\\
+  \\
+  \emph{Comments} : This function rearranges the density files of a \CQ\ run using information from the input and 
+  output files, so that it is displayed correctly. Limits (\ref{sec:limits}, \ref{sec:py-function-io-limits}) 
+  are applied to reduce the amount of data
+  or to restrict it to a given space region.
+  If some information is missing, it will fail until the user provides the necessary piece manually.
+  Depending on the level of verbosity, it will show a ``progress bar'' or it will proceed silently. For large systems,
+  it could take a while. As a side effect, the limits are reset according to the new data.\\ 
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_load\_xplor\_density}]\index{\texttt{conqtour} Python Module!Functions!cq\_load\_xplor\_density}: Load an xplor density file\\
+  \emph{Input} : The file name\\
+  \emph{Output} : None, or an exception if there was a problem\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : The limits (\ref{sec:limits}, \ref{sec:py-function-io-limits}) may change.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_load\_xyz\_coordinates}]\index{\texttt{conqtour} Python Module!Functions!cq\_load\_xyz\_coordinates}: Load a molecule from an xyz file\\
+  \emph{Input} : The file name\\
+  \emph{Output} : None, or an exception if there was a problem\\
+  \emph{Requires} : Nothing\\
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_write\_cq\_coordinates}]\index{\texttt{conqtour} Python
+Module!Functions!cq\_write\_cq\_coordinates}: Write a \CQ\ coordinates
+file\\ 
+\emph{Input} : The file name\\ 
+\emph{Output} : None\\
+  \emph{Requires} : Coordinates and some information about a \CQ\ run, limits,
+  etc\ldots\\
+  \\
+  \emph{Comments} : The behaviour can be quite complicated, so verbosity is
+  recommended, so you know exactly what you are doing. 
+  
+  The cell  dimensions that are written to the file depend on what you have. 
+  It will use the first piece of information that you have defined, in the following order:
+\begin{itemize}
+  \item \CQ\ info about cell dimensions (check with
+  \texttt{cq\_info\_find} and set with \linebreak
+  \texttt{cq\_info\_set\_cell\_dimensions}).
+  \item Real window of the limits (set or unset with
+  \texttt{cq\_limits\_set\_real\_window}).
+  \item Density dimensions (if a density is loaded).
+  \item The maximum values for the current coordinates (if everything fails,
+  you must have at least this).
+\end{itemize}
+Take the value of the \texttt{coordinates\_shift} toggle into account. If this
+is True, or in any case if limits were used, the coordinates will be shifted.
+
+You can set whether the coordinates are fractional with
+\texttt{cq\_info\_set\_fractional\_coordinates}.
+
+After writting the file, it will give you a few lines that you should copy into
+your \texttt{Conquest\_input} file. Something like this:
+
+\begin{verbatim}
+----- FYI: You could copy the next few lines into your Conquest_input
+IO.FractionalAtomicCoords F
+General.NumberOfSpecies 4
+%block ChemicalSpeciesLabel
+ 1  12.01   C
+ 2  15.99   O
+ 3  14.01   N
+ 4   1.01   H
+%endblock
+----- FYI END -------------------------------------------------------
+\end{verbatim}
+
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_write\_ppm\_image}]\index{\texttt{conqtour} Python Module!Functions!cq\_write\_ppm\_image}: Write a ppm file with the image on display\\
+  \emph{Input} : The file name\\
+  \emph{Output} : None, or an exception if there was a problem\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : For the moment, the resolution is that of the openGL window, 
+  so make it larger (if you can!) to get a better picture.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_write\_pymol\_slice}]\index{\texttt{conqtour} Python Module!Functions!cq\_write\_pymol\_slice}: Write a PyMol script to show the current slice\\
+  \emph{Input} : The file name\\
+  \emph{Output} : None\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : The script must be run within PyMol using the run command (e.g. \texttt{run slice.py}). 
+  The same script is written from the keyboard (press p) with a fixed name (\texttt{slice.py}).
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_write\_xplor\_density}]\index{\texttt{conqtour} Python Module!Functions!cq\_write\_xplor\_density}: Write an xplor file from the current 3D data\\
+  \emph{Input} : The file name\\
+  \emph{Output} : None, or an exception if there was a problem\\
+  \emph{Requires} : 3D Data\\
+  \\
+  \emph{Comments} : Limits are used and may be changed to fit the data, e.g. to reduce grid windows if they are too large.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_write\_xyz\_coordinates}]\index{\texttt{conqtour} Python
+Module!Functions!cq\_write\_xyz\_coordinates}: Write an XYZ coordinates
+file\\ 
+\emph{Input} : The file name\\ 
+\emph{Output} : None\\
+  \emph{Requires} : Coordinates and some information about a \CQ\ run, limits,
+  etc\ldots\\
+  \\
+  \emph{Comments} : See comments for \texttt{cq\_write\_xyz\_coordinates},
+  except those about fractional coordinates, which are not relevant in an XYZ
+  file.
+\end{description}
+
+\paragraph{Limits}
+\label{sec:py-function-io-limits}
+\index{Input/Output!Limits}
+\index{Limits}
+
+This section deals with getting and setting information about data limits. 
+For a detailed explanation of the various limits, see section \ref{sec:limits}.
+Most of these functions can be called at any time (even without any loaded data).
+However, checks of bounds are only possible when \CQ\ information is available
+(see sections \ref{sec:cq-info} and \ref{sec:py-function-cqinfo}).\\
+
+\begin{description}
+\item[\texttt{cq\_limits\_get}]\index{\texttt{conqtour} Python Module!Functions!cq\_limits\_get}: Get the current data limits\\
+  \emph{Input} : None\\
+  \emph{Output} : A list of the form [[grid window],[grid shift],[strides],[real window],[real shift]]\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : To set all the limits at once, use \texttt{cq\_limits\_set}.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_limits\_reset}]\index{\texttt{conqtour} Python Module!Functions!cq\_limits\_reset}: Reset I/O limits\\
+  \emph{Input} : None\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : All the limits will be zero, except the strides, which will be 1.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_limits\_set}]\index{\texttt{conqtour} Python Module!Functions!cq\_limits\_set}: Set all data limits in one go\\
+  \emph{Input} : A list of the form [[grid window],[grid shift],[strides],[real window],[real shift]]\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : The function \texttt{cq\_limits\_get} gives a list of the same form. 
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_limits\_set\_grid\_shift}]\index{\texttt{conqtour} Python Module!Functions!cq\_limits\_set\_grid\_shift}: Change the shift of the 3D data grid\\
+  \emph{Input} : A tuple containing the three shifts\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : Not to be confused with \texttt{cq\_limits\_set\_real\_shift}.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_limits\_set\_grid\_shift\_from\_real}]\index{\texttt{conqtour}
+Python Module!Functions!cq\_limits\_set\_gridl\_shift\_from\_real}: Adjust
+the grid shift using the real shift\\ \emph{Input} : None\\ \emph{Output} :
+None\\ \emph{Requires} : The dimensions and grid points of the simulation cell for a \CQ\ run. 
+  See sections \ref{sec:cq-info} and \ref{sec:py-function-cqinfo}\\
+  \\
+  \emph{Comments} : The real shift will be changed slightly to make it match
+  the grid shift exactly. If no \CQ\ information is available, the grid shift
+  will be set to zero. To choose arbitrary values, use \texttt{cq\_limits\_set\_grid\_shift}.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_limits\_set\_grid\_strides}]\index{\texttt{conqtour} Python Module!Functions!cq\_limits\_set\_grid\_strides}: Change the strides of the 3D data grid\\
+  \emph{Input} : A tuple containing the three strides\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing.\\
+  \\
+  \emph{Comments} : Grid points are read from/written to files every \emph{stride} points. The default is 1 (all points are read).
+  This is useful to save memory.
+  Use 0 to keep the current value for a component.
+  Note that there are no real strides.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_limits\_set\_grid\_window}]\index{\texttt{conqtour} Python Module!Functions!cq\_limits\_set\_grid\_window}: Change the number of actual read or written grid points\\
+  \emph{Input} : A tuple containing the grid points per coordinate\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing, but adjustment of the real window will only
+  happen if enough \CQ information is known.\\
+  \\
+  \emph{Comments} : The minimum is 2, but use 0 or 1 to
+  reset the window to 0 points (and the real one to 0.0), and negative values to
+  keep the current value. Resetting a component is useful, for example, to load
+  unconditionally all atoms in a file. This function is different from but
+  related to \texttt{cq\_limits\_set\_real\_window}: The grid and real window
+  will agree if cell dimensions and number of grid points are known from 
+  \CQ\ information.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_limits\_set\_real\_shift}]\index{\texttt{conqtour} Python Module!Functions!cq\_limits\_set\_real\_shift}: Change the real shift\\
+  \emph{Input} : A tuple containing the real shift per component (in \AA ngstrom)\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : At present, this is applied to the output only.
+  Not to be confused with \texttt{cq\_limits\_set\_grid\_shift}.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_limits\_set\_real\_shift\_from\_grid}]\index{\texttt{conqtour} Python Module!Functions!cq\_limits\_set\_real\_shift\_from\_grid}: Change the real shift using the grid shift\\
+  \emph{Input} : None\\
+  \emph{Output} : None\\
+  \emph{Requires} : The dimensions and grid points of the simulation cell for a \CQ\ run. 
+  See sections \ref{sec:cq-info} and \ref{sec:py-function-cqinfo}\\
+  \\
+  \emph{Comments} : If no \CQ\ information is available, the real shift will
+  be set to zero. To choose arbitrary values, use
+  \texttt{cq\_limits\_set\_real\_shift}.
+\end{description}
+
+\begin{description}
+\item[\texttt{cq\_limits\_set\_real\_window}]\index{\texttt{conqtour} Python Module!Functions!cq\_limits\_set\_real\_window}: Change the real window\\
+  \emph{Input} : None\\
+  \emph{Output} : None\\
+  \emph{Requires} : Nothing\\
+  \\
+  \emph{Comments} : Use negative values to keep the current value for a
+  component, and zero (or very small) to reset a component to zero. The latter
+  is useful, for example, to load unconditionally all atoms in a file. Changing
+  the real window affects the grid window, as both agree (if enough \CQ\
+  information about the grid and lattice is known). Note that the real window is
+  \emph{not} the cell dimensions.
+\end{description}
+
+\pagebreak
+
+\subsection{Lists}
+\label{sec:py-lists}
+\index{\texttt{conqtour} Python Module!Lists}
+
+\begin{description}
+\item[CQ\_LEGEND\_COLORS]\index{\texttt{conqtour} Python Module!Lists!CQ\_LEGEND\_COLORS}: \textit{string}\\ 
+  List of available color methods for the legend, to be used with \texttt{cq\_legend\_set\_color\_method}.\\
+  \begin{tabular}{ll}
+    \\
+    \hline\hline
+    Value&Meaning\\
+    \hline
+    \texttt{redblue}&Red colours for positive values and blue colours for negative values.\\
+    \texttt{rb}&Short for \texttt{redblue}.\\
+    \texttt{redgreenblue}&Similar to redblue, but with green colours around zero.\\
+    \texttt{rgb}&Short for \texttt{redgreenblue}.\\
+    \texttt{rainbow}&The colors of the rainbow.\\
+    \hline\hline
+    \\
+  \end{tabular}
+
+\item[CQ\_LEGEND\_INTERPOLATION]\index{\texttt{conqtour} Python Module!Lists!CQ\_LEGEND\_INTERPOLATION}: \textit{string}\\
+  List of available interpolation methods for the legend, to be used with \\
+  \texttt{cq\_legend\_set\_interpolation\_method}.\\
+  \begin{tabular}{ll}
+    \\
+    \hline\hline
+    Value&Meaning\\
+    \hline
+    \texttt{linear}&Linear interpolation between the extremes of each colour interval.\\
+    \texttt{log}&Logarithmic interpolation, using the absolute value \\&and keeping the sign of the interpolated point.\\
+    \texttt{constant}&Constant value for each interval\\&(the maximum, i.e. more positive value is used).\\
+    \hline\hline
+    \\
+  \end{tabular}
+ 
+\item[CQ\_LEGEND\_INTERVALS]\index{\texttt{conqtour} Python Module!Lists!CQ\_LEGEND\_INTERVALS}: \textit{string}\\
+  List of available methods for automatic generation of colour intervals, to be used with \\
+  \texttt{cq\_legend\_set\_intervals\_method}.
+  In all these methods, positive and negative values are treated
+  separately, so interpolation happens between the minimium and maximum positive values (or orders of magnitude), etc.\\
+  \begin{tabular}{ll}
+    \\
+    \hline\hline
+    Value&Meaning\\
+    \hline
+    \texttt{linear}&Linear interpolation between minimum and maximum data values.\\
+    \texttt{log}&Logarithmic interpolation between data value extremes\\&(in absolute value, but keeping the sign).\\
+    \hline\hline
+    \\
+  \end{tabular}
+
+\item[CQ\_LEGEND\_METHOD]\index{\texttt{conqtour} Python Module!Lists!CQ\_LEGEND\_METHOD}: \textit{string}\\
+  List of available (collective) methods to create a legend. These are equivalent to setting 
+  ticks, interpolation and intervals methods at once. To be used with
+  \texttt{cq\_legend\_set\_method}.\\
+  \begin{tabular}{ll}
+    \\
+    \hline\hline
+    Value&Meaning\\
+    \hline
+    \texttt{linear}&Linear ticks, intervals and interpolation.\\
+    \texttt{log}&Logarithmic methods (in absolute value, but keeping the sign).\\
+    \hline\hline
+    \\
+  \end{tabular}
+
+\item[CQ\_LEGEND\_TICKS]\index{\texttt{conqtour} Python Module!Lists!CQ\_LEGEND\_TICKS}: \textit{string}\\
+  List of available methods to add ticks to the legend. To be used with
+  \texttt{cq\_legend\_set\_tick\_method}.\\
+  \begin{tabular}{ll}
+    \\
+    \hline\hline
+    Value&Meaning\\
+    \hline
+    \texttt{linear}&Ticks at linear intervals.\\
+    \texttt{log}&Ticks at logarithmic intervals (using absolute values, but keeping the sign).\\
+    \hline\hline
+    \\
+  \end{tabular}
+\end{description}
+
+\pagebreak
+
+\section{Step by step common tasks}
+\label{sec:step-tasks}
+\index{Common tasks}
+
+\subsection{Creating \CQ\ coordinates from an xyz file}
+\label{sec:making-cq-coords}
+\index{\CQ\ coordinates}
+\index{\CQ\ coordinates!From an xyz file}
+
+\begin{description}
+\item[Case: ] You have a structure model in an xyz file and you need \CQ\ coordinates to run a linear-scaling DFT calculation.
+\item[Procedure: ] 
+\end{description}
+\begin{enumerate}
+  \item Start \Conqtour\ and load the \texttt{.xyz} file.
+{\scriptsize
+  \begin{verbatim}
+  pyCQ> cq_load_xyz_coordinates("model.xyz")
+  \end{verbatim}
+  }
+  In verbose mode, you will get some information about the number of atoms read. The display will \emph{not} open, since you have
+  not loaded a density, which is required.
+  \item Choose whether the coordinates should be fractional or not.
+{\scriptsize
+  \begin{verbatim}
+  pyCQ> cq_info_set_fractional_coordinates(False)
+  \end{verbatim}
+  }
+  \item To make sure that all atoms are written, reset the limits. (This step is not really needed in this example, but you
+  should keep in mind that some atoms may be missing in the ouput file if you have some limits set, even if they correspond to the
+  desired cell window, because atoms on the boundary might be discarded due to rounding. This step prevents that.) 
+  {\scriptsize
+  \begin{verbatim}
+  pyCQ> cq_limits_reset()  
+  \end{verbatim}
+  }
+  \item Write the \CQ\ coordinates file. You probably want to turn on verbosity with \linebreak \texttt{cq\_toggle\_verbosity()}.
+{\scriptsize
+  \begin{verbatim}
+  pyCQ> cq_write_cq_coordinates("model.in")
+  Info: Using largest coordinates to decide the cell dimensions
+        If you don't want this, set the CQ cell dimensions, with cq_info_set_cell_dimensions
+  Info: Writing a file with the folowing dimensions: 53.124000 61.488000 61.177000 A
+  ----- FYI: You could copy the next few lines into your Conquest_input file -----
+  IO.FractionalAtomicCoords F
+  General.NumberOfSpecies 7
+  %block ChemicalSpeciesLabel
+   1  14.01   N
+   2   1.01   H
+   3  12.01   C
+   4  15.99   O
+   5  32.06   S
+   6  30.97   P
+   7  22.99  Na
+  %endblock
+  ----- FYI END ------------------------------------------------------------------
+  \end{verbatim}  
+  }
+  In this case, there was no \CQ\ information available, the limits were set to zero and there was no density either, so the cell
+  dimensions were calculated using the maximum values for each coordinate component. Often, this is not what you want, you can
+  then set coordinates explicitly:
+  {\scriptsize
+  \begin{verbatim}
+  pyCQ> cq_info_set_cell_dimensions([49.5630, 57.1220, 56.9529])
+  \end{verbatim}  
+  }
+  Then you will get a different message.
+  {\scriptsize
+  \begin{verbatim}
+  Info: Using cell dimensions from the Conquest info structures
+        If you don't want this, set the CQ cell dimensions to zero, with cq_info_set_cell_dimensions
+  Info: Writing a file with the folowing dimensions: 49.563000 57.122001 56.952998 A  
+  \end{verbatim}  
+  }
+  \item Copy the labels to your \texttt{Conquest\_input} file.
+\end{enumerate}
+
+\subsection{Creating an xplor file from \CQ\ densities}
+\label{sec:making-xplor}
+\index{xplor files}
+\index{xplor files!From \CQ\ densities}
+
+\begin{description}
+\item[Case: ] You have run \CQ\ and now have a lot of files in your current
+directory, including some density files, with names like \texttt{chden.001}, and
+you want to visualise them in \Conqtour\ and then make an isosurface of the
+central piece in PyMol.
+\item[Procedure: ] 
+\end{description}
+\begin{enumerate}
+  \item Go to the directory where you have the files and run
+  \texttt{cq\_ut\_conqtour -v}. You should get a message like the following:
+{\scriptsize
+  \begin{verbatim}
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+----                 KNOWN CONQUEST PARAMETERS                 ----
+----   Note: this is NOT what you choose in the command line   ----
+----         and it is only used if you load densities and/or  ----
+----         coordinates from the pyCQ prompt                  ----
+-------------------------------------------------------------------
+-------------------------------------------------------------------
+Info: Setting input file to default: Conquest_input
+Info: Setting output file to default: Conquest_out
+Info: Using Conquest_input to set coordinates file name: testfrac.out
+Info: Setting flag: IO.FractionalAtomicCoords = False
+Info: Number of species = 7
+Info:  Species   1 = H
+Info:  Species   2 = C
+Info:  Species   3 = N
+Info:  Species   4 = O
+Info:  Species   5 = P
+Info:  Species   6 = S
+Info:  Species   7 = Na
+Info: Setting flag to default: General.DistanceUnits = a0
+Info: Setting flag to default: ReadBlocksFromFile = True
+Info: Setting flag: General.PartitionMethod = Hilbert
+Info: Using Conquest_input to set blocks file name: make_blk.dat
+Info: Setting density file prefix to default: chden
+Info: Number of processes = 256
+Info: All density files are available for reading
+Info: Number of grid points = 432 500 500
+Info: Number of grid points per block = 4 4 4
+Info: Dimensions (according to Conquest_out): a = 93.660490 b = 107.944930 c = 107.625560 a0
+Info: Grid limits: Shifts = 0 0 0
+Info: Grid limits: Window = 432 500 500
+Info: Real limits: Shifts =    0.000    0.000    0.000 a0
+Info: Real limits: Window =   93.660  107.945  107.626 a0
+Info: Strides = 1 1 1
+pyCQ>                                                               
+  \end{verbatim}
+  }
+  \item If this information looks complete, run:
+{\scriptsize
+  \begin{verbatim}
+  pyCQ> cq_load_cq_density()
+  \end{verbatim}
+  }
+  You should see a text progress bar and, finally, the display window will open
+  and show your density. Here, we could write the whole density to an \texttt{.xplor} file, but we are going to cut a piece.
+  \item Check your limits (always a good idea before writing a file):
+{\scriptsize
+  \begin{verbatim}
+  pyCQ> l=cq_limits_get()
+  pyCQ> l
+  [[432, 500, 500], [0, 0, 0], [1, 1, 1], [49.563000438192006,
+  57.122001100897563, 56.952997762884429], [0.0, 0.0, 0.0]]
+  \end{verbatim}
+  }
+  \item Choose a smaller window, say 10x10x10 \AA$^3$.
+  For the density, we need to change the grid limits, so we could use 
+  \texttt{cq\_limits\_set\_grid\_window}, but since we have \CQ\ information, 
+  we can use \texttt{cq\_limits\_set\_real\_window}, which is more convenient
+  than counting grid points. But first, we set a real shift with
+  \texttt{cq\_limits\_set\_real\_shift} and then
+  \texttt{cq\_limits\_set\_grid\_shift\_from\_real} to explicitly adjust the grid shift from that.
+{\scriptsize
+  \begin{verbatim}
+  pyCQ> cq_limits_set_real_shift([(i-10.0)/2.0 for i in l[3]])
+  pyCQ> cq_limits_get()
+  [[432, 500, 500], [0, 0, 0], [1, 1, 1], [49.563000438192006, 57.122001100897563, 
+  56.952997762884429], [19.781500219096003, 23.561000550448782, 23.476498881442215]] 
+  \end{verbatim}
+  }
+  (Here, we have used the real window, \texttt{l[3]}, to calculate a real shift, before changing the real window to 10 \AA.)
+{\scriptsize
+  \begin{verbatim}
+  pyCQ> cq_limits_set_grid_shift_from_real() 
+  WARNING: User-provided grid window is not valid for coord. x; setting to maximum
+  WARNING: User-provided grid window is not valid for coord. y; setting to maximum
+  WARNING: User-provided grid window is not valid for coord. z; setting to maximum
+  pyCQ> cq_limits_get()
+  [[260, 295, 295], [172, 205, 205], [1, 1, 1], [29.783798407173389, 33.655046740809382, 
+  33.555473631839725], [19.77920203101862, 23.466954360088177, 23.397524131044705]]
+  \end{verbatim}
+  }
+  Note how the grid window was reduced to the maximum value after changing the
+  shift. Finally, we change the real window. 
+{\scriptsize
+  \begin{verbatim}
+  pyCQ> cq_limits_set_real_window([10,10,10])
+  pyCQ> cq_limits_get()
+  [[87, 88, 88], [172, 205, 205], [1, 1, 1], [9.8896010155093101, 9.9591464845252258, 
+  9.9296809726872652], [19.77920203101862, 23.466954360088177, 23.397524131044705]]
+    \end{verbatim}
+  }
+  The grid window has been set automatically, using known parameters from the \CQ\ run (and the real window is no longer 10.0
+  \AA, but it is as close as possible).
+  \item Write the piece of density to a file.
+{\scriptsize
+  \begin{verbatim}
+  pyCQ> cq_write_xplor_density("density.xplor")
+  \end{verbatim}
+  }
+  \item Open this density in PyMol and draw an isosurface.
+{\scriptsize
+  \begin{verbatim}
+  bash$> pymol density.xplor
+  PyMOL> isosurface map1, density, 0.5
+  \end{verbatim}
+  }
+\end{enumerate}
+
+\subsection{Creating an xyz file that matches an xplor file}
+\label{sec:making-xyz-match}
+\index{xyz files}
+\index{xyz files!Match xplor}
+
+\begin{description}
+\item[Case: ] You have written an xplor file from a piece of your density and need an \texttt{xyz}
+file that matches
+\item[Procedure: ] 
+\end{description}
+\begin{enumerate}
+  \item Follow the steps in \ref{sec:making-xplor} to write a piece of a density into an xplor file.
+  \item Load the corresponding coordinates.
+{\scriptsize
+  \begin{verbatim}
+  pyCQ> cq_load_cq_coordinates()
+  \end{verbatim}
+  }  
+  Because limits are still set to the central part of your cell, only the atoms in that area will be loaded. Furthermore, because
+  the toggle for coordinates shift is set to \texttt{False} by default, the atoms will appear at the center of the display, just
+  where they should.
+  \item However, the \texttt{.xplor} we just wrote will be interpreted as being at the origin, so before writing the coordinates
+  to a file, we set the coordinates shift toggle to \texttt{True}. This will bring the coordinates (in the file, not in the
+  memory) back to the origin.
+{\scriptsize
+  \begin{verbatim}
+  pyCQ> cq_toggle_coordinates_shift()
+  True
+  \end{verbatim}
+  }
+  We have \CQ\ information, so \Conqtour\ would use to determine the size of the cell. 
+  
+  However, for an \texttt{xyz} file this is
+  irrelevant, so we can proceed. If you need to use the dimensions in the current limits (for example, if you want to write a \CQ\
+  coordinates file of this small piece), call \texttt{cq\_info\_reset} or just set the \CQ\ cell dimensions to zero with
+  \texttt{cq\_info\_set\_cell\_dimensions}. Limits will then be used.
+  \item Write the coordinates to an \texttt{xyz} file.  
+{\scriptsize
+  \begin{verbatim}
+  pyCQ> cq_write_xyz_coordinates("coords.xyz")
+  \end{verbatim}
+  }
+  \item You can check that the density piece and the coordinates indeed match by opening them with \Conqtour.
+{\scriptsize
+  \begin{verbatim}
+  bash$> cq_ut_conqtour -d density.xplor -c coords.xyz
+  \end{verbatim}
+  }
+\end{enumerate}
+
+
+\clearpage
+\thispagestyle{index}
+\pagestyle{index}
+\phantomsection
+\addcontentsline{toc}{section}{Index}
+\printindex
+
+\end{document}
