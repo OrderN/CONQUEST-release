@@ -95,7 +95,8 @@ contains
   !!CREATION DATE
   !! 24/06/2002
   !!MODIFICATION HISTORY
-  !!
+  !! 2012/08/29 L.Tong
+  !! - updated the definition of electrons
   !!SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -106,7 +107,7 @@ contains
     implicit none
 
     ! Passed variables
-    real(double) :: electrons
+    real(double), dimension(:) :: electrons
 
     write (*, *) 'ERROR: You are using the DUMMY diagonalisation module !'
     write (*, *) 'If you want to diagonalise, use the REAL DiagModule !'

@@ -36,7 +36,7 @@
 !!***
 module McWeeny
 
-  use global_module, only: io_lun
+  use global_module, only: io_lun, area_DM
   use timer_stdclocks_module, only: start_timer, stop_timer, tmr_std_matrices
 
   implicit none
@@ -950,6 +950,7 @@ contains
     use GenComms,       only: cq_abort
     use maxima_module,  only: maxnsf
     use global_module,  only: nspin
+    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -959,8 +960,13 @@ contains
     ! Local variables
     integer :: np, nat, nb, ist, i, j, gcspart, wheremat, iprim, nsfi,&
                nsfj, stat, spin
-    real(double), dimension(maxnsf,nspin) :: HMin, HMax
+    real(double), dimension(:,:), allocatable :: HMin, HMax
     real(double) :: Hval
+
+    allocate(HMin(maxnsf,nspin), HMax(maxnsf,nspin), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("GetHLimits: Error allocating mem: ", maxnsf, nspin)
+    call reg_alloc_mem(area_DM, 2*maxnsf*nspin, type_dbl)
 
     MinH(:) = 1.0e30_double
     MaxH(:) = -1.0e30_double
@@ -1012,7 +1018,13 @@ contains
           end if ! (bundle%nm_nodgroup(np) > 0)
        end do ! np
     end do ! spin
+
     call stop_timer(tmr_std_matrices)
+
+    deallocate(HMin, HMax, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("GetHLimits: Error deallocating mem")
+    call reg_dealloc_mem(area_DM, 2*maxnsf*nspin, type_dbl)
 
     return
   end subroutine GetHLimits

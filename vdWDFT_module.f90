@@ -32,6 +32,7 @@ module vdWDFT_module
 
   use datatypes
   use numbers
+  use global_module, only: area_ops
 
   implicit none
 
@@ -428,6 +429,8 @@ contains
     use numbers
     use dimens
     use fft_procedures, only: sinft
+    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use GenComms,       only: cq_abort
     implicit none
     ! passed parameters
     integer,      intent(in) :: n_r
@@ -435,9 +438,13 @@ contains
     real(double), dimension(n_r), intent(in)  :: func
     real(double), dimension(n_r), intent(out) :: func_out
     ! local variables
-    real(double), dimension(n_r) :: data
-    integer      :: ir, n_q, ik
+    real(double), dimension(:), allocatable :: data
+    integer      :: ir, n_q, ik, stat
     real(double) :: rr, kk, dk
+
+    allocate(data(n_r), STAT=stat)
+    if (stat /= 0) call cq_abort("radfft: Error alloc mem: ", nr)
+    call reg_alloc_mem(area_ops, nr, type_dbl)
 
     ! see Numerical Recipies Section 12.1: eq (12.1.2), but this time
     ! k only goes from 0 to fc, fc = 1/(2*dr) is Nyquist critical
@@ -464,6 +471,11 @@ contains
     end do
     ! scale func_out by to give approximation to non-discrete form
     func_out = dr * func_out
+
+    deallocate(data, STAT=stat)
+    if (stat /= 0) call cq_abort("radfft: Error dealloc mem")
+    call reg_dealloc_mem(area_ops, nr, type_dbl)
+
   end subroutine radfft
   !!*****
 
@@ -1741,17 +1753,23 @@ contains
     use GenComms,       only: cq_abort, gcopy, inode, ionode
     use input_module,   only: io_assign, io_close
     use vdWMesh_module, only: set_mesh, get_mesh, set_interpolation, derivative
+    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
     ! local variables
     logical      :: file_found
-    integer      :: lun
+    integer      :: lun, stat
     integer      :: id, id1, id2, nmesh
     real(double) :: d, d1, d1m, d1p, d2, d2m, d2p, dd, phi1, phim, phip,&
                     phimm, phimp, phipm, phipp
-    real(double), dimension(nd,nd) :: dphidd1, dphidd2, d2phidd1dd2, &
-                                      phi
+    real(double), dimension(:,:), allocatable :: dphidd1, dphidd2, &
+                                                 d2phidd1dd2, phi
+
+    allocate(dphidd1(nd,nd), dphidd2(nd,nd), d2phidd1dd2(nd,nd), &
+             phi(nd,nd), STAT=stat)
+    if (stat /= 0) call cq_abort("set_phi_table: Error alloc mem: ", nd)
+    call reg_alloc_mem(area_ops, nd*nd, type_dbl)
 
     ! Read file with table, if present
     if (inode == ionode) then
@@ -1775,6 +1793,9 @@ contains
        call gcopy(dmesh, nd)
        call gcopy(phi_table, 4, 4, nd, nd)
        phi_table_set = .true.
+       deallocate(dphidd1, dphidd2, d2phidd1dd2, phi, STAT=stat)
+       if (stat /= 0) call cq_abort("set_phi_table: Error dealloc mem")
+       call reg_dealloc_mem(area_ops, nd*nd, type_dbl)
        return
     end if
 
@@ -1937,6 +1958,10 @@ contains
     ! Mark table as set
     phi_table_set = .true.
 
+    deallocate(dphidd1, dphidd2, d2phidd1dd2, phi, STAT=stat)
+    if (stat /= 0) call cq_abort("set_phi_table: Error dealloc mem")
+    call reg_dealloc_mem(area_ops, nd*nd, type_dbl)
+
   end subroutine set_phi_table
   !!*****
 
@@ -2008,6 +2033,7 @@ contains
     use numbers
     use GenComms,        only: cq_abort
     use global_module,   only: nspin
+    use memory_module,   only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -2016,11 +2042,15 @@ contains
     real(double),                 intent(out) :: eps_r
 
     logical, save :: initialized = .false.
-    integer       :: iq1, iq2, ir
+    integer       :: iq1, iq2, ir, stat
     real(double)  :: ptp, phi22, r, rho_tot_r, q_r
     real(double), dimension(mq,mq), save :: table
-    real(double), dimension(mq)          :: p, pt, dpdq
-    real(double), dimension(mq,mq)       :: phi
+    real(double), dimension(:),   allocatable :: p, pt, dpdq
+    real(double), dimension(:,:), allocatable :: phi
+
+    allocate(p(mq), pt(mq), dpdq(mq), phi(mq,mq), STAT=stat)
+    if (stat /= 0) call cq_abort("vdW_decusp: Error alloc mem: ", mq)
+    call reg_alloc_mem(area_ops, (3 + mq)*mq, type_dbl)
 
     if (.not. initialized) then
 
@@ -2064,6 +2094,10 @@ contains
     ptp = sum(pt * p)
     rho_tot_r = rho_r(1) + rho_r(nspin)
     eps_r = rho_tot_r * ptp
+
+    deallocate(p, pt, dpdq, phi, STAT=stat)
+    if (stat /= 0) call cq_abort("vdW_decusp: Error dealloc mem")
+    call reg_dealloc_mem(area_ops, (3 + mq)*mq, type_dbl)
 
   end subroutine vdW_decusp
   !!*****
@@ -2294,16 +2328,21 @@ contains
     use numbers
     use spline_module, only: spline
     use GenComms,      only: cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
     ! input parameters
     real(double), intent(in) :: kc
     ! local variables
-    integer      :: ik, iq1, iq2, ir, nrs
+    integer      :: ik, iq1, iq2, ir, nrs, stat
     real(double) :: dphids, dphidk0, dphidkmax, dphidr0, dphidrmax, &
                     k, phi0, phi2, phis, q1, q2, rs
-    real(double), dimension(1:nr) :: phi, r
+    real(double), dimension(:), allocatable :: phi, r
+
+    allocate(phi(1:nr), r(1:nr), STAT=stat)
+    if (stat /= 0) call cq_abort("vdW_set_kcut: Error alloc mem: ", nr)
+    call reg_alloc_mem(area_ops, 2*nr, type_dbl)
 
     if (kcut_set) return   ! Work alredy done
     if (.not. qmesh_set) call set_qmesh()
@@ -2410,6 +2449,10 @@ contains
     kcut = kc
     kcut_set = .true.
 
+    deallocate(phi, r, STAT=stat)
+    if (stat /= 0) call cq_abort("vdW_set_kcut: Error dealloc mem")
+    call reg_dealloc_mem(area_ops, 2*nr, type_dbl)
+
   end subroutine vdW_set_kcut
   !!*****
 
@@ -2447,6 +2490,8 @@ contains
     use datatypes
     use numbers
     use global_module, only: nspin, spin_factor
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use GenComms,      only: cq_abort
 
     implicit none
 
@@ -2455,9 +2500,14 @@ contains
     real(double), dimension(:,:), intent(in)  :: grho_r
     real(double), dimension(:),   intent(out) :: theta_r
     ! local variables
+    integer :: stat
     real(double) :: rho_tot_r, q_r
-    real(double), dimension(3)  :: grho_tot_r
-    real(double), dimension(mq) :: dpdq, p
+    real(double), dimension(3) :: grho_tot_r
+    real(double), dimension(:), allocatable :: dpdq, p
+
+    allocate(dpdq(mq), p(mq), STAT=stat)
+    if (stat /= 0) call cq_abort("vdW_theta: Error alloc mem: ", mq)
+    call reg_alloc_mem(area_ops, 2*mq, type_dbl)
 
     theta_r = zero
 
@@ -2467,6 +2517,10 @@ contains
     call qofrho(rho_r, grho_r, q_r)
     call pofq(q_r, p, dpdq)
     theta_r(1:nq) = rho_tot_r * p(1:nq)
+
+    deallocate(dpdq, p, STAT=stat)
+    if (stat /= 0) call cq_abort("vdW_theta: Error dealloc mem")
+    call reg_dealloc_mem(area_ops, 2*mq, type_dbl)
 
   end subroutine vdW_theta
   !!*****
@@ -2505,8 +2559,9 @@ contains
                              eps_xc_of_r_GGA_PBE,      &
                              Vxc_of_r_LSDA_PW92
     use fft_module,    only: fft3, z_columns_node, recip_vector
-    use GenComms,      only: gsum, inode, ionode
+    use GenComms,      only: gsum, inode, ionode, cq_abort
     use timer_module
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
 ! LT_debug 2012/04/30 begin
 !    use units
@@ -2518,19 +2573,19 @@ contains
     real(double), dimension(:,:), intent(in)  :: rho
     real(double),                 intent(out) :: E_vdWXC
     ! lcoal variables
-    integer :: n_q, ix, iq, jq, ir, ik, spin
+    integer :: n_q, ix, iq, jq, ir, ik, spin, stat
     real(double) :: eps_x, eps_c
     real(double) :: mag_k, phi_k_iq_jq, tk_re, tk_im, eps_c_usp_r,    &
                     rho_tot_r, eps_vdW_nl_r, eps_gga_x, eps_lda_c
-    real(double), dimension(3)                     :: fc
-    real(double), dimension(maxngrid,3,nspin)      :: grho
-    real(double), dimension(3,nspin)               :: grho_r
-    real(double), dimension(nspin)                 :: rho_r
-    real(double), dimension(1:nq)                  :: theta_r, uk_re, &
-                                                      uk_im, u_vdW_r
-    real(double), dimension(1:nq,1:nq)             :: phi_k
-    real(double), dimension(maxngrid,1:nq)         :: u_vdW
-    complex(double_cplx), dimension(maxngrid,1:nq) :: rcp_u_vdW
+    real(double), dimension(3) :: fc
+    real(double), dimension(3,nspin) :: grho_r
+    real(double), dimension(nspin) :: rho_r
+    real(double), dimension(:,:,:), allocatable :: grho
+    real(double), dimension(:), allocatable :: theta_r, uk_re, &
+                                               uk_im, u_vdW_r
+    real(double), dimension(:,:), allocatable :: phi_k
+    real(double), dimension(:,:), allocatable :: u_vdW
+    complex(double_cplx), dimension(:,:), allocatable :: rcp_u_vdW
 
     real(double) :: E_vdW_nl, E_gga_x, E_lda_c, E_vdW_dusp
     real(double) :: d3k
@@ -2543,6 +2598,13 @@ contains
     ! like u_vdW and rcp_u_vdW, we reuse these for thetas too.
     ! However this means theta has to be recalculated point-wise once
     ! u_vdW's are computed and stored in the array u_vdW.
+
+    allocate(grho(maxngrid,3,nspin), theta_r(1:nq), uk_re(1:nq), &
+             uk_im(1:nq), u_vdW_r(1:nq), phi_k(1:nq,1:nq), &
+             u_vdW(maxngrid,1:nq), rcp_u_vdW(maxngrid,1:nq), STAT=stat)
+    if (stat /= 0) call cq_abort("vdWXC_energy: Error alloc mem: ", maxngrid, nq)
+    call reg_alloc_mem(area_ops, maxngrid*3*nspin + 4*nq + nq*nq + &
+                       maxngrid*nq + 2*maxngrid*nq, type_dbl)
 
     ! allocate VdW arrays
     call start_timer(tmr_get_qmesh, WITH_LEVEL)
@@ -2759,6 +2821,12 @@ contains
     ! end do
     ! call gsum(E_vdWXC)
     ! E_vdWXC = grid_point_volume * E_vdWXC
+
+    deallocate(grho, theta_r, uk_re, uk_im, u_vdW_r, phi_k, u_vdW, &
+               rcp_u_vdW, STAT=stat)
+    if (stat /= 0) call cq_abort("vdWXC_energy: Error dealloc mem")
+    call reg_dealloc_mem(area_ops, maxngrid*3*nspin + 4*nq + nq*nq + &
+                         maxngrid*nq + 2*maxngrid*nq, type_dbl)
 
   end subroutine vdWXC_energy
   !!*****
@@ -2998,14 +3066,18 @@ contains
     real(double) :: q0_r, eps_gga_x, eps_lda_c
     real(double) :: xc_energy, d1, d2, E_vdW_nl, E_x_gga, E_c_lda, &
                     r12, r1_x, r1_y, r1_z, r2_x, r2_y, r2_z, phi_d1d2
-    real(double), dimension(nspin)            :: rho_r
-    real(double), dimension(3,nspin)          :: grho_r
-    real(double), dimension(maxngrid,3,nspin) :: grho
-    real(double), dimension(maxngrid)         :: rho_tot, q0,      &
-                                                 xc_epsilon,       &
-                                                 xc_potential,     &
-                                                 eps_x_gga, eps_c_lda
+    real(double), dimension(nspin) :: rho_r
+    real(double), dimension(3,nspin) :: grho_r
+    real(double), dimension(:,:,:), allocatable :: grho
+    real(double), dimension(:), allocatable :: rho_tot, q0,      &
+                                               xc_epsilon,       &
+                                               xc_potential,     &
+                                               eps_x_gga, eps_c_lda
 
+    allocate(grho(maxngrid,3,nspin), rho_tot(maxngrid), q0(maxngrid), &
+             xc_epsilon(maxngrid), xc_potential(maxngrid), &
+             eps_x_gga(maxngrid), eps_c_lda(maxngrid))
+    
 ! LT_debug 2012/04/30 begin
 !    real(double) :: E_gga_x, E_lda_c
 ! LT_debug 2012/04/30 end
@@ -3095,6 +3167,9 @@ contains
 !     print *, "LT: E_gga_x = ", E_gga_x * en_conv, en_units(energy_units)
 !     print *, "LT: E_lda_c = ", E_lda_c * en_conv, en_units(energy_units)
 ! LT_debug 2012/06/11 end
+
+    deallocate(grho, rho_tot, q0, xc_epsilon, xc_potential, &
+               eps_x_gga, eps_c_lda)
 
   end subroutine vdWXC_energy_slow
   !!*****

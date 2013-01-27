@@ -56,14 +56,16 @@ module blip
 
   use datatypes
   use global_module, ONLY: io_lun
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
+  use timer_stdclocks_module, ONLY: start_timer, stop_timer, &
+                                    tmr_std_basis, tmr_std_allocation
   
   implicit none
 
   save
 
   ! RCS tag for object file identification 
-  character(len=80), private :: RCSid = "$Id$"
+  character(len=80), private :: &
+       RCSid = "$Id$"
 
   real(double) :: alpha, beta
 

@@ -20,6 +20,8 @@
 !!
 module XC_module
 
+  use global_module, only: area_ops
+
   implicit none
 
   ! methods
@@ -1224,6 +1226,7 @@ contains
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum, cq_abort
     use fft_module,    only: fft3, recip_vector
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -1241,10 +1244,16 @@ contains
     real(double),         dimension(nspin)        :: rho_r
     real(double),         dimension(3,nspin)      :: grho_r
     real(double),         dimension(0:3,nspin)    :: drhoEps_x, drhoEps_c
-    real(double),         dimension(grid_size,3,nspin) :: grad_density
-    real(double),         dimension(grid_size)         :: second_term
-    complex(double_cplx), dimension(grid_size,3)       :: rcp_drhoEps_xc
+    real(double),         dimension(:,:,:), allocatable :: grad_density
+    real(double),         dimension(:),     allocatable :: second_term
+    complex(double_cplx), dimension(:,:),   allocatable :: rcp_drhoEps_xc
 
+    allocate(grad_density(grid_size,3,nspin), second_term(grid_size), &
+             rcp_drhoEps_xc(grid_size,3), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("get_xc_potential_GGA_PBE: Error alloc mem: ", grid_size)
+    call reg_alloc_mem(area_ops, grid_size*(1+3*(1+nspin)), type_dbl)
+    
     if (present(flavour)) then
        PBE_type = flavour
     else
@@ -1312,8 +1321,11 @@ contains
        end do
     end do ! spin
 
-    ! deallocate(rho_r, grho_r, drhoEps_x, drhoEps_c, grad_density, &
-    !            second_term, rcp_drhoEps_xc, STAT=stat)
+    deallocate(grad_density, second_term, rcp_drhoEps_xc, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("get_xc_potential_GGA_PBE: Error dealloc mem")
+    call reg_dealloc_mem(area_ops, grid_size*(1+3*(1+nspin)), type_dbl)
+
   end subroutine get_xc_potential_GGA_PBE
   !!*****
 

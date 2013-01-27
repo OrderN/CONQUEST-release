@@ -207,7 +207,7 @@ contains
     real(double)   :: max_force
     type(cq_timer) :: tmr_l_tmp1
     real(double), dimension(nspin)    :: electrons
-    real(double), dimension(maxngrid) :: density_total
+    real(double), dimension(:),   allocatable :: density_total
     real(double), dimension(:,:), allocatable :: p_force,         &
                                                  cdft_force,      &
                                                  HF_force,        &
@@ -219,6 +219,9 @@ contains
     real(double), dimension(:,:), allocatable :: density_out
 
     call start_timer(tmr_std_allocation)
+    allocate(density_total(maxngrid), STAT=stat)
+    if (stat /= 0) call cq_abort("force: Error alloc mem: ", maxngrid)
+    call reg_alloc_mem(area_moveatoms, maxngrid, type_dbl)
     if (flag_pcc_global) then
        allocate(p_force(3,ni_in_cell), KE_force(3,ni_in_cell),      &
                 HF_force(3,ni_in_cell), HF_NL_force(3,ni_in_cell),  &
@@ -510,6 +513,9 @@ contains
             call cq_abort("Error deallocating forces: ", ni_in_cell)
        call reg_dealloc_mem(area_moveatoms, 5 * 3 * ni_in_cell, type_dbl)
     end if
+    deallocate(density_total, STAT=stat)
+    if (stat /= 0) call cq_abort("force: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, maxngrid, type_dbl)
     call stop_timer(tmr_std_allocation)
 
     return
@@ -2180,14 +2186,12 @@ contains
     logical        :: range_flag
     type(cq_timer) :: tmr_l_tmp1, tmr_l_tmp2
 
-    real(double), dimension(size)             :: h_potential,          &
-                                                 density_total,        &
-                                                 density_out_total
-    real(double), dimension(nspin)            :: pot_here, fx_1, fy_1, &
-                                                 fz_1, fx_pcc, fy_pcc, &
-                                                 fz_pcc, pot_here_pcc
-    real(double), dimension(size,nspin,nspin) :: dVxc_drho
-
+    real(double), dimension(:),     allocatable :: h_potential,   &
+                                                   density_total, &
+                                                   density_out_total
+    real(double), dimension(:,:,:), allocatable :: dVxc_drho
+    real(double), dimension(nspin) :: pot_here, fx_1, fy_1, fz_1, &
+                                      fx_pcc, fy_pcc, fz_pcc, pot_here_pcc
 
     ! only for GGA with P.C.C.
     real(double), allocatable, dimension(:)   :: h_potential_in,       &
@@ -2195,6 +2199,15 @@ contains
                                                  density_out_GGA_total
     real(double), allocatable, dimension(:,:) :: wk_grid,              &
                                                  density_out_GGA
+
+    call start_timer(tmr_std_allocation)
+    allocate(h_potential(size), density_total(size), &
+             density_out_total(size), dVxc_drho(size,nspin,nspin), &
+             STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", size)
+    call reg_alloc_mem(area_moveatoms, (3+nspin*nspin)*size, type_dbl)
+    call stop_timer(tmr_std_allocation)
 
     HF_force = zero
 
@@ -2688,6 +2701,11 @@ contains
           call reg_dealloc_mem(area_moveatoms, size, type_dbl)
        end if ! for GGA
     end if ! flag_pcc_global
+    deallocate(h_potential, density_total, density_out_total, dVxc_drho, &
+               STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("get_nonSC_correction_force: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, (3+nspin*nspin)*size, type_dbl)
     call stop_timer(tmr_std_allocation)
 
     return
@@ -2799,9 +2817,15 @@ contains
     logical        :: range_flag
     type(cq_timer) :: tmr_l_tmp1, tmr_l_tmp2
     ! automatic arrays
-    real(double), dimension(nspin)      :: pot_here_pcc
-    real(double), dimension(size)       :: xc_epsilon, density_wk_tot
-    real(double), dimension(size,nspin) :: xc_potential, density_wk
+    real(double), dimension(nspin) :: pot_here_pcc
+    ! allocatable arrays
+    real(double), dimension(:),   allocatable :: xc_epsilon, density_wk_tot
+    real(double), dimension(:,:), allocatable :: xc_potential, density_wk
+
+    allocate(xc_epsilon(size), density_wk_tot(size), &
+             xc_potential(size,nspin), density_wk(size,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("get_pcc_force: Error alloc mem: ", size)
+    call reg_alloc_mem(area_moveatoms, (2+2*nspin)*size, type_dbl)
 
     ! initialise arrays
     pcc_force = zero
@@ -2970,6 +2994,11 @@ contains
     call gsum(pcc_force, 3, n_atoms)
     call stop_print_timer(tmr_l_tmp1, "PCC force - Compilation", &
                           IPRINT_TIME_THRES3)
+
+    deallocate(xc_epsilon, density_wk_tot, xc_potential, density_wk, STAT=stat)
+    if (stat /= 0) call cq_abort("get_pcc_force: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, (2+2*nspin)*size, type_dbl)
+
     return
   end subroutine get_pcc_force
   !*****

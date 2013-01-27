@@ -46,7 +46,7 @@
 module EarlySCMod
 
   use datatypes
-  use global_module, only: io_lun
+  use global_module, only: io_lun, area_SC
   use timer_stdclocks_module, only: start_timer, stop_timer, tmr_std_chargescf
 
   implicit none
@@ -210,6 +210,7 @@ contains
     use global_module, only: nspin, spin_factor
     use dimens,        only: n_my_grid_points
     use GenComms,      only: cq_abort, gsum, inode, ionode
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -229,15 +230,19 @@ contains
 
     ! Local variables
     logical      :: bracket
-    integer      :: n_brak, spin
+    integer      :: n_brak, spin, stat
     real(double) :: r, cq, u, ulim, Ru, Rcross
     real(double), parameter :: GOLD = 1.618034_double
     real(double), parameter :: GLIMIT = 100.0_double
     real(double), parameter :: TINY = 1.0e-20_double
 
-    real(double), dimension(size,nspin) :: residu, residc
+    real(double), dimension(:,:), allocatable :: residu, residc
     ! I've put residu and residc here as I'm sure that they can share 
     ! space with the n-dimensional residual storage of late-stage
+
+    allocate(residu(size,nspin), residc(size,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("Error allocating residu/c: ", size)
+    call reg_alloc_mem(area_SC, 2*nspin*size, type_dbl)
 
     n_brak = 1
     ! Find an initial third point
@@ -468,6 +473,10 @@ contains
        call cq_abort ('bracketMin_spin: Too many attempts', n_brak, mx_SCiters)
     endif
 
+    deallocate(residu, residc, STAT=stat)
+    if (stat /= 0) call cq_abort("Error deallocating residu/c")
+    call reg_dealloc_mem(area_SC, 2*nspin*size, type_dbl)
+
 208 format('Residual after bracket search ',i5,': ',e15.6)
 
     return
@@ -514,7 +523,8 @@ contains
     use numbers
     use global_module, only: nspin, spin_factor
     use dimens,        only: n_my_grid_points
-    use GenComms,      only: inode, ionode
+    use GenComms,      only: inode, ionode, cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     
     implicit none
 
@@ -532,12 +542,16 @@ contains
 
     ! Local variables
     logical :: done
-    integer :: n_s, spin
+    integer :: n_s, spin, stat
     real(double), parameter :: R = 0.61803399_double
     real(double), parameter :: C = 1.0_double - R
     real(double) :: x0, x1, x2, x3
     real(double) :: f0, f1, f2, f3, Rl
-    real(double), dimension(size,nspin) :: resid
+    real(double), dimension(:,:), allocatable :: resid
+
+    allocate(resid(size,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("Error allocating resid: ", size, nspin)
+    call reg_alloc_mem(area_SC, nspin*size, type_dbl)
 
     x0 = lambda_a
     x3 = lambda_c
@@ -622,6 +636,10 @@ contains
                   'Attempted to reduce residual via golden search, but failed'
     endif
 
+    deallocate(resid, STAT=stat)
+    if (stat /= 0) call cq_abort("Error deallocating resid")
+    call reg_dealloc_mem(area_SC, nspin*size, type_dbl)
+
     return
 
 108 format('Residual after golden section ',i5,': ',e15.6)
@@ -669,12 +687,12 @@ contains
                       fixed_potential, vary_mu, n_L_iterations,    &
                       mx_SCiters, L_tol, total_energy, den0, den1, &
                       residb, size)
-
     use datatypes
     use numbers
     use global_module, only: nspin, spin_factor
     use dimens, only: n_my_grid_points
-    use GenComms, only: inode, ionode
+    use GenComms, only: inode, ionode, cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     
     implicit none
 
@@ -691,15 +709,19 @@ contains
     real(double), dimension(:,:) :: den0, den1, residb
 
     ! Local variables
-    integer      :: n_s, spin
+    integer      :: n_s, spin, stat
     real(double) :: a, b, d, e, etemp, p, q, r, u, v, w, x, xm
     real(double) :: fu, fv, fw, fx, tol1, tol2
     integer,      parameter :: itmax = 100
     real(double), parameter :: C = 0.3819660_double
     real(double), parameter :: zeps = 1.0e-10_double
     real(double), parameter :: tol = 1.0e-7_double
-    real(double), dimension(size,nspin) :: resid, residx
+    real(double), dimension(:,:), allocatable :: resid, residx
     logical :: done
+
+    allocate(resid(size,nspin), residx(size,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("Error allocating resid, residx: ", size, nspin)
+    call reg_alloc_mem(area_SC, 2*nspin*size, type_dbl)
 
     done = .false.
     a = min(lambda_a,lambda_c)
@@ -805,6 +827,11 @@ contains
     end do
     if (inode == ionode) &
          write (io_lun, *) 'Finishing brentMin with residual ', Rb
+
+    deallocate(resid, residx, STAT=stat)
+    if (stat /= 0) call cq_abort("Error dallocating resid, residx")
+    call reg_dealloc_mem(area_SC, 2*nspin*size, type_dbl)
+
     return
   end subroutine brentMin
   !!*****
@@ -855,8 +882,9 @@ contains
     use numbers
     use GenBlas
     use dimens, only: grid_point_volume
-    use GenComms, only: gsum, inode, ionode
+    use GenComms, only: gsum, inode, ionode, cq_abort
     use global_module, only: ne_in_cell, nspin, spin_factor
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
     
@@ -871,9 +899,13 @@ contains
     ! result
     real(double) :: getR2
     ! Local variables
-    integer      :: spin
+    integer      :: spin, stat
     real(double) :: R
-    real(double), dimension(size,nspin) :: rhoin, rhoout
+    real(double), dimension(:,:), allocatable :: rhoin, rhoout
+
+    allocate(rhoin(size,nspin), rhoout(size,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("Error allocating rhoin/out: ", size, nspin)
+    call reg_alloc_mem(area_SC, 2*size*nspin, type_dbl)
 
     ! Mix the charge densities
     do spin = 1, nspin
@@ -895,6 +927,10 @@ contains
     R = R + two * dot(size, resid(:,1), 1, resid(:,nspin), 1)
     call gsum(R)
     getR2 = sqrt(grid_point_volume * R) / ne_in_cell
+
+    deallocate(rhoin, rhoout, STAT=stat)
+    if (stat /= 0) call cq_abort("Error deallocating rhoin/out")
+    call reg_dealloc_mem(area_SC, 2*size*nspin, type_dbl)
 
   end function getR2
   !!***

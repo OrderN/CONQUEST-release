@@ -5,9 +5,9 @@
 # Conquest system file for PGI on x86 linux with score
 #           T. Miyazaki
 #
-FC = mpif90 -compiler pgi -nochoicemod 
-LD = mpif90 -compiler pgi -nochoicemod 
-CC = mpicc 
+FC = mpif90 -compiler pgi -nochoicemod
+LD = mpif90 -compiler pgi -nochoicemod
+CC = mpicc
 # D.R.Bowler, 2003/07/22
 # Added -Bstatic to solve library problems under RedHat 7.3/9
 LINKFLAGS = -g77libs  -Bstatic
@@ -25,3 +25,7 @@ FFT=libgpfa.a
 $(FFT):
 	(cd FFT; $(MAKE) "FC=$(FC)" "FFLAGS=$(COMPFLAGS)")
 
+# Matrix multiplication kernel type
+MULT_KERN = default
+# Use dummy DiagModule or not
+DIAG_DUMMY =

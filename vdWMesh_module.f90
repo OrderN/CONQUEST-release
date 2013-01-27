@@ -33,6 +33,7 @@
 module vdWMesh_module
 
   use datatypes
+  use global_module, only: area_integn
 
   implicit none
 
@@ -626,6 +627,7 @@ contains
     use numbers
     use GenComms,      only: cq_abort
     use spline_module, only: spline, dsplint
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -639,10 +641,14 @@ contains
     ! result
     real(double), dimension(nnew) :: interpolation
     ! local variables
-    integer                    :: i, i1, i2, inew
-    real(double), dimension(n) :: d2ydi2(n)
+    integer                    :: i, i1, i2, inew, stat
     real(double)               :: dy, dydi, iofxnew, ynew
     logical                    :: overrun
+    real(double), dimension(:), allocatable :: d2ydi2
+
+    allocate(d2ydi2(n), STAT=stat)
+    if (stat /= 0) call cq_abort("interpolation: Error alloc mem: ", n)
+    call reg_alloc_mem(area_integn, n, type_dbl)
 
     ! Mesh-initialization
     if (present(x)) then
@@ -697,6 +703,10 @@ contains
        call cq_abort('interpolation: ERROR: bad interpolation_method parameter')
     end if ! (interpolation_method)
 
+    deallocate(d2ydi2, STAT=stat)
+    if (stat /= 0) call cq_abort("interpolation: Error dealloc mem")
+    call reg_dealloc_mem(area_integn, n, type_dbl)
+
   end function interpolation
   !!*****
 
@@ -727,6 +737,7 @@ contains
     use datatypes
     use numbers
     use GenComms, only: cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -737,9 +748,13 @@ contains
     ! output
     real(double),               intent(out) :: y, dy
     ! local variables
-    integer                    :: ii, mm, ns
-    real(double), dimension(n) :: c, d
+    integer                    :: ii, mm, ns, stat
     real(double)               :: den, dif, dift, ho, hp, w
+    real(double), dimension(:), allocatable :: c, d
+
+    allocate(c(n), d(n), STAT=stat)
+    if (stat /= 0) call cq_abort("polint: Error alloc mem: ", n)
+    call reg_alloc_mem(area_integn, 2*n, type_dbl)
 
     ns = 1
     dif = abs(x - xa(1))
@@ -773,6 +788,11 @@ contains
        end if
        y = y + dy
     end do ! mm
+
+    deallocate(c, d, STAT=stat)
+    if (stat /= 0) call cq_abort("polint: Error dealloc mem")
+    call reg_dealloc_mem(area_integn, 2*n, type_dbl)
+
     return
   end subroutine polint
   !!*****
@@ -816,6 +836,7 @@ contains
     use numbers
     use GenComms,      only: cq_abort
     use spline_module, only: spline
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
     ! input parameters
@@ -827,8 +848,12 @@ contains
     ! result
     real(double), dimension(n) :: dydx
     ! local variables
-    integer  :: i, nx, ord
-    real(double), dimension(n) :: dxdi, dydi, d2ydi2
+    integer  :: i, nx, ord, stat
+    real(double), dimension(:), allocatable :: dxdi, dydi, d2ydi2
+
+    allocate(dxdi(n), dydi(n), d2ydi2(n), STAT=stat)
+    if (stat /= 0) call cq_abort("derivative: Error alloc mem: ", n)
+    call reg_alloc_mem(area_integn, 3*n, type_dbl)
 
     ! Mesh-initialization
     if (present(x)) then
@@ -918,6 +943,10 @@ contains
 
     end if ! (ord > 1)
 
+    deallocate(dxdi, dydi, d2ydi2, STAT=stat)
+    if (stat /= 0) call cq_abort("derivative: Error dealloc mem")
+    call reg_dealloc_mem(area_integn, 3*n, type_dbl)
+
   end function derivative
   !!*****
 
@@ -958,6 +987,7 @@ contains
     use numbers
     use GenComms,      only: cq_abort
     use spline_module, only: spline
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -967,9 +997,14 @@ contains
     real(double), dimension(n), optional, intent(in) :: x
     real(double),               optional, intent(in) :: dx
     ! result
+    integer :: stat
     real(double) :: integral
     ! local variables
-    real(double), dimension(n) :: d2fdi2, f
+    real(double), dimension(:), allocatable :: d2fdi2, f
+
+    allocate(d2fdi2(n), f(n), STAT=stat)
+    if (stat /= 0) call cq_abort("integral: Error alloc mem: ", n)
+    call reg_alloc_mem(area_integn, 2*n, type_dbl)
 
     ! Mesh-initialization
     if (present(x)) then
@@ -1021,6 +1056,10 @@ contains
     else
        call cq_abort('integral: ERROR: bad interpolation_method parameter')
     end if ! (interpolation_method)
+
+    deallocate(d2fdi2, f, STAT=stat)
+    if (stat /= 0) call cq_abort("integral: Error dealloc mem")
+    call reg_dealloc_mem(area_integn, 2*n, type_dbl)
 
   end function integral
   !!*****
@@ -1094,6 +1133,7 @@ contains
     use datatypes
     use numbers
     use GenComms, only: cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -1108,9 +1148,13 @@ contains
     real(double),               optional, intent(in)    :: dx
     real(double),               optional, intent(in)    :: norm
     ! local variable
-    integer                    :: i
-    real(double)               :: ynorm
-    real(double), dimension(n) :: g, g0, g1, z, zp
+    integer :: i, stat
+    real(double) :: ynorm
+    real(double), dimension(:), allocatable :: g, g0, g1, z, zp
+
+    allocate(g(n), g0(n), g1(n), z(n), zp(n), STAT=stat)
+    if (stat /= 0) call cq_abort("numerov: Error alloc mem: ", n)
+    call reg_alloc_mem(area_integn, 5*n, type_dbl)
 
     ! Mesh-initialization
     if (present(x)) then
@@ -1173,6 +1217,10 @@ contains
        if (present(yp))  yp  = yp  * sqrt(norm/ynorm)
        if (present(ypp)) ypp = ypp * sqrt(norm/ynorm)
     end if
+
+    deallocate(g, g0, g1, z, zp, STAT=stat)
+    if (stat /= 0) call cq_abort("numerov: Error dealloc mem")
+    call reg_dealloc_mem(area_integn, 5*n, type_dbl)
 
     return
   end subroutine numerov

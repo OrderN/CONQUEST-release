@@ -53,7 +53,7 @@
 module SelfCon
 
   use datatypes
-  use global_module,          only: io_lun
+  use global_module,          only: io_lun, area_SC
   use timer_stdclocks_module, only: start_timer, stop_timer, &
                                     tmr_std_chargescf, tmr_std_allocation
 
@@ -394,7 +394,12 @@ contains
     real(double) :: lambda_1, lambda_a, lambda_b, lambda_c
     real(double) :: zeta_exact, ratio, qatio, lambda_up
     real(double) :: pred_Rb, Rup, Rcrossup, zeta_num, zeta
-    real(double), dimension(maxngrid,nspin) :: resid0, rho1, residb
+    real(double), dimension(:,:), allocatable :: resid0, rho1, residb
+
+    allocate(resid0(maxngrid,nspin), rho1(maxngrid,nspin), &
+             residb(maxngrid,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("earlySC: Error alloc mem: ", maxngrid, nspin)
+    call reg_alloc_mem(area_SC, 3*maxngrid*nspin, type_dbl)
 
     init_reset = reset_L
     call my_barrier()
@@ -630,6 +635,10 @@ contains
 
     ndone = n_iters
 
+    deallocate(resid0, rho1, residb, STAT=stat)
+    if (stat /= 0) call cq_abort("earlySC: Error dealloc mem")
+    call reg_dealloc_mem(area_SC, 3*maxngrid*nspin, type_dbl)
+
 131 format('Linearity monitor for this line search: ',e15.6)
 
     return
@@ -716,18 +725,25 @@ contains
     logical      :: linear
     integer      :: n_iters, n_pulay, npmod, pul_mx, i, j, stat, spin
     real(double) :: R0, R1, E0, E1, dE, tmp_tot
-    real(double), dimension(maxngrid,maxpulaySC,nspin) :: rho_pul, resid_pul
-    real(double), dimension(maxngrid,nspin) :: rho1
+    real(double), dimension(:,:,:), allocatable :: rho_pul, resid_pul
+    real(double), dimension(:,:),   allocatable :: rho1
     real(double), dimension(maxpulaySC,maxpulaySC,nspin) :: Aij
     real(double), dimension(maxpulaySC,nspin) :: alph
     real(double), dimension(nspin) :: R, tmp
+
+    allocate(rho_pul(maxngrid,maxpulaySC,nspin),   &
+             resid_pul(maxngrid,maxpulaySC,nspin), &
+             rho1(maxngrid,nspin), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("late_SC: Error alloc mem: ", maxngrid, maxpulaySC)
+    call reg_alloc_mem(area_SC, (2*maxpulaySC+1)*nspin*maxngrid, type_dbl)
 
     done = .false.
     linear = .true.
     n_iters = ndone
     if (n_iters >= maxitersSC) then
        if (.not. flag_continue_on_SC_fail) &
-            call cq_abort('lateSC_spin: too many iterations: ', &
+            call cq_abort('lateSC: too many iterations: ', &
                           n_iters, maxitersSC)
        flag_SCconverged = .false.
        done = .true.
@@ -1077,6 +1093,11 @@ contains
          write(io_lun, *) 'Finishing lateSC after ', ndone, &
                           'iterations with residual of ', R0
 
+    deallocate(rho_pul, resid_pul, rho1, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("late_SC: Error dealloc mem")
+    call reg_dealloc_mem(area_SC, (2*maxpulaySC+1)*nspin*maxngrid, type_dbl)
+
     return
   end subroutine lateSC
   !!***
@@ -1147,10 +1168,14 @@ contains
     ! Local variables
     integer      :: n_iters, stat, spin
     real(double) :: R0
-    real(double), dimension(maxngrid)       :: rho_tot
-    real(double), dimension(maxngrid,nspin) :: rho1, resid
+    real(double), dimension(:),   allocatable :: rho_tot
+    real(double), dimension(:,:), allocatable :: rho1, resid
     real(double), dimension(:,:), allocatable :: resid_cov
 
+    allocate(rho_tot(maxngrid), rho1(maxngrid,nspin), &
+             resid(maxngrid,nspin), STAT=stat)
+    if (stat /= 0) call cq_abort("LinearMixSC: Error alloc mem: ", maxngrid, nspin)
+    call reg_alloc_mem(area_SC, (2*nspin+1)*maxngrid, type_dbl)
 
     if (flag_wdmetric) then
        allocate(resid_cov(maxngrid,nspin), STAT=stat)
@@ -1265,6 +1290,10 @@ contains
             call cq_abort("LinearMixSC: failed to deallocate resid_cov", stat)
        call reg_dealloc_mem(area_SC, nspin * maxngrid, type_dbl)
     end if
+
+    deallocate(rho_tot, rho1, resid, STAT=stat)
+    if (stat /= 0) call cq_abort("LinearMixSC: Error dealloc mem")
+    call reg_dealloc_mem(area_SC, (2*nspin+1)*maxngrid, type_dbl)
 
     !    ndone = n_iters
   end subroutine LinearMixSC
@@ -2473,15 +2502,15 @@ contains
     real(double), dimension(:,:) :: rho
 
     ! Local variables
-    integer      :: n_iters, pul_mx, ii, iter, iPulay
+    integer      :: n_iters, pul_mx, ii, iter, iPulay, stat
     real(double) :: R0
-    real(double), dimension(maxngrid)                          :: rho_tot
-    real(double), dimension(maxngrid,maxpulaySC,nspin)         :: rho_pul
-    real(double), dimension(maxngrid,maxpulaySC,nspin), target :: R_pul
+    real(double), dimension(:),     allocatable :: rho_tot
+    real(double), dimension(:,:,:), allocatable :: rho_pul
+    real(double), dimension(:,:,:), allocatable, target :: R_pul
     ! Kerker only
-    real(double), pointer,     dimension(:,:,:) :: KR_pul
+    real(double), pointer, dimension(:,:,:) :: KR_pul
     ! wdmetric only
-    real(double), pointer,     dimension(:,:,:) :: Rcov_pul
+    real(double), pointer, dimension(:,:,:) :: Rcov_pul
 
     !Reset Pulay Iterations  -- introduced by TM, Nov2007
     integer, parameter :: mx_fail = 3
@@ -2491,12 +2520,12 @@ contains
     integer      :: spin
     real(double) :: R0_old
 
+    ! allocate memories
+    call allocate_PulayMixSC_spin
+
     ! initialise
     rho_pul = zero
     R_pul = zero
-
-    ! allocate memories
-    call allocate_PulayMixSC_spin
 
     ! write out start information
     if (inode == ionode) then
@@ -2695,6 +2724,12 @@ contains
     subroutine allocate_PulayMixSC_spin
       implicit none
       integer :: stat
+      allocate(rho_tot(maxngrid), rho_pul(maxngrid,maxpulaySC,nspin), &
+               R_pul(maxngrid,maxpulaySC,nspin), STAT=stat)
+      if (stat /= 0) &
+           call cq_abort("PulayMixSC_spin: Error alloc mem: ", &
+                         maxngrid, maxpulaySC)
+      call reg_alloc_mem(area_SC, (2*maxpulaySC*nspin+1)*maxngrid, type_dbl)
       ! for Kerker preconditioning
       if (flag_Kerker) then
          allocate(KR_pul(maxngrid,maxpulaySC,nspin), STAT=stat)
@@ -2720,7 +2755,6 @@ contains
       end if
     end subroutine allocate_PulayMixSC_spin
 
-
     subroutine deallocate_PulayMixSC_spin
       implicit none
       integer :: stat
@@ -2741,6 +2775,9 @@ contains
          call reg_dealloc_mem(area_SC, nspin * maxngrid * (maxpulaySC + 1), &
                               type_dbl)
       end if
+      deallocate(rho_tot, rho_pul, R_pul, STAT=stat)
+      if (stat /= 0) call cq_abort("PulayMixSC_spin: Error dealloc mem")
+      call reg_dealloc_mem(area_SC, (2*maxpulaySC*nspin+1)*maxngrid, type_dbl)
     end subroutine deallocate_PulayMixSC_spin
 
   end subroutine PulayMixSC_spin
@@ -2853,10 +2890,11 @@ contains
     use GenBlas
     use dimens,         only: n_my_grid_points, grid_point_volume
     use EarlySCMod,     only: get_new_rho
-    use GenComms,       only: gsum
+    use GenComms,       only: gsum, cq_abort
     use hartree_module, only: kerker, kerker_and_wdmetric, wdmetric
     use global_module,  only: nspin, flag_fix_spin_population
     use maxima_module,  only: maxngrid
+    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -2870,8 +2908,13 @@ contains
     real(double), dimension(maxngrid,maxpulaySC,nspin),  intent(inout) :: &
          rho_pul, resid_pul, k_resid_pul, cov_resid_pul
     ! local variables
-    integer :: spin
-    real(double), dimension(maxngrid,nspin) :: rho_out, resid
+    integer :: spin, stat
+    real(double), dimension(:,:), allocatable :: rho_out, resid
+
+    allocate(rho_out(maxngrid,nspin), resid(maxngrid,nspin), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("update_pulay_history: Error alloc mem: ", maxngrid, nspin)
+    call reg_alloc_mem(area_SC, 2*maxngrid*nspin, type_dbl)
 
     ! store rho_in to history
     do spin = 1, nspin
@@ -2915,6 +2958,11 @@ contains
           end if
        end if ! flag_Kerker
     end do ! spin
+
+    deallocate(rho_out, resid, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("update_pulay_history: Error dealloc mem")
+    call reg_dealloc_mem(area_SC, 2*maxngrid*nspin, type_dbl)
 
   end subroutine update_pulay_history
   !*****
@@ -2964,13 +3012,16 @@ contains
     ! Local variables
     integer :: chun, stat, n,l, glob_ind, spin
     integer, dimension(nspin) :: temp_mat
-    real(double), dimension(ni_in_cell) :: charge
+    real(double), dimension(:),   allocatable :: charge
     real(double), dimension(:,:), allocatable :: node_charge
 
     call start_timer(tmr_std_chargescf)
     ! prepare arrays and suitable matrices
     l = bundle%n_prim
     call start_timer(tmr_std_allocation)
+    allocate(charge(ni_in_cell), STAT=stat)
+    if (stat /= 0) call cq_abort("get_atomic_charge: Error alloc mem: ", ni_in_cell)
+    call reg_alloc_mem(area_SC, ni_in_cell, type_dbl)
     allocate(node_charge(l,nspin), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating charge arrays in get_atomic_charge.", &
@@ -3006,17 +3057,17 @@ contains
     end if
 
     call start_timer(tmr_std_allocation)
-
     deallocate(node_charge, STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error deallocating charge arrays in get_atomic_charge.", &
                        stat)
     call reg_dealloc_mem(area_SC, nspin * l, type_dbl)
-
+    deallocate(charge, STAT=stat)
+    if (stat /= 0) call cq_abort("get_atomic_charge: Error dealloc mem")
+    call reg_dealloc_mem(area_SC, ni_in_cell, type_dbl)
     do spin = nspin, 1, -1
        call free_temp_matrix(temp_mat(spin))
     end do
-
     call stop_timer (tmr_std_allocation)
     call stop_timer (tmr_std_chargescf)
 

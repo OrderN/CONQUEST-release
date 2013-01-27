@@ -9,20 +9,21 @@
 
 !!****h* Conquest/timer_stdclocks_module *
 !!  NAME
-!!   timer_stdclocks_module
+!!    timer_stdclocks_module
 !!  USES
 !!
 !!  PURPOSE
-!!   Standard clocks (declarations of timers) for Conquest
-!!   These are (should) be used for total timing
-!!   Local timers can be declared (timer_module) locally 
-!!   in any routine
+!!    Standard clocks (declarations of timers) for Conquest
+!!    These are (should) be used for total timing
+!!    Local timers can be declared (timer_module) locally
+!!    in any routine
 !!  AUTHOR
-!!   A.S.Torralba
+!!    A.S.Torralba
 !!  CREATION DATE
-!!   15/05/2008
+!!    15/05/2008
 !!  MODIFICATION HISTORY
-!!
+!!    2012/09/05 L.Tong
+!!    - Added timer for matrix multiplication
 !!  TODO
 !!
 !!  SOURCE
@@ -49,6 +50,7 @@ module timer_stdclocks_module
   type(cq_timer),save :: tmr_std_basis            ! Code area: 11
   type(cq_timer),save :: tmr_std_integration      ! Code area: 12
   type(cq_timer),save :: tmr_std_allocation
+  type(cq_timer),save :: tmr_std_matmult
 
 contains
 
@@ -74,7 +76,8 @@ contains
 !!  CREATION DATE
 !!   15/05/08
 !!  MODIFICATION HISTORY
-!!
+!!   2012/09/05 L.Tong
+!!   - Added timer for matrix multiplication
 !!  SOURCE
 !!
   subroutine print_time_report
@@ -94,6 +97,7 @@ contains
     call print_timer(tmr_std_basis,"area 11 - Basis functions and operations")
     call print_timer(tmr_std_integration,"area 12 - Integration")
     call print_timer(tmr_std_allocation,"allocating memory")
+    call print_timer(tmr_std_matmult,"matrix multiplication")
 
     return
   end subroutine print_time_report

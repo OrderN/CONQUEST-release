@@ -47,7 +47,7 @@
 module test_force_module
 
   use datatypes
-  use global_module,          only: io_lun
+  use global_module,          only: io_lun, area_moveatoms
   use timer_stdclocks_module, only: start_timer, stop_timer, &
                                     tmr_std_moveatoms,       &
                                     tmr_std_allocation
@@ -107,7 +107,7 @@ contains
                                       flag_self_consistent,            &
                                       ni_in_cell,                      &
                                       nspin, spin_factor
-    use GenComms,               only: myid, inode, ionode
+    use GenComms,               only: myid, inode, ionode, cq_abort
     use io_module,              only: dump_charge, grab_charge,        &
                                       dump_matrix, grab_matrix,        &
                                       dump_blips, grab_blips,          &
@@ -128,6 +128,7 @@ contains
     use SelfCon,                only: new_SC_potl
     use DMMin,                  only: FindMinDM
     use force_module,           only: force, tot_force
+    use memory_module,          only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -147,10 +148,15 @@ contains
     real(double) :: E0, F0, E1, F1, analytic_force, numerical_force, &
                     electrons_tot
     real(double) :: H0, L0, XC0, NL0, K0, B0, dH0, dXC0, EW0, T0
-    real(double), dimension(nspin)        :: electrons
-    real(double), dimension(3,ni_in_cell) :: HF_force
+    real(double), dimension(nspin) :: electrons
+    real(double), dimension(:,:), allocatable :: HF_force
 
     call start_timer(tmr_std_moveatoms)
+
+    allocate(HF_force(3,ni_in_cell), STAT=stat)
+    if (stat /= 0) call cq_abort("test_forces: Error alloc mem: ", ni_in_cell)
+    call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
+
     if (inode == ionode) &
          write (io_lun,fmt='(2x,"******************"/,&
                             &2x,"* Testing Forces *"/,&
@@ -526,7 +532,13 @@ contains
           !expected_reduction,.true.)
        end if
     end if
+
+    deallocate(HF_force, STAT=stat)
+    if (stat /= 0) call cq_abort("test_forces: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
+
     call stop_timer(tmr_std_moveatoms)
+
     return
   end subroutine test_forces
 !!***
@@ -581,7 +593,7 @@ contains
                                xc_energy, get_energy, band_energy
     use force_module,    only: pulay_force, Pulay, HF_and_Pulay,     &
                                get_HF_non_local_force, get_KE_force
-    use GenComms,        only: myid, inode, ionode
+    use GenComms,        only: myid, inode, ionode, cq_abort
     use H_matrix_module, only: get_H_matrix
     use S_matrix_module, only: get_S_matrix
     use mult_module,     only: matK, allocate_temp_matrix,           &
@@ -591,6 +603,7 @@ contains
     use DMMin,           only: FindMinDM
     use density_module,  only: density
     use maxima_module,   only: maxngrid
+    use memory_module,   only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -605,13 +618,17 @@ contains
 
     ! Local variables
     logical      :: reset_L
-    integer      :: spin
+    integer      :: spin, stat
     real(double) :: E0, F0, E1, F1, analytic_force, numerical_force
     integer,      dimension(nspin)        :: matKold
     real(double), dimension(nspin)        :: electrons
-    real(double), dimension(3,ni_in_cell) :: p_force
-    real(double), dimension(3,ni_in_cell) :: HF_NL_force
-    real(double), dimension(3,ni_in_cell) :: KE_force
+    real(double), dimension(:,:), allocatable :: p_force, HF_NL_force, KE_force
+
+    allocate(p_force(3,ni_in_cell), HF_NL_force(3,ni_in_cell), &
+             KE_force(3,ni_in_cell), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("test_FullPulay: Error alloc mem: ", ni_in_cell)
+    call reg_alloc_mem(area_moveatoms, 9*ni_in_cell, type_dbl)
 
     ! Warn user that we're NOT getting just HF with PAOs !
     if (flag_basis_set==PAOs) then
@@ -773,6 +790,10 @@ contains
                       maxngrid)
     call get_energy(total_energy)
 
+    deallocate(p_force, HF_NL_force, KE_force, STAT=stat)
+    if (stat /= 0) call cq_abort("test_FullPulay: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, 9*ni_in_cell, type_dbl)
+
     return
   end subroutine test_FullPulay
   !!***
@@ -841,6 +862,8 @@ contains
                                       get_electronic_density, density
     use functions_on_grid,      only: supportfns, H_on_supportfns
     use maxima_module,          only: maxngrid
+    use memory_module,          only: reg_alloc_mem, reg_dealloc_mem, &
+                                      type_dbl
 
     implicit none
 
@@ -857,10 +880,18 @@ contains
     real(double) :: E0, F0, E1, F1, analytic_force, numerical_force, &
                     Enl0, Enl1, Fnl0, Fnl1, KE0
     real(double), dimension(nspin)          :: electrons
-    real(double), dimension(3,ni_in_cell)   :: HF_force
-    real(double), dimension(3,ni_in_cell)   :: HF_NL_force
-    real(double), dimension(maxngrid)       :: density_out_tot
-    real(double), dimension(maxngrid,nspin) :: density_out
+    real(double), dimension(:,:), allocatable :: HF_force
+    real(double), dimension(:,:), allocatable :: HF_NL_force
+    real(double), dimension(:),   allocatable :: density_out_tot
+    real(double), dimension(:,:), allocatable :: density_out
+
+    allocate(HF_force(3,ni_in_cell), HF_NL_force(3,ni_in_cell), &
+             density_out_tot(maxngrid), density_out(maxngrid,nspin), &
+             STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("test_HF: Error alloc mem: ", ni_in_cell, maxngrid)
+    call reg_alloc_mem(area_moveatoms, 6*ni_in_cell+(1+nspin)*maxngrid, &
+                       type_dbl)
     
     ! We're coming in from initial_H: assume that initial E found
     
@@ -1052,6 +1083,11 @@ contains
                       maxngrid)
     call get_energy(total_energy)
 
+    deallocate(HF_force, HF_NL_force, density_out_tot, density_out, STAT=stat)
+    if (stat /= 0) call cq_abort("test_HF: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, 6*ni_in_cell+(1+nspin)*maxngrid, &
+                         type_dbl)
+
     return
   end subroutine test_HF
   !!***
@@ -1105,12 +1141,13 @@ contains
     use energy,                     only: nl_energy, get_energy
     use force_module,               only: get_HF_non_local_force,      &
                                           Pulay
-    use GenComms,                   only: myid, inode, ionode
+    use GenComms,                   only: myid, inode, ionode, cq_abort
     use H_matrix_module,            only: get_H_matrix
     use blip_grid_transform_module, only: blip_to_support_new
     use functions_on_grid,          only: supportfns
     use density_module,             only: density
     use maxima_module,              only: maxngrid
+    use memory_module,              only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -1123,9 +1160,15 @@ contains
     real(double) :: total_energy
 
     ! Local variables
+    integer :: stat
     real(double) ::  E0, F0, E1, F1, analytic_force, numerical_force
-    real(double), dimension(nspin)        :: electrons
-    real(double), dimension(3,ni_in_cell) :: HF_NL_force
+    real(double), dimension(nspin) :: electrons
+    real(double), dimension(:,:), allocatable :: HF_NL_force
+
+    allocate(HF_NL_force(3,ni_in_cell), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("test_PhiPulay_nonlocal: Error alloc mem: ", ni_in_cell)
+    call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
 
     ! Warn user that we're don't get NL phi Pulay with PAOs !
     if (flag_basis_set == PAOs) then
@@ -1229,6 +1272,12 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+
+    deallocate(HF_NL_force, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("test_PhiPulay_nonlocal: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
+
     return
   end subroutine test_PhiPulay_nonlocal
   !!***
@@ -1280,7 +1329,7 @@ contains
                                           nspin, flag_analytic_blip_int
     use energy,                     only: kinetic_energy, get_energy
     use force_module,               only: get_KE_force, pulay_force
-    use GenComms,                   only: myid, inode, ionode
+    use GenComms,                   only: myid, inode, ionode, cq_abort
     use H_matrix_module,            only: get_H_matrix
     use blip_grid_transform_module, only: blip_to_support_new
     use mult_module,                only: matK, allocate_temp_matrix, &
@@ -1289,6 +1338,7 @@ contains
     use functions_on_grid,          only: supportfns
     use density_module,             only: density
     use maxima_module,              only: maxngrid
+    use memory_module,              only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -1302,11 +1352,16 @@ contains
     real(double) :: total_energy
 
     ! Local variables
-    integer      :: spin
+    integer      :: spin, stat
     real(double) ::  E0, F0, E1, F1, analytic_force, numerical_force
-    integer,      dimension(nspin)        :: matKold
-    real(double), dimension(nspin)        :: electrons
-    real(double), dimension(3,ni_in_cell) :: KE_force, p_force
+    integer,      dimension(nspin) :: matKold
+    real(double), dimension(nspin) :: electrons
+    real(double), dimension(:,:), allocatable :: KE_force, p_force
+
+    allocate(KE_force(3,ni_in_cell), p_force(3,ni_in_cell), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("test_PhiPulay_KE: Error alloc mem: ", ni_in_cell)
+    call reg_alloc_mem(area_moveatoms, 6*ni_in_cell, type_dbl)
 
     ! We're coming in from initial_H: assume that initial E found
     ! Find force
@@ -1407,6 +1462,12 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+
+    deallocate(KE_force, p_force, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("test_PhiPulay_KE: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, 6*ni_in_cell, type_dbl)
+
     return
   end subroutine test_PhiPulay_KE
   !!***
@@ -1472,13 +1533,14 @@ contains
                                           hartree_energy, xc_energy, &
                                           get_energy, band_energy
     use force_module,               only: pulay_force
-    use GenComms,                   only: myid, inode, ionode
+    use GenComms,                   only: myid, inode, ionode, cq_abort
     use H_matrix_module,            only: get_H_matrix
     use blip_grid_transform_module, only: blip_to_support_new
     use PAO_grid_transform_module,  only: PAO_to_grid
     use functions_on_grid,          only: supportfns
     use density_module,             only: density
     use maxima_module,              only: maxngrid
+    use memory_module,              only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -1492,9 +1554,15 @@ contains
     real(double) :: total_energy
 
     ! Local variables
+    integer :: stat
     real(double) ::  E0, F0, E1, F1, analytic_force, numerical_force
-    real(double), dimension(nspin)        :: electrons
-    real(double), dimension(3,ni_in_cell) :: p_force, KE_force
+    real(double), dimension(nspin) :: electrons
+    real(double), dimension(:,:), allocatable :: p_force, KE_force
+
+    allocate(KE_force(3,ni_in_cell), p_force(3,ni_in_cell), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("test_PhiPulay_local: Error alloc mem: ", ni_in_cell)
+    call reg_alloc_mem(area_moveatoms, 6*ni_in_cell, type_dbl)
 
     ! We're coming in from initial_H: assume that initial E found
     ! Find force
@@ -1586,6 +1654,11 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+
+    deallocate(KE_force, p_force, STAT=stat)
+    if (stat /= 0) call cq_abort("test_PhiPulay_local: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, 6*ni_in_cell, type_dbl)
+
     return
   end subroutine test_PhiPulay_local
   !!***
@@ -1646,12 +1719,13 @@ contains
     use energy,          only: local_ps_energy, hartree_energy,     &
                                xc_energy, get_energy, band_energy
     use force_module,    only: pulay_force
-    use GenComms,        only: myid, inode, ionode
+    use GenComms,        only: myid, inode, ionode, cq_abort
     use S_matrix_module, only: get_S_matrix
     use global_module,   only: WhichPulay, SPulay, flag_basis_set,  &
                                blips, PAOs
     use SelfCon,         only: new_SC_potl
     use DMMin,           only: FindMinDM
+    use memory_module,   only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -1665,9 +1739,15 @@ contains
     real(double) :: total_energy
 
     ! Local variables
+    integer :: stat
     real(double) ::  E0, F0, E1, F1, analytic_force, numerical_force
-    real(double), dimension(3,ni_in_cell) :: p_force, KE_force
+    real(double), dimension(:,:), allocatable :: p_force, KE_force
     logical :: reset_L
+
+    allocate(KE_force(3,ni_in_cell), p_force(3,ni_in_cell), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("test_SPulay: Error alloc mem: ", ni_in_cell)
+    call reg_alloc_mem(area_moveatoms, 6*ni_in_cell, type_dbl)
 
     ! We're coming in from initial_H: assume that initial E found
     ! Find force
@@ -1786,6 +1866,11 @@ contains
        call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                          DCS_parts, parts)
     end if
+
+    deallocate(KE_force, p_force, STAT=stat)
+    if (stat /= 0) call cq_abort("test_SPulay: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, 6*ni_in_cell, type_dbl)
+
     return
   end subroutine test_SPulay
   !!***
@@ -1840,12 +1925,13 @@ contains
                                  xc_energy, get_energy, band_energy,   &
                                  delta_E_hartree, delta_E_xc
     use force_module,      only: get_nonSC_correction_force
-    use GenComms,          only: myid, inode, ionode
+    use GenComms,          only: myid, inode, ionode, cq_abort
     use H_matrix_module,   only: get_H_matrix
     use density_module,    only: set_density, get_electronic_density,  &
                                  density
     use functions_on_grid, only: supportfns, H_on_supportfns
     use maxima_module,     only: maxngrid
+    use memory_module,     only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -1861,10 +1947,16 @@ contains
     integer      :: stat
     real(double) :: E0, F0, E1, F1, analytic_force, numerical_force, &
                     electrons_tot
-    real(double), dimension(nspin)          :: electrons
-    real(double), dimension(3,ni_in_cell)   :: nonSC_force
-    real(double), dimension(maxngrid,nspin) :: density_out
+    real(double), dimension(nspin) :: electrons
+    real(double), dimension(:,:), allocatable :: nonSC_force
+    real(double), dimension(:,:), allocatable :: density_out
     
+    allocate(nonSC_force(3,ni_in_cell), density_out(maxngrid,nspin), &
+             STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("test_nonSC: Error alloc mem: ", ni_in_cell, maxngrid)
+    call reg_alloc_mem(area_moveatoms, 3*ni_in_cell+nspin*maxngrid, type_dbl)
+
     ! We're coming in from initial_H: assume that initial E found
     call get_electronic_density(density_out, electrons, supportfns, &
                                 H_on_supportfns(1), inode, ionode,  &
@@ -1945,6 +2037,11 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+
+    deallocate(nonSC_force, density_out, STAT=stat)
+    if (stat /= 0) call cq_abort("test_nonSC: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell+nspin*maxngrid, type_dbl)
+
     return
   end subroutine test_nonSC
   !!***
@@ -1996,7 +2093,7 @@ contains
     use energy,          only: local_ps_energy, hartree_energy, &
                                xc_energy, get_energy, band_energy
     use force_module,    only: force, tot_force
-    use GenComms,        only: myid, inode, ionode
+    use GenComms,        only: myid, inode, ionode, cq_abort
     use H_matrix_module, only: get_H_matrix
     use global_module,   only: flag_self_consistent, nspin
     use SelfCon,         only: new_SC_potl
@@ -2004,6 +2101,7 @@ contains
     use density_module,  only: density
     use ewald_module,    only: flag_old_ewald
     use maxima_module,   only: maxngrid
+    use memory_module,   only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -2016,11 +2114,16 @@ contains
     real(double) :: total_energy
 
     ! Local variables
+    integer      :: stat
     logical      :: reset_L
     real(double) :: E0, F0, E1, F1, analytic_force, numerical_force
     real(double) :: electrons_tot
-    real(double), dimension(nspin)        :: electrons
-    real(double), dimension(3,ni_in_cell) :: p_force
+    real(double), dimension(nspin) :: electrons
+    real(double), dimension(:,:), allocatable :: p_force
+
+    allocate(p_force(3,ni_in_cell), STAT=stat)
+    if (stat /= 0) call cq_abort("test_full: Error alloc mem: ", ni_in_cell)
+    call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
 
     ! We're coming in from initial_H: assume that initial E found
     ! Ensure that h_on_support is in workspace_support
@@ -2112,6 +2215,11 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+
+    deallocate(p_force, STAT=stat)
+    if (stat /= 0) call cq_abort("test_full: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
+
     return
   end subroutine test_full
   !!***
@@ -2164,7 +2272,7 @@ contains
     use energy,          only: local_ps_energy, hartree_energy,     &
                                xc_energy, get_energy, band_energy,  &
                                cdft_energy
-    use GenComms,        only: myid, inode, ionode
+    use GenComms,        only: myid, inode, ionode, cq_abort
     use S_matrix_module, only: get_S_matrix
     use global_module,   only: WhichPulay, SPulay, flag_basis_set,  &
                                blips, PAOs
@@ -2174,6 +2282,7 @@ contains
                                build_Becke_weights
     use maxima_module,   only: maxngrid
     use cdft_module,     only: make_weights, get_cdft_constraint
+    use memory_module,   only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -2187,9 +2296,14 @@ contains
     real(double) :: total_energy
 
     ! Local variables
+    integer :: stat
     logical :: reset_L
     real(double) ::  E0, F0, E1, F1, analytic_force, numerical_force
-    real(double), dimension(3,ni_in_cell) :: c_force
+    real(double), dimension(:,:), allocatable :: c_force
+
+    allocate(c_force(3,ni_in_cell), STAT=stat)
+    if (stat /= 0) call cq_abort("test_cdft: Error alloc mem: ", ni_in_cell)
+    call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
 
     ! We're coming in from initial_H: assume that initial E found
     ! Find force
@@ -2269,6 +2383,11 @@ contains
                       DCS_parts, parts)
     call get_S_matrix(inode, ionode) !Builds new weight matrix
     !automatically.
+
+    deallocate(c_force, STAT=stat)
+    if (stat /= 0) call cq_abort("test_cdft: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
+
     return
   end subroutine test_cdft
   !!***

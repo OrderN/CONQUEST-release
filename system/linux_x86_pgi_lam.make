@@ -8,10 +8,10 @@
 FC = mpif77
 F77 = mpif77
 # If you need 64-bit flags for compiling, add them for linking
-LINKFLAGS = 
+LINKFLAGS =
 COMPFLAGS = -O2 -check all -fltconsistency -fpe0 -traceback
 COMPFLAGS_F77 = -O2 -check all -fltconsistency -fpe0 -traceback
-ARFLAGS = 
+ARFLAGS =
 
 # This line is for systems with ScaLAPACK, BLACS and diagonalisation
 LIBS = $(FFT) -lscalapack -lblacsF77init -lblacs -L/opt/intel/mkl721/lib/32/ -lmkl_lapack -lmkl_ia32 -lguide -lmpi $(FFT)
@@ -25,3 +25,8 @@ $(FFT):
 FDF=libfdf.a
 $(FDF):
 	(cd fdf; $(MAKE) "FC=$(FC)" "F77=$(F77)" "FFLAGS=-g " "ARFL=$(ARFLAGS)" module)
+
+# Matrix multiplication kernel type
+MULT_KERN = default
+# Use dummy DiagModule or not
+DIAG_DUMMY =

@@ -6,7 +6,7 @@
 #
 #
 FC = ifort
-LINKFLAGS = 
+LINKFLAGS =
 COMPFLAGS = -O2
 
 # This line is for systems with ScaLAPACK, BLACS and diagonalisation
@@ -18,3 +18,8 @@ LIBS = -lsdsm -lscs -lmpi $(FFT)
 FFT=libgpfa.a
 $(FFT):
 	(cd FFT; $(MAKE) "FC=$(FC)" "FFLAGS=$(COMPFLAGS)")
+
+# Matrix multiplication kernel type
+MULT_KERN = default
+# Use dummy DiagModule or not
+DIAG_DUMMY =

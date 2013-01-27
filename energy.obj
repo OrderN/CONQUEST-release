@@ -7,7 +7,7 @@ ENERGY_OBJS = H_matrix_module.o \
               EarlySC_module.o \
               PosTan_module.o \
               DMMinModule.o \
-              DiagModule.o \
+              DiagModule${DIAG_DUMMY}.o \
               ScalapackFormat.o \
               blip_minimisation.module.o \
               blip_gradient.module.o \

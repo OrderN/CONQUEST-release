@@ -36,7 +36,7 @@
 !!  SOURCE
 module pao2blip
 
-  use global_module, ONLY: io_lun
+  use global_module, ONLY: io_lun, area_basis
   use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
 
   implicit none
@@ -898,6 +898,7 @@ contains
     use numbers
     use pao_format
     use read_support_spec, ONLY: support_info
+    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -908,17 +909,25 @@ contains
     real(double), intent(in) :: reg_rad, b_int
     real(double), intent(in), dimension(:,:) :: bv
     real(double), intent(in), dimension(:,:) :: blip
-    integer :: i, j, k, j0, ired, jred, kred, n, nx, ny, nz, &
-         &n1, n2, n3, abs_nx, abs_ny, n_ac, n_acz, n_am, n_zeta, &
-         &n_int_grid, n_blip_add, n_int_add, n_int_points, &
-         &nb_beg0, nb_beg, nb_end0, nb_end
+    integer :: i, j, k, j0, ired, jred, kred, n, nx, ny, nz, n1, n2, &
+         n3, abs_nx, abs_ny, n_ac, n_acz, n_am, n_zeta, n_int_grid, &
+         n_blip_add, n_int_add, n_int_points, nb_beg0, nb_beg, &
+         nb_end0, nb_end, stat
     real(double) :: a1g_norm, t1u_norm, t2g_norm, eg_a_norm, eg_b_norm
-    real(double) :: acc_dphi_squared, acc_phi_squared, alpha, ang_fac, &
-         &coeff, delta_ig, deltar, dphi_rms, phi_rms, phi_blip, phi_pao, &
-         &r, sum, x, y, z
-    real(double), dimension(2*bas+1,2*bas+1,(2*bas+11)*max_blip_nu_int) :: blip1
-    real(double), dimension(2*bas+1,(2*bas+11)*max_blip_nu_int, &
-         (2*bas+11)*max_blip_nu_int) :: blip2
+    real(double) :: acc_dphi_squared, acc_phi_squared, alpha, ang_fac,&
+         coeff, delta_ig, deltar, dphi_rms, phi_rms, phi_blip, &
+         phi_pao, r, sum, x, y, z
+    real(double), dimension(:,:,:), allocatable :: blip1, blip2
+
+    allocate(blip1(2*bas+1,2*bas+1,(2*bas+11)*max_blip_nu_int), &
+             blip2(2*bas+1,(2*bas+11)*max_blip_nu_int,(2*bas+11)*max_blip_nu_int), &
+             STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("deviation: Error alloc mem: ", 2*bas+1,max_blip_nu_int)
+    call reg_alloc_mem(area_basis, &
+                       (2*bas+1) * (2*bas+1) * (2*bas+11) * max_blip_nu_int + &
+                       (2*bas+1) * (2*bas+11) * max_blip_nu_int * &
+                       (2*bas+11) * max_blip_nu_int, type_dbl)
 
     a1g_norm = sqrt(one/(four*pi))
     t1u_norm = sqrt(three/(four*pi))
@@ -1088,6 +1097,13 @@ contains
             &dphi_rms/phi_rms
     end if
 
+    deallocate(blip1, blip2, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("deviation: Error dealloc mem")
+    call reg_dealloc_mem(area_basis, &
+                         (2*bas+1) * (2*bas+1) * (2*bas+11) * max_blip_nu_int + &
+                         (2*bas+1) * (2*bas+11) * max_blip_nu_int * &
+                         (2*bas+11) * max_blip_nu_int, type_dbl)
     return
 
   end subroutine deviation

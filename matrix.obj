@@ -4,6 +4,7 @@
 MATRIX_OBJS  =  atoms.module.o \
                 mult_module.o \
                 multiply_module.o \
+                multiply_kernel_${MULT_KERN}.o \
                 io_module.o \
                 matrix_elements_module.o \
                 comms_module.o \

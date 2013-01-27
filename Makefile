@@ -19,6 +19,10 @@ NOTIMERS_DIR = altver_notimers
 NOSTDTIMERS_DIR = altver_nostdtimers
 NOLOCTIMERS_DIR = altver_noloctimers
 
+#Default settings (L.Tong 2012/08/29)
+MULT_KERN = default
+DIAG_DUMMY = 
+
 #Include system-dependent variables
 include system.make
 
@@ -42,18 +46,20 @@ NODE_OBJECTS = main.o datatypes.module.o numbers.module.o                       
 SRCS = $(NODE_OBJECTS:.o=.f90) basic_types.f90 datatypes.module.f90 matrix_data_module.f90 numbers.module.f90
 
 #Dependency rule
-deps.obj.inc: $(SRCS)
+deps.obj.inc: $(SRCS) system.make
 	touch $(COMMENT)
 	$(ECHOSTR) "module datestamp" > datestamp.f90
 	$(ECHOSTR) "  implicit none" >> datestamp.f90
 	$(ECHOSTR) '  character(len=*), parameter :: datestr="'`date`'"' >> datestamp.f90
 	sed s/RRR/`svnversion .`/ $(COMMENT) >> datestamp.f90
 	$(ECHOSTR) "end module datestamp" >> datestamp.f90
-	./makemake
-	sed /"^mpi.o"/D makemake_deps > deps.obj.inc
+#	./makemake
+	./makedeps makedeps.txt $^
+	sed /"^mpi.o"/D makedeps.txt > deps.obj.inc
+#	sed /"^mpi.o"/D makemake_deps > deps.obj.inc
 
 #Target
-$(TARGET) : $(NODE_OBJECTS) 
+$(TARGET) : $(NODE_OBJECTS)
 	$(FC) $(LINKFLAGS) -o $(TARGET) $(NODE_OBJECTS) $(LIBS) 
 
 #.f90.o:

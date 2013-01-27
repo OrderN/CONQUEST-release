@@ -30,7 +30,7 @@
 !!
 module blip_minimisation
 
-  use global_module,          only: io_lun
+  use global_module,          only: io_lun, area_basis
   use timer_stdclocks_module, only: start_timer, stop_timer, &
                                     tmr_std_basis, tmr_std_allocation
 
@@ -129,7 +129,8 @@ contains
     use DiagModule,          only: diagon
     use blip_gradient,       only: get_blip_gradient, get_electron_gradient
     use global_module,       only: flag_precondition_blips, iprint_basis, &
-                                   area_basis, nspin, spin_factor, flag_analytic_blip_int
+                                   area_basis, nspin, spin_factor,        &
+                                   flag_analytic_blip_int
     use io_module,           only: dump_blip_coeffs
     use functions_on_grid,   only: supportfns, H_on_supportfns,           &
                                    gridfunctions, fn_on_grid
@@ -139,7 +140,7 @@ contains
                                    supports_on_atom
     use primary_module,      only: bundle
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use S_matrix_module, ONLY: get_S_matrix
+    use S_matrix_module,     only: get_S_matrix
 
     implicit none
 
@@ -158,13 +159,17 @@ contains
     integer      :: k, i, j, n, spec, stat, spin
     logical      :: notredone, reduced
     real(double), parameter :: gamma_max = 6.0_double !! TM 2007.03.29
-    real(double), dimension(nspin)            :: electrons, energy_in
-    real(double), dimension(coeff_array_size) :: search_direction, &
-                                                 last_sd, Psd
-    real(double), allocatable, dimension(:)   :: summ
-
+    real(double), dimension(nspin)          :: electrons, energy_in
+    real(double), dimension(:), allocatable :: search_direction, last_sd, Psd
+    real(double), dimension(:), allocatable :: summ
 
     call start_timer(tmr_std_basis)
+
+    allocate(search_direction(coeff_array_size), &
+             last_sd(coeff_array_size), Psd(coeff_array_size), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("vary_support: Error alloc mem: ", coeff_array_size)
+    call reg_alloc_mem(area_basis, 3*coeff_array_size, type_dbl)
 
     if (inode == ionode) &
          write (io_lun, fmt='(/6x,"Starting blip-coefficient variation",/)')
@@ -399,6 +404,11 @@ contains
 
     end do ! n_iterations
     
+    deallocate(search_direction, last_sd, Psd, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("vary_support: Error dealloc mem")
+    call reg_dealloc_mem(area_basis, 3*coeff_array_size, type_dbl)
+
     call stop_timer (tmr_std_basis)
 
     return
@@ -518,8 +528,13 @@ contains
     real(double) :: k1, k2, k3, kmin, lambda, tmp
     real(double) :: e0, e1, e2, e3, energy_out
     real(double), save :: dE = zero ! Use this to guess initial step ?
-    real(double), dimension(lengthBlip) :: data_blip0
-    real(double), dimension(nspin)      :: electrons, energy_tmp
+    real(double), dimension(:), allocatable :: data_blip0
+    real(double), dimension(nspin) :: electrons, energy_tmp
+
+    allocate(data_blip0(lengthBlip), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("line_minimise_support: Error alloc mem: ", lengthBlip)
+    call reg_alloc_mem(area_basis, lengthBlip, type_dbl)
 
     if (inode == ionode .and. iprint_basis > 2) &
          write (io_lun, &
@@ -668,6 +683,11 @@ contains
                dE
     total_energy_0 = energy_out
     
+    deallocate(data_blip0, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("line_minimise_support: Error dealloc mem")
+    call reg_dealloc_mem(area_basis, lengthBlip, type_dbl)
+
     return
   end subroutine line_minimise_support
   !!***

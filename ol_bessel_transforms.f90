@@ -31,7 +31,7 @@
 module bessel_integrals
 
   use datatypes
-  use global_module, ONLY: io_lun
+  use global_module, ONLY: io_lun, area_basis
 
   implicit none
 
@@ -74,9 +74,11 @@ contains
 !!
   subroutine bess0_int(func,npts,npts_2,rcut,delta_r,func_out)
     
-    use fft_procedures, ONLY: sinft
+    use fft_procedures, only: sinft
     use datatypes
-    use numbers, ONLY: zero, twopi
+    use numbers, only: zero, twopi
+    use GenComms, only: cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -87,9 +89,13 @@ contains
     real(double), intent(out), dimension(npts_2/2) :: func_out
     real(double), intent(in) :: rcut, delta_r
 
-    real(double), dimension(npts_2) :: dummy1
+    real(double), dimension(:), allocatable :: dummy1
     real(double) :: k,r,rcp_k,n
-    integer :: i
+    integer :: i, stat
+
+    allocate(dummy1(npts_2), STAT=stat)
+    if (stat /= 0) call cq_abort("bess0_int: Error alloc mem: ", npts_2)
+    call reg_alloc_mem(area_basis, npts_2, type_dbl)
 
     !assign different sin/cos component first..
     dummy1(1:npts_2)=zero
@@ -113,6 +119,10 @@ contains
        r = (i-1)*delta_r
        func_out(1) = func_out(1)+(r*r*delta_r*func(i))
     enddo
+
+    deallocate(dummy1, STAT=stat)
+    if (stat /= 0) call cq_abort("bess0_int: Error dealloc mem")
+    call reg_dealloc_mem(area_basis, npts_2, type_dbl)
 
   end subroutine bess0_int
 !!***
@@ -148,6 +158,8 @@ contains
      use datatypes
      use fft_procedures, ONLY: sinft,cosft
      use numbers, ONLY: zero, one, twopi
+     use GenComms, ONLY: cq_abort
+     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
      implicit none
 
@@ -159,9 +171,13 @@ contains
      real(double), intent(out), dimension(npts_2/2) :: func_out
      real(double), intent(in) :: rcut, delta_r
 
-     real(double), dimension(npts_2) :: dummy1,dummy2
+     real(double), dimension(:), allocatable :: dummy1, dummy2
      real(double) :: k,r,rcp_k,n,rcp_r
-     integer :: i
+     integer :: i, stat
+
+     allocate(dummy1(npts_2), dummy2(npts_2), STAT=stat)
+     if (stat /= 0) call cq_abort("bess1_int: Error alloc mem: ", npts_2)
+     call reg_alloc_mem(area_basis, 2*npts_2, type_dbl)
 
      !assign different sin/cos component first..
      dummy1 = zero
@@ -183,6 +199,10 @@ contains
         func_out((i+1)/2) = rcp_k*(dummy2(i)+rcp_k*dummy1(i))
      enddo
      func_out(1) = zero
+
+     deallocate(dummy1, dummy2, STAT=stat)
+     if (stat /= 0) call cq_abort("bess1_int: Error dealloc mem")
+     call reg_dealloc_mem(area_basis, 2*npts_2, type_dbl)
 
    end subroutine bess1_int
 !!***
@@ -215,8 +235,10 @@ contains
    subroutine bess2_int(func,npts,npts_2,rcut,delta_r,func_out)
 
      use datatypes
-     use fft_procedures, ONLY : sinft,cosft
-     use numbers, ONLY: zero, one, three, twopi
+     use fft_procedures, only : sinft,cosft
+     use numbers, only: zero, one, three, twopi
+     use GenComms, only: cq_abort
+     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
      implicit none
 
@@ -228,9 +250,13 @@ contains
      real(double), intent(out), dimension(npts_2/2) :: func_out
      real(double), intent(in) :: rcut, delta_r
 
-     real(double), dimension(npts_2) :: dummy1,dummy2,dummy3
+     real(double), dimension(:), allocatable :: dummy1,dummy2,dummy3
      real(double) :: k,r,rcp_k,n,rcp_r
-     integer :: i
+     integer :: i, stat
+
+     allocate(dummy1(npts_2), dummy2(npts_2), dummy3(npts_2), STAT=stat)
+     if (stat /= 0) call cq_abort("bess2_int: Error alloc mem: ", npts_2)
+     call reg_alloc_mem(area_basis, 3*npts_2, type_dbl)
 
      !assign different sin/cos component first..
      dummy1 = zero
@@ -255,6 +281,10 @@ contains
         func_out((i+1)/2) = rcp_k*(dummy3(i)+rcp_k* (dummy2(i)+rcp_k*dummy1(i)))
      enddo
      func_out(1) = zero
+
+     deallocate(dummy1, dummy2, dummy3, STAT=stat)
+     if (stat /= 0) call cq_abort("bess2_int: Error dealloc mem")
+     call reg_dealloc_mem(area_basis, 3*npts_2, type_dbl)
 
    end subroutine bess2_int
 !!***
@@ -289,6 +319,8 @@ contains
      use datatypes
      use fft_procedures, ONLY : sinft,cosft
      use numbers, ONLY: zero, one, six, twopi, fifteen
+     use GenComms, ONLY: cq_abort
+     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
      implicit none
 
@@ -300,9 +332,14 @@ contains
      real(double), intent(out), dimension(npts_2/2) :: func_out
      real(double), intent(in) :: rcut, delta_r
 
-     real(double), dimension(npts_2) :: dummy1,dummy2,dummy3,dummy4
+     real(double), dimension(:), allocatable :: dummy1,dummy2,dummy3,dummy4
      real(double) :: k,r,rcp_k,n,rcp_r
-     integer :: i
+     integer :: i, stat
+
+     allocate(dummy1(npts_2), dummy2(npts_2), dummy3(npts_2), &
+              dummy4(npts_2), STAT=stat)
+     if (stat /= 0) call cq_abort("bess3_int: Error alloc mem: ", npts_2)
+     call reg_alloc_mem(area_basis, 4*npts_2, type_dbl)
 
      !assign different sin/cos component first..
      dummy1 = zero
@@ -330,6 +367,10 @@ contains
         func_out((i+1)/2) = rcp_k*(dummy4(i)+rcp_k*(dummy3(i)+rcp_k* (dummy2(i)+rcp_k*dummy1(i))))
      enddo
      func_out(1) = zero
+
+     deallocate(dummy1, dummy2, dummy3, dummy4, STAT=stat)
+     if (stat /= 0) call cq_abort("bess3_int: Error dealloc mem")
+     call reg_dealloc_mem(area_basis, 4*npts_2, type_dbl)
 
    end subroutine bess3_int
 !!***
@@ -364,6 +405,9 @@ contains
      use fft_procedures, ONLY : sinft,cosft
      use datatypes
      use numbers, ONLY: zero, one, twopi
+     use GenComms, ONLY: cq_abort
+     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+
      implicit none
 
      !subroutine to evaluate integral against spherical 
@@ -373,10 +417,15 @@ contains
      real(double), intent(out), dimension(npts_2/2) :: func_out
      real(double), intent(in) :: rcut, delta_r
 
-     real(double), dimension(npts_2) :: dummy1,dummy2,dummy3,dummy4
-     real(double), dimension(npts_2) :: dummy5
+     real(double), dimension(:), allocatable :: dummy1, dummy2, &
+                                                dummy3, dummy4, dummy5
      real(double) :: k,r,rcp_k,n,rcp_r
-     integer :: i
+     integer :: i, stat
+
+     allocate(dummy1(npts_2), dummy2(npts_2), dummy3(npts_2), &
+              dummy4(npts_2), dummy5(npts_2), STAT=stat)
+     if (stat /= 0) call cq_abort("bess4_int: Error alloc mem: ", npts_2)
+     call reg_alloc_mem(area_basis, 5*npts_2, type_dbl)
 
      !assign different sin/cos component first..
      dummy1 = zero
@@ -408,6 +457,10 @@ contains
              &(dummy4(i)+rcp_k*(dummy3(i)+rcp_k* (dummy2(i)+rcp_k*dummy1(i)))))
      enddo
      func_out(1) = zero
+
+     deallocate(dummy1, dummy2, dummy3, dummy4, dummy5, STAT=stat)
+     if (stat /= 0) call cq_abort("bess4_int: Error dealloc mem")
+     call reg_dealloc_mem(area_basis, 5*npts_2, type_dbl)
 
    end subroutine bess4_int
 !!***
@@ -442,6 +495,8 @@ contains
      use fft_procedures, ONLY : sinft,cosft
      use datatypes
      use numbers, ONLY: zero, one, twopi, fifteen
+     use GenComms, ONLY: cq_abort
+     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
      implicit none
 
@@ -453,10 +508,16 @@ contains
      real(double), intent(out), dimension(npts_2/2) :: func_out
      real(double), intent(in) :: rcut, delta_r
 
-     real(double), dimension(npts_2) :: dummy1,dummy2,dummy3,dummy4
-     real(double), dimension(npts_2) :: dummy5,dummy6
+     real(double), dimension(:), allocatable :: dummy1, dummy2, &
+                                                dummy3, dummy4, &
+                                                dummy5, dummy6
      real(double) :: k,r,rcp_k,n,rcp_r,int_part,bess5,rcp_kr,kr
-     integer :: i,j
+     integer :: i, j, stat
+
+     allocate(dummy1(npts_2), dummy2(npts_2), dummy3(npts_2), &
+              dummy4(npts_2), dummy5(npts_2), dummy6(npts_2), STAT=stat)
+     if (stat /= 0) call cq_abort("bess5_int: Error alloc mem: ", npts_2)
+     call reg_alloc_mem(area_basis, 6*npts_2, type_dbl)
 
      !assign different sin/cos component first..
      dummy1 = zero
@@ -514,6 +575,10 @@ contains
      enddo
      func_out(1) = zero
 
+     deallocate(dummy1, dummy2, dummy3, dummy4, dummy5, dummy6, STAT=stat)
+     if (stat /= 0) call cq_abort("bess5_int: Error dealloc mem")
+     call reg_dealloc_mem(area_basis, 6*npts_2, type_dbl)
+
    end subroutine bess5_int
 !!***
 
@@ -547,6 +612,8 @@ contains
      use fft_procedures, ONLY : sinft,cosft
      use datatypes
      use numbers, ONLY: zero, one, twopi
+     use GenComms, ONLY: cq_abort
+     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
      implicit none
 
@@ -557,10 +624,18 @@ contains
      real(double), intent(out), dimension(npts_2/2) :: func_out
      real(double), intent(in) :: rcut, delta_r
 
-     real(double), dimension(npts_2) :: dummy1,dummy2,dummy3,dummy4
-     real(double), dimension(npts_2) :: dummy5,dummy6,dummy7
+     real(double), dimension(:), allocatable :: dummy1, dummy2, &
+                                                dummy3, dummy4, &
+                                                dummy5, dummy6, &
+                                                dummy7        
      real(double) :: k,r,rcp_k,n,rcp_r,bess6,kr,rcp_kr,int_part
-     integer :: i,j
+     integer :: i, j, stat
+
+     allocate(dummy1(npts_2), dummy2(npts_2), dummy3(npts_2), &
+              dummy4(npts_2), dummy5(npts_2), dummy6(npts_2), &
+              dummy7(npts_2), STAT=stat)
+     if (stat /= 0) call cq_abort("bess6_int: Error alloc mem: ", npts_2)
+     call reg_alloc_mem(area_basis, 7*npts_2, type_dbl)
 
      !assign different sin/cos component first..
      dummy1 = zero
@@ -622,6 +697,11 @@ contains
         endif
      enddo
      func_out(1) = zero
+
+     deallocate(dummy1, dummy2, dummy3, dummy4, dummy5, dummy6, &
+                dummy7, STAT=stat)
+     if (stat /= 0) call cq_abort("bess6_int: Error dealloc mem")
+     call reg_dealloc_mem(area_basis, 7*npts_2, type_dbl)
 
    end subroutine bess6_int
 !!***

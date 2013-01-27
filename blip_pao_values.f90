@@ -34,6 +34,8 @@
 !!  SOURCE
 module blip_pao_values
 
+  use global_module, only: area_basis
+
   implicit none
   save
 
@@ -317,7 +319,8 @@ contains
        &delta_ig,n_blip,bv,y0,z,fv2)
     use datatypes
     use numbers
-    use GenComms, ONLY: cq_abort
+    use GenComms, only: cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     implicit none
 
     character(len=*), intent(in) :: sym_type
@@ -326,10 +329,14 @@ contains
     real(double), intent(in), dimension(:,:) :: bv
     real(double), intent(out), dimension(:,:) :: fv2
     integer :: i, i_store, j, j_add, j_store, kb_min, kb_max, &
-         m, n, n_b_int_in_diam, n_b_int_in_radius
+         m, n, n_b_int_in_diam, n_b_int_in_radius, stat
     real(double) :: b_int, deltax, sum, x0, y
-    real(double), dimension(nu_int) :: fv1
+    real(double), dimension(:), allocatable :: fv1
     real(double), dimension(4,4) :: store
+
+    allocate(fv1(nu_int), STAT=stat)
+    if (stat /= 0) call cq_abort("f2_value: Error alloc mem: ", nu_int)
+    call reg_alloc_mem(area_basis, nu_int, type_dbl)
 
     ! check that n_blip is odd
     if(2*(n_blip/2) == n_blip) then
@@ -367,6 +374,10 @@ contains
           endif
        end do
     end do
+
+    deallocate(fv1, STAT=stat)
+    if (stat /= 0) call cq_abort("f2_value: Error dealloc mem")
+    call reg_dealloc_mem(area_basis, nu_int, type_dbl)
 
     return
 
@@ -408,6 +419,7 @@ contains
     use GenComms,               only: cq_abort
     use timer_stdclocks_module, only: start_timer, stop_timer, &
                                       tmr_std_basis
+    use memory_module,          only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -419,10 +431,16 @@ contains
     integer :: i, i_store, j, j_add, j_store, k, kb_min, kb_max, &
          n, n_b_int_in_radius, n_b_int_in_diam, p
     real(double) :: b_int, deltax, sum, y0, z
-    real(double), dimension(nu_int,n_blip) :: fv2
-    real(double), dimension(4,4,n_blip) :: store
+    real(double), dimension(:,:),   allocatable :: fv2
+    real(double), dimension(:,:,:), allocatable :: store
+    integer :: stat
 
     call start_timer(tmr_std_basis)
+
+    allocate(fv2(nu_int,n_blip), store(4,4,n_blip), STAT=stat)
+    if (stat /= 0) call cq_abort("f3_value: Error alloc mem: ", nu_int, n_blip)
+    call reg_alloc_mem(area_basis, (nu_int+16)*n_blip, type_dbl)
+
     ! check that n_blip is odd
     if(2*(n_blip/2) == n_blip) then
        call cq_abort('f3_value: n_blip must be odd',n_blip)
@@ -463,6 +481,11 @@ contains
           end if
        end do
     end do
+
+    deallocate(fv2, store, STAT=stat)
+    if (stat /= 0) call cq_abort("f3_value: Error dealloc mem")
+    call reg_dealloc_mem(area_basis, (nu_int+16)*n_blip, type_dbl)
+
     call stop_timer(tmr_std_basis)
 
     return

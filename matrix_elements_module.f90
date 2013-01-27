@@ -21,10 +21,10 @@
 !!    Implementing transposes
 !!   01/03/00 by DRB
 !!    Finishing transposes
-!!   12/04/00 by DRB 
+!!   12/04/00 by DRB
 !!    Moved itran_addr into trans_remote type
-!!   20/04/00 by DRB 
-!!    Removed the pass of pairs to send_pair_info  
+!!   20/04/00 by DRB
+!!    Removed the pass of pairs to send_pair_info
 !!   25/04/00 by DRB
 !!    Now uses the generic group, primary and cover_set types
 !!   08/06/2001 dave
@@ -42,17 +42,17 @@ contains
 
 !!****f* matrix_elements_module/matrix_ini
 !!
-!!  NAME 
+!!  NAME
 !!   matrix_ini
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Creates indexing for matrix
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -76,7 +76,7 @@ contains
 
     implicit none
 
-    ! Passed variables     
+    ! Passed variables
     ! First, the small group variables
     type(group_set) :: parts
     type(primary_set) :: prim
@@ -85,7 +85,7 @@ contains
     integer :: myid,nd1,nd2
     real(double) :: rcut
     ! These variables are generic matrix variables
-    type(matrix), dimension (:) :: amat  
+    type(matrix), dimension (:) :: amat
     type(matrix_trans),OPTIONAL :: atrans
     type(matrix_halo),OPTIONAL :: ahalo
     !type(trans_remote),OPTIONAL :: atrans_rem
@@ -124,7 +124,7 @@ contains
             prim%groups_on_node,parts%mx_mem_grp)
        ! * IMPORTANT * ! This must come next: it builds ndimj
        call make_npxyz(nnd,amat,prim,gcs,parts%mx_mem_grp)
-       if(PRESENT(ahalo)) then ! make index arrays for halo 
+       if(PRESENT(ahalo)) then ! make index arrays for halo
           call make_halo_max(prim,gcs,amat,ahalo)
           call gmax(ahalo%mx_part)
           call gmax(ahalo%mx_halo)
@@ -132,7 +132,7 @@ contains
           call allocate_halo(ahalo,prim%mx_iprim,gcs%mx_mcover,gcs%mx_gcover)
           call make_halo(prim,gcs,amat,ahalo)
        endif ! halo
-       if(PRESENT(atrans)) then ! make index arrays for retro storage 
+       if(PRESENT(atrans)) then ! make index arrays for retro storage
           atrans%mx_halo = ahalo%mx_halo
           atrans%mx_nab = amat(1)%mx_nab
           call allocate_trans(atrans,prim%mx_iprim)
@@ -147,17 +147,17 @@ contains
 
 !!****f* matrix_elements_module/trans_ini *
 !!
-!!  NAME 
+!!  NAME
 !!   trans_ini
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Initialises transposes
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -182,7 +182,7 @@ contains
 
     implicit none
 
-    ! Passed variables     
+    ! Passed variables
     ! First, the small group variables
     type(group_set) :: parts
     type(primary_set) :: prim
@@ -190,7 +190,7 @@ contains
     ! Now general integers
     integer :: myid
     ! These variables are generic matrix variables
-    type(matrix), dimension (:) :: amat  
+    type(matrix), dimension (:) :: amat
     type(matrix_trans) :: atrans
     type(matrix_halo) :: ahalo
     type(matrix_halo) :: ahalo_rem
@@ -226,25 +226,25 @@ contains
           if(nnd/=atrans_rem%list_rem_node(j)) call MPI_Wait(nreq(2*j),mpi_stat,ierr)
        end do
        deallocate(nreq)
-    endif 
+    endif
   end subroutine trans_ini
 !!***
 
 !!****f* matrix_elements_module/get_naba *
 !!
-!!  NAME 
+!!  NAME
 !!   get_naba
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Creates neighbour lists for a matrix range rcut
 !!  INPUTS
-!!   type(primary_set) :: prim   
+!!   type(primary_set) :: prim
 !!   type(cover_set) :: gcs
 !!   type(matrix), dimension(:) :: amat
 !!   real(double) :: rcut
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -357,13 +357,13 @@ contains
              amat(nn)%part_nd_nabs = amat(nn)%part_nd_nabs+cumu_ndims
              inp=inp+1  ! Indexes primary-set atoms
           enddo ! End prim%nm_nodgroup
-          if(nn.lt.prim%groups_on_node) then 
+          if(nn.lt.prim%groups_on_node) then
              amat(nn+1)%offset=amat(nn)%offset+amat(nn)%part_nabs
              amat(nn+1)%nd_offset=amat(nn)%nd_offset+amat(nn)%part_nd_nabs
           endif
        else
           amat(nn)%n_atoms = 0
-          if(nn.lt.prim%groups_on_node) then 
+          if(nn.lt.prim%groups_on_node) then
              amat(nn+1)%offset=amat(nn)%offset+amat(nn)%part_nabs
              amat(nn+1)%nd_offset=amat(nn)%nd_offset+amat(nn)%part_nd_nabs
           endif
@@ -383,19 +383,19 @@ contains
 
 !!****f* matrix_elements_module/get_naba_max *
 !!
-!!  NAME 
+!!  NAME
 !!   get_naba_max
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Creates maxima for neighbour lists
 !!  INPUTS
-!!   type(primary_set) :: prim   
+!!   type(primary_set) :: prim
 !!   type(cover_set) :: gcs
 !!   type(matrix), dimension(:) :: amat
 !!   real(double) :: rcut
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -473,7 +473,7 @@ contains
              enddo ! End np_cover
              if(nabs_of_atom>mx_abs_nabs) mx_abs_nabs = nabs_of_atom
              inp=inp+1  ! Indexes primary-set atoms
-             ! Accumulate 5 times nabs_of_atom 
+             ! Accumulate 5 times nabs_of_atom
              index_size = index_size + 5*nabs_of_atom
           enddo ! End prim%nm_nodgroup
        else
@@ -483,7 +483,7 @@ contains
        ! Store offset for next partition
        if(nn<prim%groups_on_node) part_offset(nn+1) = index_size
     enddo ! End part_on_node
-    amat(1:prim%groups_on_node)%mx_nab = (tot_nabs+prim%mx_iprim-1)/prim%mx_iprim 
+    amat(1:prim%groups_on_node)%mx_nab = (tot_nabs+prim%mx_iprim-1)/prim%mx_iprim
     amat(1:prim%groups_on_node)%mx_abs = mx_abs_nabs
     return
   end subroutine get_naba_max
@@ -491,18 +491,18 @@ contains
 
 !!****f* matrix_elements_module/get_retr *
 !!
-!!  NAME 
+!!  NAME
 !!   get_retr
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Constructs indexing for "retro" storage - in other
 !!   words for local transposes (required for matrix mults)
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -557,10 +557,10 @@ contains
 
 !!****f* matrix_elements_module/make_halo *
 !!
-!!  NAME 
+!!  NAME
 !!   make_halo
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Constructs the "halo" - in other words, lists of
 !!   all atoms and all partitions within range of ANY atom
@@ -568,7 +568,7 @@ contains
 !!   the neighbours of atoms in the primary set, while the
 !!   halo partitions are simply all partitions containing at
 !!   least one halo atom.  Halo processors are those processors
-!!   responsible for at least ONE halo partition.  These are 
+!!   responsible for at least ONE halo partition.  These are
 !!   all found by searching over the cover set.
 !!  INPUTS
 !!   type(primary_set) :: prim
@@ -576,7 +576,7 @@ contains
 !!   type(matrix) :: amat(:)
 !!   type(matrix_halo) :: ahalo
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -714,10 +714,10 @@ contains
 
 !!****f* matrix_elements_module/make_halo_max *
 !!
-!!  NAME 
+!!  NAME
 !!   make_halo_max
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Find halo maxima
 !!  INPUTS
@@ -726,13 +726,13 @@ contains
 !!   type(matrix) :: amat(:)
 !!   type(matrix_halo) :: ahalo
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
 !!   2006/08/08
 !!  MODIFICATION HISTORY
-!! 
+!!
 !!  SOURCE
 !!
   subroutine make_halo_max(prim,gcs,amat,ahalo)
@@ -809,19 +809,19 @@ contains
 
 !!****f* matrix_elements_module/make_npxyz *
 !!
-!!  NAME 
+!!  NAME
 !!   make_npxyz
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Makes the xyz parameters that tell processors
 !!   how to convert from another processor's cover set
 !!   partition to a local cover set partition
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -858,7 +858,7 @@ contains
        if(prim%nm_nodgroup(np).gt.0) then ! Are there atoms ?
           do i=1,prim%nm_nodgroup(np)
              ni=prim%nm_nodbeg(np)+i-1 ! Start of partn in list of primary atoms
-             if(amat(np)%n_nab(i).gt.0) then 
+             if(amat(np)%n_nab(i).gt.0) then
                 do nb=1,amat(np)%n_nab(i) ! Loop over neighbours
                    isu = amat(np)%i_acc(i)+nb-1
                    if(isu>mx_part*amat(np)%mx_abs) then
@@ -901,19 +901,19 @@ contains
 
 !!****f* matrix_elements_module/trans_halo_info *
 !!
-!!  NAME 
+!!  NAME
 !!   trans_halo_info
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Makes info about nodes in halo, numbers
 !!   of halo neighbour pairs on each of these nodes, etc
 !!   needed for communications in performing matrix transpose.
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -967,7 +967,7 @@ contains
           if(nnd_rem.ne.adata%list_rem_node(adata%n_rem_node)) then
              if(nnd_rem<adata%list_rem_node(adata%n_rem_node).AND. &
                   nnd_rem>mynode) then
-                write(io_lun,923) 
+                write(io_lun,923)
 923             format(//'Possible error halo_com: halo nodes out of order')
              endif
              adata%n_rem_node=adata%n_rem_node+1
@@ -986,7 +986,7 @@ contains
           endif
        enddo
     endif
-    ! determine no. of pairs on each halo-node, addresses etc. 
+    ! determine no. of pairs on each halo-node, addresses etc.
     na=0
     ia=0
     adata%i_pair_addr(1)=1

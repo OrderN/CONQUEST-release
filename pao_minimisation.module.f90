@@ -174,11 +174,16 @@ contains
                     total_energy_0, total_energy_test, last_step,  &
                     dN_dot_de, dN_dot_dN, summ, E2, E1, g1, g2
     real(double), dimension(nspin) :: electrons
-    real(double), dimension(coeff_array_size) :: search_direction, &
-                                                 last_sd, Psd 
-    real(double), dimension(:), allocatable   :: grad_copy,        &
-                                                 grad_copy_dH,     &
-                                                 grad_copy_dS
+    real(double), dimension(:), allocatable :: search_direction, &
+                                               last_sd, Psd 
+    real(double), dimension(:), allocatable :: grad_copy,        &
+                                               grad_copy_dH,     &
+                                               grad_copy_dS
+
+    allocate(search_direction(coeff_array_size), &
+             last_sd(coeff_array_size), Psd(coeff_array_size), STAT=stat)
+    if (stat /= 0) call cq_abort("vary_pao: Error alloc mem: ", coeff_array_size)
+    call reg_alloc_mem(area_minE, 3*coeff_array_size, type_dbl)
 
     reset_L = .true.
 
@@ -551,6 +556,10 @@ contains
        total_energy_last = total_energy_0
     end do ! n_iterations
 
+    deallocate(search_direction, last_sd, Psd, STAT=stat)
+    if (stat /= 0) call cq_abort("vary_pao: Error dealloc mem")
+    call reg_dealloc_mem(area_minE, 3*coeff_array_size, type_dbl)
+
     return
     
 ! 1   format(20x,'mu = ',f10.7,'start energy = ',f15.7)
@@ -643,16 +652,25 @@ contains
     logical      :: reset_L
     integer      :: i, j, ii, nsf1, npao1
     integer      :: length, n_iterations, npmod, pul_mx, stat
-    real(double) :: gg, step, diff, total_energy_0, total_energy_test,    &
+    real(double) :: gg, step, diff, total_energy_0, total_energy_test, &
                     g0, last_step, summ, tolerance, con_tolerance
     real(double), dimension(nspin)             :: electrons, energy_tmp
     real(double), dimension(mx_pulay,mx_pulay) :: Aij 
     real(double), dimension(mx_pulay)          :: alph
     ! real(double), dimension(mx_pulay*mx_pulay) :: Aij1
-    real(double), dimension(coeff_array_size)  :: search_direction,       &
-                                                  last_sd, Psd  
-    real(double), dimension(coeff_array_size,mx_pulay) :: data_gradstore, &
-                                                          data_paostore
+    real(double), dimension(:), allocatable   :: search_direction, &
+                                                 last_sd, Psd  
+    real(double), dimension(:,:), allocatable :: data_gradstore, &
+                                                 data_paostore
+
+    allocate(search_direction(coeff_array_size), &
+             last_sd(coeff_array_size), Psd(coeff_array_size), &
+             data_gradstore(coeff_array_size,mx_pulay), &
+             data_paostore(coeff_array_size,mx_pulay), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("pulay_min_pao: Error alloc mem: ", &
+                       coeff_array_size, mx_pulay)
+    call reg_alloc_mem(area_minE, (3+2*mx_pulay)*coeff_array_size, type_dbl)
 
     ! Set tolerances for self-consistency and L minimisation
     con_tolerance = SCC * expected_reduction**SCBeta
@@ -839,6 +857,11 @@ contains
        end if
     end do
 
+    deallocate(search_direction, last_sd, Psd, &
+               data_gradstore, data_paostore, STAT=stat)
+    if (stat /= 0) call cq_abort("pulay_min_pao: Error dealloc mem")
+    call reg_dealloc_mem(area_minE, (3+2*mx_pulay)*coeff_array_size, type_dbl)
+
     return
 
 ! 1   format(20x,'mu = ',f10.7,'start energy = ',f15.7)
@@ -960,14 +983,18 @@ contains
                     acz, m1
     real(double) :: k1, k2, k3, kmin, lambda
     real(double) :: e0, e1, e2, e3, energy_out, summ, tmp
-    real(double), dimension(coeff_array_size) :: data_PAO0
-    real(double), dimension(nspin)            :: electrons, energy_tmp
+    real(double), dimension(:), allocatable :: data_PAO0
+    real(double), dimension(nspin)          :: electrons, energy_tmp
     ! real(double), dimension(:), allocatable :: data_PAO
     ! real(double), dimension(:), allocatable :: data_full
     logical :: done = .false. ! flag of line minimisation
     real(double), save :: kmin_last = zero
     real(double), save :: dE = zero ! Use this to guess initial step ?
         
+    allocate(data_PAO0(coeff_array_size), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("line_minimise_pao: Error alloc mem: ", coeff_array_size)
+    call reg_alloc_mem(area_minE, coeff_array_size, type_dbl)
 
     if (inode == ionode) &
          write (io_lun, *) 'On entry to pao line_min, dE is ', &
@@ -1147,6 +1174,10 @@ contains
          write (io_lun, *) 'On exit from pao line_min, dE is ', &
                            dE, total_energy_0, energy_out
     total_energy_0 = energy_out
+
+    deallocate(data_PAO0, STAT=stat)
+    if (stat /= 0) call cq_abort("line_minimise_pao: Error dealloc mem")
+    call reg_dealloc_mem(area_minE, coeff_array_size, type_dbl)
 
     return
   end subroutine line_minimise_pao

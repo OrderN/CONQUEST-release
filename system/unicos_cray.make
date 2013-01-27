@@ -6,7 +6,7 @@
 #
 #
 FC = f90
-LINKFLAGS = 
+LINKFLAGS =
 COMPFLAGS = -N132 -Oscalar3,pipeline2,unroll1,bl
 
 # This line is for systems with ScaLAPACK, BLACS and diagonalisation
@@ -15,4 +15,7 @@ COMPFLAGS = -N132 -Oscalar3,pipeline2,unroll1,bl
 # This line is for systems with dummy DiagModule
 LIBS = -lblas -lmpi
 
-
+# Matrix multiplication kernel type
+MULT_KERN = default
+# Use dummy DiagModule or not
+DIAG_DUMMY =

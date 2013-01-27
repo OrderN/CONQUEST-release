@@ -637,7 +637,7 @@ contains
 
     real(double) ::  FAC(0:MAX_D)
 
-    real(double), allocatable, dimension(:) :: work1, work2, work3, work4, work5, work6
+    real(double), allocatable, dimension(:) :: work1, work2, work4, work6
     real(double) :: temp(this_nsf,this_nsf)
 
     integer :: dx, dy, dz, offset, l, at, nsf1, stat, i1, i2
@@ -782,7 +782,7 @@ contains
     type(support_function) :: blip_grad
     real(double) :: dx, dy, dz
     integer ::  this_nsfL, this_nsfR
-    real(double), dimension(this_nsfL, this_nsfR,nspin) :: dataK, dataM12
+    real(double), dimension(this_nsfL,this_nsfR,nspin) :: dataK, dataM12
 
     ! Local Variables
     integer, parameter :: MAX_D = 4
@@ -790,7 +790,7 @@ contains
     real(double) ::  FAC(-MAX_D:MAX_D,3), D2FAC(-MAX_D:MAX_D,3)
 
     real(double), allocatable, dimension(:) :: work1, work2, work3, work4, work5, work6
-    real(double), allocatable, dimension(:,:) :: temp, temp2, temp3
+    real(double), allocatable, dimension(:,:) :: temp, temp2
     real(double) :: tmp, facx, facy, facz, factot, t0, t1, mat_val, bgv
 
     integer :: ix, iy, iz, offset, l, at, nsf1, nsf2, stat, i1, i2, m, x,y,z, xmin, xmax, ymin, ymax, zmin, zmax, &
@@ -1046,7 +1046,7 @@ contains
     real(double) :: dx, dy, dz
     real(double) :: forS, forT
     integer ::  this_nsfL, this_nsfR
-    real(double), dimension(this_nsfL, this_nsfR,nspin) :: dataK, dataM12
+    real(double), dimension(this_nsfL,this_nsfR,nspin) :: dataK, dataM12
 
     ! Local Variables
     integer, parameter :: MAX_D = 4

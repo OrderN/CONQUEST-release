@@ -14,4 +14,8 @@ LIBS = -lcomplib.sgimath -lscalapack -lmpiblacs -lsma -lmpi
 # This line is for systems with dummy DiagModule
 #LIBS = -lcomplib.sgimath -lsma -lmpi
 
+# Matrix multiplication kernel type
+MULT_KERN = default
+# Use dummy DiagModule or not
+DIAG_DUMMY =
 

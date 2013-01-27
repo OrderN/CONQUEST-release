@@ -24,7 +24,7 @@
 !!  SOURCE
 module make_rad_tables
 
-  use global_module, ONLY: io_lun
+  use global_module, ONLY: io_lun, area_basis
   use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
 
   implicit none
@@ -92,7 +92,7 @@ contains
     !30/10/03 modifying end of this routine to store nlpf_pao tables 
 
     real(double), allocatable, dimension(:) :: dummy1,dummy2,dummy1bt,dummy2bt
-    real(double), allocatable, dimension(:) :: dummyprod,dumout,ol_out,xin,y2
+    real(double), allocatable, dimension(:) :: dummyprod,dumout,ol_out
     real(double), allocatable, dimension(:,:) :: fullradtbl
     real(double), pointer, dimension(:) :: table1
     real(double), pointer, dimension(:) :: table2
@@ -221,7 +221,7 @@ contains
 
     real(double), allocatable, dimension(:) :: dummy1,dummy2,dummy1bt,dummy2bt
     real(double), allocatable, dimension(:) :: dummyprod,dummyprod_ke,dumout
-    real(double), allocatable, dimension(:) :: ol_out,xin,y2
+    real(double), allocatable, dimension(:) :: ol_out
     real(double), allocatable, dimension(:,:) :: fullradtbl,fullradtbl_ke
     real(double), pointer, dimension(:) :: table1
     real(double), pointer, dimension(:) :: table2
@@ -332,11 +332,14 @@ contains
 !!    Added timers
 !!  SOURCE
 !!
-  
-  subroutine store_supp_ke_tables(npnts,delta_r,num_l,fullradtbl,fullradtbl_ke,nsize,count)
+  subroutine store_supp_ke_tables(npnts, delta_r, num_l, fullradtbl, &
+                                  fullradtbl_ke, nsize, count)
     use datatypes
     use cubic_spline_routines !,ONLY : spline_new
     use ol_int_datatypes !,ONLY : rad_tables, rad_tables_ke
+    use GenComms,       only: cq_abort
+    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+
     implicit none
     !routine to copy the radial table information from the dummy structures
     !fullradtbl and fullradtbl_ke into the storage types defined in ol_int_dataypes.
@@ -345,8 +348,12 @@ contains
     real(double), intent(in) :: delta_r
     real(double), intent(in), dimension(nsize,num_l+1) :: fullradtbl, fullradtbl_ke
     real(double) :: yp1, ypn
-    real(double), dimension(npnts) :: xin, y2
-    integer :: i
+    real(double), dimension(:), allocatable :: xin, y2
+    integer :: i, stat
+
+    allocate(xin(npnts), y2(npnts), STAT=stat)
+    if (stat /= 0) call cq_abort("store_supp_ke_tables: Error alloc mem: ", npnts)
+    call reg_alloc_mem(area_basis, 2*npnts, type_dbl)
 
     !defining x axis array for the spline routines
     do i = 1, npnts
@@ -386,6 +393,10 @@ contains
        rad_tables_ke(count)%rad_tbls(i)%del_x = delta_r
     enddo
 
+    deallocate(xin, y2, STAT=stat)
+    if (stat /= 0) call cq_abort("store_supp_ke_tables: Error dealloc mem")
+    call reg_dealloc_mem(area_basis, 2*npnts, type_dbl)
+
   end subroutine store_supp_ke_tables
   !!***
 
@@ -421,6 +432,8 @@ contains
     use datatypes
     use ol_int_datatypes !,ONLY : rad_tables_nlpf_pao
     use cubic_spline_routines !,ONLY : spline_new
+    use GenComms,       only: cq_abort
+    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     implicit none
     !routine to store the non-local projector function/pao 
     !overlap radial tables in the appropriate derived type.
@@ -428,8 +441,13 @@ contains
     real(double), intent(in) :: delta_r
     real(double), intent(in), dimension(nsize,num_l+1) :: fullradtbl
     real(double) :: yp1, ypn
-    real(double), dimension(npnts) :: xin, y2
-    integer :: i
+    real(double), dimension(:), allocatable :: xin, y2
+    integer :: i, stat
+    
+    allocate(xin(npnts), y2(npnts), STAT=stat)
+    if (stat /= 0) call cq_abort("store_nlpf_pao_tables: Error alloc mem: ", npnts)
+    call reg_alloc_mem(area_basis, 2*npnts, type_dbl)
+
     !defining x axis array for the spline routines
     do i = 1, npnts
        xin(i) = (i-1)*delta_r
@@ -457,6 +475,10 @@ contains
        
     enddo
     
+    deallocate(xin, y2, STAT=stat)
+    if (stat /= 0) call cq_abort("store_nlpf_pao_tables: Error dealloc mem")
+    call reg_dealloc_mem(area_basis, 2*npnts, type_dbl)
+
   end subroutine store_nlpf_pao_tables
   !!***
 

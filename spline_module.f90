@@ -23,6 +23,8 @@
 !!    Bug fixes in splint and dsplint
 !!***
 module spline_module
+  
+  use global_module, only: area_general
 
   implicit none
 
@@ -74,6 +76,8 @@ contains
 
     use datatypes
     use numbers
+    use GenComms, only: cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -84,12 +88,14 @@ contains
     real(double), dimension(n) :: y, y2
 
     ! Local variables
-    integer :: i, k
-
+    integer :: i, k, stat
     real(double) :: p, qn, sig, un
     real(double), parameter ::huge = 1.0e30_double
-    ! Automatic arrays
-    real(double), dimension(n) :: u, x
+    real(double), dimension(:), allocatable :: u, x
+
+    allocate(u(n), x(n), STAT=stat)
+    if (stat /= 0) call cq_abort("spline: Error alloc mem: ", n)
+    call reg_alloc_mem(area_general, 2*n, type_dbl)
 
     ! generate the array of x entries
     do i=1, n
@@ -129,6 +135,11 @@ contains
     do k=n-1, 1, -1
        y2(k) = y2(k) * y2(k+1) + u(k)
     end do
+
+    deallocate(u, x, STAT=stat)
+    if (stat /= 0) call cq_abort("spline: Error dealloc mem")
+    call reg_dealloc_mem(area_general, 2*n, type_dbl)
+
     return
   end subroutine spline
 !!***
@@ -173,6 +184,8 @@ contains
 
     use datatypes
     use numbers
+    use GenComms, only: cq_abort
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -183,12 +196,14 @@ contains
     real(double), dimension(n) :: x, y, y2
 
     !     Local variables
-    integer i, k
-
+    integer i, k, stat
     real(double) :: p, qn, sig, un
     real(double), parameter :: huge = 1.0e30_double
-    ! Automatic array
-    real(double), dimension(n) :: u
+    real(double), dimension(:), allocatable :: u
+
+    allocate(u(n), STAT=stat)
+    if (stat /= 0) call cq_abort("spline_nonU: Error alloc mem: ", n)
+    call reg_alloc_mem(area_general, n, type_dbl)
 
     ! set up boundary conditions
     if (yp1>huge) then ! lower boundary condition set to 'natural'
@@ -224,6 +239,11 @@ contains
     do k=n-1, 1, -1
        y2(k) = y2(k) * y2(k+1) + u(k)
     end do
+
+    deallocate(u, STAT=stat)
+    if (stat /= 0) call cq_abort("spline_nonU: Error dealloc mem")
+    call reg_dealloc_mem(area_general, n, type_dbl)
+
     return
   end subroutine spline_nonU
 !!***

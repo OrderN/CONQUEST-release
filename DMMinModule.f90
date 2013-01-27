@@ -54,7 +54,7 @@
 module DMMin
 
   use datatypes
-  use global_module,          only: io_lun
+  use global_module,          only: io_lun, area_DM
   use timer_stdclocks_module, only: start_timer, stop_timer, &
                                     tmr_std_densitymat
 
@@ -222,7 +222,7 @@ contains
     end do ! end of do while (.not. done)
 
     ! *** Add frequency of output here *** !
- 
+
     if (flag_dump_L) then
        if (nspin == 1) then
           call dump_matrix("L", matL(1), inode)
@@ -698,8 +698,25 @@ contains
   !!   2010/03/18 14:08 dave
   !!    Added code for mixed L and SCF minimisation
   !!   2011/08/25 L.Tong
-  !!    Added spin polarisation
-  !!    Removed redundant parameter number_of_bands
+  !!    - Added spin polarisation
+  !!    - NOTE:
+  !!        There is a change to the size of residual. The new
+  !!        residuals are now a factor 2 less than the original
+  !!        implementation. The actual method for calculating the
+  !!        residual has not changed. However since the definition of
+  !!        mat_M3 has changed, now mat_M3(nspin) is an array and
+  !!        mat_M3(1) always stores the values for spin up component,
+  !!        this has resulted a changed in the calculated residual.
+  !!
+  !!        For spin non-polarised calculations:
+  !!        The original implementation has mat_M3 = 2.0 * mat_M3(1)
+  !!        Hence:  g1 = tr(mat_M3*T*mat_M3*T)
+  !!                   = 4.0 * tr(mat_M3(1)*T*mat_M3(1)*T)
+  !!        Now this has becomes
+  !!                g1 = sum_{is} tr(mat_M3(is)*T*mat_M3(is)*T)
+  !!                   = 2.0 * tr(mat_M3(1)*T*mat_M3(1)*T)
+  !!        Hence the factor two difference.
+  !!    - Removed redundant parameter number_of_bands
   !!   2012/03/12 L.Tong
   !!    - Major rewrite for change in spin implementation
   !!    - Removed redundant input paramter mu (real, double)
@@ -735,6 +752,7 @@ contains
     use H_matrix_module,   only: get_H_matrix
     use density_module,    only: density, get_electronic_density
     use maxima_module,     only: maxngrid
+    use memory_module,     only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     !Prints out charge density -- 2010.Nov.06 TM
     use io_module,         only: dump_charge
     use dimens,            only: n_my_grid_points
@@ -757,14 +775,18 @@ contains
     real(double)   :: e_dot_n_tot, n_dot_n_tot, electrons_tot, &
                       energy0_tot, energy1_tot
     real(double)   :: g0, g1, gg, step, dsum_factor
-    integer        :: n_iter, i, j, pul_mx, npmod, spin
+    integer        :: n_iter, i, j, pul_mx, npmod, spin, stat
     type(cq_timer) :: tmr_l_tmp1,tmr_l_iter
-    real(double), dimension(maxngrid) :: density_tot
+    real(double), dimension(:), allocatable :: density_tot
     !TM
     integer        :: iter_stuck = 0
     integer, parameter :: mx_stuck = 5
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
+
+    allocate(density_tot(maxngrid), STAT=stat)
+    if (stat /= 0) call cq_abort("Error allocating density_tot: ", maxngrid)
+    call reg_alloc_mem(area_DM, maxngrid, type_dbl)
 
     iter_stuck = 0
 
@@ -1185,6 +1207,10 @@ contains
           call dump_charge(density(:,2), n_my_grid_points, inode, spin=2)
        end if
     endif  ! (flag_mix_L_SC_min) then
+
+    deallocate(density_tot, STAT=stat)
+    if (stat /= 0) call cq_abort("Error deallocating density_tot")
+    call reg_dealloc_mem(area_DM, maxngrid, type_dbl)
 
     call dealloc_lateDM
 

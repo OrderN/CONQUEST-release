@@ -34,7 +34,7 @@
 module PosTan
 
   use datatypes
-  use global_module, ONLY: io_lun
+  use global_module, ONLY: io_lun, area_general
 
   implicit none
 
@@ -85,8 +85,9 @@ contains
 
     use datatypes
     use numbers
-    use GenComms, ONLY: inode, ionode
+    use GenComms, ONLY: inode, ionode, cq_abort
     use global_module, ONLY: iprint_gen
+    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
 
@@ -96,9 +97,13 @@ contains
     real(double), intent(OUT) :: C, beta
 
     ! Local variables
-    integer :: nkeep, ndelta, i
+    integer :: nkeep, ndelta, i, stat
     real(double) :: LastE
-    real(double), dimension(n) :: SCE, SCR ! Automatic arrays
+    real(double), dimension(:), allocatable :: SCE, SCR
+
+    allocate(SCE(n), SCR(n), STAT=stat)
+    if (stat /= 0) call cq_abort("fit_coeff: Error alloc mem: ", n)
+    call reg_alloc_mem(area_general, 2*n, type_dbl)
 
     if(n<=2) then
        nkeep = 0
@@ -131,6 +136,11 @@ contains
        call pos_tan(n,nkeep,SCE,SCR,C,beta, inode-1)
        C = cscale*dexp(C)
     endif
+
+    deallocate(SCE, SCR, STAT=stat)
+    if (stat /= 0) call cq_abort("fit_coeff: Error dealloc mem")
+    call reg_dealloc_mem(area_general, 2*n, type_dbl)
+
 1   format(2x,i4,2f15.8)
     return
   end subroutine fit_coeff

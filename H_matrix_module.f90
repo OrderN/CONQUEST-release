@@ -205,11 +205,15 @@ contains
     real(double)   :: kinetic_energy, nl_energy
     integer        :: pao_support, length, stat, paolength, matwork, spin
     type(cq_timer) :: tmr_l_hmatrix
-    real(double), dimension(size) :: rho_total
+    real(double), dimension(:), allocatable :: rho_total
 
     ! timer
     call start_timer(tmr_std_hmatrix)            ! Total
     call start_timer(tmr_l_hmatrix, WITH_LEVEL)  ! Just this call
+
+    allocate(rho_total(size), STAT=stat)
+    if (stat /= 0) call cq_abort("Error allocating rho_total: ", size)
+    call reg_alloc_mem(area_ops, size, type_dbl)
 
     stat = 0
     if (inode == ionode .and. iprint_ops > 3) &
@@ -335,6 +339,10 @@ contains
           call matrix_sum(zero, matHzero(spin), one, matH(spin))
        end do
     endif
+
+    deallocate(rho_total, STAT=stat)
+    if (stat /= 0) call cq_abort("Error deallocating rho_total")
+    call reg_dealloc_mem(area_ops, size, type_dbl)
 
     ! timer
     call stop_print_timer(tmr_l_hmatrix, "get_H_matrix", IPRINT_TIME_THRES1)
@@ -467,15 +475,20 @@ contains
     integer :: n, m, nb, atom, nsf1, point, stat, i, pot_flag, igrid, spin
     real(double) :: fften, electrons_tot
     logical     , dimension(4)    :: dump_pot
-    real(double), dimension(size) :: xc_epsilon ! energy_density of XC
-    real(double), dimension(size) :: h_potential
-    real(double), dimension(size) :: rho_tot
-    real(double), dimension(size,nspin) :: xc_potential
+    real(double), dimension(:),   allocatable :: xc_epsilon ! energy_density of XC
+    real(double), dimension(:),   allocatable :: h_potential
+    real(double), dimension(:),   allocatable :: rho_tot
+    real(double), dimension(:,:), allocatable :: xc_potential
     real(double), dimension(:,:), allocatable :: density_wk ! rho + density_pcc
     real(double), dimension(:),   allocatable :: density_wk_tot
-    complex(double_cplx), dimension(:), allocatable :: chdenr, locpotr
+    !complex(double_cplx), dimension(:), allocatable :: chdenr, locpotr
 
-
+    allocate(xc_epsilon(size), h_potential(size), rho_tot(size), &
+             xc_potential(size,nspin), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("get_h_on_support: Error allocating mem:", size, nspin)
+    call reg_alloc_mem(area_ops, (3+nspin)*size, type_dbl)
+    
     !call dump_locps(pseudopotential,size,inode)
     !allocate(chdenr(size), locpotr(size), STAT=stat)
     !call fft3( rho, chdenr, size, -1 )
@@ -498,7 +511,6 @@ contains
     !write (io_lun,*) 'Energy via FFT: ', fften
     !call fft3(pseudopotential, locpotr, size, 1)
     !deallocate(chdenr, locpotr, STAT=stat)
-
 
     ! first initialise some arrays
     h_potential = zero
@@ -706,6 +718,10 @@ contains
             call cq_abort("Error deallocating density_wk: ", stat)
        call reg_dealloc_mem(area_ops, size, type_dbl)
     endif
+
+    deallocate(xc_epsilon, h_potential, rho_tot, xc_potential, STAT=stat)
+    if (stat /= 0) call cq_abort("get_h_on_support: Error deallocating mem")
+    call reg_dealloc_mem(area_ops, (3+nspin)*size, type_dbl)
 
     return
   end subroutine get_h_on_support
