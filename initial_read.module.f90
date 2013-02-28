@@ -387,6 +387,14 @@ contains
   !!   2012/06/24 L.Tong
   !!   - Added input for flag_dump_L, which controls whether matL is
   !!     dumped or not
+  !!   2013/02/28 L.Tong
+  !!   - Removed the cq_abort when user choses non-SC calculations
+  !!     with spin polarised PBE functionals. Conquest now will
+  !!     perform the calculations as usual, but will give warnings
+  !!     about non-SC forces and set non-SC forces to zero, and carry
+  !!     on. This allows the user to still perform non-SC single point
+  !!     calculations with spin polarisation, if the forces are not
+  !!     important.
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1002,12 +1010,6 @@ contains
                         &implemented for spin polarised calculation, &
                         &reverting to LDA-PW92. ***'
              flag_functional_type = functional_lda_pw92
-          end if
-          if (.not. flag_self_consistent .and. &
-              (flag_functional_type /= functional_lda_pw92)) then
-             call cq_abort('Non self-consistent forces are at the moment &
-                            &only implemented for LDA-PW92 for spin &
-                            &polarised calculations.')
           end if
        end if
        select case(flag_functional_type)

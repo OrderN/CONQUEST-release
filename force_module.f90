@@ -317,8 +317,9 @@ contains
        end select
        call stop_print_timer(tmr_l_tmp1, "local pseudopotential force", &
                              IPRINT_TIME_THRES2)
-       call start_timer(tmr_std_allocation)
+
        ! deallocate the temporary arrays
+       call start_timer(tmr_std_allocation)
        deallocate(density_out_tot, density_out, STAT=stat)
        if (stat /= 0) &
             call cq_abort("Error deallocating output density: ", &
@@ -2116,9 +2117,18 @@ contains
   !!    - Cleaned up xc-functonal selector. Now spin and non-spin
   !!      calculations share the same calls. However so far only case
   !!      that works for spin polarised calculations is for LSDA-PW92.
+  !!   2013/02/28 L.Tong
+  !!    - Due to the lack of understanding on non-SC forces for
+  !!      LSDA-PW92, see the relevant subroutine for detailed
+  !!      explaination of what the problem was. I think it is be best
+  !!      if we stop calculations of non-SC forces for spin polarised
+  !!      calculations (PBE versions are not implemented anyway at
+  !!      this point), and hences added a warning message and by-pass
+  !!      condition (setting non-SC forces to zero and return) at the
+  !!      start of this subroutine for spin polarised calculations.
   !!  SOURCE
   !!
-  subroutine get_nonSC_correction_force(hf_force, density_out, inode, &
+  subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
                                         ionode, n_atoms, size)
 
     use datatypes
@@ -2168,7 +2178,7 @@ contains
     integer :: n_atoms, size
     integer :: inode, ionode
     real(double), dimension(:,:) :: density_out
-    real(double), dimension(:,:) :: hf_force
+    real(double), dimension(:,:) :: HF_force
 
     ! Local variables
     integer        :: i, j, my_block, n, the_species, iatom, spin, spin_2
@@ -2199,6 +2209,48 @@ contains
                                                  density_out_GGA_total
     real(double), allocatable, dimension(:,:) :: wk_grid,              &
                                                  density_out_GGA
+
+    ! ***** LT: TEMPORARY BARRIER FOR SPIN POLARISED CALCULATIONS!!! *****
+    ! Due to the fact that:
+    !   a) non-SC forces for spin polarised PBE is not yet implemented
+    !   b) While dVx_drho for LSDA PW92 is "implemented", there are
+    !      some fundamental problems with the form of the correlation
+    !      functional for PW92. The functional form of epsilon_c (see
+    !      Perdew-Wang 1992) and the fact f''(0) != 0 means that
+    !      d2_epsilon_c_dzeta2(rs,zeta=0) = alpha_c(rs) != 0 when zeta
+    !      = 0. However if one derive the equation from PW92 LDA form,
+    !      where epsilon_c = epsilon_c(rs,0) only then the
+    !      d2_epsilon_c_dzeta2 term is ignored all together. So there
+    !      is a mis-match between spin polarised form and spin
+    !      non-polarised form, and physically speaking for spin
+    !      polarised case, d2_epsilon_c_dzeta should be 0 when zeta =
+    !      0 (i.e. equivalent to spin non-polarised case).
+    !
+    !      So due to this lack of understanding, I think it is unsafe
+    !      to use the non-SC forces for spin-polarised calculations
+    !      for PW92 LSDA at the moement, and hence is appropriate to
+    !      restrict Conquest from computing the non-SC forces in these
+    !      cases.
+    if (nspin == 2) then
+       if (inode == ionode) then
+          write (io_lun, fmt='(10x,a)') &
+               "*****************************************************"
+          write (io_lun, fmt='(10x,a)') &
+               "**** WARNING!!! WARNING!!! WARNING!!! WARNING!!! ****"
+          write (io_lun, fmt='(10x,a)') &
+               "**** non-SC correction forces are not implemented ***"
+          write (io_lun, fmt='(10x,a)') &
+               "**** for spin polarised calculations, the non-SC ****"
+          write (io_lun, fmt='(10x,a)') &
+               "**** correction forces will be set to ZERO !!!   ****"
+          write (io_lun, fmt='(10x,a)') &
+               "**** The forces are NOT to be TRUSTED !!!        ****"
+          write (io_lun, fmt='(10x,a)') &
+               "*****************************************************"
+          HF_force = zero
+          return
+       end if
+    end if
 
     call start_timer(tmr_std_allocation)
     allocate(h_potential(size), density_total(size), &

@@ -2854,6 +2854,40 @@ end if
   !!   - (maxngrid,nspin,nspin), so
   !!     dxc_potential_ddensity(n,spin1,spin2) corresponds to
   !!     dVxc(spin1) / drho(spin2) at grid point n.
+  !! NOTES
+  !!   PW92 functional for spin polarised case produces non-zero
+  !!   d2e_c_dzeta2 (second derivative of e_c respect to zeta) when
+  !!   zeta = 0. In fact d2e_c_dzeta2(rs, zeta=0) = alpha_c(rs), which
+  !!   is independent of zeta. This is a result of the form of PW92
+  !!   e_c and f''(0) != 0. This produces an spurious extra term in
+  !!   the non-self-consistent forces when zeta = 0. If one derive the
+  !!   derivative of Vxc from the spin non-polarised version of PW92,
+  !!   i.e. e_c = e_c0 = e_c(rs,zeta=0), this extra term arrising from
+  !!   f''(0) does not exist, as all the e_c terms after e_c0 are
+  !!   omitted.
+  !!
+  !!   Physically d2e_c_dzeta2 should be 0 for spin non-polarised
+  !!   calculations (zeta = 0), because all of e_c - e_c0 are spin
+  !!   polarisation terms, which should not contribute to the spin
+  !!   non-polarised calculations in anyway. Howeverm simply setting
+  !!   d2e_c_dzeta2 to 0 is non-rigrous, and produces discontinuity in
+  !!   the functions.
+  !!
+  !!   Never-the-less tests have shown that for many systems, the
+  !!   non-zero d2e_c_dzeta2(zeta=0) term caused enough variation in
+  !!   the non-self-consistent forces which makes the CG calculation
+  !!   to fail to converge for spin non-polarised calculations;
+  !!   whereas if using the expression derived from the spin
+  !!   non-polarised (the only difference being the d2e_c_dzeta2 term
+  !!   is omitted) then CG converges quite fast.
+  !!
+  !!   So far no satisfactory solution has been found, and I am not
+  !!   even sure if the PW92 functional is suitable for calculation of
+  !!   non-sc-forces for spin polarised case---i.e. if the functional
+  !!   is variational. For the temporary fix which should work
+  !!   according to expectations for spin non-polarised case is
+  !!   applied, which simply sets d2e_c_dzeta2 to 0 if zeta = 0.
+  !!
   !! SOURCE
   !!
   subroutine get_dxc_potential_LSDA_PW92(density,                &
@@ -2904,13 +2938,15 @@ end if
           zeta = (rho(1) - rho(nspin)) / rho_tot
        else
           rcp_rs = zero
+          ! limit rho(spin) --> 0+ for all spin gives zeta --> zero
+          ! (remember rho(spin) >= 0)
           zeta = zero
        end if
 
        ! exchange (worked out from Mathematica)
        do spin = 1, nspin
           if (rho(spin) > RD_ERR) then
-             dVx_drho(spin,spin) = k01 / ((rho(spin))**two_thirds)
+             dVx_drho(spin,spin) = half * k01 / ((rho(spin))**two_thirds)
           else
              dVx_drho(spin,spin) = zero
           end if
@@ -2924,6 +2960,11 @@ end if
        if (rcp_rs > RD_ERR) then
           rs = one / rcp_rs
        else
+          ! here rs really should be infty, however, it is a TRICK to
+          ! set it to zero here, because it triggers the setting of
+          ! Q0, Q1 etc to zero in the code below--which on their
+          ! own-right should not be set to zero either, but the
+          ! combination gives the correct end results for e_c0, etc.
           rs = zero
        end if
        sq_rs = sqrt(rs)
@@ -3078,10 +3119,26 @@ end if
             dmalpha_c_drs)
 
        ! d2e_c_dzeta2
-       d2e_c_dzeta2 = (twelve * zeta * zeta * f + eight * zeta**3 *    &
-            df_dzeta) * (e_c1 - e_c0 + K03 * malpha_c) + d2f_dzeta2 *  &
-            (zeta**4 * e_c1 - zeta**4 * e_c0 + (zeta**4 - one) * K03 * &
-            malpha_c)
+       ! *** VERY IMPORTANT SEE NOTES SECTION IN THE HEADER *** 
+       ! PW92 functional for spin polarised case produces non-zero
+       ! d2e_c_dzeta2 even if zeta = 0. This is because of the form of
+       ! e_c in PW92 and f''(0) != 0. This produces an spurious term
+       ! in non-sc-forces when zeta = 0 (spin non-polarised
+       ! calculations). d2e_c_dzeta2 should be zero when zeta = 0 from
+       ! a physical point of view, since e_c(rs) - e_c(rs, zeta=0) is
+       ! spin polarisation related term, and should not contribute to
+       ! spin non-polarised calculations in anyway. However setting
+       ! d2e_c_dzeta2 to zero when zeta = 0 creates a discontinuity.
+       if (abs(zeta) > RD_ERR) then
+          d2e_c_dzeta2 = (twelve * zeta * zeta * f + eight * zeta**3 *    &
+               df_dzeta) * (e_c1 - e_c0 + K03 * malpha_c) + d2f_dzeta2 *  &
+               (zeta**4 * e_c1 - zeta**4 * e_c0 + (zeta**4 - one) * K03 * &
+               malpha_c)
+       else
+          ! this is set to zero here, it creates a discontinuity, use
+          ! at your own risk!
+          d2e_c_dzeta2 = zero
+       end if
 
        ! finally get the derivatives of the correlation potentials
        do spin = 1, nspin
@@ -3097,26 +3154,6 @@ end if
                   dzeta_drho(spin_2)
           end do
        end do
-
-       ! dVc_drho(1,1) = (two_thirds * de_c_drs - one_third * rs * &
-       !      d2e_c_drs2 - (zeta - one) * d2e_c_drs_dzeta) * &
-       !      drs_drho_up - (one_third * rs * d2e_c_drs_dzeta + (zeta - &
-       !      one) * d2e_c_dzeta2) * dzeta_drho_up
-
-       ! dVc_up_drho_dn = (two_thirds * de_c_drs - one_third * rs * &
-       !      d2e_c_drs2 - (zeta - one) * d2e_c_drs_dzeta) * &
-       !      drs_drho_dn - (one_third * rs * d2e_c_drs_dzeta + (zeta - &
-       !      one) * d2e_c_dzeta2) * dzeta_drho_dn
-
-       ! dVc_dn_drho_up = (two_thirds * de_c_drs - one_third * rs * &
-       !      d2e_c_drs2 - (zeta + one) * d2e_c_drs_dzeta) * &
-       !      drs_drho_up - (one_third * rs * d2e_c_drs_dzeta + (zeta + &
-       !      one) * d2e_c_dzeta2) * dzeta_drho_up
-
-       ! dVc_dn_drho_dn = (two_thirds * de_c_drs - one_third * rs * &
-       !      d2e_c_drs2 - (zeta + one) * d2e_c_drs_dzeta) * &
-       !      drs_drho_dn - (one_third * rs * d2e_c_drs_dzeta + (zeta + &
-       !      one) * d2e_c_dzeta2) * dzeta_drho_dn
 
        ! collect things together
        do spin = 1, nspin
