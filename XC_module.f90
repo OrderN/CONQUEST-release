@@ -500,6 +500,7 @@ contains
   !!   greater than one. This makes one - zeta < 0 and hence (one -
   !!   zeta)**third undefined.  Therefore to fix this I added a
   !!   constraint that zeta must be in between -one and one.
+  !! - Used separate subroutine PW92_G for G(rs)
   !! SOURCE
   !!
   subroutine Vxc_of_r_LSDA_PW92(nspin, rho_r, eps_x, eps_c, Vx, Vc)
@@ -523,14 +524,11 @@ contains
                     deps_c_dzeta
     real(double) :: onePzeta, oneMzeta, onePzeta_1_3, oneMzeta_1_3,    &
                     onePzeta_4_3, oneMzeta_4_3, zeta_3, zeta_4,        &
-                    factor_4_3, factor_1_3, AT2
-    real(double) :: Q0, Q1, dQ0_drs, dQ1_drs, logfactor, fraction_term
-    ! Fitting parameters used togeher with Table I, PRB 45, 13244 (1992)
-    real(double) :: alpha1, beta1, beta2, beta3, beta4, A
+                    factor_4_3, factor_1_3
     ! parameters used for convinience of calculation
-    real(double), parameter :: K01 = 1.042123522395696_double  ! 2*(9*pi/4)**(-1/3)
-    real(double), parameter :: K02 = 1.61199195401647_double   ! (4*pi/3)**(1/3)
-    real(double), parameter :: K03 = -0.458165293283143_double ! -3/(2*pi*K01)
+    real(double), parameter :: K01 =  1.042123522_double ! 2*(9*pi/4)**(-1/3)
+    real(double), parameter :: K02 =  1.611991954_double ! (4*pi/3)**(1/3)
+    real(double), parameter :: K03 = -0.458165293_double ! -3/(2*pi*K01)
 
     ! check passed parameters
     if (present(Vx) .and. (.not. present(eps_x))) &
@@ -595,97 +593,100 @@ contains
 
        if (present(eps_c)) then
 
-          ! Work out eps_c0, and deps_c0/drs
-          ! fitting parameters taken from Table I, Phys. Rev. B 45, 13244 (1992)
-          A = 0.031091_double
-          alpha1 = 0.21370_double
-          beta1 = 7.5957_double
-          beta2 = 3.5876_double
-          beta3 = 1.6382_double
-          beta4 = 0.49294_double
-
-          AT2 = two * A
-
-          Q0 = - AT2 * (one + alpha1 * rs)
-          Q1 = AT2 * sq_rs * &
-               (beta1 + sq_rs * (beta2 + beta3 * sq_rs + beta4 * rs))
-          ! note Q1 > zero as sq_rs and rs both > zero
-          logfactor = log(one + one/Q1)
-
-          eps_c0 = Q0 * logfactor
-
           if (present(Vc)) then
-             dQ0_drs = - AT2 * alpha1
-             dQ1_drs = A * (beta1 * rcp_sq_rs + two * beta2 + &
-                            three * beta3 * sq_rs + four * beta4 * rs)
-             fraction_term = (Q0 * dQ1_drs) / (Q1 * (Q1 + one))
-             deps_c0_drs = dQ0_drs * logfactor - fraction_term
-          end if
-
-          ! Work out eps_c1 and deps_c1/drs
-          ! fitting parameters taken from Table I, Phys. Rev. B 45, 13244 (1992)
-          A = 0.015545_double
-          alpha1 = 0.20548_double
-          beta1 = 14.1189_double
-          beta2 = 6.1977_double
-          beta3 = 3.3662_double
-          beta4 = 0.62517_double
-
-          AT2 = two * A
-
-          Q0 = - AT2 * (one + alpha1 * rs)
-          Q1 = AT2 * sq_rs * &
-               (beta1 + sq_rs * (beta2 + beta3 * sq_rs + beta4 * rs))
-          logfactor = log(one + one/Q1)
-
-          eps_c1 = Q0 * logfactor
-
-          if (present(Vc)) then
-             dQ0_drs = - AT2 * alpha1
-             dQ1_drs = A * (beta1 * rcp_sq_rs + two * beta2 + &
-                            three * beta3 * sq_rs + four * beta4 * rs)
-             fraction_term = (Q0 * dQ1_drs) / (Q1 * (Q1 + one))
-             deps_c1_drs = dQ0_drs * logfactor - fraction_term
-          end if
-
-          ! Work out alpha_c, and dalpha_c/drs
-          ! fitting parameters taken from Table I, Phys. Rev. B 45, 13244 (1992)
-          A = 0.016887_double
-          alpha1 = 0.11125_double
-          beta1 = 10.357_double
-          beta2 = 3.6231_double
-          beta3 = 0.88026_double
-          beta4 = 0.49671_double
-
-          AT2 = two * A
-
-          Q0 = - AT2 * (one + alpha1 * rs)
-          Q1 = AT2 * sq_rs * &
-               (beta1 + sq_rs * (beta2 + beta3 * sq_rs + beta4 * rs))
-          logfactor = log(one + one/Q1)
-
-          ! note that the table parameters are for -alpha_c
-          alpha_c = - Q0 * logfactor
-
-          if (present(Vc)) then
-             dQ0_drs = - AT2 * alpha1
-             dQ1_drs = A * (beta1 * rcp_sq_rs + two * beta2 + &
-                            three * beta3 * sq_rs + four * beta4 * rs)
-             fraction_term = (Q0 * dQ1_drs) / (Q1 * (Q1 + one))
+             ! Work out eps_c0, and deps_c0/drs
+             ! fitting parameters taken from Table I,
+             ! Phys. Rev. B 45, 13244 (1992)
+             call PW92_G(rs,                    &
+                         A=0.031091_double,     &
+                         alpha1=0.21370_double, &
+                         beta1=7.5957_double,   &
+                         beta2=3.5876_double,   &
+                         beta3=1.6382_double,   &
+                         beta4=0.49294_double,  &
+                         p=one,                 &
+                         G=eps_c0,              &
+                         dG_drs=deps_c0_drs)
+             ! Work out eps_c1 and deps_c1/drs
+             ! fitting parameters taken from Table I,
+             ! Phys. Rev. B 45, 13244 (1992)
+             call PW92_G(rs,                    &
+                         A=0.015545_double,     &
+                         alpha1=0.20548_double, &
+                         beta1=14.1189_double,  &
+                         beta2=6.1977_double,   &
+                         beta3=3.3662_double,   &
+                         beta4=0.62517_double,  &
+                         p=one,                 &
+                         G=eps_c1,              &
+                         dG_drs=deps_c1_drs)
+             ! Work out alpha_c, and dalpha_c/drs
+             ! fitting parameters taken from Table I,
+             ! Phys. Rev. B 45, 13244 (1992)
+             call PW92_G(rs,                    &
+                         A=0.016887_double,     &
+                         alpha1=0.11125_double, &
+                         beta1=10.357_double,   &
+                         beta2=3.6231_double,   &
+                         beta3=0.88026_double,  &
+                         beta4=0.49671_double,  &
+                         p=one,                 &
+                         G=alpha_c,             &
+                         dG_drs=dalpha_c_drs)
              ! note that the table parameters are for -alpha_c
-             dalpha_c_drs = - dQ0_drs * logfactor + fraction_term
+             alpha_c = -alpha_c
+             dalpha_c_drs = -dalpha_c_drs
+          else ! calculate eps_c only
+             ! Work out eps_c0, and deps_c0/drs
+             ! fitting parameters taken from Table I,
+             ! Phys. Rev. B 45, 13244 (1992)
+             call PW92_G(rs,                    &
+                         A=0.031091_double,     &
+                         alpha1=0.21370_double, &
+                         beta1=7.5957_double,   &
+                         beta2=3.5876_double,   &
+                         beta3=1.6382_double,   &
+                         beta4=0.49294_double,  &
+                         p=one,                 &
+                         G=eps_c0)
+             ! Work out eps_c1 and deps_c1/drs
+             ! fitting parameters taken from Table I,
+             ! Phys. Rev. B 45, 13244 (1992)
+             call PW92_G(rs,                    &
+                         A=0.015545_double,     &
+                         alpha1=0.20548_double, &
+                         beta1=14.1189_double,  &
+                         beta2=6.1977_double,   &
+                         beta3=3.3662_double,   &
+                         beta4=0.62517_double,  &
+                         p=one,                 &
+                         G=eps_c1)
+             ! Work out alpha_c, and dalpha_c/drs
+             ! fitting parameters taken from Table I,
+             ! Phys. Rev. B 45, 13244 (1992)
+             call PW92_G(rs,                    &
+                         A=0.016887_double,     &
+                         alpha1=0.11125_double, &
+                         beta1=10.357_double,   &
+                         beta2=3.6231_double,   &
+                         beta3=0.88026_double,  &
+                         beta4=0.49671_double,  &
+                         p=one,                 &
+                         G=alpha_c)
+             ! note that the table parameters are for -alpha_c
+             alpha_c = -alpha_c
           end if
 
           ! Work out f_function eq.(8) PRB 45, 13244 (1992),
           ! and df_function/dzeta
-          f_function = 1.923661050931538_double * (factor_4_3 - two)
+          f_function = 1.923661051_double * (factor_4_3 - two)
           if (present(Vc)) then
-             df_function_dzeta = 2.564881401242051_double * (factor_1_3)
+             df_function_dzeta = 2.564881401_double * (factor_1_3)
           end if
 
           ! Get eps_c, eq.(8) PRB 45, 13244 (1992)
           ! alpha_c / f''(0)
-          alpha_cDfpp0 = 0.58482233974552_double * alpha_c
+          alpha_cDfpp0 = 0.584822340_double * alpha_c
           eps_c = eps_c0 +                                      &
                   f_function * (alpha_cDfpp0 * (one - zeta_4) + &
                                 (eps_c1 - eps_c0) * zeta_4)
@@ -693,12 +694,12 @@ contains
           if (present(Vc)) then
              ! Get deps_c_drs and deps_c_dzeta
              ! dalpha_c_drs / f''(0)
-             dalpha_c_drsDfpp0 = 0.58482233974552_double * dalpha_c_drs
+             dalpha_c_drsDfpp0 = 0.584822340_double * dalpha_c_drs
              ! eq.(A2) of PRB 45, 13244 (1992)
              deps_c_drs =                                                     &
                   deps_c0_drs + f_function *                                  &
                   (zeta_4 * (deps_c1_drs - deps_c0_drs - dalpha_c_drsDfpp0) + &
-                  dalpha_c_drsDfpp0)
+                   dalpha_c_drsDfpp0)
              ! eq.(A3) of PRB 45, 13244 (1992)
              deps_c_dzeta = (four * zeta_3 * f_function +      &
                              df_function_dzeta * zeta_4) *     &
@@ -724,30 +725,34 @@ contains
        ! Correlation Part
 
        if (present(eps_c)) then
-          ! Work out eps_c0, and deps_c0/drs
-          ! fitting parameters taken from Table I, Phys. Rev. B 45, 13244 (1992)
-          A = 0.031091_double
-          alpha1 = 0.21370_double
-          beta1 = 7.5957_double
-          beta2 = 3.5876_double
-          beta3 = 1.6382_double
-          beta4 = 0.49294_double
-
-          AT2 = two * A
-
-          Q0 = - AT2 * (one + alpha1 * rs)
-          Q1 = AT2 * sq_rs * &
-               (beta1 + sq_rs * (beta2 + beta3 * sq_rs + beta4 * rs))
-          logfactor = log(one + one/Q1)
-
-          eps_c0 = Q0 * logfactor
 
           if (present(Vc)) then
-             dQ0_drs = - AT2 * alpha1
-             dQ1_drs = A * (beta1 * rcp_sq_rs + two * beta2 + &
-                       three * beta3 * sq_rs + four * beta4 * rs)
-             fraction_term = (Q0 * dQ1_drs) / (Q1 * (Q1 + one))
-             deps_c0_drs = dQ0_drs * logfactor - fraction_term
+             ! Work out eps_c0, and deps_c0/drs
+             ! fitting parameters taken from Table I,
+             ! Phys. Rev. B 45, 13244 (1992)
+             call PW92_G(rs,                    &
+                         A=0.031091_double,     &
+                         alpha1=0.21370_double, &
+                         beta1=7.5957_double,   &
+                         beta2=3.5876_double,   &
+                         beta3=1.6382_double,   &
+                         beta4=0.49294_double,  &
+                         p=one,                 &
+                         G=eps_c0,              &
+                         dG_drs=deps_c0_drs)
+          else
+             ! Work out eps_c0, and deps_c0/drs
+             ! fitting parameters taken from Table I,
+             ! Phys. Rev. B 45, 13244 (1992)
+             call PW92_G(rs,                    &
+                         A=0.031091_double,     &
+                         alpha1=0.21370_double, &
+                         beta1=7.5957_double,   &
+                         beta2=3.5876_double,   &
+                         beta3=1.6382_double,   &
+                         beta4=0.49294_double,  &
+                         p=one,                 &
+                         G=eps_c0)
           end if
 
           ! Get eps_c, eq.(8) PRB 45, 13244 (1992)
@@ -1193,7 +1198,7 @@ contains
   !!     use revPBE, PRL 80, 890 (1998)
   !!   flavour = functional_gga_pbe96_r99:
   !!     use RPBE, PRB 59, 7413 (1999)
-  !!   
+  !!
   !! USAGE
   !!   call get_xc_potential_GGA_PBE(density, xc_potential,      &
   !!                                 xc_epsilon, xc_energy, size,&
@@ -1253,13 +1258,13 @@ contains
     if (stat /= 0) &
          call cq_abort("get_xc_potential_GGA_PBE: Error alloc mem: ", grid_size)
     call reg_alloc_mem(area_ops, grid_size*(1+3*(1+nspin)), type_dbl)
-    
+
     if (present(flavour)) then
        PBE_type = flavour
     else
        PBE_type = functional_gga_pbe96
     end if
-    
+
     ! initialisation
     grad_density = zero
     xc_epsilon = zero
@@ -1295,7 +1300,7 @@ contains
     end do ! rr
     call gsum(xc_energy)
     xc_energy = xc_energy * grid_point_volume
-    
+
     ! add the second term to potential
     do spin = 1, nspin
        ! initialise for each spin
@@ -1312,7 +1317,7 @@ contains
             rcp_drhoEps_xc(:,1) * minus_i * recip_vector(:,1) + &
             rcp_drhoEps_xc(:,2) * minus_i * recip_vector(:,2) + &
             rcp_drhoEps_xc(:,3) * minus_i * recip_vector(:,3)
-       
+
        ! FFT back to obtain the convolution
        call fft3(second_term(:), rcp_drhoEps_xc(:,1), grid_size, +1)
        ! accumulate to potential
@@ -2831,7 +2836,7 @@ end if
   !!***
 
 
-  !!****f* force_module/get_dxc_potential_LSDA_PW92
+  !!****f* XC_module/get_dxc_potential_LSDA_PW92
   !! PURPOSE
   !!   Calculates the derivative of the exchange-correlation potential
   !!   on the grid within LSDA using the Ceperley-Alder interpolation
@@ -2854,40 +2859,6 @@ end if
   !!   - (maxngrid,nspin,nspin), so
   !!     dxc_potential_ddensity(n,spin1,spin2) corresponds to
   !!     dVxc(spin1) / drho(spin2) at grid point n.
-  !! NOTES
-  !!   PW92 functional for spin polarised case produces non-zero
-  !!   d2e_c_dzeta2 (second derivative of e_c respect to zeta) when
-  !!   zeta = 0. In fact d2e_c_dzeta2(rs, zeta=0) = alpha_c(rs), which
-  !!   is independent of zeta. This is a result of the form of PW92
-  !!   e_c and f''(0) != 0. This produces an spurious extra term in
-  !!   the non-self-consistent forces when zeta = 0. If one derive the
-  !!   derivative of Vxc from the spin non-polarised version of PW92,
-  !!   i.e. e_c = e_c0 = e_c(rs,zeta=0), this extra term arrising from
-  !!   f''(0) does not exist, as all the e_c terms after e_c0 are
-  !!   omitted.
-  !!
-  !!   Physically d2e_c_dzeta2 should be 0 for spin non-polarised
-  !!   calculations (zeta = 0), because all of e_c - e_c0 are spin
-  !!   polarisation terms, which should not contribute to the spin
-  !!   non-polarised calculations in anyway. Howeverm simply setting
-  !!   d2e_c_dzeta2 to 0 is non-rigrous, and produces discontinuity in
-  !!   the functions.
-  !!
-  !!   Never-the-less tests have shown that for many systems, the
-  !!   non-zero d2e_c_dzeta2(zeta=0) term caused enough variation in
-  !!   the non-self-consistent forces which makes the CG calculation
-  !!   to fail to converge for spin non-polarised calculations;
-  !!   whereas if using the expression derived from the spin
-  !!   non-polarised (the only difference being the d2e_c_dzeta2 term
-  !!   is omitted) then CG converges quite fast.
-  !!
-  !!   So far no satisfactory solution has been found, and I am not
-  !!   even sure if the PW92 functional is suitable for calculation of
-  !!   non-sc-forces for spin polarised case---i.e. if the functional
-  !!   is variational. For the temporary fix which should work
-  !!   according to expectations for spin non-polarised case is
-  !!   applied, which simply sets d2e_c_dzeta2 to 0 if zeta = 0.
-  !!
   !! SOURCE
   !!
   subroutine get_dxc_potential_LSDA_PW92(density,                &
@@ -2908,12 +2879,11 @@ end if
 
     ! local variables
     integer      :: n, spin, spin_2
-    real(double) :: rho_tot, rs, rcp_rs, zeta, sq_rs, Q0, Q0p, Q1,     &
-                    Q1p, Q1pp, e_c0, e_c1, malpha_c, f, de_c0_drs,     &
-                    de_c1_drs, dmalpha_c_drs, df_dzeta, d2e_c0_drs2,   &
-                    d2e_c1_drs2, d2malpha_c_drs2, d2f_dzeta2,          &
-                    de_c_drs, de_c_dzeta, d2e_c_drs2, d2e_c_drs_dzeta, &
-                    d2e_c_dzeta2, factor
+    real(double) :: rho_tot, rs, rcp_rs, zeta, sq_rs, e_c0, e_c1,      &
+                    malpha_c, f, de_c0_drs, drs_drho_tot, de_c1_drs,   &
+                    dmalpha_c_drs, df_dzeta, d2e_c0_drs2, d2e_c1_drs2, &
+                    d2malpha_c_drs2, d2f_dzeta2, de_c_drs, de_c_dzeta, &
+                    d2e_c_drs2, d2e_c_drs_dzeta, d2e_c_dzeta2, factor
     real(double), dimension(nspin)       :: rho, drs_drho, dzeta_drho
     real(double), dimension(nspin,nspin) :: dVx_drho, dVc_drho
 
@@ -2925,6 +2895,7 @@ end if
     real(double), parameter :: k01 = -0.413566994_double ! -(2/pi)**(1/3)/3**(2/3)
     real(double), parameter :: K02 =  1.923661051_double ! 1 / (2**(4/3)-2)
     real(double), parameter :: K03 =  0.584822362_double ! 1 / f''(0)
+    real(double), parameter :: K04 = -0.328248341_double ! -(1/pi)**(1/3)/3**(2/3)
 
     ! loop over grid points
     do n = 1, n_my_grid_points
@@ -2946,7 +2917,10 @@ end if
        ! exchange (worked out from Mathematica)
        do spin = 1, nspin
           if (rho(spin) > RD_ERR) then
-             dVx_drho(spin,spin) = half * k01 / ((rho(spin))**two_thirds)
+             ! if spin non-polarised, dVx_drho is calculated to be dVx/drho_tot
+             ! this is found to be half of dVx_drho(spin=1)
+             dVx_drho(spin,spin) = &
+                  k01 / (spin_factor * (rho(spin))**two_thirds)
           else
              dVx_drho(spin,spin) = zero
           end if
@@ -2961,199 +2935,137 @@ end if
           rs = one / rcp_rs
        else
           ! here rs really should be infty, however, it is a TRICK to
-          ! set it to zero here, because it triggers the setting of
-          ! Q0, Q1 etc to zero in the code below--which on their
-          ! own-right should not be set to zero either, but the
-          ! combination gives the correct end results for e_c0, etc.
+          ! set it to zero here, but it gives the correct end results
+          ! for G(rs), G'(rs) and G''(rs), etc.
           rs = zero
        end if
        sq_rs = sqrt(rs)
 
+       ! drs_drho
+       if (nspin == 1) then
+          if (rho_tot > RD_ERR) then
+             drs_drho_tot = - third * rs / rho_tot
+          else
+             drs_drho_tot = zero
+          end if
+       else if (nspin == 2) then
+          do spin = 1, nspin
+             if (rho(spin) > RD_ERR) then
+                drs_drho(spin) = - third * rs / rho_tot
+                dzeta_drho(spin) = ((-one)**(spin+1) - zeta) / rho_tot
+             else
+                drs_drho(spin) = zero
+                dzeta_drho(spin) = zero
+             end if
+          end do
+       end if
+
        ! e_c0 and de_c0_drs
        ! from table 1 of Phys. Rev. B 45, 13244
-       A = 0.031091_double
-       alpha1 = 0.21370_double
-       beta1 = 7.5957_double
-       beta2 = 3.5876_double
-       beta3 = 1.6382_double
-       beta4 = 0.49294_double
-       p = one
+       call PW92_G(rs,                    &
+                   A=0.031091_double,     &
+                   alpha1=0.21370_double, &
+                   beta1=7.5957_double,   &
+                   beta2=3.5876_double,   &
+                   beta3=1.6382_double,   &
+                   beta4=0.49294_double,  &
+                   p=one,                 &
+                   G=e_c0,                &
+                   dG_drs=de_c0_drs,      &
+                   d2G_drs2=d2e_c0_drs2)
 
-       Q0 = -two * A * (one + alpha1 * rs)
-       Q1 = two * A * (beta1 * sq_rs + beta2 * rs + &
-                       beta3 * sq_rs**3 + beta4 * rs**(p + one))
-       Q0p = -two * A * alpha1
-       if (sq_rs > RD_ERR) then
-          Q1p = A * (beta1 / sq_rs + two * beta2 + &
-                     three * beta3 * sq_rs + four * beta4 * rs)
-          Q1pp = half * A * (-beta1 / (sq_rs**3) + &
-                             three * beta3 / sq_rs + eight * beta4)
-       else
-          Q1p = zero
-          Q1pp = zero
-       end if
+       ! for spin non-polarised calculations this is enough for
+       ! de_c_drs and d2e_c_drs2
+       de_c_drs = de_c0_drs
+       d2e_c_drs2 = d2e_c0_drs2
 
-       if (Q1 > RD_ERR) then
-          e_c0 = Q0 * log(one + one / Q1)
-          de_c0_drs = Q0p * log(one + one / Q1) -           &
-                      (Q0 * Q1p) / (Q1 * (Q1 + one))
-          d2e_c0_drs2 = - (two * Q0p * Q1p + Q0 * Q1pp) /   &
-                        (Q1 * (Q1 + one)) +                 &
-                        Q1p * (two * Q1 + one) * Q0 * Q1p / &
-                        ((Q1 * (Q1 + one))**2)
-       else
-          e_c0 = zero
-          de_c0_drs = zero
-          d2e_c0_drs2 = zero
-       end if
+       if (nspin == 2) then
+          ! e_c1 and de_c1_drs
+          ! from table 1 of Phys. Rev. B 45, 13244
+          call PW92_G(rs,                    &
+                      A=0.015545_double,     &
+                      alpha1=0.20548_double, &
+                      beta1=14.1189_double,  &
+                      beta2=6.1977_double,   &
+                      beta3=3.3662_double,   &
+                      beta4=0.62517_double,  &
+                      p=one,                 &
+                      G=e_c1,                &
+                      dG_drs=de_c1_drs,      &
+                      d2G_drs2=d2e_c1_drs2)
+          ! malpha_c and dmalpha_c_drs
+          ! from table 1 of Phys. Rev. B 45, 13244
+          call PW92_G(rs,                    &
+                      A=0.016887_double,     &
+                      alpha1=0.11125_double, &
+                      beta1=10.357_double,   &
+                      beta2=3.6231_double,   &
+                      beta3=0.88026_double,  &
+                      beta4=0.49671_double,  &
+                      p=one,                 &
+                      G=malpha_c,            &
+                      dG_drs=dmalpha_c_drs,  &
+                      d2G_drs2=d2malpha_c_drs2)
 
-       ! e_c1 and de_c1_drs
-       ! from table 1 of Phys. Rev. B 45, 13244
-       A = 0.015545_double
-       alpha1 = 0.20548_double
-       beta1 = 14.1189_double
-       beta2 = 6.1977_double
-       beta3 = 3.3662_double
-       beta4 = 0.62517_double
-       p = one
+          ! f and df_dzeta
+          f = K02 * ((one + zeta)**four_thirds + (one - zeta)**four_thirds - two)
+          df_dzeta = four_thirds * K02 * ((one + zeta)**one_third - &
+                     (one - zeta)**one_third)
+          d2f_dzeta2 = one_third * four_thirds * K02 * &
+                       ((one + zeta)**(-two_thirds) +  &
+                        (one - zeta)**(-two_thirds))
 
-       Q0 = -two * A * (one + alpha1 * rs)
-       Q1 = two * A * (beta1 * sq_rs + beta2 * rs + beta3 * sq_rs**three + &
-            beta4 * rs**(p + one))
-       Q0p = -two * A * alpha1
-       if (sq_rs > RD_ERR) then
-          Q1p = A * (beta1 / sq_rs + two * beta2 + three * beta3 * &
-               sq_rs + two * (p + one) * beta4 * rs**p)
-          Q1pp = half * A * (-beta1 / (sq_rs**three) + three * beta3 /&
-               sq_rs + eight * beta4)
-       else
-          Q1p = zero
-          Q1pp = zero
-       end if
+          ! first order derivatives
+          de_c_drs = de_c_drs - de_c0_drs * f * zeta**4 + &
+                     de_c1_drs * f * zeta**4 + &
+                     dmalpha_c_drs * K03 * f * (zeta**4 - one)
+          de_c_dzeta = four * zeta**3 * f * (e_c1 - e_c0 + K03 * malpha_c) + &
+                       df_dzeta * (zeta**4 * e_c1 - zeta**4 * e_c0 + &
+                                   (zeta**4 - one) * K03 * malpha_c)
 
-       if (Q1 > RD_ERR) then
-          e_c1 = Q0 * log (one + one / Q1)
-          de_c1_drs = Q0p * log (one + one / Q1) - (Q0 * Q1p) / (Q1 * &
-               (Q1 + one))
-          d2e_c1_drs2 = - (two * Q0p * Q1p + Q0 * Q1pp) / (Q1 * (Q1 + &
-               one)) + Q1p * (two * Q1 + one) * Q0 * Q1p / ((Q1 * (Q1 &
-               + one))**two)
-       else
-          e_c1 = zero
-          de_c1_drs = zero
-          d2e_c1_drs2 = zero
-       end if
+          ! second order derivatives
+          ! d2e_c_drs2
+          d2e_c_drs2 = d2e_c_drs2 - d2e_c0_drs2 * f * zeta**4 + &
+                       d2e_c1_drs2 * f * zeta**4 + &
+                       d2malpha_c_drs2 * K03 * f * (zeta**4 - one)
 
-       ! malpha_c and dmalpha_c_drs
-       ! from table 1 of Phys. Rev. B 45, 13244
-       A = 0.016887_double
-       alpha1 = 0.11125_double
-       beta1 = 10.357_double
-       beta2 = 3.6231_double
-       beta3 = 0.88026_double
-       beta4 = 0.49671_double
-       p = one
+          ! d2e_c_drs_dzeta
+          d2e_c_drs_dzeta = four * zeta**3 * f * &
+                            (de_c1_drs - de_c0_drs + K03 * dmalpha_c_drs) + &
+                            df_dzeta * (zeta**4 * de_c1_drs -  &
+                                        zeta**4 * de_c0_drs + &
+                                        (zeta**4 - one) * K03 * dmalpha_c_drs)
 
-       Q0 = - two * A * (one + alpha1 * rs)
-       Q1 = two * A * (beta1 * sq_rs + beta2 * rs + beta3 * sq_rs**three + &
-            beta4 * rs**(p + one))
-       Q0p = -two * A * alpha1
-       if (sq_rs > RD_ERR) then
-          Q1p = A * (beta1 / sq_rs + two * beta2 + three * beta3 *         &
-               sq_rs + two * (p + one) * beta4 * rs**p)
-          Q1pp = half * A * (-beta1 / (sq_rs**three) + three * beta3 /     &
-               sq_rs + eight * beta4)
-       else
-          Q1p = zero
-          Q1pp = zero
-       end if
-
-       if (Q1 > RD_ERR) then
-          malpha_c = Q0 * log (one + one / Q1)
-          dmalpha_c_drs = -two * A * alpha1 * log (one + one / Q1) -       &
-               (Q0 * Q1p) / (Q1 * (Q1 + one))
-          d2malpha_c_drs2 = - (two * Q0p * Q1p + Q0 * Q1pp) / (Q1 *        &
-               (Q1 + one)) + Q1p * (two * Q1 + one) * Q0 * Q1p / ((Q1      &
-               * (Q1 + one))**two)
-       else
-          malpha_c = zero
-          dmalpha_c_drs = zero
-          d2malpha_c_drs2 = zero
-       end if
-
-       ! f and df_dzeta
-       f = K02 * ((one + zeta)**four_thirds + (one - zeta)**four_thirds - two)
-       df_dzeta = four_thirds * K02 * ((one + zeta)**one_third - &
-                                       (one - zeta)**one_third)
-       d2f_dzeta2 = one_third * four_thirds * K02 * &
-                    ((one + zeta)**(-two_thirds) +  &
-                     (one - zeta)**(-two_thirds))
-
-       ! drs_drho
-       do spin = 1, nspin
-          if (rho(spin) > RD_ERR) then
-             drs_drho(spin) = - third * rs / rho_tot
-             dzeta_drho(spin) = ((-one)**(spin+1) - zeta) / rho_tot
-          else
-             drs_drho(spin) = zero
-             dzeta_drho(spin) = zero
-          end if
-       end do
-
-       ! first order derivatives
-       de_c_drs = de_c0_drs * (one - f * zeta**4) + de_c1_drs * f *   &
-            zeta**4 + dmalpha_c_drs * K03 * f * (zeta**4 - one)
-       de_c_dzeta = four * zeta**3 * f * (e_c1 - e_c0 + K03 *         &
-            malpha_c) + df_dzeta * (zeta**4 * e_c1 - zeta**4 * e_c0 + &
-            (zeta**4 - one) * K03 * malpha_c)
-
-       ! second order derivatives
-       ! d2e_c_drs2
-       d2e_c_drs2 = d2e_c0_drs2 * (one - f * zeta**4) + d2e_c1_drs2 * &
-            f * zeta**4 + d2malpha_c_drs2 * K03 * f * (zeta**4 - one)
-
-       ! d2e_c_drs_dzeta
-       d2e_c_drs_dzeta = four * zeta**3 * f * (de_c1_drs - de_c0_drs + &
-            K03 * dmalpha_c_drs) + df_dzeta * (zeta **4 * de_c1_drs -  &
-            zeta**4 * de_c0_drs + (zeta**4 - one) * K03 *              &
-            dmalpha_c_drs)
-
-       ! d2e_c_dzeta2
-       ! *** VERY IMPORTANT SEE NOTES SECTION IN THE HEADER *** 
-       ! PW92 functional for spin polarised case produces non-zero
-       ! d2e_c_dzeta2 even if zeta = 0. This is because of the form of
-       ! e_c in PW92 and f''(0) != 0. This produces an spurious term
-       ! in non-sc-forces when zeta = 0 (spin non-polarised
-       ! calculations). d2e_c_dzeta2 should be zero when zeta = 0 from
-       ! a physical point of view, since e_c(rs) - e_c(rs, zeta=0) is
-       ! spin polarisation related term, and should not contribute to
-       ! spin non-polarised calculations in anyway. However setting
-       ! d2e_c_dzeta2 to zero when zeta = 0 creates a discontinuity.
-       if (abs(zeta) > RD_ERR) then
-          d2e_c_dzeta2 = (twelve * zeta * zeta * f + eight * zeta**3 *    &
-               df_dzeta) * (e_c1 - e_c0 + K03 * malpha_c) + d2f_dzeta2 *  &
-               (zeta**4 * e_c1 - zeta**4 * e_c0 + (zeta**4 - one) * K03 * &
-               malpha_c)
-       else
-          ! this is set to zero here, it creates a discontinuity, use
-          ! at your own risk!
-          d2e_c_dzeta2 = zero
+          ! d2e_c_dzeta2
+          d2e_c_dzeta2 = &
+               (twelve * zeta * zeta * f + eight * zeta**3 * df_dzeta) * &
+               (e_c1 - e_c0 + K03 * malpha_c) + &
+               d2f_dzeta2 * (zeta**4 * e_c1 - zeta**4 * e_c0 + &
+                             (zeta**4 - one) * K03 * malpha_c)
        end if
 
        ! finally get the derivatives of the correlation potentials
-       do spin = 1, nspin
-          do spin_2 = 1, nspin
-             factor = zeta + (-one)**spin
-             dVc_drho(spin,spin_2) =                  &
-                  (two_thirds * de_c_drs -            &
-                   one_third * rs * d2e_c_drs2 -      &
-                   factor * d2e_c_drs_dzeta) *        &
-                  drs_drho(spin_2) -                  &
-                  (one_third * rs * d2e_c_drs_dzeta + &
-                   factor * d2e_c_dzeta2) *           &
-                  dzeta_drho(spin_2)
+       if (nspin == 1) then
+          ! for spin non-polarised calculations, we need to calculate
+          ! dVc_drho_tot
+          dVc_drho(1,1) = (two_thirds * de_c_drs - &
+                           one_third * rs * d2e_c_drs2) * &
+                          drs_drho_tot
+       else
+          do spin = 1, nspin
+             do spin_2 = 1, nspin
+                factor = zeta + (-one)**spin
+                dVc_drho(spin,spin_2) = &
+                     (two_thirds * de_c_drs - &
+                      one_third * rs * d2e_c_drs2 - &
+                      factor * d2e_c_drs_dzeta) * &
+                     drs_drho(spin_2) - &
+                     (one_third * rs * d2e_c_drs_dzeta + &
+                      factor * d2e_c_dzeta2) * &
+                     dzeta_drho(spin_2)
+             end do
           end do
-       end do
+       end if
 
        ! collect things together
        do spin = 1, nspin
@@ -3169,6 +3081,83 @@ end if
   end subroutine get_dxc_potential_LSDA_PW92
   !!*****
 
+
+  !!****f* XC_module/PW92_G
+  !! PURPOSE
+  !!   Calculates the interpolation function G defined in PW92 LSDA
+  !!   paper:
+  !!   Perdew and Wang, Phys. Rev. B, 1992, 45, 13244-13249
+  !! USAGE
+  !!   call PW92_G(rs, A, alpha1, beta1, beta2, beta3, beta4, p,
+  !!               G, dG_drs, d2G_drs2)
+  !! INPUTS
+  !!   real(double) rs     : the variable for G(rs) function
+  !!   real(double) A      : interpolation parameter
+  !!   real(double) alpha1 : interpolation parameter
+  !!   real(double) beta1  : interpolation parameter
+  !!   real(double) beta2  : interpolation parameter
+  !!   real(double) beta3  : interpolation parameter
+  !!   real(double) beta4  : interpolation parameter
+  !!   real(double) p      : interpolation parameter
+  !! OUTPUT
+  !!   real(double) G        : G(rs)
+  !!   real(double) dG_drs   : dG/drs      (optional)
+  !!   real(double) d2G_drs2 : d^2G/drs^2  (optional)
+  !! AUTHOR
+  !!   L.Tong
+  !! CREATION DATE
+  !!   2013/03/01
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine PW92_G(rs, A, alpha1, beta1, beta2, beta3, beta4, p, &
+                    G, dG_drs, d2G_drs2)
+    use datatypes
+    use numbers
+    implicit none
+
+    ! passed parameters
+    real(double), intent(in) :: rs, A, alpha1, beta1, beta2, beta3, beta4, p
+    real(double), intent(out) :: G
+    real(double), intent(out), optional :: dG_drs, d2G_drs2
+    ! local variables
+    real(double) :: sq_rs, Q0, Q1, dQ0_drs, dQ1_drs, d2Q0_drs2, d2Q1_drs2
+
+    if (abs(rs) <= RD_ERR) then
+       G = zero
+       if (present(dG_drs)) dG_drs = zero
+       if (present(d2G_drs2)) d2G_drs2 = zero
+       return
+    end if
+
+    sq_rs = sqrt(rs)
+
+    Q0 = -two * A * (one + alpha1 * rs)
+    Q1 = two * A * (beta1 * sq_rs + beta2 * rs + &
+                    beta3 * sq_rs**3 + beta4 * rs**(p + one))
+    G = Q0 * log(one + one / Q1)
+    if (present(dG_drs) .or. present(d2G_drs2)) then
+       dQ0_drs = -two * A * alpha1
+       dQ1_drs = A * (beta1 / sq_rs + two * beta2 + &
+                      three * beta3 * sq_rs + four * beta4 * rs)
+       d2Q1_drs2 = half * A * (-beta1 / (sq_rs**3) + &
+                               three * beta3 / sq_rs + &
+                               eight * beta4)
+    end if
+    if (present(dG_drs)) then
+       dG_drs = dQ0_drs * log(one + one / Q1) - &
+                (Q0 * dQ1_drs) / (Q1 * (Q1 + one))
+    end if
+    if (present(d2G_drs2)) then
+       d2G_drs2 = - (two * dQ0_drs * dQ1_drs + Q0 * d2Q1_drs2) / &
+                  (Q1 * (Q1 + one)) + &
+                  dQ1_drs * (two * Q1 + one) * Q0 * dQ1_drs / &
+                  ((Q1 * (Q1 + one))**2)
+    end if
+
+    return
+  end subroutine PW92_G
+  !*****
 
 end module XC_module
 

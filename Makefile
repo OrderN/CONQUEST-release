@@ -53,10 +53,8 @@ deps.obj.inc: $(SRCS) system.make
 	$(ECHOSTR) '  character(len=*), parameter :: datestr="'`date`'"' >> datestamp.f90
 	sed s/RRR/`svnversion .`/ $(COMMENT) >> datestamp.f90
 	$(ECHOSTR) "end module datestamp" >> datestamp.f90
-#	./makemake
 	./makedeps makedeps.txt $^
 	sed /"^mpi.o"/D makedeps.txt > deps.obj.inc
-#	sed /"^mpi.o"/D makemake_deps > deps.obj.inc
 
 #Target
 $(TARGET) : $(NODE_OBJECTS)

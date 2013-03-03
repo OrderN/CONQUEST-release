@@ -2118,14 +2118,9 @@ contains
   !!      calculations share the same calls. However so far only case
   !!      that works for spin polarised calculations is for LSDA-PW92.
   !!   2013/02/28 L.Tong
-  !!    - Due to the lack of understanding on non-SC forces for
-  !!      LSDA-PW92, see the relevant subroutine for detailed
-  !!      explaination of what the problem was. I think it is be best
-  !!      if we stop calculations of non-SC forces for spin polarised
-  !!      calculations (PBE versions are not implemented anyway at
-  !!      this point), and hences added a warning message and by-pass
-  !!      condition (setting non-SC forces to zero and return) at the
-  !!      start of this subroutine for spin polarised calculations.
+  !!    - Added warning for non-implemented PBE non-SC forces (for all
+  !!      PBE variants.) The code still runs, but will set non SC
+  !!      correction forces to 0
   !!  SOURCE
   !!
   subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
@@ -2213,25 +2208,11 @@ contains
     ! ***** LT: TEMPORARY BARRIER FOR SPIN POLARISED CALCULATIONS!!! *****
     ! Due to the fact that:
     !   a) non-SC forces for spin polarised PBE is not yet implemented
-    !   b) While dVx_drho for LSDA PW92 is "implemented", there are
-    !      some fundamental problems with the form of the correlation
-    !      functional for PW92. The functional form of epsilon_c (see
-    !      Perdew-Wang 1992) and the fact f''(0) != 0 means that
-    !      d2_epsilon_c_dzeta2(rs,zeta=0) = alpha_c(rs) != 0 when zeta
-    !      = 0. However if one derive the equation from PW92 LDA form,
-    !      where epsilon_c = epsilon_c(rs,0) only then the
-    !      d2_epsilon_c_dzeta2 term is ignored all together. So there
-    !      is a mis-match between spin polarised form and spin
-    !      non-polarised form, and physically speaking for spin
-    !      polarised case, d2_epsilon_c_dzeta should be 0 when zeta =
-    !      0 (i.e. equivalent to spin non-polarised case).
-    !
-    !      So due to this lack of understanding, I think it is unsafe
-    !      to use the non-SC forces for spin-polarised calculations
-    !      for PW92 LSDA at the moement, and hence is appropriate to
-    !      restrict Conquest from computing the non-SC forces in these
-    !      cases.
-    if (nspin == 2) then
+
+    if ((nspin == 2) .and. &
+        ((flag_functional_type == functional_gga_pbe96) .or. &
+         (flag_functional_type == functional_gga_pbe96_rev98) .or. &
+         (flag_functional_type == functional_gga_pbe96_r99))) then
        if (inode == ionode) then
           write (io_lun, fmt='(10x,a)') &
                "*****************************************************"
@@ -2240,7 +2221,7 @@ contains
           write (io_lun, fmt='(10x,a)') &
                "**** non-SC correction forces are not implemented ***"
           write (io_lun, fmt='(10x,a)') &
-               "**** for spin polarised calculations, the non-SC ****"
+               "**** for spin polarised version of PBE functionals **"
           write (io_lun, fmt='(10x,a)') &
                "**** correction forces will be set to ZERO !!!   ****"
           write (io_lun, fmt='(10x,a)') &
@@ -2527,19 +2508,19 @@ contains
                                  r_from_i, v, derivative, range_flag)
                             if (range_flag) &
                                  call cq_abort('get_nonSC_force: overrun problem')
-                            ! note that here atomic densities are
-                            ! TOTAL densities for spin non-polairsed
-                            ! atoms. The factor of half that should be
-                            ! multiplied to the derivative for
-                            ! contribution to each spin component is
-                            ! already correct taken care of by
-                            ! density_scale. This is consistent
-                            ! because density = density_scale *
-                            ! atomic_density at initialisation.
+                            ! We assumed the atomic densities were
+                            ! evenly devided in spin channels at
+                            ! start, (in set_density of density
+                            ! module). So we assume the same to be
+                            ! consistent, and then apply density_scale
+                            ! calculated from set_density
                             do spin = 1, nspin
-                               fx_1(spin) = -x * derivative * density_scale(spin)
-                               fy_1(spin) = -y * derivative * density_scale(spin)
-                               fz_1(spin) = -z * derivative * density_scale(spin)
+                               fx_1(spin) = &
+                                    -x * half * derivative * density_scale(spin)
+                               fy_1(spin) = &
+                                    -y * half * derivative * density_scale(spin)
+                               fz_1(spin) = &
+                                    -z * half * derivative * density_scale(spin)
                             end do
                          else
                             do spin = 1, nspin

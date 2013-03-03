@@ -313,9 +313,12 @@ contains
                                  call cq_abort('set_density: overrun problem')
                             ! recalculate the density for this grid point
                             do spin = 1, nspin
+                               ! first assume atomic density is evenly
+                               ! divided among the spin channels, this
+                               ! applies also to spin non-polarised
+                               ! calculations
                                density(igrid,spin) = density(igrid,spin) + &
-                                                     half * spin_factor *  &
-                                                     local_density
+                                                     half * local_density
                             end do
                          end if ! if this point is within cutoff
                          ! test output of densities
@@ -331,37 +334,22 @@ contains
     end do ! end loop over blocks
 
     ! renormalise density
-    ! if (nspin == 1 .or. flag_fix_spin_population) then
-       do spin = 1, nspin
-          ! integrate the density in spin channel
-          local_density = zero
-          do iz = 1, n_my_grid_points
-             local_density = local_density + density(iz,spin)
-          end do
-          local_density = local_density * grid_point_volume
-          call gsum(local_density)
-          ! Correct electron density
-          density_scale(spin) = ne_spin_in_cell(spin) / local_density
-          density(:,spin) = density_scale(spin) * density(:,spin)
-          if (inode == ionode .and. iprint_SC > 0) &
-               write (io_lun, &
-               fmt='(10x,"In set_density, electrons (spin=",i1,"): ",f20.12)') &
-               spin, density_scale(spin) * local_density
-       end do ! spin
-    ! else ! for variable spin
-    !    local_density = zero
-    !    do spin = 1, nspin
-    !       do iz = 1, n_my_grid_points
-    !          local_density = local_density + spin_factor * density(iz,spin)
-    !       end do
-    !    end do
-    !    local_density = local_density * grid_point_volume
-    !    call gsum (local_density)
-    !    ! Correct electron density
-    !    do spin = 1, nspin
-    !       density_scale(spin) = ne_in_cell / local_density
-    !       density(:,spin) = density_scale(spin) * density(:,spin)
-    !    end do
+    do spin = 1, nspin
+       ! integrate the density in spin channel
+       local_density = zero
+       do iz = 1, n_my_grid_points
+          local_density = local_density + density(iz,spin)
+       end do
+       local_density = local_density * grid_point_volume
+       call gsum(local_density)
+       ! Correct electron density
+       density_scale(spin) = ne_spin_in_cell(spin) / local_density
+       density(:,spin) = density_scale(spin) * density(:,spin)
+       if (inode == ionode .and. iprint_SC > 0) &
+            write (io_lun, &
+            fmt='(10x,"In set_density, electrons (spin=",i1,"): ",f20.12)') &
+            spin, density_scale(spin) * local_density
+    end do ! spin
 
     !    if (iprint_SC > 0) then
     !       do spin = 1, nspin
@@ -1920,5 +1908,5 @@ contains
     end do
   end subroutine electron_number
   !!*****
-  
+
 end module density_module
