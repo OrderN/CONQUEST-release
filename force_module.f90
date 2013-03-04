@@ -2661,22 +2661,22 @@ contains
                                if (range_flag) &
                                     call cq_abort('get_nonSC_force: &
                                                   &overrun problem')
-                               ! note that here atomic densities are
-                               ! TOTAL densities for spin non-polairsed
-                               ! atoms. The factor of half that should be
-                               ! multiplied to the derivative for
-                               ! contribution to each spin component is
-                               ! already correct taken care of by
-                               ! density_scale. This is consistent
-                               ! because density = density_scale *
-                               ! atomic_density at initialisation.
+                               ! We assumed the atomic densities were
+                               ! evenly devided in spin channels at
+                               ! start, (in set_density of density
+                               ! module). So we assume the same to be
+                               ! consistent, and then apply density_scale
+                               ! calculated from set_density
                                do spin = 1, nspin
-                                  fx_pcc(spin) = -x_pcc * derivative_pcc * &
-                                                 density_scale(spin)
-                                  fy_pcc(spin) = -y_pcc * derivative_pcc * &
-                                                 density_scale(spin)
-                                  fz_pcc(spin) = -z_pcc * derivative_pcc * &
-                                                 density_scale(spin)
+                                  fx_pcc(spin) = &
+                                       -x_pcc * half * derivative_pcc * &
+                                       density_scale(spin)
+                                  fy_pcc(spin) = &
+                                       -y_pcc * half * derivative_pcc * &
+                                       density_scale(spin)
+                                  fz_pcc(spin) = &
+                                       -z_pcc * half * derivative_pcc * &
+                                       density_scale(spin)
                                end do
                             else
                                do spin = 1, nspin

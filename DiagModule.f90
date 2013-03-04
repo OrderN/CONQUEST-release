@@ -677,6 +677,9 @@ contains
                       entropy = entropy + spin_factor * wtk(kp) * &
                                 MP_entropy((w(j,kp,spin) - Efermi(spin)) / kT, &
                                            iMethfessel_Paxton)
+                   case default
+                      call cq_abort ("FindEvals: Smearing flag not recognised",&
+                                     flag_smear_type)
                    end select
                    ! occ is now used to construct matM12, factor by eps^n
                    ! to allow reuse of buildK
