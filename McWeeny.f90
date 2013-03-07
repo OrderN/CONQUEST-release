@@ -318,6 +318,11 @@ contains
   !!     eigenvalues of the L will no longer be contained within 0 and
   !!     1, due to forced double occupancy of a same spin orbital. A
   !!     warning will be produced if this happens.
+  !!  2013/03/06 L.Tong
+  !!  - Added check for the case n_o == ne(spin) or n_e, in this case
+  !!    mubar will be infinity, and cause the calculation to give
+  !!    NaN. When n_o == ne(spin) or n_e, the initial L from
+  !!    formulation should have been the identiy matrix (lambda = 0).
   !!  SOURCE
   !!
   subroutine InitMcW(inode, ionode)
@@ -335,7 +340,7 @@ contains
                               free_temp_matrix
     use matrix_data,    only: Lrange, Srange, TSrange
     use GenBlas
-    use GenComms,       only: gsum, my_barrier, gmin, gmax
+    use GenComms,       only: gsum, my_barrier, gmin, gmax, cq_abort
     use timer_module,   only: cq_timer,start_timer, stop_print_timer, &
                               WITH_LEVEL
 
@@ -440,23 +445,33 @@ contains
 
     if (nspin == 1 .or. flag_fix_spin_population) then
        do spin = 1, nspin
-          mu1(spin) = SXHX(spin) / n_o + hmax(spin) * A
-          mu2(spin) = (hmin(spin) * A * ne(spin) / (n_o - ne(spin)) - &
-                       SXHX(spin) / n_o) / &
-                      (n_o * A / (n_o - ne(spin)) - one)
-          if (inode == ionode) &
-               write (io_lun, &
-                      '(2x,"Mu1, Mu2, for spin = ",i1," are: ",2f25.15)') &
-                     spin, mu1(spin), mu2(spin)
-          if ((mu1(spin) < hmax(spin) .and. mu1(spin) > hmin(spin)) .and. &
-              (abs(ne(spin) / (hmax(spin) - mu1(spin))) < &
-               abs((n_o - ne(spin)) / (mu2(spin) - hmin(spin))))) then
-             mubar(spin) = mu1(spin)
-             lambda(spin) = ne(spin) / (hmax(spin) - mu1(spin))
+          ! for the rare case where n_o == ne(spin), we have lambda =
+          ! 0, and mu_bar = infty. But initial rho will be identity
+          ! matrix.
+          if (n_o == ne(spin)) then
+             mubar(spin) = zero
+             lambda(spin) = zero
           else
-             mubar(spin) = mu2(spin)
-             lambda(spin) = (n_o - ne(spin)) / (mu2(spin) - hmin(spin))
-          endif
+             mu1(spin) = SXHX(spin) / n_o + hmax(spin) * A
+             mu2(spin) = (hmin(spin) * A * ne(spin) / (n_o - ne(spin)) - &
+                          SXHX(spin) / n_o) / &
+                         (n_o * A / (n_o - ne(spin)) - one)
+             if (inode == ionode) &
+                  write (io_lun, &
+                         '(2x,"Mu1, Mu2, for spin = ",i1," are: ",2f25.15)') &
+                         spin, mu1(spin), mu2(spin)
+             if ((ne(spin) / (hmax(spin) - mu1(spin))) < &
+                 ((n_o - ne(spin)) / (mu1(spin) - hmin(spin)))) then
+                mubar(spin) = mu1(spin)
+                lambda(spin) = ne(spin) / (hmax(spin) - mu1(spin))
+             else if ((ne(spin) / (hmax(spin) - mu2(spin))) > &
+                      ((n_o - ne(spin)) / (mu2(spin) - hmin(spin)))) then
+                mubar(spin) = mu2(spin)
+                lambda(spin) = (n_o - ne(spin)) / (mu2(spin) - hmin(spin))
+             else
+                call cq_abort('InitMcW: Cannot find mubar.')
+             end if
+          end if
           if (inode == ionode .and. iprint_DM > 1) &
                write (io_lun, &
                       '(2x,"mubar, lambda for spin = ",i1," are: ",2f25.15)') &
@@ -468,21 +483,31 @@ contains
                lambda(spin), ne(spin), n_o)
        end do
     else ! variable spin
-       ! mu1(1) and mu1(2) always equal in this case. Same for mu2
-       mu1(:) = SXHX_ds / n_o + hmax_ds * A
-       mu2(:) = (hmin_ds * A * n_e / (n_o - n_e) - SXHX_ds / n_o) / &
-                (n_o * A / (n_o - n_e) - one)
-       if (inode == ionode) &
-            write (io_lun, '(2x,"Mu1, Mu2: ",2f25.15)') mu1(1), mu2(1)
-       if ((mu1(1) < hmax_ds .and. mu1(1) > hmin_ds) .and. &
-            (abs(n_e / (hmax_ds - mu1(1))) < &
-             abs((n_o - n_e) / (mu2(1) - hmin_ds)))) then
-          mubar(:) = mu1(:)
-          lambda(:) = n_e / (hmax_ds - mu1(:))
+       ! for the rare case where n_o == n_e, we have lambda =
+       ! 0, and mu_bar = infty. But initial rho will be identity
+       ! matrix.
+       if (n_o == n_e) then
+          mubar(:) = zero
+          lambda(:) = zero
        else
-          mubar(:) = mu2(:)
-          lambda(:) = (n_o - n_e) / (mu2(:) - hmin_ds)
-       endif
+          ! mu1(1) and mu1(2) always equal in this case. Same for mu2
+          mu1(:) = SXHX_ds / n_o + hmax_ds * A
+          mu2(:) = (hmin_ds * A * n_e / (n_o - n_e) - SXHX_ds / n_o) / &
+                   (n_o * A / (n_o - n_e) - one)
+          if (inode == ionode) &
+               write (io_lun, '(2x,"Mu1, Mu2: ",2f25.15)') mu1(1), mu2(1)
+          if ((n_e / (hmax_ds - mu1(1))) < &
+              ((n_o - n_e) / (mu1(1) - hmin_ds))) then
+             mubar(:) = mu1(:)
+             lambda(:) = n_e / (hmax_ds - mu1(:))
+          else if ((n_e / (hmax_ds - mu2(1))) < &
+                   ((n_o - n_e) / (mu2(1) - hmin_ds))) then
+             mubar(:) = mu2(:)
+             lambda(:) = (n_o - n_e) / (mu2(:) - hmin_ds)
+          else
+             call cq_abort('InitMcW: Cannot find mubar.')
+          end if
+       end if
        if (inode == ionode .and. iprint_DM > 1) then
           write (io_lun, 6) mubar(1)
           write (io_lun, '(2x,"lambda is ",f25.15)') lambda(1)

@@ -921,8 +921,7 @@ contains
 
     ! (2) Make an inital estimate for the density matrix, L, which is an
     ! approximation to L = S^-1. Then use correct_electron_number()
-    ! to modify L so that the electron number is correct. (not done now)
-    !start_L = .false.
+    ! to modify L so that the electron number is correct.
     if (.not. diagon .and. find_chdens .and. (start .or. start_L)) then
        call initial_L()
        call my_barrier()

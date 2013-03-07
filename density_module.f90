@@ -1508,12 +1508,19 @@ contains
        call gsum(atomch(:,spin), ni_in_cell)
        ! print out the atom charge density information
        if (inode == ionode .and. iprint_SC > 2) then
-          do blk = 1, ni_in_cell
-             write (io_lun, &
-                  fmt='(2x,"Atom ",i4," Becke charge (spin=",i1,")",&
-                  &f20.12)') &
-                  blk, spin, spin_factor*atomch(blk,spin)
-          end do
+          if (nspin == 1) then
+             do blk = 1, ni_in_cell
+                write (io_lun, &
+                       fmt='(2x,"Atom ",i4," Becke charge ",f20.12)') &
+                       blk, spin_factor*atomch(blk,spin)
+             end do
+          else
+             do blk = 1, ni_in_cell
+                write (io_lun, &
+                       fmt='(2x,"Atom ",i4," Becke charge (spin=",i1,") ",f20.12)') &
+                       blk, spin, atomch(blk,spin)
+             end do
+          end if
        end if
     end do ! spin
 

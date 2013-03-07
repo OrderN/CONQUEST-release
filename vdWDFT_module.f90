@@ -3077,7 +3077,7 @@ contains
     allocate(grho(maxngrid,3,nspin), rho_tot(maxngrid), q0(maxngrid), &
              xc_epsilon(maxngrid), xc_potential(maxngrid), &
              eps_x_gga(maxngrid), eps_c_lda(maxngrid))
-    
+
 ! LT_debug 2012/04/30 begin
 !    real(double) :: E_gga_x, E_lda_c
 ! LT_debug 2012/04/30 end

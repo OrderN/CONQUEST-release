@@ -49,6 +49,10 @@
 !!    Added timers
 !!   2012/03/01 L.Tong
 !!    Added interface for lineMinL
+!!   2013/03/06 L.Tong
+!!    Added module globals maxpulaystepDMM and minpulaystepDMM
+!!    to allow user to control the pulay mixing stepsize bracket
+!!    in lateDM
 !!  SOURCE
 !!
 module DMMin
@@ -61,6 +65,8 @@ module DMMin
   integer           :: maxpulayDMM
   integer,     save :: n_dumpL = 5
   real(double)      :: LinTol_DMM
+  real(double)      :: minpulaystepDMM ! min step size for pulay minimisation
+  real(double)      :: maxpulaystepDMM ! max step size for pulay minimisation
   !integer, parameter :: mx_pulay = 5
   !real(double), parameter :: LinTol = 0.1_double
 
@@ -722,6 +728,9 @@ contains
   !!    - Removed redundant input paramter mu (real, double)
   !!   2012/06/24 L.Tong
   !!    - Added control of whether to dump L using flag_dump_L
+  !!   2013/03/06 L.Tong
+  !!    - Changed the min|max step size to minpulaystepDMM and maxpulaystepDMM
+  !!      instead of hardwired values of 0.001 and 0.1
   !!  SOURCE
   !!
   subroutine lateDM(ndone, n_L_iterations, done, deltaE, vary_mu, &
@@ -922,8 +931,8 @@ contains
           step = deltaE / (real(ni_in_cell, double) * g0 + RD_ERR)
        end if
        ! We don't want the step to be too small or too big
-       if (abs(step) < 0.001_double) step = 0.001_double
-       if (abs(step) > 0.1_double) step = 0.1_double
+       if (abs(step) < minpulaystepDMM) step = minpulaystepDMM
+       if (abs(step) > maxpulaystepDMM) step = maxpulaystepDMM
        if (inode == ionode .and. iprint_DM >= 2) &
             write (io_lun, '(2x,"npmod, pul_mx and step: ",i3,i3,f25.15)') &
                   npmod, pul_mx, step

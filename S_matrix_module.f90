@@ -28,6 +28,10 @@
 !!    Changes for output to file not stdout
 !!   2008/05/22 ast
 !!    Added timers
+!!   2013/03/06 L.Tong
+!!   - Added module globals InvSMaxSteps and InvSDeltaOmegaTolerance
+!!     which can be set by the user, instead of original hard-wired
+!!     numbers of 100 and 0.0001
 !!  SOURCE
 !!
 module S_matrix_module
@@ -39,9 +43,12 @@ module S_matrix_module
   implicit none
 
   real(double) :: InvSTolerance
+  integer      :: InvSMaxSteps
+  real(double) :: InvSDeltaOmegaTolerance
 
   ! RCS tag for object file identification
-  character(len=80), save, private :: RCSid = "$Id$"
+  character(len=80), save, private :: &
+       RCSid = "$Id$"
 !!***
 
 contains
@@ -89,6 +96,12 @@ contains
 !!    Changes for cDFT (added call to Becke weight matrix)
 !!   2012/04/03 11:57 dave
 !!    Analytic integrals for S and KE added
+!!   2013/03/06 L.Tong
+!!   - Changed the hard-wired max number of Hottelling steps (100) to
+!!     use module variable InvSMaxSteps
+!!   - Changed the hard-wired deltaOmega tolerance for Hottelling
+!!     iterations (0.0001_double) to use module variable
+!!     InvSDeltaOmegaTolerance
 !!  TODO
 !!    
 !!  SOURCE
@@ -298,7 +311,8 @@ contains
     end if
     !call dump_matrix("NS",matS,inode)    
     ! get the new InvS matrix
-    call  Iter_Hott_InvS(iprint_ops, 100, 0.0001_double, ni_in_cell, &
+    call  Iter_Hott_InvS(iprint_ops, InvSMaxSteps, &
+                         InvSDeltaOmegaTolerance, ni_in_cell, &
                          inode, ionode)
     if (flag_perform_cdft) call make_weights
     call stop_print_timer(tmr_l_tmp1, "get_S_matrix", &

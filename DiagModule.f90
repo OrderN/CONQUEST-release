@@ -457,7 +457,7 @@ contains
     ! Set band_ef: this works because with no spin a factor of two is normally applied
     if(nspin>1) then
        do spin=1,nspin
-          band_ef(spin) = int(electrons(spin)) 
+          band_ef(spin) = int(electrons(spin))
        end do
     else
        band_ef(:) = int(electrons(1))
@@ -859,6 +859,10 @@ contains
                       entropy = entropy + spin_factor * wtk(kp) * &
                                 MP_entropy((w(j,kp,spin) - Efermi(spin)) / kT, &
                                            iMethfessel_Paxton)
+                   case default
+                      call cq_abort ("FindEvals: Smearing flag not recognised",&
+                                     flag_smear_type)
+
                    end select
                    ! occ is now used to construct matM12, factor by eps^n
                    ! to allow reuse of buildK
@@ -2604,6 +2608,9 @@ contains
           if (iprint_DM >= 3 .and. inode == ionode) &
                write (io_lun, 12) myid, lowEf(spin), highEf(spin)
 
+       case default
+                call cq_abort ("FindEvals: Smearing flag not recognised",&
+                               flag_smear_type)
        end select
 
        ! Starting Bisection
@@ -2851,6 +2858,9 @@ contains
                write (io_lun, 3) myid, highEf(1), highElec
        end do
 
+    case default
+       call cq_abort ("FindEvals: Smearing flag not recognised",&
+                      flag_smear_type)
     end select
 
     ! Starting Bisection
@@ -2981,6 +2991,9 @@ contains
                 occu(iband,ikp,ss) = &
                      wtk(ikp) * MP_step(ebands(iband,ikp,ss) - Ef(ss), &
                                         iMethfessel_Paxton, kT)
+             case default
+                call cq_abort ("FindEvals: Smearing flag not recognised",&
+                               flag_smear_type)
              end select
              electrons(ss) = electrons(ss) + occu(iband,ikp,ss)
           end do band

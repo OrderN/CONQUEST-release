@@ -18,7 +18,7 @@
 !!   07:54, 2003/02/04 dave
 !!  MODIFICATION HISTORY
 !!   Added call to get_H_matrix to build new H and charge in get_E_and_F
-!!   15:02, 12/03/2003 drb 
+!!   15:02, 12/03/2003 drb
 !!    Added call to get_energy after FindMinDM
 !!   15:42, 2003/06/09 dave
 !!    Changed to use new blip minimisation scheme
@@ -52,16 +52,16 @@ contains
 
   !!****f* minimise/get_E_and_F *
   !!
-  !!  NAME 
+  !!  NAME
   !!   get_E_and_F
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Finds the ground-state energy and force
   !!  INPUTS
-  !! 
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -75,7 +75,7 @@ contains
   !!    Changed call to minimise to pick and choose between full run
   !!    (varying DM, self-consistency and blips), self-consistent run
   !!    (varying DM, self-consistency) and simple TB (varying DM only)
-  !!   14:39, 26/02/2003 drb 
+  !!   14:39, 26/02/2003 drb
   !!    Added call to get_H_matrix to build new H and charge
   !!   08:35, 2003/03/12 dave
   !!    Added call to get_energy after FindMinDM
@@ -138,7 +138,7 @@ contains
     real(double)   :: vdW_energy_correction, vdW_xc_energy
 
     call start_timer(tmr_std_eminimisation)
-    ! reset_L = .true.  ! changed by TM, Aug 2008 
+    ! reset_L = .true.  ! changed by TM, Aug 2008
     if (leqi(runtype,'static')) then
      reset_L = .false.
     else
@@ -165,7 +165,7 @@ contains
                            sc_tolerance, energy_tolerance,        &
                            total_energy, expected_reduction)
           end if
-       else 
+       else
           call cq_abort("get_E_and_F: basis set undefined: ", &
                         flag_basis_set)
        end if
@@ -201,7 +201,7 @@ contains
                      sc_tolerance, energy_tolerance,        &
                      total_energy, expected_reduction)
              end if
-          else 
+          else
              call cq_abort("get_E_and_F: basis set undefined: ", &
                   flag_basis_set)
           end if
@@ -252,14 +252,14 @@ contains
 !                    (total_energy + vdW_energy_correction) * en_conv, &
 !                    en_units(energy_units)
 !           end if
-!        end if 
-! LT_debug 2012/04/30 end 
+!        end if
+! LT_debug 2012/04/30 end
     end if
 
     call stop_print_timer(tmr_l_energy, "calculating ENERGY", &
                           IPRINT_TIME_THRES1)
     if (atomch_output) call get_atomic_charge()
-    if (find_forces) then 
+    if (find_forces) then
        ! Start timing the force calculation
       call start_timer(tmr_l_force, WITH_LEVEL)
       call force(fixed_potential, vary_mu, n_L_iterations, &

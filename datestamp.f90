@@ -1,5 +1,5 @@
 module datestamp
   implicit none
-  character(len=*), parameter :: datestr="Sun 3 Mar 2013 23:39:24 GMT"
-  character(len=*), parameter :: commentver="Version beta 0.44 (r158:159M): analytic blip update DRB 2012/04/26"
+  character(len=*), parameter :: datestr="Thu Mar 7 11:23:42 GMT 2013"
+  character(len=*), parameter :: commentver="Version beta 0.44 (r161M): analytic blip update DRB 2012/04/26"
 end module datestamp

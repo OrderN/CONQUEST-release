@@ -186,7 +186,6 @@ contains
     real(double) :: sum_elecN_spin
 
     ! read input data: parameters for run
-    find_chdens = .true.
     call read_input(start, start_L, titles, restart_file, vary_mu, mu,&
                     find_chdens, read_phi,HNL_fac)
 
@@ -478,7 +477,8 @@ contains
     use GenComms, only: gcopy, my_barrier, cq_abort, inode, ionode
     use DiagModule, only: diagon
     use energy, only: flag_check_Diag
-    use DMMin, only: maxpulayDMM, LinTol_DMM, n_dumpL
+    use DMMin, only: maxpulayDMM, maxpulaystepDMM, minpulaystepDMM, &
+                     LinTol_DMM, n_dumpL
 !TM
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, &
                                       STATE, ABINIT, flag_angular_new
@@ -487,7 +487,8 @@ contains
                        atomch_output, flag_Kerker, flag_wdmetric
     use atomic_density, only: read_atomic_density_file, &
                               atomic_density_method
-    use S_matrix_module, only: InvSTolerance
+    use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
+                               InvSDeltaOmegaTolerance
     use blip, only: blip_info, init_blip_flag, alpha, beta
     use maxima_module, only: maxnsf
     use control, only: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset
@@ -555,7 +556,6 @@ contains
     ! Set defaults
     vary_mu = .true.
     read_phi = .false.
-    find_chdens = .false.
 
     !*** WHO READS AND BROADCASTS ? ***!
 
@@ -888,6 +888,8 @@ contains
        L_tolerance = fdf_double('minE.LTolerance',1.0e-7_double)
        sc_tolerance  = fdf_double('minE.SCTolerance',1.0e-6_double)
        maxpulayDMM = fdf_integer('DM.MaxPulay',5)
+       minpulaystepDMM = fdf_double('DM.MinPulayStepSize',0.001_double)
+       maxpulaystepDMM = fdf_double('DM.MaxPulayStepSize',0.1_double)
        LinTol_DMM = fdf_double('DM.LinTol',0.1_double)
        ! Find out what type of run we're doing
        runtype = fdf_string(20,'AtomMove.TypeOfRun','static')
@@ -1012,6 +1014,9 @@ contains
           end if
        end if
        InvSTolerance = fdf_double('DM.InvSTolerance',1e-2_double)
+       InvSDeltaOmegaTolerance = &
+            fdf_double('DM.InvSDeltaOmegaTolerance',0.0001_double)
+       InvSMaxSteps = fdf_integer('DM.InvSMaxSteps',100)
        basis_string = fdf_string(10,'General.BlockAssign','Hilbert')
        if(leqi(basis_string,'Raster')) then
           flag_assign_blocks = blocks_raster
