@@ -618,6 +618,8 @@ contains
   !!    Removed redundant paramter number_of_bands
   !!   2012/03/27 L.Tong
   !!   - Removed redundant input parameter real(double) mu
+  !!   2013/03/06 17:08 dave
+  !!   - Minor bug fix (length of force array)
   !!  SOURCE
   !!
   subroutine pulay_relax(fixed_potential, vary_mu, total_energy)
@@ -689,7 +691,7 @@ contains
     forceStore = zero
     ! Do we need to add MD.MaxCGDispl ?
     done = .false.
-    length = 3 * bundle%n_prim
+    length = 3 * ni_in_cell!bundle%n_prim
     if (myid == 0 .and. iprint_MD > 0) &
          write (io_lun, 2) MDn_steps, MDcgtol
     energy0 = total_energy

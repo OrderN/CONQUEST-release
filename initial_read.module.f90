@@ -142,7 +142,9 @@ contains
                                       flag_fix_spin_population,        &
                                       ne_in_cell, ne_spin_in_cell,     &
                                       ni_in_cell, area_moveatoms,      &
-                                      io_lun, flag_only_dispersion
+                                      io_lun, flag_only_dispersion, flag_cdft_atom, flag_local_excitation
+    use cdft_data, only: cDFT_NAtoms, &
+                         cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
     use primary_module,         only: bundle, make_prim
     use dimens,                 only: r_super_x, r_super_y, r_super_z, &
@@ -175,8 +177,8 @@ contains
     character(len=80) :: atom_coord_file
     character(len=80) :: part_coord_file
 
-    integer      :: i, ierr, nnd, np, ni, ind_part
-    integer      :: ncf_tmp
+    integer      :: i, ierr, nnd, np, ni, ind_part, j
+    integer      :: ncf_tmp, stat
     real(double) :: ecore_tmp
     real(double) :: HNL_fac
 
@@ -218,6 +220,16 @@ contains
     end if
     allocate(tot_force(3,ni_in_cell))
     call reg_alloc_mem(area_moveatoms,3*ni_in_cell,type_dbl)
+    if(flag_local_excitation) then
+       allocate(flag_cdft_atom(ni_in_cell), STAT=stat)
+       flag_cdft_atom = 0
+       !if(cDFT_NumberAtomGroups==1) flag_cdft_atom = 2
+       do i=1,cDFT_NumberAtomGroups
+          do j = 1, cDFT_NAtoms(i)
+             flag_cdft_atom(cDFT_AtomList(i)%Numbers(j)) = i
+          end do
+       end do
+    end if
     call my_barrier
 
     ! Create primary set for atoms: bundle of partitions
@@ -395,6 +407,8 @@ contains
   !!     on. This allows the user to still perform non-SC single point
   !!     calculations with spin polarisation, if the forces are not
   !!     important.
+  !!   2013/02/08 15:44 dave (with UT)
+  !!   - Flags for DeltaSCF
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -445,7 +459,11 @@ contains
                              flag_dft_d2, flag_only_dispersion,        &
                              flag_perform_cDFT, flag_analytic_blip_int,&
                              flag_vdWDFT, vdW_LDA_functional,          &
-                             flag_dump_L
+                             flag_dump_L, flag_DeltaSCF, dscf_source_level,&
+                             dscf_target_level, dscf_source_spin, &
+                             dscf_target_spin, dscf_source_nfold, &
+                             dscf_target_nfold, flag_local_excitation, dscf_HOMO_thresh, &
+                             dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
                       RadiusSupport, NonLocalFactor, InvSRange,      &
@@ -945,6 +963,53 @@ contains
              end if
              call fdf_endblock
           end do
+       end if
+       ! DeltaSCF flags
+       flag_DeltaSCF = fdf_boolean('minE.DeltaSCF',.false.)
+       if(flag_DeltaSCF) then
+          dscf_source_level = fdf_integer('DeltaSCF.SourceLevel',0)
+          dscf_target_level = fdf_integer('DeltaSCF.TargetLevel',0)
+          dscf_source_spin  = fdf_integer('DeltaSCF.SourceChannel',1)
+          dscf_target_spin  = fdf_integer('DeltaSCF.TargetChannel',1)
+          dscf_source_nfold = fdf_integer('DeltaSCF.SourceNFold',1)
+          dscf_target_nfold = fdf_integer('DeltaSCF.TargetNFold',1)
+          flag_local_excitation = fdf_boolean('DeltaSCF.LocalExcitation',.false.)
+          if(flag_local_excitation) then
+             dscf_homo_limit = fdf_integer('DeltaSCF.HOMOLimit',0)
+             if(dscf_homo_limit<0) then
+                dscf_homo_limit = -dscf_homo_limit
+                write(io_lun,fmt='(2x,"Changed sign on dscf_HOMO_limit: ",i5)') dscf_homo_limit
+             end if
+             dscf_lumo_limit = fdf_integer('DeltaSCF.LUMOLimit',0)
+             if((dscf_homo_limit==0).AND.(dscf_lumo_limit==0)) then
+                flag_local_excitation = .false.
+                write(io_lun,fmt='(2x,"You must set DeltaSCF.HOMOLimit or DeltaSCF.LUMOLimit for local excitation")')
+             end if
+             dscf_HOMO_thresh = fdf_double('DeltaSCF.HOMOThresh',0.5_double)
+             dscf_LUMO_thresh = fdf_double('DeltaSCF.LUMOThresh',0.5_double)
+             cDFT_NumberAtomGroups = fdf_integer('cDFT.NumberAtomGroups',1)
+             allocate(cDFT_NAtoms(cDFT_NumberAtomGroups),cDFT_Target(cDFT_NumberAtomGroups), &
+                  cDFT_AtomList(cDFT_NumberAtomGroups),cDFT_BlockLabel(cDFT_NumberAtomGroups))
+             if(fdf_block('cDFT.AtomGroups')) then
+                do i=1,cDFT_NumberAtomGroups
+                   read(unit=input_array(block_start+i-1),fmt=*) j,cDFT_NAtoms(i),cDFT_Target(i),cDFT_BlockLabel(i)
+                end do
+                call fdf_endblock
+             else
+                call cq_abort('Must define block cDFT.AtomGroups')
+             end if
+             do i=1,cDFT_NumberAtomGroups
+                if(fdf_block(cDFT_BlockLabel(i))) then
+                   allocate(cDFT_AtomList(i)%Numbers(cDFT_NAtoms(i)))
+                   do j=1,cDFT_NAtoms(i)
+                      read(unit=input_array(block_start+j-1),fmt=*) cDFT_AtomList(i)%Numbers(j)
+                   enddo
+                else
+                   call cq_abort('cDFT block not defined: '//cDFT_BlockLabel(i))
+                end if
+                call fdf_endblock
+             end do
+          end if
        end if
        InvSTolerance = fdf_double('DM.InvSTolerance',1e-2_double)
        basis_string = fdf_string(10,'General.BlockAssign','Hilbert')

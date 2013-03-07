@@ -96,6 +96,8 @@ contains
   !!   - Added calculations for vdWDF xc-energy correction
   !!   2012/05/29 L.Tong
   !!   - Added timer for vdWDFT energy correction
+  !!   2013/01/30 10:32 dave
+  !!   - Added call for deltaSCF (with U. Terranova)
   !!  SOURCE
   !!
   subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -109,7 +111,8 @@ contains
     use global_module,     only: flag_vary_basis,                      &
                                  flag_self_consistent, flag_basis_set, &
                                  blips, PAOs, IPRINT_TIME_THRES1,      &
-                                 runtype, flag_vdWDFT, io_lun
+                                 runtype, flag_vdWDFT, io_lun,         &
+                                 flag_DeltaSCF, flag_excite
     use energy,            only: get_energy, xc_energy
     use GenComms,          only: cq_abort, inode, ionode
     use blip_minimisation, only: vary_support
@@ -133,10 +136,6 @@ contains
     logical        :: reset_L
     type(cq_timer) :: tmr_l_energy, tmr_l_force, tmr_vdW
     real(double)   :: vdW_energy_correction, vdW_xc_energy
-
-! LT_debug 2012/04/30 begin
-!    logical :: flag_vdWDFT_slow
-! LT_debug 2012/04/30 end 
 
     call start_timer(tmr_std_eminimisation)
     ! reset_L = .true.  ! changed by TM, Aug 2008 
@@ -178,6 +177,43 @@ contains
        call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
                       ionode, reset_L, .false.)
        call get_energy(total_energy)
+    end if
+    ! Once ground state is reached, if we are doing deltaSCF, perform excitation
+    ! and solve for the new ground state (on excited Born-Oppenheimer surface)
+    if(flag_DeltaSCF.and.(.not.flag_excite)) then
+       flag_excite = .true.
+       if(inode==ionode.AND.iprint>2) write(io_lun,fmt='(2x,"Starting excitation loop")')
+       if (flag_vary_basis) then ! Vary everything: DM, charge density, basis set
+          if (flag_basis_set == blips) then
+             call vary_support(n_support_iterations, fixed_potential, &
+                  vary_mu, n_L_iterations, L_tolerance,  &
+                  sc_tolerance, energy_tolerance,        &
+                  total_energy, expected_reduction)
+          else if (flag_basis_set == PAOs) then
+             if (UsePulay) then
+                call pulay_min_pao(n_support_iterations, fixed_potential,&
+                     vary_mu, n_L_iterations, L_tolerance, &
+                     sc_tolerance, energy_tolerance,       &
+                     total_energy, expected_reduction)
+             else
+                call vary_pao(n_support_iterations, fixed_potential, &
+                     vary_mu, n_L_iterations, L_tolerance,  &
+                     sc_tolerance, energy_tolerance,        &
+                     total_energy, expected_reduction)
+             end if
+          else 
+             call cq_abort("get_E_and_F: basis set undefined: ", &
+                  flag_basis_set)
+          end if
+       else if (flag_self_consistent) then ! Vary only DM and charge density
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, total_energy)
+       else ! Ab initio TB: vary only DM
+          call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
+               ionode, reset_L, .false.)
+          call get_energy(total_energy)
+       end if
     end if
     ! calculate vdW energy correction to xc energy
     if (flag_vdWDFT) then

@@ -2660,6 +2660,8 @@ second:   do
   !!     - optional integer parameter spin: 0 = total, 1 = up, 2 = dn
   !!     - if spin is not present, then assume spin non-polarised
   !!       calculation
+  !!   2013/03/06 17:10 dave
+  !!   - file name length increased
   !! SOURCE
   !!
   subroutine dump_charge2(stub, density, size, inode, spin)
@@ -2678,7 +2680,7 @@ second:   do
 
     ! Local variables
     integer :: lun, block, n_point, n_i, n
-    character(len=18) :: filename
+    character(len=20) :: filename
 
     ! Build a filename based on node number
     if (present (spin)) then
@@ -2741,6 +2743,8 @@ second:   do
   !!  MODIFICATION HISTORY
   !!   2011/11/27 L.Tong
   !!   - Added spin polarisation
+  !!   2013/03/06 17:10 dave
+  !!   - file name length increased
   !!  SOURCE
   !!
   subroutine grab_charge(density, size, inode, spin)
@@ -2758,7 +2762,7 @@ second:   do
 
     ! Local variables
     integer           :: lun, block, n_point, n_i, n
-    character(len=10) :: filename
+    character(len=20) :: filename
 
     ! Build a filename based on node number
     if (present(spin)) then
@@ -2900,6 +2904,8 @@ second:   do
   !!  MODIFICATION HISTORY
   !!   2010/11/30 15:39 dave
   !!    Fixed formatting mismatch between dump_matrix and grab_matrix
+  !!   2013/03/06 17:10 dave
+  !!   - file name length increased
   !!  SOURCE
   !!
   subroutine grab_matrix(stub,matA,inode)
@@ -2915,7 +2921,7 @@ second:   do
     ! Local variables
     integer :: lun, element, nf1, nf2,len
     real(double) :: val
-    character(len=15) :: filename
+    character(len=20) :: filename
 
     ! Build a filename based on node number
     call get_file_name(stub//'matrix',numprocs,inode,filename)
@@ -2958,6 +2964,8 @@ second:   do
   !!  CREATION DATE
   !!   16:12, 15/10/2002 drb 
   !!  MODIFICATION HISTORY
+  !!   2013/03/06 17:10 dave
+  !!   - file name length increased
   !!
   !!  SOURCE
   !!
@@ -2975,7 +2983,7 @@ second:   do
 
     ! Local variables
     integer :: lun, element, nf1, nf2
-    character(len=15) :: filename
+    character(len=20) :: filename
 
     ! Build a filename based on node number
     call get_file_name(stub//'grid',numprocs,inode,filename)
@@ -3014,6 +3022,8 @@ second:   do
   !!  CREATION DATE
   !!   16:12, 15/10/2002 drb 
   !!  MODIFICATION HISTORY
+  !!   2013/03/06 17:10 dave
+  !!   - file name length increased
   !!
   !!  SOURCE
   !!
@@ -3031,7 +3041,7 @@ second:   do
 
     ! Local variables
     integer :: lun, element, nf1, nf2
-    character(len=15) :: filename
+    character(len=20) :: filename
 
     ! Build a filename based on node number
     call get_file_name(stub//'grid',numprocs,inode,filename)
@@ -3072,6 +3082,8 @@ second:   do
   !!  MODIFICATION HISTORY
   !!   2008/04/02  M. Todorovic
   !!     Added stub name into function
+  !!   2013/03/06 17:10 dave
+  !!   - file name length increased
   !!
   !!  SOURCE
   !!
@@ -3087,7 +3099,7 @@ second:   do
 
     ! Local variables
     integer :: lun, block, n_point, n_i, n
-    character(len=16) :: filename
+    character(len=20) :: filename
 
     ! Build a filename based on node number
     call get_file_name('locps'//stub,numprocs,inode,filename)
@@ -3128,6 +3140,8 @@ second:   do
   !!  MODIFICATION HISTORY
   !!   2008/04/02  M. Todorovic
   !!     Added stub name into function
+  !!   2013/03/06 17:10 dave
+  !!   - file name length increased
   !!
   !!  SOURCE
   !!
@@ -3143,7 +3157,7 @@ second:   do
 
     ! Local variables
     integer :: lun, block, n_point, n_i, n
-    character(len=16) :: filename
+    character(len=20) :: filename
 
     ! Build a filename based on node number
     call get_file_name('locps'//stub,numprocs,inode,filename)
@@ -3182,6 +3196,8 @@ second:   do
   !!  CREATION DATE
   !!   10:58, 15/10/2002 drb 
   !!  MODIFICATION HISTORY
+  !!   2013/03/06 17:10 dave
+  !!   - file name length increased
   !!
   !!  SOURCE
   !!
@@ -3196,7 +3212,7 @@ second:   do
 
     ! Local variables
     integer :: lun, block, n_point, n_i, n
-    character(len=10) :: filename
+    character(len=15) :: filename
 
     ! Build a filename based on node number
     call get_file_name('projs',numprocs,inode,filename)
@@ -3235,7 +3251,8 @@ second:   do
   !!  CREATION DATE
   !!   10:58, 15/10/2002 drb 
   !!  MODIFICATION HISTORY
-  !!
+  !!   2013/03/06 17:10 dave
+  !!   - file name length increased
   !!  SOURCE
   !!
   subroutine grab_projs(projs,size,inode)
@@ -3249,7 +3266,7 @@ second:   do
 
     ! Local variables
     integer :: lun, block, n_point, n_i, n
-    character(len=10) :: filename
+    character(len=15) :: filename
 
     ! Build a filename based on node number
     call get_file_name('projs',numprocs,inode,filename)
@@ -3510,6 +3527,8 @@ second:   do
   !!  MODIFICATION HISTORY
   !!   21/06/2001 dave
   !!    Added ROBODoc header
+  !!   2013/01/30 10:32 dave
+  !!   - Added new authors to list
   !!  SOURCE
   !!
   subroutine banner
@@ -3533,10 +3552,13 @@ second:   do
          '        (UCL,NIMS)                 (NIMS)             ',/,12x, &
          '                                                      ',/,12x, &
          '     Antonio Torralba         Veronika Brazdova       ',/,12x, &
-         '          (UCL)                    (UCL)              ',/,12x, &
+         '        (UCL,NIMS)                 (UCL)              ',/,12x, &
          '                                                      ',/,12x, &
          '      Lianheng Tong            Michiaki Arita         ',/,12x, &
          '          (UCL)                    (NIMS)             ',/,12x, &
+         '                                                      ',/,12x, &
+         '        Alex Sena             Umberto Terranova       ',/,12x, &
+         '          (UCL)                    (UCL)              ',/,12x, &
          '                                                      ',/,12x, &
          '     Rathin Choudhury           Mike Gillan           ',/,12x, &
          '          (UCL)                    (UCL)              ',/,12x, &

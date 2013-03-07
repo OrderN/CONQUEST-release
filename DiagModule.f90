@@ -113,6 +113,9 @@
 !!     them.
 !!   - Added new subroutine endDiag to handle deallocations of module
 !!     global arrays.
+!!   2013/02/08 08:31 dave (with UT)
+!!   - Adding band_ef variable to track HOMO location (defined as 0K HOMO)
+!!     along with several other DeltaSCF changes
 !!***
 module DiagModule
 
@@ -229,6 +232,7 @@ module DiagModule
 
   ! Fermi Energy
   real(double), dimension(:), allocatable :: Efermi
+  integer, dimension(2) :: band_ef
 
   ! K-point data - here so that reading of k-points can take place in
   ! different routine to FindEvals
@@ -399,6 +403,8 @@ contains
   !!   2012/06/17 L.Tong
   !!   - Found print_info was undefined when used in condition
   !!     (print_info == 0), so initialise it to 0 at beginning
+  !!   2013/01/28 17:21 dave
+  !!    Including changes for DeltaSCF from Umberto Terranova
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -408,7 +414,11 @@ contains
     use units
     use global_module,   only: iprint_DM, ni_in_cell, numprocs,       &
                                area_DM, flag_fix_spin_population,     &
-                               nspin, spin_factor
+                               nspin, spin_factor, flag_DeltaSCF, flag_excite, &
+                               flag_local_excitation, dscf_HOMO_thresh, &
+                               dscf_LUMO_thresh, dscf_source_level, dscf_target_level, &
+                               dscf_target_spin, dscf_source_spin, flag_cdft_atom,  &
+                               dscf_HOMO_limit, dscf_LUMO_limit
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
                                deallocate_arrays, block_size_r,       &
@@ -419,10 +429,11 @@ contains
                                matrix_scale, matrix_product_trace
     use matrix_data,     only: Hrange, Srange
     use primary_module,  only: bundle
-    use species_module,  only: species, nsf_species
+    use species_module,  only: species, nsf_species, species_label
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
                                reg_alloc_mem, reg_dealloc_mem
     use energy,          only: entropy
+    use cdft_data, only: cDFT_NumberAtomGroups
 
     implicit none
 
@@ -432,14 +443,25 @@ contains
     ! Local variables
     real(double)                   :: abstol, a, time0, time1, vl, vu, &
                                       orfac, scale, entropy_total,     &
-                                      bandE_total
+                                      bandE_total, coeff, setA, setB
     real(double), dimension(nspin) :: locc, bandE, entropy_local
     real(double), external         :: dlamch
     complex(double_cplx), dimension(:,:,:), allocatable :: expH
+    complex(double_cplx) :: c_n_alpha2, c_n_setA2, c_n_setB2
     integer :: info, stat, il, iu, i, j, m, mz, prim_size, ng, &
-               print_info, kp, spin
+               print_info, kp, spin, iacc, iprim, l, band, cdft_group
     integer, dimension(50) :: desca, descz, descb
 
+    logical :: flag_keepexcite
+
+    ! Set band_ef: this works because with no spin a factor of two is normally applied
+    if(nspin>1) then
+       do spin=1,nspin
+          band_ef(spin) = int(electrons(spin)) 
+       end do
+    else
+       band_ef(:) = int(electrons(1))
+    end if
     print_info = 0
     vl = zero
     vu = zero
@@ -531,9 +553,21 @@ contains
     time1 = mtime()
     if (iprint_DM >= 2 .AND. myid == 0) &
          write (io_lun, 2) myid, time1 - time0
+    ! If we are trying to localise a level, we do NOT want to excite just yet
+    if(flag_DeltaSCF.AND.flag_excite.AND.flag_local_excitation) then
+       flag_keepexcite = .true.
+       flag_excite = .false.
+    end if
     ! Find Fermi level, given the eigenvalues at all k-points (in w)
     ! if (me < proc_rows*proc_cols) then
     call findFermi(electrons, w, matrix_size, nkp, Efermi, occ)
+
+    ! Allocate space to expand eigenvectors into (i.e. when reversing
+    ! ScaLAPACK distribution)
+    allocate(expH(matrix_size,prim_size,nspin), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort('FindEvals: failed to alloc expH', stat)
+    call reg_alloc_mem(area_DM, matrix_size * prim_size * nspin, type_cplx)
 
     !call gcopy(Efermi)
     !call gcopy(occ,matrix_size,nkp)
@@ -541,7 +575,162 @@ contains
     !   call gcopy(Efermi)
     !   call gcopy(occ,matrix_size,nkp)
     ! end if
+    if(flag_DeltaSCF.AND.flag_local_excitation.AND.flag_keepexcite) then
+       flag_excite = .true.
+       if(dscf_homo_limit/=0) then
+          ! Diagonalise
+          spin = dscf_source_spin
+          i = 1 ! Just use first k-point - local states should not show dispersion
+          ! Form the Hamiltonian for this k-point and send it to
+          ! appropriate processors
+          if (iprint_DM >= 3 .and. inode == ionode) &
+               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
+          call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
+          ! Form the overlap for this k-point and send it to appropriate
+          ! processors
+          if (iprint_DM >= 3 .and. inode == ionode) &
+               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for S'
+          call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
 
+          ! Now, if this processor is involved, do the diagonalisation
+          if (i <= N_kpoints_in_pg(pgid)) then
+             ! Call the diagonalisation routine for generalised problem
+             ! H.psi = E.S.psi
+             call pzhegvx(1, 'V', 'A', 'U', matrix_size, SCHmat(:,:,spin), &
+                  1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
+                  vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
+                  orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
+                  rwork, lrwork, iwork, liwork, ifail, iclustr,    &
+                  gap, info)
+             if (info < 0) call cq_abort ("FindEvals: pzheev failed !", info)
+             if (info >= 1 .and. inode == ionode) &
+                  write (io_lun, *) 'Problem - info returned as: ', info
+          end if ! End if (i <= N_kpoints_in_pg(pgid))
+          call my_barrier()
+          ! Reverse the CQ to SC distribution so that eigenvector
+          ! coefficients for atoms are on the appropriate processor.
+          ! Loop over the process-node groups, we build K one k-point at
+          ! a time
+          do ng = 1, proc_groups
+             if (i <= N_kpoints_in_pg(ng)) then
+                kp = pg_kpoints(ng, i)
+                call DistributeSC_to_ref(DistribH, ng, z(:,:,spin), &
+                     expH(:,:,spin))       ! Find local excitation
+             end if
+          end do
+          ! Locate state
+          dscf_source_level = band_ef(spin)
+          do band=band_ef(spin),band_ef(spin)-dscf_homo_limit,-1
+             setA = zero
+             setB = zero
+             iacc = 1
+             do iprim=1,bundle%n_prim
+                coeff = zero
+                if(flag_cdft_atom(bundle%ig_prim(iprim))==1) then ! HOMO group
+                   do l=1,nsf_species(bundle%species(iprim))
+                      coeff = coeff+expH(band,iacc+l-1,spin)*conjg(expH(band,iacc+l-1,spin))
+                   end do
+                   setA = setA+coeff
+             else
+                do l=1,nsf_species(bundle%species(iprim))
+                   coeff = coeff+expH(band,iacc+l-1,spin)*conjg(expH(band,iacc+l-1,spin))
+                end do
+                setB = setB+coeff
+                end if
+                iacc = iacc + nsf_species(bundle%species(iprim))
+             end do
+             call gsum(setA)
+             call gsum(setB)
+             if(inode==ionode.AND.iprint_DM>2) &
+                  write(io_lun,fmt='(4x,"DeltaSCF HOMO search: Band, coefficients A/B: ",i5,2f12.5)') band,setA,setB
+             if(setA>dscf_HOMO_thresh) then
+                dscf_source_level = band
+                exit
+             end if
+          end do
+       end if
+       if(dscf_source_spin/=dscf_target_spin.OR.dscf_homo_limit==0) then ! Need to re-diagonalise
+          ! Diagonalise
+          spin = dscf_target_spin
+          i = 1 ! Just use first k-point - local states should not show dispersion
+          ! Form the Hamiltonian for this k-point and send it to
+          ! appropriate processors
+          if (iprint_DM >= 3 .and. inode == ionode) &
+               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
+          call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
+          ! Form the overlap for this k-point and send it to appropriate
+          ! processors
+          if (iprint_DM >= 3 .and. inode == ionode) &
+               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for S'
+          call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
+
+          ! Now, if this processor is involved, do the diagonalisation
+          if (i <= N_kpoints_in_pg(pgid)) then
+             ! Call the diagonalisation routine for generalised problem
+             ! H.psi = E.S.psi
+             call pzhegvx(1, 'V', 'A', 'U', matrix_size, SCHmat(:,:,spin), &
+                  1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
+                  vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
+                  orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
+                  rwork, lrwork, iwork, liwork, ifail, iclustr,    &
+                  gap, info)
+             if (info < 0) call cq_abort ("FindEvals: pzheev failed !", info)
+             if (info >= 1 .and. inode == ionode) &
+                  write (io_lun, *) 'Problem - info returned as: ', info
+          end if ! End if (i <= N_kpoints_in_pg(pgid))
+          call my_barrier()
+          ! Reverse the CQ to SC distribution so that eigenvector
+          ! coefficients for atoms are on the appropriate processor.
+          ! Loop over the process-node groups, we build K one k-point at
+          ! a time
+          do ng = 1, proc_groups
+             if (i <= N_kpoints_in_pg(ng)) then
+                kp = pg_kpoints(ng, i)
+                call DistributeSC_to_ref(DistribH, ng, z(:,:,spin), &
+                     expH(:,:,spin))       ! Find local excitation
+             end if
+          end do
+       end if
+       ! Locate LUMO
+       dscf_target_level = band_ef(spin)+1
+       if(cDFT_NumberAtomGroups==1) then
+          cdft_group = 1
+       else if(cDFT_NumberAtomGroups==2) then
+          cdft_group = 2
+       else
+          call cq_abort("You must specify a group of atoms using cDFT.NumberAtomsGroup")
+       end if
+       do band=band_ef(spin)+1,band_ef(spin)+dscf_lumo_limit
+          setA = zero
+          setB = zero
+          iacc = 1
+          do iprim=1,bundle%n_prim
+             coeff = zero
+             if(flag_cdft_atom(bundle%ig_prim(iprim))==cdft_group) then ! HOMO group
+                do l=1,nsf_species(bundle%species(iprim))
+                   coeff = coeff+expH(band,iacc+l-1,spin)*conjg(expH(band,iacc+l-1,spin))
+                end do
+                setA = setA+coeff
+             else
+                do l=1,nsf_species(bundle%species(iprim))
+                   coeff = coeff+expH(band,iacc+l-1,spin)*conjg(expH(band,iacc+l-1,spin))
+                end do
+                setB = setB+coeff
+             end if
+             iacc = iacc + nsf_species(bundle%species(iprim))
+          end do
+          call gsum(setA)
+          call gsum(setB)
+          if(inode==ionode.AND.iprint_DM>2) &
+               write(io_lun,fmt='(4x,"DeltaSCF LUMO search: Band, coefficients A/B: ",i5,2f12.5)') band,setA,setB
+          if(setA>dscf_LUMO_thresh) then
+             dscf_target_level = band
+             exit
+          end if
+       end do
+       ! Find Fermi level, given the eigenvalues at all k-points (in w)
+       call findFermi(electrons, w, matrix_size, nkp, Efermi, occ)
+    end if ! DeltaSCF localised excitation
     ! Now write out eigenvalues and occupancies
     if (iprint_DM >= 3 .AND. myid == 0) then
        bandE = zero
@@ -582,13 +771,6 @@ contains
           end if
        end do ! do i = 1, nkp
     end if ! if(iprint_DM>=1.AND.myid==0)
-
-    ! Allocate space to expand eigenvectors into (i.e. when reversing
-    ! ScaLAPACK distribution)
-    allocate(expH(matrix_size,prim_size,nspin), STAT=stat)
-    if (stat /= 0) &
-         call cq_abort('FindEvals: failed to alloc expH', stat)
-    call reg_alloc_mem(area_DM, matrix_size * prim_size * nspin, type_cplx)
 
     time0 = mtime()
     do spin = 1, nspin
@@ -677,9 +859,6 @@ contains
                       entropy = entropy + spin_factor * wtk(kp) * &
                                 MP_entropy((w(j,kp,spin) - Efermi(spin)) / kT, &
                                            iMethfessel_Paxton)
-                   case default
-                      call cq_abort ("FindEvals: Smearing flag not recognised",&
-                                     flag_smear_type)
                    end select
                    ! occ is now used to construct matM12, factor by eps^n
                    ! to allow reuse of buildK
@@ -2155,14 +2334,18 @@ contains
   !! CREATION DATE
   !!   2012/03/06
   !! MODIFICATION HISTORY
+  !!  2013/02/08 08:09 dave and UT
+  !!  - Adding simple DeltaSCF excitations
   !! SOURCE
   !!
   subroutine findFermi(electrons, eig, nbands, nkp, Ef, occ)
 
     use datatypes
     use numbers
-    use global_module, only: iprint_DM, nspin, &
-                             flag_fix_spin_population
+    use global_module, only: iprint_DM, nspin, spin_factor, &
+                             flag_fix_spin_population, flag_DeltaSCF, flag_excite, &
+                             dscf_source_level, dscf_target_level, dscf_source_spin, &
+                             dscf_target_spin, dscf_source_nfold, dscf_target_nfold
     use GenComms,      only: myid
 
     implicit none
@@ -2177,19 +2360,36 @@ contains
     ! local variables
     real(double)            :: electrons_total
     real(double), parameter :: tolElec = 1.0e-6_double
+    real(double) :: locals_occ, localt_occ
+    integer :: ikp, i, ispin
 
     if (nspin == 2) then
        electrons_total = electrons(1) + electrons(2)
     else
        electrons_total = two * electrons(1)
     end if
-
     if (flag_fix_spin_population .or. nspin == 1) then
        call findFermi_fixspin(electrons, eig, nbands, nkp, Ef, occ)
     else
        call findFermi_varspin(electrons_total, eig, nbands, nkp, Ef, occ)
     end if
-
+    if(flag_DeltaSCF.AND.flag_excite) then
+       if(nspin==1) then
+          if(dscf_target_spin==2) dscf_target_spin=1
+          if(dscf_source_spin==2) dscf_source_spin=1
+       end if
+       !band_ef(:) = int(electrons_total/two)
+       localt_occ = one/real(spin_factor*dscf_target_nfold,double)
+       locals_occ = one/real(spin_factor*dscf_source_nfold,double)
+       do ikp = 1,nkp
+          do i=1,dscf_target_nfold
+             occ(dscf_target_level+i-1,ikp,dscf_target_spin) = wtk(ikp)*localt_occ
+          end do
+          do i=1,dscf_source_nfold
+             occ(dscf_source_level+i-1,ikp,dscf_source_spin) = wtk(ikp)*(one - locals_occ)
+          end do
+       end do
+    end if
     return
   end subroutine findFermi
   !!*****
@@ -3174,6 +3374,8 @@ contains
   !!      occupancies of single spin channels, no matter the calculation
   !!      is spin polarised or not. Hence occ_correction should be one
   !!      in all cases.
+  !!   2013/02/13 17:10 dave
+  !!    - Changed length of sent array to include all bands up to last occupied
   !!  SOURCE
   !!
   subroutine buildK(range, matA, occs, kps, weight, localEig)
@@ -3404,10 +3606,11 @@ contains
        end if ! End if nm_nodgroup > 0
     end do ! End do part=1,groups_on_node
     ! Work out length
+    ! NB we send all bands up to last occupied one (for deltaSCF this will include some empty)
     len = 0
     do i=1,matrix_size
        if(abs(occs(i))>RD_ERR) then
-          len = len+1
+          len = i !len+1
           if(myid==0.AND.iprint_DM>=4) write(io_lun,*) 'Occ is ',occs(i)
        end if
     end do

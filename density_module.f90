@@ -1440,6 +1440,8 @@ contains
   !!    - now the subroutine calculates both spin channels. The spin
   !!      non-polarised case is treated just as the single spin up
   !!      channel in fixed spin population case.
+  !!   2013/03/06 17:03 dave
+  !!   - spin_factor added in output
   !!  SOURCE
   !!
   subroutine build_Becke_charges(atomch, chden, size)
@@ -1448,7 +1450,7 @@ contains
     use GenComms,            only: gsum, cq_abort, inode, ionode
     use numbers,             only: zero, RD_ERR, two, one
     use global_module,       only: sf, ni_in_cell, id_glob, io_lun, &
-                                   iprint_SC, nspin
+                                   iprint_SC, nspin, spin_factor
     use primary_module,      only: domain
     use set_blipgrid_module, only: naba_atm
     use cover_module,        only: DCS_parts
@@ -1508,9 +1510,9 @@ contains
        if (inode == ionode .and. iprint_SC > 2) then
           do blk = 1, ni_in_cell
              write (io_lun, &
-                    fmt='(2x,"Atom ",i4," Becke charge (spin=",i1,")",&
-                          &f20.12)') &
-                   blk, spin, atomch(blk,spin)
+                  fmt='(2x,"Atom ",i4," Becke charge (spin=",i1,")",&
+                  &f20.12)') &
+                  blk, spin, spin_factor*atomch(blk,spin)
           end do
        end if
     end do ! spin
@@ -1591,7 +1593,8 @@ contains
   !!  CREATION DATE
   !!   2009
   !!  MODIFICATION HISTORY
-  !!
+  !!   2013/03/06 17:04 dave
+  !!   - Added check for size of s
   !!  SOURCE
   !!
   real(double) function t(mu)
@@ -1618,12 +1621,12 @@ contains
        t = -half*(reca*c1 - mua2*(three*reca*c3 -&
            mua2*(five*reca*c5 - seven*reca*c7*mua2)))
        s = half*(one -  mua*(c1 - mua2*(c3 - mua2*(c5 - c7*mua2))))
-       !if(abs(s)<RD_ERR) then
-       !   write(io_lun,fmt='(2x,"Warning: s too small in t(mu)",2f12.5)') s,mu
-       !   t = zero
-       !else
+       if(abs(s)<RD_ERR) then
+          !write(io_lun,fmt='(2x,"Warning: s too small in t(mu)",2f12.5)') s,mu
+          t = zero
+       else
           t = t/s
-       !end if
+       end if
     end if
   end function t
   !!***

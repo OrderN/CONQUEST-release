@@ -86,6 +86,8 @@
 !!     functional_lda_pw92 for PW92 LDA.
 !!   2012/06/24 L.Tong
 !!   - Added flag flag_dump_L for controlling if L is to be dumped
+!!   2013/01/30 10:30 dave
+!!   - Adding deltaSCF variables (with U. Terranova)
 !!  SOURCE
 !!
 module global_module
@@ -232,6 +234,15 @@ module global_module
   ! For vdwDFT
   logical :: flag_vdWDFT          ! selector for turning on vdW energy correction
   integer :: vdW_LDA_functional   ! selector for LDA functional
+
+  ! DeltaSCF
+  logical :: flag_DeltaSCF
+  logical :: flag_excite = .false.
+  logical :: flag_local_excitation
+  integer :: dscf_source_level, dscf_target_level, dscf_source_spin, &
+       dscf_target_spin, dscf_source_nfold, dscf_target_nfold, &
+       dscf_homo_limit, dscf_lumo_limit
+  real(double) :: dscf_HOMO_thresh, dscf_LUMO_thresh
 
   ! Flag to control if matrix L is dumped to files
   logical :: flag_dump_L

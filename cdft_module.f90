@@ -139,7 +139,8 @@ contains
   !!  CREATION DATE
   !!   2011/08
   !!  MODIFICATION HISTORY
-  !!  
+  !!   2013/03/06 17:00 dave
+  !!   - Removing matrix dumping
   !!  SOURCE
   !!  
   subroutine make_weights
@@ -152,13 +153,13 @@ contains
     implicit none
 
     call build_Becke_weight_matrix(matWc,cDFT_NumberAtomGroups)
-    call dump_matrix("matW1",matWc(1),inode)
+    !call dump_matrix("matW1",matWc(1),inode)
     if(cDFT_Type==cDFT_Fix_ChargeDifference) then
-       call dump_matrix("matW2",matWc(2),inode)
+       !call dump_matrix("matW2",matWc(2),inode)
        if(inode==ionode.AND.iprint_SC>2) write(io_lun,fmt='(6x,"Adjusting Wc for charge difference")') 
        call matrix_sum(one,matWc(1),-one,matWc(2))
        call matrix_scale(zero,matWc(2))
-       call dump_matrix("matWD",matWc(1),inode)
+       !call dump_matrix("matWD",matWc(1),inode)
     end if
     
   end subroutine make_weights
@@ -195,6 +196,8 @@ contains
   !!     Removed redundant parameter number_of_bands
   !!   2012/03/18 L.Tong
   !!   - Removed redundant input parameter real(double) mu
+  !!   2013/03/06 17:00 dave
+  !!   - Normalise step to number of constrained atoms
   !!  SOURCE
   !!  
   subroutine cdft_min(reset_L, fixed_potential, vary_mu, &
@@ -263,9 +266,9 @@ contains
     do i=1,ngroups
        if(notdone(i)) then
           if(fa(i)<zero) then
-             cDFT_Vc(i) = cDFT_Vc(i)-0.03675_double*abs(cDFT_Target(i))
+             cDFT_Vc(i) = cDFT_Vc(i)-0.03675_double*abs(cDFT_Target(i))/real(cDFT_NAtoms(i),double)
           else
-             cDFT_Vc(i) = cDFT_Vc(i)+0.03675_double*abs(cDFT_Target(i))
+             cDFT_Vc(i) = cDFT_Vc(i)+0.03675_double*abs(cDFT_Target(i))/real(cDFT_NAtoms(i),double)
           end if
           cx(i)=cDFT_Vc(i)
        end if
@@ -552,6 +555,8 @@ contains
    !!    Removed redundant dependence on matHzero from cdft_data module
    !!   2012/03/13 L.Tong
    !!    Added spin polarisation
+   !!   2013/03/06 17:01 dave
+   !!   - Added output to show charge on group
    !!  SOURCE
    !!  
    subroutine get_cdft_constraint
@@ -570,6 +575,7 @@ contains
      implicit none
      
      integer :: i, spin
+     real(double) :: group_charge
 
      cdft_energy = zero
      if (cDFT_Type == cDFT_Fix_Charge .or. &
@@ -577,9 +583,10 @@ contains
         do i = 1, cDFT_NumberAtomGroups
            cDFT_W(i) = zero
            do spin = 1, nspin
-              cDFT_W(i) = cDFT_W(i) + spin_factor * &
-                          matrix_product_trace(matK(spin), matWc(i)) - &
-                          cDFT_Target(i)
+              group_charge = spin_factor * &
+                          matrix_product_trace(matK(spin), matWc(i))
+              cDFT_W(i) = cDFT_W(i) + (group_charge - cDFT_Target(i))
+              if(inode == ionode .and. iprint_SC > 2) write(io_lun,fmt='(4x,"Group ",i3,"Charge: ",f20.12)') i,group_charge
            end do
            cdft_energy = cdft_energy + cDFT_Vc(i) * cDFT_W(i)
            if (inode == ionode .and. iprint_SC > 2) &
