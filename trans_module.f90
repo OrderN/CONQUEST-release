@@ -194,7 +194,6 @@ contains
 
     ! Local variables
     integer(integ) :: nr,nnd_rem,tag,ierr,nn,irc
-
     ! Send pairs data to halo nodes
     do nr=1,trans%n_rem_node
        nnd_rem=trans%list_rem_node(nr)

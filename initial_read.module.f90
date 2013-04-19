@@ -408,6 +408,9 @@ contains
   !!     important.
   !!   2013/02/08 15:44 dave (with UT)
   !!   - Flags for DeltaSCF
+  !!   2013/04/03 L.Tong
+  !!   - Added user input parameters for updated Hilbert curve
+  !!     partitioning method
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -523,6 +526,7 @@ contains
                          cDFT_Target, cDFT_Tolerance,                &
                          cDFT_NumberAtomGroups, cDFT_AtomList,       &
                          cDFT_BlockLabel, cDFT_Vc
+    use sfc_partitions_module, only: n_parts_user, average_atomic_diameter
 
     implicit none
 
@@ -538,9 +542,9 @@ contains
     !type(parsed_line), pointer :: p ! Pointer to a line broken into tokens by fdf
 
     integer           :: i, j, k, lun, stat
-    character(len=20) :: def
+    character(len=20) :: def, tmp2
     character(len=80) :: coordfile, timefile, timefileroot
-    character(len=10) :: basis_string, part_mode, tmp2
+    character(len=10) :: basis_string, part_mode
     character(len=6)  :: method ! To find whether we diagonalise or use O(N)
     character(len=5)  :: ps_type !To find which pseudo we use
     character(len=8)  :: tmp
@@ -1122,25 +1126,34 @@ contains
        pdb_altloc = fdf_string(1,'IO.PdbAltLoc',' ')
        pdb_output = fdf_boolean('IO.PdbOut',.false.)
        part_mode = fdf_string(10,'General.PartitionMethod','Hilbert')
-       if (leqi (part_mode(1:6),'File')) then
+       if (leqi(part_mode(1:6),'File')) then
           part_method = PYTHON
-       else if (leqi (part_mode(1:7), 'Hilbert')) then
+       else if (leqi(part_mode(1:7), 'Hilbert')) then
           part_method = HILBERT
        else
           part_method = HILBERT
           if(inode==ionode) &
                write(io_lun,*) 'WARNING: Unrecognised partitioning method'
        end if
-       tmp2 = fdf_string(10,'General.LoadBalance','atoms')
-       if (leqi (tmp2(1:10),'partitions')) then
+       ! For Hilbert curve sfc partitioning
+       tmp2 = fdf_string(20,'General.LoadBalance','atoms')
+       if (leqi(tmp2(1:10),'partitions')) then
           load_balance = 1
-       else if (leqi (tmp2(1:5),'atoms')) then
+       else if (leqi(tmp2(1:5),'atoms')) then
           load_balance = 0
+       else if (leqi(tmp2(1:16),'supportfunctions')) then
+          load_balance = 2
        else
           load_balance = 0
        end if
-       many_processors = fdf_boolean('General.ManyProcessors',.true.)
+       ! many_processors = fdf_boolean('General.ManyProcessors',.true.)
        global_maxatomspart = fdf_integer('General.MaxAtomsPartition', 34)
+       n_parts_user(1) = fdf_integer('General.NPartitionsX', 0)
+       n_parts_user(2) = fdf_integer('General.NPartitionsY', 0)
+       n_parts_user(3) = fdf_integer('General.NPartitionsZ', 0)
+       average_atomic_diameter = &
+            fdf_double('General.AverageAtomicDiameter', 5.0_double)
+       ! end sfc partitioning
        append_coords = fdf_boolean('AtomMove.AppendCoords',.true.)
        flag_dft_d2 = fdf_boolean('General.DFT_D2', .false.)                   ! for DFT-D2
        if (flag_dft_d2) r_dft_d2 = fdf_double('DFT-D2_range',23.0_double)     ! for DFT-D2

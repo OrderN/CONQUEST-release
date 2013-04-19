@@ -625,6 +625,9 @@ second:   do
   !!    Added cq_abort and gcopy
   !!   2006/10/19 16:41 dave
   !!    Added filename for partition reading
+  !!   2013/04/03 L.Tong
+  !!    Swapped the original create_sfc_partitions with the new
+  !!    sfc_partitions_to_processors from sfc_partitions_module
   !!  SOURCE
   !!
   subroutine read_mult(myid,parts,part_file)
@@ -641,6 +644,7 @@ second:   do
     use maxima_module,    only: maxpartsproc, maxatomspart,           &
                                 maxatomsproc, maxpartscell
     use construct_module, only: init_group
+    use sfc_partitions_module, only: sfc_partitions_to_processors
 
     implicit none
 
@@ -707,14 +711,15 @@ second:   do
           write(io_lun,*) '---------------------------------'
           write(io_lun,*)
        end if
-       call create_sfc_partitions(myid, parts)
+       ! call create_sfc_partitions(myid, parts)
+       call sfc_partitions_to_processors(parts)
        np_in_cell = parts%ngcellx*parts%ngcelly*parts%ngcellz
        if (iprint_init > 1.AND.myid==0) write(io_lun,*) 'Finished partitioning'
-    endif
+    end if
     ! inverse table to npnode
     do np=1,np_in_cell
        parts%inv_ngnode(parts%ngnode(np))=np
-    enddo
+    end do
     call make_cc2(parts,numprocs)
     do ni = 1, ni_in_cell
        id_global= id_glob(ni)
@@ -723,7 +728,7 @@ second:   do
        z_atom_cell(ni) = atom_coord(3,id_global)
        species(ni)     = species_glob(id_global)
        !id_glob_inv(id_global) = ni  !in read_partitions
-    enddo
+    end do
     return
   end subroutine read_mult
   !!***
@@ -2083,6 +2088,7 @@ second:   do
 
   end subroutine create_sfc_partitions
   !!***
+
 
   ! --------------------------------------------------------------------
   ! Subroutine axes_to_transpose(X, b, nn)

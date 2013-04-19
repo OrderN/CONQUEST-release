@@ -649,9 +649,9 @@ contains
     m = 1
     ng = 1  ! using the first proc_group
     do i = 1, proc_rows ! looping over proc-grid
-       do row = 1, proc_start(proc)%rows  ! looping over local SC block row
-          do j = 1, proc_cols
-             proc = procid(ng, i, j) ! get global proc id
+       do j = 1, proc_cols
+          proc = procid(ng, i, j) ! get global proc id
+          do row = 1, proc_start(proc)%rows  ! looping over local SC block row
              do col = 1, proc_start(proc)%cols  ! looping over local SC block col
                 ! For this SC block, record reference block coordinates
                 SC_to_refx(n,m) = mapx(proc,row,col)
