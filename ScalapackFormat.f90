@@ -591,6 +591,8 @@ contains
 !!    Added timer
 !!   2011/02/13 L.Tong
 !!    Added modification required for k-point parallelisation
+!!   2013/04/24 15:07 dave
+!!    Bug fix (initially due to Conn O'Rourke) to degine proc properly
 !!  SOURCE
 !!
   subroutine make_maps 
@@ -649,9 +651,10 @@ contains
     m = 1
     ng = 1  ! using the first proc_group
     do i = 1, proc_rows ! looping over proc-grid
-       do j = 1, proc_cols
-          proc = procid(ng, i, j) ! get global proc id
-          do row = 1, proc_start(proc)%rows  ! looping over local SC block row
+       proc = procid(ng, i, 1) ! get global proc id
+       do row = 1, proc_start(proc)%rows  ! looping over local SC block row *The number of rows is independent of proc_cols*
+          do j = 1, proc_cols
+             proc = procid(ng, i, j) ! get global proc id
              do col = 1, proc_start(proc)%cols  ! looping over local SC block col
                 ! For this SC block, record reference block coordinates
                 SC_to_refx(n,m) = mapx(proc,row,col)

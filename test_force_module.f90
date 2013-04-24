@@ -42,6 +42,8 @@
 !!    Added timers
 !!   2011/10/06 13:55 dave
 !!    Changes for cDFT and forces
+!!   2013/04/24 15:05 dave
+!!    Extensive tweaks to fix forces with analytic blips (throughout)
 !!  SOURCE
 !!
 module test_force_module
@@ -506,7 +508,7 @@ contains
        !band_energy     = B0
     end if
     ! *** cDFT *** 
-    if (flag_test_all_forces .or. flag_which_force == 9) then
+    if (flag_perform_cDFT.AND.(flag_test_all_forces .or. flag_which_force == 9)) then
        if (inode == ionode) write (io_lun, *) '*** cDFT ***'
        call test_cdft(fixed_potential, vary_mu, n_L_iterations, &
                       L_tolerance, tolerance, total_energy,     &
@@ -631,7 +633,7 @@ contains
     call reg_alloc_mem(area_moveatoms, 9*ni_in_cell, type_dbl)
 
     ! Warn user that we're NOT getting just HF with PAOs !
-    if (flag_basis_set==PAOs) then
+    if (flag_basis_set==PAOs.OR.(flag_basis_set==blips.AND.flag_analytic_blip_int)) then
        if (myid==0) write(io_lun,&
             fmt='(2x,"********************************************************")')
        if(myid==0) write(io_lun,&
@@ -640,8 +642,13 @@ contains
             fmt='(2x,"*    WARNING * WARNING * WARNING * WARNING * WARNING   *")')
        if(myid==0) write(io_lun,&
             fmt='(2x,"*                                                      *")')
-       if(myid==0) write(io_lun,&
-            fmt='(2x,"* With a PAO basis we calculate NL HF AND Pulay forces *")')
+       if(flag_basis_set==PAOs) then
+          if(myid==0) write(io_lun,&
+               fmt='(2x,"* With a PAO basis we calculate NL HF AND Pulay forces *")')
+       else
+          if(myid==0) write(io_lun,&
+               fmt='(2x,"* With an analytic blip basis we calculate NL HF AND Pulay forces *")')
+       end if
        if(myid==0) write(io_lun,&
             fmt='(2x,"*                                                      *")')
        if(myid==0) write(io_lun,&
@@ -650,13 +657,16 @@ contains
     ! We're coming in from initial_H: assume that initial E found
     E0 = total_energy
     ! Find force
+    p_force = zero
+    KE_force = zero
     WhichPulay = BothPulay
+    call get_S_matrix(inode, ionode)
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
     ! This routine deals with the movement of the nonlocal
     ! pseudopotential.
-    if (flag_basis_set == PAOs) then
+    if (flag_basis_set == PAOs.OR.(flag_basis_set == blips.AND.flag_analytic_blip_int)) then
        call get_HF_non_local_force(HF_NL_force, HF_and_Pulay, &
                                    ni_in_cell)
     else if (flag_basis_set==blips) then
@@ -726,10 +736,13 @@ contains
     !                   density, pseudopotential, N_GRID_MAX)
     ! call get_energy(total_energy)
     ! Find force
+    p_force = zero
+    KE_force = zero
+    WhichPulay = BothPulay
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
-    if (flag_basis_set == PAOs) then
+    if (flag_basis_set == PAOs.OR.(flag_basis_set == blips.AND.flag_analytic_blip_int)) then
        call get_HF_non_local_force(HF_NL_force, HF_and_Pulay, &
                                    ni_in_cell)
     else if (flag_basis_set == blips) then
@@ -844,7 +857,7 @@ contains
                                       flag_self_consistent,         &
                                       flag_basis_set, PAOs, blips,  &
                                       ni_in_cell,                   &
-                                      nspin, spin_factor
+                                      nspin, spin_factor, flag_analytic_blip_int
     use pseudopotential_data,   only: init_pseudo
     use pseudo_tm_module,       only: set_tm_pseudo,                &
                                       loc_pp_derivative_tm
@@ -896,7 +909,7 @@ contains
     ! We're coming in from initial_H: assume that initial E found
     
     ! Warn user that we're NOT getting just HF with PAOs !
-    if (flag_basis_set == PAOs) then
+    if (flag_basis_set == PAOs.OR.(flag_basis_set == blips.AND.flag_analytic_blip_int)) then
        if (myid == 0) write (io_lun, &
             fmt='(2x,"********************************************************")')
        if (myid == 0) write (io_lun, &
@@ -905,8 +918,13 @@ contains
             fmt='(2x,"*    WARNING * WARNING * WARNING * WARNING * WARNING   *")')
        if (myid == 0) write (io_lun, &
             fmt='(2x,"*                                                      *")')
-       if(myid == 0) write (io_lun, &
-            fmt='(2x,"* With a PAO basis we calculate NL HF AND Pulay forces *")')
+       if(flag_basis_set==PAOs)then
+          if(myid == 0) write (io_lun, &
+               fmt='(2x,"* With a PAO basis we calculate NL HF AND Pulay forces *")')
+       else if(flag_basis_set==blips) then
+          if(myid == 0) write (io_lun, &
+               fmt='(2x,"* With an analytic blip basis we calculate NL HF AND Pulay forces *")')
+       end if
        if(myid == 0) write (io_lun, &
             fmt='(2x,"*                                                      *")')
        if(myid == 0) write (io_lun, &
@@ -942,7 +960,7 @@ contains
       call loc_pp_derivative_tm(hf_force, density_out_tot, maxngrid)
     end select
     ! Find force
-    if (flag_basis_set == PAOs) then
+    if (flag_basis_set == PAOs.OR.(flag_basis_set == blips.AND.flag_analytic_blip_int)) then
        call get_HF_non_local_force(HF_NL_force, HF_and_Pulay, &
                                    ni_in_cell)
     else if (flag_basis_set == blips) then
@@ -1013,7 +1031,7 @@ contains
         call loc_pp_derivative_tm(hf_force, density_out_tot, maxngrid)
     end select
     ! Find force
-    if (flag_basis_set == PAOs) then
+    if (flag_basis_set == PAOs.OR.(flag_basis_set == blips.AND.flag_analytic_blip_int)) then
        call get_HF_non_local_force(HF_NL_force, HF_and_Pulay, &
                                    ni_in_cell)
     else if(flag_basis_set == blips) then
@@ -1137,7 +1155,7 @@ contains
                                           y_atom_cell, z_atom_cell,    &
                                           id_glob_inv, flag_basis_set, &
                                           blips, PAOs, ni_in_cell,     &
-                                          nspin
+                                          nspin, flag_analytic_blip_int
     use energy,                     only: nl_energy, get_energy
     use force_module,               only: get_HF_non_local_force,      &
                                           Pulay
@@ -1171,7 +1189,7 @@ contains
     call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
 
     ! Warn user that we're don't get NL phi Pulay with PAOs !
-    if (flag_basis_set == PAOs) then
+    if (flag_basis_set == PAOs.OR.(flag_basis_set==blips.AND.flag_analytic_blip_int)) then
        if (myid == 0) &
             write (io_lun,fmt='(2x,"*****************************&
                                 &********************************")')
@@ -1184,9 +1202,15 @@ contains
        if (myid == 0) &
             write (io_lun,fmt='(2x,"*                           &
                                 &                                *")')
-       if (myid == 0) &
-            write (io_lun,fmt='(2x,"* With a PAO basis we DO &
-                                &NOT calculate NL phi Pulay forces  *")')
+       if(flag_basis_set==PAOs) then
+          if (myid == 0) &
+               write (io_lun,fmt='(2x,"* With a PAO basis we DO &
+                                   &NOT calculate NL phi Pulay forces  *")')
+       else if(flag_basis_set==blips) then
+          if (myid == 0) &
+               write (io_lun,fmt='(2x,"* With an analytic blip basis we DO &
+                                   &NOT calculate NL phi Pulay forces  *")')
+       end if
        if (myid == 0) &
             write (io_lun,fmt='(2x,"*                           &
                                 &                                *")')
@@ -1326,7 +1350,7 @@ contains
                                           y_atom_cell, z_atom_cell, &
                                           id_glob_inv, flag_basis_set,&
                                           blips, ni_in_cell, &
-                                          nspin, flag_analytic_blip_int
+                                          nspin, flag_analytic_blip_int, WhichPulay, SPulay, BothPulay
     use energy,                     only: kinetic_energy, get_energy
     use force_module,               only: get_KE_force, pulay_force
     use GenComms,                   only: myid, inode, ionode, cq_abort
@@ -1339,6 +1363,7 @@ contains
     use density_module,             only: density
     use maxima_module,              only: maxngrid
     use memory_module,              only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use S_matrix_module, ONLY : get_S_matrix
 
     implicit none
 
@@ -1370,6 +1395,9 @@ contains
        call matrix_sum(zero, matKold(spin), one, matK(spin))
     end do
     if(flag_analytic_blip_int) then
+       WhichPulay = SPulay
+       KE_force = zero
+       call get_S_matrix(inode, ionode)
        call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
             n_L_iterations, L_tolerance, tolerance, &
             total_energy, expected_reduction, ni_in_cell)       
@@ -1417,15 +1445,18 @@ contains
        call blip_to_support_new(inode-1, supportfns)    
     end if
     ! Note that we've held K and |chi> fixed
+    if(flag_analytic_blip_int) call get_S_matrix(inode, ionode)
     ! Calculate new energy
     call get_H_matrix(.true., fixed_potential, electrons, density, &
                       maxngrid)
     call get_energy (total_energy)
     ! Find force
     if(flag_analytic_blip_int) then
+       KE_force = zero
        call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
             n_L_iterations, L_tolerance, tolerance, &
             total_energy, expected_reduction, ni_in_cell)       
+       WhichPulay = BothPulay
     else
        call get_KE_force(KE_force, ni_in_cell)
     end if
@@ -1708,6 +1739,7 @@ contains
                          expected_reduction)
 
     use datatypes
+    use numbers
     use move_atoms,      only: primary_update, cover_update,        &
                                update_atom_coord
     use group_module,    only: parts
@@ -1752,6 +1784,7 @@ contains
     ! We're coming in from initial_H: assume that initial E found
     ! Find force
     WhichPulay = SPulay
+    p_force = zero
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
@@ -1787,6 +1820,7 @@ contains
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
     ! Regenerate S
+    p_force = zero
     call get_S_matrix(inode, ionode)
     ! Now we diagonalise
    if (flag_self_consistent) then ! Vary only DM and charge density

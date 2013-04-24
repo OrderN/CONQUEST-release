@@ -616,6 +616,8 @@ contains
   !!   - removed redundant input parameter real(double) mu
   !!   2012/04/03 09:41 dave
   !!    Added code for analytic blip integrals
+  !!   2013/04/24 15:06 dave
+  !!    Updates to correct analytic blip forces
   !!  SOURCE
   !!
   subroutine pulay_force(p_force, KE_force, fixed_potential, vary_mu,  &
@@ -722,7 +724,6 @@ contains
     real(double) :: matM12_value
 
     ! the force due to the change in T matrix elements is done differently...
-    mat_tmp = allocate_temp_matrix(Srange, 0)
     if (inode == ionode .and. iprint_MD > 2) &
          write (io_lun, fmt='(4x,"Starting pulay_force()")')
     !p_force = zero
@@ -878,7 +879,15 @@ contains
        end if
        call my_barrier
        deallocate(nreqs)
-       WhichPulay = PhiPulay
+       call gsum (KE_force, 3, n_atoms)
+       if(WhichPulay==PhiPulay) p_force = zero
+       if(WhichPulay==BothPulay) WhichPulay = PhiPulay ! We've DONE S-pulay above
+       if(WhichPulay==SPulay) then
+          !  In principle, the summation below is not needed.
+          !  p_force should be calculated only for my primary set of atoms.
+          call gsum(p_force, 3, n_atoms)
+          return
+       end if
     else
        if (flag_basis_set == blips .and. flag_onsite_blip_ana) then
           iprim = 0
@@ -897,7 +906,7 @@ contains
              end do ! ni
           end do ! np
        end if
-       WhichPulay = BothPulay
+       !WhichPulay = BothPulay
     end if
     call get_support_gradient(H_on_supportfns(1), inode, ionode)
 
@@ -908,8 +917,8 @@ contains
     end if
     t0 = t1
 
-    if (WhichPulay == BothPulay .or. WhichPulay == PhiPulay .or. &
-        (WhichPulay == SPulay .and. flag_basis_set == blips)) then
+    if (WhichPulay == BothPulay .or. WhichPulay == PhiPulay) then
+       mat_tmp = allocate_temp_matrix(Srange, 0)
        tmp_fn = allocate_temp_fn_on_grid(sf)
        ! now for each direction in turn
        do direction = 1, 3
@@ -992,11 +1001,13 @@ contains
           t0 = t1
        end do ! direction
        call free_temp_fn_on_grid(tmp_fn)
+       call free_temp_matrix(mat_tmp)
     end if ! if (WhichPulay == BothPulay .OR. WhichPulay == PhiPulay .OR.&
            !  & (WhichPulay == SPulay .AND. flag_basis_set == blips)) then
 
     if (flag_basis_set == PAOs .and. &
         (WhichPulay == BothPulay .or. WhichPulay == SPulay)) then
+       mat_tmp = allocate_temp_matrix(Srange, 0)
        ! We need to do the S-pulay term
        ! now for each direction in turn
        do direction = 1, 3
@@ -1055,13 +1066,12 @@ contains
                write (io_lun,*) 'S Pulay ', direction, ' time: ', t1 - t0
           t0 = t1
        end do ! direction
+       call free_temp_matrix(mat_tmp)
     end if
 
     !  In principle, the summation below is not needed.
     !  p_force should be calculated only for my primary set of atoms.
     call gsum(p_force, 3, n_atoms)
-    if(flag_analytic_blip_int) call gsum (KE_force, 3, n_atoms)
-    call free_temp_matrix(mat_tmp)
 
     return
   end subroutine pulay_force

@@ -930,6 +930,7 @@ contains
           ! Base step on present gradient and expected dE
           step = deltaE / (real(ni_in_cell, double) * g0 + RD_ERR)
        end if
+       step = abs(step)
        ! We don't want the step to be too small or too big
        if (abs(step) < minpulaystepDMM) step = minpulaystepDMM
        if (abs(step) > maxpulaystepDMM) step = maxpulaystepDMM
