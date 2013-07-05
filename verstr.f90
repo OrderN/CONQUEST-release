@@ -1,1 +1,1 @@
-  character(len=*), parameter :: commentver="Version beta 0.45 (rRRR): New Hilbert curve and bug fixes DRB and LT  2013/04/24"
+  character(len=*), parameter :: commentver="Version beta 0.45 (rRRR): Member updates implemented for MD/cg M.Arita  2013/07/05"

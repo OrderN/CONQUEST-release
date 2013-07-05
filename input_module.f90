@@ -78,7 +78,8 @@ contains
 !!  CREATION DATE
 !!   2008/08/20
 !!  MODIFICATION HISTORY
-!!  
+!!   2013/07/01 M.Arita
+!!    - Bug fix in closing a file
 !!  SOURCE
 !!  
   subroutine load_input
@@ -119,7 +120,8 @@ contains
           end do
           if(good_line) input_lines = input_lines+1
        end do
-       close(lun)
+       !OLD close(lun)
+       call io_close(lun)       !01/07/2013 michi
     end if
     ! Broadcast size of array
     call gcopy(input_lines)

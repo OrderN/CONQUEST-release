@@ -124,6 +124,8 @@ contains
 !!    Added ROBODoc header and cq_abort
 !!   2008/05/16 ast
 !!    Added some timers
+!!   2013/07/01 M.Arita
+!!    Added allocation of ig_cover
 !!  SOURCE
 !!
   subroutine make_cs(myid, gr_rcut, set, groups, prim, mx_mcell, &
@@ -359,6 +361,8 @@ contains
        if(stat/=0) call cq_abort('Error allocating cover set members y: ',set%mx_mcover,stat)
        allocate(set%zcover(set%mx_mcover),STAT=stat)
        if(stat/=0) call cq_abort('Error allocating cover set members z: ',set%mx_mcover,stat)
+       allocate(set%ig_cover(set%mx_mcover),STAT=stat)
+       if(stat/=0) call cq_abort('Error allocating ig_cover:',set%mx_mcover,stat)
        call reg_alloc_mem(area_index, 3*set%mx_mcover,type_dbl)
        call stop_timer(tmr_std_allocation)
        do ind_cover=1,set%ng_cover

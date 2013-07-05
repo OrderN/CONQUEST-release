@@ -88,6 +88,8 @@
 !!   - Added flag flag_dump_L for controlling if L is to be dumped
 !!   2013/01/30 10:30 dave
 !!   - Adding deltaSCF variables (with U. Terranova)
+!!   2013/07/01 M.Arita
+!!   - Added flags and parameters for the efficient MD scheme
 !!  SOURCE
 !!
 module global_module
@@ -205,7 +207,7 @@ module global_module
   integer :: iprint_init, iprint_mat, iprint_ops, iprint_DM, &
              iprint_SC, iprint_minE, iprint_MD, iprint_index, &
              iprint_gen, iprint_pseudo, iprint_basis, iprint_intgn, &
-             iprint_time
+             iprint_time, iprint_MDdebug
 
   integer, parameter :: IPRINT_TIME_THRES0 = 0  ! Always print
   integer, parameter :: IPRINT_TIME_THRES1 = 2  ! Important local timers
@@ -246,6 +248,21 @@ module global_module
 
   ! Flag to control if matrix L is dumped to files
   logical :: flag_dump_L
-  
+
+  ! Hold an old relation between global & partition labels
+  integer,allocatable :: id_glob_old(:),id_glob_inv_old(:)
+
+  ! For MD
+  logical :: flag_MDold
+  logical :: flag_LmatrixReuse
+  logical :: flag_SkipEarlyDM
+  logical :: flag_MDcontinue
+  logical :: flag_MDdebug
+  integer :: McWFreq
+  integer :: MDinit_step  
+  integer,allocatable      :: glob2node(:)      ! Table showing atoms (glob) in nodes
+  real(double),parameter   :: shift_in_bohr = 1.0E-03_double
+  real(double),allocatable :: atom_coord_diff(:,:)
+
 end module global_module
 !!***

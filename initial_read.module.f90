@@ -411,6 +411,8 @@ contains
   !!   2013/04/03 L.Tong
   !!   - Added user input parameters for updated Hilbert curve
   !!     partitioning method
+  !!   2013/07/01 M.Arita
+  !!   - Added flags and parameters for the efficient MD scheme
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -449,7 +451,7 @@ contains
                              iprint_SC, iprint_minE, iprint_time,      &
                              iprint_MD, iprint_index, iprint_gen,      &
                              iprint_pseudo, iprint_basis,              &
-                             iprint_intgn, area_general,               &
+                             iprint_intgn,iprint_MDdebug,area_general, &
                              global_maxatomspart, load_balance,        &
                              many_processors, flag_assign_blocks,      &
                              io_lun, flag_pulay_simpleStep,            &
@@ -465,7 +467,9 @@ contains
                              dscf_target_level, dscf_source_spin, &
                              dscf_target_spin, dscf_source_nfold, &
                              dscf_target_nfold, flag_local_excitation, dscf_HOMO_thresh, &
-                             dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit
+                             dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit, &
+                             flag_MDcontinue,flag_MDdebug,flag_MDold, &
+                             flag_LmatrixReuse,flag_SkipEarlyDM,McWFreq 
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
                       RadiusSupport, NonLocalFactor, InvSRange,      &
@@ -623,6 +627,7 @@ contains
        iprint_SC     = fdf_integer('IO.Iprint_SC',iprint)
        iprint_minE   = fdf_integer('IO.Iprint_minE',iprint)
        iprint_MD     = fdf_integer('IO.Iprint_MD',iprint)
+       iprint_MDdebug= fdf_integer('IO.Iprint_MDdebug',1)
        iprint_index  = fdf_integer('IO.Iprint_index',iprint)
        iprint_gen    = fdf_integer('IO.Iprint_gen',iprint)
        iprint_pseudo = fdf_integer('IO.Iprint_pseudo',iprint)
@@ -1163,6 +1168,13 @@ contains
        if (flag_vdWDFT) then
           vdW_LDA_functional = fdf_integer('vdWDFT.LDAFunctionalType', 3)
        end if
+       ! Basic settings for MD
+       flag_MDold=fdf_boolean('AtomMove.OldMemberUpdates',.false.)
+       flag_MDdebug=fdf_boolean('AtomMove.Debug',.false.)
+       flag_MDcontinue=fdf_boolean('AtomMove.RestartRun',.false.)
+       flag_LmatrixReuse=fdf_boolean('AtomMove.ReuseL',.false.)
+       flag_SkipEarlyDM=fdf_boolean('AtomMove.SkipEarlyDM',.false.)
+       McWFreq=fdf_integer('AtomMove.McWeenyFreq',0)
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")
 !%%!else

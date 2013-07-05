@@ -132,6 +132,8 @@ contains
   !!    Added coordinate wrapping to pdb coordinates
   !!    Added coordinate wrapping for coordinates outside 
   !!    the [-1*cell parameter; 2*cell parameter] range
+  !!   2013/07/01 M.Arita & T.Miyazaki
+  !!    Added shift_in_bohr when wrapping atoms and allocation of atom_coord_diff
   !!  SOURCE
   !!
   subroutine read_atomic_positions(filename)
@@ -143,7 +145,8 @@ contains
                               flag_fractional_atomic_coords, rcellx, &
                               rcelly, rcellz, id_glob, iprint_init,  &
                               id_glob_inv, atom_coord, species_glob, &
-                              flag_move_atom, area_init
+                              flag_move_atom, area_init, shift_in_bohr, &
+                              runtype,atom_coord_diff,id_glob_old,id_glob_inv_old
     use species_module, only: species, species_label, n_species
     use GenComms,       only: inode, ionode, cq_abort
     use memory_module,  only: reg_alloc_mem, type_dbl, type_int
@@ -357,9 +360,10 @@ second:   do
           cell(3) = r_super_z
           do i = 1, ni_in_cell
              do j = 1, 3
+                ! Introduce shift_in_bohr
                 if ((atom_coord(j,i) < zero) .or. (atom_coord(j,i) > cell(j))) &
                    atom_coord(j,i) = &
-                      atom_coord(j,i) - floor(atom_coord(j,i)/cell(j)) * cell(j)
+                      atom_coord(j,i) - floor((atom_coord(j,i)+shift_in_bohr)/cell(j)) * cell(j)
              end do
           end do
           call io_close(lun)
@@ -410,9 +414,10 @@ second:   do
              cell(2) = r_super_y
              cell(3) = r_super_z
              do j = 1, 3
+                ! Introduce shift_in_bohr
                 if ((atom_coord(j,i) < zero) .or. (atom_coord(j,i) > cell(j))) &
                    atom_coord(j,i) = &
-                      atom_coord(j,i) - floor(atom_coord(j,i)/cell(j)) * cell(j)
+                      atom_coord(j,i) - floor((atom_coord(j,i)+shift_in_bohr)/cell(j)) * cell(j)
              end do
              flag_move_atom(1,i) = movex
              flag_move_atom(2,i) = movey
@@ -448,6 +453,17 @@ second:   do
     rcellx = r_super_x
     rcelly = r_super_y
     rcellz = r_super_z
+    if ((leqi(runtype,'md')) .OR. (leqi(runtype,'cg'))) then
+      allocate(atom_coord_diff(3,ni_in_cell), STAT=stat)
+      if (stat.NE.0) call cq_abort('Error allocating atom_coord_diff: ', 3, ni_in_cell)
+      allocate(id_glob_old(ni_in_cell),id_glob_inv_old(ni_in_cell), STAT=stat)
+      if (stat.NE.0) call cq_abort('Error allocating id_glob_old/id_glob_inv_old: ', &
+                                   ni_in_cell)
+      call gcopy(atom_coord_diff,3,ni_in_cell)
+      atom_coord_diff=zero
+      id_glob_old=zero
+      id_glob_inv_old=zero
+    endif
     return
   end subroutine read_atomic_positions
   !!***
@@ -478,6 +494,8 @@ second:   do
   !!   Added option for writing out pdb files
   !!   2008/07/18
   !!     Added timers
+  !!   2013/07/01 M.Arita & T.Miyazaki
+  !!   Changed formats from f18.10 to f25.17
   !!  SOURCE
   !!
   subroutine write_atomic_positions(filename, pdb_temp)
@@ -575,17 +593,17 @@ second:   do
              open(unit=lun,file=filename)
           end if
           ! Read supercell vector - for now it must be orthorhombic so we use x and y as dummy variables
-          write(lun,fmt='(3f18.10)') r_super_x, zero, zero
-          write(lun,fmt='(3f18.10)') zero, r_super_y, zero
-          write(lun,fmt='(3f18.10)') zero, zero, r_super_z
+          write(lun,fmt='(3f25.17)') r_super_x, zero, zero
+          write(lun,fmt='(3f25.17)') zero, r_super_y, zero
+          write(lun,fmt='(3f25.17)') zero, zero, r_super_z
           write(lun,fmt='(i8)') ni_in_cell
           do i=1,ni_in_cell
              if(flag_fractional_atomic_coords) then
-                write(lun,fmt='(3f18.10,i6,3L3)') atom_coord(1,i)/r_super_x,atom_coord(2,i)/r_super_y,&
+                write(lun,fmt='(3f25.17,i6,3L3)') atom_coord(1,i)/r_super_x,atom_coord(2,i)/r_super_y,&
                      atom_coord(3,i)/r_super_z, species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
                      flag_move_atom(3,i)
              else
-                write(lun,fmt='(3f18.10,i6,3L3)') atom_coord(1,i),atom_coord(2,i),atom_coord(3,i), &
+                write(lun,fmt='(3f25.17,i6,3L3)') atom_coord(1,i),atom_coord(2,i),atom_coord(3,i), &
                      species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
                      flag_move_atom(3,i)
              end if
@@ -636,7 +654,7 @@ second:   do
     use global_module,    only: numprocs, iprint_init, id_glob,       &
                                 ni_in_cell, x_atom_cell, y_atom_cell, &
                                 z_atom_cell, atom_coord, id_glob_inv, &
-                                species_glob
+                                species_glob, runtype, id_glob_old, id_glob_inv_old
     use group_module,     only: make_cc2, part_method, PYTHON, HILBERT
     use basic_types
     use dimens,           only: r_super_x, r_super_y, r_super_z
@@ -705,6 +723,10 @@ second:   do
        call gcopy(parts%icell_beg,parts%mx_gcell)
        call gcopy(id_glob, ni_in_cell)
        call gcopy(id_glob_inv, ni_in_cell)
+       if (leqi(runtype,'md') .OR. leqi(runtype,'cg')) then
+         call gcopy(id_glob_old,ni_in_cell)
+         call gcopy(id_glob_inv_old,ni_in_cell)
+       endif
     else if (part_method == HILBERT) then
        if (iprint_init > 1.AND.myid==0) then
           write(io_lun,*) 'Partitioning using Hilbert curves'
@@ -991,6 +1013,9 @@ second:   do
   !!    0.1 (following COR suggestion) Also changed many processor
   !!    scheme to NOT wrap atoms on partition boundary down one
   !!    partition
+  !!   2013/07/01 M.Arita & T.Miyazaki
+  !!    Introduced shift_in_bohr to avoid the case where atoms are right 
+  !!    on the edge of partitions, and copied id_glob_old & id_glob_inv_old
   !!  SOURCE
   !!  
   subroutine create_sfc_partitions(myid, parts)
@@ -1000,7 +1025,9 @@ second:   do
     use global_module,    only: numprocs, iprint_init, ni_in_cell, &
                                 id_glob, id_glob_inv, atom_coord,  &
                                 sorted_coord, global_maxatomspart, &
-                                load_balance, many_processors
+                                load_balance, many_processors,     &
+                                shift_in_bohr,runtype,id_glob_old, &
+                                id_glob_inv_old
     use maxima_module,    only: maxpartsproc, maxatomspart,        &
                                 maxatomsproc, maxpartscell
     use basic_types,      only: group_set
@@ -1542,12 +1569,18 @@ second:   do
 
              ! Assign atom to part of real space and
              ! check if it is on a boundary
-             X(0) = floor(atom_coord(1,i) / hc_edge(1))
+             !ORI X(0) = floor(atom_coord(1,i) / hc_edge(1))
              !if ((X(0) /= 0) .and. ((atom_coord(1,i) / hc_edge(1)) == real(X(0)))) X(0) = X(0) - 1
-             X(1) = floor(atom_coord(2,i) / hc_edge(2))
+             !ORI X(1) = floor(atom_coord(2,i) / hc_edge(2))
              !if ((X(1) /= 0) .and. ((atom_coord(2,i) / hc_edge(2)) == real(X(1)))) X(1) = X(1) - 1
-             X(2) = floor(atom_coord(3,i) / hc_edge(3))
+             !ORI X(2) = floor(atom_coord(3,i) / hc_edge(3))
              !if ((X(2) /= 0) .and. ((atom_coord(3,i) / hc_edge(3)) == real(X(2)))) X(2) = X(2) - 1
+
+             ! Introducing shift_in_bohr
+             X(0) = floor((atom_coord(1,i)+shift_in_bohr) / hc_edge(1))
+             X(1) = floor((atom_coord(2,i)+shift_in_bohr) / hc_edge(2))
+             X(2) = floor((atom_coord(3,i)+shift_in_bohr) / hc_edge(3))
+
              ! Get the Hilbert coordinates
              call axes_to_transpose(X, b, 3)
 
@@ -2047,6 +2080,10 @@ second:   do
 
     !end if
     !write(io_lun,*) 'Proc, ending sfc: ',myid
+    if (leqi(runtype,'md') .OR. leqi(runtype,'cg')) then
+      id_glob_old = id_glob
+      id_glob_inv_old = id_glob_inv
+    endif
     call my_barrier()
 
     !call gcopy(maxpartsproc)

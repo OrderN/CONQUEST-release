@@ -38,6 +38,8 @@
 !!    Added variables for buffer around primary and covering sets
 !!   2011/09/16 11:04 dave
 !!    Changed variable atomicrad to atomicnum
+!!   2013/07/01 M.Arita
+!!    Commented out some tricks used in MD & structure optimisation
 !!  SOURCE
 module dimens
 
@@ -133,13 +135,16 @@ contains
 !!    Zero r_t
 !!   2011/09/29 M. Arita
 !!    Set the cutoff for DFT-D2
+!!   2013/07/03 M.Arita
+!!    Introduced flag_MDold to choose the way of member updates.
+!!    Now the code does not expand cutoff ranges automatically by default.
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
 
     use datatypes
     use numbers
-    use global_module, ONLY: iprint_init, flag_basis_set, blips, runtype, flag_dft_d2
+    use global_module, ONLY: iprint_init,flag_basis_set,blips,runtype,flag_dft_d2,flag_MDold
     use matrix_data
     use GenComms, ONLY: cq_abort
     use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, ABINIT
@@ -207,21 +212,23 @@ contains
        !r_s = r_c
        !r_h = r_c 
     endif
-    if(.NOT.leqi(runtype,'static')) then
-       if(flag_buffer_old) then
-          r_s = 1.1_double * r_s
-          r_c = 1.1_double * r_c
-          r_h = 1.1_double * r_h
-          r_core = 1.1_double * r_core
-          if (flag_dft_d2) r_dft_d2 = 1.1_double * r_dft_d2 ! for DFT-D2
-       else
-          r_s = AtomMove_buffer +  r_s
-          r_c = AtomMove_buffer +  r_c
-          r_h = AtomMove_buffer +  r_h
-          r_core = AtomMove_buffer +  r_core
-          if (flag_dft_d2) r_dft_d2 = AtomMove_buffer + r_dft_d2 ! for DFT-D2
-       end if
-     endif
+    ! NOTE: The following trick is not used in the default setting any longer.
+    ! ORI if(.NOT.leqi(runtype,'static')) then
+    if(.NOT.leqi(runtype,'static') .AND. flag_MDold) then
+      if(flag_buffer_old) then
+         r_s = 1.1_double * r_s
+         r_c = 1.1_double * r_c
+         r_h = 1.1_double * r_h
+         r_core = 1.1_double * r_core
+         if (flag_dft_d2) r_dft_d2 = 1.1_double * r_dft_d2 ! for DFT-D2
+      else
+         r_s = AtomMove_buffer +  r_s
+         r_c = AtomMove_buffer +  r_c
+         r_h = AtomMove_buffer +  r_h
+         r_core = AtomMove_buffer +  r_core
+         if (flag_dft_d2) r_dft_d2 = AtomMove_buffer + r_dft_d2 ! for DFT-D2
+      end if
+    endif
 
     ! Set other ranges
     r_core_squared = r_core * r_core

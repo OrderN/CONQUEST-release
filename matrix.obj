@@ -21,4 +21,6 @@ MATRIX_OBJS  =  atoms.module.o \
                 cover_module.o \
                 maxima_module.o \
                 generic_blas.o \
-                matrix_data_module.o
+                matrix_data_module.o \
+                atom_dispenser_module.o \
+                UpdateMember_module.o

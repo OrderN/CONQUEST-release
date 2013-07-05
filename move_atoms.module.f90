@@ -42,6 +42,8 @@
 !!    Changed for output to file not stdout
 !!   2008/05/25
 !!    Added timers
+!!   2013/07/01 M.Arita
+!!    Added sbrt: wrap_xyz_atom_cell
 !!  SOURCE
 !!
 module move_atoms
@@ -164,13 +166,17 @@ contains
   !!    Added timers
   !!   2011/12/09 L.Tong
   !!    Removed redundant parameter number_of_bands
+  !!   2013/07/01 M.Arita
+  !!    The new process of wrapping atoms was introduced along with member updates
   !!  TODO
   !!   Proper buffer zones for matrix mults so initialisation doesn't have
   !!   to be done at every step 03/07/2001 dave
   !!  SOURCE
   !!
   subroutine velocityVerlet(fixed_potential, prim, step, T, KE, &
-                            quenchflag, velocity, force)
+                            quenchflag, velocity, force, iter)
+  !ORI subroutine velocityVerlet(fixed_potential, prim, step, T, KE, &
+  !ORI                           quenchflag, velocity, force)
 
     use datatypes
     use numbers
@@ -178,7 +184,8 @@ contains
     use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell, &
                               z_atom_cell, ni_in_cell, id_glob,    &
                               flag_reset_dens_on_atom_move,        &
-                              flag_move_atom
+                              flag_move_atom,atom_coord_diff,      &
+                              flag_MDold
     use species_module, only: species, mass
     use GenComms,       only: myid
     use density_module, only: set_density
@@ -192,6 +199,7 @@ contains
     type(primary_set)   :: prim
     real(double), dimension(3,ni_in_cell) :: velocity
     real(double), dimension(3,ni_in_cell) :: force
+    integer             :: iter
 
     ! Local variables
     logical      :: flagx, flagy, flagz
@@ -249,33 +257,40 @@ contains
        ! X
        if (flagx) then
         acc = force(1,gatom) / massa
-        x_atom_cell(atom) = x_atom_cell(atom) +       &
-                            step * velocity(1,atom) + &
-                            half * step * step * acc
-        velocity(1,atom) = velocity(1,atom) + half * step * acc
+        atom_coord_diff(1,gatom)=step*velocity(1,atom)+half*step*step*acc
+        x_atom_cell(atom) = x_atom_cell(atom) + atom_coord_diff(1,gatom)
+        velocity(1,atom)  = velocity(1,atom) + half * step * acc
        end if
        ! Y
        if (flagy) then
         acc = force(2,gatom) / massa
-        y_atom_cell(atom) = y_atom_cell(atom) +       &
-                            step * velocity(2,atom) + &
-                            half * step * step * acc
+        atom_coord_diff(2,gatom)=step*velocity(2,atom)+half*step*step*acc
+        y_atom_cell(atom) = y_atom_cell(atom) + atom_coord_diff(2,gatom)
         velocity(2,atom) = velocity(2,atom) + half * step * acc
        end if
        ! Z
        if (flagz) then
         acc = force(3,gatom) / massa
-        z_atom_cell(atom) = z_atom_cell(atom) +       &
-                            step * velocity(3,atom) + &
-                            half * step * step * acc
+        atom_coord_diff(3,gatom)=step*velocity(3,atom)+half*step*step*acc
+        z_atom_cell(atom) = z_atom_cell(atom) + atom_coord_diff(3,gatom)
         velocity(3,atom) = velocity(3,atom) + half * step * acc
        end if
     end do
-!Update atom_coord : TM 27Aug2003
-    call update_atom_coord
-!Update atom_coord : TM 27Aug2003
+
+    ! NOTE: By default, updateIndices3 is called for member updates.
+    !       You can switch to the conventional (old) way of member updates
+    !       but not recommended. See dimens.module as well. [2013/07/03 michi]
+    if (.NOT. flag_MDold) then
+      ! IMPORTANT: You MUST wrap atoms BEFORE updating members if they get out of the cell.
+      !            Otherwise, you will get an error message at BG-transformation.
+      call wrap_xyz_atom_cell
+      call update_atom_coord !Update atom_coord : TM 27Aug2003
+      call updateIndices3(fixed_potential,velocity,step,iter)
+    else
+      call updateIndices(.true., fixed_potential)
+    endif
+
 ! 25/Jun/2010 TM : calling set_density for SCF-MD
-    call updateIndices(.true., fixed_potential)
     if (flag_reset_dens_on_atom_move) call set_density ()
 ! 25/Jun/2010 TM : calling set_density for SCF-MD
     call stop_timer(tmr_std_moveatoms)
@@ -993,6 +1008,130 @@ contains
   end subroutine updateIndices2
   !!*****
 
+  !!****f* move_atoms/updateIndices3 *
+  !! PURPOSE
+  !!  Updates the member information in each partition
+  !! INPUTS
+  !!  fixed_potential,velocity,step,iteration
+  !!   - iteration is optional
+  !!   - iteration will be deleted in the next update
+  !! AUTHOR
+  !!   Michiaki Arita
+  !! CREATION DATE 
+  !!   2013/07/02
+  !! MODIFICATION HISTORY
+  !!
+  !! SOURCE
+  !!
+  subroutine updateIndices3(fixed_potential,velocity,step,iteration)
+
+    ! Module usage
+    use datatypes
+    use global_module, ONLY: flag_basis_set,flag_Becke_weights,flag_dft_d2,blips, &
+                             ni_in_cell,x_atom_cell,y_atom_cell,z_atom_cell,      &
+                             IPRINT_TIME_THRES2
+    use GenComms, ONLY: inode,ionode,my_barrier,myid
+    use group_module, ONLY: parts
+    use primary_module, ONLY: bundle
+    use cover_module, ONLY: BCS_parts,DCS_parts,ewald_CS
+    use mult_module,            ONLY: fmmi,immi
+    use set_blipgrid_module, ONLY: set_blipgrid
+    use set_bucket_module, ONLY: set_bucket
+    use dimens, ONLY: RadiusSupport
+    use pseudopotential_common, ONLY: core_radius
+    use functions_on_grid, ONLy: associate_fn_on_grid
+    use ewald_module, ONLY: flag_old_ewald
+    use density_module, ONLY: build_Becke_weights
+    use UpdateMember_module, ONLY: updateMembers
+    use atoms, ONLY: distribute_atoms,deallocate_distribute_atom
+    use timer_module
+    use numbers
+    use DiagModule, ONLY: diagon
+    use io_module, ONLY: append_coords,write_atomic_positions,pdb_template
+
+    ! DB
+    use global_module, ONLY: io_lun
+    ! Check if updating PS and CS are correct
+    use global_module,       ONLY: id_glob
+    use UpdateMember_module, ONLY: deallocate_PSmember,allocate_PSmember, &
+                                   deallocate_CSmember
+    use group_module,   ONLY: blocks
+    use primary_module, ONLY: make_prim,domain
+    use cover_module,   ONLY: make_cs,make_iprim,send_ncover
+    use ewald_module,   ONLY: ewald_real_cutoff
+    use species_module, ONLY: species
+    use matrix_data,    ONLY: rcut,max_range
+    use dimens,         ONLY: r_core_squared,r_h
+    ! Check if updating PS and CS are correct
+
+    implicit none
+
+     ! Passed variables
+    integer, intent(in), optional :: iteration
+    real(double) :: velocity(3,ni_in_cell)
+    real(double) :: step
+    logical :: fixed_potential
+
+    ! Local variables
+    logical :: append_coords_bkup
+    type(cq_timer) :: tmr_l_tmp1,tmr_l_tmp2
+
+
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
+
+    ! Update members - be sure atoms are all wrapped back in the sim-cell.
+    if (present(iteration)) then
+      call updateMembers(fixed_potential,velocity,iteration)    ! for MD
+    else
+      ! This is NOT velocity, rather 'direction'
+      call updateMembers(fixed_potential,velocity)              ! for CG
+    endif
+
+    ! Bug fixed by Zakkie: now Lmatrix2.*, make_prt.dat & coord_next.dat are
+    ! consistent
+    append_coords_bkup = append_coords
+    append_coords = .false.
+    call write_atomic_positions('coord_next.dat',trim(pdb_template))
+    append_coords = append_coords_bkup
+
+!!  if (inode.EQ.ionode) call dump_idglob_old                   !Need to call when reusing L-matrix
+
+    ! Used in BG-transformation.
+    call deallocate_distribute_atom
+    call distribute_atoms(inode,ionode)
+    call my_barrier()
+    if (inode.EQ.ionode) write (io_lun,*) "Complete distribute_atoms()"
+
+    call start_timer(tmr_l_tmp2,WITH_LEVEL)
+    ! Deallocate all matrix storage
+    ! finish blip-grid indexing
+    call finish_blipgrid
+    ! finish matrix multiplication indexing
+    call fmmi(bundle)
+    ! Reallocate and find new indices
+    call immi(parts,bundle,BCS_parts,myid+1)
+    ! Reconstruct L-matrix data
+!!  if (.NOT. diagon) call Lmatrix_CommRebuild(step)            !Need to call when reusing L-matrix
+    call my_barrier()
+
+    ! Only when using blips
+    !if (flag_basis_set.EQ.blips) then
+    !
+    !endif
+    ! Reallocate for blip grid
+    call set_blipgrid(inode-1,RadiusSupport,core_radius)
+    call set_bucket(inode-1)
+    call associate_fn_on_grid
+    call stop_print_timer(tmr_l_tmp2,"matrix reindexing",IPRINT_TIME_THRES2)
+    if (flag_Becke_weights) call build_Becke_weights
+    ! Rebuild S, n(r) and hamiltonian based on new positions
+    call update_H(fixed_potential)
+
+    call stop_print_timer(tmr_l_tmp1,"indices update",IPRINT_TIME_THRES2)
+
+    return
+  end subroutine updateIndices3
+  !!*****
 
   ! --------------------------------------------------------------------
   ! Subroutine update_H
@@ -1710,6 +1849,55 @@ contains
 
     return
   end subroutine init_velocity
+
+  ! --------------------------------------------------------------------
+  ! Subroutine wrap_xyz_atom_cell
+  ! --------------------------------------------------------------------
+  
+  !!****f* move_atoms/wrap_xyz_atom_cell *
+  !!  
+  !!  NAME 
+  !!   wrap_xyz_atom_cell
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Wrapping atomic positions ("x,y,z_atom_cell": bohr units, partition labelling)
+  !!   into the unit cell. This is necessary for 'partition' technology in Conquest.
+  !!   In order to have a common distribution of atoms into partitions, we need
+  !!   to use the same shift_in_bohr as used in atom2part or allatom2part.
+  !!   This is important for the atoms on the bondary of partitions.
+  !!  INPUTS
+  !!  
+  !!  USES
+  !!   global_module
+  !!  AUTHOR
+  !!   M.Arita & T.Miyazaki
+  !!  CREATION DATE
+  !!   2013/07/01
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine wrap_xyz_atom_cell
+    
+    use datatypes
+    use global_module, only: x_atom_cell, y_atom_cell, z_atom_cell,   &
+                             shift_in_bohr, ni_in_cell, io_lun, iprint_MD
+    use dimens,        only: r_super_x, r_super_y, r_super_z
+
+    implicit none
+    integer        :: atom
+    real(double)   :: eps
+
+    eps=shift_in_bohr
+    do atom = 1, ni_in_cell
+      x_atom_cell(atom) = x_atom_cell(atom) - floor((x_atom_cell(atom)+eps)/r_super_x)*r_super_x
+      y_atom_cell(atom) = y_atom_cell(atom) - floor((y_atom_cell(atom)+eps)/r_super_y)*r_super_y
+      z_atom_cell(atom) = z_atom_cell(atom) - floor((z_atom_cell(atom)+eps)/r_super_z)*r_super_z
+    enddo
+      
+    return
+  end subroutine wrap_xyz_atom_cell
 
 
   ! =====================================================================

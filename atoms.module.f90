@@ -200,4 +200,55 @@ contains
     return
   end subroutine allocate_distribute_atom
 !!***
+
+! ------------------------------------------------------------------------------
+! Subroutine deallocate_distribute_atom
+! ------------------------------------------------------------------------------
+
+!!****f* atoms/deallocate_distribute_atom *
+!!
+!!  NAME 
+!!   deallocate_distribute_atom
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   Deallocates dynamic variables associated with atom distribution across 
+!!   processors (index_my_atoms and atoms_on_node). This process is necssary
+!!   in updating the member information in each partition.
+!!  INPUTS
+!! 
+!!  USES
+!!
+!!  AUTHOR
+!!   Michiaki Arita
+!!  CREATION DATE
+!!   01/07/2013
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine deallocate_distribute_atom
+
+    ! Module usage
+    use global_module, ONLY: numprocs,ni_in_cell
+    use primary_module, ONLY: bundle
+    use GenComms, ONLY: cq_abort
+
+    ! local variables
+    integer :: stat_alloc
+
+    deallocate(node_doing_atom,atom_number_on_node,n_atoms_on_node, STAT=stat_alloc)
+    if (stat_alloc.NE.0) &
+      call cq_abort('Error deallocating index_my_atoms and so on: ', ni_in_cell)
+    deallocate(atoms_on_node, STAT=stat_alloc)
+    if (stat_alloc.NE.0) &
+      call cq_abort('Error deallocating atoms_on_node: ', bundle%mx_iprim, numprocs)
+    deallocate(index_my_atoms, STAT=stat_alloc)
+    if (stat_alloc.NE.0) &
+      call cq_abort('Error deallocating index_my_atoms: ', bundle%mx_iprim)
+
+    return
+  end subroutine deallocate_distribute_atom
+!!***
+
 end module atoms

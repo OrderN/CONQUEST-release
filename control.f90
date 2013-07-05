@@ -438,7 +438,7 @@ contains
        if (myid == 0) &
             write (io_lun, fmt='(4x,"MD run, iteration ",i5)') iter
        call velocityVerlet(fixed_potential, bundle, MDtimestep, temp, &
-                           KE, flag_quench_MD, velocity, tot_force)
+                           KE, flag_quench_MD, velocity, tot_force, iter)
        if (myid == 0) &
             write (io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
                   KE / (three / two * ni_in_cell) / fac_Kelvin2Hartree

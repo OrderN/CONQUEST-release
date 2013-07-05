@@ -101,6 +101,9 @@ module basic_types
 !!     group type
 !!  AUTHOR
 !!   D.R.Bowler
+!!  MODIFICATION HISTORY
+!!   2013/07/01 M.Arita
+!!    Added ig_cover along with MD implementation
 !!  SOURCE
 !!
   type cover_set
@@ -131,6 +134,7 @@ module basic_types
     integer, pointer :: ncover_rem(:)   ! Values of ncover from ALL remote nodes
     integer, pointer :: spec_cover(:)   ! List of species of atoms in CS
     integer, pointer :: iprim_group(:)  ! Gives GCS label for a primary member
+    integer, pointer :: ig_cover(:)     ! CS --> global label
   end type cover_set
 !!***
 end module basic_types
