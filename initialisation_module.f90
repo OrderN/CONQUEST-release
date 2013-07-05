@@ -866,6 +866,8 @@ contains
   !!   2012/03/27 L.Tong
   !!   - Changed spin implementation
   !!   - Removed redundant input parameter real(double) mu
+  !!   2013/07/05 dave
+  !!    Changed L matrix reload to use up/dn names for spin
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -935,8 +937,12 @@ contains
        end if
     end if
     if (restart_L) then
-       call grab_matrix("L",matL(1),inode)
-       if (nspin == 2) call grab_matrix ("L_dn", matL(2), inode)
+       if(nspin==1) then
+          call grab_matrix("L",matL(1),inode)
+       else if (nspin == 2) then
+          call grab_matrix("L_up",matL(1),inode)
+          call grab_matrix ("L_dn", matL(2), inode)
+       end if
     end if
 
     ! (3) get K matrix (and also get phi matrix)

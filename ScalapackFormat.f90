@@ -854,6 +854,8 @@ contains
 !!    Added salutation at start of subroutine
 !!   2008/05/19 ast
 !!    Added timer
+!!   2013/07/05 dave
+!!    Moved check on cb overrunning so that erroneous error goes away
 !!  SOURCE
 !!
   subroutine find_ref_row_atoms 
@@ -879,6 +881,9 @@ contains
           part = SC_row_block_atom(blockrow,SCblockx)%part
           seq  = SC_row_block_atom(blockrow,SCblockx)%atom
           supfn  = SC_row_block_atom(blockrow,SCblockx)%support_fn
+          if(cb>blocks_c+1.OR.cb==blocks_c+1.AND.blockcol>1) then
+             call cq_abort("ScalapackFormat: Too many column blocks")
+          end if
           ref_row_block_atom(blockrow,rb)%part = part
           ref_row_block_atom(blockrow,rb)%atom = seq
           ref_row_block_atom(blockrow,rb)%support_fn = supfn
@@ -892,9 +897,6 @@ contains
           if(blockcol>block_size_c) then ! End of block - increment
              cb = cb + 1
              blockcol = 1
-             if(cb>blocks_c+1.OR.cb==blocks_c+1.AND.blockcol>1) then
-                call cq_abort("ScalapackFormat: Too many column blocks")
-             end if
           end if
        end do
     end do

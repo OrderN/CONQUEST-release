@@ -505,6 +505,8 @@ contains
 !!    Added timers
 !!   2008/09/01 08:21 dave
 !!    Added io_ routines from input_module
+!!   2013/07/05 dave
+!!    Added reading and copying of z, charge state of ion
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -689,9 +691,11 @@ contains
     call gcopy(lmax   )
     call gcopy(n_pjnl )
     call gcopy(zval)
+    call gcopy(z)
     if(inode/=ionode) then
        call alloc_pseudo_info(ps_info, n_pjnl)
        ps_info%zval = zval
+       ps_info%z = z
        pao_info%greatest_angmom = lmax
        allocate(pao_info%angmom(0:lmax),STAT=alls)
     end if
