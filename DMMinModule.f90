@@ -793,10 +793,6 @@ contains
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
 
-    allocate(density_tot(maxngrid), STAT=stat)
-    if (stat /= 0) call cq_abort("Error allocating density_tot: ", maxngrid)
-    call reg_alloc_mem(area_DM, maxngrid, type_dbl)
-
     iter_stuck = 0
 
     if (ndone > n_L_iterations) &
@@ -1210,17 +1206,21 @@ contains
     !Prints out charge density
     if (flag_mix_L_SC_min) then
        if (nspin == 1) then
-          density_tot = spin_factor * sum(density, 2)
+          allocate(density_tot(maxngrid), STAT=stat)
+          if (stat /= 0) call cq_abort("Error allocating density_tot: ", maxngrid)
+          call reg_alloc_mem(area_DM, maxngrid, type_dbl)
+          density_tot = zero
+          density_tot = spin_factor * density(:,1)
           call dump_charge(density_tot, n_my_grid_points, inode)
+          deallocate(density_tot, STAT=stat)
+          if (stat /= 0) call cq_abort("Error deallocating density_tot")
+          call reg_dealloc_mem(area_DM, maxngrid, type_dbl)
+
        else
           call dump_charge(density(:,1), n_my_grid_points, inode, spin=1)
           call dump_charge(density(:,2), n_my_grid_points, inode, spin=2)
        end if
     endif  ! (flag_mix_L_SC_min) then
-
-    deallocate(density_tot, STAT=stat)
-    if (stat /= 0) call cq_abort("Error deallocating density_tot")
-    call reg_dealloc_mem(area_DM, maxngrid, type_dbl)
 
     call dealloc_lateDM
 

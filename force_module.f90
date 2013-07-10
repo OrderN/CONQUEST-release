@@ -158,6 +158,8 @@ contains
   !!   - removed redundant input parameter real(double) mu
   !!   2012/04/03 09:39 dave
   !!    Added KE force to pulay force call (for analytic blips)
+  !!   2013/07/10 11:29 dave
+  !!    Bug fix for sum over two components of rho even without spin
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -247,8 +249,12 @@ contains
     end if
     call stop_timer (tmr_std_allocation)
     ! get total density
-    density_total = spin_factor * sum(density, 2)
-
+    density_total = zero
+    if(nspin==1) then
+       density_total(:) = spin_factor * density(:,1)
+    else
+       density_total = spin_factor * sum(density, nspin)
+    end if
     ! The 'pulay force' is the force due to the change in energy caused
     ! by the change in the basis functions as the atoms move.
     p_force = zero
@@ -291,7 +297,11 @@ contains
                                    supportfns, H_on_supportfns(1), &
                                    inode, ionode, maxngrid)
        ! get the total density_out
-       density_out_tot = spin_factor * sum(density_out, 2)
+       if(nspin==1) then
+          density_out_tot(:) = spin_factor * density_out(:,1)
+       else
+          density_out_tot = spin_factor * sum(density_out, nspin)
+       end if
        call stop_print_timer(tmr_l_tmp1, "get_electronic_density", &
                              IPRINT_TIME_THRES2)
        call start_timer(tmr_l_tmp1, WITH_LEVEL)
@@ -2131,6 +2141,8 @@ contains
   !!    - Added warning for non-implemented PBE non-SC forces (for all
   !!      PBE variants.) The code still runs, but will set non SC
   !!      correction forces to 0
+  !!   2013/07/10 11:35 dave
+  !!    Bug fix for sum over two components of rho even without spin
   !!  SOURCE
   !!
   subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
@@ -2272,8 +2284,13 @@ contains
 
     h_potential = zero
     potential = zero
-    density_total = spin_factor * sum(density, 2)
-    density_out_total = spin_factor * sum(density_out, 2)
+    if(nspin==1) then
+       density_total(:) = spin_factor * density(:,1)
+       density_out_total(:) = spin_factor * density_out(:,1)
+    else
+       density_total = spin_factor * sum(density, nspin)
+       density_out_total = spin_factor * sum(density_out, nspin)
+    end if
 
     call hartree(density_total, h_potential, size, h_energy)
     do spin = 1, nspin
@@ -2284,14 +2301,16 @@ contains
     ! for P.C.C.
     if (flag_pcc_global) then
        allocate(wk_grid_total(size), wk_grid(size,nspin), STAT=stat)
+       wk_grid_total = zero
+       wk_grid = zero
        if (stat /= 0) &
             call cq_abort('Error allocating wk_grids in &
                            &get_nonSC_correction ', stat)
        call reg_alloc_mem(area_moveatoms, (nspin + 1) * size, type_dbl)
        do spin = 1, nspin
           wk_grid(:,spin) = density(:,spin) + half * density_pcc(:)
+          wk_grid_total(:) = wk_grid_total(:) + spin_factor * wk_grid(:,spin)
        end do
-       wk_grid_total = spin_factor * sum(wk_grid, 2)
        ! only for GGA
        if ((flag_functional_type == functional_gga_pbe96) .or. &
            (flag_functional_type == functional_gga_pbe96_rev98) .or. &
@@ -2302,11 +2321,13 @@ contains
                call cq_abort ('Error allocating &
                                &density_out_GGAs in get_nonSC_force ', stat)
           call reg_alloc_mem(area_moveatoms, (nspin + 1) * size, type_dbl)
+          density_out_GGA_total = zero
+          density_out_GGA = zero
           do spin = 1, nspin
              density_out_GGA(:,spin) = density_out(:,spin) + &
                                        half * density_pcc(:)
+             density_out_GGA_total(:) = density_out_GGA_total(:) + spin_factor * density_out_GGA(:,spin)
           end do
-          density_out_GGA_total = spin_factor * sum(density_out_GGA, 2)
           ! copy hartree potential
           allocate(h_potential_in(size), STAT=stat)
           if (stat /= 0) &
@@ -2884,11 +2905,12 @@ contains
     dcellz_grid = dcellz_block / nz_in_block
 
     call start_timer (tmr_l_tmp2)
-
+    density_wk = zero
+    density_wk_tot = zero
     do spin = 1, nspin
        density_wk(:,spin) = density(:,spin) + half * density_pcc(:)
+       density_wk_tot(:) = density_wk_tot(:) + spin_factor * density_wk(:,spin)
     end do
-    density_wk_tot = spin_factor * sum(density_wk, 2)
 
     select case (flag_functional_type)
     case (functional_lda_pz81)

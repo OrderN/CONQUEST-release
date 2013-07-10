@@ -838,6 +838,8 @@ contains
   !!   2012/03/27 L.Tong
   !!   - Changed spin implementation
   !!   - removed redundant input parameter real(double) mu
+  !!   2013/07/10 11:42 dave
+  !!    Bug fix for sum over two components of rho even without spin
   !!  SOURCE
   !!
   subroutine test_HF(fixed_potential, vary_mu, n_L_iterations, &
@@ -949,8 +951,11 @@ contains
           density_out(:,spin) = density(:,spin)  
        end do
     end if
-    density_out_tot = spin_factor * sum(density_out, 2)
-
+    if(nspin==1) then
+       density_out_tot = spin_factor * density_out(:,1)
+    else
+       density_out_tot = spin_factor * sum(density_out,nspin)
+    end if
     select case (pseudo_type)
      case (OLDPS)
       call get_HF_force(hf_force, density_out_tot, ni_in_cell, maxngrid)

@@ -2483,6 +2483,8 @@ contains
   !! CREATION DATE
   !!   2012/04/08
   !! MODIFICATION HISTORY
+  !!   2013/07/10 11:43 dave
+  !!    Bug fix for sum over two components of rho even without spin
   !! SOURCE
   !!
   subroutine vdW_theta(rho_r, grho_r, theta_r)
@@ -2512,8 +2514,11 @@ contains
     theta_r = zero
 
     rho_tot_r = rho_r(1) + rho_r(nspin)
-    grho_tot_r = spin_factor * sum(grho_r, 2)
-
+    if(nspin==1) then
+       grho_tot_r(:) = spin_factor * grho_r(:,1)
+    else
+       grho_tot_r = spin_factor * sum(grho_r, nspin)
+    end if
     call qofrho(rho_r, grho_r, q_r)
     call pofq(q_r, p, dpdq)
     theta_r(1:nq) = rho_tot_r * p(1:nq)
@@ -3036,6 +3041,7 @@ contains
   !! CREATION DATE
   !!   2012/04/20
   !! MODIFICATION HISTORY
+  !!   Bug fix for sum over two components of rho even without spin
   !! SOURCE
   !!
   subroutine vdWXC_energy_slow(rho, E_vdWXC)
@@ -3081,14 +3087,14 @@ contains
 ! LT_debug 2012/04/30 begin
 !    real(double) :: E_gga_x, E_lda_c
 ! LT_debug 2012/04/30 end
-
+    rho_tot = zero
     ! get gradient of densities
     do spin = 1, nspin
        call build_gradient(rho(:,spin), grho(:,:,spin), maxngrid)
+       ! get the total density
+       rho_tot(:) = rho_tot(:) + spin_factor * rho(:,spin)
     end do
 
-    ! get the total density
-    rho_tot = spin_factor * sum(rho, 2)
 
     ! get q0
     do r1 = 1, n_my_grid_points

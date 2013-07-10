@@ -144,6 +144,8 @@ contains
   !!  - Moved all the XC functionals and related subroutines to XC_module
   !!  2012/04/26 16:13 dave
   !!   Changes for analytic evaluation of KE
+  !!  2013/07/10 11:23 dave
+  !!   Bug fix for sum over two components of rho even without spin (and moved rho_total alloc/dealloc)
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -210,10 +212,6 @@ contains
     ! timer
     call start_timer(tmr_std_hmatrix)            ! Total
     call start_timer(tmr_l_hmatrix, WITH_LEVEL)  ! Just this call
-
-    allocate(rho_total(size), STAT=stat)
-    if (stat /= 0) call cq_abort("Error allocating rho_total: ", size)
-    call reg_alloc_mem(area_ops, size, type_dbl)
 
     stat = 0
     if (inode == ionode .and. iprint_ops > 3) &
@@ -325,9 +323,16 @@ contains
 
     ! dump charges if required
     if (iprint_SC > 2) then
-       rho_total = spin_factor * sum(rho, 2)
-       call dump_charge(rho_total, size, inode, spin=0)
-       if (nspin == 2) then
+       if(nspin==1) then
+          allocate(rho_total(size), STAT=stat)
+          if (stat /= 0) call cq_abort("Error allocating rho_total: ", size)
+          call reg_alloc_mem(area_ops, size, type_dbl)
+          rho_total(:) = spin_factor * rho(:,1)
+          call dump_charge(rho_total, size, inode, spin=0)
+          deallocate(rho_total, STAT=stat)
+          if (stat /= 0) call cq_abort("Error deallocating rho_total")
+          call reg_dealloc_mem(area_ops, size, type_dbl)
+       else if (nspin == 2) then
           call dump_charge(rho(:,1), size, inode, spin=1)
           call dump_charge(rho(:,2), size, inode, spin=2)
        end if
@@ -340,9 +345,6 @@ contains
        end do
     endif
 
-    deallocate(rho_total, STAT=stat)
-    if (stat /= 0) call cq_abort("Error deallocating rho_total")
-    call reg_dealloc_mem(area_ops, size, type_dbl)
 
     ! timer
     call stop_print_timer(tmr_l_hmatrix, "get_H_matrix", IPRINT_TIME_THRES1)
@@ -418,6 +420,8 @@ contains
   !!   2012/05/29 L.Tong
   !!   - Cleaned up xc-functonal selector. Now spin and non-spin
   !!     calculations share the same calls more or less.
+  !!   2013/07/10 11:23 dave
+  !!   Bug fix for sum over two components of rho even without spin
   !!  SOURCE
   !!
   subroutine get_h_on_support(output_level, fixed_potential, &
@@ -519,9 +523,9 @@ contains
        potential(:,spin) = zero
        xc_potential(:,spin) = zero
     end do
-    rho_tot = spin_factor * sum(rho, 2)
-
+    rho_tot = zero
     do spin = 1, nspin
+       rho_tot(:) = rho_tot(:) + spin_factor*rho(:,spin)
        electrons(spin) = grid_point_volume * rsum(n_my_grid_points, rho(:,spin), 1)
        call gsum(electrons(spin))
     end do

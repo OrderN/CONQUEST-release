@@ -1131,6 +1131,8 @@ contains
   !!   - Added spin polarisation
   !!   - Added kerker and wave-dependent metric
   !!   - Removed redundant input parameter real(double) mu
+  !!   2013/07/10 11:26 dave
+  !!   Bug fix for sum over two components of rho even without spin (and moved rho_total alloc/dealloc)
   !!  SOURCE
   !!
   subroutine LinearMixSC(done, ndone, self_tol, reset_L,           &
@@ -1172,10 +1174,10 @@ contains
     real(double), dimension(:,:), allocatable :: rho1, resid
     real(double), dimension(:,:), allocatable :: resid_cov
 
-    allocate(rho_tot(maxngrid), rho1(maxngrid,nspin), &
+    allocate(rho1(maxngrid,nspin), &
              resid(maxngrid,nspin), STAT=stat)
     if (stat /= 0) call cq_abort("LinearMixSC: Error alloc mem: ", maxngrid, nspin)
-    call reg_alloc_mem(area_SC, (2*nspin+1)*maxngrid, type_dbl)
+    call reg_alloc_mem(area_SC, 2*nspin*maxngrid, type_dbl)
 
     if (flag_wdmetric) then
        allocate(resid_cov(maxngrid,nspin), STAT=stat)
@@ -1273,8 +1275,15 @@ contains
        ! print out charge
        if (iprint_SC > 1) then
           if (nspin == 1) then
-             rho_tot = spin_factor * sum(rho, 2)
+             allocate(rho_tot(maxngrid), STAT=stat)
+             if (stat /= 0) call cq_abort("LinearMixSC: Error alloc mem: ", maxngrid)
+             call reg_alloc_mem(area_SC, maxngrid, type_dbl)
+             rho_tot = zero
+             rho_tot(:) = spin_factor * rho(:,1)
              call dump_charge(rho_tot, n_my_grid_points, inode, spin=0)
+             deallocate(rho_tot, STAT=stat)
+             if (stat /= 0) call cq_abort("LinearMixSC: Error dealloc mem")
+             call reg_dealloc_mem(area_SC, maxngrid, type_dbl)
           else
              call dump_charge(rho(:,1), n_my_grid_points, inode, spin=1)
              call dump_charge(rho(:,2), n_my_grid_points, inode, spin=2)
@@ -1291,9 +1300,9 @@ contains
        call reg_dealloc_mem(area_SC, nspin * maxngrid, type_dbl)
     end if
 
-    deallocate(rho_tot, rho1, resid, STAT=stat)
+    deallocate(rho1, resid, STAT=stat)
     if (stat /= 0) call cq_abort("LinearMixSC: Error dealloc mem")
-    call reg_dealloc_mem(area_SC, (2*nspin+1)*maxngrid, type_dbl)
+    call reg_dealloc_mem(area_SC, 2*nspin*maxngrid, type_dbl)
 
     !    ndone = n_iters
   end subroutine LinearMixSC
