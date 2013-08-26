@@ -224,6 +224,8 @@ contains
   !!    Removed redundant parameter number_of_bands
   !!   2012/03/27 L.Tong
   !!   - Changed spin implementation
+  !!   2013/08/20 M.Arita
+  !!    Add call for make_glob2node (necessary for matrix reconstruction)
   !!  SOURCE
   !!
   subroutine set_up(find_chdens)
@@ -236,7 +238,8 @@ contains
                                       flag_Becke_weights,              &
                                       flag_pcc_global, flag_dft_d2,    &
                                       iprint_gen, flag_perform_cDFT,   &
-                                      nspin
+                                      nspin, runtype, flag_MDold,      &
+                                      glob2node
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl, type_int
     use group_module,           only: parts
@@ -257,7 +260,7 @@ contains
                                       r_dft_d2
     use fft_module,             only: set_fft_map, fft3
     use GenComms,               only: cq_abort, my_barrier, inode,     &
-                                      ionode
+                                      ionode, gcopy
     use pseudopotential_data,   only: init_pseudo
     ! Troullier-Martin pseudos    15/11/2002 TM
     use pseudo_tm_module,       only: init_pseudo_tm
@@ -290,6 +293,8 @@ contains
     use numbers,                only: zero
     use cDFT_module,            only: init_cdft
     use DFT_D2,                 only: read_para_D2
+    use input_module,           ONLY: leqi
+    use UpdateInfo_module,      ONLY: make_glob2node
 
     implicit none
 
@@ -485,6 +490,15 @@ contains
          call reg_alloc_mem(area_init, maxngrid, type_dbl)
       end if
    end if
+
+   ! Get the table showing the relation between atoms & processors
+   !if (.NOT. leqi(runtype,'static') .AND. .NOT. flag_MDold) then
+   if (.NOT. flag_MDold) then
+     allocate (glob2node(ni_in_cell), STAT=stat)
+     if (stat.NE.0) call cq_abort('Error allocating glob2node: ', ni_in_cell)
+     if (inode.EQ.ionode) call make_glob2node
+     call gcopy(glob2node,ni_in_cell)
+   endif
 
    if (.not. find_chdens) call set_density
    if (flag_perform_cDFT) then
@@ -860,7 +874,7 @@ contains
   !!    Removed some dependence on number_of_bands as no longer required
   !!    by some updated subroutines
   !!   29/09/2011 16:26 M. Arita
-  !!    Calculate te dispersion in the DFT-D2 level
+  !!    Calculate the dispersion in the DFT-D2 level
   !!   2011/12/09 L.Tong
   !!    Removed redundant parameter number_of_bands
   !!   2012/03/27 L.Tong
@@ -868,6 +882,9 @@ contains
   !!   - Removed redundant input parameter real(double) mu
   !!   2013/07/05 dave
   !!    Changed L matrix reload to use up/dn names for spin
+  !!   2013/08/20 M.Arita
+  !!    Added calls for reading global data and reconstructing L-matrix
+  !!    and T-matrix
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -876,16 +893,21 @@ contains
     use datatypes
     use numbers
     use logicals
-    use mult_module,       only: LNV_matrix_multiply, matL, matphi
+    use mult_module,       only: LNV_matrix_multiply, matL, matphi, &
+                                 matT, T_trans, L_trans
     use SelfCon,           only: new_SC_potl
     use global_module,     only: iprint_init, flag_self_consistent, &
                                  flag_basis_set, blips, PAOs,       &
                                  flag_vary_basis, restart_L,        &
                                  restart_rho, flag_test_forces,     &
-                                 flag_dft_d2, nspin, spin_factor
+                                 flag_dft_d2, nspin, spin_factor,   &
+                                 flag_MDold,flag_MDcontinue,        &
+                                 restart_T,glob2node,glob2node_old, &
+                                 n_proc_old,MDinit_step,ni_in_cell
     use ewald_module,      only: ewald, mikes_ewald, flag_old_ewald
     use S_matrix_module,   only: get_S_matrix
-    use GenComms,          only: my_barrier, end_comms, inode, ionode
+    use GenComms,          only: my_barrier,end_comms,inode,ionode, &
+                                 cq_abort,gcopy
     use DMMin,             only: correct_electron_number, FindMinDM
     use H_matrix_module,   only: get_H_matrix
     use energy,            only: get_energy
@@ -899,6 +921,9 @@ contains
     use minimise,          only: SC_tolerance, L_tolerance,         &
                                  n_L_iterations, expected_reduction
     use DFT_D2,            only: dispersion_D2
+    use matrix_data,       ONLY: Lrange,Trange
+    use io_module2,        ONLY: grab_InfoGlobal,grab_matrix2,InfoL,InfoT
+    use UpdateInfo_module, ONLY: make_glob2node,Matrix_CommRebuild
 
     implicit none
 
@@ -909,14 +934,36 @@ contains
 
     ! Local
     logical      :: reset_L, charge, store
-    integer      :: force_to_test, stat
+    integer      :: force_to_test, stat, nfile, symm
     real(double) :: electrons_tot, bandE
     real(double), dimension(nspin) :: electrons, energy_tmp
     ! Dummy vars for MMM
 
+    ! (0) Get the global information
+    !      --> Fetch and distribute date on old job
+    if (.NOT. flag_MDold .AND. (flag_MDcontinue .OR. &
+                                restart_L       .OR. &
+                                restart_T)             ) then
+      if (inode.EQ.ionode) write (io_lun,*) "Get global info to load matrices"
+      if (inode.EQ.ionode) call make_glob2node
+      call gcopy(glob2node, ni_in_cell)
+      allocate(glob2node_old(ni_in_cell), STAT=stat)
+      if (stat.NE.0) call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
+      if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old,MDinit_step)
+      call gcopy(n_proc_old)
+      call gcopy(glob2node_old, ni_in_cell)
+      call gcopy(MDinit_step)
+      call my_barrier()
+    endif
+
     total_energy = zero
     ! If we're vary PAOs, allocate memory
     ! (1) Get S matrix
+    if (.NOT. flag_MDold .AND. restart_T) then
+      call grab_matrix2('T',inode,nfile,InfoT)
+      call my_barrier()
+      call Matrix_CommRebuild(InfoT,Trange,T_trans,matT,nfile,symm)
+    endif
     call get_S_matrix(inode, ionode)
     if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Got S'
     call my_barrier
@@ -937,12 +984,19 @@ contains
        end if
     end if
     if (restart_L) then
-       if(nspin==1) then
+      if (.NOT. flag_MDold) then
+        ! NOTE: Not yet applicable to spin systems, though it's rather simple
+        call grab_matrix2('L',inode,nfile,InfoL)
+        call my_barrier()
+        call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+      else
+        if(nspin==1) then
           call grab_matrix("L",matL(1),inode)
-       else if (nspin == 2) then
+        else if (nspin == 2) then
           call grab_matrix("L_up",matL(1),inode)
           call grab_matrix ("L_dn", matL(2), inode)
-       end if
+        end if
+      endif
     end if
 
     ! (3) get K matrix (and also get phi matrix)

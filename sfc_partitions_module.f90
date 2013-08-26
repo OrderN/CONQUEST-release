@@ -434,6 +434,9 @@ contains
   ! CREATION DATE
   !   2013/04/02
   ! MODIFICATION HISTORY
+  !   2013/08/25 M.Arita
+  !   - Introduced shift_in_bohr to make partitioning consistent to
+  !     shift in matrix reconstruction
   ! SOURCE
   !
   subroutine setup_partitions()
@@ -445,7 +448,7 @@ contains
     use datatypes
     use numbers
     use global_module, only: atom_coord, ni_in_cell, species_glob, &
-                             area_init
+                             area_init, shift_in_bohr
     use species_module, only: nsf_species
     use Hilbert3D, only: Hilbert3D_Initialise, Hilbert3D_IntTOCoords, &
                          Hilbert3D_CoordsToInt
@@ -497,7 +500,8 @@ contains
        ! in, and do the counting
        loop_atoms: do ia = 1, ni_in_cell
           ! get the partition x,y,z indices for the partition containing the atoms
-          ipart_xyz(1:3) = floor(atom_coord(1:3,ia) / r_part(1:3) + RD_ERR)
+          !ORI ipart_xyz(1:3) = floor(atom_coord(1:3,ia) / r_part(1:3) + RD_ERR)
+          ipart_xyz(1:3) = floor((atom_coord(1:3,ia)+shift_in_bohr) / r_part(1:3) )
           ! get the corresponding Hilbert curve index corresponding to
           ! the partition
           call Hilbert3D_CoordsToInt(ipart_xyz, ihilbert)
@@ -753,13 +757,16 @@ contains
   ! CREATION DATE
   !   2013/04/01
   ! MODIFICATION HISTORY
+  !   2013/08/25 M.Arita
+  !   - Introduced shift_in_bohr and made the code consistent to shift in
+  !     matrix reconstruction
   ! SOURCE
   !
   subroutine get_cell_info()
     use datatypes
     use numbers
     use dimens, only: r_super_x, r_super_y, r_super_z
-    use global_module, only: atom_coord, ni_in_cell, area_init
+    use global_module, only: atom_coord, ni_in_cell, area_init, shift_in_bohr
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_int
     use GenComms, only: cq_abort
     implicit none
@@ -813,7 +820,8 @@ contains
     n_atoms_block = 0.0_double
     ! calculate the number of atoms in each block
     do iatom = 1, ni_in_cell
-       i_block_xyz(1:3) = floor(atom_coord(1:3,iatom) / r_block(1:3) + RD_ERR)
+       !ORI i_block_xyz(1:3) = floor(atom_coord(1:3,iatom) / r_block(1:3) + RD_ERR)
+       i_block_xyz(1:3) = floor((atom_coord(1:3,iatom)+shift_in_bohr) / r_block(1:3) ) 
        icc = i_block_xyz(1) * n_blocks(2) * n_blocks(3) + &
              i_block_xyz(2) * n_blocks(3) + &
              i_block_xyz(3) + 1

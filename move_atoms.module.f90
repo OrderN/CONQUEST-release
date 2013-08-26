@@ -44,6 +44,8 @@
 !!    Added timers
 !!   2013/07/01 M.Arita
 !!    Added sbrt: wrap_xyz_atom_cell
+!!   2013/08/21 M.Arita
+!!    Added sbrt: safemin2 & update_start_xyz
 !!  SOURCE
 !!
 module move_atoms
@@ -168,6 +170,9 @@ contains
   !!    Removed redundant parameter number_of_bands
   !!   2013/07/01 M.Arita
   !!    The new process of wrapping atoms was introduced along with member updates
+  !!   2013/08/21 M.Arita
+  !!    - Added iter as a dummy variable
+  !!    - Bug fix on call for update_atom_coord
   !!  TODO
   !!   Proper buffer zones for matrix mults so initialisation doesn't have
   !!   to be done at every step 03/07/2001 dave
@@ -284,9 +289,10 @@ contains
       ! IMPORTANT: You MUST wrap atoms BEFORE updating members if they get out of the cell.
       !            Otherwise, you will get an error message at BG-transformation.
       call wrap_xyz_atom_cell
-      call update_atom_coord !Update atom_coord : TM 27Aug2003
-      call updateIndices3(fixed_potential,velocity,step,iter)
+      call update_atom_coord
+      call updateIndices3(fixed_potential,velocity)
     else
+      call update_atom_coord
       call updateIndices(.true., fixed_potential)
     endif
 
@@ -695,6 +701,568 @@ contains
   end subroutine safemin
   !!***
 
+  !!****f* move_atoms/safemin2 *
+  !! PURPOSE
+  !!  Carry out line minimisation in conjunction with
+  !!  reusing L-matrix
+  !! INPUTS
+  !!
+  !! AUTHOR
+  !!   Michiaki Arita
+  !! CREATION DATE 
+  !!   2013/08/21
+  !! MODIFICATION HISTORY
+  !!
+  !! SOURCE
+  !!
+  subroutine safemin2(start_x, start_y, start_z, direction, energy_in, &
+                      energy_out, fixed_potential, vary_mu, total_energy)
+
+    ! Module usage
+    use datatypes
+    use numbers
+    use units
+    use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell,    &
+                              z_atom_cell, flag_vary_basis,           &
+                              atom_coord, ni_in_cell, rcellx, rcelly, &
+                              rcellz, flag_self_consistent,           &
+                              flag_reset_dens_on_atom_move,           &
+                              IPRINT_TIME_THRES1, flag_pcc_global,    &
+                              atom_coord_diff,id_glob,flag_MDold,     &
+                              n_proc_old, glob2node_old
+    use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
+                              n_L_iterations
+    use GenComms,       only: my_barrier, myid, inode, ionode,        &
+                              cq_abort, gcopy
+    use SelfCon,        only: new_SC_potl
+    use GenBlas,        only: dot
+    use force_module,   only: tot_force
+    use io_module,      only: write_atomic_positions, pdb_template
+    use density_module, only: density, set_density,                   &
+                              flag_no_atomic_densities, set_density_pcc
+    use maxima_module,  only: maxngrid
+    use timer_module
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use io_module2, ONLY: grab_InfoGlobal,dump_InfoGlobal
+
+    implicit none
+
+    ! Passed variables
+    real(double) :: energy_in, energy_out
+    real(double), dimension(3,ni_in_cell) :: direction
+    real(double), dimension(ni_in_cell)   :: start_x, start_y, start_z
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical           :: vary_mu, fixed_potential
+    real(double)      :: total_energy
+    character(len=40) :: output_file
+
+
+    ! Local variables
+    integer        :: i, j, iter, lun, gatom, stat
+    logical        :: reset_L = .false.
+    logical        :: done
+    type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
+    real(double)   :: k0, k1, k2, k3, lambda, k3old
+    real(double)   :: e0, e1, e2, e3, tmp, bottom
+    real(double), save :: kmin = zero, dE = zero
+    real(double), dimension(:), allocatable :: store_density
+    real(double) :: k3_old, k3_local, kmin_old
+
+    call start_timer(tmr_std_moveatoms)
+    !allocate(store_density(maxngrid))
+    e0 = total_energy
+    if (inode == ionode .and. iprint_MD > 0) &
+         write (io_lun, &
+                fmt='(4x,"In safemin2, initial energy is ",f20.10," ",a2)') &
+               en_conv * energy_in, en_units(energy_units)
+    if (inode == ionode) &
+         write (io_lun, fmt='(/4x,"Seeking bracketing triplet of points"/)')
+    ! Unnecessary and over cautious !
+    k0 = zero
+    !do i=1,ni_in_cell
+    !   x_atom_cell(i) = start_x(i) + k0*direction(1,i)
+    !   y_atom_cell(i) = start_y(i) + k0*direction(2,i)
+    !   z_atom_cell(i) = start_z(i) + k0*direction(3,i)
+    !   !write(io_lun,*) 'Position:
+    !   ',i,x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
+    !end do
+    !!  Update atom_coord : TM 27Aug2003
+    !call update_atom_coord
+    !!  Update atom_coord : TM 27Aug2003
+    !
+    !!   Get energy and forces
+    !call my_barrier
+    !call updateIndices(.false.,fixed_potential, number_of_bands, &
+    !     potential, density, pseudopotential, &
+    !     N_GRID_MAX)
+    !call get_E_and_F(output_file, n_save_freq, n_run,
+    !n_minimisation_iterations, n_support_iterations,&
+    !     fixed_potential, vary_mu, n_CG_L_iterations, number_of_bands,
+    !     L_tolerance, sc_tolerance, energy_tolerance, mu, &
+    !     e0, potential, pseudopotential, density, expected_reduction,
+    !     N_GRID_MAX)
+    iter = 1
+    k1 = zero
+    e1 = energy_in
+    k2 = k0
+    e2 = e0
+    e3 = e2
+    !k3 = zero
+    !k3old = k3
+    if (kmin < 1.0e-3) then
+       kmin = 0.7_double
+    else
+       kmin = 0.75_double * kmin
+    end if
+    k3 = kmin
+    k3_local = k3
+    lambda = two
+    done = .false.
+    ! Loop to find a bracketing triplet
+    do while (.not. done) !e3<=e2)
+       call start_timer(tmr_l_iter, WITH_LEVEL)
+       !if (k2==k0) then
+       !   !k3 = 0.001_double
+       !   !if(abs(kmin) < very_small) then
+       !   if(abs(dE) < very_small) then
+       !      if(k3<very_small) then ! First guess
+       !         k3 = 0.70_double!k3old/lambda
+       !      end if
+       !   else
+       !      tmp = dot(3*ni_in_cell,direction,1,tot_force,1)
+       !      k3 = abs(0.5_double*dE/tmp)!kmin/lambda
+       !      if(abs(k3)>abs(kmin)) k3 = kmin
+       !   endif
+       !   !   k3 = 0.1_double
+       !   !else
+       !   !   k3 = kmin/lambda
+       !   !endif
+       !elseif (k2==0.01_double) then
+       !   k3 = 0.01_double
+       !else
+       !   k3 = lambda*k2
+       !endif
+!       k3 = 0.032_double
+       ! These lines calculate the difference between atomic densities and total
+       ! density
+       !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
+       !%%!   ! Subtract off atomic densities
+       !%%!   store_density = density
+       !%%!   call set_density()
+       !%%!   density = store_density - density
+       !%%!end if
+       ! Move atoms
+       call start_timer(tmr_l_tmp1, WITH_LEVEL)
+       do i = 1, ni_in_cell
+          x_atom_cell(i) = start_x(i) + k3 * direction(1,i)
+          y_atom_cell(i) = start_y(i) + k3 * direction(2,i)
+          z_atom_cell(i) = start_z(i) + k3 * direction(3,i)
+          if (inode == ionode .and. iprint_MD > 2) &
+               write (io_lun,*) 'Position: ', i, x_atom_cell(i), &
+                                y_atom_cell(i), z_atom_cell(i)
+       end do
+       if (.NOT. flag_MDold) call wrap_xyz_atom_cell
+       ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
+       if (inode.EQ.ionode) write (io_lun,*) "k3, k3_local:", k3,k3_local
+       do i = 1, ni_in_cell
+         gatom = id_glob(i)
+         atom_coord_diff(1, gatom) = k3_local * direction(1,i)
+         atom_coord_diff(2, gatom) = k3_local * direction(2,i)
+         atom_coord_diff(3, gatom) = k3_local * direction(3,i)
+
+         ! ---- DEBUG: ---- !!
+         !if (inode.EQ.ionode) then
+         !  write (io_lun,*) ""
+         !  write (io_lun,*) "i & gatom:", i, gatom
+         !  write (io_lun,'(a,1x,3f15.10)') "Initial:",start_x(i),start_y(i),start_z(i)
+         !  write (io_lun,'(a,1x,3f15.10)') "New    :",x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
+         !  write (io_lun,'(a,1x,3f15.10)') "diff   :",atom_coord_diff(1:3,gatom)
+         !  write (io_lun,*) ""
+         !endif
+         !! ---- DEBUG: ---- !!
+
+       enddo                                  
+       !Update atom_coord : TM 27Aug2003
+       call update_atom_coord
+       !Update atom_coord : TM 27Aug2003
+       ! Update indices and find energy and forces
+       !call updateIndices(.false.,fixed_potential, number_of_bands)
+!ORI    call updateIndices(.true., fixed_potential)
+       if (.NOT. flag_MDold) then
+         if (ionode.EQ.inode) write (io_lun,*) "CG: 1st stage, callupdateIndices3"
+         !ORI call updateIndices3(fixed_potential)
+         !call updateIndices3(fixed_potential,direction,step)
+         if (.NOT. allocated(glob2node_old)) then
+           allocate (glob2node_old(ni_in_cell), STAT=stat)
+           if (stat.NE.0) call cq_abort('Error deallocating glob2node_old: ', &
+                                        ni_in_cell)
+         endif
+         if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
+         call gcopy(n_proc_old)
+         call gcopy(glob2node_old,ni_in_cell)
+         call updateIndices3(fixed_potential,direction)
+         if (ionode.EQ.inode) write (io_lun,*) "get through CG: 1st stage"
+       else
+         write (io_lun,*) "CG: 1st stage with old CQ."
+         call updateIndices(.true., fixed_potential)
+       endif
+       !Update start_x,start_y & start_z
+       call update_start_xyz(start_x,start_y,start_z)
+       ! These lines add back on the atomic densities for NEW atomic positions
+       !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
+          ! Add on atomic densities
+          !store_density = density
+          !call set_density()
+          !density = store_density + density
+       !end if
+       ! Write out atomic positions
+       if (iprint_MD > 2) then
+          call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+                                      trim(pdb_template))
+       end if
+       if (flag_reset_dens_on_atom_move) call set_density()
+       if (flag_pcc_global) call set_density_pcc()
+       call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
+       ! We've just moved the atoms - we need a self-consistent ground
+       ! state before we can minimise blips !
+       if (flag_vary_basis) then
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+                           fixed_potential, vary_mu, n_L_iterations, &
+                           L_tolerance, e3)
+       end if
+       call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
+                        .false.)
+       if (inode.EQ.ionode) call dump_InfoGlobal()
+       if (inode == ionode .and. iprint_MD > 1) &
+            write (io_lun, &
+                   fmt='(4x,"In safemin2, iter ",i3," step and energy &
+                         &are ",2f20.10" ",a2)') &
+                  iter, k3, en_conv * e3, en_units(energy_units)
+       k3_old = k3
+       if (e3 < e2) then ! We're still going down hill
+          k1 = k2
+          e1 = e2
+          k2 = k3
+          e2 = e3
+          ! New DRB 2007/04/18
+          k3 = lambda * k3
+          iter = iter + 1
+          !db if (inode.EQ.ionode) write (io_lun,*) "INCREASE k3!"
+       else if (k2 == zero) then ! We've gone too far
+          !k3old = k3
+          !if(abs(dE)<very_small) then
+          !   k3 = k3old/2.0_double
+          !   dE = 1.0_double
+          !else
+          !   dE = 0.5_double*dE
+          !end if
+          !e3 = e2
+          k3 = k3/lambda
+          !db if (inode.EQ.ionode) write (io_lun,*) "DECREASE k3!"
+       else
+          done = .true.
+          !db if (inode.EQ.ionode) write (io_lun,*) "TRUE!"
+       endif
+       k3_local = k3 - k3_old
+       if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3,k3_old,k3_local:", &
+                                  k3,k3_old,k3_local
+       if (k3 <= very_small) call cq_abort("Step too small: safemin2 failed!")
+       call stop_print_timer(tmr_l_iter, "a safemin2 iteration", &
+                             IPRINT_TIME_THRES1)
+       if (inode.EQ.ionode) write (io_lun,*) "Cycle the loop! -- CG"
+       if (inode.EQ.ionode) write (io_lun,*) "iter & k3:", iter, k3
+    end do ! while (.not. done)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)  ! Final interpolation and updates
+    if (inode == ionode) write(io_lun, fmt='(/4x,"Interpolating minimum"/)')
+    ! Interpolate to find minimum.
+    if (inode == ionode .and. iprint_MD > 1) &
+            write (io_lun, fmt='(4x,"In safemin2, brackets are: ",6f18.10)') &
+                  k1, e1, k2, e2, k3, e3
+    bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
+    if (abs(bottom) > very_small) then
+       kmin = 0.5_double * (((k1*k1 - k3*k3)*(e1 - e2) -    &
+                             (k1*k1 - k2*k2) * (e1 - e3)) / &
+                            ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
+    else
+       if (inode == ionode) then
+          write (io_lun, fmt='(4x,"Error in safemin2 !")')
+          write (io_lun, fmt='(4x,"Interpolation failed: ",6f15.10)') &
+                k1, e1, k2, e2, k3, e3
+       end if
+       kmin = k2
+    end if
+    !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
+    !%%!   ! Subtract off atomic densities
+    !%%!   store_density = density
+    !%%!   call set_density()
+    !%%!   density = store_density - density
+    !%%!end if
+    do i=1,ni_in_cell
+       x_atom_cell(i) = start_x(i) + kmin*direction(1,i)
+       y_atom_cell(i) = start_y(i) + kmin*direction(2,i)
+       z_atom_cell(i) = start_z(i) + kmin*direction(3,i)
+    end do
+    if (.NOT. flag_MDold) call wrap_xyz_atom_cell
+    ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
+    k3_local = kmin - k3
+    if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3, kmin, k3_local:",k3,kmin,k3_local
+    do i = 1, ni_in_cell
+      gatom = id_glob(i)
+      atom_coord_diff(1, gatom) = k3_local * direction(1,i)
+      atom_coord_diff(2, gatom) = k3_local * direction(2,i)
+      atom_coord_diff(3, gatom) = k3_local * direction(3,i)
+
+      !! ---- DEBUG: ---- !!
+      if (inode.EQ.ionode) then
+        write (io_lun,*) ""
+        write (io_lun,*) "i & gatom:", i, gatom
+        write (io_lun,'(a,1x,3f15.10)') "Before:",start_x(i),start_y(i),start_z(i)
+        write (io_lun,'(a,1x,3f15.10)') "After :",x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
+        write (io_lun,'(a,1x,3f15.10)') "diff  :", atom_coord_diff(1:3,gatom)
+        write (io_lun,*) ""
+      endif
+      !! ---- DEBUG: ---- !!
+
+    enddo                   
+    !Update atom_coord : TM 27Aug2003
+    call update_atom_coord
+    !Update atom_coord : TM 27Aug2003
+    ! Check minimum: update indices and find energy and forces
+    !call updateIndices(.false.,fixed_potential, number_of_bands)
+!ORI    call updateIndices(.true., fixed_potential)
+    if (.NOT. flag_MDold) then
+      write (io_lun,*) "CG: 2nd stage"
+      !call updateIndices3(fixed_potential,direction,step)
+      if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)!19/08/2013
+      call gcopy(n_proc_old)
+      call gcopy(glob2node_old,ni_in_cell)
+      call updateIndices3(fixed_potential,direction)
+    else
+      call updateIndices(.true., fixed_potential)
+    endif
+    !Update start_x,start_y & start_z
+    call update_start_xyz(start_x,start_y,start_z)
+    !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
+       ! Add on atomic densities
+       !store_density = density
+       !call set_density()
+       !density = store_density + density
+    !end if
+    if (iprint_MD > 2) then
+       call write_atomic_positions("UpdatedAtoms_tmp.dat", trim(pdb_template))
+    end if
+    if(flag_reset_dens_on_atom_move) call set_density()
+    if (flag_pcc_global) call set_density_pcc()
+    call stop_print_timer(tmr_l_tmp1, &
+                          "safemin2 - Final interpolation and updates", &
+                          IPRINT_TIME_THRES1)
+    ! We've just moved the atoms - we need a self-consistent ground state before
+    ! we can minimise blips !
+    if (flag_vary_basis) then
+       call new_SC_potl(.false., sc_tolerance, reset_L,           &
+                        fixed_potential, vary_mu, n_L_iterations, &
+                        L_tolerance, e3)
+    end if
+    energy_out = e3
+    if (iprint_MD > 0) then
+       call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .true.)
+    else
+       call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
+    end if
+    if (inode.EQ.ionode) call dump_InfoGlobal()
+    if (inode == ionode .and. iprint_MD > 1) &
+         write (io_lun, &
+                fmt='(4x,"In safemin2, Interpolation step and energy &
+                      &are ",f15.10,f20.10" ",a2)') &
+               kmin, en_conv*energy_out, en_units(energy_units)
+    if (energy_out > e2 .and. abs(bottom) > very_small) then
+       ! The interpolation failed - go back
+       call start_timer(tmr_l_tmp1,WITH_LEVEL)
+       if (inode == ionode) &
+            write (io_lun,fmt='(/4x,"Interpolation failed; reverting"/)')
+       kmin_old = kmin
+       kmin = k2
+       !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
+       !%%!   ! Subtract off atomic densities
+       !%%!   store_density = density
+       !%%!   call set_density()
+       !%%!   density = store_density - density
+       !%%!end if
+       do i=1,ni_in_cell
+          x_atom_cell(i) = start_x(i) + kmin*direction(1,i)
+          y_atom_cell(i) = start_y(i) + kmin*direction(2,i)
+          z_atom_cell(i) = start_z(i) + kmin*direction(3,i)
+       end do
+       if (.NOT. flag_MDold) call wrap_xyz_atom_cell
+       ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
+!WRONG k3_local = kmin - k3!!03/07/2013
+       k3_local = kmin-kmin_old!03/07/2013
+       if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3, kmin,k3_local:", k3,kmin,k3_local
+       do i = 1, ni_in_cell
+         gatom = id_glob(i)
+         atom_coord_diff(1, gatom) = k3_local * direction(1,i)
+         atom_coord_diff(2, gatom) = k3_local * direction(2,i)
+         atom_coord_diff(3, gatom) = k3_local * direction(3,i)
+         ! ---- DEBUG: ---- !!
+         !if (inode.EQ.ionode) then
+         !  write (io_lun,*) ""
+         !  write (io_lun,*) "i & gatom:", i, gatom
+         !  write (io_lun,'(a,1x,3f15.10)') "Before:",start_x(i),start_y(i),start_z(i)
+         !  write (io_lun,'(a,1x,3f15.10)') "After :",x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
+         !  write (io_lun,'(a,1x,3f15.10)') "diff  :", atom_coord_diff(1:3,gatom)
+         !  write (io_lun,*) ""
+         !endif
+         !! ---- DEBUG: ---- !!
+       enddo
+!Update atom_coord : TM 27Aug2003
+       call update_atom_coord
+!Update atom_coord : TM 27Aug2003
+!ORI       call updateIndices(.true., fixed_potential)
+       if (.NOT. flag_MDold) then
+         write (io_lun,*) "CG: 3rd stage"
+         !call updateIndices3(fixed_potential,direction,step)
+         if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
+         call gcopy(n_proc_old)
+         call gcopy(glob2node_old,ni_in_cell)
+         call updateIndices3(fixed_potential,direction)
+       else
+         call updateIndices(.true., fixed_potential)
+       endif
+       !call updateIndices(.false.,fixed_potential, number_of_bands)
+       ! Update start_x,start_y & start_z
+       call update_start_xyz(start_x,start_y,start_z)!25/01/2013
+       !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
+          ! Add on atomic densities
+          !store_density = density
+          !call set_density()
+          !density = store_density + density
+       !end if
+       if (iprint_MD > 2) then
+          call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+                                      trim(pdb_template))
+       end if
+       if(flag_reset_dens_on_atom_move) call set_density()
+       if (flag_pcc_global) call set_density_pcc()
+       call stop_print_timer(tmr_l_tmp1, &
+                             "safemin2 - Failed interpolation + Retry", &
+                             IPRINT_TIME_THRES1)
+       ! We've just moved the atoms - we need a self-consistent ground
+       ! state before we can minimise blips !
+       if(flag_vary_basis) then
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+                           fixed_potential, vary_mu, n_L_iterations, &
+                           L_tolerance, e3)
+       end if
+       energy_out = e3
+       if (iprint_MD > 0) then
+          call get_E_and_F(fixed_potential, vary_mu, energy_out, &
+                           .true., .true.)
+       else
+          call get_E_and_F(fixed_potential, vary_mu, energy_out, &
+                           .true., .false.)
+       end if
+       if (inode.EQ.ionode) call dump_InfoGlobal()
+    end if
+    dE = e0 - energy_out
+7   format(4x,3f15.8)
+    if (inode == ionode .and. iprint_MD > 0) then
+       write (io_lun, &
+              fmt='(4x,"In safemin2, exit after ",i4," &
+                    &iterations with energy ",f20.10," ",a2)') &
+            iter, en_conv * energy_out, en_units(energy_units)
+    else if (inode == ionode) then
+       write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
+             en_conv * energy_out, en_units(energy_units)
+    end if
+    !deallocate(store_density)
+    if (inode.EQ.ionode) write (io_lun,*) "Get out of safemin2 !" !db
+    call stop_timer(tmr_std_moveatoms)
+    return
+  end subroutine safemin2
+  !!***
+
+  !!****f* move_atoms/update_start_xyz *
+  !!
+  !!NAME 
+  !! update_start_xyz
+  !!USAGE
+  !! 
+  !!PURPOSE
+  !! Updates start_x, start_y and start_z after updating member info.
+  !!INPUTS
+  !! 
+  !!USES
+  !! 
+  !!AUTHOR
+  !! Michiaki Arita
+  !!CREATION DATE
+  !! 2013/08/21
+  !!MODIFICATION HISTORY
+  !!
+  !!SOURCE
+  !!
+  subroutine update_start_xyz(x,y,z)
+
+    ! Module usage
+    use datatypes
+    use global_module, ONLY: ni_in_cell,id_glob,id_glob_inv_old, &
+                             flag_MDdebug,Iprint_MDdebug
+    use GenComms, ONLY: cq_abort
+    ! DB
+    use input_module, ONLY: io_assign, io_close
+    use GenComms, ONLY: inode,ionode
+
+    implicit none
+
+    ! passed variable
+    real(double) :: x(ni_in_cell),y(ni_in_cell),z(ni_in_cell)
+
+    ! local variables
+    integer :: ni,stat_alloc
+    integer :: id_global,ni_old
+    real(double), allocatable :: x_tmp(:),y_tmp(:),z_tmp(:)
+    ! DB
+    integer :: lun_db
+    character(7) :: file_name
+
+    allocate (x_tmp(ni_in_cell),y_tmp(ni_in_cell),z_tmp(ni_in_cell), &
+              STAT=stat_alloc)
+    if (stat_alloc.NE.0) call cq_abort('Error allocating x_tmp:', ni_in_cell)
+
+    x_tmp=x ; y_tmp=y ; z_tmp=z
+    ! Update x,y & z
+    do ni = 1, ni_in_cell
+      id_global = id_glob(ni)
+      ni_old = id_glob_inv_old(id_global)
+      x(ni) = x_tmp(ni_old)
+      y(ni) = y_tmp(ni_old)
+      z(ni) = z_tmp(ni_old)
+    enddo
+
+    deallocate (x_tmp,y_tmp,z_tmp, STAT=stat_alloc)
+    if (stat_alloc.NE.0) &
+      call cq_abort('Error deallocating x_tmp,y_tmp and z_tmp:', ni_in_cell)
+
+    !! ---- DEBUG: 25/01/2013 ---- !!
+    if (flag_MDdebug .AND. iprint_MDdebug.GT.2) then
+      if (inode.EQ.ionode) then
+        call io_assign(lun_db)
+        open (lun_db,file='xyz.dat',position='append')
+        !write (lun_db,*) "safemin2 iter:", iter
+        write (lun_db,*) "safemin2:"
+        do ni = 1, ni_in_cell
+          write (lun_db,'(a,1x,3f15.10)') "ni, start_x,y,z:", x(ni), y(ni), z(ni)
+        enddo
+        write (lun_db,*) ""
+        call io_close(lun_db)
+      endif
+    endif
+    !! ---- DEBUG: 25/01/2013 ---- !!
+
+    return
+  end subroutine update_start_xyz
+  !!***
+
   !!****f* move_atoms/pulayStep *
   !!
   !!NAME 
@@ -1020,21 +1588,24 @@ contains
   !! CREATION DATE 
   !!   2013/07/02
   !! MODIFICATION HISTORY
-  !!
+  !!   2013/08/20 M.Arita
+  !!    -  Implemented L-matrix reconstruction
+  !!    -  Deleted step and iteration
   !! SOURCE
   !!
-  subroutine updateIndices3(fixed_potential,velocity,step,iteration)
+  !OLD subroutine updateIndices3(fixed_potential,velocity,step,iteration)
+  subroutine updateIndices3(fixed_potential,velocity)
 
     ! Module usage
     use datatypes
     use global_module, ONLY: flag_basis_set,flag_Becke_weights,flag_dft_d2,blips, &
                              ni_in_cell,x_atom_cell,y_atom_cell,z_atom_cell,      &
-                             IPRINT_TIME_THRES2
-    use GenComms, ONLY: inode,ionode,my_barrier,myid
+                             IPRINT_TIME_THRES2,glob2node,flag_LmatrixReuse
+    use GenComms, ONLY: inode,ionode,my_barrier,myid,gcopy
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts,DCS_parts,ewald_CS
-    use mult_module,            ONLY: fmmi,immi
+    use mult_module,            ONLY: fmmi,immi,matL,L_trans
     use set_blipgrid_module, ONLY: set_blipgrid
     use set_bucket_module, ONLY: set_bucket
     use dimens, ONLY: RadiusSupport
@@ -1048,6 +1619,9 @@ contains
     use numbers
     use DiagModule, ONLY: diagon
     use io_module, ONLY: append_coords,write_atomic_positions,pdb_template
+    use matrix_data, ONLY: Lrange
+    use io_module2, ONLY: grab_matrix2,InfoL
+    use UpdateInfo_module, ONLY: make_glob2node,Matrix_CommRebuild
 
     ! DB
     use global_module, ONLY: io_lun
@@ -1067,12 +1641,11 @@ contains
     implicit none
 
      ! Passed variables
-    integer, intent(in), optional :: iteration
     real(double) :: velocity(3,ni_in_cell)
-    real(double) :: step
     logical :: fixed_potential
 
     ! Local variables
+    integer :: nfile,symm
     logical :: append_coords_bkup
     type(cq_timer) :: tmr_l_tmp1,tmr_l_tmp2
 
@@ -1080,12 +1653,15 @@ contains
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
 
     ! Update members - be sure atoms are all wrapped back in the sim-cell.
-    if (present(iteration)) then
-      call updateMembers(fixed_potential,velocity,iteration)    ! for MD
-    else
-      ! This is NOT velocity, rather 'direction'
-      call updateMembers(fixed_potential,velocity)              ! for CG
-    endif
+    !OLD if (present(iteration)) then
+    !OLD   call updateMembers(fixed_potential,velocity,iteration)    ! for MD
+    !OLD else
+    !OLD   ! This is NOT velocity, rather 'direction'
+    !OLD   call updateMembers(fixed_potential,velocity)              ! for CG
+    !OLD endif
+    ! [NOTE:] In md, velocity is exactly velocity, but when running cg,
+    !         velocity corresponds to 'search direction'
+    call updateMembers(fixed_potential,velocity)
 
     ! Bug fixed by Zakkie: now Lmatrix2.*, make_prt.dat & coord_next.dat are
     ! consistent
@@ -1094,13 +1670,13 @@ contains
     call write_atomic_positions('coord_next.dat',trim(pdb_template))
     append_coords = append_coords_bkup
 
-!!  if (inode.EQ.ionode) call dump_idglob_old                   !Need to call when reusing L-matrix
+!!  if (inode.EQ.ionode) call dump_idglob_old  !maybe needed when changing computation resources
 
     ! Used in BG-transformation.
     call deallocate_distribute_atom
     call distribute_atoms(inode,ionode)
     call my_barrier()
-    if (inode.EQ.ionode) write (io_lun,*) "Complete distribute_atoms()"
+    !if (inode.EQ.ionode) write (io_lun,*) "Complete distribute_atoms()"
 
     call start_timer(tmr_l_tmp2,WITH_LEVEL)
     ! Deallocate all matrix storage
@@ -1110,8 +1686,20 @@ contains
     call fmmi(bundle)
     ! Reallocate and find new indices
     call immi(parts,bundle,BCS_parts,myid+1)
-    ! Reconstruct L-matrix data
-!!  if (.NOT. diagon) call Lmatrix_CommRebuild(step)            !Need to call when reusing L-matrix
+    call my_barrier()
+
+    !% NOTE: The author (michi) thinks L-matrix reconstruction, its preparation
+    !%       and hamiltonian update should be called outside updateIndices3.
+
+    ! Update glob2node
+    if (inode.EQ.ionode) call make_glob2node
+    call gcopy(glob2node,ni_in_cell)
+    ! L-matrix reconstruction
+    if (.NOT. diagon .AND. flag_LmatrixReuse) then
+      call grab_matrix2('L',inode,nfile,InfoL)
+      call my_barrier()
+      call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+    endif
     call my_barrier()
 
     ! Only when using blips
@@ -1174,6 +1762,9 @@ contains
   !!    Removed redundant parameter number_of_bands
   !!   2012/03/26 L.Tong
   !!   - Changed spin implementation
+  !!   2013/08/26 M.Arita
+  !!   - Added call for get_electronic_density to calculate charge density
+  !!     from L-matrix
   !!  SOURCE
   !!
   subroutine update_H(fixed_potential)
@@ -1193,13 +1784,15 @@ contains
     use global_module,          only: iprint_MD, flag_self_consistent, &
                                       IPRINT_TIME_THRES2,              &
                                       flag_pcc_global, flag_dft_d2,    &
-                                      nspin
+                                      nspin, flag_MDold, io_lun
     use density_module,         only: set_density,                     &
                                       flag_no_atomic_densities,        &
-                                      density, set_density_pcc
+                                      density, set_density_pcc,        &
+                                      get_electronic_density
     use GenComms,               only: cq_abort, inode, ionode
     use maxima_module,          only: maxngrid
     use DFT_D2,                 only: dispersion_D2
+    use functions_on_grid,      ONLY: supportfns, H_on_supportfns
     
     implicit none
 
@@ -1240,6 +1833,12 @@ contains
     if ((.not. flag_self_consistent) .and. &
         (.not. flag_no_atomic_densities)) then
        call set_density()
+       if (flag_pcc_global) call set_density_pcc()
+    ! Calculate charge density from L-matrix [2013/08/26 michi]
+    else if (.NOT. diagon .AND. flag_self_consistent .AND. .NOT. flag_MDold) then
+       if (inode.EQ.ionode) write (io_lun,*) "update_H: Get charge density from L-matrix"
+       call get_electronic_density(density,electrons,supportfns,H_on_supportfns(1), &
+                                   inode,ionode,maxngrid)
        if (flag_pcc_global) call set_density_pcc()
     else if ((.not. flag_self_consistent) .and. &
              (flag_no_atomic_densities)) then
@@ -1898,7 +2497,7 @@ contains
       
     return
   end subroutine wrap_xyz_atom_cell
-
+  !!***
 
   ! =====================================================================
   !   sbrt ran2: generates uniform random numbers in the

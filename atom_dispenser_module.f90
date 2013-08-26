@@ -12,7 +12,7 @@
 !!  CREATION DATE
 !!    2013/07/01
 !!  MODIFICATION HISTORY
-!!
+!!    Added atom2part
 !!***
 module atom_dispenser
 
@@ -33,7 +33,6 @@ module atom_dispenser
 
 contains
 
-
   ! ---------------------------------------------------------------------------------
   ! Subroutine atom2part
   ! ---------------------------------------------------------------------------------
@@ -53,9 +52,9 @@ contains
   !!  USES
   !!
   !!  AUTHOR
-  !! 
+  !!   Michiaki Arita
   !!  CREATION DATE
-  !!
+  !!   2013/08/21
   !!  MODIFICATION
   !!
   !!  SOURCE
@@ -86,17 +85,9 @@ contains
                     pz_max, pz_min
     real(double) :: x_eps, y_eps, z_eps, eps
     logical :: flag_px, flag_py, flag_pz
- 
-    ! Debug
+    ! db
     integer :: lun, stat, ind_part2
     character(13) :: file_name
-    !integer :: n_part
-    !integer, allocatable :: n_atom_part(:)
-
-
-    ! Set IO. print level for the following.
-    !if (inode.EQ.ionode) write (io_lun, '(a)') "Enter atom2part."
-
 
     !! ----------- DEBUG ----------- !!
     ! NOTE: This file will be sizable.
@@ -106,40 +97,31 @@ contains
       open (lun,file=file_name,position='append')
     endif
     !! ----------- DEBUG ----------- !!
-      
 
     ! Firstly, we need to shift the atoms by eps before deciding the 
     ! partition and updating parts.
-    if (flag_fractional_atomic_coords) then
-      !WRONG x = x * rcellx
-      !WRONG y = y * rcelly
-      !WRNOG z = z * rcellz
-      eps = 1.0E-08     ! May be changed later.
-    else
-      !eps = 1.0E-03    ! May be changed later.
-      eps = 1.0E-04     ! May be changed later.
-    endif
-
+!   if (flag_fractional_atomic_coords) then
+!     eps = 1.0E-08     ! May be changed later.
+!   else
+!     !eps = 1.0E-03    ! May be changed later.
+!     eps = 1.0E-04     ! May be changed later.
+!   endif
     !TM  Eps should be considered with Cartesian (bohr) units
-    eps = 1.0E-03_double    
+    eps = shift_in_bohr
     x_eps = x + eps
     y_eps = y + eps
     z_eps = z + eps
-
     if (flag_ortho) then ! if the system is orthorhombic.
       ! Calculate the partition lengths.
       plen_x = rcellx/real(parts%ngcellx,double)
       plen_y = rcelly/real(parts%ngcelly,double)
       plen_z = rcellz/real(parts%ngcellz,double)
-
       !x_eps = x_eps - floor(x_eps)
       !y_eps = y_eps - floor(y_eps)
       !z_eps = z_eps - floor(z_eps)
-
-         px = floor(x_eps/plen_x) + 1
-         py = floor(y_eps/plen_y) + 1
-         pz = floor(z_eps/plen_z) + 1
-
+      px = floor(x_eps/plen_x) + 1
+      py = floor(y_eps/plen_y) + 1
+      pz = floor(z_eps/plen_z) + 1
     else ! if NOT orthorhombic.
       call cq_abort('ERROR in atom2part: flag_ortho ')
       ! You need to consider alpha, beta and gamma, but leave it for now.
@@ -148,7 +130,8 @@ contains
       plen_z = rcellz/real(parts%ngcellz,double)
     endif
 
-    ind_part  = (px-1) * (parts%ngcelly*parts%ngcellz) + (py-1) * parts%ngcellz + pz !! --- DEBUG -- !! 
+    ! DB
+    ind_part  = (px-1) * (parts%ngcelly*parts%ngcellz) + (py-1) * parts%ngcellz + pz
 
     !! ----------- DEBUG ----------- !!
     if (flag_MDdebug) then

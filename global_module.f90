@@ -90,6 +90,8 @@
 !!   - Adding deltaSCF variables (with U. Terranova)
 !!   2013/07/01 M.Arita
 !!   - Added flags and parameters for the efficient MD scheme
+!!   2013/08/20 M.Arita
+!!   - Added flags and variables for matrix reconstruction
 !!  SOURCE
 !!
 module global_module
@@ -123,7 +125,7 @@ module global_module
   integer, dimension(:,:), allocatable :: sorted_coord ! Atom IDs of atoms sorted according to x, y, z coords
   logical, dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
   integer, dimension(:), allocatable :: flag_cdft_atom
-  logical :: restart_L, restart_rho
+  logical :: restart_L, restart_rho, restart_T
 
   integer :: global_maxatomspart ! Maximum atoms per partition, if exceeded, triggers partitioning refinement
 
@@ -255,14 +257,21 @@ module global_module
   ! For MD
   logical :: flag_MDold
   logical :: flag_LmatrixReuse
+  logical :: flag_TmatrixReuse
   logical :: flag_SkipEarlyDM
   logical :: flag_MDcontinue
   logical :: flag_MDdebug
   integer :: McWFreq
   integer :: MDinit_step  
-  integer,allocatable      :: glob2node(:)      ! Table showing atoms (glob) in nodes
   real(double),parameter   :: shift_in_bohr = 1.0E-03_double
+  ! Table showing atoms (global) in nodes
+  integer :: n_proc_old
+  integer,allocatable :: glob2node(:)        ! size: ni_in_cell
+  integer,allocatable :: glob2node_old(:)    ! size: ni_in_cell
+  ! Displacement of atoms from a previous step
   real(double),allocatable :: atom_coord_diff(:,:)
+  ! XL-BOMD
+  !logical :: flag_XLBOMD
 
 end module global_module
 !!***

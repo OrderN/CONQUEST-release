@@ -65,11 +65,12 @@ contains
   !!  CREATION DATE
   !!   2013/07/02
   !!  MODIFICATION HISTORY
-  !!
+  !!   2013/08/21 M.Arita
+  !!   - Removed iteration
   !!  SOURCE
   !!
-  subroutine group_update_mparts(velocity,iteration)
-  !subroutine group_update_mparts(velocity)
+  !ORI subroutine group_update_mparts(velocity,iteration)
+  subroutine group_update_mparts(velocity)
 
     ! Module usage
     use basic_types
@@ -90,7 +91,7 @@ contains
     implicit none
 
     ! passed variables
-    integer,intent(in), optional :: iteration
+    !ORI integer,intent(in), optional :: iteration
     real(double) :: velocity(3,ni_in_cell)
 
     ! local variables
@@ -337,7 +338,7 @@ contains
         endif
       enddo
       ! This may be deleted in the next update
-      if (present(iteration)) write (lun_prt,*) iteration
+      !ORI if (present(iteration)) write (lun_prt,*) iteration
       call io_close(lun_prt)
     endif
 
@@ -1086,10 +1087,12 @@ contains
   !!  CREATION DATE
   !!   2013/07/02
   !!  MODIFICATION HISTORY
-  !!
+  !!   2013/08/21 M.Arita
+  !!   - Removed iteration
   !!  SOURCE
   !!
-  subroutine updateMembers(fixed_potential,velocity,iteration)
+  !ORI subroutine updateMembers(fixed_potential,velocity,iteration)
+  subroutine updateMembers(fixed_potential,velocity)
 
     ! Module usage
     use basic_types
@@ -1111,7 +1114,7 @@ contains
     ! passed variables
     logical :: fixed_potential
     real(double) :: velocity(3,ni_in_cell)
-    integer, intent(in), optional :: iteration
+    !ORI integer, intent(in), optional :: iteration
 
     ! local variables
     integer :: nmodx,nmody,nmodz
@@ -1123,11 +1126,13 @@ contains
     character(20) :: file_name
 
     ! NOTE: This if statement will be deleted in the next update
-    if (present(iteration)) then                                ! for MD
-      call group_update_mparts(velocity,iteration)
-    else
-      call group_update_mparts(velocity)                        ! for CG
-    endif
+    !ORI if (present(iteration)) then                                ! for MD
+    !ORI   call group_update_mparts(velocity,iteration)
+    !ORI else
+    !ORI   call group_update_mparts(velocity)                        ! for CG
+    !ORI endif
+    call group_update_mparts(velocity) ! both for md & cg
+
     ! Update members n PS
     call deallocate_PSmember
     call allocate_PSmember(parts)

@@ -126,6 +126,8 @@ contains
 !!    Added some timers
 !!   2013/07/01 M.Arita
 !!    Added allocation of ig_cover
+!!   2013/08/21 M.Arita
+!!    Initialised and calculated ig_cover for loading matrices
 !!  SOURCE
 !!
   subroutine make_cs(myid, gr_rcut, set, groups, prim, mx_mcell, &
@@ -389,6 +391,8 @@ contains
                      y_mem_cell(groups%icell_beg(ind_qart)+ni-1)+yadd
                 set%zcover(set%icover_ibeg(ind_cover)+ni-1)= &
                      z_mem_cell(groups%icell_beg(ind_qart)+ni-1)+zadd
+                set%ig_cover(set%icover_ibeg(ind_cover)+ni-1)= &
+                     id_glob(groups%icell_beg(ind_qart)+ni-1)
              enddo
              if(ind_cover.lt.set%ng_cover) then
                 set%icover_ibeg(ind_cover+1)=set%icover_ibeg(ind_cover)+ &

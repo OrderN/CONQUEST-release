@@ -358,6 +358,8 @@ contains
 !!    Added Told so that we can revert to the best T at exit, and changed omega definition 
 !!    so that it's divided by total number of orbitals; added user-set criterion on omega 
 !!    tolerance
+!!   2013/08/20 M.Arita
+!!    Added variables and calls for reusing T-matrix
 !!  SOURCE
 !!
   subroutine Iter_Hott_InvS(output_level, n_L_iterations, tolerance,n_atoms,&
@@ -365,15 +367,19 @@ contains
 
     use datatypes
     use numbers
-    use global_module, ONLY: IPRINT_TIME_THRES1
+    use global_module, ONLY: IPRINT_TIME_THRES1,flag_MDold,flag_TmatrixReuse,restart_T, &
+                             runtype,n_proc_old
     use matrix_data, ONLY: Trange, TSrange, mat, Srange
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, store_matrix_value, matrix_scale, matrix_sum, &
-         matT, matS, return_matrix_value
+         matT, matS, return_matrix_value, T_trans
     use primary_module, only: bundle
     use GenComms, ONLY: gsum, my_barrier
     use DiagModule, ONLY: diagon
     use species_module, ONLY: nsf_species, species
     use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
+    use input_module, ONLY: leqi
+    use io_module2, ONLY: grab_matrix2,dump_matrix2,InfoT
+    use UpdateInfo_module, ONLY: Matrix_CommRebuild
 
     implicit none
 
@@ -383,9 +389,10 @@ contains
 
     ! Local variables
     integer :: n_iterations, nn, np, nb, ist, ip, i,j,nsf1,nsf2
-    integer :: matI, matT1, matTM, matTold
+    integer :: matI, matT1, matTM, matTold, nfile, symm
     real(double) :: step, tot, eps, x, omega, oldomega, deltaomega, n_orbs
     type(cq_timer) :: tmr_l_tmp1
+    logical,save :: flag_readT = .false.
 
     matI = allocate_temp_matrix(TSrange,0)
     matT1 = allocate_temp_matrix(Trange,0)
@@ -436,32 +443,39 @@ contains
        call my_barrier
 
 
-       ! Construct the initial guess for T as epsilon.S^T, where epsilon is
-       ! given as 1/(sum_jk S^2_jk)
-       tot = 0.0_double
-       ip = 1
-       do np = 1,bundle%groups_on_node
-          if(bundle%nm_nodgroup(np)>0) then
-             do i=1,bundle%nm_nodgroup(np)
-                do nb=1,mat(np,Srange)%n_nab(i)
-                   ist = mat(np,Srange)%i_acc(i)+nb-1
-                   do nsf1 = 1,mat(np,Srange)%ndimi(i)
-                      do nsf2 = 1,mat(np,Srange)%ndimj(ist)
-                         eps = return_matrix_value(matS,np,i,ip,nb,nsf1,nsf2)
-                         tot = tot + eps*eps
-                      enddo
-                   enddo
-                enddo
-                ip = ip+1
-             enddo
-          end if ! bundle%nm_nodgroup(np)>0
-       enddo
-       call gsum(tot)
-       eps = 1.0_double/(tot)
-       if(output_level>1.and.inode==ionode) write(io_lun,*) 'Eps, tot: ',eps,tot
-       call matrix_scale(zero,matT)
-       call matrix_sum(zero,matT,eps,matS)
-       call stop_print_timer(tmr_l_tmp1,"inverse S preliminaries",IPRINT_TIME_THRES1)
+       if (.NOT. flag_readT .AND. .NOT. restart_T) then ! Initialising invS
+         ! Construct the initial guess for T as epsilon.S^T, where epsilon is
+         ! given as 1/(sum_jk S^2_jk)
+         tot = 0.0_double
+         ip = 1
+         do np = 1,bundle%groups_on_node
+            if(bundle%nm_nodgroup(np)>0) then
+               do i=1,bundle%nm_nodgroup(np)
+                  do nb=1,mat(np,Srange)%n_nab(i)
+                     ist = mat(np,Srange)%i_acc(i)+nb-1
+                     do nsf1 = 1,mat(np,Srange)%ndimi(i)
+                        do nsf2 = 1,mat(np,Srange)%ndimj(ist)
+                           eps = return_matrix_value(matS,np,i,ip,nb,nsf1,nsf2)
+                           tot = tot + eps*eps
+                        enddo
+                     enddo
+                  enddo
+                  ip = ip+1
+               enddo
+            end if ! bundle%nm_nodgroup(np)>0
+         enddo
+         call gsum(tot)
+         eps = 1.0_double/(tot)
+         if(output_level>1.and.inode==ionode) write(io_lun,*) 'Eps, tot: ',eps,tot
+         call matrix_scale(zero,matT)
+         call matrix_sum(zero,matT,eps,matS)
+         call stop_print_timer(tmr_l_tmp1,"inverse S preliminaries",IPRINT_TIME_THRES1)
+       elseif (.NOT. flag_MDold .AND. (flag_readT .OR. restart_T)) then
+         !Reusing previously computed inverse S-matrix
+         call grab_matrix2('T',inode,nfile,InfoT)
+         call my_barrier()
+         call Matrix_CommRebuild(InfoT,Trange,T_trans,matT,nfile,symm)
+       endif
        ! and evaluate the current value of the functional and its gradient
        deltaomega = zero
        oldomega = zero
@@ -517,6 +531,11 @@ contains
     call free_temp_matrix(matTold)
     call free_temp_matrix(matT1)
     call free_temp_matrix(matI)
+    ! Dump T-matrix
+    if (.NOT. flag_MDold .AND. .NOT. leqi(runtype,'static') .AND. flag_TmatrixReuse) then
+      call dump_matrix2('T',matT,inode,Trange)
+      flag_readT = .true.
+    endif
 
 1   format(20x,'Starting functional value: ',f15.7,' a.u.')
 2   format(/,20x,'Conjugate Gradients InvS iteration:',i5)

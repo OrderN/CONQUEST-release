@@ -98,10 +98,16 @@ contains
   !!   - Added timer for vdWDFT energy correction
   !!   2013/01/30 10:32 dave
   !!   - Added call for deltaSCF (with U. Terranova)
+  !!   2013/08/20 M.Arita
+  !!   -  Added 'iter' as a dummy variable
+  !!   -  Added grequency to go back to McW
+  !!   -  Added call for writing out L-matrix (this will be deleted later)
   !!  SOURCE
   !!
+  !subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
+  !                       find_forces, write_forces)
   subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
-                         find_forces, write_forces)
+                         find_forces, write_forces, iter)
 
     use datatypes
     use force_module,      only: force
@@ -112,7 +118,9 @@ contains
                                  flag_self_consistent, flag_basis_set, &
                                  blips, PAOs, IPRINT_TIME_THRES1,      &
                                  runtype, flag_vdWDFT, io_lun,         &
-                                 flag_DeltaSCF, flag_excite
+                                 flag_DeltaSCF, flag_excite, runtype,  &
+                                 flag_MDold,flag_LmatrixReuse,McWFreq, &
+                                 io_lun
     use energy,            only: get_energy, xc_energy
     use GenComms,          only: cq_abort, inode, ionode
     use blip_minimisation, only: vary_support
@@ -122,6 +130,10 @@ contains
     use vdWDFT_module,     only: vdWXC_energy, vdWXC_energy_slow
     use density_module,    only: density
     use units
+    ! Deleted later ?
+    use io_module2,        ONLY: dump_matrix2,dump_InfoGlobal
+    use matrix_data,       ONLY: Lrange
+    use mult_module,       ONLY: matL
 
     implicit none
 
@@ -131,6 +143,7 @@ contains
     integer           :: n_save_freq, n_run
     character(len=40) :: output_file
     real(double)      :: total_energy
+    integer,intent(in),optional:: iter
 
     ! Local variables
     logical        :: reset_L
@@ -139,11 +152,31 @@ contains
 
     call start_timer(tmr_std_eminimisation)
     ! reset_L = .true.  ! changed by TM, Aug 2008
-    if (leqi(runtype,'static')) then
-     reset_L = .false.
-    else
-     reset_L = .true.   ! temporary for atom movements
-    end if
+!   if (leqi(runtype,'static')) then
+!    reset_L = .false.
+!   else
+!    reset_L = .true.   ! temporary for atom movements
+!   end if
+
+    ! Terrible coding.. Should be modified later. [2013/08/20 michi]
+    reset_L = .false.
+    if (.NOT. leqi(runtype,'static')) then
+      if (.NOT. flag_MDold .AND. flag_LmatrixReuse) then
+        reset_L = .false.
+        if (McWFreq.NE.0) then
+          if (present(iter)) then
+            if (mod(iter,McWFreq).EQ.0) then
+              if (inode.EQ.ionode) write (io_lun,*) "Go back to McWeeny! Iteration:", iter
+              reset_L = .true.
+            endif
+          endif
+        endif
+      ! Using an old-fashioned updates
+      else
+        reset_L = .true.
+      endif
+    endif
+
     ! Start timing the energy calculation
     call start_timer(tmr_l_energy, WITH_LEVEL)
     ! Now choose what we vary
@@ -269,6 +302,15 @@ contains
       call stop_print_timer(tmr_l_force, "calculating FORCE", &
                             IPRINT_TIME_THRES1)
     end if
+
+    !% NOTE: This call should be outside this subroutine [2013/08/20 michi]
+    ! Writes out L-matrix at the PREVIOUS step
+    if (.NOT. flag_MDold) & ! should add '.NOT. leqi(runtype,'static')' also ?
+      call dump_matrix2('L',matL(1),inode,Lrange)
+    if (.NOT. flag_MDold .AND. leqi(runtype,'static')) then
+      if (inode.EQ.ionode) call dump_InfoGlobal(0)
+    endif
+
     !  Print results of local timers
     call stop_timer(tmr_std_eminimisation)
     return

@@ -171,6 +171,8 @@ contains
   !!    Removed redundant parameter number_of_bands
   !!   2012/03/27 L.Tong
   !!   - Removed redundant input parameter real(double) mu
+  !!   2013/08/21 M.Arita
+  !!   - Added call for safemin2 necessary in reusibg L-matrix
   !!  SOURCE
   !!
   subroutine cg_run(fixed_potential, vary_mu, total_energy)
@@ -182,10 +184,10 @@ contains
                              y_atom_cell, z_atom_cell, id_glob,    &
                              atom_coord, rcellx, rcelly, rcellz,   &
                              area_general, iprint_MD,              &
-                             IPRINT_TIME_THRES1
+                             IPRINT_TIME_THRES1, flag_MDold
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin
+    use move_atoms,    only: safemin, safemin2
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force
@@ -193,6 +195,7 @@ contains
                              check_stop
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
+    use io_module2,    ONLY: dump_InfoGlobal
 
     implicit none
 
@@ -233,6 +236,9 @@ contains
     dE = zero
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+    if (.NOT. flag_MDold) then
+      call dump_InfoGlobal()
+    endif
     iter = 1
     ggold = zero
     energy1 = energy0
@@ -277,8 +283,15 @@ contains
           z_new_pos(j) = z_atom_cell(j)
        end do
        ! Minimise in this direction
-       call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-                    energy1, fixed_potential, vary_mu, energy1)
+       !ORI call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+       !ORI              energy1, fixed_potential, vary_mu, energy1)
+       if (.NOT. flag_MDold) then
+         call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+                      energy1, fixed_potential, vary_mu, energy1)
+       else
+         call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+                      energy1, fixed_potential, vary_mu, energy1)
+       endif
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
           do i = 1, ni_in_cell
@@ -368,6 +381,10 @@ contains
 !!    Removed redundant parameter number_of_bands
 !!   2012/03/27 L.Tong
 !!   - Removed redundant input parameter real(double) mu
+!!   2013/08/20 M.Arita
+!!   - Added 'iter' in velocityVerlet
+!!   - Added calls for reading/dumping global information
+!!   - Modified initial and final MD steps
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -377,7 +394,8 @@ contains
     use global_module,  only: iprint_gen, ni_in_cell, x_atom_cell,    &
                               y_atom_cell, z_atom_cell, area_general, &
                               flag_read_velocity, flag_quench_MD,     &
-                              temp_ion
+                              temp_ion, flag_MDcontinue, MDinit_step, &
+                              flag_MDold,n_proc_old,glob2node_old
     use group_module,   only: parts
     use primary_module, only: bundle
     use minimise,       only: get_E_and_F
@@ -393,6 +411,7 @@ contains
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use move_atoms,     only: fac_Kelvin2Hartree
+    use io_module2,     ONLY: dump_InfoGlobal,grab_InfoGlobal
 
     implicit none
 
@@ -403,7 +422,7 @@ contains
     
     ! Local variables
     real(double), allocatable, dimension(:,:) :: velocity
-    integer       ::  iter, i, k, length, stat
+    integer       ::  iter, i, k, length, stat, i_first, i_last
     real(double)  :: temp, KE, energy1, energy0, dE, max, g0
     real(double)  :: energy_md
     character(20) :: file_velocity='velocity.dat'
@@ -433,10 +452,36 @@ contains
     if (myid == 0 .and. iprint_gen > 0) write(io_lun, 2) MDn_steps
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
+
+    ! Get an initial MD step
+    if (.NOT. flag_MDcontinue) then
+      i_first = 1
+      i_last  = MDn_steps
+    else
+      i_first = MDinit_step
+      i_last = i_first + MDn_steps
+    endif
+    ! Dump global data
+    if (.NOT. flag_MDold) then
+      if (inode.EQ.ionode) call dump_InfoGlobal(i_first)
+    endif
+
     energy_md = energy0
-    do iter = 1, MDn_steps
+    !ORI do iter = 1, MDn_steps
+    do iter = i_first, i_last
        if (myid == 0) &
             write (io_lun, fmt='(4x,"MD run, iteration ",i5)') iter
+       ! Fetch old relations
+       if (.NOT. flag_MDold) then
+         if (.NOT. allocated(glob2node_old)) then
+           allocate (glob2node_old(ni_in_cell), STAT=stat)
+           if (stat.NE.0) call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
+         endif
+         if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
+         call gcopy(n_proc_old)
+         call gcopy(glob2node_old,ni_in_cell)
+       endif
+
        call velocityVerlet(fixed_potential, bundle, MDtimestep, temp, &
                            KE, flag_quench_MD, velocity, tot_force, iter)
        if (myid == 0) &
@@ -451,9 +496,16 @@ contains
        end if
        !Now, updateIndices and update_atom_coord are done in velocityVerlet 
        !call updateIndices(.false.,fixed_potential, number_of_bands) 
+       !ORI call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
+       !ORI                  .false.)
        call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
-                        .false.)
+                        .false., iter)
         energy_md = energy1
+       ! Dump global data
+       if (.NOT. flag_MDold) then
+         if (inode.EQ.ionode) call dump_InfoGlobal(iter)
+       endif
+
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero
@@ -789,8 +841,8 @@ contains
           jj = id_glob(i)
           forceStore(:,i,npmod) = tot_force(:,jj)
        end do
-       call pulayStep(npmod, posnStore, forceStore, x_atom_cell, &
-                      y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
+!       call pulayStep(npmod, posnStore, forceStore, x_atom_cell, &
+!                      y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
        !call gsum(x_atom_cell,ni_in_cell)
        !call gsum(y_atom_cell,ni_in_cell)
        !call gsum(z_atom_cell,ni_in_cell)

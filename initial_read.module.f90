@@ -413,6 +413,8 @@ contains
   !!     partitioning method
   !!   2013/07/01 M.Arita
   !!   - Added flags and parameters for the efficient MD scheme
+  !!   2013/08/20 M.Arita
+  !!   - Add a flag for reusing T-matrix
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -469,7 +471,8 @@ contains
                              dscf_target_nfold, flag_local_excitation, dscf_HOMO_thresh, &
                              dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit, &
                              flag_MDcontinue,flag_MDdebug,flag_MDold, &
-                             flag_LmatrixReuse,flag_SkipEarlyDM,McWFreq 
+                             flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
+                             restart_T
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
                       RadiusSupport, NonLocalFactor, InvSRange,      &
@@ -663,6 +666,7 @@ contains
        init_blip_flag = fdf_string(10,'Basis.InitBlipFlag','pao')
        restart_L = fdf_boolean('General.LoadL',.false.)
        restart_rho = fdf_boolean('General.LoadRho',.false.)
+       restart_T = fdf_boolean('General.LoadInvS',.false.)
        ! Is there a net charge on the cell ?
        ne_in_cell = fdf_double('General.NetCharge',zero)
        ! Read coordinates file 
@@ -1173,6 +1177,7 @@ contains
        flag_MDdebug=fdf_boolean('AtomMove.Debug',.false.)
        flag_MDcontinue=fdf_boolean('AtomMove.RestartRun',.false.)
        flag_LmatrixReuse=fdf_boolean('AtomMove.ReuseL',.false.)
+       flag_TmatrixReuse=fdf_boolean('AtomMove.ReuseInvS',.false.)
        flag_SkipEarlyDM=fdf_boolean('AtomMove.SkipEarlyDM',.false.)
        McWFreq=fdf_integer('AtomMove.McWeenyFreq',0)
     else

@@ -134,6 +134,8 @@ contains
   !!    the [-1*cell parameter; 2*cell parameter] range
   !!   2013/07/01 M.Arita & T.Miyazaki
   !!    Added shift_in_bohr when wrapping atoms and allocation of atom_coord_diff
+  !!   2013/08/20 M.Arita
+  !!    Bug fix & correct the if-statement
   !!  SOURCE
   !!
   subroutine read_atomic_positions(filename)
@@ -453,16 +455,17 @@ second:   do
     rcellx = r_super_x
     rcelly = r_super_y
     rcellz = r_super_z
-    if ((leqi(runtype,'md')) .OR. (leqi(runtype,'cg'))) then
+    !if ((leqi(runtype,'md')) .OR. (leqi(runtype,'cg'))) then
+    if (.NOT. leqi(runtype,'static')) then
       allocate(atom_coord_diff(3,ni_in_cell), STAT=stat)
       if (stat.NE.0) call cq_abort('Error allocating atom_coord_diff: ', 3, ni_in_cell)
       allocate(id_glob_old(ni_in_cell),id_glob_inv_old(ni_in_cell), STAT=stat)
       if (stat.NE.0) call cq_abort('Error allocating id_glob_old/id_glob_inv_old: ', &
                                    ni_in_cell)
-      call gcopy(atom_coord_diff,3,ni_in_cell)
       atom_coord_diff=zero
-      id_glob_old=zero
-      id_glob_inv_old=zero
+      !call gcopy(atom_coord_diff,3,ni_in_cell)
+      id_glob_old=0
+      id_glob_inv_old=0
     endif
     return
   end subroutine read_atomic_positions
@@ -646,6 +649,8 @@ second:   do
   !!   2013/04/03 L.Tong
   !!    Swapped the original create_sfc_partitions with the new
   !!    sfc_partitions_to_processors from sfc_partitions_module
+  !!   2013/08/20 M.Arita
+  !!    Correct the if-statement 
   !!  SOURCE
   !!
   subroutine read_mult(myid,parts,part_file)
@@ -723,7 +728,8 @@ second:   do
        call gcopy(parts%icell_beg,parts%mx_gcell)
        call gcopy(id_glob, ni_in_cell)
        call gcopy(id_glob_inv, ni_in_cell)
-       if (leqi(runtype,'md') .OR. leqi(runtype,'cg')) then
+       !if (leqi(runtype,'md') .OR. leqi(runtype,'cg')) then
+       if (.NOT. leqi(runtype,'static')) then
          call gcopy(id_glob_old,ni_in_cell)
          call gcopy(id_glob_inv_old,ni_in_cell)
        endif
@@ -733,8 +739,8 @@ second:   do
           write(io_lun,*) '---------------------------------'
           write(io_lun,*)
        end if
-       ! call create_sfc_partitions(myid, parts)
-       call sfc_partitions_to_processors(parts)
+       call create_sfc_partitions(myid, parts)
+       !call sfc_partitions_to_processors(parts)
        np_in_cell = parts%ngcellx*parts%ngcelly*parts%ngcellz
        if (iprint_init > 1.AND.myid==0) write(io_lun,*) 'Finished partitioning'
     end if
@@ -785,6 +791,8 @@ second:   do
   !!    Added check for partition file access error.
   !!   2011/11/17 10:19 dave
   !!    Bug fix to format for 1141
+  !!   2013/08/2013
+  !!    Added storage of id_glob_old & id_glob_inv_old
   !!  SOURCE
   !!
   subroutine read_partitions(parts, part_file)
@@ -792,7 +800,8 @@ second:   do
     ! Module usage
     use datatypes
     use global_module,    only: numprocs, iprint_init, ni_in_cell, &
-                                id_glob, id_glob_inv
+                                id_glob, id_glob_inv, id_glob_old, &
+                                id_glob_inv_old, runtype
     use maxima_module,    only: maxpartsproc, maxatomspart,        &
                                 maxatomsproc, maxpartscell
     use basic_types
@@ -961,6 +970,10 @@ second:   do
        endif ! if(parts%ng_on_node>0)
     enddo ! nnd = 1,nnode
     call io_close(lun)
+    if (.NOT. leqi(runtype,'static')) then
+      id_glob_old = id_glob
+      id_glob_inv_old = id_glob_inv
+    endif
     ! Format statements placed here to improve readability of code
 101 format(/8x,'cell lengths:',3f12.6)
 102 format(/8x,'partitions along cell sides',3i5)
@@ -1016,6 +1029,8 @@ second:   do
   !!   2013/07/01 M.Arita & T.Miyazaki
   !!    Introduced shift_in_bohr to avoid the case where atoms are right 
   !!    on the edge of partitions, and copied id_glob_old & id_glob_inv_old
+  !!   2013/08/20 M.Arita
+  !!    Correct the if-statement
   !!  SOURCE
   !!  
   subroutine create_sfc_partitions(myid, parts)
@@ -2080,7 +2095,8 @@ second:   do
 
     !end if
     !write(io_lun,*) 'Proc, ending sfc: ',myid
-    if (leqi(runtype,'md') .OR. leqi(runtype,'cg')) then
+    !if (leqi(runtype,'md') .OR. leqi(runtype,'cg')) then
+    if (.NOT. leqi(runtype,'static')) then
       id_glob_old = id_glob
       id_glob_inv_old = id_glob_inv
     endif

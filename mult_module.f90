@@ -68,6 +68,9 @@
 !!     correspond to spin up channel always and matX(2) corresponds to
 !!     spin down channel. This is true even for spin non-polarised
 !!     case.
+!!   2013/08/23 M.Arita
+!!   - Added subroutine symmetrise_matA, which is an extention of 
+!!     symmetrise_L and applicable to any sort of matrices
 !!  SOURCE
 !!
 module mult_module
@@ -1353,6 +1356,48 @@ contains
   end subroutine symmetrise_L
   !!***
 
+  !!****f* mult_module/symmetrise_matA *
+  !!
+  !!  NAME
+  !!   symmetrise_matA
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Symmetrises the matrix designated in dummy arguments
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Michiaki Arita
+  !!  CREATION DATE
+  !!   2013/08/23
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine symmetrise_matA(range,trans,matA)
+
+    ! Module usage
+    use datatypes
+    use numbers
+
+    implicit none
+
+    ! passed variables
+    integer :: range,trans,matA
+
+    ! local variables
+    integer :: mattmp
+
+    mattmp = allocate_temp_matrix(range,trans)
+    call matrix_transpose(matA,mattmp)
+    call matrix_sum(half,matA,half,mattmp)
+    call free_temp_matrix(mattmp)
+
+    return
+  end subroutine symmetrise_matA
+  !!***
 
   !!****f* mult_module/end_ops *
   !!

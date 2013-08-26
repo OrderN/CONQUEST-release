@@ -133,6 +133,9 @@ contains
   !!    - Removed redundant input parameter real(double) mu
   !!   2012/06/24 L.Tong
   !!    - Added control of whether to dump L using flag_dump_L
+  !!   2013/08/20 M.Arita
+  !!    - Changed calls for dumping L-matrix
+  !!    - Added flag to start from EarlyDM
   !!  SOURCE
   !!
   subroutine FindMinDM(n_L_iterations, vary_mu, tolerance, inode, &
@@ -142,7 +145,8 @@ contains
     use numbers
     use global_module, only: iprint_DM, IPRINT_TIME_THRES1,             &
                              nspin, flag_fix_spin_population,           &
-                             ne_in_cell, ne_spin_in_cell, flag_dump_L
+                             ne_in_cell, ne_spin_in_cell, flag_dump_L,  &
+                             flag_MDold,flag_SkipEarlyDM
     use mult_module,   only: matrix_transpose, matT, matTtran, matL,    &
                              matrix_sum
     use McWeeny,       only: InitMcW, McWMin
@@ -153,6 +157,8 @@ contains
     use energy,        only: entropy
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,   &
                              WITH_LEVEL
+    use io_module2,    ONLY: dump_matrix2
+    use matrix_data,   ONLY: Lrange
 
     implicit none
 
@@ -192,6 +198,7 @@ contains
     inflex = .false.
     done = .false.
     early = .false.
+    if (.NOT. flag_SkipEarlyDM) early = .true.  ! Starts from earlyDM
 
     ! Start with the transpose of S^-1
     call matrix_transpose(matT, matTtran)
@@ -229,14 +236,24 @@ contains
 
     ! *** Add frequency of output here *** !
 
-    if (flag_dump_L) then
-       if (nspin == 1) then
-          call dump_matrix("L", matL(1), inode)
+     if (flag_dump_L) then
+       if (.NOT. flag_MDold) then
+         call dump_matrix2('L',matL(1),inode,Lrange)
        else
-          call dump_matrix("L_up", matL(1), inode)
-          call dump_matrix("L_dn", matL(2), inode)
-       end if
-    end if
+         if (nspin == 1) then
+           call dump_matrix("L", matL(1), inode)
+         else
+           call dump_matrix("L_up", matL(1), inode)
+           call dump_matrix("L_dn", matL(2), inode)
+         end if
+       endif
+       !ORI    if (nspin == 1) then
+       !ORI       call dump_matrix("L", matL(1), inode)
+       !ORI    else
+       !ORI       call dump_matrix("L_up", matL(1), inode)
+       !ORI       call dump_matrix("L_dn", matL(2), inode)
+       !ORI    end if
+     end if
 
     if (record) then
        if (inode == ionode .and. iprint_DM > 1) then
@@ -731,6 +748,8 @@ contains
   !!   2013/03/06 L.Tong
   !!    - Changed the min|max step size to minpulaystepDMM and maxpulaystepDMM
   !!      instead of hardwired values of 0.001 and 0.1
+  !!   2013/08/20 M.Arita
+  !!    - Changed calls for dumping L-matrix
   !!  SOURCE
   !!
   subroutine lateDM(ndone, n_L_iterations, done, deltaE, vary_mu, &
@@ -753,7 +772,7 @@ contains
                                  ni_in_cell, flag_global_tolerance,    &
                                  flag_mix_L_SC_min,                    &
                                  flag_fix_spin_population, nspin,      &
-                                 spin_factor, flag_dump_L
+                                 spin_factor, flag_dump_L,flag_MDold
     use timer_module,      only: cq_timer,start_timer,                 &
                                  stop_print_timer, WITH_LEVEL
     use io_module,         only: dump_matrix
@@ -765,6 +784,7 @@ contains
     !Prints out charge density -- 2010.Nov.06 TM
     use io_module,         only: dump_charge
     use dimens,            only: n_my_grid_points
+    use io_module2,        ONLY: dump_matrix2
 
     implicit none
 
@@ -1143,12 +1163,22 @@ contains
        ! dump the L matrix if required
        if (flag_dump_L) then
           if (mod (n_iter, n_dumpL) == 0) then
-             if (nspin == 1) then
-                call dump_matrix("L", matL(1), inode)
-             else
-                call dump_matrix("L_up", matL(1), inode)
-                call dump_matrix("L_dn", matL(2), inode)
-             end if
+            !ORI if (nspin == 1) then
+            !ORI    call dump_matrix("L", matL(1), inode)
+            !ORI else
+            !ORI    call dump_matrix("L_up", matL(1), inode)
+            !ORI    call dump_matrix("L_dn", matL(2), inode)
+            !ORI end if
+            if (.NOT. flag_MDold) then
+              call dump_matrix2('L',matL(1),inode,Lrange)
+            else
+              if (nspin == 1) then
+                 call dump_matrix("L", matL(1), inode)
+              else
+                 call dump_matrix("L_up", matL(1), inode)
+                 call dump_matrix("L_dn", matL(2), inode)
+              end if
+            endif
           end if
        end if
        ! check if tolerance is reached
