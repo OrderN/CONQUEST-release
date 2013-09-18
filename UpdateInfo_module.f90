@@ -1207,7 +1207,7 @@ contains
     use numbers
     use GenComms, ONLY: cq_abort
     use mpi
-    use io_module2, ONLY: Info,n_matrix,InfoMatrixFile
+    use io_module2, ONLY: n_matrix,InfoMatrixFile
     ! db
     use global_module, ONLY: numprocs,io_lun
     use io_module, ONLY: get_file_name

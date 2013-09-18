@@ -739,8 +739,8 @@ second:   do
           write(io_lun,*) '---------------------------------'
           write(io_lun,*)
        end if
-       call create_sfc_partitions(myid, parts)
-       !call sfc_partitions_to_processors(parts)
+       !call create_sfc_partitions(myid, parts)
+       call sfc_partitions_to_processors(parts)
        np_in_cell = parts%ngcellx*parts%ngcelly*parts%ngcellz
        if (iprint_init > 1.AND.myid==0) write(io_lun,*) 'Finished partitioning'
     end if
