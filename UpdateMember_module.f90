@@ -33,6 +33,8 @@ module UpdateMember_module
   type(group_set) :: parts  ! Partitions of atoms
   type(group_set) :: blocks ! Blocks of integration grid points
 
+  character(80),private :: RCSid = "$Id$"
+
 !!***
 
 contains

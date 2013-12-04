@@ -11,7 +11,8 @@
 !!  CREATION DATE
 !!   2013/08/21
 !!  MODIFCATION
-!!
+!!   2013/12/02 M.Arita
+!!   - Added derived data types for XL-BOMD
 !!
 module io_module2
 
@@ -43,8 +44,15 @@ module io_module2
     real(double), pointer :: data_Lold(:,:)
   end type InfoMatrixFile
 
-  type(InfoMatrixFile), allocatable :: InfoL(:),InfoT(:),InfoX(:),InfoK(:)
+  type(InfoMatrixFile), allocatable :: InfoL(:),InfoT(:),InfoK(:),    &
+                                       InfoX(:),InfoXvel(:),InfoS(:), & ! for XL-BOMD
+                                       InfoX1(:),InfoX2(:),InfoX3(:), & ! for dissipation
+                                       InfoX4(:),InfoX5(:),InfoX6(:), &
+                                       InfoX7(:),InfoX8(:),InfoX9(:), &
+                                       InfoX10(:)
   integer :: n_matrix
+
+  character(80),private :: RCSid = "$Id$"
 
 contains
 

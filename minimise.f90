@@ -102,6 +102,8 @@ contains
   !!   -  Added 'iter' as a dummy variable
   !!   -  Added grequency to go back to McW
   !!   -  Added call for writing out L-matrix (this will be deleted later)
+  !!   2013/12/03 M.Arita
+  !!   - Removed calls for writing out L-matrix
   !!  SOURCE
   !!
   !subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -131,9 +133,9 @@ contains
     use density_module,    only: density
     use units
     ! Deleted later ?
-    use io_module2,        ONLY: dump_matrix2,dump_InfoGlobal
-    use matrix_data,       ONLY: Lrange
-    use mult_module,       ONLY: matL
+!   use io_module2,        ONLY: dump_matrix2,dump_InfoGlobal
+!   use matrix_data,       ONLY: Lrange
+!   use mult_module,       ONLY: matL
 
     implicit none
 
@@ -305,11 +307,13 @@ contains
 
     !% NOTE: This call should be outside this subroutine [2013/08/20 michi]
     ! Writes out L-matrix at the PREVIOUS step
-    if (.NOT. flag_MDold) & ! should add '.NOT. leqi(runtype,'static')' also ?
-      call dump_matrix2('L',matL(1),inode,Lrange)
-    if (.NOT. flag_MDold .AND. leqi(runtype,'static')) then
-      if (inode.EQ.ionode) call dump_InfoGlobal(0)
-    endif
+    !   --> Removed and moved to FindMinDM [2013/12/03 michi]
+
+!   if (.NOT. flag_MDold) & ! should add '.NOT. leqi(runtype,'static')' also ?
+!     call dump_matrix2('L',matL(1),inode,Lrange)
+!   if (.NOT. flag_MDold .AND. leqi(runtype,'static')) then
+!     if (inode.EQ.ionode) call dump_InfoGlobal(0)
+!   endif
 
     !  Print results of local timers
     call stop_timer(tmr_std_eminimisation)

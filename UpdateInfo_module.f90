@@ -46,6 +46,8 @@ module UpdateInfo_module
     integer, pointer :: ibeg2_recv_array(:)
   end type Lmatrix_comm_recv
 
+  character(80),private :: RCSid = "$Id$"
+
 contains
 
   ! ------------------------------------------------------------
@@ -166,14 +168,14 @@ contains
       flag_remote_iprim = .false.
     endif
     call my_barrier()
-    if (inode.EQ.ionode) write (io_lun,'(a,i7)') "Got through the 1st MPI communication !" !db
+    if (inode.EQ.ionode) write (io_lun,*) "Got through the 1st MPI communication !" !db
     !write (io_lun,'(a,i7)') "Got through the 1st MPI communication !", inode
 
     ! Get ready for the 2nd & 3rd communication.
     if (LmatrixRecv%nsend_node.GT.0 .AND. numprocs.NE.1) then
       call CommMat_irecv_data(LmatrixRecv,irecv2_array,recv_array,nreq2,nreq3)
-      write (io_lun,*) "inode:", inode, "nreq2 after calling CommMat_irecv_data:", nreq2(1:)
-      write (io_lun,*) "inode:", inode, "nreq3 after calling CommMat_irecv_data:", nreq3(1:)
+      !db write (io_lun,*) "inode:", inode, "nreq2 after calling CommMat_irecv_data:", nreq2(1:)
+      !db write (io_lun,*) "inode:", inode, "nreq3 after calling CommMat_irecv_data:", nreq3(1:)
     endif
     !! ------------------------------ NOTE: ------------------------------- !! 
     !! If it takes a bunch of time in communication, try with the following !!
@@ -184,7 +186,7 @@ contains
     if (LmatrixSend%nrecv_node.GT.0 .AND. numprocs.NE.1) then
       call CommMat_send_neigh(LmatrixSend,isend2_array,Info)
       call CommMat_send_data(LmatrixSend,send_array,Info)
-      write (io_lun, '(a,i7)') "Finished sending neighbour & L-matrix data", inode !db
+      write (io_lun,*) "Finished sending neighbour & L-matrix data", inode !db
     endif
     if (LmatrixRecv%nsend_node.GT.0 .AND. numprocs.NE.1) then
       !db write (io_lun,*) "Check MPI_Wait:", inode
@@ -247,7 +249,7 @@ contains
     if (present(symm)) call symmetrise_matA(range,trans,matA)
     call my_barrier()
     if (flag_MDdebug .AND. iprint_MDdebug.GT.3) write (lun_db6,*) mat_p(matA)%matrix(1:)
-    if (inode.EQ.ionode) write (io_lun,'(a)') &
+    if (inode.EQ.ionode) write (io_lun,*) &
        "Got through 2nd & 3rd MPIs and symmetrising matrix !" !db
 
     ! Deallocation.

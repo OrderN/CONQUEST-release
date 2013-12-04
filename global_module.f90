@@ -92,6 +92,8 @@
 !!   - Added flags and parameters for the efficient MD scheme
 !!   2013/08/20 M.Arita
 !!   - Added flags and variables for matrix reconstruction
+!!   2013/12/02 M.Arita
+!!   - Added flags and variables for XL-BOMD
 !!  SOURCE
 !!
 module global_module
@@ -125,7 +127,7 @@ module global_module
   integer, dimension(:,:), allocatable :: sorted_coord ! Atom IDs of atoms sorted according to x, y, z coords
   logical, dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
   integer, dimension(:), allocatable :: flag_cdft_atom
-  logical :: restart_L, restart_rho, restart_T
+  logical :: restart_L, restart_rho, restart_T, restart_X
 
   integer :: global_maxatomspart ! Maximum atoms per partition, if exceeded, triggers partitioning refinement
 
@@ -271,7 +273,10 @@ module global_module
   ! Displacement of atoms from a previous step
   real(double),allocatable :: atom_coord_diff(:,:)
   ! XL-BOMD
-  !logical :: flag_XLBOMD
+  logical :: flag_XLBOMD
+  logical :: flag_propagateX,flag_propagateL
+  logical :: flag_dissipation
+  character(20) :: integratorXL
 
 end module global_module
 !!***

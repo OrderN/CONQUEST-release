@@ -712,7 +712,8 @@ contains
   !! CREATION DATE 
   !!   2013/08/21
   !! MODIFICATION HISTORY
-  !!
+  !!   2013/12/02 M.Arita
+  !!    - Added calls for L-matrix reconstruction & update_H
   !! SOURCE
   !!
   subroutine safemin2(start_x, start_y, start_z, direction, energy_in, &
@@ -729,7 +730,8 @@ contains
                               flag_reset_dens_on_atom_move,           &
                               IPRINT_TIME_THRES1, flag_pcc_global,    &
                               atom_coord_diff,id_glob,flag_MDold,     &
-                              n_proc_old, glob2node_old
+                              n_proc_old, glob2node_old,              &
+                              flag_LmatrixReuse
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
                               n_L_iterations
     use GenComms,       only: my_barrier, myid, inode, ionode,        &
@@ -741,9 +743,13 @@ contains
     use density_module, only: density, set_density,                   &
                               flag_no_atomic_densities, set_density_pcc
     use maxima_module,  only: maxngrid
+    use matrix_data, ONLY: Lrange
+    use mult_module, ONLY: matL,L_trans
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
-    use io_module2, ONLY: grab_InfoGlobal,dump_InfoGlobal
+    use io_module2, ONLY: grab_InfoGlobal,dump_InfoGlobal,InfoL,grab_matrix2
+    use UpdateInfo_module, ONLY: Matrix_CommRebuild
+    use DiagModule, ONLY: diagon
 
     implicit none
 
@@ -758,7 +764,7 @@ contains
 
 
     ! Local variables
-    integer        :: i, j, iter, lun, gatom, stat
+    integer        :: i, j, iter, lun, gatom, stat, nfile, symm
     logical        :: reset_L = .false.
     logical        :: done
     type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
@@ -901,6 +907,14 @@ contains
          call gcopy(n_proc_old)
          call gcopy(glob2node_old,ni_in_cell)
          call updateIndices3(fixed_potential,direction)
+         ! L-matrix reconstruction (used to be called at updateIndices3)
+         if (.NOT.diagon .AND. flag_LmatrixReuse) then
+           call grab_matrix2('L',inode,nfile,InfoL)
+           call my_barrier()
+           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+         endif
+         ! Updates hamiltonian (used to be called at updateIndices3)
+         call update_H(fixed_potential)
          if (ionode.EQ.inode) write (io_lun,*) "get through CG: 1st stage"
        else
          write (io_lun,*) "CG: 1st stage with old CQ."
@@ -1037,6 +1051,14 @@ contains
       call gcopy(n_proc_old)
       call gcopy(glob2node_old,ni_in_cell)
       call updateIndices3(fixed_potential,direction)
+      ! L-matrix reconstruction (used to be called at updateIndices3)
+      if (.NOT.diagon .AND. flag_LmatrixReuse) then
+        call grab_matrix2('L',inode,nfile,InfoL)
+        call my_barrier()
+        call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+      endif
+      ! Updates hamiltonian (used to be called at updateIndices3)
+      call update_H(fixed_potential)
     else
       call updateIndices(.true., fixed_potential)
     endif
@@ -1125,6 +1147,14 @@ contains
          call gcopy(n_proc_old)
          call gcopy(glob2node_old,ni_in_cell)
          call updateIndices3(fixed_potential,direction)
+         ! L-matrix reconstruction (used to be called at updateIndices3)
+         if (.NOT.diagon .AND. flag_LmatrixReuse) then
+           call grab_matrix2('L',inode,nfile,InfoL)
+           call my_barrier()
+           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+         endif
+         ! Updates hamiltonian (used to be called at updateIndices3)
+         call update_H(fixed_potential)
        else
          call updateIndices(.true., fixed_potential)
        endif
@@ -1591,6 +1621,10 @@ contains
   !!   2013/08/20 M.Arita
   !!    -  Implemented L-matrix reconstruction
   !!    -  Deleted step and iteration
+  !!   2013/12/02 M.Arita
+  !!    -  Deleted calls for L-matrix reconstruction and update_H. They are
+  !!       called at md_run and safemin2
+  !!    -  Added calls for initialising and finalising matrix indexing for XL-BOMD
   !! SOURCE
   !!
   !OLD subroutine updateIndices3(fixed_potential,velocity,step,iteration)
@@ -1600,7 +1634,8 @@ contains
     use datatypes
     use global_module, ONLY: flag_basis_set,flag_Becke_weights,flag_dft_d2,blips, &
                              ni_in_cell,x_atom_cell,y_atom_cell,z_atom_cell,      &
-                             IPRINT_TIME_THRES2,glob2node,flag_LmatrixReuse
+                             IPRINT_TIME_THRES2,glob2node,flag_LmatrixReuse,      &
+                             flag_XLBOMD
     use GenComms, ONLY: inode,ionode,my_barrier,myid,gcopy
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
@@ -1622,6 +1657,7 @@ contains
     use matrix_data, ONLY: Lrange
     use io_module2, ONLY: grab_matrix2,InfoL
     use UpdateInfo_module, ONLY: make_glob2node,Matrix_CommRebuild
+    use XLBOMD_module, ONLY: immi_XL,fmmi_XL
 
     ! DB
     use global_module, ONLY: io_lun
@@ -1683,24 +1719,28 @@ contains
     ! finish blip-grid indexing
     call finish_blipgrid
     ! finish matrix multiplication indexing
+    if (flag_XLBOMD) call fmmi_XL()
     call fmmi(bundle)
     ! Reallocate and find new indices
     call immi(parts,bundle,BCS_parts,myid+1)
+    if (flag_XLBOMD) call immi_XL(parts,bundle,BCS_parts,myid+1)
     call my_barrier()
 
     !% NOTE: The author (michi) thinks L-matrix reconstruction, its preparation
     !%       and hamiltonian update should be called outside updateIndices3.
+    !%  --> Calls for L-matrix reconstruction & update_H deleted from r171
 
     ! Update glob2node
     if (inode.EQ.ionode) call make_glob2node
     call gcopy(glob2node,ni_in_cell)
-    ! L-matrix reconstruction
-    if (.NOT. diagon .AND. flag_LmatrixReuse) then
-      call grab_matrix2('L',inode,nfile,InfoL)
-      call my_barrier()
-      call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-    endif
-    call my_barrier()
+!%  The following routines are called outside updateIndices3 [02/12/2013]
+!%    ! L-matrix reconstruction
+!%    if (.NOT. diagon .AND. flag_LmatrixReuse) then
+!%      call grab_matrix2('L',inode,nfile,InfoL)
+!%      call my_barrier()
+!%      call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+!%    endif
+!%    call my_barrier()
 
     ! Only when using blips
     !if (flag_basis_set.EQ.blips) then
@@ -1712,8 +1752,9 @@ contains
     call associate_fn_on_grid
     call stop_print_timer(tmr_l_tmp2,"matrix reindexing",IPRINT_TIME_THRES2)
     if (flag_Becke_weights) call build_Becke_weights
-    ! Rebuild S, n(r) and hamiltonian based on new positions
-    call update_H(fixed_potential)
+!%  update_H is called outside updateIndices3 [02/12/2013]
+!%    ! Rebuild S, n(r) and hamiltonian based on new positions
+!%    call update_H(fixed_potential)
 
     call stop_print_timer(tmr_l_tmp1,"indices update",IPRINT_TIME_THRES2)
 
@@ -1765,6 +1806,10 @@ contains
   !!   2013/08/26 M.Arita
   !!   - Added call for get_electronic_density to calculate charge density
   !!     from L-matrix
+  !!   2013/12/02 M.Arita
+  !!   - Corrected calls to generate charge density
+  !!   - Added call for get_initiaL_XL to calculate an initial guess for
+  !!     L-matrix when XL-BOMD applies
   !!  SOURCE
   !!
   subroutine update_H(fixed_potential)
@@ -1784,7 +1829,8 @@ contains
     use global_module,          only: iprint_MD, flag_self_consistent, &
                                       IPRINT_TIME_THRES2,              &
                                       flag_pcc_global, flag_dft_d2,    &
-                                      nspin, flag_MDold, io_lun
+                                      nspin, flag_MDold, io_lun,       &
+                                      flag_mix_L_SC_min, flag_XLBOMD
     use density_module,         only: set_density,                     &
                                       flag_no_atomic_densities,        &
                                       density, set_density_pcc,        &
@@ -1793,6 +1839,7 @@ contains
     use maxima_module,          only: maxngrid
     use DFT_D2,                 only: dispersion_D2
     use functions_on_grid,      ONLY: supportfns, H_on_supportfns
+    use XLBOMD_module,          ONLY: get_initialL_XL
     
     implicit none
 
@@ -1806,6 +1853,7 @@ contains
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     ! (1) Get S matrix (includes blip-to-grid transform)
     call get_S_matrix(inode, ionode)
+    if (flag_XLBOMD) call get_initialL_XL()
     ! (2) get K matrix if O(N)
     if (.not. diagon) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1, &
@@ -1830,20 +1878,31 @@ contains
        call set_tm_pseudo
     end select
     ! Now we call set_density if we're using atomic densities
-    if ((.not. flag_self_consistent) .and. &
-        (.not. flag_no_atomic_densities)) then
+!ORI    if ((.not. flag_self_consistent) .and. &
+!ORI        (.not. flag_no_atomic_densities)) then
+!ORI       call set_density()
+!ORI    ! Calculate charge density from L-matrix [2013/08/26 michi]
+!ORI    else if (.NOT. diagon .AND. flag_self_consistent .AND. .NOT. flag_MDold) then
+!ORI       if (inode.EQ.ionode) write (io_lun,*) "update_H: Get charge density from L-matrix"
+!ORI       call get_electronic_density(density,electrons,supportfns,H_on_supportfns(1), &
+!ORI                                   inode,ionode,maxngrid)
+    ! For NSC calculations
+    if ((.NOT. flag_self_consistent)     .AND. &
+        (.NOT. flag_no_atomic_densities) .AND. &
+         .NOT. flag_mix_L_SC_min) then
        call set_density()
-       if (flag_pcc_global) call set_density_pcc()
-    ! Calculate charge density from L-matrix [2013/08/26 michi]
-    else if (.NOT. diagon .AND. flag_self_consistent .AND. .NOT. flag_MDold) then
-       if (inode.EQ.ionode) write (io_lun,*) "update_H: Get charge density from L-matrix"
-       call get_electronic_density(density,electrons,supportfns,H_on_supportfns(1), &
-                                   inode,ionode,maxngrid)
-       if (flag_pcc_global) call set_density_pcc()
+    ! For SCF-O(N) calculations
+    elseif (.NOT.diagon .AND. .NOT.flag_MDold) then
+      if (flag_self_consistent .OR. flag_mix_L_SC_min) then
+        if (inode.EQ.ionode) write (io_lun,*) "update_H: Get charge density from L-matrix"
+        call get_electronic_density(density,electrons,supportfns,H_on_supportfns(1), &
+                                    inode,ionode,maxngrid)
+      endif
     else if ((.not. flag_self_consistent) .and. &
              (flag_no_atomic_densities)) then
        call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
     end if
+    if (flag_pcc_global) call set_density_pcc()
     ! (6) Now generate a new H matrix, including a new charge density
     call get_H_matrix(.true., fixed_potential, electrons, density, &
                       maxngrid)

@@ -71,6 +71,8 @@
 !!   2013/08/23 M.Arita
 !!   - Added subroutine symmetrise_matA, which is an extention of 
 !!     symmetrise_L and applicable to any sort of matrices
+!!   2013/12/02 M.Arita
+!!   - Added parameter LS_T_L for XL-BOMD
 !!  SOURCE
 !!
 module mult_module
@@ -108,8 +110,9 @@ module mult_module
   integer(integ), parameter :: T_L_TL    = 19  ! type 1
   integer(integ), parameter :: TL_T_L    = 20  ! type 2
   integer(integ), parameter :: PAOP_PS_H = 21  ! type 1/2 (cf SP_PS_H)
+  integer(integ), parameter :: LS_T_L    = 22  ! type 2
 
-  integer(integ), parameter :: mx_mults  = 21
+  integer(integ), parameter :: mx_mults  = 22
 
   type(matrix_mult) :: mult(mx_mults)
 

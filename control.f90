@@ -385,6 +385,10 @@ contains
 !!   - Added 'iter' in velocityVerlet
 !!   - Added calls for reading/dumping global information
 !!   - Modified initial and final MD steps
+!!   2013/12/02 M.Arita
+!!   - Added calls for L-matrix reconstruction & update_H
+!!   2013/12/03 M.Arita
+!!   - Added calls for Ready_XLBOMD and Do_XLBOMD
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -395,12 +399,14 @@ contains
                               y_atom_cell, z_atom_cell, area_general, &
                               flag_read_velocity, flag_quench_MD,     &
                               temp_ion, flag_MDcontinue, MDinit_step, &
-                              flag_MDold,n_proc_old,glob2node_old
+                              flag_MDold,n_proc_old,glob2node_old,    &
+                              flag_LmatrixReuse,flag_XLBOMD,          &
+                              flag_dissipation
     use group_module,   only: parts
     use primary_module, only: bundle
     use minimise,       only: get_E_and_F
     use move_atoms,     only: velocityVerlet, updateIndices,          &
-                              init_velocity
+                              init_velocity, update_H
     use GenComms,       only: gsum, myid, my_barrier, inode, ionode,  &
                               gcopy
     use GenBlas,        only: dot
@@ -411,7 +417,12 @@ contains
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use move_atoms,     only: fac_Kelvin2Hartree
-    use io_module2,     ONLY: dump_InfoGlobal,grab_InfoGlobal
+    use io_module2,     ONLY: dump_InfoGlobal,grab_InfoGlobal,grab_matrix2,InfoL
+    use DiagModule,     ONLY: diagon
+    use mult_module,    ONLY: matL,L_trans
+    use matrix_data,    ONLY: Lrange
+    use UpdateInfo_module, ONLY: Matrix_CommRebuild
+    use XLBOMD_module,  ONLY: Ready_XLBOMD, Do_XLBOMD
 
     implicit none
 
@@ -422,7 +433,8 @@ contains
     
     ! Local variables
     real(double), allocatable, dimension(:,:) :: velocity
-    integer       ::  iter, i, k, length, stat, i_first, i_last
+    integer       ::  iter, i, k, length, stat, i_first, i_last, &
+                      nfile, symm
     real(double)  :: temp, KE, energy1, energy0, dE, max, g0
     real(double)  :: energy_md
     character(20) :: file_velocity='velocity.dat'
@@ -452,6 +464,10 @@ contains
     if (myid == 0 .and. iprint_gen > 0) write(io_lun, 2) MDn_steps
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
+
+    ! XL-BOMD
+    if (flag_XLBOMD .AND. flag_dissipation .AND. .NOT.flag_MDold) &
+      call Ready_XLBOMD()
 
     ! Get an initial MD step
     if (.NOT. flag_MDcontinue) then
@@ -496,6 +512,18 @@ contains
        end if
        !Now, updateIndices and update_atom_coord are done in velocityVerlet 
        !call updateIndices(.false.,fixed_potential, number_of_bands) 
+       ! L-matrix reconstruction (used to be called at updateIndices3)
+       if (.NOT.flag_MDold .AND. &
+           .NOT.diagon     .AND. &
+           flag_LmatrixReuse       ) then
+         call grab_matrix2('L',inode,nfile,InfoL)
+         call my_barrier()
+         call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+       endif
+       ! For XL-BOMD
+       if (flag_XLBOMD .AND. .NOT.diagon) call Do_XLBOMD(iter,MDtimestep)
+       ! Updates hamiltonian (used to be called at updateIndices3)
+       if (.NOT.flag_MDold) call update_H(fixed_potential)
        !ORI call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
        !ORI                  .false.)
        call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &

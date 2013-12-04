@@ -226,6 +226,8 @@ contains
   !!   - Changed spin implementation
   !!   2013/08/20 M.Arita
   !!    Add call for make_glob2node (necessary for matrix reconstruction)
+  !!   2013/12/03 M.Arita
+  !!    Added call for immi_XL for XL-BOMD
   !!  SOURCE
   !!
   subroutine set_up(find_chdens)
@@ -239,7 +241,7 @@ contains
                                       flag_pcc_global, flag_dft_d2,    &
                                       iprint_gen, flag_perform_cDFT,   &
                                       nspin, runtype, flag_MDold,      &
-                                      glob2node
+                                      glob2node, flag_XLBOMD
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl, type_int
     use group_module,           only: parts
@@ -295,6 +297,7 @@ contains
     use DFT_D2,                 only: read_para_D2
     use input_module,           ONLY: leqi
     use UpdateInfo_module,      ONLY: make_glob2node
+    use XLBOMD_module,          ONLY: immi_XL
 
     implicit none
 
@@ -386,6 +389,7 @@ contains
     call immi(parts, bundle, BCS_parts, inode)
     if (inode == ionode .and. iprint_init > 1) &
          write (io_lun, *) 'Completed immi()'
+    if (flag_XLBOMD) call immi_XL(parts,bundle,BCS_parts,inode)
 
     ! set up all the data block by block for atoms overlapping any
     ! point on block and similar
@@ -885,6 +889,8 @@ contains
   !!   2013/08/20 M.Arita
   !!    Added calls for reading global data and reconstructing L-matrix
   !!    and T-matrix
+  !!   2013/12/03 M.Arita
+  !!    Added calls for reading X-matrix files for XL-BOMD
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -894,7 +900,7 @@ contains
     use numbers
     use logicals
     use mult_module,       only: LNV_matrix_multiply, matL, matphi, &
-                                 matT, T_trans, L_trans
+                                 matT, T_trans, L_trans, LS_trans
     use SelfCon,           only: new_SC_potl
     use global_module,     only: iprint_init, flag_self_consistent, &
                                  flag_basis_set, blips, PAOs,       &
@@ -903,7 +909,10 @@ contains
                                  flag_dft_d2, nspin, spin_factor,   &
                                  flag_MDold,flag_MDcontinue,        &
                                  restart_T,glob2node,glob2node_old, &
-                                 n_proc_old,MDinit_step,ni_in_cell
+                                 n_proc_old,MDinit_step,ni_in_cell, &
+                                 flag_XLBOMD, flag_dissipation,     &
+                                 flag_propagateX, flag_propagateL,  &
+                                 restart_X
     use ewald_module,      only: ewald, mikes_ewald, flag_old_ewald
     use S_matrix_module,   only: get_S_matrix
     use GenComms,          only: my_barrier,end_comms,inode,ionode, &
@@ -921,9 +930,10 @@ contains
     use minimise,          only: SC_tolerance, L_tolerance,         &
                                  n_L_iterations, expected_reduction
     use DFT_D2,            only: dispersion_D2
-    use matrix_data,       ONLY: Lrange,Trange
+    use matrix_data,       ONLY: Lrange,Trange,LSrange
     use io_module2,        ONLY: grab_InfoGlobal,grab_matrix2,InfoL,InfoT
     use UpdateInfo_module, ONLY: make_glob2node,Matrix_CommRebuild
+    use XLBOMD_module,     ONLY: grab_XXvelS,grab_Xhistories
 
     implicit none
 
@@ -998,6 +1008,16 @@ contains
         end if
       endif
     end if
+    ! XL-BOMD
+    if (flag_XLBOMD .AND. restart_X) then
+      if (flag_propagateX) then
+        call grab_XXvelS(LSrange,LS_trans)
+        if (flag_dissipation) call grab_Xhistories(LSrange,LS_trans)
+      elseif (flag_propagateL) then
+        call grab_XXvelS(Lrange,L_trans)
+        if (flag_dissipation) call grab_Xhistories(Lrange,L_trans)
+      endif
+    endif
 
     ! (3) get K matrix (and also get phi matrix)
     if (.not. diagon .and. (find_chdens .or. restart_L)) then

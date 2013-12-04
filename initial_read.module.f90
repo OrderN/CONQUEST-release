@@ -472,7 +472,8 @@ contains
                              dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit, &
                              flag_MDcontinue,flag_MDdebug,flag_MDold, &
                              flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
-                             restart_T
+                             restart_T,restart_X,flag_XLBOMD,flag_propagateX, &
+                             flag_propagateL,flag_dissipation,integratorXL
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
                       RadiusSupport, NonLocalFactor, InvSRange,      &
@@ -534,6 +535,7 @@ contains
                          cDFT_NumberAtomGroups, cDFT_AtomList,       &
                          cDFT_BlockLabel, cDFT_Vc
     use sfc_partitions_module, only: n_parts_user, average_atomic_diameter
+    use XLBOMD_module, ONLY: XLInitFreq,maxitersDissipation,kappa
 
     implicit none
 
@@ -1180,6 +1182,53 @@ contains
        flag_TmatrixReuse=fdf_boolean('AtomMove.ReuseInvS',.false.)
        flag_SkipEarlyDM=fdf_boolean('AtomMove.SkipEarlyDM',.false.)
        McWFreq=fdf_integer('AtomMove.McWeenyFreq',0)
+       ! XL-BOMD
+       flag_XLBOMD=fdf_boolean('AtomMove.ExtendedLagrangian',.false.)
+       if (flag_XLBOMD) then
+         kappa=fdf_double('XL.Kappa',2.0_double)
+         if (kappa.GT.2.0_double) then
+           kappa=2.0_double
+           if (inode.EQ.ionode) &
+             write (io_lun,'(2x,a)') "WARNING: kappa should not be larger than 2.0 ! &
+                                     &Setting to 2.0 "
+         endif
+         if (.NOT.flag_LmatrixReuse) then
+           flag_LmatrixReuse = .true.
+           if (inode.EQ.ionode) write (io_lun,'(2x,a)') &
+             "WARNING: XL-BOMD requires L-matrix be reused ! Setting to true "
+         endif
+         flag_propagateX=fdf_boolean('XL.PropagateX',.true.)
+         flag_propagateL=fdf_boolean('XL.PropagateL',.false.)
+         if (flag_propagateX .AND. flag_propagateL) then
+           flag_propagateX = .false.
+           if (inode.EQ.ionode) write (io_lun,'(2x,a)')      &
+             "WARNING: we require X-matrix not be propagated &
+             &when employing the original scheme ! Setting to&
+             & false "
+         endif
+         XLInitFreq=fdf_integer('XL.ResetFreq',0)
+         flag_dissipation=fdf_boolean('XL.Dissipation',.false.)
+         maxitersDissipation=fdf_integer('XL.MaxDissipation',5)
+         if (flag_dissipation) then
+           if (maxitersDissipation.LT.1 .OR. maxitersDissipation.GT.9) then
+             maxitersDissipation = 5
+             if (inode.EQ.ionode) write (io_lun,'(2x,a)') &
+               "WARNING: K must be 1 <= K <= 9 ! Setting to 5"
+           endif
+         endif
+         integratorXL=fdf_string(20,'XL.Integrator','velocityVerlet')
+         if (integratorXL.NE.'velocityVerlet' .AND. integratorXL.NE.'Verlet') then
+           call cq_abort("Integrator for XL-BOMD must be either velocity Verlet &
+                         &or Verlet")
+         endif
+         if (integratorXL.EQ.'Verlet' .AND. .NOT.flag_dissipation) then
+           integratorXL='velocityVerlet'
+           if (inode.EQ.ionode) write (io_lun,'(2x,a)') &
+             "WARNING: integrator must be velocity Verlet when dissipation &
+             &does not apply ! Setting to velocity Verlet "
+         endif
+         restart_X=fdf_boolean('XL.LoadX',.false.)
+       endif ! XL-BOMD
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")
 !%%!else

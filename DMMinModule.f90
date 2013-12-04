@@ -136,6 +136,10 @@ contains
   !!   2013/08/20 M.Arita
   !!    - Changed calls for dumping L-matrix
   !!    - Added flag to start from EarlyDM
+  !!   2013/12/03 M.Arita
+  !!    - Added calls for writing out matrices for XL-BOMD
+  !!    - Added call for writing out InfoGlobal.dat
+  !!      (These used to be called at get_E_and_F)
   !!  SOURCE
   !!
   subroutine FindMinDM(n_L_iterations, vary_mu, tolerance, inode, &
@@ -146,9 +150,11 @@ contains
     use global_module, only: iprint_DM, IPRINT_TIME_THRES1,             &
                              nspin, flag_fix_spin_population,           &
                              ne_in_cell, ne_spin_in_cell, flag_dump_L,  &
-                             flag_MDold,flag_SkipEarlyDM
+                             flag_MDold,flag_SkipEarlyDM, flag_XLBOMD,  &
+                             flag_propagateX, flag_dissipation,         &
+                             integratorXL, runtype
     use mult_module,   only: matrix_transpose, matT, matTtran, matL,    &
-                             matrix_sum
+                             matS, matrix_sum
     use McWeeny,       only: InitMcW, McWMin
     use PosTan,        only: max_iters, cscale, PulayE, PulayR, PulayC, &
                              PulayBeta, pos_tan, fit_coeff
@@ -157,8 +163,9 @@ contains
     use energy,        only: entropy
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,   &
                              WITH_LEVEL
-    use io_module2,    ONLY: dump_matrix2
-    use matrix_data,   ONLY: Lrange
+    use io_module2,    ONLY: dump_matrix2, dump_InfoGlobal
+    use matrix_data,   ONLY: Lrange, Srange, LSrange
+    use XLBOMD_module, ONLY: matX, matXvel, dump_XL
 
     implicit none
 
@@ -239,6 +246,22 @@ contains
      if (flag_dump_L) then
        if (.NOT. flag_MDold) then
          call dump_matrix2('L',matL(1),inode,Lrange)
+         ! For XL-BOMD
+         if (flag_XLBOMD) then
+           if (flag_propagateX) then
+             call dump_matrix2('X',matX(1),inode,LSrange)
+             call dump_matrix2('S',matS   ,inode,Srange)
+             if (integratorXL.EQ.'velocityVerlet') &
+               call dump_matrix2('Xvel',matXvel(1),inode,LSrange)
+           else
+             call dump_matrix2('X',matX(1),inode,Lrange)
+             if (integratorXL.EQ.'velocityVerlet') &
+               call dump_matrix2('Xvel',matXvel(1),inode,Lrange)
+           endif
+           ! When dissipation applies
+           if (flag_dissipation) call dump_XL()
+         endif
+         if (runtype.EQ.'static') call dump_InfoGlobal(0)
        else
          if (nspin == 1) then
            call dump_matrix("L", matL(1), inode)
