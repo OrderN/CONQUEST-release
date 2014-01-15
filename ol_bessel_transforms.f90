@@ -671,7 +671,7 @@ contains
         k = ((i-1)/2)*twopi/(rcut+delta_r)
         if(k<0.2_double) then
            int_part = zero
-           do j=1,npts
+           do j=1,npts-1
               r = j*delta_r
               kr = k*r
               rcp_kr = one/kr

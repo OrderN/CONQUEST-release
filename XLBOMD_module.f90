@@ -1028,7 +1028,7 @@
       integer :: len,ispin,stat,j,K
       real(double) :: kappa_wk,acc,Pot_el,dr,dr_dt
       real(double),allocatable :: Fdiss(:,:)
-      integer,save :: allocated_tag = .false.
+      logical,save :: allocated_tag = .false.
 
       !% NOTE: In Verlet, X(dt) = X(0) + dt*Xvel(0) + half*kappa*(Z(0)-X(0))
       !%                        = X(0)
