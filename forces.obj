@@ -2,5 +2,6 @@
 # $Id: forces.obj,v 1.4 2003/02/10 13:47:05 drb Exp $
 #
 FORCES_OBJS = force_module.o \
-              move_atoms.module.o
-
+              move_atoms.module.o \
+              Integrators_module.o \
+              constraint_module.o

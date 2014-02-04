@@ -114,6 +114,8 @@ contains
   !!    instead
   !!   2012/03/27 L.Tong
   !!   - Changed spin implementation
+  !!   2014/02/04 M.Arita
+  !!   - Added call for initial_read_aux for constraint-MD
   !!  TODO
   !!   Improve calculation of number of bands 28/05/2001 dave Change
   !!   input so that appropriate variables are taken from modules
@@ -162,6 +164,7 @@ contains
     use input_module,           only: fdf_string
     use force_module,           only: tot_force
     use DiagModule,             only: diagon
+    use constraint_module,      ONLY: flag_RigidBonds,constraints
 
     implicit none
 
@@ -205,6 +208,7 @@ contains
     ! By now, we'll have unit cell sizes and grid cutoff
     call find_grid
     if(diagon) call readDiagInfo
+    if (flag_RigidBonds) call read_input_aux(constraints)
     if(inode==ionode.AND.iprint_init>1) &
          write(io_lun,fmt='(10x,"Partitioning method: ",i2)') part_method
     call read_mult(inode-1,parts,part_coord_file)
@@ -473,7 +477,8 @@ contains
                              flag_MDcontinue,flag_MDdebug,flag_MDold, &
                              flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
                              restart_T,restart_X,flag_XLBOMD,flag_propagateX, &
-                             flag_propagateL,flag_dissipation,integratorXL
+                             flag_propagateL,flag_dissipation,integratorXL,   &
+                             flag_FixCOM
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
                       RadiusSupport, NonLocalFactor, InvSRange,      &
@@ -536,6 +541,9 @@ contains
                          cDFT_BlockLabel, cDFT_Vc
     use sfc_partitions_module, only: n_parts_user, average_atomic_diameter
     use XLBOMD_module, ONLY: XLInitFreq,maxitersDissipation,kappa
+    use constraint_module, ONLY: flag_RigidBonds,constraints,SHAKE_tol, &
+                                 RATTLE_tol,maxiterSHAKE,maxiterRATTLE, &
+                                 const_range,n_bond
 
     implicit none
 
@@ -1182,6 +1190,7 @@ contains
        flag_TmatrixReuse=fdf_boolean('AtomMove.ReuseInvS',.false.)
        flag_SkipEarlyDM=fdf_boolean('AtomMove.SkipEarlyDM',.false.)
        McWFreq=fdf_integer('AtomMove.McWeenyFreq',0)
+       flag_FixCOM=fdf_boolean('AtomMove.FixCentreOfMass', .false.)
        ! XL-BOMD
        flag_XLBOMD=fdf_boolean('AtomMove.ExtendedLagrangian',.false.)
        if (flag_XLBOMD) then
@@ -1229,6 +1238,36 @@ contains
          endif
          restart_X=fdf_boolean('XL.LoadX',.false.)
        endif ! XL-BOMD
+       ! Constraints
+       flag_RigidBonds=fdf_boolean('AtomMove.RigidBonds', .false.)
+       if (flag_RigidBonds) then
+         constraints%filename=fdf_string(20,'RigidBonds.File','constraint.aux')
+         constraints%n_grp=fdf_integer('RigidBonds.NumberOfGroups',0)
+         SHAKE_tol=fdf_double('RigidBonds.SHAKETol',1.0E-8_double)
+         RATTLE_tol=fdf_double('RigidBonds.RATTLETol',1.0E-10_double)
+         maxiterSHAKE=fdf_integer('RigidBonds.MaxIterSHAKE', 500)
+         maxiterRATTLE=fdf_integer('RigidBonds.MaxIterRATTLE', maxiterSHAKE)
+         const_range=fdf_double('RigidBonds.SearchRange',9.448629943_double)
+         allocate (n_bond(constraints%n_grp))
+         ! Read block
+         if (constraints%n_grp.LE.0) call cq_abort('Error: The number of constraints must be &
+                                                   &positive integer:', constraints%n_grp)
+         allocate (constraints%grp_name(constraints%n_grp)      , &
+                   constraints%n_atom_in_grp(constraints%n_grp) , &
+                   constraints%n_subgrp(constraints%n_grp))     
+         do i = 1, constraints%n_grp
+           if (fdf_block('RigidBondsGroups')) then
+             read (unit=input_array(block_start+i-1),fmt=*) &
+               j,constraints%grp_name(i),constraints%n_atom_in_grp(i),constraints%n_subgrp(i)
+             if (constraints%n_atom_in_grp(i).LE.1) &
+               call cq_abort('Error: n_atom_in_grp must be greater than one:', &
+                             constraints%n_atom_in_grp(i))
+           else
+             call cq_abort('RigidBonds block not defined: '//'RigidBondsGroups')
+           endif
+           call fdf_endblock
+         enddo
+       endif ! Constraints
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")
 !%%!else
@@ -2391,6 +2430,130 @@ contains
 !%%! 6   format(2x,'Kpt: ',i4,' : ',3f12.8,' Weight: ',f10.6)
 !%%!   end subroutine readDiagInfo
 
+  ! ------------------------------------------------------------------------------
+  ! Subroutine read_input_aux
+  ! ------------------------------------------------------------------------------
+  
+  !!****f* initial_read/read_input_aux *
+  !!  NAME 
+  !!   read_input_aux
+  !!  USAGE
+  !!   call read_input_aux(aux)
+  !!  PURPOSE
+  !!   Reads auxiliary input files
+  !!  INPUTS
+  !!   type(group_aux) : aux
+  !!  AUTHOR
+  !!   M.Arita
+  !!  CREATION DATE
+  !!   2014/02/04
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine read_input_aux(aux)
+    ! Module usage
+    use global_module, ONLY: io_lun
+    use auxiliary_types, ONLY: group_aux
+    use GenComms, ONLY: myid,cq_abort,gcopy
+    use io_module, ONLY: io_assign,io_close
+    use input_module, ONLY: fdf_block,fdf_endblock,input_array,block_start
 
+    implicit none
+    ! passed variables
+    type(group_aux) :: aux
+    ! local varables
+    integer :: i,j,jj,l,natom,ibeg,stat,lun_aux
+    integer :: isize,jsize
+    logical :: done
+    character(20) :: filename_aux
+    character(100) :: line,line_blck
+
+    ! Allocation
+    isize = 0
+    jsize = 0
+    do i = 1, aux%n_grp
+      isize = isize + aux%n_atom_in_grp(i)*aux%n_subgrp(i)
+      jsize = jsize + aux%n_subgrp(i)
+    enddo
+    allocate (aux%ibeg_grp(aux%n_grp), STAT=stat)
+    if (stat.NE.0) call cq_abort('Error allocating ibeg_grp: ',aux%n_grp)
+    allocate (aux%glob_atom(isize), STAT=stat)
+    if (stat.NE.0) call cq_abort('Error allocating n_grp: ',isize)
+    allocate (aux%iatom_beg(jsize), STAT=stat)
+    if (stat.NE.0) call cq_abort('Error allocating iatom_beg: ',jsize)
+
+    if (myid.EQ.0) then
+      ! Open file
+      filename_aux=aux%filename
+      call io_assign(lun_aux)
+      open (lun_aux,file=filename_aux,status='old',action='read', iostat=stat)
+      if (stat.NE.0) call cq_abort('Error opening auxiliary file !')
+      ! Reckon addresses
+      aux%ibeg_grp(1) = 1
+      do i = 1, aux%n_grp-1
+        aux%ibeg_grp(i+1) = aux%ibeg_grp(i) + aux%n_atom_in_grp(i)*aux%n_subgrp(i)
+      enddo
+      aux%iatom_beg(1) = 1
+      l = 0
+      natom = aux%n_atom_in_grp(1)
+      do i = 1, aux%n_grp
+        do j = 1, aux%n_subgrp(i)
+          l = l + 1
+          if (l.NE.1) then
+            aux%iatom_beg(l) = aux%iatom_beg(l-1) + natom
+          else
+            cycle
+          endif
+          natom = aux%n_atom_in_grp(i)
+        enddo
+      enddo
+      ! Read aux%filename
+      do i = 1, aux%n_grp
+        done = .false.
+        ibeg = aux%ibeg_grp(i)
+        do while (.NOT.done)
+          read (lun_aux,'(a100)') line
+          line_blck = trim(adjustl(line(7:100)))
+          if (trim(adjustl(line_blck)).EQ.trim(aux%grp_name(i))) then
+            do j = 1, aux%n_subgrp(i)
+              read (lun_aux,*) jj,aux%glob_atom(ibeg:ibeg+aux%n_atom_in_grp(i)-1)
+              ibeg = ibeg + aux%n_atom_in_grp(i)
+            enddo
+            done = .true.
+          endif
+        enddo !done
+        rewind (lun_aux)
+      enddo
+
+      !% NOTE: I'd like to make use of fdf_block but it doesn't work...
+      !% ibeg = 1
+      !% do i = 1, aux%n_grp
+      !%   !if (fdf_block(trim(adjustl(aux%grp_name(i))))) then
+      !%   if (fdf_block(aux%grp_name(i))) then
+      !%     do j = 1, aux%n_subgrp(i)
+      !%       read (unit=input_array(block_start+j-1),fmt=*) &
+      !%         jj,aux%glob_atom(ibeg:ibeg+aux%n_atom_in_grp(i)-1)
+      !%         ibeg = ibeg + aux%n_atom_in_grp(i)
+      !%     enddo
+      !%   else
+      !%     write (io_lun,*) trim(adjustl(aux%grp_name(i)))," not found !"
+      !%     call cq_abort('Block not defined in auxiliary file:')
+      !%   endif
+      !%   rewind (lun_aux)
+      !%   call fdf_endblock
+      !% enddo
+
+      ! Close file
+      call io_close(lun_aux)
+    endif ! myid
+    ! Broadcast data to all processors
+    call gcopy(aux%ibeg_grp,aux%n_grp)
+    call gcopy(aux%glob_atom,isize)
+    call gcopy(aux%iatom_beg,jsize)
+
+    if (myid.EQ.0) write (io_lun,*) "Completed read_input_aux"
+
+    return
+  end subroutine read_input_aux
 
 end module initial_read

@@ -891,6 +891,8 @@ contains
   !!    and T-matrix
   !!   2013/12/03 M.Arita
   !!    Added calls for reading X-matrix files for XL-BOMD
+  !!   2014/02/03 michi
+  !!    Bug fix for changing the number of processors at the sequential job
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -931,7 +933,7 @@ contains
                                  n_L_iterations, expected_reduction
     use DFT_D2,            only: dispersion_D2
     use matrix_data,       ONLY: Lrange,Trange,LSrange
-    use io_module2,        ONLY: grab_InfoGlobal,grab_matrix2,InfoL,InfoT
+    use io_module2,        ONLY: n_matrix,grab_InfoGlobal,grab_matrix2,InfoL,InfoT
     use UpdateInfo_module, ONLY: make_glob2node,Matrix_CommRebuild
     use XLBOMD_module,     ONLY: grab_XXvelS,grab_Xhistories
 
@@ -963,6 +965,8 @@ contains
       call gcopy(n_proc_old)
       call gcopy(glob2node_old, ni_in_cell)
       call gcopy(MDinit_step)
+      n_matrix = 1
+      if (nspin.EQ.2) n_matrix = 2
       call my_barrier()
     endif
 

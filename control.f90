@@ -389,6 +389,10 @@ contains
 !!   - Added calls for L-matrix reconstruction & update_H
 !!   2013/12/03 M.Arita
 !!   - Added calls for Ready_XLBOMD and Do_XLBOMD
+!!   2014/02/03 M.Arita
+!!   - Adopted new integration scheme instead of velocityVerlet
+!!     with routines in Integrators_module
+!!   - Added calls for constraint-MD
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -401,12 +405,15 @@ contains
                               temp_ion, flag_MDcontinue, MDinit_step, &
                               flag_MDold,n_proc_old,glob2node_old,    &
                               flag_LmatrixReuse,flag_XLBOMD,          &
-                              flag_dissipation
+                              flag_dissipation,flag_FixCOM
     use group_module,   only: parts
     use primary_module, only: bundle
     use minimise,       only: get_E_and_F
-    use move_atoms,     only: velocityVerlet, updateIndices,          &
-                              init_velocity, update_H
+    use move_atoms,     only: velocityVerlet, updateIndices,           &
+                              init_velocity,update_H,check_move_atoms, &
+                              update_atom_coord,wrap_xyz_atom_cell,    &
+                              updateIndices3,zero_COM_velocity,        &
+                              calculate_kinetic_energy
     use GenComms,       only: gsum, myid, my_barrier, inode, ionode,  &
                               gcopy
     use GenBlas,        only: dot
@@ -423,6 +430,9 @@ contains
     use matrix_data,    ONLY: Lrange
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use XLBOMD_module,  ONLY: Ready_XLBOMD, Do_XLBOMD
+    use Integrators,    ONLY: vVerlet_v_dthalf,vVerlet_r_dt
+    use constraint_module, ONLY: correct_atomic_position,correct_atomic_velocity, &
+                                 ready_constraint,flag_RigidBonds
 
     implicit none
 
@@ -438,7 +448,8 @@ contains
     real(double)  :: temp, KE, energy1, energy0, dE, max, g0
     real(double)  :: energy_md
     character(20) :: file_velocity='velocity.dat'
-    logical       :: done
+    logical       :: done,second_call
+    logical,allocatable,dimension(:) :: flag_movable
 
     allocate(velocity(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
@@ -469,13 +480,21 @@ contains
     if (flag_XLBOMD .AND. flag_dissipation .AND. .NOT.flag_MDold) &
       call Ready_XLBOMD()
 
+    ! Get converted 1-D array for flag_atom_move
+    allocate (flag_movable(3*ni_in_cell), STAT=stat)
+    if (stat.NE.0) call cq_abort('Error allocating flag_movable: ',3*ni_in_cell)
+    call check_move_atoms(flag_movable)
+
+    ! constraint-MD
+    if (flag_RigidBonds) call ready_constraint()
+
     ! Get an initial MD step
     if (.NOT. flag_MDcontinue) then
       i_first = 1
       i_last  = MDn_steps
     else
-      i_first = MDinit_step
-      i_last = i_first + MDn_steps
+      i_first = MDinit_step + 1
+      i_last = i_first + MDn_steps - 1
     endif
     ! Dump global data
     if (.NOT. flag_MDold) then
@@ -498,42 +517,57 @@ contains
          call gcopy(glob2node_old,ni_in_cell)
        endif
 
-       call velocityVerlet(fixed_potential, bundle, MDtimestep, temp, &
-                           KE, flag_quench_MD, velocity, tot_force, iter)
+       !%%! Evolve atoms
+       call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable)
+       call vVerlet_r_dt(MDtimestep,velocity,flag_movable)
+       ! Constrain position
+       if (flag_RigidBonds) call correct_atomic_position(velocity,MDtimestep)
+       ! Reset-up
+       if (.NOT.flag_MDold) then
+         ! Update members
+         call wrap_xyz_atom_cell()
+         call update_atom_coord()
+         call updateIndices3(fixed_potential,velocity)
+         if (.NOT.diagon .AND. flag_LmatrixReuse) then
+           ! L-matrix reconstruction
+           call grab_matrix2('L',inode,nfile,InfoL)
+           call my_barrier()
+           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+         endif
+       else
+         call update_atom_coord()
+         call updateIndices(.true.,fixed_potential)
+       endif
+       if (flag_XLBOMD) call Do_XLBOMD(iter,MDtimestep)
+       call update_H(fixed_potential)
+       call get_E_and_F(fixed_potential,vary_mu,energy1,.true.,.false.,iter)
+       call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable,second_call)
+       ! Constrain velocity
+       if (flag_RigidBonds) call correct_atomic_velocity(velocity)
+       !%%! END of Evolve atoms
+
+       ! Let's analyse
+       if (flag_FixCOM) call zero_COM_velocity(velocity)
+       call calculate_kinetic_energy(velocity,KE)
+
+       ! Print out energy
+       energy_md = energy1
        if (myid == 0) &
-            write (io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
-                  KE / (three / two * ni_in_cell) / fac_Kelvin2Hartree
+         write (io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
+                KE / (three / two * ni_in_cell) / fac_Kelvin2Hartree
        if (myid == 0) write (io_lun, 8) iter, KE, energy_md, KE+energy_md
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
-          do i = 1, ni_in_cell
-             write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
-          end do
-       end if
-       !Now, updateIndices and update_atom_coord are done in velocityVerlet 
-       !call updateIndices(.false.,fixed_potential, number_of_bands) 
-       ! L-matrix reconstruction (used to be called at updateIndices3)
-       if (.NOT.flag_MDold .AND. &
-           .NOT.diagon     .AND. &
-           flag_LmatrixReuse       ) then
-         call grab_matrix2('L',inode,nfile,InfoL)
-         call my_barrier()
-         call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+         do i = 1, ni_in_cell
+           write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+         enddo
        endif
-       ! For XL-BOMD
-       if (flag_XLBOMD .AND. .NOT.diagon) call Do_XLBOMD(iter,MDtimestep)
-       ! Updates hamiltonian (used to be called at updateIndices3)
-       if (.NOT.flag_MDold) call update_H(fixed_potential)
-       !ORI call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
-       !ORI                  .false.)
-       call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
-                        .false., iter)
-        energy_md = energy1
+
        ! Dump global data
        if (.NOT. flag_MDold) then
          if (inode.EQ.ionode) call dump_InfoGlobal(iter)
        endif
-
+       
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero
@@ -558,6 +592,80 @@ contains
        !to check IO of velocity files
        call check_stop(done, iter)
        if (done) exit
+
+!%%!   if (myid == 0) &
+!%%!        write (io_lun, fmt='(4x,"MD run, iteration ",i5)') iter
+!%%!   ! Fetch old relations
+!%%!   if (.NOT. flag_MDold) then
+!%%!     if (.NOT. allocated(glob2node_old)) then
+!%%!       allocate (glob2node_old(ni_in_cell), STAT=stat)
+!%%!       if (stat.NE.0) call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
+!%%!     endif
+!%%!     if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
+!%%!     call gcopy(n_proc_old)
+!%%!     call gcopy(glob2node_old,ni_in_cell)
+!%%!   endif
+
+!%%!   call velocityVerlet(fixed_potential, bundle, MDtimestep, temp, &
+!%%!                       KE, flag_quench_MD, velocity, tot_force, iter)
+!%%!   if (myid == 0) &
+!%%!        write (io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
+!%%!              KE / (three / two * ni_in_cell) / fac_Kelvin2Hartree
+!%%!   if (myid == 0) write (io_lun, 8) iter, KE, energy_md, KE+energy_md
+!%%!   ! Output positions
+!%%!   if (myid == 0 .and. iprint_gen > 1) then
+!%%!      do i = 1, ni_in_cell
+!%%!         write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+!%%!      end do
+!%%!   end if
+!%%!   !Now, updateIndices and update_atom_coord are done in velocityVerlet 
+!%%!   !call updateIndices(.false.,fixed_potential, number_of_bands) 
+!%%!   ! L-matrix reconstruction (used to be called at updateIndices3)
+!%%!   if (.NOT.flag_MDold .AND. &
+!%%!       .NOT.diagon     .AND. &
+!%%!       flag_LmatrixReuse       ) then
+!%%!     call grab_matrix2('L',inode,nfile,InfoL)
+!%%!     call my_barrier()
+!%%!     call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+!%%!   endif
+!%%!   ! For XL-BOMD
+!%%!   if (flag_XLBOMD .AND. .NOT.diagon) call Do_XLBOMD(iter,MDtimestep)
+!%%!   ! Updates hamiltonian (used to be called at updateIndices3)
+!%%!   if (.NOT.flag_MDold) call update_H(fixed_potential)
+!%%!   !ORI call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
+!%%!   !ORI                  .false.)
+!%%!   call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
+!%%!                    .false., iter)
+!%%!    energy_md = energy1
+!%%!   ! Dump global data
+!%%!   if (.NOT. flag_MDold) then
+!%%!     if (inode.EQ.ionode) call dump_InfoGlobal(iter)
+!%%!   endif
+
+!%%!   ! Analyse forces
+!%%!   g0 = dot(length, tot_force, 1, tot_force, 1)
+!%%!   max = zero
+!%%!   do i = 1, ni_in_cell
+!%%!      do k = 1, 3
+!%%!         if (abs(tot_force(k,i)) > max) max = tot_force(k,i)
+!%%!      end do
+!%%!   end do
+!%%!   ! Output and energy changes
+!%%!   dE = energy0 - energy1
+!%%!   if (myid == 0) write (io_lun, 6) max
+!%%!   if (myid == 0) write (io_lun, 4) dE
+!%%!   if (myid == 0) write (io_lun, 5) sqrt(g0/ni_in_cell)
+!%%!   energy0 = energy1
+!%%!   energy1 = abs(dE)
+!%%!   if (myid == 0 .and. mod(iter, MDfreq) == 0) &
+!%%!        call write_positions(iter, parts)
+!%%!   call my_barrier
+!%%!   !to check IO of velocity files
+!%%!   call write_velocity(velocity, file_velocity)
+!%%!   call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+!%%!   !to check IO of velocity files
+!%%!   call check_stop(done, iter)
+!%%!   if (done) exit
     end do
     deallocate(velocity, STAT=stat)
     if (stat /= 0) call cq_abort("Error deallocating velocity in md_run: ", &
@@ -700,6 +808,9 @@ contains
   !!   - Removed redundant input parameter real(double) mu
   !!   2013/03/06 17:08 dave
   !!   - Minor bug fix (length of force array)
+  !!   2014/02/04 M.Arita
+  !!   - Added call for update_H since it is not called at
+  !!     updateIndices any longer
   !!  SOURCE
   !!
   subroutine pulay_relax(fixed_potential, vary_mu, total_energy)
@@ -715,7 +826,7 @@ contains
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
                               updateIndices, update_atom_coord,     &
-                              safemin
+                              safemin, update_H
     use GenComms,       only: gsum, myid
     use GenBlas,        only: dot
     use force_module,   only: tot_force
@@ -846,6 +957,7 @@ contains
           end if
           call update_atom_coord
           call updateIndices(.true., fixed_potential)
+          call update_H(fixed_potential)
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
                            .false.)
        else
@@ -883,6 +995,7 @@ contains
        end if
        call update_atom_coord
        call updateIndices(.true., fixed_potential)
+       call update_H(fixed_potential)
        call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
                         .false.)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))

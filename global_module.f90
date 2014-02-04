@@ -263,6 +263,7 @@ module global_module
   logical :: flag_SkipEarlyDM
   logical :: flag_MDcontinue
   logical :: flag_MDdebug
+  logical :: flag_FixCOM
   integer :: McWFreq
   integer :: MDinit_step  
   real(double),parameter   :: shift_in_bohr = 1.0E-03_double

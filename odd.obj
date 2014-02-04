@@ -10,5 +10,5 @@ ODD_OBJS = datestamp.o fft_module.o \
            memory_module.o \
            mpi.o \
            timer_module.o \
-           timer_stdclocks_module.o
-
+           timer_stdclocks_module.o \
+           auxiliary_types.o

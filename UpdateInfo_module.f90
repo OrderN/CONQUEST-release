@@ -74,6 +74,10 @@ contains
   !!   2013/08/23 michi
   !!   - Replaced call for symmetrise_L with symmetrise_matA, 
   !!     and added trans and symm in dummy arguments
+  !!   2014/02/03 michi
+  !!   - Bug fix for serial simulations
+  !!   - Bug fix for changing the number of processors at the 
+  !!     sequential job
   !!  SOURCE
   !!
   !subroutine Matrix_CommRebuild(Info,range,matA,nfile)
@@ -221,9 +225,9 @@ contains
         open (lun_db4,file=file_name4)
         open (lun_db5,file=file_name5)
         open (lun_db6,file=file_name6)
-        write (lun_db2,*) irecv_array(1:)
-        write (lun_db3,*) irecv2_array(1:)
-        write (lun_db4,*) recv_array(1:)
+        if (allocated(irecv_array) ) write (lun_db2,*) irecv_array(1:)
+        if (allocated(irecv2_array)) write (lun_db3,*) irecv2_array(1:)
+        if (allocated(recv_array)  ) write (lun_db4,*) recv_array(1:)
         call io_close(lun_db2)
         call io_close(lun_db3)
         call io_close(lun_db4)
@@ -238,13 +242,15 @@ contains
     !! ------------------------------ NOTE: ------------------------------- !! 
     if (inode.EQ.ionode) write (io_lun,*) "Reorganise local matrix data"
     call UpdateMatrix_local(Info,range,matA,flag_remote_iprim,nfile)
-    if (LmatrixSend%nrecv_node.GT.0 .OR. LmatrixRecv%nsend_node.GT.0) then
-      if (inode.EQ.ionode) write (io_lun,*) "Reorganise remote matrix data"
-      call UpdateMatrix_remote(range,matA,LmatrixRecv,flag_remote_iprim,irecv2_array,recv_array)
+    if (numprocs.NE.1) then
+      if (LmatrixSend%nrecv_node.GT.0 .OR. LmatrixRecv%nsend_node.GT.0) then
+        if (inode.EQ.ionode) write (io_lun,*) "Reorganise remote matrix data"
+        call UpdateMatrix_remote(range,matA,LmatrixRecv,flag_remote_iprim,irecv2_array,recv_array)
+      endif
     endif
     if (flag_MDdebug .AND. iprint_MDdebug.GT.3) write (lun_db5,*) mat_p(matA)%matrix(1:)
     ! symmetrise_L should be modified to be applicable to any sort of matrices [22/08/2013 michi]
-    ! Musr consider spin later as well.
+    ! Must consider spin later as well.
     !ORI call symmetrise_L() ! if not calling this routine, IntEnergy gets unstable.. (ibeg2 was wrong.)
     if (present(symm)) call symmetrise_matA(range,trans,matA)
     call my_barrier()
@@ -271,7 +277,7 @@ contains
       if (inode.EQ.ionode) write (io_lun,*) "Deallocate arrays related to Info" !db
     endif
 
-    if (LmatrixRecv%nsend_node.GE.1) then
+    if (LmatrixRecv%nsend_node.GE.1 .AND. numprocs.NE.1) then
       deallocate (nreq2,nreq3, STAT=stat_alloc)
       if (stat_alloc.NE.0) call cq_abort('Error deallocating nreq2 and/or nreq3:', &
                                           LmatrixRecv%nsend_node)
@@ -583,7 +589,8 @@ contains
   !!  CREATION DATE
   !!   2013/08/22
   !!  MODIFICATION
-  !!
+  !!   2014/02/03 michi
+  !!   - Bug fix for changing the number of processors at the sequential job
   !!  SOURCE
   !!
   subroutine alloc_send_array(nfile,LmatrixSend,isend_array,isend2_array,send_array,Info)
@@ -679,12 +686,16 @@ contains
     !! ---------- DEBUG ---------- !!
     if (flag_MDdebug .AND. iprint_MDdebug.GT.2) then
       write (lun_db,'(a,1x,i5)') "No. of Lmat file I have (nfile):", nfile
-      write (lun_db,'(a,1x,i5)') "No. of my primary atoms in Lmat files (mx_natom_total):", mx_natom_total
+      write (lun_db,'(a,1x,i5)') "No. of my primary atoms in Lmat files (mx_natom_total):", &
+                                  mx_natom_total
       write (lun_db,'(a,1x,i5)') "No. of atoms which are no longer my primary atoms (natom_remote):", &
                                   LmatrixSend%natom_remote
-      write (lun_db,*) "natomr2ifile:", natomr_to_ifile(1:LmatrixSend%natom_remote)
-      write (lun_db,*) "natomr2ia_ifile:", natomr_to_ia_file(1:LmatrixSend%natom_remote)
-      write (lun_db,*) "natomr2inode:", natomr_to_inode(1:LmatrixSend%natom_remote)
+      if (allocated(natomr_to_ifile))   &
+        write (lun_db,*) "natomr2ifile   :", natomr_to_ifile(1:LmatrixSend%natom_remote)
+      if (allocated(natomr_to_ia_file)) &
+        write (lun_db,*) "natomr2ia_ifile:", natomr_to_ia_file(1:LmatrixSend%natom_remote)
+      if (allocated(natomr_to_inode))   &
+        write (lun_db,*) "natomr2inode   :", natomr_to_inode(1:LmatrixSend%natom_remote)
       write (lun_db,*) ""
       call io_close(lun_db)
     endif
@@ -703,7 +714,7 @@ contains
     !! ---------- DEBUG ---------- !!
 
     LmatrixSend%nrecv_node = 0
-    if (LmatrixSend%natom_remote.GT.0) then
+    if (LmatrixSend%natom_remote.GT.0 .AND. nfile.GT.0) then
       allocate (list_node_tmp(LmatrixSend%natom_remote) , &
                 natom_node_tmp(LmatrixSend%natom_remote), &
                 natomr_to_nnd(LmatrixSend%natom_remote) , & 
@@ -805,7 +816,7 @@ contains
     endif
     !! ---------- DEBUG ---------- !!
 
-    if (LmatrixSend%natom_remote.GT.0) then
+    if (LmatrixSend%natom_remote.GT.0 .AND. nfile.GT.0) then
       if (flag_MDdebug .AND. iprint_MDdebug.GT.2) &
         write (lun_db,*) "No. of atoms sent to other nodes:", LmatrixSend%natom_remote
       !! =============================== !!
@@ -937,7 +948,7 @@ contains
     endif !(natom_remote.GT.0)
 
     !! ---------- DEBUG ---------- !!
-    if (flag_MDdebug .AND. iprint_MDdebug.GT.2) then
+    if (flag_MDdebug .AND. iprint_MDdebug.GT.2 .AND. nfile.GT.0) then
       write (lun_db,*) "---- Process 4. ----"
       !write (lun_db,*) "iatom_send: ", iatom_send
       write (lun_db,*) "iatom_sort(iatom_send): ", iatom_sort(1:LmatrixSend%natom_remote)
@@ -945,11 +956,11 @@ contains
       write (lun_db,*) "atom_ia_file: ", LmatrixSend%atom_ia_file(1:LmatrixSend%natom_remote)
       write (lun_db,*) "---- Process 5. ----"
       write (lun_db,*) "Size of isend_array (4*natom_remote): ", 4*LmatrixSend%natom_remote
-      write (lun_db,*) "isend_array: ", isend_array(1:)
+      if (allocated(isend_array) ) write (lun_db,*) "isend_array: ", isend_array(1:)
       write (lun_db,*) "Size of isend2_array (nsize_jj*2): ", nsize_jj, "x 2"
-      write (lun_db,*) "isend2_array: ", isend2_array(1:)
+      if (allocated(isend2_array)) write (lun_db,*) "isend2_array: ", isend2_array(1:)
       write (lun_db,*) "Size of send_array (nsize_Lmatrix_remote): ", nsize_Lmatrix_remote
-      write (lun_db,*) "send_array: ", send_array(1:)
+      if (allocated(send_array)  ) write (lun_db,*) "send_array: ", send_array(1:)
       call io_close(lun_db)
     endif
     !! ---------- DEBUG ---------- !!
@@ -959,7 +970,7 @@ contains
       deallocate (natomr_to_ifile,natomr_to_ia_file,natomr_to_inode, STAT=stat_alloc)
       if (stat_alloc.NE.0) call cq_abort('Error deallocating arrays used in process 1: ')
     endif
-    if (LmatrixSend%natom_remote.GT.0) then
+    if (LmatrixSend%natom_remote.GT.0 .AND. nfile.GT.0) then
       deallocate (list_node_tmp,natom_node_tmp,natomr_to_nnd,natomr_to_iaINnode, STAT=stat_alloc)
       if (stat_alloc.NE.0) call cq_abort('Error deallocating arrays used in process 2: ')
       deallocate (iatom_sort, STAT=stat_alloc)
@@ -1317,7 +1328,8 @@ contains
   !!  CREATION DATE
   !!   2013/08/22
   !!  MODIFICATION
-  !!
+  !!   2014/02/03 michi
+  !!   - Bug fix for changing the number of processors at the sequential job
   !!  SOURCE
   !!
   subroutine alloc_recv_array(irecv_array,irecv2_array,recv_array, &
@@ -1515,15 +1527,17 @@ contains
       write (lun_db,*) ""
       write (lun_db,*) "nsend_node:", LmatrixRecv%nsend_node
       write (lun_db,*) "isort_node(nnd):", isort_node(1:)
-      if (associated(LmatrixRecv%list_send_node)) &
-         write (lun_db,*) "list_send_node(nnd):", LmatrixRecv%list_send_node(1:)
-      if (associated(LmatrixRecv%natom_send_node)) &
-        write (lun_db,*) "natom_send_node(nnd):", LmatrixRecv%natom_send_node(1:)
-      if (associated(LmatrixRecv%ibeg_send_node)) &
-        write (lun_db,*) "ibeg_send_node(nnd):", LmatrixRecv%ibeg_send_node(1:)
-      write (lun_db,*) "Size of irecv_array:", LmatrixRecv%natom_remote, "x 4"
-      if (allocated(irecv_array)) &
-        write (lun_db,*) "irecv_array: ", irecv_array(1:)
+      if (LmatrixRecv%natom_remote.GT.0) then
+        if (associated(LmatrixRecv%list_send_node)) &
+          write (lun_db,*) "list_send_node(nnd):", LmatrixRecv%list_send_node(1:)
+        if (associated(LmatrixRecv%natom_send_node)) &
+          write (lun_db,*) "natom_send_node(nnd):", LmatrixRecv%natom_send_node(1:)
+        if (associated(LmatrixRecv%ibeg_send_node)) &
+          write (lun_db,*) "ibeg_send_node(nnd):", LmatrixRecv%ibeg_send_node(1:)
+        write (lun_db,*) "Size of irecv_array:", LmatrixRecv%natom_remote, "x 4"
+        if (allocated(irecv_array)) &
+          write (lun_db,*) "irecv_array: ", irecv_array(1:)
+      endif
       call io_close(lun_db)
     endif
     !! ---------- DEBUG ---------- !!

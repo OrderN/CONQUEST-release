@@ -366,6 +366,8 @@ contains
 !!    Removed redundant parameter number_of_bands
 !!   2012/03/27 L.Tong
 !!   - Removed redundant input parameter real(double) mu
+!!   2014/02/03 M.Arita
+!!   - Added call for update_H because this is no longer called at updateIndices
 !!  SOURCE
 !!
   subroutine safemin(start_x, start_y, start_z, direction, energy_in, &
@@ -510,6 +512,7 @@ contains
        ! Update indices and find energy and forces
        !call updateIndices(.false.,fixed_potential, number_of_bands)
        call updateIndices(.true., fixed_potential)
+       call update_H(fixed_potential)
        ! These lines add back on the atomic densities for NEW atomic positions
        !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
           ! Add on atomic densities
@@ -600,6 +603,7 @@ contains
     ! Check minimum: update indices and find energy and forces
     !call updateIndices(.false.,fixed_potential, number_of_bands)
     call updateIndices(.true., fixed_potential)
+    call update_H(fixed_potential)
     !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
        ! Add on atomic densities
        !store_density = density
@@ -652,6 +656,7 @@ contains
        call update_atom_coord
 !Update atom_coord : TM 27Aug2003
        call updateIndices(.true., fixed_potential)
+       call update_H(fixed_potential)
        !call updateIndices(.false.,fixed_potential, number_of_bands)
        !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
           ! Add on atomic densities
@@ -714,6 +719,8 @@ contains
   !! MODIFICATION HISTORY
   !!   2013/12/02 M.Arita
   !!    - Added calls for L-matrix reconstruction & update_H
+  !!   2014/02/03 M.Arita
+  !!    - update_H moved outside if statement
   !! SOURCE
   !!
   subroutine safemin2(start_x, start_y, start_z, direction, energy_in, &
@@ -913,13 +920,12 @@ contains
            call my_barrier()
            call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
          endif
-         ! Updates hamiltonian (used to be called at updateIndices3)
-         call update_H(fixed_potential)
          if (ionode.EQ.inode) write (io_lun,*) "get through CG: 1st stage"
        else
          write (io_lun,*) "CG: 1st stage with old CQ."
          call updateIndices(.true., fixed_potential)
        endif
+       call update_H(fixed_potential)
        !Update start_x,start_y & start_z
        call update_start_xyz(start_x,start_y,start_z)
        ! These lines add back on the atomic densities for NEW atomic positions
@@ -1057,11 +1063,10 @@ contains
         call my_barrier()
         call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
       endif
-      ! Updates hamiltonian (used to be called at updateIndices3)
-      call update_H(fixed_potential)
     else
       call updateIndices(.true., fixed_potential)
     endif
+    call update_H(fixed_potential)
     !Update start_x,start_y & start_z
     call update_start_xyz(start_x,start_y,start_z)
     !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
@@ -1153,11 +1158,10 @@ contains
            call my_barrier()
            call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
          endif
-         ! Updates hamiltonian (used to be called at updateIndices3)
-         call update_H(fixed_potential)
        else
          call updateIndices(.true., fixed_potential)
        endif
+       call update_H(fixed_potential)
        !call updateIndices(.false.,fixed_potential, number_of_bands)
        ! Update start_x,start_y & start_z
        call update_start_xyz(start_x,start_y,start_z)!25/01/2013
@@ -1429,6 +1433,8 @@ contains
   !!    Updated call to set_blipgrid
   !!   2011/12/09 L.Tong
   !!    Removed redundant parameter number_of_bands
+  !!   2014/02/03 M.Arita
+  !!    Removed call for update_H
   !!  TODO
   !!   Think about updating radius component of matrix derived type,
   !!   or eliminating it !
@@ -1509,7 +1515,7 @@ contains
     end if
     if (flag_Becke_weights) call build_Becke_weights
     ! Rebuild S, n(r) and hamiltonian based on new positions
-    call update_H(fixed_potential)
+    !call update_H(fixed_potential)
     call stop_print_timer(tmr_l_tmp1,"indices update",IPRINT_TIME_THRES2)
     return
   end subroutine updateIndices
@@ -1527,6 +1533,8 @@ contains
   !! MODIFICATION HISTORY
   !!   2011/12/09 L.Tong
   !!     Removed redundant parameter number_of_bands
+  !!   2014/02/03 M.Arita
+  !!     Removed call for update_H
   !! SOURCE
   !!
   subroutine updateIndices2(matrix_update, fixed_potential)
@@ -1601,7 +1609,7 @@ contains
     end if
     if(flag_Becke_weights) call build_Becke_weights
     ! Rebuild S, n(r) and hamiltonian based on new positions
-    call update_H (fixed_potential)
+    !call update_H (fixed_potential)
     return
   end subroutine updateIndices2
   !!*****
@@ -2556,6 +2564,154 @@ contains
       
     return
   end subroutine wrap_xyz_atom_cell
+  !!***
+
+  ! --------------------------------------------------------------------
+  ! Subroutine calculate_kinetic_energy
+  ! --------------------------------------------------------------------
+  
+  !!****f* move_atoms/calculate_kinetic_energy *
+  !!  NAME 
+  !!   calculate_kinetic_energy
+  !!  USAGE
+  !!   call calculate_kinetic_energy(v,KE)
+  !!  PURPOSE
+  !!   Calculates the ionic kinetic energy
+  !!  INPUTS
+  !!   real(double), v : particle velocity
+  !!   real(double), KE: kinetic energy
+  !!  AUTHOR
+  !!   Michiaki Arita
+  !!  CREATION DATE
+  !!   2014/02/03
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine calculate_kinetic_energy(v,KE)
+    ! Module usage
+    use datatypes
+    use numbers, ONLY: zero,half
+    use global_module, ONLY: ni_in_cell
+    use species_module, ONLY: species,mass
+
+    implicit none
+    ! passed variables
+    real(double),dimension(3,ni_in_cell),intent(in) :: v
+    real(double),intent(out) :: KE
+    ! local variables
+    integer :: atom,k,speca
+    real(double) :: massa
+
+    KE = zero
+    do atom = 1, ni_in_cell
+      speca = species(atom)
+      massa = mass(speca)*fac
+      do k = 1, 3
+        KE = KE + massa*v(k,atom)*v(k,atom)
+      enddo
+    enddo
+    KE = half*KE
+
+    return
+  end subroutine calculate_kinetic_energy
+  !!***
+
+  !!****f* move_atoms/zero_COM_velocity *
+  !!  NAME 
+  !!   zero_COM_velocity
+  !!  USAGE
+  !!   call zero_COM_velocity(v)
+  !!  PURPOSE
+  !!   Fixes the centre-of-mass of the system
+  !!  INPUT
+  !!   real(double), v : particle velocity
+  !!  OUTPUT
+  !!   real(double), v : particle velocity subtracted by COM velocity
+  !!  AUTHOR
+  !!   Michiaki Arita
+  !!  CREATION DATE
+  !!   2014/02/03
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine zero_COM_velocity(v)
+    ! Module usage
+    use datatypes
+    use numbers, ONLY: zero
+    use global_module, ONLY: ni_in_cell
+    use species_module, ONLY: species,mass
+
+    implicit none
+    ! passed variable
+    real(double),dimension(3,ni_in_cell),intent(inout) :: v
+    ! local variables
+    integer :: atom,k,speca
+    real(double) :: massa,M
+    real(double),dimension(3) :: COMv
+
+    ! Calculates centre-of-mass velocity
+    M = zero
+    COMv = zero
+    do atom = 1, ni_in_cell
+      speca = species(atom)
+      massa = mass(speca)
+      M = M + massa
+      do k = 1, 3
+        COMv(k) = COMv(k) + massa*v(k,atom)
+      enddo
+    enddo
+    COMv = COMv / M
+
+    ! Subtracts centre-of-mass velocity from particle velocity
+    do atom = 1, ni_in_cell
+      do k = 1, 3
+        v(k,atom) = v(k,atom) - COMv(k)
+      enddo
+    enddo
+
+    return
+  end subroutine zero_COM_velocity
+  !!***
+
+  !!****f* move_atoms/check_move_atoms *
+  !!  NAME 
+  !!   check_move_atoms
+  !!  USAGE
+  !!   call check_move_atoms(flag_movable)
+  !!  PURPOSE
+  !!   Converts flag_move_atom to 1-D array
+  !!  INPUT
+  !!   logical,flag_movable: converted 1-D array to tell if atoms move
+  !!  OUTPUT
+  !!   logical,flag_movable: converted 1-D array to tell if atoms move
+  !!  AUTHOR
+  !!   Michiaki Arita
+  !!  CREATION DATE
+  !!   2014/02/03
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine check_move_atoms(flag_movable)
+    ! Module usage
+    use global_module, ONLY: ni_in_cell,id_glob,flag_move_atom
+
+    implicit none
+    ! passed variable
+    logical,dimension(3*ni_in_cell) :: flag_movable
+    ! local variables
+    integer :: atom,k,gatom,ibeg_atom
+
+    ibeg_atom = 1
+    do atom = 1, ni_in_cell
+      gatom = id_glob(atom)
+      do k = 1, 3
+        flag_movable(ibeg_atom+k-1) = flag_move_atom(k,gatom)
+      enddo
+      ibeg_atom = ibeg_atom + 3
+    enddo
+
+    return
+  end subroutine check_move_atoms
   !!***
 
   ! =====================================================================
