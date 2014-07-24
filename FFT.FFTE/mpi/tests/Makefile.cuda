@@ -1,0 +1,76 @@
+FC = mpif90
+FCFLAGS = -fast -Mcuda=cc3x,cuda5.5 -Minfo -I../..
+
+all: pcutest1d pcutest2d pcutest3d pcutest3dv pcuspeed1d pcuspeed2d pcuspeed3d pcuspeed3dv
+
+pcutest1d : pcutest1d.o pcuzfft1d.o pfactor.o cuztrans.o factor.o
+	$(FC) $(FCFLAGS) pcutest1d.o pcuzfft1d.o pfactor.o cuztrans.o factor.o -o pcutest1d -lcufft
+
+pcutest2d : pcutest2d.o pcuzfft2d.o cuztrans.o factor.o
+	$(FC) $(FCFLAGS) pcutest2d.o pcuzfft2d.o cuztrans.o factor.o -o pcutest2d -lcufft
+
+pcutest3d : pcutest3d.o pcuzfft3d.o cuztrans.o factor.o
+	$(FC) $(FCFLAGS) pcutest3d.o pcuzfft3d.o cuztrans.o factor.o -o pcutest3d -lcufft
+
+pcutest3dv : pcutest3dv.o pcuzfft3dv.o cuztrans.o factor.o
+	$(FC) $(FCFLAGS) pcutest3dv.o pcuzfft3dv.o cuztrans.o factor.o -o pcutest3dv -lcufft
+
+pcutest1d.o : pcutest1d.f
+	$(FC) $(FCFLAGS) -c pcutest1d.f -o pcutest1d.o
+
+pcutest2d.o : pcutest2d.f
+	$(FC) $(FCFLAGS) -c pcutest2d.f -o pcutest2d.o
+
+pcutest3d.o : pcutest3d.f
+	$(FC) $(FCFLAGS) -c pcutest3d.f -o pcutest3d.o
+
+pcutest3dv.o : pcutest3dv.f
+	$(FC) $(FCFLAGS) -c pcutest3dv.f -o pcutest3dv.o
+
+pcuspeed1d : pcuspeed1d.o pcuzfft1d.o pfactor.o cuztrans.o factor.o
+	$(FC) $(FCFLAGS) pcuspeed1d.o pcuzfft1d.o pfactor.o cuztrans.o factor.o -o pcuspeed1d -lcufft
+
+pcuspeed2d : pcuspeed2d.o pcuzfft2d.o cuztrans.o factor.o
+	$(FC) $(FCFLAGS) pcuspeed2d.o pcuzfft2d.o cuztrans.o factor.o -o pcuspeed2d -lcufft
+
+pcuspeed3d : pcuspeed3d.o pcuzfft3d.o cuztrans.o factor.o
+	$(FC) $(FCFLAGS) pcuspeed3d.o pcuzfft3d.o cuztrans.o factor.o -o pcuspeed3d -lcufft
+
+pcuspeed3dv : pcuspeed3dv.o pcuzfft3dv.o cuztrans.o factor.o
+	$(FC) $(FCFLAGS) pcuspeed3dv.o pcuzfft3dv.o cuztrans.o factor.o -o pcuspeed3dv -lcufft
+
+pcuspeed1d.o : pcuspeed1d.f
+	$(FC) $(FCFLAGS) -c pcuspeed1d.f -o pcuspeed1d.o
+
+pcuspeed2d.o : pcuspeed2d.f
+	$(FC) $(FCFLAGS) -c pcuspeed2d.f -o pcuspeed2d.o
+
+pcuspeed3d.o : pcuspeed3d.f
+	$(FC) $(FCFLAGS) -c pcuspeed3d.f -o pcuspeed3d.o
+
+pcuspeed3dv.o : pcuspeed3dv.f
+	$(FC) $(FCFLAGS) -c pcuspeed3dv.f -o pcuspeed3dv.o
+
+pcuzfft1d.o : ../pcuzfft1d.f
+	$(FC) $(FCFLAGS) -c ../pcuzfft1d.f -o pcuzfft1d.o
+
+pcuzfft2d.o : ../pcuzfft2d.f
+	$(FC) $(FCFLAGS) -c ../pcuzfft2d.f -o pcuzfft2d.o
+
+pcuzfft3d.o : ../pcuzfft3d.f
+	$(FC) $(FCFLAGS) -c ../pcuzfft3d.f -o pcuzfft3d.o
+
+pcuzfft3dv.o : ../pcuzfft3dv.f
+	$(FC) $(FCFLAGS) -c ../pcuzfft3dv.f -o pcuzfft3dv.o
+
+pfactor.o : ../pfactor.f
+	$(FC) $(FCFLAGS) -c ../pfactor.f -o pfactor.o
+
+cuztrans.o : ../../cuztrans.f ../../param.h
+	$(FC) $(FCFLAGS) -c ../../cuztrans.f -o cuztrans.o
+
+factor.o : ../../factor.f
+	$(FC) $(FCFLAGS) -c ../../factor.f -o factor.o
+
+clean:
+	rm -f pcutest1d pcutest2d pcutest3d pcutest3dv pcuspeed1d pcuspeed2d pcuspeed3d pcuspeed3dv *.o

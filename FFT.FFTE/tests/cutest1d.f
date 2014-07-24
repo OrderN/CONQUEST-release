@@ -1,0 +1,60 @@
+C
+C     FFTE: A FAST FOURIER TRANSFORM PACKAGE
+C
+C     (C) COPYRIGHT SOFTWARE, 2000-2004, 2008-2014, ALL RIGHTS RESERVED
+C                BY
+C         DAISUKE TAKAHASHI
+C         FACULTY OF ENGINEERING, INFORMATION AND SYSTEMS
+C         UNIVERSITY OF TSUKUBA
+C         1-1-1 TENNODAI, TSUKUBA, IBARAKI 305-8573, JAPAN
+C         E-MAIL: daisuke@cs.tsukuba.ac.jp
+C
+C
+C     ZFFT1D TEST PROGRAM (FOR NVIDIA GPUS)
+C
+C     CUDA FORTRAN SOURCE PROGRAM
+C
+C     WRITTEN BY DAISUKE TAKAHASHI
+C
+      use cudafor
+      IMPLICIT REAL*8 (A-H,O-Z)
+      PARAMETER (NDA=33554432)
+      complex(8),pinned,allocatable :: A(:),B(:)
+C
+      ALLOCATE(A(NDA),B(NDA*2))
+      WRITE(6,*) ' N ='
+      READ(5,*) N
+C
+      CALL INIT(A,N)
+      CALL ZFFT1D(A,N,0,B)
+C
+      CALL ZFFT1D(A,N,-1,B)
+      CALL DUMP(A,N)
+C
+      CALL ZFFT1D(A,N,1,B)
+      CALL DUMP(A,N)
+C
+      CALL ZFFT1D(A,N,3,B)
+      DEALLOCATE(A,B)
+C
+      STOP
+      END
+      SUBROUTINE INIT(A,N)
+      IMPLICIT REAL*8 (A-H,O-Z)
+      COMPLEX*16 A(*)
+C
+!DIR$ VECTOR ALIGNED
+      DO 10 I=1,N
+        A(I)=DCMPLX(DBLE(I),DBLE(N-I+1))
+   10 CONTINUE
+      RETURN
+      END
+      SUBROUTINE DUMP(A,N)
+      IMPLICIT REAL*8 (A-H,O-Z)
+      COMPLEX*16 A(*)
+C
+      DO 10 I=1,N
+        WRITE(6,*) I,A(I)
+   10 CONTINUE
+      RETURN
+      END

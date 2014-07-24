@@ -573,7 +573,7 @@ contains
        max = zero
        do i = 1, ni_in_cell
           do k = 1, 3
-             if (abs(tot_force(k,i)) > max) max = tot_force(k,i)
+             if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
           end do
        end do
        ! Output and energy changes

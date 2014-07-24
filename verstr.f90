@@ -1,1 +1,1 @@
-  character(len=*), parameter :: commentver="Version beta 0.45 (rRRR): SHAKE/RATTLE with integrators  michi 2014/02/05"
+  character(len=*), parameter :: commentver="Version beta 0.46 (rRRR): new FFT routines and bug fixes tm, to and drb 2014/07/24"

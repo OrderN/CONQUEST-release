@@ -150,7 +150,8 @@ contains
        gatom = id_glob(atom)
        do k = 1, 3
          if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
-         vf = v(k,atom)+f(k,gatom)
+         !OLD vf = v(k,atom)+f(k,gatom)
+         vf = v(k,atom)*f(k,gatom)
          if (vf.LT.0) v(k,atom) = zero
          v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
        enddo

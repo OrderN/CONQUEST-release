@@ -60,7 +60,7 @@ module pseudo_tm_info
   end type rad_func
 
   type pseudo_info
-     character(len=20) :: filename   ! name of *.ion file
+     character(len=80) :: filename   ! name of *.ion file
      integer :: lmax                 ! maximum of the angular momentum
      integer :: n_pjnl               ! number of projector functions
      logical :: flag_pcc             ! flag for partial core correction
@@ -133,7 +133,7 @@ contains
     !local
     integer :: stat, ispecies, l, zeta
     real(double) :: cutoff
-    character(len=20) :: filename
+    character(len=80) :: filename
     integer :: ii
 
     if(allocated(pseudo)) then
@@ -527,7 +527,7 @@ contains
     type(rad_func), dimension(:), allocatable :: dummy_rada
     type(rad_func) :: dummy_rad
 
-    character(len=20) :: filename
+    character(len=80) :: filename
     integer :: i, lun , i1, i2, i3, i4, z
     real(double) :: dummy, a, r
     integer :: n_orbnl, n_pjnl

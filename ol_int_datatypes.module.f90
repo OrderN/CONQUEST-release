@@ -73,9 +73,9 @@ module ol_int_datatypes
        real(double), pointer, dimension(:) :: m_combs
     end type ang_coeff
     
-    real, allocatable, dimension(:,:,:,:,:,:) :: ol_index
-    real, allocatable, dimension(:,:,:,:,:,:) :: ol_index_nlpf_pao
-    real, allocatable, dimension(:,:,:,:,:,:) :: ol_index_ke
+    real(double), allocatable, dimension(:,:,:,:,:,:) :: ol_index
+    real(double), allocatable, dimension(:,:,:,:,:,:) :: ol_index_nlpf_pao
+    real(double), allocatable, dimension(:,:,:,:,:,:) :: ol_index_ke
  
     type(ang_coeff), allocatable, dimension(:) :: coefficients
 

@@ -3406,7 +3406,6 @@ contains
     use global_module,   only: numprocs, iprint_DM, id_glob,         &
                                ni_in_cell, x_atom_cell, y_atom_cell, &
                                z_atom_cell
-    use numbers,         only: RD_ERR
     use mpi
     use GenBlas,         only: dot
     use GenComms,        only: myid

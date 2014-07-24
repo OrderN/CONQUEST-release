@@ -1,7 +1,7 @@
 # -*- mode: Makefile -*-
 # $Id: odd.obj,v 1.3 2004/11/12 02:48:41 drb Exp $
 #
-ODD_OBJS = datestamp.o fft_module.o \
+ODD_OBJS = datestamp.o \
            global_module.o \
            hartree.o \
            units.module.o \
@@ -11,4 +11,5 @@ ODD_OBJS = datestamp.o fft_module.o \
            mpi.o \
            timer_module.o \
            timer_stdclocks_module.o \
-           auxiliary_types.o
+           auxiliary_types.o \
+           fft_module.o $(FFT_OBJ)

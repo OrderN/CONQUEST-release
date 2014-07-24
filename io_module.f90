@@ -362,8 +362,13 @@ second:   do
           cell(3) = r_super_z
           do i = 1, ni_in_cell
              do j = 1, 3
-                ! Introduce shift_in_bohr
-                if ((atom_coord(j,i) < zero) .or. (atom_coord(j,i) > cell(j))) &
+                ! Introduce shift_in_bohr: (small shift for fractional coordinates may cause a problem for very large systems.)
+                !  Originally, 'if'-statement in the next line was active, but since we need a common and strict rule
+                ! to treat the atoms on the boundary of the unit cell, we need to do this wrapping with shift_in_bohr
+                ! for all cases. Thus, I have commented out the next line.   23/Jul/2014 TM 
+                !  (coordinate of the atoms on the boundary of the unit cell must be 0.000*** not 0.999***.)
+                !
+                !if ((atom_coord(j,i) < zero) .or. (atom_coord(j,i) > cell(j))) &
                    atom_coord(j,i) = &
                       atom_coord(j,i) - floor((atom_coord(j,i)+shift_in_bohr)/cell(j)) * cell(j)
              end do
@@ -416,8 +421,13 @@ second:   do
              cell(2) = r_super_y
              cell(3) = r_super_z
              do j = 1, 3
-                ! Introduce shift_in_bohr
-                if ((atom_coord(j,i) < zero) .or. (atom_coord(j,i) > cell(j))) &
+                ! Introduce shift_in_bohr: (small shift for fractional coordinates may cause a problem for very large systems.)
+                !  Originally, 'if'-statement in the next line was active, but since we need a common and strict rule
+                ! to treat the atoms on the boundary of the unit cell, we need to do this wrapping with shift_in_bohr
+                ! for all cases. Thus, I have commented out the next line.   23/Jul/2014 TM   
+                !  (coordinate of the atoms on the boundary of the unit cell must be 0.000*** not 0.999***.)
+                !
+                !if ((atom_coord(j,i) < zero) .or. (atom_coord(j,i) > cell(j))) &
                    atom_coord(j,i) = &
                       atom_coord(j,i) - floor((atom_coord(j,i)+shift_in_bohr)/cell(j)) * cell(j)
              end do

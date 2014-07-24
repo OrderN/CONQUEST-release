@@ -1,0 +1,58 @@
+FC = pgfortran
+FCFLAGS = -fast -mp -Mcuda=cc3x,cuda5.5 -Minfo -I..
+
+all: cutest1d cutest2d cutest3d cuspeed1d cuspeed2d cuspeed3d
+
+cutest1d : cutest1d.o cuzfft1d.o factor.o cuztrans.o
+	$(FC) $(FCFLAGS) cutest1d.o cuzfft1d.o factor.o cuztrans.o -o cutest1d -lcufft
+
+cutest2d : cutest2d.o cuzfft2d.o factor.o cuztrans.o
+	$(FC) $(FCFLAGS) cutest2d.o cuzfft2d.o factor.o cuztrans.o -o cutest2d -lcufft
+
+cutest3d : cutest3d.o cuzfft3d.o factor.o cuztrans.o
+	$(FC) $(FCFLAGS) cutest3d.o cuzfft3d.o factor.o cuztrans.o -o cutest3d -lcufft
+
+cutest1d.o : cutest1d.f
+	$(FC) $(FCFLAGS) -c cutest1d.f -o cutest1d.o
+
+cutest2d.o : cutest2d.f
+	$(FC) $(FCFLAGS) -c cutest2d.f -o cutest2d.o
+
+cutest3d.o : cutest3d.f
+	$(FC) $(FCFLAGS) -c cutest3d.f -o cutest3d.o
+
+cuspeed1d : cuspeed1d.o cuzfft1d.o factor.o cuztrans.o
+	$(FC) $(FCFLAGS) cuspeed1d.o cuzfft1d.o factor.o cuztrans.o -o cuspeed1d -lcufft
+
+cuspeed2d : cuspeed2d.o cuzfft2d.o factor.o cuztrans.o
+	$(FC) $(FCFLAGS) cuspeed2d.o cuzfft2d.o factor.o cuztrans.o -o cuspeed2d -lcufft
+
+cuspeed3d : cuspeed3d.o cuzfft3d.o factor.o cuztrans.o
+	$(FC) $(FCFLAGS) cuspeed3d.o cuzfft3d.o factor.o cuztrans.o -o cuspeed3d -lcufft
+
+cuspeed1d.o : cuspeed1d.f
+	$(FC) $(FCFLAGS) -c cuspeed1d.f -o cuspeed1d.o
+
+cuspeed2d.o : cuspeed2d.f
+	$(FC) $(FCFLAGS) -c cuspeed2d.f -o cuspeed2d.o
+
+cuspeed3d.o : cuspeed3d.f
+	$(FC) $(FCFLAGS) -c cuspeed3d.f -o cuspeed3d.o
+
+cuzfft1d.o : ../cuzfft1d.f ../param.h
+	$(FC) $(FCFLAGS) -c ../cuzfft1d.f -o cuzfft1d.o
+
+cuzfft2d.o : ../cuzfft2d.f
+	$(FC) $(FCFLAGS) -c ../cuzfft2d.f -o cuzfft2d.o
+
+cuzfft3d.o : ../cuzfft3d.f
+	$(FC) $(FCFLAGS) -c ../cuzfft3d.f -o cuzfft3d.o
+
+factor.o : ../factor.f
+	$(FC) $(FCFLAGS) -c ../factor.f -o factor.o
+
+cuztrans.o : ../cuztrans.f ../param.h
+	$(FC) $(FCFLAGS) -c ../cuztrans.f -o cuztrans.o
+
+clean:
+	rm -f cutest1d cutest2d cutest3d cuspeed1d cuspeed2d cuspeed3d *.o

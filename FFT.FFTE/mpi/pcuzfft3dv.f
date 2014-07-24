@@ -1,0 +1,223 @@
+C
+C     FFTE: A FAST FOURIER TRANSFORM PACKAGE
+C
+C     (C) COPYRIGHT SOFTWARE, 2000-2004, 2008-2014, ALL RIGHTS RESERVED
+C                BY
+C         DAISUKE TAKAHASHI
+C         FACULTY OF ENGINEERING, INFORMATION AND SYSTEMS
+C         UNIVERSITY OF TSUKUBA
+C         1-1-1 TENNODAI, TSUKUBA, IBARAKI 305-8573, JAPAN
+C         E-MAIL: daisuke@cs.tsukuba.ac.jp
+C
+C
+C     PARALLEL 3-D COMPLEX FFT ROUTINE (WITH 2-D DECOMPOSITION,
+C                                       FOR NVIDIA GPUS)
+C
+C     CUDA FORTRAN + MPI SOURCE PROGRAM
+C
+C     CALL PZFFT3DV(A,B,NX,NY,NZ,ICOMMY,ICOMMZ,NPUY,NPUZ,IOPT)
+C
+C     NX IS THE LENGTH OF THE TRANSFORMS IN THE X-DIRECTION (INTEGER*4)
+C     NY IS THE LENGTH OF THE TRANSFORMS IN THE Y-DIRECTION (INTEGER*4)
+C     NZ IS THE LENGTH OF THE TRANSFORMS IN THE Z-DIRECTION (INTEGER*4)
+C       ------------------------------------
+C         NX = (2**IP) * (3**IQ) * (5**IR)
+C         NY = (2**JP) * (3**JQ) * (5**JR)
+C         NZ = (2**KP) * (3**KQ) * (5**KR)
+C       ------------------------------------
+C     ICOMMY IS THE COMMUNICATOR IN THE Y-DIRECTION (INTEGER*4)
+C     ICOMMZ IS THE COMMUNICATOR IN THE Z-DIRECTION (INTEGER*4)
+C     NPUY IS THE NUMBER OF PROCESSORS IN THE Y-DIRECTION (INTEGER*4)
+C     NPUZ IS THE NUMBER OF PROCESSORS IN THE Z-DIRECTION (INTEGER*4)
+C     IOPT = 0 CREATE AN FFT PLAN (INTEGER*4)
+C     IOPT = -1 FOR FORWARD TRANSFORM WHERE
+C              A(NX,NY/NPUY,NZ/NPUZ) IS COMPLEX INPUT VECTOR (COMPLEX*16)
+C!HPF$ DISTRIBUTE A(*,BLOCK,BLOCK)
+C              B(NX,NY/NPUY,NZ/NPUZ) IS COMPLEX OUTPUT VECTOR (COMPLEX*16)
+C!HPF$ DISTRIBUTE B(*,BLOCK,BLOCK)
+C     IOPT = +1 FOR INVERSE TRANSFORM WHERE
+C              A(NX,NY/NPUY,NZ/NPUZ) IS COMPLEX INPUT VECTOR (COMPLEX*16)
+C!HPF$ DISTRIBUTE A(*,BLOCK,BLOCK)
+C              B(NX,NY/NPUY,NZ/NPUZ) IS COMPLEX OUTPUT VECTOR (COMPLEX*16)
+C!HPF$ DISTRIBUTE B(*,BLOCK,BLOCK)
+C     IOPT = -2 FOR FORWARD TRANSFORM WHERE
+C              A(NX,NY/NPUY,NZ/NPUZ) IS COMPLEX INPUT VECTOR (COMPLEX*16)
+C!HPF$ DISTRIBUTE A(*,BLOCK,BLOCK)
+C              B(NX/NPUY,NY/NPUZ,NZ) IS COMPLEX OUTPUT VECTOR (COMPLEX*16)
+C!HPF$ DISTRIBUTE B(BLOCK,BLOCK,*)
+C     IOPT = +2 FOR INVERSE TRANSFORM WHERE
+C              A(NX/NPUY,NY/NPUZ,NZ) IS COMPLEX INPUT VECTOR (COMPLEX*16)
+C!HPF$ DISTRIBUTE A(BLOCK,BLOCK,*)
+C              B(NX,NY/NPUY,NZ/NPUZ) IS COMPLEX OUTPUT VECTOR (COMPLEX*16)
+C!HPF$ DISTRIBUTE B(*,BLOCK,BLOCK)
+C     IOPT = 3 DESTROY THE FFT PLAN
+C
+C     WRITTEN BY DAISUKE TAKAHASHI
+C
+      SUBROUTINE PZFFT3DV(A,B,NX,NY,NZ,ICOMMY,ICOMMZ,NPUY,NPUZ,IOPT)
+      use cudafor
+      use cufft
+      IMPLICIT REAL*8 (A-H,O-Z)
+      COMPLEX*16 A(*),B(*)
+      complex(8),device,allocatable :: A_d(:),B_d(:)
+      INTEGER*4 PLANX,PLANY,PLANZ
+      SAVE PLANX,PLANY,PLANZ
+C
+      NNXY=NX/NPUY
+      NNYY=NY/NPUY
+      NNYZ=NY/NPUZ
+      NNZZ=NZ/NPUZ
+      NN=NX*NNYY*NNZZ
+C
+      IF (IOPT .EQ. 0) THEN
+        istat=cufftPlan1D(PLANX,NX,CUFFT_Z2Z,NNYY*NNZZ)
+        istat=cufftPlan1D(PLANY,NY,CUFFT_Z2Z,NNZZ*NNXY)
+        istat=cufftPlan1D(PLANZ,NZ,CUFFT_Z2Z,NNXY*NNYZ)
+        RETURN
+      END IF
+C
+      IF (IOPT .EQ. 3) THEN
+        istat=cufftDestroy(PLANX)
+        istat=cufftDestroy(PLANY)
+        istat=cufftDestroy(PLANZ)
+        RETURN
+      END IF
+C
+      ALLOCATE(A_d(NN),B_d(NN))
+      A_d=A(1:NN)
+C
+      IF (IOPT .EQ. 1 .OR. IOPT .EQ. 2) THEN
+!$cuf kernel do <<<*,*>>>
+        DO 10 I=1,NN
+          A_d(I)=DCONJG(A_d(I))
+   10   CONTINUE
+      END IF
+C
+      IF (IOPT .EQ. -1 .OR. IOPT .EQ. -2) THEN
+        CALL PZFFT3DVF(A_d,B_d,NX,NY,NZ,ICOMMY,ICOMMZ,NPUY,NPUZ,IOPT,
+     1                 PLANX,PLANY,PLANZ)
+      ELSE
+        CALL PZFFT3DVB(A_d,B_d,NX,NY,NZ,ICOMMY,ICOMMZ,NPUY,NPUZ,IOPT,
+     1                 PLANX,PLANY,PLANZ)
+      END IF
+C
+      IF (IOPT .EQ. 1 .OR. IOPT .EQ. 2) THEN
+        DN=1.0D0/(DBLE(NX)*DBLE(NY)*DBLE(NZ))
+!$cuf kernel do <<<*,*>>>
+        DO 20 I=1,NN
+          B_d(I)=DCONJG(B_d(I))*DN
+   20   CONTINUE
+      END IF
+C
+      B(1:NN)=B_d
+      DEALLOCATE(A_d,B_d)
+      RETURN
+      END
+      SUBROUTINE PZFFT3DVF(A_d,B_d,NX,NY,NZ,ICOMMY,ICOMMZ,NPUY,NPUZ,
+     1                     IOPT,PLANX,PLANY,PLANZ)
+      use cudafor
+      use cufft
+      IMPLICIT REAL*8 (A-H,O-Z)
+      INCLUDE 'mpif.h'
+      complex(8),device :: A_d(*),B_d(*)
+      INTEGER*4 PLANX,PLANY,PLANZ
+C
+      NNXY=NX/NPUY
+      NNYY=NY/NPUY
+      NNYZ=NY/NPUZ
+      NNZZ=NZ/NPUZ
+      NN=NX*NNYY*NNZZ
+C
+      istat=cufftExecZ2Z(PLANX,A_d,A_d,CUFFT_FORWARD)
+      CALL ZTRANS(A_d,B_d,NX,NNYY*NNZZ)
+      CALL MPI_ALLTOALL(B_d,NN/NPUY,MPI_DOUBLE_COMPLEX,A_d,NN/NPUY,
+     1                  MPI_DOUBLE_COMPLEX,ICOMMY,IERR)
+      CALL MZTRANS(A_d,B_d,NNYY,NNZZ*NNXY,NPUY)
+      istat=cufftExecZ2Z(PLANY,B_d,B_d,CUFFT_FORWARD)
+      CALL ZTRANS(B_d,A_d,NY,NNZZ*NNXY)
+      CALL MPI_ALLTOALL(A_d,NN/NPUZ,MPI_DOUBLE_COMPLEX,B_d,NN/NPUZ,
+     1                  MPI_DOUBLE_COMPLEX,ICOMMZ,IERR)
+      CALL MZTRANS(B_d,A_d,NNZZ,NNXY*NNYZ,NPUZ)
+      istat=cufftExecZ2Z(PLANZ,A_d,A_d,CUFFT_FORWARD)
+      CALL ZTRANS(A_d,B_d,NZ,NNXY*NNYZ)
+      IF (IOPT .EQ. -2) RETURN
+      CALL MPI_ALLTOALL(B_d,NN/NPUZ,MPI_DOUBLE_COMPLEX,A_d,NN/NPUZ,
+     1                  MPI_DOUBLE_COMPLEX,ICOMMZ,IERR)
+      CALL MZTRANS2(A_d,B_d,NNXY,NNYZ,NNZZ,NPUZ)
+      CALL MPI_ALLTOALL(B_d,NN/NPUY,MPI_DOUBLE_COMPLEX,A_d,NN/NPUY,
+     1                  MPI_DOUBLE_COMPLEX,ICOMMY,IERR)
+      CALL MZTRANS3(A_d,B_d,NNXY,NNZZ,NNYY,NPUY)
+      RETURN
+      END
+      SUBROUTINE PZFFT3DVB(A_d,B_d,NX,NY,NZ,ICOMMY,ICOMMZ,NPUY,NPUZ,
+     1                     IOPT,PLANX,PLANY,PLANZ)
+      use cudafor
+      use cufft
+      IMPLICIT REAL*8 (A-H,O-Z)
+      INCLUDE 'mpif.h'
+      complex(8),device :: A_d(*),B_d(*)
+      INTEGER*4 PLANX,PLANY,PLANZ
+C
+      NNXY=NX/NPUY
+      NNYY=NY/NPUY
+      NNYZ=NY/NPUZ
+      NNZZ=NZ/NPUZ
+      NN=NX*NNYY*NNZZ
+C
+      IF (IOPT .EQ. 1) THEN
+        CALL MZTRANS3(A_d,B_d,NNXY,NPUY,NNYY,NNZZ)
+        CALL MPI_ALLTOALL(B_d,NN/NPUY,MPI_DOUBLE_COMPLEX,A_d,NN/NPUY,
+     1                    MPI_DOUBLE_COMPLEX,ICOMMY,IERR)
+        CALL MZTRANS2(A_d,B_d,NNXY,NNZZ,NNYZ,NPUZ)
+        CALL MPI_ALLTOALL(B_d,NN/NPUZ,MPI_DOUBLE_COMPLEX,A_d,NN/NPUZ,
+     1                    MPI_DOUBLE_COMPLEX,ICOMMZ,IERR)
+      END IF
+C
+      CALL ZTRANS(A_d,B_d,NNXY*NNYZ,NZ)
+      istat=cufftExecZ2Z(PLANZ,B_d,B_d,CUFFT_FORWARD)
+      CALL MZTRANS(B_d,A_d,NNZZ,NPUZ,NNXY*NNYZ)
+      CALL MPI_ALLTOALL(A_d,NN/NPUZ,MPI_DOUBLE_COMPLEX,B_d,NN/NPUZ,
+     1                  MPI_DOUBLE_COMPLEX,ICOMMZ,IERR)
+      CALL ZTRANS(B_d,A_d,NNZZ*NNXY,NY)
+      istat=cufftExecZ2Z(PLANY,A_d,A_d,CUFFT_FORWARD)
+      CALL MZTRANS(A_d,B_d,NNYY,NPUY,NNZZ*NNXY)
+      CALL MPI_ALLTOALL(B_d,NN/NPUY,MPI_DOUBLE_COMPLEX,A_d,NN/NPUY,
+     1                  MPI_DOUBLE_COMPLEX,ICOMMY,IERR)
+      CALL ZTRANS(A_d,B_d,NNYY*NNZZ,NX)
+      istat=cufftExecZ2Z(PLANX,B_d,B_d,CUFFT_FORWARD)
+      RETURN
+      END
+      SUBROUTINE MZTRANS2(A_d,B_d,NS,NX,NY,NZ)
+      use cudafor
+      IMPLICIT REAL*8 (A-H,O-Z)
+      complex(8),device :: A_d(NS,NX,NY,*),B_d(NS,NY,NX,*)
+C
+!$cuf kernel do(4) <<<*,*>>>
+      DO 40 K=1,NZ
+        DO 30 I=1,NX
+          DO 20 J=1,NY
+            DO 10 L=1,NS
+              B_d(L,J,I,K)=A_d(L,I,J,K)
+   10       CONTINUE
+   20     CONTINUE
+   30   CONTINUE
+   40 CONTINUE
+      RETURN
+      END
+      SUBROUTINE MZTRANS3(A_d,B_d,NS,NX,NY,NZ)
+      use cudafor
+      IMPLICIT REAL*8 (A-H,O-Z)
+      complex(8),device :: A_d(NS,NX,NY,*),B_d(NS,NZ,NY,*)
+C
+!$cuf kernel do(4) <<<*,*>>>
+      DO 40 I=1,NX
+        DO 30 J=1,NY
+          DO 20 K=1,NZ
+            DO 10 L=1,NS
+              B_d(L,K,J,I)=A_d(L,I,J,K)
+   10       CONTINUE
+   20     CONTINUE
+   30   CONTINUE
+   40 CONTINUE
+      RETURN
+      END

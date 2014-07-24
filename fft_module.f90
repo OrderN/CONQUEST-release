@@ -58,6 +58,7 @@ module fft_module
   use datatypes
   use global_module, ONLY: io_lun
   use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
+  use fft_interface_module
 
   implicit none
 
@@ -103,7 +104,7 @@ module fft_module
   real(double), allocatable, dimension(:) :: hartree_factor
   real(double), allocatable, dimension(:,:) :: recip_vector
 
-  real(double), dimension(:), allocatable :: trigs_x, trigs_y, trigs_z
+  !real(double), dimension(:), allocatable :: trigs_x, trigs_y, trigs_z
   ! Arrays for local blip FFT
   real(double), dimension(:,:), allocatable :: lb_trigs
   integer :: lb_size
@@ -207,14 +208,6 @@ contains
           data(I) = real(cdata(I),double)
        end do
     else if (isign==0) then ! Initialise the fft tables
-       ! Allocate space for trigonometric "twiddle" factors
-       ! Note that the size of trigs_? is at least 2*(2^p+3^q+5^r), where n_grid_? factors 
-       ! as 2^p*3^q*5^r.  If we set the size of trigs_? to 2*n_grid_? we'll be safe.
-       call start_timer(tmr_std_allocation)
-       allocate(trigs_x(2*n_grid_x),trigs_y(2*n_grid_y),trigs_z(2*n_grid_z),STAT=stat)
-       if(stat/=0) call cq_abort("fft3: error allocating trigs ",stat)
-       call reg_alloc_mem(area_SC,2*n_grid_x+2*n_grid_y+2*n_grid_z,type_dbl)
-       call stop_timer(tmr_std_allocation)
        call fftx(cdata,maxngrid,1,n_grid_x,0)
        call ffty(cdata,maxngrid,1,n_grid_y,0)
        call fftz(cdata,maxngrid,1,n_grid_z,0)
@@ -299,253 +292,6 @@ contains
     call stop_timer(tmr_std_allocation)
     return
   end subroutine rearrange_data
-!!***
-
-! -----------------------------------------------------------
-! Subroutine fftx
-! -----------------------------------------------------------
-
-!!****f* fft_module/fftx *
-!!
-!!  NAME 
-!!   fftx
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   One dimensional fft of cols consecutive blocks of len data
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   C.M.Goringe
-!!  CREATION DATE
-!!   06/03/95
-!!  MODIFICATION HISTORY
-!!   01/06/2001 dave
-!!    ROBODoc header, imported into fft_module
-!!   24/06/2002 dave
-!!    Now uses GPFA (which requires reals only...)
-!!   08:31, 2003/09/05 dave
-!!    Individual trigs used
-!!   2006/08/03 08:19 dave
-!!    Passed in size of cdata
-!!   2008/05/23
-!!    Added timers
-!!  SOURCE
-!!
-  subroutine fftx( cdata, size, cols, len, isign )
-
-    use numbers
-    use global_module, ONLY: area_SC
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
-    use GenComms, ONLY: cq_abort
-
-    implicit none
-
-    ! Passed variables
-    integer :: cols, len, isign, size
-    complex(double_cplx), dimension(size) :: cdata
-    real(double) :: scale
-
-    ! Local variables
-    integer :: I,j, stat
-    real(double), allocatable, dimension(:) :: a,b
-
-    call start_timer(tmr_std_allocation)
-    allocate(a(len),b(len),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating space in fftx: ",len)
-    call reg_alloc_mem(area_SC,2*len,type_dbl)
-    call stop_timer(tmr_std_allocation)
-    scale = one/REAL(len,double)
-    scale = SQRT(scale)
-    if(isign==0) then
-       call setgpfa(trigs_x,len)
-    else
-       do I = 0, cols-1
-          do j=1,len
-             a(j) = real(cdata(I*len+j),double)
-             b(j) = aimag(cdata(I*len+j))
-          end do
-          call gpfa(a,b,trigs_x,1,1,len,1,isign)
-          do j=1,len
-             cdata(I*len+j) = scale*cmplx(a(j),b(j),double_cplx)
-          end do
-       end do
-    endif
-    call start_timer(tmr_std_allocation)
-    deallocate(a,b,STAT=stat)
-    if(stat/=0) call cq_abort("Error deallocating space in fftx: ",len)
-    call reg_dealloc_mem(area_SC,2*len,type_dbl)
-    call stop_timer(tmr_std_allocation)
-    return
-  end subroutine fftx
-!!***
-
-! -----------------------------------------------------------
-! Subroutine ffty
-! -----------------------------------------------------------
-
-!!****f* fft_module/ffty *
-!!
-!!  NAME 
-!!   ffty
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   One dimensional fft of cols consecutive blocks of len data
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   C.M.Goringe
-!!  CREATION DATE
-!!   06/03/95
-!!  MODIFICATION HISTORY
-!!   01/06/2001 dave
-!!    ROBODoc header, imported into fft_module
-!!   24/06/2002 dave
-!!    Now uses GPFA (which requires reals only...)
-!!   08:31, 2003/09/05 dave
-!!    Individual trigs used
-!!   2006/08/03 08:19 dave
-!!    Passed in size of cdata
-!!   2008/05/23
-!!    Added timers
-!!  SOURCE
-!!
-  subroutine ffty( cdata, size, cols, len, isign )
-
-    use numbers
-    use global_module, ONLY: area_SC
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
-    use GenComms, ONLY: cq_abort
-
-    implicit none
-
-    ! Passed variables
-    integer :: cols, len, isign, size
-    complex(double_cplx), dimension(size) :: cdata
-    real(double) :: scale
-
-    ! Local variables
-    integer :: I,j, stat
-    real(double), allocatable, dimension(:) :: a,b
-
-    call start_timer(tmr_std_allocation)
-    allocate(a(len),b(len),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating space in ffty: ",len)
-    call reg_alloc_mem(area_SC,2*len,type_dbl)
-    call stop_timer(tmr_std_allocation)
-    scale = one/REAL(len,double)
-    scale = SQRT(scale)
-    if(isign==0) then
-       call setgpfa(trigs_y,len)
-    else
-       do I = 0, cols-1
-          do j=1,len
-             a(j) = real(cdata(I*len+j),double)
-             b(j) = aimag(cdata(I*len+j))
-          end do
-          call gpfa(a,b,trigs_y,1,1,len,1,isign)
-          do j=1,len
-             cdata(I*len+j) = scale*cmplx(a(j),b(j),double_cplx)
-          end do
-       end do
-    endif
-    call start_timer(tmr_std_allocation)
-    deallocate(a,b,STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating space in ffty: ",len)
-    call reg_dealloc_mem(area_SC,2*len,type_dbl)
-    call stop_timer(tmr_std_allocation)
-    return
-  end subroutine ffty
-!!***
-
-! -----------------------------------------------------------
-! Subroutine fftz
-! -----------------------------------------------------------
-
-!!****f* fft_module/fftz *
-!!
-!!  NAME 
-!!   fftz
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   One dimensional fft of cols consecutive blocks of len data
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   C.M.Goringe
-!!  CREATION DATE
-!!   06/03/95
-!!  MODIFICATION HISTORY
-!!   01/06/2001 dave
-!!    ROBODoc header, imported into fft_module
-!!   24/06/2002 dave
-!!    Now uses GPFA (which requires reals only...)
-!!   08:31, 2003/09/05 dave
-!!    Individual trigs used
-!!   2006/08/03 08:19 dave
-!!    Passed in size of cdata
-!!   2008/05/23
-!!    Added timers
-!!  SOURCE
-!!
-  subroutine fftz( cdata, size, cols, len, isign )
-
-    use numbers
-    use global_module, ONLY: area_SC
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
-    use GenComms, ONLY: cq_abort
-
-    implicit none
-
-    ! Passed variables
-    integer :: cols, len, isign, size
-    complex(double_cplx), dimension(size) :: cdata
-    real(double) :: scale
-
-    ! Local variables
-    integer :: I,j, stat
-    real(double), allocatable, dimension(:) :: a,b
-
-    call start_timer(tmr_std_allocation)
-    allocate(a(len),b(len),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating space in fftz: ",len)
-    call reg_alloc_mem(area_SC,2*len,type_dbl)
-    call stop_timer(tmr_std_allocation)
-    scale = one/REAL(len,double)
-    scale = SQRT(scale)
-    if(isign==0) then
-       call setgpfa(trigs_z,len)
-    else
-       do I = 0, cols-1
-          do j=1,len
-             a(j) = real(cdata(I*len+j),double)
-             b(j) = aimag(cdata(I*len+j))
-          end do
-          call gpfa(a,b,trigs_z,1,1,len,1,isign)
-          do j=1,len
-             cdata(I*len+j) = scale*cmplx(a(j),b(j),double_cplx)
-          end do
-       end do
-    endif
-    call start_timer(tmr_std_allocation)
-    deallocate(a,b,STAT=stat)
-    if(stat/=0) call cq_abort("Error deallocating space in fftz: ",len)
-    call reg_dealloc_mem(area_SC,2*len,type_dbl)
-    call stop_timer(tmr_std_allocation)
-    return
-  end subroutine fftz
-!!***
 
 ! -----------------------------------------------------------
 ! Subroutine set_fft_map
@@ -1005,38 +751,168 @@ contains
   end subroutine set_fft_map
 !!***
 
-  subroutine set_SF_fft(size)
-
-    use numbers, ONLY : zero
-
+!!****f* fft_module/fftx *
+!!
+!!  NAME 
+!!   fftx
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   One dimensional fft of cols consecutive blocks of len data
+!!  INPUTS
+!! 
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   C.M.Goringe
+!!  CREATION DATE
+!!   06/03/95
+!!  MODIFICATION HISTORY
+!!   01/06/2001 dave
+!!    ROBODoc header, imported into fft_module
+!!   24/06/2002 dave
+!!    Now uses GPFA (which requires reals only...)
+!!   08:31, 2003/09/05 dave
+!!    Individual trigs used
+!!   2006/08/03 08:19 dave
+!!    Passed in size of cdata
+!!   2008/05/23
+!!    Added timers
+!!  SOURCE
+!!
+  subroutine fftx( cdata, size, cols, len, isign )
     implicit none
 
-    integer :: size
+    integer :: cols, len, isign, size
+    complex(double_cplx), intent(inout) :: cdata(size)
 
-    lb_size = size
-    ! Allocate trigs
-    allocate(lb_trigs(2*size,3))
-    lb_trigs = zero
-    ! Set up trigs
-    call setgpfa(lb_trigs(1,1),size)
-    lb_trigs(1:2*size,2) = lb_trigs(1:2*size,1)
-    lb_trigs(1:2*size,3) = lb_trigs(1:2*size,1)
+    ! MIZUHO-IR
+    if( isign==0 ) then
+       call fftx_init_wrapper( len )
+    else
+       call fftx_exec_wrapper( cdata, size, cols, len, isign )
+    end if
+
+    return
+  end subroutine fftx
+
+
+
+!!****f* fft_module/ffty *
+!!
+!!  NAME 
+!!   ffty
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   One dimensional fft of cols consecutive blocks of len data
+!!  INPUTS
+!! 
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   C.M.Goringe
+!!  CREATION DATE
+!!   06/03/95
+!!  MODIFICATION HISTORY
+!!   01/06/2001 dave
+!!    ROBODoc header, imported into fft_module
+!!   24/06/2002 dave
+!!    Now uses GPFA (which requires reals only...)
+!!   08:31, 2003/09/05 dave
+!!    Individual trigs used
+!!   2006/08/03 08:19 dave
+!!    Passed in size of cdata
+!!   2008/05/23
+!!    Added timers
+!!  SOURCE
+!!
+  subroutine ffty( cdata, size, cols, len, isign )
+    implicit none
+
+    integer :: cols, len, isign, size
+    complex(double_cplx), dimension(size) :: cdata
+
+    ! MIZUHO-IR
+    if( isign==0 ) then
+       call ffty_init_wrapper( len )
+    else
+       call ffty_exec_wrapper( cdata, size, cols, len, isign )
+    end if
+
+    return
+  end subroutine ffty
+
+
+!!****f* fft_module/fftz *
+!!
+!!  NAME 
+!!   fftz
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   One dimensional fft of cols consecutive blocks of len data
+!!  INPUTS
+!! 
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   C.M.Goringe
+!!  CREATION DATE
+!!   06/03/95
+!!  MODIFICATION HISTORY
+!!   01/06/2001 dave
+!!    ROBODoc header, imported into fft_module
+!!   24/06/2002 dave
+!!    Now uses GPFA (which requires reals only...)
+!!   08:31, 2003/09/05 dave
+!!    Individual trigs used
+!!   2006/08/03 08:19 dave
+!!    Passed in size of cdata
+!!   2008/05/23
+!!    Added timers
+!!  SOURCE
+!!
+  subroutine fftz( cdata, size, cols, len, isign )
+    implicit none
+
+    integer :: cols, len, isign, size
+    complex(double_cplx), dimension(size) :: cdata
+
+    ! MIZUHO-IR
+    if( isign==0 ) then
+       call fftz_init_wrapper( len )
+    else
+       call fftz_exec_wrapper( cdata, size, cols, len, isign )
+    end if
+
+    return
+  end subroutine fftz
+
+
+  subroutine set_SF_fft( nsize )
+    implicit none
+
+    integer :: nsize
+
+    call fft3_init_wrapper( nsize )    ! MIZUHO-IR
+
+    return
   end subroutine set_SF_fft
 
-  subroutine fft3_SF(c,nsize,is)
 
-    use datatypes
-
+  subroutine fft3_SF( cdata, nsize, isign )
     implicit none
 
-    integer :: nsize, is
-    complex(double_cplx), dimension(nsize,nsize,nsize) :: c
+    integer, intent(in) :: nsize, isign
+    complex(double_cplx), dimension(nsize,nsize,nsize) :: cdata
 
-    integer, dimension(3) :: nn
+    call fft3_exec_wrapper( cdata, nsize, isign )    ! MIZUHO-IR
 
-    nn(:) = nsize
-    ! call gpfft
-    call GPF3D(c,lb_trigs,2*nsize,nsize,nn,is)
+    return
   end subroutine fft3_SF
 
 end module fft_module

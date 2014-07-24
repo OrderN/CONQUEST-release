@@ -557,16 +557,17 @@ contains
 !!
   subroutine wigner_3j(j1,j2,j3,m1,m2,m3,wig_3j)
     use datatypes
+    use numbers
     implicit none
 
     ! evaluating Wigner 3-j symbols
     integer, intent(in) :: j1,j2,j3,m1,m2,m3
     real(double), intent(out) :: wig_3j
     real(double) :: s_coup
-    real(double), parameter :: pi=3.1415926535897932_double
+    !real(double), parameter :: pi=3.1415926535897932_double
     if(m1+m2+m3.eq.0) then
        call vect_coupl(j1,j2,j3,m1,m2,s_coup)
-       wig_3j= ((-1)**(j1-j2-m3))*s_coup/(sqrt(2.0*j3+1))
+       wig_3j= ((-1)**(j1-j2-m3))*s_coup/(sqrt(two*j3+one))
     else
        wig_3j=0.0_double
     endif
@@ -596,6 +597,7 @@ contains
 !!  SOURCE
 !!
   subroutine sph_hrmnc_tripint(j1,j2,j3,m1,m2,m3,intgrlval)
+    use numbers
     use datatypes
     implicit none
     ! 23/04/03 R Choudhury
@@ -603,27 +605,27 @@ contains
     ! spherical harmonic triple product.
     ! This version of the code seems to be fully functional..
     integer, intent(in) :: j1,j2,j3,m1,m2,m3
-    real :: l1,l2,l3,z1,z2,z3 
+    real(double) :: l1,l2,l3,z1,z2,z3 
     real(double) :: wig_3j,s_coup,pref,wig_3ja,wig_3jb,m1neg
     real(double), intent(out) :: intgrlval
-    real(double), parameter :: pi = 3.1415926535897932_double
+    !real(double), parameter :: pi = 3.1415926535897932_double
     integer i
-    wig_3j = 0.0_double   !initialising all values to zero
-    wig_3ja = 0.0_double
-    wig_3jb = 0.0_double
-    pref = 0.0_double
-    s_coup = 0.0_double
+    wig_3j = zero
+    wig_3ja = zero
+    wig_3jb = zero
+    pref = zero
+    s_coup = zero
     !taking complex conjugate of spherical harmonic l1,m1
     
     call wigner_3j(j1,j2,j3,m1,m2,m3,wig_3j) ! calculate 3j symbols
     wig_3ja = wig_3j
-    wig_3j = 0.0_double
+    wig_3j = zero
     call wigner_3j(j1,j2,j3,0,0,0,wig_3j)
     wig_3jb = wig_3j
-    wig_3j = 0.0_double
+    wig_3j = zero
     
-    pref = sqrt(((2.0_double*j1)+1)*((2.0_double*j2)+1)&
-         *((2.0_double*j3)+1)/(4.0_double*pi))
+    pref = sqrt(((two*j1)+one)*((two*j2)+one)&
+         *((two*j3)+one)/(four*pi))
     intgrlval = pref*wig_3ja*wig_3jb
 
   end subroutine sph_hrmnc_tripint

@@ -22,6 +22,8 @@
 !!    Added ROBODoc header
 !!   18/03/2002 dave
 !!    Added static id for object files and tidied header
+!!   2014/07/24 11:40 dave
+!!    Added type wide for 64-bit integer (i.e. that can include beyond 10^9)
 !!  SOURCE
 !!
 module datatypes
@@ -38,6 +40,7 @@ module datatypes
   integer, parameter :: double = selected_real_kind( 6, 70 )
   integer, parameter :: double_cplx = selected_real_kind( 6, 70 )
   integer, parameter :: integ  = selected_int_kind( 9 )
+  integer, parameter :: wide = selected_int_kind(15) 
 
 end module datatypes
 !!***
