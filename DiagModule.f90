@@ -116,14 +116,16 @@
 !!   2013/02/08 08:31 dave (with UT)
 !!   - Adding band_ef variable to track HOMO location (defined as 0K HOMO)
 !!     along with several other DeltaSCF changes
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!***
 module DiagModule
 
   use datatypes
   use global_module,          only: io_lun, area_DM, iprint_DM
   use GenComms,               only: cq_abort, inode, ionode, myid
-  use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                    tmr_std_matrices
+  use timer_module,           only: start_timer, stop_timer
+  use timer_stdclocks_module, only: tmr_std_matrices
 
   implicit none
 

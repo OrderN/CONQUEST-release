@@ -34,13 +34,16 @@
 !!    Added timers
 !!   2009/07/08 16:46 dave
 !!    Added flag for one-to-one PAO to SF assignment
+!!   2014/09/15 18:30 lat
+!!    fixed call to start/stop_timer timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module support_spec_format
 
   use datatypes
-  use global_module, ONLY: io_lun
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
+  use global_module,          only: io_lun
+  use timer_stdclocks_module, only: tmr_std_allocation
+  use timer_module,           only: start_timer, stop_timer
 
   implicit none
 

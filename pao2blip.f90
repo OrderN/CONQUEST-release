@@ -33,11 +33,14 @@
 !!    Changed for output to file not stdout
 !!   2008/05/25
 !!    Added timers
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 module pao2blip
 
-  use global_module, ONLY: io_lun, area_basis
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_basis,tmr_std_allocation
+  use global_module,          only: io_lun, area_basis
+  use timer_module,           only: start_timer,stop_timer
+  use timer_stdclocks_module, only: tmr_std_basis,tmr_std_allocation
 
   implicit none
   save
@@ -145,7 +148,6 @@ contains
     end type scan_pao
 
     type(scan_pao), dimension(:), allocatable :: this_scan
-
 
     call start_timer(tmr_std_basis)
     if((inode == ionode).and.(iprint_basis >= 2)) then
@@ -568,6 +570,7 @@ contains
        deallocate(blip_coeff(n_sp)%coeff)
     end do
     deallocate(blip_coeff,this_scan,n_b_half)
+
     call stop_timer(tmr_std_allocation)
     call stop_timer(tmr_std_basis)
   end subroutine make_blips_from_paos

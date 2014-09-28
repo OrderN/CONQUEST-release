@@ -76,7 +76,8 @@ module io_module
 
   use global_module,          only: io_lun
   use GenComms,               only: cq_abort, gcopy
-  use timer_stdclocks_module, only: start_timer, stop_timer, tmr_std_matrices
+  use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_stdclocks_module, only: tmr_std_matrices
   use input_module,           only: leqi, io_assign, io_close
 
   implicit none
@@ -160,17 +161,23 @@ contains
     character(len=*) :: filename
 
     ! Local variables
-    integer :: lun, i, spec, stat
-    real(double) :: x, y, z
-    logical :: movex, movey, movez
+    type(cq_timer) :: tmr_std_loc
+    integer        :: lun, i, spec, stat
+    logical        :: movex, movey, movez
+    real(double)   :: x, y, z
     real(double), dimension(3) :: cell
+
     ! Local variables for reading pdb files
-    integer :: ios, j
-    character(len=80) :: pdb_line
-    real(double), dimension(3) :: angle
-    integer :: num_move_atom
+    integer      :: ios, j
+    integer      :: num_move_atom
     real(double) :: num_move_atom_real
-    character(len=2) :: atom_name
+    real(double), dimension(3) :: angle
+    character(len=80) :: pdb_line
+    character(len=2)  :: atom_name
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='read_atomic_positions',where=9,level=2)
+!****lat>$
 
     if(inode==ionode) then
        ! read a pdb file if General.pdb == .true.)
@@ -362,10 +369,14 @@ second:   do
           cell(3) = r_super_z
           do i = 1, ni_in_cell
              do j = 1, 3
-                ! Introduce shift_in_bohr: (small shift for fractional coordinates may cause a problem for very large systems.)
-                !  Originally, 'if'-statement in the next line was active, but since we need a common and strict rule
-                ! to treat the atoms on the boundary of the unit cell, we need to do this wrapping with shift_in_bohr
-                ! for all cases. Thus, I have commented out the next line.   23/Jul/2014 TM 
+                ! Introduce shift_in_bohr: (small shift for fractional coordinates may 
+                ! cause a problem for very large systems.)
+                !
+                ! Originally, 'if'-statement in the next line was active, but since we need 
+                ! a common and strict rule to treat the atoms on the boundary of the unit cell, 
+                ! we need to do this wrapping with shift_in_bohr for all cases. 
+                !
+                ! Thus, I have commented out the next line.   23/Jul/2014 TM 
                 !  (coordinate of the atoms on the boundary of the unit cell must be 0.000*** not 0.999***.)
                 !
                 !if ((atom_coord(j,i) < zero) .or. (atom_coord(j,i) > cell(j))) &
@@ -375,7 +386,7 @@ second:   do
           end do
           call io_close(lun)
        else
-          if(iprint_init>2) write(io_lun,*) 'Entering read_atomic_positions'
+          if(iprint_init>2) write(io_lun,'(10x,a30)') 'Entering read_atomic_positions'
           call io_assign(lun)
           open(unit=lun,file=filename,status='old')
           ! Read supercell vector - for now it must be orthorhombic so
@@ -421,10 +432,14 @@ second:   do
              cell(2) = r_super_y
              cell(3) = r_super_z
              do j = 1, 3
-                ! Introduce shift_in_bohr: (small shift for fractional coordinates may cause a problem for very large systems.)
-                !  Originally, 'if'-statement in the next line was active, but since we need a common and strict rule
-                ! to treat the atoms on the boundary of the unit cell, we need to do this wrapping with shift_in_bohr
-                ! for all cases. Thus, I have commented out the next line.   23/Jul/2014 TM   
+                ! Introduce shift_in_bohr: (small shift for fractional coordinates may
+                ! cause a problem for very large systems.)
+                !
+                ! Originally, 'if'-statement in the next line was active, but since we need
+                ! a common and strict rule to treat the atoms on the boundary of the unit cell, 
+                ! we need to do this wrapping with shift_in_bohr for all cases. 
+                !
+                ! Thus, I have commented out the next line.   23/Jul/2014 TM   
                 !  (coordinate of the atoms on the boundary of the unit cell must be 0.000*** not 0.999***.)
                 !
                 !if ((atom_coord(j,i) < zero) .or. (atom_coord(j,i) > cell(j))) &
@@ -435,10 +450,11 @@ second:   do
              flag_move_atom(2,i) = movey
              flag_move_atom(3,i) = movez
              !          id_glob(i) = i
-             if(iprint_init>0) &
-                  write (io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)') &
-                        i,atom_coord(1:3,i), species_glob(i), &
-                        flag_move_atom(1:3,i)
+!!$ LAT: put in write info
+            if(iprint_init>0) &
+                 write (io_lun,fmt='(3x, i7, 3f15.8, i3, 3L2)') &
+                       i,atom_coord(1:3,i), species_glob(i), &
+                       flag_move_atom(1:3,i)
           end do
           !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
              if(.not.flag_fractional_atomic_coords .and. dist_units == ang) &
@@ -477,6 +493,11 @@ second:   do
       id_glob_old=0
       id_glob_inv_old=0
     endif
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc)
+!****lat>$
+
     return
   end subroutine read_atomic_positions
   !!***
@@ -676,7 +697,7 @@ second:   do
     use species_module,   only: species
     use maxima_module,    only: maxpartsproc, maxatomspart,           &
                                 maxatomsproc, maxpartscell
-    use construct_module, only: init_group
+    use construct_module,      only: init_group
     use sfc_partitions_module, only: sfc_partitions_to_processors
 
     implicit none
@@ -694,18 +715,22 @@ second:   do
 
     integer           :: isendbuf(6)
     real(double)      :: rsendbuf(6)
+    type(cq_timer)    :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='read_mult',where=9,level=2)
+!****lat>$
 
     !parts%ng_on_node = 0
     if(part_method == PYTHON) then
        if(myid==0) then
           if(iprint_init>1) then
-             write(io_lun,*) 'Reading partition data'
-             write(io_lun,*) '--------------------------'
-             write(io_lun,*) 
-             write(io_lun,*) '  *** Partition Data Starts ***'
+             write(io_lun,'(10x,a29)')   '   Reading partition data    '
+             write(io_lun,'(10x,a29/)') '-----------------------------'
+             write(io_lun,'(10x,a29)')   '*** Partition Data Starts ***'
           end if
           call read_partitions(parts,part_file)
-          if(iprint_init>1) write(io_lun,*) '  *** Partition Data Ends ***'
+          if(iprint_init>1) write(io_lun,'(10x,a29)') '***  Partition Data Ends  ***'
        end if
        isendbuf = 0
        if(myid==0) then
@@ -715,19 +740,19 @@ second:   do
           isendbuf(4) = maxpartsproc
           isendbuf(5) = maxatomspart
           isendbuf(6) = maxatomsproc
-          np_in_cell = parts%ngcellx*parts%ngcelly*parts%ngcellz
+          np_in_cell  = parts%ngcellx*parts%ngcelly*parts%ngcellz
        endif
        call gcopy(isendbuf,6)
        if(myid/=0) then
           parts%ngcellx = isendbuf(1)
           parts%ngcelly = isendbuf(2)
           parts%ngcellz = isendbuf(3)
-          maxpartsproc = isendbuf(4)
-          maxatomspart = isendbuf(5)
-          maxatomsproc = isendbuf(6)
-          np_in_cell = parts%ngcellx*parts%ngcelly*parts%ngcellz
-          maxpartscell = np_in_cell
-          mx_tmp_edge = max(parts%ngcellx,parts%ngcelly,parts%ngcellz)
+          maxpartsproc  = isendbuf(4)
+          maxatomspart  = isendbuf(5)
+          maxatomsproc  = isendbuf(6)
+          np_in_cell    = parts%ngcellx*parts%ngcelly*parts%ngcellz
+          maxpartscell  = np_in_cell
+          mx_tmp_edge   = max(parts%ngcellx,parts%ngcelly,parts%ngcellz)
           call init_group(parts, maxpartsproc, mx_tmp_edge, &
                           np_in_cell, maxatomspart, numprocs)
        endif
@@ -745,9 +770,8 @@ second:   do
        endif
     else if (part_method == HILBERT) then
        if (iprint_init > 1.AND.myid==0) then
-          write(io_lun,*) 'Partitioning using Hilbert curves'
-          write(io_lun,*) '---------------------------------'
-          write(io_lun,*)
+          write(io_lun,'(10x,a33)' ) 'Partitioning using Hilbert curves'
+          write(io_lun,'(10x,a33/)') '---------------------------------'
        end if
        !call create_sfc_partitions(myid, parts)
        call sfc_partitions_to_processors(parts)
@@ -767,6 +791,11 @@ second:   do
        species(ni)     = species_glob(id_global)
        !id_glob_inv(id_global) = ni  !in read_partitions
     end do
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='read_mult')
+!****lat>$
+    
     return
   end subroutine read_mult
   !!***
@@ -825,10 +854,15 @@ second:   do
     character(len=80) :: part_file
 
     ! Local variables
+    type(cq_timer) :: tmr_std_loc
     integer :: nnode
     integer :: nnd,nnd1,np,np1,ind_part,n_cont,n_beg,ni,ni1
     integer :: irc,ierr,np_in_cell, lun, glob_count, map, ios
     integer :: ind_global, ntmpx, ntmpy, ntmpz, ntmp1, ntmp2, ntmp3, mx_tmp_edge
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='read_partitions',where=1,level=4)
+!****lat>$  
 
     if(iprint_init>2.AND.myid==0) write(io_lun,*) 'Entering read_partitions'
     call io_assign(lun)
@@ -984,6 +1018,12 @@ second:   do
       id_glob_old = id_glob
       id_glob_inv_old = id_glob_inv
     endif
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='read_partitions')
+!****lat>$
+
+    return
     ! Format statements placed here to improve readability of code
 101 format(/8x,'cell lengths:',3f12.6)
 102 format(/8x,'partitions along cell sides',3i5)
@@ -995,7 +1035,7 @@ second:   do
          ' atoms, starting at: ',i5/)
 114 format(10x,i5,2x,i5,2x,3e15.6,i5)
 1141 format(11x,i4,2x,3e15.6,4x,i2,3x,i6)
-    return
+
   end subroutine read_partitions
   !!***
 

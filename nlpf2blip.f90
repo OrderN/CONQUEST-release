@@ -3,8 +3,8 @@ module nlpf2blip
   use datatypes
   use numbers
   use global_module,          only: io_lun
-  use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                    tmr_std_basis, tmr_std_allocation
+  use timer_module,           only: start_timer, stop_timer
+  use timer_stdclocks_module, only: tmr_std_basis, tmr_std_allocation
   use support_spec_format,    only: support_function
 
   implicit none
@@ -216,6 +216,8 @@ contains
     ! -------------------------------------------------------------
     !   end loop over species
     ! -------------------------------------------------------------
+
+    return
   end subroutine make_blips_from_nlpfs
 !!*** 
 

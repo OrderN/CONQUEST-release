@@ -18,7 +18,9 @@
 ! SOURCE
 !
 module sfc_partitions_module
+
   use datatypes
+
   implicit none
 
   save
@@ -45,53 +47,53 @@ module sfc_partitions_module
 
   ! process type
   type proc
-     integer :: id       ! processor id (rank within MPI communicator)
+     integer :: id           ! processor id (rank within MPI communicator)
      integer :: i_part_start ! hilbert index of first partition on proc
-     integer :: n_parts  ! number of partitions belonging to it
-     integer :: n_atoms  ! number of atoms belonging to it
-     integer :: n_sf     ! number of support functions belonging to it
+     integer :: n_parts      ! number of partitions belonging to it
+     integer :: n_atoms      ! number of atoms belonging to it
+     integer :: n_sf         ! number of support functions belonging to it
   end type proc
   ! for recording size
   integer, parameter :: size_proc = 5 ! in units of sizeof(integer)
 
   ! cell type
   type cell
-     real(double), dimension(3) :: dims ! cell dimensions
-     real(double), dimension(3) :: r_atoms_min ! minimum atomic coordinates
-     real(double), dimension(3) :: r_atoms_max ! maximum atomic coordinates
-     real(double), dimension(2,3) :: gap ! gap(1,i) is the start coordinate
-                                         ! of gap in i-th direction,
-                                         ! and gap(2,i) is the end coordinate
-                                         ! of gap in i-th direction
-     integer :: system_type ! 3 = bulk, 2 = slab, 1 = chain, 0 = molecule
-     logical, dimension(3) :: has_pbc ! whether to treat direction to have pbc
-     logical, dimension(3) :: is_folded ! whether the struct is folded under pbc
-     logical :: is_translated ! whether we have translated the original structure
+     real(double), dimension(3)   :: dims        ! cell dimensions
+     real(double), dimension(3)   :: r_atoms_min ! minimum atomic coordinates
+     real(double), dimension(3)   :: r_atoms_max ! maximum atomic coordinates
+     real(double), dimension(2,3) :: gap         ! gap(1,i) is the start coordinate
+                                                 ! of gap in i-th direction,
+                                                 ! and gap(2,i) is the end coordinate
+                                                 ! of gap in i-th direction
+     integer               :: system_type    ! 3 = bulk, 2 = slab, 1 = chain, 0 = molecule
+     logical, dimension(3) :: has_pbc        ! whether to treat direction to have pbc
+     logical, dimension(3) :: is_folded      ! whether the struct is folded under pbc
+     logical               :: is_translated  ! whether we have translated the original structure
      real(double), dimension(3) :: trans_vec ! translation vector of the
                                              ! atoms if the atoms were translated
   end type cell
 
   ! module variables
-  real(double) :: average_atomic_diameter ! used for determining gaps
-  integer, dimension(3) :: n_parts_user ! user requested number of partitions
-  real(double), parameter :: no_pbc = 0.5_double ! gap/cell_dim criteria
-                                                 ! for no assuming pbc in
-                                                 ! direction
-  integer, dimension(3) :: dim_nparts_fixed ! dims which n_parts is fixed
-  integer, dimension(3) :: dim_nparts_auto  ! dims which n_parts is not fixed
-  integer :: n_dim_fixed ! number of dims fixed
-  integer :: n_dim_auto  ! numbet of dims not fixed
-  integer, dimension(3) :: n_parts ! number of partitions actually used
-  integer, dimension(3) :: n_divs ! n_parts(i) = 2**n_divs(i)
-  real(double), dimension(3) :: r_part ! size of partition cells
-  type(part), dimension(:), allocatable :: parts ! information about partitions
-  type(proc), dimension(:), allocatable :: procs ! information about processors
-  type(cell) :: FSC ! information about the cell
-  integer :: max_natoms_part ! maximum allowed atoms per partition
-  integer, dimension(:,:), allocatable :: iglob_atom_part ! iglob_atom_part(i,j)
-                                                          ! is global atomic
-                                                          ! index of ith atom
-                                                          ! in jth partition
+  real(double)               :: average_atomic_diameter ! used for determining gaps
+  integer,      dimension(3) :: n_parts_user            ! user requested number of partitions
+  real(double), parameter    :: no_pbc = 0.5_double     ! gap/cell_dim criteria
+                                                     ! for no assuming pbc in
+                                                     ! direction
+  integer,      dimension(3) :: dim_nparts_fixed ! dims which n_parts is fixed
+  integer,      dimension(3) :: dim_nparts_auto  ! dims which n_parts is not fixed
+  integer :: n_dim_fixed      ! number of dims fixed
+  integer :: n_dim_auto       ! numbet of dims not fixed
+  integer,      dimension(3) :: n_parts ! number of partitions actually used
+  integer,      dimension(3) :: n_divs  ! n_parts(i) = 2**n_divs(i)
+  real(double), dimension(3) :: r_part  ! size of partition cells
+  type(part),   dimension(:), allocatable :: parts ! information about partitions
+  type(proc),   dimension(:), allocatable :: procs ! information about processors
+  type(cell) :: FSC             ! information about the cell
+  integer    :: max_natoms_part ! maximum allowed atoms per partition
+  integer,    dimension(:,:), allocatable :: iglob_atom_part ! iglob_atom_part(i,j)
+                                                             ! is global atomic
+                                                             ! index of ith atom
+                                                             ! in jth partition
 !*****
 
 contains
@@ -116,27 +118,40 @@ contains
   ! CREATION DATE
   !   2013/04/03
   ! MODIFICATION HISTORY
+  !   2014/09/15 18:30 lat
+  !    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
   ! SOURCE
   !
   subroutine sfc_partitions_to_processors(cqParts)
+
     use datatypes
-    use global_module, only: ni_in_cell, numprocs, species_glob, &
-                             iprint_init, io_lun, area_init
-    use GenComms, only: my_barrier, inode, ionode, cq_abort
-    use species_module, only: nsf_species
-    use basic_types, only: group_set
-    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_int
-    use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                      tmr_std_initialisation
+    use global_module,          only: ni_in_cell, numprocs, species_glob, &
+                                      iprint_init, io_lun, area_init
+    use GenComms,               only: my_barrier, inode, ionode, cq_abort
+    use species_module,         only: nsf_species
+    use basic_types,            only: group_set
+    use memory_module,          only: reg_alloc_mem, reg_dealloc_mem, type_int
+    use timer_module,           only: start_timer, stop_timer, cq_timer
+    use timer_stdclocks_module, only: tmr_std_initialisation
+
     implicit none
+
     ! passed parameters
     type(group_set), intent(inout) :: cqParts ! CQ partition information type
+
     ! local variables
+    logical :: reassign
     integer :: tot_natoms_parts, tot_n_sf, tot_n_parts
     integer :: ii, i_part, stat, counter
     integer :: min_nparts_proc, min_natoms_proc, min_nsf_proc
-    integer :: av_nparts_proc, av_natoms_proc, av_nsf_proc
-    logical :: reassign
+    integer ::  av_nparts_proc,  av_natoms_proc,  av_nsf_proc
+    type(cq_timer) :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='sfc_partitions_to_proc', &
+                     where=1,level=3)
+!****lat>$
+
     if ((inode == ionode) .and. (iprint_init > 2)) then
        write (io_lun, "(/,10x,a,/)") &
             "Using Hilbert curve automatic paritions"
@@ -291,6 +306,11 @@ contains
                             type_int)
     end if
     call stop_timer(tmr_std_initialisation)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='sfc_partitions_to_processors')
+!****lat>$
+
     return
   end subroutine sfc_partitions_to_processors
   !*****
@@ -325,11 +345,15 @@ contains
   !
   function criteria(testParts, testAtoms, testSf, &
                     critParts, critAtoms, critSf)
+
     use global_module, only: load_balance
+
     implicit none
+
     ! passed parameters
     integer, intent(in) :: testParts, testAtoms, testSf
     integer, intent(in) :: critParts, critAtoms, critSf
+
     ! returned value
     logical :: criteria
     criteria = .false.
@@ -363,21 +387,25 @@ contains
   ! SOURCE
   !
   subroutine construct_cq_partitions(cqParts)
-    use global_module, only: numprocs, atom_coord, ni_in_cell, &
-                             id_glob, id_glob_inv
-    use basic_types, only: group_set
-    use maxima_module, only: maxpartsproc, maxatomspart, &
-                             maxatomsproc, maxpartscell
+
+    use global_module,    only: numprocs, atom_coord, ni_in_cell, &
+                                id_glob, id_glob_inv
+    use basic_types,      only: group_set
+    use maxima_module,    only: maxpartsproc, maxatomspart, &
+                                maxatomsproc, maxpartscell
     use construct_module, only: init_group
+
     implicit none
+
     ! passed parameters
     type(group_set), intent(inout) :: cqParts
+
     ! local variables
-    integer :: ii, ia, maxpartsedge, i_cc, counter
-    integer, dimension(3) :: i_part_xyz
+    integer, dimension(3)                :: i_part_xyz
     integer, dimension(:,:), allocatable :: i_atom_global
-    integer, dimension(:), allocatable :: i_atom_part
-    integer :: stat
+    integer, dimension(:),   allocatable :: i_atom_part
+    integer :: ii, ia, maxpartsedge, i_cc, counter, stat
+
     maxpartscell = product(n_parts)
     maxpartsedge = maxval(n_parts)
     maxatomsproc = 0
@@ -414,6 +442,8 @@ contains
           end do
        end if
     end do
+
+    return
   end subroutine construct_cq_partitions
   !*****
 
@@ -447,22 +477,27 @@ contains
     ! parts array are assumed to be indexed by hilbert indices
     use datatypes
     use numbers
-    use global_module, only: atom_coord, ni_in_cell, species_glob, &
-                             area_init, shift_in_bohr
+    use GenComms,       only: cq_abort
+    use global_module,  only: atom_coord, ni_in_cell, species_glob, &
+                              area_init, shift_in_bohr
     use species_module, only: nsf_species
-    use Hilbert3D, only: Hilbert3D_Initialise, Hilbert3D_IntTOCoords, &
-                         Hilbert3D_CoordsToInt
-    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_int
-    use GenComms, only: cq_abort
+    use Hilbert3D,      only: Hilbert3D_Initialise, Hilbert3D_IntTOCoords, &
+                              Hilbert3D_CoordsToInt
+    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_int
+
     implicit none
+
     ! local variables
-    integer :: ii, stat
-    integer :: ihilbert, icc, ia
+    integer                    :: ii, stat
+    integer                    :: ihilbert, icc, ia
+    real(double)               :: v_part, area
     real(double), dimension(3) :: r_occupied_cell
-    real(double) :: v_part, area
-    integer, dimension(3) :: ipart_xyz, nParts
-    integer :: n_parts_total
-    logical :: refine
+    integer,      dimension(3) :: ipart_xyz, nParts
+    integer                    :: n_parts_total
+    logical                    :: refine
+
+    
+
     ! get cell and system information
     call get_cell_info()
     ! get initial guess for number of partitions
@@ -576,15 +611,17 @@ contains
   ! SOURCE
   !
   subroutine get_initial_partitions()
+
     use datatypes
     use numbers
     use global_module, only: atom_coord, global_maxatomspart, &
                              ni_in_cell, numprocs
     implicit none
+
     ! local variables
     real(double), dimension(3) :: r_occupied_cell
-    real(double) :: v_part, area
-    integer :: ii
+    real(double)               :: v_part, area
+    integer                    :: ii
     ! get an estimate of maximum number of atoms per partition,
     ! minimum one partition per processor, ideally each partition
     ! should contain no more than ni_in_cell / numprocs number of
@@ -658,6 +695,8 @@ contains
           r_part(ii) = FSC%dims(ii) / real(n_parts(ii),double)
        end do
     end if
+
+    return
   end subroutine get_initial_partitions
   !*****
 
@@ -680,15 +719,20 @@ contains
   !
   function int_log2(x)
     ! returns the minumum power (of 2) that is greater or equal to num
+
     implicit none
+
     ! passed parameters
     integer, intent(in) :: x
+
     ! returned value
     integer :: int_log2
     int_log2 = 0
     do while (2**int_log2 < x)
        int_log2 = int_log2 + 1
     end do
+
+    return
   end function int_log2
   !*****
 
@@ -718,17 +762,23 @@ contains
   ! SOURCE
   !
   function refine_direction(rParts, nRefineDims, refineDims)
+
     use datatypes
+
     implicit none
+
     ! passed parameters
     real(double), dimension(:), intent(in) :: rParts
-    integer, intent(in) :: nRefineDims
-    integer, dimension(:), intent(in) :: refineDims
+    integer,                    intent(in) :: nRefineDims
+    integer,      dimension(:), intent(in) :: refineDims
+
     ! returned value
     integer :: refine_direction
+
     ! local variables
-    integer :: ii, dim
+    integer      :: ii, dim
     real(double) :: max_r
+
     max_r = 0.0_double
     do ii = 1, nRefineDims
        dim = refineDims(ii)
@@ -737,6 +787,7 @@ contains
           refine_direction = dim
        end if
     end do
+
   end function refine_direction
   !*****
 
@@ -763,26 +814,30 @@ contains
   ! SOURCE
   !
   subroutine get_cell_info()
+
     use datatypes
     use numbers
-    use dimens, only: r_super_x, r_super_y, r_super_z
+    use dimens,        only: r_super_x, r_super_y, r_super_z
     use global_module, only: atom_coord, ni_in_cell, area_init, shift_in_bohr
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_int
-    use GenComms, only: cq_abort
+    use GenComms,      only: cq_abort
+
     implicit none
+
     ! local variables
-    integer, parameter :: min_n_slices = 10
-    integer, dimension(3) :: n_blocks
-    integer, dimension(3) :: i_block_xyz
+    integer,      parameter    :: min_n_slices = 10
+    integer,      dimension(3) :: n_blocks
+    integer,      dimension(3) :: i_block_xyz
     real(double), dimension(3) :: r_block
-    real(double) :: min_r_block
-    integer :: iatom, n_blocks_total, dim_min_r_block
-    integer :: ii, icc, stat
-    integer, dimension(:), allocatable :: n_atoms_block
-    integer :: gap_block_min, gap_block_max
+    real(double), dimension(2) :: limits
+    integer,      dimension(:), allocatable :: n_atoms_block
+    integer      :: iatom, n_blocks_total, dim_min_r_block
+    integer      :: ii, icc, stat
+    integer      :: gap_block_min, gap_block_max
     real(double) :: r_gap_block_min, r_gap_block_max
     real(double) :: tmp_min, tmp_max
-    real(double), dimension(2) :: limits
+    real(double) :: min_r_block
+
     ! get cell dimensions
     FSC%dims(1) = r_super_x
     FSC%dims(2) = r_super_y
@@ -883,6 +938,8 @@ contains
        call cq_abort("get_cell_info: Error deallocating n_atoms_block")
     end if
     call reg_dealloc_mem(area_init, n_blocks_total, type_int)
+
+    return
   end subroutine get_cell_info
   !*****
 
@@ -913,17 +970,22 @@ contains
   subroutine get_extent(dir, atom_coords, extent_min, extent_max, limits)
     ! from atom_coords, get the minimum and maximum coordinates along
     ! direction dir, and within the given limits(1) and limits(2)
+
     use datatypes
+
     implicit none
+
     ! passed parameters
-    integer, intent(in) :: dir
-    real(double), dimension(:,:), intent(in) :: atom_coords
-    real(double), intent(out) :: extent_min, extent_max
-    real(double), dimension(2), intent(in), optional :: limits
+    integer,                       intent(in)          :: dir
+    real(double), dimension(:,:), intent(in)           :: atom_coords
+    real(double), dimension(2),   intent(in), optional :: limits
+    real(double),                 intent(out)          :: extent_min, extent_max
+
     ! local variables
     integer :: ii
     integer :: n_atoms
-    n_atoms = size(atom_coords, 2)
+
+    n_atoms    = size(atom_coords, 2)
     extent_min = huge(1.0_double)
     extent_max = 0.0_double
     if (present(limits)) then
@@ -949,6 +1011,7 @@ contains
     end if
     ! in the case where extend is tiny, avoid rounding errors
     if (extent_min > extent_max)  extent_min = extent_max
+    return
   end subroutine get_extent
   !*****
 
@@ -982,17 +1045,21 @@ contains
   subroutine check_gap(dir, n_blocks, n_atoms_block, gap_start, gap_end)
     ! check gap in direction dir, transverse directions are b and c
     ! find the largest gap
+
     implicit none
+
     ! passed parameters
-    integer, intent(in) :: dir
-    integer, dimension(:), intent(in) :: n_blocks, n_atoms_block
-    integer, intent(out) :: gap_start, gap_end
+    integer,               intent(in)  :: dir
+    integer, dimension(:), intent(in)  :: n_blocks, n_atoms_block
+    integer,               intent(out) :: gap_start, gap_end
+
     ! local variables
     integer, dimension(2) :: tran_dir ! transverse directions
+    integer, dimension(3) :: cc_multiplier
     integer :: ii, ia, ib, ic, icc
     integer :: tmp_start, tmp_gap, gap
     logical :: start_count, found_atom
-    integer, dimension(3) :: cc_multiplier
+
     ! work out transverse directions
     do ii = 1, 2
        tran_dir(ii) = mod(dir+ii-1, 3) + 1
@@ -1048,6 +1115,8 @@ contains
           end if
        end if
     end do loop_a
+
+    return
   end subroutine check_gap
   !*****
 
@@ -1070,17 +1139,27 @@ contains
   !
   subroutine check_partitions()
     ! check if the partitions are setup correctly
-    use global_module, only: ni_in_cell, iprint_init, io_lun, &
-                             species_glob, numprocs, area_init
-    use GenComms, only: cq_abort, inode, ionode
+    use global_module,  only: ni_in_cell, iprint_init, io_lun, &
+                              species_glob, numprocs, area_init
+    use GenComms,       only: cq_abort, inode, ionode
     use species_module, only: nsf_species
-    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_int
+    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_int
+
     implicit none
-    integer :: tot_n_atoms, tot_n_sf, tot_n_parts, n_occupied_parts, &
-               nsf_in_cell, n_atoms_in_parts
+
+    integer :: tot_n_atoms, tot_n_sf, tot_n_parts, n_occupied_parts
+    integer :: nsf_in_cell, n_atoms_in_parts
     integer :: ii, jj, counter, stat
-    integer, dimension(:), allocatable :: atoms_in_parts
     logical :: found_repeat
+    integer, dimension(:), allocatable :: atoms_in_parts
+
+    allocate(atoms_in_parts(ni_in_cell), STAT=stat)
+    if (stat /= 0) then
+       call cq_abort("check_partitions: Error allocating atoms_in_parts", &
+                     ni_in_cell)
+    end if
+    call reg_alloc_mem(area_init, ni_in_cell, type_int)
+
     ! check total partitions
     if ((inode == ionode) .and. (iprint_init >= 2)) then
        write (io_lun, "(10x,a)", advance="no") &
@@ -1161,12 +1240,6 @@ contains
        write (io_lun, "(10x,a)", advance="no") &
             "checking if atoms are correctly assigned to partitions... "
     end if
-    allocate(atoms_in_parts(ni_in_cell), STAT=stat)
-    if (stat /= 0) then
-       call cq_abort("check_partitions: Error allocating atoms_in_parts", &
-                     ni_in_cell)
-    end if
-    call reg_alloc_mem(area_init, ni_in_cell, type_int)
     n_atoms_in_parts = 0
     counter = 1
     do ii = 1, tot_n_parts
@@ -1211,6 +1284,8 @@ contains
        call cq_abort("check_partitions: Error deallocating atoms_in_parts")
     end if
     call reg_dealloc_mem(area_init, ni_in_cell, type_int)
+
+    return
   end subroutine check_partitions
   !*****
 
@@ -1232,22 +1307,27 @@ contains
   ! SOURCE
   !
   subroutine print_information()
+
     use datatypes
     use global_module, only: iprint_init, io_lun, numprocs, area_init
-    use GenComms, only: inode, ionode, cq_abort
+    use GenComms,      only: inode, ionode, cq_abort
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_int
+
     implicit none
+
     ! local variables
     integer :: n_occupied_parts, ii, jj, ipart, stat
-    integer :: max_natoms_proc, min_natoms_proc, &
-               max_nparts_proc, min_nparts_proc, &
-               max_nsf_proc, min_nsf_proc, &
-               max_noccparts_proc, min_noccparts_proc
+    integer :: max_natoms_proc,    min_natoms_proc
+    integer :: max_nparts_proc,    min_nparts_proc
+    integer :: max_nsf_proc,       min_nsf_proc
+    integer :: max_noccparts_proc, min_noccparts_proc
     integer, dimension(:), allocatable :: n_occupied_parts_proc
-    real(double) :: mean_natoms_proc, std_natoms_proc, &
-                    mean_nparts_proc, std_nparts_proc, &
-                    mean_nsf_proc, std_nsf_proc, &
-                    mean_noccparts_proc, std_noccparts_proc
+
+    real(double) :: mean_natoms_proc, std_natoms_proc
+    real(double) :: mean_nparts_proc, std_nparts_proc
+    real(double) :: mean_nsf_proc, std_nsf_proc
+    real(double) :: mean_noccparts_proc, std_noccparts_proc
+
     ! only the ionode will carry out this subroutine
     if (inode == ionode) then
        ! print system information
@@ -1262,46 +1342,46 @@ contains
           write (io_lun, "(/,10x,a,/)") "Detected system type: molecule"
        end select
        if (iprint_init >= 2) then
-          write (io_lun, "(10x,a,3f10.6)") &
-               "Cell dimensions (a0): ", &
+          write (io_lun, "(10x,a,3f10.6)")  &
+               "Cell dimensions    (a0): ", &
                FSC%dims(1), FSC%dims(2), FSC%dims(3)
-          write (io_lun, "(10x,a,2f10.6)") &
+          write (io_lun, "(10x,a,2f10.6)")  &
                "System extent in x (a0): ", &
                FSC%r_atoms_min(1), FSC%r_atoms_max(1)
-          write (io_lun, "(10x,a,2f10.6)") &
+          write (io_lun, "(10x,a,2f10.6)")  &
                "System extent in y (a0): ", &
                FSC%r_atoms_min(2), FSC%r_atoms_max(2)
-          write (io_lun, "(10x,a,2f10.6)") &
+          write (io_lun, "(10x,a,2f10.6)")  &
                "System extent in z (a0): ", &
                FSC%r_atoms_min(3), FSC%r_atoms_max(3)
-          write (io_lun, "(10x,a,f10.6)") &
-               "Largest gap in x (a0): ", &
+          write (io_lun, "(10x,a,f10.6)")   &
+               "Largest gap in x   (a0): ", &
                FSC%gap(2,1) - FSC%gap(1,1)
-          write (io_lun, "(10x,a,f10.6)") &
-               "Largest gap in y (a0): ", &
+          write (io_lun, "(10x,a,f10.6)")   &
+               "Largest gap in y   (a0): ", &
                FSC%gap(2,2) - FSC%gap(1,2)
-          write (io_lun, "(10x,a,f10.6)") &
-               "Largest gap in z (a0): ", &
+          write (io_lun, "(10x,a,f10.6)")   &
+               "Largest gap in z   (a0): ", &
                FSC%gap(2,3) - FSC%gap(1,3)
-          write (io_lun, "(10x,a,3l3)") &
+          write (io_lun, "(10x,a,3l3)")     &
                "Partitioning method treating system is folded in (x,y,z): ", &
                FSC%is_folded(1), FSC%is_folded(2), FSC%is_folded(3)
        end if
        ! print partition information
        if (iprint_init >= 2) then
-          write (io_lun, "(10x,a,i6)") &
+          write (io_lun, "(10x,a,i6)")  &
                "User requested N partitions in x: ", n_parts_user(1)
-          write (io_lun, "(10x,a,i6)") &
+          write (io_lun, "(10x,a,i6)")  &
                "User requested N partitions in y: ", n_parts_user(2)
-          write (io_lun, "(10x,a,i6)") &
+          write (io_lun, "(10x,a,i6)")  &
                "User requested N partitions in z: ", n_parts_user(3)
-          write (io_lun, "(10x,a)") &
+          write (io_lun, "(10x,a)")     &
                "(zero means set partitions automatically)"
-          write (io_lun, "(10x,a,i6)") &
+          write (io_lun, "(10x,a,i6)")  &
                "Actual N partitions in x: ", n_parts(1)
-          write (io_lun, "(10x,a,i6)") &
+          write (io_lun, "(10x,a,i6)")  &
                "Actual N partitions in y: ", n_parts(2)
-          write (io_lun, "(10x,a,i6)") &
+          write (io_lun, "(10x,a,i6)")  &
                "Actual N partitions in z: ", n_parts(3)
           write (io_lun, "(10x,a,3i6)") &
                "Number of recursions used for 3D Hilbert curve (x,y,z): ", &
@@ -1383,42 +1463,42 @@ contains
           std_natoms_proc = sqrt(std_natoms_proc / real(numprocs,double))
           std_nsf_proc = sqrt(std_nsf_proc / real(numprocs,double))
           std_noccparts_proc = sqrt(std_noccparts_proc / real(numprocs,double))
-          write (io_lun, "(12x,a,i6)") &
+          write (io_lun, "(12x,a,i6)")      &
                "Total N partitions: ", product(n_parts)
-          write (io_lun, "(12x,a,i6)") &
-               "Max N partitions in each proc: ", max_nparts_proc
-          write (io_lun, "(12x,a,i6)") &
-               "Min N partitions in each proc: ", min_nparts_proc
-          write (io_lun, "(12x,a,f10.6)") &
-               "Mean N partitions in each proc: ", mean_nparts_proc
-          write (io_lun, "(12x,a,f10.6)") &
-               "Std N partitions in each proc: ", std_nparts_proc
-          write (io_lun, "(12x,a,i6)") &
+          write (io_lun, "(12x,a,i6)")      &
+               "Max   N partitions in each proc: ", max_nparts_proc
+          write (io_lun, "(12x,a,i6)")      &
+               "Min   N partitions in each proc: ", min_nparts_proc
+          write (io_lun, "(12x,a,f10.6)")   &
+               "Mean  N partitions in each proc: ", mean_nparts_proc
+          write (io_lun, "(12x,a,f10.6)")   &
+               "Std   N partitions in each proc: ", std_nparts_proc
+          write (io_lun, "(12x,a,i6)")      &
                "Total occupied partitions: ", n_occupied_parts
-          write (io_lun, "(12x,a,i6)") &
-               "Max N occupied partitions in each proc: ", max_noccparts_proc
-          write (io_lun, "(12x,a,i6)") &
-               "Min N occupied partitions in each proc: ", min_noccparts_proc
-          write (io_lun, "(12x,a,f10.6)") &
-               "Mean N occupied partitions in each proc: ", mean_noccparts_proc
-          write (io_lun, "(12x,a,f10.6)") &
-               "Std N occupied partitions in each proc: ", std_noccparts_proc
-          write (io_lun, "(12x,a,i6)") &
-               "Max N atoms in each proc: ", max_natoms_proc
-          write (io_lun, "(12x,a,i6)") &
-               "Min N atoms in each proc: ", min_natoms_proc
-          write (io_lun, "(12x,a,f10.6)") &
-               "Mean N atoms in each proc: ", mean_natoms_proc
-          write (io_lun, "(12x,a,f10.6)") &
-               "Std N atoms in each proc: ", std_natoms_proc
-          write (io_lun, "(12x,a,i6)") &
-               "Max N support fns in each proc: ", max_nsf_proc
-          write (io_lun, "(12x,a,i6)") &
-               "Min N support fns in each proc: ", min_nsf_proc
-          write (io_lun, "(12x,a,f10.6)") &
-               "Mean N support fns in each proc: ", mean_nsf_proc
+          write (io_lun, "(12x,a,i6)")      &
+               "Max   N occupied partitions in each proc: ", max_noccparts_proc
+          write (io_lun, "(12x,a,i6)")      &
+               "Min   N occupied partitions in each proc: ", min_noccparts_proc
+          write (io_lun, "(12x,a,f10.6)")   &
+               "Mean  N occupied partitions in each proc: ", mean_noccparts_proc
+          write (io_lun, "(12x,a,f10.6)")   &
+               "Std   N occupied partitions in each proc: ", std_noccparts_proc
+          write (io_lun, "(12x,a,i6)")      &
+               "Max   N atoms in each proc: ", max_natoms_proc
+          write (io_lun, "(12x,a,i6)")      &
+               "Min   N atoms in each proc: ", min_natoms_proc
+          write (io_lun, "(12x,a,f10.6)")   &
+               "Mean  N atoms in each proc: ", mean_natoms_proc
+          write (io_lun, "(12x,a,f10.6)")   &
+               "Std   N atoms in each proc: ", std_natoms_proc
+          write (io_lun, "(12x,a,i6)")      &
+               "Max   N support fns in each proc: ", max_nsf_proc
+          write (io_lun, "(12x,a,i6)")      &
+               "Min   N support fns in each proc: ", min_nsf_proc
+          write (io_lun, "(12x,a,f10.6)")   &
+               "Mean  N support fns in each proc: ", mean_nsf_proc
           write (io_lun, "(12x,a,f10.6,/)") &
-               "Std N support fns in each proc: ", std_nsf_proc
+               "Std   N support fns in each proc: ", std_nsf_proc
           deallocate(n_occupied_parts_proc, STAT=stat)
           if (stat /= 0) then
              call cq_abort("print_information: &
@@ -1427,6 +1507,8 @@ contains
           call reg_dealloc_mem(area_init, numprocs, type_int)
        end if
     end if ! (inode == ionode)
+
+    return
   end subroutine print_information
   !*****
 

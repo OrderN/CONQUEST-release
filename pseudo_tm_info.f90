@@ -29,14 +29,17 @@
 !!    Added timers
 !!   2011/03/30 19:07 M.Arita
 !!    Added statements for P.C.C.
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module pseudo_tm_info
 
-  use datatypes, ONLY: double
-  use GenComms, ONLY: cq_abort
-  use global_module, ONLY: area_pseudo, io_lun, flag_pcc_global
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
+  use datatypes,              only: double
+  use GenComms,               only: cq_abort
+  use global_module,          only: area_pseudo, io_lun, flag_pcc_global
+  use timer_module,           only: start_timer,stop_timer
+  use timer_stdclocks_module, only: tmr_std_allocation
 
   implicit none
 

@@ -79,7 +79,6 @@ program Conquest
   use potential_module
   use global_module
   use force_module,   only: tot_force
-! use io_module,      only: banner
   use grid_index
   use atoms
   use species_module
@@ -100,6 +99,9 @@ program Conquest
   use memory_module
   use minimise
   use timer_stdclocks_module
+  !use output_module
+  !use complete_module
+
 
   implicit none
 
@@ -108,12 +110,10 @@ program Conquest
        CQid = "$Id$"
 
   ! Global variables (for now !)
-
-  logical :: fixed_potential
+  logical      :: fixed_potential
 
   ! Energies and electrons
   real(double) :: total_energy
-  ! real(double) :: number_of_bands
   
   ! Chemical potential
   real(double) :: mu
@@ -122,7 +122,14 @@ program Conquest
   fixed_potential = .false.
   ! identify what node we are on
   call init_comms(myid, numprocs)
-  ! if (inode == ionode) call banner
+
+  !call init_timing_system(inode)
+ 
+  !call init_reg_mem
+ 
+  !**<lat>** can be used here to open std output
+  !          for printing at the very beginning
+  !call init_user_output()
 
   ! Initialise reads in data and finds an initial, self-consistent
   ! Hamiltonian
@@ -136,7 +143,14 @@ program Conquest
        write (io_lun, '(4x,"Finished control")')
 
   call write_mem_use
+
   call print_time_report
+  
+  !**<lat>** as initialise routine we may need a complete routine
+  !          cheking if everything is fine before ending ; write_mem_use
+  !          and print_time_report can be within this routine 
+  !call complete()
+  !call close_user_output()
 
   ! Wrap up
   call my_barrier ()

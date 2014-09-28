@@ -411,14 +411,16 @@ contains
 !!    Changed float to real
 !!   2008/06/01 ast
 !!    Added timers
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
   subroutine f3_value(sym_type, n_sp, n_am, n_zeta, nu_int, delta_ig, &
                       n_blip, bv, z0, fv3)
     use datatypes
     use numbers
     use GenComms,               only: cq_abort
-    use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                      tmr_std_basis
+    use timer_module,           only: start_timer, stop_timer
+    use timer_stdclocks_module, only: tmr_std_basis
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none

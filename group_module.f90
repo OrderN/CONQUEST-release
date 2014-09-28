@@ -23,6 +23,8 @@
 !!    Added RCS Id and Log tags and used cq_abort throughout
 !!   2008/05/16 ast
 !!    Added timers
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module group_module
@@ -30,7 +32,8 @@ module group_module
   ! Module usage
   use datatypes
   use basic_types
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_indexing,tmr_std_allocation
+  use timer_module,           only: start_timer,stop_timer,cq_timer
+  use timer_stdclocks_module, only: tmr_std_indexing,tmr_std_allocation
 
   implicit none
   save
@@ -40,7 +43,7 @@ module group_module
 
   integer :: part_method
   integer, parameter :: HILBERT = 1
-  integer, parameter :: PYTHON = 2
+  integer, parameter :: PYTHON  = 2
 !!***
 
 contains
@@ -81,12 +84,18 @@ contains
 
     ! Passed variables
     type(group_set) :: groups
-    integer :: numprocs
+    integer         :: numprocs
 
     ! Local variables
-    integer :: nnd,np,ind_group
+    type(cq_timer)  :: tmr_std_loc
+    integer         :: nnd,np,ind_group
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='make_cc2',where=8,level=3)
+!****lat>$
 
     call start_timer(tmr_std_indexing)
+
     do nnd=1,numprocs  ! Loop over processors
       if(groups%ng_on_node(nnd).gt.0) then  
         do np=1,groups%ng_on_node(nnd)  ! Loop over groups on the node
@@ -96,7 +105,14 @@ contains
         enddo
       endif
     enddo   
+
     call stop_timer(tmr_std_indexing)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='make_cc2')
+!****lat>$
+
+    return
   end subroutine make_cc2
 !!***
 
@@ -131,18 +147,23 @@ contains
     ! Module usage
     use datatypes
     use basic_types
-    use GenComms, ONLY: cq_abort
-    use memory_module, ONLY: reg_alloc_mem, type_int
-    use global_module, ONLY: area_index
+    use GenComms,      only: cq_abort
+    use memory_module, only: reg_alloc_mem, type_int
+    use global_module, only: area_index
 
     implicit none
 
     ! Passed variables
     type(group_set) :: groups
-    integer :: mx_node
+    integer         :: mx_node
 
     ! Local variables
-    integer :: stat
+    type(cq_timer)  :: tmr_std_loc
+    integer         :: stat
+
+!****lat<$
+    call start_timer( t=tmr_std_loc,who='allocate_group_set',where=1,level=5)
+!****lat>$
 
     call start_timer(tmr_std_allocation)
     allocate(groups%ng_on_node(mx_node),STAT=stat)
@@ -180,6 +201,11 @@ contains
     endif
     call reg_alloc_mem(area_index,6*groups%mx_gcell,type_int)
     call stop_timer(tmr_std_allocation)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='allocate_group_set')
+!****lat>$
+
     return
   end subroutine allocate_group_set
 !!***
@@ -234,6 +260,7 @@ contains
     endif
     call reg_dealloc_mem(area_index,6*groups%mx_gcell,type_int)
     call stop_timer(tmr_std_allocation)
+
     return
   end subroutine deallocate_group_set
 !!***

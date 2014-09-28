@@ -59,13 +59,15 @@
 !!     energy module dependence here.
 !!   2012/05/29 L.Tong
 !!   - Added subroutine for calculating electron numbers
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 module density_module
 
   use datatypes
   use global_module,          only: io_lun, iprint_SC
-  use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                    tmr_std_chargescf
+  use timer_module,           only: start_timer, stop_timer, cq_timer, stop_print_timer
+  use timer_stdclocks_module, only: tmr_std_chargescf
 
   implicit none
   save
@@ -176,7 +178,7 @@ contains
     use spline_module,       only: splint
     use dimens,              only: n_my_grid_points, grid_point_volume
     use GenBlas,             only: rsum, scal
-    use timer_module
+    use timer_module,        only: WITH_LEVEL
 
     implicit none
 
@@ -195,16 +197,24 @@ contains
     ! local charge density returned from splint routine
     real(double)   :: local_density
     type(cq_timer) :: tmr_l_tmp1
+    type(cq_timer) :: tmr_std_loc
 
     ! logical flag to warn if splint routine called out of the
     ! tabulated range.
     logical :: range_flag
 
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='set_density',where=5,level=3)
+!****lat>$
+  
     if (inode == ionode .and. iprint_SC >= 2) &
          write (io_lun, fmt='(2x,"Entering set_density")')
 
     call start_timer(tmr_std_chargescf)
-    call start_timer(tmr_l_tmp1, WITH_LEVEL)
+    call start_timer(t=tmr_l_tmp1, l=WITH_LEVEL)
+
+    !call sub_enter_output('set_density',2,'5')
+
     ! initialize density
     density = zero
     !write(io_lun,*) 'Size of density: ',size(density)
@@ -368,9 +378,16 @@ contains
     !    end if
     ! end if ! (nspin == 1 .or. flag_fix_spin_population)
 
+
     call my_barrier()
+
     call stop_print_timer(tmr_l_tmp1, "set_density", IPRINT_TIME_THRES3)
     call stop_timer(tmr_std_chargescf)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='set_density')
+!****lat>$
+
     return
   end subroutine set_density
   !!***
@@ -446,7 +463,7 @@ contains
          write (io_lun, fmt='(2x,"Entering set_density_pcc")')
 
     call start_timer(tmr_std_chargescf)
-    call start_timer(tmr_l_tmp1, WITH_LEVEL)
+    call start_timer(t=tmr_l_tmp1, l=WITH_LEVEL)
     density_pcc = zero  ! initialize density
     ! write(io_lun,*) 'Size of density: ',size(density)
     ! call scal(n_my_grid_points,zero,density,1)
@@ -681,7 +698,13 @@ contains
     real(double), dimension(:,:) :: denout
 
     ! Local variables
+    type(cq_timer) :: tmr_std_loc
     integer :: blk, i_count_alpha, n, n_i, n_point, spin
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='get_electronic_density',&
+         where=5,level=2,echo=.true.)
+!****lat>$
 
     call start_timer(tmr_std_chargescf)
 
@@ -746,6 +769,10 @@ contains
     gridfunctions(support_K)%griddata = zero
 
     call stop_timer(tmr_std_chargescf)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='get_electronic_density',echo=.true.)
+!****lat>$
 
     return
   end subroutine get_electronic_density

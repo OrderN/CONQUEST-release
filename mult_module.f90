@@ -73,6 +73,10 @@
 !!     symmetrise_L and applicable to any sort of matrices
 !!   2013/12/02 M.Arita
 !!   - Added parameter LS_T_L for XL-BOMD
+!!   2014/01/14  lat
+!!   - Added parameters matX, matSX, S_X_SX for exx
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module mult_module
@@ -82,8 +86,8 @@ module mult_module
   use matrix_data,            only: mx_matrices, matrix_pointer
   use global_module,          only: sf, nlpf, paof, io_lun, nspin
   use GenComms,               only: cq_abort
-  use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                    tmr_std_allocation
+  use timer_module,           only: start_timer, stop_timer
+  use timer_stdclocks_module, only: tmr_std_allocation
 
   implicit none
   save
@@ -111,8 +115,9 @@ module mult_module
   integer(integ), parameter :: TL_T_L    = 20  ! type 2
   integer(integ), parameter :: PAOP_PS_H = 21  ! type 1/2 (cf SP_PS_H)
   integer(integ), parameter :: LS_T_L    = 22  ! type 2
+  integer(integ), parameter :: S_X_SX    = 23  ! type 1
 
-  integer(integ), parameter :: mx_mults  = 22
+  integer(integ), parameter :: mx_mults  = 23
 
   type(matrix_mult) :: mult(mx_mults)
 
@@ -142,7 +147,7 @@ module mult_module
   ! spin dependent matrices
   integer, allocatable, dimension(:), public :: &
        matH, matL, matLS, matSL, matK, matphi, matM12, matM4, matU, &
-       matUT, matdH
+       matUT, matdH, matX, matSX
 
   integer, allocatable, dimension(:), public :: matrix_index, &
                                                 trans_index
@@ -226,7 +231,7 @@ contains
           mat_p(i)%length = 0
           nullify(mat_p(i)%matrix)
           matrix_index(i) = 0
-          trans_index(i) = 0
+          trans_index(i)  = 0
        end do
     end if
     if (.not. allocated(mat)) then
@@ -318,6 +323,12 @@ contains
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,PAOPrange), &
                     PAOPmatind, rcut(SPrange), myid-1,                      &
                     halo(PAOPrange), ltrans(PAOPrange))
+    call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,SXrange), &
+                    SXmatind, rcut(SXrange), myid-1,                      &
+                    halo(SXrange), ltrans(SXrange))
+    call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Xrange), &
+                    Xmatind, rcut(Xrange), myid-1,                       &
+                    halo(Xrange), ltrans(Xrange))
     call associate_matrices
     call find_neighbour_procs(parts, halo(max_range))
     call start_timer(tmr_std_allocation)
@@ -698,8 +709,21 @@ contains
     mult(TL_T_L)%prim    => prim
     mult(TL_T_L)%gcs     => gcs
     call mult_ini(mult(TL_T_L), TTrmatind, myid-1, prim%n_prim, parts)
+    mult(S_X_SX)%mult_type = 1
+    mult(S_X_SX)%amat    => mat(1:prim%groups_on_node,Srange)
+    mult(S_X_SX)%bmat    => mat(1:prim%groups_on_node,Xrange)
+    mult(S_X_SX)%cmat    => mat(1:prim%groups_on_node,SXrange)
+    mult(S_X_SX)%ahalo   => halo(Srange)
+    mult(S_X_SX)%chalo   => halo(SXrange)
+    mult(S_X_SX)%ltrans  => ltrans(Srange)
+    mult(S_X_SX)%parts   => parts
+    mult(S_X_SX)%prim    => prim
+    mult(S_X_SX)%gcs     => gcs
+    call mult_ini(mult(S_X_SX), Xmatind, myid-1, prim%n_prim, parts)
     !end if
     ! call stop_timer(tmr_std_matrices)
+
+    return
   end subroutine immi
   !!***
 
@@ -836,6 +860,10 @@ contains
     mult(TL_T_L)%ahalo,mult(TL_T_L)%chalo,mult(TL_T_L)%ltrans,              &
     mult(TL_T_L)%bindex,mult(TL_T_L)%parts,mult(TL_T_L)%prim,               &
     mult(TL_T_L)%gcs)
+    nullify(mult(S_X_SX)%amat,mult(S_X_SX)%bmat,mult(S_X_SX)%cmat,          &
+    mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans,              &
+    mult(S_X_SX)%bindex,mult(S_X_SX)%parts,mult(S_X_SX)%prim,               &
+    mult(S_X_SX)%gcs)
     ! Comms
     call deallocate_comms_data(mult(H_SP_SP)%comms)
     call deallocate_comms_data(mult(L_S_LS)%comms)
@@ -891,6 +919,7 @@ contains
     call end_ops(prim,THrange,THmatind)
     call end_ops(prim,TLrange,TLmatind)
 !    call stop_timer(tmr_std_matrices)
+
     return
   end subroutine fmmi
   !!***
@@ -988,11 +1017,16 @@ contains
                                  matA, matSLS, matLSL, matLHLSL,       &
                                  matLSLHL, matB, matC, matSLSLS,       &
                                  matLSLSL
+    type(cq_timer)            :: tmr_std_loc
     type(cq_timer)            :: tmr_l_tmp1
     integer                   :: ss, ss_start, ss_end
 
     ! This routine is basically calls to matrix operations, so these
     ! are timed within the routines themselves
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='LNV_mat_mult',where=1,level=2)
+!****lat>$
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
 
@@ -1287,6 +1321,10 @@ contains
     call stop_print_timer(tmr_l_tmp1, "LNV_matrix_multiply", &
                           IPRINT_TIME_THRES3)
     
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='LNV_mat_mult')
+!****lat>$
+
     return
   end subroutine LNV_matrix_multiply
   !!***
@@ -1356,6 +1394,8 @@ contains
        end do
     end if
     call free_temp_matrix(mattmp)
+   
+    return
   end subroutine symmetrise_L
   !!***
 
@@ -1498,8 +1538,8 @@ contains
 
     use numbers,       only: zero
     use matrix_data,   only: Srange, Hrange, Lrange, Trange, PSrange, &
-                             LSrange, SPrange, SLrange, dSrange, &
-                             dHrange, TTrrange, mat
+                             LSrange, SPrange, SLrange, dSrange,      &
+                             dHrange, TTrrange, Xrange, SXrange, mat
     use global_module, only: area_matrices, iprint_mat, nspin
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use GenComms,      only: inode, ionode
@@ -1515,9 +1555,10 @@ contains
 
     ! Allocate spin dependent matrices
     if (.not. allocated_tags) then
-       allocate(matH(nspin), matL(nspin), matLS(nspin), matSL(nspin),    &
+       allocate(matH(nspin), matL(nspin),   matLS(nspin),  matSL(nspin), &
                 matK(nspin), matphi(nspin), matM12(nspin), matM4(nspin), &
-                matU(nspin), matUT(nspin), matdH(nspin), STAT=stat)
+                matU(nspin), matUT(nspin),  matdH(nspin),  matX(nspin),  &
+                matSX(nspin), STAT=stat)
        if (stat /= 0) &
             call cq_abort('associate_matrices: failed to allocate spin &
                            &depdendent matrix tags', nspin, stat)
@@ -1544,23 +1585,27 @@ contains
     matNL     = 17
     matdH(1)  = 18
     matdS     = 19
-    current_matrix = 19
+    matX(1)   = 20
+    matSX(1)  = 21
+    current_matrix = 21
     if (nspin == 2) then
-       matH(2)   = 20
-       matL(2)   = 21
-       matK(2)   = 22
-       matdH(2)  = 23
-       matLS(2)  = 24
-       matSL(2)  = 25
-       matphi(2) = 26
-       matU(2)   = 27
-       matUT(2)  = 28
-       matM12(2) = 29
-       matM4(2)  = 30
-       current_matrix = 30
+       matH(2)   = 22
+       matL(2)   = 23
+       matK(2)   = 24
+       matdH(2)  = 25
+       matLS(2)  = 26
+       matSL(2)  = 27
+       matphi(2) = 28
+       matU(2)   = 29
+       matUT(2)  = 30
+       matM12(2) = 31
+       matM4(2)  = 32
+       matX(2)   = 33
+       matSX(2)  = 34
+       current_matrix = 34
     end if
 
-!%%!    ! Now associate pointers with correct arrays
+!%%!! Now associate pointers with correct arrays
 !%%!    mat_p(matS  )%matrix => data_S
 !%%!    mat_p(matH  )%matrix => data_H
 !%%!    mat_p(matL  )%matrix => data_L
@@ -1603,8 +1648,9 @@ contains
        mat_p(matLS(spin) )%sf1_type = sf    
        mat_p(matSL(spin) )%sf1_type = sf
        mat_p(matdH(spin) )%sf1_type = paof
+       mat_p(matX(spin)  )%sf1_type = sf
+       mat_p(matSX(spin) )%sf1_type = sf
     end do
-
     ! Type for f2
     mat_p(matS    )%sf2_type = sf
     mat_p(matT    )%sf2_type = sf
@@ -1626,6 +1672,8 @@ contains
        mat_p(matLS(spin) )%sf2_type = sf
        mat_p(matSL(spin) )%sf2_type = sf
        mat_p(matdH(spin) )%sf2_type = sf
+       mat_p(matX(spin)  )%sf2_type = sf
+       mat_p(matSX(spin) )%sf2_type = sf
     end do
     ! Set up index translation for ranges
     matrix_index(matS    ) = Srange
@@ -1648,6 +1696,8 @@ contains
        matrix_index(matLS(spin) ) = LSrange
        matrix_index(matSL(spin) ) = SLrange
        matrix_index(matdH(spin) ) = dHrange
+       matrix_index(matX(spin)  ) = Hrange ! Xrange
+       matrix_index(matSX(spin) ) = SXrange
     end do
     ! Real lengths
     ! Length
@@ -1725,6 +1775,8 @@ contains
        trans_index(matLS(spin) ) = LS_trans
        trans_index(matSL(spin) ) = LS_trans
        trans_index(matdH(spin) ) = 0
+       trans_index(matX(spin)  ) = 0 ! S_trans
+       trans_index(matSX(spin) ) = 0
     end do
 
     return
@@ -1759,98 +1811,112 @@ contains
     call start_timer(tmr_std_allocation)
     if (nspin == 2) then
        ! order is important
-       deallocate(mat_p(matM4(2))%matrix, STAT=stat) ! 30
+       deallocate(mat_p(matSX(2))%matrix,STAT=stat) !34
+       if (stat /= 0) call cq_abort("Error deallocating matrix SX(2)&
+            & ",mat_p(matSX(2))%length)
+       deallocate(mat_p(matX(2))%matrix,STAT=stat)  !33
+       if (stat /= 0) call cq_abort("Error deallocating matrix X(2)&
+            & ",mat_p(matX(2))%length)
+       deallocate(mat_p(matM4(2))%matrix, STAT=stat)!32
        if (stat /= 0) call cq_abort("Error deallocating matrix M4(2) ",&
                                     mat_p(matM4(2))%length)       
-       deallocate(mat_p(matM12(2))%matrix,STAT=stat) !29
+       deallocate(mat_p(matM12(2))%matrix,STAT=stat)!31
        if (stat /= 0) call cq_abort("Error deallocating matrix M12(2)&
             & ",mat_p(matM12(2))%length)
-       deallocate(mat_p(matUT(2))%matrix,STAT=stat) !28
+       deallocate(mat_p(matUT(2))%matrix,STAT=stat) !30
        if (stat /= 0) call cq_abort("Error deallocating matrix UT(2)&
             & ",mat_p(matU(2))%length)
-       deallocate(mat_p(matphi(2))%matrix,STAT=stat) !27
+       deallocate(mat_p(matphi(2))%matrix,STAT=stat)!29
        if (stat /= 0) call cq_abort("Error deallocating matrix U(2)&
             & ",mat_p(matphi(2))%length)
-       deallocate(mat_p(matphi(2))%matrix,STAT=stat) !26
+       deallocate(mat_p(matphi(2))%matrix,STAT=stat)!28
        if (stat /= 0) call cq_abort("Error deallocating matrix phi(2)&
             & ",mat_p(matphi(2))%length)
-       deallocate(mat_p(matSL(2) )%matrix,STAT=stat) !25
+       deallocate(mat_p(matSL(2) )%matrix,STAT=stat)!27
        if (stat /= 0) call cq_abort("Error deallocating matrix SL(2)&
             & ",mat_p(matSL(2))%length)
-       deallocate(mat_p(matLS(2) )%matrix,STAT=stat) !24
+       deallocate(mat_p(matLS(2) )%matrix,STAT=stat)!26
        if (stat /= 0) call cq_abort("Error deallocating matrix LS(2)&
             & ",mat_p(matLS(2))%length)
-       deallocate(mat_p(matdH(2))%matrix,STAT=stat) !23
+       deallocate(mat_p(matdH(2))%matrix,STAT=stat) !25
        if (stat /= 0) call cq_abort("Error deallocating matrix dH(2)&
             & ",mat_p(matdH(2))%length)
-       deallocate(mat_p(matK(2))%matrix,STAT=stat) !22
+       deallocate(mat_p(matK(2))%matrix,STAT=stat)  !24
        if (stat /= 0) call cq_abort("Error deallocating matrix K(2)&
             & ",mat_p(matK(2))%length)
-       deallocate(mat_p(matL(2))%matrix,STAT=stat) !21
+       deallocate(mat_p(matL(2))%matrix,STAT=stat)  !23
        if (stat /= 0) call cq_abort("Error deallocating matrix L(2)&
             & ",mat_p(matL(2))%length)
-       deallocate(mat_p(matH(2))%matrix,STAT=stat) !20
+       deallocate(mat_p(matH(2))%matrix,STAT=stat)  !22
        if (stat /= 0) call cq_abort("Error deallocating matrix H(2)&
             & ",mat_p(matH(2))%length)
     end if
-    deallocate(mat_p(matdS)%matrix,STAT=stat) !19
+    deallocate(mat_p(matSX(1))%matrix,STAT=stat)    !21
+    if (stat /= 0) &
+         call cq_abort("Error deallocating matrix SX(1) ",mat_p(matSX(1))%length)
+    deallocate(mat_p(matX(1))%matrix,STAT=stat)     !20
+    if (stat /= 0) &
+         call cq_abort("Error deallocating matrix X(1) ",mat_p(matX(1))%length)
+    deallocate(mat_p(matdS)%matrix,STAT=stat)       !19
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix dS ", mat_p(matdS)%length)
-    deallocate(mat_p(matdH(1))%matrix,STAT=stat) !18
+    deallocate(mat_p(matdH(1))%matrix,STAT=stat)    !18
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix dH(1) ", mat_p(matdH(1))%length)
-    deallocate(mat_p(matNL)%matrix,STAT=stat) !17
+    deallocate(mat_p(matNL)%matrix,STAT=stat)       !17
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix NL ", mat_p(matNL)%length)
-    deallocate(mat_p(matKE)%matrix,STAT=stat) !16
+    deallocate(mat_p(matKE)%matrix,STAT=stat)       !16
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix KE ", mat_p(matKE)%length)
-    deallocate(mat_p(matUT(1))%matrix,STAT=stat) !15
+    deallocate(mat_p(matUT(1))%matrix,STAT=stat)    !15
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix UT(1) ", mat_p(matUT(1))%length)
-    deallocate(mat_p(matM12(1))%matrix,STAT=stat) !14
+    deallocate(mat_p(matM12(1))%matrix,STAT=stat)   !14
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix M12(1) ", mat_p(matM12(1))%length)
-    deallocate(mat_p(matphi(1))%matrix,STAT=stat) !13
+    deallocate(mat_p(matphi(1))%matrix,STAT=stat)   !13
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix phi(1) ", mat_p(matphi(1))%length)
-    deallocate(mat_p(matU(1))%matrix,STAT=stat) !12
+    deallocate(mat_p(matU(1))%matrix,STAT=stat)     !12
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix U(1) ", mat_p(matU(1))%length)
-    deallocate(mat_p(matM4(1))%matrix,STAT=stat) !11
+    deallocate(mat_p(matM4(1))%matrix,STAT=stat)    !11
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix M4(1) ", mat_p(matM4(1))%length)
-    deallocate(mat_p(matK(1))%matrix,STAT=stat) !10
+    deallocate(mat_p(matK(1))%matrix,STAT=stat)     !10
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix K(1) ", mat_p(matK(1))%length)
-    deallocate(mat_p(matCS)%matrix,STAT=stat) !9
+    deallocate(mat_p(matCS)%matrix,STAT=stat)       !9
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix CS ", mat_p(matCS)%length)
-    deallocate(mat_p(matSC)%matrix,STAT=stat) !8
+    deallocate(mat_p(matSC)%matrix,STAT=stat)       !8
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix SC ", mat_p(matSC)%length)
-    deallocate(mat_p(matSL(1))%matrix,STAT=stat) !7
+    deallocate(mat_p(matSL(1))%matrix,STAT=stat)    !7
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix SL(1) ", mat_p(matSL(1))%length)
-    deallocate(mat_p(matLS(1))%matrix,STAT=stat) !6
+    deallocate(mat_p(matLS(1))%matrix,STAT=stat)    !6
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix LS(1) ", mat_p(matLS(1))%length)
-    deallocate(mat_p(matTtran)%matrix,STAT=stat) !5
+    deallocate(mat_p(matTtran)%matrix,STAT=stat)    !5
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix Ttran ", mat_p(matTtran)%length)
-    deallocate(mat_p(matT)%matrix,STAT=stat) !4
+    deallocate(mat_p(matT)%matrix,STAT=stat)        !4
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix T ", mat_p(matT)%length)
-    deallocate(mat_p(matL(1))%matrix,STAT=stat) !3
+    deallocate(mat_p(matL(1))%matrix,STAT=stat)     !3
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix L(1) ", mat_p(matL(1))%length)
-    deallocate(mat_p(matH(1))%matrix,STAT=stat) !2
+    deallocate(mat_p(matH(1))%matrix,STAT=stat)     !2
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix H(1)", mat_p(matH(1))%length)
-    deallocate(mat_p(matS)%matrix,STAT=stat) !1
+    deallocate(mat_p(matS)%matrix,STAT=stat)        !1
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix S ", mat_p(matS)%length)
     call stop_timer(tmr_std_allocation)
+
+    return
   end subroutine dissociate_matrices
   !!*****
 
@@ -1931,6 +1997,8 @@ contains
        end if
     end if
     ! call stop_timer(tmr_std_matrices)
+
+    return
   end subroutine matrix_product
   !!***
 
@@ -1996,8 +2064,8 @@ contains
     if (stat /= 0) &
          call cq_abort("Error deallocating requests in matrix_transpose: ", stat)
     ! call stop_timer(tmr_std_matrices)
-    return
-    
+
+    return    
   end subroutine matrix_transpose
 
 
@@ -2063,6 +2131,7 @@ contains
     !mat_p(A)%matrix = alpha*mat_p(A)%matrix
     ! call stop_timer(tmr_std_matrices)
 
+    return
   end subroutine matrix_scale
 
 
@@ -2186,6 +2255,7 @@ contains
     end if
     ! call stop_timer(tmr_std_matrices)
 
+    return
   end subroutine atom_trace
   !!***
 
@@ -2203,6 +2273,8 @@ contains
   !! MODIFICATION HISTORY
   !!   2012/02/08 L.Tong
   !!   - Added intent(in) attribute for A and B.
+  !!   2014/09/22 lat
+  !!   - Added printing of matrix length  
   !! SOURCE
   !!
   function matrix_product_trace(A, B)
@@ -2234,10 +2306,70 @@ contains
     else
        ! For now I'm going to abort; we could have (say) optional
        ! argument giving the mult-type and range of the product
-       call cq_abort("Matrix product for two different ranges not implemented")
+       call cq_abort("Matrix product for two different ranges not implemented", &
+            mat_p(A)%length, mat_p(B)%length)
     end if
     ! call stop_timer(tmr_std_matrices)
+
+    return
   end function matrix_product_trace
+  !!*****
+
+
+  !!****f* mult_module/matrix_product_trace_length
+  !! PURPOSE
+  !!   Calculate Tr(AB)
+  !! INPUTS
+  !! OUTPUT
+  !! RETURN VALUE
+  !! AUTHOR
+  !!   D. Bowler/L. Truflandier
+  !! CREATION DATE 
+  !!   
+  !! MODIFICATION HISTORY
+  !!   2014/09/22 lat
+  !!   - Added printing of matrix length  
+  !!   - delete check with respect to matrix_index
+  !! SOURCE
+  !!
+  function matrix_product_trace_length(A, B)
+
+    use datatypes
+    use numbers
+    use matrix_data, only: mat
+    use GenBlas,     only: dot, vdot, asum
+
+    implicit none
+
+    ! results
+    real(double) :: matrix_product_trace_length
+    
+    ! Passed variables
+    integer, intent(in) :: A, B
+
+    ! Local variables
+    integer :: np, i, j, ierr
+
+    ! call start_timer(tmr_std_matrices)
+    ! If the matrices are the same range
+    !if (matrix_index(A) == matrix_index(B)) then
+    if (mat_p(A)%length /= mat_p(B)%length) then
+       call cq_abort("Length error in mat_prod_tr: ", &
+            mat_p(A)%length, mat_p(B)%length)
+    else
+       matrix_product_trace_length = &
+         vdot(mat_p(A)%length, mat_p(A)%matrix, 1, mat_p(B)%matrix, 1)
+    end if
+    !else
+    ! For now I'm going to abort; we could have (say) optional
+    ! argument giving the mult-type and range of the product
+    !   call cq_abort("Matrix product for two different ranges not implemented", &
+    !        mat_p(A)%length, mat_p(B)%length)
+
+    ! call stop_timer(tmr_std_matrices)
+
+    return
+  end function matrix_product_trace_length
 !!*****
 
 
@@ -2288,6 +2420,7 @@ contains
     ! call stop_timer(tmr_std_matrices)
     !if(pos/=posin) write(io_lun,*) 'Pos: ',pos,posin,i,j,halo(Ah)%i_halo(j),Ah
   end function return_matrix_value
+!!*****
 
 
   function return_matrix_value_pos(A, i)
@@ -2307,6 +2440,7 @@ contains
     ! In future we'll just have matrix_pos here
     return_matrix_value_pos = mat_p(A)%matrix(i)
   end function return_matrix_value_pos
+!!*****
 
 
   subroutine return_matrix_block_pos(A, i, val, size)
@@ -2326,6 +2460,7 @@ contains
     val(1:size) = mat_p(A)%matrix(i:i+size-1)
     ! call stop_timer(tmr_std_matrices)
   end subroutine return_matrix_block_pos
+!!*****
 
 
   function matrix_pos(A, iprim, j_in_halo, f1, f2)
@@ -2398,14 +2533,17 @@ contains
                        f1-1+(f2-1)*sf1+pos, mat_p(A)%length)
     mat_p(A)%matrix(f1-1+(f2-1)*sf1+pos) = mat_p(A)%matrix(f1-1+(f2-1)*sf1+pos)*val
 !    call stop_timer(tmr_std_matrices)
+
+    return
   end subroutine scale_matrix_value
+!!*****
 
 
   subroutine store_matrix_value(A, np, ni, ip, nabj, f1, f2, val, &
                                 onsite)
     use datatypes
     use matrix_module, only: matrix_halo, matrix
-    use matrix_data,   only: halo, mat
+    use matrix_data,   only: halo, mat, mat_name
     use cover_module,  only: BCS_parts
     use GenComms,      only: cq_abort
 
@@ -2437,6 +2575,7 @@ contains
          mat_p(A)%matrix(f1-1+(f2-1)*sf1+pos) + val
 !    call stop_timer(tmr_std_matrices)
   end subroutine store_matrix_value
+!!*****
 
 
   subroutine store_matrix_value_pos(A, i, val)
@@ -2461,7 +2600,10 @@ contains
     mat_p(A)%matrix(i) = mat_p(A)%matrix(i) + val
     ! call stop_timer(tmr_std_matrices)
     ! if (abs(mat_p(A)%matrix(i))>100.0_double) write(io_lun,*) 'Error: ',A,i,val
+   
+    return
   end subroutine store_matrix_value_pos
+!!*****
 
 
   subroutine store_matrix_block_pos(A, i, val, size)
@@ -2483,7 +2625,11 @@ contains
                        i+size-1, mat_p(A)%length)
     call axpy(size, one, val, 1, mat_p(A)%matrix(i:), 1)
     ! call stop_timer(tmr_std_matrices)
+
+    return
   end subroutine store_matrix_block_pos
+!!*****
+
 
   ! subroutine store_onsite_matrix_value(A,np,i,f1,f2,val)
   !
@@ -2556,7 +2702,9 @@ contains
                          current_matrix, mat_p(current_matrix)%length
     call reg_alloc_mem(area_matrices, mat_p(current_matrix)%length, type_dbl)
 
+    return
   end function allocate_temp_matrix
+!!*****
 
 
   subroutine free_temp_matrix(A)
@@ -2590,7 +2738,9 @@ contains
     matrix_index(current_matrix) = 0
     current_matrix = current_matrix - 1
 
+    return
   end subroutine free_temp_matrix
+!!*****
 
 
 end module mult_module

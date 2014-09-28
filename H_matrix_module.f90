@@ -59,13 +59,15 @@
 !!  TODO
 !!   08:28, 2003/09/22 dave
 !!    Understand and document onsite_T
+!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module H_matrix_module
 
   use global_module,          only: io_lun
-  use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                    tmr_std_hmatrix,         &
+  use timer_module,           only: start_timer, stop_timer, stop_print_timer
+  use timer_stdclocks_module, only: tmr_std_hmatrix,         &
                                     tmr_std_allocation,      &
                                     tmr_std_matrices
 
@@ -76,7 +78,7 @@ module H_matrix_module
        RCSid = "$Id$"
   logical :: locps_output
   integer :: locps_choice
-!!*****
+!!***** 
 
 contains
 
@@ -123,7 +125,7 @@ contains
   !!  09:11, 2003/03/11 dave
   !!   Removed find_chdens argument and writing out of energies and
   !!   added flag to force or not the rebuilding of data_NL and data_KE
-  !! (the non-local and kinetic energy contributions to the H matrix)
+  !! (the non-local and kinetic energy contributions to the H matrix) 
   !!  2008/05/22 ast
   !!   Added timers
   !!  2011/10/06 13:51 dave
@@ -152,14 +154,14 @@ contains
                           rho, size)
 
     use datatypes
-    use numbers
+    use numbers 
     use matrix_data,                 only: dHrange, Hrange, Srange
     use mult_module,                 only: matNL, matKE, matH, matH,    &
                                            matdH, matdH,                &
                                            allocate_temp_matrix,        &
                                            free_temp_matrix,            &
                                            matrix_scale, matrix_sum,    &
-                                           matS
+                                           matS, matX
     use pseudopotential_common,      only: non_local, pseudopotential
     use set_bucket_module,           only: rem_bucket, sf_H_sf_rem,     &
                                            pao_H_sf_rem
@@ -174,7 +176,8 @@ contains
                                            iprint_SC,                   &
                                            flag_perform_cDFT,           &
                                            area_ops, nspin,             &
-                                           spin_factor, flag_analytic_blip_int, blips
+                                           spin_factor, blips,          &
+                                           flag_analytic_blip_int 
     use PAO_grid_transform_module,   only: single_PAO_to_grid
     use functions_on_grid,           only: supportfns, H_on_supportfns, &
                                            allocate_temp_fn_on_grid,    &
@@ -189,11 +192,17 @@ contains
     use group_module,                only: parts
     use primary_module,              only: bundle
     use cover_module,                only: BCS_parts
-    !use io_module,                  only: dump_matrix, write_matrix
-    use timer_module  ! This is used to declare a local timer
+    use timer_module,                only: cq_timer, WITH_LEVEL
+    ! This is used to declare a local timer
     use cdft_data,                   only: matHzero,                    &
                                            cDFT_NumberAtomGroups,       &
                                            cDFT_Vc, matWc
+!****lat<$
+    use global_module,               only: flag_exx, exx_alpha, exx_counter
+    use exx_kernel_default,          only: get_X_matrix
+    use exx_module,                  only: get_X_params
+    use exx_types,                   only: exx_hgrid, exx_psolver, exx_radius   
+!****lat>$
 
     implicit none
 
@@ -207,7 +216,12 @@ contains
     real(double)   :: kinetic_energy, nl_energy
     integer        :: pao_support, length, stat, paolength, matwork, spin
     type(cq_timer) :: tmr_l_hmatrix
+    type(cq_timer) :: tmr_std_loc
     real(double), dimension(:), allocatable :: rho_total
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='get_H_matrix',where=3,level=3,echo=.true.)
+!****lat>$
 
     ! timer
     call start_timer(tmr_std_hmatrix)            ! Total
@@ -224,7 +238,8 @@ contains
        ! zero H_on_supportfns
        gridfunctions(H_on_supportfns(spin))%griddata = zero
     end do
-
+    !
+    !
     if (rebuild_KE_NL) then
        if (inode == ionode .and. iprint_ops > 3)&
             & write(io_lun, fmt='(2x,"Rebuilding KE")')
@@ -244,83 +259,131 @@ contains
        if (iprint_ops > 4) call dump_matrix("NNL", matNL, inode)
        if (iprint_ops > 4) call dump_matrix("NKE", matKE, inode)
     end if
-
+    !
+    !
     ! from here on, workspace support becomes h_on_support...
     ! in fact, what we are getting here is (H_local - T) acting on support
     call get_h_on_support(iprint_ops, fixed_potential, electrons, rho, size)
-
+    !
+    !
     if (inode == ionode .and. iprint_ops > 2) &
          write (io_lun, *) 'Doing integration'
     ! Do the integration - support holds <phi| and workspace_support
-    ! holds H|phi>. Inode starts from 1, and myid starts from
-    ! 0. get_matrix_elements_new takes myid
+    ! holds H|phi>. Inode starts from 1, and myid starts from 0. 
+    ! get_matrix_elements_new takes myid
     do spin = 1, nspin
        call get_matrix_elements_new(inode-1, rem_bucket(sf_H_sf_rem), &
                                     matH(spin), supportfns, &
                                     H_on_supportfns(spin))
     end do
     if (inode == ionode .and. iprint_ops > 2) write (io_lun, *) 'Done integration'
+    !
+    !
     if (iprint_ops > 2) then
        if (nspin == 1) then
-          call dump_matrix("Nl", matH(1), inode)
+          call dump_matrix("Nl",    matH(1), inode)
        else
           call dump_matrix("Nl_up", matH(1), inode)
           call dump_matrix("Nl_dn", matH(2), inode)
        end if
     end if
-
+    !
     ! After doing this, we need \chi_{ilm} (PAOs) projected onto the
     ! grid, and then a new call to get_matrix_elements_new
     ! We are calculating matdH here
     if (flag_vary_basis .and. flag_basis_set == PAOs) then
-       ! Project PAOs onto grid
+       ! Project PAOs onto gri
        if (inode == ionode .and. iprint_ops > 2) &
             write (io_lun, *) 'Doing single_pao_on_support'
        ! allocate temporary work matrices
-       matwork = allocate_temp_matrix(dHrange, 0, paof, sf)
+       matwork     = allocate_temp_matrix(dHrange, 0, paof, sf)
        pao_support = allocate_temp_fn_on_grid(paof)
        call single_PAO_to_grid(pao_support)
+       !
+       !
        ! Do integration
        do spin = 1, nspin
+          !
           call matrix_scale(zero, matwork)
+          !
           if (inode == ionode .and. iprint_ops > 2) &
                write (io_lun, *) 'Doing integration (spin=', spin, ')'
           call get_matrix_elements_new(inode-1,                  &
                                        rem_bucket(pao_H_sf_rem), &
-                                       matwork, pao_support,     &
+                                       matwork,   pao_support,   &
                                        H_on_supportfns(spin))
           if (inode == ionode .and. iprint_ops > 2) &
                write (io_lun, *) 'Done integration (spin=', spin, ')'
+          !
           call my_barrier()
+          !
           if (inode == ionode .and. iprint_ops > 2) &
                write (io_lun, *) 'Doing axpy for (spin=', spin ,')'
           call matrix_sum(one, matdH(spin), one, matwork)
           if (inode == ionode .and. iprint_ops > 2) &
                write (io_lun, *) 'Done axpy for (spin=', spin ,')'
+          !
+          !
        end do ! spin
        ! free the work temporary matrices
        call free_temp_fn_on_grid(pao_support)
        call free_temp_matrix(matwork)
+       !
     end if
 
     ! add the kinetic energy and non-local matrices to give the
     ! complete H matrix
     do spin = 1, nspin
        call matrix_sum(one, matH(spin), half, matKE)
-       call matrix_sum(one, matH(spin), one, matNL)
+       call matrix_sum(one, matH(spin), one,  matNL)
     end do
-
+    !
+    !
+!****lat<$
+    if (flag_exx) then
+       ! Ugly stuff but for now that's ok. Purpose is to adapt EXX accuracy to
+       ! the SCF covergence: closer to convergence finest is the grid
+       exx_counter = exx_counter + 1
+       !
+       !if (inode==ionode) print*, 'exx_pulay_r0 = ', exx_pulay_r0
+       if  ( exx_counter == 0 ) then
+          ! For first H building use pure DFT. To be improve for Hartree-Fock
+          if (inode == ionode .and. iprint_ops > 2) &
+               write (io_lun, *) 'EXX: first guess from DFT'
+          
+       else
+          !
+          if (inode == ionode .and. iprint_ops > 2) &
+               write (io_lun, *) 'EXX: setting get_X_matrix'
+          call get_X_params( )
+          !
+          if (inode == ionode .and. iprint_ops > 2) &
+               write (io_lun, *) 'EXX: doing get_X_matrix'
+          call get_X_matrix()
+          !
+          if (inode == ionode .and. iprint_ops > 2) &
+               write (io_lun, *) 'EXX: done get_X_matrix'
+          do spin = 1, nspin
+             call matrix_sum(one, matH(spin),-exx_alpha*half, matX(spin)) 
+          end do
+          !
+       end if
+    end if
+!****lat>$
+    !
+    !
     ! dump matrices if required
     if (iprint_ops > 4) then
        call dump_matrix("NS", matS, inode)
        if (nspin == 1) then
-          call dump_matrix("NH", matH(1), inode)
+          call dump_matrix("NH",    matH(1), inode)
        else
           call dump_matrix("NH_up", matH(1), inode)
           call dump_matrix("NH_dn", matH(2), inode)
        end if
     end if
-
+    !
+    !
     ! dump charges if required
     if (iprint_SC > 2) then
        if(nspin==1) then
@@ -337,18 +400,24 @@ contains
           call dump_charge(rho(:,2), size, inode, spin=2)
        end if
     end if
-
+    !
+    !
     ! Store the new H matrix for cDFT
     if (flag_perform_cDFT) then
        do spin = 1, nspin
           call matrix_sum(zero, matHzero(spin), one, matH(spin))
        end do
     endif
-
-
+    !
+    !
     ! timer
     call stop_print_timer(tmr_l_hmatrix, "get_H_matrix", IPRINT_TIME_THRES1)
     call stop_timer(tmr_std_hmatrix)
+
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='get_H_matrix',echo=.true.)
+!****lat>$
 
     return
   end subroutine get_H_matrix
@@ -421,7 +490,10 @@ contains
   !!   - Cleaned up xc-functonal selector. Now spin and non-spin
   !!     calculations share the same calls more or less.
   !!   2013/07/10 11:23 dave
-  !!   Bug fix for sum over two components of rho even without spin
+  !!     Bug fix for sum over two components of rho even without spin
+  !!   2014/09/24 L.Truflandier
+  !!   - Added temporary PBE0 and HF
+  !!   - optional output of x_energy only
   !!  SOURCE
   !!
   subroutine get_h_on_support(output_level, fixed_potential, &
@@ -437,25 +509,36 @@ contains
                                            functional_lda_pw92,        &
                                            functional_gga_pbe96,       &
                                            functional_gga_pbe96_rev98, &
-                                           functional_gga_pbe96_r99
+                                           functional_gga_pbe96_r99,   &
+                                           functional_hyb_pbe0,        &
+                                           functional_hartree_fock,    &
+                                           exx_alpha, exx_counter
+     
     use XC_module,                   only: get_xc_potential,           &
                                            get_GTH_xc_potential,       &
                                            get_xc_potential_LSDA_PW92, &
-                                           get_xc_potential_GGA_PBE
+                                           get_xc_potential_GGA_PBE,   &
+                                           get_xc_potential_hyb_PBE0
+
     use GenBlas,                     only: copy, axpy, dot, rsum
     use dimens,                      only: grid_point_volume,          &
                                            n_my_grid_points, n_grid_z
+
     use block_module,                only: n_blocks, n_pts_in_block
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atm
     use density_module,              only: density_pcc
     use GenComms,                    only: gsum, inode, ionode, cq_abort
-    use energy,                      only: hartree_energy, xc_energy,  &
-                                           local_ps_energy,            &
+    use energy,                      only: hartree_energy,  &
+                                           xc_energy,       &
+                                           x_energy,        &
+                                           local_ps_energy, &
                                            delta_E_hartree
+
     use hartree_module,              only: hartree
     use functions_on_grid,           only: gridfunctions, fn_on_grid,  &
                                            supportfns, H_on_supportfns
+
     use calc_matrix_elements_module, only: norb
     use pseudopotential_common,      only: pseudopotential
     use potential_module,            only: potential
@@ -477,7 +560,7 @@ contains
 
     ! Local variables
     integer :: n, m, nb, atom, nsf1, point, stat, i, pot_flag, igrid, spin
-    real(double) :: fften, electrons_tot
+    real(double) :: fften, electrons_tot, exx_tmp
     logical     , dimension(4)    :: dump_pot
     real(double), dimension(:),   allocatable :: xc_epsilon ! energy_density of XC
     real(double), dimension(:),   allocatable :: h_potential
@@ -515,12 +598,13 @@ contains
     !write (io_lun,*) 'Energy via FFT: ', fften
     !call fft3(pseudopotential, locpotr, size, 1)
     !deallocate(chdenr, locpotr, STAT=stat)
-
+    !
+    !
     ! first initialise some arrays
     h_potential = zero
     do spin = 1, nspin
        gridfunctions(H_on_supportfns(spin))%griddata = zero
-       potential(:,spin) = zero
+       potential(:,spin)    = zero
        xc_potential(:,spin) = zero
     end do
     rho_tot = zero
@@ -536,12 +620,16 @@ contains
        write (io_lun, '(10x, 3f25.15)') &
             electrons(1), electrons(nspin), electrons_tot
     end if
-
+    !
+    !
     ! now calculate the hartree potential on the grid
     call hartree(rho_tot, h_potential, maxngrid, hartree_energy)
-    ! Correction term
+    !
+    !
+    ! correction term
     delta_E_hartree = - hartree_energy
-
+    !
+    !
     ! for P.C.C.
     if (flag_pcc_global) then
        allocate(density_wk(size,nspin), density_wk_tot(size), STAT=stat)
@@ -555,19 +643,28 @@ contains
        end do
        density_wk_tot = rho_tot + density_pcc
     end if
-       
+    !  
+    !
     select case(flag_functional_type)
     case (functional_lda_pz81)
        ! NOT SPIN POLARISED
        if (flag_pcc_global) then
-          call get_xc_potential(density_wk_tot, xc_potential(:,1), &
-                                xc_epsilon, xc_energy, size)
+          call get_xc_potential(density=density_wk_tot, size=size, &
+                                xc_potential=xc_potential(:,1),    &
+                                xc_epsilon  =xc_epsilon, &
+                                xc_energy   =xc_energy,  &
+                                x_energy    =x_energy    )
        else
-          call get_xc_potential(rho_tot, xc_potential(:,1), &
-                                xc_epsilon, xc_energy, size)
+          call get_xc_potential(density=rho_tot, size=size,     &
+                                xc_potential=xc_potential(:,1), &
+                                xc_epsilon  =xc_epsilon,        & 
+                                xc_energy   =xc_energy,         &
+                                x_energy    =x_energy)
        end if
+       !
+       !
     case (functional_lda_gth96)
-       ! NOT SPIN POLARISED
+       ! NOT SPIN POLARISED       
        if (flag_pcc_global) then
           call get_GTH_xc_potential(density_wk_tot, xc_potential(:,1), &
                                     xc_epsilon, xc_energy, size)
@@ -575,42 +672,136 @@ contains
           call get_GTH_xc_potential(rho_tot, xc_potential(:,1), &
                                     xc_epsilon, xc_energy, size)
        end if
+       ! not possible to decompose the xc energy...
+       x_energy = zero
+       !
+       !
     case (functional_lda_pw92)
        if (flag_pcc_global) then
-          call get_xc_potential_LSDA_PW92(density_wk, xc_potential, &
-                                          xc_epsilon, xc_energy, size)
+          call get_xc_potential_LSDA_PW92(density=density_wk, size=size,&
+               xc_potential    =xc_potential,    &
+               xc_epsilon      =xc_epsilon,      &
+               xc_energy_total =xc_energy,       &
+               x_energy_total  =x_energy         )
        else
-          call get_xc_potential_LSDA_PW92(rho, xc_potential, &
-                                          xc_epsilon, xc_energy, size)
+          call get_xc_potential_LSDA_PW92(density=rho,  size=size,  &
+               xc_potential   =xc_potential,&
+               xc_epsilon     =xc_epsilon,  &  
+               xc_energy_total=xc_energy,   &
+               x_energy_total =x_energy     )
        end if
+       !
+       !
     case (functional_gga_pbe96)
        if (flag_pcc_global) then
-          call get_xc_potential_GGA_PBE(density_wk, xc_potential,&
-                                        xc_epsilon, xc_energy, size)
+          call get_xc_potential_GGA_PBE(density=density_wk, grid_size=size, &
+               xc_potential=xc_potential,  &
+               xc_epsilon  =xc_epsilon,    &
+               xc_energy   =xc_energy,     &
+               x_energy    =x_energy       )         
+
        else
-          call get_xc_potential_GGA_PBE(rho, xc_potential, &
-                                        xc_epsilon, xc_energy, size)
+          call get_xc_potential_GGA_PBE(density=rho, grid_size=size,&
+               xc_potential=xc_potential,  &
+               xc_epsilon  =xc_epsilon,    &
+               xc_energy   =xc_energy,     &
+               x_energy    =x_energy       )
        end if
+       !
+       !
     case (functional_gga_pbe96_rev98)
        if (flag_pcc_global) then
-          call get_xc_potential_GGA_PBE(density_wk, xc_potential, &
-                                        xc_epsilon, xc_energy, size, &
-                                        functional_gga_pbe96_rev98)
+          call get_xc_potential_GGA_PBE(density=density_wk, grid_size=size, &
+               xc_potential=xc_potential,  &
+               xc_epsilon  =xc_epsilon,    &
+               xc_energy   =xc_energy,     &
+               x_energy    =x_energy,      &
+               flavour=functional_gga_pbe96_rev98 )  
        else
-          call get_xc_potential_GGA_PBE(rho, xc_potential, &
-                                        xc_epsilon, xc_energy, size, &
-                                        functional_gga_pbe96_rev98)
+          call get_xc_potential_GGA_PBE(density=rho, grid_size=size, &
+               xc_potential=xc_potential,  &
+               xc_epsilon  =xc_epsilon,    &
+               xc_energy   =xc_energy,     &
+               x_energy    =x_energy,      &
+               flavour=functional_gga_pbe96_rev98 )
        end if
+       !
+       !
     case (functional_gga_pbe96_r99)
        if (flag_pcc_global) then
-          call get_xc_potential_GGA_PBE(density_wk, xc_potential, &
-                                        xc_epsilon, xc_energy, size, &
-                                        functional_gga_pbe96_r99)
+          call get_xc_potential_GGA_PBE(density=density_wk, grid_size=size, &
+               xc_potential=xc_potential,  &
+               xc_epsilon  =xc_epsilon,    &
+               xc_energy   =xc_energy,     &
+               x_energy    =x_energy,      &
+               flavour=functional_gga_pbe96_r99 )  
        else
-          call get_xc_potential_GGA_PBE(rho, xc_potential, &
-                                        xc_epsilon, xc_energy, size, &
-                                        functional_gga_pbe96_r99)
+          call get_xc_potential_GGA_PBE(density=rho, grid_size=size,&
+               xc_potential=xc_potential,  &
+               xc_epsilon  =xc_epsilon,    &
+               xc_energy   =xc_energy,     &
+               x_energy    =x_energy,      &
+               flavour=functional_gga_pbe96_r99 )
        end if
+       !
+       !
+    case (functional_hyb_pbe0)
+       !
+       if (exx_counter == 0) then
+          exx_tmp = one
+       else
+          exx_tmp = one - exx_alpha
+       end if
+       !
+       if (flag_pcc_global) then
+          call get_xc_potential_hyb_PBE0(density=density_wk, grid_size=size, &
+               xc_potential=xc_potential,   &
+               xc_epsilon  =xc_epsilon,     &
+               exx_a       =exx_tmp,        &
+               xc_energy   =xc_energy,      &
+               x_energy    =x_energy,       &
+               flavour=functional_gga_pbe96 ) 
+          
+       else
+          call get_xc_potential_hyb_PBE0(density=rho, grid_size=size, &
+               xc_potential=xc_potential,   &
+               exx_a       =exx_tmp,        &
+               xc_epsilon  =xc_epsilon,     &
+               xc_energy   =xc_energy,      &
+               x_energy    =x_energy,       &
+               flavour=functional_gga_pbe96 )
+       end if
+       !
+       !
+    case (functional_hartree_fock)
+       ! **<lat>** 
+       ! not optimal but experimental
+       if (exx_counter == 0) then
+          ! for the first call of get_H_matrix using Hartree-Fock method
+          ! to get something not to much stupid ; use pure exchange functional
+          ! in near futur such as Xalpha
+          if (flag_pcc_global) then
+             call get_xc_potential_LSDA_PW92(density=density_wk, size=size,&
+                  xc_potential    =xc_potential,    &
+                  xc_epsilon      =xc_epsilon,      &
+                  xc_energy_total =xc_energy,       &
+                  x_energy_total  =x_energy         )
+          else 
+             call get_xc_potential_LSDA_PW92(density=rho,  size=size,  &
+                  xc_potential   =xc_potential,&
+                  xc_epsilon     =xc_epsilon,  &  
+                  xc_energy_total=xc_energy,   &
+                  x_energy_total =x_energy     )
+          end if
+       else
+          xc_epsilon   = zero
+          xc_energy    = zero
+          xc_epsilon   = zero
+          xc_potential = zero
+          x_energy     = zero
+       end if
+        !
+        !
     case default
        if (flag_pcc_global) then
           call get_xc_potential_LSDA_PW92(density_wk, xc_potential, &
@@ -619,8 +810,11 @@ contains
           call get_xc_potential_LSDA_PW92(rho, xc_potential, &
                                           xc_epsilon, xc_energy, size)
        end if
+       !
+       !
     end select
-
+    !
+    !
     ! Calculation of delta_E_xc
     delta_E_xc = zero
     if (flag_pcc_global) then
@@ -640,7 +834,8 @@ contains
     end if ! (flag_pcc_global)
     call gsum(delta_E_xc)
     delta_E_xc = delta_E_xc * grid_point_volume
-
+    !
+    !
     ! Make total potential
     if (.not. fixed_potential) then
        do spin = 1, nspin
@@ -651,7 +846,8 @@ contains
                     potential(:,spin), 1)
        end do
     end if
-
+    !
+    !
     ! Print potential, if necessary
     if (locps_output) then
        dump_pot = (/.false., .true., .false., .false./)
@@ -687,13 +883,15 @@ contains
           end if
        end if
     end if
-
+    !
+    !
     ! get the pseudopotential energy
     local_ps_energy = &
          dot(n_my_grid_points, pseudopotential, 1, rho_tot, 1) * &
          grid_point_volume
     call gsum(local_ps_energy)
-
+    !
+    !
     ! now act with the potential on the support functions to get
     ! (H_local - T) on support
     n = 0
@@ -715,14 +913,16 @@ contains
        end if ! (naba_atm(sf)%no_of_atom(nb) > 0)
        m = m + n_pts_in_block
     end do ! nb
-
+    !
+    !
     if (flag_pcc_global) then
        deallocate(density_wk, STAT=stat)
        if (stat /= 0) &
             call cq_abort("Error deallocating density_wk: ", stat)
        call reg_dealloc_mem(area_ops, size, type_dbl)
     endif
-
+    !
+    !
     deallocate(xc_epsilon, h_potential, rho_tot, xc_potential, STAT=stat)
     if (stat /= 0) call cq_abort("get_h_on_support: Error deallocating mem")
     call reg_dealloc_mem(area_ops, (3+nspin)*size, type_dbl)
@@ -835,7 +1035,7 @@ contains
     real(double) :: dx, dy, dz
 
     if (flag_vary_basis .and. flag_basis_set == PAOs) then
-       matdSC = allocate_temp_matrix(PAOPrange, SP_trans, paof, nlpf)
+       matdSC  = allocate_temp_matrix(PAOPrange, SP_trans, paof, nlpf)
        matdCNL = allocate_temp_matrix(dHrange, 0, paof, sf)
     end if
     matSCtmp = allocate_temp_matrix(SPrange, SP_trans, sf, nlpf)

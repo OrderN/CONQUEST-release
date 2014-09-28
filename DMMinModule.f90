@@ -53,14 +53,16 @@
 !!    Added module globals maxpulaystepDMM and minpulaystepDMM
 !!    to allow user to control the pulay mixing stepsize bracket
 !!    in lateDM
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module DMMin
 
   use datatypes
   use global_module,          only: io_lun, area_DM
-  use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                    tmr_std_densitymat
+  use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_stdclocks_module, only: tmr_std_densitymat
 
   integer           :: maxpulayDMM
   integer,     save :: n_dumpL = 5
@@ -140,6 +142,10 @@ contains
   !!    - Added calls for writing out matrices for XL-BOMD
   !!    - Added call for writing out InfoGlobal.dat
   !!      (These used to be called at get_E_and_F)
+  !!   2014/01/21 lat
+  !!    - Added call to exx
+  !!   2014/09/15 18:30 lat
+  !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
   !!  SOURCE
   !!
   subroutine FindMinDM(n_L_iterations, vary_mu, tolerance, inode, &
@@ -152,7 +158,7 @@ contains
                              ne_in_cell, ne_spin_in_cell, flag_dump_L,  &
                              flag_MDold,flag_SkipEarlyDM, flag_XLBOMD,  &
                              flag_propagateX, flag_dissipation,         &
-                             integratorXL, runtype
+                             integratorXL, runtype, flag_exx
     use mult_module,   only: matrix_transpose, matT, matTtran, matL,    &
                              matS, matrix_sum
     use McWeeny,       only: InitMcW, McWMin
@@ -163,9 +169,11 @@ contains
     use energy,        only: entropy
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,   &
                              WITH_LEVEL
-    use io_module2,    ONLY: dump_matrix2, dump_InfoGlobal
-    use matrix_data,   ONLY: Lrange, Srange, LSrange
-    use XLBOMD_module, ONLY: matX, matXvel, dump_XL
+    use io_module2,    only: dump_matrix2, dump_InfoGlobal
+    use matrix_data,   only: Lrange, Srange, LSrange
+    use XLBOMD_module, only: matX, matXvel, dump_XL
+
+    use exx_kernel_default, only: get_X_matrix
 
     implicit none
 
@@ -181,9 +189,14 @@ contains
     real(double), parameter :: eprec = 1.0e-12_double
     real(double), save      :: delta_e
     type(cq_timer)          :: tmr_l_iter
+    type(cq_timer)          :: tmr_std_loc
     !TM 2010.Nov.06
     integer                 :: niter = 0
     integer, parameter      :: niter_max = 10
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='FindMinDM',where=4,level=3,echo=.true.)
+!****lat>$
 
     call start_timer(tmr_std_densitymat)
 
@@ -191,7 +204,11 @@ contains
 
     if (diagon) then ! Use exact diagonalisation to get K
        call FindEvals(ne_spin_in_cell)
+          
        call stop_timer(tmr_std_densitymat)
+!****lat<$
+       call stop_timer(t=tmr_std_loc,who='FindMinDM',echo=.true.)
+!****lat>$
        return
     end if
 
@@ -202,15 +219,15 @@ contains
     end if
 
     problem = .false.
-    inflex = .false.
-    done = .false.
-    early = .false.
+    inflex  = .false.
+    done    = .false.
+    early   = .false.
     if (.NOT. flag_SkipEarlyDM) early = .true.  ! Starts from earlyDM
 
     ! Start with the transpose of S^-1
     call matrix_transpose(matT, matTtran)
-    ! Now minimise the energy
 
+    ! Now minimise the energy
     ndone = 0
     niter = 0
     do while (.not. done)
@@ -290,6 +307,10 @@ contains
     end if
 
     call stop_timer(tmr_std_densitymat)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='FindMinDM',echo=.true.)
+!****lat>$
 
     return
 
@@ -1581,7 +1602,7 @@ contains
   !!   - rewrite for changed spin implementation
   !! SOURCE
   !!
-  subroutine correct_electron_number(output_level, inode, ionode)
+  subroutine correct_electron_number(output_level,inode,ionode)
 
     use mult_module,   only: matL, matphi
     use global_module, only: nspin, flag_fix_spin_population
@@ -1591,11 +1612,22 @@ contains
     ! Passed variables
     integer :: inode, ionode, output_level
 
+    ! Local variables
+    type(cq_timer) :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='corr_el_number',where=4,level=2)
+!****lat>$
+
     if (nspin == 1 .or. flag_fix_spin_population) then
        call correct_electron_number_fixspin(output_level, inode, ionode)
     else
        call correct_electron_number_varspin(output_level, inode, ionode)
     end if
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='corr_el_number')
+!****lat>$
 
     return
   end subroutine correct_electron_number

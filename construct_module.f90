@@ -16,6 +16,9 @@
 !!***
 module construct_module
   
+  !use output_module, only: sub_enter_output, sub_leave_output
+  use timer_module,  only: start_timer, stop_timer, cq_timer
+
 contains
 !!****f* construct_module/init_group *
 !!
@@ -49,19 +52,31 @@ contains
     
     ! Module usage
     use basic_types
-    use group_module, ONLY: allocate_group_set
+    use group_module, only: allocate_group_set
     
     implicit none
     
     ! Passed variables
     type(group_set) :: groups
-    integer :: mx_ngonn,mx_gedge,mx_gcell,mx_mem_grp,mx_node
-    
+    integer         :: mx_ngonn,mx_gedge,mx_gcell,mx_mem_grp,mx_node
+
+    ! Local variables
+    type(cq_timer)  :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='init_group',where=1,level=4)
+!****lat>$
+ 
     groups%mx_ngonn=mx_ngonn
     groups%mx_gedge=mx_gedge
     groups%mx_gcell=mx_gcell
     groups%mx_mem_grp=mx_mem_grp
     call allocate_group_set(groups,mx_node)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='init_group')
+!****lat>$
+
     return
   end subroutine init_group
 !!***
@@ -96,18 +111,30 @@ contains
     
     ! Module usage
     use basic_types
-    use primary_module, ONLY: allocate_primary_set
+    use primary_module, only: allocate_primary_set
     
     implicit none
     
     ! Passed variables
     type(primary_set) :: prim
-    integer :: mx_iprim, mx_ngonn
-    logical :: members
-    
+    integer           :: mx_iprim, mx_ngonn
+    logical           :: members
+
+    ! Local variables
+    type(cq_timer)    :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='init_primary',where=1,level=2)
+!****lat>$
+
     prim%mx_iprim = mx_iprim
     prim%mx_ngonn = mx_ngonn
     call allocate_primary_set(prim,members)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='init_primary')
+!****lat>$
+
     return
   end subroutine init_primary
 !!***
@@ -144,31 +171,33 @@ contains
     
     ! Module usage
     use basic_types
-    use cover_module, ONLY: allocate_cs
+    use cover_module, only: allocate_cs
     
     implicit none
     
     ! Passed variables
     type(cover_set) :: set
-    integer :: mx_mcover,mx_gcover,mx_node
-    logical :: members
+    integer         :: mx_mcover,mx_gcover,mx_node
+    logical         :: members
     
+    ! Local variables
+    type(cq_timer)   :: tmr_std_loc
+
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='init_cover',where=1,level=4)
+!****lat>$
+
     set%mx_mcover = mx_mcover
     set%mx_gcover = mx_gcover
     call allocate_cs(set,mx_node,members)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='init_cover')
+!****lat>$
+
     return
   end subroutine init_cover
 !!***
-  
-  subroutine init_matrix
     
-    ! Module usage
-    
-    implicit none
-    
-    ! Passed variables
-    
-    
-  end subroutine init_matrix
-  
 end module construct_module

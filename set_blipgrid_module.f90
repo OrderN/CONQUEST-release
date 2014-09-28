@@ -30,17 +30,20 @@
 !!    Changed for output to file not stdout
 !!   2008/05/16 ast
 !!    Added timers
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module set_blipgrid_module
 
-  use global_module, ONLY: sf, nlpf, paof, dens, iprint_index, io_lun
-  use naba_blk_module, ONLY: &
+  use global_module,   only: sf, nlpf, paof, dens, iprint_index, io_lun
+  use naba_blk_module, only: &
        comm_in_BG, naba_blk_of_atm, naba_atm_of_blk, halo_atm_of_blk, &
        alloc_comm_in_BG1, alloc_comm_in_BG2, alloc_naba_blk, alloc_naba_atm, alloc_halo_atm
 
-  use comm_array_module, ONLY:isend_array,irecv_array
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_indexing,tmr_std_allocation
+  use comm_array_module,      only: isend_array, irecv_array
+  use timer_module,           only: start_timer, stop_timer
+  use timer_stdclocks_module, only: tmr_std_indexing, tmr_std_allocation
 
   !check_commarray_int!,check_commarray_real
 

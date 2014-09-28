@@ -31,8 +31,8 @@
 module minimise
 
   use datatypes
-  use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                    tmr_std_eminimisation
+  use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_stdclocks_module, only: tmr_std_eminimisation
 
   implicit none
 
@@ -123,7 +123,7 @@ contains
                                  flag_DeltaSCF, flag_excite, runtype,  &
                                  flag_MDold,flag_LmatrixReuse,McWFreq, &
                                  io_lun
-    use energy,            only: get_energy, xc_energy
+    use energy,            only: get_energy, xc_energy, final_energy
     use GenComms,          only: cq_abort, inode, ionode
     use blip_minimisation, only: vary_support
     use pao_minimisation,  only: vary_pao, pulay_min_pao
@@ -149,8 +149,12 @@ contains
 
     ! Local variables
     logical        :: reset_L
-    type(cq_timer) :: tmr_l_energy, tmr_l_force, tmr_vdW
+    type(cq_timer) :: tmr_l_energy, tmr_l_force, tmr_vdW, tmr_std_loc
     real(double)   :: vdW_energy_correction, vdW_xc_energy
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='get_E_and_F',where=6,level=1,echo=.true.)
+!****lat>$
 
     call start_timer(tmr_std_eminimisation)
     ! reset_L = .true.  ! changed by TM, Aug 2008
@@ -168,7 +172,8 @@ contains
         if (McWFreq.NE.0) then
           if (present(iter)) then
             if (mod(iter,McWFreq).EQ.0) then
-              if (inode.EQ.ionode) write (io_lun,*) "Go back to McWeeny! Iteration:", iter
+              if (inode.EQ.ionode) write (io_lun,*) &
+                   "Go back to McWeeny! Iteration:", iter
               reset_L = .true.
             endif
           endif
@@ -244,10 +249,10 @@ contains
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
                L_tolerance, total_energy)
+
        else ! Ab initio TB: vary only DM
           call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
                ionode, reset_L, .false.)
-          call get_energy(total_energy)
        end if
     end if
     ! calculate vdW energy correction to xc energy
@@ -291,15 +296,22 @@ contains
 ! LT_debug 2012/04/30 end
     end if
 
+!****lat<$
+    call final_energy( )
+!****lat>$
+
     call stop_print_timer(tmr_l_energy, "calculating ENERGY", &
                           IPRINT_TIME_THRES1)
     if (atomch_output) call get_atomic_charge()
+
     if (find_forces) then
        ! Start timing the force calculation
       call start_timer(tmr_l_force, WITH_LEVEL)
+
       call force(fixed_potential, vary_mu, n_L_iterations, &
                  L_tolerance, sc_tolerance, total_energy,  &
                  expected_reduction, write_forces)
+
       ! Stop timing the force calculation
       call stop_print_timer(tmr_l_force, "calculating FORCE", &
                             IPRINT_TIME_THRES1)
@@ -317,6 +329,11 @@ contains
 
     !  Print results of local timers
     call stop_timer(tmr_std_eminimisation)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='get_E_and_F',echo=.true.)
+!****lat>$
+
     return
   end subroutine get_E_and_F
   !!***

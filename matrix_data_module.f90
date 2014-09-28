@@ -44,28 +44,30 @@
 !!    Added max_range parameter to find longest range matrix
 !!   2012/01/18 16:55 dave
 !!    Added blip transfer type for analytic blip integration
+!!   2014/01/17 13:20 lat
+!!    Added new matrix X and SX for exchange
 !!  SOURCE
 !!
 module matrix_data
 
   use datatypes
-  use matrix_module, ONLY: matrix, matrix_halo, blip_transfer ! Think about this - how do we want to arrange ?
+  use matrix_module, only: matrix, matrix_halo, blip_transfer ! Think about this - how do we want to arrange ?
   
   implicit none
   save
 
   ! This will need to change if the above parameters are changed
-  integer, parameter :: mx_matrices = 20
+  integer, parameter :: mx_matrices = 22
 
   ! Store ALL indices in a large array
-  type(matrix), allocatable, dimension(:,:), target :: mat
-  type(matrix_halo), allocatable, dimension(:), target :: halo
-  real(double) :: rcut(mx_matrices)
-  character(len=3), dimension(mx_matrices) :: mat_name
+  type(matrix),      allocatable, dimension(:,:), target :: mat
+  type(matrix_halo), allocatable, dimension(:),   target :: halo
+  real(double),      dimension(mx_matrices) :: rcut
+  character(len=3),  dimension(mx_matrices) :: mat_name
 
   integer, dimension(:), pointer :: Smatind, dSmatind, Lmatind, LTrmatind, Hmatind, dHmatind, &
-       SPmatind, PAOPmatind, PSmatind, LSmatind, SLmatind, LHmatind, HLmatind, LSLmatind, &
-       SLSmatind, Tmatind, TTrmatind, TSmatind, THmatind, TLmatind  
+       SPmatind, PAOPmatind, PSmatind, LSmatind, SLmatind, LHmatind, HLmatind, LSLmatind,     &
+       SLSmatind, Tmatind, TTrmatind, TSmatind, THmatind, TLmatind, Xmatind, SXmatind   
 
   ! Parameters for the different matrix ranges
   integer, parameter :: Srange   = 1   ! STS,TST,TS.TS
@@ -87,7 +89,10 @@ module matrix_data
   integer, parameter :: dSrange  = 17   ! STS,TST,TS.TS
   integer, parameter :: dHrange  = 18   ! K,LSLSL
   integer, parameter :: PAOPrange= 19  ! PS,U   ! Maybe rename ?
-  integer, parameter :: HLrange = 20
+  integer, parameter :: HLrange  = 20
+
+  integer, parameter :: Xrange   = 21
+  integer, parameter :: SXrange  = 22
 
   integer :: max_range ! Indexes matrix with largest range
 

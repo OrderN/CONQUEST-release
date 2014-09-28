@@ -38,6 +38,8 @@
 !!   2012/05/27 L.Tong
 !!    Added RD_ERR, a tiny number that if any number N with abs(N) <
 !!    RD_ERR, then N is regarded as zero.
+!!   2014/08/29 L.Truflandier
+!!    Added fourpi
 !!  SOURCE
 !!
 module numbers
@@ -84,7 +86,8 @@ module numbers
   real(double), parameter :: one_ninth = 1.0_double/9.0_double
   real(double), parameter :: seven_thirtysixths = 7.0_double/36.0_double
   real(double), parameter :: pi = 3.14159265358979323846_double 
-  real(double), parameter :: twopi = 6.28318530717958647692_double 
+  real(double), parameter :: twopi = 6.28318530717958647692_double
+  real(double), parameter :: fourpi = 6.28318530717958647692_double*2.0_double
   real(double), parameter :: sqrt_pi = 1.77245385090551588192_double
   real(double), parameter :: very_small = 1.0e-8_double
   real(double), parameter :: BIG = 1.0e12_double 

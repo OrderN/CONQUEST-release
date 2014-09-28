@@ -36,7 +36,8 @@ module control
   use datatypes
   use global_module, only: io_lun
   use GenComms,      only: cq_abort
-  
+  use timer_module,  only: start_timer, stop_timer, cq_timer 
+
   implicit none
 
   integer      :: MDn_steps 
@@ -111,30 +112,39 @@ contains
     implicit none
 
     ! Shared variables
-    logical :: vary_mu, fixed_potential
-    real(double) :: total_energy
+    logical        :: vary_mu, fixed_potential
+    real(double)   :: total_energy
 
     ! Local variables
-    logical :: NoMD
-    integer :: i, j
+    type(cq_timer) :: tmr_std_loc
+    logical        :: NoMD
+    integer        :: i, j
 
     real(double) :: spr, e_r_OLD
 
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='control_run',where=9,level=0,echo=.true.)
+!****lat>$
+
     if (leqi(runtype,'static')) then
-       call get_E_and_F(fixed_potential, vary_mu, total_energy, &
-                        .true., .true.)
+       call get_E_and_F(fixed_potential, vary_mu, total_energy,.true.,.true.)
        return
-    else if (leqi(runtype, 'cg')) then
+    else if ( leqi(runtype, 'cg')    ) then
        call cg_run(fixed_potential, vary_mu, total_energy)
-    else if (leqi(runtype, 'md')) then
+    else if ( leqi(runtype, 'md')    ) then
        call md_run(fixed_potential, vary_mu, total_energy)
-    else if (leqi(runtype, 'pulay')) then
+    else if ( leqi(runtype, 'pulay') ) then
        call pulay_relax(fixed_potential, vary_mu, total_energy)
-    else if (leqi(runtype, 'dummy')) then
+    else if ( leqi(runtype, 'dummy') ) then
        call dummy_run(fixed_potential, vary_mu, total_energy)
     else
        call cq_abort('control: Runtype not specified !')
     end if
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='control_run',echo=.true.)
+!****lat>$
+
     return
   end subroutine control_run
   !!***

@@ -21,14 +21,16 @@
 !!    Changed for output to file not stdout
 !!   2008/05/15 ast
 !!    Added some timers
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module initialisation
 
   use datatypes
   use global_module,          only: io_lun
-  use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                    tmr_std_initialisation,  &
+  use timer_module,           only: start_timer, stop_timer, cq_timer 
+  use timer_stdclocks_module, only: tmr_std_initialisation,  &
                                     tmr_std_densitymat,      &
                                     tmr_std_matrices
   use timer_module,           only: init_timing_system
@@ -125,14 +127,22 @@ contains
     real(double)      :: total_energy
 
     ! Local variables
-    logical :: start, start_L
-    logical :: read_phi
+    type(cq_timer)    :: tmr_std_loc
+    logical           :: start, start_L
+    logical           :: read_phi
+
 
     character(len=40) :: restart_file
 
     call init_timing_system(inode)
-    ! Read input
+
     call init_reg_mem
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='initialise',where=1,level=0,echo=.true.)
+!****lat>$
+
+    ! Read input
     call read_and_write(start, start_L, inode, ionode, restart_file, &
                         vary_mu, mu, find_chdens, read_phi)
 
@@ -162,12 +172,20 @@ contains
     end if
 
     call set_up(find_chdens)
-    call my_barrier
+    
+    call my_barrier()
+
     call initial_phis(mu, restart_file, read_phi, vary_mu, start)
+
     call initial_H(start, start_L, find_chdens, fixed_potential, &
                    vary_mu, total_energy)
 
     call stop_timer(tmr_std_initialisation)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='initialise',echo=.true.)
+!****lat>$
+
     return
   end subroutine initialise
   !!***
@@ -290,8 +308,7 @@ contains
     use potential_module,       only: potential
     use maxima_module,          only: maxngrid
     use species_module,         only: n_species
-    use angular_coeff_routines, only: set_fact, set_prefac,            &
-                                      set_prefac_real
+    use angular_coeff_routines, only: set_fact, set_prefac, set_prefac_real
     use numbers,                only: zero
     use cDFT_module,            only: init_cdft
     use DFT_D2,                 only: read_para_D2
@@ -305,9 +322,15 @@ contains
     logical :: find_chdens
 
     ! Local variables
-    complex(double_cplx), allocatable, dimension(:) :: chdenr
-    integer      :: i, stat, spec
-    real(double) :: rcut_BCS  !TM 26/Jun/2003
+    complex(double_cplx), allocatable, &
+         dimension(:) :: chdenr
+    integer           :: i, stat, spec
+    real(double)      :: rcut_BCS  !TM 26/Jun/2003
+    type(cq_timer)    :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='setup',where=1,level=1)
+!****lat>$
 
     ! Set organisation of blocks of grid-points.
     ! set_blocks determines the number of blocks on this node,
@@ -520,6 +543,10 @@ contains
    if (inode == ionode .and. iprint_init > 1) &
         write (io_lun, *) 'Done init_pseudo '
 
+!****lat<$
+   call stop_timer(t=tmr_std_loc,who='set_up')
+!****lat>$
+
    return
  end subroutine set_up
  !!***
@@ -534,7 +561,7 @@ contains
  !!  PURPOSE
  !!   Provides initial values for the blip coefficients
  !!   representing the support functions. Two ways of
- !!   doing this are provided, these ways being specified
+ !!   doing this are provided, these ways being sp/ecified
  !!   by the character-valued variable init_blip_flag, as follows:
  !!
  !!    init_blip_flag = 'gauss': blips coeffs set as values of a Gaussian
@@ -662,10 +689,14 @@ contains
     logical           :: read_phi, vary_mu, start
 
     ! Local variables
+    type(cq_timer)    :: tmr_std_loc
+    real(double)      :: mu_copy
+    real(double)      :: factor
+    integer           :: isf, np, ni, iprim, n_blip, n_run, spec, this_nsf
 
-    integer      :: isf, np, ni, iprim, n_blip, n_run, spec, this_nsf
-    real(double) :: mu_copy
-    real(double) :: factor
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='initial_phis',where=1,level=1,echo=.true.)
+!****lat>$
 
     ! Used by pseudopotentials as well as PAOs
     if (flag_basis_set==blips) then
@@ -673,6 +704,7 @@ contains
             write(io_lun,fmt='(10x,"Using blips as basis set for &
                                &support functions")')
        call set_blip_index(inode, ionode)
+
        call my_barrier
        if((inode == ionode) .and. (iprint_init > 1)) &
             write(io_lun,*) 'initial_phis: completed set_blip_index()'
@@ -747,7 +779,7 @@ contains
              end do
           end if
           iprim=0
-          call start_timer(tmr_std_matrices)
+          call start_timer(t=tmr_std_matrices)
           do np=1,bundle%groups_on_node
              if(bundle%nm_nodgroup(np) > 0) then
                 do ni=1,bundle%nm_nodgroup(np)
@@ -811,6 +843,11 @@ contains
        ! We don't need a PAO equivalent of blip_to_support here: this
        ! is done by get_S_matrix
     end if
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='initial_phis',echo=.true.)
+!****lat>$
+
     return
   end subroutine initial_phis
   !!***
@@ -940,28 +977,34 @@ contains
     implicit none
 
     ! Passed variables
-    logical      :: vary_mu, find_chdens, fixed_potential
-    logical      :: start, start_L
-    real(double) :: total_energy
+    logical        :: vary_mu, find_chdens, fixed_potential
+    logical        :: start, start_L
+    real(double)   :: total_energy
 
-    ! Local
-    logical      :: reset_L, charge, store
-    integer      :: force_to_test, stat, nfile, symm
-    real(double) :: electrons_tot, bandE
+    ! Local variables
+    type(cq_timer) :: tmr_std_loc
+    logical        :: ech_std_loc
+    logical        :: reset_L, charge, store
+    integer        :: force_to_test, stat, nfile, symm
+    real(double)   :: electrons_tot, bandE
     real(double), dimension(nspin) :: electrons, energy_tmp
     ! Dummy vars for MMM
 
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='initial_H',where=1,level=1,echo=.true.)
+!****lat>$
+
     ! (0) Get the global information
     !      --> Fetch and distribute date on old job
-    if (.NOT. flag_MDold .AND. (flag_MDcontinue .OR. &
-                                restart_L       .OR. &
-                                restart_T)             ) then
-      if (inode.EQ.ionode) write (io_lun,*) "Get global info to load matrices"
-      if (inode.EQ.ionode) call make_glob2node
+    if (.not.flag_MDold.and.(flag_MDcontinue.or. &
+                                restart_L   .or. &
+                                restart_T)  ) then
+      if (inode.eq.ionode) write (io_lun,*) "Get global info to load matrices"
+      if (inode.eq.ionode) call make_glob2node
       call gcopy(glob2node, ni_in_cell)
       allocate(glob2node_old(ni_in_cell), STAT=stat)
-      if (stat.NE.0) call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
-      if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old,MDinit_step)
+      if (stat .ne.0)      call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
+      if (inode.eq.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old,MDinit_step)
       call gcopy(n_proc_old)
       call gcopy(glob2node_old, ni_in_cell)
       call gcopy(MDinit_step)
@@ -973,7 +1016,7 @@ contains
     total_energy = zero
     ! If we're vary PAOs, allocate memory
     ! (1) Get S matrix
-    if (.NOT. flag_MDold .AND. restart_T) then
+    if (.not. flag_MDold .and. restart_T) then
       call grab_matrix2('T',inode,nfile,InfoT)
       call my_barrier()
       call Matrix_CommRebuild(InfoT,Trange,T_trans,matT,nfile,symm)
@@ -981,10 +1024,13 @@ contains
     call get_S_matrix(inode, ionode)
     if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Got S'
     call my_barrier
-
+!!$
+!!$
+!!$
+!!$
     ! (2) Make an inital estimate for the density matrix, L, which is an
-    ! approximation to L = S^-1. Then use correct_electron_number()
-    ! to modify L so that the electron number is correct.
+    !     approximation to L = S^-1. Then use correct_electron_number()
+    !     to modify L so that the electron number is correct.
     if (.not. diagon .and. find_chdens .and. (start .or. start_L)) then
        call initial_L()
        call my_barrier()
@@ -1022,7 +1068,10 @@ contains
         if (flag_dissipation) call grab_Xhistories(Lrange,L_trans)
       endif
     endif
-
+!!$
+!!$
+!!$
+!!$
     ! (3) get K matrix (and also get phi matrix)
     if (.not. diagon .and. (find_chdens .or. restart_L)) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,   &
@@ -1034,10 +1083,16 @@ contains
                              electrons(1), electrons(nspin),   &
                              electrons_tot
     end if
-
+!!$
+!!$
+!!$
+!!$
     ! (4) get the core correction to the pseudopotential energy
-    ! (note that this routine does not need to be passed a pig)
-
+    !     (note that this routine does not need to be passed a pig)
+!!$
+!!$
+!!$
+!!$
     ! (5) Find the Ewald energy for the initial set of atoms
     if (inode == ionode .and. iprint_init > 1) &
          write (io_lun, *) 'Calling Ewald'
@@ -1046,6 +1101,10 @@ contains
     else
        call mikes_ewald
     end if
+!!$
+!!$
+!!$
+!!$
     ! +++
     ! (6) Find the dispersion energy for the initial set of atoms
     if (flag_dft_d2) then
@@ -1054,9 +1113,16 @@ contains
       call dispersion_D2
     end if
     call my_barrier
-
+!!$
+!!$
+!!$
+!!$
     if (inode == ionode .and. iprint_init > 2) &
          write (io_lun, *) 'Find_chdens is ', find_chdens
+!!$
+!!$
+!!$
+!!$
     ! (7) Make a self-consistent H matrix and potential
     if (find_chdens) then
        call get_electronic_density(density, electrons, supportfns,    &
@@ -1079,9 +1145,14 @@ contains
           density = density / spin_factor
        end if
     end if
+!!$
+!!$
+!!$
+!!$
     reset_L = .true.
     if (flag_self_consistent) then ! Vary only DM and charge density
-       !OLD call new_SC_potl( .true., SC_tolerance, reset_L, fixed_potential, vary_mu, n_L_iterations, &
+       !OLD call new_SC_potl( .true., SC_tolerance, reset_L, fixed_potential, &
+       !                      vary_mu, n_L_iterations, &
        !OLD      number_of_bands, L_tolerance, mu, total_energy)
        if (restart_L) then
           reset_L = .false.
@@ -1104,7 +1175,8 @@ contains
        call get_H_matrix(.true., fixed_potential, electrons, density, &
                          maxngrid)
        electrons_tot = spin_factor * sum(electrons)
-       !OLD if(.NOT.restart_L) call FindMinDM(n_L_iterations, number_of_bands, vary_mu, &
+       !OLD if(.NOT.restart_L) call FindMinDM( n_L_iterations, number_of_bands, &
+       !                                       vary_mu, &
        !OLD      L_tolerance, mu, inode, ionode, reset_L, .false.)
        if (.not. restart_L) then
           call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
@@ -1115,6 +1187,10 @@ contains
        end if
        call get_energy(total_energy)
     end if
+!!$
+!!$
+!!$
+!!$
     ! Do we want to just test the forces ?
     if (flag_test_forces) then
        call test_forces(fixed_potential, vary_mu, n_L_iterations, &
@@ -1123,6 +1199,10 @@ contains
        call end_comms
        stop
     end if
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='initial_H',echo=.true.)
+!****lat>$
 
     return
 
@@ -1514,12 +1594,21 @@ contains
 
     implicit none
 
-    integer :: spin
+    integer        :: spin
+    type(cq_timer) :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='initial_L',where=1,level=2)
+!****lat>$
 
     do spin = 1, nspin
        ! set L for the second spin component also equal to 1/2 S^-1
        call matrix_sum(zero, matL(1), half, matT)
     end do
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='initial_L')
+!****lat>$
 
     return
   end subroutine initial_L

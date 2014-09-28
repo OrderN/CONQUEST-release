@@ -48,14 +48,16 @@
 !!    component
 !!   2012/03/01 L.Tong
 !!    Added interface for earlySC and lateSC
+!!   2014/09/15 18:30 lat
+!!   -fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module SelfCon
 
   use datatypes
   use global_module,          only: io_lun, area_SC
-  use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                    tmr_std_chargescf, tmr_std_allocation
+  use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_stdclocks_module, only: tmr_std_chargescf, tmr_std_allocation
 
   implicit none
 
@@ -177,26 +179,34 @@ contains
     logical        :: done, problem, early
     real(double)   :: SC_tol, DMM_tol, LastE
     type(cq_timer) :: tmr_l_tmp1
+    type(cq_timer) :: tmr_std_loc
     real(double), dimension(nspin) :: electrons
 
+    
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='new_SC_potl',where=5,level=2,echo=.true.)
+!****lat>$
+
     call start_timer(tmr_std_chargescf)
+
     ! Build H matrix *with NL and KE*
     call get_H_matrix(.true., fixed_potential, electrons, density, &
                       maxngrid)
+
     ! The H matrix build is already timed on its own, so I leave out
     ! of the SC preliminaries (open to discussion)
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
-    if (.not. flag_self_consistent) then
-       call stop_timer(tmr_std_chargescf)
-       call FindMinDM(n_L_iterations, vary_mu, L_tol, inode, ionode, &
-                      reset_L, .false.)
-       call start_timer(tmr_std_chargescf)
-       call get_energy(total_energy)
-       call stop_print_timer(tmr_l_tmp1, "new_SC_potl (except H build)", &
-                             IPRINT_TIME_THRES2)
-       call stop_timer(tmr_std_chargescf)
-       return
-    end if
+!!$    if (.not. flag_self_consistent) then
+!!$       call stop_timer(tmr_std_chargescf)
+!!$       call FindMinDM(n_L_iterations, vary_mu, L_tol, inode, ionode, &
+!!$                      reset_L, .false.)
+!!$       call start_timer(tmr_std_chargescf)
+!!$       call get_energy(total_energy)
+!!$       call stop_print_timer(tmr_l_tmp1, "new_SC_potl (except H build)", &
+!!$                             IPRINT_TIME_THRES2)
+!!$       call stop_timer(tmr_std_chargescf)
+!!$       return
+!!$    end if
     if (inode == ionode) &
          write (io_lun, &
                 fmt='(8x,"Starting self-consistency.  Tolerance: ",e12.5,/)') &
@@ -204,16 +214,20 @@ contains
     if (record) then
        if (inode == ionode .and. iprint_SC > 1) &
             write (io_lun, *) 'Original tol: ', L_tol
-       SC_tol = self_tol
+       SC_tol  = self_tol
        DMM_tol = L_tol
     else
-       SC_tol = max(self_tol, SCC * (self_tol**SCBeta))
+       SC_tol  = max(self_tol, SCC * (self_tol**SCBeta))
        DMM_tol = max(L_tol, PulayC*((0.1_double * self_tol)**PulayBeta))
     end if
-    ndone = 0
-    done = .false.
+!!$
+!!$
+!!$
+!!$
+    ndone   =  0
+    done    = .false.
     problem = .false.
-    early = .false.
+    early   = .false.
     flag_SCconverged = .true.
     ! Check on whether we need to do early iterations
     if (.not. allocated(EarlyRecord)) then
@@ -229,6 +243,14 @@ contains
     end do
     call stop_print_timer(tmr_l_tmp1, "SCF preliminaries (except H build)", &
                           IPRINT_TIME_THRES2)
+!!$
+!!$
+!!$
+!!$
+!!$
+!!$
+!!$
+!!$
     ! Loop until self-consistent
     do while (.not. done)
        call start_timer(tmr_l_tmp1, WITH_LEVEL)
@@ -244,7 +266,7 @@ contains
                                density, maxngrid)
 
        else if (early .or. problem) then ! Early stage strategy
-          earlyL = .false.
+          earlyL  = .false.
           reset_L = .true.
           if (inode == ionode .and. iprint_SC > 0) &
                write(io_lun,*) '********** EarlySC **********'
@@ -287,7 +309,14 @@ contains
                write (io_lun, *) 'early: ', i, EarlyRecord(i)
        end do
     end do ! while
-
+!!$
+!!$
+!!$
+!!$
+!!$
+!!$
+!!$
+!!$
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
 
     if (record) then ! Fit the C and beta coefficients
@@ -307,6 +336,10 @@ contains
     call stop_print_timer(tmr_l_tmp1, "finishing SCF (fitting coefficients)", &
                           IPRINT_TIME_THRES2)
     call stop_timer(tmr_std_chargescf)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='new_SC_potl',echo=.true.)
+!****lat>$
 
     return
 
@@ -395,6 +428,13 @@ contains
     real(double) :: zeta_exact, ratio, qatio, lambda_up
     real(double) :: pred_Rb, Rup, Rcrossup, zeta_num, zeta
     real(double), dimension(:,:), allocatable :: resid0, rho1, residb
+
+    type(cq_timer)    :: tmr_std_loc
+    
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='earlySC',&
+         where=5,level=3,echo=.true.)
+!****lat>$
 
     allocate(resid0(maxngrid,nspin), rho1(maxngrid,nspin), &
              residb(maxngrid,nspin), STAT=stat)
@@ -639,9 +679,14 @@ contains
     if (stat /= 0) call cq_abort("earlySC: Error dealloc mem")
     call reg_dealloc_mem(area_SC, 3*maxngrid*nspin, type_dbl)
 
-131 format('Linearity monitor for this line search: ',e15.6)
+!****lat<$
+    !call stop_timer(t=tmr_std_loc,who='earlySC',echo=.true.)
+!****lat>$
 
     return
+
+131 format('Linearity monitor for this line search: ',e15.6)
+
   end subroutine earlySC
   !!***
 
@@ -730,6 +775,12 @@ contains
     real(double), dimension(maxpulaySC,maxpulaySC,nspin) :: Aij
     real(double), dimension(maxpulaySC,nspin) :: alph
     real(double), dimension(nspin) :: R, tmp
+
+    type(cq_timer)    :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='lateSC',where=5,level=3,echo=.true.)
+!****lat>$
 
     allocate(rho_pul(maxngrid,maxpulaySC,nspin),   &
              resid_pul(maxngrid,maxpulaySC,nspin), &
@@ -1074,8 +1125,9 @@ contains
           end if
           if (inode == ionode) write (io_lun, *) 'PANIC ! Residual increase !'
        end if
-
+       !
        R0 = R1
+       !
        if (R0 < self_tol) then
           done = .true.
           if (inode == ionode) write (io_lun, *) 'Done ! Self-consistent'
@@ -1097,6 +1149,10 @@ contains
     if (stat /= 0) &
          call cq_abort("late_SC: Error dealloc mem")
     call reg_dealloc_mem(area_SC, (2*maxpulaySC+1)*nspin*maxngrid, type_dbl)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='lateSC',echo=.true.)
+!****lat>$
 
     return
   end subroutine lateSC
@@ -1173,6 +1229,12 @@ contains
     real(double), dimension(:),   allocatable :: rho_tot
     real(double), dimension(:,:), allocatable :: rho1, resid
     real(double), dimension(:,:), allocatable :: resid_cov
+
+    type(cq_timer)    :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='LinearMixSC',where=1,level=0,echo=.true.)
+!****lat>$
 
     allocate(rho1(maxngrid,nspin), &
              resid(maxngrid,nspin), STAT=stat)
@@ -1305,6 +1367,12 @@ contains
     call reg_dealloc_mem(area_SC, 2*nspin*maxngrid, type_dbl)
 
     !    ndone = n_iters
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='LinearMixSC',echo=.true.)
+!****lat>$
+
+    return
   end subroutine LinearMixSC
   !!***
 
@@ -2478,7 +2546,10 @@ contains
   !!  - Major rewrite of the subroutine
   !!  - The pulay mixing step (calculation of alpha) are now put into
   !!    a separate subroutine
-  !!  -
+  !!   2014/09/28 L.Truflandier
+  !!  - Added exx_pulay_r0 to control EXX accuracy during the SCF based on
+  !!    Pulay mixing: the point is to extract R0 from PulayMixSC and use it 
+  !!    in get_X_matrix
   !! SOURCE
   !!
   subroutine PulayMixSC_spin(done, ndone, self_tol, reset_L, &
@@ -2522,19 +2593,26 @@ contains
     real(double), pointer, dimension(:,:,:) :: Rcov_pul
 
     !Reset Pulay Iterations  -- introduced by TM, Nov2007
-    integer, parameter :: mx_fail = 3
+    integer, parameter :: mx_fail  = 3
     integer      :: IterPulayReset = 1
-    integer      :: icounter_fail = 0
-    logical      :: reset_Pulay = .false.
+    integer      :: icounter_fail  = 0
+    logical      :: reset_Pulay    = .false.
     integer      :: spin
     real(double) :: R0_old
+
+    type(cq_timer)    :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='PulayMixSC_spin',&
+         where=5,level=1,echo=.true.)
+!****lat>$
 
     ! allocate memories
     call allocate_PulayMixSC_spin
 
     ! initialise
     rho_pul = zero
-    R_pul = zero
+    R_pul   = zero
 
     ! write out start information
     if (inode == ionode) then
@@ -2558,9 +2636,9 @@ contains
     end if
 
     ! set counters
-    done = .false.
+    done    = .false.
     n_iters = ndone
-    iter = 1
+    iter    = 1
     if (n_iters >= maxitersSC) then
        if (.not. flag_continue_on_SC_fail) &
             call cq_abort('SelfCon/PulayMixSC_spin: too many SCF iterations: ', &
@@ -2718,16 +2796,20 @@ contains
              end if
           end do ! spin
           IterPulayReset = iter
-          icounter_fail = 0
-          reset_Pulay = .false.
+          icounter_fail  = 0
+          reset_Pulay    = .false.
        end if
 
     end do ! iter (SCF)
 
     ndone = n_iters
     call deallocate_PulayMixSC_spin
-    return
 
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='PulayMixSC_spin',echo=.true.)
+!****lat>$
+
+    return
   contains
 
     subroutine allocate_PulayMixSC_spin
@@ -2831,6 +2913,12 @@ contains
     real(double) :: ne, RR
     real(double), dimension(maxpulaySC,maxpulaySC,nspin) :: Aij
     real(double), dimension(maxpulaySC,nspin) :: alpha
+    type(cq_timer) :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='get_pulay_optimal_rho',&
+         where=5,level=2,echo=.true.)
+!****lat>$
 
     ! calculated Aij
     Aij = zero
@@ -2870,6 +2958,11 @@ contains
        end do
     end do
 
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='get_pulay_optimal_rho',echo=.true.)
+!****lat>$
+
+    return
   end subroutine get_pulay_optimal_rho
   !*****
 
@@ -2919,6 +3012,12 @@ contains
     ! local variables
     integer :: spin, stat
     real(double), dimension(:,:), allocatable :: rho_out, resid
+    type(cq_timer) :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='update_pulay_history',where=5,&
+         level=2,echo=.true.)
+!****lat>$
 
     allocate(rho_out(maxngrid,nspin), resid(maxngrid,nspin), STAT=stat)
     if (stat /= 0) &
@@ -2973,6 +3072,11 @@ contains
          call cq_abort("update_pulay_history: Error dealloc mem")
     call reg_dealloc_mem(area_SC, 2*maxngrid*nspin, type_dbl)
 
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='update_pulay_history',echo=.true.)
+!****lat>$
+
+    return
   end subroutine update_pulay_history
   !*****
 

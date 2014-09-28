@@ -44,15 +44,16 @@
 !!    Changes for cDFT and forces
 !!   2013/04/24 15:05 dave
 !!    Extensive tweaks to fix forces with analytic blips (throughout)
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module test_force_module
 
   use datatypes
   use global_module,          only: io_lun, area_moveatoms
-  use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                    tmr_std_moveatoms,       &
-                                    tmr_std_allocation
+  use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_stdclocks_module, only: tmr_std_moveatoms, tmr_std_allocation
 
   implicit none
 
@@ -145,13 +146,18 @@ contains
     real(double) :: total_energy
 
     ! Local variables
-    integer      :: stat, spin
-    logical      :: reset_L = .false.
-    real(double) :: E0, F0, E1, F1, analytic_force, numerical_force, &
-                    electrons_tot
-    real(double) :: H0, L0, XC0, NL0, K0, B0, dH0, dXC0, EW0, T0
+    type(cq_timer) :: tmr_std_loc
+    integer        :: stat, spin
+    logical        :: reset_L = .false.
+    real(double)   :: E0, F0, E1, F1, analytic_force, numerical_force, &
+                      electrons_tot
+    real(double)   :: H0, L0, XC0, NL0, K0, B0, dH0, dXC0, EW0, T0
     real(double), dimension(nspin) :: electrons
     real(double), dimension(:,:), allocatable :: HF_force
+
+!****lat<$
+    !call start_timer(t=tmr_std_loc,who='test_forces',where=7,level=2,echo=.true.)
+!****lat>$
 
     call start_timer(tmr_std_moveatoms)
 
@@ -172,16 +178,16 @@ contains
     end if
     ! Here we want to back up the state of the system by saving H, K,
     ! density, blips, chis, local ps Energies
-    H0 = hartree_energy
-    L0 = local_ps_energy
-    XC0 = xc_energy
-    NL0 = nl_energy
-    K0 = kinetic_energy
-    B0 = band_energy
-    dH0 = delta_E_hartree 
+    H0   = hartree_energy
+    L0   = local_ps_energy
+    XC0  = xc_energy
+    NL0  = nl_energy
+    K0   = kinetic_energy
+    B0   = band_energy
+    dH0  = delta_E_hartree 
     dXC0 = delta_E_xc
-    EW0 = ewald_energy
-    T0 = band_energy + delta_E_hartree + delta_E_xc + ewald_energy + &
+    EW0  = ewald_energy
+    T0   = band_energy + delta_E_hartree + delta_E_xc + ewald_energy + &
          core_correction
     !call dump_blips("O",supportfns, inode)
     !call dump_locps(pseudopotential,n_my_grid_points,inode)
@@ -540,6 +546,10 @@ contains
     call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
 
     call stop_timer(tmr_std_moveatoms)
+
+!****lat<$
+    !call stop_timer(t=tmr_std_loc,who='test_forces',echo=.true.)
+!****lat>$
 
     return
   end subroutine test_forces

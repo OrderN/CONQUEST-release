@@ -42,12 +42,15 @@
 !!   2012/03/01 L.Tong
 !!    Added interfaces for bracketMin, brentMin, get_new_rho, getR2
 !!    and reduceLAmbda
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!***
 module EarlySCMod
 
   use datatypes
-  use global_module, only: io_lun, area_SC
-  use timer_stdclocks_module, only: start_timer, stop_timer, tmr_std_chargescf
+  use global_module,          only: io_lun, area_SC
+  use timer_module,           only: start_timer, stop_timer
+  use timer_stdclocks_module, only: tmr_std_chargescf
 
   implicit none
 

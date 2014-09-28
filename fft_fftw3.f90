@@ -20,7 +20,7 @@ contains
 
     implicit none
 
-    integer,intent(in) :: len
+    integer,intent(in)   :: len
     complex(double_cplx) :: dummy
 
     ! for forward
@@ -63,7 +63,7 @@ contains
 
     implicit none
 
-    integer,intent(in) :: len
+    integer,intent(in)   :: len
     complex(double_cplx) :: dummy
 
     ! for forward
@@ -106,7 +106,7 @@ contains
 
     implicit none
 
-    integer,intent(in) :: len
+    integer,intent(in)   :: len
     complex(double_cplx) :: dummy
 
     ! for forward
@@ -150,7 +150,7 @@ contains
 
     implicit none
 
-    integer, intent(in) :: nsize
+    integer, intent(in)  :: nsize
     complex(double_cplx) :: dummy
 
     ! for forward
@@ -179,5 +179,19 @@ contains
 
     return
   end subroutine fft3_exec_wrapper
+
+  subroutine fft3_dest_wrapper( )
+    use datatypes
+
+    implicit none
+
+    ! for forward
+    call dfftw_destroy_plan( plan3_for )
+    ! for reverse
+    call dfftw_destroy_plan( plan3_rev )
+
+    return
+  end subroutine fft3_dest_wrapper
+
 
 end module fft_interface_module

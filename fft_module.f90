@@ -51,13 +51,16 @@
 !!    Changed for output to file not stdout
 !!   2008/05/23
 !!    Added timers
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module fft_module
 
   use datatypes
-  use global_module, ONLY: io_lun
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
+  use global_module,          only: io_lun
+  use timer_module,           only: start_timer,stop_timer
+  use timer_stdclocks_module, only: tmr_std_allocation
   use fft_interface_module
 
   implicit none
@@ -169,8 +172,8 @@ contains
 !!
   subroutine fft3( data, cdata, size, isign ) 
 
-    use dimens, ONLY: n_my_grid_points, n_grid_x, n_grid_y, n_grid_z
-    use GenComms, ONLY: cq_abort, inode
+    use dimens,        ONLY: n_my_grid_points, n_grid_x, n_grid_y, n_grid_z
+    use GenComms,      ONLY: cq_abort, inode
     use maxima_module, ONLY: maxngrid
     use global_module, ONLY: area_SC
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int

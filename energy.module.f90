@@ -18,16 +18,19 @@
 !!   17:17, 2003/03/10
 !!  MODIFICATION HISTORY
 !!   13:21, 22/09/2003 drb
-!!    Added band_energy
+!!   - Added band_energy
 !!   10:09, 13/02/2006 drb
-!!    Removed all explicit references to data_ variables and rewrote in terms of new
-!!    matrix routines
+!!   - Removed all explicit references to data_ variables and rewrote in terms of new
+!!     matrix routines
 !!   2007/08/14 17:31 dave
-!!    Added entropy, free energy output
+!!   - Added entropy, free energy output
 !!   2008/02/04 17:16 dave
-!!    Changes for output to file not stdout
+!!   - Changes for output to file not stdout
 !!   2012/04/16 L.Tong
 !!   - Added vdW_xc_energy
+!!   2014/01/18 lat
+!!   - Added exx_energy for "exact" exchange (Hartree-Fock)
+!!   - Added   x_energy for   DFT   exchange
 !!  SOURCE
 !!
 module energy
@@ -35,18 +38,22 @@ module energy
   use datatypes
   use global_module, only: io_lun
   use numbers,       only: zero
+  use timer_module,  only: start_timer, stop_timer, cq_timer
 
   implicit none
 
-  real(double) :: hartree_energy
+  real(double) ::  hartree_energy
   real(double) :: local_ps_energy
-  real(double) :: xc_energy
-  real(double) :: nl_energy
-  real(double) :: band_energy
-  real(double) :: kinetic_energy
+  real(double) ::       xc_energy
+
+  real(double) ::       nl_energy
+  real(double) ::     band_energy
+  real(double) ::  kinetic_energy
+  real(double) ::     cdft_energy
+  real(double) ::      exx_energy
+  real(double) ::        x_energy
   real(double) :: delta_E_hartree
   real(double) :: delta_E_xc
-  real(double) :: cdft_energy
   real(double) :: entropy = zero
 
   logical :: flag_check_DFT = .false.
@@ -98,6 +105,8 @@ contains
   !!   - Changed myid == 0 to inode == ionode for consistency
   !!   - Added output for total spin polarisation for spin polarised
   !!     calculations
+  !!   2014/05/29 LAT
+  !!   - Added exchange energy calculation
   !!  SOURCE
   !!
   subroutine get_energy(total_energy, printDFT)
@@ -106,18 +115,20 @@ contains
     use numbers
     use units
     use mult_module,            only: matrix_product_trace, matH,     &
-                                      matK, matKE, matNL
+                                      matK, matKE, matNL, matX
     use GenComms,               only: inode, ionode
     use global_module,          only: iprint_gen, nspin, spin_factor, &
                                       flag_dft_d2,                    &
                                       flag_SCconverged_D2,            &
                                       flag_self_consistent,           &
                                       flag_perform_cdft,              &
-                                      flag_vdWDFT
+                                      flag_vdWDFT,                    &
+                                      flag_exx, exx_alpha
     use ewald_module,           only: ewald_energy
     use pseudopotential_common, only: core_correction
     use DFT_D2,                 only: disp_energy
     use density_module,         only: electron_number
+    
 
     implicit none
 
@@ -125,10 +136,13 @@ contains
     real(double) :: total_energy
     ! check DFT energy mode  : by TM Nov2007
     logical, intent(in), optional :: printDFT
+
     ! Local variables
-    integer      :: spin
-    logical      :: print_Harris, print_DFT
-    real(double) :: total_energy2
+    integer        :: spin
+    logical        :: print_Harris, print_DFT
+    real(double)   :: total_energy2
+    type(cq_timer) :: tmr_std_loc
+
     ! electron number information
     real(double), dimension(nspin) :: electrons
     real(double) :: electrons_tot
@@ -141,64 +155,99 @@ contains
     !  printDFT = .true.  -> prints out only DFT energy
     !  printDFT = .false. -> prints out Energies except DFT energy
     !
-    print_DFT = .false.
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='get_energy',where=9,level=4,echo=.true.)
+!****lat>$
+
+    print_DFT    = .false.
     print_Harris = .true.
     if (present(printDFT)) then
-       if (printDFT) print_Harris = .false.
+       if (printDFT)     print_Harris = .false.
        print_DFT = printDFT
     else
        if (iprint_gen >= 2) print_DFT = .true.
     end if
 
     ! Find energies
-    nl_energy = zero
-    band_energy = zero
+    nl_energy      = zero
+    band_energy    = zero
     kinetic_energy = zero
+    exx_energy     = zero
     do spin = 1, nspin
-       nl_energy = nl_energy + spin_factor * &
-                   matrix_product_trace(matK(spin), matNL)
+       nl_energy   = nl_energy   + spin_factor * &
+                     matrix_product_trace(matK(spin), matNL)
        band_energy = band_energy + spin_factor * &
                      matrix_product_trace(matK(spin), matH(spin))
        ! note that matKE is < phi_i | - grad^2 | phi_j >
-       kinetic_energy = kinetic_energy + spin_factor * &
-                        half * matrix_product_trace(matK(spin), matKE)
+       kinetic_energy = kinetic_energy + spin_factor * half * &
+                        matrix_product_trace(matK(spin), matKE)
+       exx_energy = exx_energy - spin_factor * half * exx_alpha * &
+                    matrix_product_trace(matK(spin), matX(spin))
     end do
-    total_energy = band_energy + delta_E_hartree + delta_E_xc + &
+
+    ! Find exx energy
+    !exx_energy = zero
+    !if (flag_exx) then
+    !   do spin = 1, nspin
+    !      exx_energy = exx_energy -                        &
+    !           half * spin_factor * exx_alpha *            &
+    !           matrix_product_trace(matK(spin), matX(spin))
+    !   end do
+    !end if
+
+    ! Find total pure DFT energy
+    total_energy = band_energy  + delta_E_hartree + delta_E_xc + &
                    ewald_energy + core_correction
+    ! Add contribution from constrained (cDFT)
     if (flag_perform_cdft) total_energy = total_energy + cdft_energy
-    ! for DFT-D2
-    if (flag_dft_d2) total_energy = total_energy + disp_energy
+
+    ! Add contribution from dispersion (DFT-D2)
+    if (flag_dft_d2)       total_energy = total_energy + disp_energy
+
+    ! Add contribution from exact-exchange (EXX)
+    !if (flag_exx)          total_energy = total_energy + exx_energy
 
     ! Write out data
     if (inode == ionode) then
        if(print_Harris) then
           !if(iprint_gen>=1) write(io_lun,2) electrons
           if (iprint_gen >= 1) &
-               write (io_lun, 1) en_conv*band_energy, en_units(energy_units)
+               write (io_lun, 1) en_conv*band_energy,     en_units(energy_units)
           if (iprint_gen >= 1) &
-               write (io_lun, 3) en_conv*hartree_energy, en_units(energy_units)
+               write (io_lun, 3) en_conv*hartree_energy,  en_units(energy_units)
           if (iprint_gen >= 1) &
-               write (io_lun, 4) en_conv*xc_energy, en_units(energy_units)
+               write (io_lun, 4) en_conv*(xc_energy+exx_energy), en_units(energy_units)
+          if (iprint_gen >= 1) &
+               write (io_lun,23) en_conv*x_energy,               en_units(energy_units)
+          if (iprint_gen >= 1) &
+               write (io_lun,24) en_conv*(xc_energy-x_energy),   en_units(energy_units)
+          if (iprint_gen >= 1 ) &
+               write (io_lun,22) en_conv*exx_energy,      en_units(energy_units)
           if (iprint_gen >= 1) &
                write (io_lun, 5) en_conv*local_ps_energy, en_units(energy_units)
           if (iprint_gen >= 1) &
                write (io_lun, 6) en_conv*core_correction, en_units(energy_units)
           if (iprint_gen >= 1) &
-               write (io_lun, 7) en_conv*nl_energy, en_units(energy_units)
+               write (io_lun, 7) en_conv*nl_energy,       en_units(energy_units)
           if (iprint_gen >= 1) &
-               write (io_lun, 8) en_conv*kinetic_energy, en_units(energy_units)
+               write (io_lun, 8) en_conv*kinetic_energy,  en_units(energy_units)
           if (iprint_gen >= 1) &
-               write (io_lun, 9) en_conv*ewald_energy, en_units(energy_units)
+               write (io_lun, 9) en_conv*ewald_energy,    en_units(energy_units)
           if (iprint_gen >= 1) &
                write (io_lun,11) en_conv*delta_E_hartree, en_units(energy_units)
           if (iprint_gen >= 1) &
-               write (io_lun,12) en_conv*delta_E_xc, en_units(energy_units)
+               write (io_lun,12) en_conv*delta_E_xc,      en_units(energy_units)
+
           if (iprint_gen >= 1 .and. flag_perform_cdft) &
                write (io_lun,&
                       '(10x,"cDFT Energy, 2Tr[K.W]            : ",f25.15," ",a2)')&
                      en_conv*cdft_energy, en_units(energy_units)
+
           if (iprint_gen >= 1 .and. flag_dft_d2) &
                write (io_lun,17) en_conv*disp_energy, en_units(energy_units)
+
+
           if (abs(entropy) >= RD_ERR) then
              if (iprint_gen >= 0) &
                   write(io_lun,10) en_conv*total_energy, en_units(energy_units)
@@ -238,15 +287,23 @@ contains
     end if
     ! Check on validity of band energy
     if(print_DFT) then
-       total_energy2 = hartree_energy + xc_energy + local_ps_energy + &
-                       nl_energy + kinetic_energy + core_correction + &
-                       ewald_energy
+       total_energy2 = hartree_energy  + &
+                       xc_energy       + &     
+                       exx_energy      + &     
+                       local_ps_energy + &
+                       nl_energy       + &
+                       kinetic_energy  + &
+                       core_correction + &
+                       ewald_energy     
+
        if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
        if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
+
        if (inode == ionode) then
           write(io_lun,13) en_conv*total_energy2, en_units(energy_units)
        end if
     end if
+
     ! print electron number and spin polarisation information
     if (iprint_gen >= 0) then
        call electron_number(electrons)
@@ -264,7 +321,12 @@ contains
        end if
     end if
 
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='get_energy',echo=.true.)
+!****lat>$
+
     return
+
 1   format(10x,'Band Energy, 2Tr[K.H]            : ',f25.15,' ',a2)
 2   format(10x,'Electron Count                   : ',f25.15,' ',a2)
 3   format(10x,'Hartree Energy                   : ',f25.15,' ',a2)
@@ -286,7 +348,351 @@ contains
 19  format(10x,'Number of electrons spin up      : ',f25.15)
 20  format(10x,'Number of electrons spin down    : ',f25.15)
 21  format(10x,'Spin polarisation (NeUP - NeDN)  : ',f25.15)
+22  format(10x,'EXX Energy, -Tr[K.X]             : ',f25.15,' ',a2)
+23  format(10x,'X only  Energy                   : ',f25.15,' ',a2)
+24  format(10x,'C only  Energy                   : ',f25.15,' ',a2)
+
   end subroutine get_energy
   !!*** get_energy
+
+
+  !!****f* energy/final_energy
+  !!
+  !!  NAME
+  !!   final_energy
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!  Writes out energy contributions at the very last step
+  !!   of the calculation 
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D.R.Bowler/T.Miyazaki/L.Truflandier
+  !!  CREATION DATE
+  !!   2014/09/24
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine final_energy()
+
+    use datatypes
+    use numbers
+    use units
+    use GenComms,               only: inode, ionode
+
+    use mult_module,            only: matrix_product_trace, matH,     &
+                                      matrix_product_trace_length,    &
+                                      matK, matKE, matNL, matX, matS
+
+    use global_module,          only: iprint_gen, nspin, spin_factor, &
+                                      flag_dft_d2,                    &
+                                      flag_SCconverged_D2,            &
+                                      flag_self_consistent,           &
+                                      flag_perform_cdft,              &
+                                      flag_vdWDFT,                    &
+                                      flag_exx, exx_alpha
+
+    use DFT_D2,                 only: disp_energy
+    use ewald_module,           only: ewald_energy
+    use density_module,         only: electron_number
+    use pseudopotential_common, only: core_correction
+
+
+    
+    implicit none
+
+    ! Local variables
+    integer        :: spin
+    real(double)   :: total_energy1
+    real(double)   :: total_energy2
+    real(double)   :: one_electron_energy
+    real(double)   :: potential_energy
+    real(double)   :: virial
+    type(cq_timer) :: tmr_std_loc
+
+    ! electron number information
+    real(double), dimension(nspin) :: electrons
+    real(double)                   :: electrons_tot1, electrons_tot2
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='final_energy',where=9,level=4,echo=.true.)
+!****lat>$
+
+    ! Initialise energies
+    nl_energy           = zero
+    band_energy         = zero
+    kinetic_energy      = zero
+    exx_energy          = zero
+    one_electron_energy = zero
+    potential_energy    = zero
+    total_energy1       = zero
+    total_energy2       = zero
+
+    ! Nonlocal pseudop, kinetic and band energies
+    do spin = 1, nspin
+       ! 2*Tr[K NL]
+       nl_energy      = nl_energy      &
+                        + spin_factor*matrix_product_trace(matK(spin), matNL)
+       ! 2*Tr[K KE] with KE = - < grad**2 >
+       kinetic_energy = kinetic_energy &
+                        + spin_factor*half*matrix_product_trace(matK(spin), matKE)
+       ! 2*Tr[K H]
+       band_energy    = band_energy    &
+                        + spin_factor*matrix_product_trace(matK(spin), matH(spin))
+       ! -alpha*Tr[K X]
+       exx_energy     = exx_energy     &
+                        - spin_factor*half*exx_alpha*matrix_product_trace(matK(spin), matX(spin))
+    end do
+
+    ! Exact exchange energy  = - alpha * Tr[K X]
+    !if (flag_exx) then
+    !   if ( nspin == 1 ) then          
+    !      ! ****not yet implemented with spin-polarisation****
+    !      exx_energy =  - spin_factor * half * exx_alpha &
+    !           * matrix_product_trace(matK(1), matX(1))
+    !   end if
+    !end if
+
+
+    ! Find total pure DFT energy
+    total_energy1 = band_energy     + &
+                    delta_E_hartree + &
+                    delta_E_xc      + &
+                    ewald_energy    + &
+                    core_correction
+
+    ! Add contribution from exact-exchange (EXX)
+    !if (flag_exx)          total_energy1 = total_energy1 + exx_energy
+
+    ! Add contribution from constrained (cDFT)
+    if (flag_perform_cdft) total_energy1 = total_energy1 + cdft_energy
+
+    ! Add contribution from dispersion (DFT-D2)
+    if (flag_dft_d2)       total_energy1 = total_energy1 + disp_energy
+
+    !Write out data
+    !...
+    !
+    ! print electron number and spin polarisation information
+    
+    call electron_number(electrons)
+    if (inode == ionode) electrons_tot1 = electrons(1) + electrons(nspin)
+    electrons_tot2 = matrix_product_trace_length(matK(1),matS)
+
+    if (inode == ionode) then
+       !
+       if (iprint_gen >= 1) then          
+          write (io_lun, *) 
+          !write (io_lun, *) 
+          !write (io_lun, 1) 
+          !
+          if (nspin == 2) then
+             write (io_lun,19) electrons(1)
+             write (io_lun,20) electrons(2)
+             write (io_lun,21) electrons(1) - electrons(2)
+             !
+          end if
+          !
+          write (io_lun, 6) en_conv *    band_energy,  en_units(energy_units)
+          write (io_lun, 7) en_conv * hartree_energy,  en_units(energy_units)
+          write (io_lun, 8) en_conv *   ewald_energy,  en_units(energy_units)
+          write (io_lun, 9) en_conv * kinetic_energy,  en_units(energy_units)
+          write (io_lun, 2)
+          write (io_lun,30) en_conv* (xc_energy + exx_energy),  en_units(energy_units)
+          write (io_lun,31) en_conv*   x_energy,                en_units(energy_units)
+          write (io_lun,32) en_conv* (xc_energy - x_energy),    en_units(energy_units)
+          write (io_lun,33) en_conv* exx_energy,  en_units(energy_units)
+          write (io_lun, 2)
+          write (io_lun,40) en_conv* (core_correction + &
+                                      local_ps_energy + &
+                                            nl_energy    ),  en_units(energy_units)
+          write (io_lun,41) en_conv* core_correction,  en_units(energy_units) 
+          write (io_lun,42) en_conv* local_ps_energy,  en_units(energy_units) 
+          write (io_lun,43) en_conv*       nl_energy,  en_units(energy_units)
+          write (io_lun, 2)
+          write (io_lun,11) en_conv* delta_E_hartree, en_units(energy_units)          
+          write (io_lun,12) en_conv* delta_E_xc,      en_units(energy_units)
+          if (flag_dft_d2) &
+               write (io_lun,17) en_conv*disp_energy,en_units(energy_units)
+          if (flag_perform_cdft) &          
+               write (io_lun,18) en_conv*cdft_energy,en_units(energy_units)
+          write (io_lun, 2)
+       end if
+    end if
+    
+    if ( inode == ionode ) then
+       !
+       if (abs(entropy) >= RD_ERR) then
+          
+          !if (iprint_gen >= 0) &
+          !     write(io_lun,10) en_conv*total_energy1, en_units(energy_units)
+       
+          if (flag_check_Diag) then
+             !
+             select case (SmearingType)
+             case (0) ! Fermi smearing
+                if (entropy < zero) &
+                     write (io_lun, *) &
+                     ' WARNING !!!!    entropy < 0??? ', entropy
+                !
+                if (iprint_gen >= 0) &
+                     write (io_lun,14) en_conv*(total_energy1-half*entropy), &
+                     en_units(energy_units)
+                !
+                !
+             case (1) ! Methfessel-Paxton smearing
+                if (iprint_gen >= 0)                             &
+                     write (io_lun,16) en_conv * (total_energy1 - &
+                     (real(MPOrder+1,double) /                   &
+                     real(MPOrder+2,double))*entropy),          &
+                     en_units(energy_units)
+                !
+                !
+             end select
+             !
+          else
+             if (iprint_gen >= 0) &
+                  write (io_lun,14) en_conv*(total_energy1-half*entropy), &
+                  en_units(energy_units)
+          end if
+          !
+          !
+          if (iprint_gen >= 1) &
+               write (io_lun,15) en_conv*(total_energy1-entropy), &
+               en_units(energy_units)
+       else
+          !if (iprint_gen >= 0) &
+          !     write (io_lun,10) en_conv*total_energy1, en_units(energy_units)
+          !if (iprint_gen >= 0) &
+          !     write (io_lun, '(10x,"(TS=0 as O(N) or entropic &
+          !     &contribution is negligible)")')
+       end if
+    end if
+    
+    ! Check on validity of band energy
+    total_energy2 = hartree_energy  + &
+         xc_energy       + &     
+         exx_energy      + &
+         local_ps_energy + &
+         nl_energy       + &
+         kinetic_energy  + &
+         core_correction + &
+         ewald_energy     
+
+    if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
+    if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
+
+    ! One-electron energy
+    one_electron_energy = local_ps_energy + &
+                          nl_energy       + &
+                          kinetic_energy  
+
+    ! Potential energy
+    potential_energy = local_ps_energy + &
+                       nl_energy       + &
+                       hartree_energy 
+
+    if (inode == ionode) then
+       if (iprint_gen >= 0) then
+          write(io_lun,10) en_conv*total_energy1, en_units(energy_units)          
+          write(io_lun,13) en_conv*total_energy2, en_units(energy_units) 
+          write(io_lun,22) en_conv*(total_energy1 - total_energy2), en_units(energy_units) 
+          write(io_lun, *) 
+       end if
+    end if
+
+    electrons_tot1 = zero
+    call electron_number(electrons)
+    if (inode == ionode) electrons_tot1 = electrons(1) + electrons(nspin)
+
+    electrons_tot2 = zero
+    do spin = 1, nspin
+       electrons_tot2 = electrons_tot2 + &
+            spin_factor * matrix_product_trace_length(matK(spin),matS)
+    end do
+    
+    if (inode == ionode) then
+       if (iprint_gen >= 1) then
+          write (io_lun,23) 
+          write (io_lun,24) electrons_tot1
+          write (io_lun,25) electrons_tot2
+          !write (io_lun,26) one_electron_energy
+          !write (io_lun,27) potential_energy
+          !write (io_lun,28) kinetic_energy
+          write (io_lun,29) (total_energy2 - kinetic_energy)/kinetic_energy 
+          if (exx_alpha > zero .and. exx_alpha < one) then             
+             write (io_lun,50) x_energy/(one - exx_alpha)
+             write (io_lun,51) exx_energy/exx_alpha
+          end if
+          !write (io_lun, 1)
+          !write (io_lun, *) 
+          write (io_lun, *)  
+       end if
+    end if
+
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='final_energy',echo=.true.)
+!****lat>$
+
+    return
+
+
+1   format(4x, '****===============================', &
+               '===================================', &
+               '===========****')
+
+2   format(10x, ' ')
+
+
+6   format(10x,'band energy as 2Tr[K.H]       = ',f25.15,' ',a2)
+7   format(10x,'hartree energy                = ',f25.15,' ',a2)
+8   format(10x,'ewald   energy                = ',f25.15,' ',a2)
+9   format(10x,'kinetic energy                = ',f25.15,' ',a2)
+
+30  format(10x,'xc total energy               = ',f25.15,' ',a2)
+31  format(10x,'    DFT exchange              = ',f25.15,' ',a2)
+32  format(10x,'    DFT correlation           = ',f25.15,' ',a2)
+33  format(10x,'    EXX contribution          = ',f25.15,' ',a2)
+
+40  format(10x,'pseudopotential energy        = ',f25.15,' ',a2)
+41  format(10x,'    core correction           = ',f25.15,' ',a2)
+42  format(10x,'    local contribution        = ',f25.15,' ',a2)
+43  format(10x,'    nonlocal contribution     = ',f25.15,' ',a2)
+
+11  format(10x,'Ha correction                 = ',f25.15,' ',a2)
+12  format(10x,'XC correction                 = ',f25.15,' ',a2)
+
+10  format(10x,'Harris-Foulkes energy         = ',f25.15,' ',a2)
+13  format(10x,'DFT total energy              = ',f25.15,' ',a2)
+22  format(10x,'delta                         = ',f25.15,' ',a2)
+
+14  format(10x,'GroundState Energy (E-(1/2)TS = ',f25.15,' ',a2)
+15  format(10x,'Free Energy (E-TS)            = ',f25.15,' ',a2)
+16  format(10x,'GroundState Energy (kT --> 0) = ',f25.15,' ',a2)
+17  format(10x,'Dispersion (DFT-D2)           = ',f25.15,' ',a2)
+18  format(10x,'cDFT Energy as 2Tr[K.W]       = ',f25.15,' ',a2)
+19  format(10x,'Number of electrons spin up   = ',f25.15)
+20  format(10x,'Number of electrons spin down = ',f25.15)
+21  format(10x,'Spin polarisation (UP - DN)   = ',f25.15)
+
+23  format(10x,'check for accuracy            = ',f25.15,' ',a2)
+24  format(10x,'number of electrons         . = ',f25.15,' ',a2)
+25  format(10x,'number of electrons  2Tr[KS]  = ',f25.15,' ',a2)
+26  format(10x,'one-electron energy           = ',f25.15,' ',a2)
+27  format(10x,'potential energy V            = ',f25.15,' ',a2)
+28  format(10x,'kinetic energy T              = ',f25.15,' ',a2)
+29  format(10x,'virial V/T                    = ',f25.15,' ',a2)
+50  format(10x,'rescaled DFT exchange         = ',f25.15,' ',a2)
+51  format(10x,'rescaled exact exchange       = ',f25.15,' ',a2)
+
+
+  end subroutine final_energy
+  !!*** get_energy
+
 
 end module energy

@@ -28,15 +28,17 @@
 !!    Various changes to allow selection of on-site analytics or not
 !!   2012/04/02 17:15 dave
 !!    Changes for analytic S and KE matrices
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module blip_gradient
 
-  use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                    tmr_std_eminimisation,   &
+  use timer_stdclocks_module, only: tmr_std_eminimisation,   &
                                     tmr_std_allocation,      &
                                     tmr_std_matrices
-
+  use timer_module,           only: start_timer, stop_timer
+                                    
   implicit none
 
   ! RCS tag for object file identification

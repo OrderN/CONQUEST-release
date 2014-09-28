@@ -30,6 +30,7 @@
 module ionic_data
 
   use global_module, only: io_lun
+  use timer_module,  only: start_timer, stop_timer, cq_timer 
 
   implicit none
 
@@ -107,7 +108,12 @@ contains
     ! Local variables
     character(len=10) :: init_blip_method
     logical           :: flag_blips_from_pao!, flag_atomic_density_from_pao
-    
+    type(cq_timer)    :: tmr_std_loc
+
+!****lat<$    
+    call start_timer(t=tmr_std_loc,who='get_ionic_data',where=1,level=1)
+!****lat>$
+
     ! Decide whether blips are to be initialised from PAOs
     flag_blips_from_pao = .false.
     if (leqi(init_blip_flag,'pao')) flag_blips_from_pao = .true.
@@ -156,6 +162,10 @@ contains
     if (.not. flag_no_atomic_densities) then ! Spline tables
        call spline_atomic_density(n_species)
     end if
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='get_ionic_data')
+!****lat>$
 
     return
   end subroutine get_ionic_data

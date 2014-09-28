@@ -27,11 +27,14 @@
 !!    Changed for output to file not stdout
 !!   2008/02/23 ast
 !!    Added timers
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 module read_pao_info
 
-  use global_module, ONLY: io_lun
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_initialisation
+  use global_module,          only: io_lun
+  use timer_module,           only: start_timer,stop_timer
+  use timer_stdclocks_module, only: tmr_std_initialisation
 
   implicit none
 

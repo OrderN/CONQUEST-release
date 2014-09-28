@@ -94,6 +94,10 @@
 !!   - Added flags and variables for matrix reconstruction
 !!   2013/12/02 M.Arita
 !!   - Added flags and variables for XL-BOMD
+!!   2014/01/17 lat 
+!!    Added new area and flag for EXX 
+!!   2014/09/20 lat
+!!    Added flags for PBE0, Xalpha and Hartree-Fock functional
 !!  SOURCE
 !!
 module global_module
@@ -118,15 +122,15 @@ module global_module
   real(double), allocatable, dimension(:) :: x_atom_cell ! position of atom in sim cell (CC)
   real(double), allocatable, dimension(:) :: y_atom_cell
   real(double), allocatable, dimension(:) :: z_atom_cell
-  integer, allocatable, dimension(:) :: coord_to_glob
-  integer :: ni_in_cell ! Atoms in cell
+  integer,      allocatable, dimension(:) :: coord_to_glob
+  integer      :: ni_in_cell ! Atoms in cell
   real(double) :: ne_in_cell ! Electrons in cell
   ! atom_coord : Use global labelling, in the future this array should
   ! be used instead of x, y, z_atom_cell. by T. Miyazaki
   real(double), dimension(:,:), allocatable :: atom_coord ! Atomic coordinates
-  integer, dimension(:,:), allocatable :: sorted_coord ! Atom IDs of atoms sorted according to x, y, z coords
-  logical, dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
-  integer, dimension(:), allocatable :: flag_cdft_atom
+  integer,      dimension(:,:), allocatable :: sorted_coord ! Atom IDs of atoms sorted according to x, y, z coords
+  logical,      dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
+  integer,      dimension(:),   allocatable :: flag_cdft_atom
   logical :: restart_L, restart_rho, restart_T, restart_X
 
   integer :: global_maxatomspart ! Maximum atoms per partition, if exceeded, triggers partitioning refinement
@@ -170,47 +174,53 @@ module global_module
   ! Numerical flag choosing basis sets
   integer :: flag_basis_set
   integer, parameter :: blips = 1
-  integer, parameter :: PAOS = 2
+  integer, parameter :: PAOS  = 2
 
   ! Numerical flag choosing functional type
   integer :: flag_functional_type
-  character(len=15) :: functional_description 
+  character(len=15)  :: functional_description 
   integer, parameter :: functional_lda_pz81        = 1
   integer, parameter :: functional_lda_gth96       = 2
   integer, parameter :: functional_lda_pw92        = 3    ! PRB 45, 13244 (1992) + PRL 45, 566 (1980)
+  integer, parameter :: functional_xalpha          = 4    ! Slater/Dirac exchange only  ; no correlation
+  integer, parameter :: functional_hartree_fock    = 10   ! Hartree-Fock exact exchange ; no correlation  
+
   integer, parameter :: functional_gga_pbe96       = 101  ! Standard PBE
   integer, parameter :: functional_gga_pbe96_rev98 = 102  ! revPBE (PBE + Zhang-Yang 1998)
-  integer, parameter :: functional_gga_pbe96_r99   = 103  ! RPBE (PBE + Hammer-Hansen-Norskov 1999)
+  integer, parameter :: functional_gga_pbe96_r99   = 103  ! RPBE   (PBE + Hammer-Hansen-Norskov 1999)
 
+  integer, parameter :: functional_hyb_pbe0        = 201  ! PBE0   (hybrid PBE with exx_alpha=0.25)
+ 
   ! Switch for variation of blips in get_support_gradient
   integer :: WhichPulay
-  integer, parameter :: PhiPulay = 1
-  integer, parameter :: SPulay = 2
+  integer, parameter :: PhiPulay  = 1
+  integer, parameter :: SPulay    = 2
   integer, parameter :: BothPulay = 3 
 
   ! What are the local functions ? 
-  integer, parameter :: sf = 1  ! Support functions
-  integer, parameter :: nlpf = 2  ! Projector functions
+  integer, parameter :: sf   = 1 ! Support functions
+  integer, parameter :: nlpf = 2 ! Projector functions
   integer, parameter :: paof = 3 ! Pseudo-atomic orbitals
   integer, parameter :: dens = 4 ! Atomic charge density
 
   ! Define areas of the code
-  integer, parameter :: n_areas = 12
-  integer, parameter :: area_init = 1
-  integer, parameter :: area_matrices = 2
-  integer, parameter :: area_ops = 3
-  integer, parameter :: area_DM = 4 
-  integer, parameter :: area_SC = 5
-  integer, parameter :: area_minE = 6
+  integer, parameter :: n_areas        = 13
+  integer, parameter :: area_init      = 1
+  integer, parameter :: area_matrices  = 2
+  integer, parameter :: area_ops       = 3
+  integer, parameter :: area_DM        = 4 
+  integer, parameter :: area_SC        = 5
+  integer, parameter :: area_minE      = 6
   integer, parameter :: area_moveatoms = 7
-  integer, parameter :: area_index = 8
-  integer, parameter :: area_general = 9
-  integer, parameter :: area_pseudo = 10
-  integer, parameter :: area_basis = 11
-  integer, parameter :: area_integn = 12
-  integer :: iprint_init, iprint_mat, iprint_ops, iprint_DM, &
-             iprint_SC, iprint_minE, iprint_MD, iprint_index, &
-             iprint_gen, iprint_pseudo, iprint_basis, iprint_intgn, &
+  integer, parameter :: area_index     = 8
+  integer, parameter :: area_general   = 9
+  integer, parameter :: area_pseudo    = 10
+  integer, parameter :: area_basis     = 11
+  integer, parameter :: area_integn    = 12
+  integer, parameter :: area_exx       = 13
+  integer :: iprint_init, iprint_mat,    iprint_ops,   iprint_DM,      &
+             iprint_SC,   iprint_minE,   iprint_MD,    iprint_index, &
+             iprint_gen,  iprint_pseudo, iprint_basis, iprint_intgn, &
              iprint_time, iprint_MDdebug
 
   integer, parameter :: IPRINT_TIME_THRES0 = 0  ! Always print
@@ -250,6 +260,17 @@ module global_module
        dscf_homo_limit, dscf_lumo_limit
   real(double) :: dscf_HOMO_thresh, dscf_LUMO_thresh
 
+  ! For EXX
+  logical      :: flag_exx      = .false.
+  integer      :: exx_counter   = -1
+  real(double) :: exx_alpha     = zero      ! mixing factor for hybrid Exc
+  real(double) :: exx_pulay_r0  = zero 
+  real(double) :: exx_scf_ratio = zero
+  real(double) :: exx_scf_tol   = zero 
+  real(double), parameter :: exx_hgrid_coarse = 0.80  
+  real(double), parameter :: exx_hgrid_medium = 0.50
+  real(double), parameter :: exx_hgrid_fine   = 0.20  
+
   ! Flag to control if matrix L is dumped to files
   logical :: flag_dump_L
 
@@ -263,7 +284,7 @@ module global_module
   logical :: flag_SkipEarlyDM
   logical :: flag_MDcontinue
   logical :: flag_MDdebug
-  logical :: flag_FixCOM
+  logical :: flag_FixCOM 
   integer :: McWFreq
   integer :: MDinit_step  
   real(double),parameter   :: shift_in_bohr = 1.0E-03_double

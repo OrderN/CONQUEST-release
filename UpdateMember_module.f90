@@ -16,7 +16,8 @@
 !!  CREATION DATE
 !!   2013/07/02
 !!  MODIFICATION HISTORY
-!!
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module UpdateMember_module
@@ -24,8 +25,9 @@ module UpdateMember_module
   ! Module usage
   use datatypes
   use basic_types
-  use global_module, ONLY: flag_MDdebug,iprint_MDdebug
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_indexing,tmr_std_allocation
+  use global_module,          only: flag_MDdebug, iprint_MDdebug
+  use timer_module,           only: start_timer, stop_timer
+  use timer_stdclocks_module, only: tmr_std_indexing, tmr_std_allocation
 
   implicit none
   save

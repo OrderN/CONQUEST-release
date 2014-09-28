@@ -135,6 +135,7 @@ contains
     return
   end subroutine fft3_init_wrapper
 
+
   subroutine fft3_exec_wrapper( cdata, nsize, isign )
     use datatypes
 
@@ -143,8 +144,13 @@ contains
     complex(double_cplx), intent(inout) :: cdata(nsize,nsize,nsize)
     integer, intent(in) :: nsize, isign
 
-    call zfft3d( cdata, nsize, nsize, nsize, isign )
-
+    if( (-1)*isign == -1 ) then ! forward
+       call zfft3d( cdata, nsize, nsize, nsize, isign )
+    else if( (-1)*isign == +1 ) then ! reverse
+       call zfft3d( cdata, nsize, nsize, nsize, isign )
+    end if
+    
     return
   end subroutine fft3_exec_wrapper
+
 end module fft_interface_module

@@ -38,6 +38,7 @@ module XC_module
        get_xc_potential_GGA_PBE,    & ! GGA-PBE96 (rev98 or rev99), no spin
        eps_xc_of_r_GGA_PBE,         &
        get_dxc_potential_GGA_PBE,   &
+       get_xc_potential_hyb_PBE0,   & ! hyb-PBE0
        build_gradient,              & ! calculates gradient of density
        map_density                    ! map cartisian coordinates to
                                       ! density index, obsolete
@@ -105,10 +106,13 @@ contains
   !!   2012/04/03 L.Tong
   !!   - Added optional parameters x_epsilon and c_epsilon for output of
   !!     the exchange and correlation parts of xc_epsilon respectively.
+  !!   2014/09/24 L.Truflandier
+  !!   - Added optional x_energy for output
   !!  SOURCE
   !!
-  subroutine get_xc_potential(density, xc_potential, xc_epsilon, &
-                              xc_energy, size, x_epsilon, c_epsilon)
+  subroutine get_xc_potential(density, xc_potential, xc_epsilon,     &
+                              xc_energy, size, x_epsilon, c_epsilon, &
+                              x_energy)
 
     use datatypes
     use numbers
@@ -124,24 +128,26 @@ contains
     real(double), dimension(:), intent(out) :: xc_potential, xc_epsilon
     ! optional
     real(double), dimension(:), intent(out), optional :: x_epsilon, c_epsilon
+    real(double),               intent(out), optional :: x_energy
 
     ! Local variables
     integer      :: n
     real(double) :: denominator, e_correlation, e_exchange, ln_rs, &
                     numerator, rcp_rs, rho, rs, rs_ln_rs, sq_rs,   &
                     v_correlation, v_exchange
-    real(double), parameter :: alpha = -0.45817_double
-    real(double), parameter :: beta_1 = 1.0529_double
-    real(double), parameter :: beta_2 = 0.3334_double
-    real(double), parameter :: gamma = - 0.1423_double
-    real(double), parameter :: p = 0.0311_double
-    real(double), parameter :: q = - 0.048_double
-    real(double), parameter :: r = 0.0020_double
-    real(double), parameter :: s = - 0.0116_double
+    real(double), parameter :: alpha  = -0.45817_double
+    real(double), parameter :: beta_1 =  1.0529_double
+    real(double), parameter :: beta_2 =  0.3334_double
+    real(double), parameter :: gamma  = -0.1423_double
+    real(double), parameter :: p =  0.0311_double
+    real(double), parameter :: q = -0.048_double
+    real(double), parameter :: r =  0.0020_double
+    real(double), parameter :: s = -0.0116_double
 
     xc_energy = zero
     if (present(x_epsilon)) x_epsilon = zero
     if (present(c_epsilon)) c_epsilon = zero
+    if (present(x_energy))  x_energy  = zero
 
     do n = 1, n_my_grid_points ! loop over grid pts and store potl on each
        rho = density(n)
@@ -161,12 +167,12 @@ contains
        sq_rs = sqrt(rs)
        if (rs>=one) then
           denominator = one / (one + beta_1 * sq_rs + beta_2 * rs)
-          numerator = one + seven_sixths * beta_1 * sq_rs +  &
+          numerator   = one + seven_sixths * beta_1 * sq_rs +  &
                four_thirds * beta_2 * rs
           e_correlation = gamma * denominator
           v_correlation = gamma * numerator * denominator * denominator
        else if ((rs<one).and.(rs>RD_ERR)) then
-          ln_rs = log(rs)
+          ln_rs    = log(rs)
           rs_ln_rs = rs * ln_rs
           e_correlation = p * ln_rs + q  + r * rs_ln_rs + s * rs
           v_correlation = e_correlation -  &
@@ -176,10 +182,11 @@ contains
           v_correlation = zero
        end if
        if (present(c_epsilon)) c_epsilon(n) = e_correlation
+       if (present(x_energy))  x_energy     = x_energy + e_exchange * density(n)
        ! Both X and C
-       xc_energy = xc_energy + (e_exchange + e_correlation) * density(n)
+       xc_energy       = xc_energy  + (e_exchange + e_correlation) * density(n)
        xc_potential(n) = v_exchange + v_correlation
-       xc_epsilon(n) = e_exchange + e_correlation
+       xc_epsilon(n)   = e_exchange + e_correlation
        ! These two for testing
        ! Just C
        !xc_energy = xc_energy+e_correlation*density(n)
@@ -191,8 +198,11 @@ contains
        !xc_epsilon(n) = e_exchange
     end do ! do n_my_grid_points
     call gsum(xc_energy)
+    if (present(x_energy)) call gsum(x_energy)
     ! and 'integrate' the energy over the volume of the grid point
     xc_energy = xc_energy * grid_point_volume
+    if (present(x_energy)) x_energy =  x_energy * grid_point_volume
+
     return
   end subroutine get_xc_potential
   !!***
@@ -264,17 +274,17 @@ contains
        rho = density(n)
        if (rho > RD_ERR) then ! Find radius of hole
           rcp_rs = ( four*third * pi * rho )**(third)
-          rs = one/rcp_rs
-          if (rs < 0.01_double) write (io_lun, *) 'rs out of range ', n
+          rs     = one/rcp_rs
+          !if (rs < 0.01_double) write (io_lun, *) 'rs out of range ', n
        else
           rcp_rs = zero
-          rs = zero
-          write (io_lun, *) 'rho out of range ', n
+          rs     = zero
+          !write (io_lun, *) 'rho out of range ', n
        end if
        if (rs > zero) then
           drs_dRho = -rs / (3.0 * rho)
-          t1 = a0 + rs*(a1 + rs * (a2 + rs * a3))
-          t2 = rs * (b1 + rs * (b2 + rs * (b3 + rs * b4)))
+          t1  = a0 + rs*(a1 + rs * (a2 + rs * a3))
+          t2  = rs * (b1 + rs * (b2 + rs * (b3 + rs * b4)))
           dt1 = a1 + rs * (2.0 * a2 + rs * 3.0 * a3)
           dt2 = b1 + rs * (2.0 * b2 + rs * (3.0 * b3 + rs * 4.0 * b4))
           xc_energy = xc_energy - (t1/t2)*rho
@@ -422,7 +432,7 @@ contains
 
        ! Both exchange and correlation
 
-       xc_epsilon(n) = e_exchange + e_correlation
+       xc_epsilon(n)   = e_exchange + e_correlation
        xc_energy_total = xc_energy_total + xc_epsilon(n)*rho
 
        ! POTENTIAL
@@ -812,11 +822,13 @@ contains
   !!     point-wise calculations to be done in other parts of the
   !!     program if required---this saves a lot of memory in vdWDFT
   !!     calculations.
+  !!   2014/09/24 L.Truflandier
+  !!   - Added optional x_energy_total for output
   !!  SOURCE
   !!
   subroutine get_xc_potential_LSDA_PW92(density, xc_potential,       &
                                         xc_epsilon, xc_energy_total, &
-                                        size)
+                                        size, x_energy_total         )
 
     use datatypes
     use numbers
@@ -833,25 +845,34 @@ contains
     real(double), dimension(:,:), intent(out) :: xc_potential
     real(double), dimension(:),   intent(out) :: xc_epsilon
     real(double),                 intent(out) :: xc_energy_total
+    real(double), optional,       intent(out) :: x_energy_total
 
     ! Local variables
     integer      :: rr, spin
     real(double) :: eps_x, eps_c, rho_tot_r
     real(double), dimension(nspin) :: rho_r, Vx, Vc
 
-    ! loop over grid points on each node
+    ! initialisation
+    if (present(x_energy_total)) x_energy_total  = zero
     xc_energy_total = zero
+
+    ! loop over grid points on each node
     do rr = 1, n_my_grid_points
        rho_r(1:nspin) = density(rr,1:nspin)
-       rho_tot_r = rho_r(1) + rho_r(nspin)
+       rho_tot_r      = rho_r(1) + rho_r(nspin)
        call Vxc_of_r_LSDA_PW92(nspin, rho_r, eps_x=eps_x, eps_c=eps_c,&
                                Vx=Vx, Vc=Vc)
-       xc_epsilon(rr) = eps_x + eps_c
+
+       xc_epsilon(rr)           = eps_x       + eps_c
        xc_potential(rr,1:nspin) = Vx(1:nspin) + Vc(1:nspin)
        xc_energy_total = xc_energy_total + xc_epsilon(rr) * rho_tot_r
+       if (present(x_energy_total)) x_energy_total  =  x_energy_total + eps_x * rho_tot_r
     end do
     call gsum(xc_energy_total)
+    if (present(x_energy_total)) call gsum(x_energy_total)
+
     xc_energy_total = xc_energy_total * grid_point_volume
+    if (present(x_energy_total)) x_energy_total =  x_energy_total * grid_point_volume
 
     return
   end subroutine get_xc_potential_LSDA_PW92
@@ -1216,11 +1237,13 @@ contains
   !! CREATION DATE
   !!   2012/04/27
   !! MODIFICATION HISTORY
+  !!   2014/09/24 L.Truflandier
+  !!   - Added optional x_energy_total for output
   !! SOURCE
   !!
-  subroutine get_xc_potential_GGA_PBE(density, xc_potential,       &
+  subroutine get_xc_potential_GGA_PBE(density, xc_potential,            &
                                       xc_epsilon, xc_energy, grid_size, &
-                                      flavour)
+                                      flavour, x_energy )
     use datatypes
     use numbers
     use global_module, only: rcellx, rcelly, rcellz,          &
@@ -1241,10 +1264,12 @@ contains
     real(double), dimension(:),   intent(out) :: xc_epsilon
     real(double), dimension(:,:), intent(out) :: xc_potential
     real(double),                 intent(out) :: xc_energy
+    real(double), optional,       intent(out) ::  x_energy
     integer,      optional,       intent(in)  :: flavour
+
     ! local variables
-    integer :: PBE_type
-    integer :: rr, spin, stat
+    integer      :: PBE_type
+    integer      :: rr, spin, stat
     real(double) :: eps_x, eps_c, rho_tot_r
     real(double),         dimension(nspin)        :: rho_r
     real(double),         dimension(3,nspin)      :: grho_r
@@ -1266,20 +1291,21 @@ contains
     end if
 
     ! initialisation
+    if (present(x_energy)) x_energy = zero
     grad_density = zero
-    xc_epsilon = zero
-    xc_potential = zero
+    xc_epsilon   = zero
+    xc_potential = zero    
+    xc_energy    = zero
 
     ! Build the gradient of the density
     do spin = 1, nspin
        call build_gradient(density(:,spin), grad_density(:,:,spin), grid_size)
     end do
 
-    xc_energy = zero
     do rr = 1, n_my_grid_points
        rho_tot_r = density(rr,1) + density(rr,nspin)
        do spin = 1, nspin
-          rho_r(spin) = density(rr,spin)
+          rho_r(spin)      = density(rr,spin)
           grho_r(1:3,spin) = grad_density(rr,1:3,spin)
        end do
        call eps_xc_of_r_GGA_PBE(nspin, PBE_type, rho_r, grho_r, &
@@ -1287,7 +1313,8 @@ contains
                                 drhoEps_x=drhoEps_x,           &
                                 drhoEps_c=drhoEps_c)
        xc_epsilon(rr) = eps_x + eps_c
-       xc_energy = xc_energy + rho_tot_r * xc_epsilon(rr)
+       xc_energy      = xc_energy + rho_tot_r * xc_epsilon(rr)
+       if (present(x_energy)) x_energy = x_energy + rho_tot_r * eps_x
        ! for potential
        do spin = 1, nspin
           xc_potential(rr,spin) = drhoEps_x(0,spin) + drhoEps_c(0,spin)
@@ -1299,13 +1326,15 @@ contains
        end do
     end do ! rr
     call gsum(xc_energy)
+    if (present(x_energy)) call gsum(x_energy)
     xc_energy = xc_energy * grid_point_volume
+    if (present(x_energy)) x_energy = x_energy * grid_point_volume
 
     ! add the second term to potential
     do spin = 1, nspin
        ! initialise for each spin
        rcp_drhoEps_xc = zero
-       second_term = zero
+       second_term    = zero
        ! FFT drhoEps_xc / dgrho(spin) to reciprocal space
        call fft3(grad_density(:,1,spin), rcp_drhoEps_xc(:,1), grid_size, -1)
        call fft3(grad_density(:,2,spin), rcp_drhoEps_xc(:,2), grid_size, -1)
@@ -1332,6 +1361,158 @@ contains
     call reg_dealloc_mem(area_ops, grid_size*(1+3*(1+nspin)), type_dbl)
 
   end subroutine get_xc_potential_GGA_PBE
+  !!*****
+
+
+  !!****f* XC_module/get_xc_potential_hyb_PBE0
+  !! PURPOSE
+  !!   
+  !!   Work routine based on get_xc_potential_GGA_PBE.
+  !!   It will be recoded in near futur to handle any hybrid functional.
+  !!   For now just handle one coefficient as in PBE0.
+  !! USAGE
+  !! 
+  !! INPUTS
+  !!
+  !!   integer      size                : size of the real space grid
+  !!   integer      flavour             : flavour of PBE functional (optional)
+  !!   real(double) density(size,nspin) : spin dependent density
+  !! OUTPUT
+  !!   real(double) xc_energy                : total xc-energy (sum over spin)
+  !!   real(double) x_energy                 : exchange energy only (sum over spin)
+  !!   real(double) xc_epsilon(size)         : xc-energy density
+  !!   real(double) xc_potential(size,nspin) : xc-potential
+  !! 
+  !! AUTHOR
+  !!   L.Tong/L.Truflandier
+  !! CREATION DATE
+  !!   2014/09/24
+  !! MODIFICATION HISTORY
+  !!
+  !! SOURCE
+  !!
+  subroutine get_xc_potential_hyb_PBE0(density, xc_potential, exx_a,     &
+                                       xc_epsilon, xc_energy, grid_size, &
+                                       flavour, x_energy )
+    use datatypes
+    use numbers
+    use global_module, only: rcellx, rcelly, rcellz, spin_factor, nspin, &
+                             functional_gga_pbe96
+    use dimens,        only: grid_point_volume, n_my_grid_points
+    use GenComms,      only: gsum, cq_abort
+    use fft_module,    only: fft3, recip_vector
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+
+    implicit none
+
+    ! passed variables
+    integer,                      intent(in)  :: grid_size
+    real(double), dimension(:,:), intent(in)  :: density
+    real(double), dimension(:),   intent(out) :: xc_epsilon
+    real(double), dimension(:,:), intent(out) :: xc_potential
+    real(double),                 intent(out) :: xc_energy
+    real(double), optional,       intent(out) :: x_energy
+    integer,      optional,       intent(in)  :: flavour
+    real(double),                 intent(in)  :: exx_a
+
+    ! local variables
+    integer      :: PBE_type
+    integer      :: rr, spin, stat
+    real(double) :: eps_x, eps_c, rho_tot_r
+    real(double),         dimension(nspin)        :: rho_r
+    real(double),         dimension(3,nspin)      :: grho_r
+    real(double),         dimension(0:3,nspin)    :: drhoEps_x, drhoEps_c
+    real(double),         dimension(:,:,:), allocatable :: grad_density
+    real(double),         dimension(:),     allocatable :: second_term
+    complex(double_cplx), dimension(:,:),   allocatable :: rcp_drhoEps_xc
+
+    allocate(grad_density(grid_size,3,nspin), second_term(grid_size), &
+             rcp_drhoEps_xc(grid_size,3), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("get_xc_potential_GGA_PBE: Error alloc mem: ", grid_size)
+    call reg_alloc_mem(area_ops, grid_size*(1+3*(1+nspin)), type_dbl)
+
+    if (present(flavour)) then
+       PBE_type = flavour
+    else
+       PBE_type = functional_gga_pbe96
+    end if
+
+    ! setup exx_a
+
+    ! Initialisation
+    if (present(x_energy)) x_energy = zero
+    grad_density = zero
+    xc_epsilon   = zero
+    xc_potential = zero    
+    xc_energy    = zero
+
+    ! Build the gradient of the density
+    do spin = 1, nspin
+       call build_gradient(density(:,spin), grad_density(:,:,spin), grid_size)
+    end do
+
+    do rr = 1, n_my_grid_points
+       rho_tot_r = density(rr,1) + density(rr,nspin)
+       do spin = 1, nspin
+          rho_r(spin)      = density(rr,spin)
+          grho_r(1:3,spin) = grad_density(rr,1:3,spin)
+       end do
+       call eps_xc_of_r_GGA_PBE(nspin, PBE_type, rho_r, grho_r, &
+                                eps_x    =eps_x, &
+                                eps_c    =eps_c, &
+                                drhoEps_x=drhoEps_x, &
+                                drhoEps_c=drhoEps_c)
+       xc_epsilon(rr) = exx_a * eps_x + eps_c
+       xc_energy      = xc_energy + rho_tot_r * xc_epsilon(rr)
+       if (present(x_energy)) x_energy =  x_energy + exx_a * rho_tot_r * eps_x
+       ! for potential
+       do spin = 1, nspin
+          xc_potential(rr,spin) = exx_a * drhoEps_x(0,spin) + drhoEps_c(0,spin)
+          ! note that grad_density(rr,1:3,1:spin) has already been used
+          ! at this point, so we can savely reuse this slot to store
+          ! d(rho * eps_xc) / dgrho at rr.
+          grad_density(rr,1:3,spin) = exx_a * drhoEps_x(1:3,spin) + &
+                                      drhoEps_c(1:3,spin)
+       end do
+    end do ! rr
+    call gsum(xc_energy)
+    if (present(x_energy)) call gsum(x_energy)
+    xc_energy = xc_energy * grid_point_volume
+    if (present(x_energy)) x_energy =  x_energy * grid_point_volume
+
+    ! add the second term to potential
+    do spin = 1, nspin
+       ! initialise for each spin
+       rcp_drhoEps_xc = zero
+       second_term    = zero
+       ! FFT drhoEps_xc / dgrho(spin) to reciprocal space
+       call fft3(grad_density(:,1,spin), rcp_drhoEps_xc(:,1), grid_size, -1)
+       call fft3(grad_density(:,2,spin), rcp_drhoEps_xc(:,2), grid_size, -1)
+       call fft3(grad_density(:,3,spin), rcp_drhoEps_xc(:,3), grid_size, -1)
+
+       ! dot product with i * recip_vectors, and store in the first
+       ! component of rcp_drhoEps_xc (used as temp storage)
+       rcp_drhoEps_xc(:,1) = &
+            rcp_drhoEps_xc(:,1) * minus_i * recip_vector(:,1) + &
+            rcp_drhoEps_xc(:,2) * minus_i * recip_vector(:,2) + &
+            rcp_drhoEps_xc(:,3) * minus_i * recip_vector(:,3)
+
+       ! FFT back to obtain the convolution
+       call fft3(second_term(:), rcp_drhoEps_xc(:,1), grid_size, +1)
+       ! accumulate to potential
+       do rr = 1, n_my_grid_points
+          xc_potential(rr,spin) = xc_potential(rr,spin) + second_term(rr)
+       end do
+    end do ! spin
+
+    deallocate(grad_density, second_term, rcp_drhoEps_xc, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("get_xc_potential_GGA_PBE: Error dealloc mem")
+    call reg_dealloc_mem(area_ops, grid_size*(1+3*(1+nspin)), type_dbl)
+
+    return
+  end subroutine get_xc_potential_hyb_PBE0
   !!*****
 
 
@@ -2014,14 +2195,14 @@ contains
     real(double) :: denominator, e_correlation, e_exchange, ln_rs, &
                     vnumerator, rcp_rs, rho, rs, rs_ln_rs, sq_rs,  &
                     dv_correlation, dv_exchange, dfirst, dsecond
-    real(double), parameter :: alpha = -0.45817_double
-    real(double), parameter :: beta_1 = 1.0529_double
-    real(double), parameter :: beta_2 = 0.3334_double
-    real(double), parameter :: gamma = - 0.1423_double
-    real(double), parameter :: p = 0.0311_double
-    real(double), parameter :: q = - 0.048_double
-    real(double), parameter :: r = 0.0020_double
-    real(double), parameter :: s = - 0.0116_double
+    real(double), parameter :: alpha  = -0.45817_double
+    real(double), parameter :: beta_1 =  1.0529_double
+    real(double), parameter :: beta_2 =  0.3334_double
+    real(double), parameter :: gamma  = -0.1423_double
+    real(double), parameter :: p =  0.0311_double
+    real(double), parameter :: q = -0.048_double
+    real(double), parameter :: r =  0.0020_double
+    real(double), parameter :: s = -0.0116_double
     real(double), parameter :: ninth = 1.0_double/9.0_double
     real(double), parameter :: sixth = 1.0_double/6.0_double
 
@@ -2222,10 +2403,11 @@ contains
     ! Passed variables
     integer :: size
 
-    real(double) :: density(size), dxc_potential(size)
-    real(double), optional :: eclda(size)
-    real(double), optional :: declda_drho(size)
-    real(double), optional :: d2eclda_drho2(size)
+    real(double), intent(in)    :: density(size)
+    real(double), intent(inout) :: dxc_potential(size)
+    real(double), optional   :: eclda(size)
+    real(double), optional   :: declda_drho(size)
+    real(double), optional   :: d2eclda_drho2(size)
 
     !     Local variables
     integer n
@@ -2252,20 +2434,20 @@ contains
     real(double), parameter :: A      = 0.031091_double
 
     !     Precalculated constants
-    real(double), parameter :: k00 = 1.611991954_double     ! (4*pi/3)**(1/3)
-    real(double), parameter :: k01 = -0.458165347_double    ! -3/(2*pi*alpha)
-    real(double), parameter :: k02 = -0.062182_double       ! -2*A
-    real(double), parameter :: k03 = -0.0132882934_double   ! -2*A*alpha1
-    real(double), parameter :: k04 = 0.4723158174_double    ! 2*A*beta1
-    real(double), parameter :: k05 = 0.2230841432_double    ! 2*A*beta2
-    real(double), parameter :: k06 = 0.1018665524_double    ! 2*A*beta3
-    real(double), parameter :: k07 = 0.03065199508_double   ! 2*A*beta4
-    real(double), parameter :: k08 = -0.008858862267_double ! 2*k03/3
-    real(double), parameter :: k09 = 0.0787193029_double    ! k04/6
-    real(double), parameter :: k10 = 0.074361381067_double  ! k05/3
-    real(double), parameter :: k11 = 0.0509332762_double    ! k06/2
-    real(double), parameter :: k12 = 0.0204346633867_double ! 2*k07/3
-    real(double), parameter :: four_ninths = 4.0_double/9.0_double
+    real(double), parameter :: k00 =  1.611991954_double     ! (4*pi/3)**(1/3)
+    real(double), parameter :: k01 = -0.458165347_double     ! -3/(2*pi*alpha)
+    real(double), parameter :: k02 = -0.062182_double        ! -2*A
+    real(double), parameter :: k03 = -0.0132882934_double    ! -2*A*alpha1
+    real(double), parameter :: k04 =  0.4723158174_double    ! 2*A*beta1
+    real(double), parameter :: k05 =  0.2230841432_double    ! 2*A*beta2
+    real(double), parameter :: k06 =  0.1018665524_double    ! 2*A*beta3
+    real(double), parameter :: k07 =  0.03065199508_double   ! 2*A*beta4
+    real(double), parameter :: k08 = -0.008858862267_double  ! 2*k03/3
+    real(double), parameter :: k09 =  0.0787193029_double    ! k04/6
+    real(double), parameter :: k10 =  0.074361381067_double  ! k05/3
+    real(double), parameter :: k11 =  0.0509332762_double    ! k06/2
+    real(double), parameter :: k12 =  0.0204346633867_double ! 2*k07/3
+    real(double), parameter :: four_ninths       = 4.0_double/9.0_double
     real(double), parameter :: minus_four_thirds = -4.0_double/3.0_double
     real(double), parameter :: k13 = 0.0027477997778_double ! (k08-k03)/k00
 
@@ -2404,18 +2586,18 @@ contains
     use global_module, only: rcellx, rcelly, rcellz, &
                              functional_gga_pbe96_rev98, functional_gga_pbe96_r99
     use dimens,        only: grid_point_volume, n_my_grid_points
-    use GenComms,      only: gsum, myid
-!    use energy,        only: delta_E_xc
+    use GenComms,      only: gsum
     use fft_module,    only: fft3, recip_vector
+!    use energy,        only: delta_E_xc
 
     implicit none
 
     ! Passed variables
     integer size
-    real(double) :: density(size)
-    real(double) :: density_out(size)
-    real(double) :: dxc_potential(size)
-    integer, optional :: flavour
+    real(double), intent(in)      :: density(size)
+    real(double), intent(in)      :: density_out(size)
+    real(double), intent(inout)   :: dxc_potential(size)
+    integer, optional, intent(in) :: flavour
 
     ! Local variables
     integer n, i

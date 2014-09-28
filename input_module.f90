@@ -4,7 +4,7 @@
 ! ------------------------------------------------------------------------------
 ! Module input_module
 ! ------------------------------------------------------------------------------
-! $Log$
+! Code area 1: initialisation
 ! ------------------------------------------------------------------------------
 
 !!****h* Conquest/input_module
@@ -24,7 +24,8 @@
 module input_module
 
   use datatypes
-  use GenComms, ONLY: inode, ionode
+  use GenComms,      only: inode, ionode
+  use timer_module,  only: start_timer, stop_timer, cq_timer
 
   implicit none
 
@@ -47,7 +48,7 @@ module input_module
   ! Files
   integer, parameter :: lun_min = 10
   integer, parameter :: lun_max = 99
-  integer, parameter :: nunits = 90!lun_max-lun_min+1
+  integer, parameter :: nunits  = 90!lun_max-lun_min+1
   logical, dimension(lun_min:lun_max) :: free_lun != (/90*.true./)!nunits*.true./)
   data free_lun /nunits*.true./
 
@@ -84,15 +85,20 @@ contains
 !!  
   subroutine load_input
 
-    use GenComms, ONLY: inode, ionode, gcopy, cq_abort
+    use GenComms, only: inode, ionode, gcopy, cq_abort
 
     implicit none
 
-    integer :: lun, stat, i, l,j
+    type(cq_timer)     :: tmr_std_loc
     character(len=132) :: line
-    character(len=10) :: slabel
-    logical :: good_line, done
-    real(double) :: r
+    character(len=10)  :: slabel
+    real(double)       :: r
+    logical            :: good_line, done
+    integer            :: lun, stat, i, l, j
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='load_input',where=1,level=3)
+!****lat>$
 
     ! Count lines in input file on ionode
     if(inode==ionode) then
@@ -173,6 +179,11 @@ contains
     else
        fdf_debug = .false.
     end if
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='load_input')
+!****lat>$
+
     return
   end subroutine load_input
 !!***

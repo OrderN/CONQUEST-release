@@ -39,22 +39,23 @@
 !!    Changed for output to file not stdout
 !!  SOURCE
 !!
-module primary_module
+module primary_module 
 
   ! Module usage 
   use datatypes
-  use global_module, ONLY: io_lun
   use basic_types
-  use GenComms, ONLY: cq_abort
+  use timer_module,  only: start_timer, stop_timer, cq_timer
+  use global_module, only: io_lun
+  use GenComms,      only: cq_abort
 
   implicit none
   save
 
   ! Used for identifying object files (RCS ident command)
   character(len=80) :: RCSid = "$Id$"
-
   type(primary_set) :: domain ! Integration grid points
   type(primary_set) :: bundle ! Atoms
+
 !!***
 
 contains
@@ -90,6 +91,8 @@ contains
 !!    Removed MPI_Abort
 !!   31/05/2002 dave
 !!    Added important bug fix from Tsuyoshi (zero iprim_seq only if members)
+!!   22/01/2014 lat
+!!    Added important iprim_part setup in make_prime/(de)allocate_primary_set
 !!  SOURCE
 !!
   subroutine make_prim(groups,prim,myid,m_id_glob, &
@@ -103,15 +106,16 @@ contains
 
     ! Passed variables
     type(group_set), target :: groups
-    type(primary_set) :: prim
-    integer, intent(in) :: myid
-    integer, dimension(:), intent(IN), OPTIONAL :: m_id_glob
+    type(primary_set)       :: prim
+    integer, intent(in)     :: myid
+    integer,      dimension(:), intent(IN), OPTIONAL :: m_id_glob
     real(double), dimension(:), intent(IN), OPTIONAL :: x_mem_cell
     real(double), dimension(:), intent(IN), OPTIONAL :: y_mem_cell
     real(double), dimension(:), intent(IN), OPTIONAL :: z_mem_cell
-    integer, dimension(:), intent(IN), OPTIONAL :: spec
+    integer,      dimension(:), intent(IN), OPTIONAL :: spec
 
     ! Local variables
+    type(cq_timer) :: tmr_std_loc
     ! iprojx(ip),y,z: shadows of primary-set groups on cell axes
     integer :: iprojx(groups%mx_gedge)
     integer :: iprojy(groups%mx_gedge)
@@ -121,6 +125,11 @@ contains
     real(double) :: dcellx,dcelly,dcellz
     real(double) :: xadd,yadd,zadd
     logical :: members
+
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='make_prim',where=9,level=2)
+!****lat>$
 
     ! First determine if we're building details of members of set
     members = (PRESENT(m_id_glob).AND.PRESENT(x_mem_cell).AND.&
@@ -201,7 +210,8 @@ contains
                      prim%n_prim+prim%nm_nodgroup(ng)-ni,prim%mx_iprim)
              endif
              if(members) then
-                prim%iprim_seq(prim%n_prim) = ni
+                prim%iprim_seq(prim%n_prim)  = ni
+                prim%iprim_part(prim%n_prim) = ng
                 prim%ig_prim(prim%n_prim)= &
                      m_id_glob(groups%icell_beg(ind_group)+ni-1)
                 prim%xprim(prim%n_prim)= &
@@ -212,8 +222,10 @@ contains
                      z_mem_cell(groups%icell_beg(ind_group)+ni-1)+zadd
                 prim%species(prim%n_prim)= &
                      spec(groups%icell_beg(ind_group)+ni-1)
-                if(iprint_gen>4.AND.myid==0) write(io_lun,fmt='(2x,"Prim atom: ",i4," position: ",3f8.3)') prim%n_prim, &
-                     prim%xprim(prim%n_prim),prim%yprim(prim%n_prim),prim%zprim(prim%n_prim)
+                if(iprint_gen>4.AND.myid==0) then
+                   write(io_lun,fmt='(2x,"Prim atom: ",i4," position: ",3f8.3)') prim%n_prim, &
+                        prim%xprim(prim%n_prim),prim%yprim(prim%n_prim),prim%zprim(prim%n_prim)
+                end if
              endif
           enddo
        endif
@@ -221,6 +233,12 @@ contains
           prim%nm_nodbeg(ng+1)=prim%nm_nodbeg(ng)+prim%nm_nodgroup(ng)
        endif
     enddo
+
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='make_prim')
+!****lat>$
+
     return
   end subroutine make_prim
 !!***
@@ -368,9 +386,14 @@ contains
        if(stat/=0) then
           call cq_abort('alloc_prim: error(11) species')
        endif
+       allocate(prim%iprim_part(prim%mx_iprim),STAT=stat)
+       if(stat/=0) then
+          call cq_abort('alloc_prim: error(12) iprim_part')
+       endif
     else
-       nullify(prim%iprim_seq,prim%ig_prim, &
-            prim%xprim,prim%yprim,prim%zprim,prim%species)
+       nullify(prim%iprim_seq,prim%ig_prim,   &
+            prim%xprim,prim%yprim,prim%zprim, &
+            prim%species,prim%iprim_part)
     endif
     return
   end subroutine allocate_primary_set
@@ -415,9 +438,10 @@ contains
     integer :: stat
 
     deallocate(prim%species,prim%zprim,prim%yprim,prim%xprim, &
-         prim%ig_prim,prim%iprim_seq, &
-         prim%nm_nodbeg,prim%nm_nodgroup, &
-         prim%idisp_primz,prim%idisp_primy,prim%idisp_primx,STAT=stat)
+         prim%ig_prim,prim%iprim_seq,      &
+         prim%nm_nodbeg,prim%nm_nodgroup,  &
+         prim%idisp_primz,prim%idisp_primy,&
+         prim%iprim_part,prim%idisp_primx,STAT=stat)
     if(stat/=0) then
        call cq_abort('dealloc_prim: error deallocating')
     endif

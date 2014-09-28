@@ -1,0 +1,30 @@
+# -*- mode: Makefile -*-
+#
+# list of modified files:
+# 	global_module.f90	
+#	memory_module.f90
+#	dimens.module.f90
+#       matrix_data_module.f90
+#       numbers.module.f90
+#       energy.module.f90
+#       mult_module.f90
+#       basic_types.f90
+#       initial_read.module.f90
+#       DMMinModule.f90
+#       primary_module.f90
+#       timer_module.f90
+#       fft_fftw3.f90
+#
+#       Makefile 
+#       deps.obj
+#
+# $Id: exx.obj,v 1.0 2011/06/08 18:00:00 lat Exp $
+#
+EXX_OBJS=   exx_module.o \
+            exx_kernel_default.o \
+            exx_types.o \
+            exx_memory.o \
+            exx_io.o \
+            exx_evalpao.o 
+#            fft_fftw3.o
+

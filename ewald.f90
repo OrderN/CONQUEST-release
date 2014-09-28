@@ -54,7 +54,7 @@ module ewald_module
 
   use datatypes
   use global_module, ONLY: io_lun
-  use GenComms, ONLY: cq_abort
+  use GenComms,      ONLY: cq_abort
 
   implicit none
   save
@@ -124,12 +124,12 @@ contains
     use units
     use atoms
     use dimens
-    use species_module, ONLY: charge, species
-    use GenComms, ONLY: gsum, my_barrier, inode, ionode
-    use global_module, ONLY: atom_coord, ni_in_cell, iprint_gen, area_general, &
-                             species_glob, IPRINT_TIME_THRES3
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
+    use species_module, only: charge, species
+    use GenComms,       only: gsum, my_barrier, inode, ionode
+    use global_module,  only: atom_coord, ni_in_cell, iprint_gen, area_general, &
+                              species_glob, IPRINT_TIME_THRES3
+    use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use timer_module,   only: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
 
     implicit none
 
@@ -143,6 +143,11 @@ contains
          sine, sum, sum_x, sum_y, sum_z, total_charge
     real(double), allocatable, dimension(:,:) :: c1_force, c2_force
     type(cq_timer) :: tmr_l_tmp1
+    type(cq_timer) :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='ewald',where=9,level=2,echo=.true.)
+!****lat>$
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     allocate(c1_force(3,ni_in_cell),c2_force(3,ni_in_cell),STAT=stat)
@@ -295,11 +300,18 @@ contains
     if(stat/=0) call cq_abort("Error deallocating c1_force in ewald: ",ni_in_cell,stat)
     call reg_dealloc_mem(area_general,6*ni_in_cell,type_dbl)
     call stop_print_timer(tmr_l_tmp1,"ewald",IPRINT_TIME_THRES3)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='ewald',echo=.true.)
+!****lat>$
+
+    return
+
 1   format(/20x,'E_coulomb = ',f25.17,' ',a2,/,&
          20x,'E_real = ',f25.17,' ',a2,/,&
          20x,'E_recipr. = ',f25.17,' ',a2,/,&
          20x,'E_const. = ',f25.17,' ',a2,/)
-    return
+
   end subroutine ewald
   !!***
 
@@ -623,7 +635,10 @@ contains
     ! write out some information
     if ( inode .eq. ionode .AND.iprint_gen>0)  &
          write(io_lun,1) ewald_accuracy, gamma, n_supercells, n_g_vectors
-    
+
+    ! all done so return
+    return
+
 1   format (/10x,'PrecisionQ required of the Ewald summation = ',g15.7, &
          /10x,'Ewald parameter gamma = ',f10.5, &
          /10x,'With this choice of ewald_accuracy and gamma we have that', &
@@ -632,8 +647,6 @@ contains
          /10x,'need to be included in the direct and reciprocal parts' &
          /10x,'of the Ewald sumation respectively.'/)
     
-    ! all done so return
-    return
   end subroutine set_ewald
   !!***
 
@@ -1041,6 +1054,7 @@ contains
        call cq_abort('partition_distance: default found ',abs(isig1)+abs(isig2)+abs(isig3))
     end select
 
+    return
   end subroutine partition_distance
   ! ==========================================================
 
@@ -1656,7 +1670,7 @@ contains
        enddo
     endif
     ! +++
-
+    return
   end subroutine mikes_structure_factor
   ! ==============================================================================
 
@@ -1665,17 +1679,18 @@ contains
   ! =============================================================================
   subroutine mikes_ewald()
 
-    use cover_module, ONLY : ewald_CS
+    use cover_module,   ONLY: ewald_CS
     use datatypes
-    use GenComms, ONLY : gsum, cq_abort, inode, ionode
-    use global_module, ONLY : id_glob, iprint_gen, species_glob, ni_in_cell, area_general, IPRINT_TIME_THRES3
-    use group_module, ONLY : parts
-    use maxima_module, ONLY : maxatomsproc
+    use GenComms,       ONLY: gsum, cq_abort, inode, ionode
+    use global_module,  ONLY: id_glob, iprint_gen, species_glob, ni_in_cell, area_general, IPRINT_TIME_THRES3
+    use group_module,   ONLY: parts
+    use maxima_module,  ONLY: maxatomsproc
     use numbers
-    use primary_module, ONLY : bundle
-    use species_module, ONLY : charge, species
-    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
+    use primary_module, ONLY: bundle
+    use species_module, ONLY: charge, species
+    use memory_module,  ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use timer_module,   ONLY: cq_timer,start_timer,stop_timer, &
+                              stop_print_timer,WITH_LEVEL
 
     implicit none
 
@@ -1687,6 +1702,11 @@ contains
          &ewald_inter_force_x, ewald_inter_force_y, ewald_inter_force_z
     real(double), allocatable, dimension(:) :: ewald_total_force_x, ewald_total_force_y, ewald_total_force_z
     type(cq_timer) :: tmr_l_tmp1
+    type(cq_timer) :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='mikes_ewald',where=9,level=2)
+!****lat>$
 
     ! --- Ewald reciprocal-space energy and forces  --------------------------------
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
@@ -1991,6 +2011,11 @@ contains
     call reg_dealloc_mem(area_general,9*maxatomsproc,type_dbl)
     call stop_print_timer(tmr_l_tmp1,"mikes_ewald",IPRINT_TIME_THRES3)
 
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='mikes_ewald')
+!****lat>$
+
+    return
   end subroutine mikes_ewald
   ! =============================================================================
 

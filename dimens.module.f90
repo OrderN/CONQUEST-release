@@ -44,7 +44,8 @@
 module dimens
 
   use datatypes
-  use global_module, ONLY: io_lun
+  use global_module, only: io_lun
+  use timer_module,  only: start_timer, stop_timer, cq_timer
 
   implicit none
   save
@@ -54,7 +55,7 @@ module dimens
 
   real(double) :: r_super_x, r_super_y, r_super_z, volume
   real(double) :: r_super_x_squared, r_super_y_squared, r_super_z_squared
-  real(double) :: r_s, r_h, r_c, r_core_squared, r_dft_d2
+  real(double) :: r_s, r_h, r_c, r_nl, r_core_squared, r_dft_d2, r_exx
   real(double) :: grid_point_volume, one_over_grid_point_volume
   real(double) :: support_grid_volume
   real(double) :: GridCutoff, min_blip_sp
@@ -73,16 +74,16 @@ module dimens
 
   integer, parameter :: ngrids = 105
   !All grid spacings: multiples of 3, 4, 5
-  integer, dimension(ngrids), parameter :: grid_spacings = (/   &
+  integer, dimension(ngrids), parameter :: grid_spacings = (/     &
        4,    8,    12,   16,   20,   24,   32,   36,   40,   48,  &
        60,   64,   72,   80,   96,   100,  108,  120,  128,  144, &
        160,  180,  192,  200,  216,  240,  256,  288,  300,  320, &
        324,  360,  384,  400,  432,  480,  500,  512,  540,  576, &
        600,  640,  648,  720,  768,  800,  864,  900,  960,  972, &
-       1000, 1024, 1080, 1152, 1200, 1280, 1296, 1440, 1500,&
+       1000, 1024, 1080, 1152, 1200, 1280, 1296, 1440, 1500,      &
        1536, 1600, 1620, 1728, 1800, 1920, 1944, 2000, 2048, 2160,&
        2304, 2400, 2500, 2560, 2592, 2700, 2880, 3000, 3072, 3200,&
-       3240, 3456, 3600, 3840, 3888, 4000, 4096, 4320, 4500,&
+       3240, 3456, 3600, 3840, 3888, 4000, 4096, 4320, 4500,      &
        4608, 4800, 5000, 5120, 5184, 5400, 5760, 6000, 6144, 6400,&
        6480, 6912, 7200, 7500, 7680, 8000, 8192 /)
 
@@ -138,18 +139,25 @@ contains
 !!   2013/07/03 M.Arita
 !!    Introduced flag_MDold to choose the way of member updates.
 !!    Now the code does not expand cutoff ranges automatically by default.
+!!   2014/01/17 lat 
+!!    Added r_nl: fix unconsistency between HNL_fac/NonLocalFactor
+!!   2014/01/17 lat
+!!    Added r_exx and assigned to rcut(Xrange)
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
 
     use datatypes
     use numbers
-    use global_module, ONLY: iprint_init,flag_basis_set,blips,runtype,flag_dft_d2,flag_MDold
     use matrix_data
-    use GenComms, ONLY: cq_abort
-    use pseudopotential_common, ONLY: pseudo_type, OLDPS, SIESTA, ABINIT
-    use block_module, ONLY: in_block_x, in_block_y, in_block_z, n_pts_in_block, n_blocks
-    use input_module, ONLY: leqi
+    use GenComms,      only: cq_abort
+    use global_module, only: iprint_init,flag_basis_set,blips,runtype
+    use global_module, only: flag_dft_d2,flag_MDold, flag_exx
+    use block_module,  only: in_block_x, in_block_y, in_block_z, & 
+                             n_pts_in_block, n_blocks
+
+    use input_module,           only: leqi
+    use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, ABINIT
 
     implicit none
 
@@ -160,8 +168,13 @@ contains
     real(double) :: HNL_fac, core_radius(:)
 
     ! Local variables
-    integer :: max_extent, n, stat
-    real(double) :: r_core, r_t, rcutmax
+    type(cq_timer) :: tmr_std_loc
+    integer        :: max_extent, n, stat
+    real(double)   :: r_core, r_t, rcutmax
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='set_dimensions',where=9,level=2)
+!****lat>$
 
     !n_my_grid_points = n_pts_in_block * n_blocks    
     ! decide if the flag non_local needs to be set to true
@@ -178,13 +191,15 @@ contains
 
     ! we need to decide which is the largest core radius
     r_core = zero
-    r_h = zero
-    r_t = zero
+    r_h    = zero
+    r_t    = zero
+    r_nl   = zero
     !    if(non_local) then
     do n=1, n_species
        r_core = max(r_core,core_radius(n))
-       r_h = max(r_h,RadiusSupport(n))
-       r_t = max(r_t,InvSRange(n))
+       r_h    = max(r_h,RadiusSupport(n))
+       r_t    = max(r_t,InvSRange(n))
+       r_nl   = max(r_nl,NonLocalFactor(n)*core_radius(n))
     end do
     !    else
     !       do n=1, n_species
@@ -208,7 +223,8 @@ contains
     ! Set range of S matrix
     r_s = r_h
     if(two*r_s>r_c) then
-       if(inode==ionode) write(io_lun,fmt='(8x,"WARNING ! S range greater than L !")')
+       if(inode==ionode) &
+            write(io_lun,fmt='(8x,"WARNING ! S range greater than L !")')
        !r_s = r_c
        !r_h = r_c 
     endif
@@ -233,10 +249,28 @@ contains
     ! Set other ranges
     r_core_squared = r_core * r_core
     ! Set matrix ranges (from matrix_data)
+    if (HNL_fac <= 0.1_double) then
+       rcut(Hrange) = (two*(r_h + r_nl)) 
+    else
+       rcut(Hrange) = (two*(r_h+HNL_fac*r_core))
+    end if
+    rcut(Xrange)   = two*r_exx
+    rcut(SXrange)  = two*r_exx
+    if(flag_exx) then
+       if(rcut(Xrange)>rcut(Hrange)) then
+          rcut(Hrange)  = rcut(Xrange)
+       else if(rcut(Hrange)>rcut(Xrange)) then
+          rcut(Xrange)  = rcut(Hrange)
+          rcut(SXrange) = rcut(Hrange)
+       endif
+    end if
+
+    ! New 16:25, 2014/08/29 lionel
+    !rcut(Hrange)   = (two*(r_h + r_nl))
+    !rcut(Hrange)   = (two*(r_h+HNL_fac*r_core))
     rcut(Srange)   = (two*r_s)
     rcut(Trange)   = (two*r_t)
     rcut(Lrange)   = (r_c)
-    rcut(Hrange)   = (two*(r_h+HNL_fac*r_core))
     rcut(SPrange)  = (r_core + r_h)
     rcut(LSrange)  = (rcut(Lrange) + rcut(Srange))
     rcut(LHrange)  = (rcut(Lrange) + rcut(Hrange))
@@ -249,12 +283,12 @@ contains
     rcut(TLrange)  = (rcut(Trange)+rcut(Lrange))
     rcut(PSrange)  = rcut(SPrange)
     rcut(LTrrange) = rcut(Lrange)
-    rcut(SLrange) = rcut(LSrange)
+    rcut(SLrange)  = rcut(LSrange)
     rcut(TTrrange) = rcut(Trange)
-    rcut(dSrange) = rcut(Srange)
-    rcut(dHrange) = rcut(Hrange)
-    rcut(PAOPrange) = rcut(SPrange)
-    rcut(HLrange) = rcut(LHrange)
+    rcut(dSrange)  = rcut(Srange)
+    rcut(dHrange)  = rcut(Hrange)
+    rcut(PAOPrange)= rcut(SPrange)
+    rcut(HLrange)  = rcut(LHrange)
     rcutmax = zero
     do n=1,mx_matrices
        if(rcut(n)>rcutmax) then
@@ -263,6 +297,7 @@ contains
        end if
     enddo
     ! Seemingly trivial, but may be quite useful - matrix names
+    ! agreed... 2014/08/29 LAT
     mat_name(Srange)   = "S  "
     mat_name(Lrange)   = "L  "
     mat_name(Hrange)   = "H  "
@@ -275,8 +310,18 @@ contains
     mat_name(TSrange)  = "TS "
     mat_name(THrange)  = "TH "
     mat_name(TLrange)  = "TL "
+    mat_name(PSrange)  = "PS "
+    mat_name(LTrrange) = "LT "
+    mat_name(SLrange)  = "SL "
+    mat_name(TTrrange) = "TT "
+    mat_name(dSrange)  = "dS "
+    mat_name(dHrange)  = "dH "
+    mat_name(PAOPrange)= "PAO"
+    mat_name(HLrange)  = "HL "
+    mat_name(Xrange)   = "X  "
+    mat_name(SXrange)  = "SX "
     if(inode==ionode.AND.iprint_init>1) then
-       do n=1,12!mx_matrices
+       do n=1,mx_matrices
           write(io_lun,1) mat_name(n),rcut(n)
        enddo
     endif
@@ -294,6 +339,11 @@ contains
     z_grid = one / real( n_grid_z, double)
     ! Grid points in a block
     n_pts_in_block = in_block_x * in_block_y * in_block_z
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='set_dimensions')
+!****lat>$
+
     return
   end subroutine set_dimensions
 !!***
@@ -301,20 +351,26 @@ contains
   subroutine find_grid
 
     use datatypes
-    use numbers, ONLY: pi, very_small,two, half
-    use global_module, ONLY: iprint_init, flag_basis_set, blips
-    use GenComms, ONLY: inode,ionode,cq_abort
-    use species_module, ONLY: n_species
+    use numbers,        only: pi, very_small,two, half
+    use global_module,  only: iprint_init, flag_basis_set, blips
+    use GenComms,       only: inode,ionode,cq_abort
+    use species_module, only: n_species
     
     implicit none
     
     ! Local variables
-    real(double) :: sqKE, blipKE, blip_sp
-    integer :: mingrid, i
+    type(cq_timer) :: tmr_std_loc
+    real(double)   :: sqKE, blipKE, blip_sp
+    integer        :: mingrid, i
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='find_grid',where=9,level=2)
+!****lat>$
 
     if(n_grid_x>0.AND.n_grid_y>0.AND.n_grid_z>0) then ! We dont need to find grids
        if(iprint_init>1.AND.inode==ionode) &
             write(io_lun,fmt='(2x,"User specified grid dimensions: ",3i5)') n_grid_x,n_grid_y,n_grid_z
+       call stop_timer(t=tmr_std_loc,who='find_grid')
        return
     else
        if(GridCutoff<very_small) call cq_abort("Grid cutoff too small: ",GridCutoff)
@@ -355,6 +411,11 @@ contains
        end do
     endif
 
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='find_grid')
+!****lat>$
+
+    return
   end subroutine find_grid
 
 end module dimens

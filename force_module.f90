@@ -60,14 +60,16 @@
 !!   - Moved all the dxc_potential subroutines to XC_module
 !!   2012/04/03 09:38 dave
 !!    Changes for analytic blips
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module force_module
 
   use datatypes
   use global_module,          only: io_lun
-  use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                    tmr_std_allocation,      &
+  use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_stdclocks_module, only: tmr_std_allocation,      &
                                     tmr_std_matrices
 
   implicit none
@@ -208,7 +210,9 @@ contains
     integer        :: i, j, ii, stat, max_atom, max_compt, spin
     real(double)   :: max_force
     type(cq_timer) :: tmr_l_tmp1
-    real(double), dimension(nspin)    :: electrons
+    type(cq_timer) :: tmr_std_loc
+
+    real(double), dimension(nspin)            :: electrons
     real(double), dimension(:),   allocatable :: density_total
     real(double), dimension(:,:), allocatable :: p_force,         &
                                                  cdft_force,      &
@@ -219,6 +223,10 @@ contains
                                                  pcc_force
     real(double), dimension(:),   allocatable :: density_out_tot
     real(double), dimension(:,:), allocatable :: density_out
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='force',where=7,level=2,echo=.true.)
+!****lat>$
 
     call start_timer(tmr_std_allocation)
     allocate(density_total(maxngrid), STAT=stat)
@@ -253,18 +261,18 @@ contains
     if(nspin==1) then
        density_total(:) = spin_factor * density(:,1)
     else
-       density_total = spin_factor * sum(density, nspin)
+       density_total    = spin_factor * sum(density, nspin)
     end if
     ! The 'pulay force' is the force due to the change in energy caused
     ! by the change in the basis functions as the atoms move.
-    p_force = zero
-    KE_force = zero
-    HF_force = zero
+    p_force     = zero
+    KE_force    = zero
+    HF_force    = zero
     HF_NL_force = zero
     nonSC_force = zero
     if (flag_pcc_global) pcc_force = zero ! for P.C.C.
-    tot_force = zero
-    WhichPulay = BothPulay
+    tot_force   = zero
+    WhichPulay  = BothPulay
     ! This ASSUMES that H_on_supportfns contains the values of H
     ! acting on support functions
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
@@ -288,7 +296,8 @@ contains
        if (stat /= 0) &
             call cq_abort ("Error allocating output density: ", stat)
        call reg_alloc_mem(area_moveatoms, maxngrid * (nspin + 1), type_dbl)
-       density_out = zero
+
+       density_out     = zero
        density_out_tot = zero
        call stop_timer(tmr_std_allocation)
 
@@ -300,7 +309,7 @@ contains
        if(nspin==1) then
           density_out_tot(:) = spin_factor * density_out(:,1)
        else
-          density_out_tot = spin_factor * sum(density_out, nspin)
+          density_out_tot    = spin_factor * sum(density_out, nspin)
        end if
        call stop_print_timer(tmr_l_tmp1, "get_electronic_density", &
                              IPRINT_TIME_THRES2)
@@ -310,6 +319,7 @@ contains
           call get_pcc_force(pcc_force, inode, ionode, ni_in_cell, &
                              maxngrid)
        end if
+       
        call get_nonSC_correction_force(nonSC_force, density_out,  &
                                        inode, ionode, ni_in_cell, &
                                        maxngrid)
@@ -373,7 +383,7 @@ contains
                           IPRINT_TIME_THRES2)
 
     max_force = zero
-    max_atom = 0
+    max_atom  = 0
     max_compt = 0
     if (inode == ionode .and. write_forces) then
        write (io_lun, fmt='(/,20x,"Forces on atoms (",a2,"/",a2,")"/)') &
@@ -389,13 +399,13 @@ contains
              ! when ewald energy is being calculated
              if (flag_self_consistent) then
                 tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
-                                 p_force(j,i) + KE_force(j,i) +     &
-                                 ewald_force(j,i) + pcc_force(j, i)
+                                  p_force(j,i) +    KE_force(j,i) + &
+                              ewald_force(j,i) +   pcc_force(j,i)
              else
-                tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) +    &
-                                 p_force(j,i) + KE_force(j,i) +        &
-                                 ewald_force(j,i) + nonSC_force(j,i) + &
-                                 pcc_force(j, i)
+                tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
+                                  p_force(j,i) +    KE_force(j,i) + &
+                              ewald_force(j,i) + nonSC_force(j,i) + &
+                                pcc_force(j,i)
              end if
              if (flag_perform_cdft) &
                   tot_force(j,i) = tot_force(j,i) + cdft_force(j,i)
@@ -406,29 +416,29 @@ contains
              end if
              if (abs (tot_force(j,i)) > max_force) then
                 max_force = abs (tot_force(j,i))
-                max_atom = i
+                max_atom  = i
                 max_compt = j
              end if
           end do ! j
           if (inode == ionode) then
              if(iprint_MD > 2) then
                 write(io_lun, 101) i
-                write(io_lun, 102) (for_conv * HF_force(j,i), j = 1, 3)
+                write(io_lun, 102) (for_conv *   HF_force(j,i),  j = 1, 3)
                 write(io_lun, 112) (for_conv * HF_NL_force(j,i), j = 1, 3)
-                write(io_lun, 103) (for_conv * p_force(j,i), j = 1, 3)
-                write(io_lun, 104) (for_conv * KE_force(j,i), j = 1, 3)
+                write(io_lun, 103) (for_conv *     p_force(j,i), j = 1, 3)
+                write(io_lun, 104) (for_conv *    KE_force(j,i), j = 1, 3)
                 write(io_lun, 106) (for_conv * ewald_force(j,i), j = 1, 3)
-                write(io_lun, 108) (for_conv * pcc_force(j,i), j = 1, 3)
+                write(io_lun, 108) (for_conv *   pcc_force(j,i), j = 1, 3)
                 if (flag_dft_d2) &
                      write (io_lun, 109) (for_conv * disp_force(j,i), j = 1, 3)
                 if (flag_perform_cdft) &
                      write (io_lun, fmt='("Force cDFT : ",3f15.10)') &
                            (for_conv*cdft_force(j,i),j=1,3)
                 if (flag_self_consistent) then
-                   write (io_lun, 105) (for_conv * tot_force(j,i), j = 1, 3)
+                   write (io_lun, 105) (for_conv * tot_force(j,i),   j = 1, 3)
                 else
                    write (io_lun, 107) (for_conv * nonSC_force(j,i), j = 1, 3)
-                   write (io_lun, 105) (for_conv * tot_force(j,i), j = 1, 3)
+                   write (io_lun, 105) (for_conv * tot_force(j,i),   j = 1, 3)
                 end if
              else if (write_forces) then
                 if (flag_self_consistent) then
@@ -448,12 +458,12 @@ contains
           do j = 1, 3
              if (flag_self_consistent) then
                 tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
-                                 p_force(j,i) + KE_force(j,i) +     &
-                                 ewald_force(j,i)
+                                  p_force(j,i) +    KE_force(j,i) + &
+                              ewald_force(j,i)
              else
                 tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
-                                 p_force(j,i) + KE_force(j,i) +     &
-                                 ewald_force(j,i) + nonSC_force(j,i)
+                                  p_force(j,i) +    KE_force(j,i) + &
+                              ewald_force(j,i) + nonSC_force(j,i)
              end if
              if (flag_perform_cdft) &
                   tot_force(j,i) = tot_force(j,i) + cdft_force(j,i)
@@ -471,10 +481,10 @@ contains
           if (inode == ionode) then
              if (iprint_MD > 2) then
                 write (io_lun, 101) i
-                write (io_lun, 102) (for_conv * HF_force(j,i), j = 1, 3)
+                write (io_lun, 102) (for_conv *    HF_force(j,i), j = 1, 3)
                 write (io_lun, 112) (for_conv * HF_NL_force(j,i), j = 1, 3)
-                write (io_lun, 103) (for_conv * p_force(j,i), j = 1, 3)
-                write (io_lun, 104) (for_conv * KE_force(j,i), j = 1, 3)
+                write (io_lun, 103) (for_conv *     p_force(j,i), j = 1, 3)
+                write (io_lun, 104) (for_conv *    KE_force(j,i), j = 1, 3)
                 write (io_lun, 106) (for_conv * ewald_force(j,i), j = 1, 3)
                 if (flag_dft_d2) write (io_lun, 109) &
                      (for_conv * disp_force(j,i), j = 1, 3)
@@ -482,10 +492,10 @@ contains
                      write (io_lun,fmt='("Force cDFT : ",3f15.10)') &
                            (for_conv * cdft_force(j,i), j = 1, 3)
                 if (flag_self_consistent) then
-                   write (io_lun, 105) (for_conv*tot_force(j,i), j = 1, 3)
+                   write (io_lun, 105) (for_conv *   tot_force(j,i), j = 1, 3)
                 else
                    write (io_lun, 107) (for_conv * nonSC_force(j,i), j = 1, 3)
-                   write (io_lun, 105) (for_conv * tot_force(j,i), j = 1, 3)
+                   write (io_lun, 105) (for_conv *   tot_force(j,i), j = 1, 3)
                 end if
              else if (write_forces) then
                 if (flag_self_consistent) then
@@ -528,6 +538,10 @@ contains
     if (stat /= 0) call cq_abort("force: Error dealloc mem")
     call reg_dealloc_mem(area_moveatoms, maxngrid, type_dbl)
     call stop_timer(tmr_std_allocation)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='force',echo=.true.)
+!****lat>$
 
     return
 
@@ -707,8 +721,8 @@ contains
     integer, allocatable, dimension(:) :: nreqs
 
     real(double) :: energy_in, t0, t1
-    real(double), dimension(nspin) :: electrons, energy_tmp
     real(double) :: dx, dy, dz, time0, time1
+    real(double), dimension(nspin) :: electrons, energy_tmp
     real(double), allocatable, dimension(:), target :: part_blips
     type(support_function) :: supp_on_j
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
@@ -730,8 +744,14 @@ contains
     !   with local communication. (I am not sure it is important or not)
     !    --  02/Feb/2001  Tsuyoshi Miyazaki
 
-    integer      :: iprim, np, ni, isf, mat_tmp
-    real(double) :: matM12_value
+    integer        :: iprim, np, ni, isf, mat_tmp
+    real(double)   :: matM12_value
+    type(cq_timer) :: tmr_std_loc
+
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='pulay_force',where=7,level=3,echo=.true.)
+!****lat>$    
 
     ! the force due to the change in T matrix elements is done differently...
     if (inode == ionode .and. iprint_MD > 2) &
@@ -1082,6 +1102,11 @@ contains
     !  In principle, the summation below is not needed.
     !  p_force should be calculated only for my primary set of atoms.
     call gsum(p_force, 3, n_atoms)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='pulay_force',echo=.true.)
+!****lat>$
+
 
     return
   end subroutine pulay_force
@@ -2146,7 +2171,7 @@ contains
   !!  SOURCE
   !!
   subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
-                                        ionode, n_atoms, size)
+                                        ionode, n_atoms, nsize)
 
     use datatypes
     use numbers
@@ -2192,7 +2217,7 @@ contains
     implicit none
 
     ! Passed variables
-    integer :: n_atoms, size
+    integer :: n_atoms, nsize
     integer :: inode, ionode
     real(double), dimension(:,:) :: density_out
     real(double), dimension(:,:) :: HF_force
@@ -2212,6 +2237,7 @@ contains
                       z_pcc, derivative_pcc, v_pcc
     logical        :: range_flag
     type(cq_timer) :: tmr_l_tmp1, tmr_l_tmp2
+    type(cq_timer) :: tmr_std_loc
 
     real(double), dimension(:),     allocatable :: h_potential,   &
                                                    density_total, &
@@ -2219,17 +2245,23 @@ contains
     real(double), dimension(:,:,:), allocatable :: dVxc_drho
     real(double), dimension(nspin) :: pot_here, fx_1, fy_1, fz_1, &
                                       fx_pcc, fy_pcc, fz_pcc, pot_here_pcc
-
     ! only for GGA with P.C.C.
     real(double), allocatable, dimension(:)   :: h_potential_in,       &
                                                  wk_grid_total,        &
                                                  density_out_GGA_total
     real(double), allocatable, dimension(:,:) :: wk_grid,              &
                                                  density_out_GGA
+    ! tmp potential 
+    real(double), allocatable, dimension(:)   :: work_potential
+    
 
     ! ***** LT: TEMPORARY BARRIER FOR SPIN POLARISED CALCULATIONS!!! *****
     ! Due to the fact that:
     !   a) non-SC forces for spin polarised PBE is not yet implemented
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='get_nonSC_correction_force',where=7,level=3,echo=.true.)
+!****lat>$  
 
     if ((nspin == 2) .and. &
         ((flag_functional_type == functional_gga_pbe96) .or. &
@@ -2255,14 +2287,34 @@ contains
        end if
     end if
 
+    stat = 0
     call start_timer(tmr_std_allocation)
-    allocate(h_potential(size), density_total(size), &
-             density_out_total(size), dVxc_drho(size,nspin,nspin), &
-             STAT=stat)
+    allocate(h_potential(nsize),           STAT=stat)
     if (stat /= 0) &
-         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", size)
-    call reg_alloc_mem(area_moveatoms, (3+nspin*nspin)*size, type_dbl)
+         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
+    allocate(density_total(nsize),         STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
+    allocate(density_out_total(nsize),     STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
+    allocate(dVxc_drho(nsize,nspin,nspin), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
+    call reg_alloc_mem(area_moveatoms, (3+nspin*nspin)*nsize, type_dbl)
+    allocate(work_potential(nsize),        STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
+    call reg_alloc_mem(area_moveatoms, nsize, type_dbl)
     call stop_timer(tmr_std_allocation)
+
+!****lat<$
+    !print*, size(density_total,    dim=1)
+    !print*, size(dVxc_drho,        dim=1)
+    !print*, size(density_out_total,dim=1)
+    !print*, size(potential,        dim=1)
+    !print*, size(density_out_total,dim=1)
+!****lat>$
 
     HF_force = zero
 
@@ -2283,57 +2335,56 @@ contains
     call start_timer(tmr_l_tmp2)
 
     h_potential = zero
-    potential = zero
+    potential   = zero
     if(nspin==1) then
-       density_total(:) = spin_factor * density(:,1)
+       density_total(:)     = spin_factor * density(:,1)
        density_out_total(:) = spin_factor * density_out(:,1)
     else
-       density_total = spin_factor * sum(density, nspin)
+       density_total     = spin_factor * sum(density,    nspin)
        density_out_total = spin_factor * sum(density_out, nspin)
     end if
 
-    call hartree(density_total, h_potential, size, h_energy)
+    call hartree(density_total, h_potential, nsize, h_energy)
     do spin = 1, nspin
-       call axpy(size, one, h_potential, 1, potential(:,spin), 1)
+       call axpy(nsize, one, h_potential, 1, potential(:,spin), 1)
     end do
     call stop_timer(tmr_l_tmp2, TIME_ACCUMULATE_NO)
 
     ! for P.C.C.
     if (flag_pcc_global) then
-       allocate(wk_grid_total(size), wk_grid(size,nspin), STAT=stat)
+       allocate(wk_grid_total(nsize), wk_grid(nsize,nspin), STAT=stat)
        wk_grid_total = zero
-       wk_grid = zero
+       wk_grid       = zero
        if (stat /= 0) &
             call cq_abort('Error allocating wk_grids in &
                            &get_nonSC_correction ', stat)
-       call reg_alloc_mem(area_moveatoms, (nspin + 1) * size, type_dbl)
+       call reg_alloc_mem(area_moveatoms, (nspin + 1) * nsize, type_dbl)
        do spin = 1, nspin
-          wk_grid(:,spin) = density(:,spin) + half * density_pcc(:)
+          wk_grid(:,spin)  = density(:,spin)  + half * density_pcc(:)
           wk_grid_total(:) = wk_grid_total(:) + spin_factor * wk_grid(:,spin)
        end do
        ! only for GGA
-       if ((flag_functional_type == functional_gga_pbe96) .or. &
+       if ((flag_functional_type == functional_gga_pbe96)       .or. &
            (flag_functional_type == functional_gga_pbe96_rev98) .or. &
-           (flag_functional_type == functional_gga_pbe96_r99)) then
-          allocate(density_out_GGA_total(size), density_out_GGA(size,nspin), &
+           (flag_functional_type == functional_gga_pbe96_r99))   then
+          allocate(density_out_GGA_total(nsize), density_out_GGA(nsize,nspin), &
                    STAT=stat)
           if (stat /= 0)&
                call cq_abort ('Error allocating &
                                &density_out_GGAs in get_nonSC_force ', stat)
-          call reg_alloc_mem(area_moveatoms, (nspin + 1) * size, type_dbl)
+          call reg_alloc_mem(area_moveatoms, (nspin + 1) * nsize, type_dbl)
           density_out_GGA_total = zero
-          density_out_GGA = zero
+          density_out_GGA       = zero
           do spin = 1, nspin
-             density_out_GGA(:,spin) = density_out(:,spin) + &
-                                       half * density_pcc(:)
+             density_out_GGA(:,spin)  = density_out(:,spin)      + half * density_pcc(:)
              density_out_GGA_total(:) = density_out_GGA_total(:) + spin_factor * density_out_GGA(:,spin)
           end do
           ! copy hartree potential
-          allocate(h_potential_in(size), STAT=stat)
+          allocate(h_potential_in(nsize), STAT=stat)
           if (stat /= 0) &
                call cq_abort('Error allocating h_potential_in in &
                               &get_nonSC_force ', stat)
-          call reg_alloc_mem(area_moveatoms, size, type_dbl)
+          call reg_alloc_mem(area_moveatoms, nsize, type_dbl)
           h_potential_in = h_potential
        end if
     end if
@@ -2342,47 +2393,70 @@ contains
     select case (flag_functional_type)
     case (functional_lda_pz81)
        ! NON SPIN POLARISED CALCULATION ONLY
+       !print*, 'enter functional_lda_pz81'
        if (flag_pcc_global) then
-          call get_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), size)
+          call get_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), nsize)
        else
-          call get_dxc_potential(density_total, dVxc_drho(:,1,1), size)
+          !print*, size(density_total), size(dVxc_drho(:,1,1)), nsize
+          call get_dxc_potential(density_total, dVxc_drho(:,1,1), nsize)
        end if
+       !print*, 'leave functional_lda_pz81'
+       !
+       !
     case (functional_lda_gth96)
        ! NON SPIN POLARISED CALCULATION ONLY
        if (flag_pcc_global) then
-          call get_GTH_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), size)
+          call get_GTH_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), nsize)
        else
-          call get_GTH_dxc_potential(density_total, dVxc_drho(:,1,1), size)
+          call get_GTH_dxc_potential(density_total, dVxc_drho(:,1,1), nsize)
        end if
+       !
+       !
     case (functional_lda_pw92)
+       !print*, 'enter functional_lda_pw92'
        if (flag_pcc_global) then
-          call get_dxc_potential_LSDA_PW92(wk_grid, dVxc_drho, size)
+          call get_dxc_potential_LSDA_PW92(wk_grid, dVxc_drho, nsize)
        else
-          call get_dxc_potential_LSDA_PW92(density, dVxc_drho, size)
+          call get_dxc_potential_LSDA_PW92(density, dVxc_drho, nsize)
        end if
+       !print*, 'enter functional_lda_pw92'
+       !
+       !
     case (functional_gga_pbe96) ! Original PBE
        ! NON SPIN POLARISED CALCULATION ONLY
+       !print*, 'enter functional_gga_pbe96'
        if (flag_pcc_global) then
           call get_dxc_potential_GGA_PBE(wk_grid_total,         &
                                          density_out_GGA_total, &
-                                         potential(:,1), size)
+                                         potential(:,1), nsize)
        else
-          call get_dxc_potential_GGA_PBE(density_total,         &
-                                         density_out_total,     &
-                                         potential(:,1), size)
+          !print*, 'enter functional_gga_pbe96'
+          !print*, size(density_total) 
+          !print*, size(density_total)
+          !print*, size(density_out_total)
+          !print*, size(potential(:,1)) 
+          work_potential(:) = potential(:,1)
+          call get_dxc_potential_GGA_PBE(density       = density_total,     &
+                                         density_out   = density_out_total, &
+                                         dxc_potential = work_potential,    &
+                                         size          = nsize)
+          !print*, 'leave functional_gga_pbe96'
        end if
+       !print*, 'leave functional_gga_pbe96'
+       !
+       !
     case (functional_gga_pbe96_rev98)
        ! PBE with kappa of PRL 80, 890 (1998)
        ! NON SPIN POLARISED CALCULATION ONLY
        if (flag_pcc_global) then
           call get_dxc_potential_GGA_PBE(wk_grid_total,         &
                                          density_out_total,     &
-                                         potential(:,1), size,  &
+                                         potential(:,1), nsize,  &
                                          functional_gga_pbe96_rev98)
        else
           call get_dxc_potential_GGA_PBE(density_total,         &
                                          density_out_total,     &
-                                         potential(:,1), size,  &
+                                         potential(:,1), nsize,  &
                                          functional_gga_pbe96_rev98)
        end if
     case (functional_gga_pbe96_r99)
@@ -2391,20 +2465,26 @@ contains
        if (flag_pcc_global) then
           call get_dxc_potential_GGA_PBE(wk_grid_total,         &
                                          density_out_total,     &
-                                         potential(:,1), size,  &
+                                         potential(:,1), nsize,  &
                                          functional_gga_pbe96_r99)
        else
           call get_dxc_potential_GGA_PBE(density_total,         &
                                          density_out_total,     &
-                                         potential(:,1), size,  &
+                                         potential(:,1), nsize,  &
                                          functional_gga_pbe96_r99)
        end if
+       !
+       !
     case default
+       !print*, 'enter functional_default'
        if (flag_pcc_global) then
-          call get_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), size)
+          call get_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), nsize)
        else
-          call get_dxc_potential(density_total, dVxc_drho(:,1,1), size)
+          call get_dxc_potential(density_total, dVxc_drho(:,1,1), nsize)
        end if
+       !print*, 'leave functional_lda_pz81'
+       !
+       !
     end select
 
     ! deallocating density_out_GGA: only for P.C.C.
@@ -2417,7 +2497,7 @@ contains
           if (stat /= 0) &
                call cq_abort('Error deallocating density_out_GGAs in &
                               &get_nonSC_force ', stat)
-          call reg_dealloc_mem(area_moveatoms, (nspin + 1) * size, type_dbl)
+          call reg_dealloc_mem(area_moveatoms, (nspin + 1) * nsize, type_dbl)
        end if
     end if !flag_pcc_global
 
@@ -2433,7 +2513,7 @@ contains
        end do
        ! wk_grid = zero
        ! do spin = 1, nspin
-       !    call axpy(size, one, potential(:,spin), 1, wk_grid(:,spin), 1)
+       !    call axpy(nsize, one, potential(:,spin), 1, wk_grid(:,spin), 1)
        ! end do
     end if
 
@@ -2459,9 +2539,9 @@ contains
     ! Restart of the timer; level assigned here
     call start_timer(tmr_l_tmp2, WITH_LEVEL)
     h_potential = zero
-    call hartree(density_out_total, h_potential, size, h_energy)
+    call hartree(density_out_total, h_potential, nsize, h_energy)
     do spin = 1, nspin
-       call axpy(size, -one, h_potential, 1, potential(:,spin), 1)
+       call axpy(nsize, -one, h_potential, 1, potential(:,spin), 1)
     end do
     ! now, potential = - delta V_H - ( n_out - n_PAD ) * dxc_potential
     call stop_print_timer(tmr_l_tmp2, "NSC force - Hartree", &
@@ -2754,7 +2834,7 @@ contains
        if (stat /= 0) &
             call cq_abort('Error deallocating wk_grid in &
                            &get_nonSC_correction_force ', stat)
-       call reg_dealloc_mem(area_moveatoms, (nspin + 1) * size, type_dbl)
+       call reg_dealloc_mem(area_moveatoms, (nspin + 1) * nsize, type_dbl)
        if ((flag_functional_type == functional_gga_pbe96) .or. &
            (flag_functional_type == functional_gga_pbe96_rev98) .or. &
            (flag_functional_type == functional_gga_pbe96_r99)) then
@@ -2762,15 +2842,19 @@ contains
           if (stat /= 0) &
                call cq_abort('Error deallocating h_potential_in in &
                              &get_nonSC_correction_force ', stat)
-          call reg_dealloc_mem(area_moveatoms, size, type_dbl)
+          call reg_dealloc_mem(area_moveatoms, nsize, type_dbl)
        end if ! for GGA
     end if ! flag_pcc_global
     deallocate(h_potential, density_total, density_out_total, dVxc_drho, &
                STAT=stat)
     if (stat /= 0) &
          call cq_abort("get_nonSC_correction_force: Error dealloc mem")
-    call reg_dealloc_mem(area_moveatoms, (3+nspin*nspin)*size, type_dbl)
+    call reg_dealloc_mem(area_moveatoms, (3+nspin*nspin)*nsize, type_dbl)
     call stop_timer(tmr_std_allocation)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='get_nonSC_correction_force',echo=.true.)
+!****lat>$  
 
     return
   end subroutine get_nonSC_correction_force

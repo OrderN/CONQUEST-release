@@ -46,16 +46,19 @@
 !!    Added sbrt: wrap_xyz_atom_cell
 !!   2013/08/21 M.Arita
 !!    Added sbrt: safemin2 & update_start_xyz
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module move_atoms
 
   use datatypes
   use global_module,          only: io_lun
-  use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                    tmr_std_moveatoms, &
+  use timer_module,           only: start_timer, stop_timer
+  use timer_stdclocks_module, only: tmr_std_moveatoms, &
                                     tmr_std_indexing, &
                                     tmr_std_allocation
+
 
   ! Useful physical constants
   real(double), parameter:: amu = 1.660566e-27_double

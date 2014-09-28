@@ -1,23 +1,19 @@
-# Compile flags
-FC=mpif90
+FC77?=mpif77
+FC90?=mpif90
 CFLAGS=
-#FFLAGS= -r8 -fast $(CFLAGS)
-LDFLAGS= $(CFLAGS)
-ARFL=
+FFLAGS?= -fast $(CFLAGS)
+LDFLAGS?= $(CFLAGS)
+ARFL?=
 
-OBJS =  zfft1d.o zfft3d.o fft235.o kernel.o factor.o
+OBJS =	zfft1d.o zfft3d.o fft235.o kernel.o factor.o
 
-libgpfa.a: $(OBJS)
+libffte.a: $(OBJS)
 	ar $(ARFL) rv libffte.a $(OBJS)
-###	cp libgpfa.a ..
 
-.f.o:
-	$(FC) $(FFLAGS) -c $<
-#.f90.o:
+.f.o:	
+	$(FC77) $(FFLAGS) -c $<
 %.o: %.f90
-	$(FC) $(FFLAGS) -c $<
-#	$(FC) $(COMPFLAGS) -c $<
-
+	$(FC90) $(FFLAGS) -c $<
 
 clean:
 	rm -f *.o *.a

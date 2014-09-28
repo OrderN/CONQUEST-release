@@ -81,13 +81,17 @@ module GenComms
 !!  PURPOSE
 !!   Interface to different abort routines
 !!  AUTHOR
-!!   D. R. Bowler
+!!   D.R. Bowler
+!!  MODIFCATION
+!!   2014/09/10 LAT
+!!    Added cq_abort for boleans
 !!  SOURCE
 !!  
   interface cq_abort
      module procedure cq_abort_none
      module procedure cq_abort_int
      module procedure cq_abort_real
+     module procedure cq_abort_logi
   end interface
 !!***
 
@@ -262,7 +266,7 @@ contains
     if(ierr.ne.0) write(io_lun,*) 'ierr is ',ierr
     call MPI_COMM_RANK( MPI_COMM_WORLD, myid, ierr )
     call MPI_COMM_SIZE( MPI_COMM_WORLD, number_of_procs, ierr )
-    inode = myid+1
+    inode  = myid+1
     ionode = 1
     call mtmini()
     return
@@ -362,15 +366,16 @@ contains
     ! Local variables
     integer :: ierror
     
-    write(*,1)  myid+1
-    write(*,4) message
+    write(*,1)       myid+1
+    write(*,4)       message
     write(io_lun,1)  myid+1
-    write(io_lun,4) message
+    write(io_lun,4)  message
 1   format(2x,'Error in process ',i4)
 4   format(2x,a)
     call flush(io_lun)
     call MPI_abort( MPI_comm_world, 1, ierror )
     stop
+
     return
   end subroutine cq_abort_none
 !!***
@@ -418,30 +423,93 @@ contains
     implicit none
 
     ! Passed variables
-    character(len=*) :: message
-    integer :: int1
+    character(len=*)  :: message
+    integer           :: int1
     integer, OPTIONAL :: int2
 
     ! Local variables
     integer :: ierror
     
-    write (*,1)  myid+1
+    write (*,1)       myid+1
     write (io_lun,1)  myid+1
     if(PRESENT(int2)) then
-       write(*,3) message, int1, int2
+       write(*,3)      message, int1, int2
        write(io_lun,3) message, int1, int2
     else 
-       write(*,2) message, int1
+       write(*,2)      message, int1
        write(io_lun,2) message, int1
     endif
+
 1   format(2x,'Error in process ',i4)
 2   format(2x,a,i10)
 3   format(2x,a,2i10)
+
     call flush(io_lun)
     call MPI_abort( MPI_comm_world, 1, ierror )
     stop
+
     return
   end subroutine cq_abort_int
+!!***
+
+! -----------------------------------------------------------
+! Subroutine cq_abort_logi
+! -----------------------------------------------------------
+
+!!****f* GenComms/cq_abort_logi *
+!!
+!!  NAME 
+!!   cq_abort_logi - aborts Conquest and prints a message
+!!  USAGE
+!!   cq_abort_int(message indicating routine and problem,logi1,logi2)
+!!  PURPOSE
+!!   Aborts Conquest in a reasonably graceful manner, outputting
+!!   a message indicating routine and problem and one or two boleans
+!!  INPUTS
+!!   character(len=80) :: message - the abort message
+!!   integer           :: logi1
+!!   integer, OPTIONAL :: logi2
+!!  USES
+!! 
+!!  AUTHOR
+!!   L.A. Truflandier
+!!  CREATION DATE
+!!   2014/09/10 lat
+!!  MODIFICATION
+!!  SOURCE
+!!
+  subroutine cq_abort_logi(message,logi1,logi2)
+
+    implicit none
+
+    ! Passed variables
+    character(len=*)  :: message
+    logical           :: logi1
+    logical, optional :: logi2
+
+    ! Local variables
+    integer :: ierror
+    
+    write (*,1)       myid+1
+    write (io_lun,1)  myid+1
+    if(present(logi2)) then
+       write(*,3)      message, logi1, logi2
+       write(io_lun,3) message, logi1, logi2
+    else 
+       write(*,2)      message, logi1
+       write(io_lun,2) message, logi1
+    endif
+
+1   format(2x,'Error in process ',i4)
+2   format(2x,a, l)
+3   format(2x,a,2l)
+
+    call flush(io_lun)
+    call MPI_abort( MPI_comm_world, 1, ierror )
+    stop
+
+    return
+  end subroutine cq_abort_logi
 !!***
 
 ! -----------------------------------------------------------
@@ -487,29 +555,32 @@ contains
     implicit none
 
     ! Passed variables
-    character(len=*) :: message
-    real(double) :: real1
+    character(len=*)       :: message
+    real(double)           :: real1
     real(double), OPTIONAL :: real2
 
     ! Local variables
     integer :: ierror
     
-    write (*,1)  myid+1
+    write (*,1)       myid+1
     write (io_lun,1)  myid+1
     if(PRESENT(real2)) then 
-       write(*,3) message, real1, real2
+       write(*,3)      message, real1, real2
        write(io_lun,3) message, real1, real2
     else
-       write(*,2) message, real1
+       write(*,2)      message, real1
        write(io_lun,2) message, real1
     endif
+
 1   format(2x,'Error in process ',i4)
 2   format(2x,a,f20.12)
 3   format(2x,a,2f20.12)
 4   format(2x,a)
+
     call flush(io_lun)
     call MPI_abort( MPI_comm_world, 1, ierror )
     stop
+
     return
   end subroutine cq_abort_real
 !!***
@@ -1961,17 +2032,29 @@ contains
   subroutine my_barrier()
 
     use global_module, ONLY: IPRINT_TIME_THRES3
-    use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
+    use timer_module,  ONLY: cq_timer,start_timer,stop_print_timer,stop_timer,&
+         WITH_LEVEL
     
     implicit none
 
-    integer :: ierr
+    integer        :: ierr
     type(cq_timer) :: tmr_l_tmp1
+    type(cq_timer) :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='my_barrier',where=9)
+!****lat>$
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     call MPI_barrier(MPI_COMM_WORLD, ierr)
     call stop_print_timer(tmr_l_tmp1,"my_barrier",IPRINT_TIME_THRES3)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='my_barrier')
+!****lat>$
+
     if(ierr/=MPI_success) call cq_abort('my_barrier: problem with MPI_barrier')
+
     return
   end subroutine my_barrier
 !!***

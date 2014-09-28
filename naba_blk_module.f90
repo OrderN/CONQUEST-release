@@ -28,12 +28,15 @@
 !!    Added deallocation routines (or at least tidied them)
 !!   2008/05/16 ast
 !!    Added timers
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module naba_blk_module
 
   use datatypes
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_allocation
+  use timer_module,           only: start_timer,stop_timer
+  use timer_stdclocks_module, only: tmr_std_allocation
 
   implicit none
 

@@ -24,6 +24,8 @@
 !!  MODIFICATION HISTORY
 !!    2012/09/05 L.Tong
 !!    - Added timer for matrix multiplication
+!!    2014/09/12 L.Truflandier
+!!    - Added timer for area 9 (?) and exx
 !!  TODO
 !!
 !!  SOURCE
@@ -46,11 +48,13 @@ module timer_stdclocks_module
   type(cq_timer),save :: tmr_std_eminimisation    ! Code area: 6
   type(cq_timer),save :: tmr_std_moveatoms        ! Code area: 7
   type(cq_timer),save :: tmr_std_indexing         ! Code area: 8
+  type(cq_timer),save :: tmr_std_general          ! Code area: 9
   type(cq_timer),save :: tmr_std_pseudopot        ! Code area: 10
   type(cq_timer),save :: tmr_std_basis            ! Code area: 11
   type(cq_timer),save :: tmr_std_integration      ! Code area: 12
   type(cq_timer),save :: tmr_std_allocation
   type(cq_timer),save :: tmr_std_matmult
+  type(cq_timer),save :: tmr_std_exx  
 
 contains
 
@@ -80,24 +84,28 @@ contains
 !!   - Added timer for matrix multiplication
 !!  SOURCE
 !!
-  subroutine print_time_report
+  subroutine print_time_report(io_lun)
 
     implicit none
 
-    call print_timer(tmr_std_initialisation,"area 1 - Initialisation")
-    call print_timer(tmr_std_matrices,"area 2 - Matrices")
-    call print_timer(tmr_std_hmatrix,"area 3 - A - Operators: H Matrix")
-    call print_timer(tmr_std_smatrix,"area 3 - B - Operators: S Matrix")
-    call print_timer(tmr_std_densitymat,"area 4 - Density matrix")
-    call print_timer(tmr_std_chargescf,"area 5 - Charge density and SCF")
-    call print_timer(tmr_std_eminimisation,"area 6 - Energy minimisation")
-    call print_timer(tmr_std_moveatoms,"area 7 - Atom movements")
-    call print_timer(tmr_std_indexing,"area 8 - Indexing and grids")
-    call print_timer(tmr_std_pseudopot,"area 10 - Pseudopotentials")
-    call print_timer(tmr_std_basis,"area 11 - Basis functions and operations")
-    call print_timer(tmr_std_integration,"area 12 - Integration")
-    call print_timer(tmr_std_allocation,"allocating memory")
-    call print_timer(tmr_std_matmult,"matrix multiplication")
+    integer, optional :: io_lun
+
+    call print_timer(tmr_std_initialisation,"area 1 - Initialisation",io_lun)
+    call print_timer(tmr_std_matrices,      "area 2 - Matrices",io_lun)
+    call print_timer(tmr_std_hmatrix,       "area 3 - A - Operators: H Matrix",io_lun)
+    call print_timer(tmr_std_smatrix,       "area 3 - B - Operators: S Matrix",io_lun)
+    call print_timer(tmr_std_densitymat,    "area 4 - Density matrix",io_lun)
+    call print_timer(tmr_std_chargescf,     "area 5 - Charge density and SCF",io_lun)
+    call print_timer(tmr_std_eminimisation, "area 6 - Energy minimisation",io_lun)
+    call print_timer(tmr_std_moveatoms,  "area 7 - Atom movements",io_lun)
+    call print_timer(tmr_std_indexing,   "area 8 - Indexing and grids",io_lun)
+    call print_timer(tmr_std_pseudopot,  "area 10 - Pseudopotentials",io_lun)
+    call print_timer(tmr_std_basis,      "area 11 - Basis functions and operations",io_lun)
+    call print_timer(tmr_std_integration,"area 12 - Integration",io_lun)
+    call print_timer(tmr_std_allocation, "allocating memory",io_lun)
+    call print_timer(tmr_std_matmult,    "matrix multiplication",io_lun)
+    call print_timer(tmr_std_general,    "...general",io_lun)
+    call print_timer(tmr_std_exx,        "...exx",io_lun)
 
     return
   end subroutine print_time_report

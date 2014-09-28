@@ -24,16 +24,18 @@
 !!    Added new angular routines for PAO compatibility
 !!   2008/02/06 08:33 dave
 !!    Changed for output to file not stdout
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module pseudo_tm_module
 
-  use datatypes, only: double
-  use pseudo_tm_info, only: pseudo_info, pseudo, setup_pseudo_info, loc_pot, loc_chg
-  use pseudopotential_common, only: pseudopotential, &
-       core_radius, flag_angular_new
-  use global_module, only: iprint_pseudo, io_lun
-  use timer_stdclocks_module, only: start_timer,stop_timer,tmr_std_pseudopot,tmr_std_basis,tmr_std_allocation
+  use datatypes,              only: double
+  use pseudo_tm_info,         only: pseudo_info, pseudo, setup_pseudo_info, loc_pot, loc_chg
+  use pseudopotential_common, only: pseudopotential, core_radius, flag_angular_new
+  use global_module,          only: iprint_pseudo, io_lun
+  use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_stdclocks_module, only: tmr_std_pseudopot, tmr_std_basis, tmr_std_allocation
 
   implicit none
 
@@ -108,10 +110,10 @@ contains
 !!
   subroutine init_pseudo_tm(ecore, ncf_out) 
     
-    use datatypes, only: double
-    use global_module, only: iprint_pseudo
-    use block_module, only : n_pts_in_block
-    use GenComms, only: cq_abort, myid, inode, ionode
+    use datatypes,      only: double
+    use global_module,  only: iprint_pseudo
+    use block_module,   only: n_pts_in_block
+    use GenComms,       only: cq_abort, myid, inode, ionode
     use species_module, only: species, n_species, species_label, &
          nlpf_species
     
@@ -128,6 +130,12 @@ contains
     ! For PreConquest or calcluates maximum  16/05/2003 TM
     integer, intent(out), OPTIONAL :: ncf_out
     logical :: flag_calc_max = .false.
+
+    type(cq_timer)    :: tmr_std_loc
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='init_pseudo_tm',where=10,level=2)
+!****lat>$
 
     call start_timer(tmr_std_pseudopot)
     if(PRESENT(ncf_out)) then
@@ -153,13 +161,22 @@ contains
     if(flag_calc_max) then
        call deallocate_pseudo_tm  !contained in this module
        call stop_timer(tmr_std_pseudopot)    ! This is timed inside set_tm_pseudo
+!****lat<$
+       call stop_timer(t=tmr_std_loc,who='init_pseudo_tm')
+!****lat>$
        return
     endif
+
     call stop_timer(tmr_std_pseudopot)    ! This is timed inside set_tm_pseudo
     call set_tm_pseudo         !contained in this module
     call start_timer(tmr_std_pseudopot)
     call get_energy_shift(ecore)   !contained in this module
     call stop_timer(tmr_std_pseudopot)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='init_pseudo_tm')
+!****lat>$
+
     return
 
   contains

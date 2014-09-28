@@ -32,13 +32,17 @@
 !!    Changed for output to file not stdout
 !!   2008/05/23 ast
 !!    Added timers
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module atomic_density
 
   use datatypes
-  use global_module, ONLY: io_lun
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_chargescf,tmr_std_allocation
+  use global_module,          only: io_lun
+  use timer_stdclocks_module, only: tmr_std_allocation, tmr_std_chargescf
+  use timer_module,           only: start_timer, stop_timer
+
 
   implicit none
   save

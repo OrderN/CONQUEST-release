@@ -1,23 +1,21 @@
 # Compile flags
-FC=mpif90
+FC77?=mpif77
+FC90?=mpif90
 CFLAGS=
-#FFLAGS= -r8 -fast $(CFLAGS)
-LDFLAGS= $(CFLAGS)
-ARFL=
+FFLAGS?= -fast $(CFLAGS)
+LDFLAGS?= $(CFLAGS)
+ARFL?=
 
-OBJS =  gpfa.o setgpfa.o gpfa2f.o gpfa3f.o gpfa5f.o gpfft3.o
+OBJS =	gpfa.o setgpfa.o gpfa2f.o gpfa3f.o gpfa5f.o gpfft3.o
 
 libgpfa.a: $(OBJS)
 	ar $(ARFL) rv libgpfa.a $(OBJS)
-###	cp libgpfa.a ..
+#	cp libgpfa.a .. # commented out by MIZUHO-IR
 
-.f.o:
-	$(FC) $(FFLAGS) -c $<
-#.f90.o:
+.f.o:	
+	$(FC77) $(FFLAGS) -c $<
 %.o: %.f90
-	$(FC) $(FFLAGS) -c $<
-#	$(FC) $(COMPFLAGS) -c $<
-
+	$(FC90) $(FFLAGS) -c $<
 
 clean:
 	rm -f *.o *.a

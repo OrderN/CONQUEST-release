@@ -32,13 +32,16 @@
 !!   - Added module globals InvSMaxSteps and InvSDeltaOmegaTolerance
 !!     which can be set by the user, instead of original hard-wired
 !!     numbers of 100 and 0.0001
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module S_matrix_module
 
   use datatypes
-  use global_module, ONLY: io_lun
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_smatrix
+  use global_module,          only: io_lun
+  use timer_module,           only: start_timer, stop_timer
+  use timer_stdclocks_module, only: tmr_std_smatrix
 
   implicit none
 
@@ -159,10 +162,15 @@ contains
     real(double) :: dx, dy, dz, time0, time1
     real(double), allocatable, dimension(:), target :: part_blips
     type(cq_timer) :: tmr_l_tmp1
+    type(cq_timer) :: tmr_std_loc
     type(support_function) :: supp_on_j
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
     real(double), allocatable, dimension(:,:,:) :: this_data_K
     real(double), allocatable, dimension(:,:,:) :: this_data_M12
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='get_S_matrix',where=3,level=2)
+!****lat>$
 
     call start_timer(tmr_std_smatrix)
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
@@ -318,6 +326,11 @@ contains
     call stop_print_timer(tmr_l_tmp1, "get_S_matrix", &
                           IPRINT_TIME_THRES1)
     call stop_timer(tmr_std_smatrix)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='get_S_matrix')
+!****lat>$
+
     return
   end subroutine get_S_matrix
 !!***

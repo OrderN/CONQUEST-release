@@ -45,12 +45,14 @@
 !!    Added flags for Methfessel-Paxton smearing and associated Ef search method
 !!   2011/07/21 16:50 dave
 !!    Changes for cDFT
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module initial_read
 
-  use timer_stdclocks_module, only: start_timer, stop_timer, &
-                                    tmr_std_allocation
+  use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_stdclocks_module, only: tmr_std_allocation
 
   implicit none
 
@@ -144,7 +146,8 @@ contains
                                       flag_fix_spin_population,        &
                                       ne_in_cell, ne_spin_in_cell,     &
                                       ni_in_cell, area_moveatoms,      &
-                                      io_lun, flag_only_dispersion, flag_cdft_atom, flag_local_excitation
+                                      io_lun, flag_only_dispersion,    &
+                                      flag_cdft_atom, flag_local_excitation
     use cdft_data, only: cDFT_NAtoms, &
                          cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
@@ -164,7 +167,7 @@ contains
     use input_module,           only: fdf_string
     use force_module,           only: tot_force
     use DiagModule,             only: diagon
-    use constraint_module,      ONLY: flag_RigidBonds,constraints
+    use constraint_module,      only: flag_RigidBonds,constraints
 
     implicit none
 
@@ -176,6 +179,7 @@ contains
     real(double)      :: mu
 
     ! Local variables
+    type(cq_timer)    :: tmr_std_loc
     character(len=80) :: titles, def
     character(len=80) :: atom_coord_file
     character(len=80) :: part_coord_file
@@ -187,6 +191,10 @@ contains
 
     ! for checking the sum of electrons of spin channels
     real(double) :: sum_elecN_spin
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='read_and_write',where=1,level=1)
+!****lat>$
 
     ! read input data: parameters for run
     call read_input(start, start_L, titles, restart_file, vary_mu, mu,&
@@ -237,6 +245,7 @@ contains
 
     ! Create primary set for atoms: bundle of partitions
     call init_primary(bundle, maxatomsproc, maxpartsproc, .true.)
+
     call make_prim(parts, bundle, inode-1, id_glob, x_atom_cell, &
                    y_atom_cell, z_atom_cell, species)
 
@@ -286,6 +295,10 @@ contains
          call write_info(titles, mu, vary_mu, find_chdens, read_phi, &
                          HNL_fac, numprocs)
 
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='read_and_write')
+!****lat>$
+
     call my_barrier()
 
     return
@@ -307,7 +320,7 @@ contains
   !!   reads the input file
   !!  INPUTS
   !! 
-  !! 
+ !! 
   !!  USES
   !!   datatypes, global_module, atoms, dimens, species_module,
   !!   pseudopotential_data, GenComms, fdf, parse
@@ -419,6 +432,8 @@ contains
   !!   - Added flags and parameters for the efficient MD scheme
   !!   2013/08/20 M.Arita
   !!   - Add a flag for reusing T-matrix
+  !!   2014/01/21 lat
+  !!   - Added flags for EXX
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -451,6 +466,8 @@ contains
                              functional_gga_pbe96,                     &
                              functional_gga_pbe96_rev98,               &
                              functional_gga_pbe96_r99,                 &
+                             functional_hyb_pbe0,                      &
+                             functional_hartree_fock,                  &
                              flag_reset_dens_on_atom_move,             &
                              flag_continue_on_SC_fail, iprint_init,    &
                              iprint_mat, iprint_ops, iprint_DM,        &
@@ -470,69 +487,70 @@ contains
                              flag_perform_cDFT, flag_analytic_blip_int,&
                              flag_vdWDFT, vdW_LDA_functional,          &
                              flag_dump_L, flag_DeltaSCF, dscf_source_level,&
-                             dscf_target_level, dscf_source_spin, &
-                             dscf_target_spin, dscf_source_nfold, &
+                             dscf_target_level, dscf_source_spin,      &
+                             dscf_target_spin, dscf_source_nfold,      &
                              dscf_target_nfold, flag_local_excitation, dscf_HOMO_thresh, &
-                             dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit, &
+                             dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit,         &
                              flag_MDcontinue,flag_MDdebug,flag_MDold, &
                              flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
                              restart_T,restart_X,flag_XLBOMD,flag_propagateX, &
                              flag_propagateL,flag_dissipation,integratorXL,   &
-                             flag_FixCOM
+                             flag_FixCOM, flag_exx, exx_alpha, exx_scf_tol
+
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
                       RadiusSupport, NonLocalFactor, InvSRange,      &
                       min_blip_sp, flag_buffer_old, AtomMove_buffer, &
-                      r_dft_d2
+                      r_dft_d2, r_exx
     use block_module, only: in_block_x, in_block_y, in_block_z, &
                             blocks_raster, blocks_hilbert
     use species_module, only: species_label, charge, mass, n_species,  &
                               species, ps_file, ch_file, phi_file,     &
                               nsf_species, nlpf_species, npao_species, &
                               non_local_species, type_species
-    use GenComms, only: gcopy, my_barrier, cq_abort, inode, ionode
+    use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode
     use DiagModule, only: diagon
-    use energy, only: flag_check_Diag
-    use DMMin, only: maxpulayDMM, maxpulaystepDMM, minpulaystepDMM, &
-                     LinTol_DMM, n_dumpL
+    use energy,     only: flag_check_Diag
+    use DMMin,      only: maxpulayDMM, maxpulaystepDMM, minpulaystepDMM, &
+                          LinTol_DMM, n_dumpL
 !TM
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, &
                                       STATE, ABINIT, flag_angular_new
     use SelfCon, only: A, flag_linear_mixing, EndLinearMixing, q0, q1,&
                        n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
                        atomch_output, flag_Kerker, flag_wdmetric
-    use atomic_density, only: read_atomic_density_file, &
+    use atomic_density,  only: read_atomic_density_file, &
                               atomic_density_method
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
                                InvSDeltaOmegaTolerance
-    use blip, only: blip_info, init_blip_flag, alpha, beta
+    use blip,          only: blip_info, init_blip_flag, alpha, beta
     use maxima_module, only: maxnsf
-    use control, only: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset
-    use ewald_module, only: ewald_accuracy, flag_old_ewald
-    use minimise, only: UsePulay, n_L_iterations,          &
-                        n_support_iterations, L_tolerance, &
-                        sc_tolerance, energy_tolerance,    &
-                        expected_reduction
-    use pao_format, only: kcut, del_k
-    use support_spec_format, only : flag_paos_atoms_in_cell,          &
-                                    read_option, symmetry_breaking,   &
-                                    support_pao_file, TestBasisGrads, &
-                                    TestTot, TestBoth, TestS, TestH,  &
-                                    flag_one_to_one
-    use read_pao_info, only: pao_info_file, pao_norm_flag
+    use control,       only: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset
+    use ewald_module,  only: ewald_accuracy, flag_old_ewald
+    use minimise,      only: UsePulay, n_L_iterations,          &
+                             n_support_iterations, L_tolerance, &
+                             sc_tolerance, energy_tolerance,    &
+                             expected_reduction
+    use pao_format,          only: kcut, del_k
+    use support_spec_format, only: flag_paos_atoms_in_cell,          &
+                                   read_option, symmetry_breaking,   &
+                                   support_pao_file, TestBasisGrads, &
+                                   TestTot, TestBoth, TestS, TestH,  &
+                                   flag_one_to_one
+    use read_pao_info,     only: pao_info_file, pao_norm_flag
     use read_support_spec, only: support_spec_file, &
                                  flag_read_support_spec
     use test_force_module, only: flag_test_all_forces,           &
                                  flag_which_force, TF_direction, &
                                  TF_atom_moved, TF_delta
-    use io_module, only: pdb_format, pdb_altloc, append_coords, &
+    use io_module, only: pdb_format, pdb_altloc, append_coords,  &
                          pdb_output, banner, get_file_name
-    use group_module, only : part_method, HILBERT, PYTHON
-    use energy, only: flag_check_DFT
-    use H_matrix_module, only: locps_output, locps_choice
+    use group_module,     only: part_method, HILBERT, PYTHON
+    use energy,           only: flag_check_DFT
+    use H_matrix_module,  only: locps_output, locps_choice
     use pao_minimisation, only: InitStep_paomin
-    use timer_module, only: time_threshold,lun_tmr, TimingOn, &
-                            TimersWriteOut
+    use timer_module,     only: time_threshold,lun_tmr, TimingOn, &
+                                TimersWriteOut
     use input_module!, only: load_input, input_array, block_start,
     ! block_end, fd
     use cdft_data, only: cDFT_Type, cDFT_MaxIterations, cDFT_NAtoms, &
@@ -540,10 +558,13 @@ contains
                          cDFT_NumberAtomGroups, cDFT_AtomList,       &
                          cDFT_BlockLabel, cDFT_Vc
     use sfc_partitions_module, only: n_parts_user, average_atomic_diameter
-    use XLBOMD_module, ONLY: XLInitFreq,maxitersDissipation,kappa
-    use constraint_module, ONLY: flag_RigidBonds,constraints,SHAKE_tol, &
-                                 RATTLE_tol,maxiterSHAKE,maxiterRATTLE, &
-                                 const_range,n_bond
+    use XLBOMD_module,         only: XLInitFreq,maxitersDissipation,kappa
+    use constraint_module,     only: flag_RigidBonds,constraints,SHAKE_tol, &
+                                     RATTLE_tol,maxiterSHAKE,maxiterRATTLE, &
+                                     const_range,n_bond
+    use exx_types, only: exx_scheme, exx_mem, exx_overlap, exx_alloc,       &
+                         exx_cartesian, exx_radius, exx_hgrid, exx_psolver, &
+                         exx_debug, exx_Kij, exx_Kkl, p_scheme
 
     implicit none
 
@@ -557,6 +578,10 @@ contains
     ! Local variables
     !type(block), pointer :: bp      ! Pointer to a block read by fdf
     !type(parsed_line), pointer :: p ! Pointer to a line broken into tokens by fdf
+    type(cq_timer)    :: tmr_std_loc
+    type(cq_timer)    :: tmr_std_loc2
+    type(cq_timer)    :: tmr_std_loc3
+
 
     integer           :: i, j, k, lun, stat
     character(len=20) :: def, tmp2
@@ -568,17 +593,20 @@ contains
     logical           :: new_format
     !logical, external :: leqi
     real(double)      :: r_t
-
     logical :: flag_ghost, find_species
 
     ! spin polarisation
     logical :: flag_spin_polarisation
 
     ! Set defaults
-    vary_mu = .true.
+    vary_mu  = .true.
     read_phi = .false.
 
     !*** WHO READS AND BROADCASTS ? ***!
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='read_input',where=1,level=2)
+!****lat>$
 
     ! Test for existence of input file
     if (inode == ionode) then
@@ -628,11 +656,18 @@ contains
           end if ! ionode switch                                           ! tmr_rmv001
        end if                                                              ! tmr_rmv001
     end if                                                                 ! tmr_rmv001
+!!$ 
+!!$ **<lat>** 
+!!$ I think we may need (std) output file to be open before this point
+!!$ at the very beginning in the main.f90 
+!!$
+!!$
+!!$
     if(inode==ionode) call banner
     new_format = fdf_boolean('IO.NewFormat',.true.)
     if(new_format) then
        def = ' '
-       iprint = fdf_integer('IO.Iprint',0)
+       iprint        = fdf_integer('IO.Iprint',0)
        iprint_init   = fdf_integer('IO.Iprint_init',iprint)
        iprint_mat    = fdf_integer('IO.Iprint_mat',iprint)
        iprint_ops    = fdf_integer('IO.Iprint_ops',iprint)
@@ -648,18 +683,18 @@ contains
        iprint_intgn  = fdf_integer('IO.Iprint_intgn',iprint)
        iprint_time   = fdf_integer('IO.Iprint_time',iprint)
        flag_dump_L   = fdf_boolean('IO.DumpL', .true.)
-       locps_output = fdf_boolean('IO.LocalPotOutput', .false.)
-       locps_choice = fdf_integer('IO.LocalPotChoice', 8)
+       locps_output  = fdf_boolean('IO.LocalPotOutput', .false.)
+       locps_choice  = fdf_integer('IO.LocalPotChoice', 8)
        atomch_output = fdf_boolean('IO.AtomChargeOutput', .false.)
        tmp = fdf_string(8,'General.MemoryUnits','MB')
        if(leqi(tmp(1:2),'kB')) then
-          m_units = kbytes
+          m_units  = kbytes
           mem_conv = kB
        else if(leqi(tmp(1:2),'MB')) then
-          m_units = mbytes
+          m_units  = mbytes
           mem_conv = MB
        else if(leqi(tmp(1:2),'GB')) then
-          m_units = gbytes
+          m_units  = gbytes
           mem_conv = GB
        end if
        time_threshold = fdf_double('General.TimeThreshold',0.001_double)
@@ -668,27 +703,27 @@ contains
        ! Is this a restart run ? **NB NOT AVAILABLE RIGHT NOW**
        start = fdf_boolean('General.NewRun',.true.)
        if(start) then
-          start_L = .true.
+          start_L     = .true.
           read_option = .false.  ! N.B. Original had option for a blip model - add this later
        else ! This option loads data from a file - we need to add the option to search for this
           call cq_abort('read_input: you may not select restart for a run just now')
        endif
        init_blip_flag = fdf_string(10,'Basis.InitBlipFlag','pao')
-       restart_L = fdf_boolean('General.LoadL',.false.)
-       restart_rho = fdf_boolean('General.LoadRho',.false.)
-       restart_T = fdf_boolean('General.LoadInvS',.false.)
+       restart_L      = fdf_boolean('General.LoadL',.false.)
+       restart_rho    = fdf_boolean('General.LoadRho',.false.)
+       restart_T      = fdf_boolean('General.LoadInvS',.false.)
        ! Is there a net charge on the cell ?
-       ne_in_cell = fdf_double('General.NetCharge',zero)
+       ne_in_cell     = fdf_double('General.NetCharge',zero)
        ! Read coordinates file 
        flag_fractional_atomic_coords = &
             fdf_boolean('IO.FractionalAtomicCoords',.true.)
        call my_barrier()
        ! Spin polarised calculation
        ! - if we are doing spin polarised calculations or not
-       flag_spin_polarisation = fdf_boolean('Spin.SpinPolarised', .false.) 
+       flag_spin_polarisation   = fdf_boolean('Spin.SpinPolarised', .false.) 
        flag_fix_spin_population = fdf_boolean('Spin.FixSpin', .false.)
        if (flag_spin_polarisation) then
-          nspin = 2
+          nspin       = 2
           spin_factor = one
           ne_spin_in_cell(1) = fdf_double('Spin.NeUP', zero)
           ne_spin_in_cell(2) = fdf_double('Spin.NeDN', zero)
@@ -699,16 +734,16 @@ contains
        ! Default to 25 Ha or 50 Ry cutoff for grid
        GridCutoff = fdf_double('Grid.GridCutoff',25.0_double)
        ! Grid points
-       n_grid_x = fdf_integer('Grid.PointsAlongX',0)
-       n_grid_y = fdf_integer('Grid.PointsAlongY',0)
-       n_grid_z = fdf_integer('Grid.PointsAlongZ',0)
+       n_grid_x   = fdf_integer('Grid.PointsAlongX',0)
+       n_grid_y   = fdf_integer('Grid.PointsAlongY',0)
+       n_grid_z   = fdf_integer('Grid.PointsAlongZ',0)
        ! Number of different iterations - not well defined
-       n_L_iterations = fdf_integer('DM.LVariations',50)
-       max_L_iterations = n_L_iterations
-       n_dumpL = fdf_integer('DM.n_dumpL',n_L_iterations+1)
+       n_L_iterations       = fdf_integer('DM.LVariations',50)
+       max_L_iterations     = n_L_iterations
+       n_dumpL              = fdf_integer('DM.n_dumpL',n_L_iterations+1)
        n_support_iterations = fdf_integer('minE.SupportVariations',10)
        ! Initial expected drop in energy
-       expected_reduction = fdf_double('minE.ExpectedEnergyReduction',zero)
+       expected_reduction   = fdf_double('minE.ExpectedEnergyReduction',zero)
        ! Keep for fixed potential calculations
        mu = fdf_double('DM.mu',zero)
        if(fdf_defined('DM.ConstantMu')) then
@@ -716,17 +751,26 @@ contains
        else
           vary_mu = .true.
        end if
+!!$
+!!$
+!!$
+!!$
        ! Radii - again, astonishingly badly named
-       r_h = fdf_double('hamiltonian_range',zero)
-       r_c = fdf_double('DM.L_range',one)
-       r_t = fdf_double('InvSRange',r_h)
+!****lat<$
+       ! it seems that the initialisation of r_h here
+       ! is obselete due to 'r_h = max(r_h,RadiusSupport(n))'
+       ! in dimens.module.f90 is this what we want ?
+!****lat>$
+       r_h     = fdf_double('hamiltonian_range',zero)
+       r_c     = fdf_double('DM.L_range',one)
+       r_t     = fdf_double('InvSRange',r_h)
        HNL_fac = fdf_double('non_local_factor',zero)
        ! Exponents for initial gaussian blips
        alpha = fdf_double('Basis.SGaussExponent',zero)
-       beta = fdf_double('Basis.PGaussExponent',zero)
+       beta  = fdf_double('Basis.PGaussExponent',zero)
        ! Tolerance on minimisation
        energy_tolerance = fdf_double('minE.EnergyTolerance',1.0e-5_double)
-       UsePulay = fdf_boolean('Basis.UsePulayForPAOs',.false.)
+       UsePulay         = fdf_boolean('Basis.UsePulayForPAOs',.false.)
        ! Sizes of integration grid blocks
        in_block_x = fdf_integer('Grid.InBlockX',4)
        in_block_y = fdf_integer('Grid.InBlockY',4)
@@ -735,7 +779,7 @@ contains
        method = fdf_string(6,'DM.SolutionMethod','ordern') ! Default is O(N)
        if(leqi(method,'diagon')) then
           diagon = .true.
-          flag_check_Diag = .true.
+          flag_check_Diag = .true. 
        else
           diagon = .false.
           flag_check_Diag = .false.
@@ -747,18 +791,22 @@ contains
        else if(leqi(basis_string,'PAOs')) then
           flag_basis_set = PAOs
        end if
-       read_option = fdf_boolean('Basis.LoadCoeffs',.false.)
-       flag_onsite_blip_ana = fdf_boolean('Basis.OnsiteBlipsAnalytic',.true.)
+       read_option            = fdf_boolean('Basis.LoadCoeffs',.false.)
+       flag_onsite_blip_ana   = fdf_boolean('Basis.OnsiteBlipsAnalytic',.true.)
        flag_analytic_blip_int = fdf_boolean('Basis.AnalyticBlipIntegrals',.false.)
        if(read_option.AND.flag_basis_set==blips) &
-            restart_file = fdf_string(40,'Basis.LoadBlipFile',' ')
-       find_chdens = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
-       flag_Becke_weights = fdf_boolean('SC.BeckeWeights',.false.)
-       flag_Becke_atomic_radii = fdf_boolean('SC.BeckeAtomicRadii',.false.)
+            restart_file    = fdf_string(40,'Basis.LoadBlipFile',' ')
+       find_chdens            = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
+       flag_Becke_weights     = fdf_boolean('SC.BeckeWeights',.false.)
+       flag_Becke_atomic_radii= fdf_boolean('SC.BeckeAtomicRadii',.false.)
        ! Number of species
        n_species = fdf_integer('General.NumberOfSpecies',1)
        call allocate_species_vars
        flag_angular_new = fdf_boolean('Basis.FlagNewAngular',.true.)
+!!$
+!!$
+!!$
+!!$
        ! Tweak DRB 2007/03/23: fix abinit as standard type
        ps_type = fdf_string(5,'General.PseudopotentialType','abinit') 
        ! Write out pseudopotential type
@@ -783,6 +831,10 @@ contains
                       &Abinit pseudopotentials")') 
           flag_angular_new = .true.
        end if
+!!$
+!!$
+!!$
+!!$
        ! Read, using old-style fdf_block, the information about the
        ! different species
        !if(fdf_block('ChemicalSpeciesLabel',lun)) then
@@ -833,17 +885,20 @@ contains
              endif
           enddo
        endif
-        
+!!$
+!!$
+!!$
+!!$        
        ! Read charge, mass, pseudopotential and starting charge and
        ! blip models for the individual species
-       maxnsf = 0
+       maxnsf      = 0
        min_blip_sp = 1.0e8_double
        do i=1,n_species
-          charge(i) = zero
-          nsf_species(i) = 0
-          RadiusSupport(i) = r_h
+          charge(i)         = zero
+          nsf_species(i)    = 0
+          RadiusSupport(i)  = r_h
           NonLocalFactor(i) = HNL_fac
-          InvSRange(i) = r_t
+          InvSRange(i)      = r_t
           blip_info(i)%SupportGridSpacing = zero
           if(pseudo_type==SIESTA.OR.pseudo_type==ABINIT) non_local_species(i) = .true.
           ! This is new-style fdf_block
@@ -851,10 +906,10 @@ contains
           !if(fdf_block(species_label(i),bp)) then
           !   do while(fdf_bline(bp,line)) ! While there are lines in the block
           if(fdf_block(species_label(i))) then
-             charge(i) = fdf_double('Atom.ValenceCharge',zero)
-             nsf_species(i) = fdf_integer('Atom.NumberOfSupports',0)
-             RadiusSupport(i) = fdf_double('Atom.SupportFunctionRange',r_h)
-             InvSRange = fdf_double('Atom.InvSRange',zero)
+             charge(i)        = fdf_double ('Atom.ValenceCharge',zero)
+             nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
+             RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',r_h)
+             InvSRange        = fdf_double ('Atom.InvSRange',zero)
              if(InvSRange(i)<RD_ERR) InvSRange(i) = RadiusSupport(i)
              NonLocalFactor(i) = fdf_double('Atom.NonLocalFactor',HNL_fac)
              if(NonLocalFactor(i)>one.OR.NonLocalFactor(i)<zero) then
@@ -863,7 +918,7 @@ contains
                            fmt='(10x,"Warning: Atom.NonLocalFactor &
                                  &must lie between 0.0 and 1.0: ",f9.5)') &
                           NonLocalFactor(i)
-                if(NonLocalFactor(i)>one) NonLocalFactor(i) = one
+                if(NonLocalFactor(i)>one)  NonLocalFactor(i) = one
                 if(NonLocalFactor(i)<zero) NonLocalFactor(i) = zero
              end if
              blip_info(i)%SupportGridSpacing = fdf_double('Atom.SupportGridSpacing',zero)
@@ -905,55 +960,67 @@ contains
              endif
           enddo
        endif
+!!$
+!!$
+!!$
+!!$ 
        !blip_width = support_grid_spacing *
        !             fdf_double('blip_width_over_support_grid_spacing',four)
        flag_global_tolerance = fdf_boolean('minE.GlobalTolerance',.true.)
-       L_tolerance = fdf_double('minE.LTolerance',1.0e-7_double)
-       sc_tolerance  = fdf_double('minE.SCTolerance',1.0e-6_double)
-       maxpulayDMM = fdf_integer('DM.MaxPulay',5)
-       minpulaystepDMM = fdf_double('DM.MinPulayStepSize',0.001_double)
-       maxpulaystepDMM = fdf_double('DM.MaxPulayStepSize',0.1_double)
+       L_tolerance           = fdf_double ('minE.LTolerance',1.0e-7_double)
+       sc_tolerance          = fdf_double ('minE.SCTolerance',1.0e-6_double)
+       maxpulayDMM           = fdf_integer('DM.MaxPulay',5)
+       minpulaystepDMM       = fdf_double ('DM.MinPulayStepSize',0.001_double)
+       maxpulaystepDMM       = fdf_double ('DM.MaxPulayStepSize',0.1_double)
        LinTol_DMM = fdf_double('DM.LinTol',0.1_double)
+!!$
+!!$
+!!$
+!!$
        ! Find out what type of run we're doing
-       runtype = fdf_string(20,'AtomMove.TypeOfRun','static')
-       flag_buffer_old = fdf_boolean('AtomMove.OldBuffer',.false.)
-       AtomMove_buffer = fdf_double('AtomMove.BufferSize',4.0_double)
+       runtype             = fdf_string(20,'AtomMove.TypeOfRun','static')
+       flag_buffer_old       = fdf_boolean('AtomMove.OldBuffer',.false.)
+       AtomMove_buffer       = fdf_double ('AtomMove.BufferSize',4.0_double)
        flag_pulay_simpleStep = fdf_boolean('AtomMove.PulaySimpleStep',.false.)
-       CGreset = fdf_boolean('AtomMove.ResetCG',.false.)
-       MDn_steps = fdf_integer('AtomMove.NumSteps',100)
-       MDfreq = fdf_integer('AtomMove.OutputFreq',50)
-       MDtimestep = fdf_double('AtomMove.Timestep',0.5_double)
-       MDcgtol = fdf_double('AtomMove.MaxForceTol',0.0005_double)
-       flag_vary_basis = fdf_boolean('minE.VaryBasis',.false.)
+       CGreset               = fdf_boolean('AtomMove.ResetCG',.false.)
+       MDn_steps             = fdf_integer('AtomMove.NumSteps',100)
+       MDfreq                = fdf_integer('AtomMove.OutputFreq',50)
+       MDtimestep            = fdf_double ('AtomMove.Timestep',0.5_double)
+       MDcgtol               = fdf_double ('AtomMove.MaxForceTol',0.0005_double)
+       flag_vary_basis       = fdf_boolean('minE.VaryBasis',.false.)
        if(.NOT.flag_vary_basis) then
           flag_precondition_blips = .false.
        else 
           flag_precondition_blips = fdf_boolean('minE.PreconditionBlips',.true.)
        end if
-       InitStep_paomin = fdf_double('minE.InitStep_paomin',5.0_double)
+       InitStep_paomin      = fdf_double ('minE.InitStep_paomin',5.0_double)
        flag_self_consistent = fdf_boolean('minE.SelfConsistent',.true.)
-       flag_mix_L_SC_min = fdf_boolean('minE.MixedLSelfConsistent',.false.)
+       flag_mix_L_SC_min    = fdf_boolean('minE.MixedLSelfConsistent',.false.)
        ! Tweak 2007/03/23 DRB Make Pulay mixing default
-       flag_linear_mixing = fdf_boolean('SC.LinearMixingSC',.true.)
-       A(1) = fdf_double('SC.LinearMixingFactor', 0.5_double)
+       flag_linear_mixing   = fdf_boolean('SC.LinearMixingSC',.true.)
+       A(1)                 = fdf_double ('SC.LinearMixingFactor', 0.5_double)
        ! 2011/09/19 L.Tong, for spin polarised calculation
-       A(2) = fdf_double('SC.LinearMixingFactor_SpinDown', A(1))
+       A(2)                 = fdf_double ('SC.LinearMixingFactor_SpinDown', A(1))
        ! end 2011/09/19 L.Tong
-       EndLinearMixing = fdf_double('SC.LinearMixingEnd',sc_tolerance)
-       flag_Kerker = fdf_boolean('SC.KerkerPreCondition',.false.)
-       q0 = fdf_double('SC.KerkerFactor',0.1_double)
-       flag_wdmetric = fdf_boolean('SC.WaveDependentMetric',.false.)
-       q1 = fdf_double('SC.MetricFactor',0.1_double)
-       n_exact = fdf_integer('SC.LateStageReset',5)
+       EndLinearMixing = fdf_double ('SC.LinearMixingEnd',sc_tolerance)
+       flag_Kerker     = fdf_boolean('SC.KerkerPreCondition',.false.)
+       q0              = fdf_double ('SC.KerkerFactor',0.1_double)
+       flag_wdmetric   = fdf_boolean('SC.WaveDependentMetric',.false.)
+       q1              = fdf_double ('SC.MetricFactor',0.1_double)
+       n_exact         = fdf_integer('SC.LateStageReset',5)
        flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
-       flag_continue_on_SC_fail = fdf_boolean('SC.ContinueOnSCFail',.false.)
-       maxitersSC = fdf_integer('SC.MaxIters',50)
-       maxearlySC = fdf_integer('SC.MaxEarly',3)
-       maxpulaySC = fdf_integer('SC.MaxPulay',5)
+       flag_continue_on_SC_fail     = fdf_boolean('SC.ContinueOnSCFail',.false.)
+       maxitersSC      = fdf_integer('SC.MaxIters',50)
+       maxearlySC      = fdf_integer('SC.MaxEarly',3)
+       maxpulaySC      = fdf_integer('SC.MaxPulay',5)
        read_atomic_density_file = &
-            fdf_string(80,'SC.ReadAtomicDensityFile','read_atomic_density.dat')
+                       fdf_string(80,'SC.ReadAtomicDensityFile','read_atomic_density.dat')
        ! Read atomic density initialisation flag
        atomic_density_method = fdf_string(10,'SC.AtomicDensityFlag','pao')
+!!$
+!!$
+!!$
+!!$
        ! cDFT flags
        flag_perform_cDFT = fdf_boolean('cDFT.Perform_cDFT',.false.)
        if(flag_perform_cDFT) then
@@ -961,9 +1028,9 @@ contains
              flag_Becke_weights = .true.
              write(io_lun,fmt='(2x,"Warning: we require Becke  weights for cDFT ! Setting to true")')
           end if
-          cDFT_Type = fdf_integer('cDFT.Type',2) ! Default to D-A charge diff
+          cDFT_Type          = fdf_integer('cDFT.Type',2) ! Default to D-A charge diff
           cDFT_MaxIterations = fdf_integer('cDFT.MaxIterations',50)
-          cDFT_Tolerance = fdf_double('cDFT.Tolerance',0.001_double)
+          cDFT_Tolerance     = fdf_double ('cDFT.Tolerance',0.001_double)
           !cDFT_Target = fdf_double('cDFT.Target',1.0_double)
           cDFT_NumberAtomGroups = fdf_integer('cDFT.NumberAtomGroups',1)
           allocate(cDFT_NAtoms(cDFT_NumberAtomGroups),cDFT_Target(cDFT_NumberAtomGroups), &
@@ -989,18 +1056,22 @@ contains
              call fdf_endblock
           end do
        end if
+!!$
+!!$
+!!$
+!!$
        ! DeltaSCF flags
        flag_DeltaSCF = fdf_boolean('minE.DeltaSCF',.false.)
        if(flag_DeltaSCF) then
-          dscf_source_level = fdf_integer('DeltaSCF.SourceLevel',0)
-          dscf_target_level = fdf_integer('DeltaSCF.TargetLevel',0)
-          dscf_source_spin  = fdf_integer('DeltaSCF.SourceChannel',1)
-          dscf_target_spin  = fdf_integer('DeltaSCF.TargetChannel',1)
-          dscf_source_nfold = fdf_integer('DeltaSCF.SourceNFold',1)
-          dscf_target_nfold = fdf_integer('DeltaSCF.TargetNFold',1)
+          dscf_source_level     = fdf_integer('DeltaSCF.SourceLevel',0)
+          dscf_target_level     = fdf_integer('DeltaSCF.TargetLevel',0)
+          dscf_source_spin      = fdf_integer('DeltaSCF.SourceChannel',1)
+          dscf_target_spin      = fdf_integer('DeltaSCF.TargetChannel',1)
+          dscf_source_nfold     = fdf_integer('DeltaSCF.SourceNFold',1)
+          dscf_target_nfold     = fdf_integer('DeltaSCF.TargetNFold',1)
           flag_local_excitation = fdf_boolean('DeltaSCF.LocalExcitation',.false.)
           if(flag_local_excitation) then
-             dscf_homo_limit = fdf_integer('DeltaSCF.HOMOLimit',0)
+             dscf_homo_limit    = fdf_integer('DeltaSCF.HOMOLimit',0)
              if(dscf_homo_limit<0) then
                 dscf_homo_limit = -dscf_homo_limit
                 write(io_lun,fmt='(2x,"Changed sign on dscf_HOMO_limit: ",i5)') dscf_homo_limit
@@ -1010,8 +1081,8 @@ contains
                 flag_local_excitation = .false.
                 write(io_lun,fmt='(2x,"You must set DeltaSCF.HOMOLimit or DeltaSCF.LUMOLimit for local excitation")')
              end if
-             dscf_HOMO_thresh = fdf_double('DeltaSCF.HOMOThresh',0.5_double)
-             dscf_LUMO_thresh = fdf_double('DeltaSCF.LUMOThresh',0.5_double)
+             dscf_HOMO_thresh      = fdf_double ('DeltaSCF.HOMOThresh',0.5_double)
+             dscf_LUMO_thresh      = fdf_double ('DeltaSCF.LUMOThresh',0.5_double)
              cDFT_NumberAtomGroups = fdf_integer('cDFT.NumberAtomGroups',1)
              allocate(cDFT_NAtoms(cDFT_NumberAtomGroups),cDFT_Target(cDFT_NumberAtomGroups), &
                   cDFT_AtomList(cDFT_NumberAtomGroups),cDFT_BlockLabel(cDFT_NumberAtomGroups))
@@ -1036,9 +1107,13 @@ contains
              end do
           end if
        end if
+!!$
+!!$
+!!$
+!!$
        InvSTolerance = fdf_double('DM.InvSTolerance',1e-2_double)
        InvSDeltaOmegaTolerance = &
-            fdf_double('DM.InvSDeltaOmegaTolerance',0.0001_double)
+                       fdf_double('DM.InvSDeltaOmegaTolerance',0.0001_double)
        InvSMaxSteps = fdf_integer('DM.InvSMaxSteps',100)
        basis_string = fdf_string(10,'General.BlockAssign','Hilbert')
        if(leqi(basis_string,'Raster')) then
@@ -1048,35 +1123,38 @@ contains
        end if
        flag_read_blocks = fdf_boolean('Grid.ReadBlocks',.false.)
        ! Default value of 10^-10 Ha per atom
-       ewald_accuracy = fdf_double('General.EwaldAccuracy',1.0e-10_double)
-       flag_old_ewald = fdf_boolean('General.FlagOldEwald',.false.)
+       ewald_accuracy   = fdf_double ('General.EwaldAccuracy',1.0e-10_double)
+       flag_old_ewald   = fdf_boolean('General.FlagOldEwald',.false.)
        UseGemm = fdf_boolean('MM.UseGemm',.false.)
        if(flag_ghost) then
           if(inode==ionode) write(io_lun,*) ' As ghost atoms are included, UseGemm must be false.'
           UseGemm = .false.
        endif
-       flag_check_DFT=fdf_boolean('General.CheckDFT',.false.)
+       flag_check_DFT     = fdf_boolean('General.CheckDFT',.false.)
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
-       flag_quench_MD = fdf_boolean('AtomMove.QuenchMD',.false.)
-       temp_ion = fdf_double('AtomMove.IonTemperature',300.0_double)
-
+       flag_quench_MD     = fdf_boolean('AtomMove.QuenchMD',.false.)
+       temp_ion           = fdf_double ('AtomMove.IonTemperature',300.0_double)
+!!$
+!!$
+!!$
+!!$
        del_k = fdf_double('Basis.PaoKspaceOlGridspace',0.1_double)
-       kcut = fdf_double('Basis.PaoKspaceOlCutoff', 1000.0_double)
+       kcut  = fdf_double('Basis.PaoKspaceOlCutoff', 1000.0_double)
        flag_paos_atoms_in_cell = fdf_boolean('Basis.PAOs_StoreAllAtomsInCell',.true.)
-       flag_one_to_one = fdf_boolean('Basis.PAOs_OneToOne',.false.)
-       symmetry_breaking = fdf_boolean('Basis.SymmetryBreaking',.false.)
-       support_pao_file = fdf_string(80,'Basis.SupportPaoFile','supp_pao.dat')
-       pao_info_file = fdf_string(80,'Basis.PaoInfoFile','pao.dat')
-       pao_norm_flag = fdf_integer('Basis.PaoNormFlag',0)
+       flag_one_to_one         = fdf_boolean('Basis.PAOs_OneToOne',.false.)
+       symmetry_breaking       = fdf_boolean('Basis.SymmetryBreaking',.false.)
+       support_pao_file        = fdf_string(80,'Basis.SupportPaoFile','supp_pao.dat')
+       pao_info_file           = fdf_string(80,'Basis.PaoInfoFile','pao.dat')
+       pao_norm_flag           = fdf_integer('Basis.PaoNormFlag',0)
        TestBasisGrads = fdf_boolean('Basis.TestBasisGradients',.false.)
-       TestTot = fdf_boolean('Basis.TestBasisGradTot',.false.)
-       TestBoth = fdf_boolean('Basis.TestBasisGradBoth',.false.)
-       TestS = fdf_boolean('Basis.TestBasisGrad_S',.false.)
-       TestH = fdf_boolean('Basis.TestBasisGrad_H',.false.)
-       support_spec_file = fdf_string(80,'Basis.SupportSpecFile','support.dat')
+       TestTot        = fdf_boolean('Basis.TestBasisGradTot',.false.)
+       TestBoth       = fdf_boolean('Basis.TestBasisGradBoth',.false.)
+       TestS          = fdf_boolean('Basis.TestBasisGrad_S',.false.)
+       TestH          = fdf_boolean('Basis.TestBasisGrad_H',.false.)
+       support_spec_file      = fdf_string(80,'Basis.SupportSpecFile','support.dat')
        flag_read_support_spec = fdf_boolean('Basis.ReadSupportSpec',.false.)
-       flag_test_forces = fdf_boolean('AtomMove.TestForces',.false.)
-       flag_test_all_forces = fdf_boolean('AtomMove.TestAllForces',.true.)
+       flag_test_forces       = fdf_boolean('AtomMove.TestForces',.false.)
+       flag_test_all_forces   = fdf_boolean('AtomMove.TestAllForces',.true.)
        if(.NOT.flag_test_all_forces) then ! Test one force component
           flag_which_force = fdf_integer('AtomMove.TestSpecificForce',1)
           if(flag_which_force>8.OR.flag_which_force<0.AND.inode==ionode) &
@@ -1091,20 +1169,80 @@ contains
           TF_direction = 1
        end if
        TF_atom_moved = fdf_integer('AtomMove.TestForceAtom',1)
-       TF_delta = fdf_double('AtomMove.TestForceDelta',0.00001_double)
+       TF_delta      = fdf_double ('AtomMove.TestForceDelta',0.00001_double)
+!!$
+!!$
+!!$
+!!$       
        flag_functional_type = fdf_integer('General.FunctionalType', 3)   ! LDA PW92
+!!$
+!!$
+!!$
+!!$
        ! check if functional types are set correctly
+       ! **<lat>** added PBE0 and HF
        if (flag_spin_polarisation) then
-          if (flag_functional_type == functional_lda_pz81 .or. &
-              flag_functional_type == functional_lda_gth96) then
+          !
+          if ( flag_functional_type == functional_lda_pz81       .or. &
+               flag_functional_type == functional_lda_gth96      .or. &
+               flag_functional_type == functional_hyb_PBE0       .or. &
+               flag_functional_type == functional_hartree_fock ) then
+             !
              if (inode == ionode) &
                   write (io_lun,'(/,a,/)') &
-                        '*** WARNING: the chosen xc-functional is not &
-                        &implemented for spin polarised calculation, &
-                        &reverting to LDA-PW92. ***'
+                  '*** WARNING: the chosen xc-functional is not &
+                  &implemented for spin polarised calculation, &
+                  &reverting to LDA-PW92. ***'
              flag_functional_type = functional_lda_pw92
-          end if
+             !
+             !
+          end if          
        end if
+!!$
+!!$
+!!$
+!!$
+       ! EXX flags
+       if ( flag_functional_type == functional_hyb_pbe0       .or. &
+            flag_functional_type == functional_hartree_fock ) then
+          flag_exx = .true.
+       else
+          ! don't touch
+          r_exx    = fdf_double('EXX.X_range',one)
+          flag_exx = .false.
+          !             
+       end if
+       !
+       if( flag_exx ) then
+          ! Setup the exact-exchange mixing factor (0 < exx_alpha <1)
+          if ( flag_functional_type == functional_hyb_pbe0 ) then
+             exx_alpha  = fdf_double ('EXX.Alpha',0.25_double)
+          else if( flag_functional_type == functional_hartree_fock ) then
+             exx_alpha  = fdf_double ('EXX.Alpha',1.00_double)
+          end if
+          if ( exx_alpha < zero .or. alpha > one ) then
+             call cq_abort('EXX: exact-exchange mixing value is not &
+                  reasonable ', exx_alpha)
+          end if 
+          ! To control accuracy during scf
+          exx_scf_tol   = sc_tolerance
+          ! Grid spacing for PAO discretisation in EXX
+          exx_hgrid = fdf_double ('EXX.GridSpacing',zero)
+          exx_Kij       = .true.
+          exx_Kkl       = .true.
+          exx_cartesian = .true. 
+          exx_overlap   = .true. 
+          exx_alloc     = .false.
+          exx_psolver   = 'fftw'
+          p_scheme      = 'pulay'
+          exx_scheme    = 1
+          exx_mem       = 1
+          exx_debug     = .false.
+       end if
+!!$
+!!$
+!!$
+!!$
        select case(flag_functional_type)
        case (functional_lda_pz81)
           functional_description = 'LDA PZ81'
@@ -1118,9 +1256,15 @@ contains
           functional_description = 'GGA revPBE98'   !   in Zhang & Yang, PRL 80:4, 890 (1998)
        case (functional_gga_pbe96_r99)              ! This is PBE with the functional form redefinition
           functional_description = 'GGA RPBE99'     !   in Hammer et al., PRB 59:11, 7413-7421 (1999)
+       case (functional_hyb_pbe0)                   ! This is PB0E with the functional form redefinition
+          functional_description = 'hyb PBE0'        
        case default
           functional_description = 'LSDA PW92'
        end select
+!!$
+!!$
+!!$
+!!$
        tmp = fdf_string(8,'General.EnergyUnits','Ha')
        if(leqi(tmp(1:2),'Ha')) then
           energy_units = har
@@ -1141,9 +1285,9 @@ contains
           dist_conv = BohrToAng
        endif
        for_conv = en_conv/dist_conv
-       pdb_format = fdf_boolean('IO.PdbIn',.false.)
+       pdb_format = fdf_boolean ('IO.PdbIn',.false.)
        pdb_altloc = fdf_string(1,'IO.PdbAltLoc',' ')
-       pdb_output = fdf_boolean('IO.PdbOut',.false.)
+       pdb_output = fdf_boolean ('IO.PdbOut',.false.)
        part_mode = fdf_string(10,'General.PartitionMethod','Hilbert')
        if (leqi(part_mode(1:6),'File')) then
           part_method = PYTHON
@@ -1183,16 +1327,16 @@ contains
           vdW_LDA_functional = fdf_integer('vdWDFT.LDAFunctionalType', 3)
        end if
        ! Basic settings for MD
-       flag_MDold=fdf_boolean('AtomMove.OldMemberUpdates',.false.)
-       flag_MDdebug=fdf_boolean('AtomMove.Debug',.false.)
-       flag_MDcontinue=fdf_boolean('AtomMove.RestartRun',.false.)
-       flag_LmatrixReuse=fdf_boolean('AtomMove.ReuseL',.false.)
-       flag_TmatrixReuse=fdf_boolean('AtomMove.ReuseInvS',.false.)
-       flag_SkipEarlyDM=fdf_boolean('AtomMove.SkipEarlyDM',.false.)
-       McWFreq=fdf_integer('AtomMove.McWeenyFreq',0)
-       flag_FixCOM=fdf_boolean('AtomMove.FixCentreOfMass', .false.)
+       flag_MDold        = fdf_boolean('AtomMove.OldMemberUpdates',.false.)
+       flag_MDdebug      = fdf_boolean('AtomMove.Debug',.false.)
+       flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
+       flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseL',.false.)
+       flag_TmatrixReuse = fdf_boolean('AtomMove.ReuseInvS',.false.)
+       flag_SkipEarlyDM  = fdf_boolean('AtomMove.SkipEarlyDM',.false.)
+       McWFreq           = fdf_integer('AtomMove.McWeenyFreq',0)
+       flag_FixCOM       = fdf_boolean('AtomMove.FixCentreOfMass', .false.)
        ! XL-BOMD
-       flag_XLBOMD=fdf_boolean('AtomMove.ExtendedLagrangian',.false.)
+       flag_XLBOMD       = fdf_boolean('AtomMove.ExtendedLagrangian',.false.)
        if (flag_XLBOMD) then
          kappa=fdf_double('XL.Kappa',2.0_double)
          if (kappa.GT.2.0_double) then
@@ -1206,8 +1350,8 @@ contains
            if (inode.EQ.ionode) write (io_lun,'(2x,a)') &
              "WARNING: XL-BOMD requires L-matrix be reused ! Setting to true "
          endif
-         flag_propagateX=fdf_boolean('XL.PropagateX',.true.)
-         flag_propagateL=fdf_boolean('XL.PropagateL',.false.)
+         flag_propagateX = fdf_boolean('XL.PropagateX',.true.)
+         flag_propagateL = fdf_boolean('XL.PropagateL',.false.)
          if (flag_propagateX .AND. flag_propagateL) then
            flag_propagateX = .false.
            if (inode.EQ.ionode) write (io_lun,'(2x,a)')      &
@@ -1215,9 +1359,9 @@ contains
              &when employing the original scheme ! Setting to&
              & false "
          endif
-         XLInitFreq=fdf_integer('XL.ResetFreq',0)
-         flag_dissipation=fdf_boolean('XL.Dissipation',.false.)
-         maxitersDissipation=fdf_integer('XL.MaxDissipation',5)
+         XLInitFreq          = fdf_integer('XL.ResetFreq',0)
+         flag_dissipation    = fdf_boolean('XL.Dissipation',.false.)
+         maxitersDissipation = fdf_integer('XL.MaxDissipation',5)
          if (flag_dissipation) then
            if (maxitersDissipation.LT.1 .OR. maxitersDissipation.GT.9) then
              maxitersDissipation = 5
@@ -1566,7 +1710,13 @@ contains
 !%%!   append_coords = fdf_boolean('MD.AppendCoords',.true.)
     end if ! new_format
     !!!   TEMPORARY ? !!!!!!!   by T. MIYAZAKI
-    call my_barrier
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='read_input')
+!****lat>$
+
+    call my_barrier()
+
     return
   end subroutine read_input
   !!***
@@ -1602,18 +1752,24 @@ contains
   subroutine allocate_species_vars
 
     use dimens, only: RadiusSupport, NonLocalFactor, InvSRange, atomicnum
-    use blip, only: blip_info
-    use memory_module, only: reg_alloc_mem, type_dbl
-    use species_module, only: nsf_species, nlpf_species, npao_species, charge, mass, non_local_species, &
+    use blip,   only: blip_info
+    use memory_module,  only: reg_alloc_mem, type_dbl
+    use species_module, only: nsf_species, nlpf_species, npao_species, charge, &
+         mass, non_local_species, &
          ps_file, ch_file, phi_file, species_label, n_species, type_species
     use global_module, only: area_general
-    use GenComms, only: cq_abort
+    use GenComms,      only: cq_abort
 
     implicit none
 
     ! Local variables
-    integer :: stat
-    
+    type(cq_timer) :: tmr_std_loc
+    integer        :: stat
+
+!****lat<$
+    call start_timer(t=tmr_std_loc,who='allocate_species_vars',where=1,level=3)
+!****lat>$
+
     call start_timer(tmr_std_allocation)
     allocate(RadiusSupport(n_species),atomicnum(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating RadiusSupport, atomicnum in allocate_species_vars: ",n_species,stat)
@@ -1661,6 +1817,11 @@ contains
     if(stat/=0) call cq_abort("Error allocating InvSRange in allocate_species_vars: ",n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     call stop_timer(tmr_std_allocation)
+
+!****lat<$
+    call stop_timer(t=tmr_std_loc,who='allocate_species_vars')
+!****lat>$
+
     return
   end subroutine allocate_species_vars
 !!***
@@ -1993,18 +2154,24 @@ contains
     implicit none
 
     ! Local variables
-    integer      :: stat, iunit, i, j, k, matrix_size
-    real(double) :: a, sum
-    integer      :: proc_per_group
+    type(cq_timer) :: tmr_std_loc
+    integer        :: stat, iunit, i, j, k, matrix_size
+    real(double)   :: a, sum
+    integer        :: proc_per_group
+
     ! k-point mesh type
-    logical      :: mp_mesh, done
-    integer,      dimension(1:3) :: mp
-    real(double), dimension(1:3) :: mp_shift
+    logical        :: mp_mesh, done
+    integer,      dimension(1:3)              :: mp
+    real(double), dimension(1:3)              :: mp_shift
     real(double), allocatable, dimension(:,:) :: kk_tmp
     real(double), allocatable, dimension(:)   :: wtk_tmp
     integer :: nkp_tmp
     integer :: counter
     
+!****lat<$    
+    call start_timer(t=tmr_std_loc,who='readDiagInfo',where=1,level=2)
+!****lat>$
+
     if(myid==0) then
        ! Read Control Flags associated to diagonalisation method
        maxefermi = fdf_integer('Diag.MaxEfIter',50)
@@ -2020,6 +2187,7 @@ contains
        NElec_less = fdf_double('Diag.NElecLess',10.0_double)
        ! Read k-point parallelisation process-group incormation, default is 1
        proc_groups = fdf_integer ('Diag.KProcGroups', 1)
+
        if (iprint_init > 0) write (io_lun, 11) proc_groups 
        ! Read/choose ScaLAPACK processor grid dimensions
        if(fdf_defined('Diag.ProcRows')) then
@@ -2321,6 +2489,11 @@ contains
     !      write(io_lun,6) nkp,kk(1,i),kk(2,i),kk(3,i),wtk(i)
     !   end do
     !end if
+
+!****lat<$    
+    call stop_timer(t=tmr_std_loc,who='readDiagInfo')
+!****lat>$
+
     return
 
 2   format(8x,'Block size (row, col): ',2i5)
@@ -2546,6 +2719,7 @@ contains
       ! Close file
       call io_close(lun_aux)
     endif ! myid
+
     ! Broadcast data to all processors
     call gcopy(aux%ibeg_grp,aux%n_grp)
     call gcopy(aux%glob_atom,isize)

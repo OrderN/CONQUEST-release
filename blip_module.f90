@@ -50,15 +50,17 @@
 !!    Added timers
 !!   2011/11/15 07:59 dave
 !!    Updating the derived type for blips
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module blip
 
   use datatypes
-  use global_module, ONLY: io_lun
-  use timer_stdclocks_module, ONLY: start_timer, stop_timer, &
-                                    tmr_std_basis, tmr_std_allocation
-  
+  use global_module,          only: io_lun
+  use timer_module,           only: start_timer, stop_timer                                   
+  use timer_stdclocks_module, only: tmr_std_basis, tmr_std_allocation
+
   implicit none
 
   save
@@ -369,7 +371,6 @@ contains
     integer :: i, n_blips, na, nb, nx, ny, nz, stat, size, this_nsf, spec, maxsize, ni, np
     real(double) :: a2, b2, dx, dy, dz, r2_over_b2
 
-
     call start_timer(tmr_std_basis)
     if((inode == ionode).and.(iprint_init >= 2)) then
        write(unit=io_lun,fmt='(//10x,65("*")/25x,"REPORT FROM SET_BLIP_INDEX"/&
@@ -575,6 +576,7 @@ contains
     call associate_supp_coeff_array(support_elec_gradient,bundle%n_prim,elec_grad_coeff_array,size)
     call setup_blip_transfer
     call stop_timer(tmr_std_basis)
+
     return
 
   end subroutine set_blip_index
@@ -808,6 +810,7 @@ contains
        end do
     end do
     call stop_timer(tmr_std_basis)
+
     return
   end subroutine gauss2blip
 !!***

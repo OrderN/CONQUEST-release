@@ -37,12 +37,13 @@ include forces.obj
 include setgrid_new.obj
 include pao2blip.obj
 include pseudo_tm.obj
+include exx.obj 
 
 #List of all object files
 NODE_OBJECTS = main.o datatypes.module.o numbers.module.o                               \
                $(MATRIX_OBJS) $(COMM_OBJS) $(ODD_OBJS) $(OVERLAP_OBJS) $(ENERGY_OBJS)   \
                $(IONICS_OBJS) $(FORCES_OBJS) $(SETGRID_NEW_OBJS) $(PAO2BLIP_OBJS)       \
-               $(PS_TM_OBJS)
+               $(PS_TM_OBJS)  $(EXX_OBJS)
 SRCS = $(NODE_OBJECTS:.o=.f90) basic_types.f90 datatypes.module.f90 matrix_data_module.f90 numbers.module.f90
 
 #Dependency rule
@@ -88,12 +89,18 @@ tar:
 	gzip ../$(TARNAME)
 
 clean:
-	rm -f *.o *.mod *~ libgpfa.a *.d work.pc*
-	(cd FFT; make -k clean)
+	rm -f *.o *.mod *~  *.d work.pc*
+#	(cd FFT; make -k clean)
 	(cd utilities; make -k clean)
 
+clean_lib:
+	rm -f *.a
+	(cd FFT.FFTE; make -k clean)
+	(cd FFT.GPFA; make -k clean)
+	(cd FFT.ISF;  make -k clean)
+
 very_clean: 
-	make clean; make doc_clean; make pure_clean
+	make clean; make clean_lib; make doc_clean; make pure_clean;
 doc:
 	make xhtml; make html
 help:

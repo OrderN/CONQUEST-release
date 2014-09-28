@@ -63,6 +63,9 @@ module basic_types
 !!     the primary set made up of small groups
 !!  AUTHOR
 !!   D.R.Bowler
+!!  MODIFICATION HISTORY
+!!   2014/01/18 drb & lat
+!!   - Added iprim_part pointer 
 !!  SOURCE
 !!
   type primary_set  ! Contains information about a primary set
@@ -84,6 +87,7 @@ module basic_types
     integer, pointer :: nm_nodbeg(:)    ! Where the members for a group start
     ! Properties of the members (dim mx_iprim)
     integer, pointer :: iprim_seq(:)
+    integer, pointer :: iprim_part(:)
     integer, pointer :: ig_prim(:)
     real(double), pointer :: xprim(:)  ! Location of members
     real(double), pointer :: yprim(:)

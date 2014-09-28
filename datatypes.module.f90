@@ -37,10 +37,10 @@ module datatypes
   integer, parameter :: short = selected_int_kind( 6 )
 
   ! The default types.
-  integer, parameter :: double = selected_real_kind( 6, 70 )
+  integer, parameter :: double      = selected_real_kind( 6, 70 )
   integer, parameter :: double_cplx = selected_real_kind( 6, 70 )
-  integer, parameter :: integ  = selected_int_kind( 9 )
-  integer, parameter :: wide = selected_int_kind(15) 
+  integer, parameter :: integ       = selected_int_kind ( 9     )
+  integer, parameter :: wide        = selected_int_kind ( 15    ) 
 
 end module datatypes
 !!***

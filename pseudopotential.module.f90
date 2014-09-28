@@ -38,6 +38,8 @@
 !!    Changed for output to file not stdout
 !!   2008/05/25 ast
 !!    Added timers
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module pseudopotential_data
@@ -48,9 +50,8 @@ module pseudopotential_data
                                     non_local
   use GenComms,               only: cq_abort
   use species_module,         only: non_local_species
-  use timer_stdclocks_module, only: start_timer,stop_timer,       &
-                                    tmr_std_pseudopot,            &
-                                    tmr_std_allocation
+  use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_stdclocks_module, only: tmr_std_pseudopot, tmr_std_allocation
 
   implicit none
   save
@@ -530,17 +531,18 @@ contains
     use datatypes
     use numbers
     use species_module, only: species, nlpf_species
-    use global_module, only: rcellx,rcelly,rcellz,id_glob,ni_in_cell, species_glob, nlpf
+    use global_module,  only: rcellx,rcelly,rcellz,id_glob,ni_in_cell, &
+                              species_glob, nlpf
     !  At present, these arrays are dummy arguments.
-    use block_module, only : nx_in_block,ny_in_block,nz_in_block, &
-         n_pts_in_block
-    use group_module, only : blocks, parts
+    use block_module,   only : nx_in_block,ny_in_block,nz_in_block,    &
+                               n_pts_in_block
+    use group_module,   only : blocks, parts
     use primary_module, only: domain
-    use cover_module, only: DCS_parts
+    use cover_module,   only: DCS_parts
     use set_blipgrid_module, only : naba_atm
-    use functions_on_grid, only: gridfunctions, fn_on_grid
-    use dimens, only: n_my_grid_points
-    use GenComms, only: my_barrier, cq_abort, inode,ionode
+    use functions_on_grid,   only: gridfunctions, fn_on_grid
+    use dimens,              only: n_my_grid_points
+    use GenComms,            only: my_barrier, cq_abort, inode,ionode
 
     implicit none
     ! dummy arguments
@@ -935,21 +937,28 @@ contains
 
     use datatypes
     use numbers
-    use global_module, only: iprint_pseudo
+    use global_module,  only: iprint_pseudo
     use species_module, only: n_species, nlpf_species, ps_file
-    use GenComms, only: gcopy, cq_abort
-    use input_module, only: io_assign, io_close
+    use GenComms,       only: gcopy, cq_abort
+    use input_module,   only: io_assign, io_close
 
     implicit none
 
     ! Passed variables
-    integer :: inode, ionode
+    integer        :: inode, ionode
 
     ! Local variables
-    integer :: i, ios, j, jnode, l, m, n_l, n, lun, nl_max, npts_max
+    type(cq_timer) :: tmr_std_loc
+    integer        :: i, ios, j, jnode
+    integer        :: l, m, n_l, n, lun, nl_max, npts_max
 
     real(double), parameter :: ln10 = 2.302585092994_double
-    real(double) :: tmpr
+    real(double)            :: tmpr
+
+!****lat<$
+!    call sub_enter_output('read_pseudopotential',3,'10')
+    call start_timer(who='read_pseudopotential', where=10, level=3, t=tmr_std_loc)
+!****lat>$
 
     call start_timer(tmr_std_pseudopot)
     ! loop over the different species of atoms in the simulation box,
@@ -1097,10 +1106,17 @@ contains
        if (inode==ionode.AND.iprint_pseudo>=2) write(io_lun,3) n, ps_exponent(n)
     end do
     call stop_timer(tmr_std_pseudopot)
+
 1   format(10x,'An error occurred while trying to open file ', &
          a40,/,10x,'File does not exist or contains less data than needed')
 2   format(2x,'Reading pseudopotentials'/)
 3   format(2x,'Species ',i3,' Atomic exponent: ',f15.8)
+
+!****lat<$
+!    call sub_leave_output('read_pseudopotential',3,'10')
+    call stop_timer(tmr_std_loc)
+!****lat>$
+
     return
   end subroutine read_pseudopotential
 !!***

@@ -54,15 +54,18 @@
 !!    Changed for output to file not stdout
 !!   2008/05/16
 !!    Added timers
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!  SOURCE
 !!
 module set_bucket_module
 
-  use global_module, ONLY: io_lun
   use bucket_module
-  use numbers, ONLY: RD_ERR
-  use matrix_module, ONLY: matrix_halo
-  use timer_stdclocks_module, ONLY: start_timer,stop_timer,tmr_std_indexing
+  use global_module,          only: io_lun
+  use numbers,                only: RD_ERR
+  use matrix_module,          only: matrix_halo
+  use timer_module,           only: start_timer,stop_timer
+  use timer_stdclocks_module, only: tmr_std_indexing
 
   implicit none
 
@@ -72,12 +75,12 @@ module set_bucket_module
   type(remote_bucket) :: rem_bucket(mx_type_rem)
 
   ! Parameters for indexing buckets
-  integer, parameter :: sf_sf_loc = 1
-  integer, parameter :: sf_nlpf_loc = 2
-  integer, parameter :: pao_sf_loc = 3
-  integer, parameter :: sf_sf_rem = 1
-  integer, parameter :: sf_nlpf_rem = 2
-  integer, parameter :: sf_H_sf_rem = 3
+  integer, parameter :: sf_sf_loc    = 1
+  integer, parameter :: sf_nlpf_loc  = 2
+  integer, parameter :: pao_sf_loc   = 3
+  integer, parameter :: sf_sf_rem    = 1
+  integer, parameter :: sf_nlpf_rem  = 2
+  integer, parameter :: sf_H_sf_rem  = 3
   integer, parameter :: pao_H_sf_rem = 4
 
   ! -------------------------------------------------------
