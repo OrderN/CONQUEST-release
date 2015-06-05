@@ -61,6 +61,8 @@
 !!    Understand and document onsite_T
 !   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!  2015/06/05 10:03 dave
+!!    Added lines for XC GGA stress
 !!  SOURCE
 !!
 module H_matrix_module
@@ -494,6 +496,8 @@ contains
   !!   2014/09/24 L.Truflandier
   !!   - Added temporary PBE0 and HF
   !!   - optional output of x_energy only
+  !!   2015/06/05 10:03 dave
+  !!    Added zero for XC_GGA_stress
   !!  SOURCE
   !!
   subroutine get_h_on_support(output_level, fixed_potential, &
@@ -518,7 +522,8 @@ contains
                                            get_GTH_xc_potential,       &
                                            get_xc_potential_LSDA_PW92, &
                                            get_xc_potential_GGA_PBE,   &
-                                           get_xc_potential_hyb_PBE0
+                                           get_xc_potential_hyb_PBE0,  &
+                                           XC_GGA_stress
 
     use GenBlas,                     only: copy, axpy, dot, rsum
     use dimens,                      only: grid_point_volume,          &
@@ -645,6 +650,7 @@ contains
     end if
     !  
     !
+    XC_GGA_stress = zero
     select case(flag_functional_type)
     case (functional_lda_pz81)
        ! NOT SPIN POLARISED

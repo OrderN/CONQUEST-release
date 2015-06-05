@@ -48,6 +48,8 @@
 !!    Changes for output to file not stdout
 !!   2008/07/18 ast
 !!    Added timers
+!!   2015/05/01 13:24 dave and sym
+!!    Adding stress
 !!  SOURCE
 !!
 module ewald_module
@@ -73,6 +75,10 @@ module ewald_module
        &ewald_g_factor, struc_fac_r, struc_fac_i
 
   real(double), allocatable, dimension(:,:) :: ewald_force
+  real(double), dimension(3) :: ewald_stress
+  real(double), dimension(3) :: ewald_gaussian_self_stress, ewald_recip_stress, ewald_intra_stress, &
+       ewald_inter_stress
+
   real(double) :: ewald_energy
   real(double) :: ewald_accuracy 
 
@@ -1060,7 +1066,8 @@ contains
 
 !!   2009/07/08 16:58 dave
 !!    Removed double loop over all atoms to find lambda as it's not used
-
+!!   2015/05/01 13:26 dave and sym
+!!    Adding stress calculation  
   ! ==========================================================
   subroutine mikes_set_ewald(inode,ionode)
 
@@ -1084,13 +1091,14 @@ contains
 
     integer :: i, ind_part, ip, m_limit_1, m_limit_2, m_limit_3, m1, &
          m2, m3, n, nc, nccx, nccy, nccz, ni, np, nppx, nppy, nppz, &
-         np1, np2, rec_lim_1, rec_lim_2, rec_lim_3, run_mode, stat
+         np1, np2, rec_lim_1, rec_lim_2, rec_lim_3, run_mode, stat, direction
     real(double) :: ewald_recip_cutoff_squared, mean_number_density, &
          mean_interparticle_distance, mean_square_charge, &
          partition_radius_squared, partition_diameter, total_charge
     real(double) :: argument, const_phi_0, const_phi_1, const_zeta_0, &
          const_zeta_1, distance, dummy1, dummy2, dummy3, g1, g2, g3, &
          g_squared, lambda, rsq, sep, vol_prefac, v1, v2, v3
+    real(double) :: gaussian_self_stress
     real(double), dimension(3) :: rr, vert
 !    real(double), dimension(3,3) :: abs_sep, rel_sep
 ! 16:52, 2003/10/22 dave Changed to allow compilation under ifc
@@ -1302,6 +1310,14 @@ contains
          &Gaussian self-energy:",e20.12," Ewald net-charge energy:",&
          &e20.12)') ewald_gaussian_self_energy, &
          ewald_net_charge_energy
+
+    ! --- SYM 2014/10/16 20:20
+    ! --- Stress due to Gaussian self-energy
+    ewald_gaussian_self_stress = zero
+    gaussian_self_stress = pi * total_charge * total_charge/(two * ewald_real_cell_volume * ewald_gamma)
+    do direction = 1, 3
+       ewald_gaussian_self_stress(direction) = gaussian_self_stress
+    enddo
 
     ! --- limits for recip-space covering set
     rec_lim_1 = int(ewald_recip_cutoff* sqrt(real_cell_vec(1,1)**2 + &
@@ -1676,6 +1692,8 @@ contains
 
 !!   10:42, 13/02/2006 drb 
 !!    Corrected line length error
+!!   2015/05/01 13:29 dave and sym
+!!     Added stress
   ! =============================================================================
   subroutine mikes_ewald()
 
@@ -1694,9 +1712,10 @@ contains
 
     implicit none
 
-    integer :: i, ip, ig_atom_beg, j, n, nc, ni, nj, nn, stat
+    integer :: i, ip, ig_atom_beg, j, n, nc, ni, nj, nn, stat, direction
     real(double) :: arg_1, arg_2, coeff_1, dummy, ewald_real_energy, ewald_real_sum_inter, ewald_real_sum_intra, &
-         &ewald_real_sum_ip, ewald_recip_energy, ewald_total_energy, g_dot_r, q_i, q_j, rij, rijx, rijy, rijz, rij_squared, x, y, z
+         &ewald_real_sum_ip, ewald_recip_energy, ewald_total_energy, g_dot_r, q_i, q_j, rij, rijx, rijy, rijz, &
+         rij_squared, x, y, z, one_over_g_squared
     real(double), allocatable, dimension(:) :: ewald_recip_force_x, ewald_recip_force_y, ewald_recip_force_z, &
          &ewald_intra_force_x, ewald_intra_force_y, ewald_intra_force_z, &
          &ewald_inter_force_x, ewald_inter_force_y, ewald_inter_force_z
@@ -1732,6 +1751,13 @@ contains
           enddo
        endif
     enddo
+    ! Zero stress
+    do direction = 1, 3
+       ewald_recip_stress(direction) = zero
+       ewald_intra_stress(direction) = zero
+       ewald_inter_stress(direction) = zero
+       ewald_stress(direction) = zero
+    enddo
     ! Allocate memory for and call structure_factor
     allocate(struc_fac_r(number_of_g_vectors),struc_fac_i(number_of_g_vectors),STAT=stat)
     if(stat/=0) call cq_abort("ewald: error allocating struc_fac ",number_of_g_vectors,stat)
@@ -1742,6 +1768,22 @@ contains
        ewald_recip_energy = ewald_recip_energy + &
             &(struc_fac_r(n)*struc_fac_r(n) + struc_fac_i(n)*struc_fac_i(n)) * &
             &ewald_g_factor(n)
+       ! Stress added SYM 2014/10/16 21:38
+       ! Here we calculate the stress from the reciprocal space part of the Ewald sum
+       one_over_g_squared = one/(ewald_g_vector_x(n)*ewald_g_vector_x(n) + ewald_g_vector_y(n)*ewald_g_vector_y(n) + &
+            ewald_g_vector_z(n)*ewald_g_vector_z(n))
+       ewald_recip_stress(1) = ewald_recip_stress(1) + ewald_g_factor(n) * &
+            & (struc_fac_r(n)*struc_fac_r(n) + struc_fac_i(n)*struc_fac_i(n)) * &
+            & ((two*ewald_g_vector_x(n)*ewald_g_vector_x(n) * &
+            ((one/(four*ewald_gamma)) + one_over_g_squared) - one))
+       ewald_recip_stress(2) = ewald_recip_stress(2) + ewald_g_factor(n) * &
+            & (struc_fac_r(n)*struc_fac_r(n) + struc_fac_i(n)*struc_fac_i(n)) * &
+            & ((two*ewald_g_vector_y(n)*ewald_g_vector_y(n) * &
+            ((one/(four*ewald_gamma)) + one_over_g_squared) - one))
+       ewald_recip_stress(3) = ewald_recip_stress(3) + ewald_g_factor(n) * &
+            & (struc_fac_r(n)*struc_fac_r(n) + struc_fac_i(n)*struc_fac_i(n)) * &
+            & ((two*ewald_g_vector_z(n)*ewald_g_vector_z(n) * &
+            ((one/(four*ewald_gamma)) + one_over_g_squared) - one))
        do ip = 1, bundle%groups_on_node
           if(bundle%nm_nodgroup(ip) > 0) then
              do ni = 1, bundle%nm_nodgroup(ip)
@@ -1778,6 +1820,13 @@ contains
           enddo
        endif
     enddo
+    ! Correctly scale stress
+    do direction = 1, 3 
+      ewald_recip_stress(direction) = ewald_recip_stress(direction) * two * pi/(ewald_real_cell_volume)
+    enddo
+    ! 2015/05/01 13:35 dave
+    !  I think that the reciprocal space part doesn't need this sum, but I should check
+    !call gsum(ewald_recip_stress,3)
 
     !if(inode /= ionode.AND.iprint_gen>=6) then
     !   write(unit=io_lun,fmt='(/" Ewald recip-space info from node:",i3)') inode
@@ -1845,6 +1894,10 @@ contains
                    ewald_intra_force_y(bundle%nm_nodbeg(ip)+nj-1) = ewald_intra_force_y(bundle%nm_nodbeg(ip)+nj-1) - dummy*rijy
                    ewald_intra_force_z(bundle%nm_nodbeg(ip)+ni-1) = ewald_intra_force_z(bundle%nm_nodbeg(ip)+ni-1) + dummy*rijz
                    ewald_intra_force_z(bundle%nm_nodbeg(ip)+nj-1) = ewald_intra_force_z(bundle%nm_nodbeg(ip)+nj-1) - dummy*rijz
+                   ! --- Edited SYM 2014/10/16 14:23 Ewald stress
+                   ewald_intra_stress(1) = ewald_intra_stress(1) - (dummy * rijx * rijx)
+                   ewald_intra_stress(2) = ewald_intra_stress(2) - (dummy * rijy * rijy)
+                   ewald_intra_stress(3) = ewald_intra_stress(3) - (dummy * rijz * rijz)
                 endif
              enddo
           enddo
@@ -1856,7 +1909,7 @@ contains
     enddo
 
     call gsum(ewald_real_sum_intra)
-
+    call gsum(ewald_intra_stress,3)
     if(inode == ionode.AND.iprint_gen>=6) then
        write(unit=io_lun,fmt='(/" Ewald real-space self info for node:",i3/)') inode 
        write(unit=io_lun,fmt='(/" self-partition part of real_space Ewald:",e20.12)') ewald_real_sum_intra
@@ -1926,6 +1979,9 @@ contains
                               ewald_inter_force_y(bundle%nm_nodbeg(ip)+ni-1) + dummy*rijy
                          ewald_inter_force_z(bundle%nm_nodbeg(ip)+ni-1) = &
                               ewald_inter_force_z(bundle%nm_nodbeg(ip)+ni-1) + dummy*rijz
+                         ewald_inter_stress(1) = ewald_inter_stress(1) - (dummy * rijx * rijx)
+                         ewald_inter_stress(2) = ewald_inter_stress(2) - (dummy * rijy * rijy)
+                         ewald_inter_stress(3) = ewald_inter_stress(3) - (dummy * rijz * rijz)
                       endif
                    enddo
                 endif
@@ -1937,9 +1993,12 @@ contains
             &" is:",e20.12)') inode, ip, ewald_real_sum_ip
        ewald_real_sum_inter = ewald_real_sum_inter + ewald_real_sum_ip
     enddo
+    do direction=1,3
+       ewald_inter_stress(direction) = half*ewald_inter_stress(direction)
+    end do
 
     call gsum(ewald_real_sum_inter)
-
+    call gsum(ewald_inter_stress,3)
     if(inode == ionode.AND.iprint_gen>=6) then
        write(unit=io_lun,fmt='(/" Ewald real-space other info for node:",i3/)') inode 
        write(unit=io_lun,fmt='(/" other-partition part of real_space Ewald:",e20.12)') ewald_real_sum_inter
@@ -1985,6 +2044,11 @@ contains
     call gsum(ewald_total_force_x,ni_in_cell)
     call gsum(ewald_total_force_y,ni_in_cell)
     call gsum(ewald_total_force_z,ni_in_cell)
+    ! SYM 2014/10/22 14:34: Summ all the stress contributions
+    do direction = 1, 3
+       ewald_stress(direction) = ewald_intra_stress(direction) + ewald_inter_stress(direction) + &
+            ewald_recip_stress(direction) + ewald_gaussian_self_stress(direction)
+    enddo
     ! Added DRB & MJG 2003/10/22 to make force available to rest of code
     do i=1,ni_in_cell
        ewald_force(1,i) = ewald_total_force_x(i)

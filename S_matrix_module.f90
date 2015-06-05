@@ -34,6 +34,8 @@
 !!     numbers of 100 and 0.0001
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2015/04/29 17:23 dave and kane
+!!    Added get_r_on_support for calculations of stress, polarisation and TDDFT in periodic boundaries
 !!  SOURCE
 !!
 module S_matrix_module
@@ -333,6 +335,168 @@ contains
 
     return
   end subroutine get_S_matrix
+!!***
+
+    
+! -----------------------------------------------------------
+! Subroutine get_r_on_support
+! -----------------------------------------------------------
+
+!!****f* S_matrix_module/get_r_on_support *
+!!
+!!  NAME 
+!!   get_r_on_support
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Scales the support functions on the grid by x/y/z
+!!  INPUTS
+!!   direction chooses x/y/z (1-3) or all directions (0)
+!!   inputgf is the grid function to be scaled by x/y/z  
+!!   gridfunc1 should contain support functions on entry;
+!!   on exit will be scaled by x/y/z
+!!   If direction=0 we do all three directions, and gridfunc1-3 should all contain support functions
+!!   We can choose memory vs storage
+!!  USES
+!!   
+!!  AUTHOR
+!!   D. R. Bowler with J. Kane Shenton
+!!  CREATION DATE
+!!   2015/04/29
+!!  MODIFICATION HISTORY
+!!   2015/05/01 09:01 dave
+!!    Changed position-finding routines to use check-block (removes some problems with z-component)  
+!!  SOURCE
+!!  
+  subroutine get_r_on_support(direction,inputgf,gridfunc1,gridfunc2,gridfunc3)
+
+    use datatypes
+    use numbers
+    use global_module,               only: rcellx,rcelly,rcellz, sf, species_glob, ni_in_cell, id_glob
+    use cover_module,                only: DCS_parts
+    use block_module,                only: nx_in_block,ny_in_block,nz_in_block, &
+                                           n_blocks, n_pts_in_block
+    use group_module,                only: blocks, parts
+    use primary_module,              only: domain
+    use set_blipgrid_module,         only: naba_atm
+    use functions_on_grid,           only: gridfunctions, fn_on_grid
+    use dimens,                      only: n_my_grid_points, r_h
+    use GenComms,                    only: cq_abort
+    use species_module,              only: nsf_species
+    use PAO_grid_transform_module,   only: check_block
+
+    implicit none
+
+    ! Passed variables
+    integer :: direction
+    integer :: inputgf,gridfunc1
+    integer, OPTIONAL :: gridfunc2, gridfunc3
+
+    ! Local variables
+    integer        :: ipoint, iblock, nsf1, ix, iy, iz, igrid, position
+    integer        :: iatom, this_nsf
+    integer        :: ipart, jpart, ind_part, ia, ii, icover, ig_atom, no_of_ib_ia
+    real(double)   :: rx, ry, rz, dx, dy, dz
+    real(double)   :: dcellx_block, dcelly_block, dcellz_block
+    real(double)   :: dcellx_grid, dcelly_grid, dcellz_grid
+    real(double)   :: xatom, yatom, zatom
+    real(double)   :: xblock,yblock,zblock
+    real(double)   :: sfni
+
+    integer     , allocatable :: ip_store(:)
+    real(double), allocatable :: x_store(:)
+    real(double), allocatable :: y_store(:)
+    real(double), allocatable :: z_store(:)
+    real(double), allocatable :: r_store(:)
+    integer :: offset_position, ip, npoint, stat
+    real(double) :: x, y, z, rcut
+    
+    ! Test for direction=0 and all three grid functions
+    if(direction==0.AND.(.NOT.PRESENT(gridfunc2).OR..NOT.PRESENT(gridfunc3))) then
+       call cq_abort("Error in get_r_on_support: three directions requested but not passed")
+    end if
+    allocate(ip_store(n_pts_in_block),x_store(n_pts_in_block),y_store(n_pts_in_block),z_store(n_pts_in_block), &
+         r_store(n_pts_in_block), STAT=stat)
+    if(stat /= 0) call cq_abort(' Error allocating store in get_r_on_support: ',n_pts_in_block)
+
+    dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
+    dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
+    dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nz_in_block
+    no_of_ib_ia = 0
+    do iblock = 1, domain%groups_on_node
+       if (iblock*n_pts_in_block > n_my_grid_points) call cq_abort('get_nonSC_force: igrid error ', igrid,n_my_grid_points)
+       xblock = (domain%idisp_primx(iblock) + domain%nx_origin - 1) * dcellx_block
+       yblock = (domain%idisp_primy(iblock) + domain%ny_origin - 1) * dcelly_block
+       zblock = (domain%idisp_primz(iblock) + domain%nz_origin - 1) * dcellz_block
+       if (naba_atm(sf)%no_of_part(iblock) > 0) then ! if there are naba atoms
+          iatom = 0
+          do ipart = 1, naba_atm(sf)%no_of_part(iblock)
+             jpart = naba_atm(sf)%list_part(ipart,iblock)
+             if (jpart > DCS_parts%mx_gcover) call cq_abort('set_ps: JPART ERROR ', ipart, jpart)
+             ind_part = DCS_parts%lab_cell(jpart)
+             do ia = 1, naba_atm(sf)%no_atom_on_part(ipart, iblock)
+                iatom = iatom + 1
+                ii = naba_atm(sf)%list_atom(iatom, iblock)
+                icover = DCS_parts%icover_ibeg(jpart) + ii - 1
+                if (parts%icell_beg(ind_part) + ii - 1 > ni_in_cell) &
+                     call cq_abort('set_ps: globID ERROR ', ii, parts%icell_beg(ind_part))
+                ig_atom = id_glob(parts%icell_beg(ind_part) + ii - 1)
+                if (icover > DCS_parts%mx_mcover) &
+                     call cq_abort ('set_ps: icover ERROR ', icover, DCS_parts%mx_mcover)
+                xatom = DCS_parts%xcover(icover)
+                yatom = DCS_parts%ycover(icover)
+                zatom = DCS_parts%zcover(icover)
+                this_nsf = nsf_species(species_glob(ig_atom))
+                rcut = r_h + RD_ERR
+                call check_block (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
+                     npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out
+                if(npoint > 0) then
+                   !offset_position = (no_of_ib_ia-1) * nsf * n_pts_in_block
+                   offset_position = no_of_ib_ia
+                   do ip=1,npoint
+                      ipoint=ip_store(ip)
+                      position= offset_position + ipoint
+                      if(position > gridfunctions(inputgf)%size) call cq_abort &
+                           ('PAO_to_grad_global: position error ', position, gridfunctions(inputgf)%size)
+
+                      !r_from_i = r_store(ip)
+                      x = x_store(ip)
+                      y = y_store(ip)
+                      z = z_store(ip)
+                      if(direction==0) then
+                         rx = x
+                         ry = y
+                         rz = z
+                         do nsf1=1,this_nsf
+                            sfni = gridfunctions(inputgf)%griddata(position+(nsf1-1)*n_pts_in_block)
+                            gridfunctions(gridfunc1)%griddata(position+(nsf1-1)*n_pts_in_block) = sfni * rx
+                            gridfunctions(gridfunc2)%griddata(position+(nsf1-1)*n_pts_in_block) = sfni * ry
+                            gridfunctions(gridfunc3)%griddata(position+(nsf1-1)*n_pts_in_block) = sfni * rz
+                         enddo ! nsf1
+                      else ! Store position in rx and scale appropriate direction
+                         if(direction==1) then
+                            rx = x
+                         else if(direction==2) then
+                            rx = y
+                         else if(direction==3) then
+                            rx = z
+                         end if
+                         do nsf1=1,this_nsf
+                            sfni = gridfunctions(inputgf)%griddata(position+(nsf1-1)*n_pts_in_block)
+                            gridfunctions(gridfunc1)%griddata(position+(nsf1-1)*n_pts_in_block) = sfni * rx
+                         enddo ! nsf1
+                      end if
+                   end do
+                end if
+                no_of_ib_ia=no_of_ib_ia+this_nsf*n_pts_in_block
+             end do ! naba_atoms
+          end do ! naba_part
+       end if !(naba_atm(dens)%no_of_part(iblock) > 0) !naba atoms?
+    end do ! iblock : primary set of blocks
+    deallocate(ip_store,x_store,y_store,z_store, r_store, STAT=stat)
+    if(stat /= 0) call cq_abort(' Error in deallocation in PAO_to_grad_global')
+    return
+  end subroutine get_r_on_support
 !!***
 
 ! -----------------------------------------------------------

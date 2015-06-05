@@ -16,14 +16,19 @@
 !! CREATION DATE
 !!   2012/04/16
 !! MODIFICATION HISTORY
+!!   2015/05/12 08:34 dave
+!!    Adding GGA stress terms
 !! SOURCE
 !!
 module XC_module
 
+  use datatypes
   use global_module, only: area_ops
-
+  
   implicit none
 
+  real(double), dimension(3), public :: XC_GGA_stress
+  
   ! methods
   public ::                         &
        get_xc_potential,            & ! LDA-PZ81, spin non-polarised
@@ -1239,6 +1244,8 @@ contains
   !! MODIFICATION HISTORY
   !!   2014/09/24 L.Truflandier
   !!   - Added optional x_energy_total for output
+  !!   2015/05/12 08:30 dave
+  !!   - Added stress term
   !! SOURCE
   !!
   subroutine get_xc_potential_GGA_PBE(density, xc_potential,            &
@@ -1269,7 +1276,7 @@ contains
 
     ! local variables
     integer      :: PBE_type
-    integer      :: rr, spin, stat
+    integer      :: rr, spin, stat, dir
     real(double) :: eps_x, eps_c, rho_tot_r
     real(double),         dimension(nspin)        :: rho_r
     real(double),         dimension(3,nspin)      :: grho_r
@@ -1296,7 +1303,8 @@ contains
     xc_epsilon   = zero
     xc_potential = zero    
     xc_energy    = zero
-
+    XC_GGA_stress = zero
+    
     ! Build the gradient of the density
     do spin = 1, nspin
        call build_gradient(density(:,spin), grad_density(:,:,spin), grid_size)
@@ -1321,13 +1329,18 @@ contains
           ! note that grad_density(rr,1:3,1:spin) has already been used
           ! at this point, so we can savely reuse this slot to store
           ! d(rho * eps_xc) / dgrho at rr.
-          grad_density(rr,1:3,spin) = drhoEps_x(1:3,spin) + &
-                                      drhoEps_c(1:3,spin)
+          do dir=1,3
+             grad_density(rr,dir,spin) = drhoEps_x(dir,spin) + drhoEps_c(dir,spin)
+             XC_GGA_stress(dir) = XC_GGA_stress(dir) - grho_r(dir,spin)*grad_density(rr,dir,spin)
+          end do
        end do
     end do ! rr
     call gsum(xc_energy)
     if (present(x_energy)) call gsum(x_energy)
     xc_energy = xc_energy * grid_point_volume
+    call gsum(XC_GGA_stress,3)
+    XC_GGA_stress = XC_GGA_stress*grid_point_volume
+    !write(*,*) 'GGA stress term: ',XC_GGA_stress
     if (present(x_energy)) x_energy = x_energy * grid_point_volume
 
     ! add the second term to potential

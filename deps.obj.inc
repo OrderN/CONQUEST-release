@@ -97,10 +97,10 @@ memory_module.o: datatypes.module.o generic_comms.o global_module.o \
 timer_module.o: datatypes.module.o global_module.o mpi.o
 timer_stdclocks_module.o: timer_module.o
 auxiliary_types.o: datatypes.module.o
-fft_module.o: datatypes.module.o dimens.module.o fft_ffte.o generic_comms.o \
+fft_module.o: datatypes.module.o dimens.module.o fft_fftw3.o generic_comms.o \
 	global_module.o grid_index.module.o maxima_module.o memory_module.o \
 	numbers.module.o timer_module.o timer_stdclocks_module.o
-fft_ffte.o: datatypes.module.o
+fft_fftw3.o: datatypes.module.o
 blip_module.o: datatypes.module.o dimens.module.o fft_module.o generic_blas.o \
 	generic_comms.o global_module.o group_module.o matrix_data_module.o \
 	memory_module.o mult_module.o numbers.module.o primary_module.o \
@@ -189,14 +189,15 @@ Pulay.o: datatypes.module.o generic_blas.o generic_comms.o global_module.o \
 	numbers.module.o
 S_matrix_module.o: DiagModule.o PAO_grid_transform_module.o \
 	UpdateInfo_module.o blip_grid_transform_module.o blip_module.o \
-	build_PAO_matrices.module.o calc_matrix_elements_module.o \
-	cdft_module.o comms_module.o cover_module.o datatypes.module.o \
+	block_module.o build_PAO_matrices.module.o \
+	calc_matrix_elements_module.o cdft_module.o comms_module.o \
+	cover_module.o datatypes.module.o dimens.module.o \
 	functions_on_grid_module.o generic_blas.o generic_comms.o \
 	global_module.o group_module.o input_module.o io_module.o \
 	io_module2.o matrix_data_module.o mpi.o mult_module.o nlpf2blip.o \
-	numbers.module.o primary_module.o set_bucket_module.o \
-	species_module.o support_spec_format.o timer_module.o \
-	timer_stdclocks_module.o
+	numbers.module.o primary_module.o set_blipgrid_module.o \
+	set_bucket_module.o species_module.o support_spec_format.o \
+	timer_module.o timer_stdclocks_module.o
 McWeeny.o: cover_module.o datatypes.module.o generic_blas.o generic_comms.o \
 	global_module.o matrix_data_module.o matrix_module.o maxima_module.o \
 	memory_module.o mult_module.o numbers.module.o primary_module.o \
@@ -291,11 +292,11 @@ read_pao_info.o: datatypes.module.o generic_comms.o global_module.o \
 	spline_module.o timer_module.o timer_stdclocks_module.o
 force_module.o: DFT_D2_module.o DiagModule.o H_matrix_module.o \
 	PAO_grid_transform_module.o S_matrix_module.o XC_module.o \
-	atomic_density.o blip_gradient.module.o blip_grid_transform_module.o \
-	blip_module.o block_module.o build_PAO_matrices.module.o \
+	atomic_density.o blip_grid_transform_module.o blip_module.o \
+	block_module.o build_PAO_matrices.module.o \
 	calc_matrix_elements_module.o comms_module.o cover_module.o \
-	datatypes.module.o density_module.o dimens.module.o ewald.o \
-	functions_on_grid_module.o generic_blas.o generic_comms.o \
+	datatypes.module.o density_module.o dimens.module.o energy.module.o \
+	ewald.o functions_on_grid_module.o generic_blas.o generic_comms.o \
 	global_module.o grid_index.module.o group_module.o hartree.o \
 	logicals_module.o matrix_data_module.o matrix_module.o \
 	maxima_module.o memory_module.o mpi.o mult_module.o nlpf2blip.o \
@@ -423,8 +424,8 @@ nlpf2blip.o: blip_grid_transform_module.o blip_module.o datatypes.module.o \
 pseudopotential_common.o: datatypes.module.o
 exx_module.o: DiagModule.o PAO_grid_transform_module.o atomic_density.o \
 	cover_module.o datatypes.module.o dimens.module.o exx_io.o \
-	exx_types.o fft_ffte.o generic_comms.o global_module.o group_module.o \
-	matrix_data_module.o numbers.module.o primary_module.o \
+	exx_types.o fft_fftw3.o generic_comms.o global_module.o \
+	group_module.o matrix_data_module.o numbers.module.o primary_module.o \
 	species_module.o support_spec_format.o units.module.o
 exx_kernel_default.o: PAO_grid_transform_module.o basic_types.o \
 	comms_module.o cover_module.o datatypes.module.o energy.module.o \
@@ -434,7 +435,7 @@ exx_kernel_default.o: PAO_grid_transform_module.o basic_types.o \
 	mult_module.o multiply_module.o numbers.module.o primary_module.o \
 	species_module.o timer_module.o timer_stdclocks_module.o
 exx_types.o: datatypes.module.o timer_module.o timer_stdclocks_module.o
-exx_memory.o: datatypes.module.o exx_types.o fft_ffte.o generic_comms.o \
+exx_memory.o: datatypes.module.o exx_types.o fft_fftw3.o generic_comms.o \
 	global_module.o memory_module.o numbers.module.o timer_module.o
 exx_io.o: atomic_density.o cover_module.o datatypes.module.o exx_types.o \
 	generic_comms.o global_module.o group_module.o io_module.o \

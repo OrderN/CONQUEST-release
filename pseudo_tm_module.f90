@@ -26,6 +26,8 @@
 !!    Changed for output to file not stdout
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2015/05/01 13:41 dave and sym
+!!    Adding stress
 !!  SOURCE
 !!
 module pseudo_tm_module
@@ -42,7 +44,7 @@ module pseudo_tm_module
   !arrays
   private
   public :: init_pseudo_tm, loc_pp_derivative_tm, &
-       nonloc_pp_derivative_tm, set_tm_pseudo, deallocate_pseudo_tm
+       nonloc_pp_derivative_tm, set_tm_pseudo, deallocate_pseudo_tm, loc_HF_stress, loc_G_stress
   !public
   ! pseudofunctions is arranged like 
   !  (n_pts in block, ncf, naba atoms, iblock)
@@ -66,6 +68,7 @@ module pseudo_tm_module
   real(double), allocatable :: y_store(:)
   real(double), allocatable :: z_store(:)
   real(double), allocatable :: r_store(:)
+  real(double), dimension(3) :: loc_HF_stress, loc_G_stress
   !interface
   !   interface nonloc_pp_derivative_tm
   !     module procedure nonloc_pp_derivative_tm
@@ -868,6 +871,8 @@ contains
 !!    Added deallocate for h_potential (from TM)
 !!   2007/02/19 08:32 dave
 !!    Added differential of gaussian charges
+!!   2015/05/01 13:44 dave and sym
+!!    Adding stress
 !!  SOURCE
 !!
   subroutine loc_pp_derivative_tm ( hf_force, density, size )
@@ -897,11 +902,11 @@ contains
     ! Local variables
     integer :: i, j 
 
-    real(double) :: a, b,  alpha, beta, gamma, delta, derivative 
+    real(double) :: a, b, c, d, alpha, beta, gamma, delta, derivative 
     real(double) :: fx_1, fy_1, fz_1
     real(double) :: fx_2, fy_2, fz_2
     real(double) :: h_energy, r_from_i, x, y, z, step, elec_here, front, gauss
-    real(double):: r1, r2, r3, r4, da, db, dc, dd
+    real(double):: r1, r2, r3, r4, da, db, dc, dd, gauss_charge
 
     real(double):: dcellx_block,dcelly_block,dcellz_block
     integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom
@@ -915,11 +920,15 @@ contains
 
     ! allocatable
     real(double),allocatable :: h_potential(:)
+    ! Store potential scaled by 2GaGb/G^4 for stress
+    real(double),allocatable :: loc_charge(:)
 
     call start_timer(tmr_std_pseudopot)
     if(iprint_pseudo>2.AND.inode==ionode) write(io_lun,fmt='(4x,"Doing TM force with pseudotype: ",i3)') pseudo(1)%tm_loc_pot
     ! the structure of this subroutine is similar to set_tm_pseudo et.
     HF_force = 0
+    loc_HF_stress = zero
+    loc_G_stress = zero
 
     dcellx_block=rcellx/blocks%ngcellx
     dcelly_block=rcelly/blocks%ngcelly
@@ -930,9 +939,13 @@ contains
     allocate(h_potential(maxngrid),STAT=stat)
     if(stat /= 0) call cq_abort &
          ('loc_pp_derivative_tm: alloc h_potential',stat)
+    allocate(loc_charge(maxngrid),STAT=stat)
+    if(stat /= 0) call cq_abort &
+         ('loc_pp_derivative_tm: alloc loc_charge',stat)
     call stop_timer(tmr_std_allocation)
 
     call hartree( density, h_potential, maxngrid, h_energy )
+    loc_charge = zero
 
     ! now loop over grid points and accumulate HF part of the force
     do iblock = 1, domain%groups_on_node ! primary set of blocks
@@ -1055,14 +1068,20 @@ contains
                             HF_force(1,ig_atom) = HF_force(1,ig_atom) + fx_1 * elec_here + fx_2
                             HF_force(2,ig_atom) = HF_force(2,ig_atom) + fy_1 * elec_here + fy_2
                             HF_force(3,ig_atom) = HF_force(3,ig_atom) + fz_1 * elec_here + fz_2
+                            loc_HF_stress(1) = loc_HF_stress(1) + (fx_1 * elec_here + fx_2) * x*r_from_i
+                            loc_HF_stress(2) = loc_HF_stress(2) + (fy_1 * elec_here + fy_2) * y*r_from_i
+                            loc_HF_stress(3) = loc_HF_stress(3) + (fz_1 * elec_here + fz_2) * z*r_from_i
+                            r2 = r_from_i*r_from_i
+                            gauss_charge = pseudo(the_species)%prefac* exp(-pseudo(the_species)%alpha * r2)
+                            loc_charge(igrid) = loc_charge(igrid) + gauss_charge * pseudo(the_species)%zval
                          end if ! j+1<pseudo(the_species)%chlocal%n
                       else
                          if(j+1 <= pseudo(the_species)%chlocal%n) then
                             rr = real(j,double) * step
                             a = ( rr - r_from_i ) / step
                             b = one - a
-                            !c = a * ( a * a - one ) * step * step / six
-                            !d = b * ( b * b - one ) * step * step / six
+                            c = a * ( a * a - one ) * step * step / six
+                            d = b * ( b * b - one ) * step * step / six
 
                             alpha = -one / step
                             beta =  one / step
@@ -1089,6 +1108,12 @@ contains
                             HF_force(1,i) = HF_force(1,i) + fx_2 * grid_point_volume
                             HF_force(2,i) = HF_force(2,i) + fy_2 * grid_point_volume
                             HF_force(3,i) = HF_force(3,i) + fz_2 * grid_point_volume
+
+                            ! SYM, DRB 2014/09/02 and 2015/03: Accumulate HF stress and local charge (for reciprocal space stress)
+                            loc_HF_stress(1) = loc_HF_stress(1) + fx_2 * grid_point_volume * x*r_from_i
+                            loc_HF_stress(2) = loc_HF_stress(2) + fy_2 * grid_point_volume * y*r_from_i
+                            loc_HF_stress(3) = loc_HF_stress(3) + fz_2 * grid_point_volume * z*r_from_i
+                            loc_charge(igrid) = a*r1+b*r2+c*r3+d*r4
                          end if ! j+1<pseudo(the_species)%chlocal%n
                       end if
                    enddo ! ip=1, npoint
@@ -1098,13 +1123,20 @@ contains
           enddo ! ipart=1,naba_atm(nlpf)%no_of_part(iblock)
        endif    ! (naba_atm(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
     enddo ! iblock = 1, domain%groups_on_node ! primary set of blocks
+    call hartree( density, h_potential, maxngrid, h_energy, loc_charge,loc_G_stress )
+    if(pseudo(the_species)%tm_loc_pot==loc_pot) loc_G_stress = -loc_G_stress
 
     ! and add contributions from all nodes
     !  In the future this should be replaced by summation with local communication
     !    Tsuyoshi Miyazaki
     call gsum(HF_force,3,ni_in_cell)
+    call gsum(loc_HF_stress,3)
+    ! Don't gsum loc_G_stress - that's done in hartree
     ! Deallocate added by TM, 2005/08/11
     call start_timer(tmr_std_allocation)
+    deallocate(loc_charge,STAT=stat)
+    if(stat /= 0) call cq_abort &
+         ('loc_pp_derivative_tm: dealloc loc_charge',stat)
     deallocate(h_potential,STAT=stat)
     if(stat /= 0) call cq_abort &
          ('loc_pp_derivative_tm: dealloc h_potential',stat)

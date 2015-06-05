@@ -16,13 +16,20 @@
 !!    to add kerker preconditioning
 !!   2008/02/06 08:17 dave
 !!    Changed for output to file not stdout
+!!   2015/05/01 09:15 dave and sym
+!!    Implementing stress (added Hartree stress as module variable)
 !!  SOURCE
 !!
 module hartree_module
 
   use global_module, only: io_lun
 
+  use datatypes
+  
   implicit none
+
+  ! We have this here since hartree_module is used by force_module, so we can't have it here
+  real(double), dimension(3) :: Hartree_stress
 
   ! RCS tag for object file identification
   character(len=80), save, private :: &
@@ -81,13 +88,13 @@ contains
   !!   the energy only. 31/05/2001 dave
   !!  SOURCE
   !!
-  subroutine hartree(chden, potential, size, energy)
+  subroutine hartree(chden, potential, size, energy, chden2, stress2)
 
     use datatypes
     use numbers    
     use dimens,        only: grid_point_volume, &
                              one_over_grid_point_volume, n_grid_z
-    use fft_module,    only: fft3, hartree_factor, z_columns_node, i0
+    use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, recip_vector
     use GenComms,      only: gsum,  inode, cq_abort
     use global_module, only: area_SC
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
@@ -99,21 +106,32 @@ contains
     real(double) :: energy
     real(double), dimension(size), intent(in)  :: chden
     real(double), dimension(size), intent(out) :: potential
+    real(double), dimension(3) :: chden_str_r, chden_str_i
+    real(double), dimension(size), OPTIONAL :: chden2
+    real(double), dimension(3), OPTIONAL :: stress2
 
     ! Local variables
-    integer :: i, stat
+    integer :: i, stat, direction
 
     complex(double_cplx), allocatable, dimension(:) :: chdenr
-    complex(double_cplx) :: t
+    complex(double_cplx), allocatable, dimension(:) :: str_chdenr
 
-    real(double) :: dumi, dumr, rp, ip
+    real(double) :: dumi, dumr, rp, ip, rv2, rp2, ip2
     ! refcoul is energy of two electrons seperated by one unit of distance.
     real(double), parameter :: refcoul = one
     ! harcon is the constant needed for energy and potential. It assumes that
     ! the hartree_factor correctly described the G vector at every point in
     ! reciprocal space.  MUST BE IN HARTREES
     real(double), parameter :: harcon = refcoul/pi
+    logical :: second_stress
 
+    second_stress = .false.
+    if(PRESENT(chden2).AND.PRESENT(stress2)) then
+       second_stress = .true.
+       allocate(str_chdenr(size), STAT=stat)
+       call fft3(chden2, str_chdenr, size, -1)
+       stress2 = zero
+    end if    
     allocate(chdenr(size), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating chdenr in hartree: ", size, stat)
@@ -124,30 +142,41 @@ contains
     call fft3(chden, chdenr, size, -1)
     !write(io_lun,*) 'G=0 component is: ',chdenr(i0)
     energy = zero
+    Hartree_stress = zero
+    if(second_stress) stress2 = zero
     do i = 1, z_columns_node(inode)*n_grid_z
-       !dumr = dble(chdenr(i))*hartree_factor(i)*harcon*  &
-       !           one_over_grid_point_volume
-       !dumi = dimag(chdenr(i)) * hartree_factor(i) * harcon *  &
-       !           one_over_grid_point_volume 
-       !energy = energy + dumr*dble(chdenr(i)) + dumi*dimag(chdenr(i))
-       ! dumr = dble(chdenr(i))*hartree_factor(i)*harcon 
-       ! dumi = dimag(chdenr(i))*hartree_factor(i)*harcon
-       t = chdenr(i) * minus_i
        rp = real(chdenr(i), double)
-       ! Alternative would be ip = aimag(chdenr(i))
-       ip = real(t, double)
-       dumr = rp * hartree_factor(i) * harcon 
-       dumi = ip * hartree_factor(i) * harcon
-       ! I could probably move the gpv lower 01/06/2001 dave
-       energy = energy +  &
-                grid_point_volume*dumr * rp +  &
-                grid_point_volume*dumi * ip
+       ! Originally, we had t=chdenr(i) * minus_i and ip = real(t,double) 
+       ip = aimag(chdenr(i))
+       dumr = rp * hartree_factor(i) 
+       dumi = ip * hartree_factor(i) 
+       energy = energy + dumr * rp + dumi * ip
        chdenr(i) = cmplx(dumr, dumi, double_cplx)
+       if(second_stress) then
+          rp2 = real(str_chdenr(i),double)
+          ip2 = aimag(str_chdenr(i))
+       end if
+       ! SYM 2014/09/08 15:41 Hartree stress calculate and accumulate
+       do direction = 1,3
+          rv2 = recip_vector(i,direction)*recip_vector(i,direction)
+          chden_str_r(direction) = dumr * rv2 * hartree_factor(i)
+          chden_str_i(direction) = dumi * rv2 * hartree_factor(i)
+          Hartree_stress(direction) = Hartree_stress(direction) + rp*chden_str_r(direction) + ip*chden_str_i(direction)
+          if(second_stress) stress2(direction) = stress2(direction) + rp2*chden_str_r(direction) + ip2*chden_str_i(direction)
+       end do
     end do
     call fft3(potential, chdenr, size, +1)
-    ! call scal( N_GRID_MAX, one_over_grid_point_volume, chden, 1 )
+    ! Sum over processes
     call gsum(energy)
-    energy = energy * half
+    call gsum(Hartree_stress,3)
+    ! Scale
+    potential = potential*harcon
+    energy = energy * grid_point_volume*half* harcon 
+    Hartree_stress(1:3) = Hartree_stress(1:3)* harcon *grid_point_volume/(two*pi*two*pi)
+    if(second_stress) then
+       call gsum(stress2,3)
+       stress2(1:3) = stress2(1:3)*two* harcon *grid_point_volume/(two*pi*two*pi)
+    end if
     deallocate(chdenr, STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error deallocating chdenr in hartree: ", size, stat)

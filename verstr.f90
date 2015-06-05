@@ -1,1 +1,1 @@
-  character(len=*), parameter :: commentver='Version beta 0.47 (rRRR): Added EXX (PBE0 and HartreeFock) routines and bug fixes lat 2014/09/28'
+  character(len=*), parameter :: commentver='Version beta 0.48 (rRRR): Added stress drb 2015/06/05'
