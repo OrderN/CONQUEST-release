@@ -47,6 +47,8 @@
 !!    Changes for cDFT
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2015/06/10 15:44 cor & dave
+!!    Input parameters for band output
 !!  SOURCE
 !!
 module initial_read
@@ -147,7 +149,7 @@ contains
                                       ne_in_cell, ne_spin_in_cell,     &
                                       ni_in_cell, area_moveatoms,      &
                                       io_lun, flag_only_dispersion,    &
-                                      flag_cdft_atom, flag_local_excitation
+                                      flag_cdft_atom, flag_local_excitation 
     use cdft_data, only: cDFT_NAtoms, &
                          cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
@@ -434,6 +436,8 @@ contains
   !!   - Add a flag for reusing T-matrix
   !!   2014/01/21 lat
   !!   - Added flags for EXX
+  !!   2015/06/10 15:47 cor & dave
+  !!   Flags for wavefunction (band) output
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -495,7 +499,8 @@ contains
                              flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
                              restart_T,restart_X,flag_XLBOMD,flag_propagateX, &
                              flag_propagateL,flag_dissipation,integratorXL,   &
-                             flag_FixCOM, flag_exx, exx_alpha, exx_scf_tol
+                             flag_FixCOM, flag_exx, exx_alpha, exx_scf_tol, &
+                             flag_out_wf,max_wf,out_wf,wf_self_con
 
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
@@ -1021,6 +1026,29 @@ contains
 !!$
 !!$
 !!$
+       ! read wavefunction output flags
+       flag_out_wf=fdf_boolean('IO.outputWF',.false.)
+       if (flag_out_wf) then
+          if (diagon .and. leqi(runtype,'static')) then
+             wf_self_con=.false.
+             max_wf=fdf_integer('IO.maxnoWF',0)
+             allocate(out_wf(max_wf))
+             if (fdf_block('WaveFunctionsOut')) then
+                if(1+block_end-block_start<max_wf) &
+                 call cq_abort("Too few wf no in WaveFunctionsOut:"&
+                              ,1+block_end-block_start,max_wf)
+                do i=1,max_wf
+                   read(unit=input_array(block_start+i-1),fmt=*) out_wf(i)
+                end do
+                call fdf_endblock
+             end if
+          else
+              call cq_abort("Won't output WFs for Order(N) or non-static runs")
+          end if
+       end if
+ 
+
+
        ! cDFT flags
        flag_perform_cDFT = fdf_boolean('cDFT.Perform_cDFT',.false.)
        if(flag_perform_cDFT) then

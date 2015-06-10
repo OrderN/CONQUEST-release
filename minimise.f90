@@ -26,6 +26,8 @@
 !!    Added option to use pulay for SF minimisation
 !!   2008/05/25 ast
 !!    Added timers
+!!   2015/06/10 15:48 cor & dave
+!!    Wavefunction output
 !!  SOURCE
 !!
 module minimise
@@ -104,6 +106,8 @@ contains
   !!   -  Added call for writing out L-matrix (this will be deleted later)
   !!   2013/12/03 M.Arita
   !!   - Removed calls for writing out L-matrix
+  !!   2015/06/10 15:48 cor & dave
+  !!    Added call for wavefunction output at self-consistency
   !!  SOURCE
   !!
   !subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -122,7 +126,7 @@ contains
                                  runtype, flag_vdWDFT, io_lun,         &
                                  flag_DeltaSCF, flag_excite, runtype,  &
                                  flag_MDold,flag_LmatrixReuse,McWFreq, &
-                                 io_lun
+                                 io_lun, flag_out_wf, wf_self_con
     use energy,            only: get_energy, xc_energy, final_energy
     use GenComms,          only: cq_abort, inode, ionode
     use blip_minimisation, only: vary_support
@@ -296,9 +300,21 @@ contains
 ! LT_debug 2012/04/30 end
     end if
 
+
+
+
 !****lat<$
     call final_energy( )
 !****lat>$
+
+    ! output WFs
+    if (flag_out_wf) then
+       wf_self_con=.true.
+       call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode,&
+            ionode, reset_L, .false.)
+       wf_self_con=.false.
+    end if
+
 
     call stop_print_timer(tmr_l_energy, "calculating ENERGY", &
                           IPRINT_TIME_THRES1)

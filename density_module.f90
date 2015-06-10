@@ -61,6 +61,8 @@
 !!   - Added subroutine for calculating electron numbers
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2015/06/05 16:49 dave
+!!    Added band density calculation (copy of get_electronic_density basically)
 !!  SOURCE
 module density_module
 
@@ -778,6 +780,101 @@ contains
   end subroutine get_electronic_density
   !!***
 
+  ! -----------------------------------------------------------
+  ! Subroutine get_band_density
+  ! -----------------------------------------------------------
+
+  !!****f* density_module/get_band_density *
+  !!
+  !!  NAME
+  !!   get_band_density
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Gets electronic density for one band on grid (closely follows
+  !!   get_electronic_density, above)
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2015/06/05
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine get_band_density(denout, spin, support, support_K, matBand, size)
+
+    use datatypes
+    use numbers
+    use GenBlas,                     only: scal, rsum
+    use dimens,                      only: n_my_grid_points, grid_point_volume
+    use block_module,                only: n_pts_in_block
+    use set_bucket_module,           only: rem_bucket, sf_H_sf_rem
+    use calc_matrix_elements_module, only: act_on_vectors_new
+    use primary_module,              only: domain
+    use set_blipgrid_module,         only: naba_atm
+    use GenComms,                    only: gsum, inode, ionode
+    use global_module,               only: iprint_SC, sf, ni_in_cell
+    use functions_on_grid,           only: gridfunctions, fn_on_grid
+
+    implicit none
+
+    ! Passed variables
+
+    integer :: size, spin, matBand
+    integer :: support, support_K
+    real(double), dimension(size) :: denout
+
+    ! Local variables
+    type(cq_timer) :: tmr_std_loc
+    integer :: blk, i_count_alpha, n, n_i, n_point
+    real(double) :: electrons
+
+!****lat<$
+!    call start_timer(t=tmr_std_loc,who='get_electronic_density',&
+!         where=5,level=2,echo=.true.)
+!****lat>$
+
+    if (inode == ionode .and. iprint_SC >= 2) &
+         write (io_lun,fmt='(2x,"Entering get_band_density")')
+
+    gridfunctions(support_K)%griddata = zero
+    call act_on_vectors_new(inode-1, rem_bucket(sf_H_sf_rem), &
+         matBand, support_K, support)
+    denout(:) = zero
+    i_count_alpha = 0
+    do blk = 1, domain%groups_on_node
+       n_point = (blk - 1) * n_pts_in_block
+       i_count_alpha = (naba_atm(sf)%ibegin_blk_orb(blk)-1) * n_pts_in_block
+       if (naba_atm(sf)%no_of_atom(blk) > 0) then   !TM 30/Jun/2003
+          do n_i = 1, naba_atm(sf)%no_of_orb(blk)*n_pts_in_block, n_pts_in_block
+             do n=1, n_pts_in_block
+                denout(n_point+n) =                                       &
+                     denout(n_point+n) +                                  &
+                     gridfunctions(support_K)%griddata(i_count_alpha+n_i+n-1) * &
+                     gridfunctions(support)%griddata(i_count_alpha+n_i+n-1)
+             end do
+          end do
+       end if !(naba_atm(sf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
+    end do ! blk
+    electrons = grid_point_volume * rsum(n_my_grid_points, denout(:), 1)
+    call gsum(electrons)
+
+    if (inode == ionode .and. iprint_SC > 1) &
+         write (io_lun, '(2x,"Electrons: ",f25.15)') &
+         electrons
+    call stop_timer(tmr_std_chargescf)
+
+!****lat<$
+!    call stop_timer(t=tmr_std_loc,who='get_electronic_density',echo=.true.)
+!****lat>$
+
+    return
+  end subroutine get_band_density
+  !!***
 
   ! -----------------------------------------------------------
   ! Subroutine build_Becke_weights

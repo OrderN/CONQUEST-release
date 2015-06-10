@@ -118,6 +118,8 @@
 !!     along with several other DeltaSCF changes
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2015/06/05 16:43 dave and cor
+!!    Writing out band-by-band charge density
 !!***
 module DiagModule
 
@@ -420,7 +422,8 @@ contains
                                flag_local_excitation, dscf_HOMO_thresh, &
                                dscf_LUMO_thresh, dscf_source_level, dscf_target_level, &
                                dscf_target_spin, dscf_source_spin, flag_cdft_atom,  &
-                               dscf_HOMO_limit, dscf_LUMO_limit
+                               dscf_HOMO_limit, dscf_LUMO_limit, &
+                               flag_out_wf,wf_self_con, max_wf, sf, sf
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
                                deallocate_arrays, block_size_r,       &
@@ -428,7 +431,7 @@ contains
                                nkpoints_max, pgid, N_procs_in_pg,     &
                                N_kpoints_in_pg
     use mult_module,     only: matH, matS, matK, matM12, matM12,      &
-                               matrix_scale, matrix_product_trace
+                               matrix_scale, matrix_product_trace, allocate_temp_matrix, free_temp_matrix
     use matrix_data,     only: Hrange, Srange
     use primary_module,  only: bundle
     use species_module,  only: species, nsf_species, species_label
@@ -436,6 +439,11 @@ contains
                                reg_alloc_mem, reg_dealloc_mem
     use energy,          only: entropy
     use cdft_data, only: cDFT_NumberAtomGroups
+    use maxima_module,   ONLY: maxngrid
+    use functions_on_grid,           only: supportfns, &
+                                           allocate_temp_fn_on_grid,    &
+                                           free_temp_fn_on_grid
+    use density_module, ONLY: get_band_density
 
     implicit none
 
@@ -450,11 +458,14 @@ contains
     real(double), external         :: dlamch
     complex(double_cplx), dimension(:,:,:), allocatable :: expH
     complex(double_cplx) :: c_n_alpha2, c_n_setA2, c_n_setB2
-    integer :: info, stat, il, iu, i, j, m, mz, prim_size, ng, &
-               print_info, kp, spin, iacc, iprim, l, band, cdft_group
+    integer :: info, stat, il, iu, i, j, m, mz, prim_size, ng, wf_no, &
+               print_info, kp, spin, iacc, iprim, l, band, cdft_group, support_K
     integer, dimension(50) :: desca, descz, descb
+    integer, allocatable, dimension(:) :: matBand
 
     logical :: flag_keepexcite
+
+    real(double), dimension(:),allocatable :: abs_wf
 
     ! Set band_ef: this works because with no spin a factor of two is normally applied
     if(nspin>1) then
@@ -500,6 +511,13 @@ contains
 
     scale = one / real(N_procs_in_pg(pgid), double)
 
+    ! Allocate matrices to store band K matrices
+    if (wf_self_con .and. flag_out_wf) then
+       allocate(matBand(max_wf))
+       do i=1,max_wf
+          matBand(i) = allocate_temp_matrix(Hrange,0,sf,sf)
+       end do
+    end if
     ! ------------------------------------------------------------------------
     ! Start diagonalisation
     ! ------------------------------------------------------------------------
@@ -831,8 +849,14 @@ contains
                         Hrange, matK(spin)
                    print_info = 1
                 end if
-                call buildK(Hrange, matK(spin), occ(:,kp,spin), &
-                            kk(:,kp), wtk(kp), expH(:,:,spin))
+                ! Pass band-by-band K matrices if we are outputting densities
+                if(wf_self_con .and. flag_out_wf) then
+                   call buildK(Hrange, matK(spin), occ(:,kp,spin), &
+                        kk(:,kp), wtk(kp), expH(:,:,spin),matBand)
+                else
+                   call buildK(Hrange, matK(spin), occ(:,kp,spin), &
+                        kk(:,kp), wtk(kp), expH(:,:,spin))
+                end if
                 ! Build matrix needed for Pulay force
                 ! We scale the occupation number for this k-point by the
                 ! eigenvalues in order to build the matrix M12
@@ -878,6 +902,30 @@ contains
           end do ! End do ng = 1, proc_groups
        end do ! End do i = 1, nkpoints_max
     end do ! spin
+
+    !------ output WFs  --------
+    if (wf_self_con .and. flag_out_wf) then
+       allocate(abs_wf(maxngrid),STAT=stat)
+       if (stat /= 0) call cq_abort('wf_out: Failed to allocate wfs', stat)
+       call reg_alloc_mem(area_DM, maxngrid, type_dbl)
+       support_K = allocate_temp_fn_on_grid(sf)
+       do wf_no=1,max_wf
+          do spin = 1, nspin
+             abs_wf(:)=zero
+             call get_band_density(abs_wf,spin,supportfns,support_K,matBand(wf_no),maxngrid)
+             call wf_output(spin,abs_wf,wf_no)
+             call my_barrier()
+          end do
+       end do
+       deallocate(abs_wf,STAT=stat)
+       if (stat /= 0) call cq_abort('Find Evals: Failed to deallocate wfs',stat)
+       call reg_dealloc_mem(area_DM, maxngrid, type_dbl)
+       call free_temp_fn_on_grid(support_K)
+       do i=max_wf,1,-1
+          call free_temp_matrix(matBand(i))
+       end do
+    end if
+
 
     if (iprint_DM > 3 .and. inode == ionode) &
          write (io_lun, *) "Entropy, TS: ", entropy, kT * entropy
@@ -3391,9 +3439,11 @@ contains
   !!      in all cases.
   !!   2013/02/13 17:10 dave
   !!    - Changed length of sent array to include all bands up to last occupied
+  !!   2015/06/05 16:43 dave
+  !!    Added code to calculate K matrix for individual bands (to allow output of charge density from bands)
   !!  SOURCE
   !!
-  subroutine buildK(range, matA, occs, kps, weight, localEig)
+  subroutine buildK(range, matA, occs, kps, weight, localEig,matBand)
 
     !use maxima_module, only: mx_nponn, mx_at_prim
     use numbers
@@ -3407,7 +3457,7 @@ contains
                                matrix_size
     use global_module,   only: numprocs, iprint_DM, id_glob,         &
                                ni_in_cell, x_atom_cell, y_atom_cell, &
-                               z_atom_cell
+                               z_atom_cell, max_wf, out_wf
     use mpi
     use GenBlas,         only: dot
     use GenComms,        only: myid
@@ -3423,6 +3473,7 @@ contains
     real(double) :: weight
     integer :: matA, range
     complex(double_cplx), dimension(:,:), intent(in) :: localEig
+    integer, OPTIONAL, dimension(max_wf) :: matBand
     ! Local variables
     type(Krecv_data), dimension(:), allocatable :: recv_info
     integer :: part, memb, neigh, ist, prim_atom, owning_proc, locatom
@@ -3445,8 +3496,8 @@ contains
     complex(double_cplx) :: zsum
     complex(double_cplx), dimension(:,:), allocatable :: RecvBuffer, &
          SendBuffer
-    logical :: flag
-    integer :: FSCpart, ipart
+    logical :: flag, flag_write_out
+    integer :: FSCpart, ipart, iband, iwf
     ! for spin polarisation
     real(double) :: occ_correction
 
@@ -3454,6 +3505,11 @@ contains
     if(iprint_DM>=2.AND.myid==0) write(io_lun,fmt='(10x,"Entering &
          &buildK ",i4)') matA
 
+    if(PRESENT(matBand)) then
+       flag_write_out = .true.
+    else
+       flag_write_out = .false.
+    end if
     ! get occ_correction
     occ_correction = one
 
@@ -3722,6 +3778,13 @@ contains
                            recv_info(recv_proc+1)%locj(inter,locatom),col_sup,row_sup)
                       zsum = dot(len,localEig(1:len,prim_orbs(prim)+col_sup),1,RecvBuffer(1:len,orb_count+row_sup),1)
                       call store_matrix_value_pos(matA,whereMat,real(zsum*cmplx(rfac,ifac,double_cplx),double))
+                      if(flag_write_out) then
+                         do iwf = 1,max_wf
+                            iband = out_wf(iwf)
+                            zsum = conjg(localEig(iband,prim_orbs(prim)+col_sup))*RecvBuffer(iband,orb_count+row_sup)
+                            call store_matrix_value_pos(matBand(iwf),whereMat,real(zsum*cmplx(rfac,ifac,double_cplx),double))
+                         end do ! iwf = max_wf
+                      end if
                    end do ! col_sup=nsf
                 end do ! row_sup=nsf
              end do ! inter=recv_info%ints
@@ -3771,4 +3834,57 @@ contains
   end subroutine buildK
   !!***
 
+!!****f*  Diagimodule/wf_output 
+!!
+!!  NAME 
+!!   wf_output
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   Outputs the KS wavefuntion charge
+!!
+!!      
+!!  INPUTS
+!! 
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   C. O'Rourke
+!!  CREATION DATE
+!!   2015/05/29 
+!!  MODIFICATION HISTORY
+!!   2015/06/05 16:42 dave
+!!    Tidied and removed sum over grid points (done in get_band_density) 
+!!  SOURCE
+!!
+  subroutine wf_output(spin,abs_wf,wf_no)
+
+    use datatypes
+    use GenComms,       ONLY: gsum, my_barrier
+    use global_module,  ONLY: out_wf, nspin
+    use io_module,      ONLY: dump_charge2
+    use maxima_module,  ONLY: maxngrid
+    use numbers,        ONLY: zero
+
+    implicit NONE
+
+    real(double), dimension(:) :: abs_wf
+    integer(integ)    :: spin,wf_no
+
+    character(len=50) :: ci,cspin
+
+    if (nspin > 1) then
+       if (spin == 1) cspin = '_Up_'
+       if (spin == 2) cspin = '_Dn_'
+    else
+       cspin=''
+    end if
+    write(ci,'(I4)') out_wf(wf_no)
+    ci=adjustl(ci)
+    ci=trim(ci)//trim(cspin)
+    call dump_charge2(trim(ci)//"wf",abs_wf(:),maxngrid,inode)
+  end subroutine wf_output
+!!***
+  
 end module DiagModule

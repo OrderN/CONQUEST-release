@@ -98,6 +98,8 @@
 !!    Added new area and flag for EXX 
 !!   2014/09/20 lat
 !!    Added flags for PBE0, Xalpha and Hartree-Fock functional
+!!   2015/05/29
+!!    Wavefunction output flags (COR and dave)
 !!  SOURCE
 !!
 module global_module
@@ -299,6 +301,12 @@ module global_module
   logical :: flag_propagateX,flag_propagateL
   logical :: flag_dissipation
   character(20) :: integratorXL
+
+  ! Wavefunction output
+  logical :: flag_out_wf                        !output WFs?
+  integer,allocatable,dimension(:)::out_wf      !which bands to output  
+  integer::max_wf                               !total no of bands
+  logical :: wf_self_con                        !flag to select output at the end of SCF cycle
 
 end module global_module
 !!***
