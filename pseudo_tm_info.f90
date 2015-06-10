@@ -510,6 +510,8 @@ contains
 !!    Added io_ routines from input_module
 !!   2013/07/05 dave
 !!    Added reading and copying of z, charge state of ion
+!!   2015/06/10 16:02 dave & tsuyoshi
+!!    Changed to read ALL radial functions for a given l (now picks up "semi-core" PAOs)
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -559,13 +561,16 @@ contains
        read(lun,*)
        zl = 0
        maxz = 0
+       thisz = 0
        if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading PAOs")')
        do i=1,n_orbnl
           read(lun,*) i1,i2,i3,i4, dummy
           thisl(i)=i1
-          thisz(i)=i3
+          !thisz(i)=i3
           thispop(i)=dummy
-          if(thisz(i)>zl(thisl(i))) zl(thisl(i))=thisz(i)
+          zl(thisl(i)) = zl(thisl(i))+1
+          thisz(i)=zl(thisl(i))
+          !if(thisz(i)>zl(thisl(i))) zl(thisl(i))=thisz(i)
           maxz = max(maxz,thisz(i))
           if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"l: ",i3," z: ",i3)') i1,i3
           call radial_read_ascii(dummy_rada(i),lun)

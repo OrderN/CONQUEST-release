@@ -437,7 +437,9 @@ contains
   !!   2014/01/21 lat
   !!   - Added flags for EXX
   !!   2015/06/10 15:47 cor & dave
-  !!   Flags for wavefunction (band) output
+  !!    Flags for wavefunction (band) output
+  !!   2015/06/10 16:01 dave
+  !!    Bug fix: added default value for r_exx when EXX not set (prevents problems)
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1252,6 +1254,7 @@ contains
              call cq_abort('EXX: exact-exchange mixing value is not &
                   reasonable ', exx_alpha)
           end if 
+          r_exx    = fdf_double('EXX.X_range',one)
           ! To control accuracy during scf
           exx_scf_tol   = sc_tolerance
           ! Grid spacing for PAO discretisation in EXX

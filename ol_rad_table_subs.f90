@@ -800,7 +800,8 @@ end subroutine get_max_paoparams
 !!  CREATION DATE
 !!   24/07/03
 !!  MODIFICATION HISTORY
-!!
+!!   2015/06/10 16:01 dave
+!!    Fixed problems defining maximum l and n_zeta
 !!  SOURCE
 !!
 
@@ -826,17 +827,17 @@ subroutine get_max_pao_nlpfparams(lmax,nzmax)
      else
         continue
      endif
-     if(lmax.lt.pseudo(n_sp)%n_pjnl) then
-        lmax = pseudo(n_sp)%n_pjnl
+     if(lmax.lt.pseudo(n_sp)%lmax) then!n_pjnl) then
+        lmax = pseudo(n_sp)%lmax!n_pjnl
      else
         continue
      endif    
     
 
      do l = 0, pao(n_sp)%greatest_angmom
-        if(nzmax.lt.max(pao(n_sp)%angmom(l)%n_zeta_in_angmom&
-             &,pseudo(n_sp)%n_pjnl)) then
-           nzmax = max(pao(n_sp)%angmom(l)%n_zeta_in_angmom,pseudo(n_sp)%n_pjnl)
+        if(nzmax.lt.pao(n_sp)%angmom(l)%n_zeta_in_angmom) then!max(pao(n_sp)%angmom(l)%n_zeta_in_angmom&
+             !&,pseudo(n_sp)%n_pjnl)) then
+           nzmax = pao(n_sp)%angmom(l)%n_zeta_in_angmom!max(pao(n_sp)%angmom(l)%n_zeta_in_angmom,pseudo(n_sp)%n_pjnl)
         else
            continue
         endif
