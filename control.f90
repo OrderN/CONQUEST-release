@@ -29,6 +29,8 @@
 !!    General tidying related to new matrices
 !!   2008/02/04 17:10 dave
 !!    Changes for output to file not stdout
+!!   2015/06/08 lat
+!!    - Added experimental backtrace
 !!  SOURCE
 !!
 module control
@@ -37,6 +39,7 @@ module control
   use global_module, only: io_lun
   use GenComms,      only: cq_abort
   use timer_module,  only: start_timer, stop_timer, cq_timer 
+  use timer_module,  only: start_backtrace, stop_backtrace
 
   implicit none
 
@@ -45,6 +48,9 @@ module control
   real(double) :: MDtimestep 
   real(double) :: MDcgtol 
   logical      :: CGreset
+
+  ! Area identification
+  integer, parameter, private :: area = 9
 
   ! RCS tag for object file identification
   character(len=80), save, private :: &
@@ -73,28 +79,32 @@ contains
 !!   November 1998
 !!  MODIFICATION HISTORY
 !!   24/05/2001 dave
-!!    Indented, ROBODoc, stripped get_E_and_F calls
+!!   - Indented, ROBODoc, stripped get_E_and_F calls
 !!   11/06/2001 dave
-!!    Added RCS Id and Log tags and GenComms
+!!   - Added RCS Id and Log tags and GenComms
 !!   13/06/2001 dave
-!!    Adapted to use force_module
+!!   - Adapted to use force_module
 !!   17/06/2002 dave
-!!    Improved headers slightly
+!!   - Improved headers slightly
 !!   16:42, 2003/02/03 dave
-!!    Changed to be control_run as part of control module
+!!   - Changed to be control_run as part of control module
 !!   17:31, 2003/02/05 dave
-!!    Removed old, silly MD and replaced with call to either static
+!!   - Removed old, silly MD and replaced with call to either static
 !!    (i.e. just ground state) or CG
 !!   10:06, 12/03/2003 drb 
-!!    Added MD
+!!   - Added MD
 !!   2004/11/10, drb
-!!    Removed common use
+!!   - Removed common use
 !!   2008/02/13 08:23 dave
-!!    Added Pulay optimiser for atomic positions
+!!   - Added Pulay optimiser for atomic positions
 !!   2011/12/11 L.Tong
-!!    Removed redundant parameter number_of_bands
+!!   - Removed redundant parameter number_of_bands
 !!   2012/03/27 L.Tong
 !!   - Removed redundant input parameter real(double) mu
+!!   2012/03/27 L.Tong
+!!   - Removed redundant input parameter real(double) mu
+!!   2014/10/05 L.Truflandier
+!!   - Removed return for if(runtype,'static')
 !!  SOURCE
 !!
   subroutine control_run(fixed_potential, vary_mu, total_energy)
@@ -112,37 +122,45 @@ contains
     implicit none
 
     ! Shared variables
-    logical        :: vary_mu, fixed_potential
-    real(double)   :: total_energy
+    logical           :: vary_mu, fixed_potential
+    real(double)      :: total_energy
 
     ! Local variables
-    type(cq_timer) :: tmr_std_loc
-    logical        :: NoMD
-    integer        :: i, j
+    integer, parameter:: backtrace_level = 0
+    type(cq_timer)    :: backtrace_timer
+    logical           :: NoMD
+    integer           :: i, j
 
     real(double) :: spr, e_r_OLD
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='control_run',where=9,level=0,echo=.true.)
+    call start_backtrace(t=backtrace_timer,who='control_run',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
-    if (leqi(runtype,'static')) then
-       call get_E_and_F(fixed_potential, vary_mu, total_energy,.true.,.true.)
-       return
+    if ( leqi(runtype,'static') ) then
+       call get_E_and_F(fixed_potential,vary_mu, total_energy,&
+                        .true.,.true.,level=backtrace_level)
+       ! 
     else if ( leqi(runtype, 'cg')    ) then
-       call cg_run(fixed_potential, vary_mu, total_energy)
+       call cg_run(fixed_potential,     vary_mu, total_energy)
+       !
     else if ( leqi(runtype, 'md')    ) then
-       call md_run(fixed_potential, vary_mu, total_energy)
+       call md_run(fixed_potential,     vary_mu, total_energy)
+       !
     else if ( leqi(runtype, 'pulay') ) then
-       call pulay_relax(fixed_potential, vary_mu, total_energy)
+       call pulay_relax(fixed_potential,vary_mu, total_energy)
+       !
     else if ( leqi(runtype, 'dummy') ) then
-       call dummy_run(fixed_potential, vary_mu, total_energy)
+       call dummy_run(fixed_potential,  vary_mu, total_energy)
+       !
     else
        call cq_abort('control: Runtype not specified !')
+       !
     end if
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='control_run',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='control_run',echo=.true.)
 !****lat>$
 
     return

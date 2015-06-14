@@ -1,3 +1,5 @@
+! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! ------------------------------------------------------------------------------
 ! $Id: exx_kernel_default.f90 XX year-mm-dd XX:XX:XXZ Lionel $
 ! -----------------------------------------------------------
 ! Module exx_kernel_default.f90
@@ -5,12 +7,34 @@
 ! Code area 13: EXX
 ! -----------------------------------------------------------
 
-!!***h* Conquest/exx_kernel_default *
+!!****h* Conquest/exx_kernel_default *
 !!  NAME
-!!   exx_module
+!!   exx_kernel_default
+!!
+!!  PURPOSE
+!!   Holds the routines to compute exact exchange matrix (matX)
+!!   Parallelized version deriving from multiply_kernel_default
+!!
+!!  AUTHOR
+!!   L.A.Truflandier/D.R.Bowler
+!!
+!!  USES
+!!   mpi, GenComms, comms_module
+!!   timer_module, timer_stdclocks_module
+!!   exx_types, exx_io, exx_memory
+!!   exx_module, exx_evalpao
+!!   global_module, basic_types, memory_module
+!!   species_module, primary_module, cover_module
+!!   group_module, energy, datatypes, numbers
+!!   multiply_module, matrix_module, matrix_data
+!!   mult_module, matrix_comms_module
+!!
 !!  CREATION DATE
-!!   2011/02/11
+!!   2014/05/29
+!!
 !!  MODIFICATION HISTORY
+!!   2015/06/08 lat
+!!    - Added spin 
 !!
 !!  SOURCE
 !!
@@ -18,9 +42,11 @@ module exx_kernel_default
 
   use datatypes
 
-  use PAO_grid_transform_module, only: check_block
   use GenComms,                  only: my_barrier, cq_abort, mtime
   use GenComms,                  only: inode, ionode, myid, root
+  use timer_module,              only: start_timer, stop_timer, print_timer, lun_tmr
+  use timer_module,              only: start_backtrace, stop_backtrace, cq_timer
+  use timer_stdclocks_module,    only: tmr_std_exx
 
   !**<lat>** ISF Poisson solver Will be available in the forthcoming version 
   !use Poisson_Solver,            only: PSolver, createKernel, gequad
@@ -30,14 +56,38 @@ module exx_kernel_default
 
   implicit none 
 
+  ! Area identification
+  integer, parameter, private :: area = 13
+
   ! RCS tag for object file identification
   character(len=80), save, private :: RCSid = &
        "$Id: exx_kernel_default.f90 XX year-mm-dd XX:XX:XXZ lionel $"
-  !!***
-  !
+
+!!***
+  
 contains
-  !
-  subroutine get_X_matrix()
+ 
+  !!****f* exx_kernel_default/get_X_matrix *
+  !!
+  !!  NAME
+  !!   get_X_matrix
+  !!
+  !!  PURPOSE
+  !!   Compute X matrix 
+  !! 
+  !!  INPUTS
+  !!
+  !!  AUTHOR
+  !!   L.A.Truflandier
+  !!
+  !!  CREATION DATE
+  !!   2013/10/30
+  !!
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine get_X_matrix( exxspin, level )
 
     use numbers
     use global_module
@@ -45,18 +95,15 @@ contains
     use basic_types
     use matrix_comms_module
     use comms_module
-    use GenComms, only: my_barrier, cq_abort, mtime
     use mpi
+    use GenComms,        only: my_barrier, cq_abort, mtime
     use multiply_module, only: prefetch
-    use timer_stdclocks_module, only: tmr_std_matmult
     !
     use energy,         only: exx_energy
     !
-    use timer_module,   only: print_timer, cq_timer
-    !
     use primary_module, only: bundle
-    use matrix_data,    only: mat, Hrange, Srange, Xrange, SXrange, halo, rcut
     use cover_module,   only: BCS_parts
+    use matrix_data,    only: mat, Hrange, Srange, Xrange, SXrange, halo, rcut
     use mult_module,    only: S_X_SX, mat_p, mult 
     use mult_module,    only: matX, matK, matS, matrix_scale, matrix_trace
     use mult_module,    only: matrix_product_trace, matrix_product_trace_length 
@@ -68,12 +115,12 @@ contains
     use exx_memory,     only: exx_mem_alloc
     !
     use exx_types, only: prim_atomic_data, neigh_atomic_data,      &
-         tmr_std_exx,       tmr_std_exx_evalpao,         &
-         tmr_std_exx_setup, tmr_std_exx_fetch_K,   &
-         tmr_std_exx_fetch, tmr_std_exx_accumul,   &
+         tmr_std_exx_evalpao, &
+         tmr_std_exx_setup,   tmr_std_exx_fetch_K, &
+         tmr_std_exx_fetch,   tmr_std_exx_accumul, &
          tmr_std_exx_matmult, tmr_std_exx_poisson, &
          tmr_std_exx_allocat, tmr_std_exx_dealloc, &
-         tmr_std_exx_fetch, &
+         tmr_std_exx_fetch,   tmr_std_exx_kernel,  &
          unit_matrix_write, unit_output_write,     & 
          unit_timers_write, unit_screen_write,     &
          unit_memory_write
@@ -83,22 +130,19 @@ contains
          pulay_radius, p_omega, p_ngauss, p_gauss, w_gauss, &
          exx_psolver,p_scheme, isf_order, ngrid, kernel,    &
          exx_alloc, exx_mem, exx_phil, exx_screen_pao,      &
-         exx_total_time, EXX_tmp2,  EXX_tmp, exx_Kij, Kmat_tmp
+         exx_total_time
     !
-    use exx_module,only: exx_scal_rho_3d, exx_ewald_rho, &
-         exx_ewald_pot,   exx_v_on_grid, &                         
-         get_halodat, get_iprimdat, get_neighdat, get_halodat !,&
+    use exx_module,only: exx_scal_rho_3d, exx_ewald_rho, exx_ewald_pot
+    !
     !**<lat>** ISF Poisson solver Will be available in the forthcoming version 
-    !createbeylkin, &
+    !use Poisson_Solver, only: createBeylkin
     !
-
     implicit none
 
-    !integer :: myid
+    integer, optional :: level
 
     ! Local variables
-    ! This will be dynamically allocated/deallocated by the system
-    ! real(double), allocatable, dimension(:) :: atrans
+    integer :: exxspin
     integer :: lab_const
     integer :: invdir,ierr,kpart,ind_part,ncover_yz,n_which,ipart,nnode
     integer :: icall,n_cont,kpart_next,ind_partN,k_off
@@ -116,11 +160,17 @@ contains
     integer(integ),pointer :: ibndimj_rem(:)
 
     ! Arrays for remote variables to point to
+
+
+
     integer, target :: part_array(3*mult(S_X_SX)%parts%mx_mem_grp+ &
-         5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(1)%mx_abs)
-    integer, dimension(:), allocatable :: nreqs
-    integer :: offset,sends,i,j
+         5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(  exxspin  )%mx_abs)
+
+
+
+    integer, dimension(:), allocatable  :: nreqs
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
+    integer :: offset,sends,i,j
 
     logical      :: flag,call_flag
     real(double) :: t0,t1
@@ -132,60 +182,58 @@ contains
     type(neigh_atomic_data) :: jb !j_beta
     type(neigh_atomic_data) :: kg !k_gamma
     type(neigh_atomic_data) :: ld !l_delta
-    type(neigh_atomic_data) :: hl_ghost
-
-    real(double) :: exx, mat_val, exx_tot, mat_val1
-    real(double) :: xyz_ghost(3), r_ghost, tmp
+    !
+    real(double)      :: xyz_ghost(3), r_ghost, tmp
     integer           :: wheremat
+    !
     integer           :: unit1, unit2, unit3, unit4, unit5
     character(len=20) :: filename1, filename2, filename3, filename4, filename5, filename6, filename7
 
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
     !
     !==============================================================================================================
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='get_X_matrix',where=3,level=4,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='get_X_matrix',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
  
     call start_timer(tmr_std_exx)   
     call start_timer(tmr_std_exx_setup)    
     !
-    if ( exx_debug ) then
+    if ( iprint_exx > 3 ) then
        !call io_assign(unit_matrix_write)
        !unit1 = unit_matrix_write
-       unit1 = 100001
-       unit_matrix_write = unit1
-       call get_file_name('exx_matrix.debug',numprocs,inode,filename1)
-       open(unit1,file=filename1)
+       !unit1 = 100001
+       !unit_matrix_write = unit1
+       !call get_file_name('exx_matrix.debug',numprocs,inode,filename1)
+       !open(unit1,file=filename1)
 
        !call io_assign(unit_output_write)
        !unit2 = unit_output_write
-       unit2 = 100002
-       unit_output_write = unit2
-       call get_file_name('exx_output.debug',numprocs,inode,filename2)
-       open(unit2,file=filename2)
+       !unit2 = 100002
+       !unit_output_write = unit2
+       !call get_file_name('exx_output.debug',numprocs,inode,filename2)
+       !open(unit2,file=filename2)
 
-       !call io_assign(unit_timers_write)
-       !unit3 = unit_timers_write
-       unit3 = 100003
-       unit_timers_write = unit3
-       call get_file_name('exx_timers.debug',numprocs,inode,filename3)
-       open(unit3,file=filename3)
-
-       !call io_assign(unit_memory_write)
-       !unit4 = unit_memory_write
-       unit4 = 100004
-       unit_memory_write = unit4
-       call get_file_name('exx_memory.debug',numprocs,inode,filename4)
-       open(unit4,file=filename4)
+       call io_assign(unit_timers_write)
+       call get_file_name('exx_timers',numprocs,inode,filename3)
+       open(unit_timers_write,file=filename3)
+       !
+       !
+       call io_assign(unit_memory_write)
+       call get_file_name('exx_memory',numprocs,inode,filename4)
+       open(unit_memory_write,file=filename4)
 
        !call io_assign(unit_screen_write)
        !unit5 = unit_screen_write
-       unit5 = 100005
-       unit_screen_write = unit5
-       call get_file_name('exx_screen.debug',numprocs,inode,filename5)
-       open(unit5,file=filename5)
+       !unit5 = 100005
+       !unit_screen_write = unit5
+       !call get_file_name('exx_screen.debug',numprocs,inode,filename5)
+       !open(unit5,file=filename5)
 
        !call io_assign(unit_exx_debug)
        !call get_file_name('Exx_debug.debug',numprocs,inode,filename6)
@@ -198,7 +246,6 @@ contains
     !
     maxsuppfuncs = maxval(nsf_species)
     !
-    call exx_mem_alloc(1000,maxsuppfuncs,maxsuppfuncs,'exx_mat','alloc')
     call exx_mem_alloc(extent,0,0,'work_3d' ,'alloc')
     !
     !DRB! This appears to set up the different Poisson solvers
@@ -228,7 +275,8 @@ contains
                p_omega,p_ngauss,p_gauss,w_gauss)
 
        case('gauss')
-          call cq_abort('EXX: Gaussian representation if 1/r for solving the Poisson equation &
+          call cq_abort('EXX: Gaussian representation if 1/r for solving &
+               the Poisson equation &
                is currently under testing...')
           !call createBeylkin(p_gauss,w_gauss,r_int)     
           !call exx_scal_rho_3d(inode,extent,r_int,p_scheme,pulay_radius, &
@@ -248,45 +296,36 @@ contains
        !     0,1,kernel)       
 
     end if
-    call stop_timer(tmr_std_exx_setup)
+    call stop_timer(tmr_std_exx_setup,.true.)
     !    
     !DRB! Zero matrix - spin polarised possible - fix this later ? 
     !DRB! Where is matX allocated ? immi
     !call matrix_scale(zero, matX(1))
     !
-    if (.not.exx_alloc) then
-       select case (exx_mem)
-       case(1)
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_i','alloc')       
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_j','alloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_k','alloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','alloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','alloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','alloc')       
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','alloc')       
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_kj','alloc')
-
-       case(2)
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','alloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','alloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','alloc')       
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','alloc')
-       case default                
-       end select
-    end if
+    !
+    call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_i','alloc')       
+    call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_j','alloc')
+    call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_k','alloc')
+    call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','alloc')
+    !
+    call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','alloc')
+    call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','alloc')       
+    call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','alloc')       
+    call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_kj','alloc')
+    !
     !
     !==============================================================================================================
     !
-    call matrix_scale(zero,matX(1))
+    call matrix_scale(zero,matX(  exxspin  ))
     !
-    call start_timer(tmr_std_matmult)
+    call start_timer(tmr_std_exx_kernel)
     !
-    call start_timer(tmr_std_allocation)
+    call start_timer(tmr_std_exx_allocat)
     if(iprint_mat>3.AND.myid==0) t0 = mtime()
     ! Allocate memory for the elements
-    allocate(ibpart_rem(mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(1)%mx_abs),STAT=stat)
+    allocate(ibpart_rem(mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(  exxspin  )%mx_abs),STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error allocating ibpart_rem')
-    call stop_timer(tmr_std_allocation)
+    call stop_timer(tmr_std_exx_allocat,.true.)
     !
     sends = 0
     do i=1,mult(S_X_SX)%comms%inode
@@ -297,14 +336,14 @@ contains
        end if
     end do
     !
-    call start_timer(tmr_std_allocation)
+    call start_timer(tmr_std_exx_allocat)
     allocate(nreqs(sends*2),STAT=stat)
     if(stat/=0) call cq_abort("mat_mult: Error allocating nreqs",sends,stat)
-    call stop_timer(tmr_std_allocation)
+    call stop_timer(tmr_std_exx_allocat,.true.)
     !
     sends  = 0
     invdir = 0
-    call Mquest_start_send(mult(S_X_SX),mat_p(matK(1))%matrix,nreqs,myid,mult(S_X_SX)%prim%mx_ngonn,sends)
+    call Mquest_start_send(mult(S_X_SX),mat_p(matK(  exxspin  ))%matrix,nreqs,myid,mult(S_X_SX)%prim%mx_ngonn,sends)
     !ncover_yz=mult(S_X_SX)%gcs%ncovery*mult(S_X_SX)%gcs%ncoverz
     ncover_yz=mult(S_X_SX)%gcs%ncovery*mult(S_X_SX)%gcs%ncoverz
     !
@@ -328,7 +367,6 @@ contains
     !call hf_write_info(unit1,inode,10,bundle%groups_on_node,0,0,0,0, &
     !     0,0,'XX',xyz_ghost,r_ghost,0,0,0,zero,zero,0)
     !
-    EXX_tmp   = zero
     xyz_ghost = zero
     r_ghost   = zero
     do kpart = 1,mult(S_X_SX)%ahalo%np_in_halo  ! Main loop
@@ -358,7 +396,7 @@ contains
              allocate(b_rem(lenb_rem))
              !
              call prefetch(kpart,mult(S_X_SX)%ahalo,mult(S_X_SX)%comms,mult(S_X_SX)%bmat,icall, &
-                  n_cont,part_array,mult(S_X_SX)%bindex,b_rem,lenb_rem,mat_p(matK(1))%matrix,   &
+                  n_cont,part_array,mult(S_X_SX)%bindex,b_rem,lenb_rem,mat_p(matK(  exxspin  ))%matrix,   &
                   myid,ilen2,mx_msg_per_part,mult(S_X_SX)%parts,mult(S_X_SX)%prim,mult(S_X_SX)%gcs)
              !
              offset = 0
@@ -375,7 +413,7 @@ contains
              ibndimj_rem => part_array(offset+1:offset+ilen2)
              !
              if(offset+ilen2>3*mult(S_X_SX)%parts%mx_mem_grp+ &
-                  5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(1)%mx_abs) then
+                  5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(  exxspin  )%mx_abs) then
                 call cq_abort('mat_mult: error pointing to part_array ',kpart)
              end if
              ! Create ibpart_rem
@@ -396,13 +434,13 @@ contains
           end if
           !
           !
-          call start_timer(tmr_std_allocation)
+          call start_timer(tmr_std_exx_allocat)
           allocate(b_rem(lenb_rem))
-          call stop_timer(tmr_std_allocation)
+          call stop_timer(tmr_std_exx_allocat,.true.)
           !
           !
           call prefetch(kpart,mult(S_X_SX)%ahalo,mult(S_X_SX)%comms,mult(S_X_SX)%bmat,icall, &
-               n_cont,part_array,mult(S_X_SX)%bindex,b_rem,lenb_rem,mat_p(matK(1))%matrix,   & 
+               n_cont,part_array,mult(S_X_SX)%bindex,b_rem,lenb_rem,mat_p(matK(  exxspin  ))%matrix,   & 
                myid,ilen2,mx_msg_per_part,mult(S_X_SX)%parts,mult(S_X_SX)%prim,mult(S_X_SX)%gcs)
           !
           lenb_rem = size(b_rem)
@@ -416,7 +454,7 @@ contains
           offset = offset+3*ilen2 ; ibndimj_rem => part_array(offset+1:offset+ilen2)
           !
           if(offset+ilen2>3*mult(S_X_SX)%parts%mx_mem_grp+ &
-               5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(1)%mx_abs) then
+               5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(  exxspin  )%mx_abs) then
              call cq_abort('Error pointing to part_array !',kpart)
           end if
           !          
@@ -431,13 +469,13 @@ contains
             ibpart_rem,ibseq_rem,ibndimj_rem, & 
                                 !atrans, &
             b_rem,  &
-            mat_p(matX(1))%matrix,      &
+            mat_p(matX(  exxspin  ))%matrix,      &
             mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans, &
-            mult(S_X_SX)%bmat(1)%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
+            mult(S_X_SX)%bmat(  exxspin  )%mx_abs,mult(S_X_SX)%parts%mx_mem_grp, &
             mult(S_X_SX)%prim%mx_iprim, &
                                 !lena,     &
             lenb_rem, &
-            mat_p(matX(1))%length)
+            mat_p(matX(  exxspin  ))%length)
     end do ! End of the kpart=1,ahalo%np_in_halo loop !
     !
     ! #ifdef OMP_M
@@ -445,9 +483,9 @@ contains
     ! !$omp end parallel
     ! #end if
     !
-    call start_timer(tmr_std_allocation)
+    call start_timer(tmr_std_exx_dealloc)
     if(allocated(b_rem)) deallocate(b_rem)
-    call stop_timer(tmr_std_allocation)
+    call stop_timer(tmr_std_exx_dealloc,.true.)
     !
     if(sends>0) then
        do i=1,sends
@@ -458,17 +496,17 @@ contains
     !
     call my_barrier
     !
-    call start_timer(tmr_std_allocation)
+    call start_timer(tmr_std_exx_dealloc)
     deallocate(nreqs,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating nreqs')
-    call stop_timer(tmr_std_allocation)
+    call stop_timer(tmr_std_exx_dealloc,.true.)
     !
     call my_barrier
     !
-    call start_timer(tmr_std_allocation)
+    call start_timer(tmr_std_exx_dealloc)
     deallocate(ibpart_rem,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating ibpart_rem')
-    call stop_timer(tmr_std_allocation)
+    call stop_timer(tmr_std_exx_dealloc,.true.)
     !
     call my_barrier
     !
@@ -477,45 +515,33 @@ contains
        write(io_lun,*) 'mult time: ',t1-t0
     end if
     !
-    call stop_timer(tmr_std_matmult)
+    call stop_timer(tmr_std_exx_kernel,.true.)
     !
-    !exx = matrix_product_trace       (matX(1),matK(1))
-    !tmp = matrix_product_trace_length(matK(1),matS   )
-    !
+    !exx = matrix_product_trace(matX(1),matK(1))
     !if (inode == ionode) then
     !   print*, 'exx energy'
     !end if
     !
     if ( exx_debug ) then
-       call exx_write_tail(unit1,inode)  
+       !call exx_write_tail(unit1,inode)  
     end if
+    !
     !
     call exx_mem_alloc(extent,0,0,'work_3d' ,'dealloc')
-    call exx_mem_alloc(1000,maxsuppfuncs,maxsuppfuncs,'exx_mat','dealloc')
     !
-    if (.not.exx_alloc) then
-       select case (exx_mem)
-       case(1)
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_i','dealloc')       
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_j','dealloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_k','dealloc')    
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','dealloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','dealloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','dealloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','dealloc')       
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_kj','dealloc')
-       case(2)                   
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','dealloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','dealloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','dealloc')
-          call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','dealloc')
-       case(3)
-       case default
-       end select
-    end if
+    call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_i','dealloc')       
+    call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_j','dealloc')
+    call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_k','dealloc')    
+    call exx_mem_alloc(extent,maxsuppfuncs,0,'phi_l','dealloc')
+    !
+    call exx_mem_alloc(extent,maxsuppfuncs,0,'Phy_k','dealloc')
+    call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'Ome_kj','dealloc')   
+    call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'rho_kj','dealloc')       
+    call exx_mem_alloc(extent,maxsuppfuncs,maxsuppfuncs,'vhf_kj','dealloc')
+    !
     !
     if (exx_psolver == 'fftw')  then
-       call exx_mem_alloc(extent,0,0,'fftw_3d','dealloc')  
+       call exx_mem_alloc(extent,0,0,'fftw_3d',     'dealloc')  
        call exx_mem_alloc(extent,0,0,'reckernel_3d','dealloc')
        select case(p_scheme)
        case('default')         
@@ -547,44 +573,68 @@ contains
          tmr_std_exx_dealloc%t_tot + &
          tmr_std_exx_setup%t_tot   + &
          tmr_std_exx_write%t_tot   + &
-         tmr_std_exx_fetch%t_tot   + &
-         tmr_std_exx_fetch_K%t_tot 
+         tmr_std_exx_fetch%t_tot  
+         !tmr_std_exx_fetch_K%t_tot 
 
-    call stop_timer(tmr_std_exx)
+    call stop_timer(tmr_std_exx,.true.)
 
-    if ( exx_debug ) then
-       call print_timer(tmr_std_exx_setup,  "exx_setup   time:",unit3)    
-       call print_timer(tmr_std_exx_write,  "exx_write   time:",unit3)    
-       call print_timer(tmr_std_exx_fetch,  "exx_fetch   time:",unit3)    
-       call print_timer(tmr_std_exx_fetch_K,"exx_fetch_K time:",unit3)    
+    if ( iprint_exx > 3 ) then
+       call print_timer(tmr_std_exx_setup,  "exx_setup   time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_write,  "exx_write   time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_kernel, "exx_kernel  time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_fetch,  "exx_fetch   time:", unit_timers_write)    
+       !call print_timer(tmr_std_exx_fetch_K,"exx_fetch_K time:", unit_timers_write)    
 
-       call print_timer(tmr_std_exx_evalpao,"exx_evalpao time:",unit3)    
-       call print_timer(tmr_std_exx_poisson,"exx_poisson time:",unit3)
-       call print_timer(tmr_std_exx_matmult,"exx_matmult time:",unit3)    
-       call print_timer(tmr_std_exx_accumul,"exx_accumul time:",unit3)    
-       call print_timer(tmr_std_exx_allocat,"exx_allocat time:",unit3)    
-       call print_timer(tmr_std_exx_dealloc,"exx_dealloc time:",unit3)    
-       call print_timer(tmr_std_exx,        "exx_total   time:",unit3)    
+       call print_timer(tmr_std_exx_evalpao,"exx_evalpao time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_poisson,"exx_poisson time:", unit_timers_write)
+       call print_timer(tmr_std_exx_matmult,"exx_matmult time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_accumul,"exx_accumul time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_allocat,"exx_allocat time:", unit_timers_write)    
+       call print_timer(tmr_std_exx_dealloc,"exx_dealloc time:", unit_timers_write)    
+       call print_timer(tmr_std_exx,        "exx_total   time:", unit_timers_write)    
 
-       write(unit=unit3,fmt='("Timing: Proc ",i6,": Time spent in ", a50, " = ", &
+       write(unit=unit_timers_write,fmt='("Timing: Proc ",i6,": Time spent in ", a50, " = ", &
+            f12.5," s")'), inode, 'get_X_matrix',  tmr_std_exx%t_tot
+
+       write(unit=unit_timers_write,fmt='("Timing: Proc ",i6,": Time spent in ", a50, " = ", &
             f12.5," s")'), inode, 'timer calls',  tmr_std_exx%t_tot-exx_total_time 
 
-       call io_close(unit_matrix_write)
-       call io_close(unit_output_write)
+       !call io_close(unit_matrix_write)
+       !call io_close(unit_output_write)
+       !call io_close(unit_screen_write)
        call io_close(unit_memory_write)
-       call io_close(unit_screen_write)
-       call io_close(unit_timers_write) 
+       call io_close(unit_timers_write)
+       !
+       !
     end if
 
-
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='get_X_matrix',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='get_X_matrix',echo=.true.)
 !****lat>$
 
     return
   end subroutine get_X_matrix
-  !
-  !
+  !!***
+
+  !!****f* exx_kernel_default/m_kern_exx *
+  !!
+  !!  NAME
+  !!   m_kern_exx
+  !!
+  !!  PURPOSE
+  !! 
+  !!  INPUTS
+  !!
+  !!  AUTHOR
+  !!   L.A.Truflandier/D.R.Bowler
+  !!
+  !!  CREATION DATE
+  !!   2014/05/29  
+  !!
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
   subroutine m_kern_exx(k_off, kpart, ib_nd_acc, ibaddr, nbnab, &
        ibpart, ibseq, bndim2, b, c, ahalo, chalo, & 
        at, mx_absb, mx_part,  &
@@ -593,7 +643,6 @@ contains
     use numbers,        only: zero, one
     use matrix_module,  only: matrix_halo, matrix_trans
     use global_module,  only: area_exx, id_glob, species_glob
-    use timer_module,   only: start_timer, stop_timer, print_timer, lun_tmr
     !
     use basic_types,    only: primary_set
     use primary_module, only: bundle 
@@ -607,12 +656,12 @@ contains
     use exx_evalpao,    only: exx_phi_on_grid
     !
     use exx_types, only: prim_atomic_data, neigh_atomic_data, &
-         tmr_std_exx,       tmr_std_exx_evalpao,   &
+         tmr_std_exx_evalpao, &
          tmr_std_exx_setup, tmr_std_exx_fetch_K,   &
          tmr_std_exx_fetch, tmr_std_exx_accumul,   &
          tmr_std_exx_matmult, tmr_std_exx_poisson, &
          tmr_std_exx_allocat, tmr_std_exx_dealloc, &
-         tmr_std_exx_fetch, &
+         tmr_std_exx_fetch,   &
                                 !unit_matrix_write, unit_output_write,     & 
                                 !unit_timers_write, unit_screen_write,     &
                                 !unit_memory_write, &
@@ -626,12 +675,10 @@ contains
     use exx_types, only: phi_i, phi_j, phi_k, phi_l, &
          Phy_k, rho_kj, Ome_kj, vhf_kj, &
          work_in_3d, work_out_3d,       &
-         Kmat_ij, EXXmat, EXX_tmp,      &
-         EXX_tmp2, Imat,                &
          exx_Kkl, exx_Kij
 
-    use exx_module,only: exx_v_on_grid, &
-                         get_halodat, get_iprimdat, get_neighdat, get_halodat
+    use exx_module,only: exx_v_on_grid, get_halodat, get_iprimdat
+    !
     !
     implicit none
     !
@@ -668,15 +715,19 @@ contains
     real(double), dimension(3) :: xyz_ghost = zero
     real(double), dimension(3) :: xyz_zero  = zero
     real(double), dimension(3) :: xyz_delta = zero
+    real(double), dimension(3) :: xyz_ij    = zero
+    real(double), dimension(3) :: xyz_kl    = zero
     real(double)               ::   r_ghost = zero
-    real(double)               ::   dr,dv,K_val,exx
-    real(double)               ::   tmp_exx, exx_mat_elem
+    !
+    real(double)               ::   dr,dv,K_val
+    real(double)               ::   exx_mat_elem
+    real(double)               ::   screen_ij, range_ij
+    real(double)               ::   screen_kl, range_kl
     !
     type(prim_atomic_data)  :: ia !i_alpha
     type(neigh_atomic_data) :: jb !j_beta
     type(neigh_atomic_data) :: kg !k_gamma
     type(neigh_atomic_data) :: ld !l_delta
-    type(neigh_atomic_data) :: hl_ghost
     !
     integer                 :: maxsuppfuncs, nsf1, nsf2, nsf3
     integer                 :: r, s, t, tmp    
@@ -686,17 +737,20 @@ contains
     dv = dr**3
     ewald_alpha  = 0.5
     maxsuppfuncs = maxval(nsf_species)    
-    !
+    !range_ij        = 0.5d0
+    !range_kl        = 0.5d0
     !unit_exx_debug1 = 333
-    !exx             = zero
     !
-    ! [[[[[ k ]]]]]
+    !
+!!$
+!!$ ****[ k loop ]****
+!!$
     do k = 1, ahalo%nh_part(kpart)
        !
        k_in_halo  = ahalo%j_beg(kpart) + k - 1
        k_in_part  = ahalo%j_seq(k_in_halo)
-       nbkbeg     = ibaddr(k_in_part) 
-       nb_nd_kbeg = ib_nd_acc(k_in_part)
+       nbkbeg     = ibaddr     (k_in_part) 
+       nb_nd_kbeg = ib_nd_acc  (k_in_part)
        nd3        = ahalo%ndimj(k_in_halo)
        call get_halodat(kg,kg,k_in_part,ahalo%i_hbeg(ahalo%lab_hcover(kpart)), &
             ahalo%lab_hcell(kpart),'k',.true.,unit_exx_debug1)
@@ -723,27 +777,36 @@ contains
        !
        Phy_k = zero
        !
-       ! [[[[[ l ]]]]] 
+!!$
+!!$ ****[ l do loop ]****
+!!$
        do l = 1, nbnab(k_in_part)
           !l_in_halo = lbnab2ch(l)                
           lpart = ibpart(nbkbeg+l-1) + k_off
-          lseq  = ibseq( nbkbeg+l-1)
+          lseq  = ibseq (nbkbeg+l-1)
           call get_halodat(ld,kg,lseq,chalo%i_hbeg(lpart),         &
                BCS_parts%lab_cell(BCS_parts%inv_lab_cover(lpart)), &
                            'l',.true.,unit_exx_debug1)
           !
           !write(*,*) 'l',l, 'global_num',ld%global_num,'spe',ld%spec
           !
+!!$
+!!$ ****[ <kl> screening ]****
+!!$
+          !xyz_kl    = kg%xyz - ld%xyz
+          !screen_kl = sqrt(dot_product(xyz_kl,xyz_kl))
+          !if ( screen_kl < range_kl ) then
+          !
           call exx_phi_on_grid(inode,ld%global_num,ld%spec,extent,     &
                                ld%xyz,maxsuppfuncs,phi_l,r_int,xyz_zero)             
-          !                
+          !
           do nsf2 = 1, ld%nsup
              !
              nbaddr = nbbeg + kg%nsup * (nsf2 - 1)
              !
              do nsf1 = 1, kg%nsup                         
                 !
-                call start_timer(tmr_std_exx_fetch_K)
+                !call start_timer(tmr_std_exx_fetch_K)
                 if (exx_Kkl) then
                    K_val = b(nbaddr+nsf1-1)
                 else
@@ -752,7 +815,7 @@ contains
                 !
                 !write(*,'(7I4,F12.8)') kpart,i,j,k,l,nsf2,nsf1,K_val
                 !
-                call stop_timer(tmr_std_exx_fetch_K,.true.)
+                !call stop_timer(tmr_std_exx_fetch_K,.true.)
                 
                 call start_timer(tmr_std_exx_accumul)
                 Phy_k(:,:,:,nsf1) = Phy_k(:,:,:,nsf1) + K_val*phi_l(:,:,:,nsf2) 
@@ -763,13 +826,15 @@ contains
           !
           nbbeg = nbbeg + ld%nsup*kg%nsup !nd3 * nd2                
           !
+       !end if !( screen kl )
        end do ! End of l = 1, nbnab(k_in_part)
-       
-       ! [[[[[ i ]]]]]
+!!$
+!!$ ****[ i loop ]****
+!!$
        do i = 1, at%n_hnab(k_in_halo)
           i_in_prim = at%i_prim(at%i_beg(k_in_halo)+i-1)
-          nd1 = ahalo%ndimi(i_in_prim)
-          ni  = bundle%iprim_seq(i_in_prim)
+          nd1 = ahalo%ndimi      (i_in_prim)
+          ni  = bundle%iprim_seq (i_in_prim)
           np  = bundle%iprim_part(i_in_prim)
           icad  = (i_in_prim - 1) * chalo%ni_in_halo !***
           !nbbeg = nb_nd_kbeg
@@ -785,31 +850,39 @@ contains
           !
           !print*, size(chalo%i_h2d), shape(chalo%i_h2d)
           ! 
-          ! [[[[[ j ]]]]]
+!!$
+!!$ ****[ j loop ]****
+!!$
           do j = 1, nbnab(k_in_part)!mat(np,Xrange)%n_nab(ni)                   
              nbbeg     = nb_nd_kbeg
              j_in_halo = jbnab2ch(j) !***
              !
              !print*, j, icad, j_in_halo
              !   
-             if (j_in_halo /= 0) then
+             if ( j_in_halo /= 0 ) then
                 !
                 ncbeg = chalo%i_h2d(icad + j_in_halo) !***
                 !
-                if (ncbeg /= 0 ) then 
+                if ( ncbeg /= 0 ) then 
                    jpart = ibpart(nbkbeg+j-1) + k_off
                    jseq  = ibseq (nbkbeg+j-1)
                    call get_halodat(jb,kg,jseq,chalo%i_hbeg(jpart),                     &
                                     BCS_parts%lab_cell(BCS_parts%inv_lab_cover(jpart)), &
                            'j',.true.,unit_exx_debug1)
-                   !call get_neighdat(jb,ia,kg,j,np,.true.,unit_exx_debug1)
                    !
+!!$
+!!$ ****[ <ij> screening ]****
+!!$
+                   !xyz_ij    = ia%xyz - jb%xyz
+                   !screen_ij = sqrt(dot_product(xyz_ij,xyz_ij))
+                   !print*, screen_ij
+                   !if ( screen_ij < range_ij ) then
                    !write(*,*) 'j',j, 'global_num',jb%global_num,'spe',jb%spec
                    !
                    call exx_phi_on_grid(inode,jb%global_num,jb%spec,extent, &
                                         jb%xyz,maxsuppfuncs,phi_j,r_int,xyz_zero)             
                    !
-                   Ome_kj = zero
+                   !Ome_kj = zero
                    !
                    call start_timer(tmr_std_exx_accumul)
                    rho_kj = zero
@@ -821,6 +894,7 @@ contains
                             !   do s = 1, 2*extent+1
                             !      do t = 1, 2*extent+1                         
                             !         if(isnan(rho_kj(r,s,t,nsf1,nsf2))) write(*,*) 'rho: ',r,s,t,nsf1,nsf2
+
                             !         if(isnan(Phy_k(r,s,t,nsf1))) write(*,*) 'Phy: ',r,s,t,nsf1,nsf2
                             !         if(isnan(phi_j(r,s,t,nsf2))) write(*,*) 'phi: ',r,s,t,nsf1,nsf2
                             !      end do
@@ -834,9 +908,9 @@ contains
                       do nsf2 = 1, jb%nsup
                          
                          call start_timer(tmr_std_exx_poisson)    
-                         work_in_3d = zero
+                         work_in_3d  = zero
                          work_out_3d = zero
-                         work_in_3d = rho_kj(:,:,:,nsf1,nsf2)
+                         work_in_3d  = rho_kj(:,:,:,nsf1,nsf2)
                          
                          call exx_v_on_grid(inode,extent,work_in_3d,work_out_3d,r_int,   &
                               exx_psolver,p_scheme,pulay_radius,p_omega,p_ngauss,p_gauss,&
@@ -856,6 +930,8 @@ contains
                       end do
                    end do
                    !
+                   Ome_kj = zero
+                   !
                    call start_timer(tmr_std_exx_accumul)  
                    do nsf1 = 1, kg%nsup
                       do nsf2 = 1, jb%nsup                                       
@@ -868,7 +944,6 @@ contains
                    if(ia%nsup/=ahalo%ndimi(i_in_prim)) write(24,*) 'Error1: ',ia%nsup,ahalo%ndimi(i_in_prim)
                    if(jb%nsup/=bndim2(nbkbeg+j-1))     write(24,*) 'Error2: ',jb%nsup,bndim2(nbkbeg+j-1)
                    !
-                   !EXXmat = zero
                    call start_timer(tmr_std_exx_matmult)
                    do nsf2 = 1, jb%nsup                                         
                       !
@@ -883,10 +958,6 @@ contains
                             do r = 1, 2*extent+1
                                do s = 1, 2*extent+1
                                   do t = 1, 2*extent+1                         
-
-                                     !EXXmat(nsf1,nsf2) = EXXmat(nsf1,nsf2) &
-                                     !     + phi_i(r,s,t,nsf1) &
-                                     !     * Ome_kj(r,s,t,nsf3,nsf2) * dv
                                      
                                      exx_mat_elem = exx_mat_elem &                                    
                                           + phi_i(r,s,t,nsf1)    &
@@ -900,30 +971,41 @@ contains
                             !
                          end do ! nsf3
                          !
-                         !write(23,*) i,j,k,l,nsf1,nsf2,EXXmat(nsf1,nsf2)
-                         !exx = exx + EXXmat(nsf1,nsf2)*Kmat_ij(nsf1,nsf2)  
                          !
                       end do ! nsf1
+                      !
+                      !
                    end do ! nsf2
-                   call start_timer(tmr_std_exx_matmult,.true.)
+                   call stop_timer(tmr_std_exx_matmult,.true.)
                    !
-                end if
-             end if
+!!$
+!!$
+!                end if !( screen ij )
+!!$
+!!$
+                end if ! ( ncbeg /=0 )
+             end if ! ( j_in_halo /=0 )
              !
              !nbbeg = nbbeg + ia%nsup * jb%nsup ! nd3 * nd2
              !
+!!$
+!!$ ****[ j end loop ]****
+!!$
           end do ! End of j = 1, mat(np,SXrange)%n_nab(ni)           
           !          
+!!$
+!!$ ****[ i end loop ]****
+!!$
+          !
        end do ! End of i = 1, at%n_hnab(k_in_halo)
+       !
+!!$
+!!$ ****[ k end loop ]****
+!!$
        !
     end do ! End of k = 1, ahalo%nh_part(kpart)
     !
-    !write(*,'(A5,2X,I2,2X,A21,9X,F12.8)') 'inode', inode,'EXX from mat_mult_exx', -exx/real(4,double)
     !
-    !write(*,'(A5,2X,I2,2X,A5,2X,I6,2X, A21,2X,F20.8)') &
-    !     'inode', inode, 'kpart', mult(S_X_SX)%ahalo%lab_hcell(kpart), &
-    !     'EXX from mat_mult_exx', -exx/real(4,double)
-    
     return
   end subroutine m_kern_exx
   !

@@ -51,6 +51,7 @@ module pseudopotential_data
   use GenComms,               only: cq_abort
   use species_module,         only: non_local_species
   use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_pseudopot, tmr_std_allocation
 
   implicit none
@@ -931,6 +932,8 @@ contains
 !!    Added timers
 !!   2008/09/01 08:21 dave
 !!    Added io_ routines from input_module
+!!   2015/06/08 lat
+!!    Added experimental backtrace
 !!  SOURCE
 !!
   subroutine read_pseudopotential(inode, ionode)
@@ -948,7 +951,7 @@ contains
     integer        :: inode, ionode
 
     ! Local variables
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
     integer        :: i, ios, j, jnode
     integer        :: l, m, n_l, n, lun, nl_max, npts_max
 
@@ -956,8 +959,7 @@ contains
     real(double)            :: tmpr
 
 !****lat<$
-!    call sub_enter_output('read_pseudopotential',3,'10')
-    call start_timer(who='read_pseudopotential', where=10, level=3, t=tmr_std_loc)
+    call start_backtrace(t=backtrace_timer,who='read_pseudopotential',where=10,level=3)
 !****lat>$
 
     call start_timer(tmr_std_pseudopot)
@@ -1107,17 +1109,17 @@ contains
     end do
     call stop_timer(tmr_std_pseudopot)
 
+!****lat<$
+    call stop_backtrace(t=backtrace_timer,who='read_pseudopotential')
+!****lat>$
+
+    return
+
 1   format(10x,'An error occurred while trying to open file ', &
          a40,/,10x,'File does not exist or contains less data than needed')
 2   format(2x,'Reading pseudopotentials'/)
 3   format(2x,'Species ',i3,' Atomic exponent: ',f15.8)
 
-!****lat<$
-!    call sub_leave_output('read_pseudopotential',3,'10')
-    call stop_timer(tmr_std_loc)
-!****lat>$
-
-    return
   end subroutine read_pseudopotential
 !!***
 

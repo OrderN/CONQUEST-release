@@ -43,6 +43,7 @@ module S_matrix_module
   use datatypes
   use global_module,          only: io_lun
   use timer_module,           only: start_timer, stop_timer
+  use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_smatrix
 
   implicit none
@@ -107,6 +108,8 @@ contains
 !!   - Changed the hard-wired deltaOmega tolerance for Hottelling
 !!     iterations (0.0001_double) to use module variable
 !!     InvSDeltaOmegaTolerance
+!!   2015/06/08 lat
+!!    - Added experimental backtrace
 !!  TODO
 !!    
 !!  SOURCE
@@ -164,14 +167,14 @@ contains
     real(double) :: dx, dy, dz, time0, time1
     real(double), allocatable, dimension(:), target :: part_blips
     type(cq_timer) :: tmr_l_tmp1
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
     type(support_function) :: supp_on_j
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
     real(double), allocatable, dimension(:,:,:) :: this_data_K
     real(double), allocatable, dimension(:,:,:) :: this_data_M12
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='get_S_matrix',where=3,level=2)
+    call start_backtrace(t=backtrace_timer,who='get_S_matrix',where=3,level=2)
 !****lat>$
 
     call start_timer(tmr_std_smatrix)
@@ -330,7 +333,7 @@ contains
     call stop_timer(tmr_std_smatrix)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='get_S_matrix')
+    call stop_backtrace(t=backtrace_timer,who='get_S_matrix')
 !****lat>$
 
     return

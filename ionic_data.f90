@@ -25,14 +25,20 @@
 !!    Added read for basis set: defaults to blips
 !!   2008/02/06 08:08 dave
 !!    Changed for output to file not stdout
+!!   2015/06/08 lat
+!!    Added experimental backtrace
 !!  SOURCE
 !!
 module ionic_data
 
   use global_module, only: io_lun
   use timer_module,  only: start_timer, stop_timer, cq_timer 
+  use timer_module,  only: start_backtrace, stop_backtrace
 
   implicit none
+
+  ! Area identification
+  integer, parameter, private :: area = 1
 
   ! RCS tag for object file identification
   character(len=80), private, save :: &
@@ -81,7 +87,7 @@ contains
   !!    Line length change
   !!  SOURCE
   !!
-  subroutine get_ionic_data(inode,ionode,flag_no_atomic_densities)
+  subroutine get_ionic_data(inode,ionode,flag_no_atomic_densities,level)
 
     use datatypes
     use read_pao_info,          only: read_pao
@@ -102,16 +108,21 @@ contains
     implicit none
 
     ! Passed variables
+    integer, optional    :: level
     integer, intent(in)  :: inode, ionode
     logical, intent(out) :: flag_no_atomic_densities
 
     ! Local variables
     character(len=10) :: init_blip_method
     logical           :: flag_blips_from_pao!, flag_atomic_density_from_pao
-    type(cq_timer)    :: tmr_std_loc
+    type(cq_timer)    :: backtrace_timer
+    integer           :: backtrace_level
 
 !****lat<$    
-    call start_timer(t=tmr_std_loc,who='get_ionic_data',where=1,level=1)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='get_ionic_data',&
+         where=area,level=backtrace_level)
 !****lat>$
 
     ! Decide whether blips are to be initialised from PAOs
@@ -164,7 +175,7 @@ contains
     end if
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='get_ionic_data')
+    call stop_backtrace(t=backtrace_timer,who='get_ionic_data')
 !****lat>$
 
     return

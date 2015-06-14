@@ -31,6 +31,8 @@
 !!   2014/01/18 lat
 !!   - Added exx_energy for "exact" exchange (Hartree-Fock)
 !!   - Added   x_energy for   DFT   exchange
+!!   2015/06/08 lat
+!!    - Added experimental backtrace   
 !!  SOURCE
 !!
 module energy
@@ -39,8 +41,16 @@ module energy
   use global_module, only: io_lun
   use numbers,       only: zero
   use timer_module,  only: start_timer, stop_timer, cq_timer
+  use timer_module,  only: start_backtrace, stop_backtrace
 
   implicit none
+
+  ! Area identification
+  integer, parameter, private :: area = 9
+
+  ! RCS tag for object file identification
+  character(len=80), save, private :: &
+       RCSid = "$Id$"
 
   real(double) ::  hartree_energy
   real(double) :: local_ps_energy
@@ -63,9 +73,6 @@ module energy
   logical :: flag_check_Diag = .false.
   integer :: SmearingType, MPOrder
 
-  ! RCS tag for object file identification
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
 !!*** energy
 
 contains
@@ -109,7 +116,7 @@ contains
   !!   - Added exchange energy calculation
   !!  SOURCE
   !!
-  subroutine get_energy(total_energy, printDFT)
+  subroutine get_energy(total_energy, printDFT, level)
 
     use datatypes
     use numbers
@@ -134,14 +141,17 @@ contains
 
     ! Passed variables
     real(double) :: total_energy
+
     ! check DFT energy mode  : by TM Nov2007
     logical, intent(in), optional :: printDFT
+    integer, intent(in), optional :: level
 
     ! Local variables
     integer        :: spin
     logical        :: print_Harris, print_DFT
     real(double)   :: total_energy2
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
 
     ! electron number information
     real(double), dimension(nspin) :: electrons
@@ -157,7 +167,10 @@ contains
     !
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='get_energy',where=9,level=4,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='get_energy',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     print_DFT    = .false.
@@ -322,7 +335,7 @@ contains
     end if
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='get_energy',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='get_energy',echo=.true.)
 !****lat>$
 
     return
@@ -375,9 +388,11 @@ contains
   !!  CREATION DATE
   !!   2014/09/24
   !!  MODIFICATION HISTORY
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !!  SOURCE
   !!
-  subroutine final_energy()
+  subroutine final_energy(level)
 
     use datatypes
     use numbers
@@ -386,6 +401,7 @@ contains
 
     use mult_module,            only: matrix_product_trace, matH,     &
                                       matrix_product_trace_length,    &
+                                      matrix_trace,                   &
                                       matK, matKE, matNL, matX, matS
 
     use global_module,          only: iprint_gen, nspin, spin_factor, &
@@ -405,6 +421,9 @@ contains
     
     implicit none
 
+    ! Passed variables
+    integer, optional :: level
+
     ! Local variables
     integer        :: spin
     real(double)   :: total_energy1
@@ -412,14 +431,18 @@ contains
     real(double)   :: one_electron_energy
     real(double)   :: potential_energy
     real(double)   :: virial
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
 
     ! electron number information
     real(double), dimension(nspin) :: electrons
-    real(double)                   :: electrons_tot1, electrons_tot2
+    real(double)                   :: electrons_tot1, electrons_tot2, trX
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='final_energy',where=9,level=4,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='final_energy',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     ! Initialise energies
@@ -435,15 +458,19 @@ contains
     ! Nonlocal pseudop, kinetic and band energies
     do spin = 1, nspin
        ! 2*Tr[K NL]
+       if (inode == ionode) write (io_lun,*) 'nl_energy' 
        nl_energy      = nl_energy      &
                         + spin_factor*matrix_product_trace(matK(spin), matNL)
        ! 2*Tr[K KE] with KE = - < grad**2 >
+       if (inode == ionode) write (io_lun,*) 'k_energy'
        kinetic_energy = kinetic_energy &
                         + spin_factor*half*matrix_product_trace(matK(spin), matKE)
        ! 2*Tr[K H]
+       if (inode == ionode) write (io_lun,*) 'band_energy'
        band_energy    = band_energy    &
                         + spin_factor*matrix_product_trace(matK(spin), matH(spin))
        ! -alpha*Tr[K X]
+       if (inode == ionode) write (io_lun,*) 'exx_energy'
        exx_energy     = exx_energy     &
                         - spin_factor*half*exx_alpha*matrix_product_trace(matK(spin), matX(spin))
     end do
@@ -481,7 +508,10 @@ contains
     
     call electron_number(electrons)
     if (inode == ionode) electrons_tot1 = electrons(1) + electrons(nspin)
-    electrons_tot2 = matrix_product_trace_length(matK(1),matS)
+   
+    if (inode == ionode) write(io_lun,*) 'electrons_tot2 start'
+    !electrons_tot2 = matrix_product_trace_length(matK(1),matS)
+    if (inode == ionode) write(io_lun,*) 'electrons_tot2 stop'
 
     if (inode == ionode) then
        !
@@ -610,11 +640,12 @@ contains
     if (inode == ionode) electrons_tot1 = electrons(1) + electrons(nspin)
 
     electrons_tot2 = zero
-    do spin = 1, nspin
-       electrons_tot2 = electrons_tot2 + &
-            spin_factor * matrix_product_trace_length(matK(spin),matS)
-    end do
+    !do spin = 1, nspin
+       !electrons_tot2 = electrons_tot2 + &
+       !     spin_factor * matrix_product_trace_length(matK(spin),matS)
+    !end do
     
+
     if (inode == ionode) then
        if (iprint_gen >= 1) then
           write (io_lun,23) 
@@ -630,13 +661,13 @@ contains
           end if
           !write (io_lun, 1)
           !write (io_lun, *) 
-          write (io_lun, *)  
+          write (io_lun, *) 
        end if
     end if
 
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='final_energy',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='final_energy',echo=.true.)
 !****lat>$
 
     return
@@ -649,46 +680,47 @@ contains
 2   format(10x, ' ')
 
 
-6   format(10x,'band energy as 2Tr[K.H]       = ',f25.15,' ',a2)
-7   format(10x,'hartree energy                = ',f25.15,' ',a2)
-8   format(10x,'ewald   energy                = ',f25.15,' ',a2)
-9   format(10x,'kinetic energy                = ',f25.15,' ',a2)
+6   format(10x,' |* band energy as 2Tr[K.H] = ',f25.15,' ',a2)
+7   format(10x,' |  hartree energy          = ',f25.15,' ',a2)
+8   format(10x,' |  ewald   energy          = ',f25.15,' ',a2)
+9   format(10x,' |  kinetic energy          = ',f25.15,' ',a2)
 
-30  format(10x,'xc total energy               = ',f25.15,' ',a2)
-31  format(10x,'    DFT exchange              = ',f25.15,' ',a2)
-32  format(10x,'    DFT correlation           = ',f25.15,' ',a2)
-33  format(10x,'    EXX contribution          = ',f25.15,' ',a2)
+30  format(10x,' |* xc total energy         = ',f25.15,' ',a2)
+31  format(10x,' |    DFT exchange          = ',f25.15,' ',a2)
+32  format(10x,' |    DFT correlation       = ',f25.15,' ',a2)
+33  format(10x,' |    EXX contribution      = ',f25.15,' ',a2)
 
-40  format(10x,'pseudopotential energy        = ',f25.15,' ',a2)
-41  format(10x,'    core correction           = ',f25.15,' ',a2)
-42  format(10x,'    local contribution        = ',f25.15,' ',a2)
-43  format(10x,'    nonlocal contribution     = ',f25.15,' ',a2)
 
-11  format(10x,'Ha correction                 = ',f25.15,' ',a2)
-12  format(10x,'XC correction                 = ',f25.15,' ',a2)
+40  format(10x,' |* pseudopotential energy  = ',f25.15,' ',a2)
+41  format(10x,' |    core correction       = ',f25.15,' ',a2)
+42  format(10x,' |    local contribution    = ',f25.15,' ',a2)
+43  format(10x,' |    nonlocal contribution = ',f25.15,' ',a2)
 
-10  format(10x,'Harris-Foulkes energy         = ',f25.15,' ',a2)
-13  format(10x,'DFT total energy              = ',f25.15,' ',a2)
-22  format(10x,'delta                         = ',f25.15,' ',a2)
+11  format(10x,' |  Ha correction           = ',f25.15,' ',a2)
+12  format(10x,' |  XC correction           = ',f25.15,' ',a2)
 
-14  format(10x,'GroundState Energy (E-(1/2)TS = ',f25.15,' ',a2)
-15  format(10x,'Free Energy (E-TS)            = ',f25.15,' ',a2)
-16  format(10x,'GroundState Energy (kT --> 0) = ',f25.15,' ',a2)
-17  format(10x,'Dispersion (DFT-D2)           = ',f25.15,' ',a2)
-18  format(10x,'cDFT Energy as 2Tr[K.W]       = ',f25.15,' ',a2)
-19  format(10x,'Number of electrons spin up   = ',f25.15)
-20  format(10x,'Number of electrons spin down = ',f25.15)
-21  format(10x,'Spin polarisation (UP - DN)   = ',f25.15)
+10  format(10x,' |* Harris-Foulkes energy   = ',f25.15,' ',a2)
+13  format(10x,' |* DFT total energy        = ',f25.15,' ',a2)
+22  format(10x,' |  estimated accuracy      = ',f25.15,' ',a2)
 
-23  format(10x,'check for accuracy            = ',f25.15,' ',a2)
-24  format(10x,'number of electrons         . = ',f25.15,' ',a2)
-25  format(10x,'number of electrons  2Tr[KS]  = ',f25.15,' ',a2)
-26  format(10x,'one-electron energy           = ',f25.15,' ',a2)
-27  format(10x,'potential energy V            = ',f25.15,' ',a2)
-28  format(10x,'kinetic energy T              = ',f25.15,' ',a2)
-29  format(10x,'virial V/T                    = ',f25.15,' ',a2)
-50  format(10x,'rescaled DFT exchange         = ',f25.15,' ',a2)
-51  format(10x,'rescaled exact exchange       = ',f25.15,' ',a2)
+14  format(10x,' | GS Energy as E-(1/2)TS   = ',f25.15,' ',a2)
+15  format(10x,' | Free Energy as E-TS      = ',f25.15,' ',a2)
+16  format(10x,' | GS Energy with kT -> 0   = ',f25.15,' ',a2)
+17  format(10x,' | Dispersion (DFT-D2)      = ',f25.15,' ',a2)
+18  format(10x,' | cDFT Energy as 2Tr[K.W]  = ',f25.15,' ',a2)
+19  format(10x,' | Number of e- spin up     = ',f25.15)
+20  format(10x,' | Number of e- spin down   = ',f25.15)
+21  format(10x,' | Spin pol. as (up - down) = ',f25.15)
+
+23  format(10x,' |* check for accuracy      = ',f25.15,' ',a2)
+24  format(10x,' |  number of e- num. int.  = ',f25.15,' ',a2)
+25  format(10x,' |  number of e- as 2Tr[KS] = ',f25.15,' ',a2)
+26  format(10x,' |  one-electron energy     = ',f25.15,' ',a2)
+27  format(10x,' |  potential energy V      = ',f25.15,' ',a2)
+28  format(10x,' |  kinetic energy T        = ',f25.15,' ',a2)
+29  format(10x,' |* virial V/T              = ',f25.15,' ',a2)
+50  format(10x,' |  rescaled DFT exchange   = ',f25.15,' ',a2)
+51  format(10x,' |  rescaled exact exchange = ',f25.15,' ',a2)
 
 
   end subroutine final_energy

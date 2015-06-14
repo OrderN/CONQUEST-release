@@ -1,113 +1,77 @@
+! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! ------------------------------------------------------------------------------
+! $Id: $
+! -----------------------------------------------------------
+! Module exx_types.f90
+! -----------------------------------------------------------
+! Code area 13: EXX
+! -----------------------------------------------------------
+
+!!****h* Conquest/exx_types *
+!!  NAME
+!!   exx_types
+!!
+!!  PURPOSE
+!!   Contain all the global variables and 
+!!   derived-types for EXX
+!!
+!!  USES
+!!   datatypes and cq_timer derived-type 
+!!   from timer_module
+!! 
+!!  AUTHOR
+!!   L.A. Truflandier
+!!  CREATION DATE
+!!   2011/02/11
+!!
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
 module exx_types 
 
   use datatypes
   use timer_module,           only: cq_timer
-  use timer_stdclocks_module, only: tmr_std_exx
+!  use timer_stdclocks_module, only: tmr_std_exx
 
   type fftw3d
-     complex(double_cplx), allocatable, dimension(:,:,:) :: auxin
-     complex(double_cplx), allocatable, dimension(:,:,:) :: auxout
+     !     complex(double_cplx), allocatable, dimension(:,:,:) :: auxin
+     !     complex(double_cplx), allocatable, dimension(:,:,:) :: auxout
      complex(double_cplx), allocatable, dimension(:,:,:) :: arrayin
      complex(double_cplx), allocatable, dimension(:,:,:) :: arrayout
      integer*8 :: planF, planR
   end type fftw3d
 
-
-  type fftw2d
-     complex(double_cplx), allocatable, dimension(:,:) :: arrayin
-     complex(double_cplx), allocatable, dimension(:,:) :: arrayout
-     integer*8 :: planF, planR
-  end type fftw2d
-
-
-  type fftw1d
-     complex(double_cplx), allocatable, dimension(:) :: arrayin
-     complex(double_cplx), allocatable, dimension(:) :: arrayout
-     integer*8 :: planF, planR
-  end type fftw1d
+  !  type fftw2d
+  !     complex(double_cplx), allocatable, dimension(:,:) :: arrayin
+  !     complex(double_cplx), allocatable, dimension(:,:) :: arrayout
+  !     integer*8 :: planF, planR
+  !  end type fftw2d
   
-  !=================================================================>>
-  ! SERIAL
-  !=================================================================>>
-  ! Main variables
-  real(double), dimension(:,:,:,:),     allocatable :: phi_on_grid_i
-  real(double), dimension(:,:,:,:),     allocatable :: phi_on_grid_j
-  real(double), dimension(:,:,:,:),     allocatable :: phi_on_grid_k
-  real(double), dimension(:,:,:,:),     allocatable :: phi_on_grid_l  
-  real(double), dimension(:,:,:,:,:),   allocatable :: phi_on_grid_l_m  
-  real(double), dimension(:,:,:,:,:),   allocatable :: phi_on_grid_k_m    
+  !  type fftw1d
+  !     complex(double_cplx), allocatable, dimension(:) :: arrayin
+  !     complex(double_cplx), allocatable, dimension(:) :: arrayout
+  !     integer*8 :: planF, planR
+  !  end type fftw1d
 
-  real(double), dimension(:,:,:,:,:),   allocatable :: rho_on_grid_kj
-  real(double), dimension(:,:,:,:,:),   allocatable :: rho_on_grid_lj
-  real(double), dimension(:,:,:,:,:),   allocatable :: rho_on_grid_ik
-
-  real(double), dimension(:,:,:,:),     allocatable :: Ome_on_grid_j
-  real(double), dimension(:,:,:,:,:),   allocatable :: vhf_on_grid_kj
-
-  real(double), dimension(:,:,:,:),     allocatable :: Phy_on_grid_k
-  real(double), dimension(:,:,:,:,:),   allocatable :: vhf_on_grid_lj
-
-  real(double), dimension(:,:,:,:),     allocatable :: phi_on_grid_ii
-  real(double), dimension(:,:,:,:),     allocatable :: phi_on_grid_jj
-  real(double), dimension(:,:,:,:),     allocatable :: phi_on_grid_kk
-  real(double), dimension(:,:,:,:),     allocatable :: phi_on_grid_ll  
-  
-  real(double), dimension(:,:,:,:,:),   allocatable :: rho_on_grid_kjj
-  real(double), dimension(:,:,:,:,:),   allocatable :: rho_on_grid_ljj
-  real(double), dimension(:,:,:,:,:),   allocatable :: rho_on_grid_ikk
-
-  real(double), dimension(:,:,:,:),     allocatable :: Ome_on_grid_jj
-  real(double), dimension(:,:,:,:,:),   allocatable :: vhf_on_grid_kjj
-  real(double), dimension(:,:,:,:),     allocatable :: Phy_on_grid_kk
-  real(double), dimension(:,:,:,:,:),   allocatable :: vhf_on_grid_ljj
-  !
-  real(double), dimension(:,:,:,:),     allocatable :: phi_on_grid_tmp
-
-  ! Hartree-Fock (EXX) Hamiltonian and K matrix
-  real(double), dimension(:,:),         allocatable :: Imat
-  real(double), dimension(:,:),         allocatable :: EXXmat
-  real(double), dimension(:,:),         allocatable :: Kmat_ij
-  real(double), dimension(:,:),         allocatable :: Kmat_tmp
-  real(double), dimension(:,:,:,:),     allocatable :: Kmat_kl
-  real(double), dimension(:,:,:,:),     allocatable :: EXX_tmp
-  real(double), dimension(:,:,:,:,:,:), allocatable :: EXX_tmp2
-
-
-  !=================================================================>>
-  ! PARALLEL
-  !=================================================================>>
+  ! PAOs on grid
   real(double), dimension(:,:,:,:),     allocatable :: phi_i
   real(double), dimension(:,:,:,:),     allocatable :: phi_j
   real(double), dimension(:,:,:,:),     allocatable :: phi_k
   real(double), dimension(:,:,:,:),     allocatable :: phi_l  
-  real(double), dimension(:,:,:,:,:),   allocatable :: phi_l_m  
-  real(double), dimension(:,:,:,:,:),   allocatable :: phi_k_m    
 
+  ! Auxiliary densities and potentials
   real(double), dimension(:,:,:,:,:),   allocatable :: rho_kj
-  real(double), dimension(:,:,:,:,:),   allocatable :: rho_lj
-  real(double), dimension(:,:,:,:,:),   allocatable :: rho_ik
-
-  real(double), dimension(:,:,:,:),     allocatable :: Ome_j
-  real(double), dimension(:,:,:,:),     allocatable :: Ome_i
   real(double), dimension(:,:,:,:,:),   allocatable :: Ome_kj
   real(double), dimension(:,:,:,:,:),   allocatable :: vhf_kj
   real(double), dimension(:,:,:,:),     allocatable :: Phy_k
-  real(double), dimension(:,:,:,:,:),   allocatable :: vhf_lj
 
-  !real(double), dimension(:,:) :: X
-
-  !=================================================================>>
-  ! COMMON
-  !=================================================================>>
-  !
   ! Work matrix
   real(double), dimension(:,:,:),       allocatable :: work_in_3d
   real(double), dimension(:,:,:),       allocatable :: work_out_3d
 
   ! For the Poisson equation/FFTW in reciprocal space
   type(fftw3d)          :: fftwrho3d
-  type(fftw2d)          :: fftwrho2d
-  type(fftw1d)          :: fftwrho1d
 
   complex(double), dimension(:,:,:),    allocatable :: reckernel_3d
   real(double),    dimension(:,:,:),    allocatable :: ewald_rho
@@ -151,6 +115,7 @@ module exx_types
   !type(cq_timer), save :: tmr_std_exx
   type(cq_timer), save :: tmr_std_exx_setup
   type(cq_timer), save :: tmr_std_exx_write
+  type(cq_timer), save :: tmr_std_exx_kernel
   type(cq_timer), save :: tmr_std_exx_fetch
   type(cq_timer), save :: tmr_std_exx_fetch_K
   type(cq_timer), save :: tmr_std_exx_accumul
@@ -167,7 +132,6 @@ module exx_types
   real(double)         :: exx_total_time
   
   ! User settings
-
   integer :: exx_scheme      ! 4center ERIs or 3center reduction integrals
   integer :: exx_mem         ! reduced memory allocation 
   logical :: exx_phil        ! on-the-fly or storage of phi_l

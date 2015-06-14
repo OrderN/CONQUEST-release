@@ -76,7 +76,8 @@ module io_module
 
   use global_module,          only: io_lun
   use GenComms,               only: cq_abort, gcopy
-  use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_module,           only: start_timer,     stop_timer,    cq_timer
+  use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_matrices
   use input_module,           only: leqi, io_assign, io_close
 
@@ -137,6 +138,8 @@ contains
   !!    Added shift_in_bohr when wrapping atoms and allocation of atom_coord_diff
   !!   2013/08/20 M.Arita
   !!    Bug fix & correct the if-statement
+  !!   2015/06/08 lat
+  !!    Added experimental backtrace
   !!  SOURCE
   !!
   subroutine read_atomic_positions(filename)
@@ -161,7 +164,7 @@ contains
     character(len=*) :: filename
 
     ! Local variables
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
     integer        :: lun, i, spec, stat
     logical        :: movex, movey, movez
     real(double)   :: x, y, z
@@ -176,7 +179,7 @@ contains
     character(len=2)  :: atom_name
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='read_atomic_positions',where=9,level=2)
+    call start_backtrace(t=backtrace_timer,who='read_atomic_positions',where=9,level=2)
 !****lat>$
 
     if(inode==ionode) then
@@ -495,7 +498,7 @@ second:   do
     endif
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc)
+    call stop_backtrace(t=backtrace_timer,who='read_atomic_positions')
 !****lat>$
 
     return
@@ -715,10 +718,10 @@ second:   do
 
     integer           :: isendbuf(6)
     real(double)      :: rsendbuf(6)
-    type(cq_timer)    :: tmr_std_loc
+    type(cq_timer)    :: backtrace_timer
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='read_mult',where=9,level=2)
+    call start_backtrace(t=backtrace_timer,who='read_mult',where=9,level=2)
 !****lat>$
 
     !parts%ng_on_node = 0
@@ -793,7 +796,7 @@ second:   do
     end do
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='read_mult')
+    call stop_backtrace(t=backtrace_timer,who='read_mult')
 !****lat>$
     
     return
@@ -854,14 +857,14 @@ second:   do
     character(len=80) :: part_file
 
     ! Local variables
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
     integer :: nnode
     integer :: nnd,nnd1,np,np1,ind_part,n_cont,n_beg,ni,ni1
     integer :: irc,ierr,np_in_cell, lun, glob_count, map, ios
     integer :: ind_global, ntmpx, ntmpy, ntmpz, ntmp1, ntmp2, ntmp3, mx_tmp_edge
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='read_partitions',where=1,level=4)
+    call start_backtrace(t=backtrace_timer,who='read_partitions',where=1,level=4)
 !****lat>$  
 
     if(iprint_init>2.AND.myid==0) write(io_lun,*) 'Entering read_partitions'
@@ -1020,7 +1023,7 @@ second:   do
     endif
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='read_partitions')
+    call stop_backtrace(t=backtrace_timer,who='read_partitions')
 !****lat>$
 
     return
@@ -3849,7 +3852,7 @@ second:   do
          call cq_abort('get_file_name: error : string overflow')
     filename = TRIM (fileroot)//'.'
     padzeros = MAX (3, &
-         FLOOR (1.0 + LOG10 (REAL (numprocs, kind=double)))) - &
+         FLOOR (1.0 + LOG10(REAL (numprocs, kind=double)))) - &
          FLOOR (1.0 + LOG10(REAL (inode, kind=double)))
     write (num,'(i80)') inode
     num = ADJUSTL (num)

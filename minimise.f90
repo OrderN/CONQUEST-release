@@ -45,6 +45,9 @@ module minimise
   real(double) :: L_tolerance, sc_tolerance, energy_tolerance, &
                   expected_reduction
 
+  ! Area identification
+  integer, parameter, private :: area = 6
+
   ! RCS tag for object file identification
   character(len=80), private :: &
        RCSid = "$Id$"
@@ -106,6 +109,8 @@ contains
   !!   -  Added call for writing out L-matrix (this will be deleted later)
   !!   2013/12/03 M.Arita
   !!   - Removed calls for writing out L-matrix
+  !!   2015/06/08 lat
+  !!   - Added experimental backtrace
   !!   2015/06/10 15:48 cor & dave
   !!    Added call for wavefunction output at self-consistency
   !!  SOURCE
@@ -113,7 +118,7 @@ contains
   !subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
   !                       find_forces, write_forces)
   subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
-                         find_forces, write_forces, iter)
+                         find_forces, write_forces, iter, level)
 
     use datatypes
     use force_module,      only: force
@@ -144,29 +149,35 @@ contains
     implicit none
 
     ! Shared variables
-    logical           :: vary_mu, fixed_potential, find_forces, &
-                         write_forces
+    integer, intent(in), optional :: iter
+    integer, intent(in), optional :: level
+    logical           :: vary_mu, fixed_potential
+    logical           :: find_forces, write_forces
     integer           :: n_save_freq, n_run
     character(len=40) :: output_file
     real(double)      :: total_energy
-    integer,intent(in),optional:: iter
 
     ! Local variables
-    logical        :: reset_L
-    type(cq_timer) :: tmr_l_energy, tmr_l_force, tmr_vdW, tmr_std_loc
-    real(double)   :: vdW_energy_correction, vdW_xc_energy
-
+    logical           :: reset_L
+    real(double)      :: vdW_energy_correction, vdW_xc_energy
+    type(cq_timer)    :: tmr_l_energy, tmr_l_force, tmr_vdW
+    type(cq_timer)    :: backtrace_timer
+    integer           :: backtrace_level
+    
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='get_E_and_F',where=6,level=1,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='get_E_and_F',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     call start_timer(tmr_std_eminimisation)
     ! reset_L = .true.  ! changed by TM, Aug 2008
-!   if (leqi(runtype,'static')) then
-!    reset_L = .false.
-!   else
-!    reset_L = .true.   ! temporary for atom movements
-!   end if
+    !   if (leqi(runtype,'static')) then
+    !    reset_L = .false.
+    !   else
+    !    reset_L = .true.   ! temporary for atom movements
+    !   end if
 
     ! Terrible coding.. Should be modified later. [2013/08/20 michi]
     reset_L = .false.
@@ -216,11 +227,11 @@ contains
     else if (flag_self_consistent) then ! Vary only DM and charge density
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
                         fixed_potential, vary_mu, n_L_iterations, &
-                        L_tolerance, total_energy)
+                        L_tolerance, total_energy, backtrace_level)
     else ! Ab initio TB: vary only DM
        call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-                      ionode, reset_L, .false.)
-       call get_energy(total_energy)
+                      ionode, reset_L, .false., backtrace_level)
+       call get_energy(total_energy, level=backtrace_level)
     end if
     ! Once ground state is reached, if we are doing deltaSCF, perform excitation
     ! and solve for the new ground state (on excited Born-Oppenheimer surface)
@@ -252,11 +263,11 @@ contains
        else if (flag_self_consistent) then ! Vary only DM and charge density
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                fixed_potential, vary_mu, n_L_iterations, &
-               L_tolerance, total_energy)
+               L_tolerance, total_energy, backtrace_level)
 
        else ! Ab initio TB: vary only DM
           call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-               ionode, reset_L, .false.)
+               ionode, reset_L, .false., backtrace_level)
        end if
     end if
     ! calculate vdW energy correction to xc energy
@@ -300,11 +311,8 @@ contains
 ! LT_debug 2012/04/30 end
     end if
 
-
-
-
 !****lat<$
-    call final_energy( )
+    call final_energy(backtrace_level)
 !****lat>$
 
     ! output WFs
@@ -314,7 +322,6 @@ contains
             ionode, reset_L, .false.)
        wf_self_con=.false.
     end if
-
 
     call stop_print_timer(tmr_l_energy, "calculating ENERGY", &
                           IPRINT_TIME_THRES1)
@@ -326,8 +333,8 @@ contains
 
       call force(fixed_potential, vary_mu, n_L_iterations, &
                  L_tolerance, sc_tolerance, total_energy,  &
-                 expected_reduction, write_forces)
-
+                 expected_reduction, write_forces, backtrace_level)
+ 
       ! Stop timing the force calculation
       call stop_print_timer(tmr_l_force, "calculating FORCE", &
                             IPRINT_TIME_THRES1)
@@ -347,7 +354,7 @@ contains
     call stop_timer(tmr_std_eminimisation)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='get_E_and_F',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='get_E_and_F',echo=.true.)
 !****lat>$
 
     return

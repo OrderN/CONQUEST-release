@@ -98,6 +98,10 @@
 !!    Added new area and flag for EXX 
 !!   2014/09/20 lat
 !!    Added flags for PBE0, Xalpha and Hartree-Fock functional
+!!   2014/10/03 lat
+!!    Added parameters for SCF control of EXX and iprint_exx
+!!   2015/05/11 L.Truflandier
+!!   - Added optional total spin magnetization ne_magn_in_cell
 !!   2015/05/29
 !!    Wavefunction output flags (COR and dave)
 !!  SOURCE
@@ -220,10 +224,10 @@ module global_module
   integer, parameter :: area_basis     = 11
   integer, parameter :: area_integn    = 12
   integer, parameter :: area_exx       = 13
-  integer :: iprint_init, iprint_mat,    iprint_ops,   iprint_DM,      &
-             iprint_SC,   iprint_minE,   iprint_MD,    iprint_index, &
-             iprint_gen,  iprint_pseudo, iprint_basis, iprint_intgn, &
-             iprint_time, iprint_MDdebug
+  integer :: iprint_init, iprint_mat,     iprint_ops,   iprint_DM,    &
+             iprint_SC,   iprint_minE,    iprint_MD,    iprint_index, &
+             iprint_gen,  iprint_pseudo,  iprint_basis, iprint_intgn, &
+             iprint_time, iprint_MDdebug, iprint_exx
 
   integer, parameter :: IPRINT_TIME_THRES0 = 0  ! Always print
   integer, parameter :: IPRINT_TIME_THRES1 = 2  ! Important local timers
@@ -243,6 +247,7 @@ module global_module
   ! fixed electron numbers for different spin channels. This is used
   ! even for spin non-polarised case
   real(double), dimension(2) :: ne_spin_in_cell ! 1 = up, 2 = down
+  real(double)               :: ne_magn_in_cell
 
   ! For DFT-D2
   logical :: flag_dft_d2
@@ -263,15 +268,20 @@ module global_module
   real(double) :: dscf_HOMO_thresh, dscf_LUMO_thresh
 
   ! For EXX
-  logical      :: flag_exx      = .false.
-  integer      :: exx_counter   = -1
-  real(double) :: exx_alpha     = zero      ! mixing factor for hybrid Exc
-  real(double) :: exx_pulay_r0  = zero 
-  real(double) :: exx_scf_ratio = zero
-  real(double) :: exx_scf_tol   = zero 
-  real(double), parameter :: exx_hgrid_coarse = 0.80  
-  real(double), parameter :: exx_hgrid_medium = 0.50
-  real(double), parameter :: exx_hgrid_fine   = 0.20  
+  logical      :: flag_exx      = .false. ! switch on/off EXX
+  integer      :: exx_scf       = 0       ! method used during the SCF using hybrid functional or Hartree-Fock
+  real(double) :: exx_alpha     = zero    ! mixing factor for hybrid Exc
+  
+  integer      :: exx_niter     = 1       ! for EXX control during SCF
+  integer      :: exx_siter     = 1       ! for EXX control during SCF
+  real(double) :: exx_pulay_r0  = zero    ! get the R0 pulay residual for control
+  real(double) :: exx_scf_ratio = zero    ! for EXX control during SCF
+  real(double) :: exx_scf_tol   = zero    ! for EXX control during SCF
+
+  ! pre-defined grid spacing in Bohr
+  real(double), parameter :: exx_hgrid_coarse = 0.60_double
+  real(double), parameter :: exx_hgrid_medium = 0.50_double
+  real(double), parameter :: exx_hgrid_fine   = 0.20_double
 
   ! Flag to control if matrix L is dumped to files
   logical :: flag_dump_L

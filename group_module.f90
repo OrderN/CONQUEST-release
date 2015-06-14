@@ -32,7 +32,8 @@ module group_module
   ! Module usage
   use datatypes
   use basic_types
-  use timer_module,           only: start_timer,stop_timer,cq_timer
+  use timer_module,           only: start_timer,    stop_timer,   cq_timer
+  use timer_module,           only: start_backtrace,stop_backtrace
   use timer_stdclocks_module, only: tmr_std_indexing,tmr_std_allocation
 
   implicit none
@@ -71,7 +72,9 @@ contains
 !!   30/05/2001 dave
 !!    Added ROBODoc header
 !!   2008/05/16 ast
-!!    Added timer
+!!    - Added timer
+!!   2015/06/08 lat
+!!    - Added experimental backtrace
 !!  SOURCE
 !!
   subroutine make_cc2(groups,numprocs)
@@ -87,11 +90,11 @@ contains
     integer         :: numprocs
 
     ! Local variables
-    type(cq_timer)  :: tmr_std_loc
+    type(cq_timer)  :: backtrace_timer
     integer         :: nnd,np,ind_group
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='make_cc2',where=8,level=3)
+    call start_backtrace(t=backtrace_timer,who='make_cc2',where=8,level=3)
 !****lat>$
 
     call start_timer(tmr_std_indexing)
@@ -109,7 +112,7 @@ contains
     call stop_timer(tmr_std_indexing)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='make_cc2')
+    call stop_backtrace(t=backtrace_timer,who='make_cc2')
 !****lat>$
 
     return
@@ -135,11 +138,13 @@ contains
 !!   20/04/00
 !!  MODIFICATION HISTORY
 !!   30/05/2001 dave
-!!    Added ROBODoc header
+!!    - Added ROBODoc header
 !!   2008/05/16 ast
-!!    Added timer
+!!    - Added timer
 !!   2009/11/03 16:43 dave
-!!    Added memory registration
+!!    - Added memory registration
+!!   2015/06/08 lat
+!!    - Added experimental backtrace
 !!  SOURCE
 !!
   subroutine allocate_group_set(groups,mx_node)
@@ -158,11 +163,11 @@ contains
     integer         :: mx_node
 
     ! Local variables
-    type(cq_timer)  :: tmr_std_loc
+    type(cq_timer)  :: backtrace_timer
     integer         :: stat
 
 !****lat<$
-    call start_timer( t=tmr_std_loc,who='allocate_group_set',where=1,level=5)
+    call start_backtrace(t=backtrace_timer,who='allocate_group_set',where=1,level=5)
 !****lat>$
 
     call start_timer(tmr_std_allocation)
@@ -203,7 +208,7 @@ contains
     call stop_timer(tmr_std_allocation)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='allocate_group_set')
+    call stop_backtrace(t=backtrace_timer,who='allocate_group_set')
 !****lat>$
 
     return

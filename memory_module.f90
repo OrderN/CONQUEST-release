@@ -76,6 +76,7 @@ contains
   !!   2006/09/27
   !!  MODIFICATION HISTORY
   !!   2014/01/17 lat 
+  !!    Added optional printing options
   !!  SOURCE
   !!
   subroutine reg_alloc_mem(area, amount, type, what, lun)
@@ -93,7 +94,7 @@ contains
     character(*), optional, intent(in) :: what
     integer,      optional, intent(in) :: lun
 
-    if (present(what).and.present(lun)) then
+    if (iprint_gen>4 .and. present(what) .and. present(lun)) then
        write(lun,fmt='(10x,"Allocating ",a12," in area ",i3,f10.3," ",a2)') &
             adjustl(what), area, real(amount*no_bytes(type),double)*mem_conv, &
             mem_units(m_units)
@@ -140,11 +141,13 @@ contains
   !!   2006/09/27
   !!  MODIFICATION HISTORY
   !!   2014/01/17 lat 
+  !!    Added optional printing options
   !!  SOURCE
   !!
   subroutine reg_dealloc_mem_32(area, amount, type, what, lun)
 
     use units, only: m_units, mem_units, mem_conv
+    use global_module, only: iprint_gen
 
     implicit none
 
@@ -156,7 +159,7 @@ contains
     character(*), optional, intent(in) :: what
     integer,      optional, intent(in) :: lun
 
-    if (present(what).and.present(lun)) then
+    if (iprint_gen>4 .and. present(what).and.present(lun)) then
        write(lun,fmt='(10x,"Delocating ",a12," in area ",i3,f10.3," ",a2)') &
             adjustl(what), area, real(amount*no_bytes(type),double)*mem_conv, &
             mem_units(m_units)
@@ -170,6 +173,7 @@ contains
   subroutine reg_dealloc_mem_64(area, amount, type, what, lun)
 
     use units, only: m_units, mem_units, mem_conv
+    use global_module, only: iprint_gen
 
     implicit none
 
@@ -181,7 +185,7 @@ contains
     character(*), optional, intent(in) :: what
     integer,      optional, intent(in) :: lun
 
-    if (present(what).and.present(lun)) then
+    if (iprint_gen>4 .and. present(what).and.present(lun)) then
        write(lun,fmt='(10x,"Delocating ",a12," in area ",i3,f10.3," ",a2)') &
             adjustl(what), area, real(amount*no_bytes(type),double)*mem_conv, &
             mem_units(m_units)
@@ -215,6 +219,7 @@ contains
   !!   2006/09/27
   !!  MODIFICATION HISTORY
   !!   2014/01/17 lat 
+  !!    Added optional printing options
   !!  SOURCE
   !!
   subroutine init_reg_mem

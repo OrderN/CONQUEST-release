@@ -1,9 +1,11 @@
+! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! ------------------------------------------------------------------------------
 ! $Id$
-! -----------------------------------------------------------
+! ------------------------------------------------------------------------------
 ! Module SelfCon_module
-! -----------------------------------------------------------
+! ------------------------------------------------------------------------------
 ! Code area 5: self-consistency
-! -----------------------------------------------------------
+! ------------------------------------------------------------------------------
 
 !!****h* Conquest/SelfCon_module
 !!  NAME
@@ -50,6 +52,8 @@
 !!    Added interface for earlySC and lateSC
 !!   2014/09/15 18:30 lat
 !!   -fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2015/06/08 lat
+!!    - Added experimental backtrace
 !!  SOURCE
 !!
 module SelfCon
@@ -57,15 +61,23 @@ module SelfCon
   use datatypes
   use global_module,          only: io_lun, area_SC
   use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_chargescf, tmr_std_allocation
 
   implicit none
 
+  ! Area identification
+  integer, parameter, private :: area = 5
+
+  ! RCS ident string for object file id
+  character(len=80), save, private :: &
+       RCSid = "$Id$"
+  !
   ! These should all be read or dynamically allocated
-  real(double), parameter :: thresh = 2.0_double
+  real(double), parameter :: thresh        = 2.0_double
   real(double), parameter :: InitialLambda = 1.0_double
-  real(double), parameter :: ReduceLimit = 0.5_double
-  real(double), parameter :: crit_lin = 0.1_double
+  real(double), parameter :: ReduceLimit   = 0.5_double
+  real(double), parameter :: crit_lin      = 0.1_double
   integer :: maxitersSC
   integer :: maxearlySC
   integer :: maxpulaySC
@@ -88,11 +100,6 @@ module SelfCon
   logical,      save :: flag_linear_mixing
   real(double), save :: EndLinearMixing
 
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
   !!***
 
 contains
@@ -146,7 +153,7 @@ contains
   !!  SOURCE
   !!
   subroutine new_SC_potl(record, self_tol, reset_L, fixed_potential, &
-                         vary_mu, n_L_iterations, L_tol, total_energy)
+                         vary_mu, n_L_iterations, L_tol, total_energy, level)
 
     use datatypes
     use PosTan,          only: PulayC, PulayBeta, SCC, SCBeta, pos_tan, &
@@ -167,6 +174,7 @@ contains
     implicit none
 
     ! Passed variables
+    integer, optional :: level
     logical      :: record   ! Flags whether to record dE vs R
     logical      :: vary_mu, fixed_potential, reset_L
     integer      :: n_L_iterations
@@ -174,24 +182,28 @@ contains
     real(double) :: L_tol
     real(double) :: total_energy
 
+
     ! Local variables
+    real(double), dimension(nspin) :: electrons
     integer        :: mod_early, ndone, i, nkeep, ndelta, stat, spin
     logical        :: done, problem, early
     real(double)   :: SC_tol, DMM_tol, LastE
     type(cq_timer) :: tmr_l_tmp1
-    type(cq_timer) :: tmr_std_loc
-    real(double), dimension(nspin) :: electrons
-
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
     
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='new_SC_potl',where=5,level=2,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='new_SC_potl',where=area,&
+         level=backtrace_level,echo=.true.)
 !****lat>$
 
     call start_timer(tmr_std_chargescf)
 
     ! Build H matrix *with NL and KE*
     call get_H_matrix(.true., fixed_potential, electrons, density, &
-                      maxngrid)
+                      maxngrid, backtrace_level)
 
     ! The H matrix build is already timed on its own, so I leave out
     ! of the SC preliminaries (open to discussion)
@@ -263,7 +275,7 @@ contains
           call PulayMixSC_spin(done, ndone, SC_tol, reset_L,          &
                                fixed_potential, vary_mu,              &
                                n_L_iterations, DMM_tol, total_energy, &
-                               density, maxngrid)
+                               density, maxngrid, backtrace_level)
 
        else if (early .or. problem) then ! Early stage strategy
           earlyL  = .false.
@@ -274,8 +286,9 @@ contains
                write(io_lun,*) 'Problem restart'
 
           call earlySC(record,done,earlyL,ndone, SC_tol, reset_L, &
-                       fixed_potential, vary_mu, n_L_iterations, &
-                       DMM_tol, total_energy, density, maxngrid)
+                       fixed_potential, vary_mu, n_L_iterations,  &
+                       DMM_tol, total_energy, density, maxngrid,  &
+                       backtrace_level)
 
           ! Check for early/late stage switching and update variables
           mod_early = 1 + mod(earlyIters,maxearlySC)
@@ -293,7 +306,8 @@ contains
 
           call lateSC(record, done, ndone, SC_tol, reset_L,     &
                       fixed_potential, vary_mu, n_L_iterations, &
-                      DMM_tol, total_energy, density, maxngrid)
+                      DMM_tol, total_energy, density, maxngrid, &
+                      backtrace_level)
 
           problem = .true.  ! This catches returns from lateSC when
           !  not done
@@ -338,7 +352,7 @@ contains
     call stop_timer(tmr_std_chargescf)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='new_SC_potl',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='new_SC_potl',echo=.true.)
 !****lat>$
 
     return
@@ -388,11 +402,13 @@ contains
   !!   - Major rewrite of spin implementation
   !!   - Removed redundant input parameter mu
   !!   - Corrected integration measure and normalisation
+  !!   2015/06/08 lat
+  !!   - Added experimental backtrace
   !!  SOURCE
   !!
   subroutine earlySC(record, done, EarlyLin, ndone, self_tol, reset_L,&
                      fixed_potential, vary_mu, n_L_iterations, L_tol, &
-                     total_energy, rho, size)
+                     total_energy, rho, size, level)
 
     use datatypes
     use numbers
@@ -410,6 +426,7 @@ contains
     implicit none
 
     ! Passed variables
+    integer, optional :: level
     logical      :: record, done, EarlyLin
     logical      :: vary_mu, fixed_potential, reset_L
     integer      :: ndone, size
@@ -420,6 +437,7 @@ contains
     real(double), dimension(:,:) :: rho
 
     ! Local variables
+    real(double), dimension(:,:), allocatable :: resid0, rho1, residb
     integer :: n_iters, irc, stat, spin
     logical :: linear, left, moved, init_reset, Lrec
     real(double) :: R0, R1, Rcross, Rcross_a, Rcross_b, Rcross_c
@@ -427,13 +445,15 @@ contains
     real(double) :: lambda_1, lambda_a, lambda_b, lambda_c
     real(double) :: zeta_exact, ratio, qatio, lambda_up
     real(double) :: pred_Rb, Rup, Rcrossup, zeta_num, zeta
-    real(double), dimension(:,:), allocatable :: resid0, rho1, residb
 
-    type(cq_timer)    :: tmr_std_loc
-    
+    type(cq_timer)    :: backtrace_timer
+    integer           :: backtrace_level
+
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='earlySC',&
-         where=5,level=3,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='earlySC',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     allocate(resid0(maxngrid,nspin), rho1(maxngrid,nspin), &
@@ -462,7 +482,7 @@ contains
     ! Compute residual of initial density
     call get_new_rho(Lrec, reset_L, fixed_potential, vary_mu,        &
                      n_L_iterations, L_tol, total_energy, rho, rho1, &
-                     maxngrid)
+                     maxngrid, backtrace_level)
     Lrec = .false.
     R0 = zero
     do spin = 1, nspin
@@ -680,7 +700,7 @@ contains
     call reg_dealloc_mem(area_SC, 3*maxngrid*nspin, type_dbl)
 
 !****lat<$
-    !call stop_timer(t=tmr_std_loc,who='earlySC',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='earlySC',echo=.true.)
 !****lat>$
 
     return
@@ -728,11 +748,13 @@ contains
   !!     back to lateSC
   !!   - Major rewrite of spin implementation
   !!   - Removed redundant input parameter real(double) mu
+  !!   2015/06/08 lat
+  !!   - Added experimental backtrace
   !!  SOURCE
   !!
   subroutine lateSC(record, done, ndone, self_tol, reset_L,          &
                     fixed_potential, vary_mu, n_L_iterations, L_tol, &
-                    total_energy, rho, size)
+                    total_energy, rho, size, level)
 
     use datatypes
     use numbers
@@ -754,6 +776,7 @@ contains
     implicit none
 
     ! Passed variables
+    integer, optional :: level
     logical :: record, done
     logical :: vary_mu, fixed_potential, reset_L
 
@@ -776,10 +799,14 @@ contains
     real(double), dimension(maxpulaySC,nspin) :: alph
     real(double), dimension(nspin) :: R, tmp
 
-    type(cq_timer)    :: tmr_std_loc
+    type(cq_timer)    :: backtrace_timer
+    integer           :: backtrace_level
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='lateSC',where=5,level=3,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='lateSC',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     allocate(rho_pul(maxngrid,maxpulaySC,nspin),   &
@@ -808,7 +835,7 @@ contains
 
     call get_new_rho(.false., reset_L, fixed_potential, vary_mu,     &
                      n_L_iterations, L_tol, total_energy, rho, rho1, &
-                     maxngrid)
+                     maxngrid, backtrace_level)
     E0 = total_energy
     R0 = zero
     do spin = 1, nspin
@@ -872,7 +899,7 @@ contains
        ! For the present output, find the residual (i.e. R_n^\prime)
        call get_new_rho(.false., reset_L, fixed_potential, vary_mu, &
                         n_L_iterations, L_tol, total_energy, rho,   &
-                        rho1, maxngrid)
+                        rho1, maxngrid, backtrace_level)
 
        do spin = 1, nspin
           rho_pul(1:n_my_grid_points,npmod,spin) = rho(1:n_my_grid_points,spin)
@@ -991,7 +1018,7 @@ contains
 
           call get_new_rho(.false., reset_L, fixed_potential, vary_mu,&
                            n_L_iterations, L_tol, total_energy, rho,  &
-                           rho1, maxngrid)
+                           rho1, maxngrid, backtrace_level)
 
           R1 = zero
           do spin = 1, nspin
@@ -1151,7 +1178,7 @@ contains
     call reg_dealloc_mem(area_SC, (2*maxpulaySC+1)*nspin*maxngrid, type_dbl)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='lateSC',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='lateSC',echo=.true.)
 !****lat>$
 
     return
@@ -1188,12 +1215,14 @@ contains
   !!   - Added kerker and wave-dependent metric
   !!   - Removed redundant input parameter real(double) mu
   !!   2013/07/10 11:26 dave
-  !!   Bug fix for sum over two components of rho even without spin (and moved rho_total alloc/dealloc)
+  !!   - Bug fix for sum over two components of rho even without spin (and moved rho_total alloc/dealloc)
+  !!   2015/06/08 lat
+  !!   - Added experimental backtrace
   !!  SOURCE
   !!
   subroutine LinearMixSC(done, ndone, self_tol, reset_L,           &
                          fixed_potential, vary_mu, n_L_iterations, &
-                         L_tol, total_energy, rho, size)
+                         L_tol, total_energy, rho, size, level)
 
     use datatypes
     use numbers
@@ -1214,6 +1243,7 @@ contains
     implicit none
 
     ! Passed variables
+    integer, optional :: level
     logical      :: done
     logical      :: vary_mu, fixed_potential, reset_L
     integer      :: ndone, size
@@ -1230,10 +1260,14 @@ contains
     real(double), dimension(:,:), allocatable :: rho1, resid
     real(double), dimension(:,:), allocatable :: resid_cov
 
-    type(cq_timer)    :: tmr_std_loc
+    type(cq_timer)    :: backtrace_timer
+    integer           :: backtrace_level
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='LinearMixSC',where=1,level=0,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='LinearMixSC',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     allocate(rho1(maxngrid,nspin), &
@@ -1267,7 +1301,7 @@ contains
        ! Generate new charge and find residual
        call get_new_rho(.false., reset_L, fixed_potential, vary_mu, &
                         n_L_iterations, L_tol, total_energy, rho,   &
-                        rho1, maxngrid)
+                        rho1, maxngrid, backtrace_level)
        do spin = 1, nspin
           resid(1:n_my_grid_points,spin) = &
                rho1(1:n_my_grid_points,spin) - rho(1:n_my_grid_points,spin)
@@ -1369,7 +1403,7 @@ contains
     !    ndone = n_iters
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='LinearMixSC',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='LinearMixSC',echo=.true.)
 !****lat>$
 
     return
@@ -2550,11 +2584,13 @@ contains
   !!  - Added exx_pulay_r0 to control EXX accuracy during the SCF based on
   !!    Pulay mixing: the point is to extract R0 from PulayMixSC and use it 
   !!    in get_X_matrix
+  !!   2015/06/08 lat
+  !!  - Added experimental backtrace
   !! SOURCE
   !!
   subroutine PulayMixSC_spin(done, ndone, self_tol, reset_L, &
                              fixed_potential, vary_mu, n_L_iterations,&
-                             L_tol, total_energy, rho, size)
+                             L_tol, total_energy, rho, size, level)
     use datatypes
     use numbers
     use PosTan
@@ -2576,6 +2612,7 @@ contains
     implicit none
 
     ! Passed variables
+    integer,  optional :: level
     logical      :: done, vary_mu, fixed_potential, reset_L
     integer      :: size, ndone, n_L_iterations
     real(double) :: self_tol, L_tol, mixing, total_energy
@@ -2600,11 +2637,14 @@ contains
     integer      :: spin
     real(double) :: R0_old
 
-    type(cq_timer)    :: tmr_std_loc
+    type(cq_timer)    :: backtrace_timer
+    integer           :: backtrace_level
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='PulayMixSC_spin',&
-         where=5,level=1,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='PulayMixSC_spin',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     ! allocate memories
@@ -2652,7 +2692,7 @@ contains
     call update_pulay_history(1, rho, reset_L, fixed_potential,     &
                               vary_mu, n_L_iterations, L_tol,       &
                               total_energy, rho_pul, R_pul, KR_pul, &
-                              Rcov_pul)
+                              Rcov_pul, backtrace_level)
 
     ! Evaluate magnitute of residual, note do not include cross terms
     R0 = zero
@@ -2674,8 +2714,7 @@ contains
 
     ! check if they have reached tolerance
     if (R0 < self_tol) then
-       if (inode == ionode) &
-            write (io_lun, '(8x,"Reached self-consistency tolerance")')
+       if (inode == ionode) write (io_lun,1) iter
        done = .true.
        call deallocate_PulayMiXSC_spin
        return
@@ -2721,11 +2760,11 @@ contains
           end if
        end if
 
-       ! Calcualate residuals and update pulay history (store in iPulay-th slot)
+       ! Calculate residuals and update pulay history (store in iPulay-th slot)
        call update_pulay_history(iPulay, rho, reset_L, fixed_potential, &
                                  vary_mu, n_L_iterations, L_tol,        &
                                  total_energy, rho_pul, R_pul, KR_pul,  &
-                                 Rcov_pul)
+                                 Rcov_pul, backtrace_level)
 
        ! Evaluate magnitute of residual, note no cross terms
        R0 = zero
@@ -2740,6 +2779,9 @@ contains
        call gsum(R0)
        R0 = sqrt(grid_point_volume * R0) / ne_in_cell
 
+!****lat<$
+!****lat>$
+
        ! print residual information
        if (inode == ionode) then
           write (io_lun, '(8x,a,i5,a,e12.5)') &
@@ -2748,8 +2790,7 @@ contains
 
        ! check if they have reached tolerance
        if (R0 < self_tol) then
-          if (inode == ionode) &
-               write (io_lun, '(8x,"Reached self-consistency tolerance")')
+          if (inode == ionode) write (io_lun,1) iter
           done = .true.
           call deallocate_PulayMiXSC_spin
           return
@@ -2774,7 +2815,7 @@ contains
 
        ! get optimum rho mixed from rho_pul, R_pul and Rcov_pul
        call get_pulay_optimal_rho(iPulay, rho, pul_mx, A, rho_pul, &
-                                  R_pul, KR_pul, Rcov_pul)
+                                  R_pul, KR_pul, Rcov_pul, backtrace_level)
 
        ! increment iteration counter
        n_iters = n_iters + 1
@@ -2806,10 +2847,14 @@ contains
     call deallocate_PulayMixSC_spin
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='PulayMixSC_spin',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='PulayMixSC_spin',echo=.true.)
 !****lat>$
 
     return
+
+1   format(8x,'Reached self-consistency tolerance after ',i6,' iterations')
+
+
   contains
 
     subroutine allocate_PulayMixSC_spin
@@ -2888,11 +2933,13 @@ contains
   !! CREATION DATE
   !!   2012/05/21
   !! MODIFICATION HISTORY
+  !!   2015/06/08 lat
+  !!   - Added experimental backtrace
   !! SOURCE
   !!
   subroutine get_pulay_optimal_rho(iPulay, rho_opt, pul_max,       &
                                    mix_factor, rho_pul, resid_pul, &
-                                   k_resid_pul, cov_resid_pul)
+                                   k_resid_pul, cov_resid_pul, level)
     use datatypes
     use GenBlas
     use global_module,  only: nspin, flag_fix_spin_population
@@ -2902,22 +2949,28 @@ contains
     use maxima_module,  only: maxngrid
 
     implicit none
+ 
     ! Passed parameters
+    integer, optional   :: level    
     integer, intent(in) :: pul_max, iPulay
     real(double), dimension(nspin),          intent(in)  :: mix_factor
     real(double), dimension(maxngrid,nspin), intent(out) :: rho_opt
     real(double), dimension(maxngrid,maxpulaySC,nspin),  intent(in)  :: &
          rho_pul, resid_pul, k_resid_pul, cov_resid_pul
+
     ! Local variables
     integer      :: spin, ii, jj
     real(double) :: ne, RR
     real(double), dimension(maxpulaySC,maxpulaySC,nspin) :: Aij
     real(double), dimension(maxpulaySC,nspin) :: alpha
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='get_pulay_optimal_rho',&
-         where=5,level=2,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='get_pulay_optimal_rho',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     ! calculated Aij
@@ -2959,7 +3012,7 @@ contains
     end do
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='get_pulay_optimal_rho',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='get_pulay_optimal_rho',echo=.true.)
 !****lat>$
 
     return
@@ -2981,13 +3034,15 @@ contains
   !! CREATION DATE
   !!   2012/05/22
   !! MODIFICATION HISTORY
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !! SOURCE
   !!
   subroutine update_pulay_history(iPulay, rho_in, reset_L,             &
                                   fixed_potential, vary_mu,            &
                                   n_L_iterations, L_tol, total_energy, &
                                   rho_pul, resid_pul, k_resid_pul,     &
-                                  cov_resid_pul)
+                                  cov_resid_pul, level)
     use datatypes
     use GenBlas
     use dimens,         only: n_my_grid_points, grid_point_volume
@@ -3001,6 +3056,7 @@ contains
     implicit none
 
     ! Passed parameters
+    integer,      optional    :: level 
     integer,      intent(in)  :: iPulay, n_L_iterations
     logical,      intent(in)  :: reset_L, fixed_potential, vary_mu
     real(double), intent(in)  :: L_tol
@@ -3009,14 +3065,18 @@ contains
          rho_in
     real(double), dimension(maxngrid,maxpulaySC,nspin),  intent(inout) :: &
          rho_pul, resid_pul, k_resid_pul, cov_resid_pul
+
     ! local variables
     integer :: spin, stat
     real(double), dimension(:,:), allocatable :: rho_out, resid
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='update_pulay_history',where=5,&
-         level=2,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='update_pulay_history',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     allocate(rho_out(maxngrid,nspin), resid(maxngrid,nspin), STAT=stat)
@@ -3035,7 +3095,7 @@ contains
     resid = zero
     call get_new_rho(.false., reset_L, fixed_potential, vary_mu,   &
                      n_L_iterations, L_tol, total_energy, rho_in, &
-                     rho_out, maxngrid)
+                     rho_out, maxngrid, backtrace_level)
     do spin = 1, nspin
        resid(1:n_my_grid_points,spin) = &
             rho_out(1:n_my_grid_points,spin) - &
@@ -3073,7 +3133,7 @@ contains
     call reg_dealloc_mem(area_SC, 2*maxngrid*nspin, type_dbl)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='update_pulay_history',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='update_pulay_history',echo=.true.)
 !****lat>$
 
     return

@@ -47,13 +47,22 @@
 !!    Changes for cDFT
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2014/09/15 18:30 lat
+!!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2015/06/10 15:44 cor & dave
 !!    Input parameters for band output
+!!   2015/06/11 16:30 lat
+!!    Added possibility of user to define filename for PAO/pseudo *ion
+!!    Fixed EXX variable definitions
+!!    Try to make blocks of variables clearer 
+!!    Added experimental backtrace
+!!   
 !!  SOURCE
 !!
 module initial_read
 
   use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_allocation
 
   implicit none
@@ -120,10 +129,12 @@ contains
   !!   - Changed spin implementation
   !!   2014/02/04 M.Arita
   !!   - Added call for initial_read_aux for constraint-MD
-  !!  TODO
-  !!   Improve calculation of number of bands 28/05/2001 dave Change
-  !!   input so that appropriate variables are taken from modules
-  !!   10/05/2002 dave
+  !!   2015/05/11 lat 
+  !!   - Added optional total spin magnetization
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
+  !!   2015/06/10 15:44 cor & dave
+  !!    - Input parameters for band output
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -147,9 +158,10 @@ contains
                                       nspin, spin_factor,              &
                                       flag_fix_spin_population,        &
                                       ne_in_cell, ne_spin_in_cell,     &
+                                      ne_magn_in_cell,                 &
                                       ni_in_cell, area_moveatoms,      &
                                       io_lun, flag_only_dispersion,    &
-                                      flag_cdft_atom, flag_local_excitation 
+                                      flag_cdft_atom, flag_local_excitation
     use cdft_data, only: cDFT_NAtoms, &
                          cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
@@ -181,7 +193,7 @@ contains
     real(double)      :: mu
 
     ! Local variables
-    type(cq_timer)    :: tmr_std_loc
+    type(cq_timer)    :: backtrace_timer
     character(len=80) :: titles, def
     character(len=80) :: atom_coord_file
     character(len=80) :: part_coord_file
@@ -195,7 +207,7 @@ contains
     real(double) :: sum_elecN_spin
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='read_and_write',where=1,level=1)
+    call start_backtrace(t=backtrace_timer,who='read_and_write',where=1,level=1)
 !****lat>$
 
     ! read input data: parameters for run
@@ -266,14 +278,23 @@ contains
        call cq_abort(' Pseudotype Error ', pseudo_type)
     endif
     !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done pseudo")') inode
-
+    !
+    !
+    !
     ! Make number of bands in an astonishingly crude way
     ! number_of_bands = half * ne_in_cell !zero
     do i = 1, ni_in_cell
        ! number_of_bands = number_of_bands + half * charge(species(i))
        ne_in_cell = ne_in_cell + charge(species(i))
     end do
-
+    !
+    !
+    if (nspin == 2 .and. ne_magn_in_cell > zero) then
+       ne_spin_in_cell(1) = half * (ne_magn_in_cell + ne_in_cell)
+       ne_spin_in_cell(2) = ne_spin_in_cell(1) - ne_magn_in_cell  
+       !
+    end if
+    !
     ! Calculate the number of electrons in the spin channels
     ! if (flag_fix_spin_population) then
     sum_elecN_spin = ne_spin_in_cell(1) + ne_spin_in_cell(2)
@@ -287,7 +308,9 @@ contains
           ne_spin_in_cell(:) = half * ne_in_cell
        end if
     end if
-
+    !
+    ! 
+    !
     ! Set up various lengths, volumes, reciprocals etc. for convenient use
     call set_dimensions(inode, ionode,HNL_fac, non_local, n_species, &
                         non_local_species, core_radius)
@@ -298,7 +321,7 @@ contains
                          HNL_fac, numprocs)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='read_and_write')
+    call stop_backtrace(t=backtrace_timer,who='read_and_write')
 !****lat>$
 
     call my_barrier()
@@ -435,11 +458,14 @@ contains
   !!   2013/08/20 M.Arita
   !!   - Add a flag for reusing T-matrix
   !!   2014/01/21 lat
-  !!   - Added flags for EXX
+  !!   - Added flags for EXX and iprint_exx
+  !!   2015/06/08 lat
+  !!   - Added experimental backtrace
   !!   2015/06/10 15:47 cor & dave
   !!    Flags for wavefunction (band) output
   !!   2015/06/10 16:01 dave
   !!    Bug fix: added default value for r_exx when EXX not set (prevents problems)
+  !!
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -464,6 +490,7 @@ contains
                              flag_fractional_atomic_coords,            &
                              flag_old_partitions, ne_in_cell,          &
                              ne_spin_in_cell, nspin, spin_factor,      &
+                             ne_magn_in_cell,                          &
                              max_L_iterations, flag_functional_type,   &
                              functional_description,                   &
                              functional_lda_pz81,                      &
@@ -479,7 +506,7 @@ contains
                              iprint_mat, iprint_ops, iprint_DM,        &
                              iprint_SC, iprint_minE, iprint_time,      &
                              iprint_MD, iprint_index, iprint_gen,      &
-                             iprint_pseudo, iprint_basis,              &
+                             iprint_pseudo, iprint_basis, iprint_exx,  &
                              iprint_intgn,iprint_MDdebug,area_general, &
                              global_maxatomspart, load_balance,        &
                              many_processors, flag_assign_blocks,      &
@@ -492,16 +519,16 @@ contains
                              flag_dft_d2, flag_only_dispersion,        &
                              flag_perform_cDFT, flag_analytic_blip_int,&
                              flag_vdWDFT, vdW_LDA_functional,          &
-                             flag_dump_L, flag_DeltaSCF, dscf_source_level,&
+                             flag_dump_L, flag_DeltaSCF, dscf_source_level, &
                              dscf_target_level, dscf_source_spin,      &
                              dscf_target_spin, dscf_source_nfold,      &
-                             dscf_target_nfold, flag_local_excitation, dscf_HOMO_thresh, &
-                             dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit,         &
-                             flag_MDcontinue,flag_MDdebug,flag_MDold, &
+                             dscf_target_nfold, flag_local_excitation, dscf_HOMO_thresh,   &
+                             dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit,           &
+                             flag_MDcontinue,flag_MDdebug,flag_MDold,  &
                              flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
-                             restart_T,restart_X,flag_XLBOMD,flag_propagateX, &
-                             flag_propagateL,flag_dissipation,integratorXL,   &
-                             flag_FixCOM, flag_exx, exx_alpha, exx_scf_tol, &
+                             restart_T,restart_X,flag_XLBOMD,flag_propagateX,              &
+                             flag_propagateL,flag_dissipation,integratorXL, flag_FixCOM,   &
+                             flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter,         &
                              flag_out_wf,max_wf,out_wf,wf_self_con
 
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
@@ -514,7 +541,8 @@ contains
     use species_module, only: species_label, charge, mass, n_species,  &
                               species, ps_file, ch_file, phi_file,     &
                               nsf_species, nlpf_species, npao_species, &
-                              non_local_species, type_species
+                              non_local_species, type_species,         &
+                              species_file, species_from_files
     use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode
     use DiagModule, only: diagon
     use energy,     only: flag_check_Diag
@@ -557,7 +585,7 @@ contains
     use H_matrix_module,  only: locps_output, locps_choice
     use pao_minimisation, only: InitStep_paomin
     use timer_module,     only: time_threshold,lun_tmr, TimingOn, &
-                                TimersWriteOut
+                                TimersWriteOut, BackTraceOn
     use input_module!, only: load_input, input_array, block_start,
     ! block_end, fd
     use cdft_data, only: cDFT_Type, cDFT_MaxIterations, cDFT_NAtoms, &
@@ -585,9 +613,9 @@ contains
     ! Local variables
     !type(block), pointer :: bp      ! Pointer to a block read by fdf
     !type(parsed_line), pointer :: p ! Pointer to a line broken into tokens by fdf
-    type(cq_timer)    :: tmr_std_loc
-    type(cq_timer)    :: tmr_std_loc2
-    type(cq_timer)    :: tmr_std_loc3
+    type(cq_timer)    :: backtrace_timer
+    type(cq_timer)    :: backtrace_timer2
+    type(cq_timer)    :: backtrace_timer3
 
 
     integer           :: i, j, k, lun, stat
@@ -612,7 +640,7 @@ contains
     !*** WHO READS AND BROADCASTS ? ***!
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='read_input',where=1,level=2)
+    call start_backtrace(t=backtrace_timer,who='read_input',where=1,level=2)
 !****lat>$
 
     ! Test for existence of input file
@@ -637,6 +665,14 @@ contains
     else
        io_lun = 6
     end if
+!!$
+!!$
+!!$
+!!$  T I M E R S   &   O U T P U T
+!!$
+!!$
+!!$
+    BackTraceOn = fdf_boolean('IO.BackTraceOn',.false.)                         
     ! Where will the timers will be written?
     TimingOn = fdf_boolean('IO.TimingOn',.false.)                          ! tmr_rmv001
     if(TimingOn) then                                                      ! tmr_rmv001
@@ -670,40 +706,50 @@ contains
 !!$
 !!$
 !!$
+!!$  I / O
+!!$
+!!$
     if(inode==ionode) call banner
     new_format = fdf_boolean('IO.NewFormat',.true.)
     if(new_format) then
        def = ' '
-       iprint        = fdf_integer('IO.Iprint',0)
-       iprint_init   = fdf_integer('IO.Iprint_init',iprint)
-       iprint_mat    = fdf_integer('IO.Iprint_mat',iprint)
-       iprint_ops    = fdf_integer('IO.Iprint_ops',iprint)
-       iprint_DM     = fdf_integer('IO.Iprint_DM',iprint)
-       iprint_SC     = fdf_integer('IO.Iprint_SC',iprint)
-       iprint_minE   = fdf_integer('IO.Iprint_minE',iprint)
-       iprint_MD     = fdf_integer('IO.Iprint_MD',iprint)
-       iprint_MDdebug= fdf_integer('IO.Iprint_MDdebug',1)
-       iprint_index  = fdf_integer('IO.Iprint_index',iprint)
-       iprint_gen    = fdf_integer('IO.Iprint_gen',iprint)
+       iprint        = fdf_integer('IO.Iprint',       0     )
+       iprint_init   = fdf_integer('IO.Iprint_init',  iprint)
+       iprint_mat    = fdf_integer('IO.Iprint_mat',   iprint)
+       iprint_ops    = fdf_integer('IO.Iprint_ops',   iprint)
+       iprint_DM     = fdf_integer('IO.Iprint_DM',    iprint)
+       iprint_SC     = fdf_integer('IO.Iprint_SC',    iprint)
+       iprint_minE   = fdf_integer('IO.Iprint_minE',  iprint)
+       iprint_MD     = fdf_integer('IO.Iprint_MD',    iprint)
+       iprint_MDdebug= fdf_integer('IO.Iprint_MDdebug',1    )
+       iprint_index  = fdf_integer('IO.Iprint_index', iprint)
+       iprint_gen    = fdf_integer('IO.Iprint_gen'  , iprint)
        iprint_pseudo = fdf_integer('IO.Iprint_pseudo',iprint)
-       iprint_basis  = fdf_integer('IO.Iprint_basis',iprint)
-       iprint_intgn  = fdf_integer('IO.Iprint_intgn',iprint)
-       iprint_time   = fdf_integer('IO.Iprint_time',iprint)
-       flag_dump_L   = fdf_boolean('IO.DumpL', .true.)
-       locps_output  = fdf_boolean('IO.LocalPotOutput', .false.)
-       locps_choice  = fdf_integer('IO.LocalPotChoice', 8)
-       atomch_output = fdf_boolean('IO.AtomChargeOutput', .false.)
+       iprint_basis  = fdf_integer('IO.Iprint_basis' ,iprint)
+       iprint_intgn  = fdf_integer('IO.Iprint_intgn' ,iprint)
+       iprint_time   = fdf_integer('IO.Iprint_time',  iprint)
+       iprint_exx    = fdf_integer('IO.Iprint_exx',   iprint)
+       !
+       !
+       flag_dump_L   = fdf_boolean('IO.DumpL',           .true. )
+       locps_output  = fdf_boolean('IO.LocalPotOutput',  .false.)
+       locps_choice  = fdf_integer('IO.LocalPotChoice',   8     )
+       atomch_output = fdf_boolean('IO.AtomChargeOutput',.false.)
+       !
+       !
        tmp = fdf_string(8,'General.MemoryUnits','MB')
-       if(leqi(tmp(1:2),'kB')) then
+       if( leqi(tmp(1:2),     'kB') ) then
           m_units  = kbytes
           mem_conv = kB
-       else if(leqi(tmp(1:2),'MB')) then
+       else if( leqi(tmp(1:2),'MB') ) then
           m_units  = mbytes
           mem_conv = MB
-       else if(leqi(tmp(1:2),'GB')) then
+       else if( leqi(tmp(1:2),'GB') ) then
           m_units  = gbytes
           mem_conv = GB
        end if
+       !
+       !
        time_threshold = fdf_double('General.TimeThreshold',0.001_double)
        ! Read run title
        titles = fdf_string(80,'IO.Title',def)
@@ -716,8 +762,8 @@ contains
           call cq_abort('read_input: you may not select restart for a run just now')
        endif
        init_blip_flag = fdf_string(10,'Basis.InitBlipFlag','pao')
-       restart_L      = fdf_boolean('General.LoadL',.false.)
-       restart_rho    = fdf_boolean('General.LoadRho',.false.)
+       restart_L      = fdf_boolean('General.LoadL',   .false.)
+       restart_rho    = fdf_boolean('General.LoadRho', .false.)
        restart_T      = fdf_boolean('General.LoadInvS',.false.)
        ! Is there a net charge on the cell ?
        ne_in_cell     = fdf_double('General.NetCharge',zero)
@@ -725,16 +771,21 @@ contains
        flag_fractional_atomic_coords = &
             fdf_boolean('IO.FractionalAtomicCoords',.true.)
        call my_barrier()
+       !
+       !
        ! Spin polarised calculation
        ! - if we are doing spin polarised calculations or not
        flag_spin_polarisation   = fdf_boolean('Spin.SpinPolarised', .false.) 
-       flag_fix_spin_population = fdf_boolean('Spin.FixSpin', .false.)
+       flag_fix_spin_population = fdf_boolean('Spin.FixSpin',       .false.)
        if (flag_spin_polarisation) then
           nspin       = 2
           spin_factor = one
           ne_spin_in_cell(1) = fdf_double('Spin.NeUP', zero)
           ne_spin_in_cell(2) = fdf_double('Spin.NeDN', zero)
+          ne_magn_in_cell    = fdf_double('Spin.Magn', zero)
        end if
+       !
+       !
        !blip_width = fdf_double('blip_width',zero)
        !support_grid_spacing = fdf_double('support_grid_spacing',zero)
 
@@ -762,6 +813,7 @@ contains
 !!$
 !!$
 !!$
+!!$
        ! Radii - again, astonishingly badly named
 !****lat<$
        ! it seems that the initialisation of r_h here
@@ -769,9 +821,9 @@ contains
        ! in dimens.module.f90 is this what we want ?
 !****lat>$
        r_h     = fdf_double('hamiltonian_range',zero)
-       r_c     = fdf_double('DM.L_range',one)
-       r_t     = fdf_double('InvSRange',r_h)
-       HNL_fac = fdf_double('non_local_factor',zero)
+       r_c     = fdf_double('DM.L_range',       one )
+       r_t     = fdf_double('InvSRange',        r_h )
+       HNL_fac = fdf_double('non_local_factor', zero)
        ! Exponents for initial gaussian blips
        alpha = fdf_double('Basis.SGaussExponent',zero)
        beta  = fdf_double('Basis.PGaussExponent',zero)
@@ -798,18 +850,21 @@ contains
        else if(leqi(basis_string,'PAOs')) then
           flag_basis_set = PAOs
        end if
-       read_option            = fdf_boolean('Basis.LoadCoeffs',.false.)
-       flag_onsite_blip_ana   = fdf_boolean('Basis.OnsiteBlipsAnalytic',.true.)
+       read_option            = fdf_boolean('Basis.LoadCoeffs',           .false.)
+       flag_onsite_blip_ana   = fdf_boolean('Basis.OnsiteBlipsAnalytic',  .true. )
        flag_analytic_blip_int = fdf_boolean('Basis.AnalyticBlipIntegrals',.false.)
        if(read_option.AND.flag_basis_set==blips) &
             restart_file    = fdf_string(40,'Basis.LoadBlipFile',' ')
+       !
+       !
        find_chdens            = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
-       flag_Becke_weights     = fdf_boolean('SC.BeckeWeights',.false.)
-       flag_Becke_atomic_radii= fdf_boolean('SC.BeckeAtomicRadii',.false.)
+       flag_Becke_weights     = fdf_boolean('SC.BeckeWeights',          .false.)
+       flag_Becke_atomic_radii= fdf_boolean('SC.BeckeAtomicRadii',      .false.)
        ! Number of species
        n_species = fdf_integer('General.NumberOfSpecies',1)
        call allocate_species_vars
        flag_angular_new = fdf_boolean('Basis.FlagNewAngular',.true.)
+!!$
 !!$
 !!$
 !!$
@@ -842,6 +897,7 @@ contains
 !!$
 !!$
 !!$
+!!$
        ! Read, using old-style fdf_block, the information about the
        ! different species
        !if(fdf_block('ChemicalSpeciesLabel',lun)) then
@@ -852,14 +908,26 @@ contains
        !      type_species(i)=i
        !   end do
        !end if
+       !
+       !**<lat>** added possibility to read *.ion from file specified by the user
+       species_from_files = fdf_boolean('General.PAOFromFiles',.false.)
        if(fdf_block('ChemicalSpeciesLabel')) then
           flag_ghost=.false.
           if(1+block_end-block_start<n_species) & 
                call cq_abort("Too few species in ChemicalSpeciesLabel: ",&
                              1+block_end-block_start,n_species)
           do i=1,n_species
-             read (unit=input_array(block_start+i-1),fmt=*) &
-                  j,mass(i),species_label(i)
+             ! **<lat>** Added the optional filename
+             if ( species_from_files ) then
+                read (unit=input_array(block_start+i-1),fmt=*) &
+                     j, mass(i),       &
+                     species_label(i), &
+                     species_file(i)
+             else
+                read (unit=input_array(block_start+i-1),fmt=*) &
+                     j, mass(i),       &
+                     species_label(i)
+             end if
              if(mass(i) < -RD_ERR) flag_ghost=.true.
              type_species(i)=i
           end do
@@ -892,6 +960,7 @@ contains
              endif
           enddo
        endif
+!!$
 !!$
 !!$
 !!$
@@ -970,60 +1039,65 @@ contains
 !!$
 !!$
 !!$
+!!$
 !!$ 
        !blip_width = support_grid_spacing *
        !             fdf_double('blip_width_over_support_grid_spacing',four)
-       flag_global_tolerance = fdf_boolean('minE.GlobalTolerance',.true.)
-       L_tolerance           = fdf_double ('minE.LTolerance',1.0e-7_double)
-       sc_tolerance          = fdf_double ('minE.SCTolerance',1.0e-6_double)
-       maxpulayDMM           = fdf_integer('DM.MaxPulay',5)
-       minpulaystepDMM       = fdf_double ('DM.MinPulayStepSize',0.001_double)
-       maxpulaystepDMM       = fdf_double ('DM.MaxPulayStepSize',0.1_double)
+       flag_global_tolerance = fdf_boolean('minE.GlobalTolerance',     .true. )
+       L_tolerance           = fdf_double ('minE.LTolerance',    1.0e-7_double)
+       sc_tolerance          = fdf_double ('minE.SCTolerance',   1.0e-6_double)
+       maxpulayDMM           = fdf_integer('DM.MaxPulay',        5            )
+       minpulaystepDMM       = fdf_double ('DM.MinPulayStepSize',1.0e-3_double)
+       maxpulaystepDMM       = fdf_double ('DM.MaxPulayStepSize',1.0e-1_double)
        LinTol_DMM = fdf_double('DM.LinTol',0.1_double)
 !!$
 !!$
 !!$
 !!$
+!!$
        ! Find out what type of run we're doing
-       runtype             = fdf_string(20,'AtomMove.TypeOfRun','static')
-       flag_buffer_old       = fdf_boolean('AtomMove.OldBuffer',.false.)
-       AtomMove_buffer       = fdf_double ('AtomMove.BufferSize',4.0_double)
-       flag_pulay_simpleStep = fdf_boolean('AtomMove.PulaySimpleStep',.false.)
-       CGreset               = fdf_boolean('AtomMove.ResetCG',.false.)
-       MDn_steps             = fdf_integer('AtomMove.NumSteps',100)
-       MDfreq                = fdf_integer('AtomMove.OutputFreq',50)
-       MDtimestep            = fdf_double ('AtomMove.Timestep',0.5_double)
+       runtype             = fdf_string(20,'AtomMove.TypeOfRun',       'static')
+       flag_buffer_old       = fdf_boolean('AtomMove.OldBuffer',        .false.)
+       AtomMove_buffer       = fdf_double ('AtomMove.BufferSize',    4.0_double)
+       flag_pulay_simpleStep = fdf_boolean('AtomMove.PulaySimpleStep',  .false.)
+       CGreset               = fdf_boolean('AtomMove.ResetCG',          .false.)
+       MDn_steps             = fdf_integer('AtomMove.NumSteps',     100        )
+       MDfreq                = fdf_integer('AtomMove.OutputFreq',    50        )
+       MDtimestep            = fdf_double ('AtomMove.Timestep',      0.5_double)
        MDcgtol               = fdf_double ('AtomMove.MaxForceTol',0.0005_double)
-       flag_vary_basis       = fdf_boolean('minE.VaryBasis',.false.)
+       !
+       !
+       flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
        if(.NOT.flag_vary_basis) then
           flag_precondition_blips = .false.
        else 
           flag_precondition_blips = fdf_boolean('minE.PreconditionBlips',.true.)
        end if
-       InitStep_paomin      = fdf_double ('minE.InitStep_paomin',5.0_double)
-       flag_self_consistent = fdf_boolean('minE.SelfConsistent',.true.)
+       InitStep_paomin      = fdf_double ('minE.InitStep_paomin',  5.0_double)
+       flag_self_consistent = fdf_boolean('minE.SelfConsistent',      .true. )
        flag_mix_L_SC_min    = fdf_boolean('minE.MixedLSelfConsistent',.false.)
        ! Tweak 2007/03/23 DRB Make Pulay mixing default
-       flag_linear_mixing   = fdf_boolean('SC.LinearMixingSC',.true.)
+       flag_linear_mixing   = fdf_boolean('SC.LinearMixingSC',        .true. )
        A(1)                 = fdf_double ('SC.LinearMixingFactor', 0.5_double)
        ! 2011/09/19 L.Tong, for spin polarised calculation
        A(2)                 = fdf_double ('SC.LinearMixingFactor_SpinDown', A(1))
        ! end 2011/09/19 L.Tong
        EndLinearMixing = fdf_double ('SC.LinearMixingEnd',sc_tolerance)
-       flag_Kerker     = fdf_boolean('SC.KerkerPreCondition',.false.)
-       q0              = fdf_double ('SC.KerkerFactor',0.1_double)
-       flag_wdmetric   = fdf_boolean('SC.WaveDependentMetric',.false.)
-       q1              = fdf_double ('SC.MetricFactor',0.1_double)
-       n_exact         = fdf_integer('SC.LateStageReset',5)
+       flag_Kerker     = fdf_boolean('SC.KerkerPreCondition',  .false.)
+       q0              = fdf_double ('SC.KerkerFactor',     0.1_double)
+       flag_wdmetric   = fdf_boolean('SC.WaveDependentMetric', .false.)
+       q1              = fdf_double ('SC.MetricFactor',     0.1_double)
+       n_exact         = fdf_integer('SC.LateStageReset',   5         )
        flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
-       flag_continue_on_SC_fail     = fdf_boolean('SC.ContinueOnSCFail',.false.)
+       flag_continue_on_SC_fail     = fdf_boolean('SC.ContinueOnSCFail',   .false.)
        maxitersSC      = fdf_integer('SC.MaxIters',50)
-       maxearlySC      = fdf_integer('SC.MaxEarly',3)
-       maxpulaySC      = fdf_integer('SC.MaxPulay',5)
+       maxearlySC      = fdf_integer('SC.MaxEarly',3 )
+       maxpulaySC      = fdf_integer('SC.MaxPulay',5 )
        read_atomic_density_file = &
                        fdf_string(80,'SC.ReadAtomicDensityFile','read_atomic_density.dat')
        ! Read atomic density initialisation flag
        atomic_density_method = fdf_string(10,'SC.AtomicDensityFlag','pao')
+!!$
 !!$
 !!$
 !!$
@@ -1048,9 +1122,11 @@ contains
               call cq_abort("Won't output WFs for Order(N) or non-static runs")
           end if
        end if
- 
-
-
+!!$
+!!$
+!!$
+!!$
+!!$
        ! cDFT flags
        flag_perform_cDFT = fdf_boolean('cDFT.Perform_cDFT',.false.)
        if(flag_perform_cDFT) then
@@ -1088,17 +1164,18 @@ contains
        end if
 !!$
 !!$
+!!$  D e l t a - S C F 
 !!$
 !!$
        ! DeltaSCF flags
        flag_DeltaSCF = fdf_boolean('minE.DeltaSCF',.false.)
        if(flag_DeltaSCF) then
-          dscf_source_level     = fdf_integer('DeltaSCF.SourceLevel',0)
-          dscf_target_level     = fdf_integer('DeltaSCF.TargetLevel',0)
+          dscf_source_level     = fdf_integer('DeltaSCF.SourceLevel',  0)
+          dscf_target_level     = fdf_integer('DeltaSCF.TargetLevel',  0)
           dscf_source_spin      = fdf_integer('DeltaSCF.SourceChannel',1)
           dscf_target_spin      = fdf_integer('DeltaSCF.TargetChannel',1)
-          dscf_source_nfold     = fdf_integer('DeltaSCF.SourceNFold',1)
-          dscf_target_nfold     = fdf_integer('DeltaSCF.TargetNFold',1)
+          dscf_source_nfold     = fdf_integer('DeltaSCF.SourceNFold',  1)
+          dscf_target_nfold     = fdf_integer('DeltaSCF.TargetNFold',  1)
           flag_local_excitation = fdf_boolean('DeltaSCF.LocalExcitation',.false.)
           if(flag_local_excitation) then
              dscf_homo_limit    = fdf_integer('DeltaSCF.HOMOLimit',0)
@@ -1170,21 +1247,23 @@ contains
 !!$
        del_k = fdf_double('Basis.PaoKspaceOlGridspace',0.1_double)
        kcut  = fdf_double('Basis.PaoKspaceOlCutoff', 1000.0_double)
-       flag_paos_atoms_in_cell = fdf_boolean('Basis.PAOs_StoreAllAtomsInCell',.true.)
-       flag_one_to_one         = fdf_boolean('Basis.PAOs_OneToOne',.false.)
-       symmetry_breaking       = fdf_boolean('Basis.SymmetryBreaking',.false.)
-       support_pao_file        = fdf_string(80,'Basis.SupportPaoFile','supp_pao.dat')
-       pao_info_file           = fdf_string(80,'Basis.PaoInfoFile','pao.dat')
-       pao_norm_flag           = fdf_integer('Basis.PaoNormFlag',0)
-       TestBasisGrads = fdf_boolean('Basis.TestBasisGradients',.false.)
-       TestTot        = fdf_boolean('Basis.TestBasisGradTot',.false.)
-       TestBoth       = fdf_boolean('Basis.TestBasisGradBoth',.false.)
-       TestS          = fdf_boolean('Basis.TestBasisGrad_S',.false.)
-       TestH          = fdf_boolean('Basis.TestBasisGrad_H',.false.)
-       support_spec_file      = fdf_string(80,'Basis.SupportSpecFile','support.dat')
-       flag_read_support_spec = fdf_boolean('Basis.ReadSupportSpec',.false.)
-       flag_test_forces       = fdf_boolean('AtomMove.TestForces',.false.)
-       flag_test_all_forces   = fdf_boolean('AtomMove.TestAllForces',.true.)
+       flag_paos_atoms_in_cell = fdf_boolean(  'Basis.PAOs_StoreAllAtomsInCell',.true. )
+       flag_one_to_one         = fdf_boolean(  'Basis.PAOs_OneToOne',           .false.)
+       symmetry_breaking       = fdf_boolean(  'Basis.SymmetryBreaking',        .false.)
+       support_pao_file        = fdf_string(80,'Basis.SupportPaoFile',   'supp_pao.dat')
+       pao_info_file           = fdf_string(80,'Basis.PaoInfoFile',           'pao.dat')
+       pao_norm_flag           = fdf_integer(  'Basis.PaoNormFlag',              0     )
+       TestBasisGrads          = fdf_boolean(  'Basis.TestBasisGradients',      .false.)
+       TestTot                 = fdf_boolean(  'Basis.TestBasisGradTot',        .false.)
+       TestBoth                = fdf_boolean(  'Basis.TestBasisGradBoth',       .false.)
+       TestS                   = fdf_boolean(  'Basis.TestBasisGrad_S',         .false.)
+       TestH                   = fdf_boolean(  'Basis.TestBasisGrad_H',         .false.)
+       support_spec_file       = fdf_string(80,'Basis.SupportSpecFile',   'support.dat')
+       flag_read_support_spec  = fdf_boolean(  'Basis.ReadSupportSpec',         .false.)
+       !
+       !
+       flag_test_forces        = fdf_boolean('AtomMove.TestForces',   .false.)
+       flag_test_all_forces    = fdf_boolean('AtomMove.TestAllForces',.true. )
        if(.NOT.flag_test_all_forces) then ! Test one force component
           flag_which_force = fdf_integer('AtomMove.TestSpecificForce',1)
           if(flag_which_force>8.OR.flag_which_force<0.AND.inode==ionode) &
@@ -1214,9 +1293,9 @@ contains
        if (flag_spin_polarisation) then
           !
           if ( flag_functional_type == functional_lda_pz81       .or. &
-               flag_functional_type == functional_lda_gth96      .or. &
-               flag_functional_type == functional_hyb_PBE0       .or. &
-               flag_functional_type == functional_hartree_fock ) then
+               !flag_functional_type == functional_hyb_PBE0       .or. &
+               !flag_functional_type == functional_hartree_fock ) .or. & 
+               flag_functional_type == functional_lda_gth96     ) then
              !
              if (inode == ionode) &
                   write (io_lun,'(/,a,/)') &
@@ -1230,35 +1309,49 @@ contains
        end if
 !!$
 !!$
+!!$  E X X 
+!!$ 
 !!$
-!!$
-       ! EXX flags
-       if ( flag_functional_type == functional_hyb_pbe0       .or. &
-            flag_functional_type == functional_hartree_fock ) then
+       if ( flag_functional_type == functional_hyb_pbe0 ) then
           flag_exx = .true.
+          exx_siter = fdf_integer('EXX.StartAfterIter', 1 )
+          exx_scf   = fdf_integer('EXX.MethodSCF',      0 )
+          r_exx     = fdf_double ('EXX.Krange'   ,   zero )
+          !
+       else if ( flag_functional_type == functional_hartree_fock ) then
+          flag_exx = .true.
+          exx_scf  = fdf_integer('EXX.MethodSCF', 0)
+          r_exx    = fdf_double ('EXX.Krange', zero)
+          !
        else
-          ! don't touch
-          r_exx    = fdf_double('EXX.X_range',one)
+          ! don't touch we need it because matX is setup in set_dimensions 
+          ! whatever is flag_exx
           flag_exx = .false.
+          exx_scf  =  fdf_integer('EXX.MethodSCF', -1)
+          r_exx    =  one 
           !             
        end if
        !
-       if( flag_exx ) then
+       if ( flag_exx ) then
           ! Setup the exact-exchange mixing factor (0 < exx_alpha <1)
           if ( flag_functional_type == functional_hyb_pbe0 ) then
              exx_alpha  = fdf_double ('EXX.Alpha',0.25_double)
+             !
           else if( flag_functional_type == functional_hartree_fock ) then
              exx_alpha  = fdf_double ('EXX.Alpha',1.00_double)
+             !
           end if
           if ( exx_alpha < zero .or. alpha > one ) then
              call cq_abort('EXX: exact-exchange mixing value is not &
                   reasonable ', exx_alpha)
-          end if 
-          r_exx    = fdf_double('EXX.X_range',one)
+             !
+          end if
           ! To control accuracy during scf
           exx_scf_tol   = sc_tolerance
           ! Grid spacing for PAO discretisation in EXX
-          exx_hgrid = fdf_double ('EXX.GridSpacing',zero)
+          exx_hgrid  = fdf_double ('EXX.GridSpacing',zero)
+          exx_radius = fdf_double ('EXX.IntegRadius',0.00_double) 
+          ! debug mode
           exx_Kij       = .true.
           exx_Kkl       = .true.
           exx_cartesian = .true. 
@@ -1272,6 +1365,7 @@ contains
        end if
 !!$
 !!$
+!!$ 
 !!$
 !!$
        select case(flag_functional_type)
@@ -1294,6 +1388,7 @@ contains
        end select
 !!$
 !!$
+!!$  U N I T S
 !!$
 !!$
        tmp = fdf_string(8,'General.EnergyUnits','Ha')
@@ -1315,11 +1410,24 @@ contains
           dist_units = ang
           dist_conv = BohrToAng
        endif
+!!$
+!!$
+!!$  P D B
+!!$
+!!$
+
        for_conv = en_conv/dist_conv
        pdb_format = fdf_boolean ('IO.PdbIn',.false.)
        pdb_altloc = fdf_string(1,'IO.PdbAltLoc',' ')
        pdb_output = fdf_boolean ('IO.PdbOut',.false.)
-       part_mode = fdf_string(10,'General.PartitionMethod','Hilbert')
+       !
+       !
+!!$
+!!$
+!!$  P A R T I T I O N    M E T H O D
+!!$
+!!$
+       part_mode  = fdf_string(10,'General.PartitionMethod','Hilbert')
        if (leqi(part_mode(1:6),'File')) then
           part_method = PYTHON
        else if (leqi(part_mode(1:7), 'Hilbert')) then
@@ -1342,14 +1450,28 @@ contains
        end if
        ! many_processors = fdf_boolean('General.ManyProcessors',.true.)
        global_maxatomspart = fdf_integer('General.MaxAtomsPartition', 34)
-       n_parts_user(1) = fdf_integer('General.NPartitionsX', 0)
-       n_parts_user(2) = fdf_integer('General.NPartitionsY', 0)
-       n_parts_user(3) = fdf_integer('General.NPartitionsZ', 0)
+       n_parts_user(1)     = fdf_integer('General.NPartitionsX', 0)
+       n_parts_user(2)     = fdf_integer('General.NPartitionsY', 0)
+       n_parts_user(3)     = fdf_integer('General.NPartitionsZ', 0)
        average_atomic_diameter = &
             fdf_double('General.AverageAtomicDiameter', 5.0_double)
        ! end sfc partitioning
+       !
+       !
+!!$
+!!$
+!!$  
+!!$
+!!$
        append_coords = fdf_boolean('AtomMove.AppendCoords',.true.)
-       flag_dft_d2 = fdf_boolean('General.DFT_D2', .false.)                   ! for DFT-D2
+       !
+       !
+!!$
+!!$
+!!$  D F T - D 2
+!!$
+!!$
+       flag_dft_d2   = fdf_boolean('General.DFT_D2', .false.)                 ! for DFT-D2
        if (flag_dft_d2) r_dft_d2 = fdf_double('DFT-D2_range',23.0_double)     ! for DFT-D2
        flag_only_dispersion = fdf_boolean('General.only_Dispersion',.false.)  ! for DFT-D2
        ! vdW XC functional flags
@@ -1357,6 +1479,13 @@ contains
        if (flag_vdWDFT) then
           vdW_LDA_functional = fdf_integer('vdWDFT.LDAFunctionalType', 3)
        end if
+       !
+       !
+!!$
+!!$
+!!$  M O L E C U L A R    D Y N A M I C S
+!!$
+!!$
        ! Basic settings for MD
        flag_MDold        = fdf_boolean('AtomMove.OldMemberUpdates',.false.)
        flag_MDdebug      = fdf_boolean('AtomMove.Debug',.false.)
@@ -1417,12 +1546,12 @@ contains
        flag_RigidBonds=fdf_boolean('AtomMove.RigidBonds', .false.)
        if (flag_RigidBonds) then
          constraints%filename=fdf_string(20,'RigidBonds.File','constraint.aux')
-         constraints%n_grp=fdf_integer('RigidBonds.NumberOfGroups',0)
-         SHAKE_tol=fdf_double('RigidBonds.SHAKETol',1.0E-8_double)
-         RATTLE_tol=fdf_double('RigidBonds.RATTLETol',1.0E-10_double)
-         maxiterSHAKE=fdf_integer('RigidBonds.MaxIterSHAKE', 500)
-         maxiterRATTLE=fdf_integer('RigidBonds.MaxIterRATTLE', maxiterSHAKE)
-         const_range=fdf_double('RigidBonds.SearchRange',9.448629943_double)
+         constraints%n_grp=fdf_integer('RigidBonds.NumberOfGroups', 0                )
+         SHAKE_tol        =fdf_double ('RigidBonds.SHAKETol',      1.0E-8_double     )
+         RATTLE_tol       =fdf_double ('RigidBonds.RATTLETol',     1.0E-10_double    )
+         maxiterSHAKE     =fdf_integer('RigidBonds.MaxIterSHAKE',  500               )
+         maxiterRATTLE    =fdf_integer('RigidBonds.MaxIterRATTLE', maxiterSHAKE      )
+         const_range      =fdf_double ('RigidBonds.SearchRange',   9.448629943_double)
          allocate (n_bond(constraints%n_grp))
          ! Read block
          if (constraints%n_grp.LE.0) call cq_abort('Error: The number of constraints must be &
@@ -1743,7 +1872,7 @@ contains
     !!!   TEMPORARY ? !!!!!!!   by T. MIYAZAKI
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='read_input')
+    call stop_backtrace(t=backtrace_timer,who='read_input')
 !****lat>$
 
     call my_barrier()
@@ -1775,82 +1904,91 @@ contains
 !!   Unknown
 !!  MODIFICATION HISTORY
 !!   2011/09/16 11:10 dave
-!!    Added header and changed atomicrad to atomicnum
+!!    - Added header and changed atomicrad to atomicnum
 !!   2011/11/16 15:51 dave
-!!    Changes for new blip data
+!!    - Changes for new blip data
+!!   2014/10/12 10:58 lat
+!!    - Added species_file
+!!   2015/06/08 lat
+!!    - Added experimental backtrace
 !!  SOURCE
 !!
   subroutine allocate_species_vars
 
-    use dimens, only: RadiusSupport, NonLocalFactor, InvSRange, atomicnum
-    use blip,   only: blip_info
+    use dimens,         only: RadiusSupport, NonLocalFactor, InvSRange, atomicnum
     use memory_module,  only: reg_alloc_mem, type_dbl
-    use species_module, only: nsf_species, nlpf_species, npao_species, charge, &
-         mass, non_local_species, &
-         ps_file, ch_file, phi_file, species_label, n_species, type_species
-    use global_module, only: area_general
-    use GenComms,      only: cq_abort
+    use species_module, only: n_species, nsf_species, nlpf_species, npao_species, charge
+    use species_module, only: mass, non_local_species, ps_file, ch_file, phi_file 
+    use species_module, only: species_label, species_file, type_species
+    use global_module,  only: area_general
+    use GenComms,       only: cq_abort
+    use blip,           only: blip_info
 
     implicit none
 
     ! Local variables
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
     integer        :: stat
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='allocate_species_vars',where=1,level=3)
+    call start_backtrace(t=backtrace_timer,who='allocate_species_vars',where=1,level=3)
 !****lat>$
 
     call start_timer(tmr_std_allocation)
+    !
     allocate(RadiusSupport(n_species),atomicnum(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating RadiusSupport, atomicnum in allocate_species_vars: ",n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(blip_info(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating blip_info in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating blip_info in allocate_species_vars: ",               n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(NonLocalFactor(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating NonLocalFactor in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating NonLocalFactor in allocate_species_vars: ",          n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(nsf_species(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating nsf_species in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating nsf_species in allocate_species_vars: ",             n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(nlpf_species(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating nlpf_species in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating nlpf_species in allocate_species_vars: ",            n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(npao_species(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating npao_species in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating npao_species in allocate_species_vars: ",            n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(charge(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating charge in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating charge in allocate_species_vars: ",                  n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(mass(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating mass in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating mass in allocate_species_vars: ",                    n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(non_local_species(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating non_local_species in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating non_local_species in allocate_species_vars: ",       n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(ps_file(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating ps_file in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating ps_file in allocate_species_vars: ",                 n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(ch_file(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating ch_file in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating ch_file in allocate_species_vars: ",                 n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(phi_file(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating phi_file in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating phi_file in allocate_species_vars: ",                n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(species_label(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating species_label in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating species_label in allocate_species_vars: ",           n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(type_species(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating type_species in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating type_species in allocate_species_vars: ",            n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(InvSRange(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating InvSRange in allocate_species_vars: ",n_species,stat)
+    if(stat/=0) call cq_abort("Error allocating InvSRange in allocate_species_vars: ",               n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
+    allocate(species_file(n_species),STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating species_file in allocate_species_vars: ",            n_species,stat)
+    call reg_alloc_mem(area_general,n_species,type_dbl)
+    !
     call stop_timer(tmr_std_allocation)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='allocate_species_vars')
+    call stop_backtrace(t=backtrace_timer,who='allocate_species_vars')
 !****lat>$
 
     return
@@ -2160,6 +2298,8 @@ contains
   !!   2011/09/05 L.Tong
   !!    Added print out input information for k-point parallelisation
   !!    related parameters
+  !!   2015/06/08 lat
+  !!    Added experimental backtrace
   !!  SOURCE
   !!
   subroutine readDiagInfo
@@ -2185,7 +2325,7 @@ contains
     implicit none
 
     ! Local variables
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
     integer        :: stat, iunit, i, j, k, matrix_size
     real(double)   :: a, sum
     integer        :: proc_per_group
@@ -2200,7 +2340,7 @@ contains
     integer :: counter
     
 !****lat<$    
-    call start_timer(t=tmr_std_loc,who='readDiagInfo',where=1,level=2)
+    call start_backtrace(t=backtrace_timer,who='readDiagInfo',where=1,level=2)
 !****lat>$
 
     if(myid==0) then
@@ -2522,7 +2662,7 @@ contains
     !end if
 
 !****lat<$    
-    call stop_timer(t=tmr_std_loc,who='readDiagInfo')
+    call stop_backtrace(t=backtrace_timer,who='readDiagInfo')
 !****lat>$
 
     return

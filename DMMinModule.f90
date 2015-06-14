@@ -62,8 +62,16 @@ module DMMin
   use datatypes
   use global_module,          only: io_lun, area_DM
   use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_densitymat
 
+  ! Area identification
+  integer, parameter, private :: area = 4
+  !
+  ! RCS tag for object file identification
+  character(len=80), save, private :: &
+       RCSid = "$Id$"
+  !
   integer           :: maxpulayDMM
   integer,     save :: n_dumpL = 5
   real(double)      :: LinTol_DMM
@@ -72,11 +80,6 @@ module DMMin
   !integer, parameter :: mx_pulay = 5
   !real(double), parameter :: LinTol = 0.1_double
 
-  ! -------------------------------------------------------
-  ! RCS ident string for object file id
-  ! -------------------------------------------------------
-  character(len=80), save, private :: &
-       RCSid = "$Id$"
 !!***
 
 contains
@@ -145,11 +148,13 @@ contains
   !!   2014/01/21 lat
   !!    - Added call to exx
   !!   2014/09/15 18:30 lat
-  !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+  !!    - Fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !!  SOURCE
   !!
   subroutine FindMinDM(n_L_iterations, vary_mu, tolerance, inode, &
-                       ionode, resetL, record)
+                       ionode, resetL, record, level)
 
     use datatypes
     use numbers
@@ -178,6 +183,7 @@ contains
     implicit none
 
     ! Passed variables
+    integer, optional :: level
     integer      :: n_L_iterations, inode, ionode
     real(double) :: tolerance
     logical      :: resetL, vary_mu, record
@@ -189,13 +195,17 @@ contains
     real(double), parameter :: eprec = 1.0e-12_double
     real(double), save      :: delta_e
     type(cq_timer)          :: tmr_l_iter
-    type(cq_timer)          :: tmr_std_loc
+    type(cq_timer)          :: backtrace_timer
+    integer                 :: backtrace_level
     !TM 2010.Nov.06
     integer                 :: niter = 0
     integer, parameter      :: niter_max = 10
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='FindMinDM',where=4,level=3,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='FindMinDM',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     call start_timer(tmr_std_densitymat)
@@ -207,7 +217,7 @@ contains
           
        call stop_timer(tmr_std_densitymat)
 !****lat<$
-       call stop_timer(t=tmr_std_loc,who='FindMinDM',echo=.true.)
+       call stop_backtrace(t=backtrace_timer,who='FindMinDM',echo=.true.)
 !****lat>$
        return
     end if
@@ -309,7 +319,7 @@ contains
     call stop_timer(tmr_std_densitymat)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='FindMinDM',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='FindMinDM',echo=.true.)
 !****lat>$
 
     return
@@ -1600,9 +1610,11 @@ contains
   !! MODIFICATION HISTORY
   !!   2012/03/12 L.Tong
   !!   - rewrite for changed spin implementation
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !! SOURCE
   !!
-  subroutine correct_electron_number(output_level,inode,ionode)
+  subroutine correct_electron_number(output_level,inode,ionode,level)
 
     use mult_module,   only: matL, matphi
     use global_module, only: nspin, flag_fix_spin_population
@@ -1610,13 +1622,18 @@ contains
     implicit none
 
     ! Passed variables
+    integer, optional :: level
     integer :: inode, ionode, output_level
 
     ! Local variables
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='corr_el_number',where=4,level=2)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='corr_el_number',&
+         where=area,level=backtrace_level)
 !****lat>$
 
     if (nspin == 1 .or. flag_fix_spin_population) then
@@ -1626,7 +1643,7 @@ contains
     end if
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='corr_el_number')
+    call stop_backtrace(t=backtrace_timer,who='corr_el_number')
 !****lat>$
 
     return

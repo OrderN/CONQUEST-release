@@ -71,6 +71,7 @@ module force_module
   use datatypes
   use global_module,          only: io_lun
   use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_allocation,      &
                                     tmr_std_matrices
 
@@ -89,6 +90,9 @@ module force_module
   integer, parameter :: HF = 1
   integer, parameter :: Pulay = 2
   integer, parameter :: HF_and_Pulay = 3
+
+  ! Area identification
+  integer, parameter, private :: area = 7
 
   ! RCS tag for object file identification
   character(len=80), private :: &
@@ -171,11 +175,13 @@ contains
   !!    Bug fix for sum over two components of rho even without spin
   !!   2015/05/01 13:56 dave and sym
   !!    Adding stress sum and output
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
                    tolerance, con_tolerance, total_energy,      &
-                   expected_reduction, write_forces)
+                   expected_reduction, write_forces, level )
 
     use datatypes
     use numbers
@@ -216,14 +222,16 @@ contains
     ! Passed variables
     logical      :: vary_mu, fixed_potential, write_forces
     integer      :: n_cg_L_iterations
-    real(double) :: tolerance, con_tolerance, total_energy, &
-                    expected_reduction
+    real(double) :: tolerance, con_tolerance, total_energy
+    real(double) :: expected_reduction
+    integer, optional :: level 
 
     ! Local variables
     integer        :: i, j, ii, stat, max_atom, max_compt, spin, direction
     real(double)   :: max_force
     type(cq_timer) :: tmr_l_tmp1
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
 
     real(double), dimension(nspin)            :: electrons
     real(double), dimension(:),   allocatable :: density_total
@@ -238,7 +246,10 @@ contains
     real(double), dimension(:,:), allocatable :: density_out
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='force',where=7,level=2,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='force',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     call start_timer(tmr_std_allocation)
@@ -591,7 +602,7 @@ contains
     call stop_timer(tmr_std_allocation)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='force',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='force',echo=.true.)
 !****lat>$
 
     return
@@ -695,11 +706,13 @@ contains
   !!    Updates to correct analytic blip forces
   !!   2015/05/08 08:26 dave and sym
   !!    Adding local phi Pulay and S-Pulay stress calculations
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !!  SOURCE
   !!
   subroutine pulay_force(p_force, KE_force, fixed_potential, vary_mu,  &
                          n_cg_L_iterations, L_tol, self_tol, &
-                         total_energy, expected_reduction, n_atoms)
+                         total_energy, expected_reduction, n_atoms, level)
 
     use datatypes
     use logicals
@@ -764,6 +777,7 @@ contains
     integer      :: n_cg_L_iterations
     real(double) :: L_tol, self_tol, total_energy, expected_reduction
     real(double), dimension(3,n_atoms) :: p_force, KE_force
+    integer, optional :: level
 
     ! Local variables
     logical      :: test
@@ -803,10 +817,14 @@ contains
     integer        :: iprim, np, ni, isf, mat_tmp, mat_tmp2
     real(double)   :: matM12_value, matK_value
     type(cq_timer) :: tmr_std_loc
-
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='pulay_force',where=7,level=3,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='pulay_force', &
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$    
 
     ! the force due to the change in T matrix elements is done differently...
@@ -1195,9 +1213,8 @@ contains
     ! NB we do NOT need to halve PP_stress because it is from an integral on the grid
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='pulay_force',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='pulay_force',echo=.true.)
 !****lat>$
-
 
     return
   end subroutine pulay_force
@@ -2354,7 +2371,9 @@ contains
   !!      PBE variants.) The code still runs, but will set non SC
   !!      correction forces to 0
   !!   2013/07/10 11:35 dave
-  !!    Bug fix for sum over two components of rho even without spin
+  !!    - Bug fix for sum over two components of rho even without spin
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !!  SOURCE
   !!
   subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
@@ -2424,7 +2443,7 @@ contains
                       z_pcc, derivative_pcc, v_pcc
     logical        :: range_flag
     type(cq_timer) :: tmr_l_tmp1, tmr_l_tmp2
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
 
     real(double), dimension(:),     allocatable :: h_potential,   &
                                                    density_total, &
@@ -2447,8 +2466,9 @@ contains
     !   a) non-SC forces for spin polarised PBE is not yet implemented
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='get_nonSC_correction_force',where=7,level=3,echo=.true.)
-!****lat>$  
+    call start_backtrace(t=backtrace_timer,who='get_nonSC_correction_force',where=7,level=3,echo=.true.)
+!****lat>$ 
+
 
     if ((nspin == 2) .and. &
         ((flag_functional_type == functional_gga_pbe96) .or. &
@@ -3039,8 +3059,9 @@ contains
     call reg_dealloc_mem(area_moveatoms, (3+nspin*nspin)*nsize, type_dbl)
     call stop_timer(tmr_std_allocation)
 
+
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='get_nonSC_correction_force',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='get_nonSC_correction_force',echo=.true.)
 !****lat>$  
 
     return

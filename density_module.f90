@@ -61,14 +61,13 @@
 !!   - Added subroutine for calculating electron numbers
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
-!!   2015/06/05 16:49 dave
-!!    Added band density calculation (copy of get_electronic_density basically)
 !!  SOURCE
 module density_module
 
   use datatypes
   use global_module,          only: io_lun, iprint_SC
   use timer_module,           only: start_timer, stop_timer, cq_timer, stop_print_timer
+  use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_chargescf
 
   implicit none
@@ -101,6 +100,9 @@ module density_module
   ! real(double) :: density_scale_dn
   ! real(double), allocatable, dimension(:) :: density_dn
   ! real(double), allocatable, dimension(:) :: atomcharge_dn
+
+  ! Area identification
+  integer, parameter, private :: area = 5
 
   ! RCS tag for object file identification
   character(len=80), private :: &
@@ -156,9 +158,11 @@ contains
   !!   2012/03/13 L.Tong
   !!    - Rewriting spin implementation. Now the spin non-polarised
   !!      case are treated the same way as fixed spin case.
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !!  SOURCE
   !!
-  subroutine set_density()
+  subroutine set_density(level)
 
     use datatypes
     use numbers
@@ -184,6 +188,9 @@ contains
 
     implicit none
 
+    ! Passed Variables
+    integer, optional :: level
+
     ! Local Variables
     integer :: ipart, jpart, ind_part, ia, ii, icover, ig_atom
     integer :: the_species
@@ -199,21 +206,25 @@ contains
     ! local charge density returned from splint routine
     real(double)   :: local_density
     type(cq_timer) :: tmr_l_tmp1
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
 
     ! logical flag to warn if splint routine called out of the
     ! tabulated range.
     logical :: range_flag
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='set_density',where=5,level=3)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='set_density', &
+         where=area,level=backtrace_level)
 !****lat>$
   
     if (inode == ionode .and. iprint_SC >= 2) &
          write (io_lun, fmt='(2x,"Entering set_density")')
 
     call start_timer(tmr_std_chargescf)
-    call start_timer(t=tmr_l_tmp1, l=WITH_LEVEL)
+    call start_timer(tmr_l_tmp1, WITH_LEVEL)
 
     !call sub_enter_output('set_density',2,'5')
 
@@ -387,7 +398,7 @@ contains
     call stop_timer(tmr_std_chargescf)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='set_density')
+    call stop_backtrace(t=backtrace_timer,who='set_density')
 !****lat>$
 
     return
@@ -465,7 +476,7 @@ contains
          write (io_lun, fmt='(2x,"Entering set_density_pcc")')
 
     call start_timer(tmr_std_chargescf)
-    call start_timer(t=tmr_l_tmp1, l=WITH_LEVEL)
+    call start_timer(tmr_l_tmp1, WITH_LEVEL)
     density_pcc = zero  ! initialize density
     ! write(io_lun,*) 'Size of density: ',size(density)
     ! call scal(n_my_grid_points,zero,density,1)
@@ -669,10 +680,12 @@ contains
   !!    - There is no longer a factor of two difference for spin
   !!      non-polarised case. Spin non-polarised case will just store the
   !!      spin up component in density(1). This is for consistency.
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !!  SOURCE
   !!
   subroutine get_electronic_density(denout, electrons, support, &
-                                    support_K, inode, ionode, size)
+                                    support_K, inode, ionode, size, level)
 
     use datatypes
     use numbers
@@ -693,19 +706,22 @@ contains
     implicit none
 
     ! Passed variables
-
-    integer :: inode, ionode, size
-    integer :: support, support_K
     real(double), dimension(:)   :: electrons
     real(double), dimension(:,:) :: denout
+    integer :: inode, ionode, size
+    integer :: support, support_K
+    integer, optional :: level
 
     ! Local variables
-    type(cq_timer) :: tmr_std_loc
-    integer :: blk, i_count_alpha, n, n_i, n_point, spin
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
+    integer        :: blk, i_count_alpha, n, n_i, n_point, spin
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='get_electronic_density',&
-         where=5,level=2,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='get_electronic_density',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     call start_timer(tmr_std_chargescf)
@@ -773,7 +789,7 @@ contains
     call stop_timer(tmr_std_chargescf)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='get_electronic_density',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='get_electronic_density',echo=.true.)
 !****lat>$
 
     return
@@ -829,14 +845,8 @@ contains
     real(double), dimension(size) :: denout
 
     ! Local variables
-    type(cq_timer) :: tmr_std_loc
     integer :: blk, i_count_alpha, n, n_i, n_point
     real(double) :: electrons
-
-!****lat<$
-!    call start_timer(t=tmr_std_loc,who='get_electronic_density',&
-!         where=5,level=2,echo=.true.)
-!****lat>$
 
     if (inode == ionode .and. iprint_SC >= 2) &
          write (io_lun,fmt='(2x,"Entering get_band_density")')
@@ -867,10 +877,6 @@ contains
          write (io_lun, '(2x,"Electrons: ",f25.15)') &
          electrons
     call stop_timer(tmr_std_chargescf)
-
-!****lat<$
-!    call stop_timer(t=tmr_std_loc,who='get_electronic_density',echo=.true.)
-!****lat>$
 
     return
   end subroutine get_band_density

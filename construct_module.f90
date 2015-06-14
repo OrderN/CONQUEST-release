@@ -16,8 +16,8 @@
 !!***
 module construct_module
   
-  !use output_module, only: sub_enter_output, sub_leave_output
-  use timer_module,  only: start_timer, stop_timer, cq_timer
+  use timer_module,  only: start_timer,     stop_timer, cq_timer
+  use timer_module,  only: start_backtrace, stop_backtrace
 
 contains
 !!****f* construct_module/init_group *
@@ -46,6 +46,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   28/05/2001 dave
 !!    ROBODoc header and better documentation
+!!   2015/06/08 lat
+!!    - Added experimental backtrace
 !!  SOURCE
 !!
   subroutine init_group(groups,mx_ngonn,mx_gedge,mx_gcell,mx_mem_grp,mx_node)
@@ -61,10 +63,10 @@ contains
     integer         :: mx_ngonn,mx_gedge,mx_gcell,mx_mem_grp,mx_node
 
     ! Local variables
-    type(cq_timer)  :: tmr_std_loc
+    type(cq_timer)  :: backtrace_timer
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='init_group',where=1,level=4)
+    call start_backtrace(t=backtrace_timer,who='init_group',where=1,level=4)
 !****lat>$
  
     groups%mx_ngonn=mx_ngonn
@@ -74,7 +76,7 @@ contains
     call allocate_group_set(groups,mx_node)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='init_group')
+    call stop_backtrace(t=backtrace_timer,who='init_group')
 !****lat>$
 
     return
@@ -105,6 +107,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   28/05/2001 dave
 !!    ROBODoc header
+!!   2015/06/08 lat
+!!    - Added experimental backtrace
 !!  SOURCE
 !!
   subroutine init_primary(prim,mx_iprim,mx_ngonn,members)
@@ -121,10 +125,10 @@ contains
     logical           :: members
 
     ! Local variables
-    type(cq_timer)    :: tmr_std_loc
+    type(cq_timer)    :: backtrace_timer
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='init_primary',where=1,level=2)
+    call start_backtrace(t=backtrace_timer,who='init_primary',where=1,level=2)
 !****lat>$
 
     prim%mx_iprim = mx_iprim
@@ -132,7 +136,7 @@ contains
     call allocate_primary_set(prim,members)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='init_primary')
+    call stop_backtrace(t=backtrace_timer,who='init_primary')
 !****lat>$
 
     return
@@ -165,6 +169,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   28/05/2001 dave
 !!    ROBODoc header, more documentation
+!!   2015/06/08 lat
+!!    - Added experimental backtrace
 !!  SOURCE
 !!
   subroutine init_cover(set,mx_mcover,mx_gcover,mx_node,members)
@@ -181,11 +187,11 @@ contains
     logical         :: members
     
     ! Local variables
-    type(cq_timer)   :: tmr_std_loc
+    type(cq_timer)   :: backtrace_timer
 
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='init_cover',where=1,level=4)
+    call start_backtrace(t=backtrace_timer,who='init_cover',where=1,level=4)
 !****lat>$
 
     set%mx_mcover = mx_mcover
@@ -193,7 +199,7 @@ contains
     call allocate_cs(set,mx_node,members)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='init_cover')
+    call stop_backtrace(t=backtrace_timer,who='init_cover')
 !****lat>$
 
     return

@@ -25,7 +25,8 @@ module input_module
 
   use datatypes
   use GenComms,      only: inode, ionode
-  use timer_module,  only: start_timer, stop_timer, cq_timer
+  use timer_module,  only: start_timer,     stop_timer, cq_timer
+  use timer_module,  only: start_backtrace, stop_backtrace
 
   implicit none
 
@@ -81,6 +82,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2013/07/01 M.Arita
 !!    - Bug fix in closing a file
+!!   2015/06/08 lat
+!!    - Added experimental backtrace
 !!  SOURCE
 !!  
   subroutine load_input
@@ -89,7 +92,7 @@ contains
 
     implicit none
 
-    type(cq_timer)     :: tmr_std_loc
+    type(cq_timer)     :: backtrace_timer
     character(len=132) :: line
     character(len=10)  :: slabel
     real(double)       :: r
@@ -97,7 +100,7 @@ contains
     integer            :: lun, stat, i, l, j
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='load_input',where=1,level=3)
+    call start_backtrace(t=backtrace_timer,who='load_input',where=1,level=3)
 !****lat>$
 
     ! Count lines in input file on ionode
@@ -181,7 +184,7 @@ contains
     end if
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='load_input')
+    call stop_backtrace(t=backtrace_timer,who='load_input')
 !****lat>$
 
     return

@@ -45,7 +45,8 @@ module dimens
 
   use datatypes
   use global_module, only: io_lun
-  use timer_module,  only: start_timer, stop_timer, cq_timer
+  use timer_module,  only: start_timer,     stop_timer, cq_timer
+  use timer_module,  only: start_backtrace, stop_backtrace
 
   implicit none
   save
@@ -168,12 +169,12 @@ contains
     real(double) :: HNL_fac, core_radius(:)
 
     ! Local variables
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
     integer        :: max_extent, n, stat
     real(double)   :: r_core, r_t, rcutmax
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='set_dimensions',where=9,level=2)
+    call start_backtrace(t=backtrace_timer,who='set_dimensions',where=9,level=2)
 !****lat>$
 
     !n_my_grid_points = n_pts_in_block * n_blocks    
@@ -254,18 +255,28 @@ contains
     else
        rcut(Hrange) = (two*(r_h+HNL_fac*r_core))
     end if
-    rcut(Xrange)   = two*r_exx
-    rcut(SXrange)  = two*r_exx
+
+    ! **< lat >** don't touch
     if(flag_exx) then
-       if(rcut(Xrange)>rcut(Hrange)) then
+       if( rcut(Xrange) > rcut(Hrange) ) then
           rcut(Hrange)  = rcut(Xrange)
-       else if(rcut(Hrange)>rcut(Xrange)) then
+          rcut(SXrange) = rcut(Hrange)
+          !
+       else if ( rcut(Xrange) <= zero ) then
           rcut(Xrange)  = rcut(Hrange)
           rcut(SXrange) = rcut(Hrange)
+          !
+       else
+          rcut(Xrange)   = two*r_exx
+          rcut(SXrange)  = two*r_exx
+          !
        endif
+    else
+       rcut(Xrange)   = two
+       rcut(SXrange)  = two
     end if
 
-    ! New 16:25, 2014/08/29 lionel
+    ! New 16:25, 2014/08/29  **< lat >**
     !rcut(Hrange)   = (two*(r_h + r_nl))
     !rcut(Hrange)   = (two*(r_h+HNL_fac*r_core))
     rcut(Srange)   = (two*r_s)
@@ -341,7 +352,7 @@ contains
     n_pts_in_block = in_block_x * in_block_y * in_block_z
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='set_dimensions')
+    call stop_backtrace(t=backtrace_timer,who='set_dimensions')
 !****lat>$
 
     return
@@ -359,18 +370,18 @@ contains
     implicit none
     
     ! Local variables
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
     real(double)   :: sqKE, blipKE, blip_sp
     integer        :: mingrid, i
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='find_grid',where=9,level=2)
+    call start_backtrace(t=backtrace_timer,who='find_grid',where=9,level=2)
 !****lat>$
 
     if(n_grid_x>0.AND.n_grid_y>0.AND.n_grid_z>0) then ! We dont need to find grids
        if(iprint_init>1.AND.inode==ionode) &
             write(io_lun,fmt='(2x,"User specified grid dimensions: ",3i5)') n_grid_x,n_grid_y,n_grid_z
-       call stop_timer(t=tmr_std_loc,who='find_grid')
+       call stop_backtrace(t=backtrace_timer,who='find_grid')
        return
     else
        if(GridCutoff<very_small) call cq_abort("Grid cutoff too small: ",GridCutoff)
@@ -412,7 +423,7 @@ contains
     endif
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='find_grid')
+    call stop_backtrace(t=backtrace_timer,who='find_grid')
 !****lat>$
 
     return

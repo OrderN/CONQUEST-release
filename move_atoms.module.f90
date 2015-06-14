@@ -724,6 +724,8 @@ contains
   !!    - Added calls for L-matrix reconstruction & update_H
   !!   2014/02/03 M.Arita
   !!    - update_H moved outside if statement
+  !!   2015/06/08 lat
+  !!    - Corrected bug by adding barriers: grab_InfoGlobal
   !! SOURCE
   !!
   subroutine safemin2(start_x, start_y, start_z, direction, energy_in, &
@@ -913,7 +915,16 @@ contains
            if (stat.NE.0) call cq_abort('Error deallocating glob2node_old: ', &
                                         ni_in_cell)
          endif
+
+
+         !**< lat >**
+         call my_barrier
+         !
          if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
+         !**< lat >**  
+         call my_barrier
+         !
+
          call gcopy(n_proc_old)
          call gcopy(glob2node_old,ni_in_cell)
          call updateIndices3(fixed_potential,direction)

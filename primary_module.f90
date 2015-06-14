@@ -44,7 +44,8 @@ module primary_module
   ! Module usage 
   use datatypes
   use basic_types
-  use timer_module,  only: start_timer, stop_timer, cq_timer
+  use timer_module,  only: start_timer,     stop_timer, cq_timer
+  use timer_module,  only: start_backtrace, stop_backtrace
   use global_module, only: io_lun
   use GenComms,      only: cq_abort
 
@@ -115,7 +116,7 @@ contains
     integer,      dimension(:), intent(IN), OPTIONAL :: spec
 
     ! Local variables
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
     ! iprojx(ip),y,z: shadows of primary-set groups on cell axes
     integer :: iprojx(groups%mx_gedge)
     integer :: iprojy(groups%mx_gedge)
@@ -128,7 +129,7 @@ contains
 
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='make_prim',where=9,level=2)
+    call start_backtrace(t=backtrace_timer,who='make_prim',where=9,level=2)
 !****lat>$
 
     ! First determine if we're building details of members of set
@@ -236,7 +237,7 @@ contains
 
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='make_prim')
+    call stop_backtrace(t=backtrace_timer,who='make_prim')
 !****lat>$
 
     return

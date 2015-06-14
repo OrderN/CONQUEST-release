@@ -121,6 +121,8 @@ contains
   !!    Changed to use x_atom_cell not rionx
   !!   2008/02/06 08:00 dave & veronika
   !!    Subtle bug fix: species_glob not species
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !!  SOURCE
   !!
   subroutine ewald( )
@@ -136,6 +138,7 @@ contains
                               species_glob, IPRINT_TIME_THRES3
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module,   only: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
+    use timer_module,   only: start_backtrace,stop_backtrace
 
     implicit none
 
@@ -149,10 +152,10 @@ contains
          sine, sum, sum_x, sum_y, sum_z, total_charge
     real(double), allocatable, dimension(:,:) :: c1_force, c2_force
     type(cq_timer) :: tmr_l_tmp1
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='ewald',where=9,level=2,echo=.true.)
+    call start_backtrace(t=backtrace_timer,who='ewald',where=9,level=2,echo=.true.)
 !****lat>$
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
@@ -308,7 +311,7 @@ contains
     call stop_print_timer(tmr_l_tmp1,"ewald",IPRINT_TIME_THRES3)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='ewald',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='ewald',echo=.true.)
 !****lat>$
 
     return
@@ -1709,6 +1712,7 @@ contains
     use memory_module,  ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module,   ONLY: cq_timer,start_timer,stop_timer, &
                               stop_print_timer,WITH_LEVEL
+    use timer_module,   ONLY: start_backtrace,stop_backtrace
 
     implicit none
 
@@ -1721,10 +1725,10 @@ contains
          &ewald_inter_force_x, ewald_inter_force_y, ewald_inter_force_z
     real(double), allocatable, dimension(:) :: ewald_total_force_x, ewald_total_force_y, ewald_total_force_z
     type(cq_timer) :: tmr_l_tmp1
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='mikes_ewald',where=9,level=2)
+    call start_backtrace(t=backtrace_timer,who='mikes_ewald',where=9,level=2)
 !****lat>$
 
     ! --- Ewald reciprocal-space energy and forces  --------------------------------
@@ -2076,7 +2080,7 @@ contains
     call stop_print_timer(tmr_l_tmp1,"mikes_ewald",IPRINT_TIME_THRES3)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='mikes_ewald')
+    call stop_backtrace(t=backtrace_timer,who='mikes_ewald')
 !****lat>$
 
     return

@@ -152,9 +152,10 @@ module mult_module
   integer, allocatable, dimension(:), public :: matrix_index, &
                                                 trans_index
 
-  ! -------------------------------------------------------
+  ! Area identification
+  integer, parameter, private :: area = 2
+
   ! RCS ident string for object file id
-  ! -------------------------------------------------------
   character(len=80), private :: &
        RCSid = "$Id$"
 !!***
@@ -987,11 +988,13 @@ contains
   !!   - Added optional variable spin, which if present makes the
   !!     subroutine to only calculate the matrices for a single spin
   !!     channel
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !!  SOURCE
   !!
   subroutine LNV_matrix_multiply(electrons, energy, doK, doM1, doM2, &
-                                 doM3, doM4, dophi, doE, mat_M12, &
-                                 mat_M3, mat_M4, mat_phi, spin)
+                                 doM3, doM4, dophi, doE, mat_M12,    &
+                                 mat_M3, mat_M4, mat_phi, spin, level)
 
     use numbers
     use datatypes
@@ -1006,10 +1009,11 @@ contains
 
     ! Passed variables
     real(double), dimension(:) :: electrons, energy
+    integer,      dimension(:), optional :: mat_M12, mat_M3, mat_M4, mat_phi
+    integer,                    optional :: spin
+    integer,                    optional :: level
     integer :: myid
     logical :: doK, doM1, doM2, doM3, doM4, dophi, doE
-    integer, dimension(:), optional :: mat_M12, mat_M3, mat_M4, mat_phi
-    integer,               optional :: spin
     
     ! Local variables
     real(double)              :: electrons_1, electrons_2, t0, t1
@@ -1017,15 +1021,19 @@ contains
                                  matA, matSLS, matLSL, matLHLSL,       &
                                  matLSLHL, matB, matC, matSLSLS,       &
                                  matLSLSL
-    type(cq_timer)            :: tmr_std_loc
     type(cq_timer)            :: tmr_l_tmp1
+    type(cq_timer)            :: backtrace_timer
+    integer                   :: backtrace_level
     integer                   :: ss, ss_start, ss_end
 
     ! This routine is basically calls to matrix operations, so these
     ! are timed within the routines themselves
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='LNV_mat_mult',where=1,level=2)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -100
+    call start_backtrace(t=backtrace_timer,who='LNV_matrix_multiply',&
+         where=area,level=backtrace_level)
 !****lat>$
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
@@ -1322,7 +1330,7 @@ contains
                           IPRINT_TIME_THRES3)
     
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='LNV_mat_mult')
+    call stop_backtrace(t=backtrace_timer,who='LNV_matrix_multiply')
 !****lat>$
 
     return
@@ -1750,7 +1758,7 @@ contains
     end do
     if(iprint_mat > 3 .AND. inode == ionode) then
        do stat=1,current_matrix
-          write (io_lun,fmt='(2x,"Proc: ",i5," Matrix no., length: ",i4,i8)')&
+          write (io_lun,fmt='(2x,"Proc: ",i5," Matrix no., length: ",i24)')&
                 stat, mat_p(stat)%length
        end do
     end if

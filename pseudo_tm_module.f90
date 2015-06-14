@@ -37,6 +37,7 @@ module pseudo_tm_module
   use pseudopotential_common, only: pseudopotential, core_radius, flag_angular_new
   use global_module,          only: iprint_pseudo, io_lun
   use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_pseudopot, tmr_std_basis, tmr_std_allocation
 
   implicit none
@@ -109,6 +110,8 @@ contains
 !!    Added ROBODoc header
 !!   2011/09/16 11:01 dave
 !!    Tidied to use species_module variables only
+!!   2015/06/08 lat
+!!    Added experimental backtrace
 !!  SOURCE
 !!
   subroutine init_pseudo_tm(ecore, ncf_out) 
@@ -133,11 +136,10 @@ contains
     ! For PreConquest or calcluates maximum  16/05/2003 TM
     integer, intent(out), OPTIONAL :: ncf_out
     logical :: flag_calc_max = .false.
-
-    type(cq_timer)    :: tmr_std_loc
+    type(cq_timer)    :: backtrace_timer
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='init_pseudo_tm',where=10,level=2)
+    call start_backtrace(t=backtrace_timer,who='init_pseudo_tm',where=10,level=2)
 !****lat>$
 
     call start_timer(tmr_std_pseudopot)
@@ -165,7 +167,7 @@ contains
        call deallocate_pseudo_tm  !contained in this module
        call stop_timer(tmr_std_pseudopot)    ! This is timed inside set_tm_pseudo
 !****lat<$
-       call stop_timer(t=tmr_std_loc,who='init_pseudo_tm')
+       call stop_backtrace(t=backtrace_timer,who='init_pseudo_tm')
 !****lat>$
        return
     endif
@@ -177,7 +179,7 @@ contains
     call stop_timer(tmr_std_pseudopot)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='init_pseudo_tm')
+    call stop_backtrace(t=backtrace_timer,who='init_pseudo_tm')
 !****lat>$
 
     return

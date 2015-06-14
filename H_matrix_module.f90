@@ -61,26 +61,28 @@
 !!    Understand and document onsite_T
 !   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
-!!  2015/06/05 10:03 dave
-!!    Added lines for XC GGA stress
 !!  SOURCE
 !!
 module H_matrix_module
 
   use global_module,          only: io_lun
   use timer_module,           only: start_timer, stop_timer, stop_print_timer
+  use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_hmatrix,         &
                                     tmr_std_allocation,      &
                                     tmr_std_matrices
 
   implicit none
 
+  ! Area identification
+  integer, parameter, private :: area = 3
+
   ! RCS tag for object file identification
   character(len=80), save, private :: &
        RCSid = "$Id$"
   logical :: locps_output
   integer :: locps_choice
-!!***** 
+!!***
 
 contains
 
@@ -150,10 +152,12 @@ contains
   !!   Changes for analytic evaluation of KE
   !!  2013/07/10 11:23 dave
   !!   Bug fix for sum over two components of rho even without spin (and moved rho_total alloc/dealloc)
+  !!  2015/06/08 lat 
+  !!   Added EXX+spin and experimental backtrace 
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-                          rho, size)
+                          rho, size, level)
 
     use datatypes
     use numbers 
@@ -171,7 +175,7 @@ contains
     use GenComms,                    only: gsum, end_comms,             &
                                            my_barrier, inode, ionode,   &
                                            cq_abort
-    use global_module,               only: iprint_ops,                  &
+    use global_module,               only: iprint_ops, iprint_exx,      &
                                            flag_vary_basis,             &
                                            flag_basis_set, PAOs, sf,    &
                                            paof, IPRINT_TIME_THRES1,    &
@@ -200,29 +204,39 @@ contains
                                            cDFT_NumberAtomGroups,       &
                                            cDFT_Vc, matWc
 !****lat<$
-    use global_module,               only: flag_exx, exx_alpha, exx_counter
+    use global_module,               only: flag_exx, exx_niter, exx_siter, exx_alpha
     use exx_kernel_default,          only: get_X_matrix
     use exx_module,                  only: get_X_params
-    use exx_types,                   only: exx_hgrid, exx_psolver, exx_radius   
+    use exx_types,                   only: exx_hgrid, exx_psolver, exx_radius
+    use exx_io,                      only: exx_global_write
 !****lat>$
 
     implicit none
 
     ! Passed variables
+    integer, optional :: level
     integer :: size
     logical :: rebuild_KE_NL, fixed_potential
     real(double), dimension(:)   :: electrons
     real(double), dimension(:,:) :: rho
 
     ! local variables
+    real(double), dimension(:), allocatable :: rho_total
     real(double)   :: kinetic_energy, nl_energy
     integer        :: pao_support, length, stat, paolength, matwork, spin
     type(cq_timer) :: tmr_l_hmatrix
-    type(cq_timer) :: tmr_std_loc
-    real(double), dimension(:), allocatable :: rho_total
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
+    character(len=9), dimension(2) :: print_exxspin
+
+    print_exxspin(1) = 'spin up  '
+    print_exxspin(2) = 'spin down'
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='get_H_matrix',where=3,level=3,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='get_H_matrix',where=area,&
+         level=backtrace_level,echo=.true.)
 !****lat>$
 
     ! timer
@@ -294,7 +308,7 @@ contains
     ! grid, and then a new call to get_matrix_elements_new
     ! We are calculating matdH here
     if (flag_vary_basis .and. flag_basis_set == PAOs) then
-       ! Project PAOs onto gri
+       ! Project PAOs onto grid
        if (inode == ionode .and. iprint_ops > 2) &
             write (io_lun, *) 'Doing single_pao_on_support'
        ! allocate temporary work matrices
@@ -345,31 +359,41 @@ contains
     if (flag_exx) then
        ! Ugly stuff but for now that's ok. Purpose is to adapt EXX accuracy to
        ! the SCF covergence: closer to convergence finest is the grid
-       exx_counter = exx_counter + 1
        !
        !if (inode==ionode) print*, 'exx_pulay_r0 = ', exx_pulay_r0
-       if  ( exx_counter == 0 ) then
-          ! For first H building use pure DFT. To be improve for Hartree-Fock
-          if (inode == ionode .and. iprint_ops > 2) &
+       if  ( exx_niter < exx_siter ) then
+          ! For first H building use pure DFT. To be improved for Hartree-Fock
+          if (inode == ionode .and. iprint_exx > 2) &
                write (io_lun, *) 'EXX: first guess from DFT'
-          
+          !
        else
           !
-          if (inode == ionode .and. iprint_ops > 2) &
+          if (inode == ionode .and. iprint_exx > 2) &
                write (io_lun, *) 'EXX: setting get_X_matrix'
-          call get_X_params( )
+          call get_X_params(backtrace_level)
+
+          call exx_global_write() 
           !
-          if (inode == ionode .and. iprint_ops > 2) &
-               write (io_lun, *) 'EXX: doing get_X_matrix'
-          call get_X_matrix()
-          !
-          if (inode == ionode .and. iprint_ops > 2) &
-               write (io_lun, *) 'EXX: done get_X_matrix'
+          !if (inode == ionode .and. iprint_exx > 2) &
+               !write (io_lun, *) 'EXX: doing get_X_matrix'
           do spin = 1, nspin
+             if (inode == ionode .and. iprint_exx > 2) &
+             write (io_lun, *) 'EXX: doing get_X_matrix: ', print_exxspin(spin)
+             call get_X_matrix(spin,backtrace_level)
+          end do
+          !
+          !if (inode == ionode .and. iprint_exx > 2) &
+               !write (io_lun, *) 'EXX: done get_X_matrix'
+          do spin = 1, nspin
+             if (inode == ionode .and. iprint_exx > 2) &
+             write (io_lun, *) 'EXX: done get_X_matrix: ', print_exxspin(spin)
              call matrix_sum(one, matH(spin),-exx_alpha*half, matX(spin)) 
           end do
           !
        end if
+       !
+       exx_niter = exx_niter + 1
+       !
     end if
 !****lat>$
     !
@@ -418,7 +442,7 @@ contains
 
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='get_H_matrix',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='get_H_matrix',echo=.true.)
 !****lat>$
 
     return
@@ -496,8 +520,6 @@ contains
   !!   2014/09/24 L.Truflandier
   !!   - Added temporary PBE0 and HF
   !!   - optional output of x_energy only
-  !!   2015/06/05 10:03 dave
-  !!    Added zero for XC_GGA_stress
   !!  SOURCE
   !!
   subroutine get_h_on_support(output_level, fixed_potential, &
@@ -516,14 +538,13 @@ contains
                                            functional_gga_pbe96_r99,   &
                                            functional_hyb_pbe0,        &
                                            functional_hartree_fock,    &
-                                           exx_alpha, exx_counter
+                                           exx_alpha, exx_niter, exx_siter 
      
     use XC_module,                   only: get_xc_potential,           &
                                            get_GTH_xc_potential,       &
                                            get_xc_potential_LSDA_PW92, &
                                            get_xc_potential_GGA_PBE,   &
-                                           get_xc_potential_hyb_PBE0,  &
-                                           XC_GGA_stress
+                                           get_xc_potential_hyb_PBE0
 
     use GenBlas,                     only: copy, axpy, dot, rsum
     use dimens,                      only: grid_point_volume,          &
@@ -564,7 +585,7 @@ contains
     real(double), dimension(:),   intent(out) :: electrons
 
     ! Local variables
-    integer :: n, m, nb, atom, nsf1, point, stat, i, pot_flag, igrid, spin
+    integer :: n, m, nb, atom, nsf1, point, stat, i, pot_flag, igrid, spin, exx_nit
     real(double) :: fften, electrons_tot, exx_tmp
     logical     , dimension(4)    :: dump_pot
     real(double), dimension(:),   allocatable :: xc_epsilon ! energy_density of XC
@@ -650,7 +671,6 @@ contains
     end if
     !  
     !
-    XC_GGA_stress = zero
     select case(flag_functional_type)
     case (functional_lda_pz81)
        ! NOT SPIN POLARISED
@@ -753,7 +773,7 @@ contains
        !
     case (functional_hyb_pbe0)
        !
-       if (exx_counter == 0) then
+       if ( exx_niter < exx_siter ) then
           exx_tmp = one
        else
           exx_tmp = one - exx_alpha
@@ -782,7 +802,7 @@ contains
     case (functional_hartree_fock)
        ! **<lat>** 
        ! not optimal but experimental
-       if (exx_counter == 0) then
+       if (exx_niter < exx_siter) then
           ! for the first call of get_H_matrix using Hartree-Fock method
           ! to get something not to much stupid ; use pure exchange functional
           ! in near futur such as Xalpha

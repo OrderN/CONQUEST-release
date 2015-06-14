@@ -1,3 +1,5 @@
+! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! ------------------------------------------------------------------------------
 ! $Id: exx_module.f90 XX year-mm-dd XX:XX:XXZ Lionel $
 ! -----------------------------------------------------------
 ! Module exx_module
@@ -8,19 +10,35 @@
 !!***h* Conquest/exx_module *
 !!  NAME
 !!   exx_module
+!!
+!!  PURPOSE
+!!   Holds routines called in exx_kernel_module
+!!   to compute exact exchange
+!!
+!!  USES
+!!   GenComms, dimens, datatypes, numbers, units 
+!!   group_module, cover_module, global_module
+!!   species_module, primary_module, matrix_data
+!!   atomic_density, support_spec_format
+!!   fft_interface_module, exx_types, exx_io 
+!!   DiagModule
+!!
+!!  AUTHOR
+!!   L.A.Truflandier (lat)
+!!
 !!  CREATION DATE
 !!   2011/02/11
+!!
 !!  MODIFICATION HISTORY
+!!
 !!  SOURCE
 !!
 module exx_module
 
   use datatypes
-
-  use PAO_grid_transform_module, only: check_block
   use GenComms,                  only: my_barrier, cq_abort, mtime
   use GenComms,                  only: inode, ionode, myid, root
-
+  use timer_module,              only: start_backtrace, stop_backtrace, cq_timer
   !**<lat>** ISF Poisson solver Will be available in the forthcoming version 
   !use Poisson_Solver,            only: PSolver, createKernel, gequad
 
@@ -30,12 +48,16 @@ module exx_module
   use fft_interface_module,      only: fft3_exec_wrapper, fft3_init_wrapper
 
   implicit none 
+  
+  ! Area identification
+  integer, parameter, private :: area = 13
 
   ! RCS tag for object file identification
   character(len=80), save, private :: RCSid = &
        "$Id: exx_module.f90 XX year-mm-dd XX:XX:XXZ lionel $"
+
   !!***
-  !
+
 contains
 
   subroutine exx_scal_rho_3d(inode,extent,r_int,scheme,cutoff,omega,n_gauss, &
@@ -285,7 +307,7 @@ contains
   end subroutine exx_v_on_grid
   !
   !
-  subroutine get_X_params(exx_scf_hgrid)
+  subroutine get_X_params(level)
     
     use exx_types, only: exx_psolver,p_scheme,p_scheme_default,p_cutoff,p_factor,p_omega
     use exx_types, only: pulay_factor,pulay_radius, magic_number,ewald_alpha,isf_order
@@ -294,11 +316,12 @@ contains
     use exx_types, only: exx_scheme, exx_phil, exx_mem, exx_screen, exx_alloc, exx_cutoff
     use exx_types, only: exx_cartesian, exx_overlap, exx_radius, exx_screen_pao, exx_hgrid
     use exx_types, only: unit_output_write, exx_phik, exx_gto, exx_debug
+    use exx_types, only: tmr_std_exx_setup
 
     use atomic_density, only: atomic_density_table
     use species_module, only: n_species
 
-    use global_module,  only: iprint_ops, exx_hgrid_medium, exx_hgrid_coarse
+    use global_module,  only: iprint_exx, exx_hgrid_medium, exx_hgrid_coarse, exx_alpha
     use numbers,        only: zero, very_small, one, two, three
     use units,          only: BohrToAng
     use dimens,         only: r_super_x, r_super_y, r_super_z, &
@@ -306,8 +329,9 @@ contains
                               r_h, r_nl, r_h   
     implicit none
 
-    real(double), optional, intent(in) :: exx_scf_hgrid
-    
+    !real(double), optional, intent(in) :: exx_scf_hgrid
+    integer, optional :: level
+
     character(100) :: solver, scheme
     character(100) :: phil_scheme, eri_scheme, alloc_scheme, pao_scheme
     character(100) ::  mem_scheme, scr_scheme
@@ -316,9 +340,19 @@ contains
     real(double)   :: r_shift   = 0.0_double
     real(double)   :: gs(3)     = 0.0_double
     real(double)   :: r_max, r_maxs, gs_min
-
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
     integer        :: i,j,k,l,unit
-    
+   
+    !
+!****lat<$
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='get_X_params',&
+         where=area,level=backtrace_level,echo=.true.)
+!****lat>$
+    !
+    call start_timer(tmr_std_exx_setup) 
     !
     ! **<lat>** This routine need to be re-written !
     !
@@ -533,20 +567,29 @@ contains
     end if
    
 !****lat<$
-    if (inode == ionode .and. iprint_ops > 2) &
-         write (io_lun,50) &
-         grid_spacing,     &
-         r_int,            &
-         extent,           &
-         exx_psolver
- 
-50 format (' EXX: gs = ',f8.4,', rc = ',f8.4,', extent = ',i6,', psolv = ',12a)
+    if (inode == ionode .and. iprint_exx > 2) then
+       write (io_lun,50) &
+            grid_spacing,     &
+            r_int,            &
+            extent,           &
+            trim(exx_psolver),&
+            exx_alpha 
+       
+    end if
+
+50 format (' EXX: gs = ',f6.4,', rc = ',f7.4,', extent = ',i4,', psolv = ',a,', alpha = ', f4.2)
 !****lat>$
     !
     !
+    call stop_timer(tmr_std_exx_setup,.true.)
     !
-    !write(*,1, advance='no') 'exx', ('=', j=1,80), '>' ;  write(*,*)
+!****lat<$
+    call stop_backtrace(t=backtrace_timer,who='get_X_matrix',echo=.true.)
+!****lat>$
+    !
     
+    return
+
     !! EXX Formats start here
 1   format(/1x,104a/)
 2   format(1x,34a,8x,/)
@@ -588,7 +631,6 @@ contains
 47  format( 27x,'pao_on_grid: ',a30)
 48  format( 24x,'memory_storage: ',a30)
     
-    return
   end subroutine get_X_params
   !
   !
@@ -744,84 +786,84 @@ contains
 
 
   !
-  subroutine get_neighdat(nb,ia,hl,ind,part,verbose,unit)
-    
-    use numbers,        only: three
-    use group_module,   only: parts
-    use cover_module,   only: BCS_parts
-    use global_module,  only: id_glob,atom_coord
-    use species_module, only: species_label
-    use atomic_density, only: atomic_density_table
-    use numbers,        only: zero, one, two, twopi, pi
-    !
-    use matrix_data, only: mat, Hrange, Srange
-    use exx_types,   only: prim_atomic_data, neigh_atomic_data
-    use exx_types,   only: tmr_std_exx_fetch
-    !
-    !
-    implicit none
-    !
-    type(neigh_atomic_data), intent(inout) :: nb
-    type(prim_atomic_data),  intent(inout) :: ia
-    type(neigh_atomic_data), intent(inout) :: hl
-    integer, intent(in)                    :: ind
-    integer, intent(in)                    :: part
-    logical, intent(in)                    :: verbose
-    !
-    real(double)      :: xyz_Ang(3)      
-    character(len=20) :: filename
-    integer, optional :: unit
-    !
-    call start_timer(tmr_std_exx_fetch)
-    ! Get u(v) data
-    nb%nb  = ind
-    nb%ist = mat(part,Hrange)%i_acc(ia%pr) + nb%nb - 1
-    nb%npc = mat(part,Hrange)%i_part(nb%ist)
-    nb%nic = mat(part,Hrange)%i_seq(nb%ist)
-    !
-    nb%global_part = BCS_parts%lab_cell(mat(part,Hrange)%i_part(nb%ist))
-    nb%global_num  = id_glob(parts%icell_beg(nb%global_part) +  &
-         mat(part,Hrange)%i_seq(nb%ist)-1)
-    !
-    nb%spec = BCS_parts%spec_cover(BCS_parts%icover_ibeg(nb%npc) + nb%nic-1)
-    nb%name = species_label(nb%spec)               
-    nb%radi = atomic_density_table(nb%spec)%cutoff
-    nb%nsup = mat(part,Hrange)%ndimj(nb%ist)                   
-    !
-    ! Calculate R_u
-    nb%xyz_nb(1) = atom_coord(1,nb%global_num)
-    nb%xyz_nb(2) = atom_coord(2,nb%global_num)
-    nb%xyz_nb(3) = atom_coord(3,nb%global_num)
-    !
-    nb%xyz_cv(1) = BCS_parts%xcover(BCS_parts%icover_ibeg(nb%npc) + &
-         nb%nic - 1)
-    nb%xyz_cv(2) = BCS_parts%ycover(BCS_parts%icover_ibeg(nb%npc) + &
-         nb%nic - 1)
-    nb%xyz_cv(3) = BCS_parts%zcover(BCS_parts%icover_ibeg(nb%npc) + &
-         nb%nic - 1) 
-    !
-    ! Calculate R_iu
-    nb%xyz(1) = - nb%xyz_nb(1) + hl%xyz_hl(1)
-    nb%xyz(2) = - nb%xyz_nb(2) + hl%xyz_hl(2)
-    nb%xyz(3) = - nb%xyz_nb(3) + hl%xyz_hl(3)
-    nb%r      = sqrt(dot_product(nb%xyz,nb%xyz))
-    !
-    ! Calculate D_iu
-    nb%d      = sqrt(three)*(nb%radi + hl%radi)
-    !
-    xyz_Ang(1) = nb%xyz_nb(1)
-    xyz_Ang(2) = nb%xyz_nb(2)
-    xyz_Ang(3) = nb%xyz_nb(3)
-    !
-    if ( exx_debug ) then
-       write(unit,'(I8,4X,A9,4X,A,I8,A2,I3,A,6X,A2,X,I8,X,4F12.4,3X,I3,2I8,X,F7.3,F14.8)')        &
-            nb%global_part,'{j\beta} ','{',nb%global_num,'\ ',nb%nsup,'}', nb%name, nb%global_num, &
-            xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), zero, nb%spec, ind, nb%nsup, nb%radi,zero
-    end if
-    call stop_timer(tmr_std_exx_fetch,.true.)
-
-    return
-  end subroutine get_neighdat
+!!$  subroutine get_neighdat(nb,ia,hl,ind,part,verbose,unit)
+!!$    
+!!$    use numbers,        only: three
+!!$    use group_module,   only: parts
+!!$    use cover_module,   only: BCS_parts
+!!$    use global_module,  only: id_glob,atom_coord
+!!$    use species_module, only: species_label
+!!$    use atomic_density, only: atomic_density_table
+!!$    use numbers,        only: zero, one, two, twopi, pi
+!!$    !
+!!$    use matrix_data, only: mat, Hrange, Srange
+!!$    use exx_types,   only: prim_atomic_data, neigh_atomic_data
+!!$    use exx_types,   only: tmr_std_exx_fetch
+!!$    !
+!!$    !
+!!$    implicit none
+!!$    !
+!!$    type(neigh_atomic_data), intent(inout) :: nb
+!!$    type(prim_atomic_data),  intent(inout) :: ia
+!!$    type(neigh_atomic_data), intent(inout) :: hl
+!!$    integer, intent(in)                    :: ind
+!!$    integer, intent(in)                    :: part
+!!$    logical, intent(in)                    :: verbose
+!!$    !
+!!$    real(double)      :: xyz_Ang(3)      
+!!$    character(len=20) :: filename
+!!$    integer, optional :: unit
+!!$    !
+!!$    call start_timer(tmr_std_exx_fetch)
+!!$    ! Get u(v) data
+!!$    nb%nb  = ind
+!!$    nb%ist = mat(part,Hrange)%i_acc(ia%pr) + nb%nb - 1
+!!$    nb%npc = mat(part,Hrange)%i_part(nb%ist)
+!!$    nb%nic = mat(part,Hrange)%i_seq(nb%ist)
+!!$    !
+!!$    nb%global_part = BCS_parts%lab_cell(mat(part,Hrange)%i_part(nb%ist))
+!!$    nb%global_num  = id_glob(parts%icell_beg(nb%global_part) +  &
+!!$         mat(part,Hrange)%i_seq(nb%ist)-1)
+!!$    !
+!!$    nb%spec = BCS_parts%spec_cover(BCS_parts%icover_ibeg(nb%npc) + nb%nic-1)
+!!$    nb%name = species_label(nb%spec)               
+!!$    nb%radi = atomic_density_table(nb%spec)%cutoff
+!!$    nb%nsup = mat(part,Hrange)%ndimj(nb%ist)                   
+!!$    !
+!!$    ! Calculate R_u
+!!$    nb%xyz_nb(1) = atom_coord(1,nb%global_num)
+!!$    nb%xyz_nb(2) = atom_coord(2,nb%global_num)
+!!$    nb%xyz_nb(3) = atom_coord(3,nb%global_num)
+!!$    !
+!!$    nb%xyz_cv(1) = BCS_parts%xcover(BCS_parts%icover_ibeg(nb%npc) + &
+!!$         nb%nic - 1)
+!!$    nb%xyz_cv(2) = BCS_parts%ycover(BCS_parts%icover_ibeg(nb%npc) + &
+!!$         nb%nic - 1)
+!!$    nb%xyz_cv(3) = BCS_parts%zcover(BCS_parts%icover_ibeg(nb%npc) + &
+!!$         nb%nic - 1) 
+!!$    !
+!!$    ! Calculate R_iu
+!!$    nb%xyz(1) = - nb%xyz_nb(1) + hl%xyz_hl(1)
+!!$    nb%xyz(2) = - nb%xyz_nb(2) + hl%xyz_hl(2)
+!!$    nb%xyz(3) = - nb%xyz_nb(3) + hl%xyz_hl(3)
+!!$    nb%r      = sqrt(dot_product(nb%xyz,nb%xyz))
+!!$    !
+!!$    ! Calculate D_iu
+!!$    nb%d      = sqrt(three)*(nb%radi + hl%radi)
+!!$    !
+!!$    xyz_Ang(1) = nb%xyz_nb(1)
+!!$    xyz_Ang(2) = nb%xyz_nb(2)
+!!$    xyz_Ang(3) = nb%xyz_nb(3)
+!!$    !
+!!$    if ( exx_debug ) then
+!!$       write(unit,'(I8,4X,A9,4X,A,I8,A2,I3,A,6X,A2,X,I8,X,4F12.4,3X,I3,2I8,X,F7.3,F14.8)')        &
+!!$            nb%global_part,'{j\beta} ','{',nb%global_num,'\ ',nb%nsup,'}', nb%name, nb%global_num, &
+!!$            xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), zero, nb%spec, ind, nb%nsup, nb%radi,zero
+!!$    end if
+!!$    call stop_timer(tmr_std_exx_fetch,.true.)
+!!$
+!!$    return
+!!$  end subroutine get_neighdat
 
   subroutine get_halodat(hl,kl,ind,part_cover,part,which,verbose,unit)
 
@@ -983,34 +1025,34 @@ contains
     return
   end subroutine get_iprimdat
 
-  subroutine get_ghostdat(hl)
-    
-    use units,          only: BohrToAng
-    use numbers,        only: very_small, zero, three
-    use primary_module, only: bundle
-    use species_module, only: species_label,nsf_species
-    use atomic_density, only: atomic_density_table
-    use support_spec_format, only: supports_on_atom, flag_one_to_one
-    !
-    use matrix_data, only: mat, Hrange, Srange
-    use exx_types, only: prim_atomic_data, neigh_atomic_data
-    use exx_types, only: tmr_std_exx_fetch
-    use group_module,only: parts 
-    use GenComms,    only: inode
-    !
-    implicit none
-    !
-    type(neigh_atomic_data),intent(inout) :: hl
-    !
-    !call start_timer(tmr_std_exx_fetch)
-    ! Get u(v) data
-    hl%xyz_hl(1) = 0_double
-    hl%xyz_hl(2) = 0_double
-    hl%xyz_hl(3) = 0_double
-    !call stop_timer(tmr_std_exx_fetch,.true.)
-    !
-    return
-  end subroutine get_ghostdat
+!!$  subroutine get_ghostdat(hl)
+!!$    
+!!$    use units,          only: BohrToAng
+!!$    use numbers,        only: very_small, zero, three
+!!$    use primary_module, only: bundle
+!!$    use species_module, only: species_label,nsf_species
+!!$    use atomic_density, only: atomic_density_table
+!!$    use support_spec_format, only: supports_on_atom, flag_one_to_one
+!!$    !
+!!$    use matrix_data, only: mat, Hrange, Srange
+!!$    use exx_types, only: prim_atomic_data, neigh_atomic_data
+!!$    use exx_types, only: tmr_std_exx_fetch
+!!$    use group_module,only: parts 
+!!$    use GenComms,    only: inode
+!!$    !
+!!$    implicit none
+!!$    !
+!!$    type(neigh_atomic_data),intent(inout) :: hl
+!!$    !
+!!$    !call start_timer(tmr_std_exx_fetch)
+!!$    ! Get u(v) data
+!!$    hl%xyz_hl(1) = 0_double
+!!$    hl%xyz_hl(2) = 0_double
+!!$    hl%xyz_hl(3) = 0_double
+!!$    !call stop_timer(tmr_std_exx_fetch,.true.)
+!!$    !
+!!$    return
+!!$  end subroutine get_ghostdat
 
   !!***
 end module exx_module

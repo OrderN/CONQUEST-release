@@ -49,14 +49,16 @@ module EarlySCMod
 
   use datatypes
   use global_module,          only: io_lun, area_SC
-  use timer_module,           only: start_timer, stop_timer
+  use timer_module,           only: start_timer, stop_timer, cq_timer
+  use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_chargescf
 
   implicit none
 
-  ! -------------------------------------------------------
+  ! Area identification
+  integer, parameter, private :: area = 5
+
   ! RCS ident string for object file id
-  ! -------------------------------------------------------
   character(len=80), save, private :: &
        RCSid = "$Id$"
 
@@ -1002,11 +1004,13 @@ contains
   !!     subroutines get_new_rho_nospin and get_new_rho_spin
   !!   - Renamed the subroutine back to get_new_rho
   !!   - Removed redundant input parameter real(double) mu
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !!  SOURCE
   !!
   subroutine get_new_rho(record, reset_L, fixed_potential, vary_mu,  &
                          n_CG_L_iterations, tolerance, total_energy, &
-                         rhoin, rhoout, size)
+                         rhoin, rhoout, size, level)
 
     use datatypes
     use logicals
@@ -1026,16 +1030,28 @@ contains
     implicit none
 
     ! Passed Variables
+    integer, optional :: level
     logical :: record, reset_L, fixed_potential, vary_mu
     integer :: size, temp_supp_fn
     integer :: n_CG_L_iterations
     real(double) :: tolerance, total_energy
     real(double), dimension(:,:) :: rhoin, rhoout
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
+
     ! Local variables
     real(double) :: start_BE, new_BE, Ltol
     real(double), dimension(nspin) :: electrons, energy_spin
+    
+!****lat<$
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='get_new_rho',where=area,&
+         level=backtrace_level,echo=.true.)
+!****lat>$
 
-    call get_H_matrix(.false., fixed_potential, electrons, rhoin, size)
+    call get_H_matrix(.false., fixed_potential, electrons, rhoin, &
+         size, backtrace_level)
 
     if (flag_perform_cDFT) then
        call cdft_min(reset_L, fixed_potential, vary_mu, &
@@ -1045,21 +1061,22 @@ contains
        ! Find minimum density matrix
        call stop_timer(tmr_std_chargescf)
        call FindMinDM(n_CG_L_iterations, vary_mu, Ltol, inode, ionode, &
-                      reset_L, record)
+                      reset_L, record, backtrace_level)
        call start_timer(tmr_std_chargescf)
 
-       ! If we're using O(N), we only have L, and we need K - if
-       ! diagonalisation, we have K
+       ! If we're using O(N), we only have L, and we need K
+       ! if diagonalisation, we have K
        if (.not. diagon) then
-          call LNV_matrix_multiply(electrons, energy_spin, doK,    &
-                                   dontM1, dontM2, dontM3, dontM4, &
-                                   dontphi, dontE)
+          call LNV_matrix_multiply(electrons, energy_spin, doK,      &
+                                   dontM1,  dontM2, dontM3, dontM4,  &
+                                   dontphi, dontE, level=backtrace_level)
        end if
        ! Get total energy
        if (flag_check_DFT) then
-          call get_energy(total_energy, .false.)
+          call get_energy(total_energy=total_energy,printDFT=.false., &
+               level=backtrace_level)
        else
-          call get_energy(total_energy)
+          call get_energy(total_energy=total_energy,level=backtrace_level)
        endif
     end if ! if (flag_perform_cDFT) then
 
@@ -1067,7 +1084,7 @@ contains
     temp_supp_fn = allocate_temp_fn_on_grid(sf)
     call stop_timer(tmr_std_chargescf) ! This routine is always call within area 5
     call get_electronic_density(rhoout, electrons, supportfns, &
-                                temp_supp_fn, inode, ionode, size)
+                                temp_supp_fn, inode, ionode, size, backtrace_level)
     call start_timer(tmr_std_chargescf)
     call free_temp_fn_on_grid(temp_supp_fn)
 
@@ -1075,8 +1092,12 @@ contains
     !TM Nov2007
     if (flag_check_DFT) then
        call get_H_matrix(.false., fixed_potential, electrons, rhoout, size)
-       call get_energy(total_energy, flag_check_DFT)
+       call get_energy(total_energy, flag_check_DFT, backtrace_level)
     endif
+
+!****lat<$
+    call stop_backtrace(t=backtrace_timer,who='get_new_rho',echo=.true.)
+!****lat>$
 
     return
 

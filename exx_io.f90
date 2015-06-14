@@ -1,3 +1,21 @@
+! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! ------------------------------------------------------------------------------
+! $Id: exx_kernel_default.f90 XX year-mm-dd XX:XX:XXZ Lionel $
+! -----------------------------------------------------------
+! Module exx_io.f90
+! -----------------------------------------------------------
+! Code area 13: EXX
+! -----------------------------------------------------------
+
+!!***h* Conquest/exx_kernel_default *
+!!  NAME
+!!   exx_module
+!!  CREATION DATE
+!!   2011/02/11
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
 module exx_io
   
   use datatypes
@@ -7,16 +25,17 @@ module exx_io
   use exx_types,         ONLY: tmr_std_exx_write     
   use exx_types,         ONLY: unit_global_write
   !use exx_types,         ONLY: exx_gto
-
-  use io_module,                 ONLY: get_file_name, io_assign, io_close
+  use io_module,                 ONLY: get_file_name
+  use input_module,              ONLY: io_assign, io_close
   use GenComms,                  ONLY: inode, ionode  
+  !use sfc_partitions_module,     ONLY: parts
 
   implicit none
   
 contains
   
-subroutine exx_global_write()
-    
+  subroutine exx_global_write()
+
     use datatypes
     use numbers,                ONLY: zero
     use matrix_data,            ONLY: mat, Hrange, Srange, Xrange, SXrange
@@ -31,7 +50,7 @@ subroutine exx_global_write()
     use group_module,           ONLY: parts   ! new
 
     implicit none
-    
+
     ! << Local variables >>
     real(double), dimension(3) :: ip_xyz, nb_xyz
     real(double), dimension(3) :: xyz_ipnb
@@ -44,30 +63,57 @@ subroutine exx_global_write()
     integer                    :: nb_spec, ip_spec
     integer                    :: ip_lab_cell, unit
     character(len=2)           :: nb_name, ip_name
-    character(len=20)          :: filename
-    
+    character(len=23)          :: filename, filenamexyz1, filenamexyz2, filenamexyz3 
+
     integer                    :: part, memb, ip_num, iprim, ip_nsup, neigh ! new
     integer                    :: nb_global_part, nb_global_num, nb_nsup    ! new
-    integer                    :: i, j, k
-    
+    integer                    :: i, j, k, n_atoms
+
     real(double)               :: ip_radi, nb_radi
+    integer                    :: unit_local_write1, unit_local_write2, unit_local_write3 
 
-    call start_timer(tmr_std_exx_write)
+    !call start_timer(tmr_std_exx_write)
 
-    call get_file_name('Exx_global',numprocs,inode,filename)
+    call get_file_name('proc_partitions' ,numprocs,inode,filename)
+    call get_file_name('proc_atoms_stnd' ,numprocs,inode,filenamexyz1)
+    call get_file_name('proc_atoms_part' ,numprocs,inode,filenamexyz2)
+    call get_file_name('proc_atoms_proc' ,numprocs,inode,filenamexyz3)
+
+    filenamexyz1 = trim(filenamexyz1)//'.xyz'
+    filenamexyz2 = trim(filenamexyz2)//'.xyz'
+    filenamexyz3 = trim(filenamexyz3)//'.xyz'
 
     call io_assign(unit_global_write)
     unit=unit_global_write
     open(unit,file=filename)
 
+    call io_assign(unit_local_write1)
+    open(unit_local_write1,file=filenamexyz1)
+
+    call io_assign(unit_local_write2)
+    open(unit_local_write2,file=filenamexyz2)
+
+    call io_assign(unit_local_write3)
+    open(unit_local_write3,file=filenamexyz3)
+
     call hf_write_info(unit,inode,10,bundle%groups_on_node,0,0,0,0, &
          0,0,'XX',xyz_ghost,r_ghost,0,0,0,zero,zero,0)
 
+    n_atoms = 0
+    ! count atoms on node
+    do part = 1,bundle%groups_on_node ! previously np
+       n_atoms = n_atoms + bundle%nm_nodgroup(part)
+    end do
+    write(unit_local_write1,'(4X,I8)') n_atoms
+    write(unit_local_write1,*)
+    write(unit_local_write2,'(4X,I8)') n_atoms
+    write(unit_local_write2,*)
+    write(unit_local_write3,'(4X,I8)') n_atoms
+    write(unit_local_write3,*)
 
-    
     ! Loop over primary set partition <part>
     part_loop: do part = 1,bundle%groups_on_node ! previously np
-       
+
        call hf_write_info(unit,inode,20,0,parts%ngnode(parts%inode_beg(inode)+part-1), &
             bundle%nm_nodgroup(part),0,0,0,0,'XX',xyz_ghost,r_ghost,0,0,0,zero,zero,0)
 
@@ -76,11 +122,11 @@ subroutine exx_global_write()
           ! for each member <memb> of the partition <part>
           iprim = 0
           primary_loop: do memb = 1, bundle%nm_nodgroup(part) ! previously ip             
-             
+
              ip_num = bundle%nm_nodbeg(part) + memb - 1 ! new
              iprim  = iprim + 1                         ! new
              ip     = bundle%ig_prim(iprim)             ! new
-             
+
              ip_spec     = bundle%species(ip_num)
              ip_name     = species_label(bundle%species(ip_num))
              !ip_nsup     = supports_on_atom(ip)%nsuppfuncs
@@ -101,95 +147,114 @@ subroutine exx_global_write()
              ip_xyz(2) = bundle%yprim(ip_num)
              ip_xyz(3) = bundle%zprim(ip_num)             
 
-             call hf_write_info(unit,inode,30,0,0,0,memb,supports_on_atom(ip)%nsuppfuncs, &
+             call hf_write_info(unit,inode,31,0,0,0,memb,supports_on_atom(ip)%nsuppfuncs, &
                   Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
-             
-             ! consider the neighbours <n_nab(memb)> of the member <memb> 
-             ! within the partition <part> using the cutoff [Hrange] of H
-             neighbours_loop_Hrange: do neigh = 1, mat(part,Xrange)%n_nab(memb)                 
-                
-                ist   = mat(part,Xrange)%i_acc(memb) + neigh - 1
-                npc   = mat(part,Xrange)%i_part(ist)
-                nic   = mat(part,Xrange)%i_seq(ist)
-                
-                nb_global_part = BCS_parts%lab_cell(mat(part,Xrange)%i_part(ist))
-                nb_global_num  = id_glob(parts%icell_beg(nb_global_part) +  &
-                     mat(part,Xrange)%i_seq(ist)-1)
-                
-                nb_xyz(1) = BCS_parts%xcover(BCS_parts%icover_ibeg(npc) + nic - 1)
-                nb_xyz(2) = BCS_parts%ycover(BCS_parts%icover_ibeg(npc) + nic - 1)
-                nb_xyz(3) = BCS_parts%zcover(BCS_parts%icover_ibeg(npc) + nic - 1)                
 
-                nb_spec   = BCS_parts%spec_cover(BCS_parts%icover_ibeg(npc) + nic - 1)
-                nb_name   = species_label(nb_spec)                
-                !nb_nsup   = supports_on_atom(nb_global_num)%nsuppfuncs
-                nb_radi   = atomic_density_table(nb_spec)%cutoff
-                
-                !if (exx_gto .and. flag_one_to_one) then
-                !   nb_nsup = gto(nb_spec)%nprim
-                !else
-                nb_nsup = mat(part,Xrange)%ndimj(ist)                   
-                !end if
-
-                xyz_ipnb  = ip_xyz - nb_xyz
-                r_ipnb    = sqrt(dot_product(xyz_ipnb,xyz_ipnb))                              
-                
-                call hf_write_info(unit,inode,60,0,0,0,0,nb_nsup, &
-                     0,0,nb_name,nb_xyz,r_ipnb,nb_spec,neigh,nb_global_num,nb_radi,zero,0)
-                
-             end do neighbours_loop_Hrange
-
-             call hf_write_info(unit,inode,30,0,0,0,memb,supports_on_atom(ip)%nsuppfuncs, &
-                  SXrange,mat(part,SXrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+             call hf_write_info(unit_local_write1,inode,32,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
+                  memb,supports_on_atom(ip)%nsuppfuncs, &
+                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
-           
+             call hf_write_info(unit_local_write2,inode,33,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
+                  memb,supports_on_atom(ip)%nsuppfuncs, &
+                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+                  ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
+
+             call hf_write_info(unit_local_write3,inode,34,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
+                  memb,supports_on_atom(ip)%nsuppfuncs, &
+                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+                  ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
+
              ! consider the neighbours <n_nab(memb)> of the member <memb> 
-             ! within the partition <part> using the cutoff [Srange] of S
-             neighbours_loop_Srange: do neigh = 1, mat(part,SXrange)%n_nab(memb)
-
-                ist   = mat(part,SXrange)%i_acc(memb) + neigh - 1
-                npc   = mat(part,SXrange)%i_part(ist)
-                nic   = mat(part,SXrange)%i_seq(ist)
-                
-                nb_global_part = BCS_parts%lab_cell(mat(part,SXrange)%i_part(ist))
-                nb_global_num  = id_glob(parts%icell_beg(nb_global_part) +  &
-                     mat(part,SXrange)%i_seq(ist)-1)
-                
-                nb_xyz(1) = BCS_parts%xcover(BCS_parts%icover_ibeg(npc) + nic - 1)
-                nb_xyz(2) = BCS_parts%ycover(BCS_parts%icover_ibeg(npc) + nic - 1)
-                nb_xyz(3) = BCS_parts%zcover(BCS_parts%icover_ibeg(npc) + nic - 1)                
-                
-                nb_spec   = BCS_parts%spec_cover(BCS_parts%icover_ibeg(npc) + nic - 1)
-                nb_name   = species_label(nb_spec)                
-                !nb_nsup   = supports_on_atom(nb_global_num)%nsuppfuncs
-                nb_radi   = atomic_density_table(nb_spec)%cutoff
-
-                !if (exx_gto .and. flag_one_to_one) then
-                !   nb_nsup = gto(nb_spec)%nprim
-                !else
-                nb_nsup = mat(part,Xrange)%ndimj(ist)                   
-                !end if
-
-                xyz_ipnb  = ip_xyz - nb_xyz
-                r_ipnb    = sqrt(dot_product(xyz_ipnb,xyz_ipnb))                             
-                
-                call hf_write_info(unit,inode,60,0,0,0,0,nb_nsup, &
-                     0,0,nb_name,nb_xyz,r_ipnb,nb_spec,neigh,nb_global_num,nb_radi,zero,0)
-                                
-             end do neighbours_loop_Srange
-             
-                         
+             ! within the partition <part> using the cutoff [Hrange] of H
+!!$             neighbours_loop_Hrange: do neigh = 1, mat(part,Xrange)%n_nab(memb)                 
+!!$
+!!$                ist   = mat(part,Xrange)%i_acc(memb) + neigh - 1
+!!$                npc   = mat(part,Xrange)%i_part(ist)
+!!$                nic   = mat(part,Xrange)%i_seq(ist)
+!!$
+!!$                nb_global_part = BCS_parts%lab_cell(mat(part,Xrange)%i_part(ist))
+!!$                nb_global_num  = id_glob(parts%icell_beg(nb_global_part) +  &
+!!$                     mat(part,Xrange)%i_seq(ist)-1)
+!!$
+!!$                nb_xyz(1) = BCS_parts%xcover(BCS_parts%icover_ibeg(npc) + nic - 1)
+!!$                nb_xyz(2) = BCS_parts%ycover(BCS_parts%icover_ibeg(npc) + nic - 1)
+!!$                nb_xyz(3) = BCS_parts%zcover(BCS_parts%icover_ibeg(npc) + nic - 1)                
+!!$
+!!$                nb_spec   = BCS_parts%spec_cover(BCS_parts%icover_ibeg(npc) + nic - 1)
+!!$                nb_name   = species_label(nb_spec)                
+!!$                !nb_nsup   = supports_on_atom(nb_global_num)%nsuppfuncs
+!!$                nb_radi   = atomic_density_table(nb_spec)%cutoff
+!!$
+!!$                !if (exx_gto .and. flag_one_to_one) then
+!!$                !   nb_nsup = gto(nb_spec)%nprim
+!!$                !else
+!!$                nb_nsup = mat(part,Xrange)%ndimj(ist)                   
+!!$                !end if
+!!$
+!!$                xyz_ipnb  = ip_xyz - nb_xyz
+!!$                r_ipnb    = sqrt(dot_product(xyz_ipnb,xyz_ipnb))                              
+!!$
+!!$                call hf_write_info(unit,inode,60,0,0,0,0,nb_nsup, &
+!!$                     0,0,nb_name,nb_xyz,r_ipnb,nb_spec,neigh,nb_global_num,nb_radi,zero,0)
+!!$
+!!$             end do neighbours_loop_Hrange
+!!$
+!!$             call hf_write_info(unit,inode,30,0,0,0,memb,supports_on_atom(ip)%nsuppfuncs, &
+!!$                  SXrange,mat(part,SXrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+!!$                  ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
+!!$
+!!$
+!!$             ! consider the neighbours <n_nab(memb)> of the member <memb> 
+!!$             ! within the partition <part> using the cutoff [Srange] of S
+!!$             neighbours_loop_Srange: do neigh = 1, mat(part,SXrange)%n_nab(memb)
+!!$
+!!$                ist   = mat(part,SXrange)%i_acc(memb) + neigh - 1
+!!$                npc   = mat(part,SXrange)%i_part(ist)
+!!$                nic   = mat(part,SXrange)%i_seq(ist)
+!!$
+!!$                nb_global_part = BCS_parts%lab_cell(mat(part,SXrange)%i_part(ist))
+!!$                nb_global_num  = id_glob(parts%icell_beg(nb_global_part) +  &
+!!$                     mat(part,SXrange)%i_seq(ist)-1)
+!!$
+!!$                nb_xyz(1) = BCS_parts%xcover(BCS_parts%icover_ibeg(npc) + nic - 1)
+!!$                nb_xyz(2) = BCS_parts%ycover(BCS_parts%icover_ibeg(npc) + nic - 1)
+!!$                nb_xyz(3) = BCS_parts%zcover(BCS_parts%icover_ibeg(npc) + nic - 1)                
+!!$
+!!$                nb_spec   = BCS_parts%spec_cover(BCS_parts%icover_ibeg(npc) + nic - 1)
+!!$                nb_name   = species_label(nb_spec)                
+!!$                !nb_nsup   = supports_on_atom(nb_global_num)%nsuppfuncs
+!!$                nb_radi   = atomic_density_table(nb_spec)%cutoff
+!!$
+!!$                !if (exx_gto .and. flag_one_to_one) then
+!!$                !   nb_nsup = gto(nb_spec)%nprim
+!!$                !else
+!!$                nb_nsup = mat(part,Xrange)%ndimj(ist)                   
+!!$                !end if
+!!$
+!!$                xyz_ipnb  = ip_xyz - nb_xyz
+!!$                r_ipnb    = sqrt(dot_product(xyz_ipnb,xyz_ipnb))                             
+!!$
+!!$                call hf_write_info(unit,inode,60,0,0,0,0,nb_nsup, &
+!!$                     0,0,nb_name,nb_xyz,r_ipnb,nb_spec,neigh,nb_global_num,nb_radi,zero,0)
+!!$
+!!$             end do neighbours_loop_Srange
+!!$
+!!$
           end do primary_loop
        end if check_members
     end do part_loop
     
     call hf_write_info(unit,inode,0,0,0,0,0,0, &
          0,0,'XX',xyz_ghost,r_ghost,0,0,0,zero,zero,0)
-    
+
     call io_close(unit)
-    call stop_timer(tmr_std_exx_write,.true.)
+    call io_close(unit_local_write1)
+    call io_close(unit_local_write2)
+    call io_close(unit_local_write3)
+
+    !call stop_timer(tmr_std_exx_write,.true.)
 
     return
   end subroutine exx_global_write
@@ -233,9 +298,22 @@ subroutine exx_global_write()
     real(double), dimension(3) :: xyz_Ang
     real(double)               :: r_Ang
     integer                    :: i, j, k, l    
+    CHARACTER(len=2)                :: pte(103)
+
+    DATA pte /  "H ", "He", "Li", "Be", "B ", "C ", "N ", "O ", "F ", "Ne", &
+         "Na", "Mg", "Al", "Si", "P ", "S ", "Cl", "Ar", "K ", "Ca", &
+         "Sc", "Ti", "V ", "Cr", "Mn", "Fe", "Co", "Ni", "Cu", "Zn", &
+         "Ga", "Ge", "As", "Se", "Br", "Kr", "Rb", "Sr", "Y ", "Zr", &
+         "Nb", "Mo", "Tc", "Ru", "Rh", "Pd", "Ag", "Cd", "In", "St", &
+         "Sb", "Te", "I ", "Xe", "Cs", "Ba", "La", "Ce", "Pr", "Nd", &
+         "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho", "Er", "Tm", "Yb", &
+         "Lu", "Hf", "Ta", "W ", "Re", "Os", "Ir", "Pt", "Au", "Hg", &
+         "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", &
+         "Pa", "U ", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm", &
+         "Md", "No", "Lr"/
     
     r_Ang   = r!*BohrtoAng
-    xyz_Ang = xyz!*BohrtoAng
+    xyz_Ang = xyz*BohrtoAng
 
     call start_timer(tmr_std_exx_write)
 
@@ -295,6 +373,19 @@ subroutine exx_global_write()
             
        write(unit,'(18X,A,11X,A,11X,A,7X,A11,X,A5,X,A7,X,A8,X,A3,2X,A5)') &
             'x','y','z','distance(A)','spec.','neighb.','lab.cell','nsf','radii'
+
+    case(31)   
+       write(unit,'(6X,A2,4X,3F12.4)') name, xyz_Ang(1), xyz_Ang(2), xyz_Ang(3)
+
+    case(32)   
+       write(unit,'(6X,A2,4X,3F12.4,4X,I8)') name, xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
+
+    case(33)   
+       write(unit,'(6X,A2,4X,3F12.4,4X,I8)') pte(partition), xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
+
+    case(34)   
+       write(unit,'(6X,A2,4X,3F12.4,4X,I8)') pte(inode), xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
+
 
     case(60)
        if (r_Ang > very_small) then

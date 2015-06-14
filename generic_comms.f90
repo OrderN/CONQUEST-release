@@ -960,6 +960,8 @@ contains
 !!    Properly implemented
 !!   08/06/2001 dave
 !!    Fixed copy so that temp = variable (not the other way around !)
+!!   05/12/2014 lat
+!!    Fixed mod_gsum rounded to 0 
 !!  SOURCE
 !!
   subroutine double_two_gsumv(variable, len1, len2)
@@ -978,6 +980,9 @@ contains
 
     ! Make the buffersize an integer multiple of len1
     mod_dgsum = aint(double_gsum_buf/real(len1,double)) ! Round down
+    ! mod_dgsum must be at least equal to 1
+    if (mod_dgsum == 0) mod_dgsum = 1
+    !print*, 'mod_dgsum', mod_dgsum, 'double_gsum_buf', double_gsum_buf, 'real(len1,double)', real(len1,double)
     mod_dgsum_buf = mod_dgsum*len1
     t1 = MPI_wtime()
     if(len1<=0.OR.len2<=0) &
@@ -2026,23 +2031,25 @@ contains
 !!   07/06/2001 dave
 !!  MODIFICATION HISTORY
 !!   2008/07/24 ast
-!!     Added timers
+!!    - Added timers
+!!   2015/06/08 lat
+!!    - Added experimental backtrace
 !!  SOURCE
 !!
   subroutine my_barrier()
 
     use global_module, ONLY: IPRINT_TIME_THRES3
-    use timer_module,  ONLY: cq_timer,start_timer,stop_print_timer,stop_timer,&
-         WITH_LEVEL
+    use timer_module,  ONLY: start_timer,stop_print_timer,stop_timer,WITH_LEVEL
+    use timer_module,  ONLY: start_backtrace,stop_backtrace,cq_timer
     
     implicit none
 
     integer        :: ierr
     type(cq_timer) :: tmr_l_tmp1
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='my_barrier',where=9)
+    call start_backtrace(t=backtrace_timer,who='my_barrier',where=9)
 !****lat>$
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
@@ -2050,7 +2057,7 @@ contains
     call stop_print_timer(tmr_l_tmp1,"my_barrier",IPRINT_TIME_THRES3)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='my_barrier')
+    call stop_backtrace(t=backtrace_timer,who='my_barrier')
 !****lat>$
 
     if(ierr/=MPI_success) call cq_abort('my_barrier: problem with MPI_barrier')

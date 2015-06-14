@@ -30,12 +30,16 @@ module initialisation
   use datatypes
   use global_module,          only: io_lun
   use timer_module,           only: start_timer, stop_timer, cq_timer 
+  use timer_module,           only: start_backtrace, stop_backtrace
   use timer_stdclocks_module, only: tmr_std_initialisation,  &
                                     tmr_std_densitymat,      &
                                     tmr_std_matrices
   use timer_module,           only: init_timing_system
 
   implicit none
+
+  ! Area identification
+  integer, parameter, private :: area = 1
 
   ! RCS tag for object file identification
   character(len=80), save, private :: &
@@ -99,6 +103,8 @@ contains
   !!    Statements were added for calculating only disperions
   !!   2011/12/11 L.Tong
   !!    Removed redundant parameter number_of_bands
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !!  SOURCE
   !!
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
@@ -127,10 +133,10 @@ contains
     real(double)      :: total_energy
 
     ! Local variables
-    type(cq_timer)    :: tmr_std_loc
+    integer, parameter:: std_level_loc = 0
+    type(cq_timer)    :: backtrace_timer
     logical           :: start, start_L
     logical           :: read_phi
-
 
     character(len=40) :: restart_file
 
@@ -139,7 +145,8 @@ contains
     call init_reg_mem
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='initialise',where=1,level=0,echo=.true.)
+    call start_backtrace(t=backtrace_timer,who='initialise',&
+         where=area,level=std_level_loc,echo=.true.)
 !****lat>$
 
     ! Read input
@@ -171,19 +178,19 @@ contains
        find_chdens = .true.
     end if
 
-    call set_up(find_chdens)
+    call set_up(find_chdens,std_level_loc+1)
     
     call my_barrier()
 
-    call initial_phis(mu, restart_file, read_phi, vary_mu, start)
+    call initial_phis(mu, restart_file, read_phi, vary_mu, start,std_level_loc+1)
 
     call initial_H(start, start_L, find_chdens, fixed_potential, &
-                   vary_mu, total_energy)
+                   vary_mu, total_energy,std_level_loc+1)
 
     call stop_timer(tmr_std_initialisation)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='initialise',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='initialise',echo=.true.)
 !****lat>$
 
     return
@@ -246,9 +253,11 @@ contains
   !!    Add call for make_glob2node (necessary for matrix reconstruction)
   !!   2013/12/03 M.Arita
   !!    Added call for immi_XL for XL-BOMD
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !!  SOURCE
   !!
-  subroutine set_up(find_chdens)
+  subroutine set_up(find_chdens,level)
 
     use datatypes
     use global_module,          only: iprint_init, flag_read_blocks,   &
@@ -319,17 +328,22 @@ contains
     implicit none
 
     ! Passed variables
-    logical :: find_chdens
+    logical          :: find_chdens
+    integer,optional :: level
 
     ! Local variables
     complex(double_cplx), allocatable, &
          dimension(:) :: chdenr
     integer           :: i, stat, spec
     real(double)      :: rcut_BCS  !TM 26/Jun/2003
-    type(cq_timer)    :: tmr_std_loc
+    type(cq_timer)    :: backtrace_timer
+    integer           :: backtrace_level
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='setup',where=1,level=1)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='set_up',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     ! Set organisation of blocks of grid-points.
@@ -544,7 +558,7 @@ contains
         write (io_lun, *) 'Done init_pseudo '
 
 !****lat<$
-   call stop_timer(t=tmr_std_loc,who='set_up')
+   call stop_backtrace(t=backtrace_timer,who='set_up',echo=.true.)
 !****lat>$
 
    return
@@ -639,9 +653,11 @@ contains
  !!    Changed start_blip into read_option for unified naming
  !!   2011/11/28 07:55 dave
  !!    Added call for representing NLPFs with blips
+ !!   2015/06/08 lat
+ !!    Added experimental backtrace
  !!  SOURCE
  !!
- subroutine initial_phis(mu, restart_file, read_phi, vary_mu, start)
+ subroutine initial_phis(mu, restart_file, read_phi, vary_mu, start, level)
 
     use datatypes
     use blip,                        only: init_blip_flag, make_pre,   &
@@ -687,15 +703,21 @@ contains
     real(double)      :: mu
     character(len=40) :: restart_file
     logical           :: read_phi, vary_mu, start
+    integer, optional :: level
 
     ! Local variables
-    type(cq_timer)    :: tmr_std_loc
+    type(cq_timer)    :: backtrace_timer
+    integer           :: backtrace_level
     real(double)      :: mu_copy
     real(double)      :: factor
-    integer           :: isf, np, ni, iprim, n_blip, n_run, spec, this_nsf
+    integer           :: isf, np, ni, iprim, n_blip
+    integer           :: n_run, spec, this_nsf
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='initial_phis',where=1,level=1,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='initial_phis',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     ! Used by pseudopotentials as well as PAOs
@@ -779,7 +801,7 @@ contains
              end do
           end if
           iprim=0
-          call start_timer(t=tmr_std_matrices)
+          call start_timer(tmr_std_matrices)
           do np=1,bundle%groups_on_node
              if(bundle%nm_nodgroup(np) > 0) then
                 do ni=1,bundle%nm_nodgroup(np)
@@ -845,8 +867,8 @@ contains
     end if
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='initial_phis',echo=.true.)
-!****lat>$
+    call stop_backtrace(t=backtrace_timer,who='initial_phis',echo=.true.)
+!****Lat>$
 
     return
   end subroutine initial_phis
@@ -930,10 +952,12 @@ contains
   !!    Added calls for reading X-matrix files for XL-BOMD
   !!   2014/02/03 michi
   !!    Bug fix for changing the number of processors at the sequential job
+  !!   2015/06/08 lat
+  !!    Added experimental backtrace
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
-                       vary_mu, total_energy)
+                       vary_mu, total_energy,level)
 
     use datatypes
     use numbers
@@ -950,8 +974,8 @@ contains
                                  restart_T,glob2node,glob2node_old, &
                                  n_proc_old,MDinit_step,ni_in_cell, &
                                  flag_XLBOMD, flag_dissipation,     &
-                                 flag_propagateX, flag_propagateL,  &
-                                 restart_X
+                                 flag_propagateX, flag_propagateL, restart_X, &
+                                 flag_exx, exx_scf
     use ewald_module,      only: ewald, mikes_ewald, flag_old_ewald
     use S_matrix_module,   only: get_S_matrix
     use GenComms,          only: my_barrier,end_comms,inode,ionode, &
@@ -966,7 +990,7 @@ contains
     use functions_on_grid, only: supportfns, H_on_supportfns
     use dimens,            only: n_my_grid_points
     use maxima_module,     only: maxngrid
-    use minimise,          only: SC_tolerance, L_tolerance,         &
+    use minimise,          only: sc_tolerance, L_tolerance,         &
                                  n_L_iterations, expected_reduction
     use DFT_D2,            only: dispersion_D2
     use matrix_data,       ONLY: Lrange,Trange,LSrange
@@ -977,21 +1001,25 @@ contains
     implicit none
 
     ! Passed variables
-    logical        :: vary_mu, find_chdens, fixed_potential
-    logical        :: start, start_L
-    real(double)   :: total_energy
+    logical           :: vary_mu, find_chdens, fixed_potential
+    logical           :: start, start_L
+    real(double)      :: total_energy
+    integer, optional :: level
 
     ! Local variables
-    type(cq_timer) :: tmr_std_loc
-    logical        :: ech_std_loc
-    logical        :: reset_L, charge, store
+    type(cq_timer) :: backtrace_timer
+    integer        :: backtrace_level
+    logical        :: reset_L, record, rebuild_KE_NL, build_X ! charge, store
     integer        :: force_to_test, stat, nfile, symm
     real(double)   :: electrons_tot, bandE
     real(double), dimension(nspin) :: electrons, energy_tmp
     ! Dummy vars for MMM
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='initial_H',where=1,level=1,echo=.true.)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='initial_H',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     ! (0) Get the global information
@@ -1051,10 +1079,10 @@ contains
         call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
       else
         if(nspin==1) then
-          call grab_matrix("L",matL(1),inode)
+          call grab_matrix( "L",    matL(1), inode)
         else if (nspin == 2) then
-          call grab_matrix("L_up",matL(1),inode)
-          call grab_matrix ("L_dn", matL(2), inode)
+          call grab_matrix( "L_up", matL(1), inode)
+          call grab_matrix( "L_dn", matL(2), inode)
         end if
       endif
     end if
@@ -1109,7 +1137,7 @@ contains
     ! (6) Find the dispersion energy for the initial set of atoms
     if (flag_dft_d2) then
       if ((inode == ionode) .and. (iprint_init > 1) ) &
-           write (io_lun, *) "Calling DFT-D2"
+           write (io_lun, *) 'Calling DFT-D2'
       call dispersion_D2
     end if
     call my_barrier
@@ -1147,45 +1175,59 @@ contains
     end if
 !!$
 !!$
+!!$  S C F
 !!$
 !!$
-    reset_L = .true.
-    if (flag_self_consistent) then ! Vary only DM and charge density
-       !OLD call new_SC_potl( .true., SC_tolerance, reset_L, fixed_potential, &
-       !                      vary_mu, n_L_iterations, &
-       !OLD      number_of_bands, L_tolerance, mu, total_energy)
-       if (restart_L) then
+    if ( flag_self_consistent ) then ! Vary only DM and charge density
+       !
+       if ( restart_L ) then
+          record  = .true.
           reset_L = .false.
-          call new_SC_potl(.true., SC_tolerance, reset_L,            &
-                           fixed_potential, vary_mu, n_L_iterations, &
-                           L_tolerance, total_energy)
+          call new_SC_potl(record, sc_tolerance, reset_L, &
+               fixed_potential, vary_mu, n_L_iterations,  &
+               L_tolerance, total_energy, backtrace_level)
+          !
        else
-          reset_L = .true.
-          call get_H_matrix(.true., fixed_potential, electrons, &
-                            density, maxngrid)
+          rebuild_KE_NL = .true. 
+          call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
+               density, maxngrid, backtrace_level)
+          !
           electrons_tot = spin_factor * sum(electrons)
+          !
+          record  = .false.
+          reset_L = .true.                
           call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-                         ionode, reset_L, .false.)
+               ionode, reset_L, record, backtrace_level)
+          !
+          record  = .true.             
           reset_L = .false.
-          call new_SC_potl(.true., SC_tolerance, reset_L,            &
-                           fixed_potential, vary_mu, n_L_iterations, &
-                           L_tolerance, total_energy)
+          call new_SC_potl(record, sc_tolerance, reset_L, &
+               fixed_potential, vary_mu, n_L_iterations,  &
+               L_tolerance, total_energy, backtrace_level)
+          !
        end if
+       !
     else ! Ab initio TB: vary only DM
-       call get_H_matrix(.true., fixed_potential, electrons, density, &
-                         maxngrid)
+       
+       rebuild_KE_NL = .true.
+       !build_X = .false
+       call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, density, &
+            maxngrid, backtrace_level)
+       
        electrons_tot = spin_factor * sum(electrons)
-       !OLD if(.NOT.restart_L) call FindMinDM( n_L_iterations, number_of_bands, &
-       !                                       vary_mu, &
-       !OLD      L_tolerance, mu, inode, ionode, reset_L, .false.)
-       if (.not. restart_L) then
+       
+       if ( .not. restart_L ) then
+          record  = .false.   
+          reset_L = .true.
           call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-                         ionode, reset_L, .false.)
+               ionode, reset_L, record, backtrace_level)
        else
+          record  = .false.
+          reset_L = .false.
           call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-                         ionode, .false., .false.)
+               ionode, reset_L, record, backtrace_level)
        end if
-       call get_energy(total_energy)
+       call get_energy(total_energy=total_energy,level=backtrace_level)
     end if
 !!$
 !!$
@@ -1194,14 +1236,14 @@ contains
     ! Do we want to just test the forces ?
     if (flag_test_forces) then
        call test_forces(fixed_potential, vary_mu, n_L_iterations, &
-                        L_tolerance, SC_tolerance, total_energy,  &
+                        L_tolerance, sc_tolerance, total_energy,  &
                         expected_reduction)
        call end_comms
        stop
     end if
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='initial_H',echo=.true.)
+    call stop_backtrace(t=backtrace_timer,who='initial_H',echo=.true.)
 !****lat>$
 
     return
@@ -1583,9 +1625,11 @@ contains
   !!    Added initialisation for matL_dn, for spin polarisation
   !!   2012/03/27 L.Tong
   !!   - Changed spin implementation
+  !!   2015/06/08 lat
+  !!    - Added experimental backtrace
   !!  SOURCE
   !!
-  subroutine initial_L()
+  subroutine initial_L(level)
 
     use datatypes
     use numbers,       only: half, zero
@@ -1594,11 +1638,16 @@ contains
 
     implicit none
 
-    integer        :: spin
-    type(cq_timer) :: tmr_std_loc
+    integer, optional :: level
+    integer           :: spin
+    type(cq_timer)    :: backtrace_timer
+    integer           :: backtrace_level 
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='initial_L',where=1,level=2)
+    if (       present(level) ) backtrace_level = level+1
+    if ( .not. present(level) ) backtrace_level = -10
+    call start_backtrace(t=backtrace_timer,who='initial_L',&
+         where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
     do spin = 1, nspin
@@ -1607,7 +1656,7 @@ contains
     end do
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='initial_L')
+    call stop_backtrace(t=backtrace_timer,who='initial_L',echo=.true.)
 !****lat>$
 
     return

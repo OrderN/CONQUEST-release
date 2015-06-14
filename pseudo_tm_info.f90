@@ -118,17 +118,20 @@ contains
 !!    Added statements for P.C.C.
 !!   2011/09/16 11:00 dave
 !!    Changed to use n_species and species_label from species_module, and changed atomicrad to atomicnum
+!!   2014/10/12 12:21 lat
+!!    Added possibility of user defined filename for PAO/pseudo *ion
 !!  SOURCE
 !!
   subroutine setup_pseudo_info
 
     use datatypes
-    use numbers, ONLY: zero
-    use pao_format, ONLY: pao
-    use species_module, ONLY: npao_species, nsf_species, type_species, species_label, n_species
-    use global_module, ONLY: iprint_pseudo
-    use dimens, ONLY: RadiusSupport, atomicnum
-    use GenComms, ONLY: inode, ionode, cq_abort, gcopy
+    use numbers,        ONLY: zero
+    use pao_format,     ONLY: pao
+    use species_module, ONLY: n_species, species_label, species_file, species_from_files
+    use species_module, ONLY: npao_species, nsf_species, type_species
+    use global_module,  ONLY: iprint_pseudo
+    use dimens,         ONLY: RadiusSupport, atomicnum
+    use GenComms,       ONLY: inode, ionode, cq_abort, gcopy
     use pseudopotential_common, ONLY: pseudo_type, SIESTA, ABINIT
 
     implicit none
@@ -157,12 +160,20 @@ contains
           else
              call cq_abort("Error in pseudopotential type: ",pseudo_type)
           end if
-          write(filename,'(a,a)') trim(species_label(ispecies)), ".ion"
-          if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"ispecies = ",i5," file = ",a)') ispecies,filename
+          !**<lat>** 2014/10/12
+          if ( species_from_files ) then
+             write(filename,'(a,a)') trim(species_file(ispecies))
+          else
+             write(filename,'(a,a)') trim(species_label(ispecies)),".ion"
+          end if
+          if(iprint_pseudo>3.AND.inode==ionode) &
+               write(io_lun,fmt='(10x,"ispecies = ",i5," file = ",a)') ispecies, filename
+
           pseudo(ispecies)%filename = filename
           call read_ion_ascii_tmp(pseudo(ispecies),pao(ispecies))
+
           npao_species(ispecies) = pao(ispecies)%count
-          atomicnum(ispecies) = pseudo(ispecies)%z
+          atomicnum(ispecies)    = pseudo(ispecies)%z
           ! For P.C.C.
           if (pseudo(ispecies)%flag_pcc) flag_pcc_global = .true.
           !For Ghost atoms
@@ -176,10 +187,10 @@ contains
             call init_rad(pseudo(ispecies)%vlocal)
             call init_rad(pseudo(ispecies)%chlocal)
             if(pseudo(ispecies)%flag_pcc) call init_rad(pseudo(ispecies)%chpcc)
-            pseudo(ispecies)%n_pjnl = 0
-            pseudo(ispecies)%flag_pcc = .false.
-            pseudo(ispecies)%pjnl_l(:) = 0
-            pseudo(ispecies)%pjnl_n(:) = 0
+            pseudo(ispecies)%n_pjnl      = 0
+            pseudo(ispecies)%flag_pcc    = .false.
+            pseudo(ispecies)%pjnl_l(:)   = 0
+            pseudo(ispecies)%pjnl_n(:)   = 0
             pseudo(ispecies)%pjnl_ekb(:) = zero
             ! pseudo(ispecies)%alpha
             ! pseudo(ispecies)%prefac
@@ -510,7 +521,6 @@ contains
 !!    Added io_ routines from input_module
 !!   2013/07/05 dave
 !!    Added reading and copying of z, charge state of ion
-!!   2015/06/10 16:02 dave & tsuyoshi
 !!    Changed to read ALL radial functions for a given l (now picks up "semi-core" PAOs)
 !!  SOURCE
 !!
@@ -561,7 +571,6 @@ contains
        read(lun,*)
        zl = 0
        maxz = 0
-       thisz = 0
        if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading PAOs")')
        do i=1,n_orbnl
           read(lun,*) i1,i2,i3,i4, dummy
