@@ -1,4 +1,4 @@
-! -*- mode: F90; -*-
+! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 !----------------------------------------------------------------------
 ! $Id$
 !----------------------------------------------------------------------
@@ -119,7 +119,9 @@ contains
   !   2013/04/03
   ! MODIFICATION HISTORY
   !   2014/09/15 18:30 lat
-  !    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+  !    Fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+  !   2015/06/08 lat
+  !    Added experimental backtrace
   ! SOURCE
   !
   subroutine sfc_partitions_to_processors(cqParts)
@@ -131,7 +133,8 @@ contains
     use species_module,         only: nsf_species
     use basic_types,            only: group_set
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem, type_int
-    use timer_module,           only: start_timer, stop_timer, cq_timer
+    use timer_module,           only: start_timer,     stop_timer,    cq_timer
+    use timer_module,           only: start_backtrace, stop_backtrace
     use timer_stdclocks_module, only: tmr_std_initialisation
 
     implicit none
@@ -145,10 +148,10 @@ contains
     integer :: ii, i_part, stat, counter
     integer :: min_nparts_proc, min_natoms_proc, min_nsf_proc
     integer ::  av_nparts_proc,  av_natoms_proc,  av_nsf_proc
-    type(cq_timer) :: tmr_std_loc
+    type(cq_timer) :: backtrace_timer
 
 !****lat<$
-    call start_timer(t=tmr_std_loc,who='sfc_partitions_to_proc', &
+    call start_backtrace(t=backtrace_timer,who='sfc_partitions_to_proc', &
                      where=1,level=3)
 !****lat>$
 
@@ -308,7 +311,7 @@ contains
     call stop_timer(tmr_std_initialisation)
 
 !****lat<$
-    call stop_timer(t=tmr_std_loc,who='sfc_partitions_to_processors')
+    call stop_backtrace(t=backtrace_timer,who='sfc_partitions_to_processors')
 !****lat>$
 
     return

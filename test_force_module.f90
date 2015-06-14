@@ -146,7 +146,6 @@ contains
     real(double) :: total_energy
 
     ! Local variables
-    type(cq_timer) :: tmr_std_loc
     integer        :: stat, spin
     logical        :: reset_L = .false.
     real(double)   :: E0, F0, E1, F1, analytic_force, numerical_force, &
@@ -154,10 +153,6 @@ contains
     real(double)   :: H0, L0, XC0, NL0, K0, B0, dH0, dXC0, EW0, T0
     real(double), dimension(nspin) :: electrons
     real(double), dimension(:,:), allocatable :: HF_force
-
-!****lat<$
-    !call start_timer(t=tmr_std_loc,who='test_forces',where=7,level=2,echo=.true.)
-!****lat>$
 
     call start_timer(tmr_std_moveatoms)
 
@@ -546,10 +541,6 @@ contains
     call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
 
     call stop_timer(tmr_std_moveatoms)
-
-!****lat<$
-    !call stop_timer(t=tmr_std_loc,who='test_forces',echo=.true.)
-!****lat>$
 
     return
   end subroutine test_forces

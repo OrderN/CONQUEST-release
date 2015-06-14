@@ -35,6 +35,8 @@
 !!    Made all arrays (apart from species) allocatable
 !!   2011/09/16 10:58 dave
 !!    Changed species_label to length 30
+!!   2014/10/12 10:58 lat
+!!    Added species_file
 !!  SOURCE
 !!
 module species_module
@@ -49,24 +51,23 @@ module species_module
   character(len=80), private :: RCSid = "$Id$"
 
   integer :: n_species
-
-  integer, allocatable, dimension(:) :: species
-
-  real(double), allocatable, dimension(:) :: charge, mass
-
+  logical :: species_from_files
+  !
+  integer,           allocatable, dimension(:) :: species
+  real(double),      allocatable, dimension(:) :: charge, mass
   character(len=50), allocatable, dimension(:) :: ps_file
   character(len=40), allocatable, dimension(:) :: ch_file
   character(len=40), allocatable, dimension(:) :: phi_file
+  !
   character(len=30), allocatable, dimension(:) :: species_label
-
-  logical, allocatable, dimension(:) :: non_local_species
-
+  character(len=80), allocatable, dimension(:) :: species_file
+  !
+  logical, allocatable, dimension(:)  :: non_local_species
   integer, allocatable, dimension(:)  :: nlpf_species
   integer, allocatable, dimension(:)  :: nsf_species
   integer, allocatable, dimension(:)  :: npao_species
-
   integer, allocatable, dimension(:)  :: type_species
+
 !!***
 
- 
 end module species_module
