@@ -421,6 +421,8 @@ contains
 !!   - Adopted new integration scheme instead of velocityVerlet
 !!     with routines in Integrators_module
 !!   - Added calls for constraint-MD
+!!   2015/06/19 13:52 dave
+!!   - Included FIRE routines but moved reading of parameters to io_module
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -433,7 +435,8 @@ contains
                               temp_ion, flag_MDcontinue, MDinit_step, &
                               flag_MDold,n_proc_old,glob2node_old,    &
                               flag_LmatrixReuse,flag_XLBOMD,          &
-                              flag_dissipation,flag_FixCOM
+                              flag_dissipation,flag_FixCOM,           &
+                              flag_fire_qMD
     use group_module,   only: parts
     use primary_module, only: bundle
     use minimise,       only: get_E_and_F
@@ -447,7 +450,7 @@ contains
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_positions, read_velocity,         &
-                              write_velocity
+                              write_velocity, read_fire
     use io_module,      only: write_atomic_positions, pdb_template,   &
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
@@ -458,9 +461,10 @@ contains
     use matrix_data,    ONLY: Lrange
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use XLBOMD_module,  ONLY: Ready_XLBOMD, Do_XLBOMD
-    use Integrators,    ONLY: vVerlet_v_dthalf,vVerlet_r_dt
+    use Integrators,    ONLY: vVerlet_v_dthalf,vVerlet_r_dt, fire_qMD
     use constraint_module, ONLY: correct_atomic_position,correct_atomic_velocity, &
-                                 ready_constraint,flag_RigidBonds
+         ready_constraint,flag_RigidBonds
+    use input_module,   ONLY: io_assign, io_close
 
     implicit none
 
@@ -472,13 +476,22 @@ contains
     ! Local variables
     real(double), allocatable, dimension(:,:) :: velocity
     integer       ::  iter, i, k, length, stat, i_first, i_last, &
-                      nfile, symm
+         nfile, symm
+    integer       :: lun, ios, md_steps ! SA 150204; 150213 md_steps: counter for MD steps
     real(double)  :: temp, KE, energy1, energy0, dE, max, g0
     real(double)  :: energy_md
     character(20) :: file_velocity='velocity.dat'
     logical       :: done,second_call
     logical,allocatable,dimension(:) :: flag_movable
 
+    !! quenched MD optimisation is stopped
+    !! if the maximum force component is bellow threshold
+    !! for 3 consecutive iterations
+
+    ! FIRE parameters
+    integer :: step_qMD, n_stop_qMD, fire_N, fire_N2
+    real(double) :: fire_step_max, fire_P0, fire_alpha
+    
     allocate(velocity(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating velocity in md_run: ", &
@@ -502,7 +515,11 @@ contains
     length = 3*ni_in_cell
     if (myid == 0 .and. iprint_gen > 0) write(io_lun, 2) MDn_steps
     ! Find energy and forces
-    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
+    if (flag_fire_qMD) then
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+    else
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
+    end if
 
     ! XL-BOMD
     if (flag_XLBOMD .AND. flag_dissipation .AND. .NOT.flag_MDold) &
@@ -530,6 +547,15 @@ contains
     endif
 
     energy_md = energy0
+
+    if (flag_fire_qMD) then
+       step_qMD = i_first ! SA 20150201
+       done = .false.     ! SA 20150201
+       fire_step_max = 10.0_double * MDtimestep
+       ! reading FIRE parameters of the last run
+       call read_fire(fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha)
+    endif
+
     !ORI do iter = 1, MDn_steps
     do iter = i_first, i_last
        if (myid == 0) &
@@ -545,9 +571,14 @@ contains
          call gcopy(glob2node_old,ni_in_cell)
        endif
 
-       !%%! Evolve atoms
-       call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable)
-       call vVerlet_r_dt(MDtimestep,velocity,flag_movable)
+       !%%! Evolve atoms - either FIRE (quenched MD) or velocity Verlet
+       if (flag_fire_qMD) then
+          call fire_qMD(fire_step_max,MDtimestep,velocity,tot_force,flag_movable,iter,&
+                        fire_N,fire_N2,fire_P0,fire_alpha) ! SA 20150204
+       else
+          call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable)
+          call vVerlet_r_dt(MDtimestep,velocity,flag_movable)
+       end if
        ! Constrain position
        if (flag_RigidBonds) call correct_atomic_position(velocity,MDtimestep)
        ! Reset-up
@@ -568,8 +599,12 @@ contains
        endif
        if (flag_XLBOMD) call Do_XLBOMD(iter,MDtimestep)
        call update_H(fixed_potential)
-       call get_E_and_F(fixed_potential,vary_mu,energy1,.true.,.false.,iter)
-       call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable,second_call)
+       if (flag_fire_qMD) then
+          call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .true.,iter)
+       else
+          call get_E_and_F(fixed_potential,vary_mu,energy1,.true.,.false.,iter)
+          call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable,second_call)
+       end if
        ! Constrain velocity
        if (flag_RigidBonds) call correct_atomic_velocity(velocity)
        !%%! END of Evolve atoms
@@ -606,9 +641,11 @@ contains
        end do
        ! Output and energy changes
        dE = energy0 - energy1
-       if (myid == 0) write (io_lun, 6) max
-       if (myid == 0) write (io_lun, 4) dE
-       if (myid == 0) write (io_lun, 5) sqrt(g0/ni_in_cell)
+       if(myid==0) then
+          write (io_lun, 6) max
+          write (io_lun, 4) dE
+          write (io_lun, 5) sqrt(g0/ni_in_cell)
+       end if
        energy0 = energy1
        energy1 = abs(dE)
        if (myid == 0 .and. mod(iter, MDfreq) == 0) &
@@ -618,7 +655,23 @@ contains
        call write_velocity(velocity, file_velocity)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        !to check IO of velocity files
-       call check_stop(done, iter)
+       if (flag_fire_qMD) then
+          if (abs(max) < MDcgtol) then
+             if ((iter - step_qMD) > 1) then
+                n_stop_qMD = 0
+             end if
+             n_stop_qMD = n_stop_qMD + 1
+             step_qMD = iter
+             if (myid == 0) then
+                write (io_lun, fmt='(4x,i4,4x,"Maximum force below threshold: ",f12.6)') n_stop_qMD, max
+             end if
+             if (n_stop_qMD > 2) then
+                done = .true.
+             end if
+          end if
+       else
+          call check_stop(done, iter)
+       end if
        if (done) exit
 
 !%%!   if (myid == 0) &

@@ -465,7 +465,8 @@ contains
   !!    Flags for wavefunction (band) output
   !!   2015/06/10 16:01 dave
   !!    Bug fix: added default value for r_exx when EXX not set (prevents problems)
-  !!
+  !!   2015/06/19 14:28 dave
+  !!    Changed index of ChemicalSpeciesLabel to use number read from input file 
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -529,7 +530,9 @@ contains
                              restart_T,restart_X,flag_XLBOMD,flag_propagateX,              &
                              flag_propagateL,flag_dissipation,integratorXL, flag_FixCOM,   &
                              flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter,         &
-                             flag_out_wf,max_wf,out_wf,wf_self_con
+                             flag_out_wf,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
+                             fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
+                             fire_N_max
 
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
@@ -920,16 +923,16 @@ contains
              ! **<lat>** Added the optional filename
              if ( species_from_files ) then
                 read (unit=input_array(block_start+i-1),fmt=*) &
-                     j, mass(i),       &
-                     species_label(i), &
-                     species_file(i)
+                     j, mass(j),       &
+                     species_label(j), &
+                     species_file(j)
              else
                 read (unit=input_array(block_start+i-1),fmt=*) &
-                     j, mass(i),       &
-                     species_label(i)
+                     j, mass(j),       &
+                     species_label(j)
              end if
-             if(mass(i) < -RD_ERR) flag_ghost=.true.
-             type_species(i)=i
+             if(mass(j) < -RD_ERR) flag_ghost=.true.
+             type_species(j)=j
           end do
           call fdf_endblock
        end if
@@ -1241,6 +1244,15 @@ contains
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        flag_quench_MD     = fdf_boolean('AtomMove.QuenchMD',.false.)
        temp_ion           = fdf_double ('AtomMove.IonTemperature',300.0_double)
+       flag_fire_qMD = fdf_boolean('AtomMove.FIRE',.false.)
+       if(flag_fire_qMD) then
+          fire_N_min   = fdf_integer('AtomMove.FireNMin',5)
+          fire_N_max   = fdf_integer('AtomMove.FireNMaxSlowQMD',10)
+          fire_alpha0  = fdf_double ('AtomMove.FireAlpha',0.1_double)
+          fire_f_inc   = fdf_double ('AtomMove.Fire_f_inc',1.1_double)
+          fire_f_dec   = fdf_double ('AtomMove.Fire_f_dec',0.5_double)
+          fire_f_alpha = fdf_double ('AtomMove.Fire_f_alpha',0.99_double)
+       end if
 !!$
 !!$
 !!$

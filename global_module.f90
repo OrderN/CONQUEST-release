@@ -104,6 +104,8 @@
 !!   - Added optional total spin magnetization ne_magn_in_cell
 !!   2015/05/29
 !!    Wavefunction output flags (COR and dave)
+!!   2015/06/19
+!!    FIRE implmementation (SA, COR, dave)
 !!  SOURCE
 !!
 module global_module
@@ -169,6 +171,7 @@ module global_module
   logical :: flag_onsite_blip_ana
   logical :: flag_read_velocity   ! 16/06/2010 TM
   logical :: flag_quench_MD       ! 25/06/2010 TM
+  logical :: flag_fire_qMD        ! 2014/07/31 SA
   real(double) :: temp_ion        ! 25/06/2010 TM
 
   ! How should blocks be assigned ? See block_module.f90
@@ -311,7 +314,11 @@ module global_module
   logical :: flag_propagateX,flag_propagateL
   logical :: flag_dissipation
   character(20) :: integratorXL
-
+  ! FIRE relaxation method
+  ! Parameters adjusted after this many steps if there is slow convergence
+  integer :: fire_N_max, fire_N_min
+  real(double) :: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha
+  
   ! Wavefunction output
   logical :: flag_out_wf                        !output WFs?
   integer,allocatable,dimension(:)::out_wf      !which bands to output  

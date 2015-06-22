@@ -4073,7 +4073,116 @@ second:   do
   end subroutine read_velocity
   !!***
 
+  !!****f* io_module/read_fire *
+  !!
+  !!  NAME 
+  !!   read_fire
+  !!  USAGE
+  !!   
+  !!  PURPOSE
+  !!   Reads parameters for FIRE on I/O process and distributes
+  !!  INPUTS
+  !!   
+  !!   
+  !!  USES
+  !!   
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2015/06/19
+  !!  MODIFICATION HISTORY
+  !!    
+  !!  SOURCE
+  !!
+  subroutine read_fire(fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha)
 
+    use datatypes
+    use global_module, ONLY: iprint_MD
+    use GenComms,       only: myid, gcopy
+
+    implicit none
+
+    integer :: fire_N, fire_N2
+    real(double) :: MDtimestep, fire_P0, fire_alpha
+
+    integer :: ios, lun
+
+    fire_N = 0
+    fire_N2 = 0
+    fire_alpha = 0.0_double
+    fire_P0 = 0.0_double
+    if(myid==0) then
+       call io_assign(lun)
+       open(unit=lun,file='CQ.FIRE',status='old',iostat=ios)
+       if (ios == 0) then
+          read (lun,*) fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha
+          call io_close(lun)
+       else
+          fire_N = 0
+          fire_P0 = 1.0_double
+          fire_alpha = 0.1_double
+          fire_N2 = 0
+       endif
+       if(iprint_MD>1) write (io_lun,fmt="(4x,'Initial FIRE parameters:', 2x,'N= ', i3, 2x, &
+             'N2= ', i3, 2x, 'P= ', f12.8, 2x, 'dt= ', f9.6, 2x, 'alpha= ', f9.6)") &
+             fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha
+    else
+       MDtimestep = 0.0_double ! So that we can distribute with gcopy
+    end if
+    call gcopy(fire_N)
+    call gcopy(fire_N2)
+    call gcopy(fire_alpha)
+    call gcopy(fire_P0)
+    call gcopy(MDtimestep)
+    return
+    
+  end subroutine read_fire
+  !!***
+  
+  !!****f* io_module/write_fire *
+  !!
+  !!  NAME 
+  !!   write_fire
+  !!  USAGE
+  !!   
+  !!  PURPOSE
+  !!   Writes parameters for FIRE on I/O process 
+  !!  INPUTS
+  !!   
+  !!   
+  !!  USES
+  !!   
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2015/06/19
+  !!  MODIFICATION HISTORY
+  !!    
+  !!  SOURCE
+  !!
+  subroutine write_fire(fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha)
+
+    use datatypes
+    use GenComms,       only: myid
+
+    implicit none
+
+    integer :: fire_N, fire_N2
+    real(double) :: MDtimestep, fire_P0, fire_alpha
+
+    integer :: lun
+
+    if(myid==0) then
+       call io_assign(lun)
+       open(unit=lun,file='CQ.FIRE')
+       write(lun,fmt='(2i4,3f22.15)') fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha
+       call io_close(lun)
+    end if
+    return
+    
+  end subroutine write_fire
+  !!***
+  
   !!****f* io_module/check_stop *
   !!
   !!  NAME 
