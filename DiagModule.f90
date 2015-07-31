@@ -288,6 +288,12 @@ module DiagModule
   ! algorithm to fail.)
   integer :: max_brkt_iterations
 
+  ! DOS-related variables
+  real(double), allocatable, dimension(:,:) :: total_DOS
+  real(double), allocatable, dimension(:,:,:) :: pDOS
+  real(double) :: dE_DOS, pf_DOS
+  integer :: n_DOS_max, n_DOS_wid
+
 contains
 
   ! -------------------------------------------------------------------
@@ -409,6 +415,8 @@ contains
   !!     (print_info == 0), so initialise it to 0 at beginning
   !!   2013/01/28 17:21 dave
   !!    Including changes for DeltaSCF from Umberto Terranova
+  !!   2015/06/29 17:14 dave
+  !!    Added DOS output
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -417,33 +425,36 @@ contains
     use numbers
     use units
     use global_module,   only: iprint_DM, ni_in_cell, numprocs,       &
-                               area_DM, flag_fix_spin_population,     &
-                               nspin, spin_factor, flag_DeltaSCF, flag_excite, &
-                               flag_local_excitation, dscf_HOMO_thresh, &
-                               dscf_LUMO_thresh, dscf_source_level, dscf_target_level, &
-                               dscf_target_spin, dscf_source_spin, flag_cdft_atom,  &
-                               dscf_HOMO_limit, dscf_LUMO_limit, &
-                               flag_out_wf,wf_self_con, max_wf, sf, sf
+         area_DM, flag_fix_spin_population,     &
+         nspin, spin_factor, flag_DeltaSCF, flag_excite, &
+         flag_local_excitation, dscf_HOMO_thresh, &
+         dscf_LUMO_thresh, dscf_source_level, dscf_target_level, &
+         dscf_target_spin, dscf_source_spin, flag_cdft_atom,  &
+         dscf_HOMO_limit, dscf_LUMO_limit, &
+         flag_out_wf,wf_self_con, max_wf, sf, sf, flag_out_wf_by_kp, &
+         out_wf, n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, &
+         flag_write_projected_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
-                               deallocate_arrays, block_size_r,       &
-                               block_size_c, pg_kpoints, proc_groups, &
-                               nkpoints_max, pgid, N_procs_in_pg,     &
-                               N_kpoints_in_pg
+         deallocate_arrays, block_size_r,       &
+         block_size_c, pg_kpoints, proc_groups, &
+         nkpoints_max, pgid, N_procs_in_pg,     &
+         N_kpoints_in_pg
     use mult_module,     only: matH, matS, matK, matM12, matM12,      &
-                               matrix_scale, matrix_product_trace, allocate_temp_matrix, free_temp_matrix
+         matrix_scale, matrix_product_trace, allocate_temp_matrix, free_temp_matrix
     use matrix_data,     only: Hrange, Srange
     use primary_module,  only: bundle
     use species_module,  only: species, nsf_species, species_label
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
-                               reg_alloc_mem, reg_dealloc_mem
+         reg_alloc_mem, reg_dealloc_mem
     use energy,          only: entropy
     use cdft_data, only: cDFT_NumberAtomGroups
     use maxima_module,   ONLY: maxngrid
     use functions_on_grid,           only: supportfns, &
-                                           allocate_temp_fn_on_grid,    &
-                                           free_temp_fn_on_grid
+         allocate_temp_fn_on_grid,    &
+         free_temp_fn_on_grid
     use density_module, ONLY: get_band_density
+    use io_module, ONLY: dump_DOS, dump_projected_DOS, write_eigenvalues
 
     implicit none
 
@@ -452,18 +463,20 @@ contains
 
     ! Local variables
     real(double)                   :: abstol, a, time0, time1, vl, vu, &
-                                      orfac, scale, entropy_total,     &
-                                      bandE_total, coeff, setA, setB
+         orfac, scale, entropy_total,     &
+         bandE_total, coeff, setA, setB, Eband
     real(double), dimension(nspin) :: locc, bandE, entropy_local
     real(double), external         :: dlamch
     complex(double_cplx), dimension(:,:,:), allocatable :: expH
     complex(double_cplx) :: c_n_alpha2, c_n_setA2, c_n_setB2
     integer :: info, stat, il, iu, i, j, m, mz, prim_size, ng, wf_no, &
-               print_info, kp, spin, iacc, iprim, l, band, cdft_group, support_K
+         print_info, kp, spin, iacc, iprim, l, band, cdft_group, support_K, &
+         n_band_min, n_band_max
     integer, dimension(50) :: desca, descz, descb
     integer, allocatable, dimension(:) :: matBand
+    integer, allocatable, dimension(:,:) :: matBand_kp
 
-    logical :: flag_keepexcite
+    logical :: flag_keepexcite, flag_full_DOS
 
     real(double), dimension(:),allocatable :: abs_wf
 
@@ -500,24 +513,17 @@ contains
     a = real(matrix_size, double) / real(block_size_r, double)
     if (a - real(floor(a), double) > 1e-8_double) &
          call cq_abort('block_size_r not a factor of matrix size ! ', &
-                       matrix_size, block_size_r)
+         matrix_size, block_size_r)
     a = real(matrix_size, double) / real(block_size_c, double)
     if (a - real(floor(a), double) > 1e-8_double) &
          call cq_abort('block_size_c not a factor of matrix size ! ', &
-                       matrix_size, block_size_c)
+         matrix_size, block_size_c)
 
     ! Initialise - start BLACS, sort out matrices, allocate memory
     call initDiag(desca, descb, descz)
 
     scale = one / real(N_procs_in_pg(pgid), double)
 
-    ! Allocate matrices to store band K matrices
-    if (wf_self_con .and. flag_out_wf) then
-       allocate(matBand(max_wf))
-       do i=1,max_wf
-          matBand(i) = allocate_temp_matrix(Hrange,0,sf,sf)
-       end do
-    end if
     ! ------------------------------------------------------------------------
     ! Start diagonalisation
     ! ------------------------------------------------------------------------
@@ -527,7 +533,7 @@ contains
 
     if (iprint_DM >= 2 .and. (inode == ionode)) &
          write (io_lun, fmt='(10x,"In FindEvals, tolerance is ", g20.12)') &
-               abstol
+         abstol
 
     ! zero the global and local eigenvalues
     w = zero
@@ -546,16 +552,16 @@ contains
           ! Now, if this processor is involved, do the diagonalisation
           if (iprint_DM >= 3 .and. inode == ionode) &
                write (io_lun, *) myid, 'Proc row, cols, me: ', &
-                                 proc_rows, proc_cols, me, i, nkpoints_max
+               proc_rows, proc_cols, me, i, nkpoints_max
           if (i <= N_kpoints_in_pg(pgid)) then
              ! Call the diagonalisation routine for generalised problem
              ! H.psi = E.S.psi
              call pzhegvx(1, 'N', 'A', 'U', matrix_size, SCHmat(:,:,spin), &
-                          1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
-                          vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
-                          orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
-                          rwork, lrwork, iwork, liwork, ifail, iclustr,    &
-                          gap, info)
+                  1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
+                  vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
+                  orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
+                  rwork, lrwork, iwork, liwork, ifail, iclustr,    &
+                  gap, info)
              if (info /= 0) &
                   call cq_abort ("FindEvals: pzheev failed !", info)
              ! Copy local_w into appropriate place in w
@@ -569,7 +575,7 @@ contains
        ! 1 / N_procs_in_pg
        call gsum(w(:,:,spin), matrix_size, nkp)
     end do ! spin
-
+    ! Allocate matrices to store band K matrices
     time1 = mtime()
     if (iprint_DM >= 2 .AND. myid == 0) &
          write (io_lun, 2) myid, time1 - time0
@@ -581,6 +587,73 @@ contains
     ! Find Fermi level, given the eigenvalues at all k-points (in w)
     ! if (me < proc_rows*proc_cols) then
     call findFermi(electrons, w, matrix_size, nkp, Efermi, occ)
+    if (wf_self_con .and. flag_out_wf) then
+       ! Has the user specified an energy range ? If so, work out the band limits
+       if(max_wf==0) then
+          n_band_min = 1e9
+          n_band_max = 0
+          do spin=1,nspin
+             do i=1,nkpoints_max
+                if (i <= N_kpoints_in_pg(pgid)) then
+                   kp = pg_kpoints(pgid, i)
+                   do j = 1, matrix_size
+                      if(flag_wf_range_Ef) then
+                         Eband = w(j,kp,spin) - Efermi(spin)
+                      else
+                         Eband = w(j,kp,spin)
+                      end if
+                      if((Eband>E_wf_min).AND.(j<n_band_min)) n_band_min = j
+                      if((Eband<E_wf_max).AND.(j>n_band_max)) n_band_max = j
+                   end do
+                end if
+             end do
+          end do
+          if(myid==0.AND.iprint_DM>=2) write(io_lun,fmt='(2x,"WF band limits set to: ",2i6)') &
+               n_band_min, n_band_max
+          max_wf = n_band_max - n_band_min + 1
+          allocate(out_wf(max_wf))
+          do i=1,max_wf
+             out_wf(i) = n_band_min + i-1
+          end do
+       end if
+       if(flag_out_wf_by_kp) then
+          allocate(matBand_kp(max_wf,nkp))
+          do j=1,nkp
+             do i=1,max_wf
+                matBand_kp(i,j) = allocate_temp_matrix(Hrange,0,sf,sf)
+             end do
+          end do
+       else
+          allocate(matBand(max_wf))
+          do i=1,max_wf
+             matBand(i) = allocate_temp_matrix(Hrange,0,sf,sf)
+          end do
+       end if
+    end if
+    ! Preparatory work for DOS
+    if(wf_self_con.AND.flag_write_DOS) then
+       allocate(total_DOS(n_DOS,nspin))
+       total_DOS = zero
+       ! Only if projecting DOS onto atoms
+       if(flag_write_projected_DOS) then
+          allocate(pDOS(n_DOS,bundle%n_prim,nspin))
+          pDOS = zero
+       end if
+       ! If the user hasn't specified limits
+       if(E_DOS_min==zero.AND.E_DOS_max==zero) then
+          E_DOS_min = 1e30_double
+          E_DOS_max = -1e30_double
+          do i=1,nkp
+             if(E_DOS_min>w(1,i,1)) E_DOS_min = w(1,i,1)
+             if(E_DOS_max<w(matrix_size,i,1)) E_DOS_max = w(matrix_size,i,1)
+          end do
+          if(myid==0.AND.iprint_DM>=2) write(io_lun,fmt='(2x,"DOS limits set automatically: ",2f12.5)') &
+               E_DOS_min, E_DOS_max
+       end if
+       dE_DOS = (E_DOS_max - E_DOS_min)/real(n_DOS-1,double)
+       n_DOS_wid = floor(6.0_double*sigma_DOS/dE_DOS) ! How many bins either side of state we consider
+       pf_DOS = one/(sigma_DOS*sqrt(twopi))
+    end if
 
     ! Allocate space to expand eigenvectors into (i.e. when reversing
     ! ScaLAPACK distribution)
@@ -651,11 +724,11 @@ contains
                       coeff = coeff+expH(band,iacc+l-1,spin)*conjg(expH(band,iacc+l-1,spin))
                    end do
                    setA = setA+coeff
-             else
-                do l=1,nsf_species(bundle%species(iprim))
-                   coeff = coeff+expH(band,iacc+l-1,spin)*conjg(expH(band,iacc+l-1,spin))
-                end do
-                setB = setB+coeff
+                else
+                   do l=1,nsf_species(bundle%species(iprim))
+                      coeff = coeff+expH(band,iacc+l-1,spin)*conjg(expH(band,iacc+l-1,spin))
+                   end do
+                   setB = setB+coeff
                 end if
                 iacc = iacc + nsf_species(bundle%species(iprim))
              end do
@@ -765,27 +838,27 @@ contains
                    bandE(spin) = bandE(spin) + w(j,i,spin) * occ(j,i,spin)
                 else if (j == matrix_size - 1) then
                    write (io_lun, 9) w(j,i,spin), occ(j,i,spin), &
-                                     w(j+1,i,spin), occ(j+1,i,spin)
+                        w(j+1,i,spin), occ(j+1,i,spin)
                    bandE(spin) = bandE(spin) + w(j,i,spin) * occ(j,i,spin) + &
-                                 w(j+1,i,spin) * occ(j+1,i,spin)
+                        w(j+1,i,spin) * occ(j+1,i,spin)
                 else
                    write (io_lun, 10) w(j,i,spin), occ(j,i,spin), &
-                                      w(j+1,i,spin), occ(j+1,i,spin), &
-                                      w(j+2,i,spin), occ(j+2,i,spin)
+                        w(j+1,i,spin), occ(j+1,i,spin), &
+                        w(j+2,i,spin), occ(j+2,i,spin)
                    bandE(spin) = bandE(spin) + w(j,i,spin) * occ(j,i,spin) + &
-                                 w(j+1,i,spin) * occ(j+1,i,spin) + &
-                                 w(j+2,i,spin) * occ(j+2,i,spin)
+                        w(j+1,i,spin) * occ(j+1,i,spin) + &
+                        w(j+2,i,spin) * occ(j+2,i,spin)
                 endif
              end do ! j=matrix_size
              write (io_lun, &
-                    fmt='("Sum of eigenvalues for spin = ", &
-                          &i1, ": ", f18.11," ", a2)') &
-                   spin, en_conv * bandE(spin), en_units(energy_units)
+                  fmt='("Sum of eigenvalues for spin = ", &
+                  &i1, ": ", f18.11," ", a2)') &
+                  spin, en_conv * bandE(spin), en_units(energy_units)
           end do ! spin
           if (nspin == 2) then
              write (io_lun, &
-                    fmt='("Total sum of eigenvalues: ", f18.11, " ",a2)') &
-                   en_conv * (bandE(1) + bandE(2)), en_units(energy_units)
+                  fmt='("Total sum of eigenvalues: ", f18.11, " ",a2)') &
+                  en_conv * (bandE(1) + bandE(2)), en_units(energy_units)
           else
              write(io_lun, 4) en_conv * two * bandE(1), en_units(energy_units)
           end if
@@ -819,11 +892,11 @@ contains
              ! Call the diagonalisation routine for generalised problem
              ! H.psi = E.S.psi
              call pzhegvx(1, 'V', 'A', 'U', matrix_size, SCHmat(:,:,spin), &
-                          1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
-                          vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
-                          orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
-                          rwork, lrwork, iwork, liwork, ifail, iclustr,    &
-                          gap, info)
+                  1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
+                  vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
+                  orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
+                  rwork, lrwork, iwork, liwork, ifail, iclustr,    &
+                  gap, info)
              if (info < 0) call cq_abort ("FindEvals: pzheev failed !", info)
              if (info >= 1 .and. inode == ionode) &
                   write (io_lun, *) 'Problem - info returned as: ', info
@@ -841,7 +914,16 @@ contains
              if (i <= N_kpoints_in_pg(ng)) then
                 kp = pg_kpoints(ng, i)
                 call DistributeSC_to_ref(DistribH, ng, z(:,:,spin), &
-                                         expH(:,:,spin))
+                     expH(:,:,spin))
+                if(flag_write_DOS) then
+                   if(flag_write_projected_DOS) then
+                      call accumulate_DOS(wtk(kp),w(:,kp,spin), &
+                           expH(:,:,spin),total_DOS(:,spin),pDOS(:,:,spin))
+                   else
+                      call accumulate_DOS(wtk(kp),w(:,kp,spin), &
+                           expH(:,:,spin),total_DOS(:,spin))
+                   end if
+                end if
                 ! Build K and K_dn from the eigenvectors
                 if (print_info == 0) then
                    if (iprint_DM >= 4 .and. inode == ionode) &
@@ -851,8 +933,13 @@ contains
                 end if
                 ! Pass band-by-band K matrices if we are outputting densities
                 if(wf_self_con .and. flag_out_wf) then
-                   call buildK(Hrange, matK(spin), occ(:,kp,spin), &
-                        kk(:,kp), wtk(kp), expH(:,:,spin),matBand)
+                   if(flag_out_wf_by_kp) then
+                      call buildK(Hrange, matK(spin), occ(:,kp,spin), &
+                           kk(:,kp), wtk(kp), expH(:,:,spin),matBand_kp(:,kp))
+                   else
+                      call buildK(Hrange, matK(spin), occ(:,kp,spin), &
+                           kk(:,kp), wtk(kp), expH(:,:,spin),matBand)
+                   end if
                 else
                    call buildK(Hrange, matK(spin), occ(:,kp,spin), &
                         kk(:,kp), wtk(kp), expH(:,:,spin))
@@ -877,17 +964,17 @@ contains
                               write (io_lun, &
                               fmt='(2x,"Spin, Occ, wt: ", i1, 2f12.8, &
                               &" ent: ", f20.12)') &
-                                    spin, locc(spin), wtk(kp), entropy_local(spin)
+                              spin, locc(spin), wtk(kp), entropy_local(spin)
                          entropy = entropy - &
                               spin_factor * wtk(kp) * entropy_local(spin)
                       end if
                    case (1) ! Methfessel-Paxton smearing
                       entropy = entropy + spin_factor * wtk(kp) * &
-                                MP_entropy((w(j,kp,spin) - Efermi(spin)) / kT, &
-                                           iMethfessel_Paxton)
+                           MP_entropy((w(j,kp,spin) - Efermi(spin)) / kT, &
+                           iMethfessel_Paxton)
                    case default
                       call cq_abort ("FindEvals: Smearing flag not recognised",&
-                                     flag_smear_type)
+                           flag_smear_type)
 
                    end select
                    ! occ is now used to construct matM12, factor by eps^n
@@ -897,7 +984,7 @@ contains
                 ! Now build data_M12_ij (=-\sum_n eps^n c^n_i c^n_j -
                 ! hence scaling occs by eps allows reuse of buildK)
                 call buildK(Srange, matM12(spin), occ(:,kp,spin), &
-                            kk(:,kp), wtk(kp), expH(:,:,spin))
+                     kk(:,kp), wtk(kp), expH(:,:,spin))
              end if ! End if (i <= N_kpoints_in_pg(ng)) then
           end do ! End do ng = 1, proc_groups
        end do ! End do i = 1, nkpoints_max
@@ -909,23 +996,71 @@ contains
        if (stat /= 0) call cq_abort('wf_out: Failed to allocate wfs', stat)
        call reg_alloc_mem(area_DM, maxngrid, type_dbl)
        support_K = allocate_temp_fn_on_grid(sf)
-       do wf_no=1,max_wf
-          do spin = 1, nspin
-             abs_wf(:)=zero
-             call get_band_density(abs_wf,spin,supportfns,support_K,matBand(wf_no),maxngrid)
-             call wf_output(spin,abs_wf,wf_no)
-             call my_barrier()
+       if(flag_out_wf_by_kp) then
+          if(inode==ionode) call write_eigenvalues(w,matrix_size,nkp,nspin,kk,wtk,Efermi)
+          do i=1,nkp
+             do wf_no=1,max_wf
+                write(io_lun,fmt='(2x,"Band : ",i4," k-point: ",i3)') out_wf(wf_no),i
+                if(nspin>1) then
+                   do spin = 1, nspin
+                      abs_wf(:)=zero
+                      call get_band_density(abs_wf,spin,supportfns,support_K,matBand_kp(wf_no,i),maxngrid)
+                      if(i==1) then
+                         call wf_output(spin,abs_wf,wf_no,kk(:,i),w(out_wf(wf_no),i,spin),i)
+                      else
+                         call wf_output(spin,abs_wf,wf_no,kk(:,i),w(out_wf(wf_no),i,spin),i)
+                      end if
+                      call my_barrier()
+                   end do
+                else
+                   abs_wf(:)=zero
+                   spin = 1
+                   call get_band_density(abs_wf,spin,supportfns,support_K,matBand_kp(wf_no,i),maxngrid)
+                   if(i==1) then
+                      call wf_output(0,abs_wf,wf_no,kk(:,i),w(out_wf(wf_no),i,spin),i)
+                   else
+                      call wf_output(0,abs_wf,wf_no,kk(:,i),w(out_wf(wf_no),i,spin))
+                   end if
+                   call my_barrier()
+                end if
+             end do
           end do
-       end do
+       else
+          do wf_no=1,max_wf
+             do spin = 1, nspin
+                abs_wf(:)=zero
+                call get_band_density(abs_wf,spin,supportfns,support_K,matBand(wf_no),maxngrid)
+                call wf_output(spin,abs_wf,wf_no)
+                call my_barrier()
+             end do
+          end do
+       end if
        deallocate(abs_wf,STAT=stat)
        if (stat /= 0) call cq_abort('Find Evals: Failed to deallocate wfs',stat)
        call reg_dealloc_mem(area_DM, maxngrid, type_dbl)
        call free_temp_fn_on_grid(support_K)
-       do i=max_wf,1,-1
-          call free_temp_matrix(matBand(i))
-       end do
+       if(flag_out_wf_by_kp) then
+          do j=nkp,1,-1
+             do i=max_wf,1,-1
+                call free_temp_matrix(matBand_kp(i,j))
+             end do
+          end do
+       else
+          do i=max_wf,1,-1
+             call free_temp_matrix(matBand(i))
+          end do
+       end if
     end if
-
+    if(wf_self_con.AND.flag_write_DOS) then
+       ! output DOS
+       if(inode==ionode) call dump_DOS(total_DOS,Efermi)
+       call my_barrier()
+       if(flag_write_projected_DOS) then
+          call dump_projected_DOS(pDOS,Efermi)
+          deallocate(pDOS)
+       end if
+       deallocate(total_DOS)
+    end if
 
     if (iprint_DM > 3 .and. inode == ionode) &
          write (io_lun, *) "Entropy, TS: ", entropy, kT * entropy
@@ -942,7 +1077,7 @@ contains
     if (iprint_DM >= 1 .and. inode == ionode) then
        do spin = 1, nspin
           write (io_lun, 13) spin, en_conv * Efermi(spin), &
-                             en_units(energy_units)
+               en_units(energy_units)
        end do
     end if
     ! Write out the band energy and trace of K
@@ -958,8 +1093,8 @@ contains
              write (io_lun, 5)  en_conv * bandE_total, en_units(energy_units)
           else
              write (io_lun, 14) en_conv * bandE(1), en_units(energy_units), &
-                                en_conv * bandE(2), en_units(energy_units), &
-                                en_conv * bandE_total, en_units(energy_units)
+                  en_conv * bandE(2), en_units(energy_units), &
+                  en_conv * bandE_total, en_units(energy_units)
           end if
        end if
        ! for tr(S.G)
@@ -973,8 +1108,8 @@ contains
              write (io_lun, 6) en_conv * bandE_total, en_units(energy_units)
           else
              write (io_lun, 15) en_conv * bandE(1), en_units(energy_units), &
-                                en_conv * bandE(2), en_units(energy_units), &
-                                en_conv * bandE_total, en_units(energy_units)
+                  en_conv * bandE(2), en_units(energy_units), &
+                  en_conv * bandE_total, en_units(energy_units)
           end if
        end if
     end if ! iprint_DM >= 1
@@ -1004,9 +1139,9 @@ contains
 12  format(10x,'Proc: ',i5,' row, col size: ',2i5)
 13  format(10x,'Fermi energy for spin = ',i1,' is ',f18.11,' ',a2)
 14  format(10x,'Energies Tr[K.H_up], Tr[K.H_down], and their sum: ',&
-           f18.11,' ',a2,/,60x,f18.11,' ',a2,/,60x,f18.11,' ',a2)
+         f18.11,' ',a2,/,60x,f18.11,' ',a2,/,60x,f18.11,' ',a2)
 15  format(19x,'Tr[K.G_up], Tr[K.G_down], and their sum: ',&
-           f18.11,' ',a2,/,60x,f18.11,' ',a2,/,60x,f18.11,' ',a2)
+         f18.11,' ',a2,/,60x,f18.11,' ',a2,/,60x,f18.11,' ',a2)
   end subroutine FindEvals
   !!***
 
@@ -1056,17 +1191,17 @@ contains
 
     use numbers
     use ScalapackFormat, only: allocate_arrays, pg_initialise,        &
-                               ref_to_SC_blocks, make_maps,           &
-                               find_SC_row_atoms, find_ref_row_atoms, &
-                               find_SC_col_atoms, proc_start,         &
-                               block_size_r, block_size_c, proc_rows, &
-                               proc_cols, matrix_size, pgid,          &
-                               proc_groups, procid
+         ref_to_SC_blocks, make_maps,           &
+         find_SC_row_atoms, find_ref_row_atoms, &
+         find_SC_col_atoms, proc_start,         &
+         block_size_r, block_size_c, proc_rows, &
+         proc_cols, matrix_size, pgid,          &
+         proc_groups, procid
     use global_module,   only: numprocs, nspin
     use matrix_data,     only: Hrange, Srange
     use GenComms,        only: my_barrier, cq_abort, myid
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
-                               reg_alloc_mem, reg_dealloc_mem
+         reg_alloc_mem, reg_dealloc_mem
 
     implicit none
 
@@ -1075,7 +1210,7 @@ contains
 
     ! Local variables
     integer         :: nump, merow, mecol, numrows, numcols, info, &
-                       stat, m, mz, ng
+         stat, m, mz, ng
     real(double)    :: rwo(1)
     complex(double) :: wo(1)
     integer         :: iwo(1)
@@ -1118,8 +1253,8 @@ contains
     call reg_alloc_mem(area_DM, nspin, type_dbl)
 
     allocate(SCHmat(row_size,col_size,nspin), &
-             SCSmat(row_size,col_size,nspin), &
-             z(row_size,col_size,nspin), STAT=stat)
+         SCSmat(row_size,col_size,nspin), &
+         z(row_size,col_size,nspin), STAT=stat)
     if (stat /= 0) &
          call cq_abort("initDiag: failed to allocate SCHmat, SCSmat and z", stat)
     call reg_alloc_mem(area_DM, 3 * row_size * col_size * nspin, type_cplx)
@@ -1128,7 +1263,7 @@ contains
     z = zero
 
     allocate(w(matrix_size,nkp,nspin), &
-             occ(matrix_size,nkp,nspin), STAT=stat)
+         occ(matrix_size,nkp,nspin), STAT=stat)
     if (stat /= 0) call cq_abort('initDiag: failed to allocate w and occ', stat)
     call reg_alloc_mem(area_DM, 2 * matrix_size * nkp * nspin, type_dbl)
 
@@ -1142,7 +1277,7 @@ contains
     ! avaliable for BLACS
     if (nump < numprocs) &
          call cq_abort('initDiag: There are not enough nodes for BLACS', &
-                       nump, numprocs)
+         nump, numprocs)
     if (me /= myid) &
          call cq_abort('initDiag: me and myid is not the same', me, myid)
 
@@ -1171,21 +1306,21 @@ contains
     call blacs_gridinfo(context, numrows, numcols, merow, mecol)
     if (iprint_DM >= 3 .AND. myid == 0) &
          write (io_lun, fmt="(10x, 'process_grid info: ', i5, i5)") &
-                numrows, numcols
+         numrows, numcols
     if (iprint_DM >= 3 .AND. myid == 0) &
          write (io_lun, 1) myid, me, merow, mecol
     call my_barrier
     ! Register the description of the distribution of H
     call descinit(desca, matrix_size, matrix_size, block_size_r, &
-                  block_size_c, 0, 0, context, row_size, info)
+         block_size_c, 0, 0, context, row_size, info)
     if (info /= 0) call cq_abort("initDiag: descinit(a) failed !", info)
     ! Register the description of the distribution of S
     call descinit(descb, matrix_size, matrix_size, block_size_r, &
-                  block_size_c, 0, 0, context, row_size, info)
+         block_size_c, 0, 0, context, row_size, info)
     if (info /= 0) call cq_abort("initDiag: descinit(a) failed !", info)
     ! And register eigenvector distribution
     call descinit(descz, matrix_size, matrix_size, block_size_r, &
-                  block_size_c, 0, 0, context, row_size, info)
+         block_size_c, 0, 0, context, row_size, info)
     ! Find scratch space requirements for ScaLAPACk
     if (info /= 0) call cq_abort("initDiag: descinit(z) failed !", info)
 
@@ -1205,10 +1340,10 @@ contains
 
     ! the pzhegvx is only called here to get the optimal work array
     call pzhegvx(1, 'V', 'A', 'U', matrix_size, SCHmat(:,:,1), 1, 1,  &
-                 desca, SCSmat(:,:,1), 1, 1, descb, zero, zero, 0, 0, &
-                 1.0e-307_double, m, mz, w(1,1,1), -one, z(:,:,1), 1, &
-                 1, descz, wo, -1, rwo, -1, iwo, -1, ifail, iclustr,  &
-                 gap, info)
+         desca, SCSmat(:,:,1), 1, 1, descb, zero, zero, 0, 0, &
+         1.0e-307_double, m, mz, w(1,1,1), -one, z(:,:,1), 1, &
+         1, descz, wo, -1, rwo, -1, iwo, -1, ifail, iclustr,  &
+         gap, info)
 
     ! Allocate scratch space for ScaLAPACK
     lwork  = 2 * real(wo(1), double)
@@ -1259,10 +1394,10 @@ contains
   subroutine endDiag
 
     use memory_module,   only: type_dbl, type_int, type_cplx, &
-                               reg_dealloc_mem
+         reg_dealloc_mem
     use global_module,   only: numprocs, nspin
     use ScalapackFormat, only: deallocate_arrays, proc_rows,  &
-                               proc_cols, matrix_size
+         proc_cols, matrix_size
 
     implicit none
 
@@ -1296,7 +1431,7 @@ contains
     if (stat /= 0) &
          call cq_abort("endDiag: failed to deallocate ifail and iclustr", stat)
     call reg_dealloc_mem(area_DM, matrix_size + 2 * proc_rows * &
-                         proc_cols, type_int)
+         proc_cols, type_int)
 
     deallocate(gap, STAT=stat)
     if (stat /= 0) call cq_abort("endDiag: failed to deallocate gap", stat)
@@ -1327,7 +1462,7 @@ contains
     deallocate (DistribS%images, STAT=stat)
     if (stat /= 0) call cq_abort('endDiag: failed to deallocate (2)', stat)
     deallocate (DistribS%num_rows, DistribS%start_row, DistribS%send_rows, &
-                DistribS%firstrow, STAT=stat)
+         DistribS%firstrow, STAT=stat)
     if (stat /= 0) call cq_abort('endDiag: failed to deallocate (2a)', stat)
     call reg_dealloc_mem(area_DM, 4 * numprocs, type_int)
     ! For H
@@ -1345,7 +1480,7 @@ contains
     deallocate (DistribH%images, STAT=stat)
     if (stat /= 0) call cq_abort('endDiag: failed to deallocate (2)', stat)
     deallocate (DistribH%num_rows, DistribH%start_row, DistribH%send_rows, &
-                DistribH%firstrow, STAT=stat)
+         DistribH%firstrow, STAT=stat)
     if (stat /= 0) call cq_abort('endDiag: failed to deallocate (2a)', stat)
     call reg_dealloc_mem(area_DM, 4 * numprocs, type_int)
 
@@ -1402,8 +1537,8 @@ contains
   subroutine PrepareRecv(Distrib)
 
     use ScalapackFormat, only: proc_start, SC_row_block_atom,        &
-                               block_size_r, block_size_c, blocks_r, &
-                               my_row, matrix_size
+         block_size_r, block_size_c, blocks_r, &
+         my_row, matrix_size
     use global_module,   only: iprint_DM, ni_in_cell, numprocs
     use group_module,    only: parts
     use GenComms,        only: myid, cq_abort
@@ -1540,7 +1675,7 @@ contains
   subroutine PrepareSend(range,Distrib)
 
     use global_module,   only: numprocs, iprint_DM, x_atom_cell,     &
-                               y_atom_cell, z_atom_cell
+         y_atom_cell, z_atom_cell
     use GenComms,        only: myid, my_barrier
     use maxima_module,   only: maxnsf
     use matrix_module,   only: matrix, matrix_halo
@@ -1548,9 +1683,9 @@ contains
     use primary_module,  only: bundle
     use cover_module,    only: BCS_parts
     use ScalapackFormat, only: CC_to_SC, maxrow, maxcol, proc_block, &
-                               SC_to_refx, SC_to_refy, block_size_r, &
-                               block_size_c, blocks_c, proc_start,   &
-                               proc_groups
+         SC_to_refx, SC_to_refy, block_size_r, &
+         block_size_c, blocks_c, proc_start,   &
+         proc_groups
     use matrix_data,     only: mat, halo
     use species_module,  only: nsf_species
 
@@ -1924,8 +2059,8 @@ contains
     use mpi
     use numbers,         only: zero, minus_i
     use ScalapackFormat, only: proc_start, block_size_r, block_size_c,&
-                               pgid, proc_groups, pg_kpoints, pgroup, &
-                               N_kpoints_in_pg
+         pgid, proc_groups, pg_kpoints, pgroup, &
+         N_kpoints_in_pg
     use GenComms,        only: my_barrier, myid
     use GenBlas,         only: copy
     use mult_module,     only: return_matrix_value_pos, matrix_pos
@@ -2188,7 +2323,7 @@ contains
     use mpi
     use numbers,         only: zero, minus_i
     use ScalapackFormat, only: proc_start, block_size_r, block_size_c,&
-                               mapy, pgroup, pgid
+         mapy, pgroup, pgid
     use GenComms,        only: my_barrier, myid
 
     implicit none
@@ -2202,7 +2337,7 @@ contains
     ! Local variables
     integer :: send_proc, recv_proc, send_size, recv_size
     integer :: sendtag, recvtag, stat, rblock, cblock, refblock, roff,&
-               coff, req1, req2, ierr
+         coff, req1, req2, ierr
     integer :: srow_size, scol_size, rrow_size, rcol_size
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
     integer :: i, j, k
@@ -2272,7 +2407,7 @@ contains
              deallocate(RecvBuffer,STAT=stat)
           end if
           if (pgid == ng) deallocate(SendBuffer,STAT=stat)
-       ! Send and receive data to/from remote processors
+          ! Send and receive data to/from remote processors
        else ! if(send_proc==myid.AND.recv_proc==myid)
           ! ---------------
           ! Fill SendBuffer
@@ -2397,9 +2532,9 @@ contains
     use datatypes
     use numbers
     use global_module, only: iprint_DM, nspin, spin_factor, &
-                             flag_fix_spin_population, flag_DeltaSCF, flag_excite, &
-                             dscf_source_level, dscf_target_level, dscf_source_spin, &
-                             dscf_target_spin, dscf_source_nfold, dscf_target_nfold
+         flag_fix_spin_population, flag_DeltaSCF, flag_excite, &
+         dscf_source_level, dscf_target_level, dscf_source_spin, &
+         dscf_target_spin, dscf_source_nfold, dscf_target_nfold
     use GenComms,      only: myid
 
     implicit none
@@ -2642,7 +2777,7 @@ contains
           end if
           gaussian_width = two * sqrt(-log(gaussian_height)) * kT
           incEf(spin) = gaussian_width / &
-                        (two * real(iMethfessel_Paxton, double) * finess)
+               (two * real(iMethfessel_Paxton, double) * finess)
           highEf(spin) = lowEf(spin) + incEf(spin)
           call occupy(occ, eig, highEf, highElec, nbands, nkp, spin=spin)
           do while (highElec(spin) < electrons(spin))
@@ -2659,8 +2794,8 @@ contains
                write (io_lun, 12) myid, lowEf(spin), highEf(spin)
 
        case default
-                call cq_abort ("FindEvals: Smearing flag not recognised",&
-                               flag_smear_type)
+          call cq_abort ("FindEvals: Smearing flag not recognised",&
+               flag_smear_type)
        end select
 
        ! Starting Bisection
@@ -2894,7 +3029,7 @@ contains
        end if
        gaussian_width = two * sqrt(-log(gaussian_height)) * kT
        incEf(:) = gaussian_width / &
-                  (two * real(iMethfessel_Paxton, double) * finess)
+            (two * real(iMethfessel_Paxton, double) * finess)
        highEf(:) = lowEf(:) + incEf(:)
        call occupy(occ, eig, highEf, electrons, nbands, nkp)
        highElec = spin_factor * sum(electrons(:))
@@ -2910,7 +3045,7 @@ contains
 
     case default
        call cq_abort ("FindEvals: Smearing flag not recognised",&
-                      flag_smear_type)
+            flag_smear_type)
     end select
 
     ! Starting Bisection
@@ -2919,7 +3054,7 @@ contains
     thisElec = spin_factor * sum(electrons(:))
     counter = 0
     do while ((abs(thisElec - electrons_total)) > tolElec .and. &
-              (counter <= maxefermi))
+         (counter <= maxefermi))
        counter = counter + 1
        if (thisElec > electrons_total) then
           highElec = thisElec
@@ -3040,10 +3175,10 @@ contains
              case (1) ! Methfessel Paxton smearing
                 occu(iband,ikp,ss) = &
                      wtk(ikp) * MP_step(ebands(iband,ikp,ss) - Ef(ss), &
-                                        iMethfessel_Paxton, kT)
+                     iMethfessel_Paxton, kT)
              case default
                 call cq_abort ("FindEvals: Smearing flag not recognised",&
-                               flag_smear_type)
+                     flag_smear_type)
              end select
              electrons(ss) = electrons(ss) + occu(iband,ikp,ss)
           end do band
@@ -3065,14 +3200,14 @@ contains
     return
 
 1   format(10x, 'In occupy on proc: ', i5, &
-           ' For Ef of ', f8.5,            &
-           ' we get ', f12.5 ' electrons')
+         ' For Ef of ', f8.5,            &
+         ' we get ', f12.5 ' electrons')
 2   format(10x, 'In occupy on proc: ', i5,           &
-           ' For Spin = ', i1, ' with Ef of ', f8.5, &
-           ' we get ', f12.5, ' electrons')
+         ' For Spin = ', i1, ' with Ef of ', f8.5, &
+         ' we get ', f12.5, ' electrons')
 3   format(10x, 'In occupy on proc: ', i5,                   &
-           ' For Ef (up, down) of (', f8.5, ', ', f8.5, ')', &
-           ' we get electrons (up, down, total)', 3f12.5)
+         ' For Ef (up, down) of (', f8.5, ', ', f8.5, ')', &
+         ' we get electrons (up, down, total)', 3f12.5)
 
   end subroutine occupy
   !!***
@@ -3141,13 +3276,13 @@ contains
        end if
     else
        x = E/kT
-      if(x > cutoff) then
-       fermi = zero
-      elseif(x < -cutoff) then
-       fermi = one
-      else
-       fermi = one/(one + exp(x))
-      endif
+       if(x > cutoff) then
+          fermi = zero
+       elseif(x < -cutoff) then
+          fermi = one
+       else
+          fermi = one/(one + exp(x))
+       endif
     end if
   end function fermi
   !!***
@@ -3443,7 +3578,7 @@ contains
   !!    Added code to calculate K matrix for individual bands (to allow output of charge density from bands)
   !!  SOURCE
   !!
-  subroutine buildK(range, matA, occs, kps, weight, localEig,matBand)
+  subroutine buildK(range, matA, occs, kps, weight, localEig,matBand,locw)
 
     !use maxima_module, only: mx_nponn, mx_at_prim
     use numbers
@@ -3452,12 +3587,12 @@ contains
     use primary_module,  only: bundle
     use cover_module,    only: BCS_parts
     use ScalapackFormat, only: CC_to_SC,maxrow,maxcol,proc_block,    &
-                               SC_to_refx,SC_to_refy, block_size_r,  &
-                               block_size_c, blocks_c, proc_start,   &
-                               matrix_size
+         SC_to_refx,SC_to_refy, block_size_r,  &
+         block_size_c, blocks_c, proc_start,   &
+         matrix_size
     use global_module,   only: numprocs, iprint_DM, id_glob,         &
-                               ni_in_cell, x_atom_cell, y_atom_cell, &
-                               z_atom_cell, max_wf, out_wf
+         ni_in_cell, x_atom_cell, y_atom_cell, &
+         z_atom_cell, max_wf, out_wf
     use mpi
     use GenBlas,         only: dot
     use GenComms,        only: myid
@@ -3474,6 +3609,7 @@ contains
     integer :: matA, range
     complex(double_cplx), dimension(:,:), intent(in) :: localEig
     integer, OPTIONAL, dimension(max_wf) :: matBand
+    real(double), OPTIONAL, dimension(matrix_size) :: locw
     ! Local variables
     type(Krecv_data), dimension(:), allocatable :: recv_info
     integer :: part, memb, neigh, ist, prim_atom, owning_proc, locatom
@@ -3497,7 +3633,7 @@ contains
     complex(double_cplx), dimension(:,:), allocatable :: RecvBuffer, &
          SendBuffer
     logical :: flag, flag_write_out
-    integer :: FSCpart, ipart, iband, iwf
+    integer :: FSCpart, ipart, iband, iwf, len_occ
     ! for spin polarisation
     real(double) :: occ_correction
 
@@ -3678,12 +3814,24 @@ contains
     ! Work out length
     ! NB we send all bands up to last occupied one (for deltaSCF this will include some empty)
     len = 0
-    do i=1,matrix_size
+    do i=1,matrix_size ! Effectively all bands
        if(abs(occs(i))>RD_ERR) then
           len = i !len+1
           if(myid==0.AND.iprint_DM>=4) write(io_lun,*) 'Occ is ',occs(i)
        end if
     end do
+    ! DRB for WF output - means that we transfer the coefficients into the conduction band
+    ! but leave the occupancies along
+    if(flag_write_out) then
+       len_occ = len
+       do iwf = 1,max_wf
+          iband = out_wf(iwf)
+          if(iband>len) len = iband
+       end do
+       write(io_lun,*) 'Number of bands: ',len_occ,len
+    else
+       len_occ = len
+    end if
     if(iprint_DM>=3.AND.myid==0) write(io_lun,*) 'buildK: Stage three len:',len, matA
     ! Step three - loop over processors, send and recv data and build K
     allocate(send_fsc(bundle%mx_iprim),recv_to_FSC(bundle%mx_iprim),mapchunk(bundle%mx_iprim),STAT=stat)
@@ -3708,9 +3856,9 @@ contains
              SendBuffer(1:len,orb_count) = localEig(1:len,send_off(send_proc+1,j)+nsf1)
           end do
           ! We also need to send a list of what FSC each primary atom sent corresponds to - use bundle%ig_prim
-         send_FSC(j) = bundle%ig_prim(send_info(send_proc+1,j))
-         if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Building send_FSC: ',send_info(send_proc+1,j), &
-              bundle%ig_prim(send_info(send_proc+1,j)),send_FSC(j)
+          send_FSC(j) = bundle%ig_prim(send_info(send_proc+1,j))
+          if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Building send_FSC: ',send_info(send_proc+1,j), &
+               bundle%ig_prim(send_info(send_proc+1,j)),send_FSC(j)
        end do
        if(orb_count/=norb_send(send_proc+1)) call cq_abort("Orbital mismatch in buildK: ",orb_count,norb_send(send_proc+1))
        sendtag = myid + send_proc*2*numprocs
@@ -3747,7 +3895,7 @@ contains
              mapchunk(j) = LocalAtom(recv_to_FSC(j))
           end do
           if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'filling buffer'
-          do j=1,len
+          do j=1,len_occ ! This is a loop over eigenstates
              RecvBuffer(j,1:recv_info(recv_proc+1)%orbs) = RecvBuffer(j,1:recv_info(recv_proc+1)%orbs)*occ_correction*occs(j)
           end do
           orb_count = 0
@@ -3776,7 +3924,7 @@ contains
                    do col_sup = 1,nsf_species(bundle%species(prim))
                       whereMat = matrix_pos(matA,recv_info(recv_proc+1)%prim_atom(inter,locatom), &
                            recv_info(recv_proc+1)%locj(inter,locatom),col_sup,row_sup)
-                      zsum = dot(len,localEig(1:len,prim_orbs(prim)+col_sup),1,RecvBuffer(1:len,orb_count+row_sup),1)
+                      zsum = dot(len_occ,localEig(1:len_occ,prim_orbs(prim)+col_sup),1,RecvBuffer(1:len_occ,orb_count+row_sup),1)
                       call store_matrix_value_pos(matA,whereMat,real(zsum*cmplx(rfac,ifac,double_cplx),double))
                       if(flag_write_out) then
                          do iwf = 1,max_wf
@@ -3834,36 +3982,38 @@ contains
   end subroutine buildK
   !!***
 
-!!****f*  Diagimodule/wf_output 
-!!
-!!  NAME 
-!!   wf_output
-!!  USAGE
-!! 
-!!  PURPOSE
-!!   Outputs the KS wavefuntion charge
-!!
-!!      
-!!  INPUTS
-!! 
-!! 
-!!  USES
-!! 
-!!  AUTHOR
-!!   C. O'Rourke
-!!  CREATION DATE
-!!   2015/05/29 
-!!  MODIFICATION HISTORY
-!!   2015/06/05 16:42 dave
-!!    Tidied and removed sum over grid points (done in get_band_density) 
-!!  SOURCE
-!!
-  subroutine wf_output(spin,abs_wf,wf_no)
+  !!****f*  DiagModule/wf_output 
+  !!
+  !!  NAME 
+  !!   wf_output
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Outputs the KS wavefuntion charge
+  !!
+  !!      
+  !!  INPUTS
+  !! 
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   C. O'Rourke
+  !!  CREATION DATE
+  !!   2015/05/29 
+  !!  MODIFICATION HISTORY
+  !!   2015/06/05 16:42 dave
+  !!    Tidied and removed sum over grid points (done in get_band_density)
+  !!   2015/07/02 08:21 dave
+  !!    Changing to write by k-point (same file but introduce header)
+  !!  SOURCE
+  !!
+  subroutine wf_output(spin,abs_wf,wf_no,kp,energy,first)
 
     use datatypes
     use GenComms,       ONLY: gsum, my_barrier
     use global_module,  ONLY: out_wf, nspin
-    use io_module,      ONLY: dump_charge2
+    use io_module,      ONLY: dump_band_charge
     use maxima_module,  ONLY: maxngrid
     use numbers,        ONLY: zero
 
@@ -3871,20 +4021,88 @@ contains
 
     real(double), dimension(:) :: abs_wf
     integer(integ)    :: spin,wf_no
+    real(double), optional :: energy
+    real(double), optional, dimension(3) :: kp
+    integer, optional :: first
 
     character(len=50) :: ci,cspin
 
-    if (nspin > 1) then
-       if (spin == 1) cspin = '_Up_'
-       if (spin == 2) cspin = '_Dn_'
+    !ci=adjustl(ci)
+    if(PRESENT(kp)) then 
+       write(ci,'("Band",I0.6,"K")') out_wf(wf_no)
     else
-       cspin=''
+       write(ci,'("Band",I0.6)') out_wf(wf_no)
     end if
-    write(ci,'(I4)') out_wf(wf_no)
-    ci=adjustl(ci)
-    ci=trim(ci)//trim(cspin)
-    call dump_charge2(trim(ci)//"wf",abs_wf(:),maxngrid,inode)
+    !ci=trim(ci)
+    if(present(kp).AND.present(energy)) then
+       if(present(first)) then
+          call dump_band_charge(trim(ci)//"wf",abs_wf(:),maxngrid,inode,spin,kp,energy,nkp)
+       else
+          call dump_band_charge(trim(ci)//"wf",abs_wf(:),maxngrid,inode,spin,kp,energy)
+       end if
+    else
+       call dump_band_charge(trim(ci)//"wf",abs_wf(:),maxngrid,inode,spin)
+    end if
   end subroutine wf_output
-!!***
+  !!***
+
+  subroutine accumulate_DOS(weight,eval,evec,DOS,projDOS)
+
+    use datatypes
+    use numbers, ONLY: half, zero
+    use global_module, ONLY: n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, flag_write_projected_DOS
+    use ScalapackFormat, only: matrix_size
+    use species_module,  only: nsf_species
+    use primary_module,  only: bundle
+    use GenComms, ONLY: cq_abort
+    
+    implicit none
+
+    ! Passed variables
+    real(double) :: weight
+    complex(double_cplx), dimension(:,:), intent(in) :: evec
+    real(double), dimension(:) :: eval
+    real(double), dimension(n_DOS) :: DOS
+    real(double), OPTIONAL, dimension(:,:) :: projDOS
+
+    ! Local variables
+    integer :: iwf, n_band, n_min, n_max, i, acc, atom, nsf
+    real(double) :: Ebin, a, fac
+    real(double), dimension(n_DOS) :: tmp
+
+    if(present(projDOS).AND.(.NOT.flag_write_projected_DOS)) call cq_abort("Called pDOS without flag")
+    ! ---------------
+    ! DOS calculation
+    ! ---------------
+    ! Now accumulate DOS for this band
+    do iwf=1,matrix_size ! Effectively all bands
+       tmp = zero
+       n_band = aint((eval(iwf) - E_DOS_min)/dE_DOS) + 1
+       n_min = n_band - n_DOS_wid
+       if(n_min<1) n_min = 1
+       n_max = n_band + n_DOS_wid
+       if(n_max>n_DOS) n_max = n_DOS
+       do i = n_min, n_max
+          Ebin = real(i-1,double)*dE_DOS + E_DOS_min
+          a = (Ebin-eval(iwf))/sigma_DOS
+          tmp(i) = weight*pf_DOS*exp(-half*a*a)
+          DOS(i) = DOS(i) + tmp(i)
+       end do
+       ! Having found DOS, we now project onto atoms
+       if(flag_write_projected_DOS) then
+          acc = 0
+          do atom=1,bundle%n_prim
+             fac = zero
+             do nsf = 1,nsf_species(bundle%species(atom))
+                fac = fac + real(evec(iwf,acc+nsf)*conjg(evec(iwf,acc+nsf)),double)
+             end do
+             do i=n_min,n_max
+                projDOS(i,atom) = projDOS(i,atom) + tmp(i)*fac
+             end do
+             acc = acc + nsf_species(bundle%species(atom))
+          end do
+       end if
+    end do
+  end subroutine accumulate_DOS
   
 end module DiagModule

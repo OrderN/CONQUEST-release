@@ -71,7 +71,8 @@
 !!    Filenames based on node/iteration number are now not limited to
 !!    3 figures New routine get_file_name takes care of creating a
 !!    sufficiently long string
-!!
+!!   2015/06/25 17:18 dave
+!!    Changed all file name lengths to 50 characters
 module io_module
 
   use global_module,          only: io_lun
@@ -2718,7 +2719,7 @@ second:   do
 
     ! Local variables
     integer :: lun, block, n_point, n_i, n
-    character(len=20) :: filename
+    character(len=50) :: filename
 
     ! Build a filename based on node number
     if (present(spin)) then
@@ -2757,7 +2758,7 @@ second:   do
   !!***
 
 
-  !!****f* io_module/dump_charge2
+  !!****f* io_module/dump_band_charge
   !! PURPOSE
   !! INPUTS
   !! OUTPUT
@@ -2765,18 +2766,13 @@ second:   do
   !! AUTHOR
   !!   David Bowler
   !! CREATION DATE 
-  !!   
+  !!   2015/07/02 08:22 dave
   !! MODIFICATION HISTORY
-  !!   2011/08/30 L.Tong
-  !!     Added spin polarisation
-  !!     - optional integer parameter spin: 0 = total, 1 = up, 2 = dn
-  !!     - if spin is not present, then assume spin non-polarised
-  !!       calculation
-  !!   2013/03/06 17:10 dave
-  !!   - file name length increased
+  !!   2015/07/02 08:23 dave
+  !!    This was dump_charge2 (which served no purpose that I could see)
   !! SOURCE
   !!
-  subroutine dump_charge2(stub, density, size, inode, spin)
+  subroutine dump_band_charge(stub, density, size, inode, spin,kp,energy,num_kpts)
 
     use datatypes
     use block_module, only: n_pts_in_block
@@ -2788,45 +2784,216 @@ second:   do
     integer :: size, inode
     real(double), dimension(size) :: density
     character(len=*) :: stub
-    integer, optional :: spin 
+    integer :: spin 
+    real(double), optional :: energy
+    real(double), optional, dimension(3) :: kp
+    integer, optional :: num_kpts
 
     ! Local variables
     integer :: lun, block, n_point, n_i, n
-    character(len=20) :: filename
+    character(len=50) :: filename
 
     ! Build a filename based on node number
-    if (present (spin)) then
-       select case (spin)
-       case (0)
-          call get_file_name (stub//'den', numprocs, inode, filename)
-       case (1)
-          call get_file_name (stub//'den_up', numprocs, inode, filename)
-       case (2)
-          call get_file_name (stub//'den_dn', numprocs, inode, filename)
-       end select
-    else
+    select case (spin)
+    case (0)
        call get_file_name (stub//'den', numprocs, inode, filename)
-    end if
+    case (1)
+       call get_file_name (stub//'den_up', numprocs, inode, filename)
+    case (2)
+       call get_file_name (stub//'den_dn', numprocs, inode, filename)
+    end select
     ! Open file
     call io_assign (lun)
-    open (unit = lun, file = filename)
-    ! Dump charge density
-    ! do block=1, domain%groups_on_node
-    !   n_point = (block - 1) * n_pts_in_block
-    !   do n_i=1, naba_atm(supp)%no_of_atom(block) * NSF * n_pts_in_block, &
-    !        n_pts_in_block
-    !      do n=1, n_pts_in_block
-    !         write(unit=lun,fmt='(f30.15)') density(n_point+n)
-    !      end do
-    !   end do
-    ! end do
+    open (unit = lun, file = filename, position = 'append')
+    ! We need to write a header of the k-point and energy if split-down
+    if(present(num_kpts)) then
+       write(lun,fmt='(2i10)') num_kpts, domain%groups_on_node * n_pts_in_block
+    end if
+    if(present(kp).AND.present(energy)) then
+       write(lun,fmt='(3f12.5,f17.11)') kp(1:3),energy
+    end if
     do n=1, domain%groups_on_node * n_pts_in_block
        write (unit=lun, fmt='(g13.6)') density(n)
     end do
     call io_close (lun)
     return
-  end subroutine dump_charge2
+  end subroutine dump_band_charge
+  !!***
 
+  !!****f* io_module/write_eigenvalues
+  !! PURPOSE
+  !!  Writes out eigenvalues
+  !! INPUTS
+  !!  eval
+  !!  n_evals
+  !!  nkp
+  !!  nspin
+  !! OUTPUT
+  !! RETURN VALUE
+  !! AUTHOR
+  !!   David Bowler
+  !! CREATION DATE 
+  !!   2015/07/09 08:16
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine write_eigenvalues(eval,n_evals,nkp,nspin,kk,wtk,Ef)
+
+    use datatypes
+    
+    implicit none
+
+    ! Passed variables
+    integer :: n_evals,nkp,nspin
+    real(double), dimension(n_evals,nkp,nspin) :: eval
+    real(double), dimension(3,nkp) :: kk
+    real(double), dimension(nkp) :: wtk
+    real(double), dimension(nspin) :: Ef
+
+    ! Local variables
+    integer :: lun,sp,kp,ev
+    
+    call io_assign (lun)
+    open (unit = lun, file = 'eigenvalues.dat')
+    write(lun,fmt='("#  ",i7," eigenvalues ",i4," kpoints")') n_evals, nkp
+    if(nspin==1) then
+       write(lun,fmt='("# Ef: ",f12.5)') Ef(1)
+    else
+       write(lun,fmt='("# Ef: ",2f12.5)') Ef(1),Ef(2)
+    end if
+    write(lun,fmt='("# Format: nk kx ky kz weight, followed by eigenvalues")')
+    do sp = 1,nspin
+       do kp = 1,nkp
+          write(lun,fmt='(i4,4f12.5)') kp,kk(1,kp),kk(2,kp),kk(3,kp),wtk(kp)
+          do ev = 1,n_evals
+             write(lun,fmt='(i6,f18.10)') ev,eval(ev,kp,sp)
+          end do
+       end do
+    end do
+    call io_close(lun)
+    return
+  end subroutine write_eigenvalues
+  !!***
+  
+  !!****f* io_module/dump_DOS
+  !! PURPOSE
+  !! INPUTS
+  !! OUTPUT
+  !! RETURN VALUE
+  !! AUTHOR
+  !!   David Bowler
+  !! CREATION DATE 
+  !!   2015/07/02 10:46
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine dump_DOS(DOS,Ef)
+
+    use datatypes
+    use global_module, only: n_DOS, E_DOS_max, E_DOS_min, sigma_DOS, nspin
+
+    ! Passed variables
+    real(double), dimension(n_DOS,nspin) :: DOS
+    real(double), dimension(nspin) :: Ef
+
+    ! Local variables
+    integer :: lun, i
+    real(double) :: dE, thisE
+    character(len=50) :: filename
+
+    filename = 'DOSout.dat'
+    ! Open file
+    call io_assign (lun)
+    open (unit = lun, file = filename)
+    ! Header
+    if(nspin==1) then
+       write(lun,fmt='(2x,"# Ef: ",f12.5," DOS limits: ",2f12.5," n DOS: ",i5)') &
+            Ef(nspin),E_DOS_min,E_DOS_max, n_DOS
+    else if(nspin==2) then
+       write(lun,fmt='(2x,"# Ef(up.down) : ",2f12.5," DOS limits: ",2f12.5," n DOS: ",i5)') &
+            Ef(nspin),E_DOS_min,E_DOS_max, n_DOS
+    end if
+    write(lun,fmt='(2x,"# Broadening: ",f12.5)') sigma_DOS
+    dE = (E_DOS_max - E_DOS_min)/real(n_DOS - 1,double)
+    thisE = E_DOS_min
+    if(nspin==1) then
+       do i=1,n_DOS
+          write(lun,fmt='(2f17.10)') thisE,DOS(i,1)
+          thisE = thisE + dE
+       end do
+    else if(nspin==2) then
+       do i=1,n_DOS
+          write(lun,fmt='(3f17.10)') thisE,DOS(i,1),-DOS(i,2)
+          thisE = thisE + dE
+       end do
+    end if
+    call io_close (lun)
+    return
+  end subroutine dump_DOS
+  !!***
+
+  
+  !!****f* io_module/dump_projected_DOS
+  !! PURPOSE
+  !! INPUTS
+  !! OUTPUT
+  !! RETURN VALUE
+  !! AUTHOR
+  !!   David Bowler
+  !! CREATION DATE 
+  !!   2015/07/02 17:21
+  !! MODIFICATION HISTORY
+  !! SOURCE
+  !!
+  subroutine dump_projected_DOS(pDOS,Ef)
+
+    use datatypes
+    use global_module, only: n_DOS, E_DOS_max, E_DOS_min, sigma_DOS, nspin
+    use primary_module,  only: bundle
+
+    ! Passed variables
+    real(double), dimension(n_DOS,nspin,bundle%n_prim) :: pDOS
+    real(double), dimension(nspin) :: Ef
+
+    ! Local variables
+    integer :: lun, i, iprim
+    real(double) :: dE, thisE
+    character(len=50) :: filename
+
+    do iprim = 1,bundle%n_prim
+       write(filename,'("Atom",I0.7,"DOS.dat")') bundle%ig_prim(iprim)
+       ! Open file
+       call io_assign (lun)
+       open (unit = lun, file = filename)
+       ! Header
+       if(nspin==1) then
+          write(lun,fmt='(2x,"# Ef: ",f12.5," DOS limits: ",2f12.5," n DOS: ",i5)') &
+               Ef(nspin),E_DOS_min,E_DOS_max, n_DOS
+       else if(nspin==2) then
+          write(lun,fmt='(2x,"# Ef(up.down) : ",2f12.5," DOS limits: ",2f12.5," n DOS: ",i5)') &
+               Ef(nspin),E_DOS_min,E_DOS_max, n_DOS
+       end if
+       write(lun,fmt='(2x,"# Broadening: ",f12.5)') sigma_DOS
+       dE = (E_DOS_max - E_DOS_min)/real(n_DOS - 1,double)
+       thisE = E_DOS_min
+       if(nspin==1) then
+          do i=1,n_DOS
+             write(lun,fmt='(2f17.10)') thisE,pDOS(i,1,iprim)
+             thisE = thisE + dE
+          end do
+       else if(nspin==2) then
+          do i=1,n_DOS
+             write(lun,fmt='(3f17.10)') thisE,pDOS(i,iprim,1),-pDOS(i,iprim,2)
+             thisE = thisE + dE
+          end do
+       end if
+       call io_close (lun)
+    end do
+    return
+  end subroutine dump_projected_DOS
+  !!***
+
+  
 
   ! --------------------------------------------------------------------
   ! Subroutine grab_charge
@@ -2874,7 +3041,7 @@ second:   do
 
     ! Local variables
     integer           :: lun, block, n_point, n_i, n
-    character(len=20) :: filename
+    character(len=50) :: filename
 
     ! Build a filename based on node number
     if (present(spin)) then
@@ -2954,7 +3121,7 @@ second:   do
     ! Local variables
     integer :: lun, element, nf1, nf2,len
     integer :: np, ni, iprim,i, jsf, neigh, ist, gcspart,isf, Ah, globno
-    character(len=20) :: filename
+    character(len=50) :: filename
 
     ! Build a filename based on node number
     call get_file_name(stub//'matrix',numprocs,inode,filename)
@@ -3033,7 +3200,7 @@ second:   do
     ! Local variables
     integer :: lun, element, nf1, nf2,len
     real(double) :: val
-    character(len=20) :: filename
+    character(len=50) :: filename
 
     ! Build a filename based on node number
     call get_file_name(stub//'matrix',numprocs,inode,filename)
@@ -3095,7 +3262,7 @@ second:   do
 
     ! Local variables
     integer :: lun, element, nf1, nf2
-    character(len=20) :: filename
+    character(len=50) :: filename
 
     ! Build a filename based on node number
     call get_file_name(stub//'grid',numprocs,inode,filename)
@@ -3153,7 +3320,7 @@ second:   do
 
     ! Local variables
     integer :: lun, element, nf1, nf2
-    character(len=20) :: filename
+    character(len=50) :: filename
 
     ! Build a filename based on node number
     call get_file_name(stub//'grid',numprocs,inode,filename)
@@ -3211,7 +3378,7 @@ second:   do
 
     ! Local variables
     integer :: lun, block, n_point, n_i, n
-    character(len=20) :: filename
+    character(len=50) :: filename
 
     ! Build a filename based on node number
     call get_file_name('locps'//stub,numprocs,inode,filename)
@@ -3269,7 +3436,7 @@ second:   do
 
     ! Local variables
     integer :: lun, block, n_point, n_i, n
-    character(len=20) :: filename
+    character(len=50) :: filename
 
     ! Build a filename based on node number
     call get_file_name('locps'//stub,numprocs,inode,filename)
@@ -3731,7 +3898,7 @@ second:   do
     ! Local variables
     integer :: nnd, np, ind_part, ni
     integer :: lun
-    character(len=20) :: filename
+    character(len=50) :: filename
 
     if(num>0) then
        ! Build a filename based on iteration number
@@ -3985,7 +4152,7 @@ second:   do
 
     ! Passed variables
     real(double), intent(in) :: velocity(1:3, ni_in_cell)
-    character(len=20),intent(in) :: filename
+    character(len=50),intent(in) :: filename
 
     ! Local variables
     integer :: id_global, ni 
@@ -4044,7 +4211,7 @@ second:   do
 
     ! Passed variables
     real(double), intent(out) :: velocity(1:3, ni_in_cell)
-    character(len=20),intent(in) :: filename
+    character(len=50),intent(in) :: filename
 
     ! Local variables
     integer :: id_global, ni , ni2, id_tmp

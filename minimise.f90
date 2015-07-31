@@ -113,6 +113,8 @@ contains
   !!   - Added experimental backtrace
   !!   2015/06/10 15:48 cor & dave
   !!    Added call for wavefunction output at self-consistency
+  !!   2015/06/26 13:46 dave
+  !!    Turned off force calculation when writing out bands
   !!  SOURCE
   !!
   !subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -131,7 +133,7 @@ contains
                                  runtype, flag_vdWDFT, io_lun,         &
                                  flag_DeltaSCF, flag_excite, runtype,  &
                                  flag_MDold,flag_LmatrixReuse,McWFreq, &
-                                 io_lun, flag_out_wf, wf_self_con
+                                 io_lun, flag_out_wf, wf_self_con, flag_write_DOS
     use energy,            only: get_energy, xc_energy, final_energy
     use GenComms,          only: cq_abort, inode, ionode
     use blip_minimisation, only: vary_support
@@ -315,8 +317,8 @@ contains
     call final_energy(backtrace_level)
 !****lat>$
 
-    ! output WFs
-    if (flag_out_wf) then
+    ! output WFs or DOS
+    if (flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS)) then
        wf_self_con=.true.
        call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode,&
             ionode, reset_L, .false.)

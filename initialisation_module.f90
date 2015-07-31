@@ -975,7 +975,7 @@ contains
                                  n_proc_old,MDinit_step,ni_in_cell, &
                                  flag_XLBOMD, flag_dissipation,     &
                                  flag_propagateX, flag_propagateL, restart_X, &
-                                 flag_exx, exx_scf
+                                 flag_exx, exx_scf, flag_out_wf, wf_self_con, flag_write_DOS
     use ewald_module,      only: ewald, mikes_ewald, flag_old_ewald
     use S_matrix_module,   only: get_S_matrix
     use GenComms,          only: my_barrier,end_comms,inode,ionode, &
@@ -1215,6 +1215,9 @@ contains
             maxngrid, backtrace_level)
        
        electrons_tot = spin_factor * sum(electrons)
+       if (flag_out_wf.OR.flag_write_DOS) then
+          wf_self_con=.true.
+       endif
        
        if ( .not. restart_L ) then
           record  = .false.   
@@ -1227,6 +1230,9 @@ contains
           call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
                ionode, reset_L, record, backtrace_level)
        end if
+       if (flag_out_wf.OR.flag_write_DOS) then
+          wf_self_con=.false.
+       endif
        call get_energy(total_energy=total_energy,level=backtrace_level)
     end if
 !!$

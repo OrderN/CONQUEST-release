@@ -106,6 +106,8 @@
 !!    Wavefunction output flags (COR and dave)
 !!   2015/06/19
 !!    FIRE implmementation (SA, COR, dave)
+!!   2015/07/08 08:03 dave
+!!    DOS and k-point by k-point wavefunction output (for STM)
 !!  SOURCE
 !!
 module global_module
@@ -321,9 +323,21 @@ module global_module
   
   ! Wavefunction output
   logical :: flag_out_wf                        !output WFs?
+  logical :: flag_out_wf_by_kp                  !output WFs k-point by k-point
   integer,allocatable,dimension(:)::out_wf      !which bands to output  
   integer::max_wf                               !total no of bands
   logical :: wf_self_con                        !flag to select output at the end of SCF cycle
+  real(double) :: E_wf_min, E_wf_max            ! Limits for energy range
+  logical :: flag_wf_range_Ef                   ! Is the energy range relative to Ef (T) or absolute (F)
 
+  ! This is in the WF output section as I introduced it for WF output, but
+  ! it more properly applies to matrices (specifically how many temporary matrices we can store)
+  integer :: mx_temp_matrices                   ! Defaults to 100; used in mult_module (immi)
+  
+  ! DOS output
+  logical :: flag_write_DOS, flag_write_projected_DOS
+  real(double) :: E_DOS_min, E_DOS_max, sigma_DOS
+  integer :: n_DOS
+  
 end module global_module
 !!***

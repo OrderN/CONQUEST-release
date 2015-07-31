@@ -1,1 +1,1 @@
-  character(len=*), parameter :: commentver='Version beta 0.49 (rRRR): Added FIRE drb 2015/06/22'
+  character(len=*), parameter :: commentver='Version beta 0.49a (rRRR): DOS and wavefunction output drb 2015/07/31'

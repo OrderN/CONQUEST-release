@@ -116,7 +116,7 @@ contains
     use pseudopotential_data, only: set_pseudopotential
     use force_module,         only: tot_force
     use minimise,             only: get_E_and_F
-    use global_module,        only: runtype
+    use global_module,        only: runtype, flag_self_consistent, flag_out_wf, flag_write_DOS
     use input_module,         only: leqi
 
     implicit none
@@ -139,6 +139,7 @@ contains
 !****lat>$
 
     if ( leqi(runtype,'static') ) then
+       if(.NOT.flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS)) return
        call get_E_and_F(fixed_potential,vary_mu, total_energy,&
                         .true.,.true.,level=backtrace_level)
        ! 
@@ -480,7 +481,7 @@ contains
     integer       :: lun, ios, md_steps ! SA 150204; 150213 md_steps: counter for MD steps
     real(double)  :: temp, KE, energy1, energy0, dE, max, g0
     real(double)  :: energy_md
-    character(20) :: file_velocity='velocity.dat'
+    character(50) :: file_velocity='velocity.dat'
     logical       :: done,second_call
     logical,allocatable,dimension(:) :: flag_movable
 

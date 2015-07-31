@@ -347,6 +347,19 @@ contains
           nfb_y = -nfb_y
 
        enddo
+       if(inode==ionode) then
+          call io_assign(lun)
+          open(unit=lun,file='raster_make_blk.dat')
+          write(lun,fmt='(3i8)') n_block_x, n_block_y, n_block_z
+          write(lun,fmt='(i8)') numprocs
+          do nnd = 1,numprocs
+             write(lun,fmt='(3i8)') nnd,blocks%ng_on_node(nnd),blocks%inode_beg(nnd)
+             do nx = 1,blocks%ng_on_node(nnd)
+                write(lun,fmt='(2i8)') nx,blocks%ngnode(blocks%inode_beg(nnd)+nx-1)
+             end do
+          end do
+          call io_close(lun)
+       end if
     else if(flag_assign_blocks==blocks_hilbert) then
        n_all_blocks = n_block_x * n_block_y * n_block_z
        allocate(blocks_per_proc(numprocs),proc_block(n_all_blocks),proc_which_block(n_all_blocks))

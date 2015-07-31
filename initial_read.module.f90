@@ -530,9 +530,11 @@ contains
                              restart_T,restart_X,flag_XLBOMD,flag_propagateX,              &
                              flag_propagateL,flag_dissipation,integratorXL, flag_FixCOM,   &
                              flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter,         &
-                             flag_out_wf,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
+                             flag_out_wf,flag_out_wf_by_kp,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
                              fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
-                             fire_N_max
+                             fire_N_max, flag_write_DOS, flag_write_projected_DOS, &
+                             E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
+                             mx_temp_matrices
 
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
@@ -1106,12 +1108,15 @@ contains
 !!$
 !!$
        ! read wavefunction output flags
+       mx_temp_matrices = fdf_integer('General.MaxTempMatrices',100)
        flag_out_wf=fdf_boolean('IO.outputWF',.false.)
        if (flag_out_wf) then
           if (diagon .and. leqi(runtype,'static')) then
+             flag_out_wf_by_kp=fdf_boolean('IO.outputWF_by_kpoint',.false.)
              wf_self_con=.false.
+             ! The user can either specify which bands explicitly
              max_wf=fdf_integer('IO.maxnoWF',0)
-             allocate(out_wf(max_wf))
+             if(max_wf>0) allocate(out_wf(max_wf))
              if (fdf_block('WaveFunctionsOut')) then
                 if(1+block_end-block_start<max_wf) &
                  call cq_abort("Too few wf no in WaveFunctionsOut:"&
@@ -1121,8 +1126,32 @@ contains
                 end do
                 call fdf_endblock
              end if
+             ! Or specify an energy range
+             E_wf_min = fdf_double('IO.min_wf_E',zero)
+             E_wf_max = fdf_double('IO.max_wf_E',zero)
+             ! Is the range relative to Ef (T) or absolute (F)
+             flag_wf_range_Ef = fdf_boolean('IO.WFRangeRelative',.true.)
+             if(flag_wf_range_Ef.AND.E_wf_min==zero.AND.E_wf_max==zero) then
+                flag_out_wf = .false.
+                flag_wf_range_Ef = .false.
+                if(inode==ionode) write(io_lun,'(2x,"Setting IO.outputWF F as no bands range given")')
+             end if
           else
               call cq_abort("Won't output WFs for Order(N) or non-static runs")
+          end if
+       end if
+       ! DOS output
+       flag_write_DOS = fdf_boolean('IO.writeDOS',.false.)
+       if(flag_write_DOS) then
+          if(diagon) then
+             flag_write_projected_DOS = fdf_boolean('IO.write_proj_DOS',.false.)
+             E_DOS_min = fdf_double('IO.min_DOS_E',zero)
+             E_DOS_max = fdf_double('IO.max_DOS_E',zero)
+             sigma_DOS = fdf_double('IO.sigma_DOS',0.001_double)
+             n_DOS = fdf_integer('IO.n_DOS',201)
+          else
+             flag_write_DOS = .false.
+             if(inode==ionode) write(io_lun,'(2x,"Setting IO.writeDOS F as solving O(N)")')
           end if
        end if
 !!$
@@ -1465,6 +1494,9 @@ contains
        n_parts_user(1)     = fdf_integer('General.NPartitionsX', 0)
        n_parts_user(2)     = fdf_integer('General.NPartitionsY', 0)
        n_parts_user(3)     = fdf_integer('General.NPartitionsZ', 0)
+       if(n_parts_user(1)*n_parts_user(2)*n_parts_user(3)>0.AND.&
+            n_parts_user(1)*n_parts_user(2)*n_parts_user(3)<numprocs) &
+            call cq_abort("More processors than partitions! ",numprocs,n_parts_user(1)*n_parts_user(2)*n_parts_user(3))
        average_atomic_diameter = &
             fdf_double('General.AverageAtomicDiameter', 5.0_double)
        ! end sfc partitioning

@@ -190,6 +190,10 @@ contains
   !!    Added ROBODoc header
   !!   2008/05/22 ast
   !!    Added timers
+  !!   2015/07/08 08:01 dave
+  !!    Changed the limit on max_matrices to be a user parameter (mainly
+  !!    for band output, so that the user who wants to write lots of bands
+  !!    can increase the parameter for the output run)
   !!  SOURCE
   !!
   subroutine immi(parts, prim, gcs, myid, partial)
@@ -202,7 +206,7 @@ contains
     use maxima_module,       only: maxpartsproc, maxnabaprocs
     use GenComms,            only: my_barrier, cq_abort
     use matrix_comms_module, only: find_neighbour_procs
-    use global_module,       only: area_matrices
+    use global_module,       only: area_matrices, mx_temp_matrices
     use memory_module,       only: reg_alloc_mem, type_int
 
     implicit none
@@ -219,7 +223,7 @@ contains
     real(double) :: ra, rc
 
     ! call start_timer(tmr_std_matrices)
-    max_matrices = mx_matrices + 100 ! Leave plenty of room for temporary matrices
+    max_matrices = mx_matrices + mx_temp_matrices ! Leave plenty of room for temporary matrices
     if (.not. allocated(mat_p)) then
        call start_timer(tmr_std_allocation)
        allocate(mat_p(max_matrices), matrix_index(max_matrices), &
