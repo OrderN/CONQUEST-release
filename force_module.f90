@@ -2374,6 +2374,8 @@ contains
   !!    - Bug fix for sum over two components of rho even without spin
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
+  !!   2015/08/07 16:40 dave
+  !!    - Fixed bug for GGA PBE force (used work_potential not potential)
   !!  SOURCE
   !!
   subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
@@ -2456,10 +2458,7 @@ contains
                                                  wk_grid_total,        &
                                                  density_out_GGA_total
     real(double), allocatable, dimension(:,:) :: wk_grid,              &
-                                                 density_out_GGA
-    ! tmp potential 
-    real(double), allocatable, dimension(:)   :: work_potential
-    
+                                                 density_out_GGA    
 
     ! ***** LT: TEMPORARY BARRIER FOR SPIN POLARISED CALCULATIONS!!! *****
     ! Due to the fact that:
@@ -2509,10 +2508,6 @@ contains
     if (stat /= 0) &
          call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
     call reg_alloc_mem(area_moveatoms, (3+nspin*nspin)*nsize, type_dbl)
-    allocate(work_potential(nsize),        STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("get_nonSC_correction_force: Error alloc mem: ", nsize)
-    call reg_alloc_mem(area_moveatoms, nsize, type_dbl)
     call stop_timer(tmr_std_allocation)
 
 !****lat<$
@@ -2642,10 +2637,9 @@ contains
           !print*, size(density_total)
           !print*, size(density_out_total)
           !print*, size(potential(:,1)) 
-          work_potential(:) = potential(:,1)
           call get_dxc_potential_GGA_PBE(density       = density_total,     &
                                          density_out   = density_out_total, &
-                                         dxc_potential = work_potential,    &
+                                         dxc_potential = potential(:,1),    &
                                          size          = nsize)
           !print*, 'leave functional_gga_pbe96'
        end if
