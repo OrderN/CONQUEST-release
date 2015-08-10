@@ -52,7 +52,7 @@ deps.obj.inc: $(SRCS) system.make
 	$(ECHOSTR) "module datestamp" > datestamp.f90
 	$(ECHOSTR) "  implicit none" >> datestamp.f90
 	$(ECHOSTR) '  character(len=*), parameter :: datestr="'`date`'"' >> datestamp.f90
-	sed "s/RRR/"`svnversion .`"/" $(COMMENT) >> datestamp.f90
+	sed "s/RRR/"`git describe --tags`"/" $(COMMENT) >> datestamp.f90
 	$(ECHOSTR) "end module datestamp" >> datestamp.f90
 	./makedeps makedeps.txt $^
 	sed /"^mpi.o"/D makedeps.txt > deps.obj.inc
