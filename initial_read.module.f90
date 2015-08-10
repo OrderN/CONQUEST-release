@@ -1535,6 +1535,9 @@ contains
        flag_MDdebug      = fdf_boolean('AtomMove.Debug',.false.)
        flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
        flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseL',.false.)
+       if(flag_spin_polarisation.AND.flag_LmatrixReuse) then
+          call cq_abort("L matrix re-use and spin polarisation not implemented !")
+       end if
        flag_TmatrixReuse = fdf_boolean('AtomMove.ReuseInvS',.false.)
        flag_SkipEarlyDM  = fdf_boolean('AtomMove.SkipEarlyDM',.false.)
        McWFreq           = fdf_integer('AtomMove.McWeenyFreq',0)
