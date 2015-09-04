@@ -875,6 +875,8 @@ contains
 !!    Added differential of gaussian charges
 !!   2015/05/01 13:44 dave and sym
 !!    Adding stress
+!!   2015/09/04 07:53 dave
+!!    Small changes to avoid messing up Hartree stress
 !!  SOURCE
 !!
   subroutine loc_pp_derivative_tm ( hf_force, density, size )
@@ -891,7 +893,7 @@ contains
 
     use species_module, only: species
     use GenComms, only: gsum, cq_abort, inode, ionode
-    use hartree_module, only: hartree
+    use hartree_module, only: hartree, Hartree_stress
     use maxima_module, only: maxngrid
 
     implicit none   
@@ -918,7 +920,7 @@ contains
     integer :: iblock,ipoint,igrid
     real(double) :: rr
     integer ::  iatom, stat, ip, npoint, nl
-    real(double) :: rcut
+    real(double) :: rcut, temp(3)
 
     ! allocatable
     real(double),allocatable :: h_potential(:)
@@ -945,8 +947,10 @@ contains
     if(stat /= 0) call cq_abort &
          ('loc_pp_derivative_tm: alloc loc_charge',stat)
     call stop_timer(tmr_std_allocation)
-
+    ! Save existing Hartree stress
+    temp = Hartree_stress
     call hartree( density, h_potential, maxngrid, h_energy )
+    Hartree_stress = temp
     loc_charge = zero
 
     ! now loop over grid points and accumulate HF part of the force
@@ -1125,7 +1129,10 @@ contains
           enddo ! ipart=1,naba_atm(nlpf)%no_of_part(iblock)
        endif    ! (naba_atm(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
     enddo ! iblock = 1, domain%groups_on_node ! primary set of blocks
+    ! Save existing Hartree stress
+    temp = Hartree_stress
     call hartree( density, h_potential, maxngrid, h_energy, loc_charge,loc_G_stress )
+    Hartree_stress = temp
     if(pseudo(the_species)%tm_loc_pot==loc_pot) loc_G_stress = -loc_G_stress
 
     ! and add contributions from all nodes

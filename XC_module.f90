@@ -18,6 +18,8 @@
 !! MODIFICATION HISTORY
 !!   2015/05/12 08:34 dave
 !!    Adding GGA stress terms
+!!   2015/09/03 17:27 dave
+!!    Added GGA stress term to PBE0
 !! SOURCE
 !!
 module XC_module
@@ -1401,7 +1403,8 @@ contains
   !! CREATION DATE
   !!   2014/09/24
   !! MODIFICATION HISTORY
-  !!
+  !!   2015/09/03 17:27 dave
+  !!   Added GGA XC stress term
   !! SOURCE
   !!
   subroutine get_xc_potential_hyb_PBE0(density, xc_potential, exx_a,     &
@@ -1487,11 +1490,14 @@ contains
           ! d(rho * eps_xc) / dgrho at rr.
           grad_density(rr,1:3,spin) = exx_a * drhoEps_x(1:3,spin) + &
                                       drhoEps_c(1:3,spin)
+          XC_GGA_stress(1:3) = XC_GGA_stress(1:3) - grho_r(1:3,spin)*grad_density(rr,1:3,spin)
        end do
     end do ! rr
     call gsum(xc_energy)
     if (present(x_energy)) call gsum(x_energy)
     xc_energy = xc_energy * grid_point_volume
+    call gsum(XC_GGA_stress,3)
+    XC_GGA_stress = XC_GGA_stress*grid_point_volume
     if (present(x_energy)) x_energy =  x_energy * grid_point_volume
 
     ! add the second term to potential

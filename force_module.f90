@@ -64,6 +64,8 @@
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2015/05/01 13:55 dave and sym
 !!    Implementing stress
+!!   2015/08/10 08:04 dave
+!!    Adding non-SCF and PCC stress components
 !!  SOURCE
 !!
 module force_module
@@ -83,7 +85,7 @@ module force_module
 
   ! On-site part of stress tensor as Conquest uses orthorhombic cells (easily extended)
   real(double), dimension(3) :: stress
-  real(double), dimension(3) :: SP_stress, KE_stress, NL_stress, PP_stress, GPV_stress, XC_stress
+  real(double), dimension(3) :: SP_stress, KE_stress, NL_stress, PP_stress, GPV_stress, XC_stress, nonSCF_stress, pcc_stress
   ! Ewald stress in ewald_module
 
   ! Useful parameters for selecting force calculations in NL part
@@ -177,6 +179,9 @@ contains
   !!    Adding stress sum and output
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
+  !!   2015/09/03 17:10 dave
+  !!    Correcting Jacobian terms for non-SCF stress and displaying
+  !!    PCC and non-SCF stresses
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -304,11 +309,19 @@ contains
     NL_stress = zero
     GPV_stress = zero
     XC_stress = zero
-    ! Loop for GPV_stress and XC_stress
-    ! Probably wrong to call this GPV; it's really a jacobian term
+    pcc_stress = zero
+    nonSCF_stress = zero
+    ! Probably wrong to call this GPV; it's really a jacobian term, from the change in the
+    ! integration volume element for grid-based integrals
+    ! Different definitions for non-SCF and SCF
     do direction = 1,3
-       GPV_stress(direction) = (hartree_energy + local_ps_energy - core_correction) ! core contains 1/V term
-       XC_stress(direction) = xc_energy + spin_factor*XC_GGA_stress(direction)
+       if(flag_self_consistent) then
+          GPV_stress(direction) = (hartree_energy + local_ps_energy - core_correction) ! core contains 1/V term
+          XC_stress(direction) = xc_energy + spin_factor*XC_GGA_stress(direction)
+       else ! nonSCF XC found later, along with corrections to Hartree
+          GPV_stress(direction) = (hartree_energy + local_ps_energy - core_correction) ! core contains 1/V term
+          XC_stress(direction) = delta_E_xc !xc_energy + spin_factor*XC_GGA_stress(direction)
+       end if
     end do    
     WhichPulay  = BothPulay
     ! This ASSUMES that H_on_supportfns contains the values of H
@@ -355,7 +368,7 @@ contains
        ! for P.C.C.
        if (flag_pcc_global) then
           call get_pcc_force(pcc_force, inode, ionode, ni_in_cell, &
-                             maxngrid)
+                             maxngrid, density_out) ! Pass output density for non-SCF stress
        end if
        
        call get_nonSC_correction_force(nonSC_force, density_out,  &
@@ -553,12 +566,15 @@ contains
                       &a2,") on atom, component ",2i9)')     &
                for_conv * max_force, en_units(energy_units), &
                d_units(dist_units), max_atom, max_compt
+    ! We will add PCC and nonSCF stresses even if the flags are not set, as they are
+    ! zeroed at the start
     do direction = 1, 3
        stress(direction) = KE_stress(direction) + SP_stress(direction) + &
                            PP_stress(direction) + NL_stress(direction) + &
                            GPV_stress(direction) + XC_stress(direction) + &
                            Ewald_stress(direction) + Hartree_stress(direction) + &
-                           loc_HF_stress(direction) + loc_G_stress(direction)
+                           loc_HF_stress(direction) + loc_G_stress(direction) + &
+                           pcc_stress(direction) + nonSCF_stress(direction)
     end do
     if (inode == ionode) then       
        write (io_lun,fmt='(/4x,"                  ",3a15)') "X","Y","Z"
@@ -574,6 +590,12 @@ contains
           write (io_lun,fmt='(4x,"XC stress:        ",3f15.8,a3)') XC_stress(1:3), en_units(energy_units)
           write (io_lun,fmt='(4x,"Ewald stress:     ",3f15.8,a3)') Ewald_stress(1:3), en_units(energy_units)
           write (io_lun,fmt='(4x,"Hartree stress:   ",3f15.8,a3)') Hartree_stress(1:3), en_units(energy_units)
+          if (flag_pcc_global) then
+             write (io_lun,fmt='(4x,"PCC stress:       ",3f15.8,a3)') pcc_stress(1:3), en_units(energy_units)
+          end if
+          if (.not. flag_self_consistent) then
+             write (io_lun,fmt='(4x,"non-SCF stress:   ",3f15.8,a3)') nonSCF_stress(1:3), en_units(energy_units)
+          end if
        end if
        write (io_lun,fmt='(/4x,"Total stress:     ", 3f15.8,a3)') stress(1:3), en_units(energy_units)
     end if
@@ -2376,6 +2398,8 @@ contains
   !!    - Added experimental backtrace
   !!   2015/08/07 16:40 dave
   !!    - Fixed bug for GGA PBE force (used work_potential not potential)
+  !!   2015/08/10 08:07 dave
+  !!    Adding stress calculation
   !!  SOURCE
   !!
   subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
@@ -2399,7 +2423,7 @@ contains
     use XC_module,           only: get_dxc_potential,                  &
                                    get_GTH_dxc_potential,              &
                                    get_dxc_potential_LSDA_PW92,        &
-                                   get_dxc_potential_GGA_PBE
+                                   get_dxc_potential_GGA_PBE, get_xc_potential
     use block_module,        only: nx_in_block, ny_in_block,           &
                                    nz_in_block, n_pts_in_block
     use group_module,        only: blocks, parts
@@ -2413,7 +2437,7 @@ contains
     use dimens,              only: grid_point_volume, n_my_grid_points
     use GenBlas,             only: axpy
     use density_module,      only: density, density_scale, density_pcc
-    use hartree_module,      only: hartree
+    use hartree_module,      only: hartree, Hartree_stress
     use potential_module,    only: potential
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem,     &
                                    type_dbl
@@ -2421,6 +2445,7 @@ contains
                                    print_timer, stop_print_timer,      &
                                    WITH_LEVEL, TIME_ACCUMULATE_NO,     &
                                    TIME_ACCUMULATE_YES
+    use pseudopotential_common,      only: pseudopotential
 
     implicit none
 
@@ -2442,11 +2467,12 @@ contains
     real(double)   :: xblock, yblock, zblock
     real(double)   :: dx, dy, dz, loc_cutoff, loc_cutoff2, v
     real(double)   :: pcc_cutoff, pcc_cutoff2, step_pcc, x_pcc, y_pcc, &
-                      z_pcc, derivative_pcc, v_pcc
+                      z_pcc, derivative_pcc, v_pcc, jacobian
     logical        :: range_flag
     type(cq_timer) :: tmr_l_tmp1, tmr_l_tmp2
     type(cq_timer) :: backtrace_timer
 
+    real(double), dimension(3) :: loc_stress
     real(double), dimension(:),     allocatable :: h_potential,   &
                                                    density_total, &
                                                    density_out_total
@@ -2537,7 +2563,6 @@ contains
     call start_timer(tmr_l_tmp2)
 
     h_potential = zero
-    potential   = zero
     if(nspin==1) then
        density_total(:)     = spin_factor * density(:,1)
        density_out_total(:) = spin_factor * density_out(:,1)
@@ -2546,10 +2571,53 @@ contains
        density_out_total = spin_factor * sum(density_out, nspin)
     end if
 
-    call hartree(density_total, h_potential, nsize, h_energy)
+    ! Find the Hartree stress (loc_stress) of the output charge in the input potential for Jacobian
+    call hartree(density_total, h_potential, nsize, h_energy,density_out_total,loc_stress)
+    jacobian = zero
+    ! use density_total (input charge) WITHOUT a factor of half so that this term corrects the GPV
+    ! found in the main force routine
+    do ipoint = 1,nsize
+       jacobian = jacobian + (density_out_total(ipoint) - density_total(ipoint))* &
+            (h_potential(ipoint) + pseudopotential(ipoint)) ! Also calculate the correction to GPV for local potential
+    end do
+    ! Don't apply gsum to jacobian because nonSCF_stress will be summed (end of this routine)
+    jacobian = jacobian*grid_point_volume
+    ! loc_stress is \int n^{out} V^{PAD}_{Har}
+    ! NB The Hartree routine does NOT apply a factor of 0.5 to the second stress !
+    ! Hartree_stress is 0.5 \int n^{PAD} V^{PAD}_{Har}
+    ! Hartree_stress and loc_stress are the terms coming from the change of reciprocal space
+    ! lattice vectors, 2GaGb/G^4
+    ! Writing it this way gives out (n^{out} - 0.5 n^{PAD})*V^{PAD} as required
+    Hartree_stress(:) = loc_stress(:) - Hartree_stress(:)
+    nonSCF_stress(1) = jacobian 
+    nonSCF_stress(2) = jacobian 
+    nonSCF_stress(3) = jacobian
+    ! Find the PAD XC potential to calculate the correct Jacobian
+    ! The correct Jacobian comes from \int n^{out} V_{XC}(n^{PAD}) + DeltaXC
+    ! DeltaXC is added in the main force routine
+    ! For PCC we will do this in the PCC force routine (easier)
+    if (.NOT.flag_pcc_global) then
+       call get_xc_potential(density=density_total, size=nsize,     &
+            xc_potential=potential(:,1), &
+            xc_epsilon  =dVxc_drho(:,1,1),        & 
+            xc_energy   =y_pcc)
+       jacobian = zero
+       do ipoint = 1,nsize
+          jacobian = jacobian + density_out_total(ipoint)*potential(ipoint,1)
+       end do
+       jacobian = jacobian*grid_point_volume
+       call gsum(jacobian) ! gsum as XC_stress isn't summed elsewhere
+       ! Correct XC stress 
+       XC_stress(1) = XC_stress(1) + jacobian
+       XC_stress(2) = XC_stress(2) + jacobian
+       XC_stress(3) = XC_stress(3) + jacobian
+    end if
+    ! Accumulate PAD Hartree potential
+    potential = zero
     do spin = 1, nspin
        call axpy(nsize, one, h_potential, 1, potential(:,spin), 1)
     end do
+    dVxc_drho = zero
     call stop_timer(tmr_l_tmp2, TIME_ACCUMULATE_NO)
 
     ! for P.C.C.
@@ -2740,7 +2808,11 @@ contains
     ! Restart of the timer; level assigned here
     call start_timer(tmr_l_tmp2, WITH_LEVEL)
     h_potential = zero
+    ! Preserve the Hartree stress we've calculated
+    loc_stress = Hartree_stress
     call hartree(density_out_total, h_potential, nsize, h_energy)
+    ! And restore
+    Hartree_stress = loc_stress
     do spin = 1, nspin
        call axpy(nsize, -one, h_potential, 1, potential(:,spin), 1)
     end do
@@ -2820,12 +2892,10 @@ contains
                                  r_from_i, v, derivative, range_flag)
                             if (range_flag) &
                                  call cq_abort('get_nonSC_force: overrun problem')
-                            ! We assumed the atomic densities were
-                            ! evenly devided in spin channels at
-                            ! start, (in set_density of density
-                            ! module). So we assume the same to be
-                            ! consistent, and then apply density_scale
-                            ! calculated from set_density
+                            ! We assumed the atomic densities were evenly devided in spin channels at
+                            ! start, (in set_density of density module). So we assume the same to be
+                            ! consistent, and then apply density_scale calculated from set_density
+                            ! NB This means that spin_factor cancels out the half for non-spin polarised
                             do spin = 1, nspin
                                fx_1(spin) = &
                                     -x * half * derivative * density_scale(spin)
@@ -2841,19 +2911,15 @@ contains
                                fz_1(spin) = zero
                             end do
                          end if
-                         ! could be written in a simpler form, but
-                         ! written this way gives more clear idea
+                         ! could be written in a simpler form, but written this way gives more clear idea
                          ! on what we are doing here.
                          do spin = 1, nspin
-                            HF_force(1,ig_atom) =      &
-                                 HF_force(1,ig_atom) + &
-                                 spin_factor * fx_1(spin) * pot_here(spin)
-                            HF_force(2,ig_atom) =      &
-                                 HF_force(2,ig_atom) + &
-                                 spin_factor * fy_1(spin) * pot_here(spin)
-                            HF_force(3,ig_atom) =      &
-                                 HF_force(3,ig_atom) + &
-                                 spin_factor * fz_1(spin) * pot_here(spin)
+                            HF_force(1,ig_atom) = HF_force(1,ig_atom) + spin_factor * fx_1(spin) * pot_here(spin)
+                            HF_force(2,ig_atom) = HF_force(2,ig_atom) + spin_factor * fy_1(spin) * pot_here(spin)
+                            HF_force(3,ig_atom) = HF_force(3,ig_atom) + spin_factor * fz_1(spin) * pot_here(spin)
+                            nonSCF_stress(1) = nonSCF_stress(1) + rx*spin_factor * fx_1(spin) * pot_here(spin)
+                            nonSCF_stress(2) = nonSCF_stress(2) + ry*spin_factor * fy_1(spin) * pot_here(spin)
+                            nonSCF_stress(3) = nonSCF_stress(3) + rz*spin_factor * fz_1(spin) * pot_here(spin)
                          end do ! spin
                       end do !ix
                    end do  !iy
@@ -3001,18 +3067,18 @@ contains
                             ! (assumed same for different spin
                             ! components)
                             do spin = 1, nspin
-                               HF_force(1,ig_atom) = &
-                                    HF_force(1,ig_atom) + &
-                                    spin_factor * &
-                                    fx_pcc(spin) * pot_here_pcc(spin)
-                               HF_force(2,ig_atom) = &
-                                    HF_force(2,ig_atom) + &
-                                    spin_factor * &
-                                    fy_pcc(spin) * pot_here_pcc(spin)
-                               HF_force(3,ig_atom) = &
-                                    HF_force(3,ig_atom) + &
-                                    spin_factor * &
-                                    fz_pcc(spin) * pot_here_pcc(spin)
+                               HF_force(1,ig_atom) = HF_force(1,ig_atom) + &
+                                    spin_factor * fx_pcc(spin) * pot_here_pcc(spin)
+                               HF_force(2,ig_atom) = HF_force(2,ig_atom) + &
+                                    spin_factor * fy_pcc(spin) * pot_here_pcc(spin)
+                               HF_force(3,ig_atom) = HF_force(3,ig_atom) + &
+                                    spin_factor * fz_pcc(spin) * pot_here_pcc(spin)
+                               nonSCF_stress(1) = nonSCF_stress(1) + &
+                                    rx*spin_factor * fx_pcc(spin) * pot_here_pcc(spin)
+                               nonSCF_stress(2) = nonSCF_stress(2) + &
+                                    ry*spin_factor * fy_pcc(spin) * pot_here_pcc(spin)
+                               nonSCF_stress(3) = nonSCF_stress(3) + &
+                                    rz*spin_factor * fz_pcc(spin) * pot_here_pcc(spin)
                             end do ! spin
                          end do !ix
                       end do  !iy
@@ -3025,6 +3091,7 @@ contains
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
     call gsum(HF_force, 3, n_atoms)
+    call gsum(nonSCF_stress,3)
     call stop_print_timer(tmr_l_tmp1, "NSC force - Compilation", &
                           IPRINT_TIME_THRES3)
 
@@ -3102,9 +3169,12 @@ contains
   !!   2012/05/29 L.Tong
   !!   - Cleaned up xc-functonal selector. Now spin and non-spin
   !!     calculations share the same calls more or less.
+  !!   2015/08/10 08:12 dave
+  !!    Adding stress for PCC and non-SCF PCC XC term
+  !!    N.B. this relies on the output density, which is passed as an optional argument
   !!  SOURCE
   !!
-  subroutine get_pcc_force(pcc_force, inode, ionode, n_atoms, size)
+  subroutine get_pcc_force(pcc_force, inode, ionode, n_atoms, size, density_out)
 
     use datatypes
     use numbers
@@ -3120,7 +3190,7 @@ contains
                                    functional_gga_pbe96_rev98,         &
                                    functional_gga_pbe96_r99,           &
                                    area_moveatoms, IPRINT_TIME_THRES3, &
-                                   nspin, spin_factor
+                                   nspin, spin_factor, flag_self_consistent
     use block_module,        only: nx_in_block,ny_in_block,            &
                                    nz_in_block, n_pts_in_block
     use group_module,        only: blocks, parts
@@ -3151,7 +3221,8 @@ contains
     integer :: n_atoms, size
     integer :: inode, ionode
     real(double), dimension(3,n_atoms) :: pcc_force
-
+    real(double), dimension(:,:), OPTIONAL :: density_out
+    
     ! Local variables
     integer        :: i, j, my_block, n, the_species, iatom, spin
     integer        :: ix, iy, iz, iblock, ipoint, igrid, stat
@@ -3163,7 +3234,7 @@ contains
     real(double)   :: xatom, yatom, zatom, fx_pcc, fy_pcc, fz_pcc
     real(double)   :: xblock, yblock, zblock
     real(double)   :: dx, dy, dz, pcc_cutoff, pcc_cutoff2, electrons, &
-                      v_pcc
+                      v_pcc, jacobian
     logical        :: range_flag
     type(cq_timer) :: tmr_l_tmp1, tmr_l_tmp2
     ! automatic arrays
@@ -3230,6 +3301,22 @@ contains
                                        xc_epsilon, xc_energy, size)
     end select
 
+    ! We do this here to re-use xc_potential - for non-PCC we do it in get_nonSC_correction_force
+    if(.NOT.flag_self_consistent) then
+       if(.NOT.present(density_out)) call cq_abort("Output density not passed to PCC force for nonSCF calculation")
+       jacobian = zero
+       do spin=1,nspin
+          do ipoint = 1,size
+             jacobian = jacobian + density_out(ipoint,spin)*xc_potential(ipoint,spin)
+          end do
+       end do
+       jacobian = jacobian*grid_point_volume
+       call gsum(jacobian) ! gsum as XC_stress isn't summed elsewhere
+       ! Correct XC stress 
+       XC_stress(1) = XC_stress(1) + jacobian
+       XC_stress(2) = XC_stress(2) + jacobian
+       XC_stress(3) = XC_stress(3) + jacobian
+    end if
     ! This restarts the count for this timer
     call stop_timer(tmr_l_tmp2, TIME_ACCUMULATE_NO)
 
@@ -3322,15 +3409,15 @@ contains
                             fz_pcc = zero
                          end if
                          do spin = 1, nspin
-                            pcc_force(1,ig_atom) =      &
-                                 pcc_force(1,ig_atom) + &
+                            pcc_force(1,ig_atom) = pcc_force(1,ig_atom) + &
                                  spin_factor * fx_pcc * pot_here_pcc(spin)
-                            pcc_force(2,ig_atom) =      &
-                                 pcc_force(2,ig_atom) + &
+                            pcc_force(2,ig_atom) = pcc_force(2,ig_atom) + &
                                  spin_factor * fy_pcc * pot_here_pcc(spin)
-                            pcc_force(3,ig_atom) =      &
-                                 pcc_force(3,ig_atom) + &
+                            pcc_force(3,ig_atom) = pcc_force(3,ig_atom) + &
                                  spin_factor * fz_pcc * pot_here_pcc(spin)
+                            pcc_stress(1) = pcc_stress(1) + rx*spin_factor * fx_pcc * pot_here_pcc(spin)
+                            pcc_stress(2) = pcc_stress(2) + ry*spin_factor * fy_pcc * pot_here_pcc(spin)
+                            pcc_stress(3) = pcc_stress(3) + rz*spin_factor * fz_pcc * pot_here_pcc(spin)
                          end do ! spin
                       end do !ix
                    end do  !iy
@@ -3343,6 +3430,7 @@ contains
                           IPRINT_TIME_THRES3)
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
     call gsum(pcc_force, 3, n_atoms)
+    call gsum(pcc_stress, 3)
     call stop_print_timer(tmr_l_tmp1, "PCC force - Compilation", &
                           IPRINT_TIME_THRES3)
 
