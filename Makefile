@@ -79,7 +79,7 @@ include deps.obj
 
 $(NODE_OBJECTS): 
 
-initial_read.module.o:initial_read.module.f90
+initial_read.module.o:initial_read.module.f90 datestamp.o
 	$(FC) $(COMPFLAGS) -c $<
 
 #datestamp.f90: $(COMMENT)
@@ -95,7 +95,7 @@ tar:
 	gzip ../$(TARNAME)
 
 clean:
-	rm -f *.o *.mod *~  *.d work.pc*
+	rm -f *.o *.mod *~  *.d work.pc* deps.obj.inc
 #	(cd FFT; make -k clean)
 	(cd utilities; make -k clean)
 
