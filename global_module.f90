@@ -108,6 +108,8 @@
 !!    FIRE implmementation (SA, COR, dave)
 !!   2015/07/08 08:03 dave
 !!    DOS and k-point by k-point wavefunction output (for STM)
+!!   2015/11/09 08:23 dave (with TM, NW of Mizuho)
+!!    Added neutral atom flag
 !!  SOURCE
 !!
 module global_module
@@ -338,6 +340,9 @@ module global_module
   logical :: flag_write_DOS, flag_write_projected_DOS
   real(double) :: E_DOS_min, E_DOS_max, sigma_DOS
   integer :: n_DOS
+
+  ! Neutral atom potential
+  logical :: flag_neutral_atom
   
 end module global_module
 !!***

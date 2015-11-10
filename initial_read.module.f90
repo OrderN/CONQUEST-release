@@ -466,7 +466,9 @@ contains
   !!   2015/06/10 16:01 dave
   !!    Bug fix: added default value for r_exx when EXX not set (prevents problems)
   !!   2015/06/19 14:28 dave
-  !!    Changed index of ChemicalSpeciesLabel to use number read from input file 
+  !!    Changed index of ChemicalSpeciesLabel to use number read from input file
+  !!   2015/11/09 17:17 dave with TM and NW (Mizuho)
+  !!    Added read for neutral atom flag
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -534,8 +536,7 @@ contains
                              fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
                              fire_N_max, flag_write_DOS, flag_write_projected_DOS, &
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
-                             mx_temp_matrices
-
+                             mx_temp_matrices, flag_neutral_atom
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
                       RadiusSupport, NonLocalFactor, InvSRange,      &
@@ -898,6 +899,8 @@ contains
                       &Abinit pseudopotentials")') 
           flag_angular_new = .true.
        end if
+       ! Should we use neutral atom potential ?
+       flag_neutral_atom  = fdf_boolean('General.NeutralAtom',.false.) ! Default for now
 !!$
 !!$
 !!$
@@ -1621,302 +1624,7 @@ contains
        endif ! Constraints
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")
-!%%!else
-!%%!   def = ' '
-!%%!   iprint = fdf_integer('iprint',0)
-!%%!   iprint_init   = fdf_integer('iprint_init',iprint)
-!%%!   iprint_mat    = fdf_integer('iprint_mat',iprint)
-!%%!   iprint_ops    = fdf_integer('iprint_ops',iprint)
-!%%!   iprint_DM     = fdf_integer('iprint_DM',iprint)
-!%%!   iprint_SC     = fdf_integer('iprint_SC',iprint)
-!%%!   iprint_minE   = fdf_integer('iprint_minE',iprint)
-!%%!   iprint_MD     = fdf_integer('iprint_MD',iprint)
-!%%!   iprint_index  = fdf_integer('iprint_index',iprint)
-!%%!   iprint_gen    = fdf_integer('iprint_gen',iprint)
-!%%!   iprint_pseudo = fdf_integer('iprint_pseudo',iprint)
-!%%!   iprint_basis  = fdf_integer('iprint_basis',iprint)
-!%%!   iprint_intgn  = fdf_integer('iprint_intgn',iprint)
-!%%!   tmp = fdf_string('MemoryUnits','MB')
-!%%!   if(leqi(tmp(1:2),'kB')) then
-!%%!      m_units = kbytes
-!%%!      mem_conv = kB
-!%%!   else if(leqi(tmp(1:2),'MB')) then
-!%%!      m_units = mbytes
-!%%!      mem_conv = MB
-!%%!   else if(leqi(tmp(1:2),'GB')) then
-!%%!      m_units = gbytes
-!%%!      mem_conv = GB
-!%%!   end if
-!%%!   ! Read run title
-!%%!   titles = fdf_string('title',def)
-!%%!   ! Is this a restart run ? **NB NOT AVAILABLE RIGHT NOW**
-!%%!   start = .true.!fdf_defined('start')
-!%%!   if(start) then
-!%%!      start_L = .true.
-!%%!      read_option = .false.  ! N.B. Original had option for a blip model - add this later
-!%%!   else ! This option loads data from a file - we need to add the option to search for this
-!%%!      call cq_abort('read_input: you may not select restart for a run just now')
-!%%!   endif
-!%%!   !read_option = fdf_boolean('StartBlip',.true.)
-!%%!   !if(.NOT.start_blips) restart_file = fdf_string('LoadBlipFile',' ')
-!%%!   init_blip_flag = fdf_string('init_blip_flag','pao')
-!%%!   restart_L = fdf_boolean('RestartL',.false.)
-!%%!   restart_rho = fdf_boolean('RestartRho',.false.)
-!%%!   ! Is there a net charge on the cell ?
-!%%!   ne_in_cell = fdf_double('NetCharge',zero)
-!%%!   ! Read coordinates file 
-!%%!   flag_fractional_atomic_coords = fdf_boolean('FractionalAtomicCoords',.true.)
-!%%!   call my_barrier()
-!%%!   !blip_width = fdf_double('blip_width',zero)
-!%%!   !support_grid_spacing = fdf_double('support_grid_spacing',zero)
-!%%!   GridCutoff = fdf_double('GridCutoff',20.0_double) ! Default to 20 Ha or 50 Ry cutoff for grid
-!%%!   ! Grid points
-!%%!   n_grid_x = fdf_integer('grid_points_along_x',0)
-!%%!   n_grid_y = fdf_integer('grid_points_along_y',0)
-!%%!   n_grid_z = fdf_integer('grid_points_along_z',0)
-!%%!   ! Number of different iterations - not well defined
-!%%!   n_L_iterations = fdf_integer('l_variations',50)
-!%%!   max_L_iterations = n_L_iterations
-!%%!   n_support_iterations = fdf_integer('support_variations',20)
-!%%!   ! Initial expected drop in energy
-!%%!   expected_reduction = fdf_double('expected_energy_reduction',zero)
-!%%!   ! Keep for fixed potential calculations
-!%%!   mu = fdf_double('mu',zero)
-!%%!   if(fdf_defined('constant_mu')) then
-!%%!      vary_mu = .false.
-!%%!   else
-!%%!      vary_mu = .true.
-!%%!   end if
-!%%!   ! Radii - again, astonishingly badly named
-!%%!   r_h = fdf_double('hamiltonian_range',zero)
-!%%!   r_c = fdf_double('L_range',one)
-!%%!   r_t = fdf_double('InvSRange',r_h)
-!%%!   HNL_fac = fdf_double('non_local_factor',zero)
-!%%!   ! Exponents for initial gaussian blips
-!%%!   alpha = fdf_double('s_gauss_exponent',zero)
-!%%!   beta = fdf_double('p_gauss_exponent',zero)
-!%%!   ! Tolerance on minimisation
-!%%!   energy_tolerance = fdf_double('energy_tolerance',1.0e-5_double)
-!%%!   UsePulay = fdf_boolean('UsePulayForPAOs',.false.)
-!%%!   ! Sizes of integration grid blocks
-!%%!   in_block_x = fdf_integer('in_block_x',4)
-!%%!   in_block_y = fdf_integer('in_block_y',4)
-!%%!   in_block_z = fdf_integer('in_block_z',4)
-!%%!   ! Solution method - O(N) or diagonalisation ?
-!%%!   method = fdf_string('SolutionMethod','ordern') ! Default is O(N)
-!%%!   if(leqi(method,'diagon')) then
-!%%!      diagon = .true.
-!%%!   else
-!%%!      diagon = .false.
-!%%!   end if
-!%%!   ! Read basis set
-!%%!   basis_string = fdf_string('BasisSet','PAOs')
-!%%!   if(leqi(basis_string,'blips')) then
-!%%!      flag_basis_set = blips
-!%%!   else if(leqi(basis_string,'PAOs')) then
-!%%!      flag_basis_set = PAOs
-!%%!   end if
-!%%!   find_chdens = fdf_boolean('make_initial_charge_from_K',.false.)
-!%%!   ! Number of species
-!%%!   n_species = fdf_integer('NumberOfSpecies',1)
-!%%!   call allocate_species_vars
-!%%!   flag_angular_new = fdf_boolean('FlagNewAngular',.true.)
-!%%!   ! Siesta's pseudopotential or not.  14/11/2002 T. Miyazaki
-!%%!   ps_type = fdf_string('PseudopotentialType','abinit') 
-!%%!   ! siesta's pseudo is not used in default
-!%%!   if(leqi(ps_type,'siest')) then
-!%%!      if(inode==ionode.AND.iprint_init>0) write(io_lun,fmt='(10x,"SIESTA pseudopotential will be used. ")')
-!%%!      pseudo_type = SIESTA
-!%%!   else if(leqi(ps_type,'plato').OR.leqi(ps_type,'abini')) then
-!%%!      if(inode==ionode.AND.iprint_init>0) write(io_lun,fmt='(10x,"ABINIT pseudopotential will be used. ")')
-!%%!      pseudo_type = ABINIT
-!%%!   else
-!%%!      if(inode==ionode.AND.iprint_init>0) write(io_lun,fmt='(10x,"OLD pseudopotential will be used. ")')
-!%%!      pseudo_type = OLDPS
-!%%!   endif
-!%%!   if((.NOT.flag_angular_new).AND.(pseudo_type==SIESTA.OR.pseudo_type==ABINIT)) then
-!%%!      write(io_lun,fmt='(10x,"Setting FlagNewAngular to T for Siesta/Abinit pseudopotentials")') 
-!%%!      flag_angular_new = .true.
-!%%!   end if
-!%%!   ! Read, using old-style fdf_block, the information about the different species
-!%%!   if(fdf_block('ChemicalSpeciesLabel',lun)) then
-!%%!      do i=1,n_species
-!%%!         read(lun,*) j,mass(i),species_label(i)
-!%%!      end do
-!%%!   end if
-!%%!   ! Read charge, mass, pseudopotential and starting charge and blip models for the individual species
-!%%!   maxnsf = 0
-!%%!   min_blip_sp = 1.0e8_double
-!%%!   do i=1,n_species
-!%%!      charge(i) = zero
-!%%!      nsf_species(i) = 0
-!%%!      RadiusSupport(i) = r_h
-!%%!      NonLocalFactor(i) = HNL_fac
-!%%!      InvSRange(i) = r_t
-!%%!      SupportGridSpacing(i) = zero
-!%%!      if(pseudo_type==SIESTA.OR.pseudo_type==ABINIT) non_local_species(i) = .true.
-!%%!      ! This is new-style fdf_block
-!%%!      nullify(bp)
-!%%!      if(fdf_block(species_label(i),bp)) then
-!%%!         do while(fdf_bline(bp,line)) ! While there are lines in the block
-!%%!            p=>digest(line)           ! Break the line up
-!%%!            if(search(p,'charge',j)) then               ! Charge
-!%%!               charge(i) = reals(p,1)
-!%%!            else if(search(p,'NumberOfSupports',j)) then            ! NSF
-!%%!               nsf_species(i) = integers(p,1)
-!%%!            else if(search(p,'SupportFunctionRange',j)) then            ! Support radius
-!%%!               RadiusSupport(i) = reals(p,1)
-!%%!               if(InvSRange(i)<RD_ERR) InvSRange(i) = RadiusSupport(i)
-!%%!               !if(r_c<two*RadiusSupport(i)) r_c = two*RadiusSupport(i)
-!%%!            else if(search(p,'InvSRange',j)) then            ! Support radius
-!%%!               InvSRange(i) = reals(p,1)
-!%%!            else if(search(p,'NonLocalFactor',j)) then            ! Support radius
-!%%!               NonLocalFactor(i) = reals(p,1)
-!%%!            else if(search(p,'SupportGridSpacing',j)) then            ! Support radius
-!%%!               SupportGridSpacing(i) = reals(p,1)
-!%%!               min_blip_sp = min(SupportGridSpacing(i),min_blip_sp)
-!%%!               BlipWidth(i) = four*SupportGridSpacing(i)
-!%%!            else if(pseudo_type==OLDPS.AND.search(p,'pseudopotential',j)) then ! Pseudopotential
-!%%!               if(search(p,'non_local',j)) then         ! Non-local or local ?
-!%%!                  non_local_species(i) = .true.
-!%%!                  ps_file(i) = names(p,3)               ! We expect a line: pseudopotential (non_)local file 
-!%%!               else
-!%%!                  if(.NOT.search(p,'local',j)) then
-!%%!                     call cq_abort('read_input: no local/non-local specification for pseudopotential !')
-!%%!                  else
-!%%!                     non_local_species(i) = .false.
-!%%!                     ps_file(i) = names(p,3)            ! We expect a line: pseudopotential (non_)local file 
-!%%!                  end if
-!%%!               end if
-!%%!            end if
-!%%!         end do
-!%%!         call destroy(p)  ! Remove storage
-!%%!      end if
-!%%!      call destroy(bp)    ! Remove storage
-!%%!      if(nsf_species(i)==0) call cq_abort("Number of supports not specified for species ",i)
-!%%!      if(flag_basis_set==blips.AND.SupportGridSpacing(i)<RD_ERR) &
-!%%!           call cq_abort("Error: for a blip basis set you must set SupportGridSpacing for all species")
-!%%!      maxnsf = max(maxnsf,nsf_species(i))
-!%%!      if(RadiusSupport(i)<RD_ERR) &
-!%%!           call cq_abort("Radius of support too small for species; increase SupportFunctionRange ",i)
-!%%!   end do
-!%%!   !blip_width = support_grid_spacing * fdf_double('blip_width_over_support_grid_spacing',four)
-!%%!   L_tolerance = fdf_double('l_tolerance',1.0e-6_double)
-!%%!   sc_tolerance  = fdf_double('sc_tolerance',0.001_double)
-!%%!   maxpulayDMM = fdf_integer('DM.MaxPulay',5)
-!%%!   LinTol_DMM = fdf_double('DM.LinTol',0.1_double)
-!%%!   ! Find out what type of run we're doing
-!%%!   runtype = fdf_string('MD.TypeOfRun','static')
-!%%!   MDn_steps = fdf_integer('MD.NumSteps',100)
-!%%!   MDfreq = fdf_integer('MD.OutputFreq',50)
-!%%!   MDtimestep = fdf_double('MD.Timestep',0.5_double)
-!%%!   MDcgtol = fdf_double('MD.MaxForceTol',0.0005_double)
-!%%!   flag_vary_basis = fdf_boolean('VaryBasis',.false.)
-!%%!   if(fdf_boolean('VaryBlips',.false.)) flag_vary_basis = .true.
-!%%!   if(.NOT.flag_vary_basis) then
-!%%!      flag_precondition_blips = .false.
-!%%!   else 
-!%%!      flag_precondition_blips = fdf_boolean('PreconditionBlips',.true.)
-!%%!   end if
-!%%!   flag_self_consistent = fdf_boolean('SelfConsistent',.true.)
-!%%!   ! Tweak 2007/03/23 DRB Make Pulay mixing default
-!%%!   flag_linear_mixing = fdf_boolean('LinearMixingSC',.true.)
-!%%!   A = fdf_double('LinearMixingFactor',0.5_double)
-!%%!   EndLinearMixing = fdf_double('LinearMixingEnd',sc_tolerance)
-!%%!   q0 = fdf_double('KerkerFactor',0.1_double)
-!%%!   n_exact = fdf_integer('LateStageReset',5)
-!%%!   maxitersSC = fdf_integer('SC.MaxIters',50)
-!%%!   maxearlySC = fdf_integer('SC.MaxEarly',3)
-!%%!   maxpulaySC = fdf_integer('SC.MaxPulay',5)
-!%%!   read_atomic_density_file = fdf_string('read_atomic_density_file','read_atomic_density.dat')
-!%%!   ! Read atomic density initialisation flag
-!%%!   atomic_density_method = fdf_string('atomic_density_flag','pao')
-!%%!   InvSTolerance = fdf_double('InvSTolerance',1e-2_double)
-!%%!   flag_read_blocks = fdf_boolean('ReadBlocks',.false.)
-!%%!   ewald_accuracy = fdf_double('EwaldAccuracy',1.0e-10_double) ! Default value of 10^-10 Ha per atom
-!%%!   flag_old_ewald = fdf_boolean('FlagOldEwald',.false.)
-!%%!   UseGemm = fdf_boolean('MM.UseGemm',.false.)
-!%%!   del_k = fdf_double('pao_kspace_ol_gridspace',0.1_double)
-!%%!   kcut = fdf_double('pao_kspace_ol_cutoff', 1000.0_double)
-!%%!   flag_paos_atoms_in_cell = fdf_boolean('BasisSet.PAOs_StoreAllAtomsInCell',.true.)
-!%%!   read_option = fdf_boolean('read_pao_coeffs',.false.)
-!%%!   symmetry_breaking = fdf_boolean('BasisSet.SymmetryBreaking',.false.)
-!%%!   support_pao_file = fdf_string('support_pao_file','supp_pao.dat')
-!%%!   pao_info_file = fdf_string('pao_info_file','pao.dat')
-!%%!   pao_norm_flag = fdf_integer('pao_norm_flag',0)
-!%%!   TestBasisGrads = fdf_boolean('TestPAOGrads',.false.)
-!%%!   TestTot = fdf_boolean('TestPAOGradTot',.false.)
-!%%!   TestBoth = fdf_boolean('TestPAOGradBoth',.false.)
-!%%!   TestS = fdf_boolean('TestPAOGrad_S',.false.)
-!%%!   TestH = fdf_boolean('TestPAOGrad_H',.false.)
-!%%!   support_spec_file = fdf_string('support_spec_file','support.dat')
-!%%!   flag_read_support_spec = fdf_boolean('Basis.ReadSupportSpec',.false.)
-!%%!   flag_test_forces = fdf_boolean('TestForces',.false.)
-!%%!   flag_test_all_forces = fdf_boolean('TestAllForces',.true.)
-!%%!   if(.NOT.flag_test_all_forces) then ! Test one force component
-!%%!      flag_which_force = fdf_integer('TestSpecificForce',1)
-!%%!   end if
-!%%!   TF_direction = fdf_integer('TestForceDirection',1)
-!%%!   TF_atom_moved = fdf_integer('TestForceAtom',1)
-!%%!   TF_delta = fdf_double('TestForceDelta',0.00001_double)
-!%%!   flag_functional_type = fdf_integer('FunctionalType', 1)   ! LDA PZ81
-!%%!   select case(flag_functional_type)
-!%%!   case (functional_lda_pz81)
-!%%!      functional_description = 'LDA PZ81'
-!%%!   case (functional_lda_gth96)
-!%%!      functional_description = 'LDA GTH96'
-!%%!   case (functional_lda_pw92)
-!%%!      functional_description = 'LDA PW92'
-!%%!   case (functional_gga_pbe96)
-!%%!      functional_description = 'GGA PBE96'
-!%%!   case default
-!%%!      functional_description = 'LDA PZ81'
-!%%!   end select
-!%%!   tmp = fdf_string('EnergyUnits','Ha')
-!%%!   if(leqi(tmp(1:2),'Ha')) then
-!%%!      energy_units = har
-!%%!      en_conv = one
-!%%!   else if(leqi(tmp(1:2),'Ry')) then
-!%%!      energy_units = ryd
-!%%!      en_conv = HaToRy
-!%%!   else if(leqi(tmp(1:2),'eV')) then
-!%%!      energy_units = ev
-!%%!      en_conv = HaToeV
-!%%!   endif
-!%%!   tmp = fdf_string('DistanceUnits','bohr')
-!%%!   if(leqi(tmp(1:2),'a0').OR.leqi(tmp(1:2),'bo')) then
-!%%!      dist_units = bohr
-!%%!      dist_conv = one
-!%%!   else if(leqi(tmp(1:1),'A')) then
-!%%!      dist_units = ang
-!%%!      dist_conv = BohrToAng
-!%%!   endif
-!%%!   for_conv = en_conv/dist_conv
-!%%!   pdb_format = fdf_boolean('General.PdbIn',.false.)
-!%%!   pdb_altloc = fdf_string('General.PdbAltLoc',' ')
-!%%!   pdb_output = fdf_boolean('General.PdbOut',.false.)
-!%%!   part_mode = fdf_string('General.Partitions','Python')
-!%%!   if (leqi (part_mode(1:6),'Python')) then
-!%%!      part_method = PYTHON
-!%%!   else if (leqi (part_mode(1:7), 'Hilbert')) then
-!%%!      part_method = HILBERT
-!%%!   else
-!%%!      part_method = HILBERT
-!%%!      write(io_lun,*) 'WARNING: Unrecognised partitioning method'
-!%%!   end if
-!%%!   tmp2 = fdf_string('General.LoadBalance','atoms')
-!%%!   if (leqi (tmp2(1:10),'partitions')) then
-!%%!      load_balance = 1
-!%%!   else if (leqi (tmp2(1:5),'atoms')) then
-!%%!      load_balance = 0
-!%%!   else
-!%%!      load_balance = 0
-!%%!   end if
-!%%!   many_processors = fdf_boolean('General.ManyProcessors',.false.)
-!%%!   global_maxatomspart = fdf_integer('General.MaxAtomsPartition', 34)
-!%%!   append_coords = fdf_boolean('MD.AppendCoords',.true.)
     end if ! new_format
-    !!!   TEMPORARY ? !!!!!!!   by T. MIYAZAKI
 
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_input')

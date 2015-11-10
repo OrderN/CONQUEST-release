@@ -1211,7 +1211,7 @@ contains
     ! Local variables
     integer         :: nump, merow, mecol, numrows, numcols, info, &
          stat, m, mz, ng
-    real(double)    :: rwo(1)
+    real(double)    :: rwo(3)
     complex(double) :: wo(1)
     integer         :: iwo(1)
     integer, dimension(:,:), allocatable :: imap

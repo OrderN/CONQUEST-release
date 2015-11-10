@@ -31,6 +31,8 @@
 !!    Added statements for P.C.C.
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2015/11/09 17:21 dave with TM, NW (Mizuho)
+!!    Adding new members to pseudo_info derived type for neutral atom
 !!  SOURCE
 !!
 module pseudo_tm_info
@@ -75,6 +77,11 @@ module pseudo_tm_info
      integer :: tm_loc_pot
      type(rad_func) :: vlocal            ! local potential
      type(rad_func) :: chlocal            ! local charge
+     ! for Neutral atom potential
+     type(rad_func) :: chna               ! neutral atom charge
+     type(rad_func) :: vna                ! neutral atom potential
+     real(double)   :: eshift             ! shift of vchlocal-zval/r
+     
      type(rad_func) :: chpcc              ! partial core charge
      type(rad_func), pointer :: pjnl(:)   ! size = n_pjnl, projector functions
      integer, pointer :: pjnl_l(:)        ! size = n_pjnl, angular momentum

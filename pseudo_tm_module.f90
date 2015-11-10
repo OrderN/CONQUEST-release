@@ -1994,6 +1994,309 @@ contains
 !!***
 
 ! -----------------------------------------------------------
+! Subroutine make_neutral_atom
+! -----------------------------------------------------------
+
+!!****f* pseudo_tm_module/make_neutral_atom *
+!!
+!!  NAME 
+!!   make_neutral_atom
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Prepares arrays and matrix elements for neutral atom potential
+!!  INPUTS
+!!   None
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   N. Watanabe (Mizuho) with TM and DRB
+!!  CREATION DATE
+!!   2014
+!!  MODIFICATION HISTORY
+!!   2015/11/09 08:29 dave
+!!    Moved to pseudo_tm_module and included in main trunk
+!!  SOURCE
+!!  
+  subroutine make_neutral_atom
+
+    use datatypes
+    use numbers
+    use dimens, only: volume
+    use spline_module, ONLY: splint
+    use species_module, ONLY: n_species
+    use pseudo_tm_info, ONLY: rad_func, pseudo, loc_pot, rad_alloc, rad_dealloc
+    use atomic_density, ONLY: atomic_density_table
+    use spline_module, ONLY: spline
+
+    implicit none
+
+    integer      :: npoint
+    integer :: ik
+    integer :: isp
+    integer :: ir, ir1, ir2
+    
+    real(double) :: cutoff
+    real(double) :: delta
+    real(double) :: r, r1, r2, yp1, ypn
+    real(double) :: chatom_at, chlocal_at, chna_at
+    real(double) :: vlocal_at, vchatom_at
+    real(double) :: integ_inside, integ_outside
+    real(double) :: k, d, overlap, norm, sum_chna
+    real(double) :: sqrt_two_pi ! sqrt(two/pi)
+
+    logical :: range_flag
+    
+    ! parameters of integration, it can be changed.
+    integer, parameter :: k_length = 2048 ! size of radial function in reciprocal space
+    real(double), parameter :: k_cutoff = 16.0_double
+
+    sqrt_two_pi = sqrt(two)/sqrt_pi
+    ! Loop over species
+    do isp=1, n_species
+       atomic_density_table(isp)%delta = &
+            atomic_density_table(isp)%cutoff &
+            / real(atomic_density_table(isp)%length-1,double)
+
+       if( pseudo(isp)%tm_loc_pot==loc_pot ) then ! ABINIT PP
+          cutoff = atomic_density_table(isp)%cutoff
+          delta  = atomic_density_table(isp)%delta
+       else ! SIESTA PP
+          cutoff = max( atomic_density_table(isp)%cutoff, pseudo(isp)%chlocal%cutoff )
+          delta  = min( atomic_density_table(isp)%delta, pseudo(isp)%chlocal%delta )
+       end if
+       npoint = int(cutoff/delta) + 1
+
+       !-------------------------------------------------------
+       ! calculate chna(r) - atomic charge
+       pseudo(isp)%chna%cutoff = cutoff
+       pseudo(isp)%chna%delta = delta
+       call rad_alloc( pseudo(isp)%chna, npoint )
+
+       norm = zero
+       do ir=1, pseudo(isp)%chna%n
+          r = (ir-1)*pseudo(isp)%chna%delta
+
+          if( r<atomic_density_table(isp)%cutoff ) then
+             call splint(atomic_density_table(isp)%delta, &
+                  atomic_density_table(isp)%table, &
+                  atomic_density_table(isp)%d2_table, &
+                  atomic_density_table(isp)%length, &
+                  r, chatom_at, range_flag )
+          else
+             chatom_at = zero
+          end if
+
+          if( pseudo(isp)%tm_loc_pot==loc_pot ) then ! ABINIT PP
+             chlocal_at = minus_one * pseudo(isp)%zval &
+                  * pseudo(isp)%prefac * exp(-pseudo(isp)%alpha*r*r)
+          else ! SIESTA PP
+             if( r<pseudo(isp)%chlocal%cutoff ) then
+                call splint( pseudo(isp)%chlocal%delta, &
+                     pseudo(isp)%chlocal%f, &
+                     pseudo(isp)%chlocal%d2, &
+                     pseudo(isp)%chlocal%n, &
+                     r, chlocal_at, range_flag )
+             else
+                chlocal_at = zero
+             end if
+          end if
+
+          pseudo(isp)%chna%f(ir) = chatom_at + chlocal_at
+
+          norm = norm + r*r* pseudo(isp)%chna%f(ir)
+       end do
+       sum_chna = norm*four*pi* delta
+
+       yp1 = (pseudo(isp)%chna%f(2)-pseudo(isp)%chna%f(1)) &
+            /pseudo(isp)%chna%delta
+       ypn = (pseudo(isp)%chna%f(pseudo(isp)%chna%n)-pseudo(isp)%chna%f(pseudo(isp)%chna%n-1)) &
+            /pseudo(isp)%chna%delta
+
+       call spline( pseudo(isp)%chna%n, pseudo(isp)%chna%delta, &
+            pseudo(isp)%chna%f, yp1, ypn, pseudo(isp)%chna%d2 )
+
+
+       !-------------------------------------------------------
+       ! calculate Vna(r) - neutral atom potential
+       pseudo(isp)%vna%cutoff = cutoff
+       pseudo(isp)%vna%delta = delta
+       call rad_alloc( pseudo(isp)%vna, npoint )
+       do ir1=1, pseudo(isp)%chna%n
+          r1 = (ir1-1)*pseudo(isp)%chna%delta
+
+          integ_inside = zero
+          do ir2=1, ir1
+             r2 = (ir2-1)*pseudo(isp)%chna%delta
+             
+             call splint( pseudo(isp)%chna%delta, pseudo(isp)%chna%f, &
+                  pseudo(isp)%chna%d2, pseudo(isp)%chna%n, r2, chna_at, range_flag )
+             if( ir2 == 1 .or. ir2 == ir1 ) then
+                chna_at = chna_at*half
+             end if
+             integ_inside = integ_inside + r2*r2 * chna_at
+          end do
+          if( r1 == zero ) then
+             integ_inside = zero
+          else
+             integ_inside = integ_inside * four*pi/r1*pseudo(isp)%chna%delta
+          end if
+
+          integ_outside = zero
+          do ir2=ir1, pseudo(isp)%chna%n
+             r2 = (ir2-1)*pseudo(isp)%chna%delta
+             call splint( pseudo(isp)%chna%delta, pseudo(isp)%chna%f, &
+                  pseudo(isp)%chna%d2, pseudo(isp)%chna%n, r2, chna_at, range_flag )
+             if( ir2 == ir1 .or. ir2 == pseudo(isp)%chna%n ) then
+                chna_at = chna_at*half
+             end if
+             integ_outside = integ_outside + r2 * chna_at
+          end do
+          integ_outside = integ_outside * four*pi*pseudo(isp)%chna%delta
+
+          if( pseudo(isp)%tm_loc_pot==loc_pot ) then ! ABINIT PP
+             if( r1<pseudo(isp)%vlocal%cutoff ) then
+                call splint( pseudo(isp)%vlocal%delta, pseudo(isp)%vlocal%f, &
+                     pseudo(isp)%vlocal%d2, &
+                     pseudo(isp)%vlocal%n, &
+                     r1, vlocal_at, range_flag )
+             else
+                vlocal_at = zero
+             end if
+             pseudo(isp)%vna%f(ir1) = integ_inside+integ_outside + vlocal_at
+          else ! SIESTA PP
+             pseudo(isp)%vna%f(ir1) = integ_inside+integ_outside
+          end if
+       end do
+
+       yp1 = (pseudo(isp)%vna%f(2)-pseudo(isp)%vna%f(1)) &
+            /pseudo(isp)%vna%delta
+       ypn = (pseudo(isp)%vna%f(pseudo(isp)%vna%n)-pseudo(isp)%vna%f(pseudo(isp)%vna%n-1)) &
+            /pseudo(isp)%vna%delta
+
+       call spline( pseudo(isp)%vna%n, pseudo(isp)%vna%delta, &
+            pseudo(isp)%vna%f, yp1, ypn, pseudo(isp)%vna%d2 )
+
+       !-------------------------------------------------------
+       ! calculate Vatom(r) - atomic potential
+       norm = zero
+       do ir1=1, atomic_density_table(isp)%length
+          r1 = (ir1-1)*atomic_density_table(isp)%delta
+
+          integ_inside = zero
+          do ir2=1, ir1
+             r2 = (ir2-1)*atomic_density_table(isp)%delta
+             
+             call splint(atomic_density_table(isp)%delta, &
+                  atomic_density_table(isp)%table, &
+                  atomic_density_table(isp)%d2_table, &
+                  atomic_density_table(isp)%length, &
+                  r2, chatom_at, range_flag )
+
+             if( ir2 == 1 .or. ir2 == ir1 ) then
+                chatom_at = chatom_at*half
+             end if
+             integ_inside = integ_inside + r2*r2 * chatom_at
+          end do
+          if( r1 == zero ) then
+             integ_inside = zero
+          else
+             integ_inside = integ_inside * four*pi/r1*atomic_density_table(isp)%delta
+          end if
+
+          integ_outside = zero
+          do ir2=ir1, atomic_density_table(isp)%length
+             r2 = (ir2-1)*atomic_density_table(isp)%delta
+
+             call splint(atomic_density_table(isp)%delta, &
+                  atomic_density_table(isp)%table, &
+                  atomic_density_table(isp)%d2_table, &
+                  atomic_density_table(isp)%length, &
+                  r2, chatom_at, range_flag )
+
+             if( ir2 == ir1 .or. ir2 == atomic_density_table(isp)%length ) then
+                chatom_at = chatom_at*half
+             end if
+             integ_outside = integ_outside + r2 * chatom_at
+          end do
+          integ_outside = integ_outside * four*pi*atomic_density_table(isp)%delta
+
+          vchatom_at = integ_inside+integ_outside
+          norm = norm + (vchatom_at*r1 - pseudo(isp)%zval)*four*pi*r1*atomic_density_table(isp)%delta
+       end do
+       pseudo(isp)%eshift = norm
+
+       !-------------------------------------------------------
+       ! calculate chatom(k) - atomic charge
+       atomic_density_table(isp)%k_length = k_length
+       atomic_density_table(isp)%k_delta  = k_cutoff/atomic_density_table(isp)%k_length
+       allocate( atomic_density_table(isp)%k_table(0:atomic_density_table(isp)%k_length) )
+       atomic_density_table(isp)%k_table(:) = zero
+
+       do ir=1, npoint
+          r = (ir-1)*delta
+
+          call splint( atomic_density_table(isp)%delta, &
+               atomic_density_table(isp)%table, &
+               atomic_density_table(isp)%d2_table, &
+               atomic_density_table(isp)%length, &
+               r, chatom_at,range_flag)
+
+          do ik=0, atomic_density_table(isp)%k_length
+             k = ik*atomic_density_table(isp)%k_delta
+
+             atomic_density_table(isp)%k_table(ik) = &
+                  atomic_density_table(isp)%k_table(ik) &
+                  + sqrt_two_pi*delta*r*r*j0(k*r) * chatom_at
+          end do
+       end do
+    end do
+
+  end subroutine make_neutral_atom
+!!***  
+
+!!****f* pseudo_tm_module/j0 *
+!!
+!!  NAME
+!!   j0
+!!  USAGE
+!!
+!!  PURPOSE
+!!   Calculates 0th-order Bessel function
+!! INPUTS
+!!   x
+!! OUTPUTS
+!!
+!!  USES
+!!
+!!  AUTHOR
+!!   N. Watanabe (Mizuho) with TM, DRB
+!!  CREATION DATE
+!!   2014
+!!  MODIFICATION HISTORY
+!!   2015/11/09 17:28 dave
+!!    - Moved into pseudo_tm_module
+!!  SOURCE
+!!
+  function j0( x )
+    
+    use numbers, only: very_small, one_sixth, one
+
+    implicit none
+
+    real(double) :: x
+    real(double) :: j0
+
+    if( x<very_small ) then
+       j0 = one - one_sixth*x*x
+    else
+       j0 = sin(x)/x
+    endif
+  end function j0
+!!***
+
+! -----------------------------------------------------------
 ! Subroutine check_block
 ! -----------------------------------------------------------
 

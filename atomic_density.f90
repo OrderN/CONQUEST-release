@@ -34,6 +34,8 @@
 !!    Added timers
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2015/11/09 08:31 dave with TM and NW from Mizuho
+!!    Added new variables to radial_density type for neutral atom potential
 !!  SOURCE
 !!
 module atomic_density
@@ -52,6 +54,12 @@ module atomic_density
      real(double) :: cutoff
      real(double), pointer, dimension(:) :: table
      real(double), pointer, dimension(:) :: d2_table
+
+     ! for Neutral atom potential
+     real(double) :: delta
+     integer :: k_length
+     real(double) :: k_delta
+     real(double), pointer, dimension(:) :: k_table
   end type radial_density
 
   type(radial_density), allocatable, dimension(:) :: atomic_density_table

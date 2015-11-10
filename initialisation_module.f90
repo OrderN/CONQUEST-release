@@ -255,6 +255,8 @@ contains
   !!    Added call for immi_XL for XL-BOMD
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
+  !!   2015/11/09 17:12 dave with TM and NW (Mizuho)
+  !!    - Added allocation for atomic density array, density_atom
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -268,7 +270,8 @@ contains
                                       flag_pcc_global, flag_dft_d2,    &
                                       iprint_gen, flag_perform_cDFT,   &
                                       nspin, runtype, flag_MDold,      &
-                                      glob2node, flag_XLBOMD
+                                      glob2node, flag_XLBOMD,          &
+                                      flag_neutral_atom
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl, type_int
     use group_module,           only: parts
@@ -301,7 +304,8 @@ contains
                                       density_scale, atomcharge,       &
                                       build_Becke_weights,             &
                                       build_Becke_charges,             &
-                                      set_density_pcc, density_pcc
+                                      set_density_pcc, density_pcc,    &
+                                      density_atom
     use block_module,           only: nx_in_block,ny_in_block,         &
                                       nz_in_block, n_pts_in_block,     &
                                       set_blocks_from_new,             &
@@ -381,6 +385,13 @@ contains
          call cq_abort("Error allocating density and potential: ", &
                        maxngrid, stat)
     call reg_alloc_mem(area_index, 2 * nspin * maxngrid, type_dbl)
+    if(flag_neutral_atom) then ! Allocate atomic density array
+       allocate(density_atom(maxngrid), STAT=stat)
+       if (stat /= 0) &
+            call cq_abort("Error allocating density_atom: ", &
+            maxngrid, stat)
+       call reg_alloc_mem(area_index, maxngrid, type_dbl)
+    end if
     allocate(density_scale(nspin), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating density_scale: ", nspin, stat)
