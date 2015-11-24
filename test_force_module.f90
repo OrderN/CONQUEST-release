@@ -92,6 +92,8 @@ contains
   !!   2012/03/27 L.Tong
   !!   - Changed spin implementation
   !!   - removed redundant input parameter real(double) mu
+  !!   2015/11/24 08:38 dave
+  !!    Tidied up use statements and deleted old commented-out lines
   !!  SOURCE
   !!
   subroutine test_forces(fixed_potential, vary_mu, n_L_iterations, &
@@ -111,17 +113,7 @@ contains
                                       ni_in_cell,                      &
                                       nspin, spin_factor
     use GenComms,               only: myid, inode, ionode, cq_abort
-    use io_module,              only: dump_charge, grab_charge,        &
-                                      dump_matrix, grab_matrix,        &
-                                      dump_blips, grab_blips,          &
-                                      grab_locps, dump_locps,          &
-                                      grab_projs, dump_projs
-    use mult_module,            only: matH, matK, matNL, matKE
-    use energy,                 only: hartree_energy, local_ps_energy, &
-                                      xc_energy, nl_energy,            &
-                                      kinetic_energy, band_energy,     &
-                                      delta_E_hartree, delta_E_xc,     &
-                                      get_energy
+    use energy,                 only: get_energy
     use ewald_module,           only: ewald_energy
     use pseudopotential_common, only: core_correction, pseudopotential
     use H_matrix_module,        only: get_H_matrix
@@ -148,9 +140,6 @@ contains
     ! Local variables
     integer        :: stat, spin
     logical        :: reset_L = .false.
-    real(double)   :: E0, F0, E1, F1, analytic_force, numerical_force, &
-                      electrons_tot
-    real(double)   :: H0, L0, XC0, NL0, K0, B0, dH0, dXC0, EW0, T0
     real(double), dimension(nspin) :: electrons
     real(double), dimension(:,:), allocatable :: HF_force
 
@@ -171,27 +160,6 @@ contains
                   TF_atom_moved, ni_in_cell
        TF_atom_moved = 1
     end if
-    ! Here we want to back up the state of the system by saving H, K,
-    ! density, blips, chis, local ps Energies
-    H0   = hartree_energy
-    L0   = local_ps_energy
-    XC0  = xc_energy
-    NL0  = nl_energy
-    K0   = kinetic_energy
-    B0   = band_energy
-    dH0  = delta_E_hartree 
-    dXC0 = delta_E_xc
-    EW0  = ewald_energy
-    T0   = band_energy + delta_E_hartree + delta_E_xc + ewald_energy + &
-         core_correction
-    !call dump_blips("O",supportfns, inode)
-    !call dump_locps(pseudopotential,n_my_grid_points,inode)
-    !call dump_projs(pseudofunctions,NCF*CORE_SIZE,inode)
-    !call dump_charge(density,n_my_grid_points,inode)
-    !call dump_matrix("H", matH,inode)
-    !call dump_matrix("KE",matKE,inode)
-    !call dump_matrix("NL",matNL,inode)
-    !call dump_matrix("K", matK,inode)
     ! Full forces
     if (flag_test_all_forces .or. flag_which_force == 1) then
        if (inode == ionode) write (io_lun,*) '*** Full ***'
@@ -199,17 +167,6 @@ contains
        call test_full(fixed_potential, vary_mu, n_L_iterations, &
                       L_tolerance, tolerance, total_energy,     &
                       expected_reduction)
-
-       !call grab_blips("O",supportfns,inode)
-       !call grab_locps(pseudopotential,n_my_grid_points,inode)
-       !call grab_projs(pseudofunctions,NCF*CORE_SIZE,inode)
-       !call grab_charge(density,n_my_grid_points,inode)
-       !call grab_matrix("H", matH,inode)
-       !call grab_matrix("KE",matKE,inode)
-       !call grab_matrix("NL",matNL,inode)
-       !call grab_matrix("K", matK,inode)
-       ! call get_H_matrix(.false., fixed_potential, electrons, density,&
-       !      n_my_grid_points)
 
        if (flag_test_all_forces) then
           call update_H(fixed_potential)
@@ -226,22 +183,7 @@ contains
                             inode, ionode, reset_L, .false.)
              call get_energy(total_energy)
           end if
-          ! call force( fixed_potential, vary_mu, n_L_iterations, &
-          !      number_of_bands, L_tolerance, tolerance, mu, &
-          !      total_energy, expected_reduction,.true.)
        end if
-       ! call get_H_matrix(.true., fixed_potential, electrons, density, &
-       !      n_my_grid_points)
-       !delta_E_hartree = dH0  
-       !delta_E_xc      = dXC0 
-       !hartree_energy  = H0  
-       !local_ps_energy = L0  
-       !xc_energy       = XC0 
-       !nl_energy       = NL0 
-       !kinetic_energy  = K0  
-       !band_energy     = B0
-       !ewald_energy    = EW0
-       !total_energy    = T0
     end if
     ! *** Hellmann-Feynman ***
     if (flag_test_all_forces .or. flag_which_force == 2) then
@@ -268,17 +210,6 @@ contains
           !      number_of_bands, L_tolerance, tolerance, mu, &
           !      total_energy, expected_reduction,.true.)
        end if
-       !call grab_matrix("H", matH,inode)
-       !call grab_matrix("KE",matKE,inode)
-       !call grab_matrix("NL",matNL,inode)
-       !call grab_locps(pseudopotential,n_my_grid_points,inode)
-       !!call grab_projs(pseudofunctions,NCF*CORE_SIZE,inode)
-       !hartree_energy  = H0  
-       !local_ps_energy = L0  
-       !xc_energy       = XC0 
-       !nl_energy       = NL0 
-       !kinetic_energy  = K0  
-       !band_energy     = B0
     end if
     ! *** Total Pulay ***
     if (flag_test_all_forces .or. flag_which_force == 3) then
@@ -301,30 +232,13 @@ contains
                             inode, ionode, reset_L, .false.)
              call get_energy(total_energy)
           end if
-          ! call force( fixed_potential, vary_mu, n_L_iterations, &
-          !      number_of_bands, L_tolerance, tolerance, mu, &
-          !      total_energy, expected_reduction,.true.)
        end if
-       !call grab_matrix("H", matH,inode)
-       !call grab_matrix("KE",matKE,inode)
-       !call grab_matrix("NL",matNL,inode)
-       !call grab_matrix("K", matK,inode)
-       !call grab_locps(pseudopotential,n_my_grid_points,inode)
-       !!call grab_projs(pseudofunctions,NCF*CORE_SIZE,inode)
-       !hartree_energy  = H0  
-       !local_ps_energy = L0  
-       !xc_energy       = XC0 
-       !nl_energy       = NL0 
-       !kinetic_energy  = K0  
-       !band_energy     = B0
     end if
     ! *** NSC ***
     if (flag_test_all_forces .or. flag_which_force == 4) then
        if (.not. flag_self_consistent) then
           if (inode == ionode) &
                write(io_lun,*) '*** Non Self-Consistent ***'
-          delta_E_hartree = dH0  
-          delta_E_xc      = dXC0 
           call set_density()
           call test_nonSC(fixed_potential, vary_mu, n_L_iterations, &
                           L_tolerance, tolerance, total_energy,     &
@@ -345,9 +259,6 @@ contains
                                inode, ionode, reset_L, .false.)
                 call get_energy(total_energy)
              end if
-             !call force( fixed_potential, vary_mu, n_L_iterations,
-             !number_of_bands, L_tolerance, tolerance, mu,
-             !total_energy, expected_reduction,.true.)
           end if
        end if
     end if
@@ -375,20 +286,7 @@ contains
                             inode, ionode, reset_L, .false.)
              call get_energy(total_energy)
           end if
-          !call force( fixed_potential, vary_mu, n_L_iterations,
-          !number_of_bands, L_tolerance, tolerance, mu, total_energy,
-          !expected_reduction,.true.)
        end if
-       !call grab_matrix("H", matH,inode)
-       !call grab_matrix("KE",matKE,inode)
-       !call grab_matrix("NL",matNL,inode)
-       !call grab_blips("O",supportfns,inode)
-       !hartree_energy  = H0  
-       !local_ps_energy = L0  
-       !xc_energy       = XC0 
-       !nl_energy       = NL0 
-       !kinetic_energy  = K0  
-       !band_energy     = B0
     end if
     ! *** phi Pulay KE ***
     if (flag_test_all_forces .or. flag_which_force == 6) then
@@ -413,23 +311,7 @@ contains
                             inode, ionode, reset_L, .false.)
              call get_energy(total_energy)
           end if
-          !call force( fixed_potential, vary_mu, n_L_iterations,
-          !number_of_bands, L_tolerance, tolerance, mu, total_energy,
-          !expected_reduction,.true.)
        end if
-       !call grab_matrix("H", matH,inode)
-       !call grab_matrix("KE",matKE,inode)
-       !call grab_matrix("NL",matNL,inode)
-       !call grab_matrix("K", matK,inode)
-       !call grab_blips("O",supportfns,inode)
-       !call grab_locps(pseudopotential,n_my_grid_points,inode)
-       !call grab_charge(density,n_my_grid_points,inode)
-       !hartree_energy  = H0  
-       !local_ps_energy = L0  
-       !xc_energy       = XC0 
-       !nl_energy       = NL0 
-       !kinetic_energy  = K0  
-       !band_energy     = B0
     end if
     ! *** phi Pulay local ***
     if (flag_test_all_forces .or. flag_which_force == 7) then
@@ -455,20 +337,7 @@ contains
                             inode, ionode, reset_L, .false.)
              call get_energy(total_energy)
           end if
-          !call force( fixed_potential, vary_mu, n_L_iterations,
-          !number_of_bands, L_tolerance, tolerance, mu, total_energy,
-          !expected_reduction,.true.)
        end if
-       !call grab_matrix("H", matH,inode)
-       !call grab_matrix("KE",matKE,inode)
-       !call grab_matrix("NL",matNL,inode)
-       !call grab_blips("O",supportfns,inode)
-       !hartree_energy  = H0  
-       !local_ps_energy = L0  
-       !xc_energy       = XC0 
-       !nl_energy       = NL0 
-       !kinetic_energy  = K0  
-       !band_energy     = B0
     end if
     ! *** S Pulay ***
     if (flag_test_all_forces .or. flag_which_force == 8) then
@@ -492,21 +361,7 @@ contains
                             inode, ionode, reset_L, .false.)
              call get_energy(total_energy)
           end if
-          !call force( fixed_potential, vary_mu, n_L_iterations,
-          !number_of_bands, L_tolerance, tolerance, mu, total_energy,
-          !expected_reduction,.true.)
        end if
-       !call grab_matrix("H", matH,inode)
-       !call grab_matrix("KE",matKE,inode)
-       !call grab_matrix("NL",matNL,inode)
-       !call grab_matrix("K", matK,inode)
-       !call grab_blips("O",supportfns, inode)
-       !hartree_energy  = H0  
-       !local_ps_energy = L0  
-       !xc_energy       = XC0 
-       !nl_energy       = NL0 
-       !kinetic_energy  = K0  
-       !band_energy     = B0
     end if
     ! *** cDFT *** 
     if (flag_perform_cDFT.AND.(flag_test_all_forces .or. flag_which_force == 9)) then
@@ -530,9 +385,6 @@ contains
                             inode, ionode, reset_L, .false.)
              call get_energy(total_energy)
           end if
-          !call force( fixed_potential, vary_mu, n_L_iterations,
-          !number_of_bands, L_tolerance, tolerance, mu, total_energy,
-          !expected_reduction,.true.)
        end if
     end if
 
@@ -574,6 +426,8 @@ contains
   !!   - removed redundant input parameter real(double) mu
   !!  2012/04/03 10:13 dave
   !!   Update for analytic blips
+  !!  2015/11/24 08:38 dave
+  !!   Adjusted use of energy_module
   !!  SOURCE
   !!
   subroutine test_FullPulay(fixed_potential, vary_mu, n_L_iterations, &
@@ -592,8 +446,7 @@ contains
                                BothPulay, flag_self_consistent,      &
                                flag_basis_set, PAOs, blips,          &
                                ni_in_cell, nspin, flag_analytic_blip_int
-    use energy,          only: local_ps_energy, hartree_energy,      &
-                               xc_energy, get_energy, band_energy
+    use energy,          only: get_energy
     use force_module,    only: pulay_force, Pulay, HF_and_Pulay,     &
                                get_HF_non_local_force, get_KE_force
     use GenComms,        only: myid, inode, ionode, cq_abort
@@ -686,7 +539,6 @@ contains
     end do
     ! end LT 2011/11/29
     ! Store local energy
-    ! E0 = hartree_energy + xc_energy + local_ps_energy
     ! Find out direction and atom for displacement
     if (myid == 0) &
          write (io_lun,fmt='(2x,"Moving atom ",i5," in direction ",&
@@ -760,7 +612,6 @@ contains
     do spin = nspin, 1, -1
        call free_temp_matrix(matKold(spin))
     end do
-    ! E1 = hartree_energy + xc_energy + local_ps_energy
     E1 = total_energy
     F1 = p_force(TF_direction,TF_atom_moved) +     &
          HF_NL_force(TF_direction,TF_atom_moved) + &
@@ -1546,6 +1397,8 @@ contains
   !!   2012/03/27 L.Tong
   !!   - Changed spin implementation
   !!   - removed input parameter real(double) mu
+  !!   2015/11/24 08:42 dave
+  !!    Adjusted use of energy
   !!  SOURCE
   !!
   subroutine test_PhiPulay_local(fixed_potential, vary_mu,    &
@@ -1566,9 +1419,7 @@ contains
                                           PhiPulay, flag_basis_set, &
                                           blips, PAOs, ni_in_cell, &
                                           nspin
-    use energy,                     only: local_ps_energy, &
-                                          hartree_energy, xc_energy, &
-                                          get_energy, band_energy
+    use energy,                     only: get_energy, band_energy
     use force_module,               only: pulay_force
     use GenComms,                   only: myid, inode, ionode, cq_abort
     use H_matrix_module,            only: get_H_matrix
@@ -1611,7 +1462,6 @@ contains
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
     ! Store local energy
-!    E0 = hartree_energy + xc_energy + local_ps_energy
     E0 = band_energy
     ! Find out direction and atom for displacement
     if (inode == ionode) &
@@ -1657,7 +1507,6 @@ contains
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
-!    E1 = hartree_energy + xc_energy + local_ps_energy
     E1 = band_energy
     F1 = p_force(TF_direction,TF_atom_moved)
     if (inode == ionode) &
@@ -1738,6 +1587,8 @@ contains
   !!   2012/03/27 L.Tong
   !!   - Changed spin implementation
   !!   - removed input parameter real(double) mu
+  !!   2015/11/24 08:43 dave
+  !!    - Adjusted use of energy
   !!  SOURCE
   !!
   subroutine test_SPulay(fixed_potential, vary_mu, n_L_iterations, &
@@ -1754,8 +1605,7 @@ contains
     use global_module,   only: iprint_MD, x_atom_cell, y_atom_cell, &
                                z_atom_cell, id_glob_inv,            &
                                flag_self_consistent, ni_in_cell
-    use energy,          only: local_ps_energy, hartree_energy,     &
-                               xc_energy, get_energy, band_energy
+    use energy,          only: get_energy, band_energy
     use force_module,    only: pulay_force
     use GenComms,        only: myid, inode, ionode, cq_abort
     use S_matrix_module, only: get_S_matrix
@@ -1795,7 +1645,6 @@ contains
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
     ! Store local energy
-    ! E0 = hartree_energy + xc_energy + local_ps_energy
     E0 = band_energy
     ! Find out direction and atom for displacement
     if (inode == ionode) &
@@ -1870,7 +1719,6 @@ contains
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
-!    E1 = hartree_energy + xc_energy + local_ps_energy
     E1 = band_energy
     F1 = p_force(TF_direction,TF_atom_moved)
     if (inode == ionode) &
@@ -1945,6 +1793,8 @@ contains
   !!   2012/03/27 L.Tong
   !!   - Changed spin implementation
   !!   - removed redundant input parameter real(double) mu
+  !!   2015/11/24 08:43 dave
+  !!    Adjusted use of energy
   !!  SOURCE
   !!
   subroutine test_nonSC(fixed_potential, vary_mu, n_L_iterations, &
@@ -1961,8 +1811,7 @@ contains
     use global_module,     only: iprint_MD, x_atom_cell, y_atom_cell,  &
                                  z_atom_cell, id_glob_inv, ni_in_cell, &
                                  nspin
-    use energy,            only: local_ps_energy, hartree_energy,      &
-                                 xc_energy, get_energy, band_energy,   &
+    use energy,            only: get_energy, band_energy,   &
                                  delta_E_hartree, delta_E_xc
     use force_module,      only: get_nonSC_correction_force
     use GenComms,          only: myid, inode, ionode, cq_abort
@@ -2115,6 +1964,10 @@ contains
   !!   2012/03/27 L.Tong
   !!   - changed spin implementation
   !!   - removed redundant input parameter real(double) mu
+  !!   2015/11/24 08:32 dave
+  !!    Removed old ewald calls
+  !!   2015/11/24 08:44 dave
+  !!    Adjusted use of energy
   !!  SOURCE
   !!
   subroutine test_full(fixed_potential, vary_mu, n_L_iterations, &
@@ -2130,8 +1983,7 @@ contains
     use primary_module,  only: bundle
     use global_module,   only: iprint_MD, x_atom_cell, y_atom_cell, &
                                z_atom_cell, id_glob_inv, ni_in_cell
-    use energy,          only: local_ps_energy, hartree_energy, &
-                               xc_energy, get_energy, band_energy
+    use energy,          only: get_energy, band_energy
     use force_module,    only: force, tot_force
     use GenComms,        only: myid, inode, ionode, cq_abort
     use H_matrix_module, only: get_H_matrix
@@ -2139,7 +1991,6 @@ contains
     use SelfCon,         only: new_SC_potl
     use DMMin,           only: FindMinDM
     use density_module,  only: density
-    use ewald_module,    only: flag_old_ewald
     use maxima_module,   only: maxngrid
     use memory_module,   only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
@@ -2204,8 +2055,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
-    if (.not. flag_old_ewald) &
-         call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                            ewald_CS, parts)
     ! Reproject blips
     call update_H(fixed_potential)
@@ -2294,6 +2144,8 @@ contains
   !!    - removed redundant parameter number_of_bands
   !!   2012/03/27 L.Tong
   !!   - Removed redundant input parameter real(double) mu
+  !!   2015/11/24 08:44 dave
+  !!   - Adjusted use of energy
   !!  SOURCE
   !!
   subroutine test_cdft(fixed_potential, vary_mu, n_L_iterations, &
@@ -2309,8 +2161,7 @@ contains
     use global_module,   only: iprint_MD, x_atom_cell, y_atom_cell, &
                                z_atom_cell, id_glob_inv,            &
                                flag_self_consistent, ni_in_cell
-    use energy,          only: local_ps_energy, hartree_energy,     &
-                               xc_energy, get_energy, band_energy,  &
+    use energy,          only: get_energy, band_energy,  &
                                cdft_energy
     use GenComms,        only: myid, inode, ionode, cq_abort
     use S_matrix_module, only: get_S_matrix

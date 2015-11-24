@@ -32,7 +32,9 @@
 !!   - Added exx_energy for "exact" exchange (Hartree-Fock)
 !!   - Added   x_energy for   DFT   exchange
 !!   2015/06/08 lat
-!!    - Added experimental backtrace   
+!!    - Added experimental backtrace
+!!   2015/11/10 17:14 dave with TM and NW (Mizuho)
+!!    - Adding variables for neutral atom (and generalising hartree_energy to hartree_energy_total_rho)
 !!  SOURCE
 !!
 module energy
@@ -52,7 +54,7 @@ module energy
   character(len=80), save, private :: &
        RCSid = "$Id$"
 
-  real(double) ::  hartree_energy
+  real(double) ::  hartree_energy_total_rho
   real(double) :: local_ps_energy
   real(double) ::       xc_energy
 
@@ -65,6 +67,10 @@ module energy
   real(double) :: delta_E_hartree
   real(double) :: delta_E_xc
   real(double) :: entropy = zero
+  ! Neutral atom potential
+  real(double) :: hartree_energy_drho          ! Self-energy for drho = rho - rho_atom
+  real(double) :: hartree_energy_drho_atom_rho ! Energy for rho_atom in drho potential
+  real(double) :: hartree_energy_atom_rho      ! Self-energy for rho_atom UNUSED ?
 
   logical :: flag_check_DFT = .false.
 
@@ -114,6 +120,8 @@ contains
   !!     calculations
   !!   2014/05/29 LAT
   !!   - Added exchange energy calculation
+  !!   2015/11/24 08:38 dave
+  !!    Adjusted name of hartree_energy to hartree_energy_total_rho for neutral atom implementation
   !!  SOURCE
   !!
   subroutine get_energy(total_energy, printDFT, level)
@@ -228,7 +236,7 @@ contains
           if (iprint_gen >= 1) &
                write (io_lun, 1) en_conv*band_energy,     en_units(energy_units)
           if (iprint_gen >= 1) &
-               write (io_lun, 3) en_conv*hartree_energy,  en_units(energy_units)
+               write (io_lun, 3) en_conv*hartree_energy_total_rho,  en_units(energy_units)
           if (iprint_gen >= 1) &
                write (io_lun, 4) en_conv*(xc_energy+exx_energy), en_units(energy_units)
           if (iprint_gen >= 1) &
@@ -300,7 +308,7 @@ contains
     end if
     ! Check on validity of band energy
     if(print_DFT) then
-       total_energy2 = hartree_energy  + &
+       total_energy2 = hartree_energy_total_rho  + &
                        xc_energy       + &     
                        exx_energy      + &     
                        local_ps_energy + &
@@ -528,7 +536,7 @@ contains
           end if
           !
           write (io_lun, 6) en_conv *    band_energy,  en_units(energy_units)
-          write (io_lun, 7) en_conv * hartree_energy,  en_units(energy_units)
+          write (io_lun, 7) en_conv * hartree_energy_total_rho,  en_units(energy_units)
           write (io_lun, 8) en_conv *   ewald_energy,  en_units(energy_units)
           write (io_lun, 9) en_conv * kinetic_energy,  en_units(energy_units)
           write (io_lun, 2)
@@ -604,7 +612,7 @@ contains
     end if
     
     ! Check on validity of band energy
-    total_energy2 = hartree_energy  + &
+    total_energy2 = hartree_energy_total_rho  + &
          xc_energy       + &     
          exx_energy      + &
          local_ps_energy + &
@@ -624,7 +632,7 @@ contains
     ! Potential energy
     potential_energy = local_ps_energy + &
                        nl_energy       + &
-                       hartree_energy 
+                       hartree_energy_total_rho
 
     if (inode == ionode) then
        if (iprint_gen >= 0) then

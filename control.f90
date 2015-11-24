@@ -105,6 +105,8 @@ contains
 !!   - Removed redundant input parameter real(double) mu
 !!   2014/10/05 L.Truflandier
 !!   - Removed return for if(runtype,'static')
+!!   2015/11/24 10:25 dave
+!!    Removed redundant ewald use
 !!  SOURCE
 !!
   subroutine control_run(fixed_potential, vary_mu, total_energy)
@@ -112,7 +114,6 @@ contains
     use datatypes
     use dimens,               only: r_core_squared, r_h
     use GenComms,             only: my_barrier, cq_abort
-    use ewald_module,         only: ewald
     use pseudopotential_data, only: set_pseudopotential
     use force_module,         only: tot_force
     use minimise,             only: get_E_and_F

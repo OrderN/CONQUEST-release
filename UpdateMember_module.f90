@@ -1093,16 +1093,16 @@ contains
   !!  MODIFICATION HISTORY
   !!   2013/08/21 M.Arita
   !!   - Removed iteration
+  !!   2015/11/24 08:29 dave
+  !!    Removed old ewald reference
   !!  SOURCE
   !!
-  !ORI subroutine updateMembers(fixed_potential,velocity,iteration)
   subroutine updateMembers(fixed_potential,velocity)
 
     ! Module usage
     use basic_types
     use global_module, ONLY: flag_dft_d2,ni_in_cell
     use GenComms, ONLY: cq_abort,my_barrier
-    use ewald_module, ONLY: flag_old_ewald
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle,domain
     use cover_module, ONLY: BCS_parts,DCS_parts,ewald_CS,D2_CS
@@ -1154,14 +1154,12 @@ contains
     call cover_update_mparts(DCS_parts,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
                              nmodx,nmody,nmodz,dcellx,dcelly,dcellz,domain)
     if (inode.EQ.ionode) write (io_lun,*) "Finished updating DCS_parts!"
-    if (.NOT. flag_old_ewald) then
-      call deallocate_CSmember(ewald_CS)
-      call allocate_CSmember(ewald_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
+    call deallocate_CSmember(ewald_CS)
+    call allocate_CSmember(ewald_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
                              nmodx,nmody,nmodz,dcellx,dcelly,dcellz)
-      call cover_update_mparts(ewald_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
+    call cover_update_mparts(ewald_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &
                                nmodx,nmody,nmodz,dcellx,dcelly,dcellz)
       if (inode.EQ.ionode) write (io_lun,*) "Finished updating ewald_CS!"
-    endif
     if (flag_dft_d2) then
       call deallocate_CSmember(D2_CS)
       call allocate_CSmember(D2_CS,parts,nx_in_cover,ny_in_cover,nz_in_cover, &

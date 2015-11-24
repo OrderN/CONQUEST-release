@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; vc-back-end: svn -*-
+! -*- mode: F90; mode: font-lock; column-number-mode: true -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -520,6 +520,8 @@ contains
   !!   2014/09/24 L.Truflandier
   !!   - Added temporary PBE0 and HF
   !!   - optional output of x_energy only
+  !!   2015/11/24 08:38 dave
+  !!    Adjusted name of hartree_energy to hartree_energy_total_rho for neutral atom implementation
   !!  SOURCE
   !!
   subroutine get_h_on_support(output_level, fixed_potential, &
@@ -555,7 +557,7 @@ contains
     use set_blipgrid_module,         only: naba_atm
     use density_module,              only: density_pcc
     use GenComms,                    only: gsum, inode, ionode, cq_abort
-    use energy,                      only: hartree_energy,  &
+    use energy,                      only: hartree_energy_total_rho,  &
                                            xc_energy,       &
                                            x_energy,        &
                                            local_ps_energy, &
@@ -649,11 +651,11 @@ contains
     !
     !
     ! now calculate the hartree potential on the grid
-    call hartree(rho_tot, h_potential, maxngrid, hartree_energy)
+    call hartree(rho_tot, h_potential, maxngrid, hartree_energy_total_rho)
     !
     !
     ! correction term
-    delta_E_hartree = - hartree_energy
+    delta_E_hartree = - hartree_energy_total_rho
     !
     !
     ! for P.C.C.

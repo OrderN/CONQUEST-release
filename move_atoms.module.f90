@@ -1449,6 +1449,8 @@ contains
   !!    Removed redundant parameter number_of_bands
   !!   2014/02/03 M.Arita
   !!    Removed call for update_H
+  !!   2015/11/24 08:32 dave
+  !!    Removed old ewald calls
   !!  TODO
   !!   Think about updating radius component of matrix derived type,
   !!   or eliminating it !
@@ -1479,7 +1481,6 @@ contains
     use pseudopotential_common, only: core_radius
     use GenComms,               only: myid, cq_abort, gsum
     use functions_on_grid,      only: associate_fn_on_grid
-    use ewald_module,           only: flag_old_ewald
     use numbers
     use timer_module
     use density_module,         only: build_Becke_weights
@@ -1502,8 +1503,7 @@ contains
     call primary_update(x_atom_cell, y_atom_cell, z_atom_cell, bundle, parts, myid)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, DCS_parts, parts)
-    if (.not.flag_old_ewald) &
-         call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ewald_CS, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ewald_CS, parts)
     if (flag_dft_d2) &
          call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, D2_CS, parts)
     ! If there's a new interaction of Hamiltonian range, then we REALLY need to rebuild the matrices etc
@@ -1549,6 +1549,8 @@ contains
   !!     Removed redundant parameter number_of_bands
   !!   2014/02/03 M.Arita
   !!     Removed call for update_H
+  !!   2015/11/24 08:32 dave
+  !!    Removed old ewald calls
   !! SOURCE
   !!
   subroutine updateIndices2(matrix_update, fixed_potential)
@@ -1575,7 +1577,6 @@ contains
     use pseudopotential_common, only: core_radius
     use GenComms,               only: myid, cq_abort, gsum
     use functions_on_grid,      only: associate_fn_on_grid
-    use ewald_module,           only: flag_old_ewald
     use density_module,         only: build_Becke_weights
     use numbers
 
@@ -1595,7 +1596,7 @@ contains
     call primary_update(x_atom_cell, y_atom_cell, z_atom_cell, bundle, parts, myid)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, DCS_parts, parts)
-    if(.NOT.flag_old_ewald) call cover_update(x_atom_cell, y_atom_cell, &
+    call cover_update(x_atom_cell, y_atom_cell, &
          z_atom_cell, ewald_CS, parts)
     if (flag_dft_d2) call cover_update(x_atom_cell, y_atom_cell, &
          z_atom_cell, D2_CS, parts)
@@ -1647,6 +1648,8 @@ contains
   !!    -  Deleted calls for L-matrix reconstruction and update_H. They are
   !!       called at md_run and safemin2
   !!    -  Added calls for initialising and finalising matrix indexing for XL-BOMD
+  !!   2015/11/24 08:32 dave
+  !!    Removed old ewald calls
   !! SOURCE
   !!
   !OLD subroutine updateIndices3(fixed_potential,velocity,step,iteration)
@@ -1668,7 +1671,6 @@ contains
     use dimens, ONLY: RadiusSupport
     use pseudopotential_common, ONLY: core_radius
     use functions_on_grid, ONLy: associate_fn_on_grid
-    use ewald_module, ONLY: flag_old_ewald
     use density_module, ONLY: build_Becke_weights
     use UpdateMember_module, ONLY: updateMembers
     use atoms, ONLY: distribute_atoms,deallocate_distribute_atom
@@ -1832,6 +1834,8 @@ contains
   !!   - Corrected calls to generate charge density
   !!   - Added call for get_initiaL_XL to calculate an initial guess for
   !!     L-matrix when XL-BOMD applies
+  !!   2015/11/24 08:32 dave
+  !!    Removed old ewald calls
   !!  SOURCE
   !!
   subroutine update_H(fixed_potential)
@@ -1842,8 +1846,7 @@ contains
     use H_matrix_module,        only: get_H_matrix
     use DiagModule,             only: diagon
     use mult_module,            only: LNV_matrix_multiply
-    use ewald_module,           only: ewald, mikes_ewald,              &
-                                      flag_old_ewald
+    use ewald_module,           only: mikes_ewald
     use pseudopotential_data,   only: init_pseudo
     use pseudo_tm_module,       only: set_tm_pseudo
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA,      &
@@ -1883,11 +1886,7 @@ contains
                                 dontE)
     end if
     ! (3) Find the Ewald energy for the initial set of atoms
-    if (flag_old_ewald) then
-       call ewald
-    else
-       call mikes_ewald
-    end if
+    call mikes_ewald
     ! (4) Find the dispersion for the initial set of atoms
     if (flag_dft_d2) call dispersion_D2
     ! (5) Pseudopotentials: choose correct form

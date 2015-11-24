@@ -257,6 +257,8 @@ contains
   !!    - Added experimental backtrace
   !!   2015/11/09 17:12 dave with TM and NW (Mizuho)
   !!    - Added allocation for atomic density array, density_atom
+  !!   2015/11/24 08:31 dave
+  !!    - Removed old ewald calls
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -282,8 +284,7 @@ contains
     use construct_module
     use matrix_data,            only: rcut, Lrange, Srange,            &
                                       mx_matrices, max_range
-    use ewald_module,           only: set_ewald, mikes_set_ewald,      &
-                                      flag_old_ewald
+    use ewald_module,           only: mikes_set_ewald
     use atoms,                  only: distribute_atoms
     use dimens,                 only: n_grid_x, n_grid_y, n_grid_z,    &
                                       r_core_squared, r_h, r_super_x,  &
@@ -481,14 +482,8 @@ contains
 
     ! set up the Ewald sumation: find out how many superlatices
     ! in the real space sum and how many reciprocal latice vectors in the
-    ! reciprocal space sum are needed for a given energy tolerance. In the
-    ! future the tolerance will be set by the user, but right now it is
-    ! set as a parameter in set_ewald, and its value is 1.0d-5.
-    if(flag_old_ewald) then
-       call set_ewald(inode, ionode)
-    else
-       call mikes_set_ewald(inode,ionode)
-    end if
+    ! reciprocal space sum are needed for a given energy tolerance. 
+    call mikes_set_ewald(inode,ionode)
     ! +++
     call my_barrier
     if (inode == ionode .and. iprint_init > 1) &
@@ -965,6 +960,8 @@ contains
   !!    Bug fix for changing the number of processors at the sequential job
   !!   2015/06/08 lat
   !!    Added experimental backtrace
+  !!   2015/11/24 08:32 dave
+  !!    Removed old ewald calls
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -987,7 +984,7 @@ contains
                                  flag_XLBOMD, flag_dissipation,     &
                                  flag_propagateX, flag_propagateL, restart_X, &
                                  flag_exx, exx_scf, flag_out_wf, wf_self_con, flag_write_DOS
-    use ewald_module,      only: ewald, mikes_ewald, flag_old_ewald
+    use ewald_module,      only: mikes_ewald
     use S_matrix_module,   only: get_S_matrix
     use GenComms,          only: my_barrier,end_comms,inode,ionode, &
                                  cq_abort,gcopy
@@ -1135,11 +1132,7 @@ contains
     ! (5) Find the Ewald energy for the initial set of atoms
     if (inode == ionode .and. iprint_init > 1) &
          write (io_lun, *) 'Calling Ewald'
-    if (flag_old_ewald) then
-       call ewald
-    else
-       call mikes_ewald
-    end if
+    call mikes_ewald
 !!$
 !!$
 !!$

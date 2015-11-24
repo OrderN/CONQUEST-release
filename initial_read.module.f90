@@ -469,6 +469,8 @@ contains
   !!    Changed index of ChemicalSpeciesLabel to use number read from input file
   !!   2015/11/09 17:17 dave with TM and NW (Mizuho)
   !!    Added read for neutral atom flag
+  !!   2015/11/24 08:30 dave
+  !!    Removed flag_old_ewald (now redundant)
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -567,7 +569,7 @@ contains
     use blip,          only: blip_info, init_blip_flag, alpha, beta
     use maxima_module, only: maxnsf
     use control,       only: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset
-    use ewald_module,  only: ewald_accuracy, flag_old_ewald
+    use ewald_module,  only: ewald_accuracy
     use minimise,      only: UsePulay, n_L_iterations,          &
                              n_support_iterations, L_tolerance, &
                              sc_tolerance, energy_tolerance,    &
@@ -1266,7 +1268,6 @@ contains
        flag_read_blocks = fdf_boolean('Grid.ReadBlocks',.false.)
        ! Default value of 10^-10 Ha per atom
        ewald_accuracy   = fdf_double ('General.EwaldAccuracy',1.0e-10_double)
-       flag_old_ewald   = fdf_boolean('General.FlagOldEwald',.false.)
        UseGemm = fdf_boolean('MM.UseGemm',.false.)
        if(flag_ghost) then
           if(inode==ionode) write(io_lun,*) ' As ghost atoms are included, UseGemm must be false.'

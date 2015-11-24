@@ -182,6 +182,8 @@ contains
   !!   2015/09/03 17:10 dave
   !!    Correcting Jacobian terms for non-SCF stress and displaying
   !!    PCC and non-SCF stresses
+  !!   2015/11/24 08:38 dave
+  !!    Adjusted name of hartree_energy to hartree_energy_total_rho for neutral atom implementation
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -217,7 +219,7 @@ contains
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl
     use DFT_D2,                 only: disp_force
-    use energy,                  only: hartree_energy, local_ps_energy, &
+    use energy,                  only: hartree_energy_total_rho, local_ps_energy, &
                                        delta_E_xc, xc_energy
     use hartree_module, only: Hartree_stress
     use XC_module, ONLY: XC_GGA_stress
@@ -316,10 +318,10 @@ contains
     ! Different definitions for non-SCF and SCF
     do direction = 1,3
        if(flag_self_consistent) then
-          GPV_stress(direction) = (hartree_energy + local_ps_energy - core_correction) ! core contains 1/V term
+          GPV_stress(direction) = (hartree_energy_total_rho + local_ps_energy - core_correction) ! core contains 1/V term
           XC_stress(direction) = xc_energy + spin_factor*XC_GGA_stress(direction)
        else ! nonSCF XC found later, along with corrections to Hartree
-          GPV_stress(direction) = (hartree_energy + local_ps_energy - core_correction) ! core contains 1/V term
+          GPV_stress(direction) = (hartree_energy_total_rho + local_ps_energy - core_correction) ! core contains 1/V term
           XC_stress(direction) = delta_E_xc !xc_energy + spin_factor*XC_GGA_stress(direction)
        end if
     end do    
