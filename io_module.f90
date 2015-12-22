@@ -4291,7 +4291,7 @@ second:   do
           fire_N2 = 0
        endif
        if(iprint_MD>1) write (io_lun,fmt="(4x,'Initial FIRE parameters:', 2x,'N= ', i3, 2x, &
-             'N2= ', i3, 2x, 'P= ', f12.8, 2x, 'dt= ', f9.6, 2x, 'alpha= ', f9.6)") &
+            &'N2= ', i3, 2x, 'P= ', f12.8, 2x, 'dt= ', f9.6, 2x, 'alpha= ', f9.6)") &
              fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha
     else
        MDtimestep = 0.0_double ! So that we can distribute with gcopy
