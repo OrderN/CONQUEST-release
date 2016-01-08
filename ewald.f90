@@ -52,6 +52,11 @@
 !!    Adding stress
 !!   2015/11/24 08:21 dave with TM and N. Watanabe of Mizuho
 !!    Introducing neutral atom variables and routines, and removing old ewald
+!!   2015/11/26 15:20 dave
+!!    Changed standard (ewald or other method) names to ion_interaction_ instead of ewald_
+!!   2015/12/21 17:25 dave
+!!    Changed n_ewald_partition_neighbours to n_partition_neighbours (use for both ewald and neutral atom)
+!!    and ewald_partition_list
 !!  SOURCE
 !!
 module ewald_module
@@ -64,7 +69,7 @@ module ewald_module
   save
 
   integer :: n_g_vectors, n_supercells
-  integer :: number_of_g_vectors, n_ewald_partition_neighbours
+  integer :: number_of_g_vectors, n_partition_neighbours
   real(double) :: gamma
   real(double) :: ewald_gamma, ewald_real_cutoff, ewald_recip_cutoff
   real(double) :: ewald_real_cell_volume
@@ -72,21 +77,24 @@ module ewald_module
   real(double), allocatable, dimension(:) :: gx, gy, gz, g_factor, structure2
   complex(double_cplx), allocatable, dimension(:) :: cstructure
   real(double), allocatable, dimension(:) :: supercell_vec_x, supercell_vec_y, supercell_vec_z
-  integer, dimension(:,:), allocatable :: ewald_partition_neighbour_list
+  integer, dimension(:,:), allocatable :: partition_neighbour_list
   real(double), dimension(:), allocatable :: ewald_g_vector_x, ewald_g_vector_y, ewald_g_vector_z, &
        &ewald_g_factor, struc_fac_r, struc_fac_i
 
-  real(double), allocatable, dimension(:,:) :: ewald_force
-  real(double), dimension(3) :: ewald_stress
+
+  ! Standard pseudopotential (not neutral atom)
+  real(double) :: ion_interaction_energy
+  real(double), allocatable, dimension(:,:) :: ion_interaction_force
+  real(double), dimension(3) :: ion_interaction_stress
   real(double), dimension(3) :: ewald_gaussian_self_stress, ewald_recip_stress, ewald_intra_stress, &
        ewald_inter_stress
-
-  real(double) :: ewald_energy
   real(double) :: ewald_accuracy 
 
   ! For neutral atom potential
   real(double) :: screened_ion_interaction_energy
-
+  real(double), allocatable, dimension(:,:) :: screened_ion_force
+  real(double), dimension(3) :: screened_ion_stress  
+  
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
@@ -188,10 +196,30 @@ contains
   end function erfc
   !!***
 
-! Bug fix, 2005/10/06 10:13 dave
-!  It was assumed that a1_dot_a1 etc and b1_dot_b1 etc would remain defined after exit
-!  from routine; I added an explicit recalculation if pd_init .false.
-  ! ==========================================================
+!!****f* ewald_module/partition_distance *
+!!
+!!  NAME 
+!!   partition_distance
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Finds the distance between a primary set partition and a covering set partition
+!!   (though for reasons that are not clear, we actually find half this distance)
+!!  INPUTS
+!!   
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   M. J. Gillan
+!!  CREATION DATE
+!!   2003
+!!  MODIFICATION HISTORY
+!!   2005/10/06 10:13 dave
+!!    It was assumed that a1_dot_a1 etc and b1_dot_b1 etc would remain defined after exit
+!!    from routine; I added an explicit recalculation if pd_init .false.
+!!  SOURCE
+!!  
   subroutine partition_distance(pd_init,aa,beta,rr,distance)
 
     use numbers
@@ -310,12 +338,6 @@ contains
     isig2 = sign(min(1,floor(abs(p2))),nint(p2))
     isig3 = sign(min(1,floor(abs(p3))),nint(p3))
 
-      !write(io_lun,fmt='(/" info for supplied position:"/)')
-      !write(io_lun,fmt='(" x1, x2, x3:",3f12.6)') x1, x2, x3
-      !write(io_lun,fmt='(" y1, y2, y3:",3f12.6)') y1, y2, y3
-      !write(io_lun,fmt='(" p1, p2, p3:",3f12.6)') p1, p2, p3
-      !write(io_lun,fmt='(/" signatures of position:",3i3)') isig1, isig2, isig3
-
     ! --- calculate shortest distance --------------------------
     asig1 = real(isig1,double)
     asig2 = real(isig2,double)
@@ -370,18 +392,36 @@ contains
 
     return
   end subroutine partition_distance
-  ! ==========================================================
+!!***
 
+!!****f* ewald_module/mikes_set_ewald *
+!!
+!!  NAME 
+!!   mikes_set_ewald
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Sets up all the arrays and routines needed for Ewald sum calculations
+!!  INPUTS
+!!   
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   M. J. Gillan
+!!  CREATION DATE
+!!   2003
+!!  MODIFICATION HISTORY
 !!   2009/07/08 16:58 dave
 !!    Removed double loop over all atoms to find lambda as it's not used
 !!   2015/05/01 13:26 dave and sym
 !!    Adding stress calculation  
 !!   2015/11/24 08:28 dave
 !!    Removing call to obsolete_erfcc (only in a redundant test loop)
-  ! ==========================================================
+!!  SOURCE
+!!  
   subroutine mikes_set_ewald(inode,ionode)
 
-    use construct_module, ONLY : init_cover
     use cover_module, ONLY : ewald_CS, make_cs
     use datatypes
     use dimens
@@ -695,15 +735,6 @@ contains
           enddo
        enddo
     enddo
-    !    if(inode == ionode) then
-    !       write(unit=io_lun,fmt='(/" no. of non-zero recips in Ewald sum:",i10)') number_of_g_vectors
-    !       write(unit=io_lun,fmt='(//" recip vectors and recip factor:"/)')
-    !       do n = 1, number_of_g_vectors
-    !          write(unit=io_lun,fmt='(3x,i5,3x,3e15.6,3x,e15.6)') n, &
-    !               &ewald_g_vector_x(n), ewald_g_vector_y(n), ewald_g_vector_z(n), ewald_g_factor(n)
-    !       enddo
-    !    endif
-
     ! ********************************************************************
     !              SET-UP INFORMATION FOR EWALD REAL-SPACE SUM
     ! ********************************************************************
@@ -769,11 +800,8 @@ contains
     ! --- initiate partition_distance routine
     call partition_distance(.true.,part_cell_vec,part_cell_dual)
 
-!    ! --- loop over primary-set partitions of present node
-!    if(bundle%groups_on_node > mx_nponn) call cq_abort('mikes_set_ewald: mx_nponn to small',&
-!         &bundle%groups_on_node)
-
-    ! Work out n_ewald_partition_neighbours for first partition in group
+    ! --- loop over primary-set partitions of present node
+    ! Work out n_partition_neighbours for first partition in group
     ip = 1
 
     ! --- Cartesian integer indices of current primary-set partition with respect
@@ -784,7 +812,7 @@ contains
     nppy = 1 + bundle%idisp_primy(ip) + ewald_CS%nspanly
     nppz = 1 + bundle%idisp_primz(ip) + ewald_CS%nspanlz
 
-    n_ewald_partition_neighbours = 0
+    n_partition_neighbours = 0
     ! --- loop over partitions in Ewald covering set in node-periodic grouped order
     do nc = 1, ewald_CS%ng_cover
        ! --- for current partition nc in Ewald covering set, get the Cartesian-composite index
@@ -816,18 +844,18 @@ contains
           call partition_distance(.false.,part_cell_vec,part_cell_dual,rr,distance)
           distance = two*distance
           if(distance < ewald_real_cutoff) then
-             n_ewald_partition_neighbours = n_ewald_partition_neighbours + 1
+             n_partition_neighbours = n_partition_neighbours + 1
           endif
        endif
     enddo
     ! Allocate memory
-    allocate(ewald_partition_neighbour_list(bundle%groups_on_node,&
-         n_ewald_partition_neighbours), STAT=stat)
+    allocate(partition_neighbour_list(bundle%groups_on_node,&
+         n_partition_neighbours), STAT=stat)
     if(stat/=0) &
          call cq_abort("set_ewald: error allocating partition_neighbour_list ", &
-         bundle%groups_on_node,n_ewald_partition_neighbours)
+         bundle%groups_on_node,n_partition_neighbours)
     call reg_alloc_mem(area_general,bundle%groups_on_node*&
-         n_ewald_partition_neighbours,type_dbl)
+         n_partition_neighbours,type_dbl)
 
     do ip = 1, bundle%groups_on_node
 
@@ -841,7 +869,7 @@ contains
        nppy = 1 + bundle%idisp_primy(ip) + ewald_CS%nspanly
        nppz = 1 + bundle%idisp_primz(ip) + ewald_CS%nspanlz
 
-       n_ewald_partition_neighbours = 0
+       n_partition_neighbours = 0
        ! --- loop over partitions in Ewald covering set in
        !      node-periodic grouped order
        do nc = 1, ewald_CS%ng_cover
@@ -879,41 +907,49 @@ contains
                   part_cell_dual,rr,distance)
              distance = two*distance
              if(distance < ewald_real_cutoff) then
-                n_ewald_partition_neighbours = n_ewald_partition_neighbours + 1
+                n_partition_neighbours = n_partition_neighbours + 1
                 ! --- for current primary-set partition ip, record the
                 !     PG index nc of latest covering-set partition
                 !     within cutoff
-                ewald_partition_neighbour_list(ip,&
-                     n_ewald_partition_neighbours) = nc
+                partition_neighbour_list(ip,&
+                     n_partition_neighbours) = nc
              endif
           endif
        enddo
-       ! +++
-       !if(inode == 2) then
-       !   write(unit=io_lun,fmt='(" +++ for node no",i3," partition ",i3," no of Ewald neighbour partitions:",i5)') &
-       !        &inode, ip, n_ewald_partition_neighbours
-       !   write(unit=io_lun,fmt='(" no. of atoms in current partition:",i5)') bundle%nm_nodgroup(ip)
-       !   if(bundle%nm_nodgroup(ip) > 0) then
-       !      do ni = 1, bundle%nm_nodgroup(ip)
-       !         i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
-       !         write(unit=io_lun,fmt='(" +++ global index of atom no.",i5," in current partition:",i5)') ni, i
-       !      enddo
-       !   endif
-       !endif
-       ! +++
     enddo
 
-    allocate(ewald_force(3,ni_in_cell),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating ewald_force in set_ewald: ",ni_in_cell,stat)
+    allocate(ion_interaction_force(3,ni_in_cell),STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating ion_interaction_force in set_ewald: ",ni_in_cell,stat)
     call reg_alloc_mem(area_general,3*ni_in_cell,type_dbl)
+    ion_interaction_force = zero
     call my_barrier()
 
     return
 
   end subroutine mikes_set_ewald
-  ! =============================================================================
+!!***
 
-  ! ==============================================================================
+!!****f* ewald_module/mikes_structure_factor *
+!!
+!!  NAME 
+!!   mikes_structure_factor
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Calculates structure factors
+!!  INPUTS
+!!   
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   M. J. Gillan
+!!  CREATION DATE
+!!   2003
+!!  MODIFICATION HISTORY
+!!  
+!!  SOURCE
+!!  
   subroutine mikes_structure_factor(inode,ionode)
 
     use atoms, ONLY : index_my_atoms, n_my_atoms
@@ -929,25 +965,6 @@ contains
 
     integer :: i, ip, k, n, ni
     real(double) :: g_dot_r, q_i, x, y, z
-
-
-    ! >>>>>>
-    !do ip = 1, bundle%groups_on_node
-    !   if(inode /= ionode.AND.iprint_gen>=6) write(unit=io_lun,fmt='(/" node:",i3," primary-set partition no:",i3," contains",i3,&
-    !        &" atoms")') inode, ip, bundle%nm_nodgroup(ip)
-    !   if(bundle%nm_nodgroup(ip) > 0) then
-    !      do ni = 1, bundle%nm_nodgroup(ip)
-    !         x = bundle%xprim(bundle%nm_nodbeg(ip)+ni-1)
-    !         y = bundle%yprim(bundle%nm_nodbeg(ip)+ni-1)
-    !         z = bundle%zprim(bundle%nm_nodbeg(ip)+ni-1)
-    !         i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
-    !         !q_i = charge(species(i))
-    !         q_i = charge(bundle%species(bundle%nm_nodbeg(ip)+ni-1))
-    !         if(inode /= ionode.AND.iprint_gen>=6) write(unit=io_lun,fmt='(2x,2i3,2x,3e15.6,2x,f12.6)') ni, i, x, y, z, q_i
-    !      enddo
-    !   endif
-    !enddo
-    ! <<<<<<
 
     do n = 1, number_of_g_vectors
        struc_fac_r(n) = zero
@@ -984,13 +1001,32 @@ contains
     ! +++
     return
   end subroutine mikes_structure_factor
-  ! ==============================================================================
+!!***
 
+!!****f* ewald_module/mikes_ewald *
+!!
+!!  NAME 
+!!   mikes_ewald
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Calculates the ion-ion interaction energy, forces and stresses using the Ewald sum
+!!  INPUTS
+!!   
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   M. J. Gillan
+!!  CREATION DATE
+!!   2003
+!!  MODIFICATION HISTORY
 !!   10:42, 13/02/2006 drb 
 !!    Corrected line length error
 !!   2015/05/01 13:29 dave and sym
 !!     Added stress
-  ! =============================================================================
+!!  SOURCE
+!!  
   subroutine mikes_ewald()
 
     use cover_module,   ONLY: ewald_CS
@@ -1053,7 +1089,7 @@ contains
        ewald_recip_stress(direction) = zero
        ewald_intra_stress(direction) = zero
        ewald_inter_stress(direction) = zero
-       ewald_stress(direction) = zero
+       ion_interaction_stress(direction) = zero
     enddo
     ! Allocate memory for and call structure_factor
     allocate(struc_fac_r(number_of_g_vectors),struc_fac_i(number_of_g_vectors),STAT=stat)
@@ -1125,23 +1161,6 @@ contains
     !  I think that the reciprocal space part doesn't need this sum, but I should check
     !call gsum(ewald_recip_stress,3)
 
-    !if(inode /= ionode.AND.iprint_gen>=6) then
-    !   write(unit=io_lun,fmt='(/" Ewald recip-space info from node:",i3)') inode
-    !   write(unit=io_lun,fmt='(/" Ewald recip-space energy:",e20.12)') &
-    !        &ewald_recip_energy
-    !   write(unit=io_lun,fmt='(/" Ewald recip-space forces:"/)')
-    !   do ip = 1, bundle%groups_on_node
-    !      if(bundle%nm_nodgroup(ip) > 0) then
-    !         do ni = 1, bundle%nm_nodgroup(ip)
-    !            i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
-    !            write(unit=io_lun,fmt='(2x,3i5,2x,3e20.12)') ip, ni, i, &
-    !                 &ewald_recip_force_x(bundle%nm_nodbeg(ip)+ni-1), ewald_recip_force_y(bundle%nm_nodbeg(ip)+ni-1), &
-    !                 &ewald_recip_force_z(bundle%nm_nodbeg(ip)+ni-1)
-    !         enddo
-    !      endif
-    !   enddo
-    !endif
-
     ! --- Ewald real-space sum -----------------------------------------------------
 
     ! --- intra-partition contribution ---------------------------------------------
@@ -1171,7 +1190,6 @@ contains
              do nj = ni+1, bundle%nm_nodgroup(ip)
                 ! ... global label and charge, as before
                 j = bundle%ig_prim(bundle%nm_nodbeg(ip)+nj-1)
-                !q_j = charge(species(j))
                 q_j = charge(bundle%species(bundle%nm_nodbeg(ip)+nj-1))
                 ! ... Cartesian components of vector separation of the two atoms
                 rijx = bundle%xprim(bundle%nm_nodbeg(ip)+ni-1) - bundle%xprim(bundle%nm_nodbeg(ip)+nj-1)
@@ -1245,18 +1263,16 @@ contains
           do ni = 1, bundle%nm_nodgroup(ip)
              ! ... global label and charge of current primary-set atom
              i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
-             !q_i = charge(species(i))
              q_i = charge(bundle%species(bundle%nm_nodbeg(ip)+ni-1))
              ! --- loop over Ewald neighbour-list of partitions in Ewald covering set
-             do nn = 1, n_ewald_partition_neighbours
+             do nn = 1, n_partition_neighbours
                 ! ... get PG label of current ECS partition
-                nc = ewald_partition_neighbour_list(ip,nn)
+                nc = partition_neighbour_list(ip,nn)
                 ig_atom_beg = parts%icell_beg(ewald_CS%lab_cell(nc))
                 ! --- loop over atoms in ECS partition
                 if(ewald_CS%n_ing_cover(nc) > 0) then
                    do nj = 1, ewald_CS%n_ing_cover(nc)
                       ! ... global label and charge of current atom in ECS partition
-                      !q_j = charge(species(id_glob(ig_atom_beg+nj-1)))
                       q_j = charge(species_glob(id_glob(ig_atom_beg+nj-1)))
                       ! ... Cartesian components of vector separation of the two atoms
                       rijx = bundle%xprim(bundle%nm_nodbeg(ip)+ni-1) - ewald_CS%xcover(ewald_CS%icover_ibeg(nc)+nj-1)
@@ -1318,7 +1334,7 @@ contains
 
     ! --- add all contributions to total Ewald energy and forces
     ewald_total_energy = ewald_recip_energy + ewald_real_energy + ewald_gaussian_self_energy + ewald_net_charge_energy
-    ewald_energy = ewald_total_energy
+    ion_interaction_energy = ewald_total_energy
     do i = 1, ni_in_cell
        ewald_total_force_x(i) = zero
        ewald_total_force_y(i) = zero
@@ -1343,17 +1359,16 @@ contains
     call gsum(ewald_total_force_z,ni_in_cell)
     ! SYM 2014/10/22 14:34: Summ all the stress contributions
     do direction = 1, 3
-       ewald_stress(direction) = ewald_intra_stress(direction) + ewald_inter_stress(direction) + &
+       ion_interaction_stress(direction) = ewald_intra_stress(direction) + ewald_inter_stress(direction) + &
             ewald_recip_stress(direction) + ewald_gaussian_self_stress(direction)
     enddo
     ! Added DRB & MJG 2003/10/22 to make force available to rest of code
     do i=1,ni_in_cell
-       ewald_force(1,i) = ewald_total_force_x(i)
-       ewald_force(2,i) = ewald_total_force_y(i)
-       ewald_force(3,i) = ewald_total_force_z(i)
+       ion_interaction_force(1,i) = ewald_total_force_x(i)
+       ion_interaction_force(2,i) = ewald_total_force_y(i)
+       ion_interaction_force(3,i) = ewald_total_force_z(i)
     end do
     if(inode == ionode.AND.iprint_gen>=2) then
-       !write(unit=io_lun,fmt='(/" Ewald total energy and forces from node:",i3)') inode 
        write(unit=io_lun,fmt='(/8x," Ewald total energy:",e20.12)') ewald_total_energy
        if(inode == ionode.AND.iprint_gen>=4) then
           write(unit=io_lun,fmt='(/8x," Ewald total forces:"/)')
@@ -1378,6 +1393,603 @@ contains
 
     return
   end subroutine mikes_ewald
-  ! =============================================================================
+!!***
+
+!!****f* ewald_module/setup_screened_ion_interaction *
+!!
+!!  NAME 
+!!   setup_screened_ion_interaction
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Sets up the necessary arrays and covering set for calculating ion-ion interactions
+!!   within the neutral atom method (using same arrays and loops as Ewald sum but shorter range)
+!!  INPUTS
+!!   
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   D. R. Bowler
+!!  CREATION DATE
+!!   2015/12/09
+!!  MODIFICATION HISTORY
+!!  
+!!  SOURCE
+!!  
+  subroutine setup_screened_ion_interaction
+
+    use datatypes
+    use GenComms, ONLY : cq_abort, my_barrier, inode, ionode
+    use group_module, ONLY : parts
+    use global_module, ONLY : x_atom_cell, y_atom_cell, z_atom_cell, &
+         iprint_gen, ni_in_cell, area_general
+    use numbers
+    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use cover_module, ONLY : ewald_CS, make_cs
+    use primary_module, ONLY : bundle
+    use species_module, only: n_species ! for Neutral atom potential
+    use atomic_density, only: atomic_density_table ! for Neutral atom potential
+
+    implicit none
+
+    integer :: stat,  nppx, nppy, nppz, m1, m2, m3, n, nc, nccx, nccy, nccz, ind_part, &
+         i, ip, isp
+
+    real(double) :: partition_radius_squared, partition_diameter, &
+         distance, v1, v2, v3, rsq, ion_ion_cutoff
+    real(double), dimension(3) :: rr, vert
+    real(double), dimension(3,3) :: real_cell_vec, recip_cell_vec, &
+         part_cell_vec, part_cell_dual
+
+    ! This follows the ewald sum above but is all simply a loop over neighbours
+    ion_ion_cutoff = zero
+    do isp=1, n_species
+       if( ion_ion_cutoff<atomic_density_table(isp)%cutoff ) then
+          ion_ion_cutoff=atomic_density_table(isp)%cutoff
+       end if
+    end do
+
+    ! --- primitive translation vectors for partition
+    if(inode == ionode.AND.iprint_gen>1) &
+         write(unit=io_lun,fmt='(/8x," nos of partitions in cell edges:",3i5)') &
+         parts%ngcellx, parts%ngcelly, parts%ngcellz
+    do i = 1, 3
+       part_cell_vec(1,i) = real_cell_vec(1,i) / real(parts%ngcellx,double)
+       part_cell_vec(2,i) = real_cell_vec(2,i) / real(parts%ngcelly,double)
+       part_cell_vec(3,i) = real_cell_vec(3,i) / real(parts%ngcellz,double)
+    enddo
+    if(inode == ionode.AND.iprint_gen>2) then
+       write(unit=io_lun,fmt='(/8x," partition cell vectors:"/)')
+       do n = 1, 3
+          write(unit=io_lun,&
+               fmt='(8x," partition cell vector no:",i5,3x,3f12.6)') &
+               n, (part_cell_vec(n,i), i = 1, 3)
+       enddo
+    endif
+
+    ! --- diameter of sphere circumscribed round partition unit cell -
+    partition_radius_squared = zero
+    do m1 = 0, 1
+       v1 = real(m1,double) - half
+       do m2 = 0, 1
+          v2 = real(m2,double) - half
+          do m3 = 0, 1
+             v3 = real(m3,double) - half
+             vert(1) = v1*part_cell_vec(1,1) + v2*part_cell_vec(2,1) +&
+                  v3*part_cell_vec(3,1)
+             vert(2) = v1*part_cell_vec(1,2) + v2*part_cell_vec(2,2) +&
+                  v3*part_cell_vec(3,2)
+             vert(3) = v1*part_cell_vec(1,3) + v2*part_cell_vec(2,3) +&
+                  v3*part_cell_vec(3,3)
+             rsq = vert(1)*vert(1) + vert(2)*vert(2) + vert(3)*vert(3)
+             if(rsq > partition_radius_squared) partition_radius_squared = rsq
+          enddo
+       enddo
+    enddo
+    partition_diameter = two*sqrt(partition_radius_squared)
+    if(inode == ionode.AND.iprint_gen>1) &
+         write(unit=io_lun,fmt='(/8x," diameter of sphere circumscribed round &
+         &partition cell:",f12.6)') partition_diameter 
+    ! --- make covering set
+    call make_cs(inode-1,ion_ion_cutoff,ewald_CS,parts,bundle,&
+         ni_in_cell, x_atom_cell,y_atom_cell,z_atom_cell)
+    ! +++
+    if(inode == ionode.AND.iprint_gen>1) then
+       write(unit=io_lun,fmt='(/8x,"+++ ng_cover:",i10)') &
+            ewald_CS%ng_cover
+       write(unit=io_lun,fmt='(8x,"+++ ncoverx, y, z:",3i8)') &
+            ewald_CS%ncoverx, ewald_CS%ncovery, ewald_CS%ncoverz
+       write(unit=io_lun,fmt='(8x,"+++ nspanlx, y, z:",3i8)') &
+            ewald_CS%nspanlx, ewald_CS%nspanly, ewald_CS%nspanlz
+       write(unit=io_lun,fmt='(8x,"+++ nx_origin, y, z:",3i8)') &
+            ewald_CS%nx_origin, ewald_CS%ny_origin, ewald_CS%nz_origin
+    endif
+    ! +++
+    ! --- initiate partition_distance routine
+    call partition_distance(.true.,part_cell_vec,part_cell_dual)
+    ! Work out n_partition_neighbours for first partition in group
+    ip = 1
+
+    ! --- Cartesian integer indices of current primary-set partition with respect
+    !     to left of Ewald covering set (to be more precise: for a hypothetical primary-set 
+    !     partition in bottom left-hand corner of covering set, all the following
+    !     indices nppx, nppy, nppz would be equal to one).
+    nppx = 1 + bundle%idisp_primx(ip) + ewald_CS%nspanlx
+    nppy = 1 + bundle%idisp_primy(ip) + ewald_CS%nspanly
+    nppz = 1 + bundle%idisp_primz(ip) + ewald_CS%nspanlz
+
+    n_partition_neighbours = 0
+    ! --- loop over partitions in Ewald covering set in node-periodic grouped order
+    do nc = 1, ewald_CS%ng_cover
+       ! --- for current partition nc in Ewald covering set, get the Cartesian-composite index
+       ind_part = ewald_CS%lab_cover(nc)
+       ! --- unpack the Cartesian-composite index to obtain the Cartesian integer indices of current
+       !     partition nc in Ewald covering set
+       nccx = 1 + (ind_part - 1)/(ewald_CS%ncovery * ewald_CS%ncoverz)
+       nccy = 1 + (ind_part - 1 - (nccx-1) * ewald_CS%ncovery * &
+            ewald_CS%ncoverz)/ewald_CS%ncoverz
+       nccz = ind_part - (nccx-1) * ewald_CS%ncovery * ewald_CS%ncoverz - &
+            (nccy-1) * ewald_CS%ncoverz
+       ! --- integer triplet specifying offset of covering-set partition from primary-set partition
+       m1 = nccx - nppx
+       m2 = nccy - nppy
+       m3 = nccz - nppz
+       ! --- exclude from list if all components of offset are zero
+       if(m1*m1 + m2*m2 + m3*m3 /= 0) then
+          ! --- calculate distance (in a.u.) between centre of primary-set partition and the point
+          !     mid-way between the primary- and covering-set partitions
+          v1 = real(m1,double)
+          v2 = real(m2,double)
+          v3 = real(m3,double)
+          rr(1) = half*(v1*part_cell_vec(1,1) + v2*part_cell_vec(2,1) &
+               + v3*part_cell_vec(3,1))
+          rr(2) = half*(v1*part_cell_vec(1,2) + v2*part_cell_vec(2,2) &
+               + v3*part_cell_vec(3,2))
+          rr(3) = half*(v1*part_cell_vec(1,3) + v2*part_cell_vec(2,3) &
+               + v3*part_cell_vec(3,3))
+          call partition_distance(.false.,part_cell_vec,part_cell_dual,rr,distance)
+          distance = two*distance
+          if(distance < ion_ion_cutoff) then
+             n_partition_neighbours = n_partition_neighbours + 1
+          endif
+       endif
+    enddo
+    ! Allocate memory
+    allocate(partition_neighbour_list(bundle%groups_on_node,&
+         n_partition_neighbours), STAT=stat)
+    if(stat/=0) &
+         call cq_abort("setup_screened_ion_interaction: error allocating partition_neighbour_list ", &
+         bundle%groups_on_node,n_partition_neighbours)
+    call reg_alloc_mem(area_general,bundle%groups_on_node*&
+         n_partition_neighbours,type_dbl)
+
+    do ip = 1, bundle%groups_on_node
+
+       ! --- Cartesian integer indices of current primary-set
+       !     partition with respect to left of Ewald covering set (to
+       !     be more precise: for a hypothetical primary-set partition
+       !     in bottom left-hand corner of covering set, all the
+       !     following indices nppx, nppy, nppz would be equal to
+       !     one).
+       nppx = 1 + bundle%idisp_primx(ip) + ewald_CS%nspanlx
+       nppy = 1 + bundle%idisp_primy(ip) + ewald_CS%nspanly
+       nppz = 1 + bundle%idisp_primz(ip) + ewald_CS%nspanlz
+
+       n_partition_neighbours = 0
+       ! --- loop over partitions in Ewald covering set in
+       !      node-periodic grouped order
+       do nc = 1, ewald_CS%ng_cover
+          ! --- for current partition nc in Ewald covering set, get
+          !     the Cartesian-composite index
+          ind_part = ewald_CS%lab_cover(nc)
+          ! --- unpack the Cartesian-composite index to obtain the
+          !     Cartesian integer indices of current partition nc in
+          !     Ewald covering set
+          nccx = 1 + (ind_part - 1)/(ewald_CS%ncovery * ewald_CS%ncoverz)
+          nccy = 1 + (ind_part - 1 - (nccx-1) * ewald_CS%ncovery * &
+               ewald_CS%ncoverz)/ewald_CS%ncoverz
+          nccz = ind_part - (nccx-1) * ewald_CS%ncovery * ewald_CS%ncoverz - &
+               (nccy-1) * ewald_CS%ncoverz
+          ! --- integer triplet specifying offset of covering-set
+          !     partition from primary-set partition
+          m1 = nccx - nppx
+          m2 = nccy - nppy
+          m3 = nccz - nppz
+          ! --- exclude from list if all components of offset are zero
+          if(m1*m1 + m2*m2 + m3*m3 /= 0) then
+             ! --- calculate distance (in a.u.) between centre of
+             !     primary-set partition and the point mid-way between
+             !     the primary- and covering-set partitions
+             v1 = real(m1,double)
+             v2 = real(m2,double)
+             v3 = real(m3,double)
+             rr(1) = half*(v1*part_cell_vec(1,1) + v2*part_cell_vec(2,1) + &
+                  v3*part_cell_vec(3,1))
+             rr(2) = half*(v1*part_cell_vec(1,2) + v2*part_cell_vec(2,2) + &
+                  v3*part_cell_vec(3,2))
+             rr(3) = half*(v1*part_cell_vec(1,3) + v2*part_cell_vec(2,3) + &
+                  v3*part_cell_vec(3,3))
+             call partition_distance(.false.,part_cell_vec,&
+                  part_cell_dual,rr,distance)
+             distance = two*distance
+             if(distance < ion_ion_cutoff) then
+                n_partition_neighbours = n_partition_neighbours + 1
+                ! --- for current primary-set partition ip, record the
+                !     PG index nc of latest covering-set partition
+                !     within cutoff
+                partition_neighbour_list(ip,&
+                     n_partition_neighbours) = nc
+             endif
+          endif
+       enddo
+    enddo
+    
+    allocate(screened_ion_force(3,ni_in_cell),STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating screened_ion_force in setup_ion_interaction: ",ni_in_cell,stat)
+    call reg_alloc_mem(area_general,3*ni_in_cell,type_dbl)
+    screened_ion_force = zero
+    call my_barrier()
+
+  end subroutine setup_screened_ion_interaction
+!!***
+
+!!****f* ewald_module/screened_ion_interaction *
+!!
+!!  NAME 
+!!   screened_ion_interaction
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Calculates the ion-ion interaction within the neutral atom approach
+!!   (based on the standard Ewald routine for looping over atom pairs)
+!!  INPUTS
+!!   
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   D. R. Bowler with TM and NW (Mizuho)
+!!  CREATION DATE
+!!   2015/12/22
+!!  MODIFICATION HISTORY
+!!  
+!!  SOURCE
+!!  
+  subroutine screened_ion_interaction
+
+    use cover_module, ONLY : ewald_CS
+    use datatypes
+    use GenComms, ONLY : gsum, cq_abort, inode, ionode
+    use global_module, ONLY : id_glob, iprint_gen, species_glob, ni_in_cell, area_general, IPRINT_TIME_THRES3
+    use group_module, ONLY : parts
+    use maxima_module, ONLY : maxatomsproc
+    use numbers
+    use primary_module, ONLY : bundle
+    use species_module, ONLY : charge, species
+    use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
+
+    implicit none
+
+    integer :: i, ip, ig_atom_beg, j, n, nc, ni, nj, nn, stat
+    real(double) :: q_i, q_j, rij, rijx, rijy, rijz, rij_squared
+    real(double) :: screenedE_sum_intra, screenedE_sum_inter
+    real(double) :: screenedE_sum_self
+    real(double) :: overlap, dummy
+    real(double) :: goverlap_x, goverlap_y, goverlap_z
+
+    real(double), allocatable, dimension(:) :: &
+         screened_ion_intra_force_x, screened_ion_intra_force_y, screened_ion_intra_force_z
+    real(double), allocatable, dimension(:) :: &
+         screened_ion_inter_force_x, screened_ion_inter_force_y, screened_ion_inter_force_z
+
+    if(iprint_gen>4) write(io_lun,fmt='(2x,"Screened ion: allocation")')
+    allocate( &
+         screened_ion_intra_force_x(maxatomsproc), &
+         screened_ion_intra_force_y(maxatomsproc), &
+         screened_ion_intra_force_z(maxatomsproc),STAT=stat)
+    allocate( &
+         screened_ion_inter_force_x(maxatomsproc), &
+         screened_ion_inter_force_y(maxatomsproc), &
+         screened_ion_inter_force_z(maxatomsproc),STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating screened_ion forces(1): ",maxatomsproc,stat)
+
+
+    if(iprint_gen>4) write(io_lun,fmt='(2x,"Screened ion: init intra")')
+    ! --- intra-partition contribution
+    ! ... initialise energy and forces to zero
+    screenedE_sum_intra = zero
+    do ip = 1, bundle%groups_on_node
+       if(bundle%nm_nodgroup(ip) > 0) then
+          do ni = 1, bundle%nm_nodgroup(ip)
+             screened_ion_intra_force_x(bundle%nm_nodbeg(ip)+ni-1) = zero
+             screened_ion_intra_force_y(bundle%nm_nodbeg(ip)+ni-1) = zero
+             screened_ion_intra_force_z(bundle%nm_nodbeg(ip)+ni-1) = zero
+          enddo
+       endif
+    enddo
+
+    if(iprint_gen>4) write(io_lun,fmt='(2x,"Screened ion: do intra")')
+    ! --- loop over primary-set partitions 
+    do ip = 1, bundle%groups_on_node
+       if(bundle%nm_nodgroup(ip) > 1) then
+          do ni = 1, bundle%nm_nodgroup(ip) - 1
+             i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
+             q_i = charge(bundle%species(bundle%nm_nodbeg(ip)+ni-1))
+             if(iprint_gen>5) write(io_lun,fmt='(2x,"Atom, charge: ",i5,f12.5)') i,q_i
+             do nj = ni+1, bundle%nm_nodgroup(ip)
+                j = bundle%ig_prim(bundle%nm_nodbeg(ip)+nj-1)
+                q_j = charge(bundle%species(bundle%nm_nodbeg(ip)+nj-1))
+                if(iprint_gen>5) write(io_lun,fmt='(2x,"Atom, charge: ",i5,f12.5)') j,q_j
+                rijx = bundle%xprim(bundle%nm_nodbeg(ip)+ni-1) - bundle%xprim(bundle%nm_nodbeg(ip)+nj-1)
+                rijy = bundle%yprim(bundle%nm_nodbeg(ip)+ni-1) - bundle%yprim(bundle%nm_nodbeg(ip)+nj-1)
+                rijz = bundle%zprim(bundle%nm_nodbeg(ip)+ni-1) - bundle%zprim(bundle%nm_nodbeg(ip)+nj-1)
+                rij_squared = rijx*rijx + rijy*rijy + rijz*rijz
+                rij = sqrt(rij_squared)
+
+                if(iprint_gen>5) write(io_lun,fmt='(2x,"Screened ion: calc over")')
+                call calc_overlap( overlap, &
+                     bundle%species(bundle%nm_nodbeg(ip)+ni-1), &
+                     bundle%species(bundle%nm_nodbeg(ip)+nj-1), rij )
+
+                screenedE_sum_intra = screenedE_sum_intra &
+                     + q_i*q_j/rij - overlap
+
+                if(iprint_gen>5) write(io_lun,fmt='(2x,"Screened ion: calc gover")')
+                call calc_goverlap( goverlap_x, goverlap_y, goverlap_z, &
+                     bundle%species(bundle%nm_nodbeg(ip)+ni-1), &
+                     bundle%species(bundle%nm_nodbeg(ip)+nj-1), &
+                     rijx, rijy, rijz, rij )
+
+                dummy = q_i * q_j /(rij_squared*rij)
+
+                screened_ion_intra_force_x(bundle%nm_nodbeg(ip)+ni-1) &
+                     = screened_ion_intra_force_x(bundle%nm_nodbeg(ip)+ni-1) &
+                     + dummy*rijx + goverlap_x
+                
+                screened_ion_intra_force_x(bundle%nm_nodbeg(ip)+nj-1) &
+                     = screened_ion_intra_force_x(bundle%nm_nodbeg(ip)+nj-1) &
+                     - dummy*rijx - goverlap_x
+                screened_ion_intra_force_y(bundle%nm_nodbeg(ip)+ni-1) &
+                     = screened_ion_intra_force_y(bundle%nm_nodbeg(ip)+ni-1) &
+                     + dummy*rijy + goverlap_y
+                screened_ion_intra_force_y(bundle%nm_nodbeg(ip)+nj-1) &
+                     = screened_ion_intra_force_y(bundle%nm_nodbeg(ip)+nj-1) &
+                     - dummy*rijy - goverlap_y
+                screened_ion_intra_force_z(bundle%nm_nodbeg(ip)+ni-1) &
+                     = screened_ion_intra_force_z(bundle%nm_nodbeg(ip)+ni-1) &
+                     + dummy*rijz + goverlap_z
+                screened_ion_intra_force_z(bundle%nm_nodbeg(ip)+nj-1) &
+                     = screened_ion_intra_force_z(bundle%nm_nodbeg(ip)+nj-1) &
+                     - dummy*rijz - goverlap_z
+
+             enddo
+          enddo
+       endif
+    enddo
+
+    if(iprint_gen>4) write(io_lun,fmt='(2x,"Screened ion: init inter")')
+    ! --- inter-partition contribution
+    ! ... initialise energy and forces to zero
+    screenedE_sum_inter = zero
+    do ip = 1, bundle%groups_on_node
+       if(bundle%nm_nodgroup(ip) > 0) then
+          do ni = 1, bundle%nm_nodgroup(ip)
+             screened_ion_inter_force_x(bundle%nm_nodbeg(ip)+ni-1) = zero
+             screened_ion_inter_force_y(bundle%nm_nodbeg(ip)+ni-1) = zero
+             screened_ion_inter_force_z(bundle%nm_nodbeg(ip)+ni-1) = zero
+          enddo
+       endif
+    enddo
+
+    if(iprint_gen>4) write(io_lun,fmt='(2x,"Screened ion: do inter")')
+    ! --- loop over primary-set partitions
+    do ip = 1, bundle%groups_on_node
+       if(bundle%nm_nodgroup(ip) > 0) then
+          do ni = 1, bundle%nm_nodgroup(ip)
+             i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
+             q_i = charge(bundle%species(bundle%nm_nodbeg(ip)+ni-1))
+             do nn = 1, n_partition_neighbours
+                nc = partition_neighbour_list(ip,nn)
+                ig_atom_beg = parts%icell_beg(ewald_CS%lab_cell(nc))
+
+                if(ewald_CS%n_ing_cover(nc) > 0) then
+                   do nj = 1, ewald_CS%n_ing_cover(nc)
+                      q_j = charge(species_glob(id_glob(ig_atom_beg+nj-1)))
+                      rijx = bundle%xprim(bundle%nm_nodbeg(ip)+ni-1) - ewald_CS%xcover(ewald_CS%icover_ibeg(nc)+nj-1)
+                      rijy = bundle%yprim(bundle%nm_nodbeg(ip)+ni-1) - ewald_CS%ycover(ewald_CS%icover_ibeg(nc)+nj-1)
+                      rijz = bundle%zprim(bundle%nm_nodbeg(ip)+ni-1) - ewald_CS%zcover(ewald_CS%icover_ibeg(nc)+nj-1)
+                      rij_squared = rijx*rijx + rijy*rijy + rijz*rijz
+                      rij = sqrt(rij_squared)
+
+                      call calc_overlap( overlap, &
+                           bundle%species(bundle%nm_nodbeg(ip)+ni-1), &
+                           species_glob(id_glob(ig_atom_beg+nj-1)), rij )
+
+                      screenedE_sum_inter = screenedE_sum_inter &
+                           + q_i*q_j/rij - overlap
+                      
+                      call calc_goverlap( goverlap_x, goverlap_y, goverlap_z, &
+                           bundle%species(bundle%nm_nodbeg(ip)+ni-1), &
+                           species_glob(id_glob(ig_atom_beg+nj-1)), &
+                           rijx, rijy, rijz, rij )
+
+                      dummy = q_i * q_j /(rij_squared*rij)
+
+                      screened_ion_inter_force_x(bundle%nm_nodbeg(ip)+ni-1) &
+                           = screened_ion_inter_force_x(bundle%nm_nodbeg(ip)+ni-1) &
+                           + dummy*rijx + goverlap_x
+                      screened_ion_inter_force_y(bundle%nm_nodbeg(ip)+ni-1) &
+                           = screened_ion_inter_force_y(bundle%nm_nodbeg(ip)+ni-1) &
+                           + dummy*rijy + goverlap_y
+                      screened_ion_inter_force_z(bundle%nm_nodbeg(ip)+ni-1) &
+                           = screened_ion_inter_force_z(bundle%nm_nodbeg(ip)+ni-1) &
+                           + dummy*rijz + goverlap_z
+                   enddo
+                endif
+             enddo
+          enddo
+       endif
+    enddo
+
+    if(iprint_gen>4) write(io_lun,fmt='(2x,"Screened ion: self-energy")')
+    ! --- self coulomb energy
+    screenedE_sum_self = zero
+    do ip = 1, bundle%groups_on_node
+       if(bundle%nm_nodgroup(ip) > 0) then
+          do ni = 1, bundle%nm_nodgroup(ip)
+             i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
+             q_i = charge(bundle%species(bundle%nm_nodbeg(ip)+ni-1))
+
+             call calc_overlap( overlap, &
+                  bundle%species(bundle%nm_nodbeg(ip)+ni-1), &
+                  bundle%species(bundle%nm_nodbeg(ip)+ni-1), zero )
+
+             screenedE_sum_self = screenedE_sum_self &
+                  + overlap*half
+          end do
+       end if
+    end do
+
+    screened_ion_interaction_energy = screenedE_sum_intra + half*screenedE_sum_inter - screenedE_sum_self
+    call gsum(screened_ion_interaction_energy)
+
+    if(iprint_gen>4) write(io_lun,fmt='(2x,"Screened ion: forces")')
+    screened_ion_force = zero
+    do ip = 1, bundle%groups_on_node
+       if(bundle%nm_nodgroup(ip) > 0) then
+          do ni = 1, bundle%nm_nodgroup(ip)
+             i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
+             screened_ion_force(1,i) = &
+                  screened_ion_intra_force_x(bundle%nm_nodbeg(ip)+ni-1) + &
+                  screened_ion_inter_force_x(bundle%nm_nodbeg(ip)+ni-1)
+             screened_ion_force(2,i) = &
+                  screened_ion_intra_force_y(bundle%nm_nodbeg(ip)+ni-1) + &
+                  screened_ion_inter_force_y(bundle%nm_nodbeg(ip)+ni-1)
+             screened_ion_force(3,i) = &
+                  screened_ion_intra_force_z(bundle%nm_nodbeg(ip)+ni-1) + &
+                  screened_ion_inter_force_z(bundle%nm_nodbeg(ip)+ni-1)
+          enddo
+       endif
+    enddo
+
+    call gsum(screened_ion_force,3,ni_in_cell)
+
+    deallocate(screened_ion_intra_force_x,screened_ion_intra_force_y,screened_ion_intra_force_z)
+    deallocate(screened_ion_inter_force_x,screened_ion_inter_force_y,screened_ion_inter_force_z)
+
+    if(inode == ionode.AND.iprint_gen>0) &
+         write(unit=io_lun,fmt='(/8x," ++++++ Screened ion interaction energy:",e20.12)') &
+         &screened_ion_interaction_energy
+
+  end subroutine screened_ion_interaction
+
+  function j0( x )
+    use numbers
+    implicit none
+    real(double) :: x
+    real(double) :: j0
+
+    if( x<very_small ) then
+       j0 = one - one_sixth*x*x
+    else
+       j0 = sin(x)/x
+    endif
+  end function j0
+
+  function j1x( x )
+    use numbers
+    implicit none
+    real(double) :: x
+    real(double) :: j1x
+
+    if( x<very_small ) then
+       j1x = one_third - one/30.0_double*x*x
+    else
+       j1x = (sin(x)-x*cos(x))/(x*x*x)
+    endif
+  end function j1x
+
+  subroutine calc_overlap( overlap, isp1, isp2, distance )
+    use numbers
+    use atomic_density, ONLY: atomic_density_table
+    implicit none
+
+    real(double), intent(out) :: overlap
+    integer, intent(in) :: isp1, isp2
+    real(double), intent(in) :: distance
+
+    integer :: ik
+    real(double) :: dk, k, value
+
+    overlap = zero
+    dk = atomic_density_table(isp1)%k_delta
+    do ik=0, atomic_density_table(isp1)%k_length
+       k = ik*dk
+       value = j0(k*distance) &
+            * atomic_density_table(isp1)%k_table(ik) &
+            * atomic_density_table(isp2)%k_table(ik)
+
+       if( ik==0 ) then
+          overlap = overlap + dk*value*half
+       else
+          overlap = overlap + dk*value
+       end if
+    end do
+
+    overlap = overlap*four*pi*four*pi
+
+    return
+  end subroutine calc_overlap
+
+
+  subroutine calc_goverlap( &
+       goverlap_x, goverlap_y, goverlap_z, isp1, isp2, &
+       distance_x, distance_y, distance_z, distance )
+    use numbers
+    use atomic_density, ONLY: atomic_density_table
+    implicit none
+
+    real(double), intent(out) :: goverlap_x
+    real(double), intent(out) :: goverlap_y
+    real(double), intent(out) :: goverlap_z
+    integer, intent(in) :: isp1, isp2
+    real(double), intent(in) :: distance_x
+    real(double), intent(in) :: distance_y
+    real(double), intent(in) :: distance_z
+    real(double), intent(in) :: distance
+
+    integer :: ik
+    real(double) :: dk, k, value
+
+    goverlap_x = zero
+    goverlap_y = zero
+    goverlap_z = zero
+
+    dk = atomic_density_table(isp1)%k_delta
+    do ik=0, atomic_density_table(isp1)%k_length
+       k = ik*dk
+       value = minus_one*k*k*j1x(k*distance) &
+            * atomic_density_table(isp1)%k_table(ik) &
+            * atomic_density_table(isp2)%k_table(ik)
+
+       if( ik==0 ) then
+          goverlap_x = goverlap_x + dk*value*distance_x*half
+          goverlap_y = goverlap_y + dk*value*distance_y*half
+          goverlap_z = goverlap_z + dk*value*distance_z*half
+       else
+          goverlap_x = goverlap_x + dk*value*distance_x
+          goverlap_y = goverlap_y + dk*value*distance_y
+          goverlap_z = goverlap_z + dk*value*distance_z
+       end if
+    end do
+
+    goverlap_x = goverlap_x*four*pi*four*pi
+    goverlap_y = goverlap_y*four*pi*four*pi
+    goverlap_z = goverlap_z*four*pi*four*pi
+
+    return
+  end subroutine calc_goverlap
 
 end module ewald_module

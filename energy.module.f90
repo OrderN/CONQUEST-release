@@ -35,6 +35,8 @@
 !!    - Added experimental backtrace
 !!   2015/11/10 17:14 dave with TM and NW (Mizuho)
 !!    - Adding variables for neutral atom (and generalising hartree_energy to hartree_energy_total_rho)
+!!   2015/11/25 08:30 dave with TM and NW (Mizuho)
+!!    - Adding neutral atom energy expressions
 !!  SOURCE
 !!
 module energy
@@ -122,6 +124,8 @@ contains
   !!   - Added exchange energy calculation
   !!   2015/11/24 08:38 dave
   !!    Adjusted name of hartree_energy to hartree_energy_total_rho for neutral atom implementation
+  !!   2015/11/25 08:33 dave with TM and NW (Mizuho)
+  !!    Adding neutral atom energy expressions
   !!  SOURCE
   !!
   subroutine get_energy(total_energy, printDFT, level)
@@ -138,8 +142,9 @@ contains
                                       flag_self_consistent,           &
                                       flag_perform_cdft,              &
                                       flag_vdWDFT,                    &
-                                      flag_exx, exx_alpha
-    use ewald_module,           only: ewald_energy
+                                      flag_exx, exx_alpha,            &
+                                      flag_neutral_atom
+    use ewald_module,           only: ion_interaction_energy, screened_ion_interaction_energy
     use pseudopotential_common, only: core_correction
     use DFT_D2,                 only: disp_energy
     use density_module,         only: electron_number
@@ -218,8 +223,13 @@ contains
     !end if
 
     ! Find total pure DFT energy
-    total_energy = band_energy  + delta_E_hartree + delta_E_xc + &
-                   ewald_energy + core_correction
+    if(flag_neutral_atom) then
+       total_energy = band_energy - hartree_energy_drho - hartree_energy_drho_atom_rho + &
+            screened_ion_interaction_energy + delta_E_xc
+    else
+       total_energy = band_energy  + delta_E_hartree + delta_E_xc + &
+            ion_interaction_energy + core_correction
+    end if
     ! Add contribution from constrained (cDFT)
     if (flag_perform_cdft) total_energy = total_energy + cdft_energy
 
@@ -233,41 +243,41 @@ contains
     if (inode == ionode) then
        if(print_Harris) then
           !if(iprint_gen>=1) write(io_lun,2) electrons
-          if (iprint_gen >= 1) &
-               write (io_lun, 1) en_conv*band_energy,     en_units(energy_units)
-          if (iprint_gen >= 1) &
-               write (io_lun, 3) en_conv*hartree_energy_total_rho,  en_units(energy_units)
-          if (iprint_gen >= 1) &
-               write (io_lun, 4) en_conv*(xc_energy+exx_energy), en_units(energy_units)
-          if (iprint_gen >= 1) &
-               write (io_lun,23) en_conv*x_energy,               en_units(energy_units)
-          if (iprint_gen >= 1) &
-               write (io_lun,24) en_conv*(xc_energy-x_energy),   en_units(energy_units)
-          if (iprint_gen >= 1 ) &
-               write (io_lun,22) en_conv*exx_energy,      en_units(energy_units)
-          if (iprint_gen >= 1) &
-               write (io_lun, 5) en_conv*local_ps_energy, en_units(energy_units)
-          if (iprint_gen >= 1) &
-               write (io_lun, 6) en_conv*core_correction, en_units(energy_units)
-          if (iprint_gen >= 1) &
-               write (io_lun, 7) en_conv*nl_energy,       en_units(energy_units)
-          if (iprint_gen >= 1) &
-               write (io_lun, 8) en_conv*kinetic_energy,  en_units(energy_units)
-          if (iprint_gen >= 1) &
-               write (io_lun, 9) en_conv*ewald_energy,    en_units(energy_units)
-          if (iprint_gen >= 1) &
-               write (io_lun,11) en_conv*delta_E_hartree, en_units(energy_units)
-          if (iprint_gen >= 1) &
-               write (io_lun,12) en_conv*delta_E_xc,      en_units(energy_units)
-
-          if (iprint_gen >= 1 .and. flag_perform_cdft) &
-               write (io_lun,&
+          if (iprint_gen >= 1) then
+             if(flag_neutral_atom) then
+                write (io_lun, 1) en_conv*band_energy,     en_units(energy_units)
+                write (io_lun,33) en_conv*hartree_energy_drho,  en_units(energy_units)
+                write (io_lun, 4) en_conv*(xc_energy+exx_energy), en_units(energy_units)
+                write (io_lun,23) en_conv*x_energy,               en_units(energy_units)
+                write (io_lun,24) en_conv*(xc_energy-x_energy),   en_units(energy_units)
+                write (io_lun,22) en_conv*exx_energy,      en_units(energy_units)
+                write (io_lun,35) en_conv*local_ps_energy, en_units(energy_units)
+                write (io_lun, 7) en_conv*nl_energy,       en_units(energy_units)
+                write (io_lun, 8) en_conv*kinetic_energy,  en_units(energy_units)
+                write (io_lun,39) en_conv*screened_ion_interaction_energy,    en_units(energy_units)
+                write (io_lun,11) en_conv*delta_E_hartree, en_units(energy_units)
+                write (io_lun,12) en_conv*delta_E_xc,      en_units(energy_units)
+             else
+                write (io_lun, 1) en_conv*band_energy,     en_units(energy_units)
+                write (io_lun, 3) en_conv*hartree_energy_total_rho,  en_units(energy_units)
+                write (io_lun, 4) en_conv*(xc_energy+exx_energy), en_units(energy_units)
+                write (io_lun,23) en_conv*x_energy,               en_units(energy_units)
+                write (io_lun,24) en_conv*(xc_energy-x_energy),   en_units(energy_units)
+                write (io_lun,22) en_conv*exx_energy,      en_units(energy_units)
+                write (io_lun, 5) en_conv*local_ps_energy, en_units(energy_units)
+                write (io_lun, 6) en_conv*core_correction, en_units(energy_units)
+                write (io_lun, 7) en_conv*nl_energy,       en_units(energy_units)
+                write (io_lun, 8) en_conv*kinetic_energy,  en_units(energy_units)
+                write (io_lun, 9) en_conv*ion_interaction_energy,    en_units(energy_units)
+                write (io_lun,11) en_conv*delta_E_hartree, en_units(energy_units)
+                write (io_lun,12) en_conv*delta_E_xc,      en_units(energy_units)
+             end if
+             if (flag_perform_cdft) write (io_lun,&
                       '(10x,"cDFT Energy, 2Tr[K.W]            : ",f25.15," ",a2)')&
                      en_conv*cdft_energy, en_units(energy_units)
 
-          if (iprint_gen >= 1 .and. flag_dft_d2) &
-               write (io_lun,17) en_conv*disp_energy, en_units(energy_units)
-
+             if (flag_dft_d2) write (io_lun,17) en_conv*disp_energy, en_units(energy_units)
+          end if
 
           if (abs(entropy) >= RD_ERR) then
              if (iprint_gen >= 0) &
@@ -308,15 +318,24 @@ contains
     end if
     ! Check on validity of band energy
     if(print_DFT) then
-       total_energy2 = hartree_energy_total_rho  + &
-                       xc_energy       + &     
-                       exx_energy      + &     
-                       local_ps_energy + &
-                       nl_energy       + &
-                       kinetic_energy  + &
-                       core_correction + &
-                       ewald_energy     
-
+       if(flag_neutral_atom) then
+          total_energy2 = hartree_energy_drho  + &
+               xc_energy       + &     
+               exx_energy      + &     
+               local_ps_energy + &
+               nl_energy       + &
+               kinetic_energy  + &
+               screened_ion_interaction_energy     
+       else
+          total_energy2 = hartree_energy_total_rho  + &
+               xc_energy       + &     
+               exx_energy      + &     
+               local_ps_energy + &
+               nl_energy       + &
+               kinetic_energy  + &
+               core_correction + &
+               ion_interaction_energy     
+       end if
        if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
        if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
 
@@ -350,13 +369,13 @@ contains
 
 1   format(10x,'Band Energy, 2Tr[K.H]            : ',f25.15,' ',a2)
 2   format(10x,'Electron Count                   : ',f25.15,' ',a2)
-3   format(10x,'Hartree Energy                   : ',f25.15,' ',a2)
+3   format(10x,'Hartree Energy (rho)             : ',f25.15,' ',a2)
 4   format(10x,'X-C     Energy                   : ',f25.15,' ',a2)
 5   format(10x,'Local PsePot  Energy             : ',f25.15,' ',a2)
 6   format(10x,'Core Correction Energy           : ',f25.15,' ',a2)
 7   format(10x,'NonLocal PsePot Energy           : ',f25.15,' ',a2)
 8   format(10x,'Kinetic Energy                   : ',f25.15,' ',a2)
-9   format(10x,'Ewald Energy                     : ',f25.15,' ',a2)
+9   format(10x,'Ion-Ion Interaction Energy       : ',f25.15,' ',a2)
 10  format(10x,'Harris-Foulkes Energy            : ',f25.15,' ',a2)
 14  format(10x,'GroundState Energy (E-(1/2)TS)   : ',f25.15,' ',a2)
 16  format(10x,'GroundState Energy (kT --> 0)    : ',f25.15,' ',a2)
@@ -372,6 +391,9 @@ contains
 22  format(10x,'EXX Energy, -Tr[K.X]             : ',f25.15,' ',a2)
 23  format(10x,'X only  Energy                   : ',f25.15,' ',a2)
 24  format(10x,'C only  Energy                   : ',f25.15,' ',a2)
+33  format(10x,'Hartree Energy (delta rho)       : ',f25.15,' ',a2)
+35  format(10x,'Neutral Atom  Energy             : ',f25.15,' ',a2)
+39  format(10x,'Screened Ion-Ion Energy          : ',f25.15,' ',a2)
 
   end subroutine get_energy
   !!*** get_energy
@@ -398,6 +420,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
+  !!   2015/11/30 17:13 dave
+  !!    - Added neutral atom output
   !!  SOURCE
   !!
   subroutine final_energy(level)
@@ -418,10 +442,10 @@ contains
                                       flag_self_consistent,           &
                                       flag_perform_cdft,              &
                                       flag_vdWDFT,                    &
-                                      flag_exx, exx_alpha
+                                      flag_exx, exx_alpha, flag_neutral_atom
 
     use DFT_D2,                 only: disp_energy
-    use ewald_module,           only: ewald_energy
+    use ewald_module,           only: ion_interaction_energy, screened_ion_interaction_energy
     use density_module,         only: electron_number
     use pseudopotential_common, only: core_correction
 
@@ -494,12 +518,19 @@ contains
 
 
     ! Find total pure DFT energy
-    total_energy1 = band_energy     + &
-                    delta_E_hartree + &
-                    delta_E_xc      + &
-                    ewald_energy    + &
-                    core_correction
-
+    if(flag_neutral_atom) then
+       total_energy1 = band_energy     - &
+            hartree_energy_drho - &
+            hartree_energy_drho_atom_rho + &
+            screened_ion_interaction_energy + &
+            delta_E_xc
+    else
+       total_energy1 = band_energy     + &
+            delta_E_hartree + &
+            delta_E_xc      + &
+            ion_interaction_energy    + &
+            core_correction
+    end if
     ! Add contribution from exact-exchange (EXX)
     !if (flag_exx)          total_energy1 = total_energy1 + exx_energy
 
@@ -536,8 +567,13 @@ contains
           end if
           !
           write (io_lun, 6) en_conv *    band_energy,  en_units(energy_units)
-          write (io_lun, 7) en_conv * hartree_energy_total_rho,  en_units(energy_units)
-          write (io_lun, 8) en_conv *   ewald_energy,  en_units(energy_units)
+          if(flag_neutral_atom) then
+             write (io_lun,67) en_conv * hartree_energy_drho,  en_units(energy_units)
+             write (io_lun,68) en_conv * screened_ion_interaction_energy,  en_units(energy_units)
+          else
+             write (io_lun, 7) en_conv * hartree_energy_total_rho,  en_units(energy_units)
+             write (io_lun, 8) en_conv *   ion_interaction_energy,  en_units(energy_units)
+          end if
           write (io_lun, 9) en_conv * kinetic_energy,  en_units(energy_units)
           write (io_lun, 2)
           write (io_lun,30) en_conv* (xc_energy + exx_energy),  en_units(energy_units)
@@ -545,14 +581,25 @@ contains
           write (io_lun,32) en_conv* (xc_energy - x_energy),    en_units(energy_units)
           write (io_lun,33) en_conv* exx_energy,  en_units(energy_units)
           write (io_lun, 2)
-          write (io_lun,40) en_conv* (core_correction + &
-                                      local_ps_energy + &
-                                            nl_energy    ),  en_units(energy_units)
-          write (io_lun,41) en_conv* core_correction,  en_units(energy_units) 
-          write (io_lun,42) en_conv* local_ps_energy,  en_units(energy_units) 
+          if(flag_neutral_atom) then
+             write (io_lun,60) en_conv* (local_ps_energy + &
+                                         nl_energy    ),  en_units(energy_units)
+             write (io_lun,62) en_conv* local_ps_energy,  en_units(energy_units)
+          else
+             write (io_lun,40) en_conv* (core_correction + &
+                                         local_ps_energy + &
+                                         nl_energy    ),  en_units(energy_units)
+             write (io_lun,41) en_conv* core_correction,  en_units(energy_units) 
+             write (io_lun,42) en_conv* local_ps_energy,  en_units(energy_units)
+          end if
           write (io_lun,43) en_conv*       nl_energy,  en_units(energy_units)
           write (io_lun, 2)
-          write (io_lun,11) en_conv* delta_E_hartree, en_units(energy_units)          
+          if(flag_neutral_atom) then
+             write (io_lun,11) en_conv*(- hartree_energy_drho - hartree_energy_drho_atom_rho), &
+                  en_units(energy_units)
+          else
+             write (io_lun,11) en_conv* delta_E_hartree, en_units(energy_units)
+          end if
           write (io_lun,12) en_conv* delta_E_xc,      en_units(energy_units)
           if (flag_dft_d2) &
                write (io_lun,17) en_conv*disp_energy,en_units(energy_units)
@@ -612,15 +659,24 @@ contains
     end if
     
     ! Check on validity of band energy
-    total_energy2 = hartree_energy_total_rho  + &
-         xc_energy       + &     
-         exx_energy      + &
-         local_ps_energy + &
-         nl_energy       + &
-         kinetic_energy  + &
-         core_correction + &
-         ewald_energy     
-
+    if(flag_neutral_atom) then
+       total_energy2 = hartree_energy_drho  + &
+            xc_energy       + &     
+            exx_energy      + &
+            local_ps_energy + &
+            nl_energy       + &
+            kinetic_energy  + &
+            screened_ion_interaction_energy     
+    else
+       total_energy2 = hartree_energy_total_rho  + &
+            xc_energy       + &     
+            exx_energy      + &
+            local_ps_energy + &
+            nl_energy       + &
+            kinetic_energy  + &
+            core_correction + &
+            ion_interaction_energy     
+    end if
     if (flag_perform_cdft) total_energy2 = total_energy2 + cdft_energy
     if (flag_dft_d2)       total_energy2 = total_energy2 + disp_energy
 
@@ -689,8 +745,10 @@ contains
 
 
 6   format(10x,' |* band energy as 2Tr[K.H] = ',f25.15,' ',a2)
-7   format(10x,' |  hartree energy          = ',f25.15,' ',a2)
-8   format(10x,' |  ewald   energy          = ',f25.15,' ',a2)
+7   format(10x,' |  hartree energy (rho)    = ',f25.15,' ',a2)
+8   format(10x,' |  ion-ion energy          = ',f25.15,' ',a2)
+67  format(10x,' |  hartree energy (drho)   = ',f25.15,' ',a2)
+68  format(10x,' |  screened ion-ion energy = ',f25.15,' ',a2)
 9   format(10x,' |  kinetic energy          = ',f25.15,' ',a2)
 
 30  format(10x,' |* xc total energy         = ',f25.15,' ',a2)
@@ -703,6 +761,8 @@ contains
 41  format(10x,' |    core correction       = ',f25.15,' ',a2)
 42  format(10x,' |    local contribution    = ',f25.15,' ',a2)
 43  format(10x,' |    nonlocal contribution = ',f25.15,' ',a2)
+60  format(10x,' |* pseudo/NA energy        = ',f25.15,' ',a2)
+62  format(10x,' |    NA contribution       = ',f25.15,' ',a2)
 
 11  format(10x,' |  Ha correction           = ',f25.15,' ',a2)
 12  format(10x,' |  XC correction           = ',f25.15,' ',a2)

@@ -114,7 +114,6 @@ contains
                                       nspin, spin_factor
     use GenComms,               only: myid, inode, ionode, cq_abort
     use energy,                 only: get_energy
-    use ewald_module,           only: ewald_energy
     use pseudopotential_common, only: core_correction, pseudopotential
     use H_matrix_module,        only: get_H_matrix
     use density_module,         only: set_density, density

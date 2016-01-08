@@ -112,7 +112,7 @@ contains
     use datatypes
     use global_module,     only: x_atom_cell, y_atom_cell, &
                                  z_atom_cell, ni_in_cell,  &
-                                 flag_only_dispersion
+                                 flag_only_dispersion, flag_neutral_atom
     use GenComms,          only: inode, ionode, my_barrier, end_comms
     use initial_read,      only: read_and_write
     use ionic_data,        only: get_ionic_data
@@ -123,6 +123,7 @@ contains
     use cover_module,      only: make_cs, D2_CS
     use dimens,            only: r_dft_d2
     use DFT_D2
+    use pseudo_tm_module, only: make_neutral_atom
 
     implicit none
 
@@ -177,7 +178,7 @@ contains
                                &building from initial K'
        find_chdens = .true.
     end if
-
+    if(flag_neutral_atom) call make_neutral_atom
     call set_up(find_chdens,std_level_loc+1)
     
     call my_barrier()
@@ -259,6 +260,8 @@ contains
   !!    - Added allocation for atomic density array, density_atom
   !!   2015/11/24 08:31 dave
   !!    - Removed old ewald calls
+  !!   2015/11/30 17:09 dave
+  !!    - Adding branches for neutral atom/ewald
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -284,7 +287,7 @@ contains
     use construct_module
     use matrix_data,            only: rcut, Lrange, Srange,            &
                                       mx_matrices, max_range
-    use ewald_module,           only: mikes_set_ewald
+    use ewald_module,           only: mikes_set_ewald, setup_screened_ion_interaction
     use atoms,                  only: distribute_atoms
     use dimens,                 only: n_grid_x, n_grid_y, n_grid_z,    &
                                       r_core_squared, r_h, r_super_x,  &
@@ -480,14 +483,22 @@ contains
     if (inode == ionode .and. iprint_init > 1) &
          write (io_lun, *) 'Completed fft init'
 
-    ! set up the Ewald sumation: find out how many superlatices
-    ! in the real space sum and how many reciprocal latice vectors in the
-    ! reciprocal space sum are needed for a given energy tolerance. 
-    call mikes_set_ewald(inode,ionode)
+    ! Initialise the routines to calculate ion-ion interactions
+    if(flag_neutral_atom) then
+       call setup_screened_ion_interaction
+       call my_barrier
+       if (inode == ionode .and. iprint_init > 1) &
+            write (io_lun, *) 'Completed setup_ion_interaction()'
+    else
+       ! set up the Ewald sumation: find out how many superlatices
+       ! in the real space sum and how many reciprocal latice vectors in the
+       ! reciprocal space sum are needed for a given energy tolerance. 
+       call mikes_set_ewald(inode,ionode)
+       call my_barrier
+       if (inode == ionode .and. iprint_init > 1) &
+            write (io_lun, *) 'Completed set_ewald()'
+    end if
     ! +++
-    call my_barrier
-    if (inode == ionode .and. iprint_init > 1) &
-         write (io_lun, *) 'Completed set_ewald()'
 
     ! Generate D2CS
     if (flag_dft_d2) then
@@ -962,6 +973,8 @@ contains
   !!    Added experimental backtrace
   !!   2015/11/24 08:32 dave
   !!    Removed old ewald calls
+  !!   2015/11/30 17:10 dave
+  !!    Added branches for neutral atom/ewald
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -983,8 +996,9 @@ contains
                                  n_proc_old,MDinit_step,ni_in_cell, &
                                  flag_XLBOMD, flag_dissipation,     &
                                  flag_propagateX, flag_propagateL, restart_X, &
-                                 flag_exx, exx_scf, flag_out_wf, wf_self_con, flag_write_DOS
-    use ewald_module,      only: mikes_ewald
+                                 flag_exx, exx_scf, flag_out_wf, wf_self_con, &
+                                 flag_write_DOS, flag_neutral_atom
+    use ewald_module,      only: mikes_ewald, screened_ion_interaction
     use S_matrix_module,   only: get_S_matrix
     use GenComms,          only: my_barrier,end_comms,inode,ionode, &
                                  cq_abort,gcopy
@@ -1131,8 +1145,16 @@ contains
 !!$
     ! (5) Find the Ewald energy for the initial set of atoms
     if (inode == ionode .and. iprint_init > 1) &
-         write (io_lun, *) 'Calling Ewald'
-    call mikes_ewald
+         write (io_lun, *) 'Ionic electrostatics'
+    if(flag_neutral_atom) then
+       if (inode == ionode .and. iprint_init > 1) &
+            write (io_lun, *) 'Calling screened_ion_interaction'
+       call screened_ion_interaction
+    else
+       if (inode == ionode .and. iprint_init > 1) &
+            write (io_lun, *) 'Calling ewald'
+       call mikes_ewald
+    end if
 !!$
 !!$
 !!$
