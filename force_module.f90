@@ -226,7 +226,7 @@ contains
                                       type_dbl
     use DFT_D2,                 only: disp_force
     use energy,                  only: hartree_energy_total_rho, local_ps_energy, &
-                                       delta_E_xc, xc_energy
+                                       delta_E_xc, xc_energy, hartree_energy_drho
     use hartree_module, only: Hartree_stress
     use XC_module, ONLY: XC_GGA_stress
     
@@ -323,11 +323,14 @@ contains
     ! integration volume element for grid-based integrals
     ! Different definitions for non-SCF and SCF
     do direction = 1,3
-       if(flag_self_consistent) then
+       if(flag_neutral_atom) then
+          GPV_stress(direction) = (hartree_energy_drho + local_ps_energy) 
+       else
           GPV_stress(direction) = (hartree_energy_total_rho + local_ps_energy - core_correction) ! core contains 1/V term
+       end if
+       if(flag_self_consistent) then
           XC_stress(direction) = xc_energy + spin_factor*XC_GGA_stress(direction)
        else ! nonSCF XC found later, along with corrections to Hartree
-          GPV_stress(direction) = (hartree_energy_total_rho + local_ps_energy - core_correction) ! core contains 1/V term
           XC_stress(direction) = delta_E_xc !xc_energy + spin_factor*XC_GGA_stress(direction)
        end if
     end do    
@@ -495,11 +498,9 @@ contains
              else
                 write(io_lun, 106) (for_conv * ion_interaction_force(j,i), j = 1, 3)
              end if
-             write(io_lun, 108) (for_conv *   pcc_force(j,i), j = 1, 3)
-             if (flag_dft_d2) &
-                  write (io_lun, 109) (for_conv * disp_force(j,i), j = 1, 3)
-             if (flag_perform_cdft) &
-                  write (io_lun, fmt='("Force cDFT : ",3f15.10)') &
+             if (flag_pcc_global) write(io_lun, 108) (for_conv *   pcc_force(j,i), j = 1, 3)
+             if (flag_dft_d2) write (io_lun, 109) (for_conv * disp_force(j,i), j = 1, 3)
+             if (flag_perform_cdft) write (io_lun, fmt='("Force cDFT : ",3f15.10)') &
                   (for_conv*cdft_force(j,i),j=1,3)
              if (flag_self_consistent) then
                 write (io_lun, 105) (for_conv * tot_force(j,i),   j = 1, 3)
@@ -522,14 +523,14 @@ contains
     ! We will add PCC and nonSCF stresses even if the flags are not set, as they are
     ! zeroed at the start
     if(flag_neutral_atom) then
-    do direction = 1, 3
-       stress(direction) = KE_stress(direction) + SP_stress(direction) + &
-                           PP_stress(direction) + NL_stress(direction) + &
-                           GPV_stress(direction) + XC_stress(direction) + &
-                           screened_ion_stress(direction) + Hartree_stress(direction) + &
-                           loc_HF_stress(direction) + loc_G_stress(direction) + &
-                           pcc_stress(direction) + nonSCF_stress(direction)
-    end do
+       do direction = 1, 3
+          stress(direction) = KE_stress(direction) + SP_stress(direction) + &
+               PP_stress(direction) + NL_stress(direction) + &
+               GPV_stress(direction) + XC_stress(direction) + &
+               screened_ion_stress(direction) + Hartree_stress(direction) + &
+               loc_HF_stress(direction) +  &
+               pcc_stress(direction) + nonSCF_stress(direction)
+       end do
     else
        do direction = 1, 3
           stress(direction) = KE_stress(direction) + SP_stress(direction) + &
@@ -548,7 +549,8 @@ contains
           write (io_lun,fmt='(4x,"S-Pulay stress:   ",3f15.8,a3)') SP_stress(1:3), en_units(energy_units)
           write (io_lun,fmt='(4x,"Phi-Pulay stress: ",3f15.8,a3)') PP_stress(1:3), en_units(energy_units)
           write (io_lun,fmt='(4x,"Local stress:     ",3f15.8,a3)') loc_HF_stress(1:3), en_units(energy_units)
-          write (io_lun,fmt='(4x,"Local G stress:   ",3f15.8,a3)') loc_G_stress(1:3), en_units(energy_units)
+          if(.NOT.flag_neutral_atom) &
+               write (io_lun,fmt='(4x,"Local G stress:   ",3f15.8,a3)') loc_G_stress(1:3), en_units(energy_units)
           write (io_lun,fmt='(4x,"Non-local stress: ",3f15.8,a3)') NL_stress(1:3), en_units(energy_units)
           write (io_lun,fmt='(4x,"Jacobian stress:  ",3f15.8,a3)') GPV_stress(1:3), en_units(energy_units)
           write (io_lun,fmt='(4x,"XC stress:        ",3f15.8,a3)') XC_stress(1:3), en_units(energy_units)

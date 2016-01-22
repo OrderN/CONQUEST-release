@@ -540,7 +540,8 @@ contains
                                            functional_gga_pbe96_r99,   &
                                            functional_hyb_pbe0,        &
                                            functional_hartree_fock,    &
-                                           exx_alpha, exx_niter, exx_siter 
+                                           exx_alpha, exx_niter, exx_siter, &
+                                           flag_neutral_atom
      
     use XC_module,                   only: get_xc_potential,           &
                                            get_GTH_xc_potential,       &
@@ -555,15 +556,17 @@ contains
     use block_module,                only: n_blocks, n_pts_in_block
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atm
-    use density_module,              only: density_pcc
+    use density_module,              only: density_pcc, density_atom
     use GenComms,                    only: gsum, inode, ionode, cq_abort
     use energy,                      only: hartree_energy_total_rho,  &
                                            xc_energy,       &
                                            x_energy,        &
                                            local_ps_energy, &
-                                           delta_E_hartree
-
-    use hartree_module,              only: hartree
+                                           delta_E_hartree, &
+                                           hartree_energy_drho, &
+                                           hartree_energy_drho_atom_rho, &
+                                           hartree_energy_atom_rho
+    use hartree_module,              only: hartree, hartree_stress
     use functions_on_grid,           only: gridfunctions, fn_on_grid,  &
                                            supportfns, H_on_supportfns
 
@@ -588,7 +591,7 @@ contains
 
     ! Local variables
     integer :: n, m, nb, atom, nsf1, point, stat, i, pot_flag, igrid, spin, exx_nit
-    real(double) :: fften, electrons_tot, exx_tmp
+    real(double) :: fften, electrons_tot, exx_tmp, temp_stress
     logical     , dimension(4)    :: dump_pot
     real(double), dimension(:),   allocatable :: xc_epsilon ! energy_density of XC
     real(double), dimension(:),   allocatable :: h_potential
@@ -597,7 +600,17 @@ contains
     real(double), dimension(:,:), allocatable :: density_wk ! rho + density_pcc
     real(double), dimension(:),   allocatable :: density_wk_tot
     !complex(double_cplx), dimension(:), allocatable :: chdenr, locpotr
+    real(double), dimension(:),   allocatable :: drho_tot
 
+    ! for Neutral atom potential
+    if( flag_neutral_atom ) then
+       allocate( drho_tot(size), STAT=stat)
+       if (stat /= 0) &
+            call cq_abort("get_h_on_support: Error allocating drho_tot:", size )
+       call reg_alloc_mem(area_ops, size, type_dbl)
+    end if
+
+    
     allocate(xc_epsilon(size), h_potential(size), rho_tot(size), &
              xc_potential(size,nspin), STAT=stat)
     if (stat /= 0) &
@@ -641,6 +654,11 @@ contains
        electrons(spin) = grid_point_volume * rsum(n_my_grid_points, rho(:,spin), 1)
        call gsum(electrons(spin))
     end do
+    ! for Neutral atom potential
+    if( flag_neutral_atom ) then
+       drho_tot(:) = rho_tot(:) - density_atom(:)
+    end if
+    
     electrons_tot = spin_factor * sum(electrons(:))
     if (inode == ionode .and. output_level >= 2) then
        write (io_lun, '(10x,a)') &
@@ -651,11 +669,22 @@ contains
     !
     !
     ! now calculate the hartree potential on the grid
-    call hartree(rho_tot, h_potential, maxngrid, hartree_energy_total_rho)
-    !
-    !
-    ! correction term
-    delta_E_hartree = - hartree_energy_total_rho
+    if(flag_neutral_atom) then
+       call hartree(density_atom, h_potential, maxngrid, hartree_energy_atom_rho)
+       call hartree(drho_tot, h_potential, maxngrid, hartree_energy_drho)
+       ! At this point, hartree_stress should be correct
+       ! get the pseudopotential energy
+       hartree_energy_drho_atom_rho = &
+            dot(n_my_grid_points, h_potential, 1, density_atom, 1) * &
+            grid_point_volume
+       call gsum(hartree_energy_drho_atom_rho)
+    else
+       call hartree(rho_tot, h_potential, maxngrid, hartree_energy_total_rho)
+       !
+       !
+       ! correction term
+       delta_E_hartree = - hartree_energy_total_rho
+    end if
     !
     !
     ! for P.C.C.
@@ -955,6 +984,12 @@ contains
     if (stat /= 0) call cq_abort("get_h_on_support: Error deallocating mem")
     call reg_dealloc_mem(area_ops, (3+nspin)*size, type_dbl)
 
+    ! for Neutral atom potential
+    if( flag_neutral_atom ) then
+       deallocate(drho_tot, STAT=stat)
+       if (stat /= 0) call cq_abort("get_h_on_support: Error deallocating mem")
+       call reg_dealloc_mem(area_ops, size, type_dbl)
+    end if
     return
   end subroutine get_h_on_support
   !!***

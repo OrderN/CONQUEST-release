@@ -304,7 +304,7 @@ contains
                                       STATE, ABINIT, core_correction,  &
                                       pseudopotential
     ! Troullier-Martin pseudos    15/11/2002 TM
-    use density_module,         only: set_density, density,            &
+    use density_module,         only: set_atomic_density, density,            &
                                       density_scale, atomcharge,       &
                                       build_Becke_weights,             &
                                       build_Becke_charges,             &
@@ -558,7 +558,13 @@ contains
      call gcopy(glob2node,ni_in_cell)
    endif
 
-   if (.not. find_chdens) call set_density
+   ! Create initial density from superposition of atomic densities
+   if (.not. find_chdens) then
+      call set_atomic_density(.true.)  ! Set density and NA atomic density
+   else if( flag_neutral_atom ) then
+      call set_atomic_density(.false.) ! Need atomic density for neutral atom potential
+   end if
+
    if (flag_perform_cDFT) then
       call init_cdft
    end if

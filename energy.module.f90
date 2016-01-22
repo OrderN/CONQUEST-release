@@ -255,7 +255,7 @@ contains
                 write (io_lun, 7) en_conv*nl_energy,       en_units(energy_units)
                 write (io_lun, 8) en_conv*kinetic_energy,  en_units(energy_units)
                 write (io_lun,39) en_conv*screened_ion_interaction_energy,    en_units(energy_units)
-                write (io_lun,11) en_conv*delta_E_hartree, en_units(energy_units)
+                write (io_lun,11) en_conv*( -hartree_energy_drho - hartree_energy_drho_atom_rho), en_units(energy_units)
                 write (io_lun,12) en_conv*delta_E_xc,      en_units(energy_units)
              else
                 write (io_lun, 1) en_conv*band_energy,     en_units(energy_units)

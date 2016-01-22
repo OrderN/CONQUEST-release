@@ -597,8 +597,8 @@ contains
                 call check_block &
                      (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store) !out
-                r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
-                     (zatom-zblock)**2 )
+                !r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
+                !     (zatom-zblock)**2 )
 
                 !Local part  ----
                 ! construct the local part of the pseudopotential.
@@ -880,6 +880,10 @@ contains
 !!    Adding stress
 !!   2015/09/04 07:53 dave
 !!    Small changes to avoid messing up Hartree stress
+!!   2016/01/14 16:47 dave
+!!    Implementing neutral atom forces
+!!   2016/01/21 08:23 dave
+!!    Adding neutral atom stress and tidying
 !!  SOURCE
 !!
   subroutine loc_pp_derivative_tm ( hf_force, density, size )
@@ -887,7 +891,8 @@ contains
     use datatypes
     use numbers
     use dimens, only: grid_point_volume, n_my_grid_points
-    use global_module, only: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, species_glob, nlpf,ni_in_cell, sf
+    use global_module, only: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, &
+         species_glob, nlpf,ni_in_cell, sf, flag_neutral_atom, dens
     use block_module, only : n_pts_in_block
     use group_module, only : blocks, parts
     use primary_module, only: domain
@@ -898,6 +903,8 @@ contains
     use GenComms, only: gsum, cq_abort, inode, ionode
     use hartree_module, only: hartree, Hartree_stress
     use maxima_module, only: maxngrid
+    use density_module, only: density_atom
+    use atomic_density, only: atomic_density_table ! for Neutral atom potential
 
     implicit none   
 
@@ -907,7 +914,7 @@ contains
     real(double),intent(out) :: hf_force( 3, ni_in_cell )
 
     ! Local variables
-    integer :: i, j 
+    integer :: i, j, pseudo_neighbour
 
     real(double) :: a, b, c, d, alpha, beta, gamma, delta, derivative 
     real(double) :: fx_1, fy_1, fz_1
@@ -926,14 +933,14 @@ contains
     real(double) :: rcut, temp(3)
 
     ! allocatable
-    real(double),allocatable :: h_potential(:)
+    real(double),allocatable, dimension(:) :: h_potential, drho_tot
     ! Store potential scaled by 2GaGb/G^4 for stress
     real(double),allocatable :: loc_charge(:)
 
     call start_timer(tmr_std_pseudopot)
     if(iprint_pseudo>2.AND.inode==ionode) write(io_lun,fmt='(4x,"Doing TM force with pseudotype: ",i3)') pseudo(1)%tm_loc_pot
     ! the structure of this subroutine is similar to set_tm_pseudo et.
-    HF_force = 0
+    HF_force = zero
     loc_HF_stress = zero
     loc_G_stress = zero
 
@@ -943,35 +950,53 @@ contains
 
     ! get Hartree potential
     call start_timer(tmr_std_allocation)
-    allocate(h_potential(maxngrid),STAT=stat)
-    if(stat /= 0) call cq_abort &
-         ('loc_pp_derivative_tm: alloc h_potential',stat)
-    allocate(loc_charge(maxngrid),STAT=stat)
-    if(stat /= 0) call cq_abort &
-         ('loc_pp_derivative_tm: alloc loc_charge',stat)
+    if(flag_neutral_atom) then
+       ! NB we will use the variable h_potential even though it is the drho potential
+       allocate(h_potential(maxngrid),STAT=stat)
+       if(stat /= 0) call cq_abort &
+            ('loc_pp_derivative_tm: alloc h_potential',stat)
+       allocate(drho_tot(maxngrid),STAT=stat)
+       if(stat /= 0) call cq_abort &
+            ('loc_pp_derivative_tm: alloc drho_tot',stat)
+       drho_tot = zero
+       drho_tot(1:size) = density(1:size) - density_atom(1:size)
+    else
+       allocate(h_potential(maxngrid),STAT=stat)
+       if(stat /= 0) call cq_abort &
+            ('loc_pp_derivative_tm: alloc h_potential',stat)
+       allocate(loc_charge(maxngrid),STAT=stat)
+       if(stat /= 0) call cq_abort &
+            ('loc_pp_derivative_tm: alloc loc_charge',stat)
+    end if
     call stop_timer(tmr_std_allocation)
     ! Save existing Hartree stress
     temp = Hartree_stress
-    call hartree( density, h_potential, maxngrid, h_energy )
+    if(flag_neutral_atom) then
+       call hartree( drho_tot, h_potential, maxngrid, h_energy )
+       pseudo_neighbour = dens
+    else
+       call hartree( density, h_potential, maxngrid, h_energy )
+       pseudo_neighbour = nlpf
+       loc_charge = zero
+    end if
     Hartree_stress = temp
-    loc_charge = zero
 
     ! now loop over grid points and accumulate HF part of the force
     do iblock = 1, domain%groups_on_node ! primary set of blocks
        xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
        zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
-       if(naba_atm(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
+       if(naba_atm(pseudo_neighbour)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
-          do ipart=1,naba_atm(nlpf)%no_of_part(iblock)
-             jpart=naba_atm(nlpf)%list_part(ipart,iblock)
+          do ipart=1,naba_atm(pseudo_neighbour)%no_of_part(iblock)
+             jpart=naba_atm(pseudo_neighbour)%list_part(ipart,iblock)
              if(jpart > DCS_parts%mx_gcover) then
                 call cq_abort('set_ps: JPART ERROR ',ipart,jpart)
              endif
              ind_part=DCS_parts%lab_cell(jpart)
-             do ia=1,naba_atm(nlpf)%no_atom_on_part(ipart,iblock)
+             do ia=1,naba_atm(pseudo_neighbour)%no_atom_on_part(ipart,iblock)
                 iatom=iatom+1
-                ii = naba_atm(nlpf)%list_atom(iatom,iblock)
+                ii = naba_atm(pseudo_neighbour)%list_atom(iatom,iblock)
                 icover= DCS_parts%icover_ibeg(jpart)+ii-1
                 ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
 
@@ -997,7 +1022,11 @@ contains
 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
-                rcut = core_radius(the_species) + very_small   !!   03032003TM
+                if( flag_neutral_atom ) then ! for Neutral atom potential
+                   rcut = pseudo(the_species)%vna%cutoff + very_small   !!   30072007 drb
+                else ! ABINIT or SIESTA PP
+                   rcut = core_radius(the_species) + very_small   !!   03032003TM
+                end if
                 call check_block &
                      (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store) !out
@@ -1021,11 +1050,6 @@ contains
                 !  spline interpolations, as in the following.
                 !        02/07/2002  T. Miyazaki
                 !
-                if(pseudo(the_species)%tm_loc_pot==loc_pot) then
-                   step = pseudo(the_species)%vlocal%delta
-                else
-                   step = pseudo(the_species)%chlocal%delta
-                end if
                 if(npoint > 0) then
                    do ip=1, npoint
 
@@ -1037,6 +1061,13 @@ contains
                       x = x_store(ip)
                       y = y_store(ip)
                       z = z_store(ip)
+                      if(flag_neutral_atom) then
+                         step = pseudo(the_species)%vna%delta
+                      else if(pseudo(the_species)%tm_loc_pot==loc_pot) then
+                         step = pseudo(the_species)%vlocal%delta
+                      else
+                         step = pseudo(the_species)%chlocal%delta
+                      end if
                       j = aint( r_from_i / step ) + 1
                       !As we use the maximum of cutoff for check_block
                       ! overrun should occur in some cases.
@@ -1044,7 +1075,74 @@ contains
                       !     ('set_ps: overrun problem3',j)
                       ! check j (j+1 =< N_TAB)
                       ! Use the spline interpolation tables
-                      if(pseudo(the_species)%tm_loc_pot==loc_pot) then
+                      if(flag_neutral_atom) then
+                         if(j+1 <= pseudo(the_species)%vna%n) then
+                            rr = real(j,double) * step
+                            a = ( rr - r_from_i ) / step
+                            b = one - a
+
+                            alpha = -one / step
+                            beta =  one / step
+                            gamma = -step * ( three * a * a - one ) / six
+                            delta =  step * ( three * b * b - one ) / six
+
+                            r1=pseudo(the_species)%vna%f(j)
+                            r2=pseudo(the_species)%vna%f(j+1)
+                            r3=pseudo(the_species)%vna%d2(j)
+                            r4=pseudo(the_species)%vna%d2(j+1)
+
+                            derivative = &
+                                 alpha * r1 + beta * r2 + gamma * r3 + delta * r4
+
+                            fx_2 = x * derivative * density( igrid )
+                            fy_2 = y * derivative * density( igrid )
+                            fz_2 = z * derivative * density( igrid )
+
+                            i=ig_atom
+                            HF_force(1,i) = HF_force(1,i) + fx_2 * grid_point_volume
+                            HF_force(2,i) = HF_force(2,i) + fy_2 * grid_point_volume
+                            HF_force(3,i) = HF_force(3,i) + fz_2 * grid_point_volume
+                            loc_HF_stress(1) = loc_HF_stress(1) + fx_2 * grid_point_volume * x*r_from_i
+                            loc_HF_stress(2) = loc_HF_stress(2) + fy_2 * grid_point_volume * y*r_from_i
+                            loc_HF_stress(3) = loc_HF_stress(3) + fz_2 * grid_point_volume * z*r_from_i
+                         end if ! j+1<pseudo(the_species)%vna%n
+                         ! Now the atomic density interacting with the potential from drho
+                         step = atomic_density_table(the_species)%delta
+                         j = aint( r_from_i / step ) + 1
+
+                         if(j+1 <= atomic_density_table(the_species)%length) then
+                            rr = real(j,double) * step
+                            a = ( rr - r_from_i ) / step
+                            b = one - a
+
+                            alpha = -one / step
+                            beta =  one / step
+                            gamma = -step * ( three * a * a - one ) / six
+                            delta =  step * ( three * b * b - one ) / six
+
+                            r1=atomic_density_table(the_species)%table(j)
+                            r2=atomic_density_table(the_species)%table(j+1)
+                            r3=atomic_density_table(the_species)%d2_table(j)
+                            r4=atomic_density_table(the_species)%d2_table(j+1)
+
+                            derivative =  &
+                                 alpha * r1 + beta * r2 + gamma * r3 + delta * r4
+
+                            fx_2 = minus_one * x * derivative * h_potential( igrid )
+                            fy_2 = minus_one * y * derivative * h_potential( igrid )
+                            fz_2 = minus_one * z * derivative * h_potential( igrid )
+
+                            i=ig_atom
+                            HF_force(1,i) = HF_force(1,i) + fx_2 * grid_point_volume
+                            HF_force(2,i) = HF_force(2,i) + fy_2 * grid_point_volume
+                            HF_force(3,i) = HF_force(3,i) + fz_2 * grid_point_volume
+                            loc_HF_stress(1) = loc_HF_stress(1) + fx_2 * grid_point_volume * x*r_from_i
+                            loc_HF_stress(2) = loc_HF_stress(2) + fy_2 * grid_point_volume * y*r_from_i
+                            loc_HF_stress(3) = loc_HF_stress(3) + fz_2 * grid_point_volume * z*r_from_i
+
+                         end if ! j+1<atomic_density_table(the_species)%length
+
+                      else if(pseudo(the_species)%tm_loc_pot==loc_pot) then
                          if(j+1 <= pseudo(the_species)%vlocal%n) then
                             elec_here = density(igrid) * grid_point_volume
                             gauss = exp( -pseudo(the_species)%alpha * r_from_i*r_from_i )
@@ -1128,31 +1226,37 @@ contains
                    enddo ! ip=1, npoint
                 endif  !(npoint > 0) then
 
-             enddo ! ia=1,naba_atm(nlpf)%no_atom_on_part(ipart,iblock)
-          enddo ! ipart=1,naba_atm(nlpf)%no_of_part(iblock)
-       endif    ! (naba_atm(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
+             enddo ! ia=1,naba_atm(pseudo_neighbour)%no_atom_on_part(ipart,iblock)
+          enddo ! ipart=1,naba_atm(pseudo_neighbour)%no_of_part(iblock)
+       endif    ! (naba_atm(pseudo_neighbour)%no_of_part(iblock) > 0) then ! if there are naba atoms
     enddo ! iblock = 1, domain%groups_on_node ! primary set of blocks
-    ! Save existing Hartree stress
-    temp = Hartree_stress
-    call hartree( density, h_potential, maxngrid, h_energy, loc_charge,loc_G_stress )
-    Hartree_stress = temp
-    if(pseudo(the_species)%tm_loc_pot==loc_pot) loc_G_stress = -loc_G_stress
-
+    ! Deallocate added by TM, 2005/08/11
+    if(flag_neutral_atom) then
+       call start_timer(tmr_std_allocation)
+       deallocate(drho_tot,STAT=stat)
+       if(stat /= 0) call cq_abort &
+            ('loc_pp_derivative_tm: dealloc drho_tot',stat)
+    else
+       ! Save existing Hartree stress
+       temp = Hartree_stress
+       call hartree( density, h_potential, maxngrid, h_energy, loc_charge,loc_G_stress )
+       Hartree_stress = temp
+       if(pseudo(the_species)%tm_loc_pot==loc_pot) loc_G_stress = -loc_G_stress
+       call start_timer(tmr_std_allocation)
+       deallocate(loc_charge,STAT=stat)
+       if(stat /= 0) call cq_abort &
+            ('loc_pp_derivative_tm: dealloc loc_charge',stat)
+    end if
+    deallocate(h_potential,STAT=stat)
+    if(stat /= 0) call cq_abort &
+         ('loc_pp_derivative_tm: dealloc h_potential',stat)
+    call stop_timer(tmr_std_allocation)
     ! and add contributions from all nodes
     !  In the future this should be replaced by summation with local communication
     !    Tsuyoshi Miyazaki
     call gsum(HF_force,3,ni_in_cell)
     call gsum(loc_HF_stress,3)
     ! Don't gsum loc_G_stress - that's done in hartree
-    ! Deallocate added by TM, 2005/08/11
-    call start_timer(tmr_std_allocation)
-    deallocate(loc_charge,STAT=stat)
-    if(stat /= 0) call cq_abort &
-         ('loc_pp_derivative_tm: dealloc loc_charge',stat)
-    deallocate(h_potential,STAT=stat)
-    if(stat /= 0) call cq_abort &
-         ('loc_pp_derivative_tm: dealloc h_potential',stat)
-    call stop_timer(tmr_std_allocation)
     call stop_timer(tmr_std_pseudopot)
 
     return

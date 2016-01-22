@@ -116,7 +116,7 @@ contains
     use energy,                 only: get_energy
     use pseudopotential_common, only: core_correction, pseudopotential
     use H_matrix_module,        only: get_H_matrix
-    use density_module,         only: set_density, density
+    use density_module,         only: set_atomic_density, density
     use maxima_module,          only: maxngrid
     use functions_on_grid,      only: supportfns
     use SelfCon,                only: new_SC_potl
@@ -238,7 +238,7 @@ contains
        if (.not. flag_self_consistent) then
           if (inode == ionode) &
                write(io_lun,*) '*** Non Self-Consistent ***'
-          call set_density()
+          call set_atomic_density(.true.)
           call test_nonSC(fixed_potential, vary_mu, n_L_iterations, &
                           L_tolerance, tolerance, total_energy,     &
                           expected_reduction)
@@ -724,8 +724,7 @@ contains
                                       HF_and_Pulay, HF
     use GenComms,               only: myid, inode, ionode, cq_abort
     use H_matrix_module,        only: get_H_matrix
-    use density_module,         only: set_density,                  &
-                                      get_electronic_density, density
+    use density_module,         only: get_electronic_density, density
     use functions_on_grid,      only: supportfns, H_on_supportfns
     use maxima_module,          only: maxngrid
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem, &
@@ -1815,7 +1814,7 @@ contains
     use force_module,      only: get_nonSC_correction_force
     use GenComms,          only: myid, inode, ionode, cq_abort
     use H_matrix_module,   only: get_H_matrix
-    use density_module,    only: set_density, get_electronic_density,  &
+    use density_module,    only: set_atomic_density, get_electronic_density,  &
                                  density
     use functions_on_grid, only: supportfns, H_on_supportfns
     use maxima_module,     only: maxngrid
@@ -1883,7 +1882,7 @@ contains
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
     ! Recalculate atomic densities
-    call set_density
+    call set_atomic_density(.true.)
     ! Note that we've held K fixed but allow potential to vary ? Yes:
     ! this way we get h_on_support in workspace_support
     call get_H_matrix(.false., fixed_potential, electrons, density, &
