@@ -1860,7 +1860,7 @@ contains
     use H_matrix_module,        only: get_H_matrix
     use DiagModule,             only: diagon
     use mult_module,            only: LNV_matrix_multiply
-    use ewald_module,           only: mikes_ewald
+    use ewald_module,           only: mikes_ewald, screened_ion_interaction
     use pseudopotential_data,   only: init_pseudo
     use pseudo_tm_module,       only: set_tm_pseudo
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA,      &
@@ -1902,7 +1902,11 @@ contains
                                 dontE)
     end if
     ! (3) Find the Ewald energy for the initial set of atoms
-    call mikes_ewald
+    if(flag_neutral_atom) then
+       call screened_ion_interaction
+    else
+       call mikes_ewald
+    end if
     ! (4) Find the dispersion for the initial set of atoms
     if (flag_dft_d2) call dispersion_D2
     ! (5) Pseudopotentials: choose correct form
@@ -1922,12 +1926,14 @@ contains
        call set_atomic_density(.true.)
     ! For SCF-O(N) calculations
     elseif (.NOT.diagon .AND. .NOT.flag_MDold) then
-      if (flag_self_consistent .OR. flag_mix_L_SC_min) then
-         if(flag_neutral_atom) call set_atomic_density(.false.)
-         if (inode.EQ.ionode.AND.iprint_MD>2) write (io_lun,*) "update_H: Get charge density from L-matrix"
-         call get_electronic_density(density,electrons,supportfns,H_on_supportfns(1), &
-              inode,ionode,maxngrid)
-      endif
+       if (flag_self_consistent .OR. flag_mix_L_SC_min) then
+          if(flag_neutral_atom) call set_atomic_density(.false.)
+          if (inode.EQ.ionode.AND.iprint_MD>2) write (io_lun,*) "update_H: Get charge density from L-matrix"
+          call get_electronic_density(density,electrons,supportfns,H_on_supportfns(1), &
+               inode,ionode,maxngrid)
+       endif
+    else if(diagon.AND.flag_neutral_atom) then
+       call set_atomic_density(.false.)
     else if ((.not. flag_self_consistent) .and. &
              (flag_no_atomic_densities)) then
        call cq_abort("update_H: Can't run non-self-consistent without PAOs !")

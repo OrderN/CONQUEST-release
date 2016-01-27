@@ -1702,7 +1702,7 @@ contains
 
     implicit none
 
-    integer :: i, ip, ig_atom_beg, j, n, nc, ni, nj, nn, stat, direction
+    integer :: i, ip, ig_atom_beg, j, n, nc, ni, nj, nn, stat, direction, spi, spj
     real(double) :: q_i, q_j, rij, rijx, rijy, rijz, rij_squared
     real(double) :: screenedE_sum_intra, screenedE_sum_inter
     real(double) :: screenedE_sum_self
@@ -1834,7 +1834,8 @@ contains
        if(bundle%nm_nodgroup(ip) > 0) then
           do ni = 1, bundle%nm_nodgroup(ip)
              i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
-             q_i = charge(bundle%species(bundle%nm_nodbeg(ip)+ni-1))
+             spi = bundle%species(bundle%nm_nodbeg(ip)+ni-1)
+             q_i = charge(spi)
              do nc = 1, ewald_CS%ng_cover
                 ! --- for current partition nc in Ewald covering set, get
                 !     the Cartesian-composite index
@@ -1845,7 +1846,8 @@ contains
 
                 if(ewald_CS%n_ing_cover(nc) > 0) then
                    do nj = 1, ewald_CS%n_ing_cover(nc)
-                      q_j = charge(species_glob(id_glob(ig_atom_beg+nj-1)))
+                      spj = species_glob(id_glob(ig_atom_beg+nj-1))
+                      q_j = charge(spj)
                       rijx = bundle%xprim(bundle%nm_nodbeg(ip)+ni-1) - ewald_CS%xcover(ewald_CS%icover_ibeg(nc)+nj-1)
                       rijy = bundle%yprim(bundle%nm_nodbeg(ip)+ni-1) - ewald_CS%ycover(ewald_CS%icover_ibeg(nc)+nj-1)
                       rijz = bundle%zprim(bundle%nm_nodbeg(ip)+ni-1) - ewald_CS%zcover(ewald_CS%icover_ibeg(nc)+nj-1)
@@ -1853,50 +1855,34 @@ contains
                       rij = sqrt(rij_squared)
                       if(rij<two*ion_ion_cutoff) then
 
-                      call calc_overlap( overlap, &
-                           bundle%species(bundle%nm_nodbeg(ip)+ni-1), &
-                           species_glob(id_glob(ig_atom_beg+nj-1)), rij )
-                      call calc_goverlap( goverlap_x, goverlap_y, goverlap_z, &
-                           bundle%species(bundle%nm_nodbeg(ip)+ni-1), &
-                           species_glob(id_glob(ig_atom_beg+nj-1)), &
-                           rijx, rijy, rijz, rij )
-                      if(rij>very_small) then 
-                         !screenedE_sum_inter = screenedE_sum_inter &
-                         screened_ion_interaction_energy = screened_ion_interaction_energy &
-                              + half*(q_i*q_j/rij - overlap)
-                         dummy = q_i * q_j /(rij_squared*rij)
-                      else
-                         screened_ion_interaction_energy = screened_ion_interaction_energy - half*overlap
-                         dummy = zero
+                         call calc_overlap( overlap, spi, spj,rij )
+                         call calc_goverlap( goverlap_x, goverlap_y, goverlap_z, &
+                              spi, spj, rijx, rijy, rijz, rij )
+                         if(rij>very_small) then 
+                            !screenedE_sum_inter = screenedE_sum_inter &
+                            screened_ion_interaction_energy = screened_ion_interaction_energy &
+                                 + half*(q_i*q_j/rij - overlap)
+                            dummy = q_i * q_j /(rij_squared*rij)
+                            screened_ion_force(1,bundle%nm_nodbeg(ip)+ni-1) = &
+                                 screened_ion_force(1,bundle%nm_nodbeg(ip)+ni-1) + &
+                                 dummy*rijx + goverlap_x
+                            screened_ion_force(2,bundle%nm_nodbeg(ip)+ni-1) = &
+                                 screened_ion_force(2,bundle%nm_nodbeg(ip)+ni-1) + &
+                                 dummy*rijy + goverlap_y
+                            screened_ion_force(3,bundle%nm_nodbeg(ip)+ni-1) = &
+                                 screened_ion_force(3,bundle%nm_nodbeg(ip)+ni-1) + &
+                                 dummy*rijz + goverlap_z
+                            screened_ion_stress(1) = screened_ion_stress(1) - &
+                                 half*(dummy * rijx + goverlap_x) * rijx
+                            screened_ion_stress(2) = screened_ion_stress(2) - &
+                                 half*(dummy * rijy + goverlap_y) * rijy
+                            screened_ion_stress(3) = screened_ion_stress(3) - &
+                                 half*(dummy * rijz + goverlap_z) * rijz
+                         else ! i=j we just need -0.5*overlap
+                            screened_ion_interaction_energy = screened_ion_interaction_energy - half*overlap
+                            dummy = zero
+                         end if
                       end if
-                      screened_ion_force(1,bundle%nm_nodbeg(ip)+ni-1) = &
-                           screened_ion_force(1,bundle%nm_nodbeg(ip)+ni-1) + &
-                           dummy*rijx + goverlap_x
-                      screened_ion_force(2,bundle%nm_nodbeg(ip)+ni-1) = &
-                           screened_ion_force(2,bundle%nm_nodbeg(ip)+ni-1) + &
-                           dummy*rijy + goverlap_y
-                      screened_ion_force(3,bundle%nm_nodbeg(ip)+ni-1) = &
-                           screened_ion_force(3,bundle%nm_nodbeg(ip)+ni-1) + &
-                           dummy*rijz + goverlap_z
-                      screened_ion_stress(1) = screened_ion_stress(1) - &
-                           half*(dummy * rijx + goverlap_x) * rijx
-                      screened_ion_stress(2) = screened_ion_stress(2) - &
-                           half*(dummy * rijy + goverlap_y) * rijy
-                      screened_ion_stress(3) = screened_ion_stress(3) - &
-                           half*(dummy * rijz + goverlap_z) * rijz
-                      !screened_ion_inter_force_x(bundle%nm_nodbeg(ip)+ni-1) &
-                      !     = screened_ion_inter_force_x(bundle%nm_nodbeg(ip)+ni-1) &
-                      !     + dummy*rijx + goverlap_x
-                      !screened_ion_inter_force_y(bundle%nm_nodbeg(ip)+ni-1) &
-                      !     = screened_ion_inter_force_y(bundle%nm_nodbeg(ip)+ni-1) &
-                      !     + dummy*rijy + goverlap_y
-                      !screened_ion_inter_force_z(bundle%nm_nodbeg(ip)+ni-1) &
-                      !     = screened_ion_inter_force_z(bundle%nm_nodbeg(ip)+ni-1) &
-                      !     + dummy*rijz + goverlap_z
-                      !ewald_inter_stress(1) = ewald_inter_stress(1) - (dummy * rijx + goverlap_x) * rijx
-                      !ewald_inter_stress(2) = ewald_inter_stress(2) - (dummy * rijy + goverlap_y) * rijy
-                      !ewald_inter_stress(3) = ewald_inter_stress(3) - (dummy * rijz + goverlap_z) * rijz
-                   end if
                    enddo
                 endif
              enddo

@@ -243,7 +243,9 @@ contains
     !call sub_enter_output('set_density',2,'5')
 
     ! initialize density
-    density = zero
+    if(flag_set_density) then
+       density = zero
+    end if
     store_density = zero
 
     ! determine the block and grid spacing
