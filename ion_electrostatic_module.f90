@@ -7,11 +7,11 @@
 ! Code area 9: general
 ! ------------------------------------------------------------------------------
 
-!!****h* Conquest/ewald_module *
+!!****h* Conquest/ion_electrostatic *
 !!  NAME
-!!   ewald_module
+!!   ion_electrostatic
 !!  PURPOSE
-!!   Collects variables and subroutines related to ewald calculation
+!!   Collects variables and subroutines related to electrostatic interactions between ions
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
