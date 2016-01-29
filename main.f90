@@ -57,6 +57,8 @@
 !!   2012/03/27 L.Tong
 !!   - Changed spin implementation
 !!   - updated some calls that no longer passes mu
+!!   2016/01/28 16:45 dave
+!!    Updated module name to ion_electrostatic
 !!  SOURCE
 !!
 program Conquest
@@ -89,7 +91,7 @@ program Conquest
   use support_spec_format
   use ol_int_datatypes
   use functions_on_grid
-  use ewald_module
+  use ion_electrostatic
   use DiagModule
   use ScalapackFormat
   use atomic_density, only: atomic_density_table, rcut_dens, &

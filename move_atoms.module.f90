@@ -1477,7 +1477,7 @@ contains
                                       deallocate_matrix,              &
                                       set_matrix_pointers2, matrix
     use group_module,           only: parts
-    use cover_module,           only: BCS_parts, DCS_parts, ewald_CS, &
+    use cover_module,           only: BCS_parts, DCS_parts, ion_ion_CS, &
                                       D2_CS
     use primary_module,         only: bundle
     use global_module,          only: iprint_MD, x_atom_cell,         &
@@ -1515,7 +1515,7 @@ contains
     call primary_update(x_atom_cell, y_atom_cell, z_atom_cell, bundle, parts, myid)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, DCS_parts, parts)
-    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ewald_CS, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     if (flag_dft_d2) &
          call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, D2_CS, parts)
     ! If there's a new interaction of Hamiltonian range, then we REALLY need to rebuild the matrices etc
@@ -1574,7 +1574,7 @@ contains
                                       deallocate_matrix,              &
                                       set_matrix_pointers2, matrix
     use group_module,           only: parts
-    use cover_module,           only: BCS_parts, DCS_parts, ewald_CS, &
+    use cover_module,           only: BCS_parts, DCS_parts, ion_ion_CS, &
                                       D2_CS
     use primary_module,         only: bundle
     use global_module,          only: iprint_MD, x_atom_cell,         &
@@ -1609,7 +1609,7 @@ contains
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, DCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, &
-         z_atom_cell, ewald_CS, parts)
+         z_atom_cell, ion_ion_CS, parts)
     if (flag_dft_d2) call cover_update(x_atom_cell, y_atom_cell, &
          z_atom_cell, D2_CS, parts)
     check = .false.
@@ -1676,7 +1676,7 @@ contains
     use GenComms, ONLY: inode,ionode,my_barrier,myid,gcopy
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
-    use cover_module, ONLY: BCS_parts,DCS_parts,ewald_CS
+    use cover_module, ONLY: BCS_parts,DCS_parts,ion_ion_CS
     use mult_module,            ONLY: fmmi,immi,matL,L_trans
     use set_blipgrid_module, ONLY: set_blipgrid
     use set_bucket_module, ONLY: set_bucket
@@ -1704,7 +1704,7 @@ contains
     use group_module,   ONLY: blocks
     use primary_module, ONLY: make_prim,domain
     use cover_module,   ONLY: make_cs,make_iprim,send_ncover
-    use ewald_module,   ONLY: ewald_real_cutoff
+    use ion_electrostatic,   ONLY: ewald_real_cutoff
     use species_module, ONLY: species
     use matrix_data,    ONLY: rcut,max_range
     use dimens,         ONLY: r_core_squared,r_h
@@ -1850,6 +1850,8 @@ contains
   !!    Removed old ewald calls
   !!   2016/01/13 08:20 dave
   !!    Added call to set_atomic_density for reset, non-SCF and NA
+  !!   2016/01/29 15:01 dave
+  !!    Removed prefix for ewald call
   !!  SOURCE
   !!
   subroutine update_H(fixed_potential)
@@ -1860,7 +1862,7 @@ contains
     use H_matrix_module,        only: get_H_matrix
     use DiagModule,             only: diagon
     use mult_module,            only: LNV_matrix_multiply
-    use ewald_module,           only: mikes_ewald, screened_ion_interaction
+    use ion_electrostatic,      only: ewald, screened_ion_interaction
     use pseudopotential_data,   only: init_pseudo
     use pseudo_tm_module,       only: set_tm_pseudo
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA,      &
@@ -1905,7 +1907,7 @@ contains
     if(flag_neutral_atom) then
        call screened_ion_interaction
     else
-       call mikes_ewald
+       call ewald
     end if
     ! (4) Find the dispersion for the initial set of atoms
     if (flag_dft_d2) call dispersion_D2

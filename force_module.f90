@@ -15,7 +15,7 @@
 !!  USES
 !!   atoms, blip_grid_transform_module, blip,
 !!   calc_matrix_elements_module, common, datatypes, DiagModule,
-!!   dimens, ewald_module, generic_blas, generic_comms, global_module,
+!!   dimens, ion_electrostatic, generic_blas, generic_comms, global_module,
 !!   grid_index, H_matrix_module, logicals, matrix_data,
 !!   maxima_module, multiply_module, mult_module, numbers,
 !!   primary_module, pseudopotential_data, set_bucket_module,
@@ -189,6 +189,8 @@ contains
   !!    Name change for ewald_force and stress to ion_interaction_force and stress
   !!   2015/12/09 17:31 dave
   !!    Rationalised force sum and output (esp. PCC) and added changes for neutral atom
+  !!   2016/01/28 16:43 dave
+  !!    Changed to use ion_electrostatic (instead of ewald_module)
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -199,7 +201,7 @@ contains
     use numbers
     use units
     use timer_module
-    use ewald_module,           only: ion_interaction_force, ion_interaction_stress, &
+    use ion_electrostatic,      only: ion_interaction_force, ion_interaction_stress, &
                                       screened_ion_force, screened_ion_stress
     use pseudopotential_data,   only: non_local
     use GenComms,               only: my_barrier, inode, ionode,       &
@@ -1068,11 +1070,16 @@ contains
           else
              call cq_abort("pulay_force: basis set undefined ", flag_basis_set)
           end if
+          t1 = mtime()
+          if (inode == ionode .and. iprint_MD > 3)&
+               write (io_lun, fmt='(10x,"Phi Pulay grad ",i4," time: ",f12.5)')&
+                     direction, t1 - t0
+          t0 = t1
           ! Now scale the gradient by r
           call get_r_on_support(direction,tmp_fn,tmp_fn2)
           t1 = mtime()
           if (inode == ionode .and. iprint_MD > 3)&
-               write (io_lun, fmt='(10x,"Phi Pulay grad ",i4," time: ",f12.5)')&
+               write (io_lun, fmt='(10x,"Phi Pulay r_on_supp ",i4," time: ",f12.5)')&
                      direction, t1 - t0
           t0 = t1
           ! Make matrix elements

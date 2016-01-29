@@ -529,6 +529,8 @@ contains
 !!   2013/07/05 dave
 !!    Added reading and copying of z, charge state of ion
 !!    Changed to read ALL radial functions for a given l (now picks up "semi-core" PAOs)
+!!   2016/01/28 16:46 dave
+!!    Updated module name to ion_electrostatic
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -539,7 +541,7 @@ contains
     use pao_format, ONLY: species_pao
     use spline_module, ONLY : spline
     use memory_module, ONLY: reg_alloc_mem, type_dbl    
-    use ewald_module, ONLY: erfc
+    use ion_electrostatic, ONLY: erfc
     use input_module, ONLY: io_assign, io_close
 
     implicit none

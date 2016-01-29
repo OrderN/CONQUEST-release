@@ -1952,7 +1952,7 @@ contains
   !!   10:02, 05/09/2003 
   !!  MODIFICATION HISTORY
   !!   2007/02/21 17:13 dave
-  !!    Minor bug: ewald_CS update onl needed for new ewald
+  !!    Minor bug: ion_ion_CS update onl needed for new ewald
   !!   2011/09/19 L.Tong
   !!    Added Spin polarisation
   !!   2011/11/29 L.Tong
@@ -1966,6 +1966,8 @@ contains
   !!    Removed old ewald calls
   !!   2015/11/24 08:44 dave
   !!    Adjusted use of energy
+  !!   2016/01/28 16:49 dave
+  !!    Updated name of covering set to ion_ion_CS
   !!  SOURCE
   !!
   subroutine test_full(fixed_potential, vary_mu, n_L_iterations, &
@@ -1977,7 +1979,7 @@ contains
     use move_atoms,      only: primary_update, cover_update, &
                                update_atom_coord, update_H
     use group_module,    only: parts
-    use cover_module,    only: BCS_parts, DCS_parts, ewald_CS
+    use cover_module,    only: BCS_parts, DCS_parts, ion_ion_CS
     use primary_module,  only: bundle
     use global_module,   only: iprint_MD, x_atom_cell, y_atom_cell, &
                                z_atom_cell, id_glob_inv, ni_in_cell
@@ -2054,7 +2056,7 @@ contains
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
-                           ewald_CS, parts)
+                           ion_ion_CS, parts)
     ! Reproject blips
     call update_H(fixed_potential)
     if (flag_self_consistent) then ! Vary only DM and charge density

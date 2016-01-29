@@ -471,6 +471,8 @@ contains
   !!    Added read for neutral atom flag
   !!   2015/11/24 08:30 dave
   !!    Removed flag_old_ewald (now redundant)
+  !!   2016/01/28 16:44 dave
+  !!    Updated module name to ion_electrostatic
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -569,7 +571,7 @@ contains
     use blip,          only: blip_info, init_blip_flag, alpha, beta
     use maxima_module, only: maxnsf
     use control,       only: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset
-    use ewald_module,  only: ewald_accuracy
+    use ion_electrostatic,  only: ewald_accuracy
     use minimise,      only: UsePulay, n_L_iterations,          &
                              n_support_iterations, L_tolerance, &
                              sc_tolerance, energy_tolerance,    &

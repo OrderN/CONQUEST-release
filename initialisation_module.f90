@@ -262,6 +262,10 @@ contains
   !!    - Removed old ewald calls
   !!   2015/11/30 17:09 dave
   !!    - Adding branches for neutral atom/ewald
+  !!   2016/01/28 16:45 dave
+  !!    Updated module name to ion_electrostatic
+  !!   2016/01/29 15:00 dave
+  !!    Removed prefix for ewald call
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -287,7 +291,7 @@ contains
     use construct_module
     use matrix_data,            only: rcut, Lrange, Srange,            &
                                       mx_matrices, max_range
-    use ewald_module,           only: mikes_set_ewald, setup_screened_ion_interaction
+    use ion_electrostatic,      only: set_ewald, setup_screened_ion_interaction
     use atoms,                  only: distribute_atoms
     use dimens,                 only: n_grid_x, n_grid_y, n_grid_z,    &
                                       r_core_squared, r_h, r_super_x,  &
@@ -493,7 +497,7 @@ contains
        ! set up the Ewald sumation: find out how many superlatices
        ! in the real space sum and how many reciprocal latice vectors in the
        ! reciprocal space sum are needed for a given energy tolerance. 
-       call mikes_set_ewald(inode,ionode)
+       call set_ewald(inode,ionode)
        call my_barrier
        if (inode == ionode .and. iprint_init > 1) &
             write (io_lun, *) 'Completed set_ewald()'
@@ -910,7 +914,7 @@ contains
   !!
   !!
   !!  USES
-  !!   datatypes, DMMin, ewald_module, GenComms, global_module, logicals,
+  !!   datatypes, DMMin, ion_electrostatic, GenComms, global_module, logicals,
   !!   matrix_data, mult_module, numbers, SelfCon, S_matrix_module
   !!  AUTHOR
   !!   D.R.Bowler
@@ -981,6 +985,10 @@ contains
   !!    Removed old ewald calls
   !!   2015/11/30 17:10 dave
   !!    Added branches for neutral atom/ewald
+  !!   2016/01/28 16:44 dave
+  !!    Updated module name to ion_electrostatic
+  !!   2016/01/29 15:00 dave
+  !!    Removed prefix for ewald call
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1004,7 +1012,7 @@ contains
                                  flag_propagateX, flag_propagateL, restart_X, &
                                  flag_exx, exx_scf, flag_out_wf, wf_self_con, &
                                  flag_write_DOS, flag_neutral_atom
-    use ewald_module,      only: mikes_ewald, screened_ion_interaction
+    use ion_electrostatic, only: ewald, screened_ion_interaction
     use S_matrix_module,   only: get_S_matrix
     use GenComms,          only: my_barrier,end_comms,inode,ionode, &
                                  cq_abort,gcopy
@@ -1159,7 +1167,7 @@ contains
     else
        if (inode == ionode .and. iprint_init > 1) &
             write (io_lun, *) 'Calling ewald'
-       call mikes_ewald
+       call ewald
     end if
 !!$
 !!$

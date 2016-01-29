@@ -57,6 +57,8 @@
 !!    Added some timers
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2016/01/28 16:42 dave
+!!    Changed ewald_CS to ion_ion_CS
 !!  SOURCE
 !!
 module cover_module
@@ -78,7 +80,7 @@ module cover_module
   type(cover_set) :: DCS_parts
   type(cover_set) :: BCS_blocks
   type(cover_set) :: BCS_parts
-  type(cover_set) :: ewald_CS
+  type(cover_set) :: ion_ion_CS
   type(cover_set) :: D2_CS ! for DFT-D2
 
   ! -------------------------------------------------------

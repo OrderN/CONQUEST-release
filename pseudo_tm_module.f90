@@ -1829,7 +1829,7 @@ contains
       use GenComms, only: inode, ionode
       use pseudo_tm_info, only: rad_func, rad_alloc, rad_dealloc
       use global_module, only: iprint_pseudo
-      use ewald_module, only: erfc
+      use ion_electrostatic, only: erfc
 
       implicit none
 

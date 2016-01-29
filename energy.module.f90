@@ -144,7 +144,7 @@ contains
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha,            &
                                       flag_neutral_atom
-    use ewald_module,           only: ion_interaction_energy, screened_ion_interaction_energy
+    use ion_electrostatic,      only: ion_interaction_energy, screened_ion_interaction_energy
     use pseudopotential_common, only: core_correction
     use DFT_D2,                 only: disp_energy
     use density_module,         only: electron_number
@@ -445,7 +445,7 @@ contains
                                       flag_exx, exx_alpha, flag_neutral_atom
 
     use DFT_D2,                 only: disp_energy
-    use ewald_module,           only: ion_interaction_energy, screened_ion_interaction_energy
+    use ion_electrostatic,      only: ion_interaction_energy, screened_ion_interaction_energy
     use density_module,         only: electron_number
     use pseudopotential_common, only: core_correction
 
