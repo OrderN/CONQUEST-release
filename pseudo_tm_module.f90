@@ -884,6 +884,8 @@ contains
 !!    Implementing neutral atom forces
 !!   2016/01/21 08:23 dave
 !!    Adding neutral atom stress and tidying
+!!   2016/01/29 14:25 dave
+!!    Bug fix for local G stress: accumulate loc_charge (was just storing !)
 !!  SOURCE
 !!
   subroutine loc_pp_derivative_tm ( hf_force, density, size )
@@ -1220,7 +1222,7 @@ contains
                             loc_HF_stress(1) = loc_HF_stress(1) + fx_2 * grid_point_volume * x*r_from_i
                             loc_HF_stress(2) = loc_HF_stress(2) + fy_2 * grid_point_volume * y*r_from_i
                             loc_HF_stress(3) = loc_HF_stress(3) + fz_2 * grid_point_volume * z*r_from_i
-                            loc_charge(igrid) = a*r1+b*r2+c*r3+d*r4
+                            loc_charge(igrid) = loc_charge(igrid)  + a*r1+b*r2+c*r3+d*r4
                          end if ! j+1<pseudo(the_species)%chlocal%n
                       end if
                    enddo ! ip=1, npoint

@@ -1496,7 +1496,9 @@ contains
 !!   2015/12/22
 !!  MODIFICATION HISTORY
 !!   2016/01/14 to 2016/01/28
-!!    Removed the old-style ewald approach and replaced with simple loop over neighbours  
+!!    Removed the old-style ewald approach and replaced with simple loop over neighbours
+!!   2016/02/02 11:06 dave
+!!    Changed force reference - now saves to correct atoms 
 !!  SOURCE
 !!  
   subroutine screened_ion_interaction
@@ -1559,15 +1561,9 @@ contains
                                  + half*(q_i*q_j/rij - overlap)
                             ! Forces and stresses
                             dummy = q_i * q_j /(rij_squared*rij)
-                            screened_ion_force(1,bundle%nm_nodbeg(ip)+ni-1) = &
-                                 screened_ion_force(1,bundle%nm_nodbeg(ip)+ni-1) + &
-                                 dummy*rijx + goverlap_x
-                            screened_ion_force(2,bundle%nm_nodbeg(ip)+ni-1) = &
-                                 screened_ion_force(2,bundle%nm_nodbeg(ip)+ni-1) + &
-                                 dummy*rijy + goverlap_y
-                            screened_ion_force(3,bundle%nm_nodbeg(ip)+ni-1) = &
-                                 screened_ion_force(3,bundle%nm_nodbeg(ip)+ni-1) + &
-                                 dummy*rijz + goverlap_z
+                            screened_ion_force(1,i) = screened_ion_force(1,i) + dummy*rijx + goverlap_x
+                            screened_ion_force(2,i) = screened_ion_force(2,i) + dummy*rijy + goverlap_y
+                            screened_ion_force(3,i) = screened_ion_force(3,i) + dummy*rijz + goverlap_z
                             ! NB the factor of half here comes from summing over all i and j
                             screened_ion_stress(1) = screened_ion_stress(1) - &
                                  half*(dummy * rijx + goverlap_x) * rijx
