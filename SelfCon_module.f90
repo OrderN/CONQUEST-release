@@ -914,7 +914,7 @@ contains
           do i = 1, pul_mx
              ! diagonal elements of Aij
              R(spin) = dot(n_my_grid_points, resid_pul(:,i,spin), 1, &
-                           resid_pul(:,j,spin), 1)
+                           resid_pul(:,i,spin), 1)
              call gsum(R(spin))
              Aij(i,i,spin) = R(spin)
              ! Aij is symmetric
