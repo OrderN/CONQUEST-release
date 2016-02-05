@@ -1424,7 +1424,9 @@ contains
 !!  MODIFICATION HISTORY
 !!   2016/01/14 to 2016/01/28
 !!    Removed the old-style ewald approach and replaced with simple loop over neighbours
-!!    which vastly simplifies the calculation and the code  
+!!    which vastly simplifies the calculation and the code
+!!   2016/02/04 17:27 dave
+!!    Bug fix: the cutoff needed to be doubled
 !!  SOURCE
 !!  
   subroutine setup_screened_ion_interaction
@@ -1452,6 +1454,10 @@ contains
           ion_ion_cutoff=atomic_density_table(isp)%cutoff
        end if
     end do
+    ! The cutoff needs to be twice the radius so that atoms with overlapping charges interact
+    ! It might be possible to shrink this to reduce the time at the cost of reduced accuracy,
+    ! but the time required should be small
+    ion_ion_cutoff = two*ion_ion_cutoff
     ! --- make covering set
     call make_cs(inode-1,ion_ion_cutoff,ion_ion_CS,parts,bundle,&
          ni_in_cell, x_atom_cell,y_atom_cell,z_atom_cell)
