@@ -1384,7 +1384,7 @@ contains
           end if
           if ( exx_alpha < zero .or. alpha > one ) then
              call cq_abort('EXX: exact-exchange mixing value is not &
-                  reasonable ', exx_alpha)
+                 &reasonable ', exx_alpha)
              !
           end if
           ! To control accuracy during scf
