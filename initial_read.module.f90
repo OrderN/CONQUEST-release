@@ -500,6 +500,7 @@ contains
                              functional_gga_pbe96,                     &
                              functional_gga_pbe96_rev98,               &
                              functional_gga_pbe96_r99,                 &
+                             functional_gga_pbe96_wc,                  &
                              functional_hyb_pbe0,                      &
                              functional_hartree_fock,                  &
                              flag_reset_dens_on_atom_move,             &
@@ -1422,6 +1423,8 @@ contains
           functional_description = 'GGA revPBE98'   !   in Zhang & Yang, PRL 80:4, 890 (1998)
        case (functional_gga_pbe96_r99)              ! This is PBE with the functional form redefinition
           functional_description = 'GGA RPBE99'     !   in Hammer et al., PRB 59:11, 7413-7421 (1999)
+       case (functional_gga_pbe96_wc)               ! Wu-Cohen nonempirical GGA functional
+          functional_description = 'GGA WC'         !   in Wu and Cohen, PRB 73. 235116, (2006)
        case (functional_hyb_pbe0)                   ! This is PB0E with the functional form redefinition
           functional_description = 'hyb PBE0'        
        case default
