@@ -565,7 +565,7 @@ contains
                                            delta_E_hartree, &
                                            hartree_energy_drho, &
                                            hartree_energy_drho_atom_rho, &
-                                           hartree_energy_atom_rho
+                                           delta_E_xc
     use hartree_module,              only: hartree, hartree_stress
     use functions_on_grid,           only: gridfunctions, fn_on_grid,  &
                                            supportfns, H_on_supportfns
@@ -579,7 +579,6 @@ contains
     use fft_module,                  only: fft3, hartree_factor,       &
                                            z_columns_node, i0
     use io_module,                   only: dump_locps
-    use energy,                      only: delta_E_xc
 
     implicit none
 
@@ -670,7 +669,6 @@ contains
     !
     ! now calculate the hartree potential on the grid
     if(flag_neutral_atom) then
-       call hartree(density_atom, h_potential, maxngrid, hartree_energy_atom_rho)
        call hartree(drho_tot, h_potential, maxngrid, hartree_energy_drho)
        ! At this point, hartree_stress should be correct
        ! get the pseudopotential energy
@@ -678,6 +676,7 @@ contains
             dot(n_my_grid_points, h_potential, 1, density_atom, 1) * &
             grid_point_volume
        call gsum(hartree_energy_drho_atom_rho)
+       delta_E_hartree = zero
     else
        call hartree(rho_tot, h_potential, maxngrid, hartree_energy_total_rho)
        !
@@ -943,6 +942,8 @@ contains
     !
     !
     ! get the pseudopotential energy
+    ! In the OpenMX VNA formulation, we need the full integral over VNA and rhoSCF
+    ! NB if we use blips or projectors for NA this should become dot(K,HNA)
     local_ps_energy = &
          dot(n_my_grid_points, pseudopotential, 1, rho_tot, 1) * &
          grid_point_volume

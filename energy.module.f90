@@ -37,6 +37,8 @@
 !!    - Adding variables for neutral atom (and generalising hartree_energy to hartree_energy_total_rho)
 !!   2015/11/25 08:30 dave with TM and NW (Mizuho)
 !!    - Adding neutral atom energy expressions
+!!   2016/03/02 17:19 dave
+!!    - Moved ion-ion energies into this module, removed hartree_energy_atom_rho
 !!  SOURCE
 !!
 module energy
@@ -69,11 +71,13 @@ module energy
   real(double) :: delta_E_hartree
   real(double) :: delta_E_xc
   real(double) :: entropy = zero
+  real(double) :: ion_interaction_energy
+  
   ! Neutral atom potential
   real(double) :: hartree_energy_drho          ! Self-energy for drho = rho - rho_atom
   real(double) :: hartree_energy_drho_atom_rho ! Energy for rho_atom in drho potential
-  real(double) :: hartree_energy_atom_rho      ! Self-energy for rho_atom UNUSED ?
-
+  real(double) :: screened_ion_interaction_energy
+  
   logical :: flag_check_DFT = .false.
 
   ! To avoid cyclic dependancy with DiagModule, the local variables here record information needed
@@ -126,6 +130,8 @@ contains
   !!    Adjusted name of hartree_energy to hartree_energy_total_rho for neutral atom implementation
   !!   2015/11/25 08:33 dave with TM and NW (Mizuho)
   !!    Adding neutral atom energy expressions
+  !!   2016/03/02 17:20 dave
+  !!    Tidying up output for neutral atom
   !!  SOURCE
   !!
   subroutine get_energy(total_energy, printDFT, level)
@@ -144,7 +150,6 @@ contains
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha,            &
                                       flag_neutral_atom
-    use ion_electrostatic,      only: ion_interaction_energy, screened_ion_interaction_energy
     use pseudopotential_common, only: core_correction
     use DFT_D2,                 only: disp_energy
     use density_module,         only: electron_number
@@ -247,6 +252,7 @@ contains
              if(flag_neutral_atom) then
                 write (io_lun, 1) en_conv*band_energy,     en_units(energy_units)
                 write (io_lun,33) en_conv*hartree_energy_drho,  en_units(energy_units)
+                write (io_lun,36) en_conv*hartree_energy_drho_atom_rho,  en_units(energy_units)
                 write (io_lun, 4) en_conv*(xc_energy+exx_energy), en_units(energy_units)
                 write (io_lun,23) en_conv*x_energy,               en_units(energy_units)
                 write (io_lun,24) en_conv*(xc_energy-x_energy),   en_units(energy_units)
@@ -255,7 +261,7 @@ contains
                 write (io_lun, 7) en_conv*nl_energy,       en_units(energy_units)
                 write (io_lun, 8) en_conv*kinetic_energy,  en_units(energy_units)
                 write (io_lun,39) en_conv*screened_ion_interaction_energy,    en_units(energy_units)
-                write (io_lun,11) en_conv*( -hartree_energy_drho - hartree_energy_drho_atom_rho), en_units(energy_units)
+                write (io_lun,11) en_conv*( -hartree_energy_drho), en_units(energy_units)
                 write (io_lun,12) en_conv*delta_E_xc,      en_units(energy_units)
              else
                 write (io_lun, 1) en_conv*band_energy,     en_units(energy_units)
@@ -393,6 +399,7 @@ contains
 24  format(10x,'C only  Energy                   : ',f25.15,' ',a2)
 33  format(10x,'Hartree Energy (delta rho)       : ',f25.15,' ',a2)
 35  format(10x,'Neutral Atom  Energy             : ',f25.15,' ',a2)
+36  format(10x,'Hartree Energy (drho-atom rho)   : ',f25.15,' ',a2)
 39  format(10x,'Screened Ion-Ion Energy          : ',f25.15,' ',a2)
 
   end subroutine get_energy
@@ -445,7 +452,6 @@ contains
                                       flag_exx, exx_alpha, flag_neutral_atom
 
     use DFT_D2,                 only: disp_energy
-    use ion_electrostatic,      only: ion_interaction_energy, screened_ion_interaction_energy
     use density_module,         only: electron_number
     use pseudopotential_common, only: core_correction
 
@@ -666,7 +672,7 @@ contains
             local_ps_energy + &
             nl_energy       + &
             kinetic_energy  + &
-            screened_ion_interaction_energy     
+            screened_ion_interaction_energy
     else
        total_energy2 = hartree_energy_total_rho  + &
             xc_energy       + &     

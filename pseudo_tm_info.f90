@@ -62,6 +62,10 @@ module pseudo_tm_info
      real(double) :: delta           ! step
      real(double), pointer :: f(:)   ! Actual data
      real(double), pointer :: d2(:)  ! Second derivative
+     ! Reciprocal space for integrals
+     integer :: k_length
+     real(double) :: k_delta
+     real(double), pointer, dimension(:) :: k_table
   end type rad_func
 
   type pseudo_info
@@ -531,6 +535,8 @@ contains
 !!    Changed to read ALL radial functions for a given l (now picks up "semi-core" PAOs)
 !!   2016/01/28 16:46 dave
 !!    Updated module name to ion_electrostatic
+!!   2016/02/09 08:17 dave
+!!    Changed to use erfc from functions module
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -541,7 +547,7 @@ contains
     use pao_format, ONLY: species_pao
     use spline_module, ONLY : spline
     use memory_module, ONLY: reg_alloc_mem, type_dbl    
-    use ion_electrostatic, ONLY: erfc
+    use functions, ONLY: erfc
     use input_module, ONLY: io_assign, io_close
 
     implicit none

@@ -473,6 +473,8 @@ contains
   !!    Removed flag_old_ewald (now redundant)
   !!   2016/01/28 16:44 dave
   !!    Updated module name to ion_electrostatic
+  !!   2016/02/05 08:31 dave
+  !!    Changed default pseudopotential to Siesta (necessary for now)
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -880,7 +882,8 @@ contains
 !!$
 !!$
        ! Tweak DRB 2007/03/23: fix abinit as standard type
-       ps_type = fdf_string(5,'General.PseudopotentialType','abinit') 
+       ! Tweak DRB 2016/02/05: fix siesta as standard ! 
+       ps_type = fdf_string(5,'General.PseudopotentialType','siest') 
        ! Write out pseudopotential type
        if(leqi(ps_type,'siest')) then
           if(inode==ionode.AND.iprint_init>0) &
@@ -904,7 +907,7 @@ contains
           flag_angular_new = .true.
        end if
        ! Should we use neutral atom potential ?
-       flag_neutral_atom  = fdf_boolean('General.NeutralAtom',.false.) ! Default for now
+       flag_neutral_atom  = fdf_boolean('General.NeutralAtom',.true.) ! Default for now
 !!$
 !!$
 !!$

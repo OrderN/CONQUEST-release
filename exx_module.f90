@@ -711,7 +711,7 @@ contains
   subroutine exx_ewald_pot(potential,extent,alpha,r_int)
     
     use numbers,         ONLY: zero, one, two, twopi, pi
-    use DiagModule,      ONLY: erfc
+    use functions,      ONLY: erfc
 
     implicit none
 

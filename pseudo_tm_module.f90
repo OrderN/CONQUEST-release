@@ -1099,7 +1099,6 @@ contains
                             fx_2 = x * derivative * density( igrid )
                             fy_2 = y * derivative * density( igrid )
                             fz_2 = z * derivative * density( igrid )
-
                             i=ig_atom
                             HF_force(1,i) = HF_force(1,i) + fx_2 * grid_point_volume
                             HF_force(2,i) = HF_force(2,i) + fy_2 * grid_point_volume
@@ -1109,6 +1108,7 @@ contains
                             loc_HF_stress(3) = loc_HF_stress(3) + fz_2 * grid_point_volume * z*r_from_i
                          end if ! j+1<pseudo(the_species)%vna%n
                          ! Now the atomic density interacting with the potential from drho
+                         ! Note that this is the force from the SCREENED Hartree potential
                          step = atomic_density_table(the_species)%delta
                          j = aint( r_from_i / step ) + 1
 
@@ -1133,7 +1133,6 @@ contains
                             fx_2 = minus_one * x * derivative * h_potential( igrid )
                             fy_2 = minus_one * y * derivative * h_potential( igrid )
                             fz_2 = minus_one * z * derivative * h_potential( igrid )
-
                             i=ig_atom
                             HF_force(1,i) = HF_force(1,i) + fx_2 * grid_point_volume
                             HF_force(2,i) = HF_force(2,i) + fy_2 * grid_point_volume
@@ -1699,6 +1698,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2008/03/03 18:51 dave
 !!    Changed float to real
+!!   2016/02/09 08:17 dave
+!!    Changed to use erfc from functions module
 !!  SOURCE
 !!
   subroutine get_energy_shift(e_core)
@@ -1831,7 +1832,7 @@ contains
       use GenComms, only: inode, ionode
       use pseudo_tm_info, only: rad_func, rad_alloc, rad_dealloc
       use global_module, only: iprint_pseudo
-      use ion_electrostatic, only: erfc
+      use functions, only: erfc
 
       implicit none
 
@@ -2139,6 +2140,7 @@ contains
     use pseudo_tm_info, ONLY: rad_func, pseudo, loc_pot, rad_alloc, rad_dealloc
     use atomic_density, ONLY: atomic_density_table
     use spline_module, ONLY: spline
+    use functions, ONLY: j0
 
     implicit none
 
@@ -2493,50 +2495,82 @@ contains
                   + sqrt_two_pi*delta*r*r*j0(k*r) * chatom_at
           end do
        end do
+       ! Local
+       !-------------------------------------------------------
+       ! calculate FT
+       pseudo(isp)%chlocal%k_length = k_length
+       pseudo(isp)%chlocal%k_delta  = k_cutoff/pseudo(isp)%chlocal%k_length
+       allocate( pseudo(isp)%chlocal%k_table(0:pseudo(isp)%chlocal%k_length) )
+       pseudo(isp)%chlocal%k_table(:) = zero
+
+       do ir=1, npoint
+          r = (ir-1)*delta
+
+          chatom_at = zero
+          step = pseudo(isp)%chlocal%delta
+          j = aint( r / step ) + 1
+          if(j+1<=pseudo(isp)%chlocal%n) then
+             rr = real(j,double) * step
+             a = ( rr - r ) / step
+             b = one - a
+             c = a * ( a * a - one ) * step * step / six
+             d = b * ( b * b - one ) * step * step / six
+
+             r1=pseudo(isp)%chlocal%f(j)
+             r2=pseudo(isp)%chlocal%f(j+1)
+             r3=pseudo(isp)%chlocal%d2(j)
+             r4=pseudo(isp)%chlocal%d2(j+1)
+
+             chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
+          end if
+          do ik=0, pseudo(isp)%chlocal%k_length
+             k = ik*pseudo(isp)%chlocal%k_delta
+
+             pseudo(isp)%chlocal%k_table(ik) = &
+                  pseudo(isp)%chlocal%k_table(ik) &
+                  + sqrt_two_pi*delta*r*r*j0(k*r) * chatom_at
+          end do
+       end do       
+       ! NA
+       !-------------------------------------------------------
+       ! calculate FT
+       pseudo(isp)%chna%k_length = k_length
+       pseudo(isp)%chna%k_delta  = k_cutoff/pseudo(isp)%chna%k_length
+       allocate( pseudo(isp)%chna%k_table(0:pseudo(isp)%chna%k_length) )
+       pseudo(isp)%chna%k_table(:) = zero
+
+       do ir=1, npoint
+          r = (ir-1)*delta
+
+          chatom_at = zero
+          step = pseudo(isp)%chna%delta
+          j = aint( r / step ) + 1
+          if(j+1<=pseudo(isp)%chna%n) then
+             rr = real(j,double) * step
+             a = ( rr - r ) / step
+             b = one - a
+             c = a * ( a * a - one ) * step * step / six
+             d = b * ( b * b - one ) * step * step / six
+
+             r1=pseudo(isp)%chna%f(j)
+             r2=pseudo(isp)%chna%f(j+1)
+             r3=pseudo(isp)%chna%d2(j)
+             r4=pseudo(isp)%chna%d2(j+1)
+
+             chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
+          end if
+          do ik=0, pseudo(isp)%chna%k_length
+             k = ik*pseudo(isp)%chna%k_delta
+
+             pseudo(isp)%chna%k_table(ik) = &
+                  pseudo(isp)%chna%k_table(ik) &
+                  + sqrt_two_pi*delta*r*r*j0(k*r) * chatom_at
+          end do
+       end do
     end do
 
   end subroutine make_neutral_atom
 !!***  
-
-!!****f* pseudo_tm_module/j0 *
-!!
-!!  NAME
-!!   j0
-!!  USAGE
-!!
-!!  PURPOSE
-!!   Calculates 0th-order Bessel function
-!! INPUTS
-!!   x
-!! OUTPUTS
-!!
-!!  USES
-!!
-!!  AUTHOR
-!!   N. Watanabe (Mizuho) with TM, DRB
-!!  CREATION DATE
-!!   2014
-!!  MODIFICATION HISTORY
-!!   2015/11/09 17:28 dave
-!!    - Moved into pseudo_tm_module
-!!  SOURCE
-!!
-  function j0( x )
-    
-    use numbers, only: very_small, one_sixth, one
-
-    implicit none
-
-    real(double) :: x
-    real(double) :: j0
-
-    if( x<very_small ) then
-       j0 = one - one_sixth*x*x
-    else
-       j0 = sin(x)/x
-    endif
-  end function j0
-!!***
 
 ! -----------------------------------------------------------
 ! Subroutine check_block

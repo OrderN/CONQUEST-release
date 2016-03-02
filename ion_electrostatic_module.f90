@@ -60,6 +60,8 @@
 !!   2016/01/28 16:35 dave
 !!    Tidying and simplifying the neutral-atom screened ion interactions, and changing module name
 !!    from ewald_module to ion_electrostatic (file name will be changed to ion_electrostatic_module.f90)
+!!   2016/02/09 08:10 dave
+!!    Moved erfc to functions module; also energies to energy.module
 !!  SOURCE
 !!
 module ion_electrostatic
@@ -86,7 +88,6 @@ module ion_electrostatic
 
 
   ! Standard pseudopotential (not neutral atom)
-  real(double) :: ion_interaction_energy
   real(double), allocatable, dimension(:,:) :: ion_interaction_force
   real(double), dimension(3) :: ion_interaction_stress
   real(double), dimension(3) :: ewald_gaussian_self_stress, ewald_recip_stress, ewald_intra_stress, &
@@ -94,7 +95,6 @@ module ion_electrostatic
   real(double) :: ewald_accuracy, ion_ion_cutoff
 
   ! For neutral atom potential
-  real(double) :: screened_ion_interaction_energy
   real(double), allocatable, dimension(:,:) :: screened_ion_force
   real(double), dimension(3) :: screened_ion_stress  
   
@@ -105,99 +105,6 @@ module ion_electrostatic
   !!***
 
 contains
-
-  ! -----------------------------------------------------------
-  ! Function erfc
-  ! -----------------------------------------------------------
-
-  !!****f* ion_electrostatic/erfc *
-  !!
-  !!  NAME 
-  !!   erfc
-  !!  USAGE
-  !!   erfc(x)
-  !!  PURPOSE
-  !!   Calculated the complementary error function to rounding-error
-  !!   accuracy
-  !!  INPUTS
-  !!   real(double) :: argument of complementary error function
-  !!  USES
-  !! 
-  !!  AUTHOR
-  !!   Iain Chapman
-  !!  CREATION DATE
-  !!   Some time in 2001
-  !!  MODIFICATION HISTORY
-  !!   14/05/01 DRB
-  !!    Put into Conquest by MJG 10/2003, various tidying done at this time
-  !!  TODO
-  !!  COMMENT
-  !!    Lianheng: This function only works for x>0. A modified verion that works for all x is in Diag_module
-  !!  SOURCE
-  !!
-  real(double) function erfc(x)
-    use datatypes
-    use numbers, ONLY: RD_ERR, one
-    use GenComms, ONLY: cq_abort
-
-    real(double), parameter :: erfc_delta = 1.0e-12_double,              &
-                               erfc_gln   = 0.5723649429247447e0_double, &
-                               erfc_fpmax = 1.e30_double
-    integer, parameter:: erfc_iterations = 10000
-
-    real(double), intent(in)::x
-
-    ! Local variables
-    real(double) :: x2
-    real(double) :: ap, sum, del
-    real(double) :: an, b,c,d,h
-
-    integer :: i
-
-    ! This expects x^2...
-    x2 = x*x
-    !if(x2<RD_ERR) call cq_abort("Error in ewald: x2 small")
-    if(x<RD_ERR) then
-       erfc = one
-       return
-    end if
-    !if x2 less than (1.0 + 0.5) squared
-    if (x2 < 2.25_double) then
-       ap = 0.5_double
-       sum = 2.0_double
-       del = sum
-       do i = 1, erfc_iterations
-          ap = ap + 1.0_double
-          del = del * x2 /ap
-          sum = sum + del
-          if (abs(del) < abs(sum) * erfc_delta) exit
-       end do
-       erfc = 1.0_double - sum * exp(-x2 + 0.5_double * log(x2) - erfc_gln)
-
-    else
-       b = x2 + 0.5_double
-       c = erfc_fpmax
-       d = 1.0_double / b
-       sum = d
-
-       do i = 1, erfc_iterations
-          an = - i * (i - 0.5_double)
-          b = b + 2.0_double
-          d = an * d + b
-          !  if (abs(d) < fpmin) d = fpmin
-          c = b + an / c
-          !  if (abs(c) < fpmin) c = fpmin
-          d = 1.0_double / d
-          del = d * c
-          sum = sum * del         
-          if (abs(del - 1.0_double) < erfc_delta) exit
-       end do
-       erfc = sum * exp(-x2 + 0.5_double * log(x2) - erfc_gln)
-    end if
-    return
-
-  end function erfc
-  !!***
 
 !!****f* ion_electrostatic/partition_distance *
 !!
@@ -1033,6 +940,8 @@ contains
 !!     Added stress
 !!   2016/01/29 14:58 dave
 !!     Removed prefix mikes_
+!!   2016/02/09 08:10 dave  
+!!    Added use statement for erfc
 !!  SOURCE
 !!  
   subroutine ewald()
@@ -1050,7 +959,9 @@ contains
     use timer_module,   ONLY: cq_timer,start_timer,stop_timer, &
                               stop_print_timer,WITH_LEVEL
     use timer_module,   ONLY: start_backtrace,stop_backtrace
-
+    use functions,      ONLY: erfc
+    use energy,         ONLY: ion_interaction_energy
+    
     implicit none
 
     integer :: i, ip, ig_atom_beg, j, n, nc, ni, nj, nn, stat, direction
@@ -1504,7 +1415,7 @@ contains
 !!   2016/01/14 to 2016/01/28
 !!    Removed the old-style ewald approach and replaced with simple loop over neighbours
 !!   2016/02/02 11:06 dave
-!!    Changed force reference - now saves to correct atoms 
+!!    Changed force reference - now saves to correct atoms
 !!  SOURCE
 !!  
   subroutine screened_ion_interaction
@@ -1520,7 +1431,8 @@ contains
     use species_module, ONLY : charge, species
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
-
+    use energy, ONLY: local_ps_energy, screened_ion_interaction_energy
+    
     implicit none
 
     integer :: i, ip, ig_atom_beg, j, n, nc, ni, nj, nn, stat, direction, spi, spj
@@ -1571,12 +1483,9 @@ contains
                             screened_ion_force(2,i) = screened_ion_force(2,i) + dummy*rijy + goverlap_y
                             screened_ion_force(3,i) = screened_ion_force(3,i) + dummy*rijz + goverlap_z
                             ! NB the factor of half here comes from summing over all i and j
-                            screened_ion_stress(1) = screened_ion_stress(1) - &
-                                 half*(dummy * rijx + goverlap_x) * rijx
-                            screened_ion_stress(2) = screened_ion_stress(2) - &
-                                 half*(dummy * rijy + goverlap_y) * rijy
-                            screened_ion_stress(3) = screened_ion_stress(3) - &
-                                 half*(dummy * rijz + goverlap_z) * rijz
+                            screened_ion_stress(1) = screened_ion_stress(1) - half*(dummy * rijx + goverlap_x) * rijx
+                            screened_ion_stress(2) = screened_ion_stress(2) - half*(dummy * rijy + goverlap_y) * rijy
+                            screened_ion_stress(3) = screened_ion_stress(3) - half*(dummy * rijz + goverlap_z) * rijz
                          else ! i=j we just need -0.5*overlap
                             ! Find electrostatic energy due to atomic densities i and j
                             call calc_overlap( overlap, spi, spj,rij )
@@ -1599,79 +1508,6 @@ contains
   end subroutine screened_ion_interaction
 !!***
   
-!!****f* ion_electrostatic/j0 *
-!!
-!!  NAME 
-!!   j0
-!!  USAGE
-!!   
-!!  PURPOSE
-!!   0th order bessel function with provision for very small numbers
-!!  INPUTS
-!!   
-!!   
-!!  USES
-!!   
-!!  AUTHOR
-!!   NW (Mizuho) with TM and DRB
-!!  CREATION DATE
-!!   Mid 2014
-!!  MODIFICATION HISTORY
-!!  
-!!  SOURCE
-!!  
-  function j0( x )
-
-    use numbers
-
-    implicit none
-
-    real(double) :: x
-    real(double) :: j0
-
-    if( x<very_small ) then
-       j0 = one - one_sixth*x*x
-    else
-       j0 = sin(x)/x
-    endif
-  end function j0
-!!***
-  
-!!****f* ion_electrostatic/j1 *
-!!
-!!  NAME 
-!!   j1
-!!  USAGE
-!!   
-!!  PURPOSE
-!!   1st order bessel function with provision for very small numbers
-!!  INPUTS
-!!   
-!!   
-!!  USES
-!!   
-!!  AUTHOR
-!!   NW (Mizuho) with TM and DRB
-!!  CREATION DATE
-!!   Mid 2014
-!!  MODIFICATION HISTORY
-!!  
-!!  SOURCE
-!!  
-  function j1x( x )
-    use numbers
-    implicit none
-    real(double) :: x
-    real(double) :: j1x
-
-    if( x<very_small ) then
-       j1x = one_third - one/30.0_double*x*x
-    else
-       j1x = (sin(x)-x*cos(x))/(x*x*x)
-    endif
-  end function j1x
-!!***
-
 !!****f* ion_electrostatic/calc_overlap *
 !!
 !!  NAME 
@@ -1682,7 +1518,7 @@ contains
 !!   Calculates the electrostatic energy for atomic charge density
 !!   for species 1 in the Hartree potential from atomic density for species 2
 !!  INPUTS
-!!   
+!!
 !!   
 !!  USES
 !!   
@@ -1691,12 +1527,14 @@ contains
 !!  CREATION DATE
 !!   Mid 2014
 !!  MODIFICATION HISTORY
-!!  
 !!  SOURCE
 !!  
   subroutine calc_overlap( overlap, isp1, isp2, distance )
+
     use numbers
     use atomic_density, ONLY: atomic_density_table
+    use functions, ONLY: j0
+
     implicit none
 
     real(double), intent(out) :: overlap
@@ -1720,7 +1558,6 @@ contains
           overlap = overlap + dk*value
        end if
     end do
-
     overlap = overlap*four*pi*four*pi
 
     return
@@ -1755,6 +1592,7 @@ contains
     
     use numbers
     use atomic_density, ONLY: atomic_density_table
+    use functions, ONLY: j1x
 
     implicit none
 
@@ -1776,7 +1614,7 @@ contains
 
     dk = atomic_density_table(isp1)%k_delta
     do ik=0, atomic_density_table(isp1)%k_length
-       k = ik*dk
+       k = real(ik,double)*dk
        doverlap = minus_one*k*k*j1x(k*distance) &
             * atomic_density_table(isp1)%k_table(ik) &
             * atomic_density_table(isp2)%k_table(ik)
@@ -1791,7 +1629,6 @@ contains
           goverlap_z = goverlap_z + dk*doverlap*distance_z
        end if
     end do
-
     goverlap_x = goverlap_x*four*pi*four*pi
     goverlap_y = goverlap_y*four*pi*four*pi
     goverlap_z = goverlap_z*four*pi*four*pi

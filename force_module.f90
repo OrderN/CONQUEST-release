@@ -326,7 +326,7 @@ contains
     ! Different definitions for non-SCF and SCF
     do direction = 1,3
        if(flag_neutral_atom) then
-          GPV_stress(direction) = (hartree_energy_drho + local_ps_energy) 
+          GPV_stress(direction) = (hartree_energy_drho + local_ps_energy)
        else
           GPV_stress(direction) = (hartree_energy_total_rho + local_ps_energy - core_correction) ! core contains 1/V term
        end if
