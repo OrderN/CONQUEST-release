@@ -26,11 +26,11 @@ module XC_module
 
   use datatypes
   use global_module, only: area_ops
-  
+
   implicit none
 
   real(double), dimension(3), public :: XC_GGA_stress
-  
+
   ! methods
   public ::                         &
        get_xc_potential,            & ! LDA-PZ81, spin non-polarised
@@ -901,6 +901,8 @@ contains
   !!     use revPBE, PRL 80, 890 (1998)
   !!   flavour = functional_gga_pbe96_r99:
   !!     use RPBE, PRB 59, 7413 (1999)
+  !!   flavour = functional_gga_pbe96_wc:
+  !!     use Wu-Cohen, PRB 73, 235116  (2006)
   !! USAGE
   !! INPUTS
   !!   integer      nspin             : nspin = 1 for spin non-polarised,
@@ -936,7 +938,8 @@ contains
     use numbers
     use global_module, only: functional_gga_pbe96,       &
                              functional_gga_pbe96_rev98, &
-                             functional_gga_pbe96_r99
+                             functional_gga_pbe96_r99,   &
+                             functional_gga_pbe96_wc
     use GenComms,      only: cq_abort
 
     implicit none
@@ -958,10 +961,10 @@ contains
     real(double) :: drs_drho, dkF_drho, dphi_drho, dphi_dzeta,        &
                     deps_c_unif_drho, dH_drho, dH_dgrho, dks_drho,    &
                     dA_drho
-    real(double) :: kappa, mu_kappa, s, kFs, dkFs_drho, F1, F2, F3,   &
-                    F4, dFx_drho, ds_drho, ds_dgrho, dt_drho,         &
+    real(double) :: kappa, mu_kappa, s, s2, kFs, dkFs_drho, F1, F2,   &
+                    F3, F4, dFx_drho, ds_drho, ds_dgrho, dt_drho,     &
                     dt_dgrho, dF1_drho, dF2_drho, dF3_drho, dF4_drho, &
-                    dF3_dgrho, dF4_dgrho
+                    dF3_dgrho, dF4_dgrho, Xwc, dXwc_ds,  dF1_dgrho
     real(double) :: spin_factor
     real(double), dimension(1)       :: rho_s
     real(double), dimension(1:3,1)   :: grho_s
@@ -970,16 +973,19 @@ contains
                                         dzeta_drho
     ! constants
     ! From PRL 77, 3865 (1996)
-    real(double), parameter :: mu = 0.21951_double
+    real(double), parameter :: mu = 0.2195149727645171_double
     real(double), parameter :: beta = 0.066725_double
     real(double), parameter :: gamma = 0.031091_double
     real(double), parameter :: kappa_ori = 0.804_double
     ! From PRL 80, 890 (1998)
     real(double), parameter :: kappa_alt = 1.245_double
+    ! From PRB 73, 235116  (2006) - Wu-Cohen
+    real(double), parameter :: teneightyone = 0.123456790123_double  ! 10/81
+    real(double), parameter :: c_wc = 0.00793746933516_double
     ! Precalculated constants
     real(double), parameter :: mu_kappa_ori = 0.27302_double   ! mu/kappa_ori
     real(double), parameter :: mu_kappa_alt = 0.17631_double   ! mu/kappa_alt
-    real(double), parameter :: two_mu = 0.43902_double         ! 2 * mu
+    real(double), parameter :: two_mu = 0.4390299455290342_double ! 2 * mu
     real(double), parameter :: beta_gamma = 2.146119_double    ! beta/gamma
     ! minimum value of rho_tot_r and mod_grho_tot_r allowed
     real(double), parameter :: min_rho = RD_ERR
@@ -987,6 +993,7 @@ contains
     ! Fx_selector options
     integer, parameter :: Fx_ori = 1
     integer, parameter :: Fx_alt = 2
+    integer, parameter :: Fx_wc  = 3  ! Wu-Cohen Exchange
 
     ! check optional outputs
     if (present(drhoEps_x) .and. (.not. present(eps_x))) &
@@ -1008,6 +1015,10 @@ contains
        mu_kappa = mu_kappa_alt
     case (functional_gga_pbe96_r99)
        Fx_selector = Fx_alt
+       kappa = kappa_ori
+       mu_kappa = mu_kappa_ori
+   case (functional_gga_pbe96_wc)
+       Fx_selector = Fx_wc
        kappa = kappa_ori
        mu_kappa = mu_kappa_ori
     case default
@@ -1045,14 +1056,25 @@ contains
           mod_grho_tot_s = max(min_mod_grho, two * mod_grho_r(spin))
           kFs = (three * pi**2 * rho_tot_s)**third
           s = mod_grho_tot_s / (two * kFs * rho_tot_s)
+          s2 = s*s
           ! choose the Fx flavour
           select case (Fx_selector)
           case (Fx_ori)
-             F1 = one + mu_kappa * s * s
+             F1 = one + mu_kappa * s2
              Fx = one + kappa - kappa / F1
           case (Fx_alt)
-             F1 = exp(-mu_kappa * s * s)
+             F1 = exp(-mu_kappa * s2)
              Fx = one + kappa * (one - F1)
+          case (Fx_wc)   !  Wu-Cohen exchange
+             Xwc = teneightyone * s2 + (mu - teneightyone) *  &
+                   s2 * exp(-s2) + log(one + c_wc * s2*s2)
+
+             F1 = one +  Xwc / kappa
+             Fx = one + kappa - kappa / F1
+
+             dXwc_ds = two * teneightyone * s +                        &
+                 (mu - teneightyone) * exp(-s2) * two*s * (one - s2) + &
+                 four * c_wc * s*s2 / (one + c_wc * s2*s2)
           end select
 
           call Vxc_of_r_LSDA_PW92(1, rho_s, eps_x=eps_x_unif, Vx=Vx_unif)
@@ -1069,6 +1091,10 @@ contains
                 dFx_drho = two_mu * s * ds_drho / (F1 * F1)
              case (Fx_alt)
                 dFx_drho = two_mu * s * ds_drho * F1
+            case (Fx_wc)
+                dF1_drho = dXwc_ds * ds_drho / kappa
+                dFx_drho = kappa * dF1_drho / (F1*F1)
+
              end select
              ! get drhoEps_x / drho(spin)
              drhoEps_x(0,spin) = Vx_unif(1) * Fx + &
@@ -1082,6 +1108,9 @@ contains
                    dFx_dgrho = two_mu * s * ds_dgrho / (F1 * F1)
                 case (Fx_alt)
                    dFx_dgrho = two_mu * s * ds_dgrho * F1
+                case (Fx_wc)
+                   dF1_dgrho = dXwc_ds * ds_dgrho / kappa
+                   dFx_dgrho = kappa * dF1_dgrho / (F1 * F1)
                 end select
                 drhoEps_x(ii,spin) = rho_tot_s * eps_x_unif * dFx_dgrho
              end do
@@ -1303,10 +1332,10 @@ contains
     if (present(x_energy)) x_energy = zero
     grad_density = zero
     xc_epsilon   = zero
-    xc_potential = zero    
+    xc_potential = zero
     xc_energy    = zero
     XC_GGA_stress = zero
-    
+
     ! Build the gradient of the density
     do spin = 1, nspin
        call build_gradient(density(:,spin), grad_density(:,:,spin), grid_size)
@@ -1381,12 +1410,12 @@ contains
 
   !!****f* XC_module/get_xc_potential_hyb_PBE0
   !! PURPOSE
-  !!   
+  !!
   !!   Work routine based on get_xc_potential_GGA_PBE.
   !!   It will be recoded in near futur to handle any hybrid functional.
   !!   For now just handle one coefficient as in PBE0.
   !! USAGE
-  !! 
+  !!
   !! INPUTS
   !!
   !!   integer      size                : size of the real space grid
@@ -1397,7 +1426,7 @@ contains
   !!   real(double) x_energy                 : exchange energy only (sum over spin)
   !!   real(double) xc_epsilon(size)         : xc-energy density
   !!   real(double) xc_potential(size,nspin) : xc-potential
-  !! 
+  !!
   !! AUTHOR
   !!   L.Tong/L.Truflandier
   !! CREATION DATE
@@ -3361,5 +3390,3 @@ end if
   !*****
 
 end module XC_module
-
-

@@ -536,6 +536,7 @@ contains
                                            functional_gga_pbe96,       &
                                            functional_gga_pbe96_rev98, &
                                            functional_gga_pbe96_r99,   &
+                                           functional_gga_pbe96_wc,    &
                                            functional_hyb_pbe0,        &
                                            functional_hartree_fock,    &
                                            exx_alpha, exx_niter, exx_siter 
@@ -771,6 +772,24 @@ contains
        end if
        !
        !
+    case (functional_gga_pbe96_wc)
+      if (flag_pcc_global) then
+          call get_xc_potential_GGA_PBE(density=density_wk, grid_size=size, &
+               xc_potential=xc_potential,  &
+               xc_epsilon  =xc_epsilon,    &
+               xc_energy   =xc_energy,     &
+               x_energy    =x_energy,      &
+               flavour=functional_gga_pbe96_wc )
+       else
+          call get_xc_potential_GGA_PBE(density=rho, grid_size=size,&
+               xc_potential=xc_potential,  &
+               xc_epsilon  =xc_epsilon,    &
+               xc_energy   =xc_energy,     &
+               x_energy    =x_energy,      &
+               flavour=functional_gga_pbe96_wc )
+       end if
+       !
+       !   
     case (functional_hyb_pbe0)
        !
        if ( exx_niter < exx_siter ) then

@@ -108,6 +108,8 @@
 !!    FIRE implmementation (SA, COR, dave)
 !!   2015/07/08 08:03 dave
 !!    DOS and k-point by k-point wavefunction output (for STM)
+!!   2016/02/16 JKS
+!!    Added Wu-Cohen XC functional  (PRB 73, 235116  (2006) )
 !!  SOURCE
 !!
 module global_module
@@ -199,6 +201,7 @@ module global_module
   integer, parameter :: functional_gga_pbe96       = 101  ! Standard PBE
   integer, parameter :: functional_gga_pbe96_rev98 = 102  ! revPBE (PBE + Zhang-Yang 1998)
   integer, parameter :: functional_gga_pbe96_r99   = 103  ! RPBE   (PBE + Hammer-Hansen-Norskov 1999)
+  integer, parameter :: functional_gga_pbe96_wc    = 104  ! WC   (Wu-Cohen 2006)
 
   integer, parameter :: functional_hyb_pbe0        = 201  ! PBE0   (hybrid PBE with exx_alpha=0.25)
  
