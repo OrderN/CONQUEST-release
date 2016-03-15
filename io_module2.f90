@@ -358,7 +358,7 @@ contains
     ! local variables
     integer :: lun,stat,padzeros,stat_alloc,size,size2,sizeL,i,j,jbeta_alpha,len,ifile,ibeg
     integer :: nfile, nrest_file, index_file
-    integer :: proc_id, jmax_i_max
+    integer :: proc_id, jmax_i_max,ios
     character(20) :: file_name  
     character(80) :: num
 
@@ -372,7 +372,8 @@ contains
     if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
       call get_file_name('ReadLmatrix2',max_node,inode,file_db)
       call io_assign(lun_db)
-      open (lun_db,file=file_db)
+      open (lun_db,file=file_db,status='old',iostat=ios)
+      if(ios /= 0) call cq_abort('grab_matrix2: failed to open input file '//file_db)
     endif
     !! ---- DEBUG ---- !!
 
