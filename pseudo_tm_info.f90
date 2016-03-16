@@ -640,6 +640,8 @@ contains
                    if(alls/=0) call cq_abort('Failed to allocate PAOs zeta')
                    call reg_alloc_mem(area_pseudo,pao_info%angmom(l)%zeta(nzeta)%length,type_dbl)
                    call stop_timer(tmr_std_allocation)
+                else
+                   call cq_abort('PAO with zero length: ',l,nzeta)
                 end if
                 yp1 = (pao_info%angmom(l)%zeta(nzeta)%table(2)-pao_info%angmom(l)%zeta(nzeta)%table(1))/ &
                      dummy_rada(i)%delta
@@ -663,7 +665,8 @@ contains
        read(lun,*)
        ps_info%lmax = 0
        do i=1,ps_info%n_pjnl
-          read(lun,'(2i3,f22.16)') &
+!          read(lun,'(2i3,f22.16)') &
+          read(lun,*) &
                ps_info%pjnl_l(i), ps_info%pjnl_n(i), ps_info%pjnl_ekb(i)
           !!   25/Jul/2002 TM : Rydberg units -> Hartree units
           ps_info%pjnl_ekb(i) = half* ps_info%pjnl_ekb(i)
@@ -844,7 +847,7 @@ contains
          read(unit,'(a)') line
          do while(trim(line) .ne. '</preamble>')
             read(unit,'(a)') line
-            if (trim(line) .EQ. '<preamble>') then
+            if (trim(line) .EQ. '<pseudopotential_header>') then
               read (unit, '(1x,a2,1x,a2,1x,a3,1x,a4)') symbol2, xc, rel, pcc
               if (pcc .EQ. 'pcec') then
                 ps_info%flag_pcc = .true.

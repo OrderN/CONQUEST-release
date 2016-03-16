@@ -308,7 +308,7 @@ contains
       if(TimersWriteOut.AND.iprint >= 3) then
          write(unit=lun_tmr,&
          fmt='("stop_timer: Error : Tried to calculate time difference without initial time mark &
-         at node", i3)') mynode
+        &at node", i3)') mynode
       end if
     end if
 
@@ -364,12 +364,12 @@ contains
        message = trim(m)
        if( t%level >= 0 ) then             ! Print the level if assigned
           write(unit=lun_tmr,fmt='("Timing: Level ",i3," - Proc ",i6,": &
-               Time spent in ", a," = ", f12.5," s")') &
+              &Time spent in ", a," = ", f12.5," s")') &
                t%level,mynode,message, t%t_tot
        else
           if( present(lun) ) lun_tmr = lun
           write(unit=lun_tmr,fmt='("Timing:                Proc ",i6,": &
-               Time spent in ", a," = ", f12.5," s")') &
+              &Time spent in ", a," = ", f12.5," s")') &
                mynode, message, t%t_tot
        endif
     endif
@@ -612,7 +612,7 @@ contains
     ! final-time routine, so, if it is, issue a warning
     if( t%have_ini .and. iprint >= 3 ) then
        write(unit=lun_user,fmt='("start_backtrace: Warning: Second call in a row for ",a, &
-            "at node ", i6)') who, mynode
+           &"at node ", i6)') who, mynode
        if( present(who) .and. present(echo) .and. mynode==myionode ) then
           write(lun_user,3) t%t_area, t%t_name, (t%t_index(i), i=1,12)
        end if
@@ -720,7 +720,7 @@ contains
        if( iprint >= 3 ) then
           write(unit=lun_user,&
                fmt='("stop_backtrace: Warning: Tracing of ",a," not possible &
-               at node", i6)') who, mynode
+              &at node", i6)') who, mynode
        end if
        if ( present(who) .and. present(echo) .and. mynode==myionode ) then        
           write(lun_user,2) t%t_area, t%t_tot, t%t_name, (t%t_index(i), i=1,12)

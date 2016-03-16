@@ -276,8 +276,8 @@ contains
 
        case('gauss')
           call cq_abort('EXX: Gaussian representation if 1/r for solving &
-               the Poisson equation &
-               is currently under testing...')
+              &the Poisson equation &
+              &is currently under testing...')
           !call createBeylkin(p_gauss,w_gauss,r_int)     
           !call exx_scal_rho_3d(inode,extent,r_int,p_scheme,pulay_radius, &
           !     p_omega,p_ngauss,p_gauss,w_gauss)
@@ -290,7 +290,7 @@ contains
 
     else if (exx_psolver == 'isf') then
        call cq_abort('EXX: ISF Poisson solver is not available yet ; &
-               under optimisation...')
+              &under optimisation...')
        !call exx_mem_alloc(extent,0,0,'isf_rho','alloc')
        !call createKernel('F',ngrid,ngrid,ngrid,grid_spacing,grid_spacing,grid_spacing,isf_order,&
        !     0,1,kernel)       
@@ -594,10 +594,10 @@ contains
        call print_timer(tmr_std_exx,        "exx_total   time:", unit_timers_write)    
 
        write(unit=unit_timers_write,fmt='("Timing: Proc ",i6,": Time spent in ", a50, " = ", &
-            f12.5," s")'), inode, 'get_X_matrix',  tmr_std_exx%t_tot
+           &f12.5," s")') inode, 'get_X_matrix',  tmr_std_exx%t_tot
 
        write(unit=unit_timers_write,fmt='("Timing: Proc ",i6,": Time spent in ", a50, " = ", &
-            f12.5," s")'), inode, 'timer calls',  tmr_std_exx%t_tot-exx_total_time 
+           &f12.5," s")') inode, 'timer calls',  tmr_std_exx%t_tot-exx_total_time 
 
        !call io_close(unit_matrix_write)
        !call io_close(unit_output_write)

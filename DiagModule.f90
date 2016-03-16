@@ -1187,6 +1187,8 @@ contains
   !!   - Made lwork, lrwork and liwork module globals
   !!   - Removed redundant dependency on matH and matS
   !!   - Removed redundant dependency on mat from matrix_data
+  !!   2015/10.06 dave
+  !!   - Changed size of rwo to three (as required by pzhegvx workspace query)
   !!  SOURCE
   !!
   subroutine initDiag(desca, descb, descz)

@@ -660,7 +660,7 @@ contains
         allocate (natomr_to_ifile(mx_natom_total),natomr_to_ia_file(mx_natom_total), &
                   natomr_to_inode(mx_natom_total), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating natomr_to_ifile, &
-                                            natomr_to_ia_file and/or natomr_to_inode: ', &
+                                           &natomr_to_ia_file and/or natomr_to_inode: ', &
                                             mx_natom_total)
         natomr_to_ifile=0 ; natomr_to_ia_file=0 ; natomr_to_inode=0
       endif

@@ -1056,7 +1056,7 @@ contains
           do j = 1, prim%nm_nodgroup(i)
             pr = pr + 1
             if (pr.GT.prim%mx_iprim) call cq_abort('cover_update_mparts: &
-                                                    error in pr index', pr)
+                                                   &error in pr index', pr)
             set%iprim_group(pr) = ind_group
           enddo
         endif

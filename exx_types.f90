@@ -37,8 +37,8 @@ module exx_types
   type fftw3d
      !     complex(double_cplx), allocatable, dimension(:,:,:) :: auxin
      !     complex(double_cplx), allocatable, dimension(:,:,:) :: auxout
-     complex(double_cplx), allocatable, dimension(:,:,:) :: arrayin
-     complex(double_cplx), allocatable, dimension(:,:,:) :: arrayout
+     complex(double_cplx), pointer, dimension(:,:,:) :: arrayin
+     complex(double_cplx), pointer, dimension(:,:,:) :: arrayout
      integer*8 :: planF, planR
   end type fftw3d
 
