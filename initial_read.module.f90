@@ -138,7 +138,7 @@ contains
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
-                            restart_file, vary_mu, mu, find_chdens, &
+                            vary_mu, mu, find_chdens, &
                             read_phi)
 
     use datatypes
@@ -188,7 +188,6 @@ contains
     ! Passed variables
     logical           :: vary_mu, start, start_L, read_phi
     logical           :: find_chdens
-    character(len=40) :: restart_file
     integer           :: inode, ionode
     real(double)      :: mu
 
@@ -211,7 +210,7 @@ contains
 !****lat>$
 
     ! read input data: parameters for run
-    call read_input(start, start_L, titles, restart_file, vary_mu, mu,&
+    call read_input(start, start_L, titles, vary_mu, mu,&
                     find_chdens, read_phi,HNL_fac)
 
     ! Initialise group data for partitions and read in partitions and atoms
@@ -472,7 +471,7 @@ contains
   !!   Fix rigid shift 10/05/2002 dave
   !!  SOURCE
   !!
-  subroutine read_input(start, start_L, titles, restart_file, vary_mu,&
+  subroutine read_input(start, start_L, titles, vary_mu,&
                         mu, find_chdens, read_phi,HNL_fac)
 
     use datatypes
@@ -613,7 +612,6 @@ contains
     logical           :: vary_mu, find_chdens
     logical           :: start, start_L, read_phi
     real(double)      :: mu, HNL_fac
-    character(len=40) :: restart_file
     character(len=80) :: titles
 
     ! Local variables
@@ -859,8 +857,6 @@ contains
        read_option            = fdf_boolean('Basis.LoadCoeffs',           .false.)
        flag_onsite_blip_ana   = fdf_boolean('Basis.OnsiteBlipsAnalytic',  .true. )
        flag_analytic_blip_int = fdf_boolean('Basis.AnalyticBlipIntegrals',.false.)
-       if(read_option.AND.flag_basis_set==blips) &
-            restart_file    = fdf_string(40,'Basis.LoadBlipFile',' ')
        !
        !
        find_chdens            = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
