@@ -76,6 +76,11 @@ contains
   !!    Removed n_nodes from common use line
   !!   11:38, 12/11/2004 dave 
   !!    Removed grid_index use
+  !!   2016/01/21 08:26 dave
+  !!    Notes should have been added during first implementation of stress
+  !!    We now calculate stress from change in G with cell size (hartree stress)
+  !!    as well as (optionally) stress for local pseudopotential coming from the
+  !!    FFT of charge to make the potential (this is second stress)
   !!  TODO
   !!   Make absolutely sure about the following:
   !!

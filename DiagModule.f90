@@ -120,6 +120,8 @@
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2015/06/05 16:43 dave and cor
 !!    Writing out band-by-band charge density
+!!   2016/02/09 08:16 dave
+!!    Moved erfc to functions module
 !!***
 module DiagModule
 
@@ -3324,6 +3326,7 @@ contains
 
     use datatypes
     use numbers, only: zero, one, half, two, four, pi
+    use functions, ONLY: erfc
 
     implicit none
 
@@ -3440,90 +3443,6 @@ contains
        MP_entropy = half*A*H2*exp(-(x*x))
     end if
   end function MP_entropy
-  !!***
-
-  ! -----------------------------------------------------------
-  ! Function erfc
-  ! -----------------------------------------------------------
-
-  !!****f* DiagModle/erfc *
-  !!
-  !!  NAME
-  !!   erfc
-  !!  USAGE
-  !!   erfc(x)
-  !!  PURPOSE
-  !!   Calculated the complementary error function to rounding-error
-  !!   based on erfc() in ewald_module
-  !!   accuracy
-  !!  INPUTS
-  !!   real(double) :: x, argument of complementary error function
-  !!  AUTHOR
-  !!   Lianeng Tong
-  !!  CREATION DATE
-  !!   2010/07/26
-  !!  SOURCE
-  !!
-  real(double) function erfc(x)
-    use datatypes
-    use numbers,  only: RD_ERR, one, zero, half, two
-    use GenComms, only: cq_abort
-
-    real(double), parameter :: erfc_delta = 1.0e-12_double, &
-         erfc_gln = 0.5723649429247447e0_double, &
-         erfc_fpmax = 1.e30_double
-    integer, parameter:: erfc_iterations = 10000
-
-    real(double), intent(in) :: x
-
-    ! local variables
-    real(double) :: y, y2
-    real(double) :: ap, sum, del
-    real(double) :: an, b, c, d, h
-    integer :: i
-
-    if(x < zero) then
-       y = -x
-    else
-       y = x
-    end if
-    ! This expects y^2
-    y2 = y*y
-    if(y<RD_ERR) then
-       erfc = one
-       return
-    end if
-    if (y2 < 2.25_double) then
-       ap = half
-       sum = two
-       del = sum
-       do i = 1, erfc_iterations
-          ap = ap + 1.0_double
-          del = del * y2 / ap
-          sum = sum + del
-          if (abs(del) < abs(sum) * erfc_delta) exit
-       end do
-       erfc = one - sum * exp(-y2 + half * log(y2) - erfc_gln)
-    else
-       b = y2 + half
-       c = erfc_fpmax
-       d = one / b
-       sum = d
-       do i = 1, erfc_iterations
-          an = - i * (i - half)
-          b = b + two
-          d = an * d + b
-          c = b + an / c
-          d = one / d
-          del = d * c
-          sum = sum * del
-          if (abs(del - one) < erfc_delta) exit
-       end do
-       erfc = sum * exp(-y2 + half * log(y2) - erfc_gln)
-    end if
-    if (x < zero) erfc = two - erfc
-    return
-  end function erfc
   !!***
 
 

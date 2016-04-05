@@ -176,6 +176,8 @@ contains
   !!   2013/08/21 M.Arita
   !!    - Added iter as a dummy variable
   !!    - Bug fix on call for update_atom_coord
+  !!   2016/01/13 08:31 dave
+  !!    Removed call to set_density (now included in update_H)
   !!  TODO
   !!   Proper buffer zones for matrix mults so initialisation doesn't have
   !!   to be done at every step 03/07/2001 dave
@@ -196,7 +198,6 @@ contains
                               flag_MDold
     use species_module, only: species, mass
     use GenComms,       only: myid
-    use density_module, only: set_density
 
     implicit none
 
@@ -299,9 +300,12 @@ contains
       call updateIndices(.true., fixed_potential)
     endif
 
-! 25/Jun/2010 TM : calling set_density for SCF-MD
-    if (flag_reset_dens_on_atom_move) call set_density ()
-! 25/Jun/2010 TM : calling set_density for SCF-MD
+    ! DRB 2016/01/13
+    ! This line removed because this call is done in update_H
+    ! NB this routine seems to be no longer called
+    !%%! ! 25/Jun/2010 TM : calling set_density for SCF-MD
+    !%%! if (flag_reset_dens_on_atom_move) call set_density ()
+    !%%! ! 25/Jun/2010 TM : calling set_density for SCF-MD
     call stop_timer(tmr_std_moveatoms)
     return
   end subroutine velocityVerlet
@@ -371,6 +375,8 @@ contains
 !!   - Removed redundant input parameter real(double) mu
 !!   2014/02/03 M.Arita
 !!   - Added call for update_H because this is no longer called at updateIndices
+!!   2016/01/13 08:31 dave
+!!    Removed call to set_density (now included in update_H)
 !!  SOURCE
 !!
   subroutine safemin(start_x, start_y, start_z, direction, energy_in, &
@@ -394,8 +400,7 @@ contains
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template
-    use density_module, only: density, set_density,                   &
-                              flag_no_atomic_densities, set_density_pcc
+    use density_module, only: density, flag_no_atomic_densities, set_density_pcc
     use maxima_module,  only: maxngrid
     use timer_module
 
@@ -528,7 +533,8 @@ contains
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
                                       trim(pdb_template))
        end if
-       if (flag_reset_dens_on_atom_move) call set_density()
+       ! Now in update_H DRB 2016/01/13
+       !if (flag_reset_dens_on_atom_move) call set_density()
        if (flag_pcc_global) call set_density_pcc()
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
@@ -616,7 +622,8 @@ contains
     if (iprint_MD > 2) then
        call write_atomic_positions("UpdatedAtoms_tmp.dat", trim(pdb_template))
     end if
-    if(flag_reset_dens_on_atom_move) call set_density()
+    ! Now in update_H
+    ! if(flag_reset_dens_on_atom_move) call set_density()
     if (flag_pcc_global) call set_density_pcc()
     call stop_print_timer(tmr_l_tmp1, &
                           "safemin - Final interpolation and updates", &
@@ -671,7 +678,8 @@ contains
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
                                       trim(pdb_template))
        end if
-       if(flag_reset_dens_on_atom_move) call set_density()
+       ! Now in update_H
+       !if(flag_reset_dens_on_atom_move) call set_density()
        if (flag_pcc_global) call set_density_pcc()
        call stop_print_timer(tmr_l_tmp1, &
                              "safemin - Failed interpolation + Retry", &
@@ -726,6 +734,8 @@ contains
   !!    - update_H moved outside if statement
   !!   2015/06/08 lat
   !!    - Corrected bug by adding barriers: grab_InfoGlobal
+  !!   2016/01/13 08:31 dave
+  !!    Removed call to set_density (now included in update_H)
   !! SOURCE
   !!
   subroutine safemin2(start_x, start_y, start_z, direction, energy_in, &
@@ -752,8 +762,7 @@ contains
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template
-    use density_module, only: density, set_density,                   &
-                              flag_no_atomic_densities, set_density_pcc
+    use density_module, only: density, flag_no_atomic_densities, set_density_pcc
     use maxima_module,  only: maxngrid
     use matrix_data, ONLY: Lrange
     use mult_module, ONLY: matL,L_trans
@@ -954,7 +963,8 @@ contains
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
                                       trim(pdb_template))
        end if
-       if (flag_reset_dens_on_atom_move) call set_density()
+       ! Now in update_H
+       !if (flag_reset_dens_on_atom_move) call set_density()
        if (flag_pcc_global) call set_density_pcc()
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
@@ -1092,7 +1102,8 @@ contains
     if (iprint_MD > 2) then
        call write_atomic_positions("UpdatedAtoms_tmp.dat", trim(pdb_template))
     end if
-    if(flag_reset_dens_on_atom_move) call set_density()
+    ! Now in update_H
+    !if(flag_reset_dens_on_atom_move) call set_density()
     if (flag_pcc_global) call set_density_pcc()
     call stop_print_timer(tmr_l_tmp1, &
                           "safemin2 - Final interpolation and updates", &
@@ -1189,7 +1200,8 @@ contains
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
                                       trim(pdb_template))
        end if
-       if(flag_reset_dens_on_atom_move) call set_density()
+       ! Now in update_H
+       !if(flag_reset_dens_on_atom_move) call set_density()
        if (flag_pcc_global) call set_density_pcc()
        call stop_print_timer(tmr_l_tmp1, &
                              "safemin2 - Failed interpolation + Retry", &
@@ -1449,6 +1461,8 @@ contains
   !!    Removed redundant parameter number_of_bands
   !!   2014/02/03 M.Arita
   !!    Removed call for update_H
+  !!   2015/11/24 08:32 dave
+  !!    Removed old ewald calls
   !!  TODO
   !!   Think about updating radius component of matrix derived type,
   !!   or eliminating it !
@@ -1463,7 +1477,7 @@ contains
                                       deallocate_matrix,              &
                                       set_matrix_pointers2, matrix
     use group_module,           only: parts
-    use cover_module,           only: BCS_parts, DCS_parts, ewald_CS, &
+    use cover_module,           only: BCS_parts, DCS_parts, ion_ion_CS, &
                                       D2_CS
     use primary_module,         only: bundle
     use global_module,          only: iprint_MD, x_atom_cell,         &
@@ -1479,7 +1493,6 @@ contains
     use pseudopotential_common, only: core_radius
     use GenComms,               only: myid, cq_abort, gsum
     use functions_on_grid,      only: associate_fn_on_grid
-    use ewald_module,           only: flag_old_ewald
     use numbers
     use timer_module
     use density_module,         only: build_Becke_weights
@@ -1502,8 +1515,7 @@ contains
     call primary_update(x_atom_cell, y_atom_cell, z_atom_cell, bundle, parts, myid)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, DCS_parts, parts)
-    if (.not.flag_old_ewald) &
-         call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ewald_CS, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     if (flag_dft_d2) &
          call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, D2_CS, parts)
     ! If there's a new interaction of Hamiltonian range, then we REALLY need to rebuild the matrices etc
@@ -1549,6 +1561,8 @@ contains
   !!     Removed redundant parameter number_of_bands
   !!   2014/02/03 M.Arita
   !!     Removed call for update_H
+  !!   2015/11/24 08:32 dave
+  !!    Removed old ewald calls
   !! SOURCE
   !!
   subroutine updateIndices2(matrix_update, fixed_potential)
@@ -1560,7 +1574,7 @@ contains
                                       deallocate_matrix,              &
                                       set_matrix_pointers2, matrix
     use group_module,           only: parts
-    use cover_module,           only: BCS_parts, DCS_parts, ewald_CS, &
+    use cover_module,           only: BCS_parts, DCS_parts, ion_ion_CS, &
                                       D2_CS
     use primary_module,         only: bundle
     use global_module,          only: iprint_MD, x_atom_cell,         &
@@ -1575,7 +1589,6 @@ contains
     use pseudopotential_common, only: core_radius
     use GenComms,               only: myid, cq_abort, gsum
     use functions_on_grid,      only: associate_fn_on_grid
-    use ewald_module,           only: flag_old_ewald
     use density_module,         only: build_Becke_weights
     use numbers
 
@@ -1595,8 +1608,8 @@ contains
     call primary_update(x_atom_cell, y_atom_cell, z_atom_cell, bundle, parts, myid)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, DCS_parts, parts)
-    if(.NOT.flag_old_ewald) call cover_update(x_atom_cell, y_atom_cell, &
-         z_atom_cell, ewald_CS, parts)
+    call cover_update(x_atom_cell, y_atom_cell, &
+         z_atom_cell, ion_ion_CS, parts)
     if (flag_dft_d2) call cover_update(x_atom_cell, y_atom_cell, &
          z_atom_cell, D2_CS, parts)
     check = .false.
@@ -1647,6 +1660,8 @@ contains
   !!    -  Deleted calls for L-matrix reconstruction and update_H. They are
   !!       called at md_run and safemin2
   !!    -  Added calls for initialising and finalising matrix indexing for XL-BOMD
+  !!   2015/11/24 08:32 dave
+  !!    Removed old ewald calls
   !! SOURCE
   !!
   !OLD subroutine updateIndices3(fixed_potential,velocity,step,iteration)
@@ -1661,14 +1676,13 @@ contains
     use GenComms, ONLY: inode,ionode,my_barrier,myid,gcopy
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
-    use cover_module, ONLY: BCS_parts,DCS_parts,ewald_CS
+    use cover_module, ONLY: BCS_parts,DCS_parts,ion_ion_CS
     use mult_module,            ONLY: fmmi,immi,matL,L_trans
     use set_blipgrid_module, ONLY: set_blipgrid
     use set_bucket_module, ONLY: set_bucket
     use dimens, ONLY: RadiusSupport
     use pseudopotential_common, ONLY: core_radius
     use functions_on_grid, ONLy: associate_fn_on_grid
-    use ewald_module, ONLY: flag_old_ewald
     use density_module, ONLY: build_Becke_weights
     use UpdateMember_module, ONLY: updateMembers
     use atoms, ONLY: distribute_atoms,deallocate_distribute_atom
@@ -1690,7 +1704,7 @@ contains
     use group_module,   ONLY: blocks
     use primary_module, ONLY: make_prim,domain
     use cover_module,   ONLY: make_cs,make_iprim,send_ncover
-    use ewald_module,   ONLY: ewald_real_cutoff
+    use ion_electrostatic,   ONLY: ewald_real_cutoff
     use species_module, ONLY: species
     use matrix_data,    ONLY: rcut,max_range
     use dimens,         ONLY: r_core_squared,r_h
@@ -1832,6 +1846,12 @@ contains
   !!   - Corrected calls to generate charge density
   !!   - Added call for get_initiaL_XL to calculate an initial guess for
   !!     L-matrix when XL-BOMD applies
+  !!   2015/11/24 08:32 dave
+  !!    Removed old ewald calls
+  !!   2016/01/13 08:20 dave
+  !!    Added call to set_atomic_density for reset, non-SCF and NA
+  !!   2016/01/29 15:01 dave
+  !!    Removed prefix for ewald call
   !!  SOURCE
   !!
   subroutine update_H(fixed_potential)
@@ -1842,8 +1862,7 @@ contains
     use H_matrix_module,        only: get_H_matrix
     use DiagModule,             only: diagon
     use mult_module,            only: LNV_matrix_multiply
-    use ewald_module,           only: ewald, mikes_ewald,              &
-                                      flag_old_ewald
+    use ion_electrostatic,      only: ewald, screened_ion_interaction
     use pseudopotential_data,   only: init_pseudo
     use pseudo_tm_module,       only: set_tm_pseudo
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA,      &
@@ -1852,8 +1871,10 @@ contains
                                       IPRINT_TIME_THRES2,              &
                                       flag_pcc_global, flag_dft_d2,    &
                                       nspin, flag_MDold, io_lun,       &
-                                      flag_mix_L_SC_min, flag_XLBOMD
-    use density_module,         only: set_density,                     &
+                                      flag_mix_L_SC_min, flag_XLBOMD,  &
+                                      flag_reset_dens_on_atom_move,    &
+                                      flag_neutral_atom
+    use density_module,         only: set_atomic_density,              &
                                       flag_no_atomic_densities,        &
                                       density, set_density_pcc,        &
                                       get_electronic_density
@@ -1883,10 +1904,10 @@ contains
                                 dontE)
     end if
     ! (3) Find the Ewald energy for the initial set of atoms
-    if (flag_old_ewald) then
-       call ewald
+    if(flag_neutral_atom) then
+       call screened_ion_interaction
     else
-       call mikes_ewald
+       call ewald
     end if
     ! (4) Find the dispersion for the initial set of atoms
     if (flag_dft_d2) call dispersion_D2
@@ -1899,27 +1920,22 @@ contains
     case (ABINIT)
        call set_tm_pseudo
     end select
-    ! Now we call set_density if we're using atomic densities
-!ORI    if ((.not. flag_self_consistent) .and. &
-!ORI        (.not. flag_no_atomic_densities)) then
-!ORI       call set_density()
-!ORI    ! Calculate charge density from L-matrix [2013/08/26 michi]
-!ORI    else if (.NOT. diagon .AND. flag_self_consistent .AND. .NOT. flag_MDold) then
-!ORI       if (inode.EQ.ionode) write (io_lun,*) "update_H: Get charge density from L-matrix"
-!ORI       call get_electronic_density(density,electrons,supportfns,H_on_supportfns(1), &
-!ORI                                   inode,ionode,maxngrid)
-    ! For NSC calculations
-    if ((.NOT. flag_self_consistent)     .AND. &
+    ! Now we call set_density if (a) we have non-SCF and atomic densities or
+    ! (b) the flag_reset_dens_on_atom_move is set
+    if(((.NOT. flag_self_consistent)     .AND. &
         (.NOT. flag_no_atomic_densities) .AND. &
-         .NOT. flag_mix_L_SC_min) then
-       call set_density()
+        (.NOT. flag_mix_L_SC_min)).OR.flag_reset_dens_on_atom_move) then
+       call set_atomic_density(.true.)
     ! For SCF-O(N) calculations
     elseif (.NOT.diagon .AND. .NOT.flag_MDold) then
-      if (flag_self_consistent .OR. flag_mix_L_SC_min) then
-        if (inode.EQ.ionode) write (io_lun,*) "update_H: Get charge density from L-matrix"
-        call get_electronic_density(density,electrons,supportfns,H_on_supportfns(1), &
-                                    inode,ionode,maxngrid)
-      endif
+       if (flag_self_consistent .OR. flag_mix_L_SC_min) then
+          if(flag_neutral_atom) call set_atomic_density(.false.)
+          if (inode.EQ.ionode.AND.iprint_MD>2) write (io_lun,*) "update_H: Get charge density from L-matrix"
+          call get_electronic_density(density,electrons,supportfns,H_on_supportfns(1), &
+               inode,ionode,maxngrid)
+       endif
+    else if(diagon.AND.flag_neutral_atom) then
+       call set_atomic_density(.false.)
     else if ((.not. flag_self_consistent) .and. &
              (flag_no_atomic_densities)) then
        call cq_abort("update_H: Can't run non-self-consistent without PAOs !")

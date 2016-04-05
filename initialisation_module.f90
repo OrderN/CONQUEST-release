@@ -114,7 +114,7 @@ contains
     use datatypes
     use global_module,     only: x_atom_cell, y_atom_cell, &
                                  z_atom_cell, ni_in_cell,  &
-                                 flag_only_dispersion
+                                 flag_only_dispersion, flag_neutral_atom
     use GenComms,          only: inode, ionode, my_barrier, end_comms
     use initial_read,      only: read_and_write
     use ionic_data,        only: get_ionic_data
@@ -125,6 +125,7 @@ contains
     use cover_module,      only: make_cs, D2_CS
     use dimens,            only: r_dft_d2
     use DFT_D2
+    use pseudo_tm_module, only: make_neutral_atom
 
     implicit none
 
@@ -177,7 +178,7 @@ contains
                                &building from initial K'
        find_chdens = .true.
     end if
-
+    if(flag_neutral_atom) call make_neutral_atom
     call set_up(find_chdens,std_level_loc+1)
     
     call my_barrier()
@@ -255,6 +256,16 @@ contains
   !!    Added call for immi_XL for XL-BOMD
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
+  !!   2015/11/09 17:12 dave with TM and NW (Mizuho)
+  !!    - Added allocation for atomic density array, density_atom
+  !!   2015/11/24 08:31 dave
+  !!    - Removed old ewald calls
+  !!   2015/11/30 17:09 dave
+  !!    - Adding branches for neutral atom/ewald
+  !!   2016/01/28 16:45 dave
+  !!    Updated module name to ion_electrostatic
+  !!   2016/01/29 15:00 dave
+  !!    Removed prefix for ewald call
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -268,7 +279,8 @@ contains
                                       flag_pcc_global, flag_dft_d2,    &
                                       iprint_gen, flag_perform_cDFT,   &
                                       nspin, runtype, flag_MDold,      &
-                                      glob2node, flag_XLBOMD
+                                      glob2node, flag_XLBOMD,          &
+                                      flag_neutral_atom
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl, type_int
     use group_module,           only: parts
@@ -279,8 +291,7 @@ contains
     use construct_module
     use matrix_data,            only: rcut, Lrange, Srange,            &
                                       mx_matrices, max_range
-    use ewald_module,           only: set_ewald, mikes_set_ewald,      &
-                                      flag_old_ewald
+    use ion_electrostatic,      only: set_ewald, setup_screened_ion_interaction
     use atoms,                  only: distribute_atoms
     use dimens,                 only: n_grid_x, n_grid_y, n_grid_z,    &
                                       r_core_squared, r_h, r_super_x,  &
@@ -297,11 +308,12 @@ contains
                                       STATE, ABINIT, core_correction,  &
                                       pseudopotential
     ! Troullier-Martin pseudos    15/11/2002 TM
-    use density_module,         only: set_density, density,            &
+    use density_module,         only: set_atomic_density, density,            &
                                       density_scale, atomcharge,       &
                                       build_Becke_weights,             &
                                       build_Becke_charges,             &
-                                      set_density_pcc, density_pcc
+                                      set_density_pcc, density_pcc,    &
+                                      density_atom
     use block_module,           only: nx_in_block,ny_in_block,         &
                                       nz_in_block, n_pts_in_block,     &
                                       set_blocks_from_new,             &
@@ -381,6 +393,13 @@ contains
          call cq_abort("Error allocating density and potential: ", &
                        maxngrid, stat)
     call reg_alloc_mem(area_index, 2 * nspin * maxngrid, type_dbl)
+    if(flag_neutral_atom) then ! Allocate atomic density array
+       allocate(density_atom(maxngrid), STAT=stat)
+       if (stat /= 0) &
+            call cq_abort("Error allocating density_atom: ", &
+            maxngrid, stat)
+       call reg_alloc_mem(area_index, maxngrid, type_dbl)
+    end if
     allocate(density_scale(nspin), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating density_scale: ", nspin, stat)
@@ -468,20 +487,22 @@ contains
     if (inode == ionode .and. iprint_init > 1) &
          write (io_lun, *) 'Completed fft init'
 
-    ! set up the Ewald sumation: find out how many superlatices
-    ! in the real space sum and how many reciprocal latice vectors in the
-    ! reciprocal space sum are needed for a given energy tolerance. In the
-    ! future the tolerance will be set by the user, but right now it is
-    ! set as a parameter in set_ewald, and its value is 1.0d-5.
-    if(flag_old_ewald) then
-       call set_ewald(inode, ionode)
+    ! Initialise the routines to calculate ion-ion interactions
+    if(flag_neutral_atom) then
+       call setup_screened_ion_interaction
+       call my_barrier
+       if (inode == ionode .and. iprint_init > 1) &
+            write (io_lun, *) 'Completed setup_ion_interaction()'
     else
-       call mikes_set_ewald(inode,ionode)
+       ! set up the Ewald sumation: find out how many superlatices
+       ! in the real space sum and how many reciprocal latice vectors in the
+       ! reciprocal space sum are needed for a given energy tolerance. 
+       call set_ewald(inode,ionode)
+       call my_barrier
+       if (inode == ionode .and. iprint_init > 1) &
+            write (io_lun, *) 'Completed set_ewald()'
     end if
     ! +++
-    call my_barrier
-    if (inode == ionode .and. iprint_init > 1) &
-         write (io_lun, *) 'Completed set_ewald()'
 
     ! Generate D2CS
     if (flag_dft_d2) then
@@ -541,7 +562,13 @@ contains
      call gcopy(glob2node,ni_in_cell)
    endif
 
-   if (.not. find_chdens) call set_density
+   ! Create initial density from superposition of atomic densities
+   if (.not. find_chdens) then
+      call set_atomic_density(.true.)  ! Set density and NA atomic density
+   else if( flag_neutral_atom ) then
+      call set_atomic_density(.false.) ! Need atomic density for neutral atom potential
+   end if
+
    if (flag_perform_cDFT) then
       call init_cdft
    end if
@@ -880,7 +907,7 @@ contains
   !!
   !!
   !!  USES
-  !!   datatypes, DMMin, ewald_module, GenComms, global_module, logicals,
+  !!   datatypes, DMMin, ion_electrostatic, GenComms, global_module, logicals,
   !!   matrix_data, mult_module, numbers, SelfCon, S_matrix_module
   !!  AUTHOR
   !!   D.R.Bowler
@@ -947,6 +974,14 @@ contains
   !!    Bug fix for changing the number of processors at the sequential job
   !!   2015/06/08 lat
   !!    Added experimental backtrace
+  !!   2015/11/24 08:32 dave
+  !!    Removed old ewald calls
+  !!   2015/11/30 17:10 dave
+  !!    Added branches for neutral atom/ewald
+  !!   2016/01/28 16:44 dave
+  !!    Updated module name to ion_electrostatic
+  !!   2016/01/29 15:00 dave
+  !!    Removed prefix for ewald call
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -968,8 +1003,9 @@ contains
                                  n_proc_old,MDinit_step,ni_in_cell, &
                                  flag_XLBOMD, flag_dissipation,     &
                                  flag_propagateX, flag_propagateL, restart_X, &
-                                 flag_exx, exx_scf, flag_out_wf, wf_self_con, flag_write_DOS
-    use ewald_module,      only: ewald, mikes_ewald, flag_old_ewald
+                                 flag_exx, exx_scf, flag_out_wf, wf_self_con, &
+                                 flag_write_DOS, flag_neutral_atom
+    use ion_electrostatic, only: ewald, screened_ion_interaction
     use S_matrix_module,   only: get_S_matrix
     use GenComms,          only: my_barrier,end_comms,inode,ionode, &
                                  cq_abort,gcopy
@@ -1116,11 +1152,15 @@ contains
 !!$
     ! (5) Find the Ewald energy for the initial set of atoms
     if (inode == ionode .and. iprint_init > 1) &
-         write (io_lun, *) 'Calling Ewald'
-    if (flag_old_ewald) then
-       call ewald
+         write (io_lun, *) 'Ionic electrostatics'
+    if(flag_neutral_atom) then
+       if (inode == ionode .and. iprint_init > 1) &
+            write (io_lun, *) 'Calling screened_ion_interaction'
+       call screened_ion_interaction
     else
-       call mikes_ewald
+       if (inode == ionode .and. iprint_init > 1) &
+            write (io_lun, *) 'Calling ewald'
+       call ewald
     end if
 !!$
 !!$

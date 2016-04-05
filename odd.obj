@@ -11,4 +11,5 @@ ODD_OBJS = global_module.o \
            timer_module.o \
            timer_stdclocks_module.o \
            auxiliary_types.o \
+           functions_module.o \
            fft_module.o $(FFT_OBJ)

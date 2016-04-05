@@ -390,7 +390,7 @@ contains
 
     ! initialize warning flag
     flag = .false.
-    if (x .gt. (n-1)*delta_x .or. x .lt. 0) then
+    if (x>real(n-1,double)*delta_x .or. x<0) then
        flag = .true. ! the given x lies outside the tabulated values, warn the calling routine
        y = 0.0_double ! Avoid array overruns
        return
@@ -399,6 +399,7 @@ contains
     ! bracket x value   
     klo = aint(x/delta_x) + 1 ! integer division gives lower bound, add 1 for array value
     khi = klo + 1
+    if(khi>n) call cq_abort("Error in splint: index beyond range ",khi,n)
     ! Remember that we added to get array value and subtract it off again !
     xlo =delta_x*real(klo-1,double)
     xhi =delta_x*real(khi-1,double)

@@ -45,7 +45,8 @@ module pseudo_tm_module
   !arrays
   private
   public :: init_pseudo_tm, loc_pp_derivative_tm, &
-       nonloc_pp_derivative_tm, set_tm_pseudo, deallocate_pseudo_tm, loc_HF_stress, loc_G_stress
+       nonloc_pp_derivative_tm, set_tm_pseudo, deallocate_pseudo_tm, &
+       loc_HF_stress, loc_G_stress, make_neutral_atom
   !public
   ! pseudofunctions is arranged like 
   !  (n_pts in block, ncf, naba atoms, iblock)
@@ -351,7 +352,7 @@ contains
 !!***
 
 ! -----------------------------------------------------------
-! Subroutine set_tm_pseudo
+! Subroutine deallocate_pseudo_tm
 ! -----------------------------------------------------------
 
 !!****f* pseudo_tm_module/deallocate_pseudo_tm *
@@ -434,6 +435,8 @@ contains
 !!    Changed float to real
 !!   2011/12/22 13:55 dave
 !!    Removed calculation of pseudo_functions for analytic blips
+!!   2016/01/07 11:58 dave
+!!    Added switch for loop over neighbours for neutral atom, tidied
 !!  SOURCE
 !!
   subroutine set_tm_pseudo
@@ -443,7 +446,8 @@ contains
     use global_module, only: rcellx,rcelly,rcellz,id_glob, ni_in_cell, &
                              iprint_pseudo, species_glob, nlpf, sf,    &
                              flag_basis_set, blips,                    &
-                             IPRINT_TIME_THRES3, flag_analytic_blip_int
+                             IPRINT_TIME_THRES3, flag_analytic_blip_int, &
+                             flag_neutral_atom, dens
     use species_module, only: species, nlpf_species, n_species
     !  At present, these arrays are dummy arguments.
     use block_module, only : nx_in_block,ny_in_block,nz_in_block, &
@@ -463,30 +467,39 @@ contains
 
     implicit none 
     !local
-    real(double):: dcellx_block,dcelly_block,dcellz_block
     integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom
-    real(double):: xatom,yatom,zatom,alpha,step
-    real(double):: xblock,yblock,zblock
     integer :: the_species
     integer :: j,iblock,the_l,ipoint, igrid
-    real(double) :: r_from_i
-    real(double) :: rr,a,b,c,d,x,y,z,nl_potential
     integer :: no_of_ib_ia, offset_position
     integer :: position,iatom
     integer :: stat, nl, npoint, ip
-    integer :: i,m
+    integer :: i,m, pseudo_neighbour
+
+    real(double):: dcellx_block,dcelly_block,dcellz_block
+    real(double):: xatom,yatom,zatom,alpha,step
+    real(double):: xblock,yblock,zblock
+    real(double) :: r_from_i
+    real(double) :: rr,a,b,c,d,x,y,z,nl_potential
     real(double) :: coulomb_energy
     real(double) :: rcut
     real(double) :: r1, r2, r3, r4, core_charge, gauss_charge
     real(double) :: val
-    !allocatable
     real(double),allocatable :: chlocal_density(:), coulomb_potential(:)
+
     logical :: local_charge = .false.
+
     type(cq_timer) :: tmr_l_tmp1
 
     ! --  Start of subroutine  ---
     call start_timer(tmr_std_pseudopot)
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
+    ! Set up neighbour list depending on whether we use VNA
+    if(flag_neutral_atom) then
+       pseudo_neighbour = dens
+    else
+       pseudo_neighbour = nlpf
+    end if
+    ! Local charge
     do i=1,n_species
        if(pseudo(i)%tm_loc_pot==loc_chg) local_charge = .true.
     end do
@@ -530,22 +543,21 @@ contains
     ! point, get the core charge (local charge) density from the atoms 
     ! whose distances from the grid point are within the cutoff. 
     the_species = 1
-    !write(51,*) 'Pseudo: ',pseudo(the_species)%tm_loc_pot,pseudo(the_species)%vlocal%delta,pseudo(the_species)%vlocal%n
     do iblock = 1, domain%groups_on_node ! primary set of blocks
        xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
        zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
-       if(naba_atm(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
+       if(naba_atm(pseudo_neighbour)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
-          do ipart=1,naba_atm(nlpf)%no_of_part(iblock)
-             jpart=naba_atm(nlpf)%list_part(ipart,iblock)
+          do ipart=1,naba_atm(pseudo_neighbour)%no_of_part(iblock)
+             jpart=naba_atm(pseudo_neighbour)%list_part(ipart,iblock)
              if(jpart > DCS_parts%mx_gcover) then 
                 call cq_abort('set_ps: JPART ERROR ',ipart,jpart)
              endif
              ind_part=DCS_parts%lab_cell(jpart)
-             do ia=1,naba_atm(nlpf)%no_atom_on_part(ipart,iblock)
+             do ia=1,naba_atm(pseudo_neighbour)%no_atom_on_part(ipart,iblock)
                 iatom=iatom+1
-                ii = naba_atm(nlpf)%list_atom(iatom,iblock)
+                ii = naba_atm(pseudo_neighbour)%list_atom(iatom,iblock)
                 icover= DCS_parts%icover_ibeg(jpart)+ii-1
                 ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
 
@@ -565,7 +577,7 @@ contains
                 !  Now, I assume we should consider all naba_atm whose 
                 ! distance from the block is within the maximum of core_radius.
                 ! This is needed to keep the consistency with <set_bucket>.
-                ! However, we can change this strategy by changing naba_atm(nlpf).
+                ! However, we can change this strategy by changing naba_atm(pseudo_neighbour).
                 !no_of_ib_ia = no_of_ib_ia +1
 
                 xatom=DCS_parts%xcover(icover)
@@ -577,22 +589,55 @@ contains
 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
-                rcut = core_radius(the_species) + very_small   !!   30072007 drb
-                ! write(io_lun,*) ' rcut for check_block = ', rcut
+                if( flag_neutral_atom ) then ! for Neutral atom potential
+                   rcut = pseudo(the_species)%vna%cutoff + very_small  
+                else
+                   rcut = core_radius(the_species) + very_small   !!   2007/07/30 drb
+                end if
                 call check_block &
                      (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store) !out
-                r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
-                     (zatom-zblock)**2 )
+                !r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
+                !     (zatom-zblock)**2 )
 
                 !Local part  ----
                 ! construct the local part of the pseudopotential.
                 ! local part of Siesta's pseudopotential is generated
                 ! from the pseudo core charge (local charge) distribution
-                ! 
-                !write(51,*) 'Pseudo points: ',npoint
                 if(npoint > 0) then
-                   if(pseudo(the_species)%tm_loc_pot==loc_pot) then
+                   if(flag_neutral_atom) then
+                      step = pseudo(the_species)%vna%delta
+                      do ip=1, npoint
+                         ipoint=ip_store(ip)
+                         igrid=n_pts_in_block*(iblock-1)+ipoint
+                         if(igrid > n_my_grid_points) call cq_abort &
+                              ('set_ps: igrid error ', igrid, n_my_grid_points) 
+                         r_from_i = r_store(ip)
+                         x = x_store(ip)
+                         y = y_store(ip)
+                         z = z_store(ip)
+                         j = aint( r_from_i / step ) + 1
+                         if(j+1 <= pseudo(the_species)%vna%n) then
+                            rr = real(j,double) * step
+                            a = ( rr - r_from_i ) / step
+                            b = one - a
+                            c = a * ( a * a - one ) * step * step / six
+                            d = b * ( b * b - one ) * step * step / six
+
+                            r1=pseudo(the_species)%vna%f(j)
+                            r2=pseudo(the_species)%vna%f(j+1)
+                            r3=pseudo(the_species)%vna%d2(j)
+                            r4=pseudo(the_species)%vna%d2(j+1)
+                            !if(abs(a * r1 + b * r2 + c * r3 + d * r4)>1e5_double) then
+                            !!   write(*,*) 'Error!'
+                            !   write(*,*) j,a,b,r1,r2,r3,r4
+                            !end if
+                            pseudopotential(igrid) = &
+                                 pseudopotential(igrid) &
+                                 + a * r1 + b * r2 + c * r3 + d * r4
+                         end if
+                      end do
+                   else if(pseudo(the_species)%tm_loc_pot==loc_pot) then
                       step = pseudo(the_species)%vlocal%delta
 
                       do ip=1, npoint
@@ -614,7 +659,6 @@ contains
                          ! Use the spline interpolation tables
                          !  cutoff for this function might be smaller
                          !  than cut off used in check_block
-                         !write(51,*) 'Pseudo dist: ',r_from_i, j
                          if(j+1 <= pseudo(the_species)%vlocal%n) then
                             ! rr is BEYOND the point we're interested in
                             rr = real(j,double) * step
@@ -628,7 +672,6 @@ contains
                             r3=pseudo(the_species)%vlocal%d2(j)
                             r4=pseudo(the_species)%vlocal%d2(j+1)
 
-                            !write(51,*) 'Pseudo: ',igrid,r_from_i,j,a * r1 + b * r2 + c * r3 + d * r4
                             pseudopotential(igrid) =  pseudopotential(igrid)  + a * r1 + b * r2 + c * r3 + d * r4
                             !if(r_from_i>RD_ERR) then
                             !   pseudopotential(igrid) = pseudopotential(igrid) + &
@@ -686,6 +729,10 @@ contains
                    end if ! tm_loc_pot==loc_pot
                 endif! (npoint > 0) then
 
+                ! -----------------------------------------------------------------------------------
+                ! NB This loop is VERY rarely used: only when non-analytic blip operations are chosen
+                ! DRB 2016/01/07
+                ! -----------------------------------------------------------------------------------
                 !Projector Functions  ------------------------------------------
                 ! pseudofunction(n_pts_in_block,ncf,naba_atm,iblock) 
                 !  ncf is fixed for all atoms in this version, 
@@ -699,8 +746,6 @@ contains
                    do nl= 1, pseudo(the_species)%n_pjnl
 
                       the_l=pseudo(the_species)%pjnl_l(nl)
-                      !offset_position = (no_of_ib_ia-1) * ncf * n_pts_in_block + &
-                      !     offset_mcomp(nl, the_species) * n_pts_in_block
                       offset_position = no_of_ib_ia + &
                            offset_mcomp(nl, the_species) * n_pts_in_block
                       step = pseudo(the_species)%pjnl(nl)%delta
@@ -745,58 +790,19 @@ contains
                             endif
                             ! for r_from_i < RD_ERR
                             !   x, y, z are set to be 0 in check_block
-                             
-                            !RC putting in call for alternative Y_lm's here
-                            if(flag_angular_new) then
-                               if (the_l>0) then
-                                  i = 0
-                                  do m = -the_l, the_l
-                                     call pp_elem(nl_potential,the_l,m,x,y,z,r_from_i,val)
-                                     gridfunctions(pseudofns)%griddata(position+i*n_pts_in_block) = val
-                                     !write(io_lun,*) val, 'val', the_l, m,myid
-                                     i = i+1
-                                  enddo
-                               else
-                                  call pp_elem(nl_potential,the_l,0,x,y,z,r_from_i,val)
-                                  gridfunctions(pseudofns)%griddata(position) = val
-                                  !write(io_lun,*) val, 'val', the_l, m,myid
-                               endif
+
+                            ! Removed flag_angular_new switch DRB 2016/01/07
+                            if (the_l>0) then
+                               i = 0
+                               do m = -the_l, the_l
+                                  call pp_elem(nl_potential,the_l,m,x,y,z,r_from_i,val)
+                                  gridfunctions(pseudofns)%griddata(position+i*n_pts_in_block) = val
+                                  i = i+1
+                               enddo
                             else
-                               call cq_abort("Must have FlagNewAngular T for siesta/abinit pseudos")
-                               
-                               !%%! ! S, P or D components
-                               !%%! if ( the_l .eq. 0 ) then      ! NonLocal : S component
-                               !%%!    gridfunctions(pseudofns)%griddata(position) =   &
-                               !%%!         nl_potential*spherical_harmonic_norm(1)
-                               !%%!    !write(io_lun,*) pseudofunctions(position), 'val_orig',myid
-                               !%%!    
-                               !%%! else if ( the_l .eq. 1 ) then ! Nonlocal : P components
-                               !%%!    gridfunctions(pseudofns)%griddata(position) =  & 
-                               !%%!         nl_potential*spherical_harmonic_norm(2) * x 
-                               !%%!    gridfunctions(pseudofns)%griddata(position+1*n_pts_in_block) =  &
-                               !%%!         nl_potential*spherical_harmonic_norm(3) * y 
-                               !%%!    gridfunctions(pseudofns)%griddata(position+2*n_pts_in_block) =   &
-                               !%%!         nl_potential*spherical_harmonic_norm(4) * z
-                               !%%!    !write(io_lun,*) pseudofunctions(position),the_l, -1,myid 
-                               !%%!    !write(io_lun,*) pseudofunctions(position+1*n_pts_in_block),the_l,0,myid
-                               !%%!    !write(io_lun,*) pseudofunctions(position+2*n_pts_in_block),the_l,+1,myid
-                               !%%!    
-                               !%%! else if ( the_l .eq. 2 ) then ! Nonlocal : D components
-                               !%%!    gridfunctions(pseudofns)%griddata(position) =  &
-                               !%%!         nl_potential*spherical_harmonic_norm(5) * (x*x - y*y) 
-                               !%%!    gridfunctions(pseudofns)%griddata(position+1*n_pts_in_block) = &
-                               !%%!         nl_potential*spherical_harmonic_norm(6) * (three*z*z-one)
-                               !%%!    gridfunctions(pseudofns)%griddata(position+2*n_pts_in_block) = &
-                               !%%!         nl_potential*spherical_harmonic_norm(7) * x * y 
-                               !%%!    gridfunctions(pseudofns)%griddata(position+3*n_pts_in_block) = &
-                               !%%!      nl_potential*spherical_harmonic_norm(8) * x * z 
-                               !%%!    gridfunctions(pseudofns)%griddata(position+4*n_pts_in_block) = &
-                               !%%!         nl_potential*spherical_harmonic_norm(9) * y * z 
-                               !%%!    
-                               !%%! else
-                               !%%!    write(io_lun,fmt='(10x," ERROR in set_tm_pseudo! l_component = ",i3)') the_l
-                               !%%! end if
-                            endif ! flag_angular_new
+                               call pp_elem(nl_potential,the_l,0,x,y,z,r_from_i,val)
+                               gridfunctions(pseudofns)%griddata(position) = val
+                            endif
                          endif !(j+1 < pseudo(the_species)%pjnl(nl)%n) then
                       enddo ! ip=1,npoint
                    enddo ! nl= 1, pseudo(the_species)%n_pjnl
@@ -804,32 +810,29 @@ contains
                 no_of_ib_ia = no_of_ib_ia + nlpf_species(the_species)*n_pts_in_block
              enddo ! naba_atoms
           enddo ! naba_part
-       endif !(naba_atm(nlpf)%no_of_part(iblock) > 0) !naba atoms?
+       endif !(naba_atm(pseudo_neighbour)%no_of_part(iblock) > 0) !naba atoms?
     enddo ! iblock : primary set of blocks
-    !RC putting in stop for testing
-    !stop
-    
-
     ! now we must use FFT to transform the core charge density into
     ! reciprocal space to construct the pseudopotential in 
     ! reciprocal space. This is then transformed back into real space 
     ! and returned in pseudopotential from subroutine hartree()
     call my_barrier()
 
-    ! local potential 
-    if(local_charge) then
-       call hartree( chlocal_density, pseudopotential, maxngrid, coulomb_energy )
-    else
-       !write(io_lun,*) 'Calling hartree to do FFT of loc pot'
-       call hartree( chlocal_density, coulomb_potential, maxngrid, coulomb_energy )
-       call axpy( n_my_grid_points, -one, coulomb_potential, 1, &
-            pseudopotential, 1 )
-       call start_timer(tmr_std_allocation)
-       deallocate(coulomb_potential, STAT=stat)
-       if(stat/=0) call cq_abort('set_ps: dealloc c_p ', stat)
-       call stop_timer(tmr_std_allocation)
+    ! local potential
+    if(.NOT.flag_neutral_atom) then
+       if(local_charge) then
+          call hartree( chlocal_density, pseudopotential, maxngrid, coulomb_energy )
+       else
+          call hartree( chlocal_density, coulomb_potential, maxngrid, coulomb_energy )
+          call axpy( n_my_grid_points, -one, coulomb_potential, 1, &
+               pseudopotential, 1 )
+          call start_timer(tmr_std_allocation)
+          deallocate(coulomb_potential, STAT=stat)
+          if(stat/=0) call cq_abort('set_ps: dealloc c_p ', stat)
+          call stop_timer(tmr_std_allocation)
+       end if
     end if
-
+    
     !deallocates allocatable arrays
     call start_timer(tmr_std_allocation)
     deallocate(chlocal_density, STAT=stat)
@@ -877,6 +880,10 @@ contains
 !!    Adding stress
 !!   2015/09/04 07:53 dave
 !!    Small changes to avoid messing up Hartree stress
+!!   2016/01/14 16:47 dave
+!!    Implementing neutral atom forces
+!!   2016/01/21 08:23 dave
+!!    Adding neutral atom stress and tidying
 !!   2016/01/29 14:25 dave
 !!    Bug fix for local G stress: accumulate loc_charge (was just storing !)
 !!  SOURCE
@@ -886,7 +893,8 @@ contains
     use datatypes
     use numbers
     use dimens, only: grid_point_volume, n_my_grid_points
-    use global_module, only: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, species_glob, nlpf,ni_in_cell, sf
+    use global_module, only: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, &
+         species_glob, nlpf,ni_in_cell, sf, flag_neutral_atom, dens
     use block_module, only : n_pts_in_block
     use group_module, only : blocks, parts
     use primary_module, only: domain
@@ -897,6 +905,8 @@ contains
     use GenComms, only: gsum, cq_abort, inode, ionode
     use hartree_module, only: hartree, Hartree_stress
     use maxima_module, only: maxngrid
+    use density_module, only: density_atom
+    use atomic_density, only: atomic_density_table ! for Neutral atom potential
 
     implicit none   
 
@@ -906,7 +916,7 @@ contains
     real(double),intent(out) :: hf_force( 3, ni_in_cell )
 
     ! Local variables
-    integer :: i, j 
+    integer :: i, j, pseudo_neighbour
 
     real(double) :: a, b, c, d, alpha, beta, gamma, delta, derivative 
     real(double) :: fx_1, fy_1, fz_1
@@ -925,14 +935,14 @@ contains
     real(double) :: rcut, temp(3)
 
     ! allocatable
-    real(double),allocatable :: h_potential(:)
+    real(double),allocatable, dimension(:) :: h_potential, drho_tot
     ! Store potential scaled by 2GaGb/G^4 for stress
     real(double),allocatable :: loc_charge(:)
 
     call start_timer(tmr_std_pseudopot)
     if(iprint_pseudo>2.AND.inode==ionode) write(io_lun,fmt='(4x,"Doing TM force with pseudotype: ",i3)') pseudo(1)%tm_loc_pot
     ! the structure of this subroutine is similar to set_tm_pseudo et.
-    HF_force = 0
+    HF_force = zero
     loc_HF_stress = zero
     loc_G_stress = zero
 
@@ -942,35 +952,53 @@ contains
 
     ! get Hartree potential
     call start_timer(tmr_std_allocation)
-    allocate(h_potential(maxngrid),STAT=stat)
-    if(stat /= 0) call cq_abort &
-         ('loc_pp_derivative_tm: alloc h_potential',stat)
-    allocate(loc_charge(maxngrid),STAT=stat)
-    if(stat /= 0) call cq_abort &
-         ('loc_pp_derivative_tm: alloc loc_charge',stat)
+    if(flag_neutral_atom) then
+       ! NB we will use the variable h_potential even though it is the drho potential
+       allocate(h_potential(maxngrid),STAT=stat)
+       if(stat /= 0) call cq_abort &
+            ('loc_pp_derivative_tm: alloc h_potential',stat)
+       allocate(drho_tot(maxngrid),STAT=stat)
+       if(stat /= 0) call cq_abort &
+            ('loc_pp_derivative_tm: alloc drho_tot',stat)
+       drho_tot = zero
+       drho_tot(1:size) = density(1:size) - density_atom(1:size)
+    else
+       allocate(h_potential(maxngrid),STAT=stat)
+       if(stat /= 0) call cq_abort &
+            ('loc_pp_derivative_tm: alloc h_potential',stat)
+       allocate(loc_charge(maxngrid),STAT=stat)
+       if(stat /= 0) call cq_abort &
+            ('loc_pp_derivative_tm: alloc loc_charge',stat)
+    end if
     call stop_timer(tmr_std_allocation)
     ! Save existing Hartree stress
     temp = Hartree_stress
-    call hartree( density, h_potential, maxngrid, h_energy )
+    if(flag_neutral_atom) then
+       call hartree( drho_tot, h_potential, maxngrid, h_energy )
+       pseudo_neighbour = dens
+    else
+       call hartree( density, h_potential, maxngrid, h_energy )
+       pseudo_neighbour = nlpf
+       loc_charge = zero
+    end if
     Hartree_stress = temp
-    loc_charge = zero
 
     ! now loop over grid points and accumulate HF part of the force
     do iblock = 1, domain%groups_on_node ! primary set of blocks
        xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
        zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
-       if(naba_atm(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
+       if(naba_atm(pseudo_neighbour)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
-          do ipart=1,naba_atm(nlpf)%no_of_part(iblock)
-             jpart=naba_atm(nlpf)%list_part(ipart,iblock)
+          do ipart=1,naba_atm(pseudo_neighbour)%no_of_part(iblock)
+             jpart=naba_atm(pseudo_neighbour)%list_part(ipart,iblock)
              if(jpart > DCS_parts%mx_gcover) then
                 call cq_abort('set_ps: JPART ERROR ',ipart,jpart)
              endif
              ind_part=DCS_parts%lab_cell(jpart)
-             do ia=1,naba_atm(nlpf)%no_atom_on_part(ipart,iblock)
+             do ia=1,naba_atm(pseudo_neighbour)%no_atom_on_part(ipart,iblock)
                 iatom=iatom+1
-                ii = naba_atm(nlpf)%list_atom(iatom,iblock)
+                ii = naba_atm(pseudo_neighbour)%list_atom(iatom,iblock)
                 icover= DCS_parts%icover_ibeg(jpart)+ii-1
                 ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
 
@@ -996,7 +1024,11 @@ contains
 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
-                rcut = core_radius(the_species) + very_small   !!   03032003TM
+                if( flag_neutral_atom ) then ! for Neutral atom potential
+                   rcut = pseudo(the_species)%vna%cutoff + very_small   !!   30072007 drb
+                else ! ABINIT or SIESTA PP
+                   rcut = core_radius(the_species) + very_small   !!   03032003TM
+                end if
                 call check_block &
                      (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store) !out
@@ -1020,11 +1052,6 @@ contains
                 !  spline interpolations, as in the following.
                 !        02/07/2002  T. Miyazaki
                 !
-                if(pseudo(the_species)%tm_loc_pot==loc_pot) then
-                   step = pseudo(the_species)%vlocal%delta
-                else
-                   step = pseudo(the_species)%chlocal%delta
-                end if
                 if(npoint > 0) then
                    do ip=1, npoint
 
@@ -1036,6 +1063,13 @@ contains
                       x = x_store(ip)
                       y = y_store(ip)
                       z = z_store(ip)
+                      if(flag_neutral_atom) then
+                         step = pseudo(the_species)%vna%delta
+                      else if(pseudo(the_species)%tm_loc_pot==loc_pot) then
+                         step = pseudo(the_species)%vlocal%delta
+                      else
+                         step = pseudo(the_species)%chlocal%delta
+                      end if
                       j = aint( r_from_i / step ) + 1
                       !As we use the maximum of cutoff for check_block
                       ! overrun should occur in some cases.
@@ -1043,7 +1077,73 @@ contains
                       !     ('set_ps: overrun problem3',j)
                       ! check j (j+1 =< N_TAB)
                       ! Use the spline interpolation tables
-                      if(pseudo(the_species)%tm_loc_pot==loc_pot) then
+                      if(flag_neutral_atom) then
+                         if(j+1 <= pseudo(the_species)%vna%n) then
+                            rr = real(j,double) * step
+                            a = ( rr - r_from_i ) / step
+                            b = one - a
+
+                            alpha = -one / step
+                            beta =  one / step
+                            gamma = -step * ( three * a * a - one ) / six
+                            delta =  step * ( three * b * b - one ) / six
+
+                            r1=pseudo(the_species)%vna%f(j)
+                            r2=pseudo(the_species)%vna%f(j+1)
+                            r3=pseudo(the_species)%vna%d2(j)
+                            r4=pseudo(the_species)%vna%d2(j+1)
+
+                            derivative = &
+                                 alpha * r1 + beta * r2 + gamma * r3 + delta * r4
+
+                            fx_2 = x * derivative * density( igrid )
+                            fy_2 = y * derivative * density( igrid )
+                            fz_2 = z * derivative * density( igrid )
+                            i=ig_atom
+                            HF_force(1,i) = HF_force(1,i) + fx_2 * grid_point_volume
+                            HF_force(2,i) = HF_force(2,i) + fy_2 * grid_point_volume
+                            HF_force(3,i) = HF_force(3,i) + fz_2 * grid_point_volume
+                            loc_HF_stress(1) = loc_HF_stress(1) + fx_2 * grid_point_volume * x*r_from_i
+                            loc_HF_stress(2) = loc_HF_stress(2) + fy_2 * grid_point_volume * y*r_from_i
+                            loc_HF_stress(3) = loc_HF_stress(3) + fz_2 * grid_point_volume * z*r_from_i
+                         end if ! j+1<pseudo(the_species)%vna%n
+                         ! Now the atomic density interacting with the potential from drho
+                         ! Note that this is the force from the SCREENED Hartree potential
+                         step = atomic_density_table(the_species)%delta
+                         j = aint( r_from_i / step ) + 1
+
+                         if(j+1 <= atomic_density_table(the_species)%length) then
+                            rr = real(j,double) * step
+                            a = ( rr - r_from_i ) / step
+                            b = one - a
+
+                            alpha = -one / step
+                            beta =  one / step
+                            gamma = -step * ( three * a * a - one ) / six
+                            delta =  step * ( three * b * b - one ) / six
+
+                            r1=atomic_density_table(the_species)%table(j)
+                            r2=atomic_density_table(the_species)%table(j+1)
+                            r3=atomic_density_table(the_species)%d2_table(j)
+                            r4=atomic_density_table(the_species)%d2_table(j+1)
+
+                            derivative =  &
+                                 alpha * r1 + beta * r2 + gamma * r3 + delta * r4
+
+                            fx_2 = minus_one * x * derivative * h_potential( igrid )
+                            fy_2 = minus_one * y * derivative * h_potential( igrid )
+                            fz_2 = minus_one * z * derivative * h_potential( igrid )
+                            i=ig_atom
+                            HF_force(1,i) = HF_force(1,i) + fx_2 * grid_point_volume
+                            HF_force(2,i) = HF_force(2,i) + fy_2 * grid_point_volume
+                            HF_force(3,i) = HF_force(3,i) + fz_2 * grid_point_volume
+                            loc_HF_stress(1) = loc_HF_stress(1) + fx_2 * grid_point_volume * x*r_from_i
+                            loc_HF_stress(2) = loc_HF_stress(2) + fy_2 * grid_point_volume * y*r_from_i
+                            loc_HF_stress(3) = loc_HF_stress(3) + fz_2 * grid_point_volume * z*r_from_i
+
+                         end if ! j+1<atomic_density_table(the_species)%length
+
+                      else if(pseudo(the_species)%tm_loc_pot==loc_pot) then
                          if(j+1 <= pseudo(the_species)%vlocal%n) then
                             elec_here = density(igrid) * grid_point_volume
                             gauss = exp( -pseudo(the_species)%alpha * r_from_i*r_from_i )
@@ -1121,37 +1221,43 @@ contains
                             loc_HF_stress(1) = loc_HF_stress(1) + fx_2 * grid_point_volume * x*r_from_i
                             loc_HF_stress(2) = loc_HF_stress(2) + fy_2 * grid_point_volume * y*r_from_i
                             loc_HF_stress(3) = loc_HF_stress(3) + fz_2 * grid_point_volume * z*r_from_i
-                            loc_charge(igrid) = loc_charge(igrid) + a*r1+b*r2+c*r3+d*r4
+                            loc_charge(igrid) = loc_charge(igrid)  + a*r1+b*r2+c*r3+d*r4
                          end if ! j+1<pseudo(the_species)%chlocal%n
                       end if
                    enddo ! ip=1, npoint
                 endif  !(npoint > 0) then
 
-             enddo ! ia=1,naba_atm(nlpf)%no_atom_on_part(ipart,iblock)
-          enddo ! ipart=1,naba_atm(nlpf)%no_of_part(iblock)
-       endif    ! (naba_atm(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
+             enddo ! ia=1,naba_atm(pseudo_neighbour)%no_atom_on_part(ipart,iblock)
+          enddo ! ipart=1,naba_atm(pseudo_neighbour)%no_of_part(iblock)
+       endif    ! (naba_atm(pseudo_neighbour)%no_of_part(iblock) > 0) then ! if there are naba atoms
     enddo ! iblock = 1, domain%groups_on_node ! primary set of blocks
-    ! Save existing Hartree stress
-    temp = Hartree_stress
-    call hartree( density, h_potential, maxngrid, h_energy, loc_charge,loc_G_stress )
-    Hartree_stress = temp
-    if(pseudo(the_species)%tm_loc_pot==loc_pot) loc_G_stress = -loc_G_stress
-
+    ! Deallocate added by TM, 2005/08/11
+    if(flag_neutral_atom) then
+       call start_timer(tmr_std_allocation)
+       deallocate(drho_tot,STAT=stat)
+       if(stat /= 0) call cq_abort &
+            ('loc_pp_derivative_tm: dealloc drho_tot',stat)
+    else
+       ! Save existing Hartree stress
+       temp = Hartree_stress
+       call hartree( density, h_potential, maxngrid, h_energy, loc_charge,loc_G_stress )
+       Hartree_stress = temp
+       if(pseudo(the_species)%tm_loc_pot==loc_pot) loc_G_stress = -loc_G_stress
+       call start_timer(tmr_std_allocation)
+       deallocate(loc_charge,STAT=stat)
+       if(stat /= 0) call cq_abort &
+            ('loc_pp_derivative_tm: dealloc loc_charge',stat)
+    end if
+    deallocate(h_potential,STAT=stat)
+    if(stat /= 0) call cq_abort &
+         ('loc_pp_derivative_tm: dealloc h_potential',stat)
+    call stop_timer(tmr_std_allocation)
     ! and add contributions from all nodes
     !  In the future this should be replaced by summation with local communication
     !    Tsuyoshi Miyazaki
     call gsum(HF_force,3,ni_in_cell)
     call gsum(loc_HF_stress,3)
     ! Don't gsum loc_G_stress - that's done in hartree
-    ! Deallocate added by TM, 2005/08/11
-    call start_timer(tmr_std_allocation)
-    deallocate(loc_charge,STAT=stat)
-    if(stat /= 0) call cq_abort &
-         ('loc_pp_derivative_tm: dealloc loc_charge',stat)
-    deallocate(h_potential,STAT=stat)
-    if(stat /= 0) call cq_abort &
-         ('loc_pp_derivative_tm: dealloc h_potential',stat)
-    call stop_timer(tmr_std_allocation)
     call stop_timer(tmr_std_pseudopot)
 
     return
@@ -1592,6 +1698,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2008/03/03 18:51 dave
 !!    Changed float to real
+!!   2016/02/09 08:17 dave
+!!    Changed to use erfc from functions module
 !!  SOURCE
 !!
   subroutine get_energy_shift(e_core)
@@ -1724,7 +1832,7 @@ contains
       use GenComms, only: inode, ionode
       use pseudo_tm_info, only: rad_func, rad_alloc, rad_dealloc
       use global_module, only: iprint_pseudo
-      use ewald_module, only: erfc
+      use functions, only: erfc
 
       implicit none
 
@@ -1994,6 +2102,475 @@ contains
 
   end subroutine get_energy_shift
 !!***
+
+! -----------------------------------------------------------
+! Subroutine make_neutral_atom
+! -----------------------------------------------------------
+
+!!****f* pseudo_tm_module/make_neutral_atom *
+!!
+!!  NAME 
+!!   make_neutral_atom
+!!  USAGE
+!!   
+!!  PURPOSE
+!!   Prepares arrays and matrix elements for neutral atom potential
+!!  INPUTS
+!!   None
+!!   
+!!  USES
+!!   
+!!  AUTHOR
+!!   N. Watanabe (Mizuho) with TM and DRB
+!!  CREATION DATE
+!!   2014
+!!  MODIFICATION HISTORY
+!!   2015/11/09 08:29 dave
+!!    Moved to pseudo_tm_module and included in main trunk
+!!   2016/01/07 08:37 dave
+!!    Changed splint calls into explicit calculations (faster, removed some bug)  
+!!  SOURCE
+!!  
+  subroutine make_neutral_atom
+
+    use datatypes
+    use numbers
+    use dimens, only: volume
+    use species_module, ONLY: n_species
+    use pseudo_tm_info, ONLY: rad_func, pseudo, loc_pot, rad_alloc, rad_dealloc
+    use atomic_density, ONLY: atomic_density_table
+    use spline_module, ONLY: spline
+    use functions, ONLY: j0
+
+    implicit none
+
+    integer      :: npoint
+    integer :: ik
+    integer :: isp
+    integer :: ir, ir1, ir2, j
+    
+    real(double) :: cutoff
+    real(double) :: delta
+    real(double) :: r, r_1, r_2, yp1, ypn, r1, r2, r3, r4
+    real(double) :: rr, a, b, c, d, step
+    real(double) :: chatom_at, chlocal_at, chna_at
+    real(double) :: vlocal_at, vchatom_at
+    real(double) :: integ_inside, integ_outside
+    real(double) :: k, overlap, norm, sum_chna
+    real(double) :: sqrt_two_pi ! sqrt(two/pi)
+
+    logical :: range_flag
+    
+    ! parameters of integration, it can be changed.
+    integer, parameter :: k_length = 2048 ! size of radial function in reciprocal space
+    real(double), parameter :: k_cutoff = 16.0_double
+
+
+    sqrt_two_pi = sqrt(two)/sqrt_pi
+    ! Loop over species
+    do isp=1, n_species
+       if( pseudo(isp)%tm_loc_pot==loc_pot ) then ! ABINIT PP
+          cutoff = atomic_density_table(isp)%cutoff
+          delta  = atomic_density_table(isp)%delta
+       else ! SIESTA PP
+          cutoff = max( atomic_density_table(isp)%cutoff, pseudo(isp)%chlocal%cutoff )
+          delta  = min( atomic_density_table(isp)%delta, pseudo(isp)%chlocal%delta )
+       end if
+       npoint = int(cutoff/delta) + 1
+
+       !-------------------------------------------------------
+       ! calculate chna(r) - atomic charge
+       pseudo(isp)%chna%cutoff = cutoff
+       pseudo(isp)%chna%delta = delta
+       call rad_alloc( pseudo(isp)%chna, npoint )
+
+       norm = zero
+       sum_chna = zero
+       do ir=1, pseudo(isp)%chna%n
+          r = (ir-1)*pseudo(isp)%chna%delta
+          chatom_at = zero
+          if( r<atomic_density_table(isp)%cutoff ) then
+             
+             step = atomic_density_table(isp)%delta
+             j = aint( r / step ) + 1
+             if(j+1<=atomic_density_table(isp)%length) then
+                rr = real(j,double) * step
+                a = ( rr - r ) / step
+                b = one - a
+                c = a * ( a * a - one ) * step * step / six
+                d = b * ( b * b - one ) * step * step / six
+
+                r1=atomic_density_table(isp)%table(j)
+                r2=atomic_density_table(isp)%table(j+1)
+                r3=atomic_density_table(isp)%d2_table(j)
+                r4=atomic_density_table(isp)%d2_table(j+1)
+
+                chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
+             end if
+             !call splint(atomic_density_table(isp)%delta, &
+             !     atomic_density_table(isp)%table, &
+             !     atomic_density_table(isp)%d2_table, &
+             !     atomic_density_table(isp)%length, &
+             !     r, chatom_at, range_flag )
+          end if
+
+          if( pseudo(isp)%tm_loc_pot==loc_pot ) then ! ABINIT PP
+             chlocal_at = minus_one * pseudo(isp)%zval &
+                  * pseudo(isp)%prefac * exp(-pseudo(isp)%alpha*r*r)
+          else ! SIESTA PP
+             chlocal_at = zero
+             if( r<pseudo(isp)%chlocal%cutoff ) then
+                step = pseudo(isp)%chlocal%delta
+                j = aint( r / step ) + 1
+                if(j+1<=pseudo(isp)%chlocal%n) then
+                   rr = real(j,double) * step
+                   a = ( rr - r ) / step
+                   b = one - a
+                   c = a * ( a * a - one ) * step * step / six
+                   d = b * ( b * b - one ) * step * step / six
+
+                   r1=pseudo(isp)%chlocal%f(j)
+                   r2=pseudo(isp)%chlocal%f(j+1)
+                   r3=pseudo(isp)%chlocal%d2(j)
+                   r4=pseudo(isp)%chlocal%d2(j+1)
+
+                   chlocal_at =  a * r1 + b * r2 + c * r3 + d * r4
+                end if
+                !call splint( pseudo(isp)%chlocal%delta, &
+                !     pseudo(isp)%chlocal%f, &
+                !     pseudo(isp)%chlocal%d2, &
+                !     pseudo(isp)%chlocal%n, &
+                !     r, chlocal_at, range_flag )
+             end if
+          end if
+
+          pseudo(isp)%chna%f(ir) = chatom_at + chlocal_at
+          norm = norm + r*r* pseudo(isp)%chna%f(ir)
+       end do
+       sum_chna = norm*four*pi* delta
+       yp1 = zero!(pseudo(isp)%chna%f(2)-pseudo(isp)%chna%f(1)) &
+            !/pseudo(isp)%chna%delta
+       ypn = zero!(pseudo(isp)%chna%f(pseudo(isp)%chna%n)-pseudo(isp)%chna%f(pseudo(isp)%chna%n-1)) &
+            !/pseudo(isp)%chna%delta
+
+       call spline( pseudo(isp)%chna%n, pseudo(isp)%chna%delta, &
+            pseudo(isp)%chna%f, yp1, ypn, pseudo(isp)%chna%d2 )
+
+
+       !-------------------------------------------------------
+       ! calculate Vna(r) - neutral atom potential
+       pseudo(isp)%vna%cutoff = cutoff
+       pseudo(isp)%vna%delta = delta
+       call rad_alloc( pseudo(isp)%vna, npoint )
+       do ir1=1, pseudo(isp)%chna%n
+          r_1 = real(ir1-1,double)*pseudo(isp)%chna%delta
+
+          integ_inside = zero
+          do ir2=1, ir1
+             r_2 = real(ir2-1,double)*pseudo(isp)%chna%delta
+             
+             step = pseudo(isp)%chna%delta
+             j = aint( r_2 / step ) + 1
+             chna_at = zero
+             if(j+1<=pseudo(isp)%chna%n) then
+                rr = real(j,double) * step
+                a = ( rr - r_2 ) / step
+                b = one - a
+                c = a * ( a * a - one ) * step * step / six
+                d = b * ( b * b - one ) * step * step / six
+
+                r1=pseudo(isp)%chna%f(j)
+                r2=pseudo(isp)%chna%f(j+1)
+                r3=pseudo(isp)%chna%d2(j)
+                r4=pseudo(isp)%chna%d2(j+1)
+
+                chna_at =  a * r1 + b * r2 + c * r3 + d * r4
+             end if
+             !call splint( pseudo(isp)%chna%delta, pseudo(isp)%chna%f, &
+             !     pseudo(isp)%chna%d2, pseudo(isp)%chna%n, r2, chna_at, range_flag )
+             if( ir2 == 1 .or. ir2 == ir1 ) then
+                chna_at = chna_at*half
+             end if
+             integ_inside = integ_inside + r_2*r_2 * chna_at
+          end do
+          if( r_1 == zero ) then
+             integ_inside = zero
+          else
+             integ_inside = integ_inside * (four*pi/r_1)*pseudo(isp)%chna%delta
+          end if
+
+          integ_outside = zero
+          do ir2=ir1, pseudo(isp)%chna%n
+             r_2 = real(ir2-1,double)*pseudo(isp)%chna%delta
+             
+             step = pseudo(isp)%chna%delta
+             j = aint( r_2 / step ) + 1
+             chna_at = zero
+             if(j+1<=pseudo(isp)%chna%n) then
+                rr = real(j,double) * step
+                a = ( rr - r_2 ) / step
+                b = one - a
+                c = a * ( a * a - one ) * step * step / six
+                d = b * ( b * b - one ) * step * step / six
+
+                r1=pseudo(isp)%chna%f(j)
+                r2=pseudo(isp)%chna%f(j+1)
+                r3=pseudo(isp)%chna%d2(j)
+                r4=pseudo(isp)%chna%d2(j+1)
+
+                chna_at =  a * r1 + b * r2 + c * r3 + d * r4
+             end if
+             !call splint( pseudo(isp)%chna%delta, pseudo(isp)%chna%f, &
+             !     pseudo(isp)%chna%d2, pseudo(isp)%chna%n, r2, chna_at, range_flag )
+             if( ir2 == ir1 .or. ir2 == pseudo(isp)%chna%n ) then
+                chna_at = chna_at*half
+             end if
+             integ_outside = integ_outside + r_2 * chna_at
+          end do
+          integ_outside = integ_outside * four*pi*pseudo(isp)%chna%delta
+
+          if( pseudo(isp)%tm_loc_pot==loc_pot ) then ! ABINIT PP
+             vlocal_at = zero
+             if( r_1<pseudo(isp)%vlocal%cutoff ) then
+
+                step = pseudo(isp)%vlocal%delta
+                j = aint( r_1 / step ) + 1
+                if(j+1<=pseudo(isp)%vlocal%n) then
+                   rr = real(j,double) * step
+                   a = ( rr - r_1 ) / step
+                   b = one - a
+                   c = a * ( a * a - one ) * step * step / six
+                   d = b * ( b * b - one ) * step * step / six
+
+                   r1=pseudo(isp)%vlocal%f(j)
+                   r2=pseudo(isp)%vlocal%f(j+1)
+                   r3=pseudo(isp)%vlocal%d2(j)
+                   r4=pseudo(isp)%vlocal%d2(j+1)
+
+                   vlocal_at =  a * r1 + b * r2 + c * r3 + d * r4
+                end if
+                !call splint( pseudo(isp)%vlocal%delta, pseudo(isp)%vlocal%f, &
+                !     pseudo(isp)%vlocal%d2, &
+                !     pseudo(isp)%vlocal%n, &
+                !     r1, vlocal_at, range_flag )
+             end if
+             pseudo(isp)%vna%f(ir1) = integ_inside+integ_outside + vlocal_at
+          else ! SIESTA PP
+             pseudo(isp)%vna%f(ir1) = integ_inside+integ_outside
+          end if
+       end do
+
+       yp1 = (pseudo(isp)%vna%f(2)-pseudo(isp)%vna%f(1)) &
+            /pseudo(isp)%vna%delta
+       ypn = (pseudo(isp)%vna%f(pseudo(isp)%vna%n)-pseudo(isp)%vna%f(pseudo(isp)%vna%n-1)) &
+            /pseudo(isp)%vna%delta
+
+       call spline( pseudo(isp)%vna%n, pseudo(isp)%vna%delta, &
+            pseudo(isp)%vna%f, yp1, ypn, pseudo(isp)%vna%d2 )
+
+       !-------------------------------------------------------
+       ! calculate Vatom(r) - atomic potential
+       norm = zero
+       do ir1=1, atomic_density_table(isp)%length
+          r_1 = (ir1-1)*atomic_density_table(isp)%delta
+
+          integ_inside = zero
+          do ir2=1, ir1
+             r_2 = (ir2-1)*atomic_density_table(isp)%delta
+             
+             chatom_at = zero
+             step = atomic_density_table(isp)%delta
+             j = aint( r_2 / step ) + 1
+             if(j+1<=atomic_density_table(isp)%length) then
+                rr = real(j,double) * step
+                a = ( rr - r_2 ) / step
+                b = one - a
+                c = a * ( a * a - one ) * step * step / six
+                d = b * ( b * b - one ) * step * step / six
+
+                r1=atomic_density_table(isp)%table(j)
+                r2=atomic_density_table(isp)%table(j+1)
+                r3=atomic_density_table(isp)%d2_table(j)
+                r4=atomic_density_table(isp)%d2_table(j+1)
+
+                chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
+             end if
+             !write(io_lun,*) 'splint6'
+             !call splint(atomic_density_table(isp)%delta, &
+             !     atomic_density_table(isp)%table, &
+             !     atomic_density_table(isp)%d2_table, &
+             !     atomic_density_table(isp)%length, &
+             !     r2, chatom_at, range_flag )
+
+             if( ir2 == 1 .or. ir2 == ir1 ) then
+                chatom_at = chatom_at*half
+             end if
+             integ_inside = integ_inside + r_2*r_2 * chatom_at
+          end do
+          if( r_1 == zero ) then
+             integ_inside = zero
+          else
+             integ_inside = integ_inside * (four*pi/r_1)*atomic_density_table(isp)%delta
+          end if
+
+          integ_outside = zero
+          do ir2=ir1, atomic_density_table(isp)%length
+             r_2 = (ir2-1)*atomic_density_table(isp)%delta
+
+             chatom_at = zero
+             step = atomic_density_table(isp)%delta
+             j = aint( r_2 / step ) + 1
+             if(j+1<=atomic_density_table(isp)%length) then
+                rr = real(j,double) * step
+                a = ( rr - r_2 ) / step
+                b = one - a
+                c = a * ( a * a - one ) * step * step / six
+                d = b * ( b * b - one ) * step * step / six
+
+                r1=atomic_density_table(isp)%table(j)
+                r2=atomic_density_table(isp)%table(j+1)
+                r3=atomic_density_table(isp)%d2_table(j)
+                r4=atomic_density_table(isp)%d2_table(j+1)
+
+                chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
+             end if
+             !write(io_lun,*) 'splint7'
+             !call splint(atomic_density_table(isp)%delta, &
+             !     atomic_density_table(isp)%table, &
+             !     atomic_density_table(isp)%d2_table, &
+             !     atomic_density_table(isp)%length, &
+             !     r2, chatom_at, range_flag )
+
+             if( ir2 == ir1 .or. ir2 == atomic_density_table(isp)%length ) then
+                chatom_at = chatom_at*half
+             end if
+             integ_outside = integ_outside + r_2 * chatom_at
+          end do
+          integ_outside = integ_outside * four*pi*atomic_density_table(isp)%delta
+
+          vchatom_at = integ_inside+integ_outside
+          norm = norm + (vchatom_at*r_1 - pseudo(isp)%zval)*four*pi*r_1*atomic_density_table(isp)%delta
+       end do
+       pseudo(isp)%eshift = norm
+
+       !-------------------------------------------------------
+       ! calculate chatom(k) - atomic charge
+       atomic_density_table(isp)%k_length = k_length
+       atomic_density_table(isp)%k_delta  = k_cutoff/atomic_density_table(isp)%k_length
+       allocate( atomic_density_table(isp)%k_table(0:atomic_density_table(isp)%k_length) )
+       atomic_density_table(isp)%k_table(:) = zero
+
+       do ir=1, npoint
+          r = (ir-1)*delta
+
+          chatom_at = zero
+          step = atomic_density_table(isp)%delta
+          j = aint( r / step ) + 1
+          if(j+1<=atomic_density_table(isp)%length) then
+             rr = real(j,double) * step
+             a = ( rr - r ) / step
+             b = one - a
+             c = a * ( a * a - one ) * step * step / six
+             d = b * ( b * b - one ) * step * step / six
+
+             r1=atomic_density_table(isp)%table(j)
+             r2=atomic_density_table(isp)%table(j+1)
+             r3=atomic_density_table(isp)%d2_table(j)
+             r4=atomic_density_table(isp)%d2_table(j+1)
+
+             chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
+          end if
+          !write(io_lun,*) 'splint8'
+          !call splint( atomic_density_table(isp)%delta, &
+          !     atomic_density_table(isp)%table, &
+          !     atomic_density_table(isp)%d2_table, &
+          !     atomic_density_table(isp)%length, &
+          !     r, chatom_at,range_flag)
+
+          do ik=0, atomic_density_table(isp)%k_length
+             k = ik*atomic_density_table(isp)%k_delta
+
+             atomic_density_table(isp)%k_table(ik) = &
+                  atomic_density_table(isp)%k_table(ik) &
+                  + sqrt_two_pi*delta*r*r*j0(k*r) * chatom_at
+          end do
+       end do
+       ! Local
+       !-------------------------------------------------------
+       ! calculate FT
+       pseudo(isp)%chlocal%k_length = k_length
+       pseudo(isp)%chlocal%k_delta  = k_cutoff/pseudo(isp)%chlocal%k_length
+       allocate( pseudo(isp)%chlocal%k_table(0:pseudo(isp)%chlocal%k_length) )
+       pseudo(isp)%chlocal%k_table(:) = zero
+
+       do ir=1, npoint
+          r = (ir-1)*delta
+
+          chatom_at = zero
+          step = pseudo(isp)%chlocal%delta
+          j = aint( r / step ) + 1
+          if(j+1<=pseudo(isp)%chlocal%n) then
+             rr = real(j,double) * step
+             a = ( rr - r ) / step
+             b = one - a
+             c = a * ( a * a - one ) * step * step / six
+             d = b * ( b * b - one ) * step * step / six
+
+             r1=pseudo(isp)%chlocal%f(j)
+             r2=pseudo(isp)%chlocal%f(j+1)
+             r3=pseudo(isp)%chlocal%d2(j)
+             r4=pseudo(isp)%chlocal%d2(j+1)
+
+             chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
+          end if
+          do ik=0, pseudo(isp)%chlocal%k_length
+             k = ik*pseudo(isp)%chlocal%k_delta
+
+             pseudo(isp)%chlocal%k_table(ik) = &
+                  pseudo(isp)%chlocal%k_table(ik) &
+                  + sqrt_two_pi*delta*r*r*j0(k*r) * chatom_at
+          end do
+       end do       
+       ! NA
+       !-------------------------------------------------------
+       ! calculate FT
+       pseudo(isp)%chna%k_length = k_length
+       pseudo(isp)%chna%k_delta  = k_cutoff/pseudo(isp)%chna%k_length
+       allocate( pseudo(isp)%chna%k_table(0:pseudo(isp)%chna%k_length) )
+       pseudo(isp)%chna%k_table(:) = zero
+
+       do ir=1, npoint
+          r = (ir-1)*delta
+
+          chatom_at = zero
+          step = pseudo(isp)%chna%delta
+          j = aint( r / step ) + 1
+          if(j+1<=pseudo(isp)%chna%n) then
+             rr = real(j,double) * step
+             a = ( rr - r ) / step
+             b = one - a
+             c = a * ( a * a - one ) * step * step / six
+             d = b * ( b * b - one ) * step * step / six
+
+             r1=pseudo(isp)%chna%f(j)
+             r2=pseudo(isp)%chna%f(j+1)
+             r3=pseudo(isp)%chna%d2(j)
+             r4=pseudo(isp)%chna%d2(j+1)
+
+             chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
+          end if
+          do ik=0, pseudo(isp)%chna%k_length
+             k = ik*pseudo(isp)%chna%k_delta
+
+             pseudo(isp)%chna%k_table(ik) = &
+                  pseudo(isp)%chna%k_table(ik) &
+                  + sqrt_two_pi*delta*r*r*j0(k*r) * chatom_at
+          end do
+       end do
+    end do
+
+  end subroutine make_neutral_atom
+!!***  
 
 ! -----------------------------------------------------------
 ! Subroutine check_block

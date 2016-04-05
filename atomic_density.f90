@@ -34,6 +34,10 @@
 !!    Added timers
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2015/11/09 08:31 dave with TM and NW from Mizuho
+!!    Added new variables to radial_density type for neutral atom potential
+!!   2016/01/07 13:41 dave
+!!    Added calculation of delta for atomic density (makes more sense here than in make_neutral_atom !)
 !!  SOURCE
 !!
 module atomic_density
@@ -52,6 +56,12 @@ module atomic_density
      real(double) :: cutoff
      real(double), pointer, dimension(:) :: table
      real(double), pointer, dimension(:) :: d2_table
+
+     ! for Neutral atom potential
+     real(double) :: delta
+     integer :: k_length
+     real(double) :: k_delta
+     real(double), pointer, dimension(:) :: k_table
   end type radial_density
 
   type(radial_density), allocatable, dimension(:) :: atomic_density_table
@@ -180,6 +190,8 @@ contains
           if(iprint_SC >= 2) write(unit=io_lun,fmt='(/10x," reading atomic density data for species no:",i3)') n_sp
           read(lun,fmt=*) atomic_density_table(n_sp)%length
           read(lun,fmt=*) atomic_density_table(n_sp)%cutoff
+          atomic_density_table(n_sp)%delta = atomic_density_table(n_sp)%cutoff / &
+               (real(atomic_density_table(n_sp)%length,double)-1)
           if(iprint_SC >= 2) then
              write(unit=io_lun,fmt='(/10x," table length:",i5)') atomic_density_table(n_sp)%length
              write(unit=io_lun,fmt='(/10x," radial cut-off distance:",f12.6)') atomic_density_table(n_sp)%cutoff
@@ -331,6 +343,7 @@ contains
        ! Find spacing of table
        density_deltar = atomic_density_table(n_sp)%cutoff/&
             &real(atomic_density_table(n_sp)%length-1,double)
+       atomic_density_table(n_sp)%delta = density_deltar
        ! Write out info and check angular momentum
        if((inode == ionode).and.(iprint_SC >= 2)) &
             write(unit=io_lun,fmt='(/10x," greatest ang. mom. for making density from PAOs:",i3)') &

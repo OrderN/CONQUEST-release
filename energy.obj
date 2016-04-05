@@ -13,7 +13,7 @@ ENERGY_OBJS = H_matrix_module.o \
               blip_gradient.module.o \
               pseudopotential.module.o \
               potential_module.o \
-              ewald.o \
+              ion_electrostatic_module.o \
               minimise.o \
 	      Pulay.o \
 	      S_matrix_module.o \

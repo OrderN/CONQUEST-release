@@ -15,7 +15,7 @@
 !!  USES
 !!   atoms, blip_grid_transform_module, blip,
 !!   calc_matrix_elements_module, common, datatypes, DiagModule,
-!!   dimens, ewald_module, generic_blas, generic_comms, global_module,
+!!   dimens, ion_electrostatic, generic_blas, generic_comms, global_module,
 !!   grid_index, H_matrix_module, logicals, matrix_data,
 !!   maxima_module, multiply_module, mult_module, numbers,
 !!   primary_module, pseudopotential_data, set_bucket_module,
@@ -66,6 +66,8 @@
 !!    Implementing stress
 !!   2015/08/10 08:04 dave
 !!    Adding non-SCF and PCC stress components
+!!   2015/11/26 15:24 dave
+!!    Changing ewald_force and ewald_stress to ion_interaction_force and _stress
 !!  SOURCE
 !!
 module force_module
@@ -86,7 +88,6 @@ module force_module
   ! On-site part of stress tensor as Conquest uses orthorhombic cells (easily extended)
   real(double), dimension(3) :: stress
   real(double), dimension(3) :: SP_stress, KE_stress, NL_stress, PP_stress, GPV_stress, XC_stress, nonSCF_stress, pcc_stress
-  ! Ewald stress in ewald_module
 
   ! Useful parameters for selecting force calculations in NL part
   integer, parameter :: HF = 1
@@ -182,6 +183,14 @@ contains
   !!   2015/09/03 17:10 dave
   !!    Correcting Jacobian terms for non-SCF stress and displaying
   !!    PCC and non-SCF stresses
+  !!   2015/11/24 08:38 dave
+  !!    Adjusted name of hartree_energy to hartree_energy_total_rho for neutral atom implementation
+  !!   2015/11/26 15:24 dave
+  !!    Name change for ewald_force and stress to ion_interaction_force and stress
+  !!   2015/12/09 17:31 dave
+  !!    Rationalised force sum and output (esp. PCC) and added changes for neutral atom
+  !!   2016/01/28 16:43 dave
+  !!    Changed to use ion_electrostatic (instead of ewald_module)
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -192,7 +201,8 @@ contains
     use numbers
     use units
     use timer_module
-    use ewald_module,           only: ewald_force, ewald_stress
+    use ion_electrostatic,      only: ion_interaction_force, ion_interaction_stress, &
+                                      screened_ion_force, screened_ion_stress
     use pseudopotential_data,   only: non_local
     use GenComms,               only: my_barrier, inode, ionode,       &
                                       cq_abort
@@ -208,7 +218,7 @@ contains
                                       IPRINT_TIME_THRES2,              &
                                       area_moveatoms, flag_pcc_global, &
                                       flag_perform_cdft, flag_dft_d2,  &
-                                      nspin, spin_factor, flag_analytic_blip_int
+                                      nspin, spin_factor, flag_analytic_blip_int, flag_neutral_atom
     use density_module,         only: get_electronic_density, density, &
                                       build_Becke_weight_forces
     use functions_on_grid,      only: supportfns, H_on_supportfns
@@ -217,8 +227,8 @@ contains
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl
     use DFT_D2,                 only: disp_force
-    use energy,                  only: hartree_energy, local_ps_energy, &
-                                       delta_E_xc, xc_energy
+    use energy,                  only: hartree_energy_total_rho, local_ps_energy, &
+                                       delta_E_xc, xc_energy, hartree_energy_drho
     use hartree_module, only: Hartree_stress
     use XC_module, ONLY: XC_GGA_stress
     
@@ -315,11 +325,14 @@ contains
     ! integration volume element for grid-based integrals
     ! Different definitions for non-SCF and SCF
     do direction = 1,3
+       if(flag_neutral_atom) then
+          GPV_stress(direction) = (hartree_energy_drho + local_ps_energy)
+       else
+          GPV_stress(direction) = (hartree_energy_total_rho + local_ps_energy - core_correction) ! core contains 1/V term
+       end if
        if(flag_self_consistent) then
-          GPV_stress(direction) = (hartree_energy + local_ps_energy - core_correction) ! core contains 1/V term
           XC_stress(direction) = xc_energy + spin_factor*XC_GGA_stress(direction)
        else ! nonSCF XC found later, along with corrections to Hartree
-          GPV_stress(direction) = (hartree_energy + local_ps_energy - core_correction) ! core contains 1/V term
           XC_stress(direction) = delta_E_xc !xc_energy + spin_factor*XC_GGA_stress(direction)
        end if
     end do    
@@ -441,125 +454,68 @@ contains
              en_units(energy_units), d_units(dist_units)
        write (io_lun, fmt='(18x,"    Atom   X              Y              Z")')
     end if
-
-    ! with P.C.C.
-    if (flag_pcc_global) then
-       do i = 1, ni_in_cell
-          do j = 1, 3
-             ! note that ewald_force is already calculated by ewald()
-             ! when ewald energy is being calculated
-             if (flag_self_consistent) then
-                tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
-                                  p_force(j,i) +    KE_force(j,i) + &
-                              ewald_force(j,i) +   pcc_force(j,i)
-             else
-                tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
-                                  p_force(j,i) +    KE_force(j,i) + &
-                              ewald_force(j,i) + nonSC_force(j,i) + &
-                                pcc_force(j,i)
-             end if
-             if (flag_perform_cdft) &
-                  tot_force(j,i) = tot_force(j,i) + cdft_force(j,i)
-             if (flag_dft_d2) &
-                  tot_force(j,i) = tot_force(j,i) + disp_force(j,i)
-             if (.not. flag_move_atom(j,i)) then
-                tot_force(j,i) = zero
-             end if
-             if (abs (tot_force(j,i)) > max_force) then
-                max_force = abs (tot_force(j,i))
-                max_atom  = i
-                max_compt = j
-             end if
-          end do ! j
-          if (inode == ionode) then
-             if(iprint_MD > 2) then
-                write(io_lun, 101) i
-                write(io_lun, 102) (for_conv *   HF_force(j,i),  j = 1, 3)
-                write(io_lun, 112) (for_conv * HF_NL_force(j,i), j = 1, 3)
-                write(io_lun, 103) (for_conv *     p_force(j,i), j = 1, 3)
-                write(io_lun, 104) (for_conv *    KE_force(j,i), j = 1, 3)
-                write(io_lun, 106) (for_conv * ewald_force(j,i), j = 1, 3)
-                write(io_lun, 108) (for_conv *   pcc_force(j,i), j = 1, 3)
-                if (flag_dft_d2) &
-                     write (io_lun, 109) (for_conv * disp_force(j,i), j = 1, 3)
-                if (flag_perform_cdft) &
-                     write (io_lun, fmt='("Force cDFT : ",3f15.10)') &
-                           (for_conv*cdft_force(j,i),j=1,3)
-                if (flag_self_consistent) then
-                   write (io_lun, 105) (for_conv * tot_force(j,i),   j = 1, 3)
-                else
-                   write (io_lun, 107) (for_conv * nonSC_force(j,i), j = 1, 3)
-                   write (io_lun, 105) (for_conv * tot_force(j,i),   j = 1, 3)
-                end if
-             else if (write_forces) then
-                if (flag_self_consistent) then
-                   write (io_lun,fmt='(20x,i6,3f15.10)') &
-                         i, (for_conv * tot_force(j,i), j = 1, 3)
-                else
-                   write (io_lun, fmt='(20x,i6,3f15.10)') &
-                         i, (for_conv * tot_force(j,i), j = 1, 3)
-                end if
-             end if ! (iprint_MD > 2)
-          end if ! (inode == ionode)
-       end do ! i
-
-    else  ! without P.C.C.
-
-       do i = 1, ni_in_cell
-          do j = 1, 3
-             if (flag_self_consistent) then
-                tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
-                                  p_force(j,i) +    KE_force(j,i) + &
-                              ewald_force(j,i)
-             else
-                tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
-                                  p_force(j,i) +    KE_force(j,i) + &
-                              ewald_force(j,i) + nonSC_force(j,i)
-             end if
-             if (flag_perform_cdft) &
-                  tot_force(j,i) = tot_force(j,i) + cdft_force(j,i)
-             if (flag_dft_d2) &
-                  tot_force(j,i) = tot_force(j,i) + disp_force(j,i)
-             if (.not. flag_move_atom(j,i)) then
-                tot_force(j,i) = zero
-             end if
-             if (abs(tot_force(j,i)) > max_force) then
-                max_force = abs(tot_force(j,i))
-                max_atom = i
-                max_compt = j
-             end if
-          end do ! j
-          if (inode == ionode) then
-             if (iprint_MD > 2) then
-                write (io_lun, 101) i
-                write (io_lun, 102) (for_conv *    HF_force(j,i), j = 1, 3)
-                write (io_lun, 112) (for_conv * HF_NL_force(j,i), j = 1, 3)
-                write (io_lun, 103) (for_conv *     p_force(j,i), j = 1, 3)
-                write (io_lun, 104) (for_conv *    KE_force(j,i), j = 1, 3)
-                write (io_lun, 106) (for_conv * ewald_force(j,i), j = 1, 3)
-                if (flag_dft_d2) write (io_lun, 109) &
-                     (for_conv * disp_force(j,i), j = 1, 3)
-                if (flag_perform_cdft) &
-                     write (io_lun,fmt='("Force cDFT : ",3f15.10)') &
-                           (for_conv * cdft_force(j,i), j = 1, 3)
-                if (flag_self_consistent) then
-                   write (io_lun, 105) (for_conv *   tot_force(j,i), j = 1, 3)
-                else
-                   write (io_lun, 107) (for_conv * nonSC_force(j,i), j = 1, 3)
-                   write (io_lun, 105) (for_conv *   tot_force(j,i), j = 1, 3)
-                end if
-             else if (write_forces) then
-                if (flag_self_consistent) then
-                   write (io_lun, fmt='(20x,i6,3f15.10)') &
-                         i, (for_conv*tot_force(j,i), j = 1, 3)
-                else
-                   write (io_lun,fmt='(20x,i6,3f15.10)') &
-                         i, (for_conv*tot_force(j,i), j = 1, 3)
-                end if
-             end if
+    ! Calculate forces and write out
+    do i = 1, ni_in_cell
+       do j = 1, 3
+          ! Force components that are always needed
+          tot_force(j,i) = HF_force(j,i) + HF_NL_force(j,i) + &
+               p_force(j,i) +    KE_force(j,i)
+          ! Non-self-consistent
+          if (.not.flag_self_consistent) &
+               tot_force(j,i) = tot_force(j,i) + nonSC_force(j,i)
+          ! Neutral atom or conventional pseudopotential
+          if(flag_neutral_atom) then
+             tot_force(j,i) = tot_force(j,i) + screened_ion_force(j,i)
+          else
+             tot_force(j,i) = tot_force(j,i) + ion_interaction_force(j,i)
           end if
-       end do ! i
-    end if ! flag_pcc_global
+          ! PCC
+          if (flag_pcc_global) &
+               tot_force(j,i) = tot_force(j,i) + pcc_force(j,i)
+          ! CDFT
+          if (flag_perform_cdft) &
+               tot_force(j,i) = tot_force(j,i) + cdft_force(j,i)
+          ! DFT-D2
+          if (flag_dft_d2) &
+               tot_force(j,i) = tot_force(j,i) + disp_force(j,i)
+          ! Zero force on fixed atoms
+          if (.not. flag_move_atom(j,i)) then
+             tot_force(j,i) = zero
+          end if
+          if (abs (tot_force(j,i)) > max_force) then
+             max_force = abs (tot_force(j,i))
+             max_atom  = i
+             max_compt = j
+          end if
+       end do ! j
+       if (inode == ionode) then
+          if(iprint_MD > 2) then
+             write(io_lun, 101) i
+             write(io_lun, 102) (for_conv *   HF_force(j,i),  j = 1, 3)
+             write(io_lun, 112) (for_conv * HF_NL_force(j,i), j = 1, 3)
+             write(io_lun, 103) (for_conv *     p_force(j,i), j = 1, 3)
+             write(io_lun, 104) (for_conv *    KE_force(j,i), j = 1, 3)
+             if(flag_neutral_atom) then
+                write(io_lun, 106) (for_conv * screened_ion_force(j,i), j = 1, 3)
+             else
+                write(io_lun, 106) (for_conv * ion_interaction_force(j,i), j = 1, 3)
+             end if
+             if (flag_pcc_global) write(io_lun, 108) (for_conv *   pcc_force(j,i), j = 1, 3)
+             if (flag_dft_d2) write (io_lun, 109) (for_conv * disp_force(j,i), j = 1, 3)
+             if (flag_perform_cdft) write (io_lun, fmt='("Force cDFT : ",3f15.10)') &
+                  (for_conv*cdft_force(j,i),j=1,3)
+             if (flag_self_consistent) then
+                write (io_lun, 105) (for_conv * tot_force(j,i),   j = 1, 3)
+             else
+                write (io_lun, 107) (for_conv * nonSC_force(j,i), j = 1, 3)
+                write (io_lun, 105) (for_conv * tot_force(j,i),   j = 1, 3)
+             end if
+          else if (write_forces) then
+             write (io_lun,fmt='(20x,i6,3f15.10)') &
+                  i, (for_conv * tot_force(j,i), j = 1, 3)
+          end if ! (iprint_MD > 2)
+       end if ! (inode == ionode)
+    end do ! i
     if (inode == ionode) &
          write (io_lun,                                      &
                 fmt='(4x,"Maximum force : ",f15.8,"(",a2,"/",&
@@ -568,14 +524,25 @@ contains
                d_units(dist_units), max_atom, max_compt
     ! We will add PCC and nonSCF stresses even if the flags are not set, as they are
     ! zeroed at the start
-    do direction = 1, 3
-       stress(direction) = KE_stress(direction) + SP_stress(direction) + &
-                           PP_stress(direction) + NL_stress(direction) + &
-                           GPV_stress(direction) + XC_stress(direction) + &
-                           Ewald_stress(direction) + Hartree_stress(direction) + &
-                           loc_HF_stress(direction) + loc_G_stress(direction) + &
-                           pcc_stress(direction) + nonSCF_stress(direction)
-    end do
+    if(flag_neutral_atom) then
+       do direction = 1, 3
+          stress(direction) = KE_stress(direction) + SP_stress(direction) + &
+               PP_stress(direction) + NL_stress(direction) + &
+               GPV_stress(direction) + XC_stress(direction) + &
+               screened_ion_stress(direction) + Hartree_stress(direction) + &
+               loc_HF_stress(direction) +  &
+               pcc_stress(direction) + nonSCF_stress(direction)
+       end do
+    else
+       do direction = 1, 3
+          stress(direction) = KE_stress(direction) + SP_stress(direction) + &
+               PP_stress(direction) + NL_stress(direction) + &
+               GPV_stress(direction) + XC_stress(direction) + &
+               Ion_Interaction_stress(direction) + Hartree_stress(direction) + &
+               loc_HF_stress(direction) + loc_G_stress(direction) + &
+               pcc_stress(direction) + nonSCF_stress(direction)
+       end do
+    end if
     if (inode == ionode) then       
        write (io_lun,fmt='(/4x,"                  ",3a15)') "X","Y","Z"
        write(io_lun,fmt='(4x,"Stress contributions:")')
@@ -584,11 +551,16 @@ contains
           write (io_lun,fmt='(4x,"S-Pulay stress:   ",3f15.8,a3)') SP_stress(1:3), en_units(energy_units)
           write (io_lun,fmt='(4x,"Phi-Pulay stress: ",3f15.8,a3)') PP_stress(1:3), en_units(energy_units)
           write (io_lun,fmt='(4x,"Local stress:     ",3f15.8,a3)') loc_HF_stress(1:3), en_units(energy_units)
-          write (io_lun,fmt='(4x,"Local G stress:   ",3f15.8,a3)') loc_G_stress(1:3), en_units(energy_units)
+          if(.NOT.flag_neutral_atom) &
+               write (io_lun,fmt='(4x,"Local G stress:   ",3f15.8,a3)') loc_G_stress(1:3), en_units(energy_units)
           write (io_lun,fmt='(4x,"Non-local stress: ",3f15.8,a3)') NL_stress(1:3), en_units(energy_units)
           write (io_lun,fmt='(4x,"Jacobian stress:  ",3f15.8,a3)') GPV_stress(1:3), en_units(energy_units)
           write (io_lun,fmt='(4x,"XC stress:        ",3f15.8,a3)') XC_stress(1:3), en_units(energy_units)
-          write (io_lun,fmt='(4x,"Ewald stress:     ",3f15.8,a3)') Ewald_stress(1:3), en_units(energy_units)
+          if(flag_neutral_atom) then
+             write (io_lun,fmt='(4x,"Ion-Ion stress:   ",3f15.8,a3)') screened_ion_stress(1:3), en_units(energy_units)
+          else
+             write (io_lun,fmt='(4x,"Ion-Ion stress:   ",3f15.8,a3)') ion_interaction_stress(1:3), en_units(energy_units)
+          end if
           write (io_lun,fmt='(4x,"Hartree stress:   ",3f15.8,a3)') Hartree_stress(1:3), en_units(energy_units)
           if (flag_pcc_global) then
              write (io_lun,fmt='(4x,"PCC stress:       ",3f15.8,a3)') pcc_stress(1:3), en_units(energy_units)
@@ -630,15 +602,15 @@ contains
     return
 
 101 format('Force on atom ',i9)
-102 format('Force H-F  : ',3f15.10)
-112 format('Force H-Fnl: ',3f15.10)
-103 format('Force pulay: ',3f15.10)
-104 format('Force KE   : ',3f15.10)
-106 format('Force Ewald: ',3f15.10)
-107 format('Force nonSC: ',3f15.10)
-108 format('Force PCC  : ',3f15.10)
-105 format('Force Total: ',3f15.10)
-109 format('Force disp : ',3f15.10)
+102 format('Force H-F    : ',3f15.10)
+112 format('Force H-Fnl  : ',3f15.10)
+103 format('Force pulay  : ',3f15.10)
+104 format('Force KE     : ',3f15.10)
+106 format('Force Ion-Ion: ',3f15.10)
+107 format('Force nonSC  : ',3f15.10)
+108 format('Force PCC    : ',3f15.10)
+105 format('Force Total  : ',3f15.10)
+109 format('Force disp   : ',3f15.10)
 
   end subroutine force
   !!***
@@ -1098,11 +1070,16 @@ contains
           else
              call cq_abort("pulay_force: basis set undefined ", flag_basis_set)
           end if
+          t1 = mtime()
+          if (inode == ionode .and. iprint_MD > 3)&
+               write (io_lun, fmt='(10x,"Phi Pulay grad ",i4," time: ",f12.5)')&
+                     direction, t1 - t0
+          t0 = t1
           ! Now scale the gradient by r
           call get_r_on_support(direction,tmp_fn,tmp_fn2)
           t1 = mtime()
           if (inode == ionode .and. iprint_MD > 3)&
-               write (io_lun, fmt='(10x,"Phi Pulay grad ",i4," time: ",f12.5)')&
+               write (io_lun, fmt='(10x,"Phi Pulay r_on_supp ",i4," time: ",f12.5)')&
                      direction, t1 - t0
           t0 = t1
           ! Make matrix elements
