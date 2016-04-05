@@ -105,6 +105,8 @@ contains
   !!    Removed redundant parameter number_of_bands
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
+  !!   2016/03/15 13:54 dave
+  !!    Removed restart_file from call to read_and_write and initial_phis (redundant)
   !!  SOURCE
   !!
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
@@ -139,8 +141,6 @@ contains
     logical           :: start, start_L
     logical           :: read_phi
 
-    character(len=40) :: restart_file
-
     call init_timing_system(inode)
 
     call init_reg_mem
@@ -151,7 +151,7 @@ contains
 !****lat>$
 
     ! Read input
-    call read_and_write(start, start_L, inode, ionode, restart_file, &
+    call read_and_write(start, start_L, inode, ionode, &
                         vary_mu, mu, find_chdens, read_phi)
 
     ! IMPORTANT!!!!! No timers allowed before this point
@@ -183,7 +183,7 @@ contains
     
     call my_barrier()
 
-    call initial_phis(mu, restart_file, read_phi, vary_mu, start,std_level_loc+1)
+    call initial_phis(read_phi, start,std_level_loc+1)
 
     call initial_H(start, start_L, find_chdens, fixed_potential, &
                    vary_mu, total_energy,std_level_loc+1)
@@ -682,9 +682,11 @@ contains
  !!    Added call for representing NLPFs with blips
  !!   2015/06/08 lat
  !!    Added experimental backtrace
+ !!   2016/03/15 13:55 dave
+ !!    Removed restart_file (redundant) and mu
  !!  SOURCE
  !!
- subroutine initial_phis(mu, restart_file, read_phi, vary_mu, start, level)
+ subroutine initial_phis(read_phi, start, level)
 
     use datatypes
     use blip,                        only: init_blip_flag, make_pre,   &
@@ -727,15 +729,12 @@ contains
     implicit none
 
     ! Passed variables
-    real(double)      :: mu
-    character(len=40) :: restart_file
-    logical           :: read_phi, vary_mu, start
+    logical           :: read_phi, start
     integer, optional :: level
 
     ! Local variables
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level
-    real(double)      :: mu_copy
     real(double)      :: factor
     integer           :: isf, np, ni, iprim, n_blip
     integer           :: n_run, spec, this_nsf
@@ -784,11 +783,6 @@ contains
        ! Length scale Preconditioning.
        call make_pre(inode, ionode)
        ! Restart files
-       if (.not.vary_mu) mu_copy = mu
-       !     if (.not.start ) call reload(inode, ionode, &
-       !          mu, expected_reduction, n_run, restart_file)
-       !     if (start.and.(.not.start_blips)) &
-       !          call load_blip(inode, ionode, restart_file)
        ! Tweak DRB 2007/03/34 Remove need for start
        !if (start.and.(.not.start_blips)) then
        if (read_option) then
@@ -796,7 +790,6 @@ contains
                write(io_lun,fmt='(10x,"Loading blips")')
           call grab_blip_coeffs(coefficient_array,coeff_array_size, inode)
        end if
-       if(.not.vary_mu) mu = mu_copy
        ! Normalisation
        call blip_to_support_new(inode-1, supportfns)
        if((inode == ionode).AND.(iprint_init > 1)) then

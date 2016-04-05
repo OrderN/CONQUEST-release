@@ -73,6 +73,9 @@
 !!    sufficiently long string
 !!   2015/06/25 17:18 dave
 !!    Changed all file name lengths to 50 characters
+!!   2016/03/15 14:02 dave
+!!    Added tests for existence of files to all grab_ routines and abort if
+!!    they don't exist
 module io_module
 
   use global_module,          only: io_lun
@@ -3040,7 +3043,7 @@ second:   do
     integer, optional :: spin
 
     ! Local variables
-    integer           :: lun, block, n_point, n_i, n
+    integer           :: lun, block, n_point, n_i, n, ios
     character(len=50) :: filename
 
     ! Build a filename based on node number
@@ -3058,7 +3061,8 @@ second:   do
     end if
     ! Open file
     call io_assign(lun)
-    open(unit=lun, file=filename)
+    open(unit=lun, file=filename,status='old',iostat=ios)
+    if(ios /= 0) call cq_abort('grab_charge: failed to open input file '//filename)
     ! Grab charge density
     ! do block = 1, domain%groups_on_node
     !   n_point = (block - 1) * n_pts_in_block
@@ -3198,7 +3202,7 @@ second:   do
     character(len=*) :: stub
 
     ! Local variables
-    integer :: lun, element, nf1, nf2,len
+    integer :: lun, element, nf1, nf2,len, ios
     real(double) :: val
     character(len=50) :: filename
 
@@ -3206,7 +3210,8 @@ second:   do
     call get_file_name(stub//'matrix',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
-    open(unit=lun,file=filename)
+    open(unit=lun,file=filename,status='old',iostat=ios)
+    if(ios /= 0) call cq_abort('grab_matrix: failed to open input file '//filename)
     len = return_matrix_len(matA)
     ! Grab matrix
     call start_timer(tmr_std_matrices)
@@ -3319,14 +3324,15 @@ second:   do
     character(len=*) :: stub
 
     ! Local variables
-    integer :: lun, element, nf1, nf2
+    integer :: lun, element, nf1, nf2, ios
     character(len=50) :: filename
 
     ! Build a filename based on node number
     call get_file_name(stub//'grid',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
-    open(unit=lun,file=filename)
+    open(unit=lun,file=filename,status='old',iostat=ios)
+    if(ios /= 0) call cq_abort('grab_blips: failed to open input file '//filename)
     ! Grab blips
     do element=1,gridfunctions(support)%size
        read(unit=lun,fmt='(f30.15)') gridfunctions(support)%griddata(element)
@@ -3435,14 +3441,15 @@ second:   do
     character(len=*) :: stub
 
     ! Local variables
-    integer :: lun, block, n_point, n_i, n
+    integer :: lun, block, n_point, n_i, n, ios
     character(len=50) :: filename
 
     ! Build a filename based on node number
     call get_file_name('locps'//stub,numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
-    open(unit=lun,file=filename)
+    open(unit=lun,file=filename,status='old',iostat=ios)
+    if(ios /= 0) call cq_abort('grab_locps: failed to open input file '//filename)
     ! Grab locps
     do block=1, size
        read(unit=lun,fmt='(f30.15)') locps(block)
@@ -3544,14 +3551,15 @@ second:   do
     real(double), dimension(size) :: projs
 
     ! Local variables
-    integer :: lun, block, n_point, n_i, n
+    integer :: lun, block, n_point, n_i, n, ios
     character(len=15) :: filename
 
     ! Build a filename based on node number
     call get_file_name('projs',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
-    open(unit=lun,file=filename)
+    open(unit=lun,file=filename,status='old',iostat=ios)
+    if(ios /= 0) call cq_abort('grab_projs: failed to open input file '//filename)
     ! Grab projs
     do block=1, size
        read(unit=lun,fmt='(f30.15)') projs(block)
@@ -3652,14 +3660,15 @@ second:   do
     real(double) :: data_blip(size)
 
     ! Local variables
-    integer :: lun, i,j,k, nf1, nf2
+    integer :: lun, i,j,k, nf1, nf2, ios
     character(len=18) :: filename
 
     ! Build a filename based on node number
     call get_file_name('blip_coeffs',numprocs,inode,filename)
     ! Open file
     call io_assign(lun)
-    open(unit=lun,file=filename)
+    open(unit=lun,file=filename,status='old',iostat=ios)
+    if(ios /= 0) call cq_abort('grab_blip_coeffs: failed to open input file '//filename)
     ! Grab blip_coeffs
     do k=1,size
        read(unit=lun,fmt='(f30.15)') data_blip(k)

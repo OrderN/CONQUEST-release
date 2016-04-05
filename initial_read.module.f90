@@ -138,7 +138,7 @@ contains
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
-                            restart_file, vary_mu, mu, find_chdens, &
+                            vary_mu, mu, find_chdens, &
                             read_phi)
 
     use datatypes
@@ -188,7 +188,6 @@ contains
     ! Passed variables
     logical           :: vary_mu, start, start_L, read_phi
     logical           :: find_chdens
-    character(len=40) :: restart_file
     integer           :: inode, ionode
     real(double)      :: mu
 
@@ -211,7 +210,7 @@ contains
 !****lat>$
 
     ! read input data: parameters for run
-    call read_input(start, start_L, titles, restart_file, vary_mu, mu,&
+    call read_input(start, start_L, titles, vary_mu, mu,&
                     find_chdens, read_phi,HNL_fac)
 
     ! Initialise group data for partitions and read in partitions and atoms
@@ -480,7 +479,7 @@ contains
   !!   Fix rigid shift 10/05/2002 dave
   !!  SOURCE
   !!
-  subroutine read_input(start, start_L, titles, restart_file, vary_mu,&
+  subroutine read_input(start, start_L, titles, vary_mu,&
                         mu, find_chdens, read_phi,HNL_fac)
 
     use datatypes
@@ -508,6 +507,7 @@ contains
                              functional_gga_pbe96,                     &
                              functional_gga_pbe96_rev98,               &
                              functional_gga_pbe96_r99,                 &
+                             functional_gga_pbe96_wc,                  &
                              functional_hyb_pbe0,                      &
                              functional_hartree_fock,                  &
                              flag_reset_dens_on_atom_move,             &
@@ -619,7 +619,6 @@ contains
     logical           :: vary_mu, find_chdens
     logical           :: start, start_L, read_phi
     real(double)      :: mu, HNL_fac
-    character(len=40) :: restart_file
     character(len=80) :: titles
 
     ! Local variables
@@ -865,8 +864,6 @@ contains
        read_option            = fdf_boolean('Basis.LoadCoeffs',           .false.)
        flag_onsite_blip_ana   = fdf_boolean('Basis.OnsiteBlipsAnalytic',  .true. )
        flag_analytic_blip_int = fdf_boolean('Basis.AnalyticBlipIntegrals',.false.)
-       if(read_option.AND.flag_basis_set==blips) &
-            restart_file    = fdf_string(40,'Basis.LoadBlipFile',' ')
        !
        !
        find_chdens            = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
@@ -1431,6 +1428,8 @@ contains
           functional_description = 'GGA revPBE98'   !   in Zhang & Yang, PRL 80:4, 890 (1998)
        case (functional_gga_pbe96_r99)              ! This is PBE with the functional form redefinition
           functional_description = 'GGA RPBE99'     !   in Hammer et al., PRB 59:11, 7413-7421 (1999)
+       case (functional_gga_pbe96_wc)               ! Wu-Cohen nonempirical GGA functional
+          functional_description = 'GGA WC'         !   in Wu and Cohen, PRB 73. 235116, (2006)
        case (functional_hyb_pbe0)                   ! This is PB0E with the functional form redefinition
           functional_description = 'hyb PBE0'        
        case default
