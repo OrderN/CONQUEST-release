@@ -18,6 +18,8 @@
 !!  MODIFICATION HISTORY
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2016/04/06 dave
+!!    Changed Info type from allocatable to pointer (fix gcc 4.4.7 compile issue)
 !!  SOURCE
 !!
 module UpdateMember_module
@@ -744,7 +746,8 @@ contains
   !!  CREATION DATE
   !!    2013/07/02
   !!  MODIFICATION HISTORY
-  !!
+  !!    2016/04/06 dave
+  !!     Changed nx_in_cover allocatable to pointer (gcc 4.4.7 issue)
   !!  SOURCE
   !!
   subroutine allocate_CSmember(set,groups,nx_in_cover,ny_in_cover,nz_in_cover, &
@@ -766,7 +769,7 @@ contains
     ! passed variables
     integer :: nmodx,nmody,nmodz
     ! x,y,z numbering of CS groups (CC)
-    integer, allocatable :: nx_in_cover(:),ny_in_cover(:),nz_in_cover(:)
+    integer, pointer :: nx_in_cover(:),ny_in_cover(:),nz_in_cover(:)
     type(cover_set)          :: set
     type(primary_set),target,optional :: prim
     type(group_set),target   :: groups
@@ -969,6 +972,8 @@ contains
   !!  CREATION DATE
   !!   2013/07/02
   !!  MODIFICATION HISTORY
+  !!    2016/04/06 dave
+  !!     Changed nx_in_cover allocatable to pointer (gcc 4.4.7 issue)
   !!
   !!  SOURCE
   !!
@@ -991,7 +996,7 @@ contains
 
     ! passed variables
     integer :: nmodx,nmody,nmodz
-    integer,allocatable :: nx_in_cover(:),ny_in_cover(:),nz_in_cover(:)
+    integer, pointer :: nx_in_cover(:),ny_in_cover(:),nz_in_cover(:)
     real(double) :: dcellx,dcelly,dcellz
     type(cover_set)          :: set
     type(primary_set),target,optional :: prim
@@ -1095,6 +1100,8 @@ contains
   !!   - Removed iteration
   !!   2015/11/24 08:29 dave
   !!    Removed old ewald reference
+  !!   2016/04/06 dave
+  !!     Changed nx_in_cover allocatable to pointer (gcc 4.4.7 issue)
   !!  SOURCE
   !!
   subroutine updateMembers(fixed_potential,velocity)
@@ -1122,7 +1129,7 @@ contains
 
     ! local variables
     integer :: nmodx,nmody,nmodz
-    integer, allocatable :: nx_in_cover(:),ny_in_cover(:),nz_in_cover(:)
+    integer, pointer :: nx_in_cover(:),ny_in_cover(:),nz_in_cover(:)
     real(double) :: dcellx,dcelly,dcellz
 
     ! DB

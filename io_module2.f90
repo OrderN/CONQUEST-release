@@ -13,6 +13,8 @@
 !!  MODIFCATION
 !!   2013/12/02 M.Arita
 !!   - Added derived data types for XL-BOMD
+!!   2016/04/06 dave
+!!    Changed Info type from allocatable to pointer (fix gcc 4.4.7 compile issue)
 !!
 module io_module2
 
@@ -44,7 +46,7 @@ module io_module2
     real(double), pointer :: data_Lold(:,:)
   end type InfoMatrixFile
 
-  type(InfoMatrixFile), allocatable :: InfoL(:),InfoT(:),InfoK(:),    &
+  type(InfoMatrixFile), pointer :: InfoL(:),InfoT(:),InfoK(:),    &
                                        InfoX(:),InfoXvel(:),InfoS(:), & ! for XL-BOMD
                                        InfoX1(:),InfoX2(:),InfoX3(:), & ! for dissipation
                                        InfoX4(:),InfoX5(:),InfoX6(:), &
@@ -337,7 +339,8 @@ contains
   !!  CREATION DATE
   !!   2013/08/21
   !!  MODIFICATION
-  !!
+  !!   2016/04/06 dave
+  !!    Changed Info type from allocatable to pointer (fix gcc 4.4.7 compile issue)
   !!  SOURCE
   !!
   subroutine grab_matrix2(stub,inode,nfile,Info)
@@ -353,7 +356,7 @@ contains
     integer :: max_node  ! No. of nodes in the PREVIOUS job.
     integer :: inode, matA
     character(len=*) :: stub
-    type(InfoMatrixFile),allocatable :: Info(:)
+    type(InfoMatrixFile), pointer :: Info(:)
 
     ! local variables
     integer :: lun,stat,padzeros,stat_alloc,size,size2,sizeL,i,j,jbeta_alpha,len,ifile,ibeg
@@ -786,6 +789,8 @@ contains
   !!  CREATION DATE
   !!   2013/08/21
   !!  MODIFICATION
+  !!   2016/04/06 dave
+  !!    Changed Info type from allocatable to pointer (fix gcc 4.4.7 compile issue)
   !!
   !!  SOURCE
   !!
@@ -797,12 +802,12 @@ contains
 
     ! passed variables
     integer :: nfile
-    type(InfoMatrixFile),allocatable :: Info(:)
+    type(InfoMatrixFile), pointer :: Info(:)
 
     ! local variables
     integer :: ifile,stat_alloc
 
-    if (allocated(Info)) then
+    if (associated(Info)) then
       do ifile = 1, nfile
         deallocate (Info(ifile)%alpha_i, STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error deallocating alpha_i:')

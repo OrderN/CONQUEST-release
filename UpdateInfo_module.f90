@@ -78,6 +78,8 @@ contains
   !!   - Bug fix for serial simulations
   !!   - Bug fix for changing the number of processors at the 
   !!     sequential job
+  !!   2016/04/06 dave
+  !!    Changed Info to pointer from allocatable (gcc 4.4.7 issue)
   !!  SOURCE
   !!
   !subroutine Matrix_CommRebuild(Info,range,matA,nfile)
@@ -104,7 +106,7 @@ contains
     ! passed variables
     integer :: range,matA,trans
     integer,optional :: symm
-    type(InfoMatrixFile),allocatable :: Info(:)
+    type(InfoMatrixFile), pointer :: Info(:)
 
     ! local variables
     integer :: nfile,isize1,isize2
@@ -591,6 +593,8 @@ contains
   !!  MODIFICATION
   !!   2014/02/03 michi
   !!   - Bug fix for changing the number of processors at the sequential job
+  !!   2016/04/06 dave
+  !!    Changed Info to pointer from allocatable (gcc 4.4.7 issue)
   !!  SOURCE
   !!
   subroutine alloc_send_array(nfile,LmatrixSend,isend_array,isend2_array,send_array,Info)
@@ -613,7 +617,7 @@ contains
     real(double), allocatable :: send_array(:)
 
     type(Lmatrix_comm_send) :: LmatrixSend
-    type(InfoMatrixFile), allocatable :: Info(:)
+    type(InfoMatrixFile), pointer :: Info(:)
 
     ! local variables
     ! -- process 1. -- !
@@ -1107,6 +1111,8 @@ contains
   !!  CREATION DATE
   !!   2013/08/22
   !!  MODIFICATION
+  !!   2016/04/06 dave
+  !!    Changed Info to pointer from allocatable (gcc 4.4.7 issue)
   !!
   !!  SOURCE
   !!
@@ -1127,7 +1133,7 @@ contains
     ! passed variables
     integer, allocatable, intent(in) :: isend2_array(:)
     type(Lmatrix_comm_send) :: LmatrixSend
-    type(InfoMatrixFile),allocatable :: Info(:)
+    type(InfoMatrixFile), pointer :: Info(:)
     !integer, allocatable, intent(in) :: nreq2(:)
     !integer, intent(in) :: nreq2(:)
 
@@ -1211,6 +1217,8 @@ contains
   !!  CREATION DATE
   !!   2013/08/22
   !!  MODIFICATION
+  !!   2016/04/06 dave
+  !!    Changed Info to pointer from allocatable (gcc 4.4.7 issue)
   !!
   !!  SOURCE
   !!
@@ -1232,7 +1240,7 @@ contains
     ! passed variables
     real(double), allocatable, intent(in) :: send_array(:)
     type(Lmatrix_comm_send) :: LmatrixSend
-    type(InfoMatrixFile),allocatable :: Info(:)
+    type(InfoMatrixFile), pointer :: Info(:)
 
     ! local variables
     integer :: i,iatom2,nnd,inode_recv,natom_send,isize,ia,ifile,ibeg
@@ -1886,6 +1894,8 @@ contains
   !!  CREATION DATE
   !!   2013/08/22
   !!  MODIFICATION
+  !!   2016/04/06 dave
+  !!    Changed Info to pointer from allocatable (gcc 4.4.7 issue)
   !!
   !!  SOURCE
   !!
@@ -1919,7 +1929,7 @@ contains
     ! passed variables
     integer :: nfile,range,matA
     logical, allocatable :: flag_remote_iprim(:)
-    type(InfoMatrixFile), allocatable :: Info(:)
+    type(InfoMatrixFile), pointer :: Info(:)
 
     ! local variables
     integer :: ifile,ibeg1,ibeg2,ibeg_Lij,n1,n2,nLaddr,nLaddr_old
