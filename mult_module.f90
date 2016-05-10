@@ -77,6 +77,8 @@
 !!   - Added parameters matX, matSX, S_X_SX for exx
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2016/05/09 10:56 dave
+!!    Added helpful output for temp matrix overrun
 !!  SOURCE
 !!
 module mult_module
@@ -2663,6 +2665,24 @@ contains
   !   mat_p(A)%matrix(f1,f2,pos) = val
   ! end subroutine store_onsite_matrix_value
 
+  !!****f* mult_module/allocate_temp_matrix *
+  !!
+  !!  NAME
+  !!   allocate_temp_matrix
+  !!  USAGE
+  !!  PURPOSE
+  !!   Allocates space for temporary matrix and zeroes
+  !!  INPUTS
+  !!  USES
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   26/04/00
+  !!  MODIFICATION HISTORY
+  !!   2016/05/09 10:58 dave
+  !!    Added output to help user increase number of temporary matrices
+  !!  SOURCE
+  !!
   function allocate_temp_matrix(range, trans_range, f1_type, f2_type)
 
     use matrix_data,   only: mat
@@ -2682,8 +2702,11 @@ contains
     ! Local variables
     integer :: stat, i
 
-    if (current_matrix == max_matrices) &
-         call cq_abort("Overrun number of matrices ", max_matrices)
+    if (current_matrix == max_matrices) then
+       if(myid==0) write(io_lun,fmt='(2x,"You have exceeded the maximum number of temporary matrices in Conquest.")') 
+       if(myid==0) write(io_lun,fmt='(2x,"Consider increasing the limit on temporary matrices with General.MaxTempMatrices")') 
+       call cq_abort("Overrun number of matrices ", max_matrices)
+    end if
     current_matrix = current_matrix + 1
     ! Identify the matrix
     if (range > mx_matrices) &
@@ -2716,9 +2739,26 @@ contains
 
     return
   end function allocate_temp_matrix
-!!*****
+!!***
 
 
+  !!****f* mult_module/free_temp_matrix *
+  !!
+  !!  NAME
+  !!   free_temp_matrix
+  !!  USAGE
+  !!  PURPOSE
+  !!   Frees space for temporary matrix and zeroes
+  !!  INPUTS
+  !!  USES
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   26/04/00
+  !!  MODIFICATION HISTORY
+  !!    
+  !!  SOURCE
+  !!
   subroutine free_temp_matrix(A)
 
     use GenComms,      only: cq_abort, myid
@@ -2752,7 +2792,7 @@ contains
 
     return
   end subroutine free_temp_matrix
-!!*****
+!!***
 
 
 end module mult_module
