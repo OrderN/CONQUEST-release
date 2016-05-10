@@ -2064,6 +2064,8 @@ contains
   !!    Added experimental backtrace
   !!   2016/05/09 dave
   !!    Added code to specify lines in reciprocal space
+  !!   2016/05/10 dave
+  !!    Bug fix: hadn't scaled fractional k-point coordinates to reciprocal
   !!  SOURCE
   !!
   subroutine readDiagInfo
@@ -2236,6 +2238,20 @@ contains
                 call cq_abort("Must specify a block Diag.KpointLines to have lines of kpoints !")
              end if
              nkp = nkp*nkp_lines
+             ! Write out fractional k-points
+             if(iprint_init>0) then
+                write(io_lun,7) nkp
+                do i=1,nkp
+                   write(io_lun,fmt='(8x,i5,3f15.6,f12.3)')&
+                        i,kk(1,i),kk(2,i),kk(3,i),wtk(i)
+                end do
+             end if
+             ! Scale from fractional to reciprocal
+             do i = 1, nkp
+                kk(1,i) = two * pi * kk(1,i) / rcellx
+                kk(2,i) = two * pi * kk(2,i) / rcelly
+                kk(3,i) = two * pi * kk(3,i) / rcellz
+             end do
           else
              ! Read k-point number and allocate
              nkp = fdf_integer('Diag.NumKpts',1)
