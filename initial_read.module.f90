@@ -178,7 +178,7 @@ contains
     use pseudopotential_common, only: core_radius, pseudo_type, OLDPS, &
                                       SIESTA, ABINIT
     use pseudo_tm_module,       only: init_pseudo_tm
-    use input_module,           only: fdf_string
+    use input_module,           only: fdf_string, fdf_out, io_close
     use force_module,           only: tot_force
     use DiagModule,             only: diagon
     use constraint_module,      only: flag_RigidBonds,constraints
@@ -230,6 +230,8 @@ contains
     call find_grid
     if(diagon) call readDiagInfo
     if (flag_RigidBonds) call read_input_aux(constraints)
+    ! Now that input from Conquest_input is done, we will close the file
+    call io_close(fdf_out)
     if(inode==ionode.AND.iprint_init>1) &
          write(io_lun,fmt='(10x,"Partitioning method: ",i2)') part_method
     call read_mult(inode-1,parts,part_coord_file)
@@ -2060,6 +2062,8 @@ contains
   !!    related parameters
   !!   2015/06/08 lat
   !!    Added experimental backtrace
+  !!   2016/05/09 dave
+  !!    Added code to specify lines in reciprocal space
   !!  SOURCE
   !!
   subroutine readDiagInfo
@@ -2086,12 +2090,12 @@ contains
 
     ! Local variables
     type(cq_timer) :: backtrace_timer
-    integer        :: stat, iunit, i, j, k, matrix_size
-    real(double)   :: a, sum
+    integer        :: stat, iunit, i, j, k, matrix_size, nk_st, nkp_lines
+    real(double)   :: a, sum, dkx, dky, dkz
     integer        :: proc_per_group
 
     ! k-point mesh type
-    logical        :: mp_mesh, done
+    logical        :: mp_mesh, done, flag_lines_kpoints
     integer,      dimension(1:3)              :: mp
     real(double), dimension(1:3)              :: mp_shift
     real(double), allocatable, dimension(:,:) :: kk_tmp
@@ -2194,36 +2198,76 @@ contains
        ! Read k-point mesh type
        mp_mesh = fdf_boolean('Diag.MPMesh',.false.)
        if(.NOT.mp_mesh) then
-          ! Read k-point number and allocate
-          nkp = fdf_integer('Diag.NumKpts',1)
-          if(iprint_init>1) write(io_lun,fmt='(8x,"Number of Kpoints: ",i4)') nkp
-          if(nkp<1) call cq_abort("Need to specify how many kpoints !",nkp)
-          allocate(kk(3,nkp),wtk(nkp),STAT=stat)
-          if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp)
-          call reg_alloc_mem(area_general,4*nkp,type_dbl)
-          sum = zero
-          ! Read k-points
-          if(fdf_block('Diag.Kpoints'))then
-             if(1+block_end-block_start<nkp) &
-                  call cq_abort("Kpoint error: ",1+block_end-block_start,nkp)
-             do i=1,nkp
-                read (unit=input_array(block_start+i-1),fmt=*) &
-                     kk(1,i),kk(2,i),kk(3,i),wtk(i)
-                ! Assume fractional kpoints and orthorhombic cell for now
-                kk(1,i) = two*pi*kk(1,i)/rcellx
-                kk(2,i) = two*pi*kk(2,i)/rcelly
-                kk(3,i) = two*pi*kk(3,i)/rcellz
-                sum = sum + wtk(i)
-             end do
-             call fdf_endblock
-             wtk = wtk/sum
-          else ! Force gamma point dependence
-             write(io_lun,4)
-             nkp = 1
-             kk(1,1) = zero
-             kk(2,1) = zero
-             kk(3,1) = zero
-             wtk(1) = one
+          ! Do we want lines in reciprocal space ?
+          flag_lines_kpoints = fdf_boolean('Diag.KspaceLines',.false.)
+          if(flag_lines_kpoints) then
+             nkp_lines = fdf_integer('Diag.NumKptLines',1)
+             if(iprint_init>1) write(io_lun,fmt='(8x,"Number of Kpoint lines: ",i4)') nkp_lines
+             if(nkp_lines<1) call cq_abort("Need to specify how many kpoint lines !",nkp_lines)
+             nkp = fdf_integer('Diag.NumKpts',2)
+             if(iprint_init>1) write(io_lun,fmt='(8x,"Number of Kpoints in a line: ",i4)') nkp
+             allocate(kk(3,nkp*nkp_lines),wtk(nkp*nkp_lines),STAT=stat)
+             if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp*nkp_lines)
+             call reg_alloc_mem(area_general,4*nkp*nkp_lines,type_dbl)
+             kk = zero
+             wtk = one/real(nkp*nkp_lines,double)
+             sum = zero
+             nk_st = 1
+             if(fdf_block('Diag.KpointLines'))then
+                if(1+block_end-block_start<2*nkp_lines) &
+                     call cq_abort("Kpoint line error: ",1+block_end-block_start,nkp_lines)
+                do i=1,2*nkp_lines,2
+                   read (unit=input_array(block_start+i-1),fmt=*) &
+                        kk(1,nk_st),kk(2,nk_st),kk(3,nk_st)
+                   read (unit=input_array(block_start+i),fmt=*) &
+                        kk(1,nk_st+nkp-1),kk(2,nk_st+nkp-1),kk(3,nk_st+nkp-1)
+                   dkx = (kk(1,nk_st+nkp-1) - kk(1,nk_st))/real(nkp-1,double)
+                   dky = (kk(2,nk_st+nkp-1) - kk(2,nk_st))/real(nkp-1,double)
+                   dkz = (kk(3,nk_st+nkp-1) - kk(3,nk_st))/real(nkp-1,double)
+                   if(iprint_init>1) write(io_lun,fmt='(2x,"K-point spacing along line : ",i3,3f7.3)') i,dkx,dky,dkz
+                   do j=1,nkp-2
+                      kk(1,nk_st+j) = kk(1,nk_st+j-1)+dkx
+                      kk(2,nk_st+j) = kk(2,nk_st+j-1)+dky
+                      kk(3,nk_st+j) = kk(3,nk_st+j-1)+dkz
+                   end do
+                   nk_st = nk_st + nkp
+                end do
+             else
+                call cq_abort("Must specify a block Diag.KpointLines to have lines of kpoints !")
+             end if
+             nkp = nkp*nkp_lines
+          else
+             ! Read k-point number and allocate
+             nkp = fdf_integer('Diag.NumKpts',1)
+             if(iprint_init>1) write(io_lun,fmt='(8x,"Number of Kpoints: ",i4)') nkp
+             if(nkp<1) call cq_abort("Need to specify how many kpoints !",nkp)
+             allocate(kk(3,nkp),wtk(nkp),STAT=stat)
+             if(stat/=0) call cq_abort('FindEvals: couldnt allocate kpoints',nkp)
+             call reg_alloc_mem(area_general,4*nkp,type_dbl)
+             sum = zero
+             ! Read k-points
+             if(fdf_block('Diag.Kpoints'))then
+                if(1+block_end-block_start<nkp) &
+                     call cq_abort("Kpoint error: ",1+block_end-block_start,nkp)
+                do i=1,nkp
+                   read (unit=input_array(block_start+i-1),fmt=*) &
+                        kk(1,i),kk(2,i),kk(3,i),wtk(i)
+                   ! Assume fractional kpoints and orthorhombic cell for now
+                   kk(1,i) = two*pi*kk(1,i)/rcellx
+                   kk(2,i) = two*pi*kk(2,i)/rcelly
+                   kk(3,i) = two*pi*kk(3,i)/rcellz
+                   sum = sum + wtk(i)
+                end do
+                call fdf_endblock
+                wtk = wtk/sum
+             else ! Force gamma point dependence
+                write(io_lun,4)
+                nkp = 1
+                kk(1,1) = zero
+                kk(2,1) = zero
+                kk(3,1) = zero
+                wtk(1) = one
+             end if
           end if
        else
           ! Read Monkhorst-Pack mesh coefficients

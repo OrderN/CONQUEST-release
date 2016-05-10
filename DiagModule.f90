@@ -545,14 +545,14 @@ contains
        do i = 1, nkpoints_max ! Loop over the kpoints within each process
           ! group Form the Hamiltonian for this k-point and send it to
           ! appropriate processors
-          if (iprint_DM >= 3 .and. (inode == ionode)) &
+          if (iprint_DM > 3 .and. (inode == ionode)) &
                write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
           call my_barrier()
           call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
           ! Form the overlap for this k-point and send it to appropriate processors
           call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
           ! Now, if this processor is involved, do the diagonalisation
-          if (iprint_DM >= 3 .and. inode == ionode) &
+          if (iprint_DM > 3 .and. inode == ionode) &
                write (io_lun, *) myid, 'Proc row, cols, me: ', &
                proc_rows, proc_cols, me, i, nkpoints_max
           if (i <= N_kpoints_in_pg(pgid)) then
@@ -678,12 +678,12 @@ contains
           i = 1 ! Just use first k-point - local states should not show dispersion
           ! Form the Hamiltonian for this k-point and send it to
           ! appropriate processors
-          if (iprint_DM >= 3 .and. inode == ionode) &
+          if (iprint_DM > 3 .and. inode == ionode) &
                write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
           call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
           ! Form the overlap for this k-point and send it to appropriate
           ! processors
-          if (iprint_DM >= 3 .and. inode == ionode) &
+          if (iprint_DM > 3 .and. inode == ionode) &
                write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for S'
           call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
 
@@ -750,12 +750,12 @@ contains
           i = 1 ! Just use first k-point - local states should not show dispersion
           ! Form the Hamiltonian for this k-point and send it to
           ! appropriate processors
-          if (iprint_DM >= 3 .and. inode == ionode) &
+          if (iprint_DM > 3 .and. inode == ionode) &
                write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
           call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
           ! Form the overlap for this k-point and send it to appropriate
           ! processors
-          if (iprint_DM >= 3 .and. inode == ionode) &
+          if (iprint_DM > 3 .and. inode == ionode) &
                write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for S'
           call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
 
@@ -827,7 +827,7 @@ contains
        call findFermi(electrons, w, matrix_size, nkp, Efermi, occ)
     end if ! DeltaSCF localised excitation
     ! Now write out eigenvalues and occupancies
-    if (iprint_DM >= 3 .AND. myid == 0) then
+    if (iprint_DM == 2 .AND. myid == 0) then
        bandE = zero
        do i = 1, nkp
           write (io_lun, 7) i, kk(1,i), kk(2,i), kk(3,i)
@@ -865,6 +865,30 @@ contains
              write(io_lun, 4) en_conv * two * bandE(1), en_units(energy_units)
           end if
        end do ! do i = 1, nkp
+    else if (iprint_DM >= 3 .AND. myid == 0) then
+       bandE = zero
+       do i = 1, nkp
+          write (io_lun, 7) i, kk(1,i), kk(2,i), kk(3,i)
+          do spin = 1, nspin
+             if (nspin == 2) &
+                  write (io_lun, '(10x,"For spin = ",i1)') spin
+             do j = 1, matrix_size
+                write (io_lun, fmt='(10x,i5,f12.5,f6.3)') j, w(j,i,spin), occ(j,i,spin)
+                bandE(spin) = bandE(spin) + w(j,i,spin) * occ(j,i,spin)
+             end do ! j=matrix_size
+             write (io_lun, &
+                  fmt='("Sum of eigenvalues for spin = ", &
+                  &i1, ": ", f18.11," ", a2)') &
+                  spin, en_conv * bandE(spin), en_units(energy_units)
+          end do ! spin
+          if (nspin == 2) then
+             write (io_lun, &
+                  fmt='("Total sum of eigenvalues: ", f18.11, " ",a2)') &
+                  en_conv * (bandE(1) + bandE(2)), en_units(energy_units)
+          else
+             write(io_lun, 4) en_conv * two * bandE(1), en_units(energy_units)
+          end if
+       end do ! do i = 1, nkp
     end if ! if(iprint_DM>=1.AND.myid==0)
 
     time0 = mtime()
@@ -878,14 +902,14 @@ contains
        do i = 1, nkpoints_max
           ! Form the Hamiltonian for this k-point and send it to
           ! appropriate processors
-          if (iprint_DM >= 3 .and. inode == ionode) &
+          if (iprint_DM > 3 .and. inode == ionode) &
                write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
           call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
           ! Form the overlap for this k-point and send it to appropriate
           ! processors, this needs to be redone since previous call to
           ! pzhegvx have changed both SCHmat and SCSmat (and the spin
           ! down conterparts)
-          if (iprint_DM >= 3 .and. inode == ionode) &
+          if (iprint_DM > 3 .and. inode == ionode) &
                write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for S'
           call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
 
@@ -1246,7 +1270,7 @@ contains
     ! Sizes of local "chunk", used to initialise submatrix info for ScaLAPACK
     row_size = proc_start(myid+1)%rows * block_size_r
     col_size = proc_start(myid+1)%cols * block_size_c
-    if (iprint_DM >= 3 .AND. myid == 0) &
+    if (iprint_DM > 3 .AND. myid == 0) &
          write (io_lun, 12) myid, row_size, col_size
 
     ! Allocate space for the distributed Scalapack matrices
@@ -1308,10 +1332,10 @@ contains
 
     ! check if we get the correct map
     call blacs_gridinfo(context, numrows, numcols, merow, mecol)
-    if (iprint_DM >= 3 .AND. myid == 0) &
+    if (iprint_DM > 3 .AND. myid == 0) &
          write (io_lun, fmt="(10x, 'process_grid info: ', i5, i5)") &
          numrows, numcols
-    if (iprint_DM >= 3 .AND. myid == 0) &
+    if (iprint_DM > 3 .AND. myid == 0) &
          write (io_lun, 1) myid, me, merow, mecol
     call my_barrier
     ! Register the description of the distribution of H
@@ -1557,7 +1581,7 @@ contains
     integer :: row_size,col_size,count
     integer :: row, rowblock,proc
 
-    if(iprint_DM>=2.AND.myid==0) write(io_lun,fmt='(10x,"Entering PrepareRecv")')
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,"Entering PrepareRecv")')
     allocate(Distrib%num_rows(numprocs),Distrib%start_row(numprocs),Distrib%send_rows(numprocs),&
          Distrib%firstrow(numprocs),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating Distrib arrays: ",numprocs,stat)
@@ -1710,7 +1734,7 @@ contains
     integer :: FSCpart, i_acc_prim_nsf, prim_nsf_so_far
     integer :: ng
 
-    if(iprint_DM>=2.AND.myid==0) write(io_lun,fmt='(10x,"Entering PrepareSend")')
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,"Entering PrepareSend")')
     ! Initialise and allocate memory
     allocate(sendlist(maxnsf,bundle%n_prim,numprocs),STAT=stat)
     if(stat/=0) call cq_abort("DiagModule: Failed to alloc sendlist",stat)
@@ -1724,7 +1748,7 @@ contains
     firstcol = 0
     sendlist = 0
     ! Part (i)
-    if(iprint_DM>=2.AND.myid==0) write(io_lun,*) 'Part i ',myid
+    if(iprint_DM>3.AND.myid==0) write(io_lun,*) 'Part i ',myid
     call my_barrier()
     ! Work out which processors I send to
     i_acc_prim_nsf = 0   ! CQ format row index accumulator
@@ -1759,7 +1783,7 @@ contains
     end do ! End do part = 1,groups_on_node
     ! Part (ii)
     ! Work out how many rows to send to each remote processor
-    if(iprint_DM>=2.AND.myid==0) write(io_lun,*) 'Part ii ',myid
+    if(iprint_DM>3.AND.myid==0) write(io_lun,*) 'Part ii ',myid
     call my_barrier()
     Distrib%send_rows = 0
     do proc=1,numprocs ! Loop over processors
@@ -1790,7 +1814,7 @@ contains
     allocate(ele_list(numprocs,maxr,maxc),STAT=stat)
     if(stat/=0) call cq_abort("DiagModule: Failed to alloc ele_list ",stat)
     ele_list = 0
-    if(iprint_DM>=2.AND.myid==0) write(io_lun,*) 'Part iia ',myid
+    if(iprint_DM>3.AND.myid==0) write(io_lun,*) 'Part iia ',myid
     call my_barrier()
     ! Added to count elements: how many CQ elements fall onto this one SC one ?
     i_acc_prim_nsf = 0
@@ -1846,7 +1870,7 @@ contains
        if(myid==0) write(io_lun,10) myid,maxr,maxc,maxrow,maxcol
        call my_barrier()
     end if
-    if(iprint_DM>=2.AND.myid==0) write(io_lun,*) 'Part iib ',myid
+    if(iprint_DM>3.AND.myid==0) write(io_lun,*) 'Part iib ',myid
     call my_barrier()
     allocate(Distrib%images(numprocs,maxr,maxc),STAT=stat)
     if(stat/=0) call cq_abort("DiagModule: Failed to alloc images",stat,numprocs*maxr*maxc)
@@ -1878,7 +1902,7 @@ contains
     end if
     ! Part (iii)
     ! Build the loc index - for each non-zero element in data_H, record where it goes in SC matrix
-    if(iprint_DM>=2.AND.myid==0) write(io_lun,*) 'Part iii ',myid
+    if(iprint_DM>3.AND.myid==0) write(io_lun,*) 'Part iii ',myid
     call my_barrier()
     i_acc_prim_nsf = 0
     do part = 1,bundle%groups_on_node ! Loop over primary set partitions
@@ -2732,7 +2756,7 @@ contains
 
           end if ! if (thisElec(spin) < electrons(spin))
 
-          if (iprint_DM >= 3 .and. inode == ionode) &
+          if (iprint_DM > 3 .and. inode == ionode) &
                write (io_lun, 12) myid, lowEf(spin), highEf(spin)
 
        case (1) ! Methfessel-Paxton smearing
@@ -2794,7 +2818,7 @@ contains
                   write (io_lun, 5) myid, highEf(spin), highElec(spin)
           end do
 
-          if (iprint_DM >= 3 .and. inode == ionode) &
+          if (iprint_DM > 3 .and. inode == ionode) &
                write (io_lun, 12) myid, lowEf(spin), highEf(spin)
 
        case default
@@ -2977,7 +3001,7 @@ contains
              ibrkt = ibrkt + 1
           end do
        end if
-       if (iprint_DM >= 3 .AND. inode == ionode) &
+       if (iprint_DM > 3 .AND. inode == ionode) &
             write (io_lun, 5) myid, lowEf(1), highEf(1)
        ! search method to use in the case of Methmessel Paxton smearing
 
@@ -3559,7 +3583,7 @@ contains
     real(double) :: occ_correction
 
     call start_timer(tmr_std_matrices)
-    if(iprint_DM>=2.AND.myid==0) write(io_lun,fmt='(10x,"Entering &
+    if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,"Entering &
          &buildK ",i4)') matA
 
     if(PRESENT(matBand)) then
@@ -3584,7 +3608,7 @@ contains
     send_prim = 0
     num_send = 0
     norb_send = 0
-    if(iprint_DM>=3.AND.myid==0) write(io_lun,*) 'buildK: Stage one'
+    if(iprint_DM>3.AND.myid==0) write(io_lun,*) 'buildK: Stage one'
     ! Step one - work out which processors we need to exchange data with
     do part = 1,bundle%groups_on_node ! Loop over primary set partitions
        if(iprint_DM>=5.AND.myid==0) write(io_lun,1) myid,part
@@ -3632,7 +3656,7 @@ contains
        end if ! End if nm_nodgroup > 0
     end do ! End do part=1,groups_on_node
     ! Find max value of current_loc_atoms and interactions
-    if(iprint_DM>=3.AND.myid==0) write(io_lun,*) 'buildK: Stage two'
+    if(iprint_DM>3.AND.myid==0) write(io_lun,*) 'buildK: Stage two'
     maxloc = 0
     maxint = 0
     maxsend = 0
@@ -3753,7 +3777,7 @@ contains
     else
        len_occ = len
     end if
-    if(iprint_DM>=3.AND.myid==0) write(io_lun,*) 'buildK: Stage three len:',len, matA
+    if(iprint_DM>3.AND.myid==0) write(io_lun,*) 'buildK: Stage three len:',len, matA
     ! Step three - loop over processors, send and recv data and build K
     allocate(send_fsc(bundle%mx_iprim),recv_to_FSC(bundle%mx_iprim),mapchunk(bundle%mx_iprim),STAT=stat)
     if(stat/=0) call cq_abort('buildK: Error allocating send_fsc, recv_to_FSC and mapchunk',stat)

@@ -763,7 +763,7 @@ contains
     ! Local variables
     integer :: i, n, batom, patom, part, proc, CC, brow, SCblock, supfn
 
-    if(iprint_DM>2.AND.myid==0) write(io_lun,*) myid,' Starting Find SC Row Atoms'
+    if(iprint_DM>3.AND.myid==0) write(io_lun,*) myid,' Starting Find SC Row Atoms'
     ! -----------------------------------------------------------------
     ! Loop over matrix using processor/partition/sequence order
     i = 1 ! Indexes matrix row
@@ -872,7 +872,7 @@ contains
     integer :: rb, cb, SCblockx,SCblocky,blockrow, blockcol
     integer :: part, seq, supfn
 
-    if(iprint_DM>2.AND.myid==0) write(io_lun,*) myid,' Starting Find Ref Row Atoms'
+    if(iprint_DM>3.AND.myid==0) write(io_lun,*) myid,' Starting Find Ref Row Atoms'
     blockcol = 1
     cb = 1
     if(iprint_DM>3.AND.myid==0) write(io_lun,*) '  blocks, size: ',blocks_r, block_size_r
@@ -960,7 +960,7 @@ contains
     ! Local variables
     integer :: rb, cb, blockcol,refc,part,seq,supfn, i,j,np_in_cell
 
-    if(iprint_DM>2.AND.myid==0) write(io_lun,*) myid,' Starting Find SC Col Atoms'
+    if(iprint_DM>3.AND.myid==0) write(io_lun,*) myid,' Starting Find SC Col Atoms'
     ! Loop over SC blocks
     do cb = 1,blocks_c
        refc = SC_to_refy(1,cb) ! find equivalent number in reference format
