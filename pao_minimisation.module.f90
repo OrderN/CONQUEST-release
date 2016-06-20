@@ -574,6 +574,40 @@ contains
 
   end subroutine vary_pao
   !!***
+  
+  !!****f* pao_minimisation/filtration
+  !!
+  !! NAME
+  !! filtration
+  !! 
+  !! PUPOSE
+  !! To generate a minimal basis for solving the self-consistent Kohn Sham equations
+  !! using the method introduced by Rayson see Phys. Rev. B 89, 205104
+  !!
+  !!
+
+ subroutine filtration()
+ !! i) Need to define or input a cutoff radius r which will be centred on  each individual atom
+ !! ii) Start a loop through each individual atom i (i=1..N) N-total number of atoms
+ !!      a) The distance of the nearest neighbours and next nearest neighbours to atom i need to 
+ !!         be evaluated  to see if they lie within the radius r
+ !!      b) If the neighbours are within the radius then store the correspoding atom number to a
+ !!         new  set F 
+ !! iii) For the atom numbers in F take the corresponding rows and colums in the hamiltonian H and
+ !!      overlap matrix S to define new sub-matrices H' and S'
+ !!  iv) For these sub-matrices solve the general eigenvalue problem using diagonalisation to find
+ !!        eigenvectors(c) and eigenvalues(l) H'c=S'cl
+ !!   v) Define a filtration function f, for now a Fermi-Dirac function in the high temperature limit
+ !!  vi) Use this filtration function to construct a minimal basis by calculation f(c)
+ !!      f(c)=cf(l)c'S'
+ !!      where c' is the transpose of c
+ !!  vii) Define an NxN matrix of zeroes k
+ !!  viii) Using the set F take the corresponding rows and columns of the matrix k and assign to it
+ !!        a value of f(c)
+ !!  ix)   We know have the filtered matrix k
+
+ end subroutine filtration
+
 
 
   !!****f* pao_minimisation/pulay_min_pao *
