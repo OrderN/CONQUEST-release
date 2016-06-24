@@ -437,6 +437,8 @@ contains
 !!    Removed calculation of pseudo_functions for analytic blips
 !!   2016/01/07 11:58 dave
 !!    Added switch for loop over neighbours for neutral atom, tidied
+!!   2016/06/23 15:53 dave
+!!    Bug fix: added a new loop for NLPF with blips, neutral atom but NOT analytic blip integrals
 !!  SOURCE
 !!
   subroutine set_tm_pseudo
@@ -728,89 +730,134 @@ contains
                       enddo ! ip=1, npoint
                    end if ! tm_loc_pot==loc_pot
                 endif! (npoint > 0) then
-
-                ! -----------------------------------------------------------------------------------
-                ! NB This loop is VERY rarely used: only when non-analytic blip operations are chosen
-                ! DRB 2016/01/07
-                ! -----------------------------------------------------------------------------------
-                !Projector Functions  ------------------------------------------
-                ! pseudofunction(n_pts_in_block,ncf,naba_atm,iblock) 
-                !  ncf is fixed for all atoms in this version, 
-                !  though it is not necessary.  
-                !  Now, I keep the strategy of the old version  for ncf, 
-                !  but we can pack pseudofunction with respect to naba_atm 
-                !  by using species-dependent core radius.
-                !  (needs to be checked!  01/07/2002 TM)
-
-                if(flag_basis_set==blips.AND.npoint > 0.AND.(.NOT.flag_analytic_blip_int)) then
-                   do nl= 1, pseudo(the_species)%n_pjnl
-
-                      the_l=pseudo(the_species)%pjnl_l(nl)
-                      offset_position = no_of_ib_ia + &
-                           offset_mcomp(nl, the_species) * n_pts_in_block
-                      step = pseudo(the_species)%pjnl(nl)%delta
-
-                      do ip=1,npoint
-                         ipoint=ip_store(ip)
-                         position= offset_position + ipoint
-                         if(position > gridfunctions(pseudofns)%size) call cq_abort &
-                              ('set_ps: position error ', position, gridfunctions(pseudofns)%size)
-
-                         r_from_i = r_store(ip)
-                         x = x_store(ip)
-                         y = y_store(ip)
-                         z = z_store(ip)
-                         j = aint( r_from_i / step ) + 1
-                         !As we use the maximum of cutoff for check_block
-                         ! overrun should occur in some cases.
-                         !if(j > N_TAB-1) then
-                         !   call cq_abort('set_ps: overrun problem2',j)
-                         !endif
-                         ! check j (j+1 =< N_TAB)
-                         ! Use the spline interpolation tables 
-                         !  cutoff for this function might be smaller
-                         !  than cut off used in check_block
-                         if(j+1 <= pseudo(the_species)%pjnl(nl)%n) then
-                            rr = real(j,double) * step
-                            a = ( rr - r_from_i ) / step
-                            b = one - a
-                            c = a * ( a * a - one ) * step * step / six
-                            d = b * ( b * b - one ) * step * step / six
-                            
-                            r1=pseudo(the_species)%pjnl(nl)%f(j)
-                            r2=pseudo(the_species)%pjnl(nl)%f(j+1)
-                            r3=pseudo(the_species)%pjnl(nl)%d2(j)
-                            r4=pseudo(the_species)%pjnl(nl)%d2(j+1)
-                            
-                            nl_potential =  a * r1 + b * r2 + c * r3 + d * r4
-
-                            !pjnl = chi_nl(r)/r**l ----
-                            if(the_l > 0) then
-                               nl_potential= nl_potential *  r_from_i**(real(the_l,double))
-                            endif
-                            ! for r_from_i < RD_ERR
-                            !   x, y, z are set to be 0 in check_block
-
-                            ! Removed flag_angular_new switch DRB 2016/01/07
-                            if (the_l>0) then
-                               i = 0
-                               do m = -the_l, the_l
-                                  call pp_elem(nl_potential,the_l,m,x,y,z,r_from_i,val)
-                                  gridfunctions(pseudofns)%griddata(position+i*n_pts_in_block) = val
-                                  i = i+1
-                               enddo
-                            else
-                               call pp_elem(nl_potential,the_l,0,x,y,z,r_from_i,val)
-                               gridfunctions(pseudofns)%griddata(position) = val
-                            endif
-                         endif !(j+1 < pseudo(the_species)%pjnl(nl)%n) then
-                      enddo ! ip=1,npoint
-                   enddo ! nl= 1, pseudo(the_species)%n_pjnl
-                endif! (npoint > 0) then
-                no_of_ib_ia = no_of_ib_ia + nlpf_species(the_species)*n_pts_in_block
              enddo ! naba_atoms
           enddo ! naba_part
        endif !(naba_atm(pseudo_neighbour)%no_of_part(iblock) > 0) !naba atoms?
+       ! -----------------------------------------------------------------------------------
+       ! NB This loop is VERY rarely used: only when non-analytic blip operations are chosen
+       ! DRB 2016/01/07
+       ! -----------------------------------------------------------------------------------
+       ! Bug fix starts here: loop over naba_atm(dens) for NA gave array over-run on the
+       ! grid for projector functions DRB 2016/06/23
+       ! -----------------------------------------------------------------------------------
+       !Projector Functions  ------------------------------------------
+       ! I removed some fourteen year old comments (no longer relevant) DRB 2016/06/23
+       if(flag_basis_set==blips.AND.(.NOT.flag_analytic_blip_int)) then
+          if(naba_atm(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
+             iatom=0
+             do ipart=1,naba_atm(nlpf)%no_of_part(iblock)
+                jpart=naba_atm(nlpf)%list_part(ipart,iblock)
+                if(jpart > DCS_parts%mx_gcover) then 
+                   call cq_abort('set_ps: JPART ERROR ',ipart,jpart)
+                endif
+                ind_part=DCS_parts%lab_cell(jpart)
+                do ia=1,naba_atm(nlpf)%no_atom_on_part(ipart,iblock)
+                   iatom=iatom+1
+                   ii = naba_atm(nlpf)%list_atom(iatom,iblock)
+                   icover= DCS_parts%icover_ibeg(jpart)+ii-1
+                   ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
+
+                   if(parts%icell_beg(ind_part) + ii-1 > ni_in_cell) then
+                      call cq_abort('set_ps: globID ERROR ', &
+                           ii,parts%icell_beg(ind_part))
+                   endif
+                   if(icover > DCS_parts%mx_mcover) then
+                      call cq_abort('set_ps: icover ERROR ', &
+                           icover,DCS_parts%mx_mcover)
+                   endif
+
+                   !-- I (TM) am not sure where the next line should be.
+                   !   (no_of_ib_ia = no_of_ib_ia +1)
+                   !  This determines how to store 
+                   !   pseudofunctions(ipoints,ncf,naba_atm,iblock).
+                   !  Now, I assume we should consider all naba_atm whose 
+                   ! distance from the block is within the maximum of core_radius.
+                   ! This is needed to keep the consistency with <set_bucket>.
+                   ! However, we can change this strategy by changing naba_atm(pseudo_neighbour).
+                   !no_of_ib_ia = no_of_ib_ia +1
+
+                   xatom=DCS_parts%xcover(icover)
+                   yatom=DCS_parts%ycover(icover)
+                   zatom=DCS_parts%zcover(icover)
+
+                   !the_species=species(ig_atom)
+                   the_species = species_glob(ig_atom)
+
+                   rcut = core_radius(the_species) + very_small   !!   2007/07/30 drb
+
+                   call check_block &
+                        (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
+                        npoint,ip_store,r_store,x_store,y_store,z_store) !out
+                   if(npoint>0) then
+                      do nl= 1, pseudo(the_species)%n_pjnl
+
+                         the_l=pseudo(the_species)%pjnl_l(nl)
+                         offset_position = no_of_ib_ia + &
+                              offset_mcomp(nl, the_species) * n_pts_in_block
+                         step = pseudo(the_species)%pjnl(nl)%delta
+
+                         do ip=1,npoint
+                            ipoint=ip_store(ip)
+                            position= offset_position + ipoint
+                            if(position > gridfunctions(pseudofns)%size) call cq_abort &
+                                 ('set_ps: position error ', position, gridfunctions(pseudofns)%size)
+
+                            r_from_i = r_store(ip)
+                            x = x_store(ip)
+                            y = y_store(ip)
+                            z = z_store(ip)
+                            j = aint( r_from_i / step ) + 1
+                            !As we use the maximum of cutoff for check_block
+                            ! overrun should occur in some cases.
+                            !if(j > N_TAB-1) then
+                            !   call cq_abort('set_ps: overrun problem2',j)
+                            !endif
+                            ! check j (j+1 =< N_TAB)
+                            ! Use the spline interpolation tables 
+                            !  cutoff for this function might be smaller
+                            !  than cut off used in check_block
+                            if(j+1 <= pseudo(the_species)%pjnl(nl)%n) then
+                               rr = real(j,double) * step
+                               a = ( rr - r_from_i ) / step
+                               b = one - a
+                               c = a * ( a * a - one ) * step * step / six
+                               d = b * ( b * b - one ) * step * step / six
+
+                               r1=pseudo(the_species)%pjnl(nl)%f(j)
+                               r2=pseudo(the_species)%pjnl(nl)%f(j+1)
+                               r3=pseudo(the_species)%pjnl(nl)%d2(j)
+                               r4=pseudo(the_species)%pjnl(nl)%d2(j+1)
+
+                               nl_potential =  a * r1 + b * r2 + c * r3 + d * r4
+
+                               !pjnl = chi_nl(r)/r**l ----
+                               if(the_l > 0) then
+                                  nl_potential= nl_potential *  r_from_i**(real(the_l,double))
+                               endif
+                               ! for r_from_i < RD_ERR
+                               !   x, y, z are set to be 0 in check_block
+
+                               ! Removed flag_angular_new switch DRB 2016/01/07
+                               if (the_l>0) then
+                                  i = 0
+                                  do m = -the_l, the_l
+                                     call pp_elem(nl_potential,the_l,m,x,y,z,r_from_i,val)
+                                     gridfunctions(pseudofns)%griddata(position+i*n_pts_in_block) = val
+                                     i = i+1
+                                  enddo
+                               else
+                                  call pp_elem(nl_potential,the_l,0,x,y,z,r_from_i,val)
+                                  gridfunctions(pseudofns)%griddata(position) = val
+                               endif
+                            endif !(j+1 < pseudo(the_species)%pjnl(nl)%n) then
+                         enddo ! ip=1,npoint
+                      enddo ! nl= 1, pseudo(the_species)%n_pjnl
+                   endif! (npoint > 0) then
+                   no_of_ib_ia = no_of_ib_ia + nlpf_species(the_species)*n_pts_in_block
+                enddo ! naba_atoms
+             enddo ! naba_part
+          endif !(naba_atm(pseudo_neighbour)%no_of_part(iblock) > 0) !naba atoms?
+       end if ! blips and NOT analytic blip integrals
     enddo ! iblock : primary set of blocks
     ! now we must use FFT to transform the core charge density into
     ! reciprocal space to construct the pseudopotential in 
