@@ -150,6 +150,8 @@ contains
   !!   2012/03/21 L.Tong
   !!   - Major rewrite of spin polarised implementation
   !!   - Removed input parameter real(double) mu
+  !!   2016/06/24 07:27 dave
+  !!    Bug fix: removed comments hiding non-self-consistent exit
   !!  SOURCE
   !!
   subroutine new_SC_potl(record, self_tol, reset_L, fixed_potential, &
@@ -208,17 +210,17 @@ contains
     ! The H matrix build is already timed on its own, so I leave out
     ! of the SC preliminaries (open to discussion)
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
-!!$    if (.not. flag_self_consistent) then
-!!$       call stop_timer(tmr_std_chargescf)
-!!$       call FindMinDM(n_L_iterations, vary_mu, L_tol, inode, ionode, &
-!!$                      reset_L, .false.)
-!!$       call start_timer(tmr_std_chargescf)
-!!$       call get_energy(total_energy)
-!!$       call stop_print_timer(tmr_l_tmp1, "new_SC_potl (except H build)", &
-!!$                             IPRINT_TIME_THRES2)
-!!$       call stop_timer(tmr_std_chargescf)
-!!$       return
-!!$    end if
+    if (.not. flag_self_consistent) then
+       call stop_timer(tmr_std_chargescf)
+       call FindMinDM(n_L_iterations, vary_mu, L_tol, inode, ionode, &
+                      reset_L, .false.)
+       call start_timer(tmr_std_chargescf)
+       call get_energy(total_energy)
+       call stop_print_timer(tmr_l_tmp1, "new_SC_potl (except H build)", &
+                             IPRINT_TIME_THRES2)
+       call stop_timer(tmr_std_chargescf)
+       return
+    end if
     if (inode == ionode) &
          write (io_lun, &
                 fmt='(8x,"Starting self-consistency.  Tolerance: ",e12.5,/)') &
