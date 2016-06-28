@@ -106,7 +106,9 @@ contains
 !!   2014/10/05 L.Truflandier
 !!   - Removed return for if(runtype,'static')
 !!   2015/11/24 10:25 dave
-!!    Removed redundant ewald use
+!!   - Removed redundant ewald use
+!!   2016/06/28 10:25 Zamaan & Lionel
+!!   - Added phonon job type   
 !!  SOURCE
 !!
   subroutine control_run(fixed_potential, vary_mu, total_energy)
@@ -119,7 +121,8 @@ contains
     use minimise,             only: get_E_and_F
     use global_module,        only: runtype, flag_self_consistent, flag_out_wf, flag_write_DOS
     use input_module,         only: leqi
-
+    use phonon_module,        only: dummy_phonon
+    
     implicit none
 
     ! Shared variables
@@ -154,7 +157,7 @@ contains
        call pulay_relax(fixed_potential,vary_mu, total_energy)
        !
     else if ( leqi(runtype, 'phonon') ) then
-       print*, 'phonon'
+       call dummy_phonon()
        ! 
     else if ( leqi(runtype, 'dummy') ) then
        call dummy_run(fixed_potential,  vary_mu, total_energy)
