@@ -153,6 +153,9 @@ contains
     else if ( leqi(runtype, 'pulay') ) then
        call pulay_relax(fixed_potential,vary_mu, total_energy)
        !
+    else if ( leqi(runtype, 'phonon') ) then
+       print*, 'phonon'
+       ! 
     else if ( leqi(runtype, 'dummy') ) then
        call dummy_run(fixed_potential,  vary_mu, total_energy)
        !
