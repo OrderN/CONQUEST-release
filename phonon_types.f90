@@ -22,6 +22,10 @@ module phonon_types
 
   implicit none
 
+  ! atomic displacements
+  real(double)              :: phonon_disp
+  integer                   :: phonon_ndisp
+
 
 !!***
 
