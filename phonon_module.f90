@@ -19,8 +19,9 @@
 module phonon_module
 
   use datatypes
-  use GenComms, only: inode, ionode
-
+  use GenComms,  only: inode, ionode
+  use phonon_io, only: phonon_global_write
+  
   implicit none
 
   ! RCS tag for object file identification
@@ -54,9 +55,10 @@ contains
   !!  
   subroutine dummy_phonon()
 
+    
     implicit none
 
-    print*, 'phonon_dummy'
+    call phonon_global_write()
     
     return
   end subroutine dummy_phonon

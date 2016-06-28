@@ -5,4 +5,5 @@
 # $Id: phonon.obj,v 0.1 2016/28/06 11:00:00 lat Exp $
 #
 PHONON_OBJS = phonon_module.o \
-              phonon_types.o 
+              phonon_types.o \
+              phonon_io.o 

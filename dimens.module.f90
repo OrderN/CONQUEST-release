@@ -300,7 +300,7 @@ contains
     rcut(dHrange)  = rcut(Hrange)
     rcut(PAOPrange)= rcut(SPrange)
     rcut(HLrange)  = rcut(LHrange)
-    rcut(Drange)   = rcut(Drange) 
+    !rcut(Drange)   = rcut(Drange) 
     rcutmax = zero
     do n=1,mx_matrices
        if(rcut(n)>rcutmax) then
