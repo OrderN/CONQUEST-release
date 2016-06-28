@@ -46,6 +46,8 @@
 !!    Added blip transfer type for analytic blip integration
 !!   2014/01/17 13:20 lat
 !!    Added new matrix X and SX for exchange
+!!   Tue Jun 28 13:50:14 EDT 2016
+!!     Added Dynamical matrix Zamaan
 !!  SOURCE
 !!
 module matrix_data
@@ -94,6 +96,8 @@ module matrix_data
   integer, parameter :: Xrange   = 21
   integer, parameter :: SXrange  = 22
 
+  integer, parameter :: Drange   = 23
+  
   integer :: max_range ! Indexes matrix with largest range
 
   type(blip_transfer) :: blip_trans
