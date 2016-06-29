@@ -40,6 +40,8 @@
 !!    Changed variable atomicrad to atomicnum
 !!   2013/07/01 M.Arita
 !!    Commented out some tricks used in MD & structure optimisation
+!!   2016/06/29 15:00 zamaan
+!!    Added definitions for dynamical matrix
 !!  SOURCE
 module dimens
 
@@ -57,6 +59,7 @@ module dimens
   real(double) :: r_super_x, r_super_y, r_super_z, volume
   real(double) :: r_super_x_squared, r_super_y_squared, r_super_z_squared
   real(double) :: r_s, r_h, r_c, r_nl, r_core_squared, r_dft_d2, r_exx
+  real(double) :: r_fc
   real(double) :: grid_point_volume, one_over_grid_point_volume
   real(double) :: support_grid_volume
   real(double) :: GridCutoff, min_blip_sp
@@ -144,6 +147,8 @@ contains
 !!    Added r_nl: fix unconsistency between HNL_fac/NonLocalFactor
 !!   2014/01/17 lat
 !!    Added r_exx and assigned to rcut(Xrange)
+!!   2016/06/28 zamaan
+!!    Added r_fc, force constant matrix cutoff, assigned to rcut(Drange)
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -300,6 +305,7 @@ contains
     rcut(dHrange)  = rcut(Hrange)
     rcut(PAOPrange)= rcut(SPrange)
     rcut(HLrange)  = rcut(LHrange)
+    rcut(Drange)   = r_fc
     rcutmax = zero
     do n=1,mx_matrices
        if(rcut(n)>rcutmax) then
@@ -331,6 +337,7 @@ contains
     mat_name(HLrange)  = "HL "
     mat_name(Xrange)   = "X  "
     mat_name(SXrange)  = "SX "
+    mat_name(Drange)   = "D  "
     if(inode==ionode.AND.iprint_init>1) then
        do n=1,mx_matrices
           write(io_lun,1) mat_name(n),rcut(n)

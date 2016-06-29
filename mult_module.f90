@@ -69,7 +69,7 @@
 !!     spin down channel. This is true even for spin non-polarised
 !!     case.
 !!   2013/08/23 M.Arita
-!!   - Added subroutine symmetrise_matA, which is an extention of 
+!!   - Added subroutine symmetrise_matA, which is an extention of
 !!     symmetrise_L and applicable to any sort of matrices
 !!   2013/12/02 M.Arita
 !!   - Added parameter LS_T_L for XL-BOMD
@@ -79,6 +79,8 @@
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2016/05/09 10:56 dave
 !!    Added helpful output for temp matrix overrun
+!!   2016/06/28 08:30 zamaan
+!!    Added definitions for force constant matrix matD
 !!  SOURCE
 !!
 module mult_module
@@ -145,7 +147,7 @@ module mult_module
   integer :: max_matrices, current_matrix
   ! spin independent matrices
   integer, public :: &
-       matS, matT, matTtran, matSC, matCS, matKE, matNL, matdS
+       matS, matT, matTtran, matSC, matCS, matKE, matNL, matdS, matD
   ! spin dependent matrices
   integer, allocatable, dimension(:), public :: &
        matH, matL, matLS, matSL, matK, matphi, matM12, matM4, matU, &
@@ -294,6 +296,10 @@ contains
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Trange),    &
                     Tmatind, rcut(Trange), myid-1, halo(Trange),            &
                     ltrans(Trange))
+    ! force constant matrix
+    call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Drange),    &
+                    Dmatind, rcut(drange), myid-1, halo(Drange),            &
+                    ltrans(Drange))
     ! Add global transpose for the type 2 mults T?_T_L ?
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,TSrange),   &
                     TSmatind, rcut(TSrange), myid-1, halo(TSrange),         &
@@ -1020,7 +1026,7 @@ contains
     integer,                    optional :: level
     integer :: myid
     logical :: doK, doM1, doM2, doM3, doM4, dophi, doE
-    
+
     ! Local variables
     real(double)              :: electrons_1, electrons_2, t0, t1
     integer, dimension(nspin) :: matLH, matHL, matLHL, matHLS, matSLH, &
@@ -1064,7 +1070,7 @@ contains
     if (iprint_mat > 3) t0 = mtime()
 
     do ss = ss_start, ss_end
- 
+
        if (iprint_mat > 3 .and. nspin == 2) then
           if (inode == ionode) write (io_lun, '(1x,"For spin = ",i1," :")') ss
        end if
@@ -1295,7 +1301,7 @@ contains
              t0 = t1
           end if
        end if ! dophi
-       
+
        ! free temporary matrices
        call my_barrier
        if (iprint_mat > 3) t0 = mtime()
@@ -1329,12 +1335,12 @@ contains
           t1 = mtime()
           if (inode == ionode) write (io_lun, *) 'dealloc time: ', t1 - t0
        end if
-           
+
     end do ! ss (spin)
-    
+
     call stop_print_timer(tmr_l_tmp1, "LNV_matrix_multiply", &
                           IPRINT_TIME_THRES3)
-    
+
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='LNV_matrix_multiply')
 !****lat>$
@@ -1408,7 +1414,7 @@ contains
        end do
     end if
     call free_temp_matrix(mattmp)
-   
+
     return
   end subroutine symmetrise_L
   !!***
@@ -1511,7 +1517,7 @@ contains
 
 
   !*** New routines start here ***!
-  
+
   !!****f* mult_module/associate_matrices *
   !!
   !!  NAME
@@ -1546,6 +1552,8 @@ contains
   !!    and mat(2) corresponds to spin down. The global variable nspin
   !!    = 1 | 2 controls if the calculation will be spin polarised or
   !!    not
+  !!   2016/06/29 08:30 zamaan
+  !!    added force constant matrix matD
   !!  SOURCE
   !!
   subroutine associate_matrices
@@ -1553,7 +1561,8 @@ contains
     use numbers,       only: zero
     use matrix_data,   only: Srange, Hrange, Lrange, Trange, PSrange, &
                              LSrange, SPrange, SLrange, dSrange,      &
-                             dHrange, TTrrange, Xrange, SXrange, mat
+                             dHrange, TTrrange, Xrange, SXrange,      &
+                             Drange, mat
     use global_module, only: area_matrices, iprint_mat, nspin
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use GenComms,      only: inode, ionode
@@ -1601,22 +1610,23 @@ contains
     matdS     = 19
     matX(1)   = 20
     matSX(1)  = 21
-    current_matrix = 21
+    matD      = 22
+    current_matrix = 22
     if (nspin == 2) then
-       matH(2)   = 22
-       matL(2)   = 23
-       matK(2)   = 24
-       matdH(2)  = 25
-       matLS(2)  = 26
-       matSL(2)  = 27
-       matphi(2) = 28
-       matU(2)   = 29
-       matUT(2)  = 30
-       matM12(2) = 31
-       matM4(2)  = 32
-       matX(2)   = 33
-       matSX(2)  = 34
-       current_matrix = 34
+       matH(2)   = 23
+       matL(2)   = 24
+       matK(2)   = 25
+       matdH(2)  = 26
+       matLS(2)  = 27
+       matSL(2)  = 28
+       matphi(2) = 29
+       matU(2)   = 30
+       matUT(2)  = 31
+       matM12(2) = 32
+       matM4(2)  = 33
+       matX(2)   = 34
+       matSX(2)  = 35
+       current_matrix = 35
     end if
 
 !%%!! Now associate pointers with correct arrays
@@ -1644,7 +1654,7 @@ contains
     ! Type for f1
     mat_p(matS    )%sf1_type = sf
     mat_p(matT    )%sf1_type = sf
-    mat_p(matTtran)%sf1_type = sf    
+    mat_p(matTtran)%sf1_type = sf
     mat_p(matSC   )%sf1_type = sf
     mat_p(matCS   )%sf1_type = nlpf
     mat_p(matKE   )%sf1_type = sf
@@ -1659,7 +1669,7 @@ contains
        mat_p(matM4(spin) )%sf1_type = sf
        mat_p(matU(spin)  )%sf1_type = sf
        mat_p(matUT(spin) )%sf1_type = nlpf
-       mat_p(matLS(spin) )%sf1_type = sf    
+       mat_p(matLS(spin) )%sf1_type = sf
        mat_p(matSL(spin) )%sf1_type = sf
        mat_p(matdH(spin) )%sf1_type = paof
        mat_p(matX(spin)  )%sf1_type = sf
@@ -1696,8 +1706,9 @@ contains
     matrix_index(matSC   ) = SPrange
     matrix_index(matCS   ) = PSrange
     matrix_index(matKE   ) = Hrange
-    matrix_index(matNL   ) = Hrange    
+    matrix_index(matNL   ) = Hrange
     matrix_index(matdS   ) = dSrange
+    matrix_index(matD    ) = Drange
     do spin = 1, nspin
        matrix_index(matL(spin)  ) = Lrange
        matrix_index(matK(spin)  ) = Hrange
@@ -1833,7 +1844,7 @@ contains
             & ",mat_p(matX(2))%length)
        deallocate(mat_p(matM4(2))%matrix, STAT=stat)!32
        if (stat /= 0) call cq_abort("Error deallocating matrix M4(2) ",&
-                                    mat_p(matM4(2))%length)       
+                                    mat_p(matM4(2))%length)
        deallocate(mat_p(matM12(2))%matrix,STAT=stat)!31
        if (stat /= 0) call cq_abort("Error deallocating matrix M12(2)&
             & ",mat_p(matM12(2))%length)
@@ -2079,7 +2090,7 @@ contains
          call cq_abort("Error deallocating requests in matrix_transpose: ", stat)
     ! call stop_timer(tmr_std_matrices)
 
-    return    
+    return
   end subroutine matrix_transpose
 
 
@@ -2254,7 +2265,7 @@ contains
              do i = 1, bundle%nm_nodgroup(np) ! loop over atoms in partition
                 iprim = iprim + 1   ! count no. of atoms
                 ist = mat(np,Ah)%nd_offset + mat(np,Ah)%i_nd_acc(i)
-                if (i < bundle%nm_nodgroup(np)) then 
+                if (i < bundle%nm_nodgroup(np)) then
                    ! if still going through partition atoms:
                    l = mat(np,Ah)%i_nd_acc(i+1) - mat(np,Ah)%i_nd_acc(i)
                 else ! if finished all atoms in partition
@@ -2282,13 +2293,13 @@ contains
   !! RETURN VALUE
   !! AUTHOR
   !!   D. Bowler
-  !! CREATION DATE 
-  !!   
+  !! CREATION DATE
+  !!
   !! MODIFICATION HISTORY
   !!   2012/02/08 L.Tong
   !!   - Added intent(in) attribute for A and B.
   !!   2014/09/22 lat
-  !!   - Added printing of matrix length  
+  !!   - Added printing of matrix length
   !! SOURCE
   !!
   function matrix_product_trace(A, B)
@@ -2302,7 +2313,7 @@ contains
 
     ! results
     real(double) :: matrix_product_trace
-    
+
     ! Passed variables
     integer, intent(in) :: A, B
 
@@ -2338,11 +2349,11 @@ contains
   !! RETURN VALUE
   !! AUTHOR
   !!   D. Bowler/L. Truflandier
-  !! CREATION DATE 
-  !!   
+  !! CREATION DATE
+  !!
   !! MODIFICATION HISTORY
   !!   2014/09/22 lat
-  !!   - Added printing of matrix length  
+  !!   - Added printing of matrix length
   !!   - delete check with respect to matrix_index
   !! SOURCE
   !!
@@ -2357,7 +2368,7 @@ contains
 
     ! results
     real(double) :: matrix_product_trace_length
-    
+
     ! Passed variables
     integer, intent(in) :: A, B
 
@@ -2614,7 +2625,7 @@ contains
     mat_p(A)%matrix(i) = mat_p(A)%matrix(i) + val
     ! call stop_timer(tmr_std_matrices)
     ! if (abs(mat_p(A)%matrix(i))>100.0_double) write(io_lun,*) 'Error: ',A,i,val
-   
+
     return
   end subroutine store_matrix_value_pos
 !!*****
@@ -2693,7 +2704,7 @@ contains
     use memory_module, only: reg_alloc_mem, type_dbl
 
     implicit none
-    
+
     ! Result
     integer :: allocate_temp_matrix
     ! Passed variables
@@ -2703,8 +2714,8 @@ contains
     integer :: stat, i
 
     if (current_matrix == max_matrices) then
-       if(myid==0) write(io_lun,fmt='(2x,"You have exceeded the maximum number of temporary matrices in Conquest.")') 
-       if(myid==0) write(io_lun,fmt='(2x,"Consider increasing the limit on temporary matrices with General.MaxTempMatrices")') 
+       if(myid==0) write(io_lun,fmt='(2x,"You have exceeded the maximum number of temporary matrices in Conquest.")')
+       if(myid==0) write(io_lun,fmt='(2x,"Consider increasing the limit on temporary matrices with General.MaxTempMatrices")')
        call cq_abort("Overrun number of matrices ", max_matrices)
     end if
     current_matrix = current_matrix + 1
@@ -2756,7 +2767,7 @@ contains
   !!  CREATION DATE
   !!   26/04/00
   !!  MODIFICATION HISTORY
-  !!    
+  !!
   !!  SOURCE
   !!
   subroutine free_temp_matrix(A)
