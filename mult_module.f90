@@ -298,7 +298,7 @@ contains
                     ltrans(Trange))
     ! force constant matrix
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Drange),    &
-                    Dmatind, rcut(drange), myid-1, halo(Drange),            &
+                    Dmatind, rcut(Drange), myid-1, halo(Drange),            &
                     ltrans(Drange))
     ! Add global transpose for the type 2 mults T?_T_L ?
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,TSrange),   &
@@ -376,6 +376,9 @@ contains
     call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Trange),      &
                    myid-1, halo(Trange), halo(Trange), ltrans(Trange),       &
                    gtrans(T_trans), pairs(:, T_trans), Tpairind)
+    call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Drange),      &
+                   myid-1, halo(Drange), halo(Drange), ltrans(Drange),       &
+                   gtrans(D_trans), pairs(:, D_trans), Dpairind)
 
     ! Now initialise the matrix multiplications
     ! Somewhere, we need to set mult_type 1/2 - probably here !
@@ -931,6 +934,7 @@ contains
     call end_ops(prim,TSrange,TSmatind)
     call end_ops(prim,THrange,THmatind)
     call end_ops(prim,TLrange,TLmatind)
+    call end_ops(prim,Drange,Dmatind,D_trans)
 !    call stop_timer(tmr_std_matrices)
 
     return
@@ -1746,7 +1750,7 @@ contains
 !%%!    mat_p(matdS  )%length = npao*nsf*mx_at_prim*mx_snab
 !%%!    mat_p(matdH  )%length = npao*nsf*mx_at_prim*mx_hnab
 
-    ! Allocalting the core matrices
+    ! Allocating the core matrices
     do i = 1, current_matrix
        if (mat_p(i)%length == 0) then
           mat_p(i)%length = mat(1,matrix_index(i))%length
