@@ -58,7 +58,7 @@ contains
     
     implicit none
 
-    call phonon_global_write()
+    !call phonon_global_write()
     
     return
   end subroutine dummy_phonon

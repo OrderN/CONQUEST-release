@@ -69,7 +69,7 @@ contains
     integer                    :: nb_spec, ip_spec
     integer                    :: ip_lab_cell, unit
     character(len=2)           :: nb_name, ip_name
-    character(len=23)          :: filename
+    character(len=23)          :: filename, filenamepdb
     character(len=23)          :: filename1, filename2, filename3
     character(len=23)          :: filenamexyz1, filenamexyz2, filenamexyz3 
     character(len=23)          :: filenamecif1, filenamecif2, filenamecif3 
@@ -80,8 +80,9 @@ contains
 
     real(double)               :: ip_radi, nb_radi
     integer                    :: unit_write_xyz1, unit_write_xyz2, unit_write_xyz3 
-    integer                    :: unit_write_cif1, unit_write_cif2, unit_write_cif3 
-    integer                    :: toto
+    integer                    :: unit_write_cif1, unit_write_cif2, unit_write_cif3
+    integer                    :: unit_write_pdb    
+    integer                    :: toto, count
     
     !call start_timer(tmr_std_ph_write)
 
@@ -90,6 +91,7 @@ contains
     call get_file_name('proc_atoms_part' ,numprocs,inode,filename2)
     call get_file_name('proc_atoms_proc' ,numprocs,inode,filename3)
 
+    
     filenamexyz1 = trim(filename1)//'.xyz'
     filenamexyz2 = trim(filename2)//'.xyz'
     filenamexyz3 = trim(filename3)//'.xyz'
@@ -98,11 +100,16 @@ contains
     filenamecif2 = trim(filename2)//'.cif'
     filenamecif3 = trim(filename3)//'.cif'
 
+    filenamepdb  = trim(filename)//'.pdb'
+
 
     call io_assign(unit_global_write)
     unit=unit_global_write
     open(unit,file=filename)
 
+    call io_assign(unit_write_pdb)
+    open(unit_write_pdb,file=filenamepdb)
+    
     call io_assign(unit_write_xyz1)
     open(unit_write_xyz1,file=filenamexyz1)
 
@@ -186,7 +193,8 @@ contains
     write(unit_write_cif3,*) '_atom_site_fract_y'
     write(unit_write_cif3,*) '_atom_site_fract_z'
 
-    toto = 0
+    toto  = 0
+    count = 0 
     ! Loop over primary set partition <part>
     part_loop: do part = 1,bundle%groups_on_node ! previously np
 
@@ -201,6 +209,8 @@ contains
           iprim = 0
           primary_loop: do memb = 1, bundle%nm_nodgroup(part) ! previously ip             
 
+             count = count + 1
+             
              ip_num = bundle%nm_nodbeg(part) + memb - 1 ! new
              iprim  = iprim + 1                         ! new
              ip     = bundle%ig_prim(iprim)             ! new
@@ -256,6 +266,12 @@ contains
                   Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
+             call write_info(unit_write_pdb,inode,50,count,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
+                  memb,supports_on_atom(ip)%nsuppfuncs, &
+                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+                  ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
+
+             
           end do primary_loop
        end if check_members
     end do part_loop
@@ -273,18 +289,22 @@ contains
     call io_close(unit_write_cif2)
     call io_close(unit_write_cif3)
     !
+    call io_close(unit_write_pdb)
+
+    !
     !call stop_timer(tmr_std_ph_write,.true.)
     !
     return
   end subroutine phonon_global_write
   
   subroutine write_info(unit,inode,in,npartitions,partition,nmembers,member,nsuppfuncs, &
-       range,nneigh,name,xyz,r,spec,atom,labcell,radii,e_hf,dim,matHF,matK)
+       range,nneigh,name,xyz,&
+       r,spec,atom,labcell,radii,e_hf,dim,matHF,matK)
     
 
     use datatypes
     use units,                  ONLY: BohrToAng
-    use numbers,                ONLY: very_small
+    use numbers,                ONLY: very_small, zero
     use matrix_data,            ONLY: rcut, mat_name
 
     implicit none
@@ -318,7 +338,8 @@ contains
     real(double)               :: r_Ang
 
     integer                    :: i, j, k, l    
-    CHARACTER(len=2)                :: pte(103)
+    integer                    :: count 
+    CHARACTER(len=2)           :: pte(103)
 
     DATA pte /  "H ", "He", "Li", "Be", "B ", "C ", "N ", "O ", "F ", "Ne", &
          "Na", "Mg", "Al", "Si", "P ", "S ", "Cl", "Ar", "K ", "Ca", &
@@ -393,20 +414,27 @@ contains
             
        write(unit,'(18X,A,11X,A,11X,A,7X,A11,X,A5,X,A7,X,A8,X,A3,2X,A5)') &
             'x','y','z','distance(A)','spec.','neighb.','lab.cell','nsf','radii'
-       !
-       !
-       !
+       !!
+       !!
+       !!
+       !!
+       !!
+       !!
     case(31)   
        write(unit,'(6X,A2,4X,3F12.4)') name, xyz_Ang(1), xyz_Ang(2), xyz_Ang(3)
-
+       !
     case(32)   
-       write(unit,'(6X,A2,4X,3F12.4,4X,I8)') name, xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
-
+       write(unit,'(6X,A2,4X,3F12.4,4X,I8)') &
+            name, xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
+       !
     case(33)   
-       write(unit,'(6X,A2,4X,3F12.4,4X,I8)') pte(partition), xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
-
+       write(unit,'(6X,A2,4X,3F12.4,4X,I8)') &
+            pte(partition), xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
+       !
     case(34)   
-       write(unit,'(6X,A2,4X,3F12.4,4X,I8)') pte(inode), xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
+       write(unit,'(6X,A2,4X,3F12.4,4X,I8)') &
+            pte(inode), xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
+       !
        !
        !
        !
@@ -414,25 +442,41 @@ contains
        xyz_Ang(1) = xyz_Ang(1)/r_super_x
        xyz_Ang(2) = xyz_Ang(2)/r_super_y
        xyz_Ang(3) = xyz_Ang(3)/r_super_z
-
-       write(unit,'(6X,A2,4X,A2,4X,3F12.4,4X,I8)') name, name, xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
-
+       !
+       write(unit,'(6X,A2,4X,A2,4X,3F12.4,4X,I8)') &
+            name, name, xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
+       !
     case(43)   
        xyz_Ang(1) = xyz_Ang(1)/r_super_x
        xyz_Ang(2) = xyz_Ang(2)/r_super_y
        xyz_Ang(3) = xyz_Ang(3)/r_super_z
-
-       write(unit,'(6X,A2,4X,A2,4X,3F12.4,4X,I8)') pte(partition), pte(partition), xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
-
+       !
+       write(unit,'(6X,A2,4X,A2,4X,3F12.4,4X,I8)') &
+            pte(partition), pte(partition), xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
+       !
     case(44)   
        xyz_Ang(1) = xyz_Ang(1)/r_super_x
        xyz_Ang(2) = xyz_Ang(2)/r_super_y
        xyz_Ang(3) = xyz_Ang(3)/r_super_z
-
-       write(unit,'(6X,A2,4X,A2,4X,3F12.4,4X,I8)') pte(inode),  pte(inode), xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
+       !
+       write(unit,'(6X,A2,4X,A2,4X,3F12.4,4X,I8)') &
+            pte(inode),  pte(inode), xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), partition
        !
        !
        !
+       !
+    case(50)
+       count = 0
+       write(unit,'(A4,I7,A3,2I7,3F10.4,2F7.2,A12)') &
+            'ATOM', count, name, partition, member,  &
+            xyz_Ang(1), xyz_Ang(2), xyz_Ang(3), zero, zero, name
+       
+       !!
+       !!
+       !!
+       !!
+       !!
+       !!
     case(60)
        if (r_Ang > very_small) then
           write(unit,'(6X,A2,4X,4F12.4,X,I3,3I8,F7.3)') name, xyz_Ang(1), xyz_Ang(2), &
