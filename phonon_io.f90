@@ -41,7 +41,7 @@ contains
 
     use datatypes
     use numbers,                ONLY: zero
-    use matrix_data,            ONLY: mat, Hrange, Srange, Xrange, SXrange
+    use matrix_data,            ONLY: mat, Hrange, Srange, Drange, SXrange
     use cover_module,           ONLY: BCS_parts
     use primary_module,         ONLY: bundle
     use global_module,          ONLY: io_lun
@@ -232,43 +232,43 @@ contains
              ip_xyz(3) = bundle%zprim(ip_num)             
 
              call write_info(unit,inode,31,0,0,0,memb,supports_on_atom(ip)%nsuppfuncs, &
-                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+                  Drange,mat(part,Drange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
              call write_info(unit_write_xyz1,inode,32,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
                   memb,supports_on_atom(ip)%nsuppfuncs, &
-                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+                  Drange,mat(part,Drange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
              call write_info(unit_write_xyz2,inode,33,0,toto,0,&
                   memb,supports_on_atom(ip)%nsuppfuncs, &
-                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+                  Drange,mat(part,Drange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
              call write_info(unit_write_xyz3,inode,34,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
                   memb,supports_on_atom(ip)%nsuppfuncs, &
-                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+                  Drange,mat(part,Drange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
 
              call write_info(unit_write_cif1,inode,42,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
                   memb,supports_on_atom(ip)%nsuppfuncs, &
-                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+                  Drange,mat(part,Drange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
              call write_info(unit_write_cif2,inode,43,0,toto,0,&
                   memb,supports_on_atom(ip)%nsuppfuncs, &
-                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+                  Drange,mat(part,Drange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
              call write_info(unit_write_cif3,inode,44,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
                   memb,supports_on_atom(ip)%nsuppfuncs, &
-                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+                  Drange,mat(part,Drange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
              call write_info(unit_write_pdb,inode,50,count,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
                   memb,supports_on_atom(ip)%nsuppfuncs, &
-                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+                  Drange,mat(part,Drange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
              

@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -132,13 +132,14 @@ module mult_module
   integer(integ), parameter :: LS_trans  = 5
   integer(integ), parameter :: LH_trans  = 6
   integer(integ), parameter :: LSL_trans = 7
+  integer(integ), parameter :: D_trans   = 8
 
-  integer(integ), parameter :: mx_trans = 7
+  integer(integ), parameter :: mx_trans  = 8
 
   type(pair_data), allocatable, dimension(:,:) :: pairs
   integer, dimension(:), pointer :: Spairind, Lpairind, Tpairind, &
                                     SPpairind, LSpairind, LHpairind, &
-                                    LSLpairind
+                                    LSLpairind, Dpairind
 
   type(matrix_trans), dimension(mx_matrices), target :: ltrans
   type(trans_remote) :: gtrans(mx_trans)
