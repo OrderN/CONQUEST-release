@@ -218,6 +218,7 @@ module global_module
   integer, parameter :: nlpf = 2 ! Projector functions
   integer, parameter :: paof = 3 ! Pseudo-atomic orbitals
   integer, parameter :: dens = 4 ! Atomic charge density
+  integer, parameter :: posf = 5
 
   ! Define areas of the code
   integer, parameter :: n_areas        = 13

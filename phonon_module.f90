@@ -55,9 +55,26 @@ contains
   !!  
   subroutine dummy_phonon()
 
+    use mult_module,    only: mat_p, matD, matH
     
     implicit none
 
+    !type matrix_pointer
+    !  integer :: length
+    !  integer :: sf1_type, sf2_type
+    !  real(double), pointer, dimension(:) :: matrix
+    !end type matrix_pointer
+
+    print*, 'Dmat'
+    print*, mat_p(matD)%length
+    print*, mat_p(matD)%sf1_type
+    print*, mat_p(matD)%sf2_type
+    
+    print*, 'Hmat'
+    print*, mat_p(matH)%length
+    print*, mat_p(matH)%sf1_type
+    print*, mat_p(matH)%sf2_type
+    
     !call phonon_global_write()
     
     return

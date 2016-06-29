@@ -88,7 +88,7 @@ module mult_module
   use datatypes
   use matrix_module
   use matrix_data,            only: mx_matrices, matrix_pointer
-  use global_module,          only: sf, nlpf, paof, io_lun, nspin
+  use global_module,          only: sf, nlpf, paof, posf, io_lun, nspin
   use GenComms,               only: cq_abort
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_allocation
@@ -301,6 +301,9 @@ contains
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Drange),    &
                     Dmatind, rcut(Drange), myid-1, halo(Drange),            &
                     ltrans(Drange))
+    mat(1:prim%groups_on_node,Drange)%sf1_type = posf 
+    mat(1:prim%groups_on_node,Drange)%sf2_type = posf
+
     ! Add global transpose for the type 2 mults T?_T_L ?
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,TSrange),   &
                     TSmatind, rcut(TSrange), myid-1, halo(TSrange),         &
