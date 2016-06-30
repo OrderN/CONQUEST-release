@@ -31,6 +31,8 @@
 !!    Added ROBODoc header and GenComms for my_barrier and cq_abort
 !!   2008/02/06 08:22 dave
 !!    Changed for output to file not stdout
+!!   2016/06/29 17:30 zamaan
+!!    Added dummy sf type posf for 3x3 force constant matrix blocks
 !!***
 module matrix_elements_module
 
@@ -262,7 +264,7 @@ contains
     use basic_types
     use matrix_module
     use GenComms, ONLY: cq_abort, inode
-    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof
+    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, posf
     use group_module, ONLY: parts
     use species_module, ONLY: nsf_species, nlpf_species, npao_species
 
@@ -307,6 +309,8 @@ contains
                 amat(nn)%ndimi(j) = nlpf_species(prim%species(inp))
              case(paof)
                 amat(nn)%ndimi(j) = npao_species(prim%species(inp))
+             case(posf)
+                amat(nn)%ndimi(j) = 3
              end select
              cumu_ndims = 0
              do np=1,gcs%ng_cover  ! Loop over partitions in GCS
@@ -343,6 +347,8 @@ contains
                             cumu_ndims = cumu_ndims + amat(nn)%ndimi(j)*nlpf_species(neigh_spec)
                          case(paof)
                             cumu_ndims = cumu_ndims + amat(nn)%ndimi(j)*npao_species(neigh_spec)
+                         case(posf)
+                            cumu_ndims = cumu_ndims + amat(nn)%ndimi(j)*3
                          end select
                       endif
                    enddo ! End n_inp_cover
@@ -411,7 +417,7 @@ contains
     use basic_types
     use matrix_module
     use GenComms, ONLY: cq_abort, inode
-    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof
+    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, posf
     use group_module, ONLY: parts
     use species_module, ONLY: nsf_species, nlpf_species, npao_species
 
@@ -591,7 +597,7 @@ contains
     use matrix_module
     use basic_types
     use GenComms, ONLY: cq_abort
-    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof
+    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, posf
     use group_module, ONLY: parts
     use species_module, ONLY: nsf_species, nlpf_species, npao_species
 
@@ -659,6 +665,8 @@ contains
                    ahalo%ndimj(ahalo%ni_in_halo) = nlpf_species(neigh_spec)
                 case(paof)
                    ahalo%ndimj(ahalo%ni_in_halo) = npao_species(neigh_spec)
+                case(posf)
+                   ahalo%ndimj(ahalo%ni_in_halo) = 3
                 end select
                 ahalo%i_halo(gcs%icover_ibeg(np)+ni-1)=ahalo%ni_in_halo
              endif
@@ -740,7 +748,7 @@ contains
     use matrix_module
     use basic_types
     use GenComms, ONLY: cq_abort
-    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof
+    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, posf
     use group_module, ONLY: parts
     use species_module, ONLY: nsf_species, nlpf_species, npao_species
 
@@ -839,7 +847,7 @@ contains
     use GenComms, ONLY: cq_abort
     use group_module, ONLY: parts
     use species_module, ONLY: nsf_species, nlpf_species, npao_species
-    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof
+    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, posf
 
     implicit none
 
@@ -887,6 +895,8 @@ contains
                       amat(np)%ndimj(isu) = nlpf_species(neigh_spec)
                    case(paof)
                       amat(np)%ndimj(isu) = npao_species(neigh_spec)
+                   case(posf)
+                      amat(np)%ndimj(isu) = 3
                    end select
                    amat(np)%npxyz(3*(isu-1)+1) = npx
                    amat(np)%npxyz(3*(isu-1)+2) = npy

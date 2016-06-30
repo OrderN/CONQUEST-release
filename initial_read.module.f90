@@ -241,7 +241,7 @@ contains
     if(allocated(tot_force)) then
        write (io_lun,fmt='(10x,"WARNING! Proc: ",i4," tot_force &
                           &already allocated: ",i7)') &
-             size(tot_force)
+                          size(tot_force)
        deallocate(tot_force)
     end if
     allocate(tot_force(3,ni_in_cell))
@@ -1116,7 +1116,7 @@ contains
        atomic_density_method = fdf_string(10,'SC.AtomicDensityFlag','pao')
 
        ! 2016/06/28 zamaan, Phonon flags
-       r_fc            = fdf_double('Phonon.Drange', zero)
+       r_fc            = fdf_double('Phonon.Drange', one)
        phonon_disp     = fdf_double('Phonon.disp', 0.01_double)
        phonon_ndisp    = fdf_integer('Phonon.NDisp', 1)
 !!$
