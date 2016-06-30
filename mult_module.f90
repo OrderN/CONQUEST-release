@@ -298,11 +298,11 @@ contains
                     Tmatind, rcut(Trange), myid-1, halo(Trange),            &
                     ltrans(Trange))
     ! force constant matrix
+    mat(1:prim%groups_on_node,Drange)%sf1_type = posf 
+    mat(1:prim%groups_on_node,Drange)%sf2_type = posf
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Drange),    &
                     Dmatind, rcut(Drange), myid-1, halo(Drange),            &
                     ltrans(Drange))
-    mat(1:prim%groups_on_node,Drange)%sf1_type = posf 
-    mat(1:prim%groups_on_node,Drange)%sf2_type = posf
 
     ! Add global transpose for the type 2 mults T?_T_L ?
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,TSrange),   &
@@ -1668,6 +1668,7 @@ contains
     mat_p(matKE   )%sf1_type = sf
     mat_p(matNL   )%sf1_type = sf
     mat_p(matdS   )%sf1_type = paof
+    mat_p(matD    )%sf1_type = posf
     do spin = 1, nspin
        mat_p(matL(spin)  )%sf1_type = sf
        mat_p(matK(spin)  )%sf1_type = sf
@@ -1692,6 +1693,7 @@ contains
     mat_p(matKE   )%sf2_type = sf
     mat_p(matNL   )%sf2_type = sf
     mat_p(matdS   )%sf2_type = sf
+    mat_p(matD    )%sf2_type = posf
     do spin = 1, nspin
        mat_p(matL(spin)  )%sf2_type = sf
        mat_p(matK(spin)  )%sf2_type = sf
