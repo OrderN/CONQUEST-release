@@ -125,10 +125,8 @@ contains
     use cover_module,      only: make_cs, D2_CS
     use dimens,            only: r_dft_d2
     use DFT_D2
-    use pseudo_tm_module,  only: make_neutral_atom
+    use pseudo_tm_module, only: make_neutral_atom
 
-    use phonon_io,         only: phonon_global_write
-    
     implicit none
 
     ! Passed variables
@@ -182,8 +180,6 @@ contains
     end if
     if(flag_neutral_atom) call make_neutral_atom
     call set_up(find_chdens,std_level_loc+1)
-
-    call phonon_global_write()
     
     call my_barrier()
 

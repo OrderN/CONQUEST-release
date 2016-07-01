@@ -531,7 +531,6 @@ contains
                              flag_perform_cDFT, flag_analytic_blip_int,&
                              flag_vdWDFT, vdW_LDA_functional,          &
                              flag_dump_L, flag_DeltaSCF, dscf_source_level, &
-
                              dscf_target_level, dscf_source_spin,      &
                              dscf_target_spin, dscf_source_nfold,      &
                              dscf_target_nfold, flag_local_excitation, dscf_HOMO_thresh,   &
@@ -550,7 +549,7 @@ contains
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
                       RadiusSupport, NonLocalFactor, InvSRange,      &
                       min_blip_sp, flag_buffer_old, AtomMove_buffer, &
-                      r_dft_d2, r_exx, r_fc
+                      r_dft_d2, r_exx
     use block_module, only: in_block_x, in_block_y, in_block_z, &
                             blocks_raster, blocks_hilbert
     use species_module, only: species_label, charge, mass, n_species,  &
@@ -615,8 +614,6 @@ contains
     use exx_types, only: exx_scheme, exx_mem, exx_overlap, exx_alloc,       &
                          exx_cartesian, exx_radius, exx_hgrid, exx_psolver, &
                          exx_debug, exx_Kij, exx_Kkl, p_scheme
-
-    use phonon_types, only: phonon_disp, phonon_ndisp
 
     implicit none
 
@@ -1114,11 +1111,6 @@ contains
                        fdf_string(80,'SC.ReadAtomicDensityFile','read_atomic_density.dat')
        ! Read atomic density initialisation flag
        atomic_density_method = fdf_string(10,'SC.AtomicDensityFlag','pao')
-
-       ! 2016/06/28 zamaan, Phonon flags
-       r_fc            = fdf_double('Phonon.Drange', one)
-       phonon_disp     = fdf_double('Phonon.disp', 0.01_double)
-       phonon_ndisp    = fdf_integer('Phonon.NDisp', 1)
 !!$
 !!$
 !!$
