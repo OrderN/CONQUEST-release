@@ -1,4 +1,4 @@
-
+! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -88,7 +88,7 @@ module mult_module
   use datatypes
   use matrix_module
   use matrix_data,            only: mx_matrices, matrix_pointer
-  use global_module,          only: sf, nlpf, paof, posf, io_lun, nspin
+  use global_module,          only: sf, nlpf, paof, io_lun, nspin
   use GenComms,               only: cq_abort
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_allocation
@@ -132,14 +132,13 @@ module mult_module
   integer(integ), parameter :: LS_trans  = 5
   integer(integ), parameter :: LH_trans  = 6
   integer(integ), parameter :: LSL_trans = 7
-  integer(integ), parameter :: D_trans   = 8
 
-  integer(integ), parameter :: mx_trans  = 8
+  integer(integ), parameter :: mx_trans = 7
 
   type(pair_data), allocatable, dimension(:,:) :: pairs
   integer, dimension(:), pointer :: Spairind, Lpairind, Tpairind, &
                                     SPpairind, LSpairind, LHpairind, &
-                                    LSLpairind, Dpairind
+                                    LSLpairind
 
   type(matrix_trans), dimension(mx_matrices), target :: ltrans
   type(trans_remote) :: gtrans(mx_trans)
@@ -298,12 +297,9 @@ contains
                     Tmatind, rcut(Trange), myid-1, halo(Trange),            &
                     ltrans(Trange))
     ! force constant matrix
-    mat(1:prim%groups_on_node,Drange)%sf1_type = posf 
-    mat(1:prim%groups_on_node,Drange)%sf2_type = posf
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Drange),    &
-                    Dmatind, rcut(Drange), myid-1, halo(Drange),            &
+                    Dmatind, rcut(drange), myid-1, halo(Drange),            &
                     ltrans(Drange))
-
     ! Add global transpose for the type 2 mults T?_T_L ?
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,TSrange),   &
                     TSmatind, rcut(TSrange), myid-1, halo(TSrange),         &
@@ -380,9 +376,6 @@ contains
     call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Trange),      &
                    myid-1, halo(Trange), halo(Trange), ltrans(Trange),       &
                    gtrans(T_trans), pairs(:, T_trans), Tpairind)
-    call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Drange),      &
-                   myid-1, halo(Drange), halo(Drange), ltrans(Drange),       &
-                   gtrans(D_trans), pairs(:, D_trans), Dpairind)
 
     ! Now initialise the matrix multiplications
     ! Somewhere, we need to set mult_type 1/2 - probably here !
@@ -938,7 +931,6 @@ contains
     call end_ops(prim,TSrange,TSmatind)
     call end_ops(prim,THrange,THmatind)
     call end_ops(prim,TLrange,TLmatind)
-    call end_ops(prim,Drange,Dmatind,D_trans)
 !    call stop_timer(tmr_std_matrices)
 
     return
@@ -1668,7 +1660,6 @@ contains
     mat_p(matKE   )%sf1_type = sf
     mat_p(matNL   )%sf1_type = sf
     mat_p(matdS   )%sf1_type = paof
-    mat_p(matD    )%sf1_type = posf
     do spin = 1, nspin
        mat_p(matL(spin)  )%sf1_type = sf
        mat_p(matK(spin)  )%sf1_type = sf
@@ -1693,7 +1684,6 @@ contains
     mat_p(matKE   )%sf2_type = sf
     mat_p(matNL   )%sf2_type = sf
     mat_p(matdS   )%sf2_type = sf
-    mat_p(matD    )%sf2_type = posf
     do spin = 1, nspin
        mat_p(matL(spin)  )%sf2_type = sf
        mat_p(matK(spin)  )%sf2_type = sf
@@ -1756,7 +1746,7 @@ contains
 !%%!    mat_p(matdS  )%length = npao*nsf*mx_at_prim*mx_snab
 !%%!    mat_p(matdH  )%length = npao*nsf*mx_at_prim*mx_hnab
 
-    ! Allocating the core matrices
+    ! Allocalting the core matrices
     do i = 1, current_matrix
        if (mat_p(i)%length == 0) then
           mat_p(i)%length = mat(1,matrix_index(i))%length

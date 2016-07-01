@@ -1,4 +1,3 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -241,7 +240,7 @@ contains
     if(allocated(tot_force)) then
        write (io_lun,fmt='(10x,"WARNING! Proc: ",i4," tot_force &
                           &already allocated: ",i7)') &
-                          size(tot_force)
+             size(tot_force)
        deallocate(tot_force)
     end if
     allocate(tot_force(3,ni_in_cell))
