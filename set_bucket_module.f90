@@ -115,6 +115,8 @@ contains
 !!  CREATION DATE
 !!   May 2000
 !!  MODIFICATION HISTORY
+!!   2016/07/06 17:30 nakata
+!!    Renamed comBG -> comm_naba_blocks_of_atoms
 !!
 !!  SOURCE
 !!
@@ -123,10 +125,10 @@ contains
     use datatypes
     use global_module, ONLY: iprint_index, sf, nlpf, paof, numprocs
     use bucket_module
-!    use maxima_module, ONLY: mx_send_node_BG, mx_recv_node_BG, &
+!    use maxima_module, ONLY: mx_send_node_BtoG, mx_recv_node_BtoG, &
 !         mx_Spair_remnode,  mx_Spair_domain,  &
 !         mx_SPpair_remnode, mx_SPpair_domain
-    use set_blipgrid_module,ONLY: comBG,naba_atm,halo_atm
+    use set_blipgrid_module,ONLY: comm_naba_blocks_of_atoms,naba_atm,halo_atm
     use comm_array_module,  ONLY: isend_array,irecv_array!,check_commarray_int!,check_commarray_real
     use matrix_data, ONLY: halo, rcut, Srange, SPrange, Hrange, dHrange
     use GenComms, ONLY: my_barrier, cq_abort
@@ -163,7 +165,7 @@ contains
     ! Here H includes nonlocal parts
 
     !calculate mx_send_node
-    call calc_mx_nodes_bucket(myid, comBG, mx_recv_BRnode, mx_send_DRnode)
+    call calc_mx_nodes_bucket(myid, comm_naba_blocks_of_atoms, mx_recv_BRnode, mx_send_DRnode)
 
     call set_local_bucket(loc_bucket(sf_sf_loc),rcut_S, mx_recv_BRnode,sf,sf)
     call set_local_bucket(loc_bucket(sf_nlpf_loc),rcut_SP, mx_recv_BRnode,sf,nlpf)
@@ -194,7 +196,7 @@ contains
     !remote nodes (domain responsible nodes).
     ! WARNING!!
     ! Now, we assume the left functions are always support functions.
-    call make_sendinfo_ME(rem_bucket(sf_sf_rem),comBG)
+    call make_sendinfo_ME(rem_bucket(sf_sf_rem),comm_naba_blocks_of_atoms)
     rem_bucket(sf_H_sf_rem)%no_send_node=rem_bucket(sf_sf_rem)%no_send_node
     rem_bucket(sf_H_sf_rem)%list_send_node(:)=rem_bucket(sf_sf_rem)%list_send_node(:)
     !Domain responsible node sends its information of pairs of naba atms
@@ -277,20 +279,22 @@ contains
 !!  CREATION DATE
 !!   19/10/2006
 !!  MODIFICATION HISTORY
+!!   2016/07/06 17:30 nakata
+!!    Renamed comm_in_BG -> comm_in_BtoG and comBG -> comm_naba_blocks_of_atoms
 !!
 !!  SOURCE
 !!
-    subroutine calc_mx_nodes_bucket(myid,comBG,mx_recv_BRnode, mx_send_DRnode)
+    subroutine calc_mx_nodes_bucket(myid,comm_naba_blocks_of_atoms,mx_recv_BRnode, mx_send_DRnode)
 
       use datatypes
       use global_module, ONLY: numprocs
       use primary_module, ONLY: bundle
-      use naba_blk_module,ONLY: comm_in_BG
+      use naba_blk_module,ONLY: comm_in_BtoG
       use GenComms, ONLY: cq_abort
 
       implicit none
       integer, intent(in) :: myid
-      type(comm_in_BG),intent(in) :: comBG
+      type(comm_in_BtoG),intent(in) :: comm_naba_blocks_of_atoms
       integer,intent(out) :: mx_send_DRnode, mx_recv_BRnode
 
       integer :: inp,nnode,iprim,inode,jnode,ind_node,ind_node2,ifind
@@ -302,18 +306,18 @@ contains
       inp=0; nnode=0
       do iprim=1,bundle%mx_iprim
          !do iprim=1,bundle%n_prim
-         if(comBG%no_recv_node(iprim) > 0) then
+         if(comm_naba_blocks_of_atoms%no_recv_node(iprim) > 0) then
             inp=inp+1
             if(inp == 1) then    ! if this is the first
-               nnode=comBG%no_recv_node(iprim)
-               do inode=1,comBG%no_recv_node(iprim)
+               nnode=comm_naba_blocks_of_atoms%no_recv_node(iprim)
+               do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
                   list_send_node(inode)= &
-                       comBG%list_recv_node(inode,iprim)
+                       comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
                enddo
             else
-               do inode=1,comBG%no_recv_node(iprim)
+               do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
                   ! naba nodes for iprim-th atom
-                  ind_node=comBG%list_recv_node(inode,iprim)
+                  ind_node=comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
                   ifind=0
                   do jnode=1,nnode     ! check existed naba nodes for my bundle
                      ind_node2=list_send_node(jnode)
@@ -324,7 +328,7 @@ contains
                   enddo
                   if(ifind == 0) then  ! if this node is new
                      nnode=nnode+1
-                     list_send_node(nnode)= comBG%list_recv_node(inode,iprim)
+                     list_send_node(nnode)= comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
                   endif ! if this node is new
                enddo  ! end do loop over neighbour nodes for iprim-th atom
             endif    ! present primary atom is first or not
@@ -337,18 +341,18 @@ contains
       inp=0; nnode=0
       do iprim=1,bundle%mx_iprim
          !do iprim=1,bundle%n_prim
-         if(comBG%no_send_node(iprim) > 0) then
+         if(comm_naba_blocks_of_atoms%no_send_node(iprim) > 0) then
             inp=inp+1
             if(inp == 1) then    ! if this is the first
-               nnode=comBG%no_send_node(iprim)
-               do inode=1,comBG%no_send_node(iprim)
+               nnode=comm_naba_blocks_of_atoms%no_send_node(iprim)
+               do inode=1,comm_naba_blocks_of_atoms%no_send_node(iprim)
                   list_recv_node(inode)= &
-                       comBG%list_send_node(inode,iprim)
+                       comm_naba_blocks_of_atoms%list_send_node(inode,iprim)
                enddo
             else
-               do inode=1,comBG%no_send_node(iprim)
+               do inode=1,comm_naba_blocks_of_atoms%no_send_node(iprim)
                   ! naba nodes for iprim-th atom
-                  ind_node=comBG%list_send_node(inode,iprim)
+                  ind_node=comm_naba_blocks_of_atoms%list_send_node(inode,iprim)
                   ifind=0
                   do jnode=1,nnode     ! check existed naba nodes for my bundle
                      ind_node2=list_recv_node(jnode)
@@ -359,7 +363,7 @@ contains
                   enddo
                   if(ifind == 0) then  ! if this node is new
                      nnode=nnode+1
-                     list_recv_node(nnode)= comBG%list_send_node(inode,iprim)
+                     list_recv_node(nnode)= comm_naba_blocks_of_atoms%list_send_node(inode,iprim)
                   endif ! if this node is new
                enddo  ! end do loop over neighbour nodes for iprim-th atom
             endif    ! present primary atom is first or not
@@ -398,18 +402,20 @@ contains
 !!  MODIFICATION HISTORY
 !!   2006/07/03 08:05 dave
 !!    Various changes associated with variable NSF and general tidying
+!!   2016/07/06 17:30 nakata
+!!    Renamed comm_in_BG -> comm_in_BtoG and comBG -> comm_naba_blocks_of_atoms
 !!  SOURCE
 !!
-    subroutine make_sendinfo_ME(rembucket,comBG)
+    subroutine make_sendinfo_ME(rembucket,comm_naba_blocks_of_atoms)
 
       use datatypes
       use primary_module, ONLY: bundle
       use bucket_module,  ONLY: remote_bucket  ! Can we write in this way?
-      use naba_blk_module,ONLY: comm_in_BG
+      use naba_blk_module,ONLY: comm_in_BtoG
       use GenComms, ONLY: cq_abort
 
       implicit none
-      type(comm_in_BG),intent(in) :: comBG
+      type(comm_in_BtoG),intent(in) :: comm_naba_blocks_of_atoms
       type(remote_bucket),intent(inout):: rembucket
 
       integer :: inp,nnode,iprim,inode,jnode,ind_node,ind_node2,ifind
@@ -418,19 +424,19 @@ contains
       inp=0
       do iprim=1,bundle%mx_iprim
          !do iprim=1,bundle%n_prim
-         if(comBG%no_recv_node(iprim) > 0) then
+         if(comm_naba_blocks_of_atoms%no_recv_node(iprim) > 0) then
             inp=inp+1
             if(inp == 1) then    ! if this is the first 
-               nnode=comBG%no_recv_node(iprim)
+               nnode=comm_naba_blocks_of_atoms%no_recv_node(iprim)
                rembucket%no_send_node=nnode
-               do inode=1,comBG%no_recv_node(iprim)
+               do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
                   rembucket%list_send_node(inode)= &
-                       comBG%list_recv_node(inode,iprim)
+                       comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
                enddo
             else
-               do inode=1,comBG%no_recv_node(iprim) 
+               do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim) 
                   ! naba nodes for iprim-th atom
-                  ind_node=comBG%list_recv_node(inode,iprim)
+                  ind_node=comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
                   ifind=0
                   do jnode=1,nnode     ! check existed naba nodes for my bundle
                      ind_node2=rembucket%list_send_node(jnode)
@@ -442,7 +448,7 @@ contains
                   if(ifind == 0) then  ! if this node is new
                      rembucket%no_send_node=rembucket%no_send_node+1
                      rembucket%list_send_node(rembucket%no_send_node)= &
-                          comBG%list_recv_node(inode,iprim)
+                          comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
                      nnode=rembucket%no_send_node
                   endif ! if this node is new
                enddo  ! end do loop over neighbour nodes for iprim-th atom

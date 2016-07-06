@@ -15,7 +15,7 @@
 !!     1. naba_blk_of_atm  : neighbour blocks of primary atoms
 !!     2. naba_atm_of_blk  : neighbour atoms of primary blocks
 !!     3. halo_atm_of_blk  : halo atoms of primary blocks
-!!     4. comm_in_BG                                    
+!!     4. comm_in_BtoG                                    
 !! 
 !!  AUTHOR
 !!   T.Miyazaki
@@ -30,6 +30,8 @@
 !!    Added timers
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2016/07/06 17:30 nakata
+!!    Renamed comm_in_BG -> comm_in_BtoG
 !!  SOURCE
 !!
 module naba_blk_module
@@ -128,7 +130,7 @@ module naba_blk_module
   !---------------------------------------------------------------------
   !4. Variables used in the communication on BlipGrid transformations
   !---------------------------------------------------------------------
-  type comm_in_BG
+  type comm_in_BtoG
      integer :: mx_iprim    !   = bundle%mx_iprim
      integer :: mx_recv_node,mx_send_node
      integer :: mx_pair     ! >= max[no_sent_pairs(:,:)]
@@ -142,7 +144,7 @@ module naba_blk_module
      integer,pointer :: no_send_node(:)      !(mx_iprim)
      integer,pointer :: list_send_node(:,:)  !(mx_send_node,mx_iprim)
      integer,pointer :: no_sent_pairs(:,:)   !(mx_send_node,mx_iprim)
-     !table showing where to put sent BG transformed functions
+     !table showing where to put sent BtoG transformed functions
      integer,pointer :: table_blk(:,:)       !(mx_pair,mx_recv_call)
      integer,pointer :: table_pair(:,:)      !(mx_pair,mx_recv_call)
      integer,pointer :: ibeg_recv_call(:)      !(mx_iprim)
@@ -155,10 +157,10 @@ module naba_blk_module
      !size. (The arrays like table_blk(mx_pair,mx_send_node,mx_iprim) 
      !might be easier to understand, but needs much more memory.)
      !mx_iprim     : max. no. of primary atoms for all bundles
-     !no_recv_node : no. of receiving nodes in sending each BG 
+     !no_recv_node : no. of receiving nodes in sending each BtoG 
      !               transformed support function
      !mx_recv_node : maximum of no_recv_node
-     !no_send_node : no. of sending nodes in receiving each BG 
+     !no_send_node : no. of sending nodes in receiving each BtoG 
      !               transformed support function
      !mx_send_node : maximum of no_send_node
      !no_sent_pairs: no. of pairs(an atom and its naba blks) for 
@@ -175,7 +177,7 @@ module naba_blk_module
      !               to each pair sent from ... 
      !               (The neighbour atom is identified through the naba
      !               list for one of my primary blocks)
-  end type comm_in_BG
+  end type comm_in_BtoG
 
   ! -------------------------------------------------------
   ! RCS ident string for object file id
@@ -507,10 +509,10 @@ contains
   end subroutine dealloc_halo_atm
 !!***
 
-!!****f* naba_blk_module/alloc_comm_in_BG1 *
+!!****f* naba_blk_module/alloc_comm_in_BtoG1 *
 !!
 !!  NAME 
-!!   alloc_comm_in_BG1
+!!   alloc_comm_in_BtoG1
 !!  USAGE
 !! 
 !!  PURPOSE
@@ -527,16 +529,19 @@ contains
 !!  MODIFICATION HISTORY
 !!   2008/05/16 ast
 !!    Added timers
+!!   2016/07/06 17:30 nakata
+!!    Renamed subroutine alloc_comm_in_BG1 -> alloc_comm_in_BtoG1
+!!    Renamed comm_in_BG -> comm_in_BtoG
 !!  SOURCE
 !!
-  subroutine alloc_comm_in_BG1(set,mx1,mx2)
+  subroutine alloc_comm_in_BtoG1(set,mx1,mx2)
 
     use GenComms, ONLY: cq_abort
 
     implicit none
 
     integer,intent(in)::mx1,mx2
-    type(comm_in_BG),intent(inout) :: set
+    type(comm_in_BtoG),intent(inout) :: set
     integer :: stat
 
     set%mx_iprim=mx1
@@ -555,13 +560,13 @@ contains
     if(stat/=0) call cq_abort('Error allocating memory to ibeg_recv_call !',stat)
     call stop_timer(tmr_std_allocation)
     return
-  end subroutine alloc_comm_in_BG1
+  end subroutine alloc_comm_in_BtoG1
 !!***
 
-!!****f* naba_blk_module/alloc_comm_in_BG2 *
+!!****f* naba_blk_module/alloc_comm_in_BtoG2 *
 !!
 !!  NAME 
-!!   alloc_comm_in_BG2
+!!   alloc_comm_in_BtoG2
 !!  USAGE
 !! 
 !!  PURPOSE
@@ -582,16 +587,19 @@ contains
 !!   - Changed set from intent(out) to intent(inout). Otherwise
 !!     member mx_iprim becomes undefined upon entering the subroutine,
 !!     and is not defined anywhere within the subroutine.
+!!   2016/07/06 17:30 nakata
+!!    Renamed subroutine alloc_comm_in_BG2 -> alloc_comm_in_BtoG2
+!!    Renamed comm_in_BG -> comm_in_BtoG
 !!  SOURCE
 !!
-  subroutine alloc_comm_in_BG2(set,mx3,mx4,mx5)
+  subroutine alloc_comm_in_BtoG2(set,mx3,mx4,mx5)
 
     use GenComms, ONLY: cq_abort
 
     implicit none
 
     integer,intent(in)::mx3,mx4,mx5
-    type(comm_in_BG),intent(inout) :: set
+    type(comm_in_BtoG),intent(inout) :: set
     integer :: stat
 
     set%mx_send_node=mx3
@@ -609,13 +617,13 @@ contains
     if(stat/=0) call cq_abort('Error allocating memory to table_pair !',stat)
     call stop_timer(tmr_std_allocation)
     return
-  end subroutine alloc_comm_in_BG2
+  end subroutine alloc_comm_in_BtoG2
 !!***
 
-!!****f* naba_blk_module/dealloc_comm_in_BG *
+!!****f* naba_blk_module/dealloc_comm_in_BtoG *
 !!
 !!  NAME 
-!!   dealloc_comm_in_BG
+!!   dealloc_comm_in_BtoG
 !!  USAGE
 !! 
 !!  PURPOSE
@@ -634,15 +642,18 @@ contains
 !!    Changed attribute of set
 !!   2008/05/16 ast
 !!    Added timers
+!!   2016/07/06 17:30 nakata
+!!    Rename subroutine dealloc_comm_in_BG -> dealloc_comm_in_BtoG
+!!    Renamed comm_in_BG -> comm_in_BtoG and comBG to comm_naba_blocks_of_atoms
 !!  SOURCE
 !!
-  subroutine dealloc_comm_in_BG(set)
+  subroutine dealloc_comm_in_BtoG(set)
 
     use GenComms, ONLY: cq_abort
 
     implicit none
 
-    type(comm_in_BG),intent(inout) :: set
+    type(comm_in_BtoG),intent(inout) :: set
     integer :: stat
 
     call start_timer(tmr_std_allocation)
@@ -650,10 +661,10 @@ contains
          set%no_sent_pairs, set%list_send_node, set% no_send_node, &
          set%no_naba_blk, set%list_recv_node, &
          set%no_recv_node, STAT=stat)
-    if(stat /= 0) call cq_abort(' ERROR in deallocating comBG ',stat)
+    if(stat /= 0) call cq_abort(' ERROR in deallocating comm_naba_blocks_of_atoms ',stat)
     call stop_timer(tmr_std_allocation)
     return
-  end subroutine dealloc_comm_in_BG
+  end subroutine dealloc_comm_in_BtoG
 !!***
 
 end module naba_blk_module

@@ -517,10 +517,13 @@ contains
     !             different for different atoms, nunit and nsize varies
     !             at each call.
     !
+    !  Modification: 2016/07/06 17:30 nakata
+    !   Renamed comBG -> comm_naba_blocks_of_atoms
+    !
     use datatypes
     use numbers, ONLY : zero
     use mpi
-    use set_blipgrid_module, ONLY: comBG,naba_atm
+    use set_blipgrid_module, ONLY: comm_naba_blocks_of_atoms,naba_atm
     use comm_array_module,   ONLY: send_array,recv_array
     use block_module,        ONLY: n_pts_in_block  ! = blocks%nm_group(:)
     use GenComms, ONLY: my_barrier, cq_abort
@@ -536,9 +539,9 @@ contains
 
     integer :: mynode, nunit_send, nunit_recv, ind_alp_i_blk
     integer :: tag
-    integer :: nsend_req(comBG%mx_send_node),ierr_send(comBG%mx_send_node)
-    integer :: nrecv_stat(MPI_STATUS_SIZE,comBG%mx_recv_node),&
-         ierr_recv(comBG%mx_recv_node)
+    integer :: nsend_req(comm_naba_blocks_of_atoms%mx_send_node),ierr_send(comm_naba_blocks_of_atoms%mx_send_node)
+    integer :: nrecv_stat(MPI_STATUS_SIZE,comm_naba_blocks_of_atoms%mx_recv_node),&
+               ierr_recv(comm_naba_blocks_of_atoms%mx_recv_node)
     !TM 20/12/2000
     integer :: nwait_stat(MPI_STATUS_SIZE),ierr,irc
     integer :: inode,jnode,nnd_rem,ibegin,nsize,my_ibegin, nsf_recv
@@ -556,17 +559,17 @@ contains
     !  corresponding data in send_array.
     !  
 
-    if(comBG%no_recv_node(iprim) > 0) then
+    if(comm_naba_blocks_of_atoms%no_recv_node(iprim) > 0) then
        nunit_send=nsf_send*n_pts_in_block   
-       do inode=1,comBG%no_recv_node(iprim)
-          nnd_rem=comBG%list_recv_node(inode,iprim)
+       do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
+          nnd_rem=comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
           if(inode == 1) then
              ibegin=1
           else
-             ibegin=ibegin+comBG%no_naba_blk(inode-1,iprim)*nunit_send
+             ibegin=ibegin+comm_naba_blocks_of_atoms%no_naba_blk(inode-1,iprim)*nunit_send
           endif
 
-          nsize=comBG%no_naba_blk(inode,iprim)*nunit_send
+          nsize=comm_naba_blocks_of_atoms%no_naba_blk(inode,iprim)*nunit_send
           if(nnd_rem == mynode) then
              my_ibegin=ibegin
           else
@@ -582,14 +585,14 @@ contains
     call my_barrier()
     !receive
 
-    if(comBG%no_send_node(iprim) > 0) then
-       isend=comBG%ibeg_recv_call(iprim)-1
-       do jnode=1,comBG%no_send_node(iprim)
+    if(comm_naba_blocks_of_atoms%no_send_node(iprim) > 0) then
+       isend=comm_naba_blocks_of_atoms%ibeg_recv_call(iprim)-1
+       do jnode=1,comm_naba_blocks_of_atoms%no_send_node(iprim)
           isend=isend+1
-          nnd_rem=comBG%list_send_node(jnode,iprim)
+          nnd_rem=comm_naba_blocks_of_atoms%list_send_node(jnode,iprim)
           nsf_recv = nsf_species(species_glob(atoms_on_node(iprim,nnd_rem)))
           nunit_recv = nsf_recv*n_pts_in_block
-          nsize=comBG%no_sent_pairs(jnode,iprim)*nunit_recv
+          nsize=comm_naba_blocks_of_atoms%no_sent_pairs(jnode,iprim)*nunit_recv
           call start_timer(tmr_std_allocation)
           allocate(recv_array(nsize),STAT=stat)
           if(stat/=0) call cq_abort("Error allocating recv_array in distribute_result: ",nsize)
@@ -610,9 +613,9 @@ contains
              recv_ptr => recv_array(1:nsize)
           endif
 
-          do ipair=1,comBG%no_sent_pairs(jnode,iprim) !naba blks of the iprim-th atm
-             prim_blk=comBG%table_blk(ipair,isend)     ! primary block in my domain
-             naba_atm_tmp=comBG%table_pair(ipair,isend)! naba atm of the primary blk
+          do ipair=1,comm_naba_blocks_of_atoms%no_sent_pairs(jnode,iprim) !naba blks of the iprim-th atm
+             prim_blk=comm_naba_blocks_of_atoms%table_blk(ipair,isend)     ! primary block in my domain
+             naba_atm_tmp=comm_naba_blocks_of_atoms%table_pair(ipair,isend)! naba atm of the primary blk
              loc1= nunit_recv*(ipair-1)
              ind_alp_i_blk = naba_atm(sf)%ibegin_blk_orb(prim_blk)+ &
                   naba_atm(sf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
@@ -667,9 +670,9 @@ contains
 
     !Check whether we have finished all MPI_issend
     !     20/12/2000 Tsuyoshi Miyazaki 
-    if(comBG%no_recv_node(iprim) > 0) then
-       do inode=1,comBG%no_recv_node(iprim)
-          nnd_rem=comBG%list_recv_node(inode,iprim)
+    if(comm_naba_blocks_of_atoms%no_recv_node(iprim) > 0) then
+       do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
+          nnd_rem=comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
           if(nnd_rem /= mynode) then
              call MPI_WAIT(nsend_req(inode),nwait_stat,ierr)
              if(ierr /= 0) call cq_abort('ERROR in calling MPI_WAIT in distribute_result',ierr)
@@ -1624,6 +1627,8 @@ contains
 !!    Added timers
 !!   2011/11/15 17:00 dave
 !!    Removed blip module and variables passed to transform
+!!   2016/07/06 17:30 nakata
+!!    Removed not-used comm_naba_blocks_of_atoms and naba_blk_supp
 !!  SOURCE
 !!
   subroutine inverse_blip_transform_new(myid, dsupport, data_dblip, n_prim)
@@ -1632,7 +1637,6 @@ contains
     use numbers
     use primary_module, ONLY: bundle
     use comm_array_module, ONLY: send_array
-    use set_blipgrid_module, ONLY: naba_blk_supp, comBG
     use block_module,        ONLY: n_pts_in_block  ! = blocks%nm_group(:)
     use blip, ONLY: blip_info
     use GenComms, ONLY: my_barrier
@@ -1704,6 +1708,8 @@ contains
 !!   - Set data_dblip from intent(out) to intent(inout) because if
 !!     set to intent(out) then EVERY member of data_dblip becomes
 !!     undefined, and array members becomes unallocated.
+!!   2016/07/06 17:30 nakata
+!!    Removed not-used comm_naba_blocks_of_atoms
 !!  SOURCE
 !!
   subroutine do_inverse_blip_new(myid, iprim, data_dblip, nsf)
@@ -1715,7 +1721,7 @@ contains
     use group_module,        ONLY:blocks
     use primary_module,      ONLY:bundle
     use cover_module,        ONLY:BCS_blocks
-    use set_blipgrid_module, ONLY:comBG,naba_blk_supp
+    use set_blipgrid_module, ONLY:naba_blk_supp
     use comm_array_module,   ONLY:send_array
 
     use block_module,ONLY: n_pts_in_block,nx_in_block,ny_in_block,nz_in_block
@@ -2035,11 +2041,15 @@ contains
     !  My previous expectation in the above is too optimistic....
     !  As we now treat various NSF, nsf for sending and nsf for receiving 
     !  are generally different.
+    !
+    !  Modification: 2016/07/06 17:30 nakata
+    !   Renamed comBG -> comm_naba_blocks_of_atoms
+
 
     use datatypes
     use numbers
     use mpi
-    use set_blipgrid_module, ONLY: comBG,naba_atm
+    use set_blipgrid_module, ONLY: comm_naba_blocks_of_atoms,naba_atm
     use comm_array_module,   ONLY: send_array,recv_array
     use block_module,        ONLY: n_pts_in_block  != blocks%nm_group(:)
     use GenComms, ONLY: my_barrier, cq_abort
@@ -2074,10 +2084,10 @@ contains
     !  
 
     nsize = 0
-    if(comBG%no_recv_node(iprim) > 0) then
+    if(comm_naba_blocks_of_atoms%no_recv_node(iprim) > 0) then
        nunit_recv=nsf_recv*n_pts_in_block   
-       do inode=1,comBG%no_recv_node(iprim)
-          nsize = nsize+comBG%no_naba_blk(inode,iprim)
+       do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
+          nsize = nsize+comm_naba_blocks_of_atoms%no_naba_blk(inode,iprim)
        enddo
        !write(io_lun,*) 'Allocating send_array: ',nsize
        call start_timer(tmr_std_allocation)
@@ -2087,19 +2097,20 @@ contains
        call stop_timer(tmr_std_allocation)
        send_array(:)=zero
        call start_timer(tmr_std_allocation)
-       allocate(nrecv_req(comBG%no_recv_node(iprim)), STAT=ierr)
-       if(ierr/=0) call cq_abort("Error allocating nrecv_req in collect_result: ",comBG%no_recv_node(iprim),ierr)
-       call reg_alloc_mem(area_basis,comBG%no_recv_node(iprim),type_int)
+       allocate(nrecv_req(comm_naba_blocks_of_atoms%no_recv_node(iprim)), STAT=ierr)
+       if(ierr/=0) call cq_abort("Error allocating nrecv_req in collect_result: ", &
+                                 comm_naba_blocks_of_atoms%no_recv_node(iprim),ierr)
+       call reg_alloc_mem(area_basis,comm_naba_blocks_of_atoms%no_recv_node(iprim),type_int)
        call stop_timer(tmr_std_allocation)
-       do inode=1,comBG%no_recv_node(iprim)
-          nnd_rem=comBG%list_recv_node(inode,iprim)
+       do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
+          nnd_rem=comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
           if(inode == 1) then
              ibegin=1
           else
-             ibegin=ibegin+comBG%no_naba_blk(inode-1,iprim)*nunit_recv
+             ibegin=ibegin+comm_naba_blocks_of_atoms%no_naba_blk(inode-1,iprim)*nunit_recv
           endif
 
-          nsize=comBG%no_naba_blk(inode,iprim)*nunit_recv
+          nsize=comm_naba_blocks_of_atoms%no_naba_blk(inode,iprim)*nunit_recv
           if(nnd_rem == mynode) then
              my_ibegin=ibegin
           else
@@ -2112,14 +2123,14 @@ contains
     call my_barrier() ! this is not needed.
 
     !Makes Arrays and Sends
-    if(comBG%no_send_node(iprim) > 0) then
+    if(comm_naba_blocks_of_atoms%no_send_node(iprim) > 0) then
        nsize=0
        msize=0
-       do jnode=1,comBG%no_send_node(iprim)
-          nnd_rem=comBG%list_send_node(jnode,iprim)
+       do jnode=1,comm_naba_blocks_of_atoms%no_send_node(iprim)
+          nnd_rem=comm_naba_blocks_of_atoms%list_send_node(jnode,iprim)
           nsf_send = nsf_species(species_glob(atoms_on_node(iprim,nnd_rem)))
           nunit_send = nsf_send*n_pts_in_block
-          msize=max(msize,comBG%no_sent_pairs(jnode,iprim)*nunit_send)
+          msize=max(msize,comm_naba_blocks_of_atoms%no_sent_pairs(jnode,iprim)*nunit_send)
        end do
        !write(io_lun,*) 'Allocating recv_array: ',nsize
        call start_timer(tmr_std_allocation)
@@ -2127,23 +2138,23 @@ contains
        if(stat/=0) call cq_abort("Error allocating recv_array in collect_result: ",nsize)
        call reg_alloc_mem(area_basis,msize,type_dbl)
        call stop_timer(tmr_std_allocation)
-       isend=comBG%ibeg_recv_call(iprim)-1
+       isend=comm_naba_blocks_of_atoms%ibeg_recv_call(iprim)-1
        off = 0
-       do jnode=1,comBG%no_send_node(iprim)
+       do jnode=1,comm_naba_blocks_of_atoms%no_send_node(iprim)
           isend=isend+1
-          nnd_rem=comBG%list_send_node(jnode,iprim)
+          nnd_rem=comm_naba_blocks_of_atoms%list_send_node(jnode,iprim)
           nsf_send = nsf_species(species_glob(atoms_on_node(iprim,nnd_rem)))
           nunit_send = nsf_send*n_pts_in_block
-          nsize=comBG%no_sent_pairs(jnode,iprim)*nunit_send
+          nsize=comm_naba_blocks_of_atoms%no_sent_pairs(jnode,iprim)*nunit_send
           if(nnd_rem == mynode) then
              recv_ptr => send_array(my_ibegin:my_ibegin+nsize-1)
           else
              recv_ptr => recv_array
           endif
 
-          do ipair=1,comBG%no_sent_pairs(jnode,iprim) !naba blks of the iprim-th atm
-             prim_blk=comBG%table_blk(ipair,isend)     ! primary block in my domain
-             naba_atm_tmp=comBG%table_pair(ipair,isend)! naba atm of the primary blk
+          do ipair=1,comm_naba_blocks_of_atoms%no_sent_pairs(jnode,iprim) !naba blks of the iprim-th atm
+             prim_blk=comm_naba_blocks_of_atoms%table_blk(ipair,isend)     ! primary block in my domain
+             naba_atm_tmp=comm_naba_blocks_of_atoms%table_pair(ipair,isend)! naba atm of the primary blk
              loc1= nunit_send*(ipair-1)
              ind_alp_i_blk = naba_atm(sf)%ibegin_blk_orb(prim_blk)+ &
                   naba_atm(sf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
@@ -2202,9 +2213,9 @@ contains
 
     ! write(io_lun,*) ' MPI_WAIT start for Node',mynode
     !Check whether we have finished all MPI_irecv
-    if(comBG%no_recv_node(iprim) > 0) then
-       do inode=1,comBG%no_recv_node(iprim)
-          nnd_rem=comBG%list_recv_node(inode,iprim)
+    if(comm_naba_blocks_of_atoms%no_recv_node(iprim) > 0) then
+       do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
+          nnd_rem=comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
           if(nnd_rem /= mynode) then
              call MPI_WAIT(nrecv_req(inode),nwait_stat,ierr)
              if(ierr /= 0) then
@@ -2214,11 +2225,12 @@ contains
        enddo      ! Loop over remote nodes
        call start_timer(tmr_std_allocation)
        deallocate(nrecv_req, STAT=ierr)
-       if(ierr/=0) call cq_abort("Error deallocating nrecv_req in collect_result: ",comBG%no_recv_node(iprim),ierr)
-       call reg_dealloc_mem(area_basis,comBG%no_recv_node(iprim),type_int)
+       if(ierr/=0) call cq_abort("Error deallocating nrecv_req in collect_result: ", &
+                                 comm_naba_blocks_of_atoms%no_recv_node(iprim),ierr)
+       call reg_dealloc_mem(area_basis,comm_naba_blocks_of_atoms%no_recv_node(iprim),type_int)
        call stop_timer(tmr_std_allocation)
     endif       ! if there are sending nodes for iprim...
-    if(comBG%no_send_node(iprim)>0) then
+    if(comm_naba_blocks_of_atoms%no_send_node(iprim)>0) then
        if(allocated(recv_array)) then
           call start_timer(tmr_std_allocation)
           nullify(recv_ptr)
@@ -2260,6 +2272,8 @@ contains
 !!    Added GenComms
 !!   2011/11/15 17:00 dave
 !!    Removed blip module and variables passed to transform
+!!   2016/07/06 17:30 nakata
+!!    Removed not-used comm_naba_blocks_of_atoms and naba_blk_supp
 !!  SOURCE
 !!
   subroutine inverse_blip_to_grad_new(myid, direction, dsupport, data_dblip, n_prim)
@@ -2268,7 +2282,6 @@ contains
     use blip, ONLY: blip_info
     use numbers
     use primary_module, ONLY:bundle
-    use set_blipgrid_module, ONLY:naba_blk_supp,comBG
     use block_module,        ONLY: n_pts_in_block  ! = blocks%nm_group(:)
     use GenComms, ONLY: my_barrier
     use species_module, ONLY: nsf_species
@@ -2334,6 +2347,8 @@ contains
 !!     set to out then all of its members becomes undefined upon
 !!     entering the subroutine, this includes all the array members,
 !!     which becomes unallocated
+!!   2016/07/06 17:30 nakata
+!!    Removed not-used comm_naba_blocks_of_atoms
 !!  SOURCE
 !!
   subroutine do_inverse_blip_to_grad_new(myid, direction, iprim, data_dblip, NSF)
@@ -2344,7 +2359,7 @@ contains
     use group_module,        ONLY:blocks
     use primary_module,      ONLY:bundle
     use cover_module,        ONLY:BCS_blocks
-    use set_blipgrid_module, ONLY:comBG,naba_blk_supp
+    use set_blipgrid_module, ONLY:naba_blk_supp
     use comm_array_module,   ONLY:send_array
 
     use block_module,ONLY: n_pts_in_block,nx_in_block,ny_in_block,nz_in_block

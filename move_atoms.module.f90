@@ -291,7 +291,7 @@ contains
     !       but not recommended. See dimens.module as well. [2013/07/03 michi]
     if (.NOT. flag_MDold) then
       ! IMPORTANT: You MUST wrap atoms BEFORE updating members if they get out of the cell.
-      !            Otherwise, you will get an error message at BG-transformation.
+      !            Otherwise, you will get an error message at BtoG-transformation.
       call wrap_xyz_atom_cell
       call update_atom_coord
       call updateIndices3(fixed_potential,velocity)
@@ -1744,7 +1744,7 @@ contains
 
 !!  if (inode.EQ.ionode) call dump_idglob_old  !maybe needed when changing computation resources
 
-    ! Used in BG-transformation.
+    ! Used in BtoG-transformation.
     call deallocate_distribute_atom
     call distribute_atoms(inode,ionode)
     call my_barrier()
