@@ -100,6 +100,8 @@ contains
   !!   - changed spin implementation
   !!   2012/04/26 16:15 dave
   !!    Changes for analytic S and KE matrices
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed H_on_supportfns -> H_on_atomf
   !!  SOURCE
   !!
   subroutine get_blip_gradient(inode, ionode)
@@ -127,7 +129,7 @@ contains
                                            nspin, spin_factor,             &
                                            area_minE,                      &
                                            flag_analytic_blip_int, PhiPulay
-    use functions_on_grid,           only: H_on_supportfns, gridfunctions, &
+    use functions_on_grid,           only: H_on_atomf, gridfunctions, &
                                            fn_on_grid,                     &
                                            allocate_temp_fn_on_grid,       &
                                            free_temp_fn_on_grid
@@ -162,7 +164,7 @@ contains
     ! a note on signs... both the above mentioned routines give -Grad,
     ! ie the gradient downwards.
     !
-    ! We have support and h_on_support in support and workspace_support,
+    ! We have support and h_on_atomf in support and workspace_support,
     ! so use workspace2_support as working area...
     ! This returns the support_gradient in workspace_support
     WhichPulay = BothPulay
@@ -222,19 +224,19 @@ contains
        call reg_dealloc_mem(area_minE, this_nsf * this_nsf * nspin, type_dbl)
     end if
     if(flag_analytic_blip_int) WhichPulay = PhiPulay
-    ! use H_on_supportfns(1) as work storage for support gradient
-    call get_support_gradient(H_on_supportfns(1), inode, ionode)
+    ! use H_on_atomf(1) as work storage for support gradient
+    call get_support_gradient(H_on_atomf(1), inode, ionode)
     ! now we need to accumulate the 'type 1' gradient of the non-local
     ! energy (see notes, 3/1/97)
-    if (non_local) call get_non_local_gradient(H_on_supportfns(1), inode, ionode)
+    if (non_local) call get_non_local_gradient(H_on_atomf(1), inode, ionode)
 
     ! now we need to transform this into the blip basis first, apply
     ! the scaling for grid size,
-    call scal(gridfunctions(H_on_supportfns(1))%size, grid_point_volume,&
-              gridfunctions(H_on_supportfns(1))%griddata, 1)
+    call scal(gridfunctions(H_on_atomf(1))%size, grid_point_volume,&
+              gridfunctions(H_on_atomf(1))%griddata, 1)
 
     ! and then 
-    call inverse_blip_transform_new(inode-1, H_on_supportfns(1), &
+    call inverse_blip_transform_new(inode-1, H_on_atomf(1), &
                                     support_gradient, bundle%n_prim)
 
     ! Kinetic Energy; first, the change in onsite T matrix elements,
@@ -316,13 +318,13 @@ contains
     if(.NOT.flag_analytic_blip_int) then
        tmp_fn = allocate_temp_fn_on_grid(sf)
        do direction = 1, 3 
-          call blip_to_grad_new(inode-1, direction, H_on_supportfns(1))
+          call blip_to_grad_new(inode-1, direction, H_on_atomf(1))
           ! now act with K - result into workspace2_support
           gridfunctions(tmp_fn)%griddata = zero
           do spin = 1, nspin
              ! accumulate the contribution from matK(spin) to tmp_fn
              call act_on_vectors_new(inode-1, rem_bucket(3), matK(spin), &
-                  tmp_fn, H_on_supportfns(1))
+                  tmp_fn, H_on_atomf(1))
           end do
           ! apply the appropriate scaling factor
           call scal(gridfunctions(tmp_fn)%size,        &
@@ -511,6 +513,8 @@ contains
   !!     of type I and II gradients are accumulated using the fact that
   !!     act_on_vectors_new is accumulative. This improves code
   !!     efficiency.
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed H_on_supportfns -> H_on_atomf
   !!  SOURCE
   !!
   subroutine get_support_gradient(support_gradient, inode, ionode)
@@ -528,7 +532,7 @@ contains
                                            spin_factor
     use functions_on_grid,           only: gridfunctions, fn_on_grid, &
                                            supportfns,                &
-                                           H_on_supportfns,           &
+                                           H_on_atomf,           &
                                            allocate_temp_fn_on_grid,  &
                                            free_temp_fn_on_grid
 
@@ -547,18 +551,18 @@ contains
     end do
 
     ! 2011/09/20 L.Tong
-    ! This subroutine is called on the premise that both H_on_supportfns
+    ! This subroutine is called on the premise that both H_on_atomf
     ! and H_dn_on_supportfns (for spin polarised calculations) alreay contain
     ! the correct values upon entry.
 
-    ! first, act on h_on_supportfns (which holds H |phi> on entry)
+    ! first, act on h_on_atomf (which holds H |phi> on entry)
     ! with the K matrix) to get type I variation
     
     ! L.Tong: act_on_vectors_new is accumulative, we use this to our advantage
     if (WhichPulay == PhiPulay .or. WhichPulay == BothPulay) then
        do spin = 1, nspin
           call act_on_vectors_new(inode-1, rem_bucket(3), matK(spin), &
-                                  tmp_fn(spin), H_on_supportfns(spin))
+                                  tmp_fn(spin), H_on_atomf(spin))
        end do
     end if
     ! now act with M12 on support to get type II variation

@@ -154,6 +154,9 @@ contains
   !!   Bug fix for sum over two components of rho even without spin (and moved rho_total alloc/dealloc)
   !!  2015/06/08 lat 
   !!   Added EXX+spin and experimental backtrace 
+  !!  2016/07/13 18:30 nakata
+  !!   Renamed subroutine get_h_on_support -> get_h_on_atomf
+  !!   Renamed H_on_supportfns -> H_on_atomf
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -185,7 +188,7 @@ contains
                                            spin_factor, blips,          &
                                            flag_analytic_blip_int 
     use PAO_grid_transform_module,   only: single_PAO_to_grid
-    use functions_on_grid,           only: supportfns, H_on_supportfns, &
+    use functions_on_grid,           only: supportfns, H_on_atomf,      &
                                            allocate_temp_fn_on_grid,    &
                                            free_temp_fn_on_grid,        &
                                            gridfunctions, fn_on_grid
@@ -251,8 +254,8 @@ contains
        call matrix_scale(zero, matH(spin))
        if (flag_vary_basis .and. flag_basis_set == PAOs) &
             call matrix_scale(zero, matdH(spin))
-       ! zero H_on_supportfns
-       gridfunctions(H_on_supportfns(spin))%griddata = zero
+       ! zero H_on_atomf
+       gridfunctions(H_on_atomf(spin))%griddata = zero
     end do
     !
     !
@@ -277,9 +280,9 @@ contains
     end if
     !
     !
-    ! from here on, workspace support becomes h_on_support...
+    ! from here on, workspace support becomes h_on_atomf...
     ! in fact, what we are getting here is (H_local - T) acting on support
-    call get_h_on_support(iprint_ops, fixed_potential, electrons, rho, size)
+    call get_h_on_atomf(iprint_ops, fixed_potential, electrons, rho, size)
     !
     !
     if (inode == ionode .and. iprint_ops > 2) &
@@ -290,7 +293,7 @@ contains
     do spin = 1, nspin
        call get_matrix_elements_new(inode-1, rem_bucket(sf_H_sf_rem), &
                                     matH(spin), supportfns, &
-                                    H_on_supportfns(spin))
+                                    H_on_atomf(spin))
     end do
     if (inode == ionode .and. iprint_ops > 2) write (io_lun, *) 'Done integration'
     !
@@ -327,7 +330,7 @@ contains
           call get_matrix_elements_new(inode-1,                  &
                                        rem_bucket(pao_H_sf_rem), &
                                        matwork,   pao_support,   &
-                                       H_on_supportfns(spin))
+                                       H_on_atomf(spin))
           if (inode == ionode .and. iprint_ops > 2) &
                write (io_lun, *) 'Done integration (spin=', spin, ')'
           !
@@ -451,13 +454,13 @@ contains
 
 
   ! -----------------------------------------------------------
-  ! Subroutine get_h_on_support
+  ! Subroutine get_h_on_atomf
   ! -----------------------------------------------------------
 
-  !!****f* H_matrix_module/get_h_on_support_nospin *
+  !!****f* H_matrix_module/get_h_on_atomf_nospin *
   !!
   !!  NAME
-  !!   get_h_on_support
+  !!   get_h_on_atomf
   !!  USAGE
   !!
   !!  PURPOSE
@@ -522,9 +525,12 @@ contains
   !!   - optional output of x_energy only
   !!   2015/11/24 08:38 dave
   !!    Adjusted name of hartree_energy to hartree_energy_total_rho for neutral atom implementation
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed subroutine get_h_on_support -> get_h_on_atomf
+  !!    Renamed H_on_supportfns -> H_on_atomf
   !!  SOURCE
   !!
-  subroutine get_h_on_support(output_level, fixed_potential, &
+  subroutine get_h_on_atomf(output_level, fixed_potential, &
                               electrons, rho, size)
 
     use datatypes
@@ -569,7 +575,7 @@ contains
                                            delta_E_xc
     use hartree_module,              only: hartree, hartree_stress
     use functions_on_grid,           only: gridfunctions, fn_on_grid,  &
-                                           supportfns, H_on_supportfns
+                                           supportfns, H_on_atomf
 
     use calc_matrix_elements_module, only: norb
     use pseudopotential_common,      only: pseudopotential
@@ -606,7 +612,7 @@ contains
     if( flag_neutral_atom ) then
        allocate( drho_tot(size), STAT=stat)
        if (stat /= 0) &
-            call cq_abort("get_h_on_support: Error allocating drho_tot:", size )
+            call cq_abort("get_h_on_atomf: Error allocating drho_tot:", size )
        call reg_alloc_mem(area_ops, size, type_dbl)
     end if
 
@@ -614,7 +620,7 @@ contains
     allocate(xc_epsilon(size), h_potential(size), rho_tot(size), &
              xc_potential(size,nspin), STAT=stat)
     if (stat /= 0) &
-         call cq_abort("get_h_on_support: Error allocating mem:", size, nspin)
+         call cq_abort("get_h_on_atomf: Error allocating mem:", size, nspin)
     call reg_alloc_mem(area_ops, (3+nspin)*size, type_dbl)
     
     !call dump_locps(pseudopotential,size,inode)
@@ -644,7 +650,7 @@ contains
     ! first initialise some arrays
     h_potential = zero
     do spin = 1, nspin
-       gridfunctions(H_on_supportfns(spin))%griddata = zero
+       gridfunctions(H_on_atomf(spin))%griddata = zero
        potential(:,spin)    = zero
        xc_potential(:,spin) = zero
     end do
@@ -662,7 +668,7 @@ contains
     electrons_tot = spin_factor * sum(electrons(:))
     if (inode == ionode .and. output_level >= 2) then
        write (io_lun, '(10x,a)') &
-            'get_h_on_support: Electron Count, up, down and total:'
+            'get_h_on_atomf: Electron Count, up, down and total:'
        write (io_lun, '(10x, 3f25.15)') &
             electrons(1), electrons(nspin), electrons_tot
     end if
@@ -980,8 +986,8 @@ contains
                 do point = 1, n_pts_in_block
                    n = n + 1
                    do spin = 1, nspin
-                      gridfunctions(H_on_supportfns(spin))%griddata(n) = &
-                           gridfunctions(supportfns)%griddata(n) *       &
+                      gridfunctions(H_on_atomf(spin))%griddata(n) = &
+                           gridfunctions(supportfns)%griddata(n) *  &
                            potential(m+point,spin)
                    end do ! spin
                 end do ! point
@@ -1001,17 +1007,17 @@ contains
     !
     !
     deallocate(xc_epsilon, h_potential, rho_tot, xc_potential, STAT=stat)
-    if (stat /= 0) call cq_abort("get_h_on_support: Error deallocating mem")
+    if (stat /= 0) call cq_abort("get_h_on_atomf: Error deallocating mem")
     call reg_dealloc_mem(area_ops, (3+nspin)*size, type_dbl)
 
     ! for Neutral atom potential
     if( flag_neutral_atom ) then
        deallocate(drho_tot, STAT=stat)
-       if (stat /= 0) call cq_abort("get_h_on_support: Error deallocating mem")
+       if (stat /= 0) call cq_abort("get_h_on_atomf: Error deallocating mem")
        call reg_dealloc_mem(area_ops, size, type_dbl)
     end if
     return
-  end subroutine get_h_on_support
+  end subroutine get_h_on_atomf
   !!***
 
 
@@ -1403,6 +1409,8 @@ contains
   !!    Added flag for on-site analytics
   !!   2012/03/13 L.Tong
   !!   - Added spin implementation
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed H_on_supportfns -> H_on_atomf
   !!  SOURCE
   !!
   subroutine get_T_matrix(matKE)
@@ -1424,7 +1432,7 @@ contains
     use mult_module,                 only: allocate_temp_matrix,    &
                                            free_temp_matrix, matdH, &
                                            matrix_sum
-    use functions_on_grid,           only: H_on_supportfns
+    use functions_on_grid,           only: H_on_atomf
     use support_spec_format,         only: supports_on_atom
     use species_module,              only: nsf_species
 
@@ -1441,10 +1449,10 @@ contains
          matdKE = allocate_temp_matrix(dHrange, 0, paof, sf)
     if(flag_basis_set == blips) then
        do direction = 1, 3
-          call blip_to_grad_new(myid, direction, H_on_supportfns(1))
+          call blip_to_grad_new(myid, direction, H_on_atomf(1))
           call get_matrix_elements_new(myid, rem_bucket(sf_H_sf_rem), &
-                                       matwork, H_on_supportfns(1), &
-                                       H_on_supportfns(1))
+                                       matwork, H_on_atomf(1), &
+                                       H_on_atomf(1))
           call matrix_sum(one, matKE, one, matwork)
        end do
        ! replace the onsite blocks with the analytic values...

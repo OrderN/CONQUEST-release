@@ -804,6 +804,8 @@ contains
   !!      instead of hardwired values of 0.001 and 0.1
   !!   2013/08/20 M.Arita
   !!    - Changed calls for dumping L-matrix
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed H_on_supportfns -> H_on_atomf
   !!  SOURCE
   !!
   subroutine lateDM(ndone, n_L_iterations, done, deltaE, vary_mu, &
@@ -830,7 +832,7 @@ contains
     use timer_module,      only: cq_timer,start_timer,                 &
                                  stop_print_timer, WITH_LEVEL
     use io_module,         only: dump_matrix
-    use functions_on_grid, only: supportfns, H_on_supportfns
+    use functions_on_grid, only: supportfns, H_on_atomf
     use H_matrix_module,   only: get_H_matrix
     use density_module,    only: density, get_electronic_density
     use maxima_module,     only: maxngrid
@@ -893,9 +895,9 @@ contains
                                 dontM2, dontM3, dontM4, dontphi, doE)
        energy1_tot = spin_factor * sum(energy1(:))
 
-       ! note H_on_supportfns(1) is used just as a temp working array
+       ! note H_on_atomf(1) is used just as a temp working array
        call get_electronic_density(density, electrons, supportfns, &
-                                   H_on_supportfns(1), inode, ionode, &
+                                   H_on_atomf(1), inode, ionode, &
                                    maxngrid)
        call get_H_matrix(.true., .false., electrons, density, maxngrid)
     end if
@@ -1122,10 +1124,10 @@ contains
           ! the original also has dophi, but I think this is redundant
           call LNV_matrix_multiply (electrons, energy1, doK, dontM1, &
                                     dontM2, dontM3, dontM4, dontphi, doE)
-          ! H_on_supportfns(1) is used just as a temp working array
+          ! H_on_atomf(1) is used just as a temp working array
           call get_electronic_density(density, electrons,        &
                                       supportfns,                &
-                                      H_on_supportfns(1), inode, &
+                                      H_on_atomf(1), inode, &
                                       ionode, maxngrid)
           call get_H_matrix(.true., .false., electrons, density, maxngrid)
        end if

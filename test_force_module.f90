@@ -583,7 +583,7 @@ contains
        call get_energy(total_energy)
     end if
     ! Note that we've held K fixed but allow potential to vary ? Yes:
-    ! this way we get h_on_support in workspace_support
+    ! this way we get h_on_atomf in workspace_support
     ! call get_H_matrix(.false., fixed_potential, electrons, potential,
     !                   density, pseudopotential, N_GRID_MAX)
     ! call get_energy(total_energy)
@@ -649,7 +649,7 @@ contains
     ! Regenerate S
     call get_S_matrix(inode, ionode)
     ! Note that we've held K fixed but allow potential to vary ? Yes:
-    ! this way we get h_on_support in workspace_support
+    ! this way we get h_on_atomf in workspace_support
     call get_H_matrix(.true., fixed_potential, electrons, density, &
                       maxngrid)
     call get_energy(total_energy)
@@ -691,6 +691,8 @@ contains
   !!   - removed redundant input parameter real(double) mu
   !!   2013/07/10 11:42 dave
   !!    Bug fix for sum over two components of rho even without spin
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed H_on_supportfns -> H_on_atomf
   !!  SOURCE
   !!
   subroutine test_HF(fixed_potential, vary_mu, n_L_iterations, &
@@ -725,7 +727,7 @@ contains
     use GenComms,               only: myid, inode, ionode, cq_abort
     use H_matrix_module,        only: get_H_matrix
     use density_module,         only: get_electronic_density, density
-    use functions_on_grid,      only: supportfns, H_on_supportfns
+    use functions_on_grid,      only: supportfns, H_on_atomf
     use maxima_module,          only: maxngrid
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem, &
                                       type_dbl
@@ -794,7 +796,7 @@ contains
     if (.not. flag_self_consistent) then ! Harris-Foulkes requires
        ! output density
        call get_electronic_density(density_out, electrons, supportfns,&
-                                   H_on_supportfns(1), inode, ionode, &
+                                   H_on_atomf(1), inode, ionode,      &
                                    maxngrid)
     else
        do spin = 1, nspin 
@@ -941,7 +943,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
-    ! Now regenerate the pseudos and h_on_support
+    ! Now regenerate the pseudos and h_on_atomf
     select case (pseudo_type) 
     case (OLDPS)
        call init_pseudo(core_correction)
@@ -950,7 +952,7 @@ contains
     case (ABINIT)
        call set_tm_pseudo
     end select
-    ! Restore h_on_support
+    ! Restore h_on_atomf
     ! Calculate new energy
     call get_H_matrix(.true., fixed_potential, electrons, density, &
                       maxngrid)
@@ -1497,7 +1499,7 @@ contains
        call PAO_to_grid(inode-1, supportfns)
     end if
     ! Note that we've held K fixed but allow potential to vary ? Yes:
-    ! this way we get h_on_support in workspace_support
+    ! this way we get h_on_atomf in workspace_support
     call get_H_matrix(.false., fixed_potential, electrons, density, &
                       maxngrid)
     call get_energy(total_energy)
@@ -1793,6 +1795,8 @@ contains
   !!   - removed redundant input parameter real(double) mu
   !!   2015/11/24 08:43 dave
   !!    Adjusted use of energy
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed H_on_supportfns -> H_on_atomf
   !!  SOURCE
   !!
   subroutine test_nonSC(fixed_potential, vary_mu, n_L_iterations, &
@@ -1816,7 +1820,7 @@ contains
     use H_matrix_module,   only: get_H_matrix
     use density_module,    only: set_atomic_density, get_electronic_density,  &
                                  density
-    use functions_on_grid, only: supportfns, H_on_supportfns
+    use functions_on_grid, only: supportfns, H_on_atomf
     use maxima_module,     only: maxngrid
     use memory_module,     only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
@@ -1846,7 +1850,7 @@ contains
 
     ! We're coming in from initial_H: assume that initial E found
     call get_electronic_density(density_out, electrons, supportfns, &
-                                H_on_supportfns(1), inode, ionode,  &
+                                H_on_atomf(1), inode, ionode,       &
                                 maxngrid)
     ! Find force
     call get_nonSC_correction_force(nonSC_force, density_out, inode, &
@@ -1884,7 +1888,7 @@ contains
     ! Recalculate atomic densities
     call set_atomic_density(.true.)
     ! Note that we've held K fixed but allow potential to vary ? Yes:
-    ! this way we get h_on_support in workspace_support
+    ! this way we get h_on_atomf in workspace_support
     call get_H_matrix(.false., fixed_potential, electrons, density, &
                       maxngrid)
     call get_energy(total_energy)
@@ -2017,7 +2021,7 @@ contains
     call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
 
     ! We're coming in from initial_H: assume that initial E found
-    ! Ensure that h_on_support is in workspace_support
+    ! Ensure that h_on_atomf is in workspace_support
     call get_H_matrix(.false., fixed_potential, electrons, density, &
                       maxngrid)
     ! Store local energy
