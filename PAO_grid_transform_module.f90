@@ -172,6 +172,8 @@ contains
 !!    Added timers
 !!   2009/07/08 16:48 dave
 !!    Added code for one-to-one PAO to SF assignment
+!!   2016/07/14 16:30 nakata
+!!    Renamed naba_blk_supp -> naba_blocks_of_atoms
 !!  SOURCE
 !!
   subroutine do_PAO_transform(iprim,this_nsf)
@@ -182,7 +184,7 @@ contains
     use group_module,    ONLY: blocks
     use primary_module,  ONLY: bundle
     use cover_module,    ONLY: BCS_blocks
-    use set_blipgrid_module, ONLY: naba_blk_supp
+    use set_blipgrid_module, ONLY: naba_blocks_of_atoms
     use comm_array_module,   ONLY: send_array
     use block_module,    ONLY: nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
     use support_spec_format, ONLY: supports_on_atom, flag_paos_atoms_in_cell, flag_one_to_one
@@ -236,16 +238,16 @@ contains
     igrid=0
 
     call start_timer(tmr_std_allocation)
-    allocate(send_array(naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block*this_nsf),STAT=stat)
+    allocate(send_array(naba_blocks_of_atoms%no_naba_blk(iprim)*n_pts_in_block*this_nsf),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating send_array in do_PAO_grid: ",&
-         naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block*this_nsf)
+         naba_blocks_of_atoms%no_naba_blk(iprim)*n_pts_in_block*this_nsf)
     call stop_timer(tmr_std_allocation)
     send_array(:) = zero
 
     ! Loop over neighbour blocks
-    DO naba_blk=1,naba_blk_supp%no_naba_blk(iprim)! naba blks in NOPG order
+    DO naba_blk=1,naba_blocks_of_atoms%no_naba_blk(iprim)! naba blks in NOPG order
        ! iprim : primary seq. no. of the atom
-       ind_blk=naba_blk_supp%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
+       ind_blk=naba_blocks_of_atoms%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
        ind_blk=ind_blk-1
 
        nx_blk=ind_blk/ncover_yz
@@ -426,6 +428,8 @@ contains
 !!    Added timers
 !!   2009/07/08 16:48 dave
 !!    Added code for one-to-one PAO to SF assignment
+!!   2016/07/14 16:30 nakata
+!!    Renamed naba_blk_supp -> naba_blocks_of_atoms
 !!  SOURCE
 !!
   subroutine do_PAO_grad_transform(direction,iprim,this_nsf)
@@ -436,7 +440,7 @@ contains
     use group_module,    ONLY: blocks
     use primary_module,  ONLY: bundle
     use cover_module,    ONLY: BCS_blocks
-    use set_blipgrid_module, ONLY: naba_blk_supp
+    use set_blipgrid_module, ONLY: naba_blocks_of_atoms
     use comm_array_module,   ONLY: send_array
     use block_module,    ONLY: nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
     use support_spec_format, ONLY: supports_on_atom, flag_paos_atoms_in_cell, flag_one_to_one
@@ -490,17 +494,17 @@ contains
     igrid=0
 
     call start_timer(tmr_std_allocation)
-    allocate(send_array(naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block*this_nsf),&
+    allocate(send_array(naba_blocks_of_atoms%no_naba_blk(iprim)*n_pts_in_block*this_nsf),&
              STAT=stat)
     if(stat/=0) call cq_abort("Error allocating send_array in do_PAO_grad: ",&
-         naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block*this_nsf)
+         naba_blocks_of_atoms%no_naba_blk(iprim)*n_pts_in_block*this_nsf)
     call stop_timer(tmr_std_allocation)
     send_array(:) = zero
 
     ! Loop over neighbour blocks
-    DO naba_blk=1,naba_blk_supp%no_naba_blk(iprim)! naba blks in NOPG order
+    DO naba_blk=1,naba_blocks_of_atoms%no_naba_blk(iprim)! naba blks in NOPG order
        ! iprim : primary seq. no. of the atom
-       ind_blk=naba_blk_supp%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
+       ind_blk=naba_blocks_of_atoms%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
        ind_blk=ind_blk-1
 
        nx_blk=ind_blk/ncover_yz
@@ -525,9 +529,9 @@ contains
                 ! 
                 ! OK - let's assume that x, y and z are EXACTLY what we want for the grid point.
                 igrid=igrid+1  ! seq. no. of integration grids
-                if(this_nsf*igrid > naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block*this_nsf) &
+                if(this_nsf*igrid > naba_blocks_of_atoms%no_naba_blk(iprim)*n_pts_in_block*this_nsf) &
                      call cq_abort("do_PAO_grad_transform: overflow ",this_nsf*igrid, &
-                     naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block*this_nsf)
+                     naba_blocks_of_atoms%no_naba_blk(iprim)*n_pts_in_block*this_nsf)
                 ! generate the offset vector                
                 dx = x*dcellx_grid - bundle%xprim(iprim)
                 dy = y*dcelly_grid - bundle%yprim(iprim)
