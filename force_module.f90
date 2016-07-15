@@ -706,6 +706,8 @@ contains
   !!    - Added experimental backtrace
   !!   2016/07/13 18:30 nakata
   !!    Renamed H_on_supportfns -> H_on_atomf
+  !!   2016/07/15 18:30 nakata
+  !!    Renamed sf_sf_rem -> atomf_atomf_rem
   !!  SOURCE
   !!
   subroutine pulay_force(p_force, KE_force, fixed_potential, vary_mu,  &
@@ -733,7 +735,7 @@ contains
                                            flag_onsite_blip_ana,     &
                                            nspin, spin_factor,       &
                                            flag_analytic_blip_int, id_glob, species_glob
-    use set_bucket_module,           only: rem_bucket, sf_sf_rem
+    use set_bucket_module,           only: rem_bucket, atomf_atomf_rem
     use blip_grid_transform_module,  only: blip_to_support_new,      &
                                            blip_to_grad_new
     use calc_matrix_elements_module, only: get_matrix_elements_new
@@ -1087,9 +1089,9 @@ contains
                      direction, t1 - t0
           t0 = t1
           ! Make matrix elements
-          call get_matrix_elements_new(inode-1, rem_bucket(sf_sf_rem),&
+          call get_matrix_elements_new(inode-1, rem_bucket(atomf_atomf_rem),&
                                        mat_tmp, H_on_atomf(1), tmp_fn)
-          call get_matrix_elements_new(inode-1, rem_bucket(sf_sf_rem),&
+          call get_matrix_elements_new(inode-1, rem_bucket(atomf_atomf_rem),&
                                        mat_tmp2, H_on_atomf(1), tmp_fn2)
           t1 = mtime()
           if (inode == ionode .and. iprint_MD > 3) &
@@ -1138,7 +1140,7 @@ contains
           ! Call assemble to generate dS_ij/dR_kl
           if (flag_basis_set == blips) then
              call blip_to_grad_new(inode-1, direction, tmp_fn)
-             call get_matrix_elements_new(inode-1, rem_bucket(sf_sf_rem),&
+             call get_matrix_elements_new(inode-1, rem_bucket(atomf_atomf_rem),&
                   mat_tmp, supportfns, tmp_fn)
              call matrix_scale(minus_one, mat_tmp)
           else if (flag_basis_set == PAOs) then
@@ -1654,6 +1656,8 @@ contains
   !!    Adding phi-Pulay NL stress
   !!   2016/07/13 18:30 nakata
   !!    Renamed H_on_supportfns -> H_on_atomf
+  !!   2016/07/15 18:30 nakata
+  !!    Renamed sf_nlpf_rem -> atomf_nlpf_rem
   !!  SOURCE
   !!
   subroutine get_HF_non_local_force(HF_NL_force, what_force, n_atoms)
@@ -1674,7 +1678,7 @@ contains
                                            store_matrix_value
     use species_module,              only: species
     use pseudopotential_data,        only: pseudopotential_derivatives
-    use set_bucket_module,           only: rem_bucket, sf_nlpf_rem
+    use set_bucket_module,           only: rem_bucket, atomf_nlpf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use blip_grid_transform_module,  only: blip_to_grad_new
     use GenComms,                    only: gsum, cq_abort, inode,      &
@@ -1807,7 +1811,7 @@ contains
           ! now calculate overlap between these derivatives and support functions
           ! New get_matrix_elements  TSUYOSHI MIYAZAKI 28/Dec/2000
           call get_matrix_elements_new(inode-1,                       &
-                                       rem_bucket(sf_nlpf_rem),       &
+                                       rem_bucket(atomf_nlpf_rem),    &
                                        matdSC(direction), supportfns, &
                                        dpseudofns)
           call matrix_transpose(matdSC(direction), matdCS(direction))
@@ -1815,10 +1819,10 @@ contains
           ! and the overlap between the derivatives of the support and
           ! the core functions, H_on_atomf(1) is used as a work array
           call blip_to_grad_new(inode-1, direction, H_on_atomf(1))
-          call get_matrix_elements_new(inode-1,                 &
-                                       rem_bucket(sf_nlpf_rem), &
-                                       matdSC(direction),       &
-                                       H_on_atomf(1),           &
+          call get_matrix_elements_new(inode-1,                    &
+                                       rem_bucket(atomf_nlpf_rem), &
+                                       matdSC(direction),          &
+                                       H_on_atomf(1),              &
                                        pseudofns)
           call matrix_scale(-one, matdSC(direction))
           ! actually, because the derivatives we want are with respect to the
@@ -2029,6 +2033,8 @@ contains
   !!   - Changed spin implementation
   !!   2016/07/13 18:30 nakata
   !!    Renamed H_on_supportfns -> H_on_atomf
+  !!   2016/07/15 18:30 nakata
+  !!    Renamed sf_H_sf_rem -> atomf_H_atomf_rem
   !!  SOURCE
   !!
   subroutine get_KE_force(KE_force, n_atoms)
@@ -2044,7 +2050,7 @@ contains
                                            return_matrix_value, matK, &
                                            matrix_pos
     use GenBlas
-    use set_bucket_module,           only: rem_bucket, sf_H_sf_rem
+    use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use blip_grid_transform_module,  only: blip_to_grad_new,          &
                                            blip_to_gradgrad_new
@@ -2090,9 +2096,9 @@ contains
                                        force_direction, tmp_fn)
              ! now get the (d/dR_{i\alpha}) T_{ij} term from the above
              !new matrix_elements
-             call get_matrix_elements_new(inode-1,                 &
-                                          rem_bucket(sf_H_sf_rem), &
-                                          mat_grad_T, tmp_fn,      &
+             call get_matrix_elements_new(inode-1,                       &
+                                          rem_bucket(atomf_H_atomf_rem), &
+                                          mat_grad_T, tmp_fn,            &
                                           H_on_atomf(1))
              iprim = 0
              do np = 1,bundle%groups_on_node

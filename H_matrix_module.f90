@@ -157,6 +157,8 @@ contains
   !!  2016/07/13 18:30 nakata
   !!   Renamed subroutine get_h_on_support -> get_h_on_atomf
   !!   Renamed H_on_supportfns -> H_on_atomf
+  !!  2016/07/15 18:30 nakata
+  !!   Renamed sf_H_sf_rem -> atomf_H_atomf_rem
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -172,7 +174,7 @@ contains
                                            matrix_scale, matrix_sum,    &
                                            matS, matX
     use pseudopotential_common,      only: non_local, pseudopotential
-    use set_bucket_module,           only: rem_bucket, sf_H_sf_rem,     &
+    use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem, &
                                            pao_H_sf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use GenComms,                    only: gsum, end_comms,             &
@@ -291,7 +293,7 @@ contains
     ! holds H|phi>. Inode starts from 1, and myid starts from 0. 
     ! get_matrix_elements_new takes myid
     do spin = 1, nspin
-       call get_matrix_elements_new(inode-1, rem_bucket(sf_H_sf_rem), &
+       call get_matrix_elements_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
                                     matH(spin), supportfns, &
                                     H_on_atomf(spin))
     end do
@@ -1075,6 +1077,8 @@ contains
   !!     contribution to matdH from the non local potential must also be
   !!     added to matdH_dn. The value of the contribution however is
   !!     same for both spin components
+  !!   2016/07/15 18:30 nakata
+  !!    Renamed sf_nlpf_rem -> atomf_nlpf_rem
   !!  SOURCE
   !!
   subroutine get_HNL_matrix(matNL)
@@ -1090,7 +1094,7 @@ contains
     use pseudopotential_common,      only: pseudo_type, OLDPS, SIESTA, &
                                            STATE, ABINIT
     use species_module,              only: species
-    use set_bucket_module,           only: rem_bucket, sf_nlpf_rem
+    use set_bucket_module,           only: rem_bucket, atomf_nlpf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use global_module,               only: flag_basis_set, PAOs,       &
                                            blips, flag_vary_basis,     &
@@ -1179,7 +1183,7 @@ contains
           end do
           !call dump_matrix("NSC2",matSC,inode)
        else
-          call get_matrix_elements_new(myid, rem_bucket(sf_nlpf_rem), &
+          call get_matrix_elements_new(myid, rem_bucket(atomf_nlpf_rem), &
                                        matSC, supportfns, pseudofns)
        end if
        !call dump_matrix("NSC",matSC,inode)
@@ -1411,6 +1415,8 @@ contains
   !!   - Added spin implementation
   !!   2016/07/13 18:30 nakata
   !!    Renamed H_on_supportfns -> H_on_atomf
+  !!   2016/07/15 18:30 nakata
+  !!    Renamed sf_H_sf_rem -> atomf_H_atomf_rem
   !!  SOURCE
   !!
   subroutine get_T_matrix(matKE)
@@ -1418,7 +1424,7 @@ contains
     use numbers
     use primary_module,              only: bundle
     use matrix_data,                 only: mat, Hrange, dHrange
-    use set_bucket_module,           only: rem_bucket, sf_H_sf_rem
+    use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use blip_grid_transform_module,  only: blip_to_grad_new
     use GenComms,                    only: gsum, cq_abort, myid
@@ -1450,7 +1456,7 @@ contains
     if(flag_basis_set == blips) then
        do direction = 1, 3
           call blip_to_grad_new(myid, direction, H_on_atomf(1))
-          call get_matrix_elements_new(myid, rem_bucket(sf_H_sf_rem), &
+          call get_matrix_elements_new(myid, rem_bucket(atomf_H_atomf_rem), &
                                        matwork, H_on_atomf(1), &
                                        H_on_atomf(1))
           call matrix_sum(one, matKE, one, matwork)

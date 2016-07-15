@@ -56,6 +56,9 @@
 !!    Added timers
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2016/07/15 18:30 nakata
+!!    Renamed sf_sf_loc -> atomf_atomf_loc, sf_nlpf_loc -> atomf_nlpf_loc, 
+!!            sf_sf_rem -> atomf_atomf_rem, sf_nlpf_rem -> atomf_nlpf_rem, sf_H_sf_rem -> atomf_H_atomf_rem
 !!  SOURCE
 !!
 module set_bucket_module
@@ -75,13 +78,13 @@ module set_bucket_module
   type(remote_bucket) :: rem_bucket(mx_type_rem)
 
   ! Parameters for indexing buckets
-  integer, parameter :: sf_sf_loc    = 1
-  integer, parameter :: sf_nlpf_loc  = 2
-  integer, parameter :: pao_sf_loc   = 3
-  integer, parameter :: sf_sf_rem    = 1
-  integer, parameter :: sf_nlpf_rem  = 2
-  integer, parameter :: sf_H_sf_rem  = 3
-  integer, parameter :: pao_H_sf_rem = 4
+  integer, parameter :: atomf_atomf_loc = 1
+  integer, parameter :: atomf_nlpf_loc  = 2
+  integer, parameter :: pao_sf_loc      = 3
+  integer, parameter :: atomf_atomf_rem    = 1
+  integer, parameter :: atomf_nlpf_rem     = 2
+  integer, parameter :: atomf_H_atomf_rem  = 3
+  integer, parameter :: pao_H_sf_rem       = 4
 
   ! -------------------------------------------------------
   ! RCS ident string for object file id
@@ -117,6 +120,9 @@ contains
 !!  MODIFICATION HISTORY
 !!   2016/07/06 17:30 nakata
 !!    Renamed comBG -> comm_naba_blocks_of_atoms
+!!   2016/07/15 18:30 nakata
+!!    Renamed sf_sf_loc -> atomf_atomf_loc, sf_nlpf_loc -> atomf_nlpf_loc,
+!!            sf_sf_rem -> atomf_atomf_rem, sf_nlpf_rem -> atomf_nlpf_rem, sf_H_sf_rem -> atomf_H_atomf_rem
 !!
 !!  SOURCE
 !!
@@ -167,12 +173,12 @@ contains
     !calculate mx_send_node
     call calc_mx_nodes_bucket(myid, comm_naba_blocks_of_atoms, mx_recv_BRnode, mx_send_DRnode)
 
-    call set_local_bucket(loc_bucket(sf_sf_loc),rcut_S, mx_recv_BRnode,sf,sf)
-    call set_local_bucket(loc_bucket(sf_nlpf_loc),rcut_SP, mx_recv_BRnode,sf,nlpf)
+    call set_local_bucket(loc_bucket(atomf_atomf_loc),rcut_S, mx_recv_BRnode,sf,sf)
+    call set_local_bucket(loc_bucket(atomf_nlpf_loc),rcut_SP, mx_recv_BRnode,sf,nlpf)
     call set_local_bucket(loc_bucket(pao_sf_loc),rcut_S, mx_recv_BRnode,paof,sf)
     !** type 1 local_bucket -> type 1&3 remote_bucket **
     call my_barrier()
-    call make_pair_DCSpart(loc_bucket(sf_sf_loc),max_Spair)
+    call make_pair_DCSpart(loc_bucket(atomf_atomf_loc),max_Spair)
 
     ! allocate & set  remote bucket
     !   Now we assume the left functions are always support functions.
@@ -183,49 +189,49 @@ contains
     !  Now, the number of nodes for local and remote buckets are calculated
     !  in subroutine 'calc_mx_nodes_bucket'.
 
-    rem_bucket(sf_sf_rem)%locbucket => loc_bucket(sf_sf_loc)
-    rem_bucket(sf_nlpf_rem)%locbucket => loc_bucket(sf_nlpf_loc)
-    rem_bucket(sf_H_sf_rem)%locbucket => loc_bucket(sf_sf_loc)
+    rem_bucket(atomf_atomf_rem)%locbucket => loc_bucket(atomf_atomf_loc)
+    rem_bucket(atomf_nlpf_rem)%locbucket => loc_bucket(atomf_nlpf_loc)
+    rem_bucket(atomf_H_atomf_rem)%locbucket => loc_bucket(atomf_atomf_loc)
     rem_bucket(pao_H_sf_rem)%locbucket => loc_bucket(pao_sf_loc)
 
-    call set_remote_bucket(rem_bucket(sf_sf_rem),mx_send_DRnode,max_Spair)
-    call set_remote_bucket(rem_bucket(sf_H_sf_rem),mx_send_DRnode,max_Spair)
+    call set_remote_bucket(rem_bucket(atomf_atomf_rem),mx_send_DRnode,max_Spair)
+    call set_remote_bucket(rem_bucket(atomf_H_atomf_rem),mx_send_DRnode,max_Spair)
 
     ! Bundle responsible node makes rem_bucket%no_send_node and 
     !list_send_node to prepare receiving the information from its
     !remote nodes (domain responsible nodes).
     ! WARNING!!
     ! Now, we assume the left functions are always support functions.
-    call make_sendinfo_ME(rem_bucket(sf_sf_rem),comm_naba_blocks_of_atoms)
-    rem_bucket(sf_H_sf_rem)%no_send_node=rem_bucket(sf_sf_rem)%no_send_node
-    rem_bucket(sf_H_sf_rem)%list_send_node(:)=rem_bucket(sf_sf_rem)%list_send_node(:)
+    call make_sendinfo_ME(rem_bucket(atomf_atomf_rem),comm_naba_blocks_of_atoms)
+    rem_bucket(atomf_H_atomf_rem)%no_send_node=rem_bucket(atomf_atomf_rem)%no_send_node
+    rem_bucket(atomf_H_atomf_rem)%list_send_node(:)=rem_bucket(atomf_atomf_rem)%list_send_node(:)
     !Domain responsible node sends its information of pairs of naba atms
-    call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(sf_sf_loc))
+    call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(atomf_atomf_loc))
     !Bundle responsible node receives rem_bucket%no_of_pair and no_of_pair_orb
-    call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(sf_sf_rem))
-    rem_bucket(sf_H_sf_rem)%no_of_pair(:) = rem_bucket(sf_sf_rem)%no_of_pair(:)
-    rem_bucket(sf_H_sf_rem)%no_of_pair_orbs(:) = rem_bucket(sf_sf_rem)%no_of_pair_orbs(:)
-    if(rem_bucket(sf_H_sf_rem)%mx_pair_comm<rem_bucket(sf_sf_rem)%mx_pair_comm) then
-       rem_bucket(sf_H_sf_rem)%mx_pair_comm=rem_bucket(sf_sf_rem)%mx_pair_comm
-       call reset_remote_bucket(rem_bucket(sf_H_sf_rem))
+    call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(atomf_atomf_rem))
+    rem_bucket(atomf_H_atomf_rem)%no_of_pair(:) = rem_bucket(atomf_atomf_rem)%no_of_pair(:)
+    rem_bucket(atomf_H_atomf_rem)%no_of_pair_orbs(:) = rem_bucket(atomf_atomf_rem)%no_of_pair_orbs(:)
+    if(rem_bucket(atomf_H_atomf_rem)%mx_pair_comm<rem_bucket(atomf_atomf_rem)%mx_pair_comm) then
+       rem_bucket(atomf_H_atomf_rem)%mx_pair_comm=rem_bucket(atomf_atomf_rem)%mx_pair_comm
+       call reset_remote_bucket(rem_bucket(atomf_H_atomf_rem))
     end if
     !Bundle responsible node receives the information of pairs of naba
     ! atoms of its remote nodes and Constructs RemoteBucket
-    call setup_recvME(sf_sf_rem,myid,myid_ibegin,rem_bucket(sf_sf_rem),halo(Srange), &
-         rem_bucket(sf_H_sf_rem),halo(Hrange))
+    call setup_recvME(atomf_atomf_rem,myid,myid_ibegin,rem_bucket(atomf_atomf_rem),halo(Srange), &
+         rem_bucket(atomf_H_atomf_rem),halo(Hrange))
     deallocate(isend_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating isend_array in set_bucket: ",stat)
 
     !** type 3 local bucket and type 4 remote bucket
     call make_pair_DCSpart(loc_bucket(pao_sf_loc),max_PAOPpair)
     call set_remote_bucket(rem_bucket(pao_H_sf_rem),mx_send_DRnode,max_PAOPpair)
-    rem_bucket(pao_H_sf_rem)%no_send_node=rem_bucket(sf_sf_rem)%no_send_node
-    rem_bucket(pao_H_sf_rem)%list_send_node(:)=rem_bucket(sf_sf_rem)%list_send_node(:)
+    rem_bucket(pao_H_sf_rem)%no_send_node=rem_bucket(atomf_atomf_rem)%no_send_node
+    rem_bucket(pao_H_sf_rem)%list_send_node(:)=rem_bucket(atomf_atomf_rem)%list_send_node(:)
     call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(pao_sf_loc))
     call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(pao_H_sf_rem))
     if(iprint_index>3.AND.myid==0) then
-       write(io_lun,*) myid,' sf_H_sf: ',rem_bucket(sf_H_sf_rem)%no_of_pair
-       write(io_lun,*) myid,' sf_H_sf: ',rem_bucket(sf_H_sf_rem)%no_of_pair_orbs
+       write(io_lun,*) myid,' atomf_H_atomf: ',rem_bucket(atomf_H_atomf_rem)%no_of_pair
+       write(io_lun,*) myid,' atomf_H_atomf: ',rem_bucket(atomf_H_atomf_rem)%no_of_pair_orbs
        write(io_lun,*) myid,' pao_H_sf: ',rem_bucket(pao_H_sf_rem)%no_of_pair
        write(io_lun,*) myid,' pao_H_sf: ',rem_bucket(pao_H_sf_rem)%no_of_pair_orbs
     end if
@@ -236,14 +242,14 @@ contains
     !** type 2 local_bucket -> type 2 remote_bucket **
     ! same as above (dummy arg. for make_pair_DCSpart is different)
 
-    call make_pair_DCSpart(loc_bucket(sf_nlpf_loc),max_SPpair)
-    call set_remote_bucket(rem_bucket(sf_nlpf_rem),mx_send_DRnode,max_SPpair)
-    rem_bucket(sf_nlpf_rem)%no_send_node=rem_bucket(sf_sf_rem)%no_send_node
-    rem_bucket(sf_nlpf_rem)%list_send_node(:)=rem_bucket(sf_sf_rem)%list_send_node(:)
+    call make_pair_DCSpart(loc_bucket(atomf_nlpf_loc),max_SPpair)
+    call set_remote_bucket(rem_bucket(atomf_nlpf_rem),mx_send_DRnode,max_SPpair)
+    rem_bucket(atomf_nlpf_rem)%no_send_node=rem_bucket(atomf_atomf_rem)%no_send_node
+    rem_bucket(atomf_nlpf_rem)%list_send_node(:)=rem_bucket(atomf_atomf_rem)%list_send_node(:)
 
-    call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(sf_nlpf_loc))
-    call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(sf_nlpf_loc))
-    call setup_recvME(sf_nlpf_rem,myid,myid_ibegin,rem_bucket(sf_nlpf_rem),halo(SPrange))
+    call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(atomf_nlpf_loc))
+    call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(atomf_nlpf_loc))
+    call setup_recvME(atomf_nlpf_rem,myid,myid_ibegin,rem_bucket(atomf_nlpf_rem),halo(SPrange))
 
     deallocate(isend_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating isend_array in set_bucket: ",stat)

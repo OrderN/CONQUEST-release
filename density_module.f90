@@ -666,6 +666,8 @@ contains
   !!      spin up component in density(1). This is for consistency.
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
+  !!   2016/07/15 18:30 nakata
+  !!    Renamed sf_H_sf_rem -> atomf_H_atomf_rem
   !!  SOURCE
   !!
   subroutine get_electronic_density(denout, electrons, support, &
@@ -677,7 +679,7 @@ contains
     use mult_module,                 only: matK
     use dimens,                      only: n_my_grid_points, grid_point_volume
     use block_module,                only: n_pts_in_block
-    use set_bucket_module,           only: rem_bucket, sf_H_sf_rem
+    use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: act_on_vectors_new
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atm
@@ -715,7 +717,7 @@ contains
 
     do spin = 1, nspin
        gridfunctions(support_K)%griddata = zero
-       call act_on_vectors_new(inode-1, rem_bucket(sf_H_sf_rem), &
+       call act_on_vectors_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
                                matK(spin), support_K, support)
        denout(:,spin) = zero
        i_count_alpha = 0
@@ -803,6 +805,8 @@ contains
   !!  CREATION DATE
   !!   2015/06/05
   !!  MODIFICATION HISTORY
+  !!   2016/07/15 18:30 nakata
+  !!    Renamed sf_H_sf_rem -> atomf_H_atomf_rem
   !!  SOURCE
   !!
   subroutine get_band_density(denout, spin, support, support_K, matBand, size)
@@ -812,7 +816,7 @@ contains
     use GenBlas,                     only: scal, rsum
     use dimens,                      only: n_my_grid_points, grid_point_volume
     use block_module,                only: n_pts_in_block
-    use set_bucket_module,           only: rem_bucket, sf_H_sf_rem
+    use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: act_on_vectors_new
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atm
@@ -836,7 +840,7 @@ contains
          write (io_lun,fmt='(2x,"Entering get_band_density")')
 
     gridfunctions(support_K)%griddata = zero
-    call act_on_vectors_new(inode-1, rem_bucket(sf_H_sf_rem), &
+    call act_on_vectors_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
          matBand, support_K, support)
     denout(:) = zero
     i_count_alpha = 0
@@ -1456,7 +1460,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2016/07/13 18:30 nakata
   !!    Renamed H_on_supportfns -> H_on_atomf
-  !!
+  !!   2016/07/15 18:30 nakata
+  !!    Renamed sf_H_sf_rem -> atomf_H_atomf_rem
   !!  SOURCE
   !!
   subroutine build_Becke_weight_matrix(matWc, ngroups)
@@ -1470,7 +1475,7 @@ contains
     use functions_on_grid,           only: gridfunctions, fn_on_grid, &
                                            H_on_atomf, supportfns
     use calc_matrix_elements_module, only: norb
-    use set_bucket_module,           only: rem_bucket, sf_H_sf_rem,   &
+    use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem, &
                                            pao_H_sf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use GenComms,                    only: inode
@@ -1503,7 +1508,7 @@ contains
           end if ! (naba_atm(sf)%no_of_atom(nb)>0)
           m = m + n_pts_in_block
        end do
-       call get_matrix_elements_new(inode-1, rem_bucket(sf_H_sf_rem), &
+       call get_matrix_elements_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
                                     matWc(i), supportfns, H_on_atomf(1))
     end do
   end subroutine build_Becke_weight_matrix
