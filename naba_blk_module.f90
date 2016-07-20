@@ -103,7 +103,7 @@ module naba_blk_module
   !3. halo atoms and partitions of my domain
   !---------------------------------------------------------------------
   type halo_atm_of_blk
-     !type(naba_atm_of_blk),pointer :: naba_atm
+     !type(naba_atm_of_blk),pointer :: naba_atoms_of_blocks
      integer :: mx_node
      integer :: mx_part         !
      integer :: mx_mcover       ! = DCS_parts%mx_mcover
@@ -317,6 +317,9 @@ contains
 !!    Added allocates for variable NSF arrays
 !!   2008/05/16 ast
 !!    Added timers
+!!   2016/07/20 16:30 nakata
+!!    Comment: alloc_naba_atm is to allocate naba_atoms_of_blocks
+!!             (renamed from naba_atm, passed in "set")
 !!  SOURCE
 !!
   subroutine alloc_naba_atm(set,mx1,mx2,mx3)
@@ -387,6 +390,9 @@ contains
 !!    Changed attribute of set
 !!   2008/05/16 ast
 !!    Added timers
+!!   2016/07/20 16:30 nakata
+!!    Comment: alloc_naba_atm is to allocate naba_atoms_of_blocks
+!!             (renamed from naba_atm, passed in "set")
 !!  SOURCE
 !!
   subroutine dealloc_naba_atm(set)
@@ -432,6 +438,9 @@ contains
 !!  MODIFICATION HISTORY
 !!   2008/05/16 ast
 !!    Added timers
+!!   2016/07/20 16:30 nakata
+!!    Comment: alloc_halo_atm is to allocate halo_atoms_of_blocks
+!!             (renamed from halo_atm, passed in "set")
 !!  SOURCE
 !!
   subroutine alloc_halo_atm(set,mx1,mx2,mx3)
@@ -487,6 +496,9 @@ contains
 !!    Changed attribute of set
 !!   2008/05/16 ast
 !!    Added timers
+!!   2016/07/20 16:30 nakata
+!!    Comment: dealloc_halo_atm is to deallocate halo_atoms_of_blocks
+!!             (renamed from halo_atm, passed in "set")
 !!  SOURCE
 !!
   subroutine dealloc_halo_atm(set)

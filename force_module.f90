@@ -1265,6 +1265,8 @@ contains
 !!    Added hartree_module use
 !!   2008/03/03 18:46 dave
 !!    Changed float to real
+!!   2016/07/20 16:30 nakata
+!!    Renamed naba_atm -> naba_atoms_of_blocks
 !!  TODO
 !!    Fix this so that it doesn't loop over all processors ! Follow
 !!    set_pseudo 13/05/2002 dave
@@ -1289,7 +1291,7 @@ contains
     use group_module, only : blocks, parts
     use primary_module, only: domain
     use cover_module, only: DCS_parts
-    use set_blipgrid_module, only : naba_atm
+    use set_blipgrid_module, only : naba_atoms_of_blocks
     use GenComms, only: my_barrier, cq_abort, inode, ionode, gsum
     use hartree_module, only: hartree
     use maxima_module, only: maxngrid
@@ -1368,17 +1370,17 @@ contains
        zblock = (domain%idisp_primz(iblock) + domain%nz_origin - 1) *&
             & dcellz_block
 
-       if (naba_atm(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
+       if (naba_atoms_of_blocks(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom = 0
-          do ipart = 1, naba_atm(nlpf)%no_of_part(iblock)
-             jpart = naba_atm(nlpf)%list_part(ipart, iblock)
+          do ipart = 1, naba_atoms_of_blocks(nlpf)%no_of_part(iblock)
+             jpart = naba_atoms_of_blocks(nlpf)%list_part(ipart, iblock)
              if(jpart > DCS_parts%mx_gcover) then
                 call cq_abort ('set_ps: JPART ERROR ', ipart, jpart)
              end if
              ind_part = DCS_parts%lab_cell(jpart)
-             do ia = 1, naba_atm(nlpf)%no_atom_on_part(ipart, iblock)
+             do ia = 1, naba_atoms_of_blocks(nlpf)%no_atom_on_part(ipart, iblock)
                 iatom = iatom + 1
-                ii = naba_atm(nlpf)%list_atom(iatom, iblock)
+                ii = naba_atoms_of_blocks(nlpf)%list_atom(iatom, iblock)
                 icover = DCS_parts%icover_ibeg(jpart) + ii - 1
                 ig_atom = id_glob(parts%icell_beg(ind_part) + ii - 1)
                 if (parts%icell_beg(ind_part) + ii-1 > ni_in_cell) then
@@ -1490,7 +1492,7 @@ contains
                 end do   !iz
              end do ! naba_atoms
           end do ! naba_part
-       end if !(naba_atm(nlpf)%no_of_part(iblock) > 0) !naba atoms?
+       end if !(naba_atoms_of_blocks(nlpf)%no_of_part(iblock) > 0) !naba atoms?
     end do ! iblock : primary set of blocks
 
 !    ! now loop over grid points and accumulate HF part of the force
@@ -2391,6 +2393,8 @@ contains
   !!    - Fixed bug for GGA PBE force (used work_potential not potential)
   !!   2015/08/10 08:07 dave
   !!    Adding stress calculation
+  !!   2016/07/20 16:30 nakata
+  !!    Renamed naba_atm -> naba_atoms_of_blocks
   !!  SOURCE
   !!
   subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
@@ -2420,7 +2424,7 @@ contains
     use group_module,        only: blocks, parts
     use primary_module,      only: domain
     use cover_module,        only: DCS_parts
-    use set_blipgrid_module, only: naba_atm
+    use set_blipgrid_module, only: naba_atoms_of_blocks
     use GenComms,            only: my_barrier, cq_abort
     use atomic_density,      only: atomic_density_table
     use pseudo_tm_info,      only: pseudo
@@ -2816,16 +2820,16 @@ contains
        xblock = (domain%idisp_primx(iblock) + domain%nx_origin - 1) * dcellx_block
        yblock = (domain%idisp_primy(iblock) + domain%ny_origin - 1) * dcelly_block
        zblock = (domain%idisp_primz(iblock) + domain%nz_origin - 1) * dcellz_block
-       if (naba_atm(dens)%no_of_part(iblock) > 0) then ! if there are naba atoms
+       if (naba_atoms_of_blocks(dens)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom = 0
-          do ipart = 1, naba_atm(dens)%no_of_part(iblock)
-             jpart = naba_atm(dens)%list_part(ipart,iblock)
+          do ipart = 1, naba_atoms_of_blocks(dens)%no_of_part(iblock)
+             jpart = naba_atoms_of_blocks(dens)%list_part(ipart,iblock)
              if (jpart > DCS_parts%mx_gcover)&
                   call cq_abort('set_ps: JPART ERROR ', ipart, jpart)
              ind_part = DCS_parts%lab_cell(jpart)
-             do ia = 1, naba_atm(dens)%no_atom_on_part(ipart, iblock)
+             do ia = 1, naba_atoms_of_blocks(dens)%no_atom_on_part(ipart, iblock)
                 iatom = iatom + 1
-                ii = naba_atm(dens)%list_atom(iatom, iblock)
+                ii = naba_atoms_of_blocks(dens)%list_atom(iatom, iblock)
                 icover = DCS_parts%icover_ibeg(jpart) + ii - 1
                 ig_atom = id_glob(parts%icell_beg(ind_part) + ii - 1)
                 if (parts%icell_beg(ind_part) + ii - 1 > ni_in_cell) &
@@ -2917,7 +2921,7 @@ contains
                 end do   !iz
              end do ! naba_atoms
           end do ! naba_part
-       end if !(naba_atm(dens)%no_of_part(iblock) > 0) !naba atoms?
+       end if !(naba_atoms_of_blocks(dens)%no_of_part(iblock) > 0) !naba atoms?
     end do ! iblock : primary set of blocks
 
     call stop_print_timer(tmr_l_tmp1, "NSC force - Orbital part", &
@@ -2963,16 +2967,16 @@ contains
                    dcelly_block
           zblock = (domain%idisp_primz(iblock) + domain%nz_origin - 1) * &
                    dcellz_block
-          if (naba_atm(dens)%no_of_part(iblock) > 0) then ! if there are naba atoms
+          if (naba_atoms_of_blocks(dens)%no_of_part(iblock) > 0) then ! if there are naba atoms
              iatom = 0
-             do ipart = 1, naba_atm(dens)%no_of_part(iblock)
-                jpart = naba_atm(dens)%list_part(ipart, iblock)
+             do ipart = 1, naba_atoms_of_blocks(dens)%no_of_part(iblock)
+                jpart = naba_atoms_of_blocks(dens)%list_part(ipart, iblock)
                 if (jpart > DCS_parts%mx_gcover) &
                      call cq_abort('set_ps: JPART ERROR ', ipart, jpart)
                 ind_part = DCS_parts%lab_cell(jpart)
-                do ia = 1, naba_atm(dens)%no_atom_on_part(ipart, iblock)
+                do ia = 1, naba_atoms_of_blocks(dens)%no_atom_on_part(ipart, iblock)
                    iatom = iatom + 1
-                   ii = naba_atm(dens)%list_atom(iatom, iblock)
+                   ii = naba_atoms_of_blocks(dens)%list_atom(iatom, iblock)
                    icover = DCS_parts%icover_ibeg(jpart) + ii - 1
                    ig_atom = id_glob(parts%icell_beg(ind_part) + ii - 1)
                    the_species = species_glob(ig_atom)
@@ -3076,7 +3080,7 @@ contains
                    end do   !iz
                 end do ! naba_atoms
              end do ! naba_part
-          end if !(naba_atm(dens)%no_of_part(iblock) > 0) !naba atoms?
+          end if !(naba_atoms_of_blocks(dens)%no_of_part(iblock) > 0) !naba atoms?
        end do ! iblock : primary set of blocks
     end if ! (flag_pcc_global)
 
@@ -3163,6 +3167,8 @@ contains
   !!   2015/08/10 08:12 dave
   !!    Adding stress for PCC and non-SCF PCC XC term
   !!    N.B. this relies on the output density, which is passed as an optional argument
+  !!   2016/07/20 16:30 nakata
+  !!    Renamed naba_atm -> naba_atoms_of_blocks
   !!  SOURCE
   !!
   subroutine get_pcc_force(pcc_force, inode, ionode, n_atoms, size, density_out)
@@ -3187,7 +3193,7 @@ contains
     use group_module,        only: blocks, parts
     use primary_module,      only: domain
     use cover_module,        only: DCS_parts
-    use set_blipgrid_module, only: naba_atm
+    use set_blipgrid_module, only: naba_atoms_of_blocks
     use GenComms,            only: my_barrier, cq_abort
     use pseudo_tm_info,      only: pseudo
     use spline_module,       only: dsplint
@@ -3318,16 +3324,16 @@ contains
        xblock = (domain%idisp_primx(iblock) + domain%nx_origin - 1) * dcellx_block
        yblock = (domain%idisp_primy(iblock) + domain%ny_origin - 1) * dcelly_block
        zblock = (domain%idisp_primz(iblock) + domain%nz_origin - 1) * dcellz_block
-       if (naba_atm(dens)%no_of_part(iblock) > 0) then ! if there are naba atoms
+       if (naba_atoms_of_blocks(dens)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom = 0
-          do ipart = 1, naba_atm(dens)%no_of_part(iblock)
-             jpart = naba_atm(dens)%list_part(ipart,iblock)
+          do ipart = 1, naba_atoms_of_blocks(dens)%no_of_part(iblock)
+             jpart = naba_atoms_of_blocks(dens)%list_part(ipart,iblock)
              if (jpart > DCS_parts%mx_gcover) &
                   call cq_abort('set_ps: JPART ERROR ',ipart,jpart)
              ind_part = DCS_parts%lab_cell(jpart)
-             do ia = 1, naba_atm(dens)%no_atom_on_part(ipart,iblock)
+             do ia = 1, naba_atoms_of_blocks(dens)%no_atom_on_part(ipart,iblock)
                 iatom = iatom + 1
-                ii = naba_atm(dens)%list_atom(iatom,iblock)
+                ii = naba_atoms_of_blocks(dens)%list_atom(iatom,iblock)
                 icover = DCS_parts%icover_ibeg(jpart) + ii - 1
                 ig_atom = id_glob(parts%icell_beg(ind_part) + ii - 1)
                 the_species = species_glob(ig_atom)
@@ -3415,7 +3421,7 @@ contains
                 end do   !iz
              end do ! naba_atoms
           end do ! naba_part
-       end if !(naba_atm(dens)%no_of_part(iblock) > 0) !naba atoms?
+       end if !(naba_atoms_of_blocks(dens)%no_of_part(iblock) > 0) !naba atoms?
     end do ! iblock : primary set of blocks
     call stop_print_timer(tmr_l_tmp1, "PCC force - Orbital part", &
                           IPRINT_TIME_THRES3)

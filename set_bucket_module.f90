@@ -134,7 +134,7 @@ contains
 !    use maxima_module, ONLY: mx_send_node_BtoG, mx_recv_node_BtoG, &
 !         mx_Spair_remnode,  mx_Spair_domain,  &
 !         mx_SPpair_remnode, mx_SPpair_domain
-    use set_blipgrid_module,ONLY: comm_naba_blocks_of_atoms,naba_atm,halo_atm
+    use set_blipgrid_module,ONLY: comm_naba_blocks_of_atoms
     use comm_array_module,  ONLY: isend_array,irecv_array!,check_commarray_int!,check_commarray_real
     use matrix_data, ONLY: halo, rcut, Srange, SPrange, Hrange, dHrange
     use GenComms, ONLY: my_barrier, cq_abort
@@ -495,6 +495,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2006/07/03 08:40 dave
 !!    Various variable NSF changes and tidying
+!!   2016/07/20 16:30 nakata
+!!    Renamed naba_atm -> naba_atoms_of_blocks, halo_atm -> halo_atoms_of_blocks
 !!  SOURCE
 !!
     subroutine make_pair_DCSpart(loc_bucket,max_pair)
@@ -507,7 +509,7 @@ contains
       use primary_module, ONLY: domain
       use cover_module,   ONLY: DCS_parts,BCS_parts
       use naba_blk_module,ONLY: naba_atm_of_blk,halo_atm_of_blk
-      use set_blipgrid_module, ONLY: naba_atm, halo_atm
+      use set_blipgrid_module, ONLY: naba_atoms_of_blocks, halo_atoms_of_blocks
       use GenComms, ONLY: cq_abort, myid
 
       implicit none
@@ -541,10 +543,10 @@ contains
       !   in set_local_bucket. (14/Jul/2000 T. Miyazaki)
       !OLD  loc_bucket%naba_atm_left => naba_atm1
       !OLD  loc_bucket%naba_atm_right => naba_atm2
-      naba_atm1 => naba_atm(loc_bucket%ind_left)
-      naba_atm2 => naba_atm(loc_bucket%ind_right)
-      halo_atm1 => halo_atm(loc_bucket%ind_left)
-      halo_atm2 => halo_atm(loc_bucket%ind_right)
+      naba_atm1 => naba_atoms_of_blocks(loc_bucket%ind_left)
+      naba_atm2 => naba_atoms_of_blocks(loc_bucket%ind_right)
+      halo_atm1 => halo_atoms_of_blocks(loc_bucket%ind_left)
+      halo_atm2 => halo_atoms_of_blocks(loc_bucket%ind_right)
 
       !initialize table
       loc_bucket%i_h2d=0

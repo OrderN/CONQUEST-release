@@ -519,13 +519,16 @@ contains
     !             different for different atoms, nunit and nsize varies
     !             at each call.
     !
-    !  Modification: 2016/07/06 17:30 nakata
-    !   Renamed comBG -> comm_naba_blocks_of_atoms
+    !  Modification:
+    !   2016/07/06 17:30 nakata
+    !    Renamed comBG -> comm_naba_blocks_of_atoms
+    !   2016/07/20 16:30 nakata
+    !    Renamed naba_atm -> naba_atoms_of_blocks
     !
     use datatypes
     use numbers, ONLY : zero
     use mpi
-    use set_blipgrid_module, ONLY: comm_naba_blocks_of_atoms,naba_atm
+    use set_blipgrid_module, ONLY: comm_naba_blocks_of_atoms,naba_atoms_of_blocks
     use comm_array_module,   ONLY: send_array,recv_array
     use block_module,        ONLY: n_pts_in_block  ! = blocks%nm_group(:)
     use GenComms, ONLY: my_barrier, cq_abort
@@ -619,10 +622,10 @@ contains
              prim_blk=comm_naba_blocks_of_atoms%table_blk(ipair,isend)     ! primary block in my domain
              naba_atm_tmp=comm_naba_blocks_of_atoms%table_pair(ipair,isend)! naba atm of the primary blk
              loc1= nunit_recv*(ipair-1)
-             ind_alp_i_blk = naba_atm(sf)%ibegin_blk_orb(prim_blk)+ &
-                  naba_atm(sf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
-             ! naba_atm(sf)%ibegin_blk_orb(iprim_blk): initial position of support for the present primary block.
-             ! naba_atm(sf)%ibeg_orb_atom(naba, iprim_blk)
+             ind_alp_i_blk = naba_atoms_of_blocks(sf)%ibegin_blk_orb(prim_blk)+ &
+                  naba_atoms_of_blocks(sf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
+             ! naba_atoms_of_blocks(sf)%ibegin_blk_orb(iprim_blk): initial position of support for the present primary block.
+             ! naba_atoms_of_blocks(sf)%ibeg_orb_atom(naba, iprim_blk)
              ! : initial position of the present naba atom (naba) in the neighbour-atom orbitals of the 
              ! present primary block.
              !loc2 = n_pts_in_block * (ind_alp_i_blk-1) + 1
@@ -2050,14 +2053,17 @@ contains
     !  As we now treat various NSF, nsf for sending and nsf for receiving 
     !  are generally different.
     !
-    !  Modification: 2016/07/06 17:30 nakata
-    !   Renamed comBG -> comm_naba_blocks_of_atoms
+    !  Modification:
+    !   2016/07/06 17:30 nakata
+    !    Renamed comBG -> comm_naba_blocks_of_atoms
+    !   2016/07/20 16:30 nakata
+    !    Renamed naba_atm -> naba_atoms_of_blocks
 
 
     use datatypes
     use numbers
     use mpi
-    use set_blipgrid_module, ONLY: comm_naba_blocks_of_atoms,naba_atm
+    use set_blipgrid_module, ONLY: comm_naba_blocks_of_atoms,naba_atoms_of_blocks
     use comm_array_module,   ONLY: send_array,recv_array
     use block_module,        ONLY: n_pts_in_block  != blocks%nm_group(:)
     use GenComms, ONLY: my_barrier, cq_abort
@@ -2164,10 +2170,10 @@ contains
              prim_blk=comm_naba_blocks_of_atoms%table_blk(ipair,isend)     ! primary block in my domain
              naba_atm_tmp=comm_naba_blocks_of_atoms%table_pair(ipair,isend)! naba atm of the primary blk
              loc1= nunit_send*(ipair-1)
-             ind_alp_i_blk = naba_atm(sf)%ibegin_blk_orb(prim_blk)+ &
-                  naba_atm(sf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
-             ! naba_atm(sf)%ibegin_blk_orb(iprim_blk): initial position of support for the present primary block.
-             ! naba_atm(sf)%ibeg_orb_atom(naba, iprim_blk)
+             ind_alp_i_blk = naba_atoms_of_blocks(sf)%ibegin_blk_orb(prim_blk)+ &
+                  naba_atoms_of_blocks(sf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
+             ! naba_atoms_of_blocks(sf)%ibegin_blk_orb(iprim_blk): initial position of support for the present primary block.
+             ! naba_atoms_of_blocks(sf)%ibeg_orb_atom(naba, iprim_blk)
              ! : initial position of the present naba atom (naba) in the neighbour-atom orbitals of the 
              ! present primary block.
              !loc2 = n_pts_in_block * (ind_alp_i_blk-1) + 1
@@ -2180,8 +2186,8 @@ contains
                 write(io_lun,*) ' ERROR loc2 in collect_result for mynode= ',&
                      mynode,' loc2 = ',loc2+nunit_send,gridfunctions(support)%size
                 write(io_lun,*) '  ERROR prim_blk, naba_atm_tmp = ',prim_blk,naba_atm_tmp,&
-                     ' ibegin_blk = ',naba_atm(sf)%ibegin_blk(prim_blk),&
-                     ' naba_atom_of_blk = ',naba_atm(sf)%no_of_atom(prim_blk)
+                     ' ibegin_blk = ',naba_atoms_of_blocks(sf)%ibegin_blk(prim_blk),&
+                     ' naba_atom_of_blk = ',naba_atoms_of_blocks(sf)%no_of_atom(prim_blk)
                 call cq_abort("Stopping in inverse_blip_transform")
              endif
 

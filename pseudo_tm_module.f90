@@ -439,6 +439,8 @@ contains
 !!    Added switch for loop over neighbours for neutral atom, tidied
 !!   2016/06/23 15:53 dave
 !!    Bug fix: added a new loop for NLPF with blips, neutral atom but NOT analytic blip integrals
+!!   2016/07/20 16:30 nakata
+!!    Renamed naba_atm -> naba_atoms_of_blocks
 !!  SOURCE
 !!
   subroutine set_tm_pseudo
@@ -457,7 +459,7 @@ contains
     use group_module, only : blocks, parts
     use primary_module, only: domain
     use cover_module, only: DCS_parts
-    use set_blipgrid_module, only : naba_atm
+    use set_blipgrid_module, only : naba_atoms_of_blocks
     use GenBlas, only: axpy, copy
     use GenComms, only: my_barrier, cq_abort, inode, ionode, myid
     use angular_coeff_routines, only : pp_elem
@@ -549,17 +551,17 @@ contains
        xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
        zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
-       if(naba_atm(pseudo_neighbour)%no_of_part(iblock) > 0) then ! if there are naba atoms
+       if(naba_atoms_of_blocks(pseudo_neighbour)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
-          do ipart=1,naba_atm(pseudo_neighbour)%no_of_part(iblock)
-             jpart=naba_atm(pseudo_neighbour)%list_part(ipart,iblock)
+          do ipart=1,naba_atoms_of_blocks(pseudo_neighbour)%no_of_part(iblock)
+             jpart=naba_atoms_of_blocks(pseudo_neighbour)%list_part(ipart,iblock)
              if(jpart > DCS_parts%mx_gcover) then 
                 call cq_abort('set_ps: JPART ERROR ',ipart,jpart)
              endif
              ind_part=DCS_parts%lab_cell(jpart)
-             do ia=1,naba_atm(pseudo_neighbour)%no_atom_on_part(ipart,iblock)
+             do ia=1,naba_atoms_of_blocks(pseudo_neighbour)%no_atom_on_part(ipart,iblock)
                 iatom=iatom+1
-                ii = naba_atm(pseudo_neighbour)%list_atom(iatom,iblock)
+                ii = naba_atoms_of_blocks(pseudo_neighbour)%list_atom(iatom,iblock)
                 icover= DCS_parts%icover_ibeg(jpart)+ii-1
                 ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
 
@@ -579,7 +581,7 @@ contains
                 !  Now, I assume we should consider all naba_atm whose 
                 ! distance from the block is within the maximum of core_radius.
                 ! This is needed to keep the consistency with <set_bucket>.
-                ! However, we can change this strategy by changing naba_atm(pseudo_neighbour).
+                ! However, we can change this strategy by changing naba_atoms_of_blocks(pseudo_neighbour).
                 !no_of_ib_ia = no_of_ib_ia +1
 
                 xatom=DCS_parts%xcover(icover)
@@ -732,28 +734,28 @@ contains
                 endif! (npoint > 0) then
              enddo ! naba_atoms
           enddo ! naba_part
-       endif !(naba_atm(pseudo_neighbour)%no_of_part(iblock) > 0) !naba atoms?
+       endif !(naba_atoms_of_blocks(pseudo_neighbour)%no_of_part(iblock) > 0) !naba atoms?
        ! -----------------------------------------------------------------------------------
        ! NB This loop is VERY rarely used: only when non-analytic blip operations are chosen
        ! DRB 2016/01/07
        ! -----------------------------------------------------------------------------------
-       ! Bug fix starts here: loop over naba_atm(dens) for NA gave array over-run on the
+       ! Bug fix starts here: loop over naba_atoms_of_blocks(dens) for NA gave array over-run on the
        ! grid for projector functions DRB 2016/06/23
        ! -----------------------------------------------------------------------------------
        !Projector Functions  ------------------------------------------
        ! I removed some fourteen year old comments (no longer relevant) DRB 2016/06/23
        if(flag_basis_set==blips.AND.(.NOT.flag_analytic_blip_int)) then
-          if(naba_atm(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
+          if(naba_atoms_of_blocks(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
              iatom=0
-             do ipart=1,naba_atm(nlpf)%no_of_part(iblock)
-                jpart=naba_atm(nlpf)%list_part(ipart,iblock)
+             do ipart=1,naba_atoms_of_blocks(nlpf)%no_of_part(iblock)
+                jpart=naba_atoms_of_blocks(nlpf)%list_part(ipart,iblock)
                 if(jpart > DCS_parts%mx_gcover) then 
                    call cq_abort('set_ps: JPART ERROR ',ipart,jpart)
                 endif
                 ind_part=DCS_parts%lab_cell(jpart)
-                do ia=1,naba_atm(nlpf)%no_atom_on_part(ipart,iblock)
+                do ia=1,naba_atoms_of_blocks(nlpf)%no_atom_on_part(ipart,iblock)
                    iatom=iatom+1
-                   ii = naba_atm(nlpf)%list_atom(iatom,iblock)
+                   ii = naba_atoms_of_blocks(nlpf)%list_atom(iatom,iblock)
                    icover= DCS_parts%icover_ibeg(jpart)+ii-1
                    ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
 
@@ -773,7 +775,7 @@ contains
                    !  Now, I assume we should consider all naba_atm whose 
                    ! distance from the block is within the maximum of core_radius.
                    ! This is needed to keep the consistency with <set_bucket>.
-                   ! However, we can change this strategy by changing naba_atm(pseudo_neighbour).
+                   ! However, we can change this strategy by changing naba_atoms_of_blocks(pseudo_neighbour).
                    !no_of_ib_ia = no_of_ib_ia +1
 
                    xatom=DCS_parts%xcover(icover)
@@ -856,7 +858,7 @@ contains
                    no_of_ib_ia = no_of_ib_ia + nlpf_species(the_species)*n_pts_in_block
                 enddo ! naba_atoms
              enddo ! naba_part
-          endif !(naba_atm(pseudo_neighbour)%no_of_part(iblock) > 0) !naba atoms?
+          endif !(naba_atoms_of_blocks(pseudo_neighbour)%no_of_part(iblock) > 0) !naba atoms?
        end if ! blips and NOT analytic blip integrals
     enddo ! iblock : primary set of blocks
     ! now we must use FFT to transform the core charge density into
@@ -933,6 +935,8 @@ contains
 !!    Adding neutral atom stress and tidying
 !!   2016/01/29 14:25 dave
 !!    Bug fix for local G stress: accumulate loc_charge (was just storing !)
+!!   2016/07/20 16:30 nakata
+!!    Renamed naba_atm -> naba_atoms_of_blocks
 !!  SOURCE
 !!
   subroutine loc_pp_derivative_tm ( hf_force, density, size )
@@ -946,7 +950,7 @@ contains
     use group_module, only : blocks, parts
     use primary_module, only: domain
     use cover_module, only: DCS_parts
-    use set_blipgrid_module, only : naba_atm
+    use set_blipgrid_module, only : naba_atoms_of_blocks
 
     use species_module, only: species
     use GenComms, only: gsum, cq_abort, inode, ionode
@@ -1035,17 +1039,17 @@ contains
        xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
        zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
-       if(naba_atm(pseudo_neighbour)%no_of_part(iblock) > 0) then ! if there are naba atoms
+       if(naba_atoms_of_blocks(pseudo_neighbour)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
-          do ipart=1,naba_atm(pseudo_neighbour)%no_of_part(iblock)
-             jpart=naba_atm(pseudo_neighbour)%list_part(ipart,iblock)
+          do ipart=1,naba_atoms_of_blocks(pseudo_neighbour)%no_of_part(iblock)
+             jpart=naba_atoms_of_blocks(pseudo_neighbour)%list_part(ipart,iblock)
              if(jpart > DCS_parts%mx_gcover) then
                 call cq_abort('set_ps: JPART ERROR ',ipart,jpart)
              endif
              ind_part=DCS_parts%lab_cell(jpart)
-             do ia=1,naba_atm(pseudo_neighbour)%no_atom_on_part(ipart,iblock)
+             do ia=1,naba_atoms_of_blocks(pseudo_neighbour)%no_atom_on_part(ipart,iblock)
                 iatom=iatom+1
-                ii = naba_atm(pseudo_neighbour)%list_atom(iatom,iblock)
+                ii = naba_atoms_of_blocks(pseudo_neighbour)%list_atom(iatom,iblock)
                 icover= DCS_parts%icover_ibeg(jpart)+ii-1
                 ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
 
@@ -1274,9 +1278,9 @@ contains
                    enddo ! ip=1, npoint
                 endif  !(npoint > 0) then
 
-             enddo ! ia=1,naba_atm(pseudo_neighbour)%no_atom_on_part(ipart,iblock)
-          enddo ! ipart=1,naba_atm(pseudo_neighbour)%no_of_part(iblock)
-       endif    ! (naba_atm(pseudo_neighbour)%no_of_part(iblock) > 0) then ! if there are naba atoms
+             enddo ! ia=1,naba_atoms_of_blocks(pseudo_neighbour)%no_atom_on_part(ipart,iblock)
+          enddo ! ipart=1,naba_atoms_of_blocks(pseudo_neighbour)%no_of_part(iblock)
+       endif    ! (naba_atoms_of_blocks(pseudo_neighbour)%no_of_part(iblock) > 0) then ! if there are naba atoms
     enddo ! iblock = 1, domain%groups_on_node ! primary set of blocks
     ! Deallocate added by TM, 2005/08/11
     if(flag_neutral_atom) then
@@ -1336,7 +1340,8 @@ contains
 !!  CREATION DATE
 !!   01/07/2002
 !!  MODIFICATION HISTORY
-!!  
+!!   2016/07/20 16:30 nakata
+!!    Renamed naba_atm -> naba_atoms_of_blocks
 !!  SOURCE
 !!
   subroutine nonloc_pp_derivative_tm(direction, dpseudofns)
@@ -1352,7 +1357,7 @@ contains
     use group_module, only : blocks, parts
     use primary_module, only: domain
     use cover_module, only: DCS_parts
-    use set_blipgrid_module, only : naba_atm
+    use set_blipgrid_module, only : naba_atoms_of_blocks
     use GenComms, only: my_barrier, cq_abort
     use angular_coeff_routines, only : pp_gradient
     use functions_on_grid, only: gridfunctions, fn_on_grid
@@ -1400,17 +1405,17 @@ contains
        xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
        zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
-       if(naba_atm(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
+       if(naba_atoms_of_blocks(nlpf)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
-          do ipart=1,naba_atm(nlpf)%no_of_part(iblock)
-             jpart=naba_atm(nlpf)%list_part(ipart,iblock)
+          do ipart=1,naba_atoms_of_blocks(nlpf)%no_of_part(iblock)
+             jpart=naba_atoms_of_blocks(nlpf)%list_part(ipart,iblock)
              if(jpart > DCS_parts%mx_gcover) then 
                 call cq_abort('ps_derivative: JPART ERROR ',ipart,jpart)
              endif
              ind_part=DCS_parts%lab_cell(jpart)
-             do ia=1,naba_atm(nlpf)%no_atom_on_part(ipart,iblock)
+             do ia=1,naba_atoms_of_blocks(nlpf)%no_atom_on_part(ipart,iblock)
                 iatom=iatom+1
-                ii = naba_atm(nlpf)%list_atom(iatom,iblock)
+                ii = naba_atoms_of_blocks(nlpf)%list_atom(iatom,iblock)
                 icover= DCS_parts%icover_ibeg(jpart)+ii-1
                 ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
 
@@ -1712,7 +1717,7 @@ contains
                 no_of_ib_ia = no_of_ib_ia + nlpf_species(the_species)*n_pts_in_block
              enddo ! naba_atoms
           enddo ! naba_part
-       endif !(naba_atm(nlpf)%no_of_part(iblock) > 0) !naba atoms?
+       endif !(naba_atoms_of_blocks(nlpf)%no_of_part(iblock) > 0) !naba atoms?
     enddo ! iblock : primary set of blocks
     call stop_timer(tmr_std_pseudopot)
     

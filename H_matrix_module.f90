@@ -530,6 +530,8 @@ contains
   !!   2016/07/13 18:30 nakata
   !!    Renamed subroutine get_h_on_support -> get_h_on_atomf
   !!    Renamed H_on_supportfns -> H_on_atomf
+  !!   2016/07/20 16:30 nakata
+  !!    Renamed naba_atm -> naba_atoms_of_blocks
   !!  SOURCE
   !!
   subroutine get_h_on_atomf(output_level, fixed_potential, &
@@ -564,7 +566,7 @@ contains
 
     use block_module,                only: n_blocks, n_pts_in_block
     use primary_module,              only: domain
-    use set_blipgrid_module,         only: naba_atm
+    use set_blipgrid_module,         only: naba_atoms_of_blocks
     use density_module,              only: density_pcc, density_atom
     use GenComms,                    only: gsum, inode, ionode, cq_abort
     use energy,                      only: hartree_energy_total_rho,  &
@@ -982,9 +984,9 @@ contains
     n = 0
     m = 0
     do nb = 1, domain%groups_on_node
-       if (naba_atm(sf)%no_of_atom(nb) > 0) then
-          do atom = 1, naba_atm(sf)%no_of_atom(nb)
-             do nsf1 = 1, norb(naba_atm(sf),atom,nb)
+       if (naba_atoms_of_blocks(sf)%no_of_atom(nb) > 0) then
+          do atom = 1, naba_atoms_of_blocks(sf)%no_of_atom(nb)
+             do nsf1 = 1, norb(naba_atoms_of_blocks(sf),atom,nb)
                 do point = 1, n_pts_in_block
                    n = n + 1
                    do spin = 1, nspin
@@ -995,7 +997,7 @@ contains
                 end do ! point
              end do ! nsf1
           end do ! atom
-       end if ! (naba_atm(sf)%no_of_atom(nb) > 0)
+       end if ! (naba_atoms_of_blocks(sf)%no_of_atom(nb) > 0)
        m = m + n_pts_in_block
     end do ! nb
     !
