@@ -425,6 +425,8 @@ contains
 !!   - Added calls for constraint-MD
 !!   2015/06/19 13:52 dave
 !!   - Included FIRE routines but moved reading of parameters to io_module
+!!   2016/07/21 10:17 dave
+!!   - Changed format for MD Step output line to add more space
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -761,8 +763,8 @@ contains
 4   format(4x,'Energy change           : ',f15.8)
 5   format(4x,'Force Residual          : ',f15.8)
 6   format(4x,'Maximum force component : ',f15.8)
-8   format(4x,'*** MD step ',i4,' KE: ',f14.8,&
-           ' IntEnergy',f14.8,' TotalEnergy',f14.8)
+8   format(4x,'*** MD step ',i4,' KE: ',f18.8,&
+           ' IntEnergy',f20.8,' TotalEnergy',f20.8)
   end subroutine md_run
   !!***
 
