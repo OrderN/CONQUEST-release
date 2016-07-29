@@ -190,11 +190,13 @@ contains
   
 !!   2009/07/08 16:48 dave
 !!    Added code for one-to-one PAO to SF assignment
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
   subroutine loop_12(matA,iprim,j_in_halo,atom_i,atom_j,dx,dy,dz,flag&
        &,atom_spec,neigh_species,deriv_flag,direction,matAD)
 
     use datatypes
-    use support_spec_format, ONLY: supports_on_atom, flag_paos_atoms_in_cell, supports_on_atom_remote, &
+    use support_spec_format, ONLY: blips_on_atom, flag_paos_atoms_in_cell, blips_on_atom_remote, &
          support_function, flag_one_to_one
     use angular_coeff_routines, ONLY: calc_mat_elem_gen, grad_mat_elem_gen2_prot
     use GenComms, ONLY: myid, cq_abort
@@ -214,23 +216,23 @@ contains
     real(double) :: mat_val,mat_val_dummy, coeff_j
     integer :: i1,j1,k1,l1,m1,i2,j2,i3,j3,k2,l2,m2,count1,count2,nacz1,nacz2
     integer :: i4,j4, n_support1,n_support2,myflag
-    type(support_function), pointer, dimension(:) :: supports_on_atom_j
+    type(support_function), pointer, dimension(:) :: blips_on_atom_j
 
     mat_val = 0.0_double
     count1 = 1
     if(flag_paos_atoms_in_cell) then
-       supports_on_atom_j => supports_on_atom
+       blips_on_atom_j => blips_on_atom
     else
-       supports_on_atom_j => supports_on_atom_remote
+       blips_on_atom_j => blips_on_atom_remote
     end if
     ! Loop over PAOs on i
-    do l1 = 0, supports_on_atom(atom_i)%lmax
-       do nacz1 = 1, supports_on_atom(atom_i)%naczs(l1)
+    do l1 = 0, blips_on_atom(atom_i)%lmax
+       do nacz1 = 1, blips_on_atom(atom_i)%naczs(l1)
           do m1 = -l1,l1
              count2 = 1
              ! Loop over PAOs on j
-             do l2 = 0, supports_on_atom_j(atom_j)%lmax
-                do nacz2 = 1, supports_on_atom_j(atom_j)%naczs(l2)
+             do l2 = 0, blips_on_atom_j(atom_j)%lmax
+                do nacz2 = 1, blips_on_atom_j(atom_j)%naczs(l2)
                    do m2 = -l2,l2
                       if(deriv_flag.eq.0) then
                          call calc_mat_elem_gen(flag,atom_spec,l1,nacz1,m1,neigh_species, &
@@ -249,14 +251,14 @@ contains
 
                          end if
                       else
-                         do n_support1 = 1, supports_on_atom(atom_i)%nsuppfuncs
-                            do n_support2 = 1, supports_on_atom_j(atom_j)%nsuppfuncs
+                         do n_support1 = 1, blips_on_atom(atom_i)%nsuppfuncs
+                            do n_support2 = 1, blips_on_atom_j(atom_j)%nsuppfuncs
                                !--------------------------------------------------------!
                                !     Now multiply by corresponding pao coefficients     !
                                !--------------------------------------------------------!
-                               coeff_j = supports_on_atom_j(atom_j)%supp_func(n_support2)%coefficients(count2)
+                               coeff_j = blips_on_atom_j(atom_j)%supp_func(n_support2)%coefficients(count2)
                                mat_val_dummy = mat_val* &
-                                    supports_on_atom(atom_i)%supp_func(n_support1)%coefficients(count1)*coeff_j
+                                    blips_on_atom(atom_i)%supp_func(n_support1)%coefficients(count1)*coeff_j
                                wheremat = matrix_pos(matA,iprim,j_in_halo,n_support1,n_support2)
                                call store_matrix_value_pos(matA,wheremat,mat_val_dummy)
                                if(PRESENT(matAD).AND.n_support1==1) then
@@ -275,17 +277,19 @@ contains
           enddo ! m1
        enddo ! nacz1
     enddo ! l1
-    nullify(supports_on_atom_j)
+    nullify(blips_on_atom_j)
   end subroutine loop_12
   
 !!   2009/07/08 16:48 dave
 !!    Added code for one-to-one PAO to SF assignment
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
   subroutine loop_3(matA,iprim,j_in_halo,atom_i,atom_j,dx,dy,dz&
        &,atom_spec,neigh_species,deriv_flag,direction,matAD)
 
     use datatypes
     use pseudo_tm_info, ONLY: pseudo
-    use support_spec_format, ONLY: supports_on_atom, flag_one_to_one !contains all info on support-pao representation
+    use support_spec_format, ONLY: blips_on_atom, flag_one_to_one !contains all info on support-pao representation
     use angular_coeff_routines, ONLY: calc_mat_elem_gen, grad_mat_elem_gen2_prot
     use GenComms, ONLY: myid, cq_abort
     use mult_module, ONLY: store_matrix_value_pos, matrix_pos, return_matrix_value_pos
@@ -309,8 +313,8 @@ contains
     mat_val = 0.0_double
 
     count1 = 1
-    do l1 = 0,supports_on_atom(atom_i)%lmax
-       do nacz1 = 1, supports_on_atom(atom_i)%naczs(l1)
+    do l1 = 0,blips_on_atom(atom_i)%lmax
+       do nacz1 = 1, blips_on_atom(atom_i)%naczs(l1)
           do m1 = -l1,l1
              ! Fix DRB 2007/03/22
              part_index_j = 0
@@ -333,13 +337,13 @@ contains
                    !   enddo
                    !end if
                    index_j = part_index_j + (m2+l2+1)
-                   if(supports_on_atom(atom_i)%nsuppfuncs > 0) then
+                   if(blips_on_atom(atom_i)%nsuppfuncs > 0) then
                       if(flag_one_to_one) then
                          wheremat = matrix_pos(matA,iprim,j_in_halo,count1,index_j)
                          call store_matrix_value_pos(matA,wheremat,mat_val)
                       else
-                         do n_support1 = 1, supports_on_atom(atom_i)%nsuppfuncs
-                            mat_val_dummy = mat_val*supports_on_atom(atom_i)%supp_func(n_support1)%coefficients(count1)
+                         do n_support1 = 1, blips_on_atom(atom_i)%nsuppfuncs
+                            mat_val_dummy = mat_val*blips_on_atom(atom_i)%supp_func(n_support1)%coefficients(count1)
                             wheremat = matrix_pos(matA,iprim,j_in_halo,n_support1,index_j)
                             call store_matrix_value_pos(matA,wheremat,mat_val_dummy)
                          enddo ! n_support1
@@ -497,7 +501,7 @@ contains
 !%%!     use cover_module, ONLY: BCS_parts
 !%%!     use angular_coeff_routines, ONLY: calc_mat_elem_gen
 !%%!     !use support_spec_format, ONLY : which_support
-!%%!     use support_spec_format, ONLY: supports_on_atom
+!%%!     use support_spec_format, ONLY: blips_on_atom
 !%%!     
 !%%!     implicit none
 !%%! 
@@ -555,7 +559,7 @@ contains
 !%%!   
 !%%!   subroutine loop_pao(data_build,nf1,nf2,length,wheremat,global_i,global_j,dx,dy,dz,flag ,atom_spec,neigh_species)
 !%%!     use datatypes
-!%%!     use support_spec_format, ONLY: which_support, supports_on_atom
+!%%!     use support_spec_format, ONLY: which_support, blips_on_atom
 !%%!     use angular_coeff_routines, ONLY: calc_mat_elem_gen, grad_mat_elem_gen2_prot
 !%%!     use GenComms, ONLY: myid, cq_abort
 !%%!     implicit none
@@ -572,13 +576,13 @@ contains
 !%%!     mat_val = 0.0_double
 !%%!     count1 = 1
 !%%!     ! Loop over PAOs on i
-!%%!     do l1 = 0, supports_on_atom(global_i)%lmax
-!%%!        do nacz1 = 1, supports_on_atom(global_i)%naczs(l1)
+!%%!     do l1 = 0, blips_on_atom(global_i)%lmax
+!%%!        do nacz1 = 1, blips_on_atom(global_i)%naczs(l1)
 !%%!           do m1 = -l1,l1
 !%%!              count2 = 1
 !%%!              ! Loop over PAOs on j
-!%%!              do l2 = 0, supports_on_atom(global_j)%lmax
-!%%!                 do nacz2 = 1, supports_on_atom(global_j)%naczs(l2)
+!%%!              do l2 = 0, blips_on_atom(global_j)%lmax
+!%%!                 do nacz2 = 1, blips_on_atom(global_j)%naczs(l2)
 !%%!                    do m2 = -l2,l2
 !%%!                       call calc_mat_elem_gen(flag,atom_spec,l1,nacz1,m1,neigh_species, &
 !%%!                            l2,nacz2,m2,dx,dy,dz,mat_val)

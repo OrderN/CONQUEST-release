@@ -1081,6 +1081,8 @@ contains
   !!     same for both spin components
   !!   2016/07/15 18:30 nakata
   !!    Renamed sf_nlpf_rem -> atomf_nlpf_rem
+  !!   2016/07/29 18:30 nakata
+  !!    Renamed supports_on_atom -> blips_on_atom
   !!  SOURCE
   !!
   subroutine get_HNL_matrix(matNL)
@@ -1111,7 +1113,7 @@ contains
     use io_module,                   only: dump_matrix
     use nlpf2blip,                   only: get_SP, nlpf_on_atom
     use primary_module ,             only: bundle
-    use support_spec_format,         only: supports_on_atom
+    use support_spec_format,         only: blips_on_atom
     use group_module,                only: parts
     use primary_module,              only: bundle
     use cover_module,                only: BCS_parts
@@ -1174,7 +1176,7 @@ contains
                       !      call scale_matrix_value(matSC,np,ni,iprim,nab,n1,n2,zero)
                       !   end do
                       !end do
-                      call get_SP(supports_on_atom(iprim),              &
+                      call get_SP(blips_on_atom(iprim),                 &
                                   nlpf_on_atom(neigh_species), matSC,   &
                                   iprim, halo(SPrange)%i_halo(gcspart), &
                                   dx, dy, dz, spec, neigh_species)
@@ -1419,6 +1421,8 @@ contains
   !!    Renamed H_on_supportfns -> H_on_atomf
   !!   2016/07/15 18:30 nakata
   !!    Renamed sf_H_sf_rem -> atomf_H_atomf_rem
+  !!   2016/07/29 18:30 nakata
+  !!    Renamed supports_on_atom -> blips_on_atom
   !!  SOURCE
   !!
   subroutine get_T_matrix(matKE)
@@ -1441,7 +1445,7 @@ contains
                                            free_temp_matrix, matdH, &
                                            matrix_sum
     use functions_on_grid,           only: H_on_atomf
-    use support_spec_format,         only: supports_on_atom
+    use support_spec_format,         only: blips_on_atom
     use species_module,              only: nsf_species
 
     implicit none
@@ -1471,7 +1475,7 @@ contains
                 do nn = 1, bundle%nm_nodgroup(np)
                    spec = bundle%species(i)
                    this_nsf = nsf_species(spec)
-                   call get_onsite_T(supports_on_atom(i), matKE, np, &
+                   call get_onsite_T(blips_on_atom(i), matKE, np, &
                                      nn, i, this_nsf, spec)
                    i = i + 1
                 end do

@@ -174,6 +174,8 @@ contains
 !!    Added code for one-to-one PAO to SF assignment
 !!   2016/07/14 16:30 nakata
 !!    Renamed naba_blk_supp -> naba_blocks_of_atoms
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  SOURCE
 !!
   subroutine do_PAO_transform(iprim,this_nsf)
@@ -187,7 +189,7 @@ contains
     use set_blipgrid_module, ONLY: naba_blocks_of_atoms
     use comm_array_module,   ONLY: send_array
     use block_module,    ONLY: nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
-    use support_spec_format, ONLY: supports_on_atom, flag_paos_atoms_in_cell, flag_one_to_one
+    use support_spec_format, ONLY: blips_on_atom, flag_paos_atoms_in_cell, flag_one_to_one
     use GenComms, ONLY: myid, cq_abort
     use dimens, ONLY: r_h
     use angular_coeff_routines, ONLY: evaluate_pao
@@ -282,16 +284,16 @@ contains
                    ! loop over PAOs
                    dsum = zero
                    count1 = 1
-                   do l1 = 0,supports_on_atom(this_atom)%lmax
-                      do acz = 1,supports_on_atom(this_atom)%naczs(l1)
+                   do l1 = 0,blips_on_atom(this_atom)%lmax
+                      do acz = 1,blips_on_atom(this_atom)%naczs(l1)
                          do m1=-l1,l1
                             call evaluate_pao(atom_species,l1,1,m1,dx,dy,dz,val)
                             if(flag_one_to_one) then
                                   dsum(count1) = dsum(count1) + val
                             else
-                               do nsf1 = 1,supports_on_atom(this_atom)%nsuppfuncs
+                               do nsf1 = 1,blips_on_atom(this_atom)%nsuppfuncs
                                   dsum(nsf1) = dsum(nsf1) + &
-                                       supports_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
+                                       blips_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
                                end do ! nsf
                             end if
                             count1 = count1+1
@@ -430,6 +432,8 @@ contains
 !!    Added code for one-to-one PAO to SF assignment
 !!   2016/07/14 16:30 nakata
 !!    Renamed naba_blk_supp -> naba_blocks_of_atoms
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  SOURCE
 !!
   subroutine do_PAO_grad_transform(direction,iprim,this_nsf)
@@ -443,7 +447,7 @@ contains
     use set_blipgrid_module, ONLY: naba_blocks_of_atoms
     use comm_array_module,   ONLY: send_array
     use block_module,    ONLY: nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
-    use support_spec_format, ONLY: supports_on_atom, flag_paos_atoms_in_cell, flag_one_to_one
+    use support_spec_format, ONLY: blips_on_atom, flag_paos_atoms_in_cell, flag_one_to_one
     use GenComms, ONLY: myid, cq_abort
     use dimens, ONLY: r_h
     use angular_coeff_routines, ONLY: pao_elem_derivative_2, evaluate_pao
@@ -540,16 +544,16 @@ contains
                    ! loop over PAOs
                    dsum = zero
                    count1 = 1
-                   do l1 = 0,supports_on_atom(this_atom)%lmax
-                      do acz = 1,supports_on_atom(this_atom)%naczs(l1)
+                   do l1 = 0,blips_on_atom(this_atom)%lmax
+                      do acz = 1,blips_on_atom(this_atom)%naczs(l1)
                          do m1=-l1,l1
                             call pao_elem_derivative_2(direction,atom_species,l1,acz,m1,dx,dy,dz,val)
                             if(flag_one_to_one) then
                                dsum(count1) = dsum(count1) + val
                             else
-                               do nsf1 = 1,supports_on_atom(this_atom)%nsuppfuncs
+                               do nsf1 = 1,blips_on_atom(this_atom)%nsuppfuncs
                                   dsum(nsf1) = dsum(nsf1) + &
-                                       supports_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
+                                       blips_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
                                end do ! nsf
                             end if
                             count1 = count1+1
@@ -595,6 +599,8 @@ contains
 !!    Added code for one-to-one PAO to SF assignment
 !!   2016/07/20 16:30 nakata
 !!    Renamed naba_atm -> naba_atoms_of_blocks
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  SOURCE
 !!
   subroutine PAO_to_grid_global(myid, support)
@@ -615,7 +621,7 @@ contains
     use cover_module, ONLY: DCS_parts
     use set_blipgrid_module, ONLY : naba_atoms_of_blocks
     use angular_coeff_routines, ONLY : evaluate_pao
-    use support_spec_format, ONLY: supports_on_atom, flag_paos_atoms_in_cell, flag_one_to_one
+    use support_spec_format, ONLY: blips_on_atom, flag_paos_atoms_in_cell, flag_one_to_one
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
 
     implicit none 
@@ -743,16 +749,16 @@ contains
                       ! For this point-atom offset, we loop over ALL PAOs, and accumulate each PAO multiplied by
                       ! the appropriate coefficient in a local store before putting it in place later
                       count1 = 1
-                      do l1 = 0,supports_on_atom(this_atom)%lmax
-                         do acz = 1,supports_on_atom(this_atom)%naczs(l1)
+                      do l1 = 0,blips_on_atom(this_atom)%lmax
+                         do acz = 1,blips_on_atom(this_atom)%naczs(l1)
                             do m1=-l1,l1
                                call evaluate_pao(the_species,l1,acz,m1,x,y,z,val)
                                if(flag_one_to_one) then
                                   sfsum(count1) = sfsum(count1) + val
                                else
-                                  do nsf1 = 1,supports_on_atom(this_atom)%nsuppfuncs
+                                  do nsf1 = 1,blips_on_atom(this_atom)%nsuppfuncs
                                      sfsum(nsf1) = sfsum(nsf1) + &
-                                          supports_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
+                                          blips_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
                                   end do ! nsf1
                                end if
                                count1 = count1+1
@@ -811,6 +817,8 @@ contains
 !!    Added code for one-to-one PAO to SF assignment
 !!   2016/07/20 16:30 nakata
 !!    Renamed naba_atm -> naba_atoms_of_blocks
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  SOURCE
 !!
   subroutine single_PAO_to_grid(support)
@@ -830,7 +838,7 @@ contains
     use cover_module, ONLY: DCS_parts
     use set_blipgrid_module, ONLY : naba_atoms_of_blocks
     use angular_coeff_routines, ONLY : evaluate_pao
-    use support_spec_format, ONLY: supports_on_atom, flag_one_to_one
+    use support_spec_format, ONLY: blips_on_atom, flag_one_to_one
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
 
     implicit none 
@@ -938,8 +946,8 @@ contains
                       z = z_store(ip)
                       ! For this point-atom offset, we accumulate the PAO on the grid
                       count1 = 1
-                      do l1 = 0,supports_on_atom(this_atom)%lmax
-                         do acz = 1,supports_on_atom(this_atom)%naczs(l1)
+                      do l1 = 0,blips_on_atom(this_atom)%lmax
+                         do acz = 1,blips_on_atom(this_atom)%naczs(l1)
                             do m1=-l1,l1
                                call evaluate_pao(the_species,l1,acz,m1,x,y,z,val)
                                if(position+(count1-1)*n_pts_in_block > gridfunctions(support)%size) &
@@ -994,6 +1002,8 @@ contains
 !!    Added code for one-to-one PAO to SF assignment
 !!   2016/07/20 16:30 nakata
 !!    Renamed naba_atm -> naba_atoms_of_blocks
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  SOURCE
 !!
   subroutine PAO_to_grad_global(myid, direction, support)
@@ -1014,7 +1024,7 @@ contains
     use cover_module, ONLY: DCS_parts
     use set_blipgrid_module, ONLY : naba_atoms_of_blocks
     use angular_coeff_routines, ONLY : pao_elem_derivative_2
-    use support_spec_format, ONLY: supports_on_atom, flag_one_to_one
+    use support_spec_format, ONLY: blips_on_atom, flag_one_to_one
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
 
     implicit none 
@@ -1135,16 +1145,16 @@ contains
                       ! the appropriate coefficient in a local store before putting it in place later
                       ! Actually, the zeta should be *inside* the l loop
                       count1 = 1
-                      do l1 = 0,supports_on_atom(this_atom)%lmax
-                         do acz = 1,supports_on_atom(this_atom)%naczs(l1)
+                      do l1 = 0,blips_on_atom(this_atom)%lmax
+                         do acz = 1,blips_on_atom(this_atom)%naczs(l1)
                             do m1=-l1,l1
                                call pao_elem_derivative_2(direction,the_species,l1,acz,m1,x,y,z,val)
                                if(flag_one_to_one) then
                                   sfsum(count1) = sfsum(count1) + val
                                else
-                                  do nsf1 = 1,supports_on_atom(this_atom)%nsuppfuncs
+                                  do nsf1 = 1,blips_on_atom(this_atom)%nsuppfuncs
                                      sfsum(nsf1) = sfsum(nsf1) + &
-                                          supports_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
+                                          blips_on_atom(this_atom)%supp_func(nsf1)%coefficients(count1)* val
                                   end do ! nsf1
                                end if
                                count1 = count1+1

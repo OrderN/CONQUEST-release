@@ -684,6 +684,8 @@ contains
  !!    Added experimental backtrace
  !!   2016/03/15 13:55 dave
  !!    Removed restart_file (redundant) and mu
+ !!   2016/07/29 18:30 nakata
+ !!    Renamed supports_on_atom -> blips_on_atom
  !!  SOURCE
  !!
  subroutine initial_phis(read_phi, start, level)
@@ -719,7 +721,7 @@ contains
                                            set_prefac, set_prefac_real
     use read_support_spec,           only: read_support
     use functions_on_grid,           only: supportfns
-    use support_spec_format,         only: supports_on_atom,           &
+    use support_spec_format,         only: blips_on_atom,              &
                                            coefficient_array,          &
                                            coeff_array_size,           &
                                            read_option
@@ -814,7 +816,7 @@ contains
                       iprim=iprim+1
                       spec = bundle%species(iprim)
                       this_nsf = nsf_species(spec)
-                      call get_onsite_S(supports_on_atom(iprim), matS,&
+                      call get_onsite_S(blips_on_atom(iprim), matS,&
                                         np, ni, iprim, this_nsf, spec)
                    end do
                 end if
@@ -833,10 +835,10 @@ contains
                       else
                          factor = zero
                       end if
-                      do n_blip=1,supports_on_atom(iprim)%supp_func(isf)%ncoeffs
-                         supports_on_atom(iprim)%&
+                      do n_blip=1,blips_on_atom(iprim)%supp_func(isf)%ncoeffs
+                         blips_on_atom(iprim)%&
                               supp_func(isf)%coefficients(n_blip) = &
-                              factor*supports_on_atom(iprim)%&
+                              factor*blips_on_atom(iprim)%&
                               supp_func(isf)%coefficients(n_blip)
                       enddo ! n_blip
                    enddo ! isf
@@ -859,7 +861,7 @@ contains
                       iprim=iprim+1
                       spec = bundle%species(iprim)
                       this_nsf = nsf_species(spec)
-                      call get_onsite_S(supports_on_atom(iprim), matS,&
+                      call get_onsite_S(blips_on_atom(iprim), matS,&
                                         np, ni, iprim, this_nsf, spec)
                    end do
                 end if

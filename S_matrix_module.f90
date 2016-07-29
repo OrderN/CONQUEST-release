@@ -110,6 +110,8 @@ contains
 !!     InvSDeltaOmegaTolerance
 !!   2015/06/08 lat
 !!    - Added experimental backtrace
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  TODO
 !!    
 !!  SOURCE
@@ -142,7 +144,7 @@ contains
     use timer_module,                only: cq_timer, start_timer,      &
                                            stop_print_timer,           &
                                            WITH_LEVEL
-    use support_spec_format,         only: supports_on_atom, support_function, &
+    use support_spec_format,         only: blips_on_atom, support_function, &
                                            coefficient_array, support_gradient, &
                                            grad_coeff_array
     use species_module,              only: nsf_species
@@ -257,7 +259,7 @@ contains
                       wheremat = matrix_pos(matM12(spin),i_in_prim,j_in_halo,1,1)
                       call return_matrix_block_pos(matM12(spin),wheremat,this_data_M12(:,:,spin),this_nsfi*this_nsfj)
                    end do
-                   call get_S_analytic(supports_on_atom(i_in_prim),supp_on_j,support_gradient(i_in_prim), &
+                   call get_S_analytic(blips_on_atom(i_in_prim),supp_on_j,support_gradient(i_in_prim), &
                         matS,matKE,this_data_M12,this_data_K, i_in_prim, &
                         j_in_halo,dx,dy,dz,speci,specj,this_nsfi,this_nsfj)
                    deallocate(this_data_M12,this_data_K)
@@ -296,7 +298,7 @@ contains
                       iprim = iprim + 1
                       spec = bundle%species(iprim)
                       this_nsf = nsf_species(spec)
-                      call get_onsite_S(supports_on_atom(iprim), matS, &
+                      call get_onsite_S(blips_on_atom(iprim), matS, &
                            np, ni, iprim, this_nsf, spec)
                    end do
                 end if

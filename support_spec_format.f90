@@ -36,6 +36,8 @@
 !!    Added flag for one-to-one PAO to SF assignment
 !!   2014/09/15 18:30 lat
 !!    fixed call to start/stop_timer timer_module (not timer_stdlocks_module !)
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  SOURCE
 !!
 module support_spec_format
@@ -74,8 +76,8 @@ module support_spec_format
 
   character(len=80) :: support_pao_file
   
-  type(support_function), allocatable, dimension(:), target :: supports_on_atom ! Dimension mx_atoms (flag above)
-  type(support_function), allocatable, dimension(:), target :: supports_on_atom_remote 
+  type(support_function), allocatable, dimension(:), target :: blips_on_atom ! Dimension mx_atoms (flag above)
+  type(support_function), allocatable, dimension(:), target :: blips_on_atom_remote 
   type(support_function), allocatable, dimension(:) :: support_gradient
   type(support_function), allocatable, dimension(:) :: support_elec_gradient
   

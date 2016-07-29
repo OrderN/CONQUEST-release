@@ -94,6 +94,8 @@ contains
 !!    Added timers
 !!   2011/11/15 17:00 dave
 !!    Removed blip module and variables passed to transform
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  SOURCE
 !!
   subroutine blip_to_support_new(myid, support)
@@ -104,7 +106,7 @@ contains
     use GenComms, ONLY: my_barrier, cq_abort
     use functions_on_grid, ONLY: gridfunctions
     use species_module, ONLY: nsf_species
-    use support_spec_format, ONLY: supports_on_atom
+    use support_spec_format, ONLY: blips_on_atom
     use timer_module
     use global_module, ONLY: iprint_basis, IPRINT_TIME_THRES2
 
@@ -131,7 +133,7 @@ contains
        if( iprim <= bundle%n_prim ) then
           spec = bundle%species(iprim)
           nsf_send = nsf_species(spec)
-          call do_blip_transform_new(iprim, supports_on_atom(iprim), nsf_send)
+          call do_blip_transform_new(iprim, blips_on_atom(iprim), nsf_send)
        else
           nsf_send = 0
        endif
@@ -724,6 +726,8 @@ contains
 !!    Added timers
 !!   2011/11/15 17:00 dave
 !!    Removed blip module and variables passed to transform
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  SOURCE
 !!
   subroutine blip_to_grad_new(myid, direction, support)
@@ -735,7 +739,7 @@ contains
     use GenComms, ONLY: my_barrier, cq_abort
     use functions_on_grid, ONLY: gridfunctions
     use species_module, ONLY: nsf_species
-    use support_spec_format, ONLY: supports_on_atom
+    use support_spec_format, ONLY: blips_on_atom
 
     implicit none
 
@@ -755,7 +759,7 @@ contains
        if( iprim <= bundle%n_prim ) then
           spec = bundle%species(iprim)
           nsf_send = nsf_species(spec)
-          call do_blip_grad_transform_new(direction, iprim, supports_on_atom(iprim), nsf_send)
+          call do_blip_grad_transform_new(direction, iprim, blips_on_atom(iprim), nsf_send)
        else
           nsf_send = 0
        endif
@@ -1167,6 +1171,8 @@ contains
 !!    Added timers
 !!   2011/11/15 17:00 dave
 !!    Removed blip module and variables passed to transform
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  TODO
 !!   I think this subroutine can include the work by 
 !!   blip_to_grad_transform TM
@@ -1181,7 +1187,7 @@ contains
     use GenComms, ONLY: my_barrier
     use functions_on_grid, ONLY: gridfunctions
     use species_module, ONLY: nsf_species
-    use support_spec_format, ONLY: supports_on_atom
+    use support_spec_format, ONLY: blips_on_atom
 
     implicit none
 
@@ -1210,7 +1216,7 @@ contains
        if( iprim <= bundle%n_prim ) then
           spec = bundle%species(iprim)
           nsf_send = nsf_species(spec)
-          call do_blip_gradgrad_transform_new( n_d, iprim, supports_on_atom(iprim), nsf_send)
+          call do_blip_gradgrad_transform_new( n_d, iprim, blips_on_atom(iprim), nsf_send)
        else
           nsf_send = 0
        endif
@@ -1637,7 +1643,7 @@ contains
 !!   2011/11/15 17:00 dave
 !!    Removed blip module and variables passed to transform
 !!   2016/07/06 17:30 nakata
-!!    Removed not-used comm_naba_blocks_of_atoms and naba_blk_supp
+!!    Removed unused comm_naba_blocks_of_atoms and naba_blk_supp
 !!  SOURCE
 !!
   subroutine inverse_blip_transform_new(myid, dsupport, data_dblip, n_prim)
@@ -1718,7 +1724,7 @@ contains
 !!     set to intent(out) then EVERY member of data_dblip becomes
 !!     undefined, and array members becomes unallocated.
 !!   2016/07/06 17:30 nakata
-!!    Removed not-used comm_naba_blocks_of_atoms
+!!    Removed unused comm_naba_blocks_of_atoms
 !!   2016/07/14 16:30 nakata
 !!    Renamed naba_blk_supp -> naba_blocks_of_atoms
 !!  SOURCE
@@ -2287,7 +2293,7 @@ contains
 !!   2011/11/15 17:00 dave
 !!    Removed blip module and variables passed to transform
 !!   2016/07/06 17:30 nakata
-!!    Removed not-used comm_naba_blocks_of_atoms and naba_blk_supp
+!!    Removed unused comm_naba_blocks_of_atoms and naba_blk_supp
 !!  SOURCE
 !!
   subroutine inverse_blip_to_grad_new(myid, direction, dsupport, data_dblip, n_prim)
@@ -2362,7 +2368,7 @@ contains
 !!     entering the subroutine, this includes all the array members,
 !!     which becomes unallocated
 !!   2016/07/06 17:30 nakata
-!!    Removed not-used comm_naba_blocks_of_atoms
+!!    Removed unused comm_naba_blocks_of_atoms
 !!   2016/07/14 16:30 nakata
 !!    Renamed naba_blk_supp -> naba_blocks_of_atoms
 !!  SOURCE

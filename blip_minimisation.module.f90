@@ -115,6 +115,8 @@ contains
   !!    Update for analytic blip integration
   !!   2016/07/13 18:30 nakata
   !!    Renamed H_on_supportfns -> H_on_atomf
+  !!   2016/07/29 18:30 nakata
+  !!    Renamed supports_on_atom -> blips_on_atom
   !!  SOURCE
   !!
   subroutine vary_support(n_support_iterations, fixed_potential, &
@@ -142,7 +144,7 @@ contains
     use support_spec_format, only: coefficient_array,                     &
                                    coeff_array_size, grad_coeff_array,    &
                                    elec_grad_coeff_array,                 &
-                                   supports_on_atom
+                                   blips_on_atom
     use primary_module,      only: bundle
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use S_matrix_module,     only: get_S_matrix
@@ -282,23 +284,23 @@ contains
           do i = 1, bundle%n_prim
              spec = bundle%species(i)
              call start_timer(tmr_std_allocation)
-             allocate(summ(supports_on_atom(i)%nsuppfuncs))
+             allocate(summ(blips_on_atom(i)%nsuppfuncs))
              call stop_timer(tmr_std_allocation)
              do j = 1, blip_info(spec)%NBlipsRegion ! In future, base on species
                 summ = zero
                 do k = 1, blip_info(spec)%NBlipsRegion ! Again, base on species
-                   do n = 1, supports_on_atom(i)%nsuppfuncs
+                   do n = 1, blips_on_atom(i)%nsuppfuncs
                       summ(n) = summ(n) + PreCond(spec)%coeffs(j,k) * &
                                 search_direction(offset + (n-1) *     &
                                 blip_info(spec)%NBlipsRegion + k)
                    end do
                 end do
-                do n = 1, supports_on_atom(i)%nsuppfuncs
+                do n = 1, blips_on_atom(i)%nsuppfuncs
                    Psd(offset + (n - 1) * blip_info(spec)%NBlipsRegion + j) = &
                         summ(n)
                 end do
              end do
-             offset = offset + supports_on_atom(i)%nsuppfuncs * &
+             offset = offset + blips_on_atom(i)%nsuppfuncs * &
                       blip_info(spec)%NBlipsRegion
              call start_timer(tmr_std_allocation)
              deallocate(summ)

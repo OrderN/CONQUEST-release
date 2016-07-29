@@ -109,6 +109,8 @@ contains
   !!   2012/03/24 L.Tong
   !!   - Changed spin implementation
   !!   - Removed redundant input parameter real(double) mu
+  !!   2016/07/29 18:30 nakata
+  !!    Renamed supports_on_atom -> blips_on_atom
   !!  SOURCE
   !!
   subroutine vary_pao(n_support_iterations, fixed_potential, vary_mu, &
@@ -135,7 +137,7 @@ contains
     use H_matrix_module,           only: get_H_matrix
     use S_matrix_module,           only: get_S_matrix
     use make_rad_tables,           only: writeout_support_functions
-    use support_spec_format,       only: supports_on_atom,             &
+    use support_spec_format,       only: blips_on_atom,                &
                                          coeff_array_size,             &
                                          grad_coeff_array,             &
                                          elec_grad_coeff_array,        &
@@ -281,13 +283,13 @@ contains
                 do nsf1 = 1, nsf_species(bundle%species(local_atom))
                    do npao1 = 1, npao_species(bundle%species(local_atom))
                       tmp = 0.0001_double * &
-                           supports_on_atom(which_atom)%&
+                           blips_on_atom(which_atom)%&
                            supp_func(nsf1)%coefficients(npao1)
                       if (TestTot) then
                          ! Shift coefficient a little
-                         supports_on_atom(which_atom)%supp_func(nsf1)%&
+                         blips_on_atom(which_atom)%supp_func(nsf1)%&
                               coefficients(npao1) = &
-                              supports_on_atom(which_atom)%&
+                              blips_on_atom(which_atom)%&
                               supp_func(nsf1)%coefficients(npao1) + &
                               tmp
                          call my_barrier()
@@ -315,9 +317,9 @@ contains
                                               tmp, E1, E2, g1, g2
                          end if
                          ! Shift coefficient back
-                         supports_on_atom(which_atom)%supp_func(nsf1)%&
+                         blips_on_atom(which_atom)%supp_func(nsf1)%&
                               coefficients(npao1) = &
-                              supports_on_atom(which_atom)%&
+                              blips_on_atom(which_atom)%&
                               supp_func(nsf1)%coefficients(npao1) - &
                               tmp
                          call get_S_matrix(inode, ionode)
@@ -328,11 +330,11 @@ contains
                       if (TestS .or. TestBoth) then
                          ! Shift coefficient a little
                          ! tmp = 0.0001_double * &
-                         !      supports_on_atom(which_atom)%&
+                         !      blips_on_atom(which_atom)%&
                          !      supp_func(nsf1)%coefficients(npao1)
-                         supports_on_atom(which_atom)%supp_func(nsf1)%&
+                         blips_on_atom(which_atom)%supp_func(nsf1)%&
                               coefficients(npao1) = &
-                              supports_on_atom(which_atom)%&
+                              blips_on_atom(which_atom)%&
                               supp_func(nsf1)%coefficients(npao1) + &
                               tmp
                          call my_barrier()
@@ -358,9 +360,9 @@ contains
                                              tmp, E1, E2, g1, g2
                          end if
                          ! Shift coefficient back
-                         supports_on_atom(which_atom)%supp_func(nsf1)%&
+                         blips_on_atom(which_atom)%supp_func(nsf1)%&
                               coefficients(npao1) = &
-                              supports_on_atom(which_atom)%&
+                              blips_on_atom(which_atom)%&
                               supp_func(nsf1)%coefficients(npao1) - &
                               tmp
                          call get_S_matrix(inode, ionode)
@@ -370,11 +372,11 @@ contains
                       if (TestH .or. TestBoth) then
                          ! Shift coefficient a little
                          ! tmp = 0.0001_double*&
-                         !      supports_on_atom(which_atom)%&
+                         !      blips_on_atom(which_atom)%&
                          !      supp_func(nsf1)%coefficients(npao1)
-                         supports_on_atom(which_atom)%supp_func(nsf1)%&
+                         blips_on_atom(which_atom)%supp_func(nsf1)%&
                               coefficients(npao1) = &
-                              supports_on_atom(which_atom)%&
+                              blips_on_atom(which_atom)%&
                               supp_func(nsf1)%coefficients(npao1) + &
                               tmp
                          call my_barrier ()
@@ -402,9 +404,9 @@ contains
                                               tmp, E1, E2, g1, g2
                          end if
                          ! Shift coefficient back
-                         supports_on_atom(which_atom)%supp_func(nsf1)%&
+                         blips_on_atom(which_atom)%supp_func(nsf1)%&
                               coefficients(npao1) = &
-                              supports_on_atom(which_atom)%&
+                              blips_on_atom(which_atom)%&
                               supp_func(nsf1)%coefficients(npao1) - &
                               tmp
                          call PAO_to_grid(inode - 1, supportfns)
@@ -509,16 +511,16 @@ contains
                               expected_reduction, last_step, tmp)
        if (inode == ionode) write (io_lun, *) 'Returned !'
        do i = 1, ni_in_cell
-          do nsf1 = 1, supports_on_atom(i)%nsuppfuncs
+          do nsf1 = 1, blips_on_atom(i)%nsuppfuncs
              summ = zero
-             do npao1 = 1, supports_on_atom(i)%supp_func(nsf1)%ncoeffs
+             do npao1 = 1, blips_on_atom(i)%supp_func(nsf1)%ncoeffs
                 summ = summ + &
-                       supports_on_atom(i)%supp_func(nsf1)%coefficients(npao1) * &
-                       supports_on_atom(i)%supp_func(nsf1)%coefficients(npao1)
+                       blips_on_atom(i)%supp_func(nsf1)%coefficients(npao1) * &
+                       blips_on_atom(i)%supp_func(nsf1)%coefficients(npao1)
              end do
              summ = sqrt(summ)
-             supports_on_atom(i)%supp_func(nsf1)%coefficients = &
-                  supports_on_atom(i)%supp_func(nsf1)%coefficients / summ
+             blips_on_atom(i)%supp_func(nsf1)%coefficients = &
+                  blips_on_atom(i)%supp_func(nsf1)%coefficients / summ
           end do
        end do
        call writeout_support_functions(inode, ionode)
@@ -638,6 +640,8 @@ contains
   !!   - Changed spin implementation
   !!   - made temporary arrays automatic
   !!   - removed redundant input parameter real(double) mu
+  !!   2016/07/29 18:30 nakata
+  !!    Renamed supports_on_atom -> blips_on_atom
   !! SOURCE
   !!
   subroutine pulay_min_pao(n_support_iterations, fixed_potential,   &
@@ -662,10 +666,9 @@ contains
     use SelfCon,             only: new_SC_potl
     use S_matrix_module,     only: get_S_matrix
     use make_rad_tables,     only: writeout_support_functions
-    use support_spec_format, only: supports_on_atom
     use DMMin,               only: FindMinDM
     use energy,              only: get_energy, kinetic_energy, nl_energy
-    use support_spec_format, only: supports_on_atom, coeff_array_size, &
+    use support_spec_format, only: blips_on_atom, coeff_array_size,    &
                                    grad_coeff_array,                   &
                                    elec_grad_coeff_array,              &
                                    support_gradient,                   &
@@ -776,18 +779,18 @@ contains
        if (inode == ionode) write (io_lun, *) 'Normalising'
        ! Normalise
        do ii = 1, ni_in_cell
-          do nsf1 = 1, supports_on_atom(ii)%nsuppfuncs ! Select alpha
+          do nsf1 = 1, blips_on_atom(ii)%nsuppfuncs ! Select alpha
              summ = zero
-             do npao1 = 1, supports_on_atom(ii)%supp_func(nsf1)%ncoeffs
+             do npao1 = 1, blips_on_atom(ii)%supp_func(nsf1)%ncoeffs
                 ! PAOs for i, alpha
-                summ =                                                          &
-                     summ +                                                     &
-                     supports_on_atom(ii)%supp_func(nsf1)%coefficients(npao1) * &
-                     supports_on_atom(ii)%supp_func(nsf1)%coefficients(npao1)
+                summ =                                                       &
+                     summ +                                                  &
+                     blips_on_atom(ii)%supp_func(nsf1)%coefficients(npao1) * &
+                     blips_on_atom(ii)%supp_func(nsf1)%coefficients(npao1)
              end do
              summ = sqrt(summ)
-             supports_on_atom(ii)%supp_func(nsf1)%coefficients = &
-                  supports_on_atom(ii)%supp_func(nsf1)%coefficients / summ
+             blips_on_atom(ii)%supp_func(nsf1)%coefficients = &
+                  blips_on_atom(ii)%supp_func(nsf1)%coefficients / summ
           end do
        end do
        ! Find change in energy for convergence
@@ -857,18 +860,18 @@ contains
                         tolerance, total_energy_0)
        ! Normalise
        do ii = 1, ni_in_cell
-          do nsf1 = 1, supports_on_atom(ii)%nsuppfuncs ! Select alpha
+          do nsf1 = 1, blips_on_atom(ii)%nsuppfuncs ! Select alpha
              summ = zero
-             do npao1 = 1, supports_on_atom(ii)%supp_func(nsf1)%ncoeffs
+             do npao1 = 1, blips_on_atom(ii)%supp_func(nsf1)%ncoeffs
                 ! PAOs for i, alpha
-                summ =                                                          &
-                     summ +                                                     &
-                     supports_on_atom(ii)%supp_func(nsf1)%coefficients(npao1) * &
-                     supports_on_atom(ii)%supp_func(nsf1)%coefficients(npao1)
+                summ =                                                       &
+                     summ +                                                  &
+                     blips_on_atom(ii)%supp_func(nsf1)%coefficients(npao1) * &
+                     blips_on_atom(ii)%supp_func(nsf1)%coefficients(npao1)
              end do
              summ = sqrt(summ)
-             supports_on_atom(ii)%supp_func(nsf1)%coefficients = &
-                  supports_on_atom(ii)%supp_func(nsf1)%coefficients / summ
+             blips_on_atom(ii)%supp_func(nsf1)%coefficients = &
+                  blips_on_atom(ii)%supp_func(nsf1)%coefficients / summ
           end do
        end do
        grad_coeff_array = zero
@@ -974,6 +977,8 @@ contains
   !!   - removed redundant input parameter real(double) mu
   !!   2012/06/18 L.Tong
   !!   - removed unused variable k0
+  !!   2016/07/29 18:30 nakata
+  !!    Renamed supports_on_atom -> blips_on_atom
   !!  SOURCE
   !!
   subroutine line_minimise_pao(search_direction, fixed_potential,     &
@@ -996,7 +1001,7 @@ contains
     use global_module,       only: flag_vary_basis, ni_in_cell,        &
                                    area_minE, nspin
     use primary_module,      only: bundle
-    use support_spec_format, only: supports_on_atom, coeff_array_size, &
+    use support_spec_format, only: blips_on_atom, coeff_array_size,    &
                                    coefficient_array,                  &
                                    flag_paos_atoms_in_cell
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem,     &
@@ -1047,7 +1052,7 @@ contains
     ! do i = 1, n_atoms
     !    do nsf1 = 1, nsf
     !       write (io_lun, *) 'Atom ', i,' supp ', nsf1,' coeffs ', &
-    !            supports_on_atom(i)%supp_func(nsf1)%coefficients
+    !            blips_on_atom(i)%supp_func(nsf1)%coefficients
     !    end do
     ! end do
     ! First, make a copy of the coefficients FOR THIS PRIMARY SET
@@ -1076,15 +1081,15 @@ contains
        call axpy(lengthBlip, k3, search_direction, 1, coefficient_array, 1 )
        ! Normalise
        do i = 1, n_atoms
-          do nsf1 = 1, supports_on_atom(i)%nsuppfuncs
+          do nsf1 = 1, blips_on_atom(i)%nsuppfuncs
              summ = zero
-             do npao1 = 1 ,supports_on_atom(i)%supp_func(nsf1)%ncoeffs
+             do npao1 = 1 ,blips_on_atom(i)%supp_func(nsf1)%ncoeffs
                 summ = summ + &
-                     supports_on_atom(i)%supp_func(nsf1)%coefficients(npao1) * &
-                     supports_on_atom(i)%supp_func(nsf1)%coefficients(npao1)
+                     blips_on_atom(i)%supp_func(nsf1)%coefficients(npao1) * &
+                     blips_on_atom(i)%supp_func(nsf1)%coefficients(npao1)
              end do
-             supports_on_atom(i)%supp_func(nsf1)%coefficients = &
-                  supports_on_atom(i)%supp_func(nsf1)%coefficients / sqrt(summ)
+             blips_on_atom(i)%supp_func(nsf1)%coefficients = &
+                  blips_on_atom(i)%supp_func(nsf1)%coefficients / sqrt(summ)
           end do
        end do
        ! Find new self-consistent energy 
@@ -1143,15 +1148,15 @@ contains
     call copy(lengthBlip, data_PAO0, 1, coefficient_array, 1)
     call axpy(lengthBlip, kmin, search_direction, 1, coefficient_array, 1)
     do i = 1, n_atoms
-       do nsf1 = 1, supports_on_atom(i)%nsuppfuncs
+       do nsf1 = 1, blips_on_atom(i)%nsuppfuncs
           summ = zero
-          do npao1 = 1, supports_on_atom(i)%supp_func(nsf1)%ncoeffs
+          do npao1 = 1, blips_on_atom(i)%supp_func(nsf1)%ncoeffs
              summ = summ + &
-                  supports_on_atom(i)%supp_func(nsf1)%coefficients(npao1) * &
-                  supports_on_atom(i)%supp_func(nsf1)%coefficients(npao1)
+                  blips_on_atom(i)%supp_func(nsf1)%coefficients(npao1) * &
+                  blips_on_atom(i)%supp_func(nsf1)%coefficients(npao1)
           end do
-          supports_on_atom(i)%supp_func(nsf1)%coefficients = &
-               supports_on_atom(i)%supp_func(nsf1)%coefficients / sqrt(summ)
+          blips_on_atom(i)%supp_func(nsf1)%coefficients = &
+               blips_on_atom(i)%supp_func(nsf1)%coefficients / sqrt(summ)
        end do
     end do
     ! Find new self-consistent energy 
@@ -1175,15 +1180,15 @@ contains
        call axpy(lengthBlip, kmin, search_direction, 1, &
                  coefficient_array, 1)
        do i = 1, n_atoms
-          do nsf1 = 1, supports_on_atom(i)%nsuppfuncs
+          do nsf1 = 1, blips_on_atom(i)%nsuppfuncs
              summ = zero
-             do npao1 = 1, supports_on_atom(i)%supp_func(nsf1)%ncoeffs
-                summ = summ + supports_on_atom(i)%supp_func(nsf1)%&
-                       coefficients(npao1) * supports_on_atom(i)%&
+             do npao1 = 1, blips_on_atom(i)%supp_func(nsf1)%ncoeffs
+                summ = summ + blips_on_atom(i)%supp_func(nsf1)%&
+                       coefficients(npao1) * blips_on_atom(i)%&
                        supp_func(nsf1)%coefficients(npao1)
              end do
-             supports_on_atom(i)%supp_func(nsf1)%coefficients = &
-                  supports_on_atom(i)%supp_func(nsf1)%coefficients / &
+             blips_on_atom(i)%supp_func(nsf1)%coefficients = &
+                  blips_on_atom(i)%supp_func(nsf1)%coefficients / &
                   sqrt(summ)
           end do
        end do
@@ -1569,13 +1574,13 @@ contains
 
                    !*** Test gradients ***!
                    ! Shift coefficient
-                   !if(inode==ionode) tmp = 0.001_double*supports_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1)
-                   ! supports_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1) = &
-                   !      supports_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1) + tmp
+                   !if(inode==ionode) tmp = 0.001_double*blips_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1)
+                   ! blips_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1) = &
+                   !      blips_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1) + tmp
                    !write(io_lun,*) 'On this proc, global(iprim) is ',iprim,bundle%ig_prim(iprim)
-                   !%%!  tmp = 0.001_double*supports_on_atom(1)%supp_func(nsf1)%coefficients(npao1)
-                   !%%!  supports_on_atom(1)%supp_func(nsf1)%coefficients(npao1) = &
-                   !%%!       supports_on_atom(1)%supp_func(nsf1)%coefficients(npao1) + tmp
+                   !%%!  tmp = 0.001_double*blips_on_atom(1)%supp_func(nsf1)%coefficients(npao1)
+                   !%%!  blips_on_atom(1)%supp_func(nsf1)%coefficients(npao1) = &
+                   !%%!       blips_on_atom(1)%supp_func(nsf1)%coefficients(npao1) + tmp
                    !%%!  ! Get gradient
                    !%%!  ! 1. Generate data_dS
                    !%%!  call get_S_matrix(support, inode, ionode, ntwof, SUPPORT_SIZE)
@@ -1611,10 +1616,10 @@ contains
                    !%%!  !BE2 = band_energy
                    !%%!  tmpgrad = gradient(npao1,nsf1,iprim)
                    !%%!  ! Shift coefficient
-                   !%%!  !supports_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1) = &
-                   !%%!  !     supports_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1) - tmp
-                   !%%!  supports_on_atom(1)%supp_func(nsf1)%coefficients(npao1) = &
-                   !%%!       supports_on_atom(1)%supp_func(nsf1)%coefficients(npao1) - tmp
+                   !%%!  !blips_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1) = &
+                   !%%!  !     blips_on_atom(bundle%ig_prim(iprim))%supp_func(nsf1)%coefficients(npao1) - tmp
+                   !%%!  blips_on_atom(1)%supp_func(nsf1)%coefficients(npao1) = &
+                   !%%!       blips_on_atom(1)%supp_func(nsf1)%coefficients(npao1) - tmp
                    !%%!  ! Get gradient
                    !%%!  ! 1. Generate data_dS
                    !%%!  call get_S_matrix(support, inode, ionode, ntwof, SUPPORT_SIZE)

@@ -8,6 +8,8 @@ module exx_evalpao
 
 contains
 
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
   subroutine exx_phi_on_grid(inode,atom,spec,extent,xyz,nsuppfuncs,phi_on_grid,r_int,rst)
 
     use numbers,      only: zero, one, two, three, four, five, six, fifteen, sixteen
@@ -16,7 +18,7 @@ contains
     use exx_types,    only: exx_overlap, exx_cartesian
 
     use angular_coeff_routines, only: evaluate_pao
-    use support_spec_format,    only: supports_on_atom, flag_one_to_one
+    use support_spec_format,    only: blips_on_atom, flag_one_to_one
     use functions_on_grid,      only: supportfns
     use dimens,                 only: r_h   
     use pao_format,             only: pao
@@ -166,9 +168,9 @@ contains
              else
                 spec_atom = atom 
              end if
-             angu_loop: do l1 = 0, supports_on_atom(spec_atom)%lmax
+             angu_loop: do l1 = 0, blips_on_atom(spec_atom)%lmax
 
-                zeta_loop: do acz = 1, supports_on_atom(spec_atom)%naczs(l1)
+                zeta_loop: do acz = 1, blips_on_atom(spec_atom)%naczs(l1)
 
                    magn_loop: do m1 = -l1, l1                      
 
@@ -251,13 +253,13 @@ contains
                       if(flag_one_to_one) then
                          sfsum(count1) = sfsum(count1) + pao_val 
                       else
-                         !print*, atom, supports_on_atom(atom)%nsuppfuncs, count1
+                         !print*, atom, blips_on_atom(atom)%nsuppfuncs, count1
                          !print*, l1, acz, m1
-                         do nsf1 = 1, supports_on_atom(atom)%nsuppfuncs
-                            !print*, nsf1, supports_on_atom(atom)%supp_func(nsf1)%coefficients(count1)
+                         do nsf1 = 1, blips_on_atom(atom)%nsuppfuncs
+                            !print*, nsf1, blips_on_atom(atom)%supp_func(nsf1)%coefficients(count1)
 
                             sfsum(nsf1) = sfsum(nsf1) +  &
-                                 supports_on_atom(atom)% &
+                                 blips_on_atom(atom)% &
                                  supp_func(nsf1)%        &
                                  coefficients(count1)*   &
                                  pao_val
@@ -269,7 +271,7 @@ contains
                 end do zeta_loop
              end do angu_loop
 
-             do nsf1 = 1, supports_on_atom(spec_atom)%nsuppfuncs
+             do nsf1 = 1, blips_on_atom(spec_atom)%nsuppfuncs
                 phi_on_grid(nx+extent+1,ny+extent+1,nz+extent+1,nsf1) = sfsum(nsf1)                
              end do
 

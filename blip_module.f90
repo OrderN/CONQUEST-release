@@ -344,6 +344,8 @@ contains
 !!    Initialisation for blip coefficient transfer
 !!   2012/04/26 16:18 dave
 !!    More changes for analytic blips
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  SOURCE
 !!
   subroutine set_blip_index(inode,ionode)
@@ -352,7 +354,7 @@ contains
     use GenComms, ONLY: cq_abort
     use global_module, ONLY: iprint_init, area_basis
     use numbers
-    use support_spec_format, ONLY : supports_on_atom, support_gradient, support_elec_gradient, &
+    use support_spec_format, ONLY : blips_on_atom, support_gradient, support_elec_gradient, &
          coefficient_array,grad_coeff_array, elec_grad_coeff_array, coeff_array_size,&
          allocate_supp_coeff_array, associate_supp_coeff_array
     use species_module, ONLY: nsf_species, n_species
@@ -535,7 +537,7 @@ contains
     ! Set up data storage for atoms on this processor
     size = 0
     call start_timer(tmr_std_allocation)
-    allocate(supports_on_atom(bundle%n_prim),support_gradient(bundle%n_prim),support_elec_gradient(bundle%n_prim))
+    allocate(blips_on_atom(bundle%n_prim),support_gradient(bundle%n_prim),support_elec_gradient(bundle%n_prim))
     allocate(blip_trans%partst(bundle%groups_on_node),blip_trans%partlen(bundle%groups_on_node))
     call stop_timer(tmr_std_allocation)
     i=0
@@ -553,12 +555,12 @@ contains
              this_nsf = nsf_species(spec)
              size = size + this_nsf*blip_info(spec)%NBlipsRegion
              blip_trans%partlen(np)=blip_trans%partlen(np)+ this_nsf*blip_info(spec)%NBlipsRegion
-             supports_on_atom(i)%nsuppfuncs = this_nsf
+             blips_on_atom(i)%nsuppfuncs = this_nsf
              call start_timer(tmr_std_allocation)
-             allocate(supports_on_atom(i)%supp_func(this_nsf),support_gradient(i)%supp_func(this_nsf),&
+             allocate(blips_on_atom(i)%supp_func(this_nsf),support_gradient(i)%supp_func(this_nsf),&
                   support_elec_gradient(i)%supp_func(this_nsf))
              call stop_timer(tmr_std_allocation)
-             supports_on_atom(i)%supp_func(:)%ncoeffs = blip_info(spec)%NBlipsRegion
+             blips_on_atom(i)%supp_func(:)%ncoeffs = blip_info(spec)%NBlipsRegion
              support_gradient(i)%nsuppfuncs = this_nsf
              support_gradient(i)%supp_func(:)%ncoeffs = blip_info(spec)%NBlipsRegion
              support_elec_gradient(i)%nsuppfuncs = this_nsf
@@ -571,7 +573,7 @@ contains
     end do
     coeff_array_size = size
     call allocate_supp_coeff_array(size)
-    call associate_supp_coeff_array(supports_on_atom,bundle%n_prim,coefficient_array,size)
+    call associate_supp_coeff_array(blips_on_atom,bundle%n_prim,coefficient_array,size)
     call associate_supp_coeff_array(support_gradient,bundle%n_prim,grad_coeff_array,size)
     call associate_supp_coeff_array(support_elec_gradient,bundle%n_prim,elec_grad_coeff_array,size)
     call setup_blip_transfer
@@ -715,6 +717,8 @@ contains
 !!    Added timers
 !!   2008/09/17 10:01 dave
 !!    Added nsf=1 case 
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  SOURCE
 !!
   subroutine gauss2blip
@@ -723,7 +727,7 @@ contains
     use numbers
     use global_module, ONLY: iprint_basis
     use GenComms, ONLY: cq_abort, inode, ionode
-    use support_spec_format, ONLY: coefficient_array, supports_on_atom
+    use support_spec_format, ONLY: coefficient_array, blips_on_atom
     use primary_module, ONLY: bundle
 
     implicit none
@@ -782,30 +786,30 @@ contains
           r2 = x * x + y * y + z * z
           gauss_1 = exp( - alpha * r2)
           gauss_2 = exp( - beta * r2)
-          if(supports_on_atom(i)%nsuppfuncs>=4) then
-             supports_on_atom(i)%supp_func(1)%coefficients(n_blip) = gauss_1
-             supports_on_atom(i)%supp_func(2)%coefficients(n_blip) = x * gauss_2
-             supports_on_atom(i)%supp_func(3)%coefficients(n_blip) = y * gauss_2
-             supports_on_atom(i)%supp_func(4)%coefficients(n_blip) = z * gauss_2
+          if(blips_on_atom(i)%nsuppfuncs>=4) then
+             blips_on_atom(i)%supp_func(1)%coefficients(n_blip) = gauss_1
+             blips_on_atom(i)%supp_func(2)%coefficients(n_blip) = x * gauss_2
+             blips_on_atom(i)%supp_func(3)%coefficients(n_blip) = y * gauss_2
+             blips_on_atom(i)%supp_func(4)%coefficients(n_blip) = z * gauss_2
              if(iprint_basis>2.AND.inode==ionode) then
                 write(io_lun,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 1, n_blip, &
-                     supports_on_atom(i)%supp_func(1)%coefficients(n_blip)
+                     blips_on_atom(i)%supp_func(1)%coefficients(n_blip)
                 write(io_lun,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 2, n_blip, &
-                     supports_on_atom(i)%supp_func(2)%coefficients(n_blip)
+                     blips_on_atom(i)%supp_func(2)%coefficients(n_blip)
                 write(io_lun,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 3, n_blip, &
-                     supports_on_atom(i)%supp_func(3)%coefficients(n_blip)
+                     blips_on_atom(i)%supp_func(3)%coefficients(n_blip)
                 write(io_lun,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 4, n_blip, &
-                     supports_on_atom(i)%supp_func(4)%coefficients(n_blip)
+                     blips_on_atom(i)%supp_func(4)%coefficients(n_blip)
              end if
-          else if (supports_on_atom(i)%nsuppfuncs==1) then
-             supports_on_atom(i)%supp_func(1)%coefficients(n_blip) = gauss_1
+          else if (blips_on_atom(i)%nsuppfuncs==1) then
+             blips_on_atom(i)%supp_func(1)%coefficients(n_blip) = gauss_1
              if(iprint_basis>2.AND.inode==ionode) then
                 write(io_lun,fmt='(10x,"Blip Values: ",4i4,f20.12)') inode, i, 1, n_blip, &
-                     supports_on_atom(i)%supp_func(1)%coefficients(n_blip)
+                     blips_on_atom(i)%supp_func(1)%coefficients(n_blip)
              end if
           else
              call cq_abort("With this version of Conquest, gaussian initialisation needs 1 or 4 support functions ",&
-                  supports_on_atom(i)%nsuppfuncs)
+                  blips_on_atom(i)%nsuppfuncs)
           end if
        end do
     end do

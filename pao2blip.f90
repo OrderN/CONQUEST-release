@@ -105,6 +105,8 @@ contains
 !!    Added timers
 !!   2011/11/15 16:54 dave
 !!    Changing blip data
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  SOURCE
   subroutine make_blips_from_paos(inode,ionode,n_species)
 
@@ -121,7 +123,7 @@ contains
     use read_support_spec, ONLY: read_support, support_info
     use symmetry
     use species_module, ONLY: nsf_species
-    use support_spec_format, ONLY: supports_on_atom
+    use support_spec_format, ONLY: blips_on_atom
     use maxima_module, ONLY: maxnsf, max_blip_nu_int
 
     implicit none
@@ -560,7 +562,7 @@ contains
        do n_sup = 1, nsf_species(n_sp)
           ! loop over blip functions in the support region of this species
           do n = 1, blip_info(n_sp)%NBlipsRegion
-             supports_on_atom(i)%supp_func(n_sup)%coefficients(n) = blip_coeff(n_sp)%coeff(n,n_sup)
+             blips_on_atom(i)%supp_func(n_sup)%coefficients(n) = blip_coeff(n_sp)%coeff(n,n_sup)
           end do
        end do
     end do

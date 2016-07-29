@@ -936,6 +936,8 @@ end subroutine unnorm_siesta_tbl
 !!    Added io_ routines from input_module
 !!   2009/07/08 16:48 dave
 !!    Added code for one-to-one PAO to SF assignment
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  SOURCE
 !!
   subroutine get_support_pao_rep(inode,ionode)
@@ -945,7 +947,7 @@ end subroutine unnorm_siesta_tbl
     use primary_module, ONLY: bundle
     use GenComms, ONLY : gcopy, my_barrier, cq_abort
     use species_module, ONLY : nsf_species, npao_species, n_species
-    use support_spec_format, ONLY : supports_on_atom, flag_paos_atoms_in_cell, mx_pao_coeff_atoms, &
+    use support_spec_format, ONLY : blips_on_atom, flag_paos_atoms_in_cell, mx_pao_coeff_atoms, &
          allocate_supp_coeff_array, associate_supp_coeff_array, support_gradient, support_elec_gradient, &
          coefficient_array,grad_coeff_array, elec_grad_coeff_array, coeff_array_size, &
          read_option, symmetry_breaking, support_pao_file, flag_one_to_one
@@ -977,7 +979,7 @@ end subroutine unnorm_siesta_tbl
        end if
     end if
     call start_timer(tmr_std_allocation)
-    allocate(supports_on_atom(mx_pao_coeff_atoms))
+    allocate(blips_on_atom(mx_pao_coeff_atoms))
     allocate(support_gradient(mx_pao_coeff_atoms))
     allocate(support_elec_gradient(mx_pao_coeff_atoms))
     call stop_timer(tmr_std_allocation)
@@ -994,9 +996,9 @@ end subroutine unnorm_siesta_tbl
        end if
        n_sup = nsf_species(species_i)
        if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'atom, supp: ',i,species_i,n_sup
-       supports_on_atom(i)%nsuppfuncs = n_sup
+       blips_on_atom(i)%nsuppfuncs = n_sup
        call start_timer(tmr_std_allocation)
-       allocate(supports_on_atom(i)%supp_func(n_sup))
+       allocate(blips_on_atom(i)%supp_func(n_sup))
        call stop_timer(tmr_std_allocation)
        support_gradient(i)%nsuppfuncs = n_sup
        call start_timer(tmr_std_allocation)
@@ -1007,19 +1009,19 @@ end subroutine unnorm_siesta_tbl
        allocate(support_elec_gradient(i)%supp_func(n_sup))
        call stop_timer(tmr_std_allocation)
        if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'atom, lmax: ',i,pao(species_i)%greatest_angmom
-       supports_on_atom(i)%lmax = pao(species_i)%greatest_angmom
+       blips_on_atom(i)%lmax = pao(species_i)%greatest_angmom
        call start_timer(tmr_std_allocation)
-       allocate(supports_on_atom(i)%naczs(0:supports_on_atom(i)%lmax))
+       allocate(blips_on_atom(i)%naczs(0:blips_on_atom(i)%lmax))
        call stop_timer(tmr_std_allocation)
        count = 0
-       do l = 0, supports_on_atom(i)%lmax
-          supports_on_atom(i)%naczs(l) = pao(species_i)%angmom(l)%n_zeta_in_angmom
-          if(supports_on_atom(i)%naczs(l)>0) count = count + (2*l+1) ! Accumulate no. of ang. mom. components
+       do l = 0, blips_on_atom(i)%lmax
+          blips_on_atom(i)%naczs(l) = pao(species_i)%angmom(l)%n_zeta_in_angmom
+          if(blips_on_atom(i)%naczs(l)>0) count = count + (2*l+1) ! Accumulate no. of ang. mom. components
        enddo
        ! If number of support functions is less than total number of ang. mom. components (ignoring 
        ! for now multiple zetas) then there is a formal problem with basis set: we require the user
        ! to set an additional flag to assert that this is really desired
-       if(count>supports_on_atom(i)%nsuppfuncs.AND..NOT.warn_flag) then 
+       if(count>blips_on_atom(i)%nsuppfuncs.AND..NOT.warn_flag) then 
           if(.NOT.symmetry_breaking.OR..NOT.read_option) then
              if(inode==ionode) then
                 write(io_lun,fmt='("You have a major problem with your basis set.")')
@@ -1036,7 +1038,7 @@ end subroutine unnorm_siesta_tbl
              if(.NOT.warn_flag) then
                 write(io_lun,fmt='("You have a major problem with your basis set.")')
                 write(io_lun,fmt='("There are ",i4," support functions and",i4," angular momentum")') &
-                     supports_on_atom(i)%nsuppfuncs,count                     
+                     blips_on_atom(i)%nsuppfuncs,count                     
                 write(io_lun,fmt='("components.  But as BasisSet.SymmetryBreaking is set T we will continue.")')
                 warn_flag = .true.
              end if
@@ -1044,8 +1046,8 @@ end subroutine unnorm_siesta_tbl
        end if
        count = pao(species_i)%count
        if(inode==ionode.AND.iprint_basis>2) write(io_lun,*) 'PAO basis size: ',count
-       do k=1,supports_on_atom(i)%nsuppfuncs
-          supports_on_atom(i)%supp_func(k)%ncoeffs = count
+       do k=1,blips_on_atom(i)%nsuppfuncs
+          blips_on_atom(i)%supp_func(k)%ncoeffs = count
           support_gradient(i)%supp_func(k)%ncoeffs = count
           support_elec_gradient(i)%supp_func(k)%ncoeffs = count
           total_size = total_size + count
@@ -1053,7 +1055,7 @@ end subroutine unnorm_siesta_tbl
     end do
     call allocate_supp_coeff_array(total_size)
     coeff_array_size = total_size
-    call associate_supp_coeff_array(supports_on_atom,mx_pao_coeff_atoms,coefficient_array,total_size)
+    call associate_supp_coeff_array(blips_on_atom,mx_pao_coeff_atoms,coefficient_array,total_size)
     call associate_supp_coeff_array(support_gradient,mx_pao_coeff_atoms,grad_coeff_array,total_size)
     call associate_supp_coeff_array(support_elec_gradient,mx_pao_coeff_atoms,elec_grad_coeff_array,total_size)
     if(read_option) then
@@ -1071,47 +1073,47 @@ end subroutine unnorm_siesta_tbl
              if(inode==ionode) then
                 if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'Atom: ',i
                 read(lun,*) n_sup
-                if(supports_on_atom(i)%nsuppfuncs/=n_sup) &
-                     call cq_abort("n_sup mismatch in PAO reading: ",supports_on_atom(i)%nsuppfuncs,n_sup)
+                if(blips_on_atom(i)%nsuppfuncs/=n_sup) &
+                     call cq_abort("n_sup mismatch in PAO reading: ",blips_on_atom(i)%nsuppfuncs,n_sup)
                 if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'N_sup: ',n_sup
                 read(lun,*) lmax
-                if(supports_on_atom(i)%lmax/=lmax) &
-                     call cq_abort("lmax mismatch in PAO reading: ",supports_on_atom(i)%lmax,lmax)
+                if(blips_on_atom(i)%lmax/=lmax) &
+                     call cq_abort("lmax mismatch in PAO reading: ",blips_on_atom(i)%lmax,lmax)
                 if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'lmax: ',lmax
                 count = 0
-                do l = 0, supports_on_atom(i)%lmax
+                do l = 0, blips_on_atom(i)%lmax
                    read(lun,*) nacz
-                   if(supports_on_atom(i)%naczs(l)/=nacz) &
-                        call cq_abort("zeta mismatch in PAO reading: ",supports_on_atom(i)%naczs(l),nacz)
-                   count = count + (2*l+1)*supports_on_atom(i)%naczs(l)
+                   if(blips_on_atom(i)%naczs(l)/=nacz) &
+                        call cq_abort("zeta mismatch in PAO reading: ",blips_on_atom(i)%naczs(l),nacz)
+                   count = count + (2*l+1)*blips_on_atom(i)%naczs(l)
                    if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'zeta: ',l,nacz,count
                 enddo
-                do k = 1, supports_on_atom(i)%nsuppfuncs
-                   if(count/=supports_on_atom(i)%supp_func(k)%ncoeffs) &
-                        call cq_abort("coeff size mismatch in PAO reading: ",count,supports_on_atom(i)%supp_func(k)%ncoeffs)
+                do k = 1, blips_on_atom(i)%nsuppfuncs
+                   if(count/=blips_on_atom(i)%supp_func(k)%ncoeffs) &
+                        call cq_abort("coeff size mismatch in PAO reading: ",count,blips_on_atom(i)%supp_func(k)%ncoeffs)
                 end do
                 !end if
-                do k = 1, supports_on_atom(i)%nsuppfuncs
+                do k = 1, blips_on_atom(i)%nsuppfuncs
                    !   if(inode==ionode) then
                    !-------------------------------------------------------!
                    !          read and store the coefficients              !     
                    !-------------------------------------------------------!
                    count = 1
                    sum = zero
-                   do l = 0, supports_on_atom(i)%lmax
-                      do acz = 1, supports_on_atom(i)%naczs(l)
+                   do l = 0, blips_on_atom(i)%lmax
+                      do acz = 1, blips_on_atom(i)%naczs(l)
                          do m = -l,l
-                            read(lun,*) supports_on_atom(i)%supp_func(k)%coefficients(count)
-                            sum = sum + supports_on_atom(i)%supp_func(k)%coefficients(count)* &
-                                 supports_on_atom(i)%supp_func(k)%coefficients(count)
+                            read(lun,*) blips_on_atom(i)%supp_func(k)%coefficients(count)
+                            sum = sum + blips_on_atom(i)%supp_func(k)%coefficients(count)* &
+                                 blips_on_atom(i)%supp_func(k)%coefficients(count)
                             if(iprint_basis>2.AND.inode==ionode) &
-                                 write(io_lun,*) 'Coeff: ',count,supports_on_atom(i)%supp_func(k)%coefficients(count)
+                                 write(io_lun,*) 'Coeff: ',count,blips_on_atom(i)%supp_func(k)%coefficients(count)
                             count = count+1
                          enddo ! m=-l,l
-                      enddo ! acz=1,supports_on_atom(i)%naczetas(l)
+                      enddo ! acz=1,blips_on_atom(i)%naczetas(l)
                    enddo ! do l=0,lmax
                    sum = sqrt(sum)
-                   supports_on_atom(i)%supp_func(k)%coefficients = supports_on_atom(i)%supp_func(k)%coefficients/sum
+                   blips_on_atom(i)%supp_func(k)%coefficients = blips_on_atom(i)%supp_func(k)%coefficients/sum
                 enddo ! k=1,nsuppfuncs
              endif ! inode==ionode
           enddo ! mx_pao_coeff_atoms
@@ -1122,47 +1124,47 @@ end subroutine unnorm_siesta_tbl
              if(inode==ionode) then
                 if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'Atom: ',i
                 read(lun,*) n_sup
-                if(supports_on_atom(i)%nsuppfuncs/=n_sup) &
-                     call cq_abort("n_sup mismatch in PAO reading: ",supports_on_atom(i)%nsuppfuncs,n_sup)
+                if(blips_on_atom(i)%nsuppfuncs/=n_sup) &
+                     call cq_abort("n_sup mismatch in PAO reading: ",blips_on_atom(i)%nsuppfuncs,n_sup)
                 if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'N_sup: ',n_sup
                 read(lun,*) lmax
-                if(supports_on_atom(i)%lmax/=lmax) &
-                     call cq_abort("lmax mismatch in PAO reading: ",supports_on_atom(i)%lmax,lmax)
+                if(blips_on_atom(i)%lmax/=lmax) &
+                     call cq_abort("lmax mismatch in PAO reading: ",blips_on_atom(i)%lmax,lmax)
                 if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'lmax: ',lmax
                 count = 0
-                do l = 0, supports_on_atom(i)%lmax
+                do l = 0, blips_on_atom(i)%lmax
                    read(lun,*) nacz
-                   if(supports_on_atom(i)%naczs(l)/=nacz) &
-                        call cq_abort("zeta mismatch in PAO reading: ",supports_on_atom(i)%naczs(l),nacz)
-                   count = count + (2*l+1)*supports_on_atom(i)%naczs(l)
+                   if(blips_on_atom(i)%naczs(l)/=nacz) &
+                        call cq_abort("zeta mismatch in PAO reading: ",blips_on_atom(i)%naczs(l),nacz)
+                   count = count + (2*l+1)*blips_on_atom(i)%naczs(l)
                    if(iprint_basis>2.AND.inode==ionode) write(io_lun,*) 'zeta: ',l,nacz,count
                 enddo
-                do k = 1, supports_on_atom(i)%nsuppfuncs
-                   if(count/=supports_on_atom(i)%supp_func(k)%ncoeffs) &
-                        call cq_abort("coeff size mismatch in PAO reading: ",count,supports_on_atom(i)%supp_func(k)%ncoeffs)
+                do k = 1, blips_on_atom(i)%nsuppfuncs
+                   if(count/=blips_on_atom(i)%supp_func(k)%ncoeffs) &
+                        call cq_abort("coeff size mismatch in PAO reading: ",count,blips_on_atom(i)%supp_func(k)%ncoeffs)
                 end do
              end if
              if(inode==ionode) then
-                do k = 1, supports_on_atom(i)%nsuppfuncs
+                do k = 1, blips_on_atom(i)%nsuppfuncs
                    !-------------------------------------------------------!
                    !          read and store the coefficients              !     
                    !-------------------------------------------------------!
                    count = 1
                    sum = zero
-                   do l = 0, supports_on_atom(i)%lmax
-                      do acz = 1, supports_on_atom(i)%naczs(l)
+                   do l = 0, blips_on_atom(i)%lmax
+                      do acz = 1, blips_on_atom(i)%naczs(l)
                          do m = -l,l
-                            read(lun,*) supports_on_atom(i)%supp_func(k)%coefficients(count)
-                            sum = sum + supports_on_atom(i)%supp_func(k)%coefficients(count)* &
-                                 supports_on_atom(i)%supp_func(k)%coefficients(count)
+                            read(lun,*) blips_on_atom(i)%supp_func(k)%coefficients(count)
+                            sum = sum + blips_on_atom(i)%supp_func(k)%coefficients(count)* &
+                                 blips_on_atom(i)%supp_func(k)%coefficients(count)
                             if(iprint_basis>2.AND.inode==ionode) &
-                                 write(io_lun,*) 'Coeff: ',count,supports_on_atom(i)%supp_func(k)%coefficients(count)
+                                 write(io_lun,*) 'Coeff: ',count,blips_on_atom(i)%supp_func(k)%coefficients(count)
                             count = count+1
                          enddo ! m=-l,l
-                      enddo ! acz=1,supports_on_atom(i)%naczetas(l)
+                      enddo ! acz=1,blips_on_atom(i)%naczetas(l)
                    enddo ! do l=0,lmax
                    sum = sqrt(sum)
-                   supports_on_atom(i)%supp_func(k)%coefficients = supports_on_atom(i)%supp_func(k)%coefficients/sum
+                   blips_on_atom(i)%supp_func(k)%coefficients = blips_on_atom(i)%supp_func(k)%coefficients/sum
                 enddo ! k=1,nsuppfuncs
              end if
              ! Here we need to determine WHICH processor this belongs to, and send it
@@ -1183,59 +1185,59 @@ end subroutine unnorm_siesta_tbl
           end if
           if(nsf_species(species_i)==npao_species(species_i)) then ! We have one-to-one
              if(flag_one_to_one) then
-                do k = 1, supports_on_atom(i)%nsuppfuncs
-                   supports_on_atom(i)%supp_func(k)%coefficients(:) = one
+                do k = 1, blips_on_atom(i)%nsuppfuncs
+                   blips_on_atom(i)%supp_func(k)%coefficients(:) = one
                 end do
              else
-                do k = 1, supports_on_atom(i)%nsuppfuncs
+                do k = 1, blips_on_atom(i)%nsuppfuncs
                    count = 1
-                   do l = 0, supports_on_atom(i)%lmax
-                      do acz = 1, supports_on_atom(i)%naczs(l)
+                   do l = 0, blips_on_atom(i)%lmax
+                      do acz = 1, blips_on_atom(i)%naczs(l)
                          do m = -l,l
                             if(k==count) then
-                               supports_on_atom(i)%supp_func(k)%coefficients(count) = one
+                               blips_on_atom(i)%supp_func(k)%coefficients(count) = one
                             else
-                               supports_on_atom(i)%supp_func(k)%coefficients(count) = zero
+                               blips_on_atom(i)%supp_func(k)%coefficients(count) = zero
                             end if
                             count = count+1
                          enddo ! m=-l,l
-                      enddo ! acz=1,supports_on_atom(i)%naczetas(l)
+                      enddo ! acz=1,blips_on_atom(i)%naczetas(l)
                    enddo ! do l=0,lmax
                 enddo ! k=1,nsuppfuncs
              end if
           else
-             do k = 1, supports_on_atom(i)%nsuppfuncs
+             do k = 1, blips_on_atom(i)%nsuppfuncs
                 count_pao = 1 ! which PAO 
                 sum = zero
-                do l = 0, supports_on_atom(i)%lmax
-                   do acz = 1, supports_on_atom(i)%naczs(l)
+                do l = 0, blips_on_atom(i)%lmax
+                   do acz = 1, blips_on_atom(i)%naczs(l)
                       ! Count indexes which angular momentum channel we're in
                       count = 1
-                      if(l>0.AND.supports_on_atom(i)%naczs(l)>0) then
+                      if(l>0.AND.blips_on_atom(i)%naczs(l)>0) then
                          do m=0,l-1
-                            if(supports_on_atom(i)%naczs(m)>0) count = count + 2*m+1
+                            if(blips_on_atom(i)%naczs(m)>0) count = count + 2*m+1
                          end do
                       end if
                       if(inode==ionode.AND.iprint_basis>2) write(io_lun,*) 'Counter: ',count,count_pao,k
                       do m = -l,l
                          if(k==count) then
                             if(acz==1) then
-                               supports_on_atom(i)%supp_func(k)%coefficients(count_pao) = one
+                               blips_on_atom(i)%supp_func(k)%coefficients(count_pao) = one
                             else
-                               supports_on_atom(i)%supp_func(k)%coefficients(count_pao) = 0.1_double
+                               blips_on_atom(i)%supp_func(k)%coefficients(count_pao) = 0.1_double
                             end if
                          else
-                            supports_on_atom(i)%supp_func(k)%coefficients(count_pao) = zero
+                            blips_on_atom(i)%supp_func(k)%coefficients(count_pao) = zero
                          end if
-                         sum = sum + supports_on_atom(i)%supp_func(k)%coefficients(count_pao)* &
-                              supports_on_atom(i)%supp_func(k)%coefficients(count_pao)
+                         sum = sum + blips_on_atom(i)%supp_func(k)%coefficients(count_pao)* &
+                              blips_on_atom(i)%supp_func(k)%coefficients(count_pao)
                          count = count + 1
                          count_pao = count_pao + 1
                       enddo ! m=-l,l
-                   enddo ! acz=1,supports_on_atom(i)%naczetas(l)
+                   enddo ! acz=1,blips_on_atom(i)%naczetas(l)
                 enddo ! do l=0,lmax
                 sum = sqrt(sum)
-                supports_on_atom(i)%supp_func(k)%coefficients = supports_on_atom(i)%supp_func(k)%coefficients/sum
+                blips_on_atom(i)%supp_func(k)%coefficients = blips_on_atom(i)%supp_func(k)%coefficients/sum
              enddo ! k=1,nsuppfuncs
           end if ! Is this one-to-one PAOs-to-SFs
        enddo ! i=1,mx_pao_coeff_atoms
@@ -1249,9 +1251,11 @@ end subroutine unnorm_siesta_tbl
   
 !!   2009/07/08 16:48 dave
 !!    Added code for one-to-one PAO to SF assignment
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
   subroutine writeout_support_functions(inode,ionode)
     use datatypes
-    use support_spec_format, ONLY : supports_on_atom, support_pao_file, flag_one_to_one
+    use support_spec_format, ONLY : blips_on_atom, support_pao_file, flag_one_to_one
     use global_module, ONLY: ni_in_cell !this is our total no of atoms
     use GenComms, ONLY : gcopy, my_barrier
     use species_module, ONLY : n_species
@@ -1270,17 +1274,17 @@ end subroutine unnorm_siesta_tbl
        open(unit=lun,file=support_pao_file,iostat=ios)
        do i = 1, ni_in_cell
           !write(io_lun,*) "Atom ",i,inode
-          write(lun,*) supports_on_atom(i)%nsuppfuncs
-          write(lun,*) supports_on_atom(i)%lmax
-          do l = 0, supports_on_atom(i)%lmax
-             write(lun,*) supports_on_atom(i)%naczs(l)
+          write(lun,*) blips_on_atom(i)%nsuppfuncs
+          write(lun,*) blips_on_atom(i)%lmax
+          do l = 0, blips_on_atom(i)%lmax
+             write(lun,*) blips_on_atom(i)%naczs(l)
           enddo
-          do j = 1, supports_on_atom(i)%nsuppfuncs
+          do j = 1, blips_on_atom(i)%nsuppfuncs
              count = 1
-             do l = 0, supports_on_atom(i)%lmax
-                do aczeta = 1, supports_on_atom(i)%naczs(l)
+             do l = 0, blips_on_atom(i)%lmax
+                do aczeta = 1, blips_on_atom(i)%naczs(l)
                    do m = -l,l
-                      write(lun,*) supports_on_atom(i)%supp_func(j)%coefficients(count)
+                      write(lun,*) blips_on_atom(i)%supp_func(j)%coefficients(count)
                       count = count + 1
                    enddo ! m
                 enddo ! acz

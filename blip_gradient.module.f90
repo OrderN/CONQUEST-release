@@ -102,6 +102,8 @@ contains
   !!    Changes for analytic S and KE matrices
   !!   2016/07/13 18:30 nakata
   !!    Renamed H_on_supportfns -> H_on_atomf
+  !!   2016/07/29 18:30 nakata
+  !!    Renamed supports_on_atom -> blips_on_atom
   !!  SOURCE
   !!
   subroutine get_blip_gradient(inode, ionode)
@@ -116,7 +118,7 @@ contains
                                            return_matrix_block_pos
     use GenBlas,                     only: scal, copy
     use pseudopotential_data,        only: non_local
-    use support_spec_format,         only: supports_on_atom,               &
+    use support_spec_format,         only: blips_on_atom,               &
                                            support_gradient, grad_coeff_array
     use species_module,              only: nsf_species
     use set_bucket_module,           only: rem_bucket
@@ -198,7 +200,7 @@ contains
                                              this_nsf * this_nsf)
                 ! spin_factor correction for spin non-polarised
                 ! calculation is done within get_onsite_S_gradient
-                call get_onsite_S_gradient(supports_on_atom(i),   &
+                call get_onsite_S_gradient(blips_on_atom(i),   &
                                            this_data_K(:,:,spin), &
                                            support_gradient(i),   &
                                            this_nsf, bundle%species(i))
@@ -275,7 +277,7 @@ contains
                                              this_nsf * this_nsf)                
                 ! spin_factor correction for spin non-polarsed
                 ! calculation is done inside get_onsite_KE_gradient
-                call get_onsite_KE_gradient(supports_on_atom(i), &
+                call get_onsite_KE_gradient(blips_on_atom(i), &
                                             this_data_K(:,:,spin),   &
                                             support_gradient(i), &
                                             this_nsf, bundle%species(i))
@@ -646,6 +648,8 @@ contains
   !!   - Improve efficiency by absorbing spin_factor into matU, so
   !!     that factor corrections for spin non-polarised calculations
   !!     are not required.
+  !!   2016/07/29 18:30 nakata
+  !!    Removed unused supports_on_atom
   !!  SOURCE
   !!
   subroutine get_non_local_gradient(support_grad_grid, inode, ionode)
@@ -664,8 +668,7 @@ contains
     use functions_on_grid,           only: pseudofns
     use nlpf2blip,                   only: get_blipP, nlpf_on_atom
     use primary_module ,             only: bundle
-    use support_spec_format,         only: supports_on_atom,        &
-                                           support_gradient
+    use support_spec_format,         only: support_gradient
     use group_module,                only: parts
     use primary_module,              only: bundle
     use cover_module,                only: BCS_parts

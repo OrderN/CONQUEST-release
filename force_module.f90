@@ -708,6 +708,8 @@ contains
   !!    Renamed H_on_supportfns -> H_on_atomf
   !!   2016/07/15 18:30 nakata
   !!    Renamed sf_sf_rem -> atomf_atomf_rem
+  !!   2016/07/29 18:30 nakata
+  !!    Renamed supports_on_atom -> blips_on_atom
   !!  SOURCE
   !!
   subroutine pulay_force(p_force, KE_force, fixed_potential, vary_mu,  &
@@ -765,7 +767,7 @@ contains
     use GenComms,                    ONLY: myid, cq_abort, my_barrier, mtime
     use mpi
     use support_spec_format,         ONLY: support_function, coefficient_array, &
-                                           supports_on_atom
+                                           blips_on_atom
     use GenBlas,                     only: axpy, scal
     use calc_matrix_elements_module, only: act_on_vectors_new
 
@@ -948,7 +950,7 @@ contains
                       call return_matrix_block_pos(matM12(spin),wheremat,this_data_M12(:,:,spin),this_nsfi*this_nsfj)
                    end do
                    do direction = 1,3
-                      call get_dS_analytic_oneL(supports_on_atom(i_in_prim),supp_on_j, &
+                      call get_dS_analytic_oneL(blips_on_atom(i_in_prim),supp_on_j, &
                            forS,forKE,this_data_M12,this_data_K, i_in_prim, &
                            j_in_halo,dx,dy,dz,speci,specj,this_nsfi,this_nsfj,direction)
                       p_force(direction,bundle%ig_prim(i_in_prim)) = p_force(direction,bundle%ig_prim(i_in_prim)) &
@@ -1660,6 +1662,8 @@ contains
   !!    Renamed H_on_supportfns -> H_on_atomf
   !!   2016/07/15 18:30 nakata
   !!    Renamed sf_nlpf_rem -> atomf_nlpf_rem
+  !!   2016/07/29 18:30 nakata
+  !!    Renamed supports_on_atom -> blips_on_atom
   !!  SOURCE
   !!
   subroutine get_HF_non_local_force(HF_NL_force, what_force, n_atoms)
@@ -1707,7 +1711,7 @@ contains
                                            H_on_atomf, pseudofns
     use nlpf2blip,                   only: get_dSP, nlpf_on_atom
     use primary_module ,             only: bundle
-    use support_spec_format,         only: supports_on_atom
+    use support_spec_format,         only: blips_on_atom
     use group_module,                only: parts
     use primary_module,              only: bundle
     use cover_module,                only: BCS_parts
@@ -1780,7 +1784,7 @@ contains
                                    mat(np,SPrange)%i_seq(ist) - 1)
                       neigh_species = species_glob(neigh_global_num)
                       if ((dx*dx + dy*dy + dz*dz) > RD_ERR) then
-                         call get_dSP(supports_on_atom(iprim),         &
+                         call get_dSP(blips_on_atom(iprim),            &
                                       nlpf_on_atom(neigh_species),     &
                                       matdSC(direction), iprim,        &
                                       halo(SPrange)% i_halo(gcspart),  &

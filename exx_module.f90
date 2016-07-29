@@ -952,6 +952,8 @@ contains
     return
   end subroutine get_halodat
 
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
   subroutine get_iprimdat(ia,hl,ind,iprim,part,verbose,unit)
     
     use units,          only: BohrToAng
@@ -959,7 +961,7 @@ contains
     use primary_module, only: bundle
     use species_module, only: species_label,nsf_species
     use atomic_density, only: atomic_density_table
-    use support_spec_format, only: supports_on_atom, flag_one_to_one
+    use support_spec_format, only: blips_on_atom, flag_one_to_one
     !
     use matrix_data, only: mat, Hrange, Srange
     use exx_types, only: prim_atomic_data, neigh_atomic_data
@@ -991,9 +993,9 @@ contains
     ia%radi = atomic_density_table(ia%spec)%cutoff
     ia%labcell = ia%ip 
     !if (flag_one_to_one) then
-    !   ia%nsup = supports_on_atom(ia%spec)%nsuppfuncs
+    !   ia%nsup = blips_on_atom(ia%spec)%nsuppfuncs
     !else
-    !   ia%nsup = supports_on_atom(ia%ip)%nsuppfuncs
+    !   ia%nsup = blips_on_atom(ia%ip)%nsuppfuncs
     !end if
     ia%nsup = nsf_species(ia%spec)
 
@@ -1032,7 +1034,7 @@ contains
 !!$    use primary_module, only: bundle
 !!$    use species_module, only: species_label,nsf_species
 !!$    use atomic_density, only: atomic_density_table
-!!$    use support_spec_format, only: supports_on_atom, flag_one_to_one
+!!$    use support_spec_format, only: blips_on_atom, flag_one_to_one
 !!$    !
 !!$    use matrix_data, only: mat, Hrange, Srange
 !!$    use exx_types, only: prim_atomic_data, neigh_atomic_data
