@@ -710,6 +710,8 @@ contains
   !!    Renamed sf_sf_rem -> atomf_atomf_rem
   !!   2016/07/29 18:30 nakata
   !!    Renamed supports_on_atom -> blips_on_atom
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf
   !!  SOURCE
   !!
   subroutine pulay_force(p_force, KE_force, fixed_potential, vary_mu,  &
@@ -733,7 +735,7 @@ contains
     use global_module,               only: iprint_MD, WhichPulay,    &
                                            BothPulay, PhiPulay,      &
                                            SPulay, flag_basis_set,   &
-                                           blips, PAOs, sf,          &
+                                           blips, PAOs, atomf,       &   ! nakata2
                                            flag_onsite_blip_ana,     &
                                            nspin, spin_factor,       &
                                            flag_analytic_blip_int, id_glob, species_glob
@@ -1042,7 +1044,7 @@ contains
     ! Calculate local phi Pulay forces (<grad \phi_i|K_ij|H\phi_j>)
     if (WhichPulay == BothPulay .or. WhichPulay == PhiPulay) then
        mat_tmp = allocate_temp_matrix(Srange, 0)
-       tmp_fn = allocate_temp_fn_on_grid(sf)
+       tmp_fn = allocate_temp_fn_on_grid(atomf)
        gridfunctions(tmp_fn)%griddata = zero
        ! Act on H\phi_j with K and store result in H_on_atomf(1) to save memory
        ! act_on_vectors accumulates
@@ -1064,10 +1066,10 @@ contains
        end if
        t0 = t1
        ! Allocate more temporary variables
-       tmp_fn2 = allocate_temp_fn_on_grid(sf)
+       tmp_fn2 = allocate_temp_fn_on_grid(atomf)
        gridfunctions(tmp_fn2)%griddata = zero
        mat_tmp2 = allocate_temp_matrix(Srange, 0)
-       !temp_local = allocate_temp_fn_on_grid(sf) ! Edited SYM 2014/09/01 17:55 
+       !temp_local = allocate_temp_fn_on_grid(atomf) ! Edited SYM 2014/09/01 17:55 
        ! now for each direction in turn
        do direction = 1, 3
           ! we get the grad of the support functions
@@ -1137,7 +1139,7 @@ contains
     ! NB this used to be PAOs only (flag_basis_set == PAOs)
     if (WhichPulay == BothPulay .or. WhichPulay == SPulay) then
        mat_tmp = allocate_temp_matrix(Srange, 0)
-       tmp_fn = allocate_temp_fn_on_grid(sf)
+       tmp_fn = allocate_temp_fn_on_grid(atomf)
        do direction = 1, 3
           ! Call assemble to generate dS_ij/dR_kl
           if (flag_basis_set == blips) then
@@ -1664,6 +1666,8 @@ contains
   !!    Renamed sf_nlpf_rem -> atomf_nlpf_rem
   !!   2016/07/29 18:30 nakata
   !!    Renamed supports_on_atom -> blips_on_atom
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf
   !!  SOURCE
   !!
   subroutine get_HF_non_local_force(HF_NL_force, what_force, n_atoms)
@@ -1694,7 +1698,7 @@ contains
                                            STATE, ABINIT
     use pseudo_tm_module,            only: nonloc_pp_derivative_tm
     use global_module,               only: iprint_MD, flag_basis_set,  &
-                                           blips, PAOs, sf, nlpf,      &
+                                           blips, PAOs, atomf, nlpf,   &   ! nakata2
                                            nspin, spin_factor,         &
                                            id_glob, species_glob,      &
                                            flag_analytic_blip_int, ni_in_cell
@@ -1738,10 +1742,10 @@ contains
     real(double), dimension(:,:), allocatable ::  NL_P_stress, NL_HF_stress
 
     do k = 1, 3
-       matdSC(k) = allocate_temp_matrix (SPrange, SP_trans, sf, nlpf)
-       matdCS(k) = allocate_temp_matrix (PSrange, SP_trans, nlpf, sf)
-       matdSCr(k) = allocate_temp_matrix (SPrange, SP_trans, sf, nlpf)
-       matdCSr(k) = allocate_temp_matrix (PSrange, SP_trans, nlpf, sf)
+       matdSC(k) = allocate_temp_matrix (SPrange, SP_trans, atomf, nlpf)
+       matdCS(k) = allocate_temp_matrix (PSrange, SP_trans, nlpf, atomf)
+       matdSCr(k) = allocate_temp_matrix (SPrange, SP_trans, atomf, nlpf)
+       matdCSr(k) = allocate_temp_matrix (PSrange, SP_trans, nlpf, atomf)
     end do
     if (flag_basis_set == blips .and. (.not. flag_analytic_blip_int)) then
        dpseudofns = allocate_temp_fn_on_grid(nlpf)
@@ -2041,6 +2045,8 @@ contains
   !!    Renamed H_on_supportfns -> H_on_atomf
   !!   2016/07/15 18:30 nakata
   !!    Renamed sf_H_sf_rem -> atomf_H_atomf_rem
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf
   !!  SOURCE
   !!
   subroutine get_KE_force(KE_force, n_atoms)
@@ -2063,7 +2069,7 @@ contains
     use GenComms,                    only: my_barrier, gsum, inode,   &
                                            ionode
     use global_module,               only: iprint_MD, flag_basis_set, &
-                                           blips, PAOs, sf,           &
+                                           blips, PAOs, atomf,        &   ! nakata2
                                            flag_onsite_blip_ana,      &
                                            nspin, spin_factor
     use build_PAO_matrices,          only: assemble_deriv_2
@@ -2090,7 +2096,7 @@ contains
     ! Now, for the offsite part, done on the integration grid.
     if (flag_basis_set == blips) then
 
-       tmp_fn = allocate_temp_fn_on_grid(sf)
+       tmp_fn = allocate_temp_fn_on_grid(atomf)
        call start_timer(tmr_std_matrices)
        do grad_direction = 1, 3
 

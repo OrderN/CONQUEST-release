@@ -24,12 +24,14 @@
 !!    Added timer
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2016/08/01 17:30 nakata
+!!    Introduced atomf instead of sf and paof
 !!  SOURCE
 !!
 module functions_on_grid
 
   use datatypes
-  use global_module,          only: sf, nlpf, paof
+  use global_module,          only: atomf, nlpf
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_allocation
 
@@ -119,6 +121,8 @@ contains
 !!    array for the given spin channel.
 !!   2016/07/13 18:30 nakata
 !!    Renamed H_on_supportfns -> H_on_atomf
+!!   2016/08/01 17:30 nakata
+!!    Introduced atomf instead of sf
 !!  SOURCE
 !!  
   subroutine associate_fn_on_grid
@@ -141,27 +145,27 @@ contains
     end if
 
     ! Support functions
-    gridfunctions(supportfns)%size = gridsize(sf)
-    allocate(gridfunctions(supportfns)%griddata(gridsize(sf)))
-    if (gridsize(sf) > 0) then
-       do i = 1, gridsize(sf)
+    gridfunctions(supportfns)%size = gridsize(atomf)
+    allocate(gridfunctions(supportfns)%griddata(gridsize(atomf)))
+    if (gridsize(atomf) > 0) then
+       do i = 1, gridsize(atomf)
           gridfunctions(supportfns)%griddata(i) = zero
        end do
     end if
-    call reg_alloc_mem(area_index, gridsize(sf), type_dbl)
-    gridfunctions(supportfns)%type = sf
+    call reg_alloc_mem(area_index, gridsize(atomf), type_dbl)
+    gridfunctions(supportfns)%type = atomf
 
     ! H acting on support functions
     do spin = 1, nspin
-       gridfunctions(H_on_atomf(spin))%size = gridsize(sf)
-       allocate(gridfunctions(H_on_atomf(spin))%griddata(gridsize(sf)))
-       if(gridsize(sf)>0) then
-          do i=1,gridsize(sf)
+       gridfunctions(H_on_atomf(spin))%size = gridsize(atomf)
+       allocate(gridfunctions(H_on_atomf(spin))%griddata(gridsize(atomf)))
+       if(gridsize(atomf)>0) then
+          do i=1,gridsize(atomf)
              gridfunctions(H_on_atomf(spin))%griddata(i) = zero
           end do
        end if
-       call reg_alloc_mem(area_index, gridsize(sf), type_dbl)
-       gridfunctions(H_on_atomf(spin))%type = sf
+       call reg_alloc_mem(area_index, gridsize(atomf), type_dbl)
+       gridfunctions(H_on_atomf(spin))%type = atomf
     end do
 
     if (flag_basis_set == blips .and. (.not. flag_analytic_blip_int)) then

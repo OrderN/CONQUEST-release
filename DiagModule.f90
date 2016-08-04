@@ -419,6 +419,8 @@ contains
   !!    Including changes for DeltaSCF from Umberto Terranova
   !!   2015/06/29 17:14 dave
   !!    Added DOS output
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf and paof
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -433,7 +435,7 @@ contains
          dscf_LUMO_thresh, dscf_source_level, dscf_target_level, &
          dscf_target_spin, dscf_source_spin, flag_cdft_atom,  &
          dscf_HOMO_limit, dscf_LUMO_limit, &
-         flag_out_wf,wf_self_con, max_wf, sf, sf, flag_out_wf_by_kp, &
+         flag_out_wf,wf_self_con, max_wf, atomf, flag_out_wf_by_kp, &   ! nakata2
          out_wf, n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, &
          flag_write_projected_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
@@ -622,13 +624,13 @@ contains
           allocate(matBand_kp(max_wf,nkp))
           do j=1,nkp
              do i=1,max_wf
-                matBand_kp(i,j) = allocate_temp_matrix(Hrange,0,sf,sf)
+                matBand_kp(i,j) = allocate_temp_matrix(Hrange,0,atomf,atomf)   ! nakata2
              end do
           end do
        else
           allocate(matBand(max_wf))
           do i=1,max_wf
-             matBand(i) = allocate_temp_matrix(Hrange,0,sf,sf)
+             matBand(i) = allocate_temp_matrix(Hrange,0,atomf,atomf)   ! nakata2
           end do
        end if
     end if
@@ -1021,7 +1023,7 @@ contains
        allocate(abs_wf(maxngrid),STAT=stat)
        if (stat /= 0) call cq_abort('wf_out: Failed to allocate wfs', stat)
        call reg_alloc_mem(area_DM, maxngrid, type_dbl)
-       support_K = allocate_temp_fn_on_grid(sf)
+       support_K = allocate_temp_fn_on_grid(atomf)   ! nakata2
        if(flag_out_wf_by_kp) then
           if(inode==ionode) call write_eigenvalues(w,matrix_size,nkp,nspin,kk,wtk,Efermi)
           do i=1,nkp

@@ -112,6 +112,8 @@
 !!    Added neutral atom flag
 !!   2016/02/16 JKS
 !!    Added Wu-Cohen XC functional  (PRB 73, 235116  (2006) )
+!!   2016/08/01 17:30 nakata
+!!    Introduced atomf
 !!  SOURCE
 !!
 module global_module
@@ -218,6 +220,7 @@ module global_module
   integer, parameter :: nlpf = 2 ! Projector functions
   integer, parameter :: paof = 3 ! Pseudo-atomic orbitals
   integer, parameter :: dens = 4 ! Atomic charge density
+  integer            :: atomf    ! nakata2 --- set to 1 for blips and 3 for paos, but will be always 1 (no sf nor paof) ???
 
   ! Define areas of the code
   integer, parameter :: n_areas        = 13

@@ -373,13 +373,15 @@ contains
 !!    Changed position-finding routines to use check-block (removes some problems with z-component)  
 !!   2016/07/20 16:30 nakata
 !!    Renamed naba_atm -> naba_atoms_of_blocks
+!!   2016/08/01 17:30 nakata
+!!    Introduced atomf instead of sf
 !!  SOURCE
 !!  
   subroutine get_r_on_support(direction,inputgf,gridfunc1,gridfunc2,gridfunc3)
 
     use datatypes
     use numbers
-    use global_module,               only: rcellx,rcelly,rcellz, sf, species_glob, ni_in_cell, id_glob
+    use global_module,               only: rcellx,rcelly,rcellz, atomf, species_glob, ni_in_cell, id_glob
     use cover_module,                only: DCS_parts
     use block_module,                only: nx_in_block,ny_in_block,nz_in_block, &
                                            n_blocks, n_pts_in_block
@@ -435,15 +437,15 @@ contains
        xblock = (domain%idisp_primx(iblock) + domain%nx_origin - 1) * dcellx_block
        yblock = (domain%idisp_primy(iblock) + domain%ny_origin - 1) * dcelly_block
        zblock = (domain%idisp_primz(iblock) + domain%nz_origin - 1) * dcellz_block
-       if (naba_atoms_of_blocks(sf)%no_of_part(iblock) > 0) then ! if there are naba atoms
+       if (naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom = 0
-          do ipart = 1, naba_atoms_of_blocks(sf)%no_of_part(iblock)
-             jpart = naba_atoms_of_blocks(sf)%list_part(ipart,iblock)
+          do ipart = 1, naba_atoms_of_blocks(atomf)%no_of_part(iblock)
+             jpart = naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
              if (jpart > DCS_parts%mx_gcover) call cq_abort('set_ps: JPART ERROR ', ipart, jpart)
              ind_part = DCS_parts%lab_cell(jpart)
-             do ia = 1, naba_atoms_of_blocks(sf)%no_atom_on_part(ipart, iblock)
+             do ia = 1, naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart, iblock)
                 iatom = iatom + 1
-                ii = naba_atoms_of_blocks(sf)%list_atom(iatom, iblock)
+                ii = naba_atoms_of_blocks(atomf)%list_atom(iatom, iblock)
                 icover = DCS_parts%icover_ibeg(jpart) + ii - 1
                 if (parts%icell_beg(ind_part) + ii - 1 > ni_in_cell) &
                      call cq_abort('set_ps: globID ERROR ', ii, parts%icell_beg(ind_part))
@@ -498,7 +500,7 @@ contains
                 no_of_ib_ia=no_of_ib_ia+this_nsf*n_pts_in_block
              end do ! naba_atoms
           end do ! naba_part
-       end if !(naba_atoms_of_blocks(sf)%no_of_part(iblock) > 0) !naba atoms?
+       end if !(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) !naba atoms?
     end do ! iblock : primary set of blocks
     deallocate(ip_store,x_store,y_store,z_store, r_store, STAT=stat)
     if(stat /= 0) call cq_abort(' Error in deallocation in PAO_to_grad_global')

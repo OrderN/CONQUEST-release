@@ -526,6 +526,8 @@ contains
     !    Renamed comBG -> comm_naba_blocks_of_atoms
     !   2016/07/20 16:30 nakata
     !    Renamed naba_atm -> naba_atoms_of_blocks
+    !   2016/08/01 18:30 nakata
+    !    Introduced atomf instead of sf
     !
     use datatypes
     use numbers, ONLY : zero
@@ -536,7 +538,7 @@ contains
     use GenComms, ONLY: my_barrier, cq_abort
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
     use species_module, ONLY: nsf_species
-    use global_module, ONLY: species_glob, sf, area_basis
+    use global_module, ONLY: species_glob, atomf, area_basis
     use atoms, ONLY: atoms_on_node
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
@@ -624,10 +626,10 @@ contains
              prim_blk=comm_naba_blocks_of_atoms%table_blk(ipair,isend)     ! primary block in my domain
              naba_atm_tmp=comm_naba_blocks_of_atoms%table_pair(ipair,isend)! naba atm of the primary blk
              loc1= nunit_recv*(ipair-1)
-             ind_alp_i_blk = naba_atoms_of_blocks(sf)%ibegin_blk_orb(prim_blk)+ &
-                  naba_atoms_of_blocks(sf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
-             ! naba_atoms_of_blocks(sf)%ibegin_blk_orb(iprim_blk): initial position of support for the present primary block.
-             ! naba_atoms_of_blocks(sf)%ibeg_orb_atom(naba, iprim_blk)
+             ind_alp_i_blk = naba_atoms_of_blocks(atomf)%ibegin_blk_orb(prim_blk)+ &
+                  naba_atoms_of_blocks(atomf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
+             ! naba_atoms_of_blocks(atomf)%ibegin_blk_orb(iprim_blk): initial position of support for the present primary block.
+             ! naba_atoms_of_blocks(atomf)%ibeg_orb_atom(naba, iprim_blk)
              ! : initial position of the present naba atom (naba) in the neighbour-atom orbitals of the 
              ! present primary block.
              !loc2 = n_pts_in_block * (ind_alp_i_blk-1) + 1
@@ -2064,6 +2066,8 @@ contains
     !    Renamed comBG -> comm_naba_blocks_of_atoms
     !   2016/07/20 16:30 nakata
     !    Renamed naba_atm -> naba_atoms_of_blocks
+    !   2016/08/01 16:30 nakata
+    !    Introduced atomf instead of sf
 
 
     use datatypes
@@ -2075,7 +2079,7 @@ contains
     use GenComms, ONLY: my_barrier, cq_abort
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
     use species_module, ONLY: nsf_species
-    use global_module, ONLY: species_glob, sf, area_basis
+    use global_module, ONLY: species_glob, atomf, area_basis
     use atoms, ONLY: atoms_on_node
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
 
@@ -2176,10 +2180,10 @@ contains
              prim_blk=comm_naba_blocks_of_atoms%table_blk(ipair,isend)     ! primary block in my domain
              naba_atm_tmp=comm_naba_blocks_of_atoms%table_pair(ipair,isend)! naba atm of the primary blk
              loc1= nunit_send*(ipair-1)
-             ind_alp_i_blk = naba_atoms_of_blocks(sf)%ibegin_blk_orb(prim_blk)+ &
-                  naba_atoms_of_blocks(sf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
-             ! naba_atoms_of_blocks(sf)%ibegin_blk_orb(iprim_blk): initial position of support for the present primary block.
-             ! naba_atoms_of_blocks(sf)%ibeg_orb_atom(naba, iprim_blk)
+             ind_alp_i_blk = naba_atoms_of_blocks(atomf)%ibegin_blk_orb(prim_blk)+ &
+                  naba_atoms_of_blocks(atomf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
+             ! naba_atoms_of_blocks(atomf)%ibegin_blk_orb(iprim_blk): initial position of support for the present primary block.
+             ! naba_atoms_of_blocks(atomf)%ibeg_orb_atom(naba, iprim_blk)
              ! : initial position of the present naba atom (naba) in the neighbour-atom orbitals of the 
              ! present primary block.
              !loc2 = n_pts_in_block * (ind_alp_i_blk-1) + 1
@@ -2192,8 +2196,8 @@ contains
                 write(io_lun,*) ' ERROR loc2 in collect_result for mynode= ',&
                      mynode,' loc2 = ',loc2+nunit_send,gridfunctions(support)%size
                 write(io_lun,*) '  ERROR prim_blk, naba_atm_tmp = ',prim_blk,naba_atm_tmp,&
-                     ' ibegin_blk = ',naba_atoms_of_blocks(sf)%ibegin_blk(prim_blk),&
-                     ' naba_atom_of_blk = ',naba_atoms_of_blocks(sf)%no_of_atom(prim_blk)
+                     ' ibegin_blk = ',naba_atoms_of_blocks(atomf)%ibegin_blk(prim_blk),&
+                     ' naba_atom_of_blk = ',naba_atoms_of_blocks(atomf)%no_of_atom(prim_blk)
                 call cq_abort("Stopping in inverse_blip_transform")
              endif
 

@@ -675,6 +675,8 @@ contains
   !!    Renamed sf_H_sf_rem -> atomf_H_atomf_rem
   !!   2016/07/20 16:30 nakata
   !!    Renamed naba_atm -> naba_atoms_of_blocks
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf
   !!  SOURCE
   !!
   subroutine get_electronic_density(denout, electrons, support, &
@@ -691,7 +693,7 @@ contains
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atoms_of_blocks
     use GenComms,                    only: gsum
-    use global_module,               only: iprint_SC, sf, ni_in_cell, &
+    use global_module,               only: iprint_SC, atomf, ni_in_cell, &
                                            flag_Becke_weights, nspin, &
                                            spin_factor
     use functions_on_grid,           only: gridfunctions, fn_on_grid
@@ -730,16 +732,16 @@ contains
        i_count_alpha = 0
        do blk = 1, domain%groups_on_node
           n_point = (blk - 1) * n_pts_in_block
-          i_count_alpha = (naba_atoms_of_blocks(sf)%ibegin_blk_orb(blk)-1) * n_pts_in_block
+          i_count_alpha = (naba_atoms_of_blocks(atomf)%ibegin_blk_orb(blk)-1) * n_pts_in_block
           !if(blk == 1) then
           !   i_count_alpha = 0
           !else
           !   i_count_alpha= i_count_alpha+ &
-          !        naba_atoms_of_blocks(sf)%no_of_atom(blk-1)*nsf*n_pts_in_block
+          !        naba_atoms_of_blocks(atomf)%no_of_atom(blk-1)*nsf*n_pts_in_block
           !endif
-          if (naba_atoms_of_blocks(sf)%no_of_atom(blk) > 0) then   !TM 30/Jun/2003
-             !do n_i=1, naba_atoms_of_blocks(sf)%no_of_atom(blk)*NSF*n_pts_in_block, &
-             do n_i = 1, naba_atoms_of_blocks(sf)%no_of_orb(blk)*n_pts_in_block, n_pts_in_block
+          if (naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0) then   !TM 30/Jun/2003
+             !do n_i=1, naba_atoms_of_blocks(atomf)%no_of_atom(blk)*NSF*n_pts_in_block, &
+             do n_i = 1, naba_atoms_of_blocks(atomf)%no_of_orb(blk)*n_pts_in_block, n_pts_in_block
                 do n=1, n_pts_in_block
                    denout(n_point+n, spin) =                                       &
                         denout(n_point+n, spin) +                                  &
@@ -747,7 +749,7 @@ contains
                         gridfunctions(support)%griddata(i_count_alpha+n_i+n-1)
                 end do
              end do
-          end if !(naba_atoms_of_blocks(sf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
+          end if !(naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
        end do ! blk
 
        ! FOR DEBUGGING   T. MIYAZAKI 30/Jun/2003
@@ -816,6 +818,8 @@ contains
   !!    Renamed sf_H_sf_rem -> atomf_H_atomf_rem
   !!   2016/07/20 16:30 nakata
   !!    Renamed naba_atm -> naba_atoms_of_blocks
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf
   !!  SOURCE
   !!
   subroutine get_band_density(denout, spin, support, support_K, matBand, size)
@@ -830,7 +834,7 @@ contains
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atoms_of_blocks
     use GenComms,                    only: gsum, inode, ionode
-    use global_module,               only: iprint_SC, sf, ni_in_cell
+    use global_module,               only: iprint_SC, atomf, ni_in_cell
     use functions_on_grid,           only: gridfunctions, fn_on_grid
 
     implicit none
@@ -855,9 +859,9 @@ contains
     i_count_alpha = 0
     do blk = 1, domain%groups_on_node
        n_point = (blk - 1) * n_pts_in_block
-       i_count_alpha = (naba_atoms_of_blocks(sf)%ibegin_blk_orb(blk)-1) * n_pts_in_block
-       if (naba_atoms_of_blocks(sf)%no_of_atom(blk) > 0) then   !TM 30/Jun/2003
-          do n_i = 1, naba_atoms_of_blocks(sf)%no_of_orb(blk)*n_pts_in_block, n_pts_in_block
+       i_count_alpha = (naba_atoms_of_blocks(atomf)%ibegin_blk_orb(blk)-1) * n_pts_in_block
+       if (naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0) then   !TM 30/Jun/2003
+          do n_i = 1, naba_atoms_of_blocks(atomf)%no_of_orb(blk)*n_pts_in_block, n_pts_in_block
              do n=1, n_pts_in_block
                 denout(n_point+n) =                                       &
                      denout(n_point+n) +                                  &
@@ -865,7 +869,7 @@ contains
                      gridfunctions(support)%griddata(i_count_alpha+n_i+n-1)
              end do
           end do
-       end if !(naba_atoms_of_blocks(sf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
+       end if !(naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
     end do ! blk
     electrons = grid_point_volume * rsum(n_my_grid_points, denout(:), 1)
     call gsum(electrons)
@@ -905,6 +909,8 @@ contains
   !!    Moving all detailed cDFT work into cdft_module
   !!   2016/07/20 16:30 nakata
   !!    Renamed naba_atm -> naba_atoms_of_blocks
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf
   !!  SOURCE
   !!
   subroutine build_Becke_weights
@@ -917,7 +923,7 @@ contains
     use set_blipgrid_module, only: naba_atoms_of_blocks
     use GenComms,            only: gsum, cq_abort, inode, ionode
     use global_module,       only: rcellx, rcelly, rcellz, iprint_SC, &
-                                   sf, ni_in_cell, species_glob,      &
+                                   atomf, ni_in_cell, species_glob,   &
                                    id_glob, io_lun,                   &
                                    flag_Becke_atomic_radii,           &
                                    flag_perform_cdft, flag_cdft_atom
@@ -952,7 +958,7 @@ contains
     no_of_ib_ia=0
     if(allocated(bw)) deallocate(bw)
     do blk=1, domain%groups_on_node
-       no_of_ib_ia = no_of_ib_ia + naba_atoms_of_blocks(sf)%no_of_atom(blk)
+       no_of_ib_ia = no_of_ib_ia + naba_atoms_of_blocks(atomf)%no_of_atom(blk)
     end do
     no_of_ib_ia = no_of_ib_ia * n_pts_in_block
     allocate(bw(no_of_ib_ia),STAT=stat)
@@ -967,34 +973,35 @@ contains
        xblock=(domain%idisp_primx(blk)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(blk)+domain%ny_origin-1)*dcelly_block
        zblock=(domain%idisp_primz(blk)+domain%nz_origin-1)*dcellz_block
-       if(naba_atoms_of_blocks(sf)%no_of_atom(blk) > 0) then
-          allocate(xatom(naba_atoms_of_blocks(sf)%no_of_atom(blk)), &
-               yatom(naba_atoms_of_blocks(sf)%no_of_atom(blk)), &
-               zatom(naba_atoms_of_blocks(sf)%no_of_atom(blk)), rcut(naba_atoms_of_blocks(sf)%&
-               no_of_atom(blk)), npoint(naba_atoms_of_blocks(sf)%no_of_atom(blk)),&
-               globatom(naba_atoms_of_blocks(sf)%no_of_atom(blk)), &
-               ip_store(n_pts_in_block,naba_atoms_of_blocks(sf)%no_of_atom(blk)), &
-               rad(naba_atoms_of_blocks(sf)%no_of_atom(blk)), &
-               x_store(n_pts_in_block,naba_atoms_of_blocks(sf)%no_of_atom(blk)), &
-               y_store(n_pts_in_block,naba_atoms_of_blocks(sf)%no_of_atom(blk)), &
-               z_store(n_pts_in_block,naba_atoms_of_blocks(sf)%no_of_atom(blk)), &
-               r_store(n_pts_in_block,naba_atoms_of_blocks(sf)%no_of_atom(blk)),&
-               STAT=stat)
+       if(naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0) then
+          allocate(xatom(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                   &
+                   yatom(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                   &
+                   zatom(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                   &
+                   rcut(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                    &
+                   npoint(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                  &
+                   globatom(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                &
+                   ip_store(n_pts_in_block,naba_atoms_of_blocks(atomf)%no_of_atom(blk)), &
+                   rad(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                     &
+                   x_store(n_pts_in_block,naba_atoms_of_blocks(atomf)%no_of_atom(blk)),  &
+                   y_store(n_pts_in_block,naba_atoms_of_blocks(atomf)%no_of_atom(blk)),  &
+                   z_store(n_pts_in_block,naba_atoms_of_blocks(atomf)%no_of_atom(blk)),  &
+                   r_store(n_pts_in_block,naba_atoms_of_blocks(atomf)%no_of_atom(blk)),  &
+                   STAT=stat)
           ip_store = 0
           x_store = zero
           y_store = zero
           z_store = zero
           r_store = zero
           at = 0
-          do ipart=1,naba_atoms_of_blocks(sf)%no_of_part(blk)
-             jpart=naba_atoms_of_blocks(sf)%list_part(ipart,blk)
+          do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(blk)
+             jpart=naba_atoms_of_blocks(atomf)%list_part(ipart,blk)
              if(jpart > DCS_parts%mx_gcover) then
                 call cq_abort('build_Becke_weights: JPART ERROR ',ipart,jpart)
              endif
              ind_part=DCS_parts%lab_cell(jpart)
-             do ia=1,naba_atoms_of_blocks(sf)%no_atom_on_part(ipart,blk)
+             do ia=1,naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,blk)
                 at=at+1
-                ii = naba_atoms_of_blocks(sf)%list_atom(at,blk)
+                ii = naba_atoms_of_blocks(atomf)%list_atom(at,blk)
                 icover= DCS_parts%icover_ibeg(jpart)+ii-1
                 ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
                 xatom(at)=DCS_parts%xcover(icover)
@@ -1008,7 +1015,7 @@ contains
           end do
           call check_block(xblock,yblock,zblock,xatom,yatom,zatom,&
                rcut, npoint,ip_store, x_store, y_store, z_store,&
-               r_store,n_pts_in_block,naba_atoms_of_blocks(sf)%no_of_atom(blk))
+               r_store,n_pts_in_block,naba_atoms_of_blocks(atomf)%no_of_atom(blk))
           do point = 1, n_pts_in_block
              ! Sum is normalisation for grid point, Z = \sum_i bw_i
              sum = zero
@@ -1016,20 +1023,20 @@ contains
              ! is skipped if r_in criterion is met and the normalisation
              ! if(flag) then set weight for atom = 1, others = 0
              ! else
-             do atomi = 1, naba_atoms_of_blocks(sf)%no_of_atom(blk)
+             do atomi = 1, naba_atoms_of_blocks(atomf)%no_of_atom(blk)
                 ipos = no_of_ib_ia + n_pts_in_block*(atomi-1)
                 if(ip_store(point,atomi)>0) then
                    ! Here we accumulate bw which is \prod_{j\ne i} s(mu_{ij})
-                   if(naba_atoms_of_blocks(sf)%no_of_atom(blk)==1) then
+                   if(naba_atoms_of_blocks(atomf)%no_of_atom(blk)==1) then
                       bw(ipos+point) = one
                    else if(r_store(point,atomi)<1.0e-6) then
                       bw(ipos+point) = one
-                      do atomj = atomi+1,naba_atoms_of_blocks(sf)%no_of_atom(blk)
+                      do atomj = atomi+1,naba_atoms_of_blocks(atomf)%no_of_atom(blk)
                          jpos = no_of_ib_ia + n_pts_in_block*(atomj-1)
                          bw(jpos+point) = zero
                       end do
                    else
-                      do atomj = atomi+1,naba_atoms_of_blocks(sf)%no_of_atom(blk)
+                      do atomj = atomi+1,naba_atoms_of_blocks(atomf)%no_of_atom(blk)
                          jpos = no_of_ib_ia + n_pts_in_block*(atomj-1)
                          if(ip_store(point,atomj)>0) then
                             if(r_store(point,atomj)<1.0e-6) then
@@ -1077,7 +1084,7 @@ contains
                    bw(ipos+point) = zero
                 end if ! ip_store(point,atomi)>0
              end do ! atomi
-             do atomi = 1, naba_atoms_of_blocks(sf)%no_of_atom(blk)
+             do atomi = 1, naba_atoms_of_blocks(atomf)%no_of_atom(blk)
                 ipos = no_of_ib_ia + n_pts_in_block*(atomi-1)
                 ! Normalise w
                 if(abs(sum)>1.0e-8_double) &
@@ -1094,10 +1101,10 @@ contains
              end do ! atomi
              ! end if
           end do ! point
-          no_of_ib_ia = no_of_ib_ia + n_pts_in_block*naba_atoms_of_blocks(sf)%no_of_atom(blk)
+          no_of_ib_ia = no_of_ib_ia + n_pts_in_block*naba_atoms_of_blocks(atomf)%no_of_atom(blk)
           deallocate(xatom, yatom, zatom, rcut, npoint, globatom, ip_store, &
                x_store, y_store, z_store, r_store, rad, STAT=stat)
-       endif !(naba_atoms_of_blocks(sf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
+       endif !(naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
     end do ! blk
   end subroutine build_Becke_weights
   !!***
@@ -1137,6 +1144,8 @@ contains
   !!    Rewrote spin implementation
   !!   2016/07/20 16:30 nakata
   !!    Renamed naba_atm -> naba_atoms_of_blocks
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf
   !!  SOURCE
   !!
   subroutine build_Becke_weight_forces(weight_force)
@@ -1149,7 +1158,7 @@ contains
     use set_blipgrid_module, only: naba_atoms_of_blocks
     use GenComms,            only: gsum, cq_abort, inode, ionode
     use global_module,       only: rcellx, rcelly, rcellz, iprint_SC, &
-                                   sf, ni_in_cell, species_glob,      &
+                                   atomf, ni_in_cell, species_glob,   &
                                    id_glob, io_lun, flag_cdft_atom,   &
                                    flag_Becke_atomic_radii,           &
                                    nspin, spin_factor
@@ -1199,19 +1208,19 @@ contains
        xblock = (domain%idisp_primx(blk) + domain%nx_origin-1) * dcellx_block
        yblock = (domain%idisp_primy(blk) + domain%ny_origin-1) * dcelly_block
        zblock = (domain%idisp_primz(blk) + domain%nz_origin-1) * dcellz_block
-       if (naba_atoms_of_blocks(sf)%no_of_atom(blk) > 0) then
-          allocate(xatom(naba_atoms_of_blocks(sf)%no_of_atom(blk)),                   &
-                   yatom(naba_atoms_of_blocks(sf)%no_of_atom(blk)),                   &
-                   zatom(naba_atoms_of_blocks(sf)%no_of_atom(blk)),                   &
-                   rcut(naba_atoms_of_blocks(sf)%no_of_atom(blk)),                    &
-                   npoint(naba_atoms_of_blocks(sf)%no_of_atom(blk)),                  &
-                   globatom(naba_atoms_of_blocks(sf)%no_of_atom(blk)),                &
-                   rad(naba_atoms_of_blocks(sf)%no_of_atom(blk)),                     &
-                   ip_store(n_pts_in_block,naba_atoms_of_blocks(sf)%no_of_atom(blk)), &
-                   x_store(n_pts_in_block,naba_atoms_of_blocks(sf)%no_of_atom(blk)),  &
-                   y_store(n_pts_in_block,naba_atoms_of_blocks(sf) %no_of_atom(blk)), &
-                   z_store(n_pts_in_block,naba_atoms_of_blocks(sf)%no_of_atom(blk)),  &
-                   r_store(n_pts_in_block,naba_atoms_of_blocks(sf)%no_of_atom(blk)),  &
+       if (naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0) then
+          allocate(xatom(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                   &
+                   yatom(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                   &
+                   zatom(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                   &
+                   rcut(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                    &
+                   npoint(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                  &
+                   globatom(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                &
+                   rad(naba_atoms_of_blocks(atomf)%no_of_atom(blk)),                     &
+                   ip_store(n_pts_in_block,naba_atoms_of_blocks(atomf)%no_of_atom(blk)), &
+                   x_store(n_pts_in_block,naba_atoms_of_blocks(atomf)%no_of_atom(blk)),  &
+                   y_store(n_pts_in_block,naba_atoms_of_blocks(atomf) %no_of_atom(blk)), &
+                   z_store(n_pts_in_block,naba_atoms_of_blocks(atomf)%no_of_atom(blk)),  &
+                   r_store(n_pts_in_block,naba_atoms_of_blocks(atomf)%no_of_atom(blk)),  &
                    STAT=stat)
           ip_store = 0
           x_store = zero
@@ -1220,18 +1229,18 @@ contains
           r_store = zero
           ! Replace this with part/atom loop !
           ! If there's only one atom there's no force
-          if (naba_atoms_of_blocks(sf)%no_of_atom(blk) > 1) then
+          if (naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 1) then
              at = 0
-             do ipart = 1, naba_atoms_of_blocks(sf)%no_of_part(blk)
-                jpart = naba_atoms_of_blocks(sf)%list_part(ipart,blk)
+             do ipart = 1, naba_atoms_of_blocks(atomf)%no_of_part(blk)
+                jpart = naba_atoms_of_blocks(atomf)%list_part(ipart,blk)
                 if (jpart > DCS_parts%mx_gcover) then
                    call cq_abort('build_Becke_weight_forces: JPART ERROR ', &
                                  ipart, jpart)
                 endif
                 ind_part=DCS_parts%lab_cell(jpart)
-                do ia = 1, naba_atoms_of_blocks(sf)%no_atom_on_part(ipart,blk)
+                do ia = 1, naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,blk)
                    at = at + 1
-                   ii = naba_atoms_of_blocks(sf)%list_atom(at,blk)
+                   ii = naba_atoms_of_blocks(atomf)%list_atom(at,blk)
                    icover = DCS_parts%icover_ibeg(jpart)+ii-1
                    ig_atom = id_glob(parts%icell_beg(ind_part)+ii-1)
                    xatom(at) = DCS_parts%xcover(icover)
@@ -1246,11 +1255,11 @@ contains
              call check_block(xblock, yblock, zblock, xatom, yatom,   &
                               zatom, rcut, npoint, ip_store, x_store, &
                               y_store, z_store,r_store,               &
-                              n_pts_in_block,naba_atoms_of_blocks(sf)% &
+                              n_pts_in_block,naba_atoms_of_blocks(atomf)% &
                               no_of_atom(blk))
-             allocate(sum0x(naba_atoms_of_blocks(sf)%no_of_atom(blk)), &
-                      sum0y(naba_atoms_of_blocks(sf)%no_of_atom(blk)), &
-                      sum0z(naba_atoms_of_blocks(sf)%no_of_atom(blk)))
+             allocate(sum0x(naba_atoms_of_blocks(atomf)%no_of_atom(blk)), &
+                      sum0y(naba_atoms_of_blocks(atomf)%no_of_atom(blk)), &
+                      sum0z(naba_atoms_of_blocks(atomf)%no_of_atom(blk)))
              do point = 1, n_pts_in_block
                 elec_here = zero
                 do spin = 1, nspin
@@ -1265,11 +1274,11 @@ contains
                 ! else
                 ! First time around we need to store the sums over t
                 ! and \nabla \mu as well as storing t and nabla
-                do atomi = 1, naba_atoms_of_blocks(sf)%no_of_atom(blk)
+                do atomi = 1, naba_atoms_of_blocks(atomf)%no_of_atom(blk)
                    ipos = no_of_ib_ia + n_pts_in_block*(atomi-1)
                    if (ip_store(point,atomi) > 0) then
                       ! Here we accumulate bw which is \prod_{j\ne i} s(mu_{ij})
-                      if (naba_atoms_of_blocks(sf)%no_of_atom(blk) == 1 .or. &
+                      if (naba_atoms_of_blocks(atomf)%no_of_atom(blk) == 1 .or. &
                           r_store(point, atomi) < 1.0e-6) then
                          sum0x = zero
                          sum0y = zero
@@ -1290,7 +1299,7 @@ contains
                          sum2x = zero
                          sum2y = zero
                          sum2z = zero
-                         do atomj = 1, naba_atoms_of_blocks(sf)%no_of_atom(blk)
+                         do atomj = 1, naba_atoms_of_blocks(atomf)%no_of_atom(blk)
                             if (atomj /= atomi) then
                                jpos = no_of_ib_ia + n_pts_in_block*(atomj-1)
                                if (ip_store(point,atomj) > 0) then
@@ -1368,7 +1377,7 @@ contains
                                end if
                             end if
                          end do ! atomj
-                         do atomj = 1,naba_atoms_of_blocks(sf)%no_of_atom(blk)
+                         do atomj = 1,naba_atoms_of_blocks(atomf)%no_of_atom(blk)
                             jpos = no_of_ib_ia + n_pts_in_block*(atomj-1)
                             if (atomi == atomj) then
                                dwjbydix = bw(jpos+point) * sum1x - &
@@ -1438,11 +1447,11 @@ contains
              deallocate (sum0x, sum0y, sum0z)
           end if ! naba_atoms_of_blocks%no_of_atom(blk)>1
           no_of_ib_ia = no_of_ib_ia + n_pts_in_block * &
-                        naba_atoms_of_blocks(sf)%no_of_atom(blk)
+                        naba_atoms_of_blocks(atomf)%no_of_atom(blk)
           deallocate(xatom, yatom, zatom, rcut, npoint, globatom, &
                      ip_store, rad, x_store, y_store, z_store,    &
                      r_store, STAT=stat)
-       endif !(naba_atoms_of_blocks(sf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
+       endif !(naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
     end do ! blk
     call gsum(weight_force, 3, ni_in_cell)
     return
@@ -1477,21 +1486,23 @@ contains
   !!    Renamed sf_H_sf_rem -> atomf_H_atomf_rem
   !!   2016/07/20 16:30 nakata
   !!    Renamed naba_atm -> naba_atoms_of_blocks
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf
+  !!    Removed unused pao_H_sf_rem
   !!  SOURCE
   !!
   subroutine build_Becke_weight_matrix(matWc, ngroups)
 
     use datatypes
     use numbers
-    use global_module,               only: sf
+    use global_module,               only: atomf
     use block_module,                only: n_blocks, n_pts_in_block
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atoms_of_blocks
     use functions_on_grid,           only: gridfunctions, fn_on_grid, &
                                            H_on_atomf, supportfns
     use calc_matrix_elements_module, only: norb
-    use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem, &
-                                           pao_H_sf_rem
+    use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use GenComms,                    only: inode
 
@@ -1509,9 +1520,9 @@ contains
        n = 0
        m = 0
        do nb=1,domain%groups_on_node
-          if(naba_atoms_of_blocks(sf)%no_of_atom(nb)>0) then
-             do atom = 1, naba_atoms_of_blocks(sf)%no_of_atom(nb)
-                do nsf1 = 1, norb(naba_atoms_of_blocks(sf),atom,nb)
+          if(naba_atoms_of_blocks(atomf)%no_of_atom(nb)>0) then
+             do atom = 1, naba_atoms_of_blocks(atomf)%no_of_atom(nb)
+                do nsf1 = 1, norb(naba_atoms_of_blocks(atomf),atom,nb)
                    do point = 1, n_pts_in_block
                       n = n + 1
                       gridfunctions(H_on_atomf(1))%griddata(n) = &
@@ -1520,7 +1531,7 @@ contains
                    end do
                 end do
              end do
-          end if ! (naba_atoms_of_blocks(sf)%no_of_atom(nb)>0)
+          end if ! (naba_atoms_of_blocks(atomf)%no_of_atom(nb)>0)
           m = m + n_pts_in_block
        end do
        call get_matrix_elements_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
@@ -1580,6 +1591,8 @@ contains
   !!   - spin_factor added in output
   !!   2016/07/20 16:30 nakata
   !!    Renamed naba_atm -> naba_atoms_of_blocks
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf
   !!  SOURCE
   !!
   subroutine build_Becke_charges(atomch, chden, size)
@@ -1587,7 +1600,7 @@ contains
     use datatypes
     use GenComms,            only: gsum, cq_abort, inode, ionode
     use numbers,             only: zero, RD_ERR, two, one
-    use global_module,       only: sf, ni_in_cell, id_glob, io_lun, &
+    use global_module,       only: atomf, ni_in_cell, id_glob, io_lun, &
                                    iprint_SC, nspin, spin_factor
     use primary_module,      only: domain
     use set_blipgrid_module, only: naba_atoms_of_blocks
@@ -1612,18 +1625,18 @@ contains
     atomch = zero
     no_of_ib_ia = 0
     do blk = 1, domain%groups_on_node
-       if (naba_atoms_of_blocks(sf)%no_of_atom(blk) > 0) then
+       if (naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0) then
           at = 0
-          do ipart = 1, naba_atoms_of_blocks(sf)%no_of_part(blk)
-             jpart = naba_atoms_of_blocks(sf)%list_part(ipart, blk)
+          do ipart = 1, naba_atoms_of_blocks(atomf)%no_of_part(blk)
+             jpart = naba_atoms_of_blocks(atomf)%list_part(ipart, blk)
              if (jpart > DCS_parts%mx_gcover) then
                 call cq_abort('PAO_to_grid_global: JPART ERROR ', &
                               ipart, jpart)
              endif
              ind_part = DCS_parts%lab_cell(jpart)
-             do ia = 1, naba_atoms_of_blocks(sf)%no_atom_on_part(ipart, blk)
+             do ia = 1, naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart, blk)
                 at = at + 1
-                ii = naba_atoms_of_blocks(sf)%list_atom(at, blk)
+                ii = naba_atoms_of_blocks(atomf)%list_atom(at, blk)
                 icover= DCS_parts%icover_ibeg(jpart) + ii - 1
                 ig_atom= id_glob(parts%icell_beg(ind_part) + ii - 1)
                 do point = 1, n_pts_in_block
@@ -1637,8 +1650,8 @@ contains
              end do ! ia
           end do ! ipart
           no_of_ib_ia = no_of_ib_ia + n_pts_in_block * &
-                        naba_atoms_of_blocks(sf)%no_of_atom(blk)
-       end if !(naba_atoms_of_blocks(sf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
+                        naba_atoms_of_blocks(atomf)%no_of_atom(blk)
+       end if !(naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
     end do ! blk
     !write(*,*) 'Done blocks'
     do spin = 1, nspin

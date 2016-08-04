@@ -1006,6 +1006,8 @@ contains
   !!   - Removed redundant input parameter real(double) mu
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf
   !!  SOURCE
   !!
   subroutine get_new_rho(record, reset_L, fixed_potential, vary_mu,  &
@@ -1016,7 +1018,7 @@ contains
     use logicals
     use mult_module,       only: LNV_matrix_multiply
     use DMMin,             only: FindMinDM
-    use global_module,     only: iprint_SC, sf, flag_perform_cDFT,     &
+    use global_module,     only: iprint_SC, atomf, flag_perform_cDFT,  &   ! nakata2
                                  nspin, spin_factor
     use H_matrix_module,   only: get_H_matrix
     use DiagModule,        only: diagon
@@ -1081,7 +1083,7 @@ contains
     end if ! if (flag_perform_cDFT) then
 
     ! And get the output density
-    temp_supp_fn = allocate_temp_fn_on_grid(sf)
+    temp_supp_fn = allocate_temp_fn_on_grid(atomf)   ! nakata2
     call stop_timer(tmr_std_chargescf) ! This routine is always call within area 5
     call get_electronic_density(rhoout, electrons, supportfns, &
                                 temp_supp_fn, inode, ionode, size, backtrace_level)

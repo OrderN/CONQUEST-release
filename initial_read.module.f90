@@ -475,6 +475,8 @@ contains
   !!    Updated module name to ion_electrostatic
   !!   2016/02/05 08:31 dave
   !!    Changed default pseudopotential to Siesta (necessary for now)
+  !!   2016/08/01 18:30 nakata
+  !!    Introduced atomf
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -495,6 +497,7 @@ contains
                              max_L_iterations, flag_read_blocks,       &
                              runtype, restart_L, restart_rho,          &
                              flag_basis_set, blips, PAOs,              &
+                             sf, paof, atomf,                          & ! nakata2
                              flag_test_forces, UseGemm,                &
                              flag_fractional_atomic_coords,            &
                              flag_old_partitions, ne_in_cell,          &
@@ -859,8 +862,10 @@ contains
        basis_string = fdf_string(10,'Basis.BasisSet','PAOs')
        if(leqi(basis_string,'blips')) then
           flag_basis_set = blips
+          atomf = sf ! nakata2
        else if(leqi(basis_string,'PAOs')) then
           flag_basis_set = PAOs
+          atomf = paof ! nakata2
        end if
        read_option            = fdf_boolean('Basis.LoadCoeffs',           .false.)
        flag_onsite_blip_ana   = fdf_boolean('Basis.OnsiteBlipsAnalytic',  .true. )

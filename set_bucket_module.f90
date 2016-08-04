@@ -123,13 +123,16 @@ contains
 !!   2016/07/15 18:30 nakata
 !!    Renamed sf_sf_loc -> atomf_atomf_loc, sf_nlpf_loc -> atomf_nlpf_loc,
 !!            sf_sf_rem -> atomf_atomf_rem, sf_nlpf_rem -> atomf_nlpf_rem, sf_H_sf_rem -> atomf_H_atomf_rem
+!!   2016/08/01 17:30 nakata
+!!    Introduced atomf instead of sf and paof
 !!
 !!  SOURCE
 !!
   subroutine set_bucket(myid)
 
     use datatypes
-    use global_module, ONLY: iprint_index, sf, nlpf, paof, numprocs
+    use global_module, ONLY: iprint_index, sf, nlpf, paof, atomf, numprocs, &
+                             flag_basis_set, PAOs, blips ! nakata2
     use bucket_module
 !    use maxima_module, ONLY: mx_send_node_BtoG, mx_recv_node_BtoG, &
 !         mx_Spair_remnode,  mx_Spair_domain,  &
@@ -149,7 +152,8 @@ contains
     integer :: ii, stat
     integer :: inode,mx_pair1,mx_pair2,mx_pair3,mx_pair_orb1,mx_pair_orb2,mx_pair_orb3
     real(double) :: rcut_S,rcut_SP
-    integer :: max_Spair, max_SPpair, max_PAOPpair
+    integer :: max_Spair, max_SPpair, max_PAOPpair    ! nakata2 --- delete max_PAOPpair later
+    integer :: range_S, range_SP, range_H, range_dH   ! nakata2 --- delete range_dH later (also dHrange)
     integer :: mx_recv_BRnode ! for local bucket
     integer :: mx_send_DRnode ! for remote bucket
     !Automatic Array
@@ -157,25 +161,47 @@ contains
 
     call start_timer(tmr_std_indexing)
     !cutoff radius for matrix
-    rcut_S = rcut(Srange)
-    rcut_SP= rcut(SPrange)
+!!! nakata2
+    if (flag_basis_set == blips) then
+!    if (atomf == sf) then
+       ! set for SFs 
+       range_S = Srange
+       range_SP= SPrange
+       range_H = Hrange
+       range_dH= dHrange   ! nakata2 --- delete this line later
+    else if (flag_basis_set == PAOs) then
+!    else if (atomf == paof) then
+       ! set for PAOs
+       ! temorary use the setting for sf
+       range_S = Srange
+       range_SP= SPrange
+       range_H = Hrange
+       range_dH= dHrange   ! nakata2 --- delete this line later
+!       range_S = Spao_range
+!       range_SP= SPpao_range
+!       range_H = Hpao_range
+!       range_dH= dHpao_range   ! nakata2 --- delete this line later
+    endif
+    rcut_S = rcut(range_S)
+    rcut_SP= rcut(range_SP)
+!!! nakata2
 
-    !For type 1 of local_bucket   : Sij=<phi_i|phi_j>, and H^(local)_ij
-    !For type 2 of local_bucket   : Pij=<phi_i|chi_j>,|chi_j> proj. func.
-    !For type 3 of local_bucket   : <pao_i|phi_j>, <pao_i|H_loc|phi_j>
+    !For type 1 of local_bucket   : Sij=<atomf_i|atomf_j>, and H^(local)_ij, atomf = sf(for blips) or pao(for PAOs)
+    !For type 2 of local_bucket   : Pij=<atomf_i|chi_j>,|chi_j> proj. func.
+    !For type 3 of local_bucket   : <pao_i|phi_j>, <pao_i|H_loc|phi_j>   ! nakata2 --- delete this line later
 
-    !For type 1 of remote_bucket  : Sij=<phi_i|phi_j>
-    !For type 2 of remote_bucket  : Pij=<phi_i|chi_j>,|chi_j> proj. func.
-    !For type 3 of remote_bucket  : Hij=<phi_i|H|phi_j>
-    !For type 4 of remote_bucket  : dHij=<pao_i|H_loc|phi_j>
+    !For type 1 of remote_bucket  : Sij=<atomf_i|atomf_j>, atomf = sf(for blips) or pao(for PAOs)
+    !For type 2 of remote_bucket  : Pij=<atomf_i|chi_j>,|chi_j> proj. func.
+    !For type 3 of remote_bucket  : Hij=<atomf_i|H|atomf_j>
+    !For type 4 of remote_bucket  : dHij=<pao_i|H_loc|phi_j>   ! nakata2 --- delete this line later
     ! Here H includes nonlocal parts
 
     !calculate mx_send_node
     call calc_mx_nodes_bucket(myid, comm_naba_blocks_of_atoms, mx_recv_BRnode, mx_send_DRnode)
 
-    call set_local_bucket(loc_bucket(atomf_atomf_loc),rcut_S, mx_recv_BRnode,sf,sf)
-    call set_local_bucket(loc_bucket(atomf_nlpf_loc),rcut_SP, mx_recv_BRnode,sf,nlpf)
-    call set_local_bucket(loc_bucket(pao_sf_loc),rcut_S, mx_recv_BRnode,paof,sf)
+    call set_local_bucket(loc_bucket(atomf_atomf_loc),rcut_S, mx_recv_BRnode,atomf,atomf)
+    call set_local_bucket(loc_bucket(atomf_nlpf_loc),rcut_SP, mx_recv_BRnode,atomf,nlpf)
+!    call set_local_bucket(loc_bucket(pao_sf_loc),rcut_S, mx_recv_BRnode,paof,sf) ! nakata2 --- delete this line later
     !** type 1 local_bucket -> type 1&3 remote_bucket **
     call my_barrier()
     call make_pair_DCSpart(loc_bucket(atomf_atomf_loc),max_Spair)
@@ -192,7 +218,7 @@ contains
     rem_bucket(atomf_atomf_rem)%locbucket => loc_bucket(atomf_atomf_loc)
     rem_bucket(atomf_nlpf_rem)%locbucket => loc_bucket(atomf_nlpf_loc)
     rem_bucket(atomf_H_atomf_rem)%locbucket => loc_bucket(atomf_atomf_loc)
-    rem_bucket(pao_H_sf_rem)%locbucket => loc_bucket(pao_sf_loc)
+!    rem_bucket(pao_H_sf_rem)%locbucket => loc_bucket(pao_sf_loc) ! nakata2 --- delete this line later
 
     call set_remote_bucket(rem_bucket(atomf_atomf_rem),mx_send_DRnode,max_Spair)
     call set_remote_bucket(rem_bucket(atomf_H_atomf_rem),mx_send_DRnode,max_Spair)
@@ -217,27 +243,29 @@ contains
     end if
     !Bundle responsible node receives the information of pairs of naba
     ! atoms of its remote nodes and Constructs RemoteBucket
-    call setup_recvME(atomf_atomf_rem,myid,myid_ibegin,rem_bucket(atomf_atomf_rem),halo(Srange), &
-         rem_bucket(atomf_H_atomf_rem),halo(Hrange))
+    call setup_recvME(atomf_atomf_rem,myid,myid_ibegin,rem_bucket(atomf_atomf_rem),halo(range_S), &
+         rem_bucket(atomf_H_atomf_rem),halo(range_H))
     deallocate(isend_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating isend_array in set_bucket: ",stat)
 
     !** type 3 local bucket and type 4 remote bucket
-    call make_pair_DCSpart(loc_bucket(pao_sf_loc),max_PAOPpair)
-    call set_remote_bucket(rem_bucket(pao_H_sf_rem),mx_send_DRnode,max_PAOPpair)
-    rem_bucket(pao_H_sf_rem)%no_send_node=rem_bucket(atomf_atomf_rem)%no_send_node
-    rem_bucket(pao_H_sf_rem)%list_send_node(:)=rem_bucket(atomf_atomf_rem)%list_send_node(:)
-    call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(pao_sf_loc))
-    call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(pao_H_sf_rem))
-    if(iprint_index>3.AND.myid==0) then
-       write(io_lun,*) myid,' atomf_H_atomf: ',rem_bucket(atomf_H_atomf_rem)%no_of_pair
-       write(io_lun,*) myid,' atomf_H_atomf: ',rem_bucket(atomf_H_atomf_rem)%no_of_pair_orbs
-       write(io_lun,*) myid,' pao_H_sf: ',rem_bucket(pao_H_sf_rem)%no_of_pair
-       write(io_lun,*) myid,' pao_H_sf: ',rem_bucket(pao_H_sf_rem)%no_of_pair_orbs
-    end if
-    call setup_recvME(pao_H_sf_rem,myid,myid_ibegin,rem_bucket(pao_H_sf_rem),halo(dHrange))
-    deallocate(isend_array,STAT=stat)
-    if(stat/=0) call cq_abort("Error deallocating isend_array in set_bucket: ",stat)
+!!! nakata2 --- delete from here later ---
+!    call make_pair_DCSpart(loc_bucket(pao_sf_loc),max_PAOPpair)
+!    call set_remote_bucket(rem_bucket(pao_H_sf_rem),mx_send_DRnode,max_PAOPpair)
+!    rem_bucket(pao_H_sf_rem)%no_send_node=rem_bucket(atomf_atomf_rem)%no_send_node
+!    rem_bucket(pao_H_sf_rem)%list_send_node(:)=rem_bucket(atomf_atomf_rem)%list_send_node(:)
+!    call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(pao_sf_loc))
+!    call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(pao_H_sf_rem))
+!    if(iprint_index>3.AND.myid==0) then
+!       write(io_lun,*) myid,' atomf_H_atomf: ',rem_bucket(atomf_H_atomf_rem)%no_of_pair
+!       write(io_lun,*) myid,' atomf_H_atomf: ',rem_bucket(atomf_H_atomf_rem)%no_of_pair_orbs
+!       write(io_lun,*) myid,' pao_H_sf: ',rem_bucket(pao_H_sf_rem)%no_of_pair
+!       write(io_lun,*) myid,' pao_H_sf: ',rem_bucket(pao_H_sf_rem)%no_of_pair_orbs
+!    end if
+!    call setup_recvME(pao_H_sf_rem,myid,myid_ibegin,rem_bucket(pao_H_sf_rem),halo(range_dH))
+!    deallocate(isend_array,STAT=stat)
+!    if(stat/=0) call cq_abort("Error deallocating isend_array in set_bucket: ",stat)
+!!! nakata2 --- delete up to here later ---
 
     !** type 2 local_bucket -> type 2 remote_bucket **
     ! same as above (dummy arg. for make_pair_DCSpart is different)
@@ -249,7 +277,7 @@ contains
 
     call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(atomf_nlpf_loc))
     call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(atomf_nlpf_loc))
-    call setup_recvME(atomf_nlpf_rem,myid,myid_ibegin,rem_bucket(atomf_nlpf_rem),halo(SPrange))
+    call setup_recvME(atomf_nlpf_rem,myid,myid_ibegin,rem_bucket(atomf_nlpf_rem),halo(range_SP))
 
     deallocate(isend_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating isend_array in set_bucket: ",stat)

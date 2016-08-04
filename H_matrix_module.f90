@@ -159,6 +159,9 @@ contains
   !!   Renamed H_on_supportfns -> H_on_atomf
   !!  2016/07/15 18:30 nakata
   !!   Renamed sf_H_sf_rem -> atomf_H_atomf_rem
+  !!  2016/08/01 17:30 nakata
+  !!   Introduced atomf instead of sf and paof
+  !!   Use atomf_H_atomf_rem instead of pao_H_sf_rem
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -174,15 +177,14 @@ contains
                                            matrix_scale, matrix_sum,    &
                                            matS, matX
     use pseudopotential_common,      only: non_local, pseudopotential
-    use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem, &
-                                           pao_H_sf_rem
+    use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use GenComms,                    only: gsum, end_comms,             &
                                            my_barrier, inode, ionode,   &
                                            cq_abort
     use global_module,               only: iprint_ops, iprint_exx,      &
                                            flag_vary_basis,             &
-                                           flag_basis_set, PAOs, sf,    &
+                                           flag_basis_set, PAOs, atomf, &   ! nakata2
                                            paof, IPRINT_TIME_THRES1,    &
                                            iprint_SC,                   &
                                            flag_perform_cDFT,           &
@@ -317,7 +319,7 @@ contains
        if (inode == ionode .and. iprint_ops > 2) &
             write (io_lun, *) 'Doing single_pao_on_support'
        ! allocate temporary work matrices
-       matwork     = allocate_temp_matrix(dHrange, 0, paof, sf)
+       matwork     = allocate_temp_matrix(dHrange, 0, paof, atomf)   ! nakata2 --- atomf will be changed to paof later
        pao_support = allocate_temp_fn_on_grid(paof)
        call single_PAO_to_grid(pao_support)
        !
@@ -330,7 +332,7 @@ contains
           if (inode == ionode .and. iprint_ops > 2) &
                write (io_lun, *) 'Doing integration (spin=', spin, ')'
           call get_matrix_elements_new(inode-1,                  &
-                                       rem_bucket(pao_H_sf_rem), &
+                                       rem_bucket(atomf_H_atomf_rem), &   !!! nakata2
                                        matwork,   pao_support,   &
                                        H_on_atomf(spin))
           if (inode == ionode .and. iprint_ops > 2) &
@@ -532,6 +534,8 @@ contains
   !!    Renamed H_on_supportfns -> H_on_atomf
   !!   2016/07/20 16:30 nakata
   !!    Renamed naba_atm -> naba_atoms_of_blocks
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf and paof
   !!  SOURCE
   !!
   subroutine get_h_on_atomf(output_level, fixed_potential, &
@@ -539,7 +543,7 @@ contains
 
     use datatypes
     use numbers
-    use global_module,               only: sf, flag_functional_type,   &
+    use global_module,               only: atomf, flag_functional_type,&
                                            nspin, spin_factor,         &
                                            flag_pcc_global, area_ops,  &
                                            functional_lda_pz81,        &
@@ -984,9 +988,9 @@ contains
     n = 0
     m = 0
     do nb = 1, domain%groups_on_node
-       if (naba_atoms_of_blocks(sf)%no_of_atom(nb) > 0) then
-          do atom = 1, naba_atoms_of_blocks(sf)%no_of_atom(nb)
-             do nsf1 = 1, norb(naba_atoms_of_blocks(sf),atom,nb)
+       if (naba_atoms_of_blocks(atomf)%no_of_atom(nb) > 0) then
+          do atom = 1, naba_atoms_of_blocks(atomf)%no_of_atom(nb)
+             do nsf1 = 1, norb(naba_atoms_of_blocks(atomf),atom,nb)
                 do point = 1, n_pts_in_block
                    n = n + 1
                    do spin = 1, nspin
@@ -997,7 +1001,7 @@ contains
                 end do ! point
              end do ! nsf1
           end do ! atom
-       end if ! (naba_atoms_of_blocks(sf)%no_of_atom(nb) > 0)
+       end if ! (naba_atoms_of_blocks(atomf)%no_of_atom(nb) > 0)
        m = m + n_pts_in_block
     end do ! nb
     !
@@ -1083,6 +1087,8 @@ contains
   !!    Renamed sf_nlpf_rem -> atomf_nlpf_rem
   !!   2016/07/29 18:30 nakata
   !!    Renamed supports_on_atom -> blips_on_atom
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf and paof
   !!  SOURCE
   !!
   subroutine get_HNL_matrix(matNL)
@@ -1102,7 +1108,7 @@ contains
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use global_module,               only: flag_basis_set, PAOs,       &
                                            blips, flag_vary_basis,     &
-                                           paof, nlpf, sf, iprint_ops, &
+                                           paof, nlpf, atomf, iprint_ops, &
                                            nspin, id_glob,             &
                                            species_glob,               &
                                            flag_analytic_blip_int
@@ -1133,9 +1139,9 @@ contains
 
     if (flag_vary_basis .and. flag_basis_set == PAOs) then
        matdSC  = allocate_temp_matrix(PAOPrange, SP_trans, paof, nlpf)
-       matdCNL = allocate_temp_matrix(dHrange, 0, paof, sf)
+       matdCNL = allocate_temp_matrix(dHrange, 0, paof, atomf)   ! nakata2 --- atomf will be changed to paof later
     end if
-    matSCtmp = allocate_temp_matrix(SPrange, SP_trans, sf, nlpf)
+    matSCtmp = allocate_temp_matrix(SPrange, SP_trans, atomf, nlpf)
     ! first, get the overlap of support functions with core
     ! pseudowavefunctions
     if (flag_basis_set == blips) then
@@ -1423,6 +1429,8 @@ contains
   !!    Renamed sf_H_sf_rem -> atomf_H_atomf_rem
   !!   2016/07/29 18:30 nakata
   !!    Renamed supports_on_atom -> blips_on_atom
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf and paof
   !!  SOURCE
   !!
   subroutine get_T_matrix(matKE)
@@ -1437,7 +1445,7 @@ contains
     use GenBlas,                     only: axpy
     use global_module,               only: flag_basis_set, PAOs,    &
                                            blips, flag_vary_basis,  &
-                                           paof, sf,                &
+                                           paof, atomf,             &   ! nakata2
                                            flag_onsite_blip_ana,    &
                                            nspin
     use build_PAO_matrices,          only: assemble_2
@@ -1458,7 +1466,7 @@ contains
 
     matwork = allocate_temp_matrix(Hrange,0)
     if (flag_basis_set == PAOs .and. flag_vary_basis) &
-         matdKE = allocate_temp_matrix(dHrange, 0, paof, sf)
+         matdKE = allocate_temp_matrix(dHrange, 0, paof, atomf)   ! nakata2 --- atomf will be changed to paof later
     if(flag_basis_set == blips) then
        do direction = 1, 3
           call blip_to_grad_new(myid, direction, H_on_atomf(1))

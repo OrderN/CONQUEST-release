@@ -38,11 +38,13 @@
 !!    Renamed naba_blk_supp -> naba_blocks_of_atoms
 !!   2016/07/20 16:30 nakata
 !!    Renamed naba_atm -> naba_atoms_of_blocks, halo_atm -> halo_atoms_of_blocks
+!!   2016/08/01 17:30 nakata
+!!    Introduced atomf
 !!  SOURCE
 !!
 module set_blipgrid_module
 
-  use global_module,   only: sf, nlpf, paof, dens, iprint_index, io_lun
+  use global_module,   only: sf, nlpf, paof, dens, atomf, iprint_index, io_lun
   use naba_blk_module, only: &
        comm_in_BtoG, naba_blk_of_atm, naba_atm_of_blk, halo_atm_of_blk, &
        alloc_comm_in_BtoG1, alloc_comm_in_BtoG2, alloc_naba_blk, alloc_naba_atm, alloc_halo_atm
@@ -123,11 +125,13 @@ contains
 !!    Renamed naba_blk_supp -> naba_blocks_of_atoms
 !!   2016/07/20 16:30 nakata
 !!    Renamed naba_atm -> naba_atoms_of_blocks, halo_atm -> halo_atoms_of_blocks
+!!   2016/08/01 17:30 nakata
+!!    Introduced atomf instead of sf and paof
 !!  SOURCE
 !!
   subroutine set_blipgrid(myid,rcut_supp,rcut_proj)
     use datatypes
-    use global_module,ONLY:numprocs, sf, nlpf, paof
+    use global_module,ONLY:numprocs, sf, nlpf, paof, atomf
     use primary_module,ONLY: bundle, domain
     use cover_module,  ONLY: DCS_parts
     use atomic_density, ONLY: rcut_dens
@@ -157,15 +161,21 @@ contains
     !     mx_sent_pair_BtoG,mx_recv_call_BtoG)
     call alloc_naba_blk(naba_blocks_of_atoms,bundle%mx_iprim,max_naba_blk)
     ! Allocate naba_atoms_of_blocks derived types
-    ! Support and PAOs have same cutoff and maxima
+!!! nakata2
     call get_naba_DCSprt_max(rcut_supp,max_naba_part,max_naba_atm,max_halo_part, max_recv_node_BtoG)
-    call alloc_naba_atm(naba_atoms_of_blocks(sf), domain%mx_ngonn,max_naba_part,max_naba_atm)
-    naba_atoms_of_blocks(sf)%function_type = sf
-    call alloc_halo_atm(halo_atoms_of_blocks(sf), max_recv_node_BtoG,max_halo_part,DCS_parts%mx_mcover)
-    ! PAOs
-    call alloc_naba_atm(naba_atoms_of_blocks(paof), domain%mx_ngonn,max_naba_part,max_naba_atm)
-    naba_atoms_of_blocks(paof)%function_type = paof
-    call alloc_halo_atm(halo_atoms_of_blocks(paof), max_recv_node_BtoG,max_halo_part,DCS_parts%mx_mcover)
+    call alloc_naba_atm(naba_atoms_of_blocks(atomf), domain%mx_ngonn,max_naba_part,max_naba_atm)
+    naba_atoms_of_blocks(atomf)%function_type = atomf
+    call alloc_halo_atm(halo_atoms_of_blocks(atomf), max_recv_node_BtoG,max_halo_part,DCS_parts%mx_mcover)
+!    ! Support and PAOs have same cutoff and maxima
+!    call get_naba_DCSprt_max(rcut_supp,max_naba_part,max_naba_atm,max_halo_part, max_recv_node_BtoG)
+!    call alloc_naba_atm(naba_atoms_of_blocks(sf), domain%mx_ngonn,max_naba_part,max_naba_atm)
+!    naba_atoms_of_blocks(sf)%function_type = sf
+!    call alloc_halo_atm(halo_atoms_of_blocks(sf), max_recv_node_BtoG,max_halo_part,DCS_parts%mx_mcover)
+!    ! PAOs
+!    call alloc_naba_atm(naba_atoms_of_blocks(paof), domain%mx_ngonn,max_naba_part,max_naba_atm)
+!    naba_atoms_of_blocks(paof)%function_type = paof
+!    call alloc_halo_atm(halo_atoms_of_blocks(paof), max_recv_node_BtoG,max_halo_part,DCS_parts%mx_mcover)
+!!! nakata2 end
     ! Projectors
     call get_naba_DCSprt_max(rcut_proj,max_naba_part,max_naba_atm,max_halo_part, max_recv_node_BtoG)
     call alloc_naba_atm(naba_atoms_of_blocks(nlpf), domain%mx_ngonn,max_naba_part,max_naba_atm)
@@ -229,33 +239,41 @@ contains
     enddo
     !make lists of neighbour and halo atoms of primary blocks
     ! for support and projector functions
-    call get_naba_DCSprt(rcut_supp,naba_atoms_of_blocks(sf),halo_atoms_of_blocks(sf))
+!!! nakata2
+    call get_naba_DCSprt(rcut_supp,naba_atoms_of_blocks(atomf),halo_atoms_of_blocks(atomf))
     !do iprim_blk=1,domain%groups_on_node
-    gridsize(sf) = 0
+    gridsize(atomf) = 0
     do iprim=1,domain%mx_ngonn
-       gridsize(sf) = gridsize(sf) + naba_atoms_of_blocks(sf)%no_of_orb(iprim)*n_pts_in_block
+       gridsize(atomf) = gridsize(atomf) + naba_atoms_of_blocks(atomf)%no_of_orb(iprim)*n_pts_in_block
     end do
-    call get_naba_DCSprt(rcut_supp,naba_atoms_of_blocks(paof),halo_atoms_of_blocks(paof))
-    gridsize(paof) = 0
-    do iprim=1,domain%mx_ngonn
-       gridsize(paof) = gridsize(paof) + naba_atoms_of_blocks(paof)%no_of_orb(iprim)*n_pts_in_block
-    end do
+!    call get_naba_DCSprt(rcut_supp,naba_atoms_of_blocks(sf),halo_atoms_of_blocks(sf))
+!    !do iprim_blk=1,domain%groups_on_node
+!    gridsize(sf) = 0
+!    do iprim=1,domain%mx_ngonn
+!       gridsize(sf) = gridsize(sf) + naba_atoms_of_blocks(sf)%no_of_orb(iprim)*n_pts_in_block
+!    end do
+!    call get_naba_DCSprt(rcut_supp,naba_atoms_of_blocks(paof),halo_atoms_of_blocks(paof))
+!    gridsize(paof) = 0
+!    do iprim=1,domain%mx_ngonn
+!       gridsize(paof) = gridsize(paof) + naba_atoms_of_blocks(paof)%no_of_orb(iprim)*n_pts_in_block
+!    end do
+!!! nakata2 end
     call get_naba_DCSprt(rcut_proj,naba_atoms_of_blocks(nlpf),halo_atoms_of_blocks(nlpf))
     !do iprim_blk=1,domain%groups_on_node
     gridsize(nlpf) = 0
     do iprim=1,domain%mx_ngonn
        gridsize(nlpf) = gridsize(nlpf) + naba_atoms_of_blocks(nlpf)%no_of_orb(iprim)*n_pts_in_block
     end do
-    !write(io_lun,*) 'gridsizes: ',gridsize(sf),gridsize(paof),gridsize(nlpf)
+    !write(io_lun,*) 'gridsizes (atomf, nlpf): ',gridsize(atomf),gridsize(nlpf)
     ! Now add atomic density tables
     call get_naba_DCSprt(rcut_dens,naba_atoms_of_blocks(dens),halo_atoms_of_blocks(dens))
     ! End of atomic density tables
 
     !prepare for receiving
-    call make_sendinfo_BtoG_max(myid,naba_atoms_of_blocks(sf),max_send_node,max_sent_pairs,max_recv_call)
+    call make_sendinfo_BtoG_max(myid,naba_atoms_of_blocks(atomf),max_send_node,max_sent_pairs,max_recv_call)
     call alloc_comm_in_BtoG2(comm_naba_blocks_of_atoms,max_send_node, max_sent_pairs,max_recv_call)
-    call make_sendinfo_BtoG(myid,naba_atoms_of_blocks(sf),comm_naba_blocks_of_atoms)
-    !making tables showing where to put sent BtoG transformed supp. func.
+    call make_sendinfo_BtoG(myid,naba_atoms_of_blocks(atomf),comm_naba_blocks_of_atoms)
+    !making tables showing where to put sent BtoG transformed atomic func. (SF or PAOs)
     ! Now make_table_BtoG is in <make_table_BtoG.f90>.
     call make_table_BtoG(myid,comm_naba_blocks_of_atoms)
     call stop_timer(tmr_std_indexing)
@@ -1739,6 +1757,8 @@ contains
   !  Modifications:
   !   2016/07/20 16:30 nakata
   !    Renamed naba_atm -> naba_atoms_of_blocks
+  !   2016/08/01 17:30 nakata
+  !    Introduced atomf instead of sf
   !-----------------------------------------------------------------------
   subroutine make_table(mynode,nnd_rem,npair,isend,iprim)
 
@@ -1795,8 +1815,8 @@ contains
        zmin=(domain%idisp_primz(ifind_block)+domain%nz_origin-1)*dcellz_block 
        ifind_part=0 
 
-       do ipart=1,naba_atoms_of_blocks(sf)%no_of_part(ifind_block) !Loop over naba parts
-          jpart=naba_atoms_of_blocks(sf)%list_part(ipart,ifind_block) !NOPG in a cover
+       do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(ifind_block) !Loop over naba parts
+          jpart=naba_atoms_of_blocks(atomf)%list_part(ipart,ifind_block) !NOPG in a cover
           ind_qart=DCS_parts%lab_cover(jpart)-1             !CC in a cover
           nxp= ind_qart/(DCS_parts%ncovery*DCS_parts%ncoverz)
           nyp= (ind_qart-nxp*DCS_parts%ncovery*DCS_parts%ncoverz)/DCS_parts%ncoverz
@@ -1827,16 +1847,16 @@ contains
        enddo ! enddo loop of neighbour partitions
 
        if(ifind_part == 0) call cq_abort('Pair not found in make_table: ',ipair,nnd_rem)
-       jpart=naba_atoms_of_blocks(sf)%list_part(ifind_part,ifind_block)
+       jpart=naba_atoms_of_blocks(atomf)%list_part(ifind_part,ifind_block)
        ind_part=DCS_parts%lab_cell(jpart)
 
-       ibegin=naba_atoms_of_blocks(sf)%ibegin_part(ifind_part,ifind_block)
-       iend=ibegin+naba_atoms_of_blocks(sf)%no_atom_on_part(ifind_part,ifind_block)-1
+       ibegin=naba_atoms_of_blocks(atomf)%ibegin_part(ifind_part,ifind_block)
+       iend=ibegin+naba_atoms_of_blocks(atomf)%no_atom_on_part(ifind_part,ifind_block)-1
        ifind_pair=0
 
        do ii=ibegin,iend    ! find the pair (OLD: check global no. of atom)
           !               (NOW: check primary no. of atom)
-          j=naba_atoms_of_blocks(sf)%list_atom(ii,ifind_block) !part seq. no. of atom
+          j=naba_atoms_of_blocks(atomf)%list_atom(ii,ifind_block) !part seq. no. of atom
           ia1=id_glob(parts%icell_beg(ind_part)+j-1) 
           iprim2=atom_number_on_node(ia1)
           !ia1: glob no. of j-th atm in (ind_part)
@@ -1893,6 +1913,8 @@ contains
 !!    Renamed naba_blk_supp -> naba_blocks_of_atoms
 !!   2016/07/20 16:30 nakata
 !!    Renamed naba_atm -> naba_atoms_of_blocks, halo_atm -> halo_atoms_of_blocks
+!!   2016/08/01 17:30 nakata
+!!    Introduced atomf instead of sf and paof
 !!  SOURCE
 !!
   subroutine free_blipgrid
@@ -1901,13 +1923,15 @@ contains
 
 !    call start_timer(tmr_std_allocation)
     call dealloc_halo_atm(halo_atoms_of_blocks(dens))
-    call dealloc_halo_atm(halo_atoms_of_blocks(paof))
+!    call dealloc_halo_atm(halo_atoms_of_blocks(paof))   !!! nakata2 --- delete this line later
     call dealloc_halo_atm(halo_atoms_of_blocks(nlpf))
-    call dealloc_halo_atm(halo_atoms_of_blocks(sf))
+!    call dealloc_halo_atm(halo_atoms_of_blocks(sf))   !!! nakata2 --- delete this line later
+    call dealloc_halo_atm(halo_atoms_of_blocks(atomf))   !!! nakata2
     call dealloc_naba_atm(naba_atoms_of_blocks(dens))
-    call dealloc_naba_atm(naba_atoms_of_blocks(paof))
+!    call dealloc_naba_atm(naba_atoms_of_blocks(paof))   !!! nakata2 --- delete this line later
     call dealloc_naba_atm(naba_atoms_of_blocks(nlpf))
-    call dealloc_naba_atm(naba_atoms_of_blocks(sf))
+!    call dealloc_naba_atm(naba_atoms_of_blocks(sf))   !!! nakata2 --- delete this line later
+    call dealloc_naba_atm(naba_atoms_of_blocks(atomf))   !!! nakata2
     call dealloc_naba_blk(naba_blocks_of_atoms)
     call dealloc_comm_in_BtoG(comm_naba_blocks_of_atoms)
 !    call stop_timer(tmr_std_allocation)
