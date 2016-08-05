@@ -475,6 +475,8 @@ contains
   !!    Updated module name to ion_electrostatic
   !!   2016/02/05 08:31 dave
   !!    Changed default pseudopotential to Siesta (necessary for now)
+  !!   2016/08/05 10:08 dave
+  !!    Added gap threshold parameter for initial estimation of partition numbers
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -605,7 +607,7 @@ contains
                          cDFT_Target, cDFT_Tolerance,                &
                          cDFT_NumberAtomGroups, cDFT_AtomList,       &
                          cDFT_BlockLabel, cDFT_Vc
-    use sfc_partitions_module, only: n_parts_user, average_atomic_diameter
+    use sfc_partitions_module, only: n_parts_user, average_atomic_diameter, gap_threshold
     use XLBOMD_module,         only: XLInitFreq,maxitersDissipation,kappa
     use constraint_module,     only: flag_RigidBonds,constraints,SHAKE_tol, &
                                      RATTLE_tol,maxiterSHAKE,maxiterRATTLE, &
@@ -639,7 +641,7 @@ contains
     character(len=8)  :: tmp
     logical           :: new_format
     !logical, external :: leqi
-    real(double)      :: r_t
+    real(double)      :: r_t, max_rc
     logical :: flag_ghost, find_species
 
     ! spin polarisation
@@ -981,6 +983,7 @@ contains
        ! Read charge, mass, pseudopotential and starting charge and
        ! blip models for the individual species
        maxnsf      = 0
+       max_rc = zero
        min_blip_sp = 1.0e8_double
        do i=1,n_species
           charge(i)         = zero
@@ -998,6 +1001,8 @@ contains
              charge(i)        = fdf_double ('Atom.ValenceCharge',zero)
              nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
              RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',r_h)
+             ! DRB 2016/08/05 Keep track of maximum support radius
+             if(RadiusSupport(i)>max_rc) max_rc = RadiusSupport(i)
              InvSRange        = fdf_double ('Atom.InvSRange',zero)
              if(InvSRange(i)<RD_ERR) InvSRange(i) = RadiusSupport(i)
              NonLocalFactor(i) = fdf_double('Atom.NonLocalFactor',HNL_fac)
@@ -1508,6 +1513,7 @@ contains
             call cq_abort("More processors than partitions! ",numprocs,n_parts_user(1)*n_parts_user(2)*n_parts_user(3))
        average_atomic_diameter = &
             fdf_double('General.AverageAtomicDiameter', 5.0_double)
+       gap_threshold = fdf_double('General.GapThreshold',two*max_rc)
        ! end sfc partitioning
        !
        !

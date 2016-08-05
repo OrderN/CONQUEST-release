@@ -29,7 +29,7 @@ module sfc_partitions_module
   public :: &
        sfc_partitions_to_processors, &
        n_parts_user, &
-       average_atomic_diameter
+       average_atomic_diameter, gap_threshold
 
   ! RCS tag for object file identification
   character(len=80), private :: &
@@ -79,6 +79,7 @@ module sfc_partitions_module
   real(double), parameter    :: no_pbc = 0.5_double     ! gap/cell_dim criteria
                                                      ! for no assuming pbc in
                                                      ! direction
+  real(double) :: gap_threshold ! DRB 2016/08/04 Specify threshold for gap to have non-periodicity
   integer,      dimension(3) :: dim_nparts_fixed ! dims which n_parts is fixed
   integer,      dimension(3) :: dim_nparts_auto  ! dims which n_parts is not fixed
   integer :: n_dim_fixed      ! number of dims fixed
@@ -611,6 +612,8 @@ contains
   ! CREATION DATE
   !   2013/04/02
   ! MODIFICATION HISTORY
+  !   2016/08/05 09:53 dave
+  !!   Added a check on the size of r_part to prevent divide by zero or large partition number
   ! SOURCE
   !
   subroutine get_initial_partitions()
@@ -692,7 +695,12 @@ contains
                              r_occupied_cell(dim_nparts_fixed(2))))
        end select
        do ii = 1, 3
-          n_parts(ii) = max(nint(FSC%dims(ii) / r_part(ii)), 1)
+          ! DRB 2016/08/05 Bug fix to prevent divide by zero or large numbers of partitions
+          if(r_part(ii)<1.0_double) then
+             n_parts(ii) = 1
+          else
+             n_parts(ii) = max(nint(FSC%dims(ii) / r_part(ii)), 1)
+          end if
           n_divs(ii) = int_log2(n_parts(ii))
           n_parts(ii) = 2**n_divs(ii)
           r_part(ii) = FSC%dims(ii) / real(n_parts(ii),double)
@@ -814,6 +822,9 @@ contains
   !   2013/08/25 M.Arita
   !   - Introduced shift_in_bohr and made the code consistent to shift in
   !     matrix reconstruction
+  !   2016/08/05 09:49 dave
+  !   - Changed PBC detection to use gap size and threshold rather than
+  !     fraction of cell occupied
   ! SOURCE
   !
   subroutine get_cell_info()
@@ -919,8 +930,11 @@ contains
           else
              ! the gap is either on top or underneath the atoms
              ! check if no pbc in this direction
-             if ((FSC%r_atoms_max(ii) - FSC%r_atoms_min(ii)) / FSC%dims(ii) <= &
-                 no_pbc) then
+             ! DRB 2016/08/05 Original criterion based on occupied fraction 
+             !if ((FSC%r_atoms_max(ii) - FSC%r_atoms_min(ii)) / FSC%dims(ii) <= &
+             !    no_pbc) then
+             ! DRB 2016/08/05 New criterion based on gap size
+             if(one - (FSC%r_atoms_max(ii) - FSC%r_atoms_min(ii))>gap_threshold) then
                 FSC%system_type = FSC%system_type - 1
                 FSC%has_pbc(ii) = .false.
              end if
