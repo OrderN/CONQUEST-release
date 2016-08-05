@@ -172,6 +172,8 @@ contains
 !!    Added timers
 !!   2009/07/08 16:48 dave
 !!    Added code for one-to-one PAO to SF assignment
+!!   2016/08/05 10:27 dave
+!!    Bug fix: evaluate_pao was passed 1 instead of acz
 !!  SOURCE
 !!
   subroutine do_PAO_transform(iprim,this_nsf)
@@ -283,7 +285,7 @@ contains
                    do l1 = 0,supports_on_atom(this_atom)%lmax
                       do acz = 1,supports_on_atom(this_atom)%naczs(l1)
                          do m1=-l1,l1
-                            call evaluate_pao(atom_species,l1,1,m1,dx,dy,dz,val)
+                            call evaluate_pao(atom_species,l1,acz,m1,dx,dy,dz,val)
                             if(flag_one_to_one) then
                                   dsum(count1) = dsum(count1) + val
                             else
