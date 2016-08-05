@@ -36,6 +36,8 @@
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2015/04/29 17:23 dave and kane
 !!    Added get_r_on_support for calculations of stress, polarisation and TDDFT in periodic boundaries
+!!   2016/08/05 15:00 nakata
+!!    Renamed get_r_on_support -> get_r_on_atomfns
 !!  SOURCE
 !!
 module S_matrix_module
@@ -344,13 +346,13 @@ contains
 
     
 ! -----------------------------------------------------------
-! Subroutine get_r_on_support
+! Subroutine get_r_on_atomfns
 ! -----------------------------------------------------------
 
-!!****f* S_matrix_module/get_r_on_support *
+!!****f* S_matrix_module/get_r_on_atomfns *
 !!
 !!  NAME 
-!!   get_r_on_support
+!!   get_r_on_atomfns
 !!  USAGE
 !!   
 !!  PURPOSE
@@ -375,9 +377,11 @@ contains
 !!    Renamed naba_atm -> naba_atoms_of_blocks
 !!   2016/08/01 17:30 nakata
 !!    Introduced atomf instead of sf
+!!   2016/08/05 15:00 nakata
+!!    Renamed get_r_on_support -> get_r_on_atomfns
 !!  SOURCE
 !!  
-  subroutine get_r_on_support(direction,inputgf,gridfunc1,gridfunc2,gridfunc3)
+  subroutine get_r_on_atomfns(direction,inputgf,gridfunc1,gridfunc2,gridfunc3)
 
     use datatypes
     use numbers
@@ -422,11 +426,11 @@ contains
     
     ! Test for direction=0 and all three grid functions
     if(direction==0.AND.(.NOT.PRESENT(gridfunc2).OR..NOT.PRESENT(gridfunc3))) then
-       call cq_abort("Error in get_r_on_support: three directions requested but not passed")
+       call cq_abort("Error in get_r_on_atomfns: three directions requested but not passed")
     end if
     allocate(ip_store(n_pts_in_block),x_store(n_pts_in_block),y_store(n_pts_in_block),z_store(n_pts_in_block), &
          r_store(n_pts_in_block), STAT=stat)
-    if(stat /= 0) call cq_abort(' Error allocating store in get_r_on_support: ',n_pts_in_block)
+    if(stat /= 0) call cq_abort(' Error allocating store in get_r_on_atomfns: ',n_pts_in_block)
 
     dcellx_block=rcellx/blocks%ngcellx; dcellx_grid=dcellx_block/nx_in_block
     dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/ny_in_block
@@ -505,7 +509,7 @@ contains
     deallocate(ip_store,x_store,y_store,z_store, r_store, STAT=stat)
     if(stat /= 0) call cq_abort(' Error in deallocation in PAO_to_grad_global')
     return
-  end subroutine get_r_on_support
+  end subroutine get_r_on_atomfns
 !!***
 
 ! -----------------------------------------------------------

@@ -114,7 +114,7 @@ contains
   !!   2012/04/02 17:22 dave
   !!    Update for analytic blip integration
   !!   2016/07/13 18:30 nakata
-  !!    Renamed H_on_supportfns -> H_on_atomf
+  !!    Renamed H_on_supportfns -> H_on_atomfns
   !!   2016/07/29 18:30 nakata
   !!    Renamed supports_on_atom -> blips_on_atom
   !!  SOURCE
@@ -139,7 +139,7 @@ contains
                                    area_basis, nspin, spin_factor,        &
                                    flag_analytic_blip_int
     use io_module,           only: dump_blip_coeffs
-    use functions_on_grid,   only: supportfns, H_on_atomf,           &
+    use functions_on_grid,   only: supportfns, H_on_atomfns,              &
                                    gridfunctions, fn_on_grid
     use support_spec_format, only: coefficient_array,                     &
                                    coeff_array_size, grad_coeff_array,    &
@@ -232,9 +232,9 @@ contains
     ! The density matrix is effectively idempotent during
     ! diagonalisation
     if (diagon) then
-       gridfunctions(H_on_atomf(1))%griddata = zero
+       gridfunctions(H_on_atomfns(1))%griddata = zero
     else
-       call get_electron_gradient(supportfns, H_on_atomf(1), &
+       call get_electron_gradient(supportfns, H_on_atomfns(1), &
                                   inode, ionode)
        call my_barrier()
        if (inode == ionode .AND. iprint_basis > 2) &
@@ -399,10 +399,10 @@ contains
           ! The density matrix is effectively idempotent during
           ! diagonalisation
           if (diagon) then
-             gridfunctions(H_on_atomf(1))%griddata = zero
+             gridfunctions(H_on_atomfns(1))%griddata = zero
           else
-             call get_electron_gradient(supportfns,                &
-                                        H_on_atomf(1), inode, &
+             call get_electron_gradient(supportfns,             &
+                                        H_on_atomfns(1), inode, &
                                         ionode)
           end if
        end if

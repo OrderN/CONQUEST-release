@@ -985,7 +985,7 @@ contains
   !!   2016/01/29 15:00 dave
   !!    Removed prefix for ewald call
   !!   2016/07/13 18:30 nakata
-  !!    Renamed H_on_supportfns -> H_on_atomf
+  !!    Renamed H_on_supportfns -> H_on_atomfns
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1020,7 +1020,7 @@ contains
     use io_module,         only: grab_matrix, grab_charge
     use DiagModule,        only: diagon
     use density_module,    only: get_electronic_density, density
-    use functions_on_grid, only: supportfns, H_on_atomf
+    use functions_on_grid, only: supportfns, H_on_atomfns
     use dimens,            only: n_my_grid_points
     use maxima_module,     only: maxngrid
     use minimise,          only: sc_tolerance, L_tolerance,         &
@@ -1191,7 +1191,7 @@ contains
     ! (7) Make a self-consistent H matrix and potential
     if (find_chdens) then
        call get_electronic_density(density, electrons, supportfns, &
-                                   H_on_atomf(1), ionode, ionode,  &
+                                   H_on_atomfns(1), ionode, ionode,  &
                                    maxngrid)
        electrons_tot = spin_factor * sum(electrons)
        if (inode == ionode .and. iprint_init > 1) &

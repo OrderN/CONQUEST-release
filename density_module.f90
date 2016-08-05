@@ -776,8 +776,8 @@ contains
     if (flag_Becke_weights) &
          call build_Becke_charges(atomcharge, denout, size)
 
-    ! support_K is using the same memory as h_on_atomf, (in other
-    ! words we are using h_on_atomf as temorary storage), so lets be
+    ! support_K is using the same memory as h_on_atomfns, (in other
+    ! words we are using h_on_atomfns as temorary storage), so lets be
     ! safe and set it back to zero
     gridfunctions(support_K)%griddata = zero
 
@@ -1481,7 +1481,7 @@ contains
   !!   2009
   !!  MODIFICATION HISTORY
   !!   2016/07/13 18:30 nakata
-  !!    Renamed H_on_supportfns -> H_on_atomf
+  !!    Renamed H_on_supportfns -> H_on_atomfns
   !!   2016/07/15 18:30 nakata
   !!    Renamed sf_H_sf_rem -> atomf_H_atomf_rem
   !!   2016/07/20 16:30 nakata
@@ -1500,7 +1500,7 @@ contains
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atoms_of_blocks
     use functions_on_grid,           only: gridfunctions, fn_on_grid, &
-                                           H_on_atomf, supportfns
+                                           H_on_atomfns, supportfns
     use calc_matrix_elements_module, only: norb
     use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
@@ -1516,7 +1516,7 @@ contains
 
     ! Create w_c(r)|chi_j>
     do i=1,ngroups
-       gridfunctions(H_on_atomf(1))%griddata = zero
+       gridfunctions(H_on_atomfns(1))%griddata = zero
        n = 0
        m = 0
        do nb=1,domain%groups_on_node
@@ -1525,7 +1525,7 @@ contains
                 do nsf1 = 1, norb(naba_atoms_of_blocks(atomf),atom,nb)
                    do point = 1, n_pts_in_block
                       n = n + 1
-                      gridfunctions(H_on_atomf(1))%griddata(n) = &
+                      gridfunctions(H_on_atomfns(1))%griddata(n) = &
                            gridfunctions(supportfns)%griddata(n) * &
                            bwgrid(m+point,i)
                    end do
@@ -1535,7 +1535,7 @@ contains
           m = m + n_pts_in_block
        end do
        call get_matrix_elements_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
-                                    matWc(i), supportfns, H_on_atomf(1))
+                                    matWc(i), supportfns, H_on_atomfns(1))
     end do
   end subroutine build_Becke_weight_matrix
   !!***

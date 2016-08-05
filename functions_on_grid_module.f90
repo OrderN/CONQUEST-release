@@ -60,7 +60,7 @@ module functions_on_grid
   !!     constant array of dimension 2, corresponding to two spin
   !!     components.
   !!   2016/07/13 18:30 nakata
-  !!    Renamed H_on_supportfns -> H_on_atomf
+  !!    Renamed H_on_supportfns -> H_on_atomfns
   !!  SOURCE
   !!
   type fn_on_grid
@@ -76,7 +76,7 @@ module functions_on_grid
   type(fn_on_grid), dimension(:), allocatable :: gridfunctions
 
   integer, parameter :: supportfns = 1
-  integer, parameter, dimension(2) :: H_on_atomf = (/2, 3/)
+  integer, parameter, dimension(2) :: H_on_atomfns = (/2, 3/)
   integer, parameter :: pseudofns = 4
   integer :: current_fn_on_grid
   integer, parameter :: mx_fns_on_grid = 20
@@ -120,7 +120,7 @@ contains
 !!    an array (/2, 3/). H_on_supportfns(spin) will then denote the
 !!    array for the given spin channel.
 !!   2016/07/13 18:30 nakata
-!!    Renamed H_on_supportfns -> H_on_atomf
+!!    Renamed H_on_supportfns -> H_on_atomfns
 !!   2016/08/01 17:30 nakata
 !!    Introduced atomf instead of sf
 !!  SOURCE
@@ -157,15 +157,15 @@ contains
 
     ! H acting on support functions
     do spin = 1, nspin
-       gridfunctions(H_on_atomf(spin))%size = gridsize(atomf)
-       allocate(gridfunctions(H_on_atomf(spin))%griddata(gridsize(atomf)))
+       gridfunctions(H_on_atomfns(spin))%size = gridsize(atomf)
+       allocate(gridfunctions(H_on_atomfns(spin))%griddata(gridsize(atomf)))
        if(gridsize(atomf)>0) then
           do i=1,gridsize(atomf)
-             gridfunctions(H_on_atomf(spin))%griddata(i) = zero
+             gridfunctions(H_on_atomfns(spin))%griddata(i) = zero
           end do
        end if
        call reg_alloc_mem(area_index, gridsize(atomf), type_dbl)
-       gridfunctions(H_on_atomf(spin))%type = atomf
+       gridfunctions(H_on_atomfns(spin))%type = atomf
     end do
 
     if (flag_basis_set == blips .and. (.not. flag_analytic_blip_int)) then
@@ -216,7 +216,7 @@ contains
   !!   2012/03/13 L.Tong
   !!    Changed implementation for spin polarisation. 
   !!   2016/07/13 18:30 nakata
-  !!    Renamed H_on_supportfns -> H_on_atomf
+  !!    Renamed H_on_supportfns -> H_on_atomfns
   !!  SOURCE
   !!  
   subroutine dissociate_fn_on_grid
@@ -239,9 +239,9 @@ contains
 
     ! H acting on support functions 
     do spin = 1, nspin
-       deallocate(gridfunctions(H_on_atomf(spin))%griddata)
-       call reg_dealloc_mem(area_index,                                    &
-                            size(gridfunctions(H_on_atomf(spin))%griddata), &
+       deallocate(gridfunctions(H_on_atomfns(spin))%griddata)
+       call reg_dealloc_mem(area_index,                                       &
+                            size(gridfunctions(H_on_atomfns(spin))%griddata), &
                             type_dbl)
     end do
 
