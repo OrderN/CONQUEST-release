@@ -1854,6 +1854,8 @@ contains
   !!    Removed prefix for ewald call
   !!   2016/07/13 18:30 nakata
   !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine update_H(fixed_potential)
@@ -1883,7 +1885,7 @@ contains
     use GenComms,               only: cq_abort, inode, ionode
     use maxima_module,          only: maxngrid
     use DFT_D2,                 only: dispersion_D2
-    use functions_on_grid,      ONLY: supportfns, H_on_atomfns
+    use functions_on_grid,      ONLY: atomfns, H_on_atomfns
     use XLBOMD_module,          ONLY: get_initialL_XL
     
     implicit none
@@ -1933,7 +1935,7 @@ contains
        if (flag_self_consistent .OR. flag_mix_L_SC_min) then
           if(flag_neutral_atom) call set_atomic_density(.false.)
           if (inode.EQ.ionode.AND.iprint_MD>2) write (io_lun,*) "update_H: Get charge density from L-matrix"
-          call get_electronic_density(density,electrons,supportfns,H_on_atomfns(1), &
+          call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
                inode,ionode,maxngrid)
        endif
     else if(diagon.AND.flag_neutral_atom) then

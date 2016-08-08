@@ -517,6 +517,8 @@ contains
   !!     efficiency.
   !!   2016/07/13 18:30 nakata
   !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine get_support_gradient(support_gradient, inode, ionode)
@@ -533,7 +535,7 @@ contains
                                            SPulay, sf, nspin,         &
                                            spin_factor
     use functions_on_grid,           only: gridfunctions, fn_on_grid, &
-                                           supportfns,                &
+                                           atomfns,                &
                                            H_on_atomfns,              &
                                            allocate_temp_fn_on_grid,  &
                                            free_temp_fn_on_grid
@@ -574,7 +576,7 @@ contains
        do spin = 1, nspin
           call act_on_vectors_new(inode-1, rem_bucket(1), &
                                   matM12(spin), tmp_fn(spin), &
-                                  supportfns)
+                                  atomfns)
        end do
     end if
     ! multiply by the correct factor for each spin channel

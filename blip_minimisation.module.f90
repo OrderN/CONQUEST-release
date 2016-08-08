@@ -117,6 +117,8 @@ contains
   !!    Renamed H_on_supportfns -> H_on_atomfns
   !!   2016/07/29 18:30 nakata
   !!    Renamed supports_on_atom -> blips_on_atom
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine vary_support(n_support_iterations, fixed_potential, &
@@ -139,7 +141,7 @@ contains
                                    area_basis, nspin, spin_factor,        &
                                    flag_analytic_blip_int
     use io_module,           only: dump_blip_coeffs
-    use functions_on_grid,   only: supportfns, H_on_atomfns,              &
+    use functions_on_grid,   only: atomfns, H_on_atomfns,                 &
                                    gridfunctions, fn_on_grid
     use support_spec_format, only: coefficient_array,                     &
                                    coeff_array_size, grad_coeff_array,    &
@@ -234,7 +236,7 @@ contains
     if (diagon) then
        gridfunctions(H_on_atomfns(1))%griddata = zero
     else
-       call get_electron_gradient(supportfns, H_on_atomfns(1), &
+       call get_electron_gradient(atomfns, H_on_atomfns(1), &
                                   inode, ionode)
        call my_barrier()
        if (inode == ionode .AND. iprint_basis > 2) &
@@ -401,7 +403,7 @@ contains
           if (diagon) then
              gridfunctions(H_on_atomfns(1))%griddata = zero
           else
-             call get_electron_gradient(supportfns,             &
+             call get_electron_gradient(atomfns,                &
                                         H_on_atomfns(1), inode, &
                                         ionode)
           end if

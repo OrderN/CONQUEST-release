@@ -61,6 +61,8 @@ module functions_on_grid
   !!     components.
   !!   2016/07/13 18:30 nakata
   !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   type fn_on_grid
@@ -75,7 +77,7 @@ module functions_on_grid
   integer, dimension(3) :: gridsize
   type(fn_on_grid), dimension(:), allocatable :: gridfunctions
 
-  integer, parameter :: supportfns = 1
+  integer, parameter :: atomfns = 1
   integer, parameter, dimension(2) :: H_on_atomfns = (/2, 3/)
   integer, parameter :: pseudofns = 4
   integer :: current_fn_on_grid
@@ -123,6 +125,8 @@ contains
 !!    Renamed H_on_supportfns -> H_on_atomfns
 !!   2016/08/01 17:30 nakata
 !!    Introduced atomf instead of sf
+!!   2016/08/08 15:30 nakata
+!!    Renamed supportfns -> atomfns
 !!  SOURCE
 !!  
   subroutine associate_fn_on_grid
@@ -145,15 +149,15 @@ contains
     end if
 
     ! Support functions
-    gridfunctions(supportfns)%size = gridsize(atomf)
-    allocate(gridfunctions(supportfns)%griddata(gridsize(atomf)))
+    gridfunctions(atomfns)%size = gridsize(atomf)
+    allocate(gridfunctions(atomfns)%griddata(gridsize(atomf)))
     if (gridsize(atomf) > 0) then
        do i = 1, gridsize(atomf)
-          gridfunctions(supportfns)%griddata(i) = zero
+          gridfunctions(atomfns)%griddata(i) = zero
        end do
     end if
     call reg_alloc_mem(area_index, gridsize(atomf), type_dbl)
-    gridfunctions(supportfns)%type = atomf
+    gridfunctions(atomfns)%type = atomf
 
     ! H acting on support functions
     do spin = 1, nspin
@@ -217,6 +221,8 @@ contains
   !!    Changed implementation for spin polarisation. 
   !!   2016/07/13 18:30 nakata
   !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!  
   subroutine dissociate_fn_on_grid
@@ -232,9 +238,9 @@ contains
 
     call start_timer(tmr_std_allocation)
     ! Support functions
-    deallocate(gridfunctions(supportfns)%griddata)
+    deallocate(gridfunctions(atomfns)%griddata)
     call reg_dealloc_mem (area_index,                               &
-                          size(gridfunctions(supportfns)%griddata), &
+                          size(gridfunctions(atomfns)%griddata), &
                           type_dbl)
 
     ! H acting on support functions 

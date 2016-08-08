@@ -1489,6 +1489,8 @@ contains
   !!   2016/08/01 17:30 nakata
   !!    Introduced atomf instead of sf
   !!    Removed unused pao_H_sf_rem
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine build_Becke_weight_matrix(matWc, ngroups)
@@ -1500,7 +1502,7 @@ contains
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atoms_of_blocks
     use functions_on_grid,           only: gridfunctions, fn_on_grid, &
-                                           H_on_atomfns, supportfns
+                                           H_on_atomfns, atomfns
     use calc_matrix_elements_module, only: norb
     use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
@@ -1526,7 +1528,7 @@ contains
                    do point = 1, n_pts_in_block
                       n = n + 1
                       gridfunctions(H_on_atomfns(1))%griddata(n) = &
-                           gridfunctions(supportfns)%griddata(n) * &
+                           gridfunctions(atomfns)%griddata(n) * &
                            bwgrid(m+point,i)
                    end do
                 end do
@@ -1535,7 +1537,7 @@ contains
           m = m + n_pts_in_block
        end do
        call get_matrix_elements_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
-                                    matWc(i), supportfns, H_on_atomfns(1))
+                                    matWc(i), atomfns, H_on_atomfns(1))
     end do
   end subroutine build_Becke_weight_matrix
   !!***

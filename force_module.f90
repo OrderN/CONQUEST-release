@@ -193,6 +193,8 @@ contains
   !!    Changed to use ion_electrostatic (instead of ewald_module)
   !!   2016/07/13 18:30 nakata
   !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -223,7 +225,7 @@ contains
                                       nspin, spin_factor, flag_analytic_blip_int, flag_neutral_atom
     use density_module,         only: get_electronic_density, density, &
                                       build_Becke_weight_forces
-    use functions_on_grid,      only: supportfns, H_on_atomfns
+    use functions_on_grid,      only: atomfns, H_on_atomfns
     use dimens,                 only: n_my_grid_points
     use maxima_module,          only: maxngrid
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
@@ -368,8 +370,8 @@ contains
        call stop_timer(tmr_std_allocation)
 
        call start_timer(tmr_l_tmp1,WITH_LEVEL)
-       call get_electronic_density(density_out, electrons,         &
-                                   supportfns, H_on_atomfns(1),    &
+       call get_electronic_density(density_out, electrons,   &
+                                   atomfns, H_on_atomfns(1), &
                                    inode, ionode, maxngrid)
        ! get the total density_out
        if(nspin==1) then
@@ -712,6 +714,8 @@ contains
   !!    Renamed supports_on_atom -> blips_on_atom
   !!   2016/08/01 17:30 nakata
   !!    Introduced atomf instead of sf
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine pulay_force(p_force, KE_force, fixed_potential, vary_mu,  &
@@ -752,7 +756,7 @@ contains
     use PAO_grid_transform_module,   only: PAO_to_grad
     use build_PAO_matrices,          only: assemble_deriv_2
     use cover_module,                only: BCS_parts
-    use functions_on_grid,           only: supportfns,               &
+    use functions_on_grid,           only: atomfns,                  &
                                            H_on_atomfns,             &
                                            allocate_temp_fn_on_grid, &
                                            free_temp_fn_on_grid, gridfunctions
@@ -853,7 +857,7 @@ contains
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
-       call get_electronic_density(density, electrons, supportfns, &
+       call get_electronic_density(density, electrons, atomfns,    &
                                    H_on_atomfns(1), inode, ionode, &
                                    maxngrid)
        ! H_on_atomfns is given the correct values after calls of
@@ -1145,7 +1149,7 @@ contains
           if (flag_basis_set == blips) then
              call blip_to_grad_new(inode-1, direction, tmp_fn)
              call get_matrix_elements_new(inode-1, rem_bucket(atomf_atomf_rem),&
-                  mat_tmp, supportfns, tmp_fn)
+                  mat_tmp, atomfns, tmp_fn)
              call matrix_scale(minus_one, mat_tmp)
           else if (flag_basis_set == PAOs) then
              call assemble_deriv_2(direction, Srange, mat_tmp, 1)
@@ -1668,6 +1672,8 @@ contains
   !!    Renamed supports_on_atom -> blips_on_atom
   !!   2016/08/01 17:30 nakata
   !!    Introduced atomf instead of sf
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine get_HF_non_local_force(HF_NL_force, what_force, n_atoms)
@@ -1711,7 +1717,7 @@ contains
     use GenComms,                    only: gsum, myid
     use functions_on_grid,           only: allocate_temp_fn_on_grid,   &
                                            free_temp_fn_on_grid,       &
-                                           supportfns,                 &
+                                           atomfns,                    &
                                            H_on_atomfns, pseudofns
     use nlpf2blip,                   only: get_dSP, nlpf_on_atom
     use primary_module ,             only: bundle
@@ -1820,9 +1826,9 @@ contains
           !end if
           ! now calculate overlap between these derivatives and support functions
           ! New get_matrix_elements  TSUYOSHI MIYAZAKI 28/Dec/2000
-          call get_matrix_elements_new(inode-1,                       &
-                                       rem_bucket(atomf_nlpf_rem),    &
-                                       matdSC(direction), supportfns, &
+          call get_matrix_elements_new(inode-1,                    &
+                                       rem_bucket(atomf_nlpf_rem), &
+                                       matdSC(direction), atomfns, &
                                        dpseudofns)
           call matrix_transpose(matdSC(direction), matdCS(direction))
           call matrix_scale(-one, matdCS(direction))

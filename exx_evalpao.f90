@@ -10,6 +10,8 @@ contains
 
 !!   2016/07/29 18:30 nakata
 !!    Renamed supports_on_atom -> blips_on_atom
+!!   2016/08/08 15:30 nakata
+!!    Removed unused supportfns
   subroutine exx_phi_on_grid(inode,atom,spec,extent,xyz,nsuppfuncs,phi_on_grid,r_int,rst)
 
     use numbers,      only: zero, one, two, three, four, five, six, fifteen, sixteen
@@ -19,7 +21,6 @@ contains
 
     use angular_coeff_routines, only: evaluate_pao
     use support_spec_format,    only: blips_on_atom, flag_one_to_one
-    use functions_on_grid,      only: supportfns
     use dimens,                 only: r_h   
     use pao_format,             only: pao
 

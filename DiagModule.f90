@@ -421,6 +421,8 @@ contains
   !!    Added DOS output
   !!   2016/08/01 17:30 nakata
   !!    Introduced atomf instead of sf and paof
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -454,7 +456,7 @@ contains
     use energy,          only: entropy
     use cdft_data, only: cDFT_NumberAtomGroups
     use maxima_module,   ONLY: maxngrid
-    use functions_on_grid,           only: supportfns, &
+    use functions_on_grid,           only: atomfns, &
          allocate_temp_fn_on_grid,    &
          free_temp_fn_on_grid
     use density_module, ONLY: get_band_density
@@ -1032,7 +1034,7 @@ contains
                 if(nspin>1) then
                    do spin = 1, nspin
                       abs_wf(:)=zero
-                      call get_band_density(abs_wf,spin,supportfns,support_K,matBand_kp(wf_no,i),maxngrid)
+                      call get_band_density(abs_wf,spin,atomfns,support_K,matBand_kp(wf_no,i),maxngrid)
                       if(i==1) then
                          call wf_output(spin,abs_wf,wf_no,kk(:,i),w(out_wf(wf_no),i,spin),i)
                       else
@@ -1043,7 +1045,7 @@ contains
                 else
                    abs_wf(:)=zero
                    spin = 1
-                   call get_band_density(abs_wf,spin,supportfns,support_K,matBand_kp(wf_no,i),maxngrid)
+                   call get_band_density(abs_wf,spin,atomfns,support_K,matBand_kp(wf_no,i),maxngrid)
                    if(i==1) then
                       call wf_output(0,abs_wf,wf_no,kk(:,i),w(out_wf(wf_no),i,spin),i)
                    else
@@ -1057,7 +1059,7 @@ contains
           do wf_no=1,max_wf
              do spin = 1, nspin
                 abs_wf(:)=zero
-                call get_band_density(abs_wf,spin,supportfns,support_K,matBand(wf_no),maxngrid)
+                call get_band_density(abs_wf,spin,atomfns,support_K,matBand(wf_no),maxngrid)
                 call wf_output(spin,abs_wf,wf_no)
                 call my_barrier()
              end do

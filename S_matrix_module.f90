@@ -114,6 +114,8 @@ contains
 !!    - Added experimental backtrace
 !!   2016/07/29 18:30 nakata
 !!    Renamed supports_on_atom -> blips_on_atom
+!!   2016/08/08 15:30 nakata
+!!    Renamed supportfns -> atomfns
 !!  TODO
 !!    
 !!  SOURCE
@@ -141,7 +143,7 @@ contains
     use build_PAO_matrices,          only: assemble_2
     use species_module,              only: n_species
     use PAO_grid_transform_module,   only: PAO_to_grid
-    use functions_on_grid,           only: supportfns
+    use functions_on_grid,           only: atomfns
     use io_module,                   only: dump_matrix
     use timer_module,                only: cq_timer, start_timer,      &
                                            stop_print_timer,           &
@@ -186,11 +188,11 @@ contains
     ! Project support functions onto grid
     if (flag_basis_set == blips) then
        if (inode == ionode .and. iprint_ops > 2) &
-            write (io_lun, *) 'Doing blip-to-support ', supportfns
-       call blip_to_support_new(inode-1, supportfns)
+            write (io_lun, *) 'Doing blip-to-support ', atomfns
+       call blip_to_support_new(inode-1, atomfns)
 
        if (inode == ionode .and. iprint_ops > 2) &
-            write (io_lun, *) 'Doing integration ', supportfns
+            write (io_lun, *) 'Doing integration ', atomfns
        ! Integrate
        if(flag_analytic_blip_int) then
           call matrix_scale(zero,matS)
@@ -290,7 +292,7 @@ contains
           deallocate(nreqs)
        else
           call get_matrix_elements_new(inode-1, rem_bucket(1), matS, &
-               supportfns, supportfns)
+               atomfns, atomfns)
           ! Do the onsite elements analytically
           if (flag_onsite_blip_ana) then
              iprim = 0
@@ -322,9 +324,9 @@ contains
           call assemble_2(Srange, matS, 1)
        end if
        if (inode == ionode .and. iprint_ops > 2) &
-            write (io_lun, *) 'PAO to grid ', supportfns
+            write (io_lun, *) 'PAO to grid ', atomfns
        ! Also generate support with a call to PAO_to_grid
-       call PAO_to_grid(inode-1, supportfns)
+       call PAO_to_grid(inode-1, atomfns)
     end if
     !call dump_matrix("NS",matS,inode)    
     ! get the new InvS matrix

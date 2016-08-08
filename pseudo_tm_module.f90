@@ -441,6 +441,8 @@ contains
 !!    Bug fix: added a new loop for NLPF with blips, neutral atom but NOT analytic blip integrals
 !!   2016/07/20 16:30 nakata
 !!    Renamed naba_atm -> naba_atoms_of_blocks
+!!   2016/08/08 15:30 nakata
+!!    Removed unused sf in global_module
 !!  SOURCE
 !!
   subroutine set_tm_pseudo
@@ -448,7 +450,7 @@ contains
     use datatypes
     use numbers
     use global_module, only: rcellx,rcelly,rcellz,id_glob, ni_in_cell, &
-                             iprint_pseudo, species_glob, nlpf, sf,    &
+                             iprint_pseudo, species_glob, nlpf,        &
                              flag_basis_set, blips,                    &
                              IPRINT_TIME_THRES3, flag_analytic_blip_int, &
                              flag_neutral_atom, dens
@@ -937,6 +939,8 @@ contains
 !!    Bug fix for local G stress: accumulate loc_charge (was just storing !)
 !!   2016/07/20 16:30 nakata
 !!    Renamed naba_atm -> naba_atoms_of_blocks
+!!   2016/08/08 15:30 nakata
+!!    Removed unused sf in global_module
 !!  SOURCE
 !!
   subroutine loc_pp_derivative_tm ( hf_force, density, size )
@@ -945,7 +949,7 @@ contains
     use numbers
     use dimens, only: grid_point_volume, n_my_grid_points
     use global_module, only: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, &
-         species_glob, nlpf,ni_in_cell, sf, flag_neutral_atom, dens
+         species_glob, nlpf,ni_in_cell, flag_neutral_atom, dens
     use block_module, only : n_pts_in_block
     use group_module, only : blocks, parts
     use primary_module, only: domain

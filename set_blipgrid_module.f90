@@ -127,9 +127,11 @@ contains
 !!    Renamed naba_atm -> naba_atoms_of_blocks, halo_atm -> halo_atoms_of_blocks
 !!   2016/08/01 17:30 nakata
 !!    Introduced atomf instead of sf and paof
+!!   2016/08/08 15:30 nakata
+!!    Renamed rcut_supp -> rcut_atomf
 !!  SOURCE
 !!
-  subroutine set_blipgrid(myid,rcut_supp,rcut_proj)
+  subroutine set_blipgrid(myid,rcut_atomf,rcut_proj)
     use datatypes
     use global_module,ONLY:numprocs, sf, nlpf, paof, atomf
     use primary_module,ONLY: bundle, domain
@@ -145,7 +147,7 @@ contains
     
     implicit none
     integer,intent(in)      ::myid
-    real(double),intent(in), dimension(n_species) ::rcut_supp,rcut_proj
+    real(double),intent(in), dimension(n_species) ::rcut_atomf,rcut_proj
 
     integer :: iprim,max_naba_blk,max_naba_atm,max_naba_part, max_halo_part
     integer :: nxmin_grid, nxmax_grid,  nymin_grid, nymax_grid, nzmin_grid, nzmax_grid, xextent, yextent, zextent
@@ -155,17 +157,18 @@ contains
 
     call start_timer(tmr_std_indexing)
     ! Find maxima and allocate derived types
-    call get_naba_BCSblk_max(rcut_supp, max_naba_blk, max_recv_node_BtoG)
+    call get_naba_BCSblk_max(rcut_atomf, max_naba_blk, max_recv_node_BtoG)
     call alloc_comm_in_BtoG1(comm_naba_blocks_of_atoms,bundle%mx_iprim,max_recv_node_BtoG)
     !call alloc_comm_in_BtoG(comm_naba_blocks_of_atoms,bundle%mx_iprim,mx_recv_node_BtoG,mx_send_node_BtoG,&
     !     mx_sent_pair_BtoG,mx_recv_call_BtoG)
     call alloc_naba_blk(naba_blocks_of_atoms,bundle%mx_iprim,max_naba_blk)
     ! Allocate naba_atoms_of_blocks derived types
 !!! nakata2
-    call get_naba_DCSprt_max(rcut_supp,max_naba_part,max_naba_atm,max_halo_part, max_recv_node_BtoG)
+    call get_naba_DCSprt_max(rcut_atomf,max_naba_part,max_naba_atm,max_halo_part, max_recv_node_BtoG)
     call alloc_naba_atm(naba_atoms_of_blocks(atomf), domain%mx_ngonn,max_naba_part,max_naba_atm)
     naba_atoms_of_blocks(atomf)%function_type = atomf
     call alloc_halo_atm(halo_atoms_of_blocks(atomf), max_recv_node_BtoG,max_halo_part,DCS_parts%mx_mcover)
+!!! nakata2 --- delete from here later
 !    ! Support and PAOs have same cutoff and maxima
 !    call get_naba_DCSprt_max(rcut_supp,max_naba_part,max_naba_atm,max_halo_part, max_recv_node_BtoG)
 !    call alloc_naba_atm(naba_atoms_of_blocks(sf), domain%mx_ngonn,max_naba_part,max_naba_atm)
@@ -175,6 +178,7 @@ contains
 !    call alloc_naba_atm(naba_atoms_of_blocks(paof), domain%mx_ngonn,max_naba_part,max_naba_atm)
 !    naba_atoms_of_blocks(paof)%function_type = paof
 !    call alloc_halo_atm(halo_atoms_of_blocks(paof), max_recv_node_BtoG,max_halo_part,DCS_parts%mx_mcover)
+!!! nakata2 --- delet up to here later
 !!! nakata2 end
     ! Projectors
     call get_naba_DCSprt_max(rcut_proj,max_naba_part,max_naba_atm,max_halo_part, max_recv_node_BtoG)
@@ -182,14 +186,14 @@ contains
     naba_atoms_of_blocks(nlpf)%function_type = nlpf
     warn = .false.
     do i=1,n_species
-       if(rcut_supp(i) < rcut_proj(i)) warn = .true.
+       if(rcut_atomf(i) < rcut_proj(i)) warn = .true.
     end do
     if(.NOT.warn) then
        call alloc_halo_atm(halo_atoms_of_blocks(nlpf), max_recv_node_BtoG,max_halo_part,DCS_parts%mx_mcover)
     else
        ! Note: this is a problem because max_recv_node_BtoG isn't defined
        if(myid==0) write(io_lun,*) ' WARNING !! '
-       if(myid==0) write(io_lun,*) ' before alloc_halo_atm : rcut_supp < rcut_proj '
+       if(myid==0) write(io_lun,*) ' before alloc_halo_atm : rcut_atomf < rcut_proj '
        call alloc_halo_atm(halo_atoms_of_blocks(nlpf), numprocs,max_halo_part,DCS_parts%mx_mcover)
     endif
     ! Densities
@@ -201,12 +205,12 @@ contains
 
     !make lists of neighbour blocks of primary atoms and
     ! information for sending blip-grid transformed support functions
-    call get_naba_BCSblk(rcut_supp,naba_blocks_of_atoms,comm_naba_blocks_of_atoms)
+    call get_naba_BCSblk(rcut_atomf,naba_blocks_of_atoms,comm_naba_blocks_of_atoms)
     ! Calculate likely extents
     do spec = 1,n_species
-       xextent = int((rcut_supp(spec)*n_grid_x/r_super_x)+0.5)
-       yextent = int((rcut_supp(spec)*n_grid_y/r_super_y)+0.5)
-       zextent = int((rcut_supp(spec)*n_grid_z/r_super_z)+0.5)
+       xextent = int((rcut_atomf(spec)*n_grid_x/r_super_x)+0.5)
+       yextent = int((rcut_atomf(spec)*n_grid_y/r_super_y)+0.5)
+       zextent = int((rcut_atomf(spec)*n_grid_z/r_super_z)+0.5)
        blip_info(spec)%Extent = MAX(xextent,MAX(yextent,zextent))
     end do
     do iprim=1,bundle%n_prim
@@ -240,12 +244,13 @@ contains
     !make lists of neighbour and halo atoms of primary blocks
     ! for support and projector functions
 !!! nakata2
-    call get_naba_DCSprt(rcut_supp,naba_atoms_of_blocks(atomf),halo_atoms_of_blocks(atomf))
+    call get_naba_DCSprt(rcut_atomf,naba_atoms_of_blocks(atomf),halo_atoms_of_blocks(atomf))
     !do iprim_blk=1,domain%groups_on_node
     gridsize(atomf) = 0
     do iprim=1,domain%mx_ngonn
        gridsize(atomf) = gridsize(atomf) + naba_atoms_of_blocks(atomf)%no_of_orb(iprim)*n_pts_in_block
     end do
+!!! nakata2 --- delete from here later
 !    call get_naba_DCSprt(rcut_supp,naba_atoms_of_blocks(sf),halo_atoms_of_blocks(sf))
 !    !do iprim_blk=1,domain%groups_on_node
 !    gridsize(sf) = 0
@@ -257,6 +262,7 @@ contains
 !    do iprim=1,domain%mx_ngonn
 !       gridsize(paof) = gridsize(paof) + naba_atoms_of_blocks(paof)%no_of_orb(iprim)*n_pts_in_block
 !    end do
+!!! nakata2 --- delete up to here later
 !!! nakata2 end
     call get_naba_DCSprt(rcut_proj,naba_atoms_of_blocks(nlpf),halo_atoms_of_blocks(nlpf))
     !do iprim_blk=1,domain%groups_on_node

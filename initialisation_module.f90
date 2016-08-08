@@ -686,6 +686,8 @@ contains
  !!    Removed restart_file (redundant) and mu
  !!   2016/07/29 18:30 nakata
  !!    Renamed supports_on_atom -> blips_on_atom
+ !!   2016/08/08 15:30 nakata
+ !!    Renamed supportfns -> atomfns
  !!  SOURCE
  !!
  subroutine initial_phis(read_phi, start, level)
@@ -720,7 +722,7 @@ contains
     use angular_coeff_routines,      only: make_ang_coeffs, set_fact,  &
                                            set_prefac, set_prefac_real
     use read_support_spec,           only: read_support
-    use functions_on_grid,           only: supportfns
+    use functions_on_grid,           only: atomfns
     use support_spec_format,         only: blips_on_atom,              &
                                            coefficient_array,          &
                                            coeff_array_size,           &
@@ -793,7 +795,7 @@ contains
           call grab_blip_coeffs(coefficient_array,coeff_array_size, inode)
        end if
        ! Normalisation
-       call blip_to_support_new(inode-1, supportfns)
+       call blip_to_support_new(inode-1, atomfns)
        if((inode == ionode).AND.(iprint_init > 1)) then
           write(unit=io_lun,&
                 fmt='(10x,"initial_phis: completed blip_to_support()")')
@@ -806,7 +808,7 @@ contains
           !          NSF, SUPPORT_SIZE, MAX_N_BLIPS)
           !     write(io_lun,*) 'S matrix for normalisation on Node= ',inode
           call get_matrix_elements_new(inode-1,rem_bucket(1),matS,&
-                                       supportfns,supportfns)
+                                       atomfns,atomfns)
           ! Do the onsite elements analytically
           if(flag_onsite_blip_ana) then
              iprim=0
@@ -849,9 +851,9 @@ contains
           call my_barrier()
           if(inode==ionode.AND.iprint_init>1) &
                write(io_lun,fmt='(10x,"Completed normalise_support")')
-          call blip_to_support_new(inode-1, supportfns)
+          call blip_to_support_new(inode-1, atomfns)
           call get_matrix_elements_new(inode-1,rem_bucket(1),matS,&
-                                       supportfns,supportfns)
+                                       atomfns,atomfns)
           ! Do the onsite elements analytically
           if(flag_onsite_blip_ana) then
              iprim=0
@@ -986,6 +988,8 @@ contains
   !!    Removed prefix for ewald call
   !!   2016/07/13 18:30 nakata
   !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1020,7 +1024,7 @@ contains
     use io_module,         only: grab_matrix, grab_charge
     use DiagModule,        only: diagon
     use density_module,    only: get_electronic_density, density
-    use functions_on_grid, only: supportfns, H_on_atomfns
+    use functions_on_grid, only: atomfns, H_on_atomfns
     use dimens,            only: n_my_grid_points
     use maxima_module,     only: maxngrid
     use minimise,          only: sc_tolerance, L_tolerance,         &
@@ -1190,8 +1194,8 @@ contains
 !!$
     ! (7) Make a self-consistent H matrix and potential
     if (find_chdens) then
-       call get_electronic_density(density, electrons, supportfns, &
-                                   H_on_atomfns(1), ionode, ionode,  &
+       call get_electronic_density(density, electrons, atomfns,     &
+                                   H_on_atomfns(1), ionode, ionode, &
                                    maxngrid)
        electrons_tot = spin_factor * sum(electrons)
        if (inode == ionode .and. iprint_init > 1) &

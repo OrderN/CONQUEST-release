@@ -111,6 +111,8 @@ contains
   !!   - Removed redundant input parameter real(double) mu
   !!   2016/07/29 18:30 nakata
   !!    Renamed supports_on_atom -> blips_on_atom
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine vary_pao(n_support_iterations, fixed_potential, vary_mu, &
@@ -150,7 +152,7 @@ contains
     use energy,                    only: get_energy, kinetic_energy,   &
                                          nl_energy, band_energy
     use PAO_grid_transform_module, only: PAO_to_grid
-    use functions_on_grid,         only: supportfns
+    use functions_on_grid,         only: atomfns
     use species_module,            only: nsf_species, npao_species
     use density_module,            only: density
     use maxima_module,             only: maxngrid
@@ -381,7 +383,7 @@ contains
                               tmp
                          call my_barrier ()
                          ! Recalculate energy and gradient
-                         call PAO_to_grid(inode - 1, supportfns)
+                         call PAO_to_grid(inode - 1, atomfns)
                          call get_H_matrix(.true., fixed_potential, &
                                            electrons, density, maxngrid)
                          call FindMinDM(n_cg_L_iterations, vary_mu, &
@@ -409,7 +411,7 @@ contains
                               blips_on_atom(which_atom)%&
                               supp_func(nsf1)%coefficients(npao1) - &
                               tmp
-                         call PAO_to_grid(inode - 1, supportfns)
+                         call PAO_to_grid(inode - 1, atomfns)
                          call get_H_matrix(.true., fixed_potential, &
                                            electrons, density, maxngrid)
                       end if

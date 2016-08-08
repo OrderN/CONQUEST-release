@@ -162,6 +162,8 @@ contains
   !!  2016/08/01 17:30 nakata
   !!   Introduced atomf instead of sf and paof
   !!   Use atomf_H_atomf_rem instead of pao_H_sf_rem
+  !!  2016/08/08 15:30 nakata
+  !!   Renamed supportfns -> atomfns
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -192,7 +194,7 @@ contains
                                            spin_factor, blips,          &
                                            flag_analytic_blip_int 
     use PAO_grid_transform_module,   only: single_PAO_to_grid
-    use functions_on_grid,           only: supportfns, H_on_atomfns,    &
+    use functions_on_grid,           only: atomfns, H_on_atomfns,       &
                                            allocate_temp_fn_on_grid,    &
                                            free_temp_fn_on_grid,        &
                                            gridfunctions, fn_on_grid
@@ -296,7 +298,7 @@ contains
     ! get_matrix_elements_new takes myid
     do spin = 1, nspin
        call get_matrix_elements_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
-                                    matH(spin), supportfns, &
+                                    matH(spin), atomfns, &
                                     H_on_atomfns(spin))
     end do
     if (inode == ionode .and. iprint_ops > 2) write (io_lun, *) 'Done integration'
@@ -536,6 +538,8 @@ contains
   !!    Renamed naba_atm -> naba_atoms_of_blocks
   !!   2016/08/01 17:30 nakata
   !!    Introduced atomf instead of sf and paof
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine get_h_on_atomfns(output_level, fixed_potential, &
@@ -583,7 +587,7 @@ contains
                                            delta_E_xc
     use hartree_module,              only: hartree, hartree_stress
     use functions_on_grid,           only: gridfunctions, fn_on_grid,  &
-                                           supportfns, H_on_atomfns
+                                           atomfns, H_on_atomfns
 
     use calc_matrix_elements_module, only: norb
     use pseudopotential_common,      only: pseudopotential
@@ -995,7 +999,7 @@ contains
                    n = n + 1
                    do spin = 1, nspin
                       gridfunctions(H_on_atomfns(spin))%griddata(n) = &
-                           gridfunctions(supportfns)%griddata(n) *  &
+                           gridfunctions(atomfns)%griddata(n) *  &
                            potential(m+point,spin)
                    end do ! spin
                 end do ! point
@@ -1089,6 +1093,8 @@ contains
   !!    Renamed supports_on_atom -> blips_on_atom
   !!   2016/08/01 17:30 nakata
   !!    Introduced atomf instead of sf and paof
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine get_HNL_matrix(matNL)
@@ -1115,7 +1121,7 @@ contains
     use GenComms,                    only: cq_abort, myid, inode, ionode
     use GenBlas,                     only: axpy
     use build_PAO_matrices,          only: assemble_2
-    use functions_on_grid,           only: supportfns, pseudofns
+    use functions_on_grid,           only: atomfns, pseudofns
     use io_module,                   only: dump_matrix
     use nlpf2blip,                   only: get_SP, nlpf_on_atom
     use primary_module ,             only: bundle
@@ -1194,7 +1200,7 @@ contains
           !call dump_matrix("NSC2",matSC,inode)
        else
           call get_matrix_elements_new(myid, rem_bucket(atomf_nlpf_rem), &
-                                       matSC, supportfns, pseudofns)
+                                       matSC, atomfns, pseudofns)
        end if
        !call dump_matrix("NSC",matSC,inode)
     else if (flag_basis_set == PAOs) then
