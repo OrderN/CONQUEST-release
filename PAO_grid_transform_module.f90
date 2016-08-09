@@ -78,9 +78,11 @@ contains
 !!    Made variable-NSF compatible
 !!   2008/05/28 ast
 !!    Added timers
+!!   2016/08/09 14:00 nakata
+!!    Renamed support -> pao_fns
 !!  SOURCE
 !!
-  subroutine PAO_to_grid(myid, support)
+  subroutine PAO_to_grid(myid, pao_fns)
 
     use datatypes
     use numbers, ONLY: zero
@@ -97,7 +99,7 @@ contains
 
     integer,intent(in) :: myid
 
-    integer :: support
+    integer :: pao_fns
 
     integer :: iprim, nsf_send
     integer :: ii
@@ -106,12 +108,12 @@ contains
 
     call start_timer(tmr_std_basis)
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
-    gridfunctions(support)%griddata = zero
+    gridfunctions(pao_fns)%griddata = zero
 
     nthen = mtime()
     if(bundle%mx_iprim < 1) call cq_abort("PAO_to_grid: no primary atoms ! ",myid,bundle%mx_iprim)
     if(flag_paos_atoms_in_cell) then
-       call PAO_to_grid_global(myid,support)
+       call PAO_to_grid_global(myid,pao_fns)
     else
        do iprim = 1,bundle%mx_iprim
           call my_barrier()
@@ -126,7 +128,7 @@ contains
           else
              nsf_send = 0
           endif
-          call distribute_result(myid,iprim,nsf_send,support)
+          call distribute_result(myid,iprim,nsf_send,pao_fns)
           if(iprint_basis>1) then
              now = mtime()
              if(myid==0) write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grid distribute (in ms): ",f15.8)') myid,now - nthen
@@ -343,9 +345,11 @@ contains
 !!    Added direction to call to do_PAO_grad
 !!   2008/05/28 ast
 !!    Added timers
+!!   2016/08/09 14:00 nakata
+!!    Renamed support -> pao_fns
 !!  SOURCE
 !!
-  subroutine PAO_to_grad(myid, direction, support)
+  subroutine PAO_to_grad(myid, direction, pao_fns)
 
     use datatypes
     use numbers, ONLY: zero
@@ -360,19 +364,19 @@ contains
     implicit none
 
     integer,intent(in) :: myid, direction
-    integer :: support
+    integer :: pao_fns
 
     integer :: iprim, nsf_send
     integer :: ii
     real(double) :: now, nthen
 
     call start_timer(tmr_std_basis)
-    gridfunctions(support)%griddata = zero
+    gridfunctions(pao_fns)%griddata = zero
 
     nthen = mtime()
     if(bundle%mx_iprim < 1) call cq_abort("PAO_to_grad: no primary atoms ! ",myid,bundle%mx_iprim)
     if(flag_paos_atoms_in_cell) then
-       call PAO_to_grad_global(myid,direction,support)
+       call PAO_to_grad_global(myid,direction,pao_fns)
     else
        do iprim = 1,bundle%mx_iprim
           call my_barrier()
@@ -387,7 +391,7 @@ contains
           else
              nsf_send = 0
           endif
-          call distribute_result(myid,iprim,nsf_send,support)
+          call distribute_result(myid,iprim,nsf_send,pao_fns)
           if(iprint_basis>1) then
              now = mtime()
              if(myid==0) write(io_lun,fmt='(2x,"Proc ",i5," Time for PAO_grad distribute (in ms): ",f15.8)') myid,now - nthen
@@ -585,7 +589,7 @@ contains
 !!   Transforms PAOs to grid assuming global PAO coefficient storage: no communication involved
 !!  INPUTS
 !!   myid: processor number
-!!   support: index for grid function
+!!   pao_fns: index for grid function
 !!  USES
 !! 
 !!  AUTHOR
@@ -605,9 +609,11 @@ contains
 !!    Renamed supports_on_atom -> blips_on_atom
 !!   2016/08/01 17:30 nakata
 !!    Introduced atomf instead of sf
+!!   2016/08/09 14:00 nakata
+!!    Renamed support -> pao_fns
 !!  SOURCE
 !!
-  subroutine PAO_to_grid_global(myid, support)
+  subroutine PAO_to_grid_global(myid, pao_fns)
 
     use datatypes
     use primary_module, ONLY: bundle
@@ -630,7 +636,7 @@ contains
 
     implicit none 
     integer,intent(in) :: myid
-    integer :: support
+    integer :: pao_fns
 
 
     !local
@@ -671,7 +677,7 @@ contains
     dcellz_block=rcellz/blocks%ngcellz
 
     no_of_ib_ia = 0
-    gridfunctions(support)%griddata = zero
+    gridfunctions(pao_fns)%griddata = zero
 
     ! loop arround grid points in the domain, and for each
     ! point, get the core charge (local charge) density from the atoms 
@@ -742,9 +748,9 @@ contains
                    do ip=1,npoint
                       ipoint=ip_store(ip)
                       position= offset_position + ipoint
-                      if(position > gridfunctions(support)%size) &
+                      if(position > gridfunctions(pao_fns)%size) &
                            call cq_abort('PAO_to_grid_global: position error 1 ', &
-                           position, gridfunctions(support)%size)
+                           position, gridfunctions(pao_fns)%size)
                       r_from_i = r_store(ip)
                       x = x_store(ip)
                       y = y_store(ip)
@@ -770,11 +776,11 @@ contains
                          end do ! acz
                       end do ! l1
                       ! Now store data
-                      if(position+(this_nsf-1)*n_pts_in_block > gridfunctions(support)%size) &
+                      if(position+(this_nsf-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &
                            call cq_abort('PAO_to_grid_global: position error 2 ', &
-                           position+(this_nsf-1)*n_pts_in_block, gridfunctions(support)%size)
+                           position+(this_nsf-1)*n_pts_in_block, gridfunctions(pao_fns)%size)
                       do nsf1 = 1,this_nsf
-                         gridfunctions(support)%griddata(position+(nsf1-1)*n_pts_in_block) = sfsum(nsf1)
+                         gridfunctions(pao_fns)%griddata(position+(nsf1-1)*n_pts_in_block) = sfsum(nsf1)
                       end do ! nsf
                    enddo ! ip=1,npoint
                 endif! (npoint > 0) then
@@ -825,9 +831,11 @@ contains
 !!    Renamed supports_on_atom -> blips_on_atom
 !!   2016/08/01 18:30 nakata
 !!    Removed unused sf
+!!   2016/08/09 14:00 nakata
+!!    Renamed support -> pao_fns
 !!  SOURCE
 !!
-  subroutine single_PAO_to_grid(support)
+  subroutine single_PAO_to_grid(pao_fns)
 
     use datatypes
     use primary_module, ONLY: bundle
@@ -848,7 +856,7 @@ contains
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
 
     implicit none 
-    integer,intent(in) :: support
+    integer,intent(in) :: pao_fns
 
     !local
     real(double):: dcellx_block,dcelly_block,dcellz_block
@@ -887,7 +895,7 @@ contains
     call my_barrier()
 
     no_of_ib_ia = 0
-    gridfunctions(support)%griddata = zero
+    gridfunctions(pao_fns)%griddata = zero
 
     ! loop arround grid points in the domain, and for each
     ! point, get the PAO values
@@ -943,8 +951,8 @@ contains
                    do ip=1,npoint
                       ipoint=ip_store(ip)
                       position= offset_position + ipoint
-                      if(position > gridfunctions(support)%size) call cq_abort &
-                           ('single_pao_to_grid: position error ', position, gridfunctions(support)%size)
+                      if(position > gridfunctions(pao_fns)%size) call cq_abort &
+                           ('single_pao_to_grid: position error ', position, gridfunctions(pao_fns)%size)
 
                       r_from_i = r_store(ip)
                       x = x_store(ip)
@@ -956,10 +964,10 @@ contains
                          do acz = 1,blips_on_atom(this_atom)%naczs(l1)
                             do m1=-l1,l1
                                call evaluate_pao(the_species,l1,acz,m1,x,y,z,val)
-                               if(position+(count1-1)*n_pts_in_block > gridfunctions(support)%size) &
+                               if(position+(count1-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &
                                     call cq_abort('single_pao_to_grid: position error ', &
-                                    position, gridfunctions(support)%size)
-                               gridfunctions(support)%griddata(position+(count1-1)*n_pts_in_block) = val
+                                    position, gridfunctions(pao_fns)%size)
+                               gridfunctions(pao_fns)%griddata(position+(count1-1)*n_pts_in_block) = val
                                count1 = count1+1
                             end do ! m1
                          end do ! acz
@@ -1012,9 +1020,11 @@ contains
 !!    Renamed supports_on_atom -> blips_on_atom
 !!   2016/08/01 17:30 nakata
 !!    Introduced atomf instead of sf
+!!   2016/08/09 14:00 nakata
+!!    Renamed support -> pao_fns
 !!  SOURCE
 !!
-  subroutine PAO_to_grad_global(myid, direction, support)
+  subroutine PAO_to_grad_global(myid, direction, pao_fns)
 
     use datatypes
     use primary_module, ONLY: bundle
@@ -1038,7 +1048,7 @@ contains
     implicit none 
     integer,intent(in) :: myid, direction
 
-    integer :: support
+    integer :: pao_fns
 
 
     !local
@@ -1079,7 +1089,7 @@ contains
     call my_barrier()
 
     no_of_ib_ia = 0
-    gridfunctions(support)%griddata = zero
+    gridfunctions(pao_fns)%griddata = zero
 
     ! loop arround grid points in the domain, and for each
     ! point, get the core charge (local charge) density from the atoms 
@@ -1141,8 +1151,8 @@ contains
                    do ip=1,npoint
                       ipoint=ip_store(ip)
                       position= offset_position + ipoint
-                      if(position > gridfunctions(support)%size) call cq_abort &
-                           ('PAO_to_grad_global: position error ', position, gridfunctions(support)%size)
+                      if(position > gridfunctions(pao_fns)%size) call cq_abort &
+                           ('PAO_to_grad_global: position error ', position, gridfunctions(pao_fns)%size)
 
                       r_from_i = r_store(ip)
                       x = x_store(ip)
@@ -1171,7 +1181,7 @@ contains
                       end do ! l1
                       ! Now store data
                       do nsf1 = 1,this_nsf
-                         gridfunctions(support)%griddata(position+(nsf1-1)*n_pts_in_block) = sfsum(nsf1)
+                         gridfunctions(pao_fns)%griddata(position+(nsf1-1)*n_pts_in_block) = sfsum(nsf1)
                       end do ! nsf
                    enddo ! ip=1,npoint
                 endif! (npoint > 0) then

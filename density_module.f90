@@ -677,10 +677,12 @@ contains
   !!    Renamed naba_atm -> naba_atoms_of_blocks
   !!   2016/08/01 17:30 nakata
   !!    Introduced atomf instead of sf
+  !!   2016/08/09 14:00 nakata
+  !!    Renamed support -> atom_fns
   !!  SOURCE
   !!
-  subroutine get_electronic_density(denout, electrons, support, &
-                                    support_K, inode, ionode, size, level)
+  subroutine get_electronic_density(denout, electrons, atom_fns, &
+                                    atom_fns_K, inode, ionode, size, level)
 
     use datatypes
     use numbers
@@ -704,7 +706,7 @@ contains
     real(double), dimension(:)   :: electrons
     real(double), dimension(:,:) :: denout
     integer :: inode, ionode, size
-    integer :: support, support_K
+    integer :: atom_fns, atom_fns_K
     integer, optional :: level
 
     ! Local variables
@@ -725,9 +727,9 @@ contains
          write (io_lun,fmt='(2x,"Entering get_electronic_density")')
 
     do spin = 1, nspin
-       gridfunctions(support_K)%griddata = zero
+       gridfunctions(atom_fns_K)%griddata = zero
        call act_on_vectors_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
-                               matK(spin), support_K, support)
+                               matK(spin), atom_fns_K, atom_fns)
        denout(:,spin) = zero
        i_count_alpha = 0
        do blk = 1, domain%groups_on_node
@@ -745,8 +747,8 @@ contains
                 do n=1, n_pts_in_block
                    denout(n_point+n, spin) =                                       &
                         denout(n_point+n, spin) +                                  &
-                        gridfunctions(support_K)%griddata(i_count_alpha+n_i+n-1) * &
-                        gridfunctions(support)%griddata(i_count_alpha+n_i+n-1)
+                        gridfunctions(atom_fns_K)%griddata(i_count_alpha+n_i+n-1) * &
+                        gridfunctions(atom_fns)%griddata(i_count_alpha+n_i+n-1)
                 end do
              end do
           end if !(naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003
@@ -776,10 +778,10 @@ contains
     if (flag_Becke_weights) &
          call build_Becke_charges(atomcharge, denout, size)
 
-    ! support_K is using the same memory as h_on_atomfns, (in other
+    ! atom_fns_K is using the same memory as h_on_atomfns, (in other
     ! words we are using h_on_atomfns as temorary storage), so lets be
     ! safe and set it back to zero
-    gridfunctions(support_K)%griddata = zero
+    gridfunctions(atom_fns_K)%griddata = zero
 
     call stop_timer(tmr_std_chargescf)
 
@@ -820,9 +822,11 @@ contains
   !!    Renamed naba_atm -> naba_atoms_of_blocks
   !!   2016/08/01 17:30 nakata
   !!    Introduced atomf instead of sf
+  !!   2016/08/09 14:00 nakata
+  !!    Renamed support -> atom_fns
   !!  SOURCE
   !!
-  subroutine get_band_density(denout, spin, support, support_K, matBand, size)
+  subroutine get_band_density(denout, spin, atom_fns, atom_fns_K, matBand, size)
 
     use datatypes
     use numbers
@@ -842,7 +846,7 @@ contains
     ! Passed variables
 
     integer :: size, spin, matBand
-    integer :: support, support_K
+    integer :: atom_fns, atom_fns_K
     real(double), dimension(size) :: denout
 
     ! Local variables
@@ -852,9 +856,9 @@ contains
     if (inode == ionode .and. iprint_SC >= 2) &
          write (io_lun,fmt='(2x,"Entering get_band_density")')
 
-    gridfunctions(support_K)%griddata = zero
+    gridfunctions(atom_fns_K)%griddata = zero
     call act_on_vectors_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
-         matBand, support_K, support)
+         matBand, atom_fns_K, atom_fns)
     denout(:) = zero
     i_count_alpha = 0
     do blk = 1, domain%groups_on_node
@@ -865,8 +869,8 @@ contains
              do n=1, n_pts_in_block
                 denout(n_point+n) =                                       &
                      denout(n_point+n) +                                  &
-                     gridfunctions(support_K)%griddata(i_count_alpha+n_i+n-1) * &
-                     gridfunctions(support)%griddata(i_count_alpha+n_i+n-1)
+                     gridfunctions(atom_fns_K)%griddata(i_count_alpha+n_i+n-1) * &
+                     gridfunctions(atom_fns)%griddata(i_count_alpha+n_i+n-1)
              end do
           end do
        end if !(naba_atoms_of_blocks(atomf)%no_of_atom(blk) > 0)   !TM 30/Jun/2003

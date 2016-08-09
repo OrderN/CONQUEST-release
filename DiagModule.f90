@@ -423,6 +423,8 @@ contains
   !!    Introduced atomf instead of sf and paof
   !!   2016/08/08 15:30 nakata
   !!    Renamed supportfns -> atomfns
+  !!   2016/08/09 14:00 nakata
+  !!    Renamed support_K -> atom_fns_K
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -476,7 +478,7 @@ contains
     complex(double_cplx), dimension(:,:,:), allocatable :: expH
     complex(double_cplx) :: c_n_alpha2, c_n_setA2, c_n_setB2
     integer :: info, stat, il, iu, i, j, m, mz, prim_size, ng, wf_no, &
-         print_info, kp, spin, iacc, iprim, l, band, cdft_group, support_K, &
+         print_info, kp, spin, iacc, iprim, l, band, cdft_group, atom_fns_K, &
          n_band_min, n_band_max
     integer, dimension(50) :: desca, descz, descb
     integer, allocatable, dimension(:) :: matBand
@@ -1025,7 +1027,7 @@ contains
        allocate(abs_wf(maxngrid),STAT=stat)
        if (stat /= 0) call cq_abort('wf_out: Failed to allocate wfs', stat)
        call reg_alloc_mem(area_DM, maxngrid, type_dbl)
-       support_K = allocate_temp_fn_on_grid(atomf)   ! nakata2
+       atom_fns_K = allocate_temp_fn_on_grid(atomf)   ! nakata2
        if(flag_out_wf_by_kp) then
           if(inode==ionode) call write_eigenvalues(w,matrix_size,nkp,nspin,kk,wtk,Efermi)
           do i=1,nkp
@@ -1034,7 +1036,7 @@ contains
                 if(nspin>1) then
                    do spin = 1, nspin
                       abs_wf(:)=zero
-                      call get_band_density(abs_wf,spin,atomfns,support_K,matBand_kp(wf_no,i),maxngrid)
+                      call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_kp(wf_no,i),maxngrid)
                       if(i==1) then
                          call wf_output(spin,abs_wf,wf_no,kk(:,i),w(out_wf(wf_no),i,spin),i)
                       else
@@ -1045,7 +1047,7 @@ contains
                 else
                    abs_wf(:)=zero
                    spin = 1
-                   call get_band_density(abs_wf,spin,atomfns,support_K,matBand_kp(wf_no,i),maxngrid)
+                   call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_kp(wf_no,i),maxngrid)
                    if(i==1) then
                       call wf_output(0,abs_wf,wf_no,kk(:,i),w(out_wf(wf_no),i,spin),i)
                    else
@@ -1059,7 +1061,7 @@ contains
           do wf_no=1,max_wf
              do spin = 1, nspin
                 abs_wf(:)=zero
-                call get_band_density(abs_wf,spin,atomfns,support_K,matBand(wf_no),maxngrid)
+                call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand(wf_no),maxngrid)
                 call wf_output(spin,abs_wf,wf_no)
                 call my_barrier()
              end do
@@ -1068,7 +1070,7 @@ contains
        deallocate(abs_wf,STAT=stat)
        if (stat /= 0) call cq_abort('Find Evals: Failed to deallocate wfs',stat)
        call reg_dealloc_mem(area_DM, maxngrid, type_dbl)
-       call free_temp_fn_on_grid(support_K)
+       call free_temp_fn_on_grid(atom_fns_K)
        if(flag_out_wf_by_kp) then
           do j=nkp,1,-1
              do i=max_wf,1,-1
