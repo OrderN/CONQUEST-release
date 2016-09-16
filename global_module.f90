@@ -114,6 +114,8 @@
 !!    Added Wu-Cohen XC functional  (PRB 73, 235116  (2006) )
 !!   2016/08/01 17:30 nakata
 !!    Introduced atomf
+!!   2016/08/09 21:30 nakata
+!!    Added parameters for multi-site SFs
 !!  SOURCE
 !!
 module global_module
@@ -349,6 +351,9 @@ module global_module
 
   ! Neutral atom potential
   logical :: flag_neutral_atom
+
+  ! Multisite
+  logical :: flag_LFD
   
 end module global_module
 !!***

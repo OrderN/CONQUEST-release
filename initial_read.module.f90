@@ -134,6 +134,8 @@ contains
   !!    - Added experimental backtrace
   !!   2015/06/10 15:44 cor & dave
   !!    - Input parameters for band output
+  !!   2016/09/15 17:00 nakata
+  !!    Set flag_one_to_one = .true. for primitive SFs
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -160,6 +162,7 @@ contains
                                       ne_magn_in_cell,                 &
                                       ni_in_cell, area_moveatoms,      &
                                       io_lun, flag_only_dispersion,    &
+                                      flag_basis_set, blips, PAOs,     & ! nakata3
                                       flag_cdft_atom, flag_local_excitation
     use cdft_data, only: cDFT_NAtoms, &
                          cDFT_NumberAtomGroups, cDFT_AtomList
@@ -171,7 +174,8 @@ contains
     use block_module,           only: in_block_x, in_block_y,          &
                                       in_block_z
     use species_module,         only: n_species, species, charge,      &
-                                      non_local_species
+                                      non_local_species,               &
+                                      nsf_species, npao_species        ! nakata3
     use GenComms,               only: my_barrier, cq_abort
     use pseudopotential_data,   only: non_local, read_pseudopotential
     use pseudopotential_common, only: core_radius, pseudo_type, OLDPS, &
@@ -181,6 +185,7 @@ contains
     use force_module,           only: tot_force
     use DiagModule,             only: diagon
     use constraint_module,      only: flag_RigidBonds,constraints
+    use support_spec_format,    only: flag_one_to_one   ! nakata3
 
     implicit none
 
@@ -277,6 +282,18 @@ contains
     else
        call cq_abort(' Pseudotype Error ', pseudo_type)
     endif
+!!! 2016.9.15 nakata3
+    !
+    ! Turn on flag_one_to_one for primitive SFs
+    if (flag_basis_set==PAOs) then
+       flag_one_to_one = .true.
+       do i = 1, n_species
+          if (nsf_species(i).ne.npao_species(i)) flag_one_to_one = .false. ! false for contracted SFs
+       enddo
+    else if (flag_basis_set==blips) then
+       flag_one_to_one = .false.
+    endif
+!!! nakata3 end
     !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done pseudo")') inode
     !
     !

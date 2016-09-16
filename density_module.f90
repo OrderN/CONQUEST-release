@@ -679,6 +679,8 @@ contains
   !!    Introduced atomf instead of sf
   !!   2016/08/09 14:00 nakata
   !!    Renamed support -> atom_fns
+  !!   2016/08/09 18:00 nakata
+  !!    Added flag for atomf
   !!  SOURCE
   !!
   subroutine get_electronic_density(denout, electrons, atom_fns, &
@@ -687,7 +689,7 @@ contains
     use datatypes
     use numbers
     use GenBlas,                     only: scal, rsum
-    use mult_module,                 only: matK
+    use mult_module,                 only: matK, matKpao   ! nakata3
     use dimens,                      only: n_my_grid_points, grid_point_volume
     use block_module,                only: n_pts_in_block
     use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
@@ -695,9 +697,10 @@ contains
     use primary_module,              only: domain
     use set_blipgrid_module,         only: naba_atoms_of_blocks
     use GenComms,                    only: gsum
-    use global_module,               only: iprint_SC, atomf, ni_in_cell, &
+    use global_module,               only: iprint_SC, ni_in_cell, &
                                            flag_Becke_weights, nspin, &
-                                           spin_factor
+                                           spin_factor, &
+                                           sf, paof, atomf   ! nakata3
     use functions_on_grid,           only: gridfunctions, fn_on_grid
 
     implicit none
@@ -713,6 +716,7 @@ contains
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
     integer        :: blk, i_count_alpha, n, n_i, n_point, spin
+    integer        :: matKtmp
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -727,9 +731,11 @@ contains
          write (io_lun,fmt='(2x,"Entering get_electronic_density")')
 
     do spin = 1, nspin
+       if (atomf == sf)   matKtmp = matK(spin)       ! for blips    ! nakata3
+       if (atomf == paof) matKtmp = matKpao(spin)    ! for PAOs     ! nakata3
        gridfunctions(atom_fns_K)%griddata = zero
        call act_on_vectors_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
-                               matK(spin), atom_fns_K, atom_fns)
+                               matKtmp, atom_fns_K, atom_fns)
        denout(:,spin) = zero
        i_count_alpha = 0
        do blk = 1, domain%groups_on_node
@@ -824,9 +830,11 @@ contains
   !!    Introduced atomf instead of sf
   !!   2016/08/09 14:00 nakata
   !!    Renamed support -> atom_fns
+  !!   2016/09/15 18:00 nakata
+  !!    Renamed matBand -> matBand_atomfns
   !!  SOURCE
   !!
-  subroutine get_band_density(denout, spin, atom_fns, atom_fns_K, matBand, size)
+  subroutine get_band_density(denout, spin, atom_fns, atom_fns_K, matBand_atomfns, size)
 
     use datatypes
     use numbers
@@ -845,7 +853,7 @@ contains
 
     ! Passed variables
 
-    integer :: size, spin, matBand
+    integer :: size, spin, matBand_atomfns
     integer :: atom_fns, atom_fns_K
     real(double), dimension(size) :: denout
 
@@ -858,7 +866,7 @@ contains
 
     gridfunctions(atom_fns_K)%griddata = zero
     call act_on_vectors_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
-         matBand, atom_fns_K, atom_fns)
+         matBand_atomfns, atom_fns_K, atom_fns)
     denout(:) = zero
     i_count_alpha = 0
     do blk = 1, domain%groups_on_node

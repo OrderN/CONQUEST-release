@@ -46,6 +46,12 @@
 !!    Added blip transfer type for analytic blip integration
 !!   2014/01/17 13:20 lat
 !!    Added new matrix X and SX for exchange
+!!   2016/08/09 18:00 nakata
+!!    Added parameters SFcoeff_range, SFcoeffTr_range, Spao_range, Hpao_range, 
+!!                     SPpao_range, PSpao_range, Spaosf_range, Hpaosf_range, HTr_range, LD_range,
+!!                     SFcoeff_matind, SFcoeffTr_matind, Spao_matind, Hpao_matind, 
+!!                     SPpao_matind, PSpao_matind, Spaosf_matind, Hpaosf_matind, HTr_matind, LD_matind
+!!    for PAO-based calculations
 !!  SOURCE
 !!
 module matrix_data
@@ -57,7 +63,7 @@ module matrix_data
   save
 
   ! This will need to change if the above parameters are changed
-  integer, parameter :: mx_matrices = 22
+  integer, parameter :: mx_matrices = 32   ! nakata3
 
   ! Store ALL indices in a large array
   type(matrix),      allocatable, dimension(:,:), target :: mat
@@ -68,6 +74,9 @@ module matrix_data
   integer, dimension(:), pointer :: Smatind, dSmatind, Lmatind, LTrmatind, Hmatind, dHmatind, &
        SPmatind, PAOPmatind, PSmatind, LSmatind, SLmatind, LHmatind, HLmatind, LSLmatind,     &
        SLSmatind, Tmatind, TTrmatind, TSmatind, THmatind, TLmatind, Xmatind, SXmatind   
+  integer, dimension(:), pointer :: SFcoeff_matind, SFcoeffTr_matind, Spao_matind, Hpao_matind, &
+                                    SPpao_matind, PSpao_matind, Spaosf_matind, Hpaosf_matind,   &
+                                    HTr_matind, LD_matind
 
   ! Parameters for the different matrix ranges
   integer, parameter :: Srange   = 1   ! STS,TST,TS.TS
@@ -93,6 +102,19 @@ module matrix_data
 
   integer, parameter :: Xrange   = 21
   integer, parameter :: SXrange  = 22
+
+!!! nakata3
+  integer, parameter :: SFcoeff_range   = 23
+  integer, parameter :: SFcoeffTr_range = 24
+  integer, parameter :: Spao_range      = 25
+  integer, parameter :: Hpao_range      = 26
+  integer, parameter :: SPpao_range     = 27
+  integer, parameter :: PSpao_range     = 28
+  integer, parameter :: Spaosf_range    = 29
+  integer, parameter :: Hpaosf_range    = 30
+  integer, parameter :: HTr_range       = 31
+  integer, parameter :: LD_range        = 32
+!!! end nakata3
 
   integer :: max_range ! Indexes matrix with largest range
 
