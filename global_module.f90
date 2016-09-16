@@ -353,6 +353,7 @@ module global_module
   logical :: flag_neutral_atom
 
   ! Multisite
+  logical :: flag_Multisite
   logical :: flag_LFD
   
 end module global_module

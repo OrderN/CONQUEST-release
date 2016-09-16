@@ -565,10 +565,11 @@ contains
                              fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
                              fire_N_max, flag_write_DOS, flag_write_projected_DOS, &
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
-                             mx_temp_matrices, flag_neutral_atom
+                             mx_temp_matrices, flag_neutral_atom, flag_Multisite     ! nakata4
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
-                      RadiusSupport, NonLocalFactor, InvSRange,      &
+                      RadiusSupport, RadiusPAO, RadiusMS, RadiusLD,  &     ! nakata3
+                      NonLocalFactor, InvSRange,      &
                       min_blip_sp, flag_buffer_old, AtomMove_buffer, &
                       r_dft_d2, r_exx
     use block_module, only: in_block_x, in_block_y, in_block_z, &
@@ -1002,6 +1003,15 @@ contains
 !!$
 !!$
 !!$        
+!!! 2016.9.16 nakata3
+       ! Multisite support functions
+       flag_Multisite = fdf_boolean('General.MultisiteSF', .false.)
+!!! nakata3 end
+!!$
+!!$
+!!$
+!!$
+!!$
        ! Read charge, mass, pseudopotential and starting charge and
        ! blip models for the individual species
        maxnsf      = 0
@@ -1011,6 +1021,9 @@ contains
           charge(i)         = zero
           nsf_species(i)    = 0
           RadiusSupport(i)  = r_h
+          RadiusPAO(i)      = r_h    ! nakata3
+          RadiusMS(i)       = zero   ! nakata3
+          RadiusLD(i)       = zero   ! nakata3
           NonLocalFactor(i) = HNL_fac
           InvSRange(i)      = r_t
           blip_info(i)%SupportGridSpacing = zero
@@ -1023,6 +1036,12 @@ contains
              charge(i)        = fdf_double ('Atom.ValenceCharge',zero)
              nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
              RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',r_h)
+!!! 2016.9.16 nakata3
+             RadiusPAO(i)     = RadiusSupport(i)
+             RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
+             RadiusLD(i)      = fdf_double ('Atom.LocalDiagRange',zero)
+             if (flag_Multisite) RadiusSupport(i) = RadiusPAO(i) + RadiusMS(i)
+!!! nakata3 end
              ! DRB 2016/08/05 Keep track of maximum support radius
              if(RadiusSupport(i)>max_rc) max_rc = RadiusSupport(i)
              InvSRange        = fdf_double ('Atom.InvSRange',zero)
@@ -1700,11 +1719,14 @@ contains
 !!    - Added species_file
 !!   2015/06/08 lat
 !!    - Added experimental backtrace
+!!   2016/09/16 17:00 nakata
+!!    - Added RadiusPAO, RadiusMS and RadiusLD
 !!  SOURCE
 !!
   subroutine allocate_species_vars
 
-    use dimens,         only: RadiusSupport, NonLocalFactor, InvSRange, atomicnum
+    use dimens,         only: RadiusSupport, RadiusPAO, RadiusMS, RadiusLD, &
+                              NonLocalFactor, InvSRange, atomicnum
     use memory_module,  only: reg_alloc_mem, type_dbl
     use species_module, only: n_species, nsf_species, nlpf_species, npao_species, charge
     use species_module, only: mass, non_local_species, ps_file, ch_file, phi_file 
@@ -1727,6 +1749,12 @@ contains
     !
     allocate(RadiusSupport(n_species),atomicnum(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating RadiusSupport, atomicnum in allocate_species_vars: ",n_species,stat)
+!!! 2016.9.16 nakata3
+    allocate(RadiusPAO(n_species),STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating RadiusPAO in allocate_species_vars: ",n_species,stat)
+    allocate(RadiusMS(n_species),RadiusLD(n_species),STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating RadiusMS, RadiusLD in allocate_species_vars: ",n_species,stat)
+!!! nakata3 end
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(blip_info(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating blip_info in allocate_species_vars: ",               n_species,stat)

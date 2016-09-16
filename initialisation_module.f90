@@ -266,6 +266,8 @@ contains
   !!    Updated module name to ion_electrostatic
   !!   2016/01/29 15:00 dave
   !!    Removed prefix for ewald call
+  !!   2016/09/16 17:00 nakata
+  !!    Removed unused RadiusSupport
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -296,7 +298,7 @@ contains
     use dimens,                 only: n_grid_x, n_grid_y, n_grid_z,    &
                                       r_core_squared, r_h, r_super_x,  &
                                       r_super_y, r_super_z,            &
-                                      RadiusSupport, n_my_grid_points, &
+                                      n_my_grid_points,                &
                                       r_dft_d2
     use fft_module,             only: set_fft_map, fft3
     use GenComms,               only: cq_abort, my_barrier, inode,     &
@@ -1328,6 +1330,8 @@ contains
   !!    Added ROBODoc header, indented code, added 1.1 factor to rcut_max
   !!   2011/11/16 15:53 dave
   !!    Removed Extent from set_blipgrid call
+  !!   2016/09/16 17:00 nakata
+  !!    Added atomf and RadiusPAO
   !!  SOURCE
   !!
   subroutine setgrid(myid, r_core_squared, r_h)
@@ -1337,7 +1341,8 @@ contains
     use numbers,                only: very_small
     use global_module,          only: x_atom_cell,y_atom_cell,        &
                                       z_atom_cell, ni_in_cell,        &
-                                      iprint_index
+                                      iprint_index,                   &
+                                      atomf, paof, sf                     ! nakata3
     use block_module,           only: n_pts_in_block
     use maxima_module,          only: maxblocks
     use group_module,           only: blocks, parts
@@ -1349,7 +1354,7 @@ contains
     use set_blipgrid_module,    only: set_blipgrid
     use set_bucket_module,      only: set_bucket
     use GenComms,               only: my_barrier
-    use dimens,                 only: RadiusSupport
+    use dimens,                 only: RadiusSupport, RadiusPAO
     use pseudopotential_common, only: core_radius
     use input_module,           only: leqi
 
@@ -1404,7 +1409,13 @@ contains
     !if(iprint_index > 4) write(io_lun,*) ' DCS & BCS has been prepared for myid = ',myid
     !Makes variables used in Blip-Grid transforms
     ! See (naba_blk_module.f90), (set_blipgrid_module.f90), (make_table.f90)
-    call set_blipgrid(myid, RadiusSupport, core_radius)
+!!! 2016.9.16 nakata3
+    if (atomf.eq.paof) then
+       call set_blipgrid(myid, RadiusPAO, core_radius)
+    else if (atomf.eq.sf) then
+       call set_blipgrid(myid, RadiusSupport, core_radius)
+    endif
+!!! nakata3 end
     !if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done set_blipgrid'
 
     !Makes variables used in calculation (integration) of matrix elements

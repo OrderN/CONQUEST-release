@@ -1463,6 +1463,8 @@ contains
   !!    Removed call for update_H
   !!   2015/11/24 08:32 dave
   !!    Removed old ewald calls
+  !!   2016/09/16 17:00 nakata
+  !!    Added atomf and RadiusPAO
   !!  TODO
   !!   Think about updating radius component of matrix derived type,
   !!   or eliminating it !
@@ -1483,13 +1485,14 @@ contains
     use global_module,          only: iprint_MD, x_atom_cell,         &
                                       y_atom_cell, z_atom_cell,       &
                                       IPRINT_TIME_THRES2,             &
-                                      flag_Becke_weights, flag_dft_d2
+                                      flag_Becke_weights, flag_dft_d2,&
+                                      atomf, paof, sf                      ! nakata3
     use matrix_data,            only: Hrange, mat, rcut
     use maxima_module,          only: maxpartsproc
     use set_blipgrid_module,    only: set_blipgrid
     use set_bucket_module,      only: set_bucket
     use dimens,                 only: r_core_squared,r_h,             &
-                                      RadiusSupport
+                                      RadiusSupport, RadiusPAO           ! nakata3
     use pseudopotential_common, only: core_radius
     use GenComms,               only: myid, cq_abort, gsum
     use functions_on_grid,      only: associate_fn_on_grid
@@ -1533,7 +1536,13 @@ contains
        ! Reallocate and find new indices
        call immi(parts,bundle,BCS_parts,myid+1)
        ! Reallocate for blip grid
-       call set_blipgrid(myid,RadiusSupport,core_radius)
+!!! 2016.9.16 nakata3
+       if (atomf.eq.paof) then
+          call set_blipgrid(myid, RadiusPAO, core_radius)
+       else if (atomf.eq.sf) then
+          call set_blipgrid(myid, RadiusSupport, core_radius)
+       endif
+!!! nakata3 end
        !call set_blipgrid(myid,r_h,sqrt(r_core_squared))
        call set_bucket(myid)
        call associate_fn_on_grid
@@ -1563,6 +1572,8 @@ contains
   !!     Removed call for update_H
   !!   2015/11/24 08:32 dave
   !!    Removed old ewald calls
+  !!   2016/09/16 17:00 nakata
+  !!    Added atomf and RadiusPAO
   !! SOURCE
   !!
   subroutine updateIndices2(matrix_update, fixed_potential)
@@ -1579,13 +1590,14 @@ contains
     use primary_module,         only: bundle
     use global_module,          only: iprint_MD, x_atom_cell,         &
                                       y_atom_cell, z_atom_cell,       &
-                                      flag_Becke_weights, flag_dft_d2
+                                      flag_Becke_weights, flag_dft_d2,&
+                                      atomf, paof, sf                      ! nakata3
     use matrix_data,            only: Hrange, mat, rcut
     use maxima_module,          only: maxpartsproc
     use set_blipgrid_module,    only: set_blipgrid
     use set_bucket_module,      only: set_bucket
     use dimens,                 only: r_core_squared,r_h,             &
-                                      RadiusSupport
+                                      RadiusSupport, RadiusPAO
     use pseudopotential_common, only: core_radius
     use GenComms,               only: myid, cq_abort, gsum
     use functions_on_grid,      only: associate_fn_on_grid
@@ -1629,7 +1641,13 @@ contains
        ! Reallocate and find new indices
        call immi(parts,bundle,BCS_parts,myid+1,1)
        ! Reallocate for blip grid
-       call set_blipgrid(myid,RadiusSupport,core_radius)
+!!! 2016.9.16 nakata3
+       if (atomf.eq.paof) then
+          call set_blipgrid(myid, RadiusPAO, core_radius)
+       else if (atomf.eq.sf) then
+          call set_blipgrid(myid, RadiusSupport, core_radius)
+       endif
+!!! nakata3 end
        !call set_blipgrid(myid,r_h,sqrt(r_core_squared))
        call set_bucket(myid)
        call associate_fn_on_grid
@@ -1662,6 +1680,8 @@ contains
   !!    -  Added calls for initialising and finalising matrix indexing for XL-BOMD
   !!   2015/11/24 08:32 dave
   !!    Removed old ewald calls
+  !!   2016/09/16 17:00 nakata
+  !!    Added atomf and RadiusPAO
   !! SOURCE
   !!
   !OLD subroutine updateIndices3(fixed_potential,velocity,step,iteration)
@@ -1672,7 +1692,7 @@ contains
     use global_module, ONLY: flag_basis_set,flag_Becke_weights,flag_dft_d2,blips, &
                              ni_in_cell,x_atom_cell,y_atom_cell,z_atom_cell,      &
                              IPRINT_TIME_THRES2,glob2node,flag_LmatrixReuse,      &
-                             flag_XLBOMD
+                             flag_XLBOMD, atomf, paof, sf                               ! nakata3
     use GenComms, ONLY: inode,ionode,my_barrier,myid,gcopy
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
@@ -1680,7 +1700,7 @@ contains
     use mult_module,            ONLY: fmmi,immi,matL,L_trans
     use set_blipgrid_module, ONLY: set_blipgrid
     use set_bucket_module, ONLY: set_bucket
-    use dimens, ONLY: RadiusSupport
+    use dimens, ONLY: RadiusSupport, RadiusPAO                        ! nakata3
     use pseudopotential_common, ONLY: core_radius
     use functions_on_grid, ONLy: associate_fn_on_grid
     use density_module, ONLY: build_Becke_weights
@@ -1783,7 +1803,13 @@ contains
     !
     !endif
     ! Reallocate for blip grid
-    call set_blipgrid(inode-1,RadiusSupport,core_radius)
+!!! 2016.9.16 nakata3
+    if (atomf.eq.paof) then
+       call set_blipgrid(myid, RadiusPAO, core_radius)
+    else if (atomf.eq.sf) then
+       call set_blipgrid(myid, RadiusSupport, core_radius)
+    endif
+!!! nakata3 end
     call set_bucket(inode-1)
     call associate_fn_on_grid
     call stop_print_timer(tmr_l_tmp2,"matrix reindexing",IPRINT_TIME_THRES2)
