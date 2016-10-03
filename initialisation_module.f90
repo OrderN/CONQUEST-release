@@ -690,6 +690,8 @@ contains
  !!    Renamed supports_on_atom -> blips_on_atom
  !!   2016/08/08 15:30 nakata
  !!    Renamed supportfns -> atomfns
+ !!   2016/09/30 18:30 nakata
+ !!    Added call for single_PAO_to_grid
  !!  SOURCE
  !!
  subroutine initial_phis(read_phi, start, level)
@@ -731,6 +733,7 @@ contains
                                            read_option
     use input_module,                only: leqi
     use nlpf2blip,                   only: make_blips_from_nlpfs
+    use PAO_grid_transform_module,   only: single_PAO_to_grid  ! nakata3
 
     implicit none
 
@@ -888,8 +891,12 @@ contains
           write(unit=io_lun,fmt='(10x,"initial_phis: n_species:",i3)') n_species
           write(unit=io_lun,fmt='(10x,"initial_phis: r_h:",f12.6)') r_h
        end if
-       ! We don't need a PAO equivalent of blip_to_support here: this
-       ! is done by get_S_matrix
+!!! nakata3
+!       ! We don't need a PAO equivalent of blip_to_support here: this   ! nakata3, delete this line later
+!       ! is done by get_S_matrix                                        ! nakata3, delete this line later
+       ! calculate PAO values on grids
+       call single_PAO_to_grid(atomfns)
+!!! nakata3 end
     end if
 
 !****lat<$
@@ -1342,7 +1349,7 @@ contains
     use global_module,          only: x_atom_cell,y_atom_cell,        &
                                       z_atom_cell, ni_in_cell,        &
                                       iprint_index,                   &
-                                      atomf, paof, sf                     ! nakata3
+                                      atomf, sf                     ! nakata3
     use block_module,           only: n_pts_in_block
     use maxima_module,          only: maxblocks
     use group_module,           only: blocks, parts
@@ -1410,10 +1417,10 @@ contains
     !Makes variables used in Blip-Grid transforms
     ! See (naba_blk_module.f90), (set_blipgrid_module.f90), (make_table.f90)
 !!! 2016.9.16 nakata3
-    if (atomf.eq.paof) then
-       call set_blipgrid(myid, RadiusPAO, core_radius)
-    else if (atomf.eq.sf) then
+    if (atomf.eq.sf) then
        call set_blipgrid(myid, RadiusSupport, core_radius)
+    else
+       call set_blipgrid(myid, RadiusPAO, core_radius)
     endif
 !!! nakata3 end
     !if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done set_blipgrid'

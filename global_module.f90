@@ -352,6 +352,10 @@ module global_module
   ! Neutral atom potential
   logical :: flag_neutral_atom
 
+  ! Contracted SF
+  logical :: flag_contractSF
+  logical :: flag_do_SFtransform
+
   ! Multisite
   logical :: flag_Multisite
   logical :: flag_LFD

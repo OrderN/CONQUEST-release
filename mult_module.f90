@@ -80,14 +80,15 @@
 !!   2016/05/09 10:56 dave
 !!    Added helpful output for temp matrix overrun
 !!   2016/08/09 18:00 nakata
-!!    Added parameters matSpao, matSCpao, matCSpao, matKEpao, matNLpao, matHpao, matKpao,
+!!    Added parameters matSatomf, matSCatomf, matCSatomf, matKEatomf, matNLatomf, 
+!!                     matHatomf, matKatomf, matXatomf,
 !!                     matSFcoeff, matSFcoeff_tran, matdSFcoeff, matdSFcoeff_e,
-!!                     Spao_SFcoeffTr_Spaosf, SFcoeff_Spaosf_S, Hpao_SFcoeffTr_Hpaosf, 
-!!                     SFcoeff_Hpaosf_H, SFcoeff_SPpao_SP, SPpao_PSpao_Hpao, SPpao_PS_Hpaosf, 
-!!                     SFcoeffTr_H_Hpaosf, Hpaosf_SFcoeff_Hpao, LD_Spao_LDSpao, LD_Hpao_LDHpao,
-!!                     SPpao_trans, SFcoeff_trans,
-!!                     SFcoeff_pairind, SPpao_pairind
-!!    for PAO-based calculations
+!!                     AP_PA_aHa, sCa_AP_SP, AP_PS_aHs, 
+!!                     aSa_sCaTr_aSs, sCa_aSs_sSs, aHa_sCaTr_aHs, sCa_aHs_sHs,
+!!                     sCaTr_sHs_aHs, aHs_sCa_aHa, aLa_aSa_aLSa, aLa_aHa_aLHa,
+!!                     AP_trans, SFcoeff_trans,
+!!                     AP_pairind, SFcoeff_pairind
+!!    for atomic-function(ATOMF)-based calculations
 !!  SOURCE
 !!
 module mult_module
@@ -129,23 +130,22 @@ module mult_module
   integer(integ), parameter :: S_X_SX    = 23  ! type 1
 
 !!! nakata3
-!  integer(integ), parameter :: SFcoeff_Spao_Ssfpao = 24  ! type 1
-!  integer(integ), parameter :: Ssfpao_SFcoeffTr_S  = 25  ! type 1
-!  integer(integ), parameter :: SFcoeff_Hpao_Hsfpao = 26  ! type 1
-!  integer(integ), parameter :: Hsfpao_SFcoeffTr_H  = 27  ! type 1
-  integer(integ), parameter :: Spao_SFcoeffTr_Spaosf = 24  ! type 1
-  integer(integ), parameter :: SFcoeff_Spaosf_S      = 25  ! type 1
-  integer(integ), parameter :: Hpao_SFcoeffTr_Hpaosf = 26  ! type 1
-  integer(integ), parameter :: SFcoeff_Hpaosf_H      = 27  ! type 1
-  integer(integ), parameter :: SFcoeff_SPpao_SP      = 28  ! type 1
-  integer(integ), parameter :: SPpao_PSpao_Hpao      = 29  ! type 1 (possibly 2)
-  integer(integ), parameter :: SPpao_PS_Hpaosf       = 30  ! type 1
-  integer(integ), parameter :: SFcoeffTr_H_Hpaosf    = 31  ! type 2
-  integer(integ), parameter :: Hpaosf_SFcoeff_Hpao   = 32  ! type 2
-  integer(integ), parameter :: LD_Spao_LDSpao        = 33  ! type 1, for LFD
-  integer(integ), parameter :: LD_Hpao_LDHpao        = 34  ! type 1, for LFD
+  ! The indices for ATOMF-based-matrix multiplications will be set later.
+  ! The indices of matrices are demonstrated with lower-case characters: a=atomf, s=sf
+  ! C corresponds to SF coefficients.
+  ! L corresponds to local subspace regions in the LFD method.
+  integer :: AP_PA_aHa      ! 24, type 1 (possibly 2), H(atomf,nlpf )   * H(nlpf ,atomf)   = H(atomf,atomf)
+  integer :: aSa_sCaTr_aSs  ! 25, type 1             , S(atomf,atomf)   * C(sf   ,atomf)^T = S(atomf,sf   )
+  integer :: sCa_aSs_sSs    ! 26, type 1             , C(sf   ,atomf)   * S(atomf,sf   )   = S(sf   ,sf   )
+  integer :: aHa_sCaTr_aHs  ! 27, type 1             , H(atomf,atomf)   * C(sf   ,atomf)^T = H(atomf,sf   )
+  integer :: sCa_aHs_sHs    ! 28, type 1             , C(sf   ,atomf)   * H(atomf,sf   )   = H(sf   ,sf   )
+  integer :: sCa_AP_SP      ! 29, type 1             , C(sf   ,atomf)   * H(atomf,nlpf )   = H(sf   ,nlpf )
+  integer :: AP_PS_aHs      ! 30, type 1             , H(atomf,nlpf )   * H(nlpf ,sf   )   = H(atomf,sf   )  
+  integer :: sCaTr_sHs_aHs  ! 31, type 2             , C(sf   ,atomf)^T * H(sf   ,sf   )   = H(atomf,sf   )
+  integer :: aHs_sCa_aHa    ! 32, type 2             , H(atomf,sf   )   * C(sf   ,atomf)   = H(atomf,atomf)
+  integer :: aLa_aSa_aLSa   ! 33, type 1, for LFD    , L(atomf,atomf)   * S(atomf,atomf)   = Local S(atomf,atomf)
+  integer :: aLa_aHa_aLHa   ! 34, type 1, for LFD    , L(atomf,atomf)   * H(atomf,atomf)   = Local H(atomf,atomf)
 
-!  integer(integ), parameter :: mx_mults  = 23   ! nakata3 --- delete this line later
   integer(integ), parameter :: mx_mults  = 34
 !!! end nakata3
 
@@ -160,11 +160,11 @@ module mult_module
   integer(integ), parameter :: LSL_trans = 7
 
 !!! nakata3
-!  integer(integ), parameter :: Hpao_trans   = 8   ! nakata3 --- probably un-needed
-  integer(integ), parameter :: SPpao_trans   = 8
-  integer(integ), parameter :: SFcoeff_trans = 9
+! The indecies for ATOMF-based matrices will be set later
+!  integer :: Hatomf_trans  ! 8   ! nakata3 --- probably un-needed
+  integer :: AP_trans      ! 8
+  integer :: SFcoeff_trans ! 9
 
-!  integer(integ), parameter :: mx_trans = 7
   integer(integ), parameter :: mx_trans = 9
 !!! end nakata3
 
@@ -173,7 +173,7 @@ module mult_module
                                     SPpairind, LSpairind, LHpairind, &
                                     LSLpairind
 !!! nakata3
-  integer, dimension(:), pointer :: SFcoeff_pairind, SPpao_pairind
+  integer, dimension(:), pointer :: AP_pairind, SFcoeff_pairind
 !!! end nakata3
 
   type(matrix_trans), dimension(mx_matrices), target :: ltrans
@@ -189,12 +189,12 @@ module mult_module
        matH, matL, matLS, matSL, matK, matphi, matM12, matM4, matU, &
        matUT, matdH, matX, matSX
 !!! nakata3
-  ! spin independent PAO-based matrices
+  ! spin independent ATOMF-based matrices
   integer, public :: &
-       matSpao, matSCpao, matCSpao, matKEpao, matNLpao
-  ! spin dependent PAO-based matrices
+       matSatomf, matSCatomf, matCSatomf, matKEatomf, matNLatomf
+  ! spin dependent ATOMF-based matrices
   integer, allocatable, dimension(:), public :: &
-       matHpao, matKpao, &
+       matHatomf, matKatomf, matXatomf, &
        matSFcoeff, matSFcoeff_tran, matdSFcoeff, matdSFcoeff_e
 !!! end nakata3
 
@@ -244,7 +244,7 @@ contains
   !!    for band output, so that the user who wants to write lots of bands
   !!    can increase the parameter for the output run)
   !!   2016/08/09 21:30 nakata
-  !!    Added lines for PAO-based matrices and LFD matrices
+  !!    Added lines for ATOMF-based matrices and LFD matrices
   !!  SOURCE
   !!
   subroutine immi(parts, prim, gcs, myid, partial)
@@ -257,9 +257,8 @@ contains
     use maxima_module,       only: maxpartsproc, maxnabaprocs
     use GenComms,            only: my_barrier, cq_abort
     use matrix_comms_module, only: find_neighbour_procs
-    use global_module,       only: area_matrices, mx_temp_matrices, flag_LFD   ! nakata3
+    use global_module,       only: area_matrices, mx_temp_matrices, flag_LFD ! nakata3
     use memory_module,       only: reg_alloc_mem, type_int
-    use support_spec_format, only: flag_one_to_one   ! nakata3
 
     implicit none
 
@@ -306,6 +305,29 @@ contains
             call cq_abort("Error allocating halo type ", mx_matrices, stat)
        call stop_timer(tmr_std_allocation)
     end if
+
+! 2016.9.30 nakata3
+    ! Set indices of multiplications and trans for ATOMF-based-matrices
+    if (atomf.eq.sf) then
+       AP_PA_aHa     = SP_PS_H
+       AP_trans      = SP_trans
+    else
+       AP_PA_aHa     = 24
+       aSa_sCaTr_aSs = 25
+       sCa_aSs_sSs   = 26
+       aHa_sCaTr_aHs = 27
+       sCa_aHs_sHs   = 28
+       sCa_AP_SP     = 29
+       AP_PS_aHs     = 30
+       sCaTr_sHs_aHs = 31
+       aHs_sCa_aHa   = 32
+       aLa_aSa_aLSa  = 33
+       aLa_aHa_aLHa  = 34
+       AP_trans      = 8
+       SFcoeff_trans = 9
+    endif
+! nakata3 end
+
     mat%sf1_type = sf
     mat%sf2_type = sf
     ! First, initialise matrix indexing for mults and transposes for
@@ -387,60 +409,60 @@ contains
                     Xmatind, rcut(Xrange), myid-1,                       &
                     halo(Xrange), ltrans(Xrange))
 !!! nakata3
-    if (atomf == paof .and. .not.flag_one_to_one) then
-       mat(1:prim%groups_on_node,SFcoeff_range)%sf1_type = sf
-       mat(1:prim%groups_on_node,SFcoeff_range)%sf2_type = paof
-       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,SFcoeff_range), &
-                       SFcoeff_matind, rcut(SFcoeff_range), myid-1,                       &
-                       halo(SFcoeff_range), ltrans(SFcoeff_range))
-       mat(1:prim%groups_on_node,SFcoeffTr_range)%sf1_type = paof
-       mat(1:prim%groups_on_node,SFcoeffTr_range)%sf2_type = sf
-       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,SFcoeffTr_range), &
-                       SFcoeffTr_matind, rcut(SFcoeffTr_range), myid-1,                       &
-                       halo(SFcoeffTr_range), ltrans(SFcoeffTr_range))
-       mat(1:prim%groups_on_node,Spao_range)%sf1_type = paof
-       mat(1:prim%groups_on_node,Spao_range)%sf2_type = paof
-       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Spao_range), &
-                       Spao_matind, rcut(Spao_range), myid-1,                       &
-                       halo(Spao_range), ltrans(Spao_range))
-       mat(1:prim%groups_on_node,Hpao_range)%sf1_type = paof
-       mat(1:prim%groups_on_node,Hpao_range)%sf2_type = paof
-       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Hpao_range), &
-                       Hpao_matind, rcut(Hpao_range), myid-1,                       &
-                       halo(Hpao_range), ltrans(Hpao_range))
-       mat(1:prim%groups_on_node,SPpao_range)%sf1_type = paof
-       mat(1:prim%groups_on_node,SPpao_range)%sf2_type = nlpf
-       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,SPpao_range), &
-                       SPpao_matind, rcut(SPpao_range), myid-1,                       &
-                       halo(SPpao_range), ltrans(SPpao_range))
-       mat(1:prim%groups_on_node,PSpao_range)%sf1_type = nlpf
-       mat(1:prim%groups_on_node,PSpao_range)%sf2_type = paof
-       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,PSpao_range), &
-                       PSpao_matind, rcut(PSpao_range), myid-1,                       &
-                       halo(PSpao_range), ltrans(PSpao_range))
-       mat(1:prim%groups_on_node,Spaosf_range)%sf1_type = paof
-       mat(1:prim%groups_on_node,Spaosf_range)%sf2_type = sf
-       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Spaosf_range), &
-                       Spaosf_matind, rcut(Spaosf_range), myid-1,                       &
-                       halo(Spaosf_range), ltrans(Spaosf_range))
-       mat(1:prim%groups_on_node,Hpaosf_range)%sf1_type = paof
-       mat(1:prim%groups_on_node,Hpaosf_range)%sf2_type = sf
-       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Hpaosf_range), &
-                       Hpaosf_matind, rcut(Hpaosf_range), myid-1,                       &
-                       halo(Hpaosf_range), ltrans(Hpaosf_range))
+    if (atomf.ne.sf) then
+       mat(1:prim%groups_on_node,Satomf_range)%sf1_type = atomf
+       mat(1:prim%groups_on_node,Satomf_range)%sf2_type = atomf
+       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Satomf_range), &
+                       Satomf_matind, rcut(Satomf_range), myid-1,                 &
+                       halo(Satomf_range), ltrans(Satomf_range))
+       mat(1:prim%groups_on_node,Hatomf_range)%sf1_type = atomf
+       mat(1:prim%groups_on_node,Hatomf_range)%sf2_type = atomf
+       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Hatomf_range), &
+                       Hatomf_matind, rcut(Hatomf_range), myid-1,                 &
+                       halo(Hatomf_range), ltrans(Hatomf_range))
+       mat(1:prim%groups_on_node,AP_range)%sf1_type = atomf
+       mat(1:prim%groups_on_node,AP_range)%sf2_type = nlpf
+       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,AP_range), &
+                       SPatomf_matind, rcut(AP_range), myid-1,                &
+                       halo(AP_range), ltrans(AP_range))
+       mat(1:prim%groups_on_node,PA_range)%sf1_type = nlpf
+       mat(1:prim%groups_on_node,PA_range)%sf2_type = atomf
+       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,PA_range), &
+                       PSatomf_matind, rcut(PA_range), myid-1,                &
+                       halo(PA_range), ltrans(PA_range))
        mat(1:prim%groups_on_node,HTr_range)%sf1_type = sf
        mat(1:prim%groups_on_node,HTr_range)%sf2_type = sf
        call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,HTr_range), &
-                       HTr_matind, rcut(HTr_range), myid-1,                       &
+                       HTr_matind, rcut(HTr_range), myid-1,                    &
                        halo(HTr_range), ltrans(HTr_range))
+       mat(1:prim%groups_on_node,SFcoeff_range)%sf1_type = sf
+       mat(1:prim%groups_on_node,SFcoeff_range)%sf2_type = atomf
+       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,SFcoeff_range), &
+                       SFcoeff_matind, rcut(SFcoeff_range), myid-1,                &
+                       halo(SFcoeff_range), ltrans(SFcoeff_range))
+       mat(1:prim%groups_on_node,SFcoeffTr_range)%sf1_type = atomf
+       mat(1:prim%groups_on_node,SFcoeffTr_range)%sf2_type = sf
+       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,SFcoeffTr_range), &
+                       SFcoeffTr_matind, rcut(SFcoeffTr_range), myid-1,              &
+                       halo(SFcoeffTr_range), ltrans(SFcoeffTr_range))
+       mat(1:prim%groups_on_node,Satomfsf_range)%sf1_type = atomf
+       mat(1:prim%groups_on_node,Satomfsf_range)%sf2_type = sf
+       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Satomfsf_range), &
+                       Satomfsf_matind, rcut(Satomfsf_range), myid-1,               &
+                       halo(Satomfsf_range), ltrans(Satomfsf_range))
+       mat(1:prim%groups_on_node,Hatomfsf_range)%sf1_type = atomf
+       mat(1:prim%groups_on_node,Hatomfsf_range)%sf2_type = sf
+       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Hatomfsf_range), &
+                       Hatomfsf_matind, rcut(Hatomfsf_range), myid-1,               &
+                       halo(Hatomfsf_range), ltrans(Hatomfsf_range))
        if (flag_LFD) then
-          mat(1:prim%groups_on_node,LD_range)%sf1_type = paof
-          mat(1:prim%groups_on_node,LD_range)%sf2_type = paof
+          mat(1:prim%groups_on_node,LD_range)%sf1_type = atomf
+          mat(1:prim%groups_on_node,LD_range)%sf2_type = atomf
           call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,LD_range), &
-                          LD_matind, rcut(LD_range), myid-1,                       &
+                          LD_matind, rcut(LD_range), myid-1,                     &
                           halo(LD_range), ltrans(LD_range))
        endif
-    endif   ! atomf and flag_one_to_one
+    endif   ! atomf
 !!! end nakata3
     call associate_matrices
     call find_neighbour_procs(parts, halo(max_range))
@@ -477,12 +499,12 @@ contains
                    myid-1, halo(Trange), halo(Trange), ltrans(Trange),       &
                    gtrans(T_trans), pairs(:, T_trans), Tpairind)
 !!! nakata3
-    if (atomf == paof .and. .not.flag_one_to_one) then
-       call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,SPpao_range),     &
-                      myid-1, halo(SPpao_range), halo(PSpao_range), ltrans(SPpao_range),    &
-                      gtrans(SPpao_trans), pairs(:,SPpao_trans), SPpao_pairind)
-       call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,SFcoeff_range),      &
-                      myid-1, halo(SFcoeff_range), halo(SFcoeffTr_range), ltrans(SFcoeff_range),       &
+    if (atomf.ne.sf) then
+       call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,AP_range),              &
+                      myid-1, halo(AP_range), halo(PA_range), ltrans(AP_range), &
+                      gtrans(AP_trans), pairs(:,AP_trans), AP_pairind)
+       call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,SFcoeff_range),                &
+                      myid-1, halo(SFcoeff_range), halo(SFcoeffTr_range), ltrans(SFcoeff_range), &
                       gtrans(SFcoeff_trans), pairs(:, SFcoeff_trans), SFcoeff_pairind)
     endif
 !!! end nakata3
@@ -844,171 +866,170 @@ contains
     mult(S_X_SX)%gcs     => gcs
     call mult_ini(mult(S_X_SX), Xmatind, myid-1, prim%n_prim, parts)
 !!! nakata3
-    ! 24-34 : for multiplications of PAO-based matrices
-    if (atomf == paof .and. .not.flag_one_to_one) then
-
-       mult(Spao_SFcoeffTr_Spaosf)%mult_type = 1
-       mult(Spao_SFcoeffTr_Spaosf)%amat    => mat(1:prim%groups_on_node,Spao_range)
-       mult(Spao_SFcoeffTr_Spaosf)%bmat    => mat(1:prim%groups_on_node,SFcoeffTr_range)
-       mult(Spao_SFcoeffTr_Spaosf)%cmat    => mat(1:prim%groups_on_node,Spaosf_range)
-       mult(Spao_SFcoeffTr_Spaosf)%ahalo   => halo(Spao_range)
-       mult(Spao_SFcoeffTr_Spaosf)%chalo   => halo(Spaosf_range)
-       mult(Spao_SFcoeffTr_Spaosf)%ltrans  => ltrans(Spao_range)
-       !mult(Spao_SFcoeffTr_Spaosf)%bindex => SFcoeffTr_matind
-       mult(Spao_SFcoeffTr_Spaosf)%parts   => parts
-       mult(Spao_SFcoeffTr_Spaosf)%prim    => prim
-       mult(Spao_SFcoeffTr_Spaosf)%gcs     => gcs
-       call mult_ini(mult(Spao_SFcoeffTr_Spaosf), SFcoeffTr_matind, myid-1, prim%n_prim, parts)
-
-       mult(SFcoeff_Spaosf_S)%mult_type = 1
-       mult(SFcoeff_Spaosf_S)%amat    => mat(1:prim%groups_on_node,SFcoeff_range)
-       mult(SFcoeff_Spaosf_S)%bmat    => mat(1:prim%groups_on_node,Spaosf_range)
-       mult(SFcoeff_Spaosf_S)%cmat    => mat(1:prim%groups_on_node,Srange)
-       mult(SFcoeff_Spaosf_S)%ahalo   => halo(SFcoeff_range)
-       mult(SFcoeff_Spaosf_S)%chalo   => halo(Srange)
-       mult(SFcoeff_Spaosf_S)%ltrans  => ltrans(SFcoeff_range)
-       !mult(SFcoeff_Spaosf_S)%bindex => Spaosf_matind
-       mult(SFcoeff_Spaosf_S)%parts   => parts
-       mult(SFcoeff_Spaosf_S)%prim    => prim
-       mult(SFcoeff_Spaosf_S)%gcs     => gcs
-       call mult_ini(mult(SFcoeff_Spaosf_S), Spaosf_matind, myid-1, prim%n_prim, parts)
-
-       mult(Hpao_SFcoeffTr_Hpaosf)%mult_type = 1
-       mult(Hpao_SFcoeffTr_Hpaosf)%amat    => mat(1:prim%groups_on_node,Hpao_range)
-       mult(Hpao_SFcoeffTr_Hpaosf)%bmat    => mat(1:prim%groups_on_node,SFcoeffTr_range)
-       mult(Hpao_SFcoeffTr_Hpaosf)%cmat    => mat(1:prim%groups_on_node,Hpaosf_range)
-       mult(Hpao_SFcoeffTr_Hpaosf)%ahalo   => halo(Hpao_range)
-       mult(Hpao_SFcoeffTr_Hpaosf)%chalo   => halo(Hpaosf_range)
-       mult(Hpao_SFcoeffTr_Hpaosf)%ltrans  => ltrans(Hpao_range)
-       !mult(Hpao_SFcoeffTr_Hpaosf)%bindex => SFcoeffTr_matind
-       mult(Hpao_SFcoeffTr_Hpaosf)%parts   => parts
-       mult(Hpao_SFcoeffTr_Hpaosf)%prim    => prim
-       mult(Hpao_SFcoeffTr_Hpaosf)%gcs     => gcs
-       call mult_ini(mult(Hpao_SFcoeffTr_Hpaosf), SFcoeffTr_matind, myid-1, prim%n_prim, parts)
-
-       mult(SFcoeff_Hpaosf_H)%mult_type = 1
-       mult(SFcoeff_Hpaosf_H)%amat    => mat(1:prim%groups_on_node,SFcoeff_range)
-       mult(SFcoeff_Hpaosf_H)%bmat    => mat(1:prim%groups_on_node,Hpaosf_range)
-       mult(SFcoeff_Hpaosf_H)%cmat    => mat(1:prim%groups_on_node,Hrange)
-       mult(SFcoeff_Hpaosf_H)%ahalo   => halo(SFcoeff_range)
-       mult(SFcoeff_Hpaosf_H)%chalo   => halo(Hrange)
-       mult(SFcoeff_Hpaosf_H)%ltrans  => ltrans(SFcoeff_range)
-       !mult(SFcoeff_Hpaosf_H)%bindex => Hpaosf_matind
-       mult(SFcoeff_Hpaosf_H)%parts   => parts
-       mult(SFcoeff_Hpaosf_H)%prim    => prim
-       mult(SFcoeff_Hpaosf_H)%gcs     => gcs
-       call mult_ini(mult(SFcoeff_Hpaosf_H), Hpaosf_matind, myid-1, prim%n_prim, parts)
-
-       mult(SFcoeff_SPpao_SP)%mult_type = 1
-       mult(SFcoeff_SPpao_SP)%amat    => mat(1:prim%groups_on_node,SFcoeff_range)
-       mult(SFcoeff_SPpao_SP)%bmat    => mat(1:prim%groups_on_node,SPpao_range)
-       mult(SFcoeff_SPpao_SP)%cmat    => mat(1:prim%groups_on_node,SPrange)
-       mult(SFcoeff_SPpao_SP)%ahalo   => halo(SFcoeff_range)
-       mult(SFcoeff_SPpao_SP)%chalo   => halo(SPrange)
-       mult(SFcoeff_SPpao_SP)%ltrans  => ltrans(SFcoeff_range)
-       !mult(SFcoeff_SPpao_SP)%bindex => SPpao_matind
-       mult(SFcoeff_SPpao_SP)%parts   => parts
-       mult(SFcoeff_SPpao_SP)%prim    => prim
-       mult(SFcoeff_SPpao_SP)%gcs     => gcs
-       call mult_ini(mult(SFcoeff_SPpao_SP), SPpao_matind, myid-1, prim%n_prim, parts)
-
-       ra = rcut(SPpao_range)
-       rc = rcut(Hpao_range)
+    ! 24-34 : for multiplications of ATOMF-based matrices
+    if (atomf.ne.sf) then
+       ra = rcut(AP_range)
+       rc = rcut(Hatomf_range)
        if (rc >= ra) then
-          mult(SPpao_PSpao_Hpao)%mult_type = 1
-          mult(SPpao_PSpao_Hpao)%amat    => mat(1:prim%groups_on_node,SPpao_range)
-          mult(SPpao_PSpao_Hpao)%bmat    => mat(1:prim%groups_on_node,PSpao_range)
-          mult(SPpao_PSpao_Hpao)%cmat    => mat(1:prim%groups_on_node,Hpao_range)
-          mult(SPpao_PSpao_Hpao)%ahalo   => halo(SPpao_range)
-          mult(SPpao_PSpao_Hpao)%chalo   => halo(Hpao_range)
-          mult(SPpao_PSpao_Hpao)%ltrans  => ltrans(SPpao_range)
-          !mult(SPpao_PSpao_Hpao)%bindex => PSpao_matind
-          mult(SPpao_PSpao_Hpao)%parts   => parts
-          mult(SPpao_PSpao_Hpao)%prim    => prim
-          mult(SPpao_PSpao_Hpao)%gcs     => gcs
-          call mult_ini(mult(SPpao_PSpao_Hpao), PSpao_matind, myid-1, prim%n_prim, parts)
+          mult(AP_PA_aHa)%mult_type = 1
+          mult(AP_PA_aHa)%amat    => mat(1:prim%groups_on_node,AP_range)
+          mult(AP_PA_aHa)%bmat    => mat(1:prim%groups_on_node,PA_range)
+          mult(AP_PA_aHa)%cmat    => mat(1:prim%groups_on_node,Hatomf_range)
+          mult(AP_PA_aHa)%ahalo   => halo(AP_range)
+          mult(AP_PA_aHa)%chalo   => halo(Hatomf_range)
+          mult(AP_PA_aHa)%ltrans  => ltrans(AP_range)
+          !mult(AP_PA_aHa)%bindex => PSatomf_matind
+          mult(AP_PA_aHa)%parts   => parts
+          mult(AP_PA_aHa)%prim    => prim
+          mult(AP_PA_aHa)%gcs     => gcs
+          call mult_ini(mult(AP_PA_aHa), PSatomf_matind, myid-1, prim%n_prim, parts)
        else
-          mult(SPpao_PSpao_Hpao)%mult_type = 2
-          mult(SPpao_PSpao_Hpao)%amat    => mat(1:prim%groups_on_node,Hpao_range)
-          mult(SPpao_PSpao_Hpao)%bmat    => mat(1:prim%groups_on_node,SPpao_range)
-          mult(SPpao_PSpao_Hpao)%cmat    => mat(1:prim%groups_on_node,SPpao_range)
-          mult(SPpao_PSpao_Hpao)%ahalo   => halo(Hpao_range)
-          mult(SPpao_PSpao_Hpao)%chalo   => halo(SPpao_range)
-          mult(SPpao_PSpao_Hpao)%ltrans  => ltrans(Hpao_range)
-          !mult(SPpao_PSpao_Hpao)%bindex => SPpao_matind
-          mult(SPpao_PSpao_Hpao)%parts   => parts
-          mult(SPpao_PSpao_Hpao)%prim    => prim
-          mult(SPpao_PSpao_Hpao)%gcs     => gcs
-          call mult_ini(mult(SPpao_PSpao_Hpao), SPpao_matind, myid-1, prim%n_prim, parts)
+          mult(AP_PA_aHa)%mult_type = 2
+          mult(AP_PA_aHa)%amat    => mat(1:prim%groups_on_node,Hatomf_range)
+          mult(AP_PA_aHa)%bmat    => mat(1:prim%groups_on_node,AP_range)
+          mult(AP_PA_aHa)%cmat    => mat(1:prim%groups_on_node,AP_range)
+          mult(AP_PA_aHa)%ahalo   => halo(Hatomf_range)
+          mult(AP_PA_aHa)%chalo   => halo(AP_range)
+          mult(AP_PA_aHa)%ltrans  => ltrans(Hatomf_range)
+          !mult(AP_PA_aHa)%bindex => SPatomf_matind
+          mult(AP_PA_aHa)%parts   => parts
+          mult(AP_PA_aHa)%prim    => prim
+          mult(AP_PA_aHa)%gcs     => gcs
+          call mult_ini(mult(AP_PA_aHa), SPatomf_matind, myid-1, prim%n_prim, parts)
        endif
 
-       mult(SPpao_PS_Hpaosf)%mult_type = 1
-       mult(SPpao_PS_Hpaosf)%amat    => mat(1:prim%groups_on_node,SPpao_range)
-       mult(SPpao_PS_Hpaosf)%bmat    => mat(1:prim%groups_on_node,PSrange)
-       mult(SPpao_PS_Hpaosf)%cmat    => mat(1:prim%groups_on_node,Hpaosf_range)
-       mult(SPpao_PS_Hpaosf)%ahalo   => halo(SPpao_range)
-       mult(SPpao_PS_Hpaosf)%chalo   => halo(Hpaosf_range)
-       mult(SPpao_PS_Hpaosf)%ltrans  => ltrans(SPpao_range)
-       !mult(SPpao_PS_Hpaosf)%bindex => PSmatind
-       mult(SPpao_PS_Hpaosf)%parts   => parts
-       mult(SPpao_PS_Hpaosf)%prim    => prim
-       mult(SPpao_PS_Hpaosf)%gcs     => gcs
-       call mult_ini(mult(SPpao_PS_Hpaosf), PSmatind, myid-1, prim%n_prim, parts)
+       mult(aSa_sCaTr_aSs)%mult_type = 1
+       mult(aSa_sCaTr_aSs)%amat    => mat(1:prim%groups_on_node,Satomf_range)
+       mult(aSa_sCaTr_aSs)%bmat    => mat(1:prim%groups_on_node,SFcoeffTr_range)
+       mult(aSa_sCaTr_aSs)%cmat    => mat(1:prim%groups_on_node,Satomfsf_range)
+       mult(aSa_sCaTr_aSs)%ahalo   => halo(Satomf_range)
+       mult(aSa_sCaTr_aSs)%chalo   => halo(Satomfsf_range)
+       mult(aSa_sCaTr_aSs)%ltrans  => ltrans(Satomf_range)
+       !mult(aSa_sCaTr_aSs)%bindex => SFcoeffTr_matind
+       mult(aSa_sCaTr_aSs)%parts   => parts
+       mult(aSa_sCaTr_aSs)%prim    => prim
+       mult(aSa_sCaTr_aSs)%gcs     => gcs
+       call mult_ini(mult(aSa_sCaTr_aSs), SFcoeffTr_matind, myid-1, prim%n_prim, parts)
 
-       mult(SFcoeffTr_H_Hpaosf)%mult_type = 2
-       mult(SFcoeffTr_H_Hpaosf)%amat    => mat(1:prim%groups_on_node,Hpaosf_range)
-       mult(SFcoeffTr_H_Hpaosf)%bmat    => mat(1:prim%groups_on_node,HTr_range)
-       mult(SFcoeffTr_H_Hpaosf)%cmat    => mat(1:prim%groups_on_node,SFcoeffTr_range)
-       mult(SFcoeffTr_H_Hpaosf)%ahalo   => halo(Hpaosf_range)
-       mult(SFcoeffTr_H_Hpaosf)%chalo   => halo(SFcoeffTr_range)
-       mult(SFcoeffTr_H_Hpaosf)%ltrans  => ltrans(Hpaosf_range)
-       !mult(SFcoeffTr_H_Hpaosf)%bindex => HTr_matind
-       mult(SFcoeffTr_H_Hpaosf)%parts   => parts
-       mult(SFcoeffTr_H_Hpaosf)%prim    => prim
-       mult(SFcoeffTr_H_Hpaosf)%gcs     => gcs
-       call mult_ini(mult(SFcoeffTr_H_Hpaosf), HTr_matind, myid-1, prim%n_prim, parts)
+       mult(sCa_aSs_sSs)%mult_type = 1
+       mult(sCa_aSs_sSs)%amat    => mat(1:prim%groups_on_node,SFcoeff_range)
+       mult(sCa_aSs_sSs)%bmat    => mat(1:prim%groups_on_node,Satomfsf_range)
+       mult(sCa_aSs_sSs)%cmat    => mat(1:prim%groups_on_node,Srange)
+       mult(sCa_aSs_sSs)%ahalo   => halo(SFcoeff_range)
+       mult(sCa_aSs_sSs)%chalo   => halo(Srange)
+       mult(sCa_aSs_sSs)%ltrans  => ltrans(SFcoeff_range)
+       !mult(sCa_aSs_sSs)%bindex => Satomfsf_matind
+       mult(sCa_aSs_sSs)%parts   => parts
+       mult(sCa_aSs_sSs)%prim    => prim
+       mult(sCa_aSs_sSs)%gcs     => gcs
+       call mult_ini(mult(sCa_aSs_sSs), Satomfsf_matind, myid-1, prim%n_prim, parts)
 
-       mult(Hpaosf_SFcoeff_Hpao)%mult_type = 2
-       mult(Hpaosf_SFcoeff_Hpao)%amat    => mat(1:prim%groups_on_node,Hpao_range)
-       mult(Hpaosf_SFcoeff_Hpao)%bmat    => mat(1:prim%groups_on_node,SFcoeffTr_range)
-       mult(Hpaosf_SFcoeff_Hpao)%cmat    => mat(1:prim%groups_on_node,Hpaosf_range)
-       mult(Hpaosf_SFcoeff_Hpao)%ahalo   => halo(Hpao_range)
-       mult(Hpaosf_SFcoeff_Hpao)%chalo   => halo(Hpaosf_range)
-       mult(Hpaosf_SFcoeff_Hpao)%ltrans  => ltrans(Hpao_range)
-       !mult(Hpaosf_SFcoeff_Hpao)%bindex => SFcoeffTr_matind
-       mult(Hpaosf_SFcoeff_Hpao)%parts   => parts
-       mult(Hpaosf_SFcoeff_Hpao)%prim    => prim
-       mult(Hpaosf_SFcoeff_Hpao)%gcs     => gcs
-       call mult_ini(mult(Hpaosf_SFcoeff_Hpao), SFcoeffTr_matind, myid-1, prim%n_prim, parts)
+       mult(aHa_sCaTr_aHs)%mult_type = 1
+       mult(aHa_sCaTr_aHs)%amat    => mat(1:prim%groups_on_node,Hatomf_range)
+       mult(aHa_sCaTr_aHs)%bmat    => mat(1:prim%groups_on_node,SFcoeffTr_range)
+       mult(aHa_sCaTr_aHs)%cmat    => mat(1:prim%groups_on_node,Hatomfsf_range)
+       mult(aHa_sCaTr_aHs)%ahalo   => halo(Hatomf_range)
+       mult(aHa_sCaTr_aHs)%chalo   => halo(Hatomfsf_range)
+       mult(aHa_sCaTr_aHs)%ltrans  => ltrans(Hatomf_range)
+       !mult(aHa_sCaTr_aHs)%bindex => SFcoeffTr_matind
+       mult(aHa_sCaTr_aHs)%parts   => parts
+       mult(aHa_sCaTr_aHs)%prim    => prim
+       mult(aHa_sCaTr_aHs)%gcs     => gcs
+       call mult_ini(mult(aHa_sCaTr_aHs), SFcoeffTr_matind, myid-1, prim%n_prim, parts)
+
+       mult(sCa_aHs_sHs)%mult_type = 1
+       mult(sCa_aHs_sHs)%amat    => mat(1:prim%groups_on_node,SFcoeff_range)
+       mult(sCa_aHs_sHs)%bmat    => mat(1:prim%groups_on_node,Hatomfsf_range)
+       mult(sCa_aHs_sHs)%cmat    => mat(1:prim%groups_on_node,Hrange)
+       mult(sCa_aHs_sHs)%ahalo   => halo(SFcoeff_range)
+       mult(sCa_aHs_sHs)%chalo   => halo(Hrange)
+       mult(sCa_aHs_sHs)%ltrans  => ltrans(SFcoeff_range)
+       !mult(sCa_aHs_sHs)%bindex => Hatomfsf_matind
+       mult(sCa_aHs_sHs)%parts   => parts
+       mult(sCa_aHs_sHs)%prim    => prim
+       mult(sCa_aHs_sHs)%gcs     => gcs
+       call mult_ini(mult(sCa_aHs_sHs), Hatomfsf_matind, myid-1, prim%n_prim, parts)
+
+       mult(sCa_AP_SP)%mult_type = 1
+       mult(sCa_AP_SP)%amat    => mat(1:prim%groups_on_node,SFcoeff_range)
+       mult(sCa_AP_SP)%bmat    => mat(1:prim%groups_on_node,AP_range)
+       mult(sCa_AP_SP)%cmat    => mat(1:prim%groups_on_node,SPrange)
+       mult(sCa_AP_SP)%ahalo   => halo(SFcoeff_range)
+       mult(sCa_AP_SP)%chalo   => halo(SPrange)
+       mult(sCa_AP_SP)%ltrans  => ltrans(SFcoeff_range)
+       !mult(sCa_AP_SP)%bindex => SPatomf_matind
+       mult(sCa_AP_SP)%parts   => parts
+       mult(sCa_AP_SP)%prim    => prim
+       mult(sCa_AP_SP)%gcs     => gcs
+       call mult_ini(mult(sCa_AP_SP), SPatomf_matind, myid-1, prim%n_prim, parts)
+
+       mult(AP_PS_aHs)%mult_type = 1
+       mult(AP_PS_aHs)%amat    => mat(1:prim%groups_on_node,AP_range)
+       mult(AP_PS_aHs)%bmat    => mat(1:prim%groups_on_node,PSrange)
+       mult(AP_PS_aHs)%cmat    => mat(1:prim%groups_on_node,Hatomfsf_range)
+       mult(AP_PS_aHs)%ahalo   => halo(AP_range)
+       mult(AP_PS_aHs)%chalo   => halo(Hatomfsf_range)
+       mult(AP_PS_aHs)%ltrans  => ltrans(AP_range)
+       !mult(AP_PS_aHs)%bindex => PSmatind
+       mult(AP_PS_aHs)%parts   => parts
+       mult(AP_PS_aHs)%prim    => prim
+       mult(AP_PS_aHs)%gcs     => gcs
+       call mult_ini(mult(AP_PS_aHs), PSmatind, myid-1, prim%n_prim, parts)
+
+       mult(sCaTr_sHs_aHs)%mult_type = 2
+       mult(sCaTr_sHs_aHs)%amat    => mat(1:prim%groups_on_node,Hatomfsf_range)
+       mult(sCaTr_sHs_aHs)%bmat    => mat(1:prim%groups_on_node,HTr_range)
+       mult(sCaTr_sHs_aHs)%cmat    => mat(1:prim%groups_on_node,SFcoeffTr_range)
+       mult(sCaTr_sHs_aHs)%ahalo   => halo(Hatomfsf_range)
+       mult(sCaTr_sHs_aHs)%chalo   => halo(SFcoeffTr_range)
+       mult(sCaTr_sHs_aHs)%ltrans  => ltrans(Hatomfsf_range)
+       !mult(sCaTr_sHs_aHs)%bindex => HTr_matind
+       mult(sCaTr_sHs_aHs)%parts   => parts
+       mult(sCaTr_sHs_aHs)%prim    => prim
+       mult(sCaTr_sHs_aHs)%gcs     => gcs
+       call mult_ini(mult(sCaTr_sHs_aHs), HTr_matind, myid-1, prim%n_prim, parts)
+
+       mult(aHs_sCa_aHa)%mult_type = 2
+       mult(aHs_sCa_aHa)%amat    => mat(1:prim%groups_on_node,Hatomf_range)
+       mult(aHs_sCa_aHa)%bmat    => mat(1:prim%groups_on_node,SFcoeffTr_range)
+       mult(aHs_sCa_aHa)%cmat    => mat(1:prim%groups_on_node,Hatomfsf_range)
+       mult(aHs_sCa_aHa)%ahalo   => halo(Hatomf_range)
+       mult(aHs_sCa_aHa)%chalo   => halo(Hatomfsf_range)
+       mult(aHs_sCa_aHa)%ltrans  => ltrans(Hatomf_range)
+       !mult(aHs_sCa_aHa)%bindex => SFcoeffTr_matind
+       mult(aHs_sCa_aHa)%parts   => parts
+       mult(aHs_sCa_aHa)%prim    => prim
+       mult(aHs_sCa_aHa)%gcs     => gcs
+       call mult_ini(mult(aHs_sCa_aHa), SFcoeffTr_matind, myid-1, prim%n_prim, parts)
 
        if (flag_LFD) then
-          mult(LD_Spao_LDSpao)%mult_type = 1
-          mult(LD_Spao_LDSpao)%amat    => mat(1:prim%groups_on_node,LD_range)
-          mult(LD_Spao_LDSpao)%bmat    => mat(1:prim%groups_on_node,Spao_range)
-          mult(LD_Spao_LDSpao)%cmat    => mat(1:prim%groups_on_node,LD_range)
-          mult(LD_Spao_LDSpao)%ahalo   => halo(LD_range)
-          mult(LD_Spao_LDSpao)%chalo   => halo(LD_range)
-          mult(LD_Spao_LDSpao)%ltrans  => ltrans(LD_range)
-          !mult(LD_Spao_LDSpao)%bindex => Spao_matind
-          mult(LD_Spao_LDSpao)%parts   => parts
-          mult(LD_Spao_LDSpao)%prim    => prim
-          mult(LD_Spao_LDSpao)%gcs     => gcs
-          call mult_ini(mult(LD_Spao_LDSpao), Spao_matind, myid-1, prim%n_prim, parts)
+          mult(aLa_aSa_aLSa)%mult_type = 1
+          mult(aLa_aSa_aLSa)%amat    => mat(1:prim%groups_on_node,LD_range)
+          mult(aLa_aSa_aLSa)%bmat    => mat(1:prim%groups_on_node,Satomf_range)
+          mult(aLa_aSa_aLSa)%cmat    => mat(1:prim%groups_on_node,LD_range)
+          mult(aLa_aSa_aLSa)%ahalo   => halo(LD_range)
+          mult(aLa_aSa_aLSa)%chalo   => halo(LD_range)
+          mult(aLa_aSa_aLSa)%ltrans  => ltrans(LD_range)
+          !mult(aLa_aSa_aLSa)%bindex => Satomf_matind
+          mult(aLa_aSa_aLSa)%parts   => parts
+          mult(aLa_aSa_aLSa)%prim    => prim
+          mult(aLa_aSa_aLSa)%gcs     => gcs
+          call mult_ini(mult(aLa_aSa_aLSa), Satomf_matind, myid-1, prim%n_prim, parts)
 
-          mult(LD_Hpao_LDHpao)%mult_type = 1
-          mult(LD_Hpao_LDHpao)%amat    => mat(1:prim%groups_on_node,LD_range)
-          mult(LD_Hpao_LDHpao)%bmat    => mat(1:prim%groups_on_node,Hpao_range)
-          mult(LD_Hpao_LDHpao)%cmat    => mat(1:prim%groups_on_node,LD_range)
-          mult(LD_Hpao_LDHpao)%ahalo   => halo(LD_range)
-          mult(LD_Hpao_LDHpao)%chalo   => halo(LD_range)
-          mult(LD_Hpao_LDHpao)%ltrans  => ltrans(LD_range)
-          !mult(LD_Hpao_LDHpao)%bindex => Hpao_matind
-          mult(LD_Hpao_LDHpao)%parts   => parts
-          mult(LD_Hpao_LDHpao)%prim    => prim
-          mult(LD_Hpao_LDHpao)%gcs     => gcs
-          call mult_ini(mult(LD_Hpao_LDHpao), Hpao_matind, myid-1, prim%n_prim, parts)
+          mult(aLa_aHa_aLHa)%mult_type = 1
+          mult(aLa_aHa_aLHa)%amat    => mat(1:prim%groups_on_node,LD_range)
+          mult(aLa_aHa_aLHa)%bmat    => mat(1:prim%groups_on_node,Hatomf_range)
+          mult(aLa_aHa_aLHa)%cmat    => mat(1:prim%groups_on_node,LD_range)
+          mult(aLa_aHa_aLHa)%ahalo   => halo(LD_range)
+          mult(aLa_aHa_aLHa)%chalo   => halo(LD_range)
+          mult(aLa_aHa_aLHa)%ltrans  => ltrans(LD_range)
+          !mult(aLa_aHa_aLHa)%bindex => Hatomf_matind
+          mult(aLa_aHa_aLHa)%parts   => parts
+          mult(aLa_aHa_aLHa)%prim    => prim
+          mult(aLa_aHa_aLHa)%gcs     => gcs
+          call mult_ini(mult(aLa_aHa_aLHa), Hatomf_matind, myid-1, prim%n_prim, parts)
        endif
-    endif   ! atomf and flag_one_to_one
+    endif   ! atomf
 !!! end nakata3
     !end if
     ! call stop_timer(tmr_std_matrices)
@@ -1043,17 +1064,16 @@ contains
   !!   2008/05/22 ast
   !!    Added timers
   !!   2016/08/09 21:30 nakata
-  !!    Added lines for PAO-based matrices and LFD matrices
+  !!    Added lines for ATOMF-based matrices and LFD matrices
   !!  SOURCE
   !!
   subroutine fmmi(prim)
 
     use basic_types
-    use global_module, only: iprint_mat, flag_LFD
+    use global_module, only: iprint_mat, flag_LFD ! nakata3
     use matrix_module, only: deallocate_comms_data
     use matrix_data
     use maxima_module, only: maxnabaprocs
-    use support_spec_format, only: flag_one_to_one   ! nakata3
 
     implicit none
 
@@ -1158,54 +1178,54 @@ contains
     mult(S_X_SX)%bindex,mult(S_X_SX)%parts,mult(S_X_SX)%prim,               &
     mult(S_X_SX)%gcs)
 !!! nakata3
-    if (atomf == paof .and. .not.flag_one_to_one) then
-       nullify(mult(Spao_SFcoeffTr_Spaosf)%amat,mult(Spao_SFcoeffTr_Spaosf)%bmat,mult(Spao_SFcoeffTr_Spaosf)%cmat, &
-       mult(Spao_SFcoeffTr_Spaosf)%ahalo,mult(Spao_SFcoeffTr_Spaosf)%chalo,mult(Spao_SFcoeffTr_Spaosf)%ltrans,     &
-       mult(Spao_SFcoeffTr_Spaosf)%bindex,mult(Spao_SFcoeffTr_Spaosf)%parts,mult(Spao_SFcoeffTr_Spaosf)%prim,      &
-       mult(Spao_SFcoeffTr_Spaosf)%gcs)
-       nullify(mult(SFcoeff_Spaosf_S)%amat,mult(SFcoeff_Spaosf_S)%bmat,mult(SFcoeff_Spaosf_S)%cmat,                &
-       mult(SFcoeff_Spaosf_S)%ahalo,mult(SFcoeff_Spaosf_S)%chalo,mult(SFcoeff_Spaosf_S)%ltrans,                    &
-       mult(SFcoeff_Spaosf_S)%bindex,mult(SFcoeff_Spaosf_S)%parts,mult(SFcoeff_Spaosf_S)%prim,                     &
-       mult(SFcoeff_Spaosf_S)%gcs)
-       nullify(mult(Hpao_SFcoeffTr_Hpaosf)%amat,mult(Hpao_SFcoeffTr_Hpaosf)%bmat,mult(Hpao_SFcoeffTr_Hpaosf)%cmat, &
-       mult(Hpao_SFcoeffTr_Hpaosf)%ahalo,mult(Hpao_SFcoeffTr_Hpaosf)%chalo,mult(Hpao_SFcoeffTr_Hpaosf)%ltrans,     &
-       mult(Hpao_SFcoeffTr_Hpaosf)%bindex,mult(Hpao_SFcoeffTr_Hpaosf)%parts,mult(Hpao_SFcoeffTr_Hpaosf)%prim,      &
-       mult(Hpao_SFcoeffTr_Hpaosf)%gcs)
-       nullify(mult(SFcoeff_Hpaosf_H)%amat,mult(SFcoeff_Hpaosf_H)%bmat,mult(SFcoeff_Hpaosf_H)%cmat,                &
-       mult(SFcoeff_Hpaosf_H)%ahalo,mult(SFcoeff_Hpaosf_H)%chalo,mult(SFcoeff_Hpaosf_H)%ltrans,                    &
-       mult(SFcoeff_Hpaosf_H)%bindex,mult(SFcoeff_Hpaosf_H)%parts,mult(SFcoeff_Hpaosf_H)%prim,                     &
-       mult(SFcoeff_Hpaosf_H)%gcs)
-       nullify(mult(SFcoeff_SPpao_SP)%amat,mult(SFcoeff_SPpao_SP)%bmat,mult(SFcoeff_SPpao_SP)%cmat,                &
-       mult(SFcoeff_SPpao_SP)%ahalo,mult(SFcoeff_SPpao_SP)%chalo,mult(SFcoeff_SPpao_SP)%ltrans,                    &
-       mult(SFcoeff_SPpao_SP)%bindex,mult(SFcoeff_SPpao_SP)%parts,mult(SFcoeff_SPpao_SP)%prim,                     &
-       mult(SFcoeff_SPpao_SP)%gcs)
-       nullify(mult(SPpao_PSpao_Hpao)%amat,mult(SPpao_PSpao_Hpao)%bmat,mult(SPpao_PSpao_Hpao)%cmat,                &
-       mult(SPpao_PSpao_Hpao)%ahalo,mult(SPpao_PSpao_Hpao)%chalo,mult(SPpao_PSpao_Hpao)%ltrans,                    &
-       mult(SPpao_PSpao_Hpao)%bindex,mult(SPpao_PSpao_Hpao)%parts,mult(SPpao_PSpao_Hpao)%prim,                     &
-       mult(SPpao_PSpao_Hpao)%gcs)
-       nullify(mult(SPpao_PS_Hpaosf)%amat,mult(SPpao_PS_Hpaosf)%bmat,mult(SPpao_PS_Hpaosf)%cmat,                   &
-       mult(SPpao_PS_Hpaosf)%ahalo,mult(SPpao_PS_Hpaosf)%chalo,mult(SPpao_PS_Hpaosf)%ltrans,                       &
-       mult(SPpao_PS_Hpaosf)%bindex,mult(SPpao_PS_Hpaosf)%parts,mult(SPpao_PS_Hpaosf)%prim,                        &
-       mult(SPpao_PS_Hpaosf)%gcs)
-       nullify(mult(SFcoeffTr_H_Hpaosf)%amat,mult(SFcoeffTr_H_Hpaosf)%bmat,mult(SFcoeffTr_H_Hpaosf)%cmat,          &
-       mult(SFcoeffTr_H_Hpaosf)%ahalo,mult(SFcoeffTr_H_Hpaosf)%chalo,mult(SFcoeffTr_H_Hpaosf)%ltrans,              &
-       mult(SFcoeffTr_H_Hpaosf)%bindex,mult(SFcoeffTr_H_Hpaosf)%parts,mult(SFcoeffTr_H_Hpaosf)%prim,               &
-       mult(SFcoeffTr_H_Hpaosf)%gcs)
-       nullify(mult(Hpaosf_SFcoeff_Hpao)%amat,mult(Hpaosf_SFcoeff_Hpao)%bmat,mult(Hpaosf_SFcoeff_Hpao)%cmat,       &
-       mult(Hpaosf_SFcoeff_Hpao)%ahalo,mult(Hpaosf_SFcoeff_Hpao)%chalo,mult(Hpaosf_SFcoeff_Hpao)%ltrans,           &
-       mult(Hpaosf_SFcoeff_Hpao)%bindex,mult(Hpaosf_SFcoeff_Hpao)%parts,mult(Hpaosf_SFcoeff_Hpao)%prim,            &
-       mult(Hpaosf_SFcoeff_Hpao)%gcs)
+    if (atomf.ne.sf) then
+       nullify(mult(AP_PA_aHa)%amat,mult(AP_PA_aHa)%bmat,mult(AP_PA_aHa)%cmat, &
+       mult(AP_PA_aHa)%ahalo,mult(AP_PA_aHa)%chalo,mult(AP_PA_aHa)%ltrans,     &
+       mult(AP_PA_aHa)%bindex,mult(AP_PA_aHa)%parts,mult(AP_PA_aHa)%prim,      &
+       mult(AP_PA_aHa)%gcs)
+       nullify(mult(aSa_sCaTr_aSs)%amat,mult(aSa_sCaTr_aSs)%bmat,mult(aSa_sCaTr_aSs)%cmat, &
+       mult(aSa_sCaTr_aSs)%ahalo,mult(aSa_sCaTr_aSs)%chalo,mult(aSa_sCaTr_aSs)%ltrans,     &
+       mult(aSa_sCaTr_aSs)%bindex,mult(aSa_sCaTr_aSs)%parts,mult(aSa_sCaTr_aSs)%prim,      &
+       mult(aSa_sCaTr_aSs)%gcs)
+       nullify(mult(sCa_aSs_sSs)%amat,mult(sCa_aSs_sSs)%bmat,mult(sCa_aSs_sSs)%cmat, &
+       mult(sCa_aSs_sSs)%ahalo,mult(sCa_aSs_sSs)%chalo,mult(sCa_aSs_sSs)%ltrans,     &
+       mult(sCa_aSs_sSs)%bindex,mult(sCa_aSs_sSs)%parts,mult(sCa_aSs_sSs)%prim,      &
+       mult(sCa_aSs_sSs)%gcs)
+       nullify(mult(aHa_sCaTr_aHs)%amat,mult(aHa_sCaTr_aHs)%bmat,mult(aHa_sCaTr_aHs)%cmat, &
+       mult(aHa_sCaTr_aHs)%ahalo,mult(aHa_sCaTr_aHs)%chalo,mult(aHa_sCaTr_aHs)%ltrans,     &
+       mult(aHa_sCaTr_aHs)%bindex,mult(aHa_sCaTr_aHs)%parts,mult(aHa_sCaTr_aHs)%prim,      &
+       mult(aHa_sCaTr_aHs)%gcs)
+       nullify(mult(sCa_aHs_sHs)%amat,mult(sCa_aHs_sHs)%bmat,mult(sCa_aHs_sHs)%cmat, &
+       mult(sCa_aHs_sHs)%ahalo,mult(sCa_aHs_sHs)%chalo,mult(sCa_aHs_sHs)%ltrans,     &
+       mult(sCa_aHs_sHs)%bindex,mult(sCa_aHs_sHs)%parts,mult(sCa_aHs_sHs)%prim,      &
+       mult(sCa_aHs_sHs)%gcs)
+       nullify(mult(sCa_AP_SP)%amat,mult(sCa_AP_SP)%bmat,mult(sCa_AP_SP)%cmat, &
+       mult(sCa_AP_SP)%ahalo,mult(sCa_AP_SP)%chalo,mult(sCa_AP_SP)%ltrans,     &
+       mult(sCa_AP_SP)%bindex,mult(sCa_AP_SP)%parts,mult(sCa_AP_SP)%prim,      &
+       mult(sCa_AP_SP)%gcs)
+       nullify(mult(AP_PS_aHs)%amat,mult(AP_PS_aHs)%bmat,mult(AP_PS_aHs)%cmat, &
+       mult(AP_PS_aHs)%ahalo,mult(AP_PS_aHs)%chalo,mult(AP_PS_aHs)%ltrans,     &
+       mult(AP_PS_aHs)%bindex,mult(AP_PS_aHs)%parts,mult(AP_PS_aHs)%prim,      &
+       mult(AP_PS_aHs)%gcs)
+       nullify(mult(sCaTr_sHs_aHs)%amat,mult(sCaTr_sHs_aHs)%bmat,mult(sCaTr_sHs_aHs)%cmat, &
+       mult(sCaTr_sHs_aHs)%ahalo,mult(sCaTr_sHs_aHs)%chalo,mult(sCaTr_sHs_aHs)%ltrans,     &
+       mult(sCaTr_sHs_aHs)%bindex,mult(sCaTr_sHs_aHs)%parts,mult(sCaTr_sHs_aHs)%prim,      &
+       mult(sCaTr_sHs_aHs)%gcs)
+       nullify(mult(aHs_sCa_aHa)%amat,mult(aHs_sCa_aHa)%bmat,mult(aHs_sCa_aHa)%cmat, &
+       mult(aHs_sCa_aHa)%ahalo,mult(aHs_sCa_aHa)%chalo,mult(aHs_sCa_aHa)%ltrans,     &
+       mult(aHs_sCa_aHa)%bindex,mult(aHs_sCa_aHa)%parts,mult(aHs_sCa_aHa)%prim,      &
+       mult(aHs_sCa_aHa)%gcs)
        if (flag_LFD) then
-          nullify(mult(LD_Spao_LDSpao)%amat,mult(LD_Spao_LDSpao)%bmat,mult(LD_Spao_LDSpao)%cmat,                   &
-          mult(LD_Spao_LDSpao)%ahalo,mult(LD_Spao_LDSpao)%chalo,mult(LD_Spao_LDSpao)%ltrans,                       &
-          mult(LD_Spao_LDSpao)%bindex,mult(LD_Spao_LDSpao)%parts,mult(LD_Spao_LDSpao)%prim,                        &
-          mult(LD_Spao_LDSpao)%gcs)
-          nullify(mult(LD_Hpao_LDHpao)%amat,mult(LD_Hpao_LDHpao)%bmat,mult(LD_Hpao_LDHpao)%cmat,                   &
-          mult(LD_Hpao_LDHpao)%ahalo,mult(LD_Hpao_LDHpao)%chalo,mult(LD_Hpao_LDHpao)%ltrans,                       &
-          mult(LD_Hpao_LDHpao)%bindex,mult(LD_Hpao_LDHpao)%parts,mult(LD_Hpao_LDHpao)%prim,                        &
-          mult(LD_Hpao_LDHpao)%gcs)
+          nullify(mult(aLa_aSa_aLSa)%amat,mult(aLa_aSa_aLSa)%bmat,mult(aLa_aSa_aLSa)%cmat, &
+          mult(aLa_aSa_aLSa)%ahalo,mult(aLa_aSa_aLSa)%chalo,mult(aLa_aSa_aLSa)%ltrans,     &
+          mult(aLa_aSa_aLSa)%bindex,mult(aLa_aSa_aLSa)%parts,mult(aLa_aSa_aLSa)%prim,      &
+          mult(aLa_aSa_aLSa)%gcs)
+          nullify(mult(aLa_aHa_aLHa)%amat,mult(aLa_aHa_aLHa)%bmat,mult(aLa_aHa_aLHa)%cmat, &
+          mult(aLa_aHa_aLHa)%ahalo,mult(aLa_aHa_aLHa)%chalo,mult(aLa_aHa_aLHa)%ltrans,     &
+          mult(aLa_aHa_aLHa)%bindex,mult(aLa_aHa_aLHa)%parts,mult(aLa_aHa_aLHa)%prim,      &
+          mult(aLa_aHa_aLHa)%gcs)
        endif
-    endif   ! atomf and flag_one_to_one
+    endif   ! atomf
 !!! end nakata3
     ! Comms
     call deallocate_comms_data(mult(H_SP_SP)%comms)
@@ -1231,19 +1251,19 @@ contains
     call deallocate_comms_data(mult(T_L_TL)%comms)
     call deallocate_comms_data(mult(TL_T_L)%comms)
 !!! nakata3
-    if (atomf == paof .and. .not.flag_one_to_one) then
-       call deallocate_comms_data(mult(Spao_SFcoeffTr_Spaosf)%comms)
-       call deallocate_comms_data(mult(SFcoeff_Spaosf_S)%comms)
-       call deallocate_comms_data(mult(Hpao_SFcoeffTr_Hpaosf)%comms)
-       call deallocate_comms_data(mult(SFcoeff_Hpaosf_H)%comms)
-       call deallocate_comms_data(mult(SFcoeff_SPpao_SP)%comms)
-       call deallocate_comms_data(mult(SPpao_PSpao_Hpao)%comms)
-       call deallocate_comms_data(mult(SPpao_PS_Hpaosf)%comms)
-       call deallocate_comms_data(mult(SFcoeffTr_H_Hpaosf)%comms)
-       call deallocate_comms_data(mult(Hpaosf_SFcoeff_Hpao)%comms)
+    if (atomf.ne.sf) then
+       call deallocate_comms_data(mult(AP_PA_aHa)%comms)
+       call deallocate_comms_data(mult(aSa_sCaTr_aSs)%comms)
+       call deallocate_comms_data(mult(sCa_aSs_sSs)%comms)
+       call deallocate_comms_data(mult(aHa_sCaTr_aHs)%comms)
+       call deallocate_comms_data(mult(sCa_aHs_sHs)%comms)
+       call deallocate_comms_data(mult(sCa_AP_SP)%comms)
+       call deallocate_comms_data(mult(AP_PS_aHs)%comms)
+       call deallocate_comms_data(mult(sCaTr_sHs_aHs)%comms)
+       call deallocate_comms_data(mult(aHs_sCa_aHa)%comms)
        if (flag_LFD) then
-          call deallocate_comms_data(mult(LD_Spao_LDSpao)%comms)
-          call deallocate_comms_data(mult(LD_Hpao_LDHpao)%comms)
+          call deallocate_comms_data(mult(aLa_aSa_aLSa)%comms)
+          call deallocate_comms_data(mult(aLa_aHa_aLHa)%comms)
        endif
     endif
 !!! end nakata3
@@ -1256,10 +1276,7 @@ contains
     deallocate(pairs)
     deallocate(Spairind, Lpairind, SPpairind, LSpairind, LHpairind, &
                LSLpairind, Tpairind)
-!!! nakata3
-    if (atomf == paof .and. .not.flag_one_to_one) &
-       deallocate(SFcoeff_pairind, SPpao_pairind)
-!!! end nakata3
+    if (atomf.ne.sf) deallocate(AP_pairind, SFcoeff_pairind)   ! nakata3
     !call dissociate_matrices
     ! Matrices
     call end_ops(prim,Srange,Smatind,S_trans)
@@ -1283,16 +1300,16 @@ contains
     call end_ops(prim,THrange,THmatind)
     call end_ops(prim,TLrange,TLmatind)
 !!! nakata3
-    if (atomf == paof .and. .not.flag_one_to_one) then
-       call end_ops(prim,SFcoeff_range,SFcoeff_matind)
-       call end_ops(prim,SFcoeffTr_range,SFcoeffTr_matind)
-       call end_ops(prim,Spao_range,Spao_matind)
-       call end_ops(prim,Hpao_range,Hpao_matind)
-       call end_ops(prim,SPpao_range,SPpao_matind)
-       call end_ops(prim,PSpao_range,PSpao_matind)
-       call end_ops(prim,Spaosf_range,Spaosf_matind)
-       call end_ops(prim,Hpaosf_range,Hpaosf_matind)
+    if (atomf.ne.sf) then
+       call end_ops(prim,Satomf_range,Satomf_matind)
+       call end_ops(prim,Hatomf_range,Hatomf_matind)
+       call end_ops(prim,AP_range,SPatomf_matind,AP_trans)
+       call end_ops(prim,PA_range,PSatomf_matind)
        call end_ops(prim,HTr_range,HTr_matind)
+       call end_ops(prim,SFcoeff_range,SFcoeff_matind,SFcoeff_trans)
+       call end_ops(prim,SFcoeffTr_range,SFcoeffTr_matind)
+       call end_ops(prim,Satomfsf_range,Satomfsf_matind)
+       call end_ops(prim,Hatomfsf_range,Hatomfsf_matind)
        if (flag_LFD) call end_ops(prim,LD_range,LD_matind)
     endif
 !!! end nakata3
@@ -1368,7 +1385,7 @@ contains
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
   !!   2016/09/15 22:00 nakata
-  !!    Introduce matK -> matKpao transformations
+  !!    Introduce matK -> matKatomf transformations
   !!  SOURCE
   !!
   subroutine LNV_matrix_multiply(electrons, energy, doK, doM1, doM2, &
@@ -1377,13 +1394,12 @@ contains
 
     use numbers
     use datatypes
-    use global_module, only: iprint_mat, IPRINT_TIME_THRES3, nspin, paof, sf, atomf ! 2016.9.15 nakata3
+    use global_module, only: iprint_mat, IPRINT_TIME_THRES3, nspin, flag_contractSF ! nakata3
     use matrix_data,   only: LHrange, SLSrange, LSLrange, Lrange,   &
-                             Srange, Hrange, Hpaosf_range               ! 2016.9.15 nakata3
+                             Srange, Hrange
     use GenComms,      only: gsum, inode, ionode, my_barrier, gmax, &
                              mtime
     use timer_module
-    use support_spec_format, only: flag_one_to_one                      ! 2016.9.15 nakata3
 
     implicit none
 
@@ -1405,7 +1421,6 @@ contains
     type(cq_timer)            :: backtrace_timer
     integer                   :: backtrace_level
     integer                   :: ss, ss_start, ss_end
-    integer                   :: matHpaosf                             ! 2016.9.15 nakata3
 
     ! This routine is basically calls to matrix operations, so these
     ! are timed within the routines themselves
@@ -1592,19 +1607,9 @@ contains
           ! work out matK or matK_dn
           call matrix_sum(zero, matK(ss), three, matLSL(ss))
           call matrix_sum(one, matK(ss), -two, matLSLSL(ss))
-
 !!! 2016.9.15 nakata3
-          ! matK->matKpao transformation for contracted SFs
-          if (atomf == paof .and. .not.flag_one_to_one) then
-             matHpaosf = allocate_temp_matrix(Hpaosf_range,0,paof,sf)
-             call matrix_scale(zero,matKpao(ss))
-             call matrix_scale(zero,matHpaosf)
-             ! Hpaosf = SFcoeff-DAGGER * K
-             call matrix_product(matSFcoeff_tran(ss), matK(ss), matHpaosf, mult( SFcoeffTr_H_Hpaosf ) )
-             ! Kpao = Hpaosf * SFcoeff (use SFcoeff_tran instead of SFcoeff because mult_type=2)
-             call matrix_product(matHpaosf, matSFcoeff_tran(ss), matKpao(ss), mult( Hpaosf_SFcoeff_Hpao ) )
-             call free_temp_matrix(matHpaosf)
-          endif
+          ! matK->matKatomf backtransformation for contracted SFs
+          if (flag_contractSF) call transform_SF_to_ATOMF(matK(ss), matKatomf(ss), ss, Hrange)
 !!! nakata3 end
           if (iprint_mat > 3) then
              t1 = mtime()
@@ -1936,7 +1941,7 @@ contains
   !!    = 1 | 2 controls if the calculation will be spin polarised or
   !!    not
   !!   2016/08/09 21:30 nakata
-  !!    Added lines for PAO-based matrices and LFD matrices
+  !!    Added lines for ATOMF-based matrices and LFD matrices
   !!  SOURCE
   !!
   subroutine associate_matrices
@@ -1945,14 +1950,13 @@ contains
     use matrix_data,   only: Srange, Hrange, Lrange, Trange, PSrange, &
                              LSrange, SPrange, SLrange, dSrange,      &
                              dHrange, TTrrange, Xrange, SXrange,      &
+                             Satomf_range, Hatomf_range,              &
+                             AP_range, PA_range,            &
                              SFcoeff_range, SFcoeffTr_range,          &
-                             Spao_range, Hpao_range, SPpao_range,     &
-                             PSpao_range, Spaosf_range, Hpaosf_range, &
                              mat
     use global_module, only: area_matrices, iprint_mat, nspin
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use GenComms,      only: inode, ionode
-    use support_spec_format, only: flag_one_to_one   ! nakata3
 !%%!    use matrix_data, only: data_S, data_H, data_L, data_T, data_Ttran, &
 !%%!         data_LS, data_SL, data_SC, data_CS, data_K, data_M4, data_U, data_phi, &
 !%%!         data_M12, data_UT, data_KE, data_NL, Srange, Hrange, Lrange, Trange, PSrange,&
@@ -1973,14 +1977,17 @@ contains
             call cq_abort('associate_matrices: failed to allocate spin &
                            &depdendent matrix tags', nspin, stat)
 !!! nakata3
-       ! For PAO-based calculations
-       if (atomf == paof) then
-          allocate(matHpao(nspin),     matKpao(nspin),         &
-                   matSFcoeff(nspin),  matSFcoeff_tran(nspin), &
+       ! For ATOMF-based calculations
+       allocate(matHatomf(nspin), matKatomf(nspin), matXatomf(nspin), STAT=stat)
+       if (stat /= 0) &
+            call cq_abort('associate_matrices: failed to allocate spin &
+                           &depdendent ATOMF matrix tags', nspin, stat)
+       if (atomf.ne.sf) then
+          allocate(matSFcoeff(nspin),  matSFcoeff_tran(nspin), &
                    matdSFcoeff(nspin), matdSFcoeff_e(nspin), STAT=stat)
           if (stat /= 0) &
                call cq_abort('associate_matrices: failed to allocate spin &
-                              &depdendent PAO matrix tags', nspin, stat)
+                              &depdendent SFcoefficient matrix tags', nspin, stat)
        endif
 !!! nakata3
        allocated_tags = .true.
@@ -2026,43 +2033,46 @@ contains
        current_matrix = 34
     end if
 !!! nakata3
-    if (atomf == paof) then
-       if (flag_one_to_one) then
-          ! For primitive SFs, mat in SF-basis and PAO-basis are equivalent
-          matSpao    = matS
-          matHpao(1) = matH(1)
-          matSCpao   = matSC
-          matCSpao   = matCS
-          matKpao(1) = matK(1)
-          matKEpao   = matKE
-          matNLpao   = matNL
-          if (nspin == 2) then
-             matHpao(2) = matH(2)
-             matKpao(2) = matK(2)
-          endif
-       else
-          matSpao            = current_matrix + 1  ! 22 or 35
-          matHpao(1)         = current_matrix + 2  ! 23 or 36
-          matSCpao           = current_matrix + 3  ! 24 or 37
-          matCSpao           = current_matrix + 4  ! 25 or 38
-          matKpao(1)         = current_matrix + 5  ! 26 or 39
-          matKEpao           = current_matrix + 6  ! 27 or 40
-          matNLpao           = current_matrix + 7  ! 28 or 41
-          matSFcoeff(1)      = current_matrix + 8  ! 29 or 42
-          matSFcoeff_tran(1) = current_matrix + 9  ! 30 or 43
-          matdSFcoeff(1)     = current_matrix + 10 ! 31 or 44
-          matdSFcoeff_e(1)   = current_matrix + 11 ! 32 or 45
-          current_matrix = current_matrix + 11 ! 32 or 45
-          if (nspin == 2) then
-             matHpao(2)         = current_matrix + 1  ! 46
-             matKpao(2)         = current_matrix + 2  ! 47
-             matSFcoeff(2)      = current_matrix + 3  ! 48
-             matSFcoeff_tran(2) = current_matrix + 4  ! 49
-             matdSFcoeff(2)     = current_matrix + 5  ! 50
-             matdSFcoeff_e(2)   = current_matrix + 6  ! 51
-             current_matrix = current_matrix + 6  ! 51
-          endif
-       endif ! flag_one_to_one
+    if (atomf.eq.sf) then
+    ! when atomic functions are euivalent to SFs (blips and one_to_one PAOs)
+       matSatomf    = matS
+       matHatomf(1) = matH(1)
+       matSCatomf   = matSC
+       matCSatomf   = matCS
+       matKatomf(1) = matK(1)
+       matKEatomf   = matKE
+       matNLatomf   = matNL
+       matXatomf(1) = matX(1)
+       if (nspin == 2) then
+          matHatomf(2) = matH(2)
+          matKatomf(2) = matK(2)
+          matXatomf(2) = matX(2)
+       endif
+    else
+    ! contracted SFs
+       matSatomf          = current_matrix + 1     ! 22 or 35
+       matHatomf(1)       = current_matrix + 2     ! 23 or 36
+       matSCatomf         = current_matrix + 3     ! 24 or 37
+       matCSatomf         = current_matrix + 4     ! 25 or 38
+       matKatomf(1)       = current_matrix + 5     ! 26 or 39
+       matKEatomf         = current_matrix + 6     ! 27 or 40
+       matNLatomf         = current_matrix + 7     ! 28 or 41
+       matXatomf(1)       = current_matrix + 8     ! 29 or 42
+       matSFcoeff(1)      = current_matrix + 9     ! 30 or 43
+       matSFcoeff_tran(1) = current_matrix + 10    ! 31 or 44
+       matdSFcoeff(1)     = current_matrix + 11    ! 32 or 45
+       matdSFcoeff_e(1)   = current_matrix + 12    ! 33 or 46
+       current_matrix     = current_matrix + 12    ! 33 or 46
+       if (nspin == 2) then
+          matHatomf(2)       = current_matrix + 1  ! 47
+          matKatomf(2)       = current_matrix + 2  ! 48
+          matXatomf(2)       = current_matrix + 3  ! 49
+          matSFcoeff(2)      = current_matrix + 4  ! 50
+          matSFcoeff_tran(2) = current_matrix + 5  ! 51
+          matdSFcoeff(2)     = current_matrix + 6  ! 52
+          matdSFcoeff_e(2)   = current_matrix + 7  ! 53
+          current_matrix     = current_matrix + 7  ! 53
+       endif
     endif ! atomf
 !!! end nakata3
 
@@ -2113,17 +2123,18 @@ contains
        mat_p(matSX(spin) )%sf1_type = sf
     end do
 !!! nakata3
-    if (atomf == paof .and. .not.flag_one_to_one) then
-       mat_p(matSpao )%sf1_type = paof
-       mat_p(matSCpao)%sf1_type = paof
-       mat_p(matCSpao)%sf1_type = nlpf
-       mat_p(matKEpao)%sf1_type = paof
-       mat_p(matNLpao)%sf1_type = paof
+    if (atomf.ne.sf) then
+       mat_p(matSatomf )%sf1_type = atomf
+       mat_p(matSCatomf)%sf1_type = atomf
+       mat_p(matCSatomf)%sf1_type = nlpf
+       mat_p(matKEatomf)%sf1_type = atomf
+       mat_p(matNLatomf)%sf1_type = atomf
        do spin = 1, nspin
-          mat_p(matKpao(spin)        )%sf1_type = paof
-          mat_p(matHpao(spin)        )%sf1_type = paof
+          mat_p(matKatomf(spin)      )%sf1_type = atomf
+          mat_p(matHatomf(spin)      )%sf1_type = atomf
+          mat_p(matXatomf(spin)      )%sf1_type = atomf
           mat_p(matSFcoeff(spin)     )%sf1_type = sf
-          mat_p(matSFcoeff_tran(spin))%sf1_type = paof
+          mat_p(matSFcoeff_tran(spin))%sf1_type = atomf
           mat_p(matdSFcoeff(spin)    )%sf1_type = sf
           mat_p(matdSFcoeff_e(spin)  )%sf1_type = sf
        enddo
@@ -2154,19 +2165,20 @@ contains
        mat_p(matSX(spin) )%sf2_type = sf
     end do
 !!! nakata3
-    if (atomf == paof .and. .not.flag_one_to_one) then
-       mat_p(matSpao )%sf2_type = paof
-       mat_p(matSCpao)%sf2_type = nlpf
-       mat_p(matCSpao)%sf2_type = paof
-       mat_p(matKEpao)%sf2_type = paof
-       mat_p(matNLpao)%sf2_type = paof
+    if (atomf.ne.sf) then
+       mat_p(matSatomf )%sf2_type = atomf
+       mat_p(matSCatomf)%sf2_type = nlpf
+       mat_p(matCSatomf)%sf2_type = atomf
+       mat_p(matKEatomf)%sf2_type = atomf
+       mat_p(matNLatomf)%sf2_type = atomf
        do spin = 1, nspin
-          mat_p(matKpao(spin)        )%sf2_type = paof
-          mat_p(matHpao(spin)        )%sf2_type = paof
-          mat_p(matSFcoeff(spin)     )%sf2_type = paof
+          mat_p(matKatomf(spin)      )%sf2_type = atomf
+          mat_p(matHatomf(spin)      )%sf2_type = atomf
+          mat_p(matXatomf(spin)      )%sf2_type = atomf
+          mat_p(matSFcoeff(spin)     )%sf2_type = atomf
           mat_p(matSFcoeff_tran(spin))%sf2_type = sf
-          mat_p(matdSFcoeff(spin)    )%sf2_type = paof
-          mat_p(matdSFcoeff_e(spin)  )%sf2_type = paof
+          mat_p(matdSFcoeff(spin)    )%sf2_type = atomf
+          mat_p(matdSFcoeff_e(spin)  )%sf2_type = atomf
        enddo
     endif
 !!! end nakata3
@@ -2191,19 +2203,20 @@ contains
        matrix_index(matLS(spin) ) = LSrange
        matrix_index(matSL(spin) ) = SLrange
        matrix_index(matdH(spin) ) = dHrange
-       matrix_index(matX(spin)  ) = Hrange ! Xrange
+       matrix_index(matX(spin)  ) = Hrange  ! Xrange
        matrix_index(matSX(spin) ) = SXrange
     end do
 !!! nakata3
-    if (atomf == paof .and. .not.flag_one_to_one) then
-       matrix_index(matSpao ) = Spao_range
-       matrix_index(matSCpao) = SPpao_range
-       matrix_index(matCSpao) = PSpao_range
-       matrix_index(matKEpao) = Hpao_range
-       matrix_index(matNLpao) = Hpao_range
+    if (atomf.ne.sf) then
+       matrix_index(matSatomf ) = Satomf_range
+       matrix_index(matSCatomf) = AP_range
+       matrix_index(matCSatomf) = PA_range
+       matrix_index(matKEatomf) = Hatomf_range
+       matrix_index(matNLatomf) = Hatomf_range
        do spin = 1, nspin
-          matrix_index(matKpao(spin)        ) = Hpao_range
-          matrix_index(matHpao(spin)        ) = Hpao_range
+          matrix_index(matKatomf(spin)      ) = Hatomf_range
+          matrix_index(matHatomf(spin)      ) = Hatomf_range
+          matrix_index(matXatomf(spin)      ) = Hatomf_range    ! Xatomf_range
           matrix_index(matSFcoeff(spin)     ) = SFcoeff_range
           matrix_index(matSFcoeff_tran(spin)) = SFcoeffTr_range
           matrix_index(matdSFcoeff(spin)    ) = SFcoeff_range
@@ -2291,16 +2304,17 @@ contains
        trans_index(matSX(spin) ) = 0
     end do
 !!! nakata3
-    if (atomf == paof .and. .not.flag_one_to_one) then
-       trans_index(matSpao ) = 0
-       trans_index(matSCpao) = SPpao_trans
-       trans_index(matCSpao) = SPpao_trans
-       trans_index(matKEpao) = 0
-       trans_index(matNLpao) = 0
+    if (atomf.ne.sf) then
+       trans_index(matSatomf ) = 0
+       trans_index(matSCatomf) = AP_trans
+       trans_index(matCSatomf) = AP_trans
+       trans_index(matKEatomf) = 0
+       trans_index(matNLatomf) = 0
        do spin = 1, nspin
-          trans_index(matKpao(spin)        ) = 0
-          trans_index(matHpao(spin)        ) = 0
-!          trans_index(matHpao(spin)        ) = Hpao_trans
+          trans_index(matKatomf(spin)      ) = 0
+          trans_index(matHatomf(spin)      ) = 0
+!          trans_index(matHatomf(spin)      ) = Hatomf_trans
+          trans_index(matXatomf(spin)      ) = 0 ! Satomf_trans
           trans_index(matSFcoeff(spin)     ) = SFcoeff_trans 
           trans_index(matSFcoeff_tran(spin)) = SFcoeff_trans 
           trans_index(matdSFcoeff(spin)    ) = SFcoeff_trans 
@@ -2330,74 +2344,79 @@ contains
   !!   2012/03/28 L.Tong
   !!   - Changed spin implementation
   !!   2016/08/09 21:30 nakata
-  !!    Added lines for PAO-based matrices and LFD matrices
+  !!    Added lines for ATOMF-based matrices and LFD matrices
   !! SOURCE
   !!
   subroutine dissociate_matrices
 
     use global_module, only: nspin
-    use support_spec_format, only: flag_one_to_one   ! nakata3
     implicit none
 
     integer :: stat
 
     call start_timer(tmr_std_allocation)
 !!! nakata3
-    if (atomf == paof .and. .not.flag_one_to_one) then
+    if (atomf.ne.sf) then
        if (nspin == 2) then
-          deallocate(mat_p(matdSFcoeff_e(2))%matrix,STAT=stat)   !51
-          if (stat /= 0) call cq_abort("Error deallocating matrix dSFcoeff_e(2)&
-               & ",mat_p(matdSFcoeff_e(2))%length)
-          deallocate(mat_p(matdSFcoeff(2))%matrix,STAT=stat)     !50
-          if (stat /= 0) call cq_abort("Error deallocating matrix dSFcoeff(2)&
-               & ",mat_p(matdSFcoeff(2))%length)
-          deallocate(mat_p(matSFcoeff_tran(2))%matrix,STAT=stat) !49
-          if (stat /= 0) call cq_abort("Error deallocating matrix SFcoeff_tran(2)&
-               & ",mat_p(matSFcoeff_tran(2))%length)
-          deallocate(mat_p(matSFcoeff(2))%matrix,STAT=stat)      !48
-          if (stat /= 0) call cq_abort("Error deallocating matrix SFcoeff(2)&
-               & ",mat_p(matSFcoeff(2))%length)
-          deallocate(mat_p(matKpao(2))%matrix,STAT=stat)         !47
-          if (stat /= 0) call cq_abort("Error deallocating matrix Kpao(2)&
-               & ",mat_p(matKpao(2))%length)
-          deallocate(mat_p(matHpao(2))%matrix,STAT=stat)         !46
-          if (stat /= 0) call cq_abort("Error deallocating matrix Hpao(2)&
-               & ",mat_p(matHpao(2))%length)
+          deallocate(mat_p(matdSFcoeff_e(2))%matrix,STAT=stat)     !53
+          if (stat /= 0) call cq_abort("Error deallocating matrix dSFcoeff_e(2)", &
+                                       mat_p(matdSFcoeff_e(2))%length)
+          deallocate(mat_p(matdSFcoeff(2))%matrix,STAT=stat)       !52
+          if (stat /= 0) call cq_abort("Error deallocating matrix dSFcoeff(2)", &
+                                       mat_p(matdSFcoeff(2))%length)
+          deallocate(mat_p(matSFcoeff_tran(2))%matrix,STAT=stat)   !51
+          if (stat /= 0) call cq_abort("Error deallocating matrix SFcoeff_tran(2)", &
+                                       mat_p(matSFcoeff_tran(2))%length)
+          deallocate(mat_p(matSFcoeff(2))%matrix,STAT=stat)        !50
+          if (stat /= 0) call cq_abort("Error deallocating matrix SFcoeff(2)", &
+                                       mat_p(matSFcoeff(2))%length)
+          deallocate(mat_p(matXatomf(2))%matrix,STAT=stat)         !49
+          if (stat /= 0) call cq_abort("Error deallocating matrix Xatomf(2)", &
+                                       mat_p(matXatomf(2))%length)
+          deallocate(mat_p(matKatomf(2))%matrix,STAT=stat)         !48
+          if (stat /= 0) call cq_abort("Error deallocating matrix Katomf(2)", &
+                                       mat_p(matKatomf(2))%length)
+          deallocate(mat_p(matHatomf(2))%matrix,STAT=stat)         !47
+          if (stat /= 0) call cq_abort("Error deallocating matrix Hatomf(2)", &
+                                       mat_p(matHatomf(2))%length)
        endif ! nspin
-       deallocate(mat_p(matdSFcoeff_e(1))%matrix,STAT=stat)      !32 or 45
-       if (stat /= 0) call cq_abort("Error deallocating matrix dSFcoeff_e(1)&
-            & ",mat_p(matdSFcoeff_e(1))%length)
-       deallocate(mat_p(matdSFcoeff(1))%matrix,STAT=stat)        !31 or 44
-       if (stat /= 0) call cq_abort("Error deallocating matrix dSFcoeff(1)&
-            & ",mat_p(matdSFcoeff(1))%length)
-       deallocate(mat_p(matSFcoeff_tran(1))%matrix,STAT=stat)    !30 or 43
-       if (stat /= 0) call cq_abort("Error deallocating matrix SFcoeff_tran(1)&
-            & ",mat_p(matSFcoeff_tran(1))%length)
-       deallocate(mat_p(matSFcoeff(1))%matrix,STAT=stat)         !29 or 42
-       if (stat /= 0) call cq_abort("Error deallocating matrix SFcoeff(1)&
-            & ",mat_p(matSFcoeff(1))%length)
-       deallocate(mat_p(matNLpao)%matrix,STAT=stat)              !28 or 41
-       if (stat /= 0) call cq_abort("Error deallocating matrix NLpao&
-            & ",mat_p(matNLpao)%length)
-       deallocate(mat_p(matKEpao)%matrix,STAT=stat)              !27 or 40
-       if (stat /= 0) call cq_abort("Error deallocating matrix KEpao&
-            & ",mat_p(matKEpao)%length)
-       deallocate(mat_p(matKpao(1))%matrix,STAT=stat)            !26 or 39
-       if (stat /= 0) call cq_abort("Error deallocating matrix Kpao(1)&
-            & ",mat_p(matKpao(1))%length)
-       deallocate(mat_p(matCSpao)%matrix,STAT=stat)              !25 or 38
-       if (stat /= 0) call cq_abort("Error deallocating matrix CSpao&
-            & ",mat_p(matCSpao)%length)
-       deallocate(mat_p(matSCpao)%matrix,STAT=stat)              !24 or 37
-       if (stat /= 0) call cq_abort("Error deallocating matrix SCpao&
-            & ",mat_p(matSCpao)%length)
-       deallocate(mat_p(matHpao(1))%matrix,STAT=stat)            !23 or 36
-       if (stat /= 0) call cq_abort("Error deallocating matrix Hpao(1)&
-            & ",mat_p(matHpao(1))%length)
-       deallocate(mat_p(matSpao)%matrix,STAT=stat)               !22 or 35
-       if (stat /= 0) call cq_abort("Error deallocating matrix Spao&
-            & ",mat_p(matSpao)%length)
-    endif ! atomf and flag_one_to_one
+       deallocate(mat_p(matdSFcoeff_e(1))%matrix,STAT=stat)        !33 or 46
+       if (stat /= 0) call cq_abort("Error deallocating matrix dSFcoeff_e(1)", &
+                                    mat_p(matdSFcoeff_e(1))%length)
+       deallocate(mat_p(matdSFcoeff(1))%matrix,STAT=stat)          !32 or 45
+       if (stat /= 0) call cq_abort("Error deallocating matrix dSFcoeff(1)", &
+                                    mat_p(matdSFcoeff(1))%length)
+       deallocate(mat_p(matSFcoeff_tran(1))%matrix,STAT=stat)      !31 or 44
+       if (stat /= 0) call cq_abort("Error deallocating matrix SFcoeff_tran(1)", &
+                                    mat_p(matSFcoeff_tran(1))%length)
+       deallocate(mat_p(matSFcoeff(1))%matrix,STAT=stat)           !30 or 43
+       if (stat /= 0) call cq_abort("Error deallocating matrix SFcoeff(1)", &
+                                    mat_p(matSFcoeff(1))%length)
+       deallocate(mat_p(matXatomf(1))%matrix,STAT=stat)            !29 or 42
+       if (stat /= 0) call cq_abort("Error deallocating matrix Xatomf(1)", &
+                                    mat_p(matXatomf(1))%length)
+       deallocate(mat_p(matNLatomf)%matrix,STAT=stat)              !28 or 41
+       if (stat /= 0) call cq_abort("Error deallocating matrix NLatomf", &
+                                    mat_p(matNLatomf)%length)
+       deallocate(mat_p(matKEatomf)%matrix,STAT=stat)              !27 or 40
+       if (stat /= 0) call cq_abort("Error deallocating matrix KEatomf", &
+                                    mat_p(matKEatomf)%length)
+       deallocate(mat_p(matKatomf(1))%matrix,STAT=stat)            !26 or 39
+       if (stat /= 0) call cq_abort("Error deallocating matrix Katomf(1)", &
+                                    mat_p(matKatomf(1))%length)
+       deallocate(mat_p(matCSatomf)%matrix,STAT=stat)              !25 or 38
+       if (stat /= 0) call cq_abort("Error deallocating matrix CSatomf", &
+                                    mat_p(matCSatomf)%length)
+       deallocate(mat_p(matSCatomf)%matrix,STAT=stat)              !24 or 37
+       if (stat /= 0) call cq_abort("Error deallocating matrix SCatomf", &
+                                    mat_p(matSCatomf)%length)
+       deallocate(mat_p(matHatomf(1))%matrix,STAT=stat)            !23 or 36
+       if (stat /= 0) call cq_abort("Error deallocating matrix Hatomf(1)", &
+                                    mat_p(matHatomf(1))%length)
+       deallocate(mat_p(matSatomf)%matrix,STAT=stat)               !22 or 35
+       if (stat /= 0) call cq_abort("Error deallocating matrix Satomf", &
+                                    mat_p(matSatomf)%length)
+    endif ! atomf
 !!! end nakata3
     if (nspin == 2) then
        ! order is important
@@ -3368,6 +3387,119 @@ contains
 
     return
   end subroutine free_temp_matrix
+!!***
+
+  !!****f* mult_module/transform_ATOMF_to_SF *
+  !!
+  !!  NAME
+  !!   transform_ATOMF_to_SF
+  !!  USAGE
+  !!  PURPOSE
+  !!   Multiply SF coefficients to transform matATOMF -> matSF
+  !!  INPUTS
+  !!  USES
+  !!  AUTHOR
+  !!   A.Nakata
+  !!  CREATION DATE
+  !!   26/09/16
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine transform_ATOMF_to_SF(matSF, matATOMF, spin, Arange)
+
+    use numbers
+    use GenComms,    only: cq_abort
+    use matrix_data, only: Srange, Hrange, Satomfsf_range, Hatomfsf_range
+
+    implicit none
+
+    ! Passed variables
+    integer :: matSF, matATOMF, spin, Arange
+    ! Local variables
+    integer :: mat_ATOMF_SF, ind1_mult, ind2_mult
+
+
+    if (Arange.eq.Srange) then
+       mat_ATOMF_SF = allocate_temp_matrix(Satomfsf_range,0,atomf,sf)
+       ind1_mult = aSa_sCaTr_aSs
+       ind2_mult = sCa_aSs_sSs
+    else if (Arange.eq.Hrange) then
+       mat_ATOMF_SF = allocate_temp_matrix(Hatomfsf_range,0,atomf,sf)
+       ind1_mult = aHa_sCaTr_aHs
+       ind2_mult = sCa_aHs_sHs
+    else
+       call cq_abort("transform_ATOMF_to_SF supports only Srange and Hrange.")
+    endif
+
+    call matrix_scale(zero, mat_ATOMF_SF)
+    call matrix_scale(zero, matSF)
+
+    ! Transform matAatomf(atomf,atomf) in Aatomf_range -> matA(sf,sf) in Arange
+    ! step 1: B(atomf,sf) = A(atomf,atomf) * SFcoeff(sf,atomf)-DAGGER
+    call matrix_product(matATOMF, matSFcoeff_tran(spin), mat_ATOMF_SF, mult(ind1_mult))
+    ! step 2: A(sf,sf) = SFcoeff(sf,atomf) * B(atomf,sf)
+    call matrix_product(matSFcoeff(spin), mat_ATOMF_SF, matSF, mult(ind2_mult) )
+
+    call free_temp_matrix(mat_ATOMF_SF)
+!
+    return
+  end subroutine transform_ATOMF_to_SF
+!!***
+
+  !!****f* mult_module/transform_SF_to_ATOMF *
+  !!
+  !!  NAME
+  !!   transform_SF_to_ATOMF
+  !!  USAGE
+  !!  PURPOSE
+  !!   Multiply SF coefficients to transform matSF -> matATOMF
+  !!  INPUTS
+  !!  USES
+  !!  AUTHOR
+  !!   A.Nakata
+  !!  CREATION DATE
+  !!   26/09/16
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine transform_SF_to_ATOMF(matSF, matATOMF, spin, Arange)
+
+    use numbers
+    use GenComms,    only: cq_abort
+    use matrix_data, only: Hrange, Hatomfsf_range
+
+    implicit none
+
+    ! Passed variables
+    integer :: matSF, matATOMF, spin, Arange
+    ! Local variables
+    integer :: mat_ATOMF_SF, ind1_mult, ind2_mult
+
+
+    if (Arange.eq.Hrange) then
+       mat_ATOMF_SF = allocate_temp_matrix(Hatomfsf_range,0,atomf,sf)
+       ind1_mult = sCaTr_sHs_aHs
+       ind2_mult = aHs_sCa_aHa
+    else
+       call cq_abort("transform_SF_to_ATOMF supports only Hrange.")
+    endif
+
+    call matrix_scale(zero, mat_ATOMF_SF)
+    call matrix_scale(zero, matATOMF)
+
+    ! Transform matA(sf,sf) in Arange -> matAatomf(atomf,atomf) in Aatomf_range
+    ! step 1: B(atomf,sf) = SFcoeff(sf,atomf)-DAGGER * A(sf,sf)
+    call matrix_product(matSFcoeff_tran(spin), matSF, mat_ATOMF_SF, mult(ind1_mult))
+    ! step 2: A(atomf,atomf) = B(atomf,sf) * SFcoeff(sf,atomf) 
+    !         use SFcoeff_tran instead of SFcoeff because mult_type=2
+    call matrix_product(mat_ATOMF_SF, matSFcoeff_tran(spin), matATOMF, mult(ind2_mult))
+
+    call free_temp_matrix(mat_ATOMF_SF)
+!
+    return
+  end subroutine transform_SF_to_ATOMF
 !!***
 
 

@@ -139,7 +139,7 @@ contains
 !         mx_SPpair_remnode, mx_SPpair_domain
     use set_blipgrid_module,ONLY: comm_naba_blocks_of_atoms
     use comm_array_module,  ONLY: isend_array,irecv_array!,check_commarray_int!,check_commarray_real
-    use matrix_data, ONLY: halo, rcut, Srange, SPrange, Hrange, dHrange
+    use matrix_data, ONLY: halo, rcut, Satomf_range, AP_range, Hatomf_range, dHrange ! nakata3
     use GenComms, ONLY: my_barrier, cq_abort
     use mpi, ONLY: MPI_STATUS_SIZE
 
@@ -162,35 +162,15 @@ contains
     call start_timer(tmr_std_indexing)
     !cutoff radius for matrix
 !!! nakata2
-    if (flag_basis_set == blips) then
-!    if (atomf == sf) then
-       ! set for SFs 
-       range_S = Srange
-       range_SP= SPrange
-       range_H = Hrange
-       range_dH= dHrange   ! nakata2 --- delete this line later
-    else if (flag_basis_set == PAOs) then
-!    else if (atomf == paof) then
-       ! set for PAOs
-       ! temorary use the setting for sf
-       range_S = Srange
-       range_SP= SPrange
-       range_H = Hrange
-       range_dH= dHrange   ! nakata2 --- delete this line later
-!       range_S = Spao_range
-!       range_SP= SPpao_range
-!       range_H = Hpao_range
-!       range_dH= dHpao_range   ! nakata2 --- delete this line later
-    endif
-    rcut_S = rcut(range_S)
-    rcut_SP= rcut(range_SP)
+    rcut_S = rcut(Satomf_range)
+    rcut_SP= rcut(AP_range)
 !!! nakata2
-
-    !For type 1 of local_bucket   : Sij=<atomf_i|atomf_j>, and H^(local)_ij, atomf = sf(for blips) or pao(for PAOs)
+    !atomf = sf (for blips and one_to_one PAOs) or paof (for contracted PAOs)
+    !For type 1 of local_bucket   : Sij=<atomf_i|atomf_j>, and H^(local)_ij
     !For type 2 of local_bucket   : Pij=<atomf_i|chi_j>,|chi_j> proj. func.
     !For type 3 of local_bucket   : <pao_i|phi_j>, <pao_i|H_loc|phi_j>   ! nakata2 --- delete this line later
 
-    !For type 1 of remote_bucket  : Sij=<atomf_i|atomf_j>, atomf = sf(for blips) or pao(for PAOs)
+    !For type 1 of remote_bucket  : Sij=<atomf_i|atomf_j>
     !For type 2 of remote_bucket  : Pij=<atomf_i|chi_j>,|chi_j> proj. func.
     !For type 3 of remote_bucket  : Hij=<atomf_i|H|atomf_j>
     !For type 4 of remote_bucket  : dHij=<pao_i|H_loc|phi_j>   ! nakata2 --- delete this line later
@@ -243,8 +223,8 @@ contains
     end if
     !Bundle responsible node receives the information of pairs of naba
     ! atoms of its remote nodes and Constructs RemoteBucket
-    call setup_recvME(atomf_atomf_rem,myid,myid_ibegin,rem_bucket(atomf_atomf_rem),halo(range_S), &
-         rem_bucket(atomf_H_atomf_rem),halo(range_H))
+    call setup_recvME(atomf_atomf_rem,myid,myid_ibegin,rem_bucket(atomf_atomf_rem),halo(Satomf_range), &
+         rem_bucket(atomf_H_atomf_rem),halo(Hatomf_range))
     deallocate(isend_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating isend_array in set_bucket: ",stat)
 
@@ -262,7 +242,7 @@ contains
 !       write(io_lun,*) myid,' pao_H_sf: ',rem_bucket(pao_H_sf_rem)%no_of_pair
 !       write(io_lun,*) myid,' pao_H_sf: ',rem_bucket(pao_H_sf_rem)%no_of_pair_orbs
 !    end if
-!    call setup_recvME(pao_H_sf_rem,myid,myid_ibegin,rem_bucket(pao_H_sf_rem),halo(range_dH))
+!    call setup_recvME(pao_H_sf_rem,myid,myid_ibegin,rem_bucket(pao_H_sf_rem),halo(dHrange))
 !    deallocate(isend_array,STAT=stat)
 !    if(stat/=0) call cq_abort("Error deallocating isend_array in set_bucket: ",stat)
 !!! nakata2 --- delete up to here later ---
@@ -277,7 +257,7 @@ contains
 
     call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(atomf_nlpf_loc))
     call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(atomf_nlpf_loc))
-    call setup_recvME(atomf_nlpf_rem,myid,myid_ibegin,rem_bucket(atomf_nlpf_rem),halo(range_SP))
+    call setup_recvME(atomf_nlpf_rem,myid,myid_ibegin,rem_bucket(atomf_nlpf_rem),halo(AP_range))
 
     deallocate(isend_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating isend_array in set_bucket: ",stat)

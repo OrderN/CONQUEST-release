@@ -426,7 +426,7 @@ contains
   !!   2016/08/09 14:00 nakata
   !!    Renamed support_K -> atom_fns_K
   !!   2016/09/15 22:00 nakata
-  !!    Introduce matK -> matKpao and matBand -> matBandpao transformations
+  !!    Introduce matK -> matKatomf and matBand -> matBand_atomf transformations
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -443,7 +443,8 @@ contains
          dscf_HOMO_limit, dscf_LUMO_limit, &
          flag_out_wf,wf_self_con, max_wf, paof, sf, atomf, flag_out_wf_by_kp, &   ! nakata2
          out_wf, n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, &
-         flag_write_projected_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef
+         flag_write_projected_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
+         flag_contractSF                                                          ! nakata3
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
          deallocate_arrays, block_size_r,       &
@@ -451,9 +452,9 @@ contains
          nkpoints_max, pgid, N_procs_in_pg,     &
          N_kpoints_in_pg
     use mult_module,     only: matH, matS, matK, matM12, matM12,      &
-                               matKpao, matSFcoeff_tran, mult, SFcoeffTr_H_Hpaosf, Hpaosf_SFcoeff_Hpao, &   ! nakata3
-         matrix_scale, matrix_product, matrix_product_trace, allocate_temp_matrix, free_temp_matrix   ! nakata3
-    use matrix_data,     only: Hrange, Srange, Hpaosf_range   ! nakata3
+                               matKatomf, transform_SF_to_ATOMF, &   ! nakata3
+         matrix_scale, matrix_product_trace, allocate_temp_matrix, free_temp_matrix
+    use matrix_data,     only: Hrange, Srange
     use primary_module,  only: bundle
     use species_module,  only: species, nsf_species, species_label
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
@@ -466,7 +467,6 @@ contains
          free_temp_fn_on_grid
     use density_module, ONLY: get_band_density
     use io_module, ONLY: dump_DOS, dump_projected_DOS, write_eigenvalues
-    use support_spec_format, ONLY: flag_one_to_one   ! nakata3
 
     implicit none
 
@@ -487,7 +487,7 @@ contains
     integer, dimension(50) :: desca, descz, descb
     integer, allocatable, dimension(:) :: matBand
     integer, allocatable, dimension(:,:) :: matBand_kp
-    integer :: matHpaosf, matBandpao ! nakata3
+    integer :: matBand_atomf ! nakata3
 
     logical :: flag_keepexcite, flag_full_DOS
 
@@ -536,13 +536,6 @@ contains
     call initDiag(desca, descb, descz)
 
     scale = one / real(N_procs_in_pg(pgid), double)
-
-!!! 2016.9.15 nakata3
-    ! allocate intermediate matrix matHpaosf 
-    ! for matK->matKpao transformation for contracted SFs
-    if (atomf == paof .and. .not.flag_one_to_one) &
-       matHpaosf = allocate_temp_matrix(Hpaosf_range,0,paof,sf)  
-!!! nakata3 end
 
     ! ------------------------------------------------------------------------
     ! Start diagonalisation
@@ -649,11 +642,7 @@ contains
              matBand(i) = allocate_temp_matrix(Hrange,0,sf,sf)   ! nakata2
           end do
        end if
-!!! 2016.9.15 nakata3
-       if (atomf == paof .and. .not.flag_one_to_one) then
-          matBandpao = allocate_temp_matrix(Hrange,0,paof,paof)
-       endif
-!!! nakata3 end
+       if (flag_contractSF .and. atomf==paof) matBand_atomf = allocate_temp_matrix(Hrange,0,paof,paof)   ! nakata3
     end if
     ! Preparatory work for DOS
     if(wf_self_con.AND.flag_write_DOS) then
@@ -1039,15 +1028,8 @@ contains
        end do ! End do i = 1, nkpoints_max
 
 !!! 2016.9.15 nakata3
-       ! matK->matKpao transformation for contracted SFs
-       if (atomf == paof .and. .not.flag_one_to_one) then
-          call matrix_scale(zero,matKpao(spin))
-          call matrix_scale(zero,matHpaosf)
-          ! Hpaosf = SFcoeff-DAGGER * K
-          call matrix_product(matSFcoeff_tran(spin), matK(spin), matHpaosf, mult( SFcoeffTr_H_Hpaosf ) )
-          ! Kpao = Hpaosf * SFcoeff (use SFcoeff_tran instead of SFcoeff because mult_type=2)
-          call matrix_product(matHpaosf, matSFcoeff_tran(spin), matKpao(spin), mult( Hpaosf_SFcoeff_Hpao ) )
-       endif
+       ! matK->matKatomf backtransformation for contracted SFs
+       if (flag_contractSF) call transform_SF_to_ATOMF(matK(spin), matKatomf(spin), spin, Hrange)
 !!! nakata3 end
     end do ! spin
 
@@ -1066,13 +1048,9 @@ contains
                    do spin = 1, nspin
                       abs_wf(:)=zero
 !!! 2016.9.15 nakata3 
-                      if (atomf == paof .and. .not.flag_one_to_one) then
-                         call matrix_scale(zero,matBandpao)
-                         call matrix_scale(zero,matHpaosf)
-                         call matrix_product(matSFcoeff_tran(spin), matBand_kp(wf_no,i), matHpaosf, mult( SFcoeffTr_H_Hpaosf ) )
-                         ! use SFcoeff_tran instead of SFcoeff because mult_type=2
-                         call matrix_product(matHpaosf, matSFcoeff_tran(spin), matBandpao, mult( Hpaosf_SFcoeff_Hpao ) ) 
-                         call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBandpao,maxngrid)
+                      if (flag_contractSF) then
+                         call transform_SF_to_ATOMF(matBand_kp(wf_no,i), matBand_atomf, spin, Hrange)
+                         call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
                       else                     
                          call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_kp(wf_no,i),maxngrid)
                       endif
@@ -1088,13 +1066,9 @@ contains
                    abs_wf(:)=zero
                    spin = 1
 !!! 2016.9.15 nakata3
-                   if (atomf == paof .and. .not.flag_one_to_one) then
-                      call matrix_scale(zero,matBandpao)
-                      call matrix_scale(zero,matHpaosf)
-                      call matrix_product(matSFcoeff_tran(spin), matBand_kp(wf_no,i), matHpaosf, mult( SFcoeffTr_H_Hpaosf ) )
-                      ! use SFcoeff_tran instead of SFcoeff because mult_type=2
-                      call matrix_product(matHpaosf, matSFcoeff_tran(spin), matBandpao, mult( Hpaosf_SFcoeff_Hpao ) )
-                      call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBandpao,maxngrid)
+                   if (flag_contractSF) then
+                      call transform_SF_to_ATOMF(matBand_kp(wf_no,i), matBand_atomf, spin, Hrange)
+                      call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
                    else
                       call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_kp(wf_no,i),maxngrid)
                    endif
@@ -1113,13 +1087,9 @@ contains
              do spin = 1, nspin
                 abs_wf(:)=zero
 !!! 2016.9.15 nakata3
-                if (atomf == paof .and. .not.flag_one_to_one) then
-                   call matrix_scale(zero,matBandpao)
-                   call matrix_scale(zero,matHpaosf)
-                   call matrix_product(matSFcoeff_tran(spin), matBand(wf_no), matHpaosf, mult( SFcoeffTr_H_Hpaosf ) )
-                   ! use SFcoeff_tran instead of SFcoeff because mult_type=2
-                   call matrix_product(matHpaosf, matSFcoeff_tran(spin), matBandpao, mult( Hpaosf_SFcoeff_Hpao ) )
-                   call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBandpao,maxngrid)
+                if (flag_contractSF) then
+                   call transform_SF_to_ATOMF(matBand(wf_no), matBand_atomf, spin, Hrange)
+                   call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
                 else
                    call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand(wf_no),maxngrid)
                 endif
@@ -1144,7 +1114,7 @@ contains
              call free_temp_matrix(matBand(i))
           end do
        end if
-       if (atomf == paof .and. .not.flag_one_to_one) call free_temp_matrix(matBandpao)   ! nakata3
+       if (flag_contractSF .and. atomf==paof) call free_temp_matrix(matBand_atomf)   ! nakata3
     end if
     if(wf_self_con.AND.flag_write_DOS) then
        ! output DOS
@@ -1216,7 +1186,6 @@ contains
     deallocate(expH, STAT=stat)
     if (stat /= 0) call cq_abort('FindEvals: failed to deallocate expH', stat)
     call reg_dealloc_mem(area_DM, matrix_size * prim_size * nspin, type_cplx)
-    if (atomf == paof .and. .not.flag_one_to_one) call free_temp_matrix(matHpaosf)   ! nakata3
     ! global
     call endDiag
 

@@ -116,6 +116,9 @@ contains
 !!    Renamed supports_on_atom -> blips_on_atom
 !!   2016/08/08 15:30 nakata
 !!    Renamed supportfns -> atomfns
+!!   2016/09/28 15:30 nakata
+!!    Introduce get_S_matrix_blips and get_S_matrix_PAO
+!!    Introduce PAO->SF transformation for contracted SFs
 !!  TODO
 !!    
 !!  SOURCE
@@ -126,33 +129,175 @@ contains
     use numbers
     use global_module,               only: iprint_ops, flag_basis_set, &
                                            blips, PAOs,                &
-                                           flag_vary_basis,            &
                                            ni_in_cell,                 &
+                                           flag_perform_cdft,          &
                                            IPRINT_TIME_THRES1,         &
-                                           flag_onsite_blip_ana,       &
-                                           flag_perform_cdft, id_glob, &
-                                           species_glob, flag_analytic_blip_int, nspin
-    use matrix_data,                 only: Srange, halo, blip_trans, mat
-    use mult_module,                 only: matS, matdS, ltrans, matrix_scale, &
+                                           flag_contractSF, flag_do_SFtransform
+    use matrix_data,                 only: Srange
+    use mult_module,                 only: matS, matSatomf, transform_ATOMF_to_SF
+    use io_module,                   only: dump_matrix
+    use timer_module,                only: cq_timer, start_timer,      &
+                                           stop_print_timer,           &
+                                           WITH_LEVEL
+    use cdft_module,                 only: make_weights
+
+    implicit none
+
+    ! Passed variables
+    integer :: inode, ionode
+    
+    ! Local variables
+    type(cq_timer) :: tmr_l_tmp1
+    type(cq_timer) :: backtrace_timer
+
+
+!****lat<$
+    call start_backtrace(t=backtrace_timer,who='get_S_matrix',where=3,level=2)
+!****lat>$
+
+    call start_timer(tmr_std_smatrix)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)
+
+    ! get S in atomic-function basis
+    if (flag_basis_set == blips) call get_S_matrix_blips(inode, ionode)
+    if (flag_basis_set == PAOs)  call get_S_matrix_PAO(inode, ionode)
+
+    ! For blips and one_to_one PAOs, atomic functions are SFs so that no transformation is needed.
+    ! For contracted SFs, transform S from atomic-function basis to SF basis
+    if (flag_contractSF .and. flag_do_SFtransform) call transform_ATOMF_to_SF(matS, matSatomf, 1, Srange)
+
+    !call dump_matrix("NS",matS,inode)
+
+    ! get the new InvS matrix
+    call  Iter_Hott_InvS(iprint_ops, InvSMaxSteps, &
+                         InvSDeltaOmegaTolerance, ni_in_cell, &
+                         inode, ionode)
+
+    if (flag_perform_cdft) call make_weights
+
+    call stop_print_timer(tmr_l_tmp1, "get_S_matrix", &
+                          IPRINT_TIME_THRES1)
+    call stop_timer(tmr_std_smatrix)
+
+!****lat<$
+    call stop_backtrace(t=backtrace_timer,who='get_S_matrix')
+!****lat>$
+
+    return
+  end subroutine get_S_matrix
+!!***
+
+! -----------------------------------------------------------
+! Subroutine get_S_matrix_PAO
+! -----------------------------------------------------------
+
+!!****f* S_matrix_module/get_S_matrix_PAO *
+!!
+!!  NAME 
+!!   get_S_matrix_PAO
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   Gets a new S matrix in PAO-basis by assemble_2
+!!  INPUTS
+!! 
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler, A. Nakata
+!!  CREATION DATE
+!!   28/09/2016
+!!  MODIFICATION HISTORY
+!!   2016/09/28 nakata
+!!   This subroutine is the part for PAOs in previous get_S_matrix
+!!   
+!!  TODO
+!!    
+!!  SOURCE
+!!
+  subroutine get_S_matrix_PAO(inode, ionode)
+
+    use global_module,               only: iprint_ops, flag_vary_basis
+    use matrix_data,                 only: Satomf_range
+    use mult_module,                 only: matSatomf, matdS
+    use build_PAO_matrices,          only: assemble_2
+
+    implicit none
+
+    ! Passed variables
+    integer :: inode, ionode
+
+
+    ! Get S matrix with assemble
+    if (flag_vary_basis) then
+       if (inode == ionode .and. iprint_ops > 2) &
+            write (io_lun, *) 'Calling assemble_2 for Satomf, dS: ', &
+                  matSatomf, matdS
+       call assemble_2(Satomf_range, matSatomf, 1, matdS)
+       !call dump_matrix("NS",matSatomf,inode)
+       !call dump_matrix("NdS",matdS,inode)
+    else
+       if (inode == ionode .and. iprint_ops > 2) &
+            write (io_lun, *) 'Calling assemble_2 for Satomf: ', matSatomf
+       call assemble_2(Satomf_range, matSatomf, 1)
+    end if
+
+    return
+  end subroutine get_S_matrix_PAO
+!!***
+
+! -----------------------------------------------------------
+! Subroutine get_S_matrix_blips
+! -----------------------------------------------------------
+
+!!****f* S_matrix_module/get_S_matrix_blips *
+!!
+!!  NAME 
+!!   get_S_matrix_blips
+!!  USAGE
+!! 
+!!  PURPOSE
+!!   Gets a new S matrix by doing blip_to_support and integrating
+!!
+!!  INPUTS
+!! 
+!! 
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler, A. Nakata
+!!  CREATION DATE
+!!   28/09/2016
+!!  MODIFICATION HISTORY
+!!   2016/09/28 nakata
+!!   This subroutine is the part for blips in previous get_S_matrix
+!!
+!!  TODO
+!!    
+!!  SOURCE
+!!
+  subroutine get_S_matrix_blips(inode, ionode)
+
+    use datatypes
+    use numbers
+    use global_module,               only: iprint_ops,            &
+                                           flag_onsite_blip_ana,  &
+                                           id_glob, species_glob, &
+                                           flag_analytic_blip_int, nspin
+    use matrix_data,                 only: Srange, halo, blip_trans
+    use mult_module,                 only: matS, ltrans, matrix_scale, &
                                            matK, matM12, return_matrix_block_pos,&
                                            matKE, matrix_pos
     use set_bucket_module,           only: rem_bucket
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use blip_grid_transform_module,  only: blip_to_support_new
     use primary_module ,             only: bundle
-    use build_PAO_matrices,          only: assemble_2
-    use species_module,              only: n_species
-    use PAO_grid_transform_module,   only: PAO_to_grid
     use functions_on_grid,           only: atomfns
-    use io_module,                   only: dump_matrix
-    use timer_module,                only: cq_timer, start_timer,      &
-                                           stop_print_timer,           &
-                                           WITH_LEVEL
     use support_spec_format,         only: blips_on_atom, support_function, &
                                            coefficient_array, support_gradient, &
                                            grad_coeff_array
     use species_module,              only: nsf_species
-    use cdft_module,                 only: make_weights
     use comms_module,                ONLY: start_blip_transfer, fetch_blips
     use group_module,                ONLY: parts
     use blip,                        ONLY: blip_info
@@ -172,56 +317,38 @@ contains
     integer, allocatable, dimension(:) :: nreqs
     real(double) :: dx, dy, dz, time0, time1
     real(double), allocatable, dimension(:), target :: part_blips
-    type(cq_timer) :: tmr_l_tmp1
-    type(cq_timer) :: backtrace_timer
     type(support_function) :: supp_on_j
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
     real(double), allocatable, dimension(:,:,:) :: this_data_K
     real(double), allocatable, dimension(:,:,:) :: this_data_M12
 
-!****lat<$
-    call start_backtrace(t=backtrace_timer,who='get_S_matrix',where=3,level=2)
-!****lat>$
 
-    call start_timer(tmr_std_smatrix)
-    call start_timer(tmr_l_tmp1,WITH_LEVEL)
     ! Project support functions onto grid
-    if (flag_basis_set == blips) then
-       if (inode == ionode .and. iprint_ops > 2) &
-            write (io_lun, *) 'Doing blip-to-support ', atomfns
-       call blip_to_support_new(inode-1, atomfns)
+    if (inode == ionode .and. iprint_ops > 2) &
+         write (io_lun, *) 'Doing blip-to-support ', atomfns
+    call blip_to_support_new(inode-1, atomfns)
 
-       if (inode == ionode .and. iprint_ops > 2) &
-            write (io_lun, *) 'Doing integration ', atomfns
-       ! Integrate
-       if(flag_analytic_blip_int) then
-          call matrix_scale(zero,matS)
-          call matrix_scale(zero,matKE)
-          grad_coeff_array = zero
-          allocate(nreqs(blip_trans%npart_send))
-          ! For speed, we should have a blip_trans%max_len and max_nsf and allocate once
+    if (inode == ionode .and. iprint_ops > 2) &
+         write (io_lun, *) 'Doing integration ', atomfns
+    ! Integrate
+    if(flag_analytic_blip_int) then
+       call matrix_scale(zero,matS)
+       call matrix_scale(zero,matKE)
+       grad_coeff_array = zero
+       allocate(nreqs(blip_trans%npart_send))
+       ! For speed, we should have a blip_trans%max_len and max_nsf and allocate once
+       time0 = mtime()
+       call start_blip_transfer(nreqs,sends,parts%mx_ngonn)
+       time1 = mtime()
+       do jpart=1,halo(Srange)%np_in_halo
+          pb_len = blip_trans%len_recv(jpart)
+          ind_part = halo(Srange)%lab_hcell(jpart)
+          nod = parts%i_cc2node(ind_part)
+          ! Fetch remote blip coefficients for partition
+          ! or copy local blip coefficients
           time0 = mtime()
-          call start_blip_transfer(nreqs,sends,parts%mx_ngonn)
-          time1 = mtime()
-          do jpart=1,halo(Srange)%np_in_halo
-             pb_len = blip_trans%len_recv(jpart)
-             ind_part = halo(Srange)%lab_hcell(jpart)
-             nod = parts%i_cc2node(ind_part)
-             ! Fetch remote blip coefficients for partition
-             ! or copy local blip coefficients
-             time0 = mtime()
-             if(jpart>1) then
-                if(ind_part/=halo(Srange)%lab_hcell(jpart-1)) then
-                   allocate(part_blips(pb_len))
-                   part_blips = zero
-                   if(nod==myid+1) then
-                      pb_st = blip_trans%partst(parts%i_cc2seq(ind_part))
-                      part_blips(1:pb_len) = coefficient_array(pb_st:pb_st+pb_len-1)
-                   else
-                      call fetch_blips(part_blips,pb_len,nod-1,(myid)*parts%mx_ngonn + parts%i_cc2seq(ind_part))
-                   end if
-                end if
-             else
+          if(jpart>1) then
+             if(ind_part/=halo(Srange)%lab_hcell(jpart-1)) then
                 allocate(part_blips(pb_len))
                 part_blips = zero
                 if(nod==myid+1) then
@@ -230,122 +357,100 @@ contains
                 else
                    call fetch_blips(part_blips,pb_len,nod-1,(myid)*parts%mx_ngonn + parts%i_cc2seq(ind_part))
                 end if
-             endif
-             time1 = mtime()
-             gcspart = halo(Srange)%i_hbeg(halo(Srange)%lab_hcover(jpart))
-             pb_st = 1
-             time0 = mtime()
-             do j=1,halo(Srange)%nh_part(jpart) ! Loop over atoms j in partition
-                j_in_halo = halo(Srange)%j_beg(jpart)+j-1
-                jseq = halo(Srange)%j_seq(j_in_halo)
-                specj = species_glob( id_glob( parts%icell_beg(halo(Srange)%lab_hcell(jpart))+jseq-1) )
-                nblipsj = blip_info(specj)%NBlipsRegion
-                this_nsfj = nsf_species(specj)
-                allocate(supp_on_j%supp_func(this_nsfj))
-                do nsfj=1,this_nsfj
-                   supp_on_j%supp_func(nsfj)%ncoeffs = nblipsj
-                   supp_on_j%supp_func(nsfj)%coefficients => part_blips(pb_st:pb_st+nblipsj-1)
-                   pb_st = pb_st+nblipsj
-                end do
-                do i=1,ltrans(Srange)%n_hnab(j_in_halo) ! Loop over atoms i: primary set neighbours of j
-                   i_in_prim=ltrans(Srange)%i_prim(ltrans(Srange)%i_beg(j_in_halo)+i-1)
-                   speci = bundle%species(i_in_prim)
-                   this_nsfi = nsf_species(speci)
-                   dx = BCS_parts%xcover(gcspart+jseq-1)-bundle%xprim(i_in_prim)
-                   dy = BCS_parts%ycover(gcspart+jseq-1)-bundle%yprim(i_in_prim)
-                   dz = BCS_parts%zcover(gcspart+jseq-1)-bundle%zprim(i_in_prim)
-                   allocate(this_data_K(this_nsfi,this_nsfj,nspin),this_data_M12(this_nsfi,this_nsfj,nspin))
-                   this_data_K = zero
-                   this_data_M12 = zero
-                   do spin=1,nspin
-                      wheremat = matrix_pos(matK(spin),i_in_prim,j_in_halo,1,1)
-                      call return_matrix_block_pos(matK(spin),wheremat,this_data_K(:,:,spin),this_nsfi*this_nsfj)
-                      wheremat = matrix_pos(matM12(spin),i_in_prim,j_in_halo,1,1)
-                      call return_matrix_block_pos(matM12(spin),wheremat,this_data_M12(:,:,spin),this_nsfi*this_nsfj)
-                   end do
-                   call get_S_analytic(blips_on_atom(i_in_prim),supp_on_j,support_gradient(i_in_prim), &
-                        matS,matKE,this_data_M12,this_data_K, i_in_prim, &
-                        j_in_halo,dx,dy,dz,speci,specj,this_nsfi,this_nsfj)
-                   deallocate(this_data_M12,this_data_K)
-                end do
-                do nsfj=1,this_nsfj
-                   nullify(supp_on_j%supp_func(nsfj)%coefficients)
-                end do
-                deallocate(supp_on_j%supp_func)
-             end do
-             if(jpart<halo(Srange)%np_in_halo) then
-                if(ind_part/=halo(Srange)%lab_hcell(jpart+1)) then
-                   deallocate(part_blips)
-                end if
+             end if
+          else
+             allocate(part_blips(pb_len))
+             part_blips = zero
+             if(nod==myid+1) then
+                pb_st = blip_trans%partst(parts%i_cc2seq(ind_part))
+                part_blips(1:pb_len) = coefficient_array(pb_st:pb_st+pb_len-1)
              else
+                call fetch_blips(part_blips,pb_len,nod-1,(myid)*parts%mx_ngonn + parts%i_cc2seq(ind_part))
+             end if
+          endif
+          time1 = mtime()
+          gcspart = halo(Srange)%i_hbeg(halo(Srange)%lab_hcover(jpart))
+          pb_st = 1
+          time0 = mtime()
+          do j=1,halo(Srange)%nh_part(jpart) ! Loop over atoms j in partition
+             j_in_halo = halo(Srange)%j_beg(jpart)+j-1
+             jseq = halo(Srange)%j_seq(j_in_halo)
+
+             specj = species_glob( id_glob( parts%icell_beg(halo(Srange)%lab_hcell(jpart))+jseq-1) )
+             nblipsj = blip_info(specj)%NBlipsRegion
+             this_nsfj = nsf_species(specj)
+             allocate(supp_on_j%supp_func(this_nsfj))
+             do nsfj=1,this_nsfj
+                supp_on_j%supp_func(nsfj)%ncoeffs = nblipsj
+                supp_on_j%supp_func(nsfj)%coefficients => part_blips(pb_st:pb_st+nblipsj-1)
+                pb_st = pb_st+nblipsj
+             end do
+             do i=1,ltrans(Srange)%n_hnab(j_in_halo) ! Loop over atoms i: primary set neighbours of j
+                i_in_prim=ltrans(Srange)%i_prim(ltrans(Srange)%i_beg(j_in_halo)+i-1)
+                speci = bundle%species(i_in_prim)
+                this_nsfi = nsf_species(speci)
+                dx = BCS_parts%xcover(gcspart+jseq-1)-bundle%xprim(i_in_prim)
+                dy = BCS_parts%ycover(gcspart+jseq-1)-bundle%yprim(i_in_prim)
+                dz = BCS_parts%zcover(gcspart+jseq-1)-bundle%zprim(i_in_prim)
+                allocate(this_data_K(this_nsfi,this_nsfj,nspin),this_data_M12(this_nsfi,this_nsfj,nspin))
+                this_data_K = zero
+                this_data_M12 = zero
+                do spin=1,nspin
+                   wheremat = matrix_pos(matK(spin),i_in_prim,j_in_halo,1,1)
+                   call return_matrix_block_pos(matK(spin),wheremat,this_data_K(:,:,spin),this_nsfi*this_nsfj)
+                   wheremat = matrix_pos(matM12(spin),i_in_prim,j_in_halo,1,1)
+                   call return_matrix_block_pos(matM12(spin),wheremat,this_data_M12(:,:,spin),this_nsfi*this_nsfj)
+                end do
+                call get_S_analytic(blips_on_atom(i_in_prim),supp_on_j,support_gradient(i_in_prim), &
+                     matS,matKE,this_data_M12,this_data_K, i_in_prim, &
+                     j_in_halo,dx,dy,dz,speci,specj,this_nsfi,this_nsfj)
+                deallocate(this_data_M12,this_data_K)
+             end do
+             do nsfj=1,this_nsfj
+                nullify(supp_on_j%supp_func(nsfj)%coefficients)
+             end do
+             deallocate(supp_on_j%supp_func)
+          end do
+          if(jpart<halo(Srange)%np_in_halo) then
+             if(ind_part/=halo(Srange)%lab_hcell(jpart+1)) then
                 deallocate(part_blips)
              end if
-             time1 = mtime()
+          else
+             deallocate(part_blips)
+          end if
+          time1 = mtime()
+       end do
+       if(sends>0) then
+          do i=1,sends
+             call MPI_Wait(nreqs(i),mpi_stat,ierr)
+             if(ierr/=0) call cq_abort("Error waiting for blip send to finish",i)
           end do
-          if(sends>0) then
-             do i=1,sends
-                call MPI_Wait(nreqs(i),mpi_stat,ierr)
-                if(ierr/=0) call cq_abort("Error waiting for blip send to finish",i)
-             end do
-          end if
-          call my_barrier
-          deallocate(nreqs)
-       else
-          call get_matrix_elements_new(inode-1, rem_bucket(1), matS, &
-               atomfns, atomfns)
-          ! Do the onsite elements analytically
-          if (flag_onsite_blip_ana) then
-             iprim = 0
-             do np = 1, bundle%groups_on_node
-                if (bundle%nm_nodgroup(np) > 0) then
-                   do ni = 1, bundle%nm_nodgroup(np)
-                      iprim = iprim + 1
-                      spec = bundle%species(iprim)
-                      this_nsf = nsf_species(spec)
-                      call get_onsite_S(blips_on_atom(iprim), matS, &
-                           np, ni, iprim, this_nsf, spec)
-                   end do
-                end if
-             end do
-          end if
        end if
-    else if (flag_basis_set == PAOs) then
-       ! Get S matrix with assemble
-       if (flag_vary_basis) then
-          if (inode == ionode .and. iprint_ops > 2) &
-               write (io_lun, *) 'Calling assemble_2 for S, dS: ', &
-                     matS, matdS
-          call assemble_2(Srange, matS, 1, matdS)
-          !call dump_matrix("NS",matS,inode)
-          !call dump_matrix("NdS",matdS,inode)
-       else
-          if (inode == ionode .and. iprint_ops > 2) &
-               write (io_lun, *) 'Calling assemble_2 for S: ', matS
-          call assemble_2(Srange, matS, 1)
+       call my_barrier
+       deallocate(nreqs)
+    else
+       call get_matrix_elements_new(inode-1, rem_bucket(1), matS, &
+            atomfns, atomfns)
+       ! Do the onsite elements analytically
+       if (flag_onsite_blip_ana) then
+          iprim = 0
+          do np = 1, bundle%groups_on_node
+             if (bundle%nm_nodgroup(np) > 0) then
+                do ni = 1, bundle%nm_nodgroup(np)
+                   iprim = iprim + 1
+                   spec = bundle%species(iprim)
+                   this_nsf = nsf_species(spec)
+                   call get_onsite_S(blips_on_atom(iprim), matS, &
+                        np, ni, iprim, this_nsf, spec)
+                end do
+             end if
+          end do
        end if
-       if (inode == ionode .and. iprint_ops > 2) &
-            write (io_lun, *) 'PAO to grid ', atomfns
-       ! Also generate support with a call to PAO_to_grid
-       call PAO_to_grid(inode-1, atomfns)
-    end if
-    !call dump_matrix("NS",matS,inode)    
-    ! get the new InvS matrix
-    call  Iter_Hott_InvS(iprint_ops, InvSMaxSteps, &
-                         InvSDeltaOmegaTolerance, ni_in_cell, &
-                         inode, ionode)
-    if (flag_perform_cdft) call make_weights
-    call stop_print_timer(tmr_l_tmp1, "get_S_matrix", &
-                          IPRINT_TIME_THRES1)
-    call stop_timer(tmr_std_smatrix)
-
-!****lat<$
-    call stop_backtrace(t=backtrace_timer,who='get_S_matrix')
-!****lat>$
+    end if  ! flag_analytic_blip_int
 
     return
-  end subroutine get_S_matrix
+  end subroutine get_S_matrix_blips
 !!***
-
     
 ! -----------------------------------------------------------
 ! Subroutine get_r_on_atomfns

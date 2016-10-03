@@ -84,6 +84,8 @@ contains
 !!    Added timers
 !!   2009/07/08 16:48 dave
 !!    Added code for one-to-one PAO to SF assignment
+!!   2016/09/23 21:30 nakata
+!!    Removed ip and neigh_global_num passed to subroutines loop_12 and loop_3
 !!  SOURCE
 !!
   subroutine assemble_2(range,matA,flag,matAD)
@@ -111,7 +113,7 @@ contains
     integer, OPTIONAL :: matAD
 
     ! Local variables
-    integer :: part, memb, neigh, ist, atom_num, atom_spec, iprim, ip
+    integer :: part, memb, neigh, ist, atom_num, atom_spec, iprim
     integer :: i, j, k, supfn_r, supfn_c
     integer :: neigh_global_part, neigh_global_num, neigh_species
     integer :: gcspart, wheremat, nsf_i, nsf_j, acz_i, acz_j
@@ -126,7 +128,7 @@ contains
     !write(io_lun,*) 'Zeroing dS: ',PRESENT(matAD)
     if(PRESENT(matAD)) call matrix_scale(zero,matAD)
     if(iprint_basis>=5.AND.myid==0) write(io_lun,fmt='(6x,i5," Done Zeroing")') 
-    iprim = 0; ip = 0
+    iprim = 0
     if(flag_paos_atoms_in_cell.OR.flag==3.OR.flag_one_to_one) then
        call start_timer(tmr_std_matrices)
        do part = 1,bundle%groups_on_node ! Loop over primary set partitions
@@ -135,7 +137,7 @@ contains
              do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
                 atom_num = bundle%nm_nodbeg(part)+memb-1
                 iprim=iprim+1
-                ip=bundle%ig_prim(iprim)
+!                ip=bundle%ig_prim(iprim)    ! nakata3, delete this line later
                 ! Atomic species
                 atom_spec = bundle%species(atom_num)
                 if(iprint_basis>=6.AND.myid==0) write(io_lun,'(6x,"Processor, atom, spec: ",3i7)') myid,memb,atom_spec
@@ -152,26 +154,32 @@ contains
                    neigh_global_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist)) 
                    neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,range)%i_seq(ist)-1)
                    neigh_species = species_glob(neigh_global_num)
-                   if(flag_one_to_one) then
-                      ip = atom_spec
-                      neigh_global_num = neigh_species
-                   end if
+!!! 2016.9.23 nakata3, delete from here
+!                   if(flag_one_to_one) then
+!                      ip = atom_spec
+!                      neigh_global_num = neigh_species
+!                   end if
+!!! nakata3, delete up to here
                    if(iprint_basis>=6.AND.myid==0) write(io_lun,'(6x,"Processor, neighbour, spec: ",3i7)') myid,neigh,neigh_species
                    ! Now loop over support functions and PAOs and call routine
                    if(flag<3) then
                       if(PRESENT(matAD)) then
-                         call loop_12(matA,iprim,halo(range)%i_halo(gcspart),ip,neigh_global_num,&
+!                         call loop_12(matA,iprim,halo(range)%i_halo(gcspart),ip,neigh_global_num,&   ! nakata3, delete this line later
+                         call loop_12(matA,iprim,halo(range)%i_halo(gcspart),&   ! nakata3
                               dx,dy,dz,flag ,atom_spec,neigh_species,0,0,matAD)
                       else
-                         call loop_12(matA,iprim,halo(range)%i_halo(gcspart),ip,neigh_global_num,&
+!                         call loop_12(matA,iprim,halo(range)%i_halo(gcspart),ip,neigh_global_num,&   ! nakata3, delete this line later
+                         call loop_12(matA,iprim,halo(range)%i_halo(gcspart),&   ! nakata3
                               dx,dy,dz,flag ,atom_spec,neigh_species,0,0)
                       end if
                    else
                       if(PRESENT(matAD)) then
-                         call loop_3(matA,iprim,halo(range)%i_halo(gcspart),ip,neigh_global_num,dx,dy,dz,&
+!                         call loop_3(matA,iprim,halo(range)%i_halo(gcspart),ip,neigh_global_num,dx,dy,dz,&   ! nakata3, delete this line later
+                         call loop_3(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,&   ! nakata3
                               &atom_spec,neigh_species,0,0,matAD)
                       else
-                         call loop_3(matA,iprim,halo(range)%i_halo(gcspart),ip,neigh_global_num,dx,dy,dz,&
+!                         call loop_3(matA,iprim,halo(range)%i_halo(gcspart),ip,neigh_global_num,dx,dy,dz,&   ! nakata3, delete this line later
+                         call loop_3(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,&
                               &atom_spec,neigh_species,0,0)
                       end if
                    endif
@@ -192,21 +200,27 @@ contains
 !!    Added code for one-to-one PAO to SF assignment
 !!   2016/07/29 18:30 nakata
 !!    Renamed supports_on_atom -> blips_on_atom
-  subroutine loop_12(matA,iprim,j_in_halo,atom_i,atom_j,dx,dy,dz,flag&
+!!   2016/09/23 21:30 nakata
+!!    Removed blips_on_atom, atom_i and atom_j, and introduced pao_format
+!  subroutine loop_12(matA,iprim,j_in_halo,atom_i,atom_j,dx,dy,dz,flag&
+!       &,atom_spec,neigh_species,deriv_flag,direction,matAD)
+  subroutine loop_12(matA,iprim,j_in_halo,dx,dy,dz,flag&
        &,atom_spec,neigh_species,deriv_flag,direction,matAD)
 
     use datatypes
-    use support_spec_format, ONLY: blips_on_atom, flag_paos_atoms_in_cell, blips_on_atom_remote, &
-         support_function, flag_one_to_one
+!    use support_spec_format, ONLY: blips_on_atom, flag_paos_atoms_in_cell, blips_on_atom_remote, &
+!         support_function, flag_one_to_one
     use angular_coeff_routines, ONLY: calc_mat_elem_gen, grad_mat_elem_gen2_prot
     use GenComms, ONLY: myid, cq_abort
     use mult_module, ONLY: store_matrix_value_pos, matrix_pos, return_matrix_value_pos
+    use pao_format
 
     implicit none
 
     !routine to calculate the case(1) pao_pao and case(2) pao_ke_pao
     !matrix elements
-    integer, intent(in) ::  iprim,j_in_halo,atom_j,atom_i,flag,matA
+!    integer, intent(in) ::  iprim,j_in_halo,atom_j,atom_i,flag,matA
+    integer, intent(in) ::  iprim,j_in_halo,flag,matA
     integer, intent(in) :: atom_spec,neigh_species,deriv_flag,direction
     real(double), intent(in) :: dx,dy,dz
     ! Optional variables - do we want dmatrix/dPAOcoefficient ? 
@@ -216,23 +230,29 @@ contains
     real(double) :: mat_val,mat_val_dummy, coeff_j
     integer :: i1,j1,k1,l1,m1,i2,j2,i3,j3,k2,l2,m2,count1,count2,nacz1,nacz2
     integer :: i4,j4, n_support1,n_support2,myflag
-    type(support_function), pointer, dimension(:) :: blips_on_atom_j
+!    type(support_function), pointer, dimension(:) :: blips_on_atom_j
 
     mat_val = 0.0_double
     count1 = 1
-    if(flag_paos_atoms_in_cell) then
-       blips_on_atom_j => blips_on_atom
-    else
-       blips_on_atom_j => blips_on_atom_remote
-    end if
+!!! 2016.9.21 nakata3, delete lines from here
+!    if(flag_paos_atoms_in_cell) then
+!       blips_on_atom_j => blips_on_atom
+!    else
+!       blips_on_atom_j => blips_on_atom_remote
+!    end if
+!!! nakata3 delete above lines
     ! Loop over PAOs on i
-    do l1 = 0, blips_on_atom(atom_i)%lmax
-       do nacz1 = 1, blips_on_atom(atom_i)%naczs(l1)
+!    do l1 = 0, blips_on_atom(atom_i)%lmax   ! nakata3, delet this line later
+    do l1 = 0, pao(atom_spec)%greatest_angmom   ! nakata3
+!       do nacz1 = 1, blips_on_atom(atom_i)%naczs(l1)   ! nakata3, delete this line later
+       do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom   ! nakata3
           do m1 = -l1,l1
              count2 = 1
              ! Loop over PAOs on j
-             do l2 = 0, blips_on_atom_j(atom_j)%lmax
-                do nacz2 = 1, blips_on_atom_j(atom_j)%naczs(l2)
+!             do l2 = 0, blips_on_atom_j(atom_j)%lmax   ! nakata3, delete this line later
+             do l2 = 0, pao(neigh_species)%greatest_angmom   ! nakata3
+!                do nacz2 = 1, blips_on_atom_j(atom_j)%naczs(l2)   ! nakata3, delete this line later
+                do nacz2 = 1, pao(neigh_species)%angmom(l2)%n_zeta_in_angmom   ! nakata3
                    do m2 = -l2,l2
                       if(deriv_flag.eq.0) then
                          call calc_mat_elem_gen(flag,atom_spec,l1,nacz1,m1,neigh_species, &
@@ -241,7 +261,7 @@ contains
                          call grad_mat_elem_gen2_prot(direction,flag,atom_spec,l1,nacz1,m1,neigh_species, &
                               l2,nacz2,m2,dx,dy,dz,mat_val)
                       endif
-                      if(flag_one_to_one) then
+!                      if(flag_one_to_one) then
                          mat_val_dummy = mat_val
                          wheremat = matrix_pos(matA,iprim,j_in_halo,count1,count2)
                          call store_matrix_value_pos(matA,wheremat,mat_val)
@@ -250,25 +270,27 @@ contains
                             call store_matrix_value_pos(matAD,wheremat,mat_val)
 
                          end if
-                      else
-                         do n_support1 = 1, blips_on_atom(atom_i)%nsuppfuncs
-                            do n_support2 = 1, blips_on_atom_j(atom_j)%nsuppfuncs
-                               !--------------------------------------------------------!
-                               !     Now multiply by corresponding pao coefficients     !
-                               !--------------------------------------------------------!
-                               coeff_j = blips_on_atom_j(atom_j)%supp_func(n_support2)%coefficients(count2)
-                               mat_val_dummy = mat_val* &
-                                    blips_on_atom(atom_i)%supp_func(n_support1)%coefficients(count1)*coeff_j
-                               wheremat = matrix_pos(matA,iprim,j_in_halo,n_support1,n_support2)
-                               call store_matrix_value_pos(matA,wheremat,mat_val_dummy)
-                               if(PRESENT(matAD).AND.n_support1==1) then
-                                  mat_val_dummy = mat_val*coeff_j
-                                  wheremat = matrix_pos(matAD,iprim,j_in_halo,count1,n_support2)
-                                  call store_matrix_value_pos(matAD,wheremat,mat_val_dummy)
-                               end if
-                            enddo ! nsupport2
-                         enddo ! nsupport1
-                      end if
+!!! 2016.9.23, nakata3, delete from here ->
+!                      else
+!                         do n_support1 = 1, blips_on_atom(atom_i)%nsuppfuncs
+!                            do n_support2 = 1, blips_on_atom_j(atom_j)%nsuppfuncs
+!                               !--------------------------------------------------------!
+!                               !     Now multiply by corresponding pao coefficients     !
+!                               !--------------------------------------------------------!
+!                               coeff_j = blips_on_atom_j(atom_j)%supp_func(n_support2)%coefficients(count2)
+!                               mat_val_dummy = mat_val* &
+!                                    blips_on_atom(atom_i)%supp_func(n_support1)%coefficients(count1)*coeff_j
+!                               wheremat = matrix_pos(matA,iprim,j_in_halo,n_support1,n_support2)
+!                               call store_matrix_value_pos(matA,wheremat,mat_val_dummy)
+!                               if(PRESENT(matAD).AND.n_support1==1) then
+!                                  mat_val_dummy = mat_val*coeff_j
+!                                  wheremat = matrix_pos(matAD,iprim,j_in_halo,count1,n_support2)
+!                                  call store_matrix_value_pos(matAD,wheremat,mat_val_dummy)
+!                               end if
+!                            enddo ! nsupport2
+!                         enddo ! nsupport1
+!                      end if
+!!! nakata3, delete up to here <-
                       count2 = count2 +1
                    enddo ! m2
                 enddo ! nacz2
@@ -277,27 +299,32 @@ contains
           enddo ! m1
        enddo ! nacz1
     enddo ! l1
-    nullify(blips_on_atom_j)
+!    nullify(blips_on_atom_j)
   end subroutine loop_12
   
 !!   2009/07/08 16:48 dave
 !!    Added code for one-to-one PAO to SF assignment
 !!   2016/07/29 18:30 nakata
 !!    Renamed supports_on_atom -> blips_on_atom
-  subroutine loop_3(matA,iprim,j_in_halo,atom_i,atom_j,dx,dy,dz&
+!!   2016/09/23 21:30 nakata
+!!    Removed blips_on_atom, atom_i and atom_j, and introduced pao_format
+!  subroutine loop_3(matA,iprim,j_in_halo,atom_i,atom_j,dx,dy,dz&
+!       &,atom_spec,neigh_species,deriv_flag,direction,matAD)
+  subroutine loop_3(matA,iprim,j_in_halo,dx,dy,dz&
        &,atom_spec,neigh_species,deriv_flag,direction,matAD)
 
     use datatypes
     use pseudo_tm_info, ONLY: pseudo
-    use support_spec_format, ONLY: blips_on_atom, flag_one_to_one !contains all info on support-pao representation
+!    use support_spec_format, ONLY: blips_on_atom, flag_one_to_one !contains all info on support-pao representation
     use angular_coeff_routines, ONLY: calc_mat_elem_gen, grad_mat_elem_gen2_prot
     use GenComms, ONLY: myid, cq_abort
     use mult_module, ONLY: store_matrix_value_pos, matrix_pos, return_matrix_value_pos
+    use pao_format
 
     implicit none
 
     !routine to generate <nlpf|pao> matrix elements
-    integer, intent(in) ::  iprim,j_in_halo,atom_i,atom_j, matA
+    integer, intent(in) ::  iprim,j_in_halo,matA
     integer, intent(in) :: atom_spec,neigh_species,deriv_flag,direction
     real(double), intent(in) :: dx,dy,dz
     ! Optional variables - do we want dmatrix/dPAOcoefficient ? 
@@ -313,8 +340,10 @@ contains
     mat_val = 0.0_double
 
     count1 = 1
-    do l1 = 0,blips_on_atom(atom_i)%lmax
-       do nacz1 = 1, blips_on_atom(atom_i)%naczs(l1)
+!    do l1 = 0,blips_on_atom(atom_i)%lmax   ! nakata3, delet this line later
+    do l1 = 0, pao(atom_spec)%greatest_angmom   ! nakata3
+!       do nacz1 = 1, blips_on_atom(atom_i)%naczs(l1)   ! nakata3, delete this line later
+       do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom   ! nakata3
           do m1 = -l1,l1
              ! Fix DRB 2007/03/22
              part_index_j = 0
@@ -337,18 +366,20 @@ contains
                    !   enddo
                    !end if
                    index_j = part_index_j + (m2+l2+1)
-                   if(blips_on_atom(atom_i)%nsuppfuncs > 0) then
-                      if(flag_one_to_one) then
+!                    if(blips_on_atom(atom_i)%nsuppfuncs > 0) then   ! nakata3, delete this line later
+!                      if(flag_one_to_one) then                      ! nakata3, delete this line later
                          wheremat = matrix_pos(matA,iprim,j_in_halo,count1,index_j)
                          call store_matrix_value_pos(matA,wheremat,mat_val)
-                      else
-                         do n_support1 = 1, blips_on_atom(atom_i)%nsuppfuncs
-                            mat_val_dummy = mat_val*blips_on_atom(atom_i)%supp_func(n_support1)%coefficients(count1)
-                            wheremat = matrix_pos(matA,iprim,j_in_halo,n_support1,index_j)
-                            call store_matrix_value_pos(matA,wheremat,mat_val_dummy)
-                         enddo ! n_support1
-                      end if
-                   endif
+!!! 2016.9.23 nakata3, delete from here
+!                      else
+!                         do n_support1 = 1, blips_on_atom(atom_i)%nsuppfuncs
+!                            mat_val_dummy = mat_val*blips_on_atom(atom_i)%supp_func(n_support1)%coefficients(count1)
+!                            wheremat = matrix_pos(matA,iprim,j_in_halo,n_support1,index_j)
+!                            call store_matrix_value_pos(matA,wheremat,mat_val_dummy)
+!                         enddo ! n_support1
+!                      end if
+!                   endif
+!!! nakata3, delete up to here <-
                    if(PRESENT(matAD)) then
                       wheremat = matrix_pos(matAD,iprim,j_in_halo,count1,index_j)
                       call store_matrix_value_pos(matAD,wheremat,mat_val)
@@ -393,6 +424,8 @@ contains
 !!    Added timers
 !!   2009/07/08 16:48 dave
 !!    Added code for one-to-one PAO to SF assignment
+!!   2016/09/23 21:30 nakata
+!!    Removed ip and neigh_global_num passed to subroutines loop_12 and loop_3
 !!  SOURCE
 !!
   subroutine assemble_deriv_2(direction,range,matA,flag)
@@ -418,7 +451,7 @@ contains
     integer :: direction, flag, range, matA
 
     ! Local variables
-    integer :: part, memb, neigh, ist, atom_num, atom_spec, iprim, ip
+    integer :: part, memb, neigh, ist, atom_num, atom_spec, iprim
     integer :: i, j, k, supfn_r, supfn_c
     integer :: neigh_global_part, neigh_global_num, neigh_species
     integer :: gcspart, wheremat, nsf_i, nsf_j, acz_i, acz_j
@@ -430,7 +463,7 @@ contains
     call start_timer(tmr_std_matrices)
     call start_timer(tmr_std_basis)
     call matrix_scale(zero,matA)
-    iprim = 0; ip = 0
+    iprim = 0
     if(flag_paos_atoms_in_cell.OR.flag==3.OR.flag_one_to_one) then
        do part = 1,bundle%groups_on_node ! Loop over primary set partitions
           if(iprint_basis>=6.AND.myid==0) write(io_lun,fmt='(6x,"Processor, partition: ",2i7)') myid,part
@@ -439,7 +472,7 @@ contains
                 atom_num = bundle%nm_nodbeg(part)+memb-1
                 !RC setting up so i have the global number of the bra atom  
                 iprim=iprim+1
-                ip=bundle%ig_prim(iprim)
+!                ip=bundle%ig_prim(iprim)   ! nakata3, delete this line later
                 ! Atomic species
                 atom_spec = bundle%species(atom_num)
                 if(iprint_basis>=6.AND.myid==0) write(io_lun,'(6x,"Processor, atom, spec: ",3i7)') myid,memb,atom_spec
@@ -456,19 +489,23 @@ contains
                    neigh_global_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist)) 
                    neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,range)%i_seq(ist)-1)
                    neigh_species = species_glob(neigh_global_num)
-                   if(flag_one_to_one) then
-                      ip = atom_spec
-                      neigh_global_num = neigh_species
-                   end if
+!!! 2016.9.23 nakata3, delete from here
+!                   if(flag_one_to_one) then
+!                      ip = atom_spec
+!                      neigh_global_num = neigh_species
+!                   end if
+!!! nakata3 delete up to here
                    ! Where to put the result - this will become matrix_pos
                    wheremat = matrix_pos(matA,iprim,halo(range)%i_halo(gcspart))
                    ! Now loop over support functions and PAOs and call routine
                    if(wheremat/=mat(part,range)%onsite(memb)) then
                       if(flag<3) then
-                         call loop_12(matA,iprim,halo(range)%i_halo(gcspart),ip,neigh_global_num,dx,dy,dz,flag&
+!                         call loop_12(matA,iprim,halo(range)%i_halo(gcspart),ip,neigh_global_num,dx,dy,dz,flag&   ! nakata3, delete this line later
+                         call loop_12(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,flag&   ! nakata3
                               &,atom_spec,neigh_species,1,direction)
                       else
-                         call loop_3(matA,iprim,halo(range)%i_halo(gcspart),ip,neigh_global_num,dx,dy,dz,&
+!                         call loop_3(matA,iprim,halo(range)%i_halo(gcspart),ip,neigh_global_num,dx,dy,dz,&   ! nakata3, delete this line later
+                         call loop_3(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,&    ! nakata3
                               &atom_spec,neigh_species,1,direction)
                       endif
                    end if

@@ -47,10 +47,10 @@
 !!   2014/01/17 13:20 lat
 !!    Added new matrix X and SX for exchange
 !!   2016/08/09 18:00 nakata
-!!    Added parameters SFcoeff_range, SFcoeffTr_range, Spao_range, Hpao_range, 
-!!                     SPpao_range, PSpao_range, Spaosf_range, Hpaosf_range, HTr_range, LD_range,
-!!                     SFcoeff_matind, SFcoeffTr_matind, Spao_matind, Hpao_matind, 
-!!                     SPpao_matind, PSpao_matind, Spaosf_matind, Hpaosf_matind, HTr_matind, LD_matind
+!!    Added parameters Satomf_range, Hatomf_range, AP_range, PA_range, HTr_range,
+!!                     SFcoeff_range, SFcoeffTr_range, Satomfsf_range, Hatomfsf_range, LD_range,
+!!                     SFcoeff_matind, SFcoeffTr_matind, Satomf_matind, Hatomf_matind, 
+!!                     SPatomf_matind, PSatomf_matind, Satomfsf_matind, Hatomfsf_matind, HTr_matind, LD_matind
 !!    for PAO-based calculations
 !!  SOURCE
 !!
@@ -74,8 +74,8 @@ module matrix_data
   integer, dimension(:), pointer :: Smatind, dSmatind, Lmatind, LTrmatind, Hmatind, dHmatind, &
        SPmatind, PAOPmatind, PSmatind, LSmatind, SLmatind, LHmatind, HLmatind, LSLmatind,     &
        SLSmatind, Tmatind, TTrmatind, TSmatind, THmatind, TLmatind, Xmatind, SXmatind   
-  integer, dimension(:), pointer :: SFcoeff_matind, SFcoeffTr_matind, Spao_matind, Hpao_matind, &
-                                    SPpao_matind, PSpao_matind, Spaosf_matind, Hpaosf_matind,   &
+  integer, dimension(:), pointer :: SFcoeff_matind, SFcoeffTr_matind, Satomf_matind, Hatomf_matind, &
+                                    SPatomf_matind, PSatomf_matind, Satomfsf_matind, Hatomfsf_matind,   &
                                     HTr_matind, LD_matind
 
   ! Parameters for the different matrix ranges
@@ -104,16 +104,17 @@ module matrix_data
   integer, parameter :: SXrange  = 22
 
 !!! nakata3
-  integer, parameter :: SFcoeff_range   = 23
-  integer, parameter :: SFcoeffTr_range = 24
-  integer, parameter :: Spao_range      = 25
-  integer, parameter :: Hpao_range      = 26
-  integer, parameter :: SPpao_range     = 27
-  integer, parameter :: PSpao_range     = 28
-  integer, parameter :: Spaosf_range    = 29
-  integer, parameter :: Hpaosf_range    = 30
-  integer, parameter :: HTr_range       = 31
-  integer, parameter :: LD_range        = 32
+  ! The indices for ATOMF-based-matrix ranges will be set later.
+  integer :: Satomf_range    ! 23
+  integer :: Hatomf_range    ! 24
+  integer :: AP_range        ! 25
+  integer :: PA_range        ! 26
+  integer :: HTr_range       ! 27
+  integer :: SFcoeff_range   ! 28
+  integer :: SFcoeffTr_range ! 29
+  integer :: Satomfsf_range  ! 30
+  integer :: Hatomfsf_range  ! 31
+  integer :: LD_range        ! 32
 !!! end nakata3
 
   integer :: max_range ! Indexes matrix with largest range

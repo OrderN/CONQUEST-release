@@ -59,7 +59,7 @@ module dimens
   real(double) :: r_super_x, r_super_y, r_super_z, volume
   real(double) :: r_super_x_squared, r_super_y_squared, r_super_z_squared
   real(double) :: r_s, r_h, r_c, r_nl, r_core_squared, r_dft_d2, r_exx
-  real(double) :: r_s_pao, r_h_pao, r_MS, r_LD                                         ! nakata3
+  real(double) :: r_s_atomf, r_h_atomf, r_MS, r_LD                                         ! nakata3
   real(double) :: grid_point_volume, one_over_grid_point_volume
   real(double) :: support_grid_volume
   real(double) :: GridCutoff, min_blip_sp
@@ -149,7 +149,7 @@ contains
 !!   2014/01/17 lat
 !!    Added r_exx and assigned to rcut(Xrange)
 !!   2016/09/16 16:00 nakata
-!!    Set ranges of PAO-based matrices
+!!    Set ranges of ATOMF-based matrices
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -158,14 +158,13 @@ contains
     use numbers
     use matrix_data
     use GenComms,      only: cq_abort
-    use global_module, only: iprint_init,flag_basis_set,blips,runtype, atomf, paof ! nakata3
+    use global_module, only: iprint_init,flag_basis_set,blips,runtype, atomf, sf, flag_Multisite
     use global_module, only: flag_dft_d2,flag_MDold, flag_exx
     use block_module,  only: in_block_x, in_block_y, in_block_z, & 
                              n_pts_in_block, n_blocks
 
     use input_module,           only: leqi
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, ABINIT
-    use support_spec_format, only: flag_one_to_one   ! nakata3
 
     implicit none
 
@@ -177,12 +176,35 @@ contains
 
     ! Local variables
     type(cq_timer) :: backtrace_timer
-    integer        :: max_extent, n, stat
+    integer        :: max_extent, n, stat, mx_matrices_tmp ! nakata3
     real(double)   :: r_core, r_t, rcutmax
 
 !****lat<$
     call start_backtrace(t=backtrace_timer,who='set_dimensions',where=9,level=2)
 !****lat>$
+
+!!! nakata3
+    ! Set indices for ATOMF-based-matrix ranges
+    if (atomf==sf) then
+       Satomf_range = Srange
+       Hatomf_range = Hrange
+       AP_range     = SPrange
+       PA_range     = PSrange
+       mx_matrices_tmp = 22
+    else
+       Satomf_range = 23
+       Hatomf_range = 24
+       AP_range     = 25
+       PA_range     = 26
+       HTr_range       = 27
+       SFcoeff_range   = 28
+       SFcoeffTr_range = 29
+       Satomfsf_range  = 30
+       Hatomfsf_range  = 31
+       LD_range        = 32
+       mx_matrices_tmp = mx_matrices ! = 32 
+    endif
+!!! end nakata3
 
     !n_my_grid_points = n_pts_in_block * n_blocks    
     ! decide if the flag non_local needs to be set to true
@@ -198,22 +220,22 @@ contains
     endif
 
     ! we need to decide which is the largest core radius
-    r_core  = zero
-    r_h     = zero
-    r_t     = zero
-    r_nl    = zero
-    r_h_pao = zero   ! nakata3
-    r_MS    = zero   ! nakata3
-    r_LD    = zero   ! nakata3
+    r_core    = zero
+    r_h       = zero
+    r_t       = zero
+    r_nl      = zero
+    r_h_atomf = zero   ! nakata3
+    r_MS      = zero   ! nakata3
+    r_LD      = zero   ! nakata3
     !    if(non_local) then
     do n=1, n_species
-       r_core  = max(r_core,core_radius(n))
-       r_h     = max(r_h,RadiusSupport(n))
-       r_t     = max(r_t,InvSRange(n))
-       r_nl    = max(r_nl,NonLocalFactor(n)*core_radius(n))
-       r_h_pao = max(r_h,RadiusPAO(n))                        ! nakata3
-       r_MS    = max(r_MS,RadiusMS(n))                        ! nakata3
-       r_LD    = max(r_LD,RadiusLD(n))                        ! nakata3
+       r_core    = max(r_core,core_radius(n))
+       r_h       = max(r_h,RadiusSupport(n))
+       r_t       = max(r_t,InvSRange(n))
+       r_nl      = max(r_nl,NonLocalFactor(n)*core_radius(n))
+       r_h_atomf = max(r_h,RadiusPAO(n))                        ! nakata3
+       r_MS      = max(r_MS,RadiusMS(n))                        ! nakata3
+       r_LD      = max(r_LD,RadiusLD(n))                        ! nakata3
     end do
     !    else
     !       do n=1, n_species
@@ -235,8 +257,8 @@ contains
     !fobw3 = four_on_blip_width*fobw2
 
     ! Set range of S matrix
-    r_s     = r_h
-    r_s_pao = r_h_pao   ! nakata3
+    r_s       = r_h
+    r_s_atomf = r_h_atomf   ! nakata3
     if(two*r_s>r_c) then
        if(inode==ionode) &
             write(io_lun,fmt='(8x,"WARNING ! S range greater than L !")')
@@ -252,23 +274,23 @@ contains
          r_h = 1.1_double * r_h
          r_core = 1.1_double * r_core
          if (flag_dft_d2) r_dft_d2 = 1.1_double * r_dft_d2 ! for DFT-D2
-         r_s_pao = 1.1_double * r_s_pao      ! nakata3
-         r_h_pao = 1.1_double * r_h_pao      ! nakata3
+         r_s_atomf = 1.1_double * r_s_atomf      ! nakata3
+         r_h_atomf = 1.1_double * r_h_atomf      ! nakata3
       else
          r_s = AtomMove_buffer +  r_s
          r_c = AtomMove_buffer +  r_c
          r_h = AtomMove_buffer +  r_h
          r_core = AtomMove_buffer +  r_core
          if (flag_dft_d2) r_dft_d2 = AtomMove_buffer + r_dft_d2 ! for DFT-D2
-         r_s_pao = AtomMove_buffer +  r_s_pao     ! nakata3
-         r_h_pao = AtomMove_buffer +  r_h_pao     ! nakata3
+         r_s_atomf = AtomMove_buffer +  r_s_atomf     ! nakata3
+         r_h_atomf = AtomMove_buffer +  r_h_atomf     ! nakata3
       end if
     endif
 !!! 2016.9.16 nakata3
     ! Set ranges for contracted SFs
-    if (atomf == paof .and. .not.flag_one_to_one) then
-         r_s = r_s_pao + r_MS
-         r_h = r_h_pao + r_MS
+    if (flag_Multisite) then
+         r_s = r_s_atomf + r_MS
+         r_h = r_h_atomf + r_MS
          if (r_t.lt.r_s) r_t = r_s
     endif
 !!! nakata3 end
@@ -322,29 +344,27 @@ contains
     rcut(LTrrange) = rcut(Lrange)
     rcut(SLrange)  = rcut(LSrange)
     rcut(TTrrange) = rcut(Trange)
-!    rcut(dSrange)  = rcut(Srange)
-!    rcut(dHrange)  = rcut(Hrange)
-!    rcut(PAOPrange)= rcut(SPrange)
+    rcut(dSrange)  = rcut(Srange)
+    rcut(dHrange)  = rcut(Hrange)
+    rcut(PAOPrange)= rcut(SPrange)
     rcut(HLrange)  = rcut(LHrange)
 !!! 2016.9.16 nakata3
-    ! for PAO-based matrices
-    rcut(Spao_range)      = two*r_s_pao
-    rcut(Hpao_range)      = rcut(Hrange) - two*r_MS
-    rcut(SPpao_range)     = r_core + r_h_pao
-    rcut(PSpao_range)     = rcut(SPpao_range)
-    rcut(Spaosf_range)    = r_s_pao + r_s
-    rcut(Hpaosf_range)    = rcut(Hrange) - r_MS
-    rcut(SFcoeff_range)   = r_MS
-    rcut(SFcoeffTr_range) = r_MS
-    rcut(LD_range)        = r_LD
-    rcut(HTr_range)       = rcut(Hrange)
-    ! common matrices
-    rcut(dSrange)  = rcut(Spaosf_range)   ! dS = (pao,sf)
-    rcut(dHrange)  = rcut(Hpaosf_range)   ! dH = (pao,sf)
-    rcut(PAOPrange)= r_h_pao + r_core
+    ! for ATOMF-based matrices
+    if (atomf.ne.sf) then
+       rcut(Satomf_range)    = two*r_s_atomf
+       rcut(Hatomf_range)    = rcut(Hrange) - two*r_MS
+       rcut(AP_range)        = r_core + r_h_atomf
+       rcut(PA_range)        = rcut(AP_range)
+       rcut(Satomfsf_range)  = r_s_atomf + r_s
+       rcut(Hatomfsf_range)  = rcut(Hrange) - r_MS
+       rcut(SFcoeff_range)   = r_MS
+       rcut(SFcoeffTr_range) = r_MS
+       rcut(LD_range)        = r_LD
+       rcut(HTr_range)       = rcut(Hrange)
+    endif
 !!! nakata3 end
     rcutmax = zero
-    do n=1,mx_matrices
+    do n=1,mx_matrices_tmp
        if(rcut(n)>rcutmax) then
           max_range = n
           rcutmax = rcut(n)
@@ -374,18 +394,22 @@ contains
     mat_name(HLrange)  = "HL "
     mat_name(Xrange)   = "X  "
     mat_name(SXrange)  = "SX "
-    mat_name(Spao_range)      = "Sp "
-    mat_name(Hpao_range)      = "Hp"
-    mat_name(SPpao_range)     = "SPp"
-    mat_name(PSpao_range)     = "PSp"
-    mat_name(Spaosf_range)    = "Sps"
-    mat_name(Hpaosf_range)    = "Hps"
-    mat_name(SFcoeff_range)   = "MS"
-    mat_name(SFcoeffTr_range) = "MSt"
-    mat_name(LD_range)        = "LD"
-    mat_name(HTr_range)       = "Ht"
+!!! nakata3
+    if (atomf.ne.sf) then
+       mat_name(Satomf_range)    = "aSa"
+       mat_name(Hatomf_range)    = "aHa"
+       mat_name(AP_range)        = "AP"
+       mat_name(PA_range)        = "PA"
+       mat_name(Satomfsf_range)  = "aSs"
+       mat_name(Hatomfsf_range)  = "aHs"
+       mat_name(SFcoeff_range)   = "MS"
+       mat_name(SFcoeffTr_range) = "MSt"
+       mat_name(LD_range)        = "LD"
+       mat_name(HTr_range)       = "Ht"
+    endif
+!!! nakata3 end
     if(inode==ionode.AND.iprint_init>1) then
-       do n=1,mx_matrices
+       do n=1,mx_matrices_tmp
           write(io_lun,1) mat_name(n),rcut(n)
        enddo
     endif

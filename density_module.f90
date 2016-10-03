@@ -680,7 +680,7 @@ contains
   !!   2016/08/09 14:00 nakata
   !!    Renamed support -> atom_fns
   !!   2016/08/09 18:00 nakata
-  !!    Added flag for atomf
+  !!    Introduced matKatomf
   !!  SOURCE
   !!
   subroutine get_electronic_density(denout, electrons, atom_fns, &
@@ -689,7 +689,7 @@ contains
     use datatypes
     use numbers
     use GenBlas,                     only: scal, rsum
-    use mult_module,                 only: matK, matKpao   ! nakata3
+    use mult_module,                 only: matKatomf   ! nakata3
     use dimens,                      only: n_my_grid_points, grid_point_volume
     use block_module,                only: n_pts_in_block
     use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
@@ -716,7 +716,6 @@ contains
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
     integer        :: blk, i_count_alpha, n, n_i, n_point, spin
-    integer        :: matKtmp
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -731,11 +730,9 @@ contains
          write (io_lun,fmt='(2x,"Entering get_electronic_density")')
 
     do spin = 1, nspin
-       if (atomf == sf)   matKtmp = matK(spin)       ! for blips    ! nakata3
-       if (atomf == paof) matKtmp = matKpao(spin)    ! for PAOs     ! nakata3
        gridfunctions(atom_fns_K)%griddata = zero
        call act_on_vectors_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
-                               matKtmp, atom_fns_K, atom_fns)
+                               matKatomf(spin), atom_fns_K, atom_fns)
        denout(:,spin) = zero
        i_count_alpha = 0
        do blk = 1, domain%groups_on_node
@@ -1025,10 +1022,10 @@ contains
                 the_species=species_glob(ig_atom)
                 globatom(at) = ig_atom
 !!! 2016.9.16 nakata3
-                if (atomf.eq.paof) then
-                   rcut(at) = RadiusPAO(the_species)
-                else if (atomf.eq.sf) then
+                if (atomf.eq.sf) then
                    rcut(at) = RadiusSupport(the_species)
+                else if (atomf.eq.paof) then
+                   rcut(at) = RadiusPAO(the_species)
                 endif
 !!! nakata3 end
                 rad(at) = atrad(atomicnum(the_species))
@@ -1274,10 +1271,10 @@ contains
                    the_species = species_glob(ig_atom)
                    globatom(at) = ig_atom
 !!! 2016.9.16 nakata3
-                   if (atomf.eq.paof) then
-                      rcut(at) = RadiusPAO(the_species)
-                   else if (atomf.eq.sf) then
+                   if (atomf.eq.sf) then
                       rcut(at) = RadiusSupport(the_species)
+                   else if (atomf.eq.paof) then
+                      rcut(at) = RadiusPAO(the_species)
                    endif
 !!! nakata3 end
                    rad(at) = atrad(atomicnum(the_species))

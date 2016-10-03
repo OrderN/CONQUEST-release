@@ -1537,10 +1537,10 @@ contains
        call immi(parts,bundle,BCS_parts,myid+1)
        ! Reallocate for blip grid
 !!! 2016.9.16 nakata3
-       if (atomf.eq.paof) then
-          call set_blipgrid(myid, RadiusPAO, core_radius)
-       else if (atomf.eq.sf) then
+       if (atomf.eq.sf) then
           call set_blipgrid(myid, RadiusSupport, core_radius)
+       else if (atomf.eq.paof) then
+          call set_blipgrid(myid, RadiusPAO, core_radius)
        endif
 !!! nakata3 end
        !call set_blipgrid(myid,r_h,sqrt(r_core_squared))
@@ -1642,10 +1642,10 @@ contains
        call immi(parts,bundle,BCS_parts,myid+1,1)
        ! Reallocate for blip grid
 !!! 2016.9.16 nakata3
-       if (atomf.eq.paof) then
-          call set_blipgrid(myid, RadiusPAO, core_radius)
-       else if (atomf.eq.sf) then
+       if (atomf.eq.sf) then
           call set_blipgrid(myid, RadiusSupport, core_radius)
+       else if (atomf.eq.paof) then
+          call set_blipgrid(myid, RadiusPAO, core_radius)
        endif
 !!! nakata3 end
        !call set_blipgrid(myid,r_h,sqrt(r_core_squared))
@@ -1804,10 +1804,10 @@ contains
     !endif
     ! Reallocate for blip grid
 !!! 2016.9.16 nakata3
-    if (atomf.eq.paof) then
-       call set_blipgrid(myid, RadiusPAO, core_radius)
-    else if (atomf.eq.sf) then
+    if (atomf.eq.sf) then
        call set_blipgrid(myid, RadiusSupport, core_radius)
+    else if (atomf.eq.paof) then
+       call set_blipgrid(myid, RadiusPAO, core_radius)
     endif
 !!! nakata3 end
     call set_bucket(inode-1)

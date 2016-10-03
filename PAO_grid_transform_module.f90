@@ -833,6 +833,8 @@ contains
 !!    Removed unused sf
 !!   2016/08/09 14:00 nakata
 !!    Renamed support -> pao_fns
+!!   2016/09/30 18:30 nakata
+!!    Changed paof to atomf (atomf is sf for one_to_one PAOs but quivalent to paof)
 !!  SOURCE
 !!
   subroutine single_PAO_to_grid(pao_fns)
@@ -843,7 +845,7 @@ contains
     use dimens, ONLY: r_h
     use GenComms, ONLY: inode, ionode
     use numbers
-    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell, iprint_basis, species_glob, paof
+    use global_module, ONLY: rcellx,rcelly,rcellz,id_glob,ni_in_cell, iprint_basis, species_glob, atomf
     use species_module, ONLY: species, npao_species
     !  At present, these arrays are dummy arguments.
     use block_module, ONLY : nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
@@ -904,17 +906,17 @@ contains
        xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
        zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
-       if(naba_atoms_of_blocks(paof)%no_of_part(iblock) > 0) then ! if there are naba atoms
+       if(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
-          do ipart=1,naba_atoms_of_blocks(paof)%no_of_part(iblock)
-             jpart=naba_atoms_of_blocks(paof)%list_part(ipart,iblock)
+          do ipart=1,naba_atoms_of_blocks(atomf)%no_of_part(iblock)
+             jpart=naba_atoms_of_blocks(atomf)%list_part(ipart,iblock)
              if(jpart > DCS_parts%mx_gcover) then 
                 call cq_abort('single_PAO_to_grid: JPART ERROR ',ipart,jpart)
              endif
              ind_part=DCS_parts%lab_cell(jpart)
-             do ia=1,naba_atoms_of_blocks(paof)%no_atom_on_part(ipart,iblock)
+             do ia=1,naba_atoms_of_blocks(atomf)%no_atom_on_part(ipart,iblock)
                 iatom=iatom+1
-                ii = naba_atoms_of_blocks(paof)%list_atom(iatom,iblock)
+                ii = naba_atoms_of_blocks(atomf)%list_atom(iatom,iblock)
                 icover= DCS_parts%icover_ibeg(jpart)+ii-1
                 ig_atom= id_glob(parts%icell_beg(ind_part)+ii-1)
 
@@ -977,7 +979,7 @@ contains
                 no_of_ib_ia = no_of_ib_ia + npao_species(the_species)*n_pts_in_block
              enddo ! naba_atoms
           enddo ! naba_part
-       endif !(naba_atoms_of_blocks(paof)%no_of_part(iblock) > 0) !naba atoms?
+       endif !(naba_atoms_of_blocks(atomf)%no_of_part(iblock) > 0) !naba atoms?
     enddo ! iblock : primary set of blocks
     call my_barrier()
     call start_timer(tmr_std_allocation)

@@ -135,7 +135,7 @@ contains
   !!   2015/06/10 15:44 cor & dave
   !!    - Input parameters for band output
   !!   2016/09/15 17:00 nakata
-  !!    Set flag_one_to_one = .true. for primitive SFs
+  !!    Set flag_one_to_one = .true. automatically for primitive SFs
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -163,6 +163,8 @@ contains
                                       ni_in_cell, area_moveatoms,      &
                                       io_lun, flag_only_dispersion,    &
                                       flag_basis_set, blips, PAOs,     & ! nakata3
+                                      atomf, paof,                     & ! nakata3
+                                      flag_contractSF, flag_do_SFtransform, & ! nakata3
                                       flag_cdft_atom, flag_local_excitation
     use cdft_data, only: cDFT_NAtoms, &
                          cDFT_NumberAtomGroups, cDFT_AtomList
@@ -287,12 +289,24 @@ contains
     ! Turn on flag_one_to_one for primitive SFs
     if (flag_basis_set==PAOs) then
        flag_one_to_one = .true.
+       flag_contractSF = .false.
        do i = 1, n_species
-          if (nsf_species(i).ne.npao_species(i)) flag_one_to_one = .false. ! false for contracted SFs
+          if (nsf_species(i).ne.npao_species(i)) then
+             ! Contracted SFs
+             flag_one_to_one = .false.
+             flag_contractSF = .true.
+             flag_do_SFtransform = .true.
+             atomf = paof
+          endif
        enddo
     else if (flag_basis_set==blips) then
        flag_one_to_one = .false.
+       flag_contractSF = .false.
+       flag_do_SFtransform = .false.
     endif
+    if (iprint_init.ge.3) write(io_lun,*) 'flag_one_to_one: ',flag_one_to_one
+    if (iprint_init.ge.3) write(io_lun,*) 'flag_contractSF: ',flag_contractSF
+    if (iprint_init.ge.3) write(io_lun,*) 'atomf          : ',atomf
 !!! nakata3 end
     !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done pseudo")') inode
     !
@@ -516,7 +530,7 @@ contains
                              max_L_iterations, flag_read_blocks,       &
                              runtype, restart_L, restart_rho,          &
                              flag_basis_set, blips, PAOs,              &
-                             sf, paof, atomf,                          & ! nakata2
+                             sf, atomf,                                & ! nakata2
                              flag_test_forces, UseGemm,                &
                              flag_fractional_atomic_coords,            &
                              flag_old_partitions, ne_in_cell,          &
@@ -882,11 +896,10 @@ contains
        basis_string = fdf_string(10,'Basis.BasisSet','PAOs')
        if(leqi(basis_string,'blips')) then
           flag_basis_set = blips
-          atomf = sf ! nakata2
        else if(leqi(basis_string,'PAOs')) then
           flag_basis_set = PAOs
-          atomf = paof ! nakata2
        end if
+       atomf = sf ! set to be sf as default   ! nakata3
        read_option            = fdf_boolean('Basis.LoadCoeffs',           .false.)
        flag_onsite_blip_ana   = fdf_boolean('Basis.OnsiteBlipsAnalytic',  .true. )
        flag_analytic_blip_int = fdf_boolean('Basis.AnalyticBlipIntegrals',.false.)
