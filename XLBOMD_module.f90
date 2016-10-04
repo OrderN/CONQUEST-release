@@ -633,7 +633,7 @@
       use matrix_data, ONLY: LSrange,Lrange
       use io_module2, ONLY: InfoX1,InfoX2,InfoX3,InfoX4,InfoX5, &
                             InfoX6,InfoX7,InfoX8,InfoX9
-      use store_matrix_module, ONLY: dump_matrix2
+      use store_matrix, ONLY: dump_matrix2
 
       implicit none
       ! local variables
@@ -1017,7 +1017,7 @@
       use mult_module, ONLY: mat_p,matrix_product,matS,matL,L_S_LS,mult, &
                              matrix_sum,allocate_temp_matrix,free_temp_matrix, &
                              matrix_product_trace
-      use store_matrix_module, ONLY: dump_matrix2
+      use store_matrix, ONLY: dump_matrix2
 
       ! db
       use global_module, ONLY: io_lun
