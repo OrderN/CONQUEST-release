@@ -174,7 +174,8 @@ contains
     use energy,        only: entropy
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,   &
                              WITH_LEVEL
-    use io_module2,    only: dump_matrix2, dump_InfoGlobal
+    use io_module2,    only: dump_InfoGlobal
+    use store_matrix_module, only: dump_matrix2
     use matrix_data,   only: Lrange, Srange, LSrange
     use XLBOMD_module, only: matX, matXvel, dump_XL
 
@@ -272,18 +273,18 @@ contains
 
      if (flag_dump_L) then
        if (.NOT. flag_MDold) then
-         call dump_matrix2('L',matL(1),inode,Lrange)
+         call dump_matrix2('L',matL(1),Lrange)
          ! For XL-BOMD
          if (flag_XLBOMD) then
            if (flag_propagateX) then
-             call dump_matrix2('X',matX(1),inode,LSrange)
-             call dump_matrix2('S',matS   ,inode,Srange)
+             call dump_matrix2('X',matX(1),LSrange)
+             call dump_matrix2('S',matS   ,Srange)
              if (integratorXL.EQ.'velocityVerlet') &
-               call dump_matrix2('Xvel',matXvel(1),inode,LSrange)
+               call dump_matrix2('Xvel',matXvel(1),LSrange)
            else
-             call dump_matrix2('X',matX(1),inode,Lrange)
+             call dump_matrix2('X',matX(1),Lrange)
              if (integratorXL.EQ.'velocityVerlet') &
-               call dump_matrix2('Xvel',matXvel(1),inode,Lrange)
+               call dump_matrix2('Xvel',matXvel(1),Lrange)
            endif
            ! When dissipation applies
            if (flag_dissipation) call dump_XL()
@@ -838,7 +839,7 @@ contains
     !Prints out charge density -- 2010.Nov.06 TM
     use io_module,         only: dump_charge
     use dimens,            only: n_my_grid_points
-    use io_module2,        ONLY: dump_matrix2
+    use store_matrix_module, only: dump_matrix2
 
     implicit none
 
@@ -1224,7 +1225,7 @@ contains
             !ORI    call dump_matrix("L_dn", matL(2), inode)
             !ORI end if
             if (.NOT. flag_MDold) then
-              call dump_matrix2('L',matL(1),inode,Lrange)
+              call dump_matrix2('L',matL(1),Lrange)
             else
               if (nspin == 1) then
                  call dump_matrix("L", matL(1), inode)

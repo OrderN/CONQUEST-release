@@ -558,7 +558,9 @@ contains
     use species_module, ONLY: nsf_species, species
     use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
     use input_module, ONLY: leqi
-    use io_module2, ONLY: grab_matrix2,dump_matrix2,InfoT
+    use io_module2, ONLY: grab_matrix2,InfoT
+    use store_matrix_module, ONLY: dump_matrix2
+
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
 
     implicit none
@@ -713,7 +715,7 @@ contains
     call free_temp_matrix(matI)
     ! Dump T-matrix
     if (.NOT. flag_MDold .AND. .NOT. leqi(runtype,'static') .AND. flag_TmatrixReuse) then
-      call dump_matrix2('T',matT,inode,Trange)
+      call dump_matrix2('T',matT,Trange)
       flag_readT = .true.
     endif
 

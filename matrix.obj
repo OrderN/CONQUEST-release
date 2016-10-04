@@ -26,4 +26,5 @@ MATRIX_OBJS  =  atoms.module.o \
                 io_module2.o \
                 UpdateInfo_module.o \
                 UpdateMember_module.o \
-                XLBOMD_module.o
+                XLBOMD_module.o \
+		store_matrix_module.o

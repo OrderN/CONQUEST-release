@@ -91,7 +91,7 @@ contains
     use global_module, ONLY: io_lun,ni_in_cell,nspin,numprocs,glob2node,n_proc_old
     use GenComms, ONLY: cq_abort,inode,ionode,gcopy,my_barrier
     use mult_module, ONLY: symmetrise_L,symmetrise_matA
-    use io_module2, ONLY: grab_InfoGlobal,grab_matrix2,dump_matrix2, &
+    use io_module2, ONLY: grab_InfoGlobal,grab_matrix2,&
                           dump_InfoGlobal,dump_idglob_old,deallocate_InfoMatrixFile, &
                           grab_idglob_old,n_matrix,InfoL,InfoMatrixFile
     use primary_module, ONLY: bundle

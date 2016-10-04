@@ -631,8 +631,9 @@
       use global_module, ONLY: flag_propagateL
       use GenComms, ONLY: cq_abort,inode
       use matrix_data, ONLY: LSrange,Lrange
-      use io_module2, ONLY: dump_matrix2,InfoX1,InfoX2,InfoX3,InfoX4,InfoX5, &
+      use io_module2, ONLY: InfoX1,InfoX2,InfoX3,InfoX4,InfoX5, &
                             InfoX6,InfoX7,InfoX8,InfoX9
+      use store_matrix_module, ONLY: dump_matrix2
 
       implicit none
       ! local variables
@@ -646,39 +647,39 @@
       maxiters = maxitersDissipation
       ! Dump X-matrix files
       !% Spin non-polarised only considered
-      call dump_matrix2('X1',matX_store(1,1),inode,range)
-      call dump_matrix2('X2',matX_store(2,1),inode,range)
-      call dump_matrix2('X3',matX_store(3,1),inode,range)
-      call dump_matrix2('X4',matX_store(4,1),inode,range)
+      call dump_matrix2('X1',matX_store(1,1),range)
+      call dump_matrix2('X2',matX_store(2,1),range)
+      call dump_matrix2('X3',matX_store(3,1),range)
+      call dump_matrix2('X4',matX_store(4,1),range)
       ! I DO HATE the following way, but leave it for now.. [01/10/2013 michi]
       select case (maxiters)
       case (4)
-        call dump_matrix2('X5',matX_store(5,1),inode,range)
+        call dump_matrix2('X5',matX_store(5,1),range)
       case (5)
-        call dump_matrix2('X5',matX_store(5,1),inode,range)
-        call dump_matrix2('X6',matX_store(6,1),inode,range)
+        call dump_matrix2('X5',matX_store(5,1),range)
+        call dump_matrix2('X6',matX_store(6,1),range)
       case (6)
-        call dump_matrix2('X5',matX_store(5,1),inode,range)
-        call dump_matrix2('X6',matX_store(6,1),inode,range)
-        call dump_matrix2('X7',matX_store(7,1),inode,range)
+        call dump_matrix2('X5',matX_store(5,1),range)
+        call dump_matrix2('X6',matX_store(6,1),range)
+        call dump_matrix2('X7',matX_store(7,1),range)
       case (7)
-        call dump_matrix2('X5',matX_store(5,1),inode,range)
-        call dump_matrix2('X6',matX_store(6,1),inode,range)
-        call dump_matrix2('X7',matX_store(7,1),inode,range)
-        call dump_matrix2('X8',matX_store(8,1),inode,range)
+        call dump_matrix2('X5',matX_store(5,1),range)
+        call dump_matrix2('X6',matX_store(6,1),range)
+        call dump_matrix2('X7',matX_store(7,1),range)
+        call dump_matrix2('X8',matX_store(8,1),range)
       case (8)
-        call dump_matrix2('X5',matX_store(5,1),inode,range)
-        call dump_matrix2('X6',matX_store(6,1),inode,range)
-        call dump_matrix2('X7',matX_store(7,1),inode,range)
-        call dump_matrix2('X8',matX_store(8,1),inode,range)
-        call dump_matrix2('X9',matX_store(9,1),inode,range)
+        call dump_matrix2('X5',matX_store(5,1),range)
+        call dump_matrix2('X6',matX_store(6,1),range)
+        call dump_matrix2('X7',matX_store(7,1),range)
+        call dump_matrix2('X8',matX_store(8,1),range)
+        call dump_matrix2('X9',matX_store(9,1),range)
       case (9)
-        call dump_matrix2('X5',matX_store(5,1),inode,range)
-        call dump_matrix2('X6',matX_store(6,1),inode,range)
-        call dump_matrix2('X7',matX_store(7,1),inode,range)
-        call dump_matrix2('X8',matX_store(8,1),inode,range)
-        call dump_matrix2('X9',matX_store(9,1),inode,range)
-        call dump_matrix2('X10',matX_store(10,1),inode,range)
+        call dump_matrix2('X5',matX_store(5,1),range)
+        call dump_matrix2('X6',matX_store(6,1),range)
+        call dump_matrix2('X7',matX_store(7,1),range)
+        call dump_matrix2('X8',matX_store(8,1),range)
+        call dump_matrix2('X9',matX_store(9,1),range)
+        call dump_matrix2('X10',matX_store(10,1),range)
       end select
 
       return
@@ -1016,7 +1017,8 @@
       use mult_module, ONLY: mat_p,matrix_product,matS,matL,L_S_LS,mult, &
                              matrix_sum,allocate_temp_matrix,free_temp_matrix, &
                              matrix_product_trace
-      use io_module2, ONLY: dump_matrix2
+      use store_matrix_module, ONLY: dump_matrix2
+
       ! db
       use global_module, ONLY: io_lun
       use GenComms, ONLY: myid

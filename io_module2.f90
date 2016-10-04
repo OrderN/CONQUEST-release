@@ -100,224 +100,224 @@ contains
   !!  SOURCE
   !!
   !subroutine dump_matrix2(stub,inode,range,matA,matB)
-  subroutine dump_matrix2(stub,matA,inode,range)
-
-    ! Module usage
-    use numbers
-    use basic_types, ONLY: cover_set
-    use global_module, ONLY: id_glob, species_glob, atom_coord
-    use io_module, ONLY: get_file_name
-    use group_module, ONLY: parts
-    use mult_module, ONLY: return_matrix_value, matrix_index, mat_p
-    use primary_module, ONLY: bundle
-    use cover_module, ONLY: BCS_parts
-    use matrix_data, ONLY: Lrange, mat
-    use species_module, ONLY: nsf_species
-    use matrix_data, ONLY: matrix_pointer, mat, Lrange
-
-    ! passed variables
-    integer :: inode, matA
-    integer,intent(in) :: range
-    character(len=*) :: stub
-    !integer,optional :: matB
-
-    ! local variables
-    integer :: lun, stat_alloc
-    integer :: iprim, ipart, mem_ipart, nab, n_beta, ist, j, jmax_i_max, &
-               j_global_part, np, ni, jsf, neigh, isf, ibeg, jbeta_alpha, len, gcspart, &
-               ipartx_ps,iparty_ps,ipartz_ps,ipartx_cs,iparty_cs,ipartz_cs,CC, &
-               ni_cover,idlocal_i,i_in_cover,np_cover,np_cover_CC,x_CC,y_CC,z_CC,atom_num
-    integer, allocatable :: jmax_i(:), jbeta_max_i(:), j_global_num(:,:), &
-                            beta_j(:,:)
-    real(double), allocatable :: vec_Rij(:,:), Ltmp(:)
-    character(20) :: file_name
-    logical :: find_local
-
-    ! DEBUG
-    integer :: lun_db
-    real(double) :: dist
-    character(20) :: file_db
-
-
-    ! Firstly, make a file based upon the node ID.
-    ! Its name will be renamed later.
-    !ORI call get_file_name('Lmatrix2',numprocs,inode,file_name)
-    call get_file_name(stub//'matrix2',numprocs,inode,file_name)
-    call io_assign(lun)
-    open (lun,file=file_name)
-
-    !! -------- DEBUG -------- !!
-    if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
-      call get_file_name('io2',numprocs,inode,file_db)
-      call io_assign(lun_db)
-      !ORI open (lun_db,file=file_db,position='append')
-      open (lun_db,file=file_db)
-      write (lun_db,*) "mat_p(matL(1))%matrix(1:)"
-      write (lun_db,*) mat_p(matA)%matrix(1:)
-    endif
-    !! -------- DEBUG -------- !!
-
-    ! Then, write down the information necessary for reading Lmatrix files.
-    ! 1. node ID, no. of PS of atoms "i".
-    write (lun,*) inode, bundle%n_prim 
-
-    ! 2. no. of alpha for each "i".
-    write (lun,*) nsf_species(bundle%species(1:bundle%n_prim))
-
-    ! NOTE: The followings are written out with neighbour-labelling
-    ! 3. no. of the neighbours "j" for each "i".
-    ! 4. no. of "neighbour-j x beta" for each "i".
-    allocate (jmax_i(bundle%n_prim),jbeta_max_i(bundle%n_prim), STAT=stat_alloc)
-    if (stat_alloc.NE.0) call cq_abort('Error allocating jmax_i, jbeta_max_i: ', &
-                                        bundle%n_prim)
-    iprim = 0
-    jbeta_max_i = 0
-    jmax_i_max = -1
-    do np = 1, bundle%groups_on_node
-      if (bundle%nm_nodgroup(np).GT.0) then
-        do ni = 1, bundle%nm_nodgroup(np)
-          iprim = iprim + 1
-          atom_num = bundle%nm_nodbeg(np)+ni-1
-          jmax_i(atom_num) =  mat(np,range)%n_nab(ni)
-          if (jmax_i(atom_num).GT.jmax_i_max) jmax_i_max = jmax_i(atom_num)
-          do neigh = 1, jmax_i(atom_num)
-            ist = mat(np,range)%i_acc(ni) + neigh - 1 ! Neighbour-labeling
-            n_beta = mat(np,range)%ndimj(ist)
-            jbeta_max_i(iprim) = jbeta_max_i(iprim) + n_beta
-          enddo !(neigh)
-
-          !! ---- DEBUG ---- !!
-          if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
-            write (lun_db,*) "iprim,np,ni: ", iprim, np, ni
-            write (lun_db,*) ""
-          endif
-          !! ---- DEBUG ---- !!
-
-        enddo !(ni)
-      endif
-    enddo !(np)
-    write (lun,*) jmax_i(1:bundle%n_prim)
-    write (lun,*) jbeta_max_i(1:bundle%n_prim)
-
-    ! 5. beta, j in global ID, vec_Rij and L for each "j" over "i".
-    ! It does not look good to allocate arrays with jmax_i_max, 
-    ! but I hate to allocate them in a do-loop.
-    ! Be careful - Spin is NOT considered.
-    allocate (j_global_num(bundle%n_prim,jmax_i_max), &
-              beta_j(bundle%n_prim,jmax_i_max), STAT=stat_alloc)
-    if (stat_alloc.NE.0) call cq_abort('Error allocating j_global_num: ')
-    allocate (vec_Rij(3,jmax_i_max), STAT=stat_alloc)
-    if (stat_alloc.NE.0) call cq_abort('Error allocating vec_Rij: ',3,jmax_i_max)
-
-    j_global_num = 0
-    beta_j = 0
-    iprim = 0
-    ibeg = 1
-    do np = 1, bundle%groups_on_node
-      if (bundle%nm_nodgroup(np).GT.0) then
-        do ni = 1, bundle%nm_nodgroup(np)
-          atom_num=bundle%nm_nodbeg(np)+ni-1
-          iprim = iprim + 1
-  
-          !! ------------ DEBUG: ------------ !!
-          if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
-            write (lun_db,*) ""
-            write (lun_db,*) "parts. & members in bundle:", np, ni
-            write (lun_db,*) "No. of neighbour:", mat(np,range)%n_nab(ni)
-            write (lun_db,*) ""
-          endif
-          !! ------------ DEBUG: ------------ !!
-
-          !ORI do neigh = 1, jmax_i(iprim)
-          do neigh = 1, mat(np,range)%n_nab(ni)
-            ist = mat(np,range)%i_acc(ni) + neigh - 1  ! Neighbour-labeling
-            gcspart=BCS_parts%icover_ibeg(mat(np,range)%i_part(ist))+mat(np,range)%i_seq(ist)-1
-            j_global_part = BCS_parts%lab_cell(mat(np,range)%i_part(ist))
-
-            !! --------- DEBUG: --------- !!
-            if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
-              write (lun_db,*) "j_global_part:", j_global_part
-              write (lun_db,*) "parts%icell_beg:", parts%icell_beg(j_global_part)
-              write (lun_db,*) "mat(np,range)i_seq(ist)-1:", mat(np,range)%i_seq(ist)-1
-            endif
-            !! --------- DEBUG: --------- !!
-
-            j_global_num(atom_num,neigh) = id_glob(parts%icell_beg(j_global_part) &
-                                                +mat(np,range)%i_seq(ist)-1)
-            beta_j(atom_num,neigh) = nsf_species(species_glob(j_global_num(atom_num,neigh)))
-            vec_Rij(1,neigh) = bundle%xprim(atom_num) - BCS_parts%xcover(gcspart)
-            vec_Rij(2,neigh) = bundle%yprim(atom_num) - BCS_parts%ycover(gcspart)
-            vec_Rij(3,neigh) = bundle%zprim(atom_num) - BCS_parts%zcover(gcspart)
-
-            !! -------- DEBUG: -------- !!
-            if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
-              dist = vec_Rij(1,neigh)*vec_Rij(1,neigh)+vec_Rij(2,neigh)*vec_Rij(2,neigh) &
-                      +vec_Rij(3,neigh)*vec_Rij(3,neigh)
-              dist = sqrt(dist)
-              write (lun_db,*) "Neigh-label, part(in BCS, CC) &  dist.:"
-              write (lun_db,*) neigh,BCS_parts%lab_cover(mat(np,range)%i_part(ist)),dist
-            endif
-            !! -------- DEBUG: -------- !!
-
-          enddo
-          write (lun,*) bundle%ig_prim(iprim)
-          write (lun,*) beta_j(iprim,1:jmax_i(atom_num))
-          write (lun,*) j_global_num(iprim,1:jmax_i(atom_num))
-          do j = 1, jmax_i(atom_num)
-            !DEBUG write (lun,*) j, vec_Rij(1:3,j)
-            write (lun,*) vec_Rij(1:3,j)
-          enddo
-          len = jbeta_max_i(iprim)*nsf_species(bundle%species(iprim))
-
-          !! ---------- DEBUG ---------- !!
-          if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
-            write (lun_db,*) "mat_p(matL(1))%length: ", mat_p(matA)%length 
-            write (lun_db,*) "ni,len: ",ni,len
-            write (lun_db,*) "ibeg:", ibeg
-          endif
-          !! ---------- DEBUG ---------- !!
-          
-          do jbeta_alpha = 1, len
-            write (lun,fmt='(f25.18)') mat_p(matA)%matrix(ibeg+jbeta_alpha-1)
-          enddo
-          ibeg = ibeg + len
-        enddo !(ni)
-      endif
-    enddo !(np)
-
-    !! ---------- DEBUG: ---------- !!
-    if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
-      write (lun_db,'(/a)') "--- Lmatrix elements: mat_p(matA)%matrix(1:length)"
-      do ni = 1, mat_p(matA)%length
-        write (lun_db,'(f25.18)') mat_p(matA)%matrix(ni)
-      enddo
-    endif
-    !! ---------- DEBUG: ---------- !!
-
-    ! Deallocation section.
-    deallocate (jmax_i,jbeta_max_i, STAT=stat_alloc)
-    if (stat_alloc.NE.0) call cq_abort('Error deallocating jmax_i, jbeta_max_i: ', &
-                                        bundle%n_prim)
-    deallocate (j_global_num,beta_j, STAT=stat_alloc)
-    if (stat_alloc.NE.0) call cq_abort('Error deallocating j_global_num:')
-    deallocate (vec_Rij, STAT=stat_alloc)
-    if (stat_alloc.NE.0) call cq_abort('Error deallocating vec_Rij:')
-
-    ! Close the file in the end.
-    call io_close(lun)
-
-    !! ---------- DEBUG ---------- !!
-    if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
-      write (lun_db,*) ""
-      write (lun_db,*) ""
-      call io_close(lun_db)
-    endif
-    !! ---------- DEBUG ---------- !!
-
-    return
-  end subroutine dump_matrix2
-  !!***
-
+!  subroutine dump_matrix2(stub,matA,inode,range)
+!
+!    ! Module usage
+!    use numbers
+!    use basic_types, ONLY: cover_set
+!    use global_module, ONLY: id_glob, species_glob, atom_coord
+!    use io_module, ONLY: get_file_name
+!    use group_module, ONLY: parts
+!    use mult_module, ONLY: return_matrix_value, matrix_index, mat_p
+!    use primary_module, ONLY: bundle
+!    use cover_module, ONLY: BCS_parts
+!    use matrix_data, ONLY: Lrange, mat
+!    use species_module, ONLY: nsf_species
+!    use matrix_data, ONLY: matrix_pointer, mat, Lrange
+!
+!    ! passed variables
+!    integer :: inode, matA
+!    integer,intent(in) :: range
+!    character(len=*) :: stub
+!    !integer,optional :: matB
+!
+!    ! local variables
+!    integer :: lun, stat_alloc
+!    integer :: iprim, ipart, mem_ipart, nab, n_beta, ist, j, jmax_i_max, &
+!               j_global_part, np, ni, jsf, neigh, isf, ibeg, jbeta_alpha, len, gcspart, &
+!               ipartx_ps,iparty_ps,ipartz_ps,ipartx_cs,iparty_cs,ipartz_cs,CC, &
+!               ni_cover,idlocal_i,i_in_cover,np_cover,np_cover_CC,x_CC,y_CC,z_CC,atom_num
+!    integer, allocatable :: jmax_i(:), jbeta_max_i(:), j_global_num(:,:), &
+!                            beta_j(:,:)
+!    real(double), allocatable :: vec_Rij(:,:), Ltmp(:)
+!    character(20) :: file_name
+!    logical :: find_local
+!
+!    ! DEBUG
+!    integer :: lun_db
+!    real(double) :: dist
+!    character(20) :: file_db
+!
+!
+!    ! Firstly, make a file based upon the node ID.
+!    ! Its name will be renamed later.
+!    !ORI call get_file_name('Lmatrix2',numprocs,inode,file_name)
+!    call get_file_name(stub//'matrix2',numprocs,inode,file_name)
+!    call io_assign(lun)
+!    open (lun,file=file_name)
+!
+!    !! -------- DEBUG -------- !!
+!    if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
+!      call get_file_name('io2',numprocs,inode,file_db)
+!      call io_assign(lun_db)
+!      !ORI open (lun_db,file=file_db,position='append')
+!      open (lun_db,file=file_db)
+!      write (lun_db,*) "mat_p(matL(1))%matrix(1:)"
+!      write (lun_db,*) mat_p(matA)%matrix(1:)
+!    endif
+!    !! -------- DEBUG -------- !!
+!
+!    ! Then, write down the information necessary for reading Lmatrix files.
+!    ! 1. node ID, no. of PS of atoms "i".
+!    write (lun,*) inode, bundle%n_prim 
+!
+!    ! 2. no. of alpha for each "i".
+!    write (lun,*) nsf_species(bundle%species(1:bundle%n_prim))
+!
+!    ! NOTE: The followings are written out with neighbour-labelling
+!    ! 3. no. of the neighbours "j" for each "i".
+!    ! 4. no. of "neighbour-j x beta" for each "i".
+!    allocate (jmax_i(bundle%n_prim),jbeta_max_i(bundle%n_prim), STAT=stat_alloc)
+!    if (stat_alloc.NE.0) call cq_abort('Error allocating jmax_i, jbeta_max_i: ', &
+!                                        bundle%n_prim)
+!    iprim = 0
+!    jbeta_max_i = 0
+!    jmax_i_max = -1
+!    do np = 1, bundle%groups_on_node
+!      if (bundle%nm_nodgroup(np).GT.0) then
+!        do ni = 1, bundle%nm_nodgroup(np)
+!          iprim = iprim + 1
+!          atom_num = bundle%nm_nodbeg(np)+ni-1
+!          jmax_i(atom_num) =  mat(np,range)%n_nab(ni)
+!          if (jmax_i(atom_num).GT.jmax_i_max) jmax_i_max = jmax_i(atom_num)
+!          do neigh = 1, jmax_i(atom_num)
+!            ist = mat(np,range)%i_acc(ni) + neigh - 1 ! Neighbour-labeling
+!            n_beta = mat(np,range)%ndimj(ist)
+!            jbeta_max_i(iprim) = jbeta_max_i(iprim) + n_beta
+!          enddo !(neigh)
+!
+!          !! ---- DEBUG ---- !!
+!          if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
+!            write (lun_db,*) "iprim,np,ni: ", iprim, np, ni
+!            write (lun_db,*) ""
+!          endif
+!          !! ---- DEBUG ---- !!
+!
+!        enddo !(ni)
+!      endif
+!    enddo !(np)
+!    write (lun,*) jmax_i(1:bundle%n_prim)
+!    write (lun,*) jbeta_max_i(1:bundle%n_prim)
+!
+!    ! 5. beta, j in global ID, vec_Rij and L for each "j" over "i".
+!    ! It does not look good to allocate arrays with jmax_i_max, 
+!    ! but I hate to allocate them in a do-loop.
+!    ! Be careful - Spin is NOT considered.
+!    allocate (j_global_num(bundle%n_prim,jmax_i_max), &
+!              beta_j(bundle%n_prim,jmax_i_max), STAT=stat_alloc)
+!    if (stat_alloc.NE.0) call cq_abort('Error allocating j_global_num: ')
+!    allocate (vec_Rij(3,jmax_i_max), STAT=stat_alloc)
+!    if (stat_alloc.NE.0) call cq_abort('Error allocating vec_Rij: ',3,jmax_i_max)
+!
+!    j_global_num = 0
+!    beta_j = 0
+!    iprim = 0
+!    ibeg = 1
+!    do np = 1, bundle%groups_on_node
+!      if (bundle%nm_nodgroup(np).GT.0) then
+!        do ni = 1, bundle%nm_nodgroup(np)
+!          atom_num=bundle%nm_nodbeg(np)+ni-1
+!          iprim = iprim + 1
+!  
+!          !! ------------ DEBUG: ------------ !!
+!          if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
+!            write (lun_db,*) ""
+!            write (lun_db,*) "parts. & members in bundle:", np, ni
+!            write (lun_db,*) "No. of neighbour:", mat(np,range)%n_nab(ni)
+!            write (lun_db,*) ""
+!          endif
+!          !! ------------ DEBUG: ------------ !!
+!
+!          !ORI do neigh = 1, jmax_i(iprim)
+!          do neigh = 1, mat(np,range)%n_nab(ni)
+!            ist = mat(np,range)%i_acc(ni) + neigh - 1  ! Neighbour-labeling
+!            gcspart=BCS_parts%icover_ibeg(mat(np,range)%i_part(ist))+mat(np,range)%i_seq(ist)-1
+!            j_global_part = BCS_parts%lab_cell(mat(np,range)%i_part(ist))
+!
+!            !! --------- DEBUG: --------- !!
+!            if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
+!              write (lun_db,*) "j_global_part:", j_global_part
+!              write (lun_db,*) "parts%icell_beg:", parts%icell_beg(j_global_part)
+!              write (lun_db,*) "mat(np,range)i_seq(ist)-1:", mat(np,range)%i_seq(ist)-1
+!            endif
+!            !! --------- DEBUG: --------- !!
+!
+!            j_global_num(atom_num,neigh) = id_glob(parts%icell_beg(j_global_part) &
+!                                                +mat(np,range)%i_seq(ist)-1)
+!            beta_j(atom_num,neigh) = nsf_species(species_glob(j_global_num(atom_num,neigh)))
+!            vec_Rij(1,neigh) = bundle%xprim(atom_num) - BCS_parts%xcover(gcspart)
+!            vec_Rij(2,neigh) = bundle%yprim(atom_num) - BCS_parts%ycover(gcspart)
+!            vec_Rij(3,neigh) = bundle%zprim(atom_num) - BCS_parts%zcover(gcspart)
+!
+!            !! -------- DEBUG: -------- !!
+!            if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
+!              dist = vec_Rij(1,neigh)*vec_Rij(1,neigh)+vec_Rij(2,neigh)*vec_Rij(2,neigh) &
+!                      +vec_Rij(3,neigh)*vec_Rij(3,neigh)
+!              dist = sqrt(dist)
+!              write (lun_db,*) "Neigh-label, part(in BCS, CC) &  dist.:"
+!              write (lun_db,*) neigh,BCS_parts%lab_cover(mat(np,range)%i_part(ist)),dist
+!            endif
+!            !! -------- DEBUG: -------- !!
+!
+!          enddo
+!          write (lun,*) bundle%ig_prim(iprim)
+!          write (lun,*) beta_j(iprim,1:jmax_i(atom_num))
+!          write (lun,*) j_global_num(iprim,1:jmax_i(atom_num))
+!          do j = 1, jmax_i(atom_num)
+!            !DEBUG write (lun,*) j, vec_Rij(1:3,j)
+!            write (lun,*) vec_Rij(1:3,j)
+!          enddo
+!          len = jbeta_max_i(iprim)*nsf_species(bundle%species(iprim))
+!
+!          !! ---------- DEBUG ---------- !!
+!          if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
+!            write (lun_db,*) "mat_p(matL(1))%length: ", mat_p(matA)%length 
+!            write (lun_db,*) "ni,len: ",ni,len
+!            write (lun_db,*) "ibeg:", ibeg
+!          endif
+!          !! ---------- DEBUG ---------- !!
+!          
+!          do jbeta_alpha = 1, len
+!            write (lun,fmt='(f25.18)') mat_p(matA)%matrix(ibeg+jbeta_alpha-1)
+!          enddo
+!          ibeg = ibeg + len
+!        enddo !(ni)
+!      endif
+!    enddo !(np)
+!
+!    !! ---------- DEBUG: ---------- !!
+!    if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
+!      write (lun_db,'(/a)') "--- Lmatrix elements: mat_p(matA)%matrix(1:length)"
+!      do ni = 1, mat_p(matA)%length
+!        write (lun_db,'(f25.18)') mat_p(matA)%matrix(ni)
+!      enddo
+!    endif
+!    !! ---------- DEBUG: ---------- !!
+!
+!    ! Deallocation section.
+!    deallocate (jmax_i,jbeta_max_i, STAT=stat_alloc)
+!    if (stat_alloc.NE.0) call cq_abort('Error deallocating jmax_i, jbeta_max_i: ', &
+!                                        bundle%n_prim)
+!    deallocate (j_global_num,beta_j, STAT=stat_alloc)
+!    if (stat_alloc.NE.0) call cq_abort('Error deallocating j_global_num:')
+!    deallocate (vec_Rij, STAT=stat_alloc)
+!    if (stat_alloc.NE.0) call cq_abort('Error deallocating vec_Rij:')
+!
+!    ! Close the file in the end.
+!    call io_close(lun)
+!
+!    !! ---------- DEBUG ---------- !!
+!    if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
+!      write (lun_db,*) ""
+!      write (lun_db,*) ""
+!      call io_close(lun_db)
+!    endif
+!    !! ---------- DEBUG ---------- !!
+!
+!    return
+!  end subroutine dump_matrix2
+!  !!***
+!
   ! -----------------------------------------------------------------------
   ! Subroutine grab_matrix2
   ! -----------------------------------------------------------------------
