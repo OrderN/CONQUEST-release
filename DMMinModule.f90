@@ -175,7 +175,7 @@ contains
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,   &
                              WITH_LEVEL
     use io_module2,    only: dump_InfoGlobal
-    use store_matrix_module, only: dump_matrix2
+    use store_matrix,  only: dump_matrix2
     use matrix_data,   only: Lrange, Srange, LSrange
     use XLBOMD_module, only: matX, matXvel, dump_XL
 
@@ -839,7 +839,7 @@ contains
     !Prints out charge density -- 2010.Nov.06 TM
     use io_module,         only: dump_charge
     use dimens,            only: n_my_grid_points
-    use store_matrix_module, only: dump_matrix2
+    use store_matrix,      only: dump_matrix2
 
     implicit none
 

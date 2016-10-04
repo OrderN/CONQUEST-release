@@ -559,7 +559,7 @@ contains
     use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
     use input_module, ONLY: leqi
     use io_module2, ONLY: grab_matrix2,InfoT
-    use store_matrix_module, ONLY: dump_matrix2
+    use store_matrix, ONLY: dump_matrix2
 
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
 

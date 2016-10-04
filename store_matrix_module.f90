@@ -13,7 +13,7 @@
 !!  MODIFCATION
 !!   - Added derived data types for XL-BOMD
 !!
-module store_matrix_module
+module store_matrix
 
   use datatypes
   use global_module, ONLY: numprocs
@@ -292,4 +292,4 @@ contains
     return
    end subroutine free_matrix_store
 
-end module store_matrix_module
+end module store_matrix
