@@ -186,21 +186,21 @@ contains
 !!! nakata3
     ! Set indices for ATOMF-based-matrix ranges
     if (atomf==sf) then
-       Satomf_range = Srange
-       Hatomf_range = Hrange
-       AP_range     = SPrange
-       PA_range     = PSrange
+       aSa_range = Srange
+       aHa_range = Hrange
+       AP_range  = SPrange
+       PA_range  = PSrange
        mx_matrices_tmp = 22
     else
-       Satomf_range = 23
-       Hatomf_range = 24
-       AP_range     = 25
-       PA_range     = 26
+       aSa_range       = 23
+       aHa_range       = 24
+       AP_range        = 25
+       PA_range        = 26
        HTr_range       = 27
        SFcoeff_range   = 28
        SFcoeffTr_range = 29
-       Satomfsf_range  = 30
-       Hatomfsf_range  = 31
+       aSs_range       = 30
+       aHs_range       = 31
        LD_range        = 32
        mx_matrices_tmp = mx_matrices ! = 32 
     endif
@@ -351,12 +351,12 @@ contains
 !!! 2016.9.16 nakata3
     ! for ATOMF-based matrices
     if (atomf.ne.sf) then
-       rcut(Satomf_range)    = two*r_s_atomf
-       rcut(Hatomf_range)    = rcut(Hrange) - two*r_MS
+       rcut(aSa_range)       = two*r_s_atomf
+       rcut(aHa_range)       = rcut(Hrange) - two*r_MS
        rcut(AP_range)        = r_core + r_h_atomf
        rcut(PA_range)        = rcut(AP_range)
-       rcut(Satomfsf_range)  = r_s_atomf + r_s
-       rcut(Hatomfsf_range)  = rcut(Hrange) - r_MS
+       rcut(aSs_range)       = r_s_atomf + r_s
+       rcut(aHs_range)       = rcut(Hrange) - r_MS
        rcut(SFcoeff_range)   = r_MS
        rcut(SFcoeffTr_range) = r_MS
        rcut(LD_range)        = r_LD
@@ -396,12 +396,12 @@ contains
     mat_name(SXrange)  = "SX "
 !!! nakata3
     if (atomf.ne.sf) then
-       mat_name(Satomf_range)    = "aSa"
-       mat_name(Hatomf_range)    = "aHa"
+       mat_name(aSa_range)       = "aSa"
+       mat_name(aHa_range)       = "aHa"
        mat_name(AP_range)        = "AP"
        mat_name(PA_range)        = "PA"
-       mat_name(Satomfsf_range)  = "aSs"
-       mat_name(Hatomfsf_range)  = "aHs"
+       mat_name(aSs_range)       = "aSs"
+       mat_name(aHs_range)       = "aHs"
        mat_name(SFcoeff_range)   = "MS"
        mat_name(SFcoeffTr_range) = "MSt"
        mat_name(LD_range)        = "LD"

@@ -139,7 +139,7 @@ contains
 !         mx_SPpair_remnode, mx_SPpair_domain
     use set_blipgrid_module,ONLY: comm_naba_blocks_of_atoms
     use comm_array_module,  ONLY: isend_array,irecv_array!,check_commarray_int!,check_commarray_real
-    use matrix_data, ONLY: halo, rcut, Satomf_range, AP_range, Hatomf_range, dHrange ! nakata3
+    use matrix_data, ONLY: halo, rcut, aSa_range, AP_range, aHa_range, dHrange ! nakata3
     use GenComms, ONLY: my_barrier, cq_abort
     use mpi, ONLY: MPI_STATUS_SIZE
 
@@ -162,7 +162,7 @@ contains
     call start_timer(tmr_std_indexing)
     !cutoff radius for matrix
 !!! nakata2
-    rcut_S = rcut(Satomf_range)
+    rcut_S = rcut(aSa_range)
     rcut_SP= rcut(AP_range)
 !!! nakata2
     !atomf = sf (for blips and one_to_one PAOs) or paof (for contracted PAOs)
@@ -223,8 +223,8 @@ contains
     end if
     !Bundle responsible node receives the information of pairs of naba
     ! atoms of its remote nodes and Constructs RemoteBucket
-    call setup_recvME(atomf_atomf_rem,myid,myid_ibegin,rem_bucket(atomf_atomf_rem),halo(Satomf_range), &
-         rem_bucket(atomf_H_atomf_rem),halo(Hatomf_range))
+    call setup_recvME(atomf_atomf_rem,myid,myid_ibegin,rem_bucket(atomf_atomf_rem),halo(aSa_range), &
+         rem_bucket(atomf_H_atomf_rem),halo(aHa_range))
     deallocate(isend_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating isend_array in set_bucket: ",stat)
 

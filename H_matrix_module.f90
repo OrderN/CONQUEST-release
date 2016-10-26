@@ -316,7 +316,7 @@ contains
     if (inode == ionode .and. iprint_ops > 2) write (io_lun, *) 'Done integration'
     !
     !
-    if (iprint_ops > 2) then
+    if (iprint_ops > 4) then
        if (nspin == 1) then
           call dump_matrix("Nl",    matHatomf(1), inode)
        else
@@ -433,7 +433,7 @@ contains
     !
     !
     ! dump matrices if required
-    if (iprint_ops > 4) then
+    if (iprint_ops > 3) then
        call dump_matrix("NS", matS, inode)
        if (nspin == 1) then
           call dump_matrix("NH",    matH(1), inode)
@@ -1482,7 +1482,7 @@ contains
 
     use numbers
     use primary_module,              only: bundle
-    use matrix_data,                 only: mat, Hrange, dHrange, Hatomf_range   ! nakata3
+    use matrix_data,                 only: mat, Hrange, dHrange, aHa_range   ! nakata3
     use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use blip_grid_transform_module,  only: blip_to_grad_new
@@ -1540,13 +1540,13 @@ contains
        ! Use assemble to generate matrix elements
        if(flag_vary_basis) then
           matdKE = allocate_temp_matrix(dHrange, 0, paof, atomf)   ! nakata2, delete this line later
-          call assemble_2(Hatomf_range, matKEatomf, 2, matdKE)
+          call assemble_2(aHa_range, matKEatomf, 2, matdKE)
           do spin = 1, nspin
              call matrix_sum(one, matdH(spin), half, matdKE)
           end do
           call free_temp_matrix(matdKE)
        else
-          call assemble_2(Hatomf_range, matKEatomf, 2)
+          call assemble_2(aHa_range, matKEatomf, 2)
        end if
     else
        call cq_abort('get_T_matrix: basis set incorrectly specified ', &

@@ -135,7 +135,7 @@ contains
   !!   2015/06/10 15:44 cor & dave
   !!    - Input parameters for band output
   !!   2016/09/15 17:00 nakata
-  !!    Set flag_one_to_one = .true. automatically for primitive SFs
+  !!    Set flag_one_to_one and flag_contractSF
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -187,7 +187,7 @@ contains
     use force_module,           only: tot_force
     use DiagModule,             only: diagon
     use constraint_module,      only: flag_RigidBonds,constraints
-    use support_spec_format,    only: flag_one_to_one   ! nakata3
+    use support_spec_format,    only: flag_one_to_one, read_option   ! nakata3
 
     implicit none
 
@@ -286,7 +286,7 @@ contains
     endif
 !!! 2016.9.15 nakata3
     !
-    ! Turn on flag_one_to_one for primitive SFs
+    ! Set flag_one_to_one and flag_contractSF
     if (flag_basis_set==PAOs) then
        flag_one_to_one = .true.
        flag_contractSF = .false.
@@ -299,14 +299,23 @@ contains
              atomf = paof
           endif
        enddo
+       if (flag_one_to_one .and. read_option) then
+          if (inode==ionode) write(io_lun,'(A/A)') &
+             'Warning!! The number of the SFs and the PAOs are the same but read SF coefficients', &
+             '          so that flag_one_to_one and flag_contractSF are set to be F and T.'
+          flag_one_to_one = .false.
+          flag_contractSF = .true.
+          flag_do_SFtransform = .true.
+          atomf = paof
+       endif
     else if (flag_basis_set==blips) then
        flag_one_to_one = .false.
        flag_contractSF = .false.
        flag_do_SFtransform = .false.
     endif
-    if (iprint_init.ge.3) write(io_lun,*) 'flag_one_to_one: ',flag_one_to_one
-    if (iprint_init.ge.3) write(io_lun,*) 'flag_contractSF: ',flag_contractSF
-    if (iprint_init.ge.3) write(io_lun,*) 'atomf          : ',atomf
+    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_one_to_one: ',flag_one_to_one
+    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_contractSF: ',flag_contractSF
+    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'atomf          : ',atomf
 !!! nakata3 end
     !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done pseudo")') inode
     !
@@ -620,8 +629,7 @@ contains
     use support_spec_format, only: flag_paos_atoms_in_cell,          &
                                    read_option, symmetry_breaking,   &
                                    support_pao_file, TestBasisGrads, &
-                                   TestTot, TestBoth, TestS, TestH,  &
-                                   flag_one_to_one
+                                   TestTot, TestBoth, TestS, TestH
     use read_pao_info,     only: pao_info_file, pao_norm_flag
     use read_support_spec, only: support_spec_file, &
                                  flag_read_support_spec
@@ -1355,7 +1363,7 @@ contains
        del_k = fdf_double('Basis.PaoKspaceOlGridspace',0.1_double)
        kcut  = fdf_double('Basis.PaoKspaceOlCutoff', 1000.0_double)
        flag_paos_atoms_in_cell = fdf_boolean(  'Basis.PAOs_StoreAllAtomsInCell',.true. )
-       flag_one_to_one         = fdf_boolean(  'Basis.PAOs_OneToOne',           .false.)
+!       flag_one_to_one         = fdf_boolean(  'Basis.PAOs_OneToOne',           .false.)  ! flag_one_to_one is set in subroutine_read_and_write
        symmetry_breaking       = fdf_boolean(  'Basis.SymmetryBreaking',        .false.)
        support_pao_file        = fdf_string(80,'Basis.SupportPaoFile',   'supp_pao.dat')
        pao_info_file           = fdf_string(80,'Basis.PaoInfoFile',           'pao.dat')

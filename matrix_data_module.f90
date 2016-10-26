@@ -47,8 +47,8 @@
 !!   2014/01/17 13:20 lat
 !!    Added new matrix X and SX for exchange
 !!   2016/08/09 18:00 nakata
-!!    Added parameters Satomf_range, Hatomf_range, AP_range, PA_range, HTr_range,
-!!                     SFcoeff_range, SFcoeffTr_range, Satomfsf_range, Hatomfsf_range, LD_range,
+!!    Added parameters aSa_range, aHa_range, AP_range, PA_range, HTr_range,
+!!                     SFcoeff_range, SFcoeffTr_range, aSs_range, aHs_range, LD_range,
 !!                     SFcoeff_matind, SFcoeffTr_matind, Satomf_matind, Hatomf_matind, 
 !!                     SPatomf_matind, PSatomf_matind, Satomfsf_matind, Hatomfsf_matind, HTr_matind, LD_matind
 !!    for PAO-based calculations
@@ -105,15 +105,15 @@ module matrix_data
 
 !!! nakata3
   ! The indices for ATOMF-based-matrix ranges will be set later.
-  integer :: Satomf_range    ! 23
-  integer :: Hatomf_range    ! 24
+  integer :: aSa_range       ! 23 for S(atomf,atomf) = r_atomf + r_atomf
+  integer :: aHa_range       ! 24 for H(atomf,atomf) = r_atomf + r_atomf
   integer :: AP_range        ! 25
   integer :: PA_range        ! 26
   integer :: HTr_range       ! 27
   integer :: SFcoeff_range   ! 28
   integer :: SFcoeffTr_range ! 29
-  integer :: Satomfsf_range  ! 30
-  integer :: Hatomfsf_range  ! 31
+  integer :: aSs_range       ! 30 for S(atomf,sf) = r_atomf + r_sf
+  integer :: aHs_range       ! 31 for H(atomf,sf) = r_atomf + r_sf
   integer :: LD_range        ! 32
 !!! end nakata3
 
