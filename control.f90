@@ -226,6 +226,7 @@ contains
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use io_module2,    ONLY: dump_InfoGlobal
+    use store_matrix,  ONLY: dump_InfoMatGlobal
 
     implicit none
 
@@ -267,7 +268,7 @@ contains
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     if (.NOT. flag_MDold) then
-      call dump_InfoGlobal()
+      call dump_InfoMatGlobal()
     endif
     iter = 1
     ggold = zero
@@ -460,6 +461,7 @@ contains
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use move_atoms,     only: fac_Kelvin2Hartree
     use io_module2,     ONLY: dump_InfoGlobal,grab_InfoGlobal,grab_matrix2,InfoL
+    use store_matrix,   ONLY: dump_InfoMatGlobal
     use DiagModule,     ONLY: diagon
     use mult_module,    ONLY: matL,L_trans
     use matrix_data,    ONLY: Lrange
@@ -547,7 +549,7 @@ contains
     endif
     ! Dump global data
     if (.NOT. flag_MDold) then
-      if (inode.EQ.ionode) call dump_InfoGlobal(i_first)
+      if (inode.EQ.ionode) call dump_InfoMatGlobal(i_first)
     endif
 
     energy_md = energy0
@@ -632,7 +634,7 @@ contains
 
        ! Dump global data
        if (.NOT. flag_MDold) then
-         if (inode.EQ.ionode) call dump_InfoGlobal(iter)
+         if (inode.EQ.ionode) call dump_InfoMatGlobal(iter)
        endif
        
        ! Analyse forces

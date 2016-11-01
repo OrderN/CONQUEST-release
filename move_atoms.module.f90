@@ -769,6 +769,7 @@ contains
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use io_module2, ONLY: grab_InfoGlobal,dump_InfoGlobal,InfoL,grab_matrix2
+    use store_matrix, ONLY:dump_InfoMatGlobal
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use DiagModule, ONLY: diagon
 
@@ -976,7 +977,7 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
                         .false.)
-       if (inode.EQ.ionode) call dump_InfoGlobal()
+       if (inode.EQ.ionode) call dump_InfoMatGlobal()
        if (inode == ionode .and. iprint_MD > 1) &
             write (io_lun, &
                    fmt='(4x,"In safemin2, iter ",i3," step and energy &
@@ -1121,7 +1122,7 @@ contains
     else
        call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
     end if
-    if (inode.EQ.ionode) call dump_InfoGlobal()
+    if (inode.EQ.ionode) call dump_InfoMatGlobal()
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
                 fmt='(4x,"In safemin2, Interpolation step and energy &
@@ -1221,7 +1222,7 @@ contains
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
                            .true., .false.)
        end if
-       if (inode.EQ.ionode) call dump_InfoGlobal()
+       if (inode.EQ.ionode) call dump_InfoMatGlobal()
     end if
     dE = e0 - energy_out
 7   format(4x,3f15.8)
