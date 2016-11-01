@@ -1,6 +1,6 @@
-!!****h* Conquest/store_matrix_module
+!!****h* Conquest/store_matrix
 !!  NAME
-!!   store_matrix_module
+!!   store_matrix
 !!  PURPOSE
 !!    Stores the data and information of a matrix for a set of atomic positions.
 !!   to use them for a different set of atomic positions. (ex. during the MD)
@@ -22,6 +22,9 @@ module store_matrix
 
   implicit none
 
+! matrix_store : 
+!   It includes the information of a matrix in my process.
+!    (Information of Primary sets of atoms, Lists of Neighbours, ...  by global numbers.)
   type matrix_store
     character(len=80) :: name
     !integer :: inode  ! not necessary 
@@ -42,24 +45,90 @@ module store_matrix
     real(double), pointer :: data_matrix(:)
   end type matrix_store
 
+! matrix_store_global : 
+!   It includes the information for the whole system, including the atomic positions. 
+!   Number of mpi processes may change during the multiple jobs.
+!   In the future, we also assume that cell size, number of partitions may also change 
+!   during a simulation.
+!                  2016/10/04 Tsuyoshi Miyazaki@UCL
+  type matrix_store_global
+    integer :: index                     ! Will be used as "***"
+    integer :: ni_in_cell, numprocs         ! number of atoms, number of MPI processes
+    integer :: npcellx, npcelly, npcellz    ! partition
+    real(double) :: rcellx, rcelly, rcellz  ! cell length (should be changed to 3x3 cell parameters)
+    integer, pointer :: glob_to_node(:)     ! global id of atoms -> index of MPI-process
+    real(double), pointer :: atom_coord(:,:)! atomic coordinates (3, global-id)
+  end type matrix_store_global
+
   character(80),private :: RCSid = "$Id$"
 
 contains
   ! -----------------------------------------------------------------------
+  ! Subroutine dump_matrix_update
+  ! -----------------------------------------------------------------------
+
+  !!****f* store_matrix/dump_matrix_update *
+  !!
+  !!  NAME
+  !!    dump_matrix_update
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!    prints out the files (*matrix2.dat & InfoGlobal.dat) for updating a matrix
+  !!    calls "dump_matrix2" and "InfoMatGlobal"
+  !!
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Tsuyoshi Miyazaki
+  !!  CREATION DATE
+  !!   2016/10/05
+  !!  MODIFICATION
+  !!   
+  !!  SOURCE
+  !!
+
+   subroutine dump_matrix_update(stub,matA,range,index,iprint_mode)
+    use GenComms, ONLY: inode, ionode, cq_abort
+    use global_module, ONLY: numprocs, id_glob
+    use io_module, ONLY: get_file_name
+    implicit none
+    character(len=*),intent(in) :: stub
+    integer,intent(in) :: matA
+    integer,intent(in) :: range
+    integer,intent(in), optional :: index
+    integer,intent(inout), optional :: iprint_mode
+
+    if(.not.present(iprint_mode)) iprint_mode = 0
+
+     select case(iprint_mode)
+      case(0)  ! Both "InfoGlobal.dat" and "*matrix2.dat" will be pinted out.
+        call dump_InfoMatGlobal(index)
+        call dump_matrix2(stub,matA,range)
+      case(1)  ! only "*matrix2.dat" will be printed out.
+        call dump_matrix2(stub,matA,range)
+      case(2)  ! only "InfoGlobal.dat" will be printed out.
+        call dump_InfoMatGlobal(index)
+     end select ! case(iprint_mode)
+ 
+    return
+   end subroutine dump_matrix_update
+  ! -----------------------------------------------------------------------
   ! Subroutine dump_matrix2
   ! -----------------------------------------------------------------------
 
-  !!****f* io_module2/dump_matrix2 *
+  !!****f* store_matrix/dump_matrix2 *
   !!
   !!  NAME
   !!    dump_matrix2
   !!  USAGE
   !!
   !!  PURPOSE
-  !!    Stores the information as for the primary atoms and its
-  !!    neighbours first, then the matrix elements are followed.
-  !!    Note that matrix data are the ones obtained at the previous (old)
-  !!    step - e.g. L_{i.OLD,alpha | j.OLD,beta}.
+  !!    Stores the information of matrix for my primary set of atoms.
+  !!     Information of the atoms in my primary set (i) and their neighbour atoms (j)
+  !!     
   !!
   !!    imax:           the number of primary atoms "i" in the current node "inode".
   !!    alpha_i():      the number of orbitals for each primary set of atom "i"
@@ -118,7 +187,7 @@ contains
         write (lun,*) tmp_matrix_store%jbeta_max_i(1:nprim)
 
      !I will change the order of dumping in the following, later.   2016/09/30: TM@UCL
-      if(nprim .GT. 1) then
+      if(nprim .GT. 0) then
        do iprim=1,nprim
           jmax = tmp_matrix_store%jmax_i(iprim)
           write (lun,*) tmp_matrix_store%idglob_i(iprim)
@@ -137,7 +206,7 @@ contains
           write (lun,fmt='(f25.18)') tmp_matrix_store%data_matrix(ibeg+jbeta_alpha-1)
          enddo !jbeta_alpha = 1, len
        enddo !iprim=1,nprim
-      endif  ! (nprim .GT. 1) 
+      endif  ! (nprim .GT. 0) 
 
     ! Close the file in the end.
     call io_close(lun)
@@ -151,7 +220,7 @@ contains
   ! -----------------------------------------------------------------------
   ! Subroutine set_matrix_store  & free_matrix_store
   ! -----------------------------------------------------------------------
-  !!****f* store_matrix_module/set_matrix_store *
+  !!****f* store_matrix/set_matrix_store *
   !!
   !!  NAME
   !!    set_matrix_store
@@ -291,5 +360,137 @@ contains
      if(istat .NE. 0) call cq_abort("Error in deallocation at free_matrix_store",istat)
     return
    end subroutine free_matrix_store
+
+  ! -----------------------------------------------------------------------
+  ! Subroutine dump_InfoMatGlobal
+  ! -----------------------------------------------------------------------
+  !!****f* store_matrix/dump_InfoMatGlobal *
+  !!
+  !!  NAME
+  !!   dump_InfoMatGlobal
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Writes out the global information
+  !!    l.1 no. of atoms, no. of procs.
+  !!    l.2 no. of partitions along a,b and c axes
+  !!    l.3 cell size
+  !!    l.4 relations between atoms (global label) and procs.
+  !!    (optional) MD iteration
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Tsuyoshi Miyazaki/Michiaki Arita
+  !!  CREATION DATE
+  !!   2016/10/04 (2013/08/21)
+  !!  MODIFICATION
+  !!
+  !!  SOURCE
+  !!
+  subroutine dump_InfoMatGlobal(MDiter)
+
+    ! Module usage
+    use global_module, ONLY: ni_in_cell,numprocs,rcellx,rcelly,rcellz,id_glob
+    use GenComms, ONLY: cq_abort
+    use group_module, ONLY: parts
+    use io_module, ONLY: get_file_name
+
+    implicit none
+    type(matrix_store_global):: mat_global_tmp
+    integer, intent(in), optional :: MDiter
+    integer :: lun, istat, iglob
+
+    call set_InfoMatGlobal(mat_global_tmp, MDiter)
+
+    ! Open InfoGlobal.dat and write data.
+    call io_assign(lun)
+    open (lun,file='InfoGlobal.dat',iostat=istat)
+    if (istat.GT.0) call cq_abort('Fail in opening InfoGlobal.dat .')
+    write (lun,*) mat_global_tmp%ni_in_cell, mat_global_tmp%numprocs
+    write (lun,*) mat_global_tmp%npcellx,mat_global_tmp%npcelly,mat_global_tmp%npcellz
+    write (lun,*) mat_global_tmp%rcellx,mat_global_tmp%rcelly,mat_global_tmp%rcellz
+    write (lun,*) mat_global_tmp%glob_to_node(1:mat_global_tmp%ni_in_cell)
+    if (present(MDiter)) write (lun,*) mat_global_tmp%index
+
+    do iglob=1, mat_global_tmp%ni_in_cell
+     write (lun,101) iglob, mat_global_tmp%atom_coord(1:3, iglob)
+     101 format(5x,i8,3x,3e20.10)
+    enddo !iglob=1, mat_global_tmp%ni_in_cell
+    call io_close (lun)
+
+    call free_InfoMatGlobal(mat_global_tmp)
+    return
+  end subroutine dump_InfoMatGlobal
+  !!***
+
+  ! -----------------------------------------------------------------------
+  ! Subroutine set_InfoMatGlobal & free_InfoMatGlobal
+  ! -----------------------------------------------------------------------
+  !!****f* store_matrix/set_InfoMatGlobal *
+
+  subroutine set_InfoMatGlobal(mat_glob, MDiter)
+    
+    ! Module usage
+    use global_module, ONLY: ni_in_cell,numprocs,rcellx,rcelly,rcellz,id_glob, atom_coord
+    use GenComms, ONLY: cq_abort
+    use group_module, ONLY: parts
+
+    implicit none
+    integer, intent(in), optional :: MDiter
+    type(matrix_store_global),intent(out) :: mat_glob
+    integer :: istat, ind_part, id_node, ni, id_global
+   
+    if(present(MDiter))then
+       mat_glob%index      = MDiter
+    else
+       mat_glob%index      = 0
+    endif
+
+    mat_glob%ni_in_cell = ni_in_cell
+    mat_glob%numprocs   = numprocs
+
+    mat_glob%rcellx     = rcellx
+    mat_glob%rcelly     = rcelly
+    mat_glob%rcellz     = rcellz
+
+    mat_glob%npcellx     = parts%ngcellx
+    mat_glob%npcelly     = parts%ngcelly
+    mat_glob%npcellz     = parts%ngcellz
+
+    !allocation of glob_to_node, atom_coord
+    allocate(mat_glob%glob_to_node(ni_in_cell), mat_glob%atom_coord(3,ni_in_cell), STAT=istat)
+    if(istat .NE. 0) call cq_abort('Error : allocation in set_InfoMatGlobal',istat,ni_in_cell)
+
+    do ind_part = 1, parts%mx_gcell
+      id_node = parts%i_cc2node(ind_part) ! CC labeling
+      if (parts%nm_group(ind_part).NE.0) then
+        do ni = 1, parts%nm_group(ind_part)
+          id_global = id_glob(parts%icell_beg(ind_part)+ni-1)
+          mat_glob%glob_to_node(id_global) = id_node
+          if (id_node.EQ.0 .OR. id_node .GT. numprocs) &
+             call cq_abort('Error: glob_to_node in set_InfoMatGlobal',id_node, numprocs)
+        enddo
+      endif
+    enddo !(ind_part, mx_gcell)
+      
+    mat_glob%atom_coord(1:3,1:ni_in_cell) = atom_coord(1:3,1:ni_in_cell) 
+
+   return
+  end subroutine set_InfoMatGlobal
+
+  !!***
+  subroutine free_InfoMatGlobal(mat_glob)
+    use GenComms, ONLY: cq_abort
+    implicit none
+    integer :: istat
+    type(matrix_store_global),intent(out) :: mat_glob
+
+    deallocate(mat_glob%atom_coord, mat_glob%glob_to_node, STAT=istat)
+    if(istat .NE. 0) call cq_abort('Error : deallocation in free_InfoMatGlobal',istat)
+ 
+   return
+  end subroutine free_InfoMatGlobal
 
 end module store_matrix
