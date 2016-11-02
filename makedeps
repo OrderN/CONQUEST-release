@@ -14,6 +14,8 @@
 # Currently only works for Fortran 77/90.
 #
 # Written by L.Tong 2012/08/30
+# Update 2016/09/01 by dave
+# Removed the (now deprecated) defined(@array) calls and replaced with simple test
 
 ########## Main program ##########
 
@@ -202,7 +204,8 @@ sub MakeDependsf90 {
           /^\s*include\s+["\']([^"\']+)["\']/i && push(@incs, $1);
           /^\s*use\s+(\w+)/i && push(@modules, &ToLower($1));
         }
-      if (defined @incs || defined @modules)
+#      if (defined @incs || defined @modules)
+      if (@incs || @modules)
         {
           ($objfile = $file) =~ s/\.[fF](90)?$/.o/;
           print $output "$objfile: ";

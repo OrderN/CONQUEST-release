@@ -18,6 +18,8 @@
 ! CREATION DATE
 !   2012/11/22
 ! MODIFICATION HISTORY
+!   2016/10/06 dave
+!    Changed allocatable types in unpacked to pointers for F90 compatibility
 ! SOURCE
 !
 module Hilbert3D
@@ -44,9 +46,9 @@ module Hilbert3D
   ! unpacked index and coordinate structures
   type unpacked
      integer :: N_l_levels, N_p_levels, N_c_levels
-     integer, dimension(:), allocatable :: l
-     integer, dimension(:), allocatable :: p
-     integer, dimension(:), allocatable :: c
+     integer, dimension(:), pointer :: l
+     integer, dimension(:), pointer :: p
+     integer, dimension(:), pointer :: c
   end type unpacked
 
 contains

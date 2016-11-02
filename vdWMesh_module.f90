@@ -979,6 +979,8 @@ contains
   !! CREATION DATE
   !!   2012/02/28
   !! MODIFICATION HISTORY
+  !!   2016/10/06 dave
+  !!    Added limits to line f = y * xp1 to cope with different sized arrays being passed
   !! SOURCE
   !!
   function integral(n, y, x, dx)
@@ -1021,7 +1023,7 @@ contains
        ! at the same time, x = x(i), i indices the mesh points
        ! and y(x) = y(i). So, the integral may be rewritten as
        !   integral = \int di * dxdi * y(i), di = one
-       f = y * xp1
+       f(1:n) = y(1:n) * xp1(1:n)  ! DRB added limits
        call spline(n, one, f, yp1, ypn, d2fdi2)
 
        ! the integral is just sum of contributio of integral of each
