@@ -2377,6 +2377,8 @@ contains
   !!    - Fixed bug for GGA PBE force (used work_potential not potential)
   !!   2015/08/10 08:07 dave
   !!    Adding stress calculation
+  !!   2016/11/02 10:24 dave
+  !!    - Subtle GGA error: return is inside if(inode==ionode) loop causing hang !
   !!  SOURCE
   !!
   subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
@@ -2463,17 +2465,14 @@ contains
     real(double), allocatable, dimension(:,:) :: wk_grid,              &
                                                  density_out_GGA    
 
-    ! ***** LT: TEMPORARY BARRIER FOR SPIN POLARISED CALCULATIONS!!! *****
-    ! Due to the fact that:
-    !   a) non-SC forces for spin polarised PBE is not yet implemented
 
 !****lat<$
     call start_backtrace(t=backtrace_timer,who='get_nonSC_correction_force',where=7,level=3,echo=.true.)
 !****lat>$ 
 
-
+    ! Spin-polarised PBE non-SCF forces not implemented, so exit if necessary
     if ((nspin == 2) .and. &
-        ((flag_functional_type == functional_gga_pbe96) .or. &
+         ((flag_functional_type == functional_gga_pbe96) .or. &
          (flag_functional_type == functional_gga_pbe96_rev98) .or. &
          (flag_functional_type == functional_gga_pbe96_r99))) then
        if (inode == ionode) then
@@ -2491,9 +2490,9 @@ contains
                "**** The forces are NOT to be TRUSTED !!!        ****"
           write (io_lun, fmt='(10x,a)') &
                "*****************************************************"
-          HF_force = zero
-          return
        end if
+       HF_force = zero
+       return
     end if
 
     stat = 0
