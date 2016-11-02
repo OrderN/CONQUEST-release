@@ -1384,8 +1384,6 @@ contains
   !!     channel
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
-  !!   2016/09/15 22:00 nakata
-  !!    Introduce matK -> matKatomf transformations
   !!  SOURCE
   !!
   subroutine LNV_matrix_multiply(electrons, energy, doK, doM1, doM2, &
@@ -1394,7 +1392,7 @@ contains
 
     use numbers
     use datatypes
-    use global_module, only: iprint_mat, IPRINT_TIME_THRES3, nspin, flag_contractSF ! nakata3
+    use global_module, only: iprint_mat, IPRINT_TIME_THRES3, nspin
     use matrix_data,   only: LHrange, SLSrange, LSLrange, Lrange,   &
                              Srange, Hrange
     use GenComms,      only: gsum, inode, ionode, my_barrier, gmax, &
@@ -1607,10 +1605,6 @@ contains
           ! work out matK or matK_dn
           call matrix_sum(zero, matK(ss), three, matLSL(ss))
           call matrix_sum(one, matK(ss), -two, matLSLSL(ss))
-!!! 2016.9.15 nakata3
-          ! matK->matKatomf backtransformation for contracted SFs
-          if (flag_contractSF) call transform_SF_to_ATOMF(matK(ss), matKatomf(ss), ss, Hrange)
-!!! nakata3 end
           if (iprint_mat > 3) then
              t1 = mtime()
              if (inode == ionode) write (io_lun, *) 'K time: ', t1 - t0

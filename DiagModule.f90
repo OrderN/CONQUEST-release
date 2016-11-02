@@ -426,7 +426,7 @@ contains
   !!   2016/08/09 14:00 nakata
   !!    Renamed support_K -> atom_fns_K
   !!   2016/09/15 22:00 nakata
-  !!    Introduce matK -> matKatomf and matBand -> matBand_atomf transformations
+  !!    Introduce matBand -> matBand_atomf transformations
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -642,7 +642,7 @@ contains
              matBand(i) = allocate_temp_matrix(Hrange,0,sf,sf)   ! nakata2
           end do
        end if
-       if (flag_contractSF .and. atomf==paof) matBand_atomf = allocate_temp_matrix(Hrange,0,paof,paof)   ! nakata3
+       if (flag_contractSF) matBand_atomf = allocate_temp_matrix(Hrange,0,paof,paof)   ! nakata3
     end if
     ! Preparatory work for DOS
     if(wf_self_con.AND.flag_write_DOS) then
@@ -1026,11 +1026,6 @@ contains
              end if ! End if (i <= N_kpoints_in_pg(ng)) then
           end do ! End do ng = 1, proc_groups
        end do ! End do i = 1, nkpoints_max
-
-!!! 2016.9.15 nakata3
-       ! matK->matKatomf backtransformation for contracted SFs
-       if (flag_contractSF) call transform_SF_to_ATOMF(matK(spin), matKatomf(spin), spin, Hrange)
-!!! nakata3 end
     end do ! spin
 
     !------ output WFs  --------
@@ -1114,7 +1109,7 @@ contains
              call free_temp_matrix(matBand(i))
           end do
        end if
-       if (flag_contractSF .and. atomf==paof) call free_temp_matrix(matBand_atomf)   ! nakata3
+       if (flag_contractSF) call free_temp_matrix(matBand_atomf)   ! nakata3
     end if
     if(wf_self_con.AND.flag_write_DOS) then
        ! output DOS

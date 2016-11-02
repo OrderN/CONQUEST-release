@@ -15,4 +15,5 @@ PAO2BLIP_OBJS = blip_pao_values.o\
                 build_PAO_matrices.module.o\
                 read_support_spec.o\
                 support_spec_format.o\
-                symmetry.o
+                symmetry.o\
+                multisiteSF_module.o

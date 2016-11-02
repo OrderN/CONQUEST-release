@@ -86,6 +86,7 @@ contains
 !!    Added code for one-to-one PAO to SF assignment
 !!   2016/09/23 21:30 nakata
 !!    Removed ip and neigh_global_num passed to subroutines loop_12 and loop_3
+!!    Removed unused species_module, gcopy, my_barrier, matrix_module
 !!  SOURCE
 !!
   subroutine assemble_2(range,matA,flag,matAD)
@@ -93,9 +94,7 @@ contains
     use datatypes
     use numbers
     use global_module, ONLY: iprint_basis, id_glob, species_glob, IPRINT_TIME_THRES2
-    use species_module, ONLY: species
-    use GenComms, ONLY: myid, cq_abort, gcopy, my_barrier
-    use matrix_module, ONLY: matrix, matrix_halo
+    use GenComms, ONLY: myid, cq_abort
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
@@ -426,6 +425,7 @@ contains
 !!    Added code for one-to-one PAO to SF assignment
 !!   2016/09/23 21:30 nakata
 !!    Removed ip and neigh_global_num passed to subroutines loop_12 and loop_3
+!!    Removed unused species_module, gcopy, matrix_module
 !!  SOURCE
 !!
   subroutine assemble_deriv_2(direction,range,matA,flag)
@@ -433,9 +433,7 @@ contains
     use datatypes
     use numbers
     use global_module, ONLY: iprint_basis, id_glob, species_glob
-    use species_module, ONLY: species
-    use GenComms, ONLY: myid, cq_abort, gcopy
-    use matrix_module, ONLY: matrix, matrix_halo
+    use GenComms, ONLY: myid, cq_abort
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts

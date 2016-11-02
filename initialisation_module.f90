@@ -114,7 +114,8 @@ contains
     use datatypes
     use global_module,     only: x_atom_cell, y_atom_cell, &
                                  z_atom_cell, ni_in_cell,  &
-                                 flag_only_dispersion, flag_neutral_atom
+                                 flag_only_dispersion, flag_neutral_atom, &
+                                 flag_contractSF, flag_Multisite ! nakata3
     use GenComms,          only: inode, ionode, my_barrier, end_comms
     use initial_read,      only: read_and_write
     use ionic_data,        only: get_ionic_data
@@ -125,7 +126,8 @@ contains
     use cover_module,      only: make_cs, D2_CS
     use dimens,            only: r_dft_d2
     use DFT_D2
-    use pseudo_tm_module, only: make_neutral_atom
+    use pseudo_tm_module,   only: make_neutral_atom
+    use multisiteSF_module, only: initial_SFcoeff_SSSF 
 
     implicit none
 
@@ -184,6 +186,12 @@ contains
     call my_barrier()
 
     call initial_phis(read_phi, start,std_level_loc+1)
+
+!!! 2016.10.27 nakata3
+    if (flag_contractSF .and. .not.flag_Multisite) then
+       call initial_SFcoeff_SSSF
+    endif
+!!! nakata3 end
 
     call initial_H(start, start_L, find_chdens, fixed_potential, &
                    vary_mu, total_energy,std_level_loc+1)

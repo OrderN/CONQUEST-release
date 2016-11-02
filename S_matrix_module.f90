@@ -132,7 +132,7 @@ contains
                                            ni_in_cell,                 &
                                            flag_perform_cdft,          &
                                            IPRINT_TIME_THRES1,         &
-                                           flag_contractSF, flag_do_SFtransform
+                                           flag_do_SFtransform
     use matrix_data,                 only: Srange
     use mult_module,                 only: matS, matSatomf, transform_ATOMF_to_SF
     use io_module,                   only: dump_matrix
@@ -164,9 +164,9 @@ contains
 
     ! For blips and one_to_one PAOs, atomic functions are SFs so that no transformation is needed.
     ! For contracted SFs, transform S from atomic-function basis to SF basis
-    if (flag_contractSF .and. flag_do_SFtransform) call transform_ATOMF_to_SF(matS, matSatomf, 1, Srange)
+    if (flag_do_SFtransform) call transform_ATOMF_to_SF(matS, matSatomf, 1, Srange)
 
-    !call dump_matrix("NS",matS,inode)
+    call dump_matrix("NS1",matS,inode)
 
     ! get the new InvS matrix
     call  Iter_Hott_InvS(iprint_ops, InvSMaxSteps, &
@@ -222,6 +222,7 @@ contains
     use matrix_data,                 only: aSa_range
     use mult_module,                 only: matSatomf, matdS
     use build_PAO_matrices,          only: assemble_2
+    use io_module,                   only: dump_matrix
 
     implicit none
 
@@ -235,12 +236,13 @@ contains
             write (io_lun, *) 'Calling assemble_2 for Satomf, dS: ', &
                   matSatomf, matdS
        call assemble_2(aSa_range, matSatomf, 1, matdS)
-       !call dump_matrix("NS",matSatomf,inode)
+       !call dump_matrix("NS_atomf",matSatomf,inode)
        !call dump_matrix("NdS",matdS,inode)
     else
        if (inode == ionode .and. iprint_ops > 2) &
             write (io_lun, *) 'Calling assemble_2 for Satomf: ', matSatomf
        call assemble_2(aSa_range, matSatomf, 1)
+       !call dump_matrix("NS_atomf",matSatomf,inode)
     end if
 
     return

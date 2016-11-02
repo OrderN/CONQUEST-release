@@ -681,6 +681,8 @@ contains
   !!    Renamed support -> atom_fns
   !!   2016/08/09 18:00 nakata
   !!    Introduced matKatomf
+  !!   2016/10/28 17:30 nakata
+  !!    Introduce matK -> matKatomf transformations
   !!  SOURCE
   !!
   subroutine get_electronic_density(denout, electrons, atom_fns, &
@@ -689,7 +691,8 @@ contains
     use datatypes
     use numbers
     use GenBlas,                     only: scal, rsum
-    use mult_module,                 only: matKatomf   ! nakata3
+    use mult_module,                 only: matK, matKatomf, transform_SF_to_ATOMF   ! nakata3
+    use matrix_data,                 only: Hrange   ! nakata3
     use dimens,                      only: n_my_grid_points, grid_point_volume
     use block_module,                only: n_pts_in_block
     use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
@@ -700,7 +703,8 @@ contains
     use global_module,               only: iprint_SC, ni_in_cell, &
                                            flag_Becke_weights, nspin, &
                                            spin_factor, &
-                                           sf, paof, atomf   ! nakata3
+                                           sf, paof, atomf, &
+                                           flag_contractSF   ! nakata3
     use functions_on_grid,           only: gridfunctions, fn_on_grid
 
     implicit none
@@ -730,6 +734,8 @@ contains
          write (io_lun,fmt='(2x,"Entering get_electronic_density")')
 
     do spin = 1, nspin
+       ! matK->matKatomf backtransformation for contracted SFs
+       if (flag_contractSF) call transform_SF_to_ATOMF(matK(spin), matKatomf(spin), spin, Hrange)
        gridfunctions(atom_fns_K)%griddata = zero
        call act_on_vectors_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
                                matKatomf(spin), atom_fns_K, atom_fns)

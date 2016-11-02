@@ -194,7 +194,6 @@ contains
                                            flag_vary_basis,             &
                                            flag_basis_set, PAOs,        &
                                            atomf, paof, sf,             &   ! nakata2
-                                           flag_contractSF,             &   ! nakata3
                                            flag_do_SFtransform,         &   ! nakata3
                                            IPRINT_TIME_THRES1,          &
                                            iprint_SC,                   &
@@ -293,8 +292,8 @@ contains
 !          call get_HNL_matrix(matNL)
           call get_HNL_matrix   ! nakata3
        end if
-       if (iprint_ops > 4) call dump_matrix("NNL", matNL, inode)
-       if (iprint_ops > 4) call dump_matrix("NKE", matKE, inode)
+       if (iprint_ops > 4) call dump_matrix("NNL_atomf", matNLatomf, inode)
+       if (iprint_ops > 4) call dump_matrix("NKE_atomf", matKEatomf, inode)
     end if
     !
     !
@@ -318,10 +317,10 @@ contains
     !
     if (iprint_ops > 4) then
        if (nspin == 1) then
-          call dump_matrix("Nl",    matHatomf(1), inode)
+          call dump_matrix("Nl_atomf",    matHatomf(1), inode)
        else
-          call dump_matrix("Nl_up", matHatomf(1), inode)
-          call dump_matrix("Nl_dn", matHatomf(2), inode)
+          call dump_matrix("Nl_up_atomf", matHatomf(1), inode)
+          call dump_matrix("Nl_dn_atomf", matHatomf(2), inode)
        end if
     end if
     !
@@ -421,7 +420,7 @@ contains
 !!! 2016.9.16 nakata3
     ! For blips and one_to_one PAOs, atomic functions are SFs so that no transformation is needed.
     ! For contracted SFs, transform H from atomic-function basis to SF basis
-    if (flag_contractSF .and. flag_do_SFtransform) then
+    if (flag_do_SFtransform) then
        call transform_ATOMF_to_SF(matKE, matKEatomf, 1, Hrange)   ! only to output kinetic energy
        call transform_ATOMF_to_SF(matNL, matNLatomf, 1, Hrange)   ! only to output kinetic energy
        do spin = 1, nspin
@@ -442,6 +441,10 @@ contains
           call dump_matrix("NH_dn", matH(2), inode)
        end if
     end if
+    if (iprint_ops > 4) then
+       call dump_matrix("NNL", matNL, inode)
+       call dump_matrix("NKE", matKE, inode)
+    endif
     !
     !
     ! dump charges if required

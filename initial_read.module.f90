@@ -135,7 +135,7 @@ contains
   !!   2015/06/10 15:44 cor & dave
   !!    - Input parameters for band output
   !!   2016/09/15 17:00 nakata
-  !!    Set flag_one_to_one and flag_contractSF
+  !!    Added automatic setting of flag_one_to_one and flag_contractSF
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -163,7 +163,7 @@ contains
                                       ni_in_cell, area_moveatoms,      &
                                       io_lun, flag_only_dispersion,    &
                                       flag_basis_set, blips, PAOs,     & ! nakata3
-                                      atomf, paof,                     & ! nakata3
+                                      atomf, sf, paof,                 & ! nakata3
                                       flag_contractSF, flag_do_SFtransform, & ! nakata3
                                       flag_cdft_atom, flag_local_excitation
     use cdft_data, only: cDFT_NAtoms, &
@@ -284,12 +284,17 @@ contains
     else
        call cq_abort(' Pseudotype Error ', pseudo_type)
     endif
+    !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done pseudo")') inode
 !!! 2016.9.15 nakata3
     !
-    ! Set flag_one_to_one and flag_contractSF
+    !
+    !
+    ! Distinguish flag_one_to_one or not
     if (flag_basis_set==PAOs) then
        flag_one_to_one = .true.
        flag_contractSF = .false.
+       flag_do_SFtransform = .false.
+       atomf = sf
        do i = 1, n_species
           if (nsf_species(i).ne.npao_species(i)) then
              ! Contracted SFs
@@ -312,12 +317,13 @@ contains
        flag_one_to_one = .false.
        flag_contractSF = .false.
        flag_do_SFtransform = .false.
+       atomf = sf
     endif
     if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_one_to_one: ',flag_one_to_one
     if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_contractSF: ',flag_contractSF
+!    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_do_SFtransform: ',flag_do_SFtransform
     if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'atomf          : ',atomf
 !!! nakata3 end
-    !if(iprint_init>4) write(io_lun,fmt='(10x,"Proc: ",i4," done pseudo")') inode
     !
     !
     !
@@ -515,8 +521,6 @@ contains
   !!    Updated module name to ion_electrostatic
   !!   2016/02/05 08:31 dave
   !!    Changed default pseudopotential to Siesta (necessary for now)
-  !!   2016/08/01 18:30 nakata
-  !!    Introduced atomf
   !!   2016/08/05 10:08 dave
   !!    Added gap threshold parameter for initial estimation of partition numbers
   !!  TODO
@@ -539,7 +543,6 @@ contains
                              max_L_iterations, flag_read_blocks,       &
                              runtype, restart_L, restart_rho,          &
                              flag_basis_set, blips, PAOs,              &
-                             sf, atomf,                                & ! nakata2
                              flag_test_forces, UseGemm,                &
                              flag_fractional_atomic_coords,            &
                              flag_old_partitions, ne_in_cell,          &
@@ -907,7 +910,6 @@ contains
        else if(leqi(basis_string,'PAOs')) then
           flag_basis_set = PAOs
        end if
-       atomf = sf ! set to be sf as default   ! nakata3
        read_option            = fdf_boolean('Basis.LoadCoeffs',           .false.)
        flag_onsite_blip_ana   = fdf_boolean('Basis.OnsiteBlipsAnalytic',  .true. )
        flag_analytic_blip_int = fdf_boolean('Basis.AnalyticBlipIntegrals',.false.)

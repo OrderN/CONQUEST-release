@@ -361,6 +361,11 @@ contains
        rcut(SFcoeffTr_range) = r_MS
        rcut(LD_range)        = r_LD
        rcut(HTr_range)       = rcut(Hrange)
+       if (r_MS.eq.zero) then
+          rcut(SFcoeff_range)   = 0.001_double
+          rcut(SFcoeffTr_range) = 0.001_double
+       endif
+       if (r_LD.eq.zero) rcut(LD_range) = 0.001_double
     endif
 !!! nakata3 end
     rcutmax = zero
