@@ -139,7 +139,7 @@ contains
     use numbers,        ONLY: zero
     use pao_format,     ONLY: pao
     use species_module, ONLY: n_species, species_label, species_file, species_from_files
-    use species_module, ONLY: npao_species, nsf_species, type_species
+    use species_module, ONLY: npao_species, nsf_species, type_species, charge
     use global_module,  ONLY: iprint_pseudo
     use dimens,         ONLY: RadiusSupport, atomicnum
     use GenComms,       ONLY: inode, ionode, cq_abort, gcopy
@@ -185,6 +185,11 @@ contains
 
           npao_species(ispecies) = pao(ispecies)%count
           atomicnum(ispecies)    = pseudo(ispecies)%z
+          if(charge(ispecies)/=pseudo(ispecies)%zval) then
+             if(inode==ionode) &
+                  write(io_lun,fmt='(/,2x,"WARNING: Mismatch between valence charge in input and pseudopotential: ",2f7.2,/)') &
+                  charge(ispecies),pseudo(ispecies)%zval
+          end if
           ! For P.C.C.
           if (pseudo(ispecies)%flag_pcc) flag_pcc_global = .true.
           !For Ghost atoms
