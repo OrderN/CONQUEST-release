@@ -1366,6 +1366,7 @@ contains
     
   end subroutine pp_gradient_y_multiply
 
+  !! 2016/11/2 10:29 dave Fixing bug in forces for zero distance
   subroutine pp_gradient_z(f_r,df_r,x_n,y_n,z_n,r,l,m,d_val)
     use datatypes
     implicit none
@@ -1383,21 +1384,20 @@ contains
     x = x_n*r; y = y_n*r; z = z_n*r
     call convert_basis(x,y,z,r_my,theta,phi)
     !if zero radius then lets get out of here..
-    !if(abs(r).lt.mintol) then
-    !   d_val = 0.0_double
-    !   return
-    !else
-    !   continue
-    !endif
+    if(abs(r).lt.mintol) then
+       d_val = 0.0_double
+       return
+    endif
     denom1 = (2.0_double*l+1.0_double)*(2.0_double*l+3.0_double)
     denom2 = (2.0_double*l-1.0_double)*(2.0_double*l+1.0_double)
     pref1 = sqrt((((l+1.0_double)**2)-(m**2))/denom1)
     pref2 = sqrt(((l**2)-(m**2))/denom2)
-    if(r.gt.epsilon) then
-       coeff1 = (df_r-(l*f_r/r)); coeff2 = (df_r+((l+1.0_double)*f_r/r))
-    else
-       coeff1 = df_r; coeff2 = df_r
-    end if
+    ! The commented lines below were present when we didn't exit on small r
+    !if(r.gt.epsilon) then
+    coeff1 = (df_r-(l*f_r/r)); coeff2 = (df_r+((l+1.0_double)*f_r/r))
+    !else
+    !   coeff1 = df_r; coeff2 = df_r
+    !end if
     z_comp_1 = pref1*coeff1; z_comp_2 = pref2*coeff2
     if(abs(theta).lt.epsilon) then
        !write(io_lun,*) 'theta small condition satisfied'
