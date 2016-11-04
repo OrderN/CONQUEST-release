@@ -144,6 +144,8 @@ contains
 !!    Added r_nl: fix unconsistency between HNL_fac/NonLocalFactor
 !!   2014/01/17 lat
 !!    Added r_exx and assigned to rcut(Xrange)
+!!   2016/11/02 dave
+!!    Added flag so that we only warn Lrange<Srange if O(N) is used
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -159,6 +161,7 @@ contains
 
     use input_module,           only: leqi
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, ABINIT
+    use DiagModule,             only: diagon
 
     implicit none
 
@@ -223,7 +226,7 @@ contains
 
     ! Set range of S matrix
     r_s = r_h
-    if(two*r_s>r_c) then
+    if(two*r_s>r_c.AND.(.NOT.diagon)) then ! Only warn if using O(N)
        if(inode==ionode) &
             write(io_lun,fmt='(8x,"WARNING ! S range greater than L !")')
        !r_s = r_c
