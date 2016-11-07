@@ -150,6 +150,8 @@ contains
 !!    Added r_exx and assigned to rcut(Xrange)
 !!   2016/09/16 16:00 nakata
 !!    Set ranges of ATOMF-based matrices
+!!   2016/11/02 dave
+!!    Added flag so that we only warn Lrange<Srange if O(N) is used
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -165,6 +167,7 @@ contains
 
     use input_module,           only: leqi
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, ABINIT
+    use DiagModule,             only: diagon
 
     implicit none
 
@@ -257,9 +260,14 @@ contains
     !fobw3 = four_on_blip_width*fobw2
 
     ! Set range of S matrix
+<<<<<<< HEAD
     r_s       = r_h
     r_s_atomf = r_h_atomf   ! nakata3
     if(two*r_s>r_c) then
+=======
+    r_s = r_h
+    if(two*r_s>r_c.AND.(.NOT.diagon)) then ! Only warn if using O(N)
+>>>>>>> remotes/origin/master
        if(inode==ionode) &
             write(io_lun,fmt='(8x,"WARNING ! S range greater than L !")')
        !r_s = r_c

@@ -1903,7 +1903,7 @@ contains
                                       nspin, flag_MDold, io_lun,       &
                                       flag_mix_L_SC_min, flag_XLBOMD,  &
                                       flag_reset_dens_on_atom_move,    &
-                                      flag_neutral_atom
+                                      flag_neutral_atom, flag_LmatrixReuse
     use density_module,         only: set_atomic_density,              &
                                       flag_no_atomic_densities,        &
                                       density, set_density_pcc,        &
@@ -1960,9 +1960,11 @@ contains
     elseif (.NOT.diagon .AND. .NOT.flag_MDold) then
        if (flag_self_consistent .OR. flag_mix_L_SC_min) then
           if(flag_neutral_atom) call set_atomic_density(.false.)
-          if (inode.EQ.ionode.AND.iprint_MD>2) write (io_lun,*) "update_H: Get charge density from L-matrix"
-          call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
-               inode,ionode,maxngrid)
+          if(flag_LmatrixReuse) then
+             if (inode.EQ.ionode.AND.iprint_MD>2) write (io_lun,*) "update_H: Get charge density from L-matrix"
+             call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
+                  inode,ionode,maxngrid)
+          end if
        endif
     else if(diagon.AND.flag_neutral_atom) then
        call set_atomic_density(.false.)
