@@ -1124,8 +1124,8 @@ contains
   !!   2016/08/08 15:30 nakata
   !!    Renamed supportfns -> atomfns
   !!   2016/09/20 18:30 nakata
-  !!    Introduced matSCatomf, matCSatomf, matNLatomf, AP_range, AP_trans, AP_PA_aHa
-  !!    instead of matSC     , matCS     , matNL     , SPrange , SP_trans, SP_PS_H
+  !!    Introduced matAP, matPA, matNLatomf, APrange, AP_trans, AP_PA_aHa
+  !!    instead of matSC, matCS, matNL     , SPrange, SP_trans, SP_PS_H
   !!  SOURCE
   !!
 !  subroutine get_HNL_matrix(matNL)
@@ -1133,9 +1133,9 @@ contains
 
     use datatypes
     use numbers
-    use matrix_data, only: mat, AP_range, halo, PAOPrange, dHrange       ! nakata3, PAOPrange and dHrange will be deleted later
+    use matrix_data, only: mat, APrange, halo, PAOPrange, dHrange       ! nakata3, PAOPrange and dHrange will be deleted later
     use mult_module, only: mult, AP_PA_aHa, AP_trans,                  & ! nakata3
-                           matCSatomf, matSCatomf, matNLatomf,         & ! nakata3
+                           matPA, matAP, matNLatomf,                   & ! nakata3
                            PAOP_PS_H, matdH,                           & ! nakata3, delete this line later
                            allocate_temp_matrix,                       &
                            free_temp_matrix, matrix_product,           &
@@ -1173,7 +1173,7 @@ contains
     integer :: matNL_tmp
 
     ! Local variables
-    integer      :: stat, matdSC, matdCNL, matSCtmp, np, ni, iprim, spec,   &
+    integer      :: stat, matdSC, matdCNL, matAPtmp, np, ni, iprim, spec,   &
                     this_nsf, this_nlpf, nab, ist, gcspart, n1, n2,         &
                     neigh_global_part, neigh_global_num, neigh_species, i1, &
                     i2, wheremat, spin
@@ -1183,7 +1183,7 @@ contains
        matdSC  = allocate_temp_matrix(PAOPrange, AP_trans, paof, nlpf)        ! nakata3, delete this line later
        matdCNL = allocate_temp_matrix(dHrange, 0, paof, atomf)   ! nakata2 --- atomf will be changed to paof later, nakata3 delete later
     end if
-    matSCtmp = allocate_temp_matrix(AP_range, AP_trans, atomf, nlpf)
+    matAPtmp = allocate_temp_matrix(APrange, AP_trans, atomf, nlpf)
 
     ! first, get the overlap of support functions with core
     ! pseudowavefunctions
@@ -1191,7 +1191,7 @@ contains
        if (inode == ionode .and. iprint_ops > 2) &
             write(io_lun,*) 'Calling get_matrix_elements'
        if (flag_analytic_blip_int) then
-          call matrix_scale(zero, matSCatomf)
+          call matrix_scale(zero, matAP)
           iprim = 0
           do np = 1, bundle%groups_on_node
              if (bundle%nm_nodgroup(np) > 0) then
@@ -1200,54 +1200,54 @@ contains
                    spec = bundle%species(iprim)
                    ! write (60, *) "#Atom ", iprim
                    ! Loop over neighbours of atom
-                   do nab = 1, mat(np,AP_range)%n_nab(ni)
-                      ist = mat(np,AP_range)%i_acc(ni) + nab - 1
+                   do nab = 1, mat(np,APrange)%n_nab(ni)
+                      ist = mat(np,APrange)%i_acc(ni) + nab - 1
                       ! Build the distances between atoms - needed for phases
                       gcspart = &
-                           BCS_parts%icover_ibeg(mat(np,AP_range)%i_part(ist)) + &
-                           mat(np,AP_range)%i_seq(ist) - 1
+                           BCS_parts%icover_ibeg(mat(np,APrange)%i_part(ist)) + &
+                           mat(np,APrange)%i_seq(ist) - 1
                       ! Displacement vector
                       dx = BCS_parts%xcover(gcspart) - bundle%xprim(iprim)
                       dy = BCS_parts%ycover(gcspart) - bundle%yprim(iprim)
                       dz = BCS_parts%zcover(gcspart) - bundle%zprim(iprim)
                       ! We need to know the species of neighbour
                       neigh_global_part = &
-                           BCS_parts%lab_cell(mat(np,AP_range)%i_part(ist))
+                           BCS_parts%lab_cell(mat(np,APrange)%i_part(ist))
                       neigh_global_num  = &
                            id_glob(parts%icell_beg(neigh_global_part) + &
-                                   mat(np,AP_range)%i_seq(ist) - 1)
+                                   mat(np,APrange)%i_seq(ist) - 1)
                       ! write (60, *) "#Nab no and glob: ", &
                       !               nab, neigh_global_num, dx, dy, dz
                       neigh_species = species_glob(neigh_global_num)
                       !write(io_lun,fmt='(2x,"Offset: ",3f7.2,4i4)') dx, dy, dz, iprim,neigh_global_num, spec,neigh_species
                       !do n1=1,nsf_species(spec)
                       !   do n2=1,nlpf_species(neigh_species)
-                      !      call scale_matrix_value(matSCatomf,np,ni,iprim,nab,n1,n2,zero)
+                      !      call scale_matrix_value(matAP,np,ni,iprim,nab,n1,n2,zero)
                       !   end do
                       !end do
-                      call get_SP(blips_on_atom(iprim),                    &
-                                  nlpf_on_atom(neigh_species), matSCatomf, &
-                                  iprim, halo(AP_range)%i_halo(gcspart),    &
+                      call get_SP(blips_on_atom(iprim),                  &
+                                  nlpf_on_atom(neigh_species), matAP,    &
+                                  iprim, halo(APrange)%i_halo(gcspart), &
                                   dx, dy, dz, spec, neigh_species)
                    end do
                    ! write (60, *) "&"
                 end do
              end if
           end do
-          !call dump_matrix("NSC2",matSCatomf,inode)
+          !call dump_matrix("NSC2",matAP,inode)
        else
           call get_matrix_elements_new(myid, rem_bucket(atomf_nlpf_rem), &
-                                       matSCatomf, atomfns, pseudofns)
+                                       matAP, atomfns, pseudofns)
        end if
-       !call dump_matrix("NSC",matSCatomf,inode)
+       !call dump_matrix("NSC",matAP,inode)
     else if (flag_basis_set == PAOs) then
        ! Use assemble to generate matrix elements
        if (inode == ionode .and. iprint_ops > 2) &
             write (io_lun, *) 'Calling assemble'
        if (flag_vary_basis) then
-          call assemble_2(AP_range, matSCatomf, 3, matdSC)
+          call assemble_2(APrange, matAP, 3, matdSC)
        else
-          call assemble_2(AP_range, matSCatomf, 3)
+          call assemble_2(APrange, matAP, 3)
        end if
        if (inode == ionode .AND. iprint_ops > 2) &
             write(io_lun,*) 'Called assemble'
@@ -1257,37 +1257,37 @@ contains
     end if
     if (inode == ionode .and. iprint_ops > 2) write(io_lun,*) 'Made SP'
 
-    call matrix_sum(zero, matSCtmp, one ,matSCatomf)
+    call matrix_sum(zero, matAPtmp, one ,matAP)
     if (mult(AP_PA_aHa)%mult_type == 2) then ! type 2 means no transpose necessary
        select case (pseudo_type)
        case (OLDPS)
-          call matrix_scale_diag(matSCatomf, species, n_projectors, l_core,&
-                                 recip_scale, AP_range)
+          call matrix_scale_diag(matAP, species, n_projectors, l_core,&
+                                 recip_scale, APrange)
        case(SIESTA)
-          call matrix_scale_diag_tm(matSCatomf, AP_range)
+          call matrix_scale_diag_tm(matAP, APrange)
        case(ABINIT)
-          call matrix_scale_diag_tm(matSCatomf, AP_range)
+          call matrix_scale_diag_tm(matAP, APrange)
        end select
-       call matrix_product(matSCtmp, matSCatomf, matNLatomf, mult(AP_PA_aHa))
+       call matrix_product(matAPtmp, matAP, matNLatomf, mult(AP_PA_aHa))
        if (inode == ionode .and. iprint_ops > 2) &
             write (io_lun, *) 'Calling mult_wrap'
        if (flag_vary_basis .and. flag_basis_set == PAOs) then
-          call matrix_product(matdSC, matSCatomf, matdCNL, mult(PAOP_PS_H))
+          call matrix_product(matdSC, matAP, matdCNL, mult(PAOP_PS_H))
        end if
     else ! Transpose SP->PS, then mult
        if (inode == ionode .and. iprint_ops > 2) &
-            write (io_lun, *) 'Type 1 ', matSCatomf, matCSatomf
-       call matrix_transpose(matSCatomf, matCSatomf)
+            write (io_lun, *) 'Type 1 ', matAP, matPA
+       call matrix_transpose(matAP, matPA)
        if (inode == ionode .and. iprint_ops > 2) &
             write (io_lun, *) 'Done transpose'
        select case (pseudo_type)
        case (OLDPS)
-          call matrix_scale_diag(matSCatomf, species, n_projectors, l_core,&
-                                 recip_scale, AP_range)
+          call matrix_scale_diag(matAP, species, n_projectors, l_core,&
+                                 recip_scale, APrange)
        case (SIESTA)
           if (inode == ionode .and. iprint_ops > 2) &
                write (io_lun, *) 'Doing scale'
-          call matrix_scale_diag_tm(matSCatomf, AP_range)
+          call matrix_scale_diag_tm(matAP, APrange)
           if (inode == ionode .and. iprint_ops > 2) &
                write (io_lun, *) 'Calling scale'
           if (flag_vary_basis .and. flag_basis_set == PAOs) &
@@ -1295,17 +1295,17 @@ contains
        case(ABINIT)
           if (inode == ionode .and. iprint_ops > 2) &
                write (io_lun, *) 'Doing scale'
-          call matrix_scale_diag_tm(matSCatomf, AP_range)
+          call matrix_scale_diag_tm(matAP, APrange)
           if (inode == ionode .and. iprint_ops > 2) &
                write (io_lun, *) 'Calling scale'
           if (flag_vary_basis .and. flag_basis_set == PAOs) &
                call matrix_scale_diag_tm(matdSC, PAOPrange)
        end select
-       call matrix_product(matSCatomf, matCSatomf, matNLatomf, mult(AP_PA_aHa))
+       call matrix_product(matAP, matPA, matNLatomf, mult(AP_PA_aHa))
        if (inode == ionode .and. iprint_ops > 2) &
             write (io_lun, *) 'Calling mult_wrap'
        if (flag_vary_basis .and. flag_basis_set == PAOs) then
-          call matrix_product(matdSC, matCSatomf, matdCNL, mult(PAOP_PS_H))
+          call matrix_product(matdSC, matPA, matdCNL, mult(PAOP_PS_H))
        end if
     endif
     if (flag_vary_basis .and. flag_basis_set == PAOs) then
@@ -1316,7 +1316,7 @@ contains
        end do
     end if
 
-    call free_temp_matrix(matSCtmp)
+    call free_temp_matrix(matAPtmp)
     if (flag_vary_basis .and. flag_basis_set == PAOs) then
        call free_temp_matrix(matdCNL)
        call free_temp_matrix(matdSC)
@@ -1328,7 +1328,7 @@ contains
     ! Added nonef to allow scaling of the matrix <PAO|projector>
     ! required for PAO basis of support functions
     ! DRB 2004/07/23 08:28
-    subroutine matrix_scale_diag_tm(matSCatomf, range)
+    subroutine matrix_scale_diag_tm(matAP, range)
 
       ! Module usage
       use datatypes,      only: double
@@ -1345,7 +1345,7 @@ contains
       implicit none
 
       ! Passed variables
-      integer :: range, matSCatomf
+      integer :: range, matAP
 
       ! Local variables
       integer :: np, i, nb, isu, ind_cover, ind_qart, ip
@@ -1374,7 +1374,7 @@ contains
                            n_proj=n_proj+1
                            do nsf1=1,mat(np,range)%ndimi(i)
                               call scale_matrix_value(&
-                                   matSCatomf, np, i, ip, nb, nsf1, n_proj, &
+                                   matAP, np, i, ip, nb, nsf1, n_proj, &
                                    pseudo(species_k)%pjnl_ekb(nl))
                               if (abs(pseudo(species_k)%pjnl_ekb(nl)) < &
                                   RD_ERR .and. inode == ionode) &
@@ -1794,7 +1794,7 @@ contains
   !!    Also added comments to end of if and do statements to make more readable
   !!  SOURCE
   !!
-  subroutine matrix_scale_diag(matSCatomf, species, n_projectors, l_core, &
+  subroutine matrix_scale_diag(matAP, species, n_projectors, l_core, &
                                recip_scale, range)
 
     use datatypes
@@ -1807,7 +1807,7 @@ contains
 
     implicit none
 
-    integer :: matSCatomf, species(:), n_projectors(:),l_core( :, : )
+    integer :: matAP, species(:), n_projectors(:),l_core( :, : )
     integer :: range
 
     real(double) :: recip_scale( :, : )
@@ -1832,7 +1832,7 @@ contains
                    do n = 1, n_projectors(species_k)
                       l2 = l_core( n, species_k )
                       do nsf1 = 1,mat(np,range)%ndimi(i)
-                         call scale_matrix_value(matSCatomf, np, i, ip, nb, &
+                         call scale_matrix_value(matAP, np, i, ip, nb, &
                                                  nsf1, n,              &
                                                  recip_scale(l2,       &
                                                  species_k))

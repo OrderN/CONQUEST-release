@@ -68,8 +68,8 @@ module dimens
   !real(double) :: support_grid_spacing, support_grid_volume
   !real(double) ::  blip_width, four_on_blip_width, fobw2, fobw3
 
-  real(double), allocatable, dimension(:) :: RadiusSupport, RadiusPAO, &   ! nakata3
-                                             RadiusMS, RadiusLD,       &   ! nakata3
+  real(double), allocatable, dimension(:) :: RadiusSupport, RadiusAtomf, &   ! nakata3
+                                             RadiusMS, RadiusLD,         &   ! nakata3
                                              NonLocalFactor, InvSRange
   integer, allocatable, dimension(:) :: atomicnum
 
@@ -191,21 +191,18 @@ contains
     if (atomf==sf) then
        aSa_range = Srange
        aHa_range = Hrange
-       AP_range  = SPrange
-       PA_range  = PSrange
        mx_matrices_tmp = 22
     else
        aSa_range       = 23
        aHa_range       = 24
-       AP_range        = 25
-       PA_range        = 26
-       HTr_range       = 27
-       SFcoeff_range   = 28
-       SFcoeffTr_range = 29
-       aSs_range       = 30
-       aHs_range       = 31
-       LD_range        = 32
-       mx_matrices_tmp = mx_matrices ! = 32 
+       STr_range       = 25
+       HTr_range       = 26
+       SFcoeff_range   = 27
+       SFcoeffTr_range = 28
+       aSs_range       = 29
+       aHs_range       = 30
+       LD_range        = 31
+       mx_matrices_tmp = mx_matrices ! = 31
     endif
 !!! end nakata3
 
@@ -236,7 +233,7 @@ contains
        r_h       = max(r_h,RadiusSupport(n))
        r_t       = max(r_t,InvSRange(n))
        r_nl      = max(r_nl,NonLocalFactor(n)*core_radius(n))
-       r_h_atomf = max(r_h,RadiusPAO(n))                        ! nakata3
+       r_h_atomf = max(r_h_atomf,RadiusAtomf(n))                ! nakata3
        r_MS      = max(r_MS,RadiusMS(n))                        ! nakata3
        r_LD      = max(r_LD,RadiusLD(n))                        ! nakata3
     end do
@@ -260,14 +257,9 @@ contains
     !fobw3 = four_on_blip_width*fobw2
 
     ! Set range of S matrix
-<<<<<<< HEAD
     r_s       = r_h
     r_s_atomf = r_h_atomf   ! nakata3
-    if(two*r_s>r_c) then
-=======
-    r_s = r_h
     if(two*r_s>r_c.AND.(.NOT.diagon)) then ! Only warn if using O(N)
->>>>>>> remotes/origin/master
        if(inode==ionode) &
             write(io_lun,fmt='(8x,"WARNING ! S range greater than L !")')
        !r_s = r_c
@@ -338,7 +330,7 @@ contains
     rcut(Srange)   = (two*r_s)
     rcut(Trange)   = (two*r_t)
     rcut(Lrange)   = (r_c)
-    rcut(SPrange)  = (r_core + r_h)
+    rcut(APrange)  = (r_core + r_h_atomf)
     rcut(LSrange)  = (rcut(Lrange) + rcut(Srange))
     rcut(LHrange)  = (rcut(Lrange) + rcut(Hrange))
     rcut(LSLrange) = (two*rcut(Lrange) + rcut(Srange))
@@ -348,26 +340,25 @@ contains
     rcut(TSrange)  = (rcut(Trange)+rcut(Srange))
     rcut(THrange)  = (rcut(Trange)+rcut(Hrange))
     rcut(TLrange)  = (rcut(Trange)+rcut(Lrange))
-    rcut(PSrange)  = rcut(SPrange)
+    rcut(PArange)  = rcut(APrange)
     rcut(LTrrange) = rcut(Lrange)
     rcut(SLrange)  = rcut(LSrange)
     rcut(TTrrange) = rcut(Trange)
     rcut(dSrange)  = rcut(Srange)
     rcut(dHrange)  = rcut(Hrange)
-    rcut(PAOPrange)= rcut(SPrange)
+    rcut(PAOPrange)= rcut(APrange)
     rcut(HLrange)  = rcut(LHrange)
 !!! 2016.9.16 nakata3
     ! for ATOMF-based matrices
     if (atomf.ne.sf) then
        rcut(aSa_range)       = two*r_s_atomf
-       rcut(aHa_range)       = rcut(Hrange) - two*r_MS
-       rcut(AP_range)        = r_core + r_h_atomf
-       rcut(PA_range)        = rcut(AP_range)
+       rcut(aHa_range)       = rcut(Hrange) - two*r_MS   ! = two*(r_h_atomf+HNL_fac*r_core)
        rcut(aSs_range)       = r_s_atomf + r_s
-       rcut(aHs_range)       = rcut(Hrange) - r_MS
+       rcut(aHs_range)       = rcut(Hrange) - r_MS       ! = (r_h_atomf+HNL_fac*r_core)+(r_h+HNL_fac*r_core)
        rcut(SFcoeff_range)   = r_MS
        rcut(SFcoeffTr_range) = r_MS
        rcut(LD_range)        = r_LD
+       rcut(STr_range)       = rcut(Srange)
        rcut(HTr_range)       = rcut(Hrange)
        if (r_MS.eq.zero) then
           rcut(SFcoeff_range)   = 0.001_double
@@ -388,7 +379,7 @@ contains
     mat_name(Srange)   = "S  "
     mat_name(Lrange)   = "L  "
     mat_name(Hrange)   = "H  "
-    mat_name(SPrange)  = "SP "
+    mat_name(APrange)  = "AP "
     mat_name(LSrange)  = "LS "
     mat_name(LHrange)  = "LH "
     mat_name(LSLrange) = "LSL"
@@ -397,7 +388,7 @@ contains
     mat_name(TSrange)  = "TS "
     mat_name(THrange)  = "TH "
     mat_name(TLrange)  = "TL "
-    mat_name(PSrange)  = "PS "
+    mat_name(PArange)  = "PA "
     mat_name(LTrrange) = "LT "
     mat_name(SLrange)  = "SL "
     mat_name(TTrrange) = "TT "
@@ -411,13 +402,12 @@ contains
     if (atomf.ne.sf) then
        mat_name(aSa_range)       = "aSa"
        mat_name(aHa_range)       = "aHa"
-       mat_name(AP_range)        = "AP"
-       mat_name(PA_range)        = "PA"
        mat_name(aSs_range)       = "aSs"
        mat_name(aHs_range)       = "aHs"
        mat_name(SFcoeff_range)   = "MS"
        mat_name(SFcoeffTr_range) = "MSt"
        mat_name(LD_range)        = "LD"
+       mat_name(STr_range)       = "St"
        mat_name(HTr_range)       = "Ht"
     endif
 !!! nakata3 end

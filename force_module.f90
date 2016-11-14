@@ -218,6 +218,7 @@ contains
                                       flag_move_atom, id_glob,         &
                                       WhichPulay, BothPulay, PhiPulay, &
                                       SPulay, flag_basis_set, PAOs,    &
+                                      atomf, sf,                       & ! nakata4
                                       blips, ni_in_cell, iprint_MD,    &
                                       IPRINT_TIME_THRES2,              &
                                       area_moveatoms, flag_pcc_global, &
@@ -227,6 +228,8 @@ contains
                                       build_Becke_weight_forces
     use functions_on_grid,      only: atomfns, H_on_atomfns
     use dimens,                 only: n_my_grid_points
+    use matrix_data,            only: Hrange  ! nakata4
+    use mult_module,            only: matK, matKatomf, transform_SF_to_ATOMF ! nakata4
     use maxima_module,          only: maxngrid
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl
@@ -246,7 +249,7 @@ contains
     integer, optional :: level 
 
     ! Local variables
-    integer        :: i, j, ii, stat, max_atom, max_compt, spin, direction
+    integer        :: i, j, ii, stat, max_atom, max_compt, ispin, direction
     real(double)   :: max_force
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
@@ -341,8 +344,16 @@ contains
        end if
     end do    
     WhichPulay  = BothPulay
+
+    ! matK->matKatomf backtransformation for contracted SFs
+    if (atomf.ne.sf) then
+       do ispin = 1, nspin
+          call transform_SF_to_ATOMF(matK(ispin), matKatomf(ispin), ispin, Hrange)
+       enddo
+    endif
+
     ! This ASSUMES that H_on_atomfns contains the values of H
-    ! acting on support functions
+    ! acting on atomic functions (SF or PAO)
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu, &
                      n_cg_L_iterations, tolerance, con_tolerance, &
@@ -716,6 +727,8 @@ contains
   !!    Introduced atomf instead of sf
   !!   2016/08/08 15:30 nakata
   !!    Renamed supportfns -> atomfns
+  !!   2016/11/09 21:30 nakata
+  !!    Introduce atomf-based calculations
   !!  SOURCE
   !!
   subroutine pulay_force(p_force, KE_force, fixed_potential, vary_mu,  &
@@ -727,19 +740,22 @@ contains
     use numbers
     use primary_module,              only: bundle
     use matrix_module,               only: matrix, matrix_halo
-    use matrix_data,                 only: mat, Srange, halo, blip_trans, Hrange
+    use matrix_data,                 only: mat, halo, blip_trans, Srange, aSa_range
     use mult_module,                 only: LNV_matrix_multiply,      &
                                            matM12,                   &
                                            allocate_temp_matrix,     &
                                            free_temp_matrix,         &
                                            return_matrix_value,      &
-                                           matrix_pos,               &
-                                           scale_matrix_value, ltrans, &
-                                           matK, return_matrix_block_pos, matrix_scale
+                                           matrix_pos, ltrans,       &
+                                           scale_matrix_value,       &
+                                           matKatomf,                &   ! nakata4
+                                           return_matrix_block_pos,  &
+                                           matrix_scale,             &
+                                           transform_SF_to_ATOMF         ! nakata4
     use global_module,               only: iprint_MD, WhichPulay,    &
                                            BothPulay, PhiPulay,      &
                                            SPulay, flag_basis_set,   &
-                                           blips, PAOs, atomf,       &   ! nakata2
+                                           blips, PAOs, sf, atomf,   &   ! nakata4
                                            flag_onsite_blip_ana,     &
                                            nspin, spin_factor,       &
                                            flag_analytic_blip_int, id_glob, species_glob
@@ -753,14 +769,14 @@ contains
                                            inode, ionode
     use DiagModule,                  only: diagon
 !    use blip_gradient,               only: get_support_gradient
-    use PAO_grid_transform_module,   only: PAO_to_grad
+    use PAO_grid_transform_module,   only: single_PAO_to_grad ! nakata4
     use build_PAO_matrices,          only: assemble_deriv_2
     use cover_module,                only: BCS_parts
     use functions_on_grid,           only: atomfns,                  &
                                            H_on_atomfns,             &
                                            allocate_temp_fn_on_grid, &
                                            free_temp_fn_on_grid, gridfunctions
-    use species_module,              only: nsf_species
+    use species_module,              only: nsf_species, natomf_species   ! nakata4
     ! Temp
     use dimens,                      only: grid_point_volume,        &
                                            n_my_grid_points
@@ -823,6 +839,7 @@ contains
     !    --  02/Feb/2001  Tsuyoshi Miyazaki
 
     integer        :: iprim, np, ni, isf, mat_tmp, mat_tmp2
+    integer, dimension(nspin) :: matM12atomf ! nakata4
     real(double)   :: matM12_value, matK_value
     type(cq_timer) :: tmr_std_loc
     type(cq_timer) :: backtrace_timer
@@ -894,15 +911,15 @@ contains
        time0 = mtime()
        call start_blip_transfer(nreqs,sends,parts%mx_ngonn)
        time1 = mtime()
-       do jpart=1,halo(Srange)%np_in_halo
+       do jpart=1,halo(aSa_range)%np_in_halo
           pb_len = blip_trans%len_recv(jpart)
-          ind_part = halo(Srange)%lab_hcell(jpart)
+          ind_part = halo(aSa_range)%lab_hcell(jpart)
           nod = parts%i_cc2node(ind_part)
           ! Fetch remote blip coefficients for partition
           ! or copy local blip coefficients
           time0 = mtime()
           if(jpart>1) then
-             if(ind_part/=halo(Srange)%lab_hcell(jpart-1)) then
+             if(ind_part/=halo(aSa_range)%lab_hcell(jpart-1)) then
                 allocate(part_blips(pb_len))
                 part_blips = zero
                 if(nod==myid+1) then
@@ -923,13 +940,13 @@ contains
              end if
           endif
           time1 = mtime()
-          gcspart = halo(Srange)%i_hbeg(halo(Srange)%lab_hcover(jpart))
+          gcspart = halo(aSa_range)%i_hbeg(halo(aSa_range)%lab_hcover(jpart))
           pb_st = 1
           time0 = mtime()
-          do j=1,halo(Srange)%nh_part(jpart) ! Loop over atoms j in partition
-             j_in_halo = halo(Srange)%j_beg(jpart)+j-1
-             jseq = halo(Srange)%j_seq(j_in_halo)
-             specj = species_glob( id_glob( parts%icell_beg(halo(Srange)%lab_hcell(jpart))+jseq-1) )
+          do j=1,halo(aSa_range)%nh_part(jpart) ! Loop over atoms j in partition
+             j_in_halo = halo(aSa_range)%j_beg(jpart)+j-1
+             jseq = halo(aSa_range)%j_seq(j_in_halo)
+             specj = species_glob( id_glob( parts%icell_beg(halo(aSa_range)%lab_hcell(jpart))+jseq-1) )
              nblipsj = blip_info(specj)%NBlipsRegion
              this_nsfj = nsf_species(specj)
              allocate(supp_on_j%supp_func(this_nsfj))
@@ -938,8 +955,8 @@ contains
                 supp_on_j%supp_func(nsfj)%coefficients => part_blips(pb_st:pb_st+nblipsj-1)
                 pb_st = pb_st+nblipsj
              end do
-             do i=1,ltrans(Srange)%n_hnab(j_in_halo) ! Loop over atoms i: primary set neighbours of j
-                i_in_prim=ltrans(Srange)%i_prim(ltrans(Srange)%i_beg(j_in_halo)+i-1)
+             do i=1,ltrans(aSa_range)%n_hnab(j_in_halo) ! Loop over atoms i: primary set neighbours of j
+                i_in_prim=ltrans(aSa_range)%i_prim(ltrans(aSa_range)%i_beg(j_in_halo)+i-1)
                 speci = bundle%species(i_in_prim)
                 this_nsfi = nsf_species(speci)
                 dx = BCS_parts%xcover(gcspart+jseq-1)-bundle%xprim(i_in_prim)
@@ -950,8 +967,8 @@ contains
                    this_data_K = zero
                    this_data_M12 = zero
                    do spin=1,nspin
-                      wheremat = matrix_pos(matK(spin),i_in_prim,j_in_halo,1,1)
-                      call return_matrix_block_pos(matK(spin),wheremat,this_data_K(:,:,spin),this_nsfi*this_nsfj)
+                      wheremat = matrix_pos(matKatomf(spin),i_in_prim,j_in_halo,1,1)
+                      call return_matrix_block_pos(matKatomf(spin),wheremat,this_data_K(:,:,spin),this_nsfi*this_nsfj)
                       wheremat = matrix_pos(matM12(spin),i_in_prim,j_in_halo,1,1)
                       call return_matrix_block_pos(matM12(spin),wheremat,this_data_M12(:,:,spin),this_nsfi*this_nsfj)
                    end do
@@ -978,8 +995,8 @@ contains
              end do
              deallocate(supp_on_j%supp_func)
           end do
-          if(jpart<halo(Srange)%np_in_halo) then
-             if(ind_part/=halo(Srange)%lab_hcell(jpart+1)) then
+          if(jpart<halo(aSa_range)%np_in_halo) then
+             if(ind_part/=halo(aSa_range)%lab_hcell(jpart+1)) then
                 deallocate(part_blips)
              end if
           else
@@ -1047,13 +1064,13 @@ contains
     ! ---------------------------------------
     ! Calculate local phi Pulay forces (<grad \phi_i|K_ij|H\phi_j>)
     if (WhichPulay == BothPulay .or. WhichPulay == PhiPulay) then
-       mat_tmp = allocate_temp_matrix(Srange, 0)
+       mat_tmp = allocate_temp_matrix(aSa_range, 0, atomf, atomf)  ! nakata4
        tmp_fn = allocate_temp_fn_on_grid(atomf)
        gridfunctions(tmp_fn)%griddata = zero
        ! Act on H\phi_j with K and store result in H_on_atomfns(1) to save memory
        ! act_on_vectors accumulates
        do spin = 1, nspin
-          call act_on_vectors_new(inode-1, rem_bucket(3), matK(spin), &
+          call act_on_vectors_new(inode-1, rem_bucket(3), matKatomf(spin), &
                tmp_fn, H_on_atomfns(spin))
        end do
        call scal(gridfunctions(tmp_fn)%size, minus_two, &
@@ -1072,7 +1089,7 @@ contains
        ! Allocate more temporary variables
        tmp_fn2 = allocate_temp_fn_on_grid(atomf)
        gridfunctions(tmp_fn2)%griddata = zero
-       mat_tmp2 = allocate_temp_matrix(Srange, 0)
+       mat_tmp2 = allocate_temp_matrix(aSa_range, 0, atomf, atomf) ! nakata4
        !temp_local = allocate_temp_fn_on_grid(atomf) ! Edited SYM 2014/09/01 17:55 
        ! now for each direction in turn
        do direction = 1, 3
@@ -1080,7 +1097,7 @@ contains
           if (flag_basis_set == blips) then
              call blip_to_grad_new(inode-1, direction, tmp_fn)
           else if (flag_basis_set == PAOs) then
-             call PAO_to_grad(inode-1, direction, tmp_fn)
+             call single_PAO_to_grad(direction, tmp_fn) ! nakata4
           else
              call cq_abort("pulay_force: basis set undefined ", flag_basis_set)
           end if
@@ -1117,7 +1134,7 @@ contains
                    !i=id_glob(index_my_atoms(iprim))
                    !i=index_my_atoms(iprim)
                    i = bundle%ig_prim(iprim)
-                   do isf = 1, nsf_species(bundle%species(iprim))
+                   do isf = 1, natomf_species(bundle%species(iprim))
                       p_force(direction, i) = p_force(direction, i) - &
                            return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
                       PP_stress(direction) = PP_stress(direction) - &  
@@ -1142,8 +1159,20 @@ contains
 
     ! NB this used to be PAOs only (flag_basis_set == PAOs)
     if (WhichPulay == BothPulay .or. WhichPulay == SPulay) then
-       mat_tmp = allocate_temp_matrix(Srange, 0)
+       mat_tmp = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
        tmp_fn = allocate_temp_fn_on_grid(atomf)
+!!! nakata4
+       if (atomf==sf) then
+          do spin = 1, nspin
+             matM12atomf(spin) = matM12(spin)
+          enddo
+       else
+          do spin = 1, nspin
+             matM12atomf(spin) = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
+             call transform_SF_to_ATOMF(matM12(spin), matM12atomf(spin), spin, Srange)
+          enddo
+       endif
+!!! nakata4 end
        do direction = 1, 3
           ! Call assemble to generate dS_ij/dR_kl
           if (flag_basis_set == blips) then
@@ -1152,7 +1181,7 @@ contains
                   mat_tmp, atomfns, tmp_fn)
              call matrix_scale(minus_one, mat_tmp)
           else if (flag_basis_set == PAOs) then
-             call assemble_deriv_2(direction, Srange, mat_tmp, 1)
+             call assemble_deriv_2(direction, aSa_range, mat_tmp, 1)
           end if
           ! For each primary set atom, we want \sum_j dS_ij G_ij (I think)
           iprim = 0
@@ -1164,11 +1193,11 @@ contains
                    !i=id_glob(index_my_atoms(iprim))
                    !i=index_my_atoms(iprim)
                    i = bundle%ig_prim(iprim)
-                   do neigh = 1, mat(np,Srange)%n_nab(ni)
-                      ist = mat(np,Srange)%i_acc(ni) + neigh - 1
+                   do neigh = 1, mat(np,aSa_range)%n_nab(ni)
+                      ist = mat(np,aSa_range)%i_acc(ni) + neigh - 1
                       gcspart = &
-                           BCS_parts%icover_ibeg(mat(np,Srange)%i_part(ist)) + &
-                           mat(np,Srange)%i_seq(ist) - 1
+                           BCS_parts%icover_ibeg(mat(np,aSa_range)%i_part(ist)) + &
+                           mat(np,aSa_range)%i_seq(ist) - 1
                       if(direction==1) then
                          r_str=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
                       else if(direction==2) then
@@ -1180,17 +1209,17 @@ contains
                       ! position in matrix, this position will be
                       ! identical for matM12(nspin), so only matM12(1)
                       ! needed here
-                      wheremat = matrix_pos(matM12(1), iprim,             &
-                                            halo(Srange)%i_halo(gcspart), &
+                      wheremat = matrix_pos(matM12atomf(1), iprim,           &
+                                            halo(aSa_range)%i_halo(gcspart), &
                                             1, 1)
-                      if (wheremat /= mat(np,Srange)%onsite(ni)) then
-                         do isf = 1, mat(np,Srange)%ndimj(ist)
-                            do jsf = 1, mat(np,Srange)%ndimi(ni)
+                      if (wheremat /= mat(np,aSa_range)%onsite(ni)) then
+                         do isf = 1, mat(np,aSa_range)%ndimj(ist)
+                            do jsf = 1, mat(np,aSa_range)%ndimi(ni)
                                matM12_value = zero
                                do spin = 1, nspin
-                                  matM12_value =                                 &
-                                       matM12_value + spin_factor *              &
-                                       return_matrix_value(matM12(spin), np, ni, &
+                                  matM12_value =                                      &
+                                       matM12_value + spin_factor *                   &
+                                       return_matrix_value(matM12atomf(spin), np, ni, &
                                                            iprim, neigh, jsf, isf)
                                end do ! spin
                                ! the factor of two here comes from
@@ -1201,7 +1230,7 @@ contains
                                SP_stress(direction) = SP_stress(direction) + thisG_dS_dR * r_str
                             end do ! jsf
                          end do ! isf
-                      end if ! (wheremat /= mat(np,Srange)%onsite(ni))
+                      end if ! (wheremat /= mat(np,aSa_range)%onsite(ni))
                    end do ! neigh
                 end do ! ni
              end if ! (bundle%nm_nodgroup(np) > 0)
@@ -1212,6 +1241,12 @@ contains
                write (io_lun,*) 'S Pulay ', direction, ' time: ', t1 - t0
           t0 = t1
        end do ! direction
+
+       if (atomf.ne.sf) then
+          do spin = 1, nspin
+             call free_temp_matrix(matM12atomf(spin))
+          enddo
+       endif
        call free_temp_fn_on_grid(tmp_fn)
        call free_temp_matrix(mat_tmp)
     end if
@@ -1682,14 +1717,15 @@ contains
     use numbers
     use dimens
     use GenBlas
-    use matrix_data,                 only: SPrange, PSrange, mat, halo
-    use mult_module,                 only: SP_trans, mult, H_SP_SP,    &
+    use matrix_data,                 only: APrange, PArange, mat, halo
+    use mult_module,                 only: AP_trans, mult, aHa_AP_AP,  &
                                            matrix_product,             &
                                            matrix_scale,               &
                                            matrix_transpose,           &
                                            allocate_temp_matrix,       &
-                                           free_temp_matrix, matU,     &
-                                           matUT, matCS, matSC, matK,  &
+                                           free_temp_matrix,           &
+                                           matU, matUT, matPA, matAP,  &
+                                           matKatomf,                  &
                                            return_matrix_value,        &
                                            store_matrix_value
     use species_module,              only: species
@@ -1735,23 +1771,23 @@ contains
 
     ! Local variables
 
-    ! data_dCS will be obtained by a global trans of data_dCS_t
+    ! data_dPA will be obtained by a global trans of data_dPA_t
     !  this trans is same as the one used in U => UT
     !     Tsuyoshi Miyazaki 28/12/2000
-    integer, dimension(3) :: matdSC, matdCS
-    integer, dimension(3) :: matdSCr, matdCSr
+    integer, dimension(3) :: matdAP, matdPA
+    integer, dimension(3) :: matdAPr, matdPAr
     integer      :: direction, k, stat, dpseudofns, np, nn, i, i1, i2, &
                     spec, this_nsf, this_nlpf, ni, spin
     integer      :: iprim, gcspart, ist, nab, neigh_global_num,        &
                     neigh_global_part, neigh_species, wheremat, isf, jsf
-    real(double) :: dx, dy, dz, r_str, thisdSC
+    real(double) :: dx, dy, dz, r_str, thisdAP
     real(double), dimension(:,:), allocatable ::  NL_P_stress, NL_HF_stress
 
     do k = 1, 3
-       matdSC(k) = allocate_temp_matrix (SPrange, SP_trans, atomf, nlpf)
-       matdCS(k) = allocate_temp_matrix (PSrange, SP_trans, nlpf, atomf)
-       matdSCr(k) = allocate_temp_matrix (SPrange, SP_trans, atomf, nlpf)
-       matdCSr(k) = allocate_temp_matrix (PSrange, SP_trans, nlpf, atomf)
+       matdAP(k)  = allocate_temp_matrix (APrange, AP_trans, atomf, nlpf)
+       matdPA(k)  = allocate_temp_matrix (PArange, AP_trans, nlpf, atomf)
+       matdAPr(k) = allocate_temp_matrix (APrange, AP_trans, atomf, nlpf)
+       matdPAr(k) = allocate_temp_matrix (PArange, AP_trans, nlpf, atomf)
     end do
     if (flag_basis_set == blips .and. (.not. flag_analytic_blip_int)) then
        dpseudofns = allocate_temp_fn_on_grid(nlpf)
@@ -1764,10 +1800,10 @@ contains
 
     ! to save memory we do each direction in turn...
     do direction = 1, 3
-       call matrix_scale(zero, matdSC(direction))
-       call matrix_scale(zero, matdCS(direction))
-       call matrix_scale(zero, matdSCr(direction))
-       call matrix_scale(zero, matdCSr(direction))
+       call matrix_scale(zero, matdAP(direction))
+       call matrix_scale(zero, matdPA(direction))
+       call matrix_scale(zero, matdAPr(direction))
+       call matrix_scale(zero, matdPAr(direction))
        if ((flag_basis_set == blips) .and. flag_analytic_blip_int) then
           iprim=0
           do np = 1, bundle%groups_on_node
@@ -1776,28 +1812,28 @@ contains
                    iprim = iprim + 1
                    spec = bundle%species(iprim)
                    ! Loop over neighbours of atom
-                   do nab = 1, mat(np,SPrange)%n_nab(ni)
-                      ist = mat(np,SPrange)%i_acc(ni) + nab - 1
+                   do nab = 1, mat(np,APrange)%n_nab(ni)
+                      ist = mat(np,APrange)%i_acc(ni) + nab - 1
                       ! Build the distances between atoms - needed for phases
                       gcspart = &
-                           BCS_parts%icover_ibeg(mat(np,SPrange)%i_part(ist)) + &
-                           mat(np,SPrange)%i_seq(ist) - 1
+                           BCS_parts%icover_ibeg(mat(np,APrange)%i_part(ist)) + &
+                           mat(np,APrange)%i_seq(ist) - 1
                       ! Displacement vector
                       dx = BCS_parts%xcover(gcspart) - bundle%xprim(iprim)
                       dy = BCS_parts%ycover(gcspart) - bundle%yprim(iprim)
                       dz = BCS_parts%zcover(gcspart) - bundle%zprim(iprim)
                       ! We need to know the species of neighbour
                       neigh_global_part = &
-                           BCS_parts%lab_cell(mat(np,SPrange)%i_part(ist))
+                           BCS_parts%lab_cell(mat(np,APrange)%i_part(ist))
                       neigh_global_num  = &
                            id_glob(parts%icell_beg(neigh_global_part) + &
-                                   mat(np,SPrange)%i_seq(ist) - 1)
+                                   mat(np,APrange)%i_seq(ist) - 1)
                       neigh_species = species_glob(neigh_global_num)
                       if ((dx*dx + dy*dy + dz*dz) > RD_ERR) then
                          call get_dSP(blips_on_atom(iprim),            &
                                       nlpf_on_atom(neigh_species),     &
-                                      matdSC(direction), iprim,        &
-                                      halo(SPrange)% i_halo(gcspart),  &
+                                      matdAP(direction), iprim,        &
+                                      halo(APrange)% i_halo(gcspart),  &
                                       dx, dy, dz, spec, neigh_species, &
                                       direction)
                       end if
@@ -1805,8 +1841,8 @@ contains
                 end do ! ni
              end if ! (bundle%nm_nodgroup(np) > 0)
           end do ! np
-          call matrix_transpose(matdSC(direction), matdCS(direction))
-          call matrix_scale(-one, matdSC(direction))
+          call matrix_transpose(matdAP(direction), matdPA(direction))
+          call matrix_scale(-one, matdAP(direction))
        else if (flag_basis_set == blips .and. &
                 (.not. flag_analytic_blip_int)) then
           ! first of all construct the directional derivatives of the core
@@ -1828,47 +1864,47 @@ contains
           ! New get_matrix_elements  TSUYOSHI MIYAZAKI 28/Dec/2000
           call get_matrix_elements_new(inode-1,                    &
                                        rem_bucket(atomf_nlpf_rem), &
-                                       matdSC(direction), atomfns, &
+                                       matdAP(direction), atomfns, &
                                        dpseudofns)
-          call matrix_transpose(matdSC(direction), matdCS(direction))
-          call matrix_scale(-one, matdCS(direction))
+          call matrix_transpose(matdAP(direction), matdPA(direction))
+          call matrix_scale(-one, matdPA(direction))
           ! and the overlap between the derivatives of the support and
           ! the core functions, H_on_atomfns(1) is used as a work array
           call blip_to_grad_new(inode-1, direction, H_on_atomfns(1))
           call get_matrix_elements_new(inode-1,                    &
                                        rem_bucket(atomf_nlpf_rem), &
-                                       matdSC(direction),          &
+                                       matdAP(direction),          &
                                        H_on_atomfns(1),            &
                                        pseudofns)
-          call matrix_scale(-one, matdSC(direction))
+          call matrix_scale(-one, matdAP(direction))
           ! actually, because the derivatives we want are with respect to the
           ! position of the atom supporting each support function, we must
           ! scale the above integrals by -1
        else if (flag_basis_set == PAOs) then
           ! Get matrix elements between derivative of projectors and
-          ! support functions
-          call assemble_deriv_2(direction, SPrange, matdSC(direction), 3)
-          call matrix_scale(-one, matdSC(direction))
+          ! atom functions (support function or PAO)
+          call assemble_deriv_2(direction, APrange, matdAP(direction), 3)   ! nakata4
+          call matrix_scale(-one, matdAP(direction))
 
           ! Get matrix elements between projectors and derivative of
           ! support functions BY TRANSPOSE. This is fine (I think)
           ! because the transpose ought to be exact
-          call matrix_transpose(matdSC(direction), matdCS(direction))
-          call matrix_scale(-one, matdCS(direction))
+          call matrix_transpose(matdAP(direction), matdPA(direction))
+          call matrix_scale(-one, matdPA(direction))
        else
           call cq_abort("get_HF_NL_force: basis set undefined ", &
                         flag_basis_set)
        end if ! ((flag_basis_set == blips) .and. flag_analytic_blip_int)
-       ! Now scale dSC and dCS by R_{ji} for stress
+       ! Now scale dAP and dPA by R_{ji} for stress
        ! 2014/08/06 11:45 Shereif
        iprim = 0
        do np = 1, bundle%groups_on_node
           if (bundle%nm_nodgroup(np) > 0) then
              do ni = 1, bundle%nm_nodgroup(np)
                 iprim = iprim + 1
-                do nab = 1, mat(np,SPrange)%n_nab(ni)
-                   ist = mat(np,SPrange)%i_acc(ni) + nab - 1
-                   gcspart = BCS_parts%icover_ibeg(mat(np,SPrange)%i_part(ist)) + mat(np,SPrange)%i_seq(ist) - 1
+                do nab = 1, mat(np,APrange)%n_nab(ni)
+                   ist = mat(np,APrange)%i_acc(ni) + nab - 1
+                   gcspart = BCS_parts%icover_ibeg(mat(np,APrange)%i_part(ist)) + mat(np,APrange)%i_seq(ist) - 1
                    if(direction==1) then
                       r_str=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
                    else if(direction==2) then
@@ -1876,19 +1912,19 @@ contains
                    else if(direction==3) then
                       r_str=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
                    end if
-                   do isf = 1, mat(np,SPrange)%ndimj(ist)
-                      do jsf = 1, mat(np,SPrange)%ndimi(ni)
-                         thisdSC = return_matrix_value(matdSC(direction), np, ni, iprim, nab, jsf, isf)
-                         call store_matrix_value(matdSCr(direction), np, ni, iprim, nab, jsf, isf, r_str*thisdSC)
+                   do isf = 1, mat(np,APrange)%ndimj(ist)
+                      do jsf = 1, mat(np,APrange)%ndimi(ni)
+                         thisdAP = return_matrix_value(matdAP(direction), np, ni, iprim, nab, jsf, isf)
+                         call store_matrix_value(matdAPr(direction), np, ni, iprim, nab, jsf, isf, r_str*thisdAP)
                          ! Reuse variable
-                         !thisdSC = return_matrix_value(matdCS(direction), np, ni, iprim, nab, jsf, isf)
-                         !call store_matrix_value(matdCSr(direction), np, ni, iprim, nab, jsf, isf, r_str*thisdSC)
+                         !thisdAP = return_matrix_value(matdPA(direction), np, ni, iprim, nab, jsf, isf)
+                         !call store_matrix_value(matdPAr(direction), np, ni, iprim, nab, jsf, isf, r_str*thisdAP)
                       end do
                    end do
                 end do
-                !do nab = 1, mat(np,PSrange)%n_nab(ni)
-                !   ist = mat(np,PSrange)%i_acc(ni) + nab - 1
-                !   gcspart = BCS_parts%icover_ibeg(mat(np,PSrange)%i_part(ist)) + mat(np,PSrange)%i_seq(ist) - 1
+                !do nab = 1, mat(np,PArange)%n_nab(ni)
+                !   ist = mat(np,PArange)%i_acc(ni) + nab - 1
+                !   gcspart = BCS_parts%icover_ibeg(mat(np,PArange)%i_part(ist)) + mat(np,PArange)%i_seq(ist) - 1
                 !   if(direction==1) then
                 !      r_str=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
                 !   else if(direction==2) then
@@ -1896,47 +1932,47 @@ contains
                 !   else if(direction==3) then
                 !      r_str=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
                 !   end if
-                !   do isf = 1, mat(np,PSrange)%ndimj(ist)
-                !      do jsf = 1, mat(np,PSrange)%ndimi(ni)
-                !         thisdSC = return_matrix_value(matdCS(direction), np, ni, iprim, nab, jsf, isf)
-                !         call store_matrix_value(matdCSr(direction), np, ni, iprim, nab, jsf, isf, r_str*thisdSC)
+                !   do isf = 1, mat(np,PArange)%ndimj(ist)
+                !      do jsf = 1, mat(np,PArange)%ndimi(ni)
+                !         thisdAP = return_matrix_value(matdPA(direction), np, ni, iprim, nab, jsf, isf)
+                !         call store_matrix_value(matdPAr(direction), np, ni, iprim, nab, jsf, isf, r_str*thisdAP)
                 !      end do
                 !   end do
                 !end do
              end do
           end if
        end do
-       call matrix_transpose(matdSCr(direction), matdCSr(direction))
-       !call matrix_scale(-one, matdCSr(direction))
+       call matrix_transpose(matdAPr(direction), matdPAr(direction))
+       !call matrix_scale(-one, matdPAr(direction))
     end do ! Now end the direction loop
     if (flag_basis_set == blips .and. (.not.flag_analytic_blip_int)) &
          call free_temp_fn_on_grid(dpseudofns)
-    ! First of all, find U (= K.SC)
-    call matrix_transpose(matSC, matCS)
+    ! First of all, find U (= K.AP)
+    call matrix_transpose(matAP, matPA)
     do spin = 1, nspin
-       call matrix_product(matK(spin), matCS, matU(spin), mult(H_SP_SP))
+       call matrix_product(matKatomf(spin), matPA, matU(spin), mult(aHa_AP_AP))
        ! we factor matU(1) with spin_factor for spin non-polarised
        ! calculation. This may cause slight confusion, as the factor
        ! are not applied to other matrices of the spin channels, and
        ! matU(1) is supposed to be U for spin up, but doing this way
        ! we make the calculations more efficient.
        call matrix_scale(minus_two * spin_factor, matU(spin))
-       ! Find the transpose of U (= K.SC)
+       ! Find the transpose of U (= K.AP)
        call matrix_transpose(matU(spin), matUT(spin))
     end do
 
     ! For PAOs, we need to zero the on-site terms
 
     ! Evaluate the pulay term - due to the phis changing
-    ! NB We want sum_k dSC_ik.UT_ki, so let's do sum_k dSC_ik.U_ik
+    ! NB We want sum_k dAP_ik.UT_ki, so let's do sum_k dAP_ik.U_ik
     if (what_force == Pulay .OR. what_force == HF_and_Pulay) then
        do k = 1, 3
           do spin = 1, nspin
              ! Note that matrix_diagonal accumulates HF_NL_force(k,:)
-             call matrix_diagonal(matdSC(k), matU(spin), &
-                                  HF_NL_force(k,:), SPrange, inode)
-             call matrix_diagonal(matdSCr(k), matU(spin), &
-                                  NL_P_stress(k,:), SPrange, inode)
+             call matrix_diagonal(matdAP(k), matU(spin), &
+                                  HF_NL_force(k,:), APrange, inode)
+             call matrix_diagonal(matdAPr(k), matU(spin), &
+                                  NL_P_stress(k,:), APrange, inode)
           end do ! spin
        end do ! k
     end if
@@ -1945,10 +1981,10 @@ contains
        do k = 1, 3
           do spin = 1, nspin
              ! Note that matrix_diagonal accumulates HF_NL_force(k,:)
-             call matrix_diagonal(matdCS(k), matUT(spin), &
-                                  HF_NL_force(k,:), PSrange,inode)
-             call matrix_diagonal(matdCSr(k), matUT(spin), &
-                                  NL_HF_stress(k,:), PSrange, inode)
+             call matrix_diagonal(matdPA(k), matUT(spin), &
+                                  HF_NL_force(k,:), PArange,inode)
+             call matrix_diagonal(matdPAr(k), matUT(spin), &
+                                  NL_HF_stress(k,:), PArange, inode)
           end do ! spin
        end do ! k
     end if
@@ -1962,10 +1998,10 @@ contains
     call gsum(NL_stress,3)
     deallocate(NL_P_stress,NL_HF_stress)
     do k = 3, 1, -1
-       call free_temp_matrix(matdCSr(k))
-       call free_temp_matrix(matdSCr(k))
-       call free_temp_matrix(matdCS(k))
-       call free_temp_matrix(matdSC(k))
+       call free_temp_matrix(matdPAr(k))
+       call free_temp_matrix(matdAPr(k))
+       call free_temp_matrix(matdPA(k))
+       call free_temp_matrix(matdAP(k))
     end do
 
     return
@@ -2061,11 +2097,11 @@ contains
     use numbers
     use primary_module,              only: bundle
     use matrix_module,               only: matrix, matrix_halo
-    use matrix_data,                 only: mat, Hrange, halo
+    use matrix_data,                 only: mat, aHa_range, halo
     use cover_module,                only: BCS_parts
     use mult_module,                 only: allocate_temp_matrix,      &
                                            free_temp_matrix,          &
-                                           return_matrix_value, matK, &
+                                           return_matrix_value, matKatomf, &
                                            matrix_pos
     use GenBlas
     use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
@@ -2098,7 +2134,7 @@ contains
 !    ! First, clear the diagonal blocks of data K; this is the easiest way
 !    ! to avoid doing the onsite terms
     KE_force = zero
-    mat_grad_T = allocate_temp_matrix(Hrange,0)
+    mat_grad_T = allocate_temp_matrix(aHa_range,0)
     ! Now, for the offsite part, done on the integration grid.
     if (flag_basis_set == blips) then
 
@@ -2128,11 +2164,11 @@ contains
                       ! instance) DRB and TM 10:38, 29/08/2003
                       iprim = iprim+1
                       atom = bundle%ig_prim(bundle%nm_nodbeg(np)+i-1)
-                      do j = 1,mat(np,Hrange)%n_nab(i)
-                         ist = mat(np,Hrange)%i_acc(i)+j-1
+                      do j = 1,mat(np,aHa_range)%n_nab(i)
+                         ist = mat(np,aHa_range)%i_acc(i)+j-1
                          gcspart =                                                &
-                              BCS_parts%icover_ibeg(mat(np,Hrange)%i_part(ist)) + &
-                              mat(np,Hrange)%i_seq(ist) - 1
+                              BCS_parts%icover_ibeg(mat(np,aHa_range)%i_part(ist)) + &
+                              mat(np,aHa_range)%i_seq(ist) - 1
                          if(force_direction==1) then
                             r_str=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
                          else if(force_direction==2) then
@@ -2140,19 +2176,19 @@ contains
                          else if(force_direction==3) then
                             r_str=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
                          end if
-                         ! matK(1) here is just to work out the matrix
+                         ! matKatomf(1) here is just to work out the matrix
                          ! position, it is going to be the same as
-                         ! matK(nspin)
+                         ! matKatomf(nspin)
                          element =                       &
-                              matrix_pos(matK(1), iprim, &
-                                         halo(Hrange)%i_halo(gcspart), 1, 1)
+                              matrix_pos(matKatomf(1), iprim, &
+                                         halo(aHa_range)%i_halo(gcspart), 1, 1)
                          if ((.not. flag_onsite_blip_ana) .or. &
-                             (element /= mat(np,Hrange)%onsite(i))) then
-                            do n1 = 1, mat(np,Hrange)%ndimj(ist)
-                               do n2 = 1, mat(np,Hrange)%ndimi(i)
+                             (element /= mat(np,aHa_range)%onsite(i))) then
+                            do n1 = 1, mat(np,aHa_range)%ndimj(ist)
+                               do n2 = 1, mat(np,aHa_range)%ndimi(i)
                                   do spin = 1, nspin
                                      thisK_gradT = spin_factor *                     &
-                                          return_matrix_value(matK(spin),   &
+                                          return_matrix_value(matKatomf(spin),   &
                                           np, i, iprim, &
                                           j, n2, n1) *  &
                                           return_matrix_value(mat_grad_T,   &
@@ -2179,7 +2215,7 @@ contains
 
        do force_direction = 1, 3
           ! Build derivatives
-          call assemble_deriv_2(force_direction,Hrange, mat_grad_T, 2)
+          call assemble_deriv_2(force_direction,aHa_range, mat_grad_T, 2)
           call start_timer(tmr_std_matrices)
           iprim = 0
           do np = 1, bundle%groups_on_node
@@ -2191,11 +2227,11 @@ contains
                    ! DRB and TM 10:38, 29/08/2003
                    atom = bundle%ig_prim(bundle%nm_nodbeg(np)+i-1)
                    iprim = iprim + 1
-                   do j = 1, mat(np,Hrange)%n_nab(i)
-                      ist = mat(np,Hrange)%i_acc(i) + j - 1
+                   do j = 1, mat(np,aHa_range)%n_nab(i)
+                      ist = mat(np,aHa_range)%i_acc(i) + j - 1
                       gcspart =                                                &
-                           BCS_parts%icover_ibeg(mat(np,Hrange)%i_part(ist)) + &
-                           mat(np,Hrange)%i_seq(ist) - 1
+                           BCS_parts%icover_ibeg(mat(np,aHa_range)%i_part(ist)) + &
+                           mat(np,aHa_range)%i_seq(ist) - 1
                       if(force_direction==1) then
                          r_str=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
                       else if(force_direction==2) then
@@ -2203,16 +2239,16 @@ contains
                       else if(force_direction==3) then
                          r_str=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
                       end if
-                      ! matK(1) is used to just to get the position
+                      ! matKatomf(1) is used to just to get the position
                       element =                    &
-                           matrix_pos(matK(1), iprim, &
-                                      halo(Hrange)%i_halo(gcspart), 1, 1)
-                      if (element /= mat(np,Hrange)%onsite(i)) then
-                         do n1 = 1, mat(np,Hrange)%ndimj(ist)
-                            do n2 = 1, mat(np,Hrange)%ndimi(i)
+                           matrix_pos(matKatomf(1), iprim, &
+                                      halo(aHa_range)%i_halo(gcspart), 1, 1)
+                      if (element /= mat(np,aHa_range)%onsite(i)) then
+                         do n1 = 1, mat(np,aHa_range)%ndimj(ist)
+                            do n2 = 1, mat(np,aHa_range)%ndimi(i)
                                do spin = 1, nspin
                                   thisK_gradT = spin_factor *                     &
-                                       return_matrix_value(matK(spin),   &
+                                       return_matrix_value(matKatomf(spin),   &
                                        np, i, iprim, &
                                        j, n2, n1) *  &
                                        return_matrix_value(mat_grad_T,   &
@@ -2226,7 +2262,7 @@ contains
                                end do ! spin
                             end do ! n2
                          end do ! n1
-                      end if ! (element /= mat(np,Hrange)%onsite(i))
+                      end if ! (element /= mat(np,aHa_range)%onsite(i))
                    end do ! j
                 end do ! i
              end if  ! (bundle%nm_nodgroup(np) > 0)

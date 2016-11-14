@@ -651,18 +651,18 @@ contains
   !!     that factor corrections for spin non-polarised calculations
   !!     are not required.
   !!   2016/07/29 18:30 nakata
-  !!    Removed unused supports_on_atom
+  !!    Removed unused supports_on_atom, SP_trans
   !!  SOURCE
   !!
   subroutine get_non_local_gradient(support_grad_grid, inode, ionode)
 
     use datatypes
     use numbers
-    use mult_module,                 only: H_SP_SP, SP_trans, mult, &
+    use mult_module,                 only: aHa_AP_AP, mult,         &
                                            matrix_product,          &
                                            matrix_scale,            &
-                                           matrix_transpose, matSC, &
-                                           matCS, matU, matK,       &
+                                           matrix_transpose, matAP, &
+                                           matPA, matU, matKatomf,  &
                                            return_matrix_block_pos, &
                                            matrix_pos
     use set_bucket_module,           only: rem_bucket
@@ -674,7 +674,7 @@ contains
     use group_module,                only: parts
     use primary_module,              only: bundle
     use cover_module,                only: BCS_parts
-    use matrix_data,                 only: mat, SPrange, halo
+    use matrix_data,                 only: mat, APrange, halo
     use species_module,              only: nsf_species, nlpf_species
     use global_module,               only: nspin, spin_factor,      &
                                            id_glob, species_glob,   &
@@ -694,10 +694,10 @@ contains
     real(double) :: dx, dy, dz
     real(double), dimension(:,:), allocatable :: dataU
 
-    ! First of all, find U (=K.SC)
-    call matrix_transpose(matSC,matCS)
+    ! First of all, find U (=K.AP)
+    call matrix_transpose(matAP,matPA)
     do spin = 1, nspin
-       call matrix_product(matK(spin), matCS, matU(spin), mult(H_SP_SP))
+       call matrix_product(matKatomf(spin), matPA, matU(spin), mult(aHa_AP_AP))
        call matrix_scale(minus_two * spin_factor, matU(spin))
     end do
 
@@ -709,26 +709,26 @@ contains
              iprim = iprim + 1
              spec = bundle%species(iprim)
              this_nsf = nsf_species(spec)
-             do nab = 1, mat(np,SPrange)%n_nab(nn) ! Loop over neighbours of atom
-                ist = mat(np,SPrange)%i_acc(nn) + nab - 1
+             do nab = 1, mat(np,APrange)%n_nab(nn) ! Loop over neighbours of atom
+                ist = mat(np,APrange)%i_acc(nn) + nab - 1
                 ! Build the distances between atoms - needed for phases 
                 gcspart = &
-                     BCS_parts%icover_ibeg(mat(np,SPrange)%i_part(ist)) + &
-                     mat(np,SPrange)%i_seq(ist) - 1
+                     BCS_parts%icover_ibeg(mat(np,APrange)%i_part(ist)) + &
+                     mat(np,APrange)%i_seq(ist) - 1
                 ! Displacement vector
                 dx = BCS_parts%xcover(gcspart) - bundle%xprim(iprim)
                 dy = BCS_parts%ycover(gcspart) - bundle%yprim(iprim)
                 dz = BCS_parts%zcover(gcspart) - bundle%zprim(iprim)
                 ! We need to know the species of neighbour
                 neigh_global_part = &
-                     BCS_parts%lab_cell(mat(np,SPrange)%i_part(ist)) 
+                     BCS_parts%lab_cell(mat(np,APrange)%i_part(ist)) 
                 neigh_global_num  = &
                      id_glob(parts%icell_beg(neigh_global_part) + &
-                             mat(np,SPrange)%i_seq(ist) - 1)
+                             mat(np,APrange)%i_seq(ist) - 1)
                 neigh_species = species_glob(neigh_global_num)
                 this_nlpf = nlpf_species(neigh_species)
-                j_in_halo = halo(SPrange)%i_halo(gcspart)
-                wheremat = matrix_pos(matSC, iprim, j_in_halo, 1, 1)
+                j_in_halo = halo(APrange)%i_halo(gcspart)
+                wheremat = matrix_pos(matAP, iprim, j_in_halo, 1, 1)
                 allocate(dataU(this_nsf,this_nlpf))
                 do spin = 1, nspin
                    dataU = zero

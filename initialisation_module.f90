@@ -1346,7 +1346,7 @@ contains
   !!   2011/11/16 15:53 dave
   !!    Removed Extent from set_blipgrid call
   !!   2016/09/16 17:00 nakata
-  !!    Added atomf and RadiusPAO
+  !!    Added atomf and RadiusAtomf
   !!  SOURCE
   !!
   subroutine setgrid(myid, r_core_squared, r_h)
@@ -1369,7 +1369,7 @@ contains
     use set_blipgrid_module,    only: set_blipgrid
     use set_bucket_module,      only: set_bucket
     use GenComms,               only: my_barrier
-    use dimens,                 only: RadiusSupport, RadiusPAO
+    use dimens,                 only: RadiusAtomf
     use pseudopotential_common, only: core_radius
     use input_module,           only: leqi
 
@@ -1424,13 +1424,7 @@ contains
     !if(iprint_index > 4) write(io_lun,*) ' DCS & BCS has been prepared for myid = ',myid
     !Makes variables used in Blip-Grid transforms
     ! See (naba_blk_module.f90), (set_blipgrid_module.f90), (make_table.f90)
-!!! 2016.9.16 nakata3
-    if (atomf.eq.sf) then
-       call set_blipgrid(myid, RadiusSupport, core_radius)
-    else
-       call set_blipgrid(myid, RadiusPAO, core_radius)
-    endif
-!!! nakata3 end
+    call set_blipgrid(myid, RadiusAtomf, core_radius) ! nakata3
     !if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done set_blipgrid'
 
     !Makes variables used in calculation (integration) of matrix elements

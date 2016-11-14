@@ -47,11 +47,14 @@
 !!   2014/01/17 13:20 lat
 !!    Added new matrix X and SX for exchange
 !!   2016/08/09 18:00 nakata
-!!    Added parameters aSa_range, aHa_range, AP_range, PA_range, HTr_range,
+!!    Added parameters aSa_range, aHa_range, STr_range, HTr_range,
 !!                     SFcoeff_range, SFcoeffTr_range, aSs_range, aHs_range, LD_range,
 !!                     SFcoeff_matind, SFcoeffTr_matind, Satomf_matind, Hatomf_matind, 
-!!                     SPatomf_matind, PSatomf_matind, Satomfsf_matind, Hatomfsf_matind, HTr_matind, LD_matind
+!!                     Satomfsf_matind, Hatomfsf_matind, STr_matind, HTr_matind, LD_matind
 !!    for PAO-based calculations
+!!    Changed from SPrange, PSrange, SPmatind, PSmatind
+!!              to APrange, PArange, APmatind, PAmatind
+!!    where A = atomic function (sf or paof) and P = projecter function for NL
 !!  SOURCE
 !!
 module matrix_data
@@ -63,7 +66,7 @@ module matrix_data
   save
 
   ! This will need to change if the above parameters are changed
-  integer, parameter :: mx_matrices = 32   ! nakata3
+  integer, parameter :: mx_matrices = 31   ! nakata3
 
   ! Store ALL indices in a large array
   type(matrix),      allocatable, dimension(:,:), target :: mat
@@ -72,17 +75,16 @@ module matrix_data
   character(len=3),  dimension(mx_matrices) :: mat_name
 
   integer, dimension(:), pointer :: Smatind, dSmatind, Lmatind, LTrmatind, Hmatind, dHmatind, &
-       SPmatind, PAOPmatind, PSmatind, LSmatind, SLmatind, LHmatind, HLmatind, LSLmatind,     &
+       APmatind, PAOPmatind, PAmatind, LSmatind, SLmatind, LHmatind, HLmatind, LSLmatind,     &
        SLSmatind, Tmatind, TTrmatind, TSmatind, THmatind, TLmatind, Xmatind, SXmatind   
   integer, dimension(:), pointer :: SFcoeff_matind, SFcoeffTr_matind, Satomf_matind, Hatomf_matind, &
-                                    SPatomf_matind, PSatomf_matind, Satomfsf_matind, Hatomfsf_matind,   &
-                                    HTr_matind, LD_matind
+                                    Satomfsf_matind, Hatomfsf_matind, STr_matind, HTr_matind, LD_matind
 
   ! Parameters for the different matrix ranges
   integer, parameter :: Srange   = 1   ! STS,TST,TS.TS
   integer, parameter :: Lrange   = 2   ! SLS,HLSLS,SLSLS,THT,LSLSL
   integer, parameter :: Hrange   = 3   ! K,LSLSL
-  integer, parameter :: SPrange  = 4   ! PS,U   ! Maybe rename ?
+  integer, parameter :: APrange  = 4   ! PA,U   ! Maybe rename ?
   integer, parameter :: LSrange  = 5   ! SL
   integer, parameter :: LHrange  = 6   ! HL
   integer, parameter :: LSLrange = 7   ! HLS
@@ -91,13 +93,13 @@ module matrix_data
   integer, parameter :: TSrange  = 10  
   integer, parameter :: THrange  = 11
   integer, parameter :: TLrange  = 12
-  integer, parameter :: PSrange  = 13   ! PS,U   ! Maybe rename ?
+  integer, parameter :: PArange  = 13  ! AP,U   ! Maybe rename ?
   integer, parameter :: LTrrange = 14
   integer, parameter :: SLrange  = 15
   integer, parameter :: TTrrange = 16
   integer, parameter :: dSrange  = 17   ! STS,TST,TS.TS
   integer, parameter :: dHrange  = 18   ! K,LSLSL
-  integer, parameter :: PAOPrange= 19  ! PS,U   ! Maybe rename ?
+  integer, parameter :: PAOPrange= 19  ! PA,U   ! Maybe rename ?
   integer, parameter :: HLrange  = 20
 
   integer, parameter :: Xrange   = 21
@@ -107,14 +109,13 @@ module matrix_data
   ! The indices for ATOMF-based-matrix ranges will be set later.
   integer :: aSa_range       ! 23 for S(atomf,atomf) = r_atomf + r_atomf
   integer :: aHa_range       ! 24 for H(atomf,atomf) = r_atomf + r_atomf
-  integer :: AP_range        ! 25
-  integer :: PA_range        ! 26
-  integer :: HTr_range       ! 27
-  integer :: SFcoeff_range   ! 28
-  integer :: SFcoeffTr_range ! 29
-  integer :: aSs_range       ! 30 for S(atomf,sf) = r_atomf + r_sf
-  integer :: aHs_range       ! 31 for H(atomf,sf) = r_atomf + r_sf
-  integer :: LD_range        ! 32
+  integer :: STr_range       ! 25 for sMs -> aMa transformation (Srange)
+  integer :: HTr_range       ! 26 for sMs -> aMa transformation (Hrange)
+  integer :: SFcoeff_range   ! 27
+  integer :: SFcoeffTr_range ! 28
+  integer :: aSs_range       ! 29 for S(atomf,sf) = r_atomf + r_sf
+  integer :: aHs_range       ! 30 for H(atomf,sf) = r_atomf + r_sf
+  integer :: LD_range        ! 31
 !!! end nakata3
 
   integer :: max_range ! Indexes matrix with largest range

@@ -927,7 +927,7 @@ contains
   !!   2016/08/01 17:30 nakata
   !!    Introduced atomf
   !!   2016/09/16 17:00 nakata
-  !!    Introduced RadiusPAO
+  !!    Introduced RadiusAtomf instead of RadiusSupport
   !!  SOURCE
   !!
   subroutine build_Becke_weights
@@ -947,7 +947,7 @@ contains
                                    flag_perform_cdft, flag_cdft_atom
     use cover_module,        only: DCS_parts
     use group_module,        only: blocks, parts
-    use dimens,              only: RadiusSupport, RadiusPAO, atomicnum
+    use dimens,              only: RadiusAtomf, atomicnum
 
     implicit none
 
@@ -1027,13 +1027,7 @@ contains
                 zatom(at)=DCS_parts%zcover(icover)
                 the_species=species_glob(ig_atom)
                 globatom(at) = ig_atom
-!!! 2016.9.16 nakata3
-                if (atomf.eq.sf) then
-                   rcut(at) = RadiusSupport(the_species)
-                else if (atomf.eq.paof) then
-                   rcut(at) = RadiusPAO(the_species)
-                endif
-!!! nakata3 end
+                rcut(at) = RadiusAtomf(the_species) ! nakata3
                 rad(at) = atrad(atomicnum(the_species))
              end do
           end do
@@ -1171,7 +1165,7 @@ contains
   !!   2016/08/01 17:30 nakata
   !!    Introduced atomf
   !!   2016/09/16 17:00 nakata
-  !!    Introduced RadiusPAO
+  !!    Introduced RadiusAtomf instead of RadiusSupport
   !!  SOURCE
   !!
   subroutine build_Becke_weight_forces(weight_force)
@@ -1191,8 +1185,7 @@ contains
                                    nspin, spin_factor
     use cover_module,        only: DCS_parts
     use group_module,        only: blocks, parts
-    use dimens,              only: RadiusSupport, RadiusPAO,          &
-                                   grid_point_volume,                 &
+    use dimens,              only: RadiusAtomf, grid_point_volume,    &
                                    atomicnum
     use cdft_data,           only: cDFT_Type, cDFT_Fix_Charge,        &
                                    cDFT_Fix_ChargeDifference, cDFT_Vc
@@ -1276,13 +1269,7 @@ contains
                    zatom(at) = DCS_parts%zcover(icover)
                    the_species = species_glob(ig_atom)
                    globatom(at) = ig_atom
-!!! 2016.9.16 nakata3
-                   if (atomf.eq.sf) then
-                      rcut(at) = RadiusSupport(the_species)
-                   else if (atomf.eq.paof) then
-                      rcut(at) = RadiusPAO(the_species)
-                   endif
-!!! nakata3 end
+                   rcut(at) = RadiusAtomf(the_species) ! nakata3
                    rad(at) = atrad(atomicnum(the_species))
                 end do
              end do

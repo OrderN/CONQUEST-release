@@ -177,7 +177,8 @@ contains
                                       in_block_z
     use species_module,         only: n_species, species, charge,      &
                                       non_local_species,               &
-                                      nsf_species, npao_species        ! nakata3
+                                      nsf_species, npao_species,       &
+                                      natomf_species                     ! nakata3
     use GenComms,               only: my_barrier, cq_abort
     use pseudopotential_data,   only: non_local, read_pseudopotential
     use pseudopotential_common, only: core_radius, pseudo_type, OLDPS, &
@@ -319,6 +320,8 @@ contains
        flag_do_SFtransform = .false.
        atomf = sf
     endif
+    if (atomf==sf)   natomf_species(:) =  nsf_species(:)
+    if (atomf==paof) natomf_species(:) = npao_species(:)
     if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_one_to_one: ',flag_one_to_one
     if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_contractSF: ',flag_contractSF
 !    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_do_SFtransform: ',flag_do_SFtransform
@@ -592,11 +595,11 @@ contains
                              fire_N_max, flag_write_DOS, flag_write_projected_DOS, &
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_Multisite     ! nakata4
-    use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,   &
-                      n_grid_x, n_grid_y, n_grid_z, r_h, r_c,        &
-                      RadiusSupport, RadiusPAO, RadiusMS, RadiusLD,  &     ! nakata3
-                      NonLocalFactor, InvSRange,      &
-                      min_blip_sp, flag_buffer_old, AtomMove_buffer, &
+    use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
+                      n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
+                      RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &     ! nakata3
+                      NonLocalFactor, InvSRange,                      &
+                      min_blip_sp, flag_buffer_old, AtomMove_buffer,  &
                       r_dft_d2, r_exx
     use block_module, only: in_block_x, in_block_y, in_block_z, &
                             blocks_raster, blocks_hilbert
@@ -1044,7 +1047,7 @@ contains
           charge(i)         = zero
           nsf_species(i)    = 0
           RadiusSupport(i)  = r_h
-          RadiusPAO(i)      = r_h    ! nakata3
+          RadiusAtomf(i)    = r_h    ! nakata3
           RadiusMS(i)       = zero   ! nakata3
           RadiusLD(i)       = zero   ! nakata3
           NonLocalFactor(i) = HNL_fac
@@ -1060,10 +1063,10 @@ contains
              nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
              RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',r_h)
 !!! 2016.9.16 nakata3
-             RadiusPAO(i)     = RadiusSupport(i)
+             RadiusAtomf(i)   = RadiusSupport(i) ! = r_pao for (atomf=paof) or r_sf for (atomf==sf)
              RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
              RadiusLD(i)      = fdf_double ('Atom.LocalDiagRange',zero)
-             if (flag_Multisite) RadiusSupport(i) = RadiusPAO(i) + RadiusMS(i)
+             if (flag_Multisite) RadiusSupport(i) = RadiusAtomf(i) + RadiusMS(i)
 !!! nakata3 end
              ! DRB 2016/08/05 Keep track of maximum support radius
              if(RadiusSupport(i)>max_rc) max_rc = RadiusSupport(i)
@@ -1743,15 +1746,15 @@ contains
 !!   2015/06/08 lat
 !!    - Added experimental backtrace
 !!   2016/09/16 17:00 nakata
-!!    - Added RadiusPAO, RadiusMS and RadiusLD
+!!    - Added RadiusAtomf, RadiusMS and RadiusLD
 !!  SOURCE
 !!
   subroutine allocate_species_vars
 
-    use dimens,         only: RadiusSupport, RadiusPAO, RadiusMS, RadiusLD, &
+    use dimens,         only: RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
                               NonLocalFactor, InvSRange, atomicnum
     use memory_module,  only: reg_alloc_mem, type_dbl
-    use species_module, only: n_species, nsf_species, nlpf_species, npao_species, charge
+    use species_module, only: n_species, nsf_species, nlpf_species, npao_species, natomf_species, charge
     use species_module, only: mass, non_local_species, ps_file, ch_file, phi_file 
     use species_module, only: species_label, species_file, type_species
     use global_module,  only: area_general
@@ -1772,13 +1775,15 @@ contains
     !
     allocate(RadiusSupport(n_species),atomicnum(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating RadiusSupport, atomicnum in allocate_species_vars: ",n_species,stat)
+    call reg_alloc_mem(area_general,2*n_species,type_dbl)
 !!! 2016.9.16 nakata3
-    allocate(RadiusPAO(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating RadiusPAO in allocate_species_vars: ",n_species,stat)
+    allocate(RadiusAtomf(n_species),STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating RadiusAtomf in allocate_species_vars: ",n_species,stat)
+    call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(RadiusMS(n_species),RadiusLD(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating RadiusMS, RadiusLD in allocate_species_vars: ",n_species,stat)
+    call reg_alloc_mem(area_general,2*n_species,type_dbl)
 !!! nakata3 end
-    call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(blip_info(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating blip_info in allocate_species_vars: ",               n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
@@ -1794,6 +1799,11 @@ contains
     allocate(npao_species(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating npao_species in allocate_species_vars: ",            n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
+!!! nakata3
+    allocate(natomf_species(n_species),STAT=stat)
+    if(stat/=0) call cq_abort("Error allocating natomf_species in allocate_species_vars: ",          n_species,stat)
+    call reg_alloc_mem(area_general,n_species,type_dbl)
+!!! nakata3 end
     allocate(charge(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating charge in allocate_species_vars: ",                  n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)

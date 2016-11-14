@@ -488,6 +488,8 @@ contains
 !!    Introduced atomf instead of sf
 !!   2016/08/05 15:00 nakata
 !!    Renamed get_r_on_support -> get_r_on_atomfns
+!!   2016/11/09 21:00 nakata
+!!    Used natomf_species instead of nsf_species
 !!  SOURCE
 !!  
   subroutine get_r_on_atomfns(direction,inputgf,gridfunc1,gridfunc2,gridfunc3)
@@ -504,7 +506,7 @@ contains
     use functions_on_grid,           only: gridfunctions, fn_on_grid
     use dimens,                      only: n_my_grid_points, r_h
     use GenComms,                    only: cq_abort
-    use species_module,              only: nsf_species
+    use species_module,              only: natomf_species
     use PAO_grid_transform_module,   only: check_block
 
     implicit none
@@ -568,7 +570,7 @@ contains
                 xatom = DCS_parts%xcover(icover)
                 yatom = DCS_parts%ycover(icover)
                 zatom = DCS_parts%zcover(icover)
-                this_nsf = nsf_species(species_glob(ig_atom))
+                this_nsf = natomf_species(species_glob(ig_atom))
                 rcut = r_h + RD_ERR
                 call check_block (xblock,yblock,zblock,xatom,yatom,zatom, rcut, &  ! in
                      npoint,ip_store,r_store,x_store,y_store,z_store,n_pts_in_block) !out

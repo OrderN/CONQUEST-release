@@ -454,7 +454,7 @@ contains
     use mult_module,     only: matH, matS, matK, matM12, matM12,      &
                                matKatomf, transform_SF_to_ATOMF, &   ! nakata3
          matrix_scale, matrix_product_trace, allocate_temp_matrix, free_temp_matrix
-    use matrix_data,     only: Hrange, Srange
+    use matrix_data,     only: Hrange, Srange, aHa_range   ! nakata3
     use primary_module,  only: bundle
     use species_module,  only: species, nsf_species, species_label
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
@@ -642,7 +642,7 @@ contains
              matBand(i) = allocate_temp_matrix(Hrange,0,sf,sf)   ! nakata2
           end do
        end if
-       if (flag_contractSF) matBand_atomf = allocate_temp_matrix(Hrange,0,paof,paof)   ! nakata3
+       if (flag_contractSF) matBand_atomf = allocate_temp_matrix(aHa_range,0,atomf,atomf)   ! nakata3
     end if
     ! Preparatory work for DOS
     if(wf_self_con.AND.flag_write_DOS) then
