@@ -197,12 +197,14 @@ contains
        aHa_range       = 24
        STr_range       = 25
        HTr_range       = 26
-       SFcoeff_range   = 27
-       SFcoeffTr_range = 28
-       aSs_range       = 29
-       aHs_range       = 30
-       LD_range        = 31
-       mx_matrices_tmp = mx_matrices ! = 31
+       aSs_range       = 27
+       aHs_range       = 28
+       sSa_range       = 29
+       sHa_range       = 30
+       SFcoeff_range   = 31
+       SFcoeffTr_range = 32
+       LD_range        = 33
+       mx_matrices_tmp = mx_matrices ! = 33
     endif
 !!! end nakata3
 
@@ -353,13 +355,15 @@ contains
     if (atomf.ne.sf) then
        rcut(aSa_range)       = two*r_s_atomf
        rcut(aHa_range)       = rcut(Hrange) - two*r_MS   ! = two*(r_h_atomf+HNL_fac*r_core)
+       rcut(STr_range)       = rcut(Srange)
+       rcut(HTr_range)       = rcut(Hrange)
        rcut(aSs_range)       = r_s_atomf + r_s
        rcut(aHs_range)       = rcut(Hrange) - r_MS       ! = (r_h_atomf+HNL_fac*r_core)+(r_h+HNL_fac*r_core)
+       rcut(sSa_range)       = rcut(aSs_range)
+       rcut(sHa_range)       = rcut(aHs_range)
        rcut(SFcoeff_range)   = r_MS
        rcut(SFcoeffTr_range) = r_MS
        rcut(LD_range)        = r_LD
-       rcut(STr_range)       = rcut(Srange)
-       rcut(HTr_range)       = rcut(Hrange)
        if (r_MS.eq.zero) then
           rcut(SFcoeff_range)   = 0.001_double
           rcut(SFcoeffTr_range) = 0.001_double
@@ -402,13 +406,15 @@ contains
     if (atomf.ne.sf) then
        mat_name(aSa_range)       = "aSa"
        mat_name(aHa_range)       = "aHa"
+       mat_name(STr_range)       = "St"
+       mat_name(HTr_range)       = "Ht"
        mat_name(aSs_range)       = "aSs"
        mat_name(aHs_range)       = "aHs"
+       mat_name(sSa_range)       = "sSa"
+       mat_name(sHa_range)       = "sHa"
        mat_name(SFcoeff_range)   = "MS"
        mat_name(SFcoeffTr_range) = "MSt"
        mat_name(LD_range)        = "LD"
-       mat_name(STr_range)       = "St"
-       mat_name(HTr_range)       = "Ht"
     endif
 !!! nakata3 end
     if(inode==ionode.AND.iprint_init>1) then

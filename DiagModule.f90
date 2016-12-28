@@ -451,8 +451,8 @@ contains
          block_size_c, pg_kpoints, proc_groups, &
          nkpoints_max, pgid, N_procs_in_pg,     &
          N_kpoints_in_pg
-    use mult_module,     only: matH, matS, matK, matM12, matM12,      &
-                               matKatomf, transform_SF_to_ATOMF, &   ! nakata3
+    use mult_module,     only: matH, matS, matK, matM12, &
+                               transform_SF_to_ATOMF,    &   ! nakata3
          matrix_scale, matrix_product_trace, allocate_temp_matrix, free_temp_matrix
     use matrix_data,     only: Hrange, Srange, aHa_range   ! nakata3
     use primary_module,  only: bundle

@@ -88,7 +88,7 @@ contains
     
     use datatypes
     use numbers
-    use global_module,  ONLY: iprint_basis, id_glob, species_glob, IPRINT_TIME_THRES2, nspin
+    use global_module,  ONLY: iprint_basis, id_glob, species_glob, IPRINT_TIME_THRES2, nspin_SF
     use io_module,      ONLY: dump_matrix
     use group_module,   ONLY: parts
     use primary_module, ONLY: bundle
@@ -104,7 +104,7 @@ contains
     integer :: gcspart, neigh_global_part, neigh_global_num, neigh_species
     real(double) :: dx, dy, dz, r2
     type(cq_timer) :: tmr_l_tmp1   
-    integer :: ispin
+    integer :: spin_SF
 
 
     call start_timer(tmr_std_basis)
@@ -113,9 +113,9 @@ contains
 
 
     if(iprint_basis>=5.AND.myid==0) write(io_lun,'(6x,i5,A)') myid, ' Zeroing matSFcoeff'
-    do ispin=1,nspin
-       call matrix_scale(zero,matSFcoeff(ispin))
-       call matrix_scale(zero,matSFcoeff_tran(ispin))
+    do spin_SF=1,nspin_SF
+       call matrix_scale(zero,matSFcoeff(spin_SF))
+       call matrix_scale(zero,matSFcoeff_tran(spin_SF))
     enddo
     if(iprint_basis>=5.AND.myid==0) write(io_lun,'(6x,A)') ' Done Zeroing'
 
@@ -159,11 +159,11 @@ contains
     call normalise_SFcoeff
 
     ! transpose SFcoeff
-    do ispin = 1,nspin
-       call matrix_transpose(matSFcoeff(ispin), matSFcoeff_tran(ispin))
+    do spin_SF = 1,nspin_SF
+       call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
     enddo
 
-    if (nspin == 1) then
+    if (nspin_SF == 1) then
        call dump_matrix("SFcoeff",    matSFcoeff(1), inode)
     else
        call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
@@ -194,7 +194,7 @@ contains
 !!  
   subroutine loop_initial_SFcoeff_SSSF(iprim,j_in_halo,atom_spec)
 
-    use global_module,  ONLY: iprint_basis, nspin
+    use global_module,  ONLY: iprint_basis, nspin_SF
     use mult_module,    ONLY: matSFcoeff, store_matrix_value_pos, matrix_pos
     use pao_format
     use species_module, ONLY: nsf_species, npao_species
@@ -206,7 +206,7 @@ contains
     ! Local variables
     integer :: wheremat
     real(double) :: val
-    integer :: nsf_i, sf1, l2, ll2, nacz2, m2, ispin
+    integer :: nsf_i, sf1, l2, ll2, nacz2, m2, spin_SF
     integer :: count, count_pao_j
 
 
@@ -214,7 +214,7 @@ contains
     ! Loop over SFs on i
     if (nsf_species(atom_spec).eq.npao_species(atom_spec)) then
     ! not-contracted SFs
-       write(io_lun,*) 'not contracted!!!'
+       if (iprint_basis>=6) write(io_lun,*) 'SFs of species', atom_spec, ' are not contracted'
        do sf1 = 1, nsf_i
           count_pao_j = 1
           ! Loop over PAOs on j = i
@@ -223,9 +223,9 @@ contains
                 do m2 = -l2,l2
                    if (sf1==count_pao_j) then
                       val = one
-                      do ispin = 1, nspin
-                         wheremat = matrix_pos(matSFcoeff(ispin),iprim,j_in_halo,sf1,count_pao_j)
-                         call store_matrix_value_pos(matSFcoeff(ispin),wheremat,val)
+                      do spin_SF = 1, nspin_SF
+                         wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,sf1,count_pao_j)
+                         call store_matrix_value_pos(matSFcoeff(spin_SF),wheremat,val)
                       enddo
                    endif
                    count_pao_j = count_pao_j + 1
@@ -235,7 +235,7 @@ contains
        enddo ! sf1
     else
     ! contracted SFs
-       write(io_lun,*) 'contracted!!!'
+       if (iprint_basis>=6) write(io_lun,*) 'SFs of species', atom_spec, ' are contracted'
        do sf1 = 1, nsf_i
           count_pao_j = 1 ! which PAO
           ! Loop over PAOs on j = i
@@ -248,7 +248,6 @@ contains
                       if (pao(atom_spec)%angmom(ll2)%n_zeta_in_angmom>0) count = count + (2*ll2+1)
                    end do
                 end if
-                if(inode==ionode.AND.iprint_basis>=6) write(io_lun,*) 'Counter: ',count,count_pao_j,sf1
                 do m2 = -l2,l2
                    if (sf1==count) then
                       if (nacz2==1) then
@@ -256,11 +255,9 @@ contains
                       else
                          val = 0.1_double
                       endif
-                      do ispin = 1, nspin
-                         wheremat = matrix_pos(matSFcoeff(ispin),iprim,j_in_halo,sf1,count_pao_j)
-                         write(io_lun,*) 'sf1,count_pao_j,val=',sf1,count_pao_j,val
-                         write(io_lun,*) 'iprim,j_in_halo,wheremat=',iprim,j_in_halo,wheremat
-                         call store_matrix_value_pos(matSFcoeff(ispin),wheremat,val)
+                      do spin_SF = 1, nspin_SF
+                         wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,sf1,count_pao_j)
+                         call store_matrix_value_pos(matSFcoeff(spin_SF),wheremat,val)
                       enddo
                    endif
                    count = count + 1
@@ -301,12 +298,12 @@ contains
     
     use datatypes
     use numbers
-    use global_module,  ONLY: iprint_basis, id_glob, species_glob, IPRINT_TIME_THRES2, nspin
+    use global_module,  ONLY: iprint_basis, id_glob, species_glob, IPRINT_TIME_THRES2, nspin_SF
     use group_module,   ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module,   ONLY: BCS_parts
     use matrix_data,    ONLY: mat, halo, SFcoeff_range
-    use mult_module,    ONLY: matSFcoeff, matrix_pos, store_matrix_value_pos, mat_p
+    use mult_module,    ONLY: matSFcoeff, matrix_pos, mat_p
     use pao_format
     use timer_module
     
@@ -315,7 +312,7 @@ contains
     ! Local variables
     integer :: iprim, part, memb, neigh, ist
     integer :: gcspart, neigh_global_part, neigh_global_num, spec_j, j_in_halo, count_pao_j
-    integer :: ispin, nsf_i, sf1, l2, nacz2, m2, wheremat
+    integer :: spin_SF, nsf_i, sf1, l2, nacz2, m2, wheremat
     real(double) :: val, summ
     type(cq_timer) :: tmr_l_tmp1   
 
@@ -326,7 +323,7 @@ contains
 
     call start_timer(tmr_std_matrices)
 
-    do ispin = 1, nspin
+    do spin_SF = 1, nspin_SF
        iprim = 0
        do part = 1,bundle%groups_on_node ! Loop over primary set partitions
           if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
@@ -349,8 +346,8 @@ contains
                       do l2 = 0, pao(spec_j)%greatest_angmom
                          do nacz2 = 1, pao(spec_j)%angmom(l2)%n_zeta_in_angmom
                             do m2 = -l2,l2
-                               wheremat = matrix_pos(matSFcoeff(ispin),iprim,j_in_halo,sf1,count_pao_j)
-                               val = mat_p(matSFcoeff(ispin))%matrix(wheremat)
+                               wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,sf1,count_pao_j)
+                               val = mat_p(matSFcoeff(spin_SF))%matrix(wheremat)
                                summ = summ + val*val
                                count_pao_j = count_pao_j + 1
                             enddo ! m2
@@ -359,10 +356,8 @@ contains
                    end do ! neigh
 !
                    ! Normalise SFcoeff
-                   write(io_lun,*) 'sf1,summ=',sf1,summ
                    summ = sqrt(summ)
                    summ = one / summ
-                   write(io_lun,*) 'sf1,new summ=',sf1,summ
                    do neigh = 1, mat(part,SFcoeff_range)%n_nab(memb) ! Loop over j
                       ist = mat(part,SFcoeff_range)%i_acc(memb)+neigh-1
                       gcspart = BCS_parts%icover_ibeg(mat(part,SFcoeff_range)%i_part(ist))+mat(part,SFcoeff_range)%i_seq(ist)-1
@@ -375,12 +370,10 @@ contains
                       do l2 = 0, pao(spec_j)%greatest_angmom
                          do nacz2 = 1, pao(spec_j)%angmom(l2)%n_zeta_in_angmom
                             do m2 = -l2,l2
-                               wheremat = matrix_pos(matSFcoeff(ispin),iprim,j_in_halo,sf1,count_pao_j)
-                               val = mat_p(matSFcoeff(ispin))%matrix(wheremat)
+                               wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,sf1,count_pao_j)
+                               val = mat_p(matSFcoeff(spin_SF))%matrix(wheremat)
                                val = val * summ
-                         write(io_lun,*) 'sf1,count_pao_j,val=',sf1,count_pao_j,val
-                         write(io_lun,*) 'iprim,j_in_halo,wheremat=',iprim,j_in_halo,wheremat
-                               mat_p(matSFcoeff(ispin))%matrix(wheremat) = val
+                               mat_p(matSFcoeff(spin_SF))%matrix(wheremat) = val
                                count_pao_j = count_pao_j + 1
                             enddo ! m2
                          enddo ! nacz2
@@ -391,7 +384,7 @@ contains
              end do ! memb
           end if ! nm_nodgroup > 0
        end do ! part
-    end do ! ispin
+    end do ! spin_SF
 !
     call stop_timer(tmr_std_matrices)
     call stop_print_timer(tmr_l_tmp1,"normalise_SFcoeff",IPRINT_TIME_THRES2)

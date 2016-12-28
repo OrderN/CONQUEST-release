@@ -218,9 +218,9 @@ contains
 !!
   subroutine get_S_matrix_PAO(inode, ionode)
 
-    use global_module,               only: iprint_ops, flag_vary_basis
+    use global_module,               only: iprint_ops
     use matrix_data,                 only: aSa_range
-    use mult_module,                 only: matSatomf, matdS
+    use mult_module,                 only: matSatomf
     use build_PAO_matrices,          only: assemble_2
     use io_module,                   only: dump_matrix
 
@@ -231,19 +231,10 @@ contains
 
 
     ! Get S matrix with assemble
-    if (flag_vary_basis) then
-       if (inode == ionode .and. iprint_ops > 2) &
-            write (io_lun, *) 'Calling assemble_2 for Satomf, dS: ', &
-                  matSatomf, matdS
-       call assemble_2(aSa_range, matSatomf, 1, matdS)
-       !call dump_matrix("NS_atomf",matSatomf,inode)
-       !call dump_matrix("NdS",matdS,inode)
-    else
-       if (inode == ionode .and. iprint_ops > 2) &
-            write (io_lun, *) 'Calling assemble_2 for Satomf: ', matSatomf
-       call assemble_2(aSa_range, matSatomf, 1)
-       !call dump_matrix("NS_atomf",matSatomf,inode)
-    end if
+    if (inode == ionode .and. iprint_ops > 2) &
+         write (io_lun, *) 'Calling assemble_2 for Satomf: ', matSatomf
+    call assemble_2(aSa_range, matSatomf, 1)
+    !call dump_matrix("NS_atomf",matSatomf,inode)
 
     return
   end subroutine get_S_matrix_PAO

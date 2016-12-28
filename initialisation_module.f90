@@ -1007,6 +1007,8 @@ contains
   !!    Renamed H_on_supportfns -> H_on_atomfns
   !!   2016/08/08 15:30 nakata
   !!    Renamed supportfns -> atomfns
+  !!   2016/12/19 17:15 nakata
+  !!    Removed unused flag_vary_basis
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1020,7 +1022,7 @@ contains
     use SelfCon,           only: new_SC_potl
     use global_module,     only: iprint_init, flag_self_consistent, &
                                  flag_basis_set, blips, PAOs,       &
-                                 flag_vary_basis, restart_L,        &
+                                 restart_L,                         &
                                  restart_rho, flag_test_forces,     &
                                  flag_dft_d2, nspin, spin_factor,   &
                                  flag_MDold,flag_MDcontinue,        &

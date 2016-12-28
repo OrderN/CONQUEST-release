@@ -165,6 +165,7 @@ contains
                                       flag_basis_set, blips, PAOs,     & ! nakata3
                                       atomf, sf, paof,                 & ! nakata3
                                       flag_contractSF, flag_do_SFtransform, & ! nakata3
+                                      flag_SpinDependentSF, nspin_SF,  & ! nakata5
                                       flag_cdft_atom, flag_local_excitation
     use cdft_data, only: cDFT_NAtoms, &
                          cDFT_NumberAtomGroups, cDFT_AtomList
@@ -290,38 +291,36 @@ contains
     !
     !
     !
-    ! Distinguish flag_one_to_one or not
+    ! Check PAOs are contracted or not (flag_one_to_one)
+    flag_one_to_one = .false. ! default for blips
+    flag_contractSF = .false.
+    flag_do_SFtransform = .false.
+    atomf = sf
+    nspin_SF = 1
     if (flag_basis_set==PAOs) then
-       flag_one_to_one = .true.
-       flag_contractSF = .false.
-       flag_do_SFtransform = .false.
-       atomf = sf
+       flag_one_to_one = .true. ! default for PAOs
        do i = 1, n_species
-          if (nsf_species(i).ne.npao_species(i)) then
-             ! Contracted SFs
-             flag_one_to_one = .false.
-             flag_contractSF = .true.
-             flag_do_SFtransform = .true.
-             atomf = paof
-          endif
+          if (nsf_species(i).ne.npao_species(i)) flag_one_to_one = .false.
        enddo
+       if (.not.flag_one_to_one) then
+          flag_contractSF = .true.
+          flag_do_SFtransform = .true.
+          atomf = paof
+       endif
        if (flag_one_to_one .and. read_option) then
           if (inode==ionode) write(io_lun,'(A/A)') &
-             'Warning!! The number of the SFs and the PAOs are the same but read SF coefficients', &
-             '          so that flag_one_to_one and flag_contractSF are set to be F and T.'
+             'Warning!! nsf and npao are the same but read SF coefficients', &
+             '          so that flag_one_to_one is set to be .false.'
           flag_one_to_one = .false.
           flag_contractSF = .true.
           flag_do_SFtransform = .true.
           atomf = paof
        endif
-    else if (flag_basis_set==blips) then
-       flag_one_to_one = .false.
-       flag_contractSF = .false.
-       flag_do_SFtransform = .false.
-       atomf = sf
     endif
     if (atomf==sf)   natomf_species(:) =  nsf_species(:)
     if (atomf==paof) natomf_species(:) = npao_species(:)
+    if (.not.flag_contractSF) flag_SpinDependentSF = .false.
+    if (flag_SpinDependentSF) nspin_SF = nspin
     if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_one_to_one: ',flag_one_to_one
     if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_contractSF: ',flag_contractSF
 !    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_do_SFtransform: ',flag_do_SFtransform
@@ -594,7 +593,8 @@ contains
                              fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
                              fire_N_max, flag_write_DOS, flag_write_projected_DOS, &
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
-                             mx_temp_matrices, flag_neutral_atom, flag_Multisite     ! nakata4
+                             mx_temp_matrices, flag_neutral_atom, &
+                             flag_Multisite, flag_SpinDependentSF    ! nakata4
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &     ! nakata3
@@ -1031,7 +1031,7 @@ contains
 !!$        
 !!! 2016.9.16 nakata3
        ! Multisite support functions
-       flag_Multisite = fdf_boolean('General.MultisiteSF', .false.)
+       flag_Multisite = fdf_boolean('Basis.MultisiteSF', .false.)
 !!! nakata3 end
 !!$
 !!$
@@ -1368,7 +1368,7 @@ contains
        del_k = fdf_double('Basis.PaoKspaceOlGridspace',0.1_double)
        kcut  = fdf_double('Basis.PaoKspaceOlCutoff', 1000.0_double)
        flag_paos_atoms_in_cell = fdf_boolean(  'Basis.PAOs_StoreAllAtomsInCell',.true. )
-!       flag_one_to_one         = fdf_boolean(  'Basis.PAOs_OneToOne',           .false.)  ! flag_one_to_one is set in subroutine_read_and_write
+!       flag_one_to_one         = fdf_boolean(  'Basis.PAOs_OneToOne',           .false.)  ! will be set automatically later
        symmetry_breaking       = fdf_boolean(  'Basis.SymmetryBreaking',        .false.)
        support_pao_file        = fdf_string(80,'Basis.SupportPaoFile',   'supp_pao.dat')
        pao_info_file           = fdf_string(80,'Basis.PaoInfoFile',           'pao.dat')
@@ -1380,6 +1380,9 @@ contains
        TestH                   = fdf_boolean(  'Basis.TestBasisGrad_H',         .false.)
        support_spec_file       = fdf_string(80,'Basis.SupportSpecFile',   'support.dat')
        flag_read_support_spec  = fdf_boolean(  'Basis.ReadSupportSpec',         .false.)
+!!! 2016.9.16 nakata3
+       flag_SpinDependentSF = fdf_boolean('Basis.SpinDependentSF', .false.) ! Spin-dependence of SFs
+!!! nakata3 end
        !
        !
        flag_test_forces        = fdf_boolean('AtomMove.TestForces',   .false.)

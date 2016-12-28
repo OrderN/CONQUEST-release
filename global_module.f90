@@ -355,6 +355,8 @@ module global_module
   ! Contracted SF
   logical :: flag_contractSF
   logical :: flag_do_SFtransform
+  logical :: flag_SpinDependentSF
+  integer :: nspin_SF
 
   ! Multisite
   logical :: flag_Multisite
