@@ -223,6 +223,8 @@ contains
     use mult_module,                 only: matSatomf
     use build_PAO_matrices,          only: assemble_2
     use io_module,                   only: dump_matrix
+    use PAO_grid_transform_module,   only: single_PAO_to_grid
+    use functions_on_grid,           only: atomfns
 
     implicit none
 
@@ -235,6 +237,11 @@ contains
          write (io_lun, *) 'Calling assemble_2 for Satomf: ', matSatomf
     call assemble_2(aSa_range, matSatomf, 1)
     !call dump_matrix("NS_atomf",matSatomf,inode)
+
+    ! calculate PAO values on grids
+    if (inode == ionode .and. iprint_ops > 2) &
+         write (io_lun, *) 'single PAO to grid ', atomfns
+    call single_PAO_to_grid(atomfns)
 
     return
   end subroutine get_S_matrix_PAO

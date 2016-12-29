@@ -167,7 +167,6 @@ contains
 
     use input_module,           only: leqi
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, ABINIT
-    use DiagModule,             only: diagon
 
     implicit none
 
@@ -261,7 +260,7 @@ contains
     ! Set range of S matrix
     r_s       = r_h
     r_s_atomf = r_h_atomf   ! nakata3
-    if(two*r_s>r_c.AND.(.NOT.diagon)) then ! Only warn if using O(N)
+    if(two*r_s>r_c) then
        if(inode==ionode) &
             write(io_lun,fmt='(8x,"WARNING ! S range greater than L !")')
        !r_s = r_c

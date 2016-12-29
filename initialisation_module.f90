@@ -698,8 +698,6 @@ contains
  !!    Renamed supports_on_atom -> blips_on_atom
  !!   2016/08/08 15:30 nakata
  !!    Renamed supportfns -> atomfns
- !!   2016/09/30 18:30 nakata
- !!    Added call for single_PAO_to_grid
  !!  SOURCE
  !!
  subroutine initial_phis(read_phi, start, level)
@@ -741,7 +739,6 @@ contains
                                            read_option
     use input_module,                only: leqi
     use nlpf2blip,                   only: make_blips_from_nlpfs
-    use PAO_grid_transform_module,   only: single_PAO_to_grid  ! nakata3
 
     implicit none
 
@@ -899,12 +896,8 @@ contains
           write(unit=io_lun,fmt='(10x,"initial_phis: n_species:",i3)') n_species
           write(unit=io_lun,fmt='(10x,"initial_phis: r_h:",f12.6)') r_h
        end if
-!!! nakata3
-!       ! We don't need a PAO equivalent of blip_to_support here: this   ! nakata3, delete this line later
-!       ! is done by get_S_matrix                                        ! nakata3, delete this line later
-       ! calculate PAO values on grids
-       call single_PAO_to_grid(atomfns)
-!!! nakata3 end
+       ! We don't need a PAO equivalent of blip_to_support here: this
+       ! is done by get_S_matrix_PAO
     end if
 
 !****lat<$

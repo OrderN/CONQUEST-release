@@ -837,6 +837,10 @@ contains
 !!    Renamed support -> pao_fns
 !!   2016/09/30 18:30 nakata
 !!    Changed paof to atomf (atomf is sf for one_to_one PAOs but quivalent to paof)
+!!   2016/12/29 19:30 nakata
+!!    Removed support_spec_format (blips_on_atom and flag_one_to_one) and this_atom,
+!!    which are no longer needed
+!!    Removed unused npao1 and atom_species
 !!  SOURCE
 !!
   subroutine single_PAO_to_grid(pao_fns)
@@ -856,15 +860,15 @@ contains
     use cover_module, ONLY: DCS_parts
     use set_blipgrid_module, ONLY : naba_atoms_of_blocks
     use angular_coeff_routines, ONLY : evaluate_pao
-    use support_spec_format, ONLY: blips_on_atom, flag_one_to_one
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
+    use pao_format
 
     implicit none 
     integer,intent(in) :: pao_fns
 
     !local
     real(double):: dcellx_block,dcelly_block,dcellz_block
-    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom, this_atom
+    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom
     real(double):: xatom,yatom,zatom,alpha,step
     real(double):: xblock,yblock,zblock
     integer :: the_species
@@ -874,7 +878,7 @@ contains
     integer :: no_of_ib_ia, offset_position
     integer :: position,iatom
     integer :: stat, nl, npoint, ip, this_nsf
-    integer :: i,m, m1min, m1max,acz,m1,l1,npao1,atom_species, count1
+    integer :: i,m, m1min, m1max,acz,m1,l1,count1
     integer     , allocatable :: ip_store(:)
     real(double), allocatable :: x_store(:)
     real(double), allocatable :: y_store(:)
@@ -944,11 +948,6 @@ contains
                 r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
                      (zatom-zblock)**2 )
 
-                if(flag_one_to_one) then
-                   this_atom = the_species
-                else
-                   this_atom = ig_atom
-                end if
                 if(npoint > 0) then
                    !offset_position = (no_of_ib_ia-1) * npao * n_pts_in_block
                    offset_position = no_of_ib_ia
@@ -964,8 +963,8 @@ contains
                       z = z_store(ip)
                       ! For this point-atom offset, we accumulate the PAO on the grid
                       count1 = 1
-                      do l1 = 0,blips_on_atom(this_atom)%lmax
-                         do acz = 1,blips_on_atom(this_atom)%naczs(l1)
+                      do l1 = 0,pao(the_species)%greatest_angmom
+                         do acz = 1,pao(the_species)%angmom(l1)%n_zeta_in_angmom
                             do m1=-l1,l1
                                call evaluate_pao(the_species,l1,acz,m1,x,y,z,val)
                                if(position+(count1-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &
@@ -1247,8 +1246,8 @@ contains
     use cover_module, ONLY: DCS_parts
     use set_blipgrid_module, ONLY : naba_atoms_of_blocks
     use angular_coeff_routines, ONLY : pao_elem_derivative_2
-    use support_spec_format, ONLY: blips_on_atom, flag_one_to_one
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
+    use pao_format
 
     implicit none 
     integer,intent(in) :: pao_fns
@@ -1256,7 +1255,7 @@ contains
 
     !local
     real(double):: dcellx_block,dcelly_block,dcellz_block
-    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom, this_atom
+    integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom
     real(double):: xatom,yatom,zatom,alpha,step
     real(double):: xblock,yblock,zblock
     integer :: the_species
@@ -1266,7 +1265,7 @@ contains
     integer :: no_of_ib_ia, offset_position
     integer :: position,iatom
     integer :: stat, nl, npoint, ip
-    integer :: i,m, m1min, m1max,acz,m1,l1,npao1,atom_species, count1
+    integer :: i,m, m1min, m1max,acz,m1,l1,count1
     integer     , allocatable :: ip_store(:)
     real(double), allocatable :: x_store(:)
     real(double), allocatable :: y_store(:)
@@ -1336,11 +1335,6 @@ contains
                 r_from_i = sqrt((xatom-xblock)**2+(yatom-yblock)**2+ &
                      (zatom-zblock)**2 )
 
-                if(flag_one_to_one) then
-                   this_atom = the_species
-                else
-                   this_atom = ig_atom
-                end if
                 if(npoint > 0) then
                    !offset_position = (no_of_ib_ia-1) * npao * n_pts_in_block
                    offset_position = no_of_ib_ia
@@ -1356,8 +1350,9 @@ contains
                       z = z_store(ip)
                       ! For this point-atom offset, we accumulate the PAO on the grid
                       count1 = 1
-                      do l1 = 0,blips_on_atom(this_atom)%lmax
-                         do acz = 1,blips_on_atom(this_atom)%naczs(l1)
+
+                      do l1 = 0,pao(the_species)%greatest_angmom
+                         do acz = 1,pao(the_species)%angmom(l1)%n_zeta_in_angmom
                             do m1=-l1,l1
                                call pao_elem_derivative_2(direction,the_species,l1,acz,m1,x,y,z,val)
                                if(position+(count1-1)*n_pts_in_block > gridfunctions(pao_fns)%size) &

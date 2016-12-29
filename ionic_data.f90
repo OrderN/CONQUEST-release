@@ -155,7 +155,9 @@ contains
     end if
 
     ! If we're using PAOs as a basis, need coefficients
-    if (flag_basis_set == PAOs) call get_support_pao_rep(inode,ionode)
+!!! 2016.12.29 nakata5, blips_on_atom is no longer needed for PAO
+!    if (flag_basis_set == PAOs) call get_support_pao_rep(inode,ionode)
+!!!
 
     ! Get the atomic densities
     if (flag_atomic_density_from_pao) then ! Use PAOs for atomic densities

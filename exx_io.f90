@@ -44,8 +44,8 @@ contains
     use cover_module,           ONLY: BCS_parts
     use primary_module,         ONLY: bundle
     use global_module,          ONLY: io_lun
-    use species_module,         ONLY: species_label
-    use support_spec_format,    ONLY: blips_on_atom, flag_one_to_one
+    use species_module,         ONLY: species_label, npao_species ! nakata3
+!    use support_spec_format,    ONLY: blips_on_atom, flag_one_to_one ! nakata3, delete later
     use atomic_density,         ONLY: atomic_density_table   
 
     use global_module,          ONLY: id_glob ! new
@@ -138,35 +138,58 @@ contains
              !if (exx_gto .and. flag_one_to_one) then
              !   ip_nsup = gto(ip_spec)%nprim
              !else 
-             if (flag_one_to_one) then
-                ip_nsup = blips_on_atom(ip_spec)%nsuppfuncs
-             else
-                ip_nsup = blips_on_atom(ip)%nsuppfuncs
-             end if
+!!! 2016.12.29 nakata3, assumed to be only for PAOs
+             ip_nsup = npao_species(ip_spec)
+!             if (flag_one_to_one) then
+!                ip_nsup = blips_on_atom(ip_spec)%nsuppfuncs
+!             else
+!                ip_nsup = blips_on_atom(ip)%nsuppfuncs
+!             end if
+!!!
              !end if
 
              ip_xyz(1) = bundle%xprim(ip_num)
              ip_xyz(2) = bundle%yprim(ip_num)
              ip_xyz(3) = bundle%zprim(ip_num)             
-
-             call hf_write_info(unit,inode,31,0,0,0,memb,blips_on_atom(ip)%nsuppfuncs, &
+!!! 2016.12.29 nakata3, assumed to be only for PAOs
+             call hf_write_info(unit,inode,31,0,0,0,memb,ip_nsup, &
                   Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
              call hf_write_info(unit_local_write1,inode,32,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
-                  memb,blips_on_atom(ip)%nsuppfuncs, &
+                  memb,ip_nsup, &
                   Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
              call hf_write_info(unit_local_write2,inode,33,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
-                  memb,blips_on_atom(ip)%nsuppfuncs, &
+                  memb,ip_nsup, &
                   Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
              call hf_write_info(unit_local_write3,inode,34,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
-                  memb,blips_on_atom(ip)%nsuppfuncs, &
+                  memb,ip_nsup, &
                   Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
+!!!
+!             call hf_write_info(unit,inode,31,0,0,0,memb,blips_on_atom(ip)%nsuppfuncs, &
+!                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+!                  ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
+!
+!             call hf_write_info(unit_local_write1,inode,32,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
+!                  memb,blips_on_atom(ip)%nsuppfuncs, &
+!                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+!                  ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
+!
+!             call hf_write_info(unit_local_write2,inode,33,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
+!                  memb,blips_on_atom(ip)%nsuppfuncs, &
+!                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+!                  ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
+!
+!             call hf_write_info(unit_local_write3,inode,34,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
+!                  memb,blips_on_atom(ip)%nsuppfuncs, &
+!                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
+!                  ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
+!!! nakata3 end
 
              ! consider the neighbours <n_nab(memb)> of the member <memb> 
              ! within the partition <part> using the cutoff [Hrange] of H

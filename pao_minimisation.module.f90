@@ -109,10 +109,12 @@ contains
   !!   2012/03/24 L.Tong
   !!   - Changed spin implementation
   !!   - Removed redundant input parameter real(double) mu
-  !!   2016/07/29 18:30 nakata
-  !!    Renamed supports_on_atom -> blips_on_atom
-  !!   2016/08/08 15:30 nakata
-  !!    Renamed supportfns -> atomfns
+  !!   2016/12/28 18:30 nakata
+  !!    matdSFcoeff and matdSFcoeff_e are used instead of
+  !!    grad_coeff_array and elec_grad_coeff_array.
+  !!    dump_matrix is used instead of writeout_support_functions.
+  !!    Removed blips_on_atom, nsf_species, npao_species,
+  !!    which are no longer used here.
   !!  SOURCE
   !!
   subroutine vary_pao(n_support_iterations, fixed_potential, vary_mu, &
@@ -135,27 +137,16 @@ contains
                                          ni_in_cell,                   &
                                          flag_self_consistent,         &
                                          id_glob, numprocs, area_minE, &
-                                         nspin, spin_factor,           &
-                                         flag_SpinDependentSF, nspin_SF   ! nakata5
+                                         nspin, spin_factor, nspin_SF   ! nakata5
     use group_module,              only: parts
     use H_matrix_module,           only: get_H_matrix
     use S_matrix_module,           only: get_S_matrix
     use io_module,                 only: dump_matrix
-    use make_rad_tables,           only: writeout_support_functions
-    use support_spec_format,       only: blips_on_atom,                &
-                                         grad_coeff_array,             &
-                                         elec_grad_coeff_array,        &
-                                         support_gradient,             &
-                                         support_elec_gradient,        &
-                                         flag_paos_atoms_in_cell,      &
-                                         TestBasisGrads, TestTot,      &
+    use support_spec_format,       only: TestBasisGrads, TestTot,      &
                                          TestBoth, TestS, TestH
     use DMMin,                     only: FindMinDM
     use energy,                    only: get_energy, kinetic_energy,   &
                                          nl_energy, band_energy
-    use PAO_grid_transform_module, only: PAO_to_grid
-    use functions_on_grid,         only: atomfns
-    use species_module,            only: nsf_species, npao_species
     use density_module,            only: density
     use matrix_data,               only: mat, halo, SFcoeff_range
     use maxima_module,             only: maxngrid
@@ -164,7 +155,7 @@ contains
     use mult_module,               only: mat_p, matrix_pos,            &
                                          matSFcoeff, matSFcoeff_tran,  &
                                          matdSFcoeff, matdSFcoeff_e,   &
-                                         matrix_scale, matrix_transpose, matKE, matS
+                                         matrix_scale, matrix_transpose
     use multisiteSF_module,        only: normalise_SFcoeff
 
     implicit none
@@ -197,7 +188,7 @@ contains
 
     reset_L = .true.
 
-    length = mat_p(matSFcoeff(1))%length   ! nakata5
+    length = mat_p(matSFcoeff(1))%length
 
     call start_timer (tmr_std_allocation)
     if (TestBasisGrads) then
@@ -226,12 +217,10 @@ contains
     if (inode == ionode) &
          write (io_lun, *) inode, ' entering vary_pao'
 
-! nakata5
     allocate(search_direction(length,nspin_SF), &
              last_sd(length,nspin_SF), Psd(length,nspin_SF), STAT=stat)
     if (stat /= 0) call cq_abort("vary_pao: Error alloc mem: ", length)
     call reg_alloc_mem(area_minE, 3*length*nspin_SF, type_dbl)
-!!! nakata5 end
 
     search_direction(:,:) = zero
     Psd(:,:) = zero
@@ -243,14 +232,10 @@ contains
     total_energy_last = total_energy_0
 
     ! We need to assemble the gradient
-!!! nakata5
     do spin_SF = 1, nspin_SF
        call matrix_scale(zero, matdSFcoeff(spin_SF))
        call matrix_scale(zero, matdSFcoeff_e(spin_SF))
     enddo
-!    grad_coeff_array = zero   ! delete this line later
-!    elec_grad_coeff_array = zero   ! delete this line later
-!!! nakata5 end
     ! call get_H_matrix before calling build_PAO_coeff ! TM
     call get_H_matrix(.true., fixed_potential, electrons, density, &
                       maxngrid)
@@ -259,25 +244,19 @@ contains
     if (TestBasisGrads) then
        do spin_SF = 1, nspin_SF
           grad_copy = mat_p(matdSFcoeff(spin_SF))%matrix
-          !do i = 1,size(grad_coeff_array)
-          !   write(20,*) grad_coeff_array(i)
-          !end do
+          !call dump_matrix("dSFcoeff1",matdSFcoeff(1), inode)
           ! Test PAO gradients
           ! Preserve unperturbed energy and gradient
           E1 = band_energy
           call matrix_scale(zero, matdSFcoeff(spin_SF))
           call matrix_scale(zero, matdSFcoeff_e(spin_SF))
           call build_PAO_coeff_grad(GdS)
-          !do i = 1,size(grad_coeff_array)
-          !   write(21,*) grad_coeff_array(i)
-          !end do
+          !call dump_matrix("dSFcoeff2",matdSFcoeff(1), inode)
           grad_copy_dS = mat_p(matdSFcoeff(spin_SF))%matrix
           call matrix_scale(zero, matdSFcoeff(spin_SF))
           call matrix_scale(zero, matdSFcoeff_e(spin_SF))
           call build_PAO_coeff_grad(KdH)
-          !do i = 1,size(grad_coeff_array)
-          !   write(22,*) grad_coeff_array(i)
-          !end do
+          !call dump_matrix("dSFcoeff3",matdSFcoeff(1), inode)
           ! LT 2011/12/06: Note that grad_copy_dH stores the value as the
           ! sum of contribution from both spin components if not flag_SpinDependentSF
           grad_copy_dH = mat_p(matdSFcoeff(spin_SF))%matrix
@@ -343,13 +322,10 @@ contains
                                E2 = band_energy
                                call matrix_scale(zero, matdSFcoeff(spin_SF))
                                call matrix_scale(zero, matdSFcoeff_e(spin_SF))
-!                               grad_coeff_array = zero
-!                               elec_grad_coeff_array = zero
                                call build_PAO_coeff_grad(full)
                                if (my_atom) then
                                   g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
                                   mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy
-!                                  grad_coeff_array = grad_copy
                                   g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
                                   write (io_lun, *) 'Tot: Numerical, analytic grad: ', &
                                                     (E2 - E1) / tmp0, - half * (g1 + g2)
@@ -386,13 +362,10 @@ contains
                                E2 = band_energy
                                call matrix_scale(zero, matdSFcoeff(spin_SF))
                                call matrix_scale(zero, matdSFcoeff_e(spin_SF))
-!                               grad_coeff_array = zero
-!                               elec_grad_coeff_array = zero
                                call build_PAO_coeff_grad(GdS)
                                if (my_atom) then
                                   g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
                                   mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy_dS
-!                                  grad_coeff_array = grad_copy_dS
                                   g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
                                   write (io_lun,*) 'GdS: Numerical, analytic grad: ',&
                                                    (E2 - E1) / tmp0, - half * (g1 + g2)
@@ -420,7 +393,6 @@ contains
                                endif
                                call my_barrier()
                                ! Recalculate energy and gradient
-                               ! call PAO_to_grid(inode - 1, atomfns)
                                call get_H_matrix(.true., fixed_potential, &
                                                  electrons, density, maxngrid)
                                call FindMinDM(n_cg_L_iterations, vary_mu, &
@@ -430,13 +402,10 @@ contains
                                E2 = band_energy
                                call matrix_scale(zero, matdSFcoeff(spin_SF))
                                call matrix_scale(zero, matdSFcoeff_e(spin_SF))
-!                               grad_coeff_array = zero
-!                               elec_grad_coeff_array = zero
                                call build_PAO_coeff_grad(KdH)
                                if(my_atom) then
                                   g1 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
                                   mat_p(matdSFcoeff(spin_SF))%matrix = grad_copy_dH
-!                                  grad_coeff_array = grad_copy_dH
                                   g2 = mat_p(matdSFcoeff(spin_SF))%matrix(wheremat)
                                   write (io_lun, *) 'KdH: Numerical, analytic grad: ',&
                                                     (E2 - E1) / tmp0, - half * (g1 + g2)
@@ -450,7 +419,6 @@ contains
                                   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
                                endif
                                call my_barrier()
-                               !call PAO_to_grid(inode - 1, atomfns)
                                call get_H_matrix(.true., fixed_potential, &
                                                  electrons, density, maxngrid)
                             end if ! TestH .or. TestBoth
@@ -483,7 +451,6 @@ contains
           ! We need the last search direction for CG manipulations
           call copy(length, search_direction(:,spin_SF), 1, last_sd(:,spin_SF), 1)
           ! The basis for searching is gradient
-!          call copy(length, grad_coeff_array, 1, search_direction, 1)
           call copy(length, mat_p(matdSFcoeff(spin_SF))%matrix, 1, search_direction(:,spin_SF), 1) ! nakata5
           ! Now project gradient tangential to the constant Ne hyperplane
           if (.not. diagon) then
@@ -498,21 +465,6 @@ contains
                                    dN_dot_de, dN_dot_dN
              call axpy(length, - (dN_dot_de / dN_dot_dN), &
                        mat_p(matdSFcoeff_e(spin_SF))%matrix, 1, search_direction(:,spin_SF), 1)
-! nakata5 delete from here
-!          dN_dot_de = dot(length, grad_coeff_array, 1, &
-!                          elec_grad_coeff_array, 1)
-!          dN_dot_dN = dot(length, elec_grad_coeff_array, 1, &
-!                          elec_grad_coeff_array, 1)
-!          if (.not. flag_paos_atoms_in_cell) then
-!             call gsum(dN_dot_de)
-!             call gsum(dN_dot_dN)
-!          end if
-!          if (inode == ionode) &
-!               write (io_lun, *) 'dN.de, dN.dN ', &
-!                                 dN_dot_de, dN_dot_dN
-!          call axpy(length, - (dN_dot_de / dN_dot_dN), &
-!                    elec_grad_coeff_array, 1, search_direction, 1)
-! nakata5 delete up to here
           end if
           ! *THINK* Do we need/want to precondition ?
           Psd(:,spin_SF) = search_direction(:,spin_SF)
@@ -546,27 +498,10 @@ contains
                                     dN_dot_de, dN_dot_dN
              call axpy(length, - (dN_dot_de / dN_dot_dN), &
                        mat_p(matdSFcoeff_e(spin_SF))%matrix, 1, search_direction(:,spin_SF), 1)
-!!! nakata5 delete from here
-!          dN_dot_de = dot(length, search_direction, 1, &
-!                          elec_grad_coeff_array, 1)
-!          dN_dot_dN = dot(length, elec_grad_coeff_array, 1, &
-!                          elec_grad_coeff_array, 1)
-!          if (.not. flag_paos_atoms_in_cell) then
-!             call gsum(dN_dot_de)
-!             call gsum(dN_dot_dN)
-!          end if
-!          if (inode == ionode) &
-!               write (io_lun, *) 'dN.de, dN.dN ', &
-!                                 dN_dot_de, dN_dot_dN
-!          call axpy(length, - (dN_dot_de / dN_dot_dN), &
-!                    elec_grad_coeff_array, 1, search_direction, 1)
-!!! nakata5 delete up to here
           end if
           ! Check this !
           sum_0(spin_SF) = dot(length, mat_p(matdSFcoeff(spin_SF))%matrix, 1, search_direction(:,spin_SF), 1)
           call gsum(sum_0(spin_SF))
-!       sum_0 = dot(length, grad_coeff_array, 1, search_direction, 1)   ! nakata5 delete later
-!       if (.not. flag_paos_atoms_in_cell) call gsum(sum_0)             ! nakata5 delete later
           if (inode == ionode) write (io_lun, '(A,I2,A,F15.7)') 'sum_0(',spin_SF,') is ', sum_0(spin_SF)
           call my_barrier()
 
@@ -575,8 +510,6 @@ contains
           call my_barrier()
           tmp(spin_SF) = dot(length, search_direction(:,spin_SF), 1, mat_p(matdSFcoeff(spin_SF))%matrix, 1)
           call gsum(tmp(spin_SF))
-!       tmp = dot(length, search_direction, 1, grad_coeff_array, 1) ! nakata5 delete later
-!       if (.not. flag_paos_atoms_in_cell) call gsum(tmp)           ! nakata5 delete later
        enddo ! spin_SF
 
        ! Temporarily turn off basis variation so that we don't do
@@ -602,22 +535,6 @@ contains
           call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
           call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
        end if
-!!! nakata5 delete from here
-!       do i = 1, ni_in_cell
-!          do nsf1 = 1, blips_on_atom(i)%nsuppfuncs
-!             summ = zero
-!             do npao1 = 1, blips_on_atom(i)%supp_func(nsf1)%ncoeffs
-!                summ = summ + &
-!                       blips_on_atom(i)%supp_func(nsf1)%coefficients(npao1) * &
-!                       blips_on_atom(i)%supp_func(nsf1)%coefficients(npao1)
-!             end do
-!             summ = sqrt(summ)
-!             blips_on_atom(i)%supp_func(nsf1)%coefficients = &
-!                  blips_on_atom(i)%supp_func(nsf1)%coefficients / summ
-!          end do
-!       end do
-!       call writeout_support_functions(inode, ionode)
-!!! nakata delete up to here
 
        ! Find change in energy for convergence
        diff = total_energy_last - total_energy_0
@@ -625,7 +542,7 @@ contains
           if (inode == ionode) write (io_lun, 18) total_energy_0
           convergence_flag = .true.
           total_energy_last = total_energy_0
-! nakata5, deallocate memory
+!!! nakata5, deallocate memory
           deallocate(search_direction, last_sd, Psd, STAT=stat)
           if (stat /= 0) call cq_abort("vary_pao: Error dealloc mem")
           call reg_dealloc_mem(area_minE, 3*length*nspin_SF, type_dbl)
@@ -649,8 +566,6 @@ contains
           call matrix_scale(zero, matdSFcoeff(spin_SF))
           call matrix_scale(zero, matdSFcoeff_e(spin_SF))
        enddo
-!       grad_coeff_array = zero
-!       elec_grad_coeff_array = zero
        call build_PAO_coeff_grad(full)
        !if(inode==1) then
        !   gradient(:,:,2:mx_at_prim) = zero
@@ -660,8 +575,6 @@ contains
        do spin_SF = 1, nspin_SF
           summ = dot(length, mat_p(matdSFcoeff(spin_SF))%matrix, 1, mat_p(matdSFcoeff(spin_SF))%matrix, 1)
           call gsum(summ)
-!          summ = dot(length, grad_coeff_array, 1, grad_coeff_array, 1)     ! nakata5 delete later
-!          if (.not. flag_paos_atoms_in_cell) call gsum(summ)               ! nakata5 delete later
           if (inode == ionode) &
                write (io_lun, *) 'Dot prod of gradient (',spin_SF,'): ', summ
        enddo
@@ -749,10 +662,13 @@ contains
   !!   - Changed spin implementation
   !!   - made temporary arrays automatic
   !!   - removed redundant input parameter real(double) mu
-  !!   2016/07/29 18:30 nakata
-  !!    Renamed supports_on_atom -> blips_on_atom
   !!   2016/12/26 18:30 nakata
-  !!    Removed unused search_direction, Psd, last_sd
+  !!    Removed unused search_direction, Psd, last_sd, FindMinDM
+  !!   2016/12/28 18:30 nakata
+  !!    Removed support_spec_format(blips_on_atom), which is no longer used here.
+  !!    matdSFcoeff and matdSFcoeff_e are used instead of
+  !!    grad_coeff_array and elec_grad_coeff_array.
+  !!    dump_matrix is used instead of writeout_support_functions.
   !! SOURCE
   !!
   subroutine pulay_min_pao(n_support_iterations, fixed_potential,   &
@@ -779,16 +695,7 @@ contains
                                    area_minE, nspin_SF
     use SelfCon,             only: new_SC_potl
     use S_matrix_module,     only: get_S_matrix
-    use make_rad_tables,     only: writeout_support_functions
-    use DMMin,               only: FindMinDM
     use energy,              only: get_energy, kinetic_energy, nl_energy
-    use support_spec_format, only: blips_on_atom,                      &
-                                   grad_coeff_array,                   &
-                                   elec_grad_coeff_array,              &
-                                   support_gradient,                   &
-                                   support_elec_gradient,              &
-                                   coefficient_array,                  &
-                                   flag_paos_atoms_in_cell
     use memory_module,       only: reg_alloc_mem, type_dbl,            &
                                    reg_dealloc_mem
     use multisiteSF_module,  only: normalise_SFcoeff
@@ -815,7 +722,8 @@ contains
     real(double), dimension(:,:,:), allocatable :: data_gradstore, &
                                                    data_paostore
 
-    length = mat_p(matSFcoeff(1))%length   ! nakata5
+
+    length = mat_p(matSFcoeff(1))%length
 
     allocate(data_gradstore(length,mx_pulay,nspin_SF), &
              data_paostore(length,mx_pulay,nspin_SF), STAT=stat)
@@ -854,14 +762,10 @@ contains
     ! We should have the elements built by H_matrix_module and
     ! S_matrix_module Now we take the sum over j\beta (nsf2 = \beta;
     ! neigh = j)
-!!! nakata5
     do spin_SF = 1, nspin_SF
        call matrix_scale(zero, matdSFcoeff(spin_SF))
        call matrix_scale(zero, matdSFcoeff_e(spin_SF))
     enddo
-!    grad_coeff_array = zero
-!    elec_grad_coeff_array = zero
-!!! nakata5 end
     call build_PAO_coeff_grad(full)
 
     ! What about preconditioning ?       
@@ -873,9 +777,6 @@ contains
                              mat_p(matdSFcoeff(spin_SF))%matrix, 1)
     enddo
     call gsum(g0)
-!    g0 = dot(length, grad_coeff_array,1, grad_coeff_array, 1) ! delete this line later
-!    if (.not. flag_paos_atoms_in_cell) call gsum(g0) ! delete this line later
-!    last_step = 1.0D10 ! delete this line later
     if (inode == ionode) &
          write (io_lun, *) 'Dot product of initial gradient ', g0
     ! Store gradient
@@ -905,15 +806,6 @@ contains
                                                  data_gradstore(:,pul_mx,spin_SF)
           endif
        enddo
-! nakata5 delete from here
-!       if (npmod > 1) then
-!          coefficient_array = coefficient_array + step * &
-!                              data_gradstore(:,npmod-1)
-!       else
-!          coefficient_array = coefficient_array + step * &
-!                              data_gradstore(:,pul_mx)
-!       endif
-! nakata5 delete up to here
        if (inode == ionode) write (io_lun, *) 'Normalising'
        ! Normalise
        call normalise_SFcoeff
@@ -921,24 +813,6 @@ contains
           call matrix_scale(zero,matSFcoeff_tran(spin_SF))
           call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
        enddo
-! nakata5 delete from here
-!       ! Normalise
-!       do ii = 1, ni_in_cell
-!          do nsf1 = 1, blips_on_atom(ii)%nsuppfuncs ! Select alpha
-!             summ = zero
-!             do npao1 = 1, blips_on_atom(ii)%supp_func(nsf1)%ncoeffs
-!                ! PAOs for i, alpha
-!                summ =                                                       &
-!                     summ +                                                  &
-!                     blips_on_atom(ii)%supp_func(nsf1)%coefficients(npao1) * &
-!                     blips_on_atom(ii)%supp_func(nsf1)%coefficients(npao1)
-!             end do
-!             summ = sqrt(summ)
-!             blips_on_atom(ii)%supp_func(nsf1)%coefficients = &
-!                  blips_on_atom(ii)%supp_func(nsf1)%coefficients / summ
-!          end do
-!       end do
-! nakata5 delete from here
 
        ! Find change in energy for convergence
 
@@ -964,8 +838,6 @@ contains
           call matrix_scale(zero, matdSFcoeff(spin_SF))
           call matrix_scale(zero, matdSFcoeff_e(spin_SF))
        enddo
-!       grad_coeff_array = zero
-!       elec_grad_coeff_array = zero
        call build_PAO_coeff_grad(full)
        do spin_SF = 1, nspin_SF
           summ = dot (length, mat_p(matdSFcoeff(spin_SF))%matrix, 1, mat_p(matdSFcoeff(spin_SF))%matrix, 1)
@@ -988,12 +860,6 @@ contains
              enddo
              call gsum(gg)
              Aij(j,ii) = gg
-!!! nakata5, delete from here
-!             gg = dot(length, data_gradstore(1:,j), 1, &
-!                      data_gradstore(1:,ii), 1)
-!             if (.not. flag_paos_atoms_in_cell) call gsum(gg)
-!             Aij(j,ii) = gg
-!!! nakata5 end
              ! Aij1(j+(ii-1) * pul_mx) = gg
           end do
        end do
@@ -1036,35 +902,20 @@ contains
 !      nakata5, normalisation should be done above ???
 !       ! Normalise
 !       call normalise_SFcoeff
-!       do ii = 1, ni_in_cell
-!          do nsf1 = 1, blips_on_atom(ii)%nsuppfuncs ! Select alpha
-!             summ = zero
-!             do npao1 = 1, blips_on_atom(ii)%supp_func(nsf1)%ncoeffs
-!                ! PAOs for i, alpha
-!                summ =                                                       &
-!                     summ +                                                  &
-!                     blips_on_atom(ii)%supp_func(nsf1)%coefficients(npao1) * &
-!                     blips_on_atom(ii)%supp_func(nsf1)%coefficients(npao1)
-!             end do
-!             summ = sqrt(summ)
-!             blips_on_atom(ii)%supp_func(nsf1)%coefficients = &
-!                  blips_on_atom(ii)%supp_func(nsf1)%coefficients / summ
-!          end do
-!       end do
+!       do spin_SF = 1,nspin_SF
+!          call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+!          call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+!       enddo
 
        do spin_SF = 1, nspin_SF
           call matrix_scale(zero, matdSFcoeff(spin_SF))
           call matrix_scale(zero, matdSFcoeff_e(spin_SF))
        enddo
-!       grad_coeff_array = zero
-!       elec_grad_coeff_array = zero
        call build_PAO_coeff_grad(full)
 
        do spin_SF = 1, nspin_SF
           summ = dot (length, mat_p(matdSFcoeff(spin_SF))%matrix, 1, mat_p(matdSFcoeff(spin_SF))%matrix, 1)
           call gsum(summ)
-!       summ = dot (length, grad_coeff_array, 1, grad_coeff_array, 1)
-!       if (.not. flag_paos_atoms_in_cell) call gsum(summ)
           if (inode == ionode) &
                write (io_lun, *) 'Dot prod of gradient(',spin_SF,'): ', summ
           ! Replace step with real L
@@ -1078,7 +929,6 @@ contains
           call dump_matrix("SFcoeff_up", matSFcoeff(1), inode)
           call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
        end if
-!       call writeout_support_functions(inode, ionode)
 
        diff = total_energy_last - total_energy_0
        total_energy_last = total_energy_0
