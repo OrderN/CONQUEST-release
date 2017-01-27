@@ -154,8 +154,8 @@ contains
 
     end if
 
-    ! If we're using PAOs as a basis, need coefficients
 !!! 2016.12.29 nakata5, blips_on_atom is no longer needed for PAO
+!    ! If we're using PAOs as a basis, need coefficients
 !    if (flag_basis_set == PAOs) call get_support_pao_rep(inode,ionode)
 !!!
 

@@ -312,9 +312,11 @@ contains
                                endif
                                call my_barrier()
                                ! Recalculate energy and gradient
-                               call get_S_matrix(inode, ionode)
-                               call get_H_matrix(.true., fixed_potential, &
+                               call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+                               call get_H_matrix(.false., fixed_potential, &
                                                  electrons, density, maxngrid)
+!nakata6                               call get_H_matrix(.true., fixed_potential, &
+!nakata6                                                 electrons, density, maxngrid)
                                call FindMinDM(n_cg_L_iterations, vary_mu, &
                                               L_tolerance, inode, ionode, &
                                               .false., .false.)
@@ -339,9 +341,11 @@ contains
                                   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
                                endif
                                call my_barrier()
-                               call get_S_matrix(inode, ionode)
-                               call get_H_matrix(.true., fixed_potential, &
+                               call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+                               call get_H_matrix(.false., fixed_potential, &
                                                  electrons, density, maxngrid)
+!nakata6                               call get_H_matrix(.true., fixed_potential, &
+!nakata6                                                 electrons, density, maxngrid)
                                call my_barrier()
                             end if ! (TestTot)
                             if (TestS .or. TestBoth) then
@@ -354,7 +358,7 @@ contains
                                endif
                                call my_barrier()
                                ! Recalculate energy and gradient
-                               call get_S_matrix (inode, ionode)
+                               call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
                                call FindMinDM(n_cg_L_iterations, vary_mu, &
                                               L_tolerance, inode, ionode, &
                                               .false., .false.)
@@ -379,7 +383,7 @@ contains
                                   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
                                endif
                                call my_barrier()
-                               call get_S_matrix(inode, ionode)
+                               call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
                                call my_barrier()
                             end if ! TestS .or. TestBoth
                             ! ** Test H ** !
@@ -393,8 +397,10 @@ contains
                                endif
                                call my_barrier()
                                ! Recalculate energy and gradient
-                               call get_H_matrix(.true., fixed_potential, &
+                               call get_H_matrix(.false., fixed_potential, &
                                                  electrons, density, maxngrid)
+!nakata6                               call get_H_matrix(.true., fixed_potential, &
+!nakata6                                                 electrons, density, maxngrid)
                                call FindMinDM(n_cg_L_iterations, vary_mu, &
                                               L_tolerance, inode, ionode, &
                                               .false., .false.)
@@ -419,8 +425,10 @@ contains
                                   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
                                endif
                                call my_barrier()
-                               call get_H_matrix(.true., fixed_potential, &
+                               call get_H_matrix(.false., fixed_potential, &
                                                  electrons, density, maxngrid)
+!                               call get_H_matrix(.true., fixed_potential, &
+!                                                 electrons, density, maxngrid)
                             end if ! TestH .or. TestBoth
                          end do ! npao2
                       end do ! nsf1
@@ -536,6 +544,8 @@ contains
           call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
        end if
 
+       flag_vary_basis = .true.
+
        ! Find change in energy for convergence
        diff = total_energy_last - total_energy_0
        if (abs(diff / total_energy_0) <= energy_tolerance) then
@@ -551,13 +561,14 @@ contains
        end if
 
        ! prepare for next iteration
-       flag_vary_basis = .true.
        ! Find new self-consistent energy 
-       ! 1. Generate data_dS
-       call get_S_matrix(inode, ionode)
-       ! 3. Generate data_dH
-       call get_H_matrix(.true., fixed_potential, electrons, density, &
+       ! 1. Generate S
+       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+       ! 3. Generate H
+       call get_H_matrix(.false., fixed_potential, electrons, density, &
                          maxngrid)
+!       call get_H_matrix(.true., fixed_potential, electrons, density, &
+!                         maxngrid)
        call FindMinDM(n_cg_L_iterations, vary_mu, L_tolerance, inode, &
                       ionode, .false., .false.)
        call get_energy(total_energy_test)
@@ -566,6 +577,7 @@ contains
           call matrix_scale(zero, matdSFcoeff(spin_SF))
           call matrix_scale(zero, matdSFcoeff_e(spin_SF))
        enddo
+       ! Generate dS and dH
        call build_PAO_coeff_grad(full)
        !if(inode==1) then
        !   gradient(:,:,2:mx_at_prim) = zero
@@ -820,8 +832,8 @@ contains
        if (inode == ionode) write (io_lun, *) 'Getting new S, H, E'
        flag_vary_basis = .true.
        ! Find new self-consistent energy 
-       ! 1. Generate data_dS
-       call get_S_matrix(inode, ionode)
+       ! 1. Generate S
+       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
        if (.not. diagon) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
@@ -885,8 +897,8 @@ contains
 
        ! re-evaluate the gradient and energy at new position
        ! Find new self-consistent energy 
-       ! 1. Generate data_dS
-       call get_S_matrix(inode, ionode)
+       ! 1. Generate S
+       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
        if (.not. diagon) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
@@ -1144,8 +1156,8 @@ contains
        enddo
 
        ! Find new self-consistent energy 
-       ! 1. Get new S matrix (includes pao-to-grid transform)
-       call get_S_matrix(inode, ionode)
+       ! 1. Get new S matrix
+       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
        if (.not. diagon) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
@@ -1210,7 +1222,7 @@ contains
 
     ! Find new self-consistent energy 
     ! 1. Get new S matrix
-    call get_S_matrix(inode, ionode)
+    call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
     ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
     if (.not. diagon) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1, &
@@ -1239,7 +1251,7 @@ contains
 
        ! Find new self-consistent energy 
        ! 1. Get new S matrix
-       call get_S_matrix(inode, ionode)
+       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
        if (.not. diagon) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&

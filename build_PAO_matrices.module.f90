@@ -100,7 +100,7 @@ contains
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
-    use support_spec_format, ONLY: flag_paos_atoms_in_cell, flag_one_to_one
+!    use support_spec_format, ONLY: flag_paos_atoms_in_cell, flag_one_to_one ! nakata3, delete this line later
     use mult_module, ONLY: matrix_scale
     use matrix_data, ONLY: mat, halo
     use timer_module
@@ -126,7 +126,7 @@ contains
     call matrix_scale(zero,matA)
     if(iprint_basis>=5.AND.myid==0) write(io_lun,fmt='(6x,i5," Done Zeroing")') 
     iprim = 0
-    if(flag_paos_atoms_in_cell.OR.flag==3.OR.flag_one_to_one) then
+!    if(flag_paos_atoms_in_cell.OR.flag==3.OR.flag_one_to_one) then ! nakata3, delete this line later
        call start_timer(tmr_std_matrices)
        do part = 1,bundle%groups_on_node ! Loop over primary set partitions
           if(iprint_basis>=6.AND.myid==0) write(io_lun,fmt='(6x,"Processor, partition: ",2i7)') myid,part
@@ -165,9 +165,9 @@ contains
           end if ! End if nm_nodgroup > 0
        end do ! End do part=1,groups_on_node
        call stop_timer(tmr_std_matrices)
-    else
-       call cq_abort("Storage of PAOs on primary-set processors not implemented yet")
-    end if    
+!    else                                                                              ! nakata3, delete this line later
+!       call cq_abort("Storage of PAOs on primary-set processors not implemented yet") ! nakata3, delete this line later
+!    end if                                                                            ! nakata3, delete this line later
     call stop_print_timer(tmr_l_tmp1,"S matrix assembly",IPRINT_TIME_THRES2)
     call stop_timer(tmr_std_basis)
   end subroutine assemble_2
@@ -353,7 +353,7 @@ contains
     !use angular_coeff_routines, ONLY: numerical_ol_gradient
     use matrix_data, ONLY: mat, halo
     use mult_module, ONLY: matrix_scale, store_matrix_value_pos, matrix_pos
-    use support_spec_format, ONLY: flag_paos_atoms_in_cell, flag_one_to_one
+!    use support_spec_format, ONLY: flag_paos_atoms_in_cell, flag_one_to_one ! nakata3, delete this line later
     
     implicit none
 
@@ -374,7 +374,7 @@ contains
     call start_timer(tmr_std_basis)
     call matrix_scale(zero,matA)
     iprim = 0
-    if(flag_paos_atoms_in_cell.OR.flag==3.OR.flag_one_to_one) then
+!    if(flag_paos_atoms_in_cell.OR.flag==3.OR.flag_one_to_one) then ! nakata3, delete this line later
        do part = 1,bundle%groups_on_node ! Loop over primary set partitions
           if(iprint_basis>=6.AND.myid==0) write(io_lun,fmt='(6x,"Processor, partition: ",2i7)') myid,part
           if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
@@ -421,9 +421,9 @@ contains
              end do ! End do memb =1,nm_nodgroup
           end if ! End if nm_nodgroup > 0
        end do ! End do part=1,groups_on_node
-    else
-       call cq_abort("Storage of PAOs on primary-set processors not implemented yet")
-    end if
+!    else                                                                              ! nakata3, delete this line later
+!       call cq_abort("Storage of PAOs on primary-set processors not implemented yet") ! nakata3, delete this line later
+!    end if                                                                            ! nakata3, delete this line later
     call stop_timer(tmr_std_basis)
     call stop_timer(tmr_std_matrices)
   end subroutine assemble_deriv_2

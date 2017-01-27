@@ -353,10 +353,9 @@ module global_module
   logical :: flag_neutral_atom
 
   ! Contracted SF
-  logical :: flag_contractSF
-  logical :: flag_do_SFtransform
   logical :: flag_SpinDependentSF
   integer :: nspin_SF
+  integer :: flag_SFcoeffReuse
 
   ! Multisite
   logical :: flag_Multisite

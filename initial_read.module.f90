@@ -135,7 +135,7 @@ contains
   !!   2015/06/10 15:44 cor & dave
   !!    - Input parameters for band output
   !!   2016/09/15 17:00 nakata
-  !!    Added automatic setting of flag_one_to_one and flag_contractSF
+  !!    Added automatic setting of flag_one_to_one, atomf and nspin_SF
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -164,8 +164,8 @@ contains
                                       io_lun, flag_only_dispersion,    &
                                       flag_basis_set, blips, PAOs,     & ! nakata3
                                       atomf, sf, paof,                 & ! nakata3
-                                      flag_contractSF, flag_do_SFtransform, & ! nakata3
                                       flag_SpinDependentSF, nspin_SF,  & ! nakata5
+                                      flag_Multisite,                  & ! nakata5
                                       flag_cdft_atom, flag_local_excitation
     use cdft_data, only: cDFT_NAtoms, &
                          cDFT_NumberAtomGroups, cDFT_AtomList
@@ -189,7 +189,8 @@ contains
     use force_module,           only: tot_force
     use DiagModule,             only: diagon
     use constraint_module,      only: flag_RigidBonds,constraints
-    use support_spec_format,    only: flag_one_to_one, read_option   ! nakata3
+    use support_spec_format,    only: flag_one_to_one, symmetry_breaking, read_option   ! nakata3
+    use pao_format                                                                      ! nakata3
 
     implicit none
 
@@ -207,6 +208,7 @@ contains
 
     integer      :: i, ierr, nnd, np, ni, ind_part, j
     integer      :: ncf_tmp, stat
+    integer      :: count_SZP
     real(double) :: ecore_tmp
     real(double) :: HNL_fac
 
@@ -291,39 +293,66 @@ contains
     !
     !
     !
-    ! Check PAOs are contracted or not (flag_one_to_one)
-    flag_one_to_one = .false. ! default for blips
-    flag_contractSF = .false.
-    flag_do_SFtransform = .false.
-    atomf = sf
-    nspin_SF = 1
-    if (flag_basis_set==PAOs) then
-       flag_one_to_one = .true. ! default for PAOs
+    ! Set flag_one_to_one
+    if (flag_basis_set==blips) then
+       flag_one_to_one = .false.
+       atomf = sf
+       nspin_SF = 1
+       flag_SpinDependentSF = .false.
+    else if (flag_basis_set==PAOs) then
+       flag_one_to_one = .true. ! primitive SFs
+       atomf = sf
+       nspin_SF = 1
+       ! Check PAOs are contracted or not
        do i = 1, n_species
           if (nsf_species(i).ne.npao_species(i)) flag_one_to_one = .false.
        enddo
-       if (.not.flag_one_to_one) then
-          flag_contractSF = .true.
-          flag_do_SFtransform = .true.
-          atomf = paof
-       endif
        if (flag_one_to_one .and. read_option) then
           if (inode==ionode) write(io_lun,'(A/A)') &
              'Warning!! nsf and npao are the same but read SF coefficients', &
              '          so that flag_one_to_one is set to be .false.'
           flag_one_to_one = .false.
-          flag_contractSF = .true.
-          flag_do_SFtransform = .true.
-          atomf = paof
+       endif
+       if (.not.flag_one_to_one) atomf = paof
+       if (flag_one_to_one) flag_SpinDependentSF = .false. ! spin-dependent SFs will be available only for contracted SFs
+       if (flag_SpinDependentSF) nspin_SF = nspin
+       ! Check symmetry-breaking for contracted SFs
+       if (.not.flag_one_to_one) then
+          do i = 1, 1, n_species
+             count_SZP = 0
+             do j = 0, pao(i)%greatest_angmom
+                if(pao(i)%angmom(j)%n_zeta_in_angmom>0) count_SZP = count_SZP + (2*j+1) ! Accumulate no. of ang. mom. components
+             enddo
+             ! If number of support functions is less than total number of ang. mom. components (ignoring
+             ! for now multiple zetas) then there is a formal problem with basis set: we require the user
+             ! to set an additional flag to assert that this is really desired
+             if(count_SZP>nsf_species(i)) then
+                ! multisite SFs are symmetry-breaking usually
+                if (.not.flag_Multisite) then
+                   if(.NOT.symmetry_breaking.OR..NOT.read_option) then
+                      if(inode==ionode) then
+                         write(io_lun,fmt='("You have a major problem with your basis set.")')
+                         write(io_lun,fmt='("There are less support functions than the minimal angular momentum")')
+                         write(io_lun,fmt='("components.  Either increase number of support functions on species ",i4)') i
+                         write(io_lun,fmt='("to",i4," or set flag BasisSet.SymmetryBreaking to T")') count_SZP
+                         write(io_lun,fmt='("You must also specify the basis set coefficients.")')
+                         write(io_lun,fmt='("Use read_pao_coeffs T and support_pao_file <filename>.")')
+                      end if
+                      call cq_abort("Basis set error for species ",i)
+                   else if(symmetry_breaking.AND.read_option) then
+                      write(io_lun,fmt='("You have a major problem with your basis set.")')
+                      write(io_lun,fmt='("There are ",i4," support functions and",i4," angular momentum")') &
+                          nsf_species(i),count_SZP
+                      write(io_lun,fmt='("components.  But as BasisSet.SymmetryBreaking is set T we will continue.")')
+                   end if
+                end if
+             end if
+          enddo
        endif
     endif
     if (atomf==sf)   natomf_species(:) =  nsf_species(:)
     if (atomf==paof) natomf_species(:) = npao_species(:)
-    if (.not.flag_contractSF) flag_SpinDependentSF = .false.
-    if (flag_SpinDependentSF) nspin_SF = nspin
     if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_one_to_one: ',flag_one_to_one
-    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_contractSF: ',flag_contractSF
-!    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_do_SFtransform: ',flag_do_SFtransform
     if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'atomf          : ',atomf
 !!! nakata3 end
     !
@@ -594,7 +623,7 @@ contains
                              fire_N_max, flag_write_DOS, flag_write_projected_DOS, &
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, &
-                             flag_Multisite, flag_SpinDependentSF    ! nakata4
+                             flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse    ! nakata4
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &     ! nakata3
@@ -664,6 +693,13 @@ contains
     use exx_types, only: exx_scheme, exx_mem, exx_overlap, exx_alloc,       &
                          exx_cartesian, exx_radius, exx_hgrid, exx_psolver, &
                          exx_debug, exx_Kij, exx_Kkl, p_scheme
+    use multisiteSF_module, only: flag_MSSF_smear, MSSF_Smear_Type,                      &
+                                  MSSF_Smear_center, MSSF_Smear_shift, MSSF_Smear_width, &
+                                  flag_LFD_ReadTVEC, LFD_TVEC_read, LFD_TVEC_zeta,       &
+                                  LFD_kT, LFD_ChemP, flag_LFD_useChemPsub,               &
+                                  flag_LFD_minimise, LFD_ThreshE, LFD_ThreshD,           &
+                                  LFD_Thresh_EnergyRise, LFD_max_iteration,              &
+                                  flag_LFD_MD_UseAtomicDensity
 
     implicit none
 
@@ -682,6 +718,7 @@ contains
 
 
     integer           :: i, j, k, lun, stat
+    integer           :: i_LFD, j_LFD, k_LFD, n_LFD, line_LFD   ! nakata8, For LFD TVEC read
     character(len=20) :: def, tmp2
     character(len=80) :: coordfile, timefile, timefileroot
     character(len=10) :: basis_string, part_mode
@@ -1032,6 +1069,61 @@ contains
 !!! 2016.9.16 nakata3
        ! Multisite support functions
        flag_Multisite = fdf_boolean('Basis.MultisiteSF', .false.)
+       if (flag_Multisite) then
+          if(flag_basis_set==blips) call cq_abort("Multi-site support functions are only for PAOs.")
+          flag_LFD = fdf_boolean('Multisite.LFD', .true.)
+          flag_MSSF_smear = fdf_boolean('Multisite.Smear', .false.)
+          if (flag_MSSF_smear) then
+             MSSF_Smear_type   = fdf_integer('Multisite.Smear.FunctionType', 1)
+             MSSF_Smear_center = fdf_double('Multisite.Smear.Center', BIG) ! in default, no change on MSSF
+             MSSF_Smear_shift  = fdf_double('Multisite.Smear.Shift', zero)
+             MSSF_Smear_width  = fdf_double('Multisite.Smear.Width', 0.1_double)
+          endif
+       else
+          flag_MSSF_smear   = .false.
+          flag_LFD          = .false.
+          flag_LFD_minimise = .false.
+       endif
+
+       if (flag_LFD) then
+          LFD_ChemP = fdf_double('Multisite.LFD.ChemP',zero)
+          LFD_kT    = fdf_double('Multisite.LFD.kT',   0.1_double)
+          flag_LFD_useChemPsub = fdf_boolean('Multisite.LFD.UseChemPsub', .true.)
+          flag_LFD_ReadTVEC    = fdf_boolean('Multisite.LFD.ReadTVEC',    .false.)
+          if (flag_LFD_ReadTVEC) then
+             allocate(LFD_TVEC_read(n_species,25,100))
+             if (fdf_block('LFDTrialVector')) then
+                if(inode==ionode) write(io_lun,*) 'Reading TVEC for LFD'
+                line_LFD = 0
+                do i=1,n_species
+                   if (nsf_species(i).gt.25) call cq_abort("nsf_species must be less or equal to 25 for Multi-site SFs")
+                   do j = 1,nsf_species(i)
+                      line_LFD = line_LFD + 1
+                      ! i_LFD = species, j_LFD = sf, n_LFD = npao
+                      read (unit=input_array(block_start+line_LFD-1),fmt=*) &
+                            i_LFD,j_LFD,n_LFD,(LFD_TVEC_read(i,j,k_LFD),k_LFD=1,n_LFD)
+                      if (i_LFD.ne.i)   call cq_abort("Error reading LFD TrialVector")
+                      if (j_LFD.ne.j)   call cq_abort("Error reading LFD TrialVector")
+                      if (n_LFD.gt.100) call cq_abort("n_PAO per atom must be less than 100 for Multi-site SFs")
+                   enddo
+                enddo
+                call fdf_endblock
+             else
+                call cq_abort("No LFDTrialVector label in the input file.")
+             endif
+          endif ! flag_LFD_ReadTVEC
+          allocate(LFD_TVEC_zeta(n_species))
+          flag_LFD_minimise = fdf_boolean('Multisite.LFD.Minimise',.true.)
+          if (flag_LFD_minimise) then
+             LFD_threshE = fdf_double('Multisite.LFD.Min.ThreshE',1.0e-6_double)
+             LFD_threshD = fdf_double('Multisite.LFD.Min.ThreshD',1.0e-6_double)
+             LFD_Thresh_EnergyRise = fdf_double('Multisite.LFD.Min.ThreshEnergyRise',LFD_threshE*ten)
+             LFD_max_iteration = fdf_integer('Multisite.LFD.Min.MaxIteration',50)
+          endif
+          flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
+       else 
+          flag_LFD_MD_UseAtomicDensity = .false.
+       endif
 !!! nakata3 end
 !!$
 !!$
@@ -1065,8 +1157,9 @@ contains
 !!! 2016.9.16 nakata3
              RadiusAtomf(i)   = RadiusSupport(i) ! = r_pao for (atomf=paof) or r_sf for (atomf==sf)
              RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
-             RadiusLD(i)      = fdf_double ('Atom.LocalDiagRange',zero)
+             RadiusLD(i)      = fdf_double ('Atom.LFDRange',zero)
              if (flag_Multisite) RadiusSupport(i) = RadiusAtomf(i) + RadiusMS(i)
+             if (flag_LFD)       LFD_TVEC_zeta(i) = fdf_integer ('Atom.LFDTvecZeta',1)
 !!! nakata3 end
              ! DRB 2016/08/05 Keep track of maximum support radius
              if(RadiusSupport(i)>max_rc) max_rc = RadiusSupport(i)
@@ -1241,7 +1334,9 @@ contains
 !!$
        ! cDFT flags
        flag_perform_cDFT = fdf_boolean('cDFT.Perform_cDFT',.false.)
+
        if(flag_perform_cDFT) then
+          if(flag_multisite) call cq_abort('cDFT is not supported with multi-site SFs.') ! nakata8
           if(.NOT.flag_Becke_weights) then
              flag_Becke_weights = .true.
              write(io_lun,fmt='(2x,"Warning: we require Becke  weights for cDFT ! Setting to true")')
@@ -1282,6 +1377,7 @@ contains
        ! DeltaSCF flags
        flag_DeltaSCF = fdf_boolean('minE.DeltaSCF',.false.)
        if(flag_DeltaSCF) then
+          if(flag_multisite) call cq_abort('DeltaSCF is not supported with multi-site SFs.') ! nakata8
           dscf_source_level     = fdf_integer('DeltaSCF.SourceLevel',  0)
           dscf_target_level     = fdf_integer('DeltaSCF.TargetLevel',  0)
           dscf_source_spin      = fdf_integer('DeltaSCF.SourceChannel',1)
@@ -1619,6 +1715,7 @@ contains
        flag_MDold        = fdf_boolean('AtomMove.OldMemberUpdates',.false.)
        flag_MDdebug      = fdf_boolean('AtomMove.Debug',.false.)
        flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
+       flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.) ! nakata8
        flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseL',.false.)
        if(flag_spin_polarisation.AND.flag_LmatrixReuse) then
           call cq_abort("L matrix re-use and spin polarisation not implemented !")

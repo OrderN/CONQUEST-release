@@ -3380,10 +3380,10 @@ contains
   end subroutine free_temp_matrix
 !!***
 
-  !!****f* mult_module/transform_ATOMF_to_SF *
+  !!****f* mult_module/ATOMF_to_SF_transform *
   !!
   !!  NAME
-  !!   transform_ATOMF_to_SF
+  !!   ATOMF_to_SF_transform
   !!  USAGE
   !!  PURPOSE
   !!   Multiply SF coefficients to transform matATOMF -> matSF
@@ -3397,7 +3397,7 @@ contains
   !!
   !!  SOURCE
   !!
-  subroutine transform_ATOMF_to_SF(matSF, matATOMF, spin, Arange)
+  subroutine ATOMF_to_SF_transform(matSF, matATOMF, spin, Arange)
 
     use numbers
     use GenComms,      only: cq_abort
@@ -3424,7 +3424,7 @@ contains
        ind1_mult = aHa_sCaTr_aHs
        ind2_mult = sCa_aHs_sHs
     else
-       call cq_abort("transform_ATOMF_to_SF supports only Srange and Hrange.")
+       call cq_abort("ATOMF_to_SF_transform supports only Srange and Hrange.")
     endif
 
     call matrix_scale(zero, mat_ATOMF_SF)
@@ -3439,13 +3439,13 @@ contains
     call free_temp_matrix(mat_ATOMF_SF)
 !
     return
-  end subroutine transform_ATOMF_to_SF
+  end subroutine ATOMF_to_SF_transform
 !!***
 
-  !!****f* mult_module/transform_SF_to_ATOMF *
+  !!****f* mult_module/SF_to_ATOMF_transform *
   !!
   !!  NAME
-  !!   transform_SF_to_ATOMF
+  !!   SF_to_ATOMF_transform
   !!  USAGE
   !!  PURPOSE
   !!   Multiply SF coefficients to transform matSF -> matATOMF
@@ -3459,7 +3459,7 @@ contains
   !!
   !!  SOURCE
   !!
-  subroutine transform_SF_to_ATOMF(matSF, matATOMF, spin, Arange)
+  subroutine SF_to_ATOMF_transform(matSF, matATOMF, spin, Arange)
 
     use numbers
     use GenComms,      only: cq_abort
@@ -3486,7 +3486,7 @@ contains
        ind1_mult = sCaTr_sHs_aHs
        ind2_mult = aHs_sCa_aHa
     else
-       call cq_abort("transform_SF_to_ATOMF supports only Srange and Hrange.")
+       call cq_abort("SF_to_ATOMF_transform supports only Srange and Hrange.")
     endif
 
     call matrix_scale(zero, mat_ATOMF_SF)
@@ -3502,7 +3502,7 @@ contains
     call free_temp_matrix(mat_ATOMF_SF)
 !
     return
-  end subroutine transform_SF_to_ATOMF
+  end subroutine SF_to_ATOMF_transform
 !!***
 
 

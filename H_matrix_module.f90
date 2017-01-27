@@ -165,14 +165,16 @@ contains
   !!   Renamed supportfns -> atomfns
   !!  2016/09/16 21:30 nakata
   !!   Introduced matKEatomf, matNLatomf, matXatomf, matHatomf
-  !!   Added matHatomf -> matH transformation
+  !!   Added matHatomf -> matH transformation (ATOMF_to_SF_transform)
   !!  2016/12/19 18:30 nakata
   !!   Removed unused fn_on_grid, length, paolength
   !!   Removed dHrange, matdH, paof and sf, which are no longer needed.
+  !!  2017/01/26 20:00 nakata
+  !!   Added optional passed variables build_ATOMF_matrix and transform_ATOMF_to_SF
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-                          rho, size, level)
+                          rho, size, level, build_ATOMF_matrix, transform_ATOMF_to_SF)
 
     use datatypes
     use numbers 
@@ -183,7 +185,7 @@ contains
                                            matS, matX,                  &
                                            matNLatomf, matKEatomf,      &
                                            matHatomf, matXatomf,        &
-                                           transform_ATOMF_to_SF
+                                           ATOMF_to_SF_transform
     use pseudopotential_common,      only: non_local, pseudopotential
     use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
@@ -192,13 +194,13 @@ contains
                                            cq_abort
     use global_module,               only: iprint_ops, iprint_exx,      &
                                            flag_basis_set, PAOs,        &
-                                           flag_do_SFtransform,         &   ! nakata3
+                                           atomf, sf,                   &
                                            IPRINT_TIME_THRES1,          &
                                            iprint_SC,                   &
                                            flag_perform_cDFT,           &
                                            area_ops, nspin,             &
                                            spin_factor, blips,          &
-                                           flag_analytic_blip_int 
+                                           flag_analytic_blip_int
     use functions_on_grid,           only: atomfns, H_on_atomfns,       &
                                            gridfunctions
     use io_module,                   only: dump_matrix, dump_blips,     &
@@ -231,6 +233,8 @@ contains
     logical :: rebuild_KE_NL, fixed_potential
     real(double), dimension(:)   :: electrons
     real(double), dimension(:,:) :: rho
+    logical, optional :: build_ATOMF_matrix
+    logical, optional :: transform_ATOMF_to_SF
 
     ! local variables
     real(double), dimension(:), allocatable :: rho_total
@@ -240,6 +244,7 @@ contains
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
     character(len=9), dimension(2) :: print_exxspin
+    logical        :: flag_build_Hatomf, flag_do_SFtransform
 
     print_exxspin(1) = 'spin up  '
     print_exxspin(2) = 'spin down'
@@ -259,122 +264,136 @@ contains
     if (inode == ionode .and. iprint_ops > 3) &
          write (io_lun, fmt='(10x,"Entering get_H_matrix")')
 
-    ! zero the H matrix (in Conquest format)
-    do spin = 1, nspin
-       call matrix_scale(zero, matHatomf(spin))
-       ! zero H_on_atomfns
-       gridfunctions(H_on_atomfns(spin))%griddata = zero
-    end do
-    !
-    !
-    if (rebuild_KE_NL) then
-       if (inode == ionode .and. iprint_ops > 3)&
-            & write(io_lun, fmt='(2x,"Rebuilding KE")')
-       ! both matKE and matNL are independent of spin (only XC is spin dependent)
-       if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) &
-            call matrix_scale(zero, matKEatomf)
-       call matrix_scale(zero, matNLatomf)
-       ! get the T matrix and the kinetic energy...
-       if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) &
-            call get_T_matrix
-       ! now, we do the non-local part (if we are doing it)
-       if (non_local) then
-          if (inode == ionode .and. iprint_ops > 3) &
-               write (io_lun, fmt='(2x,"Rebuilding NL")')
-!          call get_HNL_matrix(matNL)
-          call get_HNL_matrix   ! nakata3
-       end if
-       if (iprint_ops > 4) call dump_matrix("NNL_atomf", matNLatomf, inode)
-       if (iprint_ops > 4) call dump_matrix("NKE_atomf", matKEatomf, inode)
-    end if
-    !
-    !
-    ! from here on, workspace support becomes h_on_atomfns...
-    ! in fact, what we are getting here is (H_local - T) acting on support
-    call get_h_on_atomfns(iprint_ops, fixed_potential, electrons, rho, size)
-    !
-    !
-    if (inode == ionode .and. iprint_ops > 2) &
-         write (io_lun, *) 'Doing integration'
-    ! Do the integration - support holds <phi| and workspace_support
-    ! holds H|phi>. Inode starts from 1, and myid starts from 0. 
-    ! get_matrix_elements_new takes myid
-    do spin = 1, nspin
-       call get_matrix_elements_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
-                                    matHatomf(spin), atomfns, &                    ! nakata3
-                                    H_on_atomfns(spin))
-    end do
-    if (inode == ionode .and. iprint_ops > 2) write (io_lun, *) 'Done integration'
-    !
-    !
-    if (iprint_ops > 4) then
-       if (nspin == 1) then
-          call dump_matrix("Nl_atomf",    matHatomf(1), inode)
-       else
-          call dump_matrix("Nl_up_atomf", matHatomf(1), inode)
-          call dump_matrix("Nl_dn_atomf", matHatomf(2), inode)
-       end if
-    end if
+    flag_build_Hatomf = .true.
+    if (flag_basis_set == PAOs .and. present(build_ATOMF_matrix)) flag_build_Hatomf = build_ATOMF_matrix
 
-    ! add the kinetic energy and non-local matrices to give the
-    ! complete H matrix
-    do spin = 1, nspin
-       call matrix_sum(one, matHatomf(spin), half, matKEatomf)
-       call matrix_sum(one, matHatomf(spin), one,  matNLatomf)
-    end do
-    !
-    !
+    if (flag_build_Hatomf) then
+       ! zero the H matrix (in Conquest format)
+       do spin = 1, nspin
+          call matrix_scale(zero, matHatomf(spin))
+          ! zero H_on_atomfns
+          gridfunctions(H_on_atomfns(spin))%griddata = zero
+       end do
+       !
+       !
+       if (rebuild_KE_NL) then
+          if (inode == ionode .and. iprint_ops > 3)&
+               & write(io_lun, fmt='(2x,"Rebuilding KE")')
+          ! both matKE and matNL are independent of spin (only XC is spin dependent)
+          if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) &
+               call matrix_scale(zero, matKEatomf)
+          call matrix_scale(zero, matNLatomf)
+          ! get the T matrix and the kinetic energy...
+          if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) &
+               call get_T_matrix
+          ! now, we do the non-local part (if we are doing it)
+          if (non_local) then
+             if (inode == ionode .and. iprint_ops > 3) &
+                  write (io_lun, fmt='(2x,"Rebuilding NL")')
+!             call get_HNL_matrix(matNL)
+             call get_HNL_matrix   ! nakata3
+          end if
+          if (iprint_ops > 4) call dump_matrix("NNL_atomf", matNLatomf, inode)
+          if (iprint_ops > 4) call dump_matrix("NKE_atomf", matKEatomf, inode)
+       end if
+       !
+       !
+       ! from here on, workspace support becomes h_on_atomfns...
+       ! in fact, what we are getting here is (H_local - T) acting on support
+       call get_h_on_atomfns(iprint_ops, fixed_potential, electrons, rho, size)
+       !
+       !
+       if (inode == ionode .and. iprint_ops > 2) &
+            write (io_lun, *) 'Doing integration'
+       ! Do the integration - support holds <phi| and workspace_support
+       ! holds H|phi>. Inode starts from 1, and myid starts from 0. 
+       ! get_matrix_elements_new takes myid
+       do spin = 1, nspin
+          call get_matrix_elements_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
+                                       matHatomf(spin), atomfns, &                    ! nakata3
+                                       H_on_atomfns(spin))
+       end do
+       if (inode == ionode .and. iprint_ops > 2) write (io_lun, *) 'Done integration'
+       !
+       !
+       if (iprint_ops > 4) then
+          if (nspin == 1) then
+             call dump_matrix("Nl_atomf",    matHatomf(1), inode)
+          else
+             call dump_matrix("Nl_up_atomf", matHatomf(1), inode)
+             call dump_matrix("Nl_dn_atomf", matHatomf(2), inode)
+          end if
+       end if
+
+       ! add the kinetic energy and non-local matrices to give the
+       ! complete H matrix
+       do spin = 1, nspin
+          call matrix_sum(one, matHatomf(spin), half, matKEatomf)
+          call matrix_sum(one, matHatomf(spin), one,  matNLatomf)
+       end do
+       !
+       !
 !****lat<$
-    if (flag_exx) then
-       ! Ugly stuff but for now that's ok. Purpose is to adapt EXX accuracy to
-       ! the SCF covergence: closer to convergence finest is the grid
-       !
-       !if (inode==ionode) print*, 'exx_pulay_r0 = ', exx_pulay_r0
-       if  ( exx_niter < exx_siter ) then
-          ! For first H building use pure DFT. To be improved for Hartree-Fock
-          if (inode == ionode .and. iprint_exx > 2) &
-               write (io_lun, *) 'EXX: first guess from DFT'
+       if (flag_exx) then
+          ! Ugly stuff but for now that's ok. Purpose is to adapt EXX accuracy to
+          ! the SCF covergence: closer to convergence finest is the grid
           !
-       else
-          !
-          if (inode == ionode .and. iprint_exx > 2) &
-               write (io_lun, *) 'EXX: setting get_X_matrix'
-          call get_X_params(backtrace_level)
+          !if (inode==ionode) print*, 'exx_pulay_r0 = ', exx_pulay_r0
+          if  ( exx_niter < exx_siter ) then
+             ! For first H building use pure DFT. To be improved for Hartree-Fock
+             if (inode == ionode .and. iprint_exx > 2) &
+                  write (io_lun, *) 'EXX: first guess from DFT'
+             !
+          else
+             !
+             if (inode == ionode .and. iprint_exx > 2) &
+                  write (io_lun, *) 'EXX: setting get_X_matrix'
+             call get_X_params(backtrace_level)
 
-          call exx_global_write() 
+             call exx_global_write() 
+             !
+             !if (inode == ionode .and. iprint_exx > 2) &
+                  !write (io_lun, *) 'EXX: doing get_X_matrix'
+             do spin = 1, nspin
+                if (inode == ionode .and. iprint_exx > 2) &
+                write (io_lun, *) 'EXX: doing get_X_matrix: ', print_exxspin(spin)
+                call get_X_matrix(spin,backtrace_level)
+             end do
+             !
+             !if (inode == ionode .and. iprint_exx > 2) &
+                  !write (io_lun, *) 'EXX: done get_X_matrix'
+             do spin = 1, nspin
+                if (inode == ionode .and. iprint_exx > 2) &
+                write (io_lun, *) 'EXX: done get_X_matrix: ', print_exxspin(spin)
+                call matrix_sum(one, matHatomf(spin),-exx_alpha*half, matXatomf(spin)) 
+             end do
+             !
+          end if
           !
-          !if (inode == ionode .and. iprint_exx > 2) &
-               !write (io_lun, *) 'EXX: doing get_X_matrix'
-          do spin = 1, nspin
-             if (inode == ionode .and. iprint_exx > 2) &
-             write (io_lun, *) 'EXX: doing get_X_matrix: ', print_exxspin(spin)
-             call get_X_matrix(spin,backtrace_level)
-          end do
-          !
-          !if (inode == ionode .and. iprint_exx > 2) &
-               !write (io_lun, *) 'EXX: done get_X_matrix'
-          do spin = 1, nspin
-             if (inode == ionode .and. iprint_exx > 2) &
-             write (io_lun, *) 'EXX: done get_X_matrix: ', print_exxspin(spin)
-             call matrix_sum(one, matHatomf(spin),-exx_alpha*half, matXatomf(spin)) 
-          end do
+          exx_niter = exx_niter + 1
           !
        end if
-       !
-       exx_niter = exx_niter + 1
-       !
-    end if
 !****lat>$
+    endif ! flag_build_Hatomf
 
 !!! 2016.9.16 nakata3
-    ! For blips and one_to_one PAOs, atomic functions are SFs so that no transformation is needed.
-    ! For contracted SFs, transform H from atomic-function basis to SF basis
+    ! For PAO-based contracted SFs, atomic functions are PAOs
+    !     so transform H from atomic-function basis to SF basis
+    ! For blips and one_to_one PAOs, atomic functions are SFs
+    !     so no transformation is needed.
+    if (atomf.ne.sf) then
+       flag_do_SFtransform = .true.
+       if (present(transform_ATOMF_to_SF)) flag_do_SFtransform = transform_ATOMF_to_SF
+    else
+       flag_do_SFtransform = .false.
+    endif
+
     if (flag_do_SFtransform) then
-       call transform_ATOMF_to_SF(matKE, matKEatomf, 1, Hrange)   ! only to output kinetic energy
-       call transform_ATOMF_to_SF(matNL, matNLatomf, 1, Hrange)   ! only to output non-local PP energy
+       call ATOMF_to_SF_transform(matKE, matKEatomf, 1, Hrange)   ! only to output kinetic energy
+       call ATOMF_to_SF_transform(matNL, matNLatomf, 1, Hrange)   ! only to output non-local PP energy
        do spin = 1, nspin
-          call transform_ATOMF_to_SF(matX(spin), matXatomf(spin), spin, Hrange)   ! only to output exact-exchange energy
-          call transform_ATOMF_to_SF(matH(spin), matHatomf(spin), spin, Hrange)   ! total electronic Hamiltonian
+          if (flag_exx) call ATOMF_to_SF_transform(matX(spin), matXatomf(spin), spin, Hrange)   ! only to output EXX energy
+          call ATOMF_to_SF_transform(matH(spin), matHatomf(spin), spin, Hrange)   ! total electronic Hamiltonian
        enddo
     endif
 !!! nakata3

@@ -118,23 +118,24 @@ contains
 !!    Renamed supportfns -> atomfns
 !!   2016/09/28 15:30 nakata
 !!    Introduce get_S_matrix_blips and get_S_matrix_PAO
-!!    Introduce PAO->SF transformation for contracted SFs
+!!    Introduce PAO->SF transformation for contracted SFs (ATOMF_to_SF_transform)
+!!   2017/01/17 19:00 nakata
+!!    Added optional passed variable rebuild_Spao
 !!  TODO
 !!    
 !!  SOURCE
 !!
-  subroutine get_S_matrix(inode, ionode)
+  subroutine get_S_matrix(inode, ionode, build_ATOMF_matrix, transform_ATOMF_to_SF)
 
     use datatypes
     use numbers
     use global_module,               only: iprint_ops, flag_basis_set, &
-                                           blips, PAOs,                &
+                                           blips, PAOs, atomf, sf,     &
                                            ni_in_cell,                 &
                                            flag_perform_cdft,          &
-                                           IPRINT_TIME_THRES1,         &
-                                           flag_do_SFtransform
+                                           IPRINT_TIME_THRES1
     use matrix_data,                 only: Srange
-    use mult_module,                 only: matS, matSatomf, transform_ATOMF_to_SF
+    use mult_module,                 only: matS, matSatomf, ATOMF_to_SF_transform
     use io_module,                   only: dump_matrix
     use timer_module,                only: cq_timer, start_timer,      &
                                            stop_print_timer,           &
@@ -145,8 +146,11 @@ contains
 
     ! Passed variables
     integer :: inode, ionode
+    logical, optional :: build_ATOMF_matrix
+    logical, optional :: transform_ATOMF_to_SF
     
     ! Local variables
+    logical :: flag_build_Satomf, flag_do_SFtransform
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
 
@@ -159,19 +163,31 @@ contains
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
 
     ! get S in atomic-function basis
-    if (flag_basis_set == blips) call get_S_matrix_blips(inode, ionode)
-    if (flag_basis_set == PAOs)  call get_S_matrix_PAO(inode, ionode)
+    flag_build_Satomf = .true.
+    if (present(build_ATOMF_matrix)) flag_build_Satomf = build_ATOMF_matrix
 
-    ! For blips and one_to_one PAOs, atomic functions are SFs so that no transformation is needed.
-    ! For contracted SFs, transform S from atomic-function basis to SF basis
-    if (flag_do_SFtransform) call transform_ATOMF_to_SF(matS, matSatomf, 1, Srange)
+    if (flag_basis_set == blips)                        call get_S_matrix_blips(inode, ionode)
+    if (flag_basis_set == PAOs .and. flag_build_Satomf) call get_S_matrix_PAO(inode, ionode)
+
+    ! For PAO-based contracted SFs, atomic functions are PAOs 
+    !     so transform S from atomic-function basis to SF basis
+    ! For blips and one_to_one PAOs, atomic functions are SFs
+    !     so no transformation is needed.
+    if (atomf.ne.sf) then 
+       flag_do_SFtransform = .true.
+       if (present(transform_ATOMF_to_SF)) flag_do_SFtransform = transform_ATOMF_to_SF
+    else
+       flag_do_SFtransform = .false.
+    endif
+
+    if (flag_do_SFtransform) call ATOMF_to_SF_transform(matS, matSatomf, 1, Srange)
 
     call dump_matrix("NS1",matS,inode)
 
     ! get the new InvS matrix
     call  Iter_Hott_InvS(iprint_ops, InvSMaxSteps, &
                          InvSDeltaOmegaTolerance, ni_in_cell, &
-                         inode, ionode)
+                         inode, ionode, flag_do_SFtransform)
 
     if (flag_perform_cdft) call make_weights
 
@@ -659,15 +675,17 @@ contains
 !!    tolerance
 !!   2013/08/20 M.Arita
 !!    Added variables and calls for reusing T-matrix
+!!   2017/01/18 nakata
+!!    Added IF for contracted SFs
 !!  SOURCE
 !!
   subroutine Iter_Hott_InvS(output_level, n_L_iterations, tolerance,n_atoms,&
-       inode, ionode)
+       inode, ionode, flag_do_SFtransform)
 
     use datatypes
     use numbers
     use global_module, ONLY: IPRINT_TIME_THRES1,flag_MDold,flag_TmatrixReuse,restart_T, &
-                             runtype,n_proc_old
+                             runtype,n_proc_old, atomf, sf
     use matrix_data, ONLY: Trange, TSrange, mat, Srange
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, store_matrix_value, matrix_scale, matrix_sum, &
          matT, matS, return_matrix_value, T_trans
@@ -685,6 +703,7 @@ contains
     ! Passed variables
     integer :: output_level, inode, ionode,n_atoms, n_L_iterations
     real(double) ::  tolerance
+    logical :: flag_do_SFtransform
 
     ! Local variables
     integer :: n_iterations, nn, np, nb, ist, ip, i,j,nsf1,nsf2
@@ -693,124 +712,17 @@ contains
     type(cq_timer) :: tmr_l_tmp1
     logical,save :: flag_readT = .false.
 
-    matI = allocate_temp_matrix(TSrange,0)
-    matT1 = allocate_temp_matrix(Trange,0)
-    matTold = allocate_temp_matrix(Trange,0)
-    matTM = allocate_temp_matrix(TSrange,0)
 
-    if(diagon) then ! Don't need S^-1 for diagonalisation
-       call matrix_scale(zero,matT)
-       ip = 1
-       nb = 1
-       do np = 1,bundle%groups_on_node
-          if(bundle%nm_nodgroup(np)>0) then
-             do i=1,bundle%nm_nodgroup(np)
-                do j = 1, nsf_species(bundle%species(ip))
-                   call store_matrix_value(matT,np,i,ip,nb,j,j,one,1)
-                enddo
-                ip = ip+1
-             enddo
-          end if ! bundle%nm_nodgroup(np)>0
-       enddo
+    if (atomf.ne.sf .and. .not.flag_do_SFtransform) then
+       if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) &
+          'Now we have only Spao but not Ssf yet, so InvS is not calculated at present.'
     else
-       call start_timer(tmr_l_tmp1,WITH_LEVEL)
-       n_orbs = zero
-       do i=1,n_atoms
-          n_orbs = n_orbs + real(nsf_species(species(i)),double)
-       end do
-       ! First construct the identity
-       if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'Zeroing data'
-       call matrix_scale(zero,matT1)
-       call matrix_scale(zero,matI)
-       call matrix_scale(zero,matT)
-       call matrix_scale(zero,matTold)
-       call matrix_scale(zero,matTM)
-       if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'Creating I'
-       ip = 1
-       nb = 1
-       do np = 1,bundle%groups_on_node
-          if(bundle%nm_nodgroup(np)>0) then
-             do i=1,bundle%nm_nodgroup(np)
-                do j = 1, nsf_species(bundle%species(ip))
-                   call store_matrix_value(matT,np,i,ip,nb,j,j,one,1)
-                   call store_matrix_value(matI,np,i,ip,nb,j,j,one,1)
-                enddo
-                ip = ip+1
-             enddo
-          end if ! bundle%nm_nodgroup(np)>0
-       enddo
-       call my_barrier
+       matI = allocate_temp_matrix(TSrange,0)
+       matT1 = allocate_temp_matrix(Trange,0)
+       matTold = allocate_temp_matrix(Trange,0)
+       matTM = allocate_temp_matrix(TSrange,0)
 
-
-       if (.NOT. flag_readT .AND. .NOT. restart_T) then ! Initialising invS
-         ! Construct the initial guess for T as epsilon.S^T, where epsilon is
-         ! given as 1/(sum_jk S^2_jk)
-         tot = 0.0_double
-         ip = 1
-         do np = 1,bundle%groups_on_node
-            if(bundle%nm_nodgroup(np)>0) then
-               do i=1,bundle%nm_nodgroup(np)
-                  do nb=1,mat(np,Srange)%n_nab(i)
-                     ist = mat(np,Srange)%i_acc(i)+nb-1
-                     do nsf1 = 1,mat(np,Srange)%ndimi(i)
-                        do nsf2 = 1,mat(np,Srange)%ndimj(ist)
-                           eps = return_matrix_value(matS,np,i,ip,nb,nsf1,nsf2)
-                           tot = tot + eps*eps
-                        enddo
-                     enddo
-                  enddo
-                  ip = ip+1
-               enddo
-            end if ! bundle%nm_nodgroup(np)>0
-         enddo
-         call gsum(tot)
-         eps = 1.0_double/(tot)
-         if(output_level>1.and.inode==ionode) write(io_lun,*) 'Eps, tot: ',eps,tot
-         call matrix_scale(zero,matT)
-         call matrix_sum(zero,matT,eps,matS)
-         call stop_print_timer(tmr_l_tmp1,"inverse S preliminaries",IPRINT_TIME_THRES1)
-       elseif (.NOT. flag_MDold .AND. (flag_readT .OR. restart_T)) then
-         !Reusing previously computed inverse S-matrix
-         call grab_matrix2('T',inode,nfile,InfoT)
-         call my_barrier()
-         call Matrix_CommRebuild(InfoT,Trange,T_trans,matT,nfile,symm)
-       endif
-       ! and evaluate the current value of the functional and its gradient
-       deltaomega = zero
-       oldomega = zero
-       if (inode==ionode.and.output_level>=2) write(io_lun,*) 'Starting loop'
-       do n_iterations=1,n_L_iterations
-          call start_timer(tmr_l_tmp1,WITH_LEVEL)
-          if (inode==ionode.and.output_level>=2) &
-               write(io_lun,2) n_iterations
-          deltaomega = deltaomega * half
-          ! check for convergence
-          if(n_iterations<3.or.abs(deltaomega)>tolerance) then
-             call HotInvS_mm( matI, matS, matT, matT1, matTM, omega,n_iterations)
-             deltaomega = omega - oldomega
-             if(inode==ionode.and.output_level>=1) then
-                write(io_lun,*) 'Omega is ',omega/n_orbs
-                if(omega>zero) write(io_lun,*) 'R is ',sqrt(omega)/n_orbs
-                write(io_lun,*) 'deltaomega is ',n_iterations,deltaomega
-             endif
-             if ( omega>oldomega.and.oldomega/=0.0_double) then
-                if(inode==ionode) write(io_lun,*) 'Truncation error reached !'
-                call matrix_sum(zero,matT,one,matTold)
-                call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
-                exit
-             endif
-             oldomega = omega 
-             call matrix_sum(zero,matTold,one,matT)
-             call matrix_sum(zero,matT,one,matT1)
-          else
-             call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
-             exit  ! Leave the do loop
-          endif
-          call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
-       end do
-       ! If this isn't a good guess, then reset to I
-       if((omega/n_orbs)>InvSTolerance) then
-          if(inode==ionode) write(io_lun,*) 'Setting InvS to I'
+       if(diagon) then ! Don't need S^-1 for diagonalisation
           call matrix_scale(zero,matT)
           ip = 1
           nb = 1
@@ -824,17 +736,130 @@ contains
                 enddo
              end if ! bundle%nm_nodgroup(np)>0
           enddo
+       else
+          call start_timer(tmr_l_tmp1,WITH_LEVEL)
+          n_orbs = zero
+          do i=1,n_atoms
+             n_orbs = n_orbs + real(nsf_species(species(i)),double)
+          end do
+          ! First construct the identity
+          if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'Zeroing data'
+          call matrix_scale(zero,matT1)
+          call matrix_scale(zero,matI)
+          call matrix_scale(zero,matT)
+          call matrix_scale(zero,matTold)
+          call matrix_scale(zero,matTM)
+          if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) 'Creating I'
+          ip = 1
+          nb = 1
+          do np = 1,bundle%groups_on_node
+             if(bundle%nm_nodgroup(np)>0) then
+                do i=1,bundle%nm_nodgroup(np)
+                   do j = 1, nsf_species(bundle%species(ip))
+                      call store_matrix_value(matT,np,i,ip,nb,j,j,one,1)
+                      call store_matrix_value(matI,np,i,ip,nb,j,j,one,1)
+                   enddo
+                   ip = ip+1
+                enddo
+             end if ! bundle%nm_nodgroup(np)>0
+          enddo
+          call my_barrier
+
+
+          if (.NOT. flag_readT .AND. .NOT. restart_T) then ! Initialising invS
+            ! Construct the initial guess for T as epsilon.S^T, where epsilon is
+            ! given as 1/(sum_jk S^2_jk)
+            tot = 0.0_double
+            ip = 1
+            do np = 1,bundle%groups_on_node
+               if(bundle%nm_nodgroup(np)>0) then
+                  do i=1,bundle%nm_nodgroup(np)
+                     do nb=1,mat(np,Srange)%n_nab(i)
+                        ist = mat(np,Srange)%i_acc(i)+nb-1
+                        do nsf1 = 1,mat(np,Srange)%ndimi(i)
+                           do nsf2 = 1,mat(np,Srange)%ndimj(ist)
+                              eps = return_matrix_value(matS,np,i,ip,nb,nsf1,nsf2)
+                              tot = tot + eps*eps
+                           enddo
+                        enddo
+                     enddo
+                     ip = ip+1
+                  enddo
+               end if ! bundle%nm_nodgroup(np)>0
+            enddo
+            call gsum(tot)
+            eps = 1.0_double/(tot)
+            if(output_level>1.and.inode==ionode) write(io_lun,*) 'Eps, tot: ',eps,tot
+            call matrix_scale(zero,matT)
+            call matrix_sum(zero,matT,eps,matS)
+            call stop_print_timer(tmr_l_tmp1,"inverse S preliminaries",IPRINT_TIME_THRES1)
+          elseif (.NOT. flag_MDold .AND. (flag_readT .OR. restart_T)) then
+            !Reusing previously computed inverse S-matrix
+            call grab_matrix2('T',inode,nfile,InfoT)
+            call my_barrier()
+            call Matrix_CommRebuild(InfoT,Trange,T_trans,matT,nfile,symm)
+          endif
+          ! and evaluate the current value of the functional and its gradient
+          deltaomega = zero
+          oldomega = zero
+          if (inode==ionode.and.output_level>=2) write(io_lun,*) 'Starting loop'
+          do n_iterations=1,n_L_iterations
+             call start_timer(tmr_l_tmp1,WITH_LEVEL)
+             if (inode==ionode.and.output_level>=2) &
+                  write(io_lun,2) n_iterations
+             deltaomega = deltaomega * half
+             ! check for convergence
+             if(n_iterations<3.or.abs(deltaomega)>tolerance) then
+                call HotInvS_mm( matI, matS, matT, matT1, matTM, omega,n_iterations)
+                deltaomega = omega - oldomega
+                if(inode==ionode.and.output_level>=1) then
+                   write(io_lun,*) 'Omega is ',omega/n_orbs
+                   if(omega>zero) write(io_lun,*) 'R is ',sqrt(omega)/n_orbs
+                   write(io_lun,*) 'deltaomega is ',n_iterations,deltaomega
+                endif
+                if ( omega>oldomega.and.oldomega/=0.0_double) then
+                   if(inode==ionode) write(io_lun,*) 'Truncation error reached !'
+                   call matrix_sum(zero,matT,one,matTold)
+                   call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
+                   exit
+                endif
+                oldomega = omega 
+                call matrix_sum(zero,matTold,one,matT)
+                call matrix_sum(zero,matT,one,matT1)
+             else
+                call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
+                exit  ! Leave the do loop
+             endif
+             call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
+          end do
+          ! If this isn't a good guess, then reset to I
+          if((omega/n_orbs)>InvSTolerance) then
+             if(inode==ionode) write(io_lun,*) 'Setting InvS to I'
+             call matrix_scale(zero,matT)
+             ip = 1
+             nb = 1
+             do np = 1,bundle%groups_on_node
+                if(bundle%nm_nodgroup(np)>0) then
+                   do i=1,bundle%nm_nodgroup(np)
+                      do j = 1, nsf_species(bundle%species(ip))
+                         call store_matrix_value(matT,np,i,ip,nb,j,j,one,1)
+                      enddo
+                      ip = ip+1
+                   enddo
+                end if ! bundle%nm_nodgroup(np)>0
+             enddo
+          endif
+       end if! End if NOT diagon
+       call free_temp_matrix(matTM)
+       call free_temp_matrix(matTold)
+       call free_temp_matrix(matT1)
+       call free_temp_matrix(matI)
+       ! Dump T-matrix
+       if (.NOT. flag_MDold .AND. .NOT. leqi(runtype,'static') .AND. flag_TmatrixReuse) then
+         call dump_matrix2('T',matT,inode,Trange)
+         flag_readT = .true.
        endif
-    end if! End if NOT diagon
-    call free_temp_matrix(matTM)
-    call free_temp_matrix(matTold)
-    call free_temp_matrix(matT1)
-    call free_temp_matrix(matI)
-    ! Dump T-matrix
-    if (.NOT. flag_MDold .AND. .NOT. leqi(runtype,'static') .AND. flag_TmatrixReuse) then
-      call dump_matrix2('T',matT,inode,Trange)
-      flag_readT = .true.
-    endif
+    end if ! End if (atomf.ne.sf .and. .not.flag_do_SFtransform)
 
 1   format(20x,'Starting functional value: ',f15.7,' a.u.')
 2   format(/,20x,'Conjugate Gradients InvS iteration:',i5)

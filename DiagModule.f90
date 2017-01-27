@@ -443,8 +443,7 @@ contains
          dscf_HOMO_limit, dscf_LUMO_limit, &
          flag_out_wf,wf_self_con, max_wf, paof, sf, atomf, flag_out_wf_by_kp, &   ! nakata2
          out_wf, n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, &
-         flag_write_projected_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
-         flag_contractSF                                                          ! nakata3
+         flag_write_projected_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
          deallocate_arrays, block_size_r,       &
@@ -452,7 +451,7 @@ contains
          nkpoints_max, pgid, N_procs_in_pg,     &
          N_kpoints_in_pg
     use mult_module,     only: matH, matS, matK, matM12, &
-                               transform_SF_to_ATOMF,    &   ! nakata3
+                               SF_to_ATOMF_transform,    &   ! nakata3
          matrix_scale, matrix_product_trace, allocate_temp_matrix, free_temp_matrix
     use matrix_data,     only: Hrange, Srange, aHa_range   ! nakata3
     use primary_module,  only: bundle
@@ -642,7 +641,7 @@ contains
              matBand(i) = allocate_temp_matrix(Hrange,0,sf,sf)   ! nakata2
           end do
        end if
-       if (flag_contractSF) matBand_atomf = allocate_temp_matrix(aHa_range,0,atomf,atomf)   ! nakata3
+       if (atomf.ne.sf) matBand_atomf = allocate_temp_matrix(aHa_range,0,atomf,atomf)   ! nakata3
     end if
     ! Preparatory work for DOS
     if(wf_self_con.AND.flag_write_DOS) then
@@ -1043,8 +1042,8 @@ contains
                    do spin = 1, nspin
                       abs_wf(:)=zero
 !!! 2016.9.15 nakata3 
-                      if (flag_contractSF) then
-                         call transform_SF_to_ATOMF(matBand_kp(wf_no,i), matBand_atomf, spin, Hrange)
+                      if (atomf.ne.sf) then
+                         call SF_to_ATOMF_transform(matBand_kp(wf_no,i), matBand_atomf, spin, Hrange)
                          call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
                       else                     
                          call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_kp(wf_no,i),maxngrid)
@@ -1061,8 +1060,8 @@ contains
                    abs_wf(:)=zero
                    spin = 1
 !!! 2016.9.15 nakata3
-                   if (flag_contractSF) then
-                      call transform_SF_to_ATOMF(matBand_kp(wf_no,i), matBand_atomf, spin, Hrange)
+                   if (atomf.ne.sf) then
+                      call SF_to_ATOMF_transform(matBand_kp(wf_no,i), matBand_atomf, spin, Hrange)
                       call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
                    else
                       call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_kp(wf_no,i),maxngrid)
@@ -1082,8 +1081,8 @@ contains
              do spin = 1, nspin
                 abs_wf(:)=zero
 !!! 2016.9.15 nakata3
-                if (flag_contractSF) then
-                   call transform_SF_to_ATOMF(matBand(wf_no), matBand_atomf, spin, Hrange)
+                if (atomf.ne.sf) then
+                   call SF_to_ATOMF_transform(matBand(wf_no), matBand_atomf, spin, Hrange)
                    call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
                 else
                    call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand(wf_no),maxngrid)
@@ -1109,7 +1108,7 @@ contains
              call free_temp_matrix(matBand(i))
           end do
        end if
-       if (flag_contractSF) call free_temp_matrix(matBand_atomf)   ! nakata3
+       if (atomf.ne.sf) call free_temp_matrix(matBand_atomf)   ! nakata3
     end if
     if(wf_self_con.AND.flag_write_DOS) then
        ! output DOS

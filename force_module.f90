@@ -229,7 +229,7 @@ contains
     use functions_on_grid,      only: atomfns, H_on_atomfns
     use dimens,                 only: n_my_grid_points
     use matrix_data,            only: Hrange  ! nakata4
-    use mult_module,            only: matK, matKatomf, transform_SF_to_ATOMF ! nakata4
+    use mult_module,            only: matK, matKatomf, SF_to_ATOMF_transform ! nakata4
     use maxima_module,          only: maxngrid
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl
@@ -348,7 +348,7 @@ contains
     ! matK->matKatomf backtransformation for contracted SFs
     if (atomf.ne.sf) then
        do ispin = 1, nspin
-          call transform_SF_to_ATOMF(matK(ispin), matKatomf(ispin), ispin, Hrange)
+          call SF_to_ATOMF_transform(matK(ispin), matKatomf(ispin), ispin, Hrange)
        enddo
     endif
 
@@ -751,7 +751,7 @@ contains
                                            matKatomf,                &   ! nakata4
                                            return_matrix_block_pos,  &
                                            matrix_scale,             &
-                                           transform_SF_to_ATOMF         ! nakata4
+                                           SF_to_ATOMF_transform         ! nakata4
     use global_module,               only: iprint_MD, WhichPulay,    &
                                            BothPulay, PhiPulay,      &
                                            SPulay, flag_basis_set,   &
@@ -868,7 +868,7 @@ contains
     test = .false.
     if (test) then
        ! (1) get S matrix
-       call get_S_matrix(inode, ionode)
+       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
        ! (2) get K matrix
        if (.not. diagon) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
@@ -1169,7 +1169,7 @@ contains
        else
           do spin = 1, nspin
              matM12atomf(spin) = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
-             call transform_SF_to_ATOMF(matM12(spin), matM12atomf(spin), spin, Srange)
+             call SF_to_ATOMF_transform(matM12(spin), matM12atomf(spin), spin, Srange)
           enddo
        endif
 !!! nakata4 end

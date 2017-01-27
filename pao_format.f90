@@ -45,6 +45,8 @@
 !!    Changed type uni_table to type table_and_occ to store occupation numbers for individual zetas
 !!   14:02, 2003/12/19 dave & rc
 !!    Moved occupation numbers outside table type
+!!   2017/01/09 nakata
+!!    Added angmom%pol to distinguish whether PAOs are for polarization or not
 !!  SOURCE
 module pao_format
 
@@ -71,6 +73,7 @@ module pao_format
      integer :: n_zeta_in_angmom
      type(table), pointer, dimension(:) :: zeta
      real(double), pointer, dimension(:) :: occ
+     integer, pointer, dimension(:) :: pol   ! nakata8
   end type angmom_pao
 
   type species_pao

@@ -386,22 +386,23 @@ contains
     use datatypes
     use numbers
     use units
-    use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell,    &
-                              z_atom_cell, flag_vary_basis,           &
-                              atom_coord, ni_in_cell, rcellx, rcelly, &
-                              rcellz, flag_self_consistent,           &
-                              flag_reset_dens_on_atom_move,           &
-                              IPRINT_TIME_THRES1, flag_pcc_global
-    use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
-                              n_L_iterations
-    use GenComms,       only: my_barrier, myid, inode, ionode,        &
-                              cq_abort
-    use SelfCon,        only: new_SC_potl
-    use GenBlas,        only: dot
-    use force_module,   only: tot_force
-    use io_module,      only: write_atomic_positions, pdb_template
-    use density_module, only: density, flag_no_atomic_densities, set_density_pcc
-    use maxima_module,  only: maxngrid
+    use global_module,      only: iprint_MD, x_atom_cell, y_atom_cell,    &
+                                  z_atom_cell, flag_vary_basis,           &
+                                  atom_coord, ni_in_cell, rcellx, rcelly, &
+                                  rcellz, flag_self_consistent,           &
+                                  flag_reset_dens_on_atom_move,           &
+                                  IPRINT_TIME_THRES1, flag_pcc_global
+    use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
+                                  n_L_iterations
+    use GenComms,           only: my_barrier, myid, inode, ionode,        &
+                                  cq_abort
+    use SelfCon,            only: new_SC_potl
+    use GenBlas,            only: dot
+    use force_module,       only: tot_force
+    use io_module,          only: write_atomic_positions, pdb_template
+    use density_module,     only: density, flag_no_atomic_densities, set_density_pcc
+    use maxima_module,      only: maxngrid
+    use multisiteSF_module, only: flag_LFD_minimise
     use timer_module
 
     implicit none
@@ -539,7 +540,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis) then
+       if (flag_vary_basis .or. flag_LFD_minimise) then ! nakata8
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                            fixed_potential, vary_mu, n_L_iterations, &
                            L_tolerance, e3)
@@ -629,7 +630,7 @@ contains
                           "safemin - Final interpolation and updates", &
                           IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
-    if (flag_vary_basis) then
+    if (flag_vary_basis .or. flag_LFD_minimise) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
                         fixed_potential, vary_mu, n_L_iterations, &
                         L_tolerance, e3)
@@ -686,7 +687,7 @@ contains
                              IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if(flag_vary_basis) then
+       if(flag_vary_basis .or. flag_LFD_minimise) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                            fixed_potential, vary_mu, n_L_iterations, &
                            L_tolerance, e3)
@@ -771,6 +772,7 @@ contains
     use io_module2, ONLY: grab_InfoGlobal,dump_InfoGlobal,InfoL,grab_matrix2
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use DiagModule, ONLY: diagon
+    use multisiteSF_module, only: flag_LFD_minimise
 
     implicit none
 
@@ -969,7 +971,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis) then
+       if (flag_vary_basis .or. flag_LFD_minimise) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                            fixed_potential, vary_mu, n_L_iterations, &
                            L_tolerance, e3)
@@ -1110,7 +1112,7 @@ contains
                           IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before
     ! we can minimise blips !
-    if (flag_vary_basis) then
+    if (flag_vary_basis .or. flag_LFD_minimise) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
                         fixed_potential, vary_mu, n_L_iterations, &
                         L_tolerance, e3)
@@ -1208,7 +1210,7 @@ contains
                              IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if(flag_vary_basis) then
+       if(flag_vary_basis .or. flag_LFD_minimise) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                            fixed_potential, vary_mu, n_L_iterations, &
                            L_tolerance, e3)
@@ -1862,6 +1864,8 @@ contains
   !!    Renamed H_on_supportfns -> H_on_atomfns
   !!   2016/08/08 15:30 nakata
   !!    Renamed supportfns -> atomfns
+  !!   2017/01/18 10:00 nakata
+  !!    Added call to initail_SFcoeff_SSSF/MSSF
   !!  SOURCE
   !!
   subroutine update_H(fixed_potential)
@@ -1871,7 +1875,7 @@ contains
     use S_matrix_module,        only: get_S_matrix
     use H_matrix_module,        only: get_H_matrix
     use DiagModule,             only: diagon
-    use mult_module,            only: LNV_matrix_multiply
+    use mult_module,            only: LNV_matrix_multiply, matrix_scale, matSFcoeff
     use ion_electrostatic,      only: ewald, screened_ion_interaction
     use pseudopotential_data,   only: init_pseudo
     use pseudo_tm_module,       only: set_tm_pseudo
@@ -1883,7 +1887,10 @@ contains
                                       nspin, flag_MDold, io_lun,       &
                                       flag_mix_L_SC_min, flag_XLBOMD,  &
                                       flag_reset_dens_on_atom_move,    &
-                                      flag_neutral_atom, flag_LmatrixReuse
+                                      flag_LmatrixReuse,               &
+                                      flag_neutral_atom,               &
+                                      atomf, sf, nspin_SF, flag_LFD,   & ! nakata8
+                                      flag_SFcoeffReuse
     use density_module,         only: set_atomic_density,              &
                                       flag_no_atomic_densities,        &
                                       density, set_density_pcc,        &
@@ -1893,7 +1900,8 @@ contains
     use DFT_D2,                 only: dispersion_D2
     use functions_on_grid,      ONLY: atomfns, H_on_atomfns
     use XLBOMD_module,          ONLY: get_initialL_XL
-    
+    use multisiteSF_module,     ONLY: initial_SFcoeff, flag_LFD_MD_UseAtomicDensity
+
     implicit none
 
     ! Shared variables needed by get_H_matrix for now (!)
@@ -1902,27 +1910,12 @@ contains
     ! Local variables
     type(cq_timer) :: tmr_l_tmp1
     real(double), dimension(nspin) :: electrons, energy_tmp
+    integer :: spin_SF
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
-    ! (1) Get S matrix (includes blip-to-grid transform)
-    call get_S_matrix(inode, ionode)
-    if (flag_XLBOMD) call get_initialL_XL()
-    ! (2) get K matrix if O(N)
-    if (.not. diagon) then
-       call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1, &
-                                dontM2, dontM3, dontM4, dontphi,    &
-                                dontE)
-    end if
-    ! (3) Find the Ewald energy for the initial set of atoms
-    if(flag_neutral_atom) then
-       call screened_ion_interaction
-    else
-       call ewald
-    end if
-    ! (4) Find the dispersion for the initial set of atoms
-    if (flag_dft_d2) call dispersion_D2
-    ! (5) Pseudopotentials: choose correct form
-    select case (pseudo_type) 
+!!! nakata8
+    ! (0) Pseudopotentials: choose correct form
+    select case (pseudo_type)
     case (OLDPS)
        call init_pseudo(core_correction)
     case (SIESTA)
@@ -1930,32 +1923,92 @@ contains
     case (ABINIT)
        call set_tm_pseudo
     end select
+    ! (0) Prepare SF-PAO coefficients for contracted SFs
+    if (atomf.ne.sf) then
+       do spin_SF = 1, nspin_SF
+          call matrix_scale(zero,matSFcoeff(spin_SF))
+       enddo
+       if (flag_SFcoeffReuse) then
+       ! Use the coefficients in the previous step   
+!          call Matrix_CommRebuild??
+          call cq_abort("update_H: SFcoeff in the previous MD step cannot be reused at present!")
+       else
+       ! Make SF coefficients newly
+          ! Use the atomic density if flag_LFD_MD_UseAtomicDensity=T,
+          ! otherwise, use the density in the previous step
+          if (flag_LFD_MD_UseAtomicDensity) then
+             if (flag_neutral_atom) then
+                call set_atomic_density(.false.)
+             else
+                call set_atomic_density(.true.)
+             endif
+          endif
+          call initial_SFcoeff(.true., .true., fixed_potential)
+       endif
+    endif
+!!! nakata8 end
+    ! (1) Get S matrix (includes blip-to-grid transform)
+    if (flag_LFD .and. .not.flag_SFcoeffReuse) then
+       ! Spao was already made in sub:initial_SFcoeff
+       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+    else
+       call get_S_matrix(inode, ionode)
+    endif
+    ! (2) Make L
+    if (flag_XLBOMD) call get_initialL_XL()
+    ! (3) get K matrix if O(N)
+    if (.not. diagon) then
+       call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1, &
+                                dontM2, dontM3, dontM4, dontphi,    &
+                                dontE)
+    end if
+    ! (4) core correction?
+    ! (5) Find the Ewald energy for the initial set of atoms
+    if(flag_neutral_atom) then
+       call screened_ion_interaction
+    else
+       call ewald
+    end if
+    ! (6) Find the dispersion for the initial set of atoms
+    if (flag_dft_d2) call dispersion_D2
     ! Now we call set_density if (a) we have non-SCF and atomic densities or
     ! (b) the flag_reset_dens_on_atom_move is set
     if(((.NOT. flag_self_consistent)     .AND. &
         (.NOT. flag_no_atomic_densities) .AND. &
         (.NOT. flag_mix_L_SC_min)).OR.flag_reset_dens_on_atom_move) then
-       call set_atomic_density(.true.)
+        if (.not.flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.true.) ! if flag_LFD_MD_UseAtomicDensity=T, atomic density was already set
     ! For SCF-O(N) calculations
     elseif (.NOT.diagon .AND. .NOT.flag_MDold) then
        if (flag_self_consistent .OR. flag_mix_L_SC_min) then
-          if(flag_neutral_atom) call set_atomic_density(.false.)
+          if(flag_neutral_atom .and. .not.flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.false.)
           if(flag_LmatrixReuse) then
              if (inode.EQ.ionode.AND.iprint_MD>2) write (io_lun,*) "update_H: Get charge density from L-matrix"
              call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
                   inode,ionode,maxngrid)
+             ! if flag_LFD=T, update SF-PAO coefficients with the obtained density
+             ! and update S with the coefficients
+             if (flag_LFD) then
+                call initial_SFcoeff(.false., .true., fixed_potential)
+                call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+             endif
           end if
        endif
     else if(diagon.AND.flag_neutral_atom) then
-       call set_atomic_density(.false.)
+       if (.not.flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.false.)
     else if ((.not. flag_self_consistent) .and. &
              (flag_no_atomic_densities)) then
        call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
     end if
     if (flag_pcc_global) call set_density_pcc()
-    ! (6) Now generate a new H matrix, including a new charge density
-    call get_H_matrix(.true., fixed_potential, electrons, density, &
-                      maxngrid)
+    ! (7) Now generate a new H matrix, including a new charge density
+    if (flag_LFD .and. .not.flag_SFcoeffReuse) then
+       ! Hpao was already made in sub:initial_SFcoeff
+       call get_H_matrix(.false., fixed_potential, electrons, density, &
+                         maxngrid, build_ATOMF_matrix=.false.)
+    else
+       call get_H_matrix(.true., fixed_potential, electrons, density, &
+                         maxngrid)
+    endif
     call stop_print_timer(tmr_l_tmp1, "update_H", IPRINT_TIME_THRES2)
     return
   end subroutine update_H
