@@ -2028,7 +2028,9 @@ contains
 !!   A.Nakata
 !!  CREATION DATE
 !!   2017/01/17
-!!
+!!  MODIFICATION DATE
+!!   2017/01/31 15:56 dave
+!!    Small bug fix: changed dimension of rhototal to maxngrid
   subroutine LFD_minimise(fixed_potential, vary_mu, n_cg_L_iterations, L_tolerance, &
                           sc_tolerance, expected_reduction, total_energy, rho)
 
@@ -2209,9 +2211,10 @@ contains
           call dump_matrix("SFcoeff_dn", matSFcoeff(2), inode)
        end if
        if(nspin==1) then
-          allocate(rho_total(n_my_grid_points), STAT=stat)
-          if (stat /= 0) call cq_abort("Error allocating rho_total: ", n_my_grid_points)
+          allocate(rho_total(maxngrid), STAT=stat)
+          if (stat /= 0) call cq_abort("Error allocating rho_total: ", maxngrid)
           call reg_alloc_mem(area_ops, n_my_grid_points, type_dbl)
+          rho_total = zero
           rho_total(:) = spin_factor * rho(:,1)
           call dump_charge(rho_total, n_my_grid_points, inode, spin=0)
           deallocate(rho_total, STAT=stat)
