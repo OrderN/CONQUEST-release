@@ -165,7 +165,7 @@ contains
   !!   Renamed supportfns -> atomfns
   !!  2016/09/16 21:30 nakata
   !!   Introduced matKEatomf, matNLatomf, matXatomf, matHatomf
-  !!   Added matHatomf -> matH transformation (ATOMF_to_SF_transform)
+  !!   Added matHatomf -> matH transformation (AtomF_to_SF_transform)
   !!  2016/12/19 18:30 nakata
   !!   Removed unused fn_on_grid, length, paolength
   !!   Removed dHrange, matdH, paof and sf, which are no longer needed.
@@ -185,7 +185,7 @@ contains
                                            matS, matX,                  &
                                            matNLatomf, matKEatomf,      &
                                            matHatomf, matXatomf,        &
-                                           ATOMF_to_SF_transform
+                                           AtomF_to_SF_transform
     use pseudopotential_common,      only: non_local, pseudopotential
     use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
@@ -389,11 +389,11 @@ contains
     endif
 
     if (flag_do_SFtransform) then
-       call ATOMF_to_SF_transform(matKE, matKEatomf, 1, Hrange)   ! only to output kinetic energy
-       call ATOMF_to_SF_transform(matNL, matNLatomf, 1, Hrange)   ! only to output non-local PP energy
+       call AtomF_to_SF_transform(matKE, matKEatomf, 1, Hrange)   ! only to output kinetic energy
+       call AtomF_to_SF_transform(matNL, matNLatomf, 1, Hrange)   ! only to output non-local PP energy
        do spin = 1, nspin
-          if (flag_exx) call ATOMF_to_SF_transform(matX(spin), matXatomf(spin), spin, Hrange)   ! only to output EXX energy
-          call ATOMF_to_SF_transform(matH(spin), matHatomf(spin), spin, Hrange)   ! total electronic Hamiltonian
+          if (flag_exx) call AtomF_to_SF_transform(matX(spin), matXatomf(spin), spin, Hrange)   ! only to output EXX energy
+          call AtomF_to_SF_transform(matH(spin), matHatomf(spin), spin, Hrange)   ! total electronic Hamiltonian
        enddo
     endif
 !!! nakata3

@@ -691,7 +691,7 @@ contains
     use datatypes
     use numbers
     use GenBlas,                     only: scal, rsum
-    use mult_module,                 only: matK, matKatomf, SF_to_ATOMF_transform   ! nakata3
+    use mult_module,                 only: matK, matKatomf, SF_to_AtomF_transform   ! nakata3
     use matrix_data,                 only: Hrange   ! nakata3
     use dimens,                      only: n_my_grid_points, grid_point_volume
     use block_module,                only: n_pts_in_block
@@ -733,7 +733,7 @@ contains
 
     do spin = 1, nspin
        ! matK->matKatomf backtransformation for contracted SFs
-       if (atomf.ne.sf) call SF_to_ATOMF_transform(matK(spin), matKatomf(spin), spin, Hrange)
+       if (atomf.ne.sf) call SF_to_AtomF_transform(matK(spin), matKatomf(spin), spin, Hrange)
 
        gridfunctions(atom_fns_K)%griddata = zero
        call act_on_vectors_new(inode-1, rem_bucket(atomf_H_atomf_rem), &

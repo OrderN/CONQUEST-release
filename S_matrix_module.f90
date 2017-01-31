@@ -118,7 +118,7 @@ contains
 !!    Renamed supportfns -> atomfns
 !!   2016/09/28 15:30 nakata
 !!    Introduce get_S_matrix_blips and get_S_matrix_PAO
-!!    Introduce PAO->SF transformation for contracted SFs (ATOMF_to_SF_transform)
+!!    Introduce PAO->SF transformation for contracted SFs (AtomF_to_SF_transform)
 !!   2017/01/17 19:00 nakata
 !!    Added optional passed variable rebuild_Spao
 !!  TODO
@@ -135,7 +135,7 @@ contains
                                            flag_perform_cdft,          &
                                            IPRINT_TIME_THRES1
     use matrix_data,                 only: Srange
-    use mult_module,                 only: matS, matSatomf, ATOMF_to_SF_transform
+    use mult_module,                 only: matS, matSatomf, AtomF_to_SF_transform
     use io_module,                   only: dump_matrix
     use timer_module,                only: cq_timer, start_timer,      &
                                            stop_print_timer,           &
@@ -180,7 +180,7 @@ contains
        flag_do_SFtransform = .false.
     endif
 
-    if (flag_do_SFtransform) call ATOMF_to_SF_transform(matS, matSatomf, 1, Srange)
+    if (flag_do_SFtransform) call AtomF_to_SF_transform(matS, matSatomf, 1, Srange)
 
     call dump_matrix("NS1",matS,inode)
 

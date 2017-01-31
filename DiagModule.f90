@@ -451,7 +451,7 @@ contains
          nkpoints_max, pgid, N_procs_in_pg,     &
          N_kpoints_in_pg
     use mult_module,     only: matH, matS, matK, matM12, &
-                               SF_to_ATOMF_transform,    &   ! nakata3
+                               SF_to_AtomF_transform,    &   ! nakata3
          matrix_scale, matrix_product_trace, allocate_temp_matrix, free_temp_matrix
     use matrix_data,     only: Hrange, Srange, aHa_range   ! nakata3
     use primary_module,  only: bundle
@@ -1043,7 +1043,7 @@ contains
                       abs_wf(:)=zero
 !!! 2016.9.15 nakata3 
                       if (atomf.ne.sf) then
-                         call SF_to_ATOMF_transform(matBand_kp(wf_no,i), matBand_atomf, spin, Hrange)
+                         call SF_to_AtomF_transform(matBand_kp(wf_no,i), matBand_atomf, spin, Hrange)
                          call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
                       else                     
                          call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_kp(wf_no,i),maxngrid)
@@ -1061,7 +1061,7 @@ contains
                    spin = 1
 !!! 2016.9.15 nakata3
                    if (atomf.ne.sf) then
-                      call SF_to_ATOMF_transform(matBand_kp(wf_no,i), matBand_atomf, spin, Hrange)
+                      call SF_to_AtomF_transform(matBand_kp(wf_no,i), matBand_atomf, spin, Hrange)
                       call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
                    else
                       call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_kp(wf_no,i),maxngrid)
@@ -1082,7 +1082,7 @@ contains
                 abs_wf(:)=zero
 !!! 2016.9.15 nakata3
                 if (atomf.ne.sf) then
-                   call SF_to_ATOMF_transform(matBand(wf_no), matBand_atomf, spin, Hrange)
+                   call SF_to_AtomF_transform(matBand(wf_no), matBand_atomf, spin, Hrange)
                    call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
                 else
                    call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand(wf_no),maxngrid)

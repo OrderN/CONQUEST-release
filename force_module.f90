@@ -229,7 +229,7 @@ contains
     use functions_on_grid,      only: atomfns, H_on_atomfns
     use dimens,                 only: n_my_grid_points
     use matrix_data,            only: Hrange  ! nakata4
-    use mult_module,            only: matK, matKatomf, SF_to_ATOMF_transform ! nakata4
+    use mult_module,            only: matK, matKatomf, SF_to_AtomF_transform ! nakata4
     use maxima_module,          only: maxngrid
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl
@@ -348,7 +348,7 @@ contains
     ! matK->matKatomf backtransformation for contracted SFs
     if (atomf.ne.sf) then
        do ispin = 1, nspin
-          call SF_to_ATOMF_transform(matK(ispin), matKatomf(ispin), ispin, Hrange)
+          call SF_to_AtomF_transform(matK(ispin), matKatomf(ispin), ispin, Hrange)
        enddo
     endif
 
@@ -751,7 +751,7 @@ contains
                                            matKatomf,                &   ! nakata4
                                            return_matrix_block_pos,  &
                                            matrix_scale,             &
-                                           SF_to_ATOMF_transform         ! nakata4
+                                           SF_to_AtomF_transform         ! nakata4
     use global_module,               only: iprint_MD, WhichPulay,    &
                                            BothPulay, PhiPulay,      &
                                            SPulay, flag_basis_set,   &
@@ -1169,7 +1169,7 @@ contains
        else
           do spin = 1, nspin
              matM12atomf(spin) = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
-             call SF_to_ATOMF_transform(matM12(spin), matM12atomf(spin), spin, Srange)
+             call SF_to_AtomF_transform(matM12(spin), matM12atomf(spin), spin, Srange)
           enddo
        endif
 !!! nakata4 end
