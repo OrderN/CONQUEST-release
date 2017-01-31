@@ -125,7 +125,7 @@ contains
 !!    
 !!  SOURCE
 !!
-  subroutine get_S_matrix(inode, ionode, build_ATOMF_matrix, transform_ATOMF_to_SF)
+  subroutine get_S_matrix(inode, ionode, build_AtomF_matrix, transform_AtomF_to_SF)
 
     use datatypes
     use numbers
@@ -146,8 +146,8 @@ contains
 
     ! Passed variables
     integer :: inode, ionode
-    logical, optional :: build_ATOMF_matrix
-    logical, optional :: transform_ATOMF_to_SF
+    logical, optional :: build_AtomF_matrix
+    logical, optional :: transform_AtomF_to_SF
     
     ! Local variables
     logical :: flag_build_Satomf, flag_do_SFtransform
@@ -164,7 +164,7 @@ contains
 
     ! get S in atomic-function basis
     flag_build_Satomf = .true.
-    if (present(build_ATOMF_matrix)) flag_build_Satomf = build_ATOMF_matrix
+    if (present(build_AtomF_matrix)) flag_build_Satomf = build_AtomF_matrix
 
     if (flag_basis_set == blips)                        call get_S_matrix_blips(inode, ionode)
     if (flag_basis_set == PAOs .and. flag_build_Satomf) call get_S_matrix_PAO(inode, ionode)
@@ -175,7 +175,7 @@ contains
     !     so no transformation is needed.
     if (atomf.ne.sf) then 
        flag_do_SFtransform = .true.
-       if (present(transform_ATOMF_to_SF)) flag_do_SFtransform = transform_ATOMF_to_SF
+       if (present(transform_AtomF_to_SF)) flag_do_SFtransform = transform_AtomF_to_SF
     else
        flag_do_SFtransform = .false.
     endif

@@ -142,10 +142,10 @@ contains
        ! 1. Calculate PAO values on grids
        if (LFD_build_Spao) call single_PAO_to_grid(atomfns)
        ! 2. Construct matSpao
-       if (LFD_build_Spao) call get_S_matrix(inode, ionode, transform_ATOMF_to_SF=.false.)
+       if (LFD_build_Spao) call get_S_matrix(inode, ionode, transform_AtomF_to_SF=.false.)
        ! 3. Construct matHpao
        if (LFD_build_Hpao) call get_H_matrix(.true., fixed_potential, electrons, &
-                                             density, maxngrid, transform_ATOMF_to_SF=.false.)
+                                             density, maxngrid, transform_AtomF_to_SF=.false.)
        call my_barrier()
        t1 = mtime()
        if (inode == ionode) write (io_lun,*) 'LFD: Time for S and H in primitive PAO: ', t1-t0    
@@ -2116,7 +2116,7 @@ contains
        ! Find new self-consistent energy
        if (inode==ionode .and. iprint_basis.ge.5) write(io_lun,*) 'In sub:LFD_minimise, perform SC calculation.'
        ! 1. Get new S_sf matrix 
-       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+       call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
        if (.not. diagon) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
@@ -2181,7 +2181,7 @@ contains
                 'SF coefficients and density are returned to those at previous iteration # ', iter-1, &
                 'Total energy = ',total_energy
           ! Reconstruct S, H and K with previous density 
-          call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+          call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
           call get_H_matrix(.false., fixed_potential, electrons, &
                             rho, maxngrid)
           call FindMinDM(n_cg_L_iterations, vary_mu, L_tolerance, inode, &

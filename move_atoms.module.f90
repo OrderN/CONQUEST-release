@@ -1950,7 +1950,7 @@ contains
     ! (1) Get S matrix (includes blip-to-grid transform)
     if (flag_LFD .and. .not.flag_SFcoeffReuse) then
        ! Spao was already made in sub:initial_SFcoeff
-       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+       call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
     else
        call get_S_matrix(inode, ionode)
     endif
@@ -1989,7 +1989,7 @@ contains
              ! and update S with the coefficients
              if (flag_LFD) then
                 call initial_SFcoeff(.false., .true., fixed_potential)
-                call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+                call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
              endif
           end if
        endif
@@ -2004,7 +2004,7 @@ contains
     if (flag_LFD .and. .not.flag_SFcoeffReuse) then
        ! Hpao was already made in sub:initial_SFcoeff
        call get_H_matrix(.false., fixed_potential, electrons, density, &
-                         maxngrid, build_ATOMF_matrix=.false.)
+                         maxngrid, build_AtomF_matrix=.false.)
     else
        call get_H_matrix(.true., fixed_potential, electrons, density, &
                          maxngrid)

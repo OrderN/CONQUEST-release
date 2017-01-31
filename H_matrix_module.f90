@@ -170,11 +170,11 @@ contains
   !!   Removed unused fn_on_grid, length, paolength
   !!   Removed dHrange, matdH, paof and sf, which are no longer needed.
   !!  2017/01/26 20:00 nakata
-  !!   Added optional passed variables build_ATOMF_matrix and transform_ATOMF_to_SF
+  !!   Added optional passed variables build_AtomF_matrix and transform_AtomF_to_SF
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-                          rho, size, level, build_ATOMF_matrix, transform_ATOMF_to_SF)
+                          rho, size, level, build_AtomF_matrix, transform_AtomF_to_SF)
 
     use datatypes
     use numbers 
@@ -233,8 +233,8 @@ contains
     logical :: rebuild_KE_NL, fixed_potential
     real(double), dimension(:)   :: electrons
     real(double), dimension(:,:) :: rho
-    logical, optional :: build_ATOMF_matrix
-    logical, optional :: transform_ATOMF_to_SF
+    logical, optional :: build_AtomF_matrix
+    logical, optional :: transform_AtomF_to_SF
 
     ! local variables
     real(double), dimension(:), allocatable :: rho_total
@@ -265,7 +265,7 @@ contains
          write (io_lun, fmt='(10x,"Entering get_H_matrix")')
 
     flag_build_Hatomf = .true.
-    if (flag_basis_set == PAOs .and. present(build_ATOMF_matrix)) flag_build_Hatomf = build_ATOMF_matrix
+    if (flag_basis_set == PAOs .and. present(build_AtomF_matrix)) flag_build_Hatomf = build_AtomF_matrix
 
     if (flag_build_Hatomf) then
        ! zero the H matrix (in Conquest format)
@@ -383,7 +383,7 @@ contains
     !     so no transformation is needed.
     if (atomf.ne.sf) then
        flag_do_SFtransform = .true.
-       if (present(transform_ATOMF_to_SF)) flag_do_SFtransform = transform_ATOMF_to_SF
+       if (present(transform_AtomF_to_SF)) flag_do_SFtransform = transform_AtomF_to_SF
     else
        flag_do_SFtransform = .false.
     endif

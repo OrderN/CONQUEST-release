@@ -868,7 +868,7 @@ contains
     test = .false.
     if (test) then
        ! (1) get S matrix
-       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+       call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! (2) get K matrix
        if (.not. diagon) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&

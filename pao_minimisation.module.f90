@@ -312,7 +312,7 @@ contains
                                endif
                                call my_barrier()
                                ! Recalculate energy and gradient
-                               call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+                               call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
                                call get_H_matrix(.false., fixed_potential, &
                                                  electrons, density, maxngrid)
 !nakata6                               call get_H_matrix(.true., fixed_potential, &
@@ -341,7 +341,7 @@ contains
                                   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
                                endif
                                call my_barrier()
-                               call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+                               call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
                                call get_H_matrix(.false., fixed_potential, &
                                                  electrons, density, maxngrid)
 !nakata6                               call get_H_matrix(.true., fixed_potential, &
@@ -358,7 +358,7 @@ contains
                                endif
                                call my_barrier()
                                ! Recalculate energy and gradient
-                               call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+                               call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
                                call FindMinDM(n_cg_L_iterations, vary_mu, &
                                               L_tolerance, inode, ionode, &
                                               .false., .false.)
@@ -383,7 +383,7 @@ contains
                                   call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
                                endif
                                call my_barrier()
-                               call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+                               call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
                                call my_barrier()
                             end if ! TestS .or. TestBoth
                             ! ** Test H ** !
@@ -563,7 +563,7 @@ contains
        ! prepare for next iteration
        ! Find new self-consistent energy 
        ! 1. Generate S
-       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+       call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! 3. Generate H
        call get_H_matrix(.false., fixed_potential, electrons, density, &
                          maxngrid)
@@ -833,7 +833,7 @@ contains
        flag_vary_basis = .true.
        ! Find new self-consistent energy 
        ! 1. Generate S
-       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+       call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
        if (.not. diagon) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
@@ -898,7 +898,7 @@ contains
        ! re-evaluate the gradient and energy at new position
        ! Find new self-consistent energy 
        ! 1. Generate S
-       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+       call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
        if (.not. diagon) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
@@ -1157,7 +1157,7 @@ contains
 
        ! Find new self-consistent energy 
        ! 1. Get new S matrix
-       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+       call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
        if (.not. diagon) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
@@ -1222,7 +1222,7 @@ contains
 
     ! Find new self-consistent energy 
     ! 1. Get new S matrix
-    call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+    call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
     ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
     if (.not. diagon) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1, &
@@ -1251,7 +1251,7 @@ contains
 
        ! Find new self-consistent energy 
        ! 1. Get new S matrix
-       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+       call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
        if (.not. diagon) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&

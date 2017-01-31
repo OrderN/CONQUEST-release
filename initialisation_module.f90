@@ -1135,7 +1135,7 @@ contains
 !!! nakata8
     if (flag_LFD .and. .not.read_option) then
        ! Spao was already made in sub:initial_SFcoeff
-       call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+       call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
     else
        call get_S_matrix(inode, ionode)
     endif
@@ -1257,7 +1257,7 @@ contains
        ! and update S with the coefficients
        if (flag_LFD) then
           call initial_SFcoeff(.false., .true., fixed_potential)
-          call get_S_matrix(inode, ionode, build_ATOMF_matrix=.false.)
+          call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        endif
     else if (restart_rho .and. .not.flag_LFD) then
        ! when flag_LFD=T, density was already grabbed in (0).
@@ -1294,7 +1294,7 @@ contains
              ! Hpao was already made in sub:initial_SFcoeff
              rebuild_KE_NL = .false. 
              call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-                               density, maxngrid, level=backtrace_level, build_ATOMF_matrix=.false.)
+                               density, maxngrid, level=backtrace_level, build_AtomF_matrix=.false.)
           else
              rebuild_KE_NL = .true. 
              call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -1326,7 +1326,7 @@ contains
           ! Hpao was already made in sub:initial_SFcoeff
           rebuild_KE_NL = .false.
           call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-                            density, maxngrid, level=backtrace_level, build_ATOMF_matrix=.false.)
+                            density, maxngrid, level=backtrace_level, build_AtomF_matrix=.false.)
        else
           rebuild_KE_NL = .true.
           call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
