@@ -46,7 +46,7 @@
 !!   14:02, 2003/12/19 dave & rc
 !!    Moved occupation numbers outside table type
 !!   2017/01/09 nakata
-!!    Added angmom%pol to distinguish whether PAOs are for polarization or not
+!!    Added angmom%prncpl to store the information of principal qunatum number
 !!  SOURCE
 module pao_format
 
@@ -73,7 +73,7 @@ module pao_format
      integer :: n_zeta_in_angmom
      type(table), pointer, dimension(:) :: zeta
      real(double), pointer, dimension(:) :: occ
-     integer, pointer, dimension(:) :: pol   ! nakata8
+     integer, pointer, dimension(:) :: prncpl ! nakata8
   end type angmom_pao
 
   type species_pao

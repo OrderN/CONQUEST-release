@@ -70,7 +70,7 @@ module multisiteSF_module
   logical :: flag_LFD_useChemPsub                                ! use ChemP of subspaces (default=T)
   logical :: flag_LFD_ReadTVEC                                   ! read trial vectors from input file (default=F)
   real(double), allocatable, dimension(:,:,:) :: LFD_TVEC_read   ! (species, nsf, npao)
-  integer,allocatable, dimension(:) :: LFD_TVEC_zeta             ! (species), which valence-zeta PAO is used as trial vector
+!  integer,allocatable, dimension(:) :: LFD_TVEC_zeta             ! (species), which valence-zeta PAO is used as trial vector ! nakata, delete this line later
 
   ! LFD SFcoeff minimisation
   logical :: flag_LFD_minimise                                   ! minimise energy (optimise SF coefficients) by updating Hpao with SCF density
@@ -776,12 +776,14 @@ contains
     abstol = 1.0e-300_double
 
     ! open debug file for TVEC and subspace MOs
-    call get_file_name('TVECr',numprocs,inode,filename11)  ! Build a filename based on node number for TVEC
-    call io_assign(lun11)                                  ! Open file 
-    open(unit=lun11,file=filename11)
-    call get_file_name('SubMOr',numprocs,inode,filename12) ! Build a filename based on node number for MOs
-    call io_assign(lun12)                                  ! Open file
-    open(unit=lun12,file=filename12)
+    if (iprint_basis>=6) then
+       call get_file_name('TVECr',numprocs,inode,filename11)  ! Build a filename based on node number for TVEC
+       call io_assign(lun11)                                  ! Open file 
+       open(unit=lun11,file=filename11)
+       call get_file_name('SubMOr',numprocs,inode,filename12) ! Build a filename based on node number for MOs
+       call io_assign(lun12)                                  ! Open file
+       open(unit=lun12,file=filename12)
+    endif
 
     ! estimate the maximum size of subspace matrices for halo-atoms (Ssub and Hsub)
     max_npao     = maxval(npao_species)                         ! max. number of PAOs belonging to a halo atom
@@ -906,13 +908,13 @@ contains
                 l_k_r2(:)    = zero
                 l_kpao(:)    = 0
 !
-!            --- make trial vectors for atom_i ---
+!               --- make trial vectors for atom_i ---
 !
-             NEsub = zero
-             call LFD_make_TVEC(TVEC,NTVEC,len_Sub_i,np,i,atom_i,atom_num,atom_spec,LFDhalo, NEsub, &
-                                len_Sub_i_d,n_naba_i_d,l_k_g,l_k_r2,l_kpao)  
-             if (iprint_basis>=6) call LFD_debug_matrix(lun11,0,np,atom_i,EVAL,TVEC,len_Sub_i,NTVEC, &
-                                                        n_naba_i_d,l_k_g,l_k_r2,l_kpao)           
+                NEsub = zero
+                call LFD_make_TVEC(TVEC,NTVEC,len_Sub_i,np,i,atom_i,atom_num,atom_spec,LFDhalo, NEsub, &
+                                   len_Sub_i_d,n_naba_i_d,l_k_g,l_k_r2,l_kpao)  
+                if (iprint_basis>=6) call LFD_debug_matrix(lun11,0,np,atom_i,EVAL,TVEC,len_Sub_i,NTVEC, &
+                                                           n_naba_i_d,l_k_g,l_k_r2,l_kpao)           
 !
 !               --- (2) make subspaces for atom_i
 !
@@ -954,14 +956,12 @@ contains
 !
 !               (4-2) multiply filtration function f(e): t~ = f(e) * t~, on exit, TVEC contains t~.
                 if (flag_LFD_useChemPsub) then
-                   if (inode==ionode) write(io_lun,'(A,F10.5)') 'Number of Electrons in this subspace =',NEsub
-                   NEsub0 = NEsub / two
+                   NEsub0 = NEsub / two                          ! NEsub is the number of electrons in the subspace
                    NEsub  = dint(NEsub0) 
                    if (NEsub0.gt.NEsub) NEsub = NEsub + one
-                   INEsub = idint(NEsub)
-                   ChemP = (EVAL(INEsub)+EVAL(INEsub+1)) / two   ! ChemP is set to the average of HOMO and LUMO of subspace.
-                   if (inode==ionode) write(io_lun,'(I4,A)') INEsub,' orbitals are occupied.'
-                   if (inode==ionode) write(io_lun,'(A,F10.5)') 'ChemP of this subspace =',ChemP
+                   INEsub = idint(NEsub)                         ! number of occupied orbitals
+                   ChemP = (EVAL(INEsub)+EVAL(INEsub+1)) / two   ! ChemP is set to the average of subspace HOMO and LUMO
+                   if (iprint_basis>=6) write(io_lun,'(A,i8,A,F10.5)') ' Atom',atom_i,': ChemP of this subspace =',ChemP
                 endif
                 call LFD_filter(TVEC,EVAL,ChemP,kT1,NUMEIG,NTVEC)
 !
@@ -1023,8 +1023,10 @@ contains
     call stop_timer(tmr_std_allocation)
 
     ! Close debug file
-    call io_close(lun11)
-    call io_close(lun12)
+    if (iprint_basis>=6) then
+       call io_close(lun11)
+       call io_close(lun12)
+    endif
 
     if(myid==0) then
        t1 = mtime()
@@ -1678,11 +1680,12 @@ contains
     ! Local variables
     integer :: npao_i, &
                k, ist, gcspart, k_in_halo, npao_k, &
-               neigh_global_part, atom_k, neigh_species, &
+               neigh_global_part, atom_k, neigh_species, prncpl, &
                kpao, kpao0, ITVEC, count, l1, nacz1, m1, k1, kk
-    real(double) :: dx,dy,dz,r2
+    integer, dimension(7) :: tvec_n
+    real(double) :: dx,dy,dz,r2,cutoff
+    real(double), dimension(7) :: occ_n, max_cutoff_n
     real(double), parameter :: R2_ERR = 1.0e-4_double
-    logical :: find_onsite 
 
     if (iprint_basis>=5.and.inode==ionode) write(io_lun,*) 'We are in sub:LFD_make_TVEC'
 
@@ -1691,14 +1694,13 @@ contains
     ! --- make trial vectors
     kpao0 = 0
     kk    = 0
-    find_onsite = .false.
     ! Loop over atom_k, neighbour of atom_i
     do k = 1,mat(np,LD_range)%n_nab(i)
        ist = mat(np,LD_range)%i_acc(i) + k - 1                         ! index of atom_k in neighbour labelling
        gcspart = BCS_parts%icover_ibeg(mat(np,LD_range)%i_part(ist)) &
                + mat(np,LD_range)%i_seq(ist) -1                        ! index of atom_k in CS
        k_in_halo = LFDhalo%i_halo(gcspart)                             ! index of atom_k in halo labelling
-       npao_k = LFDhalo%ndimj(k_in_halo)                               !  npao of atom_k
+       npao_k = LFDhalo%ndimj(k_in_halo)                               ! npao of atom_k
        
        ! Displacement vector
        dx = BCS_parts%xcover(gcspart)-bundle%xprim(atom_num)
@@ -1715,28 +1717,44 @@ contains
        ! find on-site
        if (r2.le.R2_ERR) then
           if (atom_i.ne.atom_k) call cq_abort("in sub: make_TVEC_LFD, error in finding onsite atom", atom_i)
-          find_onsite = .true.
           if (.not.flag_LFD_ReadTVEC) then
-          ! --- make trial vectors
+          ! --- make trial vectors by choosing the largest PAO for each L and N
              kpao = 0
              ITVEC = 0
-             do l1 = 0, pao(atom_spec)%greatest_angmom
+             do l1 = 0, pao(atom_spec)%greatest_angmom ! Loop L
+                ! check occupancy for each N to distinguish (semicore,valence) or (polarization)
+                occ_n(:) = zero
                 do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
-                   if (nacz1 .eq. LFD_TVEC_zeta(atom_spec)) then
-                      if (pao(atom_spec)%angmom(l1)%pol(nacz1).eq.0) then ! valence PAOs 
-                         do m1 = -l1,l1
-                            ITVEC = ITVEC + 1
-                            kpao = kpao + 1
-                            TVEC(kpao0+kpao,ITVEC) = one
-                         enddo ! m1
-                      else
-                         kpao = kpao + 2*l1 + 1
-                      endif
+                   prncpl = pao(atom_spec)%angmom(l1)%prncpl(nacz1)
+                   occ_n(prncpl) = occ_n(prncpl) + pao(atom_spec)%angmom(l1)%occ(nacz1)
+                enddo
+                ! find Z of the largest PAO for each L and N
+                max_cutoff_n(:) = zero
+                tvec_n(:) = 0
+                do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
+                   prncpl = pao(atom_spec)%angmom(l1)%prncpl(nacz1)
+                   if (occ_n(prncpl).gt.zero) then ! Semicore or Valence PAOs
+                      cutoff = pao(atom_spec)%angmom(l1)%zeta(nacz1)%cutoff
+                      if (cutoff.gt.max_cutoff_n(prncpl)) then
+                         max_cutoff_n(prncpl) = cutoff
+                         tvec_n(prncpl) = nacz1 ! Z of the largest PAO for this L and this N
+                      endif                         
+                   endif
+                enddo
+                ! make TVEC
+                do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
+                   prncpl = pao(atom_spec)%angmom(l1)%prncpl(nacz1)
+                   if (nacz1.eq.tvec_n(prncpl)) then
+                      do m1 = -l1,l1
+                         ITVEC = ITVEC + 1
+                         kpao = kpao + 1
+                         TVEC(kpao0+kpao,ITVEC) = one
+                      enddo ! m1
                    else
                       kpao = kpao + 2*l1 + 1
                    endif
-                enddo ! nacz1
-             enddo !l1
+                enddo
+             enddo ! l1
              if (kpao.ne.npao_k) call cq_abort("in sub: make_TVEC_LFD, error in making TVEC 1", kpao, npao_k)
              if (ITVEC.ne.NTVEC) call cq_abort("in sub: make_TVEC_LFD, error in making TVEC 2", ITVEC, NTVEC)
           else

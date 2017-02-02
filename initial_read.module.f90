@@ -695,7 +695,8 @@ contains
                          exx_debug, exx_Kij, exx_Kkl, p_scheme
     use multisiteSF_module, only: flag_MSSF_smear, MSSF_Smear_Type,                      &
                                   MSSF_Smear_center, MSSF_Smear_shift, MSSF_Smear_width, &
-                                  flag_LFD_ReadTVEC, LFD_TVEC_read, LFD_TVEC_zeta,       &
+                                  flag_LFD_ReadTVEC, LFD_TVEC_read,                      &
+!                                  LFD_TVEC_zeta,                                        & ! nakata, delete this line later
                                   LFD_kT, LFD_ChemP, flag_LFD_useChemPsub,               &
                                   flag_LFD_minimise, LFD_ThreshE, LFD_ThreshD,           &
                                   LFD_Thresh_EnergyRise, LFD_max_iteration,              &
@@ -962,6 +963,14 @@ contains
        n_species = fdf_integer('General.NumberOfSpecies',1)
        call allocate_species_vars
        flag_angular_new = fdf_boolean('Basis.FlagNewAngular',.true.)
+!!! 2016.9.16 nakata3
+       ! Multisite support functions
+       flag_Multisite = fdf_boolean('Basis.MultisiteSF', .false.)
+       if (flag_Multisite .and. flag_basis_set==blips) &
+          call cq_abort("Multi-site support functions are available only with PAOs.")
+!       if (flag_Multisite) flag_LFD = fdf_boolean('Multisite.LFD', .true.)
+!       if (flag_LFD) allocate(LFD_TVEC_zeta(n_species))
+!!! nakata3 end
 !!$
 !!$
 !!$
@@ -1065,70 +1074,6 @@ contains
 !!$
 !!$
 !!$
-!!$        
-!!! 2016.9.16 nakata3
-       ! Multisite support functions
-       flag_Multisite = fdf_boolean('Basis.MultisiteSF', .false.)
-       if (flag_Multisite) then
-          if(flag_basis_set==blips) call cq_abort("Multi-site support functions are only for PAOs.")
-          flag_LFD = fdf_boolean('Multisite.LFD', .true.)
-          flag_MSSF_smear = fdf_boolean('Multisite.Smear', .false.)
-          if (flag_MSSF_smear) then
-             MSSF_Smear_type   = fdf_integer('Multisite.Smear.FunctionType', 1)
-             MSSF_Smear_center = fdf_double('Multisite.Smear.Center', BIG) ! in default, no change on MSSF
-             MSSF_Smear_shift  = fdf_double('Multisite.Smear.Shift', zero)
-             MSSF_Smear_width  = fdf_double('Multisite.Smear.Width', 0.1_double)
-          endif
-       else
-          flag_MSSF_smear   = .false.
-          flag_LFD          = .false.
-          flag_LFD_minimise = .false.
-       endif
-
-       if (flag_LFD) then
-          LFD_ChemP = fdf_double('Multisite.LFD.ChemP',zero)
-          LFD_kT    = fdf_double('Multisite.LFD.kT',   0.1_double)
-          flag_LFD_useChemPsub = fdf_boolean('Multisite.LFD.UseChemPsub', .true.)
-          flag_LFD_ReadTVEC    = fdf_boolean('Multisite.LFD.ReadTVEC',    .false.)
-          if (flag_LFD_ReadTVEC) then
-             allocate(LFD_TVEC_read(n_species,25,100))
-             if (fdf_block('LFDTrialVector')) then
-                if(inode==ionode) write(io_lun,*) 'Reading TVEC for LFD'
-                line_LFD = 0
-                do i=1,n_species
-                   if (nsf_species(i).gt.25) call cq_abort("nsf_species must be less or equal to 25 for Multi-site SFs")
-                   do j = 1,nsf_species(i)
-                      line_LFD = line_LFD + 1
-                      ! i_LFD = species, j_LFD = sf, n_LFD = npao
-                      read (unit=input_array(block_start+line_LFD-1),fmt=*) &
-                            i_LFD,j_LFD,n_LFD,(LFD_TVEC_read(i,j,k_LFD),k_LFD=1,n_LFD)
-                      if (i_LFD.ne.i)   call cq_abort("Error reading LFD TrialVector")
-                      if (j_LFD.ne.j)   call cq_abort("Error reading LFD TrialVector")
-                      if (n_LFD.gt.100) call cq_abort("n_PAO per atom must be less than 100 for Multi-site SFs")
-                   enddo
-                enddo
-                call fdf_endblock
-             else
-                call cq_abort("No LFDTrialVector label in the input file.")
-             endif
-          endif ! flag_LFD_ReadTVEC
-          allocate(LFD_TVEC_zeta(n_species))
-          flag_LFD_minimise = fdf_boolean('Multisite.LFD.Minimise',.true.)
-          if (flag_LFD_minimise) then
-             LFD_threshE = fdf_double('Multisite.LFD.Min.ThreshE',1.0e-6_double)
-             LFD_threshD = fdf_double('Multisite.LFD.Min.ThreshD',1.0e-6_double)
-             LFD_Thresh_EnergyRise = fdf_double('Multisite.LFD.Min.ThreshEnergyRise',LFD_threshE*ten)
-             LFD_max_iteration = fdf_integer('Multisite.LFD.Min.MaxIteration',50)
-          endif
-          flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
-       else 
-          flag_LFD_MD_UseAtomicDensity = .false.
-       endif
-!!! nakata3 end
-!!$
-!!$
-!!$
-!!$
 !!$
        ! Read charge, mass, pseudopotential and starting charge and
        ! blip models for the individual species
@@ -1159,7 +1104,7 @@ contains
              RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
              RadiusLD(i)      = fdf_double ('Atom.LFDRange',zero)
              if (flag_Multisite) RadiusSupport(i) = RadiusAtomf(i) + RadiusMS(i)
-             if (flag_LFD)       LFD_TVEC_zeta(i) = fdf_integer ('Atom.LFDTvecZeta',1)
+!             if (flag_LFD)       LFD_TVEC_zeta(i) = fdf_integer ('Atom.LFDTvecZeta',0)
 !!! nakata3 end
              ! DRB 2016/08/05 Keep track of maximum support radius
              if(RadiusSupport(i)>max_rc) max_rc = RadiusSupport(i)
@@ -1214,6 +1159,67 @@ contains
              endif
           enddo
        endif
+!!$        
+!!$        
+!!$        
+!!$        
+!!$        
+!!! 2016.9.16 nakata3
+       ! For multisite support functions
+       if (flag_Multisite) then
+          flag_LFD = fdf_boolean('Multisite.LFD', .true.)
+          flag_MSSF_smear = fdf_boolean('Multisite.Smear', .false.)
+          if (flag_MSSF_smear) then
+             MSSF_Smear_type   = fdf_integer('Multisite.Smear.FunctionType', 1)
+             MSSF_Smear_center = fdf_double('Multisite.Smear.Center', BIG) ! in default, no change on MSSF
+             MSSF_Smear_shift  = fdf_double('Multisite.Smear.Shift', zero)
+             MSSF_Smear_width  = fdf_double('Multisite.Smear.Width', 0.1_double)
+          endif
+       else
+          flag_LFD          = .false.
+          flag_LFD_minimise = .false.
+          flag_MSSF_smear   = .false.
+       endif
+       ! For LFD
+       if (flag_LFD) then
+          LFD_ChemP = fdf_double('Multisite.LFD.ChemP',zero)
+          LFD_kT    = fdf_double('Multisite.LFD.kT',   0.1_double)
+          flag_LFD_useChemPsub = fdf_boolean('Multisite.LFD.UseChemPsub', .true.)
+          flag_LFD_ReadTVEC    = fdf_boolean('Multisite.LFD.ReadTVEC',    .false.)
+          if (flag_LFD_ReadTVEC) then
+             allocate(LFD_TVEC_read(n_species,25,100))
+             if (fdf_block('LFDTrialVector')) then
+                if(inode==ionode) write(io_lun,'(10x,A)') 'Reading TVEC for LFD'
+                line_LFD = 0
+                do i=1,n_species
+                   if (nsf_species(i).gt.25) call cq_abort("nsf_species must be less or equal to 25 for Multi-site SFs")
+                   do j = 1,nsf_species(i)
+                      line_LFD = line_LFD + 1
+                      ! i_LFD = species, j_LFD = sf, n_LFD = npao
+                      read (unit=input_array(block_start+line_LFD-1),fmt=*) &
+                            i_LFD,j_LFD,n_LFD,(LFD_TVEC_read(i,j,k_LFD),k_LFD=1,n_LFD)
+                      if (i_LFD.ne.i)   call cq_abort("Error reading LFD TrialVector")
+                      if (j_LFD.ne.j)   call cq_abort("Error reading LFD TrialVector")
+                      if (n_LFD.gt.100) call cq_abort("n_PAO per atom must be less than 100 for Multi-site SFs")
+                   enddo
+                enddo
+                call fdf_endblock
+             else
+                call cq_abort("No LFDTrialVector label in the input file.")
+             endif
+          endif ! flag_LFD_ReadTVEC
+          flag_LFD_minimise = fdf_boolean('Multisite.LFD.Minimise',.true.)
+          if (flag_LFD_minimise) then
+             LFD_threshE = fdf_double('Multisite.LFD.Min.ThreshE',1.0e-6_double)
+             LFD_threshD = fdf_double('Multisite.LFD.Min.ThreshD',1.0e-6_double)
+             LFD_Thresh_EnergyRise = fdf_double('Multisite.LFD.Min.ThreshEnergyRise',LFD_threshE*ten)
+             LFD_max_iteration = fdf_integer('Multisite.LFD.Min.MaxIteration',50)
+          endif
+          flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
+       else 
+          flag_LFD_MD_UseAtomicDensity = .false.
+       endif
+!!! nakata3 end
 !!$
 !!$
 !!$
