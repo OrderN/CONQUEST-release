@@ -334,7 +334,6 @@ contains
                    enddo
                 endif
              enddo
-             if (inode==ionode) write(io_lun,*) 'count_SZ=',count_SZ,'  count_SZP=',count_SZP
              ! If number of support functions is less than total number of ang. mom. components (ignoring
              ! for now multiple zetas) then there is a formal problem with basis set: we require the user
              ! to set an additional flag to assert that this is really desired
