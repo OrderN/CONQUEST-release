@@ -573,7 +573,7 @@ contains
 
     integer :: iproc, lmax, maxz, alls, nzeta, l, count,tzl
     real(double), allocatable :: thispop(:)
-    integer, allocatable :: thisl(:), thisn(:), thisz(:), zl(:), indexlz(:,:) ! nakata8
+    integer, allocatable :: thisl(:), thisn(:), thisz(:), zl(:), indexlz(:,:)
 
     if(inode==ionode) then
        filename=ps_info%filename
@@ -584,7 +584,7 @@ contains
        call read_header_tmp(n_orbnl,lmax,n_pjnl, zval, z, lun)
        call alloc_pseudo_info(ps_info, n_pjnl)
        call start_timer(tmr_std_allocation)
-       allocate(dummy_rada(n_orbnl),thisl(n_orbnl),thisn(n_orbnl),thisz(n_orbnl),thispop(n_orbnl),zl(0:lmax)) ! nakata8
+       allocate(dummy_rada(n_orbnl),thisl(n_orbnl),thisn(n_orbnl),thisz(n_orbnl),thispop(n_orbnl),zl(0:lmax))
        call stop_timer(tmr_std_allocation)
 
        ps_info%z = z
@@ -597,7 +597,7 @@ contains
        do i=1,n_orbnl
           read(lun,*) i1,i2,i3,i4, dummy
           thisl(i)=i1
-          thisn(i)=i2 ! nakata8
+          thisn(i)=i2
           !thisz(i)=i3
           thispop(i)=dummy
           zl(thisl(i)) = zl(thisl(i))+1
@@ -626,10 +626,7 @@ contains
           if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"l, zl: ",2i5)') l,zl(l)
           if(zl(l)>0) then
              call start_timer(tmr_std_allocation)
-!!! 2016.1.9 nakata8
-!             allocate(pao_info%angmom(l)%zeta(zl(l)),pao_info%angmom(l)%occ(zl(l)),STAT=alls)
              allocate(pao_info%angmom(l)%zeta(zl(l)),pao_info%angmom(l)%prncpl(zl(l)),pao_info%angmom(l)%occ(zl(l)),STAT=alls)
-!!!
              if(alls/=0) call cq_abort('Failed to allocate PAOs zeta')
              call stop_timer(tmr_std_allocation)
              count = count + zl(l)*(2*l+1)
@@ -638,7 +635,7 @@ contains
                 if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"i,z,l: ",3i5)') i,nzeta,l
                 pao_info%angmom(l)%zeta(nzeta)%length = dummy_rada(i)%n
                 pao_info%angmom(l)%zeta(nzeta)%cutoff = dummy_rada(i)%cutoff
-                pao_info%angmom(l)%prncpl(nzeta) = thisn(i)   ! nakata8
+                pao_info%angmom(l)%prncpl(nzeta) = thisn(i)
                 pao_info%angmom(l)%occ(nzeta) = thispop(i)
                 if(pao_info%angmom(l)%zeta(nzeta)%length>=1) then
                    call start_timer(tmr_std_allocation)
@@ -670,7 +667,7 @@ contains
        do i=1,n_orbnl
           call rad_dealloc(dummy_rada(i))
        end do
-       deallocate(dummy_rada,thisl,thisn,thisz,thispop,zl) ! nakata8
+       deallocate(dummy_rada,thisl,thisn,thisz,thispop,zl)
 
        ! KBs
        if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading KB projectors ")')
@@ -755,7 +752,7 @@ contains
           if(tzl>0) then
              if(inode/=ionode) then
                 call start_timer(tmr_std_allocation)
-                allocate(pao_info%angmom(l)%zeta(tzl),pao_info%angmom(l)%prncpl(tzl),pao_info%angmom(l)%occ(tzl),STAT=alls) ! nakata8
+                allocate(pao_info%angmom(l)%zeta(tzl),pao_info%angmom(l)%prncpl(tzl),pao_info%angmom(l)%occ(tzl),STAT=alls)
                 if(alls/=0) call cq_abort('Failed to allocate PAOs zeta')
                 call stop_timer(tmr_std_allocation)
              end if
@@ -763,7 +760,7 @@ contains
              do nzeta = 1,tzl
                 call gcopy(pao_info%angmom(l)%zeta(nzeta)%length)
                 call gcopy(pao_info%angmom(l)%zeta(nzeta)%cutoff)
-                call gcopy(pao_info%angmom(l)%prncpl(nzeta)) ! nakata8
+                call gcopy(pao_info%angmom(l)%prncpl(nzeta))
                 call gcopy(pao_info%angmom(l)%occ(nzeta))
                 if(inode/=ionode) then
                    if(pao_info%angmom(l)%zeta(nzeta)%length>=1) then

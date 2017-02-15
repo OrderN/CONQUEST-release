@@ -68,7 +68,7 @@ module matrix_data
   save
 
   ! This will need to change if the above parameters are changed
-  integer, parameter :: mx_matrices = 33   ! nakata3
+  integer, parameter :: mx_matrices = 33
 
   ! Store ALL indices in a large array
   type(matrix),      allocatable, dimension(:,:), target :: mat
@@ -100,15 +100,14 @@ module matrix_data
   integer, parameter :: LTrrange = 14
   integer, parameter :: SLrange  = 15
   integer, parameter :: TTrrange = 16
-  integer, parameter :: dSrange  = 17   ! STS,TST,TS.TS
-  integer, parameter :: dHrange  = 18   ! K,LSLSL
+  integer, parameter :: dSrange  = 17  ! STS,TST,TS.TS
+  integer, parameter :: dHrange  = 18  ! K,LSLSL
   integer, parameter :: PAOPrange= 19  ! PA,U   ! Maybe rename ?
   integer, parameter :: HLrange  = 20
 
   integer, parameter :: Xrange   = 21
   integer, parameter :: SXrange  = 22
 
-!!! nakata3
   ! The indices for ATOMF-based-matrix ranges will be set later.
   integer :: aSa_range       ! 23 for S(atomf,atomf) = r_atomf + r_atomf
   integer :: aHa_range       ! 24 for H(atomf,atomf) = r_atomf + r_atomf
@@ -121,7 +120,6 @@ module matrix_data
   integer :: SFcoeff_range   ! 31
   integer :: SFcoeffTr_range ! 32
   integer :: LD_range        ! 33
-!!! end nakata3
 
   integer :: max_range ! Indexes matrix with largest range
 

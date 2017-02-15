@@ -136,14 +136,14 @@ contains
 
     use datatypes
     use global_module, ONLY: iprint_index, sf, nlpf, paof, atomf, numprocs, &
-                             flag_basis_set, PAOs, blips ! nakata2
+                             flag_basis_set, PAOs, blips
     use bucket_module
 !    use maxima_module, ONLY: mx_send_node_BtoG, mx_recv_node_BtoG, &
 !         mx_Spair_remnode,  mx_Spair_domain,  &
 !         mx_APpair_remnode, mx_APpair_domain
     use set_blipgrid_module,ONLY: comm_naba_blocks_of_atoms
     use comm_array_module,  ONLY: isend_array,irecv_array!,check_commarray_int!,check_commarray_real
-    use matrix_data, ONLY: halo, rcut, aSa_range, APrange, aHa_range, dHrange ! nakata3
+    use matrix_data, ONLY: halo, rcut, aSa_range, APrange, aHa_range, dHrange
     use GenComms, ONLY: my_barrier, cq_abort
     use mpi, ONLY: MPI_STATUS_SIZE
 
@@ -163,11 +163,11 @@ contains
     integer :: buff_npair(numprocs), buff_npair_orb(numprocs)
 
     call start_timer(tmr_std_indexing)
-    !cutoff radius for matrix
-!!! nakata2
+
+    !cutoff radii for matrices
     rcut_S = rcut(aSa_range)
     rcut_SP= rcut(APrange)
-!!! nakata2
+
     !atomf = sf (for blips and one_to_one PAOs) or paof (for contracted PAOs)
     !For type 1 of local_bucket   : Sij=<atomf_i|atomf_j>, and H^(local)_ij
     !For type 2 of local_bucket   : Pij=<atomf_i|chi_j>,|chi_j> proj. func.

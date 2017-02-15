@@ -954,6 +954,8 @@ contains
 
 !!   2016/07/29 18:30 nakata
 !!    Renamed supports_on_atom -> blips_on_atom
+!!   2016/12/29 18:30 nakata
+!!    Removed no longer used blips_on_atom and flag_one_to_one
   subroutine get_iprimdat(ia,hl,ind,iprim,part,verbose,unit)
     
     use units,          only: BohrToAng
@@ -961,7 +963,6 @@ contains
     use primary_module, only: bundle
     use species_module, only: species_label,nsf_species
     use atomic_density, only: atomic_density_table
-!    use support_spec_format, only: blips_on_atom, flag_one_to_one ! nakata3, delete later
     !
     use matrix_data, only: mat, Hrange, Srange
     use exx_types, only: prim_atomic_data, neigh_atomic_data

@@ -89,6 +89,8 @@ contains
 !!    Removed unused species_module, gcopy, my_barrier, matrix_module
 !!   2016/12/19 18:30 nakata
 !!    Removed matAD which is no longer needed.
+!!   2017/02/06 17:15 nakata
+!!    Removed flag_paos_atoms_in_cell and flag_one_to_one which are no longer used here.
 !!  SOURCE
 !!
   subroutine assemble_2(range,matA,flag)
@@ -100,7 +102,6 @@ contains
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
-!    use support_spec_format, ONLY: flag_paos_atoms_in_cell, flag_one_to_one ! nakata3, delete this line later
     use mult_module, ONLY: matrix_scale
     use matrix_data, ONLY: mat, halo
     use timer_module
@@ -125,49 +126,46 @@ contains
     if(iprint_basis>=5.AND.myid==0) write(io_lun,fmt='(6x,i5," Zeroing S")') myid
     call matrix_scale(zero,matA)
     if(iprint_basis>=5.AND.myid==0) write(io_lun,fmt='(6x,i5," Done Zeroing")') 
+
     iprim = 0
-!    if(flag_paos_atoms_in_cell.OR.flag==3.OR.flag_one_to_one) then ! nakata3, delete this line later
-       call start_timer(tmr_std_matrices)
-       do part = 1,bundle%groups_on_node ! Loop over primary set partitions
-          if(iprint_basis>=6.AND.myid==0) write(io_lun,fmt='(6x,"Processor, partition: ",2i7)') myid,part
-          if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
-             do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
-                atom_num = bundle%nm_nodbeg(part)+memb-1
-                iprim=iprim+1
-!                ip=bundle%ig_prim(iprim)    ! nakata3, delete this line later
-                ! Atomic species
-                atom_spec = bundle%species(atom_num)
-                if(iprint_basis>=6.AND.myid==0) write(io_lun,'(6x,"Processor, atom, spec: ",3i7)') myid,memb,atom_spec
-                do neigh = 1, mat(part,range)%n_nab(memb) ! Loop over neighbours of atom
-                   ist = mat(part,range)%i_acc(memb)+neigh-1
-                   ! Build the distances between atoms - needed for phases 
-                   gcspart = BCS_parts%icover_ibeg(mat(part,range)%i_part(ist))+mat(part,range)%i_seq(ist)-1
-                   ! Displacement vector
-                   dx = BCS_parts%xcover(gcspart)-bundle%xprim(atom_num)
-                   dy = BCS_parts%ycover(gcspart)-bundle%yprim(atom_num)
-                   dz = BCS_parts%zcover(gcspart)-bundle%zprim(atom_num)
-                   if(iprint_basis>=6.AND.myid==0) write(80+myid,*) 'dx,y,z: ',gcspart,dx,dy,dz
-                   ! We need to know the species of neighbour
-                   neigh_global_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist)) 
-                   neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,range)%i_seq(ist)-1)
-                   neigh_species = species_glob(neigh_global_num)
-                   if(iprint_basis>=6.AND.myid==0) write(io_lun,'(6x,"Processor, neighbour, spec: ",3i7)') myid,neigh,neigh_species
-                   ! Now loop over support functions and PAOs and call routine
-                   if(flag<3) then
-                      call loop_12(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,flag, &
-                                   atom_spec,neigh_species,0,0)
-                   else
-                      call loop_3(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz, &
-                                  atom_spec,neigh_species,0,0)
-                   endif
-                end do ! End do neigh=1,mat%n_nab
-             end do ! End do memb =1,nm_nodgroup
-          end if ! End if nm_nodgroup > 0
-       end do ! End do part=1,groups_on_node
-       call stop_timer(tmr_std_matrices)
-!    else                                                                              ! nakata3, delete this line later
-!       call cq_abort("Storage of PAOs on primary-set processors not implemented yet") ! nakata3, delete this line later
-!    end if                                                                            ! nakata3, delete this line later
+    call start_timer(tmr_std_matrices)
+    do part = 1,bundle%groups_on_node ! Loop over primary set partitions
+       if(iprint_basis>=6.AND.myid==0) write(io_lun,fmt='(6x,"Processor, partition: ",2i7)') myid,part
+       if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
+          do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
+             atom_num = bundle%nm_nodbeg(part)+memb-1
+             iprim=iprim+1
+             ! Atomic species
+             atom_spec = bundle%species(atom_num)
+             if(iprint_basis>=6.AND.myid==0) write(io_lun,'(6x,"Processor, atom, spec: ",3i7)') myid,memb,atom_spec
+             do neigh = 1, mat(part,range)%n_nab(memb) ! Loop over neighbours of atom
+                ist = mat(part,range)%i_acc(memb)+neigh-1
+                ! Build the distances between atoms - needed for phases 
+                gcspart = BCS_parts%icover_ibeg(mat(part,range)%i_part(ist))+mat(part,range)%i_seq(ist)-1
+                ! Displacement vector
+                dx = BCS_parts%xcover(gcspart)-bundle%xprim(atom_num)
+                dy = BCS_parts%ycover(gcspart)-bundle%yprim(atom_num)
+                dz = BCS_parts%zcover(gcspart)-bundle%zprim(atom_num)
+                if(iprint_basis>=6.AND.myid==0) write(80+myid,*) 'dx,y,z: ',gcspart,dx,dy,dz
+                ! We need to know the species of neighbour
+                neigh_global_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist)) 
+                neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,range)%i_seq(ist)-1)
+                neigh_species = species_glob(neigh_global_num)
+                if(iprint_basis>=6.AND.myid==0) write(io_lun,'(6x,"Processor, neighbour, spec: ",3i7)') myid,neigh,neigh_species
+                ! Now loop over support functions and PAOs and call routine
+                if(flag<3) then
+                   call loop_12(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,flag, &
+                                atom_spec,neigh_species,0,0)
+                else
+                   call loop_3(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz, &
+                               atom_spec,neigh_species,0,0)
+                endif
+             end do ! End do neigh=1,mat%n_nab
+          end do ! End do memb =1,nm_nodgroup
+       end if ! End if nm_nodgroup > 0
+    end do ! End do part=1,groups_on_node
+    call stop_timer(tmr_std_matrices)
+
     call stop_print_timer(tmr_l_tmp1,"S matrix assembly",IPRINT_TIME_THRES2)
     call stop_timer(tmr_std_basis)
   end subroutine assemble_2
@@ -206,13 +204,13 @@ contains
     mat_val = 0.0_double
     count1 = 1
     ! Loop over PAOs on i
-    do l1 = 0, pao(atom_spec)%greatest_angmom   ! nakata3
-       do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom   ! nakata3
+    do l1 = 0, pao(atom_spec)%greatest_angmom
+       do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
           do m1 = -l1,l1
              count2 = 1
              ! Loop over PAOs on j
-             do l2 = 0, pao(neigh_species)%greatest_angmom   ! nakata3
-                do nacz2 = 1, pao(neigh_species)%angmom(l2)%n_zeta_in_angmom   ! nakata3
+             do l2 = 0, pao(neigh_species)%greatest_angmom
+                do nacz2 = 1, pao(neigh_species)%angmom(l2)%n_zeta_in_angmom
                    do m2 = -l2,l2
                       if(deriv_flag.eq.0) then
                          call calc_mat_elem_gen(flag,atom_spec,l1,nacz1,m1,neigh_species, &
@@ -269,8 +267,8 @@ contains
     mat_val = 0.0_double
 
     count1 = 1
-    do l1 = 0, pao(atom_spec)%greatest_angmom   ! nakata3
-       do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom   ! nakata3
+    do l1 = 0, pao(atom_spec)%greatest_angmom
+       do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
           do m1 = -l1,l1
              ! Fix DRB 2007/03/22
              part_index_j = 0
@@ -338,6 +336,8 @@ contains
 !!   2016/09/23 21:30 nakata
 !!    Removed ip and neigh_global_num passed to subroutines loop_12 and loop_3
 !!    Removed unused species_module, gcopy, matrix_module
+!!   2017/02/06 17:15 nakata
+!!    Removed flag_paos_atoms_in_cell and flag_one_to_one which are no longer used here.
 !!  SOURCE
 !!
   subroutine assemble_deriv_2(direction,range,matA,flag)
@@ -353,7 +353,6 @@ contains
     !use angular_coeff_routines, ONLY: numerical_ol_gradient
     use matrix_data, ONLY: mat, halo
     use mult_module, ONLY: matrix_scale, store_matrix_value_pos, matrix_pos
-!    use support_spec_format, ONLY: flag_paos_atoms_in_cell, flag_one_to_one ! nakata3, delete this line later
     
     implicit none
 
@@ -373,57 +372,48 @@ contains
     call start_timer(tmr_std_matrices)
     call start_timer(tmr_std_basis)
     call matrix_scale(zero,matA)
+
     iprim = 0
-!    if(flag_paos_atoms_in_cell.OR.flag==3.OR.flag_one_to_one) then ! nakata3, delete this line later
-       do part = 1,bundle%groups_on_node ! Loop over primary set partitions
-          if(iprint_basis>=6.AND.myid==0) write(io_lun,fmt='(6x,"Processor, partition: ",2i7)') myid,part
-          if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
-             do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
-                atom_num = bundle%nm_nodbeg(part)+memb-1
-                !RC setting up so i have the global number of the bra atom  
-                iprim=iprim+1
-!                ip=bundle%ig_prim(iprim)   ! nakata3, delete this line later
-                ! Atomic species
-                atom_spec = bundle%species(atom_num)
-                if(iprint_basis>=6.AND.myid==0) write(io_lun,'(6x,"Processor, atom, spec: ",3i7)') myid,memb,atom_spec
-                do neigh = 1, mat(part,range)%n_nab(memb) ! Loop over neighbours of atom
-                   ist = mat(part,range)%i_acc(memb)+neigh-1
-                   ! Build the distances between atoms - needed for phases 
-                   gcspart = BCS_parts%icover_ibeg(mat(part,range)%i_part(ist))+mat(part,range)%i_seq(ist)-1
-                   ! Displacement vector
-                   dx = BCS_parts%xcover(gcspart)-bundle%xprim(atom_num)
-                   dy = BCS_parts%ycover(gcspart)-bundle%yprim(atom_num)
-                   dz = BCS_parts%zcover(gcspart)-bundle%zprim(atom_num)
-                   if(iprint_basis>=6.AND.myid==0) write(80+myid,*) 'dx,y,z: ',gcspart,dx,dy,dz
-                   ! We need to know the species of neighbour
-                   neigh_global_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist)) 
-                   neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,range)%i_seq(ist)-1)
-                   neigh_species = species_glob(neigh_global_num)
-!!! 2016.9.23 nakata3, delete from here
-!                   if(flag_one_to_one) then
-!                      ip = atom_spec
-!                      neigh_global_num = neigh_species
-!                   end if
-!!! nakata3 delete up to here
-                   ! Where to put the result - this will become matrix_pos
-                   wheremat = matrix_pos(matA,iprim,halo(range)%i_halo(gcspart))
-                   ! Now loop over support functions and PAOs and call routine
-                   if(wheremat/=mat(part,range)%onsite(memb)) then
-                      if(flag<3) then
-                         call loop_12(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,flag, &
-                                      atom_spec,neigh_species,1,direction)
-                      else
-                         call loop_3(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz, &
-                                     atom_spec,neigh_species,1,direction)
-                      endif
-                   end if
-                end do ! End do neigh=1,mat%n_nab
-             end do ! End do memb =1,nm_nodgroup
-          end if ! End if nm_nodgroup > 0
-       end do ! End do part=1,groups_on_node
-!    else                                                                              ! nakata3, delete this line later
-!       call cq_abort("Storage of PAOs on primary-set processors not implemented yet") ! nakata3, delete this line later
-!    end if                                                                            ! nakata3, delete this line later
+    do part = 1,bundle%groups_on_node ! Loop over primary set partitions
+       if(iprint_basis>=6.AND.myid==0) write(io_lun,fmt='(6x,"Processor, partition: ",2i7)') myid,part
+       if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
+          do memb = 1,bundle%nm_nodgroup(part) ! Loop over atoms
+             atom_num = bundle%nm_nodbeg(part)+memb-1
+             !RC setting up so i have the global number of the bra atom  
+             iprim=iprim+1
+             ! Atomic species
+             atom_spec = bundle%species(atom_num)
+             if(iprint_basis>=6.AND.myid==0) write(io_lun,'(6x,"Processor, atom, spec: ",3i7)') myid,memb,atom_spec
+             do neigh = 1, mat(part,range)%n_nab(memb) ! Loop over neighbours of atom
+                ist = mat(part,range)%i_acc(memb)+neigh-1
+                ! Build the distances between atoms - needed for phases 
+                gcspart = BCS_parts%icover_ibeg(mat(part,range)%i_part(ist))+mat(part,range)%i_seq(ist)-1
+                ! Displacement vector
+                dx = BCS_parts%xcover(gcspart)-bundle%xprim(atom_num)
+                dy = BCS_parts%ycover(gcspart)-bundle%yprim(atom_num)
+                dz = BCS_parts%zcover(gcspart)-bundle%zprim(atom_num)
+                if(iprint_basis>=6.AND.myid==0) write(80+myid,*) 'dx,y,z: ',gcspart,dx,dy,dz
+                ! We need to know the species of neighbour
+                neigh_global_part = BCS_parts%lab_cell(mat(part,range)%i_part(ist)) 
+                neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+mat(part,range)%i_seq(ist)-1)
+                neigh_species = species_glob(neigh_global_num)
+                ! Where to put the result - this will become matrix_pos
+                wheremat = matrix_pos(matA,iprim,halo(range)%i_halo(gcspart))
+                ! Now loop over support functions and PAOs and call routine
+                if(wheremat/=mat(part,range)%onsite(memb)) then
+                   if(flag<3) then
+                      call loop_12(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,flag, &
+                                   atom_spec,neigh_species,1,direction)
+                   else
+                      call loop_3(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz, &
+                                  atom_spec,neigh_species,1,direction)
+                   endif
+                end if
+             end do ! End do neigh=1,mat%n_nab
+          end do ! End do memb =1,nm_nodgroup
+       end if ! End if nm_nodgroup > 0
+    end do ! End do part=1,groups_on_node
+
     call stop_timer(tmr_std_basis)
     call stop_timer(tmr_std_matrices)
   end subroutine assemble_deriv_2

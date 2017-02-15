@@ -73,7 +73,7 @@ module pao_format
      integer :: n_zeta_in_angmom
      type(table), pointer, dimension(:) :: zeta
      real(double), pointer, dimension(:) :: occ
-     integer, pointer, dimension(:) :: prncpl ! nakata8
+     integer, pointer, dimension(:) :: prncpl
   end type angmom_pao
 
   type species_pao

@@ -66,7 +66,7 @@ module support_spec_format
 
   ! For the PAOs, we can store coefficients for ALL atoms in cell (technically not order-N, but convenient for
   ! relatively small systems - i.e. up to 10,000 atoms) or for the primary set only.  This flag selects the
-  ! former if tru and the latter if false (default, set in get_support_pao_rep in ol_rad_table_subs.f90) is
+  ! former if true and the latter if false (default, set in get_support_pao_rep in ol_rad_table_subs.f90) is
   ! false
   logical :: flag_paos_atoms_in_cell ! Do we store coefficients for ALL atoms in cell, or only in primary set
   integer :: mx_pao_coeff_atoms ! max atoms coefficients stored for

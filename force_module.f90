@@ -218,7 +218,7 @@ contains
                                       flag_move_atom, id_glob,         &
                                       WhichPulay, BothPulay, PhiPulay, &
                                       SPulay, flag_basis_set, PAOs,    &
-                                      atomf, sf,                       & ! nakata4
+                                      atomf, sf,                       &
                                       blips, ni_in_cell, iprint_MD,    &
                                       IPRINT_TIME_THRES2,              &
                                       area_moveatoms, flag_pcc_global, &
@@ -228,8 +228,8 @@ contains
                                       build_Becke_weight_forces
     use functions_on_grid,      only: atomfns, H_on_atomfns
     use dimens,                 only: n_my_grid_points
-    use matrix_data,            only: Hrange  ! nakata4
-    use mult_module,            only: matK, matKatomf, SF_to_AtomF_transform ! nakata4
+    use matrix_data,            only: Hrange
+    use mult_module,            only: matK, matKatomf, SF_to_AtomF_transform
     use maxima_module,          only: maxngrid
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl
@@ -748,14 +748,14 @@ contains
                                            return_matrix_value,      &
                                            matrix_pos, ltrans,       &
                                            scale_matrix_value,       &
-                                           matKatomf,                &   ! nakata4
+                                           matKatomf,                &
                                            return_matrix_block_pos,  &
                                            matrix_scale,             &
-                                           SF_to_AtomF_transform         ! nakata4
+                                           SF_to_AtomF_transform
     use global_module,               only: iprint_MD, WhichPulay,    &
                                            BothPulay, PhiPulay,      &
                                            SPulay, flag_basis_set,   &
-                                           blips, PAOs, sf, atomf,   &   ! nakata4
+                                           blips, PAOs, sf, atomf,   &
                                            flag_onsite_blip_ana,     &
                                            nspin, spin_factor,       &
                                            flag_analytic_blip_int, id_glob, species_glob
@@ -769,14 +769,14 @@ contains
                                            inode, ionode
     use DiagModule,                  only: diagon
 !    use blip_gradient,               only: get_support_gradient
-    use PAO_grid_transform_module,   only: single_PAO_to_grad ! nakata4
+    use PAO_grid_transform_module,   only: single_PAO_to_grad
     use build_PAO_matrices,          only: assemble_deriv_2
     use cover_module,                only: BCS_parts
     use functions_on_grid,           only: atomfns,                  &
                                            H_on_atomfns,             &
                                            allocate_temp_fn_on_grid, &
                                            free_temp_fn_on_grid, gridfunctions
-    use species_module,              only: nsf_species, natomf_species   ! nakata4
+    use species_module,              only: nsf_species, natomf_species
     ! Temp
     use dimens,                      only: grid_point_volume,        &
                                            n_my_grid_points
@@ -839,7 +839,7 @@ contains
     !    --  02/Feb/2001  Tsuyoshi Miyazaki
 
     integer        :: iprim, np, ni, isf, mat_tmp, mat_tmp2
-    integer, dimension(nspin) :: matM12atomf ! nakata4
+    integer, dimension(nspin) :: matM12atomf
     real(double)   :: matM12_value, matK_value
     type(cq_timer) :: tmr_std_loc
     type(cq_timer) :: backtrace_timer
@@ -1064,7 +1064,7 @@ contains
     ! ---------------------------------------
     ! Calculate local phi Pulay forces (<grad \phi_i|K_ij|H\phi_j>)
     if (WhichPulay == BothPulay .or. WhichPulay == PhiPulay) then
-       mat_tmp = allocate_temp_matrix(aSa_range, 0, atomf, atomf)  ! nakata4
+       mat_tmp = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
        tmp_fn = allocate_temp_fn_on_grid(atomf)
        gridfunctions(tmp_fn)%griddata = zero
        ! Act on H\phi_j with K and store result in H_on_atomfns(1) to save memory
@@ -1089,7 +1089,7 @@ contains
        ! Allocate more temporary variables
        tmp_fn2 = allocate_temp_fn_on_grid(atomf)
        gridfunctions(tmp_fn2)%griddata = zero
-       mat_tmp2 = allocate_temp_matrix(aSa_range, 0, atomf, atomf) ! nakata4
+       mat_tmp2 = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
        !temp_local = allocate_temp_fn_on_grid(atomf) ! Edited SYM 2014/09/01 17:55 
        ! now for each direction in turn
        do direction = 1, 3
@@ -1097,7 +1097,7 @@ contains
           if (flag_basis_set == blips) then
              call blip_to_grad_new(inode-1, direction, tmp_fn)
           else if (flag_basis_set == PAOs) then
-             call single_PAO_to_grad(direction, tmp_fn) ! nakata4
+             call single_PAO_to_grad(direction, tmp_fn)
           else
              call cq_abort("pulay_force: basis set undefined ", flag_basis_set)
           end if
@@ -1161,7 +1161,6 @@ contains
     if (WhichPulay == BothPulay .or. WhichPulay == SPulay) then
        mat_tmp = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
        tmp_fn = allocate_temp_fn_on_grid(atomf)
-!!! nakata4
        if (atomf==sf) then
           do spin = 1, nspin
              matM12atomf(spin) = matM12(spin)
@@ -1172,7 +1171,6 @@ contains
              call SF_to_AtomF_transform(matM12(spin), matM12atomf(spin), spin, Srange)
           enddo
        endif
-!!! nakata4 end
        do direction = 1, 3
           ! Call assemble to generate dS_ij/dR_kl
           if (flag_basis_set == blips) then
@@ -1740,7 +1738,7 @@ contains
                                            STATE, ABINIT
     use pseudo_tm_module,            only: nonloc_pp_derivative_tm
     use global_module,               only: iprint_MD, flag_basis_set,  &
-                                           blips, PAOs, atomf, nlpf,   &   ! nakata2
+                                           blips, PAOs, atomf, nlpf,   &
                                            nspin, spin_factor,         &
                                            id_glob, species_glob,      &
                                            flag_analytic_blip_int, ni_in_cell
@@ -1883,7 +1881,7 @@ contains
        else if (flag_basis_set == PAOs) then
           ! Get matrix elements between derivative of projectors and
           ! atom functions (support function or PAO)
-          call assemble_deriv_2(direction, APrange, matdAP(direction), 3)   ! nakata4
+          call assemble_deriv_2(direction, APrange, matdAP(direction), 3)
           call matrix_scale(-one, matdAP(direction))
 
           ! Get matrix elements between projectors and derivative of
@@ -2111,7 +2109,7 @@ contains
     use GenComms,                    only: my_barrier, gsum, inode,   &
                                            ionode
     use global_module,               only: iprint_MD, flag_basis_set, &
-                                           blips, PAOs, atomf,        &   ! nakata2
+                                           blips, PAOs, atomf,        &
                                            flag_onsite_blip_ana,      &
                                            nspin, spin_factor
     use build_PAO_matrices,          only: assemble_deriv_2

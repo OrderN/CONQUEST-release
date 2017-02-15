@@ -540,7 +540,7 @@ contains
        call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
-       if (flag_vary_basis .or. flag_LFD_minimise) then ! nakata8
+       if (flag_vary_basis .or. flag_LFD_minimise) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
                            fixed_potential, vary_mu, n_L_iterations, &
                            L_tolerance, e3)
@@ -1493,7 +1493,7 @@ contains
     use set_blipgrid_module,    only: set_blipgrid
     use set_bucket_module,      only: set_bucket
     use dimens,                 only: r_core_squared,r_h,             &
-                                      RadiusAtomf           ! nakata3
+                                      RadiusAtomf
     use pseudopotential_common, only: core_radius
     use GenComms,               only: myid, cq_abort, gsum
     use functions_on_grid,      only: associate_fn_on_grid
@@ -1537,7 +1537,7 @@ contains
        ! Reallocate and find new indices
        call immi(parts,bundle,BCS_parts,myid+1)
        ! Reallocate for blip grid
-       call set_blipgrid(myid, RadiusAtomf, core_radius) ! nakata3
+       call set_blipgrid(myid, RadiusAtomf, core_radius)
        !call set_blipgrid(myid,r_h,sqrt(r_core_squared))
        call set_bucket(myid)
        call associate_fn_on_grid
@@ -1635,7 +1635,7 @@ contains
        ! Reallocate and find new indices
        call immi(parts,bundle,BCS_parts,myid+1,1)
        ! Reallocate for blip grid
-       call set_blipgrid(myid, RadiusAtomf, core_radius) ! nakata3
+       call set_blipgrid(myid, RadiusAtomf, core_radius)
        !call set_blipgrid(myid,r_h,sqrt(r_core_squared))
        call set_bucket(myid)
        call associate_fn_on_grid
@@ -1688,7 +1688,7 @@ contains
     use mult_module,            ONLY: fmmi,immi,matL,L_trans
     use set_blipgrid_module, ONLY: set_blipgrid
     use set_bucket_module, ONLY: set_bucket
-    use dimens, ONLY: RadiusAtomf                        ! nakata3
+    use dimens, ONLY: RadiusAtomf
     use pseudopotential_common, ONLY: core_radius
     use functions_on_grid, ONLy: associate_fn_on_grid
     use density_module, ONLY: build_Becke_weights
@@ -1791,7 +1791,7 @@ contains
     !
     !endif
     ! Reallocate for blip grid
-    call set_blipgrid(myid, RadiusAtomf, core_radius) ! nakata3
+    call set_blipgrid(myid, RadiusAtomf, core_radius)
     call set_bucket(inode-1)
     call associate_fn_on_grid
     call stop_print_timer(tmr_l_tmp2,"matrix reindexing",IPRINT_TIME_THRES2)
@@ -1889,7 +1889,7 @@ contains
                                       flag_reset_dens_on_atom_move,    &
                                       flag_LmatrixReuse,               &
                                       flag_neutral_atom,               &
-                                      atomf, sf, nspin_SF, flag_LFD,   & ! nakata8
+                                      atomf, sf, nspin_SF, flag_LFD,   &
                                       flag_SFcoeffReuse
     use density_module,         only: set_atomic_density,              &
                                       flag_no_atomic_densities,        &
@@ -1913,7 +1913,6 @@ contains
     integer :: spin_SF
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
-!!! nakata8
     ! (0) Pseudopotentials: choose correct form
     select case (pseudo_type)
     case (OLDPS)
@@ -1946,7 +1945,6 @@ contains
           call initial_SFcoeff(.true., .true., fixed_potential)
        endif
     endif
-!!! nakata8 end
     ! (1) Get S matrix (includes blip-to-grid transform)
     if (flag_LFD .and. .not.flag_SFcoeffReuse) then
        ! Spao was already made in sub:initial_SFcoeff
@@ -1976,7 +1974,8 @@ contains
     if(((.NOT. flag_self_consistent)     .AND. &
         (.NOT. flag_no_atomic_densities) .AND. &
         (.NOT. flag_mix_L_SC_min)).OR.flag_reset_dens_on_atom_move) then
-        if (.not.flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.true.) ! if flag_LFD_MD_UseAtomicDensity=T, atomic density was already set
+        ! if flag_LFD_MD_UseAtomicDensity=T, atomic density was already set in (0)
+        if (.not.flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.true.)
     ! For SCF-O(N) calculations
     elseif (.NOT.diagon .AND. .NOT.flag_MDold) then
        if (flag_self_consistent .OR. flag_mix_L_SC_min) then

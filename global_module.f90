@@ -115,7 +115,7 @@
 !!   2016/08/01 17:30 nakata
 !!    Introduced atomf
 !!   2016/08/09 21:30 nakata
-!!    Added parameters for multi-site SFs
+!!    Added parameters for Contracted SFs and multi-site SFs
 !!  SOURCE
 !!
 module global_module
@@ -222,7 +222,7 @@ module global_module
   integer, parameter :: nlpf = 2 ! Projector functions
   integer, parameter :: paof = 3 ! Pseudo-atomic orbitals
   integer, parameter :: dens = 4 ! Atomic charge density
-  integer            :: atomf    ! nakata2 --- set to 1 for blips and 3 for paos, but will be always 1 (no sf nor paof) ???
+  integer            :: atomf    ! 1(=sf) for blips and primitive paos, 3(=paof) for contracted paos
 
   ! Define areas of the code
   integer, parameter :: n_areas        = 13

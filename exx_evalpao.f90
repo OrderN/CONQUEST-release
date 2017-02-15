@@ -14,7 +14,7 @@ contains
 !!    Removed unused supportfns
 !!   2016/12/29 21:30 nakata
 !!    Used pao information instead of blips_on_atom, and 
-!!    removed support_spec_format (blips_on_atom),hich is no longer needed
+!!    removed support_spec_format (blips_on_atom), which is no longer needed
   subroutine exx_phi_on_grid(inode,atom,spec,extent,xyz,nsuppfuncs,phi_on_grid,r_int,rst)
 
     use numbers,      only: zero, one, two, three, four, five, six, fifteen, sixteen
@@ -23,7 +23,6 @@ contains
     use exx_types,    only: exx_overlap, exx_cartesian
 
     use angular_coeff_routines, only: evaluate_pao
-!    use support_spec_format,    only: blips_on_atom, flag_one_to_one ! nakata3, delete later
     use dimens,                 only: r_h   
     use pao_format,             only: pao
 
@@ -61,8 +60,6 @@ contains
     integer             :: i, j, ngrid   
     integer             :: ijk_delta(3), ijk(3), kji(3), njk(3), nji(3)
     integer             :: n1, n2, npts
-
-!    integer             :: spec_atom ! nakata3, delete later
 
     real(double)        :: xj1, xj2, a, b, c, d, del_r, alpha
     real(double)        :: a_table, b_table, c_table, d_table
@@ -167,18 +164,9 @@ contains
 
              count1  = 1
              sfsum   = zero
-!!! nakata3, delete from here
-!             if (flag_one_to_one) then
-!                spec_atom = spec
-!             else
-!                spec_atom = atom 
-!             end if
-!!! nakata3, delete up to here
-!             angu_loop: do l1 = 0, blips_on_atom(spec_atom)%lmax ! nakata3, delete later
-             angu_loop: do l1 = 0, pao(spec)%greatest_angmom   ! nakata3
+             angu_loop: do l1 = 0, pao(spec)%greatest_angmom
 
-!                zeta_loop: do acz = 1, blips_on_atom(spec_atom)%naczs(l1) ! nakata3, delete later
-                zeta_loop: do acz = 1, pao(spec)%angmom(l1)%n_zeta_in_angmom   ! nakata3
+                zeta_loop: do acz = 1, pao(spec)%angmom(l1)%n_zeta_in_angmom
 
                    magn_loop: do m1 = -l1, l1                      
 
@@ -258,38 +246,14 @@ contains
                          end if
                       end if rec_ylm
 
-!!! 2016.12.29 nakata3
-                      ! Put pao_val directly into phi_on_grid (for primitive PAOs)
+                      ! Put pao_val directly into phi_on_grid
+                      ! (only for primitive PAOs and not for blips)
                       phi_on_grid(nx+extent+1,ny+extent+1,nz+extent+1,count1) = pao_val
-!!! delete from here ONLY IF this part is only for PAO and not for blips
-!                      if(flag_one_to_one) then
-!                         sfsum(count1) = sfsum(count1) + pao_val 
-!                      else
-!                         !print*, atom, blips_on_atom(atom)%nsuppfuncs, count1
-!                         !print*, l1, acz, m1
-!                         do nsf1 = 1, blips_on_atom(atom)%nsuppfuncs
-!                            !print*, nsf1, blips_on_atom(atom)%supp_func(nsf1)%coefficients(count1)
-!
-!                            sfsum(nsf1) = sfsum(nsf1) +  &
-!                                 blips_on_atom(atom)% &
-!                                 supp_func(nsf1)%        &
-!                                 coefficients(count1)*   &
-!                                 pao_val
-!                         end do 
-!                      end if
-!!! delete up to here
-!!! nakata3 end
 
                       count1 = count1 + 1
                    end do magn_loop
                 end do zeta_loop
              end do angu_loop
-
-!!! 2016.12.29 nakata3, delete from here ONLY IF this part is only for PAO and not for blips
-!             do nsf1 = 1, blips_on_atom(spec_atom)%nsuppfuncs
-!                phi_on_grid(nx+extent+1,ny+extent+1,nz+extent+1,nsf1) = sfsum(nsf1)                
-!             end do
-!!! nakata3 end
 
           end do grid_z_loop
        end do grid_y_loop

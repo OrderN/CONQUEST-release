@@ -163,23 +163,10 @@ contains
     !     mx_sent_pair_BtoG,mx_recv_call_BtoG)
     call alloc_naba_blk(naba_blocks_of_atoms,bundle%mx_iprim,max_naba_blk)
     ! Allocate naba_atoms_of_blocks derived types
-!!! nakata2
     call get_naba_DCSprt_max(rcut_atomf,max_naba_part,max_naba_atm,max_halo_part, max_recv_node_BtoG)
     call alloc_naba_atm(naba_atoms_of_blocks(atomf), domain%mx_ngonn,max_naba_part,max_naba_atm)
     naba_atoms_of_blocks(atomf)%function_type = atomf
     call alloc_halo_atm(halo_atoms_of_blocks(atomf), max_recv_node_BtoG,max_halo_part,DCS_parts%mx_mcover)
-!!! nakata2 --- delete from here later
-!    ! Support and PAOs have same cutoff and maxima
-!    call get_naba_DCSprt_max(rcut_supp,max_naba_part,max_naba_atm,max_halo_part, max_recv_node_BtoG)
-!    call alloc_naba_atm(naba_atoms_of_blocks(sf), domain%mx_ngonn,max_naba_part,max_naba_atm)
-!    naba_atoms_of_blocks(sf)%function_type = sf
-!    call alloc_halo_atm(halo_atoms_of_blocks(sf), max_recv_node_BtoG,max_halo_part,DCS_parts%mx_mcover)
-!    ! PAOs
-!    call alloc_naba_atm(naba_atoms_of_blocks(paof), domain%mx_ngonn,max_naba_part,max_naba_atm)
-!    naba_atoms_of_blocks(paof)%function_type = paof
-!    call alloc_halo_atm(halo_atoms_of_blocks(paof), max_recv_node_BtoG,max_halo_part,DCS_parts%mx_mcover)
-!!! nakata2 --- delet up to here later
-!!! nakata2 end
     ! Projectors
     call get_naba_DCSprt_max(rcut_proj,max_naba_part,max_naba_atm,max_halo_part, max_recv_node_BtoG)
     call alloc_naba_atm(naba_atoms_of_blocks(nlpf), domain%mx_ngonn,max_naba_part,max_naba_atm)
@@ -242,28 +229,13 @@ contains
        blip_info(spec)%Extent = max(thisextent,blip_info(spec)%Extent)
     enddo
     !make lists of neighbour and halo atoms of primary blocks
-    ! for support and projector functions
-!!! nakata2
+    ! for atomic functions and projector functions
     call get_naba_DCSprt(rcut_atomf,naba_atoms_of_blocks(atomf),halo_atoms_of_blocks(atomf))
     !do iprim_blk=1,domain%groups_on_node
     gridsize(atomf) = 0
     do iprim=1,domain%mx_ngonn
        gridsize(atomf) = gridsize(atomf) + naba_atoms_of_blocks(atomf)%no_of_orb(iprim)*n_pts_in_block
     end do
-!!! nakata2 --- delete from here later
-!    call get_naba_DCSprt(rcut_supp,naba_atoms_of_blocks(sf),halo_atoms_of_blocks(sf))
-!    !do iprim_blk=1,domain%groups_on_node
-!    gridsize(sf) = 0
-!    do iprim=1,domain%mx_ngonn
-!       gridsize(sf) = gridsize(sf) + naba_atoms_of_blocks(sf)%no_of_orb(iprim)*n_pts_in_block
-!    end do
-!    call get_naba_DCSprt(rcut_supp,naba_atoms_of_blocks(paof),halo_atoms_of_blocks(paof))
-!    gridsize(paof) = 0
-!    do iprim=1,domain%mx_ngonn
-!       gridsize(paof) = gridsize(paof) + naba_atoms_of_blocks(paof)%no_of_orb(iprim)*n_pts_in_block
-!    end do
-!!! nakata2 --- delete up to here later
-!!! nakata2 end
     call get_naba_DCSprt(rcut_proj,naba_atoms_of_blocks(nlpf),halo_atoms_of_blocks(nlpf))
     !do iprim_blk=1,domain%groups_on_node
     gridsize(nlpf) = 0
@@ -1929,15 +1901,11 @@ contains
 
 !    call start_timer(tmr_std_allocation)
     call dealloc_halo_atm(halo_atoms_of_blocks(dens))
-!    call dealloc_halo_atm(halo_atoms_of_blocks(paof))   !!! nakata2 --- delete this line later
     call dealloc_halo_atm(halo_atoms_of_blocks(nlpf))
-!    call dealloc_halo_atm(halo_atoms_of_blocks(sf))   !!! nakata2 --- delete this line later
-    call dealloc_halo_atm(halo_atoms_of_blocks(atomf))   !!! nakata2
+    call dealloc_halo_atm(halo_atoms_of_blocks(atomf))
     call dealloc_naba_atm(naba_atoms_of_blocks(dens))
-!    call dealloc_naba_atm(naba_atoms_of_blocks(paof))   !!! nakata2 --- delete this line later
     call dealloc_naba_atm(naba_atoms_of_blocks(nlpf))
-!    call dealloc_naba_atm(naba_atoms_of_blocks(sf))   !!! nakata2 --- delete this line later
-    call dealloc_naba_atm(naba_atoms_of_blocks(atomf))   !!! nakata2
+    call dealloc_naba_atm(naba_atoms_of_blocks(atomf))
     call dealloc_naba_blk(naba_blocks_of_atoms)
     call dealloc_comm_in_BtoG(comm_naba_blocks_of_atoms)
 !    call stop_timer(tmr_std_allocation)

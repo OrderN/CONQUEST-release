@@ -1004,7 +1004,7 @@ contains
     use logicals
     use mult_module,         only: LNV_matrix_multiply, matL, matphi, &
                                    matT, T_trans, L_trans, LS_trans,  &
-                                   matrix_scale, matSFcoeff      ! nakata3
+                                   matrix_scale, matSFcoeff
     use SelfCon,             only: new_SC_potl
     use global_module,       only: iprint_init, flag_self_consistent, &
                                    flag_basis_set, blips, PAOs,       &
@@ -1018,7 +1018,7 @@ contains
                                    flag_propagateX, flag_propagateL, restart_X, &
                                    flag_exx, exx_scf, flag_out_wf, wf_self_con, &
                                    flag_write_DOS, flag_neutral_atom, &
-                                   atomf, sf, flag_LFD, nspin_SF        ! nakata3
+                                   atomf, sf, flag_LFD, nspin_SF
     use ion_electrostatic,   only: ewald, screened_ion_interaction
     use S_matrix_module,     only: get_S_matrix
     use GenComms,            only: my_barrier,end_comms,inode,ionode, &
@@ -1087,7 +1087,6 @@ contains
       call my_barrier()
     endif
 
-!!! nakata8
     ! (0) If we use PAOs and contract them, prepare SF-PAO coefficients here
     if (atomf.ne.sf) then
        do spin_SF = 1, nspin_SF
@@ -1119,7 +1118,6 @@ contains
        if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Got SFcoeff'
        call my_barrier
     endif
-!!! nakata8 end
 !!$
 !!$
 !!$
@@ -1132,14 +1130,12 @@ contains
       call my_barrier()
       call Matrix_CommRebuild(InfoT,Trange,T_trans,matT,nfile,symm)
     endif
-!!! nakata8
     if (flag_LFD .and. .not.read_option) then
        ! Spao was already made in sub:initial_SFcoeff
        call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
     else
        call get_S_matrix(inode, ionode)
     endif
-!!! nakata8 end
     if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Got S'
     call my_barrier
 !!$
@@ -1289,7 +1285,6 @@ contains
                L_tolerance, total_energy, backtrace_level)
           !
        else
-!!! nakata8
           if (flag_LFD .and. .not.read_option) then
              ! Hpao was already made in sub:initial_SFcoeff
              rebuild_KE_NL = .false. 
@@ -1300,7 +1295,6 @@ contains
              call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
                                density, maxngrid, level=backtrace_level)
           endif
-!!! nakata8 end
           !
           electrons_tot = spin_factor * sum(electrons)
           !
@@ -1321,7 +1315,6 @@ contains
        
        rebuild_KE_NL = .true.
        !build_X = .false
-!!! nakata8
        if (flag_LFD .and. .not.read_option) then
           ! Hpao was already made in sub:initial_SFcoeff
           rebuild_KE_NL = .false.
@@ -1332,7 +1325,6 @@ contains
           call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
                             density, maxngrid, level=backtrace_level)
        endif
-!!! nakata8 end
        electrons_tot = spin_factor * sum(electrons)
        if (flag_out_wf.OR.flag_write_DOS) then
           wf_self_con=.true.
@@ -1418,7 +1410,7 @@ contains
     use global_module,          only: x_atom_cell,y_atom_cell,        &
                                       z_atom_cell, ni_in_cell,        &
                                       iprint_index,                   &
-                                      atomf, sf                     ! nakata3
+                                      atomf, sf
     use block_module,           only: n_pts_in_block
     use maxima_module,          only: maxblocks
     use group_module,           only: blocks, parts
@@ -1485,7 +1477,7 @@ contains
     !if(iprint_index > 4) write(io_lun,*) ' DCS & BCS has been prepared for myid = ',myid
     !Makes variables used in Blip-Grid transforms
     ! See (naba_blk_module.f90), (set_blipgrid_module.f90), (make_table.f90)
-    call set_blipgrid(myid, RadiusAtomf, core_radius) ! nakata3
+    call set_blipgrid(myid, RadiusAtomf, core_radius)
     !if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done set_blipgrid'
 
     !Makes variables used in calculation (integration) of matrix elements

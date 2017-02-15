@@ -89,7 +89,7 @@
 !!                     aLa_aSa_aLSa, aLa_aHa_aLHa,
 !!                     aSs_trans,   aHs_trans,   SFcoeff_trans,
 !!                     aSs_pairind, aHs_pairind, SFcoeff_pairind
-!!    for atomic-function(ATOMF)-based calculations.
+!!    for atomic-function(atomf)-based calculations.
 !!    Changed names from matSC, matCS, SP_trans, SPpairind, SP_PS_H,     H_SP_SP
 !!                    to matAP, matPA, AP_trans, APpairind, AP_PA_aHa, aHa_AP_AP
 !!    where A = atomic function and P = projecter function for NL.
@@ -101,7 +101,7 @@ module mult_module
   use datatypes
   use matrix_module
   use matrix_data,            only: mx_matrices, matrix_pointer
-  use global_module,          only: sf, nlpf, paof, atomf, io_lun, nspin   ! nakata3
+  use global_module,          only: sf, nlpf, paof, atomf, io_lun, nspin
   use GenComms,               only: cq_abort
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_allocation
@@ -134,11 +134,11 @@ module mult_module
   integer(integ), parameter :: LS_T_L    = 22  ! type 2
   integer(integ), parameter :: S_X_SX    = 23  ! type 1
 
-!!! nakata3
-  ! The indices for ATOMF-based-matrix multiplications will be set later.
-  ! The indices of matrices are demonstrated with lower-case characters: a=atomf, s=sf
-  ! C corresponds to SF coefficients.
-  ! L corresponds to local subspace regions in the LFD method.
+  ! The indices for atomf-based matrix multiplications
+  !     The values  will be set later.
+  !     The indices of matrices are demonstrated with lower-case characters: a=atomf, s=sf
+  !     C corresponds to SF coefficients.
+  !     L corresponds to local subspace regions in the LFD method.
   integer :: aSa_sCaTr_aSs  ! 24, type 1             , S(atomf,atomf)   * C(sf   ,atomf)^T = S(atomf,sf   )
   integer :: sCa_aSs_sSs    ! 25, type 1             , C(sf   ,atomf)   * S(atomf,sf   )   = S(sf   ,sf   )
   integer :: aHa_sCaTr_aHs  ! 26, type 1             , H(atomf,atomf)   * C(sf   ,atomf)^T = H(atomf,sf   )
@@ -153,7 +153,6 @@ module mult_module
   integer :: aLa_aHa_aLHa   ! 35, type 1, for LFD    , L(atomf,atomf)   * H(atomf,atomf)   = Local H(atomf,atomf)
 
   integer(integ), parameter :: mx_mults  = 35
-!!! end nakata3
 
   type(matrix_mult) :: mult(mx_mults)
 
@@ -164,22 +163,18 @@ module mult_module
   integer(integ), parameter :: LS_trans  = 5
   integer(integ), parameter :: LH_trans  = 6
   integer(integ), parameter :: LSL_trans = 7
-!!! nakata3
   ! The followings will be set later
   integer :: aSs_trans     ! 8
   integer :: aHs_trans     ! 9
   integer :: SFcoeff_trans ! 10
 
   integer(integ), parameter :: mx_trans = 10
-!!! end nakata3
 
   type(pair_data), allocatable, dimension(:,:) :: pairs
   integer, dimension(:), pointer :: Spairind, Lpairind, Tpairind, &
                                     APpairind, LSpairind, LHpairind, &
-                                    LSLpairind
-!!! nakata3
-  integer, dimension(:), pointer :: aSs_pairind, aHs_pairind, SFcoeff_pairind
-!!! end nakata3
+                                    LSLpairind, &
+                                    aSs_pairind, aHs_pairind, SFcoeff_pairind
 
   type(matrix_trans), dimension(mx_matrices), target :: ltrans
   type(trans_remote) :: gtrans(mx_trans)
@@ -193,15 +188,13 @@ module mult_module
   integer, allocatable, dimension(:), public :: &
        matH, matL, matLS, matSL, matK, matphi, matM12, matM4, matU, &
        matUT, matdH, matX, matSX
-!!! nakata3
-  ! spin independent ATOMF-based matrices
+  ! spin independent atomf-based matrices
   integer, public :: &
        matSatomf, matKEatomf, matNLatomf
-  ! spin dependent ATOMF-based matrices
+  ! spin dependent atomf-based matrices
   integer, allocatable, dimension(:), public :: &
        matHatomf, matKatomf, matXatomf, &
        matSFcoeff, matSFcoeff_tran, matdSFcoeff, matdSFcoeff_e
-!!! end nakata3
 
   integer, allocatable, dimension(:), public :: matrix_index, &
                                                 trans_index
@@ -249,7 +242,7 @@ contains
   !!    for band output, so that the user who wants to write lots of bands
   !!    can increase the parameter for the output run)
   !!   2016/08/09 21:30 nakata
-  !!    Added lines for ATOMF-based matrices and LFD matrices
+  !!    Added lines for atomf-based matrices and LFD matrices
   !!  SOURCE
   !!
   subroutine immi(parts, prim, gcs, myid, partial)
@@ -262,7 +255,7 @@ contains
     use maxima_module,       only: maxpartsproc, maxnabaprocs
     use GenComms,            only: my_barrier, cq_abort
     use matrix_comms_module, only: find_neighbour_procs
-    use global_module,       only: area_matrices, mx_temp_matrices, flag_LFD ! nakata3
+    use global_module,       only: area_matrices, mx_temp_matrices, flag_LFD
     use memory_module,       only: reg_alloc_mem, type_int
 
     implicit none
@@ -311,8 +304,7 @@ contains
        call stop_timer(tmr_std_allocation)
     end if
 
-! 2016.9.30 nakata3
-    ! Set indices of multiplications and trans for ATOMF-based-matrices
+    ! Set indices of multiplications and trans for atomf-based-matrices
     if (atomf.ne.sf) then
        aSa_sCaTr_aSs = 24
        sCa_aSs_sSs   = 25
@@ -332,7 +324,6 @@ contains
        aHs_trans     = 9
        SFcoeff_trans = 10
     endif
-! nakata3 end
 
     mat%sf1_type = sf
     mat%sf2_type = sf
@@ -414,7 +405,6 @@ contains
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Xrange), &
                     Xmatind, rcut(Xrange), myid-1,                       &
                     halo(Xrange), ltrans(Xrange))
-!!! nakata3
     if (atomf.ne.sf) then
        mat(1:prim%groups_on_node,aSa_range)%sf1_type = atomf
        mat(1:prim%groups_on_node,aSa_range)%sf2_type = atomf
@@ -473,8 +463,7 @@ contains
                           LD_matind, rcut(LD_range), myid-1,                     &
                           halo(LD_range), ltrans(LD_range))
        endif
-    endif   ! atomf
-!!! end nakata3
+    endif ! atomf
     call associate_matrices
     call find_neighbour_procs(parts, halo(max_range))
     call start_timer(tmr_std_allocation)
@@ -509,7 +498,6 @@ contains
     call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,Trange),      &
                    myid-1, halo(Trange), halo(Trange), ltrans(Trange),       &
                    gtrans(T_trans), pairs(:, T_trans), Tpairind)
-!!! nakata3
     if (atomf.ne.sf) then
        call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,aSs_range),                &
                       myid-1, halo(aSs_range), halo(sSa_range), ltrans(aSs_range), &
@@ -521,7 +509,6 @@ contains
                       myid-1, halo(SFcoeff_range), halo(SFcoeffTr_range), ltrans(SFcoeff_range), &
                       gtrans(SFcoeff_trans), pairs(:, SFcoeff_trans), SFcoeff_pairind)
     endif
-!!! end nakata3
 
     ! Now initialise the matrix multiplications
     ! Somewhere, we need to set mult_type 1/2 - probably here !
@@ -879,8 +866,7 @@ contains
     mult(S_X_SX)%prim    => prim
     mult(S_X_SX)%gcs     => gcs
     call mult_ini(mult(S_X_SX), Xmatind, myid-1, prim%n_prim, parts)
-!!! nakata3
-    ! 24-34 : for multiplications of ATOMF-based matrices
+    ! 24-34 : for multiplications of atomf-based matrices
     if (atomf.ne.sf) then
        mult(aSa_sCaTr_aSs)%mult_type = 1
        mult(aSa_sCaTr_aSs)%amat    => mat(1:prim%groups_on_node,aSa_range)
@@ -1039,8 +1025,7 @@ contains
           mult(aLa_aHa_aLHa)%gcs     => gcs
           call mult_ini(mult(aLa_aHa_aLHa), aHa_matind, myid-1, prim%n_prim, parts)
        endif
-    endif   ! atomf
-!!! end nakata3
+    endif ! atomf
     !end if
     ! call stop_timer(tmr_std_matrices)
 
@@ -1074,13 +1059,13 @@ contains
   !!   2008/05/22 ast
   !!    Added timers
   !!   2016/08/09 21:30 nakata
-  !!    Added lines for ATOMF-based matrices and LFD matrices
+  !!    Added lines for atomf-based matrices and LFD matrices
   !!  SOURCE
   !!
   subroutine fmmi(prim)
 
     use basic_types
-    use global_module, only: iprint_mat, flag_LFD ! nakata3
+    use global_module, only: iprint_mat, flag_LFD
     use matrix_module, only: deallocate_comms_data
     use matrix_data
     use maxima_module, only: maxnabaprocs
@@ -1187,7 +1172,6 @@ contains
     mult(S_X_SX)%ahalo,mult(S_X_SX)%chalo,mult(S_X_SX)%ltrans,              &
     mult(S_X_SX)%bindex,mult(S_X_SX)%parts,mult(S_X_SX)%prim,               &
     mult(S_X_SX)%gcs)
-!!! nakata3
     if (atomf.ne.sf) then
        nullify(mult(aSa_sCaTr_aSs)%amat,mult(aSa_sCaTr_aSs)%bmat,mult(aSa_sCaTr_aSs)%cmat, &
        mult(aSa_sCaTr_aSs)%ahalo,mult(aSa_sCaTr_aSs)%chalo,mult(aSa_sCaTr_aSs)%ltrans,     &
@@ -1239,8 +1223,7 @@ contains
           mult(aLa_aHa_aLHa)%bindex,mult(aLa_aHa_aLHa)%parts,mult(aLa_aHa_aLHa)%prim,      &
           mult(aLa_aHa_aLHa)%gcs)
        endif
-    endif   ! atomf
-!!! end nakata3
+    endif ! atomf
     ! Comms
     call deallocate_comms_data(mult(aHa_AP_AP)%comms)
     call deallocate_comms_data(mult(L_S_LS)%comms)
@@ -1264,7 +1247,6 @@ contains
     call deallocate_comms_data(mult(T_H_TH)%comms)
     call deallocate_comms_data(mult(T_L_TL)%comms)
     call deallocate_comms_data(mult(TL_T_L)%comms)
-!!! nakata3
     if (atomf.ne.sf) then
        call deallocate_comms_data(mult(aSa_sCaTr_aSs)%comms)
        call deallocate_comms_data(mult(sCa_aSs_sSs)%comms)
@@ -1281,7 +1263,6 @@ contains
           call deallocate_comms_data(mult(aLa_aHa_aLHa)%comms)
        endif
     endif
-!!! end nakata3
     do i=1,mx_trans
        do j = 1,gtrans(i)%n_rem_node!maxnabaprocs+1
           !if(associated(pairs(j,i)%submat)) deallocate(pairs(j,i)%submat)
@@ -1291,7 +1272,7 @@ contains
     deallocate(pairs)
     deallocate(Spairind, Lpairind, APpairind, LSpairind, LHpairind, &
                LSLpairind, Tpairind)
-    if (atomf.ne.sf) deallocate(aSs_pairind, aHs_pairind, SFcoeff_pairind)   ! nakata3
+    if (atomf.ne.sf) deallocate(aSs_pairind, aHs_pairind, SFcoeff_pairind)
     !call dissociate_matrices
     ! Matrices
     call end_ops(prim,Srange,Smatind,S_trans)
@@ -1314,7 +1295,6 @@ contains
     call end_ops(prim,TSrange,TSmatind)
     call end_ops(prim,THrange,THmatind)
     call end_ops(prim,TLrange,TLmatind)
-!!! nakata3
     if (atomf.ne.sf) then
        call end_ops(prim,aSa_range,aSa_matind)
        call end_ops(prim,aHa_range,aHa_matind)
@@ -1328,7 +1308,6 @@ contains
        call end_ops(prim,SFcoeffTr_range,SFcoeffTr_matind)
        if (flag_LFD) call end_ops(prim,LD_range,LD_matind)
     endif
-!!! end nakata3
 !    call stop_timer(tmr_std_matrices)
 
     return
@@ -1951,7 +1930,7 @@ contains
   !!    = 1 | 2 controls if the calculation will be spin polarised or
   !!    not
   !!   2016/08/09 21:30 nakata
-  !!    Added lines for ATOMF-based matrices and LFD matrices
+  !!    Added lines for atomf-based matrices and LFD matrices
   !!  SOURCE
   !!
   subroutine associate_matrices
@@ -1985,8 +1964,7 @@ contains
        if (stat /= 0) &
             call cq_abort('associate_matrices: failed to allocate spin &
                            &depdendent matrix tags', nspin, stat)
-!!! nakata3
-       ! For ATOMF-based calculations
+       ! For atomf-based calculations
        allocate(matHatomf(nspin), matKatomf(nspin), matXatomf(nspin), STAT=stat)
        if (stat /= 0) &
             call cq_abort('associate_matrices: failed to allocate spin &
@@ -1998,7 +1976,6 @@ contains
                call cq_abort('associate_matrices: failed to allocate spin &
                               &depdendent SFcoefficient matrix tags', nspin, stat)
        endif
-!!! nakata3
        allocated_tags = .true.
     end if
 
@@ -2041,7 +2018,6 @@ contains
        matSX(2)  = 34
        current_matrix = 34
     end if
-!!! nakata3
     if (atomf.eq.sf) then
     ! when atomic functions are euivalent to SFs (blips and one_to_one PAOs)
        matSatomf    = matS
@@ -2079,7 +2055,6 @@ contains
           current_matrix     = current_matrix + 7  ! 51
        endif
     endif ! atomf
-!!! end nakata3
 
 !%%!! Now associate pointers with correct arrays
 !%%!    mat_p(matS  )%matrix => data_S
@@ -2127,7 +2102,6 @@ contains
        mat_p(matX(spin)  )%sf1_type = sf
        mat_p(matSX(spin) )%sf1_type = sf
     end do
-!!! nakata3
     if (atomf.ne.sf) then
        mat_p(matSatomf )%sf1_type = atomf
        mat_p(matKEatomf)%sf1_type = atomf
@@ -2142,7 +2116,6 @@ contains
           mat_p(matdSFcoeff_e(spin)  )%sf1_type = sf
        enddo
     endif
-!!! end nakata3
     ! Type for f2
     mat_p(matS    )%sf2_type = sf
     mat_p(matT    )%sf2_type = sf
@@ -2167,7 +2140,6 @@ contains
        mat_p(matX(spin)  )%sf2_type = sf
        mat_p(matSX(spin) )%sf2_type = sf
     end do
-!!! nakata3
     if (atomf.ne.sf) then
        mat_p(matSatomf )%sf2_type = atomf
        mat_p(matKEatomf)%sf2_type = atomf
@@ -2182,7 +2154,6 @@ contains
           mat_p(matdSFcoeff_e(spin)  )%sf2_type = atomf
        enddo
     endif
-!!! end nakata3
     ! Set up index translation for ranges
     matrix_index(matS    ) = Srange
     matrix_index(matT    ) = Trange
@@ -2207,7 +2178,6 @@ contains
        matrix_index(matX(spin)  ) = Hrange  ! Xrange
        matrix_index(matSX(spin) ) = SXrange
     end do
-!!! nakata3
     if (atomf.ne.sf) then
        matrix_index(matSatomf ) = aSa_range
        matrix_index(matKEatomf) = aHa_range
@@ -2222,7 +2192,6 @@ contains
           matrix_index(matdSFcoeff_e(spin)  ) = SFcoeff_range
        end do
     endif
-!!! end nakata3
     ! Real lengths
     ! Length
 !%%!    mat_p(matS  )%length = nsf*nsf*mx_at_prim*mx_snab
@@ -2302,15 +2271,13 @@ contains
        trans_index(matX(spin)  ) = 0 ! S_trans
        trans_index(matSX(spin) ) = 0
     end do
-!!! nakata3
     if (atomf.ne.sf) then
        trans_index(matSatomf ) = 0
        trans_index(matKEatomf) = 0
        trans_index(matNLatomf) = 0
        do spin = 1, nspin
           trans_index(matKatomf(spin)      ) = 0
-          trans_index(matHatomf(spin)      ) = 0
-!          trans_index(matHatomf(spin)      ) = Hatomf_trans
+          trans_index(matHatomf(spin)      ) = 0 ! Hatomf_trans
           trans_index(matXatomf(spin)      ) = 0 ! Satomf_trans
           trans_index(matSFcoeff(spin)     ) = SFcoeff_trans 
           trans_index(matSFcoeff_tran(spin)) = SFcoeff_trans 
@@ -2318,7 +2285,6 @@ contains
           trans_index(matdSFcoeff_e(spin)  ) = SFcoeff_trans 
        end do
     endif
-!!! end nakata3
 
     return
   end subroutine associate_matrices
@@ -2341,7 +2307,7 @@ contains
   !!   2012/03/28 L.Tong
   !!   - Changed spin implementation
   !!   2016/08/09 21:30 nakata
-  !!    Added lines for ATOMF-based matrices and LFD matrices
+  !!    Added lines for atomf-based matrices and LFD matrices
   !! SOURCE
   !!
   subroutine dissociate_matrices
@@ -2352,7 +2318,6 @@ contains
     integer :: stat
 
     call start_timer(tmr_std_allocation)
-!!! nakata3
     if (atomf.ne.sf) then
        if (nspin == 2) then
           deallocate(mat_p(matdSFcoeff_e(2))%matrix,STAT=stat)     !51
@@ -2408,7 +2373,6 @@ contains
        if (stat /= 0) call cq_abort("Error deallocating matrix Satomf", &
                                     mat_p(matSatomf)%length)
     endif ! atomf
-!!! end nakata3
     if (nspin == 2) then
        ! order is important
        deallocate(mat_p(matSX(2))%matrix,STAT=stat) !34
@@ -3386,7 +3350,7 @@ contains
   !!   AtomF_to_SF_transform
   !!  USAGE
   !!  PURPOSE
-  !!   Multiply SF coefficients to transform matATOMF -> matSF
+  !!   Multiply SF coefficients to transform matAtomF -> matSF
   !!  INPUTS
   !!  USES
   !!  AUTHOR
@@ -3397,7 +3361,7 @@ contains
   !!
   !!  SOURCE
   !!
-  subroutine AtomF_to_SF_transform(matSF, matATOMF, spin, Arange)
+  subroutine AtomF_to_SF_transform(matSF, matAtomF, spin, Arange)
 
     use numbers
     use GenComms,      only: cq_abort
@@ -3407,36 +3371,36 @@ contains
     implicit none
 
     ! Passed variables
-    integer :: matSF, matATOMF, spin, Arange
+    integer :: matSF, matAtomF, spin, Arange
     ! Local variables
-    integer :: spin_SF, mat_ATOMF_SF, ind1_mult, ind2_mult
+    integer :: spin_SF, mat_AtomF_SF, ind1_mult, ind2_mult
 
 
     spin_SF = 1
     if (flag_SpinDependentSF .and. spin.eq.2) spin_SF = 2
 
     if (Arange.eq.Srange) then
-       mat_ATOMF_SF = allocate_temp_matrix(aSs_range,0,atomf,sf)
+       mat_AtomF_SF = allocate_temp_matrix(aSs_range,0,atomf,sf)
        ind1_mult = aSa_sCaTr_aSs
        ind2_mult = sCa_aSs_sSs
     else if (Arange.eq.Hrange) then
-       mat_ATOMF_SF = allocate_temp_matrix(aHs_range,0,atomf,sf)
+       mat_AtomF_SF = allocate_temp_matrix(aHs_range,0,atomf,sf)
        ind1_mult = aHa_sCaTr_aHs
        ind2_mult = sCa_aHs_sHs
     else
        call cq_abort("AtomF_to_SF_transform supports only Srange and Hrange.")
     endif
 
-    call matrix_scale(zero, mat_ATOMF_SF)
+    call matrix_scale(zero, mat_AtomF_SF)
     call matrix_scale(zero, matSF)
 
     ! Transform matAatomf(atomf,atomf) in Aatomf_range -> matA(sf,sf) in Arange
     ! step 1: B(atomf,sf) = A(atomf,atomf) * SFcoeff(sf,atomf)-DAGGER
-    call matrix_product(matATOMF, matSFcoeff_tran(spin_SF), mat_ATOMF_SF, mult(ind1_mult))
+    call matrix_product(matAtomF, matSFcoeff_tran(spin_SF), mat_AtomF_SF, mult(ind1_mult))
     ! step 2: A(sf,sf) = SFcoeff(sf,atomf) * B(atomf,sf)
-    call matrix_product(matSFcoeff(spin_SF), mat_ATOMF_SF, matSF, mult(ind2_mult) )
+    call matrix_product(matSFcoeff(spin_SF), mat_AtomF_SF, matSF, mult(ind2_mult) )
 
-    call free_temp_matrix(mat_ATOMF_SF)
+    call free_temp_matrix(mat_AtomF_SF)
 !
     return
   end subroutine AtomF_to_SF_transform
@@ -3448,7 +3412,7 @@ contains
   !!   SF_to_AtomF_transform
   !!  USAGE
   !!  PURPOSE
-  !!   Multiply SF coefficients to transform matSF -> matATOMF
+  !!   Multiply SF coefficients to transform matSF -> matAtomF
   !!  INPUTS
   !!  USES
   !!  AUTHOR
@@ -3459,7 +3423,7 @@ contains
   !!
   !!  SOURCE
   !!
-  subroutine SF_to_AtomF_transform(matSF, matATOMF, spin, Arange)
+  subroutine SF_to_AtomF_transform(matSF, matAtomF, spin, Arange)
 
     use numbers
     use GenComms,      only: cq_abort
@@ -3469,37 +3433,37 @@ contains
     implicit none
 
     ! Passed variables
-    integer :: matSF, matATOMF, spin, Arange
+    integer :: matSF, matAtomF, spin, Arange
     ! Local variables
-    integer :: spin_SF, mat_ATOMF_SF, ind1_mult, ind2_mult
+    integer :: spin_SF, mat_AtomF_SF, ind1_mult, ind2_mult
 
 
     spin_SF = 1
     if (flag_SpinDependentSF .and. spin.eq.2) spin_SF = 2
 
     if (Arange.eq.Srange) then
-       mat_ATOMF_SF = allocate_temp_matrix(aSs_range,0,atomf,sf)
+       mat_AtomF_SF = allocate_temp_matrix(aSs_range,0,atomf,sf)
        ind1_mult = sCaTr_sSs_aSs
        ind2_mult = aSs_sCa_aSa
     else if (Arange.eq.Hrange) then
-       mat_ATOMF_SF = allocate_temp_matrix(aHs_range,0,atomf,sf)
+       mat_AtomF_SF = allocate_temp_matrix(aHs_range,0,atomf,sf)
        ind1_mult = sCaTr_sHs_aHs
        ind2_mult = aHs_sCa_aHa
     else
        call cq_abort("SF_to_AtomF_transform supports only Srange and Hrange.")
     endif
 
-    call matrix_scale(zero, mat_ATOMF_SF)
-    call matrix_scale(zero, matATOMF)
+    call matrix_scale(zero, mat_AtomF_SF)
+    call matrix_scale(zero, matAtomF)
 
     ! Transform matA(sf,sf) in Arange -> matAatomf(atomf,atomf) in Aatomf_range
     ! step 1: B(atomf,sf) = SFcoeff(sf,atomf)-DAGGER * A(sf,sf)
-    call matrix_product(matSFcoeff_tran(spin_SF), matSF, mat_ATOMF_SF, mult(ind1_mult))
+    call matrix_product(matSFcoeff_tran(spin_SF), matSF, mat_AtomF_SF, mult(ind1_mult))
     ! step 2: A(atomf,atomf) = B(atomf,sf) * SFcoeff(sf,atomf) 
     !         use SFcoeff_tran instead of SFcoeff because mult_type=2
-    call matrix_product(mat_ATOMF_SF, matSFcoeff_tran(spin_SF), matATOMF, mult(ind2_mult))
+    call matrix_product(mat_AtomF_SF, matSFcoeff_tran(spin_SF), matAtomF, mult(ind2_mult))
 
-    call free_temp_matrix(mat_ATOMF_SF)
+    call free_temp_matrix(mat_AtomF_SF)
 !
     return
   end subroutine SF_to_AtomF_transform

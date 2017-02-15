@@ -290,8 +290,7 @@ contains
           if (non_local) then
              if (inode == ionode .and. iprint_ops > 3) &
                   write (io_lun, fmt='(2x,"Rebuilding NL")')
-!             call get_HNL_matrix(matNL)
-             call get_HNL_matrix   ! nakata3
+             call get_HNL_matrix
           end if
           if (iprint_ops > 4) call dump_matrix("NNL_atomf", matNLatomf, inode)
           if (iprint_ops > 4) call dump_matrix("NKE_atomf", matKEatomf, inode)
@@ -310,7 +309,7 @@ contains
        ! get_matrix_elements_new takes myid
        do spin = 1, nspin
           call get_matrix_elements_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
-                                       matHatomf(spin), atomfns, &                    ! nakata3
+                                       matHatomf(spin), atomfns, &
                                        H_on_atomfns(spin))
        end do
        if (inode == ionode .and. iprint_ops > 2) write (io_lun, *) 'Done integration'
@@ -376,9 +375,8 @@ contains
 !****lat>$
     endif ! flag_build_Hatomf
 
-!!! 2016.9.16 nakata3
     ! For PAO-based contracted SFs, atomic functions are PAOs
-    !     so transform H from atomic-function basis to SF basis
+    !     so we should transform H from atomic-function basis to SF basis.
     ! For blips and one_to_one PAOs, atomic functions are SFs
     !     so no transformation is needed.
     if (atomf.ne.sf) then
@@ -396,7 +394,6 @@ contains
           call AtomF_to_SF_transform(matH(spin), matHatomf(spin), spin, Hrange)   ! total electronic Hamiltonian
        enddo
     endif
-!!! nakata3
     !
     !
     ! dump matrices if required
@@ -1096,19 +1093,19 @@ contains
   !!   2016/09/20 18:30 nakata
   !!    Introduced matAP, matPA, matNLatomf, APrange, AP_trans, AP_PA_aHa
   !!    instead of matSC, matCS, matNL     , SPrange, SP_trans, SP_PS_H
+  !!    matNLatomf is used from module, not from passed variables
   !!   2016/12/19 18:30 nakata
   !!    Removed PAOPrange, dHrange, matdAP, matdCNL and matdH, 
   !!    which are no longer needed.
   !!  SOURCE
   !!
-!  subroutine get_HNL_matrix(matNL)
   subroutine get_HNL_matrix
 
     use datatypes
     use numbers
     use matrix_data, only: mat, APrange, halo
-    use mult_module, only: mult, AP_PA_aHa, AP_trans,                  & ! nakata3
-                           matPA, matAP, matNLatomf,                   & ! nakata3
+    use mult_module, only: mult, AP_PA_aHa, AP_trans,                  &
+                           matPA, matAP, matNLatomf,                   &
                            allocate_temp_matrix,                       &
                            free_temp_matrix, matrix_product,           &
                            matrix_sum, matrix_transpose, matrix_scale

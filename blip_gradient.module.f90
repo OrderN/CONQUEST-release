@@ -559,7 +559,7 @@ contains
     ! and H_dn_on_supportfns (for spin polarised calculations) alreay contain
     ! the correct values upon entry.
 
-    ! first, act on h_on_atomfns (which holds H |phi> on entry)
+    ! first, act on h_on_atomfns (which holds H |atomf> on entry)
     ! with the K matrix) to get type I variation
     
     ! L.Tong: act_on_vectors_new is accumulative, we use this to our advantage

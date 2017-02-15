@@ -137,7 +137,7 @@ contains
                                          ni_in_cell,                   &
                                          flag_self_consistent,         &
                                          id_glob, numprocs, area_minE, &
-                                         nspin, spin_factor, nspin_SF   ! nakata5
+                                         nspin, spin_factor, nspin_SF
     use group_module,              only: parts
     use H_matrix_module,           only: get_H_matrix
     use S_matrix_module,           only: get_S_matrix
@@ -315,8 +315,6 @@ contains
                                call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
                                call get_H_matrix(.false., fixed_potential, &
                                                  electrons, density, maxngrid)
-!nakata6                               call get_H_matrix(.true., fixed_potential, &
-!nakata6                                                 electrons, density, maxngrid)
                                call FindMinDM(n_cg_L_iterations, vary_mu, &
                                               L_tolerance, inode, ionode, &
                                               .false., .false.)
@@ -344,8 +342,6 @@ contains
                                call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
                                call get_H_matrix(.false., fixed_potential, &
                                                  electrons, density, maxngrid)
-!nakata6                               call get_H_matrix(.true., fixed_potential, &
-!nakata6                                                 electrons, density, maxngrid)
                                call my_barrier()
                             end if ! (TestTot)
                             if (TestS .or. TestBoth) then
@@ -399,8 +395,6 @@ contains
                                ! Recalculate energy and gradient
                                call get_H_matrix(.false., fixed_potential, &
                                                  electrons, density, maxngrid)
-!nakata6                               call get_H_matrix(.true., fixed_potential, &
-!nakata6                                                 electrons, density, maxngrid)
                                call FindMinDM(n_cg_L_iterations, vary_mu, &
                                               L_tolerance, inode, ionode, &
                                               .false., .false.)
@@ -459,7 +453,7 @@ contains
           ! We need the last search direction for CG manipulations
           call copy(length, search_direction(:,spin_SF), 1, last_sd(:,spin_SF), 1)
           ! The basis for searching is gradient
-          call copy(length, mat_p(matdSFcoeff(spin_SF))%matrix, 1, search_direction(:,spin_SF), 1) ! nakata5
+          call copy(length, mat_p(matdSFcoeff(spin_SF))%matrix, 1, search_direction(:,spin_SF), 1)
           ! Now project gradient tangential to the constant Ne hyperplane
           if (.not. diagon) then
              dN_dot_de = dot(length, mat_p(matdSFcoeff(spin_SF))%matrix, 1, &
@@ -552,11 +546,9 @@ contains
           if (inode == ionode) write (io_lun, 18) total_energy_0
           convergence_flag = .true.
           total_energy_last = total_energy_0
-!!! nakata5, deallocate memory
           deallocate(search_direction, last_sd, Psd, STAT=stat)
           if (stat /= 0) call cq_abort("vary_pao: Error dealloc mem")
           call reg_dealloc_mem(area_minE, 3*length*nspin_SF, type_dbl)
-!!! nakata5 end
           return
        end if
 
@@ -567,8 +559,6 @@ contains
        ! 3. Generate H
        call get_H_matrix(.false., fixed_potential, electrons, density, &
                          maxngrid)
-!       call get_H_matrix(.true., fixed_potential, electrons, density, &
-!                         maxngrid)
        call FindMinDM(n_cg_L_iterations, vary_mu, L_tolerance, inode, &
                       ionode, .false., .false.)
        call get_energy(total_energy_test)
@@ -887,7 +877,6 @@ contains
                                                + alph(ii) * data_paostore(:,ii,spin_SF)
           end do
        enddo
-       ! nakata5, normalisation should be done here ???
        ! Normalise
        call normalise_SFcoeff
        do spin_SF = 1,nspin_SF
@@ -911,13 +900,6 @@ contains
        call new_SC_potl(.false., con_tolerance, reset_L,             &
                         fixed_potential, vary_mu, n_cg_L_iterations, &
                         tolerance, total_energy_0)
-!      nakata5, normalisation should be done above ???
-!       ! Normalise
-!       call normalise_SFcoeff
-!       do spin_SF = 1,nspin_SF
-!          call matrix_scale(zero,matSFcoeff_tran(spin_SF))
-!          call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
-!       enddo
 
        do spin_SF = 1, nspin_SF
           call matrix_scale(zero, matdSFcoeff(spin_SF))
@@ -948,11 +930,9 @@ contains
           if (inode == ionode) write (io_lun, 18) total_energy_0
           convergence_flag = .true.
           total_energy_last = total_energy_0
-! nakata5, deallocate memory
           deallocate(data_gradstore, data_paostore, STAT=stat)
           if (stat /= 0) call cq_abort("pulay_min_pao: Error dealloc mem")
           call reg_dealloc_mem(area_minE, 2*mx_pulay*length*nspin_SF, type_dbl)
-!!! nakata5 end
           return
        end if
     end do ! n_iterations
@@ -1323,7 +1303,7 @@ contains
   !!     spin non-polarised caluclations, hence requires a spin_factor
   !!     correction when accumulating its contribution to the
   !!     coefficients
-  !!   2016/11/16 A. Nakata
+  !!   2016/11/16 nakata
   !!   - Changed how to calculate gradients
   !!   - Done by matrix multiplications as A(sf,sf) * (M(paof,paof) * C(paof,sf))^T
   !!    (This can be done also as C(sf,paof) * A(sf,sf) * M(paof,paof))
@@ -1350,7 +1330,7 @@ contains
                                    aHa_sCaTr_aHs, sHs_sHa_sCa,         &
                                    allocate_temp_matrix, free_temp_matrix
     use global_module,       only: nspin, spin_factor, atomf, sf,      &
-                                   flag_SpinDependentSF                ! nakata5
+                                   flag_SpinDependentSF
 
     ! Passed variables
     integer :: flag
@@ -1407,7 +1387,7 @@ contains
              call matrix_product(matM12(spin), mat_tmpS, matdSFcoeff(spin_SF), mult(sSs_sSa_sCa))
           else if (flag == full) then
              call matrix_product(matM12(spin), mat_tmpS, matdSFcoeff_e(spin_SF), mult(sSs_sSa_sCa)) ! once save in matdSFcoeff_e
-             call matrix_sum(one, matdSFcoeff(spin_SF), one, matdSFcoeff_e(spin_SF))          ! sum up with K.dH
+             call matrix_sum(one, matdSFcoeff(spin_SF), one, matdSFcoeff_e(spin_SF))                ! sum up with K.dH
           endif
           ! Electron gradient
           if (.not. diagon) then

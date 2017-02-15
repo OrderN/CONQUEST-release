@@ -36,6 +36,9 @@ contains
 
 !!   2016/07/29 18:30 nakata
 !!    Renamed supports_on_atom -> blips_on_atom
+!!   2016/12/29 18:30 nakata
+!!    Added npao_species
+!!    Removed no longer used blips_on_atom and flag_one_to_one
   subroutine exx_global_write()
 
     use datatypes
@@ -44,8 +47,7 @@ contains
     use cover_module,           ONLY: BCS_parts
     use primary_module,         ONLY: bundle
     use global_module,          ONLY: io_lun
-    use species_module,         ONLY: species_label, npao_species ! nakata3
-!    use support_spec_format,    ONLY: blips_on_atom, flag_one_to_one ! nakata3, delete later
+    use species_module,         ONLY: species_label, npao_species
     use atomic_density,         ONLY: atomic_density_table   
 
     use global_module,          ONLY: id_glob ! new
@@ -138,20 +140,12 @@ contains
              !if (exx_gto .and. flag_one_to_one) then
              !   ip_nsup = gto(ip_spec)%nprim
              !else 
-!!! 2016.12.29 nakata3, assumed to be only for PAOs
              ip_nsup = npao_species(ip_spec)
-!             if (flag_one_to_one) then
-!                ip_nsup = blips_on_atom(ip_spec)%nsuppfuncs
-!             else
-!                ip_nsup = blips_on_atom(ip)%nsuppfuncs
-!             end if
-!!!
              !end if
 
              ip_xyz(1) = bundle%xprim(ip_num)
              ip_xyz(2) = bundle%yprim(ip_num)
              ip_xyz(3) = bundle%zprim(ip_num)             
-!!! 2016.12.29 nakata3, assumed to be only for PAOs
              call hf_write_info(unit,inode,31,0,0,0,memb,ip_nsup, &
                   Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
@@ -170,26 +164,6 @@ contains
                   memb,ip_nsup, &
                   Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
-!!!
-!             call hf_write_info(unit,inode,31,0,0,0,memb,blips_on_atom(ip)%nsuppfuncs, &
-!                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
-!                  ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
-!
-!             call hf_write_info(unit_local_write1,inode,32,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
-!                  memb,blips_on_atom(ip)%nsuppfuncs, &
-!                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
-!                  ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
-!
-!             call hf_write_info(unit_local_write2,inode,33,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
-!                  memb,blips_on_atom(ip)%nsuppfuncs, &
-!                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
-!                  ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
-!
-!             call hf_write_info(unit_local_write3,inode,34,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
-!                  memb,blips_on_atom(ip)%nsuppfuncs, &
-!                  Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
-!                  ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
-!!! nakata3 end
 
              ! consider the neighbours <n_nab(memb)> of the member <memb> 
              ! within the partition <part> using the cutoff [Hrange] of H

@@ -537,9 +537,7 @@ contains
        Rcross = Rcross + dot(n_my_grid_points, residb(:,1), 1, resid0(:,nspin), 1)
        Rcross = Rcross + dot(n_my_grid_points, residb(:,nspin), 1, resid0(:,1), 1)
        call gsum(Rcross)
-!!! 2016.10.31 nakata bug fix, Rcross should be a absolute value.
        Rcross = abs(Rcross)
-!!! nakata bug fix end
        Rcross = sqrt(grid_point_volume * Rcross) / ne_in_cell
 
        if (R0 < self_tol) then

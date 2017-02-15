@@ -691,8 +691,8 @@ contains
     use datatypes
     use numbers
     use GenBlas,                     only: scal, rsum
-    use mult_module,                 only: matK, matKatomf, SF_to_AtomF_transform   ! nakata3
-    use matrix_data,                 only: Hrange   ! nakata3
+    use mult_module,                 only: matK, matKatomf, SF_to_AtomF_transform
+    use matrix_data,                 only: Hrange
     use dimens,                      only: n_my_grid_points, grid_point_volume
     use block_module,                only: n_pts_in_block
     use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
@@ -939,7 +939,7 @@ contains
     use set_blipgrid_module, only: naba_atoms_of_blocks
     use GenComms,            only: gsum, cq_abort, inode, ionode
     use global_module,       only: rcellx, rcelly, rcellz, iprint_SC, &
-                                   atomf, paof, sf,                   &   ! nakata3
+                                   atomf, paof, sf,                   &
                                    ni_in_cell, species_glob,          &
                                    id_glob, io_lun,                   &
                                    flag_Becke_atomic_radii,           &
@@ -1026,7 +1026,7 @@ contains
                 zatom(at)=DCS_parts%zcover(icover)
                 the_species=species_glob(ig_atom)
                 globatom(at) = ig_atom
-                rcut(at) = RadiusAtomf(the_species) ! nakata3
+                rcut(at) = RadiusAtomf(the_species)
                 rad(at) = atrad(atomicnum(the_species))
              end do
           end do
@@ -1268,7 +1268,7 @@ contains
                    zatom(at) = DCS_parts%zcover(icover)
                    the_species = species_glob(ig_atom)
                    globatom(at) = ig_atom
-                   rcut(at) = RadiusAtomf(the_species) ! nakata3
+                   rcut(at) = RadiusAtomf(the_species)
                    rad(at) = atrad(atomicnum(the_species))
                 end do
              end do

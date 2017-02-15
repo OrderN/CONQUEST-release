@@ -628,7 +628,7 @@ contains
              loc1= nunit_recv*(ipair-1)
              ind_alp_i_blk = naba_atoms_of_blocks(atomf)%ibegin_blk_orb(prim_blk)+ &
                   naba_atoms_of_blocks(atomf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
-             ! naba_atoms_of_blocks(atomf)%ibegin_blk_orb(iprim_blk): initial position of support for the present primary block.
+             ! naba_atoms_of_blocks(atomf)%ibegin_blk_orb(iprim_blk): initial position of atomf for the present primary block.
              ! naba_atoms_of_blocks(atomf)%ibeg_orb_atom(naba, iprim_blk)
              ! : initial position of the present naba atom (naba) in the neighbour-atom orbitals of the 
              ! present primary block.
@@ -2182,7 +2182,7 @@ contains
              loc1= nunit_send*(ipair-1)
              ind_alp_i_blk = naba_atoms_of_blocks(atomf)%ibegin_blk_orb(prim_blk)+ &
                   naba_atoms_of_blocks(atomf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
-             ! naba_atoms_of_blocks(atomf)%ibegin_blk_orb(iprim_blk): initial position of support for the present primary block.
+             ! naba_atoms_of_blocks(atomf)%ibegin_blk_orb(iprim_blk): initial position of atomf for the present primary block.
              ! naba_atoms_of_blocks(atomf)%ibeg_orb_atom(naba, iprim_blk)
              ! : initial position of the present naba atom (naba) in the neighbour-atom orbitals of the 
              ! present primary block.

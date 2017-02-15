@@ -70,7 +70,6 @@ module multisiteSF_module
   logical :: flag_LFD_useChemPsub                                ! use ChemP of subspaces (default=T)
   logical :: flag_LFD_ReadTVEC                                   ! read trial vectors from input file (default=F)
   real(double), allocatable, dimension(:,:,:) :: LFD_TVEC_read   ! (species, nsf, npao)
-!  integer,allocatable, dimension(:) :: LFD_TVEC_zeta             ! (species), which valence-zeta PAO is used as trial vector ! nakata, delete this line later
 
   ! LFD SFcoeff minimisation
   logical :: flag_LFD_minimise                                   ! minimise energy (optimise SF coefficients) by updating Hpao with SCF density
@@ -487,7 +486,7 @@ contains
           count_pao_j = 1
           ! Loop over PAOs on j = i
           do l2 = 0, pao(atom_spec)%greatest_angmom
-             do nacz2 = 1, pao(atom_spec)%angmom(l2)%n_zeta_in_angmom   ! nakata3
+             do nacz2 = 1, pao(atom_spec)%angmom(l2)%n_zeta_in_angmom
                 do m2 = -l2,l2
                    if (sf1==count_pao_j) then
                       val = one
@@ -726,11 +725,11 @@ contains
     use matrix_data,            only: mat, halo, SFcoeff_range, LD_range
     use mult_module,            only: mult, mat_p, matrix_scale, &
                                       matSatomf, matHatomf, matSFcoeff, aLa_aHa_aLHa, aLa_aSa_aLSa
-    use global_module,          only: numprocs, nspin_SF
+    use global_module,          only: ni_in_cell, numprocs, nspin_SF
     use species_module,         only: npao_species
     use io_module,              only: get_file_name
     use input_module,           only: io_assign, io_close
-    use GenComms,               only: mtime
+    use GenComms,               only: mtime, gsum
     use timer_stdclocks_module, only: start_timer,stop_timer,tmr_std_allocation
 
     implicit none
@@ -752,6 +751,7 @@ contains
                np, i, k, ist, gcspart, k_in_halo, nd3,                 &
                len_Sub_i, LWORK, LIWORK, NUMEIG                               ! for subspace of atom_i 
 
+    integer, allocatable, dimension(:)        :: num_naba_MS                  ! storage for number of naba atoms
     integer, allocatable, dimension(:)        :: label_kj_Hsub, label_kj_Ssub ! for subspace of halo atoms
     real(double), allocatable, dimension(:)   :: Hsub, Ssub
     real(double), allocatable, dimension(:,:) :: TVEC, Hsub_i, Ssub_i, EVEC   ! for subspace of atom_i
@@ -813,7 +813,12 @@ contains
     allocate(label_kj_Hsub(len_kj_sub),label_kj_Ssub(len_kj_sub),STAT=stat)
     if(stat/=0) call cq_abort('LocFilterDiag: error allocating label_kj_H/Ssub')
     call reg_alloc_mem(area_basis, 2*len_kj_sub, type_int)
+    allocate(num_naba_MS(ni_in_cell),STAT=stat)
+    if(stat/=0) call cq_abort('LocFilterDiag: error allocating num_naba_MS')
+    call reg_alloc_mem(area_basis, ni_in_cell, type_int)
     call stop_timer(tmr_std_allocation)
+
+    num_naba_MS(:) = 0
 
 
     do spin_SF = 1,nspin_SF
@@ -848,7 +853,7 @@ contains
                 NTVEC = mat(np,SFcoeff_range)%ndimi(i)
 !
                 ! count the dimension of the subspace for atom_i
-                ! nakata8, can we simplify this?
+                ! can we simplify this?
                 len_Sub_i = 0
                 do k = 1,mat(np,LD_range)%n_nab(i)                                   ! Loop over atom_k, neighbour of atom_i
                    ist = mat(np,LD_range)%i_acc(i) + k - 1                           ! index of atom_k in neighbour labelling
@@ -858,6 +863,7 @@ contains
                    nd3 = LFDhalo%ndimj(k_in_halo)                                    ! number of PAOs on atom_k
                    len_Sub_i = len_Sub_i + nd3                                       ! dimension of subspace for atom_i
                 enddo ! k
+                num_naba_MS(atom_i) = mat(np,LD_range)%n_nab(i)
                 if (iprint_basis>=6) write(io_lun,'(A,I8,A,I2,A,I3,A,I4)') &
                                           '  atom_i=',atom_i, ' : NTVEC=',NTVEC, &
                                           '  nab=',mat(np,LD_range)%n_nab(i), '  len_Sub_i = ',len_Sub_i
@@ -1012,8 +1018,22 @@ contains
        enddo ! np
     enddo ! spin_SF
 
+    ! print out the number of neighbour atoms for each target atom
+    call my_barrier()
+    call gsum(num_naba_MS,ni_in_cell)
+    if (inode==ionode) then
+       write(io_lun,*) ' --- Number of neighbour atoms in the multi-site range ---'
+       write(io_lun,*) '     atom ID      number of neighbour atoms'
+       do i = 1, ni_in_cell
+          write(io_lun,'(5X,I8,5X,I8)') i, num_naba_MS(i)
+       enddo
+    endif
+
     ! deallocate subspace matrices their labels
     call start_timer(tmr_std_allocation)
+    deallocate(num_naba_MS,STAT=stat)
+    if(stat/=0) call cq_abort('LocFilterDiag: error deallocating num_naba_MS')
+    call reg_dealloc_mem(area_basis, ni_in_cell, type_int)
     deallocate(label_kj_Hsub,label_kj_Ssub,STAT=stat)
     if(stat/=0) call cq_abort('LocFilterDiag: error deallocating label_kj_H/Ssub')
     call reg_dealloc_mem(area_basis, 2*len_kj_sub, type_int)
@@ -2144,7 +2164,6 @@ contains
        end if
        reset_L = .true.
        ! 3. Get a new self-consistent potential and Hamiltonian
-       ! rebuild_Hpao ??? nakata8
        call new_SC_potl(.false., con_tolerance, reset_L,             &
                         fixed_potential, vary_mu, n_cg_L_iterations, &
                         tolerance, total_energy_last)
