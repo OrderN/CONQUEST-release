@@ -20,7 +20,7 @@
 !!   --- for on-site SFs (single-site SFs) ---
 !!   initial_SFcoeff_onsite, loop_initial_SFcoeff_onsite
 !!   --- for Multi-site SFs (MSSFs) ---
-!!   smear_MSSF,
+!!   smear_MSSF, print_naba_in_MSSF,
 !!   --- for Localized filter diagonalisation (LFD) ---
 !!   LocFilterDiag,    LFD_make_Subspace_halo, LFD_pickup_subspace_elements, LFD_make_Subspace_i,
 !!   LFD_symm_sub_mat, LFD_make_TVEC,          LFD_filter,                   LFD_put_TVEC_to_SFcoeff,
@@ -101,7 +101,7 @@ contains
 !!   This subroutine is called in sub:initial_phis in initialisation_module.f90
 !!   and in sub:update_H in move_atoms.f90.
 !!
-  subroutine initial_SFcoeff(LFD_build_Spao, LFD_build_Hpao, fixed_potential)
+  subroutine initial_SFcoeff(LFD_build_Spao, LFD_build_Hpao, fixed_potential, output_naba_in_MSSF)
 
     use matrix_data,               only: SFcoeff_range
     use mult_module,               only: mult, matrix_scale, matrix_transpose, matrix_sum, &
@@ -121,7 +121,7 @@ contains
     implicit none
 
     ! Passed variables
-    logical :: LFD_grab_rho, fixed_potential, LFD_build_Spao, LFD_build_Hpao
+    logical :: LFD_build_Spao, LFD_build_Hpao, fixed_potential, output_naba_in_MSSF
     ! Local
     real(double), dimension(nspin) :: electrons
     real(double) :: electrons_tot, t0, t1, t2
@@ -129,6 +129,9 @@ contains
 
 
     if (inode==ionode) write(io_lun,*) 'We are in sub:initial_SFcoeff'
+
+    if (output_naba_in_MSSF) call print_naba_in_MSSF
+
     call my_barrier()
     t0 = mtime()
 
@@ -147,7 +150,8 @@ contains
                                              density, maxngrid, transform_AtomF_to_SF=.false.)
        call my_barrier()
        t1 = mtime()
-       if (inode == ionode) write (io_lun,*) 'LFD: Time for S and H in primitive PAO: ', t1-t0    
+       if (inode == ionode) write (io_lun,'(A,f20.8,A)') &
+          'LFD: Time for S and H in primitive PAO: ', t1-t0, ' ms'
        t0 = t1
        ! Rayson's Localised Filter Diagonalisation method
        call LocFilterDiag(mult(aLa_aHa_aLHa)%ahalo)    
@@ -186,7 +190,8 @@ contains
 
     call my_barrier()
     t2 = mtime()
-    if (inode == ionode) write (io_lun,*) 'Time for making initial multi-site SF coeffficients: ', t2-t0  
+    if (inode == ionode) write (io_lun,'(A,f20.8,A)') &
+       'Time for making initial multi-site SF coeffficients: ', t2-t0, ' ms'
 
     return
   end subroutine initial_SFcoeff
@@ -552,13 +557,14 @@ contains
 !!   but can be used any kinds of matrices.
 !!
 !!   (r_center+r_shift) is the center position of the smearing function.
+!!   In default, r_center is set to r_MS.
 !!   WIDTH determines the width of the smearing function (like kT).
 !!
 !!   Function to be used for smearing is specified by itype:
 !!      itype = 1 ... Fermi-Dirac function (with center+shift and width)
 !!              2 ... Error function (with center+shift)
 !!
-!!   This subroutine is called in sub:initial_SFcoeff_MSSF.
+!!   This subroutine is called in sub:initial_SFcoeff.
 !!
 !!  AUTHOR
 !!   A.Nakata
@@ -577,7 +583,7 @@ contains
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
-    use matrix_data, ONLY: mat, halo
+    use matrix_data, ONLY: mat, halo, rcut, Srange
     use mult_module, ONLY: matrix_pos, mat_p
 
     implicit none
@@ -606,6 +612,8 @@ contains
 !   --- smearing ---
 
     if (itype.eq.1) width1 = one / width
+
+    if (r_center.eq.zero) r_center = rcut(Srange) * half ! = r_SF = r_pao + r_MS
 
     iprim = 0; atom_i = 0
        do np = 1,bundle%groups_on_node ! Loop over primary set partitions
@@ -685,6 +693,71 @@ contains
   end subroutine smear_MSSF
 !!***
 
+!!****f* multisiteSF_module/print_naba_in_MSSF *
+!!
+!!  NAME
+!!   print_naba_in_MSSF
+!!
+!!  PURPOSE
+!!   Count the number of the neighbor atoms in the multi-site range
+!!   in new atomic position and write out.
+!!
+!!   This subroutine is called in sub:initial_SFcoeff.
+!!
+!!  AUTHOR
+!!   A.Nakata
+!!  CREATION DATE
+!!   2017/02/20
+!!
+  subroutine print_naba_in_MSSF
+
+    use primary_module,         only: bundle
+    use matrix_data,            only: mat, SFcoeff_range
+    use global_module,          only: ni_in_cell
+    use GenComms,               only: gsum
+
+    implicit none
+
+    ! Local
+    integer :: stat, iprim, atom_i, np, i
+    integer, allocatable, dimension(:) :: num_naba_MS   ! storage for number of naba atoms
+
+
+    allocate(num_naba_MS(ni_in_cell),STAT=stat)
+    if(stat/=0) call cq_abort('print_naba_in_MSSF: error allocating num_naba_MS')
+
+    num_naba_MS(:) = 0
+
+    iprim = 0; atom_i = 0  
+    do np = 1,bundle%groups_on_node           ! Loop over primary set partitions
+       if(bundle%nm_nodgroup(np)>0) then      ! If there are atoms in partition
+          do i = 1,bundle%nm_nodgroup(np)     ! Loop over atom_i
+             iprim = iprim + 1
+             atom_i = bundle%ig_prim(iprim)   ! global number of i
+             num_naba_MS(atom_i) = mat(np,SFcoeff_range)%n_nab(i)
+          enddo ! i
+       endif ! endif of (bundle%nm_nodgroup(np)>0)
+    enddo ! np
+
+    ! print out the number of neighbour atoms for each target atom
+    call my_barrier()
+    call gsum(num_naba_MS,ni_in_cell)
+    if (inode==ionode) then
+       write(io_lun,*) ' --- Number of neighbour atoms in the multi-site range ---'
+       write(io_lun,*) '     atom ID      number of neighbour atoms'
+       do i = 1, ni_in_cell
+          write(io_lun,'(5X,I8,5X,I8)') i, num_naba_MS(i)
+       enddo
+    endif
+
+    ! deallocate subspace matrices their labels
+    deallocate(num_naba_MS,STAT=stat)
+    if(stat/=0) call cq_abort('print_naba_in_MSSF: error deallocating num_naba_MS')
+!
+    return
+  end subroutine print_naba_in_MSSF
+!!***
+
 !!****f* multisiteSF_module/LocFilterDiag *
 !!
 !!  NAME
@@ -751,7 +824,6 @@ contains
                np, i, k, ist, gcspart, k_in_halo, nd3,                 &
                len_Sub_i, LWORK, LIWORK, NUMEIG                               ! for subspace of atom_i 
 
-    integer, allocatable, dimension(:)        :: num_naba_MS                  ! storage for number of naba atoms
     integer, allocatable, dimension(:)        :: label_kj_Hsub, label_kj_Ssub ! for subspace of halo atoms
     real(double), allocatable, dimension(:)   :: Hsub, Ssub
     real(double), allocatable, dimension(:,:) :: TVEC, Hsub_i, Ssub_i, EVEC   ! for subspace of atom_i
@@ -813,13 +885,7 @@ contains
     allocate(label_kj_Hsub(len_kj_sub),label_kj_Ssub(len_kj_sub),STAT=stat)
     if(stat/=0) call cq_abort('LocFilterDiag: error allocating label_kj_H/Ssub')
     call reg_alloc_mem(area_basis, 2*len_kj_sub, type_int)
-    allocate(num_naba_MS(ni_in_cell),STAT=stat)
-    if(stat/=0) call cq_abort('LocFilterDiag: error allocating num_naba_MS')
-    call reg_alloc_mem(area_basis, ni_in_cell, type_int)
     call stop_timer(tmr_std_allocation)
-
-    num_naba_MS(:) = 0
-
 
     do spin_SF = 1,nspin_SF
 !
@@ -863,7 +929,6 @@ contains
                    nd3 = LFDhalo%ndimj(k_in_halo)                                    ! number of PAOs on atom_k
                    len_Sub_i = len_Sub_i + nd3                                       ! dimension of subspace for atom_i
                 enddo ! k
-                num_naba_MS(atom_i) = mat(np,LD_range)%n_nab(i)
                 if (iprint_basis>=6) write(io_lun,'(A,I8,A,I2,A,I3,A,I4)') &
                                           '  atom_i=',atom_i, ' : NTVEC=',NTVEC, &
                                           '  nab=',mat(np,LD_range)%n_nab(i), '  len_Sub_i = ',len_Sub_i
@@ -1018,22 +1083,8 @@ contains
        enddo ! np
     enddo ! spin_SF
 
-    ! print out the number of neighbour atoms for each target atom
-    call my_barrier()
-    call gsum(num_naba_MS,ni_in_cell)
-    if (inode==ionode) then
-       write(io_lun,*) ' --- Number of neighbour atoms in the multi-site range ---'
-       write(io_lun,*) '     atom ID      number of neighbour atoms'
-       do i = 1, ni_in_cell
-          write(io_lun,'(5X,I8,5X,I8)') i, num_naba_MS(i)
-       enddo
-    endif
-
     ! deallocate subspace matrices their labels
     call start_timer(tmr_std_allocation)
-    deallocate(num_naba_MS,STAT=stat)
-    if(stat/=0) call cq_abort('LocFilterDiag: error deallocating num_naba_MS')
-    call reg_dealloc_mem(area_basis, ni_in_cell, type_int)
     deallocate(label_kj_Hsub,label_kj_Ssub,STAT=stat)
     if(stat/=0) call cq_abort('LocFilterDiag: error deallocating label_kj_H/Ssub')
     call reg_dealloc_mem(area_basis, 2*len_kj_sub, type_int)
@@ -1050,7 +1101,7 @@ contains
 
     if(myid==0) then
        t1 = mtime()
-       write(io_lun,*) 'Time for Localised Filter Diagonalisation: ',t1-t0
+       write(io_lun,'(A,f20.8,A)') 'Time for Localised Filter Diagonalisation: ',t1-t0,' ms'
     end if
     if (inode==ionode) write(io_lun,*) 'Done Localized Filter Diagonalization'
 !
@@ -1307,7 +1358,7 @@ contains
     call my_barrier
     if(iprint_mat>3.AND.myid==0) then
        t1 = mtime()
-       write(io_lun,*) 'LFD_make_Subspace_halo: ',t1-t0
+       write(io_lun,'(A,f20.8,A)') 'Time for LFD_make_Subspace_halo: ',t1-t0,' ms'
     end if
 !
     return
@@ -2149,7 +2200,7 @@ contains
 
        ! Make new multisite SF coefficients with updated density
        ! matSpao is not rebuild, matHpao is rebuild 
-       call initial_SFcoeff(.false., .true., fixed_potential)
+       call initial_SFcoeff(.false., .true., fixed_potential, .false.)
 
        call my_barrier
 

@@ -1942,7 +1942,7 @@ contains
                 call set_atomic_density(.true.)
              endif
           endif
-          call initial_SFcoeff(.true., .true., fixed_potential)
+          call initial_SFcoeff(.true., .true., fixed_potential, .true.)
        endif
     endif
     ! (1) Get S matrix (includes blip-to-grid transform)
@@ -1987,7 +1987,7 @@ contains
              ! if flag_LFD=T, update SF-PAO coefficients with the obtained density
              ! and update S with the coefficients
              if (flag_LFD) then
-                call initial_SFcoeff(.false., .true., fixed_potential)
+                call initial_SFcoeff(.false., .true., fixed_potential, .false.)
                 call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
              endif
           end if

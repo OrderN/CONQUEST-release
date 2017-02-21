@@ -1113,7 +1113,7 @@ contains
              end if
           endif
           ! make SF-PAO coefficients
-          call initial_SFcoeff(.true., .true., fixed_potential)
+          call initial_SFcoeff(.true., .true., fixed_potential, .true.)
        endif
        if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Got SFcoeff'
        call my_barrier
@@ -1252,7 +1252,7 @@ contains
        ! if flag_LFD=T, update SF-PAO coefficients with the obtained density
        ! and update S with the coefficients
        if (flag_LFD) then
-          call initial_SFcoeff(.false., .true., fixed_potential)
+          call initial_SFcoeff(.false., .true., fixed_potential, .false.)
           call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        endif
     else if (restart_rho .and. .not.flag_LFD) then

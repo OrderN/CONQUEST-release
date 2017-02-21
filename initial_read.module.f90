@@ -1179,7 +1179,7 @@ contains
           flag_MSSF_smear = fdf_boolean('Multisite.Smear', .false.)
           if (flag_MSSF_smear) then
              MSSF_Smear_type   = fdf_integer('Multisite.Smear.FunctionType', 1)
-             MSSF_Smear_center = fdf_double('Multisite.Smear.Center', BIG) ! in default, no change on MSSFs
+             MSSF_Smear_center = fdf_double('Multisite.Smear.Center', zero) ! if zero, will be changed to r_s later
              MSSF_Smear_shift  = fdf_double('Multisite.Smear.Shift', zero)
              MSSF_Smear_width  = fdf_double('Multisite.Smear.Width', 0.1_double)
           endif
@@ -2010,7 +2010,8 @@ contains
     use blip,                 only: blip_info
     use global_module,        only: flag_basis_set, PAOs,blips,        &
                                     functional_description,            &
-                                    flag_precondition_blips, io_lun
+                                    flag_precondition_blips, io_lun,   &
+                                    flag_Multisite
     use minimise,             only: energy_tolerance, L_tolerance,     &
                                     sc_tolerance,                      &
                                     n_support_iterations,              &
@@ -2085,6 +2086,8 @@ contains
     end do
 
     write(io_lun,20)
+
+    if (flag_Multisite) write(io_lun,'(/10x,"PAOs are contracted to multi-site support functions")')
 
     write(io_lun,29) energy_tolerance, L_tolerance, sc_tolerance
 

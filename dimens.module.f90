@@ -287,9 +287,9 @@ contains
     endif
     ! Set ranges for contracted SFs
     if (flag_Multisite) then
-         r_s = r_s_atomf + r_MS
-         r_h = r_h_atomf + r_MS
-         if (r_t.lt.r_s) r_t = r_s
+       r_s = r_s_atomf + r_MS
+       r_h = r_h_atomf + r_MS
+       if (r_t.lt.r_s) r_t = r_s
     endif
 
     ! Set other ranges
