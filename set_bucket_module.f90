@@ -143,7 +143,7 @@ contains
 !         mx_APpair_remnode, mx_APpair_domain
     use set_blipgrid_module,ONLY: comm_naba_blocks_of_atoms
     use comm_array_module,  ONLY: isend_array,irecv_array!,check_commarray_int!,check_commarray_real
-    use matrix_data, ONLY: halo, rcut, aSa_range, APrange, aHa_range, dHrange
+    use matrix_data, ONLY: halo, rcut, aSa_range, APrange, aHa_range
     use GenComms, ONLY: my_barrier, cq_abort
     use mpi, ONLY: MPI_STATUS_SIZE
 

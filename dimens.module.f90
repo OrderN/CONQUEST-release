@@ -189,20 +189,20 @@ contains
     if (atomf==sf) then
        aSa_range = Srange
        aHa_range = Hrange
-       mx_matrices_tmp = 22
+       mx_matrices_tmp = 19
     else
-       aSa_range       = 23
-       aHa_range       = 24
-       STr_range       = 25
-       HTr_range       = 26
-       aSs_range       = 27
-       aHs_range       = 28
-       sSa_range       = 29
-       sHa_range       = 30
-       SFcoeff_range   = 31
-       SFcoeffTr_range = 32
-       LD_range        = 33
-       mx_matrices_tmp = mx_matrices ! = 33
+       aSa_range       = 20
+       aHa_range       = 21
+       STr_range       = 22
+       HTr_range       = 23
+       aSs_range       = 24
+       aHs_range       = 25
+       sSa_range       = 26
+       sHa_range       = 27
+       SFcoeff_range   = 28
+       SFcoeffTr_range = 29
+       LD_range        = 30
+       mx_matrices_tmp = mx_matrices ! = 30
     endif
 
     !n_my_grid_points = n_pts_in_block * n_blocks    
@@ -341,9 +341,9 @@ contains
     rcut(LTrrange) = rcut(Lrange)
     rcut(SLrange)  = rcut(LSrange)
     rcut(TTrrange) = rcut(Trange)
-    rcut(dSrange)  = rcut(Srange)
-    rcut(dHrange)  = rcut(Hrange)
-    rcut(PAOPrange)= rcut(APrange)
+!MS1    rcut(dSrange)  = rcut(Srange)
+!MS1    rcut(dHrange)  = rcut(Hrange)
+!MS1    rcut(PAOPrange)= rcut(APrange)
     rcut(HLrange)  = rcut(LHrange)
     ! for atomf-based matrices
     if (atomf.ne.sf) then
@@ -389,9 +389,9 @@ contains
     mat_name(LTrrange) = "LT "
     mat_name(SLrange)  = "SL "
     mat_name(TTrrange) = "TT "
-    mat_name(dSrange)  = "dS "
-    mat_name(dHrange)  = "dH "
-    mat_name(PAOPrange)= "PAO"
+!MS1    mat_name(dSrange)  = "dS "
+!MS1    mat_name(dHrange)  = "dH "
+!MS1    mat_name(PAOPrange)= "PAO"
     mat_name(HLrange)  = "HL "
     mat_name(Xrange)   = "X  "
     mat_name(SXrange)  = "SX "
