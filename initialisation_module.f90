@@ -690,6 +690,8 @@ contains
  !!    Renamed supports_on_atom -> blips_on_atom
  !!   2016/08/08 15:30 nakata
  !!    Renamed supportfns -> atomfns
+ !!   2017/02/21 16:00 nakata
+ !!    Removed unused get_support_pao_rep
  !!  SOURCE
  !!
  subroutine initial_phis(read_phi, start, find_chdens, fixed_potential, level)
@@ -719,8 +721,7 @@ contains
     ! Temp
     use S_matrix_module,             only: get_onsite_S, get_S_matrix
     use make_rad_tables,             only: gen_rad_tables,             &
-                                           gen_nlpf_supp_tbls,         &
-                                           get_support_pao_rep
+                                           gen_nlpf_supp_tbls
     use angular_coeff_routines,      only: make_ang_coeffs, set_fact,  &
                                            set_prefac, set_prefac_real
     use read_support_spec,           only: read_support

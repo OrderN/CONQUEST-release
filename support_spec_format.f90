@@ -38,6 +38,8 @@
 !!    fixed call to start/stop_timer timer_module (not timer_stdlocks_module !)
 !!   2016/07/29 18:30 nakata
 !!    Renamed supports_on_atom -> blips_on_atom
+!!   2017/02/21 16:00 nakata
+!!    Commented out no-longer used mx_pao_coeff_atoms
 !!  SOURCE
 !!
 module support_spec_format
@@ -69,7 +71,7 @@ module support_spec_format
   ! former if true and the latter if false (default, set in get_support_pao_rep in ol_rad_table_subs.f90) is
   ! false
   logical :: flag_paos_atoms_in_cell ! Do we store coefficients for ALL atoms in cell, or only in primary set
-  integer :: mx_pao_coeff_atoms ! max atoms coefficients stored for
+!MS2  integer :: mx_pao_coeff_atoms ! max atoms coefficients stored for
   logical :: read_option, symmetry_breaking
   logical :: TestBasisGrads, TestTot, TestBoth, TestS, TestH
   logical :: flag_one_to_one

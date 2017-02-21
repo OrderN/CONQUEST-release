@@ -1707,6 +1707,8 @@ contains
   !!    Introduced atomf instead of sf
   !!   2016/08/08 15:30 nakata
   !!    Renamed supportfns -> atomfns
+  !!   2017/02/21 16:30 nakata
+  !!    Removed unused PAO_to_grad
   !!  SOURCE
   !!
   subroutine get_HF_non_local_force(HF_NL_force, what_force, n_atoms)
@@ -1743,7 +1745,6 @@ contains
                                            id_glob, species_glob,      &
                                            flag_analytic_blip_int, ni_in_cell
     ! TEMP
-    use PAO_grid_transform_module,   only: PAO_to_grad
     use build_PAO_matrices,          only: assemble_deriv_2
     use group_module,                only: parts
     use primary_module,              only: bundle
