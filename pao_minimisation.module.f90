@@ -109,6 +109,8 @@ contains
   !!   2012/03/24 L.Tong
   !!   - Changed spin implementation
   !!   - Removed redundant input parameter real(double) mu
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine vary_pao(n_support_iterations, fixed_potential, vary_mu, &
@@ -124,13 +126,13 @@ contains
                                          SCBeta
     use GenComms,                  only: my_barrier, gsum, inode,      &
                                          ionode, cq_abort
-    use DiagModule,                only: diagon
+    !use DiagModule,                only: diagon
     use primary_module,            only: bundle
     use global_module,             only: flag_vary_basis, iprint_minE, &
                                          ni_in_cell,                   &
                                          flag_self_consistent,         &
                                          id_glob, numprocs, area_minE, &
-                                         nspin, spin_factor
+                                         nspin, spin_factor, flag_diagonalisation
     use group_module,              only: parts
     use H_matrix_module,           only: get_H_matrix
     use S_matrix_module,           only: get_S_matrix
@@ -437,7 +439,7 @@ contains
        ! The basis for searching is gradient
        call copy(length, grad_coeff_array, 1, search_direction, 1)
        ! Now project gradient tangential to the constant Ne hyperplane
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           dN_dot_de = dot(length, grad_coeff_array, 1, &
                           elec_grad_coeff_array, 1)
           dN_dot_dN = dot(length, elec_grad_coeff_array, 1, &
@@ -472,7 +474,7 @@ contains
        call copy(length, Psd, 1, search_direction, 1)
        call axpy(length, gamma, last_sd, 1, search_direction, 1)
        ! And project perpendicular to electron gradient
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           dN_dot_de = dot(length, search_direction, 1, &
                           elec_grad_coeff_array, 1)
           dN_dot_dN = dot(length, elec_grad_coeff_array, 1, &
@@ -638,6 +640,8 @@ contains
   !!   - Changed spin implementation
   !!   - made temporary arrays automatic
   !!   - removed redundant input parameter real(double) mu
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !! SOURCE
   !!
   subroutine pulay_min_pao(n_support_iterations, fixed_potential,   &
@@ -654,11 +658,11 @@ contains
     use PosTan,              only: PulayC, PulayBeta, SCC, SCBeta
     use GenComms,            only: my_barrier, gsum, inode, ionode,    &
                                    cq_abort
-    use DiagModule,          only: diagon
+    !use DiagModule,          only: diagon
     use primary_module,      only: bundle
     use global_module,       only: flag_vary_basis, iprint_minE,       &
                                    ni_in_cell, nspin, spin_factor,     &
-                                   area_minE
+                                   area_minE, flag_diagonalisation
     use SelfCon,             only: new_SC_potl
     use S_matrix_module,     only: get_S_matrix
     use make_rad_tables,     only: writeout_support_functions
@@ -732,7 +736,7 @@ contains
     total_energy_last = total_energy_0
 
     ! We need to assemble the gradient
-    if (.not. diagon) then
+    if (.not. flag_diagonalisation) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, doM1,   &
                                 doM2, dontM3, doM4, dontphi, dontE, &
                                 mat_M12=matM12, mat_M4=matM4)
@@ -798,7 +802,7 @@ contains
        ! 1. Generate data_dS
        call get_S_matrix(inode, ionode)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
@@ -844,7 +848,7 @@ contains
        ! 1. Generate data_dS
        call get_S_matrix(inode, ionode)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
@@ -974,6 +978,8 @@ contains
   !!   - removed redundant input parameter real(double) mu
   !!   2012/06/18 L.Tong
   !!   - removed unused variable k0
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine line_minimise_pao(search_direction, fixed_potential,     &
@@ -992,9 +998,9 @@ contains
     use GenComms,            only: gsum, my_barrier, cq_abort, inode,  &
                                    ionode
     ! Check on whether we need K found from L or whether we have it exactly
-    use DiagModule,          only: diagon
+    !use DiagModule,          only: diagon
     use global_module,       only: flag_vary_basis, ni_in_cell,        &
-                                   area_minE, nspin
+                                   area_minE, nspin, flag_diagonalisation
     use primary_module,      only: bundle
     use support_spec_format, only: supports_on_atom, coeff_array_size, &
                                    coefficient_array,                  &
@@ -1091,7 +1097,7 @@ contains
        ! 1. Get new S matrix (includes pao-to-grid transform)
        call get_S_matrix(inode, ionode)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
@@ -1158,7 +1164,7 @@ contains
     ! 1. Get new S matrix (includes pao-to-grid transform)
     call get_S_matrix(inode, ionode)
     ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-    if (.not. diagon) then
+    if (.not. flag_diagonalisation) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1, &
                                 dontM2, dontM3, dontM4, dontphi, dontE)
     end if
@@ -1191,7 +1197,7 @@ contains
        ! 1. Get new S matrix (includes pao-to-grid transform)
        call get_S_matrix(inode, ionode)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
@@ -1255,6 +1261,8 @@ contains
   !!     spin non-polarised caluclations, hence requires a spin_factor
   !!     correction when accumulating its contribution to the
   !!     coefficients
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine build_PAO_coeff_grad(flag)
@@ -1262,7 +1270,7 @@ contains
     use datatypes
     use logicals
     use numbers
-    use DiagModule,          only: diagon
+    !use DiagModule,          only: diagon
     use GenBlas,             only: dot
     use primary_module,      only: bundle
     use cover_module,        only: BCS_parts
@@ -1281,7 +1289,7 @@ contains
                                    elec_grad_coeff_array,              &
                                    coeff_array_size
     use global_module,       only: iprint_minE, area_minE,             &
-                                   nspin, spin_factor
+                                   nspin, spin_factor, flag_diagonalisation
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem,     &
                                    type_dbl
 
@@ -1299,7 +1307,7 @@ contains
     real(double), dimension(:,:), allocatable :: tmpM12, tmpM4, tmpK,  &
                                                  tmpdH
     
-    if (.not. diagon) then
+    if (.not. flag_diagonalisation) then
        ! e1 and e2 are not used, just used for dumping the electron
        ! numbers and energies
        call LNV_matrix_multiply(e1, e2, doK, doM1, doM2, dontM3, doM4,&
@@ -1528,7 +1536,7 @@ contains
                         atom_no,i1, i2,            &
                         support_gradient(atom_no)%supp_func(i1)%coefficients(i2)
                    ! Electron gradient
-                   if (.not. diagon) then
+                   if (.not. flag_diagonalisation) then
                       ! No problems with electron number when diagonalising
                       do spin = 1, nspin
                          support_elec_gradient(atom_no)%supp_func(i1)% &

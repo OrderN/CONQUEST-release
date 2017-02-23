@@ -151,6 +151,8 @@ contains
   !!    - Fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine FindMinDM(n_L_iterations, vary_mu, tolerance, inode, &
@@ -163,13 +165,13 @@ contains
                              ne_in_cell, ne_spin_in_cell, flag_dump_L,  &
                              flag_MDold,flag_SkipEarlyDM, flag_XLBOMD,  &
                              flag_propagateX, flag_dissipation,         &
-                             integratorXL, runtype, flag_exx
+                             integratorXL, runtype, flag_exx, flag_diagonalisation
     use mult_module,   only: matrix_transpose, matT, matTtran, matL,    &
                              matS, matrix_sum
     use McWeeny,       only: InitMcW, McWMin
     use PosTan,        only: max_iters, cscale, PulayE, PulayR, PulayC, &
                              PulayBeta, pos_tan, fit_coeff
-    use DiagModule,    only: FindEvals, diagon
+    use DiagModule,    only: FindEvals
     use io_module,     only: dump_matrix
     use energy,        only: entropy
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,   &
@@ -212,7 +214,7 @@ contains
 
     entropy = zero
 
-    if (diagon) then ! Use exact diagonalisation to get K
+    if (flag_diagonalisation) then ! Use exact diagonalisation to get K
        call FindEvals(ne_spin_in_cell)
           
        call stop_timer(tmr_std_densitymat)
