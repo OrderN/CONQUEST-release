@@ -112,6 +112,8 @@
 !!    Added neutral atom flag
 !!   2016/02/16 JKS
 !!    Added Wu-Cohen XC functional  (PRB 73, 235116  (2006) )
+!!   2017/02/23 dave
+!!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
 !!  SOURCE
 !!
 module global_module
@@ -346,6 +348,9 @@ module global_module
 
   ! Neutral atom potential
   logical :: flag_neutral_atom
+
+  ! diagonalise or linear scaling
+  logical :: flag_diagonalisation
   
 end module global_module
 !!***

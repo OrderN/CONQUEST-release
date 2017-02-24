@@ -736,6 +736,8 @@ contains
   !!    - Corrected bug by adding barriers: grab_InfoGlobal
   !!   2016/01/13 08:31 dave
   !!    Removed call to set_density (now included in update_H)
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !! SOURCE
   !!
   subroutine safemin2(start_x, start_y, start_z, direction, energy_in, &
@@ -753,7 +755,7 @@ contains
                               IPRINT_TIME_THRES1, flag_pcc_global,    &
                               atom_coord_diff,id_glob,flag_MDold,     &
                               n_proc_old, glob2node_old,              &
-                              flag_LmatrixReuse
+                              flag_LmatrixReuse, flag_diagonalisation
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
                               n_L_iterations
     use GenComms,       only: my_barrier, myid, inode, ionode,        &
@@ -770,7 +772,7 @@ contains
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use io_module2, ONLY: grab_InfoGlobal,dump_InfoGlobal,InfoL,grab_matrix2
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
-    use DiagModule, ONLY: diagon
+    !use DiagModule, ONLY: diagon
 
     implicit none
 
@@ -938,7 +940,7 @@ contains
          call gcopy(glob2node_old,ni_in_cell)
          call updateIndices3(fixed_potential,direction)
          ! L-matrix reconstruction (used to be called at updateIndices3)
-         if (.NOT.diagon .AND. flag_LmatrixReuse) then
+         if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
            call grab_matrix2('L',inode,nfile,InfoL)
            call my_barrier()
            call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
@@ -1082,7 +1084,7 @@ contains
       call gcopy(glob2node_old,ni_in_cell)
       call updateIndices3(fixed_potential,direction)
       ! L-matrix reconstruction (used to be called at updateIndices3)
-      if (.NOT.diagon .AND. flag_LmatrixReuse) then
+      if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
         call grab_matrix2('L',inode,nfile,InfoL)
         call my_barrier()
         call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
@@ -1178,7 +1180,7 @@ contains
          call gcopy(glob2node_old,ni_in_cell)
          call updateIndices3(fixed_potential,direction)
          ! L-matrix reconstruction (used to be called at updateIndices3)
-         if (.NOT.diagon .AND. flag_LmatrixReuse) then
+         if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
            call grab_matrix2('L',inode,nfile,InfoL)
            call my_barrier()
            call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
@@ -1662,6 +1664,8 @@ contains
   !!    -  Added calls for initialising and finalising matrix indexing for XL-BOMD
   !!   2015/11/24 08:32 dave
   !!    Removed old ewald calls
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !! SOURCE
   !!
   !OLD subroutine updateIndices3(fixed_potential,velocity,step,iteration)
@@ -1672,7 +1676,7 @@ contains
     use global_module, ONLY: flag_basis_set,flag_Becke_weights,flag_dft_d2,blips, &
                              ni_in_cell,x_atom_cell,y_atom_cell,z_atom_cell,      &
                              IPRINT_TIME_THRES2,glob2node,flag_LmatrixReuse,      &
-                             flag_XLBOMD
+                             flag_XLBOMD, flag_diagonalisation
     use GenComms, ONLY: inode,ionode,my_barrier,myid,gcopy
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
@@ -1688,7 +1692,7 @@ contains
     use atoms, ONLY: distribute_atoms,deallocate_distribute_atom
     use timer_module
     use numbers
-    use DiagModule, ONLY: diagon
+    !use DiagModule, ONLY: diagon
     use io_module, ONLY: append_coords,write_atomic_positions,pdb_template
     use matrix_data, ONLY: Lrange
     use io_module2, ONLY: grab_matrix2,InfoL
@@ -1852,6 +1856,8 @@ contains
   !!    Added call to set_atomic_density for reset, non-SCF and NA
   !!   2016/01/29 15:01 dave
   !!    Removed prefix for ewald call
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine update_H(fixed_potential)
@@ -1860,7 +1866,7 @@ contains
     use timer_module    
     use S_matrix_module,        only: get_S_matrix
     use H_matrix_module,        only: get_H_matrix
-    use DiagModule,             only: diagon
+    !use DiagModule,             only: diagon
     use mult_module,            only: LNV_matrix_multiply
     use ion_electrostatic,      only: ewald, screened_ion_interaction
     use pseudopotential_data,   only: init_pseudo
@@ -1873,7 +1879,7 @@ contains
                                       nspin, flag_MDold, io_lun,       &
                                       flag_mix_L_SC_min, flag_XLBOMD,  &
                                       flag_reset_dens_on_atom_move,    &
-                                      flag_neutral_atom, flag_LmatrixReuse
+                                      flag_neutral_atom, flag_LmatrixReuse, flag_diagonalisation
     use density_module,         only: set_atomic_density,              &
                                       flag_no_atomic_densities,        &
                                       density, set_density_pcc,        &
@@ -1898,7 +1904,7 @@ contains
     call get_S_matrix(inode, ionode)
     if (flag_XLBOMD) call get_initialL_XL()
     ! (2) get K matrix if O(N)
-    if (.not. diagon) then
+    if (.not. flag_diagonalisation) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1, &
                                 dontM2, dontM3, dontM4, dontphi,    &
                                 dontE)
@@ -1927,7 +1933,7 @@ contains
         (.NOT. flag_mix_L_SC_min)).OR.flag_reset_dens_on_atom_move) then
        call set_atomic_density(.true.)
     ! For SCF-O(N) calculations
-    elseif (.NOT.diagon .AND. .NOT.flag_MDold) then
+    elseif (.NOT.flag_diagonalisation .AND. .NOT.flag_MDold) then
        if (flag_self_consistent .OR. flag_mix_L_SC_min) then
           if(flag_neutral_atom) call set_atomic_density(.false.)
           if(flag_LmatrixReuse) then
@@ -1936,7 +1942,7 @@ contains
                   inode,ionode,maxngrid)
           end if
        endif
-    else if(diagon.AND.flag_neutral_atom) then
+    else if(flag_diagonalisation.AND.flag_neutral_atom) then
        call set_atomic_density(.false.)
     else if ((.not. flag_self_consistent) .and. &
              (flag_no_atomic_densities)) then

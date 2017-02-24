@@ -540,6 +540,8 @@ contains
 !!    tolerance
 !!   2013/08/20 M.Arita
 !!    Added variables and calls for reusing T-matrix
+!!   2017/02/23 dave
+!!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
 !!  SOURCE
 !!
   subroutine Iter_Hott_InvS(output_level, n_L_iterations, tolerance,n_atoms,&
@@ -548,13 +550,13 @@ contains
     use datatypes
     use numbers
     use global_module, ONLY: IPRINT_TIME_THRES1,flag_MDold,flag_TmatrixReuse,restart_T, &
-                             runtype,n_proc_old
+                             runtype,n_proc_old, flag_diagonalisation
     use matrix_data, ONLY: Trange, TSrange, mat, Srange
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, store_matrix_value, matrix_scale, matrix_sum, &
          matT, matS, return_matrix_value, T_trans
     use primary_module, only: bundle
     use GenComms, ONLY: gsum, my_barrier
-    use DiagModule, ONLY: diagon
+    !use DiagModule, ONLY: diagon
     use species_module, ONLY: nsf_species, species
     use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
     use input_module, ONLY: leqi
@@ -579,7 +581,7 @@ contains
     matTold = allocate_temp_matrix(Trange,0)
     matTM = allocate_temp_matrix(TSrange,0)
 
-    if(diagon) then ! Don't need S^-1 for diagonalisation
+    if(flag_diagonalisation) then ! Don't need S^-1 for diagonalisation
        call matrix_scale(zero,matT)
        ip = 1
        nb = 1
@@ -706,7 +708,7 @@ contains
              end if ! bundle%nm_nodgroup(np)>0
           enddo
        endif
-    end if! End if NOT diagon
+    end if! End if NOT flag_diagonalisation
     call free_temp_matrix(matTM)
     call free_temp_matrix(matTold)
     call free_temp_matrix(matT1)
