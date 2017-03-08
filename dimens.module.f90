@@ -152,6 +152,8 @@ contains
 !!    Set ranges of atomf-based matrices
 !!   2016/11/02 dave
 !!    Added flag so that we only warn Lrange<Srange if O(N) is used
+!!   2017/03/08 15:00 nakata
+!!    Removed dSrange, dHrange and PAOPrange which are no longer used
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -341,9 +343,6 @@ contains
     rcut(LTrrange) = rcut(Lrange)
     rcut(SLrange)  = rcut(LSrange)
     rcut(TTrrange) = rcut(Trange)
-!MS1    rcut(dSrange)  = rcut(Srange)
-!MS1    rcut(dHrange)  = rcut(Hrange)
-!MS1    rcut(PAOPrange)= rcut(APrange)
     rcut(HLrange)  = rcut(LHrange)
     ! for atomf-based matrices
     if (atomf.ne.sf) then
@@ -389,9 +388,6 @@ contains
     mat_name(LTrrange) = "LT "
     mat_name(SLrange)  = "SL "
     mat_name(TTrrange) = "TT "
-!MS1    mat_name(dSrange)  = "dS "
-!MS1    mat_name(dHrange)  = "dH "
-!MS1    mat_name(PAOPrange)= "PAO"
     mat_name(HLrange)  = "HL "
     mat_name(Xrange)   = "X  "
     mat_name(SXrange)  = "SX "

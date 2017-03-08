@@ -94,7 +94,7 @@
 !!                    to matAP, matPA, AP_trans, APpairind, AP_PA_aHa, aHa_AP_AP
 !!    where A = atomic function and P = projecter function for NL.
 !!    matU is changed from (sf,nlpf) to (atomf,nlpf) (and its transpose matUT)
-!!   2017/02/21 14:30 nakata
+!!   2017/03/08 15:00 nakata
 !!    Removed PAOP_PS_H, matdS and matdH which are no longer used
 !!  SOURCE
 !!
@@ -132,7 +132,6 @@ module mult_module
   integer(integ), parameter :: T_H_TH    = 18  ! type 1
   integer(integ), parameter :: T_L_TL    = 19  ! type 1
   integer(integ), parameter :: TL_T_L    = 20  ! type 2
-!MS1  integer(integ), parameter :: PAOP_PS_H = 21  ! type 1/2 (cf AP_PA_aHa)
   integer(integ), parameter :: LS_T_L    = 21  ! type 2
   integer(integ), parameter :: S_X_SX    = 22  ! type 1
 
@@ -185,11 +184,11 @@ module mult_module
   integer :: max_matrices, current_matrix
   ! spin independent matrices
   integer, public :: &
-       matS, matT, matTtran, matAP, matPA, matKE, matNL !MS1 matdS
+       matS, matT, matTtran, matAP, matPA, matKE, matNL
   ! spin dependent matrices
   integer, allocatable, dimension(:), public :: &
        matH, matL, matLS, matSL, matK, matphi, matM12, matM4, matU, &
-       matUT, matX, matSX !MS1 matdH
+       matUT, matX, matSX
   ! spin independent atomf-based matrices
   integer, public :: &
        matSatomf, matKEatomf, matNLatomf
@@ -245,7 +244,7 @@ contains
   !!    can increase the parameter for the output run)
   !!   2016/08/09 21:30 nakata
   !!    Added lines for atomf-based matrices and LFD matrices
-  !!   2017/02/21 14:30 nakata
+  !!   2017/03/08 15:00 nakata
   !!    Removed dSrange, dHrange, PAOPrange and PAOP_PS_H which are no longer used
   !!  SOURCE
   !!
@@ -388,21 +387,6 @@ contains
                     TTrmatind, rcut(Trange), myid-1, halo(TTrrange),        &
                     ltrans(TTrrange))
     ! Differentials
-!MS1    mat(1:prim%groups_on_node,dSrange)%sf1_type = paof
-!MS1    mat(1:prim%groups_on_node,dSrange)%sf2_type = sf
-!MS1    call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,dSrange),   &
-!MS1                    dSmatind, rcut(Srange), myid-1, halo(dSrange),          &
-!MS1                    ltrans(dSrange))
-!MS1    mat(1:prim%groups_on_node,dHrange)%sf1_type = paof
-!MS1    mat(1:prim%groups_on_node,dHrange)%sf2_type = sf
-!MS1    call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,dHrange),   &
-!MS1                    dHmatind, rcut(Hrange), myid-1, halo(dHrange),          &
-!MS1                    ltrans(dHrange))
-!MS1    mat(1:prim%groups_on_node,PAOPrange)%sf1_type = paof
-!MS1    mat(1:prim%groups_on_node,PAOPrange)%sf2_type = nlpf
-!MS1    call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,PAOPrange), &
-!MS1                    PAOPmatind, rcut(APrange), myid-1,                      &
-!MS1                    halo(PAOPrange), ltrans(PAOPrange))
     call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,SXrange), &
                     SXmatind, rcut(SXrange), myid-1,                      &
                     halo(SXrange), ltrans(SXrange))
@@ -743,18 +727,6 @@ contains
        mult(AP_PA_aHa)%prim    => prim
        mult(AP_PA_aHa)%gcs     => gcs
        call mult_ini(mult(AP_PA_aHa), PAmatind, myid-1, prim%n_prim, parts)
-!MS1       mult(PAOP_PS_H)%mult_type = 1
-!MS1       mult(PAOP_PS_H)%amat    => mat(1:prim%groups_on_node,PAOPrange)
-!MS1       mult(PAOP_PS_H)%bmat    => mat(1:prim%groups_on_node,PArange)
-!MS1       mult(PAOP_PS_H)%cmat    => mat(1:prim%groups_on_node,dHrange)
-!MS1       mult(PAOP_PS_H)%ahalo   => halo(PAOPrange)
-!MS1       mult(PAOP_PS_H)%chalo   => halo(dHrange)
-!MS1       mult(PAOP_PS_H)%ltrans  => ltrans(PAOPrange)
-!MS1       !mult(PAOP_PS_H)%bindex => PAmatind
-!MS1       mult(PAOP_PS_H)%parts   => parts
-!MS1       mult(PAOP_PS_H)%prim    => prim
-!MS1       mult(PAOP_PS_H)%gcs     => gcs
-!MS1       call mult_ini(mult(PAOP_PS_H), PAmatind, myid-1, prim%n_prim, parts)
     else
        mult(AP_PA_aHa)%mult_type = 2
        mult(AP_PA_aHa)%amat    => mat(1:prim%groups_on_node,aHa_range)
@@ -768,18 +740,6 @@ contains
        mult(AP_PA_aHa)%prim    => prim
        mult(AP_PA_aHa)%gcs     => gcs
        call mult_ini(mult(AP_PA_aHa), APmatind, myid-1, prim%n_prim, parts)
-!MS1       mult(PAOP_PS_H)%mult_type = 2
-!MS1       mult(PAOP_PS_H)%amat    => mat(1:prim%groups_on_node,dHrange)
-!MS1       mult(PAOP_PS_H)%bmat    => mat(1:prim%groups_on_node,APrange)
-!MS1       mult(PAOP_PS_H)%cmat    => mat(1:prim%groups_on_node,PAOPrange)
-!MS1       mult(PAOP_PS_H)%ahalo   => halo(dHrange)
-!MS1       mult(PAOP_PS_H)%chalo   => halo(PAOPrange)
-!MS1       mult(PAOP_PS_H)%ltrans  => ltrans(dHrange)
-!MS1       !mult(PAOP_PS_H)%bindex => APmatind
-!MS1       mult(PAOP_PS_H)%parts   => parts
-!MS1       mult(PAOP_PS_H)%prim    => prim
-!MS1       mult(PAOP_PS_H)%gcs     => gcs
-!MS1       call mult_ini(mult(PAOP_PS_H), APmatind, myid-1, prim%n_prim, parts)
     end if
     ! 16-20
     mult(TS_T_T)%mult_type = 2
@@ -1064,6 +1024,8 @@ contains
   !!    Added timers
   !!   2016/08/09 21:30 nakata
   !!    Added lines for atomf-based matrices and LFD matrices
+  !!   2017/03/08 15:00 nakata
+  !!    Removed PAOP_PS_H, dSrange, dHrange and PAOPrange which are no longer used
   !!  SOURCE
   !!
   subroutine fmmi(prim)
@@ -1148,10 +1110,6 @@ contains
     mult(AP_PA_aHa)%ahalo,mult(AP_PA_aHa)%chalo,mult(AP_PA_aHa)%ltrans,           &
     mult(AP_PA_aHa)%bindex,mult(AP_PA_aHa)%parts,mult(AP_PA_aHa)%prim,            &
     mult(AP_PA_aHa)%gcs)
-!MS1    nullify(mult(PAOP_PS_H)%amat,mult(PAOP_PS_H)%bmat,mult(PAOP_PS_H)%cmat, &
-!MS1    mult(PAOP_PS_H)%ahalo,mult(PAOP_PS_H)%chalo,mult(PAOP_PS_H)%ltrans,     &
-!MS1    mult(PAOP_PS_H)%bindex,mult(PAOP_PS_H)%parts,mult(PAOP_PS_H)%prim,      &
-!MS1    mult(PAOP_PS_H)%gcs)
     nullify(mult(TS_T_T)%amat,mult(TS_T_T)%bmat,mult(TS_T_T)%cmat,          &
     mult(TS_T_T)%ahalo,mult(TS_T_T)%chalo,mult(TS_T_T)%ltrans,              &
     mult(TS_T_T)%bindex,mult(TS_T_T)%parts,mult(TS_T_T)%prim,               &
@@ -1245,7 +1203,6 @@ contains
     call deallocate_comms_data(mult(LHL_SL_S)%comms)
     call deallocate_comms_data(mult(LSL_SL_H)%comms)
     call deallocate_comms_data(mult(AP_PA_aHa)%comms)
-!MS1    call deallocate_comms_data(mult(PAOP_PS_H)%comms)
     call deallocate_comms_data(mult(TS_T_T)%comms)
     call deallocate_comms_data(mult(TH_T_L)%comms)
     call deallocate_comms_data(mult(T_H_TH)%comms)
@@ -1280,13 +1237,10 @@ contains
     !call dissociate_matrices
     ! Matrices
     call end_ops(prim,Srange,Smatind,S_trans)
-!MS1    call end_ops(prim,dSrange,dSmatind)
     call end_ops(prim,Lrange,Lmatind,L_trans)
     call end_ops(prim,LTrrange,LTrmatind)
     call end_ops(prim,Hrange,Hmatind)
-!MS1    call end_ops(prim,dHrange,dHmatind)
     call end_ops(prim,APrange, APmatind,AP_trans)
-!MS1    call end_ops(prim,PAOPrange,PAOPmatind)
     call end_ops(prim,PArange,PAmatind)
     call end_ops(prim,LSrange, LSmatind,LS_trans)
     call end_ops(prim,SLrange,SLmatind)
@@ -1935,7 +1889,7 @@ contains
   !!    not
   !!   2016/08/09 21:30 nakata
   !!    Added lines for atomf-based matrices and LFD matrices
-  !!   2017/02/21 14:30 nakata
+  !!   2017/03/08 15:00 nakata
   !!    Removed dSrange, dHrange, matdS and matdH which are no longer used
   !!  SOURCE
   !!
@@ -1964,8 +1918,7 @@ contains
     if (.not. allocated_tags) then
        allocate(matH(nspin), matL(nspin),   matLS(nspin),  matSL(nspin), &
                 matK(nspin), matphi(nspin), matM12(nspin), matM4(nspin), &
-                matU(nspin), matUT(nspin),  matX(nspin),                 & !MS1 matdH(nspin)
-                matSX(nspin), STAT=stat)
+                matU(nspin), matUT(nspin),  matX(nspin),   matSX(nspin), STAT=stat)
        if (stat /= 0) &
             call cq_abort('associate_matrices: failed to allocate spin &
                            &depdendent matrix tags', nspin, stat)
@@ -2002,8 +1955,6 @@ contains
     matUT(1)  = 15
     matKE     = 16
     matNL     = 17
-!MS1    matdH(1)  = 18
-!MS1    matdS     = 19
     matX(1)   = 18
     matSX(1)  = 19
     current_matrix = 19
@@ -2011,7 +1962,6 @@ contains
        matH(2)   = 20
        matL(2)   = 21
        matK(2)   = 22
-!MS1       matdH(2)  = 25
        matLS(2)  = 23
        matSL(2)  = 24
        matphi(2) = 25
@@ -2079,8 +2029,6 @@ contains
 !%%!    mat_p(matUT )%matrix => data_UT
 !%%!    mat_p(matKE )%matrix => data_KE
 !%%!    mat_p(matNL )%matrix => data_NL
-!MS1!%%!    mat_p(matdH  )%matrix => data_dH
-!MS1!%%!    mat_p(matdS  )%matrix => data_dS
 
     ! Set the dimensions of the arrays
     ! Type for f1
@@ -2091,7 +2039,6 @@ contains
     mat_p(matPA   )%sf1_type = nlpf
     mat_p(matKE   )%sf1_type = sf
     mat_p(matNL   )%sf1_type = sf
-!MS1    mat_p(matdS   )%sf1_type = paof
     do spin = 1, nspin
        mat_p(matL(spin)  )%sf1_type = sf
        mat_p(matK(spin)  )%sf1_type = sf
@@ -2103,7 +2050,6 @@ contains
        mat_p(matUT(spin) )%sf1_type = nlpf
        mat_p(matLS(spin) )%sf1_type = sf    
        mat_p(matSL(spin) )%sf1_type = sf
-!MS1       mat_p(matdH(spin) )%sf1_type = paof
        mat_p(matX(spin)  )%sf1_type = sf
        mat_p(matSX(spin) )%sf1_type = sf
     end do
@@ -2129,7 +2075,6 @@ contains
     mat_p(matPA   )%sf2_type = atomf
     mat_p(matKE   )%sf2_type = sf
     mat_p(matNL   )%sf2_type = sf
-!MS1    mat_p(matdS   )%sf2_type = sf
     do spin = 1, nspin
        mat_p(matL(spin)  )%sf2_type = sf
        mat_p(matK(spin)  )%sf2_type = sf
@@ -2141,7 +2086,6 @@ contains
        mat_p(matUT(spin) )%sf2_type = atomf
        mat_p(matLS(spin) )%sf2_type = sf
        mat_p(matSL(spin) )%sf2_type = sf
-!MS1       mat_p(matdH(spin) )%sf2_type = sf
        mat_p(matX(spin)  )%sf2_type = sf
        mat_p(matSX(spin) )%sf2_type = sf
     end do
@@ -2167,7 +2111,6 @@ contains
     matrix_index(matPA   ) = PArange
     matrix_index(matKE   ) = Hrange
     matrix_index(matNL   ) = Hrange    
-!MS1    matrix_index(matdS   ) = dSrange
     do spin = 1, nspin
        matrix_index(matL(spin)  ) = Lrange
        matrix_index(matK(spin)  ) = Hrange
@@ -2179,7 +2122,6 @@ contains
        matrix_index(matUT(spin) ) = PArange
        matrix_index(matLS(spin) ) = LSrange
        matrix_index(matSL(spin) ) = SLrange
-!MS1       matrix_index(matdH(spin) ) = dHrange
        matrix_index(matX(spin)  ) = Hrange  ! Xrange
        matrix_index(matSX(spin) ) = SXrange
     end do
@@ -2216,8 +2158,6 @@ contains
 !%%!    mat_p(matUT )%length = nlpf*nsf*mx_at_prim*mx_scnab
 !%%!    mat_p(matKE )%length = nsf*nsf*mx_at_prim*mx_hnab
 !%%!    mat_p(matNL )%length = nsf*nsf*mx_at_prim*mx_hnab
-!MS1!%%!    mat_p(matdS  )%length = npao*nsf*mx_at_prim*mx_snab
-!MS1!%%!    mat_p(matdH  )%length = npao*nsf*mx_at_prim*mx_hnab
 
     ! Allocalting the core matrices
     do i = 1, current_matrix
@@ -2260,7 +2200,6 @@ contains
     trans_index(matPA   ) = AP_trans
     trans_index(matKE   ) = 0
     trans_index(matNL   ) = 0
-!MS1    trans_index(matdS   ) = 0
     do spin = 1, nspin
        trans_index(matL(spin)  ) = L_trans
        trans_index(matK(spin)  ) = 0
@@ -2272,7 +2211,6 @@ contains
        trans_index(matUT(spin) ) = AP_trans
        trans_index(matLS(spin) ) = LS_trans
        trans_index(matSL(spin) ) = LS_trans
-!MS1       trans_index(matdH(spin) ) = 0
        trans_index(matX(spin)  ) = 0 ! S_trans
        trans_index(matSX(spin) ) = 0
     end do
@@ -2313,7 +2251,7 @@ contains
   !!   - Changed spin implementation
   !!   2016/08/09 21:30 nakata
   !!    Added lines for atomf-based matrices and LFD matrices
-  !!   2017/02/21 14:30 nakata
+  !!   2017/03/08 15:00 nakata
   !!    Removed matdS and matdH which are no longer used
   !! SOURCE
   !!
@@ -2409,9 +2347,6 @@ contains
        deallocate(mat_p(matLS(2) )%matrix,STAT=stat)!23
        if (stat /= 0) call cq_abort("Error deallocating matrix LS(2)&
             & ",mat_p(matLS(2))%length)
-!MS1       deallocate(mat_p(matdH(2))%matrix,STAT=stat) !25
-!MS1       if (stat /= 0) call cq_abort("Error deallocating matrix dH(2)&
-!MS1            & ",mat_p(matdH(2))%length)
        deallocate(mat_p(matK(2))%matrix,STAT=stat)  !22
        if (stat /= 0) call cq_abort("Error deallocating matrix K(2)&
             & ",mat_p(matK(2))%length)
@@ -2428,12 +2363,6 @@ contains
     deallocate(mat_p(matX(1))%matrix,STAT=stat)     !18
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix X(1) ",mat_p(matX(1))%length)
-!MS1    deallocate(mat_p(matdS)%matrix,STAT=stat)       !19
-!MS1    if (stat /= 0) &
-!MS1         call cq_abort("Error deallocating matrix dS ", mat_p(matdS)%length)
-!MS1    deallocate(mat_p(matdH(1))%matrix,STAT=stat)    !18
-!MS1    if (stat /= 0) &
-!MS1         call cq_abort("Error deallocating matrix dH(1) ", mat_p(matdH(1))%length)
     deallocate(mat_p(matNL)%matrix,STAT=stat)       !17
     if (stat /= 0) &
          call cq_abort("Error deallocating matrix NL ", mat_p(matNL)%length)

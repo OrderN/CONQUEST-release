@@ -57,6 +57,9 @@
 !!    Changed from SPrange, PSrange, SPmatind, PSmatind
 !!              to APrange, PArange, APmatind, PAmatind
 !!    where A = atomic function (sf or paof) and P = projecter function for NL
+!!   2017/03/08 15:00 nakata
+!!    Removed dSrange, dHrange, PAOPrange, dSmatind, dHmatind and PAOPmatind
+!!    which are no longer used
 !!  SOURCE
 !!
 module matrix_data
@@ -79,7 +82,6 @@ module matrix_data
   integer, dimension(:), pointer :: Smatind, Lmatind, LTrmatind, Hmatind, &
        APmatind, PAmatind, LSmatind, SLmatind, LHmatind, HLmatind, LSLmatind, &
        SLSmatind, Tmatind, TTrmatind, TSmatind, THmatind, TLmatind, Xmatind, SXmatind
-!MS1       dSmatind, dHmatind, PAOPmatind
   integer, dimension(:), pointer :: aSa_matind, aHa_matind, STr_matind, HTr_matind, &
                                     aSs_matind, aHs_matind, sSa_matind, sHa_matind, &
                                     SFcoeff_matind, SFcoeffTr_matind, LD_matind
@@ -101,9 +103,6 @@ module matrix_data
   integer, parameter :: LTrrange = 14
   integer, parameter :: SLrange  = 15
   integer, parameter :: TTrrange = 16
-!MS1  integer, parameter :: dSrange  = 17  ! STS,TST,TS.TS
-!MS1  integer, parameter :: dHrange  = 18  ! K,LSLSL
-!MS1  integer, parameter :: PAOPrange= 19  ! PA,U   ! Maybe rename ?
   integer, parameter :: HLrange  = 17
 
   integer, parameter :: Xrange   = 18
