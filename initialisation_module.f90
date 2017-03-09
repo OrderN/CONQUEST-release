@@ -125,7 +125,7 @@ contains
     use cover_module,      only: make_cs, D2_CS
     use dimens,            only: r_dft_d2
     use DFT_D2
-    use pseudo_tm_module, only: make_neutral_atom
+    use pseudo_tm_module,   only: make_neutral_atom
 
     implicit none
 
@@ -183,7 +183,7 @@ contains
     
     call my_barrier()
 
-    call initial_phis(read_phi, start,std_level_loc+1)
+    call initial_phis(read_phi, start, find_chdens, fixed_potential, std_level_loc+1)
 
     call initial_H(start, start_L, find_chdens, fixed_potential, &
                    vary_mu, total_energy,std_level_loc+1)
@@ -266,6 +266,8 @@ contains
   !!    Updated module name to ion_electrostatic
   !!   2016/01/29 15:00 dave
   !!    Removed prefix for ewald call
+  !!   2016/09/16 17:00 nakata
+  !!    Removed unused RadiusSupport
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -296,7 +298,7 @@ contains
     use dimens,                 only: n_grid_x, n_grid_y, n_grid_z,    &
                                       r_core_squared, r_h, r_super_x,  &
                                       r_super_y, r_super_z,            &
-                                      RadiusSupport, n_my_grid_points, &
+                                      n_my_grid_points,                &
                                       r_dft_d2
     use fft_module,             only: set_fft_map, fft3
     use GenComms,               only: cq_abort, my_barrier, inode,     &
@@ -684,9 +686,15 @@ contains
  !!    Added experimental backtrace
  !!   2016/03/15 13:55 dave
  !!    Removed restart_file (redundant) and mu
+ !!   2016/07/29 18:30 nakata
+ !!    Renamed supports_on_atom -> blips_on_atom
+ !!   2016/08/08 15:30 nakata
+ !!    Renamed supportfns -> atomfns
+ !!   2017/02/21 16:00 nakata
+ !!    Removed unused get_support_pao_rep
  !!  SOURCE
  !!
- subroutine initial_phis(read_phi, start, level)
+ subroutine initial_phis(read_phi, start, find_chdens, fixed_potential, level)
 
     use datatypes
     use blip,                        only: init_blip_flag, make_pre,   &
@@ -713,13 +721,12 @@ contains
     ! Temp
     use S_matrix_module,             only: get_onsite_S, get_S_matrix
     use make_rad_tables,             only: gen_rad_tables,             &
-                                           gen_nlpf_supp_tbls,         &
-                                           get_support_pao_rep
+                                           gen_nlpf_supp_tbls
     use angular_coeff_routines,      only: make_ang_coeffs, set_fact,  &
                                            set_prefac, set_prefac_real
     use read_support_spec,           only: read_support
-    use functions_on_grid,           only: supportfns
-    use support_spec_format,         only: supports_on_atom,           &
+    use functions_on_grid,           only: atomfns
+    use support_spec_format,         only: blips_on_atom,              &
                                            coefficient_array,          &
                                            coeff_array_size,           &
                                            read_option
@@ -729,7 +736,7 @@ contains
     implicit none
 
     ! Passed variables
-    logical           :: read_phi, start
+    logical           :: read_phi, start, find_chdens, fixed_potential
     integer, optional :: level
 
     ! Local variables
@@ -791,7 +798,7 @@ contains
           call grab_blip_coeffs(coefficient_array,coeff_array_size, inode)
        end if
        ! Normalisation
-       call blip_to_support_new(inode-1, supportfns)
+       call blip_to_support_new(inode-1, atomfns)
        if((inode == ionode).AND.(iprint_init > 1)) then
           write(unit=io_lun,&
                 fmt='(10x,"initial_phis: completed blip_to_support()")')
@@ -804,7 +811,7 @@ contains
           !          NSF, SUPPORT_SIZE, MAX_N_BLIPS)
           !     write(io_lun,*) 'S matrix for normalisation on Node= ',inode
           call get_matrix_elements_new(inode-1,rem_bucket(1),matS,&
-                                       supportfns,supportfns)
+                                       atomfns,atomfns)
           ! Do the onsite elements analytically
           if(flag_onsite_blip_ana) then
              iprim=0
@@ -814,7 +821,7 @@ contains
                       iprim=iprim+1
                       spec = bundle%species(iprim)
                       this_nsf = nsf_species(spec)
-                      call get_onsite_S(supports_on_atom(iprim), matS,&
+                      call get_onsite_S(blips_on_atom(iprim), matS,&
                                         np, ni, iprim, this_nsf, spec)
                    end do
                 end if
@@ -833,10 +840,10 @@ contains
                       else
                          factor = zero
                       end if
-                      do n_blip=1,supports_on_atom(iprim)%supp_func(isf)%ncoeffs
-                         supports_on_atom(iprim)%&
+                      do n_blip=1,blips_on_atom(iprim)%supp_func(isf)%ncoeffs
+                         blips_on_atom(iprim)%&
                               supp_func(isf)%coefficients(n_blip) = &
-                              factor*supports_on_atom(iprim)%&
+                              factor*blips_on_atom(iprim)%&
                               supp_func(isf)%coefficients(n_blip)
                       enddo ! n_blip
                    enddo ! isf
@@ -847,9 +854,9 @@ contains
           call my_barrier()
           if(inode==ionode.AND.iprint_init>1) &
                write(io_lun,fmt='(10x,"Completed normalise_support")')
-          call blip_to_support_new(inode-1, supportfns)
+          call blip_to_support_new(inode-1, atomfns)
           call get_matrix_elements_new(inode-1,rem_bucket(1),matS,&
-                                       supportfns,supportfns)
+                                       atomfns,atomfns)
           ! Do the onsite elements analytically
           if(flag_onsite_blip_ana) then
              iprim=0
@@ -859,7 +866,7 @@ contains
                       iprim=iprim+1
                       spec = bundle%species(iprim)
                       this_nsf = nsf_species(spec)
-                      call get_onsite_S(supports_on_atom(iprim), matS,&
+                      call get_onsite_S(blips_on_atom(iprim), matS,&
                                         np, ni, iprim, this_nsf, spec)
                    end do
                 end if
@@ -883,7 +890,7 @@ contains
           write(unit=io_lun,fmt='(10x,"initial_phis: r_h:",f12.6)') r_h
        end if
        ! We don't need a PAO equivalent of blip_to_support here: this
-       ! is done by get_S_matrix
+       ! is done by get_S_matrix_PAO
     end if
 
 !****lat<$
@@ -982,6 +989,12 @@ contains
   !!    Updated module name to ion_electrostatic
   !!   2016/01/29 15:00 dave
   !!    Removed prefix for ewald call
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
+  !!   2016/12/19 17:15 nakata
+  !!    Removed unused flag_vary_basis
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
@@ -992,42 +1005,46 @@ contains
     use datatypes
     use numbers
     use logicals
-    use mult_module,       only: LNV_matrix_multiply, matL, matphi, &
-                                 matT, T_trans, L_trans, LS_trans
-    use SelfCon,           only: new_SC_potl
-    use global_module,     only: iprint_init, flag_self_consistent, &
-                                 flag_basis_set, blips, PAOs,       &
-                                 flag_vary_basis, restart_L,        &
-                                 restart_rho, flag_test_forces,     &
-                                 flag_dft_d2, nspin, spin_factor,   &
-                                 flag_MDold,flag_MDcontinue,        &
-                                 restart_T,glob2node,glob2node_old, &
-                                 n_proc_old,MDinit_step,ni_in_cell, &
-                                 flag_XLBOMD, flag_dissipation,     &
-                                 flag_propagateX, flag_propagateL, restart_X, &
-                                 flag_exx, exx_scf, flag_out_wf, wf_self_con, &
-                                 flag_write_DOS, flag_neutral_atom, flag_diagonalisation
-    use ion_electrostatic, only: ewald, screened_ion_interaction
-    use S_matrix_module,   only: get_S_matrix
-    use GenComms,          only: my_barrier,end_comms,inode,ionode, &
-                                 cq_abort,gcopy
-    use DMMin,             only: correct_electron_number, FindMinDM
-    use H_matrix_module,   only: get_H_matrix
-    use energy,            only: get_energy
-    use test_force_module, only: test_forces
-    use io_module,         only: grab_matrix, grab_charge
-    !use DiagModule,        only: diagon
-    use density_module,    only: get_electronic_density, density
-    use functions_on_grid, only: supportfns, H_on_supportfns
-    use dimens,            only: n_my_grid_points
-    use maxima_module,     only: maxngrid
-    use minimise,          only: sc_tolerance, L_tolerance,         &
-                                 n_L_iterations, expected_reduction
-    use DFT_D2,            only: dispersion_D2
-    use matrix_data,       ONLY: Lrange,Trange,LSrange
-    use io_module2,        ONLY: n_matrix,grab_InfoGlobal,grab_matrix2,InfoL,InfoT
-    use UpdateInfo_module, ONLY: make_glob2node,Matrix_CommRebuild
-    use XLBOMD_module,     ONLY: grab_XXvelS,grab_Xhistories
+    use mult_module,         only: LNV_matrix_multiply, matL, matphi, &
+                                   matT, T_trans, L_trans, LS_trans,  &
+                                   matrix_scale, matSFcoeff
+    use SelfCon,             only: new_SC_potl
+    use global_module,       only: iprint_init, flag_self_consistent, &
+                                   flag_basis_set, blips, PAOs,       &
+                                   restart_L,                         &
+                                   restart_rho, flag_test_forces,     &
+                                   flag_dft_d2, nspin, spin_factor,   &
+                                   flag_MDold,flag_MDcontinue,        &
+                                   restart_T,glob2node,glob2node_old, &
+                                   n_proc_old,MDinit_step,ni_in_cell, &
+                                   flag_XLBOMD, flag_dissipation,     &
+                                   flag_propagateX, flag_propagateL, restart_X, &
+                                   flag_exx, exx_scf, flag_out_wf, wf_self_con, &
+                                   flag_write_DOS, flag_neutral_atom, &
+                                   atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation
+    use ion_electrostatic,   only: ewald, screened_ion_interaction
+    use S_matrix_module,     only: get_S_matrix
+    use GenComms,            only: my_barrier,end_comms,inode,ionode, &
+                                   cq_abort,gcopy
+    use DMMin,               only: correct_electron_number, FindMinDM
+    use H_matrix_module,     only: get_H_matrix
+    use energy,              only: get_energy
+    use test_force_module,   only: test_forces
+    use io_module,           only: grab_matrix, grab_charge
+    !use DiagModule,          only: diagon
+    use density_module,      only: get_electronic_density, density
+    use functions_on_grid,   only: atomfns, H_on_atomfns
+    use dimens,              only: n_my_grid_points
+    use maxima_module,       only: maxngrid
+    use minimise,            only: sc_tolerance, L_tolerance,         &
+                                   n_L_iterations, expected_reduction
+    use DFT_D2,              only: dispersion_D2
+    use matrix_data,         ONLY: Lrange,Trange,LSrange
+    use io_module2,          ONLY: n_matrix,grab_InfoGlobal,grab_matrix2,InfoL,InfoT
+    use UpdateInfo_module,   ONLY: make_glob2node,Matrix_CommRebuild
+    use XLBOMD_module,       ONLY: grab_XXvelS,grab_Xhistories
+    use support_spec_format, only: read_option
+    use multisiteSF_module,  only: initial_SFcoeff
 
     implicit none
 
@@ -1044,6 +1061,7 @@ contains
     integer        :: force_to_test, stat, nfile, symm
     real(double)   :: electrons_tot, bandE
     real(double), dimension(nspin) :: electrons, energy_tmp
+    integer        :: spin_SF
     ! Dummy vars for MMM
 
 !****lat<$
@@ -1072,6 +1090,41 @@ contains
       call my_barrier()
     endif
 
+    ! (0) If we use PAOs and contract them, prepare SF-PAO coefficients here
+    if (atomf.ne.sf) then
+       do spin_SF = 1, nspin_SF
+          call matrix_scale(zero,matSFcoeff(spin_SF))
+       enddo
+       if (read_option) then
+          ! Read SF-PAO coefficients
+          if (inode == ionode) write (io_lun,*) 'Read supp_pao coefficients from input files.'
+          if (nspin_SF == 1) then
+             call grab_matrix("SFcoeff",    matSFcoeff(1), inode)
+          else
+             call grab_matrix("SFcoeff_up", matSFcoeff(1), inode)
+             call grab_matrix("SFcoeff_dn", matSFcoeff(2), inode)
+          endif
+       else
+          if (restart_rho .and. flag_LFD) then
+          ! read density from input files for LFD
+             if (nspin == 2) then
+                call grab_charge(density(:,1), n_my_grid_points, inode, spin=1)
+                call grab_charge(density(:,2), n_my_grid_points, inode, spin=2)
+             else
+                call grab_charge(density(:,1), n_my_grid_points, inode)
+                density = density / spin_factor
+             end if
+          endif
+          ! make SF-PAO coefficients
+          call initial_SFcoeff(.true., .true., fixed_potential, .true.)
+       endif
+       if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Got SFcoeff'
+       call my_barrier
+    endif
+!!$
+!!$
+!!$
+!!$
     total_energy = zero
     ! If we're vary PAOs, allocate memory
     ! (1) Get S matrix
@@ -1080,7 +1133,12 @@ contains
       call my_barrier()
       call Matrix_CommRebuild(InfoT,Trange,T_trans,matT,nfile,symm)
     endif
-    call get_S_matrix(inode, ionode)
+    if (flag_LFD .and. .not.read_option) then
+       ! Spao was already made in sub:initial_SFcoeff
+       call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
+    else
+       call get_S_matrix(inode, ionode)
+    endif
     if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Got S'
     call my_barrier
 !!$
@@ -1188,13 +1246,20 @@ contains
 !!$
     ! (7) Make a self-consistent H matrix and potential
     if (find_chdens) then
-       call get_electronic_density(density, electrons, supportfns,    &
-                                   H_on_supportfns(1), ionode, ionode,&
+       call get_electronic_density(density, electrons, atomfns,     &
+                                   H_on_atomfns(1), ionode, ionode, &
                                    maxngrid)
        electrons_tot = spin_factor * sum(electrons)
        if (inode == ionode .and. iprint_init > 1) &
             write (io_lun, *) 'In initial_H, electrons: ', electrons_tot
-    else if (restart_rho) then
+       ! if flag_LFD=T, update SF-PAO coefficients with the obtained density
+       ! and update S with the coefficients
+       if (flag_LFD) then
+          call initial_SFcoeff(.false., .true., fixed_potential, .false.)
+          call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
+       endif
+    else if (restart_rho .and. .not.flag_LFD) then
+       ! when flag_LFD=T, density was already grabbed in (0).
        if (nspin == 2) then
           call grab_charge(density(:,1), n_my_grid_points, inode, spin=1)
           call grab_charge(density(:,2), n_my_grid_points, inode, spin=2)
@@ -1223,9 +1288,16 @@ contains
                L_tolerance, total_energy, backtrace_level)
           !
        else
-          rebuild_KE_NL = .true. 
-          call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-               density, maxngrid, backtrace_level)
+          if (flag_LFD .and. .not.read_option) then
+             ! Hpao was already made in sub:initial_SFcoeff
+             rebuild_KE_NL = .false. 
+             call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
+                               density, maxngrid, level=backtrace_level, build_AtomF_matrix=.false.)
+          else
+             rebuild_KE_NL = .true. 
+             call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
+                               density, maxngrid, level=backtrace_level)
+          endif
           !
           electrons_tot = spin_factor * sum(electrons)
           !
@@ -1246,9 +1318,16 @@ contains
        
        rebuild_KE_NL = .true.
        !build_X = .false
-       call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, density, &
-            maxngrid, backtrace_level)
-       
+       if (flag_LFD .and. .not.read_option) then
+          ! Hpao was already made in sub:initial_SFcoeff
+          rebuild_KE_NL = .false.
+          call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
+                            density, maxngrid, level=backtrace_level, build_AtomF_matrix=.false.)
+       else
+          rebuild_KE_NL = .true.
+          call get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
+                            density, maxngrid, level=backtrace_level)
+       endif
        electrons_tot = spin_factor * sum(electrons)
        if (flag_out_wf.OR.flag_write_DOS) then
           wf_self_con=.true.
@@ -1322,6 +1401,8 @@ contains
   !!    Added ROBODoc header, indented code, added 1.1 factor to rcut_max
   !!   2011/11/16 15:53 dave
   !!    Removed Extent from set_blipgrid call
+  !!   2016/09/16 17:00 nakata
+  !!    Added atomf and RadiusAtomf
   !!  SOURCE
   !!
   subroutine setgrid(myid, r_core_squared, r_h)
@@ -1331,7 +1412,8 @@ contains
     use numbers,                only: very_small
     use global_module,          only: x_atom_cell,y_atom_cell,        &
                                       z_atom_cell, ni_in_cell,        &
-                                      iprint_index
+                                      iprint_index,                   &
+                                      atomf, sf
     use block_module,           only: n_pts_in_block
     use maxima_module,          only: maxblocks
     use group_module,           only: blocks, parts
@@ -1343,7 +1425,7 @@ contains
     use set_blipgrid_module,    only: set_blipgrid
     use set_bucket_module,      only: set_bucket
     use GenComms,               only: my_barrier
-    use dimens,                 only: RadiusSupport
+    use dimens,                 only: RadiusAtomf
     use pseudopotential_common, only: core_radius
     use input_module,           only: leqi
 
@@ -1398,7 +1480,7 @@ contains
     !if(iprint_index > 4) write(io_lun,*) ' DCS & BCS has been prepared for myid = ',myid
     !Makes variables used in Blip-Grid transforms
     ! See (naba_blk_module.f90), (set_blipgrid_module.f90), (make_table.f90)
-    call set_blipgrid(myid, RadiusSupport, core_radius)
+    call set_blipgrid(myid, RadiusAtomf, core_radius)
     !if(iprint_index > 4) write(io_lun,*) 'Node ',myid+1,' Done set_blipgrid'
 
     !Makes variables used in calculation (integration) of matrix elements

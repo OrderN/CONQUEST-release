@@ -112,6 +112,10 @@
 !!    Added neutral atom flag
 !!   2016/02/16 JKS
 !!    Added Wu-Cohen XC functional  (PRB 73, 235116  (2006) )
+!!   2016/08/01 17:30 nakata
+!!    Introduced atomf
+!!   2016/08/09 21:30 nakata
+!!    Added parameters for Contracted SFs and multi-site SFs
 !!   2017/02/23 dave
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
 !!  SOURCE
@@ -220,6 +224,7 @@ module global_module
   integer, parameter :: nlpf = 2 ! Projector functions
   integer, parameter :: paof = 3 ! Pseudo-atomic orbitals
   integer, parameter :: dens = 4 ! Atomic charge density
+  integer            :: atomf    ! 1(=sf) for blips and primitive paos, 3(=paof) for contracted paos
 
   ! Define areas of the code
   integer, parameter :: n_areas        = 13
@@ -348,6 +353,15 @@ module global_module
 
   ! Neutral atom potential
   logical :: flag_neutral_atom
+
+  ! Contracted SF
+  logical :: flag_SpinDependentSF
+  integer :: nspin_SF
+  logical :: flag_SFcoeffReuse
+
+  ! Multisite
+  logical :: flag_Multisite
+  logical :: flag_LFD
 
   ! diagonalise or linear scaling
   logical :: flag_diagonalisation

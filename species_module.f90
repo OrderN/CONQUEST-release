@@ -37,6 +37,8 @@
 !!    Changed species_label to length 30
 !!   2014/10/12 10:58 lat
 !!    Added species_file
+!!   2016/11/09 21:00 nakata
+!!    Added natomf_species
 !!  SOURCE
 !!
 module species_module
@@ -66,6 +68,7 @@ module species_module
   integer, allocatable, dimension(:)  :: nlpf_species
   integer, allocatable, dimension(:)  :: nsf_species
   integer, allocatable, dimension(:)  :: npao_species
+  integer, allocatable, dimension(:)  :: natomf_species
   integer, allocatable, dimension(:)  :: type_species
 
 !!***

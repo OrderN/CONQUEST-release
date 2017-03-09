@@ -1006,6 +1006,10 @@ contains
   !!   - Removed redundant input parameter real(double) mu
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
@@ -1018,12 +1022,12 @@ contains
     use logicals
     use mult_module,       only: LNV_matrix_multiply
     use DMMin,             only: FindMinDM
-    use global_module,     only: iprint_SC, sf, flag_perform_cDFT,     &
+    use global_module,     only: iprint_SC, atomf, flag_perform_cDFT, &
                                  nspin, spin_factor, flag_diagonalisation
     use H_matrix_module,   only: get_H_matrix
     !use DiagModule,        only: diagon
     use energy,            only: get_energy, flag_check_DFT
-    use functions_on_grid, only: supportfns, allocate_temp_fn_on_grid, &
+    use functions_on_grid, only: atomfns, allocate_temp_fn_on_grid, &
                                  free_temp_fn_on_grid
     use density_module,    only: get_electronic_density
     use GenComms,          only: inode, ionode
@@ -1083,9 +1087,9 @@ contains
     end if ! if (flag_perform_cDFT) then
 
     ! And get the output density
-    temp_supp_fn = allocate_temp_fn_on_grid(sf)
+    temp_supp_fn = allocate_temp_fn_on_grid(atomf)
     call stop_timer(tmr_std_chargescf) ! This routine is always call within area 5
-    call get_electronic_density(rhoout, electrons, supportfns, &
+    call get_electronic_density(rhoout, electrons, atomfns, &
                                 temp_supp_fn, inode, ionode, size, backtrace_level)
     call start_timer(tmr_std_chargescf)
     call free_temp_fn_on_grid(temp_supp_fn)

@@ -94,6 +94,8 @@ contains
   !!   - removed redundant input parameter real(double) mu
   !!   2015/11/24 08:38 dave
   !!    Tidied up use statements and deleted old commented-out lines
+  !!   2016/08/08 15:30 nakata
+  !!    Removed unused supportfns
   !!  SOURCE
   !!
   subroutine test_forces(fixed_potential, vary_mu, n_L_iterations, &
@@ -118,7 +120,6 @@ contains
     use H_matrix_module,        only: get_H_matrix
     use density_module,         only: set_atomic_density, density
     use maxima_module,          only: maxngrid
-    use functions_on_grid,      only: supportfns
     use SelfCon,                only: new_SC_potl
     use DMMin,                  only: FindMinDM
     use force_module,           only: force, tot_force
@@ -583,7 +584,7 @@ contains
        call get_energy(total_energy)
     end if
     ! Note that we've held K fixed but allow potential to vary ? Yes:
-    ! this way we get h_on_support in workspace_support
+    ! this way we get h_on_atomfns in workspace_support
     ! call get_H_matrix(.false., fixed_potential, electrons, potential,
     !                   density, pseudopotential, N_GRID_MAX)
     ! call get_energy(total_energy)
@@ -649,7 +650,7 @@ contains
     ! Regenerate S
     call get_S_matrix(inode, ionode)
     ! Note that we've held K fixed but allow potential to vary ? Yes:
-    ! this way we get h_on_support in workspace_support
+    ! this way we get h_on_atomfns in workspace_support
     call get_H_matrix(.true., fixed_potential, electrons, density, &
                       maxngrid)
     call get_energy(total_energy)
@@ -691,6 +692,10 @@ contains
   !!   - removed redundant input parameter real(double) mu
   !!   2013/07/10 11:42 dave
   !!    Bug fix for sum over two components of rho even without spin
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine test_HF(fixed_potential, vary_mu, n_L_iterations, &
@@ -725,7 +730,7 @@ contains
     use GenComms,               only: myid, inode, ionode, cq_abort
     use H_matrix_module,        only: get_H_matrix
     use density_module,         only: get_electronic_density, density
-    use functions_on_grid,      only: supportfns, H_on_supportfns
+    use functions_on_grid,      only: atomfns, H_on_atomfns
     use maxima_module,          only: maxngrid
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem, &
                                       type_dbl
@@ -793,8 +798,8 @@ contains
     ! If necessary, find output density (for HF)
     if (.not. flag_self_consistent) then ! Harris-Foulkes requires
        ! output density
-       call get_electronic_density(density_out, electrons, supportfns,&
-                                   H_on_supportfns(1), inode, ionode, &
+       call get_electronic_density(density_out, electrons, atomfns, &
+                                   H_on_atomfns(1), inode, ionode,  &
                                    maxngrid)
     else
        do spin = 1, nspin 
@@ -941,7 +946,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
-    ! Now regenerate the pseudos and h_on_support
+    ! Now regenerate the pseudos and h_on_atomfns
     select case (pseudo_type) 
     case (OLDPS)
        call init_pseudo(core_correction)
@@ -950,7 +955,7 @@ contains
     case (ABINIT)
        call set_tm_pseudo
     end select
-    ! Restore h_on_support
+    ! Restore h_on_atomfns
     ! Calculate new energy
     call get_H_matrix(.true., fixed_potential, electrons, density, &
                       maxngrid)
@@ -991,6 +996,8 @@ contains
   !!   2012/03/27 L.Tong
   !!   - Changed spin implementation
   !!   - removed redundant input parameter real(double) mu
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine test_PhiPulay_nonlocal(fixed_potential, vary_mu,    &
@@ -1017,7 +1024,7 @@ contains
     use GenComms,                   only: myid, inode, ionode, cq_abort
     use H_matrix_module,            only: get_H_matrix
     use blip_grid_transform_module, only: blip_to_support_new
-    use functions_on_grid,          only: supportfns
+    use functions_on_grid,          only: atomfns
     use density_module,             only: density
     use maxima_module,              only: maxngrid
     use memory_module,              only: reg_alloc_mem, reg_dealloc_mem, type_dbl
@@ -1109,7 +1116,7 @@ contains
                       DCS_parts, parts)
     if (flag_basis_set == blips) then
        ! Reproject blips
-       call blip_to_support_new(inode-1, supportfns)    
+       call blip_to_support_new(inode-1, atomfns)    
     end if
     ! Note that we've held K and |chi> fixed
     ! Calculate new energy
@@ -1187,6 +1194,8 @@ contains
   !!  - Removed redundant input parameter real(double) mu
   !!  2012/04/03 10:13 dave
   !!   Update for analytic blips
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine test_PhiPulay_KE(fixed_potential, vary_mu,               &
@@ -1214,7 +1223,7 @@ contains
     use mult_module,                only: matK, allocate_temp_matrix, &
                                           free_temp_matrix, matrix_sum
     use matrix_data,                only: Hrange
-    use functions_on_grid,          only: supportfns
+    use functions_on_grid,          only: atomfns
     use density_module,             only: density
     use maxima_module,              only: maxngrid
     use memory_module,              only: reg_alloc_mem, reg_dealloc_mem, type_dbl
@@ -1297,7 +1306,7 @@ contains
                       DCS_parts, parts)
     if (flag_basis_set == blips) then
        ! Reproject blips
-       call blip_to_support_new(inode-1, supportfns)    
+       call blip_to_support_new(inode-1, atomfns)    
     end if
     ! Note that we've held K and |chi> fixed
     if(flag_analytic_blip_int) call get_S_matrix(inode, ionode)
@@ -1397,6 +1406,10 @@ contains
   !!   - removed input parameter real(double) mu
   !!   2015/11/24 08:42 dave
   !!    Adjusted use of energy
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
+  !!   2016/12/29 19:30 nakata
+  !!    Changed PAO_to_grid to single_PAO_to_grid
   !!  SOURCE
   !!
   subroutine test_PhiPulay_local(fixed_potential, vary_mu,    &
@@ -1422,8 +1435,8 @@ contains
     use GenComms,                   only: myid, inode, ionode, cq_abort
     use H_matrix_module,            only: get_H_matrix
     use blip_grid_transform_module, only: blip_to_support_new
-    use PAO_grid_transform_module,  only: PAO_to_grid
-    use functions_on_grid,          only: supportfns
+    use PAO_grid_transform_module,  only: single_PAO_to_grid
+    use functions_on_grid,          only: atomfns
     use density_module,             only: density
     use maxima_module,              only: maxngrid
     use memory_module,              only: reg_alloc_mem, reg_dealloc_mem, type_dbl
@@ -1491,13 +1504,13 @@ contains
                       DCS_parts, parts)
     if (flag_basis_set == blips) then
        ! Reproject blips
-       call blip_to_support_new(inode-1, supportfns)    
+       call blip_to_support_new(inode-1, atomfns)    
     else if (flag_basis_set == PAOs) then
-       ! Regenerate support with a call to PAO_to_grid
-       call PAO_to_grid(inode-1, supportfns)
+       ! Regenerate PAO with a call to single_PAO_to_grid
+       call single_PAO_to_grid(atomfns)
     end if
     ! Note that we've held K fixed but allow potential to vary ? Yes:
-    ! this way we get h_on_support in workspace_support
+    ! this way we get h_on_atomfns in workspace_support
     call get_H_matrix(.false., fixed_potential, electrons, density, &
                       maxngrid)
     call get_energy(total_energy)
@@ -1793,6 +1806,10 @@ contains
   !!   - removed redundant input parameter real(double) mu
   !!   2015/11/24 08:43 dave
   !!    Adjusted use of energy
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine test_nonSC(fixed_potential, vary_mu, n_L_iterations, &
@@ -1816,7 +1833,7 @@ contains
     use H_matrix_module,   only: get_H_matrix
     use density_module,    only: set_atomic_density, get_electronic_density,  &
                                  density
-    use functions_on_grid, only: supportfns, H_on_supportfns
+    use functions_on_grid, only: atomfns, H_on_atomfns
     use maxima_module,     only: maxngrid
     use memory_module,     only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
@@ -1845,8 +1862,8 @@ contains
     call reg_alloc_mem(area_moveatoms, 3*ni_in_cell+nspin*maxngrid, type_dbl)
 
     ! We're coming in from initial_H: assume that initial E found
-    call get_electronic_density(density_out, electrons, supportfns, &
-                                H_on_supportfns(1), inode, ionode,  &
+    call get_electronic_density(density_out, electrons, atomfns, &
+                                H_on_atomfns(1), inode, ionode,  &
                                 maxngrid)
     ! Find force
     call get_nonSC_correction_force(nonSC_force, density_out, inode, &
@@ -1884,7 +1901,7 @@ contains
     ! Recalculate atomic densities
     call set_atomic_density(.true.)
     ! Note that we've held K fixed but allow potential to vary ? Yes:
-    ! this way we get h_on_support in workspace_support
+    ! this way we get h_on_atomfns in workspace_support
     call get_H_matrix(.false., fixed_potential, electrons, density, &
                       maxngrid)
     call get_energy(total_energy)
@@ -2017,7 +2034,7 @@ contains
     call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
 
     ! We're coming in from initial_H: assume that initial E found
-    ! Ensure that h_on_support is in workspace_support
+    ! Ensure that h_on_atomfns is in workspace_support
     call get_H_matrix(.false., fixed_potential, electrons, density, &
                       maxngrid)
     ! Store local energy

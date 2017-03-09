@@ -56,6 +56,12 @@
 !!    Added timers
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2016/07/15 18:30 nakata
+!!    Renamed sf_sf_loc -> atomf_atomf_loc, sf_nlpf_loc -> atomf_nlpf_loc, 
+!!            sf_sf_rem -> atomf_atomf_rem, sf_nlpf_rem -> atomf_nlpf_rem, sf_H_sf_rem -> atomf_H_atomf_rem
+!!   2016/12/29 19:00 nakata
+!!    Removed pao_sf_loc and pao_H_sf_rem, which are no longer needed 
+!!    Instead, we will use atomf_atomf_loc*C(sf,atomf) and atomf_H_atomf_rem*C(sf,atomf)
 !!  SOURCE
 !!
 module set_bucket_module
@@ -75,13 +81,12 @@ module set_bucket_module
   type(remote_bucket) :: rem_bucket(mx_type_rem)
 
   ! Parameters for indexing buckets
-  integer, parameter :: sf_sf_loc    = 1
-  integer, parameter :: sf_nlpf_loc  = 2
-  integer, parameter :: pao_sf_loc   = 3
-  integer, parameter :: sf_sf_rem    = 1
-  integer, parameter :: sf_nlpf_rem  = 2
-  integer, parameter :: sf_H_sf_rem  = 3
-  integer, parameter :: pao_H_sf_rem = 4
+  integer, parameter :: atomf_atomf_loc = 1
+  integer, parameter :: atomf_nlpf_loc  = 2
+  integer, parameter :: pao_sf_loc      = 3
+  integer, parameter :: atomf_atomf_rem    = 1
+  integer, parameter :: atomf_nlpf_rem     = 2
+  integer, parameter :: atomf_H_atomf_rem  = 3
 
   ! -------------------------------------------------------
   ! RCS ident string for object file id
@@ -115,20 +120,30 @@ contains
 !!  CREATION DATE
 !!   May 2000
 !!  MODIFICATION HISTORY
+!!   2016/07/06 17:30 nakata
+!!    Renamed comBG -> comm_naba_blocks_of_atoms
+!!   2016/07/15 18:30 nakata
+!!    Renamed sf_sf_loc -> atomf_atomf_loc, sf_nlpf_loc -> atomf_nlpf_loc,
+!!            sf_sf_rem -> atomf_atomf_rem, sf_nlpf_rem -> atomf_nlpf_rem, sf_H_sf_rem -> atomf_H_atomf_rem
+!!   2016/08/01 17:30 nakata
+!!    Introduced atomf instead of sf and paof
+!!   2016/12/29 19:30 nakata
+!!    Removed max_PAOPpair, which is no longer needed 
 !!
 !!  SOURCE
 !!
   subroutine set_bucket(myid)
 
     use datatypes
-    use global_module, ONLY: iprint_index, sf, nlpf, paof, numprocs
+    use global_module, ONLY: iprint_index, sf, nlpf, paof, atomf, numprocs, &
+                             flag_basis_set, PAOs, blips
     use bucket_module
-!    use maxima_module, ONLY: mx_send_node_BG, mx_recv_node_BG, &
+!    use maxima_module, ONLY: mx_send_node_BtoG, mx_recv_node_BtoG, &
 !         mx_Spair_remnode,  mx_Spair_domain,  &
-!         mx_SPpair_remnode, mx_SPpair_domain
-    use set_blipgrid_module,ONLY: comBG,naba_atm,halo_atm
+!         mx_APpair_remnode, mx_APpair_domain
+    use set_blipgrid_module,ONLY: comm_naba_blocks_of_atoms
     use comm_array_module,  ONLY: isend_array,irecv_array!,check_commarray_int!,check_commarray_real
-    use matrix_data, ONLY: halo, rcut, Srange, SPrange, Hrange, dHrange
+    use matrix_data, ONLY: halo, rcut, aSa_range, APrange, aHa_range
     use GenComms, ONLY: my_barrier, cq_abort
     use mpi, ONLY: MPI_STATUS_SIZE
 
@@ -141,36 +156,35 @@ contains
     integer :: ii, stat
     integer :: inode,mx_pair1,mx_pair2,mx_pair3,mx_pair_orb1,mx_pair_orb2,mx_pair_orb3
     real(double) :: rcut_S,rcut_SP
-    integer :: max_Spair, max_SPpair, max_PAOPpair
+    integer :: max_Spair, max_APpair
     integer :: mx_recv_BRnode ! for local bucket
     integer :: mx_send_DRnode ! for remote bucket
     !Automatic Array
     integer :: buff_npair(numprocs), buff_npair_orb(numprocs)
 
     call start_timer(tmr_std_indexing)
-    !cutoff radius for matrix
-    rcut_S = rcut(Srange)
-    rcut_SP= rcut(SPrange)
 
-    !For type 1 of local_bucket   : Sij=<phi_i|phi_j>, and H^(local)_ij
-    !For type 2 of local_bucket   : Pij=<phi_i|chi_j>,|chi_j> proj. func.
-    !For type 3 of local_bucket   : <pao_i|phi_j>, <pao_i|H_loc|phi_j>
+    !cutoff radii for matrices
+    rcut_S = rcut(aSa_range)
+    rcut_SP= rcut(APrange)
 
-    !For type 1 of remote_bucket  : Sij=<phi_i|phi_j>
-    !For type 2 of remote_bucket  : Pij=<phi_i|chi_j>,|chi_j> proj. func.
-    !For type 3 of remote_bucket  : Hij=<phi_i|H|phi_j>
-    !For type 4 of remote_bucket  : dHij=<pao_i|H_loc|phi_j>
+    !atomf = sf (for blips and one_to_one PAOs) or paof (for contracted PAOs)
+    !For type 1 of local_bucket   : Sij=<atomf_i|atomf_j>, and H^(local)_ij
+    !For type 2 of local_bucket   : Pij=<atomf_i|chi_j>,|chi_j> proj. func.
+
+    !For type 1 of remote_bucket  : Sij=<atomf_i|atomf_j>
+    !For type 2 of remote_bucket  : Pij=<atomf_i|chi_j>,|chi_j> proj. func.
+    !For type 3 of remote_bucket  : Hij=<atomf_i|H|atomf_j>
     ! Here H includes nonlocal parts
 
     !calculate mx_send_node
-    call calc_mx_nodes_bucket(myid, comBG, mx_recv_BRnode, mx_send_DRnode)
+    call calc_mx_nodes_bucket(myid, comm_naba_blocks_of_atoms, mx_recv_BRnode, mx_send_DRnode)
 
-    call set_local_bucket(loc_bucket(sf_sf_loc),rcut_S, mx_recv_BRnode,sf,sf)
-    call set_local_bucket(loc_bucket(sf_nlpf_loc),rcut_SP, mx_recv_BRnode,sf,nlpf)
-    call set_local_bucket(loc_bucket(pao_sf_loc),rcut_S, mx_recv_BRnode,paof,sf)
+    call set_local_bucket(loc_bucket(atomf_atomf_loc),rcut_S, mx_recv_BRnode,atomf,atomf)
+    call set_local_bucket(loc_bucket(atomf_nlpf_loc),rcut_SP, mx_recv_BRnode,atomf,nlpf)
     !** type 1 local_bucket -> type 1&3 remote_bucket **
     call my_barrier()
-    call make_pair_DCSpart(loc_bucket(sf_sf_loc),max_Spair)
+    call make_pair_DCSpart(loc_bucket(atomf_atomf_loc),max_Spair)
 
     ! allocate & set  remote bucket
     !   Now we assume the left functions are always support functions.
@@ -181,67 +195,49 @@ contains
     !  Now, the number of nodes for local and remote buckets are calculated
     !  in subroutine 'calc_mx_nodes_bucket'.
 
-    rem_bucket(sf_sf_rem)%locbucket => loc_bucket(sf_sf_loc)
-    rem_bucket(sf_nlpf_rem)%locbucket => loc_bucket(sf_nlpf_loc)
-    rem_bucket(sf_H_sf_rem)%locbucket => loc_bucket(sf_sf_loc)
-    rem_bucket(pao_H_sf_rem)%locbucket => loc_bucket(pao_sf_loc)
+    rem_bucket(atomf_atomf_rem)%locbucket => loc_bucket(atomf_atomf_loc)
+    rem_bucket(atomf_nlpf_rem)%locbucket => loc_bucket(atomf_nlpf_loc)
+    rem_bucket(atomf_H_atomf_rem)%locbucket => loc_bucket(atomf_atomf_loc)
 
-    call set_remote_bucket(rem_bucket(sf_sf_rem),mx_send_DRnode,max_Spair)
-    call set_remote_bucket(rem_bucket(sf_H_sf_rem),mx_send_DRnode,max_Spair)
+    call set_remote_bucket(rem_bucket(atomf_atomf_rem),mx_send_DRnode,max_Spair)
+    call set_remote_bucket(rem_bucket(atomf_H_atomf_rem),mx_send_DRnode,max_Spair)
 
     ! Bundle responsible node makes rem_bucket%no_send_node and 
     !list_send_node to prepare receiving the information from its
     !remote nodes (domain responsible nodes).
     ! WARNING!!
     ! Now, we assume the left functions are always support functions.
-    call make_sendinfo_ME(rem_bucket(sf_sf_rem),comBG)
-    rem_bucket(sf_H_sf_rem)%no_send_node=rem_bucket(sf_sf_rem)%no_send_node
-    rem_bucket(sf_H_sf_rem)%list_send_node(:)=rem_bucket(sf_sf_rem)%list_send_node(:)
+    call make_sendinfo_ME(rem_bucket(atomf_atomf_rem),comm_naba_blocks_of_atoms)
+    rem_bucket(atomf_H_atomf_rem)%no_send_node=rem_bucket(atomf_atomf_rem)%no_send_node
+    rem_bucket(atomf_H_atomf_rem)%list_send_node(:)=rem_bucket(atomf_atomf_rem)%list_send_node(:)
     !Domain responsible node sends its information of pairs of naba atms
-    call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(sf_sf_loc))
+    call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(atomf_atomf_loc))
     !Bundle responsible node receives rem_bucket%no_of_pair and no_of_pair_orb
-    call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(sf_sf_rem))
-    rem_bucket(sf_H_sf_rem)%no_of_pair(:) = rem_bucket(sf_sf_rem)%no_of_pair(:)
-    rem_bucket(sf_H_sf_rem)%no_of_pair_orbs(:) = rem_bucket(sf_sf_rem)%no_of_pair_orbs(:)
-    if(rem_bucket(sf_H_sf_rem)%mx_pair_comm<rem_bucket(sf_sf_rem)%mx_pair_comm) then
-       rem_bucket(sf_H_sf_rem)%mx_pair_comm=rem_bucket(sf_sf_rem)%mx_pair_comm
-       call reset_remote_bucket(rem_bucket(sf_H_sf_rem))
+    call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(atomf_atomf_rem))
+    rem_bucket(atomf_H_atomf_rem)%no_of_pair(:) = rem_bucket(atomf_atomf_rem)%no_of_pair(:)
+    rem_bucket(atomf_H_atomf_rem)%no_of_pair_orbs(:) = rem_bucket(atomf_atomf_rem)%no_of_pair_orbs(:)
+    if(rem_bucket(atomf_H_atomf_rem)%mx_pair_comm<rem_bucket(atomf_atomf_rem)%mx_pair_comm) then
+       rem_bucket(atomf_H_atomf_rem)%mx_pair_comm=rem_bucket(atomf_atomf_rem)%mx_pair_comm
+       call reset_remote_bucket(rem_bucket(atomf_H_atomf_rem))
     end if
     !Bundle responsible node receives the information of pairs of naba
     ! atoms of its remote nodes and Constructs RemoteBucket
-    call setup_recvME(sf_sf_rem,myid,myid_ibegin,rem_bucket(sf_sf_rem),halo(Srange), &
-         rem_bucket(sf_H_sf_rem),halo(Hrange))
-    deallocate(isend_array,STAT=stat)
-    if(stat/=0) call cq_abort("Error deallocating isend_array in set_bucket: ",stat)
-
-    !** type 3 local bucket and type 4 remote bucket
-    call make_pair_DCSpart(loc_bucket(pao_sf_loc),max_PAOPpair)
-    call set_remote_bucket(rem_bucket(pao_H_sf_rem),mx_send_DRnode,max_PAOPpair)
-    rem_bucket(pao_H_sf_rem)%no_send_node=rem_bucket(sf_sf_rem)%no_send_node
-    rem_bucket(pao_H_sf_rem)%list_send_node(:)=rem_bucket(sf_sf_rem)%list_send_node(:)
-    call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(pao_sf_loc))
-    call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(pao_H_sf_rem))
-    if(iprint_index>3.AND.myid==0) then
-       write(io_lun,*) myid,' sf_H_sf: ',rem_bucket(sf_H_sf_rem)%no_of_pair
-       write(io_lun,*) myid,' sf_H_sf: ',rem_bucket(sf_H_sf_rem)%no_of_pair_orbs
-       write(io_lun,*) myid,' pao_H_sf: ',rem_bucket(pao_H_sf_rem)%no_of_pair
-       write(io_lun,*) myid,' pao_H_sf: ',rem_bucket(pao_H_sf_rem)%no_of_pair_orbs
-    end if
-    call setup_recvME(pao_H_sf_rem,myid,myid_ibegin,rem_bucket(pao_H_sf_rem),halo(dHrange))
+    call setup_recvME(atomf_atomf_rem,myid,myid_ibegin,rem_bucket(atomf_atomf_rem),halo(aSa_range), &
+         rem_bucket(atomf_H_atomf_rem),halo(aHa_range))
     deallocate(isend_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating isend_array in set_bucket: ",stat)
 
     !** type 2 local_bucket -> type 2 remote_bucket **
     ! same as above (dummy arg. for make_pair_DCSpart is different)
 
-    call make_pair_DCSpart(loc_bucket(sf_nlpf_loc),max_SPpair)
-    call set_remote_bucket(rem_bucket(sf_nlpf_rem),mx_send_DRnode,max_SPpair)
-    rem_bucket(sf_nlpf_rem)%no_send_node=rem_bucket(sf_sf_rem)%no_send_node
-    rem_bucket(sf_nlpf_rem)%list_send_node(:)=rem_bucket(sf_sf_rem)%list_send_node(:)
+    call make_pair_DCSpart(loc_bucket(atomf_nlpf_loc),max_APpair)
+    call set_remote_bucket(rem_bucket(atomf_nlpf_rem),mx_send_DRnode,max_APpair)
+    rem_bucket(atomf_nlpf_rem)%no_send_node=rem_bucket(atomf_atomf_rem)%no_send_node
+    rem_bucket(atomf_nlpf_rem)%list_send_node(:)=rem_bucket(atomf_atomf_rem)%list_send_node(:)
 
-    call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(sf_nlpf_loc))
-    call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(sf_nlpf_loc))
-    call setup_recvME(sf_nlpf_rem,myid,myid_ibegin,rem_bucket(sf_nlpf_rem),halo(SPrange))
+    call setup_sendME(myid,myid_ibegin,myid_npair,myid_npair_orb,loc_bucket(atomf_nlpf_loc))
+    call recv_npairME(myid,myid_npair,myid_npair_orb,rem_bucket(atomf_nlpf_loc))
+    call setup_recvME(atomf_nlpf_rem,myid,myid_ibegin,rem_bucket(atomf_nlpf_rem),halo(APrange))
 
     deallocate(isend_array,STAT=stat)
     if(stat/=0) call cq_abort("Error deallocating isend_array in set_bucket: ",stat)
@@ -277,20 +273,22 @@ contains
 !!  CREATION DATE
 !!   19/10/2006
 !!  MODIFICATION HISTORY
+!!   2016/07/06 17:30 nakata
+!!    Renamed comm_in_BG -> comm_in_BtoG and comBG -> comm_naba_blocks_of_atoms
 !!
 !!  SOURCE
 !!
-    subroutine calc_mx_nodes_bucket(myid,comBG,mx_recv_BRnode, mx_send_DRnode)
+    subroutine calc_mx_nodes_bucket(myid,comm_naba_blocks_of_atoms,mx_recv_BRnode, mx_send_DRnode)
 
       use datatypes
       use global_module, ONLY: numprocs
       use primary_module, ONLY: bundle
-      use naba_blk_module,ONLY: comm_in_BG
+      use naba_blk_module,ONLY: comm_in_BtoG
       use GenComms, ONLY: cq_abort
 
       implicit none
       integer, intent(in) :: myid
-      type(comm_in_BG),intent(in) :: comBG
+      type(comm_in_BtoG),intent(in) :: comm_naba_blocks_of_atoms
       integer,intent(out) :: mx_send_DRnode, mx_recv_BRnode
 
       integer :: inp,nnode,iprim,inode,jnode,ind_node,ind_node2,ifind
@@ -302,18 +300,18 @@ contains
       inp=0; nnode=0
       do iprim=1,bundle%mx_iprim
          !do iprim=1,bundle%n_prim
-         if(comBG%no_recv_node(iprim) > 0) then
+         if(comm_naba_blocks_of_atoms%no_recv_node(iprim) > 0) then
             inp=inp+1
             if(inp == 1) then    ! if this is the first
-               nnode=comBG%no_recv_node(iprim)
-               do inode=1,comBG%no_recv_node(iprim)
+               nnode=comm_naba_blocks_of_atoms%no_recv_node(iprim)
+               do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
                   list_send_node(inode)= &
-                       comBG%list_recv_node(inode,iprim)
+                       comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
                enddo
             else
-               do inode=1,comBG%no_recv_node(iprim)
+               do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
                   ! naba nodes for iprim-th atom
-                  ind_node=comBG%list_recv_node(inode,iprim)
+                  ind_node=comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
                   ifind=0
                   do jnode=1,nnode     ! check existed naba nodes for my bundle
                      ind_node2=list_send_node(jnode)
@@ -324,7 +322,7 @@ contains
                   enddo
                   if(ifind == 0) then  ! if this node is new
                      nnode=nnode+1
-                     list_send_node(nnode)= comBG%list_recv_node(inode,iprim)
+                     list_send_node(nnode)= comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
                   endif ! if this node is new
                enddo  ! end do loop over neighbour nodes for iprim-th atom
             endif    ! present primary atom is first or not
@@ -337,18 +335,18 @@ contains
       inp=0; nnode=0
       do iprim=1,bundle%mx_iprim
          !do iprim=1,bundle%n_prim
-         if(comBG%no_send_node(iprim) > 0) then
+         if(comm_naba_blocks_of_atoms%no_send_node(iprim) > 0) then
             inp=inp+1
             if(inp == 1) then    ! if this is the first
-               nnode=comBG%no_send_node(iprim)
-               do inode=1,comBG%no_send_node(iprim)
+               nnode=comm_naba_blocks_of_atoms%no_send_node(iprim)
+               do inode=1,comm_naba_blocks_of_atoms%no_send_node(iprim)
                   list_recv_node(inode)= &
-                       comBG%list_send_node(inode,iprim)
+                       comm_naba_blocks_of_atoms%list_send_node(inode,iprim)
                enddo
             else
-               do inode=1,comBG%no_send_node(iprim)
+               do inode=1,comm_naba_blocks_of_atoms%no_send_node(iprim)
                   ! naba nodes for iprim-th atom
-                  ind_node=comBG%list_send_node(inode,iprim)
+                  ind_node=comm_naba_blocks_of_atoms%list_send_node(inode,iprim)
                   ifind=0
                   do jnode=1,nnode     ! check existed naba nodes for my bundle
                      ind_node2=list_recv_node(jnode)
@@ -359,7 +357,7 @@ contains
                   enddo
                   if(ifind == 0) then  ! if this node is new
                      nnode=nnode+1
-                     list_recv_node(nnode)= comBG%list_send_node(inode,iprim)
+                     list_recv_node(nnode)= comm_naba_blocks_of_atoms%list_send_node(inode,iprim)
                   endif ! if this node is new
                enddo  ! end do loop over neighbour nodes for iprim-th atom
             endif    ! present primary atom is first or not
@@ -398,18 +396,20 @@ contains
 !!  MODIFICATION HISTORY
 !!   2006/07/03 08:05 dave
 !!    Various changes associated with variable NSF and general tidying
+!!   2016/07/06 17:30 nakata
+!!    Renamed comm_in_BG -> comm_in_BtoG and comBG -> comm_naba_blocks_of_atoms
 !!  SOURCE
 !!
-    subroutine make_sendinfo_ME(rembucket,comBG)
+    subroutine make_sendinfo_ME(rembucket,comm_naba_blocks_of_atoms)
 
       use datatypes
       use primary_module, ONLY: bundle
       use bucket_module,  ONLY: remote_bucket  ! Can we write in this way?
-      use naba_blk_module,ONLY: comm_in_BG
+      use naba_blk_module,ONLY: comm_in_BtoG
       use GenComms, ONLY: cq_abort
 
       implicit none
-      type(comm_in_BG),intent(in) :: comBG
+      type(comm_in_BtoG),intent(in) :: comm_naba_blocks_of_atoms
       type(remote_bucket),intent(inout):: rembucket
 
       integer :: inp,nnode,iprim,inode,jnode,ind_node,ind_node2,ifind
@@ -418,19 +418,19 @@ contains
       inp=0
       do iprim=1,bundle%mx_iprim
          !do iprim=1,bundle%n_prim
-         if(comBG%no_recv_node(iprim) > 0) then
+         if(comm_naba_blocks_of_atoms%no_recv_node(iprim) > 0) then
             inp=inp+1
             if(inp == 1) then    ! if this is the first 
-               nnode=comBG%no_recv_node(iprim)
+               nnode=comm_naba_blocks_of_atoms%no_recv_node(iprim)
                rembucket%no_send_node=nnode
-               do inode=1,comBG%no_recv_node(iprim)
+               do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
                   rembucket%list_send_node(inode)= &
-                       comBG%list_recv_node(inode,iprim)
+                       comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
                enddo
             else
-               do inode=1,comBG%no_recv_node(iprim) 
+               do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim) 
                   ! naba nodes for iprim-th atom
-                  ind_node=comBG%list_recv_node(inode,iprim)
+                  ind_node=comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
                   ifind=0
                   do jnode=1,nnode     ! check existed naba nodes for my bundle
                      ind_node2=rembucket%list_send_node(jnode)
@@ -442,7 +442,7 @@ contains
                   if(ifind == 0) then  ! if this node is new
                      rembucket%no_send_node=rembucket%no_send_node+1
                      rembucket%list_send_node(rembucket%no_send_node)= &
-                          comBG%list_recv_node(inode,iprim)
+                          comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
                      nnode=rembucket%no_send_node
                   endif ! if this node is new
                enddo  ! end do loop over neighbour nodes for iprim-th atom
@@ -483,6 +483,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2006/07/03 08:40 dave
 !!    Various variable NSF changes and tidying
+!!   2016/07/20 16:30 nakata
+!!    Renamed naba_atm -> naba_atoms_of_blocks, halo_atm -> halo_atoms_of_blocks
 !!  SOURCE
 !!
     subroutine make_pair_DCSpart(loc_bucket,max_pair)
@@ -495,7 +497,7 @@ contains
       use primary_module, ONLY: domain
       use cover_module,   ONLY: DCS_parts,BCS_parts
       use naba_blk_module,ONLY: naba_atm_of_blk,halo_atm_of_blk
-      use set_blipgrid_module, ONLY: naba_atm, halo_atm
+      use set_blipgrid_module, ONLY: naba_atoms_of_blocks, halo_atoms_of_blocks
       use GenComms, ONLY: cq_abort, myid
 
       implicit none
@@ -529,10 +531,10 @@ contains
       !   in set_local_bucket. (14/Jul/2000 T. Miyazaki)
       !OLD  loc_bucket%naba_atm_left => naba_atm1
       !OLD  loc_bucket%naba_atm_right => naba_atm2
-      naba_atm1 => naba_atm(loc_bucket%ind_left)
-      naba_atm2 => naba_atm(loc_bucket%ind_right)
-      halo_atm1 => halo_atm(loc_bucket%ind_left)
-      halo_atm2 => halo_atm(loc_bucket%ind_right)
+      naba_atm1 => naba_atoms_of_blocks(loc_bucket%ind_left)
+      naba_atm2 => naba_atoms_of_blocks(loc_bucket%ind_right)
+      halo_atm1 => halo_atoms_of_blocks(loc_bucket%ind_left)
+      halo_atm2 => halo_atoms_of_blocks(loc_bucket%ind_right)
 
       !initialize table
       loc_bucket%i_h2d=0
@@ -1272,6 +1274,8 @@ contains
 !!  CREATION DATE
 !!   08:08, 08/01/2003 dave
 !!  MODIFICATION HISTORY
+!!   2016/12/29 19:00 nakata
+!!    Removed rem_bucket(4) and loc_bucket(3), which are no longer needed
 !!
 !!  SOURCE
 !!
@@ -1279,11 +1283,9 @@ contains
 
     use bucket_module, ONLY: free_remote_bucket, free_local_bucket
 
-    call free_remote_bucket(rem_bucket(4))
     call free_remote_bucket(rem_bucket(3))
     call free_remote_bucket(rem_bucket(2))
     call free_remote_bucket(rem_bucket(1))
-    call free_local_bucket(loc_bucket(3))
     call free_local_bucket(loc_bucket(2))
     call free_local_bucket(loc_bucket(1))
     return

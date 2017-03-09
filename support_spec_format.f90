@@ -36,6 +36,12 @@
 !!    Added flag for one-to-one PAO to SF assignment
 !!   2014/09/15 18:30 lat
 !!    fixed call to start/stop_timer timer_module (not timer_stdlocks_module !)
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
+!!   2017/02/21 16:00 nakata
+!!    Commented out no-longer used mx_pao_coeff_atoms
+!!   2017/03/08 15:00 nakata
+!!    Removed no-longer used mx_pao_coeff_atoms
 !!  SOURCE
 !!
 module support_spec_format
@@ -64,18 +70,17 @@ module support_spec_format
 
   ! For the PAOs, we can store coefficients for ALL atoms in cell (technically not order-N, but convenient for
   ! relatively small systems - i.e. up to 10,000 atoms) or for the primary set only.  This flag selects the
-  ! former if tru and the latter if false (default, set in get_support_pao_rep in ol_rad_table_subs.f90) is
+  ! former if true and the latter if false (default, set in get_support_pao_rep in ol_rad_table_subs.f90) is
   ! false
   logical :: flag_paos_atoms_in_cell ! Do we store coefficients for ALL atoms in cell, or only in primary set
-  integer :: mx_pao_coeff_atoms ! max atoms coefficients stored for
   logical :: read_option, symmetry_breaking
   logical :: TestBasisGrads, TestTot, TestBoth, TestS, TestH
   logical :: flag_one_to_one
 
   character(len=80) :: support_pao_file
   
-  type(support_function), allocatable, dimension(:), target :: supports_on_atom ! Dimension mx_atoms (flag above)
-  type(support_function), allocatable, dimension(:), target :: supports_on_atom_remote 
+  type(support_function), allocatable, dimension(:), target :: blips_on_atom ! Dimension mx_atoms (flag above)
+  type(support_function), allocatable, dimension(:), target :: blips_on_atom_remote 
   type(support_function), allocatable, dimension(:) :: support_gradient
   type(support_function), allocatable, dimension(:) :: support_elec_gradient
   

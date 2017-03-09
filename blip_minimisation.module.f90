@@ -113,6 +113,12 @@ contains
   !!   - Removed redundant input parameter real(double) mu
   !!   2012/04/02 17:22 dave
   !!    Update for analytic blip integration
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/07/29 18:30 nakata
+  !!    Renamed supports_on_atom -> blips_on_atom
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
@@ -137,12 +143,12 @@ contains
                                    area_basis, nspin, spin_factor,        &
                                    flag_analytic_blip_int, flag_diagonalisation
     use io_module,           only: dump_blip_coeffs
-    use functions_on_grid,   only: supportfns, H_on_supportfns,           &
+    use functions_on_grid,   only: atomfns, H_on_atomfns,                 &
                                    gridfunctions, fn_on_grid
     use support_spec_format, only: coefficient_array,                     &
                                    coeff_array_size, grad_coeff_array,    &
                                    elec_grad_coeff_array,                 &
-                                   supports_on_atom
+                                   blips_on_atom
     use primary_module,      only: bundle
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use S_matrix_module,     only: get_S_matrix
@@ -230,9 +236,9 @@ contains
     ! The density matrix is effectively idempotent during
     ! diagonalisation
     if (flag_diagonalisation) then
-       gridfunctions(H_on_supportfns(1))%griddata = zero
+       gridfunctions(H_on_atomfns(1))%griddata = zero
     else
-       call get_electron_gradient(supportfns, H_on_supportfns(1), &
+       call get_electron_gradient(atomfns, H_on_atomfns(1), &
                                   inode, ionode)
        call my_barrier()
        if (inode == ionode .AND. iprint_basis > 2) &
@@ -282,23 +288,23 @@ contains
           do i = 1, bundle%n_prim
              spec = bundle%species(i)
              call start_timer(tmr_std_allocation)
-             allocate(summ(supports_on_atom(i)%nsuppfuncs))
+             allocate(summ(blips_on_atom(i)%nsuppfuncs))
              call stop_timer(tmr_std_allocation)
              do j = 1, blip_info(spec)%NBlipsRegion ! In future, base on species
                 summ = zero
                 do k = 1, blip_info(spec)%NBlipsRegion ! Again, base on species
-                   do n = 1, supports_on_atom(i)%nsuppfuncs
+                   do n = 1, blips_on_atom(i)%nsuppfuncs
                       summ(n) = summ(n) + PreCond(spec)%coeffs(j,k) * &
                                 search_direction(offset + (n-1) *     &
                                 blip_info(spec)%NBlipsRegion + k)
                    end do
                 end do
-                do n = 1, supports_on_atom(i)%nsuppfuncs
+                do n = 1, blips_on_atom(i)%nsuppfuncs
                    Psd(offset + (n - 1) * blip_info(spec)%NBlipsRegion + j) = &
                         summ(n)
                 end do
              end do
-             offset = offset + supports_on_atom(i)%nsuppfuncs * &
+             offset = offset + blips_on_atom(i)%nsuppfuncs * &
                       blip_info(spec)%NBlipsRegion
              call start_timer(tmr_std_allocation)
              deallocate(summ)
@@ -397,10 +403,10 @@ contains
           ! The density matrix is effectively idempotent during
           ! diagonalisation
           if (flag_diagonalisation) then
-             gridfunctions(H_on_supportfns(1))%griddata = zero
+             gridfunctions(H_on_atomfns(1))%griddata = zero
           else
-             call get_electron_gradient(supportfns,                &
-                                        H_on_supportfns(1), inode, &
+             call get_electron_gradient(atomfns,                &
+                                        H_on_atomfns(1), inode, &
                                         ionode)
           end if
        end if

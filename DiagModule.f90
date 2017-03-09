@@ -421,6 +421,14 @@ contains
   !!    Including changes for DeltaSCF from Umberto Terranova
   !!   2015/06/29 17:14 dave
   !!    Added DOS output
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf and paof
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
+  !!   2016/08/09 14:00 nakata
+  !!    Renamed support_K -> atom_fns_K
+  !!   2016/09/15 22:00 nakata
+  !!    Introduce matBand -> matBand_atomf transformations
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -435,7 +443,7 @@ contains
          dscf_LUMO_thresh, dscf_source_level, dscf_target_level, &
          dscf_target_spin, dscf_source_spin, flag_cdft_atom,  &
          dscf_HOMO_limit, dscf_LUMO_limit, &
-         flag_out_wf,wf_self_con, max_wf, sf, sf, flag_out_wf_by_kp, &
+         flag_out_wf,wf_self_con, max_wf, paof, sf, atomf, flag_out_wf_by_kp, &
          out_wf, n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, &
          flag_write_projected_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
@@ -444,9 +452,9 @@ contains
          block_size_c, pg_kpoints, proc_groups, &
          nkpoints_max, pgid, N_procs_in_pg,     &
          N_kpoints_in_pg
-    use mult_module,     only: matH, matS, matK, matM12, matM12,      &
+    use mult_module,     only: matH, matS, matK, matM12, SF_to_AtomF_transform, &
          matrix_scale, matrix_product_trace, allocate_temp_matrix, free_temp_matrix
-    use matrix_data,     only: Hrange, Srange
+    use matrix_data,     only: Hrange, Srange, aHa_range
     use primary_module,  only: bundle
     use species_module,  only: species, nsf_species, species_label
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
@@ -454,7 +462,7 @@ contains
     use energy,          only: entropy
     use cdft_data, only: cDFT_NumberAtomGroups
     use maxima_module,   ONLY: maxngrid
-    use functions_on_grid,           only: supportfns, &
+    use functions_on_grid,           only: atomfns, &
          allocate_temp_fn_on_grid,    &
          free_temp_fn_on_grid
     use density_module, ONLY: get_band_density
@@ -474,11 +482,12 @@ contains
     complex(double_cplx), dimension(:,:,:), allocatable :: expH
     complex(double_cplx) :: c_n_alpha2, c_n_setA2, c_n_setB2
     integer :: info, stat, il, iu, i, j, m, mz, prim_size, ng, wf_no, &
-         print_info, kp, spin, iacc, iprim, l, band, cdft_group, support_K, &
+         print_info, kp, spin, iacc, iprim, l, band, cdft_group, atom_fns_K, &
          n_band_min, n_band_max
     integer, dimension(50) :: desca, descz, descb
     integer, allocatable, dimension(:) :: matBand
     integer, allocatable, dimension(:,:) :: matBand_kp
+    integer :: matBand_atomf
 
     logical :: flag_keepexcite, flag_full_DOS
 
@@ -633,6 +642,7 @@ contains
              matBand(i) = allocate_temp_matrix(Hrange,0,sf,sf)
           end do
        end if
+       if (atomf.ne.sf) matBand_atomf = allocate_temp_matrix(aHa_range,0,atomf,atomf)
     end if
     ! Preparatory work for DOS
     if(wf_self_con.AND.flag_write_DOS) then
@@ -1023,7 +1033,7 @@ contains
        allocate(abs_wf(maxngrid),STAT=stat)
        if (stat /= 0) call cq_abort('wf_out: Failed to allocate wfs', stat)
        call reg_alloc_mem(area_DM, maxngrid, type_dbl)
-       support_K = allocate_temp_fn_on_grid(sf)
+       atom_fns_K = allocate_temp_fn_on_grid(atomf)
        if(flag_out_wf_by_kp) then
           if(inode==ionode) call write_eigenvalues(w,matrix_size,nkp,nspin,kk,wtk,Efermi)
           do i=1,nkp
@@ -1032,7 +1042,12 @@ contains
                 if(nspin>1) then
                    do spin = 1, nspin
                       abs_wf(:)=zero
-                      call get_band_density(abs_wf,spin,supportfns,support_K,matBand_kp(wf_no,i),maxngrid)
+                      if (atomf.ne.sf) then
+                         call SF_to_AtomF_transform(matBand_kp(wf_no,i), matBand_atomf, spin, Hrange)
+                         call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
+                      else                     
+                         call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_kp(wf_no,i),maxngrid)
+                      endif
                       if(i==1) then
                          call wf_output(spin,abs_wf,wf_no,kk(:,i),w(out_wf(wf_no),i,spin),i)
                       else
@@ -1043,7 +1058,12 @@ contains
                 else
                    abs_wf(:)=zero
                    spin = 1
-                   call get_band_density(abs_wf,spin,supportfns,support_K,matBand_kp(wf_no,i),maxngrid)
+                   if (atomf.ne.sf) then
+                      call SF_to_AtomF_transform(matBand_kp(wf_no,i), matBand_atomf, spin, Hrange)
+                      call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
+                   else
+                      call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_kp(wf_no,i),maxngrid)
+                   endif
                    if(i==1) then
                       call wf_output(0,abs_wf,wf_no,kk(:,i),w(out_wf(wf_no),i,spin),i)
                    else
@@ -1057,7 +1077,12 @@ contains
           do wf_no=1,max_wf
              do spin = 1, nspin
                 abs_wf(:)=zero
-                call get_band_density(abs_wf,spin,supportfns,support_K,matBand(wf_no),maxngrid)
+                if (atomf.ne.sf) then
+                   call SF_to_AtomF_transform(matBand(wf_no), matBand_atomf, spin, Hrange)
+                   call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
+                else
+                   call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand(wf_no),maxngrid)
+                endif
                 call wf_output(spin,abs_wf,wf_no)
                 call my_barrier()
              end do
@@ -1066,7 +1091,7 @@ contains
        deallocate(abs_wf,STAT=stat)
        if (stat /= 0) call cq_abort('Find Evals: Failed to deallocate wfs',stat)
        call reg_dealloc_mem(area_DM, maxngrid, type_dbl)
-       call free_temp_fn_on_grid(support_K)
+       call free_temp_fn_on_grid(atom_fns_K)
        if(flag_out_wf_by_kp) then
           do j=nkp,1,-1
              do i=max_wf,1,-1
@@ -1078,6 +1103,7 @@ contains
              call free_temp_matrix(matBand(i))
           end do
        end if
+       if (atomf.ne.sf) call free_temp_matrix(matBand_atomf)
     end if
     if(wf_self_con.AND.flag_write_DOS) then
        ! output DOS

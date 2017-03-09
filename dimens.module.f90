@@ -40,6 +40,8 @@
 !!    Changed variable atomicrad to atomicnum
 !!   2013/07/01 M.Arita
 !!    Commented out some tricks used in MD & structure optimisation
+!!   2016/09/16 16:00 nakata
+!!    Added variables for PAO-based matrices and multi-site SFs
 !!  SOURCE
 module dimens
 
@@ -57,6 +59,7 @@ module dimens
   real(double) :: r_super_x, r_super_y, r_super_z, volume
   real(double) :: r_super_x_squared, r_super_y_squared, r_super_z_squared
   real(double) :: r_s, r_h, r_c, r_nl, r_core_squared, r_dft_d2, r_exx
+  real(double) :: r_s_atomf, r_h_atomf, r_MS, r_LD
   real(double) :: grid_point_volume, one_over_grid_point_volume
   real(double) :: support_grid_volume
   real(double) :: GridCutoff, min_blip_sp
@@ -65,7 +68,8 @@ module dimens
   !real(double) :: support_grid_spacing, support_grid_volume
   !real(double) ::  blip_width, four_on_blip_width, fobw2, fobw3
 
-  real(double), allocatable, dimension(:) :: RadiusSupport, &
+  real(double), allocatable, dimension(:) :: RadiusSupport, RadiusAtomf, &
+                                             RadiusMS, RadiusLD,         &
                                              NonLocalFactor, InvSRange
   integer, allocatable, dimension(:) :: atomicnum
 
@@ -144,8 +148,12 @@ contains
 !!    Added r_nl: fix unconsistency between HNL_fac/NonLocalFactor
 !!   2014/01/17 lat
 !!    Added r_exx and assigned to rcut(Xrange)
+!!   2016/09/16 16:00 nakata
+!!    Set ranges of atomf-based matrices
 !!   2016/11/02 dave
 !!    Added flag so that we only warn Lrange<Srange if O(N) is used
+!!   2017/03/08 15:00 nakata
+!!    Removed dSrange, dHrange and PAOPrange which are no longer used
 !!   2017/02/23 dave
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
 !!  SOURCE
@@ -156,7 +164,7 @@ contains
     use numbers
     use matrix_data
     use GenComms,      only: cq_abort
-    use global_module, only: iprint_init,flag_basis_set,blips,runtype
+    use global_module, only: iprint_init,flag_basis_set,blips,runtype, atomf, sf, flag_Multisite
     use global_module, only: flag_dft_d2,flag_MDold, flag_exx, flag_diagonalisation
     use block_module,  only: in_block_x, in_block_y, in_block_z, & 
                              n_pts_in_block, n_blocks
@@ -175,12 +183,32 @@ contains
 
     ! Local variables
     type(cq_timer) :: backtrace_timer
-    integer        :: max_extent, n, stat
+    integer        :: max_extent, n, stat, mx_matrices_tmp
     real(double)   :: r_core, r_t, rcutmax
 
 !****lat<$
     call start_backtrace(t=backtrace_timer,who='set_dimensions',where=9,level=2)
 !****lat>$
+
+    ! Set indices for atomf-based-matrix ranges
+    if (atomf==sf) then
+       aSa_range = Srange
+       aHa_range = Hrange
+       mx_matrices_tmp = 19
+    else
+       aSa_range       = 20
+       aHa_range       = 21
+       STr_range       = 22
+       HTr_range       = 23
+       aSs_range       = 24
+       aHs_range       = 25
+       sSa_range       = 26
+       sHa_range       = 27
+       SFcoeff_range   = 28
+       SFcoeffTr_range = 29
+       LD_range        = 30
+       mx_matrices_tmp = mx_matrices ! = 30
+    endif
 
     !n_my_grid_points = n_pts_in_block * n_blocks    
     ! decide if the flag non_local needs to be set to true
@@ -196,16 +224,22 @@ contains
     endif
 
     ! we need to decide which is the largest core radius
-    r_core = zero
-    r_h    = zero
-    r_t    = zero
-    r_nl   = zero
+    r_core    = zero
+    r_h       = zero
+    r_t       = zero
+    r_nl      = zero
+    r_h_atomf = zero
+    r_MS      = zero
+    r_LD      = zero
     !    if(non_local) then
     do n=1, n_species
-       r_core = max(r_core,core_radius(n))
-       r_h    = max(r_h,RadiusSupport(n))
-       r_t    = max(r_t,InvSRange(n))
-       r_nl   = max(r_nl,NonLocalFactor(n)*core_radius(n))
+       r_core    = max(r_core,core_radius(n))
+       r_h       = max(r_h,RadiusSupport(n))
+       r_t       = max(r_t,InvSRange(n))
+       r_nl      = max(r_nl,NonLocalFactor(n)*core_radius(n))
+       r_h_atomf = max(r_h_atomf,RadiusAtomf(n))
+       r_MS      = max(r_MS,RadiusMS(n))
+       r_LD      = max(r_LD,RadiusLD(n))
     end do
     !    else
     !       do n=1, n_species
@@ -227,7 +261,8 @@ contains
     !fobw3 = four_on_blip_width*fobw2
 
     ! Set range of S matrix
-    r_s = r_h
+    r_s       = r_h
+    r_s_atomf = r_h_atomf
     if(two*r_s>r_c.AND.(.NOT.flag_diagonalisation)) then ! Only warn if using O(N)
        if(inode==ionode) &
             write(io_lun,fmt='(8x,"WARNING ! S range greater than L !")')
@@ -243,13 +278,23 @@ contains
          r_h = 1.1_double * r_h
          r_core = 1.1_double * r_core
          if (flag_dft_d2) r_dft_d2 = 1.1_double * r_dft_d2 ! for DFT-D2
+         r_s_atomf = 1.1_double * r_s_atomf
+         r_h_atomf = 1.1_double * r_h_atomf
       else
          r_s = AtomMove_buffer +  r_s
          r_c = AtomMove_buffer +  r_c
          r_h = AtomMove_buffer +  r_h
          r_core = AtomMove_buffer +  r_core
          if (flag_dft_d2) r_dft_d2 = AtomMove_buffer + r_dft_d2 ! for DFT-D2
+         r_s_atomf = AtomMove_buffer +  r_s_atomf
+         r_h_atomf = AtomMove_buffer +  r_h_atomf
       end if
+    endif
+    ! Set ranges for contracted SFs
+    if (flag_Multisite) then
+       r_s = r_s_atomf + r_MS
+       r_h = r_h_atomf + r_MS
+       if (r_t.lt.r_s) r_t = r_s
     endif
 
     ! Set other ranges
@@ -287,7 +332,7 @@ contains
     rcut(Srange)   = (two*r_s)
     rcut(Trange)   = (two*r_t)
     rcut(Lrange)   = (r_c)
-    rcut(SPrange)  = (r_core + r_h)
+    rcut(APrange)  = (r_core + r_h_atomf)
     rcut(LSrange)  = (rcut(Lrange) + rcut(Srange))
     rcut(LHrange)  = (rcut(Lrange) + rcut(Hrange))
     rcut(LSLrange) = (two*rcut(Lrange) + rcut(Srange))
@@ -297,16 +342,32 @@ contains
     rcut(TSrange)  = (rcut(Trange)+rcut(Srange))
     rcut(THrange)  = (rcut(Trange)+rcut(Hrange))
     rcut(TLrange)  = (rcut(Trange)+rcut(Lrange))
-    rcut(PSrange)  = rcut(SPrange)
+    rcut(PArange)  = rcut(APrange)
     rcut(LTrrange) = rcut(Lrange)
     rcut(SLrange)  = rcut(LSrange)
     rcut(TTrrange) = rcut(Trange)
-    rcut(dSrange)  = rcut(Srange)
-    rcut(dHrange)  = rcut(Hrange)
-    rcut(PAOPrange)= rcut(SPrange)
     rcut(HLrange)  = rcut(LHrange)
+    ! for atomf-based matrices
+    if (atomf.ne.sf) then
+       rcut(aSa_range)       = two*r_s_atomf
+       rcut(aHa_range)       = rcut(Hrange) - two*r_MS   ! = two*(r_h_atomf+HNL_fac*r_core)
+       rcut(STr_range)       = rcut(Srange)
+       rcut(HTr_range)       = rcut(Hrange)
+       rcut(aSs_range)       = r_s_atomf + r_s
+       rcut(aHs_range)       = rcut(Hrange) - r_MS       ! = (r_h_atomf+HNL_fac*r_core)+(r_h+HNL_fac*r_core)
+       rcut(sSa_range)       = rcut(aSs_range)
+       rcut(sHa_range)       = rcut(aHs_range)
+       rcut(SFcoeff_range)   = r_MS
+       rcut(SFcoeffTr_range) = r_MS
+       rcut(LD_range)        = r_LD
+       if (r_MS.eq.zero) then
+          rcut(SFcoeff_range)   = 0.001_double
+          rcut(SFcoeffTr_range) = 0.001_double
+       endif
+       if (r_LD.eq.zero) rcut(LD_range) = 0.001_double
+    endif
     rcutmax = zero
-    do n=1,mx_matrices
+    do n=1,mx_matrices_tmp
        if(rcut(n)>rcutmax) then
           max_range = n
           rcutmax = rcut(n)
@@ -317,7 +378,7 @@ contains
     mat_name(Srange)   = "S  "
     mat_name(Lrange)   = "L  "
     mat_name(Hrange)   = "H  "
-    mat_name(SPrange)  = "SP "
+    mat_name(APrange)  = "AP "
     mat_name(LSrange)  = "LS "
     mat_name(LHrange)  = "LH "
     mat_name(LSLrange) = "LSL"
@@ -326,18 +387,28 @@ contains
     mat_name(TSrange)  = "TS "
     mat_name(THrange)  = "TH "
     mat_name(TLrange)  = "TL "
-    mat_name(PSrange)  = "PS "
+    mat_name(PArange)  = "PA "
     mat_name(LTrrange) = "LT "
     mat_name(SLrange)  = "SL "
     mat_name(TTrrange) = "TT "
-    mat_name(dSrange)  = "dS "
-    mat_name(dHrange)  = "dH "
-    mat_name(PAOPrange)= "PAO"
     mat_name(HLrange)  = "HL "
     mat_name(Xrange)   = "X  "
     mat_name(SXrange)  = "SX "
+    if (atomf.ne.sf) then
+       mat_name(aSa_range)       = "aSa"
+       mat_name(aHa_range)       = "aHa"
+       mat_name(STr_range)       = "St"
+       mat_name(HTr_range)       = "Ht"
+       mat_name(aSs_range)       = "aSs"
+       mat_name(aHs_range)       = "aHs"
+       mat_name(sSa_range)       = "sSa"
+       mat_name(sHa_range)       = "sHa"
+       mat_name(SFcoeff_range)   = "MS"
+       mat_name(SFcoeffTr_range) = "MSt"
+       mat_name(LD_range)        = "LD"
+    endif
     if(inode==ionode.AND.iprint_init>1) then
-       do n=1,mx_matrices
+       do n=1,mx_matrices_tmp
           write(io_lun,1) mat_name(n),rcut(n)
        enddo
     endif

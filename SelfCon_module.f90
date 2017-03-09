@@ -406,6 +406,8 @@ contains
   !!   - Corrected integration measure and normalisation
   !!   2015/06/08 lat
   !!   - Added experimental backtrace
+  !!   2016/11/01 Nakata
+  !!   - Took abs for Rcross
   !!  SOURCE
   !!
   subroutine earlySC(record, done, EarlyLin, ndone, self_tol, reset_L,&
@@ -535,6 +537,7 @@ contains
        Rcross = Rcross + dot(n_my_grid_points, residb(:,1), 1, resid0(:,nspin), 1)
        Rcross = Rcross + dot(n_my_grid_points, residb(:,nspin), 1, resid0(:,1), 1)
        call gsum(Rcross)
+       Rcross = abs(Rcross)
        Rcross = sqrt(grid_point_volume * Rcross) / ne_in_cell
 
        if (R0 < self_tol) then
