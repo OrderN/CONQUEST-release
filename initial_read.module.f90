@@ -138,6 +138,8 @@ contains
   !!    Added automatic setting of flag_one_to_one, atomf and nspin_SF
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2017/03/09 17:30 nakata
+  !!    Changed to check consistence between flag_one_to_one and flag_Multisite
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -314,6 +316,9 @@ contains
              'Warning!! nsf and npao are the same but read SF coefficients', &
              '          so that flag_one_to_one is set to be .false.'
           flag_one_to_one = .false.
+       endif
+       if (flag_one_to_one .and. flag_Multisite) then
+          call cq_abort("flag_Multisite is .true., but the number of SFs is the same as the number of PAOs.")
        endif
        if (.not.flag_one_to_one) atomf = paof
        if (flag_one_to_one) flag_SpinDependentSF = .false. ! spin-dependent SFs will be available only for contracted SFs
