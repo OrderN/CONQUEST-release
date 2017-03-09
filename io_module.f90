@@ -3839,6 +3839,9 @@ second:   do
          '       David Bowler           Tsuyoshi Miyazaki       ',/,12x, &
          '        (UCL,NIMS)                 (NIMS)             ',/,12x, &
          '                                                      ',/,12x, &
+         '       Ayako Nakata           Lionel Truflandier      ',/,12x, &
+         '          (NIMS)                 (Bordeaux)           ',/,12x, &
+         '                                                      ',/,12x, &
          '     Antonio Torralba         Veronika Brazdova       ',/,12x, &
          '        (UCL,NIMS)                 (UCL)              ',/,12x, &
          '                                                      ',/,12x, &

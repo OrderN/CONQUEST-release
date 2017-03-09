@@ -811,14 +811,14 @@ contains
     ! Passed variables
     type(matrix_halo) LFDhalo                         ! LFDhalo = mult(aLa_aHa_aLHa)%ahalo
     ! Local
-    integer :: stat, t0, t1, spin_SF
+    integer :: stat, spin_SF
     integer :: lun11,lun12, n_naba_i_d, len_Sub_i_d
     character(len=15) :: filename11,filename12
     real(double) :: ChemP, kT, kT1                   ! filter function
     real(double) :: NEsub, NEsub0                    ! number of electrons in subspace, used for determing ChemP
     integer :: INEsub
     integer :: info                                  ! for DSYGVX
-    real(double) :: abstol
+    real(double) :: abstol, t0, t1
     integer :: max_npao, nhalo_LFD, max_npao_LFD, len_kj_sub, len_Sub, &      ! for max subspace of halo atoms
                atom_num, iprim, atom_i, atom_spec, NTVEC,              &      ! for atom_i
                np, i, k, ist, gcspart, k_in_halo, nd3,                 &

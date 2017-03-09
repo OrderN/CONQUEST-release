@@ -115,6 +115,8 @@ contains
   !!    Added call for wavefunction output at self-consistency
   !!   2015/06/26 13:46 dave
   !!    Turned off force calculation when writing out bands
+  !!   2017/02/15 (or earlier) nakata
+  !!    Added LFD minimisation for multisite support functions
   !!  SOURCE
   !!
   !subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
