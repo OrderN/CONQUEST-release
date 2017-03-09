@@ -2125,12 +2125,12 @@ contains
 
     use logicals
     use global_module,      only: nspin, ni_in_cell, ne_in_cell, spin_factor, nspin_SF, &
-                                  area_minE, area_ops
+                                  area_minE, area_ops, flag_diagonalisation
     use PosTan,             only: PulayC, PulayBeta, SCC, SCBeta
     use GenComms,           only: gsum
     use dimens,             only: n_my_grid_points, grid_point_volume
     use maxima_module,      only: maxngrid
-    use DiagModule,         only: diagon
+    !use DiagModule,         only: diagon
     use DMMin,              only: FindMinDM
     use SelfCon,            only: new_SC_potl
     use S_matrix_module,    only: get_S_matrix
@@ -2209,7 +2209,7 @@ contains
        ! 1. Get new S_sf matrix 
        call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if

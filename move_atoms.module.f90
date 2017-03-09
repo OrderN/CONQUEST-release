@@ -1881,7 +1881,7 @@ contains
     use S_matrix_module,        only: get_S_matrix
     use H_matrix_module,        only: get_H_matrix
     !use DiagModule,             only: diagon
-    use mult_module,            only: LNV_matrix_multiply
+    use mult_module,            only: LNV_matrix_multiply, matrix_scale, matSFcoeff
     use ion_electrostatic,      only: ewald, screened_ion_interaction
     use pseudopotential_data,   only: init_pseudo
     use pseudo_tm_module,       only: set_tm_pseudo
