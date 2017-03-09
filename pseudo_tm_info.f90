@@ -542,6 +542,8 @@ contains
 !!    Updated module name to ion_electrostatic
 !!   2016/02/09 08:17 dave
 !!    Changed to use erfc from functions module
+!!   2017/02/24 10:06 dave & tsuyoshi
+!!    Bug fix for read_header_tmp: removed formatting for zval
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -868,14 +870,13 @@ contains
          write(io_lun,fmt='(10x,"symbol = ",a2)') symbol
          read(unit,'(a20)') label
          write(io_lun,fmt='(10x,"label = ",a20)') label
-         read(unit,'(i5)') z
+         read(unit,*) z
          write(io_lun,fmt='(10x,"z = ",i5)') z
-         read(unit,'(i5)') zval_int
-         zval=real(zval_int,double)
-         write(io_lun,fmt='(10x,"zval_int, zval = ",i5,f12.5)') zval_int, zval
-         read(unit,'(g25.15)') mass
+         read(unit,*) zval
+         write(io_lun,fmt='(10x,"zval_int, zval = ",f12.5)') zval
+         read(unit,*) mass
          write(io_lun,fmt='(10x,"mass = ",g25.15)') mass
-         read(unit,'(g25.15)') self_energy
+         read(unit,*) self_energy
          write(io_lun,fmt='(10x,"self_energy = ",g25.15)') self_energy
          read(unit,'(2i4)') lmax_basis, n_orbnl
          write(io_lun,fmt='(10x,"lmax_basis, n_orbnl = ",2i4)') lmax_basis, n_orbnl
