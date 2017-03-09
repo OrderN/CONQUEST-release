@@ -995,6 +995,8 @@ contains
   !!    Renamed supportfns -> atomfns
   !!   2016/12/19 17:15 nakata
   !!    Removed unused flag_vary_basis
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1019,7 +1021,7 @@ contains
                                    flag_propagateX, flag_propagateL, restart_X, &
                                    flag_exx, exx_scf, flag_out_wf, wf_self_con, &
                                    flag_write_DOS, flag_neutral_atom, &
-                                   atomf, sf, flag_LFD, nspin_SF
+                                   atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation
     use ion_electrostatic,   only: ewald, screened_ion_interaction
     use S_matrix_module,     only: get_S_matrix
     use GenComms,            only: my_barrier,end_comms,inode,ionode, &
@@ -1029,7 +1031,7 @@ contains
     use energy,              only: get_energy
     use test_force_module,   only: test_forces
     use io_module,           only: grab_matrix, grab_charge
-    use DiagModule,          only: diagon
+    !use DiagModule,          only: diagon
     use density_module,      only: get_electronic_density, density
     use functions_on_grid,   only: atomfns, H_on_atomfns
     use dimens,              only: n_my_grid_points
@@ -1146,7 +1148,7 @@ contains
     ! (2) Make an inital estimate for the density matrix, L, which is an
     !     approximation to L = S^-1. Then use correct_electron_number()
     !     to modify L so that the electron number is correct.
-    if (.not. diagon .and. find_chdens .and. (start .or. start_L)) then
+    if (.not. flag_diagonalisation .and. find_chdens .and. (start .or. start_L)) then
        call initial_L()
        call my_barrier()
        if (inode == ionode .and. iprint_init > 1) &
@@ -1188,7 +1190,7 @@ contains
 !!$
 !!$
     ! (3) get K matrix (and also get phi matrix)
-    if (.not. diagon .and. (find_chdens .or. restart_L)) then
+    if (.not. flag_diagonalisation .and. (find_chdens .or. restart_L)) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,   &
                                 dontM2, dontM3, dontM4, dophi, dontE, &
                                 mat_phi=matphi)

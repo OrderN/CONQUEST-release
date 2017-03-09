@@ -119,6 +119,8 @@ contains
   !!    Renamed supports_on_atom -> blips_on_atom
   !!   2016/08/08 15:30 nakata
   !!    Renamed supportfns -> atomfns
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine vary_support(n_support_iterations, fixed_potential, &
@@ -135,11 +137,11 @@ contains
     use PosTan,              only: PulayC, PulayBeta, SCC, SCBeta
     use blip,                only: PreCond, blip_info
     use GenComms,            only: my_barrier, gsum, inode, ionode, cq_abort
-    use DiagModule,          only: diagon
+    !use DiagModule,          only: diagon
     use blip_gradient,       only: get_blip_gradient, get_electron_gradient
     use global_module,       only: flag_precondition_blips, iprint_basis, &
                                    area_basis, nspin, spin_factor,        &
-                                   flag_analytic_blip_int
+                                   flag_analytic_blip_int, flag_diagonalisation
     use io_module,           only: dump_blip_coeffs
     use functions_on_grid,   only: atomfns, H_on_atomfns,                 &
                                    gridfunctions, fn_on_grid
@@ -221,7 +223,7 @@ contains
     ! functions. For diagonalisation, this is already stored
     if (inode == ionode .and. iprint_basis > 2) &
          write (io_lun, fmt='(6x, "Finding gradient")')
-    if (.not. diagon) then
+    if (.not. flag_diagonalisation) then
        call LNV_matrix_multiply(electrons, energy_in, doK, doM1, doM2,&
                                 dontM3, doM4, dontphi, dontE,         &
                                 mat_M12=matM12, mat_M4=matM4)
@@ -233,7 +235,7 @@ contains
     call my_barrier()
     ! The density matrix is effectively idempotent during
     ! diagonalisation
-    if (diagon) then
+    if (flag_diagonalisation) then
        gridfunctions(H_on_atomfns(1))%griddata = zero
     else
        call get_electron_gradient(atomfns, H_on_atomfns(1), &
@@ -264,7 +266,7 @@ contains
        ! The basis for searching is data_dblip
        call copy(length, grad_coeff_array, 1, search_direction, 1)
        ! Now project dblip tangential to the constant Ne hyperplane
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           dN_dot_de = dot(length, grad_coeff_array, 1, &
                           elec_grad_coeff_array, 1)
           dN_dot_dN = dot(length, elec_grad_coeff_array, 1, &
@@ -338,7 +340,7 @@ contains
        call copy(length, Psd, 1, search_direction, 1)
        call axpy(length, gamma, last_sd, 1, search_direction, 1)
        ! And project perpendicular to electron gradient
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           dN_dot_de = dot(length, search_direction, 1, &
                           elec_grad_coeff_array, 1)
           dN_dot_dN = dot(length, elec_grad_coeff_array, 1, &
@@ -385,7 +387,7 @@ contains
 
        ! prepare for next iteration
        if (n_iterations < n_support_iterations) then
-          if (.not. diagon) then
+          if (.not. flag_diagonalisation) then
              call LNV_matrix_multiply(electrons, energy_in, doK, doM1, &
                                       doM2, dontM3, doM4, dontphi,     &
                                       dontE, mat_M12=matM12, mat_M4=matM4)
@@ -400,7 +402,7 @@ contains
           
           ! The density matrix is effectively idempotent during
           ! diagonalisation
-          if (diagon) then
+          if (flag_diagonalisation) then
              gridfunctions(H_on_atomfns(1))%griddata = zero
           else
              call get_electron_gradient(atomfns,                &
@@ -493,6 +495,8 @@ contains
   !!   - removed redundant input parameter real(double) mu
   !!   2012/06/18 L.Tong
   !!   - removed k0, it seemed not used and redundant
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine line_minimise_support(search_direction, lengthBlip,  &
@@ -505,7 +509,7 @@ contains
     use numbers
     use logicals
     use global_module,       only: iprint_basis, area_basis, nspin,    &
-                                   spin_factor
+                                   spin_factor, flag_diagonalisation
     use mult_module,         only: LNV_matrix_multiply, matM12, matM4
     use GenBlas,             only: dot, axpy, copy, vdot
     use SelfCon,             only: new_SC_potl
@@ -515,7 +519,7 @@ contains
                                    ionode
     ! Check on whether we need K found from L or whether we have it
     ! exactly
-    use DiagModule,          only: diagon
+    !use DiagModule,          only: diagon
     use support_spec_format, only: coefficient_array,                  &
                                    coeff_array_size, grad_coeff_array, &
                                    elec_grad_coeff_array
@@ -588,7 +592,7 @@ contains
        ! 1. Get new S matrix (includes blip-to-grid transform)
        call get_S_matrix(inode, ionode)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi,   &
                                    dontE)
@@ -644,7 +648,7 @@ contains
     ! 1. Get new S matrix (includes blip-to-grid transform)
     call get_S_matrix(inode, ionode)
     ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-    if (.not. diagon) then
+    if (.not. flag_diagonalisation) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1, &
                                 dontM2, dontM3, dontM4, dontphi,    &
                                 dontE)
@@ -666,7 +670,7 @@ contains
        ! 1. Get new S matrix (includes blip-to-grid transform)
        call get_S_matrix(inode, ionode)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi,   &
                                    dontE)

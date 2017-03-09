@@ -154,6 +154,8 @@ contains
 !!    Added flag so that we only warn Lrange<Srange if O(N) is used
 !!   2017/03/08 15:00 nakata
 !!    Removed dSrange, dHrange and PAOPrange which are no longer used
+!!   2017/02/23 dave
+!!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -163,12 +165,13 @@ contains
     use matrix_data
     use GenComms,      only: cq_abort
     use global_module, only: iprint_init,flag_basis_set,blips,runtype, atomf, sf, flag_Multisite
-    use global_module, only: flag_dft_d2,flag_MDold, flag_exx
+    use global_module, only: flag_dft_d2,flag_MDold, flag_exx, flag_diagonalisation
     use block_module,  only: in_block_x, in_block_y, in_block_z, & 
                              n_pts_in_block, n_blocks
 
     use input_module,           only: leqi
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, ABINIT
+    !use DiagModule,             only: diagon
 
     implicit none
 
@@ -260,7 +263,7 @@ contains
     ! Set range of S matrix
     r_s       = r_h
     r_s_atomf = r_h_atomf
-    if(two*r_s>r_c) then
+    if(two*r_s>r_c.AND.(.NOT.flag_diagonalisation)) then ! Only warn if using O(N)
        if(inode==ionode) &
             write(io_lun,fmt='(8x,"WARNING ! S range greater than L !")')
        !r_s = r_c

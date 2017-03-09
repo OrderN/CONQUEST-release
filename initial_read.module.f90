@@ -136,6 +136,8 @@ contains
   !!    - Input parameters for band output
   !!   2016/09/15 17:00 nakata
   !!    Added automatic setting of flag_one_to_one, atomf and nspin_SF
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -166,7 +168,7 @@ contains
                                       atomf, sf, paof,                 &
                                       flag_SpinDependentSF, nspin_SF,  &
                                       flag_Multisite,                  &
-                                      flag_cdft_atom, flag_local_excitation
+                                      flag_cdft_atom, flag_local_excitation, flag_diagonalisation
     use cdft_data, only: cDFT_NAtoms, &
                          cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
@@ -187,7 +189,7 @@ contains
     use pseudo_tm_module,       only: init_pseudo_tm
     use input_module,           only: fdf_string, fdf_out, io_close
     use force_module,           only: tot_force
-    use DiagModule,             only: diagon
+    !use DiagModule,             only: diagon
     use constraint_module,      only: flag_RigidBonds,constraints
     use support_spec_format,    only: flag_one_to_one, symmetry_breaking, read_option
     use pao_format
@@ -239,7 +241,7 @@ contains
     if(iprint_init>4) call print_process_info()
     ! By now, we'll have unit cell sizes and grid cutoff
     call find_grid
-    if(diagon) call readDiagInfo
+    if(flag_diagonalisation) call readDiagInfo
     if (flag_RigidBonds) call read_input_aux(constraints)
     ! Now that input from Conquest_input is done, we will close the file
     call io_close(fdf_out)
@@ -571,6 +573,8 @@ contains
   !!    Changed default pseudopotential to Siesta (necessary for now)
   !!   2016/08/05 10:08 dave
   !!    Added gap threshold parameter for initial estimation of partition numbers
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -639,7 +643,7 @@ contains
                              fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
                              fire_N_max, flag_write_DOS, flag_write_projected_DOS, &
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
-                             mx_temp_matrices, flag_neutral_atom, &
+                             mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
@@ -655,7 +659,7 @@ contains
                               non_local_species, type_species,         &
                               species_file, species_from_files
     use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode
-    use DiagModule, only: diagon
+    !use DiagModule, only: diagon
     use energy,     only: flag_check_Diag
     use DMMin,      only: maxpulayDMM, maxpulaystepDMM, minpulaystepDMM, &
                           LinTol_DMM, n_dumpL
@@ -954,10 +958,10 @@ contains
        ! Solution method - O(N) or diagonalisation ?
        method = fdf_string(6,'DM.SolutionMethod','ordern') ! Default is O(N)
        if(leqi(method,'diagon')) then
-          diagon = .true.
+          flag_diagonalisation = .true.
           flag_check_Diag = .true. 
        else
-          diagon = .false.
+          flag_diagonalisation = .false.
           flag_check_Diag = .false.
        end if
        ! Read basis set
@@ -1297,7 +1301,7 @@ contains
        mx_temp_matrices = fdf_integer('General.MaxTempMatrices',100)
        flag_out_wf=fdf_boolean('IO.outputWF',.false.)
        if (flag_out_wf) then
-          if (diagon .and. leqi(runtype,'static')) then
+          if (flag_diagonalisation .and. leqi(runtype,'static')) then
              flag_out_wf_by_kp=fdf_boolean('IO.outputWF_by_kpoint',.false.)
              wf_self_con=.false.
              ! The user can either specify which bands explicitly
@@ -1329,7 +1333,7 @@ contains
        ! DOS output
        flag_write_DOS = fdf_boolean('IO.writeDOS',.false.)
        if(flag_write_DOS) then
-          if(diagon) then
+          if(flag_diagonalisation) then
              flag_write_projected_DOS = fdf_boolean('IO.write_proj_DOS',.false.)
              E_DOS_min = fdf_double('IO.min_DOS_E',zero)
              E_DOS_max = fdf_double('IO.max_DOS_E',zero)
@@ -1990,6 +1994,8 @@ contains
   !!    Small bug fix on formatting numbers
   !!   2011/12/11 L.Tong
   !!    Removed obsolete parameter number_of_bands
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine write_info(titles, mu, vary_mu, find_chdens, read_phi, &
@@ -2005,13 +2011,13 @@ contains
                                     charge, ps_file, ch_file,          &
                                     phi_file, species, nsf_species
     use pseudopotential_data, only: core_radius, non_local_species
-    use DiagModule,           only: diagon, flag_smear_type,           &
+    use DiagModule,           only: flag_smear_type,           &
                                     iMethfessel_Paxton
     use blip,                 only: blip_info
     use global_module,        only: flag_basis_set, PAOs,blips,        &
                                     functional_description,            &
                                     flag_precondition_blips, io_lun,   &
-                                    flag_Multisite
+                                    flag_Multisite, flag_diagonalisation
     use minimise,             only: energy_tolerance, L_tolerance,     &
                                     sc_tolerance,                      &
                                     n_support_iterations,              &
@@ -2042,7 +2048,7 @@ contains
     write(io_lun,1)
     write(io_lun,2) titles
 
-    if(diagon) then
+    if(flag_diagonalisation) then
        write(io_lun,30) 'diagonalisation '
        select case (flag_smear_type)
        case (0)

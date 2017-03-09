@@ -469,6 +469,8 @@ contains
   !!     - Removed redundant input parameter real(double) mu
   !!   2016/08/08 nakata
   !!     - Removed unused sf in global_module
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!  
   subroutine evaluate_cdft_function(reset_L, fixed_potential,   &
@@ -481,8 +483,8 @@ contains
      use mult_module,    only: LNV_matrix_multiply, matH, matrix_sum
      use DMMin,          only: FindMinDM
      use global_module,  only: iprint_SC, iprint_SC, io_lun, &
-                               nspin, spin_factor
-     use DiagModule,     only: diagon
+                               nspin, spin_factor, flag_diagonalisation
+     !use DiagModule,     only: diagon
      use energy,         only: get_energy
      use GenComms,       only: inode, ionode
 
@@ -518,7 +520,7 @@ contains
                     reset_L, .false.)
      ! If we're using O(N), we only have L, and we need K - if
      ! diagonalisation, we have K
-     if (.not. diagon) then
+     if (.not. flag_diagonalisation) then
         ! electrons and tmp_energy are used as dump for electrons and
         ! energies calculated from LNV_matrix_multipy
         ! total_energy is calculated from get_energy below

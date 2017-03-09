@@ -729,6 +729,8 @@ contains
   !!    Renamed supportfns -> atomfns
   !!   2016/11/09 21:30 nakata
   !!    Introduce atomf-based calculations
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine pulay_force(p_force, KE_force, fixed_potential, vary_mu,  &
@@ -758,7 +760,7 @@ contains
                                            blips, PAOs, sf, atomf,   &
                                            flag_onsite_blip_ana,     &
                                            nspin, spin_factor,       &
-                                           flag_analytic_blip_int, id_glob, species_glob
+                                           flag_analytic_blip_int, id_glob, species_glob, flag_diagonalisation
     use set_bucket_module,           only: rem_bucket, atomf_atomf_rem
     use blip_grid_transform_module,  only: blip_to_support_new,      &
                                            blip_to_grad_new
@@ -767,7 +769,7 @@ contains
     use H_matrix_module,             only: get_H_matrix
     use GenComms,                    only: gsum, cq_abort, mtime,    &
                                            inode, ionode
-    use DiagModule,                  only: diagon
+    !use DiagModule,                  only: diagon
 !    use blip_gradient,               only: get_support_gradient
     use PAO_grid_transform_module,   only: single_PAO_to_grad
     use build_PAO_matrices,          only: assemble_deriv_2
@@ -870,7 +872,7 @@ contains
        ! (1) get S matrix
        call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! (2) get K matrix
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
@@ -881,7 +883,7 @@ contains
        ! get_H_matrix
        call get_H_matrix(.false., fixed_potential, electrons, density,&
                          maxngrid)
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           call LNV_matrix_multiply(electrons, energy_tmp, dontK, doM1,&
                                    doM2, dontM3, dontM4, dontphi,     &
                                    dontE, mat_M12=matM12)
@@ -893,7 +895,7 @@ contains
     t0 = mtime()
     ! for the energy wrt support function we need  M1 and M2...
     ! If we're diagonalising, we've already build data_M12
-    if (.not. diagon) then
+    if (.not. flag_diagonalisation) then
        call LNV_matrix_multiply(electrons, energy_tmp, dontK, doM1,   &
                                 doM2, dontM3, dontM4, dontphi, dontE, &
                                 mat_M12=matM12)

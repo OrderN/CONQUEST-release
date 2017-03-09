@@ -1010,6 +1010,8 @@ contains
   !!    Introduced atomf instead of sf
   !!   2016/08/08 15:30 nakata
   !!    Renamed supportfns -> atomfns
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine get_new_rho(record, reset_L, fixed_potential, vary_mu,  &
@@ -1021,9 +1023,9 @@ contains
     use mult_module,       only: LNV_matrix_multiply
     use DMMin,             only: FindMinDM
     use global_module,     only: iprint_SC, atomf, flag_perform_cDFT, &
-                                 nspin, spin_factor
+                                 nspin, spin_factor, flag_diagonalisation
     use H_matrix_module,   only: get_H_matrix
-    use DiagModule,        only: diagon
+    !use DiagModule,        only: diagon
     use energy,            only: get_energy, flag_check_DFT
     use functions_on_grid, only: atomfns, allocate_temp_fn_on_grid, &
                                  free_temp_fn_on_grid
@@ -1070,7 +1072,7 @@ contains
 
        ! If we're using O(N), we only have L, and we need K
        ! if diagonalisation, we have K
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           call LNV_matrix_multiply(electrons, energy_spin, doK,      &
                                    dontM1,  dontM2, dontM3, dontM4,  &
                                    dontphi, dontE, level=backtrace_level)

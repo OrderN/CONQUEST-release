@@ -677,6 +677,8 @@ contains
 !!    Added variables and calls for reusing T-matrix
 !!   2017/01/18 nakata
 !!    Added IF for contracted SFs
+!!   2017/02/23 dave
+!!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
 !!  SOURCE
 !!
   subroutine Iter_Hott_InvS(output_level, n_L_iterations, tolerance,n_atoms,&
@@ -685,13 +687,13 @@ contains
     use datatypes
     use numbers
     use global_module, ONLY: IPRINT_TIME_THRES1,flag_MDold,flag_TmatrixReuse,restart_T, &
-                             runtype,n_proc_old, atomf, sf
+                             runtype,n_proc_old, atomf, sf, flag_diagonalisation
     use matrix_data, ONLY: Trange, TSrange, mat, Srange
     use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, store_matrix_value, matrix_scale, matrix_sum, &
          matT, matS, return_matrix_value, T_trans
     use primary_module, only: bundle
     use GenComms, ONLY: gsum, my_barrier
-    use DiagModule, ONLY: diagon
+    !use DiagModule, ONLY: diagon
     use species_module, ONLY: nsf_species, species
     use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
     use input_module, ONLY: leqi
@@ -712,7 +714,6 @@ contains
     type(cq_timer) :: tmr_l_tmp1
     logical,save :: flag_readT = .false.
 
-
     if (atomf.ne.sf .and. .not.flag_do_SFtransform) then
        if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) &
           'Now we have only Spao but not Ssf yet, so InvS is not calculated at present.'
@@ -722,7 +723,7 @@ contains
        matTold = allocate_temp_matrix(Trange,0)
        matTM = allocate_temp_matrix(TSrange,0)
 
-       if(diagon) then ! Don't need S^-1 for diagonalisation
+       if(flag_diagonalisation) then ! Don't need S^-1 for diagonalisation
           call matrix_scale(zero,matT)
           ip = 1
           nb = 1

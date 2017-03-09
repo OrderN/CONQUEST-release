@@ -115,6 +115,8 @@ contains
   !!    dump_matrix is used instead of writeout_support_functions.
   !!    Removed blips_on_atom, nsf_species, npao_species,
   !!    which are no longer used here.
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine vary_pao(n_support_iterations, fixed_potential, vary_mu, &
@@ -130,14 +132,14 @@ contains
                                          SCBeta
     use GenComms,                  only: my_barrier, gsum, inode,      &
                                          ionode, cq_abort
-    use DiagModule,                only: diagon
+    !use DiagModule,                only: diagon
     use primary_module,            only: bundle
     use cover_module,              only: BCS_parts
     use global_module,             only: flag_vary_basis, iprint_minE, &
                                          ni_in_cell,                   &
                                          flag_self_consistent,         &
                                          id_glob, numprocs, area_minE, &
-                                         nspin, spin_factor, nspin_SF
+                                         nspin, spin_factor, nspin_SF, flag_diagonalisation
     use group_module,              only: parts
     use H_matrix_module,           only: get_H_matrix
     use S_matrix_module,           only: get_S_matrix
@@ -448,14 +450,13 @@ contains
     ! now loop over search directions
     do n_iterations = 1, n_support_iterations
        if (inode == ionode) write (io_lun, 7) n_iterations
-
        do spin_SF = 1, nspin_SF
           ! We need the last search direction for CG manipulations
           call copy(length, search_direction(:,spin_SF), 1, last_sd(:,spin_SF), 1)
           ! The basis for searching is gradient
           call copy(length, mat_p(matdSFcoeff(spin_SF))%matrix, 1, search_direction(:,spin_SF), 1)
           ! Now project gradient tangential to the constant Ne hyperplane
-          if (.not. diagon) then
+          if (.not. flag_diagonalisation) then
              dN_dot_de = dot(length, mat_p(matdSFcoeff(spin_SF))%matrix, 1, &
                                      mat_p(matdSFcoeff_e(spin_SF))%matrix, 1)
              dN_dot_dN = dot(length, mat_p(matdSFcoeff_e(spin_SF))%matrix, 1, &
@@ -488,7 +489,7 @@ contains
           call copy(length, Psd(:,spin_SF), 1, search_direction(:,spin_SF), 1)
           call axpy(length, gamma(spin_SF), last_sd(:,spin_SF), 1, search_direction(:,spin_SF), 1)
           ! And project perpendicular to electron gradient
-          if (.not. diagon) then
+          if (.not. flag_diagonalisation) then
              dN_dot_de = dot(length, search_direction(:,spin_SF), 1, &
                                      mat_p(matdSFcoeff_e(spin_SF))%matrix, 1)
              dN_dot_dN = dot(length, mat_p(matdSFcoeff_e(spin_SF))%matrix, 1, &
@@ -671,6 +672,8 @@ contains
   !!    matdSFcoeff and matdSFcoeff_e are used instead of
   !!    grad_coeff_array and elec_grad_coeff_array.
   !!    dump_matrix is used instead of writeout_support_functions.
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !! SOURCE
   !!
   subroutine pulay_min_pao(n_support_iterations, fixed_potential,   &
@@ -690,11 +693,11 @@ contains
     use PosTan,              only: PulayC, PulayBeta, SCC, SCBeta
     use GenComms,            only: my_barrier, gsum, inode, ionode,    &
                                    cq_abort
-    use DiagModule,          only: diagon
+    !use DiagModule,          only: diagon
     use primary_module,      only: bundle
     use global_module,       only: flag_vary_basis, iprint_minE,       &
                                    ni_in_cell, nspin, spin_factor,     &
-                                   area_minE, nspin_SF
+                                   area_minE, nspin_SF, flag_diagonalisation
     use SelfCon,             only: new_SC_potl
     use S_matrix_module,     only: get_S_matrix
     use energy,              only: get_energy, kinetic_energy, nl_energy
@@ -755,7 +758,7 @@ contains
     total_energy_last = total_energy_0
 
     ! We need to assemble the gradient
-    if (.not. diagon) then
+    if (.not. flag_diagonalisation) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, doM1,   &
                                 doM2, dontM3, doM4, dontphi, dontE, &
                                 mat_M12=matM12, mat_M4=matM4)
@@ -825,7 +828,7 @@ contains
        ! 1. Generate S
        call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
@@ -889,7 +892,7 @@ contains
        ! 1. Generate S
        call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
@@ -1022,6 +1025,8 @@ contains
   !!    Renamed supports_on_atom -> blips_on_atom
   !!   2016/12/19 18:15 nakata
   !!    Removed unused flag_vary_basis
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine line_minimise_pao(search_direction, fixed_potential,     &
@@ -1042,9 +1047,8 @@ contains
     use GenComms,            only: gsum, my_barrier, cq_abort, inode, &
                                    ionode
     ! Check on whether we need K found from L or whether we have it exactly
-    use DiagModule,          only: diagon
     use global_module,       only: ni_in_cell,                        &
-                                   area_minE, nspin, nspin_SF
+                                   area_minE, nspin, nspin_SF, flag_diagonalisation
     use primary_module,      only: bundle
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem,    &
                                    type_dbl
@@ -1139,7 +1143,7 @@ contains
        ! 1. Get new S matrix
        call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
@@ -1204,7 +1208,7 @@ contains
     ! 1. Get new S matrix
     call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
     ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-    if (.not. diagon) then
+    if (.not. flag_diagonalisation) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1, &
                                 dontM2, dontM3, dontM4, dontphi, dontE)
     end if
@@ -1233,7 +1237,7 @@ contains
        ! 1. Get new S matrix
        call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        ! 2. If we're building K as 3LSL-2LSLSL, we need to make K now
-       if (.not. diagon) then
+       if (.not. flag_diagonalisation) then
           call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,&
                                    dontM2, dontM3, dontM4, dontphi, dontE)
        end if
@@ -1310,6 +1314,8 @@ contains
   !!    (Previously, since we stored coefficients for ALL atoms locally (shown by the
   !!     flag_paos_atoms_in_cell), we needed to do a gsum at the end (having stored
   !!     the coefficients for each primary atom in the appropriate part of the array)
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!
   subroutine build_PAO_coeff_grad(flag)
@@ -1317,7 +1323,6 @@ contains
     use datatypes
     use logicals
     use numbers
-    use DiagModule,          only: diagon
     use matrix_data,         only: aSs_range, aHs_range
     use mult_module,         only: LNV_matrix_multiply, matM12, matM4, &
                                    matK, matHatomf, matSatomf,         &
@@ -1330,7 +1335,7 @@ contains
                                    aHa_sCaTr_aHs, sHs_sHa_sCa,         &
                                    allocate_temp_matrix, free_temp_matrix
     use global_module,       only: nspin, spin_factor, atomf, sf,      &
-                                   flag_SpinDependentSF
+                                   flag_SpinDependentSF, flag_diagonalisation
 
     ! Passed variables
     integer :: flag
@@ -1340,7 +1345,7 @@ contains
     real(double), dimension(nspin) :: e1, e2
 
     
-    if (.not. diagon) then
+    if (.not. flag_diagonalisation) then
        ! e1 and e2 are not used, just used for dumping the electron
        ! numbers and energies
        call LNV_matrix_multiply(e1, e2, doK, doM1, doM2, dontM3, doM4,&
@@ -1371,7 +1376,7 @@ contains
        call free_temp_matrix(mat_tmpH)
     endif
 
-    if (flag == GdS .or. flag == full .or. .not.diagon) then
+    if (flag == GdS .or. flag == full .or. .not.flag_diagonalisation) then
        mat_tmpS     = allocate_temp_matrix(aSs_range,aSs_trans,atomf,sf)
        spin_SF = 1 ! spin of coefficients
        do spin = 1, nspin
@@ -1390,7 +1395,7 @@ contains
              call matrix_sum(one, matdSFcoeff(spin_SF), one, matdSFcoeff_e(spin_SF))                ! sum up with K.dH
           endif
           ! Electron gradient
-          if (.not. diagon) then
+          if (.not. flag_diagonalisation) then
              ! No problems with electron number when diagonalising
              call matrix_product(matM4(spin), mat_tmpS, matdSFcoeff_e(spin_SF), mult(sSs_sSa_sCa))
           endif
@@ -1399,8 +1404,255 @@ contains
     endif
 
     call matrix_scale(-two*spin_factor, matdSFcoeff(spin_SF)) ! -2*spin_factor
-    if (.not. diagon) call matrix_scale(-spin_factor, matdSFcoeff_e(spin_SF)) ! -spin_factor
+    if (.not. flag_diagonalisation) call matrix_scale(-spin_factor, matdSFcoeff_e(spin_SF)) ! -spin_factor
 
+=======
+    do part = 1, bundle%groups_on_node
+       if (bundle%nm_nodgroup(part) > 0) then
+          do memb = 1, bundle%nm_nodgroup(part) ! Select i
+             nsfi = mat(part,Srange)%ndimi(memb)
+             npaoi = mat(part,dSrange)%ndimi(memb)
+             if (iprint_minE > 2 .and. inode == ionode) &
+                  write (io_lun, *) myid, ' atom, nsf, npao: ', &
+                                    memb, nsfi, npaoi
+             if (memb < bundle%nm_nodgroup(part)) then
+                S_nd_nabs = mat(part,Srange)%i_nd_acc(memb + 1) - &
+                            mat(part,Srange)%i_nd_acc(memb)
+                if (iprint_minE > 2 .and. inode == ionode) &
+                     write (io_lun, *) myid, ' 1 nd: ', &
+                     mat(part,Srange)%i_nd_acc(memb + 1), &
+                     mat(part,Srange)%i_nd_acc(memb)
+             else
+                S_nd_nabs = mat(part,Srange)%part_nd_nabs - &
+                            mat(part,Srange)%i_nd_acc(memb) + 1
+                if (iprint_minE > 2 .and. inode == ionode) &
+                     write (io_lun, *) myid, ' 2 nd: ', &
+                     mat(part,Srange)%part_nd_nabs, &
+                     mat(part,Srange)%i_nd_acc(memb)
+             end if
+             if (iprint_minE > 2 .and. inode == ionode) &
+                  write (io_lun, *) 'S_nd_nabs: ', S_nd_nabs, &
+                                    mat(part,Srange)%n_nab(memb)
+             S_nd_nabs = S_nd_nabs / nsfi
+             if (iprint_minE > 2 .and. inode == ionode) &
+                  write (io_lun, *) 'S_nd_nabs: ', S_nd_nabs, &
+                                    mat(part,Srange)%n_nab(memb)
+             call start_timer(tmr_std_allocation)
+             allocate(tmpS(nsfi * S_nd_nabs),         &
+                      tmpdS(npaoi * S_nd_nabs),       &
+                      tmpM12(nsfi * S_nd_nabs,nspin), &
+                      tmpM4(nsfi * S_nd_nabs,nspin),  &
+                      STAT=stat)
+             if (stat /= 0) &
+                  call cq_abort("build_PAO_coeff_grad: &
+                                 &failed allocate temp matrices.", stat)
+             call reg_alloc_mem(area_minE, ((2 * nspin + 1) * nsfi + &
+                                npaoi) * S_nd_nabs, type_dbl)
+             call stop_timer(tmr_std_allocation)
+             if (memb < bundle%nm_nodgroup(part)) then
+                H_nd_nabs = mat(part,Hrange)%i_nd_acc(memb + 1) - &
+                            mat(part,Hrange)%i_nd_acc(memb)
+             else if (bundle%nm_nodgroup(part) > 1) then
+                H_nd_nabs = mat(part,Hrange)%part_nd_nabs - &
+                            mat(part,Hrange)%i_nd_acc(memb) + 1
+             else
+                H_nd_nabs = mat(part,Hrange)%part_nd_nabs
+             end if
+             if (iprint_minE > 2 .and. inode == ionode) &
+                  write (io_lun, *) myid, ' H_nd_nabs: ', H_nd_nabs, &
+                                    mat(part,Hrange)%n_nab(memb)
+             H_nd_nabs = H_nd_nabs / nsfi
+             if (iprint_minE > 2 .and. inode == ionode) &
+                  write (io_lun, *) myid, ' H_nd_nabs: ', H_nd_nabs, &
+                                    mat(part,Hrange)%n_nab(memb)
+             call start_timer(tmr_std_allocation)
+             allocate (tmpK(nsfi * H_nd_nabs,nspin),   &
+                       tmpdH(npaoi * H_nd_nabs,nspin), &
+                       STAT=stat)
+             if (stat /= 0) &
+                  call cq_abort ("build_PAO_coeff_grad: &
+                                  &failed to allocate tmpK and tmpdH.", &
+                                 stat)
+             call reg_alloc_mem(area_minE, (nsfi + npaoi) * H_nd_nabs * &
+                                nspin, type_dbl)
+             call stop_timer (tmr_std_allocation)
+             tmpS = zero
+             tmpM12 = zero
+             tmpM4 = zero
+             tmpdS = zero
+             tmpK = zero
+             tmpdH = zero
+             iprim = iprim + 1
+             if (flag_paos_atoms_in_cell) then
+                atom_no = bundle%ig_prim(iprim)
+             else
+                atom_no = iprim
+             end if
+             count = 0
+             tmpc = 0
+             do nab = 1, mat(part,Srange)%n_nab(memb)
+                ist = mat(part,Srange)%i_acc(memb) + nab - 1
+                gcspart = BCS_parts%icover_ibeg(mat(part,Srange)%i_part(ist)) + &
+                          mat(part,Srange)%i_seq(ist) - 1
+                do i2 = 1, mat(part,Srange)%ndimj(ist)
+                   count = count + 1
+                   do i1 = 1, nsfi
+                      ! position for matM12(nspin) is same as matM12(1)
+                      point = matrix_pos(matM12(1), iprim,            &
+                                         halo(Srange)%i_halo(gcspart),&
+                                         i1, i2)
+                      if ((i1 - 1) * S_nd_nabs + count > nsfi * S_nd_nabs) &
+                           call cq_abort("Overflow1 in buildPAOGrad ", &
+                                         (i1 - 1) * S_nd_nabs + count, &
+                                         nsfi * S_nd_nabs)
+                      do spin = 1, nspin
+                         tmpM12((i1 - 1) * S_nd_nabs + count,spin) = &
+                              return_matrix_value_pos(matM12(spin), point)
+                         tmpM4((i1 - 1) * S_nd_nabs + count,spin) = &
+                              return_matrix_value_pos(matM4(spin), point)
+                      end do
+                      tmpS((i1 - 1) * S_nd_nabs + count) = &
+                           return_matrix_value_pos(matS, point)
+                      tmpc = tmpc + 1
+                   end do
+                   do i1 = 1, npaoi
+                      point = matrix_pos(matdS, iprim,                  &
+                                         halo(dSrange)%i_halo(gcspart), &
+                                         i1, i2)
+                      if ((i1 - 1) * S_nd_nabs + count > npaoi * S_nd_nabs) &
+                           call cq_abort("Overflow2 in buildPAOGrad ", &
+                                         (i1 - 1) * S_nd_nabs + count, &
+                                         npaoi * S_nd_nabs)
+                      tmpdS((i1 - 1) * S_nd_nabs + count) = &
+                           return_matrix_value_pos(matdS, point)
+                   end do ! i1
+                end do ! i2
+             end do ! nab
+             if (iprint_minE > 2 .and. inode == ionode) &
+                  write (io_lun, *) 'tmpc is ', tmpc
+             count = 0
+             do nab = 1, mat(part,Hrange)%n_nab(memb)
+                ist = mat(part,Hrange)%i_acc(memb) + nab - 1
+                gcspart = BCS_parts%icover_ibeg(mat(part,Hrange)%i_part(ist)) + &
+                          mat(part,Hrange)%i_seq(ist) - 1
+                do i2 = 1, mat(part,Hrange)%ndimj(ist)
+                   count = count + 1
+                   do i1 = 1, nsfi
+                      ! position in tmpK(napin) is the same as tmpK(1)
+                      point = matrix_pos(matK(1), iprim,               &
+                                         halo(Hrange)%i_halo(gcspart), &
+                                         i1, i2)
+                      do spin = 1, nspin
+                         tmpK((i1 - 1) * H_nd_nabs + count,spin) = &
+                              return_matrix_value_pos(matK(spin), point)
+                      end do
+                   end do ! i1
+                   do i1 = 1, npaoi
+                      ! position in tmpdH(nspin) is the same as tmpdH(1)
+                      point = matrix_pos(matdH(1), iprim,               &
+                                         halo(dHrange)%i_halo(gcspart), &
+                                         i1, i2)
+                      do spin = 1, nspin
+                         tmpdH((i1 - 1) * H_nd_nabs + count,spin) = &
+                              return_matrix_value_pos(matdH(spin), point)
+                      end do
+                   end do ! i1
+                end do ! i2
+             end do ! nab
+             ! write (myid + 16, *) 'Atom: ', iprim, npaoi, nsfi
+             do i1 = 1, nsfi
+                do i2 = 1, npaoi
+                   ! First do G.dS
+                   if (iprint_minE > 2 .and. inode == ionode) &
+                        write (io_lun, *) &
+                        'atom, nsf, npao, grad: ', &
+                        atom_no, i1, i2, &
+                        support_gradient(atom_no)%supp_func(i1)%coefficients(i2)
+                   if (flag == GdS .or. flag == full) then
+                      do spin = 1, nspin
+                         support_gradient(atom_no)%supp_func(i1)%              &
+                              coefficients(i2) =                               &
+                              support_gradient(atom_no)%supp_func(i1)%         &
+                              coefficients(i2) -                               &
+                              two * spin_factor *                              &
+                              dot(S_nd_nabs, tmpM12((i1-1)*S_nd_nabs+1:,spin), &
+                                  1, tmpdS((i2-1)*S_nd_nabs+1:), 1)
+                      end do
+                      ! write (myid + 16, *) 'dS: ', tmpdS((i2 - 1) * &
+                      !      S_nd_nabs + 1:i2 * S_nd_nabs)
+                      ! write (myid + 16, *) 'M12: ', tmpM12((i1 - 1) * &
+                      !      S_nd_nabs + 1:i1 * S_nd_nabs)
+                      ! write (myid + 16, *) 'grad: ', &
+                      !      support_gradient(atom_no)%supp_func(i1)%&
+                      !      coefficients(i2)
+                      ! write (myid + 16, *) 'grad: ', four * &
+                      !      dot(S_nd_nabs, tmpM12((i1 - 1) * S_nd_nabs &
+                      !      + 1:), 1, tmpdS((i2 - 1) * S_nd_nabs + 1:),&
+                      !      1)
+                   end if
+                   if (iprint_minE > 2 .and. inode == ionode) &
+                        write (io_lun, *)          &
+                        'atom, nsf, npao, grad: ', &
+                        atom_no, i1, i2,           &
+                        support_gradient(atom_no)%supp_func(i1)%coefficients(i2)
+                   ! Now do K.dH
+                   if (flag == KdH .or. flag == full) then
+                      do spin = 1, nspin
+                         support_gradient(atom_no)%supp_func(i1)%            &
+                              coefficients(i2) =                             &
+                              support_gradient(atom_no)%supp_func(i1)%       &
+                              coefficients(i2) -                             &
+                              two * spin_factor *                            &
+                              dot(H_nd_nabs, tmpK((i1-1)*H_nd_nabs+1:,spin), &
+                                  1, tmpdH((i2-1)*H_nd_nabs+1:,spin), 1)
+                      end do
+                      ! write (myid + 16, *) 'dH: ',tmpdH((i2 - 1) * &
+                      !      H_nd_nabs + 1 : i2 * H_nd_nabs)
+                      ! write (myid + 16, *) 'K: ', tmpK((i1 - 1) * &
+                      !      H_nd_nabs + 1 : i1 * H_nd_nabs)
+                      ! write (myid + 16, *) 'grad: ', four * dot &
+                      !      (H_nd_nabs, tmpK((i1 - 1) * H_nd_nabs + &
+                      !      1:), 1, tmpdH((i2 - 1) * H_nd_nabs + 1:), &
+                      !      1)
+                      ! write (myid + 16, *) 'grad: ', &
+                      !      support_gradient(atom_no)%supp_func(i1)%&
+                      !      coefficients(i2)
+                   end if
+                   if (iprint_minE > 2 .and. inode == ionode) &
+                        write (io_lun, *)          &
+                        'atom, nsf, npao, grad: ', &
+                        atom_no,i1, i2,            &
+                        support_gradient(atom_no)%supp_func(i1)%coefficients(i2)
+                   ! Electron gradient
+                   if (.not. flag_diagonalisation) then
+                      ! No problems with electron number when diagonalising
+                      do spin = 1, nspin
+                         support_elec_gradient(atom_no)%supp_func(i1)% &
+                              coefficients(i2) =                       &
+                              support_elec_gradient(atom_no)%          &
+                              supp_func(i1)%coefficients(i2) -         &
+                              spin_factor *                            &
+                              dot(S_nd_nabs,                           &
+                                  tmpM4((i1-1)*S_nd_nabs+1:,spin), 1,  &
+                                  tmpdS((i2-1)*S_nd_nabs+1:), 1)
+                      end do
+                   end if
+                end do ! i2 = npao
+             end do ! i1 = nsf
+             call start_timer(tmr_std_allocation)
+             deallocate(tmpS, tmpM12, tmpM4, tmpK, tmpdS, tmpdH, STAT=stat)
+             if (stat /= 0) &
+                  call cq_abort("build_PAO_coeff_grad: failed to &
+                                &deallocate temp matrices", stat)
+             call reg_dealloc_mem(area_minE, ((2 * nspin + 1) * nsfi + &
+                                  npaoi) * S_nd_nabs + (nsfi + npaoi) &
+                                  * H_nd_nabs * nspin, type_dbl)
+             call stop_timer(tmr_std_allocation)
+             !call cq_abort("Stopping now")
+          end do ! memb=bundle%nm_nodgroup(part)
+       end if
+    end do ! part=bundle%groups_on_node    
+>>>>>>> master
     call stop_timer(tmr_std_matrices)
 
     return

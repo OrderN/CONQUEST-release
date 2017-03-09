@@ -122,11 +122,13 @@
 !!    Writing out band-by-band charge density
 !!   2016/02/09 08:16 dave
 !!    Moved erfc to functions module
+!!   2017/02/23 dave
+!!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
 !!***
 module DiagModule
 
   use datatypes
-  use global_module,          only: io_lun, area_DM, iprint_DM
+  use global_module,          only: io_lun, area_DM, iprint_DM, flag_diagonalisation
   use GenComms,               only: cq_abort, inode, ionode, myid
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_matrices
@@ -250,7 +252,7 @@ module DiagModule
   real(double) :: kT
   logical :: first = .true.
 
-  logical :: diagon ! Do we diagonalise or use O(N) ?
+  !logical :: diagon ! Do we diagonalise or use O(N) ?
 
   ! -------------------------------------------------------
   ! RCS ident string for object file id

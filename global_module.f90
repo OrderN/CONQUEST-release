@@ -116,6 +116,8 @@
 !!    Introduced atomf
 !!   2016/08/09 21:30 nakata
 !!    Added parameters for Contracted SFs and multi-site SFs
+!!   2017/02/23 dave
+!!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
 !!  SOURCE
 !!
 module global_module
@@ -360,6 +362,9 @@ module global_module
   ! Multisite
   logical :: flag_Multisite
   logical :: flag_LFD
+
+  ! diagonalise or linear scaling
+  logical :: flag_diagonalisation
   
 end module global_module
 !!***
