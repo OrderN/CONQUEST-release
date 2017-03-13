@@ -546,6 +546,8 @@ contains
 !!    Added pao_info%angmom%prncpl
 !!   2017/02/24 10:06 dave & tsuyoshi
 !!    Bug fix for read_header_tmp: removed formatting for zval
+!!   2017/03/13 dave
+!!    Repeated bug fix for other if branch in read_header_tmp (credit Jac van Driel for finding issue)  
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -890,8 +892,8 @@ contains
       else
          read(unit,'(a2)') symbol
          read(unit,'(a20)') label
-         read(unit,'(i5)') z
-         read(unit,'(i5)') zval_int
+         read(unit,*) z
+         read(unit,*) zval_int
          zval=zval_int
          read(unit,'(g25.15)') mass
          read(unit,'(g25.15)') self_energy
