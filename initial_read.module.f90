@@ -1126,7 +1126,8 @@ contains
              if (flag_Multisite) RadiusSupport(i) = RadiusAtomf(i) + RadiusMS(i)
              ! DRB 2016/08/05 Keep track of maximum support radius
              if(RadiusSupport(i)>max_rc) max_rc = RadiusSupport(i)
-             InvSRange        = fdf_double ('Atom.InvSRange',zero)
+             ! SYM 2017/03/13 Fix no iterator on InvSRange
+             InvSRange(i)     = fdf_double ('Atom.InvSRange',zero)
              if(InvSRange(i)<RD_ERR) InvSRange(i) = RadiusSupport(i)
              NonLocalFactor(i) = fdf_double('Atom.NonLocalFactor',HNL_fac)
              if(NonLocalFactor(i)>one.OR.NonLocalFactor(i)<zero) then
