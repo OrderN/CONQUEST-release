@@ -836,6 +836,7 @@ contains
     subroutine read_header_tmp(n_orbnl, lmax_basis, n_pjnl, zval, z, unit)
 
       use global_module, ONLY: iprint_pseudo
+      use input_module, ONLY: leqi
 
       implicit none
 
@@ -843,7 +844,7 @@ contains
       integer, intent(out) :: n_orbnl, n_pjnl, z
       real(double), intent(out) :: zval
 
-      character(len=78) :: line
+      character(len=78) :: line, trim_line
 
       character(len=2)  :: symbol
       character(len=20) :: label
@@ -857,15 +858,18 @@ contains
 
       ! Judge if P.C.C. is considered
       read(unit,'(a)') line
-      if (trim(line) .eq. '<preamble>') then
+      trim_line = trim(line)
+      if (leqi(trim_line(1:10),'<preamble>')) then
          read(unit,'(a)') line
-         do while(trim(line) .ne. '</preamble>')
+         trim_line = trim(line)
+         do while(.NOT.leqi(trim_line(1:11),'</preamble>'))
             read(unit,'(a)') line
-            if (trim(line) .EQ. '<pseudopotential_header>') then
+            trim_line = trim(line)
+            if (leqi(trim_line(1:23),'<pseudopotential_header>')) then
               read (unit, '(1x,a2,1x,a2,1x,a3,1x,a4)') symbol2, xc, rel, pcc
-              if (pcc .EQ. 'pcec') then
+              if (leqi(pcc,'pcec')) then
                 ps_info%flag_pcc = .true.
-              elseif (pcc .NE. 'pcec') then
+              else !if (pcc .NE. 'pcec') then
                 ps_info%flag_pcc = .false.
               endif
             endif
@@ -893,8 +897,8 @@ contains
          read(unit,'(a2)') symbol
          read(unit,'(a20)') label
          read(unit,*) z
-         read(unit,*) zval_int
-         zval=zval_int
+         read(unit,*) zval!_int
+         !zval=zval_int
          read(unit,'(g25.15)') mass
          read(unit,'(g25.15)') self_energy
          read(unit,'(2i4)') lmax_basis, n_orbnl
