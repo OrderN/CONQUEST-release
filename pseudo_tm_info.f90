@@ -547,7 +547,9 @@ contains
 !!   2017/02/24 10:06 dave & tsuyoshi
 !!    Bug fix for read_header_tmp: removed formatting for zval
 !!   2017/03/13 dave
-!!    Repeated bug fix for other if branch in read_header_tmp (credit Jac van Driel for finding issue)  
+!!    Repeated bug fix for other if branch in read_header_tmp (credit Jac van Driel for finding issue)
+!!   2017/03/14 dave
+!!    Changed string comparisons to use leqi from input_module (direct comparison breaks on Cray)
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
