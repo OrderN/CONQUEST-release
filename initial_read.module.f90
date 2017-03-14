@@ -580,6 +580,8 @@ contains
   !!    Added gap threshold parameter for initial estimation of partition numbers
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2017/03/14 SYM (with dave)
+  !!    Fix lack of index on InvSRange when read in
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1126,7 +1128,7 @@ contains
              if (flag_Multisite) RadiusSupport(i) = RadiusAtomf(i) + RadiusMS(i)
              ! DRB 2016/08/05 Keep track of maximum support radius
              if(RadiusSupport(i)>max_rc) max_rc = RadiusSupport(i)
-             ! SYM 2017/03/13 Fix no iterator on InvSRange
+             ! SYM 2017/03/13 Fix no index on InvSRange
              InvSRange(i)     = fdf_double ('Atom.InvSRange',zero)
              if(InvSRange(i)<RD_ERR) InvSRange(i) = RadiusSupport(i)
              NonLocalFactor(i) = fdf_double('Atom.NonLocalFactor',HNL_fac)
