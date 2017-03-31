@@ -731,6 +731,8 @@ contains
   !!    Introduce atomf-based calculations
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2017/03/28 dave
+  !!    Small bug fix on order of deallocation of matM12atomf
   !!  SOURCE
   !!
   subroutine pulay_force(p_force, KE_force, fixed_potential, vary_mu,  &
@@ -1243,7 +1245,7 @@ contains
        end do ! direction
 
        if (atomf.ne.sf) then
-          do spin = 1, nspin
+          do spin = nspin,1,-1 ! Inverse order required
              call free_temp_matrix(matM12atomf(spin))
           enddo
        endif
