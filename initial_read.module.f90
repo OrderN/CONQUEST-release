@@ -582,8 +582,6 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2017/03/14 SYM (with dave)
   !!    Fix lack of index on InvSRange when read in
-  !!   2017/04/05 18:00 nakata
-  !!    Added charge_up, charge_dn and flag_readAtomicSpin to initialise spin from input file
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -653,8 +651,7 @@ contains
                              fire_N_max, flag_write_DOS, flag_write_projected_DOS, &
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
-                             flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
-                             flag_readAtomicSpin
+                             flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -664,7 +661,6 @@ contains
     use block_module, only: in_block_x, in_block_y, in_block_z, &
                             blocks_raster, blocks_hilbert
     use species_module, only: species_label, charge, mass, n_species,  &
-                              charge, charge_up, charge_dn,            &   ! nakata init_spin
                               species, ps_file, ch_file, phi_file,     &
                               nsf_species, nlpf_species, npao_species, &
                               non_local_species, type_species,         &
@@ -764,7 +760,6 @@ contains
 
     ! spin polarisation
     logical :: flag_spin_polarisation
-    real(double) :: sum_elecN_spin   ! nakata init_spin
 
     ! Set defaults
     vary_mu  = .true.
@@ -1125,21 +1120,6 @@ contains
           !   do while(fdf_bline(bp,line)) ! While there are lines in the block
           if(fdf_block(species_label(i))) then
              charge(i)        = fdf_double ('Atom.ValenceCharge',zero)
-
-
-!!! 2017.2.25 nakata init_spin
-             charge_up(i)     = fdf_double ('Atom.SpinNeUp',zero)
-             charge_dn(i)     = fdf_double ('Atom.SpinNeDn',zero)
-             sum_elecN_spin   = charge_up(i)+charge_dn(i)
-             if (sum_elecN_spin.ne.zero) then
-                flag_readAtomicSpin = .true.
-                if (sum_elecN_spin.ne.charge(i)) &
-                   call cq_abort('read_input: sum of number of electrons &
-                                 &in spin channels is different from total &
-                                 &number of electrons for this species ', &
-                                 sum_elecN_spin,charge(i))
-             endif
-!!! nakata init_spin end
              nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
              RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',r_h)
              RadiusAtomf(i)   = RadiusSupport(i) ! = r_pao for (atomf=paof) or r_sf for (atomf==sf)
@@ -1890,8 +1870,6 @@ contains
 !!    - Added experimental backtrace
 !!   2016/09/16 17:00 nakata
 !!    - Added RadiusAtomf, RadiusMS and RadiusLD
-!!   2017/04/05 18:00 nakata
-!!    - Added charge_up and charge_dn
 !!  SOURCE
 !!
   subroutine allocate_species_vars
@@ -1899,8 +1877,7 @@ contains
     use dimens,         only: RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
                               NonLocalFactor, InvSRange, atomicnum
     use memory_module,  only: reg_alloc_mem, type_dbl
-    use species_module, only: n_species, nsf_species, nlpf_species, npao_species, natomf_species, &
-                              charge, charge_up, charge_dn
+    use species_module, only: n_species, nsf_species, nlpf_species, npao_species, natomf_species, charge
     use species_module, only: mass, non_local_species, ps_file, ch_file, phi_file 
     use species_module, only: species_label, species_file, type_species
     use global_module,  only: area_general
@@ -1949,14 +1926,6 @@ contains
     allocate(charge(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating charge in allocate_species_vars: ",                  n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
-!!! nakata init_spin
-    allocate(charge_up(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating charge_up in allocate_species_vars: ",               n_species,stat)
-    call reg_alloc_mem(area_general,n_species,type_dbl)
-    allocate(charge_dn(n_species),STAT=stat)
-    if(stat/=0) call cq_abort("Error allocating charge_dn in allocate_species_vars: ",               n_species,stat)
-    call reg_alloc_mem(area_general,n_species,type_dbl)
-!!! nakata init_spin end
     allocate(mass(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating mass in allocate_species_vars: ",                    n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
