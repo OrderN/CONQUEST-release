@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -997,6 +997,8 @@ contains
   !!    Removed unused flag_vary_basis
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2017/04/10 dave
+  !!    Small bug fix: transpose SF coefficients before transforming (fixes issue 26)
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1007,7 +1009,7 @@ contains
     use logicals
     use mult_module,         only: LNV_matrix_multiply, matL, matphi, &
                                    matT, T_trans, L_trans, LS_trans,  &
-                                   matrix_scale, matSFcoeff
+                                   matrix_scale, matSFcoeff, matSFcoeff_tran, matrix_transpose
     use SelfCon,             only: new_SC_potl
     use global_module,       only: iprint_init, flag_self_consistent, &
                                    flag_basis_set, blips, PAOs,       &
@@ -1104,6 +1106,12 @@ contains
              call grab_matrix("SFcoeff_up", matSFcoeff(1), inode)
              call grab_matrix("SFcoeff_dn", matSFcoeff(2), inode)
           endif
+          ! Added DRB 2017/04/10 to fix issue 26: transpose required before transformation can occur
+          ! Transpose
+          do spin_SF = 1,nspin_SF
+             call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+             call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+          enddo
        else
           if (restart_rho .and. flag_LFD) then
           ! read density from input files for LFD
