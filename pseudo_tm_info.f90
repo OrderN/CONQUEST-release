@@ -131,6 +131,8 @@ contains
 !!    Changed to use n_species and species_label from species_module, and changed atomicrad to atomicnum
 !!   2014/10/12 12:21 lat
 !!    Added possibility of user defined filename for PAO/pseudo *ion
+!!   2017/02/17 15:59 dave
+!!    Changes to allow reading of Hamann's optimised norm-conserving pseudopotentials (remove ABINIT)
 !!  SOURCE
 !!
   subroutine setup_pseudo_info
@@ -550,6 +552,8 @@ contains
 !!    Repeated bug fix for other if branch in read_header_tmp (credit Jac van Driel for finding issue)
 !!   2017/03/14 dave
 !!    Changed string comparisons to use leqi from input_module (direct comparison breaks on Cray)
+!!   2017/03/23 dave
+!!    Added storage of spacing of PAO table
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -562,6 +566,7 @@ contains
     use memory_module, ONLY: reg_alloc_mem, type_dbl    
     use functions, ONLY: erfc
     use input_module, ONLY: io_assign, io_close
+    use pseudopotential_common, ONLY: pseudo_type, SIESTA, ABINIT
 
     implicit none
 
@@ -641,6 +646,7 @@ contains
                 if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"i,z,l: ",3i5)') i,nzeta,l
                 pao_info%angmom(l)%zeta(nzeta)%length = dummy_rada(i)%n
                 pao_info%angmom(l)%zeta(nzeta)%cutoff = dummy_rada(i)%cutoff
+                pao_info%angmom(l)%zeta(nzeta)%delta = dummy_rada(i)%delta
                 pao_info%angmom(l)%prncpl(nzeta) = thisn(i)
                 pao_info%angmom(l)%occ(nzeta) = thispop(i)
                 if(pao_info%angmom(l)%zeta(nzeta)%length>=1) then
@@ -691,16 +697,23 @@ contains
           call radial_read_ascii(ps_info%pjnl(i),lun)
        enddo
        !Vlocal
-       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading Vlocal ")')
+       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading Vna ")')
        read(lun,*)
        ! Read and store local potential; it may be local part of pseudo, or neutral atom
-       call radial_read_ascii(ps_info%vlocal,lun)
-       !call radial_read_ascii(dummy_rad,lun)
-       !call rad_dealloc(dummy_rad)
-       !Chlocal
-       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading Chlocal ")')
-       read(lun,*)
-       call radial_read_ascii(ps_info%chlocal,lun)
+       ! DRB 2017/02/21 switch here: after vna, get vlocal for Hamann, chlocal for siesta
+       ! DRB 2017/02/21 This is the NA potential
+       if(pseudo_type==SIESTA) then
+          call radial_read_ascii(ps_info%vna,lun)
+          ps_info%vna%f = half*ps_info%vna%f ! Siesta works in Ry
+          if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading Chlocal ")')
+          read(lun,*)
+          call radial_read_ascii(ps_info%chlocal,lun)
+       else if(pseudo_type==ABINIT) then
+          call radial_read_ascii(ps_info%vna,lun)
+          if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading Vlocal ")')
+          read(lun,*)
+          call radial_read_ascii(ps_info%vlocal,lun)
+       end if
        !sets up gaussian which is used to calculate G=0 term
        !  exp( - alpha * cutoff **2 ) = 10 **(-six) 
        if(ps_info%tm_loc_pot==loc_pot) then
@@ -727,14 +740,19 @@ contains
           ps_info%alpha = six * ln10 / (ps_info%chlocal%cutoff ** 2)
        endif
        !Core
-       ps_info%flag_pcc = .false.
-       ! I *really* don't like this, but we'll stay with it for now
-       read(lun,*,end=9999)
-       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading pcc ")')
-       call radial_read_ascii(ps_info%chpcc,lun)
-       ps_info%flag_pcc = .true.
+       ! 2017/03/17 dave
+       ! I'm removing this because we read the PCC flag from the pseudopotential header
+       !ps_info%flag_pcc = .false.
+       !! I *really* don't like this, but we'll stay with it for now
+       !read(lun,*,end=9999)
+       if(ps_info%flag_pcc) then
+          read(lun,*)
+          if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading pcc ")')
+          call radial_read_ascii(ps_info%chpcc,lun)
+       end if
+       !ps_info%flag_pcc = .true.
 
-9999   continue
+!9999   continue
        call io_close(lun)
     endif !  (inode == ionode) then
     ! Now broadcast the information
@@ -867,7 +885,7 @@ contains
          do while(.NOT.leqi(trim_line(1:11),'</preamble>'))
             read(unit,'(a)') line
             trim_line = trim(line)
-            if (leqi(trim_line(1:23),'<pseudopotential_header>')) then
+            if (leqi(trim_line(1:24),'<pseudopotential_header>')) then
               read (unit, '(1x,a2,1x,a2,1x,a3,1x,a4)') symbol2, xc, rel, pcc
               if (leqi(pcc,'pcec')) then
                 ps_info%flag_pcc = .true.
