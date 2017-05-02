@@ -1009,7 +1009,7 @@ contains
           if(inode==ionode.AND.iprint_init>0) &
                write(io_lun,fmt='(10x,"SIESTA pseudopotential will be used. ")')
           pseudo_type = SIESTA
-       else if(leqi(ps_type,'plato').OR.leqi(ps_type,'abini')) then
+       else if(leqi(ps_type,'plato').OR.leqi(ps_type,'haman')) then
           if(inode==ionode.AND.iprint_init>0) &
                write(io_lun,fmt='(10x,"HAMANN pseudopotential will be used. ")')
           pseudo_type = ABINIT
