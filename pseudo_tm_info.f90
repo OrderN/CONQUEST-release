@@ -769,6 +769,7 @@ contains
     end if
     if(numprocs>1) then
        count = 0
+       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,*) 'PAOs'
        do l=0,lmax
           if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x," l is ",i5)') l
           call gcopy(pao_info%angmom(l)%n_zeta_in_angmom)
@@ -784,6 +785,7 @@ contains
              do nzeta = 1,tzl
                 call gcopy(pao_info%angmom(l)%zeta(nzeta)%length)
                 call gcopy(pao_info%angmom(l)%zeta(nzeta)%cutoff)
+                call gcopy(pao_info%angmom(l)%zeta(nzeta)%delta)
                 call gcopy(pao_info%angmom(l)%prncpl(nzeta))
                 call gcopy(pao_info%angmom(l)%occ(nzeta))
                 if(inode/=ionode) then
@@ -806,7 +808,9 @@ contains
        end do
        pao_info%count = count
        if(inode/=ionode) ps_info%lmax = 0
+       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,*) 'PPs'
        do i=1,ps_info%n_pjnl
+          if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(2x,"Projector number: ",i3)') i
           call gcopy(ps_info%pjnl_l(i))
           call gcopy(ps_info%pjnl_n(i))
           call gcopy(ps_info%pjnl_ekb(i))
@@ -818,21 +822,39 @@ contains
           call gcopy(ps_info%pjnl(i)%f,ps_info%pjnl(i)%n)
           call gcopy(ps_info%pjnl(i)%d2,ps_info%pjnl(i)%n)
        end do
-       !Vlocal
-       call gcopy(ps_info%tm_loc_pot)
-       call gcopy(ps_info%vlocal%n)
-       call gcopy(ps_info%vlocal%cutoff)
-       call gcopy(ps_info%vlocal%delta)
-       if(inode/=ionode) call rad_alloc(ps_info%vlocal,ps_info%vlocal%n)
-       call gcopy(ps_info%vlocal%f,ps_info%vlocal%n)
-       call gcopy(ps_info%vlocal%d2,ps_info%vlocal%n)
-       !Chlocal
-       call gcopy(ps_info%chlocal%n)
-       call gcopy(ps_info%chlocal%cutoff)
-       call gcopy(ps_info%chlocal%delta)
-       if(inode/=ionode) call rad_alloc(ps_info%chlocal,ps_info%chlocal%n)
-       call gcopy(ps_info%chlocal%f,ps_info%chlocal%n)
-       call gcopy(ps_info%chlocal%d2,ps_info%chlocal%n)
+       if(pseudo_type==SIESTA) then
+          !Chlocal
+          call gcopy(ps_info%tm_loc_pot)
+          call gcopy(ps_info%chlocal%n)
+          call gcopy(ps_info%chlocal%cutoff)
+          call gcopy(ps_info%chlocal%delta)
+          if(inode/=ionode) call rad_alloc(ps_info%chlocal,ps_info%chlocal%n)
+          call gcopy(ps_info%chlocal%f,ps_info%chlocal%n)
+          call gcopy(ps_info%chlocal%d2,ps_info%chlocal%n)
+          ! Vna
+          call gcopy(ps_info%vna%n)
+          call gcopy(ps_info%vna%cutoff)
+          call gcopy(ps_info%vna%delta)
+          if(inode/=ionode) call rad_alloc(ps_info%vna,ps_info%vna%n)
+          call gcopy(ps_info%vna%f,ps_info%vna%n)
+          call gcopy(ps_info%vna%d2,ps_info%vna%n)
+       else if(pseudo_type==ABINIT) then
+          !Vlocal
+          call gcopy(ps_info%tm_loc_pot)
+          call gcopy(ps_info%vlocal%n)
+          call gcopy(ps_info%vlocal%cutoff)
+          call gcopy(ps_info%vlocal%delta)
+          if(inode/=ionode) call rad_alloc(ps_info%vlocal,ps_info%vlocal%n)
+          call gcopy(ps_info%vlocal%f,ps_info%vlocal%n)
+          call gcopy(ps_info%vlocal%d2,ps_info%vlocal%n)
+          ! Vna
+          call gcopy(ps_info%vna%n)
+          call gcopy(ps_info%vna%cutoff)
+          call gcopy(ps_info%vna%delta)
+          if(inode/=ionode) call rad_alloc(ps_info%vna,ps_info%vna%n)
+          call gcopy(ps_info%vna%f,ps_info%vna%n)
+          call gcopy(ps_info%vna%d2,ps_info%vna%n)
+       end if
        if(inode/=ionode) then
           if(ps_info%tm_loc_pot==loc_pot) then
              ps_info%alpha = six * ln10 / (ps_info%vlocal%cutoff ** 2)
