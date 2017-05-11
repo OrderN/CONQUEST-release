@@ -429,6 +429,8 @@ contains
 !!   - Changed format for MD Step output line to add more space
 !!   2017/02/23 dave
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+!!   2017/05/09 dave
+!!    Added calls to read L-matrix for both spin channels
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -442,7 +444,7 @@ contains
                               flag_MDold,n_proc_old,glob2node_old,    &
                               flag_LmatrixReuse,flag_XLBOMD,          &
                               flag_dissipation,flag_FixCOM,           &
-                              flag_fire_qMD, flag_diagonalisation
+                              flag_fire_qMD, flag_diagonalisation, nspin
     use group_module,   only: parts
     use primary_module, only: bundle
     use minimise,       only: get_E_and_F
@@ -598,6 +600,12 @@ contains
            call grab_matrix2('L',inode,nfile,InfoL)
            call my_barrier()
            call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+           ! DRB 2017/05/09 now extended to spin systems
+           if(nspin==2) then
+              call grab_matrix2('L2',inode,nfile,InfoL)
+              call my_barrier()
+              call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
+           end if
          endif
        else
          call update_atom_coord()

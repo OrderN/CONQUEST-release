@@ -582,6 +582,8 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2017/03/14 SYM (with dave)
   !!    Fix lack of index on InvSRange when read in
+  !!   2017/05/09 dave
+  !!    Removed restriction on L-matrix re-use and spin
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1740,9 +1742,10 @@ contains
        flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
        flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.)
        flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseL',.false.)
-       if(flag_spin_polarisation.AND.flag_LmatrixReuse) then
-          call cq_abort("L matrix re-use and spin polarisation not implemented !")
-       end if
+       ! DRB 2017/05/09 Removing restriction (now implemented)
+       !if(flag_spin_polarisation.AND.flag_LmatrixReuse) then
+       !   call cq_abort("L matrix re-use and spin polarisation not implemented !")
+       !end if
        flag_TmatrixReuse = fdf_boolean('AtomMove.ReuseInvS',.false.)
        flag_SkipEarlyDM  = fdf_boolean('AtomMove.SkipEarlyDM',.false.)
        McWFreq           = fdf_integer('AtomMove.McWeenyFreq',0)
