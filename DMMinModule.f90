@@ -153,6 +153,10 @@ contains
   !!    - Added experimental backtrace
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2017/05/09 dave
+  !!    Added code to dump L matrix for both spin channels
+  !!   2017/05/11 dave
+  !!    Added code to dump X matrix (and associated) for both spin channels
   !!  SOURCE
   !!
   subroutine FindMinDM(n_L_iterations, vary_mu, tolerance, inode, &
@@ -272,41 +276,42 @@ contains
 
     ! *** Add frequency of output here *** !
 
-     if (flag_dump_L) then
+    if (flag_dump_L) then
        if (.NOT. flag_MDold) then
-         call dump_matrix2('L',matL(1),inode,Lrange)
-         ! For XL-BOMD
-         if (flag_XLBOMD) then
-           if (flag_propagateX) then
-             call dump_matrix2('X',matX(1),inode,LSrange)
-             call dump_matrix2('S',matS   ,inode,Srange)
-             if (integratorXL.EQ.'velocityVerlet') &
-               call dump_matrix2('Xvel',matXvel(1),inode,LSrange)
-           else
-             call dump_matrix2('X',matX(1),inode,Lrange)
-             if (integratorXL.EQ.'velocityVerlet') &
-               call dump_matrix2('Xvel',matXvel(1),inode,Lrange)
-           endif
-           ! When dissipation applies
-           if (flag_dissipation) call dump_XL()
-         endif
-         if (runtype.EQ.'static') call dump_InfoGlobal(0)
+          call dump_matrix2('L',matL(1),inode,Lrange)
+          ! DRB 2017/05/09 now extended to spin systems
+          if(nspin==2) call dump_matrix2('L2',matL(2),inode,Lrange)
+          ! For XL-BOMD
+          if (flag_XLBOMD) then
+             if (flag_propagateX) then
+                call dump_matrix2('X',matX(1),inode,LSrange)
+                if(nspin==2) call dump_matrix2('X_2',matX(2),inode,LSrange)
+                call dump_matrix2('S',matS   ,inode,Srange)
+                if (integratorXL.EQ.'velocityVerlet') then
+                   call dump_matrix2('Xvel',matXvel(1),inode,LSrange)
+                   if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),inode,LSrange)
+                end if
+             else
+                call dump_matrix2('X',matX(1),inode,Lrange)
+                if(nspin==2) call dump_matrix2('X_2',matX(2),inode,LSrange)
+                if (integratorXL.EQ.'velocityVerlet') then
+                   call dump_matrix2('Xvel',matXvel(1),inode,Lrange)
+                   if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),inode,LSrange)
+                end if
+             endif
+             ! When dissipation applies
+             if (flag_dissipation) call dump_XL()
+          endif
+          if (runtype.EQ.'static') call dump_InfoGlobal(0)
        else
-         if (nspin == 1) then
-           call dump_matrix("L", matL(1), inode)
-         else
-           call dump_matrix("L_up", matL(1), inode)
-           call dump_matrix("L_dn", matL(2), inode)
-         end if
+          if (nspin == 1) then
+             call dump_matrix("L", matL(1), inode)
+          else
+             call dump_matrix("L_up", matL(1), inode)
+             call dump_matrix("L_dn", matL(2), inode)
+          end if
        endif
-       !ORI    if (nspin == 1) then
-       !ORI       call dump_matrix("L", matL(1), inode)
-       !ORI    else
-       !ORI       call dump_matrix("L_up", matL(1), inode)
-       !ORI       call dump_matrix("L_dn", matL(2), inode)
-       !ORI    end if
-     end if
-
+    end if
     if (record) then
        if (inode == ionode .and. iprint_DM > 1) then
           write (io_lun,*) '  List of residuals and energies'
@@ -810,6 +815,8 @@ contains
   !!    Renamed H_on_supportfns -> H_on_atomfns
   !!   2016/08/08 15:30 nakata
   !!    Renamed supportfns -> atomfns
+  !!   2017/05/09 dave
+  !!    Added output of L matrix for both spin channels
   !!  SOURCE
   !!
   subroutine lateDM(ndone, n_L_iterations, done, deltaE, vary_mu, &
@@ -1231,6 +1238,8 @@ contains
             !ORI end if
             if (.NOT. flag_MDold) then
               call dump_matrix2('L',matL(1),inode,Lrange)
+              ! DRB 2017/05/09 now extended to spin systems
+              if(nspin==2) call dump_matrix2('L2',matL(2),inode,Lrange)
             else
               if (nspin == 1) then
                  call dump_matrix("L", matL(1), inode)

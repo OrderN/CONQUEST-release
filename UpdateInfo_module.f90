@@ -1896,7 +1896,8 @@ contains
   !!  MODIFICATION
   !!   2016/04/06 dave
   !!    Changed Info to pointer from allocatable (gcc 4.4.7 issue)
-  !!
+  !!   2017/05/09 dave
+  !!    Removed restriction spin and on L-matrix update 
   !!  SOURCE
   !!
   subroutine UpdateMatrix_local(Info,range,matA,flag_remote_iprim,nfile)
@@ -2263,7 +2264,7 @@ contains
               endif
             ! Reorder Lmatrix elements.
             if (ibeg_Lij.NE.0) then
-              if (nspin.EQ.1) then
+               !if (nspin.EQ.1) then
                 if (flag_MDdebug .AND. iprint_MDdebug.GT.1) write (lun_db2,*) "jpart(CC) in CS:", jpart
                 jpart_x = 1 + (jpart-1) / (BCS_parts%ncovery*BCS_parts%ncoverz)
                 jpart_y = 1 + (jpart-1-(jpart_x-1)*BCS_parts%ncovery*BCS_parts%ncoverz) / BCS_parts%ncoverz
@@ -2282,7 +2283,7 @@ contains
                 endif
                 !! ------------- DEBUG: ------------- !!
 
-                if (nspin.EQ.1) then
+                !if (nspin.EQ.1) then
                   do n1 = 1, n_alpha*n_beta
                     mat_p(matA)%matrix(ibeg_Lij+n1-1) = &
                       Info(ifile)%data_Lold(ibeg2+n1-1, 1)
@@ -2296,30 +2297,30 @@ contains
                     !! --------------- DEBUG: --------------- !!
 
                   enddo
-                else
-                  do n1 = 1, n_alpha*n_beta
-                    mat_p(matA)%matrix(ibeg_Lij+n1-1) = &
-                      Info(ifile)%data_Lold(ibeg2+n1-1, 1)
-                    !mat_p(matB)%matrix(ibeg_Lij+n1-1) = &
-                    !  Info(ifile)%data_Lold(ibeg2+n1-1, 2)
+                !else
+                !  do n1 = 1, n_alpha*n_beta
+                !    mat_p(matA)%matrix(ibeg_Lij+n1-1) = &
+                !      Info(ifile)%data_Lold(ibeg2+n1-1, 1)
+                !    !mat_p(matB)%matrix(ibeg_Lij+n1-1) = &
+                !    !  Info(ifile)%data_Lold(ibeg2+n1-1, 2)
+                !
+                !    !! --------------- DEBUG: --------------- !!
+                !    !if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
+                !    !  write (lun_db2,'(3f25.18,f10.5,i10)') mat_p(matA)%matrix(ibeg_Lij+n1-1), &
+                !    !                                        Info(ifile)%data_Lold(ibeg2+n1-1,1), &
+                !    !                                        Info(ifile)%data_Lold(ibeg2+n1-1,2), &
+                !    !                                        Rij, jcover
+                !    !endif
+                !    !! --------------- DEBUG: --------------- !!
+                !
+                !  enddo
+                !endif !(nspin)
 
-                    !! --------------- DEBUG: --------------- !!
-                    !if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
-                    !  write (lun_db2,'(3f25.18,f10.5,i10)') mat_p(matA)%matrix(ibeg_Lij+n1-1), &
-                    !                                        Info(ifile)%data_Lold(ibeg2+n1-1,1), &
-                    !                                        Info(ifile)%data_Lold(ibeg2+n1-1,2), &
-                    !                                        Rij, jcover
-                    !endif
-                    !! --------------- DEBUG: --------------- !!
-
-                  enddo
-                endif !(nspin)
-
-              endif
-            endif
+               !endif
+               endif
             ibeg2 = ibeg2 + n_alpha*n_beta
-          enddo !(jj, jmax_i)
-        endif !(ind_node.EQ.inode)
+         enddo !(jj, jmax_i)
+      endif !(ind_node.EQ.inode)
         !ibeg1 = ibeg1 + Info(ifile)%jmax_i(ia)
         !ibeg2 = ibeg2 + Info(ifile)%jbeta_max_i(ia)*n_alpha
 
@@ -2381,6 +2382,8 @@ contains
   !!  CREATION DATE
   !!   2013/08/22
   !!  MODIFICATION
+  !!   2017/05/09 dave
+  !!    Removed restriction spin and on L-matrix update 
   !!
   !!  SOURCE
   !!
@@ -2632,7 +2635,7 @@ contains
                   ibeg_Lij,ibeg_dataL,len
           endif
 
-          if (nspin.EQ.1) then
+          !if (nspin.EQ.1) then
             do n1 = 1, len
               mat_p(matA)%matrix(ibeg_Lij+n1-1) = recv_array(ibeg_dataL+n1-1)
               if (flag_MDdebug) write (lun_db,*) "ibeg_Lij+n1, ibeg_dataL+n1-1:", ibeg_Lij+n1-1, ibeg_dataL+n1-1
@@ -2652,7 +2655,7 @@ contains
           !  enddo
           !  ibeg_dataP = ibeg_dataL + nsize2
           !  ibeg_dataPdot = ibeg_dataP + nsize2
-          endif
+          !endif
 
         endif !(ibeg_Lij.NE.0)
         ibeg_dataL = ibeg_dataL + len

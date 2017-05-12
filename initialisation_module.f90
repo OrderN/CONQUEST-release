@@ -999,6 +999,8 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2017/04/10 dave
   !!    Small bug fix: transpose SF coefficients before transforming (fixes issue 26)
+  !!   2017/05/09 dave
+  !!    Removed restriction spin and on L-matrix update 
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1170,10 +1172,15 @@ contains
     end if
     if (restart_L) then
       if (.NOT. flag_MDold) then
-        ! NOTE: Not yet applicable to spin systems, though it's rather simple
         call grab_matrix2('L',inode,nfile,InfoL)
         call my_barrier()
         call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+        ! DRB 2017/05/09 now extended to spin systems
+        if(nspin==2) then
+           call grab_matrix2('L2',inode,nfile,InfoL)
+           call my_barrier()
+           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
+        end if
       else
         if(nspin==1) then
           call grab_matrix( "L",    matL(1), inode)

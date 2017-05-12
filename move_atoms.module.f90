@@ -739,6 +739,8 @@ contains
   !!    Removed call to set_density (now included in update_H)
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2017/05/09 dave
+  !!    Adding code to load both L matrix for both spin channels
   !! SOURCE
   !!
   subroutine safemin2(start_x, start_y, start_z, direction, energy_in, &
@@ -756,7 +758,7 @@ contains
                               IPRINT_TIME_THRES1, flag_pcc_global,    &
                               atom_coord_diff,id_glob,flag_MDold,     &
                               n_proc_old, glob2node_old,              &
-                              flag_LmatrixReuse, flag_diagonalisation
+                              flag_LmatrixReuse, flag_diagonalisation, nspin
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
                               n_L_iterations
     use GenComms,       only: my_barrier, myid, inode, ionode,        &
@@ -946,6 +948,12 @@ contains
            call grab_matrix2('L',inode,nfile,InfoL)
            call my_barrier()
            call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+           ! DRB 2017/05/09 now extended to spin systems
+           if(nspin==2) then
+              call grab_matrix2('L2',inode,nfile,InfoL)
+              call my_barrier()
+              call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
+           end if
          endif
          if (ionode.EQ.inode) write (io_lun,*) "get through CG: 1st stage"
        else
@@ -1090,6 +1098,12 @@ contains
         call grab_matrix2('L',inode,nfile,InfoL)
         call my_barrier()
         call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+        ! DRB 2017/05/09 now extended to spin systems
+        if(nspin==2) then
+           call grab_matrix2('L2',inode,nfile,InfoL)
+           call my_barrier()
+           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
+        end if
       endif
     else
       call updateIndices(.true., fixed_potential)
@@ -1186,6 +1200,12 @@ contains
            call grab_matrix2('L',inode,nfile,InfoL)
            call my_barrier()
            call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+           ! DRB 2017/05/09 now extended to spin systems
+           if(nspin==2) then
+              call grab_matrix2('L2',inode,nfile,InfoL)
+              call my_barrier()
+              call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
+           end if
          endif
        else
          call updateIndices(.true., fixed_potential)
