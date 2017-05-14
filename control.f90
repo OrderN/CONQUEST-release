@@ -19,13 +19,13 @@
 !!  MODIFICATION HISTORY
 !!   17:31, 2003/02/05 dave
 !!    Changed flow of control so that the switch occurs on the local variable runtype
-!!   14:26, 26/02/2003 drb 
+!!   14:26, 26/02/2003 drb
 !!    Small bug fixes
-!!   10:06, 12/03/2003 drb 
+!!   10:06, 12/03/2003 drb
 !!    Added simple MD
-!!   13:19, 22/09/2003 drb 
+!!   13:19, 22/09/2003 drb
 !!    Bug fixes in cg
-!!   10:52, 13/02/2006 drb 
+!!   10:52, 13/02/2006 drb
 !!    General tidying related to new matrices
 !!   2008/02/04 17:10 dave
 !!    Changes for output to file not stdout
@@ -38,15 +38,15 @@ module control
   use datatypes
   use global_module, only: io_lun
   use GenComms,      only: cq_abort
-  use timer_module,  only: start_timer, stop_timer, cq_timer 
+  use timer_module,  only: start_timer, stop_timer, cq_timer
   use timer_module,  only: start_backtrace, stop_backtrace
 
   implicit none
 
-  integer      :: MDn_steps 
-  integer      :: MDfreq 
-  real(double) :: MDtimestep 
-  real(double) :: MDcgtol 
+  integer      :: MDn_steps
+  integer      :: MDfreq
+  real(double) :: MDtimestep
+  real(double) :: MDcgtol
   logical      :: CGreset
 
   ! Area identification
@@ -61,17 +61,17 @@ contains
 
 !!****f* control/control_run *
 !!
-!!  NAME 
+!!  NAME
 !!   control
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Very simple routine to control execution of Conquest
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!!   atoms, common, datatypes, dimens, ewald_module, force_module, GenComms, 
+!!   atoms, common, datatypes, dimens, ewald_module, force_module, GenComms,
 !!   matrix_data, pseudopotential_data
 !!  AUTHOR
 !!   D.R.Bowler
@@ -91,7 +91,7 @@ contains
 !!   17:31, 2003/02/05 dave
 !!   - Removed old, silly MD and replaced with call to either static
 !!    (i.e. just ground state) or CG
-!!   10:06, 12/03/2003 drb 
+!!   10:06, 12/03/2003 drb
 !!   - Added MD
 !!   2004/11/10, drb
 !!   - Removed common use
@@ -143,10 +143,13 @@ contains
        if(.NOT.flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS)) return
        call get_E_and_F(fixed_potential,vary_mu, total_energy,&
                         .true.,.true.,level=backtrace_level)
-       ! 
+       !
     else if ( leqi(runtype, 'cg')    ) then
        call cg_run(fixed_potential,     vary_mu, total_energy)
        !
+    else if ( leqi(runtype, 'relaxcell')    ) then
+      write(*,*) "lattice vector relaxation selected"
+       call cell_cg_run(fixed_potential,     vary_mu, total_energy)
     else if ( leqi(runtype, 'md')    ) then
        call md_run(fixed_potential,     vary_mu, total_energy)
        !
@@ -172,16 +175,16 @@ contains
 
   !!****f* control/cg_run *
   !!
-  !!  NAME 
+  !!  NAME
   !!   cg_run - Does CG minimisation
   !!  USAGE
   !!   cg_run(velocity,atmforce)
   !!  PURPOSE
   !!   Performs CG minimisation by repeated calling of minimiser
   !!  INPUTS
-  !! 
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -191,9 +194,9 @@ contains
   !!    Added vast numbers of passed arguments for get_E_and_F
   !!   17:26, 2003/02/05 dave
   !!    Corrected atom position arguments
-  !!   14:27, 26/02/2003 drb 
+  !!   14:27, 26/02/2003 drb
   !!    Other small bug fixes
-  !!   13:20, 22/09/2003 drb 
+  !!   13:20, 22/09/2003 drb
   !!    Added id_glob referencing for forces
   !!   2006/09/04 07:53 dave
   !!    Dynamic allocation for positions
@@ -233,7 +236,7 @@ contains
     ! Shared variables needed by get_E_and_F for now (!)
     logical :: vary_mu, fixed_potential
     real(double) :: total_energy
-    
+
     ! Local variables
     real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma
     integer        :: i,j,k,iter,length, jj, lun, stat
@@ -387,22 +390,22 @@ contains
 
 !!****f* control/md_run *
 !!
-!!  NAME 
+!!  NAME
 !!   md_run
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Does a QUENCHED MD run
 !!   Now, this can also employ NVE-MD
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
-!!   10:07, 12/03/2003 drb 
+!!   10:07, 12/03/2003 drb
 !!  MODIFICATION HISTORY
 !!   2011/12/07 L.Tong
 !!    - changed 0.0_double to zero in numbers module
@@ -480,7 +483,7 @@ contains
     ! Shared variables needed by get_E_and_F for now (!)
     logical      :: vary_mu, fixed_potential
     real(double) :: total_energy
-    
+
     ! Local variables
     real(double), allocatable, dimension(:,:) :: velocity
     integer       ::  iter, i, k, length, stat, i_first, i_last, &
@@ -499,7 +502,7 @@ contains
     ! FIRE parameters
     integer :: step_qMD, n_stop_qMD, fire_N, fire_N2
     real(double) :: fire_step_max, fire_P0, fire_alpha
-    
+
     allocate(velocity(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating velocity in md_run: ", &
@@ -644,7 +647,7 @@ contains
        if (.NOT. flag_MDold) then
          if (inode.EQ.ionode) call dump_InfoGlobal(iter)
        endif
-       
+
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero
@@ -713,8 +716,8 @@ contains
 !%%!         write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
 !%%!      end do
 !%%!   end if
-!%%!   !Now, updateIndices and update_atom_coord are done in velocityVerlet 
-!%%!   !call updateIndices(.false.,fixed_potential, number_of_bands) 
+!%%!   !Now, updateIndices and update_atom_coord are done in velocityVerlet
+!%%!   !call updateIndices(.false.,fixed_potential, number_of_bands)
 !%%!   ! L-matrix reconstruction (used to be called at updateIndices3)
 !%%!   if (.NOT.flag_MDold .AND. &
 !%%!       .NOT.diagon     .AND. &
@@ -786,7 +789,7 @@ contains
   !! RETURN VALUE
   !! AUTHOR
   !!   David Bowler
-  !! CREATION DATE 
+  !! CREATION DATE
   !!
   !! MODIFICATION HISTORY
   !!   2011/12/07 L.Tong
@@ -821,7 +824,7 @@ contains
     ! Shared variables needed by get_E_and_F for now (!)
     logical      :: vary_mu, fixed_potential
     real(double) :: total_energy
-    
+
     ! Local variables
     integer      :: iter, i, k, length, stat
     real(double) :: temp, KE, energy1, energy0, dE, max, g0
@@ -863,7 +866,7 @@ contains
             call write_positions(iter, parts)
        call my_barrier
     end do
-    
+
     return
 1   format(4x,'Atom ',i4,' Position ',3f15.8)
 2   format(4x,'Welcome to dummy_run. Doing ',i4,' steps')
@@ -877,16 +880,16 @@ contains
 
   !!****f* control/pulay_relax *
   !!
-  !!  NAME 
+  !!  NAME
   !!   pulay_relax
   !!  USAGE
-  !!   
+  !!
   !!  PURPOSE
   !!   Performs pulay relaxation
   !!  INPUTS
-  !! 
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -936,7 +939,7 @@ contains
     ! Shared variables needed by get_E_and_F for now (!)
     logical :: vary_mu, fixed_potential
     real(double) :: total_energy
-    
+
     ! Local variables
     real(double), allocatable, dimension(:,:)   :: velocity
     real(double), allocatable, dimension(:,:)   :: cg
@@ -1123,7 +1126,7 @@ contains
           posnStore(3,i,npmod) = z_atom_cell(i)
           jj = id_glob(i)
           forceStore(:,i,npmod) = tot_force(:,jj)
-       end do       
+       end do
        if (.not. done) call check_stop(done, iter)
        iter = iter + 1
        energy0 = energy1
@@ -1150,5 +1153,233 @@ contains
 7   format(4x,3f15.8)
   end subroutine pulay_relax
   !!***
+
+  !!****f* control/cg_run *
+  !!
+  !!  NAME
+  !!   cg_run - Does CG minimisation
+  !!  USAGE
+  !!   cg_run(velocity,atmforce)
+  !!  PURPOSE
+  !!   Performs CG minimisation of the total energy by repeated calls to the minimizer
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   16:43, 2003/02/03 dave
+  !!  MODIFICATION HISTORY
+  !!   08:06, 2003/02/04 dave
+  !!    Added vast numbers of passed arguments for get_E_and_F
+  !!   17:26, 2003/02/05 dave
+  !!    Corrected atom position arguments
+  !!   14:27, 26/02/2003 drb
+  !!    Other small bug fixes
+  !!   13:20, 22/09/2003 drb
+  !!    Added id_glob referencing for forces
+  !!   2006/09/04 07:53 dave
+  !!    Dynamic allocation for positions
+  !!   2011/12/11 L.Tong
+  !!    Removed redundant parameter number_of_bands
+  !!   2012/03/27 L.Tong
+  !!   - Removed redundant input parameter real(double) mu
+  !!   2013/08/21 M.Arita
+  !!   - Added call for safemin2 necessary in reusibg L-matrix
+  !!  SOURCE
+  !!
+  subroutine cell_cg_run(fixed_potential, vary_mu, total_energy)
+
+    ! Module usage
+    use numbers
+    use units
+    use global_module, only: iprint_gen, ni_in_cell, x_atom_cell,  &
+                             y_atom_cell, z_atom_cell, id_glob,    &
+                             atom_coord, rcellx, rcelly, rcellz,   &
+                             area_general, iprint_MD,              &
+                             IPRINT_TIME_THRES1, flag_MDold
+    use group_module,  only: parts
+    use minimise,      only: get_E_and_F
+    use move_atoms,    only: safemin, safemin2
+    use GenComms,      only: gsum, myid, inode, ionode
+    use GenBlas,       only: dot
+    use force_module,  only: tot_force
+    use io_module,     only: write_atomic_positions, pdb_template, &
+                             check_stop
+    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use timer_module
+    use io_module2,    ONLY: dump_InfoGlobal
+
+    implicit none
+
+    ! Passed variables
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical :: vary_mu, fixed_potential
+    real(double) :: total_energy
+
+    ! Local variables
+    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma, energy_resid
+    integer        :: i,j,k,iter,length, jj, lun, stat
+    logical        :: done
+    type(cq_timer) :: tmr_l_iter
+    real(double), allocatable, dimension(:,:) :: cg
+    real(double), allocatable :: new_rcellx, new_rcelly, new_rcellz
+
+    allocate(cg(3,3), STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error allocating cg in control: ",&
+                       ni_in_cell, stat)
+    allocate(new_rcellx, new_rcelly, new_rcellz, &
+             STAT=stat)
+    if(stat/=0) &
+         call cq_abort("Error allocating _new_pos in control: ", &
+                       ni_in_cell,stat)
+    call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
+
+
+    ! write(*,*) rcellx
+    ! write(*,*) rcelly
+    ! write(*,*) rcellz
+
+    if (myid == 0) &
+         write (io_lun, fmt='(/4x,"Starting CG lattice vector relaxation"/)')
+    cg = zero
+    ! Do we need to add MD.MaxCGDispl ?
+    done = .false.
+    length = 3 * ni_in_cell ! do we need to change this to 3?
+    ! if (myid == 0 .and. iprint_gen > 0) &
+    !      write (io_lun, 2) MDn_steps, MDcgtol
+    energy0 = total_energy
+    energy1 = zero
+    dE = zero
+    ! Find energy and forces
+    call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+    if (.NOT. flag_MDold) then
+      call dump_InfoGlobal()
+    endif
+    iter = 1
+    ggold = zero
+    energy_resid = energy0 - energy1
+    energy1 = energy0
+    write(*,*) energy1
+    do while (.not. done)
+       call start_timer(tmr_l_iter, WITH_LEVEL)
+       ! Construct ratio for conjugacy
+       gg = energy1
+      !  do j = 1, ni_in_cell
+          ! gg = gg +                              &
+          !      tot_force(1,j) * tot_force(1,j) + &
+          !      tot_force(2,j) * tot_force(2,j) + &
+          !      tot_force(3,j) * tot_force(3,j)
+       end do
+       if (abs(ggold) < 1.0e-6_double) then
+          gamma = zero
+       else
+          gamma = gg/ggold
+       end if
+       if (inode == ionode .and. iprint_MD > 2) &
+            write (io_lun,*) ' CHECK :: energy residual = ', &
+                               energy_resid
+       if (inode == ionode .and. iprint_MD > 2) &
+            write (io_lun,*) ' CHECK :: gamma = ', gamma
+       if (CGreset) then
+          if (gamma > one) then
+             if (inode == ionode) &
+                  write(io_lun,*) ' CG direction is reset! '
+             gamma = zero
+          end if
+       end if
+       if (inode == ionode) &
+            write (io_lun, fmt='(/4x,"Atomic relaxation CG iteration: ",i5)') iter
+       ggold = gg
+       !    done = .true. ! DEBUG STUFF DELETE
+       !  end do ! DEBUG STUFF DELETE
+       !Build search direction
+       do j = 1, 3
+          ! jj = id_glob(j)
+          cg(1,j) = gamma*cg(1,j) + gg
+          cg(2,j) = gamma*cg(2,j) + gg
+          cg(3,j) = gamma*cg(3,j) + gg
+          new_rcellx = rcellx
+          new_rcelly = rcelly
+          new_rcellz = rcellz
+          ! x_new_pos(j) = x_atom_cell(j)
+          ! y_new_pos(j) = y_atom_cell(j)
+          ! z_new_pos(j) = z_atom_cell(j)
+       end do
+       ! Minimise in this direction
+       call safemin3(new_rcellx, new_rcelly, new_rcellz, cg, energy0, &
+                    energy1, fixed_potential, vary_mu, energy1)
+       !ORI call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+       !ORI              energy1, fixed_potential, vary_mu, energy1)
+      !  if (.NOT. flag_MDold) then
+      !    call safemin3(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+      !                 energy1, fixed_potential, vary_mu, energy1)
+      !  else
+      !    call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+      !                 energy1, fixed_potential, vary_mu, energy1)
+      !  endif
+       ! Output positions
+       if (myid == 0 .and. iprint_gen > 1) then
+          do i = 1, ni_in_cell
+             write (io_lun, 1) i, atom_coord(1,i), atom_coord(2,i), &
+                               atom_coord(3,i)
+          end do
+       end if
+       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+       ! Analyse forces
+       g0 = dot(length, tot_force, 1, tot_force, 1)
+       max = zero
+       do i = 1, ni_in_cell
+          do k = 1, 3
+             if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
+          end do
+       end do
+       ! Output and energy changes
+       iter = iter + 1
+       dE = energy0 - energy1
+       !if(myid==0) write(io_lun,6) for_conv*max, en_units(energy_units), d_units(dist_units)
+       if (myid == 0) write (io_lun, 4) en_conv*dE, en_units(energy_units)
+       if (myid == 0) write (io_lun, 5) for_conv*sqrt(g0/ni_in_cell), &
+                                        en_units(energy_units),       &
+                                        d_units(dist_units)
+       energy0 = energy1
+       !energy1 = abs(dE)
+       if (iter > MDn_steps) then
+          done = .true.
+          if (myid == 0) &
+               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') &
+                     iter
+       end if
+       if (abs(max) < MDcgtol) then
+          done = .true.
+          if (myid == 0) &
+               write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') &
+                     max
+       end if
+       call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
+       if (.not. done) call check_stop(done, iter)
+    !end do
+    ! Output final positions
+!    if(myid==0) call write_positions(parts)
+    deallocate(new_rcellx, new_rcelly, new_rcellz, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error deallocating _new_pos in control: ", &
+                       ni_in_cell,stat)
+    deallocate(cg, STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("Error deallocating cg in control: ", ni_in_cell,stat)
+    call reg_dealloc_mem(area_general, 6*ni_in_cell, type_dbl)
+
+1   format(4x,'Atom ',i8,' Position ',3f15.8)
+2   format(4x,'Welcome to cg_run. Doing ',i4,&
+           ' steps with tolerance of ',f8.4,' ev/A')
+3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
+4   format(4x,'Energy change: ',f15.8,' ',a2)
+5   format(4x,'Force Residual: ',f15.10,' ',a2,'/',a2)
+6   format(4x,'Maximum force component: ',f15.8,' ',a2,'/',a2)
+7   format(4x,3f15.8)
+  end subroutine cell_cg_run
 
 end module control

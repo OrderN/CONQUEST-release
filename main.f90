@@ -124,7 +124,6 @@ program Conquest
   fixed_potential = .false.
   ! identify what node we are on
   call init_comms(myid, numprocs)
-
   !call init_timing_system(inode)
  
   !call init_reg_mem

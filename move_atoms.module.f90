@@ -22,19 +22,19 @@
 !!   08:55, 2003/02/05 dave
 !!    Created update_H to reproject blips, build S, reproject pseudos,
 !!    build n(r) and H
-!!   14:41, 26/02/2003 drb 
+!!   14:41, 26/02/2003 drb
 !!    Added n_atoms to safemin, gsum on check to updateIndices
-!!   15:57, 27/02/2003 drb & tm 
+!!   15:57, 27/02/2003 drb & tm
 !!    Sorted out charge densities in update_H
 !!   11:05, 2003/02/28 dave
 !!    Added deallocation call for tm pseudopotentials
-!!   10:25, 06/03/2003 drb 
+!!   10:25, 06/03/2003 drb
 !!    Corrected updating of tm pseudos
-!!   15:02, 12/03/2003 drb 
+!!   15:02, 12/03/2003 drb
 !!    Tidied use statements in updateIndices
-!!   13:27, 22/09/2003 drb 
+!!   13:27, 22/09/2003 drb
 !!    Added TM's changes to update positions in different arrays
-!!   10:09, 13/02/2006 drb 
+!!   10:09, 13/02/2006 drb
 !!    Removed all explicit references to data_ variables and rewrote
 !!    in terms of new
 !!    matrix routines
@@ -84,20 +84,20 @@ contains
   ! --------------------------------------------------------------------
   ! Subroutine finish_blipgrid
   ! --------------------------------------------------------------------
-  
+
   !!****f* move_atoms/finish_blipgrid *
   !!
-  !!  NAME 
+  !!  NAME
   !!   finish_blipgrid
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
-  !! 
+  !!
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -122,42 +122,42 @@ contains
   ! --------------------------------------------------------------------
   ! Subroutine velocityVerlet
   ! --------------------------------------------------------------------
-  
+
   !!****f* move_atoms/velocityVerlet *
   !!
-  !!  NAME 
+  !!  NAME
   !!   velocityVerlet
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Moves atoms according to forces using the velocity
   !!   Verlet algorithm.  If the quenchflag is set, then quench
   !!   the motion - when v.F<0, set v=0.
-  !! 
+  !!
   !!   The velocity Verlet algorithm is an adaption of the Verlet
-  !!   algorithm which allows calculation of the velocities in a 
+  !!   algorithm which allows calculation of the velocities in a
   !! "better" way - it's described in "Understanding Molecular
   !!   Simulation" by Frenkel and Smit (though in a rather confusing
   !!   way - see below) or "Computer Simulation of Liquids" by
   !!   Allen and Tildesley.  The formal algorithm (as given by both
-  !!   A&T and F&S) is as follows (remembering that we start with 
+  !!   A&T and F&S) is as follows (remembering that we start with
   !!   r(t) and v(t) and enter the routine with f(t) - a(t) = f(t)/m):
   !!
-  !!   r(t+dt) = r(t) + dt.v(t) + half.a(t).dt.dt 
+  !!   r(t+dt) = r(t) + dt.v(t) + half.a(t).dt.dt
   !!   v(t+dt) = v(t) + half.dt.(f(t+dt)+f(t))
   !!
   !!   This is not how it's implemented - instead (as described certainly
   !!   in A&T) we do:
-  !! 
+  !!
   !!   v(t) = v(t-dt/2) + half.dt.a(t)
   !! [Perform analysis and output requiring v(t)]
-  !!   r(t+dt) = r(t) + dt.v(t) + half.a(t).dt.dt 
+  !!   r(t+dt) = r(t) + dt.v(t) + half.a(t).dt.dt
   !!   v(t+dt/2) = v(t) + half.dt.a(t)
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -220,7 +220,7 @@ contains
 1   format(4x,'In velocityVerlet, timestep is ',f10.5/, &
            'Quench is ',l3)
     do atom = 1, ni_in_cell
-       speca = species(atom) 
+       speca = species(atom)
        massa = mass(speca)*fac
        gatom = id_glob(atom)
        flagx = flag_move_atom(1,gatom)
@@ -241,7 +241,7 @@ contains
        end if
        !Now, we assume forces are forced to be zero, when
        ! flagx, y or z is false. But, I(TM) think we should
-       ! have the followings, in the future. 
+       ! have the followings, in the future.
        !if(.not.flagx) velocity(1,atom) = zero
        !if(.not.flagy) velocity(2,atom) = zero
        !if(.not.flagz) velocity(3,atom) = zero
@@ -249,7 +249,7 @@ contains
     ! Maybe fiddle with KE
     KE = zero
     do atom = 1, ni_in_cell
-       speca = species(atom) 
+       speca = species(atom)
        massa = mass(speca)*fac
       do k = 1, 3
        KE = KE + half * massa * velocity(k,atom) * velocity(k,atom)
@@ -258,7 +258,7 @@ contains
     ! Update positions and velocities
     do atom = 1, ni_in_cell
        gatom = id_glob(atom)
-       speca = species(atom) 
+       speca = species(atom)
        massa = mass(speca) * fac
        flagx = flag_move_atom(1,gatom)
        flagy = flag_move_atom(2,gatom)
@@ -317,17 +317,17 @@ contains
 
 !!****f* move_atoms/safemin *
 !!
-!!  NAME 
+!!  NAME
 !!   safemin
 !!  USAGE
-!! 
+!!
 !!  PURPOSE
 !!   Finds a minimum in energy given a search direction
 !!  INPUTS
-!! 
-!! 
+!!
+!!
 !!  USES
-!! 
+!!
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
@@ -338,18 +338,18 @@ contains
 !!    get_E_and_F
 !!   08:57, 2003/02/05 dave
 !!    Sorted out arguments to pass to updateIndices
-!!   14:41, 26/02/2003 drb 
+!!   14:41, 26/02/2003 drb
 !!    Added n_atoms from atoms
-!!   08:50, 11/05/2005 dave 
+!!   08:50, 11/05/2005 dave
 !!    Added code to write out atomic positions during minimisation;
 !!    also added code to subtract off atomic densities for old atomic
 !!    positions and add it back on for new ones after atoms moved;
 !!    this is commented out as it's not been tested or checked
 !!    rigorously
-!!   09:51, 25/10/2005 drb 
+!!   09:51, 25/10/2005 drb
 !!    Added correction so that the present energy is passed to
 !!    get_E_and_F for blip minimisation loop
-!!   15:13, 27/04/2007 drb 
+!!   15:13, 27/04/2007 drb
 !!    Reworked minimiser to be more robust; added (but not
 !!    implemented) corrections to permit VERY SIMPLE charge density
 !!    prediction
@@ -415,7 +415,7 @@ contains
     logical           :: vary_mu, fixed_potential
     real(double)      :: total_energy
     character(len=40) :: output_file
-        
+
 
     ! Local variables
     integer        :: i, j, iter, lun
@@ -495,7 +495,7 @@ contains
        !elseif (k2==0.01_double) then
        !   k3 = 0.01_double
        !else
-       !   k3 = lambda*k2          
+       !   k3 = lambda*k2
        !endif
 !       k3 = 0.032_double
        ! These lines calculate the difference between atomic densities and total density
@@ -562,7 +562,7 @@ contains
           iter = iter + 1
        else if (k2 == zero) then ! We've gone too far
           !k3old = k3
-          !if(abs(dE)<RD_ERR) then 
+          !if(abs(dE)<RD_ERR) then
           !   k3 = k3old/2.0_double
           !   dE = 1.0_double
           !else
@@ -648,7 +648,7 @@ contains
                kmin, en_conv*energy_out, en_units(energy_units)
     if (energy_out > e2 .and. abs(bottom) > RD_ERR) then
        ! The interpolation failed - go back
-       call start_timer(tmr_l_tmp1,WITH_LEVEL) 
+       call start_timer(tmr_l_tmp1,WITH_LEVEL)
        if (inode == ionode) &
             write (io_lun,fmt='(/4x,"Interpolation failed; reverting"/)')
        kmin = k2
@@ -726,7 +726,7 @@ contains
   !!
   !! AUTHOR
   !!   Michiaki Arita
-  !! CREATION DATE 
+  !! CREATION DATE
   !!   2013/08/21
   !! MODIFICATION HISTORY
   !!   2013/12/02 M.Arita
@@ -914,7 +914,7 @@ contains
          !endif
          !! ---- DEBUG: ---- !!
 
-       enddo                                  
+       enddo
        !Update atom_coord : TM 27Aug2003
        call update_atom_coord
        !Update atom_coord : TM 27Aug2003
@@ -936,7 +936,7 @@ contains
          call my_barrier
          !
          if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-         !**< lat >**  
+         !**< lat >**
          call my_barrier
          !
 
@@ -1079,7 +1079,7 @@ contains
       endif
       !! ---- DEBUG: ---- !!
 
-    enddo                   
+    enddo
     !Update atom_coord : TM 27Aug2003
     call update_atom_coord
     !Update atom_coord : TM 27Aug2003
@@ -1263,20 +1263,307 @@ contains
     call stop_timer(tmr_std_moveatoms)
     return
   end subroutine safemin2
+
+
+    !!****f* move_atoms/safemin3 *
+    !! PURPOSE
+    !! Optimize the simulation cell dimensions a b and c
+    !! INPUTS
+    !!
+    !! AUTHOR
+    !!   Jack Baker
+    !!   Shereif Mujahed
+    !! CREATION DATE
+    !!   2017/05/12
+    !! MODIFICATION HISTORY
+    !!
+    !! SOURCE
+    !! Heavily borrowed from previous safemin subroutines
+
+
+  subroutine safemin3(start_rcellx, start_rcelly, start_rcellz, direction, energy_in, &
+                     energy_out, fixed_potential, vary_mu, total_energy)
+
+    ! Module usage
+
+
+    use datatypes
+    use numbers
+    use units
+    use global_module,      only: iprint_MD, x_atom_cell, y_atom_cell,    &
+                                  z_atom_cell, flag_vary_basis,           &
+                                  atom_coord, ni_in_cell, rcellx, rcelly, &
+                                  rcellz, flag_self_consistent,           &
+                                  flag_reset_dens_on_atom_move,           &
+                                  IPRINT_TIME_THRES1, flag_pcc_global
+    use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
+                                  n_L_iterations
+    use GenComms,           only: my_barrier, myid, inode, ionode,        &
+                                  cq_abort
+    use SelfCon,            only: new_SC_potl
+    use GenBlas,            only: dot
+    use force_module,       only: tot_force
+    use io_module,          only: write_atomic_positions, pdb_template
+    use density_module,     only: density, flag_no_atomic_densities, set_density_pcc
+    use maxima_module,      only: maxngrid
+    use multisiteSF_module, only: flag_LFD_minimise
+    use timer_module
+
+    implicit none
+
+    ! Passed variables
+    real(double) :: energy_in, energy_out, start_rcellx, start_rcelly, start_rcellz
+    real(double), dimension(3,3) :: direction ! change this to array with dimensions for sim cell
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical           :: vary_mu, fixed_potential
+    real(double)      :: total_energy
+    character(len=40) :: output_file
+
+
+    ! Local variables
+    integer        :: i, j, iter, lun
+    logical        :: reset_L = .false.
+    logical        :: done
+    type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
+    real(double)   :: k0, k1, k2, k3, lambda, k3old
+    real(double)   :: e0, e1, e2, e3, tmp, bottom
+    real(double), save :: kmin = zero, dE = zero
+    real(double), dimension(:), allocatable :: store_density
+
+    call start_timer(tmr_std_moveatoms)
+    !allocate(store_density(maxngrid))
+    e0 = total_energy
+    if (inode == ionode .and. iprint_MD > 0) &
+         write (io_lun, &
+                fmt='(4x,"In safemin, initial energy is ",f20.10," ",a2)') &
+               en_conv * energy_in, en_units(energy_units)
+    if (inode == ionode) &
+         write (io_lun, fmt='(/4x,"Seeking bracketing triplet of points"/)')
+    ! Unnecessary and over cautious !
+    k0 = zero
+    iter = 1
+    k1 = zero
+    e1 = energy_in
+    k2 = k0
+    e2 = e0
+    e3 = e2
+    !k3 = zero
+    !k3old = k3
+    if (kmin < 1.0e-3) then
+       kmin = 0.7_double
+    else
+       kmin = 0.75_double * kmin
+    end if
+    k3 = kmin
+    lambda = two
+    done = .false.
+    ! Loop to find a bracketing triplet
+    do while (.not. done) !e3<=e2)
+       call start_timer(tmr_l_iter, WITH_LEVEL)
+       ! get new lattice vectors
+       call start_timer(tmr_l_tmp1, WITH_LEVEL)
+       do i = 1, 3
+         rcellx = start_rcellx + k3 * direction(1,i)
+         rcelly = start_rcelly + k3 * direction(2,i)
+         rcellz = start_rcellz + k3 * direction(3,i)
+          ! x_atom_cell(i) = start_x(i) + k3 * direction(1,i)
+          ! y_atom_cell(i) = start_y(i) + k3 * direction(2,i)
+          ! z_atom_cell(i) = start_z(i) + k3 * direction(3,i)
+        do j = 1, ni_in_cell
+          if (inode == ionode .and. iprint_MD > 2) &
+               write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
+                                y_atom_cell(j), z_atom_cell(j)
+        end do
+       end do
+       !Update atom_coord : TM 27Aug2003
+       call update_atom_coord
+       !Update atom_coord : TM 27Aug2003
+       ! Update indices and find energy and forces
+       !call updateIndices(.false.,fixed_potential, number_of_bands)
+       call updateIndices(.true., fixed_potential)
+       call update_H(fixed_potential)
+       ! These lines add back on the atomic densities for NEW atomic positions
+       ! Write out atomic positions
+       if (iprint_MD > 2) then
+          call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+                                      trim(pdb_template))
+       end if
+       ! Now in update_H DRB 2016/01/13
+       !if (flag_reset_dens_on_atom_move) call set_density()
+       if (flag_pcc_global) call set_density_pcc()
+       call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
+       ! We've just moved the atoms - we need a self-consistent ground
+       ! state before we can minimise blips !
+       if (flag_vary_basis .or. flag_LFD_minimise) then
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+                           fixed_potential, vary_mu, n_L_iterations, &
+                           L_tolerance, e3)
+       end if
+       call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
+                        .false.)
+       if (inode == ionode .and. iprint_MD > 1) &
+            write (io_lun, &
+                   fmt='(4x,"In safemin, iter ",i3," step and energy &
+                         &are ",2f20.10" ",a2)') &
+                  iter, k3, en_conv * e3, en_units(energy_units)
+       if (e3 < e2) then ! We're still going down hill
+          k1 = k2
+          e1 = e2
+          k2 = k3
+          e2 = e3
+          ! New DRB 2007/04/18
+          k3 = lambda * k3
+          iter = iter + 1
+       else if (k2 == zero) then ! We've gone too far
+          k3 = k3/lambda
+       else
+          done = .true.
+       endif
+       if (k3 <= very_small) call cq_abort("Step too small: safemin failed!")
+       call stop_print_timer(tmr_l_iter, "a safemin iteration", &
+                             IPRINT_TIME_THRES1)
+    end do !while (.not. done)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)  ! Final interpolation and updates
+    if (inode == ionode) write(io_lun, fmt='(/4x,"Interpolating minimum"/)')
+    ! Interpolate to find minimum.
+    if (inode == ionode .and. iprint_MD > 1) &
+            write (io_lun, fmt='(4x,"In safemin, brackets are: ",6f18.10)') &
+                  k1, e1, k2, e2, k3, e3
+    bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
+    if (abs(bottom) > RD_ERR) then
+       kmin = 0.5_double * (((k1*k1 - k3*k3)*(e1 - e2) -    &
+                             (k1*k1 - k2*k2) * (e1 - e3)) / &
+                            ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
+    else
+       if (inode == ionode) then
+          write (io_lun, fmt='(4x,"Error in safemin !")')
+          write (io_lun, fmt='(4x,"Interpolation failed: ",6f15.10)') &
+                k1, e1, k2, e2, k3, e3
+       end if
+       kmin = k2
+    end if
+    do i = 1, 3
+      rcellx = start_rcellx + kmin * direction(1,i)
+      rcelly = start_rcelly + kmin * direction(2,i)
+      rcellz = start_rcellz + kmin * direction(3,i)
+    end do
+    !Update atom_coord : TM 27Aug2003
+    call update_atom_coord
+    !Update atom_coord : TM 27Aug2003
+    ! Check minimum: update indices and find energy and forces
+    !call updateIndices(.false.,fixed_potential, number_of_bands)
+    call updateIndices(.true., fixed_potential)
+    call update_H(fixed_potential)
+    !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
+       ! Add on atomic densities
+       !store_density = density
+       !call set_density()
+       !density = store_density + density
+    !end if
+    if (iprint_MD > 2) then
+       call write_atomic_positions("UpdatedAtoms_tmp.dat", trim(pdb_template))
+    end if
+    ! Now in update_H
+    ! if(flag_reset_dens_on_atom_move) call set_density()
+    if (flag_pcc_global) call set_density_pcc()
+    call stop_print_timer(tmr_l_tmp1, &
+                          "safemin - Final interpolation and updates", &
+                          IPRINT_TIME_THRES1)
+    ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
+    if (flag_vary_basis .or. flag_LFD_minimise) then
+       call new_SC_potl(.false., sc_tolerance, reset_L,           &
+                        fixed_potential, vary_mu, n_L_iterations, &
+                        L_tolerance, e3)
+    end if
+    energy_out = e3
+    if (iprint_MD > 0) then
+       call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .true.)
+    else
+       call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
+    end if
+    if (inode == ionode .and. iprint_MD > 1) &
+         write (io_lun, &
+                fmt='(4x,"In safemin, Interpolation step and energy &
+                      &are ",f15.10,f20.10" ",a2)') &
+               kmin, en_conv*energy_out, en_units(energy_units)
+    if (energy_out > e2 .and. abs(bottom) > RD_ERR) then
+       ! The interpolation failed - go back
+       call start_timer(tmr_l_tmp1,WITH_LEVEL)
+       if (inode == ionode) &
+            write (io_lun,fmt='(/4x,"Interpolation failed; reverting"/)')
+       kmin = k2
+       do i = 1, 3
+         rcellx = start_rcellx + kmin * direction(1,i)
+         rcelly = start_rcelly + kmin * direction(2,i)
+         rcellz = start_rcellz + kmin * direction(3,i)
+       end do
+  !Update atom_coord : TM 27Aug2003
+       call update_atom_coord
+  !Update atom_coord : TM 27Aug2003
+       call updateIndices(.true., fixed_potential)
+       call update_H(fixed_potential)
+       if (iprint_MD > 2) then
+          call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+                                      trim(pdb_template))
+       end if
+       ! Now in update_H
+       !if(flag_reset_dens_on_atom_move) call set_density()
+       if (flag_pcc_global) call set_density_pcc()
+       call stop_print_timer(tmr_l_tmp1, &
+                             "safemin - Failed interpolation + Retry", &
+                             IPRINT_TIME_THRES1)
+       ! We've just moved the atoms - we need a self-consistent ground
+       ! state before we can minimise blips !
+       if(flag_vary_basis .or. flag_LFD_minimise) then
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+                           fixed_potential, vary_mu, n_L_iterations, &
+                           L_tolerance, e3)
+       end if
+       energy_out = e3
+       if (iprint_MD > 0) then
+          call get_E_and_F(fixed_potential, vary_mu, energy_out, &
+                           .true., .true.)
+       else
+          call get_E_and_F(fixed_potential, vary_mu, energy_out, &
+                           .true., .false.)
+       end if
+    end if
+    dE = e0 - energy_out
+  7   format(4x,3f15.8)
+    if (inode == ionode .and. iprint_MD > 0) then
+       write (io_lun, &
+              fmt='(4x,"In safemin, exit after ",i4," &
+                    &iterations with energy ",f20.10," ",a2)') &
+            iter, en_conv * energy_out, en_units(energy_units)
+    else if (inode == ionode) then
+       write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
+             en_conv * energy_out, en_units(energy_units)
+    end if
+    !deallocate(store_density)
+    call stop_timer(tmr_std_moveatoms)
+     return
+  end subroutine safemin3
+
+
+
+
+
+
+
   !!***
 
   !!****f* move_atoms/update_start_xyz *
   !!
-  !!NAME 
+  !!NAME
   !! update_start_xyz
   !!USAGE
-  !! 
+  !!
   !!PURPOSE
   !! Updates start_x, start_y and start_z after updating member info.
   !!INPUTS
-  !! 
+  !!
   !!USES
-  !! 
+  !!
   !!AUTHOR
   !! Michiaki Arita
   !!CREATION DATE
@@ -1349,20 +1636,20 @@ contains
 
   !!****f* move_atoms/pulayStep *
   !!
-  !!NAME 
+  !!NAME
   !! pulayStep
   !!USAGE
-  !! 
+  !!
   !!PURPOSE
   !! Relaxes the atoms to their minimum energy positions using the
   !! guaranteed reduction Pulay algorithm (see Chem. Phys. Lett. 325, 796
   !! (2000) for more details - also minimise).  Take a step with the atoms
   !! based on the timestep and then minimise the norm of the force vector.
   !!INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!USES
-  !! 
+  !!
   !!AUTHOR
   !! D.R.Bowler
   !!CREATION DATE
@@ -1435,13 +1722,13 @@ contains
   ! --------------------------------------------------------------------
   ! Subroutine updateIndices
   ! --------------------------------------------------------------------
-  
+
   !!****f* move_atoms/updateIndices *
   !!
-  !!  NAME 
+  !!  NAME
   !!   updateIndices
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Updates the indices for matrices, saves relevant information
   !!   and stores (if necessary) old L matrix
@@ -1452,9 +1739,9 @@ contains
   !!  INPUTS
   !!   logical :: matrix_update Flags whether the user wants ALL
   !!   matrix information updated
-  !! 
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -1462,14 +1749,14 @@ contains
   !!  MODIFICATION HISTORY
   !!   08:13, 2003/02/04 dave
   !!    Added blipgrid initialisation and reinitialisation calls
-  !!   14:42, 26/02/2003 drb 
+  !!   14:42, 26/02/2003 drb
   !!    Added gsum on check
   !!   08:36, 2003/03/12 dave
   !!    Removed unnecessary use of H_matrix_module
   !!   09:01, 2003/11/10 dave
   !!    D'oh ! Put in a call to cover_update for ewald_CS so that the
   !!    new ewald routines work
-  !!   08:49, 11/05/2005 dave 
+  !!   08:49, 11/05/2005 dave
   !!    Added lines which check for change in band energy, and reset
   !!    DM if too large; these are commented out as these ideas are
   !!    not rigorously tested
@@ -1581,7 +1868,7 @@ contains
   !! RETURN VALUE
   !! AUTHOR
   !!   David Bowler
-  !! CREATION DATE 
+  !! CREATION DATE
   !! MODIFICATION HISTORY
   !!   2011/12/09 L.Tong
   !!     Removed redundant parameter number_of_bands
@@ -1678,7 +1965,7 @@ contains
   !!   - iteration will be deleted in the next update
   !! AUTHOR
   !!   Michiaki Arita
-  !! CREATION DATE 
+  !! CREATION DATE
   !!   2013/07/02
   !! MODIFICATION HISTORY
   !!   2013/08/20 M.Arita
@@ -1833,33 +2120,33 @@ contains
   ! --------------------------------------------------------------------
   ! Subroutine update_H
   ! --------------------------------------------------------------------
-  
+
   !!****f* move_atoms/update_H *
   !!
-  !!  NAME 
+  !!  NAME
   !!   update_H
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Updates various quantities when atoms move: blips, S, n(r), H
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
   !!   08:24, 2003/02/05 dave
   !!  MODIFICATION HISTORY
-  !!   15:04, 27/02/2003 drb & tm 
+  !!   15:04, 27/02/2003 drb & tm
   !!    Added call to set_density for Harris-Foulkes type calculations;
   !!    completely sorted out charge density questions
   !!   18:28, 2003/02/27 dave
   !!    Added call to deallocate Tm pseudopotential
-  !!   10:25, 06/03/2003 drb 
+  !!   10:25, 06/03/2003 drb
   !!    Corrected Tm pseudo updating (alloc/dealloc not needed)
-  !!   13:12, 22/10/2003 mjg & drb 
+  !!   13:12, 22/10/2003 mjg & drb
   !!    Added old/new ewald calls
   !!   12:13  31/03/2011 M.Arita
   !!    Added the statement to recall sbrt: set_density_pcc for NSC cg calculations
@@ -1897,7 +2184,7 @@ contains
   subroutine update_H(fixed_potential)
 
     use logicals
-    use timer_module    
+    use timer_module
     use S_matrix_module,        only: get_S_matrix
     use H_matrix_module,        only: get_H_matrix
     !use DiagModule,             only: diagon
@@ -1954,7 +2241,7 @@ contains
           call matrix_scale(zero,matSFcoeff(spin_SF))
        enddo
        if (flag_SFcoeffReuse) then
-       ! Use the coefficients in the previous step   
+       ! Use the coefficients in the previous step
 !          call Matrix_CommRebuild??
           call cq_abort("update_H: SFcoeff in the previous MD step cannot be reused at present!")
        else
@@ -2042,13 +2329,13 @@ contains
   ! --------------------------------------------------------------------
   ! Subroutine checkBonds
   ! --------------------------------------------------------------------
-  
+
   !!****f* move_atoms/checkBonds *
   !!
-  !!  NAME 
+  !!  NAME
   !!   checkBonds
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
   !!   Checks to see if there are new H range interactions
   !!
@@ -2064,9 +2351,9 @@ contains
   !!
   !!  INPUTS
   !!   logiccal :: newAtom Flags if a new atom is found
-  !! 
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -2143,21 +2430,21 @@ contains
   ! --------------------------------------------------------------------
   ! Subroutine primary_update
   ! --------------------------------------------------------------------
-  
+
   !!****f* move_atoms/primary_update *
   !!
-  !!  NAME 
+  !!  NAME
   !!   primary_update
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
-  !!   Updates the atomic positions in primary set after atom 
+  !!   Updates the atomic positions in primary set after atom
   !!   movement
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -2229,15 +2516,15 @@ contains
   ! --------------------------------------------------------------------
   ! Subroutine cover_update
   ! --------------------------------------------------------------------
-  
+
   !!****f* move_atoms/cover_update *
   !!
-  !!  NAME 
+  !!  NAME
   !!   cover_update
   !!  USAGE
-  !! 
+  !!
   !!  PURPOSE
-  !!   Updates the atomic positions in cover set after atom 
+  !!   Updates the atomic positions in cover set after atom
   !!   movement
   !!
   !!   The details of how atoms are offset in covering sets
@@ -2246,10 +2533,10 @@ contains
   !!   Dave Bowler, referred to in cover_module - see there
   !!   for details.
   !!  INPUTS
-  !! 
-  !! 
+  !!
+  !!
   !!  USES
-  !! 
+  !!
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -2365,7 +2652,7 @@ contains
        end if
     end do
     ! go over groups in GCS periodic-irreducible set, calculating
-    ! simulation-cell (node-order, home-start) label of each 
+    ! simulation-cell (node-order, home-start) label of each
     ng_in_cell = groups%ngcellx*groups%ngcelly*groups%ngcellz
     ng_in_min = minx*miny*minz
     ind=0
@@ -2386,9 +2673,9 @@ contains
           enddo
        enddo
     enddo
-    ! sort minimum CS by nodes 
+    ! sort minimum CS by nodes
     call indexx(groups%mx_gcell,ng_in_min,ind_min,min_sort)
-    ! go over all GCS groups in node-periodic-grouped order 
+    ! go over all GCS groups in node-periodic-grouped order
     ind_cover=0
     do ind=1,ng_in_min
        ngcx=ngcx_min(min_sort(ind))
@@ -2450,20 +2737,20 @@ contains
   ! --------------------------------------------------------------------
   ! Subroutine update_atom_coord
   ! --------------------------------------------------------------------
-  
+
   !!****f* move_atoms/update_atom_coord *
-  !!  
-  !!  NAME 
+  !!
+  !!  NAME
   !!   update_atom_coord
   !!  USAGE
   !!
   !!  PURPOSE
-  !!   Updates the atomic positions (atom_coord) in global_module after atom 
-  !!   movement 
-  !!  
+  !!   Updates the atomic positions (atom_coord) in global_module after atom
+  !!   movement
+  !!
   !!  INPUTS
-  !!  
-  !!  
+  !!
+  !!
   !!  USES
   !!   global_module
   !!  AUTHOR
@@ -2476,7 +2763,7 @@ contains
   !!  SOURCE
   !!
   subroutine update_atom_coord
-    
+
     use datatypes
     use global_module, only: x_atom_cell, y_atom_cell, z_atom_cell,   &
                              id_glob, atom_coord, ni_in_cell, io_lun, &
@@ -2490,7 +2777,7 @@ contains
     integer        :: ni, id_global
     real(double)   :: dx, dy, dz
     type(cq_timer) :: tmr_l_tmp1
-    
+
     call start_timer(tmr_std_indexing)    ! NOTE: This will be annotated in area 8
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
     dx = r_super_x / parts%ngcellx
@@ -2532,10 +2819,10 @@ contains
 
   !!****f*  move_atoms/init_velocity *
   !!
-  !!  NAME 
+  !!  NAME
   !!   pulay_relax
   !!  USAGE
-  !!   
+  !!
   !!  PURPOSE
   !!   Performs pulay relaxation
   !!  INPUTS
@@ -2547,9 +2834,9 @@ contains
   !!  AUTHOR
   !!   T. Miyazaki
   !!  CREATION DATE
-  !!   2010/6/30 
+  !!   2010/6/30
   !!  MODIFICATION HISTORY
-  !!    
+  !!
   !!  SOURCE
   !!
   subroutine init_velocity(ni_in_cell, temp, velocity)
@@ -2567,7 +2854,7 @@ contains
     real(double) :: xx, yy, zz, u0, ux, uy, uz, v0
     real(double) :: massa, KE
     integer :: speca
-   
+
     KE = zero
     write(io_lun,*) ' Welcome to init_velocity', ' fac = ',fac
     velocity(:,:) = zero
@@ -2575,14 +2862,14 @@ contains
     do ii=1,initial_roulette
        call ran2(xx,iroulette)
     enddo
-  
+
     !  We would like to use the order of global labelling in the following.
     !(since we use random numbers, the order of atoms is probably relevant
     ! if we want to have a same distribution of velocities as in other codes.)
-    
+
     do iglob=1,ni_in_cell
        ia= id_glob_inv(iglob)
-       !speca= species_glob(iglob) 
+       !speca= species_glob(iglob)
        speca= species(ia)
        massa= mass(speca)
        if(ia < 1 .or. ia > ni_in_cell) &
@@ -2601,15 +2888,15 @@ contains
        zz = twopi*uz
        ! -- (Important Notes) ----
        ! it is tricky, but velocity is in the unit, bohr/fs, transforming from
-       ! (fs * Har/bohr)/ amu, with the factor (fac) defined in the beginning of 
-       ! this module.  This factor comes from that v is calculated as (dt*F/mass), 
-       ! and we want to express dt in femtosecond, force in Hartree/bohr, 
-       ! and m in atomic mass units. 
+       ! (fs * Har/bohr)/ amu, with the factor (fac) defined in the beginning of
+       ! this module.  This factor comes from that v is calculated as (dt*F/mass),
+       ! and we want to express dt in femtosecond, force in Hartree/bohr,
+       ! and m in atomic mass units.
        ! (it should be equivalent to express dt and m in atomic units, I think.)
        ! Kinetic Energy is calculated as m/2*v^2 *fac in Hartree unit, and
        ! Positions are calculated as v*dt in bohr unit. (m in amu, dt in fs)
 
-       v0 = sqrt(temp*fac_Kelvin2Hartree/(massa*fac)) 
+       v0 = sqrt(temp*fac_Kelvin2Hartree/(massa*fac))
 
        call ran2(u0,iroulette)
        if(u0 >= one)  call cq_abort('ERROR in init_velocity 1',u0)
@@ -2639,10 +2926,10 @@ contains
   ! --------------------------------------------------------------------
   ! Subroutine wrap_xyz_atom_cell
   ! --------------------------------------------------------------------
-  
+
   !!****f* move_atoms/wrap_xyz_atom_cell *
-  !!  
-  !!  NAME 
+  !!
+  !!  NAME
   !!   wrap_xyz_atom_cell
   !!  USAGE
   !!
@@ -2653,7 +2940,7 @@ contains
   !!   to use the same shift_in_bohr as used in atom2part or allatom2part.
   !!   This is important for the atoms on the bondary of partitions.
   !!  INPUTS
-  !!  
+  !!
   !!  USES
   !!   global_module
   !!  AUTHOR
@@ -2665,7 +2952,7 @@ contains
   !!  SOURCE
   !!
   subroutine wrap_xyz_atom_cell
-    
+
     use datatypes
     use global_module, only: x_atom_cell, y_atom_cell, z_atom_cell,   &
                              shift_in_bohr, ni_in_cell, io_lun, iprint_MD
@@ -2681,7 +2968,7 @@ contains
       y_atom_cell(atom) = y_atom_cell(atom) - floor((y_atom_cell(atom)+eps)/r_super_y)*r_super_y
       z_atom_cell(atom) = z_atom_cell(atom) - floor((z_atom_cell(atom)+eps)/r_super_z)*r_super_z
     enddo
-      
+
     return
   end subroutine wrap_xyz_atom_cell
   !!***
@@ -2689,9 +2976,9 @@ contains
   ! --------------------------------------------------------------------
   ! Subroutine calculate_kinetic_energy
   ! --------------------------------------------------------------------
-  
+
   !!****f* move_atoms/calculate_kinetic_energy *
-  !!  NAME 
+  !!  NAME
   !!   calculate_kinetic_energy
   !!  USAGE
   !!   call calculate_kinetic_energy(v,KE)
@@ -2737,7 +3024,7 @@ contains
   !!***
 
   !!****f* move_atoms/zero_COM_velocity *
-  !!  NAME 
+  !!  NAME
   !!   zero_COM_velocity
   !!  USAGE
   !!   call zero_COM_velocity(v)
@@ -2794,7 +3081,7 @@ contains
   !!***
 
   !!****f* move_atoms/check_move_atoms *
-  !!  NAME 
+  !!  NAME
   !!   check_move_atoms
   !!  USAGE
   !!   call check_move_atoms(flag_movable)
