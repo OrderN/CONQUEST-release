@@ -1375,6 +1375,10 @@ contains
                                 y_atom_cell(j), z_atom_cell(j)
         end do
        end do
+       write(io_lun,*) 'Search direction', direction
+       write(io_lun,*) 'k3 value', k3
+       !write(io_lun,*) 'new sim cell dims', start_rcellx, start_rcellx, start_rcellx
+       write(io_lun,*) 'New sim cell dims', rcellx, rcellx, rcellx
        !Update atom_coord : TM 27Aug2003
        call update_atom_coord
        !Update atom_coord : TM 27Aug2003

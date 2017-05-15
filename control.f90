@@ -148,7 +148,6 @@ contains
        call cg_run(fixed_potential,     vary_mu, total_energy)
        !
     else if ( leqi(runtype, 'relaxcell')    ) then
-      write(*,*) "lattice vector relaxation selected"
        call cell_cg_run(fixed_potential,     vary_mu, total_energy)
     else if ( leqi(runtype, 'md')    ) then
        call md_run(fixed_potential,     vary_mu, total_energy)
@@ -278,6 +277,7 @@ contains
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
        ! Construct ratio for conjugacy
+       ! Forces are gradient of energy idiot!!! ahh
        gg = zero
        do j = 1, ni_in_cell
           gg = gg +                              &
@@ -1201,7 +1201,7 @@ contains
                              IPRINT_TIME_THRES1, flag_MDold
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin, safemin2
+    use move_atoms,    only: safemin, safemin2, safemin3
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force
@@ -1219,7 +1219,8 @@ contains
     real(double) :: total_energy
 
     ! Local variables
-    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma, energy_resid
+    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma, energy_resid &
+                      , x_tot_force, y_tot_force, z_tot_force
     integer        :: i,j,k,iter,length, jj, lun, stat
     logical        :: done
     type(cq_timer) :: tmr_l_iter
@@ -1237,19 +1238,14 @@ contains
                        ni_in_cell,stat)
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
 
-
-    ! write(*,*) rcellx
-    ! write(*,*) rcelly
-    ! write(*,*) rcellz
-
     if (myid == 0) &
          write (io_lun, fmt='(/4x,"Starting CG lattice vector relaxation"/)')
     cg = zero
     ! Do we need to add MD.MaxCGDispl ?
     done = .false.
-    length = 3 * ni_in_cell ! do we need to change this to 3?
-    ! if (myid == 0 .and. iprint_gen > 0) &
-    !      write (io_lun, 2) MDn_steps, MDcgtol
+    length = 3 !* ni_in_cell ! do we need to change this to 3?
+    if (myid == 0 .and. iprint_gen > 0) &
+         write (io_lun, 2) MDn_steps, MDcgtol
     energy0 = total_energy
     energy1 = zero
     dE = zero
@@ -1260,19 +1256,29 @@ contains
     endif
     iter = 1
     ggold = zero
-    energy_resid = energy0 - energy1
     energy1 = energy0
-    write(*,*) energy1
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
        ! Construct ratio for conjugacy
-       gg = energy1
-      !  do j = 1, ni_in_cell
-          ! gg = gg +                              &
-          !      tot_force(1,j) * tot_force(1,j) + &
-          !      tot_force(2,j) * tot_force(2,j) + &
-          !      tot_force(3,j) * tot_force(3,j)
+       ! need to reconsider how this works: vector gg is different now...
+       ! Need derivative of energy WRT to sim cell dims
+       ! sum of forces in various directions approxes this
+       x_tot_force = zero
+       y_tot_force = zero
+       z_tot_force = zero
+       do j = 1, ni_in_cell
+         x_tot_force = x_tot_force + tot_force(1, j)
+         y_tot_force = y_tot_force + tot_force(2, j)
+         z_tot_force = z_tot_force + tot_force(3, j)
        end do
+       gg = x_tot_force * x_tot_force + y_tot_force * y_tot_force + &
+            z_tot_force * z_tot_force
+        ! do j = 1, ni_in_cell
+        !    gg = gg +                              &
+        !         tot_force(1,j) * tot_force(1,j) + &
+        !         tot_force(2,j) * tot_force(2,j) + &
+        !         tot_force(3,j) * tot_force(3,j)
+       !end do
        if (abs(ggold) < 1.0e-6_double) then
           gamma = zero
        else
@@ -1293,14 +1299,12 @@ contains
        if (inode == ionode) &
             write (io_lun, fmt='(/4x,"Atomic relaxation CG iteration: ",i5)') iter
        ggold = gg
-       !    done = .true. ! DEBUG STUFF DELETE
-       !  end do ! DEBUG STUFF DELETE
        !Build search direction
        do j = 1, 3
-          ! jj = id_glob(j)
-          cg(1,j) = gamma*cg(1,j) + gg
-          cg(2,j) = gamma*cg(2,j) + gg
-          cg(3,j) = gamma*cg(3,j) + gg
+          jj = id_glob(j)
+          cg(1,j) = gamma*cg(1,j) + x_tot_force
+          cg(2,j) = gamma*cg(2,j) + y_tot_force
+          cg(3,j) = gamma*cg(3,j) + z_tot_force
           new_rcellx = rcellx
           new_rcelly = rcelly
           new_rcellz = rcellz
@@ -1360,7 +1364,7 @@ contains
        end if
        call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
        if (.not. done) call check_stop(done, iter)
-    !end do
+    end do
     ! Output final positions
 !    if(myid==0) call write_positions(parts)
     deallocate(new_rcellx, new_rcelly, new_rcellz, STAT=stat)
