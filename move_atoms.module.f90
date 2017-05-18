@@ -1369,23 +1369,30 @@ contains
           ! x_atom_cell(i) = start_x(i) + k3 * direction(1,i)
           ! y_atom_cell(i) = start_y(i) + k3 * direction(2,i)
           ! z_atom_cell(i) = start_z(i) + k3 * direction(3,i)
-        do j = 1, ni_in_cell
-          if (inode == ionode .and. iprint_MD > 2) &
-               write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
-                                y_atom_cell(j), z_atom_cell(j)
-        end do
        end do
+       do j = 1, ni_in_cell
+         x_atom_cell(j) = (rcellx/start_rcellx)*x_atom_cell(j)
+         y_atom_cell(j) = (rcelly/start_rcelly)*y_atom_cell(j)
+         z_atom_cell(j) = (rcellz/start_rcellz)*z_atom_cell(j)
+         if (inode == ionode .and. iprint_MD > 2) &
+              write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
+                               y_atom_cell(j), z_atom_cell(j)
+       end do
+
        write(io_lun,*) 'Search direction', direction
        write(io_lun,*) 'k3 value', k3
        !write(io_lun,*) 'new sim cell dims', start_rcellx, start_rcellx, start_rcellx
        write(io_lun,*) 'New sim cell dims', rcellx, rcellx, rcellx
        !Update atom_coord : TM 27Aug2003
        call update_atom_coord
+       write(*,*) "Updated atom coord"
        !Update atom_coord : TM 27Aug2003
        ! Update indices and find energy and forces
        !call updateIndices(.false.,fixed_potential, number_of_bands)
        call updateIndices(.true., fixed_potential)
+       write(*,*) "Updated indicies"
        call update_H(fixed_potential)
+       write(*,*) "Updated H"
        ! These lines add back on the atomic densities for NEW atomic positions
        ! Write out atomic positions
        if (iprint_MD > 2) then
@@ -1450,6 +1457,11 @@ contains
       rcellx = start_rcellx + kmin * direction(1,i)
       rcelly = start_rcelly + kmin * direction(2,i)
       rcellz = start_rcellz + kmin * direction(3,i)
+    end do
+    do j = 1, ni_in_cell
+      x_atom_cell(j) = (rcellx/start_rcellx)*x_atom_cell(j)
+      y_atom_cell(j) = (rcelly/start_rcelly)*y_atom_cell(j)
+      z_atom_cell(j) = (rcellz/start_rcellz)*z_atom_cell(j)
     end do
     !Update atom_coord : TM 27Aug2003
     call update_atom_coord

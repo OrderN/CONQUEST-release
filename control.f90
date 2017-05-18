@@ -149,6 +149,7 @@ contains
        !
     else if ( leqi(runtype, 'relaxcell')    ) then
        call cell_cg_run(fixed_potential,     vary_mu, total_energy)
+       !
     else if ( leqi(runtype, 'md')    ) then
        call md_run(fixed_potential,     vary_mu, total_energy)
        !
@@ -1220,7 +1221,8 @@ contains
 
     ! Local variables
     real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma, energy_resid &
-                      , x_tot_force, y_tot_force, z_tot_force
+                      , x_tot_force, y_tot_force, z_tot_force, all_force, delta_rx_dE &
+                      , delta_ry_dE, delta_rz_dE
     integer        :: i,j,k,iter,length, jj, lun, stat
     logical        :: done
     type(cq_timer) :: tmr_l_iter
@@ -1263,16 +1265,13 @@ contains
        ! need to reconsider how this works: vector gg is different now...
        ! Need derivative of energy WRT to sim cell dims
        ! sum of forces in various directions approxes this
-       x_tot_force = zero
-       y_tot_force = zero
-       z_tot_force = zero
-       do j = 1, ni_in_cell
-         x_tot_force = x_tot_force + tot_force(1, j)
-         y_tot_force = y_tot_force + tot_force(2, j)
-         z_tot_force = z_tot_force + tot_force(3, j)
-       end do
-       gg = x_tot_force * x_tot_force + y_tot_force * y_tot_force + &
-            z_tot_force * z_tot_force
+      ! all_force = zero
+      ! do j = 1, ni_in_cell
+      !   all_force = all_force + tot_force(1, j) + tot_force(2, j) + tot_force(3, j)
+      ! end do
+      ! gg = all_force*all_force
+      !  gg = x_tot_force * x_tot_force + y_tot_force * y_tot_force + &
+      !       z_tot_force * z_tot_force
         ! do j = 1, ni_in_cell
         !    gg = gg +                              &
         !         tot_force(1,j) * tot_force(1,j) + &
@@ -1280,8 +1279,21 @@ contains
         !         tot_force(3,j) * tot_force(3,j)
        !end do
        if (abs(ggold) < 1.0e-6_double) then
+         x_tot_force = zero
+         y_tot_force = zero
+         z_tot_force = zero
+         do j = 1, ni_in_cell
+           x_tot_force = x_tot_force + tot_force(1, j)
+           y_tot_force = y_tot_force + tot_force(2, j)
+           z_tot_force = z_tot_force + tot_force(3, j)
+         end do
           gamma = zero
        else
+          delta_rx_dE = (rcellx - new_rcellx)/dE
+          delta_ry_dE = (rcelly - new_rcelly)/dE
+          delta_rz_dE = (rcellz - new_rcellz)/dE
+          gg = gg + delta_rx_dE*delta_rx_dE + delta_ry_dE*delta_ry_dE + &
+              delta_rz_dE*delta_rz_dE
           gamma = gg/ggold
        end if
        if (inode == ionode .and. iprint_MD > 2) &
@@ -1299,19 +1311,40 @@ contains
        if (inode == ionode) &
             write (io_lun, fmt='(/4x,"Atomic relaxation CG iteration: ",i5)') iter
        ggold = gg
+       ! check starting atom positions
+      !write(*,*) x_atom_cell
+      !write(*,*) y_atom_cell
+      !write(*,*) z_atom_cell
        !Build search direction
-       do j = 1, 3
-          jj = id_glob(j)
-          cg(1,j) = gamma*cg(1,j) + x_tot_force
-          cg(2,j) = gamma*cg(2,j) + y_tot_force
-          cg(3,j) = gamma*cg(3,j) + z_tot_force
-          new_rcellx = rcellx
-          new_rcelly = rcelly
-          new_rcellz = rcellz
+       if (iter == 1) then
+           do j = 1, 3
+             !jj = id_glob(j)
+             cg(1,j) = gamma*cg(1,j) + x_tot_force
+             cg(2,j) = gamma*cg(2,j) + y_tot_force
+             cg(3,j) = gamma*cg(3,j) + z_tot_force
           ! x_new_pos(j) = x_atom_cell(j)
           ! y_new_pos(j) = y_atom_cell(j)
           ! z_new_pos(j) = z_atom_cell(j)
-       end do
+          end do
+      else
+          do j = 1, 3
+            cg(1,j) = gamma*cg(1,j) + delta_rx_dE
+            cg(2,j) = gamma*cg(2,j) + delta_ry_dE
+            cg(3,j) = gamma*cg(3,j) + delta_rz_dE
+          end do
+      end if
+      do j = 1, ni_in_cell
+        x_atom_cell(j) = (new_rcellx/rcellx)*x_atom_cell(j)
+        y_atom_cell(j) = (new_rcelly/rcelly)*y_atom_cell(j)
+        z_atom_cell(j) = (new_rcellz/rcellz)*z_atom_cell(j)
+      end do
+      new_rcellx = rcellx
+      new_rcelly = rcelly
+      new_rcellz = rcellz
+      write(*,*) gamma
+      write(*,*) rcellx
+      write(*,*) rcelly
+      write(*,*) rcellz
        ! Minimise in this direction
        call safemin3(new_rcellx, new_rcelly, new_rcellz, cg, energy0, &
                     energy1, fixed_potential, vary_mu, energy1)
