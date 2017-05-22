@@ -677,7 +677,7 @@ contains
                                       STATE, ABINIT, flag_angular_new
     use SelfCon, only: A, flag_linear_mixing, EndLinearMixing, q0, q1,&
                        n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
-                       atomch_output, flag_Kerker, flag_wdmetric
+                       atomch_output, flag_Kerker, flag_wdmetric, minitersSC
     use atomic_density,  only: read_atomic_density_file, &
                               atomic_density_method
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
@@ -1296,6 +1296,7 @@ contains
        flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
        flag_continue_on_SC_fail     = fdf_boolean('SC.ContinueOnSCFail',   .false.)
        maxitersSC      = fdf_integer('SC.MaxIters',50)
+       minitersSC      = fdf_integer('SC.MinIters',2)
        maxearlySC      = fdf_integer('SC.MaxEarly',3 )
        maxpulaySC      = fdf_integer('SC.MaxPulay',5 )
        read_atomic_density_file = &
