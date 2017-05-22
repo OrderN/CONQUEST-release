@@ -1205,7 +1205,7 @@ contains
     use move_atoms,    only: safemin, safemin2, safemin3
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
-    use force_module,  only: tot_force
+    use force_module,  only: stress, tot_force
     use io_module,     only: write_atomic_positions, pdb_template, &
                              check_stop
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
@@ -1220,29 +1220,19 @@ contains
     real(double) :: total_energy
 
     ! Local variables
-    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma, energy_resid &
-                      , x_tot_force, y_tot_force, z_tot_force, all_force, delta_rx_dE &
-                      , delta_ry_dE, delta_rz_dE
+    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma, energy_resid
     integer        :: i,j,k,iter,length, jj, lun, stat
     logical        :: done
     type(cq_timer) :: tmr_l_iter
-    real(double), allocatable, dimension(:,:) :: cg
-    real(double), allocatable :: new_rcellx, new_rcelly, new_rcellz
-
-    allocate(cg(3,3), STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("Error allocating cg in control: ",&
-                       ni_in_cell, stat)
-    allocate(new_rcellx, new_rcelly, new_rcellz, &
-             STAT=stat)
-    if(stat/=0) &
-         call cq_abort("Error allocating _new_pos in control: ", &
-                       ni_in_cell,stat)
+    real(double) :: new_rcellx, new_rcelly, new_rcellz, old_stressx, old_stressy,&
+                    old_stressz, stressx, stressy, stressz
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
 
     if (myid == 0) &
          write (io_lun, fmt='(/4x,"Starting CG lattice vector relaxation"/)')
-    cg = zero
+    old_stressx = zero
+    old_stressy = zero
+    old_stressz = zero
     ! Do we need to add MD.MaxCGDispl ?
     done = .false.
     length = 3 !* ni_in_cell ! do we need to change this to 3?
@@ -1261,39 +1251,15 @@ contains
     energy1 = energy0
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
+       old_stressx = stress(1)
+       old_stressy = stress(2)
+       old_stressz = stress(3)
        ! Construct ratio for conjugacy
-       ! need to reconsider how this works: vector gg is different now...
-       ! Need derivative of energy WRT to sim cell dims
-       ! sum of forces in various directions approxes this
-      ! all_force = zero
-      ! do j = 1, ni_in_cell
-      !   all_force = all_force + tot_force(1, j) + tot_force(2, j) + tot_force(3, j)
-      ! end do
-      ! gg = all_force*all_force
-      !  gg = x_tot_force * x_tot_force + y_tot_force * y_tot_force + &
-      !       z_tot_force * z_tot_force
-        ! do j = 1, ni_in_cell
-        !    gg = gg +                              &
-        !         tot_force(1,j) * tot_force(1,j) + &
-        !         tot_force(2,j) * tot_force(2,j) + &
-        !         tot_force(3,j) * tot_force(3,j)
-       !end do
        if (abs(ggold) < 1.0e-6_double) then
-         x_tot_force = zero
-         y_tot_force = zero
-         z_tot_force = zero
-         do j = 1, ni_in_cell
-           x_tot_force = x_tot_force + tot_force(1, j)
-           y_tot_force = y_tot_force + tot_force(2, j)
-           z_tot_force = z_tot_force + tot_force(3, j)
-         end do
           gamma = zero
        else
-          delta_rx_dE = (rcellx - new_rcellx)/dE
-          delta_ry_dE = (rcelly - new_rcelly)/dE
-          delta_rz_dE = (rcellz - new_rcellz)/dE
-          gg = gg + delta_rx_dE*delta_rx_dE + delta_ry_dE*delta_ry_dE + &
-              delta_rz_dE*delta_rz_dE
+          gg = gg + old_stressx*old_stressx + old_stressy*old_stressy + &
+              old_stressz*old_stressz
           gamma = gg/ggold
        end if
        if (inode == ionode .and. iprint_MD > 2) &
@@ -1311,52 +1277,17 @@ contains
        if (inode == ionode) &
             write (io_lun, fmt='(/4x,"Atomic relaxation CG iteration: ",i5)') iter
        ggold = gg
-       ! check starting atom positions
-      !write(*,*) x_atom_cell
-      !write(*,*) y_atom_cell
-      !write(*,*) z_atom_cell
        !Build search direction
-       if (iter == 1) then
-           do j = 1, 3
-             !jj = id_glob(j)
-             cg(1,j) = gamma*cg(1,j) + x_tot_force
-             cg(2,j) = gamma*cg(2,j) + y_tot_force
-             cg(3,j) = gamma*cg(3,j) + z_tot_force
-          ! x_new_pos(j) = x_atom_cell(j)
-          ! y_new_pos(j) = y_atom_cell(j)
-          ! z_new_pos(j) = z_atom_cell(j)
-          end do
-      else
-          do j = 1, 3
-            cg(1,j) = gamma*cg(1,j) + delta_rx_dE
-            cg(2,j) = gamma*cg(2,j) + delta_ry_dE
-            cg(3,j) = gamma*cg(3,j) + delta_rz_dE
-          end do
-      end if
-      do j = 1, ni_in_cell
-        x_atom_cell(j) = (new_rcellx/rcellx)*x_atom_cell(j)
-        y_atom_cell(j) = (new_rcelly/rcelly)*y_atom_cell(j)
-        z_atom_cell(j) = (new_rcellz/rcellz)*z_atom_cell(j)
-      end do
-      new_rcellx = rcellx
-      new_rcelly = rcelly
-      new_rcellz = rcellz
-      write(*,*) gamma
-      write(*,*) rcellx
-      write(*,*) rcelly
-      write(*,*) rcellz
+       stressx = gamma*stressx + old_stressx
+       stressy = gamma*stressy + old_stressy
+       stressz = gamma*stressz + old_stressz
+       write(*,*)  "Initial cell dims", rcellx, rcelly, rcellx
+       new_rcellx = rcellx
+       new_rcelly = rcelly
+       new_rcellz = rcellz
        ! Minimise in this direction
-       call safemin3(new_rcellx, new_rcelly, new_rcellz, cg, energy0, &
-                    energy1, fixed_potential, vary_mu, energy1)
-       !ORI call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-       !ORI              energy1, fixed_potential, vary_mu, energy1)
-      !  if (.NOT. flag_MDold) then
-      !    call safemin3(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-      !                 energy1, fixed_potential, vary_mu, energy1)
-      !  else
-      !    call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-      !                 energy1, fixed_potential, vary_mu, energy1)
-      !  endif
+       call safemin3(new_rcellx, new_rcelly, new_rcellz, stressx, stressy, stressz,&
+                   energy0, energy1, fixed_potential, vary_mu, energy1)
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
           do i = 1, ni_in_cell
@@ -1398,15 +1329,6 @@ contains
        call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
        if (.not. done) call check_stop(done, iter)
     end do
-    ! Output final positions
-!    if(myid==0) call write_positions(parts)
-    deallocate(new_rcellx, new_rcelly, new_rcellz, STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("Error deallocating _new_pos in control: ", &
-                       ni_in_cell,stat)
-    deallocate(cg, STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("Error deallocating cg in control: ", ni_in_cell,stat)
     call reg_dealloc_mem(area_general, 6*ni_in_cell, type_dbl)
 
 1   format(4x,'Atom ',i8,' Position ',3f15.8)

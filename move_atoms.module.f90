@@ -1281,8 +1281,8 @@ contains
     !! Heavily borrowed from previous safemin subroutines
 
 
-  subroutine safemin3(start_rcellx, start_rcelly, start_rcellz, direction, energy_in, &
-                     energy_out, fixed_potential, vary_mu, total_energy)
+  subroutine safemin3(start_rcellx, start_rcelly, start_rcellz, stressx, stressy, stressz,&
+                      energy_in, energy_out, fixed_potential, vary_mu, total_energy)
 
     ! Module usage
 
@@ -1312,8 +1312,8 @@ contains
     implicit none
 
     ! Passed variables
-    real(double) :: energy_in, energy_out, start_rcellx, start_rcelly, start_rcellz
-    real(double), dimension(3,3) :: direction ! change this to array with dimensions for sim cell
+    real(double) :: energy_in, energy_out, start_rcellx, start_rcelly, start_rcellz,&
+                    stressx, stressy, stressz
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
     real(double)      :: total_energy
@@ -1362,14 +1362,10 @@ contains
        call start_timer(tmr_l_iter, WITH_LEVEL)
        ! get new lattice vectors
        call start_timer(tmr_l_tmp1, WITH_LEVEL)
-       do i = 1, 3
-         rcellx = start_rcellx + k3 * direction(1,i)
-         rcelly = start_rcelly + k3 * direction(2,i)
-         rcellz = start_rcellz + k3 * direction(3,i)
-          ! x_atom_cell(i) = start_x(i) + k3 * direction(1,i)
-          ! y_atom_cell(i) = start_y(i) + k3 * direction(2,i)
-          ! z_atom_cell(i) = start_z(i) + k3 * direction(3,i)
-       end do
+       rcellx = start_rcellx + k3 * stressx
+       rcelly = start_rcelly + k3 * stressy
+       rcellz = start_rcellz + k3 * stressz
+
        do j = 1, ni_in_cell
          x_atom_cell(j) = (rcellx/start_rcellx)*x_atom_cell(j)
          y_atom_cell(j) = (rcelly/start_rcelly)*y_atom_cell(j)
@@ -1379,20 +1375,17 @@ contains
                                y_atom_cell(j), z_atom_cell(j)
        end do
 
-       write(io_lun,*) 'Search direction', direction
+
        write(io_lun,*) 'k3 value', k3
        !write(io_lun,*) 'new sim cell dims', start_rcellx, start_rcellx, start_rcellx
-       write(io_lun,*) 'New sim cell dims', rcellx, rcellx, rcellx
+       write(*,*) 'New sim cell dims', rcellx, rcelly, rcellz
        !Update atom_coord : TM 27Aug2003
        call update_atom_coord
-       write(*,*) "Updated atom coord"
        !Update atom_coord : TM 27Aug2003
        ! Update indices and find energy and forces
        !call updateIndices(.false.,fixed_potential, number_of_bands)
        call updateIndices(.true., fixed_potential)
-       write(*,*) "Updated indicies"
        call update_H(fixed_potential)
-       write(*,*) "Updated H"
        ! These lines add back on the atomic densities for NEW atomic positions
        ! Write out atomic positions
        if (iprint_MD > 2) then
@@ -1453,15 +1446,17 @@ contains
        end if
        kmin = k2
     end if
-    do i = 1, 3
-      rcellx = start_rcellx + kmin * direction(1,i)
-      rcelly = start_rcelly + kmin * direction(2,i)
-      rcellz = start_rcellz + kmin * direction(3,i)
-    end do
+    rcellx = start_rcellx + kmin * stressx
+    rcelly = start_rcelly + kmin * stressy
+    rcellz = start_rcellz + kmin * stressz
+
     do j = 1, ni_in_cell
       x_atom_cell(j) = (rcellx/start_rcellx)*x_atom_cell(j)
       y_atom_cell(j) = (rcelly/start_rcelly)*y_atom_cell(j)
       z_atom_cell(j) = (rcellz/start_rcellz)*z_atom_cell(j)
+      if (inode == ionode .and. iprint_MD > 2) &
+           write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
+                            y_atom_cell(j), z_atom_cell(j)
     end do
     !Update atom_coord : TM 27Aug2003
     call update_atom_coord
@@ -1508,10 +1503,17 @@ contains
        if (inode == ionode) &
             write (io_lun,fmt='(/4x,"Interpolation failed; reverting"/)')
        kmin = k2
-       do i = 1, 3
-         rcellx = start_rcellx + kmin * direction(1,i)
-         rcelly = start_rcelly + kmin * direction(2,i)
-         rcellz = start_rcellz + kmin * direction(3,i)
+       rcellx = start_rcellx + kmin * stressx
+       rcelly = start_rcelly + kmin * stressy
+       rcellz = start_rcellz + kmin * stressz
+
+       do j = 1, ni_in_cell
+         x_atom_cell(j) = (rcellx/start_rcellx)*x_atom_cell(j)
+         y_atom_cell(j) = (rcelly/start_rcelly)*y_atom_cell(j)
+         z_atom_cell(j) = (rcellz/start_rcellz)*z_atom_cell(j)
+         if (inode == ionode .and. iprint_MD > 2) &
+              write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
+                               y_atom_cell(j), z_atom_cell(j)
        end do
   !Update atom_coord : TM 27Aug2003
        call update_atom_coord
