@@ -1211,6 +1211,7 @@ contains
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use io_module2,    ONLY: dump_InfoGlobal
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z
 
     implicit none
 
@@ -1251,9 +1252,9 @@ contains
     energy1 = energy0
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
-       old_stressx = stress(1)
-       old_stressy = stress(2)
-       old_stressz = stress(3)
+       old_stressx = -stress(1)
+       old_stressy = -stress(2)
+       old_stressz = -stress(3)
        ! Construct ratio for conjugacy
        if (abs(ggold) < 1.0e-6_double) then
           gamma = zero

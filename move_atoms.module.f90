@@ -1308,6 +1308,7 @@ contains
     use maxima_module,      only: maxngrid
     use multisiteSF_module, only: flag_LFD_minimise
     use timer_module
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z
 
     implicit none
 
@@ -1365,7 +1366,9 @@ contains
        rcellx = start_rcellx + k3 * stressx
        rcelly = start_rcelly + k3 * stressy
        rcellz = start_rcellz + k3 * stressz
-
+       r_super_x = rcellx
+       r_super_y = rcelly
+       r_super_z = rcellz
        do j = 1, ni_in_cell
          x_atom_cell(j) = (rcellx/start_rcellx)*x_atom_cell(j)
          y_atom_cell(j) = (rcelly/start_rcelly)*y_atom_cell(j)
@@ -1374,11 +1377,13 @@ contains
               write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
                                y_atom_cell(j), z_atom_cell(j)
        end do
-
-
-       write(io_lun,*) 'k3 value', k3
+       write(io_lun,*) "Iteration ", iter
+       write(io_lun,*) "rcellx/start_rcellx = ", rcellx/start_rcellx
+       write(io_lun,*) "rcelly/start_rcelly = ", rcelly/start_rcelly
+       write(io_lun,*) "rcellz/start_rcellz = ", rcellz/start_rcellz
        !write(io_lun,*) 'new sim cell dims', start_rcellx, start_rcellx, start_rcellx
-       write(*,*) 'New sim cell dims', rcellx, rcelly, rcellz
+       write(io_lun,*) 'current sim cell dims', rcellx, rcelly, rcellz
+
        !Update atom_coord : TM 27Aug2003
        call update_atom_coord
        !Update atom_coord : TM 27Aug2003
@@ -1410,7 +1415,10 @@ contains
                    fmt='(4x,"In safemin, iter ",i3," step and energy &
                          &are ",2f20.10" ",a2)') &
                   iter, k3, en_conv * e3, en_units(energy_units)
+        write(io_lun,*) "e3 is", e3, "e2 is", e2
+        write(io_lun,*) "k1 is", k1, "k2 is", k2, "k3 is", k3
        if (e3 < e2) then ! We're still going down hill
+         write(io_lun,*) "e3 larger than e2. Going downhill"
           k1 = k2
           e1 = e2
           k2 = k3
@@ -1420,6 +1428,7 @@ contains
           iter = iter + 1
        else if (k2 == zero) then ! We've gone too far
           k3 = k3/lambda
+          write(io_lun,*) "Gone too far"
        else
           done = .true.
        endif
@@ -1449,6 +1458,9 @@ contains
     rcellx = start_rcellx + kmin * stressx
     rcelly = start_rcelly + kmin * stressy
     rcellz = start_rcellz + kmin * stressz
+    r_super_x = rcellx
+    r_super_y = rcelly
+    r_super_z = rcellz
 
     do j = 1, ni_in_cell
       x_atom_cell(j) = (rcellx/start_rcellx)*x_atom_cell(j)
@@ -1506,6 +1518,9 @@ contains
        rcellx = start_rcellx + kmin * stressx
        rcelly = start_rcelly + kmin * stressy
        rcellz = start_rcellz + kmin * stressz
+       r_super_x = rcellx
+       r_super_y = rcelly
+       r_super_z = rcellz
 
        do j = 1, ni_in_cell
          x_atom_cell(j) = (rcellx/start_rcellx)*x_atom_cell(j)
