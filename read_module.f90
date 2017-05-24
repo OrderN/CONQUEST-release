@@ -483,7 +483,7 @@ contains
        !   functional_description = 'LSDA PW92'
        end select
        write(*,fmt='("Using XC functional: ",a12)') functional_description
-       write(*,fmt='("There are ",i2," core and ",i2," valence shells: ")') nc,nv
+       write(*,fmt='("There are ",i2," core and ",i2," valence shells")') nc,nv
        ! Comment line
        read(lun, '(a)') a
        ! Read n, l, filling for core

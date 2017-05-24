@@ -248,5 +248,23 @@ contains
     call io_close(lun)
     return
   end subroutine write_pao_plot
+
+  subroutine write_banner
+
+    use datestamp, ONLY: datestr, commentver
+
+    implicit none
+
+    character(len=10) :: today, the_time
+
+    write(*,fmt='(/"CONQUEST PAO generation and ion file creation"/)')
+    write(*,fmt='("D. R. Bowler (UCL) and T. Miyazaki (NIMS)")')
+    call date_and_time(today, the_time)
+    write(*,fmt='(/4x,"This job was run on ",a4,"/",a2,"/",a2," at ",a2,":",a2,/)') &
+         today(1:4), today(5:6), today(7:8), the_time(1:2), the_time(3:4)
+    write(*,&
+          '(/4x,"Code compiled on: ",a,/10x,"Version comment: ",/6x,a//)') &
+         datestr, commentver
+  end subroutine write_banner
   
 end module write

@@ -24,6 +24,7 @@ program MakeIonFiles
   call init_comms(myid,numprocs)
   call init_reg_mem
 
+  call write_banner
   ! Read input (from Conquest_input file)
   call read_input
   !! Read pseudopotential files

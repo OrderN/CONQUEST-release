@@ -94,7 +94,7 @@ contains
           val(i_species)%en_pao(i_shell) = large_energy
        end do
        if(iprint>0) then
-          write(*,fmt='(2x,"Unconfined valence state energies")')
+          write(*,fmt='(2x,"Unconfined valence state energies (Ha)")')
           write(*,fmt='(2x,"  n  l         AE energy        PAO energy")')
           do i_shell = 1, val(i_species)%n_occ
              ell = val(i_species)%l(i_shell)
@@ -136,7 +136,7 @@ contains
           end do
        end if
        write(*,fmt='(4x,"Cutoff radii for PAOs")')
-       write(*,fmt='(4x,"  n  l  z        R")')
+       write(*,fmt='(4x,"  n  l  z        R (bohr)")')
        do i_shell = 1,paos(i_species)%n_shells
           ell = paos(i_species)%l(i_shell)
           en = paos(i_species)%n(i_shell)
@@ -169,16 +169,16 @@ contains
                 ell = paos(i_species)%l(i_shell)!-1 !i_shell-1)
                 en = paos(i_species)%npao(i_shell)!i_shell-1)
                 if(iprint>2) write(*,fmt='(2x,"Perturbative polarisation")')
-                if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1)') &
+                if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr")') &
                      i_species, en, ell, zeta, paos(i_species)%cutoff(zeta,i_shell)
                 call find_polarisation(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell-1),&
                      paos(i_species)%psi(zeta,i_shell-1)%f,paos(i_species)%psi(zeta,i_shell)%f,&
                      paos(i_species)%energy(zeta,i_shell-1),vha,vxc)
              else if(i_shell>val(i_species)%n_occ) then  ! Polarisation shells
              !else if(i_shell==paos(i_species)%n_shells) then
-                if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, "Rc=",f4.1," pol ",f4.1)') &
-                     i_species, en, ell, zeta, paos(i_species)%cutoff(zeta,i_shell), &
-                     paos(i_species)%energy(1,val(i_species)%n_occ)
+                if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr pol")') &
+                     i_species, en, ell, zeta, paos(i_species)%cutoff(zeta,i_shell)!, &
+                !paos(i_species)%energy(1,val(i_species)%n_occ)
                 !if(iprint>2) write(*,*) '# Species, n, l, zeta, cutoff: ',i_species, en, ell, zeta, &
                 !     paos(i_species)%cutoff(zeta,i_shell)," pol ",paos(i_species)%energy(1,val(i_species)%n_occ)
                 paos(i_species)%energy(zeta,i_shell) = paos(i_species)%energy(1,val(i_species)%n_occ)
@@ -186,14 +186,14 @@ contains
                      paos(i_species)%psi(zeta,i_shell)%f,paos(i_species)%energy(zeta,i_shell), &
                      vha,vxc) 
              else
-                if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, "Rc=",f4.1)') &
+                if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr")') &
                      i_species, en, ell, zeta, paos(i_species)%cutoff(zeta,i_shell)
                 !if(iprint>2) write(*,*) '# Species, n, l, zeta, cutoff: ',i_species, en, ell, zeta, &
                 !     paos(i_species)%cutoff(zeta,i_shell)
                 large_energy = val(i_species)%en_ps(i_shell) + paos(i_species)%energy(zeta,i_shell)
                 call find_eigenstate_and_energy_vkb(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
                      paos(i_species)%psi(zeta,i_shell)%f,large_energy, vha,vxc)
-                if(iprint>2) write(*,fmt='(2x,"Final energy shift required: ",f9.4,"Ha")') &
+                if(iprint>2) write(*,fmt='(2x,"Final energy shift required: ",f10.5," Ha")') &
                      large_energy - val(i_species)%en_ps(i_shell)
                 paos(i_species)%energy(zeta,i_shell) = large_energy
              end if
@@ -809,7 +809,7 @@ contains
        if(abs(d_energy)<tol) exit
     end do
     if(loop>=100.AND.abs(d_energy)>tol) call cq_abort("Error: failed to find energy for n,l: ",en,ell)
-    if(iprint>2) write(*,fmt='(2x,"Final energy found: ",f11.6,"Ha")') energy
+    if(iprint>2) write(*,fmt='(2x,"Final energy found: ",f11.6," Ha")') energy
     ! Rescale - remove factor of sqrt r
     do i=1,nmax
        psi(i) = psi(i)*sqrt(drdi(i))/rr(i)
