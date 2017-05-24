@@ -358,7 +358,7 @@ contains
 
     use datatypes
     use numbers
-    use mesh, ONLY: nmesh, rr
+    use mesh, ONLY: nmesh, rr, delta_r_reg
     
     implicit none
 
@@ -367,9 +367,9 @@ contains
     real(double), dimension(nmesh) :: vha,vxc
 
     ! Local variables
-    integer :: i_shell
+    integer :: i_shell, grid_size
     real(double), dimension(:), allocatable :: large_cutoff, small_cutoff
-    real(double) :: energy, average_large, average_small
+    real(double) :: energy, average_large, average_small, average_mid
     real(double), dimension(:), allocatable :: psi
 
     ! Find the cutoffs for the valence shells first
@@ -383,10 +383,15 @@ contains
        if(iprint>3) write(*,*) '# Finding radius for ',paos(species)%npao(i_shell), paos(species)%l(i_shell)
        call find_radius_from_energy(species,paos(species)%npao(i_shell), paos(species)%l(i_shell), &
             large_cutoff(i_shell), val(species)%en_ps(i_shell)+deltaE_large_radius(species), vha, vxc, .false.)
+       ! Round to grid step
+       grid_size = 2+floor(large_cutoff(i_shell)/delta_r_reg)
+       large_cutoff(i_shell) = delta_r_reg*real(grid_size-1,double)
        if(val(species)%semicore(i_shell)==0) then
           call find_radius_from_energy(species,paos(species)%npao(i_shell), paos(species)%l(i_shell), &
                small_cutoff(i_shell), val(species)%en_ps(i_shell)+deltaE_small_radius(species), vha, vxc, .false.)
           !write(*,*) '# Cutoffs: ',large_cutoff, small_cutoff
+          grid_size = 2+floor(small_cutoff(i_shell)/delta_r_reg)
+          small_cutoff(i_shell) = delta_r_reg*real(grid_size-1,double)
        else
           !write(*,*) '# Cutoff: ',large_cutoff
           small_cutoff(i_shell) = large_cutoff(i_shell)
@@ -428,6 +433,13 @@ contains
        ! Find averages for large and small
        average_large = average_large/real(paos(species)%n_shells-1, double)
        average_small = average_small/real(paos(species)%n_shells-1, double)
+       ! Round to grid step
+       grid_size = 2+floor(average_large/delta_r_reg)
+       average_large = delta_r_reg*real(grid_size-1,double)
+       grid_size = 2+floor(average_small/delta_r_reg)
+       average_small = delta_r_reg*real(grid_size-1,double)
+       grid_size = 2+floor((average_large+average_small)/(two*delta_r_reg))
+       average_mid = delta_r_reg*real(grid_size-1,double)      
        ! Set radii for all shells
        paos(species)%cutoff(:,i_shell) = zero
        paos(species)%cutoff(1,:) = average_large
@@ -437,7 +449,7 @@ contains
           else if(paos(species)%nzeta(i_shell)==3) then
              paos(species)%cutoff(3,:) = average_small
              ! Now average large and small
-             paos(species)%cutoff(2,:) = half*(average_large + average_small)
+             paos(species)%cutoff(2,:) = average_mid !half*(average_large + average_small)
           end if
           !write(*,*) '# Cutoffs: ',paos(species)%cutoff(:,i_shell)
        end do

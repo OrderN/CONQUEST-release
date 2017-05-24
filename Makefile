@@ -12,7 +12,7 @@ DEP_OBJECTS = MakeIonFile.o read_module.o generic_comms.o input_module.o datatyp
 OBJECTS = $(DEP_OBJECTS) datestamp.o
 
 SRCS = $(DEP_OBJECTS:.o=.f90)
-deps.obj: $(SRCS) datestamp.f90 system.make
+deps.obj: $(SRCS) system.make
 	touch $(COMMENT)
 	$(ECHOSTR) "module datestamp" > datestamp.f90
 	$(ECHOSTR) "  implicit none" >> datestamp.f90
