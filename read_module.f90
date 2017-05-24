@@ -713,7 +713,7 @@ contains
                    paos(i_species)%polarised_n = paos(i_species)%n(paos(i_species)%polarised_shell)
                    paos(i_species)%n(i_shell) = paos(i_species)%n(paos(i_species)%polarised_shell)
                    paos(i_species)%l(i_shell) = paos(i_species)%l(paos(i_species)%polarised_shell)
-                   paos(i_species)%nzeta(i_shell) = paos(i_species)%nzeta(paos(i_species)%polarised_shell)
+                   !paos(i_species)%nzeta(i_shell) = paos(i_species)%nzeta(paos(i_species)%polarised_shell)
                    paos(i_species)%npao(i_shell) = paos(i_species)%npao(paos(i_species)%polarised_shell)
                 end if
              end if
