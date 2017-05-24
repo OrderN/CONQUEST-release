@@ -75,7 +75,7 @@ contains
              write(lun,fmt='("n =",i2,", l =",i2,",",i2," zetas, polarisation shell")') en, ell,paos(i_species)%nzeta(i_shell)
           end if
           ! Ugly hack: assume no more than five zetas to get formatting
-          write(lun,fmt='(3x,"Radii: ",5f5.2)') (paos(i_species)%cutoff(i,i_shell),i=1,paos(i_species)%nzeta(i_shell))
+          write(lun,fmt='(3x,"Radii: ",5f6.2)') (paos(i_species)%cutoff(i,i_shell),i=1,paos(i_species)%nzeta(i_shell))
        end do
        ! Give details of zetas, radii, semi-core, occupation
        write(lun,fmt='("</Conquest_basis_specs>")')

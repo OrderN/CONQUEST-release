@@ -143,11 +143,11 @@ contains
           if(paos(i_species)%flag_perturb_polarise.AND.i_shell==paos(i_species)%n_shells) then
              if(en<3) en = en+1
              do zeta = 1,paos(i_species)%nzeta(i_shell)
-                write(*,fmt='(4x,3i3,f18.10)') en,ell+1,zeta,paos(i_species)%cutoff(zeta,i_shell)
+                write(*,fmt='(4x,3i3,f12.4)') en,ell+1,zeta,paos(i_species)%cutoff(zeta,i_shell)
              end do
           else
              do zeta = 1,paos(i_species)%nzeta(i_shell)
-                write(*,fmt='(4x,3i3,f18.10)') en,ell,zeta,paos(i_species)%cutoff(zeta,i_shell)
+                write(*,fmt='(4x,3i3,f12.4)') en,ell,zeta,paos(i_species)%cutoff(zeta,i_shell)
              end do
           end if
        end do

@@ -37,7 +37,8 @@ contains
     character(len=4) :: ps_format
     integer :: i, j, k, maxl, n_paos
     character(len=30), dimension(:), allocatable :: species_label
-
+    real(double) :: temp
+    
     ! Load the Conquest_input files
     call load_input
     ! Now scan for parameters
@@ -241,6 +242,60 @@ contains
                         write(*,fmt='("Warning: radius of ",f6.3,"a0 is rather small.  Are these energies ?")') paos(i)%cutoff(1,j)
                 end do
              end if
+             ! Sort the energies/cutoffs so that largest is first
+             do j=1,paos(i)%n_shells
+                if(paos(i)%flag_cutoff==pao_cutoff_radii) then
+                   if(paos(i)%nzeta(j)==2) then
+                      if(paos(i)%cutoff(1,j)<paos(i)%cutoff(2,j)) then
+                         temp = paos(i)%cutoff(2,j)
+                         paos(i)%cutoff(2,j) = paos(i)%cutoff(1,j)
+                         paos(i)%cutoff(1,j) = temp
+                      end if
+                   else if(paos(i)%nzeta(j)==3) then
+                      ! Not the most elegant, but simple; 1&2; 2&3; 1&2 again
+                      if(paos(i)%cutoff(1,j)<paos(i)%cutoff(2,j)) then
+                         temp = paos(i)%cutoff(2,j)
+                         paos(i)%cutoff(2,j) = paos(i)%cutoff(1,j)
+                         paos(i)%cutoff(1,j) = temp
+                      end if
+                      if(paos(i)%cutoff(2,j)<paos(i)%cutoff(3,j)) then
+                         temp = paos(i)%cutoff(3,j)
+                         paos(i)%cutoff(3,j) = paos(i)%cutoff(2,j)
+                         paos(i)%cutoff(2,j) = temp
+                      end if
+                      if(paos(i)%cutoff(1,j)<paos(i)%cutoff(2,j)) then
+                         temp = paos(i)%cutoff(2,j)
+                         paos(i)%cutoff(2,j) = paos(i)%cutoff(1,j)
+                         paos(i)%cutoff(1,j) = temp
+                      end if
+                   end if
+                else ! Energies
+                   if(paos(i)%nzeta(j)==2) then
+                      if(paos(i)%energy(1,j)>paos(i)%energy(2,j)) then
+                         temp = paos(i)%energy(2,j)
+                         paos(i)%energy(2,j) = paos(i)%energy(1,j)
+                         paos(i)%energy(1,j) = temp
+                      end if
+                   else if(paos(i)%nzeta(j)==3) then
+                      ! Not the most elegant, but simple; 1&2; 2&3; 1&2 again
+                      if(paos(i)%energy(1,j)>paos(i)%energy(2,j)) then
+                         temp = paos(i)%energy(2,j)
+                         paos(i)%energy(2,j) = paos(i)%energy(1,j)
+                         paos(i)%energy(1,j) = temp
+                      end if
+                      if(paos(i)%energy(2,j)>paos(i)%energy(3,j)) then
+                         temp = paos(i)%energy(3,j)
+                         paos(i)%energy(3,j) = paos(i)%energy(2,j)
+                         paos(i)%energy(2,j) = temp
+                      end if
+                      if(paos(i)%energy(1,j)>paos(i)%energy(2,j)) then
+                         temp = paos(i)%energy(2,j)
+                         paos(i)%energy(2,j) = paos(i)%energy(1,j)
+                         paos(i)%energy(1,j) = temp
+                      end if
+                   end if
+                end if
+             end do
              call fdf_endblock
           else
              call cq_abort("Can't find species basis block "//input_string)
