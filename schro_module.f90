@@ -169,7 +169,7 @@ contains
                 ell = paos(i_species)%l(i_shell)!-1 !i_shell-1)
                 en = paos(i_species)%npao(i_shell)!i_shell-1)
                 if(iprint>2) write(*,fmt='(2x,"Perturbative polarisation")')
-                if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, "Rc=",f4.1)') &
+                if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1)') &
                      i_species, en, ell, zeta, paos(i_species)%cutoff(zeta,i_shell)
                 call find_polarisation(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell-1),&
                      paos(i_species)%psi(zeta,i_shell-1)%f,paos(i_species)%psi(zeta,i_shell)%f,&
@@ -193,7 +193,8 @@ contains
                 large_energy = val(i_species)%en_ps(i_shell) + paos(i_species)%energy(zeta,i_shell)
                 call find_eigenstate_and_energy_vkb(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
                      paos(i_species)%psi(zeta,i_shell)%f,large_energy, vha,vxc)
-                if(iprint>2) write(*,*) '# Energy shift required: ',large_energy - val(i_species)%en_ps(i_shell)
+                if(iprint>2) write(*,fmt='(2x,"Final energy shift required: ",f9.4,"Ha")') &
+                     large_energy - val(i_species)%en_ps(i_shell)
                 paos(i_species)%energy(zeta,i_shell) = large_energy
              end if
              if(paos(i_species)%cutoff(zeta,i_shell)>max_cutoff) max_cutoff = paos(i_species)%cutoff(zeta,i_shell)
@@ -319,7 +320,7 @@ contains
        vxc = zero
        energy = zero
        call get_vxc(nmesh,rr,atomic_rho,val(i_species)%functional,vxc,energy)
-       if(iprint>2) write(*,*) '# XC energy w/o core: ',energy
+       if(iprint>5) write(*,*) '# XC energy w/o core: ',energy
        !do i=1,nmesh
        !   write(70,*) rr(i),vxc(i),atomic_rho(i)
        !end do
@@ -328,7 +329,7 @@ contains
        if(flag_pcc_global) & 
             atomic_rho = atomic_rho + local_and_vkb(i_species)%pcc
        call get_vxc(nmesh,rr,atomic_rho,val(i_species)%functional,vxc,energy)
-       if(iprint>2) write(*,*) '# XC energy with core: ',energy
+       if(iprint>5) write(*,*) '# XC energy with core: ',energy
        !do i=1,nmesh
        !   write(71,*) rr(i),vxc(i),atomic_rho(i)
        !end do
@@ -808,7 +809,7 @@ contains
        if(abs(d_energy)<tol) exit
     end do
     if(loop>=100.AND.abs(d_energy)>tol) call cq_abort("Error: failed to find energy for n,l: ",en,ell)
-    if(iprint>2) write(*,fmt='(2x,"Final energy found: ",f18.10)') energy
+    if(iprint>2) write(*,fmt='(2x,"Final energy found: ",f11.6,"Ha")') energy
     ! Rescale - remove factor of sqrt r
     do i=1,nmax
        psi(i) = psi(i)*sqrt(drdi(i))/rr(i)
