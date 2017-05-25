@@ -700,7 +700,7 @@ second:   do
                                 species_glob, runtype, id_glob_old, id_glob_inv_old
     use group_module,     only: make_cc2, part_method, PYTHON, HILBERT
     use basic_types
-    use dimens,           only: r_super_x, r_super_y, r_super_z
+    !use dimens,           only: r_super_x, r_super_y, r_super_z
     use species_module,   only: species
     use maxima_module,    only: maxpartsproc, maxatomspart,           &
                                 maxatomsproc, maxpartscell

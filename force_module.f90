@@ -1322,7 +1322,7 @@ contains
     use datatypes
     use numbers
     use dimens, only: n_my_grid_points, x_grid, y_grid, z_grid, &
-         grid_point_volume, r_super_x, r_super_y, r_super_z
+         grid_point_volume!, r_super_x, r_super_y, r_super_z
     use grid_index, only: grid_point_block, grid_point_x, &
          grid_point_y, grid_point_z
     use species_module, only: species, charge

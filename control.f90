@@ -215,7 +215,7 @@ contains
     use units
     use global_module, only: iprint_gen, ni_in_cell, x_atom_cell,  &
                              y_atom_cell, z_atom_cell, id_glob,    &
-                             atom_coord, rcellx, rcelly, rcellz,   &
+                             atom_coord, & !rcellx, rcelly, rcellz,   &
                              area_general, iprint_MD,              &
                              IPRINT_TIME_THRES1, flag_MDold
     use group_module,  only: parts
@@ -919,7 +919,7 @@ contains
     use units
     use global_module,  only: iprint_MD, ni_in_cell, x_atom_cell,   &
                               y_atom_cell, z_atom_cell, id_glob,    &
-                              atom_coord, rcellx, rcelly, rcellz,   &
+                              atom_coord, & !rcellx, rcelly, rcellz,   &
                               area_general, flag_pulay_simpleStep
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
@@ -1263,6 +1263,7 @@ contains
               old_stressz*old_stressz
           gamma = gg/ggold
        end if
+       write(io_lun,*) 'gg is ',gg
        if (inode == ionode .and. iprint_MD > 2) &
             write (io_lun,*) ' CHECK :: energy residual = ', &
                                energy_resid
@@ -1282,7 +1283,7 @@ contains
        stressx = gamma*stressx + old_stressx
        stressy = gamma*stressy + old_stressy
        stressz = gamma*stressz + old_stressz
-       write(*,*)  "Initial cell dims", rcellx, rcelly, rcellx
+       write(io_lun,*)  "Initial cell dims", rcellx, rcelly, rcellz
        new_rcellx = rcellx
        new_rcelly = rcelly
        new_rcellz = rcellz
@@ -1321,10 +1322,10 @@ contains
                write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') &
                      iter
        end if
-       if (abs(max) < MDcgtol) then
+       if (abs(dE)<MDcgtol) then  ! Use force tol as energy diff for now !abs(max) < MDcgtol) then
           done = .true.
           if (myid == 0) &
-               write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') &
+               write (io_lun, fmt='(4x,"Energy change below threshold: ",f12.5)') &
                      max
        end if
        call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)

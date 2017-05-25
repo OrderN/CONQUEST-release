@@ -158,8 +158,8 @@ contains
     use maxima_module,          only: maxpartsproc, maxatomsproc
     use global_module,          only: id_glob,x_atom_cell,y_atom_cell, &
                                       z_atom_cell, numprocs,           &
-                                      iprint_init, rcellx, rcelly,     &
-                                      rcellz, flag_old_partitions,     &
+                                      iprint_init, &!rcellx, rcelly, rcellz,    &
+                                      flag_old_partitions,     &
                                       nspin, spin_factor,              &
                                       flag_fix_spin_population,        &
                                       ne_in_cell, ne_spin_in_cell,     &
@@ -175,7 +175,7 @@ contains
                          cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
     use primary_module,         only: bundle, make_prim
-    use dimens,                 only: r_super_x, r_super_y, r_super_z, &
+    use dimens,                 only: &!r_super_x, r_super_y, r_super_z, &
                                       x_grid, y_grid, z_grid, r_h,     &
                                       set_dimensions, find_grid
     use block_module,           only: in_block_x, in_block_y,          &
@@ -654,7 +654,8 @@ contains
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse
-    use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
+    !use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
+    use dimens, only: GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
                       NonLocalFactor, InvSRange,                      &

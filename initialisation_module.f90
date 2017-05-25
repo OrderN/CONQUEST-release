@@ -296,8 +296,8 @@ contains
     use ion_electrostatic,      only: set_ewald, setup_screened_ion_interaction
     use atoms,                  only: distribute_atoms
     use dimens,                 only: n_grid_x, n_grid_y, n_grid_z,    &
-                                      r_core_squared, r_h, r_super_x,  &
-                                      r_super_y, r_super_z,            &
+                                      r_core_squared, r_h, &!r_super_x,  &
+                                      !r_super_y, r_super_z,            &
                                       n_my_grid_points,                &
                                       r_dft_d2
     use fft_module,             only: set_fft_map, fft3

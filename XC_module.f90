@@ -1284,7 +1284,7 @@ contains
                                       flavour, x_energy )
     use datatypes
     use numbers
-    use global_module, only: rcellx, rcelly, rcellz,          &
+    use global_module, only: & !rcellx, rcelly, rcellz,          &
                              functional_gga_pbe96,            &
                              functional_gga_pbe96_rev98,      &
                              functional_gga_pbe96_r99, nspin, &
@@ -1441,7 +1441,8 @@ contains
                                        flavour, x_energy )
     use datatypes
     use numbers
-    use global_module, only: rcellx, rcelly, rcellz, spin_factor, nspin, &
+    !use global_module, only: rcellx, rcelly, rcellz, spin_factor, nspin, &
+    use global_module, only: spin_factor, nspin, &
                              functional_gga_pbe96
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum, cq_abort
@@ -1614,7 +1615,7 @@ contains
 
     use datatypes
     use numbers
-    use global_module, only: rcellx, rcelly, rcellz,               &
+    use global_module, only: &!rcellx, rcelly, rcellz,               &
                              functional_gga_pbe96_rev98,           &
                              functional_gga_pbe96_r99
     use dimens,        only: grid_point_volume, n_my_grid_points
@@ -2072,7 +2073,7 @@ contains
 
     use datatypes
     use numbers
-    use global_module, only: rcellx, rcelly, rcellz
+!    use global_module, only: rcellx, rcelly, rcellz
     use dimens,        only: n_grid_x, n_grid_y, n_grid_z
     use fft_module,    only: fft3, recip_vector
     use GenComms,      only: cq_abort
@@ -2631,7 +2632,7 @@ contains
 
     use datatypes
     use numbers
-    use global_module, only: rcellx, rcelly, rcellz, &
+    use global_module, only: & !rcellx, rcelly, rcellz, &
                              functional_gga_pbe96_rev98, functional_gga_pbe96_r99
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum

@@ -113,7 +113,7 @@ contains
 
     ! Module usage
     use datatypes
-    use global_module,ONLY: rcellx,rcelly,rcellz
+    !use global_module,ONLY: rcellx,rcelly,rcellz
     use group_module, ONLY: blocks
     use GenComms, ONLY: inode, ionode
 

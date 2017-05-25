@@ -1295,7 +1295,8 @@ contains
                                   atom_coord, ni_in_cell, rcellx, rcelly, &
                                   rcellz, flag_self_consistent,           &
                                   flag_reset_dens_on_atom_move,           &
-                                  IPRINT_TIME_THRES1, flag_pcc_global
+                                  IPRINT_TIME_THRES1, flag_pcc_global, &
+                                  flag_diagonalisation
     use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
                                   n_L_iterations
     use GenComms,           only: my_barrier, myid, inode, ionode,        &
@@ -1308,7 +1309,11 @@ contains
     use maxima_module,      only: maxngrid
     use multisiteSF_module, only: flag_LFD_minimise
     use timer_module
-    use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z, &
+         r_super_x_squared, r_super_y_squared, r_super_z_squared, volume, &
+         grid_point_volume, one_over_grid_point_volume, n_grid_x, n_grid_y, n_grid_z
+    use fft_module, ONLY: recip_vector, hartree_factor
+    use DiagModule, ONLY: kk, nkp
 
     implicit none
 
@@ -1326,7 +1331,7 @@ contains
     logical        :: reset_L = .false.
     logical        :: done
     type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
-    real(double)   :: k0, k1, k2, k3, lambda, k3old
+    real(double)   :: k0, k1, k2, k3, lambda, k3old, orcellx, orcelly, orcellz, scale
     real(double)   :: e0, e1, e2, e3, tmp, bottom
     real(double), save :: kmin = zero, dE = zero
     real(double), dimension(:), allocatable :: store_density
@@ -1363,16 +1368,44 @@ contains
        call start_timer(tmr_l_iter, WITH_LEVEL)
        ! get new lattice vectors
        call start_timer(tmr_l_tmp1, WITH_LEVEL)
+       ! DRB added 2017/05/24 17:13
+       ! Keep previous cell to allow scaling
+       orcellx = rcellx
+       orcelly = rcelly
+       orcellz = rcellz
        rcellx = start_rcellx + k3 * stressx
        rcelly = start_rcelly + k3 * stressy
        rcellz = start_rcellz + k3 * stressz
        r_super_x = rcellx
        r_super_y = rcelly
        r_super_z = rcellz
+       ! DRB added 2017/05/24 17:05
+       r_super_x_squared = r_super_x * r_super_x
+       r_super_y_squared = r_super_y * r_super_y
+       r_super_z_squared = r_super_z * r_super_z
+       volume = r_super_x * r_super_y * r_super_z
+       grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
+       one_over_grid_point_volume = one / grid_point_volume
+       scale = (orcellx*orcelly*orcellz)/volume  
+       density = density * scale
+       if(flag_diagonalisation) then
+          do i = 1, nkp
+             kk(1,i) = kk(1,i) * orcellx / rcellx
+             kk(2,i) = kk(2,i) * orcelly / rcelly
+             kk(3,i) = kk(3,i) * orcellz / rcellz
+          end do
+       end if
+       do j = 1, maxngrid
+          recip_vector(j,1) = recip_vector(j,1) * orcellx / rcellx
+          recip_vector(j,2) = recip_vector(j,2) * orcelly / rcelly
+          recip_vector(j,3) = recip_vector(j,3) * orcellz / rcellz
+          ! We will have to recalculate this properly - the code below works for cubic only
+          hartree_factor(j) = hartree_factor(j) * (rcellx*rcellx)/(orcellx*orcellx)
+       end do
        do j = 1, ni_in_cell
-         x_atom_cell(j) = (rcellx/start_rcellx)*x_atom_cell(j)
-         y_atom_cell(j) = (rcelly/start_rcelly)*y_atom_cell(j)
-         z_atom_cell(j) = (rcellz/start_rcellz)*z_atom_cell(j)
+         x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
+         y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
+         z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
          if (inode == ionode .and. iprint_MD > 2) &
               write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
                                y_atom_cell(j), z_atom_cell(j)
@@ -1455,17 +1488,52 @@ contains
        end if
        kmin = k2
     end if
+    write(io_lun,*) 'kmin is ',kmin
+    ! DRB added 2017/05/24 17:13
+    ! Keep previous cell to allow scaling
+    orcellx = rcellx
+    orcelly = rcelly
+    orcellz = rcellz
+    ! End DRB added
     rcellx = start_rcellx + kmin * stressx
     rcelly = start_rcelly + kmin * stressy
     rcellz = start_rcellz + kmin * stressz
     r_super_x = rcellx
     r_super_y = rcelly
     r_super_z = rcellz
+    write(io_lun,*) "rcellx/start_rcellx = ", rcellx/start_rcellx
+    write(io_lun,*) "rcelly/start_rcelly = ", rcelly/start_rcelly
+    write(io_lun,*) "rcellz/start_rcellz = ", rcellz/start_rcellz
+    write(io_lun,*) 'current sim cell dims', rcellx, rcelly, rcellz
 
+    ! DRB added 2017/05/24 17:05
+    r_super_x_squared = r_super_x * r_super_x
+    r_super_y_squared = r_super_y * r_super_y
+    r_super_z_squared = r_super_z * r_super_z
+    volume = r_super_x * r_super_y * r_super_z
+    grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
+    one_over_grid_point_volume = one / grid_point_volume
+    scale = (orcellx*orcelly*orcellz)/volume  
+    density = density * scale
+    if(flag_diagonalisation) then
+       do i = 1, nkp
+          kk(1,i) = kk(1,i) * orcellx / rcellx
+          kk(2,i) = kk(2,i) * orcelly / rcelly
+          kk(3,i) = kk(3,i) * orcellz / rcellz
+       end do
+    end if
+    do j = 1, maxngrid
+       recip_vector(i,1) = recip_vector(i,1) * orcellx / rcellx
+       recip_vector(i,2) = recip_vector(i,2) * orcelly / rcelly
+       recip_vector(i,3) = recip_vector(i,3) * orcellz / rcellz
+       ! We will have to recalculate this properly - the code below works for cubic only
+       hartree_factor(j) = hartree_factor(j) * (rcellx*rcellx)/(orcellx*orcellx)
+    end do
+    ! End DRB added    
     do j = 1, ni_in_cell
-      x_atom_cell(j) = (rcellx/start_rcellx)*x_atom_cell(j)
-      y_atom_cell(j) = (rcelly/start_rcelly)*y_atom_cell(j)
-      z_atom_cell(j) = (rcellz/start_rcellz)*z_atom_cell(j)
+      x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
+      y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
+      z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
       if (inode == ionode .and. iprint_MD > 2) &
            write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
                             y_atom_cell(j), z_atom_cell(j)
@@ -1515,6 +1583,12 @@ contains
        if (inode == ionode) &
             write (io_lun,fmt='(/4x,"Interpolation failed; reverting"/)')
        kmin = k2
+       ! DRB added 2017/05/24 17:13
+       ! Keep previous cell to allow scaling
+       orcellx = rcellx
+       orcelly = rcelly
+       orcellz = rcellz
+       ! End DRB added
        rcellx = start_rcellx + kmin * stressx
        rcelly = start_rcelly + kmin * stressy
        rcellz = start_rcellz + kmin * stressz
@@ -1522,6 +1596,30 @@ contains
        r_super_y = rcelly
        r_super_z = rcellz
 
+       ! DRB added 2017/05/24 17:05
+       r_super_x_squared = r_super_x * r_super_x
+       r_super_y_squared = r_super_y * r_super_y
+       r_super_z_squared = r_super_z * r_super_z
+       volume = r_super_x * r_super_y * r_super_z
+       grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
+       one_over_grid_point_volume = one / grid_point_volume
+       scale = (orcellx*orcelly*orcellz)/volume  
+       density = density * scale
+       if(flag_diagonalisation) then
+          do i = 1, nkp
+             kk(1,i) = kk(1,i) * orcellx / rcellx
+             kk(2,i) = kk(2,i) * orcelly / rcelly
+             kk(3,i) = kk(3,i) * orcellz / rcellz
+          end do
+       end if
+       do j = 1, maxngrid
+          recip_vector(i,1) = recip_vector(i,1) * orcellx / rcellx
+          recip_vector(i,2) = recip_vector(i,2) * orcelly / rcelly
+          recip_vector(i,3) = recip_vector(i,3) * orcellz / rcellz
+          ! We will have to recalculate this properly - the code below works for cubic only
+          hartree_factor(j) = hartree_factor(j) * (rcellx*rcellx)/(orcellx*orcellx)
+       end do
+       ! End DRB added    
        do j = 1, ni_in_cell
          x_atom_cell(j) = (rcellx/start_rcellx)*x_atom_cell(j)
          y_atom_cell(j) = (rcelly/start_rcelly)*y_atom_cell(j)

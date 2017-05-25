@@ -982,7 +982,8 @@ contains
 
     ! Module usage
     use basic_types
-    use global_module, ONLY: rcellx,rcelly,rcellz,ni_in_cell, &
+    !use global_module, ONLY: rcellx,rcelly,rcellz,ni_in_cell, &
+    use global_module, ONLY: ni_in_cell, &
                              x_atom_cell,y_atom_cell,z_atom_cell, &
                              id_glob
     use GenComms, ONLY: cq_abort
