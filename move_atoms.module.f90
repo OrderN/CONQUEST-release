@@ -1265,24 +1265,24 @@ contains
   end subroutine safemin2
 
 
-    !!****f* move_atoms/safemin3 *
-    !! PURPOSE
-    !! Optimize the simulation cell dimensions a b and c
-    !! INPUTS
-    !!
-    !! AUTHOR
-    !!   Jack Baker
-    !!   Shereif Mujahed
-    !! CREATION DATE
-    !!   2017/05/12
-    !! MODIFICATION HISTORY
-    !!
-    !! SOURCE
-    !! Heavily borrowed from previous safemin subroutines
-
-
+  !!****f* move_atoms/safemin3 *
+  !! PURPOSE
+  !! Optimize the simulation cell dimensions a b and c
+  !! Heavily borrowed from previous safemin subroutines
+  !! INPUTS
+  !!
+  !! AUTHOR
+  !!   Jack Baker
+  !!   Shereif Mujahed
+  !! CREATION DATE
+  !!   2017/05/12
+  !! MODIFICATION HISTORY
+  !!   2017/05/25 dave
+  !!    Added more variables that need updating following cell vector changes,
+  !!    notably k point locations and reciprocal lattice vectors for FFTs
+  !! SOURCE
   subroutine safemin3(start_rcellx, start_rcelly, start_rcellz, stressx, stressy, stressz,&
-                      energy_in, energy_out, fixed_potential, vary_mu, total_energy)
+       energy_in, energy_out, fixed_potential, vary_mu, total_energy)
 
     ! Module usage
 
@@ -1291,16 +1291,16 @@ contains
     use numbers
     use units
     use global_module,      only: iprint_MD, x_atom_cell, y_atom_cell,    &
-                                  z_atom_cell, flag_vary_basis,           &
-                                  atom_coord, ni_in_cell, rcellx, rcelly, &
-                                  rcellz, flag_self_consistent,           &
-                                  flag_reset_dens_on_atom_move,           &
-                                  IPRINT_TIME_THRES1, flag_pcc_global, &
-                                  flag_diagonalisation
+         z_atom_cell, flag_vary_basis,           &
+         atom_coord, ni_in_cell, rcellx, rcelly, &
+         rcellz, flag_self_consistent,           &
+         flag_reset_dens_on_atom_move,           &
+         IPRINT_TIME_THRES1, flag_pcc_global, &
+         flag_diagonalisation
     use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
-                                  n_L_iterations
+         n_L_iterations
     use GenComms,           only: my_barrier, myid, inode, ionode,        &
-                                  cq_abort
+         cq_abort
     use SelfCon,            only: new_SC_potl
     use GenBlas,            only: dot
     use force_module,       only: tot_force
@@ -1312,14 +1312,14 @@ contains
     use dimens, ONLY: r_super_x, r_super_y, r_super_z, &
          r_super_x_squared, r_super_y_squared, r_super_z_squared, volume, &
          grid_point_volume, one_over_grid_point_volume, n_grid_x, n_grid_y, n_grid_z
-    use fft_module, ONLY: recip_vector, hartree_factor
+    use fft_module, ONLY: recip_vector, hartree_factor, i0
     use DiagModule, ONLY: kk, nkp
 
     implicit none
 
     ! Passed variables
     real(double) :: energy_in, energy_out, start_rcellx, start_rcelly, start_rcellz,&
-                    stressx, stressy, stressz
+         stressx, stressy, stressz
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
     real(double)      :: total_energy
@@ -1332,7 +1332,7 @@ contains
     logical        :: done
     type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
     real(double)   :: k0, k1, k2, k3, lambda, k3old, orcellx, orcelly, orcellz, scale
-    real(double)   :: e0, e1, e2, e3, tmp, bottom
+    real(double)   :: e0, e1, e2, e3, tmp, bottom, xvec, yvec, zvec, r2
     real(double), save :: kmin = zero, dE = zero
     real(double), dimension(:), allocatable :: store_density
 
@@ -1341,8 +1341,8 @@ contains
     e0 = total_energy
     if (inode == ionode .and. iprint_MD > 0) &
          write (io_lun, &
-                fmt='(4x,"In safemin, initial energy is ",f20.10," ",a2)') &
-               en_conv * energy_in, en_units(energy_units)
+         fmt='(4x,"In safemin, initial energy is ",f20.10," ",a2)') &
+         en_conv * energy_in, en_units(energy_units)
     if (inode == ionode) &
          write (io_lun, fmt='(/4x,"Seeking bracketing triplet of points"/)')
     ! Unnecessary and over cautious !
@@ -1399,16 +1399,19 @@ contains
           recip_vector(j,1) = recip_vector(j,1) * orcellx / rcellx
           recip_vector(j,2) = recip_vector(j,2) * orcelly / rcelly
           recip_vector(j,3) = recip_vector(j,3) * orcellz / rcellz
-          ! We will have to recalculate this properly - the code below works for cubic only
-          hartree_factor(j) = hartree_factor(j) * (rcellx*rcellx)/(orcellx*orcellx)
+          xvec = recip_vector(j,1)/(two*pi)
+          yvec = recip_vector(j,2)/(two*pi)
+          zvec = recip_vector(j,3)/(two*pi)
+          r2 = xvec*xvec + yvec*yvec + zvec*zvec
+          if(j/=i0) hartree_factor(j) = one/r2 ! i0 notates gamma point
        end do
        do j = 1, ni_in_cell
-         x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
-         y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
-         z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
-         if (inode == ionode .and. iprint_MD > 2) &
-              write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
-                               y_atom_cell(j), z_atom_cell(j)
+          x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
+          y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
+          z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
+          if (inode == ionode .and. iprint_MD > 2) &
+               write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
+               y_atom_cell(j), z_atom_cell(j)
        end do
        write(io_lun,*) "Iteration ", iter
        write(io_lun,*) "rcellx/start_rcellx = ", rcellx/start_rcellx
@@ -1428,7 +1431,7 @@ contains
        ! Write out atomic positions
        if (iprint_MD > 2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
-                                      trim(pdb_template))
+               trim(pdb_template))
        end if
        ! Now in update_H DRB 2016/01/13
        !if (flag_reset_dens_on_atom_move) call set_density()
@@ -1438,20 +1441,20 @@ contains
        ! state before we can minimise blips !
        if (flag_vary_basis .or. flag_LFD_minimise) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
-                           fixed_potential, vary_mu, n_L_iterations, &
-                           L_tolerance, e3)
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, e3)
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
-                        .false.)
+            .false.)
        if (inode == ionode .and. iprint_MD > 1) &
             write (io_lun, &
-                   fmt='(4x,"In safemin, iter ",i3," step and energy &
-                         &are ",2f20.10" ",a2)') &
-                  iter, k3, en_conv * e3, en_units(energy_units)
-        write(io_lun,*) "e3 is", e3, "e2 is", e2
-        write(io_lun,*) "k1 is", k1, "k2 is", k2, "k3 is", k3
+            fmt='(4x,"In safemin, iter ",i3," step and energy &
+            &are ",2f20.10" ",a2)') &
+            iter, k3, en_conv * e3, en_units(energy_units)
+       write(io_lun,*) "e3 is", e3, "e2 is", e2
+       write(io_lun,*) "k1 is", k1, "k2 is", k2, "k3 is", k3
        if (e3 < e2) then ! We're still going down hill
-         write(io_lun,*) "e3 larger than e2. Going downhill"
+          write(io_lun,*) "e3 larger than e2. Going downhill"
           k1 = k2
           e1 = e2
           k2 = k3
@@ -1467,24 +1470,24 @@ contains
        endif
        if (k3 <= very_small) call cq_abort("Step too small: safemin failed!")
        call stop_print_timer(tmr_l_iter, "a safemin iteration", &
-                             IPRINT_TIME_THRES1)
+            IPRINT_TIME_THRES1)
     end do !while (.not. done)
     call start_timer(tmr_l_tmp1,WITH_LEVEL)  ! Final interpolation and updates
     if (inode == ionode) write(io_lun, fmt='(/4x,"Interpolating minimum"/)')
     ! Interpolate to find minimum.
     if (inode == ionode .and. iprint_MD > 1) &
-            write (io_lun, fmt='(4x,"In safemin, brackets are: ",6f18.10)') &
-                  k1, e1, k2, e2, k3, e3
+         write (io_lun, fmt='(4x,"In safemin, brackets are: ",6f18.10)') &
+         k1, e1, k2, e2, k3, e3
     bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
     if (abs(bottom) > RD_ERR) then
        kmin = 0.5_double * (((k1*k1 - k3*k3)*(e1 - e2) -    &
-                             (k1*k1 - k2*k2) * (e1 - e3)) / &
-                            ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
+            (k1*k1 - k2*k2) * (e1 - e3)) / &
+            ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
     else
        if (inode == ionode) then
           write (io_lun, fmt='(4x,"Error in safemin !")')
           write (io_lun, fmt='(4x,"Interpolation failed: ",6f15.10)') &
-                k1, e1, k2, e2, k3, e3
+               k1, e1, k2, e2, k3, e3
        end if
        kmin = k2
     end if
@@ -1526,17 +1529,20 @@ contains
        recip_vector(j,1) = recip_vector(j,1) * orcellx / rcellx
        recip_vector(j,2) = recip_vector(j,2) * orcelly / rcelly
        recip_vector(j,3) = recip_vector(j,3) * orcellz / rcellz
-       ! We will have to recalculate this properly - the code below works for cubic only
-       hartree_factor(j) = hartree_factor(j) * (rcellx*rcellx)/(orcellx*orcellx)
+       xvec = recip_vector(j,1)/(two*pi)
+       yvec = recip_vector(j,2)/(two*pi)
+       zvec = recip_vector(j,3)/(two*pi)
+       r2 = xvec*xvec + yvec*yvec + zvec*zvec
+       if(j/=i0) hartree_factor(j) = one/r2 ! i0 notates gamma point
     end do
     ! End DRB added    
     do j = 1, ni_in_cell
-      x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
-      y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
-      z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
-      if (inode == ionode .and. iprint_MD > 2) &
-           write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
-                            y_atom_cell(j), z_atom_cell(j)
+       x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
+       y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
+       z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
+       if (inode == ionode .and. iprint_MD > 2) &
+            write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
+            y_atom_cell(j), z_atom_cell(j)
     end do
     !Update atom_coord : TM 27Aug2003
     call update_atom_coord
@@ -1546,10 +1552,10 @@ contains
     call updateIndices(.true., fixed_potential)
     call update_H(fixed_potential)
     !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-       ! Add on atomic densities
-       !store_density = density
-       !call set_density()
-       !density = store_density + density
+    ! Add on atomic densities
+    !store_density = density
+    !call set_density()
+    !density = store_density + density
     !end if
     if (iprint_MD > 2) then
        call write_atomic_positions("UpdatedAtoms_tmp.dat", trim(pdb_template))
@@ -1558,13 +1564,13 @@ contains
     ! if(flag_reset_dens_on_atom_move) call set_density()
     if (flag_pcc_global) call set_density_pcc()
     call stop_print_timer(tmr_l_tmp1, &
-                          "safemin - Final interpolation and updates", &
-                          IPRINT_TIME_THRES1)
+         "safemin - Final interpolation and updates", &
+         IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
     if (flag_vary_basis .or. flag_LFD_minimise) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
-                        fixed_potential, vary_mu, n_L_iterations, &
-                        L_tolerance, e3)
+            fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, e3)
     end if
     energy_out = e3
     if (iprint_MD > 0) then
@@ -1574,9 +1580,9 @@ contains
     end if
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
-                fmt='(4x,"In safemin, Interpolation step and energy &
-                      &are ",f15.10,f20.10" ",a2)') &
-               kmin, en_conv*energy_out, en_units(energy_units)
+         fmt='(4x,"In safemin, Interpolation step and energy &
+         &are ",f15.10,f20.10" ",a2)') &
+         kmin, en_conv*energy_out, en_units(energy_units)
     if (energy_out > e2 .and. abs(bottom) > RD_ERR) then
        ! The interpolation failed - go back
        call start_timer(tmr_l_tmp1,WITH_LEVEL)
@@ -1616,71 +1622,67 @@ contains
           recip_vector(j,1) = recip_vector(j,1) * orcellx / rcellx
           recip_vector(j,2) = recip_vector(j,2) * orcelly / rcelly
           recip_vector(j,3) = recip_vector(j,3) * orcellz / rcellz
-          ! We will have to recalculate this properly - the code below works for cubic only
-          hartree_factor(j) = hartree_factor(j) * (rcellx*rcellx)/(orcellx*orcellx)
+          xvec = recip_vector(j,1)/(two*pi)
+          yvec = recip_vector(j,2)/(two*pi)
+          zvec = recip_vector(j,3)/(two*pi)
+          r2 = xvec*xvec + yvec*yvec + zvec*zvec
+          if(j/=i0) hartree_factor(j) = one/r2 ! i0 notates gamma point
        end do
        ! End DRB added    
        do j = 1, ni_in_cell
-         x_atom_cell(j) = (rcellx/start_rcellx)*x_atom_cell(j)
-         y_atom_cell(j) = (rcelly/start_rcelly)*y_atom_cell(j)
-         z_atom_cell(j) = (rcellz/start_rcellz)*z_atom_cell(j)
-         if (inode == ionode .and. iprint_MD > 2) &
-              write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
-                               y_atom_cell(j), z_atom_cell(j)
+          x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
+          y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
+          z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
+          if (inode == ionode .and. iprint_MD > 2) &
+               write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
+               y_atom_cell(j), z_atom_cell(j)
        end do
-  !Update atom_coord : TM 27Aug2003
+       !Update atom_coord : TM 27Aug2003
        call update_atom_coord
-  !Update atom_coord : TM 27Aug2003
+       !Update atom_coord : TM 27Aug2003
        call updateIndices(.true., fixed_potential)
        call update_H(fixed_potential)
        if (iprint_MD > 2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
-                                      trim(pdb_template))
+               trim(pdb_template))
        end if
        ! Now in update_H
        !if(flag_reset_dens_on_atom_move) call set_density()
        if (flag_pcc_global) call set_density_pcc()
        call stop_print_timer(tmr_l_tmp1, &
-                             "safemin - Failed interpolation + Retry", &
-                             IPRINT_TIME_THRES1)
+            "safemin - Failed interpolation + Retry", &
+            IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
        if(flag_vary_basis .or. flag_LFD_minimise) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
-                           fixed_potential, vary_mu, n_L_iterations, &
-                           L_tolerance, e3)
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, e3)
        end if
        energy_out = e3
        if (iprint_MD > 0) then
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
-                           .true., .true.)
+               .true., .true.)
        else
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
-                           .true., .false.)
+               .true., .false.)
        end if
     end if
     dE = e0 - energy_out
-  7   format(4x,3f15.8)
+7   format(4x,3f15.8)
     if (inode == ionode .and. iprint_MD > 0) then
        write (io_lun, &
-              fmt='(4x,"In safemin, exit after ",i4," &
-                    &iterations with energy ",f20.10," ",a2)') &
+            fmt='(4x,"In safemin, exit after ",i4," &
+            &iterations with energy ",f20.10," ",a2)') &
             iter, en_conv * energy_out, en_units(energy_units)
     else if (inode == ionode) then
        write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
-             en_conv * energy_out, en_units(energy_units)
+            en_conv * energy_out, en_units(energy_units)
     end if
     !deallocate(store_density)
     call stop_timer(tmr_std_moveatoms)
-     return
+    return
   end subroutine safemin3
-
-
-
-
-
-
-
   !!***
 
   !!****f* move_atoms/update_start_xyz *
