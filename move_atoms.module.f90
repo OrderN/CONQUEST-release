@@ -1523,9 +1523,9 @@ contains
        end do
     end if
     do j = 1, maxngrid
-       recip_vector(i,1) = recip_vector(i,1) * orcellx / rcellx
-       recip_vector(i,2) = recip_vector(i,2) * orcelly / rcelly
-       recip_vector(i,3) = recip_vector(i,3) * orcellz / rcellz
+       recip_vector(j,1) = recip_vector(j,1) * orcellx / rcellx
+       recip_vector(j,2) = recip_vector(j,2) * orcelly / rcelly
+       recip_vector(j,3) = recip_vector(j,3) * orcellz / rcellz
        ! We will have to recalculate this properly - the code below works for cubic only
        hartree_factor(j) = hartree_factor(j) * (rcellx*rcellx)/(orcellx*orcellx)
     end do
@@ -1613,9 +1613,9 @@ contains
           end do
        end if
        do j = 1, maxngrid
-          recip_vector(i,1) = recip_vector(i,1) * orcellx / rcellx
-          recip_vector(i,2) = recip_vector(i,2) * orcelly / rcelly
-          recip_vector(i,3) = recip_vector(i,3) * orcellz / rcellz
+          recip_vector(j,1) = recip_vector(j,1) * orcellx / rcellx
+          recip_vector(j,2) = recip_vector(j,2) * orcelly / rcelly
+          recip_vector(j,3) = recip_vector(j,3) * orcellz / rcellz
           ! We will have to recalculate this properly - the code below works for cubic only
           hartree_factor(j) = hartree_factor(j) * (rcellx*rcellx)/(orcellx*orcellx)
        end do
