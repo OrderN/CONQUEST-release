@@ -14,7 +14,8 @@ module read
   integer, parameter :: small = 2
   integer, parameter :: medium = 3
   integer, parameter :: full = 4
-  
+
+  integer :: energy_units ! Local for reading; 1 is Ha, 2 is eV
 contains
 
   ! Read Conquest_input file for parameters from simulation, output parameters and coordinates
@@ -117,8 +118,10 @@ contains
           end if
           deltaE_large_radius(i) = fdf_double("Atom.dE_large_radius",0.00073498_double)
           deltaE_small_radius(i) = fdf_double("Atom.dE_small_radius",0.073498_double)
+          energy_units = 1
           input_string = fdf_string(2,"Atom.EnergyUnits","Ha")
           if(leqi(input_string(1:2),"eV")) then
+             energy_units = 2
              deltaE_large_radius(i) = deltaE_large_radius(i) / HaToeV
              deltaE_small_radius(i) = deltaE_small_radius(i) / HaToeV
           end if
@@ -210,12 +213,14 @@ contains
                 if(paos(i)%flag_perturb_polarise) then
                    do j=1,paos(i)%n_shells-1
                       read (unit=input_array(block_start+paos(i)%n_shells-1+j-1),fmt=*) (paos(i)%energy(k,j),k=1,paos(i)%nzeta(j))
+                      if(energy_units==2) paos(i)%energy(:,j) = paos(i)%energy(:,j)/ HaToeV
                       !write(*,*) '# '//input_array(block_start+paos(i)%n_shells-1+j-1)
                    end do
                    paos(i)%energy(:,paos(i)%n_shells) = paos(i)%energy(:,paos(i)%polarised_shell)
                 else
                    do j=1,paos(i)%n_shells
                       read (unit=input_array(block_start+paos(i)%n_shells+j-1),fmt=*) (paos(i)%energy(k,j),k=1,paos(i)%nzeta(j))
+                      if(energy_units==2) paos(i)%energy(:,j) = paos(i)%energy(:,j)/ HaToeV
                       !write(*,*) '# '//input_array(block_start+paos(i)%n_shells+j-1)
                    end do
                 end if
@@ -499,20 +504,15 @@ contains
        open(unit=lun, file=pseudo_file_name(i_species), status='old', iostat=ios)
        if ( ios > 0 ) call cq_abort('Error opening Hamann input file: '//pseudo_file_name(i_species))
        pseudo(i_species)%filename = pseudo_file_name(i_species)
-       ! Comment line
-       read(lun, '(a)') a
        ! Basic element information
-       read(lun,*) sym,z,nc,nv,iexc,file_format
+       a = get_hamann_line(lun)
+       read(a,*) sym,z,nc,nv,iexc,file_format
        write(*,fmt='(/"Information about pseudopotential for species: ",a2/)') sym
        pseudo(i_species)%z = z
        if(iexc==3) then
           val(i_species)%functional = functional_lda_pz81
-          !flag_functional_type = functional_lda_pz81
-          !write(*,*) '# Using LDA'
        else if(iexc==4) then
           val(i_species)%functional = functional_gga_pbe96
-          !flag_functional_type = functional_gga_pbe96
-          !write(*,*) '# Using PBE96 GGA'
        else
           call cq_abort("Error: unrecognised iexc value: ",iexc)
        end if
@@ -539,43 +539,39 @@ contains
        end select
        write(*,fmt='("Using XC functional: ",a12)') functional_description
        write(*,fmt='("There are ",i2," core and ",i2," valence shells")') nc,nv
-       ! Comment line
-       read(lun, '(a)') a
+       a = get_hamann_line(lun)
        ! Read n, l, filling for core
        do i_shell = 1, nc
-          read(lun,*) en,ell,fill
+          read(a,*) en,ell,fill
+          a = get_hamann_line(lun)
        end do
        ! Read n, l, filling for valence
        zval = zero
        do i_shell = 1, nv
-          read(lun,*) en,ell,fill
+          read(a,*) en,ell,fill
           zval = zval + fill
+          a = get_hamann_line(lun)
        end do
        pseudo(i_species)%zval = zval
        write(*,fmt='("The atomic number is",i3,", with valence charge ",f4.1)') z,zval
-       ! Comment line
-       read(lun, '(a)') a
        ! lmax
-       read(lun,*) pseudo(i_species)%lmax
+       read(a,*) pseudo(i_species)%lmax
        write(*,fmt='("Maximum angular momentum for pseudopotential is l=",i1)') pseudo(i_species)%lmax
-       ! Comment line
-       read(lun, '(a)') a
        ! Projector radii etc
-       do ell = 0, pseudo(i_species)%lmax
-          read(lun,'(a)') a
+       a = get_hamann_line(lun)
+       do ell = 0, pseudo(i_species)%lmax-1
+          a = get_hamann_line(lun)
        end do
-       ! Comment line
-       read(lun, '(a)') a
        ! Local potential
-       read(lun, '(a)') a
-       ! Comment line
-       read(lun, '(a)') a
+       a = get_hamann_line(lun)
        ! Numbers of projectors
        n_proj = 0
        n_nl_proj = 0
+       a = get_hamann_line(lun)
        do ell = 0, pseudo(i_species)%lmax
-          read(lun,*) en,n_proj(en),fill
+          read(a,*) en,n_proj(en),fill
           n_nl_proj = n_nl_proj + n_proj(en)
+          a = get_hamann_line(lun)
        end do
        write(*,fmt='("Total number of VKB projectors: ",i2)') n_nl_proj
        call alloc_pseudo_info(pseudo(i_species),n_nl_proj)
@@ -590,11 +586,9 @@ contains
              pseudo(i_species)%pjnl_n(i) = zeta
           end do
        end do
-       ! Comment line
-       read(lun, '(a)') a
        ! Partial core corrections ?
        pseudo(i_species)%flag_pcc = .false.
-       read(lun,*) icmod
+       read(a,*) icmod
        if(icmod>0) then
           pseudo(i_species)%flag_pcc = .true.
           flag_pcc_global = .true.
@@ -615,6 +609,25 @@ contains
     end do
   end subroutine read_hamann_input
   
+  ! Check for comment markers
+  function get_hamann_line(lun)
+
+    implicit none
+   
+    integer :: lun
+    character(len=80) :: get_hamann_line
+
+    character(len=80) :: a
+
+    read(lun,'(a)') a
+    get_hamann_line = adjustl(a)
+    do while(get_hamann_line(1:1).eq.'#')
+       read(lun,'(a)') a
+       get_hamann_line = adjustl(a)
+    end do
+    return
+  end function get_hamann_line
+
   subroutine set_pao_initial
 
     use numbers
