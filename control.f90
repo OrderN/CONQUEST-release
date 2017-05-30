@@ -117,7 +117,8 @@ contains
     use pseudopotential_data, only: set_pseudopotential
     use force_module,         only: tot_force
     use minimise,             only: get_E_and_F
-    use global_module,        only: runtype, flag_self_consistent, flag_out_wf, flag_write_DOS
+    use global_module,        only: runtype, flag_self_consistent, flag_out_wf, &
+                                    flag_write_DOS, opt_cell
     use input_module,         only: leqi
 
     implicit none
@@ -145,10 +146,11 @@ contains
                         .true.,.true.,level=backtrace_level)
        !
     else if ( leqi(runtype, 'cg')    ) then
-       call cg_run(fixed_potential,     vary_mu, total_energy)
-       !
-    else if ( leqi(runtype, 'relaxcell')    ) then
-       call cell_cg_run(fixed_potential,     vary_mu, total_energy)
+        if (opt_cell) then
+            call cell_cg_run(fixed_potential, vary_mu, total_energy)
+        else
+            call cg_run(fixed_potential, vary_mu, total_energy)
+        end if
        !
     else if ( leqi(runtype, 'md')    ) then
        call md_run(fixed_potential,     vary_mu, total_energy)
@@ -1199,7 +1201,7 @@ contains
                              y_atom_cell, z_atom_cell, id_glob,    &
                              atom_coord, rcellx, rcelly, rcellz,   &
                              area_general, iprint_MD,              &
-                             IPRINT_TIME_THRES1, flag_MDold
+                             IPRINT_TIME_THRES1, flag_MDold, constraint_flag
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
     use move_atoms,    only: safemin, safemin2, safemin3
@@ -1210,6 +1212,7 @@ contains
                              check_stop
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
+    use io_module,      only: leqi
     use io_module2,    ONLY: dump_InfoGlobal
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
 
@@ -1259,9 +1262,28 @@ contains
        if (abs(ggold) < 1.0e-6_double) then
           gamma = zero
        else
-          gg = gg + old_stressx*old_stressx + old_stressy*old_stressy + &
-              old_stressz*old_stressz
-          gamma = gg/ggold
+         ! gg will change if we have constraints...
+         ! i.e. we can reuduce the number of search direction
+         ! Should probably putthee conditionals in a function
+         if (leqi(constraint_flag, 'none')) then
+           gg = gg + old_stressx*old_stressx + old_stressy*old_stressy + &
+               old_stressz*old_stressz
+         ! Fix a single lattice parameter
+         else if (leqi(constraint_flag, 'a')) then
+           gg = gg + old_stressy*old_stressy + old_stressz*old_stressz
+         else if (leqi(constraint_flag, 'b')) then
+           gg = gg + old_stressx*old_stressx + old_stressz*old_stressz
+         else if (leqi(constraint_flag, 'c')) then
+           gg = gg + old_stressy*old_stressy + old_stressx*old_stressx
+        ! Fix a single ratio
+         else if (leqi(constraint_flag, 'c/a') .or. leqi(constraint_flag, 'a/c')) then
+           gg = gg + old_stressy*old_stressy + old_stressx*old_stressx
+         else if (leqi(constraint_flag, 'a/b') .or. leqi(constraint_flag, 'b/a')) then
+           gg = gg + old_stressy*old_stressy + old_stressz*old_stressz
+         else if (leqi(constraint_flag, 'b/c') .or. leqi(constraint_flag, 'c/b')) then
+           gg = gg + old_stressx*old_stressx + old_stressz*old_stressz
+         end if
+         gamma = gg/ggold
        end if
        write(io_lun,*) 'gg is ',gg
        if (inode == ionode .and. iprint_MD > 2) &

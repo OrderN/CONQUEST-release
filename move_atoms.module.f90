@@ -1296,7 +1296,7 @@ contains
          rcellz, flag_self_consistent,           &
          flag_reset_dens_on_atom_move,           &
          IPRINT_TIME_THRES1, flag_pcc_global, &
-         flag_diagonalisation
+         flag_diagonalisation, constraint_flag
     use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
          n_L_iterations
     use GenComms,           only: my_barrier, myid, inode, ionode,        &
@@ -1370,55 +1370,8 @@ contains
        call start_timer(tmr_l_tmp1, WITH_LEVEL)
        ! DRB added 2017/05/24 17:13
        ! Keep previous cell to allow scaling
-       orcellx = rcellx
-       orcelly = rcelly
-       orcellz = rcellz
-       rcellx = start_rcellx + k3 * stressx
-       rcelly = start_rcelly + k3 * stressy
-       rcellz = start_rcellz + k3 * stressz
-       r_super_x = rcellx
-       r_super_y = rcelly
-       r_super_z = rcellz
-       ! DRB added 2017/05/24 17:05
-       r_super_x_squared = r_super_x * r_super_x
-       r_super_y_squared = r_super_y * r_super_y
-       r_super_z_squared = r_super_z * r_super_z
-       volume = r_super_x * r_super_y * r_super_z
-       grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
-       one_over_grid_point_volume = one / grid_point_volume
-       scale = (orcellx*orcelly*orcellz)/volume  
-       density = density * scale
-       if(flag_diagonalisation) then
-          do i = 1, nkp
-             kk(1,i) = kk(1,i) * orcellx / rcellx
-             kk(2,i) = kk(2,i) * orcelly / rcelly
-             kk(3,i) = kk(3,i) * orcellz / rcellz
-          end do
-       end if
-       do j = 1, maxngrid
-          recip_vector(j,1) = recip_vector(j,1) * orcellx / rcellx
-          recip_vector(j,2) = recip_vector(j,2) * orcelly / rcelly
-          recip_vector(j,3) = recip_vector(j,3) * orcellz / rcellz
-          xvec = recip_vector(j,1)/(two*pi)
-          yvec = recip_vector(j,2)/(two*pi)
-          zvec = recip_vector(j,3)/(two*pi)
-          r2 = xvec*xvec + yvec*yvec + zvec*zvec
-          if(j/=i0) hartree_factor(j) = one/r2 ! i0 notates gamma point
-       end do
-       do j = 1, ni_in_cell
-          x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
-          y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
-          z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
-          if (inode == ionode .and. iprint_MD > 2) &
-               write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
-               y_atom_cell(j), z_atom_cell(j)
-       end do
-       write(io_lun,*) "Iteration ", iter
-       write(io_lun,*) "rcellx/start_rcellx = ", rcellx/start_rcellx
-       write(io_lun,*) "rcelly/start_rcelly = ", rcelly/start_rcelly
-       write(io_lun,*) "rcellz/start_rcellz = ", rcellz/start_rcellz
-       !write(io_lun,*) 'new sim cell dims', start_rcellx, start_rcellx, start_rcellx
-       write(io_lun,*) 'current sim cell dims', rcellx, rcelly, rcellz
+       call update_cell_dims(start_rcellx, start_rcelly, &
+                             start_rcellz, stressx, stressy, stressz, k3, iter)
 
        !Update atom_coord : TM 27Aug2003
        call update_atom_coord
@@ -1492,58 +1445,8 @@ contains
        kmin = k2
     end if
     write(io_lun,*) 'kmin is ',kmin
-    ! DRB added 2017/05/24 17:13
-    ! Keep previous cell to allow scaling
-    orcellx = rcellx
-    orcelly = rcelly
-    orcellz = rcellz
-    ! End DRB added
-    rcellx = start_rcellx + kmin * stressx
-    rcelly = start_rcelly + kmin * stressy
-    rcellz = start_rcellz + kmin * stressz
-    r_super_x = rcellx
-    r_super_y = rcelly
-    r_super_z = rcellz
-    write(io_lun,*) "rcellx/start_rcellx = ", rcellx/start_rcellx
-    write(io_lun,*) "rcelly/start_rcelly = ", rcelly/start_rcelly
-    write(io_lun,*) "rcellz/start_rcellz = ", rcellz/start_rcellz
-    write(io_lun,*) 'current sim cell dims', rcellx, rcelly, rcellz
-
-    ! DRB added 2017/05/24 17:05
-    r_super_x_squared = r_super_x * r_super_x
-    r_super_y_squared = r_super_y * r_super_y
-    r_super_z_squared = r_super_z * r_super_z
-    volume = r_super_x * r_super_y * r_super_z
-    grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
-    one_over_grid_point_volume = one / grid_point_volume
-    scale = (orcellx*orcelly*orcellz)/volume  
-    density = density * scale
-    if(flag_diagonalisation) then
-       do i = 1, nkp
-          kk(1,i) = kk(1,i) * orcellx / rcellx
-          kk(2,i) = kk(2,i) * orcelly / rcelly
-          kk(3,i) = kk(3,i) * orcellz / rcellz
-       end do
-    end if
-    do j = 1, maxngrid
-       recip_vector(j,1) = recip_vector(j,1) * orcellx / rcellx
-       recip_vector(j,2) = recip_vector(j,2) * orcelly / rcelly
-       recip_vector(j,3) = recip_vector(j,3) * orcellz / rcellz
-       xvec = recip_vector(j,1)/(two*pi)
-       yvec = recip_vector(j,2)/(two*pi)
-       zvec = recip_vector(j,3)/(two*pi)
-       r2 = xvec*xvec + yvec*yvec + zvec*zvec
-       if(j/=i0) hartree_factor(j) = one/r2 ! i0 notates gamma point
-    end do
-    ! End DRB added    
-    do j = 1, ni_in_cell
-       x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
-       y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
-       z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
-       if (inode == ionode .and. iprint_MD > 2) &
-            write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
-            y_atom_cell(j), z_atom_cell(j)
-    end do
+    call update_cell_dims(start_rcellx, start_rcelly, &
+                          start_rcellz, stressx, stressy, stressz, kmin, iter)
     !Update atom_coord : TM 27Aug2003
     call update_atom_coord
     !Update atom_coord : TM 27Aug2003
@@ -1591,52 +1494,8 @@ contains
        kmin = k2
        ! DRB added 2017/05/24 17:13
        ! Keep previous cell to allow scaling
-       orcellx = rcellx
-       orcelly = rcelly
-       orcellz = rcellz
-       ! End DRB added
-       rcellx = start_rcellx + kmin * stressx
-       rcelly = start_rcelly + kmin * stressy
-       rcellz = start_rcellz + kmin * stressz
-       r_super_x = rcellx
-       r_super_y = rcelly
-       r_super_z = rcellz
-
-       ! DRB added 2017/05/24 17:05
-       r_super_x_squared = r_super_x * r_super_x
-       r_super_y_squared = r_super_y * r_super_y
-       r_super_z_squared = r_super_z * r_super_z
-       volume = r_super_x * r_super_y * r_super_z
-       grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
-       one_over_grid_point_volume = one / grid_point_volume
-       scale = (orcellx*orcelly*orcellz)/volume  
-       density = density * scale
-       if(flag_diagonalisation) then
-          do i = 1, nkp
-             kk(1,i) = kk(1,i) * orcellx / rcellx
-             kk(2,i) = kk(2,i) * orcelly / rcelly
-             kk(3,i) = kk(3,i) * orcellz / rcellz
-          end do
-       end if
-       do j = 1, maxngrid
-          recip_vector(j,1) = recip_vector(j,1) * orcellx / rcellx
-          recip_vector(j,2) = recip_vector(j,2) * orcelly / rcelly
-          recip_vector(j,3) = recip_vector(j,3) * orcellz / rcellz
-          xvec = recip_vector(j,1)/(two*pi)
-          yvec = recip_vector(j,2)/(two*pi)
-          zvec = recip_vector(j,3)/(two*pi)
-          r2 = xvec*xvec + yvec*yvec + zvec*zvec
-          if(j/=i0) hartree_factor(j) = one/r2 ! i0 notates gamma point
-       end do
-       ! End DRB added    
-       do j = 1, ni_in_cell
-          x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
-          y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
-          z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
-          if (inode == ionode .and. iprint_MD > 2) &
-               write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
-               y_atom_cell(j), z_atom_cell(j)
-       end do
+       call update_cell_dims(start_rcellx, start_rcelly, &
+                            start_rcellz, stressx, stressy, stressz, kmin, iter)
        !Update atom_coord : TM 27Aug2003
        call update_atom_coord
        !Update atom_coord : TM 27Aug2003
@@ -3298,5 +3157,152 @@ contains
     return
   end subroutine ran2
   !!***
+
+
+  !!****f* move_atoms/update_cell_dims *
+  !!  NAME
+  !!   update_cell_dims
+  !!  USAGE
+  !!   call update_cell_dims()
+  !!  PURPOSE
+  !!   Updates the simulation cell dimensions subject to constraints on ratios.
+  !!   e.g c/a = const. Upon a change in a, b or c, grids are updated and the
+  !!   density is scaled.
+  !!  INPUT
+  !!  OUTPUT
+  !!  AUTHOR
+  !!  Jack Baker
+  !!  David Bowler
+  !!  CREATION DATE
+  !!   30/05/17
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+
+
+  subroutine update_cell_dims(start_rcellx, start_rcelly, &
+                              start_rcellz, stressx, stressy, stressz, k, iter)
+    use datatypes
+    use numbers
+    use units
+    use global_module,      only: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, &
+         atom_coord, ni_in_cell, rcellx, rcelly, &
+         rcellz, flag_self_consistent,           &
+         flag_reset_dens_on_atom_move,           &
+         IPRINT_TIME_THRES1, flag_pcc_global, &
+         flag_diagonalisation, constraint_flag
+    use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
+         n_L_iterations
+    use GenComms,           only: my_barrier, myid, inode, ionode,        &
+         cq_abort
+    use io_module,          only: write_atomic_positions, pdb_template
+    use density_module,     only: density, flag_no_atomic_densities, set_density_pcc
+    use maxima_module,      only: maxngrid
+    use multisiteSF_module, only: flag_LFD_minimise
+    use timer_module
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z, &
+         r_super_x_squared, r_super_y_squared, r_super_z_squared, volume, &
+         grid_point_volume, one_over_grid_point_volume, n_grid_x, n_grid_y, n_grid_z
+    use fft_module, ONLY: recip_vector, hartree_factor, i0
+    use DiagModule, ONLY: kk, nkp
+    use input_module,         only: leqi
+
+    implicit none
+
+    ! Passed variables
+    real(double) :: start_rcellx, start_rcelly, start_rcellz,&
+         stressx, stressy, stressz, k
+    integer iter
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical           :: vary_mu, fixed_potential
+    real(double)      :: total_energy
+    character(len=40) :: output_file
+
+    ! local variables
+    real(double) :: orcellx, orcelly, orcellz, xvec, yvec, zvec, r2, scale
+    integer :: i, j
+
+    orcellx = rcellx
+    orcelly = rcelly
+    orcellz = rcellz
+    ! Update based on constraints.
+    ! none => Unconstrained case
+    if (leqi(constraint_flag, 'none')) then
+        rcellx = start_rcellx + k * stressx
+        rcelly = start_rcelly + k * stressy
+        rcellz = start_rcellz + k * stressz
+    ! Fix a single dimension?
+    else if (leqi(constraint_flag, 'a')) then
+        rcelly = start_rcelly + k * stressy
+        rcellz = start_rcellz + k * stressz
+    else if (leqi(constraint_flag, 'b')) then
+        rcellx = start_rcellx + k * stressx
+        rcellz = start_rcellz + k * stressz
+    else if (leqi(constraint_flag, 'c')) then
+        rcelly = start_rcelly + k * stressy
+        rcellx = start_rcellx + k * stressx
+    ! Fix a single ratio?
+    else if (leqi(constraint_flag, 'c/a') .or. leqi(constraint_flag, 'a/c')) then
+        rcellx = start_rcellx + k * stressx
+        rcelly = start_rcelly + k * stressy
+        rcellz = start_rcellz + k * (start_rcellz/start_rcellx)*stressx
+    else if (leqi(constraint_flag, 'a/b') .or. leqi(constraint_flag, 'b/a')) then
+        rcellx = start_rcellx + k * (start_rcellx/start_rcelly)*stressy
+        rcelly = start_rcelly + k * stressy
+        rcellz = start_rcellz + k * stressz
+    else if (leqi(constraint_flag, 'b/c') .or. leqi(constraint_flag, 'c/b')) then
+        rcellx = start_rcellx + k * stressx
+        rcelly = start_rcelly + k * (start_rcelly/start_rcellz)*stressz
+        rcellz = start_rcellz + k * stressz
+    end if
+    r_super_x = rcellx
+    r_super_y = rcelly
+    r_super_z = rcellz
+    ! DRB added 2017/05/24 17:05
+    ! We've changed the simulation cell. Now we must update grids and the density
+    r_super_x_squared = r_super_x * r_super_x
+    r_super_y_squared = r_super_y * r_super_y
+    r_super_z_squared = r_super_z * r_super_z
+    volume = r_super_x * r_super_y * r_super_z
+    grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
+    one_over_grid_point_volume = one / grid_point_volume
+    scale = (orcellx*orcelly*orcellz)/volume
+    density = density * scale
+    if(flag_diagonalisation) then
+       do i = 1, nkp
+          kk(1,i) = kk(1,i) * orcellx / rcellx
+          kk(2,i) = kk(2,i) * orcelly / rcelly
+          kk(3,i) = kk(3,i) * orcellz / rcellz
+       end do
+    end if
+    do j = 1, maxngrid
+       recip_vector(j,1) = recip_vector(j,1) * orcellx / rcellx
+       recip_vector(j,2) = recip_vector(j,2) * orcelly / rcelly
+       recip_vector(j,3) = recip_vector(j,3) * orcellz / rcellz
+       xvec = recip_vector(j,1)/(two*pi)
+       yvec = recip_vector(j,2)/(two*pi)
+       zvec = recip_vector(j,3)/(two*pi)
+       r2 = xvec*xvec + yvec*yvec + zvec*zvec
+       if(j/=i0) hartree_factor(j) = one/r2 ! i0 notates gamma point
+    end do
+    do j = 1, ni_in_cell
+       x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
+       y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
+       z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
+       if (inode == ionode .and. iprint_MD > 2) &
+            write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
+            y_atom_cell(j), z_atom_cell(j)
+    end do
+    write(io_lun,*) "Iteration ", iter
+    write(io_lun,*) "rcellx/start_rcellx = ", rcellx/start_rcellx
+    write(io_lun,*) "rcelly/start_rcelly = ", rcelly/start_rcelly
+    write(io_lun,*) "rcellz/start_rcellz = ", rcellz/start_rcellz
+    !write(io_lun,*) 'new sim cell dims', start_rcellx, start_rcellx, start_rcellx
+    write(io_lun,*) 'current sim cell dims', rcellx, rcelly, rcellz
+
+  end subroutine update_cell_dims
+
+
+
 
 end module move_atoms
