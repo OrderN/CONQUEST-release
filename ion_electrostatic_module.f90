@@ -1416,6 +1416,8 @@ contains
 !!    Removed the old-style ewald approach and replaced with simple loop over neighbours
 !!   2016/02/02 11:06 dave
 !!    Changed force reference - now saves to correct atoms
+!!   2017/03/23 dave
+!!    Changed cutoff criterion on interactions to use individual species size
 !!  SOURCE
 !!  
   subroutine screened_ion_interaction
@@ -1432,6 +1434,7 @@ contains
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
     use energy, ONLY: local_ps_energy, screened_ion_interaction_energy
+    use atomic_density, only: atomic_density_table ! for Neutral atom potential
     
     implicit none
 
@@ -1466,8 +1469,7 @@ contains
                       rijz = bundle%zprim(bundle%nm_nodbeg(ip)+ni-1) - ion_ion_CS%zcover(ion_ion_CS%icover_ibeg(nc)+nj-1)
                       rij_squared = rijx*rijx + rijy*rijy + rijz*rijz
                       rij = sqrt(rij_squared)
-                      if(rij<two*ion_ion_cutoff) then
-
+                      if(rij<(atomic_density_table(spi)%cutoff + atomic_density_table(spj)%cutoff)) then 
                          if(rij>very_small) then
                             ! Find electrostatic energy due to atomic densities i and j
                             call calc_overlap( overlap, spi, spj,rij )
