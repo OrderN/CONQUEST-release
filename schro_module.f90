@@ -521,14 +521,19 @@ contains
        end do
        n_kink = nmax
        call integrate_vkb_outwards(species,n_kink,ell,psi,f,n_crossings,n_nodes) ! We want to integrate to max before final node
-       do i=n_kink,nmax-1
-          psi(i+1) = ( (twelve - ten*f(i)) * psi(i) - f(i-1)*psi(i-1) )/f(i+1)
-          if(psi(i)*psi(i+1)<zero.OR.(abs(psi(i+1))<1e-16_double)) then ! Crossing the x-axis
-             !write(*,*) '# Node ! ',rr(i),psi(i),psi(i+1)
-             n_crossings = n_crossings + 1
-             if(n_crossings>=n_nodes+1) exit
-          end if
-       end do
+       if(n_crossings>=n_nodes+1) then
+          call cq_abort("Found cutoff inside the VKB projector cutoff: this suggests too great an energy shift")
+       else
+          do i=n_kink,nmax-1
+             psi(i+1) = ( (twelve - ten*f(i)) * psi(i) - f(i-1)*psi(i-1) )/f(i+1)
+             if(psi(i)*psi(i+1)<zero.OR.(abs(psi(i+1))<1e-16_double)) then ! Crossing the x-axis
+                !write(*,*) '# Node ! ',rr(i),psi(i),psi(i+1)
+                n_crossings = n_crossings + 1
+                if(n_crossings>=n_nodes+1) exit
+             end if
+          end do
+       end if
+       if(n_crossings<n_nodes+1) call cq_abort("Failed to find confined state - please check input")
     end if
     ! Find radius by integrating outwards
     ! Interpolate between i+1 and i

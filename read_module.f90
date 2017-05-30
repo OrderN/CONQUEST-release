@@ -16,6 +16,7 @@ module read
   integer, parameter :: full = 4
 
   integer :: energy_units ! Local for reading; 1 is Ha, 2 is eV
+  real(double) :: energy_semicore ! Threshold for semi-core states
 contains
 
   ! Read Conquest_input file for parameters from simulation, output parameters and coordinates
@@ -90,6 +91,7 @@ contains
     end if
     ! Is this a debug run ? 
     flag_run_debug = fdf_boolean('General.RunDebug',.false.)
+    energy_semicore = fdf_double('General.SemicoreEnergy',-one)
     ! Energy cutoffs
     allocate(deltaE_large_radius(n_species), deltaE_small_radius(n_species))
     ! Now read the species-dependent data
@@ -362,7 +364,7 @@ contains
           ! Simplistic check for correct ordering - I think that this is all that's needed though
           if(i>1) then
              do j=i,2,-1
-                if(val(i_species)%en_ps(j)<val(i_species)%en_ps(j-1)) then
+                if(val(i_species)%en_ps(j)<val(i_species)%en_ps(j-1).AND.val(i_species)%occ(j)>RD_ERR) then ! Only re-order occupied
                    en = val(i_species)%n(j-1)
                    ell = val(i_species)%l(j-1)
                    dummy = val(i_species)%occ(j-1)
@@ -399,7 +401,7 @@ contains
                    val(i_species)%npao(i) = val(i_species)%l(i)+2
                 end if
              end do
-          else if(val(i_species)%en_ps(i)<-1.0_double) then ! Make the value -1 a user input
+          else if(val(i_species)%en_ps(i)<energy_semicore) then ! Make the value -1 a user input
              val(i_species)%semicore(i) = 1
              val(i_species)%npao(i) = val(i_species)%l(i)+1
           else
