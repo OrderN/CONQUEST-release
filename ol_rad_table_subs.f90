@@ -808,6 +808,8 @@ end subroutine get_max_paoparams
 !!  MODIFICATION HISTORY
 !!   2015/06/10 16:01 dave
 !!    Fixed problems defining maximum l and n_zeta
+!!   2017/02/24 15:36 dave
+!!    Changed to check max l and zeta for both paos and non-local pseudopotential projectors
 !!  SOURCE
 !!
 
@@ -828,26 +830,15 @@ subroutine get_max_pao_nlpfparams(lmax,nzmax)
         
   nspecies_tot = size(pao)
   do n_sp = 1,nspecies_tot
-     if(lmax.lt.pao(n_sp)%greatest_angmom) then
-        lmax = pao(n_sp)%greatest_angmom
-     else
-        continue
-     endif
-     if(lmax.lt.pseudo(n_sp)%lmax) then!n_pjnl) then
-        lmax = pseudo(n_sp)%lmax!n_pjnl
-     else
-        continue
-     endif    
-    
+     if(lmax < pao(n_sp)%greatest_angmom) lmax = pao(n_sp)%greatest_angmom
+     if(lmax < pseudo(n_sp)%lmax) lmax = pseudo(n_sp)%lmax
 
      do l = 0, pao(n_sp)%greatest_angmom
-        if(nzmax.lt.pao(n_sp)%angmom(l)%n_zeta_in_angmom) then!max(pao(n_sp)%angmom(l)%n_zeta_in_angmom&
-             !&,pseudo(n_sp)%n_pjnl)) then
-           nzmax = pao(n_sp)%angmom(l)%n_zeta_in_angmom!max(pao(n_sp)%angmom(l)%n_zeta_in_angmom,pseudo(n_sp)%n_pjnl)
-        else
-           continue
-        endif
+        if(nzmax < pao(n_sp)%angmom(l)%n_zeta_in_angmom) nzmax = pao(n_sp)%angmom(l)%n_zeta_in_angmom
      enddo
+     do l = 1,pseudo(n_sp)%n_pjnl
+        if(nzmax<pseudo(n_sp)%pjnl_n(l)) nzmax = pseudo(n_sp)%pjnl_n(l)
+     end do
      
   enddo
   

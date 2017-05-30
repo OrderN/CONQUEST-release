@@ -269,6 +269,8 @@ contains
 !!    Changed float to real()
 !!   2008/05/23 ast
 !!    Added timers
+!!   2017/03/23 drb
+!!    Change to use delta from PAO structure, not calculate it
 !!  SOURCE
 !!
   subroutine make_atomic_density_from_paos(inode,ionode,n_species)
@@ -357,11 +359,10 @@ contains
              ! Loop over zetas
              do n_zeta = 1, pao(n_sp)%angmom(n_am)%n_zeta_in_angmom
                 if(pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length > 1) then
-                   pao_deltar = pao(n_sp)%angmom(n_am)%zeta(n_zeta)%cutoff/&
-                        &real(pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length-1,double)
+                   pao_deltar = pao(n_sp)%angmom(n_am)%zeta(n_zeta)%delta
                    do nt = 1, atomic_density_table(n_sp)%length
-                      r = (nt-1)*density_deltar
-                      i = one + very_small + r/pao_deltar
+                      r = real(nt-1,double)*density_deltar
+                      i = 1 + floor(r/pao_deltar)
                       if(i+1 <= pao(n_sp)%angmom(n_am)%zeta(n_zeta)%length) then
                          if(n_am /=0) then
                            rn_am = r**n_am

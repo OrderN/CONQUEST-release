@@ -113,12 +113,14 @@ contains
 !!    Tidied to use species_module variables only
 !!   2015/06/08 lat
 !!    Added experimental backtrace
+!!   2017/04/24 11:52 dave
+!!    Updated rcutmax for neutral atom
 !!  SOURCE
 !!
   subroutine init_pseudo_tm(ecore, ncf_out) 
     
     use datatypes,      only: double
-    use global_module,  only: iprint_pseudo
+    use global_module,  only: iprint_pseudo, flag_neutral_atom
     use block_module,   only: n_pts_in_block
     use GenComms,       only: cq_abort, myid, inode, ionode
     use species_module, only: species, n_species, species_label, &
@@ -336,6 +338,7 @@ contains
          else
             rcutmax = max(rcutmax, pseudo(ispecies)%chlocal%cutoff)
          end if
+         if(flag_neutral_atom) rcutmax = max(rcutmax, pseudo(ispecies)%vna%cutoff)
          if(pseudo(ispecies)%flag_pcc) &
               rcutmax = max(rcutmax, pseudo(ispecies)%chpcc%cutoff)
         if(pseudo(ispecies)%n_pjnl > 0) then
@@ -1984,7 +1987,7 @@ contains
 
                vlocal = a* r1 + b*r2 + c*r3 + d* r4
             else
-               vlocal = pseudo%vlocal%f(imesh_rr)
+               vlocal = pseudo%vlocal%f(pseudo%vlocal%n) ! Safer this way DRB 2017/04/24
             endif
             ! We need to scale by r
             if(rr > RD_ERR) then
@@ -2233,281 +2236,288 @@ contains
           delta  = min( atomic_density_table(isp)%delta, pseudo(isp)%chlocal%delta )
        end if
        npoint = int(cutoff/delta) + 1
-
        !-------------------------------------------------------
-       ! calculate chna(r) - atomic charge
-       pseudo(isp)%chna%cutoff = cutoff
-       pseudo(isp)%chna%delta = delta
-       call rad_alloc( pseudo(isp)%chna, npoint )
+       ! UNNECESSARY ROUTINES 
+       !-------------------------------------------------------
+       if(.false.) then ! remove this for now
+          !-------------------------------------------------------
+          ! calculate chna(r) - atomic charge
+          pseudo(isp)%chna%cutoff = cutoff
+          pseudo(isp)%chna%delta = delta
+          call rad_alloc( pseudo(isp)%chna, npoint )
 
-       norm = zero
-       sum_chna = zero
-       do ir=1, pseudo(isp)%chna%n
-          r = (ir-1)*pseudo(isp)%chna%delta
-          chatom_at = zero
-          if( r<atomic_density_table(isp)%cutoff ) then
-             
-             step = atomic_density_table(isp)%delta
-             j = aint( r / step ) + 1
-             if(j+1<=atomic_density_table(isp)%length) then
-                rr = real(j,double) * step
-                a = ( rr - r ) / step
-                b = one - a
-                c = a * ( a * a - one ) * step * step / six
-                d = b * ( b * b - one ) * step * step / six
+          norm = zero
+          sum_chna = zero
+          do ir=1, pseudo(isp)%chna%n
+             r = (ir-1)*pseudo(isp)%chna%delta
+             chatom_at = zero
+             if( r<atomic_density_table(isp)%cutoff ) then
 
-                r1=atomic_density_table(isp)%table(j)
-                r2=atomic_density_table(isp)%table(j+1)
-                r3=atomic_density_table(isp)%d2_table(j)
-                r4=atomic_density_table(isp)%d2_table(j+1)
-
-                chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
-             end if
-             !call splint(atomic_density_table(isp)%delta, &
-             !     atomic_density_table(isp)%table, &
-             !     atomic_density_table(isp)%d2_table, &
-             !     atomic_density_table(isp)%length, &
-             !     r, chatom_at, range_flag )
-          end if
-
-          if( pseudo(isp)%tm_loc_pot==loc_pot ) then ! ABINIT PP
-             chlocal_at = minus_one * pseudo(isp)%zval &
-                  * pseudo(isp)%prefac * exp(-pseudo(isp)%alpha*r*r)
-          else ! SIESTA PP
-             chlocal_at = zero
-             if( r<pseudo(isp)%chlocal%cutoff ) then
-                step = pseudo(isp)%chlocal%delta
+                step = atomic_density_table(isp)%delta
                 j = aint( r / step ) + 1
-                if(j+1<=pseudo(isp)%chlocal%n) then
+                if(j+1<=atomic_density_table(isp)%length) then
                    rr = real(j,double) * step
                    a = ( rr - r ) / step
                    b = one - a
                    c = a * ( a * a - one ) * step * step / six
                    d = b * ( b * b - one ) * step * step / six
 
-                   r1=pseudo(isp)%chlocal%f(j)
-                   r2=pseudo(isp)%chlocal%f(j+1)
-                   r3=pseudo(isp)%chlocal%d2(j)
-                   r4=pseudo(isp)%chlocal%d2(j+1)
+                   r1=atomic_density_table(isp)%table(j)
+                   r2=atomic_density_table(isp)%table(j+1)
+                   r3=atomic_density_table(isp)%d2_table(j)
+                   r4=atomic_density_table(isp)%d2_table(j+1)
 
-                   chlocal_at =  a * r1 + b * r2 + c * r3 + d * r4
+                   chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
                 end if
-                !call splint( pseudo(isp)%chlocal%delta, &
-                !     pseudo(isp)%chlocal%f, &
-                !     pseudo(isp)%chlocal%d2, &
-                !     pseudo(isp)%chlocal%n, &
-                !     r, chlocal_at, range_flag )
+                !call splint(atomic_density_table(isp)%delta, &
+                !     atomic_density_table(isp)%table, &
+                !     atomic_density_table(isp)%d2_table, &
+                !     atomic_density_table(isp)%length, &
+                !     r, chatom_at, range_flag )
              end if
-          end if
 
-          pseudo(isp)%chna%f(ir) = chatom_at + chlocal_at
-          norm = norm + r*r* pseudo(isp)%chna%f(ir)
-       end do
-       sum_chna = norm*four*pi* delta
-       yp1 = zero!(pseudo(isp)%chna%f(2)-pseudo(isp)%chna%f(1)) &
-            !/pseudo(isp)%chna%delta
-       ypn = zero!(pseudo(isp)%chna%f(pseudo(isp)%chna%n)-pseudo(isp)%chna%f(pseudo(isp)%chna%n-1)) &
-            !/pseudo(isp)%chna%delta
+             if( pseudo(isp)%tm_loc_pot==loc_pot ) then ! ABINIT PP
+                chlocal_at = minus_one * pseudo(isp)%zval &
+                     * pseudo(isp)%prefac * exp(-pseudo(isp)%alpha*r*r)
+             else ! SIESTA PP
+                chlocal_at = zero
+                if( r<pseudo(isp)%chlocal%cutoff ) then
+                   step = pseudo(isp)%chlocal%delta
+                   j = aint( r / step ) + 1
+                   if(j+1<=pseudo(isp)%chlocal%n) then
+                      rr = real(j,double) * step
+                      a = ( rr - r ) / step
+                      b = one - a
+                      c = a * ( a * a - one ) * step * step / six
+                      d = b * ( b * b - one ) * step * step / six
 
-       call spline( pseudo(isp)%chna%n, pseudo(isp)%chna%delta, &
-            pseudo(isp)%chna%f, yp1, ypn, pseudo(isp)%chna%d2 )
+                      r1=pseudo(isp)%chlocal%f(j)
+                      r2=pseudo(isp)%chlocal%f(j+1)
+                      r3=pseudo(isp)%chlocal%d2(j)
+                      r4=pseudo(isp)%chlocal%d2(j+1)
 
-
-       !-------------------------------------------------------
-       ! calculate Vna(r) - neutral atom potential
-       pseudo(isp)%vna%cutoff = cutoff
-       pseudo(isp)%vna%delta = delta
-       call rad_alloc( pseudo(isp)%vna, npoint )
-       do ir1=1, pseudo(isp)%chna%n
-          r_1 = real(ir1-1,double)*pseudo(isp)%chna%delta
-
-          integ_inside = zero
-          do ir2=1, ir1
-             r_2 = real(ir2-1,double)*pseudo(isp)%chna%delta
-             
-             step = pseudo(isp)%chna%delta
-             j = aint( r_2 / step ) + 1
-             chna_at = zero
-             if(j+1<=pseudo(isp)%chna%n) then
-                rr = real(j,double) * step
-                a = ( rr - r_2 ) / step
-                b = one - a
-                c = a * ( a * a - one ) * step * step / six
-                d = b * ( b * b - one ) * step * step / six
-
-                r1=pseudo(isp)%chna%f(j)
-                r2=pseudo(isp)%chna%f(j+1)
-                r3=pseudo(isp)%chna%d2(j)
-                r4=pseudo(isp)%chna%d2(j+1)
-
-                chna_at =  a * r1 + b * r2 + c * r3 + d * r4
+                      chlocal_at =  a * r1 + b * r2 + c * r3 + d * r4
+                   end if
+                   !call splint( pseudo(isp)%chlocal%delta, &
+                   !     pseudo(isp)%chlocal%f, &
+                   !     pseudo(isp)%chlocal%d2, &
+                   !     pseudo(isp)%chlocal%n, &
+                   !     r, chlocal_at, range_flag )
+                end if
              end if
-             !call splint( pseudo(isp)%chna%delta, pseudo(isp)%chna%f, &
-             !     pseudo(isp)%chna%d2, pseudo(isp)%chna%n, r2, chna_at, range_flag )
-             if( ir2 == 1 .or. ir2 == ir1 ) then
-                chna_at = chna_at*half
-             end if
-             integ_inside = integ_inside + r_2*r_2 * chna_at
+
+             pseudo(isp)%chna%f(ir) = chatom_at + chlocal_at
+             norm = norm + r*r* pseudo(isp)%chna%f(ir)
           end do
-          if( r_1 == zero ) then
+          sum_chna = norm*four*pi* delta
+          yp1 = zero!(pseudo(isp)%chna%f(2)-pseudo(isp)%chna%f(1)) &
+          !/pseudo(isp)%chna%delta
+          ypn = zero!(pseudo(isp)%chna%f(pseudo(isp)%chna%n)-pseudo(isp)%chna%f(pseudo(isp)%chna%n-1)) &
+          !/pseudo(isp)%chna%delta
+
+          call spline( pseudo(isp)%chna%n, pseudo(isp)%chna%delta, &
+               pseudo(isp)%chna%f, yp1, ypn, pseudo(isp)%chna%d2 )
+
+
+          !-------------------------------------------------------
+          ! calculate Vna(r) - neutral atom potential
+          pseudo(isp)%vna%cutoff = cutoff
+          pseudo(isp)%vna%delta = delta
+          call rad_alloc( pseudo(isp)%vna, npoint )
+          do ir1=1, pseudo(isp)%chna%n
+             r_1 = real(ir1-1,double)*pseudo(isp)%chna%delta
+
              integ_inside = zero
-          else
-             integ_inside = integ_inside * (four*pi/r_1)*pseudo(isp)%chna%delta
-          end if
+             do ir2=1, ir1
+                r_2 = real(ir2-1,double)*pseudo(isp)%chna%delta
 
-          integ_outside = zero
-          do ir2=ir1, pseudo(isp)%chna%n
-             r_2 = real(ir2-1,double)*pseudo(isp)%chna%delta
-             
-             step = pseudo(isp)%chna%delta
-             j = aint( r_2 / step ) + 1
-             chna_at = zero
-             if(j+1<=pseudo(isp)%chna%n) then
-                rr = real(j,double) * step
-                a = ( rr - r_2 ) / step
-                b = one - a
-                c = a * ( a * a - one ) * step * step / six
-                d = b * ( b * b - one ) * step * step / six
-
-                r1=pseudo(isp)%chna%f(j)
-                r2=pseudo(isp)%chna%f(j+1)
-                r3=pseudo(isp)%chna%d2(j)
-                r4=pseudo(isp)%chna%d2(j+1)
-
-                chna_at =  a * r1 + b * r2 + c * r3 + d * r4
-             end if
-             !call splint( pseudo(isp)%chna%delta, pseudo(isp)%chna%f, &
-             !     pseudo(isp)%chna%d2, pseudo(isp)%chna%n, r2, chna_at, range_flag )
-             if( ir2 == ir1 .or. ir2 == pseudo(isp)%chna%n ) then
-                chna_at = chna_at*half
-             end if
-             integ_outside = integ_outside + r_2 * chna_at
-          end do
-          integ_outside = integ_outside * four*pi*pseudo(isp)%chna%delta
-
-          if( pseudo(isp)%tm_loc_pot==loc_pot ) then ! ABINIT PP
-             vlocal_at = zero
-             if( r_1<pseudo(isp)%vlocal%cutoff ) then
-
-                step = pseudo(isp)%vlocal%delta
-                j = aint( r_1 / step ) + 1
-                if(j+1<=pseudo(isp)%vlocal%n) then
+                step = pseudo(isp)%chna%delta
+                j = aint( r_2 / step ) + 1
+                chna_at = zero
+                if(j+1<=pseudo(isp)%chna%n) then
                    rr = real(j,double) * step
-                   a = ( rr - r_1 ) / step
+                   a = ( rr - r_2 ) / step
                    b = one - a
                    c = a * ( a * a - one ) * step * step / six
                    d = b * ( b * b - one ) * step * step / six
 
-                   r1=pseudo(isp)%vlocal%f(j)
-                   r2=pseudo(isp)%vlocal%f(j+1)
-                   r3=pseudo(isp)%vlocal%d2(j)
-                   r4=pseudo(isp)%vlocal%d2(j+1)
+                   r1=pseudo(isp)%chna%f(j)
+                   r2=pseudo(isp)%chna%f(j+1)
+                   r3=pseudo(isp)%chna%d2(j)
+                   r4=pseudo(isp)%chna%d2(j+1)
 
-                   vlocal_at =  a * r1 + b * r2 + c * r3 + d * r4
+                   chna_at =  a * r1 + b * r2 + c * r3 + d * r4
                 end if
-                !call splint( pseudo(isp)%vlocal%delta, pseudo(isp)%vlocal%f, &
-                !     pseudo(isp)%vlocal%d2, &
-                !     pseudo(isp)%vlocal%n, &
-                !     r1, vlocal_at, range_flag )
+                !call splint( pseudo(isp)%chna%delta, pseudo(isp)%chna%f, &
+                !     pseudo(isp)%chna%d2, pseudo(isp)%chna%n, r2, chna_at, range_flag )
+                if( ir2 == 1 .or. ir2 == ir1 ) then
+                   chna_at = chna_at*half
+                end if
+                integ_inside = integ_inside + r_2*r_2 * chna_at
+             end do
+             if( r_1 == zero ) then
+                integ_inside = zero
+             else
+                integ_inside = integ_inside * (four*pi/r_1)*pseudo(isp)%chna%delta
              end if
-             pseudo(isp)%vna%f(ir1) = integ_inside+integ_outside + vlocal_at
-          else ! SIESTA PP
-             pseudo(isp)%vna%f(ir1) = integ_inside+integ_outside
-          end if
-       end do
 
-       yp1 = (pseudo(isp)%vna%f(2)-pseudo(isp)%vna%f(1)) &
-            /pseudo(isp)%vna%delta
-       ypn = (pseudo(isp)%vna%f(pseudo(isp)%vna%n)-pseudo(isp)%vna%f(pseudo(isp)%vna%n-1)) &
-            /pseudo(isp)%vna%delta
+             integ_outside = zero
+             do ir2=ir1, pseudo(isp)%chna%n
+                r_2 = real(ir2-1,double)*pseudo(isp)%chna%delta
 
-       call spline( pseudo(isp)%vna%n, pseudo(isp)%vna%delta, &
-            pseudo(isp)%vna%f, yp1, ypn, pseudo(isp)%vna%d2 )
+                step = pseudo(isp)%chna%delta
+                j = aint( r_2 / step ) + 1
+                chna_at = zero
+                if(j+1<=pseudo(isp)%chna%n) then
+                   rr = real(j,double) * step
+                   a = ( rr - r_2 ) / step
+                   b = one - a
+                   c = a * ( a * a - one ) * step * step / six
+                   d = b * ( b * b - one ) * step * step / six
 
-       !-------------------------------------------------------
-       ! calculate Vatom(r) - atomic potential
-       norm = zero
-       do ir1=1, atomic_density_table(isp)%length
-          r_1 = (ir1-1)*atomic_density_table(isp)%delta
+                   r1=pseudo(isp)%chna%f(j)
+                   r2=pseudo(isp)%chna%f(j+1)
+                   r3=pseudo(isp)%chna%d2(j)
+                   r4=pseudo(isp)%chna%d2(j+1)
 
-          integ_inside = zero
-          do ir2=1, ir1
-             r_2 = (ir2-1)*atomic_density_table(isp)%delta
-             
-             chatom_at = zero
-             step = atomic_density_table(isp)%delta
-             j = aint( r_2 / step ) + 1
-             if(j+1<=atomic_density_table(isp)%length) then
-                rr = real(j,double) * step
-                a = ( rr - r_2 ) / step
-                b = one - a
-                c = a * ( a * a - one ) * step * step / six
-                d = b * ( b * b - one ) * step * step / six
+                   chna_at =  a * r1 + b * r2 + c * r3 + d * r4
+                end if
+                !call splint( pseudo(isp)%chna%delta, pseudo(isp)%chna%f, &
+                !     pseudo(isp)%chna%d2, pseudo(isp)%chna%n, r2, chna_at, range_flag )
+                if( ir2 == ir1 .or. ir2 == pseudo(isp)%chna%n ) then
+                   chna_at = chna_at*half
+                end if
+                integ_outside = integ_outside + r_2 * chna_at
+             end do
+             integ_outside = integ_outside * four*pi*pseudo(isp)%chna%delta
 
-                r1=atomic_density_table(isp)%table(j)
-                r2=atomic_density_table(isp)%table(j+1)
-                r3=atomic_density_table(isp)%d2_table(j)
-                r4=atomic_density_table(isp)%d2_table(j+1)
+             if( pseudo(isp)%tm_loc_pot==loc_pot ) then ! ABINIT PP
+                vlocal_at = zero
+                if( r_1<pseudo(isp)%vlocal%cutoff ) then
 
-                chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
+                   step = pseudo(isp)%vlocal%delta
+                   j = aint( r_1 / step ) + 1
+                   if(j+1<=pseudo(isp)%vlocal%n) then
+                      rr = real(j,double) * step
+                      a = ( rr - r_1 ) / step
+                      b = one - a
+                      c = a * ( a * a - one ) * step * step / six
+                      d = b * ( b * b - one ) * step * step / six
+
+                      r1=pseudo(isp)%vlocal%f(j)
+                      r2=pseudo(isp)%vlocal%f(j+1)
+                      r3=pseudo(isp)%vlocal%d2(j)
+                      r4=pseudo(isp)%vlocal%d2(j+1)
+
+                      vlocal_at =  a * r1 + b * r2 + c * r3 + d * r4
+                   end if
+                   !call splint( pseudo(isp)%vlocal%delta, pseudo(isp)%vlocal%f, &
+                   !     pseudo(isp)%vlocal%d2, &
+                   !     pseudo(isp)%vlocal%n, &
+                   !     r1, vlocal_at, range_flag )
+                end if
+                pseudo(isp)%vna%f(ir1) = integ_inside+integ_outside + vlocal_at
+             else ! SIESTA PP
+                pseudo(isp)%vna%f(ir1) = integ_inside+integ_outside
              end if
-             !write(io_lun,*) 'splint6'
-             !call splint(atomic_density_table(isp)%delta, &
-             !     atomic_density_table(isp)%table, &
-             !     atomic_density_table(isp)%d2_table, &
-             !     atomic_density_table(isp)%length, &
-             !     r2, chatom_at, range_flag )
-
-             if( ir2 == 1 .or. ir2 == ir1 ) then
-                chatom_at = chatom_at*half
-             end if
-             integ_inside = integ_inside + r_2*r_2 * chatom_at
           end do
-          if( r_1 == zero ) then
+
+          yp1 = (pseudo(isp)%vna%f(2)-pseudo(isp)%vna%f(1)) &
+               /pseudo(isp)%vna%delta
+          ypn = (pseudo(isp)%vna%f(pseudo(isp)%vna%n)-pseudo(isp)%vna%f(pseudo(isp)%vna%n-1)) &
+               /pseudo(isp)%vna%delta
+
+          call spline( pseudo(isp)%vna%n, pseudo(isp)%vna%delta, &
+               pseudo(isp)%vna%f, yp1, ypn, pseudo(isp)%vna%d2 )
+
+          !-------------------------------------------------------
+          ! calculate Vatom(r) - atomic potential
+          norm = zero
+          do ir1=1, atomic_density_table(isp)%length
+             r_1 = (ir1-1)*atomic_density_table(isp)%delta
+
              integ_inside = zero
-          else
-             integ_inside = integ_inside * (four*pi/r_1)*atomic_density_table(isp)%delta
-          end if
+             do ir2=1, ir1
+                r_2 = (ir2-1)*atomic_density_table(isp)%delta
 
-          integ_outside = zero
-          do ir2=ir1, atomic_density_table(isp)%length
-             r_2 = (ir2-1)*atomic_density_table(isp)%delta
+                chatom_at = zero
+                step = atomic_density_table(isp)%delta
+                j = aint( r_2 / step ) + 1
+                if(j+1<=atomic_density_table(isp)%length) then
+                   rr = real(j,double) * step
+                   a = ( rr - r_2 ) / step
+                   b = one - a
+                   c = a * ( a * a - one ) * step * step / six
+                   d = b * ( b * b - one ) * step * step / six
 
-             chatom_at = zero
-             step = atomic_density_table(isp)%delta
-             j = aint( r_2 / step ) + 1
-             if(j+1<=atomic_density_table(isp)%length) then
-                rr = real(j,double) * step
-                a = ( rr - r_2 ) / step
-                b = one - a
-                c = a * ( a * a - one ) * step * step / six
-                d = b * ( b * b - one ) * step * step / six
+                   r1=atomic_density_table(isp)%table(j)
+                   r2=atomic_density_table(isp)%table(j+1)
+                   r3=atomic_density_table(isp)%d2_table(j)
+                   r4=atomic_density_table(isp)%d2_table(j+1)
 
-                r1=atomic_density_table(isp)%table(j)
-                r2=atomic_density_table(isp)%table(j+1)
-                r3=atomic_density_table(isp)%d2_table(j)
-                r4=atomic_density_table(isp)%d2_table(j+1)
+                   chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
+                end if
+                !write(io_lun,*) 'splint6'
+                !call splint(atomic_density_table(isp)%delta, &
+                !     atomic_density_table(isp)%table, &
+                !     atomic_density_table(isp)%d2_table, &
+                !     atomic_density_table(isp)%length, &
+                !     r2, chatom_at, range_flag )
 
-                chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
+                if( ir2 == 1 .or. ir2 == ir1 ) then
+                   chatom_at = chatom_at*half
+                end if
+                integ_inside = integ_inside + r_2*r_2 * chatom_at
+             end do
+             if( r_1 == zero ) then
+                integ_inside = zero
+             else
+                integ_inside = integ_inside * (four*pi/r_1)*atomic_density_table(isp)%delta
              end if
-             !write(io_lun,*) 'splint7'
-             !call splint(atomic_density_table(isp)%delta, &
-             !     atomic_density_table(isp)%table, &
-             !     atomic_density_table(isp)%d2_table, &
-             !     atomic_density_table(isp)%length, &
-             !     r2, chatom_at, range_flag )
 
-             if( ir2 == ir1 .or. ir2 == atomic_density_table(isp)%length ) then
-                chatom_at = chatom_at*half
-             end if
-             integ_outside = integ_outside + r_2 * chatom_at
+             integ_outside = zero
+             do ir2=ir1, atomic_density_table(isp)%length
+                r_2 = (ir2-1)*atomic_density_table(isp)%delta
+
+                chatom_at = zero
+                step = atomic_density_table(isp)%delta
+                j = aint( r_2 / step ) + 1
+                if(j+1<=atomic_density_table(isp)%length) then
+                   rr = real(j,double) * step
+                   a = ( rr - r_2 ) / step
+                   b = one - a
+                   c = a * ( a * a - one ) * step * step / six
+                   d = b * ( b * b - one ) * step * step / six
+
+                   r1=atomic_density_table(isp)%table(j)
+                   r2=atomic_density_table(isp)%table(j+1)
+                   r3=atomic_density_table(isp)%d2_table(j)
+                   r4=atomic_density_table(isp)%d2_table(j+1)
+
+                   chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
+                end if
+                !write(io_lun,*) 'splint7'
+                !call splint(atomic_density_table(isp)%delta, &
+                !     atomic_density_table(isp)%table, &
+                !     atomic_density_table(isp)%d2_table, &
+                !     atomic_density_table(isp)%length, &
+                !     r2, chatom_at, range_flag )
+
+                if( ir2 == ir1 .or. ir2 == atomic_density_table(isp)%length ) then
+                   chatom_at = chatom_at*half
+                end if
+                integ_outside = integ_outside + r_2 * chatom_at
+             end do
+             integ_outside = integ_outside * four*pi*atomic_density_table(isp)%delta
+
+             vchatom_at = integ_inside+integ_outside
+             norm = norm + (vchatom_at*r_1 - pseudo(isp)%zval)*four*pi*r_1*atomic_density_table(isp)%delta
           end do
-          integ_outside = integ_outside * four*pi*atomic_density_table(isp)%delta
-
-          vchatom_at = integ_inside+integ_outside
-          norm = norm + (vchatom_at*r_1 - pseudo(isp)%zval)*four*pi*r_1*atomic_density_table(isp)%delta
-       end do
-       pseudo(isp)%eshift = norm
+          pseudo(isp)%eshift = norm
+       end if ! .false. - removing unnecessary routines
+       !-------------------------------------------------------
+       ! END OF UNNECESSARY ROUTINES 
+       !-------------------------------------------------------
 
        !-------------------------------------------------------
        ! calculate chatom(k) - atomic charge
@@ -2551,79 +2561,87 @@ contains
                   + sqrt_two_pi*delta*r*r*j0(k*r) * chatom_at
           end do
        end do
-       ! Local
        !-------------------------------------------------------
-       ! calculate FT
-       pseudo(isp)%chlocal%k_length = k_length
-       pseudo(isp)%chlocal%k_delta  = k_cutoff/pseudo(isp)%chlocal%k_length
-       allocate( pseudo(isp)%chlocal%k_table(0:pseudo(isp)%chlocal%k_length) )
-       pseudo(isp)%chlocal%k_table(:) = zero
-
-       do ir=1, npoint
-          r = (ir-1)*delta
-
-          chatom_at = zero
-          step = pseudo(isp)%chlocal%delta
-          j = aint( r / step ) + 1
-          if(j+1<=pseudo(isp)%chlocal%n) then
-             rr = real(j,double) * step
-             a = ( rr - r ) / step
-             b = one - a
-             c = a * ( a * a - one ) * step * step / six
-             d = b * ( b * b - one ) * step * step / six
-
-             r1=pseudo(isp)%chlocal%f(j)
-             r2=pseudo(isp)%chlocal%f(j+1)
-             r3=pseudo(isp)%chlocal%d2(j)
-             r4=pseudo(isp)%chlocal%d2(j+1)
-
-             chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
-          end if
-          do ik=0, pseudo(isp)%chlocal%k_length
-             k = ik*pseudo(isp)%chlocal%k_delta
-
-             pseudo(isp)%chlocal%k_table(ik) = &
-                  pseudo(isp)%chlocal%k_table(ik) &
-                  + sqrt_two_pi*delta*r*r*j0(k*r) * chatom_at
-          end do
-       end do       
-       ! NA
+       ! UNNECESSARY ROUTINES 
        !-------------------------------------------------------
-       ! calculate FT
-       pseudo(isp)%chna%k_length = k_length
-       pseudo(isp)%chna%k_delta  = k_cutoff/pseudo(isp)%chna%k_length
-       allocate( pseudo(isp)%chna%k_table(0:pseudo(isp)%chna%k_length) )
-       pseudo(isp)%chna%k_table(:) = zero
+       if(.false.) then
+          ! Local
+          !-------------------------------------------------------
+          ! calculate FT
+          pseudo(isp)%chlocal%k_length = k_length
+          pseudo(isp)%chlocal%k_delta  = k_cutoff/pseudo(isp)%chlocal%k_length
+          allocate( pseudo(isp)%chlocal%k_table(0:pseudo(isp)%chlocal%k_length) )
+          pseudo(isp)%chlocal%k_table(:) = zero
 
-       do ir=1, npoint
-          r = (ir-1)*delta
+          do ir=1, npoint
+             r = (ir-1)*delta
 
-          chatom_at = zero
-          step = pseudo(isp)%chna%delta
-          j = aint( r / step ) + 1
-          if(j+1<=pseudo(isp)%chna%n) then
-             rr = real(j,double) * step
-             a = ( rr - r ) / step
-             b = one - a
-             c = a * ( a * a - one ) * step * step / six
-             d = b * ( b * b - one ) * step * step / six
+             chatom_at = zero
+             step = pseudo(isp)%chlocal%delta
+             j = aint( r / step ) + 1
+             if(j+1<=pseudo(isp)%chlocal%n) then
+                rr = real(j,double) * step
+                a = ( rr - r ) / step
+                b = one - a
+                c = a * ( a * a - one ) * step * step / six
+                d = b * ( b * b - one ) * step * step / six
 
-             r1=pseudo(isp)%chna%f(j)
-             r2=pseudo(isp)%chna%f(j+1)
-             r3=pseudo(isp)%chna%d2(j)
-             r4=pseudo(isp)%chna%d2(j+1)
+                r1=pseudo(isp)%chlocal%f(j)
+                r2=pseudo(isp)%chlocal%f(j+1)
+                r3=pseudo(isp)%chlocal%d2(j)
+                r4=pseudo(isp)%chlocal%d2(j+1)
 
-             chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
-          end if
-          do ik=0, pseudo(isp)%chna%k_length
-             k = ik*pseudo(isp)%chna%k_delta
+                chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
+             end if
+             do ik=0, pseudo(isp)%chlocal%k_length
+                k = ik*pseudo(isp)%chlocal%k_delta
 
-             pseudo(isp)%chna%k_table(ik) = &
-                  pseudo(isp)%chna%k_table(ik) &
-                  + sqrt_two_pi*delta*r*r*j0(k*r) * chatom_at
+                pseudo(isp)%chlocal%k_table(ik) = &
+                     pseudo(isp)%chlocal%k_table(ik) &
+                     + sqrt_two_pi*delta*r*r*j0(k*r) * chatom_at
+             end do
           end do
-       end do
-    end do
+          ! NA
+          !-------------------------------------------------------
+          ! calculate FT
+          pseudo(isp)%chna%k_length = k_length
+          pseudo(isp)%chna%k_delta  = k_cutoff/pseudo(isp)%chna%k_length
+          allocate( pseudo(isp)%chna%k_table(0:pseudo(isp)%chna%k_length) )
+          pseudo(isp)%chna%k_table(:) = zero
+
+          do ir=1, npoint
+             r = (ir-1)*delta
+
+             chatom_at = zero
+             step = pseudo(isp)%chna%delta
+             j = aint( r / step ) + 1
+             if(j+1<=pseudo(isp)%chna%n) then
+                rr = real(j,double) * step
+                a = ( rr - r ) / step
+                b = one - a
+                c = a * ( a * a - one ) * step * step / six
+                d = b * ( b * b - one ) * step * step / six
+
+                r1=pseudo(isp)%chna%f(j)
+                r2=pseudo(isp)%chna%f(j+1)
+                r3=pseudo(isp)%chna%d2(j)
+                r4=pseudo(isp)%chna%d2(j+1)
+
+                chatom_at =  a * r1 + b * r2 + c * r3 + d * r4
+             end if
+             do ik=0, pseudo(isp)%chna%k_length
+                k = ik*pseudo(isp)%chna%k_delta
+
+                pseudo(isp)%chna%k_table(ik) = &
+                     pseudo(isp)%chna%k_table(ik) &
+                     + sqrt_two_pi*delta*r*r*j0(k*r) * chatom_at
+             end do
+          end do
+       end if ! End of if(.false.) commenting out unnecessary routines
+       !-------------------------------------------------------
+       ! END OF UNNECESSARY ROUTINES 
+       !-------------------------------------------------------
+    end do ! n_species
 
   end subroutine make_neutral_atom
 !!***  
