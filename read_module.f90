@@ -1,5 +1,6 @@
 module read
 
+  use datatypes
   use GenComms, ONLY: cq_abort
   use global_module, ONLY: iprint
   
@@ -92,6 +93,7 @@ contains
     ! Is this a debug run ? 
     flag_run_debug = fdf_boolean('General.RunDebug',.false.)
     energy_semicore = fdf_double('General.SemicoreEnergy',-one)
+    if(energy_semicore>zero) write(*,fmt='(4x,"Possible error: your semi-core threshold is positive ! ",f6.3)') energy_semicore
     ! Energy cutoffs
     allocate(deltaE_large_radius(n_species), deltaE_small_radius(n_species))
     ! Now read the species-dependent data
