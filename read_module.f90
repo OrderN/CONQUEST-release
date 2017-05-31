@@ -120,14 +120,17 @@ contains
           else
              call cq_abort("Unrecognised atomic cutoff flag "//input_string(1:8))
           end if
-          deltaE_large_radius(i) = fdf_double("Atom.dE_large_radius",0.00073498_double)
-          deltaE_small_radius(i) = fdf_double("Atom.dE_small_radius",0.073498_double)
           energy_units = 1
           input_string = fdf_string(2,"Atom.EnergyUnits","Ha")
           if(leqi(input_string(1:2),"eV")) then
              energy_units = 2
+             deltaE_large_radius(i) = fdf_double("Atom.dE_large_radius",0.02_double)
+             deltaE_small_radius(i) = fdf_double("Atom.dE_small_radius",two)
              deltaE_large_radius(i) = deltaE_large_radius(i) / HaToeV
              deltaE_small_radius(i) = deltaE_small_radius(i) / HaToeV
+          else if(leqi(input_string(1:2),"Ha")) then
+             deltaE_large_radius(i) = fdf_double("Atom.dE_large_radius",0.00073498_double)
+             deltaE_small_radius(i) = fdf_double("Atom.dE_small_radius",0.073498_double)
           end if
           input_string = fdf_string(7,'Atom.BasisSize','none')
           if(leqi(input_string(1:7),'minimal')) then

@@ -522,7 +522,9 @@ contains
        n_kink = nmax
        call integrate_vkb_outwards(species,n_kink,ell,psi,f,n_crossings,n_nodes) ! We want to integrate to max before final node
        if(n_crossings>=n_nodes+1) then
-          call cq_abort("Found cutoff inside the VKB projector cutoff: this suggests too great an energy shift")
+          write(*,fmt='(2x,"Found cutoff inside the VKB projector cutoff: this suggests too great an energy shift")')
+          write(*,fmt='(2x,"Try reducing Atom.dE_small_radius from its default of 2 eV")')
+          call cq_abort("Aborting")
        else
           do i=n_kink,nmax-1
              psi(i+1) = ( (twelve - ten*f(i)) * psi(i) - f(i-1)*psi(i-1) )/f(i+1)
