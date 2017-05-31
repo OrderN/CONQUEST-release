@@ -41,6 +41,7 @@ contains
     use radial_xc, ONLY: get_vxc
     use input_module, ONLY: io_assign, io_close
     use write, ONLY: write_pao_plot, pte
+    use units, ONLY: HaToeV
     
     implicit none
 
@@ -106,18 +107,25 @@ contains
        ! Find default radii or radii from cutoffs
        write(*,fmt='(/2x,"Setting cutoff radii"/)')
        if(flag_default_cutoffs) then ! Work out radii
-          write(*,fmt='(4x,"Default cutoffs")')
+          if(paos(i_species)%flag_cutoff==pao_cutoff_energies.OR.paos(i_species)%flag_cutoff==pao_cutoff_default) then
+             write(*,fmt='(4x,"Default cutoffs, shells share energy shifts")')
+          else if(paos(i_species)%flag_cutoff==pao_cutoff_radii) then
+             write(*,fmt='(4x,"Default cutoffs, averaging radii over shells")')
+          end if
           call find_default_cutoffs(i_species,vha,vxc)
        else if(paos(i_species)%flag_cutoff==pao_cutoff_energies) then ! Work out radii from energy shifts
           write(*,fmt='(4x,"User-specified energy shifts")')
+          write(*,fmt='(4x,"  n  l  z  delta E (Ha)  delta E (eV)")')
           do i_shell = 1,val(i_species)%n_occ
-             ell = val(i_species)%l(i_shell)
-             en = val(i_species)%npao(i_shell)
+             ell = paos(i_species)%l(i_shell)
+             en = paos(i_species)%n(i_shell)
              do zeta = 1,paos(i_species)%nzeta(i_shell)
+                write(*,fmt='(4x,3i3,x,2f13.8)') en, ell, zeta, paos(i_species)%energy(zeta,i_shell), &
+                     paos(i_species)%energy(zeta,i_shell)*HaToeV
+                en = paos(i_species)%npao(i_shell)
                 !if(iprint>2) write(*,*) '# shell, n, l, zeta: ',i_shell, ell, en, zeta
-                call find_radius_from_energy(i_species,paos(i_species)%npao(i_shell), paos(i_species)%l(i_shell), &
-                     paos(i_species)%cutoff(zeta,i_shell), val(i_species)%en_ps(i_shell) + paos(i_species)%energy(zeta,i_shell), &
-                     vha, vxc, .false.)
+                call find_radius_from_energy(i_species,en, ell, paos(i_species)%cutoff(zeta,i_shell), &
+                     val(i_species)%en_ps(i_shell) + paos(i_species)%energy(zeta,i_shell), vha, vxc, .false.)
                 ! Now ensure that we have exact cutoff - effectively round up (2+ not 1+)
                 grid_size = 2+floor(paos(i_species)%cutoff(zeta,i_shell)/delta_r_reg)
                 paos(i_species)%cutoff(zeta,i_shell) = delta_r_reg*real(grid_size-1,double)
@@ -139,7 +147,7 @@ contains
        else ! Radii
           write(*,fmt='(4x,"User-specified radii")')          
        end if
-       write(*,fmt='(4x,"Cutoff radii for PAOs")')
+       write(*,fmt='(/4x,"Cutoff radii for PAOs")')
        write(*,fmt='(4x,"  n  l  z        R (bohr)")')
        do i_shell = 1,paos(i_species)%n_shells
           ell = paos(i_species)%l(i_shell)
@@ -363,6 +371,7 @@ contains
     use datatypes
     use numbers
     use mesh, ONLY: nmesh, rr, delta_r_reg
+    use units, ONLY: HaToeV
     
     implicit none
 
@@ -371,7 +380,7 @@ contains
     real(double), dimension(nmesh) :: vha,vxc
 
     ! Local variables
-    integer :: i_shell, grid_size
+    integer :: i_shell, grid_size, n_shells_average
     real(double), dimension(:), allocatable :: large_cutoff, small_cutoff
     real(double) :: energy, average_large, average_small, average_mid
     real(double), dimension(:), allocatable :: psi
@@ -382,6 +391,8 @@ contains
     allocate(large_cutoff(val(species)%n_occ),small_cutoff(val(species)%n_occ))
     large_cutoff = zero
     small_cutoff = zero
+    write(*,fmt='(4x,"Default energy shifts")')
+    write(*,fmt='(4x,"  n  l  delta E (Ha)  delta E (eV)")')
     ! Loop over valence states, find large/small cutoffs
     do i_shell = 1, val(species)%n_occ !paos(species)%n_shells-1 
        if(iprint>3) write(*,*) '# Finding radius for ',paos(species)%npao(i_shell), paos(species)%l(i_shell)
@@ -391,12 +402,18 @@ contains
        grid_size = 2+floor(large_cutoff(i_shell)/delta_r_reg)
        large_cutoff(i_shell) = delta_r_reg*real(grid_size-1,double)
        if(val(species)%semicore(i_shell)==0) then
+          write(*,fmt='(4x,2i3,2f13.8," (large radius)")') paos(species)%n(i_shell), paos(species)%l(i_shell), &
+               deltaE_large_radius(species), deltaE_large_radius(species)*HaToeV
+          write(*,fmt='(4x,2i3,2f13.8," (small radius)")') paos(species)%n(i_shell), paos(species)%l(i_shell), &
+               deltaE_small_radius(species), deltaE_small_radius(species)*HaToeV
           call find_radius_from_energy(species,paos(species)%npao(i_shell), paos(species)%l(i_shell), &
                small_cutoff(i_shell), val(species)%en_ps(i_shell)+deltaE_small_radius(species), vha, vxc, .false.)
           !write(*,*) '# Cutoffs: ',large_cutoff, small_cutoff
           grid_size = 2+floor(small_cutoff(i_shell)/delta_r_reg)
           small_cutoff(i_shell) = delta_r_reg*real(grid_size-1,double)
        else
+          write(*,fmt='(4x,2i3,2f13.8," (only radius)")') paos(species)%n(i_shell), paos(species)%l(i_shell), &
+               deltaE_large_radius(species), deltaE_large_radius(species)*HaToeV
           !write(*,*) '# Cutoff: ',large_cutoff
           small_cutoff(i_shell) = large_cutoff(i_shell)
        end if
@@ -430,13 +447,17 @@ contains
        ! Sum over radii of different shells, excluding polarisation
        average_large = zero
        average_small = zero
+       n_shells_average = 0
        do i_shell = 1, val(species)%n_occ!paos(species)%n_shells-1
-          average_large = average_large + large_cutoff(i_shell)
-          average_small = average_small + small_cutoff(i_shell)
+          if(val(species)%semicore(i_shell)/=1) then
+             average_large = average_large + large_cutoff(i_shell)
+             average_small = average_small + small_cutoff(i_shell)
+             n_shells_average = n_shells_average + 1
+          end if
        end do
        ! Find averages for large and small
-       average_large = average_large/real(paos(species)%n_shells-1, double)
-       average_small = average_small/real(paos(species)%n_shells-1, double)
+       average_large = average_large/real(n_shells_average, double)
+       average_small = average_small/real(n_shells_average, double)
        ! Round to grid step
        grid_size = 2+floor(average_large/delta_r_reg)
        average_large = delta_r_reg*real(grid_size-1,double)
@@ -445,17 +466,32 @@ contains
        grid_size = 2+floor((average_large+average_small)/(two*delta_r_reg))
        average_mid = delta_r_reg*real(grid_size-1,double)      
        ! Set radii for all shells
-       paos(species)%cutoff(:,i_shell) = zero
-       paos(species)%cutoff(1,:) = average_large
-       do i_shell = 1, paos(species)%n_shells
-          if(paos(species)%nzeta(i_shell)==2) then
-             paos(species)%cutoff(2,:) = average_small
-          else if(paos(species)%nzeta(i_shell)==3) then
-             paos(species)%cutoff(3,:) = average_small
-             ! Now average large and small
-             paos(species)%cutoff(2,:) = average_mid !half*(average_large + average_small)
+       do i_shell = 1, val(species)%n_occ
+          if(val(species)%semicore(i_shell)==1) then
+             paos(species)%cutoff(:,i_shell) = zero
+             paos(species)%cutoff(1,i_shell) = large_cutoff(i_shell)
+          else
+             paos(species)%cutoff(:,i_shell) = zero
+             paos(species)%cutoff(1,i_shell) = average_large
+             if(paos(species)%nzeta(i_shell)==2) then
+                paos(species)%cutoff(2,i_shell) = average_small
+             else if(paos(species)%nzeta(i_shell)==3) then
+                paos(species)%cutoff(3,i_shell) = average_small
+                ! Now average large and small
+                paos(species)%cutoff(2,i_shell) = average_mid !half*(average_large + average_small)
+             end if
           end if
-          !write(*,*) '# Cutoffs: ',paos(species)%cutoff(:,i_shell)
+       end do
+       do i_shell = val(species)%n_occ + 1, paos(species)%n_shells
+          paos(species)%cutoff(:,i_shell) = zero
+          paos(species)%cutoff(1,i_shell) = average_large
+          if(paos(species)%nzeta(i_shell)==2) then
+             paos(species)%cutoff(2,i_shell) = average_small
+          else if(paos(species)%nzeta(i_shell)==3) then
+             paos(species)%cutoff(3,i_shell) = average_small
+             ! Now average large and small
+             paos(species)%cutoff(2,i_shell) = average_mid !half*(average_large + average_small)
+          end if
        end do
     end if
     !deallocate(psi)
