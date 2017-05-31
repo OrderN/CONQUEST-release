@@ -541,7 +541,7 @@ contains
     ! Interpolate between i+1 and i
     if(i>=nmax) i=nmax-1
     Rc = rr(i) - psi(i)*(rr(i+1)-rr(i))/(psi(i+1)-psi(i))
-    write(*,*) 'ri, ri+1 and interp are: ',rr(i), rr(i+1),psi(i),psi(i+1), - psi(i)*(rr(i+1)-rr(i))/(psi(i+1)-psi(i))
+    !write(*,*) 'ri, ri+1 and interp are: ',rr(i), rr(i+1),psi(i),psi(i+1), - psi(i)*(rr(i+1)-rr(i))/(psi(i+1)-psi(i))
     if(iprint>5) write(*,*) '# Found radius ',Rc
     return
   end subroutine find_radius_from_energy
