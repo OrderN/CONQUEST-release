@@ -106,10 +106,10 @@ contains
        ! Find default radii or radii from cutoffs
        write(*,fmt='(/2x,"Setting cutoff radii"/)')
        if(flag_default_cutoffs) then ! Work out radii
-          write(*,fmt='(4x,"Default cutoffs"))')
+          write(*,fmt='(4x,"Default cutoffs")')
           call find_default_cutoffs(i_species,vha,vxc)
        else if(paos(i_species)%flag_cutoff==pao_cutoff_energies) then ! Work out radii from energy shifts
-          write(*,fmt='(4x,"User-specified energy shifts"))')
+          write(*,fmt='(4x,"User-specified energy shifts")')
           do i_shell = 1,val(i_species)%n_occ
              ell = val(i_species)%l(i_shell)
              en = val(i_species)%npao(i_shell)
@@ -137,7 +137,7 @@ contains
              end if
           end do
        else ! Radii
-          write(*,fmt='(4x,"User-specified radii"))')          
+          write(*,fmt='(4x,"User-specified radii")')          
        end if
        write(*,fmt='(4x,"Cutoff radii for PAOs")')
        write(*,fmt='(4x,"  n  l  z        R (bohr)")')
