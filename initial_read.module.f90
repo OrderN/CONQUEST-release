@@ -582,6 +582,8 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2017/03/14 SYM (with dave)
   !!    Fix lack of index on InvSRange when read in
+  !!   2017/04/24 dave
+  !!    Changed pseudopotential output label to HAMANN (replacing ABINIT)
   !!   2017/05/09 dave
   !!    Removed restriction on L-matrix re-use and spin
   !!  TODO
@@ -1011,9 +1013,9 @@ contains
           if(inode==ionode.AND.iprint_init>0) &
                write(io_lun,fmt='(10x,"SIESTA pseudopotential will be used. ")')
           pseudo_type = SIESTA
-       else if(leqi(ps_type,'plato').OR.leqi(ps_type,'abini')) then
+       else if(leqi(ps_type,'plato').OR.leqi(ps_type,'haman')) then
           if(inode==ionode.AND.iprint_init>0) &
-               write(io_lun,fmt='(10x,"ABINIT pseudopotential will be used. ")')
+               write(io_lun,fmt='(10x,"HAMANN pseudopotential will be used. ")')
           pseudo_type = ABINIT
        else
           if(inode==ionode.AND.iprint_init>0) &
