@@ -493,4 +493,25 @@ contains
    return
   end subroutine free_InfoMatGlobal
 
+  !!***
+  subroutine make_index_iter(mx_store, iter_present, index_iter)
+   implicit none
+   integer, intent(in) :: mx_store
+   integer, intent(in) :: iter_present
+   integer, intent(out) :: index_iter(0:mx_store-1)
+   integer :: iter
+
+   index_iter(:) = 0
+   if(iter_present < mx_store) then
+    do iter = 0, iter_present-1
+      index_iter(iter)=iter_present-iter
+    enddo
+   else
+    do iter = 0, mx_store-1
+      index_iter(iter)=mod(iter_present-iter-1,mx_store)+1
+    enddo
+   endif
+  return
+  end subroutine make_index_iter
+
 end module store_matrix
