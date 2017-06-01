@@ -131,6 +131,8 @@ contains
 !!    Changed to use n_species and species_label from species_module, and changed atomicrad to atomicnum
 !!   2014/10/12 12:21 lat
 !!    Added possibility of user defined filename for PAO/pseudo *ion
+!!   2017/02/17 15:59 dave
+!!    Changes to allow reading of Hamann's optimised norm-conserving pseudopotentials (remove ABINIT)
 !!  SOURCE
 !!
   subroutine setup_pseudo_info
@@ -542,6 +544,16 @@ contains
 !!    Updated module name to ion_electrostatic
 !!   2016/02/09 08:17 dave
 !!    Changed to use erfc from functions module
+!!   2016/01/09 20:00 nakata
+!!    Added pao_info%angmom%prncpl
+!!   2017/02/24 10:06 dave & tsuyoshi
+!!    Bug fix for read_header_tmp: removed formatting for zval
+!!   2017/03/13 dave
+!!    Repeated bug fix for other if branch in read_header_tmp (credit Jac van Driel for finding issue)
+!!   2017/03/14 dave
+!!    Changed string comparisons to use leqi from input_module (direct comparison breaks on Cray)
+!!   2017/03/23 dave
+!!    Added storage of spacing of PAO table
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -554,6 +566,7 @@ contains
     use memory_module, ONLY: reg_alloc_mem, type_dbl    
     use functions, ONLY: erfc
     use input_module, ONLY: io_assign, io_close
+    use pseudopotential_common, ONLY: pseudo_type, SIESTA, ABINIT
 
     implicit none
 
@@ -571,7 +584,7 @@ contains
 
     integer :: iproc, lmax, maxz, alls, nzeta, l, count,tzl
     real(double), allocatable :: thispop(:)
-    integer, allocatable :: thisl(:), thisz(:), zl(:), indexlz(:,:)
+    integer, allocatable :: thisl(:), thisn(:), thisz(:), zl(:), indexlz(:,:)
 
     if(inode==ionode) then
        filename=ps_info%filename
@@ -582,7 +595,7 @@ contains
        call read_header_tmp(n_orbnl,lmax,n_pjnl, zval, z, lun)
        call alloc_pseudo_info(ps_info, n_pjnl)
        call start_timer(tmr_std_allocation)
-       allocate(dummy_rada(n_orbnl),thisl(n_orbnl),thisz(n_orbnl),thispop(n_orbnl),zl(0:lmax))
+       allocate(dummy_rada(n_orbnl),thisl(n_orbnl),thisn(n_orbnl),thisz(n_orbnl),thispop(n_orbnl),zl(0:lmax))
        call stop_timer(tmr_std_allocation)
 
        ps_info%z = z
@@ -595,6 +608,7 @@ contains
        do i=1,n_orbnl
           read(lun,*) i1,i2,i3,i4, dummy
           thisl(i)=i1
+          thisn(i)=i2
           !thisz(i)=i3
           thispop(i)=dummy
           zl(thisl(i)) = zl(thisl(i))+1
@@ -623,7 +637,7 @@ contains
           if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"l, zl: ",2i5)') l,zl(l)
           if(zl(l)>0) then
              call start_timer(tmr_std_allocation)
-             allocate(pao_info%angmom(l)%zeta(zl(l)),pao_info%angmom(l)%occ(zl(l)),STAT=alls)
+             allocate(pao_info%angmom(l)%zeta(zl(l)),pao_info%angmom(l)%prncpl(zl(l)),pao_info%angmom(l)%occ(zl(l)),STAT=alls)
              if(alls/=0) call cq_abort('Failed to allocate PAOs zeta')
              call stop_timer(tmr_std_allocation)
              count = count + zl(l)*(2*l+1)
@@ -632,6 +646,8 @@ contains
                 if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"i,z,l: ",3i5)') i,nzeta,l
                 pao_info%angmom(l)%zeta(nzeta)%length = dummy_rada(i)%n
                 pao_info%angmom(l)%zeta(nzeta)%cutoff = dummy_rada(i)%cutoff
+                pao_info%angmom(l)%zeta(nzeta)%delta = dummy_rada(i)%delta
+                pao_info%angmom(l)%prncpl(nzeta) = thisn(i)
                 pao_info%angmom(l)%occ(nzeta) = thispop(i)
                 if(pao_info%angmom(l)%zeta(nzeta)%length>=1) then
                    call start_timer(tmr_std_allocation)
@@ -663,7 +679,7 @@ contains
        do i=1,n_orbnl
           call rad_dealloc(dummy_rada(i))
        end do
-       deallocate(dummy_rada,thisl,thisz,thispop,zl)
+       deallocate(dummy_rada,thisl,thisn,thisz,thispop,zl)
 
        ! KBs
        if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading KB projectors ")')
@@ -681,16 +697,23 @@ contains
           call radial_read_ascii(ps_info%pjnl(i),lun)
        enddo
        !Vlocal
-       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading Vlocal ")')
+       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading Vna ")')
        read(lun,*)
        ! Read and store local potential; it may be local part of pseudo, or neutral atom
-       call radial_read_ascii(ps_info%vlocal,lun)
-       !call radial_read_ascii(dummy_rad,lun)
-       !call rad_dealloc(dummy_rad)
-       !Chlocal
-       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading Chlocal ")')
-       read(lun,*)
-       call radial_read_ascii(ps_info%chlocal,lun)
+       ! DRB 2017/02/21 switch here: after vna, get vlocal for Hamann, chlocal for siesta
+       ! DRB 2017/02/21 This is the NA potential
+       if(pseudo_type==SIESTA) then
+          call radial_read_ascii(ps_info%vna,lun)
+          ps_info%vna%f = half*ps_info%vna%f ! Siesta works in Ry
+          if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading Chlocal ")')
+          read(lun,*)
+          call radial_read_ascii(ps_info%chlocal,lun)
+       else if(pseudo_type==ABINIT) then
+          call radial_read_ascii(ps_info%vna,lun)
+          if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading Vlocal ")')
+          read(lun,*)
+          call radial_read_ascii(ps_info%vlocal,lun)
+       end if
        !sets up gaussian which is used to calculate G=0 term
        !  exp( - alpha * cutoff **2 ) = 10 **(-six) 
        if(ps_info%tm_loc_pot==loc_pot) then
@@ -717,14 +740,19 @@ contains
           ps_info%alpha = six * ln10 / (ps_info%chlocal%cutoff ** 2)
        endif
        !Core
-       ps_info%flag_pcc = .false.
-       ! I *really* don't like this, but we'll stay with it for now
-       read(lun,*,end=9999)
-       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading pcc ")')
-       call radial_read_ascii(ps_info%chpcc,lun)
-       ps_info%flag_pcc = .true.
+       ! 2017/03/17 dave
+       ! I'm removing this because we read the PCC flag from the pseudopotential header
+       !ps_info%flag_pcc = .false.
+       !! I *really* don't like this, but we'll stay with it for now
+       !read(lun,*,end=9999)
+       if(ps_info%flag_pcc) then
+          read(lun,*)
+          if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading pcc ")')
+          call radial_read_ascii(ps_info%chpcc,lun)
+       end if
+       !ps_info%flag_pcc = .true.
 
-9999   continue
+!9999   continue
        call io_close(lun)
     endif !  (inode == ionode) then
     ! Now broadcast the information
@@ -741,6 +769,7 @@ contains
     end if
     if(numprocs>1) then
        count = 0
+       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,*) 'PAOs'
        do l=0,lmax
           if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x," l is ",i5)') l
           call gcopy(pao_info%angmom(l)%n_zeta_in_angmom)
@@ -748,7 +777,7 @@ contains
           if(tzl>0) then
              if(inode/=ionode) then
                 call start_timer(tmr_std_allocation)
-                allocate(pao_info%angmom(l)%zeta(tzl),pao_info%angmom(l)%occ(tzl),STAT=alls)
+                allocate(pao_info%angmom(l)%zeta(tzl),pao_info%angmom(l)%prncpl(tzl),pao_info%angmom(l)%occ(tzl),STAT=alls)
                 if(alls/=0) call cq_abort('Failed to allocate PAOs zeta')
                 call stop_timer(tmr_std_allocation)
              end if
@@ -756,6 +785,8 @@ contains
              do nzeta = 1,tzl
                 call gcopy(pao_info%angmom(l)%zeta(nzeta)%length)
                 call gcopy(pao_info%angmom(l)%zeta(nzeta)%cutoff)
+                call gcopy(pao_info%angmom(l)%zeta(nzeta)%delta)
+                call gcopy(pao_info%angmom(l)%prncpl(nzeta))
                 call gcopy(pao_info%angmom(l)%occ(nzeta))
                 if(inode/=ionode) then
                    if(pao_info%angmom(l)%zeta(nzeta)%length>=1) then
@@ -777,7 +808,9 @@ contains
        end do
        pao_info%count = count
        if(inode/=ionode) ps_info%lmax = 0
+       if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,*) 'PPs'
        do i=1,ps_info%n_pjnl
+          if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(2x,"Projector number: ",i3)') i
           call gcopy(ps_info%pjnl_l(i))
           call gcopy(ps_info%pjnl_n(i))
           call gcopy(ps_info%pjnl_ekb(i))
@@ -789,21 +822,39 @@ contains
           call gcopy(ps_info%pjnl(i)%f,ps_info%pjnl(i)%n)
           call gcopy(ps_info%pjnl(i)%d2,ps_info%pjnl(i)%n)
        end do
-       !Vlocal
-       call gcopy(ps_info%tm_loc_pot)
-       call gcopy(ps_info%vlocal%n)
-       call gcopy(ps_info%vlocal%cutoff)
-       call gcopy(ps_info%vlocal%delta)
-       if(inode/=ionode) call rad_alloc(ps_info%vlocal,ps_info%vlocal%n)
-       call gcopy(ps_info%vlocal%f,ps_info%vlocal%n)
-       call gcopy(ps_info%vlocal%d2,ps_info%vlocal%n)
-       !Chlocal
-       call gcopy(ps_info%chlocal%n)
-       call gcopy(ps_info%chlocal%cutoff)
-       call gcopy(ps_info%chlocal%delta)
-       if(inode/=ionode) call rad_alloc(ps_info%chlocal,ps_info%chlocal%n)
-       call gcopy(ps_info%chlocal%f,ps_info%chlocal%n)
-       call gcopy(ps_info%chlocal%d2,ps_info%chlocal%n)
+       if(pseudo_type==SIESTA) then
+          !Chlocal
+          call gcopy(ps_info%tm_loc_pot)
+          call gcopy(ps_info%chlocal%n)
+          call gcopy(ps_info%chlocal%cutoff)
+          call gcopy(ps_info%chlocal%delta)
+          if(inode/=ionode) call rad_alloc(ps_info%chlocal,ps_info%chlocal%n)
+          call gcopy(ps_info%chlocal%f,ps_info%chlocal%n)
+          call gcopy(ps_info%chlocal%d2,ps_info%chlocal%n)
+          ! Vna
+          call gcopy(ps_info%vna%n)
+          call gcopy(ps_info%vna%cutoff)
+          call gcopy(ps_info%vna%delta)
+          if(inode/=ionode) call rad_alloc(ps_info%vna,ps_info%vna%n)
+          call gcopy(ps_info%vna%f,ps_info%vna%n)
+          call gcopy(ps_info%vna%d2,ps_info%vna%n)
+       else if(pseudo_type==ABINIT) then
+          !Vlocal
+          call gcopy(ps_info%tm_loc_pot)
+          call gcopy(ps_info%vlocal%n)
+          call gcopy(ps_info%vlocal%cutoff)
+          call gcopy(ps_info%vlocal%delta)
+          if(inode/=ionode) call rad_alloc(ps_info%vlocal,ps_info%vlocal%n)
+          call gcopy(ps_info%vlocal%f,ps_info%vlocal%n)
+          call gcopy(ps_info%vlocal%d2,ps_info%vlocal%n)
+          ! Vna
+          call gcopy(ps_info%vna%n)
+          call gcopy(ps_info%vna%cutoff)
+          call gcopy(ps_info%vna%delta)
+          if(inode/=ionode) call rad_alloc(ps_info%vna,ps_info%vna%n)
+          call gcopy(ps_info%vna%f,ps_info%vna%n)
+          call gcopy(ps_info%vna%d2,ps_info%vna%n)
+       end if
        if(inode/=ionode) then
           if(ps_info%tm_loc_pot==loc_pot) then
              ps_info%alpha = six * ln10 / (ps_info%vlocal%cutoff ** 2)
@@ -827,6 +878,7 @@ contains
     subroutine read_header_tmp(n_orbnl, lmax_basis, n_pjnl, zval, z, unit)
 
       use global_module, ONLY: iprint_pseudo
+      use input_module, ONLY: leqi
 
       implicit none
 
@@ -834,7 +886,7 @@ contains
       integer, intent(out) :: n_orbnl, n_pjnl, z
       real(double), intent(out) :: zval
 
-      character(len=78) :: line
+      character(len=78) :: line, trim_line
 
       character(len=2)  :: symbol
       character(len=20) :: label
@@ -848,15 +900,18 @@ contains
 
       ! Judge if P.C.C. is considered
       read(unit,'(a)') line
-      if (trim(line) .eq. '<preamble>') then
+      trim_line = trim(line)
+      if (leqi(trim_line(1:10),'<preamble>')) then
          read(unit,'(a)') line
-         do while(trim(line) .ne. '</preamble>')
+         trim_line = trim(line)
+         do while(.NOT.leqi(trim_line(1:11),'</preamble>'))
             read(unit,'(a)') line
-            if (trim(line) .EQ. '<pseudopotential_header>') then
+            trim_line = trim(line)
+            if (leqi(trim_line(1:24),'<pseudopotential_header>')) then
               read (unit, '(1x,a2,1x,a2,1x,a3,1x,a4)') symbol2, xc, rel, pcc
-              if (pcc .EQ. 'pcec') then
+              if (leqi(pcc,'pcec')) then
                 ps_info%flag_pcc = .true.
-              elseif (pcc .NE. 'pcec') then
+              else !if (pcc .NE. 'pcec') then
                 ps_info%flag_pcc = .false.
               endif
             endif
@@ -868,14 +923,13 @@ contains
          write(io_lun,fmt='(10x,"symbol = ",a2)') symbol
          read(unit,'(a20)') label
          write(io_lun,fmt='(10x,"label = ",a20)') label
-         read(unit,'(i5)') z
+         read(unit,*) z
          write(io_lun,fmt='(10x,"z = ",i5)') z
-         read(unit,'(i5)') zval_int
-         zval=real(zval_int,double)
-         write(io_lun,fmt='(10x,"zval_int, zval = ",i5,f12.5)') zval_int, zval
-         read(unit,'(g25.15)') mass
+         read(unit,*) zval
+         write(io_lun,fmt='(10x,"zval_int, zval = ",f12.5)') zval
+         read(unit,*) mass
          write(io_lun,fmt='(10x,"mass = ",g25.15)') mass
-         read(unit,'(g25.15)') self_energy
+         read(unit,*) self_energy
          write(io_lun,fmt='(10x,"self_energy = ",g25.15)') self_energy
          read(unit,'(2i4)') lmax_basis, n_orbnl
          write(io_lun,fmt='(10x,"lmax_basis, n_orbnl = ",2i4)') lmax_basis, n_orbnl
@@ -884,9 +938,9 @@ contains
       else
          read(unit,'(a2)') symbol
          read(unit,'(a20)') label
-         read(unit,'(i5)') z
-         read(unit,'(i5)') zval_int
-         zval=zval_int
+         read(unit,*) z
+         read(unit,*) zval!_int
+         !zval=zval_int
          read(unit,'(g25.15)') mass
          read(unit,'(g25.15)') self_energy
          read(unit,'(2i4)') lmax_basis, n_orbnl

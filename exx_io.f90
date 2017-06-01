@@ -33,7 +33,12 @@ module exx_io
   implicit none
   
 contains
-  
+
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
+!!   2016/12/29 18:30 nakata
+!!    Added npao_species
+!!    Removed no longer used blips_on_atom and flag_one_to_one
   subroutine exx_global_write()
 
     use datatypes
@@ -42,8 +47,7 @@ contains
     use cover_module,           ONLY: BCS_parts
     use primary_module,         ONLY: bundle
     use global_module,          ONLY: io_lun
-    use species_module,         ONLY: species_label
-    use support_spec_format,    ONLY: supports_on_atom, flag_one_to_one
+    use species_module,         ONLY: species_label, npao_species
     use atomic_density,         ONLY: atomic_density_table   
 
     use global_module,          ONLY: id_glob ! new
@@ -129,40 +133,35 @@ contains
 
              ip_spec     = bundle%species(ip_num)
              ip_name     = species_label(bundle%species(ip_num))
-             !ip_nsup     = supports_on_atom(ip)%nsuppfuncs
+             !ip_nsup     = blips_on_atom(ip)%nsuppfuncs
              ip_radi     = atomic_density_table(ip_spec)%cutoff
              ip_lab_cell = ip
 
              !if (exx_gto .and. flag_one_to_one) then
              !   ip_nsup = gto(ip_spec)%nprim
              !else 
-             if (flag_one_to_one) then
-                ip_nsup = supports_on_atom(ip_spec)%nsuppfuncs
-             else
-                ip_nsup = supports_on_atom(ip)%nsuppfuncs
-             end if
+             ip_nsup = npao_species(ip_spec)
              !end if
 
              ip_xyz(1) = bundle%xprim(ip_num)
              ip_xyz(2) = bundle%yprim(ip_num)
              ip_xyz(3) = bundle%zprim(ip_num)             
-
-             call hf_write_info(unit,inode,31,0,0,0,memb,supports_on_atom(ip)%nsuppfuncs, &
+             call hf_write_info(unit,inode,31,0,0,0,memb,ip_nsup, &
                   Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
              call hf_write_info(unit_local_write1,inode,32,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
-                  memb,supports_on_atom(ip)%nsuppfuncs, &
+                  memb,ip_nsup, &
                   Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
              call hf_write_info(unit_local_write2,inode,33,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
-                  memb,supports_on_atom(ip)%nsuppfuncs, &
+                  memb,ip_nsup, &
                   Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
              call hf_write_info(unit_local_write3,inode,34,0,parts%ngnode(parts%inode_beg(inode)+part-1),0,&
-                  memb,supports_on_atom(ip)%nsuppfuncs, &
+                  memb,ip_nsup, &
                   Xrange,mat(part,Xrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
                   ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 
@@ -184,7 +183,7 @@ contains
 !!$
 !!$                nb_spec   = BCS_parts%spec_cover(BCS_parts%icover_ibeg(npc) + nic - 1)
 !!$                nb_name   = species_label(nb_spec)                
-!!$                !nb_nsup   = supports_on_atom(nb_global_num)%nsuppfuncs
+!!$                !nb_nsup   = blips_on_atom(nb_global_num)%nsuppfuncs
 !!$                nb_radi   = atomic_density_table(nb_spec)%cutoff
 !!$
 !!$                !if (exx_gto .and. flag_one_to_one) then
@@ -201,7 +200,7 @@ contains
 !!$
 !!$             end do neighbours_loop_Hrange
 !!$
-!!$             call hf_write_info(unit,inode,30,0,0,0,memb,supports_on_atom(ip)%nsuppfuncs, &
+!!$             call hf_write_info(unit,inode,30,0,0,0,memb,blips_on_atom(ip)%nsuppfuncs, &
 !!$                  SXrange,mat(part,SXrange)%n_nab(memb),ip_name,ip_xyz,r_ghost, &
 !!$                  ip_spec,ip,ip_lab_cell,ip_radi,zero,0)
 !!$
@@ -224,7 +223,7 @@ contains
 !!$
 !!$                nb_spec   = BCS_parts%spec_cover(BCS_parts%icover_ibeg(npc) + nic - 1)
 !!$                nb_name   = species_label(nb_spec)                
-!!$                !nb_nsup   = supports_on_atom(nb_global_num)%nsuppfuncs
+!!$                !nb_nsup   = blips_on_atom(nb_global_num)%nsuppfuncs
 !!$                nb_radi   = atomic_density_table(nb_spec)%cutoff
 !!$
 !!$                !if (exx_gto .and. flag_one_to_one) then

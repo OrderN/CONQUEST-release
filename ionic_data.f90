@@ -85,6 +85,10 @@ contains
   !!    is during read_and_write and that the tables are read in there
   !!   10:55, 13/02/2006 drb 
   !!    Line length change
+  !!   16:00, 2017/02/21 nakata
+  !!    Commented out get_support_pao_rep which is no longer used
+  !!   15:00, 2017/03/08 nakata
+  !!    Removed get_support_pao_rep which is no longer used
   !!  SOURCE
   !!
   subroutine get_ionic_data(inode,ionode,flag_no_atomic_densities,level)
@@ -100,7 +104,6 @@ contains
     use GenComms,               only: cq_abort
     use global_module,          only: flag_basis_set, blips, PAOs,   &
                                       iprint_init
-    use make_rad_tables,        only: get_support_pao_rep
     use pseudopotential_common, only: pseudo_type, SIESTA, ABINIT
     use blip,                   only: init_blip_flag
     use input_module,           only: leqi
@@ -153,9 +156,6 @@ contains
                                       &input from init_pseudo_tm already done")')
 
     end if
-
-    ! If we're using PAOs as a basis, need coefficients
-    if (flag_basis_set == PAOs) call get_support_pao_rep(inode,ionode)
 
     ! Get the atomic densities
     if (flag_atomic_density_from_pao) then ! Use PAOs for atomic densities

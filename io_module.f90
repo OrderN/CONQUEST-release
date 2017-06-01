@@ -2713,7 +2713,7 @@ second:   do
     use block_module, only: n_pts_in_block
     use primary_module, only: domain
     use global_module, only: numprocs
-    !use set_blipgrid_module, only: naba_atm, supp
+    !use set_blipgrid_module, only: naba_atoms_of_blocks, supp
 
     ! Passed variables
     integer :: size, inode
@@ -2746,7 +2746,7 @@ second:   do
     ! Dump charge density
     !do block=1, domain%groups_on_node
     !   n_point = (block - 1) * n_pts_in_block
-    !   do n_i=1, naba_atm(supp)%no_of_atom(block)*NSF*n_pts_in_block, n_pts_in_block
+    !   do n_i=1, naba_atoms_of_blocks(supp)%no_of_atom(block)*NSF*n_pts_in_block, n_pts_in_block
     !      do n=1, n_pts_in_block
     !         write(unit=lun,fmt='(f30.15)') density(n_point+n)
     !      end do
@@ -2781,7 +2781,7 @@ second:   do
     use block_module, only: n_pts_in_block
     use primary_module, only: domain
     use global_module, only: numprocs
-    !use set_blipgrid_module, only: naba_atm, supp
+    !use set_blipgrid_module, only: naba_atoms_of_blocks, supp
 
     ! Passed variables
     integer :: size, inode
@@ -3035,7 +3035,7 @@ second:   do
     use block_module,   only: n_pts_in_block
     use primary_module, only: domain
     use global_module,  only: numprocs
-    !use set_blipgrid_module, only: naba_atm, supp
+    !use set_blipgrid_module, only: naba_atoms_of_blocks, supp
 
     ! Passed variables
     integer :: size, inode
@@ -3066,7 +3066,7 @@ second:   do
     ! Grab charge density
     ! do block = 1, domain%groups_on_node
     !   n_point = (block - 1) * n_pts_in_block
-    !   do n_i = 1, naba_atm(supp)%no_of_atom(block) * NSF * n_pts_in_block, &
+    !   do n_i = 1, naba_atoms_of_blocks(supp)%no_of_atom(block) * NSF * n_pts_in_block, &
     !            n_pts_in_block
     !      do n=1, n_pts_in_block
     !         read(unit=lun,fmt='(f30.15)') density(n_point+n)
@@ -3838,6 +3838,9 @@ second:   do
          '                                                      ',/,12x, &
          '       David Bowler           Tsuyoshi Miyazaki       ',/,12x, &
          '        (UCL,NIMS)                 (NIMS)             ',/,12x, &
+         '                                                      ',/,12x, &
+         '       Ayako Nakata           Lionel Truflandier      ',/,12x, &
+         '          (NIMS)                 (Bordeaux)           ',/,12x, &
          '                                                      ',/,12x, &
          '     Antonio Torralba         Veronika Brazdova       ',/,12x, &
          '        (UCL,NIMS)                 (UCL)              ',/,12x, &

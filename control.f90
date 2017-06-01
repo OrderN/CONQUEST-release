@@ -428,6 +428,10 @@ contains
 !!   - Included FIRE routines but moved reading of parameters to io_module
 !!   2016/07/21 10:17 dave
 !!   - Changed format for MD Step output line to add more space
+!!   2017/02/23 dave
+!!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+!!   2017/05/09 dave
+!!    Added calls to read L-matrix for both spin channels
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -441,7 +445,7 @@ contains
                               flag_MDold,n_proc_old,glob2node_old,    &
                               flag_LmatrixReuse,flag_XLBOMD,          &
                               flag_dissipation,flag_FixCOM,           &
-                              flag_fire_qMD
+                              flag_fire_qMD, flag_diagonalisation, nspin
     use group_module,   only: parts
     use primary_module, only: bundle
     use minimise,       only: get_E_and_F
@@ -462,7 +466,7 @@ contains
     use move_atoms,     only: fac_Kelvin2Hartree
     use io_module2,     ONLY: dump_InfoGlobal,grab_InfoGlobal,grab_matrix2,InfoL
     use store_matrix,   ONLY: dump_InfoMatGlobal
-    use DiagModule,     ONLY: diagon
+    !use DiagModule,     ONLY: diagon
     use mult_module,    ONLY: matL,L_trans
     use matrix_data,    ONLY: Lrange
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
@@ -593,11 +597,17 @@ contains
          call wrap_xyz_atom_cell()
          call update_atom_coord()
          call updateIndices3(fixed_potential,velocity)
-         if (.NOT.diagon .AND. flag_LmatrixReuse) then
+         if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
            ! L-matrix reconstruction
            call grab_matrix2('L',inode,nfile,InfoL)
            call my_barrier()
            call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+           ! DRB 2017/05/09 now extended to spin systems
+           if(nspin==2) then
+              call grab_matrix2('L2',inode,nfile,InfoL)
+              call my_barrier()
+              call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
+           end if
          endif
        else
          call update_atom_coord()

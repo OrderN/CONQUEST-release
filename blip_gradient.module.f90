@@ -100,6 +100,10 @@ contains
   !!   - changed spin implementation
   !!   2012/04/26 16:15 dave
   !!    Changes for analytic S and KE matrices
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/07/29 18:30 nakata
+  !!    Renamed supports_on_atom -> blips_on_atom
   !!  SOURCE
   !!
   subroutine get_blip_gradient(inode, ionode)
@@ -114,7 +118,7 @@ contains
                                            return_matrix_block_pos
     use GenBlas,                     only: scal, copy
     use pseudopotential_data,        only: non_local
-    use support_spec_format,         only: supports_on_atom,               &
+    use support_spec_format,         only: blips_on_atom,               &
                                            support_gradient, grad_coeff_array
     use species_module,              only: nsf_species
     use set_bucket_module,           only: rem_bucket
@@ -127,7 +131,7 @@ contains
                                            nspin, spin_factor,             &
                                            area_minE,                      &
                                            flag_analytic_blip_int, PhiPulay
-    use functions_on_grid,           only: H_on_supportfns, gridfunctions, &
+    use functions_on_grid,           only: H_on_atomfns, gridfunctions,    &
                                            fn_on_grid,                     &
                                            allocate_temp_fn_on_grid,       &
                                            free_temp_fn_on_grid
@@ -162,7 +166,7 @@ contains
     ! a note on signs... both the above mentioned routines give -Grad,
     ! ie the gradient downwards.
     !
-    ! We have support and h_on_support in support and workspace_support,
+    ! We have support and h_on_atomfns in support and workspace_support,
     ! so use workspace2_support as working area...
     ! This returns the support_gradient in workspace_support
     WhichPulay = BothPulay
@@ -196,7 +200,7 @@ contains
                                              this_nsf * this_nsf)
                 ! spin_factor correction for spin non-polarised
                 ! calculation is done within get_onsite_S_gradient
-                call get_onsite_S_gradient(supports_on_atom(i),   &
+                call get_onsite_S_gradient(blips_on_atom(i),   &
                                            this_data_K(:,:,spin), &
                                            support_gradient(i),   &
                                            this_nsf, bundle%species(i))
@@ -222,19 +226,19 @@ contains
        call reg_dealloc_mem(area_minE, this_nsf * this_nsf * nspin, type_dbl)
     end if
     if(flag_analytic_blip_int) WhichPulay = PhiPulay
-    ! use H_on_supportfns(1) as work storage for support gradient
-    call get_support_gradient(H_on_supportfns(1), inode, ionode)
+    ! use H_on_atomfns(1) as work storage for support gradient
+    call get_support_gradient(H_on_atomfns(1), inode, ionode)
     ! now we need to accumulate the 'type 1' gradient of the non-local
     ! energy (see notes, 3/1/97)
-    if (non_local) call get_non_local_gradient(H_on_supportfns(1), inode, ionode)
+    if (non_local) call get_non_local_gradient(H_on_atomfns(1), inode, ionode)
 
     ! now we need to transform this into the blip basis first, apply
     ! the scaling for grid size,
-    call scal(gridfunctions(H_on_supportfns(1))%size, grid_point_volume,&
-              gridfunctions(H_on_supportfns(1))%griddata, 1)
+    call scal(gridfunctions(H_on_atomfns(1))%size, grid_point_volume,&
+              gridfunctions(H_on_atomfns(1))%griddata, 1)
 
     ! and then 
-    call inverse_blip_transform_new(inode-1, H_on_supportfns(1), &
+    call inverse_blip_transform_new(inode-1, H_on_atomfns(1), &
                                     support_gradient, bundle%n_prim)
 
     ! Kinetic Energy; first, the change in onsite T matrix elements,
@@ -273,7 +277,7 @@ contains
                                              this_nsf * this_nsf)                
                 ! spin_factor correction for spin non-polarsed
                 ! calculation is done inside get_onsite_KE_gradient
-                call get_onsite_KE_gradient(supports_on_atom(i), &
+                call get_onsite_KE_gradient(blips_on_atom(i), &
                                             this_data_K(:,:,spin),   &
                                             support_gradient(i), &
                                             this_nsf, bundle%species(i))
@@ -316,13 +320,13 @@ contains
     if(.NOT.flag_analytic_blip_int) then
        tmp_fn = allocate_temp_fn_on_grid(sf)
        do direction = 1, 3 
-          call blip_to_grad_new(inode-1, direction, H_on_supportfns(1))
+          call blip_to_grad_new(inode-1, direction, H_on_atomfns(1))
           ! now act with K - result into workspace2_support
           gridfunctions(tmp_fn)%griddata = zero
           do spin = 1, nspin
              ! accumulate the contribution from matK(spin) to tmp_fn
              call act_on_vectors_new(inode-1, rem_bucket(3), matK(spin), &
-                  tmp_fn, H_on_supportfns(1))
+                  tmp_fn, H_on_atomfns(1))
           end do
           ! apply the appropriate scaling factor
           call scal(gridfunctions(tmp_fn)%size,        &
@@ -511,6 +515,10 @@ contains
   !!     of type I and II gradients are accumulated using the fact that
   !!     act_on_vectors_new is accumulative. This improves code
   !!     efficiency.
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
   !!  SOURCE
   !!
   subroutine get_support_gradient(support_gradient, inode, ionode)
@@ -527,8 +535,8 @@ contains
                                            SPulay, sf, nspin,         &
                                            spin_factor
     use functions_on_grid,           only: gridfunctions, fn_on_grid, &
-                                           supportfns,                &
-                                           H_on_supportfns,           &
+                                           atomfns,                &
+                                           H_on_atomfns,              &
                                            allocate_temp_fn_on_grid,  &
                                            free_temp_fn_on_grid
 
@@ -547,18 +555,18 @@ contains
     end do
 
     ! 2011/09/20 L.Tong
-    ! This subroutine is called on the premise that both H_on_supportfns
+    ! This subroutine is called on the premise that both H_on_atomfns
     ! and H_dn_on_supportfns (for spin polarised calculations) alreay contain
     ! the correct values upon entry.
 
-    ! first, act on h_on_supportfns (which holds H |phi> on entry)
+    ! first, act on h_on_atomfns (which holds H |atomf> on entry)
     ! with the K matrix) to get type I variation
     
     ! L.Tong: act_on_vectors_new is accumulative, we use this to our advantage
     if (WhichPulay == PhiPulay .or. WhichPulay == BothPulay) then
        do spin = 1, nspin
           call act_on_vectors_new(inode-1, rem_bucket(3), matK(spin), &
-                                  tmp_fn(spin), H_on_supportfns(spin))
+                                  tmp_fn(spin), H_on_atomfns(spin))
        end do
     end if
     ! now act with M12 on support to get type II variation
@@ -568,7 +576,7 @@ contains
        do spin = 1, nspin
           call act_on_vectors_new(inode-1, rem_bucket(1), &
                                   matM12(spin), tmp_fn(spin), &
-                                  supportfns)
+                                  atomfns)
        end do
     end if
     ! multiply by the correct factor for each spin channel
@@ -642,17 +650,19 @@ contains
   !!   - Improve efficiency by absorbing spin_factor into matU, so
   !!     that factor corrections for spin non-polarised calculations
   !!     are not required.
+  !!   2016/07/29 18:30 nakata
+  !!    Removed unused supports_on_atom, SP_trans
   !!  SOURCE
   !!
   subroutine get_non_local_gradient(support_grad_grid, inode, ionode)
 
     use datatypes
     use numbers
-    use mult_module,                 only: H_SP_SP, SP_trans, mult, &
+    use mult_module,                 only: aHa_AP_AP, mult,         &
                                            matrix_product,          &
                                            matrix_scale,            &
-                                           matrix_transpose, matSC, &
-                                           matCS, matU, matK,       &
+                                           matrix_transpose, matAP, &
+                                           matPA, matU, matKatomf,  &
                                            return_matrix_block_pos, &
                                            matrix_pos
     use set_bucket_module,           only: rem_bucket
@@ -660,12 +670,11 @@ contains
     use functions_on_grid,           only: pseudofns
     use nlpf2blip,                   only: get_blipP, nlpf_on_atom
     use primary_module ,             only: bundle
-    use support_spec_format,         only: supports_on_atom,        &
-                                           support_gradient
+    use support_spec_format,         only: support_gradient
     use group_module,                only: parts
     use primary_module,              only: bundle
     use cover_module,                only: BCS_parts
-    use matrix_data,                 only: mat, SPrange, halo
+    use matrix_data,                 only: mat, APrange, halo
     use species_module,              only: nsf_species, nlpf_species
     use global_module,               only: nspin, spin_factor,      &
                                            id_glob, species_glob,   &
@@ -685,10 +694,10 @@ contains
     real(double) :: dx, dy, dz
     real(double), dimension(:,:), allocatable :: dataU
 
-    ! First of all, find U (=K.SC)
-    call matrix_transpose(matSC,matCS)
+    ! First of all, find U (=K.AP)
+    call matrix_transpose(matAP,matPA)
     do spin = 1, nspin
-       call matrix_product(matK(spin), matCS, matU(spin), mult(H_SP_SP))
+       call matrix_product(matKatomf(spin), matPA, matU(spin), mult(aHa_AP_AP))
        call matrix_scale(minus_two * spin_factor, matU(spin))
     end do
 
@@ -700,26 +709,26 @@ contains
              iprim = iprim + 1
              spec = bundle%species(iprim)
              this_nsf = nsf_species(spec)
-             do nab = 1, mat(np,SPrange)%n_nab(nn) ! Loop over neighbours of atom
-                ist = mat(np,SPrange)%i_acc(nn) + nab - 1
+             do nab = 1, mat(np,APrange)%n_nab(nn) ! Loop over neighbours of atom
+                ist = mat(np,APrange)%i_acc(nn) + nab - 1
                 ! Build the distances between atoms - needed for phases 
                 gcspart = &
-                     BCS_parts%icover_ibeg(mat(np,SPrange)%i_part(ist)) + &
-                     mat(np,SPrange)%i_seq(ist) - 1
+                     BCS_parts%icover_ibeg(mat(np,APrange)%i_part(ist)) + &
+                     mat(np,APrange)%i_seq(ist) - 1
                 ! Displacement vector
                 dx = BCS_parts%xcover(gcspart) - bundle%xprim(iprim)
                 dy = BCS_parts%ycover(gcspart) - bundle%yprim(iprim)
                 dz = BCS_parts%zcover(gcspart) - bundle%zprim(iprim)
                 ! We need to know the species of neighbour
                 neigh_global_part = &
-                     BCS_parts%lab_cell(mat(np,SPrange)%i_part(ist)) 
+                     BCS_parts%lab_cell(mat(np,APrange)%i_part(ist)) 
                 neigh_global_num  = &
                      id_glob(parts%icell_beg(neigh_global_part) + &
-                             mat(np,SPrange)%i_seq(ist) - 1)
+                             mat(np,APrange)%i_seq(ist) - 1)
                 neigh_species = species_glob(neigh_global_num)
                 this_nlpf = nlpf_species(neigh_species)
-                j_in_halo = halo(SPrange)%i_halo(gcspart)
-                wheremat = matrix_pos(matSC, iprim, j_in_halo, 1, 1)
+                j_in_halo = halo(APrange)%i_halo(gcspart)
+                wheremat = matrix_pos(matAP, iprim, j_in_halo, 1, 1)
                 allocate(dataU(this_nsf,this_nlpf))
                 do spin = 1, nspin
                    dataU = zero

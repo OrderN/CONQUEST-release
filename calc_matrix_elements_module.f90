@@ -123,6 +123,8 @@ contains
 !!    Small correction to force size(send_array) into integer
 !!   2008/05/23 ast
 !!    Added timers
+!!   2016/07/20 16:30 nakata
+!!    Renamed naba_atm -> naba_atoms_of_blocks
 !!  SOURCE
 !!
   subroutine get_matrix_elements_new(myid,rem_bucket,matM,gridone,gridtwo)
@@ -135,7 +137,7 @@ contains
     use GenBlas,             only: gemm
     use comm_array_module,   only: send_array
     use block_module,        only: n_pts_in_block
-    use set_blipgrid_module, only: naba_atm
+    use set_blipgrid_module, only: naba_atoms_of_blocks
     use functions_on_grid,   only: gridfunctions, fn_on_grid
     use GenComms,            only: cq_abort
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem, &
@@ -164,8 +166,8 @@ contains
     call start_timer(tmr_std_integration)
     ! pointer
     loc_bucket => rem_bucket%locbucket
-    naba_atm1  => naba_atm(loc_bucket%ind_left)
-    naba_atm2  => naba_atm(loc_bucket%ind_right)
+    naba_atm1  => naba_atoms_of_blocks(loc_bucket%ind_left)
+    naba_atm2  => naba_atoms_of_blocks(loc_bucket%ind_right)
 
     size_send_array = loc_bucket%no_pair_orb
     if(allocated(send_array)) then 
@@ -439,13 +441,17 @@ contains
 !
 ! The subroutine accumulates for gridone
 ! it calculates gridone = gridone + matM gridtwo
+!
+! Modifications:
+!  2016/07/20 16:30 nakata
+!   Renamed naba_atm -> naba_atoms_of_blocks
   subroutine act_on_vectors_new(myid,rem_bucket,matM,gridone,gridtwo)
     ! Modules and Dummy arguments
     use datatypes
     use numbers
     use primary_module,    only:domain
     use naba_blk_module,   only:naba_atm_of_blk
-    use set_blipgrid_module, only: naba_atm
+    use set_blipgrid_module, only: naba_atoms_of_blocks
     use bucket_module,     only:local_bucket,remote_bucket
     use GenBlas,           only:axpy
     use comm_array_module, only:send_array
@@ -478,8 +484,8 @@ contains
     !  This structure is introduced to keep the strict connection
     !  of remote_bucket <-> local_bucket <-> naba_atm_of_blk.
     loc_bucket => rem_bucket%locbucket
-    naba_atm1  => naba_atm(loc_bucket%ind_left)
-    naba_atm2  => naba_atm(loc_bucket%ind_right)
+    naba_atm1  => naba_atoms_of_blocks(loc_bucket%ind_left)
+    naba_atm2  => naba_atoms_of_blocks(loc_bucket%ind_right)
 
     allocate(send_array(loc_bucket%no_pair_orb), STAT=stat)
     if (stat /= 0) &

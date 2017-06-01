@@ -198,6 +198,8 @@ contains
   !!   - Removed redundant input parameter real(double) mu
   !!   2013/03/06 17:00 dave
   !!   - Normalise step to number of constrained atoms
+  !!   2016/08/08 15:30 nakata
+  !!   - Removed unused sf in global_module
   !!  SOURCE
   !!  
   subroutine cdft_min(reset_L, fixed_potential, vary_mu, &
@@ -205,7 +207,7 @@ contains
 
     use datatypes
     use numbers
-    use global_module,  only: iprint_SC, sf,iprint_SC,io_lun
+    use global_module,  only: iprint_SC, iprint_SC,io_lun
     use GenComms,       only: cq_abort
     use energy,         only: cdft_energy, get_energy
 
@@ -465,6 +467,10 @@ contains
   !!   2012/03/18 L.Tong
   !!     - Rewrite for change in spin implementation
   !!     - Removed redundant input parameter real(double) mu
+  !!   2016/08/08 nakata
+  !!     - Removed unused sf in global_module
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!  SOURCE
   !!  
   subroutine evaluate_cdft_function(reset_L, fixed_potential,   &
@@ -476,9 +482,9 @@ contains
      use logicals
      use mult_module,    only: LNV_matrix_multiply, matH, matrix_sum
      use DMMin,          only: FindMinDM
-     use global_module,  only: iprint_SC, sf, iprint_SC, io_lun, &
-                               nspin, spin_factor
-     use DiagModule,     only: diagon
+     use global_module,  only: iprint_SC, iprint_SC, io_lun, &
+                               nspin, spin_factor, flag_diagonalisation
+     !use DiagModule,     only: diagon
      use energy,         only: get_energy
      use GenComms,       only: inode, ionode
 
@@ -514,7 +520,7 @@ contains
                     reset_L, .false.)
      ! If we're using O(N), we only have L, and we need K - if
      ! diagonalisation, we have K
-     if (.not. diagon) then
+     if (.not. flag_diagonalisation) then
         ! electrons and tmp_energy are used as dump for electrons and
         ! energies calculated from LNV_matrix_multipy
         ! total_energy is calculated from get_energy below

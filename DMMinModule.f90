@@ -151,6 +151,12 @@ contains
   !!    - Fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
+  !!   2017/02/23 dave
+  !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2017/05/09 dave
+  !!    Added code to dump L matrix for both spin channels
+  !!   2017/05/11 dave
+  !!    Added code to dump X matrix (and associated) for both spin channels
   !!  SOURCE
   !!
   subroutine FindMinDM(n_L_iterations, vary_mu, tolerance, inode, &
@@ -163,13 +169,13 @@ contains
                              ne_in_cell, ne_spin_in_cell, flag_dump_L,  &
                              flag_MDold,flag_SkipEarlyDM, flag_XLBOMD,  &
                              flag_propagateX, flag_dissipation,         &
-                             integratorXL, runtype, flag_exx
+                             integratorXL, runtype, flag_exx, flag_diagonalisation
     use mult_module,   only: matrix_transpose, matT, matTtran, matL,    &
                              matS, matrix_sum
     use McWeeny,       only: InitMcW, McWMin
     use PosTan,        only: max_iters, cscale, PulayE, PulayR, PulayC, &
                              PulayBeta, pos_tan, fit_coeff
-    use DiagModule,    only: FindEvals, diagon
+    use DiagModule,    only: FindEvals
     use io_module,     only: dump_matrix
     use energy,        only: entropy
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,   &
@@ -213,7 +219,7 @@ contains
 
     entropy = zero
 
-    if (diagon) then ! Use exact diagonalisation to get K
+    if (flag_diagonalisation) then ! Use exact diagonalisation to get K
        call FindEvals(ne_spin_in_cell)
           
        call stop_timer(tmr_std_densitymat)
@@ -271,41 +277,42 @@ contains
 
     ! *** Add frequency of output here *** !
 
-     if (flag_dump_L) then
+    if (flag_dump_L) then
        if (.NOT. flag_MDold) then
-         call dump_matrix2('L',matL(1),Lrange)
-         ! For XL-BOMD
-         if (flag_XLBOMD) then
-           if (flag_propagateX) then
-             call dump_matrix2('X',matX(1),LSrange)
-             call dump_matrix2('S',matS   ,Srange)
-             if (integratorXL.EQ.'velocityVerlet') &
-               call dump_matrix2('Xvel',matXvel(1),LSrange)
-           else
-             call dump_matrix2('X',matX(1),Lrange)
-             if (integratorXL.EQ.'velocityVerlet') &
-               call dump_matrix2('Xvel',matXvel(1),Lrange)
-           endif
-           ! When dissipation applies
-           if (flag_dissipation) call dump_XL()
-         endif
-         if (runtype.EQ.'static') call dump_InfoMatGlobal(0)
+          call dump_matrix2('L',matL(1),Lrange)
+          ! DRB 2017/05/09 now extended to spin systems
+          if(nspin==2) call dump_matrix2('L2',matL(2),Lrange)
+          ! For XL-BOMD
+          if (flag_XLBOMD) then
+             if (flag_propagateX) then
+                call dump_matrix2('X',matX(1),LSrange)
+                if(nspin==2) call dump_matrix2('X_2',matX(2),LSrange)
+                call dump_matrix2('S',matS   ,Srange)
+                if (integratorXL.EQ.'velocityVerlet') then
+                   call dump_matrix2('Xvel',matXvel(1),LSrange)
+                   if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),LSrange)
+                end if
+             else
+                call dump_matrix2('X',matX(1),Lrange)
+                if(nspin==2) call dump_matrix2('X_2',matX(2),LSrange)
+                if (integratorXL.EQ.'velocityVerlet') then
+                   call dump_matrix2('Xvel',matXvel(1),Lrange)
+                   if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),LSrange)
+                end if
+             endif
+             ! When dissipation applies
+             if (flag_dissipation) call dump_XL()
+          endif
+          if (runtype.EQ.'static') call dump_InfoGlobal(0)
        else
-         if (nspin == 1) then
-           call dump_matrix("L", matL(1), inode)
-         else
-           call dump_matrix("L_up", matL(1), inode)
-           call dump_matrix("L_dn", matL(2), inode)
-         end if
+          if (nspin == 1) then
+             call dump_matrix("L", matL(1), inode)
+          else
+             call dump_matrix("L_up", matL(1), inode)
+             call dump_matrix("L_dn", matL(2), inode)
+          end if
        endif
-       !ORI    if (nspin == 1) then
-       !ORI       call dump_matrix("L", matL(1), inode)
-       !ORI    else
-       !ORI       call dump_matrix("L_up", matL(1), inode)
-       !ORI       call dump_matrix("L_dn", matL(2), inode)
-       !ORI    end if
-     end if
-
+    end if
     if (record) then
        if (inode == ionode .and. iprint_DM > 1) then
           write (io_lun,*) '  List of residuals and energies'
@@ -805,6 +812,12 @@ contains
   !!      instead of hardwired values of 0.001 and 0.1
   !!   2013/08/20 M.Arita
   !!    - Changed calls for dumping L-matrix
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
+  !!   2017/05/09 dave
+  !!    Added output of L matrix for both spin channels
   !!  SOURCE
   !!
   subroutine lateDM(ndone, n_L_iterations, done, deltaE, vary_mu, &
@@ -831,7 +844,7 @@ contains
     use timer_module,      only: cq_timer,start_timer,                 &
                                  stop_print_timer, WITH_LEVEL
     use io_module,         only: dump_matrix
-    use functions_on_grid, only: supportfns, H_on_supportfns
+    use functions_on_grid, only: atomfns, H_on_atomfns
     use H_matrix_module,   only: get_H_matrix
     use density_module,    only: density, get_electronic_density
     use maxima_module,     only: maxngrid
@@ -894,9 +907,9 @@ contains
                                 dontM2, dontM3, dontM4, dontphi, doE)
        energy1_tot = spin_factor * sum(energy1(:))
 
-       ! note H_on_supportfns(1) is used just as a temp working array
-       call get_electronic_density(density, electrons, supportfns, &
-                                   H_on_supportfns(1), inode, ionode, &
+       ! note H_on_atomfns(1) is used just as a temp working array
+       call get_electronic_density(density, electrons, atomfns,    &
+                                   H_on_atomfns(1), inode, ionode, &
                                    maxngrid)
        call get_H_matrix(.true., .false., electrons, density, maxngrid)
     end if
@@ -1123,10 +1136,10 @@ contains
           ! the original also has dophi, but I think this is redundant
           call LNV_matrix_multiply (electrons, energy1, doK, dontM1, &
                                     dontM2, dontM3, dontM4, dontphi, doE)
-          ! H_on_supportfns(1) is used just as a temp working array
-          call get_electronic_density(density, electrons,        &
-                                      supportfns,                &
-                                      H_on_supportfns(1), inode, &
+          ! H_on_atomfns(1) is used just as a temp working array
+          call get_electronic_density(density, electrons,     &
+                                      atomfns,                &
+                                      H_on_atomfns(1), inode, &
                                       ionode, maxngrid)
           call get_H_matrix(.true., .false., electrons, density, maxngrid)
        end if
@@ -1226,6 +1239,8 @@ contains
             !ORI end if
             if (.NOT. flag_MDold) then
               call dump_matrix2('L',matL(1),Lrange)
+              ! DRB 2017/05/09 now extended to spin systems
+              if(nspin==2) call dump_matrix2('L2',matL(2),Lrange)
             else
               if (nspin == 1) then
                  call dump_matrix("L", matL(1), inode)

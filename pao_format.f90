@@ -45,6 +45,10 @@
 !!    Changed type uni_table to type table_and_occ to store occupation numbers for individual zetas
 !!   14:02, 2003/12/19 dave & rc
 !!    Moved occupation numbers outside table type
+!!   2017/01/09 nakata
+!!    Added angmom%prncpl to store the information of principal qunatum number
+!!   2017/03/23 dave
+!!    Added delta to table
 !!  SOURCE
 module pao_format
 
@@ -61,7 +65,7 @@ module pao_format
 
   type table
      integer :: length
-     real(double) :: cutoff
+     real(double) :: cutoff, delta
      real(double), pointer, dimension(:) :: table
      real(double), pointer, dimension(:) :: table2
      !RC real(double) :: occ
@@ -71,6 +75,7 @@ module pao_format
      integer :: n_zeta_in_angmom
      type(table), pointer, dimension(:) :: zeta
      real(double), pointer, dimension(:) :: occ
+     integer, pointer, dimension(:) :: prncpl
   end type angmom_pao
 
   type species_pao

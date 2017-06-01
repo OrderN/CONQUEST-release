@@ -341,6 +341,8 @@ contains
   !!  MODIFICATION
   !!   2016/04/06 dave
   !!    Changed Info type from allocatable to pointer (fix gcc 4.4.7 compile issue)
+  !!   2017/05/09 dave
+  !!    Removed attempts to read both spin channels in one routine (this routine should now be called once for each channel)
   !!  SOURCE
   !!
   subroutine grab_matrix2(stub,inode,nfile,Info)
@@ -450,7 +452,7 @@ contains
         enddo
         ! n_matrix depends on nspin
         n_matrix = 1
-        if (nspin.EQ.2) n_matrix = 2
+        !if (nspin.EQ.2) n_matrix = 2
         !ORI allocate (Info(ifile)%data_Lold(sizeL), STAT=stat_alloc)
         allocate (Info(ifile)%data_Lold(sizeL,n_matrix), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating data_Lold:', sizeL, n_matrix)
@@ -496,23 +498,23 @@ contains
           !! --------- DEBUG: --------- !!
 
           ! spin
-          if (nspin.EQ.1) then
+          !if (nspin.EQ.1) then
             do jbeta_alpha = 1, len
               read (lun,*) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 1)
               if (flag_MDdebug .AND. iprint_MDdebug.GT.3) &
                  write (lun_db,'(f25.18)')               &
                  Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 1)
             enddo
-          elseif (nspin.EQ.2) then
-            do jbeta_alpha = 1, len
-              read (lun,*) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 1), &
-                           Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 2)
-              if (flag_MDdebug .AND. iprint_MDdebug.GT.3) &
-                 write (lun_db,'(3f25.18)')               &
-                   Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 1), &
-                   Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 2)
-            enddo
-          endif
+          !elseif (nspin.EQ.2) then
+          !  do jbeta_alpha = 1, len
+          !    read (lun,*) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 1), &
+          !                 Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 2)
+          !    if (flag_MDdebug .AND. iprint_MDdebug.GT.3) &
+          !       write (lun_db,'(3f25.18)')               &
+          !         Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 1), &
+          !         Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 2)
+          !  enddo
+          !endif
 
           !ORI if (i+1.LE.size) Info(ifile)%ibeg_dataL(i+1) = len + 1
           if (i+1.LE.size) then

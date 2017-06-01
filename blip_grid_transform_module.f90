@@ -94,6 +94,8 @@ contains
 !!    Added timers
 !!   2011/11/15 17:00 dave
 !!    Removed blip module and variables passed to transform
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  SOURCE
 !!
   subroutine blip_to_support_new(myid, support)
@@ -104,7 +106,7 @@ contains
     use GenComms, ONLY: my_barrier, cq_abort
     use functions_on_grid, ONLY: gridfunctions
     use species_module, ONLY: nsf_species
-    use support_spec_format, ONLY: supports_on_atom
+    use support_spec_format, ONLY: blips_on_atom
     use timer_module
     use global_module, ONLY: iprint_basis, IPRINT_TIME_THRES2
 
@@ -131,7 +133,7 @@ contains
        if( iprim <= bundle%n_prim ) then
           spec = bundle%species(iprim)
           nsf_send = nsf_species(spec)
-          call do_blip_transform_new(iprim, supports_on_atom(iprim), nsf_send)
+          call do_blip_transform_new(iprim, blips_on_atom(iprim), nsf_send)
        else
           nsf_send = 0
        endif
@@ -172,6 +174,8 @@ contains
 !!    Added ROBODoc header, indented and removed NSF=4 dependence
 !!   2008/06/10 ast
 !!    Added timers
+!!   2016/07/14 16:30 nakata
+!!    Renamed naba_blk_supp -> naba_blocks_of_atoms
 !!  SOURCE
 !!
   subroutine do_blip_transform_new(iprim, data_blip, nsf)
@@ -182,7 +186,7 @@ contains
     use group_module,    ONLY: blocks
     use primary_module,  ONLY: bundle
     use cover_module,    ONLY: BCS_blocks
-    use set_blipgrid_module, ONLY: naba_blk_supp
+    use set_blipgrid_module, ONLY: naba_blocks_of_atoms
     use comm_array_module,   ONLY: send_array
     use block_module,    ONLY: nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
     use GenComms, ONLY: cq_abort, myid
@@ -241,12 +245,12 @@ contains
     dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/nblky
     dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nblkz
 
-    nxmin_grid=(naba_blk_supp%nxmin(iprim)-1)*nblkx  
-    nxmax_grid= naba_blk_supp%nxmax(iprim)*nblkx-1
-    nymin_grid=(naba_blk_supp%nymin(iprim)-1)*nblky  
-    nymax_grid= naba_blk_supp%nymax(iprim)*nblky-1
-    nzmin_grid=(naba_blk_supp%nzmin(iprim)-1)*nblkz  
-    nzmax_grid= naba_blk_supp%nzmax(iprim)*nblkz-1
+    nxmin_grid=(naba_blocks_of_atoms%nxmin(iprim)-1)*nblkx  
+    nxmax_grid= naba_blocks_of_atoms%nxmax(iprim)*nblkx-1
+    nymin_grid=(naba_blocks_of_atoms%nymin(iprim)-1)*nblky  
+    nymax_grid= naba_blocks_of_atoms%nymax(iprim)*nblky-1
+    nzmin_grid=(naba_blocks_of_atoms%nzmin(iprim)-1)*nblkz  
+    nzmax_grid= naba_blocks_of_atoms%nzmax(iprim)*nblkz-1
     !check extent
     ierr=0
     if(2*blip_info(spec)%Extent < nxmax_grid-nxmin_grid) then
@@ -422,15 +426,15 @@ contains
     igrid=0
 
     call start_timer(tmr_std_allocation)
-    allocate(send_array(naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block),STAT=stat)
+    allocate(send_array(naba_blocks_of_atoms%no_naba_blk(iprim)*nsf*n_pts_in_block),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating send_array in do_blip_transform: ",&
-         naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block)
-    call reg_alloc_mem(area_basis,naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block,type_dbl)
+         naba_blocks_of_atoms%no_naba_blk(iprim)*nsf*n_pts_in_block)
+    call reg_alloc_mem(area_basis,naba_blocks_of_atoms%no_naba_blk(iprim)*nsf*n_pts_in_block,type_dbl)
     call stop_timer(tmr_std_allocation)
     send_array(:) = zero
-    DO naba_blk=1,naba_blk_supp%no_naba_blk(iprim)! naba blks in NOPG order
+    DO naba_blk=1,naba_blocks_of_atoms%no_naba_blk(iprim)! naba blks in NOPG order
        ! iprim : primary seq. no. of the atom
-       ind_blk=naba_blk_supp%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
+       ind_blk=naba_blocks_of_atoms%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
        ind_blk=ind_blk-1
 
        nx_blk=ind_blk/ncover_yz
@@ -517,16 +521,24 @@ contains
     !             different for different atoms, nunit and nsize varies
     !             at each call.
     !
+    !  Modification:
+    !   2016/07/06 17:30 nakata
+    !    Renamed comBG -> comm_naba_blocks_of_atoms
+    !   2016/07/20 16:30 nakata
+    !    Renamed naba_atm -> naba_atoms_of_blocks
+    !   2016/08/01 18:30 nakata
+    !    Introduced atomf instead of sf
+    !
     use datatypes
     use numbers, ONLY : zero
     use mpi
-    use set_blipgrid_module, ONLY: comBG,naba_atm
+    use set_blipgrid_module, ONLY: comm_naba_blocks_of_atoms,naba_atoms_of_blocks
     use comm_array_module,   ONLY: send_array,recv_array
     use block_module,        ONLY: n_pts_in_block  ! = blocks%nm_group(:)
     use GenComms, ONLY: my_barrier, cq_abort
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
     use species_module, ONLY: nsf_species
-    use global_module, ONLY: species_glob, sf, area_basis
+    use global_module, ONLY: species_glob, atomf, area_basis
     use atoms, ONLY: atoms_on_node
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
@@ -536,9 +548,9 @@ contains
 
     integer :: mynode, nunit_send, nunit_recv, ind_alp_i_blk
     integer :: tag
-    integer :: nsend_req(comBG%mx_send_node),ierr_send(comBG%mx_send_node)
-    integer :: nrecv_stat(MPI_STATUS_SIZE,comBG%mx_recv_node),&
-         ierr_recv(comBG%mx_recv_node)
+    integer :: nsend_req(comm_naba_blocks_of_atoms%mx_send_node),ierr_send(comm_naba_blocks_of_atoms%mx_send_node)
+    integer :: nrecv_stat(MPI_STATUS_SIZE,comm_naba_blocks_of_atoms%mx_recv_node),&
+               ierr_recv(comm_naba_blocks_of_atoms%mx_recv_node)
     !TM 20/12/2000
     integer :: nwait_stat(MPI_STATUS_SIZE),ierr,irc
     integer :: inode,jnode,nnd_rem,ibegin,nsize,my_ibegin, nsf_recv
@@ -556,17 +568,17 @@ contains
     !  corresponding data in send_array.
     !  
 
-    if(comBG%no_recv_node(iprim) > 0) then
+    if(comm_naba_blocks_of_atoms%no_recv_node(iprim) > 0) then
        nunit_send=nsf_send*n_pts_in_block   
-       do inode=1,comBG%no_recv_node(iprim)
-          nnd_rem=comBG%list_recv_node(inode,iprim)
+       do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
+          nnd_rem=comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
           if(inode == 1) then
              ibegin=1
           else
-             ibegin=ibegin+comBG%no_naba_blk(inode-1,iprim)*nunit_send
+             ibegin=ibegin+comm_naba_blocks_of_atoms%no_naba_blk(inode-1,iprim)*nunit_send
           endif
 
-          nsize=comBG%no_naba_blk(inode,iprim)*nunit_send
+          nsize=comm_naba_blocks_of_atoms%no_naba_blk(inode,iprim)*nunit_send
           if(nnd_rem == mynode) then
              my_ibegin=ibegin
           else
@@ -582,14 +594,14 @@ contains
     call my_barrier()
     !receive
 
-    if(comBG%no_send_node(iprim) > 0) then
-       isend=comBG%ibeg_recv_call(iprim)-1
-       do jnode=1,comBG%no_send_node(iprim)
+    if(comm_naba_blocks_of_atoms%no_send_node(iprim) > 0) then
+       isend=comm_naba_blocks_of_atoms%ibeg_recv_call(iprim)-1
+       do jnode=1,comm_naba_blocks_of_atoms%no_send_node(iprim)
           isend=isend+1
-          nnd_rem=comBG%list_send_node(jnode,iprim)
+          nnd_rem=comm_naba_blocks_of_atoms%list_send_node(jnode,iprim)
           nsf_recv = nsf_species(species_glob(atoms_on_node(iprim,nnd_rem)))
           nunit_recv = nsf_recv*n_pts_in_block
-          nsize=comBG%no_sent_pairs(jnode,iprim)*nunit_recv
+          nsize=comm_naba_blocks_of_atoms%no_sent_pairs(jnode,iprim)*nunit_recv
           call start_timer(tmr_std_allocation)
           allocate(recv_array(nsize),STAT=stat)
           if(stat/=0) call cq_abort("Error allocating recv_array in distribute_result: ",nsize)
@@ -610,14 +622,14 @@ contains
              recv_ptr => recv_array(1:nsize)
           endif
 
-          do ipair=1,comBG%no_sent_pairs(jnode,iprim) !naba blks of the iprim-th atm
-             prim_blk=comBG%table_blk(ipair,isend)     ! primary block in my domain
-             naba_atm_tmp=comBG%table_pair(ipair,isend)! naba atm of the primary blk
+          do ipair=1,comm_naba_blocks_of_atoms%no_sent_pairs(jnode,iprim) !naba blks of the iprim-th atm
+             prim_blk=comm_naba_blocks_of_atoms%table_blk(ipair,isend)     ! primary block in my domain
+             naba_atm_tmp=comm_naba_blocks_of_atoms%table_pair(ipair,isend)! naba atm of the primary blk
              loc1= nunit_recv*(ipair-1)
-             ind_alp_i_blk = naba_atm(sf)%ibegin_blk_orb(prim_blk)+ &
-                  naba_atm(sf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
-             ! naba_atm(sf)%ibegin_blk_orb(iprim_blk): initial position of support for the present primary block.
-             ! naba_atm(sf)%ibeg_orb_atom(naba, iprim_blk)
+             ind_alp_i_blk = naba_atoms_of_blocks(atomf)%ibegin_blk_orb(prim_blk)+ &
+                  naba_atoms_of_blocks(atomf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
+             ! naba_atoms_of_blocks(atomf)%ibegin_blk_orb(iprim_blk): initial position of atomf for the present primary block.
+             ! naba_atoms_of_blocks(atomf)%ibeg_orb_atom(naba, iprim_blk)
              ! : initial position of the present naba atom (naba) in the neighbour-atom orbitals of the 
              ! present primary block.
              !loc2 = n_pts_in_block * (ind_alp_i_blk-1) + 1
@@ -667,9 +679,9 @@ contains
 
     !Check whether we have finished all MPI_issend
     !     20/12/2000 Tsuyoshi Miyazaki 
-    if(comBG%no_recv_node(iprim) > 0) then
-       do inode=1,comBG%no_recv_node(iprim)
-          nnd_rem=comBG%list_recv_node(inode,iprim)
+    if(comm_naba_blocks_of_atoms%no_recv_node(iprim) > 0) then
+       do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
+          nnd_rem=comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
           if(nnd_rem /= mynode) then
              call MPI_WAIT(nsend_req(inode),nwait_stat,ierr)
              if(ierr /= 0) call cq_abort('ERROR in calling MPI_WAIT in distribute_result',ierr)
@@ -716,6 +728,8 @@ contains
 !!    Added timers
 !!   2011/11/15 17:00 dave
 !!    Removed blip module and variables passed to transform
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  SOURCE
 !!
   subroutine blip_to_grad_new(myid, direction, support)
@@ -727,7 +741,7 @@ contains
     use GenComms, ONLY: my_barrier, cq_abort
     use functions_on_grid, ONLY: gridfunctions
     use species_module, ONLY: nsf_species
-    use support_spec_format, ONLY: supports_on_atom
+    use support_spec_format, ONLY: blips_on_atom
 
     implicit none
 
@@ -747,7 +761,7 @@ contains
        if( iprim <= bundle%n_prim ) then
           spec = bundle%species(iprim)
           nsf_send = nsf_species(spec)
-          call do_blip_grad_transform_new(direction, iprim, supports_on_atom(iprim), nsf_send)
+          call do_blip_grad_transform_new(direction, iprim, blips_on_atom(iprim), nsf_send)
        else
           nsf_send = 0
        endif
@@ -780,6 +794,8 @@ contains
 !!    Added ROBODoc header, indented and removed NSF=4 dependency
 !!   2008/06/10 ast
 !!    Added timers
+!!   2016/07/14 16:30 nakata
+!!    Renamed naba_blk_supp -> naba_blocks_of_atoms
 !!  SOURCE
 !!
   subroutine do_blip_grad_transform_new(direction, iprim, data_blip, nsf)
@@ -790,7 +806,7 @@ contains
     use group_module,    ONLY: blocks
     use primary_module,  ONLY: bundle
     use cover_module,    ONLY: BCS_blocks
-    use set_blipgrid_module, ONLY: naba_blk_supp
+    use set_blipgrid_module, ONLY: naba_blocks_of_atoms
     use comm_array_module,   ONLY: send_array
     use block_module,    ONLY: nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
     use GenComms,        ONLY: cq_abort
@@ -847,12 +863,12 @@ contains
     dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/nblky
     dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nblkz
 
-    nxmin_grid=(naba_blk_supp%nxmin(iprim)-1)*nblkx  
-    nxmax_grid= naba_blk_supp%nxmax(iprim)*nblkx-1
-    nymin_grid=(naba_blk_supp%nymin(iprim)-1)*nblky  
-    nymax_grid= naba_blk_supp%nymax(iprim)*nblky-1
-    nzmin_grid=(naba_blk_supp%nzmin(iprim)-1)*nblkz  
-    nzmax_grid= naba_blk_supp%nzmax(iprim)*nblkz-1
+    nxmin_grid=(naba_blocks_of_atoms%nxmin(iprim)-1)*nblkx  
+    nxmax_grid= naba_blocks_of_atoms%nxmax(iprim)*nblkx-1
+    nymin_grid=(naba_blocks_of_atoms%nymin(iprim)-1)*nblky  
+    nymax_grid= naba_blocks_of_atoms%nymax(iprim)*nblky-1
+    nzmin_grid=(naba_blocks_of_atoms%nzmin(iprim)-1)*nblkz  
+    nzmax_grid= naba_blocks_of_atoms%nzmax(iprim)*nblkz-1
     !check extent & MAXBAS.
     ierr=0
     if(2*blip_info(spec)%Extent < nxmax_grid-nxmin_grid) then
@@ -1055,15 +1071,15 @@ contains
 
 
     call start_timer(tmr_std_allocation)
-    allocate(send_array(naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block),STAT=stat)
+    allocate(send_array(naba_blocks_of_atoms%no_naba_blk(iprim)*nsf*n_pts_in_block),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating send_array in do_blip_grad_transform: ",&
-         naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block)
-    call reg_alloc_mem(area_basis,naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block,type_dbl)
+         naba_blocks_of_atoms%no_naba_blk(iprim)*nsf*n_pts_in_block)
+    call reg_alloc_mem(area_basis,naba_blocks_of_atoms%no_naba_blk(iprim)*nsf*n_pts_in_block,type_dbl)
     call stop_timer(tmr_std_allocation)
     send_array(:) = 0
-    DO naba_blk=1,naba_blk_supp%no_naba_blk(iprim)! naba blks in NOPG order
+    DO naba_blk=1,naba_blocks_of_atoms%no_naba_blk(iprim)! naba blks in NOPG order
        ! iprim : primary seq. no. of the atom
-       ind_blk=naba_blk_supp%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
+       ind_blk=naba_blocks_of_atoms%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
        ind_blk=ind_blk-1
 
        nx_blk=ind_blk/ncover_yz
@@ -1157,6 +1173,8 @@ contains
 !!    Added timers
 !!   2011/11/15 17:00 dave
 !!    Removed blip module and variables passed to transform
+!!   2016/07/29 18:30 nakata
+!!    Renamed supports_on_atom -> blips_on_atom
 !!  TODO
 !!   I think this subroutine can include the work by 
 !!   blip_to_grad_transform TM
@@ -1171,7 +1189,7 @@ contains
     use GenComms, ONLY: my_barrier
     use functions_on_grid, ONLY: gridfunctions
     use species_module, ONLY: nsf_species
-    use support_spec_format, ONLY: supports_on_atom
+    use support_spec_format, ONLY: blips_on_atom
 
     implicit none
 
@@ -1200,7 +1218,7 @@ contains
        if( iprim <= bundle%n_prim ) then
           spec = bundle%species(iprim)
           nsf_send = nsf_species(spec)
-          call do_blip_gradgrad_transform_new( n_d, iprim, supports_on_atom(iprim), nsf_send)
+          call do_blip_gradgrad_transform_new( n_d, iprim, blips_on_atom(iprim), nsf_send)
        else
           nsf_send = 0
        endif
@@ -1234,6 +1252,8 @@ contains
 !!    Removed NSF=4 dependencies
 !!   2008/06/10 ast
 !!    Added timers
+!!   2016/07/14 16:30 nakata
+!!    Renamed naba_blk_supp -> naba_blocks_of_atoms
 !!  SOURCE
 !!
   subroutine do_blip_gradgrad_transform_new(n_d, iprim, data_blip, nsf)
@@ -1244,7 +1264,7 @@ contains
     use group_module,    ONLY: blocks
     use primary_module,  ONLY: bundle
     use cover_module,    ONLY: BCS_blocks
-    use set_blipgrid_module, ONLY: naba_blk_supp
+    use set_blipgrid_module, ONLY: naba_blocks_of_atoms
     use comm_array_module,   ONLY: send_array
     use block_module,    ONLY: nx_in_block,ny_in_block,nz_in_block, n_pts_in_block
     use GenComms,        ONLY: cq_abort
@@ -1301,12 +1321,12 @@ contains
     dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/nblky
     dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nblkz
 
-    nxmin_grid=(naba_blk_supp%nxmin(iprim)-1)*nblkx  
-    nxmax_grid= naba_blk_supp%nxmax(iprim)*nblkx-1
-    nymin_grid=(naba_blk_supp%nymin(iprim)-1)*nblky  
-    nymax_grid= naba_blk_supp%nymax(iprim)*nblky-1
-    nzmin_grid=(naba_blk_supp%nzmin(iprim)-1)*nblkz  
-    nzmax_grid= naba_blk_supp%nzmax(iprim)*nblkz-1
+    nxmin_grid=(naba_blocks_of_atoms%nxmin(iprim)-1)*nblkx  
+    nxmax_grid= naba_blocks_of_atoms%nxmax(iprim)*nblkx-1
+    nymin_grid=(naba_blocks_of_atoms%nymin(iprim)-1)*nblky  
+    nymax_grid= naba_blocks_of_atoms%nymax(iprim)*nblky-1
+    nzmin_grid=(naba_blocks_of_atoms%nzmin(iprim)-1)*nblkz  
+    nzmax_grid= naba_blocks_of_atoms%nzmax(iprim)*nblkz-1
     !check extent
     ierr=0
     if(2*blip_info(spec)%Extent < nxmax_grid-nxmin_grid) then
@@ -1523,15 +1543,15 @@ contains
 
  
     call start_timer(tmr_std_allocation)
-    allocate(send_array(naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block),STAT=stat)
+    allocate(send_array(naba_blocks_of_atoms%no_naba_blk(iprim)*nsf*n_pts_in_block),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating send_array in do_blip_gradgrad_transform: ",&
-         naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block)
-    call reg_alloc_mem(area_basis,naba_blk_supp%no_naba_blk(iprim)*nsf*n_pts_in_block,type_dbl)
+         naba_blocks_of_atoms%no_naba_blk(iprim)*nsf*n_pts_in_block)
+    call reg_alloc_mem(area_basis,naba_blocks_of_atoms%no_naba_blk(iprim)*nsf*n_pts_in_block,type_dbl)
     call stop_timer(tmr_std_allocation)
     send_array(:) = zero
-    DO naba_blk=1,naba_blk_supp%no_naba_blk(iprim)! naba blks in NOPG order
+    DO naba_blk=1,naba_blocks_of_atoms%no_naba_blk(iprim)! naba blks in NOPG order
        ! iprim : primary seq. no. of the atom
-       ind_blk=naba_blk_supp%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
+       ind_blk=naba_blocks_of_atoms%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
        ind_blk=ind_blk-1
 
        nx_blk=ind_blk/ncover_yz
@@ -1624,6 +1644,8 @@ contains
 !!    Added timers
 !!   2011/11/15 17:00 dave
 !!    Removed blip module and variables passed to transform
+!!   2016/07/06 17:30 nakata
+!!    Removed unused comm_naba_blocks_of_atoms and naba_blk_supp
 !!  SOURCE
 !!
   subroutine inverse_blip_transform_new(myid, dsupport, data_dblip, n_prim)
@@ -1632,7 +1654,6 @@ contains
     use numbers
     use primary_module, ONLY: bundle
     use comm_array_module, ONLY: send_array
-    use set_blipgrid_module, ONLY: naba_blk_supp, comBG
     use block_module,        ONLY: n_pts_in_block  ! = blocks%nm_group(:)
     use blip, ONLY: blip_info
     use GenComms, ONLY: my_barrier
@@ -1704,6 +1725,10 @@ contains
 !!   - Set data_dblip from intent(out) to intent(inout) because if
 !!     set to intent(out) then EVERY member of data_dblip becomes
 !!     undefined, and array members becomes unallocated.
+!!   2016/07/06 17:30 nakata
+!!    Removed unused comm_naba_blocks_of_atoms
+!!   2016/07/14 16:30 nakata
+!!    Renamed naba_blk_supp -> naba_blocks_of_atoms
 !!  SOURCE
 !!
   subroutine do_inverse_blip_new(myid, iprim, data_dblip, nsf)
@@ -1715,7 +1740,7 @@ contains
     use group_module,        ONLY:blocks
     use primary_module,      ONLY:bundle
     use cover_module,        ONLY:BCS_blocks
-    use set_blipgrid_module, ONLY:comBG,naba_blk_supp
+    use set_blipgrid_module, ONLY:naba_blocks_of_atoms
     use comm_array_module,   ONLY:send_array
 
     use block_module,ONLY: n_pts_in_block,nx_in_block,ny_in_block,nz_in_block
@@ -1798,12 +1823,12 @@ contains
     dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/nblky
     dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nblkz
 
-    nxmin_grid=(naba_blk_supp%nxmin(iprim)-1)*nblkx
-    nxmax_grid= naba_blk_supp%nxmax(iprim)*nblkx-1
-    nymin_grid=(naba_blk_supp%nymin(iprim)-1)*nblky
-    nymax_grid= naba_blk_supp%nymax(iprim)*nblky-1
-    nzmin_grid=(naba_blk_supp%nzmin(iprim)-1)*nblkz
-    nzmax_grid= naba_blk_supp%nzmax(iprim)*nblkz-1
+    nxmin_grid=(naba_blocks_of_atoms%nxmin(iprim)-1)*nblkx
+    nxmax_grid= naba_blocks_of_atoms%nxmax(iprim)*nblkx-1
+    nymin_grid=(naba_blocks_of_atoms%nymin(iprim)-1)*nblky
+    nymax_grid= naba_blocks_of_atoms%nymax(iprim)*nblky-1
+    nzmin_grid=(naba_blocks_of_atoms%nzmin(iprim)-1)*nblkz
+    nzmax_grid= naba_blocks_of_atoms%nzmax(iprim)*nblkz-1
 
     !check extent
     ierr=0
@@ -1855,9 +1880,9 @@ contains
 
     ncover_yz=BCS_blocks%ncovery*BCS_blocks%ncoverz
     igrid=0
-    DO naba_blk=1,naba_blk_supp%no_naba_blk(iprim)! naba blks (in NOPG order)
+    DO naba_blk=1,naba_blocks_of_atoms%no_naba_blk(iprim)! naba blks (in NOPG order)
        ! iprim : prim. seq. # of atm
-       ind_blk=naba_blk_supp%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
+       ind_blk=naba_blocks_of_atoms%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
        ind_blk=ind_blk-1
 
        nx_blk=ind_blk/ncover_yz
@@ -1889,9 +1914,9 @@ contains
 
                 igrid=igrid+1  ! seq. no. of integration grids
 
-                if(igrid > naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block .OR. igrid < 1) then
+                if(igrid > naba_blocks_of_atoms%no_naba_blk(iprim)*n_pts_in_block .OR. igrid < 1) then
                    call cq_abort('ERROR!!!!!!!   iprim,naba_blk,iz,iy,ix = ',&
-                        igrid,naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block)
+                        igrid,naba_blocks_of_atoms%no_naba_blk(iprim)*n_pts_in_block)
                 endif
                 do nsf1 = 1,NSF  ! data_naba_grid(1,igrid)
                    dsum(nsf1) = send_array(NSF*igrid-NSF+nsf1)
@@ -2035,17 +2060,26 @@ contains
     !  My previous expectation in the above is too optimistic....
     !  As we now treat various NSF, nsf for sending and nsf for receiving 
     !  are generally different.
+    !
+    !  Modification:
+    !   2016/07/06 17:30 nakata
+    !    Renamed comBG -> comm_naba_blocks_of_atoms
+    !   2016/07/20 16:30 nakata
+    !    Renamed naba_atm -> naba_atoms_of_blocks
+    !   2016/08/01 16:30 nakata
+    !    Introduced atomf instead of sf
+
 
     use datatypes
     use numbers
     use mpi
-    use set_blipgrid_module, ONLY: comBG,naba_atm
+    use set_blipgrid_module, ONLY: comm_naba_blocks_of_atoms,naba_atoms_of_blocks
     use comm_array_module,   ONLY: send_array,recv_array
     use block_module,        ONLY: n_pts_in_block  != blocks%nm_group(:)
     use GenComms, ONLY: my_barrier, cq_abort
     use functions_on_grid, ONLY: gridfunctions, fn_on_grid
     use species_module, ONLY: nsf_species
-    use global_module, ONLY: species_glob, sf, area_basis
+    use global_module, ONLY: species_glob, atomf, area_basis
     use atoms, ONLY: atoms_on_node
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl, type_int
 
@@ -2074,10 +2108,10 @@ contains
     !  
 
     nsize = 0
-    if(comBG%no_recv_node(iprim) > 0) then
+    if(comm_naba_blocks_of_atoms%no_recv_node(iprim) > 0) then
        nunit_recv=nsf_recv*n_pts_in_block   
-       do inode=1,comBG%no_recv_node(iprim)
-          nsize = nsize+comBG%no_naba_blk(inode,iprim)
+       do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
+          nsize = nsize+comm_naba_blocks_of_atoms%no_naba_blk(inode,iprim)
        enddo
        !write(io_lun,*) 'Allocating send_array: ',nsize
        call start_timer(tmr_std_allocation)
@@ -2087,19 +2121,20 @@ contains
        call stop_timer(tmr_std_allocation)
        send_array(:)=zero
        call start_timer(tmr_std_allocation)
-       allocate(nrecv_req(comBG%no_recv_node(iprim)), STAT=ierr)
-       if(ierr/=0) call cq_abort("Error allocating nrecv_req in collect_result: ",comBG%no_recv_node(iprim),ierr)
-       call reg_alloc_mem(area_basis,comBG%no_recv_node(iprim),type_int)
+       allocate(nrecv_req(comm_naba_blocks_of_atoms%no_recv_node(iprim)), STAT=ierr)
+       if(ierr/=0) call cq_abort("Error allocating nrecv_req in collect_result: ", &
+                                 comm_naba_blocks_of_atoms%no_recv_node(iprim),ierr)
+       call reg_alloc_mem(area_basis,comm_naba_blocks_of_atoms%no_recv_node(iprim),type_int)
        call stop_timer(tmr_std_allocation)
-       do inode=1,comBG%no_recv_node(iprim)
-          nnd_rem=comBG%list_recv_node(inode,iprim)
+       do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
+          nnd_rem=comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
           if(inode == 1) then
              ibegin=1
           else
-             ibegin=ibegin+comBG%no_naba_blk(inode-1,iprim)*nunit_recv
+             ibegin=ibegin+comm_naba_blocks_of_atoms%no_naba_blk(inode-1,iprim)*nunit_recv
           endif
 
-          nsize=comBG%no_naba_blk(inode,iprim)*nunit_recv
+          nsize=comm_naba_blocks_of_atoms%no_naba_blk(inode,iprim)*nunit_recv
           if(nnd_rem == mynode) then
              my_ibegin=ibegin
           else
@@ -2112,14 +2147,14 @@ contains
     call my_barrier() ! this is not needed.
 
     !Makes Arrays and Sends
-    if(comBG%no_send_node(iprim) > 0) then
+    if(comm_naba_blocks_of_atoms%no_send_node(iprim) > 0) then
        nsize=0
        msize=0
-       do jnode=1,comBG%no_send_node(iprim)
-          nnd_rem=comBG%list_send_node(jnode,iprim)
+       do jnode=1,comm_naba_blocks_of_atoms%no_send_node(iprim)
+          nnd_rem=comm_naba_blocks_of_atoms%list_send_node(jnode,iprim)
           nsf_send = nsf_species(species_glob(atoms_on_node(iprim,nnd_rem)))
           nunit_send = nsf_send*n_pts_in_block
-          msize=max(msize,comBG%no_sent_pairs(jnode,iprim)*nunit_send)
+          msize=max(msize,comm_naba_blocks_of_atoms%no_sent_pairs(jnode,iprim)*nunit_send)
        end do
        !write(io_lun,*) 'Allocating recv_array: ',nsize
        call start_timer(tmr_std_allocation)
@@ -2127,28 +2162,28 @@ contains
        if(stat/=0) call cq_abort("Error allocating recv_array in collect_result: ",nsize)
        call reg_alloc_mem(area_basis,msize,type_dbl)
        call stop_timer(tmr_std_allocation)
-       isend=comBG%ibeg_recv_call(iprim)-1
+       isend=comm_naba_blocks_of_atoms%ibeg_recv_call(iprim)-1
        off = 0
-       do jnode=1,comBG%no_send_node(iprim)
+       do jnode=1,comm_naba_blocks_of_atoms%no_send_node(iprim)
           isend=isend+1
-          nnd_rem=comBG%list_send_node(jnode,iprim)
+          nnd_rem=comm_naba_blocks_of_atoms%list_send_node(jnode,iprim)
           nsf_send = nsf_species(species_glob(atoms_on_node(iprim,nnd_rem)))
           nunit_send = nsf_send*n_pts_in_block
-          nsize=comBG%no_sent_pairs(jnode,iprim)*nunit_send
+          nsize=comm_naba_blocks_of_atoms%no_sent_pairs(jnode,iprim)*nunit_send
           if(nnd_rem == mynode) then
              recv_ptr => send_array(my_ibegin:my_ibegin+nsize-1)
           else
              recv_ptr => recv_array
           endif
 
-          do ipair=1,comBG%no_sent_pairs(jnode,iprim) !naba blks of the iprim-th atm
-             prim_blk=comBG%table_blk(ipair,isend)     ! primary block in my domain
-             naba_atm_tmp=comBG%table_pair(ipair,isend)! naba atm of the primary blk
+          do ipair=1,comm_naba_blocks_of_atoms%no_sent_pairs(jnode,iprim) !naba blks of the iprim-th atm
+             prim_blk=comm_naba_blocks_of_atoms%table_blk(ipair,isend)     ! primary block in my domain
+             naba_atm_tmp=comm_naba_blocks_of_atoms%table_pair(ipair,isend)! naba atm of the primary blk
              loc1= nunit_send*(ipair-1)
-             ind_alp_i_blk = naba_atm(sf)%ibegin_blk_orb(prim_blk)+ &
-                  naba_atm(sf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
-             ! naba_atm(sf)%ibegin_blk_orb(iprim_blk): initial position of support for the present primary block.
-             ! naba_atm(sf)%ibeg_orb_atom(naba, iprim_blk)
+             ind_alp_i_blk = naba_atoms_of_blocks(atomf)%ibegin_blk_orb(prim_blk)+ &
+                  naba_atoms_of_blocks(atomf)%ibeg_orb_atom(naba_atm_tmp, prim_blk) -1 
+             ! naba_atoms_of_blocks(atomf)%ibegin_blk_orb(iprim_blk): initial position of atomf for the present primary block.
+             ! naba_atoms_of_blocks(atomf)%ibeg_orb_atom(naba, iprim_blk)
              ! : initial position of the present naba atom (naba) in the neighbour-atom orbitals of the 
              ! present primary block.
              !loc2 = n_pts_in_block * (ind_alp_i_blk-1) + 1
@@ -2161,8 +2196,8 @@ contains
                 write(io_lun,*) ' ERROR loc2 in collect_result for mynode= ',&
                      mynode,' loc2 = ',loc2+nunit_send,gridfunctions(support)%size
                 write(io_lun,*) '  ERROR prim_blk, naba_atm_tmp = ',prim_blk,naba_atm_tmp,&
-                     ' ibegin_blk = ',naba_atm(sf)%ibegin_blk(prim_blk),&
-                     ' naba_atom_of_blk = ',naba_atm(sf)%no_of_atom(prim_blk)
+                     ' ibegin_blk = ',naba_atoms_of_blocks(atomf)%ibegin_blk(prim_blk),&
+                     ' naba_atom_of_blk = ',naba_atoms_of_blocks(atomf)%no_of_atom(prim_blk)
                 call cq_abort("Stopping in inverse_blip_transform")
              endif
 
@@ -2202,9 +2237,9 @@ contains
 
     ! write(io_lun,*) ' MPI_WAIT start for Node',mynode
     !Check whether we have finished all MPI_irecv
-    if(comBG%no_recv_node(iprim) > 0) then
-       do inode=1,comBG%no_recv_node(iprim)
-          nnd_rem=comBG%list_recv_node(inode,iprim)
+    if(comm_naba_blocks_of_atoms%no_recv_node(iprim) > 0) then
+       do inode=1,comm_naba_blocks_of_atoms%no_recv_node(iprim)
+          nnd_rem=comm_naba_blocks_of_atoms%list_recv_node(inode,iprim)
           if(nnd_rem /= mynode) then
              call MPI_WAIT(nrecv_req(inode),nwait_stat,ierr)
              if(ierr /= 0) then
@@ -2214,11 +2249,12 @@ contains
        enddo      ! Loop over remote nodes
        call start_timer(tmr_std_allocation)
        deallocate(nrecv_req, STAT=ierr)
-       if(ierr/=0) call cq_abort("Error deallocating nrecv_req in collect_result: ",comBG%no_recv_node(iprim),ierr)
-       call reg_dealloc_mem(area_basis,comBG%no_recv_node(iprim),type_int)
+       if(ierr/=0) call cq_abort("Error deallocating nrecv_req in collect_result: ", &
+                                 comm_naba_blocks_of_atoms%no_recv_node(iprim),ierr)
+       call reg_dealloc_mem(area_basis,comm_naba_blocks_of_atoms%no_recv_node(iprim),type_int)
        call stop_timer(tmr_std_allocation)
     endif       ! if there are sending nodes for iprim...
-    if(comBG%no_send_node(iprim)>0) then
+    if(comm_naba_blocks_of_atoms%no_send_node(iprim)>0) then
        if(allocated(recv_array)) then
           call start_timer(tmr_std_allocation)
           nullify(recv_ptr)
@@ -2260,6 +2296,8 @@ contains
 !!    Added GenComms
 !!   2011/11/15 17:00 dave
 !!    Removed blip module and variables passed to transform
+!!   2016/07/06 17:30 nakata
+!!    Removed unused comm_naba_blocks_of_atoms and naba_blk_supp
 !!  SOURCE
 !!
   subroutine inverse_blip_to_grad_new(myid, direction, dsupport, data_dblip, n_prim)
@@ -2268,7 +2306,6 @@ contains
     use blip, ONLY: blip_info
     use numbers
     use primary_module, ONLY:bundle
-    use set_blipgrid_module, ONLY:naba_blk_supp,comBG
     use block_module,        ONLY: n_pts_in_block  ! = blocks%nm_group(:)
     use GenComms, ONLY: my_barrier
     use species_module, ONLY: nsf_species
@@ -2334,6 +2371,10 @@ contains
 !!     set to out then all of its members becomes undefined upon
 !!     entering the subroutine, this includes all the array members,
 !!     which becomes unallocated
+!!   2016/07/06 17:30 nakata
+!!    Removed unused comm_naba_blocks_of_atoms
+!!   2016/07/14 16:30 nakata
+!!    Renamed naba_blk_supp -> naba_blocks_of_atoms
 !!  SOURCE
 !!
   subroutine do_inverse_blip_to_grad_new(myid, direction, iprim, data_dblip, NSF)
@@ -2344,7 +2385,7 @@ contains
     use group_module,        ONLY:blocks
     use primary_module,      ONLY:bundle
     use cover_module,        ONLY:BCS_blocks
-    use set_blipgrid_module, ONLY:comBG,naba_blk_supp
+    use set_blipgrid_module, ONLY:naba_blocks_of_atoms
     use comm_array_module,   ONLY:send_array
 
     use block_module,ONLY: n_pts_in_block,nx_in_block,ny_in_block,nz_in_block
@@ -2421,12 +2462,12 @@ contains
     dcelly_block=rcelly/blocks%ngcelly; dcelly_grid=dcelly_block/nblky
     dcellz_block=rcellz/blocks%ngcellz; dcellz_grid=dcellz_block/nblkz
 
-    nxmin_grid=(naba_blk_supp%nxmin(iprim)-1)*nblkx
-    nxmax_grid= naba_blk_supp%nxmax(iprim)*nblkx-1
-    nymin_grid=(naba_blk_supp%nymin(iprim)-1)*nblky
-    nymax_grid= naba_blk_supp%nymax(iprim)*nblky-1
-    nzmin_grid=(naba_blk_supp%nzmin(iprim)-1)*nblkz
-    nzmax_grid= naba_blk_supp%nzmax(iprim)*nblkz-1
+    nxmin_grid=(naba_blocks_of_atoms%nxmin(iprim)-1)*nblkx
+    nxmax_grid= naba_blocks_of_atoms%nxmax(iprim)*nblkx-1
+    nymin_grid=(naba_blocks_of_atoms%nymin(iprim)-1)*nblky
+    nymax_grid= naba_blocks_of_atoms%nymax(iprim)*nblky-1
+    nzmin_grid=(naba_blocks_of_atoms%nzmin(iprim)-1)*nblkz
+    nzmax_grid= naba_blocks_of_atoms%nzmax(iprim)*nblkz-1
 
     !check extent
     ierr=0
@@ -2495,9 +2536,9 @@ contains
 
     ncover_yz=BCS_blocks%ncovery*BCS_blocks%ncoverz
     igrid=0
-    DO naba_blk=1,naba_blk_supp%no_naba_blk(iprim)! naba blks (in NOPG order)
+    DO naba_blk=1,naba_blocks_of_atoms%no_naba_blk(iprim)! naba blks (in NOPG order)
        ! iprim : prim. seq. # of atm
-       ind_blk=naba_blk_supp%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
+       ind_blk=naba_blocks_of_atoms%list_naba_blk(naba_blk,iprim) !CC in BCS_blocks
        ind_blk=ind_blk-1
 
        nx_blk=ind_blk/ncover_yz
@@ -2529,8 +2570,8 @@ contains
 
                 igrid=igrid+1  ! seq. no. of integration grids
 
-                if(igrid > naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block .OR. igrid < 1) then
-                   call cq_abort('ERROR!!!!!!! ',igrid,naba_blk_supp%no_naba_blk(iprim)*n_pts_in_block)
+                if(igrid > naba_blocks_of_atoms%no_naba_blk(iprim)*n_pts_in_block .OR. igrid < 1) then
+                   call cq_abort('ERROR!!!!!!! ',igrid,naba_blocks_of_atoms%no_naba_blk(iprim)*n_pts_in_block)
                 endif
                 do nsf1 = 1,NSF ! data_naba_grid(1,igrid)
                    dsum(nsf1) = send_array(NSF*igrid-NSF+nsf1) 

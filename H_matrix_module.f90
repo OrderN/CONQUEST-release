@@ -154,41 +154,55 @@ contains
   !!   Bug fix for sum over two components of rho even without spin (and moved rho_total alloc/dealloc)
   !!  2015/06/08 lat 
   !!   Added EXX+spin and experimental backtrace 
+  !!  2016/07/13 18:30 nakata
+  !!   Renamed subroutine get_h_on_support -> get_h_on_atomfns
+  !!   Renamed H_on_supportfns -> H_on_atomfns
+  !!  2016/07/15 18:30 nakata
+  !!   Renamed sf_H_sf_rem -> atomf_H_atomf_rem
+  !!  2016/08/01 17:30 nakata
+  !!   Use atomf_H_atomf_rem instead of pao_H_sf_rem
+  !!  2016/08/08 15:30 nakata
+  !!   Renamed supportfns -> atomfns
+  !!  2016/09/16 21:30 nakata
+  !!   Introduced matKEatomf, matNLatomf, matXatomf, matHatomf
+  !!   Added matHatomf -> matH transformation (AtomF_to_SF_transform)
+  !!  2016/12/19 18:30 nakata
+  !!   Removed unused fn_on_grid, length, paolength
+  !!   Removed dHrange, matdH, paof and sf, which are no longer needed.
+  !!  2017/01/26 20:00 nakata
+  !!   Added optional passed variables build_AtomF_matrix and transform_AtomF_to_SF
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
-                          rho, size, level)
+                          rho, size, level, build_AtomF_matrix, transform_AtomF_to_SF)
 
     use datatypes
     use numbers 
-    use matrix_data,                 only: dHrange, Hrange, Srange
-    use mult_module,                 only: matNL, matKE, matH, matH,    &
-                                           matdH, matdH,                &
-                                           allocate_temp_matrix,        &
-                                           free_temp_matrix,            &
+    use matrix_data,                 only: Hrange, Srange
+    use mult_module,                 only: matNL, matKE, matH,          &
                                            matrix_scale, matrix_sum,    &
-                                           matS, matX
+                                           matrix_product,              &
+                                           matS, matX,                  &
+                                           matNLatomf, matKEatomf,      &
+                                           matHatomf, matXatomf,        &
+                                           AtomF_to_SF_transform
     use pseudopotential_common,      only: non_local, pseudopotential
-    use set_bucket_module,           only: rem_bucket, sf_H_sf_rem,     &
-                                           pao_H_sf_rem
+    use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use GenComms,                    only: gsum, end_comms,             &
                                            my_barrier, inode, ionode,   &
                                            cq_abort
     use global_module,               only: iprint_ops, iprint_exx,      &
-                                           flag_vary_basis,             &
-                                           flag_basis_set, PAOs, sf,    &
-                                           paof, IPRINT_TIME_THRES1,    &
+                                           flag_basis_set, PAOs,        &
+                                           atomf, sf,                   &
+                                           IPRINT_TIME_THRES1,          &
                                            iprint_SC,                   &
                                            flag_perform_cDFT,           &
                                            area_ops, nspin,             &
                                            spin_factor, blips,          &
-                                           flag_analytic_blip_int 
-    use PAO_grid_transform_module,   only: single_PAO_to_grid
-    use functions_on_grid,           only: supportfns, H_on_supportfns, &
-                                           allocate_temp_fn_on_grid,    &
-                                           free_temp_fn_on_grid,        &
-                                           gridfunctions, fn_on_grid
+                                           flag_analytic_blip_int
+    use functions_on_grid,           only: atomfns, H_on_atomfns,       &
+                                           gridfunctions
     use io_module,                   only: dump_matrix, dump_blips,     &
                                            dump_charge, write_matrix,   &
                                            dump_charge
@@ -219,15 +233,18 @@ contains
     logical :: rebuild_KE_NL, fixed_potential
     real(double), dimension(:)   :: electrons
     real(double), dimension(:,:) :: rho
+    logical, optional :: build_AtomF_matrix
+    logical, optional :: transform_AtomF_to_SF
 
     ! local variables
     real(double), dimension(:), allocatable :: rho_total
     real(double)   :: kinetic_energy, nl_energy
-    integer        :: pao_support, length, stat, paolength, matwork, spin
+    integer        :: stat, spin
     type(cq_timer) :: tmr_l_hmatrix
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
     character(len=9), dimension(2) :: print_exxspin
+    logical        :: flag_build_Hatomf, flag_do_SFtransform
 
     print_exxspin(1) = 'spin up  '
     print_exxspin(2) = 'spin down'
@@ -246,160 +263,141 @@ contains
     stat = 0
     if (inode == ionode .and. iprint_ops > 3) &
          write (io_lun, fmt='(10x,"Entering get_H_matrix")')
-    ! zero the H matrix (in Conquest format)
-    do spin = 1, nspin
-       call matrix_scale(zero, matH(spin))
-       if (flag_vary_basis .and. flag_basis_set == PAOs) &
-            call matrix_scale(zero, matdH(spin))
-       ! zero H_on_supportfns
-       gridfunctions(H_on_supportfns(spin))%griddata = zero
-    end do
-    !
-    !
-    if (rebuild_KE_NL) then
-       if (inode == ionode .and. iprint_ops > 3)&
-            & write(io_lun, fmt='(2x,"Rebuilding KE")')
-       ! both matKE and matNL are independent of spin (only XC is spin dependent)
-       if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) &
-            call matrix_scale(zero, matKE)
-       call matrix_scale(zero, matNL)
-       ! get the T matrix and the kinetic energy...
-       if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) &
-            call get_T_matrix(matKE)
-       ! now, we do the non-local part (if we are doing it)
-       if (non_local) then
-          if (inode == ionode .and. iprint_ops > 3) &
-               write (io_lun, fmt='(2x,"Rebuilding NL")')
-          call get_HNL_matrix(matNL)
-       end if
-       if (iprint_ops > 4) call dump_matrix("NNL", matNL, inode)
-       if (iprint_ops > 4) call dump_matrix("NKE", matKE, inode)
-    end if
-    !
-    !
-    ! from here on, workspace support becomes h_on_support...
-    ! in fact, what we are getting here is (H_local - T) acting on support
-    call get_h_on_support(iprint_ops, fixed_potential, electrons, rho, size)
-    !
-    !
-    if (inode == ionode .and. iprint_ops > 2) &
-         write (io_lun, *) 'Doing integration'
-    ! Do the integration - support holds <phi| and workspace_support
-    ! holds H|phi>. Inode starts from 1, and myid starts from 0. 
-    ! get_matrix_elements_new takes myid
-    do spin = 1, nspin
-       call get_matrix_elements_new(inode-1, rem_bucket(sf_H_sf_rem), &
-                                    matH(spin), supportfns, &
-                                    H_on_supportfns(spin))
-    end do
-    if (inode == ionode .and. iprint_ops > 2) write (io_lun, *) 'Done integration'
-    !
-    !
-    if (iprint_ops > 2) then
-       if (nspin == 1) then
-          call dump_matrix("Nl",    matH(1), inode)
-       else
-          call dump_matrix("Nl_up", matH(1), inode)
-          call dump_matrix("Nl_dn", matH(2), inode)
-       end if
-    end if
-    !
-    ! After doing this, we need \chi_{ilm} (PAOs) projected onto the
-    ! grid, and then a new call to get_matrix_elements_new
-    ! We are calculating matdH here
-    if (flag_vary_basis .and. flag_basis_set == PAOs) then
-       ! Project PAOs onto grid
-       if (inode == ionode .and. iprint_ops > 2) &
-            write (io_lun, *) 'Doing single_pao_on_support'
-       ! allocate temporary work matrices
-       matwork     = allocate_temp_matrix(dHrange, 0, paof, sf)
-       pao_support = allocate_temp_fn_on_grid(paof)
-       call single_PAO_to_grid(pao_support)
-       !
-       !
-       ! Do integration
+
+    flag_build_Hatomf = .true.
+    if (flag_basis_set == PAOs .and. present(build_AtomF_matrix)) flag_build_Hatomf = build_AtomF_matrix
+
+    if (flag_build_Hatomf) then
+       ! zero the H matrix (in Conquest format)
        do spin = 1, nspin
-          !
-          call matrix_scale(zero, matwork)
-          !
-          if (inode == ionode .and. iprint_ops > 2) &
-               write (io_lun, *) 'Doing integration (spin=', spin, ')'
-          call get_matrix_elements_new(inode-1,                  &
-                                       rem_bucket(pao_H_sf_rem), &
-                                       matwork,   pao_support,   &
-                                       H_on_supportfns(spin))
-          if (inode == ionode .and. iprint_ops > 2) &
-               write (io_lun, *) 'Done integration (spin=', spin, ')'
-          !
-          call my_barrier()
-          !
-          if (inode == ionode .and. iprint_ops > 2) &
-               write (io_lun, *) 'Doing axpy for (spin=', spin ,')'
-          call matrix_sum(one, matdH(spin), one, matwork)
-          if (inode == ionode .and. iprint_ops > 2) &
-               write (io_lun, *) 'Done axpy for (spin=', spin ,')'
-          !
-          !
-       end do ! spin
-       ! free the work temporary matrices
-       call free_temp_fn_on_grid(pao_support)
-       call free_temp_matrix(matwork)
+          call matrix_scale(zero, matHatomf(spin))
+          ! zero H_on_atomfns
+          gridfunctions(H_on_atomfns(spin))%griddata = zero
+       end do
        !
-    end if
-
-    ! add the kinetic energy and non-local matrices to give the
-    ! complete H matrix
-    do spin = 1, nspin
-       call matrix_sum(one, matH(spin), half, matKE)
-       call matrix_sum(one, matH(spin), one,  matNL)
-    end do
-    !
-    !
-!****lat<$
-    if (flag_exx) then
-       ! Ugly stuff but for now that's ok. Purpose is to adapt EXX accuracy to
-       ! the SCF covergence: closer to convergence finest is the grid
        !
-       !if (inode==ionode) print*, 'exx_pulay_r0 = ', exx_pulay_r0
-       if  ( exx_niter < exx_siter ) then
-          ! For first H building use pure DFT. To be improved for Hartree-Fock
-          if (inode == ionode .and. iprint_exx > 2) &
-               write (io_lun, *) 'EXX: first guess from DFT'
-          !
-       else
-          !
-          if (inode == ionode .and. iprint_exx > 2) &
-               write (io_lun, *) 'EXX: setting get_X_matrix'
-          call get_X_params(backtrace_level)
-
-          call exx_global_write() 
-          !
-          !if (inode == ionode .and. iprint_exx > 2) &
-               !write (io_lun, *) 'EXX: doing get_X_matrix'
-          do spin = 1, nspin
-             if (inode == ionode .and. iprint_exx > 2) &
-             write (io_lun, *) 'EXX: doing get_X_matrix: ', print_exxspin(spin)
-             call get_X_matrix(spin,backtrace_level)
-          end do
-          !
-          !if (inode == ionode .and. iprint_exx > 2) &
-               !write (io_lun, *) 'EXX: done get_X_matrix'
-          do spin = 1, nspin
-             if (inode == ionode .and. iprint_exx > 2) &
-             write (io_lun, *) 'EXX: done get_X_matrix: ', print_exxspin(spin)
-             call matrix_sum(one, matH(spin),-exx_alpha*half, matX(spin)) 
-          end do
-          !
+       if (rebuild_KE_NL) then
+          if (inode == ionode .and. iprint_ops > 3)&
+               & write(io_lun, fmt='(2x,"Rebuilding KE")')
+          ! both matKE and matNL are independent of spin (only XC is spin dependent)
+          if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) &
+               call matrix_scale(zero, matKEatomf)
+          call matrix_scale(zero, matNLatomf)
+          ! get the T matrix and the kinetic energy...
+          if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) &
+               call get_T_matrix
+          ! now, we do the non-local part (if we are doing it)
+          if (non_local) then
+             if (inode == ionode .and. iprint_ops > 3) &
+                  write (io_lun, fmt='(2x,"Rebuilding NL")')
+             call get_HNL_matrix
+          end if
+          if (iprint_ops > 4) call dump_matrix("NNL_atomf", matNLatomf, inode)
+          if (iprint_ops > 4) call dump_matrix("NKE_atomf", matKEatomf, inode)
        end if
        !
-       exx_niter = exx_niter + 1
        !
-    end if
+       ! from here on, workspace support becomes h_on_atomfns...
+       ! in fact, what we are getting here is (H_local - T) acting on support
+       call get_h_on_atomfns(iprint_ops, fixed_potential, electrons, rho, size)
+       !
+       !
+       if (inode == ionode .and. iprint_ops > 2) &
+            write (io_lun, *) 'Doing integration'
+       ! Do the integration - support holds <phi| and workspace_support
+       ! holds H|phi>. Inode starts from 1, and myid starts from 0. 
+       ! get_matrix_elements_new takes myid
+       do spin = 1, nspin
+          call get_matrix_elements_new(inode-1, rem_bucket(atomf_H_atomf_rem), &
+                                       matHatomf(spin), atomfns, &
+                                       H_on_atomfns(spin))
+       end do
+       if (inode == ionode .and. iprint_ops > 2) write (io_lun, *) 'Done integration'
+       !
+       !
+       if (iprint_ops > 4) then
+          if (nspin == 1) then
+             call dump_matrix("Nl_atomf",    matHatomf(1), inode)
+          else
+             call dump_matrix("Nl_up_atomf", matHatomf(1), inode)
+             call dump_matrix("Nl_dn_atomf", matHatomf(2), inode)
+          end if
+       end if
+
+       ! add the kinetic energy and non-local matrices to give the
+       ! complete H matrix
+       do spin = 1, nspin
+          call matrix_sum(one, matHatomf(spin), half, matKEatomf)
+          call matrix_sum(one, matHatomf(spin), one,  matNLatomf)
+       end do
+       !
+       !
+!****lat<$
+       if (flag_exx) then
+          ! Ugly stuff but for now that's ok. Purpose is to adapt EXX accuracy to
+          ! the SCF covergence: closer to convergence finest is the grid
+          !
+          !if (inode==ionode) print*, 'exx_pulay_r0 = ', exx_pulay_r0
+          if  ( exx_niter < exx_siter ) then
+             ! For first H building use pure DFT. To be improved for Hartree-Fock
+             if (inode == ionode .and. iprint_exx > 2) &
+                  write (io_lun, *) 'EXX: first guess from DFT'
+             !
+          else
+             !
+             if (inode == ionode .and. iprint_exx > 2) &
+                  write (io_lun, *) 'EXX: setting get_X_matrix'
+             call get_X_params(backtrace_level)
+
+             call exx_global_write() 
+             !
+             !if (inode == ionode .and. iprint_exx > 2) &
+                  !write (io_lun, *) 'EXX: doing get_X_matrix'
+             do spin = 1, nspin
+                if (inode == ionode .and. iprint_exx > 2) &
+                write (io_lun, *) 'EXX: doing get_X_matrix: ', print_exxspin(spin)
+                call get_X_matrix(spin,backtrace_level)
+             end do
+             !
+             !if (inode == ionode .and. iprint_exx > 2) &
+                  !write (io_lun, *) 'EXX: done get_X_matrix'
+             do spin = 1, nspin
+                if (inode == ionode .and. iprint_exx > 2) &
+                write (io_lun, *) 'EXX: done get_X_matrix: ', print_exxspin(spin)
+                call matrix_sum(one, matHatomf(spin),-exx_alpha*half, matXatomf(spin)) 
+             end do
+             !
+          end if
+          !
+          exx_niter = exx_niter + 1
+          !
+       end if
 !****lat>$
+    endif ! flag_build_Hatomf
+
+    ! For PAO-based contracted SFs, atomic functions are PAOs
+    !     so we should transform H from atomic-function basis to SF basis.
+    ! For blips and one_to_one PAOs, atomic functions are SFs
+    !     so no transformation is needed.
+    if (atomf.ne.sf) then
+       flag_do_SFtransform = .true.
+       if (present(transform_AtomF_to_SF)) flag_do_SFtransform = transform_AtomF_to_SF
+    else
+       flag_do_SFtransform = .false.
+    endif
+
+    if (flag_do_SFtransform) then
+       call AtomF_to_SF_transform(matKE, matKEatomf, 1, Hrange)   ! only to output kinetic energy
+       call AtomF_to_SF_transform(matNL, matNLatomf, 1, Hrange)   ! only to output non-local PP energy
+       do spin = 1, nspin
+          if (flag_exx) call AtomF_to_SF_transform(matX(spin), matXatomf(spin), spin, Hrange)   ! only to output EXX energy
+          call AtomF_to_SF_transform(matH(spin), matHatomf(spin), spin, Hrange)   ! total electronic Hamiltonian
+       enddo
+    endif
     !
     !
     ! dump matrices if required
-    if (iprint_ops > 4) then
+    if (iprint_ops > 3) then
        call dump_matrix("NS", matS, inode)
        if (nspin == 1) then
           call dump_matrix("NH",    matH(1), inode)
@@ -408,6 +406,10 @@ contains
           call dump_matrix("NH_dn", matH(2), inode)
        end if
     end if
+    if (iprint_ops > 4) then
+       call dump_matrix("NNL", matNL, inode)
+       call dump_matrix("NKE", matKE, inode)
+    endif
     !
     !
     ! dump charges if required
@@ -451,13 +453,13 @@ contains
 
 
   ! -----------------------------------------------------------
-  ! Subroutine get_h_on_support
+  ! Subroutine get_h_on_atomfns
   ! -----------------------------------------------------------
 
-  !!****f* H_matrix_module/get_h_on_support_nospin *
+  !!****f* H_matrix_module/get_h_on_atomfns_nospin *
   !!
   !!  NAME
-  !!   get_h_on_support
+  !!   get_h_on_atomfns
   !!  USAGE
   !!
   !!  PURPOSE
@@ -522,14 +524,25 @@ contains
   !!   - optional output of x_energy only
   !!   2015/11/24 08:38 dave
   !!    Adjusted name of hartree_energy to hartree_energy_total_rho for neutral atom implementation
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed subroutine get_h_on_support -> get_h_on_atomfns
+  !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/07/20 16:30 nakata
+  !!    Renamed naba_atm -> naba_atoms_of_blocks
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf and paof
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
+  !!   2016/12/19 18:30 nakata
+  !!    Removed unused fn_on_grid
   !!  SOURCE
   !!
-  subroutine get_h_on_support(output_level, fixed_potential, &
+  subroutine get_h_on_atomfns(output_level, fixed_potential, &
                               electrons, rho, size)
 
     use datatypes
     use numbers
-    use global_module,               only: sf, flag_functional_type,   &
+    use global_module,               only: atomf, flag_functional_type,&
                                            nspin, spin_factor,         &
                                            flag_pcc_global, area_ops,  &
                                            functional_lda_pz81,        &
@@ -556,7 +569,7 @@ contains
 
     use block_module,                only: n_blocks, n_pts_in_block
     use primary_module,              only: domain
-    use set_blipgrid_module,         only: naba_atm
+    use set_blipgrid_module,         only: naba_atoms_of_blocks
     use density_module,              only: density_pcc, density_atom
     use GenComms,                    only: gsum, inode, ionode, cq_abort
     use energy,                      only: hartree_energy_total_rho,  &
@@ -568,8 +581,8 @@ contains
                                            hartree_energy_drho_atom_rho, &
                                            delta_E_xc
     use hartree_module,              only: hartree, hartree_stress
-    use functions_on_grid,           only: gridfunctions, fn_on_grid,  &
-                                           supportfns, H_on_supportfns
+    use functions_on_grid,           only: gridfunctions, &
+                                           atomfns, H_on_atomfns
 
     use calc_matrix_elements_module, only: norb
     use pseudopotential_common,      only: pseudopotential
@@ -606,7 +619,7 @@ contains
     if( flag_neutral_atom ) then
        allocate( drho_tot(size), STAT=stat)
        if (stat /= 0) &
-            call cq_abort("get_h_on_support: Error allocating drho_tot:", size )
+            call cq_abort("get_h_on_atomfns: Error allocating drho_tot:", size )
        call reg_alloc_mem(area_ops, size, type_dbl)
     end if
 
@@ -614,7 +627,7 @@ contains
     allocate(xc_epsilon(size), h_potential(size), rho_tot(size), &
              xc_potential(size,nspin), STAT=stat)
     if (stat /= 0) &
-         call cq_abort("get_h_on_support: Error allocating mem:", size, nspin)
+         call cq_abort("get_h_on_atomfns: Error allocating mem:", size, nspin)
     call reg_alloc_mem(area_ops, (3+nspin)*size, type_dbl)
     
     !call dump_locps(pseudopotential,size,inode)
@@ -644,7 +657,7 @@ contains
     ! first initialise some arrays
     h_potential = zero
     do spin = 1, nspin
-       gridfunctions(H_on_supportfns(spin))%griddata = zero
+       gridfunctions(H_on_atomfns(spin))%griddata = zero
        potential(:,spin)    = zero
        xc_potential(:,spin) = zero
     end do
@@ -662,7 +675,7 @@ contains
     electrons_tot = spin_factor * sum(electrons(:))
     if (inode == ionode .and. output_level >= 2) then
        write (io_lun, '(10x,a)') &
-            'get_h_on_support: Electron Count, up, down and total:'
+            'get_h_on_atomfns: Electron Count, up, down and total:'
        write (io_lun, '(10x, 3f25.15)') &
             electrons(1), electrons(nspin), electrons_tot
     end if
@@ -974,20 +987,20 @@ contains
     n = 0
     m = 0
     do nb = 1, domain%groups_on_node
-       if (naba_atm(sf)%no_of_atom(nb) > 0) then
-          do atom = 1, naba_atm(sf)%no_of_atom(nb)
-             do nsf1 = 1, norb(naba_atm(sf),atom,nb)
+       if (naba_atoms_of_blocks(atomf)%no_of_atom(nb) > 0) then
+          do atom = 1, naba_atoms_of_blocks(atomf)%no_of_atom(nb)
+             do nsf1 = 1, norb(naba_atoms_of_blocks(atomf),atom,nb)
                 do point = 1, n_pts_in_block
                    n = n + 1
                    do spin = 1, nspin
-                      gridfunctions(H_on_supportfns(spin))%griddata(n) = &
-                           gridfunctions(supportfns)%griddata(n) *       &
+                      gridfunctions(H_on_atomfns(spin))%griddata(n) = &
+                           gridfunctions(atomfns)%griddata(n) *  &
                            potential(m+point,spin)
                    end do ! spin
                 end do ! point
              end do ! nsf1
           end do ! atom
-       end if ! (naba_atm(sf)%no_of_atom(nb) > 0)
+       end if ! (naba_atoms_of_blocks(atomf)%no_of_atom(nb) > 0)
        m = m + n_pts_in_block
     end do ! nb
     !
@@ -1001,17 +1014,17 @@ contains
     !
     !
     deallocate(xc_epsilon, h_potential, rho_tot, xc_potential, STAT=stat)
-    if (stat /= 0) call cq_abort("get_h_on_support: Error deallocating mem")
+    if (stat /= 0) call cq_abort("get_h_on_atomfns: Error deallocating mem")
     call reg_dealloc_mem(area_ops, (3+nspin)*size, type_dbl)
 
     ! for Neutral atom potential
     if( flag_neutral_atom ) then
        deallocate(drho_tot, STAT=stat)
-       if (stat /= 0) call cq_abort("get_h_on_support: Error deallocating mem")
+       if (stat /= 0) call cq_abort("get_h_on_atomfns: Error deallocating mem")
        call reg_dealloc_mem(area_ops, size, type_dbl)
     end if
     return
-  end subroutine get_h_on_support
+  end subroutine get_h_on_atomfns
   !!***
 
 
@@ -1069,37 +1082,53 @@ contains
   !!     contribution to matdH from the non local potential must also be
   !!     added to matdH_dn. The value of the contribution however is
   !!     same for both spin components
+  !!   2016/07/15 18:30 nakata
+  !!    Renamed sf_nlpf_rem -> atomf_nlpf_rem
+  !!   2016/07/29 18:30 nakata
+  !!    Renamed supports_on_atom -> blips_on_atom
+  !!   2016/08/01 17:30 nakata
+  !!    Introduced atomf instead of sf
+  !!   2016/08/08 15:30 nakata
+  !!    Renamed supportfns -> atomfns
+  !!   2016/09/20 18:30 nakata
+  !!    Introduced matAP, matPA, matNLatomf, APrange, AP_trans, AP_PA_aHa
+  !!    instead of matSC, matCS, matNL     , SPrange, SP_trans, SP_PS_H
+  !!    matNLatomf is used from module, not from passed variables
+  !!   2016/12/19 18:30 nakata
+  !!    Removed PAOPrange, dHrange, matdAP, matdCNL and matdH, 
+  !!    which are no longer needed.
   !!  SOURCE
   !!
-  subroutine get_HNL_matrix(matNL)
+  subroutine get_HNL_matrix
 
     use datatypes
     use numbers
-    use matrix_data, only: mat, SPrange, PAOPrange, dHrange, halo
-    use mult_module, only: mult, SP_PS_H, PAOP_PS_H, SP_trans, matCS,  &
-                           matdH, matSC, allocate_temp_matrix,         &
+    use matrix_data, only: mat, APrange, halo
+    use mult_module, only: mult, AP_PA_aHa, AP_trans,                  &
+                           matPA, matAP, matNLatomf,                   &
+                           allocate_temp_matrix,                       &
                            free_temp_matrix, matrix_product,           &
                            matrix_sum, matrix_transpose, matrix_scale
     use pseudopotential_data,        only: n_projectors, l_core, recip_scale
     use pseudopotential_common,      only: pseudo_type, OLDPS, SIESTA, &
                                            STATE, ABINIT
     use species_module,              only: species
-    use set_bucket_module,           only: rem_bucket, sf_nlpf_rem
+    use set_bucket_module,           only: rem_bucket, atomf_nlpf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use global_module,               only: flag_basis_set, PAOs,       &
-                                           blips, flag_vary_basis,     &
-                                           paof, nlpf, sf, iprint_ops, &
+                                           blips, nlpf, atomf,         &
+                                           iprint_ops,                 &
                                            nspin, id_glob,             &
                                            species_glob,               &
                                            flag_analytic_blip_int
     use GenComms,                    only: cq_abort, myid, inode, ionode
     use GenBlas,                     only: axpy
     use build_PAO_matrices,          only: assemble_2
-    use functions_on_grid,           only: supportfns, pseudofns
+    use functions_on_grid,           only: atomfns, pseudofns
     use io_module,                   only: dump_matrix
     use nlpf2blip,                   only: get_SP, nlpf_on_atom
     use primary_module ,             only: bundle
-    use support_spec_format,         only: supports_on_atom
+    use support_spec_format,         only: blips_on_atom
     use group_module,                only: parts
     use primary_module,              only: bundle
     use cover_module,                only: BCS_parts
@@ -1108,27 +1137,25 @@ contains
     implicit none
 
     ! Passed variables
-    integer :: matNL
+    integer :: matNL_tmp
 
     ! Local variables
-    integer      :: stat, matdSC, matdCNL, matSCtmp, np, ni, iprim, spec,   &
+    integer      :: stat, matAPtmp, np, ni, iprim, spec,                    &
                     this_nsf, this_nlpf, nab, ist, gcspart, n1, n2,         &
                     neigh_global_part, neigh_global_num, neigh_species, i1, &
                     i2, wheremat, spin
     real(double) :: dx, dy, dz
 
-    if (flag_vary_basis .and. flag_basis_set == PAOs) then
-       matdSC  = allocate_temp_matrix(PAOPrange, SP_trans, paof, nlpf)
-       matdCNL = allocate_temp_matrix(dHrange, 0, paof, sf)
-    end if
-    matSCtmp = allocate_temp_matrix(SPrange, SP_trans, sf, nlpf)
+
+    matAPtmp = allocate_temp_matrix(APrange, AP_trans, atomf, nlpf)
+
     ! first, get the overlap of support functions with core
     ! pseudowavefunctions
     if (flag_basis_set == blips) then
        if (inode == ionode .and. iprint_ops > 2) &
             write(io_lun,*) 'Calling get_matrix_elements'
        if (flag_analytic_blip_int) then
-          call matrix_scale(zero, matSC)
+          call matrix_scale(zero, matAP)
           iprim = 0
           do np = 1, bundle%groups_on_node
              if (bundle%nm_nodgroup(np) > 0) then
@@ -1137,55 +1164,51 @@ contains
                    spec = bundle%species(iprim)
                    ! write (60, *) "#Atom ", iprim
                    ! Loop over neighbours of atom
-                   do nab = 1, mat(np,SPrange)%n_nab(ni)
-                      ist = mat(np,SPrange)%i_acc(ni) + nab - 1
+                   do nab = 1, mat(np,APrange)%n_nab(ni)
+                      ist = mat(np,APrange)%i_acc(ni) + nab - 1
                       ! Build the distances between atoms - needed for phases
                       gcspart = &
-                           BCS_parts%icover_ibeg(mat(np,SPrange)%i_part(ist)) + &
-                           mat(np,SPrange)%i_seq(ist) - 1
+                           BCS_parts%icover_ibeg(mat(np,APrange)%i_part(ist)) + &
+                           mat(np,APrange)%i_seq(ist) - 1
                       ! Displacement vector
                       dx = BCS_parts%xcover(gcspart) - bundle%xprim(iprim)
                       dy = BCS_parts%ycover(gcspart) - bundle%yprim(iprim)
                       dz = BCS_parts%zcover(gcspart) - bundle%zprim(iprim)
                       ! We need to know the species of neighbour
                       neigh_global_part = &
-                           BCS_parts%lab_cell(mat(np,SPrange)%i_part(ist))
+                           BCS_parts%lab_cell(mat(np,APrange)%i_part(ist))
                       neigh_global_num  = &
                            id_glob(parts%icell_beg(neigh_global_part) + &
-                                   mat(np,SPrange)%i_seq(ist) - 1)
+                                   mat(np,APrange)%i_seq(ist) - 1)
                       ! write (60, *) "#Nab no and glob: ", &
                       !               nab, neigh_global_num, dx, dy, dz
                       neigh_species = species_glob(neigh_global_num)
                       !write(io_lun,fmt='(2x,"Offset: ",3f7.2,4i4)') dx, dy, dz, iprim,neigh_global_num, spec,neigh_species
                       !do n1=1,nsf_species(spec)
                       !   do n2=1,nlpf_species(neigh_species)
-                      !      call scale_matrix_value(matSC,np,ni,iprim,nab,n1,n2,zero)
+                      !      call scale_matrix_value(matAP,np,ni,iprim,nab,n1,n2,zero)
                       !   end do
                       !end do
-                      call get_SP(supports_on_atom(iprim),              &
-                                  nlpf_on_atom(neigh_species), matSC,   &
-                                  iprim, halo(SPrange)%i_halo(gcspart), &
+                      call get_SP(blips_on_atom(iprim),                  &
+                                  nlpf_on_atom(neigh_species), matAP,    &
+                                  iprim, halo(APrange)%i_halo(gcspart), &
                                   dx, dy, dz, spec, neigh_species)
                    end do
                    ! write (60, *) "&"
                 end do
              end if
           end do
-          !call dump_matrix("NSC2",matSC,inode)
+          !call dump_matrix("NSC2",matAP,inode)
        else
-          call get_matrix_elements_new(myid, rem_bucket(sf_nlpf_rem), &
-                                       matSC, supportfns, pseudofns)
+          call get_matrix_elements_new(myid, rem_bucket(atomf_nlpf_rem), &
+                                       matAP, atomfns, pseudofns)
        end if
-       !call dump_matrix("NSC",matSC,inode)
+       !call dump_matrix("NSC",matAP,inode)
     else if (flag_basis_set == PAOs) then
        ! Use assemble to generate matrix elements
        if (inode == ionode .and. iprint_ops > 2) &
             write (io_lun, *) 'Calling assemble'
-       if (flag_vary_basis) then
-          call assemble_2(SPrange, matSC, 3, matdSC)
-       else
-          call assemble_2(SPrange, matSC, 3)
-       end if
+       call assemble_2(APrange, matAP, 3)
        if (inode == ionode .AND. iprint_ops > 2) &
             write(io_lun,*) 'Called assemble'
     else
@@ -1193,69 +1216,42 @@ contains
                      flag_basis_set)
     end if
     if (inode == ionode .and. iprint_ops > 2) write(io_lun,*) 'Made SP'
-    call matrix_sum(zero, matSCtmp, one ,matSC)
-    if (mult(SP_PS_H)%mult_type == 2) then ! type 2 means no transpose necessary
+
+    call matrix_sum(zero, matAPtmp, one ,matAP)
+    if (mult(AP_PA_aHa)%mult_type == 2) then ! type 2 means no transpose necessary
        select case (pseudo_type)
        case (OLDPS)
-          call matrix_scale_diag(matSC, species, n_projectors, l_core,&
-                                 recip_scale, SPrange)
+          call matrix_scale_diag(matAP, species, n_projectors, l_core,&
+                                 recip_scale, APrange)
        case(SIESTA)
-          call matrix_scale_diag_tm(matSC, SPrange)
+          call matrix_scale_diag_tm(matAP, APrange)
        case(ABINIT)
-          call matrix_scale_diag_tm(matSC, SPrange)
+          call matrix_scale_diag_tm(matAP, APrange)
        end select
-       call matrix_product(matSCtmp, matSC, matNL, mult(SP_PS_H))
-       if (inode == ionode .and. iprint_ops > 2) &
-            write (io_lun, *) 'Calling mult_wrap'
-       if (flag_vary_basis .and. flag_basis_set == PAOs) then
-          call matrix_product(matdSC, matSC, matdCNL, mult(PAOP_PS_H))
-       end if
+       call matrix_product(matAPtmp, matAP, matNLatomf, mult(AP_PA_aHa))
     else ! Transpose SP->PS, then mult
        if (inode == ionode .and. iprint_ops > 2) &
-            write (io_lun, *) 'Type 1 ', matSC, matCS
-       call matrix_transpose(matSC, matCS)
+            write (io_lun, *) 'Type 1 ', matAP, matPA
+       call matrix_transpose(matAP, matPA)
        if (inode == ionode .and. iprint_ops > 2) &
             write (io_lun, *) 'Done transpose'
        select case (pseudo_type)
        case (OLDPS)
-          call matrix_scale_diag(matSC, species, n_projectors, l_core,&
-                                 recip_scale, SPrange)
+          call matrix_scale_diag(matAP, species, n_projectors, l_core,&
+                                 recip_scale, APrange)
        case (SIESTA)
           if (inode == ionode .and. iprint_ops > 2) &
                write (io_lun, *) 'Doing scale'
-          call matrix_scale_diag_tm(matSC, SPrange)
-          if (inode == ionode .and. iprint_ops > 2) &
-               write (io_lun, *) 'Calling scale'
-          if (flag_vary_basis .and. flag_basis_set == PAOs) &
-               call matrix_scale_diag_tm(matdSC, PAOPrange)
+          call matrix_scale_diag_tm(matAP, APrange)
        case(ABINIT)
           if (inode == ionode .and. iprint_ops > 2) &
                write (io_lun, *) 'Doing scale'
-          call matrix_scale_diag_tm(matSC, SPrange)
-          if (inode == ionode .and. iprint_ops > 2) &
-               write (io_lun, *) 'Calling scale'
-          if (flag_vary_basis .and. flag_basis_set == PAOs) &
-               call matrix_scale_diag_tm(matdSC, PAOPrange)
+          call matrix_scale_diag_tm(matAP, APrange)
        end select
-       call matrix_product(matSC, matCS, matNL, mult(SP_PS_H))
-       if (inode == ionode .and. iprint_ops > 2) &
-            write (io_lun, *) 'Calling mult_wrap'
-       if (flag_vary_basis .and. flag_basis_set == PAOs) then
-          call matrix_product(matdSC, matCS, matdCNL, mult(PAOP_PS_H))
-       end if
+       call matrix_product(matAP, matPA, matNLatomf, mult(AP_PA_aHa))
     endif
-    if (flag_vary_basis .and. flag_basis_set == PAOs) then
-       if (inode == ionode .and. iprint_ops > 2) &
-            write (io_lun, *) 'PAOs'
-       do spin = 1, nspin
-          call matrix_sum(one, matdH(spin), one, matdCNL)
-       end do
-    end if
-    call free_temp_matrix(matSCtmp)
-    if (flag_vary_basis .and. flag_basis_set == PAOs) then
-       call free_temp_matrix(matdCNL)
-       call free_temp_matrix(matdSC)
-    end if
+
+    call free_temp_matrix(matAPtmp)
     return
 
   contains
@@ -1263,7 +1259,7 @@ contains
     ! Added nonef to allow scaling of the matrix <PAO|projector>
     ! required for PAO basis of support functions
     ! DRB 2004/07/23 08:28
-    subroutine matrix_scale_diag_tm(matSC, range)
+    subroutine matrix_scale_diag_tm(matAP, range)
 
       ! Module usage
       use datatypes,      only: double
@@ -1280,7 +1276,7 @@ contains
       implicit none
 
       ! Passed variables
-      integer :: range, matSC
+      integer :: range, matAP
 
       ! Local variables
       integer :: np, i, nb, isu, ind_cover, ind_qart, ip
@@ -1309,7 +1305,7 @@ contains
                            n_proj=n_proj+1
                            do nsf1=1,mat(np,range)%ndimi(i)
                               call scale_matrix_value(&
-                                   matSC, np, i, ip, nb, nsf1, n_proj, &
+                                   matAP, np, i, ip, nb, nsf1, n_proj, &
                                    pseudo(species_k)%pjnl_ekb(nl))
                               if (abs(pseudo(species_k)%pjnl_ekb(nl)) < &
                                   RD_ERR .and. inode == ionode) &
@@ -1403,49 +1399,56 @@ contains
   !!    Added flag for on-site analytics
   !!   2012/03/13 L.Tong
   !!   - Added spin implementation
+  !!   2016/07/13 18:30 nakata
+  !!    Renamed H_on_supportfns -> H_on_atomfns
+  !!   2016/07/15 18:30 nakata
+  !!    Renamed sf_H_sf_rem -> atomf_H_atomf_rem
+  !!   2016/07/29 18:30 nakata
+  !!    Renamed supports_on_atom -> blips_on_atom
+  !!   2016/09/29 18:30 nakata
+  !!    Introduced matKEatomf instead of matKE
+  !!   2016/12/19 18:30 nakata
+  !!    Removed dHrange, matdKE, matdH, paof and sf,
+  !!    which are no longer needed.
   !!  SOURCE
   !!
-  subroutine get_T_matrix(matKE)
+  subroutine get_T_matrix
 
     use numbers
     use primary_module,              only: bundle
-    use matrix_data,                 only: mat, Hrange, dHrange
-    use set_bucket_module,           only: rem_bucket, sf_H_sf_rem
+    use matrix_data,                 only: mat, Hrange, aHa_range
+    use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use blip_grid_transform_module,  only: blip_to_grad_new
     use GenComms,                    only: gsum, cq_abort, myid
     use GenBlas,                     only: axpy
-    use global_module,               only: flag_basis_set, PAOs,    &
-                                           blips, flag_vary_basis,  &
-                                           paof, sf,                &
-                                           flag_onsite_blip_ana,    &
+    use global_module,               only: flag_basis_set,       &
+                                           PAOs, blips,          &
+                                           flag_onsite_blip_ana, &
                                            nspin
     use build_PAO_matrices,          only: assemble_2
-    use mult_module,                 only: allocate_temp_matrix,    &
-                                           free_temp_matrix, matdH, &
-                                           matrix_sum
-    use functions_on_grid,           only: H_on_supportfns
-    use support_spec_format,         only: supports_on_atom
+    use mult_module,                 only: allocate_temp_matrix, &
+                                           free_temp_matrix,     &
+                                           matrix_sum,           &
+                                           matKEatomf
+    use functions_on_grid,           only: H_on_atomfns
+    use support_spec_format,         only: blips_on_atom
     use species_module,              only: nsf_species
 
     implicit none
 
-    ! Passed variables
-    integer :: matKE
-
     ! local variables
-    integer :: direction, i, np, nn, matwork, matdKE, this_nsf, spec, spin
+    integer :: direction, i, np, nn, matwork, this_nsf, spec, spin
 
-    matwork = allocate_temp_matrix(Hrange,0)
-    if (flag_basis_set == PAOs .and. flag_vary_basis) &
-         matdKE = allocate_temp_matrix(dHrange, 0, paof, sf)
+
     if(flag_basis_set == blips) then
+       matwork = allocate_temp_matrix(Hrange,0)
        do direction = 1, 3
-          call blip_to_grad_new(myid, direction, H_on_supportfns(1))
-          call get_matrix_elements_new(myid, rem_bucket(sf_H_sf_rem), &
-                                       matwork, H_on_supportfns(1), &
-                                       H_on_supportfns(1))
-          call matrix_sum(one, matKE, one, matwork)
+          call blip_to_grad_new(myid, direction, H_on_atomfns(1))
+          call get_matrix_elements_new(myid, rem_bucket(atomf_H_atomf_rem), &
+                                       matwork, H_on_atomfns(1), &
+                                       H_on_atomfns(1))
+          call matrix_sum(one, matKEatomf, one, matwork)
        end do
        ! replace the onsite blocks with the analytic values...
        if (flag_onsite_blip_ana) then
@@ -1455,30 +1458,21 @@ contains
                 do nn = 1, bundle%nm_nodgroup(np)
                    spec = bundle%species(i)
                    this_nsf = nsf_species(spec)
-                   call get_onsite_T(supports_on_atom(i), matKE, np, &
+                   call get_onsite_T(blips_on_atom(i), matKEatomf, np, &
                                      nn, i, this_nsf, spec)
                    i = i + 1
                 end do
              endif
           end do
        end if
+       call free_temp_matrix(matwork)
     else if (flag_basis_set == PAOs) then
        ! Use assemble to generate matrix elements
-       if(flag_vary_basis) then
-          call assemble_2(Hrange, matKE, 2, matdKE)
-          do spin = 1, nspin
-             call matrix_sum(one, matdH(spin), half, matdKE)
-          end do
-       else
-          call assemble_2(Hrange, matKE, 2)
-       end if
+       call assemble_2(aHa_range, matKEatomf, 2)
     else
        call cq_abort('get_T_matrix: basis set incorrectly specified ', &
                      flag_basis_set)
     end if
-    if (flag_basis_set == PAOs .and. flag_vary_basis) &
-         call free_temp_matrix(matdKE)
-    call free_temp_matrix(matwork)
     return
   end subroutine get_T_matrix
   !!***
@@ -1519,9 +1513,11 @@ contains
 !!    Added species of atom
 !!   2011/11/15 08:02 dave
 !!    Changes to blip data
+!!   2016/09/29 18:30 nakata
+!!    Rename matKE to mat_KE (local name)
 !!  SOURCE
 !!
-  subroutine get_onsite_T(blip_co, matKE, np, nn, ip, this_nsf, spec)
+  subroutine get_onsite_T(blip_co, mat_KE, np, nn, ip, this_nsf, spec)
 
     use datatypes
     use numbers
@@ -1536,7 +1532,7 @@ contains
     implicit none
 
     ! Shared Variables
-    integer :: this_nsf, matKE,np, nn, ip, spec
+    integer :: this_nsf, mat_KE, np, nn, ip, spec
 
     type(support_function) :: blip_co
     ! Local Variables
@@ -1675,8 +1671,8 @@ contains
     call start_timer(tmr_std_matrices)
     do i1 = 1,this_nsf
        do i2=1,this_nsf
-          call scale_matrix_value(matKE,np,nn,ip,0,i2,i1,zero,1)
-          call store_matrix_value(matKE,np,nn,ip,0,i2,i1,blip_info(spec)%SupportGridSpacing*temp(i2,i1),1)
+          call scale_matrix_value(mat_KE,np,nn,ip,0,i2,i1,zero,1)
+          call store_matrix_value(mat_KE,np,nn,ip,0,i2,i1,blip_info(spec)%SupportGridSpacing*temp(i2,i1),1)
        end do
     end do
     call stop_timer(tmr_std_matrices)
@@ -1718,7 +1714,7 @@ contains
   !!    Also added comments to end of if and do statements to make more readable
   !!  SOURCE
   !!
-  subroutine matrix_scale_diag(matSC, species, n_projectors, l_core, &
+  subroutine matrix_scale_diag(matAP, species, n_projectors, l_core, &
                                recip_scale, range)
 
     use datatypes
@@ -1731,7 +1727,7 @@ contains
 
     implicit none
 
-    integer :: matSC, species(:), n_projectors(:),l_core( :, : )
+    integer :: matAP, species(:), n_projectors(:),l_core( :, : )
     integer :: range
 
     real(double) :: recip_scale( :, : )
@@ -1756,7 +1752,7 @@ contains
                    do n = 1, n_projectors(species_k)
                       l2 = l_core( n, species_k )
                       do nsf1 = 1,mat(np,range)%ndimi(i)
-                         call scale_matrix_value(matSC, np, i, ip, nb, &
+                         call scale_matrix_value(matAP, np, i, ip, nb, &
                                                  nsf1, n,              &
                                                  recip_scale(l2,       &
                                                  species_k))

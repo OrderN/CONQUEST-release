@@ -115,6 +115,8 @@ contains
   !!    Added call for wavefunction output at self-consistency
   !!   2015/06/26 13:46 dave
   !!    Turned off force calculation when writing out bands
+  !!   2017/02/15 (or earlier) nakata
+  !!    Added LFD minimisation for multisite support functions
   !!  SOURCE
   !!
   !subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -133,6 +135,7 @@ contains
                                  runtype, flag_vdWDFT, io_lun,         &
                                  flag_DeltaSCF, flag_excite, runtype,  &
                                  flag_MDold,flag_LmatrixReuse,McWFreq, &
+                                 flag_multisite,                       &
                                  io_lun, flag_out_wf, wf_self_con, flag_write_DOS
     use energy,            only: get_energy, xc_energy, final_energy
     use GenComms,          only: cq_abort, inode, ionode
@@ -142,6 +145,7 @@ contains
     use input_module,      only: leqi
     use vdWDFT_module,     only: vdWXC_energy, vdWXC_energy_slow
     use density_module,    only: density
+    use multisiteSF_module,only: flag_LFD_minimise, LFD_minimise
     use units
     ! Deleted later ?
 !   use io_module2,        ONLY: dump_matrix2,dump_InfoGlobal
@@ -204,13 +208,35 @@ contains
     ! Start timing the energy calculation
     call start_timer(tmr_l_energy, WITH_LEVEL)
     ! Now choose what we vary
-    if (flag_vary_basis) then ! Vary everything: DM, charge density, basis set
+    if (flag_LFD_minimise) then ! Vary everything, this flag is only for PAO-based multi-site SFs
+       ! minimise by repeating LFD with updated SCF density
+       call LFD_minimise(fixed_potential, vary_mu, n_L_iterations, L_tolerance, &
+                         sc_tolerance, expected_reduction, total_energy, density)
+       ! Numerical optimisation subsequently 
+       if (flag_vary_basis) then
+          if (UsePulay) then
+             call pulay_min_pao(n_support_iterations, fixed_potential,&
+                                vary_mu, n_L_iterations, L_tolerance, &
+                                sc_tolerance, energy_tolerance,       &
+                                total_energy, expected_reduction)
+          else
+             call vary_pao(n_support_iterations, fixed_potential, &
+                           vary_mu, n_L_iterations, L_tolerance,  &
+                           sc_tolerance, energy_tolerance,        &
+                           total_energy, expected_reduction)
+          end if
+       endif
+    else if (flag_vary_basis) then ! Vary everything: DM, charge density, basis set
        if (flag_basis_set == blips) then
           call vary_support(n_support_iterations, fixed_potential, &
                             vary_mu, n_L_iterations, L_tolerance,  &
                             sc_tolerance, energy_tolerance,        &
                             total_energy, expected_reduction)
        else if (flag_basis_set == PAOs) then
+          if (flag_multisite .and. .not.flag_LFD_minimise) then
+             if (inode==ionode) write(io_lun,'(/3x,A/)') &
+                'WARNING: Numerical PAO minimisation will be performed without doing LFD_minimisation!'   
+          endif
           if (UsePulay) then
              call pulay_min_pao(n_support_iterations, fixed_potential,&
                                 vary_mu, n_L_iterations, L_tolerance, &

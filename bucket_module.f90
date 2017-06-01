@@ -47,7 +47,6 @@ module bucket_module
 
   use datatypes
   use global_module,          only: io_lun
-  use naba_blk_module,        only: naba_atm_of_blk
   use timer_module,           only: start_timer,stop_timer
   use timer_stdclocks_module, only: tmr_std_allocation
 
@@ -146,13 +145,15 @@ contains
 !!    Added ROBODoc headers
 !!   2008/05/16 ast
 !!    Added timer
+!!   2016/07/20 16:30 nakata
+!!    Renamed halo_atm -> halo_atoms_of_blocks
 !!  SOURCE
 !!
 !  subroutine set_local_bucket(set,rcut_in,mx_node_in,mx_pair_in,ind_left,ind_right)
   subroutine set_local_bucket(set,rcut_in,mx_node_in,ind_left,ind_right)
 
     use datatypes
-    use set_blipgrid_module, ONLY: halo_atm
+    use set_blipgrid_module, ONLY: halo_atoms_of_blocks
     use GenComms, ONLY: cq_abort
     use global_module, ONLY: area_index
     use memory_module, ONLY: reg_alloc_mem, type_int
@@ -172,8 +173,8 @@ contains
     ! left and right functions
     set%ind_left  = ind_left
     set%ind_right = ind_right
-    no_halo_left  = halo_atm(ind_left )%no_of_atom
-    no_halo_right = halo_atm(ind_right)%no_of_atom
+    no_halo_left  = halo_atoms_of_blocks(ind_left )%no_of_atom
+    no_halo_right = halo_atoms_of_blocks(ind_right)%no_of_atom
 
     set%rcut=rcut_in
     set%no_halo_atom1=no_halo_left ; set%no_halo_atom2=no_halo_right
