@@ -162,6 +162,7 @@ module global_module
 
 
   logical :: opt_cell ! optimize the simulation cell?
+  logical :: move_atom_cg ! move atoms in the CG run?
   ! specify sim cell dims/ratios of dims to be held constant.
   character(len=20), save :: constraint_flag
 

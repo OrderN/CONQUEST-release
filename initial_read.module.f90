@@ -582,8 +582,6 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2017/03/14 SYM (with dave)
   !!    Fix lack of index on InvSRange when read in
-  !!   2017/04/24 dave
-  !!    Changed pseudopotential output label to HAMANN (replacing ABINIT)
   !!   2017/05/09 dave
   !!    Removed restriction on L-matrix re-use and spin
   !!  TODO
@@ -656,7 +654,7 @@ contains
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
-                             opt_cell, constraint_flag
+                             opt_cell, constraint_flag, move_atom_cg
     !use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
     use dimens, only: GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
@@ -1013,9 +1011,9 @@ contains
           if(inode==ionode.AND.iprint_init>0) &
                write(io_lun,fmt='(10x,"SIESTA pseudopotential will be used. ")')
           pseudo_type = SIESTA
-       else if(leqi(ps_type,'plato').OR.leqi(ps_type,'haman')) then
+       else if(leqi(ps_type,'plato').OR.leqi(ps_type,'abini')) then
           if(inode==ionode.AND.iprint_init>0) &
-               write(io_lun,fmt='(10x,"HAMANN pseudopotential will be used. ")')
+               write(io_lun,fmt='(10x,"ABINIT pseudopotential will be used. ")')
           pseudo_type = ABINIT
        else
           if(inode==ionode.AND.iprint_init>0) &
@@ -1276,7 +1274,8 @@ contains
        MDtimestep            = fdf_double ('AtomMove.Timestep',      0.5_double)
        MDcgtol               = fdf_double ('AtomMove.MaxForceTol',0.0005_double)
        ! JSB - added flag to fix ratios/sim cell dims 30/05/17
-       constraint_flag       = fdf_string(20,'AtomMove.FixCellRatio',    'none')
+       constraint_flag       = fdf_string(20,'AtomMove.FixCell',         'none')
+       move_atom_cg          = fdf_boolean('AtomMove.MoveAtomscg',        .true.)
        !
        !
        flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
