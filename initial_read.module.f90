@@ -2669,6 +2669,7 @@ contains
     ! Distribute data to all processors
     call gcopy(block_size_r)
     call gcopy(block_size_c)
+    call gcopy(matrix_size)
     call gcopy(proc_groups)
     call gcopy(proc_rows)
     call gcopy(proc_cols)

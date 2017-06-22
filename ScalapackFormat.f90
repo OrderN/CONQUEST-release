@@ -73,11 +73,13 @@
 !!    Added k-point parallelisation
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2017/06/22 13:47 dave
+!!    Changes alongside DiagModule to split initialisation
 !!  SOURCE
 !!
 module ScalapackFormat
 
-  use global_module,          only: io_lun
+  use global_module,          only: io_lun, area_DM, iprint_DM
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_allocation
 
@@ -215,6 +217,7 @@ module ScalapackFormat
 
 contains
 
+    
 !!****f* ScalapackFormat/allocate_arrays *
 !!
 !!  NAME 
@@ -260,7 +263,6 @@ contains
 
     use global_module, ONLY: iprint_DM, numprocs
     use GenComms, ONLY: cq_abort, myid
-    use maxima_module, ONLY: maxnsf, maxpartscell, maxatomspart
 
     implicit none
 
@@ -293,9 +295,7 @@ contains
          SC_row_block_atom(block_size_r,blocks_r),&
          SC_col_block_atom(block_size_c,blocks_c),STAT=stat)
     if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc bxa var",stat)
-    allocate(CC_to_SC(maxpartscell,maxatomspart,maxnsf),CQ2SC_row_info(matrix_size),&
-         my_row(matrix_size),proc_start(numprocs), STAT=stat)
-    if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc CC2SC, CQ2SC",stat)
+    allocate(CQ2SC_row_info(matrix_size), my_row(matrix_size),proc_start(numprocs), STAT=stat)
     nprocs_max = aint(real(numprocs/proc_groups))+1
     nkpoints_max = aint(real(nkp/proc_groups))+1
     allocate(pg_procs(proc_groups,nprocs_max),pg_kpoints(proc_groups,nkpoints_max),STAT=stat)
