@@ -275,6 +275,8 @@ module DiagModule
   ! BLACS variables
   integer :: me
   integer :: context
+  integer, dimension(50) :: desca, descz, descb
+  real(double) :: abstol = 1e-30_double ! pdlamch (context,'U')
 
   ! Max number of iterations when searching for E_Fermi
   integer :: maxefermi
@@ -429,6 +431,10 @@ contains
   !!    Renamed support_K -> atom_fns_K
   !!   2016/09/15 22:00 nakata
   !!    Introduce matBand -> matBand_atomf transformations
+  !!   2017/06/21 17:19 dave
+  !!    Tidying: remove block size check, calculation of matrix size
+  !!    Moving calls to DistribH/S and pzhegvx into a new routine
+  !!    Establishing desca/b/z as globals (calculated once)
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -448,7 +454,7 @@ contains
          flag_write_projected_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
-         deallocate_arrays, block_size_r,       &
+         block_size_r,       &
          block_size_c, pg_kpoints, proc_groups, &
          nkpoints_max, pgid, N_procs_in_pg,     &
          N_kpoints_in_pg
@@ -474,7 +480,7 @@ contains
     real(double), dimension(:), intent(in) :: electrons
 
     ! Local variables
-    real(double)                   :: abstol, a, time0, time1, vl, vu, &
+    real(double)                   :: a, time0, time1, vl, vu, &
          orfac, scale, entropy_total,     &
          bandE_total, coeff, setA, setB, Eband
     real(double), dimension(nspin) :: locc, bandE, entropy_local
@@ -484,7 +490,6 @@ contains
     integer :: info, stat, il, iu, i, j, m, mz, prim_size, ng, wf_no, &
          print_info, kp, spin, iacc, iprim, l, band, cdft_group, atom_fns_K, &
          n_band_min, n_band_max
-    integer, dimension(50) :: desca, descz, descb
     integer, allocatable, dimension(:) :: matBand
     integer, allocatable, dimension(:,:) :: matBand_kp
     integer :: matBand_atomf
@@ -502,38 +507,15 @@ contains
        band_ef(:) = int(electrons(1))
     end if
     print_info = 0
-    vl = zero
-    vu = zero
-    orfac = -one
-    il = 0
-    iu = 0
     if (iprint_DM >= 2 .AND. myid == 0) &
          write (io_lun, fmt='(10x,"Entering FindEvals")')
-    ! Read appropriate data for Scalapack diagonalisation - k-points,
-    ! block sizes etc
-    ! if (first) call readDiagInfo (proc_rows, proc_cols, block_size_r, &
-    !      block_size_c)
-    matrix_size = 0 !ni_in_cell*nsf
-    do i = 1, ni_in_cell
-       matrix_size = matrix_size + nsf_species(species(i))
-    end do
     prim_size = 0
     do i = 1, bundle%n_prim
        prim_size = prim_size + nsf_species(bundle%species(i))
     end do
 
-    ! Check for block size factoring into matrix size
-    a = real(matrix_size, double) / real(block_size_r, double)
-    if (a - real(floor(a), double) > 1e-8_double) &
-         call cq_abort('block_size_r not a factor of matrix size ! ', &
-         matrix_size, block_size_r)
-    a = real(matrix_size, double) / real(block_size_c, double)
-    if (a - real(floor(a), double) > 1e-8_double) &
-         call cq_abort('block_size_c not a factor of matrix size ! ', &
-         matrix_size, block_size_c)
-
     ! Initialise - start BLACS, sort out matrices, allocate memory
-    call initDiag(desca, descb, descz)
+    call initDiag
 
     scale = one / real(N_procs_in_pg(pgid), double)
 
@@ -542,7 +524,6 @@ contains
     ! ------------------------------------------------------------------------
     ! First diagonalisation - get eigenvalues only (so that we can find Efermi)
     time0 = mtime ()
-    abstol = 1e-30_double ! pdlamch (context,'U')
 
     if (iprint_DM >= 2 .and. (inode == ionode)) &
          write (io_lun, fmt='(10x,"In FindEvals, tolerance is ", g20.12)') &
@@ -553,34 +534,9 @@ contains
     local_w = zero
 
     do spin = 1, nspin
-       do i = 1, nkpoints_max ! Loop over the kpoints within each process
-          ! group Form the Hamiltonian for this k-point and send it to
-          ! appropriate processors
-          if (iprint_DM > 3 .and. (inode == ionode)) &
-               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
-          call my_barrier()
-          call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
-          ! Form the overlap for this k-point and send it to appropriate processors
-          call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
-          ! Now, if this processor is involved, do the diagonalisation
-          if (iprint_DM > 3 .and. inode == ionode) &
-               write (io_lun, *) myid, 'Proc row, cols, me: ', &
-               proc_rows, proc_cols, me, i, nkpoints_max
-          if (i <= N_kpoints_in_pg(pgid)) then
-             ! Call the diagonalisation routine for generalised problem
-             ! H.psi = E.S.psi
-             call pzhegvx(1, 'N', 'A', 'U', matrix_size, SCHmat(:,:,spin), &
-                  1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
-                  vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
-                  orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
-                  rwork, lrwork, iwork, liwork, ifail, iclustr,    &
-                  gap, info)
-             if (info /= 0) &
-                  call cq_abort ("FindEvals: pzheev failed !", info)
-             ! Copy local_w into appropriate place in w
-             w(1:matrix_size, pg_kpoints(pgid, i), spin) = &
-                  scale * local_w(1:matrix_size, spin)
-          end if ! End if (i<=N_kpoints_in_pg(pgid))
+       do i = 1, nkpoints_max ! Loop over the kpoints within each process group
+          call distrib_and_diag(spin,i,'N') ! Eigenvalues
+          !call my_barrier()
        end do ! End do i = 1, nkpoints_max
        ! sum the w on each node together to give the whole w on each
        ! node, note that the repeating of the same eigenvalues in each
@@ -688,36 +644,10 @@ contains
           ! Diagonalise
           spin = dscf_source_spin
           i = 1 ! Just use first k-point - local states should not show dispersion
-          ! Form the Hamiltonian for this k-point and send it to
-          ! appropriate processors
-          if (iprint_DM > 3 .and. inode == ionode) &
-               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
-          call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
-          ! Form the overlap for this k-point and send it to appropriate
-          ! processors
-          if (iprint_DM > 3 .and. inode == ionode) &
-               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for S'
-          call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
-
-          ! Now, if this processor is involved, do the diagonalisation
-          if (i <= N_kpoints_in_pg(pgid)) then
-             ! Call the diagonalisation routine for generalised problem
-             ! H.psi = E.S.psi
-             call pzhegvx(1, 'V', 'A', 'U', matrix_size, SCHmat(:,:,spin), &
-                  1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
-                  vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
-                  orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
-                  rwork, lrwork, iwork, liwork, ifail, iclustr,    &
-                  gap, info)
-             if (info < 0) call cq_abort ("FindEvals: pzheev failed !", info)
-             if (info >= 1 .and. inode == ionode) &
-                  write (io_lun, *) 'Problem - info returned as: ', info
-          end if ! End if (i <= N_kpoints_in_pg(pgid))
+          call distrib_and_diag(spin,i,'V')
           call my_barrier()
           ! Reverse the CQ to SC distribution so that eigenvector
           ! coefficients for atoms are on the appropriate processor.
-          ! Loop over the process-node groups, we build K one k-point at
-          ! a time
           do ng = 1, proc_groups
              if (i <= N_kpoints_in_pg(ng)) then
                 kp = pg_kpoints(ng, i)
@@ -760,36 +690,9 @@ contains
           ! Diagonalise
           spin = dscf_target_spin
           i = 1 ! Just use first k-point - local states should not show dispersion
-          ! Form the Hamiltonian for this k-point and send it to
-          ! appropriate processors
-          if (iprint_DM > 3 .and. inode == ionode) &
-               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
-          call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
-          ! Form the overlap for this k-point and send it to appropriate
-          ! processors
-          if (iprint_DM > 3 .and. inode == ionode) &
-               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for S'
-          call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
-
-          ! Now, if this processor is involved, do the diagonalisation
-          if (i <= N_kpoints_in_pg(pgid)) then
-             ! Call the diagonalisation routine for generalised problem
-             ! H.psi = E.S.psi
-             call pzhegvx(1, 'V', 'A', 'U', matrix_size, SCHmat(:,:,spin), &
-                  1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
-                  vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
-                  orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
-                  rwork, lrwork, iwork, liwork, ifail, iclustr,    &
-                  gap, info)
-             if (info < 0) call cq_abort ("FindEvals: pzheev failed !", info)
-             if (info >= 1 .and. inode == ionode) &
-                  write (io_lun, *) 'Problem - info returned as: ', info
-          end if ! End if (i <= N_kpoints_in_pg(pgid))
-          call my_barrier()
+          call distrib_and_diag(spin,i,'V')
           ! Reverse the CQ to SC distribution so that eigenvector
           ! coefficients for atoms are on the appropriate processor.
-          ! Loop over the process-node groups, we build K one k-point at
-          ! a time
           do ng = 1, proc_groups
              if (i <= N_kpoints_in_pg(ng)) then
                 kp = pg_kpoints(ng, i)
@@ -912,33 +815,7 @@ contains
     entropy = zero
     do spin = 1, nspin
        do i = 1, nkpoints_max
-          ! Form the Hamiltonian for this k-point and send it to
-          ! appropriate processors
-          if (iprint_DM > 3 .and. inode == ionode) &
-               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
-          call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
-          ! Form the overlap for this k-point and send it to appropriate
-          ! processors, this needs to be redone since previous call to
-          ! pzhegvx have changed both SCHmat and SCSmat (and the spin
-          ! down conterparts)
-          if (iprint_DM > 3 .and. inode == ionode) &
-               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for S'
-          call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
-
-          ! Now, if this processor is involved, do the diagonalisation
-          if (i <= N_kpoints_in_pg(pgid)) then
-             ! Call the diagonalisation routine for generalised problem
-             ! H.psi = E.S.psi
-             call pzhegvx(1, 'V', 'A', 'U', matrix_size, SCHmat(:,:,spin), &
-                  1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
-                  vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
-                  orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
-                  rwork, lrwork, iwork, liwork, ifail, iclustr,    &
-                  gap, info)
-             if (info < 0) call cq_abort ("FindEvals: pzheev failed !", info)
-             if (info >= 1 .and. inode == ionode) &
-                  write (io_lun, *) 'Problem - info returned as: ', info
-          end if ! End if (i <= N_kpoints_in_pg(pgid))
+          call distrib_and_diag(spin,i,'V')
           if (iprint_DM >= 5 .and. inode == ionode) &
                write (io_lun, *) myid, ' Calling barrier'
           call my_barrier()
@@ -1241,9 +1118,11 @@ contains
   !!   - Removed redundant dependency on mat from matrix_data
   !!   2015/10.06 dave
   !!   - Changed size of rwo to three (as required by pzhegvx workspace query)
+  !!   2017/06/22 dave
+  !!   Made descriptors module variables
   !!  SOURCE
   !!
-  subroutine initDiag(desca, descb, descz)
+  subroutine initDiag
 
     use numbers
     use ScalapackFormat, only: allocate_arrays, pg_initialise,        &
@@ -1260,9 +1139,6 @@ contains
          reg_alloc_mem, reg_dealloc_mem
 
     implicit none
-
-    ! Passed variables
-    integer, dimension(50) :: desca, descb, descz
 
     ! Local variables
     integer         :: nump, merow, mecol, numrows, numcols, info, &
@@ -4077,5 +3953,56 @@ contains
        end if
     end do
   end subroutine accumulate_DOS
-  
+
+  subroutine distrib_and_diag(spin,i,mode)
+
+    use datatypes
+    use numbers
+    use global_module,   only: iprint_DM
+    use mult_module,     only: matH, matS
+    use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
+         nkpoints_max, pgid, N_kpoints_in_pg, pg_kpoints, N_procs_in_pg
+
+    implicit none
+
+    ! Passed
+    integer :: spin, i
+    character(len=1) :: mode
+
+    ! Local
+    real(double) :: vl, vu, orfac, scale
+    integer :: il, iu, m, mz, info
+
+    scale = one / real(N_procs_in_pg(pgid), double)
+    vl = zero
+    vu = zero
+    orfac = -one
+    il = 0
+    iu = 0
+    if (iprint_DM > 3 .and. (inode == ionode)) &
+         write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
+    call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
+    ! Form the overlap for this k-point and send it to appropriate processors
+    call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
+    ! Now, if this processor is involved, do the diagonalisation
+    if (iprint_DM > 3 .and. inode == ionode) &
+         write (io_lun, *) myid, 'Proc row, cols, me: ', &
+         proc_rows, proc_cols, me, i, nkpoints_max
+    if (i <= N_kpoints_in_pg(pgid)) then
+       ! Call the diagonalisation routine for generalised problem
+       ! H.psi = E.S.psi
+       call pzhegvx(1, mode, 'A', 'U', matrix_size, SCHmat(:,:,spin), &
+            1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
+            vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
+            orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
+            rwork, lrwork, iwork, liwork, ifail, iclustr,    &
+            gap, info)
+       if (info /= 0) &
+            call cq_abort ("FindEvals: pzheev failed !", info)
+       ! Copy local_w into appropriate place in w
+       w(1:matrix_size, pg_kpoints(pgid, i), spin) = &
+            scale * local_w(1:matrix_size, spin)
+    end if ! End if (i<=N_kpoints_in_pg(pgid))
+  end subroutine distrib_and_diag
+    
 end module DiagModule
