@@ -1281,8 +1281,9 @@ contains
   !!    Added more variables that need updating following cell vector changes,
   !!    notably k point locations and reciprocal lattice vectors for FFTs
   !! SOURCE
-  subroutine safemin3(start_rcellx, start_rcelly, start_rcellz, stressx, stressy, stressz,&
-       energy_in, energy_out, fixed_potential, vary_mu, total_energy)
+  subroutine safemin3(start_rcellx, start_rcelly, start_rcellz, search_dir_x,&
+                      search_dir_y, search_dir_z, energy_in, energy_out,&
+                      fixed_potential, vary_mu, total_energy)
 
     ! Module usage
 
@@ -1319,7 +1320,7 @@ contains
 
     ! Passed variables
     real(double) :: energy_in, energy_out, start_rcellx, start_rcelly, start_rcellz,&
-         stressx, stressy, stressz
+         search_dir_x, search_dir_y, search_dir_z
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
     real(double)      :: total_energy
@@ -1371,7 +1372,8 @@ contains
        ! DRB added 2017/05/24 17:13
        ! Keep previous cell to allow scaling
        call update_cell_dims(start_rcellx, start_rcelly, &
-                             start_rcellz, stressx, stressy, stressz, k3, iter)
+                             start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
+                             k3, iter)
 
        !Update atom_coord : TM 27Aug2003
        call update_atom_coord
@@ -1446,7 +1448,8 @@ contains
     end if
     write(io_lun,*) 'kmin is ',kmin
     call update_cell_dims(start_rcellx, start_rcelly, &
-                          start_rcellz, stressx, stressy, stressz, kmin, iter)
+                          start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
+                          kmin, iter)
     !Update atom_coord : TM 27Aug2003
     call update_atom_coord
     !Update atom_coord : TM 27Aug2003
@@ -1495,7 +1498,8 @@ contains
        ! DRB added 2017/05/24 17:13
        ! Keep previous cell to allow scaling
        call update_cell_dims(start_rcellx, start_rcelly, &
-                            start_rcellz, stressx, stressy, stressz, kmin, iter)
+                             start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
+                             kmin, iter)
        !Update atom_coord : TM 27Aug2003
        call update_atom_coord
        !Update atom_coord : TM 27Aug2003
@@ -3180,8 +3184,8 @@ contains
   !!
 
 
-  subroutine update_cell_dims(start_rcellx, start_rcelly, &
-                              start_rcellz, stressx, stressy, stressz, k, iter)
+  subroutine update_cell_dims(start_rcellx, start_rcelly, start_rcellz, search_dir_x,&
+                              search_dir_y, search_dir_z, k, iter)
     use datatypes
     use numbers
     use units
@@ -3211,7 +3215,7 @@ contains
 
     ! Passed variables
     real(double) :: start_rcellx, start_rcelly, start_rcellz,&
-         stressx, stressy, stressz, k
+         search_dir_x, search_dir_y, search_dir_z, k
     integer iter
     ! Shared variables needed by get_E_and_F for now (!)
     logical           :: vary_mu, fixed_potential
@@ -3228,32 +3232,32 @@ contains
     ! Update based on constraints.
     ! none => Unconstrained case
     if (leqi(constraint_flag, 'none')) then
-        rcellx = start_rcellx + k * stressx
-        rcelly = start_rcelly + k * stressy
-        rcellz = start_rcellz + k * stressz
+        rcellx = start_rcellx + k * search_dir_x
+        rcelly = start_rcelly + k * search_dir_y
+        rcellz = start_rcellz + k * search_dir_z
     ! Fix a single dimension?
     else if (leqi(constraint_flag, 'a')) then
-        rcelly = start_rcelly + k * stressy
-        rcellz = start_rcellz + k * stressz
+        rcelly = start_rcelly + k * search_dir_y
+        rcellz = start_rcellz + k * search_dir_z
     else if (leqi(constraint_flag, 'b')) then
-        rcellx = start_rcellx + k * stressx
-        rcellz = start_rcellz + k * stressz
+        rcellx = start_rcellx + k * search_dir_x
+        rcellz = start_rcellz + k * search_dir_z
     else if (leqi(constraint_flag, 'c')) then
-        rcelly = start_rcelly + k * stressy
-        rcellx = start_rcellx + k * stressx
+        rcelly = start_rcelly + k * search_dir_y
+        rcellx = start_rcellx + k * search_dir_x
     ! Fix a single ratio?
     else if (leqi(constraint_flag, 'c/a') .or. leqi(constraint_flag, 'a/c')) then
-        rcellx = start_rcellx + k * stressx
-        rcelly = start_rcelly + k * stressy
-        rcellz = start_rcellz + k * (start_rcellz/start_rcellx)*stressx
+        rcellx = start_rcellx + k * search_dir_x
+        rcelly = start_rcelly + k * search_dir_y
+        rcellz = start_rcellz + k * (start_rcellz/start_rcellx)*search_dir_x
     else if (leqi(constraint_flag, 'a/b') .or. leqi(constraint_flag, 'b/a')) then
-        rcellx = start_rcellx + k * (start_rcellx/start_rcelly)*stressy
-        rcelly = start_rcelly + k * stressy
-        rcellz = start_rcellz + k * stressz
+        rcellx = start_rcellx + k * (start_rcellx/start_rcelly)*search_dir_y
+        rcelly = start_rcelly + k * search_dir_y
+        rcellz = start_rcellz + k * search_dir_z
     else if (leqi(constraint_flag, 'b/c') .or. leqi(constraint_flag, 'c/b')) then
-        rcellx = start_rcellx + k * stressx
-        rcelly = start_rcelly + k * (start_rcelly/start_rcellz)*stressz
-        rcellz = start_rcellz + k * stressz
+        rcellx = start_rcellx + k * search_dir_x
+        rcelly = start_rcelly + k * (start_rcelly/start_rcellz)*search_dir_z
+        rcellz = start_rcellz + k * search_dir_z
     end if
     r_super_x = rcellx
     r_super_y = rcelly
