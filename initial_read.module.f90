@@ -2295,7 +2295,7 @@ contains
     use GenComms,        only: cq_abort, gcopy, myid
     use input_module
     use ScalapackFormat, only: proc_rows, proc_cols, block_size_r,   &
-                               block_size_c, proc_groups
+                               block_size_c, proc_groups, matrix_size
     use DiagModule,      only: nkp, kk, wtk, kT, maxefermi,          &
                                flag_smear_type, iMethfessel_Paxton,  &
                                max_brkt_iterations, gaussian_height, &
@@ -2309,7 +2309,7 @@ contains
 
     ! Local variables
     type(cq_timer) :: backtrace_timer
-    integer        :: stat, iunit, i, j, k, matrix_size, nk_st, nkp_lines
+    integer        :: stat, iunit, i, j, k, nk_st, nkp_lines
     real(double)   :: a, sum, dkx, dky, dkz
     integer        :: proc_per_group
 
@@ -2669,6 +2669,7 @@ contains
     ! Distribute data to all processors
     call gcopy(block_size_r)
     call gcopy(block_size_c)
+    call gcopy(matrix_size)
     call gcopy(proc_groups)
     call gcopy(proc_rows)
     call gcopy(proc_cols)

@@ -124,6 +124,11 @@
 !!    Moved erfc to functions module
 !!   2017/02/23 dave
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+!!   2017/06/22 13:41 dave
+!!    Rearranged initialisation so that BLACS is only started once, and allocations are now split
+!!    into once only (init_blacs_pg), once for every atom move (init/end_scalapack_format) now
+!!    called from updateIndices (all routines) and once for each diagonalisation session (initDiag).
+!!    To perform a set of diagonalisations call initDiag, distrib_and_diag, endDiag
 !!***
 module DiagModule
 
@@ -239,7 +244,7 @@ module DiagModule
   type(DistributeData) :: DistribH, DistribS
 
   ! Fermi Energy
-  real(double), dimension(:), allocatable :: Efermi
+  real(double), dimension(2) :: Efermi
   integer, dimension(2) :: band_ef
 
   ! K-point data - here so that reading of k-points can take place in
@@ -275,6 +280,8 @@ module DiagModule
   ! BLACS variables
   integer :: me
   integer :: context
+  integer, dimension(50) :: desca, descz, descb
+  real(double) :: abstol = 1e-30_double ! pdlamch (context,'U')
 
   ! Max number of iterations when searching for E_Fermi
   integer :: maxefermi
@@ -429,6 +436,12 @@ contains
   !!    Renamed support_K -> atom_fns_K
   !!   2016/09/15 22:00 nakata
   !!    Introduce matBand -> matBand_atomf transformations
+  !!   2017/06/21 17:19 dave
+  !!    Tidying: remove block size check, calculation of matrix size
+  !!    Moving calls to DistribH/S and pzhegvx into a new routine
+  !!    Establishing desca/b/z as globals (calculated once)
+  !!   2017/06/22 08:35 dave
+  !!    Continued tidying: removing print_info
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -448,7 +461,7 @@ contains
          flag_write_projected_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
-         deallocate_arrays, block_size_r,       &
+         block_size_r,       &
          block_size_c, pg_kpoints, proc_groups, &
          nkpoints_max, pgid, N_procs_in_pg,     &
          N_kpoints_in_pg
@@ -474,7 +487,7 @@ contains
     real(double), dimension(:), intent(in) :: electrons
 
     ! Local variables
-    real(double)                   :: abstol, a, time0, time1, vl, vu, &
+    real(double)                   :: a, time0, time1, vl, vu, &
          orfac, scale, entropy_total,     &
          bandE_total, coeff, setA, setB, Eband
     real(double), dimension(nspin) :: locc, bandE, entropy_local
@@ -482,9 +495,8 @@ contains
     complex(double_cplx), dimension(:,:,:), allocatable :: expH
     complex(double_cplx) :: c_n_alpha2, c_n_setA2, c_n_setB2
     integer :: info, stat, il, iu, i, j, m, mz, prim_size, ng, wf_no, &
-         print_info, kp, spin, iacc, iprim, l, band, cdft_group, atom_fns_K, &
+         kp, spin, iacc, iprim, l, band, cdft_group, atom_fns_K, &
          n_band_min, n_band_max
-    integer, dimension(50) :: desca, descz, descb
     integer, allocatable, dimension(:) :: matBand
     integer, allocatable, dimension(:,:) :: matBand_kp
     integer :: matBand_atomf
@@ -493,47 +505,15 @@ contains
 
     real(double), dimension(:),allocatable :: abs_wf
 
-    ! Set band_ef: this works because with no spin a factor of two is normally applied
-    if(nspin>1) then
-       do spin=1,nspin
-          band_ef(spin) = int(electrons(spin))
-       end do
-    else
-       band_ef(:) = int(electrons(1))
-    end if
-    print_info = 0
-    vl = zero
-    vu = zero
-    orfac = -one
-    il = 0
-    iu = 0
     if (iprint_DM >= 2 .AND. myid == 0) &
          write (io_lun, fmt='(10x,"Entering FindEvals")')
-    ! Read appropriate data for Scalapack diagonalisation - k-points,
-    ! block sizes etc
-    ! if (first) call readDiagInfo (proc_rows, proc_cols, block_size_r, &
-    !      block_size_c)
-    matrix_size = 0 !ni_in_cell*nsf
-    do i = 1, ni_in_cell
-       matrix_size = matrix_size + nsf_species(species(i))
-    end do
     prim_size = 0
     do i = 1, bundle%n_prim
        prim_size = prim_size + nsf_species(bundle%species(i))
     end do
 
-    ! Check for block size factoring into matrix size
-    a = real(matrix_size, double) / real(block_size_r, double)
-    if (a - real(floor(a), double) > 1e-8_double) &
-         call cq_abort('block_size_r not a factor of matrix size ! ', &
-         matrix_size, block_size_r)
-    a = real(matrix_size, double) / real(block_size_c, double)
-    if (a - real(floor(a), double) > 1e-8_double) &
-         call cq_abort('block_size_c not a factor of matrix size ! ', &
-         matrix_size, block_size_c)
-
     ! Initialise - start BLACS, sort out matrices, allocate memory
-    call initDiag(desca, descb, descz)
+    call initDiag
 
     scale = one / real(N_procs_in_pg(pgid), double)
 
@@ -542,7 +522,6 @@ contains
     ! ------------------------------------------------------------------------
     ! First diagonalisation - get eigenvalues only (so that we can find Efermi)
     time0 = mtime ()
-    abstol = 1e-30_double ! pdlamch (context,'U')
 
     if (iprint_DM >= 2 .and. (inode == ionode)) &
          write (io_lun, fmt='(10x,"In FindEvals, tolerance is ", g20.12)') &
@@ -553,34 +532,9 @@ contains
     local_w = zero
 
     do spin = 1, nspin
-       do i = 1, nkpoints_max ! Loop over the kpoints within each process
-          ! group Form the Hamiltonian for this k-point and send it to
-          ! appropriate processors
-          if (iprint_DM > 3 .and. (inode == ionode)) &
-               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
-          call my_barrier()
-          call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
-          ! Form the overlap for this k-point and send it to appropriate processors
-          call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
-          ! Now, if this processor is involved, do the diagonalisation
-          if (iprint_DM > 3 .and. inode == ionode) &
-               write (io_lun, *) myid, 'Proc row, cols, me: ', &
-               proc_rows, proc_cols, me, i, nkpoints_max
-          if (i <= N_kpoints_in_pg(pgid)) then
-             ! Call the diagonalisation routine for generalised problem
-             ! H.psi = E.S.psi
-             call pzhegvx(1, 'N', 'A', 'U', matrix_size, SCHmat(:,:,spin), &
-                  1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
-                  vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
-                  orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
-                  rwork, lrwork, iwork, liwork, ifail, iclustr,    &
-                  gap, info)
-             if (info /= 0) &
-                  call cq_abort ("FindEvals: pzheev failed !", info)
-             ! Copy local_w into appropriate place in w
-             w(1:matrix_size, pg_kpoints(pgid, i), spin) = &
-                  scale * local_w(1:matrix_size, spin)
-          end if ! End if (i<=N_kpoints_in_pg(pgid))
+       do i = 1, nkpoints_max ! Loop over the kpoints within each process group
+          call distrib_and_diag(spin,i,'N',.true.) ! Eigenvalues
+          !call my_barrier()
        end do ! End do i = 1, nkpoints_max
        ! sum the w on each node together to give the whole w on each
        ! node, note that the repeating of the same eigenvalues in each
@@ -683,41 +637,23 @@ contains
     !   call gcopy(occ,matrix_size,nkp)
     ! end if
     if(flag_DeltaSCF.AND.flag_local_excitation.AND.flag_keepexcite) then
+       ! Set band_ef: this works because with no spin a factor of two is normally applied
+       if(nspin>1) then
+          do spin=1,nspin
+             band_ef(spin) = int(electrons(spin))
+          end do
+       else
+          band_ef(:) = int(electrons(1))
+       end if
        flag_excite = .true.
        if(dscf_homo_limit/=0) then
           ! Diagonalise
           spin = dscf_source_spin
           i = 1 ! Just use first k-point - local states should not show dispersion
-          ! Form the Hamiltonian for this k-point and send it to
-          ! appropriate processors
-          if (iprint_DM > 3 .and. inode == ionode) &
-               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
-          call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
-          ! Form the overlap for this k-point and send it to appropriate
-          ! processors
-          if (iprint_DM > 3 .and. inode == ionode) &
-               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for S'
-          call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
-
-          ! Now, if this processor is involved, do the diagonalisation
-          if (i <= N_kpoints_in_pg(pgid)) then
-             ! Call the diagonalisation routine for generalised problem
-             ! H.psi = E.S.psi
-             call pzhegvx(1, 'V', 'A', 'U', matrix_size, SCHmat(:,:,spin), &
-                  1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
-                  vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
-                  orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
-                  rwork, lrwork, iwork, liwork, ifail, iclustr,    &
-                  gap, info)
-             if (info < 0) call cq_abort ("FindEvals: pzheev failed !", info)
-             if (info >= 1 .and. inode == ionode) &
-                  write (io_lun, *) 'Problem - info returned as: ', info
-          end if ! End if (i <= N_kpoints_in_pg(pgid))
+          call distrib_and_diag(spin,i,'V',.false.)
           call my_barrier()
           ! Reverse the CQ to SC distribution so that eigenvector
           ! coefficients for atoms are on the appropriate processor.
-          ! Loop over the process-node groups, we build K one k-point at
-          ! a time
           do ng = 1, proc_groups
              if (i <= N_kpoints_in_pg(ng)) then
                 kp = pg_kpoints(ng, i)
@@ -760,36 +696,9 @@ contains
           ! Diagonalise
           spin = dscf_target_spin
           i = 1 ! Just use first k-point - local states should not show dispersion
-          ! Form the Hamiltonian for this k-point and send it to
-          ! appropriate processors
-          if (iprint_DM > 3 .and. inode == ionode) &
-               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
-          call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
-          ! Form the overlap for this k-point and send it to appropriate
-          ! processors
-          if (iprint_DM > 3 .and. inode == ionode) &
-               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for S'
-          call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
-
-          ! Now, if this processor is involved, do the diagonalisation
-          if (i <= N_kpoints_in_pg(pgid)) then
-             ! Call the diagonalisation routine for generalised problem
-             ! H.psi = E.S.psi
-             call pzhegvx(1, 'V', 'A', 'U', matrix_size, SCHmat(:,:,spin), &
-                  1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
-                  vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
-                  orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
-                  rwork, lrwork, iwork, liwork, ifail, iclustr,    &
-                  gap, info)
-             if (info < 0) call cq_abort ("FindEvals: pzheev failed !", info)
-             if (info >= 1 .and. inode == ionode) &
-                  write (io_lun, *) 'Problem - info returned as: ', info
-          end if ! End if (i <= N_kpoints_in_pg(pgid))
-          call my_barrier()
+          call distrib_and_diag(spin,i,'V',.false.)
           ! Reverse the CQ to SC distribution so that eigenvector
           ! coefficients for atoms are on the appropriate processor.
-          ! Loop over the process-node groups, we build K one k-point at
-          ! a time
           do ng = 1, proc_groups
              if (i <= N_kpoints_in_pg(ng)) then
                 kp = pg_kpoints(ng, i)
@@ -912,33 +821,7 @@ contains
     entropy = zero
     do spin = 1, nspin
        do i = 1, nkpoints_max
-          ! Form the Hamiltonian for this k-point and send it to
-          ! appropriate processors
-          if (iprint_DM > 3 .and. inode == ionode) &
-               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
-          call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
-          ! Form the overlap for this k-point and send it to appropriate
-          ! processors, this needs to be redone since previous call to
-          ! pzhegvx have changed both SCHmat and SCSmat (and the spin
-          ! down conterparts)
-          if (iprint_DM > 3 .and. inode == ionode) &
-               write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for S'
-          call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
-
-          ! Now, if this processor is involved, do the diagonalisation
-          if (i <= N_kpoints_in_pg(pgid)) then
-             ! Call the diagonalisation routine for generalised problem
-             ! H.psi = E.S.psi
-             call pzhegvx(1, 'V', 'A', 'U', matrix_size, SCHmat(:,:,spin), &
-                  1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
-                  vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
-                  orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
-                  rwork, lrwork, iwork, liwork, ifail, iclustr,    &
-                  gap, info)
-             if (info < 0) call cq_abort ("FindEvals: pzheev failed !", info)
-             if (info >= 1 .and. inode == ionode) &
-                  write (io_lun, *) 'Problem - info returned as: ', info
-          end if ! End if (i <= N_kpoints_in_pg(pgid))
+          call distrib_and_diag(spin,i,'V',.false.)
           if (iprint_DM >= 5 .and. inode == ionode) &
                write (io_lun, *) myid, ' Calling barrier'
           call my_barrier()
@@ -963,12 +846,9 @@ contains
                    end if
                 end if
                 ! Build K and K_dn from the eigenvectors
-                if (print_info == 0) then
-                   if (iprint_DM >= 4 .and. inode == ionode) &
-                        write (io_lun, *) myid, ' Calling buildK ', &
-                        Hrange, matK(spin)
-                   print_info = 1
-                end if
+                if (iprint_DM >= 4 .and. inode == ionode) &
+                     write (io_lun, *) myid, ' Calling buildK ', &
+                     Hrange, matK(spin)
                 ! Pass band-by-band K matrices if we are outputting densities
                 if(wf_self_con .and. flag_out_wf) then
                    if(flag_out_wf_by_kp) then
@@ -1241,28 +1121,21 @@ contains
   !!   - Removed redundant dependency on mat from matrix_data
   !!   2015/10.06 dave
   !!   - Changed size of rwo to three (as required by pzhegvx workspace query)
+  !!   2017/06/22 dave
+  !!   Made descriptors module variables
+  !!   Moved many operations out to new routines so this contains only work needed each time
   !!  SOURCE
   !!
-  subroutine initDiag(desca, descb, descz)
+  subroutine initDiag
 
     use numbers
-    use ScalapackFormat, only: allocate_arrays, pg_initialise,        &
-         ref_to_SC_blocks, make_maps,           &
-         find_SC_row_atoms, find_ref_row_atoms, &
-         find_SC_col_atoms, proc_start,         &
-         block_size_r, block_size_c, proc_rows, &
-         proc_cols, matrix_size, pgid,          &
-         proc_groups, procid
+    use ScalapackFormat, only: proc_rows, proc_cols, matrix_size
     use global_module,   only: numprocs, nspin
-    use matrix_data,     only: Hrange, Srange
     use GenComms,        only: my_barrier, cq_abort, myid
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
          reg_alloc_mem, reg_dealloc_mem
 
     implicit none
-
-    ! Passed variables
-    integer, dimension(50) :: desca, descb, descz
 
     ! Local variables
     integer         :: nump, merow, mecol, numrows, numcols, info, &
@@ -1270,56 +1143,22 @@ contains
     real(double)    :: rwo(3)
     complex(double) :: wo(1)
     integer         :: iwo(1)
-    integer, dimension(:,:), allocatable :: imap
-
-    ! ScalapackFormat - do various translation tasks between Conquest
-    ! compressed row storage and distributed Scalapack form. The
-    ! arrays created will be used to form the Hamiltonian and K
-    ! matrices.
-    call allocate_arrays(nkp)
-    call pg_initialise(nkp) ! defined the process group parameters
-    call ref_to_SC_blocks
-    call make_maps
-    call find_SC_row_atoms
-    call find_ref_row_atoms
-    call find_SC_col_atoms
-    ! Now that's done, we can prepare to distribute things
-    ! For Hamiltonian
-    call PrepareRecv(DistribH)
-    call PrepareSend(Hrange, DistribH)
-    ! For Overlap
-    call PrepareRecv(DistribS)
-    call PrepareSend(Srange, DistribS)
 
     ! First, work out how much data we're going to receive How many
     ! rows and columns do we have ? only works if the rows are exact
     ! integer multiples of block rows
 
-    ! Sizes of local "chunk", used to initialise submatrix info for ScaLAPACK
-    row_size = proc_start(myid+1)%rows * block_size_r
-    col_size = proc_start(myid+1)%cols * block_size_c
-    if (iprint_DM > 3 .AND. myid == 0) &
-         write (io_lun, 12) myid, row_size, col_size
-
     ! Allocate space for the distributed Scalapack matrices
     stat = 0
-
-    allocate(Efermi(nspin), STAT=stat)
-    if (stat /= 0) call cq_abort('initDiag: failed to allocate Efermi', stat)
-    call reg_alloc_mem(area_DM, nspin, type_dbl)
-
-    allocate(SCHmat(row_size,col_size,nspin), &
-         SCSmat(row_size,col_size,nspin), &
+    allocate(SCHmat(row_size,col_size,nspin), SCSmat(row_size,col_size,nspin), &
          z(row_size,col_size,nspin), STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("initDiag: failed to allocate SCHmat, SCSmat and z", stat)
+    if (stat /= 0) call cq_abort("initDiag: failed to allocate SCHmat, SCSmat and z", stat)
     call reg_alloc_mem(area_DM, 3 * row_size * col_size * nspin, type_cplx)
     SCHmat = zero
     SCSmat = zero
     z = zero
 
-    allocate(w(matrix_size,nkp,nspin), &
-         occ(matrix_size,nkp,nspin), STAT=stat)
+    allocate(w(matrix_size,nkp,nspin), occ(matrix_size,nkp,nspin), STAT=stat)
     if (stat /= 0) call cq_abort('initDiag: failed to allocate w and occ', stat)
     call reg_alloc_mem(area_DM, 2 * matrix_size * nkp * nspin, type_dbl)
 
@@ -1327,72 +1166,13 @@ contains
     if (stat /= 0) call cq_abort('initDiag: failed to allocate local_w', stat)
     call reg_alloc_mem(area_DM, matrix_size * nspin, type_dbl)
 
-    ! Start up BLACS
-    ! First check if there are enough process nodes
-    call blacs_pinfo(me, nump)  ! get the total number of nodes
-    ! avaliable for BLACS
-    if (nump < numprocs) &
-         call cq_abort('initDiag: There are not enough nodes for BLACS', &
-         nump, numprocs)
-    if (me /= myid) &
-         call cq_abort('initDiag: me and myid is not the same', me, myid)
-
-    ! allocate imap for defining BLACS grid on the group
-    allocate(imap(proc_rows, proc_cols), STAT=stat)
-    if (stat /= 0) call cq_abort('initDiag: Failed to allocate imap', stat)
-    call reg_alloc_mem(area_DM, proc_rows * proc_cols, type_int)
-
-    ! assign the process grid map from ScalapackFormat procid, note
-    ! that each context is local to the node, which associates to the
-    ! map of the group the node belongs to
-    imap(1:proc_rows, 1:proc_cols) = &
-         procid(pgid, 1:proc_rows, 1:proc_cols) - 1
-
-    ! get the default system context
-    call blacs_get(0, 0, context)
-    ! replace the default context with the context defined for imap
-    call blacs_gridmap(context, imap, proc_rows, proc_rows, proc_cols)
-
-    ! imap is no longer required
-    deallocate(imap, STAT=stat)
-    if (stat /= 0) call cq_abort('initDiag: Failed to deallocate imap', stat)
-    call reg_dealloc_mem(area_DM, proc_rows * proc_cols, type_int)
-
-    ! check if we get the correct map
-    call blacs_gridinfo(context, numrows, numcols, merow, mecol)
-    if (iprint_DM > 3 .AND. myid == 0) &
-         write (io_lun, fmt="(10x, 'process_grid info: ', i5, i5)") &
-         numrows, numcols
-    if (iprint_DM > 3 .AND. myid == 0) &
-         write (io_lun, 1) myid, me, merow, mecol
-    call my_barrier
-    ! Register the description of the distribution of H
-    call descinit(desca, matrix_size, matrix_size, block_size_r, &
-         block_size_c, 0, 0, context, row_size, info)
-    if (info /= 0) call cq_abort("initDiag: descinit(a) failed !", info)
-    ! Register the description of the distribution of S
-    call descinit(descb, matrix_size, matrix_size, block_size_r, &
-         block_size_c, 0, 0, context, row_size, info)
-    if (info /= 0) call cq_abort("initDiag: descinit(a) failed !", info)
-    ! And register eigenvector distribution
-    call descinit(descz, matrix_size, matrix_size, block_size_r, &
-         block_size_c, 0, 0, context, row_size, info)
-    ! Find scratch space requirements for ScaLAPACk
-    if (info /= 0) call cq_abort("initDiag: descinit(z) failed !", info)
-
     allocate(ifail(matrix_size), iclustr(2 * proc_rows * proc_cols), STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("initDiag: failed to allocate ifail and iclustr", stat)
+    if (stat /= 0) call cq_abort("initDiag: failed to allocate ifail and iclustr", stat)
     call reg_alloc_mem(area_DM, matrix_size + 2 * proc_rows * proc_cols, type_int)
 
     allocate(gap(proc_rows * proc_cols), STAT=stat)
     if (stat /= 0) call cq_abort("initDiag: failed to allocate gap", stat)
     call reg_alloc_mem(area_DM, proc_rows * proc_cols, type_dbl)
-
-    ! !allocate(work(1),rwork(1),iwork(1),STAT=stat)
-    ! if (stat /= 0) &
-    !      call cq_abort('initDiag: failed to alloc work and rwork', &
-    !                    lwork, lrwork)
 
     ! the pzhegvx is only called here to get the optimal work array
     call pzhegvx(1, 'V', 'A', 'U', matrix_size, SCHmat(:,:,1), 1, 1,  &
@@ -1402,34 +1182,18 @@ contains
          gap, info)
 
     ! Allocate scratch space for ScaLAPACK
-    lwork  = 2 * real(wo(1), double)
+    lwork  = 2 * wo(1)
     lrwork = 2 * rwo(1)
     liwork = iwo(1)
-    ! deallocate (work, rwork, iwork, STAT=stat)
-    ! if (stat /= 0) call cq_abort ('FindEvals: failed to alloc work &
-    !      &and rwork', lwork, lrwork)
-    !lwork = 9 * matrix_size
-
-    stat = 0
-
     allocate(work(lwork), rwork(lrwork), STAT=stat)
-    if (stat /= 0) &
-         call cq_abort ('initDiag: failed to allocate work and rwork', stat)
+    if (stat /= 0) call cq_abort ('initDiag: failed to allocate work and rwork', stat)
     call reg_alloc_mem(area_DM, lwork + lrwork, type_cplx)
 
     allocate(iwork(liwork), STAT=stat)
     if (stat /= 0) call cq_abort ('initDiag: failed to allocate iwork', stat)
     call reg_alloc_mem(area_DM, liwork, type_int)
 
-    ! allocate (work(lwork), rwork(7*matrix_size), iwork(5*matrix_size),&
-    !      ifail(matrix_size), STAT=stat)
-
-    call my_barrier
-
     return
-
-1   format(10x, 'Proc: ', i5, ' BLACS proc, row, col: ', 3i5)
-12  format(10x, 'Proc: ', i5, ' row, col size: ', 2i5)
 
   end subroutine initDiag
   !!***
@@ -1461,10 +1225,6 @@ contains
 
     ! Deallocate memory
 
-    deallocate(Efermi, STAT=stat)
-    if (stat /= 0) call cq_abort('endDiag: failed to deallocate Efermi', stat)
-    call reg_dealloc_mem(area_DM, nspin, type_dbl)
-
     deallocate(SCHmat, SCSmat, z, STAT=stat)
     if (stat /= 0) &
          call cq_abort("endDiag: failed to deallocate SCHmat, SCSmat and z", stat)
@@ -1481,7 +1241,7 @@ contains
     ! Shut down BLACS
 
     !    if(me<proc_rows*proc_cols) then
-    call blacs_gridexit(context) ! this is a BLACS library subroutine
+    !call blacs_gridexit(context) ! this is a BLACS library subroutine
 
     deallocate(ifail, iclustr, STAT=stat)
     if (stat /= 0) &
@@ -1503,45 +1263,8 @@ contains
     call reg_dealloc_mem(area_DM, liwork, type_int)
     ! end if
 
-    ! For S
-    do i = 1, size(DistribS%images, 3)
-       do j = 1, size(DistribS%images, 2)
-          do k = 1, size(DistribS%images, 1)
-             if (DistribS%images(k,j,i)%n_elements > 0) then
-                deallocate(DistribS%images(k,j,i)%where, STAT=stat)
-                if (stat /= 0) &
-                     call cq_abort('endDiag: failed to deallocate (2)', stat)
-             end if
-          end do
-       end do
-    end do
-    deallocate (DistribS%images, STAT=stat)
-    if (stat /= 0) call cq_abort('endDiag: failed to deallocate (2)', stat)
-    deallocate (DistribS%num_rows, DistribS%start_row, DistribS%send_rows, &
-         DistribS%firstrow, STAT=stat)
-    if (stat /= 0) call cq_abort('endDiag: failed to deallocate (2a)', stat)
-    call reg_dealloc_mem(area_DM, 4 * numprocs, type_int)
-    ! For H
-    do i = 1, size(DistribH%images, 3)
-       do j = 1, size(DistribH%images, 2)
-          do k = 1, size(DistribH%images, 1)
-             if (DistribH%images(k,j,i)%n_elements > 0) then
-                deallocate (DistribH%images(k,j,i)%where, STAT=stat)
-                if (stat /= 0) &
-                     call cq_abort ('endDiag: failed to deallocate (2)', stat)
-             end if
-          end do
-       end do
-    end do
-    deallocate (DistribH%images, STAT=stat)
-    if (stat /= 0) call cq_abort('endDiag: failed to deallocate (2)', stat)
-    deallocate (DistribH%num_rows, DistribH%start_row, DistribH%send_rows, &
-         DistribH%firstrow, STAT=stat)
-    if (stat /= 0) call cq_abort('endDiag: failed to deallocate (2a)', stat)
-    call reg_dealloc_mem(area_DM, 4 * numprocs, type_int)
-
     ! deallocate ScalapackFormat arrays
-    call deallocate_arrays
+    !call deallocate_arrays
 
     return
   end subroutine endDiag
@@ -1606,7 +1329,7 @@ contains
 
     ! Local variables
     integer :: i,j,stat
-    integer :: row_size,col_size,count
+    integer :: count
     integer :: row, rowblock,proc
 
     if(iprint_DM>3.AND.myid==0) write(io_lun,fmt='(10x,"Entering PrepareRecv")')
@@ -2623,7 +2346,6 @@ contains
           if(dscf_target_spin==2) dscf_target_spin=1
           if(dscf_source_spin==2) dscf_source_spin=1
        end if
-       !band_ef(:) = int(electrons_total/two)
        localt_occ = one/real(spin_factor*dscf_target_nfold,double)
        locals_occ = one/real(spin_factor*dscf_source_nfold,double)
        do ikp = 1,nkp
@@ -4019,6 +3741,25 @@ contains
   end subroutine wf_output
   !!***
 
+  !!****f*  DiagModule/accumulate_DOS
+  !!
+  !!  NAME 
+  !!   wf_output
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Accumulates DOS
+  !!  INPUTS
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2016 ?
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
   subroutine accumulate_DOS(weight,eval,evec,DOS,projDOS)
 
     use datatypes
@@ -4077,5 +3818,303 @@ contains
        end if
     end do
   end subroutine accumulate_DOS
+  !!***
+  
+  !!****f*  DiagModule/distrib_and_diag
+  !!
+  !!  NAME 
+  !!   distrib_and_diag
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   For k-point i, distributes H and S and diagonalises
+  !!
+  !!      
+  !!  INPUTS
+  !!   spin: spin component (1 or 2)
+  !!   i: k-point index
+  !!   mode: 'N' (eigenvalues) or 'V' (eigenvectors)
+  !!   flag_store_w: do we accumulate w ?
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2017/06/21
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine distrib_and_diag(spin,i,mode,flag_store_w)
+
+    use datatypes
+    use numbers
+    use global_module,   only: iprint_DM
+    use mult_module,     only: matH, matS
+    use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
+         nkpoints_max, pgid, N_kpoints_in_pg, pg_kpoints, N_procs_in_pg
+
+    implicit none
+
+    ! Passed
+    integer :: spin, i
+    character(len=1) :: mode
+    logical :: flag_store_w
+
+    ! Local
+    real(double) :: vl, vu, orfac, scale
+    integer :: il, iu, m, mz, info
+
+    scale = one / real(N_procs_in_pg(pgid), double)
+    vl = zero
+    vu = zero
+    orfac = -one
+    il = 0
+    iu = 0
+    if (iprint_DM > 3 .and. (inode == ionode)) &
+         write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
+    call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
+    ! Form the overlap for this k-point and send it to appropriate processors
+    call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
+    ! Now, if this processor is involved, do the diagonalisation
+    if (iprint_DM > 3 .and. inode == ionode) &
+         write (io_lun, *) myid, 'Proc row, cols, me: ', &
+         proc_rows, proc_cols, me, i, nkpoints_max
+    if (i <= N_kpoints_in_pg(pgid)) then
+       ! Call the diagonalisation routine for generalised problem
+       ! H.psi = E.S.psi
+       call pzhegvx(1, mode, 'A', 'U', matrix_size, SCHmat(:,:,spin), &
+            1, 1, desca, SCSmat(:,:,spin), 1, 1, descb,      &
+            vl, vu, il, iu, abstol, m, mz, local_w(:,spin),  &
+            orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
+            rwork, lrwork, iwork, liwork, ifail, iclustr,    &
+            gap, info)
+       if (info /= 0) &
+            call cq_abort ("FindEvals: pzheev failed !", info)
+       ! Copy local_w into appropriate place in w
+       if(flag_store_w) w(1:matrix_size, pg_kpoints(pgid, i), spin) = &
+            scale * local_w(1:matrix_size, spin)
+    end if ! End if (i<=N_kpoints_in_pg(pgid))
+  end subroutine distrib_and_diag
+  !!***
+
+  !!****f*  DiagModule/init_blacs_pg
+  !!
+  !!  NAME 
+  !!   init_blacs_pg
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   New subroutine which is run once per calculation to initialise BLACS and set up
+  !!   progress groups for Conquest
+  !!      
+  !!  INPUTS
+  !!
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2017/06/22
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine init_blacs_pg
+
+    use global_module,   only: numprocs
+    use GenComms,        only: my_barrier, cq_abort, myid
+    use memory_module,   only: type_dbl, type_int, type_cplx,         &
+         reg_alloc_mem, reg_dealloc_mem
+    use ScalapackFormat, only: allocate_arrays, pg_initialise, ref_to_SC_blocks, make_maps, &
+         block_size_r, block_size_c, proc_rows, &
+         proc_cols, matrix_size, pgid, procid, proc_start
+    
+    implicit none
+
+    ! Passed
+
+    ! Local
+    integer, dimension(:,:), allocatable :: imap
+    integer :: nump, merow, mecol, numrows, numcols, info, stat
+    
+    call allocate_arrays(nkp)
+    call pg_initialise(nkp) ! defined the process group parameters
+    call ref_to_SC_blocks
+    call make_maps
+    ! Start up BLACS
+    ! First check if there are enough process nodes
+    call blacs_pinfo(me, nump)  ! get the total number of nodes
+    ! avaliable for BLACS
+    if (nump < numprocs) call cq_abort('initDiag: There are not enough nodes for BLACS', nump, numprocs)
+    if (me /= myid) call cq_abort('initDiag: me and myid is not the same', me, myid)
+
+    ! allocate imap for defining BLACS grid on the group
+    allocate(imap(proc_rows, proc_cols), STAT=stat)
+    if (stat /= 0) call cq_abort('initDiag: Failed to allocate imap', stat)
+    call reg_alloc_mem(area_DM, proc_rows * proc_cols, type_int)
+
+    ! assign the process grid map from ScalapackFormat procid, note
+    ! that each context is local to the node, which associates to the
+    ! map of the group the node belongs to
+    imap(1:proc_rows, 1:proc_cols) = procid(pgid, 1:proc_rows, 1:proc_cols) - 1
+
+    ! get the default system context
+    call blacs_get(0, 0, context)
+    ! replace the default context with the context defined for imap
+    call blacs_gridmap(context, imap, proc_rows, proc_rows, proc_cols)
+
+    ! imap is no longer required
+    deallocate(imap, STAT=stat)
+    if (stat /= 0) call cq_abort('initDiag: Failed to deallocate imap', stat)
+    call reg_dealloc_mem(area_DM, proc_rows * proc_cols, type_int)
+
+    ! check if we get the correct map
+    call blacs_gridinfo(context, numrows, numcols, merow, mecol)
+    if (iprint_DM > 3 .AND. myid == 0) then
+       write (io_lun, fmt="(10x, 'process_grid info: ', i5, i5)") numrows, numcols
+       write (io_lun, 1) myid, me, merow, mecol
+    end if
+    ! Sizes of local "chunk", used to initialise submatrix info for ScaLAPACK
+    row_size = proc_start(myid+1)%rows * block_size_r
+    col_size = proc_start(myid+1)%cols * block_size_c
+    if (iprint_DM > 3 .AND. myid == 0) write (io_lun, 12) myid, row_size, col_size
+
+    ! Register the description of the distribution of H
+    call descinit(desca, matrix_size, matrix_size, block_size_r, block_size_c, 0, 0, context, row_size, info)
+    if (info /= 0) call cq_abort("initDiag: descinit(a) failed !", info)
+    ! Register the description of the distribution of S
+    call descinit(descb, matrix_size, matrix_size, block_size_r, block_size_c, 0, 0, context, row_size, info)
+    if (info /= 0) call cq_abort("initDiag: descinit(a) failed !", info)
+    ! And register eigenvector distribution
+    call descinit(descz, matrix_size, matrix_size, block_size_r, block_size_c, 0, 0, context, row_size, info)
+    ! Find scratch space requirements for ScaLAPACk
+    if (info /= 0) call cq_abort("initDiag: descinit(z) failed !", info)
+1   format(10x, 'Proc: ', i5, ' BLACS proc, row, col: ', 3i5)
+12  format(10x, 'Proc: ', i5, ' row, col size: ', 2i5)
+    
+  end subroutine init_blacs_pg
+  !!***
+
+  !!****f*  DiagModule/init_scalapack_format
+  !!
+  !!  NAME 
+  !!   init_scalapack_format
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   New subroutine which is run once per atomic configuration to define the mapping
+  !!   between Conquest and ScaLAPACK
+  !!  INPUTS
+  !!
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2017/06/22
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine init_scalapack_format
+
+    use matrix_data,     only: Hrange, Srange
+    use ScalapackFormat, only: find_SC_row_atoms, find_ref_row_atoms, find_SC_col_atoms, CC_to_SC
+    use maxima_module, ONLY: maxnsf, maxpartscell, maxatomspart
+         
+    implicit none
+
+    integer :: stat
+    
+    ! ScalapackFormat - do various translation tasks between Conquest
+    ! compressed row storage and distributed Scalapack form. The
+    ! arrays created will be used to form the Hamiltonian and K
+    ! matrices.
+    allocate(CC_to_SC(maxpartscell,maxatomspart,maxnsf), STAT=stat)
+    if(stat/=0) call cq_abort("ScalapackFormat: Could not alloc CC2SC",stat)    
+    call find_SC_row_atoms
+    call find_ref_row_atoms
+    call find_SC_col_atoms
+    ! Now that's done, we can prepare to distribute things
+    ! For Hamiltonian
+    call PrepareRecv(DistribH)
+    call PrepareSend(Hrange, DistribH)
+    ! For Overlap
+    call PrepareRecv(DistribS)
+    call PrepareSend(Srange, DistribS)
+
+  end subroutine init_scalapack_format
+  !!***
+
+  !!****f*  DiagModule/end_scalapack_format
+  !!
+  !!  NAME 
+  !!   end_scalapack_format
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   New subroutine which is run once per atomic configuration to deallocate variables
+  !!   from init_scalapack_format
+  !!  INPUTS
+  !!
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2017/06/22
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine end_scalapack_format
+
+    use memory_module,   only: type_dbl, type_int, type_cplx, &
+         reg_dealloc_mem
+    use global_module,   only: numprocs
+    use ScalapackFormat, only: CC_to_SC
+
+    implicit none
+
+    integer :: i, j, k, stat
+
+    deallocate(CC_to_SC, STAT=stat)
+    if(stat/=0) call cq_abort("ScalapackFormat: Could not dealloc CC2SC",stat)    
+    ! For S
+    do i = 1, size(DistribS%images, 3)
+       do j = 1, size(DistribS%images, 2)
+          do k = 1, size(DistribS%images, 1)
+             if (DistribS%images(k,j,i)%n_elements > 0) then
+                deallocate(DistribS%images(k,j,i)%where, STAT=stat)
+                if (stat /= 0) &
+                     call cq_abort('endDiag: failed to deallocate (2)', stat)
+             end if
+          end do
+       end do
+    end do
+    deallocate (DistribS%images, STAT=stat)
+    if (stat /= 0) call cq_abort('endDiag: failed to deallocate (2)', stat)
+    deallocate (DistribS%num_rows, DistribS%start_row, DistribS%send_rows, &
+         DistribS%firstrow, STAT=stat)
+    if (stat /= 0) call cq_abort('endDiag: failed to deallocate (2a)', stat)
+    call reg_dealloc_mem(area_DM, 4 * numprocs, type_int)
+    ! For H
+    do i = 1, size(DistribH%images, 3)
+       do j = 1, size(DistribH%images, 2)
+          do k = 1, size(DistribH%images, 1)
+             if (DistribH%images(k,j,i)%n_elements > 0) then
+                deallocate (DistribH%images(k,j,i)%where, STAT=stat)
+                if (stat /= 0) &
+                     call cq_abort ('endDiag: failed to deallocate (2)', stat)
+             end if
+          end do
+       end do
+    end do
+    deallocate (DistribH%images, STAT=stat)
+    if (stat /= 0) call cq_abort('endDiag: failed to deallocate (2)', stat)
+    deallocate (DistribH%num_rows, DistribH%start_row, DistribH%send_rows, &
+         DistribH%firstrow, STAT=stat)
+    if (stat /= 0) call cq_abort('endDiag: failed to deallocate (2a)', stat)
+    call reg_dealloc_mem(area_DM, 4 * numprocs, type_int)
+
+  end subroutine end_scalapack_format
+  !!***
   
 end module DiagModule
