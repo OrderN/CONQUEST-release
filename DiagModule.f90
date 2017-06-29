@@ -442,6 +442,8 @@ contains
   !!    Establishing desca/b/z as globals (calculated once)
   !!   2017/06/22 08:35 dave
   !!    Continued tidying: removing print_info
+  !!   2017/06/29 14:00 nakata
+  !!    Changed the position to deallocate matBand_atomf
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -972,6 +974,7 @@ contains
        if (stat /= 0) call cq_abort('Find Evals: Failed to deallocate wfs',stat)
        call reg_dealloc_mem(area_DM, maxngrid, type_dbl)
        call free_temp_fn_on_grid(atom_fns_K)
+       if (atomf.ne.sf) call free_temp_matrix(matBand_atomf)
        if(flag_out_wf_by_kp) then
           do j=nkp,1,-1
              do i=max_wf,1,-1
@@ -983,7 +986,6 @@ contains
              call free_temp_matrix(matBand(i))
           end do
        end if
-       if (atomf.ne.sf) call free_temp_matrix(matBand_atomf)
     end if
     if(wf_self_con.AND.flag_write_DOS) then
        ! output DOS
