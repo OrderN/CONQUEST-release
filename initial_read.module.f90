@@ -2283,6 +2283,8 @@ contains
   !!    Added code to specify lines in reciprocal space
   !!   2016/05/10 dave
   !!    Bug fix: hadn't scaled fractional k-point coordinates to reciprocal
+  !!   2017/07/11 dave
+  !!    Bug fix: added check for KPointGroups being smaller than number of processors
   !!  SOURCE
   !!
   subroutine readDiagInfo
@@ -2341,7 +2343,15 @@ contains
        NElec_less = fdf_double('Diag.NElecLess',10.0_double)
        ! Read k-point parallelisation process-group incormation, default is 1
        proc_groups = fdf_integer ('Diag.KProcGroups', 1)
-
+       if(proc_groups>numprocs) then
+          write(io_lun,fmt='(/2x,"*************")')
+          write(io_lun,fmt='(2x,"* WARNING ! *")')
+          write(io_lun,fmt='(2x,"*************")')
+          write(io_lun,fmt='(/2x,"Error setting Diag.KProcGroups.  We have ",i6, &
+               &" processes and ",i6," KProcGroups.   Setting to 1 and continuing."/)') numprocs,proc_groups
+          proc_groups = 1
+       end if
+       
        if (iprint_init > 0) write (io_lun, 11) proc_groups 
        ! Read/choose ScaLAPACK processor grid dimensions
        if(fdf_defined('Diag.ProcRows')) then
