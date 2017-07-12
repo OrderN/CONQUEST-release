@@ -140,6 +140,8 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2017/03/09 17:30 nakata
   !!    Changed to check consistence between flag_one_to_one and flag_Multisite
+  !!   2017/07/11 16:36 dave
+  !!    Bug fix (GitHub issue #36) to turn off basis optimisation if NSF=NPAO
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -170,7 +172,8 @@ contains
                                       atomf, sf, paof,                 &
                                       flag_SpinDependentSF, nspin_SF,  &
                                       flag_Multisite,                  &
-                                      flag_cdft_atom, flag_local_excitation, flag_diagonalisation
+                                      flag_cdft_atom, flag_local_excitation, &
+                                      flag_diagonalisation, flag_vary_basis
     use cdft_data, only: cDFT_NAtoms, &
                          cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
@@ -323,6 +326,15 @@ contains
        if (.not.flag_one_to_one) atomf = paof
        if (flag_one_to_one) flag_SpinDependentSF = .false. ! spin-dependent SFs will be available only for contracted SFs
        if (flag_SpinDependentSF) nspin_SF = nspin
+       if (flag_one_to_one.AND.flag_vary_basis) then
+          write(io_lun,fmt='(/2x,"************")')
+          write(io_lun,fmt='(2x,"* WARNING !*")')
+          write(io_lun,fmt='(2x,"************"/)')
+          write(io_lun,fmt='(2x,"You have set minE.VaryBasis T")')
+          write(io_lun,fmt='(2x,"This is not possible when numbers of support functions and PAOs are the same")')
+          write(io_lun,fmt='(2x,"Setting the flag to false and proceeding"/)')
+          flag_vary_basis = .false.
+       end if
        ! Check symmetry-breaking for contracted SFs
        if (.not.flag_one_to_one) then
           do i = 1, 1, n_species
@@ -377,8 +389,14 @@ contains
     endif ! flag_basis_set
     if (atomf==sf)   natomf_species(:) =  nsf_species(:)
     if (atomf==paof) natomf_species(:) = npao_species(:)
-    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_one_to_one: ',flag_one_to_one
-    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'atomf          : ',atomf
+    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_one_to_one (T/F): ',flag_one_to_one
+    if (iprint_init.ge.3 .and. inode==ionode) then
+       if(atomf==sf) then
+          write(io_lun,fmt='(2x,"Primitive atom functions are the support functions"/)')
+       else if(atomf==paof) then
+          write(io_lun,fmt='(2x,"Primitive atom functions are the pseudo-atomic orbitals"/)')
+       endif
+    end if
     !
     !
     !
