@@ -118,7 +118,7 @@ contains
     use force_module,         only: tot_force
     use minimise,             only: get_E_and_F
     use global_module,        only: runtype, flag_self_consistent, flag_out_wf, &
-                                    flag_write_DOS, opt_cell, move_atom_cg
+                                    flag_write_DOS, opt_cell
     use input_module,         only: leqi
 
     implicit none
@@ -146,10 +146,9 @@ contains
                         .true.,.true.,level=backtrace_level)
        !
     else if ( leqi(runtype, 'cg')    ) then
-        if (opt_cell .and. .not. move_atom_cg) then
+        if (opt_cell) then
             call cell_cg_run(fixed_potential, vary_mu, total_energy)
-            ! Relax a, b and c
-        else if (.not. opt_cell .and. move_atom_cg) then
+        else if (.not. opt_cell) then
             call cg_run(fixed_potential, vary_mu, total_energy)
         end if
        !
@@ -1176,7 +1175,7 @@ contains
   !!   S.Mujahed
   !!   D.R.Bowler
   !!  CREATION DATE
-  !!   16:43, 2003/02/03 dave
+  !!  01/06/17 J.S.Baker
   !!  MODIFICATION HISTORY
   !!
   !!  SOURCE
@@ -1190,10 +1189,11 @@ contains
                              y_atom_cell, z_atom_cell, id_glob,    &
                              atom_coord, rcellx, rcelly, rcellz,   &
                              area_general, iprint_MD,              &
-                             IPRINT_TIME_THRES1, flag_MDold, constraint_flag
+                             IPRINT_TIME_THRES1, flag_MDold, cell_en_tol, &
+                             cell_constraint_flag
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin, safemin2, safemin3
+    use move_atoms,    only: safemin_cell
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: stress, tot_force
@@ -1213,13 +1213,14 @@ contains
     real(double) :: total_energy
 
     ! Local variables
-    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma, energy_resid
+    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma
     integer        :: i,j,k,iter,length, jj, lun, stat, reset_iter
     logical        :: done
     type(cq_timer) :: tmr_l_iter
     real(double) :: new_rcellx, new_rcelly, new_rcellz, search_dir_x, search_dir_y,&
-                    search_dir_z, stressx, stressy, stressz, oldRMSstress, newRMSstress,&
-                    dRMSstress
+                    search_dir_z, stressx, stressy, stressz, RMSstress, newRMSstress,&
+                    dRMSstress, search_dir_mean, mean_stress
+
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
 
     if (myid == 0) &
@@ -1227,11 +1228,12 @@ contains
     search_dir_z = zero
     search_dir_x = zero
     search_dir_y = zero
+    search_dir_mean = zero
     ! Do we need to add MD.MaxCGDispl ?
     done = .false.
-    length = 3 !* ni_in_cell ! do we need to change this to 3?
+    length = 3
     if (myid == 0 .and. iprint_gen > 0) &
-         write (io_lun, 2) MDn_steps, MDcgtol
+         write (io_lun, 2) MDn_steps, cell_en_tol
     energy0 = total_energy
     energy1 = zero
     dE = zero
@@ -1249,37 +1251,17 @@ contains
        stressx = -stress(1)
        stressy = -stress(2)
        stressz = -stress(3)
+       mean_stress = (stressx + stressy + stressz)/3
+       RMSstress = sqrt(((stressx*stressx) + (stressy*stressy) + (stressz*stressz))/3)
+
        ! Construct ratio for conjugacy
-       if (abs(ggold) < 1.0e-6_double) then
-          gamma = zero
-       else
-         ! gg will change if we have constraints...
-         ! i.e. we can reuduce the number of search direction
-         ! Should probably putthee conditionals in a function
-         if (leqi(constraint_flag, 'none')) then
-           gg = stressx*stressx + stressy*stressy + &
-               stressz*stressz
-         ! Fix a single lattice parameter
-         else if (leqi(constraint_flag, 'a')) then
-           gg = stressy*stressy + stressz*stressz
-         else if (leqi(constraint_flag, 'b')) then
-           gg = stressx*stressx + stressz*stressz
-         else if (leqi(constraint_flag, 'c')) then
-           gg = stressy*stressy + stressx*stressx
-        ! Fix a single ratio
-         else if (leqi(constraint_flag, 'c/a') .or. leqi(constraint_flag, 'a/c')) then
-           gg = stressy*stressy + stressx*stressx
-         else if (leqi(constraint_flag, 'a/b') .or. leqi(constraint_flag, 'b/a')) then
-           gg = stressy*stressy + stressz*stressz
-         else if (leqi(constraint_flag, 'b/c') .or. leqi(constraint_flag, 'c/b')) then
-           gg = stressx*stressx + stressz*stressz
-         end if
-         gamma = gg/ggold
-       end if
-       write(io_lun,*) 'gg is ',gg
+       call get_gamma_cell_cg(ggold, gg, gamma, stressx, stressy, stressz)
+       if (myid == 0) write(io_lun, 3) iter, gamma
+
+
        if (inode == ionode .and. iprint_MD > 2) &
             write (io_lun,*) ' CHECK :: energy residual = ', &
-                               energy_resid
+                               dE
        if (inode == ionode .and. iprint_MD > 2) &
             write (io_lun,*) ' CHECK :: gamma = ', gamma
 
@@ -1292,20 +1274,28 @@ contains
           end if
        end if
        if (inode == ionode) &
-            write (io_lun, fmt='(/4x,"Atomic relaxation CG iteration: ",i5)') iter
+            write (io_lun, fmt='(/4x,"Lattice vector relaxation CG iteration: ",i5)') iter
        ggold = gg
+
        !Build search direction
-       search_dir_x = gamma*search_dir_x + stressx
-       search_dir_y = gamma*search_dir_y + stressy
-       search_dir_z = gamma*search_dir_z + stressz
+       if (leqi(cell_constraint_flag, 'volume')) then
+         search_dir_mean = gamma*search_dir_mean + mean_stress
+       else
+         search_dir_x = gamma*search_dir_x + stressx
+         search_dir_y = gamma*search_dir_y + stressy
+         search_dir_z = gamma*search_dir_z + stressz
+       end if
        write(io_lun,*)  "Initial cell dims", rcellx, rcelly, rcellz
        new_rcellx = rcellx
        new_rcelly = rcelly
        new_rcellz = rcellz
+
        ! Minimise in this direction
-       call safemin3(new_rcellx, new_rcelly, new_rcellz, search_dir_x, search_dir_y,&
-                  search_dir_z, energy0, energy1, fixed_potential, vary_mu, energy1)
-       ! Output positions
+       call safemin_cell(new_rcellx, new_rcelly, new_rcellz, search_dir_x, &
+                         search_dir_y, search_dir_z, energy0, energy1, &
+                         fixed_potential, vary_mu, energy1, search_dir_mean)
+
+       ! Output positions to UpdatedAtoms.dat
        if (myid == 0 .and. iprint_gen > 1) then
           do i = 1, ni_in_cell
              write (io_lun, 1) i, atom_coord(1,i), atom_coord(2,i), &
@@ -1313,58 +1303,132 @@ contains
           end do
        end if
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
-       ! Analyse forces
-       !g0 = dot(length, tot_force, 1, tot_force, 1)
-       !max = zero
-       !do i = 1, ni_in_cell
-       !    do k = 1, 3
-       !       if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
-       !    end do
-       !end do
-       ! Output and energy changes
+
+       ! Analyse Stresses and energies
        dE = energy0 - energy1
-       oldRMSstress = sqrt(stressx*stressx + stressy*stressy&
-                          + stressz*stressz)
-       newRMSstress = sqrt(stress(1)*stress(1) + stress(2)*stress(2)&
-                          + stress(3)*stress(3))
-       dRMSstress = oldRMSstress - newRMSstress
-       write(io_lun, *) "CG iteration", iter, "energy residual", dE
-       write(io_lun, *) "CG iteration", iter, "RMS stress residual", dRMSstress
+       newRMSstress = sqrt(((stress(1)*stress(1)) + (stress(2)*stress(2)) + (stress(3)*stress(3)))/3)
+       dRMSstress = RMSstress - newRMSstress
+
        iter = iter + 1
        reset_iter = reset_iter +1
-       !if(myid==0) write(io_lun,6) for_conv*max, en_units(energy_units), d_units(dist_units)
+
        if (myid == 0) write (io_lun, 4) en_conv*dE, en_units(energy_units)
-       if (myid == 0) write (io_lun, 5) for_conv*sqrt(g0/ni_in_cell), &
-                                        en_units(energy_units),       &
-                                        d_units(dist_units)
+       if (myid == 0) write (io_lun, 5) dRMSstress, "Ha"
+
        energy0 = energy1
-       !energy1 = abs(dE)
+
+       ! Check exit criteria
        if (iter > MDn_steps) then
           done = .true.
           if (myid == 0) &
                write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') &
                      iter
        end if
-       if (abs(dE)<MDcgtol) then  ! Use force tol as energy diff for now !abs(max) < MDcgtol) then
+       ! Will replace with stress tolerance when more reliable
+       if (abs(dE)<cell_en_tol) then
           done = .true.
           if (myid == 0) &
-               write (io_lun, fmt='(4x,"Energy change below threshold: ",f12.5)') &
+               write (io_lun, fmt='(4x,"Energy change below threshold: ",f12.7)') &
                      max
        end if
        call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
        if (.not. done) call check_stop(done, iter)
     end do
+
     call reg_dealloc_mem(area_general, 6*ni_in_cell, type_dbl)
 
 1   format(4x,'Atom ',i8,' Position ',3f15.8)
-2   format(4x,'Welcome to cg_run. Doing ',i4,&
-           ' steps with tolerance of ',f8.4,' ev/A')
+2   format(4x,'Welcome to cell_cg_run. Doing ',i4,&
+           ' steps with tolerance of ',f8.8,' ev')
 3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
 4   format(4x,'Energy change: ',f15.8,' ',a2)
-5   format(4x,'Force Residual: ',f15.10,' ',a2,'/',a2)
-6   format(4x,'Maximum force component: ',f15.8,' ',a2,'/',a2)
-7   format(4x,3f15.8)
+5   format(4x,'RMS Stress change: ',f15.8,' ',a2)
+
   end subroutine cell_cg_run
+
+  !!***
+
+  !!****f* control/get_gamma_cell_cg *
+  !!
+  !!  NAME
+  !!   get_gamma_cell_cg
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Gets the Gamma value for the CG algorithm in cell_cg_run based on the
+  !!   user set constraints.
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   J.S.Baker
+  !!
+  !!  CREATION DATE
+  !!  01/06/17 J.S.Baker
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+
+subroutine get_gamma_cell_cg(ggold, gg, gamma, stressx, stressy, stressz)
+
+  !Module usage
+  use io_module,      only: leqi
+  use global_module, only: cell_constraint_flag
+  use numbers
+
+  implicit none
+
+  !Passed arguments
+  real(double) :: ggold, gg, stressx, stressy, stressz, gamma, mean_stress
+
+  ! gamma is zero if the first iteration
+  if (abs(ggold) < 1.0e-6_double) then
+     gamma = zero
+  else
+    ! no contraints or scale volume = all three stress components used
+    if (leqi(cell_constraint_flag, 'none')) then
+      gg = stressx*stressx + stressy*stressy + &
+          stressz*stressz
+
+    ! scale by volume
+    else if (leqi(cell_constraint_flag, 'volume')) then
+      mean_stress = (stressx + stressy + stressz)/3
+      gg = mean_stress*mean_stress
+
+    ! Fix a single lattice parameter (no longer need a stress component)
+    else if (leqi(cell_constraint_flag, 'a')) then
+      gg = stressy*stressy + stressz*stressz
+    else if (leqi(cell_constraint_flag, 'b')) then
+      gg = stressx*stressx + stressz*stressz
+    else if (leqi(cell_constraint_flag, 'c')) then
+      gg = stressy*stressy + stressx*stressx
+
+    ! Fix more than one lattice parameter (only one stress component required)
+    else if (leqi(cell_constraint_flag, 'c a') .or. leqi(cell_constraint_flag, 'a c')) then
+      gg = stressy*stressy
+    else if (leqi(cell_constraint_flag, 'a b') .or. leqi(cell_constraint_flag, 'b a')) then
+      gg = stressz*stressz
+    else if (leqi(cell_constraint_flag, 'b c') .or. leqi(cell_constraint_flag, 'c b')) then
+      gg = stressx*stressx
+
+   ! Fix a single ratio (can eliminate a stress)
+    else if (leqi(cell_constraint_flag, 'c/a') .or. leqi(cell_constraint_flag, 'a/c')) then
+      gg = stressy*stressy + stressx*stressx
+    else if (leqi(cell_constraint_flag, 'a/b') .or. leqi(cell_constraint_flag, 'b/a')) then
+      gg = stressy*stressy + stressz*stressz
+    else if (leqi(cell_constraint_flag, 'b/c') .or. leqi(cell_constraint_flag, 'c/b')) then
+      gg = stressx*stressx + stressz*stressz
+    end if
+
+    gamma = gg/ggold
+
+  end if
+  write(io_lun,*) 'gg is ',gg
+
+end subroutine get_gamma_cell_cg
+
 
 
 end module control
