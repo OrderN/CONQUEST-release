@@ -1387,15 +1387,18 @@ subroutine get_gamma_cell_cg(ggold, gg, gamma, stressx, stressy, stressz)
   if (abs(ggold) < 1.0e-6_double) then
      gamma = zero
   else
-    ! no contraints or scale volume = all three stress components used
-    if (leqi(cell_constraint_flag, 'none')) then
-      gg = stressx*stressx + stressy*stressy + &
-          stressz*stressz
-
-    ! scale by volume
-    else if (leqi(cell_constraint_flag, 'volume')) then
+    ! use mean stress to scale by volume
+    if (leqi(cell_constraint_flag, 'volume')) then
       mean_stress = (stressx + stressy + stressz)/3
       gg = mean_stress*mean_stress
+
+    ! no contraints or single ratio fixed = all three stress components used
+    else if (leqi(cell_constraint_flag, 'none') .or. leqi(cell_constraint_flag, 'c/a') &
+            .or. leqi(cell_constraint_flag, 'a/c') .or. leqi(cell_constraint_flag, 'a/b') & 
+            .or. leqi(cell_constraint_flag, 'b/a') .or. leqi(cell_constraint_flag, 'b/c') &
+            .or. leqi(cell_constraint_flag, 'c/b')) then
+     
+      gg = stressx*stressx + stressy*stressy + stressz*stressz
 
     ! Fix a single lattice parameter (no longer need a stress component)
     else if (leqi(cell_constraint_flag, 'a')) then
@@ -1413,13 +1416,6 @@ subroutine get_gamma_cell_cg(ggold, gg, gamma, stressx, stressy, stressz)
     else if (leqi(cell_constraint_flag, 'b c') .or. leqi(cell_constraint_flag, 'c b')) then
       gg = stressx*stressx
 
-   ! Fix a single ratio (can eliminate a stress)
-    else if (leqi(cell_constraint_flag, 'c/a') .or. leqi(cell_constraint_flag, 'a/c')) then
-      gg = stressy*stressy + stressx*stressx
-    else if (leqi(cell_constraint_flag, 'a/b') .or. leqi(cell_constraint_flag, 'b/a')) then
-      gg = stressy*stressy + stressz*stressz
-    else if (leqi(cell_constraint_flag, 'b/c') .or. leqi(cell_constraint_flag, 'c/b')) then
-      gg = stressx*stressx + stressz*stressz
     end if
 
     gamma = gg/ggold
