@@ -19,7 +19,7 @@ deps.obj: $(SRCS) system.make
 	$(ECHOSTR) '  character(len=*), parameter :: datestr="'`date`'"' >> datestamp.f90
 	sed "s/BBB/"`git symbolic-ref HEAD | cut -b 12-`"/" $(COMMENT) | sed "s/RRR/"`git describe --tags`"/" >> datestamp.f90
 	$(ECHOSTR) "end module datestamp" >> datestamp.f90
-	./makedeps deps.obj $^
+	./makedeps deps.obj datestamp.f90 $^
 
 include deps.obj
 
