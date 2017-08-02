@@ -64,7 +64,7 @@ contains
           if(paos(i_species)%flag_perturb_polarise.AND.i_shell==paos(i_species)%n_shells) then
              if(en<3) en = en+1
              write(lun,fmt='("n =",i2,", l =",i2,",",i2," zetas, perturbative polarisation shell")') &
-                  en, ell+1,paos(i_species)%nzeta(i_shell)
+                  en, ell,paos(i_species)%nzeta(i_shell)
           else if(i_shell<=val(i_species)%n_occ) then 
              if(val(i_species)%semicore(i_shell)>0) then
                 write(lun,fmt='("n =",i2,", l =",i2,",",i2," zetas  Semi-core")') en, ell,paos(i_species)%nzeta(i_shell)
@@ -141,8 +141,8 @@ contains
           ell = paos(i_species)%l(i_shell)
           en = paos(i_species)%n(i_shell)
           if(paos(i_species)%flag_perturb_polarise.AND.i_shell==paos(i_species)%n_shells) then
-             ell = ell + 1
-             if(en<3) en = en + 1
+             !ell = ell + 1
+             !if(en<3) en = en + 1
              is_pol = 1
           else if(i_shell>val(i_species)%n_occ) then
              is_pol = 1

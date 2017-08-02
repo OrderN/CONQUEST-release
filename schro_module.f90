@@ -155,7 +155,7 @@ contains
           if(paos(i_species)%flag_perturb_polarise.AND.i_shell==paos(i_species)%n_shells) then
              if(en<3) en = en+1
              do zeta = 1,paos(i_species)%nzeta(i_shell)
-                write(*,fmt='(4x,3i3,f12.4)') en,ell+1,zeta,paos(i_species)%cutoff(zeta,i_shell)
+                write(*,fmt='(4x,3i3,f12.4)') en,ell,zeta,paos(i_species)%cutoff(zeta,i_shell)
              end do
           else
              do zeta = 1,paos(i_species)%nzeta(i_shell)
@@ -178,7 +178,9 @@ contains
              allocate(paos(i_species)%psi(zeta,i_shell)%f(nmesh))
              !write(*,*) '# Occ for shell: ',paos(i_species)%occ(i_shell)
              if(paos(i_species)%flag_perturb_polarise.AND.i_shell==paos(i_species)%n_shells) then ! Polarisation functions
-                ell = paos(i_species)%l(i_shell)!-1 !i_shell-1)
+                ! NB we pass l-1 here as we need to perturb the shell below
+                ell = paos(i_species)%l(i_shell)-1 !i_shell-1)
+                ! npao is only used to determine nodes - so here we need npao of the shell below
                 en = paos(i_species)%npao(i_shell)!i_shell-1)
                 if(iprint>2) write(*,fmt='(2x,"Perturbative polarisation")')
                 if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr")') &
@@ -193,7 +195,7 @@ contains
                 !paos(i_species)%energy(1,val(i_species)%n_occ)
                 !if(iprint>2) write(*,*) '# Species, n, l, zeta, cutoff: ',i_species, en, ell, zeta, &
                 !     paos(i_species)%cutoff(zeta,i_shell)," pol ",paos(i_species)%energy(1,val(i_species)%n_occ)
-                paos(i_species)%energy(zeta,i_shell) = paos(i_species)%energy(1,val(i_species)%n_occ)
+                paos(i_species)%energy(zeta,i_shell) = zero !paos(i_species)%energy(1,val(i_species)%n_occ)
                 call find_eigenstate_and_energy_vkb(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
                      paos(i_species)%psi(zeta,i_shell)%f,paos(i_species)%energy(zeta,i_shell), &
                      vha,vxc) 
@@ -216,10 +218,10 @@ contains
        do i_shell = 1,paos(i_species)%n_shells
           ell = paos(i_species)%l(i_shell)
           en = paos(i_species)%n(i_shell)
-          if(paos(i_species)%flag_perturb_polarise.AND.i_shell==paos(i_species)%n_shells) then
-             ell = ell + 1
-             if(en<3) en = en + 1
-          end if
+          !if(paos(i_species)%flag_perturb_polarise.AND.i_shell==paos(i_species)%n_shells) then
+          !   ell = ell + 1
+          !   if(en<3) en = en + 1
+          !end if
           do zeta = 1,paos(i_species)%nzeta(i_shell)
              nmesh_reg = paos(i_species)%cutoff(zeta,i_shell)/delta_r_reg + 1
              allocate(paos(i_species)%psi_reg(zeta,i_shell)%f(nmesh_reg))
@@ -1462,6 +1464,7 @@ contains
     l_half_sq = l_half_sq*l_half_sq
     l_l_plus_one = real((ell+2)*(ell+1),double)
     n_nodes = en - ell - 1 
+    if(iprint>2) write(*,fmt='(2x,"For this polarisation function, we require ",i2," nodes")') n_nodes
     zval = pseudo(species)%z
     dx_sq_over_twelve = alpha*alpha/twelve
     alpha_sq_over_four = alpha*alpha/four
