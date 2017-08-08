@@ -195,7 +195,7 @@ contains
                 !paos(i_species)%energy(1,val(i_species)%n_occ)
                 !if(iprint>2) write(*,*) '# Species, n, l, zeta, cutoff: ',i_species, en, ell, zeta, &
                 !     paos(i_species)%cutoff(zeta,i_shell)," pol ",paos(i_species)%energy(1,val(i_species)%n_occ)
-                paos(i_species)%energy(zeta,i_shell) = zero !paos(i_species)%energy(1,val(i_species)%n_occ)
+                paos(i_species)%energy(zeta,i_shell) = one!zero !paos(i_species)%energy(1,val(i_species)%n_occ)
                 call find_eigenstate_and_energy_vkb(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
                      paos(i_species)%psi(zeta,i_shell)%f,paos(i_species)%energy(zeta,i_shell), &
                      vha,vxc) 
@@ -1457,7 +1457,7 @@ contains
     do loop = 1,ell
        psi_l = psi_l*rr
     end do
-    pf_low = one
+    pf_low = 1.0_double
     pf_high = 10000.0_double
     prefac = 1000.0_double ! Arbitrary initial value
     l_half_sq = real(ell+1,double) + half
@@ -1504,6 +1504,7 @@ contains
           psi_pol(i+1) = (two*psi_pol(i)*(one-five*g(i)) - psi_pol(i-1)*f(i-1) + (s(i+1)+ten*s(i)+s(i-1))/twelve)/f(i+1)
           if(psi_pol(i+1)*psi_pol(i)<zero) n_crossings = n_crossings + 1
        end do
+       if(iprint>5) write(*,fmt='("Crossings found: ",i3)') n_crossings
        if(n_crossings > n_nodes) then ! Increase
           pf_low = prefac
           prefac = half*(pf_low + pf_high)
@@ -1531,6 +1532,9 @@ contains
        end if
     end do
     if(loop>=n_loop) then
+       do i=1,nmax
+          write(50,*) rr(i),psi_pol(i)
+       end do
        call cq_abort("ERROR in perturbative polarisation routines - prefactor not found")
     else
        if(iprint>2) write(*,fmt='("Finished perturbative polarisation search with prefactor ",f13.5)') prefac

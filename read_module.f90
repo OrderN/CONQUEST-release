@@ -190,7 +190,15 @@ contains
                 if(iprint>2) write(*,fmt='("For polarisation, we will perturb shell with n=",i2," and l=",i2)') &
                      paos(i)%n(paos(i)%polarised_shell), paos(i)%l(paos(i)%polarised_shell)
                 paos(i)%n(paos(i)%n_shells) = paos(i)%n(paos(i)%polarised_shell)
-                paos(i)%l(paos(i)%n_shells) = paos(i)%l(paos(i)%polarised_shell)
+                paos(i)%l(paos(i)%n_shells) = paos(i)%l(paos(i)%polarised_shell)+1
+                paos(i)%npao(paos(i)%n_shells) = paos(i)%l(paos(i)%polarised_shell)+1
+                do j=paos(i)%n_shells-1,1,-1
+                   if(paos(i)%l(j)==paos(i)%l(paos(i)%n_shells)) then ! Semi-core with this l
+                      paos(i)%npao(paos(i)%n_shells) = paos(i)%npao(paos(i)%n_shells) + 1
+                      write(*,*) 'Found semi-core state ! ',paos(i)%l(j),paos(i)%npao(paos(i)%n_shells)
+                      exit
+                   end if
+                end do
                 paos(i)%nzeta(paos(i)%n_shells) = paos(i)%nzeta(paos(i)%polarised_shell)
                 n_paos = n_paos + paos(i)%nzeta(paos(i)%n_shells)
              else
@@ -713,16 +721,19 @@ contains
                 i_highest_occ = val(i_species)%n_occ
                 if(paos(i_species)%l(i_highest_occ)<2) then ! We polarise this
                    ell = paos(i_species)%l(i_highest_occ)+1
-                   paos(i_species)%npao(i_shell) = ell
+                   paos(i_species)%npao(i_shell) = ell+1 ! Will need to change for perturb
+                   if(paos(i_species)%flag_perturb_polarise)then
+                      paos(i_species)%npao(i_shell) = ell
+                   end if
                    do j=i_shell-1,1,-1
                       if(paos(i_species)%l(j)==ell) then ! Semi-core with this l
                          paos(i_species)%npao(i_shell) = paos(i_species)%npao(i_shell) + 1
+                         if(paos(i_species)%flag_perturb_polarise) &
+                              call cq_abort("We cannot support perturbative polarisation with semi-core states")
                          exit
                       end if
                    end do
                    paos(i_species)%n(i_shell) = paos(i_species)%n(i_highest_occ)
-                   if((paos(i_species)%n(i_shell) - ell -1) < 0) &
-                        paos(i_species)%n(i_shell) = paos(i_species)%n(i_shell) + 1
                    paos(i_species)%l(i_shell) = ell
                    paos(i_species)%nzeta(i_shell) = n_pol_zeta 
                    n_paos = n_paos + n_pol_zeta
@@ -730,7 +741,10 @@ contains
                    call cq_abort("I can't polarise an atom with one shell and l=2")
                 else ! Polarise the i_highest_occ - 1 shell
                    ell = paos(i_species)%l(i_highest_occ-1)+1
-                   paos(i_species)%npao(i_shell) = ell
+                   paos(i_species)%npao(i_shell) = ell + 1
+                   if(paos(i_species)%flag_perturb_polarise)then
+                      paos(i_species)%npao(i_shell) = ell
+                   end if
                    do j=i_shell-1,1,-1
                       if(paos(i_species)%l(j)==ell) then ! Semi-core with this l
                          paos(i_species)%npao(i_shell) = paos(i_species)%npao(i_shell) + 1
@@ -787,11 +801,18 @@ contains
                    paos(i_species)%polarised_l = paos(i_species)%l(paos(i_species)%polarised_shell)
                    paos(i_species)%polarised_n = paos(i_species)%n(paos(i_species)%polarised_shell)
                    paos(i_species)%n(i_shell) = paos(i_species)%n(paos(i_species)%polarised_shell)
-                   paos(i_species)%l(i_shell) = paos(i_species)%l(paos(i_species)%polarised_shell)+1
+                   ell = paos(i_species)%l(paos(i_species)%polarised_shell)+1
+                   paos(i_species)%l(i_shell) = ell
                    if((paos(i_species)%n(i_shell) - paos(i_species)%l(i_shell) -1) < 0) &
                         paos(i_species)%n(i_shell) = paos(i_species)%n(i_shell) + 1
                    !paos(i_species)%nzeta(i_shell) = paos(i_species)%nzeta(paos(i_species)%polarised_shell)
                    paos(i_species)%npao(i_shell) = paos(i_species)%npao(paos(i_species)%polarised_shell)
+                   do j=i_shell-1,1,-1
+                      if(paos(i_species)%l(j)==ell) then ! Semi-core with this l
+                         paos(i_species)%npao(i_shell) = paos(i_species)%npao(i_shell) + 1
+                         exit
+                      end if
+                   end do
                 end if
              end if
              if(paos(i_species)%flag_perturb_polarise.AND.i_shell==n_shells) then
@@ -856,7 +877,13 @@ contains
              count_func(paos(i_species)%l(i_shell)) = count_func(paos(i_species)%l(i_shell))+1
              if(paos(i_species)%flag_perturb_polarise.AND.i_shell==paos(i_species)%n_shells) then
                 if(paos(i_species)%l(i_shell)+1>paos(i_species)%lmax) paos(i_species)%lmax=paos(i_species)%l(i_shell)+1
-                paos(i_species)%npao(i_shell) = paos(i_species)%npao(paos(i_species)%polarised_shell)
+                !paos(i_species)%npao(i_shell) = paos(i_species)%npao(paos(i_species)%polarised_shell)
+                !do j=i_shell-1,1,-1
+                !   if(paos(i_species)%l(j)==ell) then ! Semi-core with this l
+                !      paos(i_species)%npao(i_shell) = paos(i_species)%npao(i_shell) + 1
+                !      exit
+                !   end if
+                !end do
                 en = paos(i_species)%n(i_shell)
                 if(en<3) en = en+1
                 write(*,fmt='(2i3,2i7," using perturbative polarisation")') en, paos(i_species)%l(i_shell), &
