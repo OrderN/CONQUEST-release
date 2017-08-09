@@ -1223,7 +1223,7 @@ contains
 
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
 
-    if (myid == 0) &
+    if (myid == 0 .and. iprint_gen > 0) &
          write (io_lun, fmt='(/4x,"Starting CG lattice vector relaxation"/)')
     search_dir_z = zero
     search_dir_x = zero
@@ -1239,9 +1239,6 @@ contains
     dE = zero
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
-    if (.NOT. flag_MDold) then
-      call dump_InfoGlobal()
-    endif
     iter = 1
     reset_iter = 1
     ggold = zero
@@ -1254,10 +1251,11 @@ contains
        mean_stress = (stressx + stressy + stressz)/3
        RMSstress = sqrt(((stressx*stressx) + (stressy*stressy) + (stressz*stressz))/3)
 
-       ! Construct ratio for conjugacy
+       ! Construct ratio for conjugacy. Constraints are initially applied within
+       ! get_gamma_cell_cg.
        call get_gamma_cell_cg(ggold, gg, gamma, stressx, stressy, stressz)
-       if (myid == 0) write(io_lun, 3) iter, gamma
-
+       if (myid == 0 .and. iprint_gen > 0) &
+           write(io_lun, 3) iter, gamma
 
        if (inode == ionode .and. iprint_MD > 2) &
             write (io_lun,*) ' CHECK :: energy residual = ', &
@@ -1267,17 +1265,19 @@ contains
 
        if (CGreset) then
           if (gamma > one .or. reset_iter > length) then
-             if (inode == ionode) &
+             if (inode == ionode .and. iprint_gen > 0) &
                   write(io_lun,*) ' CG direction is reset to steepest descents! '
              gamma = zero
              reset_iter = 0
           end if
        end if
-       if (inode == ionode) &
+       if (inode == ionode .and. iprint_gen > 0) &
             write (io_lun, fmt='(/4x,"Lattice vector relaxation CG iteration: ",i5)') iter
        ggold = gg
 
-       !Build search direction
+       !Build search direction.
+       ! If the volume constraint is set, there is only one search direction!
+       ! This is the direction which minimises the mean stress.
        if (leqi(cell_constraint_flag, 'volume')) then
          search_dir_mean = gamma*search_dir_mean + mean_stress
        else
@@ -1285,12 +1285,16 @@ contains
          search_dir_y = gamma*search_dir_y + stressy
          search_dir_z = gamma*search_dir_z + stressz
        end if
-       write(io_lun,*)  "Initial cell dims", rcellx, rcelly, rcellz
+
+       if (inode == ionode .and. iprint_gen > 0) &
+           write(io_lun,*)  "Initial cell dims", rcellx, rcelly, rcellz
+
        new_rcellx = rcellx
        new_rcelly = rcelly
        new_rcellz = rcellz
 
-       ! Minimise in this direction
+       ! Minimise in this direction. Constraint information is also used within
+       ! safemin_cell. Look in move_atoms.module.f90 for further information.
        call safemin_cell(new_rcellx, new_rcelly, new_rcellz, search_dir_x, &
                          search_dir_y, search_dir_z, energy0, energy1, &
                          fixed_potential, vary_mu, energy1, search_dir_mean)
@@ -1312,28 +1316,42 @@ contains
        iter = iter + 1
        reset_iter = reset_iter +1
 
-       if (myid == 0) write (io_lun, 4) en_conv*dE, en_units(energy_units)
-       if (myid == 0) write (io_lun, 5) dRMSstress, "Ha"
+       if (myid == 0 .and. iprint_gen > 0) then
+           write (io_lun, 4) en_conv*dE, en_units(energy_units)
+           write (io_lun, 5) dRMSstress, "Ha"
+       end if
 
        energy0 = energy1
 
        ! Check exit criteria
+
+       ! First exit is if too many steps have been taken. Default is 50.
        if (iter > MDn_steps) then
           done = .true.
           if (myid == 0) &
                write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') &
                      iter
        end if
+
+       ! Second exit is if the desired energy tolerence has ben reached
        ! Will replace with stress tolerance when more reliable
        if (abs(dE)<cell_en_tol) then
           done = .true.
-          if (myid == 0) &
-               write (io_lun, fmt='(4x,"Energy change below threshold: ",f12.7)') &
+          if (myid == 0 .and. iprint_gen > 0) &
+               write (io_lun, fmt='(4x,"Energy change below threshold: ",f12.10)') &
                      max
        end if
+
        call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
        if (.not. done) call check_stop(done, iter)
     end do
+
+    if (myid == 0 .and. iprint_gen > 0) then
+        write(io_lun, *) "\n Final simulation box dimensions are: \n"
+        write(io_lun, *) "a = ", rcellx, "\n" 
+        write(io_lun, *) "b = ", rcelly, "\n"
+        write(io_lun, *) "c = ", rcellz, "\n"
+    end if
 
     call reg_dealloc_mem(area_general, 6*ni_in_cell, type_dbl)
 
