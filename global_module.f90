@@ -23,19 +23,19 @@
 !!    ROBODoc header, removed unnecessary variables
 !!   18/03/2002 dave
 !!    Added RCS Id and Log tags and static tag for object file id
-!!   13:49, 10/02/2003 drb
+!!   13:49, 10/02/2003 drb 
 !!    Added flags for minimisation control
 !!   10:58, 2003/06/10 dave
 !!    Added new flags for different options and new atomic coordinate variables
-!!   12:19, 29/08/2003 drb
+!!   12:19, 29/08/2003 drb 
 !!    Added flag_move_atom
-!!   13:33, 22/09/2003 drb
+!!   13:33, 22/09/2003 drb 
 !!    Added flags to allow separate testing of S-Pulay and phi-Pulay forces
 !!   08:31, 2003/10/01 dave
 !!    Changed flag_vary_blips to flag_vary_basis
-!!   14:56, 02/05/2005 dave
+!!   14:56, 02/05/2005 dave 
 !!    Added global ne_in_cell variable for total electron number in cell
-!!   09:11, 11/05/2005 dave
+!!   09:11, 11/05/2005 dave 
 !!    Added max L iterations parameter
 !!   2006/09/04 08:06 dave
 !!    Dynamic allocation implemented for final variables
@@ -47,10 +47,10 @@
 !!    Added flag for block assignment
 !!   2008/02/01 03:43 dave
 !!    Added output unit (output to file rather than stdout)
-!!   12:19, 14/02/2008 drb
+!!   12:19, 14/02/2008 drb 
 !!    Added flag for Pulay relaxation algorithm
 !!   2008/07/16 ast
-!!    New iprint levels for timing
+!!    New iprint levels for timing 
 !!   2009/07/24 16:41 dave
 !!    Added new flag for global or per atom tolerances
 !!   2011/03/30 18:59 M.Arita
@@ -94,8 +94,8 @@
 !!   - Added flags and variables for matrix reconstruction
 !!   2013/12/02 M.Arita
 !!   - Added flags and variables for XL-BOMD
-!!   2014/01/17 lat
-!!    Added new area and flag for EXX
+!!   2014/01/17 lat 
+!!    Added new area and flag for EXX 
 !!   2014/09/20 lat
 !!    Added flags for PBE0, Xalpha and Hartree-Fock functional
 !!   2014/10/03 lat
@@ -118,6 +118,8 @@
 !!    Added parameters for Contracted SFs and multi-site SFs
 !!   2017/02/23 dave
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+!!   2017/08/29 jack baker & dave
+!!    Adding variables for cell optimisation
 !!  SOURCE
 !!
 module global_module
@@ -128,7 +130,7 @@ module global_module
 
   implicit none
 
-  ! RCS tag for object file identification
+  ! RCS tag for object file identification 
   character(len=80), save, private :: &
        RCSid = "$Id$"
 
@@ -136,7 +138,7 @@ module global_module
   integer :: io_lun                 ! Output unit
   integer, allocatable, dimension(:) :: id_glob      ! global label of atom in sim cell (CC)
   integer, allocatable, dimension(:) :: id_glob_inv  ! gives global number for a CC atom
-  integer, dimension(:), allocatable :: species_glob ! gives species
+  integer, dimension(:), allocatable :: species_glob ! gives species 
   integer :: numprocs               ! number of processors
   real(double) :: rcellx,rcelly,rcellz  ! cell side lengths
   real(double), allocatable, dimension(:) :: x_atom_cell ! position of atom in sim cell (CC)
@@ -161,7 +163,7 @@ module global_module
   character(len=20), save :: runtype ! What type of run is it ?
 
 
-  logical :: opt_cell ! optimize the simulation cell?
+  logical :: flag_opt_cell ! optimize the simulation cell?
   ! specify sim cell dims/ratios of dims to be held constant.
   character(len=20), save :: cell_constraint_flag
   ! Termination condition to exit cell_cg_run
@@ -207,12 +209,12 @@ module global_module
 
   ! Numerical flag choosing functional type
   integer :: flag_functional_type
-  character(len=15)  :: functional_description
+  character(len=15)  :: functional_description 
   integer, parameter :: functional_lda_pz81        = 1
   integer, parameter :: functional_lda_gth96       = 2
   integer, parameter :: functional_lda_pw92        = 3    ! PRB 45, 13244 (1992) + PRL 45, 566 (1980)
   integer, parameter :: functional_xalpha          = 4    ! Slater/Dirac exchange only  ; no correlation
-  integer, parameter :: functional_hartree_fock    = 10   ! Hartree-Fock exact exchange ; no correlation
+  integer, parameter :: functional_hartree_fock    = 10   ! Hartree-Fock exact exchange ; no correlation  
 
   integer, parameter :: functional_gga_pbe96       = 101  ! Standard PBE
   integer, parameter :: functional_gga_pbe96_rev98 = 102  ! revPBE (PBE + Zhang-Yang 1998)
@@ -220,14 +222,14 @@ module global_module
   integer, parameter :: functional_gga_pbe96_wc    = 104  ! WC   (Wu-Cohen 2006)
 
   integer, parameter :: functional_hyb_pbe0        = 201  ! PBE0   (hybrid PBE with exx_alpha=0.25)
-
+ 
   ! Switch for variation of blips in get_support_gradient
   integer :: WhichPulay
   integer, parameter :: PhiPulay  = 1
   integer, parameter :: SPulay    = 2
-  integer, parameter :: BothPulay = 3
+  integer, parameter :: BothPulay = 3 
 
-  ! What are the local functions ?
+  ! What are the local functions ? 
   integer, parameter :: sf   = 1 ! Support functions
   integer, parameter :: nlpf = 2 ! Projector functions
   integer, parameter :: paof = 3 ! Pseudo-atomic orbitals
@@ -239,7 +241,7 @@ module global_module
   integer, parameter :: area_init      = 1
   integer, parameter :: area_matrices  = 2
   integer, parameter :: area_ops       = 3
-  integer, parameter :: area_DM        = 4
+  integer, parameter :: area_DM        = 4 
   integer, parameter :: area_SC        = 5
   integer, parameter :: area_minE      = 6
   integer, parameter :: area_moveatoms = 7
@@ -267,7 +269,7 @@ module global_module
   ! number of spin channels
   integer      :: nspin = 1
   real(double) :: spin_factor = two
-  ! Logical flag determine if spin populations are fixed (fixed magnetic moment)
+  ! Logical flag determine if spin populations are fixed (fixed magnetic moment) 
   logical      :: flag_fix_spin_population = .false.
   ! fixed electron numbers for different spin channels. This is used
   ! even for spin non-polarised case
@@ -296,7 +298,7 @@ module global_module
   logical      :: flag_exx      = .false. ! switch on/off EXX
   integer      :: exx_scf       = 0       ! method used during the SCF using hybrid functional or Hartree-Fock
   real(double) :: exx_alpha     = zero    ! mixing factor for hybrid Exc
-
+  
   integer      :: exx_niter     = 1       ! for EXX control during SCF
   integer      :: exx_siter     = 1       ! for EXX control during SCF
   real(double) :: exx_pulay_r0  = zero    ! get the R0 pulay residual for control
@@ -321,9 +323,9 @@ module global_module
   logical :: flag_SkipEarlyDM
   logical :: flag_MDcontinue
   logical :: flag_MDdebug
-  logical :: flag_FixCOM
+  logical :: flag_FixCOM 
   integer :: McWFreq
-  integer :: MDinit_step
+  integer :: MDinit_step  
   real(double),parameter   :: shift_in_bohr = 1.0E-03_double
   ! Table showing atoms (global) in nodes
   integer :: n_proc_old
@@ -340,11 +342,11 @@ module global_module
   ! Parameters adjusted after this many steps if there is slow convergence
   integer :: fire_N_max, fire_N_min
   real(double) :: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha
-
+  
   ! Wavefunction output
   logical :: flag_out_wf                        !output WFs?
   logical :: flag_out_wf_by_kp                  !output WFs k-point by k-point
-  integer,allocatable,dimension(:)::out_wf      !which bands to output
+  integer,allocatable,dimension(:)::out_wf      !which bands to output  
   integer::max_wf                               !total no of bands
   logical :: wf_self_con                        !flag to select output at the end of SCF cycle
   real(double) :: E_wf_min, E_wf_max            ! Limits for energy range
@@ -353,7 +355,7 @@ module global_module
   ! This is in the WF output section as I introduced it for WF output, but
   ! it more properly applies to matrices (specifically how many temporary matrices we can store)
   integer :: mx_temp_matrices                   ! Defaults to 100; used in mult_module (immi)
-
+  
   ! DOS output
   logical :: flag_write_DOS, flag_write_projected_DOS
   real(double) :: E_DOS_min, E_DOS_max, sigma_DOS
@@ -373,6 +375,6 @@ module global_module
 
   ! diagonalise or linear scaling
   logical :: flag_diagonalisation
-
+  
 end module global_module
 !!***

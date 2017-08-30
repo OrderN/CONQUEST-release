@@ -1312,6 +1312,8 @@ contains
 !!    Changed float to real
 !!   2016/07/20 16:30 nakata
 !!    Renamed naba_atm -> naba_atoms_of_blocks
+!!   2017/08/29 jack baker & dave
+!!    Removed r_super_x references (redundant)
 !!  TODO
 !!    Fix this so that it doesn't loop over all processors ! Follow
 !!    set_pseudo 13/05/2002 dave
@@ -1322,7 +1324,7 @@ contains
     use datatypes
     use numbers
     use dimens, only: n_my_grid_points, x_grid, y_grid, z_grid, &
-         grid_point_volume!, r_super_x, r_super_y, r_super_z
+         grid_point_volume
     use grid_index, only: grid_point_block, grid_point_x, &
          grid_point_y, grid_point_z
     use species_module, only: species, charge

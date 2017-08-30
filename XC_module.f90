@@ -1277,6 +1277,8 @@ contains
   !!   - Added optional x_energy_total for output
   !!   2015/05/12 08:30 dave
   !!   - Added stress term
+  !!   2017/08/29 jack baker & dave
+  !!     Removed rcellx references (redundant)
   !! SOURCE
   !!
   subroutine get_xc_potential_GGA_PBE(density, xc_potential,            &
@@ -1284,8 +1286,7 @@ contains
                                       flavour, x_energy )
     use datatypes
     use numbers
-    use global_module, only: & !rcellx, rcelly, rcellz,          &
-                             functional_gga_pbe96,            &
+    use global_module, only: functional_gga_pbe96,            &
                              functional_gga_pbe96_rev98,      &
                              functional_gga_pbe96_r99, nspin, &
                              spin_factor
@@ -1433,7 +1434,9 @@ contains
   !!   2014/09/24
   !! MODIFICATION HISTORY
   !!   2015/09/03 17:27 dave
-  !!   Added GGA XC stress term
+  !!     Added GGA XC stress term
+  !!   2017/08/29 jack baker & dave
+  !!     Removed rcellx references (redundant)
   !! SOURCE
   !!
   subroutine get_xc_potential_hyb_PBE0(density, xc_potential, exx_a,     &
@@ -1441,7 +1444,6 @@ contains
                                        flavour, x_energy )
     use datatypes
     use numbers
-    !use global_module, only: rcellx, rcelly, rcellz, spin_factor, nspin, &
     use global_module, only: spin_factor, nspin, &
                              functional_gga_pbe96
     use dimens,        only: grid_point_volume, n_my_grid_points
@@ -1606,6 +1608,8 @@ contains
   !!   2012/04/11 L.Tong
   !!     Added optional parameters x_epsilon and c_epsilon to output
   !!     the exchange and correlation parts of xc_epsilon respectively.
+  !!   2017/08/29 jack baker & dave
+  !!     Removed rcellx references (redundant)
   !!  SOURCE
   !!
   subroutine get_xc_potential_GGA_PBE_obsolete(density, xc_potential, &
@@ -1615,8 +1619,7 @@ contains
 
     use datatypes
     use numbers
-    use global_module, only: &!rcellx, rcelly, rcellz,               &
-                             functional_gga_pbe96_rev98,           &
+    use global_module, only: functional_gga_pbe96_rev98,           &
                              functional_gga_pbe96_r99
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum, cq_abort
@@ -2067,13 +2070,14 @@ contains
   !!   - removed function calculating the modulus of the grad_density,
   !!     since this is now redundant.
   !!   - renamed grad_density_xyz to grad_density
+  !!   2017/08/29 jack baker & dave
+  !!     Removed rcellx references (redundant)
   !!  SOURCE
   !!
   subroutine build_gradient(density, grad_density, size)
 
     use datatypes
     use numbers
-!    use global_module, only: rcellx, rcelly, rcellz
     use dimens,        only: n_grid_x, n_grid_y, n_grid_z
     use fft_module,    only: fft3, recip_vector
     use GenComms,      only: cq_abort
@@ -2625,6 +2629,8 @@ contains
   !!    Added new PBE functional types
   !!   2011/12/13 L.Tong
   !!    Removed third, and eight, they are now defined in numbers module
+  !!   2017/08/29 jack baker & dave
+  !!    Removed rcellx references (redundant)
   !!  SOURCE
   !!
   subroutine get_dxc_potential_GGA_PBE(density, density_out, &
@@ -2632,8 +2638,7 @@ contains
 
     use datatypes
     use numbers
-    use global_module, only: & !rcellx, rcelly, rcellz, &
-                             functional_gga_pbe96_rev98, functional_gga_pbe96_r99
+    use global_module, only: functional_gga_pbe96_rev98, functional_gga_pbe96_r99
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum
     use fft_module,    only: fft3, recip_vector

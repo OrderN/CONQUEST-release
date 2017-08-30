@@ -19,13 +19,13 @@
 !!  MODIFICATION HISTORY
 !!   17:31, 2003/02/05 dave
 !!    Changed flow of control so that the switch occurs on the local variable runtype
-!!   14:26, 26/02/2003 drb
+!!   14:26, 26/02/2003 drb 
 !!    Small bug fixes
-!!   10:06, 12/03/2003 drb
+!!   10:06, 12/03/2003 drb 
 !!    Added simple MD
-!!   13:19, 22/09/2003 drb
+!!   13:19, 22/09/2003 drb 
 !!    Bug fixes in cg
-!!   10:52, 13/02/2006 drb
+!!   10:52, 13/02/2006 drb 
 !!    General tidying related to new matrices
 !!   2008/02/04 17:10 dave
 !!    Changes for output to file not stdout
@@ -38,15 +38,15 @@ module control
   use datatypes
   use global_module, only: io_lun
   use GenComms,      only: cq_abort
-  use timer_module,  only: start_timer, stop_timer, cq_timer
+  use timer_module,  only: start_timer, stop_timer, cq_timer 
   use timer_module,  only: start_backtrace, stop_backtrace
 
   implicit none
 
-  integer      :: MDn_steps
-  integer      :: MDfreq
-  real(double) :: MDtimestep
-  real(double) :: MDcgtol
+  integer      :: MDn_steps 
+  integer      :: MDfreq 
+  real(double) :: MDtimestep 
+  real(double) :: MDcgtol 
   logical      :: CGreset
 
   ! Area identification
@@ -61,7 +61,7 @@ contains
 
 !!****f* control/control_run *
 !!
-!!  NAME
+!!  NAME 
 !!   control
 !!  USAGE
 !!
@@ -71,7 +71,7 @@ contains
 !!
 !!
 !!  USES
-!!   atoms, common, datatypes, dimens, ewald_module, force_module, GenComms,
+!!   atoms, common, datatypes, dimens, ewald_module, force_module, GenComms, 
 !!   matrix_data, pseudopotential_data
 !!  AUTHOR
 !!   D.R.Bowler
@@ -91,7 +91,7 @@ contains
 !!   17:31, 2003/02/05 dave
 !!   - Removed old, silly MD and replaced with call to either static
 !!    (i.e. just ground state) or CG
-!!   10:06, 12/03/2003 drb
+!!   10:06, 12/03/2003 drb 
 !!   - Added MD
 !!   2004/11/10, drb
 !!   - Removed common use
@@ -107,6 +107,8 @@ contains
 !!   - Removed return for if(runtype,'static')
 !!   2015/11/24 10:25 dave
 !!    Removed redundant ewald use
+!!   2017/08/29 jack baker & dave
+!!    Added cell optimisation controls
 !!  SOURCE
 !!
   subroutine control_run(fixed_potential, vary_mu, total_energy)
@@ -118,7 +120,7 @@ contains
     use force_module,         only: tot_force
     use minimise,             only: get_E_and_F
     use global_module,        only: runtype, flag_self_consistent, flag_out_wf, &
-                                    flag_write_DOS, opt_cell
+                                    flag_write_DOS, flag_opt_cell
     use input_module,         only: leqi
 
     implicit none
@@ -144,11 +146,11 @@ contains
        if(.NOT.flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS)) return
        call get_E_and_F(fixed_potential,vary_mu, total_energy,&
                         .true.,.true.,level=backtrace_level)
-       !
+       ! 
     else if ( leqi(runtype, 'cg')    ) then
-        if (opt_cell) then
+        if (flag_opt_cell) then
             call cell_cg_run(fixed_potential, vary_mu, total_energy)
-        else if (.not. opt_cell) then
+        else
             call cg_run(fixed_potential, vary_mu, total_energy)
         end if
        !
@@ -177,16 +179,16 @@ contains
 
   !!****f* control/cg_run *
   !!
-  !!  NAME
+  !!  NAME 
   !!   cg_run - Does CG minimisation
   !!  USAGE
   !!   cg_run(velocity,atmforce)
   !!  PURPOSE
   !!   Performs CG minimisation by repeated calling of minimiser
   !!  INPUTS
-  !!
+  !! 
   !!  USES
-  !!
+  !! 
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -196,9 +198,9 @@ contains
   !!    Added vast numbers of passed arguments for get_E_and_F
   !!   17:26, 2003/02/05 dave
   !!    Corrected atom position arguments
-  !!   14:27, 26/02/2003 drb
+  !!   14:27, 26/02/2003 drb 
   !!    Other small bug fixes
-  !!   13:20, 22/09/2003 drb
+  !!   13:20, 22/09/2003 drb 
   !!    Added id_glob referencing for forces
   !!   2006/09/04 07:53 dave
   !!    Dynamic allocation for positions
@@ -208,6 +210,8 @@ contains
   !!   - Removed redundant input parameter real(double) mu
   !!   2013/08/21 M.Arita
   !!   - Added call for safemin2 necessary in reusibg L-matrix
+  !!    2017/08/29 jack baker & dave
+  !!     Removed rcellx references (redundant)
   !!  SOURCE
   !!
   subroutine cg_run(fixed_potential, vary_mu, total_energy)
@@ -217,7 +221,7 @@ contains
     use units
     use global_module, only: iprint_gen, ni_in_cell, x_atom_cell,  &
                              y_atom_cell, z_atom_cell, id_glob,    &
-                             atom_coord, & !rcellx, rcelly, rcellz,   &
+                             atom_coord, &
                              area_general, iprint_MD,              &
                              IPRINT_TIME_THRES1, flag_MDold
     use group_module,  only: parts
@@ -238,7 +242,7 @@ contains
     ! Shared variables needed by get_E_and_F for now (!)
     logical :: vary_mu, fixed_potential
     real(double) :: total_energy
-
+    
     ! Local variables
     real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma
     integer        :: i,j,k,iter,length, jj, lun, stat
@@ -280,7 +284,6 @@ contains
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
        ! Construct ratio for conjugacy
-       ! Forces are gradient of energy idiot!!! ahh
        gg = zero
        do j = 1, ni_in_cell
           gg = gg +                              &
@@ -393,22 +396,22 @@ contains
 
 !!****f* control/md_run *
 !!
-!!  NAME
+!!  NAME 
 !!   md_run
 !!  USAGE
-!!
+!! 
 !!  PURPOSE
 !!   Does a QUENCHED MD run
 !!   Now, this can also employ NVE-MD
 !!  INPUTS
-!!
-!!
+!! 
+!! 
 !!  USES
-!!
+!! 
 !!  AUTHOR
 !!   D.R.Bowler
 !!  CREATION DATE
-!!   10:07, 12/03/2003 drb
+!!   10:07, 12/03/2003 drb 
 !!  MODIFICATION HISTORY
 !!   2011/12/07 L.Tong
 !!    - changed 0.0_double to zero in numbers module
@@ -486,7 +489,7 @@ contains
     ! Shared variables needed by get_E_and_F for now (!)
     logical      :: vary_mu, fixed_potential
     real(double) :: total_energy
-
+    
     ! Local variables
     real(double), allocatable, dimension(:,:) :: velocity
     integer       ::  iter, i, k, length, stat, i_first, i_last, &
@@ -505,7 +508,7 @@ contains
     ! FIRE parameters
     integer :: step_qMD, n_stop_qMD, fire_N, fire_N2
     real(double) :: fire_step_max, fire_P0, fire_alpha
-
+    
     allocate(velocity(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating velocity in md_run: ", &
@@ -650,7 +653,7 @@ contains
        if (.NOT. flag_MDold) then
          if (inode.EQ.ionode) call dump_InfoGlobal(iter)
        endif
-
+       
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero
@@ -719,8 +722,8 @@ contains
 !%%!         write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
 !%%!      end do
 !%%!   end if
-!%%!   !Now, updateIndices and update_atom_coord are done in velocityVerlet
-!%%!   !call updateIndices(.false.,fixed_potential, number_of_bands)
+!%%!   !Now, updateIndices and update_atom_coord are done in velocityVerlet 
+!%%!   !call updateIndices(.false.,fixed_potential, number_of_bands) 
 !%%!   ! L-matrix reconstruction (used to be called at updateIndices3)
 !%%!   if (.NOT.flag_MDold .AND. &
 !%%!       .NOT.diagon     .AND. &
@@ -792,7 +795,7 @@ contains
   !! RETURN VALUE
   !! AUTHOR
   !!   David Bowler
-  !! CREATION DATE
+  !! CREATION DATE 
   !!
   !! MODIFICATION HISTORY
   !!   2011/12/07 L.Tong
@@ -827,7 +830,7 @@ contains
     ! Shared variables needed by get_E_and_F for now (!)
     logical      :: vary_mu, fixed_potential
     real(double) :: total_energy
-
+    
     ! Local variables
     integer      :: iter, i, k, length, stat
     real(double) :: temp, KE, energy1, energy0, dE, max, g0
@@ -869,7 +872,7 @@ contains
             call write_positions(iter, parts)
        call my_barrier
     end do
-
+    
     return
 1   format(4x,'Atom ',i4,' Position ',3f15.8)
 2   format(4x,'Welcome to dummy_run. Doing ',i4,' steps')
@@ -883,16 +886,16 @@ contains
 
   !!****f* control/pulay_relax *
   !!
-  !!  NAME
+  !!  NAME 
   !!   pulay_relax
   !!  USAGE
-  !!
+  !!   
   !!  PURPOSE
   !!   Performs pulay relaxation
   !!  INPUTS
-  !!
+  !! 
   !!  USES
-  !!
+  !! 
   !!  AUTHOR
   !!   D.R.Bowler
   !!  CREATION DATE
@@ -912,6 +915,8 @@ contains
   !!   2014/02/04 M.Arita
   !!   - Added call for update_H since it is not called at
   !!     updateIndices any longer
+  !!   2017/08/29 jack baker & dave
+  !!    Removed rcellx references (redundant)
   !!  SOURCE
   !!
   subroutine pulay_relax(fixed_potential, vary_mu, total_energy)
@@ -921,8 +926,7 @@ contains
     use units
     use global_module,  only: iprint_MD, ni_in_cell, x_atom_cell,   &
                               y_atom_cell, z_atom_cell, id_glob,    &
-                              atom_coord, & !rcellx, rcelly, rcellz,   &
-                              area_general, flag_pulay_simpleStep
+                              atom_coord, area_general, flag_pulay_simpleStep
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
@@ -942,7 +946,7 @@ contains
     ! Shared variables needed by get_E_and_F for now (!)
     logical :: vary_mu, fixed_potential
     real(double) :: total_energy
-
+    
     ! Local variables
     real(double), allocatable, dimension(:,:)   :: velocity
     real(double), allocatable, dimension(:,:)   :: cg
@@ -1129,7 +1133,7 @@ contains
           posnStore(3,i,npmod) = z_atom_cell(i)
           jj = id_glob(i)
           forceStore(:,i,npmod) = tot_force(:,jj)
-       end do
+       end do       
        if (.not. done) call check_stop(done, iter)
        iter = iter + 1
        energy0 = energy1
@@ -1233,7 +1237,7 @@ contains
     done = .false.
     length = 3
     if (myid == 0 .and. iprint_gen > 0) &
-         write (io_lun, 2) MDn_steps, cell_en_tol
+         write (io_lun, 2) MDn_steps, cell_en_tol,en_units(energy_units)
     energy0 = total_energy
     energy1 = zero
     dE = zero
@@ -1347,17 +1351,17 @@ contains
     end do
 
     if (myid == 0 .and. iprint_gen > 0) then
-        write(io_lun, *) "\n Final simulation box dimensions are: \n"
-        write(io_lun, *) "a = ", rcellx, "\n" 
-        write(io_lun, *) "b = ", rcelly, "\n"
-        write(io_lun, *) "c = ", rcellz, "\n"
+        write(io_lun, fmt='("Final simulation box dimensions are: ")')
+        write(io_lun, fmt='(2x,"a = ",f12.5)') rcellx
+        write(io_lun, fmt='(2x,"a = ",f12.5)') rcelly
+        write(io_lun, fmt='(2x,"a = ",f12.5)') rcellz
     end if
 
     call reg_dealloc_mem(area_general, 6*ni_in_cell, type_dbl)
 
 1   format(4x,'Atom ',i8,' Position ',3f15.8)
 2   format(4x,'Welcome to cell_cg_run. Doing ',i4,&
-           ' steps with tolerance of ',f8.8,' ev')
+           ' steps with tolerance of ',f12.5,a2)
 3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
 4   format(4x,'Energy change: ',f15.8,' ',a2)
 5   format(4x,'RMS Stress change: ',f15.8,' ',a2)
@@ -1385,64 +1389,64 @@ contains
   !!  CREATION DATE
   !!  01/06/17 J.S.Baker
   !!  MODIFICATION HISTORY
-  !!
+  !!   2017/08/29 dave
+  !!    Indentation fixed (emacs standard) and added check for inode to write statement
   !!  SOURCE
   !!
+  subroutine get_gamma_cell_cg(ggold, gg, gamma, stressx, stressy, stressz)
 
-subroutine get_gamma_cell_cg(ggold, gg, gamma, stressx, stressy, stressz)
+    !Module usage
+    use io_module,      only: leqi
+    use global_module, only: cell_constraint_flag, iprint_gen
+    use numbers
+    use GenComms,      only: gsum, myid, inode, ionode
 
-  !Module usage
-  use io_module,      only: leqi
-  use global_module, only: cell_constraint_flag
-  use numbers
+    implicit none
 
-  implicit none
+    !Passed arguments
+    real(double) :: ggold, gg, stressx, stressy, stressz, gamma, mean_stress
 
-  !Passed arguments
-  real(double) :: ggold, gg, stressx, stressy, stressz, gamma, mean_stress
+    ! gamma is zero if the first iteration
+    if (abs(ggold) < 1.0e-6_double) then
+       gamma = zero
+    else
+       ! use mean stress to scale by volume
+       if (leqi(cell_constraint_flag, 'volume')) then
+          mean_stress = (stressx + stressy + stressz)/3
+          gg = mean_stress*mean_stress
 
-  ! gamma is zero if the first iteration
-  if (abs(ggold) < 1.0e-6_double) then
-     gamma = zero
-  else
-    ! use mean stress to scale by volume
-    if (leqi(cell_constraint_flag, 'volume')) then
-      mean_stress = (stressx + stressy + stressz)/3
-      gg = mean_stress*mean_stress
-
-    ! no contraints or single ratio fixed = all three stress components used
-    else if (leqi(cell_constraint_flag, 'none') .or. leqi(cell_constraint_flag, 'c/a') &
+          ! no contraints or single ratio fixed = all three stress components used
+       else if (leqi(cell_constraint_flag, 'none') .or. leqi(cell_constraint_flag, 'c/a') &
             .or. leqi(cell_constraint_flag, 'a/c') .or. leqi(cell_constraint_flag, 'a/b') & 
             .or. leqi(cell_constraint_flag, 'b/a') .or. leqi(cell_constraint_flag, 'b/c') &
             .or. leqi(cell_constraint_flag, 'c/b')) then
-     
-      gg = stressx*stressx + stressy*stressy + stressz*stressz
 
-    ! Fix a single lattice parameter (no longer need a stress component)
-    else if (leqi(cell_constraint_flag, 'a')) then
-      gg = stressy*stressy + stressz*stressz
-    else if (leqi(cell_constraint_flag, 'b')) then
-      gg = stressx*stressx + stressz*stressz
-    else if (leqi(cell_constraint_flag, 'c')) then
-      gg = stressy*stressy + stressx*stressx
+          gg = stressx*stressx + stressy*stressy + stressz*stressz
 
-    ! Fix more than one lattice parameter (only one stress component required)
-    else if (leqi(cell_constraint_flag, 'c a') .or. leqi(cell_constraint_flag, 'a c')) then
-      gg = stressy*stressy
-    else if (leqi(cell_constraint_flag, 'a b') .or. leqi(cell_constraint_flag, 'b a')) then
-      gg = stressz*stressz
-    else if (leqi(cell_constraint_flag, 'b c') .or. leqi(cell_constraint_flag, 'c b')) then
-      gg = stressx*stressx
+          ! Fix a single lattice parameter (no longer need a stress component)
+       else if (leqi(cell_constraint_flag, 'a')) then
+          gg = stressy*stressy + stressz*stressz
+       else if (leqi(cell_constraint_flag, 'b')) then
+          gg = stressx*stressx + stressz*stressz
+       else if (leqi(cell_constraint_flag, 'c')) then
+          gg = stressy*stressy + stressx*stressx
+
+          ! Fix more than one lattice parameter (only one stress component required)
+       else if (leqi(cell_constraint_flag, 'c a') .or. leqi(cell_constraint_flag, 'a c')) then
+          gg = stressy*stressy
+       else if (leqi(cell_constraint_flag, 'a b') .or. leqi(cell_constraint_flag, 'b a')) then
+          gg = stressz*stressz
+       else if (leqi(cell_constraint_flag, 'b c') .or. leqi(cell_constraint_flag, 'c b')) then
+          gg = stressx*stressx
+
+       end if
+
+       gamma = gg/ggold
 
     end if
+    if(inode==ionode.AND.iprint_gen>1) write(io_lun,fmt='(2x,"Stress gg is ",f12.5)') gg
 
-    gamma = gg/ggold
-
-  end if
-  write(io_lun,*) 'gg is ',gg
-
-end subroutine get_gamma_cell_cg
-
-
+  end subroutine get_gamma_cell_cg
+!!***
 
 end module control

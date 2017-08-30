@@ -689,6 +689,8 @@ second:   do
   !!    sfc_partitions_to_processors from sfc_partitions_module
   !!   2013/08/20 M.Arita
   !!    Correct the if-statement 
+  !!   2017/08/29 jack baker & dave
+  !!    Removed r_super_x references (redundant)
   !!  SOURCE
   !!
   subroutine read_mult(myid,parts,part_file)
@@ -700,7 +702,6 @@ second:   do
                                 species_glob, runtype, id_glob_old, id_glob_inv_old
     use group_module,     only: make_cc2, part_method, PYTHON, HILBERT
     use basic_types
-    !use dimens,           only: r_super_x, r_super_y, r_super_z
     use species_module,   only: species
     use maxima_module,    only: maxpartsproc, maxatomspart,           &
                                 maxatomsproc, maxpartscell

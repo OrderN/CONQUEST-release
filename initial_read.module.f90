@@ -13,7 +13,7 @@
 !!   Holds the initial read routines
 !!  USES
 !!   atoms, construct_module, datatypes, DiagModule, dimens, fdf, GenComms, global_module,
-!!   group_module, io_module, maxima_module, numbers, parse, primary_module,
+!!   group_module, io_module, maxima_module, numbers, parse, primary_module, 
 !!   pseudopotential_data, species_module
 !!  AUTHOR
 !!   D.R.Bowler
@@ -24,11 +24,11 @@
 !!    Bug fix (from TM) for read_and_write
 !!   17/06/2002 dave
 !!    Added read to find solution method - order N or exact diagonalisation
-!!   15:55, 25/09/2002 mjg & drb
+!!   15:55, 25/09/2002 mjg & drb 
 !!    Added flag for initial charge from initial K
-!!   10:41, 06/03/2003 drb
+!!   10:41, 06/03/2003 drb 
 !!    Added tags for linear mixing for self-consistency in read_input
-!!   11:02, 24/03/2003 drb
+!!   11:02, 24/03/2003 drb 
 !!    Simplified read_and_write
 !!   14:51, 2003/06/09 dave
 !!    Added new way of reading atomic coordinates, independent of make_prt
@@ -53,9 +53,9 @@
 !!   2015/06/11 16:30 lat
 !!    Added possibility of user to define filename for PAO/pseudo *ion
 !!    Fixed EXX variable definitions
-!!    Try to make blocks of variables clearer
+!!    Try to make blocks of variables clearer 
 !!    Added experimental backtrace
-!!
+!!   
 !!  SOURCE
 !!
 module initial_read
@@ -76,13 +76,13 @@ contains
   ! ------------------------------------------------------------------------------
   ! Subroutine read_and_write
   ! ------------------------------------------------------------------------------
-
+  
   !!****f* initial_read/read_and_write *
   !!
-  !!  NAME
+  !!  NAME 
   !!   read_and_write
   !!  USAGE
-  !!
+  !! 
   !!  PURPOSE
   !!   Reads the input data and writes out the parameters for the run
   !!  INPUTS
@@ -108,11 +108,11 @@ contains
   !!   31/05/2002 dave
   !!    Bug fix (TM) - changed np to ind_part in loop to build atom
   !!    positions from make_prt.dat
-  !!   11:02, 24/03/2003 drb
+  !!   11:02, 24/03/2003 drb 
   !!    Removed variables associated with old phi initialisation
   !!   14:52, 2003/06/09 dave
   !!    Removed atomic coordinate fiddling
-  !!   14:59, 02/05/2005 dave
+  !!   14:59, 02/05/2005 dave 
   !!    Added calculation of number of electrons in cell
   !!   2007/05/08 17:00 dave
   !!    Added net charge on cell to number_of_bands for consistency
@@ -128,7 +128,7 @@ contains
   !!   - Changed spin implementation
   !!   2014/02/04 M.Arita
   !!   - Added call for initial_read_aux for constraint-MD
-  !!   2015/05/11 lat
+  !!   2015/05/11 lat 
   !!   - Added optional total spin magnetization
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
@@ -236,7 +236,7 @@ contains
        pdb_template = fdf_string(80,'IO.PdbTemplate',atom_coord_file)
     else
        pdb_template = fdf_string(80,'IO.PdbTemplate',' ')
-    end if
+    end if    
     def = 'make_prt.dat'
     part_coord_file = fdf_string(80,'IO.Partitions',def)
     call read_atomic_positions(trim(atom_coord_file))
@@ -352,7 +352,7 @@ contains
                                                                  " is not equal to single-zeta size", count_SZ
                    call cq_abort("Basis set error for species ",i)
                 endif
-             else
+             else 
                 if(count_SZP>nsf_species(i)) then
                    if(.NOT.symmetry_breaking.OR..NOT.read_option) then
                       if(inode==ionode) then
@@ -392,7 +392,7 @@ contains
     !
     if (nspin == 2 .and. ne_magn_in_cell > zero) then
        ne_spin_in_cell(1) = half * (ne_magn_in_cell + ne_in_cell)
-       ne_spin_in_cell(2) = ne_spin_in_cell(1) - ne_magn_in_cell
+       ne_spin_in_cell(2) = ne_spin_in_cell(1) - ne_magn_in_cell  
        !
     end if
     !
@@ -410,7 +410,7 @@ contains
        end if
     end if
     !
-    !
+    ! 
     !
     ! Set up various lengths, volumes, reciprocals etc. for convenient use
     call set_dimensions(inode, ionode,HNL_fac, non_local, n_species, &
@@ -435,18 +435,18 @@ contains
   ! ------------------------------------------------------------------------------
   ! Subroutine read_input
   ! ------------------------------------------------------------------------------
-
+  
   !!****f* initial_read/read_input *
   !!
-  !!  NAME
+  !!  NAME 
   !!   read_input
   !!  USAGE
-  !!
+  !! 
   !!  PURPOSE
   !!   reads the input file
   !!  INPUTS
-  !!
- !!
+  !! 
+  !! 
   !!  USES
   !!   datatypes, global_module, atoms, dimens, species_module,
   !!   pseudopotential_data, GenComms, fdf, parse
@@ -467,27 +467,27 @@ contains
   !!    Incorporated into initial_read module
   !!   29/05/2002 dave
   !!    Added scan for SolutionMethod tag
-  !!   15:54, 25/09/2002 mjg & drb
+  !!   15:54, 25/09/2002 mjg & drb 
   !!    Added scan for make_initial_charge_from_K (which sets find_chdens)
   !!   16:31, 2003/02/03 dave
   !!    Added scans for type of run (e.g. MD, CG etc)
   !!   07:49, 2003/02/04 dave
   !!    Added boolean variables to control run (vary blips, self-consistency)
-  !!   10:41, 06/03/2003 drb
+  !!   10:41, 06/03/2003 drb 
   !!    Added tags for linear mixing in self-consistency
-  !!   10:09, 12/03/2003 drb
+  !!   10:09, 12/03/2003 drb 
   !!    Added an end tag
   !!   14:52, 2003/06/09 dave
   !!    Added new way to read atomic coordinates and preconditioning flag
   !!   08:31, 2003/10/01 dave
   !!    Changed flag_vary_blips to flag_vary_basis
-  !!   13:15, 03/10/2003 drb
+  !!   13:15, 03/10/2003 drb 
   !!    Bug fix - missing .
   !!   2004/10/29 drb
   !!    Added various new flags for self consistency
-  !!   14:59, 02/05/2005 dave
+  !!   14:59, 02/05/2005 dave 
   !!    Added call to check for net charge - initialises ne_in_cell
-  !!   09:14, 11/05/2005 dave
+  !!   09:14, 11/05/2005 dave 
   !!    Store max_L_iterations in global variable
   !!   13:34, 2006/07/09 ast
   !!    Added flag for functional
@@ -499,22 +499,22 @@ contains
   !!    Added keyword MaxEfIter to stop infinite loop in findFermi
   !!   2008/01/24 Veronika
   !!    Changed the default of General.ManyProcessors to .true.
-  !!   12:18, 14/02/2008 drb
+  !!   12:18, 14/02/2008 drb 
   !!    Added options for buffer around primary and covering sets
   !!   2008/07/16 ast
   !!    New keywords for timers
   !!   2009/07/08 16:47 dave
   !!    Added keyword for one-to-one PAO to SF assigment
   !!   2009/07/23 ast
-  !!    More general routine to name timer files, so that they are not
+  !!    More general routine to name timer files, so that they are not 
   !!    to a maximum number of processes, as it was the case before,
   !!    with only three figures (max. 999 processes)
   !!   2010/06/18 lt
   !!    Added control flags for Methfessel-Paxton smearing method
   !!   2010/07/22 15.53 Lianheng
-  !!    Moved control flags associated with Diagonalisation method from
-  !!    here to readDiagInfo() subroutine. Added Methfessel-Paxton
-  !!    smearing and related control flags. Changed SC.MaxEfIter to
+  !!    Moved control flags associated with Diagonalisation method from 
+  !!    here to readDiagInfo() subroutine. Added Methfessel-Paxton 
+  !!    smearing and related control flags. Changed SC.MaxEfIter to 
   !!    Diag.MaxEfIter (moved to readDiagInfo()) for greater consistency
   !!   2011/07/21 16:50 dave
   !!    Added input flags for cDFT
@@ -586,6 +586,8 @@ contains
   !!    Changed pseudopotential output label to HAMANN (replacing ABINIT)
   !!   2017/05/09 dave
   !!    Removed restriction on L-matrix re-use and spin
+  !!   2017/08/30 jack baker & dave
+  !!    Adding parameters for simulation cell optimisation
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -656,7 +658,7 @@ contains
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
-                             opt_cell, cell_constraint_flag, cell_en_tol
+                             flag_opt_cell, cell_constraint_flag, cell_en_tol
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -805,7 +807,7 @@ contains
 !!$
 !!$
 !!$
-    BackTraceOn = fdf_boolean('IO.BackTraceOn',.false.)
+    BackTraceOn = fdf_boolean('IO.BackTraceOn',.false.)                         
     ! Where will the timers will be written?
     TimingOn = fdf_boolean('IO.TimingOn',.false.)                          ! tmr_rmv001
     if(TimingOn) then                                                      ! tmr_rmv001
@@ -832,10 +834,10 @@ contains
           end if ! ionode switch                                           ! tmr_rmv001
        end if                                                              ! tmr_rmv001
     end if                                                                 ! tmr_rmv001
-!!$
-!!$ **<lat>**
+!!$ 
+!!$ **<lat>** 
 !!$ I think we may need (std) output file to be open before this point
-!!$ at the very beginning in the main.f90
+!!$ at the very beginning in the main.f90 
 !!$
 !!$
 !!$
@@ -900,7 +902,7 @@ contains
        restart_T      = fdf_boolean('General.LoadInvS',.false.)
        ! Is there a net charge on the cell ?
        ne_in_cell     = fdf_double('General.NetCharge',zero)
-       ! Read coordinates file
+       ! Read coordinates file 
        flag_fractional_atomic_coords = &
             fdf_boolean('IO.FractionalAtomicCoords',.true.)
        call my_barrier()
@@ -908,7 +910,7 @@ contains
        !
        ! Spin polarised calculation
        ! - if we are doing spin polarised calculations or not
-       flag_spin_polarisation   = fdf_boolean('Spin.SpinPolarised', .false.)
+       flag_spin_polarisation   = fdf_boolean('Spin.SpinPolarised', .false.) 
        flag_fix_spin_population = fdf_boolean('Spin.FixSpin',       .false.)
        if (flag_spin_polarisation) then
           nspin       = 2
@@ -971,7 +973,7 @@ contains
        method = fdf_string(6,'DM.SolutionMethod','ordern') ! Default is O(N)
        if(leqi(method,'diagon')) then
           flag_diagonalisation = .true.
-          flag_check_Diag = .true.
+          flag_check_Diag = .true. 
        else
           flag_diagonalisation = .false.
           flag_check_Diag = .false.
@@ -1005,8 +1007,8 @@ contains
 !!$
 !!$
        ! Tweak DRB 2007/03/23: fix abinit as standard type
-       ! Tweak DRB 2016/02/05: fix siesta as standard !
-       ps_type = fdf_string(5,'General.PseudopotentialType','siest')
+       ! Tweak DRB 2016/02/05: fix siesta as standard ! 
+       ps_type = fdf_string(5,'General.PseudopotentialType','siest') 
        ! Write out pseudopotential type
        if(leqi(ps_type,'siest')) then
           if(inode==ionode.AND.iprint_init>0) &
@@ -1051,7 +1053,7 @@ contains
        species_from_files = fdf_boolean('General.PAOFromFiles',.false.)
        if(fdf_block('ChemicalSpeciesLabel')) then
           flag_ghost=.false.
-          if(1+block_end-block_start<n_species) &
+          if(1+block_end-block_start<n_species) & 
                call cq_abort("Too few species in ChemicalSpeciesLabel: ",&
                              1+block_end-block_start,n_species)
           do i=1,n_species
@@ -1072,7 +1074,7 @@ contains
           call fdf_endblock
        end if
        ! I (TM) now assume we will use type_species(j) = 0
-       ! for vacancy sites.   Nov. 14, 2007
+       ! for vacancy sites.   Nov. 14, 2007 
        if(flag_ghost) then
           do i=1, n_species
              if(mass(i) < -RD_ERR) then
@@ -1084,7 +1086,7 @@ contains
                       exit
                    endif
                 enddo
-                if(.not.find_species) then
+                if(.not.find_species) then 
                    type_species(i) = -i
                 endif
              elseif(mass(i) > RD_ERR) then
@@ -1185,11 +1187,11 @@ contains
              endif
           enddo
        endif
-!!$
-!!$
-!!$
-!!$
-!!$
+!!$        
+!!$        
+!!$        
+!!$        
+!!$        
        ! Set variables for multisite support functions
        if (flag_Multisite) then
           flag_LFD = fdf_boolean('Multisite.LFD', .true.)
@@ -1241,14 +1243,14 @@ contains
              LFD_max_iteration = fdf_integer('Multisite.LFD.Min.MaxIteration',50)
           endif
           flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
-       else
+       else 
           flag_LFD_MD_UseAtomicDensity = .false.
        endif
 !!$
 !!$
 !!$
 !!$
-!!$
+!!$ 
        !blip_width = support_grid_spacing *
        !             fdf_double('blip_width_over_support_grid_spacing',four)
        flag_global_tolerance = fdf_boolean('minE.GlobalTolerance',     .true. )
@@ -1264,7 +1266,7 @@ contains
 !!$
 !!$
        ! Find out what type of run we're doing
-       runtype               = fdf_string(20,'AtomMove.TypeOfRun',     'static')
+       runtype             = fdf_string(20,'AtomMove.TypeOfRun',       'static')
        flag_buffer_old       = fdf_boolean('AtomMove.OldBuffer',        .false.)
        AtomMove_buffer       = fdf_double ('AtomMove.BufferSize',    4.0_double)
        flag_pulay_simpleStep = fdf_boolean('AtomMove.PulaySimpleStep',  .false.)
@@ -1273,14 +1275,14 @@ contains
        MDfreq                = fdf_integer('AtomMove.OutputFreq',    50        )
        MDtimestep            = fdf_double ('AtomMove.Timestep',      0.5_double)
        MDcgtol               = fdf_double ('AtomMove.MaxForceTol',0.0005_double)
-       opt_cell              = fdf_boolean('AtomMove.OptCell',          .false.)
+       flag_opt_cell         = fdf_boolean('AtomMove.OptCell',          .false.)
        cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
        cell_en_tol           = fdf_double('AtomMove.OptCell.EnTol',0.00001_double)
        !
        flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
        if(.NOT.flag_vary_basis) then
           flag_precondition_blips = .false.
-       else
+       else 
           flag_precondition_blips = fdf_boolean('minE.PreconditionBlips',.true.)
        end if
        InitStep_paomin      = fdf_double ('minE.InitStep_paomin',  5.0_double)
@@ -1403,7 +1405,7 @@ contains
        end if
 !!$
 !!$
-!!$  D e l t a - S C F
+!!$  D e l t a - S C F 
 !!$
 !!$
        ! DeltaSCF flags
@@ -1531,7 +1533,7 @@ contains
 !!$
 !!$
 !!$
-!!$
+!!$       
        flag_functional_type = fdf_integer('General.FunctionalType', 3)   ! LDA PW92
 !!$
 !!$
@@ -1543,7 +1545,7 @@ contains
           !
           if ( flag_functional_type == functional_lda_pz81       .or. &
                !flag_functional_type == functional_hyb_PBE0       .or. &
-               !flag_functional_type == functional_hartree_fock ) .or. &
+               !flag_functional_type == functional_hartree_fock ) .or. & 
                flag_functional_type == functional_lda_gth96     ) then
              !
              if (inode == ionode) &
@@ -1554,12 +1556,12 @@ contains
              flag_functional_type = functional_lda_pw92
              !
              !
-          end if
+          end if          
        end if
 !!$
 !!$
-!!$  E X X
-!!$
+!!$  E X X 
+!!$ 
 !!$
        if ( flag_functional_type == functional_hyb_pbe0 ) then
           flag_exx = .true.
@@ -1573,12 +1575,12 @@ contains
           r_exx    = fdf_double ('EXX.Krange', zero)
           !
        else
-          ! don't touch we need it because matX is setup in set_dimensions
+          ! don't touch we need it because matX is setup in set_dimensions 
           ! whatever is flag_exx
           flag_exx = .false.
           exx_scf  =  fdf_integer('EXX.MethodSCF', -1)
-          r_exx    =  one
-          !
+          r_exx    =  one 
+          !             
        end if
        !
        if ( flag_exx ) then
@@ -1599,12 +1601,12 @@ contains
           exx_scf_tol   = sc_tolerance
           ! Grid spacing for PAO discretisation in EXX
           exx_hgrid  = fdf_double ('EXX.GridSpacing',zero)
-          exx_radius = fdf_double ('EXX.IntegRadius',0.00_double)
+          exx_radius = fdf_double ('EXX.IntegRadius',0.00_double) 
           ! debug mode
           exx_Kij       = .true.
           exx_Kkl       = .true.
-          exx_cartesian = .true.
-          exx_overlap   = .true.
+          exx_cartesian = .true. 
+          exx_overlap   = .true. 
           exx_alloc     = .false.
           exx_psolver   = 'fftw'
           p_scheme      = 'pulay'
@@ -1614,7 +1616,7 @@ contains
        end if
 !!$
 !!$
-!!$
+!!$ 
 !!$
 !!$
        select case(flag_functional_type)
@@ -1633,7 +1635,7 @@ contains
        case (functional_gga_pbe96_wc)               ! Wu-Cohen nonempirical GGA functional
           functional_description = 'GGA WC'         !   in Wu and Cohen, PRB 73. 235116, (2006)
        case (functional_hyb_pbe0)                   ! This is PB0E with the functional form redefinition
-          functional_description = 'hyb PBE0'
+          functional_description = 'hyb PBE0'        
        case default
           functional_description = 'LSDA PW92'
        end select
@@ -1715,7 +1717,7 @@ contains
        !
 !!$
 !!$
-!!$
+!!$  
 !!$
 !!$
        append_coords = fdf_boolean('AtomMove.AppendCoords',.true.)
@@ -1818,7 +1820,7 @@ contains
                                                    &positive integer:', constraints%n_grp)
          allocate (constraints%grp_name(constraints%n_grp)      , &
                    constraints%n_atom_in_grp(constraints%n_grp) , &
-                   constraints%n_subgrp(constraints%n_grp))
+                   constraints%n_subgrp(constraints%n_grp))     
          do i = 1, constraints%n_grp
            if (fdf_block('RigidBondsGroups')) then
              read (unit=input_array(block_start+i-1),fmt=*) &
@@ -1852,17 +1854,17 @@ contains
 
 !!****f* initial_read/allocate_species_vars *
 !!
-!!  NAME
+!!  NAME 
 !!   allocate_species_vars
 !!  USAGE
-!!
+!!   
 !!  PURPOSE
 !!   Allocates variables which depend on number of species
 !!  INPUTS
-!!
-!!
+!! 
+!! 
 !!  USES
-!!
+!!   
 !!  AUTHOR
 !!   D. R. Bowler
 !!  CREATION DATE
@@ -1886,7 +1888,7 @@ contains
                               NonLocalFactor, InvSRange, atomicnum
     use memory_module,  only: reg_alloc_mem, type_dbl
     use species_module, only: n_species, nsf_species, nlpf_species, npao_species, natomf_species, charge
-    use species_module, only: mass, non_local_species, ps_file, ch_file, phi_file
+    use species_module, only: mass, non_local_species, ps_file, ch_file, phi_file 
     use species_module, only: species_label, species_file, type_species
     use global_module,  only: area_general
     use GenComms,       only: cq_abort
@@ -1975,13 +1977,13 @@ contains
   ! ------------------------------------------------------------------------------
   ! Subroutine write_info
   ! ------------------------------------------------------------------------------
-
+  
   !!****f* initial_read/write_info *
   !!
-  !!  NAME
+  !!  NAME 
   !!   write_info
   !!  USAGE
-  !!
+  !! 
   !!  PURPOSE
   !!   Writes out information about the run
   !!  INPUTS
@@ -1993,7 +1995,7 @@ contains
   !!  CREATION DATE
   !!   9/11/93 (!)
   !!  MODIFICATION HISTORY
-  !!   10/8/01 DRB
+  !!   10/8/01 DRB 
   !!    Changed to F90 format and tidied
   !!   10/05/2002 dave
   !!    Changed titles to be a single line
@@ -2046,7 +2048,7 @@ contains
     logical :: vary_mu, find_chdens
     logical :: read_phi
     character(len=80) :: titles
-    integer :: NODES
+    integer :: NODES 
     integer :: n_title
     real(double) :: mu, alpha, beta, expected_reduction, HNL_fac
 
@@ -2060,7 +2062,7 @@ contains
     write(io_lun,&
           '(/10x,"Code compiled on: ",a,/10x,"Version comment: ",/10x,a)') &
          datestr, commentver
-
+    
     write(io_lun,1)
     write(io_lun,2) titles
 
@@ -2075,7 +2077,7 @@ contains
                iMethfessel_Paxton
        end select
     else
-       write(io_lun,30) 'order N with LNV'
+       write(io_lun,30) 'order N with LNV'   
     end if
     write(io_lun,4) dist_conv*r_super_x, dist_conv*r_super_y, &
                     dist_conv*r_super_z,d_units(dist_units)
@@ -2093,17 +2095,17 @@ contains
     do n=1, n_species
        write(io_lun,19) n, species_label(n), mass(n), charge(n), &
                         dist_conv*core_radius(n), nsf_species(n)
-       if(flag_basis_set==blips) then
+       if(flag_basis_set==blips) then 
           if(flag_precondition_blips) then
-             write(io_lun,'(/13x,"Blip basis with preconditioning")')
+             write(io_lun,'(/13x,"Blip basis with preconditioning")') 
           else
-             write(io_lun,'(/13x,"Blip basis - no preconditioning")')
+             write(io_lun,'(/13x,"Blip basis - no preconditioning")') 
           end if
           write(io_lun,14) &
                dist_conv*blip_info(n)%SupportGridSpacing, d_units(dist_units), &
                dist_conv*blip_info(n)%BlipWidth,          d_units(dist_units)
        else
-          write(io_lun,'(13x,"PAO basis")')
+          write(io_lun,'(13x,"PAO basis")') 
        end if
     end do
 
@@ -2121,7 +2123,7 @@ contains
     do n=1, n_species
        if ( non_local_species(n) ) then
           write(io_lun,22) species_label(n), 'Non Local'
-       else
+       else 
           write(io_lun,22) species_label(n), 'Local    '
        end if
     end do
@@ -2200,7 +2202,7 @@ contains
 21  format(20x,a10,10x,a40)
 211 format(20x,a10,10x,a40)
 212 format(20x,a10,10x,a40)
-22  format(20x,a30,10x,a10)
+22  format(20x,a30,10x,a10) 
 23  format(/,10x, &
          '-------------------------------------------------------',/, &
          10x,'   Atom No.    Species      rx        ry       rz       ' &
@@ -2233,10 +2235,10 @@ contains
   ! -----------------------------------------------------------------------------
   ! Subroutine readDiagInfo
   ! -----------------------------------------------------------------------------
-
+  
   !!****f* DiagModule/readDiagInfo *
   !!
-  !!  NAME
+  !!  NAME 
   !!   readDiagInfo
   !!  USAGE
   !!   readDiagInfo(Number of Kpts, proc grid rows, proc grid cols,
@@ -2275,7 +2277,7 @@ contains
   !!    must contain the same number of processes.
   !!   2011/09/02 L.Tong
   !!    Corrected Conquest default values for ScaLAPACK processor grid
-  !!    definitions when k-point parallelisation is on.
+  !!    definitions when k-point parallelisation is on. 
   !!    Added local variable proc_per_group
   !!   2011/09/05 L.Tong
   !!    Added print out input information for k-point parallelisation
@@ -2324,8 +2326,8 @@ contains
     real(double), allocatable, dimension(:)   :: wtk_tmp
     integer :: nkp_tmp
     integer :: counter
-
-!****lat<$
+    
+!****lat<$    
     call start_backtrace(t=backtrace_timer,who='readDiagInfo',where=1,level=2)
 !****lat>$
 
@@ -2345,7 +2347,7 @@ contains
        ! Read k-point parallelisation process-group incormation, default is 1
        proc_groups = fdf_integer ('Diag.KProcGroups', 1)
 
-       if (iprint_init > 0) write (io_lun, 11) proc_groups
+       if (iprint_init > 0) write (io_lun, 11) proc_groups 
        ! Read/choose ScaLAPACK processor grid dimensions
        if(fdf_defined('Diag.ProcRows')) then
           proc_rows = fdf_integer('Diag.ProcRows',0)
@@ -2358,7 +2360,7 @@ contains
           proc_per_group = numprocs / proc_groups
           if(proc_rows*proc_cols > proc_per_group) &
                call cq_abort('Diag: proc grid product is too large: ', &
-                             proc_rows*proc_cols, proc_per_group)
+                             proc_rows*proc_cols, proc_per_group) 
        else
           ! default values
           if(numprocs<9) then ! Recommended by ScaLapack User Guide
@@ -2371,7 +2373,7 @@ contains
              proc_per_group = numprocs / proc_groups
              a = sqrt(real(proc_per_group, double))
              proc_rows = aint(a)+1
-             do while(.NOT.done.AND.proc_rows>1)
+             do while(.NOT.done.AND.proc_rows>1) 
                 proc_rows = proc_rows - 1
                 proc_cols = aint(real(proc_per_group,double) / &
                                  real(proc_rows,double))
@@ -2381,7 +2383,7 @@ contains
           end if
        end if
        ! Read/choose ScaLAPACK block sizes
-       matrix_size = 0
+       matrix_size = 0 
        do i=1,ni_in_cell
           matrix_size = matrix_size + nsf_species(species_glob(i))
        end do
@@ -2399,7 +2401,7 @@ contains
        else
           done = .false.
           block_size_r = matrix_size/max(proc_rows,proc_cols)+1
-          do while(.NOT.done)
+          do while(.NOT.done) 
              block_size_r = block_size_r - 1
              a = real(matrix_size)/real(block_size_r)
              if(a - real(floor(a))<1e-8_double) done = .true.
@@ -2507,7 +2509,7 @@ contains
           end if
        else
           ! Read Monkhorst-Pack mesh coefficients
-          ! Default is Gamma point only
+          ! Default is Gamma point only 
           if(iprint_init>0) then
              write(io_lun,fmt='(/8x,"Reading Monkhorst-Pack Kpoint mesh"//)')
           end if
@@ -2522,7 +2524,7 @@ contains
           ! it's then handled as boolean below
           mp(1) = fdf_integer('Diag.MPMeshX',1)
           mp(2) = fdf_integer('Diag.MPMeshY',1)
-          mp(3) = fdf_integer('Diag.MPMeshZ',1)
+          mp(3) = fdf_integer('Diag.MPMeshZ',1) 
           if(iprint_init>0) &
                write (io_lun,fmt='(8x,a, 3i3)') &
                      ' Monkhorst-Pack mesh: ', (mp(i), i=1,3)
@@ -2565,7 +2567,7 @@ contains
           if(iprint_init>0) write(io_lun,*)
           ! Generate fractional k-point coordinates plus shift
           ! Assume orthorhombic cell for now
-          do i = 0, mp(1) -1 ! x axis
+          do i = 0, mp(1) -1 ! x axis 
              do j = 0, mp(2) -1 ! y axis
                 do k = 1, mp(3) ! z axis
                    counter = k + j * mp(3) + i * mp(2) * mp(3)
@@ -2603,13 +2605,13 @@ contains
              end if
           end do
 
-          ! How many k-points are now left?
+          ! How many k-points are now left? 
           nkp = 0
-          ! DRB fix
+          ! DRB fix 
           sum = zero
           do i = 1, nkp_tmp
              if (wtk_tmp(i) > RD_ERR ) then
-                nkp = nkp + 1
+                nkp = nkp + 1 
                 sum = sum + wtk_tmp(i)
              end if
           end do
@@ -2663,7 +2665,7 @@ contains
           end do
           write(io_lun,fmt='(/8x,"Finished reading Kpoints"/)')
        end if
-
+       
        ! Write out smearing temperature
        if(iprint_init>0) &
             write (io_lun,'(10x,"Temperature used for smearing: ",f10.6)') kT
@@ -2701,7 +2703,7 @@ contains
     !   end do
     !end if
 
-!****lat<$
+!****lat<$    
     call stop_backtrace(t=backtrace_timer,who='readDiagInfo')
 !****lat>$
 
@@ -2727,7 +2729,7 @@ contains
   !!***
 
 !%%!   subroutine readDiagInfo
-!%%!
+!%%! 
 !%%!     use datatypes
 !%%!     use global_module, only: iprint_init, rcellx, rcelly, rcellz, area_general
 !%%!     use numbers, only: two, pi
@@ -2736,13 +2738,13 @@ contains
 !%%!     use ScalapackFormat, only: proc_rows, proc_cols, block_size_r, block_size_c
 !%%!     use DiagModule, only: nkp, kk, wtk
 !%%!     use memory_module, only: reg_alloc_mem, type_dbl
-!%%!
-!%%!
+!%%! 
+!%%! 
 !%%!     implicit none
-!%%!
+!%%! 
 !%%!     ! Local variables
 !%%!     integer :: stat, iunit, i
-!%%!
+!%%!     
 !%%!     if(myid==0) then
 !%%!        ! Read ScaLAPACK block sizes
 !%%!        block_size_r = fdf_integer('SCBlockSizeR',1)
@@ -2817,9 +2819,9 @@ contains
   ! ------------------------------------------------------------------------------
   ! Subroutine read_input_aux
   ! ------------------------------------------------------------------------------
-
+  
   !!****f* initial_read/read_input_aux *
-  !!  NAME
+  !!  NAME 
   !!   read_input_aux
   !!  USAGE
   !!   call read_input_aux(aux)

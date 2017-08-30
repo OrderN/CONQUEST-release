@@ -268,6 +268,8 @@ contains
   !!    Removed prefix for ewald call
   !!   2016/09/16 17:00 nakata
   !!    Removed unused RadiusSupport
+  !!   2017/08/29 jack baker & dave
+  !!    Removed r_super_x references (redundant)  
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -296,10 +298,8 @@ contains
     use ion_electrostatic,      only: set_ewald, setup_screened_ion_interaction
     use atoms,                  only: distribute_atoms
     use dimens,                 only: n_grid_x, n_grid_y, n_grid_z,    &
-                                      r_core_squared, r_h, &!r_super_x,  &
-                                      !r_super_y, r_super_z,            &
-                                      n_my_grid_points,                &
-                                      r_dft_d2
+                                      r_core_squared, r_h, &
+                                      n_my_grid_points, r_dft_d2
     use fft_module,             only: set_fft_map, fft3
     use GenComms,               only: cq_abort, my_barrier, inode,     &
                                       ionode, gcopy
