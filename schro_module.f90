@@ -736,7 +736,7 @@ contains
     else if(energy<zero) then
        e_lower = energy*1.2_double
     else ! Unbound (polarisation) state
-       e_lower = zero
+       e_lower = -half!zero
     end if
     ! Energy bounds - allow for unbound states
     e_upper = five ! One failed to find the tightest PAO for O
