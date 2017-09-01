@@ -107,13 +107,14 @@ contains
 !!    Removed grid_point_volume definition
 !!   2006/10/10 16:58 dave
 !!    in_block_ variables now part of module, so removed from argument list
+!!   2017/08/29 jack baker & dave
+!!    Removed rcellx references (redundant)
 !!  SOURCE
 !!
   subroutine set_block_module
 
     ! Module usage
     use datatypes
-    use global_module,ONLY: rcellx,rcelly,rcellz
     use group_module, ONLY: blocks
     use GenComms, ONLY: inode, ionode
 

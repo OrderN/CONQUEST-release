@@ -118,6 +118,8 @@
 !!    Added parameters for Contracted SFs and multi-site SFs
 !!   2017/02/23 dave
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+!!   2017/08/29 jack baker & dave
+!!    Adding variables for cell optimisation
 !!  SOURCE
 !!
 module global_module
@@ -159,6 +161,14 @@ module global_module
   logical :: many_processors ! Selects appropriate algorithm for partitioning
 
   character(len=20), save :: runtype ! What type of run is it ?
+
+
+  logical :: flag_opt_cell ! optimize the simulation cell?
+  ! specify sim cell dims/ratios of dims to be held constant.
+  character(len=20), save :: cell_constraint_flag
+  ! Termination condition to exit cell_cg_run
+  real(double) :: cell_en_tol
+
 
   ! Logical flags controlling run
   logical :: flag_vary_basis, flag_self_consistent, flag_residual_done
