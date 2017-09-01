@@ -1028,7 +1028,7 @@ contains
           inode==ionode) then
           write(io_lun,&
                 fmt='(10x,"Setting FlagNewAngular to T for Siesta/&
-                      &Abinit pseudopotentials")')
+                      &Abinit pseudopotentials")') 
           flag_angular_new = .true.
        end if
        ! Should we use neutral atom potential ?

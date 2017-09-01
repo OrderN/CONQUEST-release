@@ -64,12 +64,12 @@ contains
 !!  NAME 
 !!   control
 !!  USAGE
-!!
+!! 
 !!  PURPOSE
 !!   Very simple routine to control execution of Conquest
 !!  INPUTS
-!!
-!!
+!! 
+!! 
 !!  USES
 !!   atoms, common, datatypes, dimens, ewald_module, force_module, GenComms, 
 !!   matrix_data, pseudopotential_data
@@ -1352,9 +1352,9 @@ contains
 
     if (myid == 0 .and. iprint_gen > 0) then
         write(io_lun, fmt='("Final simulation box dimensions are: ")')
-        write(io_lun, fmt='(2x,"a = ",f12.5)') rcellx
-        write(io_lun, fmt='(2x,"a = ",f12.5)') rcelly
-        write(io_lun, fmt='(2x,"a = ",f12.5)') rcellz
+        write(io_lun, fmt='(2x,"a = ",f12.5,1x,a2)') rcellx, d_units(dist_units)
+        write(io_lun, fmt='(2x,"b = ",f12.5,1x,a2)') rcelly, d_units(dist_units)
+        write(io_lun, fmt='(2x,"c = ",f12.5,1x,a2)') rcellz, d_units(dist_units)
     end if
 
     call reg_dealloc_mem(area_general, 6*ni_in_cell, type_dbl)
