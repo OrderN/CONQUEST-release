@@ -140,6 +140,8 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2017/03/09 17:30 nakata
   !!    Changed to check consistence between flag_one_to_one and flag_Multisite
+  !!   2017/07/11 16:36 dave
+  !!    Bug fix (GitHub issue #36) to turn off basis optimisation if NSF=NPAO
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -170,7 +172,8 @@ contains
                                       atomf, sf, paof,                 &
                                       flag_SpinDependentSF, nspin_SF,  &
                                       flag_Multisite,                  &
-                                      flag_cdft_atom, flag_local_excitation, flag_diagonalisation
+                                      flag_cdft_atom, flag_local_excitation, &
+                                      flag_diagonalisation, flag_vary_basis
     use cdft_data, only: cDFT_NAtoms, &
                          cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
@@ -323,6 +326,15 @@ contains
        if (.not.flag_one_to_one) atomf = paof
        if (flag_one_to_one) flag_SpinDependentSF = .false. ! spin-dependent SFs will be available only for contracted SFs
        if (flag_SpinDependentSF) nspin_SF = nspin
+       if (flag_one_to_one.AND.flag_vary_basis) then
+          write(io_lun,fmt='(/2x,"************")')
+          write(io_lun,fmt='(2x,"* WARNING !*")')
+          write(io_lun,fmt='(2x,"************"/)')
+          write(io_lun,fmt='(2x,"You have set minE.VaryBasis T")')
+          write(io_lun,fmt='(2x,"This is not possible when numbers of support functions and PAOs are the same")')
+          write(io_lun,fmt='(2x,"Setting the flag to false and proceeding"/)')
+          flag_vary_basis = .false.
+       end if
        ! Check symmetry-breaking for contracted SFs
        if (.not.flag_one_to_one) then
           do i = 1, 1, n_species
@@ -377,8 +389,14 @@ contains
     endif ! flag_basis_set
     if (atomf==sf)   natomf_species(:) =  nsf_species(:)
     if (atomf==paof) natomf_species(:) = npao_species(:)
-    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_one_to_one: ',flag_one_to_one
-    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'atomf          : ',atomf
+    if (iprint_init.ge.3 .and. inode==ionode) write(io_lun,*) 'flag_one_to_one (T/F): ',flag_one_to_one
+    if (iprint_init.ge.3 .and. inode==ionode) then
+       if(atomf==sf) then
+          write(io_lun,fmt='(2x,"Primitive atom functions are the support functions"/)')
+       else if(atomf==paof) then
+          write(io_lun,fmt='(2x,"Primitive atom functions are the pseudo-atomic orbitals"/)')
+       endif
+    end if
     !
     !
     !
@@ -2288,6 +2306,8 @@ contains
   !!    Added code to specify lines in reciprocal space
   !!   2016/05/10 dave
   !!    Bug fix: hadn't scaled fractional k-point coordinates to reciprocal
+  !!   2017/07/11 dave
+  !!    Bug fix: added check for KPointGroups being smaller than number of processors
   !!  SOURCE
   !!
   subroutine readDiagInfo
@@ -2300,7 +2320,7 @@ contains
     use GenComms,        only: cq_abort, gcopy, myid
     use input_module
     use ScalapackFormat, only: proc_rows, proc_cols, block_size_r,   &
-                               block_size_c, proc_groups
+                               block_size_c, proc_groups, matrix_size
     use DiagModule,      only: nkp, kk, wtk, kT, maxefermi,          &
                                flag_smear_type, iMethfessel_Paxton,  &
                                max_brkt_iterations, gaussian_height, &
@@ -2314,7 +2334,7 @@ contains
 
     ! Local variables
     type(cq_timer) :: backtrace_timer
-    integer        :: stat, iunit, i, j, k, matrix_size, nk_st, nkp_lines
+    integer        :: stat, iunit, i, j, k, nk_st, nkp_lines
     real(double)   :: a, sum, dkx, dky, dkz
     integer        :: proc_per_group
 
@@ -2346,7 +2366,15 @@ contains
        NElec_less = fdf_double('Diag.NElecLess',10.0_double)
        ! Read k-point parallelisation process-group incormation, default is 1
        proc_groups = fdf_integer ('Diag.KProcGroups', 1)
-
+       if(proc_groups>numprocs) then
+          write(io_lun,fmt='(/2x,"*************")')
+          write(io_lun,fmt='(2x,"* WARNING ! *")')
+          write(io_lun,fmt='(2x,"*************")')
+          write(io_lun,fmt='(/2x,"Error setting Diag.KProcGroups.  We have ",i6, &
+               &" processes and ",i6," KProcGroups.   Setting to 1 and continuing."/)') numprocs,proc_groups
+          proc_groups = 1
+       end if
+       
        if (iprint_init > 0) write (io_lun, 11) proc_groups 
        ! Read/choose ScaLAPACK processor grid dimensions
        if(fdf_defined('Diag.ProcRows')) then
@@ -2674,6 +2702,7 @@ contains
     ! Distribute data to all processors
     call gcopy(block_size_r)
     call gcopy(block_size_c)
+    call gcopy(matrix_size)
     call gcopy(proc_groups)
     call gcopy(proc_rows)
     call gcopy(proc_cols)

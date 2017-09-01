@@ -1799,7 +1799,7 @@ contains
     use global_module,          only: iprint_MD, x_atom_cell,         &
                                       y_atom_cell, z_atom_cell,       &
                                       IPRINT_TIME_THRES2,             &
-                                      flag_Becke_weights, flag_dft_d2
+                                      flag_Becke_weights, flag_dft_d2, flag_diagonalisation
     use matrix_data,            only: Hrange, mat, rcut
     use maxima_module,          only: maxpartsproc
     use set_blipgrid_module,    only: set_blipgrid
@@ -1812,7 +1812,8 @@ contains
     use numbers
     use timer_module
     use density_module,         only: build_Becke_weights
-
+    use DiagModule, only: end_scalapack_format, init_scalapack_format
+    
     implicit none
 
     ! Passed variables
@@ -1841,6 +1842,7 @@ contains
     ! There's also an option for the user to force it via matrix_update (which could be set to every n iterations ?)
     if(check.OR.matrix_update) then
        call start_timer(tmr_l_tmp2,WITH_LEVEL)
+       if(flag_diagonalisation) call end_scalapack_format
        ! Deallocate all matrix storage
        ! finish blip-grid indexing
        call finish_blipgrid
@@ -1853,6 +1855,7 @@ contains
        !call set_blipgrid(myid,r_h,sqrt(r_core_squared))
        call set_bucket(myid)
        call associate_fn_on_grid
+       if(flag_diagonalisation) call init_scalapack_format
        call stop_print_timer(tmr_l_tmp2,"matrix reindexing",IPRINT_TIME_THRES2)
     end if
     if (flag_Becke_weights) call build_Becke_weights
@@ -1897,7 +1900,7 @@ contains
     use primary_module,         only: bundle
     use global_module,          only: iprint_MD, x_atom_cell,         &
                                       y_atom_cell, z_atom_cell,       &
-                                      flag_Becke_weights, flag_dft_d2
+                                      flag_Becke_weights, flag_dft_d2, flag_diagonalisation
     use matrix_data,            only: Hrange, mat, rcut
     use maxima_module,          only: maxpartsproc
     use set_blipgrid_module,    only: set_blipgrid
@@ -1909,6 +1912,7 @@ contains
     use functions_on_grid,      only: associate_fn_on_grid
     use density_module,         only: build_Becke_weights
     use numbers
+    use DiagModule, only: end_scalapack_format, init_scalapack_format
 
     implicit none
 
@@ -1939,6 +1943,7 @@ contains
     ! There's also an option for the user to force it via
     ! matrix_update (which could be set to every n iterations ?)
     if(check.OR.matrix_update) then
+       if(flag_diagonalisation) call end_scalapack_format
        ! Deallocate all matrix storage
        ! finish blip-grid indexing
        call finish_blipgrid
@@ -1951,6 +1956,7 @@ contains
        !call set_blipgrid(myid,r_h,sqrt(r_core_squared))
        call set_bucket(myid)
        call associate_fn_on_grid
+       if(flag_diagonalisation) call init_scalapack_format
     end if
     if(flag_Becke_weights) call build_Becke_weights
     ! Rebuild S, n(r) and hamiltonian based on new positions
@@ -2031,6 +2037,7 @@ contains
     use matrix_data,    ONLY: rcut,max_range
     use dimens,         ONLY: r_core_squared,r_h
     ! Check if updating PS and CS are correct
+    use DiagModule, only: end_scalapack_format, init_scalapack_format
 
     implicit none
 
@@ -2073,6 +2080,7 @@ contains
     !if (inode.EQ.ionode) write (io_lun,*) "Complete distribute_atoms()"
 
     call start_timer(tmr_l_tmp2,WITH_LEVEL)
+    if(flag_diagonalisation) call end_scalapack_format
     ! Deallocate all matrix storage
     ! finish blip-grid indexing
     call finish_blipgrid
@@ -2108,6 +2116,7 @@ contains
     call set_blipgrid(myid, RadiusAtomf, core_radius)
     call set_bucket(inode-1)
     call associate_fn_on_grid
+    if(flag_diagonalisation) call init_scalapack_format
     call stop_print_timer(tmr_l_tmp2,"matrix reindexing",IPRINT_TIME_THRES2)
     if (flag_Becke_weights) call build_Becke_weights
 !%  update_H is called outside updateIndices3 [02/12/2013]
