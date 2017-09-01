@@ -3843,6 +3843,9 @@ second:   do
          '       Ayako Nakata           Lionel Truflandier      ',/,12x, &
          '          (NIMS)                 (Bordeaux)           ',/,12x, &
          '                                                      ',/,12x, &
+         '      Shereif Mujahed            Jack Baker           ',/,12x, &
+         '          (UCL)                    (UCL)              ',/,12x, &
+         '                                                      ',/,12x, &
          '     Antonio Torralba         Veronika Brazdova       ',/,12x, &
          '        (UCL,NIMS)                 (UCL)              ',/,12x, &
          '                                                      ',/,12x, &
