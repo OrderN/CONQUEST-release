@@ -2191,6 +2191,8 @@ contains
   !!    Added call to initail_SFcoeff_SSSF/MSSF
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2017/09/06 19:00 nakata
+  !!    Changed to call set_atomic_density with ".true." before calling initial_SFcoeff
   !!  SOURCE
   !!
   subroutine update_H(fixed_potential)
@@ -2260,13 +2262,7 @@ contains
        ! Make SF coefficients newly
           ! Use the atomic density if flag_LFD_MD_UseAtomicDensity=T,
           ! otherwise, use the density in the previous step
-          if (flag_LFD_MD_UseAtomicDensity) then
-             if (flag_neutral_atom) then
-                call set_atomic_density(.false.)
-             else
-                call set_atomic_density(.true.)
-             endif
-          endif
+          if (flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.true.)
           call initial_SFcoeff(.true., .true., fixed_potential, .true.)
        endif
     endif
