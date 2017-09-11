@@ -2915,7 +2915,7 @@ second:   do
             Ef(nspin),E_DOS_min,E_DOS_max, n_DOS
     else if(nspin==2) then
        write(lun,fmt='(2x,"# Ef(up.down) : ",2f12.5," DOS limits: ",2f12.5," n DOS: ",i5)') &
-            Ef(nspin),E_DOS_min,E_DOS_max, n_DOS
+            Ef(1:nspin),E_DOS_min,E_DOS_max, n_DOS
     end if
     write(lun,fmt='(2x,"# Broadening: ",f12.5)') sigma_DOS
     dE = (E_DOS_max - E_DOS_min)/real(n_DOS - 1,double)
@@ -2975,7 +2975,7 @@ second:   do
                Ef(nspin),E_DOS_min,E_DOS_max, n_DOS
        else if(nspin==2) then
           write(lun,fmt='(2x,"# Ef(up.down) : ",2f12.5," DOS limits: ",2f12.5," n DOS: ",i5)') &
-               Ef(nspin),E_DOS_min,E_DOS_max, n_DOS
+               Ef(1:nspin),E_DOS_min,E_DOS_max, n_DOS
        end if
        write(lun,fmt='(2x,"# Broadening: ",f12.5)') sigma_DOS
        dE = (E_DOS_max - E_DOS_min)/real(n_DOS - 1,double)
