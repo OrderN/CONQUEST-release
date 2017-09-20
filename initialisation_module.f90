@@ -268,6 +268,10 @@ contains
   !!    Removed prefix for ewald call
   !!   2016/09/16 17:00 nakata
   !!    Removed unused RadiusSupport
+  !!   2017/06/22 11:04 dave
+  !!    Adding diagonalisation initialisation calls
+  !!   2017/08/29 jack baker & dave
+  !!    Removed r_super_x references (redundant)  
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -282,7 +286,7 @@ contains
                                       iprint_gen, flag_perform_cDFT,   &
                                       nspin, runtype, flag_MDold,      &
                                       glob2node, flag_XLBOMD,          &
-                                      flag_neutral_atom
+                                      flag_neutral_atom, flag_diagonalisation
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl, type_int
     use group_module,           only: parts
@@ -296,10 +300,8 @@ contains
     use ion_electrostatic,      only: set_ewald, setup_screened_ion_interaction
     use atoms,                  only: distribute_atoms
     use dimens,                 only: n_grid_x, n_grid_y, n_grid_z,    &
-                                      r_core_squared, r_h, r_super_x,  &
-                                      r_super_y, r_super_z,            &
-                                      n_my_grid_points,                &
-                                      r_dft_d2
+                                      r_core_squared, r_h, &
+                                      n_my_grid_points, r_dft_d2
     use fft_module,             only: set_fft_map, fft3
     use GenComms,               only: cq_abort, my_barrier, inode,     &
                                       ionode, gcopy
@@ -338,7 +340,8 @@ contains
     use input_module,           ONLY: leqi
     use UpdateInfo_module,      ONLY: make_glob2node
     use XLBOMD_module,          ONLY: immi_XL
-
+    use DiagModule,             only: init_blacs_pg, init_scalapack_format
+    
     implicit none
 
     ! Passed variables
@@ -586,6 +589,10 @@ contains
    if (inode == ionode .and. iprint_init > 1) &
         write (io_lun, *) 'Done init_pseudo '
 
+   if(flag_diagonalisation) then
+      call init_blacs_pg
+      call init_scalapack_format
+   end if
 !****lat<$
    call stop_backtrace(t=backtrace_timer,who='set_up',echo=.true.)
 !****lat>$

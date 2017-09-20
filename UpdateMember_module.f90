@@ -974,7 +974,8 @@ contains
   !!  MODIFICATION HISTORY
   !!    2016/04/06 dave
   !!     Changed nx_in_cover allocatable to pointer (gcc 4.4.7 issue)
-  !!
+  !!    2017/08/29 jack baker & dave
+  !!     Removed rcellx references (redundant)
   !!  SOURCE
   !!
   subroutine cover_update_mparts(set,groups,nx_in_cover,ny_in_cover,nz_in_cover, &
@@ -982,7 +983,7 @@ contains
 
     ! Module usage
     use basic_types
-    use global_module, ONLY: rcellx,rcelly,rcellz,ni_in_cell, &
+    use global_module, ONLY: ni_in_cell, &
                              x_atom_cell,y_atom_cell,z_atom_cell, &
                              id_glob
     use GenComms, ONLY: cq_abort

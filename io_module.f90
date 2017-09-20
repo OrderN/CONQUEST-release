@@ -689,6 +689,8 @@ second:   do
   !!    sfc_partitions_to_processors from sfc_partitions_module
   !!   2013/08/20 M.Arita
   !!    Correct the if-statement 
+  !!   2017/08/29 jack baker & dave
+  !!    Removed r_super_x references (redundant)
   !!  SOURCE
   !!
   subroutine read_mult(myid,parts,part_file)
@@ -700,7 +702,6 @@ second:   do
                                 species_glob, runtype, id_glob_old, id_glob_inv_old
     use group_module,     only: make_cc2, part_method, PYTHON, HILBERT
     use basic_types
-    use dimens,           only: r_super_x, r_super_y, r_super_z
     use species_module,   only: species
     use maxima_module,    only: maxpartsproc, maxatomspart,           &
                                 maxatomsproc, maxpartscell
@@ -2914,7 +2915,7 @@ second:   do
             Ef(nspin),E_DOS_min,E_DOS_max, n_DOS
     else if(nspin==2) then
        write(lun,fmt='(2x,"# Ef(up.down) : ",2f12.5," DOS limits: ",2f12.5," n DOS: ",i5)') &
-            Ef(nspin),E_DOS_min,E_DOS_max, n_DOS
+            Ef(1:nspin),E_DOS_min,E_DOS_max, n_DOS
     end if
     write(lun,fmt='(2x,"# Broadening: ",f12.5)') sigma_DOS
     dE = (E_DOS_max - E_DOS_min)/real(n_DOS - 1,double)
@@ -2974,7 +2975,7 @@ second:   do
                Ef(nspin),E_DOS_min,E_DOS_max, n_DOS
        else if(nspin==2) then
           write(lun,fmt='(2x,"# Ef(up.down) : ",2f12.5," DOS limits: ",2f12.5," n DOS: ",i5)') &
-               Ef(nspin),E_DOS_min,E_DOS_max, n_DOS
+               Ef(1:nspin),E_DOS_min,E_DOS_max, n_DOS
        end if
        write(lun,fmt='(2x,"# Broadening: ",f12.5)') sigma_DOS
        dE = (E_DOS_max - E_DOS_min)/real(n_DOS - 1,double)
@@ -3841,6 +3842,9 @@ second:   do
          '                                                      ',/,12x, &
          '       Ayako Nakata           Lionel Truflandier      ',/,12x, &
          '          (NIMS)                 (Bordeaux)           ',/,12x, &
+         '                                                      ',/,12x, &
+         '      Shereif Mujahed            Jack Baker           ',/,12x, &
+         '          (UCL)                    (UCL)              ',/,12x, &
          '                                                      ',/,12x, &
          '     Antonio Torralba         Veronika Brazdova       ',/,12x, &
          '        (UCL,NIMS)                 (UCL)              ',/,12x, &

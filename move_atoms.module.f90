@@ -1263,6 +1263,296 @@ contains
     call stop_timer(tmr_std_moveatoms)
     return
   end subroutine safemin2
+
+
+  !!****f* move_atoms/safemin_cell *
+  !! PURPOSE
+  !! Optimize the simulation cell dimensions a b and c
+  !! Heavily borrowed from previous safemin subroutines
+  !! INPUTS
+  !!
+  !! AUTHOR
+  !!   Jack Baker
+  !!   Shereif Mujahed
+  !! CREATION DATE
+  !!   2017/05/12
+  !! MODIFICATION HISTORY
+  !!   2017/05/25 dave
+  !!    Added more variables that need updating following cell vector changes,
+  !!    notably k point locations and reciprocal lattice vectors for FFTs
+  !!   2017/06/20 J.S.B
+  !!    Moved Dave's changes to a separate subroutine "update_cell_dims" for
+  !!    clarity.
+  !! SOURCE
+
+  subroutine safemin_cell(start_rcellx, start_rcelly, start_rcellz, search_dir_x,&
+                          search_dir_y, search_dir_z, energy_in, energy_out,&
+                          fixed_potential, vary_mu, total_energy, search_dir_mean)
+
+    ! Module usage
+
+
+    use datatypes
+    use numbers
+    use units
+    use global_module,      only: iprint_MD, x_atom_cell, y_atom_cell,    &
+         z_atom_cell, flag_vary_basis,           &
+         atom_coord, ni_in_cell, rcellx, rcelly, &
+         rcellz, flag_self_consistent,           &
+         flag_reset_dens_on_atom_move,           &
+         IPRINT_TIME_THRES1, flag_pcc_global, &
+         flag_diagonalisation, cell_constraint_flag
+    use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
+         n_L_iterations
+    use GenComms,           only: my_barrier, myid, inode, ionode,        &
+         cq_abort
+    use SelfCon,            only: new_SC_potl
+    use GenBlas,            only: dot
+    use force_module,       only: tot_force
+    use io_module,          only: write_atomic_positions, pdb_template
+    use density_module,     only: density, flag_no_atomic_densities, set_density_pcc
+    use maxima_module,      only: maxngrid
+    use multisiteSF_module, only: flag_LFD_minimise
+    use timer_module
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z, &
+         r_super_x_squared, r_super_y_squared, r_super_z_squared, volume, &
+         grid_point_volume, one_over_grid_point_volume, n_grid_x, n_grid_y, n_grid_z
+    use fft_module, ONLY: recip_vector, hartree_factor, i0
+    use DiagModule, ONLY: kk, nkp
+
+    implicit none
+
+    ! Passed variables
+    real(double) :: energy_in, energy_out, start_rcellx, start_rcelly, start_rcellz,&
+         search_dir_x, search_dir_y, search_dir_z, search_dir_mean
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical           :: vary_mu, fixed_potential
+    real(double)      :: total_energy
+    character(len=40) :: output_file
+
+
+    ! Local variables
+    integer        :: i, j, iter, lun
+    logical        :: reset_L = .false.
+    logical        :: done
+    type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
+    real(double)   :: k0, k1, k2, k3, lambda, k3old, orcellx, orcelly, orcellz, scale
+    real(double)   :: e0, e1, e2, e3, tmp, bottom, xvec, yvec, zvec, r2
+    real(double), save :: kmin = zero, dE = zero
+    real(double), dimension(:), allocatable :: store_density
+
+    call start_timer(tmr_std_moveatoms)
+    !allocate(store_density(maxngrid))
+    e0 = total_energy
+    if (inode == ionode .and. iprint_MD > 0) &
+         write (io_lun, &
+         fmt='(4x,"In safemin_cell, initial energy is ",f20.10," ",a2)') &
+         en_conv * energy_in, en_units(energy_units)
+    if (inode == ionode .and. iprint_MD > 0) &
+         write (io_lun, fmt='(/4x,"Seeking bracketing triplet of points"/)')
+    ! Unnecessary and over cautious !
+    k0 = zero
+    iter = 1
+    k1 = zero
+    e1 = energy_in
+    k2 = k0
+    e2 = e0
+    e3 = e2
+    !k3 = zero
+    !k3old = k3
+    if (kmin < 1.0e-3) then
+       kmin = 0.7_double
+    else
+       kmin = 0.75_double * kmin
+    end if
+    k3 = kmin
+    lambda = two
+    done = .false.
+    ! Loop to find a bracketing triplet
+    do while (.not. done) !e3<=e2)
+       call start_timer(tmr_l_iter, WITH_LEVEL)
+       ! get new lattice vectors
+       call start_timer(tmr_l_tmp1, WITH_LEVEL)
+       ! DRB added 2017/05/24 17:13
+       ! Keep previous cell to allow scaling
+       ! update_cell_dims updates the cell according to the user set
+       ! constraints.
+       call update_cell_dims(start_rcellx, start_rcelly, &
+                             start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
+                             k3, iter, search_dir_mean)
+
+       !Update atom_coord : TM 27Aug2003
+       call update_atom_coord
+       !Update atom_coord : TM 27Aug2003
+       ! Update indices and find energy and forces
+       !call updateIndices(.false.,fixed_potential, number_of_bands)
+       call updateIndices(.true., fixed_potential)
+       call update_H(fixed_potential)
+       ! These lines add back on the atomic densities for NEW atomic positions
+       ! Write out atomic positions
+       if (iprint_MD > 2) then
+          call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+               trim(pdb_template))
+       end if
+       ! Now in update_H DRB 2016/01/13
+       !if (flag_reset_dens_on_atom_move) call set_density()
+       if (flag_pcc_global) call set_density_pcc()
+       call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
+       ! We've just moved the atoms - we need a self-consistent ground
+       ! state before we can minimise blips !
+       if (flag_vary_basis .or. flag_LFD_minimise) then
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, e3)
+       end if
+       call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
+            .false.)
+       if (inode == ionode .and. iprint_MD > 1) &
+            write (io_lun, &
+            fmt='(4x,"In safemin_cell, iter ",i3," step and energy &
+            &are ",2f20.10" ",a2)') &
+            iter, k3, en_conv * e3, en_units(energy_units)
+       write(io_lun,*) "e3 is", e3, "e2 is", e2
+       write(io_lun,*) "k1 is", k1, "k2 is", k2, "k3 is", k3
+       if (e3 < e2) then ! We're still going down hill
+          if (inode == ionode .and. iprint_MD > 0) write(io_lun,*) "e3 larger than e2. Going downhill"
+          k1 = k2
+          e1 = e2
+          k2 = k3
+          e2 = e3
+          ! New DRB 2007/04/18
+          k3 = lambda * k3
+          iter = iter + 1
+       else if (k2 == zero) then ! We've gone too far
+          k3 = k3/lambda
+          if (inode == ionode .and. iprint_MD > 0) write(io_lun,*) "Gone too far"
+       else
+          done = .true.
+       endif
+       if (k3 <= very_small) call cq_abort("Step too small: safemin_cell failed!")
+       call stop_print_timer(tmr_l_iter, "a safemin_cell iteration", &
+            IPRINT_TIME_THRES1)
+    end do !while (.not. done)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)  ! Final interpolation and updates
+    if (inode == ionode .and. iprint_MD > 0) write(io_lun, fmt='(/4x,"Interpolating minimum"/)')
+    ! Interpolate to find minimum.
+    if (inode == ionode .and. iprint_MD > 1) &
+         write (io_lun, fmt='(4x,"In safemin_cell, brackets are: ",6f18.10)') &
+         k1, e1, k2, e2, k3, e3
+    bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
+    if (abs(bottom) > RD_ERR) then
+       kmin = 0.5_double * (((k1*k1 - k3*k3)*(e1 - e2) -    &
+            (k1*k1 - k2*k2) * (e1 - e3)) / &
+            ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
+    else
+       if (inode == ionode .and. iprint_MD > 0) then
+          write (io_lun, fmt='(4x,"Error in safemin_cell !")')
+          write (io_lun, fmt='(4x,"Interpolation failed: ",6f15.10)') &
+               k1, e1, k2, e2, k3, e3
+       end if
+       kmin = k2
+    end if
+
+    if (inode == ionode .and. iprint_MD > 0) write(io_lun,*) 'kmin is ',kmin
+    call update_cell_dims(start_rcellx, start_rcelly, &
+                          start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
+                          kmin, iter, search_dir_mean)
+    !Update atom_coord : TM 27Aug2003
+    call update_atom_coord
+    !Update atom_coord : TM 27Aug2003
+    ! Check minimum: update indices and find energy and forces
+    !call updateIndices(.false.,fixed_potential, number_of_bands)
+    call updateIndices(.true., fixed_potential)
+    call update_H(fixed_potential)
+    !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
+    ! Add on atomic densities
+    !store_density = density
+    !call set_density()
+    !density = store_density + density
+    !end if
+    if (iprint_MD > 2) then
+       call write_atomic_positions("UpdatedAtoms_tmp.dat", trim(pdb_template))
+    end if
+    ! Now in update_H
+    ! if(flag_reset_dens_on_atom_move) call set_density()
+    if (flag_pcc_global) call set_density_pcc()
+    call stop_print_timer(tmr_l_tmp1, &
+         "safemin_cell - Final interpolation and updates", &
+         IPRINT_TIME_THRES1)
+    ! We've just moved the atoms - we need a self-consistent ground state before we can minimise blips !
+    if (flag_vary_basis .or. flag_LFD_minimise) then
+       call new_SC_potl(.false., sc_tolerance, reset_L,           &
+            fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, e3)
+    end if
+    energy_out = e3
+    if (iprint_MD > 0) then
+       call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .true.)
+    else
+       call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
+    end if
+    if (inode == ionode .and. iprint_MD > 1) &
+         write (io_lun, &
+         fmt='(4x,"In safemin_cell, Interpolation step and energy &
+         &are ",f15.10,f20.10" ",a2)') &
+         kmin, en_conv*energy_out, en_units(energy_units)
+    if (energy_out > e2 .and. abs(bottom) > RD_ERR) then
+       ! The interpolation failed - go back
+       call start_timer(tmr_l_tmp1,WITH_LEVEL)
+       if (inode == ionode .and. iprint_MD > 0) &
+            write (io_lun,fmt='(/4x,"Interpolation failed; reverting"/)')
+       kmin = k2
+       ! DRB added 2017/05/24 17:13
+       ! Keep previous cell to allow scaling
+       call update_cell_dims(start_rcellx, start_rcelly, &
+                             start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
+                             kmin, iter, search_dir_mean)
+       !Update atom_coord : TM 27Aug2003
+       call update_atom_coord
+       !Update atom_coord : TM 27Aug2003
+       call updateIndices(.true., fixed_potential)
+       call update_H(fixed_potential)
+       if (iprint_MD > 2) then
+          call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+               trim(pdb_template))
+       end if
+       ! Now in update_H
+       !if(flag_reset_dens_on_atom_move) call set_density()
+       if (flag_pcc_global) call set_density_pcc()
+       call stop_print_timer(tmr_l_tmp1, &
+            "safemin_cell - Failed interpolation + Retry", &
+            IPRINT_TIME_THRES1)
+       ! We've just moved the atoms - we need a self-consistent ground
+       ! state before we can minimise blips !
+       if(flag_vary_basis .or. flag_LFD_minimise) then
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, e3)
+       end if
+       energy_out = e3
+       if (iprint_MD > 0) then
+          call get_E_and_F(fixed_potential, vary_mu, energy_out, &
+               .true., .true.)
+       else
+          call get_E_and_F(fixed_potential, vary_mu, energy_out, &
+               .true., .false.)
+       end if
+    end if
+    dE = e0 - energy_out
+7   format(4x,3f15.8)
+    if (inode == ionode .and. iprint_MD > 0) then
+       write (io_lun, &
+            fmt='(4x,"In safemin_cell, exit after ",i4," &
+            &iterations with energy ",f20.10," ",a2)') &
+            iter, en_conv * energy_out, en_units(energy_units)
+    else if (inode == ionode) then
+       write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
+            en_conv * energy_out, en_units(energy_units)
+    end if
+    !deallocate(store_density)
+    call stop_timer(tmr_std_moveatoms)
+    return
+  end subroutine safemin_cell
   !!***
 
   !!****f* move_atoms/update_start_xyz *
@@ -1509,7 +1799,7 @@ contains
     use global_module,          only: iprint_MD, x_atom_cell,         &
                                       y_atom_cell, z_atom_cell,       &
                                       IPRINT_TIME_THRES2,             &
-                                      flag_Becke_weights, flag_dft_d2
+                                      flag_Becke_weights, flag_dft_d2, flag_diagonalisation
     use matrix_data,            only: Hrange, mat, rcut
     use maxima_module,          only: maxpartsproc
     use set_blipgrid_module,    only: set_blipgrid
@@ -1522,7 +1812,8 @@ contains
     use numbers
     use timer_module
     use density_module,         only: build_Becke_weights
-
+    use DiagModule, only: end_scalapack_format, init_scalapack_format
+    
     implicit none
 
     ! Passed variables
@@ -1551,6 +1842,7 @@ contains
     ! There's also an option for the user to force it via matrix_update (which could be set to every n iterations ?)
     if(check.OR.matrix_update) then
        call start_timer(tmr_l_tmp2,WITH_LEVEL)
+       if(flag_diagonalisation) call end_scalapack_format
        ! Deallocate all matrix storage
        ! finish blip-grid indexing
        call finish_blipgrid
@@ -1563,6 +1855,7 @@ contains
        !call set_blipgrid(myid,r_h,sqrt(r_core_squared))
        call set_bucket(myid)
        call associate_fn_on_grid
+       if(flag_diagonalisation) call init_scalapack_format
        call stop_print_timer(tmr_l_tmp2,"matrix reindexing",IPRINT_TIME_THRES2)
     end if
     if (flag_Becke_weights) call build_Becke_weights
@@ -1607,7 +1900,7 @@ contains
     use primary_module,         only: bundle
     use global_module,          only: iprint_MD, x_atom_cell,         &
                                       y_atom_cell, z_atom_cell,       &
-                                      flag_Becke_weights, flag_dft_d2
+                                      flag_Becke_weights, flag_dft_d2, flag_diagonalisation
     use matrix_data,            only: Hrange, mat, rcut
     use maxima_module,          only: maxpartsproc
     use set_blipgrid_module,    only: set_blipgrid
@@ -1619,6 +1912,7 @@ contains
     use functions_on_grid,      only: associate_fn_on_grid
     use density_module,         only: build_Becke_weights
     use numbers
+    use DiagModule, only: end_scalapack_format, init_scalapack_format
 
     implicit none
 
@@ -1649,6 +1943,7 @@ contains
     ! There's also an option for the user to force it via
     ! matrix_update (which could be set to every n iterations ?)
     if(check.OR.matrix_update) then
+       if(flag_diagonalisation) call end_scalapack_format
        ! Deallocate all matrix storage
        ! finish blip-grid indexing
        call finish_blipgrid
@@ -1661,6 +1956,7 @@ contains
        !call set_blipgrid(myid,r_h,sqrt(r_core_squared))
        call set_bucket(myid)
        call associate_fn_on_grid
+       if(flag_diagonalisation) call init_scalapack_format
     end if
     if(flag_Becke_weights) call build_Becke_weights
     ! Rebuild S, n(r) and hamiltonian based on new positions
@@ -1741,6 +2037,7 @@ contains
     use matrix_data,    ONLY: rcut,max_range
     use dimens,         ONLY: r_core_squared,r_h
     ! Check if updating PS and CS are correct
+    use DiagModule, only: end_scalapack_format, init_scalapack_format
 
     implicit none
 
@@ -1783,6 +2080,7 @@ contains
     !if (inode.EQ.ionode) write (io_lun,*) "Complete distribute_atoms()"
 
     call start_timer(tmr_l_tmp2,WITH_LEVEL)
+    if(flag_diagonalisation) call end_scalapack_format
     ! Deallocate all matrix storage
     ! finish blip-grid indexing
     call finish_blipgrid
@@ -1818,6 +2116,7 @@ contains
     call set_blipgrid(myid, RadiusAtomf, core_radius)
     call set_bucket(inode-1)
     call associate_fn_on_grid
+    if(flag_diagonalisation) call init_scalapack_format
     call stop_print_timer(tmr_l_tmp2,"matrix reindexing",IPRINT_TIME_THRES2)
     if (flag_Becke_weights) call build_Becke_weights
 !%  update_H is called outside updateIndices3 [02/12/2013]
@@ -1892,6 +2191,8 @@ contains
   !!    Added call to initail_SFcoeff_SSSF/MSSF
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2017/09/06 19:00 nakata
+  !!    Changed to call set_atomic_density with ".true." before calling initial_SFcoeff
   !!  SOURCE
   !!
   subroutine update_H(fixed_potential)
@@ -1961,13 +2262,7 @@ contains
        ! Make SF coefficients newly
           ! Use the atomic density if flag_LFD_MD_UseAtomicDensity=T,
           ! otherwise, use the density in the previous step
-          if (flag_LFD_MD_UseAtomicDensity) then
-             if (flag_neutral_atom) then
-                call set_atomic_density(.false.)
-             else
-                call set_atomic_density(.true.)
-             endif
-          endif
+          if (flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.true.)
           call initial_SFcoeff(.true., .true., fixed_potential, .true.)
        endif
     endif
@@ -2878,5 +3173,168 @@ contains
     return
   end subroutine ran2
   !!***
+
+
+  !!****f* move_atoms/update_cell_dims *
+  !!  NAME
+  !!   update_cell_dims
+  !!  USAGE
+  !!   call update_cell_dims()
+  !!  PURPOSE
+  !!   Updates the simulation cell dimensions subject to constraints on ratios.
+  !!   e.g c/a = const. Upon a change in a, b or c, grids are updated and the
+  !!   density is scaled.
+  !!  INPUT
+  !!  OUTPUT
+  !!  AUTHOR
+  !!  Jack Baker
+  !!  David Bowler
+  !!  CREATION DATE
+  !!   30/05/17
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+
+
+  subroutine update_cell_dims(start_rcellx, start_rcelly, start_rcellz, search_dir_x,&
+                              search_dir_y, search_dir_z, k, iter, search_dir_mean)
+    use datatypes
+    use numbers
+    use units
+    use global_module,      only: iprint_MD, x_atom_cell, y_atom_cell, z_atom_cell, &
+         atom_coord, ni_in_cell, rcellx, rcelly, &
+         rcellz, flag_self_consistent,           &
+         flag_reset_dens_on_atom_move,           &
+         IPRINT_TIME_THRES1, flag_pcc_global, &
+         flag_diagonalisation, cell_constraint_flag
+    use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
+         n_L_iterations
+    use GenComms,           only: my_barrier, myid, inode, ionode,        &
+         cq_abort
+    use io_module,          only: write_atomic_positions, pdb_template
+    use density_module,     only: density, flag_no_atomic_densities, set_density_pcc
+    use maxima_module,      only: maxngrid
+    use multisiteSF_module, only: flag_LFD_minimise
+    use timer_module
+    use dimens, ONLY: r_super_x, r_super_y, r_super_z, &
+         r_super_x_squared, r_super_y_squared, r_super_z_squared, volume, &
+         grid_point_volume, one_over_grid_point_volume, n_grid_x, n_grid_y, n_grid_z
+    use fft_module, ONLY: recip_vector, hartree_factor, i0
+    use DiagModule, ONLY: kk, nkp
+    use input_module,         only: leqi
+
+    implicit none
+
+    ! Passed variables
+    real(double) :: start_rcellx, start_rcelly, start_rcellz,&
+         search_dir_x, search_dir_y, search_dir_z, k, search_dir_mean
+    integer iter
+    ! Shared variables needed by get_E_and_F for now (!)
+    logical           :: vary_mu, fixed_potential
+    real(double)      :: total_energy
+    character(len=40) :: output_file
+
+    ! local variables
+    real(double) :: orcellx, orcelly, orcellz, xvec, yvec, zvec, r2, scale
+    integer :: i, j
+
+    orcellx = rcellx
+    orcelly = rcelly
+    orcellz = rcellz
+    ! Update based on constraints.
+    ! none => Unconstrained case
+    if (leqi(cell_constraint_flag, 'none')) then
+        rcellx = start_rcellx + k * search_dir_x
+        rcelly = start_rcelly + k * search_dir_y
+        rcellz = start_rcellz + k * search_dir_z
+
+    else if (leqi(cell_constraint_flag, 'volume')) then
+        rcellx = start_rcellx + k * search_dir_mean
+        rcelly = start_rcelly + k * search_dir_mean
+        rcellz = start_rcellz + k * search_dir_mean
+
+    ! Fix a single dimension?
+    else if (leqi(cell_constraint_flag, 'a')) then
+        rcelly = start_rcelly + k * search_dir_y
+        rcellz = start_rcellz + k * search_dir_z
+    else if (leqi(cell_constraint_flag, 'b')) then
+        rcellx = start_rcellx + k * search_dir_x
+        rcellz = start_rcellz + k * search_dir_z
+    else if (leqi(cell_constraint_flag, 'c')) then
+        rcelly = start_rcelly + k * search_dir_y
+        rcellx = start_rcellx + k * search_dir_x
+
+    ! Fix two dimensions?
+    else if (leqi(cell_constraint_flag, 'c a') .or. leqi(cell_constraint_flag, 'a c')) then
+        rcelly = start_rcelly + k * search_dir_y
+    else if (leqi(cell_constraint_flag, 'a b') .or. leqi(cell_constraint_flag, 'b a')) then
+        rcellz = start_rcellz + k * search_dir_z
+    else if (leqi(cell_constraint_flag, 'b c') .or. leqi(cell_constraint_flag, 'c b')) then
+        rcellx = start_rcellx + k * search_dir_x
+
+    ! Fix a single ratio?
+    else if (leqi(cell_constraint_flag, 'c/a') .or. leqi(cell_constraint_flag, 'a/c')) then
+        rcellx = start_rcellx + k * (start_rcellx/start_rcellz)*search_dir_z
+        rcelly = start_rcelly + k * search_dir_y
+        rcellz = start_rcellz + k * (start_rcellz/start_rcellx)*search_dir_x
+    else if (leqi(cell_constraint_flag, 'a/b') .or. leqi(cell_constraint_flag, 'b/a')) then
+        rcellx = start_rcellx + k * (start_rcellx/start_rcelly)*search_dir_y
+        rcelly = start_rcelly + k * (start_rcelly/start_rcellx)*search_dir_x
+        rcellz = start_rcellz + k * search_dir_z
+    else if (leqi(cell_constraint_flag, 'b/c') .or. leqi(cell_constraint_flag, 'c/b')) then
+        rcellx = start_rcellx + k * search_dir_x
+        rcelly = start_rcelly + k * (start_rcelly/start_rcellz)*search_dir_z
+        rcellz = start_rcellz + k * (start_rcellz/start_rcelly)*search_dir_y
+    end if
+
+    r_super_x = rcellx
+    r_super_y = rcelly
+    r_super_z = rcellz
+    ! DRB added 2017/05/24 17:05
+    ! We've changed the simulation cell. Now we must update grids and the density
+    r_super_x_squared = r_super_x * r_super_x
+    r_super_y_squared = r_super_y * r_super_y
+    r_super_z_squared = r_super_z * r_super_z
+    volume = r_super_x * r_super_y * r_super_z
+    grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
+    one_over_grid_point_volume = one / grid_point_volume
+    scale = (orcellx*orcelly*orcellz)/volume
+    density = density * scale
+    if(flag_diagonalisation) then
+       do i = 1, nkp
+          kk(1,i) = kk(1,i) * orcellx / rcellx
+          kk(2,i) = kk(2,i) * orcelly / rcelly
+          kk(3,i) = kk(3,i) * orcellz / rcellz
+       end do
+    end if
+    do j = 1, maxngrid
+       recip_vector(j,1) = recip_vector(j,1) * orcellx / rcellx
+       recip_vector(j,2) = recip_vector(j,2) * orcelly / rcelly
+       recip_vector(j,3) = recip_vector(j,3) * orcellz / rcellz
+       xvec = recip_vector(j,1)/(two*pi)
+       yvec = recip_vector(j,2)/(two*pi)
+       zvec = recip_vector(j,3)/(two*pi)
+       r2 = xvec*xvec + yvec*yvec + zvec*zvec
+       if(j/=i0) hartree_factor(j) = one/r2 ! i0 notates gamma point
+    end do
+    do j = 1, ni_in_cell
+       x_atom_cell(j) = (rcellx/orcellx)*x_atom_cell(j)
+       y_atom_cell(j) = (rcelly/orcelly)*y_atom_cell(j)
+       z_atom_cell(j) = (rcellz/orcellz)*z_atom_cell(j)
+       if (inode == ionode .and. iprint_MD > 2) &
+            write (io_lun,*) 'Position: ', j, x_atom_cell(j), &
+            y_atom_cell(j), z_atom_cell(j)
+    end do
+    write(io_lun,*) "Iteration ", iter
+    write(io_lun,*) "rcellx/start_rcellx = ", rcellx/start_rcellx
+    write(io_lun,*) "rcelly/start_rcelly = ", rcelly/start_rcelly
+    write(io_lun,*) "rcellz/start_rcellz = ", rcellz/start_rcellz
+    !write(io_lun,*) 'new sim cell dims', start_rcellx, start_rcellx, start_rcellx
+    write(io_lun,*) 'current sim cell dims', rcellx, rcelly, rcellz
+
+  end subroutine update_cell_dims
+
+
+
 
 end module move_atoms
