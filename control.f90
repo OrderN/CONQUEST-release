@@ -472,10 +472,10 @@ contains
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use move_atoms,     only: fac_Kelvin2Hartree
-    use io_module2,     ONLY: dump_InfoGlobal,grab_InfoGlobal,grab_matrix2,InfoL
+    use io_module2,     ONLY: dump_InfoGlobal,grab_InfoGlobal,grab_matrix2,InfoL, dump_matrix2
     !use DiagModule,     ONLY: diagon
-    use mult_module,    ONLY: matL,L_trans
-    use matrix_data,    ONLY: Lrange
+    use mult_module,    ONLY: matL,L_trans,matK,S_trans, matrix_scale
+    use matrix_data,    ONLY: Lrange,Hrange
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use XLBOMD_module,  ONLY: Ready_XLBOMD, Do_XLBOMD
     use Integrators,    ONLY: vVerlet_v_dthalf,vVerlet_r_dt, fire_qMD
@@ -560,7 +560,13 @@ contains
     endif
     ! Dump global data
     if (.NOT. flag_MDold) then
-      if (inode.EQ.ionode) call dump_InfoGlobal(i_first)
+       if(flag_diagonalisation) then
+          call dump_matrix2('K',matK(1),inode,Hrange)
+          if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
+       end if
+       if (inode.EQ.ionode) call dump_InfoGlobal(i_first)
+       allocate (glob2node_old(ni_in_cell), STAT=stat)
+       if (stat/=0) call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
     endif
 
     energy_md = energy0
@@ -579,10 +585,6 @@ contains
             write (io_lun, fmt='(4x,"MD run, iteration ",i5)') iter
        ! Fetch old relations
        if (.NOT. flag_MDold) then
-         if (.NOT. allocated(glob2node_old)) then
-           allocate (glob2node_old(ni_in_cell), STAT=stat)
-           if (stat.NE.0) call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
-         endif
          if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
          call gcopy(n_proc_old)
          call gcopy(glob2node_old,ni_in_cell)
@@ -600,25 +602,36 @@ contains
        if (flag_RigidBonds) call correct_atomic_position(velocity,MDtimestep)
        ! Reset-up
        if (.NOT.flag_MDold) then
-         ! Update members
-         call wrap_xyz_atom_cell()
-         call update_atom_coord()
-         call updateIndices3(fixed_potential,velocity)
-         if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
-           ! L-matrix reconstruction
-           call grab_matrix2('L',inode,nfile,InfoL)
-           call my_barrier()
-           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-           ! DRB 2017/05/09 now extended to spin systems
-           if(nspin==2) then
-              call grab_matrix2('L2',inode,nfile,InfoL)
-              call my_barrier()
-              call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
-           end if
-         endif
+          ! Update members
+          call wrap_xyz_atom_cell()
+          call update_atom_coord()
+          call updateIndices3(fixed_potential,velocity)
+          if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
+             ! L-matrix reconstruction
+             call grab_matrix2('L',inode,nfile,InfoL)
+             call my_barrier()
+             call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+             ! DRB 2017/05/09 now extended to spin systems
+             if(nspin==2) then
+                call grab_matrix2('L2',inode,nfile,InfoL)
+                call my_barrier()
+                call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
+             end if
+          else if(flag_diagonalisation .AND. flag_LmatrixReuse) then
+             call grab_matrix2('K',inode,nfile,InfoL)
+             call my_barrier()
+             call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile,symm)
+             call matrix_scale(two,matK(1))
+             if(nspin==2) then
+                call grab_matrix2('K2',inode,nfile,InfoL)
+                call my_barrier()
+                call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile,symm)
+                call matrix_scale(two,matK(1))
+             end if
+          endif
        else
-         call update_atom_coord()
-         call updateIndices(.true.,fixed_potential)
+          call update_atom_coord()
+          call updateIndices(.true.,fixed_potential)
        endif
        if (flag_XLBOMD) call Do_XLBOMD(iter,MDtimestep)
        call update_H(fixed_potential)
@@ -651,7 +664,11 @@ contains
 
        ! Dump global data
        if (.NOT. flag_MDold) then
-         if (inode.EQ.ionode) call dump_InfoGlobal(iter)
+          if(flag_diagonalisation) then
+             call dump_matrix2('K',matK(1),inode,Hrange)
+             if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
+          end if
+          if (inode.EQ.ionode) call dump_InfoGlobal(iter)
        endif
        
        ! Analyse forces
@@ -926,19 +943,25 @@ contains
     use units
     use global_module,  only: iprint_MD, ni_in_cell, x_atom_cell,   &
                               y_atom_cell, z_atom_cell, id_glob,    &
-                              atom_coord, area_general, flag_pulay_simpleStep
+                              atom_coord, area_general, flag_pulay_simpleStep, &
+                              glob2node_old, n_proc_old, flag_MDold, &
+                              flag_diagonalisation, nspin, flag_LmatrixReuse
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
-                              updateIndices, update_atom_coord,     &
-                              safemin, update_H
-    use GenComms,       only: gsum, myid
+                              updateIndices, updateIndices3, update_atom_coord,     &
+                              safemin, safemin2, update_H, wrap_xyz_atom_cell
+    use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template, &
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use primary_module, only: bundle
+    use io_module2, ONLY: grab_InfoGlobal,dump_InfoGlobal,InfoL,grab_matrix2, dump_matrix2
+    use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
+    use matrix_data, ONLY: Hrange, Lrange
+    use UpdateInfo_module, ONLY: Matrix_CommRebuild
 
     implicit none
 
@@ -958,7 +981,8 @@ contains
     real(double) :: energy0, energy1, max, g0, dE, gg, ggold, gamma, &
                     temp, KE
     integer      :: i,j,k,iter,length, jj, lun, stat, npmod, pul_mx, &
-                    mx_pulay
+                    mx_pulay, i_first, i_last, &
+                    nfile, symm
     logical      :: done!, simpleStep
 
     !simpleStep = .false.
@@ -1007,12 +1031,23 @@ contains
        jj = id_glob(i)
        forceStore(:,i,1) = tot_force(:,jj)
     end do
+    if (.NOT. flag_MDold) then
+       allocate (glob2node_old(ni_in_cell), STAT=stat)
+       if (stat/=0) call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
+    endif
     do while (.not. done)
        ! Book-keeping
        npmod = mod(iter, mx_pulay)+1
        pul_mx = min(iter+1, mx_pulay)
        if (myid == 0 .and. iprint_MD > 2) &
             write (io_lun, *) 'npmod: ', npmod, pul_mx
+       if (.NOT. flag_MDold) then
+          if(flag_diagonalisation) then
+             call dump_matrix2('K',matK(1),inode,Hrange)
+             if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
+          end if
+          if (inode.EQ.ionode) call dump_InfoGlobal(i_first)
+       end if
        x_atom_cell = zero
        y_atom_cell = zero
        z_atom_cell = zero
@@ -1060,8 +1095,42 @@ contains
                                   z_atom_cell(i)
              end do
           end if
-          call update_atom_coord
-          call updateIndices(.true., fixed_potential)
+          if(.NOT.flag_MDold) then
+             ! Update members
+             call wrap_xyz_atom_cell()
+             call update_atom_coord()
+             call updateIndices3(fixed_potential,velocity)
+             if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
+             call my_barrier
+             call gcopy(n_proc_old)
+             call gcopy(glob2node_old,ni_in_cell)
+             if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
+                ! L-matrix reconstruction
+                call grab_matrix2('L',inode,nfile,InfoL)
+                call my_barrier()
+                call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+                ! DRB 2017/05/09 now extended to spin systems
+                if(nspin==2) then
+                   call grab_matrix2('L2',inode,nfile,InfoL)
+                   call my_barrier()
+                   call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
+                end if
+             else if(flag_diagonalisation .AND. flag_LmatrixReuse) then
+                call grab_matrix2('K',inode,nfile,InfoL)
+                call my_barrier()
+                call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile,symm)
+                call matrix_scale(two,matK(1))
+                if(nspin==2) then
+                   call grab_matrix2('K2',inode,nfile,InfoL)
+                   call my_barrier()
+                   call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile,symm)
+                   call matrix_scale(two,matK(2))
+                end if
+             endif
+          else
+             call update_atom_coord
+             call updateIndices(.true., fixed_potential)
+          end if
           call update_H(fixed_potential)
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
                            .false.)
@@ -1075,8 +1144,20 @@ contains
              y_new_pos(j) = y_atom_cell(j)
              z_new_pos(j) = z_atom_cell(j)
           end do
-          call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-                       energy1, fixed_potential, vary_mu, energy1)
+          if (.NOT. flag_MDold) then
+             call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+                  energy1, fixed_potential, vary_mu, energy1)
+          else
+             call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+                  energy1, fixed_potential, vary_mu, energy1)
+          end if
+       end if
+       if (.NOT. flag_MDold) then
+          if(flag_diagonalisation) then
+             call dump_matrix2('K',matK(1),inode,Hrange)
+             if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
+          end if
+          if (inode.EQ.ionode) call dump_InfoGlobal(i_first)
        end if
        ! Pass forces and positions down to pulayStep routine
        do i = 1, ni_in_cell
@@ -1086,8 +1167,8 @@ contains
           jj = id_glob(i)
           forceStore(:,i,npmod) = tot_force(:,jj)
        end do
-!       call pulayStep(npmod, posnStore, forceStore, x_atom_cell, &
-!                      y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
+       call pulayStep(npmod, posnStore, forceStore, x_atom_cell, &
+                      y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
        !call gsum(x_atom_cell,ni_in_cell)
        !call gsum(y_atom_cell,ni_in_cell)
        !call gsum(z_atom_cell,ni_in_cell)
@@ -1098,8 +1179,42 @@ contains
                                z_atom_cell(i)
           end do
        end if
-       call update_atom_coord
-       call updateIndices(.true., fixed_potential)
+       if(.NOT.flag_MDold) then
+          ! Update members
+          call wrap_xyz_atom_cell()
+          call update_atom_coord()
+          call updateIndices3(fixed_potential,velocity)
+          if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
+          call my_barrier
+          call gcopy(n_proc_old)
+          call gcopy(glob2node_old,ni_in_cell)
+          if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
+             ! L-matrix reconstruction
+             call grab_matrix2('L',inode,nfile,InfoL)
+             call my_barrier()
+             call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+             ! DRB 2017/05/09 now extended to spin systems
+             if(nspin==2) then
+                call grab_matrix2('L2',inode,nfile,InfoL)
+                call my_barrier()
+                call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
+             end if
+          else if(flag_diagonalisation .AND. flag_LmatrixReuse) then
+             call grab_matrix2('K',inode,nfile,InfoL)
+             call my_barrier()
+             call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile,symm)
+             call matrix_scale(two,matK(1))
+             if(nspin==2) then
+                call grab_matrix2('K2',inode,nfile,InfoL)
+                call my_barrier()
+                call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile,symm)
+                call matrix_scale(two,matK(2))
+             end if
+          endif
+       else
+          call update_atom_coord
+          call updateIndices(.true., fixed_potential)
+       end if
        call update_H(fixed_potential)
        call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
                         .false.)
