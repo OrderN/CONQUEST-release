@@ -953,13 +953,13 @@ contains
        else if(flag_diagonalisation .AND. flag_LmatrixReuse) then
           call grab_matrix2('K',inode,nfile,InfoL)
           call my_barrier()
-          call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile,symm)
-          call matrix_scale(two,matK(1))
+          call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile)
           if(nspin==2) then
              call grab_matrix2('K2',inode,nfile,InfoL)
              call my_barrier()
-             call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile,symm)
-             call matrix_scale(two,matK(2))
+             call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile)
+          !else
+          !   call matrix_scale(two,matK(1))
           end if
        endif
        if (ionode.EQ.inode) write (io_lun,*) "get through CG: 1st stage"
@@ -1111,13 +1111,13 @@ contains
     else if(flag_diagonalisation .AND. flag_LmatrixReuse) then
        call grab_matrix2('K',inode,nfile,InfoL)
        call my_barrier()
-       call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile,symm)
-       call matrix_scale(two,matK(1))
+       call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile)
        if(nspin==2) then
           call grab_matrix2('K2',inode,nfile,InfoL)
           call my_barrier()
-          call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile,symm)
-          call matrix_scale(two,matK(2))
+          call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile)
+       !else
+       !   call matrix_scale(two,matK(1))
        end if
     endif
     call update_H(fixed_potential)
@@ -1222,13 +1222,13 @@ contains
        else if(flag_diagonalisation .AND. flag_LmatrixReuse) then
           call grab_matrix2('K',inode,nfile,InfoL)
           call my_barrier()
-          call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile,symm)
-          call matrix_scale(two,matK(1))
+          call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile)
           if(nspin==2) then
              call grab_matrix2('K2',inode,nfile,InfoL)
              call my_barrier()
-             call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile,symm)
-             call matrix_scale(two,matK(2))
+             call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile)
+          !else
+          !   call matrix_scale(two,matK(1))
           end if
        endif
        call update_H(fixed_potential)
@@ -2344,6 +2344,10 @@ contains
              (flag_no_atomic_densities)) then
        call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
     end if
+    ! If we have read K and are predicting density from it, then rebuild
+    if(flag_diagonalisation.AND.flag_LmatrixReuse.AND.(.NOT.flag_MDold)) &
+         call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
+         inode,ionode,maxngrid)
     if (flag_pcc_global) call set_density_pcc()
     ! (7) Now generate a new H matrix, including a new charge density
     if (flag_LFD .and. .not.flag_SFcoeffReuse) then

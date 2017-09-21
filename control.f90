@@ -620,13 +620,13 @@ contains
           else if(flag_diagonalisation .AND. flag_LmatrixReuse) then
              call grab_matrix2('K',inode,nfile,InfoL)
              call my_barrier()
-             call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile,symm)
-             call matrix_scale(two,matK(1))
+             call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile)
              if(nspin==2) then
                 call grab_matrix2('K2',inode,nfile,InfoL)
                 call my_barrier()
-                call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile,symm)
-                call matrix_scale(two,matK(1))
+                call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile)
+             !else
+             !   call matrix_scale(two,matK(1))
              end if
           endif
        else
@@ -979,12 +979,13 @@ contains
     real(double), allocatable, dimension(:,:,:) :: posnStore
     real(double), allocatable, dimension(:,:,:) :: forceStore
     real(double) :: energy0, energy1, max, g0, dE, gg, ggold, gamma, &
-                    temp, KE
+                    temp, KE, guess_step, step
     integer      :: i,j,k,iter,length, jj, lun, stat, npmod, pul_mx, &
                     mx_pulay, i_first, i_last, &
                     nfile, symm
     logical      :: done!, simpleStep
 
+    step = MDtimestep
     !simpleStep = .false.
     allocate(velocity(3,ni_in_cell),STAT=stat)
     if (stat /= 0) &
@@ -1042,11 +1043,11 @@ contains
        if (myid == 0 .and. iprint_MD > 2) &
             write (io_lun, *) 'npmod: ', npmod, pul_mx
        if (.NOT. flag_MDold) then
-          if(flag_diagonalisation) then
+          if(flag_LmatrixReuse.AND.flag_diagonalisation) then
              call dump_matrix2('K',matK(1),inode,Hrange)
              if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
           end if
-          if (inode.EQ.ionode) call dump_InfoGlobal(i_first)
+          call dump_InfoGlobal
        end if
        x_atom_cell = zero
        y_atom_cell = zero
@@ -1076,13 +1077,23 @@ contains
        ! Move the atoms using velocity Verlet (why not ?)
        !call velocityVerlet(bundle,MDtimestep,temp,KE, &
        !     .false.,velocity,tot_force)
+       ! Moved so we can pass cg to updateIndices3
+       do j=1,ni_in_cell
+          jj=id_glob(j)
+          cg(1,j) = tot_force(1,jj)
+          cg(2,j) = tot_force(2,jj)
+          cg(3,j) = tot_force(3,jj)
+          x_new_pos(j) = x_atom_cell(j)
+          y_new_pos(j) = y_atom_cell(j)
+          z_new_pos(j) = z_atom_cell(j)
+       end do
        if (flag_pulay_simpleStep) then
-          if (myid == 0) write (io_lun, *) 'Step is ', MDtimestep
+          if (myid == 0) write (io_lun, *) 'Step is ', step
           do i = 1, ni_in_cell
              jj = id_glob(i)
-             x_atom_cell(i) = x_atom_cell(i) + MDtimestep*tot_force(1,jj)
-             y_atom_cell(i) = y_atom_cell(i) + MDtimestep*tot_force(2,jj)
-             z_atom_cell(i) = z_atom_cell(i) + MDtimestep*tot_force(3,jj)
+             x_atom_cell(i) = x_atom_cell(i) + step*cg(1,j)
+             y_atom_cell(i) = y_atom_cell(i) + step*cg(2,j)
+             z_atom_cell(i) = z_atom_cell(i) + step*cg(3,j)
           end do
           ! Do we want gsum or a scatter/gather ?
           !call gsum(x_atom_cell,ni_in_cell)
@@ -1099,11 +1110,11 @@ contains
              ! Update members
              call wrap_xyz_atom_cell()
              call update_atom_coord()
-             call updateIndices3(fixed_potential,velocity)
              if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
              call my_barrier
              call gcopy(n_proc_old)
              call gcopy(glob2node_old,ni_in_cell)
+             call updateIndices3(fixed_potential,cg)
              if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
                 ! L-matrix reconstruction
                 call grab_matrix2('L',inode,nfile,InfoL)
@@ -1118,13 +1129,13 @@ contains
              else if(flag_diagonalisation .AND. flag_LmatrixReuse) then
                 call grab_matrix2('K',inode,nfile,InfoL)
                 call my_barrier()
-                call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile,symm)
-                call matrix_scale(two,matK(1))
+                call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile)
                 if(nspin==2) then
                    call grab_matrix2('K2',inode,nfile,InfoL)
                    call my_barrier()
-                   call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile,symm)
-                   call matrix_scale(two,matK(2))
+                   call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile)
+                !else
+                !   call matrix_scale(two,matK(1))
                 end if
              endif
           else
@@ -1135,15 +1146,6 @@ contains
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
                            .false.)
        else
-          do j=1,ni_in_cell
-             jj=id_glob(j)
-             cg(1,j) = tot_force(1,jj)
-             cg(2,j) = tot_force(2,jj)
-             cg(3,j) = tot_force(3,jj)
-             x_new_pos(j) = x_atom_cell(j)
-             y_new_pos(j) = y_atom_cell(j)
-             z_new_pos(j) = z_atom_cell(j)
-          end do
           if (.NOT. flag_MDold) then
              call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
                   energy1, fixed_potential, vary_mu, energy1)
@@ -1157,7 +1159,7 @@ contains
              call dump_matrix2('K',matK(1),inode,Hrange)
              if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
           end if
-          if (inode.EQ.ionode) call dump_InfoGlobal(i_first)
+          call dump_InfoGlobal
        end if
        ! Pass forces and positions down to pulayStep routine
        do i = 1, ni_in_cell
@@ -1183,11 +1185,11 @@ contains
           ! Update members
           call wrap_xyz_atom_cell()
           call update_atom_coord()
-          call updateIndices3(fixed_potential,velocity)
           if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
           call my_barrier
           call gcopy(n_proc_old)
           call gcopy(glob2node_old,ni_in_cell)
+          call updateIndices3(fixed_potential,cg)
           if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
              ! L-matrix reconstruction
              call grab_matrix2('L',inode,nfile,InfoL)
@@ -1202,13 +1204,13 @@ contains
           else if(flag_diagonalisation .AND. flag_LmatrixReuse) then
              call grab_matrix2('K',inode,nfile,InfoL)
              call my_barrier()
-             call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile,symm)
-             call matrix_scale(two,matK(1))
+             call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile)
              if(nspin==2) then
                 call grab_matrix2('K2',inode,nfile,InfoL)
                 call my_barrier()
-                call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile,symm)
-                call matrix_scale(two,matK(2))
+                call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile)
+             !else
+             !   call matrix_scale(two,matK(1))
              end if
           endif
        else
@@ -1251,6 +1253,16 @@ contains
        end do       
        if (.not. done) call check_stop(done, iter)
        iter = iter + 1
+       dE = energy0 - energy1
+       guess_step = dE*real(ni_in_cell,double)/sqrt(g0)
+       if(myid==0) write(*,*) 'Guessed step is ',guess_step
+       ! We really need a proper trust radius or something
+       if(guess_step>10.0_double) guess_step = 10.0_double 
+       if(guess_step>MDtimestep) then
+          step=guess_step
+       else
+          step=MDtimestep
+       end if
        energy0 = energy1
     end do
     ! Output final positions
