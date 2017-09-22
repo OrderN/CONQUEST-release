@@ -276,7 +276,7 @@ contains
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     if (.NOT. flag_MDold) then
-      call dump_InfoGlobal()
+       if(inode==ionode) call dump_InfoGlobal()
     endif
     iter = 1
     ggold = zero
@@ -1047,7 +1047,7 @@ contains
              call dump_matrix2('K',matK(1),inode,Hrange)
              if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
           end if
-          call dump_InfoGlobal
+          if(inode==ionode) call dump_InfoGlobal
        end if
        x_atom_cell = zero
        y_atom_cell = zero
@@ -1159,7 +1159,7 @@ contains
              call dump_matrix2('K',matK(1),inode,Hrange)
              if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
           end if
-          call dump_InfoGlobal
+          if(inode==ionode) call dump_InfoGlobal
        end if
        ! Pass forces and positions down to pulayStep routine
        do i = 1, ni_in_cell

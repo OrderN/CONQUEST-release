@@ -893,7 +893,7 @@ contains
        if (flag_LmatrixReuse.AND.flag_diagonalisation) then
           call dump_matrix2('K',matK(1),inode,Hrange)
           if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
-          call dump_InfoGlobal
+          if(inode==ionode) call dump_InfoGlobal
        end if
        call start_timer(tmr_l_tmp1, WITH_LEVEL)
        do i = 1, ni_in_cell
@@ -1033,7 +1033,7 @@ contains
     if (flag_LmatrixReuse.AND.flag_diagonalisation) then
        call dump_matrix2('K',matK(1),inode,Hrange)
        if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
-       call dump_InfoGlobal
+       if(inode==ionode) call dump_InfoGlobal
     end if
     call start_timer(tmr_l_tmp1,WITH_LEVEL)  ! Final interpolation and updates
     if (inode == ionode) write(io_lun, fmt='(/4x,"Interpolating minimum"/)')
@@ -1154,7 +1154,7 @@ contains
     if (flag_LmatrixReuse.AND.flag_diagonalisation) then
        call dump_matrix2('K',matK(1),inode,Hrange)
        if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
-       call dump_InfoGlobal
+       if(inode==ionode) call dump_InfoGlobal
     end if
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
@@ -1269,7 +1269,7 @@ contains
        if (flag_LmatrixReuse.AND.flag_diagonalisation) then
           call dump_matrix2('K',matK(1),inode,Hrange)
           if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
-          call dump_InfoGlobal
+          if(inode==ionode) call dump_InfoGlobal
        end if
     end if
     dE = e0 - energy_out
