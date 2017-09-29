@@ -1092,7 +1092,14 @@ contains
       call gcopy(glob2node, ni_in_cell)
       allocate(glob2node_old(ni_in_cell), STAT=stat)
       if (stat .ne.0)      call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
-      if (inode.eq.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old,MDinit_step)
+      if (inode.eq.ionode) then
+         if(flag_MDcontinue) then
+            call grab_InfoGlobal(n_proc_old,glob2node_old,MDinit_step)
+         else
+            call grab_InfoGlobal(n_proc_old,glob2node_old)
+            MDinit_step = 0
+         end if
+      end if
       call gcopy(n_proc_old)
       call gcopy(glob2node_old, ni_in_cell)
       call gcopy(MDinit_step)
