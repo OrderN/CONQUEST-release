@@ -244,18 +244,19 @@ contains
     real(double) :: total_energy
     
     ! Local variables
-    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma
+    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma,gg1
     integer        :: i,j,k,iter,length, jj, lun, stat
     logical        :: done
     type(cq_timer) :: tmr_l_iter
-    real(double), allocatable, dimension(:,:) :: cg
+    real(double), allocatable, dimension(:,:) :: cg, old_force
     real(double), allocatable, dimension(:)   :: x_new_pos, y_new_pos,&
-                                                 z_new_pos
+         z_new_pos
 
     allocate(cg(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating cg in control: ",&
                        ni_in_cell, stat)
+    allocate(old_force(3,ni_in_cell), STAT=stat)
     allocate(x_new_pos(ni_in_cell), y_new_pos(ni_in_cell), &
              z_new_pos(ni_in_cell), STAT=stat)
     if(stat/=0) &
@@ -280,22 +281,29 @@ contains
     endif
     iter = 1
     ggold = zero
+    old_force = zero
     energy1 = energy0
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
        ! Construct ratio for conjugacy
        gg = zero
+       gg1 = zero! PR
        do j = 1, ni_in_cell
           gg = gg +                              &
                tot_force(1,j) * tot_force(1,j) + &
                tot_force(2,j) * tot_force(2,j) + &
                tot_force(3,j) * tot_force(3,j)
+          gg1 = gg1 +                              &
+               tot_force(1,j) * old_force(1,j) + &
+               tot_force(2,j) * old_force(2,j) + &
+               tot_force(3,j) * old_force(3,j)
        end do
        if (abs(ggold) < 1.0e-6_double) then
           gamma = zero
        else
-          gamma = gg/ggold
+          gamma = (gg-gg1)/ggold ! PR - change to gg/ggold for FR
        end if
+       if(gamma<zero) gamma = zero
        if (inode == ionode .and. iprint_MD > 2) &
             write (io_lun,*) ' CHECK :: Force Residual = ', &
                              for_conv * sqrt(gg)/ni_in_cell
@@ -321,6 +329,7 @@ contains
           y_new_pos(j) = y_atom_cell(j)
           z_new_pos(j) = z_atom_cell(j)
        end do
+       old_force = tot_force
        ! Minimise in this direction
        !ORI call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
        !ORI              energy1, fixed_potential, vary_mu, energy1)
@@ -378,6 +387,7 @@ contains
     if (stat /= 0) &
          call cq_abort("Error deallocating _new_pos in control: ", &
                        ni_in_cell,stat)
+    deallocate(old_force, STAT=stat)
     deallocate(cg, STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error deallocating cg in control: ", ni_in_cell,stat)
@@ -945,7 +955,7 @@ contains
                               y_atom_cell, z_atom_cell, id_glob,    &
                               atom_coord, area_general, flag_pulay_simpleStep, &
                               glob2node_old, n_proc_old, flag_MDold, &
-                              flag_diagonalisation, nspin, flag_LmatrixReuse
+                              flag_diagonalisation, nspin, flag_LmatrixReuse, atom_coord_diff
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
@@ -1008,6 +1018,12 @@ contains
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
     if (myid == 0) &
          write (io_lun, fmt='(/4x,"Starting Pulay atomic relaxation"/)')
+    if (myid == 0 .and. iprint_MD > 1) then
+       do i = 1, ni_in_cell
+          write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), &
+               z_atom_cell(i)
+       end do
+    end if
     posnStore = zero
     forceStore = zero
     ! Do we need to add MD.MaxCGDispl ?
@@ -1026,11 +1042,11 @@ contains
     energy1 = energy0
     ! Store positions and forces on entry (primary set only)
     do i=1,ni_in_cell
-       posnStore(1,i,1) = x_atom_cell(i)
-       posnStore(2,i,1) = y_atom_cell(i)
-       posnStore(3,i,1) = z_atom_cell(i)
        jj = id_glob(i)
-       forceStore(:,i,1) = tot_force(:,jj)
+       posnStore (1,jj,1) = x_atom_cell(i)!i)
+       posnStore (2,jj,1) = y_atom_cell(i)!i)
+       posnStore (3,jj,1) = z_atom_cell(i)!i)
+       forceStore(:,jj,1) = tot_force(:,jj)
     end do
     if (.NOT. flag_MDold) then
        allocate (glob2node_old(ni_in_cell), STAT=stat)
@@ -1041,7 +1057,8 @@ contains
        npmod = mod(iter, mx_pulay)+1
        pul_mx = min(iter+1, mx_pulay)
        if (myid == 0 .and. iprint_MD > 2) &
-            write (io_lun, *) 'npmod: ', npmod, pul_mx
+            write(io_lun,fmt='(2x,"Pulay relaxation iteration ",i4)') iter
+            !write (io_lun, *) 'npmod: ', npmod, pul_mx
        if (.NOT. flag_MDold) then
           if(flag_LmatrixReuse.AND.flag_diagonalisation) then
              call dump_matrix2('K',matK(1),inode,Hrange)
@@ -1054,18 +1071,21 @@ contains
        z_atom_cell = zero
        tot_force = zero
        do i = 1, ni_in_cell
+          jj = id_glob(i)
           if (npmod > 1) then
-             x_atom_cell(i) = posnStore(1,i,npmod-1)
-             y_atom_cell(i) = posnStore(2,i,npmod-1)
-             z_atom_cell(i) = posnStore(3,i,npmod-1)
+             x_atom_cell(i) = posnStore(1,jj,npmod-1)
+             y_atom_cell(i) = posnStore(2,jj,npmod-1)
+             z_atom_cell(i) = posnStore(3,jj,npmod-1)
              jj = id_glob(i)
-             tot_force(:,jj) = forceStore(:,i,npmod-1)
+             tot_force(:,jj) = forceStore(:,jj,npmod-1)
+             !tot_force(:,jj) = forceStore(:,i,npmod-1)
           else
-             x_atom_cell(i) = posnStore(1,i,pul_mx)
-             y_atom_cell(i) = posnStore(2,i,pul_mx)
-             z_atom_cell(i) = posnStore(3,i,pul_mx)
+             x_atom_cell(i) = posnStore(1,jj,pul_mx)
+             y_atom_cell(i) = posnStore(2,jj,pul_mx)
+             z_atom_cell(i) = posnStore(3,jj,pul_mx)
              jj = id_glob(i)
-             tot_force(:,jj) = forceStore(:,i,pul_mx)
+             tot_force(:,jj) = forceStore(:,jj,pul_mx)
+             !tot_force(:,jj) = forceStore(:,i,pul_mx)
           end if
        end do
        !call gsum(x_atom_cell,ni_in_cell)
@@ -1087,13 +1107,18 @@ contains
           y_new_pos(j) = y_atom_cell(j)
           z_new_pos(j) = z_atom_cell(j)
        end do
+       if(myid==0) write(io_lun,*) 'Taking trial step'
        if (flag_pulay_simpleStep) then
           if (myid == 0) write (io_lun, *) 'Step is ', step
           do i = 1, ni_in_cell
+             !jj = id_glob(i)
+             x_atom_cell(i) = x_atom_cell(i) + step*cg(1,i)
+             y_atom_cell(i) = y_atom_cell(i) + step*cg(2,i)
+             z_atom_cell(i) = z_atom_cell(i) + step*cg(3,i)
              jj = id_glob(i)
-             x_atom_cell(i) = x_atom_cell(i) + step*cg(1,j)
-             y_atom_cell(i) = y_atom_cell(i) + step*cg(2,j)
-             z_atom_cell(i) = z_atom_cell(i) + step*cg(3,j)
+             atom_coord_diff(1, jj) = step * cg(1,i)
+             atom_coord_diff(2, jj) = step * cg(2,i)
+             atom_coord_diff(3, jj) = step * cg(3,i)
           end do
           ! Do we want gsum or a scatter/gather ?
           !call gsum(x_atom_cell,ni_in_cell)
@@ -1161,19 +1186,52 @@ contains
           end if
           if(inode==ionode) call dump_InfoGlobal
        end if
-       ! Pass forces and positions down to pulayStep routine
+       ! Check for termination
+       ! Analyse forces
+       g0 = dot(length, tot_force, 1, tot_force, 1)
+       max = zero
        do i = 1, ni_in_cell
-          posnStore(1,i,npmod) = x_atom_cell(i)
-          posnStore(2,i,npmod) = y_atom_cell(i)
-          posnStore(3,i,npmod) = z_atom_cell(i)
+          do k = 1, 3
+             if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
+          end do
+       end do
+       if (myid == 0) &
+            write (io_lun, 5) for_conv * sqrt(g0) / ni_in_cell, &
+                              en_units(energy_units), d_units(dist_units)
+       if (iter > MDn_steps) then
+          done = .true.
+          if (myid == 0) &
+               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') &
+                     iter
+       end if
+       if (abs(max) < MDcgtol) then
+          done = .true.
+          if (myid == 0) &
+               write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') &
+                     max
+       end if
+       if(done) exit
+       ! Pass forces and positions down to pulayStep routine
+       if(myid==0) write(io_lun,*) 'Building optimal structure'
+       cg = zero
+       do i = 1, ni_in_cell
           jj = id_glob(i)
-          forceStore(:,i,npmod) = tot_force(:,jj)
+          posnStore (1,jj,npmod) = x_atom_cell(i)!i)
+          posnStore (2,jj,npmod) = y_atom_cell(i)!i)
+          posnStore (3,jj,npmod) = z_atom_cell(i)!i)
+          forceStore(:,jj,npmod) = tot_force(:,jj) !jj)
        end do
        call pulayStep(npmod, posnStore, forceStore, x_atom_cell, &
                       y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
        !call gsum(x_atom_cell,ni_in_cell)
        !call gsum(y_atom_cell,ni_in_cell)
        !call gsum(z_atom_cell,ni_in_cell)
+       do i = 1, ni_in_cell
+          jj = id_glob(i)
+          atom_coord_diff(1, jj) = x_atom_cell(i) - posnStore(1,jj,npmod)
+          atom_coord_diff(2, jj) = y_atom_cell(i) - posnStore(2,jj,npmod)
+          atom_coord_diff(3, jj) = z_atom_cell(i) - posnStore(3,jj,npmod)
+       end do
        ! Output positions
        if (myid == 0 .and. iprint_MD > 1) then
           do i = 1, ni_in_cell
@@ -1245,11 +1303,11 @@ contains
                      max
        end if
        do i = 1, ni_in_cell!bundle%n_prim !!! ERROR ?? !!!
-          posnStore(1,i,npmod) = x_atom_cell(i)
-          posnStore(2,i,npmod) = y_atom_cell(i)
-          posnStore(3,i,npmod) = z_atom_cell(i)
           jj = id_glob(i)
-          forceStore(:,i,npmod) = tot_force(:,jj)
+          posnStore (1,jj,npmod) = x_atom_cell(i)
+          posnStore (2,jj,npmod) = y_atom_cell(i)
+          posnStore (3,jj,npmod) = z_atom_cell(i)
+          forceStore(:,jj,npmod) = tot_force(:,jj)
        end do       
        if (.not. done) call check_stop(done, iter)
        iter = iter + 1
@@ -1257,7 +1315,7 @@ contains
        guess_step = dE*real(ni_in_cell,double)/sqrt(g0)
        if(myid==0) write(*,*) 'Guessed step is ',guess_step
        ! We really need a proper trust radius or something
-       if(guess_step>10.0_double) guess_step = 10.0_double 
+       if(guess_step>2.0_double) guess_step = 2.0_double 
        if(guess_step>MDtimestep) then
           step=guess_step
        else

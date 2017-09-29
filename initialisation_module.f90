@@ -1018,7 +1018,7 @@ contains
     use logicals
     use mult_module,         only: LNV_matrix_multiply, matL, matphi, &
                                    matT, T_trans, L_trans, LS_trans,  &
-                                   matrix_scale, matSFcoeff, matSFcoeff_tran, matrix_transpose
+                                   matrix_scale, matSFcoeff, matSFcoeff_tran, matrix_transpose, matK, S_trans
     use SelfCon,             only: new_SC_potl
     use global_module,       only: iprint_init, flag_self_consistent, &
                                    flag_basis_set, blips, PAOs,       &
@@ -1050,7 +1050,7 @@ contains
     use minimise,            only: sc_tolerance, L_tolerance,         &
                                    n_L_iterations, expected_reduction
     use DFT_D2,              only: dispersion_D2
-    use matrix_data,         ONLY: Lrange,Trange,LSrange
+    use matrix_data,         ONLY: Lrange,Trange,LSrange, Hrange
     use io_module2,          ONLY: n_matrix,grab_InfoGlobal,grab_matrix2,InfoL,InfoT
     use UpdateInfo_module,   ONLY: make_glob2node,Matrix_CommRebuild
     use XLBOMD_module,       ONLY: grab_XXvelS,grab_Xhistories
@@ -1178,16 +1178,29 @@ contains
        end if
     end if
     if (restart_L) then
-      if (.NOT. flag_MDold) then
-        call grab_matrix2('L',inode,nfile,InfoL)
-        call my_barrier()
-        call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-        ! DRB 2017/05/09 now extended to spin systems
-        if(nspin==2) then
-           call grab_matrix2('L2',inode,nfile,InfoL)
-           call my_barrier()
-           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
-        end if
+       if (.NOT. flag_MDold) then
+          if(flag_diagonalisation) then
+             call grab_matrix2('K',inode,nfile,InfoL)
+             call my_barrier()
+             call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile)
+             if(nspin==2) then
+                call grab_matrix2('K2',inode,nfile,InfoL)
+                call my_barrier()
+                call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile)
+             !else
+             !   call matrix_scale(two,matK(1))
+             end if
+          else
+             call grab_matrix2('L',inode,nfile,InfoL)
+             call my_barrier()
+             call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+             ! DRB 2017/05/09 now extended to spin systems
+             if(nspin==2) then
+                call grab_matrix2('L2',inode,nfile,InfoL)
+                call my_barrier()
+                call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
+             end if
+          end if
       else
         if(nspin==1) then
           call grab_matrix( "L",    matL(1), inode)

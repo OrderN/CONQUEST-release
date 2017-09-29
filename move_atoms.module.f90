@@ -1146,11 +1146,11 @@ contains
                         L_tolerance, e3)
     end if
     energy_out = e3
-    if (iprint_MD > 0) then
-       call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .true.)
-    else
-       call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
-    end if
+    !if (iprint_MD > 0) then
+       call get_E_and_F(fixed_potential, vary_mu, energy_out, .false., .false. ) !.true., .true.)
+    !else
+    !   call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
+    !end if
     if (flag_LmatrixReuse.AND.flag_diagonalisation) then
        call dump_matrix2('K',matK(1),inode,Hrange)
        if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
@@ -1160,14 +1160,61 @@ contains
          write (io_lun, &
                 fmt='(4x,"In safemin2, Interpolation step and energy &
                       &are ",f15.10,f20.10" ",a2)') &
-               kmin, en_conv*energy_out, en_units(energy_units)
-    if (energy_out > e2 .and. abs(bottom) > very_small) then
-       ! The interpolation failed - go back
-       call start_timer(tmr_l_tmp1,WITH_LEVEL)
-       if (inode == ionode) &
-            write (io_lun,fmt='(/4x,"Interpolation failed; reverting"/)')
-       kmin_old = kmin
-       kmin = k2
+                      kmin, en_conv*energy_out, en_units(energy_units)
+    ! Now do interpolation AGAIN
+    if(e1<e3) then ! Keep k1
+       if(k2<kmin) then
+          k3 = kmin
+          e3 = energy_out
+       else
+          k3 = k2
+          e3 = e2
+          k2 = kmin
+          e2 = energy_out
+       end if
+    else ! Keep k3
+       if(k2<kmin) then
+          k1 = k2
+          e1 = e2
+          k2 = kmin
+          e2 = energy_out
+       end if
+    end if
+    kmin_old = kmin
+    if (inode == ionode .and. iprint_MD > 1) &
+            write (io_lun, fmt='(4x,"In safemin2, brackets are: ",6f18.10)') &
+                  k1, e1, k2, e2, k3, e3
+    bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
+    if (abs(bottom) > very_small) then
+       kmin = 0.5_double * (((k1*k1 - k3*k3)*(e1 - e2) -    &
+                             (k1*k1 - k2*k2) * (e1 - e3)) / &
+                            ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
+       if (inode == ionode .and. iprint_MD > 1) &
+         write (io_lun, &
+                fmt='(4x,"In safemin2, second interpolation step is ", f15.10)') kmin
+    else
+       dE = e0 - energy_out
+       if (inode == ionode .and. iprint_MD > 0) then
+          write (io_lun, &
+               fmt='(4x,"In safemin2, exit after ",i4," &
+               &iterations with energy ",f20.10," ",a2)') &
+               iter, en_conv * energy_out, en_units(energy_units)
+       else if (inode == ionode) then
+          write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
+               en_conv * energy_out, en_units(energy_units)
+       end if
+       if (inode.EQ.ionode) write (io_lun,*) "Get out of safemin2 !" !db
+       return
+    end if
+       !deallocate(store_density)
+
+       !!    if (energy_out > e2 .and. abs(bottom) > very_small) then
+!!       ! The interpolation failed - go back
+!!       call start_timer(tmr_l_tmp1,WITH_LEVEL)
+!!       if (inode == ionode) &
+!!            write (io_lun,fmt='(/4x,"Interpolation failed; reverting"/)')
+!!       kmin_old = kmin
+!!       kmin = k2
        !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
        !%%!   ! Subtract off atomic densities
        !%%!   store_density = density
@@ -1271,7 +1318,7 @@ contains
           if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
           if(inode==ionode) call dump_InfoGlobal
        end if
-    end if
+!    end if
     dE = e0 - energy_out
 7   format(4x,3f15.8)
     if (inode == ionode .and. iprint_MD > 0) then
@@ -1695,7 +1742,7 @@ contains
                        y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
 
     use datatypes
-    use global_module,  only: iprint_MD, ni_in_cell
+    use global_module,  only: iprint_MD, ni_in_cell, id_glob_inv
     use numbers
     use GenBlas,        only: dot, axpy
     use GenComms,       only: gsum, myid, inode, ionode
@@ -1713,7 +1760,7 @@ contains
     integer :: npmod, mx_pulay, pul_mx
 
     ! Local variables
-    integer      :: i,j, length
+    integer      :: i,j, length, jj
     real(double) :: gg
     real(double), dimension(mx_pulay,mx_pulay) :: Aij
     real(double), dimension(mx_pulay)          :: alph
@@ -1737,9 +1784,10 @@ contains
     z_atom_cell(:) = 0.0_double
     do i=1,pul_mx
        do j=1,ni_in_cell
-          x_atom_cell(j) = x_atom_cell(j) + alph(i)*posnStore(1,j,i)
-          y_atom_cell(j) = y_atom_cell(j) + alph(i)*posnStore(2,j,i)
-          z_atom_cell(j) = z_atom_cell(j) + alph(i)*posnStore(3,j,i)
+          jj = id_glob_inv(j)
+          x_atom_cell(jj) = x_atom_cell(jj) + alph(i)*posnStore(1,j,i)
+          y_atom_cell(jj) = y_atom_cell(jj) + alph(i)*posnStore(2,j,i)
+          z_atom_cell(jj) = z_atom_cell(jj) + alph(i)*posnStore(3,j,i)
        enddo
     enddo
     call stop_timer(tmr_std_moveatoms)
