@@ -1289,7 +1289,7 @@ contains
     ! (7) Make a self-consistent H matrix and potential
     if (find_chdens) then
        call get_electronic_density(density, electrons, atomfns,     &
-                                   H_on_atomfns(1), ionode, ionode, &
+                                   H_on_atomfns(1), inode, ionode, &
                                    maxngrid)
        electrons_tot = spin_factor * sum(electrons)
        if (inode == ionode .and. iprint_init > 1) &

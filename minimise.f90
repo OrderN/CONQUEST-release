@@ -136,7 +136,8 @@ contains
                                  flag_DeltaSCF, flag_excite, runtype,  &
                                  flag_MDold,flag_LmatrixReuse,McWFreq, &
                                  flag_multisite,                       &
-                                 io_lun, flag_out_wf, wf_self_con, flag_write_DOS
+                                 io_lun, flag_out_wf, wf_self_con, flag_write_DOS, &
+                                 flag_diagonalisation, nspin
     use energy,            only: get_energy, xc_energy, final_energy
     use GenComms,          only: cq_abort, inode, ionode
     use blip_minimisation, only: vary_support
@@ -148,9 +149,9 @@ contains
     use multisiteSF_module,only: flag_LFD_minimise, LFD_minimise
     use units
     ! Deleted later ?
-!   use io_module2,        ONLY: dump_matrix2,dump_InfoGlobal
-!   use matrix_data,       ONLY: Lrange
-!   use mult_module,       ONLY: matL
+    use io_module2,        ONLY: dump_matrix2,dump_InfoGlobal
+    use matrix_data,       ONLY: Hrange
+    use mult_module,       ONLY: matK, S_trans
 
     implicit none
 
@@ -260,6 +261,11 @@ contains
        call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
                       ionode, reset_L, .false., backtrace_level)
        call get_energy(total_energy, level=backtrace_level)
+    end if
+    if (flag_LmatrixReuse.AND.flag_diagonalisation) then
+       call dump_matrix2('K',matK(1),inode,Hrange)
+       if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
+       if(inode==ionode) call dump_InfoGlobal
     end if
     ! Once ground state is reached, if we are doing deltaSCF, perform excitation
     ! and solve for the new ground state (on excited Born-Oppenheimer surface)
