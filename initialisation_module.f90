@@ -1032,7 +1032,8 @@ contains
                                    flag_propagateX, flag_propagateL, restart_X, &
                                    flag_exx, exx_scf, flag_out_wf, wf_self_con, &
                                    flag_write_DOS, flag_neutral_atom, &
-                                   atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation
+                                   atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation, &
+                                   atom_coord_diff
     use ion_electrostatic,   only: ewald, screened_ion_interaction
     use S_matrix_module,     only: get_S_matrix
     use GenComms,            only: my_barrier,end_comms,inode,ionode, &
@@ -1100,12 +1101,13 @@ contains
             MDinit_step = 0
          end if
       end if
+      call my_barrier()
       call gcopy(n_proc_old)
       call gcopy(glob2node_old, ni_in_cell)
       call gcopy(MDinit_step)
+      call gcopy(atom_coord_diff, 3, ni_in_cell)
       n_matrix = 1
       if (nspin.EQ.2) n_matrix = 2
-      call my_barrier()
     endif
 
     ! (0) If we use PAOs and contract them, prepare SF-PAO coefficients here
