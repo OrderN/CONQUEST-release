@@ -1008,6 +1008,8 @@ contains
   !!    Small bug fix: transpose SF coefficients before transforming (fixes issue 26)
   !!   2017/05/09 dave
   !!    Removed restriction spin and on L-matrix update 
+  !!   2017/10/11 dave
+  !!    Bug fix: changed call to get_electronic_density to use inode, ionode (not ionode, ionode)
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1269,7 +1271,7 @@ contains
     ! (7) Make a self-consistent H matrix and potential
     if (find_chdens) then
        call get_electronic_density(density, electrons, atomfns,     &
-                                   H_on_atomfns(1), ionode, ionode, &
+                                   H_on_atomfns(1), inode, ionode,  &
                                    maxngrid)
        electrons_tot = spin_factor * sum(electrons)
        if (inode == ionode .and. iprint_init > 1) &
