@@ -4044,6 +4044,65 @@ second:   do
   end subroutine get_file_name
   !!***
 
+  !!****f* io_module/get_file_name_2rank *
+  !!
+  !!  NAME
+  !!   get_file_name_2rank - creates a file name with an index (MD step), and process number.
+  !!  USAGE
+  !!   get_file_name_2rank(fileroot,step,inode,filename)
+  !!  PURPOSE
+  !!   Returns a file name with the number of step, and inode (optional) 
+  !!   At present, we assum 6 digits for each number, though it can be 
+  !!   easily changed by changing the line 
+  !!  INPUTS
+  !!   character(lem=*) :: fileroot  ! The root of the filename, e.g. chden
+  !!   integer :: step               ! MD step or some index
+  !!   integer :: inode              ! Process Number
+  !!  OUTPUTS
+  !!   character(len=*) :: filename  ! The formatted filename
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   T. Miyazaki
+  !!  CREATION DATE
+  !!   02/06/2017
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine get_file_name_2rank(fileroot, filename, step, inode)
+    use datatypes
+    implicit none
+
+    ! Passed variables
+    character(len=*), intent(in) :: fileroot
+    integer, intent(in) :: step
+    integer, intent(in),optional :: inode
+    character(len=*), intent(out) :: filename
+
+    ! Parameters
+    integer, parameter :: maxlen=80
+
+    ! Local variables
+    integer :: i
+    character(len=maxlen) :: num_step
+    character(len=maxlen) :: num_inode
+
+    if (LEN_TRIM (fileroot) + 1 > maxlen) &
+         call cq_abort('get_file_name: error : string overflow')
+
+    write (num_step,'(i6.6)') step
+     filename = TRIM (fileroot)//'.step'//num_step
+
+    if(present(inode)) then
+     write (num_inode,'(i6.6)') inode
+     filename = TRIM (filename)//'.proc'//num_inode
+    endif
+ 
+   return
+  end subroutine get_file_name_2rank
+  !!***
+
 
   !!****f* io_module/print_process_info *
   !!
