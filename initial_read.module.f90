@@ -664,7 +664,7 @@ contains
     use block_module, only: in_block_x, in_block_y, in_block_z, &
                             blocks_raster, blocks_hilbert
     use species_module, only: species_label, charge, mass, n_species,  &
-                              charge, charge_up, charge_dn,            &   ! nakata init_spin
+                              charge, charge_up, charge_dn,            &
                               species, ps_file, ch_file, phi_file,     &
                               nsf_species, nlpf_species, npao_species, &
                               non_local_species, type_species,         &
@@ -764,7 +764,7 @@ contains
 
     ! spin polarisation
     logical :: flag_spin_polarisation
-    real(double) :: sum_elecN_spin   ! nakata init_spin
+    real(double) :: sum_elecN_spin
 
     ! Set defaults
     vary_mu  = .true.
@@ -1125,9 +1125,6 @@ contains
           !   do while(fdf_bline(bp,line)) ! While there are lines in the block
           if(fdf_block(species_label(i))) then
              charge(i)        = fdf_double ('Atom.ValenceCharge',zero)
-
-
-!!! 2017.2.25 nakata init_spin
              charge_up(i)     = fdf_double ('Atom.SpinNeUp',zero)
              charge_dn(i)     = fdf_double ('Atom.SpinNeDn',zero)
              sum_elecN_spin   = charge_up(i)+charge_dn(i)
@@ -1139,7 +1136,6 @@ contains
                                  &number of electrons for this species ', &
                                  sum_elecN_spin,charge(i))
              endif
-!!! nakata init_spin end
              nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
              RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',r_h)
              RadiusAtomf(i)   = RadiusSupport(i) ! = r_pao for (atomf=paof) or r_sf for (atomf==sf)
@@ -1949,14 +1945,12 @@ contains
     allocate(charge(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating charge in allocate_species_vars: ",                  n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
-!!! nakata init_spin
     allocate(charge_up(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating charge_up in allocate_species_vars: ",               n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
     allocate(charge_dn(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating charge_dn in allocate_species_vars: ",               n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)
-!!! nakata init_spin end
     allocate(mass(n_species),STAT=stat)
     if(stat/=0) call cq_abort("Error allocating mass in allocate_species_vars: ",                    n_species,stat)
     call reg_alloc_mem(area_general,n_species,type_dbl)

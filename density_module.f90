@@ -221,9 +221,9 @@ contains
     real(double) :: xblock, yblock, zblock, alpha
     real(double) :: dx, dy, dz, rx, ry, rz, r2, r_from_i
     ! local charge density returned from splint routine
-    real(double), dimension(:),   allocatable :: store_density_atom      ! nakata init_spin
-    real(double), dimension(:,:), allocatable :: store_density_spin      ! nakata 
-    real(double)   :: local_density, scale, scale_spin_up, scale_spin_dn ! nakata 
+    real(double), dimension(:),   allocatable :: store_density_atom
+    real(double), dimension(:,:), allocatable :: store_density_spin
+    real(double)   :: local_density, scale, scale_spin_up, scale_spin_dn
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level, stat
@@ -238,14 +238,12 @@ contains
     call start_backtrace(t=backtrace_timer,who='set_density', &
          where=area,level=backtrace_level)
 !****lat>$
-!!! nakata init_spin
     allocate(store_density_atom(maxngrid), STAT=stat)
     if (stat/=0) call cq_abort('Error allocating store_density_atom: ', maxngrid)
     if (flag_readAtomicSpin) then
        allocate(store_density_spin(maxngrid,2), STAT=stat)
        if (stat/=0) call cq_abort('Error allocating store_density_spin: ', maxngrid*2)
     endif
-!!! nakata init_spin end
 
     if (inode == ionode .and. iprint_SC >= 2) then
        write (io_lun, fmt='(2x,"Entering set_density")')
@@ -323,7 +321,6 @@ contains
                        real(atomic_density_table(the_species)%length - 1, &
                             double)
 
-!!! nakata init_spin
                 ! determine the spin-dependent scaling factor
                 if (flag_readAtomicSpin) then
                    if (charge_up(the_species).eq.zero .and. charge_dn(the_species).eq.zero) then
@@ -334,7 +331,6 @@ contains
                       scale_spin_dn = charge_dn(the_species)/charge(the_species)
                    endif
                 endif
-!!! nakata init_spin end
 
                 icheck = 0
                 ipoint = 0
@@ -368,12 +364,10 @@ contains
                                  call cq_abort('set_density: overrun problem')
                             ! Store the density for this grid point
                             store_density_atom(igrid) = store_density_atom(igrid) + local_density ! both up and down
-!!! nakata init_spin
                             if (flag_readAtomicSpin) then
                                store_density_spin(igrid,1) = store_density_spin(igrid,1) + local_density * scale_spin_up
                                store_density_spin(igrid,2) = store_density_spin(igrid,2) + local_density * scale_spin_dn
                             endif
-!!! nakata init_spin end
                          end if ! if this point is within cutoff
                       end do !ix gridpoints
                    end do  !iy gridpoints
@@ -396,7 +390,6 @@ contains
     if(flag_neutral_atom) density_atom(:) = store_density_atom(:)
 
     if(flag_set_density) then
-!!! nakata init_spin
        if (flag_readAtomicSpin) then
           ! -- Already scaled for spin
           do spin = 1, nspin
@@ -429,7 +422,6 @@ contains
                   spin, density_scale(spin) * local_density
           end do
        endif
-!!! nakata init_spin end
     end if
 
     call my_barrier()
