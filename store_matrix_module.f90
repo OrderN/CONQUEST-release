@@ -58,6 +58,7 @@ module store_matrix
     real(double) :: rcellx, rcelly, rcellz  ! cell length (should be changed to 3x3 cell parameters)
     integer, pointer :: glob_to_node(:)     ! global id of atoms -> index of MPI-process
     real(double), pointer :: atom_coord(:,:)! atomic coordinates (3, global-id)
+    real(double), pointer :: atom_veloc(:,:)! atomic velocities  (3, global-id)
   end type matrix_store_global
 
   character(80),private :: RCSid = "$Id$"
@@ -377,6 +378,8 @@ contains
   !!    l.3 cell size
   !!    l.4 relations between atoms (global label) and procs.
   !!    (optional) MD iteration
+  !!    l.5 atomic position
+  !!    l.6 atomic velocity
   !!  INPUTS
   !!
   !!  USES
@@ -389,7 +392,7 @@ contains
   !!
   !!  SOURCE
   !!
-  subroutine dump_InfoMatGlobal(MDiter)
+  subroutine dump_InfoMatGlobal(MDstep,velocity)
 
     ! Module usage
     use global_module, ONLY: ni_in_cell,numprocs,rcellx,rcelly,rcellz,id_glob
@@ -399,10 +402,22 @@ contains
 
     implicit none
     type(matrix_store_global):: mat_global_tmp
-    integer, intent(in), optional :: MDiter
+    integer, intent(in), optional :: MDstep
+    real(double), intent(in), optional :: velocity(1:3,ni_in_cell)
     integer :: lun, istat, iglob
+    integer :: step_local
 
-    call set_InfoMatGlobal(mat_global_tmp, MDiter)
+    if(present(MDstep)) then
+     step_local = MDstep
+    else
+     step_local = 0
+    endif
+
+    if(present(velocity)) then
+     call set_InfoMatGlobal(mat_global_tmp, step=step_local, velocity_in=velocity)
+    else
+     call set_InfoMatGlobal(mat_global_tmp, step=step_local)
+    endif
 
     ! Open InfoGlobal.dat and write data.
     call io_assign(lun)
@@ -412,7 +427,8 @@ contains
     write (lun,*) mat_global_tmp%npcellx,mat_global_tmp%npcelly,mat_global_tmp%npcellz
     write (lun,*) mat_global_tmp%rcellx,mat_global_tmp%rcelly,mat_global_tmp%rcellz
     write (lun,*) mat_global_tmp%glob_to_node(1:mat_global_tmp%ni_in_cell)
-    if (present(MDiter)) write (lun,*) mat_global_tmp%index
+    !if (present(MDstep)) write (lun,*) mat_global_tmp%index
+    write (lun,*) mat_global_tmp%index
 
     do iglob=1, mat_global_tmp%ni_in_cell
      write (lun,101) iglob, mat_global_tmp%atom_coord(1:3, iglob)
@@ -430,20 +446,22 @@ contains
   ! -----------------------------------------------------------------------
   !!****f* store_matrix/set_InfoMatGlobal *
 
-  subroutine set_InfoMatGlobal(mat_glob, MDiter)
+  subroutine set_InfoMatGlobal(mat_glob, step, velocity_in)
     
     ! Module usage
+    use numbers, ONLY: zero
     use global_module, ONLY: ni_in_cell,numprocs,rcellx,rcelly,rcellz,id_glob, atom_coord
     use GenComms, ONLY: cq_abort
     use group_module, ONLY: parts
 
     implicit none
-    integer, intent(in), optional :: MDiter
+    integer, intent(in), optional :: step
+    real(double), intent(in), optional :: velocity_in(3,ni_in_cell)
     type(matrix_store_global),intent(out) :: mat_glob
     integer :: istat, ind_part, id_node, ni, id_global
    
-    if(present(MDiter))then
-       mat_glob%index      = MDiter
+    if(present(step))then
+       mat_glob%index      = step
     else
        mat_glob%index      = 0
     endif
@@ -459,8 +477,9 @@ contains
     mat_glob%npcelly     = parts%ngcelly
     mat_glob%npcellz     = parts%ngcellz
 
-    !allocation of glob_to_node, atom_coord
-    allocate(mat_glob%glob_to_node(ni_in_cell), mat_glob%atom_coord(3,ni_in_cell), STAT=istat)
+    !allocation of glob_to_node, atom_coord, atom_veloc
+    allocate(mat_glob%glob_to_node(ni_in_cell), mat_glob%atom_coord(3,ni_in_cell), &
+             mat_glob%atom_veloc(3,ni_in_cell), STAT=istat)
     if(istat .NE. 0) call cq_abort('Error : allocation in set_InfoMatGlobal',istat,ni_in_cell)
 
     do ind_part = 1, parts%mx_gcell
@@ -476,6 +495,16 @@ contains
     enddo !(ind_part, mx_gcell)
       
     mat_glob%atom_coord(1:3,1:ni_in_cell) = atom_coord(1:3,1:ni_in_cell) 
+
+   !velocity ( global_id, partition labelling)
+    if(present(velocity_in)) then
+     do ni=1, ni_in_cell
+       id_global= id_glob(ni)
+       mat_glob%atom_veloc(1:3,id_global)=velocity_in(1:3,ni)
+     enddo
+    else
+       mat_glob%atom_veloc(1:3,:)=zero
+    endif
 
    return
   end subroutine set_InfoMatGlobal
@@ -494,6 +523,96 @@ contains
   end subroutine free_InfoMatGlobal
 
   !!***
+  ! -----------------------------------------------------------------------
+  ! Subroutine grab_InfoMatGlobal
+  ! -----------------------------------------------------------------------
+  !!****f* store_matrix_module/grab_InfoMatGlobal *
+  !!
+  !!  NAME
+  !!   grab_InfoMatGlobal
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Reads the global data used for communication & reconstruction 
+  !!   Now, the 
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Tsuyoshi Miyazaki/Michiaki Arita
+  !!  CREATION DATE
+  !!   2017/10/13 made from grab_InfoGlobal
+  !!  MODIFICATION
+  !!
+  !!  SOURCE
+  !!
+  subroutine grab_InfoMatGlobal(InfoGlob,index)
+
+    ! Module usage
+    use GenComms, ONLY: inode,ionode,gcopy
+    use io_module, ONLY: get_file_name_2rank
+
+    ! passed variables
+    type(matrix_store_global),intent(out) :: InfoGlob
+    integer,intent(in), optional :: index
+
+    ! local variables
+    integer :: lun, istat, iglob, ig
+    integer :: index_local
+    character(len=80) :: filename
+
+    index_local=0
+    if(present(index)) index_local=index
+    call io_assign(lun)
+    call get_file_name_2rank('InfoGlobal',filename,index_local)
+    open (lun,file=filename,status='old',iostat=istat)
+    if (istat.GT.0) then
+     write(*,*) " grab_InfoMatGlobal: Error in opening InfoGlobal",filename
+     call cq_abort('Fail in opening InfoGlobal.dat')
+    endif
+
+     read(lun,*) InfoGlob%ni_in_cell, InfoGlob%numprocs
+     read(lun,*) InfoGlob%npcellx,InfoGlob%npcelly,InfoGlob%npcellz
+     read(lun,*) InfoGlob%rcellx,InfoGlob%rcelly,InfoGlob%rcellz
+     read(lun,*) InfoGlob%glob_to_node(1:InfoGlob%ni_in_cell)
+     read(lun,*) InfoGlob%index
+
+    do ig=1, InfoGlob%ni_in_cell
+     read(lun,101) iglob, InfoGlob%atom_coord(1:3, ig)
+     101 format(5x,i8,3x,3e20.10)
+    enddo !ig=1, InfoGlob%ni_in_cell
+    call io_close (lun)
+
+    return
+  end subroutine grab_InfoMatGlobal
+  !!***
+
+
+  ! -----------------------------------------------------------------------
+  ! Subroutine make_index_iter
+  ! -----------------------------------------------------------------------
+  !!****f* store_matrix/make_index_iter
+  !!
+  !!  NAME
+  !!   make_index_iter
+  !!  USAGE
+  !!   make_index_iter(mx_store, iter_present, index_iter)
+  !!  PURPOSE
+  !!   to get the iteration numbers for the latest mx_store steps
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Tsuyoshi Miyazaki
+  !!  CREATION DATE
+  !!   2017 June
+  !!  MODIFICATION
+  !!
+  !!  SOURCE
+  !!
+
   subroutine make_index_iter(mx_store, iter_present, index_iter)
    implicit none
    integer, intent(in) :: mx_store
