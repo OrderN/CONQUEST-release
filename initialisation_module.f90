@@ -1,4 +1,4 @@
-! -*- mode: F90; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
+! -*- mode: F90; mode: font-lock -*-
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
@@ -268,6 +268,10 @@ contains
   !!    Removed prefix for ewald call
   !!   2016/09/16 17:00 nakata
   !!    Removed unused RadiusSupport
+  !!   2017/06/22 11:04 dave
+  !!    Adding diagonalisation initialisation calls
+  !!   2017/08/29 jack baker & dave
+  !!    Removed r_super_x references (redundant)  
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -282,7 +286,7 @@ contains
                                       iprint_gen, flag_perform_cDFT,   &
                                       nspin, runtype, flag_MDold,      &
                                       glob2node, flag_XLBOMD,          &
-                                      flag_neutral_atom
+                                      flag_neutral_atom, flag_diagonalisation
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl, type_int
     use group_module,           only: parts
@@ -296,10 +300,8 @@ contains
     use ion_electrostatic,      only: set_ewald, setup_screened_ion_interaction
     use atoms,                  only: distribute_atoms
     use dimens,                 only: n_grid_x, n_grid_y, n_grid_z,    &
-                                      r_core_squared, r_h, r_super_x,  &
-                                      r_super_y, r_super_z,            &
-                                      n_my_grid_points,                &
-                                      r_dft_d2
+                                      r_core_squared, r_h, &
+                                      n_my_grid_points, r_dft_d2
     use fft_module,             only: set_fft_map, fft3
     use GenComms,               only: cq_abort, my_barrier, inode,     &
                                       ionode, gcopy
@@ -338,7 +340,8 @@ contains
     use input_module,           ONLY: leqi
     use UpdateInfo_module,      ONLY: make_glob2node
     use XLBOMD_module,          ONLY: immi_XL
-
+    use DiagModule,             only: init_blacs_pg, init_scalapack_format
+    
     implicit none
 
     ! Passed variables
@@ -586,6 +589,10 @@ contains
    if (inode == ionode .and. iprint_init > 1) &
         write (io_lun, *) 'Done init_pseudo '
 
+   if(flag_diagonalisation) then
+      call init_blacs_pg
+      call init_scalapack_format
+   end if
 !****lat<$
    call stop_backtrace(t=backtrace_timer,who='set_up',echo=.true.)
 !****lat>$
@@ -997,6 +1004,12 @@ contains
   !!    Removed unused flag_vary_basis
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2017/04/10 dave
+  !!    Small bug fix: transpose SF coefficients before transforming (fixes issue 26)
+  !!   2017/05/09 dave
+  !!    Removed restriction spin and on L-matrix update 
+  !!   2017/10/11 dave
+  !!    Bug fix: changed call to get_electronic_density to use inode, ionode (not ionode, ionode)
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1007,7 +1020,7 @@ contains
     use logicals
     use mult_module,         only: LNV_matrix_multiply, matL, matphi, &
                                    matT, T_trans, L_trans, LS_trans,  &
-                                   matrix_scale, matSFcoeff
+                                   matrix_scale, matSFcoeff, matSFcoeff_tran, matrix_transpose
     use SelfCon,             only: new_SC_potl
     use global_module,       only: iprint_init, flag_self_consistent, &
                                    flag_basis_set, blips, PAOs,       &
@@ -1104,6 +1117,12 @@ contains
              call grab_matrix("SFcoeff_up", matSFcoeff(1), inode)
              call grab_matrix("SFcoeff_dn", matSFcoeff(2), inode)
           endif
+          ! Added DRB 2017/04/10 to fix issue 26: transpose required before transformation can occur
+          ! Transpose
+          do spin_SF = 1,nspin_SF
+             call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+             call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+          enddo
        else
           if (restart_rho .and. flag_LFD) then
           ! read density from input files for LFD
@@ -1162,10 +1181,15 @@ contains
     end if
     if (restart_L) then
       if (.NOT. flag_MDold) then
-        ! NOTE: Not yet applicable to spin systems, though it's rather simple
         call grab_matrix2('L',inode,nfile,InfoL)
         call my_barrier()
         call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+        ! DRB 2017/05/09 now extended to spin systems
+        if(nspin==2) then
+           call grab_matrix2('L2',inode,nfile,InfoL)
+           call my_barrier()
+           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
+        end if
       else
         if(nspin==1) then
           call grab_matrix( "L",    matL(1), inode)
@@ -1247,7 +1271,7 @@ contains
     ! (7) Make a self-consistent H matrix and potential
     if (find_chdens) then
        call get_electronic_density(density, electrons, atomfns,     &
-                                   H_on_atomfns(1), ionode, ionode, &
+                                   H_on_atomfns(1), inode, ionode,  &
                                    maxngrid)
        electrons_tot = spin_factor * sum(electrons)
        if (inode == ionode .and. iprint_init > 1) &

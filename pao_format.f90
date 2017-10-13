@@ -47,6 +47,8 @@
 !!    Moved occupation numbers outside table type
 !!   2017/01/09 nakata
 !!    Added angmom%prncpl to store the information of principal qunatum number
+!!   2017/03/23 dave
+!!    Added delta to table
 !!  SOURCE
 module pao_format
 
@@ -63,7 +65,7 @@ module pao_format
 
   type table
      integer :: length
-     real(double) :: cutoff
+     real(double) :: cutoff, delta
      real(double), pointer, dimension(:) :: table
      real(double), pointer, dimension(:) :: table2
      !RC real(double) :: occ
