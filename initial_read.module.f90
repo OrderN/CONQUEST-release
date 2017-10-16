@@ -608,6 +608,8 @@ contains
   !!    Removed restriction on L-matrix re-use and spin
   !!   2017/08/30 jack baker & dave
   !!    Adding parameters for simulation cell optimisation
+  !!   2017/10/15 dave & an
+  !!    Reading atomic spins: small tweak to test on net spin (uses abs and RD_ERR)
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1153,9 +1155,9 @@ contains
              charge_up(i)     = fdf_double ('Atom.SpinNeUp',zero)
              charge_dn(i)     = fdf_double ('Atom.SpinNeDn',zero)
              sum_elecN_spin   = charge_up(i)+charge_dn(i)
-             if (sum_elecN_spin.ne.zero) then
+             if (abs(sum_elecN_spin)>RD_ERR) then
                 flag_readAtomicSpin = .true.
-                if (sum_elecN_spin.ne.charge(i)) &
+                if (abs(sum_elecN_spin-charge(i))>RD_ERR) &
                    call cq_abort('read_input: sum of number of electrons &
                                  &in spin channels is different from total &
                                  &number of electrons for this species ', &
