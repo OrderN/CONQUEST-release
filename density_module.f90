@@ -170,6 +170,8 @@ contains
   !!    - Changed name and included VNA possibility; also added temporary array to store density
   !!   2016/07/20 16:30 nakata
   !!    Renamed naba_atm -> naba_atoms_of_blocks
+  !!   2017/04/05 18:00 nakata
+  !!    Added flag_readAtomicSpin, charge, charge_up and charge_dn to initialise spin from input file
   !!  SOURCE
   !!
   subroutine set_atomic_density(flag_set_density,level)
@@ -183,7 +185,8 @@ contains
                                    IPRINT_TIME_THRES3, nspin,       &
                                    spin_factor,                     &
                                    flag_fix_spin_population, &
-                                   flag_neutral_atom
+                                   flag_neutral_atom, &
+                                   flag_readAtomicSpin
     use block_module,        only: nx_in_block, ny_in_block,        &
                                    nz_in_block, n_pts_in_block
     use group_module,        only: blocks, parts
@@ -197,6 +200,7 @@ contains
     use GenBlas,             only: rsum, scal
     use timer_module,        only: WITH_LEVEL
     use maxima_module,  only: maxngrid
+    use species_module, only: charge, charge_up, charge_dn
 
     implicit none
 
@@ -217,8 +221,9 @@ contains
     real(double) :: xblock, yblock, zblock, alpha
     real(double) :: dx, dy, dz, rx, ry, rz, r2, r_from_i
     ! local charge density returned from splint routine
-    real(double), dimension(:), allocatable :: store_density
-    real(double)   :: local_density, scale
+    real(double), dimension(:),   allocatable :: store_density_atom
+    real(double), dimension(:,:), allocatable :: store_density_spin
+    real(double)   :: local_density, scale, scale_spin_up, scale_spin_dn
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level, stat
@@ -233,11 +238,17 @@ contains
     call start_backtrace(t=backtrace_timer,who='set_density', &
          where=area,level=backtrace_level)
 !****lat>$
-    allocate(store_density(maxngrid), STAT=stat)
-    if (stat/=0) call cq_abort('Error allocating store_density: ', maxngrid)
+    allocate(store_density_atom(maxngrid), STAT=stat)
+    if (stat/=0) call cq_abort('Error allocating store_density_atom: ', maxngrid)
+    if (flag_readAtomicSpin) then
+       allocate(store_density_spin(maxngrid,2), STAT=stat)
+       if (stat/=0) call cq_abort('Error allocating store_density_spin: ', maxngrid*2)
+    endif
 
-    if (inode == ionode .and. iprint_SC >= 2) &
-         write (io_lun, fmt='(2x,"Entering set_density")')
+    if (inode == ionode .and. iprint_SC >= 2) then
+       write (io_lun, fmt='(2x,"Entering set_density")')
+       if (flag_readAtomicSpin) write (io_lun, fmt='(2x,"Initial atomic spins are read from input file")')
+    endif
 
     call start_timer(tmr_std_chargescf)
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
@@ -248,7 +259,8 @@ contains
     if(flag_set_density) then
        density = zero
     end if
-    store_density = zero
+    store_density_atom = zero
+    if (flag_readAtomicSpin) store_density_spin = zero
 
     ! determine the block and grid spacing
     dcellx_block = rcellx / blocks%ngcellx
@@ -308,6 +320,18 @@ contains
                 step = loc_cutoff / &
                        real(atomic_density_table(the_species)%length - 1, &
                             double)
+
+                ! determine the spin-dependent scaling factor
+                if (flag_readAtomicSpin) then
+                   if (charge_up(the_species).eq.zero .and. charge_dn(the_species).eq.zero) then
+                      scale_spin_up = half
+                      scale_spin_dn = half
+                   else
+                      scale_spin_up = charge_up(the_species)/charge(the_species)
+                      scale_spin_dn = charge_dn(the_species)/charge(the_species)
+                   endif
+                endif
+
                 icheck = 0
                 ipoint = 0
                 ! loop over the grid points in the current block
@@ -339,7 +363,11 @@ contains
                             if (range_flag) &
                                  call cq_abort('set_density: overrun problem')
                             ! Store the density for this grid point
-                            store_density(igrid) = store_density(igrid) + local_density
+                            store_density_atom(igrid) = store_density_atom(igrid) + local_density ! both up and down
+                            if (flag_readAtomicSpin) then
+                               store_density_spin(igrid,1) = store_density_spin(igrid,1) + local_density * scale_spin_up
+                               store_density_spin(igrid,2) = store_density_spin(igrid,2) + local_density * scale_spin_dn
+                            endif
                          end if ! if this point is within cutoff
                       end do !ix gridpoints
                    end do  !iy gridpoints
@@ -352,33 +380,57 @@ contains
     ! renormalise density
     local_density = zero
     do iz = 1, n_my_grid_points
-       local_density = local_density + store_density(iz)
+       local_density = local_density + store_density_atom(iz)
     end do
     local_density = local_density * grid_point_volume
     call gsum(local_density)
     scale = ne_in_cell/local_density
-    store_density(:) = store_density(:) * scale
-    
-    if(flag_neutral_atom) density_atom(:) = store_density(:)
+    store_density_atom(:) = store_density_atom(:) * scale
+
+    if(flag_neutral_atom) density_atom(:) = store_density_atom(:)
+
     if(flag_set_density) then
-       ! first assume atomic density is evenly
-       ! divided among the spin channels, this
-       ! applies also to spin non-polarised
-       ! calculations
-       local_density = half*local_density
-       do spin = 1, nspin
-          density_scale(spin) = ne_spin_in_cell(spin) / local_density
-          density(:,spin) = density_scale(spin) * half* store_density(:) ! Check later
-          if (inode == ionode .and. iprint_SC > 0) &
-               write (io_lun, &
-               fmt='(10x,"In set_density, electrons (spin=",i1,"): ",f20.12)') &
-               spin, density_scale(spin) * local_density
-       end do
+       if (flag_readAtomicSpin) then
+          ! -- Already scaled for spin
+          do spin = 1, nspin
+             local_density = zero
+             do iz = 1, n_my_grid_points
+                local_density = local_density + store_density_spin(iz,spin)
+             end do
+             local_density = local_density * grid_point_volume
+             call gsum(local_density)
+             density_scale(spin) = ne_spin_in_cell(spin) / local_density        ! renormalise
+             density(:,spin) = store_density_spin(:,spin) * density_scale(spin)
+             if (inode == ionode .and. iprint_SC > 0) &
+                  write (io_lun, &
+                  fmt='(10x,"In set_density, electrons (spin=",i1,"): ",f20.12)') &
+                  spin, density_scale(spin) * local_density
+          enddo
+       else
+          ! -- Scale for spin
+          ! first assume atomic density is evenly
+          ! divided among the spin channels, this
+          ! applies also to spin non-polarised
+          ! calculations
+          local_density = half*local_density
+          do spin = 1, nspin
+             density_scale(spin) = ne_spin_in_cell(spin) / local_density         ! spin factor, renormalise
+             density(:,spin) = density_scale(spin) * half* store_density_atom(:) ! Check later
+             if (inode == ionode .and. iprint_SC > 0) &
+                  write (io_lun, &
+                  fmt='(10x,"In set_density, electrons (spin=",i1,"): ",f20.12)') &
+                  spin, density_scale(spin) * local_density
+          end do
+       endif
     end if
 
     call my_barrier()
-    deallocate(store_density, STAT=stat)
-    if (stat/=0) call cq_abort('Error deallocating store_density: ', maxngrid)
+    deallocate(store_density_atom, STAT=stat)
+    if (stat/=0) call cq_abort('Error deallocating store_density_atom: ', maxngrid)
+    if (flag_readAtomicSpin) then
+       deallocate(store_density_spin, STAT=stat)
+       if (stat/=0) call cq_abort('Error deallocating store_density_spin: ', maxngrid*2)
+    endif
 
     call stop_print_timer(tmr_l_tmp1, "set_density", IPRINT_TIME_THRES3)
     call stop_timer(tmr_std_chargescf)
