@@ -113,7 +113,7 @@ contains
                                       id_glob_inv, flag_perform_cDFT,  &
                                       flag_self_consistent,            &
                                       ni_in_cell,                      &
-                                      nspin, spin_factor
+                                      nspin, spin_factor, flag_pcc_global
     use GenComms,               only: myid, inode, ionode, cq_abort
     use energy,                 only: get_energy
     use pseudopotential_common, only: core_correction, pseudopotential
@@ -387,7 +387,34 @@ contains
           end if
        end if
     end if
-
+    ! *** PCC ***
+    if (flag_test_all_forces .or. flag_which_force == 10) then
+       if (flag_pcc_global) then
+          if (inode == ionode) &
+               write(io_lun,*) '*** Partial Core Corrections ***'
+          call test_PCC(fixed_potential, vary_mu, n_L_iterations, &
+                          L_tolerance, tolerance, total_energy,     &
+                          expected_reduction)
+          if (flag_test_all_forces) then
+             call update_H(fixed_potential)
+             if (flag_self_consistent) then
+                ! Vary only DM and charge density
+                reset_L = .true.
+                call new_SC_potl(.true., tolerance, reset_L,  &
+                                 fixed_potential, vary_mu,    &
+                                 n_L_iterations, L_tolerance, &
+                                 total_energy)
+             else ! Ab initio TB: vary only DM
+                call get_H_matrix(.true., fixed_potential, electrons, &
+                                  density, maxngrid)
+                call FindMinDM(n_L_iterations, vary_mu, L_tolerance, &
+                               inode, ionode, reset_L, .false.)
+                call get_energy(total_energy)
+             end if
+          end if
+       end if
+    end if
+    
     deallocate(HF_force, STAT=stat)
     if (stat /= 0) call cq_abort("test_forces: Error dealloc mem")
     call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
@@ -2130,7 +2157,159 @@ contains
     return
   end subroutine test_full
   !!***
+  
+  !!****f* test_force_module/test_PCC *
+  !!
+  !!  NAME 
+  !!   test_PCC
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Tests the SCF PCC force.
+  !!
+  !!   We're interested in how the XC energy varies as the 
+  !!   partial core densities move over the grid.
+  !!  INPUTS
+  !! 
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   12:10, 2017/10/19 dave
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine test_PCC(fixed_potential, vary_mu, n_L_iterations, &
+                        L_tolerance, tolerance, total_energy,     &
+                        expected_reduction)
 
+    use datatypes
+    use numbers
+    use move_atoms,        only: primary_update, cover_update,         &
+                                 update_atom_coord
+    use group_module,      only: parts
+    use cover_module,      only: BCS_parts, DCS_parts
+    use primary_module,    only: bundle
+    use global_module,     only: iprint_MD, x_atom_cell, y_atom_cell,  &
+                                 z_atom_cell, id_glob_inv, ni_in_cell, &
+                                 nspin
+    use energy,            only: get_energy, band_energy,   &
+                                 delta_E_hartree, delta_E_xc, xc_energy
+    use GenComms,          only: myid, inode, ionode, cq_abort
+    use H_matrix_module,   only: get_H_matrix
+    use density_module,    only: set_density_pcc, density
+    use functions_on_grid, only: atomfns, H_on_atomfns
+    use maxima_module,     only: maxngrid
+    use memory_module,     only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use force_module,      only: get_pcc_force
+
+    implicit none
+
+    ! Passed variables
+    logical      :: vary_mu, find_chdens, fixed_potential
+    logical      :: start, start_L
+    integer      :: n_L_iterations
+    real(double) :: tolerance, L_tolerance
+    real(double) :: expected_reduction
+    real(double) :: total_energy
+
+    ! Local variables
+    integer      :: stat
+    real(double) :: E0, F0, E1, F1, analytic_force, numerical_force, &
+                    electrons_tot
+    real(double), dimension(nspin) :: electrons
+    real(double), dimension(:,:), allocatable :: PCC_force
+    real(double), dimension(:,:), allocatable :: density_out
+    
+    allocate(PCC_force(3,ni_in_cell), density_out(maxngrid,nspin), &
+             STAT=stat)
+    if (stat /= 0) &
+         call cq_abort("test_nonSC: Error alloc mem: ", ni_in_cell, maxngrid)
+    call reg_alloc_mem(area_moveatoms, 3*ni_in_cell+nspin*maxngrid, type_dbl)
+
+    ! Find force
+    call get_pcc_force(PCC_force, inode, ionode, ni_in_cell, &
+         maxngrid, xc_energy_ret = xc_energy) ! Pass output density for non-SCF stress
+    ! Store local energy
+    E0 = xc_energy 
+    ! Find out direction and atom for displacement
+    if (inode == ionode) &
+         write (io_lun,fmt='(2x,"Moving atom ",i5," &
+                             &in direction ",i2," by ",f10.6," bohr")') &
+               TF_atom_moved, TF_direction, TF_delta
+    F0 = PCC_force(TF_direction,TF_atom_moved)
+    if (inode == ionode) &
+         write (io_lun,fmt='(2x,"Initial energy: ",f20.12,/,2x,&
+                             &"Initial PCC force: ",f20.12)') E0, F0
+    ! Move the specified atom
+    if (TF_direction == 1) then
+       x_atom_cell(id_glob_inv(TF_atom_moved)) = &
+            x_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
+    else if (TF_direction == 2) then
+       y_atom_cell(id_glob_inv(TF_atom_moved)) = &
+            y_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
+    else if (TF_direction == 3) then
+       z_atom_cell(id_glob_inv(TF_atom_moved)) = &
+            z_atom_cell(id_glob_inv(TF_atom_moved)) + TF_delta
+    end if
+    call update_atom_coord
+    ! Update positions and indices
+    call primary_update(x_atom_cell, y_atom_cell, z_atom_cell, bundle,&
+                        parts, myid)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
+                      BCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
+                      DCS_parts, parts)
+    ! Recalculate atomic densities
+    call set_density_pcc()
+    ! Find force - we also return updated XC energy
+    call get_pcc_force(PCC_force, inode, ionode, ni_in_cell, &
+         maxngrid, xc_energy_ret = xc_energy)
+    E1 = xc_energy
+    F1 = PCC_force(TF_direction,TF_atom_moved)
+    if (inode == ionode) &
+         write (io_lun,fmt='(2x,"Final energy: ",f20.12,/,2x,"Final &
+                             &PCC force: ",f20.12)') E1, F1
+    numerical_force = -(E1 - E0) / TF_delta
+    analytic_force = half * (F1 + F0)
+    if (inode == ionode) &
+         write (io_lun,fmt='(2x,"Numerical Force: ",f20.12,/,2x,&
+                             &"Analytic Force : ",f20.12)') &
+               numerical_force, analytic_force
+    if (inode == ionode) &
+         write (io_lun,fmt='(2x,"Force error: ",e20.12)') &
+               numerical_force - analytic_force
+    ! Move the specified atom back
+    if (TF_direction == 1) then
+       x_atom_cell(id_glob_inv(TF_atom_moved)) = &
+            x_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
+    else if (TF_direction == 2) then
+       y_atom_cell(id_glob_inv(TF_atom_moved)) = &
+            y_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
+    else if (TF_direction == 3) then
+       z_atom_cell(id_glob_inv(TF_atom_moved)) = &
+            z_atom_cell(id_glob_inv(TF_atom_moved)) - TF_delta
+    end if
+    call update_atom_coord
+    ! Update positions and indices
+    call primary_update(x_atom_cell, y_atom_cell, z_atom_cell, bundle,&
+                        parts, myid)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
+                      BCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
+                      DCS_parts, parts)
+    ! Recalculate atomic densities
+    call set_density_pcc()
+
+    deallocate(PCC_force, density_out, STAT=stat)
+    if (stat /= 0) call cq_abort("test_nonSC: Error dealloc mem")
+    call reg_dealloc_mem(area_moveatoms, 3*ni_in_cell+nspin*maxngrid, type_dbl)
+
+    return
+  end subroutine test_PCC
+  !!***
 
   !!****f* test_force_module/test_cdft *
   !!
