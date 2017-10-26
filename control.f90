@@ -459,7 +459,8 @@ contains
                               flag_MDold,n_proc_old,glob2node_old,    &
                               flag_LmatrixReuse,flag_XLBOMD,          &
                               flag_dissipation,flag_FixCOM,           &
-                              flag_fire_qMD, flag_diagonalisation, nspin
+                              flag_fire_qMD, flag_diagonalisation,    &
+                              nspin, flag_thermoDebug
     use group_module,   only: parts
     use primary_module, only: bundle
     use minimise,       only: get_E_and_F
@@ -473,7 +474,7 @@ contains
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_positions, read_velocity,         &
-                              write_velocity, read_fire
+                              write_velocity, read_fire, write_xsf
     use io_module,      only: write_atomic_positions, pdb_template,   &
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
@@ -604,6 +605,11 @@ contains
        call read_fire(fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha)
     endif
 
+    if (flag_thermoDebug) then
+      call thermo%dump_thermo_state(i_first-1, 'thermostat.dat')
+      call write_xsf('trajectory.xsf', i_first-1)
+    end if
+
     !ORI do iter = 1, MDn_steps
     do iter = i_first, i_last
        if (myid == 0) &
@@ -681,6 +687,10 @@ contains
            call thermo%berendsen_v_rescale(velocity)
          end select
        end select
+       if (flag_thermoDebug) then
+         call thermo%dump_thermo_state(iter,'thermostat.dat')
+         call write_xsf('trajectory.xsf', i_first-1)
+       end if
 
        ! Constrain velocity
        if (flag_RigidBonds) call correct_atomic_velocity(velocity)
@@ -825,6 +835,7 @@ contains
 !%%!   call check_stop(done, iter)
 !%%!   if (done) exit
     end do
+
     deallocate(velocity, STAT=stat)
     if (stat /= 0) call cq_abort("Error deallocating velocity in md_run: ", &
                                  ni_in_cell, stat)

@@ -60,6 +60,7 @@ module thermostat
     real(double)        :: ke_ions      ! kinetic energy of ions
     real(double)        :: dt           ! time step
     integer             :: ndof         ! number of degrees of freedom
+    logical             :: restart
 
     ! Weak coupling thermostat variables
     real(double)        :: lambda       ! Berendsen scaling factor
@@ -116,6 +117,7 @@ subroutine init_nhc(th, dt, T_ext, ndof, n_nhc, n_ys, n_mts, ke_ions)
   real(double), intent(in)              :: T_ext, ke_ions, dt
 
   th%thermo_type = "nhc"
+  th%restart = .false.
   th%dt = dt
   th%T_ext = T_ext
   th%ndof = ndof
@@ -461,29 +463,40 @@ end subroutine get_temperature
 !!   2017/10/24 13:36
 !!  SOURCE
 !!  
-subroutine dump_thermo_state(th, step, lun)
-
+subroutine dump_thermo_state(th, step, filename)
   use input_module,     only: io_assign, io_close
+  use GenComms,         only: myid
 
   ! passed variables
   class(type_thermostat), intent(inout) :: th
-  integer, intent(in)                   :: step, lun
+  integer, intent(in)                   :: step
+  character(len=*), intent(in)          :: filename
 
   ! local variables
   character(40)                         :: fmt
+  integer                               :: lun
 
-  write(fmt,'("(a8,",i4,"e16.4)")') th%n_nhc
-  write(lun,'("step   ",i12)') step
-  write(lun,'("T_int  ",f12.4)') th%T_int
-  if (th%thermo_type == 'nhc') then
-    write(lun,fmt) "eta:    ", th%eta
-    write(lun,fmt) "v_eta:  ", th%v_eta
-    write(lun,fmt) "G_nhc:  ", th%G_nhc
-    write(lun,'("e_nhc:  ",e16.4)') th%ke_nhc
-  else if (th%thermo_type == 'berendsen') then
-    write(lun,'("lambda: ",e16.4)') th%lambda
+  if (myid==0) then
+    call io_assign(lun)
+    if (th%restart) then
+      open(unit=lun,file=filename,status='old',position='append')
+      write(lun,*)
+    else 
+      open(unit=lun,file=filename,status='replace')
+    end if
+    write(fmt,'("(a8,",i4,"e16.4)")') th%n_nhc
+    write(lun,'("step   ",i12)') step
+    write(lun,'("T_int  ",f12.4)') th%T_int
+    if (th%thermo_type == 'nhc') then
+      write(lun,fmt) "eta:    ", th%eta
+      write(lun,fmt) "v_eta:  ", th%v_eta
+      write(lun,fmt) "G_nhc:  ", th%G_nhc
+      write(lun,'("e_nhc:  ",e16.4)') th%ke_nhc
+    else if (th%thermo_type == 'berendsen') then
+      write(lun,'("lambda: ",e16.4)') th%lambda
+    end if
+    call io_close(lun)
   end if
-  write(lun,*)
 
 end subroutine dump_thermo_state
 !!***

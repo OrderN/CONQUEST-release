@@ -672,6 +672,7 @@ contains
                              dscf_target_nfold, flag_local_excitation, dscf_HOMO_thresh,   &
                              dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit,           &
                              flag_MDcontinue,flag_MDdebug,flag_MDold,  &
+                             flag_thermoDebug, &
                              flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
                              restart_T,restart_X,flag_XLBOMD,flag_propagateX,              &
                              flag_propagateL,flag_dissipation,integratorXL, flag_FixCOM,   &
@@ -1882,6 +1883,7 @@ contains
        md_n_nhc           = fdf_integer('MD.nNHC', 5) 
        md_n_ys            = fdf_integer('MD.nYoshida', 1)
        md_n_mts           = fdf_integer('MD.nMTS', 1)
+       flag_thermoDebug   = fdf_boolean('MD.ThermoDebug',.false.)
        if (fdf_block('MD.NHCMass')) then
          allocate(md_nhc_mass(md_n_nhc)) 
          read(unit=input_array(block_start), fmt=*) md_nhc_mass

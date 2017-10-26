@@ -325,6 +325,7 @@ module global_module
   logical :: flag_SkipEarlyDM
   logical :: flag_MDcontinue
   logical :: flag_MDdebug
+  logical :: flag_thermoDebug
   logical :: flag_FixCOM 
   integer :: McWFreq
   integer :: MDinit_step  
