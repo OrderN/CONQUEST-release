@@ -1867,7 +1867,7 @@ contains
     integer :: srow_size,scol_size,rrow_size,rcol_size
     integer :: req, i, j, k, l, ierr, wheremat
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
-    real(double) :: phase,rfac,ifac,hreal,himag, kx, ky, kz
+    real(double) :: phase,rfac,ifac,hreal,himag, kx, ky, kz, send_kx, send_ky, send_kz
 
     ! Work out k-point - has it been passed in explicitly ?
     if(PRESENT(kpassed)) then
@@ -1904,6 +1904,9 @@ contains
           if(stat/=0) call cq_abort("DiagModule: Can't alloc SendBuffer",stat)
           ! Zero SendBuffer
           SendBuffer = cmplx(zero,zero,double_cplx)
+          send_kx = kk(1,pg_kpoints(send_pgid,pgk))
+          send_ky = kk(2,pg_kpoints(send_pgid,pgk))
+          send_kz = kk(3,pg_kpoints(send_pgid,pgk))
        end if
        if (pgk <= N_kpoints_in_pg(pgid)) then
           rrow_size = Distrib%num_rows(recv_proc+1)             ! numbef of rows to be received by local from remote
@@ -1968,9 +1971,9 @@ contains
                             if(iprint_DM>=5.AND.myid==0) write(io_lun,7) myid,send_proc,j,k,wheremat
                             ! the kpoints used should be that responsible by the remote node, i.e.
                             ! corresponding to the pgk-th kpoint in proc_group that contains send_proc
-                            phase = kx*Distrib%images(send_proc+1,j,k)%where(l)%dx + &
-                                    ky*Distrib%images(send_proc+1,j,k)%where(l)%dy + &
-                                    kz*Distrib%images(send_proc+1,j,k)%where(l)%dz
+                            phase = send_kx*Distrib%images(send_proc+1,j,k)%where(l)%dx + &
+                                    send_ky*Distrib%images(send_proc+1,j,k)%where(l)%dy + &
+                                    send_kz*Distrib%images(send_proc+1,j,k)%where(l)%dz
                             rfac = cos(phase)*return_matrix_value_pos(matA,wheremat)
                             ifac = sin(phase)*return_matrix_value_pos(matA,wheremat)
                             ! Accumulate the data
