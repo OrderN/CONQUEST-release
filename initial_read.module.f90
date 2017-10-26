@@ -610,6 +610,8 @@ contains
   !!    Adding parameters for simulation cell optimisation
   !!   2017/10/15 dave & an
   !!    Reading atomic spins: small tweak to test on net spin (uses abs and RD_ERR)
+  !!   2017/10/24 zamaan
+  !!    added thermostat flags for refactored NVT
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -759,6 +761,9 @@ contains
                                   flag_LFD_minimise, LFD_ThreshE, LFD_ThreshD,           &
                                   LFD_Thresh_EnergyRise, LFD_max_iteration,              &
                                   flag_LFD_MD_UseAtomicDensity
+    use control,    only: md_ensemble, md_thermo_type
+    use thermostat, only: md_T_ext, md_tau_T, md_n_nhc, md_n_ys, md_n_mts, &
+                          md_nhc_mass 
 
     implicit none
 
@@ -1870,6 +1875,20 @@ contains
            call fdf_endblock
          enddo
        endif ! Constraints
+
+       ! Thermostat
+       md_ensemble        = fdf_string(3, 'MD.Ensemble', 'nve')
+       md_thermo_type     = fdf_string(20, 'MD.Thermoststat', 'nhc')
+       md_T_ext           = fdf_double('MD.Temperature', 300.0_double)
+       md_tau_T           = fdf_double('MD.tauT', 10.0_double)
+       md_n_nhc           = fdf_integer('MD.nNHC', 5) 
+       md_n_ys            = fdf_integer('MD.nYoshida', 1)
+       md_n_mts           = fdf_integer('MD.nMTS', 1)
+       if (fdf_block('MD.NHCMass')) then
+         allocate(md_nhc_mass(md_n_nhc)) 
+         read(unit=input_array(block_start), fmt=*) md_nhc_mass
+       end if
+
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")
     end if ! new_format

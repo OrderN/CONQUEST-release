@@ -4,4 +4,5 @@
 FORCES_OBJS = force_module.o \
               move_atoms.module.o \
               Integrators_module.o \
-              constraint_module.o
+              constraint_module.o \
+              thermostat_module.o

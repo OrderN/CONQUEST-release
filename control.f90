@@ -31,6 +31,8 @@
 !!    Changes for output to file not stdout
 !!   2015/06/08 lat
 !!    - Added experimental backtrace
+!!   2017/10/24 zamaan
+!!    Added md_ensemble variable for md_run
 !!  SOURCE
 !!
 module control
@@ -48,6 +50,8 @@ module control
   real(double) :: MDtimestep 
   real(double) :: MDcgtol 
   logical      :: CGreset
+  character(3)  :: md_ensemble
+  character(20) :: md_thermo_type
 
   ! Area identification
   integer, parameter, private :: area = 9
@@ -440,6 +444,8 @@ contains
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
 !!   2017/05/09 dave
 !!    Added calls to read L-matrix for both spin channels
+!!   2017/10/25 zamaan
+!!    Added refactored NVT
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -482,6 +488,10 @@ contains
     use constraint_module, ONLY: correct_atomic_position,correct_atomic_velocity, &
          ready_constraint,flag_RigidBonds
     use input_module,   ONLY: io_assign, io_close
+    use thermostat,     only: type_thermostat, init_nhc, init_berendsen, &
+                              berendsen_v_rescale, propagate_nvt_nhc, &
+                              get_nhc_energy, md_T_ext, md_tau_T, md_n_nhc, &
+                              md_n_ys, md_n_mts, md_nhc_mass
 
     implicit none
 
@@ -493,7 +503,7 @@ contains
     ! Local variables
     real(double), allocatable, dimension(:,:) :: velocity
     integer       ::  iter, i, k, length, stat, i_first, i_last, &
-         nfile, symm
+         nfile, symm, md_ndof
     integer       :: lun, ios, md_steps ! SA 150204; 150213 md_steps: counter for MD steps
     real(double)  :: temp, KE, energy1, energy0, dE, max, g0
     real(double)  :: energy_md
@@ -508,6 +518,9 @@ contains
     ! FIRE parameters
     integer :: step_qMD, n_stop_qMD, fire_N, fire_N2
     real(double) :: fire_step_max, fire_P0, fire_alpha
+
+    ! thermostat
+    type(type_thermostat) :: thermo
     
     allocate(velocity(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
@@ -530,6 +543,24 @@ contains
     energy1 = zero
     dE = zero
     length = 3*ni_in_cell
+
+    ! thermostat/barostat initialisation
+    call calculate_kinetic_energy(velocity,KE)
+    md_ndof = 3*ni_in_cell
+    if (md_ensemble(2:2) == 'v') then ! constant volume
+      if (md_ensemble(3:3) == 't') then ! constant temperature
+        if (md_thermo_type == 'nhc') then
+          md_ndof = md_ndof + md_n_nhc
+          call thermo%init_nhc(MDtimestep, md_T_ext, md_ndof, md_n_nhc, &
+                               md_n_ys, md_n_mts, KE)
+        else if (md_thermo_type == 'berendsen') then
+          call thermo%init_berendsen(MDtimestep, md_T_ext, md_ndof, md_tau_T, KE)
+        else
+          call cq_abort("Unknown thermostat type")
+        end if
+      end if
+    end if
+
     if (myid == 0 .and. iprint_gen > 0) write(io_lun, 2) MDn_steps
     ! Find energy and forces
     if (flag_fire_qMD) then
@@ -588,6 +619,17 @@ contains
          call gcopy(glob2node_old,ni_in_cell)
        endif
 
+       ! thermostat/barostat
+       select case(md_ensemble)
+       case('nvt')
+         select case(md_thermo_type)
+         case('nhc')
+           call thermo%propagate_nvt_nhc(velocity)
+         case('berendsen')
+           call thermo%get_berendsen_sf
+         end select
+       end select
+
        !%%! Evolve atoms - either FIRE (quenched MD) or velocity Verlet
        if (flag_fire_qMD) then
           call fire_qMD(fire_step_max,MDtimestep,velocity,tot_force,flag_movable,iter,&
@@ -628,6 +670,18 @@ contains
           call get_E_and_F(fixed_potential,vary_mu,energy1,.true.,.false.,iter)
           call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable,second_call)
        end if
+
+       ! thermostat/barostat
+       select case(md_ensemble)
+       case('nvt')
+         select case(md_thermo_type)
+         case('nhc')
+           call thermo%propagate_nvt_nhc(velocity)
+         case('berendsen')
+           call thermo%berendsen_v_rescale(velocity)
+         end select
+       end select
+
        ! Constrain velocity
        if (flag_RigidBonds) call correct_atomic_velocity(velocity)
        !%%! END of Evolve atoms
