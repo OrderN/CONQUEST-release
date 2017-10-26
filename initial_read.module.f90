@@ -762,8 +762,7 @@ contains
                                   LFD_Thresh_EnergyRise, LFD_max_iteration,              &
                                   flag_LFD_MD_UseAtomicDensity
     use control,    only: md_ensemble, md_thermo_type
-    use thermostat, only: md_T_ext, md_tau_T, md_n_nhc, md_n_ys, md_n_mts, &
-                          md_nhc_mass 
+    use thermostat, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass 
 
     implicit none
 
@@ -1879,7 +1878,6 @@ contains
        ! Thermostat
        md_ensemble        = fdf_string(3, 'MD.Ensemble', 'nve')
        md_thermo_type     = fdf_string(20, 'MD.Thermoststat', 'nhc')
-       md_T_ext           = fdf_double('MD.Temperature', 300.0_double)
        md_tau_T           = fdf_double('MD.tauT', 10.0_double)
        md_n_nhc           = fdf_integer('MD.nNHC', 5) 
        md_n_ys            = fdf_integer('MD.nYoshida', 1)

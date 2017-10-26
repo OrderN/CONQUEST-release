@@ -490,8 +490,8 @@ contains
     use input_module,   ONLY: io_assign, io_close
     use thermostat,     only: type_thermostat, init_nhc, init_berendsen, &
                               berendsen_v_rescale, propagate_nvt_nhc, &
-                              get_nhc_energy, md_T_ext, md_tau_T, md_n_nhc, &
-                              md_n_ys, md_n_mts, md_nhc_mass
+                              get_nhc_energy, md_tau_T, md_n_nhc, md_n_ys, &
+                              md_n_mts, md_nhc_mass
 
     implicit none
 
@@ -551,10 +551,10 @@ contains
       if (md_ensemble(3:3) == 't') then ! constant temperature
         if (md_thermo_type == 'nhc') then
           md_ndof = md_ndof + md_n_nhc
-          call thermo%init_nhc(MDtimestep, md_T_ext, md_ndof, md_n_nhc, &
+          call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
                                md_n_ys, md_n_mts, KE)
         else if (md_thermo_type == 'berendsen') then
-          call thermo%init_berendsen(MDtimestep, md_T_ext, md_ndof, md_tau_T, KE)
+          call thermo%init_berendsen(MDtimestep, temp_ion, md_ndof, md_tau_T, KE)
         else
           call cq_abort("Unknown thermostat type")
         end if

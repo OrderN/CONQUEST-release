@@ -37,7 +37,7 @@ module thermostat
   character(len=80), save, private :: RCSid = "$Id$"
 
   character(20) :: md_thermo_type
-  real(double)  :: md_T_ext, md_tau_T
+  real(double)  :: md_tau_T
   integer       :: md_n_nhc, md_n_ys, md_n_mts
   real(double), dimension(:), allocatable :: md_nhc_mass
 
