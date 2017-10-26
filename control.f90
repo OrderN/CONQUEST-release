@@ -546,7 +546,7 @@ contains
     length = 3*ni_in_cell
 
     ! thermostat/barostat initialisation
-    call calculate_kinetic_energy(velocity,KE)
+!    call calculate_kinetic_energy(velocity,KE)
     md_ndof = 3*ni_in_cell
     if (md_ensemble(2:2) == 'v') then ! constant volume
       if (md_ensemble(3:3) == 't') then ! constant temperature
@@ -683,6 +683,7 @@ contains
          select case(md_thermo_type)
          case('nhc')
            call thermo%propagate_nvt_nhc(velocity)
+           call thermo%get_nhc_energy
          case('berendsen')
            call thermo%berendsen_v_rescale(velocity)
          end select

@@ -4000,10 +4000,10 @@ second:   do
       if (iprint_init>2) write(io_lun,*) 'Writing atomic positions to .xsf'
       call io_assign(lun)
       if(append_coords) then
-         open(unit=lun,file=filename,status='old',position='append')
+         open(unit=lun,file=filename,position='append')
          write(lun,*)
       else
-         open(unit=lun,file=filename,status='replace')
+         open(unit=lun,file=filename)
       end if
       write(lun,'(a)') "CRYSTAL"
       write(lun,'("PRIMVEC   ",i8)') step
@@ -4014,7 +4014,7 @@ second:   do
       write(lun,fmt='(2i8)') ni_in_cell, 1
       do i=1,ni_in_cell
         atom_name = adjustr(species_label(species_glob(i))(1:2))
-        write(lun,'(a4,3f16.8)') atom_name, atom_coord(:,i)
+        write(lun,'(a4,3f16.8)') atom_name, atom_coord(:,i)*BohrToAng
                  ! species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
       end do
       call io_close(lun)
