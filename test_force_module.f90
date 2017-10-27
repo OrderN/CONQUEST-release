@@ -598,18 +598,18 @@ contains
                       DCS_parts, parts)
     ! Regenerate S
     call get_S_matrix(inode, ionode)
-   if (flag_self_consistent) then ! Vary only DM and charge density
-      reset_L = .true.
-      call new_SC_potl(.true., tolerance, reset_L, fixed_potential, &
-                       vary_mu, n_L_iterations, L_tolerance,        &
-                       total_energy)
-    else ! Ab initio TB: vary only DM
+    !if (flag_self_consistent) then ! Vary only DM and charge density
+    !   reset_L = .true.
+    !   call new_SC_potl(.true., tolerance, reset_L, fixed_potential, &
+    !        vary_mu, n_L_iterations, L_tolerance,        &
+    !        total_energy)
+    !else ! Ab initio TB: vary only DM
        call get_H_matrix(.true., fixed_potential, electrons, density, &
                          maxngrid)
        call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
                       ionode, reset_L, .false.)
        call get_energy(total_energy)
-    end if
+    !end if
     ! Note that we've held K fixed but allow potential to vary ? Yes:
     ! this way we get h_on_atomfns in workspace_support
     ! call get_H_matrix(.false., fixed_potential, electrons, potential,
@@ -723,6 +723,8 @@ contains
   !!    Renamed H_on_supportfns -> H_on_atomfns
   !!   2016/08/08 15:30 nakata
   !!    Renamed supportfns -> atomfns
+  !!   2017/10/27 10:52 dave
+  !!    Update for NA local HF (which contains the force due to hartree_energy_drho changing !)
   !!  SOURCE
   !!
   subroutine test_HF(fixed_potential, vary_mu, n_L_iterations, &
@@ -742,7 +744,8 @@ contains
                                       flag_self_consistent,         &
                                       flag_basis_set, PAOs, blips,  &
                                       ni_in_cell,                   &
-                                      nspin, spin_factor, flag_analytic_blip_int
+                                      nspin, spin_factor, flag_analytic_blip_int, &
+                                      flag_neutral_atom
     use pseudopotential_data,   only: init_pseudo
     use pseudo_tm_module,       only: set_tm_pseudo,                &
                                       loc_pp_derivative_tm
@@ -750,7 +753,7 @@ contains
                                       STATE, ABINIT, core_correction
     use energy,                 only: nl_energy, get_energy,        &
                                       local_ps_energy, band_energy, &
-                                      kinetic_energy
+                                      kinetic_energy, hartree_energy_drho
     use force_module,           only: get_HF_force,                 &
                                       get_HF_non_local_force,       &
                                       HF_and_Pulay, HF
@@ -761,6 +764,7 @@ contains
     use maxima_module,          only: maxngrid
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem, &
                                       type_dbl
+    use density_module,         only: set_atomic_density
 
     implicit none
 
@@ -814,11 +818,32 @@ contains
        if(myid == 0) write (io_lun, &
             fmt='(2x,"********************************************************")')
     end if
+    if(flag_neutral_atom) then
+       if (myid == 0) write (io_lun, &
+            fmt='(2x,"********************************************************")')
+       if (myid == 0) write (io_lun, &
+            fmt='(2x,"*                                                      *")')
+       if (myid == 0) write (io_lun, &
+            fmt='(2x,"*    WARNING * WARNING * WARNING * WARNING * WARNING   *")')
+       if (myid == 0) write (io_lun, &
+            fmt='(2x,"*                                                      *")')
+       if(myid == 0) write (io_lun, &
+            fmt='(2x,"* With the neutral atom potential, the local HF force  *")')
+       if(myid == 0) write (io_lun, &
+            fmt='(2x,"* additionally contains the force due to the change in *")')
+       if(myid == 0) write (io_lun, &
+            fmt='(2x,"* Hartree energy (delta rho)                           *")')
+       if(myid == 0) write (io_lun, &
+            fmt='(2x,"*                                                      *")')
+       if(myid == 0) write (io_lun, &
+            fmt='(2x,"********************************************************")')
+    end if
     ! We're coming in from initial_H: assume that initial E found
     ! Non-local
     Enl0 = nl_energy
     ! Full band energy
-    E0 = band_energy
+    E0 = local_ps_energy!band_energy
+    if(flag_neutral_atom) E0 = E0 + hartree_energy_drho
     ! Store KE for later correction
     KE0 = kinetic_energy
     ! Find force: local
@@ -898,14 +923,19 @@ contains
     case (ABINIT)
        call set_tm_pseudo
     end select
+    if( flag_neutral_atom ) then
+       call set_atomic_density(.false.) ! Need atomic density for neutral atom potential
+    end if
     ! Note that we've held K and |phi> fixed
     ! Calculate new energy
     call get_H_matrix(.true., fixed_potential, electrons, density, &
                       maxngrid)
     call get_energy(total_energy)
     Enl1 = nl_energy
-    E1 = band_energy - kinetic_energy + KE0 ! Fix change in KE
-    E1 = band_energy - kinetic_energy - nl_energy + Enl0 + KE0 ! Fix change
+    !E1 = band_energy - kinetic_energy + KE0 ! Fix change in KE
+    !E1 = band_energy - kinetic_energy - nl_energy + Enl0 + KE0 ! Fix change
+    E1 = local_ps_energy!band_energy
+    if(flag_neutral_atom) E1 = E1 + hartree_energy_drho
     ! in KE AND NL
     ! Find force
     ! Now that the atoms have moved, calculate the terms again
