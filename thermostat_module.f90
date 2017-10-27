@@ -28,8 +28,9 @@ module thermostat
 
   use datatypes,        only: double
   use numbers
-  use global_module,    only: ni_in_cell, io_lun
-  use move_atoms,       only: kB
+  use global_module,    only: ni_in_cell, io_lun, temp_ion
+  use move_atoms,       only: kB, fac_Kelvin2Hartree
+  use GenComms,         only: myid
 
   implicit none
 
@@ -60,10 +61,10 @@ module thermostat
     real(double)        :: ke_ions      ! kinetic energy of ions
     real(double)        :: dt           ! time step
     integer             :: ndof         ! number of degrees of freedom
-    logical             :: restart
+    logical             :: append
+    real(double)        :: lambda       ! velocity scaling factor
 
     ! Weak coupling thermostat variables
-    real(double)        :: lambda       ! Berendsen scaling factor
     real(double)        :: tau_T        ! temperature coupling time period
 
     ! Nose-Hoover chain thermostat variables
@@ -89,7 +90,6 @@ module thermostat
       procedure :: propagate_v_eta_2
       procedure :: propagate_nvt_nhc
       procedure :: get_nhc_energy
-      procedure :: get_temperature
       procedure :: dump_thermo_state
   end type type_thermostat
 !!***
@@ -117,7 +117,7 @@ subroutine init_nhc(th, dt, T_ext, ndof, n_nhc, n_ys, n_mts, ke_ions)
   real(double), intent(in)              :: T_ext, ke_ions, dt
 
   th%thermo_type = "nhc"
-  th%restart = .false.
+  th%append = .false.
   th%dt = dt
   th%T_ext = T_ext
   th%ndof = ndof
@@ -125,6 +125,7 @@ subroutine init_nhc(th, dt, T_ext, ndof, n_nhc, n_ys, n_mts, ke_ions)
   th%ke_ions = ke_ions
   th%n_ys = n_ys
   th%n_mts_nhc = n_mts
+  th%lambda = one
 
   allocate(th%eta(n_nhc))
   allocate(th%v_eta(n_nhc))
@@ -135,7 +136,7 @@ subroutine init_nhc(th, dt, T_ext, ndof, n_nhc, n_ys, n_mts, ke_ions)
   ! Defaults for heat bath positions, velocities, masses
   th%eta = zero
   th%m_nhc = one
-  th%v_eta = sqrt(two*th%T_ext/th%m_nhc(1)) 
+  th%v_eta = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
   th%G_nhc = zero
 
   ! Yoshida-Suzuki time steps
@@ -157,7 +158,15 @@ subroutine init_nhc(th, dt, T_ext, ndof, n_nhc, n_ys, n_mts, ke_ions)
   end select
   th%dt_ys = th%dt*th%dt_ys/th%n_mts_nhc
 
-  call th%get_temperature
+  if (myid==0) then
+    write(io_lun,*) ' Welcome to init_nhc'
+    write(io_lun,*) ' Target temperature        T_ext = ', th%T_ext
+    write(io_lun,*) ' Instantateous temperature T_int = ', temp_ion
+    write(io_lun,*) ' Number of NHC thermostats n_nhc = ', th%n_nhc
+    write(io_lun,*) ' Multiple time step order  n_mts = ', th%n_mts_nhc
+    write(io_lun,*) ' Yoshida-Suzuki order      n_ys  = ', th%n_ys
+    write(io_lun,*) ' YS time steps: ', th%dt_ys
+  end if
 
 end subroutine init_nhc
 !!***
@@ -206,7 +215,7 @@ subroutine get_berendsen_sf(th)
   ! passed variables
   class(type_thermostat), intent(inout)   :: th
 
-  th%lambda = sqrt(one + (th%dt/th%tau_T)*(th%T_ext/th%T_int - one))
+  th%lambda = sqrt(one + (th%dt/th%tau_T)*(th%T_ext*fac_Kelvin2Hartree/temp_ion - one))
 
 end subroutine get_berendsen_sf
 !!***
@@ -254,9 +263,9 @@ subroutine update_G(th, k, ke_box)
   real(double), intent(in)              :: ke_box ! box ke for pressure coupling
 
   if (k == 1) then
-    th%G_nhc(k) = 2*th%ke_ions - th%ndof*kB*th%T_ext + ke_box
+    th%G_nhc(k) = 2*th%ke_ions - th%ndof*kB*th%T_ext*fac_Kelvin2Hartree + ke_box
   else
-    th%G_nhc(k) = th%m_nhc(k-1)*th%v_eta(k-1)**2 - kB*th%T_ext
+    th%G_nhc(k) = th%m_nhc(k-1)*th%v_eta(k-1)**2 - kB*th%T_ext*fac_Kelvin2Hartree
   end if
   th%G_nhc(k) = th%G_nhc(k)/th%m_nhc(k)
 
@@ -378,6 +387,7 @@ subroutine propagate_nvt_nhc(th, v)
       ! scale the ionic velocities and kinetic energy
       fac = exp(-half*th%dt_ys(i_ys)*th%v_eta(1))
       v_sfac = v_sfac*fac
+      if (myid==0) write(io_lun,*) 'v_sfac = ', v_sfac
       th%ke_ions = th%ke_ions*fac**2
 
       ! update the thermostat "positions" eta
@@ -403,7 +413,7 @@ subroutine propagate_nvt_nhc(th, v)
 
   ! scale the ionic velocities
   v = v_sfac*v
-  call th%get_temperature
+  th%lambda = v_sfac
 
 end subroutine propagate_nvt_nhc
 !!***
@@ -425,31 +435,10 @@ subroutine get_nhc_energy(th)
   class(type_thermostat), intent(inout) :: th
 
   th%ke_nhc = half*sum(th%m_nhc*th%v_eta**2) ! TODO: check this
-  th%ke_nhc = th%ke_nhc + th%ndof*kB*th%T_ext*th%eta(1)
-  th%ke_nhc = th%ke_nhc + kB*th%T_ext*sum(th%eta(2:))
+  th%ke_nhc = th%ke_nhc + th%ndof*kB*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
+  th%ke_nhc = th%ke_nhc + kB*th%T_ext*fac_Kelvin2Hartree*sum(th%eta(2:))
 
 end subroutine get_nhc_energy
-!!***
-
-!!****m* / *
-!!  NAME
-!!   get_temperature
-!!  PURPOSE
-!!   compute the istantaneous temperature
-!!  AUTHOR
-!!   Zamaan Raza
-!!  CREATION DATE
-!!   2017/10/24 14:48
-!!  SOURCE
-!!  
-subroutine get_temperature(th)
-
-  ! passed variables
-  class(type_thermostat), intent(inout) :: th
-
-  th%T_int = two*th%ke_ions/kB/real(th%ndof, double)
-
-end subroutine get_temperature
 !!***
 
 !!****m* / *
@@ -465,7 +454,6 @@ end subroutine get_temperature
 !!  
 subroutine dump_thermo_state(th, step, filename)
   use input_module,     only: io_assign, io_close
-  use GenComms,         only: myid
 
   ! passed variables
   class(type_thermostat), intent(inout) :: th
@@ -478,15 +466,16 @@ subroutine dump_thermo_state(th, step, filename)
 
   if (myid==0) then
     call io_assign(lun)
-    if (th%restart) then
-      open(unit=lun,file=filename,status='old',position='append')
-      write(lun,*)
+    if (th%append) then
+      open(unit=lun,file=filename,position='append')
     else 
       open(unit=lun,file=filename,status='replace')
+      th%append = .true.
     end if
     write(fmt,'("(a8,",i4,"e16.4)")') th%n_nhc
     write(lun,'("step   ",i12)') step
-    write(lun,'("T_int  ",f12.4)') th%T_int
+    write(lun,'("T_int  ",f12.4)') temp_ion
+    write(lun,'("lambda ",f12.4)') th%lambda
     if (th%thermo_type == 'nhc') then
       write(lun,fmt) "eta:    ", th%eta
       write(lun,fmt) "v_eta:  ", th%v_eta
@@ -495,6 +484,7 @@ subroutine dump_thermo_state(th, step, filename)
     else if (th%thermo_type == 'berendsen') then
       write(lun,'("lambda: ",e16.4)') th%lambda
     end if
+    write(lun,*)
     call io_close(lun)
   end if
 

@@ -3006,7 +3006,7 @@ contains
     ! Module usage
     use datatypes
     use numbers, ONLY: zero,half
-    use global_module, ONLY: ni_in_cell
+    use global_module, ONLY: ni_in_cell, temp_ion
     use species_module, ONLY: species,mass
 
     implicit none
@@ -3025,6 +3025,7 @@ contains
         KE = KE + massa*v(k,atom)*v(k,atom)
       enddo
     enddo
+    temp_ion = KE/fac_Kelvin2Hartree
     KE = half*KE
 
     return
