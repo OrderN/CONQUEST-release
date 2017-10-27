@@ -106,7 +106,7 @@ contains
     use move_atoms,             only: primary_update, cover_update,    &
                                       update_atom_coord, update_H
     use group_module,           only: parts
-    use cover_module,           only: BCS_parts, DCS_parts
+    use cover_module,           only: BCS_parts, DCS_parts, ion_ion_CS
     use primary_module,         only: bundle
     use global_module,          only: iprint_MD, x_atom_cell,          &
                                       y_atom_cell, z_atom_cell,        &
@@ -466,7 +466,7 @@ contains
     use move_atoms,      only: primary_update, cover_update,         &
                                update_atom_coord
     use group_module,    only: parts
-    use cover_module,    only: BCS_parts, DCS_parts
+    use cover_module,    only: BCS_parts, DCS_parts, ion_ion_CS
     use primary_module,  only: bundle
     use global_module,   only: iprint_MD, x_atom_cell, y_atom_cell,  &
                                z_atom_cell, id_glob_inv, WhichPulay, &
@@ -596,6 +596,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     ! Regenerate S
     call get_S_matrix(inode, ionode)
     !if (flag_self_consistent) then ! Vary only DM and charge density
@@ -674,6 +675,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     ! Regenerate S
     call get_S_matrix(inode, ionode)
     ! Note that we've held K fixed but allow potential to vary ? Yes:
@@ -736,7 +738,7 @@ contains
     use move_atoms,             only: primary_update, cover_update, &
                                       update_atom_coord
     use group_module,           only: parts
-    use cover_module,           only: BCS_parts, DCS_parts
+    use cover_module,           only: BCS_parts, DCS_parts, ion_ion_CS
     use primary_module,         only: bundle
     use global_module,          only: iprint_MD, x_atom_cell,       &
                                       y_atom_cell, z_atom_cell,     &
@@ -752,8 +754,7 @@ contains
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA,   &
                                       STATE, ABINIT, core_correction
     use energy,                 only: nl_energy, get_energy,        &
-                                      local_ps_energy, band_energy, &
-                                      kinetic_energy, hartree_energy_drho
+                                      local_ps_energy, hartree_energy_drho
     use force_module,           only: get_HF_force,                 &
                                       get_HF_non_local_force,       &
                                       HF_and_Pulay, HF
@@ -841,11 +842,10 @@ contains
     ! We're coming in from initial_H: assume that initial E found
     ! Non-local
     Enl0 = nl_energy
-    ! Full band energy
-    E0 = local_ps_energy!band_energy
+    ! Local energy
+    E0 = local_ps_energy
+    ! Correction required because the force contains change in hartree_energy_drho
     if(flag_neutral_atom) E0 = E0 + hartree_energy_drho
-    ! Store KE for later correction
-    KE0 = kinetic_energy
     ! Find force: local
     ! If necessary, find output density (for HF)
     if (.not. flag_self_consistent) then ! Harris-Foulkes requires
@@ -914,6 +914,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     ! Recalculate pseudopotentials
     select case (pseudo_type) 
     case (OLDPS)
@@ -932,11 +933,9 @@ contains
                       maxngrid)
     call get_energy(total_energy)
     Enl1 = nl_energy
-    !E1 = band_energy - kinetic_energy + KE0 ! Fix change in KE
-    !E1 = band_energy - kinetic_energy - nl_energy + Enl0 + KE0 ! Fix change
-    E1 = local_ps_energy!band_energy
+    E1 = local_ps_energy
+    ! Correction required because the force contains change in hartree_energy_drho
     if(flag_neutral_atom) E1 = E1 + hartree_energy_drho
-    ! in KE AND NL
     ! Find force
     ! Now that the atoms have moved, calculate the terms again
     select case (pseudo_type)
@@ -1003,6 +1002,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     ! Now regenerate the pseudos and h_on_atomfns
     select case (pseudo_type) 
     case (OLDPS)
@@ -1068,7 +1068,7 @@ contains
                                           cover_update,                &
                                           update_atom_coord
     use group_module,               only: parts
-    use cover_module,               only: BCS_parts, DCS_parts
+    use cover_module,               only: BCS_parts, DCS_parts, ion_ion_CS
     use primary_module,             only: bundle
     use global_module,              only: iprint_MD, x_atom_cell,      &
                                           y_atom_cell, z_atom_cell,    &
@@ -1171,6 +1171,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     if (flag_basis_set == blips) then
        ! Reproject blips
        call blip_to_support_new(inode-1, atomfns)    
@@ -1215,6 +1216,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
 
     deallocate(HF_NL_force, STAT=stat)
     if (stat /= 0) &
@@ -1265,7 +1267,7 @@ contains
                                           cover_update, &
                                           update_atom_coord
     use group_module,               only: parts
-    use cover_module,               only : BCS_parts, DCS_parts
+    use cover_module,               only : BCS_parts, DCS_parts, ion_ion_CS
     use primary_module,             only : bundle
     use global_module,              only: iprint_MD, x_atom_cell, &
                                           y_atom_cell, z_atom_cell, &
@@ -1361,6 +1363,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     if (flag_basis_set == blips) then
        ! Reproject blips
        call blip_to_support_new(inode-1, atomfns)    
@@ -1414,6 +1417,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
 
     deallocate(KE_force, p_force, STAT=stat)
     if (stat /= 0) &
@@ -1480,7 +1484,7 @@ contains
                                           cover_update, &
                                           update_atom_coord
     use group_module,               only: parts
-    use cover_module,               only: BCS_parts, DCS_parts
+    use cover_module,               only: BCS_parts, DCS_parts, ion_ion_CS
     use primary_module,             only: bundle
     use global_module,              only: iprint_MD, x_atom_cell, &
                                           y_atom_cell, z_atom_cell, &
@@ -1560,6 +1564,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     if (flag_basis_set == blips) then
        ! Reproject blips
        call blip_to_support_new(inode-1, atomfns)    
@@ -1611,6 +1616,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
 
     deallocate(KE_force, p_force, STAT=stat)
     if (stat /= 0) call cq_abort("test_PhiPulay_local: Error dealloc mem")
@@ -1670,7 +1676,7 @@ contains
     use move_atoms,      only: primary_update, cover_update,        &
                                update_atom_coord
     use group_module,    only: parts
-    use cover_module,    only: BCS_parts, DCS_parts
+    use cover_module,    only: BCS_parts, DCS_parts, ion_ion_CS
     use primary_module,  only: bundle
     use global_module,   only: iprint_MD, x_atom_cell, y_atom_cell, &
                                z_atom_cell, id_glob_inv,            &
@@ -1744,6 +1750,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     ! Regenerate S
     p_force = zero
     call get_S_matrix(inode, ionode)
@@ -1772,6 +1779,7 @@ contains
                          BCS_parts, parts)
        call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                          DCS_parts, parts)
+       call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     end if
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
@@ -1810,6 +1818,7 @@ contains
                          BCS_parts, parts)
        call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                          DCS_parts, parts)
+       call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     end if
 
     deallocate(KE_force, p_force, STAT=stat)
@@ -1867,7 +1876,7 @@ contains
     use move_atoms,        only: primary_update, cover_update,         &
                                  update_atom_coord
     use group_module,      only: parts
-    use cover_module,      only: BCS_parts, DCS_parts
+    use cover_module,      only: BCS_parts, DCS_parts, ion_ion_CS
     use primary_module,    only: bundle
     use global_module,     only: iprint_MD, x_atom_cell, y_atom_cell,  &
                                  z_atom_cell, id_glob_inv, ni_in_cell, &
@@ -1944,6 +1953,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     ! Recalculate atomic densities
     call set_atomic_density(.true.)
     ! Note that we've held K fixed but allow potential to vary ? Yes:
@@ -1987,6 +1997,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
 
     deallocate(nonSC_force, density_out, STAT=stat)
     if (stat /= 0) call cq_abort("test_nonSC: Error dealloc mem")
@@ -2168,6 +2179,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
 
     deallocate(p_force, STAT=stat)
     if (stat /= 0) call cq_abort("test_full: Error dealloc mem")
@@ -2209,7 +2221,7 @@ contains
     use move_atoms,        only: primary_update, cover_update,         &
                                  update_atom_coord
     use group_module,      only: parts
-    use cover_module,      only: BCS_parts, DCS_parts
+    use cover_module,      only: BCS_parts, DCS_parts, ion_ion_CS
     use primary_module,    only: bundle
     use global_module,     only: iprint_MD, x_atom_cell, y_atom_cell,  &
                                  z_atom_cell, id_glob_inv, ni_in_cell, &
@@ -2281,6 +2293,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     ! Recalculate atomic densities
     call set_density_pcc()
     ! Find force - we also return updated XC energy
@@ -2319,6 +2332,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     ! Recalculate atomic densities
     call set_density_pcc()
 
@@ -2371,7 +2385,7 @@ contains
     use move_atoms,      only: primary_update, cover_update,        &
                                update_atom_coord
     use group_module,    only: parts
-    use cover_module,    only: BCS_parts, DCS_parts
+    use cover_module,    only: BCS_parts, DCS_parts, ion_ion_CS
     use primary_module,  only:  bundle
     use global_module,   only: iprint_MD, x_atom_cell, y_atom_cell, &
                                z_atom_cell, id_glob_inv,            &
@@ -2446,6 +2460,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     ! Regenerate W
     call build_Becke_weights
     call make_weights
@@ -2487,6 +2502,7 @@ contains
                       BCS_parts, parts)
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, &
                       DCS_parts, parts)
+    call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     call get_S_matrix(inode, ionode) !Builds new weight matrix
     !automatically.
 
