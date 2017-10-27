@@ -1402,16 +1402,13 @@ contains
   !!  USAGE
   !! 
   !!  PURPOSE
-  !!   Tests the phi Pulay non-local pseudopotential force
+  !!   Tests the phi Pulay local potential force
   !!
-  !!   This is a knotty one ! The most general way to get the energy
+  !!   The most general way to get the energy
   !!   change is to consider the Harris-Foulkes functional (which 
   !!   at self-consistency is the same as the "alternative" energy),
   !!   whose value is 2Tr[KH].  Then we fix K_{ij} but allow H_{ij} 
-  !!   to vary (i.e. rebuild from \hat{H} and |\phi_i>).  BUT because
-  !!   we're being careful and looking at all the different bits 
-  !!   separately we'll FIX the NL and KE parts of H (they don't
-  !!   matter).
+  !!   to vary (i.e. rebuild from \hat{H} and |\phi_i>).  
   !!  INPUTS
   !! 
   !! 
@@ -1437,6 +1434,9 @@ contains
   !!    Renamed supportfns -> atomfns
   !!   2016/12/29 19:30 nakata
   !!    Changed PAO_to_grid to single_PAO_to_grid
+  !!   2017/10/27 09:55 dave
+  !!    Bug fix: p_force not being zeroed before second call made
+  !!    analytic force wrong
   !!  SOURCE
   !!
   subroutine test_PhiPulay_local(fixed_potential, vary_mu,    &
@@ -1445,6 +1445,7 @@ contains
                                  expected_reduction)
 
     use datatypes
+    use numbers, ONLY: zero
     use move_atoms,                 only: primary_update, &
                                           cover_update, &
                                           update_atom_coord
@@ -1542,6 +1543,8 @@ contains
                       maxngrid)
     call get_energy(total_energy)
     ! Find force
+    ! Added DRB 2017/10/27 - not zeroed in pulay_force
+    p_force = zero
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
@@ -1595,16 +1598,12 @@ contains
   !!  USAGE
   !! 
   !!  PURPOSE
-  !!   Tests the phi Pulay non-local pseudopotential force
+  !!   Tests the S Pulay force
   !!
-  !!   This is a knotty one ! The most general way to get the energy
-  !!   change is to consider the Harris-Foulkes functional (which 
-  !!   at self-consistency is the same as the "alternative" energy),
-  !!   whose value is 2Tr[KH].  Then we fix K_{ij} but allow H_{ij} 
-  !!   to vary (i.e. rebuild from \hat{H} and |\phi_i>).  BUT because
-  !!   we're being careful and looking at all the different bits 
-  !!   separately we'll FIX the NL and KE parts of H (they don't
-  !!   matter).
+  !!   We need to update S but not H, and then find the matrix sigma (in
+  !!   the force paper, J Chem Phys 121, 6186 (2004)) or M12 in Conquest
+  !!   and calculate the energy difference just using the band energy
+  !!   (in this case 2Tr[KH]) and the force using S-Pulay only.
   !!  INPUTS
   !! 
   !! 
@@ -1627,6 +1626,9 @@ contains
   !!   - removed input parameter real(double) mu
   !!   2015/11/24 08:43 dave
   !!    - Adjusted use of energy
+  !!   2017/10/24 12:17 dave
+  !!    - Updated description and removed call to new_SC_potl (we just
+  !!      want the new energy after S changes, not H)
   !!  SOURCE
   !!
   subroutine test_SPulay(fixed_potential, vary_mu, n_L_iterations, &
@@ -1715,23 +1717,10 @@ contains
     ! Regenerate S
     p_force = zero
     call get_S_matrix(inode, ionode)
-    ! Now we diagonalise
-   if (flag_self_consistent) then ! Vary only DM and charge density
-      reset_L = .true.
-      call new_SC_potl(.true., tolerance, reset_L, fixed_potential, &
-                       vary_mu, n_L_iterations, L_tolerance,        &
-                       total_energy)
-    else ! Ab initio TB: vary only DM
-!       call get_H_matrix(.true., fixed_potential, electrons,
-       !       potential, density, pseudopotential, N_GRID_MAX)
-       call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
-                      ionode, reset_L, .false.)
-       call get_energy(total_energy)
-    end if
-    ! Project H onto support
-    ! call get_H_matrix(.false., fixed_potential, electrons, potential,
-    !                   density, pseudopotential, N_GRID_MAX)
-    ! call get_energy(total_energy)
+    ! Now we diagonalise with new S but keeping H fixed
+    call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &
+         ionode, reset_L, .false.)
+    call get_energy(total_energy)
     ! Find force
     if (flag_basis_set == PAOs) then
        ! Move the specified atom back
