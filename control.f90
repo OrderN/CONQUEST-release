@@ -460,7 +460,7 @@ contains
                               flag_LmatrixReuse,flag_XLBOMD,          &
                               flag_dissipation,flag_FixCOM,           &
                               flag_fire_qMD, flag_diagonalisation,    &
-                              nspin, flag_thermoDebug
+                              nspin, flag_thermoDebug, flag_move_atom
     use group_module,   only: parts
     use primary_module, only: bundle
     use minimise,       only: get_E_and_F
@@ -503,7 +503,7 @@ contains
     
     ! Local variables
     real(double), allocatable, dimension(:,:) :: velocity
-    integer       ::  iter, i, k, length, stat, i_first, i_last, &
+    integer       ::  iter, i, j, k, length, stat, i_first, i_last, &
          nfile, symm, md_ndof
     integer       :: lun, ios, md_steps ! SA 150204; 150213 md_steps: counter for MD steps
     real(double)  :: temp, KE, energy1, energy0, dE, max, g0
@@ -511,6 +511,7 @@ contains
     character(50) :: file_velocity='velocity.dat'
     logical       :: done,second_call
     logical,allocatable,dimension(:) :: flag_movable
+    real(double)  :: h_prime  ! the conserved quantity
 
     !! quenched MD optimisation is stopped
     !! if the maximum force component is bellow threshold
@@ -547,7 +548,14 @@ contains
 
     ! thermostat/barostat initialisation
     call calculate_kinetic_energy(velocity,KE)
+    ! Initialise number of degrees of freedom
     md_ndof = 3*ni_in_cell
+    do i=1,ni_in_cell
+      do j=1,3
+        if (flag_move_atom(j,i) == .false.) md_ndof = md_ndof-1
+      end do
+    end do
+
     if (md_ensemble(2:2) == 'v') then ! constant volume
       if (md_ensemble(3:3) == 't') then ! constant temperature
         if (md_thermo_type == 'nhc') then
@@ -732,7 +740,22 @@ contains
        end do
        ! Output and energy changes
        dE = energy0 - energy1
+       ! Compute the conserved quantity
+       h_prime = KE + energy_md ! the NVE case
+       write (io_lun, '(6x,a)') "Components of conserved quantity"
+       write (io_lun, 9) KE
+       write (io_lun, 10) energy_md
+       select case(md_ensemble)
+       case('nvt')
+         select case(md_thermo_type)
+         case('nhc')
+             call thermo%get_nhc_energy
+             h_prime = h_prime + thermo%ke_nhc
+             write (io_lun, 11) thermo%ke_nhc
+         end select
+       end select
        if(myid==0) then
+          write (io_lun, 7) h_prime
           write (io_lun, 6) max
           write (io_lun, 4) dE
           write (io_lun, 5) sqrt(g0/ni_in_cell)
@@ -851,8 +874,12 @@ contains
 4   format(4x,'Energy change           : ',f15.8)
 5   format(4x,'Force Residual          : ',f15.8)
 6   format(4x,'Maximum force component : ',f15.8)
+7   format(4x,'Conserved qty h_prime   : ',f15.8)
 8   format(4x,'*** MD step ',i4,' KE: ',f18.8,&
            ' IntEnergy',f20.8,' TotalEnergy',f20.8)
+9   format(6x,'Potential Energy        : ',f15.8)
+10  format(6x,'Kinetic energy          : ',f15.8)
+11  format(6x,'Nose-Hoover energy      : ',f15.8)
   end subroutine md_run
   !!***
 
