@@ -357,7 +357,7 @@ module global_module
   integer :: mx_temp_matrices                   ! Defaults to 100; used in mult_module (immi)
   
   ! DOS output
-  logical :: flag_write_DOS, flag_write_projected_DOS
+  logical :: flag_write_DOS, flag_write_projected_DOS, flag_normalise_pDOS ! 2017.9.7 nakata normalise pDOS
   real(double) :: E_DOS_min, E_DOS_max, sigma_DOS
   integer :: n_DOS
 
