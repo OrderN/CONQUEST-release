@@ -3025,7 +3025,6 @@ contains
         KE = KE + massa*v(k,atom)*v(k,atom)
       enddo
     enddo
-    temp_ion = KE/fac_Kelvin2Hartree
     KE = half*KE
 
     return

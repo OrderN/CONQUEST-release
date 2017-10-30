@@ -28,7 +28,7 @@ module thermostat
 
   use datatypes,        only: double
   use numbers
-  use global_module,    only: ni_in_cell, io_lun, temp_ion
+  use global_module,    only: ni_in_cell, io_lun, iprint_MD
   use move_atoms,       only: kB, fac_Kelvin2Hartree
   use GenComms,         only: myid
 
@@ -56,8 +56,8 @@ module thermostat
   type type_thermostat
     ! General thermostat variables
     character(20)       :: thermo_type  ! thermostat type
+    real(double)        :: T_int        ! instantateous temperature
     real(double)        :: T_ext        ! target temperature
-    real(double)        :: T_int        ! instantaneous temperature
     real(double)        :: ke_ions      ! kinetic energy of ions
     real(double)        :: dt           ! time step
     integer             :: ndof         ! number of degrees of freedom
@@ -90,6 +90,7 @@ module thermostat
       procedure :: propagate_v_eta_2
       procedure :: propagate_nvt_nhc
       procedure :: get_nhc_energy
+      procedure :: get_temperature
       procedure :: dump_thermo_state
   end type type_thermostat
 !!***
@@ -161,7 +162,7 @@ subroutine init_nhc(th, dt, T_ext, ndof, n_nhc, n_ys, n_mts, ke_ions)
   if (myid==0) then
     write(io_lun,*) ' Welcome to init_nhc'
     write(io_lun,*) ' Target temperature        T_ext = ', th%T_ext
-    write(io_lun,*) ' Instantateous temperature T_int = ', temp_ion
+    write(io_lun,*) ' Instantateous temperature T_int = ', th%T_int
     write(io_lun,*) ' Number of NHC thermostats n_nhc = ', th%n_nhc
     write(io_lun,*) ' Multiple time step order  n_mts = ', th%n_mts_nhc
     write(io_lun,*) ' Yoshida-Suzuki order      n_ys  = ', th%n_ys
@@ -215,7 +216,7 @@ subroutine get_berendsen_sf(th)
   ! passed variables
   class(type_thermostat), intent(inout)   :: th
 
-  th%lambda = sqrt(one + (th%dt/th%tau_T)*(th%T_ext*fac_Kelvin2Hartree/temp_ion - one))
+  th%lambda = sqrt(one + (th%dt/th%tau_T)*(th%T_ext*fac_Kelvin2Hartree/th%T_int - one))
 
 end subroutine get_berendsen_sf
 !!***
@@ -263,9 +264,9 @@ subroutine update_G(th, k, ke_box)
   real(double), intent(in)              :: ke_box ! box ke for pressure coupling
 
   if (k == 1) then
-    th%G_nhc(k) = 2*th%ke_ions - th%ndof*kB*th%T_ext*fac_Kelvin2Hartree + ke_box
+    th%G_nhc(k) = 2*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree + ke_box
   else
-    th%G_nhc(k) = th%m_nhc(k-1)*th%v_eta(k-1)**2 - kB*th%T_ext*fac_Kelvin2Hartree
+    th%G_nhc(k) = th%m_nhc(k-1)*th%v_eta(k-1)**2 - th%T_ext*fac_Kelvin2Hartree
   end if
   th%G_nhc(k) = th%G_nhc(k)/th%m_nhc(k)
 
@@ -356,10 +357,11 @@ end subroutine propagate_v_eta_2
 !!   2017/10/24 11:44
 !!  SOURCE
 !!  
-subroutine propagate_nvt_nhc(th, v)
+subroutine propagate_nvt_nhc(th, v, ke)
 
   ! passed variables
   class(type_thermostat), intent(inout) :: th
+  real(double), intent(in)              :: ke
   real(double), dimension(:,:), intent(inout) :: v  ! ion velocities
 
   ! local variables
@@ -367,27 +369,31 @@ subroutine propagate_nvt_nhc(th, v)
   real(double)  :: v_sfac   ! ionic velocity scaling factor
   real(double)  :: fac
 
+  if (myid==0 .and. iprint_MD>0) write(io_lun,*) "Welcome to propagate_nvt_nhc"
+
+  th%ke_ions = ke
   v_sfac = one
+  call th%update_G(1, zero)
   do i_mts=1,th%n_mts_nhc ! MTS loop
     do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
       ! Reverse part of Trotter expansion: update thermostat force/velocity
       do i_nhc=th%n_nhc,1,-1 ! loop over NH thermostats in reverse order
         if (i_nhc==th%n_nhc) then
-          call th%update_G(i_nhc, zero) ! box ke is zero in NVT ensemble
+!          call th%update_G(i_nhc, zero) ! box ke is zero in NVT ensemble
           call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
         else
           ! Trotter expansion to avoid sinh singularity
-          call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
+          call th%propagate_v_eta_2(i_nhc+1, th%dt_ys(i_ys), one_eighth)
           call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
-          call th%update_G(i_nhc, zero)
-          call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
+!          call th%update_G(i_nhc, zero)
+          call th%propagate_v_eta_2(i_nhc+1, th%dt_ys(i_ys), one_eighth)
         end if
       end do
 
       ! scale the ionic velocities and kinetic energy
       fac = exp(-half*th%dt_ys(i_ys)*th%v_eta(1))
       v_sfac = v_sfac*fac
-      if (myid==0) write(io_lun,*) 'v_sfac = ', v_sfac
+      if (myid==0 .and. iprint_MD > 0) write(io_lun,*) 'v_sfac = ', v_sfac
       th%ke_ions = th%ke_ions*fac**2
 
       ! update the thermostat "positions" eta
@@ -399,12 +405,12 @@ subroutine propagate_nvt_nhc(th, v)
       do i_nhc=1,th%n_nhc ! loop over NH thermostats in forward order
         if (i_nhc<th%n_nhc) then
           ! Trotter expansion to avoid sinh singularity
-          call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
+          call th%propagate_v_eta_2(i_nhc+1, th%dt_ys(i_ys), one_eighth)
           call th%update_G(i_nhc, zero)
           call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
-          call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
+          call th%propagate_v_eta_2(i_nhc+1, th%dt_ys(i_ys), one_eighth)
         else
-          call th%update_G(i_nhc, zero) ! box ke is zero in NVT ensemble
+          call th%update_G(i_nhc+1, zero) ! box ke is zero in NVT ensemble
           call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
         end if
       end do
@@ -435,10 +441,32 @@ subroutine get_nhc_energy(th)
   class(type_thermostat), intent(inout) :: th
 
   th%ke_nhc = half*sum(th%m_nhc*th%v_eta**2) ! TODO: check this
-  th%ke_nhc = th%ke_nhc + th%ndof*kB*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
-  th%ke_nhc = th%ke_nhc + kB*th%T_ext*fac_Kelvin2Hartree*sum(th%eta(2:))
+  th%ke_nhc = th%ke_nhc + th%ndof*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
+  th%ke_nhc = th%ke_nhc + th%T_ext*fac_Kelvin2Hartree*sum(th%eta(2:))
 
 end subroutine get_nhc_energy
+!!***
+
+!!****m* / *
+!!  NAME
+!!   get_temperature
+!!  PURPOSE
+!!   compute the instantaneous temperature
+!!  AUTHOR
+!!   Zamaan Raza
+!!  CREATION DATE
+!!   2017/10/27 16:48
+!!  SOURCE
+!!  
+subroutine get_temperature(th)
+
+  ! passed variables
+  class(type_thermostat), intent(inout) :: th
+
+  th%T_int = 2*th%ke_ions/fac_Kelvin2Hartree/th%ndof
+  if (myid==0) write(io_lun,'(4x,"T = ", f12.6)') th%T_int
+
+end subroutine get_temperature
 !!***
 
 !!****m* / *
@@ -473,14 +501,15 @@ subroutine dump_thermo_state(th, step, filename)
       th%append = .true.
     end if
     write(fmt,'("(a8,",i4,"e16.4)")') th%n_nhc
-    write(lun,'("step   ",i12)') step
-    write(lun,'("T_int  ",f12.4)') temp_ion
-    write(lun,'("lambda ",f12.4)') th%lambda
+    write(lun,'("step    ",i12)') step
+    write(lun,'("T_int   ",f12.4)') th%T_int
+    write(lun,'("ke_ions ",e12.4)') th%ke_ions
+    write(lun,'("lambda  ",f12.4)') th%lambda
     if (th%thermo_type == 'nhc') then
       write(lun,fmt) "eta:    ", th%eta
       write(lun,fmt) "v_eta:  ", th%v_eta
       write(lun,fmt) "G_nhc:  ", th%G_nhc
-      write(lun,'("e_nhc:  ",e16.4)') th%ke_nhc
+      write(lun,'("e_nhc: ",e16.4)') th%ke_nhc
     else if (th%thermo_type == 'berendsen') then
       write(lun,'("lambda: ",e16.4)') th%lambda
     end if

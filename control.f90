@@ -546,7 +546,7 @@ contains
     length = 3*ni_in_cell
 
     ! thermostat/barostat initialisation
-!    call calculate_kinetic_energy(velocity,KE)
+    call calculate_kinetic_energy(velocity,KE)
     md_ndof = 3*ni_in_cell
     if (md_ensemble(2:2) == 'v') then ! constant volume
       if (md_ensemble(3:3) == 't') then ! constant temperature
@@ -561,6 +561,7 @@ contains
         end if
       end if
     end if
+    call thermo%get_temperature
 
     if (myid == 0 .and. iprint_gen > 0) write(io_lun, 2) MDn_steps
     ! Find energy and forces
@@ -630,7 +631,7 @@ contains
        case('nvt')
          select case(md_thermo_type)
          case('nhc')
-           call thermo%propagate_nvt_nhc(velocity)
+           call thermo%propagate_nvt_nhc(velocity, KE)
          case('berendsen')
            call thermo%get_berendsen_sf
          end select
@@ -682,7 +683,7 @@ contains
        case('nvt')
          select case(md_thermo_type)
          case('nhc')
-           call thermo%propagate_nvt_nhc(velocity)
+           call thermo%propagate_nvt_nhc(velocity, KE)
            call thermo%get_nhc_energy
          case('berendsen')
            call thermo%berendsen_v_rescale(velocity)
@@ -700,6 +701,8 @@ contains
        ! Let's analyse
        if (flag_FixCOM) call zero_COM_velocity(velocity)
        call calculate_kinetic_energy(velocity,KE)
+       thermo%ke_ions = KE
+       call thermo%get_temperature
 
        ! Print out energy
        energy_md = energy1
