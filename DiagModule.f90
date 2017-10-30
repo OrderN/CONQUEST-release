@@ -129,6 +129,8 @@
 !!    into once only (init_blacs_pg), once for every atom move (init/end_scalapack_format) now
 !!    called from updateIndices (all routines) and once for each diagonalisation session (initDiag).
 !!    To perform a set of diagonalisations call initDiag, distrib_and_diag, endDiag
+!!   2017/10/18 11:06 dave
+!!    Change to allow arbitrary k-points to be passed to distrib_and_diag
 !!***
 module DiagModule
 
@@ -1848,9 +1850,13 @@ contains
   !!   10:09, 13/02/2006 drb
   !!    Removed all explicit references to data_ variables and rewrote
   !!    in terms of new matrix routines
+  !!   2017/10/18 14:46 dave
+  !!    Added optional argument kpassed to allow for calling of diagonalisation for
+  !!    arbitrary k-points (NB at present ONLY works for ONE process group).  Changed
+  !!    to define k-point location at start of routine
   !!  SOURCE
   !!
-  subroutine DistributeCQ_to_SC(Distrib,matA,pgk,SCmat)
+  subroutine DistributeCQ_to_SC(Distrib,matA,pgk,SCmat,kpassed)
 
     use datatypes
     use global_module,   only: numprocs, iprint_DM
@@ -1870,6 +1876,7 @@ contains
     integer,              intent(in)  :: matA  ! the CQ format matrix on local node
     integer,              intent(in)  :: pgk  ! k-point index within process group
     complex(double_cplx), intent(out) :: SCmat(:,:)  ! the SC format sub matrix on local node
+    real(double), dimension(3), OPTIONAL :: kpassed
 
     ! Local variables
     integer :: send_proc,recv_proc,send_size,recv_size,send_pgid
@@ -1877,8 +1884,22 @@ contains
     integer :: srow_size,scol_size,rrow_size,rcol_size
     integer :: req, i, j, k, l, ierr, wheremat
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
-    real(double) :: phase,rfac,ifac,hreal,himag
+    real(double) :: phase,rfac,ifac,hreal,himag, kx, ky, kz, send_kx, send_ky, send_kz
 
+    ! Work out k-point - has it been passed in explicitly ?
+    if(PRESENT(kpassed)) then
+       kx = kpassed(1)
+       ky = kpassed(2)
+       kz = kpassed(3)
+    else if (pgk <= N_kpoints_in_pg(pgid)) then
+       kx = kk(1,pg_kpoints(pgid,pgk))
+       ky = kk(2,pg_kpoints(pgid,pgk))
+       kz = kk(3,pg_kpoints(pgid,pgk))
+    else
+       kx = zero
+       ky = zero
+       kz = zero
+    end if
     send_proc = myid
     recv_proc = myid
     ! Distribute data: loop over processors and issue sends and
@@ -1900,6 +1921,9 @@ contains
           if(stat/=0) call cq_abort("DiagModule: Can't alloc SendBuffer",stat)
           ! Zero SendBuffer
           SendBuffer = cmplx(zero,zero,double_cplx)
+          send_kx = kk(1,pg_kpoints(send_pgid,pgk))
+          send_ky = kk(2,pg_kpoints(send_pgid,pgk))
+          send_kz = kk(3,pg_kpoints(send_pgid,pgk))
        end if
        if (pgk <= N_kpoints_in_pg(pgid)) then
           rrow_size = Distrib%num_rows(recv_proc+1)             ! numbef of rows to be received by local from remote
@@ -1929,9 +1953,9 @@ contains
                          if(iprint_DM>=5.AND.myid==0) write(io_lun,7) myid,send_proc,j,k,wheremat
                          ! for onsite terms, we need to work with k-points in the proc_group pgid
                          ! more precisely we work with pgk-th kpoint responsible by proc_group pgid
-                         phase = kk(1,pg_kpoints(pgid,pgk))*Distrib%images(send_proc+1,j,k)%where(l)%dx + &
-                              kk(2,pg_kpoints(pgid,pgk))*Distrib%images(send_proc+1,j,k)%where(l)%dy + &
-                              kk(3,pg_kpoints(pgid,pgk))*Distrib%images(send_proc+1,j,k)%where(l)%dz
+                         phase = kx*Distrib%images(send_proc+1,j,k)%where(l)%dx + &
+                              ky*Distrib%images(send_proc+1,j,k)%where(l)%dy + &
+                              kz*Distrib%images(send_proc+1,j,k)%where(l)%dz
                          rfac = cos(phase)* return_matrix_value_pos(matA,wheremat)
                          ifac = sin(phase)* return_matrix_value_pos(matA,wheremat)
                          ! Care here - we need to accumulate
@@ -1964,9 +1988,9 @@ contains
                             if(iprint_DM>=5.AND.myid==0) write(io_lun,7) myid,send_proc,j,k,wheremat
                             ! the kpoints used should be that responsible by the remote node, i.e.
                             ! corresponding to the pgk-th kpoint in proc_group that contains send_proc
-                            phase = kk(1,pg_kpoints(send_pgid,pgk))*Distrib%images(send_proc+1,j,k)%where(l)%dx + &
-                                 kk(2,pg_kpoints(send_pgid,pgk))*Distrib%images(send_proc+1,j,k)%where(l)%dy + &
-                                 kk(3,pg_kpoints(send_pgid,pgk))*Distrib%images(send_proc+1,j,k)%where(l)%dz
+                            phase = send_kx*Distrib%images(send_proc+1,j,k)%where(l)%dx + &
+                                    send_ky*Distrib%images(send_proc+1,j,k)%where(l)%dy + &
+                                    send_kz*Distrib%images(send_proc+1,j,k)%where(l)%dz
                             rfac = cos(phase)*return_matrix_value_pos(matA,wheremat)
                             ifac = sin(phase)*return_matrix_value_pos(matA,wheremat)
                             ! Accumulate the data
@@ -3923,23 +3947,32 @@ contains
   !!  CREATION DATE
   !!   2017/06/21
   !!  MODIFICATION HISTORY
+  !!   2017/10/18 11:11 dave
+  !!    Changed input variable i to index_kpoint
+  !!   2017/10/18 14:50 dave
+  !!    Added optional kpassed argument to allow calling of routine for arbitrary
+  !!    (passed) kpoint.  In this case, set index_kpoint to one.
+  !!   2017/10/19 09:05 dave
+  !!    Added abort if we pass k-point with multiple process groups (not possible at present)
   !!  SOURCE
   !!
-  subroutine distrib_and_diag(spin,i,mode,flag_store_w)
+  subroutine distrib_and_diag(spin,index_kpoint,mode,flag_store_w,kpassed)
 
     use datatypes
     use numbers
     use global_module,   only: iprint_DM
     use mult_module,     only: matH, matS
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
-         nkpoints_max, pgid, N_kpoints_in_pg, pg_kpoints, N_procs_in_pg
+         nkpoints_max, pgid, N_kpoints_in_pg, pg_kpoints, N_procs_in_pg, proc_groups
 
     implicit none
 
     ! Passed
-    integer :: spin, i
+    integer :: spin ! Spin component
+    integer :: index_kpoint ! K-point index in the process group list
     character(len=1) :: mode
     logical :: flag_store_w
+    real(double), dimension(3), OPTIONAL :: kpassed
 
     ! Local
     real(double) :: vl, vu, orfac, scale
@@ -3953,14 +3986,20 @@ contains
     iu = 0
     if (iprint_DM > 3 .and. (inode == ionode)) &
          write (io_lun, *) myid, ' Calling DistributeCQ_to_SC for H'
-    call DistributeCQ_to_SC(DistribH, matH(spin), i, SCHmat(:,:,spin))
-    ! Form the overlap for this k-point and send it to appropriate processors
-    call DistributeCQ_to_SC(DistribS, matS, i, SCSmat(:,:,spin))
+    ! Form the Hamiltonian and overlap for this k-point and send them to appropriate processors
+    if(PRESENT(kpassed)) then
+       if(proc_groups>1) call cq_abort("Coding error: can't have more than one PG and pass k-point to distrib_and_diag")
+       call DistributeCQ_to_SC(DistribH, matH(spin), index_kpoint, SCHmat(:,:,spin),kpassed)
+       call DistributeCQ_to_SC(DistribS, matS, index_kpoint, SCSmat(:,:,spin),kpassed)
+    else
+       call DistributeCQ_to_SC(DistribH, matH(spin), index_kpoint, SCHmat(:,:,spin))
+       call DistributeCQ_to_SC(DistribS, matS, index_kpoint, SCSmat(:,:,spin))
+    end if
     ! Now, if this processor is involved, do the diagonalisation
     if (iprint_DM > 3 .and. inode == ionode) &
          write (io_lun, *) myid, 'Proc row, cols, me: ', &
-         proc_rows, proc_cols, me, i, nkpoints_max
-    if (i <= N_kpoints_in_pg(pgid)) then
+         proc_rows, proc_cols, me, index_kpoint, nkpoints_max
+    if (index_kpoint <= N_kpoints_in_pg(pgid)) then
        ! Call the diagonalisation routine for generalised problem
        ! H.psi = E.S.psi
        call pzhegvx(1, mode, 'A', 'U', matrix_size, SCHmat(:,:,spin), &
@@ -3977,7 +4016,7 @@ contains
        if(info>0) write(io_lun,fmt='("Warning! Info greater than zero: ",i3)') info
 !!! 
        ! Copy local_w into appropriate place in w
-       if(flag_store_w) w(1:matrix_size, pg_kpoints(pgid, i), spin) = &
+       if(flag_store_w) w(1:matrix_size, pg_kpoints(pgid, index_kpoint), spin) = &
             scale * local_w(1:matrix_size, spin)
     end if ! End if (i<=N_kpoints_in_pg(pgid))
   end subroutine distrib_and_diag

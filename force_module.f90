@@ -3225,9 +3225,11 @@ contains
   !!    N.B. this relies on the output density, which is passed as an optional argument
   !!   2016/07/20 16:30 nakata
   !!    Renamed naba_atm -> naba_atoms_of_blocks
+  !!   2017/10/20 12:08 dave
+  !!    Added extra optional argument to allow return of XC energy (for force testing)
   !!  SOURCE
   !!
-  subroutine get_pcc_force(pcc_force, inode, ionode, n_atoms, size, density_out)
+  subroutine get_pcc_force(pcc_force, inode, ionode, n_atoms, size, density_out,xc_energy_ret)
 
     use datatypes
     use numbers
@@ -3275,6 +3277,7 @@ contains
     integer :: inode, ionode
     real(double), dimension(3,n_atoms) :: pcc_force
     real(double), dimension(:,:), OPTIONAL :: density_out
+    real(double), OPTIONAL :: xc_energy_ret
     
     ! Local variables
     integer        :: i, j, my_block, n, the_species, iatom, spin
@@ -3353,7 +3356,7 @@ contains
        call get_xc_potential_LSDA_PW92(density_wk, xc_potential,    &
                                        xc_epsilon, xc_energy, size)
     end select
-
+    if(PRESENT(xc_energy_ret)) xc_energy_ret = xc_energy
     ! We do this here to re-use xc_potential - for non-PCC we do it in get_nonSC_correction_force
     if(.NOT.flag_self_consistent) then
        if(.NOT.present(density_out)) call cq_abort("Output density not passed to PCC force for nonSCF calculation")
