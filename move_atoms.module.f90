@@ -3006,7 +3006,7 @@ contains
     ! Module usage
     use datatypes
     use numbers, ONLY: zero,half
-    use global_module, ONLY: ni_in_cell, temp_ion
+    use global_module, ONLY: ni_in_cell
     use species_module, ONLY: species,mass
 
     implicit none

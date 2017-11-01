@@ -7,7 +7,7 @@
 ! Code area 9: General
 ! ------------------------------------------------------------------------------
 
-!!****h* Conquest/name
+!!****h* Conquest/thermostat
 !!  NAME
 !!   thermostat
 !!  PURPOSE
@@ -42,7 +42,7 @@ module thermostat
   integer       :: md_n_nhc, md_n_ys, md_n_mts
   real(double), dimension(:), allocatable :: md_nhc_mass
 
-    !!****s* /
+  !!****s* thermostat/type_thermostat
   !!  NAME
   !!   type_thermostat 
   !!  PURPOSE
@@ -97,7 +97,7 @@ module thermostat
 
 contains
 
-!!****m* / *
+!!****m* thermostat/init_nhc *
 !!  NAME
 !!   init_nhc
 !!  PURPOSE
@@ -172,7 +172,7 @@ subroutine init_nhc(th, dt, T_ext, ndof, n_nhc, n_ys, n_mts, ke_ions)
 end subroutine init_nhc
 !!***
 
-!!****m* / *
+!!****m* thermostat/init_berendsen *
 !!  NAME
 !!   init_berendsen
 !!  PURPOSE
@@ -200,11 +200,11 @@ subroutine init_berendsen(th, dt, T_ext, ndof, tau_T, ke_ions)
 end subroutine init_berendsen
 !!***
 
-!!****m* / *
+!!****m* thermostat/get_berendsen_sf *
 !!  NAME
-!!   berendsen_v_rescale
+!!   get_berendsen_sf
 !!  PURPOSE
-!!   thermostat using Berendsen (weak coupling) velocity rescaling
+!!   Get velocity scaling factor for Berendsen thermostat
 !!  AUTHOR
 !!    Zamaan Raza 
 !!  CREATION DATE
@@ -221,13 +221,14 @@ subroutine get_berendsen_sf(th)
 end subroutine get_berendsen_sf
 !!***
 
-!!****m* / *
+!!****m* thermostat/berendsen_v_rescale *
 !!  NAME
 !!   berendsen_v_rescale
 !!  PURPOSE
-!!   thermostat using Berendsen (weak coupling) velocity rescaling. Note that
-!!   the scaling factor is computed before the first vVerlet velocity update,
-!!   and the velocities scaled after the second vVerlet velocity update.
+!!   rescale veolocity using Berendsen (weak coupling) velocity rescaling.
+!!   Note that the scaling factor is computed before the first vVerlet
+!!   velocity update, and the velocities scaled after the second vVerlet
+!!   velocity update.
 !!  AUTHOR
 !!    Zamaan Raza 
 !!  CREATION DATE
@@ -245,7 +246,7 @@ subroutine berendsen_v_rescale(th, v)
 end subroutine berendsen_v_rescale
 !!***
 
-!!****m* / *
+!!****m* thermostat/update_G *
 !!  NAME
 !!   update_G
 !!  PURPOSE
@@ -273,7 +274,7 @@ subroutine update_G(th, k, ke_box)
 end subroutine update_G
 !!***
 
-!!****m* / *
+!!****m* thermostat/propagate_eta *
 !!  NAME
 !!   propagate_eta
 !!  PURPOSE
@@ -297,7 +298,7 @@ subroutine propagate_eta(th, k, dt, dtfac)
 end subroutine propagate_eta
 !!***
 
-!!****m* / *
+!!****m* thermostat/propagate_v_eta_1 *
 !!  NAME
 !!   propagate_v_eta_1
 !!  PURPOSE
@@ -321,7 +322,7 @@ subroutine propagate_v_eta_1(th, k, dt, dtfac)
 end subroutine propagate_v_eta_1
 !!***
 
-!!****m* / *
+!!****m* thermostat/propagate_v_eta_2 *
 !!  NAME
 !!   propagate_v_eta_2
 !!  PURPOSE
@@ -345,7 +346,7 @@ subroutine propagate_v_eta_2(th, k, dt, dtfac)
 end subroutine propagate_v_eta_2
 !!***
 
-!!****m* / *
+!!****m* thermostat/propagate_nvt_nhc *
 !!  NAME
 !!   propagate_nvt_nhc
 !!  PURPOSE
@@ -396,6 +397,7 @@ subroutine propagate_nvt_nhc(th, v, ke)
       if (myid==0 .and. iprint_MD > 0) write(io_lun,*) 'v_sfac = ', v_sfac
       th%ke_ions = th%ke_ions*fac**2
 
+      call th%update_G(1, zero)
       ! update the thermostat "positions" eta
       do i_nhc=1,th%n_nhc
         call th%propagate_eta(i_nhc, th%dt_ys(i_ys), half)
@@ -406,7 +408,7 @@ subroutine propagate_nvt_nhc(th, v, ke)
         if (i_nhc<th%n_nhc) then
           ! Trotter expansion to avoid sinh singularity
           call th%propagate_v_eta_2(i_nhc+1, th%dt_ys(i_ys), one_eighth)
-          call th%update_G(i_nhc, zero)
+          if (i_nhc /= 1) call th%update_G(i_nhc, zero)
           call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
           call th%propagate_v_eta_2(i_nhc+1, th%dt_ys(i_ys), one_eighth)
         else
@@ -424,7 +426,7 @@ subroutine propagate_nvt_nhc(th, v, ke)
 end subroutine propagate_nvt_nhc
 !!***
 
-!!****m* / *
+!!****m* thermostat/get_nhc_energy *
 !!  NAME
 !!   get_nhc_energy
 !!  PURPOSE
@@ -447,7 +449,7 @@ subroutine get_nhc_energy(th)
 end subroutine get_nhc_energy
 !!***
 
-!!****m* / *
+!!****m* thermostat/get_temperature *
 !!  NAME
 !!   get_temperature
 !!  PURPOSE
@@ -469,11 +471,11 @@ subroutine get_temperature(th)
 end subroutine get_temperature
 !!***
 
-!!****m* / *
+!!****m* thermostat/dump_thermo_state *
 !!  NAME
 !!   dump_thermo_state
 !!  PURPOSE
-!!   dump the state of the thermostat to unit lun
+!!   dump the state of the thermostat
 !!  AUTHOR
 !!   Zamaan Raza
 !!  CREATION DATE

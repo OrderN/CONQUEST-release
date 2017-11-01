@@ -552,7 +552,7 @@ contains
     md_ndof = 3*ni_in_cell
     do i=1,ni_in_cell
       do j=1,3
-        if (flag_move_atom(j,i) == .false.) md_ndof = md_ndof-1
+        if (flag_move_atom(j,i) .eqv. .false.) md_ndof = md_ndof-1
       end do
     end do
 
@@ -877,7 +877,7 @@ contains
 7   format(4x,'Conserved qty h_prime   : ',f15.8)
 8   format(4x,'*** MD step ',i4,' KE: ',f18.8,&
            ' IntEnergy',f20.8,' TotalEnergy',f20.8)
-9   format(6x,'Potential Energy        : ',f15.8)
+9   format(6x,'Potential energy        : ',f15.8)
 10  format(6x,'Kinetic energy          : ',f15.8)
 11  format(6x,'Nose-Hoover energy      : ',f15.8)
   end subroutine md_run
