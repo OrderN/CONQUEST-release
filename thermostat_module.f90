@@ -30,7 +30,7 @@ module thermostat
   use numbers
   use global_module,    only: ni_in_cell, io_lun, iprint_MD
   use move_atoms,       only: kB, fac_Kelvin2Hartree
-  use GenComms,         only: myid
+  use GenComms,         only: inode, ionode
 
   implicit none
 
@@ -159,13 +159,14 @@ subroutine init_nhc(th, dt, T_ext, ndof, n_nhc, n_ys, n_mts, ke_ions)
   end select
   th%dt_ys = th%dt*th%dt_ys/th%n_mts_nhc
 
-  if (myid==0) then
+  if (inode==ionode) then
     write(io_lun,*) ' Welcome to init_nhc'
     write(io_lun,*) ' Target temperature        T_ext = ', th%T_ext
     write(io_lun,*) ' Instantateous temperature T_int = ', th%T_int
     write(io_lun,*) ' Number of NHC thermostats n_nhc = ', th%n_nhc
     write(io_lun,*) ' Multiple time step order  n_mts = ', th%n_mts_nhc
     write(io_lun,*) ' Yoshida-Suzuki order      n_ys  = ', th%n_ys
+    write(io_lun,*) ' NHC masses:    ', th%m_nhc
     write(io_lun,*) ' YS time steps: ', th%dt_ys
   end if
 
@@ -369,7 +370,7 @@ subroutine propagate_nvt_nhc(th, v, ke)
   real(double)  :: v_sfac   ! ionic velocity scaling factor
   real(double)  :: fac
 
-  if (myid==0 .and. iprint_MD>0) write(io_lun,*) "Welcome to propagate_nvt_nhc"
+  if (inode==ionode .and. iprint_MD>0) write(io_lun,*) "Welcome to propagate_nvt_nhc"
 
   th%ke_ions = ke
   v_sfac = one
@@ -383,19 +384,20 @@ subroutine propagate_nvt_nhc(th, v, ke)
           call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
         else
           ! Trotter expansion to avoid sinh singularity
-          call th%propagate_v_eta_2(i_nhc+1, th%dt_ys(i_ys), one_eighth)
+          call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
           call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
 !          call th%update_G(i_nhc, zero)
-          call th%propagate_v_eta_2(i_nhc+1, th%dt_ys(i_ys), one_eighth)
+          call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
         end if
       end do
 
       ! scale the ionic velocities and kinetic energy
       fac = exp(-half*th%dt_ys(i_ys)*th%v_eta(1))
       v_sfac = v_sfac*fac
-      if (myid==0 .and. iprint_MD > 0) write(io_lun,*) 'v_sfac = ', v_sfac
-      th%ke_ions = th%ke_ions*fac**2
+      if (inode==ionode .and. iprint_MD > 0) write(io_lun,*) 'v_sfac = ', v_sfac
+      th%ke_ions = th%ke_ions*v_sfac**2
 
+      call th%update_G(1, zero)
       ! update the thermostat "positions" eta
       do i_nhc=1,th%n_nhc
         call th%propagate_eta(i_nhc, th%dt_ys(i_ys), half)
@@ -405,10 +407,10 @@ subroutine propagate_nvt_nhc(th, v, ke)
       do i_nhc=1,th%n_nhc ! loop over NH thermostats in forward order
         if (i_nhc<th%n_nhc) then
           ! Trotter expansion to avoid sinh singularity
-          call th%propagate_v_eta_2(i_nhc+1, th%dt_ys(i_ys), one_eighth)
-          call th%update_G(i_nhc, zero)
+          call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
+          if (i_nhc /= 1) call th%update_G(i_nhc, zero)
           call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
-          call th%propagate_v_eta_2(i_nhc+1, th%dt_ys(i_ys), one_eighth)
+          call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
         else
           call th%update_G(i_nhc+1, zero) ! box ke is zero in NVT ensemble
           call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
@@ -464,7 +466,7 @@ subroutine get_temperature(th)
   class(type_thermostat), intent(inout) :: th
 
   th%T_int = 2*th%ke_ions/fac_Kelvin2Hartree/th%ndof
-  if (myid==0) write(io_lun,'(4x,"T = ", f12.6)') th%T_int
+  if (inode==ionode) write(io_lun,'(4x,"T = ", f12.6)') th%T_int
 
 end subroutine get_temperature
 !!***
@@ -492,7 +494,7 @@ subroutine dump_thermo_state(th, step, filename)
   character(40)                         :: fmt
   integer                               :: lun
 
-  if (myid==0) then
+  if (inode==ionode) then
     call io_assign(lun)
     if (th%append) then
       open(unit=lun,file=filename,position='append')

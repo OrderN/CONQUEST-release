@@ -1878,7 +1878,7 @@ contains
 
        ! Thermostat
        md_ensemble        = fdf_string(3, 'MD.Ensemble', 'nve')
-       md_thermo_type     = fdf_string(20, 'MD.Thermoststat', 'nhc')
+       md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
        md_tau_T           = fdf_double('MD.tauT', 10.0_double)
        md_n_nhc           = fdf_integer('MD.nNHC', 5) 
        md_n_ys            = fdf_integer('MD.nYoshida', 1)
