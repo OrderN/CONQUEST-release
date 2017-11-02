@@ -39,6 +39,8 @@
 !!    Added species_file
 !!   2016/11/09 21:00 nakata
 !!    Added natomf_species
+!!   2017/04/05 18:00 nakata
+!!    Added charge_up and charge_dn
 !!  SOURCE
 !!
 module species_module
@@ -56,7 +58,7 @@ module species_module
   logical :: species_from_files
   !
   integer,           allocatable, dimension(:) :: species
-  real(double),      allocatable, dimension(:) :: charge, mass
+  real(double),      allocatable, dimension(:) :: charge, charge_up, charge_dn, mass
   character(len=50), allocatable, dimension(:) :: ps_file
   character(len=40), allocatable, dimension(:) :: ch_file
   character(len=40), allocatable, dimension(:) :: phi_file
