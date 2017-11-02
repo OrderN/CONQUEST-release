@@ -446,6 +446,8 @@ contains
 !!    Added calls to read L-matrix for both spin channels
 !!   2017/10/25 zamaan
 !!    Added refactored NVT
+!!   2017/11/02 zamaan
+!!    Changed velocity local variable to ion_velocity from md_control
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -489,10 +491,9 @@ contains
     use constraint_module, ONLY: correct_atomic_position,correct_atomic_velocity, &
          ready_constraint,flag_RigidBonds
     use input_module,   ONLY: io_assign, io_close
-    use thermostat,     only: type_thermostat, init_nhc, init_berendsen, &
-                              berendsen_v_rescale, propagate_nvt_nhc, &
-                              get_nhc_energy, md_tau_T, md_n_nhc, md_n_ys, &
-                              md_n_mts, md_nhc_mass
+    use md_model,       only: type_md_model
+    use md_control,     only: type_thermostat, md_tau_T, md_n_nhc, md_n_ys, &
+                              md_n_mts, md_nhc_mass, ion_velocity
 
     implicit none
 
@@ -502,16 +503,14 @@ contains
     real(double) :: total_energy
     
     ! Local variables
-    real(double), allocatable, dimension(:,:) :: velocity
+    real(double), allocatable, target, dimension(:,:) :: velocity
     integer       ::  iter, i, j, k, length, stat, i_first, i_last, &
          nfile, symm, md_ndof
     integer       :: lun, ios, md_steps ! SA 150204; 150213 md_steps: counter for MD steps
-    real(double)  :: temp, KE, energy1, energy0, dE, max, g0
-    real(double)  :: energy_md
+    real(double)  :: temp, energy1, energy0, dE, max, g0
     character(50) :: file_velocity='velocity.dat'
     logical       :: done,second_call
     logical,allocatable,dimension(:) :: flag_movable
-    real(double)  :: h_prime  ! the conserved quantity
 
     !! quenched MD optimisation is stopped
     !! if the maximum force component is bellow threshold
@@ -521,24 +520,28 @@ contains
     integer :: step_qMD, n_stop_qMD, fire_N, fire_N2
     real(double) :: fire_step_max, fire_P0, fire_alpha
 
+    ! model
+    type(type_md_model)           :: mdl
+
     ! thermostat
-    type(type_thermostat) :: thermo
+    type(type_thermostat), target :: thermo
     
-    allocate(velocity(3,ni_in_cell), STAT=stat)
+    allocate(ion_velocity(3,ni_in_cell), STAT=stat)
+    call mdl%init_model(thermo)
     if (stat /= 0) &
          call cq_abort("Error allocating velocity in md_run: ", &
                        ni_in_cell, stat)
     call reg_alloc_mem(area_general, 3*ni_in_cell, type_dbl)
-    velocity = zero
+    ion_velocity = zero
     if (flag_read_velocity) then
-       call read_velocity(velocity, file_velocity)
+       call read_velocity(ion_velocity, file_velocity)
     else
        if(temp_ion > RD_ERR) then
           if(inode == ionode) &
-               call init_velocity(ni_in_cell, temp_ion, velocity)
-          call gcopy(velocity, 3, ni_in_cell)
+               call init_velocity(ni_in_cell, temp_ion, ion_velocity)
+          call gcopy(ion_velocity, 3, ni_in_cell)
        else
-          velocity = zero
+          ion_velocity = zero
        end if
     end if
     energy0 = zero
@@ -547,7 +550,7 @@ contains
     length = 3*ni_in_cell
 
     ! thermostat/barostat initialisation
-    call calculate_kinetic_energy(velocity,KE)
+    call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
     ! Initialise number of degrees of freedom
     md_ndof = 3*ni_in_cell
     do i=1,ni_in_cell
@@ -561,9 +564,9 @@ contains
         if (md_thermo_type == 'nhc') then
           md_ndof = md_ndof + md_n_nhc
           call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
-                               md_n_ys, md_n_mts, KE)
+                               md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
         else if (md_thermo_type == 'berendsen') then
-          call thermo%init_berendsen(MDtimestep, temp_ion, md_ndof, md_tau_T, KE)
+          call thermo%init_berendsen(MDtimestep, temp_ion, md_ndof, md_tau_T, mdl%ion_kinetic_energy)
         else
           call cq_abort("Unknown thermostat type")
         end if
@@ -604,7 +607,7 @@ contains
       if (inode.EQ.ionode) call dump_InfoGlobal(i_first)
     endif
 
-    energy_md = energy0
+    mdl%dft_total_energy = energy0
 
     if (flag_fire_qMD) then
        step_qMD = i_first ! SA 20150201
@@ -639,7 +642,7 @@ contains
        case('nvt')
          select case(md_thermo_type)
          case('nhc')
-           call thermo%propagate_nvt_nhc(velocity, KE)
+           call thermo%propagate_nvt_nhc(ion_velocity, mdl%ion_kinetic_energy)
          case('berendsen')
            call thermo%get_berendsen_sf
          end select
@@ -647,20 +650,20 @@ contains
 
        !%%! Evolve atoms - either FIRE (quenched MD) or velocity Verlet
        if (flag_fire_qMD) then
-          call fire_qMD(fire_step_max,MDtimestep,velocity,tot_force,flag_movable,iter,&
+          call fire_qMD(fire_step_max,MDtimestep,ion_velocity,tot_force,flag_movable,iter,&
                         fire_N,fire_N2,fire_P0,fire_alpha) ! SA 20150204
        else
-          call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable)
-          call vVerlet_r_dt(MDtimestep,velocity,flag_movable)
+          call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable)
+          call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
        end if
        ! Constrain position
-       if (flag_RigidBonds) call correct_atomic_position(velocity,MDtimestep)
+       if (flag_RigidBonds) call correct_atomic_position(ion_velocity,MDtimestep)
        ! Reset-up
        if (.NOT.flag_MDold) then
          ! Update members
          call wrap_xyz_atom_cell()
          call update_atom_coord()
-         call updateIndices3(fixed_potential,velocity)
+         call updateIndices3(fixed_potential,ion_velocity)
          if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
            ! L-matrix reconstruction
            call grab_matrix2('L',inode,nfile,InfoL)
@@ -683,7 +686,7 @@ contains
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .true.,iter)
        else
           call get_E_and_F(fixed_potential,vary_mu,energy1,.true.,.false.,iter)
-          call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable,second_call)
+          call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
        end if
 
        ! thermostat/barostat
@@ -691,10 +694,10 @@ contains
        case('nvt')
          select case(md_thermo_type)
          case('nhc')
-           call thermo%propagate_nvt_nhc(velocity, KE)
+           call thermo%propagate_nvt_nhc(ion_velocity, mdl%ion_kinetic_energy)
            call thermo%get_nhc_energy
          case('berendsen')
-           call thermo%berendsen_v_rescale(velocity)
+           call thermo%berendsen_v_rescale(ion_velocity)
          end select
        end select
        if (flag_thermoDebug) then
@@ -703,21 +706,23 @@ contains
        end if
 
        ! Constrain velocity
-       if (flag_RigidBonds) call correct_atomic_velocity(velocity)
+       if (flag_RigidBonds) call correct_atomic_velocity(ion_velocity)
        !%%! END of Evolve atoms
 
        ! Let's analyse
-       if (flag_FixCOM) call zero_COM_velocity(velocity)
-       call calculate_kinetic_energy(velocity,KE)
-       thermo%ke_ions = KE
+       if (flag_FixCOM) call zero_COM_velocity(ion_velocity)
+       call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
+       thermo%ke_ions = mdl%ion_kinetic_energy
        call thermo%get_temperature
 
        ! Print out energy
-       energy_md = energy1
+       mdl%dft_total_energy = energy1
        if (myid == 0) &
          write (io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
-                KE / (three / two * ni_in_cell) / fac_Kelvin2Hartree
-       if (myid == 0) write (io_lun, 8) iter, KE, energy_md, KE+energy_md
+                mdl%ion_kinetic_energy / (three / two * ni_in_cell) / fac_Kelvin2Hartree
+       if (myid == 0) write (io_lun, 8) iter, mdl%ion_kinetic_energy, &
+                                  mdl%dft_total_energy, &
+                                  mdl%ion_kinetic_energy+mdl%dft_total_energy
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
          do i = 1, ni_in_cell
@@ -741,21 +746,21 @@ contains
        ! Output and energy changes
        dE = energy0 - energy1
        ! Compute the conserved quantity
-       h_prime = KE + energy_md ! the NVE case
+       mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy ! the NVE case
        write (io_lun, '(6x,a)') "Components of conserved quantity"
-       write (io_lun, 9) KE
-       write (io_lun, 10) energy_md
+       write (io_lun, 9) mdl%ion_kinetic_energy
+       write (io_lun, 10) mdl%dft_total_energy
        select case(md_ensemble)
        case('nvt')
          select case(md_thermo_type)
          case('nhc')
              call thermo%get_nhc_energy
-             h_prime = h_prime + thermo%ke_nhc
+             mdl%h_prime = mdl%h_prime + thermo%ke_nhc
              write (io_lun, 11) thermo%ke_nhc
          end select
        end select
        if(myid==0) then
-          write (io_lun, 7) h_prime
+          write (io_lun, 7) mdl%h_prime
           write (io_lun, 6) max
           write (io_lun, 4) dE
           write (io_lun, 5) sqrt(g0/ni_in_cell)
@@ -766,8 +771,9 @@ contains
             call write_positions(iter, parts)
        call my_barrier
        !to check IO of velocity files
-       call write_velocity(velocity, file_velocity)
+       call write_velocity(ion_velocity, file_velocity)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+       call mdl%dump_stats("Stats")
        !to check IO of velocity files
        if (flag_fire_qMD) then
           if (abs(max) < MDcgtol) then
@@ -863,7 +869,7 @@ contains
 !%%!   if (done) exit
     end do
 
-    deallocate(velocity, STAT=stat)
+    deallocate(ion_velocity, STAT=stat)
     if (stat /= 0) call cq_abort("Error deallocating velocity in md_run: ", &
                                  ni_in_cell, stat)
     call reg_dealloc_mem(area_general, 3 * ni_in_cell, type_dbl)
@@ -874,7 +880,7 @@ contains
 4   format(4x,'Energy change           : ',f15.8)
 5   format(4x,'Force Residual          : ',f15.8)
 6   format(4x,'Maximum force component : ',f15.8)
-7   format(4x,'Conserved qty h_prime   : ',f15.8)
+7   format(4x,'Conserved qty mdl%h_prime   : ',f15.8)
 8   format(4x,'*** MD step ',i4,' KE: ',f18.8,&
            ' IntEnergy',f20.8,' TotalEnergy',f20.8)
 9   format(6x,'Potential energy        : ',f15.8)

@@ -151,7 +151,7 @@ module global_module
   real(double) :: ne_in_cell ! Electrons in cell
   ! atom_coord : Use global labelling, in the future this array should
   ! be used instead of x, y, z_atom_cell. by T. Miyazaki
-  real(double), dimension(:,:), allocatable :: atom_coord ! Atomic coordinates
+  real(double), dimension(:,:), allocatable, target :: atom_coord ! Atomic coordinates
   integer,      dimension(:,:), allocatable :: sorted_coord ! Atom IDs of atoms sorted according to x, y, z coords
   logical,      dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
   integer,      dimension(:),   allocatable :: flag_cdft_atom

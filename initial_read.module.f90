@@ -763,7 +763,7 @@ contains
                                   LFD_Thresh_EnergyRise, LFD_max_iteration,              &
                                   flag_LFD_MD_UseAtomicDensity
     use control,    only: md_ensemble, md_thermo_type
-    use thermostat, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass 
+    use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass 
 
     implicit none
 

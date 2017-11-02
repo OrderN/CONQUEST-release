@@ -83,7 +83,7 @@ module force_module
 
   save
 
-  real(double), dimension(:,:), allocatable :: tot_force
+  real(double), dimension(:,:), allocatable, target :: tot_force
 
   ! On-site part of stress tensor as Conquest uses orthorhombic cells (easily extended)
   real(double), dimension(3) :: stress
