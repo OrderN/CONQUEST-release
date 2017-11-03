@@ -936,7 +936,7 @@ contains
 
 
          !!**< lat >**
-         !call my_barrier
+         call my_barrier
          !!
          !if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
          !!**< lat >**  
