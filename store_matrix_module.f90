@@ -31,18 +31,18 @@ module store_matrix
     integer :: n_prim
     integer :: matrix_size
    ! Size : n_prim
-    integer, pointer :: nsf_spec_i(:)
-    integer, pointer :: idglob_i(:)
-    integer, pointer :: jmax_i(:)
-    integer, pointer :: jbeta_max_i(:)
-    integer, pointer :: ibeg_data_matrix(:)  ! initial address of data_matrix for (iprim)th atom
+    integer, allocatable :: nsf_spec_i(:)
+    integer, allocatable :: idglob_i(:)
+    integer, allocatable :: jmax_i(:)
+    integer, allocatable :: jbeta_max_i(:)
+    integer, allocatable :: ibeg_data_matrix(:)  ! initial address of data_matrix for (iprim)th atom
    ! Size : (n_prim, jmax_i_max)
-    integer, pointer :: idglob_j(:,:)
-    integer, pointer :: beta_j(:,:)
+    integer, allocatable :: idglob_j(:,:)
+    integer, allocatable :: beta_j(:,:)
    ! Size : (3, jmax_i_max, iprim)
-    real(double), pointer :: vec_Rij(:,:,:)
+    real(double), allocatable :: vec_Rij(:,:,:)
    ! Size : matrix_size
-    real(double), pointer :: data_matrix(:)
+    real(double), allocatable :: data_matrix(:)
   end type matrix_store
 
 ! matrix_store_global : 
@@ -56,9 +56,9 @@ module store_matrix
     integer :: ni_in_cell, numprocs         ! number of atoms, number of MPI processes
     integer :: npcellx, npcelly, npcellz    ! partition
     real(double) :: rcellx, rcelly, rcellz  ! cell length (should be changed to 3x3 cell parameters)
-    integer, pointer :: glob_to_node(:)     ! global id of atoms -> index of MPI-process
-    real(double), pointer :: atom_coord(:,:)! atomic coordinates (3, global-id)
-    real(double), pointer :: atom_veloc(:,:)! atomic velocities  (3, global-id)
+    integer, allocatable :: glob_to_node(:)     ! global id of atoms -> index of MPI-process
+    real(double), allocatable :: atom_coord(:,:)! atomic coordinates (3, global-id)
+    real(double), allocatable :: atom_veloc(:,:)! atomic velocities  (3, global-id)
   end type matrix_store_global
 
   character(80),private :: RCSid = "$Id$"
@@ -247,7 +247,7 @@ contains
 
    subroutine set_matrix_store(stub,matA,range,matinfo)
     use numbers
-    use global_module, ONLY: id_glob, species_glob
+    use global_module, ONLY: id_glob, species_glob, io_lun
     use species_module, ONLY: nsf_species
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
@@ -318,7 +318,7 @@ contains
         do ni = 1, bundle%nm_nodgroup(np)
           atom_num=bundle%nm_nodbeg(np)+ni-1
           iprim = iprim + 1
-          if(atom_num .NE. iprim) write(*,*) 'Warning!! in set_matrix_store : iprim & atom_num = ',iprim,atom_num
+          if(atom_num .NE. iprim) write(io_lun,*) 'Warning!! in set_matrix_store : iprim & atom_num = ',iprim,atom_num
 
           do neigh = 1, mat(np,range)%n_nab(ni)
             ist = mat(np,range)%i_acc(ni) + neigh - 1  ! Neighbour-labeling
@@ -395,10 +395,10 @@ contains
   subroutine dump_InfoMatGlobal(MDstep,velocity)
 
     ! Module usage
-    use global_module, ONLY: ni_in_cell,numprocs,rcellx,rcelly,rcellz,id_glob
-    use GenComms, ONLY: cq_abort
+    use global_module, ONLY: ni_in_cell,numprocs,rcellx,rcelly,rcellz,id_glob, io_lun
+    use GenComms, ONLY: cq_abort, inode, ionode, my_barrier
     use group_module, ONLY: parts
-    use io_module, ONLY: get_file_name
+    use io_module, ONLY: get_file_name, get_file_name_2rank
 
     implicit none
     type(matrix_store_global):: mat_global_tmp
@@ -406,6 +406,7 @@ contains
     real(double), intent(in), optional :: velocity(1:3,ni_in_cell)
     integer :: lun, istat, iglob
     integer :: step_local
+    character(len=80) :: filename
 
     if(present(MDstep)) then
      step_local = MDstep
@@ -420,21 +421,27 @@ contains
     endif
 
     ! Open InfoGlobal.dat and write data.
-    call io_assign(lun)
-    open (lun,file='InfoGlobal.dat',iostat=istat)
-    if (istat.GT.0) call cq_abort('Fail in opening InfoGlobal.dat .')
-    write (lun,*) mat_global_tmp%ni_in_cell, mat_global_tmp%numprocs
-    write (lun,*) mat_global_tmp%npcellx,mat_global_tmp%npcelly,mat_global_tmp%npcellz
-    write (lun,*) mat_global_tmp%rcellx,mat_global_tmp%rcelly,mat_global_tmp%rcellz
-    write (lun,*) mat_global_tmp%glob_to_node(1:mat_global_tmp%ni_in_cell)
-    !if (present(MDstep)) write (lun,*) mat_global_tmp%index
-    write (lun,*) mat_global_tmp%index
-
-    do iglob=1, mat_global_tmp%ni_in_cell
-     write (lun,101) iglob, mat_global_tmp%atom_coord(1:3, iglob)
-     101 format(5x,i8,3x,3e20.10)
-    enddo !iglob=1, mat_global_tmp%ni_in_cell
-    call io_close (lun)
+    if(inode == ionode) then
+     call io_assign(lun)
+     call get_file_name_2rank('InfoGlobal',filename,step_local)
+     write(io_lun,*) ' filename = ',filename
+     open (lun,file=filename,iostat=istat)
+     !open (lun,file='InfoGlobal.dat',iostat=istat)
+     rewind lun
+     if (istat.GT.0) call cq_abort('Fail in opening InfoGlobal.dat .')
+     write (lun,*) mat_global_tmp%ni_in_cell, mat_global_tmp%numprocs
+     write (lun,*) mat_global_tmp%npcellx,mat_global_tmp%npcelly,mat_global_tmp%npcellz
+     write (lun,*) mat_global_tmp%rcellx,mat_global_tmp%rcelly,mat_global_tmp%rcellz
+     write (lun,*) mat_global_tmp%glob_to_node(1:mat_global_tmp%ni_in_cell)
+     !if (present(MDstep)) write (lun,*) mat_global_tmp%index
+     write (lun,*) mat_global_tmp%index
+ 
+     do iglob=1, mat_global_tmp%ni_in_cell
+      write (lun,101) iglob, mat_global_tmp%atom_coord(1:3, iglob)
+      101 format(5x,i8,3x,3e20.10)
+     enddo !iglob=1, mat_global_tmp%ni_in_cell
+     call io_close (lun)
+    endif
 
     call free_InfoMatGlobal(mat_global_tmp)
     return
@@ -514,9 +521,10 @@ contains
     use GenComms, ONLY: cq_abort
     implicit none
     integer :: istat
-    type(matrix_store_global),intent(out) :: mat_glob
+    !type(matrix_store_global),intent(out) :: mat_glob
+    type(matrix_store_global) :: mat_glob
 
-    deallocate(mat_glob%atom_coord, mat_glob%glob_to_node, STAT=istat)
+    deallocate(mat_glob%atom_veloc, mat_glob%atom_coord, mat_glob%glob_to_node, STAT=istat)
     if(istat .NE. 0) call cq_abort('Error : deallocation in free_InfoMatGlobal',istat)
  
    return
@@ -552,6 +560,7 @@ contains
     ! Module usage
     use GenComms, ONLY: inode,ionode,gcopy
     use io_module, ONLY: get_file_name_2rank
+    use global_module, ONLY: io_lun, ni_in_cell
 
     ! passed variables
     type(matrix_store_global),intent(out) :: InfoGlob
@@ -562,27 +571,67 @@ contains
     integer :: index_local
     character(len=80) :: filename
 
+    ! check whether members of InfoGlob has been allocated or not.
+     if(.not.allocated(InfoGlob%glob_to_node)) then
+       !allocation of glob_to_node, atom_coord, atom_veloc
+        write(io_lun,*) "allocation in grab_InfoMatGlobal"
+        allocate(InfoGlob%glob_to_node(ni_in_cell), InfoGlob%atom_coord(3,ni_in_cell), &
+                 InfoGlob%atom_veloc(3,ni_in_cell), STAT=istat)
+        if(istat .NE. 0) call cq_abort('Error : allocation in grab_InfoMatGlobal',istat,ni_in_cell)
+     endif
+
     index_local=0
     if(present(index)) index_local=index
-    call io_assign(lun)
-    call get_file_name_2rank('InfoGlobal',filename,index_local)
-    open (lun,file=filename,status='old',iostat=istat)
-    if (istat.GT.0) then
-     write(*,*) " grab_InfoMatGlobal: Error in opening InfoGlobal",filename
-     call cq_abort('Fail in opening InfoGlobal.dat')
-    endif
 
-     read(lun,*) InfoGlob%ni_in_cell, InfoGlob%numprocs
-     read(lun,*) InfoGlob%npcellx,InfoGlob%npcelly,InfoGlob%npcellz
-     read(lun,*) InfoGlob%rcellx,InfoGlob%rcelly,InfoGlob%rcellz
-     read(lun,*) InfoGlob%glob_to_node(1:InfoGlob%ni_in_cell)
-     read(lun,*) InfoGlob%index
+   !Reading  "InfoGlobal.ind***"
+    if(inode == ionode) then
+     call io_assign(lun)
+     call get_file_name_2rank('InfoGlobal',filename,index_local)
+     open (lun,file=filename,status='old',iostat=istat)
+     if (istat.GT.0) then
+      write(io_lun,*) " grab_InfoMatGlobal: Error in opening InfoGlobal",filename
+      call cq_abort('Fail in opening InfoGlobal.dat')
+     endif
+ 
+      read(lun,*) InfoGlob%ni_in_cell, InfoGlob%numprocs
+       if(ni_in_cell .NE. InfoGlob%ni_in_cell) &
+        call cq_abort('Error in grab_InfoMatGlobal: ni_in_cell= ',ni_in_cell,InfoGlob%ni_in_cell)
+      read(lun,*) InfoGlob%npcellx,InfoGlob%npcelly,InfoGlob%npcellz
+      read(lun,*) InfoGlob%rcellx,InfoGlob%rcelly,InfoGlob%rcellz
+      read(lun,*) InfoGlob%glob_to_node(1:InfoGlob%ni_in_cell)
+      read(lun,*) InfoGlob%index
+ 
+     do ig=1, InfoGlob%ni_in_cell
+      read(lun,101) iglob, InfoGlob%atom_coord(1:3, ig)
+      101 format(5x,i8,3x,3e20.10)
+     enddo !ig=1, InfoGlob%ni_in_cell
+  
+     ! Velociy will be needed in the future ?
+     !do ig=1, InfoGlob%ni_in_cell
+     ! read(lun,101) iglob, InfoGlob%atom_veloc(1:3, ig)
+     !enddo !ig=1, InfoGlob%ni_in_cell
 
-    do ig=1, InfoGlob%ni_in_cell
-     read(lun,101) iglob, InfoGlob%atom_coord(1:3, ig)
-     101 format(5x,i8,3x,3e20.10)
-    enddo !ig=1, InfoGlob%ni_in_cell
-    call io_close (lun)
+     call io_close (lun)
+    endif !(inode == ionode) 
+
+   !gcopy InfoGlob to all nodes
+    call gcopy(InfoGlob%ni_in_cell)
+    call gcopy(InfoGlob%numprocs)
+
+    call gcopy(InfoGlob%npcellx)
+    call gcopy(InfoGlob%npcelly)
+    call gcopy(InfoGlob%npcellz)
+
+    call gcopy(InfoGlob%rcellx)
+    call gcopy(InfoGlob%rcelly)
+    call gcopy(InfoGlob%rcellz)
+
+    call gcopy(InfoGlob%glob_to_node, ni_in_cell)
+    call gcopy(InfoGlob%index)
+    call gcopy(InfoGlob%atom_coord, 3, ni_in_cell)
+    !call gcopy(InfoGlob%atom_veloc, 3, ni_in_cell)
+
+   !gcopy InfoGlob : END
 
     return
   end subroutine grab_InfoMatGlobal

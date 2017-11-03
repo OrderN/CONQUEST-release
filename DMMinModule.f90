@@ -180,7 +180,6 @@ contains
     use energy,        only: entropy
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,   &
                              WITH_LEVEL
-    use io_module2,    only: dump_InfoGlobal
     use store_matrix,  only: dump_matrix2, dump_InfoMatGlobal
     use matrix_data,   only: Lrange, Srange, LSrange
     use XLBOMD_module, only: matX, matXvel, dump_XL
@@ -303,7 +302,7 @@ contains
              ! When dissipation applies
              if (flag_dissipation) call dump_XL()
           endif
-          if (runtype.EQ.'static') call dump_InfoGlobal(0)
+          if (runtype.EQ.'static') call dump_InfoMatGlobal(0)
        else
           if (nspin == 1) then
              call dump_matrix("L", matL(1), inode)

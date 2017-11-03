@@ -234,7 +234,6 @@ contains
                              check_stop
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
-    use io_module2,    ONLY: dump_InfoGlobal
     use store_matrix,  ONLY: dump_InfoMatGlobal
 
     implicit none
@@ -473,8 +472,8 @@ contains
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use move_atoms,     only: fac_Kelvin2Hartree
-    use io_module2,     ONLY: dump_InfoGlobal,grab_InfoGlobal,grab_matrix2,InfoL
-    use store_matrix,   ONLY: dump_InfoMatGlobal
+    use io_module2,     ONLY: grab_matrix2,InfoL
+    use store_matrix,   ONLY: dump_InfoMatGlobal,grab_InfoMatGlobal, matrix_store_global
     !use DiagModule,     ONLY: diagon
     use mult_module,    ONLY: matL,L_trans
     use matrix_data,    ONLY: Lrange
@@ -502,6 +501,8 @@ contains
     character(50) :: file_velocity='velocity.dat'
     logical       :: done,second_call
     logical,allocatable,dimension(:) :: flag_movable
+
+    type(matrix_store_global) :: InfoGlob
 
     !! quenched MD optimisation is stopped
     !! if the maximum force component is bellow threshold
@@ -562,7 +563,7 @@ contains
     endif
     ! Dump global data
     if (.NOT. flag_MDold) then
-      if (inode.EQ.ionode) call dump_InfoMatGlobal(i_first)
+      call dump_InfoMatGlobal()
     endif
 
     energy_md = energy0
@@ -585,9 +586,14 @@ contains
            allocate (glob2node_old(ni_in_cell), STAT=stat)
            if (stat.NE.0) call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
          endif
-         if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-         call gcopy(n_proc_old)
-         call gcopy(glob2node_old,ni_in_cell)
+         !if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
+         !call gcopy(n_proc_old)
+         !call gcopy(glob2node_old,ni_in_cell)
+
+         call grab_InfoMatGlobal(InfoGlob,0)
+         n_proc_old = InfoGlob%numprocs
+         glob2node_old(:) = InfoGlob%glob_to_node(:)
+         
        endif
 
        !%%! Evolve atoms - either FIRE (quenched MD) or velocity Verlet
@@ -653,7 +659,7 @@ contains
 
        ! Dump global data
        if (.NOT. flag_MDold) then
-         if (inode.EQ.ionode) call dump_InfoMatGlobal(iter)
+         call dump_InfoMatGlobal()
        endif
        
        ! Analyse forces
@@ -1208,7 +1214,6 @@ contains
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use io_module,      only: leqi
-    use io_module2,    ONLY: dump_InfoGlobal
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
 
     implicit none

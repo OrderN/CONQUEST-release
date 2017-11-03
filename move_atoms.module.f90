@@ -774,7 +774,7 @@ contains
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use io_module2, ONLY: grab_InfoGlobal,dump_InfoGlobal,InfoL,grab_matrix2
-    use store_matrix, ONLY:dump_InfoMatGlobal
+    use store_matrix, ONLY:dump_InfoMatGlobal, grab_InfoMatGlobal, matrix_store_global
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use multisiteSF_module, only: flag_LFD_minimise
     !use DiagModule, ONLY: diagon
@@ -801,6 +801,8 @@ contains
     real(double), save :: kmin = zero, dE = zero
     real(double), dimension(:), allocatable :: store_density
     real(double) :: k3_old, k3_local, kmin_old
+
+    type(matrix_store_global) :: InfoGlob
 
     call start_timer(tmr_std_moveatoms)
     !allocate(store_density(maxngrid))
@@ -933,16 +935,20 @@ contains
          endif
 
 
-         !**< lat >**
-         call my_barrier
-         !
-         if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-         !**< lat >**  
-         call my_barrier
-         !
+         !!**< lat >**
+         !call my_barrier
+         !!
+         !if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
+         !!**< lat >**  
+         !call my_barrier
+         !!
+         !call gcopy(n_proc_old)
+         !call gcopy(glob2node_old,ni_in_cell)
 
-         call gcopy(n_proc_old)
-         call gcopy(glob2node_old,ni_in_cell)
+         call grab_InfoMatGlobal(InfoGlob,0)
+         n_proc_old = InfoGlob%numprocs
+         glob2node_old(:) = InfoGlob%glob_to_node(:)
+ 
          call updateIndices3(fixed_potential,direction)
          ! L-matrix reconstruction (used to be called at updateIndices3)
          if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
@@ -989,7 +995,7 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
                         .false.)
-       if (inode.EQ.ionode) call dump_InfoMatGlobal()
+       call dump_InfoMatGlobal()
        if (inode == ionode .and. iprint_MD > 1) &
             write (io_lun, &
                    fmt='(4x,"In safemin2, iter ",i3," step and energy &
@@ -1089,10 +1095,15 @@ contains
 !ORI    call updateIndices(.true., fixed_potential)
     if (.NOT. flag_MDold) then
       write (io_lun,*) "CG: 2nd stage"
-      !call updateIndices3(fixed_potential,direction,step)
-      if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)!19/08/2013
-      call gcopy(n_proc_old)
-      call gcopy(glob2node_old,ni_in_cell)
+      !!call updateIndices3(fixed_potential,direction,step)
+      !if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)!19/08/2013
+      !call gcopy(n_proc_old)
+      !call gcopy(glob2node_old,ni_in_cell)
+
+      call grab_InfoMatGlobal(InfoGlob,0)
+      n_proc_old = InfoGlob%numprocs
+      glob2node_old(:) = InfoGlob%glob_to_node(:)
+
       call updateIndices3(fixed_potential,direction)
       ! L-matrix reconstruction (used to be called at updateIndices3)
       if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
@@ -1140,7 +1151,7 @@ contains
     else
        call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
     end if
-    if (inode.EQ.ionode) call dump_InfoMatGlobal()
+    call dump_InfoMatGlobal()
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
                 fmt='(4x,"In safemin2, Interpolation step and energy &
@@ -1191,10 +1202,15 @@ contains
 !ORI       call updateIndices(.true., fixed_potential)
        if (.NOT. flag_MDold) then
          write (io_lun,*) "CG: 3rd stage"
-         !call updateIndices3(fixed_potential,direction,step)
-         if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-         call gcopy(n_proc_old)
-         call gcopy(glob2node_old,ni_in_cell)
+         !!call updateIndices3(fixed_potential,direction,step)
+         !if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
+         !call gcopy(n_proc_old)
+         !call gcopy(glob2node_old,ni_in_cell)
+
+         call grab_InfoMatGlobal(InfoGlob,0)
+         n_proc_old = InfoGlob%numprocs
+         glob2node_old(:) = InfoGlob%glob_to_node(:)
+
          call updateIndices3(fixed_potential,direction)
          ! L-matrix reconstruction (used to be called at updateIndices3)
          if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
@@ -1246,7 +1262,7 @@ contains
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
                            .true., .false.)
        end if
-       if (inode.EQ.ionode) call dump_InfoMatGlobal()
+       call dump_InfoMatGlobal()
     end if
     dE = e0 - energy_out
 7   format(4x,3f15.8)

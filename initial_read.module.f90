@@ -1874,6 +1874,8 @@ contains
        call cq_abort("Old-style CQ input no longer supported: please convert")
     end if ! new_format
 
+!**** TM 2017.Nov.3rd
+    call check_compatibility
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_input')
 !****lat>$
@@ -1881,6 +1883,20 @@ contains
     call my_barrier()
 
     return
+   contains
+    ! ------------------------------------------------------------------------------
+    ! subroutine check_compatibility
+    ! ------------------------------------------------------------------------------
+    subroutine check_compatibility 
+     ! this subroutine checks the compatibility between keywords defined in read_input
+     ! add the
+     !       2017.11(Nov).03   Tsuyoshi Miyazaki
+     implicit none
+      !check AtomMove.ExtendedLagrangian(flag_XLBOMD) &  AtomMove.TypeOfRun (runtype)
+       if(runtype .NE. 'md') flag_XLBOMD=.false.
+     
+     return
+    end subroutine check_compatibility 
   end subroutine read_input
   !!***
 
