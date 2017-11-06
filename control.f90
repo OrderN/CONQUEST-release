@@ -448,6 +448,8 @@ contains
 !!    Added refactored NVT
 !!   2017/11/02 zamaan
 !!    Changed velocity local variable to ion_velocity from md_control
+!!   2017/11/6 zamaan
+!!    added lattice_vec for md_model to track cell vectors
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -462,7 +464,8 @@ contains
                               flag_LmatrixReuse,flag_XLBOMD,          &
                               flag_dissipation,flag_FixCOM,           &
                               flag_fire_qMD, flag_diagonalisation,    &
-                              nspin, flag_thermoDebug, flag_move_atom
+                              nspin, flag_thermoDebug, flag_move_atom,&
+                              rcellx, rcelly, rcellz
     use group_module,   only: parts
     use primary_module, only: bundle
     use minimise,       only: get_E_and_F
@@ -493,7 +496,7 @@ contains
     use input_module,   ONLY: io_assign, io_close
     use md_model,       only: type_md_model
     use md_control,     only: type_thermostat, md_tau_T, md_n_nhc, md_n_ys, &
-                              md_n_mts, md_nhc_mass, ion_velocity
+                              md_n_mts, md_nhc_mass, ion_velocity, lattice_vec
 
     implicit none
 
@@ -527,7 +530,6 @@ contains
     type(type_thermostat), target :: thermo
     
     allocate(ion_velocity(3,ni_in_cell), STAT=stat)
-    call mdl%init_model(thermo)
     if (stat /= 0) &
          call cq_abort("Error allocating velocity in md_run: ", &
                        ni_in_cell, stat)
@@ -617,6 +619,13 @@ contains
        call read_fire(fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha)
     endif
 
+    ! Initialise the model
+    lattice_vec = zero
+    lattice_vec(1,1) = rcellx
+    lattice_vec(2,2) = rcelly
+    lattice_vec(3,3) = rcellz
+    call mdl%init_model(md_ensemble, thermo)
+
     if (flag_thermoDebug) then
       call thermo%dump_thermo_state(i_first-1, 'thermostat.dat')
       call write_xsf('trajectory.xsf', i_first-1)
@@ -624,6 +633,7 @@ contains
 
     !ORI do iter = 1, MDn_steps
     do iter = i_first, i_last
+       mdl%step = iter
        if (myid == 0) &
             write (io_lun, fmt='(4x,"MD run, iteration ",i5)') iter
        ! Fetch old relations
@@ -747,32 +757,36 @@ contains
        dE = energy0 - energy1
        ! Compute the conserved quantity
        mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy ! the NVE case
-       write (io_lun, '(6x,a)') "Components of conserved quantity"
-       write (io_lun, 9) mdl%ion_kinetic_energy
-       write (io_lun, 10) mdl%dft_total_energy
-       select case(md_ensemble)
-       case('nvt')
-         select case(md_thermo_type)
-         case('nhc')
-             call thermo%get_nhc_energy
-             mdl%h_prime = mdl%h_prime + thermo%ke_nhc
-             write (io_lun, 11) thermo%ke_nhc
-         end select
-       end select
+
        if(myid==0) then
-          write (io_lun, 7) mdl%h_prime
-          write (io_lun, 6) max
-          write (io_lun, 4) dE
-          write (io_lun, 5) sqrt(g0/ni_in_cell)
+         write (io_lun, '(6x,a)') "Components of conserved quantity"
+         write (io_lun, 9) mdl%ion_kinetic_energy
+         write (io_lun, 10) mdl%dft_total_energy
+         select case(md_ensemble)
+         case('nvt')
+           select case(md_thermo_type)
+           case('nhc')
+               call thermo%get_nhc_energy
+               mdl%h_prime = mdl%h_prime + thermo%ke_nhc
+               write (io_lun, 11) thermo%ke_nhc
+           end select
+         end select
+         write (io_lun, 7) mdl%h_prime
+         write (io_lun, 6) max
+         write (io_lun, 4) dE
+         write (io_lun, 5) sqrt(g0/ni_in_cell)
        end if
        energy0 = energy1
        energy1 = abs(dE)
-       if (myid == 0 .and. mod(iter, MDfreq) == 0) &
-            call write_positions(iter, parts)
+       if (myid == 0 .and. mod(iter, MDfreq) == 0) then
+         call write_positions(iter, parts)
+         call mdl%dump_frame("Frames")
+       end if
        call my_barrier
        !to check IO of velocity files
        call write_velocity(ion_velocity, file_velocity)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+       call mdl%get_cons_qty
        call mdl%dump_stats("Stats")
        !to check IO of velocity files
        if (flag_fire_qMD) then
@@ -880,7 +894,7 @@ contains
 4   format(4x,'Energy change           : ',f15.8)
 5   format(4x,'Force Residual          : ',f15.8)
 6   format(4x,'Maximum force component : ',f15.8)
-7   format(4x,'Conserved qty mdl%h_prime   : ',f15.8)
+7   format(4x,'Conserved qty h_prime   : ',f15.8)
 8   format(4x,'*** MD step ',i4,' KE: ',f18.8,&
            ' IntEnergy',f20.8,' TotalEnergy',f20.8)
 9   format(6x,'Potential energy        : ',f15.8)

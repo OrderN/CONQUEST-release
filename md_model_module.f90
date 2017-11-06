@@ -17,7 +17,8 @@ module md_model
   use force_module,     only: tot_force
   use global_module,    only: ni_in_cell, io_lun, atom_coord
   use species_module,   only: species
-  use md_control,       only: md_n_nhc, ion_velocity, type_thermostat
+  use md_control,       only: md_n_nhc, ion_velocity, type_thermostat, &
+                              lattice_vec
 
   implicit none
 
@@ -38,7 +39,7 @@ module md_model
     integer                                 :: step
     integer                                 :: ndof     ! degrees of freedom
     character(3)                            :: ensemble ! nve, nvt, npt etc
-    real(double), dimension(3,3)            :: lattice_vec
+    real(double), dimension(:,:), pointer   :: lattice_vec
     real(double)                            :: volume
 
     ! ionic variables
@@ -54,7 +55,7 @@ module md_model
     real(double)                            :: h_prime  ! conserved qty
 
     ! Thermodynamic variables
-    real(double)                            :: T_int    ! internal temperature
+    real(double), pointer                   :: T_int    ! internal temperature
     real(double)                            :: P_int    ! internal pressure
     real(double)                            :: PV
     real(double)                            :: enthalpy
@@ -103,22 +104,26 @@ contains
   !!   Zamaan Raza 
   !!  SOURCE
   !!  
-  subroutine init_model(mdl, thermo)
+  subroutine init_model(mdl, ensemble, thermo)
 
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
+    character(3), intent(in)              :: ensemble
     type(type_thermostat), intent(in), target  :: thermo
 
     mdl%append = .false.
 
     ! General MD arrays
     mdl%natoms = ni_in_cell
+    mdl%ensemble = ensemble
     mdl%species       => species
     mdl%atom_coords   => atom_coord
     mdl%atom_force    => tot_force
     mdl%atom_velocity => ion_velocity
+    mdl%lattice_vec   => lattice_vec
 
     ! NHC thermostat arrays
+    mdl%T_int         => thermo%T_int
     mdl%thermo_type   => thermo%thermo_type
     mdl%lambda        => thermo%lambda
     mdl%tau_T         => thermo%tau_T
@@ -181,57 +186,55 @@ contains
 
     if (inode==ionode) then
       call io_assign(lun)
+
       if (mdl%append) then
         open(unit=lun,file=filename,position='append')
       else 
         open(unit=lun,file=filename,status='replace')
-        mdl%append = .true.
-      end if
-      if (mdl%step == 0) then
         select case (mdl%ensemble)
         case ('nve')
-          write(lun,'(a10,5a16)') "step", "pe", "ke", "H'", "T", "P"
+          write(lun,'(a10,3a18,2a12)') "step", "pe", "ke", "H'", "T", "P"
         case ('nvt')
           if (mdl%thermo_type == 'nhc') then
-            write(lun,'(a10,6a16)') "step", "pe", "ke", "nhc", "H'", "T", "P"
+            write(lun,'(a10,4a18,2a12)') "step", "pe", "ke", "nhc", "H'", "T", "P"
           else
-            write(lun,'(a10,5a16)') "step", "pe", "ke", "total", "T", "P"
+            write(lun,'(a10,3a16,2a12)') "step", "pe", "ke", "total", "T", "P"
           end if
         case ('npt')
           if (mdl%thermo_type == 'nhc') then
-            write(lun,'(a10,9a16)') "step", "pe", "ke", "nhc", "box", "pV", "H'", "T", "P", "V"
+            write(lun,'(a10,6a18,3a12)') "step", "pe", "ke", "nhc", "box", "pV", "H'", "T", "P", "V"
           end if
         case ('nph')
-          write(lun,'(a10,8a16)') "step", "pe", "ke", "box", "pV", "H'", "T", "P", "V"
+          write(lun,'(a10,5a18,3a12)') "step", "pe", "ke", "box", "pV", "H'", "T", "P", "V"
         end select
+        mdl%append = .true.
       end if
       select case (mdl%ensemble)
       case ('nve')
-        write(lun,'(i10,5e16.6)') mdl%step, mdl%dft_total_energy, &
+        write(lun,'(i10,3e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
           mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, mdl%P_int
       case ('nvt')
         if (mdl%thermo_type == 'nhc') then
-          write(lun,'(i10,6e16.6)') mdl%step, mdl%dft_total_energy, &
+          write(lun,'(i10,4e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%nhc_energy, mdl%h_prime, mdl%T_int, &
             mdl%P_int
         else
-          write(lun,'(i10,5e16.6)') mdl%step, mdl%dft_total_energy, &
+          write(lun,'(i10,3e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, mdl%P_int
         end if
       case ('npt')
         if (mdl%thermo_type == 'nhc') then
-          write(lun,'(i10,9e16.6)') mdl%step, mdl%dft_total_energy, &
+          write(lun,'(i10,6e18.8,3f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%nhc_energy, mdl%box_kinetic_energy, &
             mdl%pV, mdl%h_prime, mdl%T_int, mdl%P_int, mdl%volume
         end if
       case ('nph')
-          write(lun,'(i10,8e16.6)') mdl%step, mdl%dft_total_energy, &
+          write(lun,'(i10,5e18.8,3f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%box_kinetic_energy, mdl%pV, &
             mdl%h_prime, mdl%T_int, mdl%P_int, mdl%volume
       end select
+      call io_close(lun)
     end if
-
-    call io_close(lun)
 
   end subroutine dump_stats
   !!***
@@ -252,7 +255,7 @@ contains
 
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
-    character(20), intent(in)             :: filename
+    character(len=*), intent(in)          :: filename
 
     ! local variables
     integer                               :: lun, i
@@ -273,11 +276,11 @@ contains
         write(lun,'(3f12.6)') mdl%lattice_vec(i,:)
       end do
       write(lun,'(a)') "end cell_vectors"
-      write(lun,'(a)') "stress_tensor"
-      do i=1,3
-        write(lun,'(3f12.6)') mdl%stress(i,:)
-      end do
-      write(lun,'(a)') "end stress_tensor"
+!      write(lun,'(a)') "stress_tensor"
+!      do i=1,3
+!        write(lun,'(3f12.6)') mdl%stress(i,:)
+!      end do
+!      write(lun,'(a)') "end stress_tensor"
       write(lun,'(a)') "positions"
       call mdl%dump_mdl_atom_arr(lun, mdl%atom_coords)
       write(lun,'(a)') "end positions"

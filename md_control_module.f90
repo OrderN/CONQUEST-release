@@ -37,6 +37,7 @@ module md_control
   character(20) :: md_thermo_type
   real(double)  :: md_tau_T
   integer       :: md_n_nhc, md_n_ys, md_n_mts
+  real(double), dimension(3,3), target      :: lattice_vec
   real(double), dimension(:), allocatable   :: md_nhc_mass
   real(double), dimension(:,:), allocatable, target :: ion_velocity
 
@@ -395,7 +396,7 @@ contains
         ! scale the ionic velocities and kinetic energy
         fac = exp(-half*th%dt_ys(i_ys)*th%v_eta(1))
         v_sfac = v_sfac*fac
-        if (inode==ionode .and. iprint_MD > 0) write(io_lun,*) 'v_sfac = ', v_sfac
+        if (inode==ionode .and. iprint_MD > 2) write(io_lun,*) 'v_sfac = ', v_sfac
         th%ke_ions = th%ke_ions*v_sfac**2
 
         call th%update_G(1, zero)
