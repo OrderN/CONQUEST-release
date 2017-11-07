@@ -2266,10 +2266,13 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2017/09/06 19:00 nakata
   !!    Changed to call set_atomic_density with ".true." before calling initial_SFcoeff
+  !!   2017/11/07 10:02 dave
+  !!    Added scaling of electron density after atom move
   !!  SOURCE
   !!
   subroutine update_H(fixed_potential)
 
+    use numbers
     use logicals
     use timer_module    
     use S_matrix_module,        only: get_S_matrix
@@ -2290,7 +2293,8 @@ contains
                                       flag_LmatrixReuse,               &
                                       flag_neutral_atom,               &
                                       atomf, sf, nspin_SF, flag_LFD,   &
-                                      flag_SFcoeffReuse, flag_diagonalisation
+                                      flag_SFcoeffReuse, flag_diagonalisation, &
+                                      ne_in_cell, spin_factor
     use density_module,         only: set_atomic_density,              &
                                       flag_no_atomic_densities,        &
                                       density, set_density_pcc,        &
@@ -2310,6 +2314,7 @@ contains
     ! Local variables
     type(cq_timer) :: tmr_l_tmp1
     real(double), dimension(nspin) :: electrons, energy_tmp
+    real(double) :: scale
     integer :: spin_SF
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
@@ -2393,9 +2398,12 @@ contains
        call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
     end if
     ! If we have read K and are predicting density from it, then rebuild
-    if(flag_diagonalisation.AND.flag_LmatrixReuse.AND.(.NOT.flag_MDold)) &
-         call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
-         inode,ionode,maxngrid)
+    if(flag_diagonalisation.AND.flag_LmatrixReuse.AND.(.NOT.flag_MDold)) then
+       call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
+            inode,ionode,maxngrid)
+       scale = ne_in_cell/(spin_factor*sum(electrons))
+       if(abs(scale-one)>RD_ERR) density = density*scale
+    end if
     if (flag_pcc_global) call set_density_pcc()
     ! (7) Now generate a new H matrix, including a new charge density
     if (flag_LFD .and. .not.flag_SFcoeffReuse) then
