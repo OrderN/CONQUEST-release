@@ -118,6 +118,8 @@
 !!    Added parameters for Contracted SFs and multi-site SFs
 !!   2017/02/23 dave
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+!!   2017/04/05 18:00 nakata
+!!    Added flag_readAtomicSpin to initialise spin
 !!   2017/08/29 jack baker & dave
 !!    Adding variables for cell optimisation
 !!  SOURCE
@@ -375,6 +377,9 @@ module global_module
 
   ! diagonalise or linear scaling
   logical :: flag_diagonalisation
+
+  ! Initialise spin
+  logical :: flag_readAtomicSpin
   
 end module global_module
 !!***

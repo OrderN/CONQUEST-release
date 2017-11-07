@@ -457,6 +457,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   10:17, 2004/01/12 dave
 !!    Changed formatting for reads to read new Siesta (1.3) pseudos
+!!   2017/11/10 14:24 dave
+!!    Changed yp1 and ypn to use first derivative (simple FD) instead of zero
 !!  SOURCE
 !!
   subroutine radial_read_ascii(op,lun)
@@ -491,8 +493,8 @@ contains
     ! conquest version 
     !  yp1= BIG * 1.1
     !  ypn= BIG * 1.1
-    yp1= zero
-    ypn= zero
+    yp1= (op%f(2)-op%f(1))/delta!zero
+    ypn= (op%f(npts)-op%f(npts-1))/delta!zero
     call spline(op%n, op%delta, op%f, yp1, ypn, op%d2)
     return
   end subroutine radial_read_ascii
@@ -554,6 +556,8 @@ contains
 !!    Changed string comparisons to use leqi from input_module (direct comparison breaks on Cray)
 !!   2017/03/23 dave
 !!    Added storage of spacing of PAO table
+!!   2017/11/10 14:22 dave
+!!    Bug fix: added Ry->Ha conversion for Siesta VNA d2 table (as well as f table)
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -704,7 +708,8 @@ contains
        ! DRB 2017/02/21 This is the NA potential
        if(pseudo_type==SIESTA) then
           call radial_read_ascii(ps_info%vna,lun)
-          ps_info%vna%f = half*ps_info%vna%f ! Siesta works in Ry
+          ps_info%vna%f  = half*ps_info%vna%f  ! Siesta works in Ry
+          ps_info%vna%d2 = half*ps_info%vna%d2 ! Siesta works in Ry
           if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"Reading Chlocal ")')
           read(lun,*)
           call radial_read_ascii(ps_info%chlocal,lun)
