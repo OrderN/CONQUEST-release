@@ -162,14 +162,14 @@ contains
     end select
     th%dt_ys = th%dt*th%dt_ys/th%n_mts_nhc
 
-    write(fmt,'("(a16,",i4,"e10.4)")') th%n_nhc
+    write(fmt,'("(a16,",i4,"f10.4)")') th%n_nhc
     if (inode==ionode) then
       write(io_lun,*) ' Welcome to init_nhc'
-      write(io_lun,*) ' Target temperature        T_ext = ', th%T_ext
-      write(io_lun,*) ' Instantaneous temperature T_int = ', th%T_int
-      write(io_lun,*) ' Number of NHC thermostats n_nhc = ', th%n_nhc
-      write(io_lun,*) ' Multiple time step order  n_mts = ', th%n_mts_nhc
-      write(io_lun,*) ' Yoshida-Suzuki order      n_ys  = ', th%n_ys
+      write(io_lun,'(a,f10.2)') ' Target temperature        T_ext = ', th%T_ext
+      write(io_lun,'(a,f10.2)') ' Instantaneous temperature T_int = ', th%T_int
+      write(io_lun,'(a,i10)') ' Number of NHC thermostats n_nhc = ', th%n_nhc
+      write(io_lun,'(a,i10)') ' Multiple time step order  n_mts = ', th%n_mts_nhc
+      write(io_lun,'(a,i10)') ' Yoshida-Suzuki order      n_ys  = ', th%n_ys
       write(io_lun,fmt) ' NHC masses:    ', th%m_nhc
       write(io_lun,fmt) ' YS time steps: ', th%dt_ys
     end if
