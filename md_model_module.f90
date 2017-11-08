@@ -14,7 +14,8 @@
 module md_model
 
   use datatypes
-  use force_module,     only: tot_force
+  use numbers
+  use force_module,     only: tot_force, stress
   use global_module,    only: ni_in_cell, io_lun, atom_coord
   use species_module,   only: species
   use md_control,       only: md_n_nhc, ion_velocity, type_thermostat, &
@@ -72,7 +73,7 @@ module md_model
     real(double), pointer, dimension(:)     :: m_nhc
 
     ! Barostat
-    real(double), dimension(3,3)            :: stress
+    real(double), pointer, dimension(:)     :: stress
     real(double)                            :: box_kinetic_energy
     real(double)                            :: m_box
     real(double)                            :: eps
@@ -121,6 +122,7 @@ contains
     mdl%atom_force    => tot_force
     mdl%atom_velocity => ion_velocity
     mdl%lattice_vec   => lattice_vec
+    mdl%stress        => stress
 
     ! NHC thermostat arrays
     mdl%T_int         => thermo%T_int
@@ -276,11 +278,11 @@ contains
         write(lun,'(3f12.6)') mdl%lattice_vec(i,:)
       end do
       write(lun,'(a)') "end cell_vectors"
-!      write(lun,'(a)') "stress_tensor"
-!      do i=1,3
-!        write(lun,'(3f12.6)') mdl%stress(i,:)
-!      end do
-!      write(lun,'(a)') "end stress_tensor"
+      write(lun,'(a)') "stress_tensor"
+      write(lun,'(3e12.6)') mdl%stress(1), zero, zero
+      write(lun,'(3e12.6)') zero, mdl%stress(2), zero
+      write(lun,'(3e12.6)') zero, zero, mdl%stress(3)
+      write(lun,'(a)') "end stress_tensor"
       write(lun,'(a)') "positions"
       call mdl%dump_mdl_atom_arr(lun, mdl%atom_coords)
       write(lun,'(a)') "end positions"

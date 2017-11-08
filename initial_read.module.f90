@@ -1888,6 +1888,7 @@ contains
          allocate(md_nhc_mass(md_n_nhc)) 
          read(unit=input_array(block_start), fmt=*) md_nhc_mass
        end if
+       call fdf_endblock
 
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")
