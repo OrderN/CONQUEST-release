@@ -117,6 +117,9 @@ contains
     integer, intent(in)                   :: ndof, n_nhc, n_ys, n_mts
     real(double), intent(in)              :: T_ext, ke_ions, dt
 
+    ! local variables
+    character(40)                         :: fmt
+
     th%thermo_type = "nhc"
     th%append = .false.
     th%dt = dt
@@ -159,6 +162,7 @@ contains
     end select
     th%dt_ys = th%dt*th%dt_ys/th%n_mts_nhc
 
+    write(fmt,'("(a16,",i4,"e10.4)")') th%n_nhc
     if (inode==ionode) then
       write(io_lun,*) ' Welcome to init_nhc'
       write(io_lun,*) ' Target temperature        T_ext = ', th%T_ext
@@ -166,8 +170,8 @@ contains
       write(io_lun,*) ' Number of NHC thermostats n_nhc = ', th%n_nhc
       write(io_lun,*) ' Multiple time step order  n_mts = ', th%n_mts_nhc
       write(io_lun,*) ' Yoshida-Suzuki order      n_ys  = ', th%n_ys
-      write(io_lun,*) ' NHC masses:    ', th%m_nhc
-      write(io_lun,*) ' YS time steps: ', th%dt_ys
+      write(io_lun,fmt) ' NHC masses:    ', th%m_nhc
+      write(io_lun,fmt) ' YS time steps: ', th%dt_ys
     end if
 
   end subroutine init_nhc
