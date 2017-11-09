@@ -2,7 +2,6 @@
 
 import argparse
 import re
-import sys
 import scipy as sp
 import matplotlib.pyplot as plt
 from frame import Frame
