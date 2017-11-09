@@ -477,7 +477,7 @@ contains
     use GenComms,       only: gsum, myid, my_barrier, inode, ionode,  &
                               gcopy
     use GenBlas,        only: dot
-    use force_module,   only: tot_force
+    use force_module,   only: tot_force, stress
     use io_module,      only: write_positions, read_velocity,         &
                               write_velocity, read_fire, write_xsf
     use io_module,      only: write_atomic_positions, pdb_template,   &
@@ -495,8 +495,10 @@ contains
          ready_constraint,flag_RigidBonds
     use input_module,   ONLY: io_assign, io_close
     use md_model,       only: type_md_model
-    use md_control,     only: type_thermostat, md_tau_T, md_n_nhc, md_n_ys, &
-                              md_n_mts, md_nhc_mass, ion_velocity, lattice_vec
+    use md_control,     only: type_thermostat, type_barostat, md_tau_T, &
+                              md_tau_P, md_n_nhc, md_n_ys, md_n_mts, &
+                              md_nhc_mass, ion_velocity, lattice_vec, &
+                              md_thermo_type, md_baro_type
 
     implicit none
 
@@ -526,8 +528,9 @@ contains
     ! model
     type(type_md_model)           :: mdl
 
-    ! thermostat
+    ! thermostat, barostat
     type(type_thermostat), target :: thermo
+    type(type_barostat), target   :: baro
     
     allocate(ion_velocity(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
@@ -561,20 +564,38 @@ contains
       end do
     end do
 
-    if (md_ensemble(2:2) == 'v') then ! constant volume
-      if (md_ensemble(3:3) == 't') then ! constant temperature
-        if (md_thermo_type == 'nhc') then
-          md_ndof = md_ndof + md_n_nhc
-          call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
-                               md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
-        else if (md_thermo_type == 'berendsen') then
-          call thermo%init_berendsen(MDtimestep, temp_ion, md_ndof, md_tau_T, mdl%ion_kinetic_energy)
-        else
-          call cq_abort("Unknown thermostat type")
-        end if
-      end if
-    end if
+    ! Initialise thermostat/barostat accordint to md_ensemble
+    select case(md_ensemble)
+    case('nve')
+      ! Just for computing temperature
+      call thermo%init_thermo_none(md_ndof, mdl%ion_kinetic_energy)
+      call baro%init_baro_none(stress) ! Just for computing pressure
+    case('nvt')
+      call baro%init_baro_none(stress) ! Just for computing pressure
+      select case(md_thermo_type)
+      case('nhc')
+        md_ndof = md_ndof + md_n_nhc
+        call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
+                             md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
+      case('berendsen')
+        call thermo%init_berendsen(MDtimestep, temp_ion, md_ndof, md_tau_T, &
+                                   mdl%ion_kinetic_energy)
+      case default
+        call cq_abort("Unknown thermostat type")
+      end select
+    case('npt')
+      select case(md_baro_type)
+      case('iso-mttk')
+      case('mttk')
+      case('berensen')
+      case default
+        call cq_abort("Unknown barostat type")
+      end select
+    end select
+
     call thermo%get_temperature
+    call baro%get_ke_stress(ion_velocity)
+    call baro%get_pressure
 
     if (myid == 0 .and. iprint_gen > 0) write(io_lun, 2) MDn_steps
     ! Find energy and forces
@@ -624,7 +645,7 @@ contains
     lattice_vec(1,1) = rcellx
     lattice_vec(2,2) = rcelly
     lattice_vec(3,3) = rcellz
-    call mdl%init_model(md_ensemble, thermo)
+    call mdl%init_model(md_ensemble, thermo, baro)
 
     if (flag_thermoDebug) then
       call thermo%dump_thermo_state(i_first-1, 'thermostat.dat')
@@ -723,6 +744,10 @@ contains
        if (flag_FixCOM) call zero_COM_velocity(ion_velocity)
        call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
        thermo%ke_ions = mdl%ion_kinetic_energy
+       if (thermo%thermo_type == 'None') call thermo%update_ke_ions(mdl%ion_kinetic_energy)
+       if (baro%baro_type == 'None') call baro%update_static_stress(stress)
+       call baro%get_ke_stress(ion_velocity)
+       call baro%get_pressure
        call thermo%get_temperature
 
        ! Print out energy

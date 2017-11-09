@@ -763,7 +763,8 @@ contains
                                   LFD_Thresh_EnergyRise, LFD_max_iteration,              &
                                   flag_LFD_MD_UseAtomicDensity
     use control,    only: md_ensemble, md_thermo_type
-    use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass 
+    use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
+                          md_target_press, md_baro_type, md_tau_P
 
     implicit none
 
@@ -1876,8 +1877,9 @@ contains
          enddo
        endif ! Constraints
 
-       ! Thermostat
        md_ensemble        = fdf_string(3, 'MD.Ensemble', 'nve')
+
+       ! Thermostat
        md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
        md_tau_T           = fdf_double('MD.tauT', 10.0_double)
        md_n_nhc           = fdf_integer('MD.nNHC', 5) 
@@ -1889,6 +1891,11 @@ contains
          read(unit=input_array(block_start), fmt=*) md_nhc_mass
        end if
        call fdf_endblock
+
+       ! Barostat
+       md_target_press    = fdf_double('MD.TargetPressure', zero)
+       md_baro_type       = fdf_string(20, 'MD.Barostat', 'None')
+       md_tau_P           = fdf_double('MD.tauP', 10.0_double)
 
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")

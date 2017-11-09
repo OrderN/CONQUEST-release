@@ -19,7 +19,7 @@ module md_model
   use global_module,    only: ni_in_cell, io_lun, atom_coord
   use species_module,   only: species
   use md_control,       only: md_n_nhc, ion_velocity, type_thermostat, &
-                              lattice_vec
+                              type_barostat, lattice_vec
 
   implicit none
 
@@ -57,7 +57,7 @@ module md_model
 
     ! Thermodynamic variables
     real(double), pointer                   :: T_int    ! internal temperature
-    real(double)                            :: P_int    ! internal pressure
+    real(double), pointer                   :: P_int    ! internal pressure
     real(double)                            :: PV
     real(double)                            :: enthalpy
 
@@ -105,12 +105,13 @@ contains
   !!   Zamaan Raza 
   !!  SOURCE
   !!  
-  subroutine init_model(mdl, ensemble, thermo)
+  subroutine init_model(mdl, ensemble, thermo, baro)
 
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
     character(3), intent(in)              :: ensemble
-    type(type_thermostat), intent(in), target  :: thermo
+    type(type_thermostat), intent(in), target :: thermo
+    type(type_barostat), intent(in), target   :: baro
 
     mdl%append = .false.
 
@@ -124,7 +125,7 @@ contains
     mdl%lattice_vec   => lattice_vec
     mdl%stress        => stress
 
-    ! NHC thermostat arrays
+    ! Thermostat
     mdl%T_int         => thermo%T_int
     mdl%thermo_type   => thermo%thermo_type
     mdl%lambda        => thermo%lambda
@@ -135,6 +136,9 @@ contains
     mdl%v_eta         => thermo%v_eta
     mdl%G_nhc         => thermo%G_nhc
     mdl%m_nhc         => thermo%m_nhc
+
+    ! Barostat
+    mdl%P_int         => baro%P_int
 
   end subroutine init_model
   !!***

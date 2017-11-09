@@ -29,13 +29,14 @@ module md_control
   use datatypes
   use numbers
   use global_module,    only: ni_in_cell, io_lun, iprint_MD
-  use move_atoms,       only: kB, fac_Kelvin2Hartree
+  use move_atoms,       only: fac_Kelvin2Hartree
+  use species_module,   only: species, mass
   use GenComms,         only: inode, ionode
 
   implicit none
 
-  character(20) :: md_thermo_type
-  real(double)  :: md_tau_T
+  character(20) :: md_thermo_type, md_baro_type
+  real(double)  :: md_tau_T, md_tau_P, md_target_press
   integer       :: md_n_nhc, md_n_ys, md_n_mts
   real(double), dimension(3,3), target      :: lattice_vec
   real(double), dimension(:), allocatable   :: md_nhc_mass
@@ -79,8 +80,10 @@ module md_control
 
     contains
 
+      procedure, public   :: init_thermo_none
       procedure, public   :: init_nhc
       procedure, public   :: init_berendsen
+      procedure, public   :: update_ke_ions
       procedure, public   :: get_berendsen_sf
       procedure, public   :: berendsen_v_rescale
       procedure, public   :: get_nhc_energy
@@ -95,7 +98,91 @@ module md_control
   end type type_thermostat
 !!***
 
+  !!****s* md_control/type_barostat
+  !!  NAME
+  !!   type_barostat
+  !!  PURPOSE
+  !!   Container for all barostat-related variables
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/11/08 11:45
+  !!  SOURCE
+  !!  
+  type type_barostat
+    ! General barostat variables
+    character(20)       :: baro_type    ! thermostat type
+    real(double)        :: P_int        ! instantateous pressure
+    real(double)        :: P_ext        ! target pressure
+    real(double)        :: volume
+    real(double)        :: ke_ions      ! kinetic energy of ions
+    real(double)        :: dt           ! time step
+    integer             :: ndof         ! number of degrees of freedom
+    logical             :: append
+    real(double)        :: mu           ! box scaling factor
+    real(double), dimension(3,3)  :: h    ! lattice vectors
+    real(double), dimension(3,3)  :: h0   ! reference lattice vectors
+    real(double), dimension(3,3)  :: ke_stress      ! kinetic contrib to stress
+    real(double), dimension(3,3)  :: static_stress  ! static contrib to stress
+
+    ! Weak coupling barostat variables
+    real(double)        :: tau_P        ! pressure coupling time period
+    real(double)        :: beta         ! isothermal compressibility
+
+    ! Extended Lagrangian barostat variables
+    real(double)        :: box_mass
+    real(double)        :: ke_box
+
+    ! Isotropic variables
+    real(double)        :: v_g
+    real(double)        :: G_g
+
+    ! Fully flexible cell variables
+    real(double), dimension(3,3)  :: v_h
+    real(double), dimension(3,3)  :: G_h
+    real(double), dimension(3,3)  :: c_g
+    real(double), dimension(3,3)  :: I_e
+    real(double), dimension(3,3)  :: I_s
+    real(double), dimension(3,3)  :: ident
+    real(double), dimension(3,3)  :: onfm
+    real(double), dimension(3)    :: lambda
+
+    contains
+
+      procedure, public   :: init_baro_none
+      procedure, public   :: update_static_stress
+      procedure, public   :: get_pressure
+      procedure, public   :: get_ke_stress
+
+  end type type_barostat
+!!***
+
 contains
+
+  !!****m* md_control/init_thermo_none *
+  !!  NAME
+  !!   init_thermo_none
+  !!  PURPOSE
+  !!   initialise thermostat just for calculating temperature
+  !!  AUTHOR
+  !!    Zamaan Raza 
+  !!  CREATION DATE
+  !!   2017/11/09 10:11
+  !!  SOURCE
+  !!  
+  subroutine init_thermo_none(th, ndof, ke_ions)
+
+    ! passed variables
+    class(type_thermostat), intent(inout) :: th
+    integer, intent(in)                   :: ndof
+    real(double), intent(in)              :: ke_ions
+
+    th%thermo_type = "None"
+    th%ndof = ndof
+    th%ke_ions = ke_ions
+
+  end subroutine init_thermo_none
+  !!***
 
   !!****m* md_control/init_nhc *
   !!  NAME
@@ -203,6 +290,28 @@ contains
     th%tau_T = tau_T
 
   end subroutine init_berendsen
+  !!***
+
+  !!****m* md_control/update_ke_ions *
+  !!  NAME
+  !!   update_ke_ions
+  !!  PURPOSE
+  !!   update ionic kinetic energy when thermo_type = 'None'
+  !!  AUTHOR
+  !!    Zamaan Raza 
+  !!  CREATION DATE
+  !!   2017/11/09 10:39
+  !!  SOURCE
+  !!  
+  subroutine update_ke_ions(th, ke_ions)
+
+    ! passed variables
+    class(type_thermostat), intent(inout) :: th
+    real(double), intent(in)              :: ke_ions
+
+    th%ke_ions = ke_ions
+
+  end subroutine update_ke_ions
   !!***
 
   !!****m* md_control/get_berendsen_sf *
@@ -526,6 +635,126 @@ contains
     end if
 
   end subroutine dump_thermo_state
+  !!***
+
+  !!****m* md_control/init_baro_none *
+  !!  NAME
+  !!   init_baro_none
+  !!  PURPOSE
+  !!   initialise barostat for constant volume, just to compute pressure
+  !!  AUTHOR
+  !!    Zamaan Raza 
+  !!  CREATION DATE
+  !!   2017/11/08 12:23
+  !!  SOURCE
+  !!  
+  subroutine init_baro_none(baro, stress)
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+    real(double), dimension(3), intent(in)  :: stress
+
+    ! local variables
+    integer                               :: i
+
+    baro%baro_type = 'None'
+    baro%static_stress = zero
+    do i=1,3
+      baro%static_stress(i,i) = stress(i)
+    end do
+
+  end subroutine init_baro_none
+  !!***
+
+  !!****m* md_control/update_static_stress *
+  !!  NAME
+  !!   update_static_stress
+  !!  PURPOSE
+  !!   update static stress when baro_type = 'None'
+  !!  AUTHOR
+  !!    Zamaan Raza 
+  !!  CREATION DATE
+  !!   2017/11/09 10:44
+  !!  SOURCE
+  !!  
+  subroutine update_static_stress(baro, stress)
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+    real(double), dimension(3), intent(in)  :: stress
+
+    ! local variables
+    integer                               :: i
+
+    baro%static_stress = zero
+    do i=1,3
+      baro%static_stress(i,i) = stress(i)
+    end do
+
+  end subroutine update_static_stress
+  !!***
+
+  !!****m* md_control/get_ke_stress *
+  !!  NAME
+  !!   get_ke_stress
+  !!  PURPOSE
+  !!   Compute the kinetic contribution to the stress tensor
+  !!  AUTHOR
+  !!    Zamaan Raza 
+  !!  CREATION DATE
+  !!   2017/11/08 12:23
+  !!  SOURCE
+  !!  
+  subroutine get_ke_stress(baro, v)
+
+    ! passed variables
+    class(type_barostat), intent(inout)         :: baro
+    real(double), dimension(3,3), intent(inout) :: v
+
+    ! local variables
+    integer                                     :: i, j, k
+    real(double)                                :: m
+
+    baro%ke_stress = zero
+    do i=1,ni_in_cell
+      m = mass(species(i))
+      do j=1,3
+        do k=1,3
+          baro%ke_stress(j,k) = baro%ke_stress(j,k) + m*v(j,i)*v(k,i)
+        end do
+      end do
+    end do 
+    baro%ke_stress = baro%ke_stress/baro%volume
+
+  end subroutine get_ke_stress
+  !!***
+
+  !!****m* md_control/get_pressure *
+  !!  NAME
+  !!   get_pressure
+  !!  PURPOSE
+  !!   Compute the pressure from the stress tensor
+  !!  AUTHOR
+  !!    Zamaan Raza 
+  !!  CREATION DATE
+  !!   2017/11/08 13:27
+  !!  SOURCE
+  !!  
+  subroutine get_pressure(baro)
+
+    ! passed variables
+    class(type_barostat), intent(inout)         :: baro
+
+    ! local variables
+    integer                                     :: i
+
+    baro%P_int = zero
+    do i=1,3
+      baro%P_int = baro%P_int + baro%ke_stress(1,1) + baro%static_stress(1,1)
+    end do
+    baro%P_int = baro%P_int*third
+
+  end subroutine get_pressure
   !!***
 
 end module md_control
