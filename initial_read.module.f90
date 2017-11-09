@@ -672,7 +672,7 @@ contains
                              dscf_target_nfold, flag_local_excitation, dscf_HOMO_thresh,   &
                              dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit,           &
                              flag_MDcontinue,flag_MDdebug,flag_MDold,  &
-                             flag_thermoDebug, &
+                             flag_thermoDebug, flag_baroDebug, &
                              flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
                              restart_T,restart_X,flag_XLBOMD,flag_propagateX,              &
                              flag_propagateL,flag_dissipation,integratorXL, flag_FixCOM,   &
@@ -762,9 +762,10 @@ contains
                                   flag_LFD_minimise, LFD_ThreshE, LFD_ThreshD,           &
                                   LFD_Thresh_EnergyRise, LFD_max_iteration,              &
                                   flag_LFD_MD_UseAtomicDensity
-    use control,    only: md_ensemble, md_thermo_type
+    use control,    only: md_ensemble
     use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
-                          md_target_press, md_baro_type, md_tau_P
+                          md_target_press, md_baro_type, md_tau_P, &
+                          md_thermo_type
 
     implicit none
 
@@ -1896,6 +1897,7 @@ contains
        md_target_press    = fdf_double('MD.TargetPressure', zero)
        md_baro_type       = fdf_string(20, 'MD.Barostat', 'None')
        md_tau_P           = fdf_double('MD.tauP', 10.0_double)
+       flag_baroDebug     = fdf_boolean('MD.BaroDebug',.false.)
 
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")

@@ -464,8 +464,8 @@ contains
                               flag_LmatrixReuse,flag_XLBOMD,          &
                               flag_dissipation,flag_FixCOM,           &
                               flag_fire_qMD, flag_diagonalisation,    &
-                              nspin, flag_thermoDebug, flag_move_atom,&
-                              rcellx, rcelly, rcellz
+                              nspin, flag_thermoDebug, flag_baroDebug,&
+                              flag_move_atom,rcellx, rcelly, rcellz
     use group_module,   only: parts
     use primary_module, only: bundle
     use minimise,       only: get_E_and_F
@@ -594,6 +594,7 @@ contains
     end select
 
     call thermo%get_temperature
+    call baro%get_volume
     call baro%get_ke_stress(ion_velocity)
     call baro%get_pressure
 
@@ -650,6 +651,9 @@ contains
     if (flag_thermoDebug) then
       call thermo%dump_thermo_state(i_first-1, 'thermostat.dat')
       call write_xsf('trajectory.xsf', i_first-1)
+    end if
+    if (flag_baroDebug) then
+      call baro%dump_baro_state(i_first-1, 'barostat.dat')
     end if
 
     !ORI do iter = 1, MDn_steps
@@ -734,6 +738,9 @@ contains
        if (flag_thermoDebug) then
          call thermo%dump_thermo_state(iter,'thermostat.dat')
          call write_xsf('trajectory.xsf', i_first-1)
+       end if
+       if (flag_baroDebug) then
+         call baro%dump_baro_state(iter, 'barostat.dat')
        end if
 
        ! Constrain velocity

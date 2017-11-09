@@ -35,6 +35,9 @@ module md_control
 
   implicit none
 
+  ! Unit conversion factors
+  real(double), parameter :: fac_GPa2HaPBohr3 = 29421.02648438959
+
   character(20) :: md_thermo_type, md_baro_type
   real(double)  :: md_tau_T, md_tau_P, md_target_press
   integer       :: md_n_nhc, md_n_ys, md_n_mts
@@ -152,7 +155,9 @@ module md_control
       procedure, public   :: init_baro_none
       procedure, public   :: update_static_stress
       procedure, public   :: get_pressure
+      procedure, public   :: get_volume
       procedure, public   :: get_ke_stress
+      procedure, public   :: dump_baro_state
 
   end type type_barostat
 !!***
@@ -755,6 +760,77 @@ contains
     baro%P_int = baro%P_int*third
 
   end subroutine get_pressure
+  !!***
+
+  !!****m* md_control/get_volume *
+  !!  NAME
+  !!   get_volume
+  !!  PURPOSE
+  !!   Compute the volume of the cell (orthorhombic only!)
+  !!  AUTHOR
+  !!    Zamaan Raza 
+  !!  CREATION DATE
+  !!   2017/11/09 13:15
+  !!  SOURCE
+  !!  
+  subroutine get_volume(baro)
+    use global_module,    only: rcellx, rcelly, rcellz
+
+    ! passed variables
+    class(type_barostat), intent(inout)         :: baro
+
+    ! local variables
+    integer                                     :: i
+
+    baro%volume = rcellx*rcelly*rcellz
+
+  end subroutine get_volume
+  !!***
+
+  !!****m* md_control/dump_baro_state *
+  !!  NAME
+  !!   dump_baro_state
+  !!  PURPOSE
+  !!   dump the state of the barostat
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/11/09 11:49
+  !!  SOURCE
+  !!  
+  subroutine dump_baro_state(baro, step, filename)
+    use input_module,     only: io_assign, io_close
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+    integer, intent(in)                   :: step
+    character(len=*), intent(in)          :: filename
+
+    ! local variables
+    character(40)                         :: fmt
+    integer                               :: lun
+
+    if (inode==ionode) then
+      call io_assign(lun)
+      if (baro%append) then
+        open(unit=lun,file=filename,position='append')
+      else 
+        open(unit=lun,file=filename,status='replace')
+        baro%append = .true.
+      end if
+      write(lun,'("step    ",i12)') step
+      write(lun,'("P_int   ",f12.4)') baro%P_int
+      write(lun,'("static_stress: ",3e16.8)') baro%static_stress(1,1), &
+                                              baro%static_stress(2,2), &
+                                              baro%static_stress(3,3)
+      write(lun,'("ke_stress    : ",3e16.8)') baro%ke_stress(1,1), &
+                                              baro%ke_stress(2,2), &
+                                              baro%ke_stress(3,3)
+      write(lun,*)
+      call io_close(lun)
+    end if
+
+  end subroutine dump_baro_state
   !!***
 
 end module md_control

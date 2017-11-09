@@ -181,6 +181,7 @@ contains
 
     use input_module,     only: io_assign, io_close
     use GenComms,         only: inode, ionode
+    use md_control,       only: fac_GPa2HaPBohr3 
 
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
@@ -188,7 +189,10 @@ contains
 
     ! local variables
     integer                               :: lun
+    real(double)                          :: P_GPa
 
+    ! Convert units if necessary
+    P_GPa = mdl%P_int/fac_GPa2HaPBohr3 
 
     if (inode==ionode) then
       call io_assign(lun)
@@ -218,26 +222,26 @@ contains
       select case (mdl%ensemble)
       case ('nve')
         write(lun,'(i10,3e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
-          mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, mdl%P_int
+          mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, P_GPa
       case ('nvt')
         if (mdl%thermo_type == 'nhc') then
           write(lun,'(i10,4e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%nhc_energy, mdl%h_prime, mdl%T_int, &
-            mdl%P_int
+            P_GPa
         else
           write(lun,'(i10,3e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
-            mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, mdl%P_int
+            mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, P_GPa
         end if
       case ('npt')
         if (mdl%thermo_type == 'nhc') then
           write(lun,'(i10,6e18.8,3f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%nhc_energy, mdl%box_kinetic_energy, &
-            mdl%pV, mdl%h_prime, mdl%T_int, mdl%P_int, mdl%volume
+            mdl%pV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
         end if
       case ('nph')
           write(lun,'(i10,5e18.8,3f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%box_kinetic_energy, mdl%pV, &
-            mdl%h_prime, mdl%T_int, mdl%P_int, mdl%volume
+            mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
       end select
       call io_close(lun)
     end if
