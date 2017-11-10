@@ -1105,6 +1105,16 @@ contains
 
     ! (0) If we use PAOs and contract them, prepare SF-PAO coefficients here
     if (atomf.ne.sf) then
+       if (restart_rho) then
+          ! Read density from input files here to make SF-PAO coefficients
+          if (nspin == 2) then
+             call grab_charge(density(:,1), n_my_grid_points, inode, spin=1)
+             call grab_charge(density(:,2), n_my_grid_points, inode, spin=2)
+          else
+             call grab_charge(density(:,1), n_my_grid_points, inode)
+             density = density / spin_factor
+          end if
+       endif
        do spin_SF = 1, nspin_SF
           call matrix_scale(zero,matSFcoeff(spin_SF))
        enddo
@@ -1124,16 +1134,6 @@ contains
              call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
           enddo
        else
-          if (restart_rho .and. flag_LFD) then
-          ! read density from input files for LFD
-             if (nspin == 2) then
-                call grab_charge(density(:,1), n_my_grid_points, inode, spin=1)
-                call grab_charge(density(:,2), n_my_grid_points, inode, spin=2)
-             else
-                call grab_charge(density(:,1), n_my_grid_points, inode)
-                density = density / spin_factor
-             end if
-          endif
           ! make SF-PAO coefficients
           call initial_SFcoeff(.true., .true., fixed_potential, .true.)
        endif
@@ -1282,8 +1282,8 @@ contains
           call initial_SFcoeff(.false., .true., fixed_potential, .false.)
           call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
        endif
-    else if (restart_rho .and. .not.flag_LFD) then
-       ! when flag_LFD=T, density was already grabbed in (0).
+    else if (restart_rho .and. atomf==sf) then
+       ! when atomf/=sf, density was already grabbed in (0).
        if (nspin == 2) then
           call grab_charge(density(:,1), n_my_grid_points, inode, spin=1)
           call grab_charge(density(:,2), n_my_grid_points, inode, spin=2)

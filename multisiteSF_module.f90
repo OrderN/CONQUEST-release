@@ -101,6 +101,15 @@ contains
 !!   This subroutine is called in sub:initial_phis in initialisation_module.f90
 !!   and in sub:update_H in move_atoms.f90.
 !!
+!!  AUTHOR
+!!   A.Nakata
+!!  CREATION DATE
+!!   14/10/2016
+!!  MODIFICATION HISTORY
+!!   10/11/2017 nakata
+!!    Removed unused grab_charge
+!!  SOURCE
+!!
   subroutine initial_SFcoeff(LFD_build_Spao, LFD_build_Hpao, fixed_potential, output_naba_in_MSSF)
 
     use matrix_data,               only: SFcoeff_range
@@ -115,7 +124,7 @@ contains
     use PAO_grid_transform_module, only: single_PAO_to_grid
     use S_matrix_module,           only: get_S_matrix
     use H_matrix_module,           only: get_H_matrix
-    use io_module,                 only: dump_matrix, grab_charge
+    use io_module,                 only: dump_matrix
     use GenComms,                  only: mtime
 
     implicit none
@@ -464,6 +473,14 @@ contains
 !!
 !!   This subroutine is called in sub:initial_SFcoeff_onsite.
 !!  
+!!  AUTHOR
+!!   A.Nakata
+!!  CREATION DATE
+!!   2016/10/04
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
   subroutine loop_initial_SFcoeff_onsite(iprim,j_in_halo,atom_spec)
 
     use global_module,  ONLY: nspin_SF
@@ -570,6 +587,9 @@ contains
 !!   A.Nakata
 !!  CREATION DATE
 !!   2017/01/08
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
 !!
   subroutine smear_MSSF(matA,Arange,itype,r_center,r_shift,WIDTH)
 
@@ -708,6 +728,9 @@ contains
 !!   A.Nakata
 !!  CREATION DATE
 !!   2017/02/20
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
 !!
   subroutine print_naba_in_MSSF
 
@@ -789,6 +812,9 @@ contains
 !!   A.Nakata
 !!  CREATION DATE
 !!   2017/01/08
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
 !!
   subroutine LocFilterDiag(LFDhalo)
 
@@ -1138,6 +1164,9 @@ contains
 !!   A.Nakata
 !!  CREATION DATE
 !!   2017/01/08
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
 !!
   subroutine LFD_make_Subspace_halo(myid,b,lenb,bsub,len_bsub,label_kj_sub,len_kj_sub,a_b_c)
 
@@ -1404,6 +1433,9 @@ contains
 !!   A.Nakata
 !!  CREATION DATE
 !!   2017/01/08
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
 !!
   subroutine LFD_pickup_Subspace_elements(k_off,kpart,&
        ib_nd_acc,ibaddr,nbnab,ibpart,ibseq,bndim2,b,ahalo,chalo,at,&
@@ -1543,6 +1575,9 @@ contains
 !!   A.Nakata
 !!  CREATION DATE
 !!   2017/01/08
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
 !!
   subroutine LFD_make_Subspace_i(np,i,LFDhalo,Ssub,Hsub,label_kj_Ssub,label_kj_Hsub, &
                                  Ssub_i,Hsub_i,len_Sub_i,len_Sub,len_kj_sub)
@@ -1682,6 +1717,9 @@ contains
 !!   A.Nakata
 !!  CREATION DATE
 !!   2017/01/08
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
 !!
   subroutine LFD_symm_sub_mat(mat,len)
 
@@ -1723,6 +1761,9 @@ contains
 !!   A.Nakata
 !!  CREATION DATE
 !!   2017/01/08
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
 !!
   subroutine LFD_make_TVEC(TVEC,NTVEC,len_Sub_i,np,i,atom_i,atom_num,atom_spec,LFDhalo, NEsub, &
                            len_Sub_i_d,n_naba_i_d,l_k_g,l_k_r2,l_kpao)
@@ -1872,6 +1913,9 @@ contains
 !!   A.Nakata
 !!  CREATION DATE
 !!   2017/01/08
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
 !!
   subroutine LFD_filter(TVEC,EIG,CHEMP,kT1,NUMEIG,NTVEC)                            
                             
@@ -1917,6 +1961,9 @@ contains
 !!   A.Nakata
 !!  CREATION DATE
 !!   2017/01/08
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
 !!
   subroutine transpose_2Dmat(A,B,LDA,LDB)
 
@@ -1969,6 +2016,9 @@ contains
 !!   A.Nakata
 !!  CREATION DATE
 !!   2017/01/08
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
 !!
   subroutine LFD_put_TVEC_to_SFcoeff(np,i,MSmat,SFCOEFF,lenSFCOEFF,LFDmat,TVEC,lenTVEC)
 
@@ -2056,6 +2106,9 @@ contains
 !!   A.Nakata
 !!  CREATION DATE
 !!   2017/01/08
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
 !!
   subroutine LFD_debug_matrix(lun,itype,np,atom_i,EVAL,VEC,len_Sub_i,NUM, &
                              n_naba_i,l_k_g,l_k_r2,l_kpao)
@@ -2120,6 +2173,8 @@ contains
 !!  MODIFICATION DATE
 !!   2017/01/31 15:56 dave
 !!    Small bug fix: changed dimension of rhototal to maxngrid
+!!  SOURCE
+!!
   subroutine LFD_minimise(fixed_potential, vary_mu, n_cg_L_iterations, L_tolerance, &
                           sc_tolerance, expected_reduction, total_energy, rho)
 
