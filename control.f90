@@ -212,6 +212,8 @@ contains
   !!   - Added call for safemin2 necessary in reusibg L-matrix
   !!    2017/08/29 jack baker & dave
   !!     Removed rcellx references (redundant)
+  !!   2017/11/10 14:06 dave
+  !!    Removing dump_InfoGlobal calls
   !!  SOURCE
   !!
   subroutine cg_run(fixed_potential, vary_mu, total_energy)
@@ -234,7 +236,6 @@ contains
                              check_stop
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
-    use io_module2,    ONLY: dump_InfoGlobal
 
     implicit none
 
@@ -276,9 +277,6 @@ contains
     dE = zero
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
-    if (.NOT. flag_MDold) then
-       if(inode==ionode) call dump_InfoGlobal()
-    endif
     iter = 1
     ggold = zero
     old_force = zero
@@ -413,6 +411,9 @@ contains
 !!  PURPOSE
 !!   Does a QUENCHED MD run
 !!   Now, this can also employ NVE-MD
+!!
+!!   Note that we require fire_N_below_thresh consecutive steps with the force below threshold
+!!   before convergence is accepted
 !!  INPUTS
 !! 
 !! 
@@ -450,6 +451,12 @@ contains
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
 !!   2017/05/09 dave
 !!    Added calls to read L-matrix for both spin channels
+!!   2017/10/20 09:32 dave
+!!    Removed fire_step_max from call to fire_qMD (now module variable set by user)
+!!   2017/11/10 dave
+!!    Removed calls to dump K matrix (now done in DMMinModule)
+!!   2017/11/10 15:15 dave
+!!    Created variable fire_N_below_thresh to set number of consecutive steps below threshold
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -482,13 +489,13 @@ contains
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use move_atoms,     only: fac_Kelvin2Hartree
-    use io_module2,     ONLY: dump_InfoGlobal,grab_InfoGlobal,grab_matrix2,InfoL, dump_matrix2
+    use io_module2,     ONLY: dump_InfoGlobal,grab_InfoGlobal,grab_matrix2,InfoL
     !use DiagModule,     ONLY: diagon
     use mult_module,    ONLY: matL,L_trans,matK,S_trans, matrix_scale
     use matrix_data,    ONLY: Lrange,Hrange
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use XLBOMD_module,  ONLY: Ready_XLBOMD, Do_XLBOMD
-    use Integrators,    ONLY: vVerlet_v_dthalf,vVerlet_r_dt, fire_qMD
+    use Integrators,    ONLY: vVerlet_v_dthalf,vVerlet_r_dt, fire_qMD, fire_N_below_thresh
     use constraint_module, ONLY: correct_atomic_position,correct_atomic_velocity, &
          ready_constraint,flag_RigidBonds
     use input_module,   ONLY: io_assign, io_close
@@ -518,7 +525,7 @@ contains
     ! FIRE parameters
     integer :: step_qMD, n_stop_qMD, fire_N, fire_N2
     real(double) :: fire_step_max, fire_P0, fire_alpha
-    
+
     allocate(velocity(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating velocity in md_run: ", &
@@ -568,23 +575,15 @@ contains
       i_first = MDinit_step + 1
       i_last = i_first + MDn_steps - 1
     endif
-    ! Dump global data
     if (.NOT. flag_MDold) then
-       if(flag_diagonalisation) then
-          call dump_matrix2('K',matK(1),inode,Hrange)
-          if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
-       end if
-       if (inode.EQ.ionode) call dump_InfoGlobal(i_first)
-       allocate (glob2node_old(ni_in_cell), STAT=stat)
-       if (stat/=0) call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
-    endif
+      if (inode.EQ.ionode) call dump_InfoGlobal(i_first)
+   endif
 
-    energy_md = energy0
+   energy_md = energy0
 
     if (flag_fire_qMD) then
        step_qMD = i_first ! SA 20150201
        done = .false.     ! SA 20150201
-       fire_step_max = 10.0_double * MDtimestep
        ! reading FIRE parameters of the last run
        call read_fire(fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha)
     endif
@@ -602,7 +601,7 @@ contains
 
        !%%! Evolve atoms - either FIRE (quenched MD) or velocity Verlet
        if (flag_fire_qMD) then
-          call fire_qMD(fire_step_max,MDtimestep,velocity,tot_force,flag_movable,iter,&
+          call fire_qMD(MDtimestep,velocity,tot_force,flag_movable,iter,&
                         fire_N,fire_N2,fire_P0,fire_alpha) ! SA 20150204
        else
           call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable)
@@ -672,15 +671,6 @@ contains
          enddo
        endif
 
-       ! Dump global data
-       if (.NOT. flag_MDold) then
-          if(flag_diagonalisation) then
-             call dump_matrix2('K',matK(1),inode,Hrange)
-             if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
-          end if
-          if (inode.EQ.ionode) call dump_InfoGlobal(iter)
-       endif
-       
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero
@@ -715,7 +705,7 @@ contains
              if (myid == 0) then
                 write (io_lun, fmt='(4x,i4,4x,"Maximum force below threshold: ",f12.6)') n_stop_qMD, max
              end if
-             if (n_stop_qMD > 2) then
+             if (n_stop_qMD > fire_N_below_thresh) then
                 done = .true.
              end if
           end if
@@ -944,6 +934,8 @@ contains
   !!     updateIndices any longer
   !!   2017/08/29 jack baker & dave
   !!    Removed rcellx references (redundant)
+  !!   2017/11/10 dave
+  !!    Removed calls to dump K matrix (now done in DMMinModule)
   !!  SOURCE
   !!
   subroutine pulay_relax(fixed_potential, vary_mu, total_energy)
@@ -968,7 +960,7 @@ contains
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use primary_module, only: bundle
-    use io_module2, ONLY: grab_InfoGlobal,dump_InfoGlobal,InfoL,grab_matrix2, dump_matrix2
+    use io_module2, ONLY: grab_InfoGlobal,InfoL,grab_matrix2
     use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
     use matrix_data, ONLY: Hrange, Lrange
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
@@ -1048,24 +1040,12 @@ contains
        posnStore (3,jj,1) = z_atom_cell(i)!i)
        forceStore(:,jj,1) = tot_force(:,jj)
     end do
-    if (.NOT. flag_MDold) then
-       allocate (glob2node_old(ni_in_cell), STAT=stat)
-       if (stat/=0) call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
-    endif
     do while (.not. done)
        ! Book-keeping
        npmod = mod(iter, mx_pulay)+1
        pul_mx = min(iter+1, mx_pulay)
        if (myid == 0 .and. iprint_MD > 2) &
             write(io_lun,fmt='(2x,"Pulay relaxation iteration ",i4)') iter
-            !write (io_lun, *) 'npmod: ', npmod, pul_mx
-       if (.NOT. flag_MDold) then
-          if(flag_LmatrixReuse.AND.flag_diagonalisation) then
-             call dump_matrix2('K',matK(1),inode,Hrange)
-             if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
-          end if
-          if(inode==ionode) call dump_InfoGlobal
-       end if
        x_atom_cell = zero
        y_atom_cell = zero
        z_atom_cell = zero
@@ -1179,14 +1159,6 @@ contains
                   energy1, fixed_potential, vary_mu, energy1)
           end if
        end if
-       if (.NOT. flag_MDold) then
-          if(flag_diagonalisation) then
-             call dump_matrix2('K',matK(1),inode,Hrange)
-             if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
-          end if
-          if(inode==ionode) call dump_InfoGlobal
-       end if
-       ! Check for termination
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero
@@ -1196,7 +1168,7 @@ contains
           end do
        end do
        if (myid == 0) &
-            write (io_lun, 5) for_conv * sqrt(g0) / ni_in_cell, &
+            write (io_lun, 5) for_conv * sqrt(g0/real(ni_in_cell,double)), & !) / ni_in_cell, &
                               en_units(energy_units), d_units(dist_units)
        if (iter > MDn_steps) then
           done = .true.
@@ -1288,7 +1260,7 @@ contains
           end do
        end do
        if (myid == 0) &
-            write (io_lun, 5) for_conv * sqrt(g0) / ni_in_cell, &
+            write (io_lun, 5) for_conv * sqrt(g0/real(ni_in_cell,double)), & !) / ni_in_cell, &
                               en_units(energy_units), d_units(dist_units)
        if (iter > MDn_steps) then
           done = .true.
@@ -1312,7 +1284,7 @@ contains
        if (.not. done) call check_stop(done, iter)
        iter = iter + 1
        dE = energy0 - energy1
-       guess_step = dE*real(ni_in_cell,double)/sqrt(g0)
+       guess_step = dE*sqrt(real(ni_in_cell,double)/g0)!real(ni_in_cell,double)/sqrt(g0)
        if(myid==0) write(*,*) 'Guessed step is ',guess_step
        ! We really need a proper trust radius or something
        if(guess_step>2.0_double) guess_step = 2.0_double 
@@ -1391,7 +1363,6 @@ contains
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use io_module,      only: leqi
-    use io_module2,    ONLY: dump_InfoGlobal
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
 
     implicit none
@@ -1487,7 +1458,6 @@ contains
        call safemin_cell(new_rcellx, new_rcelly, new_rcellz, search_dir_x, &
                          search_dir_y, search_dir_z, energy0, energy1, &
                          fixed_potential, vary_mu, energy1, search_dir_mean)
-
        ! Output positions to UpdatedAtoms.dat
        if (myid == 0 .and. iprint_gen > 1) then
           do i = 1, ni_in_cell

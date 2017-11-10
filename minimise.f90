@@ -117,6 +117,8 @@ contains
   !!    Turned off force calculation when writing out bands
   !!   2017/02/15 (or earlier) nakata
   !!    Added LFD minimisation for multisite support functions
+  !!   2017/11/10 dave
+  !!    Removed calls to dump K matrix (now done in DMMinModule)
   !!  SOURCE
   !!
   !subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -148,10 +150,7 @@ contains
     use density_module,    only: density
     use multisiteSF_module,only: flag_LFD_minimise, LFD_minimise
     use units
-    ! Deleted later ?
-    use io_module2,        ONLY: dump_matrix2,dump_InfoGlobal
-    use matrix_data,       ONLY: Hrange
-    use mult_module,       ONLY: matK, S_trans
+    use io_module2,        only: dump_InfoGlobal
 
     implicit none
 
@@ -262,11 +261,6 @@ contains
                       ionode, reset_L, .false., backtrace_level)
        call get_energy(total_energy, level=backtrace_level)
     end if
-    if (flag_LmatrixReuse.AND.flag_diagonalisation) then
-       call dump_matrix2('K',matK(1),inode,Hrange)
-       if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
-       if(inode==ionode) call dump_InfoGlobal
-    end if
     ! Once ground state is reached, if we are doing deltaSCF, perform excitation
     ! and solve for the new ground state (on excited Born-Oppenheimer surface)
     if(flag_DeltaSCF.and.(.not.flag_excite)) then
@@ -373,6 +367,13 @@ contains
       call stop_print_timer(tmr_l_force, "calculating FORCE", &
                             IPRINT_TIME_THRES1)
     end if
+    if (.NOT. flag_MDold ) then
+       if(PRESENT(iter))then
+          if (inode.EQ.ionode) call dump_InfoGlobal(iter)
+       else
+          if (inode.EQ.ionode) call dump_InfoGlobal
+       end if
+    endif
 
     !% NOTE: This call should be outside this subroutine [2013/08/20 michi]
     ! Writes out L-matrix at the PREVIOUS step

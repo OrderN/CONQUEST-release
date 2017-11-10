@@ -1010,6 +1010,9 @@ contains
   !!    Removed restriction spin and on L-matrix update 
   !!   2017/10/11 dave
   !!    Bug fix: changed call to get_electronic_density to use inode, ionode (not ionode, ionode)
+  !!    Removed restriction spin and on L-matrix update
+  !!   2017/11/10 15:24 dave
+  !!    Added allocation of glob2node_old
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1083,33 +1086,36 @@ contains
     if ( .not. present(level) ) backtrace_level = -10
     call start_backtrace(t=backtrace_timer,who='initial_H',&
          where=area,level=backtrace_level,echo=.true.)
-!****lat>$
+    !****lat>$
 
     ! (0) Get the global information
     !      --> Fetch and distribute date on old job
     if (.not.flag_MDold.and.(flag_MDcontinue.or. &
-                                restart_L   .or. &
-                                restart_T)  ) then
-      if (inode.eq.ionode) write (io_lun,*) "Get global info to load matrices"
-      if (inode.eq.ionode) call make_glob2node
-      call gcopy(glob2node, ni_in_cell)
-      allocate(glob2node_old(ni_in_cell), STAT=stat)
-      if (stat .ne.0)      call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
-      if (inode.eq.ionode) then
-         if(flag_MDcontinue) then
-            call grab_InfoGlobal(n_proc_old,glob2node_old,MDinit_step)
-         else
-            call grab_InfoGlobal(n_proc_old,glob2node_old)
-            MDinit_step = 0
-         end if
-      end if
-      call my_barrier()
-      call gcopy(n_proc_old)
-      call gcopy(glob2node_old, ni_in_cell)
-      call gcopy(MDinit_step)
-      call gcopy(atom_coord_diff, 3, ni_in_cell)
-      n_matrix = 1
-      if (nspin.EQ.2) n_matrix = 2
+         restart_L   .or. &
+         restart_T)  ) then
+       if (inode.eq.ionode) write (io_lun,*) "Get global info to load matrices"
+       if (inode.eq.ionode) call make_glob2node
+       call gcopy(glob2node, ni_in_cell)
+       allocate(glob2node_old(ni_in_cell), STAT=stat)
+       if (stat .ne.0)      call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
+       if (inode.eq.ionode) then
+          if(flag_MDcontinue) then
+             call grab_InfoGlobal(n_proc_old,glob2node_old,MDinit_step)
+          else
+             call grab_InfoGlobal(n_proc_old,glob2node_old)
+             MDinit_step = 0
+          end if
+       end if
+       call my_barrier()
+       call gcopy(n_proc_old)
+       call gcopy(glob2node_old, ni_in_cell)
+       call gcopy(MDinit_step)
+       call gcopy(atom_coord_diff, 3, ni_in_cell)
+       n_matrix = 1
+       if (nspin.EQ.2) n_matrix = 2
+    else if (.not.flag_MDold) then
+       allocate(glob2node_old(ni_in_cell), STAT=stat)
+       if (stat .ne.0)      call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
     endif
 
     ! (0) If we use PAOs and contract them, prepare SF-PAO coefficients here
