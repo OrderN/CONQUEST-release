@@ -15,13 +15,17 @@
   !!  MODIFICATION HISTORY
   !!   2017/05/11 dave
   !!    Various changes to allow L reuse and propagation with spin
+  !!   2017/11/11 Tsuyoshi
+  !!     io_module2 -> store_matrix
+  !!     InfoX, InfoX1, ...., INfoXvel are defined in this module
+  !!     InfoS is defined locally (in each subroutine).
   !!  SOURCE
   !!
   module XLBOMD_module
 
     use datatypes
     use global_module, ONLY: iprint_MD,nspin
-
+    use store_matrix, ONLY: InfoMatrixFile
     implicit none
     integer,allocatable :: matX(:),matXvel(:),matZ(:),matPot(:)
     integer,allocatable :: matX_store(:,:)
@@ -32,6 +36,10 @@
 
     character(80),private :: RCSid = "$Id$"
     logical, save :: allocated_XL = .false.
+
+    type(InfoMatrixFile), pointer :: InfoX(:),InfoXvel(:),InfoS(:), & ! for XL-BOMD
+        InfoX1(:),InfoX2(:),InfoX3(:),InfoX4(:),InfoX5(:),InfoX6(:),& ! for dissipation
+        InfoX7(:),InfoX8(:),InfoX9(:), InfoX10(:)
 
   contains
 
@@ -361,7 +369,7 @@
       use matrix_data, ONLY: LSrange,Srange
       use mult_module, ONLY: LS_trans,S_trans,matS,matL,matrix_product,mult, &
                              L_S_LS
-      use io_module2, ONLY: grab_matrix2,InfoS,InfoX,InfoXvel,InfoX1
+      use store_matrix, ONLY: grab_matrix2
       use UpdateInfo_module, ONLY: Matrix_CommRebuild
       ! db
       use global_module, ONLY: io_lun
@@ -478,7 +486,7 @@
       use GenComms, ONLY: inode
       use matrix_data, ONLY: Srange
       use mult_module, ONLY: matS,S_trans
-      use io_module2, ONLY: grab_matrix2,InfoX,InfoXvel,InfoS
+      use store_matrix, ONLY: grab_matrix2
       use UpdateInfo_module, ONLY: Matrix_CommRebuild
 
       implicit none
@@ -541,8 +549,7 @@
       use GenComms, ONLY: inode
       use matrix_data, ONLY: LSrange,Lrange
       use mult_module, ONLY: LS_trans,L_trans
-      use io_module2, ONLY: grab_matrix2,InfoX1,InfoX2,InfoX3,InfoX4,InfoX5, &
-                            InfoX6,InfoX7,InfoX8,InfoX9,InfoX10
+      use store_matrix, ONLY: grab_matrix2
       use UpdateInfo_module, ONLY: Matrix_CommRebuild
       !db
       use global_module, ONLY: io_lun
@@ -715,8 +722,6 @@
       use global_module, ONLY: flag_propagateL, nspin
       use GenComms, ONLY: cq_abort,inode
       use matrix_data, ONLY: LSrange,Lrange
-      use io_module2, ONLY: InfoX1,InfoX2,InfoX3,InfoX4,InfoX5, &
-                            InfoX6,InfoX7,InfoX8,InfoX9
       use store_matrix, ONLY: dump_matrix2
 
       implicit none

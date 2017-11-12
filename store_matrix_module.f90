@@ -25,6 +25,7 @@ module store_matrix
 ! matrix_store : 
 !   It includes the information of a matrix in my process.
 !    (Information of Primary sets of atoms, Lists of Neighbours, ...  by global numbers.)
+!  
   type matrix_store
     character(len=80) :: name
     !integer :: inode  ! not necessary 
@@ -52,7 +53,7 @@ module store_matrix
 !   during a simulation.
 !                  2016/10/04 Tsuyoshi Miyazaki@UCL
   type matrix_store_global
-    integer :: index                     ! Will be used as "***"
+    integer :: MDstep                       ! Will be used as "***"
     integer :: ni_in_cell, numprocs         ! number of atoms, number of MPI processes
     integer :: npcellx, npcelly, npcellz    ! partition
     real(double) :: rcellx, rcelly, rcellz  ! cell length (should be changed to 3x3 cell parameters)
@@ -60,6 +61,46 @@ module store_matrix
     real(double), allocatable :: atom_coord(:,:)! atomic coordinates (3, global-id)
     real(double), allocatable :: atom_veloc(:,:)! atomic velocities  (3, global-id)
   end type matrix_store_global
+
+! InfoMatrixFile : 
+!   Moved from io_module2
+!  The information in this type is basically the same as in "matrix_store".
+!  But "InfoMatrixFile" is for storing the information from the files (IOs) at previous steps
+!  or previous jobs. Since the number of (MPI)processes may change during the contiguous jobs,
+!  each present (MPI) process may need to read multiple files. Thus, the arrays with this type
+!  are defined as 1-rank array.  
+!  
+!  At present, in io_module2, they are defined by 
+!  type(InfoMatrixFile), pointer :: InfoL(:),InfoT(:),InfoK(:),    &
+!                                       InfoX(:),InfoXvel(:),InfoS(:), & ! for XL-BOMD
+!                                       InfoX1(:),InfoX2(:),InfoX3(:), & ! for dissipation
+!                                       InfoX4(:),InfoX5(:),InfoX6(:), &
+!                                       InfoX7(:),InfoX8(:),InfoX9(:), &
+!                                       InfoX10(:)
+!
+!                  2017/11/10 Tsuyoshi Miyazaki 
+  type InfoMatrixFile
+    integer :: index_node
+    integer :: natom_i
+    ! Size : natom_i
+    integer, pointer :: alpha_i(:)
+    integer, pointer :: idglob_i(:)
+    integer, pointer :: jmax_i(:)
+    integer, pointer :: jbeta_max_i(:)
+    integer, pointer :: ibeg_dataL(:)
+    integer, pointer :: ibeg_Pij(:)
+    ! Size : jmax_i
+    integer, pointer :: idglob_j(:)
+    integer, pointer :: beta_j_i(:)
+    ! Size : 3 x jmax_i
+    real(double), pointer :: rvec_Pij(:,:)
+    ! Size :
+    real(double), pointer :: data_Lold(:,:)
+  end type InfoMatrixFile
+
+ !TEMPORARY !!!  n_matrix   for multiple spin (nspin = 2)
+  integer :: n_matrix = 1
+ !TEMPORARY !!!  n_matrix
 
   character(80),private :: RCSid = "$Id$"
 
@@ -107,15 +148,16 @@ contains
      select case(iprint_mode)
       case(0)  ! Both "InfoGlobal.dat" and "*matrix2.dat" will be pinted out.
         call dump_InfoMatGlobal(index)
-        call dump_matrix2(stub,matA,range)
+        call dump_matrix2(stub,matA,range,index)
       case(1)  ! only "*matrix2.dat" will be printed out.
-        call dump_matrix2(stub,matA,range)
+        call dump_matrix2(stub,matA,range,index)
       case(2)  ! only "InfoGlobal.dat" will be printed out.
         call dump_InfoMatGlobal(index)
      end select ! case(iprint_mode)
  
     return
    end subroutine dump_matrix_update
+  !!***
   ! -----------------------------------------------------------------------
   ! Subroutine dump_matrix2
   ! -----------------------------------------------------------------------
@@ -154,25 +196,28 @@ contains
   !!  SOURCE
   !!
 
-   subroutine dump_matrix2(stub,matA,range)
+   subroutine dump_matrix2(stub,matA,range,index_in)
     use GenComms, ONLY: inode, ionode, cq_abort
     use global_module, ONLY: numprocs, id_glob
-    use io_module, ONLY: get_file_name
+    use io_module, ONLY: get_file_name, get_file_name_2rank
     implicit none
     character(len=*),intent(in) :: stub
     integer,intent(in) :: matA
     integer,intent(in) :: range
+    integer,optional,intent(in) :: index_in
     type(matrix_store):: tmp_matrix_store
 
     integer :: lun, iprim, nprim, jmax, jj, ibeg, jbeta_alpha, len
-    character(20) :: file_name
+    character(32) :: file_name
+    integer :: index
 
     ! set_matrix_store : build tmp_matrix_store
     call set_matrix_store(stub,matA,range,tmp_matrix_store)
 
     ! Actual Dump (from dump_matrix2)
      ! First, make a file based upon the node ID.
-     call get_file_name(stub//'matrix2',numprocs,inode,file_name)
+     !call get_file_name(stub//'matrix2',numprocs,inode,file_name)
+     call get_file_name_2rank(stub//'matrix2',file_name,index,inode)
      call io_assign(lun)
     open (lun,file=file_name)
 
@@ -217,6 +262,7 @@ contains
 
     return
    end subroutine dump_matrix2
+  !!***
 
   ! -----------------------------------------------------------------------
   ! Subroutine set_matrix_store  & free_matrix_store
@@ -361,6 +407,7 @@ contains
      if(istat .NE. 0) call cq_abort("Error in deallocation at free_matrix_store",istat)
     return
    end subroutine free_matrix_store
+  !!***
 
   ! -----------------------------------------------------------------------
   ! Subroutine dump_InfoMatGlobal
@@ -392,7 +439,7 @@ contains
   !!
   !!  SOURCE
   !!
-  subroutine dump_InfoMatGlobal(MDstep,velocity)
+  subroutine dump_InfoMatGlobal(index,velocity,MDstep)
 
     ! Module usage
     use global_module, ONLY: ni_in_cell,numprocs,rcellx,rcelly,rcellz,id_glob, io_lun
@@ -402,48 +449,72 @@ contains
 
     implicit none
     type(matrix_store_global):: mat_global_tmp
+    integer, intent(in), optional :: index
     integer, intent(in), optional :: MDstep
     real(double), intent(in), optional :: velocity(1:3,ni_in_cell)
     integer :: lun, istat, iglob
-    integer :: step_local
+    integer :: index_local, step_local
     character(len=80) :: filename
 
+    logical :: flag_index, flag_velocity, flag_MDstep
+
+    if(present(index)) then
+     flag_index=.true. 
+     index_local = index
+    else
+     flag_index=.false. 
+     index_local = 0
+    endif
+
     if(present(MDstep)) then
+     flag_MDstep=.true. 
      step_local = MDstep
     else
+     flag_MDstep=.false. 
      step_local = 0
     endif
 
     if(present(velocity)) then
+     flag_velocity = .true.
      call set_InfoMatGlobal(mat_global_tmp, step=step_local, velocity_in=velocity)
     else
+     flag_velocity = .false.
      call set_InfoMatGlobal(mat_global_tmp, step=step_local)
     endif
 
     ! Open InfoGlobal.dat and write data.
     if(inode == ionode) then
      call io_assign(lun)
-     call get_file_name_2rank('InfoGlobal',filename,step_local)
+     call get_file_name_2rank('InfoGlobal',filename,index_local)
      write(io_lun,*) ' filename = ',filename
      open (lun,file=filename,iostat=istat)
-     !open (lun,file='InfoGlobal.dat',iostat=istat)
      rewind lun
      if (istat.GT.0) call cq_abort('Fail in opening InfoGlobal.dat .')
-     write (lun,*) mat_global_tmp%ni_in_cell, mat_global_tmp%numprocs
-     write (lun,*) mat_global_tmp%npcellx,mat_global_tmp%npcelly,mat_global_tmp%npcellz
-     write (lun,*) mat_global_tmp%rcellx,mat_global_tmp%rcelly,mat_global_tmp%rcellz
-     write (lun,*) mat_global_tmp%glob_to_node(1:mat_global_tmp%ni_in_cell)
-     !if (present(MDstep)) write (lun,*) mat_global_tmp%index
-     write (lun,*) mat_global_tmp%index
+     write (lun,*) flag_velocity, flag_MDstep,'  = flag_velocity, flag_MDstep'
+     write (lun,*) mat_global_tmp%ni_in_cell, mat_global_tmp%numprocs, ' # of atoms, # of process '
+     write (lun,*) mat_global_tmp%npcellx,mat_global_tmp%npcelly,mat_global_tmp%npcellz,' npcellx,y,z'
+     write (lun,*) mat_global_tmp%rcellx,mat_global_tmp%rcelly,mat_global_tmp%rcellz,' rcellx,y,z'
+     write (lun,*) mat_global_tmp%glob_to_node(1:mat_global_tmp%ni_in_cell)   
+     write (lun,*) mat_global_tmp%MDstep,'  MD step'
  
      do iglob=1, mat_global_tmp%ni_in_cell
       write (lun,101) iglob, mat_global_tmp%atom_coord(1:3, iglob)
-      101 format(5x,i8,3x,3e20.10)
+      101 format(5x,i8,3x,3e20.13)
      enddo !iglob=1, mat_global_tmp%ni_in_cell
+
+     if(flag_velocity) then
+      write (lun,*) 'velocity'
+      do iglob=1, mat_global_tmp%ni_in_cell
+       write (lun,101) iglob, mat_global_tmp%atom_veloc(1:3, iglob)
+      enddo !iglob=1, mat_global_tmp%ni_in_cell
+     endif 
+
+     write (lun,*) index_local,' = index_local in dump_InfoMatGlobal'
+
      call io_close (lun)
     endif
 
-    call free_InfoMatGlobal(mat_global_tmp)
+    call free_InfoMatGlobal(mat_global_tmp,flag_velocity)
     return
   end subroutine dump_InfoMatGlobal
   !!***
@@ -468,9 +539,9 @@ contains
     integer :: istat, ind_part, id_node, ni, id_global
    
     if(present(step))then
-       mat_glob%index      = step
+       mat_glob%MDstep      = step
     else
-       mat_glob%index      = 0
+       mat_glob%MDstep      = 0
     endif
 
     mat_glob%ni_in_cell = ni_in_cell
@@ -485,9 +556,14 @@ contains
     mat_glob%npcellz     = parts%ngcellz
 
     !allocation of glob_to_node, atom_coord, atom_veloc
-    allocate(mat_glob%glob_to_node(ni_in_cell), mat_glob%atom_coord(3,ni_in_cell), &
-             mat_glob%atom_veloc(3,ni_in_cell), STAT=istat)
-    if(istat .NE. 0) call cq_abort('Error : allocation in set_InfoMatGlobal',istat,ni_in_cell)
+    if(present(velocity_in)) then
+       allocate(mat_glob%glob_to_node(ni_in_cell), mat_glob%atom_coord(3,ni_in_cell), &
+               mat_glob%atom_veloc(3,ni_in_cell), STAT=istat)
+       if(istat .NE. 0) call cq_abort('Error : allocation in set_InfoMatGlobal1',istat,ni_in_cell)
+    else
+       allocate(mat_glob%glob_to_node(ni_in_cell), mat_glob%atom_coord(3,ni_in_cell), STAT=istat)
+       if(istat .NE. 0) call cq_abort('Error : allocation in set_InfoMatGlobal2',istat,ni_in_cell)
+    endif
 
     do ind_part = 1, parts%mx_gcell
       id_node = parts%i_cc2node(ind_part) ! CC labeling
@@ -509,23 +585,27 @@ contains
        id_global= id_glob(ni)
        mat_glob%atom_veloc(1:3,id_global)=velocity_in(1:3,ni)
      enddo
-    else
-       mat_glob%atom_veloc(1:3,:)=zero
     endif
 
    return
   end subroutine set_InfoMatGlobal
 
   !!***
-  subroutine free_InfoMatGlobal(mat_glob)
+  subroutine free_InfoMatGlobal(mat_glob,flag_velocity_in)
     use GenComms, ONLY: cq_abort
     implicit none
+    logical, intent(in) :: flag_velocity_in
     integer :: istat
     !type(matrix_store_global),intent(out) :: mat_glob
     type(matrix_store_global) :: mat_glob
 
-    deallocate(mat_glob%atom_veloc, mat_glob%atom_coord, mat_glob%glob_to_node, STAT=istat)
-    if(istat .NE. 0) call cq_abort('Error : deallocation in free_InfoMatGlobal',istat)
+    if(flag_velocity_in) then
+     deallocate(mat_glob%atom_veloc, mat_glob%atom_coord, mat_glob%glob_to_node, STAT=istat)
+     if(istat .NE. 0) call cq_abort('Error : deallocation in free_InfoMatGlobal1',istat)
+    else
+     deallocate(mat_glob%atom_coord, mat_glob%glob_to_node, STAT=istat)
+     if(istat .NE. 0) call cq_abort('Error : deallocation in free_InfoMatGlobal2',istat)
+    endif
  
    return
   end subroutine free_InfoMatGlobal
@@ -555,29 +635,44 @@ contains
   !!
   !!  SOURCE
   !!
-  subroutine grab_InfoMatGlobal(InfoGlob,index)
+  subroutine grab_InfoMatGlobal(InfoGlob,index,flag_velocity_in)
 
     ! Module usage
-    use GenComms, ONLY: inode,ionode,gcopy
+    use GenComms, ONLY: inode,ionode,gcopy, my_barrier
     use io_module, ONLY: get_file_name_2rank
     use global_module, ONLY: io_lun, ni_in_cell
 
     ! passed variables
     type(matrix_store_global),intent(out) :: InfoGlob
     integer,intent(in), optional :: index
+    logical,intent(in), optional :: flag_velocity_in
 
     ! local variables
     integer :: lun, istat, iglob, ig
-    integer :: index_local
+    integer :: index_local, index_in_file
     character(len=80) :: filename
+    logical :: flag_velocity, flag_MDstep
+    integer :: ni_in_cell_tmp, numprocs_tmp
+
+    if(present(flag_velocity_in)) then
+     flag_velocity=flag_velocity_in
+    else
+     flag_velocity=.false.
+    endif
 
     ! check whether members of InfoGlob has been allocated or not.
      if(.not.allocated(InfoGlob%glob_to_node)) then
+      if(flag_velocity) then
        !allocation of glob_to_node, atom_coord, atom_veloc
-        write(io_lun,*) "allocation in grab_InfoMatGlobal"
+        !write(io_lun,*) "allocation in grab_InfoMatGlobal1"
         allocate(InfoGlob%glob_to_node(ni_in_cell), InfoGlob%atom_coord(3,ni_in_cell), &
                  InfoGlob%atom_veloc(3,ni_in_cell), STAT=istat)
-        if(istat .NE. 0) call cq_abort('Error : allocation in grab_InfoMatGlobal',istat,ni_in_cell)
+        if(istat .NE. 0) call cq_abort('Error : allocation in grab_InfoMatGlobal1',istat,ni_in_cell)
+      else
+        !write(io_lun,*) "allocation in grab_InfoMatGlobal2"
+        allocate(InfoGlob%glob_to_node(ni_in_cell), InfoGlob%atom_coord(3,ni_in_cell), STAT=istat)
+        if(istat .NE. 0) call cq_abort('Error : allocation in grab_InfoMatGlobal2',istat,ni_in_cell)
+      endif
      endif
 
     index_local=0
@@ -589,27 +684,41 @@ contains
      call get_file_name_2rank('InfoGlobal',filename,index_local)
      open (lun,file=filename,status='old',iostat=istat)
      if (istat.GT.0) then
-      write(io_lun,*) " grab_InfoMatGlobal: Error in opening InfoGlobal",filename
+      write(io_lun,*) " grab_InfoMatGlobal: Error in opening InfoGlobal: ",filename
       call cq_abort('Fail in opening InfoGlobal.dat')
      endif
  
+     !Reading  Start !!!
+      read(lun,*) flag_velocity, flag_MDstep   ! it is probably better to have this output for the future.
+       if(present(flag_velocity_in)) then
+        if(flag_velocity_in .neqv. flag_velocity) call cq_abort('Error in grab_InfoMatglobal: flag_velocity')
+       endif
       read(lun,*) InfoGlob%ni_in_cell, InfoGlob%numprocs
        if(ni_in_cell .NE. InfoGlob%ni_in_cell) &
         call cq_abort('Error in grab_InfoMatGlobal: ni_in_cell= ',ni_in_cell,InfoGlob%ni_in_cell)
       read(lun,*) InfoGlob%npcellx,InfoGlob%npcelly,InfoGlob%npcellz
       read(lun,*) InfoGlob%rcellx,InfoGlob%rcelly,InfoGlob%rcellz
       read(lun,*) InfoGlob%glob_to_node(1:InfoGlob%ni_in_cell)
-      read(lun,*) InfoGlob%index
+      read(lun,*) InfoGlob%MDstep
  
      do ig=1, InfoGlob%ni_in_cell
       read(lun,101) iglob, InfoGlob%atom_coord(1:3, ig)
       101 format(5x,i8,3x,3e20.10)
      enddo !ig=1, InfoGlob%ni_in_cell
-  
-     ! Velociy will be needed in the future ?
-     !do ig=1, InfoGlob%ni_in_cell
-     ! read(lun,101) iglob, InfoGlob%atom_veloc(1:3, ig)
-     !enddo !ig=1, InfoGlob%ni_in_cell
+
+     if(flag_velocity) then
+      write(io_lun,*) 'Reading velocity from ',filename
+      read(lun,*)
+      do ig=1, InfoGlob%ni_in_cell
+       read(lun,101) iglob, InfoGlob%atom_veloc(1:3, ig)
+      enddo !ig=1, InfoGlob%ni_in_cell
+     endif
+
+     read(lun,*) index_in_file
+     if(index_in_file .ne. index) then
+      write(io_lun, *) 'ERROR: Index in the file InfoGlobal.*** is different. ',filename,index_in_file
+      call cq_abort(' ERROR in Reading InfoGlobal ')
+     endif
 
      call io_close (lun)
     endif !(inode == ionode) 
@@ -627,9 +736,9 @@ contains
     call gcopy(InfoGlob%rcellz)
 
     call gcopy(InfoGlob%glob_to_node, ni_in_cell)
-    call gcopy(InfoGlob%index)
+    call gcopy(InfoGlob%MDstep)
     call gcopy(InfoGlob%atom_coord, 3, ni_in_cell)
-    !call gcopy(InfoGlob%atom_veloc, 3, ni_in_cell)
+    if(flag_velocity) call gcopy(InfoGlob%atom_veloc, 3, ni_in_cell)
 
    !gcopy InfoGlob : END
 
@@ -681,5 +790,253 @@ contains
    endif
   return
   end subroutine make_index_iter
+  !!***
+
+  ! -----------------------------------------------------------------------
+  ! Subroutine grab_matrix2
+  ! -----------------------------------------------------------------------
+
+  !!****f* store_matrix/grab_matrix2 *
+  !!
+  !!  NAME
+  !!   grab_matrix2
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Reads all the necessary data for matrix reconstruction
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Michiaki Arita
+  !!  CREATION DATE
+  !!   2013/08/21
+  !!  MODIFICATION
+  !!   2016/04/06 dave
+  !!    Changed Info type from allocatable to pointer (fix gcc 4.4.7 compile issue)
+  !!   2017/05/09 dave
+  !!    Removed attempts to read both spin channels in one routine (this routine should now be called once for each channel)
+  !!   2017/11/10 tsuyoshi 
+  !!    Moved from io_module2 to store_matrix
+  !!  SOURCE
+  !!
+  subroutine grab_matrix2(stub,inode,nfile,Info,n_matrix_in,index_in)
+
+    ! Module usage
+    use io_module, ONLY: get_file_name, get_file_name_2rank
+    use GenComms, ONLY: cq_abort
+    use global_module, ONLY: nspin,io_lun,n_proc_old
+
+    implicit none
+
+    ! passed variables
+    integer :: max_node  ! No. of nodes in the PREVIOUS job.
+    integer :: inode, matA
+    character(len=*) :: stub
+    type(InfoMatrixFile), pointer :: Info(:)
+    integer, optional :: n_matrix_in
+    integer, optional :: index_in
+
+    ! local variables
+    integer :: lun,stat,padzeros,stat_alloc,size,size2,sizeL,i,j,jbeta_alpha,len,ifile,ibeg
+    integer :: nfile, nrest_file, index_file
+    integer :: proc_id, jmax_i_max,ios, index
+    character(32) :: file_name
+    character(80) :: num
+
+    ! db
+    integer :: lun_db
+    character(20) :: file_db
+
+    max_node = n_proc_old
+
+    n_matrix=1; if(present(n_matrix_in)) n_matrix=n_matrix_in
+       index=0; if(present(index_in)) index=index_in
+
+    ! Open matrix files to get "natom_i", allocate the arrays of Info,
+    ! and read the data.
+    ! Note numprocs = No. of MPI_process_new and max_nodes = No. of MPI_process_old.
+
+    nfile = int(max_node/numprocs)
+    nfile = int(max_node/numprocs)
+    nrest_file = mod(max_node,numprocs)
+    if (inode.LT.nrest_file+1) nfile = nfile + 1
+
+    ! Allocate Info when nfile is greater than 0.
+    if (nfile.GT.0) then
+      allocate (Info(nfile), STAT=stat_alloc)
+      if (stat_alloc.NE.0) call cq_abort('Error allocating Info: ', nfile)
+      do ifile = 1, nfile
+        ! Open a file to start with.
+        index_file=numprocs*(ifile-1)+inode
+        !padzeros=MAX(3, &
+        !             FLOOR(1.0+LOG10(REAL(numprocs,kind=double)))) - &
+        !             FLOOR(1.0+LOG10(REAL(inode,kind=double)))
+        !write (num,'(i80)') index_file
+        !num=adjustl(num)
+        !file_name=stub//'matrix2.'
+    
+        !do i = 1, padzeros
+        !  file_name=trim(file_name)//'0'
+        !enddo
+        !file_name=trim(file_name)//num
+
+        call get_file_name_2rank(stub//'matrix2',file_name,index,index_file)
+         write(*,*) ' FILE NAME :: inode,ifile = ',inode,ifile,'  NAME ',file_name
+
+        call io_assign(lun)
+        open (lun,file=file_name,status='old',iostat=stat)
+        if (stat.NE.0) call cq_abort('Fail in opening Lmatrix file.')
+        ! Get dimension, allocate arrays and store necessary data.
+        read (lun,*) proc_id, Info(ifile)%natom_i
+        size = Info(ifile)%natom_i
+        allocate (Info(ifile)%alpha_i(size), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating alpha_i:', size)
+        allocate (Info(ifile)%idglob_i(size), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating idglob_i:', size)
+        allocate (Info(ifile)%jmax_i(size), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating jmax_i:', size)
+        allocate (Info(ifile)%jbeta_max_i(size), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating jbeta_max_i:', size)
+        allocate (Info(ifile)%ibeg_dataL(size), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating ibeg_dataL:', size)
+        allocate (Info(ifile)%ibeg_Pij(size), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating ibeg_Pij:', size)
+        read (lun,*) Info(ifile)%alpha_i(1:size)
+        read (lun,*) Info(ifile)%jmax_i(1:size)
+        read (lun,*) Info(ifile)%jbeta_max_i(1:size)
+        jmax_i_max = -1
+        do i = 1, size
+          if (Info(ifile)%jmax_i(i).GT.jmax_i_max) jmax_i_max = Info(ifile)%jmax_i(i)
+        enddo
+        !db write (io_lun,*) "jmax_i_max: ", jmax_i_max
+        size2 = 0
+        do i = 1, size
+          size2 = size2 + Info(ifile)%jmax_i(i)
+        enddo
+        allocate (Info(ifile)%idglob_j(size2), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating idglob_j:', size2)
+        allocate (Info(ifile)%beta_j_i(size2), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating beta_j_i:', size2)
+        allocate (Info(ifile)%rvec_Pij(3,size2), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating rvec_Pij:',size2)
+        sizeL = 0
+        do i = 1, size
+          sizeL = sizeL + Info(ifile)%alpha_i(i)*Info(ifile)%jbeta_max_i(i)
+        enddo
+        ! n_matrix depends on nspin
+        n_matrix = 1
+        !if (nspin.EQ.2) n_matrix = 2
+        allocate (Info(ifile)%data_Lold(sizeL,n_matrix), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating data_Lold:', sizeL, n_matrix)
+
+        Info(ifile)%ibeg_dataL(1) = 1 ; Info(ifile)%ibeg_Pij(1) = 1
+        ibeg = 1
+        do i = 1, size
+          read (lun,*) Info(ifile)%idglob_i(i)
+          read (lun,*) Info(ifile)%beta_j_i(Info(ifile)%ibeg_Pij(i) : &
+                                             Info(ifile)%ibeg_Pij(i)+Info(ifile)%jmax_i(i)-1)
+          read (lun,*) Info(ifile)%idglob_j(Info(ifile)%ibeg_Pij(i) : &
+                                             Info(ifile)%ibeg_Pij(i)+Info(ifile)%jmax_i(i)-1)
+          do j = 1, Info(ifile)%jmax_i(i)
+            read (lun,*) Info(ifile)%rvec_Pij(1:3,Info(ifile)%ibeg_Pij(i)+j-1)
+          enddo
+          len = Info(ifile)%jbeta_max_i(i)*Info(ifile)%alpha_i(i)
+
+          ! spin
+          !if (nspin.EQ.1) then
+            do jbeta_alpha = 1, len
+              read (lun,*) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 1)
+            enddo
+          !elseif (nspin.EQ.2) then
+          !  do jbeta_alpha = 1, len
+          !    read (lun,*) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 1), &
+          !                 Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 2)
+          !  enddo
+          !endif
+
+          if (i+1.LE.size) then
+            Info(ifile)%ibeg_Pij(i+1) = Info(ifile)%ibeg_Pij(i) + Info(ifile)%jmax_i(i)
+            Info(ifile)%ibeg_dataL(i+1) = Info(ifile)%ibeg_dataL(i) + len
+          endif
+        enddo !(i, size)
+
+        ! Close the file.
+        call io_close (lun)
+      enddo !(ifile, nfile)
+    endif
+
+    return
+  end subroutine grab_matrix2
+  !!***
+
+  !!****f* store_matrix/deallocate_InfoMatrixFile *
+  !!
+  !!  NAME
+  !!   deallocate_InfoLmatrix_File
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Releases memories for the derived data type InfoMatrixFile(:)
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Michiaki Arita
+  !!  CREATION DATE
+  !!   2013/08/21
+  !!  MODIFICATION
+  !!   2016/04/06 dave
+  !!    Changed Info type from allocatable to pointer (fix gcc 4.4.7 compile issue)
+  !!   2017/11/10 tsuyoshi
+  !!    Moved from io_module2
+  !!
+  !!  SOURCE
+  !!
+  subroutine deallocate_InfoMatrixFile(nfile,Info)
+
+    ! Module usage
+    use numbers
+    use GenComms, ONLY: cq_abort
+
+    ! passed variables
+    integer :: nfile
+    type(InfoMatrixFile), pointer :: Info(:)
+
+    ! local variables
+    integer :: ifile,stat_alloc
+
+    if (associated(Info)) then
+      do ifile = 1, nfile
+        deallocate (Info(ifile)%alpha_i, STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error deallocating alpha_i:')
+        deallocate (Info(ifile)%idglob_i, STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error deallocating idglob_i:')
+        deallocate (Info(ifile)%jmax_i, STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error deallocating jmax_i:')
+        deallocate (Info(ifile)%jbeta_max_i, STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error deallocating jbeta_max_i:')
+        deallocate (Info(ifile)%ibeg_Pij, STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error deallocating ibeg_Pij:')
+        deallocate (Info(ifile)%ibeg_dataL, STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error deallocating ibeg_dataL:')
+        deallocate (Info(ifile)%beta_j_i, STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error deallocating beta_j_i:')
+        deallocate (Info(ifile)%idglob_j, STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error deallocating idglob_j:')
+        deallocate (Info(ifile)%rvec_Pij, STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error deallocating rvec_Pij:')
+        deallocate (Info(ifile)%data_Lold, STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error deallocating data_Lold:')
+      enddo
+      deallocate (Info, STAT=stat_alloc)
+      if (stat_alloc.NE.0) call cq_abort('Error deallocating Info:', nfile)
+    endif
+
+    return
+  end subroutine deallocate_InfoMatrixFile
+  !!***
 
 end module store_matrix

@@ -616,58 +616,58 @@ contains
   end subroutine dump_InfoGlobal
   !!***
 
-  ! -----------------------------------------------------------------------
-  ! Subroutine grab_InfoGlobal
-  ! -----------------------------------------------------------------------
-
-  !!****f* io_module2/grab_InfoGlobal *
-  !!
-  !!  NAME
-  !!   grab_InfoGlobal
-  !!  USAGE
-  !!
-  !!  PURPOSE
-  !!   Reads the global data used for communication & reconstruction
-  !!  INPUTS
-  !!
-  !!  USES
-  !!
-  !!  AUTHOR
-  !!   Michiaki Arita
-  !!  CREATION DATE
-  !!   2013/08/21
-  !!  MODIFICATION
-  !!
-  !!  SOURCE
-  !!
-  !subroutine grab_InfoGlobal(n_proc_old,glob_to_node_old)
-  subroutine grab_InfoGlobal(n_proc_old,glob_to_node_old,MDiter)
-
-    ! Module usage
-    use GenComms, ONLY: inode,ionode,gcopy
-
-    ! passed variables
-    integer :: n_proc_old, glob_to_node_old(:)
-    integer,optional :: MDiter
-
-    ! local variables
-    integer :: lun, stat
-    integer :: n_atom,npcellx,npcelly,npcellz
-    real(double) :: rx,ry,rz
-
-    call io_assign(lun)
-    open (lun,file='InfoGlobal.dat',status='old',iostat=stat)
-    if (stat.GT.0) call cq_abort('Fail in opening InfoGlobal.dat .')
-    read (lun,*) n_atom, n_proc_old
-    read (lun,*) npcellx, npcelly, npcellz
-    read (lun,*) rx, ry, rz
-    read (lun,*) glob_to_node_old(1:)
-    if (present(MDiter)) read (lun,*) MDiter
-    call io_close(lun)
-
-    return
-  end subroutine grab_InfoGlobal
-  !!***
+!  ! -----------------------------------------------------------------------
+!  ! Subroutine grab_InfoGlobal
+!  ! -----------------------------------------------------------------------
+!
+!  !!****f* io_module2/grab_InfoGlobal *
+!  !!
+!  !!  NAME
+!  !!   grab_InfoGlobal
+!  !!  USAGE
+!  !!
+!  !!  PURPOSE
+!  !!   Reads the global data used for communication & reconstruction
+!  !!  INPUTS
+!  !!
+!  !!  USES
+!  !!
+!  !!  AUTHOR
+!  !!   Michiaki Arita
+!  !!  CREATION DATE
+!  !!   2013/08/21
+!  !!  MODIFICATION
+!  !!
+!  !!  SOURCE
+!  !!
+!  !subroutine grab_InfoGlobal(n_proc_old,glob_to_node_old)
+!  subroutine grab_InfoGlobal(n_proc_old,glob_to_node_old,MDiter)
+!
+!    ! Module usage
+!    use GenComms, ONLY: inode,ionode,gcopy
+!
+!    ! passed variables
+!    integer :: n_proc_old, glob_to_node_old(:)
+!    integer,optional :: MDiter
+!
+!    ! local variables
+!    integer :: lun, stat
+!    integer :: n_atom,npcellx,npcelly,npcellz
+!    real(double) :: rx,ry,rz
+!
+!    call io_assign(lun)
+!    open (lun,file='InfoGlobal.dat',status='old',iostat=stat)
+!    if (stat.GT.0) call cq_abort('Fail in opening InfoGlobal.dat .')
+!    read (lun,*) n_atom, n_proc_old
+!    read (lun,*) npcellx, npcelly, npcellz
+!    read (lun,*) rx, ry, rz
+!    read (lun,*) glob_to_node_old(1:)
+!    if (present(MDiter)) read (lun,*) MDiter
+!    call io_close(lun)
+!
+!    return
+!  end subroutine grab_InfoGlobal
+!  !!***
 
   !!****f* io_module2/dump_idglob_old *
   !!

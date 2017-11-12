@@ -773,8 +773,8 @@ contains
     use mult_module, ONLY: matL,L_trans
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
-    use io_module2, ONLY: grab_InfoGlobal,dump_InfoGlobal,InfoL,grab_matrix2
-    use store_matrix, ONLY:dump_InfoMatGlobal, grab_InfoMatGlobal, matrix_store_global
+    !use io_module2, ONLY: InfoL
+    use store_matrix, ONLY:dump_InfoMatGlobal, grab_InfoMatGlobal, matrix_store_global, grab_matrix2, InfoMatrixFile
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use multisiteSF_module, only: flag_LFD_minimise
     !use DiagModule, ONLY: diagon
@@ -803,6 +803,8 @@ contains
     real(double) :: k3_old, k3_local, kmin_old
 
     type(matrix_store_global) :: InfoGlob
+    integer :: ig
+    type(InfoMatrixFile),pointer :: InfoL(:)
 
     call start_timer(tmr_std_moveatoms)
     !allocate(store_density(maxngrid))
@@ -899,55 +901,37 @@ contains
        end do
        if (.NOT. flag_MDold) call wrap_xyz_atom_cell
        ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
-       if (inode.EQ.ionode) write (io_lun,*) "k3, k3_local:", k3,k3_local
-       do i = 1, ni_in_cell
-         gatom = id_glob(i)
-         atom_coord_diff(1, gatom) = k3_local * direction(1,i)
-         atom_coord_diff(2, gatom) = k3_local * direction(2,i)
-         atom_coord_diff(3, gatom) = k3_local * direction(3,i)
+       !if (inode.EQ.ionode) write (io_lun,*) "k3, k3_local:", k3,k3_local
+       !do i = 1, ni_in_cell
+       !  gatom = id_glob(i)
+       !  atom_coord_diff(1, gatom) = k3_local * direction(1,i)
+       !  atom_coord_diff(2, gatom) = k3_local * direction(2,i)
+       !  atom_coord_diff(3, gatom) = k3_local * direction(3,i)
+       !enddo                                  
 
-         ! ---- DEBUG: ---- !!
-         !if (inode.EQ.ionode) then
-         !  write (io_lun,*) ""
-         !  write (io_lun,*) "i & gatom:", i, gatom
-         !  write (io_lun,'(a,1x,3f15.10)') "Initial:",start_x(i),start_y(i),start_z(i)
-         !  write (io_lun,'(a,1x,3f15.10)') "New    :",x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
-         !  write (io_lun,'(a,1x,3f15.10)') "diff   :",atom_coord_diff(1:3,gatom)
-         !  write (io_lun,*) ""
-         !endif
-         !! ---- DEBUG: ---- !!
-
-       enddo                                  
        !Update atom_coord : TM 27Aug2003
        call update_atom_coord
-       !Update atom_coord : TM 27Aug2003
-       ! Update indices and find energy and forces
-       !call updateIndices(.false.,fixed_potential, number_of_bands)
-!ORI    call updateIndices(.true., fixed_potential)
+
        if (.NOT. flag_MDold) then
          if (ionode.EQ.inode) write (io_lun,*) "CG: 1st stage, callupdateIndices3"
-         !ORI call updateIndices3(fixed_potential)
-         !call updateIndices3(fixed_potential,direction,step)
          if (.NOT. allocated(glob2node_old)) then
            allocate (glob2node_old(ni_in_cell), STAT=stat)
            if (stat.NE.0) call cq_abort('Error deallocating glob2node_old: ', &
                                         ni_in_cell)
          endif
 
-
-         !!**< lat >**
-         call my_barrier
-         !!
-         !if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-         !!**< lat >**  
-         !call my_barrier
-         !!
-         !call gcopy(n_proc_old)
-         !call gcopy(glob2node_old,ni_in_cell)
-
          call grab_InfoMatGlobal(InfoGlob,0)
          n_proc_old = InfoGlob%numprocs
          glob2node_old(:) = InfoGlob%glob_to_node(:)
+         do ig = 1, ni_in_cell
+          atom_coord_diff(:,ig) = atom_coord(:,ig) - InfoGlob%atom_coord(:,ig)
+          if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
+          if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
+          if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
+          if((atom_coord_diff(2,ig)) < -half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)+rcelly
+          if((atom_coord_diff(3,ig)) > half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)-rcellz
+          if((atom_coord_diff(3,ig)) < -half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)+rcellz
+         enddo
  
          call updateIndices3(fixed_potential,direction)
          ! L-matrix reconstruction (used to be called at updateIndices3)
@@ -1068,41 +1052,32 @@ contains
     if (.NOT. flag_MDold) call wrap_xyz_atom_cell
     ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
     k3_local = kmin - k3
-    if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3, kmin, k3_local:",k3,kmin,k3_local
-    do i = 1, ni_in_cell
-      gatom = id_glob(i)
-      atom_coord_diff(1, gatom) = k3_local * direction(1,i)
-      atom_coord_diff(2, gatom) = k3_local * direction(2,i)
-      atom_coord_diff(3, gatom) = k3_local * direction(3,i)
-
-      !! ---- DEBUG: ---- !!
-      if (inode.EQ.ionode) then
-        write (io_lun,*) ""
-        write (io_lun,*) "i & gatom:", i, gatom
-        write (io_lun,'(a,1x,3f15.10)') "Before:",start_x(i),start_y(i),start_z(i)
-        write (io_lun,'(a,1x,3f15.10)') "After :",x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
-        write (io_lun,'(a,1x,3f15.10)') "diff  :", atom_coord_diff(1:3,gatom)
-        write (io_lun,*) ""
-      endif
-      !! ---- DEBUG: ---- !!
-
-    enddo                   
+    !if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3, kmin, k3_local:",k3,kmin,k3_local
+    !do i = 1, ni_in_cell
+    !  gatom = id_glob(i)
+    !  atom_coord_diff(1, gatom) = k3_local * direction(1,i)
+    !  atom_coord_diff(2, gatom) = k3_local * direction(2,i)
+    !  atom_coord_diff(3, gatom) = k3_local * direction(3,i)
+    !enddo                   
     !Update atom_coord : TM 27Aug2003
     call update_atom_coord
-    !Update atom_coord : TM 27Aug2003
-    ! Check minimum: update indices and find energy and forces
-    !call updateIndices(.false.,fixed_potential, number_of_bands)
-!ORI    call updateIndices(.true., fixed_potential)
+
     if (.NOT. flag_MDold) then
       write (io_lun,*) "CG: 2nd stage"
-      !!call updateIndices3(fixed_potential,direction,step)
-      !if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)!19/08/2013
-      !call gcopy(n_proc_old)
-      !call gcopy(glob2node_old,ni_in_cell)
 
       call grab_InfoMatGlobal(InfoGlob,0)
       n_proc_old = InfoGlob%numprocs
       glob2node_old(:) = InfoGlob%glob_to_node(:)
+
+         do ig = 1, ni_in_cell
+          atom_coord_diff(:,ig) = atom_coord(:,ig) - InfoGlob%atom_coord(:,ig)
+          if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
+          if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
+          if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
+          if((atom_coord_diff(2,ig)) < -half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)+rcelly
+          if((atom_coord_diff(3,ig)) > half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)-rcellz
+          if((atom_coord_diff(3,ig)) < -half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)+rcellz
+         enddo
 
       call updateIndices3(fixed_potential,direction)
       ! L-matrix reconstruction (used to be called at updateIndices3)
@@ -1179,37 +1154,32 @@ contains
        ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
 !WRONG k3_local = kmin - k3!!03/07/2013
        k3_local = kmin-kmin_old!03/07/2013
-       if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3, kmin,k3_local:", k3,kmin,k3_local
-       do i = 1, ni_in_cell
-         gatom = id_glob(i)
-         atom_coord_diff(1, gatom) = k3_local * direction(1,i)
-         atom_coord_diff(2, gatom) = k3_local * direction(2,i)
-         atom_coord_diff(3, gatom) = k3_local * direction(3,i)
-         ! ---- DEBUG: ---- !!
-         !if (inode.EQ.ionode) then
-         !  write (io_lun,*) ""
-         !  write (io_lun,*) "i & gatom:", i, gatom
-         !  write (io_lun,'(a,1x,3f15.10)') "Before:",start_x(i),start_y(i),start_z(i)
-         !  write (io_lun,'(a,1x,3f15.10)') "After :",x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
-         !  write (io_lun,'(a,1x,3f15.10)') "diff  :", atom_coord_diff(1:3,gatom)
-         !  write (io_lun,*) ""
-         !endif
-         !! ---- DEBUG: ---- !!
-       enddo
+       !if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3, kmin,k3_local:", k3,kmin,k3_local
+       !do i = 1, ni_in_cell
+       !  gatom = id_glob(i)
+       !  atom_coord_diff(1, gatom) = k3_local * direction(1,i)
+       !  atom_coord_diff(2, gatom) = k3_local * direction(2,i)
+       !  atom_coord_diff(3, gatom) = k3_local * direction(3,i)
+       !enddo
 !Update atom_coord : TM 27Aug2003
        call update_atom_coord
-!Update atom_coord : TM 27Aug2003
-!ORI       call updateIndices(.true., fixed_potential)
+
        if (.NOT. flag_MDold) then
          write (io_lun,*) "CG: 3rd stage"
-         !!call updateIndices3(fixed_potential,direction,step)
-         !if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-         !call gcopy(n_proc_old)
-         !call gcopy(glob2node_old,ni_in_cell)
 
          call grab_InfoMatGlobal(InfoGlob,0)
          n_proc_old = InfoGlob%numprocs
          glob2node_old(:) = InfoGlob%glob_to_node(:)
+
+         do ig = 1, ni_in_cell
+          atom_coord_diff(:,ig) = atom_coord(:,ig) - InfoGlob%atom_coord(:,ig)
+          if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
+          if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
+          if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
+          if((atom_coord_diff(2,ig)) < -half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)+rcelly
+          if((atom_coord_diff(3,ig)) > half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)-rcellz
+          if((atom_coord_diff(3,ig)) < -half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)+rcellz
+         enddo
 
          call updateIndices3(fixed_potential,direction)
          ! L-matrix reconstruction (used to be called at updateIndices3)
@@ -2036,7 +2006,7 @@ contains
     !use DiagModule, ONLY: diagon
     use io_module, ONLY: append_coords,write_atomic_positions,pdb_template
     use matrix_data, ONLY: Lrange
-    use io_module2, ONLY: grab_matrix2,InfoL
+    !use io_module2, ONLY: InfoL
     use UpdateInfo_module, ONLY: make_glob2node,Matrix_CommRebuild
     use XLBOMD_module, ONLY: immi_XL,fmmi_XL
 

@@ -4095,12 +4095,12 @@ second:   do
     if (LEN_TRIM (fileroot) + 1 > maxlen) &
          call cq_abort('get_file_name: error : string overflow')
 
-    write (num_index,'(i3.3)') index
-     filename = TRIM (fileroot)//'.ind'//num_index
+    write (num_index,'(i2.2)') index
+     filename = TRIM (fileroot)//'.i'//num_index
 
     if(present(inode)) then
      write (num_inode,'(i6.6)') inode
-     filename = TRIM (filename)//'.proc'//num_inode
+     filename = TRIM (filename)//'.p'//num_inode
     endif
  
    return

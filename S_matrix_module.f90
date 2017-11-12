@@ -679,6 +679,8 @@ contains
 !!    Added IF for contracted SFs
 !!   2017/02/23 dave
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+!!   2017/11/11 Tsuyoshi
+!!      io_module2 -> store_matrix, InfoT is defined locally
 !!  SOURCE
 !!
   subroutine Iter_Hott_InvS(output_level, n_L_iterations, tolerance,n_atoms,&
@@ -697,8 +699,8 @@ contains
     use species_module, ONLY: nsf_species, species
     use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
     use input_module, ONLY: leqi
-    use io_module2, ONLY: grab_matrix2,InfoT
-    use store_matrix, ONLY: dump_matrix2
+    !use io_module2, ONLY: grab_matrix2,InfoT
+    use store_matrix, ONLY: dump_matrix2, grab_matrix2, InfoMatrixFile
 
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
 
@@ -715,6 +717,8 @@ contains
     real(double) :: step, tot, eps, x, omega, oldomega, deltaomega, n_orbs
     type(cq_timer) :: tmr_l_tmp1
     logical,save :: flag_readT = .false.
+
+    type(InfoMatrixFile),pointer :: InfoT(:)   ! why pointer ?
 
     if (atomf.ne.sf .and. .not.flag_do_SFtransform) then
        if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) &

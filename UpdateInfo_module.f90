@@ -91,9 +91,8 @@ contains
     use global_module, ONLY: io_lun,ni_in_cell,nspin,numprocs,glob2node,n_proc_old
     use GenComms, ONLY: cq_abort,inode,ionode,gcopy,my_barrier
     use mult_module, ONLY: symmetrise_L,symmetrise_matA
-    use io_module2, ONLY: grab_InfoGlobal,grab_matrix2,&
-                          dump_InfoGlobal,dump_idglob_old,deallocate_InfoMatrixFile, &
-                          grab_idglob_old,n_matrix,InfoL,InfoMatrixFile
+    !use io_module2, ONLY: InfoL
+    use store_matrix, ONLY: InfoMatrixFile, deallocate_InfoMatrixFile
     use primary_module, ONLY: bundle
     ! db
     use input_module, ONLY: io_assign,io_close
@@ -603,7 +602,7 @@ contains
     use numbers
     use global_module, ONLY: glob2node,numprocs
     use GenComms, ONLY: inode,cq_abort
-    use io_module2, ONLY: InfoMatrixFile,InfoL,n_matrix
+    use store_matrix, ONLY: InfoMatrixFile, deallocate_InfoMatrixFile, n_matrix
     ! db
     use input_module, ONLY: io_assign,io_close
     use io_module, ONLY: get_file_name
@@ -1121,7 +1120,8 @@ contains
     ! Module usage
     use GenComms, ONLY: cq_abort,myid
     use mpi
-    use io_module2, ONLY: InfoL,InfoMatrixFile
+    !use io_module2, ONLY: InfoL
+    use store_matrix, ONLY: InfoMatrixFile
     ! db
     use global_module, ONLY: numprocs,io_lun
     use io_module, ONLY: get_file_name
@@ -1228,7 +1228,7 @@ contains
     use numbers
     use GenComms, ONLY: cq_abort
     use mpi
-    use io_module2, ONLY: n_matrix,InfoMatrixFile
+    use store_matrix, ONLY: InfoMatrixFile, n_matrix
     ! db
     use global_module, ONLY: numprocs,io_lun
     use io_module, ONLY: get_file_name
@@ -1348,8 +1348,8 @@ contains
     use GenComms, ONLY: inode,cq_abort
     use primary_module, ONLY: bundle
     use mpi
-    use io_module2, ONLY: n_matrix
     use global_module, ONLY: n_proc_old,glob2node_old
+    use store_matrix, ONLY: n_matrix
     ! db
     use input_module, ONLY: io_assign, io_close
     use io_module, ONLY: get_file_name
@@ -1713,7 +1713,7 @@ contains
     use numbers
     use GenComms, ONLY: cq_abort,myid
     use mpi
-    use io_module2, ONLY: n_matrix
+    use store_matrix, ONLY: n_matrix
     ! db
     use global_module, ONLY: numprocs,io_lun
     use io_module, ONLY: get_file_name
@@ -1909,7 +1909,8 @@ contains
     use Gencomms, ONLY: inode,cq_abort
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
-    use io_module2, ONLY: InfoMatrixFile,InfoL
+    !use io_module2, ONLY: InfoL
+    use store_matrix, ONLY: InfoMatrixFile
     use input_module, ONLY: leqi
     use atom_dispenser, ONLY: atom2part
     use matrix_module, ONLY: matrix_halo
@@ -2218,7 +2219,7 @@ contains
     use matrix_module, ONLY: matrix_halo
     use matrix_data, ONLY: halo
     use mult_module, ONLY: mat_p
-    use io_module2, ONLY: n_matrix
+    use store_matrix, ONLY: n_matrix
     ! db
     use io_module, ONLY: get_file_name
     use global_module, ONLY: numprocs

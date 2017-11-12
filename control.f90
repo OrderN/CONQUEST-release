@@ -472,8 +472,9 @@ contains
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use move_atoms,     only: fac_Kelvin2Hartree
-    use io_module2,     ONLY: grab_matrix2,InfoL
-    use store_matrix,   ONLY: dump_InfoMatGlobal,grab_InfoMatGlobal, matrix_store_global
+    !use io_module2,     ONLY: InfoL
+    use store_matrix,   ONLY: dump_InfoMatGlobal,grab_InfoMatGlobal, &
+                    matrix_store_global, grab_matrix2, InfoMatrixFile
     !use DiagModule,     ONLY: diagon
     use mult_module,    ONLY: matL,L_trans
     use matrix_data,    ONLY: Lrange
@@ -503,6 +504,7 @@ contains
     logical,allocatable,dimension(:) :: flag_movable
 
     type(matrix_store_global) :: InfoGlob
+    type(InfoMatrixFile),pointer:: InfoL(:)
 
     !! quenched MD optimisation is stopped
     !! if the maximum force component is bellow threshold
@@ -563,7 +565,7 @@ contains
     endif
     ! Dump global data
     if (.NOT. flag_MDold) then
-      call dump_InfoMatGlobal()
+      call dump_InfoMatGlobal(index=0,MDstep=i_first)
     endif
 
     energy_md = energy0
@@ -659,7 +661,7 @@ contains
 
        ! Dump global data
        if (.NOT. flag_MDold) then
-         call dump_InfoMatGlobal()
+         call dump_InfoMatGlobal(index=0,MDstep=iter)
        endif
        
        ! Analyse forces

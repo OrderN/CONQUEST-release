@@ -23,7 +23,6 @@ MATRIX_OBJS  =  atoms.module.o \
                 generic_blas.o \
                 matrix_data_module.o \
                 atom_dispenser_module.o \
-                io_module2.o \
                 UpdateInfo_module.o \
                 UpdateMember_module.o \
                 XLBOMD_module.o \

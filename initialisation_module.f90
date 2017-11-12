@@ -1053,7 +1053,9 @@ contains
                                    n_L_iterations, expected_reduction
     use DFT_D2,              only: dispersion_D2
     use matrix_data,         ONLY: Lrange,Trange,LSrange
-    use io_module2,          ONLY: n_matrix,grab_InfoGlobal,grab_matrix2,InfoL,InfoT
+    !use io_module2,          ONLY: n_matrix,InfoL,InfoT
+    use store_matrix,        ONLY: matrix_store_global, grab_InfoMatGlobal, grab_matrix2, &
+                                   n_matrix,InfoMatrixFile
     use UpdateInfo_module,   ONLY: make_glob2node,Matrix_CommRebuild
     use XLBOMD_module,       ONLY: grab_XXvelS,grab_Xhistories
     use support_spec_format, only: read_option
@@ -1075,6 +1077,10 @@ contains
     real(double)   :: electrons_tot, bandE
     real(double), dimension(nspin) :: electrons, energy_tmp
     integer        :: spin_SF
+
+    type(matrix_store_global) :: InfoGlob
+    type(InfoMatrixFile),pointer :: InfoL(:), InfoT(:)
+
     ! Dummy vars for MMM
 
 !****lat<$
@@ -1094,10 +1100,11 @@ contains
       call gcopy(glob2node, ni_in_cell)
       allocate(glob2node_old(ni_in_cell), STAT=stat)
       if (stat .ne.0)      call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
-      if (inode.eq.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old,MDinit_step)
-      call gcopy(n_proc_old)
-      call gcopy(glob2node_old, ni_in_cell)
-      call gcopy(MDinit_step)
+       call grab_InfoMatGlobal(InfoGlob,MDinit_step)  
+        n_proc_old = InfoGlob%numprocs
+        glob2node_old(:) = InfoGlob%glob_to_node(:)
+        MDinit_step = InfoGlob%MDstep
+
       n_matrix = 1
       if (nspin.EQ.2) n_matrix = 2
       call my_barrier()
