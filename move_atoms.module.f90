@@ -1133,51 +1133,66 @@ contains
                         L_tolerance, e3)
     end if
     energy_out = e3
-    !if (iprint_MD > 0) then
-    call get_E_and_F(fixed_potential, vary_mu, energy_out, .false., .false. ) !.true., .true.)
-    !else
-    !   call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
-    !end if
+    if (iprint_MD > 0) then
+       call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .true.)
+    else
+       call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
+    end if
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
                 fmt='(4x,"In safemin2, Interpolation step and energy &
                       &are ",f15.10,f20.10" ",a2)') &
                       kmin, en_conv*energy_out, en_units(energy_units)
-    ! Now do interpolation AGAIN
-    if(e1<e3) then ! Keep k1
-       if(k2<kmin) then
-          k3 = kmin
-          e3 = energy_out
-       else
-          k3 = k2
-          e3 = e2
-          k2 = kmin
-          e2 = energy_out
+    ! If interpolation step failed, do interpolation AGAIN
+    if (energy_out > e2 .and. abs(bottom) > RD_ERR) then
+       if(e1<e3) then ! Keep k1
+          if(k2<kmin) then
+             k3 = kmin
+             e3 = energy_out
+          else
+             k3 = k2
+             e3 = e2
+             k2 = kmin
+             e2 = energy_out
+          end if
+       else ! Keep k3
+          if(k2<kmin) then
+             k1 = k2
+             e1 = e2
+             k2 = kmin
+             e2 = energy_out
+          end if
        end if
-    else ! Keep k3
-       if(k2<kmin) then
-          k1 = k2
-          e1 = e2
-          k2 = kmin
-          e2 = energy_out
-       end if
-    end if
-    kmin_old = kmin
-    if (inode == ionode .and. iprint_MD > 1) &
-            write (io_lun, fmt='(4x,"In safemin2, brackets are: ",6f18.10)') &
-                  k1, e1, k2, e2, k3, e3
-    bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
-    if (abs(bottom) > very_small) then
-       kmin = 0.5_double * (((k1*k1 - k3*k3)*(e1 - e2) -    &
-                             (k1*k1 - k2*k2) * (e1 - e3)) / &
-                            ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
+       kmin_old = kmin
        if (inode == ionode .and. iprint_MD > 1) &
-         write (io_lun, &
-                fmt='(4x,"In safemin2, second interpolation step is ", f15.10)') kmin
-       if(kmin<k1.OR.kmin>k3) then
-          write(io_lun,*) 'Second interpolation outside limits: ',k1,k3,kmin
+            write (io_lun, fmt='(4x,"In safemin2, brackets are: ",6f18.10)') &
+            k1, e1, k2, e2, k3, e3
+       bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
+       if (abs(bottom) > very_small) then
+          kmin = 0.5_double * (((k1*k1 - k3*k3)*(e1 - e2) -    &
+               (k1*k1 - k2*k2) * (e1 - e3)) / &
+               ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
+          if (inode == ionode .and. iprint_MD > 1) &
+               write (io_lun, &
+               fmt='(4x,"In safemin2, second interpolation step is ", f15.10)') kmin
+          if(kmin<k1.OR.kmin>k3) then
+             write(io_lun,*) 'Second interpolation outside limits: ',k1,k3,kmin
+             dE = e0 - energy_out
+             kmin = kmin_old
+             if (inode == ionode .and. iprint_MD > 0) then
+                write (io_lun, &
+                     fmt='(4x,"In safemin2, exit after ",i4," &
+                     &iterations with energy ",f20.10," ",a2)') &
+                     iter, en_conv * energy_out, en_units(energy_units)
+             else if (inode == ionode) then
+                write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
+                     en_conv * energy_out, en_units(energy_units)
+             end if
+             if (inode.EQ.ionode) write (io_lun,*) "Get out of safemin2 !" !db
+             return
+          end if
+       else
           dE = e0 - energy_out
-          kmin = kmin_old
           if (inode == ionode .and. iprint_MD > 0) then
              write (io_lun, &
                   fmt='(4x,"In safemin2, exit after ",i4," &
@@ -1190,35 +1205,6 @@ contains
           if (inode.EQ.ionode) write (io_lun,*) "Get out of safemin2 !" !db
           return
        end if
-    else
-       dE = e0 - energy_out
-       if (inode == ionode .and. iprint_MD > 0) then
-          write (io_lun, &
-               fmt='(4x,"In safemin2, exit after ",i4," &
-               &iterations with energy ",f20.10," ",a2)') &
-               iter, en_conv * energy_out, en_units(energy_units)
-       else if (inode == ionode) then
-          write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
-               en_conv * energy_out, en_units(energy_units)
-       end if
-       if (inode.EQ.ionode) write (io_lun,*) "Get out of safemin2 !" !db
-       return
-    end if
-       !deallocate(store_density)
-
-       !!    if (energy_out > e2 .and. abs(bottom) > very_small) then
-!!       ! The interpolation failed - go back
-!!       call start_timer(tmr_l_tmp1,WITH_LEVEL)
-!!       if (inode == ionode) &
-!!            write (io_lun,fmt='(/4x,"Interpolation failed; reverting"/)')
-!!       kmin_old = kmin
-!!       kmin = k2
-       !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-       !%%!   ! Subtract off atomic densities
-       !%%!   store_density = density
-       !%%!   call set_density()
-       !%%!   density = store_density - density
-       !%%!end if
        do i=1,ni_in_cell
           x_atom_cell(i) = start_x(i) + kmin*direction(1,i)
           y_atom_cell(i) = start_y(i) + kmin*direction(2,i)
@@ -1226,7 +1212,6 @@ contains
        end do
        if (.NOT. flag_MDold) call wrap_xyz_atom_cell
        ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
-!WRONG k3_local = kmin - k3!!03/07/2013
        k3_local = kmin-kmin_old!03/07/2013
        if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3, kmin,k3_local:", k3,kmin,k3_local
        do i = 1, ni_in_cell
@@ -1234,20 +1219,8 @@ contains
          atom_coord_diff(1, gatom) = k3_local * direction(1,i)
          atom_coord_diff(2, gatom) = k3_local * direction(2,i)
          atom_coord_diff(3, gatom) = k3_local * direction(3,i)
-         ! ---- DEBUG: ---- !!
-         !if (inode.EQ.ionode) then
-         !  write (io_lun,*) ""
-         !  write (io_lun,*) "i & gatom:", i, gatom
-         !  write (io_lun,'(a,1x,3f15.10)') "Before:",start_x(i),start_y(i),start_z(i)
-         !  write (io_lun,'(a,1x,3f15.10)') "After :",x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
-         !  write (io_lun,'(a,1x,3f15.10)') "diff  :", atom_coord_diff(1:3,gatom)
-         !  write (io_lun,*) ""
-         !endif
-         !! ---- DEBUG: ---- !!
        enddo
-!Update atom_coord : TM 27Aug2003
        call update_atom_coord
-!Update atom_coord : TM 27Aug2003
        write (io_lun,*) "CG: 3rd stage"
        if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
        call gcopy(n_proc_old)
@@ -1277,15 +1250,8 @@ contains
           end if
        endif
        call update_H(fixed_potential)
-       !call updateIndices(.false.,fixed_potential, number_of_bands)
        ! Update start_x,start_y & start_z
        call update_start_xyz(start_x,start_y,start_z)!25/01/2013
-       !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-          ! Add on atomic densities
-          !store_density = density
-          !call set_density()
-          !density = store_density + density
-       !end if
        if (iprint_MD > 2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
                                       trim(pdb_template))
@@ -1311,7 +1277,7 @@ contains
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
                            .true., .false.)
        end if
-!    end if
+    end if ! End of second interpolation step if first failed
     dE = e0 - energy_out
 7   format(4x,3f15.8)
     if (inode == ionode .and. iprint_MD > 0) then
@@ -2415,6 +2381,7 @@ contains
                                       flag_neutral_atom,               &
                                       atomf, sf, nspin_SF, flag_LFD,   &
                                       flag_SFcoeffReuse, flag_diagonalisation, &
+                                      ne_spin_in_cell,                 &
                                       ne_in_cell, spin_factor
     use density_module,         only: set_atomic_density,              &
                                       flag_no_atomic_densities,        &
@@ -2436,7 +2403,7 @@ contains
     type(cq_timer) :: tmr_l_tmp1
     real(double), dimension(nspin) :: electrons, energy_tmp
     real(double) :: scale
-    integer :: spin_SF
+    integer :: spin_SF, spin
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     ! (0) Pseudopotentials: choose correct form
@@ -2522,8 +2489,15 @@ contains
     if(flag_diagonalisation.AND.flag_LmatrixReuse.AND.(.NOT.flag_MDold)) then
        call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
             inode,ionode,maxngrid)
-       scale = ne_in_cell/(spin_factor*sum(electrons))
-       if(abs(scale-one)>RD_ERR) density = density*scale
+       do spin=1,nspin
+          scale = ne_spin_in_cell(spin)/(spin_factor*electrons(spin))
+          if(abs(scale-one)<0.01.AND.abs(scale-one)>RD_ERR) then
+             density(:,spin) = density(:,spin)*scale
+          else if (abs(scale-one)>=0.01) then
+             call set_atomic_density(.true.)
+             exit
+          end if
+       end do
     end if
     if (flag_pcc_global) call set_density_pcc()
     ! (7) Now generate a new H matrix, including a new charge density
