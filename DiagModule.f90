@@ -852,12 +852,13 @@ contains
                    if(flag_write_projected_DOS) then
 !!! 2017.9.7 nakata normalise pDOS
                       if (flag_normalise_pDOS) then
-                         call weight_pDOS(expH(:,:,spin),w_pDOS)
+                         call get_weight_pDOS(expH(:,:,spin),w_pDOS)
+                         call gsum(w_PDOS(:), matrix_size)
                          call accumulate_DOS(wtk(kp),w(:,kp,spin), &
-                              expH(:,:,spin),total_DOS(:,spin),pDOS(:,:,spin),w_pDOS)
+                              expH(:,:,spin),total_DOS(:,spin),projDOS=pDOS(:,:,spin),weight_pDOS=w_pDOS)
                       else
                          call accumulate_DOS(wtk(kp),w(:,kp,spin), &
-                              expH(:,:,spin),total_DOS(:,spin),pDOS(:,:,spin))
+                              expH(:,:,spin),total_DOS(:,spin),projDOS=pDOS(:,:,spin))
                       endif
 !!! nakata normalise pDOS end
                    else
@@ -3803,7 +3804,7 @@ contains
   !!  MODIFICATION HISTORY
   !!  SOURCE
   !!
-  subroutine accumulate_DOS(weight,eval,evec,DOS,projDOS,w_pDOS)
+  subroutine accumulate_DOS(weight,eval,evec,DOS,projDOS,weight_pDOS)
 
     use datatypes
     use numbers, ONLY: half, zero
@@ -3822,7 +3823,7 @@ contains
     real(double), dimension(:) :: eval
     real(double), dimension(n_DOS) :: DOS
     real(double), OPTIONAL, dimension(:,:) :: projDOS
-    real(double), OPTIONAL, dimension(:) :: w_pDOS ! 2017.9.7 nakata norm PDOS
+    real(double), OPTIONAL, dimension(:) :: weight_pDOS ! 2017.9.7 nakata norm PDOS
 
     ! Local variables
     integer :: iwf, n_band, n_min, n_max, i, acc, atom, nsf
@@ -3830,7 +3831,7 @@ contains
     real(double), dimension(n_DOS) :: tmp
 
     if(present(projDOS).AND.(.NOT.flag_write_projected_DOS)) call cq_abort("Called pDOS without flag")
-    if(present(w_pDOS) .AND.(.NOT.flag_normalise_pDOS))      call cq_abort("Normalised pDOS without flag") ! 2017.9.7 nakata norm PDOS
+    if(present(weight_pDOS) .AND.(.NOT.flag_normalise_pDOS))      call cq_abort("Normalised pDOS without flag") ! 2017.9.7 nakata norm PDOS
     ! ---------------
     ! DOS calculation
     ! ---------------
@@ -3856,7 +3857,7 @@ contains
              do nsf = 1,nsf_species(bundle%species(atom))
                 fac = fac + real(evec(iwf,acc+nsf)*conjg(evec(iwf,acc+nsf)),double)
              end do
-             if (flag_normalise_pDOS) fac = fac / w_pDOS(iwf) ! 2017.9.7 nakata normalise pDOS
+             if (flag_normalise_pDOS) fac = fac / weight_pDOS(iwf) ! 2017.9.7 nakata normalise pDOS
              do i=n_min,n_max
                 projDOS(i,atom) = projDOS(i,atom) + tmp(i)*fac
              end do
@@ -3887,7 +3888,7 @@ contains
   !!  MODIFICATION HISTORY
   !!  SOURCE
   !!
-  subroutine weight_pDOS(evec,w_pDOS)
+  subroutine get_weight_pDOS(evec,w_pDOS)
 
     use datatypes
     use numbers, ONLY: zero
@@ -3913,7 +3914,6 @@ contains
        acc = 0
        fac = zero
        do atom=1,bundle%n_prim
-          fac = zero
           do nsf = 1,nsf_species(bundle%species(atom))
              fac = fac + real(evec(iwf,acc+nsf)*conjg(evec(iwf,acc+nsf)),double)
           end do
@@ -3921,7 +3921,7 @@ contains
        end do
        w_pDOS(iwf) = fac
     end do
-  end subroutine weight_pDOS
+  end subroutine get_weight_pDOS
   !!***
 !!!
  

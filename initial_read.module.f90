@@ -1392,7 +1392,7 @@ contains
              E_DOS_max = fdf_double('IO.max_DOS_E',zero)
              sigma_DOS = fdf_double('IO.sigma_DOS',0.001_double)
              n_DOS = fdf_integer('IO.n_DOS',201)
-             flag_normalise_pDOS = fdf_boolean('IO.write_proj_DOS',.false.)   ! 2017.9.7 nakata normalise pDOS
+             flag_normalise_pDOS = fdf_boolean('IO.normalize_PDOS',.false.)   ! 2017.9.7 nakata normalise pDOS
              if (.not.flag_write_projected_DOS) flag_normalise_pDOS = .false. ! 2017.9.7 nakata normalise pDOS
           else
              flag_write_DOS = .false.
