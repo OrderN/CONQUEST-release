@@ -131,6 +131,8 @@
 !!    To perform a set of diagonalisations call initDiag, distrib_and_diag, endDiag
 !!   2017/10/18 11:06 dave
 !!    Change to allow arbitrary k-points to be passed to distrib_and_diag
+!!   2017/11/13 18:15 nakata
+!!    Added flag_normalise and weight_pDOS to normalise each eigenstate of PDOS
 !!***
 module DiagModule
 
@@ -304,7 +306,7 @@ module DiagModule
   ! DOS-related variables
   real(double), allocatable, dimension(:,:) :: total_DOS
   real(double), allocatable, dimension(:,:,:) :: pDOS
-  real(double), allocatable, dimension(:) :: w_pDOS ! 2017.9.7 nakata normalise pDOS
+  real(double), allocatable, dimension(:) :: w_pDOS
   real(double) :: dE_DOS, pf_DOS
   integer :: n_DOS_max, n_DOS_wid
 
@@ -464,7 +466,6 @@ contains
          flag_out_wf,wf_self_con, max_wf, paof, sf, atomf, flag_out_wf_by_kp, &
          out_wf, n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, &
          flag_write_projected_DOS, flag_normalise_pDOS, E_wf_min, E_wf_max, flag_wf_range_Ef
-!!!         flag_write_projected_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
          block_size_r,       &
@@ -612,12 +613,10 @@ contains
        if(flag_write_projected_DOS) then
           allocate(pDOS(n_DOS,bundle%n_prim,nspin))
           pDOS = zero
-!!! 2017.9.7 nakata normalise pDOS
           if (flag_normalise_pDOS) then
              allocate(w_pDOS(matrix_size))
              w_pDOS = zero
           end if
-!!! nakata normalise pDOS end
        end if
        ! If the user hasn't specified limits
        if(E_DOS_min==zero.AND.E_DOS_max==zero) then
@@ -850,7 +849,6 @@ contains
                      expH(:,:,spin))
                 if(flag_write_DOS) then
                    if(flag_write_projected_DOS) then
-!!! 2017.9.7 nakata normalise pDOS
                       if (flag_normalise_pDOS) then
                          call get_weight_pDOS(expH(:,:,spin),w_pDOS)
                          call gsum(w_PDOS(:), matrix_size)
@@ -860,7 +858,6 @@ contains
                          call accumulate_DOS(wtk(kp),w(:,kp,spin), &
                               expH(:,:,spin),total_DOS(:,spin),projDOS=pDOS(:,:,spin))
                       endif
-!!! nakata normalise pDOS end
                    else
                       call accumulate_DOS(wtk(kp),w(:,kp,spin), &
                            expH(:,:,spin),total_DOS(:,spin))
@@ -3802,6 +3799,8 @@ contains
   !!  CREATION DATE
   !!   2016 ?
   !!  MODIFICATION HISTORY
+  !!   2017/11/13 18:15 nakata
+  !!    Added flag_normalise and weight_pDOS to normalise each eigenstate of PDOS
   !!  SOURCE
   !!
   subroutine accumulate_DOS(weight,eval,evec,DOS,projDOS,weight_pDOS)
@@ -3809,7 +3808,7 @@ contains
     use datatypes
     use numbers, ONLY: half, zero
     use global_module, ONLY: n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, flag_write_projected_DOS, &
-                             flag_normalise_pDOS ! 2017.9.7 nakata normalise pDOS
+                             flag_normalise_pDOS
     use ScalapackFormat, only: matrix_size
     use species_module,  only: nsf_species
     use primary_module,  only: bundle
@@ -3831,7 +3830,7 @@ contains
     real(double), dimension(n_DOS) :: tmp
 
     if(present(projDOS).AND.(.NOT.flag_write_projected_DOS)) call cq_abort("Called pDOS without flag")
-    if(present(weight_pDOS) .AND.(.NOT.flag_normalise_pDOS))      call cq_abort("Normalised pDOS without flag") ! 2017.9.7 nakata norm PDOS
+    if(present(weight_pDOS) .AND.(.NOT.flag_normalise_pDOS)) call cq_abort("Normalised pDOS without flag")
     ! ---------------
     ! DOS calculation
     ! ---------------
@@ -3857,7 +3856,7 @@ contains
              do nsf = 1,nsf_species(bundle%species(atom))
                 fac = fac + real(evec(iwf,acc+nsf)*conjg(evec(iwf,acc+nsf)),double)
              end do
-             if (flag_normalise_pDOS) fac = fac / weight_pDOS(iwf) ! 2017.9.7 nakata normalise pDOS
+             if (flag_normalise_pDOS) fac = fac / weight_pDOS(iwf)
              do i=n_min,n_max
                 projDOS(i,atom) = projDOS(i,atom) + tmp(i)*fac
              end do
@@ -3868,7 +3867,6 @@ contains
   end subroutine accumulate_DOS
   !!***
  
-!!! 2017.9.7 nakata normalise pDOS
   !!****f*  DiagModule/weight_pDOS
   !!
   !!  NAME
