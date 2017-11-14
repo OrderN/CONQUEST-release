@@ -446,6 +446,8 @@ contains
   !!    Continued tidying: removing print_info
   !!   2017/06/29 14:00 nakata
   !!    Changed the position to deallocate matBand_atomf
+  !!   2017/11/09 16:00 nakata
+  !!    Introduced PDOS with MSSFs (tentative)
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -608,7 +610,8 @@ contains
        total_DOS = zero
        ! Only if projecting DOS onto atoms
        if(flag_write_projected_DOS) then
-          allocate(pDOS(n_DOS,bundle%n_prim,nspin))
+          if (atomf==sf) allocate(pDOS(n_DOS,bundle%n_prim,nspin))
+          if (atomf/=sf) allocate(pDOS(n_DOS,ni_in_cell,   nspin))
           pDOS = zero
        end if
        ! If the user hasn't specified limits
@@ -842,8 +845,13 @@ contains
                      expH(:,:,spin))
                 if(flag_write_DOS) then
                    if(flag_write_projected_DOS) then
-                      call accumulate_DOS(wtk(kp),w(:,kp,spin), &
-                           expH(:,:,spin),total_DOS(:,spin),pDOS(:,:,spin))
+                      if (atomf==sf) then
+                         call accumulate_DOS(wtk(kp),w(:,kp,spin), &
+                              expH(:,:,spin),total_DOS(:,spin),projDOS=pDOS(:,:,spin))
+                      else
+                         call accumulate_DOS(wtk(kp),w(:,kp,spin), &
+                              expH(:,:,spin),total_DOS(:,spin),projDOS=pDOS(:,:,spin),spin=spin)
+                      endif
                    else
                       call accumulate_DOS(wtk(kp),w(:,kp,spin), &
                            expH(:,:,spin),total_DOS(:,spin))
@@ -994,7 +1002,12 @@ contains
        if(inode==ionode) call dump_DOS(total_DOS,Efermi)
        call my_barrier()
        if(flag_write_projected_DOS) then
-          call dump_projected_DOS(pDOS,Efermi)
+          if (atomf==sf) then
+             call dump_projected_DOS(pDOS,Efermi)
+          else
+             call gsum(pDOS(:,:,:),n_DOS,ni_in_cell,nspin)
+             if (inode==ionode) call dump_projected_DOS(pDOS,Efermi)
+          endif
           deallocate(pDOS)
        end if
        deallocate(total_DOS)
@@ -3784,17 +3797,25 @@ contains
   !!  CREATION DATE
   !!   2016 ?
   !!  MODIFICATION HISTORY
+  !!   2017/11/01 18:00 nakata
+  !!    Introduced PDOS with MSSFs, projecting on neighbor atoms with global ID (tentative)
+  !!    Added optional argument spin to specify the spin of the SF coefficients
   !!  SOURCE
   !!
-  subroutine accumulate_DOS(weight,eval,evec,DOS,projDOS)
+  subroutine accumulate_DOS(weight,eval,evec,DOS,projDOS,spin)
 
     use datatypes
-    use numbers, ONLY: half, zero
-    use global_module, ONLY: n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, flag_write_projected_DOS
+    use numbers,         only: half, zero
+    use global_module,   only: n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, flag_write_projected_DOS, &
+                               sf, atomf, id_glob, species_glob, nspin_SF
     use ScalapackFormat, only: matrix_size
-    use species_module,  only: nsf_species
+    use species_module,  only: nsf_species, natomf_species
+    use group_module,    only: parts
     use primary_module,  only: bundle
-    use GenComms, ONLY: cq_abort
+    use cover_module,    only: BCS_parts
+    use matrix_data,     only: mat, halo, SFcoeff_range
+    use mult_module,     only: matSFcoeff, matrix_pos, mat_p
+    use GenComms,        only: cq_abort
     
     implicit none
 
@@ -3804,11 +3825,15 @@ contains
     real(double), dimension(:) :: eval
     real(double), dimension(n_DOS) :: DOS
     real(double), OPTIONAL, dimension(:,:) :: projDOS
+    integer, OPTIONAL, intent(in) :: spin
 
     ! Local variables
-    integer :: iwf, n_band, n_min, n_max, i, acc, atom, nsf
-    real(double) :: Ebin, a, fac
+    integer :: iwf, n_band, n_min, n_max, i, acc, atom, nsf, natomf, nsf1, natomf2, spin_SF
+    real(double) :: Ebin, a, fac, fac1, fac2, val
     real(double), dimension(n_DOS) :: tmp
+    integer :: iprim, part, memb, neigh, ist
+    integer :: atom_num, gcspart, neigh_global_part, neigh_global_num, neigh_species, j_in_halo, wheremat
+
 
     if(present(projDOS).AND.(.NOT.flag_write_projected_DOS)) call cq_abort("Called pDOS without flag")
     ! ---------------
@@ -3828,19 +3853,64 @@ contains
           tmp(i) = weight*pf_DOS*exp(-half*a*a)
           DOS(i) = DOS(i) + tmp(i)
        end do
+
        ! Having found DOS, we now project onto atoms
        if(flag_write_projected_DOS) then
-          acc = 0
-          do atom=1,bundle%n_prim
-             fac = zero
-             do nsf = 1,nsf_species(bundle%species(atom))
-                fac = fac + real(evec(iwf,acc+nsf)*conjg(evec(iwf,acc+nsf)),double)
+          if (atomf == sf) then
+             acc = 0
+             do atom=1,bundle%n_prim
+                fac = zero
+                do nsf = 1,nsf_species(bundle%species(atom))
+                   fac = fac + real(evec(iwf,acc+nsf)*conjg(evec(iwf,acc+nsf)),double)
+                end do
+                do i=n_min,n_max
+                   projDOS(i,atom) = projDOS(i,atom) + tmp(i)*fac
+                end do
+                acc = acc + nsf_species(bundle%species(atom))
              end do
-             do i=n_min,n_max
-                projDOS(i,atom) = projDOS(i,atom) + tmp(i)*fac
-             end do
-             acc = acc + nsf_species(bundle%species(atom))
-          end do
+          else
+             spin_SF = spin
+             if (nspin_SF == 1) spin_SF = 1
+             acc = 0 
+             iprim = 0
+             do part = 1,bundle%groups_on_node ! Loop over primary set partitions
+                if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
+                   do memb = 1,bundle%nm_nodgroup(part) ! Loop over primary atoms
+                      atom_num = bundle%nm_nodbeg(part)+memb-1
+                      iprim=iprim+1
+                      nsf1 = nsf_species(bundle%species(atom_num)) ! = mat(part,SFcoeff_range)%ndimi(memb)
+                      do neigh = 1, mat(part,SFcoeff_range)%n_nab(memb) ! Loop over neighbours of atom
+                         fac = zero
+                         ist = mat(part,SFcoeff_range)%i_acc(memb)+neigh-1
+                         gcspart = BCS_parts%icover_ibeg(mat(part,SFcoeff_range)%i_part(ist))+ &
+                                   mat(part,SFcoeff_range)%i_seq(ist)-1
+                         neigh_global_part = BCS_parts%lab_cell(mat(part,SFcoeff_range)%i_part(ist))
+                         neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+ &
+                                             mat(part,SFcoeff_range)%i_seq(ist)-1)
+                         neigh_species = species_glob(neigh_global_num)
+                         j_in_halo = halo(SFcoeff_range)%i_halo(gcspart)
+                         natomf2 =  natomf_species(neigh_species)
+                         ! Now loop over support functions and atomf (basically PAOs)
+                         do nsf = 1, nsf1
+                            fac1 = real(evec(iwf,acc+nsf)*conjg(evec(iwf,acc+nsf)),double)
+                            fac2 = zero
+                            do natomf = 1, natomf2
+                               wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,nsf,natomf)
+                               val = mat_p(matSFcoeff(spin_SF))%matrix(wheremat)
+                               fac2 = fac2 + val*val
+                            enddo ! l
+                            fac = fac + fac1 * fac2
+                         enddo ! nsf
+                         ! project on the neighbour atom 
+                         do i=n_min,n_max
+                            projDOS(i,neigh_global_num) = projDOS(i,neigh_global_num) + tmp(i)*fac
+                         end do
+                      end do ! neigh
+                      acc = acc + nsf1
+                   end do ! memb
+                end if ! nm_nodgroup
+             end do ! part
+          endif
        end if
     end do
   end subroutine accumulate_DOS

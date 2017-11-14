@@ -2947,12 +2947,14 @@ second:   do
   !! CREATION DATE 
   !!   2015/07/02 17:21
   !! MODIFICATION HISTORY
+  !!   2017/11/09 16:00 nakata
+  !!    Added atomf to find whether the PDOS is with PAOs or MSSFs (tentative)
   !! SOURCE
   !!
   subroutine dump_projected_DOS(pDOS,Ef)
 
     use datatypes
-    use global_module, only: n_DOS, E_DOS_max, E_DOS_min, sigma_DOS, nspin
+    use global_module, only: n_DOS, E_DOS_max, E_DOS_min, sigma_DOS, nspin, atomf, sf, ni_in_cell
     use primary_module,  only: bundle
 
     ! Passed variables
@@ -2960,12 +2962,16 @@ second:   do
     real(double), dimension(nspin) :: Ef
 
     ! Local variables
-    integer :: lun, i, iprim
+    integer :: lun, i, iprim, natom
     real(double) :: dE, thisE
     character(len=50) :: filename
 
-    do iprim = 1,bundle%n_prim
-       write(filename,'("Atom",I0.7,"DOS.dat")') bundle%ig_prim(iprim)
+    if (atomf==sf) natom = bundle%n_prim
+    if (atomf/=sf) natom = ni_in_cell
+
+    do iprim = 1,natom
+       if (atomf==sf) write(filename,'("Atom",I0.7,"DOS.dat")') bundle%ig_prim(iprim)
+       if (atomf/=sf) write(filename,'("Atom",I0.7,"DOS.dat")') iprim ! iprim is equal to global ID if atomf = paof (MSSFs)
        ! Open file
        call io_assign (lun)
        open (unit = lun, file = filename)
