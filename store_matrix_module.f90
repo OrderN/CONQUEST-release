@@ -26,6 +26,9 @@ module store_matrix
 !   It includes the information of a matrix in my process.
 !    (Information of Primary sets of atoms, Lists of Neighbours, ...  by global numbers.)
 !  
+!   To make the arrays defined with type used as those with "InfoMatrixFile"
+!   ranks of beta_j(2rank) & vec_Rij (3rank) must be reduced by introducing ibeg_Pij(:)
+!
   type matrix_store
     character(len=80) :: name
     !integer :: inode  ! not necessary 
@@ -499,7 +502,7 @@ contains
  
      do iglob=1, mat_global_tmp%ni_in_cell
       write (lun,101) iglob, mat_global_tmp%atom_coord(1:3, iglob)
-      101 format(5x,i8,3x,3e20.13)
+      101 format(5x,i8,3x,3e22.13)
      enddo !iglob=1, mat_global_tmp%ni_in_cell
 
      if(flag_velocity) then
@@ -635,7 +638,7 @@ contains
   !!
   !!  SOURCE
   !!
-  subroutine grab_InfoMatGlobal(InfoGlob,index,flag_velocity_in)
+  subroutine grab_InfoMatGlobal(InfoGlob,index,flag_velocity)
 
     ! Module usage
     use GenComms, ONLY: inode,ionode,gcopy, my_barrier
@@ -645,24 +648,24 @@ contains
     ! passed variables
     type(matrix_store_global),intent(out) :: InfoGlob
     integer,intent(in), optional :: index
-    logical,intent(in), optional :: flag_velocity_in
+    logical,intent(in), optional :: flag_velocity
 
     ! local variables
     integer :: lun, istat, iglob, ig
     integer :: index_local, index_in_file
     character(len=80) :: filename
-    logical :: flag_velocity, flag_MDstep
+    logical :: flag_velocity_local, flag_MDstep
     integer :: ni_in_cell_tmp, numprocs_tmp
 
-    if(present(flag_velocity_in)) then
-     flag_velocity=flag_velocity_in
+    if(present(flag_velocity)) then
+     flag_velocity_local=flag_velocity
     else
-     flag_velocity=.false.
+     flag_velocity_local=.false.
     endif
 
     ! check whether members of InfoGlob has been allocated or not.
      if(.not.allocated(InfoGlob%glob_to_node)) then
-      if(flag_velocity) then
+      if(flag_velocity_local) then
        !allocation of glob_to_node, atom_coord, atom_veloc
         !write(io_lun,*) "allocation in grab_InfoMatGlobal1"
         allocate(InfoGlob%glob_to_node(ni_in_cell), InfoGlob%atom_coord(3,ni_in_cell), &
@@ -689,9 +692,9 @@ contains
      endif
  
      !Reading  Start !!!
-      read(lun,*) flag_velocity, flag_MDstep   ! it is probably better to have this output for the future.
-       if(present(flag_velocity_in)) then
-        if(flag_velocity_in .neqv. flag_velocity) call cq_abort('Error in grab_InfoMatglobal: flag_velocity')
+      read(lun,*) flag_velocity_local, flag_MDstep   ! it is probably better to have this output for the future.
+       if(present(flag_velocity)) then
+        if(flag_velocity .neqv. flag_velocity_local) call cq_abort('Error in grab_InfoMatglobal: flag_velocity')
        endif
       read(lun,*) InfoGlob%ni_in_cell, InfoGlob%numprocs
        if(ni_in_cell .NE. InfoGlob%ni_in_cell) &
@@ -703,10 +706,10 @@ contains
  
      do ig=1, InfoGlob%ni_in_cell
       read(lun,101) iglob, InfoGlob%atom_coord(1:3, ig)
-      101 format(5x,i8,3x,3e20.10)
+      101 format(5x,i8,3x,3e22.13)
      enddo !ig=1, InfoGlob%ni_in_cell
 
-     if(flag_velocity) then
+     if(flag_velocity_local) then
       write(io_lun,*) 'Reading velocity from ',filename
       read(lun,*)
       do ig=1, InfoGlob%ni_in_cell
@@ -738,7 +741,7 @@ contains
     call gcopy(InfoGlob%glob_to_node, ni_in_cell)
     call gcopy(InfoGlob%MDstep)
     call gcopy(InfoGlob%atom_coord, 3, ni_in_cell)
-    if(flag_velocity) call gcopy(InfoGlob%atom_veloc, 3, ni_in_cell)
+    if(flag_velocity_local) call gcopy(InfoGlob%atom_veloc, 3, ni_in_cell)
 
    !gcopy InfoGlob : END
 

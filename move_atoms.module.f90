@@ -72,6 +72,17 @@ module move_atoms
   real(double), parameter:: fac_Kelvin2Hartree = kB/ev
   !real(double), parameter:: fac_Kelvin2Hartree = 2.92126269e-6_double
 
+  ! Table to show the methods to update  (for update_pos_and_matrix)
+   integer, parameter :: updatePos  = 0
+   integer, parameter :: updateL    = 1
+   integer, parameter :: updateK    = 2
+   integer, parameter :: updateLorK = 3
+   integer, parameter :: updateMS   = 4
+   integer, parameter :: extrplL    = 5
+   integer, parameter :: updateX    = 6
+   integer, parameter :: updateXdiss= 7
+   integer, parameter :: updateS    = 8
+
   ! -------------------------------------------------------
   ! RCS ident string for object file id
   ! -------------------------------------------------------
@@ -807,6 +818,13 @@ contains
     type(InfoMatrixFile),pointer :: InfoL(:)
 
     call start_timer(tmr_std_moveatoms)
+
+    !allocation of glob2node_old:  though I (TM) am planning to remove this array.
+      if (.NOT. allocated(glob2node_old)) then
+         allocate (glob2node_old(ni_in_cell), STAT=stat)
+         if (stat.NE.0) call cq_abort('Error deallocating glob2node_old: ', ni_in_cell)
+      endif
+
     !allocate(store_density(maxngrid))
     e0 = total_energy
     if (inode == ionode .and. iprint_MD > 0) &
@@ -899,58 +917,15 @@ contains
                write (io_lun,*) 'Position: ', i, x_atom_cell(i), &
                                 y_atom_cell(i), z_atom_cell(i)
        end do
-       if (.NOT. flag_MDold) call wrap_xyz_atom_cell
-       ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
-       !if (inode.EQ.ionode) write (io_lun,*) "k3, k3_local:", k3,k3_local
-       !do i = 1, ni_in_cell
-       !  gatom = id_glob(i)
-       !  atom_coord_diff(1, gatom) = k3_local * direction(1,i)
-       !  atom_coord_diff(2, gatom) = k3_local * direction(2,i)
-       !  atom_coord_diff(3, gatom) = k3_local * direction(3,i)
-       !enddo                                  
-
-       !Update atom_coord : TM 27Aug2003
-       call update_atom_coord
 
        if (.NOT. flag_MDold) then
-         if (ionode.EQ.inode) write (io_lun,*) "CG: 1st stage, callupdateIndices3"
-         if (.NOT. allocated(glob2node_old)) then
-           allocate (glob2node_old(ni_in_cell), STAT=stat)
-           if (stat.NE.0) call cq_abort('Error deallocating glob2node_old: ', &
-                                        ni_in_cell)
-         endif
-
-         call grab_InfoMatGlobal(InfoGlob,0)
-         n_proc_old = InfoGlob%numprocs
-         glob2node_old(:) = InfoGlob%glob_to_node(:)
-         do ig = 1, ni_in_cell
-          atom_coord_diff(:,ig) = atom_coord(:,ig) - InfoGlob%atom_coord(:,ig)
-          if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
-          if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
-          if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
-          if((atom_coord_diff(2,ig)) < -half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)+rcelly
-          if((atom_coord_diff(3,ig)) > half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)-rcellz
-          if((atom_coord_diff(3,ig)) < -half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)+rcellz
-         enddo
- 
-         call updateIndices3(fixed_potential,direction)
-         ! L-matrix reconstruction (used to be called at updateIndices3)
-         if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
-           call grab_matrix2('L',inode,nfile,InfoL)
-           call my_barrier()
-           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-           ! DRB 2017/05/09 now extended to spin systems
-           if(nspin==2) then
-              call grab_matrix2('L2',inode,nfile,InfoL)
-              call my_barrier()
-              call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
-           end if
-         endif
-         if (ionode.EQ.inode) write (io_lun,*) "get through CG: 1st stage"
+         if (ionode.EQ.inode) write (io_lun,*) "CG: 1st stage, call updateIndices3"
+         call update_pos_and_matrices(updateLorK,direction)
        else
          write (io_lun,*) "CG: 1st stage with old CQ."
          call updateIndices(.true., fixed_potential)
        endif
+
        call update_H(fixed_potential)
        !Update start_x,start_y & start_z
        call update_start_xyz(start_x,start_y,start_z)
@@ -1052,50 +1027,16 @@ contains
     if (.NOT. flag_MDold) call wrap_xyz_atom_cell
     ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
     k3_local = kmin - k3
-    !if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3, kmin, k3_local:",k3,kmin,k3_local
-    !do i = 1, ni_in_cell
-    !  gatom = id_glob(i)
-    !  atom_coord_diff(1, gatom) = k3_local * direction(1,i)
-    !  atom_coord_diff(2, gatom) = k3_local * direction(2,i)
-    !  atom_coord_diff(3, gatom) = k3_local * direction(3,i)
-    !enddo                   
-    !Update atom_coord : TM 27Aug2003
-    call update_atom_coord
 
     if (.NOT. flag_MDold) then
       write (io_lun,*) "CG: 2nd stage"
-
-      call grab_InfoMatGlobal(InfoGlob,0)
-      n_proc_old = InfoGlob%numprocs
-      glob2node_old(:) = InfoGlob%glob_to_node(:)
-
-         do ig = 1, ni_in_cell
-          atom_coord_diff(:,ig) = atom_coord(:,ig) - InfoGlob%atom_coord(:,ig)
-          if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
-          if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
-          if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
-          if((atom_coord_diff(2,ig)) < -half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)+rcelly
-          if((atom_coord_diff(3,ig)) > half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)-rcellz
-          if((atom_coord_diff(3,ig)) < -half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)+rcellz
-         enddo
-
-      call updateIndices3(fixed_potential,direction)
-      ! L-matrix reconstruction (used to be called at updateIndices3)
-      if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
-        call grab_matrix2('L',inode,nfile,InfoL)
-        call my_barrier()
-        call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-        ! DRB 2017/05/09 now extended to spin systems
-        if(nspin==2) then
-           call grab_matrix2('L2',inode,nfile,InfoL)
-           call my_barrier()
-           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
-        end if
-      endif
+      call update_pos_and_matrices(updateLorK,direction)
     else
+      call update_atom_coord
       call updateIndices(.true., fixed_potential)
     endif
     call update_H(fixed_potential)
+
     !Update start_x,start_y & start_z
     call update_start_xyz(start_x,start_y,start_z)
     !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
@@ -1152,52 +1093,18 @@ contains
        end do
        if (.NOT. flag_MDold) call wrap_xyz_atom_cell
        ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
-!WRONG k3_local = kmin - k3!!03/07/2013
        k3_local = kmin-kmin_old!03/07/2013
        !if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3, kmin,k3_local:", k3,kmin,k3_local
-       !do i = 1, ni_in_cell
-       !  gatom = id_glob(i)
-       !  atom_coord_diff(1, gatom) = k3_local * direction(1,i)
-       !  atom_coord_diff(2, gatom) = k3_local * direction(2,i)
-       !  atom_coord_diff(3, gatom) = k3_local * direction(3,i)
-       !enddo
-!Update atom_coord : TM 27Aug2003
-       call update_atom_coord
 
        if (.NOT. flag_MDold) then
          write (io_lun,*) "CG: 3rd stage"
-
-         call grab_InfoMatGlobal(InfoGlob,0)
-         n_proc_old = InfoGlob%numprocs
-         glob2node_old(:) = InfoGlob%glob_to_node(:)
-
-         do ig = 1, ni_in_cell
-          atom_coord_diff(:,ig) = atom_coord(:,ig) - InfoGlob%atom_coord(:,ig)
-          if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
-          if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
-          if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
-          if((atom_coord_diff(2,ig)) < -half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)+rcelly
-          if((atom_coord_diff(3,ig)) > half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)-rcellz
-          if((atom_coord_diff(3,ig)) < -half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)+rcellz
-         enddo
-
-         call updateIndices3(fixed_potential,direction)
-         ! L-matrix reconstruction (used to be called at updateIndices3)
-         if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
-           call grab_matrix2('L',inode,nfile,InfoL)
-           call my_barrier()
-           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-           ! DRB 2017/05/09 now extended to spin systems
-           if(nspin==2) then
-              call grab_matrix2('L2',inode,nfile,InfoL)
-              call my_barrier()
-              call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
-           end if
-         endif
+         call update_pos_and_matrices(updateLorK,direction)
        else
+         call update_atom_coord
          call updateIndices(.true., fixed_potential)
        endif
        call update_H(fixed_potential)
+
        !call updateIndices(.false.,fixed_potential, number_of_bands)
        ! Update start_x,start_y & start_z
        call update_start_xyz(start_x,start_y,start_z)!25/01/2013
@@ -2029,7 +1936,7 @@ contains
     implicit none
 
      ! Passed variables
-    real(double) :: velocity(3,ni_in_cell)
+    real(double):: velocity(3,ni_in_cell)
     logical :: fixed_potential
 
     ! Local variables
@@ -3321,7 +3228,167 @@ contains
 
   end subroutine update_cell_dims
 
+  ! -----------------------------------------------------------------------
+  ! Subroutine update_pos_and_matrices
+  ! -----------------------------------------------------------------------
+
+  !!****f* move_atoms/update_pos_and_matrices *
+  !!
+  !!  NAME
+  !!    update_pos_and_matrices
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!    Update information of atomic positions, neighbour lists, ...
+  !!     AND...     matrices  
+  !!
+  !!  INPUTS
+  !!    update_method :: showing which matrices will be updated.
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Tsuyoshi Miyazaki
+  !!  CREATION DATE
+  !!   2017/Nov/12
+  !!  MODIFICATION
+  !!
+  !!  SOURCE
+  !!
+ subroutine update_pos_and_matrices(update_method, velocity)
+  use datatypes
+  use numbers,         only: half
+  use global_module,   only: flag_diagonalisation, atom_coord, atom_coord_diff, &
+                             rcellx, rcelly, rcellz, ni_in_cell, nspin
+    ! n_proc_old and glob2node_old should be removed soon...
+    use global_module, only: n_proc_old, glob2node_old
+  use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
+  use mult_module,     only: matL, L_trans, matK, matS, S_trans
+  use matrix_data,     only: Lrange, Hrange, Srange
+  use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2
+  use UpdateInfo_module, only: Matrix_CommRebuild
+
+  implicit none
+  integer, intent(in) :: update_method
+  real(double), intent(inout) :: velocity(3, ni_in_cell)
+  logical :: flag_L, flag_K, flag_S, flag_MS, flag_X
+  integer :: nfile, symm, ig
+  logical :: fixed_potential 
+   ! should be removed in the future (calling update_H is outside of this routine)
+  
+ !H_trans is not prepared. If we need to symmetrise K, we need H_trans
+  integer :: H_trans = 1
+ 
+ !InfoGlob and Info can be defined locally.
+ ! for extrapolation, we need to prepare multiple InfoGlob and Info.
+  type(matrix_store_global) :: InfoGlob
+  type(InfoMatrixFile),pointer :: Info(:)
+
+ !!! Note: for developers  !!!
+ !  if you want to update some new matrix, you should
+ !   1)define  updateXXX
+ !   2)define  flagXXX
+ !   3)check mult_module, and add "use mult_module, ONLY: matXXX, XXX_trans (if symm is needed).
+ !   4)add if(flagXXX) statement
+ !
+
+ flag_L=.false.
+ flag_K=.false.
+ flag_S=.false.
+ flag_X=.false.
+ flag_MS=.false.
+
+ select case(update_method)
+  case(updatePos)
+   if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: only Positions are updated '
+  case(updateL)
+   flag_L = .true.
+  case(updateK)
+   flag_K = .true.
+  case(updateLorK)
+   if(flag_diagonalisation) then
+     flag_K=.true.
+   else
+     flag_L=.true.
+   endif
+  case(updateS)
+   flag_S=.true.
+  case(updateX)
+   if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: updateX is not implemented yet.'
+  case(extrplL)
+   if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: updateX is not implemented yet.'
+   ! TM plans to implement  L(n)=2L(n-1)-L(n-2)
+ end select ! case (update_method)
 
 
+ !First updating information of atomic positions, neighbour lists, etc...
+     call wrap_xyz_atom_cell
+     call update_atom_coord
+
+  !Before calling this routine, we need 1) call dump_InfoMatGlobal or 2) call set_InfoMatGlobal
+  ! Then, we use InfoGlob read from the file or use InfoGlob as it is (in the case of 2))
+  !       Now, we just assume 1).
+     call grab_InfoMatGlobal(InfoGlob,0)
+       n_proc_old = InfoGlob%numprocs
+       glob2node_old(:) = InfoGlob%glob_to_node(:)
+      do ig = 1, ni_in_cell
+          atom_coord_diff(1:3,ig) = atom_coord(1:3,ig) - InfoGlob%atom_coord(1:3,ig)
+          if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
+          if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
+          if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
+          if((atom_coord_diff(2,ig)) < -half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)+rcelly
+          if((atom_coord_diff(3,ig)) > half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)-rcellz
+          if((atom_coord_diff(3,ig)) < -half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)+rcellz
+      enddo
+
+  ! Since the order of the atoms in x,y,z_atom_cell and velocity (or direction in CG) changes 
+  ! depending on their partitions, they are rearranged in updateIndices3.
+  ! (these arrays should be replaced by atom_coord and atom_veloc in the future.)
+  !    updateIndices3 : deallocates member of parts, bundles, covering sets, domain, ...
+  !                     and allocates them following the new atomic positions.
+  !   Now, old informaiton is stored in InfoGlob, thus some of the information is redundant 
+  !    I (TM) should make new routine like "updateIndices4" using InfoGlob, soon.
+  !                              2017.Nov.13  Tsuyoshi Miyazaki
+     call updateIndices3(fixed_potential, velocity)
+
+ !
+ ! Then, matrices will be read from the corresponding files
+ !
+  if(flag_L) then
+     call grab_matrix2('L',inode,nfile,Info)
+     call my_barrier()
+     call Matrix_CommRebuild(Info,Lrange,L_trans,matL(1),nfile,symm)
+     ! DRB 2017/05/09 now extended to spin systems
+     if(nspin==2) then
+       call grab_matrix2('L2',inode,nfile,Info)
+       call my_barrier()
+       call Matrix_CommRebuild(Info,Lrange,L_trans,matL(2),nfile,symm)
+     end if
+  endif
+
+  if(flag_K) then
+     call grab_matrix2('K',inode,nfile,Info)
+     call my_barrier()
+     call Matrix_CommRebuild(Info,Hrange,H_trans,matK(1),nfile)
+     if(nspin==2) then
+       call grab_matrix2('K2',inode,nfile,Info)
+       call my_barrier()
+       call Matrix_CommRebuild(Info,Hrange,H_trans,matK(2),nfile)
+     end if
+  endif
+
+  if(flag_S) then
+     call grab_matrix2('S',inode,nfile,Info)
+     call my_barrier()
+     call Matrix_CommRebuild(Info,Srange,S_trans,matS,nfile)
+     ! If we introduce spin-dependent support ...
+     !if(nspin==2) then
+     !  call grab_matrix2('S2',inode,nfile,Info)
+     !  call my_barrier()
+     !  call Matrix_CommRebuild(Info,Srange,S_trans,matS(2),nfile,symm)
+     !end if
+  endif
+
+ return
+ end subroutine update_pos_and_matrices
 
 end module move_atoms
