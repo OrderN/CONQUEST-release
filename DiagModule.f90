@@ -869,10 +869,10 @@ contains
                       else
                          if (flag_normalise_pDOS) then
                             call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin), &
-                                                projDOS=pDOS(:,:,spin),weight_pDOS=w_pDOS,spin=spin)
+                                                projDOS=pDOS(:,:,spin),weight_pDOS=w_pDOS,spinSF=spin)
                          else
                             call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin), &
-                                                projDOS=pDOS(:,:,spin),spin=spin)
+                                                projDOS=pDOS(:,:,spin),spinSF=spin)
                          endif
                       endif
                    else
@@ -3828,7 +3828,7 @@ contains
   !!    Added optional argument weight_pDOS, the normalisation weight
   !!  SOURCE
   !!
-  subroutine accumulate_DOS(weight,eval,evec,DOS,projDOS,weight_pDOS,spin)
+  subroutine accumulate_DOS(weight,eval,evec,DOS,projDOS,weight_pDOS,spinSF)
 
     use datatypes
     use numbers,         only: half, zero
@@ -3852,7 +3852,7 @@ contains
     real(double), dimension(n_DOS) :: DOS
     real(double), OPTIONAL, dimension(:,:) :: projDOS
     real(double), OPTIONAL, dimension(:) :: weight_pDOS
-    integer, OPTIONAL, intent(in) :: spin
+    integer, OPTIONAL, intent(in) :: spinSF
 
     ! Local variables
     integer :: iwf, n_band, n_min, n_max, i, acc, atom, nsf, natomf, nsf1, natomf2, spin_SF
@@ -3898,7 +3898,7 @@ contains
                 acc = acc + nsf_species(bundle%species(atom))
              end do
           else
-             spin_SF = spin
+             spin_SF = spinSF
              if (nspin_SF == 1) spin_SF = 1
              acc = 0 
              iprim = 0
@@ -4000,7 +4000,6 @@ contains
     end do
   end subroutine get_weight_pDOS
   !!***
-!!!
  
   !!****f*  DiagModule/distrib_and_diag
   !!
@@ -4085,13 +4084,8 @@ contains
             orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
             rwork, lrwork, iwork, liwork, ifail, iclustr,    &
             gap, info)
-!!! 2017.9.19 nakata Diag temp: continue even if INFO=2
-!       if (info /= 0) &
-!            call cq_abort ("FindEvals: pzheev failed !", info)
-       if (info < 0) &
+       if (info /= 0) &
             call cq_abort ("FindEvals: pzheev failed !", info)
-       if(info>0) write(io_lun,fmt='("Warning! Info greater than zero: ",i3)') info
-!!! 
        ! Copy local_w into appropriate place in w
        if(flag_store_w) w(1:matrix_size, pg_kpoints(pgid, index_kpoint), spin) = &
             scale * local_w(1:matrix_size, spin)
