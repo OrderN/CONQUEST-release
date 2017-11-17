@@ -1010,6 +1010,9 @@ contains
   !!    Removed restriction spin and on L-matrix update 
   !!   2017/10/11 dave
   !!    Bug fix: changed call to get_electronic_density to use inode, ionode (not ionode, ionode)
+  !!    Removed restriction spin and on L-matrix update
+  !!   2017/11/10 15:24 dave
+  !!    Added allocation of glob2node_old
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1020,7 +1023,7 @@ contains
     use logicals
     use mult_module,         only: LNV_matrix_multiply, matL, matphi, &
                                    matT, T_trans, L_trans, LS_trans,  &
-                                   matrix_scale, matSFcoeff, matSFcoeff_tran, matrix_transpose
+                                   matrix_scale, matSFcoeff, matSFcoeff_tran, matrix_transpose, matK, S_trans
     use SelfCon,             only: new_SC_potl
     use global_module,       only: iprint_init, flag_self_consistent, &
                                    flag_basis_set, blips, PAOs,       &
@@ -1034,7 +1037,8 @@ contains
                                    flag_propagateX, flag_propagateL, restart_X, &
                                    flag_exx, exx_scf, flag_out_wf, wf_self_con, &
                                    flag_write_DOS, flag_neutral_atom, &
-                                   atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation
+                                   atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation, &
+                                   atom_coord_diff
     use ion_electrostatic,   only: ewald, screened_ion_interaction
     use S_matrix_module,     only: get_S_matrix
     use GenComms,            only: my_barrier,end_comms,inode,ionode, &
@@ -1052,7 +1056,7 @@ contains
     use minimise,            only: sc_tolerance, L_tolerance,         &
                                    n_L_iterations, expected_reduction
     use DFT_D2,              only: dispersion_D2
-    use matrix_data,         ONLY: Lrange,Trange,LSrange
+    use matrix_data,         ONLY: Lrange,Trange,LSrange, Hrange
     use io_module2,          ONLY: n_matrix,grab_InfoGlobal,grab_matrix2,InfoL,InfoT
     use UpdateInfo_module,   ONLY: make_glob2node,Matrix_CommRebuild
     use XLBOMD_module,       ONLY: grab_XXvelS,grab_Xhistories
@@ -1082,25 +1086,36 @@ contains
     if ( .not. present(level) ) backtrace_level = -10
     call start_backtrace(t=backtrace_timer,who='initial_H',&
          where=area,level=backtrace_level,echo=.true.)
-!****lat>$
+    !****lat>$
 
     ! (0) Get the global information
     !      --> Fetch and distribute date on old job
     if (.not.flag_MDold.and.(flag_MDcontinue.or. &
-                                restart_L   .or. &
-                                restart_T)  ) then
-      if (inode.eq.ionode) write (io_lun,*) "Get global info to load matrices"
-      if (inode.eq.ionode) call make_glob2node
-      call gcopy(glob2node, ni_in_cell)
-      allocate(glob2node_old(ni_in_cell), STAT=stat)
-      if (stat .ne.0)      call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
-      if (inode.eq.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old,MDinit_step)
-      call gcopy(n_proc_old)
-      call gcopy(glob2node_old, ni_in_cell)
-      call gcopy(MDinit_step)
-      n_matrix = 1
-      if (nspin.EQ.2) n_matrix = 2
-      call my_barrier()
+         restart_L   .or. &
+         restart_T)  ) then
+       if (inode.eq.ionode) write (io_lun,*) "Get global info to load matrices"
+       if (inode.eq.ionode) call make_glob2node
+       call gcopy(glob2node, ni_in_cell)
+       allocate(glob2node_old(ni_in_cell), STAT=stat)
+       if (stat .ne.0)      call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
+       if (inode.eq.ionode) then
+          if(flag_MDcontinue) then
+             call grab_InfoGlobal(n_proc_old,glob2node_old,MDinit_step)
+          else
+             call grab_InfoGlobal(n_proc_old,glob2node_old)
+             MDinit_step = 0
+          end if
+       end if
+       call my_barrier()
+       call gcopy(n_proc_old)
+       call gcopy(glob2node_old, ni_in_cell)
+       call gcopy(MDinit_step)
+       call gcopy(atom_coord_diff, 3, ni_in_cell)
+       n_matrix = 1
+       if (nspin.EQ.2) n_matrix = 2
+    else if (.not.flag_MDold) then
+       allocate(glob2node_old(ni_in_cell), STAT=stat)
+       if (stat .ne.0)      call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
     endif
 
     ! (0) If we use PAOs and contract them, prepare SF-PAO coefficients here
@@ -1180,16 +1195,29 @@ contains
        end if
     end if
     if (restart_L) then
-      if (.NOT. flag_MDold) then
-        call grab_matrix2('L',inode,nfile,InfoL)
-        call my_barrier()
-        call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-        ! DRB 2017/05/09 now extended to spin systems
-        if(nspin==2) then
-           call grab_matrix2('L2',inode,nfile,InfoL)
-           call my_barrier()
-           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
-        end if
+       if (.NOT. flag_MDold) then
+          if(flag_diagonalisation) then
+             call grab_matrix2('K',inode,nfile,InfoL)
+             call my_barrier()
+             call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile)
+             if(nspin==2) then
+                call grab_matrix2('K2',inode,nfile,InfoL)
+                call my_barrier()
+                call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile)
+             !else
+             !   call matrix_scale(two,matK(1))
+             end if
+          else
+             call grab_matrix2('L',inode,nfile,InfoL)
+             call my_barrier()
+             call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
+             ! DRB 2017/05/09 now extended to spin systems
+             if(nspin==2) then
+                call grab_matrix2('L2',inode,nfile,InfoL)
+                call my_barrier()
+                call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
+             end if
+          end if
       else
         if(nspin==1) then
           call grab_matrix( "L",    matL(1), inode)

@@ -157,6 +157,8 @@ contains
   !!    Added code to dump L matrix for both spin channels
   !!   2017/05/11 dave
   !!    Added code to dump X matrix (and associated) for both spin channels
+  !!   2017/11/06 dave
+  !!    Added dump of K matrix
   !!  SOURCE
   !!
   subroutine FindMinDM(n_L_iterations, vary_mu, tolerance, inode, &
@@ -171,7 +173,7 @@ contains
                              flag_propagateX, flag_dissipation,         &
                              integratorXL, runtype, flag_exx, flag_diagonalisation
     use mult_module,   only: matrix_transpose, matT, matTtran, matL,    &
-                             matS, matrix_sum
+                             matS, matrix_sum, matK
     use McWeeny,       only: InitMcW, McWMin
     use PosTan,        only: max_iters, cscale, PulayE, PulayR, PulayC, &
                              PulayBeta, pos_tan, fit_coeff
@@ -181,7 +183,7 @@ contains
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,   &
                              WITH_LEVEL
     use io_module2,    only: dump_matrix2, dump_InfoGlobal
-    use matrix_data,   only: Lrange, Srange, LSrange
+    use matrix_data,   only: Lrange, Srange, LSrange, Hrange
     use XLBOMD_module, only: matX, matXvel, dump_XL
 
     use exx_kernel_default, only: get_X_matrix
@@ -220,95 +222,97 @@ contains
 
     if (flag_diagonalisation) then ! Use exact diagonalisation to get K
        call FindEvals(ne_spin_in_cell)
-          
-       call stop_timer(tmr_std_densitymat)
-!****lat<$
-       call stop_backtrace(t=backtrace_timer,who='FindMinDM',echo=.true.)
-!****lat>$
-       return
+    else
+       if (inode == ionode) then
+          write (io_lun,'(1x,a,f15.10,2x,a,i5)') &
+               'Welcome to FindDMMin, tol: ', tolerance, &
+               'number of L iterations: ', n_L_iterations
+       end if
+
+       problem = .false.
+       inflex  = .false.
+       done    = .false.
+       early   = .false.
+       if (.NOT. flag_SkipEarlyDM) early = .true.  ! Starts from earlyDM
+
+       ! Start with the transpose of S^-1
+       call matrix_transpose(matT, matTtran)
+
+       ! Now minimise the energy
+       ndone = 0
+       niter = 0
+       do while (.not. done)
+          call start_timer(tmr_l_iter, WITH_LEVEL)
+          if (resetL .or. inflex) then ! Reset L to McW
+             call InitMcW(inode, ionode)
+             call McWMin(n_L_iterations, delta_e)
+             early = .true.
+             resetL = .false.    !2010.Nov.06 TM
+          end if
+          if (early .or. problem) then
+             inflex = .false.
+             call earlyDM(ndone, n_L_iterations, delta_e, done, vary_mu, &
+                  tolerance,inode, ionode, inflex, record)
+          end if
+          if ((.not. done) .and. (.not. inflex)) then ! Continue on to late stage
+             call lateDM(ndone, n_L_iterations, done, delta_e, vary_mu, &
+                  inode, ionode, tolerance, record)
+          end if
+          niter = niter + 1
+          if (problem) resetL = .true.
+          !ORI problem = .true. ! If we're not done, then this kicks us back to early
+          if (niter > niter_max) then
+             problem = .true. ! If we're not done, then this kicks us back to early
+             niter = 0
+          end if
+          call stop_print_timer(tmr_l_iter, "FindMinDM iteration", &
+               IPRINT_TIME_THRES1)
+       end do ! end of do while (.not. done)
     end if
-
-    if (inode == ionode) then
-       write (io_lun,'(1x,a,f15.10,2x,a,i5)') &
-             'Welcome to FindDMMin, tol: ', tolerance, &
-             'number of L iterations: ', n_L_iterations
-    end if
-
-    problem = .false.
-    inflex  = .false.
-    done    = .false.
-    early   = .false.
-    if (.NOT. flag_SkipEarlyDM) early = .true.  ! Starts from earlyDM
-
-    ! Start with the transpose of S^-1
-    call matrix_transpose(matT, matTtran)
-
-    ! Now minimise the energy
-    ndone = 0
-    niter = 0
-    do while (.not. done)
-       call start_timer(tmr_l_iter, WITH_LEVEL)
-       if (resetL .or. inflex) then ! Reset L to McW
-          call InitMcW(inode, ionode)
-          call McWMin(n_L_iterations, delta_e)
-          early = .true.
-          resetL = .false.    !2010.Nov.06 TM
-       end if
-       if (early .or. problem) then
-          inflex = .false.
-          call earlyDM(ndone, n_L_iterations, delta_e, done, vary_mu, &
-                       tolerance,inode, ionode, inflex, record)
-       end if
-       if ((.not. done) .and. (.not. inflex)) then ! Continue on to late stage
-          call lateDM(ndone, n_L_iterations, done, delta_e, vary_mu, &
-                      inode, ionode, tolerance, record)
-       end if
-       niter = niter + 1
-       if (problem) resetL = .true.
-       !ORI problem = .true. ! If we're not done, then this kicks us back to early
-       if (niter > niter_max) then
-          problem = .true. ! If we're not done, then this kicks us back to early
-          niter = 0
-       end if
-       call stop_print_timer(tmr_l_iter, "FindMinDM iteration", &
-                             IPRINT_TIME_THRES1)
-    end do ! end of do while (.not. done)
-
     ! *** Add frequency of output here *** !
 
     if (flag_dump_L) then
        if (.NOT. flag_MDold) then
-          call dump_matrix2('L',matL(1),inode,Lrange)
-          ! DRB 2017/05/09 now extended to spin systems
-          if(nspin==2) call dump_matrix2('L2',matL(2),inode,Lrange)
-          ! For XL-BOMD
-          if (flag_XLBOMD) then
-             if (flag_propagateX) then
-                call dump_matrix2('X',matX(1),inode,LSrange)
-                if(nspin==2) call dump_matrix2('X_2',matX(2),inode,LSrange)
-                call dump_matrix2('S',matS   ,inode,Srange)
-                if (integratorXL.EQ.'velocityVerlet') then
-                   call dump_matrix2('Xvel',matXvel(1),inode,LSrange)
-                   if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),inode,LSrange)
-                end if
-             else
-                call dump_matrix2('X',matX(1),inode,Lrange)
-                if(nspin==2) call dump_matrix2('X_2',matX(2),inode,LSrange)
-                if (integratorXL.EQ.'velocityVerlet') then
-                   call dump_matrix2('Xvel',matXvel(1),inode,Lrange)
-                   if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),inode,LSrange)
-                end if
-             endif
-             ! When dissipation applies
-             if (flag_dissipation) call dump_XL()
-          endif
-          if (runtype.EQ.'static') call dump_InfoGlobal(0)
-       else
-          if (nspin == 1) then
-             call dump_matrix("L", matL(1), inode)
+          if (flag_diagonalisation) then ! Use exact diagonalisation to get K
+             call dump_matrix2('K',matK(1),inode,Hrange)
+             if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
           else
-             call dump_matrix("L_up", matL(1), inode)
-             call dump_matrix("L_dn", matL(2), inode)
+             call dump_matrix2('L',matL(1),inode,Lrange)
+             ! DRB 2017/05/09 now extended to spin systems
+             if(nspin==2) call dump_matrix2('L2',matL(2),inode,Lrange)
+             ! For XL-BOMD
+             if (flag_XLBOMD) then
+                if (flag_propagateX) then
+                   call dump_matrix2('X',matX(1),inode,LSrange)
+                   if(nspin==2) call dump_matrix2('X_2',matX(2),inode,LSrange)
+                   call dump_matrix2('S',matS   ,inode,Srange)
+                   if (integratorXL.EQ.'velocityVerlet') then
+                      call dump_matrix2('Xvel',matXvel(1),inode,LSrange)
+                      if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),inode,LSrange)
+                   end if
+                else
+                   call dump_matrix2('X',matX(1),inode,Lrange)
+                   if(nspin==2) call dump_matrix2('X_2',matX(2),inode,LSrange)
+                   if (integratorXL.EQ.'velocityVerlet') then
+                      call dump_matrix2('Xvel',matXvel(1),inode,Lrange)
+                      if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),inode,LSrange)
+                   end if
+                endif
+                ! When dissipation applies
+                if (flag_dissipation) call dump_XL()
+             endif
+          end if
+          !if (runtype.EQ.'static') call dump_InfoGlobal(0)
+       else
+          if (flag_diagonalisation) then ! Use exact diagonalisation to get K
+             if(inode==ionode.AND.iprint_DM>2) write(io_lun,fmt='(2x,"K matrix only saved if AtomMove.OldMemberUpdates is F")')
+          else
+             if (nspin == 1) then
+                call dump_matrix("L", matL(1), inode)
+             else
+                call dump_matrix("L_up", matL(1), inode)
+                call dump_matrix("L_dn", matL(2), inode)
+             end if
           end if
        endif
     end if
