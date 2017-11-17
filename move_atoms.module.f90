@@ -2355,6 +2355,8 @@ contains
   !!    Changed to call set_atomic_density with ".true." before calling initial_SFcoeff
   !!   2017/11/07 10:02 dave
   !!    Added scaling of electron density after atom move
+  !!   2017/11/17 14:51 dave
+  !!    Bug fix: removed erroneous spin scaling on electron density
   !!  SOURCE
   !!
   subroutine update_H(fixed_potential)
@@ -2490,7 +2492,7 @@ contains
        call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
             inode,ionode,maxngrid)
        do spin=1,nspin
-          scale = ne_spin_in_cell(spin)/(spin_factor*electrons(spin))
+          scale = ne_spin_in_cell(spin)/electrons(spin)
           if(abs(scale-one)<0.01.AND.abs(scale-one)>RD_ERR) then
              density(:,spin) = density(:,spin)*scale
           else if (abs(scale-one)>=0.01) then
