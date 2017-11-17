@@ -35,7 +35,8 @@ contains
     use numbers
     use species_module, ONLY: n_species
     use pseudo_tm_info, ONLY: pseudo, rad_alloc
-    use mesh, ONLY: nmesh, make_mesh, rr, nmesh_reg, rmesh_reg, interpolate, make_mesh_reg, rr_squared, delta_r_reg
+    use mesh, ONLY: nmesh, make_mesh, rr, nmesh_reg, rmesh_reg, new_interpolate, interpolate, &
+         make_mesh_reg, rr_squared, delta_r_reg, convert_r_to_i
     use global_module, ONLY: flag_pcc_global, iprint
     use GenComms, ONLY: cq_abort
     use radial_xc, ONLY: get_vxc
@@ -45,11 +46,11 @@ contains
     
     implicit none
 
-    integer :: i_species, ell, en, i, j, k, zeta, n_shells, i_shell, grid_size, n_val, lun
+    integer :: i_species, ell, en, i, j, k, zeta, n_shells, i_shell, grid_size, n_val, lun, nrc
     real(double), allocatable, dimension(:) :: psi_reg, x_reg, vha, vxc, vha_reg, psi, atomic_rho, &
          small_cutoff, large_cutoff, cutoffs, vha_conf
     real(double) :: energy, max_cutoff, small_energy, large_energy
-    real(double) :: radius_small, radius_med, radius_large, sum_small, sum_large
+    real(double) :: radius_small, radius_med, radius_large, sum_small, sum_large, orig_dr
     real(double), dimension(3) :: scaling
     !logical :: flag_plot = .true.
     
@@ -224,6 +225,8 @@ contains
           !end if
           do zeta = 1,paos(i_species)%nzeta(i_shell)
              nmesh_reg = paos(i_species)%cutoff(zeta,i_shell)/delta_r_reg + 1
+             orig_dr = delta_r_reg
+             delta_r_reg = paos(i_species)%cutoff(zeta,i_shell)/real(nmesh_reg-1,double)
              allocate(paos(i_species)%psi_reg(zeta,i_shell)%f(nmesh_reg))
              allocate(paos(i_species)%psi_reg(zeta,i_shell)%x(nmesh_reg))
              !if(iprint>2) write(*,*) '# regular mesh ',paos(i_species)%cutoff(zeta,i_shell)
@@ -244,10 +247,14 @@ contains
              if(zeta==1.AND.i_shell<=val(i_species)%n_shells) atomic_rho = atomic_rho + val(i_species)%occ(i_shell)*psi*psi
              ! Interpolate
              !if(iprint>2) write(*,*) '# interpolate ',nmesh_reg, nmesh
-             call interpolate(rmesh_reg,paos(i_species)%psi_reg(zeta,i_shell)%f,nmesh_reg,&
-                  paos(i_species)%psi(zeta,i_shell)%f,nmesh,zero)
+             call convert_r_to_i(paos(i_species)%cutoff(zeta,i_shell),nrc)
+             call new_interpolate(rmesh_reg,paos(i_species)%psi_reg(zeta,i_shell)%f,nmesh_reg,&
+                  rr,paos(i_species)%psi(zeta,i_shell)%f,nrc-1,zero)!nmesh,zero)
+             !call interpolate(rmesh_reg,paos(i_species)%psi_reg(zeta,i_shell)%f,nmesh_reg,&
+             !     paos(i_species)%psi(zeta,i_shell)%f,nmesh,zero)
              if(flag_plot_output) call write_pao_plot(pseudo(i_species)%z,rmesh_reg,paos(i_species)%psi_reg(zeta,i_shell)%f, &
                   nmesh_reg, en,ell,zeta)
+             delta_r_reg = orig_dr
           end do
        end do
        ! Interpolate the logarithmic grid pseudopotential terms
@@ -255,8 +262,12 @@ contains
        !if(iprint>2) write(*,*) '# Moving to VKB projectors'
        ! VKB projectors
        ! Round up VKB cutoff
+       !nmesh_reg = paos(i_species)%cutoff(zeta,i_shell)/delta_r_reg + 1
+       !delta_r_reg = paos(i_species)%cutoff(zeta,i_shell)/real(nmesh_reg-1,double)
        grid_size = floor(local_and_vkb(i_species)%r_vkb/delta_r_reg) + 2
-       local_and_vkb(i_species)%r_vkb = (grid_size-1)*delta_r_reg
+       orig_dr = delta_r_reg
+       delta_r_reg = local_and_vkb(i_species)%r_vkb/real(grid_size-1,double)
+       !local_and_vkb(i_species)%r_vkb = (grid_size-1)*delta_r_reg
        call make_mesh_reg(local_and_vkb(i_species)%r_vkb)
        !if(iprint>2) write(*,*) '# Cutoff and size: ',local_and_vkb(i_species)%r_vkb,local_and_vkb(i_species)%ngrid_vkb
        j = 0
@@ -273,16 +284,18 @@ contains
                 local_and_vkb(i_species)%projector(:,i,ell) = local_and_vkb(i_species)%projector(:,i,ell)/rr
              end do
              ! Grid point, projector, ell
-             call interpolate(rmesh_reg,pseudo(i_species)%pjnl(j)%f,grid_size, &
-                  local_and_vkb(i_species)%projector(:,i,ell),local_and_vkb(i_species)%ngrid_vkb,zero)
+             call new_interpolate(rmesh_reg,pseudo(i_species)%pjnl(j)%f,grid_size, &
+                  rr,local_and_vkb(i_species)%projector(:,i,ell),local_and_vkb(i_species)%ngrid_vkb,zero)
+             !call interpolate(rmesh_reg,pseudo(i_species)%pjnl(j)%f,grid_size, &
+             !     local_and_vkb(i_species)%projector(:,i,ell),local_and_vkb(i_species)%ngrid_vkb,zero)
              pseudo(i_species)%pjnl(j)%cutoff = local_and_vkb(i_species)%r_vkb
           end do
        end do
+       delta_r_reg = orig_dr
        ! Partial core charge
        if(pseudo(i_species)%flag_pcc) then
           if(iprint>1) write(*,fmt='(/4x,"Partial core correction")')
           !if(iprint>2) write(*,*) '# PCC'
-          pseudo(i_species)%chpcc%delta = delta_r_reg
           ! Find core charge cutoff
           do i=1,nmesh
              ! Find cutoff radius: two successive points less than 1e-8 
@@ -293,31 +306,38 @@ contains
                 end if
              end if
           end do
-          grid_size = floor(pseudo(i_species)%chpcc%cutoff/pseudo(i_species)%chpcc%delta) + 2
-          pseudo(i_species)%chpcc%cutoff = real(grid_size-1,double)*delta_r_reg
+          grid_size = floor(pseudo(i_species)%chpcc%cutoff/delta_r_reg) + 2
+          delta_r_reg = pseudo(i_species)%chpcc%cutoff/real(grid_size-1,double)
+          !pseudo(i_species)%chpcc%cutoff = real(grid_size-1,double)*delta_r_reg
+          pseudo(i_species)%chpcc%delta = delta_r_reg
           !if(iprint>3) write(*,*) '# PCC cutoff ',pseudo(i_species)%chpcc%cutoff
           call rad_alloc(pseudo(i_species)%chpcc,grid_size)
           call make_mesh_reg(pseudo(i_species)%chpcc%cutoff)!,grid_size)
-          call interpolate(rmesh_reg,pseudo(i_species)%chpcc%f,grid_size, &
-               local_and_vkb(i_species)%pcc,local_and_vkb(i_species)%ngrid,zero)
+          call new_interpolate(rmesh_reg,pseudo(i_species)%chpcc%f,grid_size, &
+               rr,local_and_vkb(i_species)%pcc,local_and_vkb(i_species)%ngrid,zero)
+          !call interpolate(rmesh_reg,pseudo(i_species)%chpcc%f,grid_size, &
+          !     local_and_vkb(i_species)%pcc,local_and_vkb(i_species)%ngrid,zero)
+          delta_r_reg = orig_dr
        end if
        ! Local - the radius is taken as largest PAO for compatibility with NA
        if(iprint>1) write(*,fmt='(/4x,"Local potential")')
        !if(iprint>2) write(*,*) '# Local'
+       call convert_r_to_i(max_cutoff,nrc)
        grid_size = max_cutoff/delta_r_reg + 1
        call rad_alloc(pseudo(i_species)%vlocal,grid_size)
+       delta_r_reg = max_cutoff/real(grid_size-1,double)
        pseudo(i_species)%vlocal%delta = delta_r_reg
-       pseudo(i_species)%vlocal%cutoff = (grid_size-1)*delta_r_reg
+       pseudo(i_species)%vlocal%cutoff = max_cutoff!(grid_size-1)*delta_r_reg
        call make_mesh_reg(pseudo(i_species)%vlocal%cutoff)!,grid_size)
-       call interpolate(rmesh_reg,pseudo(i_species)%vlocal%f,grid_size, &
-            local_and_vkb(i_species)%local,local_and_vkb(i_species)%ngrid)
+       call new_interpolate(rmesh_reg,pseudo(i_species)%vlocal%f,grid_size, &
+            rr,local_and_vkb(i_species)%local,local_and_vkb(i_species)%ngrid,local_and_vkb(i_species)%local(nrc-1))
        ! Build the neutral atom potential as sum of local and pseudo-atomic hartree potentials
        if(iprint>1) write(*,fmt='(/4x,"Neutral atom potential")')
        !if(iprint>2) write(*,*) '# NA'
        ! Find pseudo-atomic hartree potential from pseudo-atomic density
        call radial_hartree(nmesh,atomic_rho,vha_conf,i_species)
        do i=1,nmesh
-          !write(60,*) rr(i),vha_conf(i),local_and_vkb(i_species)%local(i) + vha_conf(i), atomic_rho(i) 
+          write(60,*) rr(i),vha_conf(i),local_and_vkb(i_species)%local(i)
           vha_conf(i) = vha_conf(i) + local_and_vkb(i_species)%local(i)
        end do
        !if(iprint>2) write(*,*) '# Building VNA'
@@ -326,27 +346,27 @@ contains
        call rad_alloc( pseudo(i_species)%vna, grid_size )
        pseudo(i_species)%vna%delta = delta_r_reg
        pseudo(i_species)%vna%cutoff = max_cutoff
-       ! Interpolate onto regular mesh
-       !allocate(vha_reg(pseudo(i_species)%vna%n))
-       !call make_mesh_reg(pseudo(i_species)%vna%cutoff,pseudo(i_species)%vna%n)
-       call interpolate(rmesh_reg,pseudo(i_species)%vna%f,pseudo(i_species)%vna%n,vha_conf,nmesh,zero)
        if(iprint>1) write(*,fmt='(/4x,"XC potential")')
        vxc = zero
        energy = zero
        call get_vxc(nmesh,rr,atomic_rho,val(i_species)%functional,vxc,energy)
        if(iprint>5) write(*,*) '# XC energy w/o core: ',energy
-       !do i=1,nmesh
-       !   write(70,*) rr(i),vxc(i),atomic_rho(i)
-       !end do
+       do i=1,nmesh
+          write(70,*) rr(i),vxc(i),atomic_rho(i)
+       end do
        vxc = zero
        energy = zero
        if(flag_pcc_global) & 
             atomic_rho = atomic_rho + local_and_vkb(i_species)%pcc
        call get_vxc(nmesh,rr,atomic_rho,val(i_species)%functional,vxc,energy)
        if(iprint>5) write(*,*) '# XC energy with core: ',energy
-       !do i=1,nmesh
-       !   write(71,*) rr(i),vxc(i),atomic_rho(i)
-       !end do
+       do i=1,nmesh
+          write(71,*) rr(i),vxc(i),atomic_rho(i)
+       end do
+       ! Interpolate onto regular mesh
+       !allocate(vha_reg(pseudo(i_species)%vna%n))
+       !call make_mesh_reg(pseudo(i_species)%vna%cutoff,pseudo(i_species)%vna%n)
+       call new_interpolate(rmesh_reg,pseudo(i_species)%vna%f,pseudo(i_species)%vna%n,rr,vha_conf,nmesh,zero)
        !%%! ! The local potential is normally defined to a specific cut-off, beyond which it goes
        !%%! ! as zval/r, whereas the pseudo-atomic density extends to the PAO range, so we need to
        !%%! ! add the long-range asymptote of the local potential to make the neutral atom potential
@@ -749,6 +769,10 @@ contains
     n_loop = 100
     call convert_r_to_i(Rc,nmax)
     nmax = nmax - 1
+    ! NEW !
+    write(*,*) 'Rc and rr(nmax) are: ',Rc,rr(nmax)
+    Rc = rr(nmax)
+    ! NEW !
     if(abs(energy)<RD_ERR) then
        energy = half*(e_lower+e_upper)
     end if
@@ -1253,6 +1277,9 @@ contains
     n_loop = 100
     call convert_r_to_i(Rc,nmax)
     nmax = nmax - 1
+    ! NEW !
+    Rc = rr(nmax)
+    ! NEW !
     if(abs(energy)<RD_ERR) then
        energy = half*(e_lower+e_upper)
     end if

@@ -17,6 +17,7 @@ module mesh
   integer, parameter :: siesta = 2
   integer :: mesh_type
   integer :: n_poly_lag = 5 ! User adjustable ?
+  integer :: n_poly = 4 ! User adjustable ?
 
   
   
@@ -105,8 +106,100 @@ contains
     end do
     return
   end subroutine make_mesh_reg
+
+  ! New polynomial interpolation following NR
+  subroutine new_interpolate(x_reg,y_reg,n_reg,x_irreg,y_irreg,n_irreg,max_bc)
+
+    use numbers
+    use GenComms, ONLY: cq_abort
+    use global_module, ONLY: iprint
+    
+    implicit none
+
+    integer :: n_reg
+    real(double), dimension(n_reg) :: x_reg, y_reg
+    integer :: n_irreg
+    real(double), dimension(n_irreg) :: x_irreg, y_irreg
+    real(double), OPTIONAL :: max_bc ! Apply BC at cutoff
+
+    integer :: nr, i
+    integer :: nmax, nmin, npts
+    real(double) :: interp, this_term, r
+
+    ! Loop over regular mesh
+    do i=1,n_reg-1
+       r = x_reg(i)
+       ! Convert r into grid point
+       call convert_r_to_i(r,nr)
+       if(nr<1) write(*,*) 'Error: ',r,nr
+       nmin = max(1,nr - n_poly)
+       nmax = min(n_irreg,nr + n_poly)
+       npts = nmax - nmin + 1
+       call polint(x_irreg(nmin:nmax),y_irreg(nmin:nmax),npts,r,interp)
+       y_reg(i) = interp
+    end do
+    if(PRESENT(max_bc)) then
+       y_reg(n_reg) = max_bc
+    else
+       y_reg(n_reg) = zero
+    end if
+    return
+  end subroutine new_interpolate
+
+
+  ! Polynomial interpolation. 
+  subroutine polint(xa,ya,n,x,y)
+
+    use numbers
+    use GenComms, ONLY: cq_abort
+
+    implicit none
+
+    ! Passed variables
+    integer          :: n
+    real(double) :: xa(n),ya(n), x, y, dy
+
+    ! Local variables
+    integer          :: i, m, ns
+    real(double), dimension(n) :: c, d
+    real(double) :: den, diff, dift, ho, hp, w
+
+    ns=1
+    diff=abs(x-xa(1))
+    do i=1,n 
+       dift=abs(x-xa(i))
+       if (dift<diff) then
+          ns=i
+          diff=dift
+       endif
+       c(i)=ya(i)
+       d(i)=ya(i)
+    end do ! i
+    y=ya(ns)
+    ns=ns-1
+    do m=1,n-1
+       do i=1,n-m
+          ho=xa(i)-x
+          hp=xa(i+m)-x
+          w=c(i+1)-d(i)
+          den=ho-hp
+          if (den.eq.zero) call cq_abort('Error in polint: two xas are equal')
+          den=w/den
+          d(i)=hp*den
+          c(i)=ho*den
+       end do ! i
+       if ((2*ns)<(n-m)) then
+          dy=c(ns+1)
+       else
+          dy=d(ns)
+          ns=ns-1
+       endif
+       y=y+dy
+    end do ! m
+    return
+  end subroutine polint
   
-  ! Interpolate from a logarithmic to even mesh
+  ! interpolate from a logarithmic to even mesh
   ! Uses Lagrange polynomials for now
   subroutine interpolate(x,y_reg,n_reg,y,n_irreg,max_bc)
 
@@ -218,7 +311,11 @@ contains
     real(double) :: r
     
     if(mesh_type==hamann) then
-       i = nint(log(r*mesh_z/beta)/alpha  + one)+1
+       if(r<rr(1)) then
+          i=1
+       else
+          i = nint(log(r*mesh_z/beta)/alpha  + one)+1
+       end if
     else if(mesh_type==siesta) then
        i = nint(log(r/beta+one)/alpha + one)+1
     end if

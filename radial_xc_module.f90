@@ -86,7 +86,7 @@ contains
     do i=1,n_tot
        !  rho is 4.pi.rho
        rh = rho(i)/fourpi
-       if(rh>zero) then
+       if(rh>1e-8_double) then
           rs = prefac_rs*rh**(-third)
           if(rs>one) then
              sq_rs = sqrt(rs)
@@ -101,6 +101,7 @@ contains
           end if
        else
           vxc(i) = zero
+          if(present(exc)) exc(i) = zero
        end if
     end do
   end subroutine vxc_pz_ca
@@ -148,7 +149,7 @@ contains
        ! NB the alpha here is from the radial mesh (NOT the alpha defined in the PW92 LDA correlation)
        d2rho_dr2 = (d2rho_dn2 - alpha*drho_dn)/drdi_squared(i)
        lapl_rho  = (d2rho_dn2 + alpha*drho_dn)/drdi_squared(i)
-       if(rho_sc>1e-18_double) then ! Hamann's tolerance - check
+       if(rho_sc>1e-10_double) then ! Hamann's tolerance - check
           kF = prefac_kF*rho_sc**third
           s = abs(drho_dr)/(two * kF * rho_sc)
           u = abs(drho_dr)*d2rho_dr2/(rho_sc*rho_sc*eight*kF*kF*kF)
@@ -163,6 +164,12 @@ contains
           v = lapl_rho/(rho_sc*four*k_s*k_s)
           call pbe_corr(rs,t,u,v,ec,vc,h,dvc) ! No spin
        else
+          vx = zero
+          vc = zero
+          dvc = zero
+          ex = zero
+          ec = zero
+          h = zero
        end if
        vxc(i) = vx + vc + dvc
        if(PRESENT(exc)) exc(i) = ex + ec + h

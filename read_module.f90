@@ -723,18 +723,28 @@ contains
                    ell = paos(i_species)%l(i_highest_occ)+1
                    paos(i_species)%npao(i_shell) = ell+1 ! Will need to change for perturb
                    if(paos(i_species)%flag_perturb_polarise)then
-                      paos(i_species)%npao(i_shell) = ell
-                   end if
-                   do j=i_shell-1,1,-1
+                      do j=1,paos(i_species)%n_shells -1
+                         if(paos(i_species)%n(j)==paos(i_species)%polarised_n.AND. &
+                              paos(i_species)%l(j)==paos(i_species)%polarised_l) then
+                            paos(i_species)%polarised_shell = j
+                            paos(i_species)%npao(i_shell) = paos(i_species)%npao(j) !+ 1
+                            paos(i_species)%n(i_shell) = paos(i_species)%n(j)
+                            paos(i_species)%l(i_shell) = paos(i_species)%l(j)+1
+                            exit
+                         end if
+                      end do
+                   else
+                      do j=i_shell-1,1,-1
                       if(paos(i_species)%l(j)==ell) then ! Semi-core with this l
                          paos(i_species)%npao(i_shell) = paos(i_species)%npao(i_shell) + 1
-                         if(paos(i_species)%flag_perturb_polarise) &
-                              call cq_abort("We cannot support perturbative polarisation with semi-core states")
+                         !if(paos(i_species)%flag_perturb_polarise) &
+                         !     call cq_abort("We cannot support perturbative polarisation with semi-core states")
                          exit
                       end if
                    end do
                    paos(i_species)%n(i_shell) = paos(i_species)%n(i_highest_occ)
                    paos(i_species)%l(i_shell) = ell
+                end if
                    paos(i_species)%nzeta(i_shell) = n_pol_zeta 
                    n_paos = n_paos + n_pol_zeta
                 else if(i_highest_occ==1) then
@@ -887,7 +897,7 @@ contains
                 en = paos(i_species)%n(i_shell)
                 if(en<3) en = en+1
                 write(*,fmt='(2i3,2i7," using perturbative polarisation")') en, paos(i_species)%l(i_shell), &
-                     paos(i_species)%npao(i_shell) - paos(i_species)%l(i_shell) - 1, &
+                     paos(i_species)%npao(i_shell) - paos(i_species)%l(i_shell) - 1+1, & ! Silly book-keeping
                      paos(i_species)%nzeta(i_shell)
                 !write(*,fmt='(2i3,2i7,"  Shell being polarised")') paos(i_species)%n(i_shell), paos(i_species)%l(i_shell),&
                 !     paos(i_species)%npao(i_shell) - paos(i_species)%l(i_shell) - 1, &
