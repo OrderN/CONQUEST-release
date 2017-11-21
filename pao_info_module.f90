@@ -32,6 +32,7 @@ module pao_info
      integer :: polarised_l, polarised_n, polarised_shell, inner_shell
      integer :: flag_cutoff ! 1 for radii, 2 for energies, 3 for default (mix of all)
      logical :: flag_perturb_polarise
+     integer :: flag_zetas ! 1 for split-norm, 2 for compressed energies
      integer, pointer, dimension(:) :: nzeta, l, n, npao, l_no
      real(double), pointer, dimension(:,:) :: cutoff, energy
      type(radial_table), pointer, dimension(:,:) :: psi, psi_reg

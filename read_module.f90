@@ -110,6 +110,14 @@ contains
              if(paos(i)%polarised_l==-1) call cq_abort("Must specify polarised shell l when using perturbation")
              paos(i)%polarised_shell = 0
           end if
+          input_string = fdf_string(80,'Atom.ZetaForm','split')
+          if(leqi(input_string(1:3),'spl')) then
+             paos(i)%flag_zetas = 1 ! Split-norm approach
+          else if(leqi(input_string(1:3),'com')) then
+             paos(i)%flag_zetas = 2 ! Compression approach
+          else
+             call cq_abort("Unrecognised zeta form flage "//input_string(1:8))
+          end if
           input_string = fdf_string(8,"Atom.Cutoffs","default")
           if(leqi(input_string(1:2),'en')) then ! Take reasonable keyword
              paos(i)%flag_cutoff = pao_cutoff_energies

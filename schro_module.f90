@@ -186,9 +186,15 @@ contains
                 if(iprint>2) write(*,fmt='(2x,"Perturbative polarisation")')
                 if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr")') &
                      i_species, en, ell, zeta, paos(i_species)%cutoff(zeta,i_shell)
-                call find_polarisation(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell-1),&
-                     paos(i_species)%psi(zeta,i_shell-1)%f,paos(i_species)%psi(zeta,i_shell)%f,&
-                     paos(i_species)%energy(zeta,i_shell-1),vha,vxc)
+                if(zeta>1.AND.paos(i_species)%flag_zetas==1) then
+                   if(iprint>2) write(*,fmt='(2x,"Using split-norm approach for multiple zetas")')
+                   call find_split_norm(i_species,en,ell+1,paos(i_species)%cutoff(zeta,i_shell),&
+                        paos(i_species)%psi(zeta,i_shell)%f,paos(i_species)%psi(1,i_shell)%f)
+                else
+                   call find_polarisation(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell-1),&
+                        paos(i_species)%psi(zeta,i_shell-1)%f,paos(i_species)%psi(zeta,i_shell)%f,&
+                        paos(i_species)%energy(zeta,i_shell-1),vha,vxc)
+                end if
              else if(i_shell>val(i_species)%n_occ) then  ! Polarisation shells
              !else if(i_shell==paos(i_species)%n_shells) then
                 if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr pol")') &
@@ -196,21 +202,33 @@ contains
                 !paos(i_species)%energy(1,val(i_species)%n_occ)
                 !if(iprint>2) write(*,*) '# Species, n, l, zeta, cutoff: ',i_species, en, ell, zeta, &
                 !     paos(i_species)%cutoff(zeta,i_shell)," pol ",paos(i_species)%energy(1,val(i_species)%n_occ)
-                paos(i_species)%energy(zeta,i_shell) = one!zero !paos(i_species)%energy(1,val(i_species)%n_occ)
-                call find_eigenstate_and_energy_vkb(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
-                     paos(i_species)%psi(zeta,i_shell)%f,paos(i_species)%energy(zeta,i_shell), &
-                     vha,vxc) 
+                if(zeta>1.AND.paos(i_species)%flag_zetas==1) then
+                   if(iprint>2) write(*,fmt='(2x,"Using split-norm approach for multiple zetas")')
+                   call find_split_norm(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
+                        paos(i_species)%psi(zeta,i_shell)%f,paos(i_species)%psi(1,i_shell)%f)
+                else
+                   paos(i_species)%energy(zeta,i_shell) = one!zero !paos(i_species)%energy(1,val(i_species)%n_occ)
+                   call find_eigenstate_and_energy_vkb(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
+                        paos(i_species)%psi(zeta,i_shell)%f,paos(i_species)%energy(zeta,i_shell), &
+                        vha,vxc)
+                end if
              else
                 if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr")') &
                      i_species, en, ell, zeta, paos(i_species)%cutoff(zeta,i_shell)
                 !if(iprint>2) write(*,*) '# Species, n, l, zeta, cutoff: ',i_species, en, ell, zeta, &
                 !     paos(i_species)%cutoff(zeta,i_shell)
-                large_energy = val(i_species)%en_ps(i_shell) + paos(i_species)%energy(zeta,i_shell)
-                call find_eigenstate_and_energy_vkb(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
-                     paos(i_species)%psi(zeta,i_shell)%f,large_energy, vha,vxc)
-                if(iprint>2) write(*,fmt='(2x,"Final energy shift required: ",f10.5," Ha")') &
-                     large_energy - val(i_species)%en_ps(i_shell)
-                paos(i_species)%energy(zeta,i_shell) = large_energy
+                if(zeta>1.AND.paos(i_species)%flag_zetas==1) then
+                   if(iprint>2) write(*,fmt='(2x,"Using split-norm approach for multiple zetas")')
+                   call find_split_norm(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
+                        paos(i_species)%psi(zeta,i_shell)%f,paos(i_species)%psi(1,i_shell)%f)
+                else
+                   large_energy = val(i_species)%en_ps(i_shell) + paos(i_species)%energy(zeta,i_shell)
+                   call find_eigenstate_and_energy_vkb(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
+                        paos(i_species)%psi(zeta,i_shell)%f,large_energy, vha,vxc)
+                   if(iprint>2) write(*,fmt='(2x,"Final energy shift required: ",f10.5," Ha")') &
+                        large_energy - val(i_species)%en_ps(i_shell)
+                   paos(i_species)%energy(zeta,i_shell) = large_energy
+                end if
              end if
              if(paos(i_species)%cutoff(zeta,i_shell)>max_cutoff) max_cutoff = paos(i_species)%cutoff(zeta,i_shell)
           end do
@@ -337,7 +355,7 @@ contains
        ! Find pseudo-atomic hartree potential from pseudo-atomic density
        call radial_hartree(nmesh,atomic_rho,vha_conf,i_species)
        do i=1,nmesh
-          write(60,*) rr(i),vha_conf(i),local_and_vkb(i_species)%local(i)
+          if(iprint>5) write(60,*) rr(i),vha_conf(i),local_and_vkb(i_species)%local(i)
           vha_conf(i) = vha_conf(i) + local_and_vkb(i_species)%local(i)
        end do
        !if(iprint>2) write(*,*) '# Building VNA'
@@ -350,19 +368,23 @@ contains
        vxc = zero
        energy = zero
        call get_vxc(nmesh,rr,atomic_rho,val(i_species)%functional,vxc,energy)
-       if(iprint>5) write(*,*) '# XC energy w/o core: ',energy
-       do i=1,nmesh
-          write(70,*) rr(i),vxc(i),atomic_rho(i)
-       end do
+       if(iprint>5) then
+          write(*,*) '# XC energy w/o core: ',energy
+          do i=1,nmesh
+             write(70,*) rr(i),vxc(i),atomic_rho(i)
+          end do
+       end if
        vxc = zero
        energy = zero
        if(flag_pcc_global) & 
             atomic_rho = atomic_rho + local_and_vkb(i_species)%pcc
        call get_vxc(nmesh,rr,atomic_rho,val(i_species)%functional,vxc,energy)
-       if(iprint>5) write(*,*) '# XC energy with core: ',energy
-       do i=1,nmesh
-          write(71,*) rr(i),vxc(i),atomic_rho(i)
-       end do
+       if(iprint>5) then
+          write(*,*) '# XC energy with core: ',energy
+          do i=1,nmesh
+             write(71,*) rr(i),vxc(i),atomic_rho(i)
+          end do
+       end if
        ! Interpolate onto regular mesh
        !allocate(vha_reg(pseudo(i_species)%vna%n))
        !call make_mesh_reg(pseudo(i_species)%vna%cutoff,pseudo(i_species)%vna%n)
@@ -909,7 +931,56 @@ contains
     end if
     deallocate(f,potential)
   end subroutine find_eigenstate_and_energy_vkb
-  
+
+  ! Fit a simple polynomial (a + b*r*r)*r**(l+1) up to Rc and then match psi_match
+  ! from that point on.  We then subtract this function off psi_match to generate a
+  ! more compressed orbital, but one whose gradient goes to zero at Rc.
+  !
+  ! Follows the ideas of Siesta (e.g. JPCM 14, 2745 2002)
+  subroutine find_split_norm(species,en,ell,Rc,psi,psi_match)
+
+    use datatypes
+    use numbers
+    use GenComms, ONLY: cq_abort
+    use mesh, ONLY: rr, rr_squared, nmesh, alpha, make_mesh, beta, sqrt_rr, drdi, drdi_squared, convert_r_to_i
+    use pseudo_tm_info, ONLY: pseudo
+    
+    implicit none
+
+    ! Passed variables
+    integer :: species, ell, en
+    real(double) :: Rc
+    real(double), dimension(nmesh) :: psi,psi_match
+
+    ! Local variables
+    integer :: nrc, i
+    real(double) :: psi_val, dpsi_val, a, b, rmatch, norm, rl
+    
+    ! Find matching point
+    call convert_r_to_i(Rc,nrc)
+    nrc = nrc-1
+    rmatch = rr(nrc)
+    ! Values of psi and dpsi at Rc
+    psi_val = psi_match(nrc)/rr(nrc)
+    dpsi_val = half*(psi_match(nrc+1)/rr(nrc+1) - psi_match(nrc-1)/rr(nrc-1)) / drdi(nrc)
+    ! Coefficients of polynomial
+    rl = one
+    do i=1,ell
+       rl = rl*rmatch
+    end do
+    b = half*(dpsi_val*rmatch - real(ell,double)*psi_val)/(rl*rmatch*rmatch)
+    a = psi_val/rl - b*rmatch*rmatch
+    ! Now create the difference between smooth and original
+    do i=1,nrc
+       psi(i) = psi_match(i) - (a + b*rr(i)*rr(i))*rr(i)**(ell+1)
+    end do
+    ! Normalise
+    do i=1,nrc
+       norm = norm + rr(i)**(2*ell+2)*psi(i)*psi(i)*drdi(i)
+    end do
+    psi = psi/sqrt(norm)
+  end subroutine find_split_norm
+
   ! Energy shift has been specified - find the radius that gives this shift
   ! VKB version
   ! Use local potential for homogeneous equation, and solve inhomogeneous
