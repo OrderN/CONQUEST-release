@@ -179,7 +179,8 @@ contains
              !     call cq_abort("Too few species in SpeciesLabels: ",&
              !     1+block_end-block_start,n_species)
              allocate(paos(i)%nzeta(paos(i)%n_shells),paos(i)%l(paos(i)%n_shells), &
-                  paos(i)%n(paos(i)%n_shells),paos(i)%npao(paos(i)%n_shells))
+                  paos(i)%n(paos(i)%n_shells),paos(i)%npao(paos(i)%n_shells), &
+                  paos(i)%has_semicore(paos(i)%n_shells),paos(i)%inner(paos(i)%n_shells))
              maxl = 0
              n_paos = 0
              if(paos(i)%flag_perturb_polarise) then
@@ -906,6 +907,8 @@ contains
           end do ! i_shell = 1,n_shells
           ! Create npao - used for number of nodes
           paos(i_species)%lmax = 0
+          paos(i_species)%inner = 0
+          paos(i_species)%has_semicore(:) = .false.
           do i_shell = 1,paos(i_species)%n_shells
              count_func(paos(i_species)%l(i_shell)) = count_func(paos(i_species)%l(i_shell))+1
              if(paos(i_species)%flag_perturb_polarise.AND.i_shell==paos(i_species)%n_shells) then
@@ -931,6 +934,12 @@ contains
                 write(*,fmt='(2i3,2i7)') paos(i_species)%n(i_shell), paos(i_species)%l(i_shell),&
                      paos(i_species)%npao(i_shell) - paos(i_species)%l(i_shell) - 1, &
                      paos(i_species)%nzeta(i_shell)
+                do j=i_shell-1,1,-1
+                   if(paos(i_species)%l(j)==paos(i_species)%l(i_shell)) then ! Semi-core with this l
+                      paos(i_species)%has_semicore(i_shell) = .true.
+                      paos(i_species)%inner(i_shell) = j
+                   end if
+                end do
              end if
              if(i_shell>val(i_species)%n_occ) then
                 if(val(i_species)%n_shells>2) then
