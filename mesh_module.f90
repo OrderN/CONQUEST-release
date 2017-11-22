@@ -92,8 +92,8 @@ contains
        n_use = n_points
        if(PRESENT(reg_cutoff)) then
           reg_cutoff = delta_r_reg*real(n_points-1,double)
-       else
-          write(*,*) '# WARNING: using regular mesh without changing final cutoff'
+       !else
+       !   write(*,*) '# WARNING: using regular mesh without changing final cutoff'
        end if
     else
        n_use = cutoff/delta_r_reg + 1 !nmesh_reg

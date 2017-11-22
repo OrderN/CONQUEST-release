@@ -33,18 +33,20 @@ module pao_info
      integer :: flag_cutoff ! 1 for radii, 2 for energies, 3 for default (mix of all)
      logical :: flag_perturb_polarise
      integer :: flag_zetas ! 1 for split-norm, 2 for compressed energies
-     integer, pointer, dimension(:) :: nzeta, l, n, npao, l_no
+     integer, pointer, dimension(:) :: nzeta, l, n, npao, l_no, inner
      real(double), pointer, dimension(:,:) :: cutoff, energy
      type(radial_table), pointer, dimension(:,:) :: psi, psi_reg
      type(radial_table), pointer, dimension(:) :: pol, pol_reg
+     logical, pointer, dimension(:) :: has_semicore
   end type pao
 
   type(pao), allocatable, dimension(:) :: paos
 
   type valence_info
-     integer, pointer, dimension(:) :: n, l, semicore, nkb, npao
+     integer, pointer, dimension(:) :: n, l, semicore, nkb, npao, inner
      integer :: n_shells, n_occ, functional
      real(double), pointer, dimension(:) :: occ, en_ps, en_pao
+     logical, pointer, dimension(:) :: has_semicore
   end type valence_info
 
   logical :: flag_default_cutoffs

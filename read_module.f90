@@ -369,7 +369,7 @@ contains
        if(iprint>4) write(*,fmt='("Reading Hamann output, with ",i3," valence shells")') n_shells
        allocate(val(i_species)%n(n_shells),val(i_species)%npao(n_shells),val(i_species)%l(n_shells), &
             val(i_species)%occ(n_shells),val(i_species)%semicore(n_shells),val(i_species)%en_ps(n_shells), &
-            val(i_species)%en_pao(n_shells))
+            val(i_species)%en_pao(n_shells),val(i_species)%has_semicore(n_shells),val(i_species)%inner(n_shells))
        count_func = 0 ! Count how many functions per l channel
        n_occ = 0
        val(i_species)%n = 0
@@ -377,6 +377,7 @@ contains
        val(i_species)%l = 0
        val(i_species)%occ = zero
        val(i_species)%semicore = 0
+       val(i_species)%inner = 0
        val(i_species)%en_ps = zero
        val(i_species)%en_pao = zero
        ! Read in table of shells, energies and occupancies and test for ordering
@@ -411,6 +412,7 @@ contains
           if(iprint>3) write(*,fmt='(2i3,f7.2,f10.4)') &
                val(i_species)%n(i),val(i_species)%l(i),val(i_species)%occ(i),val(i_species)%en_ps(i)
           count_func(val(i_species)%l(i)) = count_func(val(i_species)%l(i)) + 1
+          val(i_species)%has_semicore(i) = .false.
           ! Do we have semi-core states ? 
           if(count_func(val(i_species)%l(i))>1) then
              val(i_species)%semicore(i) = 0 ! This shell is the valence
@@ -420,6 +422,8 @@ contains
                    val(i_species)%semicore(j) = 1
                    val(i_species)%npao(j) = val(i_species)%l(j)+1
                    val(i_species)%npao(i) = val(i_species)%l(i)+2
+                   val(i_species)%has_semicore(i) = .true.
+                   val(i_species)%inner(i) = j
                 end if
              end do
           else if(val(i_species)%en_ps(i)<energy_semicore) then ! Make the value -1 a user input
@@ -693,7 +697,8 @@ contains
           end if
           paos(i_species)%n_shells = n_shells
           allocate(paos(i_species)%nzeta(n_shells),paos(i_species)%l(n_shells), &
-               paos(i_species)%n(n_shells),paos(i_species)%npao(n_shells),paos(i_species)%l_no(n_shells))
+               paos(i_species)%n(n_shells),paos(i_species)%npao(n_shells),paos(i_species)%l_no(n_shells),&
+               paos(i_species)%has_semicore(n_shells),paos(i_species)%inner(n_shells))
           paos(i_species)%n = 0
           paos(i_species)%npao = 0
           paos(i_species)%nzeta = 0
@@ -713,6 +718,8 @@ contains
           !end if
           n_paos = 0
           paos(i_species)%inner_shell = 0
+          paos(i_species)%inner = 0
+          paos(i_species)%has_semicore(:) = .false.
           do i_shell = 1,n_shells
              if(i_shell<=val(i_species)%n_occ) then ! We have n/l
                 paos(i_species)%n(i_shell) = val(i_species)%n(i_shell)
@@ -725,6 +732,12 @@ contains
                    paos(i_species)%nzeta(i_shell) = max_zeta 
                    n_paos = n_paos + max_zeta
                 end if
+                do j=i_shell-1,1,-1
+                   if(paos(i_species)%l(j)==paos(i_species)%l(i_shell)) then ! Semi-core with this l
+                      paos(i_species)%has_semicore(i_shell) = .true.
+                      paos(i_species)%inner(i_shell) = j
+                   end if
+                end do
              else ! Polarisation shell, defined as not being within the occupied valence states
                 i_highest_occ = val(i_species)%n_occ
                 if(paos(i_species)%l(i_highest_occ)<2) then ! We polarise this
@@ -745,6 +758,8 @@ contains
                       do j=i_shell-1,1,-1
                       if(paos(i_species)%l(j)==ell) then ! Semi-core with this l
                          paos(i_species)%npao(i_shell) = paos(i_species)%npao(i_shell) + 1
+                         paos(i_species)%has_semicore(i_shell) = .true.
+                         paos(i_species)%inner(i_shell) = j
                          !if(paos(i_species)%flag_perturb_polarise) &
                          !     call cq_abort("We cannot support perturbative polarisation with semi-core states")
                          exit

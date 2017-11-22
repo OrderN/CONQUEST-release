@@ -36,7 +36,7 @@ contains
     use species_module, ONLY: n_species
     use pseudo_tm_info, ONLY: pseudo, rad_alloc
     use mesh, ONLY: nmesh, make_mesh, rr, nmesh_reg, rmesh_reg, new_interpolate, interpolate, &
-         make_mesh_reg, rr_squared, delta_r_reg, convert_r_to_i
+         make_mesh_reg, rr_squared, delta_r_reg, convert_r_to_i, drdi
     use global_module, ONLY: flag_pcc_global, iprint
     use GenComms, ONLY: cq_abort
     use radial_xc, ONLY: get_vxc
@@ -49,7 +49,7 @@ contains
     integer :: i_species, ell, en, i, j, k, zeta, n_shells, i_shell, grid_size, n_val, lun, nrc
     real(double), allocatable, dimension(:) :: psi_reg, x_reg, vha, vxc, vha_reg, psi, atomic_rho, &
          small_cutoff, large_cutoff, cutoffs, vha_conf
-    real(double) :: energy, max_cutoff, small_energy, large_energy
+    real(double) :: energy, max_cutoff, small_energy, large_energy, dot_p
     real(double) :: radius_small, radius_med, radius_large, sum_small, sum_large, orig_dr
     real(double), dimension(3) :: scaling
     !logical :: flag_plot = .true.
@@ -211,6 +211,25 @@ contains
                    call find_eigenstate_and_energy_vkb(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
                         paos(i_species)%psi(zeta,i_shell)%f,paos(i_species)%energy(zeta,i_shell), &
                         vha,vxc)
+                   if(paos(i_species)%has_semicore(i_shell)) then
+                      ! Dot product of two
+                      dot_p = zero
+                      do i=1,nmesh
+                         dot_p = dot_p + rr(i)**(2*ell+2)*paos(i_species)%psi(zeta,i_shell)%f(i)* &
+                              paos(i_species)%psi(zeta,paos(i_species)%inner(i_shell))%f(i)*drdi(i)
+                      end do
+                      write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
+                      ! Orthgonalise
+                      paos(i_species)%psi(zeta,i_shell)%f = paos(i_species)%psi(zeta,i_shell)%f - &
+                           dot_p * paos(i_species)%psi(1,paos(i_species)%inner(i_shell))%f
+                      ! Check
+                      dot_p = zero
+                      do i=1,nmesh
+                         dot_p = dot_p + rr(i)**(2*ell+2)*paos(i_species)%psi(zeta,i_shell)%f(i)* &
+                              paos(i_species)%psi(zeta,paos(i_species)%inner(i_shell))%f(i)*drdi(i)
+                      end do
+                      if(abs(dot_p)>RD_ERR) write(*,fmt='(2x,"Warning: following orthogonalisation, overlap is ",f10.5)') dot_p
+                   end if
                 end if
              else
                 if(iprint>2) write(*,fmt='(2x,"Species ",i2," n=",i2," l=",i2," zeta=",i2, " Rc=",f4.1," bohr")') &
@@ -228,6 +247,26 @@ contains
                    if(iprint>2) write(*,fmt='(2x,"Final energy shift required: ",f10.5," Ha")') &
                         large_energy - val(i_species)%en_ps(i_shell)
                    paos(i_species)%energy(zeta,i_shell) = large_energy
+                   ! Orthogonalise to semi-core state
+                   if(paos(i_species)%has_semicore(i_shell)) then
+                      ! Dot product of two
+                      dot_p = zero
+                      do i=1,nmesh
+                         dot_p = dot_p + rr(i)**(2*ell+2)*paos(i_species)%psi(zeta,i_shell)%f(i)* &
+                              paos(i_species)%psi(zeta,val(i_species)%inner(i_shell))%f(i)*drdi(i)
+                      end do
+                      write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
+                      ! Orthgonalise
+                      paos(i_species)%psi(zeta,i_shell)%f = paos(i_species)%psi(zeta,i_shell)%f - &
+                           dot_p * paos(i_species)%psi(1,val(i_species)%inner(i_shell))%f
+                      ! Check
+                      dot_p = zero
+                      do i=1,nmesh
+                         dot_p = dot_p + rr(i)**(2*ell+2)*paos(i_species)%psi(zeta,i_shell)%f(i)* &
+                              paos(i_species)%psi(zeta,val(i_species)%inner(i_shell))%f(i)*drdi(i)
+                      end do
+                      if(abs(dot_p)>RD_ERR) write(*,fmt='(2x,"Warning: following orthogonalisation, overlap is ",f10.5)') dot_p
+                   end if
                 end if
              end if
              if(paos(i_species)%cutoff(zeta,i_shell)>max_cutoff) max_cutoff = paos(i_species)%cutoff(zeta,i_shell)
@@ -248,7 +287,7 @@ contains
              allocate(paos(i_species)%psi_reg(zeta,i_shell)%f(nmesh_reg))
              allocate(paos(i_species)%psi_reg(zeta,i_shell)%x(nmesh_reg))
              !if(iprint>2) write(*,*) '# regular mesh ',paos(i_species)%cutoff(zeta,i_shell)
-             call make_mesh_reg(paos(i_species)%cutoff(zeta,i_shell))
+             call make_mesh_reg(paos(i_species)%cutoff(zeta,i_shell),nmesh_reg)
              paos(i_species)%psi_reg(zeta,i_shell)%x = rmesh_reg
              paos(i_species)%psi_reg(zeta,i_shell)%delta = delta_r_reg
              paos(i_species)%psi_reg(zeta,i_shell)%n = nmesh_reg
@@ -286,7 +325,7 @@ contains
        orig_dr = delta_r_reg
        delta_r_reg = local_and_vkb(i_species)%r_vkb/real(grid_size-1,double)
        !local_and_vkb(i_species)%r_vkb = (grid_size-1)*delta_r_reg
-       call make_mesh_reg(local_and_vkb(i_species)%r_vkb)
+       call make_mesh_reg(local_and_vkb(i_species)%r_vkb,grid_size)
        !if(iprint>2) write(*,*) '# Cutoff and size: ',local_and_vkb(i_species)%r_vkb,local_and_vkb(i_species)%ngrid_vkb
        j = 0
        if(iprint>1) write(*,fmt='(/4x,"VKB projectors")')
@@ -330,7 +369,7 @@ contains
           pseudo(i_species)%chpcc%delta = delta_r_reg
           !if(iprint>3) write(*,*) '# PCC cutoff ',pseudo(i_species)%chpcc%cutoff
           call rad_alloc(pseudo(i_species)%chpcc,grid_size)
-          call make_mesh_reg(pseudo(i_species)%chpcc%cutoff)!,grid_size)
+          call make_mesh_reg(pseudo(i_species)%chpcc%cutoff,grid_size)
           call new_interpolate(rmesh_reg,pseudo(i_species)%chpcc%f,grid_size, &
                rr,local_and_vkb(i_species)%pcc,local_and_vkb(i_species)%ngrid,zero)
           !call interpolate(rmesh_reg,pseudo(i_species)%chpcc%f,grid_size, &
@@ -346,7 +385,7 @@ contains
        delta_r_reg = max_cutoff/real(grid_size-1,double)
        pseudo(i_species)%vlocal%delta = delta_r_reg
        pseudo(i_species)%vlocal%cutoff = max_cutoff!(grid_size-1)*delta_r_reg
-       call make_mesh_reg(pseudo(i_species)%vlocal%cutoff)!,grid_size)
+       call make_mesh_reg(pseudo(i_species)%vlocal%cutoff,grid_size)
        call new_interpolate(rmesh_reg,pseudo(i_species)%vlocal%f,grid_size, &
             rr,local_and_vkb(i_species)%local,local_and_vkb(i_species)%ngrid,local_and_vkb(i_species)%local(nrc-1))
        ! Build the neutral atom potential as sum of local and pseudo-atomic hartree potentials
