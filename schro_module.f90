@@ -216,7 +216,7 @@ contains
                       dot_p = zero
                       do i=1,nmesh
                          dot_p = dot_p + rr(i)**(2*ell+2)*paos(i_species)%psi(zeta,i_shell)%f(i)* &
-                              paos(i_species)%psi(zeta,paos(i_species)%inner(i_shell))%f(i)*drdi(i)
+                              paos(i_species)%psi(1,paos(i_species)%inner(i_shell))%f(i)*drdi(i)
                       end do
                       write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
                       ! Orthgonalise
@@ -226,7 +226,7 @@ contains
                       dot_p = zero
                       do i=1,nmesh
                          dot_p = dot_p + rr(i)**(2*ell+2)*paos(i_species)%psi(zeta,i_shell)%f(i)* &
-                              paos(i_species)%psi(zeta,paos(i_species)%inner(i_shell))%f(i)*drdi(i)
+                              paos(i_species)%psi(1,paos(i_species)%inner(i_shell))%f(i)*drdi(i)
                       end do
                       if(abs(dot_p)>RD_ERR) write(*,fmt='(2x,"Warning: following orthogonalisation, overlap is ",f10.5)') dot_p
                    end if
@@ -253,7 +253,7 @@ contains
                       dot_p = zero
                       do i=1,nmesh
                          dot_p = dot_p + rr(i)**(2*ell+2)*paos(i_species)%psi(zeta,i_shell)%f(i)* &
-                              paos(i_species)%psi(zeta,val(i_species)%inner(i_shell))%f(i)*drdi(i)
+                              paos(i_species)%psi(1,val(i_species)%inner(i_shell))%f(i)*drdi(i)
                       end do
                       write(*,fmt='(2x,"Orthogonalising to semi-core; overlap is ",f10.5)') dot_p
                       ! Orthgonalise
@@ -263,7 +263,7 @@ contains
                       dot_p = zero
                       do i=1,nmesh
                          dot_p = dot_p + rr(i)**(2*ell+2)*paos(i_species)%psi(zeta,i_shell)%f(i)* &
-                              paos(i_species)%psi(zeta,val(i_species)%inner(i_shell))%f(i)*drdi(i)
+                              paos(i_species)%psi(1,val(i_species)%inner(i_shell))%f(i)*drdi(i)
                       end do
                       if(abs(dot_p)>RD_ERR) write(*,fmt='(2x,"Warning: following orthogonalisation, overlap is ",f10.5)') dot_p
                    end if
