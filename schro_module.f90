@@ -210,7 +210,7 @@ contains
                    paos(i_species)%energy(zeta,i_shell) = one!zero !paos(i_species)%energy(1,val(i_species)%n_occ)
                    call find_eigenstate_and_energy_vkb(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
                         paos(i_species)%psi(zeta,i_shell)%f,paos(i_species)%energy(zeta,i_shell), &
-                        vha,vxc)
+                        vha,vxc,paos(i_species)%width,paos(i_species)%prefac)
                    if(paos(i_species)%has_semicore(i_shell)) then
                       ! Dot product of two
                       dot_p = zero
@@ -243,7 +243,7 @@ contains
                 else
                    large_energy = val(i_species)%en_ps(i_shell) + paos(i_species)%energy(zeta,i_shell)
                    call find_eigenstate_and_energy_vkb(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
-                        paos(i_species)%psi(zeta,i_shell)%f,large_energy, vha,vxc)
+                        paos(i_species)%psi(zeta,i_shell)%f,large_energy, vha,vxc,paos(i_species)%width,paos(i_species)%prefac)
                    if(iprint>2) write(*,fmt='(2x,"Final energy shift required: ",f10.5," Ha")') &
                         large_energy - val(i_species)%en_ps(i_shell)
                    paos(i_species)%energy(zeta,i_shell) = large_energy
@@ -780,7 +780,7 @@ contains
   ! VKB version
   ! Use local potential for homogeneous equation, and solve inhomogeneous
   ! equations for projectors (then combine solutions)
-  subroutine find_eigenstate_and_energy_vkb(species,en,ell,Rc,psi,energy,vha,vxc)
+  subroutine find_eigenstate_and_energy_vkb(species,en,ell,Rc,psi,energy,vha,vxc,width,prefac)
 
     use datatypes
     use numbers
@@ -793,6 +793,7 @@ contains
     integer :: species, ell, en
     real(double) :: energy, Rc
     real(double), dimension(nmesh) :: psi,vha,vxc
+    real(double), OPTIONAL :: width, prefac
 
     ! Local variables
     real(double) :: g_temp, dy_L, dy_R
@@ -800,9 +801,11 @@ contains
     integer :: classical_tp, i, n_crossings, n_nodes, n_loop, loop, nmax, n_kink, n_nodes_lower, n_nodes_upper, n_kink_vkb
     real(double) :: l_half_sq, dx_sq_over_twelve, fac, norm, d_energy, e_lower, e_upper, df_cusp, cusp_psi, tol
     real(double) :: delta_energy_bracket, zval, l_l_plus_one, alpha_sq_over_four, xkap
-    real(double) :: gin, gout, gsgin, gsgout, xin, xout
+    real(double) :: gin, gout, gsgin, gsgout, xin, xout, exponent, delta
     logical :: flag_find_radius = .false.
+    logical :: flag_confine = .false.
 
+    if(present(width).AND.present(prefac)) flag_confine = .true.
     l_half_sq = real(ell,double) + half
     l_half_sq = l_half_sq*l_half_sq
     l_l_plus_one = real(ell*(ell+1),double)
@@ -839,6 +842,16 @@ contains
     end if
     tol = 1.0e-8_double
     !write(*,*) "# Nmax is ",nmax
+    if(flag_confine) then
+       delta = 0.01_double
+       do i=1,nmax
+          ! Locally rc = Rc  + delta, ri = Rc - width
+          if(rr(i)>(Rc + delta - width)) then
+             exponent = (width + delta)/(rr(i) - Rc + width)
+             potential(i) = potential(i) + prefac*exp(-exponent)/(Rc + delta - rr(i))
+          end if
+       end do
+    end if
     if(iprint>2) write(*,fmt='(2x,"For this eigenstate, we require ",i2," nodes")') n_nodes
     ! Now loop to find the correct energy
     do loop = 1,n_loop

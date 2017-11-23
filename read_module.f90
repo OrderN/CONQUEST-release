@@ -116,8 +116,10 @@ contains
           else if(leqi(input_string(1:3),'com')) then
              paos(i)%flag_zetas = 2 ! Compression approach
           else
-             call cq_abort("Unrecognised zeta form flage "//input_string(1:8))
+             call cq_abort("Unrecognised zeta form flag "//input_string(1:8))
           end if
+          paos(i)%width = fdf_double("Atom.WidthConfine",one)
+          paos(i)%prefac = fdf_double("Atom.PrefacConfine",zero)
           input_string = fdf_string(8,"Atom.Cutoffs","default")
           if(leqi(input_string(1:2),'en')) then ! Take reasonable keyword
              paos(i)%flag_cutoff = pao_cutoff_energies

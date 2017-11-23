@@ -38,6 +38,7 @@ module pao_info
      type(radial_table), pointer, dimension(:,:) :: psi, psi_reg
      type(radial_table), pointer, dimension(:) :: pol, pol_reg
      logical, pointer, dimension(:) :: has_semicore
+     real(double) :: width, prefac ! Parameters for exponential confinement
   end type pao
 
   type(pao), allocatable, dimension(:) :: paos

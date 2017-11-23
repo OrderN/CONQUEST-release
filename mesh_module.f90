@@ -17,7 +17,7 @@ module mesh
   integer, parameter :: siesta = 2
   integer :: mesh_type
   integer :: n_poly_lag = 5 ! User adjustable ?
-  integer :: n_poly = 3 ! Should this be user adjustable ? Actually gives 2*n_poly+1
+  integer :: n_poly = 5 ! Should this be user adjustable ? Actually gives 2*n_poly+1
 
   
   
