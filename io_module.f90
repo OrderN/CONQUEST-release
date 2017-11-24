@@ -489,7 +489,8 @@ second:   do
     rcelly = r_super_y
     rcellz = r_super_z
     !if ((leqi(runtype,'md')) .OR. (leqi(runtype,'cg'))) then
-    if (.NOT. leqi(runtype,'static')) then
+    ! DRB 2017/10/06 We may need these to read in old positions
+    !if (.NOT. leqi(runtype,'static')) then
       allocate(atom_coord_diff(3,ni_in_cell), STAT=stat)
       if (stat.NE.0) call cq_abort('Error allocating atom_coord_diff: ', 3, ni_in_cell)
       allocate(id_glob_old(ni_in_cell),id_glob_inv_old(ni_in_cell), STAT=stat)
@@ -499,7 +500,7 @@ second:   do
       !call gcopy(atom_coord_diff,3,ni_in_cell)
       id_glob_old=0
       id_glob_inv_old=0
-    endif
+    !endif
 
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_atomic_positions')

@@ -1923,7 +1923,7 @@ contains
     use matrix_data, ONLY: max_range
     use atom_dispenser, ONLY: allatom2part
     use GenComms, ONLY: ionode
-    use global_module, ONLY:  ni_in_cell
+    use global_module, ONLY:  ni_in_cell, atom_coord
 
     implicit none
 
@@ -2087,21 +2087,21 @@ contains
           ! If atoms move, we need to consider the displacements of each atom.
           ! Displacement in X of PS of atoms 'i'.
           !ORI if ((flag_ix).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-          if ((flag_ix) .AND. .NOT. leqi(runtype,'static')) then
+          if ((flag_ix)) then! .AND. .NOT. leqi(runtype,'static')) then
            deltai_x=atom_coord_diff(1,idglob_ii)
           else
            deltai_x=zero
           endif
           ! Displacement in Y of PS of atoms 'i'.
           !ORI if ((flag_iy).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-          if ((flag_iy) .AND. .NOT. leqi(runtype,'static')) then
+          if ((flag_iy)) then !  .AND. .NOT. leqi(runtype,'static')) then
            deltai_y=atom_coord_diff(2,idglob_ii)
           else
            deltai_y=zero
           endif
           ! Displacement in Z of PS of atoms 'i'.
           !ORI if ((flag_iz).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-          if ((flag_iz) .AND. .NOT. leqi(runtype,'static')) then
+          if ((flag_iz)) then ! .AND. .NOT. leqi(runtype,'static')) then
            deltai_z=atom_coord_diff(3,idglob_ii)
           else
            deltai_z=zero
@@ -2118,21 +2118,21 @@ contains
             flag_jz=flag_move_atom(3,idglob_jj)
             ! Displacement in X of neighbour 'j' of 'i'.
             !ORI if ((flag_jx).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-            if ((flag_jx) .AND. .NOT. leqi(runtype,'static')) then
+            if ((flag_jx))then! .AND. .NOT. leqi(runtype,'static')) then
               deltaj_x=atom_coord_diff(1,idglob_jj)
             else
               deltaj_x=zero
             endif
             ! Displacement in Y of neighbour 'j' of 'i'.
             !ORI if ((flag_jy).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-            if ((flag_jy) .AND. .NOT. leqi(runtype,'static')) then
+            if ((flag_jy))then ! .AND. .NOT. leqi(runtype,'static')) then
               deltaj_y=atom_coord_diff(2,idglob_jj)
             else
               deltaj_y=zero
             endif
             ! Displacement in Z of neighbour 'j' of 'i'.
             !ORI if ((flag_jz).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-            if ((flag_jz) .AND. .NOT. leqi(runtype,'static')) then
+            if ((flag_jz))then! .AND. .NOT. leqi(runtype,'static')) then
               deltaj_z=atom_coord_diff(3,idglob_jj)
             else
               deltaj_z=zero
@@ -2209,7 +2209,6 @@ contains
             do jjj = 1, BCS_parts%n_ing_cover(jpart_nopg)
               jcover = BCS_parts%icover_ibeg(jpart_nopg) + jjj - 1      ! ID in CS
               idglob_jjj = BCS_parts%ig_cover(jcover)                   ! CS --> glob
-
               !! ---------- DEBUG ---------- !!
               if (flag_MDdebug) then
                 write (lun_db,*) "jcover,idglob_jjj:", jcover, idglob_jjj
@@ -2481,21 +2480,21 @@ contains
       flag_iz = flag_move_atom(3,idglob_ii)
       ! Displacement in X of PS of atoms 'i'.
       !ORI if ((flag_ix).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-      if ((flag_ix) .AND. .NOT.leqi(runtype,'static')) then
+      if ((flag_ix))then! .AND. .NOT.leqi(runtype,'static')) then
         deltai_x=atom_coord_diff(1,idglob_ii)
       else
         deltai_x=zero
       endif
       ! Displacement in Y of PS of atoms 'i'.
       !ORI if ((flag_iy).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-      if ((flag_iy) .AND. .NOT.leqi(runtype,'static')) then
+      if ((flag_iy))then! .AND. .NOT.leqi(runtype,'static')) then
         deltai_y=atom_coord_diff(2,idglob_ii)
       else
         deltai_y=zero
       endif
       ! Displacement in Z of PS of atoms 'i'.
       !ORI if ((flag_iz).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-      if ((flag_iz) .AND. .NOT.leqi(runtype,'static')) then
+      if ((flag_iz))then! .AND. .NOT.leqi(runtype,'static')) then
         deltai_z=atom_coord_diff(3,idglob_ii)
       else
         deltai_z=zero
@@ -2532,21 +2531,21 @@ contains
         !ibeg_dataL = ibeg_dataL + ibeg2
         ! Displacement in X of neighbour 'i'.
         !ORI if ((flag_jx).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-        if ((flag_jx) .AND. .NOT.leqi(runtype,'static')) then
+        if ((flag_jx))then! .AND. .NOT.leqi(runtype,'static')) then
           deltaj_x=atom_coord_diff(1,idglob_jj)
         else
           deltaj_x=zero
         endif
         ! Displacement in Y of neighbour 'i'.
         !ORI if ((flag_jy).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-        if ((flag_jy) .AND. .NOT.leqi(runtype,'static')) then
+        if ((flag_jy))then! .AND. .NOT.leqi(runtype,'static')) then
           deltaj_y=atom_coord_diff(2,idglob_jj)
         else
           deltaj_y=zero
         endif
         ! Displacement in Z of neighbour 'i'.
         !ORI if ((flag_jz).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-        if ((flag_jz) .AND. .NOT.leqi(runtype,'static')) then
+        if ((flag_jz))then! .AND. .NOT.leqi(runtype,'static')) then
           deltaj_z=atom_coord_diff(3,idglob_jj)
         else
           deltaj_z=zero

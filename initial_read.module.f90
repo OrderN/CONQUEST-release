@@ -678,8 +678,7 @@ contains
                              flag_propagateL,flag_dissipation,integratorXL, flag_FixCOM,   &
                              flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter,         &
                              flag_out_wf,flag_out_wf_by_kp,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
-                             fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
-                             fire_N_max, flag_write_DOS, flag_write_projected_DOS, &
+                             flag_write_DOS, flag_write_projected_DOS, &
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
@@ -709,7 +708,7 @@ contains
                                       STATE, ABINIT, flag_angular_new
     use SelfCon, only: A, flag_linear_mixing, EndLinearMixing, q0, q1,&
                        n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
-                       atomch_output, flag_Kerker, flag_wdmetric
+                       atomch_output, flag_Kerker, flag_wdmetric, minitersSC
     use atomic_density,  only: read_atomic_density_file, &
                               atomic_density_method
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
@@ -767,6 +766,8 @@ contains
                           md_target_press, md_baro_type, md_tau_P, &
                           md_thermo_type, md_baro_beta, md_box_mass, &
                           md_write_xsf
+    use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
+         fire_N_max, fire_max_step, fire_N_below_thresh
 
     implicit none
 
@@ -1347,6 +1348,7 @@ contains
        flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
        flag_continue_on_SC_fail     = fdf_boolean('SC.ContinueOnSCFail',   .false.)
        maxitersSC      = fdf_integer('SC.MaxIters',50)
+       minitersSC      = fdf_integer('SC.MinIters',2)
        maxearlySC      = fdf_integer('SC.MaxEarly',3 )
        maxpulaySC      = fdf_integer('SC.MaxPulay',5 )
        read_atomic_density_file = &
@@ -1525,15 +1527,19 @@ contains
        flag_check_DFT     = fdf_boolean('General.CheckDFT',.false.)
        flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        flag_quench_MD     = fdf_boolean('AtomMove.QuenchMD',.false.)
-       temp_ion           = fdf_double ('AtomMove.IonTemperature',300.0_double)
        flag_fire_qMD = fdf_boolean('AtomMove.FIRE',.false.)
        if(flag_fire_qMD) then
-          fire_N_min   = fdf_integer('AtomMove.FireNMin',5)
-          fire_N_max   = fdf_integer('AtomMove.FireNMaxSlowQMD',10)
-          fire_alpha0  = fdf_double ('AtomMove.FireAlpha',0.1_double)
-          fire_f_inc   = fdf_double ('AtomMove.Fire_f_inc',1.1_double)
-          fire_f_dec   = fdf_double ('AtomMove.Fire_f_dec',0.5_double)
-          fire_f_alpha = fdf_double ('AtomMove.Fire_f_alpha',0.99_double)
+          fire_N_min         = fdf_integer('AtomMove.FireNMin',5)
+          fire_N_max         = fdf_integer('AtomMove.FireNMaxSlowQMD',10)
+          fire_alpha0        = fdf_double ('AtomMove.FireAlpha',0.1_double)
+          fire_f_inc         = fdf_double ('AtomMove.Fire_f_inc',1.1_double)
+          fire_f_dec         = fdf_double ('AtomMove.Fire_f_dec',0.5_double)
+          fire_f_alpha       = fdf_double ('AtomMove.Fire_f_alpha',0.99_double)
+          fire_max_step      = fdf_double ('AtomMove.FireMaxStep',2.0_double)
+          fire_N_below_thresh= fdf_integer('AtomMove.FireNBelowThresh',3)
+          temp_ion           = fdf_double ('AtomMove.IonTemperature',0.0_double)
+       else
+          temp_ion           = fdf_double ('AtomMove.IonTemperature',300.0_double)
        end if
 !!$
 !!$

@@ -54,6 +54,8 @@
 !!   -fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2015/06/08 lat
 !!    - Added experimental backtrace
+!!   2017/05/22 dave
+!!    - Added minimum number of SCF iterations variable, minitersSC
 !!  SOURCE
 !!
 module SelfCon
@@ -79,6 +81,7 @@ module SelfCon
   real(double), parameter :: ReduceLimit   = 0.5_double
   real(double), parameter :: crit_lin      = 0.1_double
   integer :: maxitersSC
+  integer :: minitersSC
   integer :: maxearlySC
   integer :: maxpulaySC
   !integer, parameter :: mx_SCiters = 50
@@ -2718,7 +2721,7 @@ contains
     end if
 
     ! check if they have reached tolerance
-    if (R0 < self_tol) then
+    if (R0 < self_tol .AND. iter >= minitersSC) then ! If we've done minimum number
        if (inode == ionode) write (io_lun,1) iter
        done = .true.
        call deallocate_PulayMiXSC_spin
@@ -2794,7 +2797,7 @@ contains
        end if
 
        ! check if they have reached tolerance
-       if (R0 < self_tol) then
+       if (R0 < self_tol .AND. iter >= minitersSC) then ! Passed minimum number of iterations
           if (inode == ionode) write (io_lun,1) iter
           done = .true.
           call deallocate_PulayMiXSC_spin
