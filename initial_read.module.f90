@@ -765,7 +765,8 @@ contains
     use control,    only: md_ensemble
     use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
                           md_target_press, md_baro_type, md_tau_P, &
-                          md_thermo_type
+                          md_thermo_type, md_baro_beta, md_box_mass, &
+                          md_write_xsf
 
     implicit none
 
@@ -1879,6 +1880,7 @@ contains
        endif ! Constraints
 
        md_ensemble        = fdf_string(3, 'MD.Ensemble', 'nve')
+       md_write_xsf       = fdf_boolean('MD.WriteXSF', .true.)
 
        ! Thermostat
        md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
@@ -1894,9 +1896,12 @@ contains
        call fdf_endblock
 
        ! Barostat
+       md_baro_type       = fdf_string(20, 'MD.Barostat', 'None')
        md_target_press    = fdf_double('MD.TargetPressure', zero)
        md_baro_type       = fdf_string(20, 'MD.Barostat', 'None')
+       md_box_mass        = fdf_double('MD.BoxMass', one)
        md_tau_P           = fdf_double('MD.tauP', 10.0_double)
+       md_baro_beta       = fdf_double('MD.BerendsenBeta', one)
        flag_baroDebug     = fdf_boolean('MD.BaroDebug',.false.)
 
     else

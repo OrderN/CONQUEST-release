@@ -39,8 +39,10 @@ module md_control
   real(double), parameter :: fac_GPa2HaPBohr3 = 29421.02648438959
 
   character(20) :: md_thermo_type, md_baro_type
-  real(double)  :: md_tau_T, md_tau_P, md_target_press
+  real(double)  :: md_tau_T, md_tau_P, md_target_press, md_baro_beta, &
+                   md_box_mass
   integer       :: md_n_nhc, md_n_ys, md_n_mts
+  logical       :: md_write_xsf
   real(double), dimension(3,3), target      :: lattice_vec
   real(double), dimension(:), allocatable   :: md_nhc_mass
   real(double), dimension(:,:), allocatable, target :: ion_velocity
@@ -94,7 +96,7 @@ module md_control
       procedure, public   :: dump_thermo_state
       procedure, public   :: propagate_nvt_nhc
 
-      procedure, private  :: update_G
+      procedure, private  :: update_G_eta
       procedure, private  :: propagate_eta
       procedure, private  :: propagate_v_eta_1
       procedure, private  :: propagate_v_eta_2
@@ -117,16 +119,19 @@ module md_control
     character(20)       :: baro_type    ! thermostat type
     real(double)        :: P_int        ! instantateous pressure
     real(double)        :: P_ext        ! target pressure
-    real(double)        :: volume
+    real(double)        :: volume, volume_ref
     real(double)        :: ke_ions      ! kinetic energy of ions
     real(double)        :: dt           ! time step
     integer             :: ndof         ! number of degrees of freedom
     logical             :: append
     real(double)        :: mu           ! box scaling factor
-    real(double), dimension(3,3)  :: h    ! lattice vectors
-    real(double), dimension(3,3)  :: h0   ! reference lattice vectors
+    real(double), dimension(3,3)  :: lat       ! lattice vectors
+    real(double), dimension(3,3)  :: lat_ref   ! reference lattice vectors
     real(double), dimension(3,3)  :: ke_stress      ! kinetic contrib to stress
     real(double), dimension(3,3)  :: static_stress  ! static contrib to stress
+
+    ! constants for polynomial expansion
+    real(double)        :: c2, c4, c6, c8
 
     ! Weak coupling barostat variables
     real(double)        :: tau_P        ! pressure coupling time period
@@ -137,8 +142,10 @@ module md_control
     real(double)        :: ke_box
 
     ! Isotropic variables
-    real(double)        :: v_g
-    real(double)        :: G_g
+    real(double)        :: odnf
+    real(double)        :: eps, eps_ref ! 1/3 log(V/V_0)
+    real(double)        :: v_eps        ! box velocity
+    real(double)        :: G_eps        ! box force
 
     ! Fully flexible cell variables
     real(double), dimension(3,3)  :: v_h
@@ -153,11 +160,24 @@ module md_control
     contains
 
       procedure, public   :: init_baro_none
+      procedure, public   :: init_baro_mttk
       procedure, public   :: update_static_stress
       procedure, public   :: get_pressure
       procedure, public   :: get_volume
+      procedure, public   :: get_box_ke
       procedure, public   :: get_ke_stress
+      procedure, public   :: propagate_npt_mttk
+      procedure, public   :: propagate_r_mttk
+      procedure, public   :: propagate_box_mttk
       procedure, public   :: dump_baro_state
+
+      procedure, private  :: update_G_eps
+      procedure, private  :: propagate_eps_1
+      procedure, private  :: propagate_eps_2
+      procedure, private  :: propagate_v_eps_1
+      procedure, private  :: propagate_v_eps_2
+      procedure, private  :: propagate_v_mttk
+      procedure, private  :: poly_sinhx_x
 
   end type type_barostat
 !!***
@@ -365,9 +385,9 @@ contains
   end subroutine berendsen_v_rescale
   !!***
 
-  !!****m* md_control/update_G *
+  !!****m* md_control/update_G_eta *
   !!  NAME
-  !!   update_G
+  !!   update_G_eta
   !!  PURPOSE
   !!   updates the "force" on thermostat k 
   !!  AUTHOR
@@ -376,7 +396,7 @@ contains
   !!   2017/10/24 10:41
   !!  SOURCE
   !!  
-  subroutine update_G(th, k, ke_box)
+  subroutine update_G_eta(th, k, ke_box)
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
@@ -384,13 +404,15 @@ contains
     real(double), intent(in)              :: ke_box ! box ke for pressure coupling
 
     if (k == 1) then
-      th%G_nhc(k) = 2*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree + ke_box
+      th%G_nhc(k) = 2*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree + &
+                    2*ke_box
     else
-      th%G_nhc(k) = th%m_nhc(k-1)*th%v_eta(k-1)**2 - th%T_ext*fac_Kelvin2Hartree
+      th%G_nhc(k) = th%m_nhc(k-1)*th%v_eta(k-1)**2 - &
+                    th%T_ext*fac_Kelvin2Hartree
     end if
     th%G_nhc(k) = th%G_nhc(k)/th%m_nhc(k)
 
-  end subroutine update_G
+  end subroutine update_G_eta
   !!***
 
   !!****m* md_control/propagate_eta *
@@ -494,19 +516,19 @@ contains
 
     th%ke_ions = ke
     v_sfac = one
-    call th%update_G(1, zero)
+    call th%update_G_eta(1, zero)
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
         ! Reverse part of Trotter expansion: update thermostat force/velocity
         do i_nhc=th%n_nhc,1,-1 ! loop over NH thermostats in reverse order
           if (i_nhc==th%n_nhc) then
-  !          call th%update_G(i_nhc, zero) ! box ke is zero in NVT ensemble
+  !          call th%update_G_eta(i_nhc, zero) ! box ke is zero in NVT ensemble
             call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
           else
             ! Trotter expansion to avoid sinh singularity
             call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
             call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
-  !          call th%update_G(i_nhc, zero)
+  !          call th%update_G_eta(i_nhc, zero)
             call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
           end if
         end do
@@ -517,7 +539,7 @@ contains
         if (inode==ionode .and. iprint_MD > 2) write(io_lun,*) 'v_sfac = ', v_sfac
         th%ke_ions = th%ke_ions*v_sfac**2
 
-        call th%update_G(1, zero)
+        call th%update_G_eta(1, zero)
         ! update the thermostat "positions" eta
         do i_nhc=1,th%n_nhc
           call th%propagate_eta(i_nhc, th%dt_ys(i_ys), half)
@@ -528,11 +550,11 @@ contains
           if (i_nhc<th%n_nhc) then
             ! Trotter expansion to avoid sinh singularity
             call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
-            if (i_nhc /= 1) call th%update_G(i_nhc, zero)
+            if (i_nhc /= 1) call th%update_G_eta(i_nhc, zero)
             call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
             call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
           else
-            call th%update_G(i_nhc+1, zero) ! box ke is zero in NVT ensemble
+            call th%update_G_eta(i_nhc+1, zero) ! box ke is zero in NVT ensemble
             call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
           end if
         end do
@@ -656,11 +678,11 @@ contains
   subroutine init_baro_none(baro, stress)
 
     ! passed variables
-    class(type_barostat), intent(inout)   :: baro
+    class(type_barostat), intent(inout)     :: baro
     real(double), dimension(3), intent(in)  :: stress
 
     ! local variables
-    integer                               :: i
+    integer                                 :: i
 
     baro%baro_type = 'None'
     baro%static_stress = zero
@@ -669,6 +691,69 @@ contains
     end do
 
   end subroutine init_baro_none
+  !!***
+
+  !!****m* md_control/init_baro_mttk *
+  !!  NAME
+  !!   init_baro_mttk
+  !!  PURPOSE
+  !!   initialise MTTK barostat
+  !!  AUTHOR
+  !!    Zamaan Raza 
+  !!  CREATION DATE
+  !!   2017/11/17 12:44
+  !!  SOURCE
+  !!  
+  subroutine init_baro_mttk(baro, P_ext, ndof, stress, v, ke_ions)
+
+    use GenComms,         only: cq_abort
+    use global_module,    only: rcellx, rcelly, rcellz
+
+    ! passed variables
+    class(type_barostat), intent(inout)       :: baro
+    real(double), intent(in)                  :: P_ext, ke_ions
+    integer, intent(in)                       :: ndof
+    real(double), dimension(3), intent(in)    :: stress
+    real(double), dimension(:,:), intent(in)  :: v
+
+    ! Globals
+    baro%baro_type = md_baro_type
+    baro%box_mass = md_box_mass
+    baro%tau_P = md_tau_P
+    baro%beta = md_baro_beta
+
+    ! constants for polynomial expanion
+    baro%c2 = one/6.0_double
+    baro%c4 = baro%c2/20.0_double
+    baro%c6 = baro%c4/42.0_double
+    baro%c8 = baro%c6/72.0_double
+
+    baro%P_ext = P_ext
+    baro%ke_ions = ke_ions
+    baro%ndof = ndof
+    baro%lat_ref = zero
+    baro%lat_ref(1,1) = rcellx
+    baro%lat_ref(2,2) = rcelly
+    baro%lat_ref(3,3) = rcellz
+    baro%lat = baro%lat_ref
+    call baro%get_volume
+    call baro%update_static_stress(stress)
+    call baro%get_ke_stress(v)
+    call baro%get_pressure
+
+    select case(baro%baro_type)
+    case('iso-mttk')
+      baro%volume_ref = baro%volume
+      baro%eps_ref = third*log(baro%volume/baro%volume_ref)
+      baro%eps = baro%eps_ref
+      baro%v_eps = zero
+      baro%ke_box = zero
+      baro%odnf = one + three/baro%ndof
+    case default
+      call cq_abort("Invalid barostat")
+    end select
+
+  end subroutine init_baro_mttk
   !!***
 
   !!****m* md_control/update_static_stress *
@@ -685,11 +770,11 @@ contains
   subroutine update_static_stress(baro, stress)
 
     ! passed variables
-    class(type_barostat), intent(inout)   :: baro
+    class(type_barostat), intent(inout)     :: baro
     real(double), dimension(3), intent(in)  :: stress
 
     ! local variables
-    integer                               :: i
+    integer                                 :: i
 
     baro%static_stress = zero
     do i=1,3
@@ -713,12 +798,12 @@ contains
   subroutine get_ke_stress(baro, v)
 
     ! passed variables
-    class(type_barostat), intent(inout)         :: baro
-    real(double), dimension(3,3), intent(inout) :: v
+    class(type_barostat), intent(inout)       :: baro
+    real(double), dimension(:,:), intent(in)  :: v
 
     ! local variables
-    integer                                     :: i, j, k
-    real(double)                                :: m
+    integer                                   :: i, j, k
+    real(double)                              :: m
 
     baro%ke_stress = zero
     do i=1,ni_in_cell
@@ -779,12 +864,367 @@ contains
     ! passed variables
     class(type_barostat), intent(inout)         :: baro
 
-    ! local variables
-    integer                                     :: i
-
     baro%volume = rcellx*rcelly*rcellz
 
   end subroutine get_volume
+  !!***
+
+  !!****m* md_control/get_box_ke *
+  !!  NAME
+  !!   get_box_ke
+  !!  PURPOSE
+  !!   get the box kinetic energy
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/11/17 14:09
+  !!  SOURCE
+  !!  
+  subroutine get_box_ke(baro)
+
+    ! passed variables
+    class(type_barostat), intent(inout)         :: baro
+
+    select case(baro%baro_type)
+    case('iso-mttk')
+      baro%ke_box = half*baro%v_eps**2/baro%box_mass 
+    end select
+
+  end subroutine get_box_ke
+  !!***
+
+  !!****m* md_control/update_G_eps *
+  !!  NAME
+  !!   update_G_eps
+  !!  PURPOSE
+  !!   update force on isotropic MTTK barostat
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/11/17 13:59
+  !!  SOURCE
+  !!  
+  subroutine update_G_eps(baro)
+
+    ! passed variables
+    class(type_barostat), intent(inout)         :: baro
+
+    baro%G_eps = (baro%odnf*baro%ke_ions + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
+
+  end subroutine update_G_eps
+  !!***
+
+  !!****m* md_control/propagate_eps_1 *
+  !!  NAME
+  !!   propagate_eps_1
+  !!  PURPOSE
+  !!   propagate epsilon third*ln(V/V0), linear shift
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/11/17 14:12
+  !!  SOURCE
+  !!  
+  subroutine propagate_eps_1(baro, dt, dtfac)
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+    real(double), intent(in)              :: dt     ! time step
+    real(double), intent(in)              :: dtfac  ! Trotter epxansion factor
+
+    baro%eps = baro%eps + dtfac*dt*baro%v_eps
+
+  end subroutine propagate_eps_1
+  !!***
+
+  !!****m* md_control/propagate_eps_2 *
+  !!  NAME
+  !!   propagate_eps_2
+  !!  PURPOSE
+  !!   propagate epsilon third*ln(V/V0), exponential factor
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/11/17 14:14
+  !!  SOURCE
+  !!  
+  subroutine propagate_eps_2(baro, dt, dtfac, v_eta_1)
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+    real(double), intent(in)              :: dt     ! time step
+    real(double), intent(in)              :: dtfac  ! Trotter epxansion factor
+    real(double), intent(in)              :: v_eta_1  ! v of first NHC thermo
+
+    baro%eps = baro%eps*exp(-dtfac*dt*v_eta_1)
+
+  end subroutine propagate_eps_2
+  !!***
+
+  !!****m* md_control/propagate_v_eps_1 *
+  !!  NAME
+  !!   propagate_v_eps_1
+  !!  PURPOSE
+  !!   propagate box velocity, linear shift
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/11/17 14:17
+  !!  SOURCE
+  !!  
+  subroutine propagate_v_eps_1(baro, dt, dtfac)
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+    real(double), intent(in)              :: dt     ! time step
+    real(double), intent(in)              :: dtfac  ! Trotter epxansion factor
+
+    baro%v_eps = baro%v_eps + dtfac*dt*baro%G_eps
+
+  end subroutine propagate_v_eps_1
+  !!***
+
+  !!****m* md_control/propagate_v_eps_2 *
+  !!  NAME
+  !!   propagate_v_eps_1
+  !!  PURPOSE
+  !!   propagate box velocity, exponential factor
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/11/17 14:18
+  !!  SOURCE
+  !!  
+  subroutine propagate_v_eps_2(baro, dt, dtfac, v_eta_1)
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+    real(double), intent(in)              :: dt     ! time step
+    real(double), intent(in)              :: dtfac  ! Trotter epxansion factor
+    real(double), intent(in)              :: v_eta_1  ! v of first NHC thermo
+
+    baro%v_eps = baro%v_eps*exp(-dtfac*dt*v_eta_1)
+
+  end subroutine propagate_v_eps_2
+  !!***
+
+  !!****m* md_control/propagate_v *
+  !!  NAME
+  !!   propagate_v
+  !!  PURPOSE
+  !!   Propagate ionic velocities for MTTK integrator
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/11/17 15:45
+  !!  SOURCE
+  !!  
+  subroutine propagate_v_mttk(baro, dt, dtfac, v_eta_1, v)
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+    real(double), intent(in)              :: dt     ! time step
+    real(double), intent(in)              :: dtfac  ! Trotter epxansion factor
+    real(double), intent(in)              :: v_eta_1  ! v of first NHC thermo
+    real(double), dimension(:,:), intent(inout) :: v
+
+    select case(baro%baro_type)
+    case('iso-mttk')
+      v = v*exp(-dtfac*dt*(v_eta_1 + baro%odnf*baro%v_eps))
+    end select
+
+  end subroutine propagate_v_mttk
+  !!***
+
+  !!****m* md_control/propagate_r *
+  !!  NAME
+  !!   propagate_r
+  !!  PURPOSE
+  !!   Propagate ionic positions for MTTK integrator
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/11/17 15:25
+  !!  SOURCE
+  !!  
+  subroutine propagate_r_mttk(baro, dt, dtfac, v, r)
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+    real(double), intent(in)              :: dt     ! time step
+    real(double), intent(in)              :: dtfac  ! Trotter epxansion factor
+    real(double), dimension(:,:), intent(in)    :: v
+    real(double), dimension(:,:), intent(inout) :: r
+
+    ! local variables
+    real(double)                          :: exp_v_eps, sinhx_x, fac_r, fac_v
+
+    select case(baro%baro_type)
+    case('iso-mttk')
+      exp_v_eps = exp(dt*dtfac*baro%v_eps)
+      sinhx_x = baro%poly_sinhx_x(dtfac*dt*baro%v_eps)
+      fac_r = exp_v_eps**2
+      fac_v = exp_v_eps*sinhx_x*dt
+      r = r*fac_r + v*fac_v
+    end select
+
+  end subroutine propagate_r_mttk
+  !!***
+
+  !!****m* md_control/propagate_box *
+  !!  NAME
+  !!   propagate_box
+  !!  PURPOSE
+  !!   Propagate box (lattice vectors) for MTTK integrator
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/11/17 15:29
+  !!  SOURCE
+  !!  
+  subroutine propagate_box_mttk(baro, dt)
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+    real(double), intent(in)              :: dt     ! time step
+
+    ! local variables
+    real(double)                          :: v_new, v_old, lat_sfac
+
+    select case(baro%baro_type)
+    case('iso-mttk')
+      call baro%propagate_eps_1(dt, one)
+      v_old = baro%volume
+      v_new = baro%volume_ref*exp(three*baro%eps)
+      lat_sfac = (v_new/v_old)**third
+      baro%lat = baro%lat*lat_sfac
+    end select
+
+  end subroutine propagate_box_mttk
+  !!***
+
+  !!****m* md_control/poly_sinhx_x *
+  !!  NAME
+  !!   poly_sinhx_x
+  !!  PURPOSE
+  !!   polynomial expansion of sinh(x)/x
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/11/17 15:16
+  !!  SOURCE
+  !!  
+  function poly_sinhx_x(baro, x) result(f)
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+    real(double), intent(in)              :: x
+
+    ! local variables
+    real(double)                          :: f, x2
+
+    x2 = x**2
+    f = (((baro%c8*x2 + baro%c6)*x2 + baro%c4)*x2 + baro%c2) + one
+
+  end function poly_sinhx_x
+  !!***
+
+  !!****m* md_control/propagate_npt_mttk *
+  !!  NAME
+  !!   propagate_npt_mttk
+  !!  PURPOSE
+  !!   Propagate the NHC and barostat variables --- MTTK integrator
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/11/17 15:55
+  !!  SOURCE
+  !!  
+  subroutine propagate_npt_mttk(baro, th, stress, ke, v)
+
+    ! passed variables
+    class(type_barostat), intent(inout)     :: baro
+    type(type_thermostat), intent(inout)    :: th
+    real(double), intent(in)                :: ke
+    real(double), dimension(3), intent(in)  :: stress
+    real(double), dimension(3,3), intent(inout) :: v
+
+    ! local variables
+    integer                                 :: i_mts, i_ys, i_nhc
+    real(double)                            :: v_sfac, fac
+
+    baro%ke_ions = ke
+    call baro%update_static_stress(stress)
+    call baro%get_ke_stress(v)
+    call baro%get_pressure
+    call baro%get_box_ke
+
+    v_sfac = one
+    call th%update_G_eta(1, baro%ke_box)
+    call baro%update_G_eps
+
+    do i_mts=1,th%n_mts_nhc ! MTS loop
+      do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
+        do i_nhc=th%n_nhc,1,-1 ! loop over NH thermostats in reverse order
+          if (i_nhc==th%n_nhc) then
+            call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
+          else
+            ! Trotter expansion to avoid sinh singularity
+            call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
+            call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
+            call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
+          end if
+        end do
+
+        ! update box velocities
+        select case(baro%baro_type)
+        case('iso-mttk')
+          call baro%propagate_v_eps_2(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
+          call baro%propagate_v_eps_1(th%dt_ys(i_ys), quarter)
+          call baro%propagate_v_eps_2(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
+        end select
+
+        ! update ionic velocities
+        call baro%propagate_v_mttk(th%dt_ys(i_ys), half, th%v_eta(1), v)
+
+        ! scale the ionic velocities and kinetic energy
+        ! fac = exp(-half*th%dt_ys(i_ys)*th%v_eta(1))
+        ! v_sfac = v_sfac*fac
+        ! if (inode==ionode .and. iprint_MD > 2) write(io_lun,*) 'v_sfac = ', v_sfac
+        th%ke_ions = th%ke_ions*v_sfac**2
+
+        call baro%update_G_eps
+        call th%update_G_eta(1, baro%ke_box)
+        ! update the thermostat "positions" eta
+        do i_nhc=1,th%n_nhc
+          call th%propagate_eta(i_nhc, th%dt_ys(i_ys), half)
+        end do
+
+        ! update box velocities
+        select case(baro%baro_type)
+        case('iso-mttk')
+          call baro%propagate_v_eps_2(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
+          call baro%propagate_v_eps_1(th%dt_ys(i_ys), quarter)
+          call baro%propagate_v_eps_2(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
+        end select
+        call baro%get_box_ke
+
+        do i_nhc=1,th%n_nhc ! loop over NH thermostats in forward order
+          if (i_nhc<th%n_nhc) then
+            ! Trotter expansion to avoid sinh singularity
+            call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
+            if (i_nhc /= 1) call th%update_G_eta(i_nhc, zero)
+            call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
+            call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
+          else
+            call th%update_G_eta(i_nhc+1, zero) ! box ke is zero in NVT ensemble
+            call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
+          end if
+        end do
+      end do  ! Yoshida-Suzuki loop
+    end do    ! MTS loop
+
+  end subroutine propagate_npt_mttk
   !!***
 
   !!****m* md_control/dump_baro_state *
@@ -807,7 +1247,6 @@ contains
     character(len=*), intent(in)          :: filename
 
     ! local variables
-    character(40)                         :: fmt
     integer                               :: lun
 
     if (inode==ionode) then

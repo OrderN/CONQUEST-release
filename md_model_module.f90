@@ -73,12 +73,15 @@ module md_model
     real(double), pointer, dimension(:)     :: m_nhc
 
     ! Barostat
+    character(20), pointer                  :: baro_type
     real(double), pointer, dimension(:)     :: stress
-    real(double)                            :: box_kinetic_energy
-    real(double)                            :: m_box
-    real(double)                            :: eps
-    real(double)                            :: v_eps
-    real(double)                            :: G_eps
+    real(double), pointer, dimension(:,:)   :: static_stress
+    real(double), pointer, dimension(:,:)   :: ke_stress
+    real(double), pointer                   :: box_kinetic_energy
+    real(double), pointer                   :: m_box
+    real(double), pointer                   :: eps
+    real(double), pointer                   :: v_eps
+    real(double), pointer                   :: G_eps
     real(double), dimension(3,3)            :: c_g
     real(double), dimension(3,3)            :: v_g
 
@@ -139,6 +142,14 @@ contains
 
     ! Barostat
     mdl%P_int         => baro%P_int
+    mdl%box_kinetic_energy => baro%ke_box
+    mdl%baro_type     => baro%baro_type
+    mdl%static_stress => baro%static_stress
+    mdl%ke_stress     => baro%ke_stress
+    mdl%m_box         => baro%box_mass
+    mdl%eps           => baro%eps
+    mdl%v_eps         => baro%v_eps
+    mdl%G_eps         => baro%G_eps
 
   end subroutine init_model
   !!***
@@ -161,8 +172,15 @@ contains
     case("nve")
       mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy
     case("nvt")
-      mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
-                    mdl%nhc_energy
+      if (mdl%thermo_type == 'nhc') then
+        mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
+                      mdl%nhc_energy
+      end if
+    case("npt")
+      if (mdl%baro_type == 'iso_mttk' .or. mdl%baro_type == 'mttk') then
+        mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
+                      mdl%nhc_energy + mdl%box_kinetic_energy
+      end if
     end select
 
   end subroutine get_cons_qty

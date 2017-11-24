@@ -498,7 +498,8 @@ contains
     use md_control,     only: type_thermostat, type_barostat, md_tau_T, &
                               md_tau_P, md_n_nhc, md_n_ys, md_n_mts, &
                               md_nhc_mass, ion_velocity, lattice_vec, &
-                              md_thermo_type, md_baro_type
+                              md_thermo_type, md_baro_type, md_target_press, &
+                              md_write_xsf
 
     implicit none
 
@@ -586,8 +587,13 @@ contains
     case('npt')
       select case(md_baro_type)
       case('iso-mttk')
+        md_ndof = md_ndof + md_n_nhc + 1
+        call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
+                             md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
+        call baro%init_baro_mttk(md_target_press, md_ndof, stress, &
+                                 ion_velocity, mdl%ion_kinetic_energy)
       case('mttk')
-      case('berensen')
+      case('berendsen')
       case default
         call cq_abort("Unknown barostat type")
       end select
@@ -681,6 +687,14 @@ contains
          case('berendsen')
            call thermo%get_berendsen_sf
          end select
+        case('npt')
+          select case(md_baro_type)
+          case('berendsen')
+          case('iso_mttk')
+            call baro%propagate_npt_mttk(thermo, stress, &
+                                         mdl%ion_kinetic_energy, ion_velocity)
+          case('mttk')
+          end select
        end select
 
        !%%! Evolve atoms - either FIRE (quenched MD) or velocity Verlet
@@ -689,7 +703,13 @@ contains
                         fire_N,fire_N2,fire_P0,fire_alpha) ! SA 20150204
        else
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable)
-          call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
+          if (md_baro_type == 'iso-mttk' .or. md_baro_type == 'mttk') then
+            call baro%propagate_r_mttk(MDtimestep, half, ion_velocity, &
+                                       mdl%atom_coords) 
+            call baro%propagate_box_mttk(MDtimestep)
+          else
+            call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
+          end if
        end if
        ! Constrain position
        if (flag_RigidBonds) call correct_atomic_position(ion_velocity,MDtimestep)
@@ -734,10 +754,17 @@ contains
          case('berendsen')
            call thermo%berendsen_v_rescale(ion_velocity)
          end select
+       case('npt')
+         select case(md_baro_type)
+         case('berendsen')
+         case('iso_mttk')
+           call baro%propagate_npt_mttk(thermo, stress, &
+                                        mdl%ion_kinetic_energy, ion_velocity)
+         case('mttk')
+         end select
        end select
        if (flag_thermoDebug) then
          call thermo%dump_thermo_state(iter,'thermostat.dat')
-         call write_xsf('trajectory.xsf', i_first-1)
        end if
        if (flag_baroDebug) then
          call baro%dump_baro_state(iter, 'barostat.dat')
@@ -788,7 +815,7 @@ contains
        ! Output and energy changes
        dE = energy0 - energy1
        ! Compute the conserved quantity
-       mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy ! the NVE case
+       call mdl%get_cons_qty
 
        if(myid==0) then
          write (io_lun, '(6x,a)') "Components of conserved quantity"
@@ -798,9 +825,16 @@ contains
          case('nvt')
            select case(md_thermo_type)
            case('nhc')
-               call thermo%get_nhc_energy
-               mdl%h_prime = mdl%h_prime + thermo%ke_nhc
-               write (io_lun, 11) thermo%ke_nhc
+             call thermo%get_nhc_energy
+             write(io_lun, 11) mdl%nhc_energy
+           end select
+         case('npt')
+           select case(md_baro_type)
+           case('iso-mttk')
+             call thermo%get_nhc_energy
+             call baro%get_box_ke
+             write(io_lun, 11) mdl%nhc_energy
+             write(io_lun, 12) mdl%box_kinetic_energy
            end select
          end select
          write (io_lun, 7) mdl%h_prime
@@ -818,6 +852,7 @@ contains
        !to check IO of velocity files
        call write_velocity(ion_velocity, file_velocity)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+       if (md_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
        call mdl%get_cons_qty
        call mdl%dump_stats("Stats")
        !to check IO of velocity files
@@ -932,6 +967,7 @@ contains
 9   format(6x,'Potential energy        : ',f15.8)
 10  format(6x,'Kinetic energy          : ',f15.8)
 11  format(6x,'Nose-Hoover energy      : ',f15.8)
+12  format(6x,'Box kinetic energy      : ',f15.8)
   end subroutine md_run
   !!***
 
