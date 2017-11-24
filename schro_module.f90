@@ -1013,8 +1013,8 @@ contains
     nrc = nrc-1
     rmatch = rr(nrc)
     ! Values of psi and dpsi at Rc
-    psi_val = psi_match(nrc)/rr(nrc)
-    dpsi_val = half*(psi_match(nrc+1)/rr(nrc+1) - psi_match(nrc-1)/rr(nrc-1)) / drdi(nrc)
+    psi_val = rr(nrc)**ell*psi_match(nrc)
+    dpsi_val = half*(rr(nrc+1)**ell*psi_match(nrc+1) - rr(nrc-1)**ell*psi_match(nrc-1)) / drdi(nrc)
     ! Coefficients of polynomial
     rl = one
     do i=1,ell
@@ -1024,7 +1024,7 @@ contains
     a = psi_val/rl - b*rmatch*rmatch
     ! Now create the difference between smooth and original
     do i=1,nrc
-       psi(i) = psi_match(i) - (a + b*rr(i)*rr(i))*rr(i)**(ell+1)
+       psi(i) = psi_match(i) - (a + b*rr(i)*rr(i))
     end do
     ! Normalise
     do i=1,nrc
