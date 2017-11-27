@@ -710,13 +710,13 @@ contains
 
        !%%! Evolve atoms - either FIRE (quenched MD) or velocity Verlet
        if (flag_fire_qMD) then
-          call fire_qMD(fire_step_max,MDtimestep,ion_velocity,tot_force, &
-            flag_movable,iter,& fire_N,fire_N2,fire_P0,fire_alpha) ! SA 20150204
+          call fire_qMD(MDtimestep,ion_velocity,tot_force,flag_movable,iter, &
+                        fire_N,fire_N2,fire_P0,fire_alpha) ! SA 20150204
        else
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable)
           if (md_baro_type == 'iso-mttk' .or. md_baro_type == 'mttk') then
             call baro%propagate_r_mttk(MDtimestep, half, ion_velocity, &
-                                       mdl%atom_coords) 
+                                       flag_movable)
             call baro%propagate_box_mttk(MDtimestep)
           else
             call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
@@ -727,9 +727,11 @@ contains
        ! Reset-up
        if (.NOT.flag_MDold) then
           ! Update members
+          if (md_ensemble(2:2) == 'p') call baro%update_cell
           call wrap_xyz_atom_cell()
           call update_atom_coord()
           call updateIndices3(fixed_potential,velocity)
+          ! update rcellx, rcelly, rcellz, grid, scale density
           if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
              ! L-matrix reconstruction
              call grab_matrix2('L',inode,nfile,InfoL)

@@ -170,6 +170,7 @@ module md_control
       procedure, public   :: propagate_r_mttk
       procedure, public   :: propagate_box_mttk
       procedure, public   :: dump_baro_state
+      procedure, public   :: update_cell
 
       procedure, private  :: update_G_eps
       procedure, private  :: propagate_eps_1
@@ -1040,24 +1041,33 @@ contains
   !!  NAME
   !!   propagate_r
   !!  PURPOSE
-  !!   Propagate ionic positions for MTTK integrator
+  !!   Propagate ionic positions for MTTK integrator. This is a modified
+  !!   velocity Verlet step, adapted from vVerlet_r_dt in integrators_module
   !!  AUTHOR
   !!   Zamaan Raza
   !!  CREATION DATE
   !!   2017/11/17 15:25
   !!  SOURCE
   !!  
-  subroutine propagate_r_mttk(baro, dt, dtfac, v, r)
+  subroutine propagate_r_mttk(baro, dt, dtfac, v, flag_movable)
+
+    use global_module,      only: x_atom_cell, y_atom_cell, z_atom_cell, &
+                                  atom_coord, atom_coord_diff, id_glob
+    use species_module,     only: species, mass
+    use move_atoms,         only: fac
 
     ! passed variables
     class(type_barostat), intent(inout)   :: baro
     real(double), intent(in)              :: dt     ! time step
     real(double), intent(in)              :: dtfac  ! Trotter epxansion factor
     real(double), dimension(:,:), intent(in)    :: v
-    real(double), dimension(:,:), intent(inout) :: r
+    logical, dimension(:), intent(in)           :: flag_movable
 
     ! local variables
-    real(double)                          :: exp_v_eps, sinhx_x, fac_r, fac_v
+    real(double)                          :: exp_v_eps, sinhx_x, fac_r, &
+                                             fac_v, massa, x_old, y_old, z_old
+    integer                               :: i, speca, gatom, ibeg_atom
+    logical                               :: flagx, flagy, flagz
 
     select case(baro%baro_type)
     case('iso-mttk')
@@ -1065,7 +1075,35 @@ contains
       sinhx_x = baro%poly_sinhx_x(dtfac*dt*baro%v_eps)
       fac_r = exp_v_eps**2
       fac_v = exp_v_eps*sinhx_x*dt
-      r = r*fac_r + v*fac_v
+      ! r = r*fac_r + v*fac_v
+
+      ibeg_atom = 1
+      do i=1,ni_in_cell
+        gatom = id_glob(i)
+        speca = species(i)
+        massa = mass(speca)*fac
+        flagx = flag_movable(ibeg_atom)
+        flagy = flag_movable(ibeg_atom+1)
+        flagz = flag_movable(ibeg_atom+2)
+        if (flagx) then
+          x_old = x_atom_cell(i)
+          x_atom_cell(i) = fac_r*x_atom_cell(i) + fac_v*v(1,i)
+          ! atom_coord(1,gatom) = x_atom_cell(i)
+          atom_coord_diff(1,gatom) = x_atom_cell(i) - x_old
+        end if
+        if (flagy) then
+          y_old = y_atom_cell(i)
+          y_atom_cell(i) = fac_r*y_atom_cell(i) + fac_v*v(2,i)
+          ! atom_coord(2,gatom) = y_atom_cell(i)
+          atom_coord_diff(2,gatom) = y_atom_cell(i) - y_old
+        end if
+        if (flagz) then
+          z_old = z_atom_cell(i)
+          z_atom_cell(i) = fac_r*z_atom_cell(i) + fac_v*v(3,i)
+          ! atom_coord(3,gatom) = z_atom_cell(i)
+          atom_coord_diff(3,gatom) = z_atom_cell(i) - z_old
+        end if
+      end do
     end select
 
   end subroutine propagate_r_mttk
@@ -1270,6 +1308,95 @@ contains
     end if
 
   end subroutine dump_baro_state
+  !!***
+
+
+  !!****m* md_control/update_cell *
+  !!  NAME
+  !!   update_cell
+  !!  PURPOSE
+  !!   Update the integration grid and density when the cell is rescaled during
+  !!   a NPT MD run. Adapted from update_cell_dims in move_atoms_module
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/11/24 10:43
+  !!  SOURCE
+  !!  
+  subroutine update_cell(baro)
+
+    use units
+    use global_module,      only: iprint_MD, rcellx, rcelly, rcellz, &
+                                  flag_diagonalisation
+    use GenComms,           only: inode, ionode
+    use density_module,     only: density
+    use maxima_module,      only: maxngrid
+    use dimens,             only: r_super_x, r_super_y, r_super_z, &
+                                  r_super_x_squared, r_super_y_squared, &
+                                  r_super_z_squared, volume, &
+                                  grid_point_volume, &
+                                  one_over_grid_point_volume, n_grid_x, &
+                                  n_grid_y, n_grid_z
+    use fft_module,         only: recip_vector, hartree_factor, i0
+    use DiagModule,         only: kk, nkp
+    use input_module,       only: leqi
+
+    implicit none
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+
+    ! local variables
+    real(double) :: orcellx, orcelly, orcellz, xvec, yvec, zvec, r2, scale
+    integer :: i, j
+
+    orcellx = rcellx
+    orcelly = rcelly
+    orcellz = rcellz
+
+    rcellx = baro%lat(1,1)
+    rcelly = baro%lat(2,2)
+    rcellz = baro%lat(3,3)
+
+    r_super_x = rcellx
+    r_super_y = rcelly
+    r_super_z = rcellz
+
+    ! scale the integration grid and volume to the new cell.
+    ! Constant number of grid points
+    r_super_x_squared = r_super_x * r_super_x
+    r_super_y_squared = r_super_y * r_super_y
+    r_super_z_squared = r_super_z * r_super_z
+    volume = r_super_x * r_super_y * r_super_z
+    grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
+    one_over_grid_point_volume = one / grid_point_volume
+    scale = (orcellx*orcelly*orcellz)/volume
+    density = density * scale
+    if(flag_diagonalisation) then
+       do i = 1, nkp
+          kk(1,i) = kk(1,i) * orcellx / rcellx
+          kk(2,i) = kk(2,i) * orcelly / rcelly
+          kk(3,i) = kk(3,i) * orcellz / rcellz
+       end do
+    end if
+    do j = 1, maxngrid
+       recip_vector(j,1) = recip_vector(j,1) * orcellx / rcellx
+       recip_vector(j,2) = recip_vector(j,2) * orcelly / rcelly
+       recip_vector(j,3) = recip_vector(j,3) * orcellz / rcellz
+       xvec = recip_vector(j,1)/(two*pi)
+       yvec = recip_vector(j,2)/(two*pi)
+       zvec = recip_vector(j,3)/(two*pi)
+       r2 = xvec*xvec + yvec*yvec + zvec*zvec
+       if(j/=i0) hartree_factor(j) = one/r2 ! i0 notates gamma point
+    end do
+    if (inode == ionode) then
+      write(io_lun,'(a,3f12.6)') "cell scaling factors: ", rcellx/orcellx, &
+                                 rcelly/orcelly, rcellz/orcellz
+      write(io_lun,'(a,3f12.6)') "new cell dimensions:  ", rcellx, rcelly, &
+                                 rcellz
+    end if
+
+  end subroutine update_cell
   !!***
 
 end module md_control
