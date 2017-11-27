@@ -105,7 +105,7 @@ contains
     ! Module usage
     use numbers
     use basic_types, ONLY: cover_set
-    use global_module, ONLY: id_glob, species_glob, atom_coord
+    use global_module, ONLY: id_glob, species_glob, atom_coord, rcellx, rcelly, rcellz
     use io_module, ONLY: get_file_name
     use group_module, ONLY: parts
     use mult_module, ONLY: return_matrix_value, matrix_index, mat_p
@@ -244,9 +244,9 @@ contains
             j_global_num(atom_num,neigh) = id_glob(parts%icell_beg(j_global_part) &
                                                 +mat(np,range)%i_seq(ist)-1)
             beta_j(atom_num,neigh) = nsf_species(species_glob(j_global_num(atom_num,neigh)))
-            vec_Rij(1,neigh) = bundle%xprim(atom_num) - BCS_parts%xcover(gcspart)
-            vec_Rij(2,neigh) = bundle%yprim(atom_num) - BCS_parts%ycover(gcspart)
-            vec_Rij(3,neigh) = bundle%zprim(atom_num) - BCS_parts%zcover(gcspart)
+            vec_Rij(1,neigh) = (bundle%xprim(atom_num) - BCS_parts%xcover(gcspart))/rcellx
+            vec_Rij(2,neigh) = (bundle%yprim(atom_num) - BCS_parts%ycover(gcspart))/rcelly
+            vec_Rij(3,neigh) = (bundle%zprim(atom_num) - BCS_parts%zcover(gcspart))/rcellz
 
             !! -------- DEBUG: -------- !!
             if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
@@ -348,7 +348,7 @@ contains
     ! Module usage
     use io_module, ONLY: get_file_name
     use GenComms, ONLY: cq_abort
-    use global_module, ONLY: nspin,io_lun,n_proc_old
+    use global_module, ONLY: nspin,io_lun,n_proc_old, rcellx, rcelly, rcellz
 
     implicit none
 
@@ -482,7 +482,10 @@ contains
           if (flag_MDdebug .AND. iprint_MDdebug.GT.3) &
             write (lun_db,*) Info(ifile)%idglob_j(ibeg:ibeg+Info(ifile)%jmax_i(i)-1)
           do j = 1, Info(ifile)%jmax_i(i)
-            read (lun,*) Info(ifile)%rvec_Pij(1:3,Info(ifile)%ibeg_Pij(i)+j-1)
+             read (lun,*) Info(ifile)%rvec_Pij(1:3,Info(ifile)%ibeg_Pij(i)+j-1)
+             Info(ifile)%rvec_Pij(1,Info(ifile)%ibeg_Pij(i)+j-1) = Info(ifile)%rvec_Pij(1,Info(ifile)%ibeg_Pij(i)+j-1)*rcellx
+             Info(ifile)%rvec_Pij(2,Info(ifile)%ibeg_Pij(i)+j-1) = Info(ifile)%rvec_Pij(2,Info(ifile)%ibeg_Pij(i)+j-1)*rcelly
+             Info(ifile)%rvec_Pij(3,Info(ifile)%ibeg_Pij(i)+j-1) = Info(ifile)%rvec_Pij(3,Info(ifile)%ibeg_Pij(i)+j-1)*rcellz
             if (flag_MDdebug .AND. iprint_MDdebug.GT.3) &
               write (lun_db,*) Info(ifile)%rvec_Pij(1:3,Info(ifile)%ibeg_Pij(i)+j-1)
           enddo
@@ -566,7 +569,7 @@ contains
   subroutine dump_InfoGlobal(MDiter)
 
     ! Module usage
-    use global_module, ONLY: ni_in_cell,numprocs,rcellx,rcelly,rcellz,id_glob
+    use global_module, ONLY: ni_in_cell,numprocs,rcellx,rcelly,rcellz,id_glob, atom_coord, ni_in_cell
     use GenComms, ONLY: cq_abort
     use group_module, ONLY: parts
 
@@ -574,7 +577,7 @@ contains
     integer,intent(in),optional :: MDiter
 
     ! local variables
-    integer :: lun, stat, stat_alloc
+    integer :: lun, stat, stat_alloc, i
     integer, allocatable :: glob_to_node_old_local(:)
     integer :: ind_part, id_node, ni, id_global
 
@@ -605,6 +608,10 @@ contains
     write (lun,*) rcellx,rcelly,rcellz
     write (lun,*) glob_to_node_old_local(1:ni_in_cell)
     if (present(MDiter)) write (lun,*) MDiter
+    ! DRB adding new code to write present atomic coordinates (so we can calculate atom_coord_diff)
+    do i=1,ni_in_cell
+       write(lun,fmt='(3f20.12)') atom_coord(1:3,i)
+    end do
     call io_close (lun)
     deallocate (glob_to_node_old_local, STAT=stat_alloc)
     if (stat_alloc.NE.0) call cq_abort('Error deallocating glob_to_node_old_local :', &
@@ -642,16 +649,19 @@ contains
   subroutine grab_InfoGlobal(n_proc_old,glob_to_node_old,MDiter)
 
     ! Module usage
+    use numbers
     use GenComms, ONLY: inode,ionode,gcopy
+    use global_module, ONLY: atom_coord_diff, atom_coord, ni_in_cell, rcellx, rcelly, rcellz
 
     ! passed variables
     integer :: n_proc_old, glob_to_node_old(:)
     integer,optional :: MDiter
 
     ! local variables
-    integer :: lun, stat
+    integer :: lun, stat, i
     integer :: n_atom,npcellx,npcelly,npcellz
     real(double) :: rx,ry,rz
+    real(double), dimension(3) :: coords_i
 
     call io_assign(lun)
     open (lun,file='InfoGlobal.dat',status='old',iostat=stat)
@@ -661,6 +671,20 @@ contains
     read (lun,*) rx, ry, rz
     read (lun,*) glob_to_node_old(1:)
     if (present(MDiter)) read (lun,*) MDiter
+    ! DRB added reading for automatic calculation of atom_coord_diff
+    ! At present, cell size is separate from atomic motion; cell size changes
+    ! should NOT have the coordinate different calculated
+    !if(abs(rx - rcellx)>RD_ERR.OR.abs(ry-rcelly)>RD_ERR.OR.abs(rz-rcellz)>RD_ERR) then ! Cell size changed
+    !   atom_coord_diff = zero
+    !   write(*,*) 'Setting difference to zero'
+    !else
+       do i=1,ni_in_cell
+          read(lun,*) coords_i(1:3)
+          atom_coord_diff(1,i) = atom_coord(1,i) - coords_i(1)*rcellx/rx ! Account for cell size change
+          atom_coord_diff(2,i) = atom_coord(2,i) - coords_i(2)*rcelly/ry
+          atom_coord_diff(3,i) = atom_coord(3,i) - coords_i(3)*rcellz/rz
+       end do
+    !end if
     call io_close(lun)
 
     return

@@ -122,6 +122,8 @@
 !!    Added flag_readAtomicSpin to initialise spin
 !!   2017/08/29 jack baker & dave
 !!    Adding variables for cell optimisation
+!!   2017/10/20 09:19 dave
+!!    Moved fire variables to Integrators_module
 !!  SOURCE
 !!
 module global_module
@@ -342,10 +344,6 @@ module global_module
   logical :: flag_propagateX,flag_propagateL
   logical :: flag_dissipation
   character(20) :: integratorXL
-  ! FIRE relaxation method
-  ! Parameters adjusted after this many steps if there is slow convergence
-  integer :: fire_N_max, fire_N_min
-  real(double) :: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha
   
   ! Wavefunction output
   logical :: flag_out_wf                        !output WFs?
