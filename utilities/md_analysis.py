@@ -1,4 +1,4 @@
-#!/usr/local/bin/python3
+#!/home/zamaan/codes/anaconda3/bin/python3
 
 import argparse
 import re
