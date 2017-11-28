@@ -36,7 +36,7 @@ module md_control
   implicit none
 
   ! Unit conversion factors
-  real(double), parameter :: fac_GPa2HaPBohr3 = 29421.02648438959
+  real(double), parameter :: fac_HaBohr32GPa = 29421.02648438959
 
   character(20) :: md_thermo_type, md_baro_type
   real(double)  :: md_tau_T, md_tau_P, md_target_press, md_baro_beta, &
@@ -124,7 +124,6 @@ module md_control
     real(double)        :: dt           ! time step
     integer             :: ndof         ! number of degrees of freedom
     logical             :: append
-    real(double)        :: mu           ! box scaling factor
     real(double), dimension(3,3)  :: lat       ! lattice vectors
     real(double), dimension(3,3)  :: lat_ref   ! reference lattice vectors
     real(double), dimension(3,3)  :: ke_stress      ! kinetic contrib to stress
@@ -146,6 +145,7 @@ module md_control
     real(double)        :: eps, eps_ref ! 1/3 log(V/V_0)
     real(double)        :: v_eps        ! box velocity
     real(double)        :: G_eps        ! box force
+    real(double)        :: mu           ! box scaling factor
 
     ! Fully flexible cell variables
     real(double), dimension(3,3)  :: v_h
@@ -537,7 +537,7 @@ contains
         ! scale the ionic velocities and kinetic energy
         fac = exp(-half*th%dt_ys(i_ys)*th%v_eta(1))
         v_sfac = v_sfac*fac
-        if (inode==ionode .and. iprint_MD > 2) write(io_lun,*) 'v_sfac = ', v_sfac
+        if (inode==ionode .and. iprint_MD > 1) write(io_lun,*) 'v_sfac = ', v_sfac
         th%ke_ions = th%ke_ions*v_sfac**2
 
         call th%update_G_eta(1, zero)
@@ -841,7 +841,7 @@ contains
 
     baro%P_int = zero
     do i=1,3
-      baro%P_int = baro%P_int + baro%ke_stress(1,1) + baro%static_stress(1,1)
+      baro%P_int = baro%P_int + baro%ke_stress(i,i) + baro%static_stress(i,i)
     end do
     baro%P_int = baro%P_int*third
 
@@ -911,6 +911,14 @@ contains
     class(type_barostat), intent(inout)         :: baro
 
     baro%G_eps = (baro%odnf*baro%ke_ions + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
+    if (inode == ionode) then
+      write(io_lun,*) "odnf = ", baro%odnf
+      write(io_lun,*) "ke_ions = ", baro%ke_ions
+      write(io_lun,*) "P_int = ", baro%P_int
+      write(io_lun,*) "box_mass = ", baro%box_mass
+      write(io_lun,*) "G_eps = ", baro%box_mass
+    end if
+    stop
 
   end subroutine update_G_eps
   !!***
@@ -1135,7 +1143,11 @@ contains
       v_old = baro%volume
       v_new = baro%volume_ref*exp(three*baro%eps)
       lat_sfac = (v_new/v_old)**third
+      baro%mu = lat_sfac
       baro%lat = baro%lat*lat_sfac
+      if (inode==ionode .and. iprint_MD>1) then
+        write(io_lun,*) 'lat_sfac = ', lat_sfac
+      end if
     end select
 
   end subroutine propagate_box_mttk
@@ -1191,6 +1203,10 @@ contains
     integer                                 :: i_mts, i_ys, i_nhc
     real(double)                            :: v_sfac, fac
 
+    if (inode==ionode .and. iprint_MD>0) write(io_lun,*) "Welcome to &
+                                                          propagate_npt_mttk"
+
+    if (inode==ionode) write(io_lun,*) ">>>>>>>>>>>>>"
     baro%ke_ions = ke
     call baro%update_static_stress(stress)
     call baro%get_ke_stress(v)
@@ -1297,12 +1313,25 @@ contains
       end if
       write(lun,'("step    ",i12)') step
       write(lun,'("P_int   ",f12.4)') baro%P_int
-      write(lun,'("static_stress: ",3e16.8)') baro%static_stress(1,1), &
-                                              baro%static_stress(2,2), &
-                                              baro%static_stress(3,3)
-      write(lun,'("ke_stress    : ",3e16.8)') baro%ke_stress(1,1), &
-                                              baro%ke_stress(2,2), &
-                                              baro%ke_stress(3,3)
+      write(lun,'("volume  ",f12.4)') baro%volume
+      write(lun,'("static_stress: ",3e16.8)') &
+            baro%static_stress(1,1)*fac_HaBohr32GPa, &
+            baro%static_stress(2,2)*fac_HaBohr32GPa, &
+            baro%static_stress(3,3)*fac_HaBohr32GPa
+      write(lun,'("ke_stress    : ",3e16.8)') &
+            baro%ke_stress(1,1)*fac_HaBohr32GPa, &
+            baro%ke_stress(2,2)*fac_HaBohr32GPa, &
+            baro%ke_stress(3,3)*fac_HaBohr32GPa
+      write(lun,'("cell         : ",3f16.8)') &
+            baro%lat(1,1), baro%lat(2,2), baro%lat(3,3)
+      select case(baro%baro_type)
+      case('iso-mttk')
+        write(lun,'("eps     ",f12.6)') baro%eps
+        write(lun,'("v_eps   ",f12.6)') baro%v_eps
+        write(lun,'("G_eps   ",f12.6)') baro%G_eps
+        write(lun,'("ke_box  ",f12.6)') baro%ke_box
+        write(lun,'("mu      ",f12.6)') baro%mu
+      end select
       write(lun,*)
       call io_close(lun)
     end if

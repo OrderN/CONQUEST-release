@@ -41,7 +41,7 @@ module md_model
     integer                                 :: ndof     ! degrees of freedom
     character(3)                            :: ensemble ! nve, nvt, npt etc
     real(double), dimension(:,:), pointer   :: lattice_vec
-    real(double)                            :: volume
+    real(double), pointer                   :: volume
 
     ! ionic variables
     integer                                 :: natoms
@@ -142,6 +142,7 @@ contains
 
     ! Barostat
     mdl%P_int         => baro%P_int
+    mdl%volume        => baro%volume
     mdl%box_kinetic_energy => baro%ke_box
     mdl%baro_type     => baro%baro_type
     mdl%static_stress => baro%static_stress
@@ -199,7 +200,7 @@ contains
 
     use input_module,     only: io_assign, io_close
     use GenComms,         only: inode, ionode
-    use md_control,       only: fac_GPa2HaPBohr3 
+    use md_control,       only: fac_HaBohr32GPa
 
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
@@ -210,7 +211,7 @@ contains
     real(double)                          :: P_GPa
 
     ! Convert units if necessary
-    P_GPa = mdl%P_int/fac_GPa2HaPBohr3 
+    P_GPa = mdl%P_int*fac_HaBohr32GPA
 
     if (inode==ionode) then
       call io_assign(lun)
