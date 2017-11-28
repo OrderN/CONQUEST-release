@@ -1368,6 +1368,7 @@ contains
     r_super_y_squared = r_super_y * r_super_y
     r_super_z_squared = r_super_z * r_super_z
     volume = r_super_x * r_super_y * r_super_z
+    baro%volume = volume
     grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
     one_over_grid_point_volume = one / grid_point_volume
     scale = (orcellx*orcelly*orcellz)/volume
