@@ -582,6 +582,23 @@ contains
       end do
     end do
 
+    call thermo%get_temperature
+    call baro%get_volume
+    call baro%get_ke_stress(ion_velocity)
+    call baro%get_pressure
+
+    if (myid == 0 .and. iprint_gen > 0) write(io_lun, 2) MDn_steps
+    ! Find energy and forces
+    if (flag_fire_qMD) then
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+    else
+       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
+    end if
+
+    ! XL-BOMD
+    if (flag_XLBOMD .AND. flag_dissipation .AND. .NOT.flag_MDold) &
+      call Ready_XLBOMD()
+
     ! Initialise thermostat/barostat accordint to md_ensemble
     select case(md_ensemble)
     case('nve')
@@ -615,23 +632,6 @@ contains
         call cq_abort("Unknown barostat type")
       end select
     end select
-
-    call thermo%get_temperature
-    call baro%get_volume
-    call baro%get_ke_stress(ion_velocity)
-    call baro%get_pressure
-
-    if (myid == 0 .and. iprint_gen > 0) write(io_lun, 2) MDn_steps
-    ! Find energy and forces
-    if (flag_fire_qMD) then
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
-    else
-       call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
-    end if
-
-    ! XL-BOMD
-    if (flag_XLBOMD .AND. flag_dissipation .AND. .NOT.flag_MDold) &
-      call Ready_XLBOMD()
 
     ! Get converted 1-D array for flag_atom_move
     allocate (flag_movable(3*ni_in_cell), STAT=stat)
@@ -730,7 +730,8 @@ contains
           if (md_ensemble(2:2) == 'p') call baro%update_cell
           call wrap_xyz_atom_cell()
           call update_atom_coord()
-          call updateIndices3(fixed_potential,velocity)
+          call updateIndices3(fixed_potential,ion_velocity)
+!          if (inode==ionode) write(io_lun,*) ">>>>>>>>>>>>>>>>"
           ! update rcellx, rcelly, rcellz, grid, scale density
           if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
              ! L-matrix reconstruction
