@@ -582,10 +582,6 @@ contains
       end do
     end do
 
-    call thermo%get_temperature
-    call baro%get_volume
-    call baro%get_ke_stress(ion_velocity)
-    call baro%get_pressure
 
     if (myid == 0 .and. iprint_gen > 0) write(io_lun, 2) MDn_steps
     ! Find energy and forces
@@ -688,6 +684,7 @@ contains
          call gcopy(n_proc_old)
          call gcopy(glob2node_old,ni_in_cell)
        endif
+       call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
 
        ! thermostat/barostat
        select case(md_ensemble)
@@ -701,7 +698,7 @@ contains
         case('npt')
           select case(md_baro_type)
           case('berendsen')
-          case('iso_mttk')
+          case('iso-mttk')
             call baro%propagate_npt_mttk(thermo, stress, &
                                          mdl%ion_kinetic_energy, ion_velocity)
           case('mttk')
@@ -731,7 +728,6 @@ contains
           call wrap_xyz_atom_cell()
           call update_atom_coord()
           call updateIndices3(fixed_potential,ion_velocity)
-!          if (inode==ionode) write(io_lun,*) ">>>>>>>>>>>>>>>>"
           ! update rcellx, rcelly, rcellz, grid, scale density
           if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
              ! L-matrix reconstruction
@@ -769,6 +765,20 @@ contains
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
        end if
 
+       call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
+       thermo%ke_ions = mdl%ion_kinetic_energy
+       if (thermo%thermo_type == 'None') call thermo%update_ke_ions(mdl%ion_kinetic_energy)
+       if (baro%baro_type == 'None') call baro%update_static_stress(stress)
+       if (flag_FixCOM) call zero_COM_velocity(ion_velocity)
+       call baro%update_static_stress(stress)
+       call baro%get_ke_stress(ion_velocity)
+       call baro%get_pressure
+       call thermo%get_temperature
+
+       ! Constrain velocity
+       if (flag_RigidBonds) call correct_atomic_velocity(ion_velocity)
+       !%%! END of Evolve atoms
+
        ! thermostat/barostat
        select case(md_ensemble)
        case('nvt')
@@ -782,7 +792,7 @@ contains
        case('npt')
          select case(md_baro_type)
          case('berendsen')
-         case('iso_mttk')
+         case('iso-mttk')
            call baro%propagate_npt_mttk(thermo, stress, &
                                         mdl%ion_kinetic_energy, ion_velocity)
          case('mttk')
@@ -795,19 +805,7 @@ contains
          call baro%dump_baro_state(iter, 'barostat.dat')
        end if
 
-       ! Constrain velocity
-       if (flag_RigidBonds) call correct_atomic_velocity(ion_velocity)
-       !%%! END of Evolve atoms
-
        ! Let's analyse
-       if (flag_FixCOM) call zero_COM_velocity(ion_velocity)
-       call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
-       thermo%ke_ions = mdl%ion_kinetic_energy
-       if (thermo%thermo_type == 'None') call thermo%update_ke_ions(mdl%ion_kinetic_energy)
-       if (baro%baro_type == 'None') call baro%update_static_stress(stress)
-       call baro%get_ke_stress(ion_velocity)
-       call baro%get_pressure
-       call thermo%get_temperature
 
        ! Print out energy
        mdl%dft_total_energy = energy1

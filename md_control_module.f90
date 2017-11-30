@@ -98,8 +98,8 @@ module md_control
 
       procedure, private  :: update_G_eta
       procedure, private  :: propagate_eta
-      procedure, private  :: propagate_v_eta_1
-      procedure, private  :: propagate_v_eta_2
+      procedure, private  :: propagate_v_eta_lin
+      procedure, private  :: propagate_v_eta_exp
   end type type_thermostat
 !!***
 
@@ -173,11 +173,11 @@ module md_control
       procedure, public   :: update_cell
 
       procedure, private  :: update_G_eps
-      procedure, private  :: propagate_eps_1
-      procedure, private  :: propagate_eps_2
-      procedure, private  :: propagate_v_eps_1
-      procedure, private  :: propagate_v_eps_2
-      procedure, private  :: propagate_v_mttk
+      procedure, private  :: propagate_eps_lin
+      procedure, private  :: propagate_eps_exp
+      procedure, private  :: propagate_v_eps_lin
+      procedure, private  :: propagate_v_eps_exp
+      procedure, private  :: update_vscale_fac
       procedure, private  :: poly_sinhx_x
 
   end type type_barostat
@@ -206,6 +206,7 @@ contains
     th%thermo_type = "None"
     th%ndof = ndof
     th%ke_ions = ke_ions
+    call th%get_temperature
 
   end subroutine init_thermo_none
   !!***
@@ -243,6 +244,7 @@ contains
     th%n_ys = n_ys
     th%n_mts_nhc = n_mts
     th%lambda = one
+    call th%get_temperature
 
     allocate(th%eta(n_nhc))
     allocate(th%v_eta(n_nhc))
@@ -275,16 +277,21 @@ contains
     end select
     th%dt_ys = th%dt*th%dt_ys/th%n_mts_nhc
 
-    write(fmt,'("(a16,",i4,"f10.4)")') th%n_nhc
+    write(fmt,'("(4x,a16,",i4,"f10.4)")') th%n_nhc
     if (inode==ionode) then
-      write(io_lun,*) ' Welcome to init_nhc'
-      write(io_lun,'(a,f10.2)') ' Target temperature        T_ext = ', th%T_ext
-      write(io_lun,'(a,f10.2)') ' Instantaneous temperature T_int = ', th%T_int
-      write(io_lun,'(a,i10)') ' Number of NHC thermostats n_nhc = ', th%n_nhc
-      write(io_lun,'(a,i10)') ' Multiple time step order  n_mts = ', th%n_mts_nhc
-      write(io_lun,'(a,i10)') ' Yoshida-Suzuki order      n_ys  = ', th%n_ys
-      write(io_lun,fmt) ' NHC masses:    ', th%m_nhc
-      write(io_lun,fmt) ' YS time steps: ', th%dt_ys
+      write(io_lun,'(2x,a)') 'Welcome to init_nhc'
+      write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
+                                   th%T_ext
+      write(io_lun,'(4x,a,f10.2)') 'Instantaneous temperature T_int = ', &
+                                   th%T_int
+      write(io_lun,'(4x,a,i10)')   'Number of NHC thermostats n_nhc = ', &
+                                   th%n_nhc
+      write(io_lun,'(4x,a,i10)')   'Multiple time step order  n_mts = ', &
+                                   th%n_mts_nhc
+      write(io_lun,'(4x,a,i10)')   'Yoshida-Suzuki order      n_ys  = ', &
+                                   th%n_ys
+      write(io_lun,fmt) 'NHC masses:    ', th%m_nhc
+      write(io_lun,fmt) 'YS time steps: ', th%dt_ys
     end if
 
   end subroutine init_nhc
@@ -405,8 +412,8 @@ contains
     real(double), intent(in)              :: ke_box ! box ke for pressure coupling
 
     if (k == 1) then
-      th%G_nhc(k) = 2*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree + &
-                    2*ke_box
+      th%G_nhc(k) = two*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree + &
+                    two*ke_box
     else
       th%G_nhc(k) = th%m_nhc(k-1)*th%v_eta(k-1)**2 - &
                     th%T_ext*fac_Kelvin2Hartree
@@ -440,9 +447,9 @@ contains
   end subroutine propagate_eta
   !!***
 
-  !!****m* md_control/propagate_v_eta_1 *
+  !!****m* md_control/propagate_v_eta_lin *
   !!  NAME
-  !!   propagate_v_eta_1
+  !!   propagate_v_eta_lin
   !!  PURPOSE
   !!   propagate the "velocity" of thermostat k: linear shift 
   !!  AUTHOR
@@ -451,7 +458,7 @@ contains
   !!   2017/10/24 11:43
   !!  SOURCE
   !!  
-  subroutine propagate_v_eta_1(th, k, dt, dtfac)
+  subroutine propagate_v_eta_lin(th, k, dt, dtfac)
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
@@ -461,12 +468,12 @@ contains
 
     th%v_eta(k) = th%v_eta(k) + dtfac*dt*th%G_nhc(k)
 
-  end subroutine propagate_v_eta_1
+  end subroutine propagate_v_eta_lin
   !!***
 
-  !!****m* md_control/propagate_v_eta_2 *
+  !!****m* md_control/propagate_v_eta_exp *
   !!  NAME
-  !!   propagate_v_eta_2
+  !!   propagate_v_eta_exp
   !!  PURPOSE
   !!   propagate the "velocity" of thermostat k: exponential factor 
   !!  AUTHOR
@@ -475,7 +482,7 @@ contains
   !!   2017/10/24 11:45
   !!  SOURCE
   !!  
-  subroutine propagate_v_eta_2(th, k, dt, dtfac)
+  subroutine propagate_v_eta_exp(th, k, dt, dtfac)
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
@@ -485,7 +492,7 @@ contains
 
     th%v_eta(k) = th%v_eta(k)*exp(-dtfac*dt*th%v_eta(k+1))
 
-  end subroutine propagate_v_eta_2
+  end subroutine propagate_v_eta_exp
   !!***
 
   !!****m* md_control/propagate_nvt_nhc *
@@ -521,17 +528,12 @@ contains
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
         ! Reverse part of Trotter expansion: update thermostat force/velocity
-        do i_nhc=th%n_nhc,1,-1 ! loop over NH thermostats in reverse order
-          if (i_nhc==th%n_nhc) then
-  !          call th%update_G_eta(i_nhc, zero) ! box ke is zero in NVT ensemble
-            call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
-          else
-            ! Trotter expansion to avoid sinh singularity
-            call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
-            call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
-  !          call th%update_G_eta(i_nhc, zero)
-            call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
-          end if
+        call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
+        do i_nhc=th%n_nhc-1,1,-1 ! loop over NH thermostats in reverse order
+          ! Trotter expansion to avoid sinh singularity
+          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
+          call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
+          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
 
         ! scale the ionic velocities and kinetic energy
@@ -547,18 +549,15 @@ contains
         end do
 
         ! Forward part of Trotter expansion: update thermostat force/velocity
-        do i_nhc=1,th%n_nhc ! loop over NH thermostats in forward order
-          if (i_nhc<th%n_nhc) then
-            ! Trotter expansion to avoid sinh singularity
-            call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
-            if (i_nhc /= 1) call th%update_G_eta(i_nhc, zero)
-            call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
-            call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
-          else
-            call th%update_G_eta(i_nhc+1, zero) ! box ke is zero in NVT ensemble
-            call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
-          end if
+        do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
+          ! Trotter expansion to avoid sinh singularity
+          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
+          if (i_nhc /= 1) call th%update_G_eta(i_nhc, zero)
+          call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
+          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
+        call th%update_G_eta(th%n_nhc, zero) ! box ke is zero in NVT ensemble
+        call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
       end do  ! Yoshida-Suzuki loop
     end do    ! MTS loop
 
@@ -608,7 +607,7 @@ contains
     ! passed variables
     class(type_thermostat), intent(inout) :: th
 
-    th%T_int = 2*th%ke_ions/fac_Kelvin2Hartree/th%ndof
+    th%T_int = two*th%ke_ions/fac_Kelvin2Hartree/th%ndof
     if (inode==ionode) write(io_lun,'(4x,"T = ", f12.6)') th%T_int
 
   end subroutine get_temperature
@@ -754,6 +753,16 @@ contains
       call cq_abort("Invalid barostat")
     end select
 
+    if (inode==ionode) then
+      write(io_lun,('(2x,a)')) 'Welcome to init_baro_mttk'
+      write(io_lun,'(4x,a,f10.2)') 'Target pressure        P_ext = ', &
+                                    baro%P_ext
+      write(io_lun,'(4x,a,f10.2)') 'Instantaneous pressure P_int = ', &
+                                    baro%P_int
+      write(io_lun,'(4x,a,f10.2)') 'Box mass                     = ', &
+                                    baro%box_mass
+    end if
+
   end subroutine init_baro_mttk
   !!***
 
@@ -798,20 +807,22 @@ contains
   !!  
   subroutine get_ke_stress(baro, v)
 
+    use move_atoms,       only: fac
+
     ! passed variables
     class(type_barostat), intent(inout)       :: baro
-    real(double), dimension(:,:), intent(in)  :: v
+    real(double), dimension(3,ni_in_cell), intent(in)  :: v
 
     ! local variables
-    integer                                   :: i, j, k
+    integer                                   :: iatom, j, k
     real(double)                              :: m
 
     baro%ke_stress = zero
-    do i=1,ni_in_cell
-      m = mass(species(i))
+    do iatom=1,ni_in_cell
+      m = mass(species(iatom))*fac
       do j=1,3
         do k=1,3
-          baro%ke_stress(j,k) = baro%ke_stress(j,k) + m*v(j,i)*v(k,i)
+          baro%ke_stress(j,k) = baro%ke_stress(j,k) + m*v(j,iatom)*v(k,iatom)
         end do
       end do
     end do 
@@ -860,12 +871,11 @@ contains
   !!  SOURCE
   !!  
   subroutine get_volume(baro)
-    use global_module,    only: rcellx, rcelly, rcellz
 
     ! passed variables
     class(type_barostat), intent(inout)         :: baro
 
-    baro%volume = rcellx*rcelly*rcellz
+    baro%volume = baro%lat(1,1)*baro%lat(2,2)*baro%lat(3,3)
 
   end subroutine get_volume
   !!***
@@ -911,21 +921,14 @@ contains
     class(type_barostat), intent(inout)         :: baro
 
     baro%G_eps = (baro%odnf*baro%ke_ions + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
-    if (inode == ionode) then
-      write(io_lun,*) "odnf = ", baro%odnf
-      write(io_lun,*) "ke_ions = ", baro%ke_ions
-      write(io_lun,*) "P_int = ", baro%P_int
-      write(io_lun,*) "box_mass = ", baro%box_mass
-      write(io_lun,*) "G_eps = ", baro%box_mass
-    end if
-    stop
+    ! baro%G_eps = (three*baro%ke_ions/baro%ndof + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
 
   end subroutine update_G_eps
   !!***
 
-  !!****m* md_control/propagate_eps_1 *
+  !!****m* md_control/propagate_eps_lin *
   !!  NAME
-  !!   propagate_eps_1
+  !!   propagate_eps_lin
   !!  PURPOSE
   !!   propagate epsilon third*ln(V/V0), linear shift
   !!  AUTHOR
@@ -934,7 +937,7 @@ contains
   !!   2017/11/17 14:12
   !!  SOURCE
   !!  
-  subroutine propagate_eps_1(baro, dt, dtfac)
+  subroutine propagate_eps_lin(baro, dt, dtfac)
 
     ! passed variables
     class(type_barostat), intent(inout)   :: baro
@@ -943,12 +946,12 @@ contains
 
     baro%eps = baro%eps + dtfac*dt*baro%v_eps
 
-  end subroutine propagate_eps_1
+  end subroutine propagate_eps_lin
   !!***
 
-  !!****m* md_control/propagate_eps_2 *
+  !!****m* md_control/propagate_eps_exp *
   !!  NAME
-  !!   propagate_eps_2
+  !!   propagate_eps_exp
   !!  PURPOSE
   !!   propagate epsilon third*ln(V/V0), exponential factor
   !!  AUTHOR
@@ -957,7 +960,7 @@ contains
   !!   2017/11/17 14:14
   !!  SOURCE
   !!  
-  subroutine propagate_eps_2(baro, dt, dtfac, v_eta_1)
+  subroutine propagate_eps_exp(baro, dt, dtfac, v_eta_1)
 
     ! passed variables
     class(type_barostat), intent(inout)   :: baro
@@ -967,12 +970,12 @@ contains
 
     baro%eps = baro%eps*exp(-dtfac*dt*v_eta_1)
 
-  end subroutine propagate_eps_2
+  end subroutine propagate_eps_exp
   !!***
 
-  !!****m* md_control/propagate_v_eps_1 *
+  !!****m* md_control/propagate_v_eps_lin *
   !!  NAME
-  !!   propagate_v_eps_1
+  !!   propagate_v_eps_lin
   !!  PURPOSE
   !!   propagate box velocity, linear shift
   !!  AUTHOR
@@ -981,7 +984,7 @@ contains
   !!   2017/11/17 14:17
   !!  SOURCE
   !!  
-  subroutine propagate_v_eps_1(baro, dt, dtfac)
+  subroutine propagate_v_eps_lin(baro, dt, dtfac)
 
     ! passed variables
     class(type_barostat), intent(inout)   :: baro
@@ -990,12 +993,12 @@ contains
 
     baro%v_eps = baro%v_eps + dtfac*dt*baro%G_eps
 
-  end subroutine propagate_v_eps_1
+  end subroutine propagate_v_eps_lin
   !!***
 
-  !!****m* md_control/propagate_v_eps_2 *
+  !!****m* md_control/propagate_v_eps_exp *
   !!  NAME
-  !!   propagate_v_eps_1
+  !!   propagate_v_eps_lin
   !!  PURPOSE
   !!   propagate box velocity, exponential factor
   !!  AUTHOR
@@ -1004,7 +1007,7 @@ contains
   !!   2017/11/17 14:18
   !!  SOURCE
   !!  
-  subroutine propagate_v_eps_2(baro, dt, dtfac, v_eta_1)
+  subroutine propagate_v_eps_exp(baro, dt, dtfac, v_eta_1)
 
     ! passed variables
     class(type_barostat), intent(inout)   :: baro
@@ -1014,35 +1017,40 @@ contains
 
     baro%v_eps = baro%v_eps*exp(-dtfac*dt*v_eta_1)
 
-  end subroutine propagate_v_eps_2
+  end subroutine propagate_v_eps_exp
   !!***
 
-  !!****m* md_control/propagate_v *
+  !!****m* md_control/update_vscale_fac *
   !!  NAME
-  !!   propagate_v
+  !!   update_vscale_fac
   !!  PURPOSE
-  !!   Propagate ionic velocities for MTTK integrator
+  !!   update the NHC velocity scaling factor
   !!  AUTHOR
   !!   Zamaan Raza
   !!  CREATION DATE
-  !!   2017/11/17 15:45
+  !!   2017/11/29 17:30
   !!  SOURCE
   !!  
-  subroutine propagate_v_mttk(baro, dt, dtfac, v_eta_1, v)
+  subroutine update_vscale_fac(baro, dt, dtfac, v_eta_1, v_sfac)
 
     ! passed variables
     class(type_barostat), intent(inout)   :: baro
-    real(double), intent(in)              :: dt     ! time step
-    real(double), intent(in)              :: dtfac  ! Trotter epxansion factor
-    real(double), intent(in)              :: v_eta_1  ! v of first NHC thermo
-    real(double), dimension(:,:), intent(inout) :: v
+    real(double), intent(in)              :: dt      ! time step
+    real(double), intent(in)              :: dtfac   ! Trotter epxansion factor
+    real(double), intent(in)              :: v_eta_1 ! v of first NHC thermo
+    real(double), intent(inout)           :: v_sfac  ! the scaling factor
+
+    ! local variables
+    real(double)                          :: expfac
 
     select case(baro%baro_type)
     case('iso-mttk')
-      v = v*exp(-dtfac*dt*(v_eta_1 + baro%odnf*baro%v_eps))
+      expfac = exp(-dtfac*dt*(v_eta_1 + baro%odnf*baro%v_eps))
+      v_sfac = v_sfac*expfac
+      baro%ke_ions = baro%ke_ions*expfac**2
     end select
 
-  end subroutine propagate_v_mttk
+  end subroutine update_vscale_fac
   !!***
 
   !!****m* md_control/propagate_r *
@@ -1083,7 +1091,6 @@ contains
       sinhx_x = baro%poly_sinhx_x(dtfac*dt*baro%v_eps)
       fac_r = exp_v_eps**2
       fac_v = exp_v_eps*sinhx_x*dt
-      ! r = r*fac_r + v*fac_v
 
       ibeg_atom = 1
       do i=1,ni_in_cell
@@ -1096,19 +1103,16 @@ contains
         if (flagx) then
           x_old = x_atom_cell(i)
           x_atom_cell(i) = fac_r*x_atom_cell(i) + fac_v*v(1,i)
-          ! atom_coord(1,gatom) = x_atom_cell(i)
           atom_coord_diff(1,gatom) = x_atom_cell(i) - x_old
         end if
         if (flagy) then
           y_old = y_atom_cell(i)
           y_atom_cell(i) = fac_r*y_atom_cell(i) + fac_v*v(2,i)
-          ! atom_coord(2,gatom) = y_atom_cell(i)
           atom_coord_diff(2,gatom) = y_atom_cell(i) - y_old
         end if
         if (flagz) then
           z_old = z_atom_cell(i)
           z_atom_cell(i) = fac_r*z_atom_cell(i) + fac_v*v(3,i)
-          ! atom_coord(3,gatom) = z_atom_cell(i)
           atom_coord_diff(3,gatom) = z_atom_cell(i) - z_old
         end if
       end do
@@ -1139,7 +1143,7 @@ contains
 
     select case(baro%baro_type)
     case('iso-mttk')
-      call baro%propagate_eps_1(dt, one)
+      call baro%propagate_eps_lin(dt, one)
       v_old = baro%volume
       v_new = baro%volume_ref*exp(three*baro%eps)
       lat_sfac = (v_new/v_old)**third
@@ -1201,53 +1205,41 @@ contains
 
     ! local variables
     integer                                 :: i_mts, i_ys, i_nhc
-    real(double)                            :: v_sfac, fac
+    real(double)                            :: v_sfac
 
     if (inode==ionode .and. iprint_MD>0) write(io_lun,*) "Welcome to &
                                                           propagate_npt_mttk"
 
-    if (inode==ionode) write(io_lun,*) ">>>>>>>>>>>>>"
     baro%ke_ions = ke
-    call baro%update_static_stress(stress)
-    call baro%get_ke_stress(v)
-    call baro%get_pressure
-    call baro%get_box_ke
-
     v_sfac = one
+    call baro%get_box_ke
     call th%update_G_eta(1, baro%ke_box)
     call baro%update_G_eps
 
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
-        do i_nhc=th%n_nhc,1,-1 ! loop over NH thermostats in reverse order
-          if (i_nhc==th%n_nhc) then
-            call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
-          else
-            ! Trotter expansion to avoid sinh singularity
-            call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
-            call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
-            call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
-          end if
+        call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
+        do i_nhc=th%n_nhc-1,1,-1 ! loop over NH thermostats in reverse order
+          ! Trotter expansion to avoid sinh singularity
+          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
+          call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
+          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
 
         ! update box velocities
         select case(baro%baro_type)
         case('iso-mttk')
-          call baro%propagate_v_eps_2(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
-          call baro%propagate_v_eps_1(th%dt_ys(i_ys), quarter)
-          call baro%propagate_v_eps_2(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
+          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
+          call baro%propagate_v_eps_lin(th%dt_ys(i_ys), quarter)
+          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
         end select
 
-        ! update ionic velocities
-        call baro%propagate_v_mttk(th%dt_ys(i_ys), half, th%v_eta(1), v)
-
-        ! scale the ionic velocities and kinetic energy
-        ! fac = exp(-half*th%dt_ys(i_ys)*th%v_eta(1))
-        ! v_sfac = v_sfac*fac
-        ! if (inode==ionode .and. iprint_MD > 2) write(io_lun,*) 'v_sfac = ', v_sfac
-        th%ke_ions = th%ke_ions*v_sfac**2
+        ! update ionic velocities, scale ion kinetic energy
+        call baro%update_vscale_fac(th%dt_ys(i_ys), half, th%v_eta(1), v_sfac)
+        th%ke_ions = baro%ke_ions
 
         call baro%update_G_eps
+        call baro%get_box_ke
         call th%update_G_eta(1, baro%ke_box)
         ! update the thermostat "positions" eta
         do i_nhc=1,th%n_nhc
@@ -1257,26 +1249,26 @@ contains
         ! update box velocities
         select case(baro%baro_type)
         case('iso-mttk')
-          call baro%propagate_v_eps_2(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
-          call baro%propagate_v_eps_1(th%dt_ys(i_ys), quarter)
-          call baro%propagate_v_eps_2(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
+          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
+          call baro%propagate_v_eps_lin(th%dt_ys(i_ys), quarter)
+          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
         end select
-        call baro%get_box_ke
 
-        do i_nhc=1,th%n_nhc ! loop over NH thermostats in forward order
-          if (i_nhc<th%n_nhc) then
-            ! Trotter expansion to avoid sinh singularity
-            call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
-            if (i_nhc /= 1) call th%update_G_eta(i_nhc, zero)
-            call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
-            call th%propagate_v_eta_2(i_nhc, th%dt_ys(i_ys), one_eighth)
-          else
-            call th%update_G_eta(i_nhc+1, zero) ! box ke is zero in NVT ensemble
-            call th%propagate_v_eta_1(i_nhc, th%dt_ys(i_ys), quarter)
-          end if
+        do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
+          ! Trotter expansion to avoid sinh singularity
+          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
+          if (i_nhc > 1) call th%update_G_eta(i_nhc, baro%ke_box)
+          call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
+          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
+        call th%update_G_eta(th%n_nhc, baro%ke_box)
+        call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
       end do  ! Yoshida-Suzuki loop
     end do    ! MTS loop
+
+    ! scale the velocities
+    v = v_sfac*v
+    th%lambda = v_sfac
 
   end subroutine propagate_npt_mttk
   !!***
