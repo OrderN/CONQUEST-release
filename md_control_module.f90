@@ -119,6 +119,7 @@ module md_control
     character(20)       :: baro_type    ! thermostat type
     real(double)        :: P_int        ! instantateous pressure
     real(double)        :: P_ext        ! target pressure
+    real(double)        :: PV           ! pressure*volume enthalpy term
     real(double)        :: volume, volume_ref
     real(double)        :: ke_ions      ! kinetic energy of ions
     real(double)        :: dt           ! time step
@@ -876,6 +877,7 @@ contains
     class(type_barostat), intent(inout)         :: baro
 
     baro%volume = baro%lat(1,1)*baro%lat(2,2)*baro%lat(3,3)
+    baro%PV = baro%volume*baro%P_ext
 
   end subroutine get_volume
   !!***
@@ -1388,8 +1390,10 @@ contains
     r_super_x_squared = r_super_x * r_super_x
     r_super_y_squared = r_super_y * r_super_y
     r_super_z_squared = r_super_z * r_super_z
-    volume = r_super_x * r_super_y * r_super_z
-    baro%volume = volume
+    call baro%get_volume
+    volume = baro%volume
+    ! volume = r_super_x * r_super_y * r_super_z
+    ! baro%volume = volume
     grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
     one_over_grid_point_volume = one / grid_point_volume
     scale = (orcellx*orcelly*orcellz)/volume

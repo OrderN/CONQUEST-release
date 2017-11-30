@@ -853,6 +853,7 @@ contains
              call baro%get_box_ke
              write(io_lun, 11) mdl%nhc_energy
              write(io_lun, 12) mdl%box_kinetic_energy
+             write(io_lun, 13) mdl%PV
            end select
          end select
          write (io_lun, 7) mdl%h_prime
@@ -986,6 +987,7 @@ contains
 10  format(6x,'Kinetic energy          : ',f15.8)
 11  format(6x,'Nose-Hoover energy      : ',f15.8)
 12  format(6x,'Box kinetic energy      : ',f15.8)
+13  format(6x,'PV                      : ',f15.8)
   end subroutine md_run
   !!***
 

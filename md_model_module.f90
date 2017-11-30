@@ -57,7 +57,9 @@ module md_model
 
     ! Thermodynamic variables
     real(double), pointer                   :: T_int    ! internal temperature
+    real(double), pointer                   :: T_ext    ! internal temperature
     real(double), pointer                   :: P_int    ! internal pressure
+    real(double), pointer                   :: P_ext    ! internal pressure
     real(double)                            :: PV
     real(double)                            :: enthalpy
 
@@ -130,6 +132,7 @@ contains
 
     ! Thermostat
     mdl%T_int         => thermo%T_int
+    mdl%T_ext         => thermo%T_ext
     mdl%thermo_type   => thermo%thermo_type
     mdl%lambda        => thermo%lambda
     mdl%tau_T         => thermo%tau_T
@@ -142,6 +145,7 @@ contains
 
     ! Barostat
     mdl%P_int         => baro%P_int
+    mdl%P_ext         => baro%P_ext
     mdl%volume        => baro%volume
     mdl%box_kinetic_energy => baro%ke_box
     mdl%baro_type     => baro%baro_type
@@ -178,9 +182,9 @@ contains
                       mdl%nhc_energy
       end if
     case("npt")
-      if (mdl%baro_type == 'iso_mttk' .or. mdl%baro_type == 'mttk') then
+      if (mdl%baro_type == 'iso-mttk' .or. mdl%baro_type == 'mttk') then
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
-                      mdl%nhc_energy + mdl%box_kinetic_energy
+                      mdl%nhc_energy + mdl%box_kinetic_energy + mdl%PV
       end if
     end select
 
@@ -255,11 +259,11 @@ contains
         if (mdl%thermo_type == 'nhc') then
           write(lun,'(i10,6e18.8,3f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%nhc_energy, mdl%box_kinetic_energy, &
-            mdl%pV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
+            mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
         end if
       case ('nph')
           write(lun,'(i10,5e18.8,3f12.4)') mdl%step, mdl%dft_total_energy, &
-            mdl%ion_kinetic_energy, mdl%box_kinetic_energy, mdl%pV, &
+            mdl%ion_kinetic_energy, mdl%box_kinetic_energy, mdl%PV, &
             mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
       end select
       call io_close(lun)
