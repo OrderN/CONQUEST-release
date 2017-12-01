@@ -61,6 +61,7 @@ module md_control
   type type_thermostat
     ! General thermostat variables
     character(20)       :: thermo_type  ! thermostat type
+    character(3)        :: ensemble
     real(double)        :: T_int        ! instantateous temperature
     real(double)        :: T_ext        ! target temperature
     real(double)        :: ke_ions      ! kinetic energy of ions
@@ -80,6 +81,9 @@ module md_control
     real(double), dimension(:), allocatable :: eta    ! thermostat "position"
     real(double), dimension(:), allocatable :: v_eta  ! thermostat "velocity"
     real(double), dimension(:), allocatable :: G_nhc  ! "force" on thermostat
+    real(double), dimension(:), allocatable :: eta_cell  ! NHC for cell
+    real(double), dimension(:), allocatable :: v_eta_cell
+    real(double), dimension(:), allocatable :: G_nhc_cell
     real(double), dimension(:), allocatable :: m_nhc  ! thermostat mass
     real(double), dimension(:), allocatable :: dt_ys  ! Yoshida-Suzuki time steps
 
@@ -87,9 +91,9 @@ module md_control
 
       procedure, public   :: init_thermo_none
       procedure, public   :: init_nhc
-      procedure, public   :: init_berendsen
+      procedure, public   :: init_berendsen_thermo
       procedure, public   :: update_ke_ions
-      procedure, public   :: get_berendsen_sf
+      procedure, public   :: get_berendsen_thermo_sf
       procedure, public   :: berendsen_v_rescale
       procedure, public   :: get_nhc_energy
       procedure, public   :: get_temperature
@@ -161,7 +165,7 @@ module md_control
     contains
 
       procedure, public   :: init_baro_none
-      procedure, public   :: init_baro_mttk
+      procedure, public   :: init_baro
       procedure, public   :: update_static_stress
       procedure, public   :: get_pressure
       procedure, public   :: get_volume
@@ -252,12 +256,22 @@ contains
     allocate(th%G_nhc(n_nhc))
     allocate(th%m_nhc(n_nhc))
     allocate(th%dt_ys(n_ys))
+    if (th%ensemble == "npt" .and. th%thermo_type == "nhc") then
+      allocate(th%eta_cell(n_nhc))    ! independent thermostat for cell DOFs
+      allocate(th%v_eta_cell(n_nhc))
+      allocate(th%G_nhc_cell(n_nhc))
+    end if
 
     ! Defaults for heat bath positions, velocities, masses
-    th%eta = zero
     th%m_nhc = one
+    th%eta = zero
     th%v_eta = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
     th%G_nhc = zero
+    if (th%ensemble == "npt" .and. th%thermo_type == "nhc") then
+      th%eta_cell = zero
+      th%v_eta_cell = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
+      th%G_nhc_cell = zero
+    end if
 
     ! Yoshida-Suzuki time steps
     select case(th%n_ys) ! The YS order
@@ -298,9 +312,9 @@ contains
   end subroutine init_nhc
   !!***
 
-  !!****m* md_control/init_berendsen *
+  !!****m* md_control/init_berendsen_thermo *
   !!  NAME
-  !!   init_berendsen
+  !!   init_berendsen_thermo
   !!  PURPOSE
   !!   initialise Berendsen weak coupling thermostat variables
   !!  AUTHOR
@@ -309,7 +323,7 @@ contains
   !!   2017/10/24 10:39
   !!  SOURCE
   !!  
-  subroutine init_berendsen(th, dt, T_ext, ndof, tau_T, ke_ions)
+  subroutine init_berendsen_thermo(th, dt, T_ext, ndof, tau_T, ke_ions)
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
@@ -323,7 +337,7 @@ contains
     th%ke_ions = ke_ions
     th%tau_T = tau_T
 
-  end subroutine init_berendsen
+  end subroutine init_berendsen_thermo
   !!***
 
   !!****m* md_control/update_ke_ions *
@@ -348,9 +362,9 @@ contains
   end subroutine update_ke_ions
   !!***
 
-  !!****m* md_control/get_berendsen_sf *
+  !!****m* md_control/get_berendsen_thermo_sf *
   !!  NAME
-  !!   get_berendsen_sf
+  !!   get_berendsen_thermo_sf
   !!  PURPOSE
   !!   Get velocity scaling factor for Berendsen thermostat
   !!  AUTHOR
@@ -359,14 +373,14 @@ contains
   !!   2017/10/24 14:26
   !!  SOURCE
   !!  
-  subroutine get_berendsen_sf(th)
+  subroutine get_berendsen_thermo_sf(th)
 
     ! passed variables
     class(type_thermostat), intent(inout)   :: th
 
     th%lambda = sqrt(one + (th%dt/th%tau_T)*(th%T_ext*fac_Kelvin2Hartree/th%T_int - one))
 
-  end subroutine get_berendsen_sf
+  end subroutine get_berendsen_thermo_sf
   !!***
 
   !!****m* md_control/berendsen_v_rescale *
@@ -694,9 +708,9 @@ contains
   end subroutine init_baro_none
   !!***
 
-  !!****m* md_control/init_baro_mttk *
+  !!****m* md_control/init_baro *
   !!  NAME
-  !!   init_baro_mttk
+  !!   init_baro
   !!  PURPOSE
   !!   initialise MTTK barostat
   !!  AUTHOR
@@ -705,7 +719,7 @@ contains
   !!   2017/11/17 12:44
   !!  SOURCE
   !!  
-  subroutine init_baro_mttk(baro, P_ext, ndof, stress, v, ke_ions)
+  subroutine init_baro(baro, P_ext, ndof, stress, v, ke_ions)
 
     use GenComms,         only: cq_abort
     use global_module,    only: rcellx, rcelly, rcellz
@@ -720,8 +734,6 @@ contains
     ! Globals
     baro%baro_type = md_baro_type
     baro%box_mass = md_box_mass
-    baro%tau_P = md_tau_P
-    baro%beta = md_baro_beta
 
     ! constants for polynomial expanion
     baro%c2 = one/6.0_double
@@ -741,10 +753,13 @@ contains
     call baro%update_static_stress(stress)
     call baro%get_ke_stress(v)
     call baro%get_pressure
+    baro%volume_ref = baro%volume
 
     select case(baro%baro_type)
+    case('berendsen')
+      baro%tau_P = md_tau_P
+      baro%beta = md_baro_beta
     case('iso-mttk')
-      baro%volume_ref = baro%volume
       baro%eps_ref = third*log(baro%volume/baro%volume_ref)
       baro%eps = baro%eps_ref
       baro%v_eps = zero
@@ -755,7 +770,7 @@ contains
     end select
 
     if (inode==ionode) then
-      write(io_lun,('(2x,a)')) 'Welcome to init_baro_mttk'
+      write(io_lun,('(2x,a)')) 'Welcome to init_baro'
       write(io_lun,'(4x,a,f10.2)') 'Target pressure        P_ext = ', &
                                     baro%P_ext
       write(io_lun,'(4x,a,f10.2)') 'Instantaneous pressure P_int = ', &
@@ -764,7 +779,7 @@ contains
                                     baro%box_mass
     end if
 
-  end subroutine init_baro_mttk
+  end subroutine init_baro
   !!***
 
   !!****m* md_control/update_static_stress *
@@ -880,6 +895,71 @@ contains
     baro%PV = baro%volume*baro%P_ext
 
   end subroutine get_volume
+  !!***
+
+  !!****m* md_control/get_berendsen_baro_sf *
+  !!  NAME
+  !!   berendsen_baro_sf
+  !!  PURPOSE
+  !!   Get cell scaling factor for Berendsen barostat
+  !!  AUTHOR
+  !!    Zamaan Raza 
+  !!  CREATION DATE
+  !!   2017/12/01 14:17
+  !!  SOURCE
+  !!  
+  subroutine get_berendsen_baro_sf(baro, dt)
+
+    ! passed variables
+    class(type_barostat), intent(inout)         :: baro
+    real(double), intent(in)                    :: dt
+
+    baro%mu = (one - (dt/baro%tau_P)*baro%beta*(baro%P_ext-baro%P_int))**third
+
+  end subroutine get_berendsen_baro_sf
+  !!***
+
+  !!****m* md_control/propagate_berendsen *
+  !!  NAME
+  !!   propagate_berendsen
+  !!  PURPOSE
+  !!   Propagate the fractional coordinates and cell parameters for the
+  !!   Berendsen barostat. Note that this is equivalent to scaling the,
+  !!   fractional coordinates, and is not part of the dynamics
+  !!  AUTHOR
+  !!    Zamaan Raza 
+  !!  CREATION DATE
+  !!   2017/12/01 14:21
+  !!  SOURCE
+  !!  
+  subroutine propagate_berendsen(baro)
+
+    use global_module,      only: x_atom_cell, y_atom_cell, z_atom_cell, &
+                                  atom_coord_diff, id_glob
+
+    ! passed variables
+    class(type_barostat), intent(inout)         :: baro
+
+    ! local variables
+    integer                                     :: i, gatom
+    real(double)                                :: x_old, y_old, z_old
+
+    baro%lat = baro%lat*baro%mu
+
+    do i=1,ni_in_cell
+      gatom = id_glob(i)
+      x_old = x_atom_cell(i)
+      y_old = y_atom_cell(i)
+      z_old = z_atom_cell(i)
+      x_atom_cell(i) = baro%mu*x_atom_cell(i)
+      y_atom_cell(i) = baro%mu*y_atom_cell(i)
+      z_atom_cell(i) = baro%mu*z_atom_cell(i)
+      atom_coord_diff(1,gatom) = x_atom_cell(i) - x_old
+      atom_coord_diff(2,gatom) = y_atom_cell(i) - y_old
+      atom_coord_diff(3,gatom) = z_atom_cell(i) - z_old
+    end do
+
+  end subroutine propagate_berendsen
   !!***
 
   !!****m* md_control/get_box_ke *

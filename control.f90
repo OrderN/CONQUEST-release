@@ -609,8 +609,8 @@ contains
         call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
                              md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
       case('berendsen')
-        call thermo%init_berendsen(MDtimestep, temp_ion, md_ndof, md_tau_T, &
-                                   mdl%ion_kinetic_energy)
+        call thermo%init_berendsen_thermo(MDtimestep, temp_ion, md_ndof, &
+                                          md_tau_T, mdl%ion_kinetic_energy)
       case default
         call cq_abort("Unknown thermostat type")
       end select
@@ -620,10 +620,14 @@ contains
         md_ndof = md_ndof + md_n_nhc + 1
         call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
                              md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
-        call baro%init_baro_mttk(md_target_press, md_ndof, stress, &
+        call baro%init_baro(md_target_press, md_ndof, stress, &
                                  ion_velocity, mdl%ion_kinetic_energy)
       case('mttk')
       case('berendsen')
+        call thermo%init_berendsen_thermo(MDtimestep, temp_ion, md_ndof, &
+                                          md_tau_T, mdl%ion_kinetic_energy)
+        call baro%init_baro(md_target_press, md_ndof, stress, &
+                                 ion_velocity, mdl%ion_kinetic_energy)
       case default
         call cq_abort("Unknown barostat type")
       end select
@@ -693,11 +697,14 @@ contains
          case('nhc')
            call thermo%propagate_nvt_nhc(ion_velocity, mdl%ion_kinetic_energy)
          case('berendsen')
-           call thermo%get_berendsen_sf
+           call thermo%get_berendsen_thermo_sf
          end select
         case('npt')
           select case(md_baro_type)
           case('berendsen')
+            call thermo%get_berendsen_thermo_sf
+            call baro%get_berendsen_baro_sf(MDtimestep)
+            call baro%propagate_berendsen
           case('iso-mttk')
             call baro%propagate_npt_mttk(thermo, stress, &
                                          mdl%ion_kinetic_energy, ion_velocity)
@@ -792,6 +799,7 @@ contains
        case('npt')
          select case(md_baro_type)
          case('berendsen')
+           call thermo%berendsen_v_rescale(ion_velocity)
          case('iso-mttk')
            call baro%propagate_npt_mttk(thermo, stress, &
                                         mdl%ion_kinetic_energy, ion_velocity)
