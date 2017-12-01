@@ -520,7 +520,7 @@ contains
     real(double)  :: v_sfac   ! ionic velocity scaling factor
     real(double)  :: fac
 
-    if (inode==ionode .and. iprint_MD>0) write(io_lun,*) "Welcome to &
+    if (inode==ionode .and. iprint_MD>1) write(io_lun,*) "MD_debug: &
                                                           propagate_nvt_nhc"
 
     th%ke_ions = ke
@@ -1087,6 +1087,9 @@ contains
     integer                               :: i, speca, gatom, ibeg_atom
     logical                               :: flagx, flagy, flagz
 
+    if (inode==ionode .and. iprint_MD>0) write(io_lun,*) "MD_debug: &
+                                                          propagate_r_mttk"
+
     select case(baro%baro_type)
     case('iso-mttk')
       exp_v_eps = exp(dt*dtfac*baro%v_eps)
@@ -1142,6 +1145,9 @@ contains
 
     ! local variables
     real(double)                          :: v_new, v_old, lat_sfac
+
+    if (inode==ionode .and. iprint_MD>0) write(io_lun,*) "MD_debug: &
+                                                          propagate_box_mttk"
 
     select case(baro%baro_type)
     case('iso-mttk')
@@ -1209,7 +1215,7 @@ contains
     integer                                 :: i_mts, i_ys, i_nhc
     real(double)                            :: v_sfac
 
-    if (inode==ionode .and. iprint_MD>0) write(io_lun,*) "Welcome to &
+    if (inode==ionode .and. iprint_MD>0) write(io_lun,*) "MD_debug: &
                                                           propagate_npt_mttk"
 
     baro%ke_ions = ke
@@ -1372,6 +1378,9 @@ contains
     ! local variables
     real(double) :: orcellx, orcelly, orcellz, xvec, yvec, zvec, r2, scale
     integer :: i, j
+
+    if (inode==ionode .and. iprint_MD>1) write(io_lun,*) "MD_debug: &
+                                                          update_cell"
 
     orcellx = rcellx
     orcelly = rcelly
