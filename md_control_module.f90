@@ -28,7 +28,7 @@ module md_control
 
   use datatypes
   use numbers
-  use global_module,    only: ni_in_cell, io_lun, iprint_MD
+  use global_module,    only: ni_in_cell, io_lun, iprint_MD, flag_baroDebug
   use move_atoms,       only: fac_Kelvin2Hartree
   use species_module,   only: species, mass
   use GenComms,         only: inode, ionode
@@ -872,7 +872,7 @@ contains
     do i=1,3
       baro%P_int = baro%P_int + baro%ke_stress(i,i) + baro%static_stress(i,i)
     end do
-    baro%P_int = baro%P_int*third
+    baro%P_int = -baro%P_int*third
 
   end subroutine get_pressure
   !!***
@@ -1007,6 +1007,10 @@ contains
     baro%G_eps = (baro%odnf*baro%ke_ions + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
     ! baro%G_eps = (three*baro%ke_ions/baro%ndof + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
 
+    if (inode==ionode .and. flag_baroDebug) then
+      write(io_lun,*) "baroDebug: update_G_eps: G_eps = ", baro%G_eps
+    end if
+
   end subroutine update_G_eps
   !!***
 
@@ -1029,6 +1033,10 @@ contains
     real(double), intent(in)              :: dtfac  ! Trotter epxansion factor
 
     baro%eps = baro%eps + dtfac*dt*baro%v_eps
+
+    if (inode==ionode .and. flag_baroDebug) then
+      write(io_lun,*) "baroDebug: propagate_eps_lin: eps = ", baro%eps
+    end if
 
   end subroutine propagate_eps_lin
   !!***
@@ -1054,6 +1062,10 @@ contains
 
     baro%eps = baro%eps*exp(-dtfac*dt*v_eta_1)
 
+    if (inode==ionode .and. flag_baroDebug) then
+      write(io_lun,*) "baroDebug: propagate_eps_exp: eps = ", baro%eps
+    end if
+
   end subroutine propagate_eps_exp
   !!***
 
@@ -1076,6 +1088,10 @@ contains
     real(double), intent(in)              :: dtfac  ! Trotter epxansion factor
 
     baro%v_eps = baro%v_eps + dtfac*dt*baro%G_eps
+
+    if (inode==ionode .and. flag_baroDebug) then
+      write(io_lun,*) "baroDebug: propagate_v_eps_lin: v_eps = ", baro%v_eps
+    end if
 
   end subroutine propagate_v_eps_lin
   !!***
@@ -1100,6 +1116,10 @@ contains
     real(double), intent(in)              :: v_eta_1  ! v of first NHC thermo
 
     baro%v_eps = baro%v_eps*exp(-dtfac*dt*v_eta_1)
+
+    if (inode==ionode .and. flag_baroDebug) then
+      write(io_lun,*) "baroDebug: propagate_v_eps_lin: v_eps = ", baro%v_eps
+    end if
 
   end subroutine propagate_v_eps_exp
   !!***
@@ -1133,6 +1153,10 @@ contains
       v_sfac = v_sfac*expfac
       baro%ke_ions = baro%ke_ions*expfac**2
     end select
+
+    if (inode==ionode .and. flag_baroDebug) then
+      write(io_lun,*) "baroDebug: update_vscale_fac: v_sfac = ", v_sfac
+    end if
 
   end subroutine update_vscale_fac
   !!***
@@ -1204,6 +1228,11 @@ contains
       end do
     end select
 
+    if (inode==ionode .and. flag_baroDebug) then
+      write(io_lun,*) "baroDebug: propagate_r_mttk: fac_v = ", fac_v
+      write(io_lun,*) "baroDebug: propagate_r_mttk: fac_r = ", fac_r
+    end if
+
   end subroutine propagate_r_mttk
   !!***
 
@@ -1242,6 +1271,10 @@ contains
         write(io_lun,*) 'lat_sfac = ', lat_sfac
       end if
     end select
+
+    if (inode==ionode .and. flag_baroDebug) then
+      write(io_lun,*) "baroDebug: propagate_box_mttk: lat_sfac = ", lat_sfac
+    end if
 
   end subroutine propagate_box_mttk
   !!***
@@ -1358,6 +1391,10 @@ contains
     ! scale the velocities
     v = v_sfac*v
     th%lambda = v_sfac
+
+    if (inode==ionode .and. flag_baroDebug) then
+      write(io_lun,*) "baroDebug: propagate_npt_mttk: v_sfac = ", v_sfac
+    end if
 
   end subroutine propagate_npt_mttk
   !!***
