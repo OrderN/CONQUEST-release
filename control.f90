@@ -719,8 +719,7 @@ contains
        else
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable)
           if (md_baro_type == 'iso-mttk' .or. md_baro_type == 'mttk') then
-            call baro%propagate_r_mttk(MDtimestep, half, ion_velocity, &
-                                       flag_movable)
+            call baro%propagate_r_mttk(MDtimestep, ion_velocity, flag_movable)
             call baro%propagate_box_mttk(MDtimestep)
           else
             call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)

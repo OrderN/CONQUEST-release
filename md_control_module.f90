@@ -1149,7 +1149,7 @@ contains
   !!   2017/11/17 15:25
   !!  SOURCE
   !!  
-  subroutine propagate_r_mttk(baro, dt, dtfac, v, flag_movable)
+  subroutine propagate_r_mttk(baro, dt, v, flag_movable)
 
     use global_module,      only: x_atom_cell, y_atom_cell, z_atom_cell, &
                                   atom_coord, atom_coord_diff, id_glob
@@ -1159,7 +1159,6 @@ contains
     ! passed variables
     class(type_barostat), intent(inout)   :: baro
     real(double), intent(in)              :: dt     ! time step
-    real(double), intent(in)              :: dtfac  ! Trotter epxansion factor
     real(double), dimension(:,:), intent(in)    :: v
     logical, dimension(:), intent(in)           :: flag_movable
 
@@ -1174,8 +1173,8 @@ contains
 
     select case(baro%baro_type)
     case('iso-mttk')
-      exp_v_eps = exp(dt*dtfac*baro%v_eps)
-      sinhx_x = baro%poly_sinhx_x(dtfac*dt*baro%v_eps)
+      exp_v_eps = exp(dt*half*baro%v_eps)
+      sinhx_x = baro%poly_sinhx_x(half*dt*baro%v_eps)
       fac_r = exp_v_eps**2
       fac_v = exp_v_eps*sinhx_x*dt
 
@@ -1330,7 +1329,6 @@ contains
 
         call baro%update_G_eps
         call baro%get_box_ke
-        call th%update_G_eta(1, baro%ke_box)
         ! update the thermostat "positions" eta
         do i_nhc=1,th%n_nhc
           call th%propagate_eta(i_nhc, th%dt_ys(i_ys), half)
@@ -1344,6 +1342,7 @@ contains
           call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
         end select
 
+        call th%update_G_eta(1, baro%ke_box)
         do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
           ! Trotter expansion to avoid sinh singularity
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
