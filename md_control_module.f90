@@ -169,6 +169,8 @@ module md_control
       procedure, public   :: update_static_stress
       procedure, public   :: get_pressure
       procedure, public   :: get_volume
+      procedure, public   :: get_berendsen_baro_sf
+      procedure, public   :: propagate_berendsen
       procedure, public   :: get_box_ke
       procedure, public   :: get_ke_stress
       procedure, public   :: propagate_npt_mttk
