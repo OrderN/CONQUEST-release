@@ -728,7 +728,8 @@ contains
     ! Temp
     use S_matrix_module,             only: get_onsite_S, get_S_matrix
     use make_rad_tables,             only: gen_rad_tables,             &
-                                           gen_nlpf_supp_tbls, gen_paoNApao_tbls
+         gen_nlpf_supp_tbls, gen_paoNApao_tbls, &
+         gen_napf_supp_tbls
     use angular_coeff_routines,      only: make_ang_coeffs, set_fact,  &
                                            set_prefac, set_prefac_real
     use read_support_spec,           only: read_support
@@ -891,6 +892,7 @@ contains
        ! Neutral atom Projector functions
        if( flag_neutral_atom .and. flag_neutral_atom_projector ) then
           call gen_paoNApao_tbls(inode,ionode)
+          call gen_napf_supp_tbls(inode,ionode)
        end if
        call make_ang_coeffs
        if(inode==ionode) &

@@ -253,6 +253,8 @@ contains
 !!   08/06/2001 dave
 !!    Added ROBODoc header, GenComms and
 !!    removed MPI_Abort for cq_abort
+!!   2017/12/05 14:24 dave with TM and NW (Mizuho)
+!!    Adding napf for NA projectors  
 !!  SOURCE
 !!
   subroutine get_naba(prim,gcs,amat,rcut)
@@ -262,9 +264,9 @@ contains
     use basic_types
     use matrix_module
     use GenComms, ONLY: cq_abort, inode
-    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof
+    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, napf
     use group_module, ONLY: parts
-    use species_module, ONLY: nsf_species, nlpf_species, npao_species
+    use species_module, ONLY: nsf_species, nlpf_species, npao_species, napf_species
 
     implicit none
 
@@ -307,6 +309,8 @@ contains
                 amat(nn)%ndimi(j) = nlpf_species(prim%species(inp))
              case(paof)
                 amat(nn)%ndimi(j) = npao_species(prim%species(inp))
+             case(napf)
+                amat(nn)%ndimi(j) = napf_species(prim%species(inp))
              end select
              cumu_ndims = 0
              do np=1,gcs%ng_cover  ! Loop over partitions in GCS
@@ -343,6 +347,8 @@ contains
                             cumu_ndims = cumu_ndims + amat(nn)%ndimi(j)*nlpf_species(neigh_spec)
                          case(paof)
                             cumu_ndims = cumu_ndims + amat(nn)%ndimi(j)*npao_species(neigh_spec)
+                         case(napf)
+                            cumu_ndims = cumu_ndims + amat(nn)%ndimi(j)*napf_species(neigh_spec)
                          end select
                       endif
                    enddo ! End n_inp_cover
@@ -584,6 +590,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   08/06/2001 dave
 !!    Added ROBODoc header and cq_abort from GenComms
+!!   2017/12/05 14:26 dave with TM and NW (Mizuho)
+!!    Adding napf for NA projector functions
 !!  SOURCE
 !!
   subroutine make_halo(prim,gcs,amat,ahalo)
@@ -591,9 +599,9 @@ contains
     use matrix_module
     use basic_types
     use GenComms, ONLY: cq_abort
-    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof
+    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, napf
     use group_module, ONLY: parts
-    use species_module, ONLY: nsf_species, nlpf_species, npao_species
+    use species_module, ONLY: nsf_species, nlpf_species, npao_species, napf_species
 
     implicit none
 
@@ -659,6 +667,8 @@ contains
                    ahalo%ndimj(ahalo%ni_in_halo) = nlpf_species(neigh_spec)
                 case(paof)
                    ahalo%ndimj(ahalo%ni_in_halo) = npao_species(neigh_spec)
+                case(napf)
+                   ahalo%ndimj(ahalo%ni_in_halo) = napf_species(neigh_spec)
                 end select
                 ahalo%i_halo(gcs%icover_ibeg(np)+ni-1)=ahalo%ni_in_halo
              endif
@@ -829,6 +839,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   08/06/2001 dave
 !!    Added ROBODoc header and GenComms for cq_abort
+!!   2017/12/05 14:26 dave with TM and NW (Mizuho)
+!!    Adding napf for NA projector functions
 !!  SOURCE
 !!
   subroutine make_npxyz(nnd,amat,prim,gcs,mx_part)
@@ -838,8 +850,8 @@ contains
     use basic_types
     use GenComms, ONLY: cq_abort
     use group_module, ONLY: parts
-    use species_module, ONLY: nsf_species, nlpf_species, npao_species
-    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof
+    use species_module, ONLY: nsf_species, nlpf_species, npao_species, napf_species
+    use global_module, ONLY: id_glob, species_glob, sf, nlpf, paof, napf
 
     implicit none
 
@@ -887,6 +899,8 @@ contains
                       amat(np)%ndimj(isu) = nlpf_species(neigh_spec)
                    case(paof)
                       amat(np)%ndimj(isu) = npao_species(neigh_spec)
+                   case(napf)
+                      amat(np)%ndimj(isu) = napf_species(neigh_spec)
                    end select
                    amat(np)%npxyz(3*(isu-1)+1) = npx
                    amat(np)%npxyz(3*(isu-1)+2) = npy
