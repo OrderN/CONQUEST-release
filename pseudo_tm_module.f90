@@ -2208,8 +2208,8 @@ contains
     use atomic_density, ONLY: atomic_density_table
     use spline_module, ONLY: spline
     use functions, ONLY: j0
-    use pseudopotential_common, ONLY: flag_neutral_atom_projector!, maxL_neutral_atom_projector, &
-    !         numN_neutral_atom_projector
+    use pseudopotential_common, ONLY: flag_neutral_atom_projector, maxL_neutral_atom_projector, &
+         numN_neutral_atom_projector
     use species_module, ONLY: napf_species, npao_species
     use pao_format, ONLY: pao, paoVNA
 
@@ -2235,6 +2235,12 @@ contains
     ! parameters of integration, it can be changed.
     integer, parameter :: k_length = 2048 ! size of radial function in reciprocal space
     real(double), parameter :: k_cutoff = 16.0_double
+
+    real(double), allocatable :: Rad(:)
+    real(double), allocatable :: Radbar(:,:)
+    
+    integer :: j_pjna
+    integer :: m
 
     allocate(napf_species(n_species),paoVNA(n_species))
     sqrt_two_pi = sqrt(two)/sqrt_pi
@@ -2540,33 +2546,33 @@ contains
           ! for the 3-centre integrals; it would be easiest to add these
           ! on-top of the other functions
           !
-          !i_pjna = 0
-          napf_species(isp) = 0
           paoVNA(isp)%greatest_angmom = pao(isp)%greatest_angmom
           paoVNA(isp)%count = pao(isp)%count
-          !do l=0, pao(isp)%greatest_angmom!maxL_neutral_atom_projector
-          !   do n=1, pao(isp)%angmom(l)%n_zeta_in_angmom!numN_neutral_atom_projector(l)
-          !      i_pjna = i_pjna + 1
-          !   end do
-          !end do
-          !napf_species = i_pjna
-          !pseudo(isp)%n_pjna = i_pjna
+          i_pjna = 0
+          napf_species(isp) = 0
+          do l=0, maxL_neutral_atom_projector
+             do n=1, numN_neutral_atom_projector(l)
+                i_pjna = i_pjna + 1
+             end do
+          end do
+          napf_species = i_pjna
+          pseudo(isp)%n_pjna = i_pjna
+          npoint = pseudo(isp)%vna%n          
           !write(*,*) 'n_pjna: ',pseudo(isp)%n_pjna
           allocate(paoVNA(isp)%angmom(0:pao(isp)%greatest_angmom))
-          !allocate( pseudo(isp)%pjna(pseudo(isp)%n_pjna) )
-          !allocate( pseudo(isp)%pjna_l(pseudo(isp)%n_pjna) )
-          !allocate( pseudo(isp)%pjna_n(pseudo(isp)%n_pjna) )
-          !allocate( pseudo(isp)%pjna_ekb(pseudo(isp)%n_pjna) )
-          !allocate( Rad(npoint) )
-          !allocate( Radbar(npoint,maxval(numN_neutral_atom_projector(:))) )
+          allocate( pseudo(isp)%pjna(pseudo(isp)%n_pjna) )
+          allocate( pseudo(isp)%pjna_l(pseudo(isp)%n_pjna) )
+          allocate( pseudo(isp)%pjna_n(pseudo(isp)%n_pjna) )
+          allocate( pseudo(isp)%pjna_ekb(pseudo(isp)%n_pjna) )
+          allocate( Rad(npoint) )
+          allocate( Radbar(npoint,maxval(numN_neutral_atom_projector(:))) )
 
-          ! Allocate
-          !i_pjna = 0
-          napf_species(isp) = 0
-          do l=0, pao(isp)%greatest_angmom!maxL_neutral_atom_projector
+          ! 1- and 2-centre integrals
+          i_pjna = 0
+          do l=0, pao(isp)%greatest_angmom
              paoVNA(isp)%angmom(l)%n_zeta_in_angmom = pao(isp)%angmom(l)%n_zeta_in_angmom
              allocate(paoVNA(isp)%angmom(l)%zeta(pao(isp)%angmom(l)%n_zeta_in_angmom))
-             do n=1, pao(isp)%angmom(l)%n_zeta_in_angmom!numN_neutral_atom_projector(l)
+             do n=1, pao(isp)%angmom(l)%n_zeta_in_angmom
                 i_pjna = i_pjna + 1
                 paoVNA(isp)%angmom(l)%zeta(n)%length = pao(isp)%angmom(l)%zeta(n)%length
                 paoVNA(isp)%angmom(l)%zeta(n)%cutoff = pao(isp)%angmom(l)%zeta(n)%cutoff
@@ -2575,24 +2581,26 @@ contains
                 allocate(paoVNA(isp)%angmom(l)%zeta(n)%table2(paoVNA(isp)%angmom(l)%zeta(n)%length))
                 paoVNA(isp)%angmom(l)%zeta(n)%table = zero
                 paoVNA(isp)%angmom(l)%zeta(n)%table2 = zero
-                !pseudo(isp)%pjna_l(i_pjna) = l
-                !pseudo(isp)%pjna_n(i_pjna) = n
-                !pseudo(isp)%pjna(i_pjna)%cutoff = pao(isp)%angmom(l)%zeta(n)%cutoff
-                !pseudo(isp)%pjna(i_pjna)%delta  = pao(isp)%angmom(l)%zeta(n)%delta
-                !call rad_alloc( pseudo(isp)%pjna(i_pjna), pao(isp)%angmom(l)%zeta(n)%length )
+             end do
+          end do
+          ! 3-centre integrals via projectors
+          i_pjna = 0
+          napf_species(isp) = 0
+          do l=0, maxL_neutral_atom_projector
+             do n=1, numN_neutral_atom_projector(l)
+                i_pjna = i_pjna + 1
+                pseudo(isp)%pjna_l(i_pjna) = l
+                pseudo(isp)%pjna_n(i_pjna) = n
+                pseudo(isp)%pjna(i_pjna)%cutoff = pseudo(isp)%vna%cutoff
+                pseudo(isp)%pjna(i_pjna)%delta  = pseudo(isp)%vna%delta
+                call rad_alloc( pseudo(isp)%pjna(i_pjna), pseudo(isp)%vna%n )
                 napf_species(isp) = napf_species(isp) + (2*l+1)
              end do
           end do
-          if(i_pjna/=npao_species(isp)) write(*,*) 'ERROR: pjna mismatch: ',i_pjna,npao_species(isp)
           ! Create Vna phi for each PAO for each species
-          do l=0, pao(isp)%greatest_angmom!maxL_neutral_atom_projector
-             do n=1, pao(isp)%angmom(l)%n_zeta_in_angmom!numN_neutral_atom_projector(l)
-          !do i_pjna=1, pseudo(isp)%n_pjna
-          !   n = pseudo(isp)%pjna_n(i_pjna)
-          !   l = pseudo(isp)%pjna_l(i_pjna)
-          !   step = pseudo(isp)%pjna(i_pjna)%delta
-          !   ! |Vna_ln> = Vna(r) |PAO'_ln>
-                !   do j=1,pseudo(isp)%pjna(i_pjna)%n
+          do l=0, pao(isp)%greatest_angmom
+             do n=1, pao(isp)%angmom(l)%n_zeta_in_angmom
+                !   ! |Vna_ln> = Vna(r) |PAO'_ln>
                 step = pseudo(isp)%vna%delta
                 do j=1,paoVNA(isp)%angmom(l)%zeta(n)%length
                    r = paoVNA(isp)%angmom(l)%zeta(n)%delta * real(j,double)
@@ -2609,32 +2617,78 @@ contains
                       r4=pseudo(isp)%vna%d2(jj+1)
                       vna_here = a * r1 + b * r2 + c * r3 + d * r4
                       paoVNA(isp)%angmom(l)%zeta(n)%table(j) = pao(isp)%angmom(l)%zeta(n)%table(j) * vna_here
-                      !pseudo(isp)%pjna(i_pjna)%f(j) = pao(isp)%angmom(l)%zeta(n)%table(j) * vna_here
                    else
                       paoVNA(isp)%angmom(l)%zeta(n)%table(j) = zero
-                      !pseudo(isp)%pjna(i_pjna)%f(j) = zero
                    end if
-                   write(70+i_pjna,*) r,paoVNA(isp)%angmom(l)%zeta(n)%table(j) !pseudo(isp)%pjna(i_pjna)%f(j)
                 end do
-             !                  pseudo(isp)%vna%f(:) * Radbar(:,n)
-             delta = pao(isp)%angmom(l)%zeta(n)%delta
-             npoint = pao(isp)%angmom(l)%zeta(n)%length
-             yp1 = (paoVNA(isp)%angmom(l)%zeta(n)%table(2) &
-                  - paoVNA(isp)%angmom(l)%zeta(n)%table(1)       )/delta
-             ypn = (paoVNA(isp)%angmom(l)%zeta(n)%table(npoint) &
-                  - paoVNA(isp)%angmom(l)%zeta(n)%table(npoint-1))/delta
-             call spline( npoint, delta, &
-                  paoVNA(isp)%angmom(l)%zeta(n)%table, yp1, ypn, &
-                  paoVNA(isp)%angmom(l)%zeta(n)%table2 )
-             !yp1 = (pseudo(isp)%pjna(i_pjna)%f(2) &
-             !     - pseudo(isp)%pjna(i_pjna)%f(1)       )/delta
-             !ypn = (pseudo(isp)%pjna(i_pjna)%f(npoint) &
-             !     - pseudo(isp)%pjna(i_pjna)%f(npoint-1))/delta
-             !call spline( npoint, delta, &
-             !     pseudo(isp)%pjna(i_pjna)%f, yp1, ypn, &
-             !     pseudo(isp)%pjna(i_pjna)%d2 )
+                delta = pao(isp)%angmom(l)%zeta(n)%delta
+                npoint = pao(isp)%angmom(l)%zeta(n)%length
+                yp1 = (paoVNA(isp)%angmom(l)%zeta(n)%table(2) &
+                     - paoVNA(isp)%angmom(l)%zeta(n)%table(1)       )/delta
+                ypn = (paoVNA(isp)%angmom(l)%zeta(n)%table(npoint) &
+                     - paoVNA(isp)%angmom(l)%zeta(n)%table(npoint-1))/delta
+                call spline( npoint, delta, &
+                     paoVNA(isp)%angmom(l)%zeta(n)%table, yp1, ypn, &
+                     paoVNA(isp)%angmom(l)%zeta(n)%table2 )
+             end do
           end do
-       end do
+          ! 3-centre integrals
+          delta = pseudo(isp)%vna%delta
+          cutoff = pseudo(isp)%vna%cutoff
+          npoint = pseudo(isp)%vna%n
+          Radbar = zero
+          do i_pjna=1, pseudo(isp)%n_pjna
+             n = pseudo(isp)%pjna_n(i_pjna)
+             l = pseudo(isp)%pjna_l(i_pjna)
+             step = pseudo(isp)%pjna(i_pjna)%delta
+             a = (four/cutoff)**2
+             Rad = zero
+             do ir=1, npoint
+                r = (ir-1)*delta
+                Rad(ir) =  r**real(n-1,double)*exp(-a*r**2)
+             end do
+             ! Normalise
+             norm = overlapRadials(Rad,Rad,delta,l)
+             Rad(:) = Rad(:) * sqrt(one/norm)
+
+             ! |R'_ln>=|R_ln>
+             Radbar(:,n) = Rad(:)
+
+             do j_pjna=1, i_pjna-1
+                if( pseudo(isp)%pjna_l(j_pjna) /= l ) then
+                   cycle
+                end if
+                m = pseudo(isp)%pjna_n(j_pjna)
+
+                ! calc <R_ln|VNA_lm>
+                overlap = overlapRadials(Rad,pseudo(isp)%pjna(j_pjna)%f,delta,l)
+                ! subtract |R_ln> by |R'_lm>*(<R_ln|VNA_lm>*(1/C_lm)
+                Radbar(:,n) = Radbar(:,n) - Radbar(:,m) * &
+                     (pseudo(isp)%pjna_ekb(j_pjna)*overlap)  !DRB 2017/06/13
+             end do
+
+             ! |Vna_ln> = Vna(r) |R'_ln>
+             pseudo(isp)%pjna(i_pjna)%f(:) = pseudo(isp)%vna%f(:) * Radbar(:,n)
+
+             ! calc <R'_ln|Vna_i>
+             overlap = overlapRadials(Radbar(:,n),pseudo(isp)%pjna(i_pjna)%f(:),delta,l)
+
+             ! 1/C_ln = 1/<R'_i|Vna_ln>
+             pseudo(isp)%pjna_ekb(i_pjna) = one/overlap
+          end do
+          ! make splines
+          do i_pjna=1, pseudo(isp)%n_pjna
+             yp1 = (pseudo(isp)%pjna(i_pjna)%f(2) &
+                  - pseudo(isp)%pjna(i_pjna)%f(1)       )/delta
+             ypn = (pseudo(isp)%pjna(i_pjna)%f(npoint) &
+                  - pseudo(isp)%pjna(i_pjna)%f(npoint-1))/delta
+             call spline( npoint, delta, &
+                  pseudo(isp)%pjna(i_pjna)%f, yp1, ypn, &
+                  pseudo(isp)%pjna(i_pjna)%d2 )
+          end do
+
+          deallocate( Rad, Radbar )
+
        end if
        !-------------------------------------------------------
        ! calculate chatom(k) - atomic charge
@@ -2761,7 +2815,54 @@ contains
     end do ! n_species
 
   end subroutine make_neutral_atom
-!!***  
+  !!***
+  
+  ! -----------------------------------------------------------
+  ! Function overlapRadials
+  ! -----------------------------------------------------------
+
+  !!****f* pseudo_tm_module/overlapRadials *
+  !!
+  !!  NAME
+  !!   overlapRadials
+  !!  USAGE
+  !!   
+  !!  PURPOSE
+  !!   Calculates the overlap between two radial functions after
+  !!   scaling by the appropriate power of r
+  !!  INPUTS
+  !!   
+  !!  AUTHOR
+  !!   N. Watanabe (Mizuho) with TM and DRB
+  !!  CREATION DATE
+  !!   2016
+  !!  MODIFICATION HISTORY
+  !!   2017/06/01 16:53 dave
+  !!    Changed to remove result argument
+  !!  SOURCE
+  !!
+  real(double) function overlapRadials( radial1, radial2, delta, l )
+    use datatypes
+    use numbers
+    implicit none
+    real(double), intent(in) :: radial1(:)
+    real(double), intent(in) :: radial2(:)
+    real(double), intent(in) :: delta
+    integer, intent(in) :: l
+
+    integer :: ir, nr
+    real(double) :: r
+    nr = size(radial1)
+    
+    overlapRadials = zero
+    do ir=1, nr
+       r = (ir-1)*delta
+       overlapRadials = overlapRadials + delta*r**(2*l+2)*radial1(ir)*radial2(ir)
+    end do
+
+    return
+  end function overlapRadials
+  !!***
 
 ! -----------------------------------------------------------
 ! Subroutine check_block
