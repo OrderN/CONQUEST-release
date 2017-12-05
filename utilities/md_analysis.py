@@ -174,7 +174,7 @@ if cq_params['MD.Ensemble'][2] == 't':
 if cq_params['MD.Ensemble'][1] == 'p':
   if 'mttk' in cq_params['MD.Barostat']:
     ax1a.plot(data['time'], data['box'], 'c-', label='Box energy')
-  ax1.plot(data['time'], data['pV'], 'm-', label='pV')
+  ax1a.plot(data['time'], data['pV'], 'm-', label='pV')
 ax2.plot(data['time'], data['H\''])
 ax2.plot((opts.nskip,data['time'][-1]), (avg['H\''],avg['H\'']), '-',
       label=r'$\langle H\' \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['H\''], std['H\'']))
@@ -185,16 +185,16 @@ ax4.plot(data['time'], data['P'], 'b-')
 ax4.plot((opts.nskip,data['time'][-1]), (avg['P'],avg['P']), 'b--',
       label=r'$\langle P \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['P'], std['P']))
 if cq_params['MD.Ensemble'][1] == 'p':
-  ax5 = ax4.twinx()
-  ax5.plot(data['time'], data['V'], 'r-')
-  ax5.plot((opts.nskip,data['time'][-1]), (avg['V'],avg['V']), 'r--',
-        label=r'$\langle V \rangle$ = {0:>12.4f} $\pm$ {1:>12.4f}'.format(avg['V'], std['V']))
+  ax4a = ax4.twinx()
+  ax4a.plot(data['time'], data['V'], 'r-')
+  ax4a.plot((opts.nskip,data['time'][-1]), (avg['V'],avg['V']), 'r--',
+        label=r'$\langle V \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['V'], std['V']))
 ax1.set_ylabel("E")
 ax2.set_ylabel("E")
 ax3.set_ylabel("T")
 ax4.set_ylabel("P", color='b')
 if cq_params['MD.Ensemble'][1] == 'p':
-  ax5.set_ylabel("V", color='r')
+  ax4a.set_ylabel("V", color='r')
 ax4.set_xlabel("time (fs)")
 ax1.get_yaxis().set_label_coords(-0.1, 0.5)
 ax2.get_yaxis().set_label_coords(-0.1, 0.5)
@@ -204,9 +204,9 @@ ax1.legend(loc="upper left")
 ax1a.legend(loc="lower right")
 ax2.legend()
 ax3.legend()
-ax4.legend(loc=2)
+ax4.legend(loc="upper left")
 if cq_params['MD.Ensemble'][1] == 'p':
-  ax5.legend(loc=0)
+  ax4a.legend(loc="lower right")
 plt.xlim((opts.nskip,data['time'][-1]))
 fig1.subplots_adjust(hspace=0)
 fig1.savefig("stats.pdf", bbox_inches='tight')
