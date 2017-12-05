@@ -607,6 +607,7 @@ contains
         md_ndof = md_ndof + md_n_nhc
         call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
                              md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
+        call thermo%get_nhc_energy
       case('berendsen')
         call thermo%init_berendsen_thermo(MDtimestep, temp_ion, md_ndof, &
                                           md_tau_T, mdl%ion_kinetic_energy)
@@ -620,6 +621,7 @@ contains
         if (md_cell_nhc) md_ndof = md_ndof + md_n_nhc
         call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
                              md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
+        call thermo%get_nhc_energy
         call baro%init_baro(md_target_press, md_ndof, stress, &
                                  ion_velocity, mdl%ion_kinetic_energy)
       case('mttk')

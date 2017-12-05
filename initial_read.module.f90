@@ -1903,7 +1903,7 @@ contains
          read(unit=input_array(block_start), fmt=*) md_nhc_mass
        end if
        call fdf_endblock
-       if (fdf_block('MD.NHCCellMass')) then
+       if (fdf_block('MD.NHCMass')) then
          read(unit=input_array(block_start), fmt=*) md_nhc_cell_mass
        end if
        call fdf_endblock

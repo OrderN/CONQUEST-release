@@ -32,7 +32,8 @@ module md_control
 
   use datatypes
   use numbers
-  use global_module,    only: ni_in_cell, io_lun, iprint_MD, flag_baroDebug
+  use global_module,    only: ni_in_cell, io_lun, iprint_MD, &
+                              flag_thermoDebug, flag_baroDebug
   use move_atoms,       only: fac_Kelvin2Hartree
   use species_module,   only: species, mass
   use GenComms,         only: inode, ionode
@@ -85,6 +86,7 @@ module md_control
     real(double)        :: e_nhc        ! energy of NHC thermostats
     real(double)        :: e_nhc_ion    ! energy of ionic NHC thermostats
     real(double)        :: e_nhc_cell   ! energy of cell NHC thermostats
+    character(40)       :: nhc_fmt      ! format string for printing NHC arrays
     real(double), dimension(:), allocatable :: eta    ! thermostat "position"
     real(double), dimension(:), allocatable :: v_eta  ! thermostat "velocity"
     real(double), dimension(:), allocatable :: G_nhc  ! "force" on thermostat
@@ -247,7 +249,7 @@ contains
     real(double), intent(in)              :: T_ext, ke_ions, dt
 
     ! local variables
-    character(40)                         :: fmt
+    character(40)                         :: fmt1, fmt2
 
     th%thermo_type = "nhc"
     th%append = .false.
@@ -261,13 +263,14 @@ contains
     th%lambda = one
     th%cell_nhc  = md_cell_nhc
     call th%get_temperature
+    write(th%nhc_fmt,'("(4x,a12,",i4,"f10.4)")') th%n_nhc
 
     allocate(th%eta(n_nhc))
     allocate(th%v_eta(n_nhc))
     allocate(th%G_nhc(n_nhc))
     allocate(th%m_nhc(n_nhc))
     allocate(th%dt_ys(n_ys))
-    if (th%ensemble == "npt" .and. th%cell_nhc) then
+    if (th%cell_nhc) then
       allocate(th%eta_cell(n_nhc))    ! independent thermostat for cell DOFs
       allocate(th%v_eta_cell(n_nhc))
       allocate(th%G_nhc_cell(n_nhc))
@@ -281,7 +284,7 @@ contains
     th%eta = zero
     th%v_eta = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
     th%G_nhc = zero
-    if (th%ensemble == "npt" .and. th%thermo_type == "nhc") then
+    if (th%cell_nhc) then
       th%eta_cell = zero
       th%v_eta_cell = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
       th%G_nhc_cell = zero
@@ -306,7 +309,8 @@ contains
     end select
     th%dt_ys = th%dt*th%dt_ys/th%n_mts_nhc
 
-    write(fmt,'("(4x,a16,",i4,"f10.4)")') th%n_nhc
+    write(fmt1,'("(4x,a16,",i4,"f10.4)")') th%n_nhc
+    write(fmt2,'("(4x,a16,",i4,"f10.4)")') th%n_ys
     if (inode==ionode) then
       write(io_lun,'(2x,a)') 'Welcome to init_nhc'
       write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
@@ -319,8 +323,9 @@ contains
                                    th%n_mts_nhc
       write(io_lun,'(4x,a,i10)')   'Yoshida-Suzuki order      n_ys  = ', &
                                    th%n_ys
-      write(io_lun,fmt) 'NHC masses:    ', th%m_nhc
-      write(io_lun,fmt) 'YS time steps: ', th%dt_ys
+      write(io_lun,fmt2) 'YS time steps:  ', th%dt_ys
+      write(io_lun,fmt1) 'ion  NHC masses:', th%m_nhc
+      if (th%cell_nhc) write(io_lun,fmt1) 'cell NHC masses:', th%m_nhc_cell
     end if
 
   end subroutine init_nhc
@@ -463,6 +468,12 @@ contains
       th%G_nhc(k) = th%G_nhc(k)/th%m_nhc(k)
     end if
 
+    if (inode==ionode .and. flag_thermoDebug) then
+      write(io_lun,'(a,i2)') "thermoDebug: update_G_eta, k = ", k
+      write(io_lun,*) "G_eta:      ", th%G_nhc(k)
+      if (th%cell_nhc) write(io_lun,*) "G_eta_cell: ", th%G_nhc_cell(k)
+    end if
+
   end subroutine update_G_eta
   !!***
 
@@ -488,6 +499,12 @@ contains
     th%eta(k) = th%eta(k) + dtfac*dt*th%v_eta(k)
     if (th%cell_nhc) th%eta_cell(k) = th%eta_cell(k) + &
                      dtfac*dt*th%v_eta_cell(k)
+
+    if (inode==ionode .and. flag_thermoDebug) then
+      write(io_lun,'(a,i2)') "thermoDebug: propagate_eta, k = ", k
+      write(io_lun,*) "eta:        ", th%eta(k)
+      if (th%cell_nhc) write(io_lun,*) "eta_cell:   ", th%eta_cell(k)
+    end if
 
   end subroutine propagate_eta
   !!***
@@ -515,6 +532,12 @@ contains
     if (th%cell_nhc) th%v_eta_cell(k) = th%v_eta_cell(k) + &
                                         dtfac*dt*th%G_nhc_cell(k)
 
+    if (inode==ionode .and. flag_thermoDebug) then
+      write(io_lun,'(a,i2)') "thermoDebug: propagate_v_eta_lin, k = ", k
+      write(io_lun,*) "v_eta:      ", th%v_eta(k)
+      if (th%cell_nhc) write(io_lun,*) "v_eta_cell: ", th%v_eta_cell(k)
+    end if
+
   end subroutine propagate_v_eta_lin
   !!***
 
@@ -540,6 +563,12 @@ contains
     th%v_eta(k) = th%v_eta(k)*exp(-dtfac*dt*th%v_eta(k+1))
     if (th%cell_nhc) th%v_eta_cell(k) = &
                           th%v_eta_cell(k)*exp(-dtfac*dt*th%v_eta_cell(k+1))
+
+    if (inode==ionode .and. flag_thermoDebug) then
+      write(io_lun,'(a,i2)') "thermoDebug: propagate_v_eta_exp, k = ", k
+      write(io_lun,*) "v_eta:      ", th%v_eta(k)
+      if (th%cell_nhc) write(io_lun,*) "v_eta_cell: ", th%v_eta_cell(k)
+    end if
 
   end subroutine propagate_v_eta_exp
   !!***
@@ -568,8 +597,8 @@ contains
     real(double)  :: v_sfac   ! ionic velocity scaling factor
     real(double)  :: fac
 
-    if (inode==ionode .and. iprint_MD>1) write(io_lun,*) "MD_debug: &
-                                                          propagate_nvt_nhc"
+    if (inode==ionode .and. flag_thermoDebug) write(io_lun,*) "thermoDebug: &
+                                                            propagate_nvt_nhc"
 
     th%ke_ions = ke
     v_sfac = one
@@ -588,7 +617,8 @@ contains
         ! scale the ionic velocities and kinetic energy
         fac = exp(-half*th%dt_ys(i_ys)*th%v_eta(1))
         v_sfac = v_sfac*fac
-        if (inode==ionode .and. iprint_MD > 1) write(io_lun,*) 'v_sfac = ', v_sfac
+        if (inode==ionode .and. flag_thermoDebug) write(io_lun,*) &
+                                            'thermoDebug:v_sfac = ', v_sfac
         th%ke_ions = th%ke_ions*v_sfac**2
 
         call th%update_G_eta(1, zero)
@@ -701,7 +731,6 @@ contains
     character(len=*), intent(in)          :: filename
 
     ! local variables
-    character(40)                         :: fmt
     integer                               :: lun
 
     if (inode==ionode) then
@@ -712,20 +741,19 @@ contains
         open(unit=lun,file=filename,status='replace')
         th%append = .true.
       end if
-      write(fmt,'("(a8,",i4,"e16.4)")') th%n_nhc
-      write(lun,'("step    ",i12)') step
-      write(lun,'("T_int   ",f12.4)') th%T_int
-      write(lun,'("ke_ions ",e12.4)') th%ke_ions
-      write(lun,'("lambda  ",f12.4)') th%lambda
+      write(lun,'("step        ",i12)') step
+      write(lun,'("T_int       ",f12.4)') th%T_int
+      write(lun,'("ke_ions     ",e12.4)') th%ke_ions
+      write(lun,'("lambda      ",f12.4)') th%lambda
       if (th%thermo_type == 'nhc') then
-        write(lun,fmt) "eta:        ", th%eta
-        write(lun,fmt) "v_eta:      ", th%v_eta
-        write(lun,fmt) "G_nhc:      ", th%G_nhc
-        write(lun,'("e_nhc_ion:  ",e16.4)') th%e_nhc_ion
+        write(lun,th%nhc_fmt) "eta:        ", th%eta
+        write(lun,th%nhc_fmt) "v_eta:      ", th%v_eta
+        write(lun,th%nhc_fmt) "G_nhc:      ", th%G_nhc
         if (th%cell_nhc) then
-          write(lun,fmt) "eta_cell:   ", th%eta
-          write(lun,fmt) "v_eta_cell: ", th%v_eta
-          write(lun,fmt) "G_nhc_cell: ", th%G_nhc
+          write(lun,th%nhc_fmt) "eta_cell:   ", th%eta
+          write(lun,th%nhc_fmt) "v_eta_cell: ", th%v_eta
+          write(lun,th%nhc_fmt) "G_nhc_cell: ", th%G_nhc
+          write(lun,'("e_nhc_ion:  ",e16.4)') th%e_nhc_ion
           write(lun,'("e_nhc_cell: ",e16.4)') th%e_nhc_cell
         end if
         write(lun,'("e_nhc:      ",e16.4)') th%e_nhc
@@ -1250,8 +1278,8 @@ contains
     integer                               :: i, speca, gatom, ibeg_atom
     logical                               :: flagx, flagy, flagz
 
-    if (inode==ionode .and. iprint_MD>0) write(io_lun,*) "MD_debug: &
-                                                          propagate_r_mttk"
+    if (inode==ionode .and. flag_baroDebug) write(io_lun,*) "baroDebug: &
+                                                            propagate_r_mttk"
 
     select case(baro%baro_type)
     case('iso-mttk')
@@ -1314,8 +1342,8 @@ contains
     ! local variables
     real(double)                          :: v_new, v_old, lat_sfac
 
-    if (inode==ionode .and. iprint_MD>0) write(io_lun,*) "MD_debug: &
-                                                          propagate_box_mttk"
+    if (inode==ionode .and. flag_baroDebug) write(io_lun,*) "baroDebug: &
+                                                            propagate_box_mttk"
 
     select case(baro%baro_type)
     case('iso-mttk')
@@ -1325,9 +1353,6 @@ contains
       lat_sfac = (v_new/v_old)**third
       baro%mu = lat_sfac
       baro%lat = baro%lat*lat_sfac
-      if (inode==ionode .and. iprint_MD>1) then
-        write(io_lun,*) 'lat_sfac = ', lat_sfac
-      end if
     end select
 
     if (inode==ionode .and. flag_baroDebug) then
@@ -1386,8 +1411,8 @@ contains
     integer                                 :: i_mts, i_ys, i_nhc
     real(double)                            :: v_sfac, v_eta_couple
 
-    if (inode==ionode .and. iprint_MD>0) write(io_lun,*) "MD_debug: &
-                                                          propagate_npt_mttk"
+    if (inode==ionode .and. flag_baroDebug) write(io_lun,*) "baroDebug: &
+                                                            propagate_npt_mttk"
 
     baro%ke_ions = ke
     v_sfac = one
@@ -1544,7 +1569,7 @@ contains
   subroutine update_cell(baro)
 
     use units
-    use global_module,      only: iprint_MD, rcellx, rcelly, rcellz, &
+    use global_module,      only: rcellx, rcelly, rcellz, &
                                   flag_diagonalisation
     use GenComms,           only: inode, ionode
     use density_module,     only: density
@@ -1568,8 +1593,8 @@ contains
     real(double) :: orcellx, orcelly, orcellz, xvec, yvec, zvec, r2, scale
     integer :: i, j
 
-    if (inode==ionode .and. iprint_MD>1) write(io_lun,*) "MD_debug: &
-                                                          update_cell"
+    if (inode==ionode .and. flag_baroDebug) write(io_lun,*) "baroDebug: &
+                                                            update_cell"
 
     orcellx = rcellx
     orcelly = rcelly
