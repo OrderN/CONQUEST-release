@@ -780,6 +780,7 @@ contains
        if (flag_FixCOM) call zero_COM_velocity(ion_velocity)
        call baro%update_static_stress(stress)
        call baro%get_ke_stress(ion_velocity)
+       call baro%get_volume
        call baro%get_pressure
        call thermo%get_temperature
 

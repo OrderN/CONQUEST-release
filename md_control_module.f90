@@ -958,7 +958,7 @@ contains
     do i=1,3
       baro%P_int = baro%P_int + baro%ke_stress(i,i) + baro%static_stress(i,i)
     end do
-    baro%P_int = -baro%P_int*third
+    baro%P_int = -baro%P_int*third/baro%volume
 
   end subroutine get_pressure
   !!***
