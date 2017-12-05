@@ -702,7 +702,7 @@ contains
                           LinTol_DMM, n_dumpL
 !TM
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, &
-                                      STATE, ABINIT, flag_angular_new
+                                      STATE, ABINIT, flag_angular_new, flag_neutral_atom_projector
     use SelfCon, only: A, flag_linear_mixing, EndLinearMixing, q0, q1,&
                        n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
                        atomch_output, flag_Kerker, flag_wdmetric, minitersSC
@@ -1060,6 +1060,9 @@ contains
        end if
        ! Should we use neutral atom potential ?
        flag_neutral_atom  = fdf_boolean('General.NeutralAtom',.true.) ! Default for now
+       if( flag_neutral_atom ) then
+          flag_neutral_atom_projector = fdf_boolean('General.NeutralAtomProjector',.false.)
+       end if
 !!$
 !!$
 !!$

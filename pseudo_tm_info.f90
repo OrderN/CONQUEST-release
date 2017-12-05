@@ -33,6 +33,8 @@
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2015/11/09 17:21 dave with TM, NW (Mizuho)
 !!    Adding new members to pseudo_info derived type for neutral atom
+!!   2017/11/27 15:52 dave with TM, NW
+!!    NA projectors added to pseudo_info type
 !!  SOURCE
 !!
 module pseudo_tm_info
@@ -91,6 +93,14 @@ module pseudo_tm_info
      integer, pointer :: pjnl_l(:)        ! size = n_pjnl, angular momentum
      integer, pointer :: pjnl_n(:)        ! size = n_pjnl, index for projectors
      real(double), pointer :: pjnl_ekb(:) ! size = n_pjnl, <phi_ln|dV_l|phi_ln>
+     
+     ! Neutral atom projectors
+     integer :: n_pjna               ! number of NA projector functions
+     type(rad_func), pointer :: pjna(:)   ! size = n_pjna, projector functions
+     integer, pointer :: pjna_l(:)        ! size = n_pjna, angular momentum
+     integer, pointer :: pjna_n(:)        ! size = n_pjna, index for projectors
+     real(double), pointer :: pjna_ekb(:) ! size = n_pjna, <phi_ln|V_na|phi_ln>
+     
   end type pseudo_info
 
   type(pseudo_info), allocatable :: pseudo(:)

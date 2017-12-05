@@ -446,6 +446,8 @@ contains
 !!    Renamed naba_atm -> naba_atoms_of_blocks
 !!   2016/08/08 15:30 nakata
 !!    Removed unused sf in global_module
+!!   2017/11/27 15:27 dave   
+!!    Added if loop for NA projectors to avoid making pseudopotential on grid
 !!  SOURCE
 !!
   subroutine set_tm_pseudo
@@ -473,7 +475,8 @@ contains
     use dimens, only: n_my_grid_points
     use maxima_module, only: maxngrid
     use timer_module, only: cq_timer, start_timer, stop_print_timer, WITH_LEVEL
-
+    use pseudopotential_common, only: flag_neutral_atom_projector
+    
     implicit none 
     !local
     integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom
@@ -556,6 +559,7 @@ contains
        xblock=(domain%idisp_primx(iblock)+domain%nx_origin-1)*dcellx_block
        yblock=(domain%idisp_primy(iblock)+domain%ny_origin-1)*dcelly_block
        zblock=(domain%idisp_primz(iblock)+domain%nz_origin-1)*dcellz_block
+       if(.NOT.flag_neutral_atom_projector) then
        if(naba_atoms_of_blocks(pseudo_neighbour)%no_of_part(iblock) > 0) then ! if there are naba atoms
           iatom=0
           do ipart=1,naba_atoms_of_blocks(pseudo_neighbour)%no_of_part(iblock)
@@ -740,6 +744,7 @@ contains
              enddo ! naba_atoms
           enddo ! naba_part
        endif !(naba_atoms_of_blocks(pseudo_neighbour)%no_of_part(iblock) > 0) !naba atoms?
+       end if ! NAP
        ! -----------------------------------------------------------------------------------
        ! NB This loop is VERY rarely used: only when non-analytic blip operations are chosen
        ! DRB 2016/01/07
@@ -944,6 +949,8 @@ contains
 !!    Renamed naba_atm -> naba_atoms_of_blocks
 !!   2016/08/08 15:30 nakata
 !!    Removed unused sf in global_module
+!!   2017/11/27 15:28 dave
+!!    Remove calculation of HF forces for NA projectors
 !!  SOURCE
 !!
   subroutine loc_pp_derivative_tm ( hf_force, density, size )
@@ -965,6 +972,7 @@ contains
     use maxima_module, only: maxngrid
     use density_module, only: density_atom
     use atomic_density, only: atomic_density_table ! for Neutral atom potential
+    use pseudopotential_common, only: flag_neutral_atom_projector
 
     implicit none   
 
@@ -1136,7 +1144,7 @@ contains
                       ! check j (j+1 =< N_TAB)
                       ! Use the spline interpolation tables
                       if(flag_neutral_atom) then
-                         if(j+1 <= pseudo(the_species)%vna%n) then
+                         if(j+1 <= pseudo(the_species)%vna%n.AND.(.NOT.flag_neutral_atom_projector)) then
                             rr = real(j,double) * step
                             a = ( rr - r_from_i ) / step
                             b = one - a
@@ -2200,20 +2208,24 @@ contains
     use atomic_density, ONLY: atomic_density_table
     use spline_module, ONLY: spline
     use functions, ONLY: j0
+    use pseudopotential_common, ONLY: flag_neutral_atom_projector!, maxL_neutral_atom_projector, &
+    !         numN_neutral_atom_projector
+    use species_module, ONLY: napf_species, npao_species
+    use pao_format, ONLY: pao, paoVNA
 
     implicit none
 
     integer      :: npoint
     integer :: ik
     integer :: isp
-    integer :: ir, ir1, ir2, j
+    integer :: ir, ir1, ir2, j, i_pjna, l, n, jj
     
     real(double) :: cutoff
     real(double) :: delta
     real(double) :: r, r_1, r_2, yp1, ypn, r1, r2, r3, r4
     real(double) :: rr, a, b, c, d, step
     real(double) :: chatom_at, chlocal_at, chna_at
-    real(double) :: vlocal_at, vchatom_at
+    real(double) :: vlocal_at, vchatom_at, vna_here
     real(double) :: integ_inside, integ_outside
     real(double) :: k, overlap, norm, sum_chna
     real(double) :: sqrt_two_pi ! sqrt(two/pi)
@@ -2224,7 +2236,7 @@ contains
     integer, parameter :: k_length = 2048 ! size of radial function in reciprocal space
     real(double), parameter :: k_cutoff = 16.0_double
 
-
+    allocate(napf_species(n_species),paoVNA(n_species))
     sqrt_two_pi = sqrt(two)/sqrt_pi
     ! Loop over species
     do isp=1, n_species
@@ -2519,6 +2531,111 @@ contains
        ! END OF UNNECESSARY ROUTINES 
        !-------------------------------------------------------
 
+       if( flag_neutral_atom_projector ) then
+          !-------------------------------------------------------
+          ! calculate pjna(r)
+          !
+          ! We need (at least) the same number of projectors as PAOs
+          ! Following simple 1- and 2-centre tests we may add projectors
+          ! for the 3-centre integrals; it would be easiest to add these
+          ! on-top of the other functions
+          !
+          !i_pjna = 0
+          napf_species(isp) = 0
+          paoVNA(isp)%greatest_angmom = pao(isp)%greatest_angmom
+          paoVNA(isp)%count = pao(isp)%count
+          !do l=0, pao(isp)%greatest_angmom!maxL_neutral_atom_projector
+          !   do n=1, pao(isp)%angmom(l)%n_zeta_in_angmom!numN_neutral_atom_projector(l)
+          !      i_pjna = i_pjna + 1
+          !   end do
+          !end do
+          !napf_species = i_pjna
+          !pseudo(isp)%n_pjna = i_pjna
+          !write(*,*) 'n_pjna: ',pseudo(isp)%n_pjna
+          allocate(paoVNA(isp)%angmom(0:pao(isp)%greatest_angmom))
+          !allocate( pseudo(isp)%pjna(pseudo(isp)%n_pjna) )
+          !allocate( pseudo(isp)%pjna_l(pseudo(isp)%n_pjna) )
+          !allocate( pseudo(isp)%pjna_n(pseudo(isp)%n_pjna) )
+          !allocate( pseudo(isp)%pjna_ekb(pseudo(isp)%n_pjna) )
+          !allocate( Rad(npoint) )
+          !allocate( Radbar(npoint,maxval(numN_neutral_atom_projector(:))) )
+
+          ! Allocate
+          !i_pjna = 0
+          napf_species(isp) = 0
+          do l=0, pao(isp)%greatest_angmom!maxL_neutral_atom_projector
+             paoVNA(isp)%angmom(l)%n_zeta_in_angmom = pao(isp)%angmom(l)%n_zeta_in_angmom
+             allocate(paoVNA(isp)%angmom(l)%zeta(pao(isp)%angmom(l)%n_zeta_in_angmom))
+             do n=1, pao(isp)%angmom(l)%n_zeta_in_angmom!numN_neutral_atom_projector(l)
+                i_pjna = i_pjna + 1
+                paoVNA(isp)%angmom(l)%zeta(n)%length = pao(isp)%angmom(l)%zeta(n)%length
+                paoVNA(isp)%angmom(l)%zeta(n)%cutoff = pao(isp)%angmom(l)%zeta(n)%cutoff
+                paoVNA(isp)%angmom(l)%zeta(n)%delta = pao(isp)%angmom(l)%zeta(n)%delta
+                allocate(paoVNA(isp)%angmom(l)%zeta(n)%table(paoVNA(isp)%angmom(l)%zeta(n)%length))
+                allocate(paoVNA(isp)%angmom(l)%zeta(n)%table2(paoVNA(isp)%angmom(l)%zeta(n)%length))
+                paoVNA(isp)%angmom(l)%zeta(n)%table = zero
+                paoVNA(isp)%angmom(l)%zeta(n)%table2 = zero
+                !pseudo(isp)%pjna_l(i_pjna) = l
+                !pseudo(isp)%pjna_n(i_pjna) = n
+                !pseudo(isp)%pjna(i_pjna)%cutoff = pao(isp)%angmom(l)%zeta(n)%cutoff
+                !pseudo(isp)%pjna(i_pjna)%delta  = pao(isp)%angmom(l)%zeta(n)%delta
+                !call rad_alloc( pseudo(isp)%pjna(i_pjna), pao(isp)%angmom(l)%zeta(n)%length )
+                napf_species(isp) = napf_species(isp) + (2*l+1)
+             end do
+          end do
+          if(i_pjna/=npao_species(isp)) write(*,*) 'ERROR: pjna mismatch: ',i_pjna,npao_species(isp)
+          ! Create Vna phi for each PAO for each species
+          do l=0, pao(isp)%greatest_angmom!maxL_neutral_atom_projector
+             do n=1, pao(isp)%angmom(l)%n_zeta_in_angmom!numN_neutral_atom_projector(l)
+          !do i_pjna=1, pseudo(isp)%n_pjna
+          !   n = pseudo(isp)%pjna_n(i_pjna)
+          !   l = pseudo(isp)%pjna_l(i_pjna)
+          !   step = pseudo(isp)%pjna(i_pjna)%delta
+          !   ! |Vna_ln> = Vna(r) |PAO'_ln>
+                !   do j=1,pseudo(isp)%pjna(i_pjna)%n
+                step = pseudo(isp)%vna%delta
+                do j=1,paoVNA(isp)%angmom(l)%zeta(n)%length
+                   r = paoVNA(isp)%angmom(l)%zeta(n)%delta * real(j,double)
+                   jj = aint(r/step) + 1
+                   if(jj+1<=pseudo(isp)%vna%n) then
+                      rr = real(jj,double) * step
+                      a = ( rr - r ) / step
+                      b = one - a
+                      c = a * ( a * a - one ) * step * step / six
+                      d = b * ( b * b - one ) * step * step / six                   
+                      r1=pseudo(isp)%vna%f(jj)
+                      r2=pseudo(isp)%vna%f(jj+1)
+                      r3=pseudo(isp)%vna%d2(jj)
+                      r4=pseudo(isp)%vna%d2(jj+1)
+                      vna_here = a * r1 + b * r2 + c * r3 + d * r4
+                      paoVNA(isp)%angmom(l)%zeta(n)%table(j) = pao(isp)%angmom(l)%zeta(n)%table(j) * vna_here
+                      !pseudo(isp)%pjna(i_pjna)%f(j) = pao(isp)%angmom(l)%zeta(n)%table(j) * vna_here
+                   else
+                      paoVNA(isp)%angmom(l)%zeta(n)%table(j) = zero
+                      !pseudo(isp)%pjna(i_pjna)%f(j) = zero
+                   end if
+                   write(70+i_pjna,*) r,paoVNA(isp)%angmom(l)%zeta(n)%table(j) !pseudo(isp)%pjna(i_pjna)%f(j)
+                end do
+             !                  pseudo(isp)%vna%f(:) * Radbar(:,n)
+             delta = pao(isp)%angmom(l)%zeta(n)%delta
+             npoint = pao(isp)%angmom(l)%zeta(n)%length
+             yp1 = (paoVNA(isp)%angmom(l)%zeta(n)%table(2) &
+                  - paoVNA(isp)%angmom(l)%zeta(n)%table(1)       )/delta
+             ypn = (paoVNA(isp)%angmom(l)%zeta(n)%table(npoint) &
+                  - paoVNA(isp)%angmom(l)%zeta(n)%table(npoint-1))/delta
+             call spline( npoint, delta, &
+                  paoVNA(isp)%angmom(l)%zeta(n)%table, yp1, ypn, &
+                  paoVNA(isp)%angmom(l)%zeta(n)%table2 )
+             !yp1 = (pseudo(isp)%pjna(i_pjna)%f(2) &
+             !     - pseudo(isp)%pjna(i_pjna)%f(1)       )/delta
+             !ypn = (pseudo(isp)%pjna(i_pjna)%f(npoint) &
+             !     - pseudo(isp)%pjna(i_pjna)%f(npoint-1))/delta
+             !call spline( npoint, delta, &
+             !     pseudo(isp)%pjna(i_pjna)%f, yp1, ypn, &
+             !     pseudo(isp)%pjna(i_pjna)%d2 )
+          end do
+       end do
+       end if
        !-------------------------------------------------------
        ! calculate chatom(k) - atomic charge
        atomic_density_table(isp)%k_length = k_length

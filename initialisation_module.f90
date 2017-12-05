@@ -715,7 +715,7 @@ contains
     use global_module,               only: iprint_init,                &
                                            flag_basis_set, blips,      &
                                            PAOs, flag_onsite_blip_ana, &
-                                           flag_analytic_blip_int
+                                           flag_analytic_blip_int, flag_neutral_atom
     use matrix_data,                 only: Srange, mat
     use numbers,                     only: zero, RD_ERR, one
     use pao2blip,                    only: make_blips_from_paos
@@ -728,7 +728,7 @@ contains
     ! Temp
     use S_matrix_module,             only: get_onsite_S, get_S_matrix
     use make_rad_tables,             only: gen_rad_tables,             &
-                                           gen_nlpf_supp_tbls
+                                           gen_nlpf_supp_tbls, gen_paoNApao_tbls
     use angular_coeff_routines,      only: make_ang_coeffs, set_fact,  &
                                            set_prefac, set_prefac_real
     use read_support_spec,           only: read_support
@@ -739,6 +739,7 @@ contains
                                            read_option
     use input_module,                only: leqi
     use nlpf2blip,                   only: make_blips_from_nlpfs
+    use pseudopotential_common,      only: flag_neutral_atom_projector
 
     implicit none
 
@@ -887,6 +888,10 @@ contains
     else if(flag_basis_set==PAOs) then
        call gen_rad_tables(inode,ionode)
        call gen_nlpf_supp_tbls(inode,ionode)
+       ! Neutral atom Projector functions
+       if( flag_neutral_atom .and. flag_neutral_atom_projector ) then
+          call gen_paoNApao_tbls(inode,ionode)
+       end if
        call make_ang_coeffs
        if(inode==ionode) &
             write(io_lun,&

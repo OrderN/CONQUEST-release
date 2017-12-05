@@ -168,7 +168,7 @@ contains
     !real(double), allocatable, dimension(:) :: radial_table
     
     !find required set of radial tables through indices
-    if(case.lt.3) then !either case 1 or 2
+    if(case.lt.3.OR.case==4) then !either case 1 or 2
        count = ol_index(sp1,sp2,nz1,nz2,l1,l2)
        n_lvals = rad_tables(count)%no_of_lvals
        npts = rad_tables(count)%rad_tbls(1)%npnts
@@ -182,23 +182,26 @@ contains
     call convert_basis(dx,dy,dz,r,theta,phi)
     
     mat_val = 0.0_double ; ind_val = 0.0_double
-    if(case.lt.3) then
+    if(case.lt.3.OR.case==4) then
        del_x = rad_tables(count)%rad_tbls(1)%del_x
        do i = 1,n_lvals
           l3 = rad_tables(count)%l_values(i)
           call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
           !multiply radial table(l3) by the associated angular factor
-          if(case.eq.1) then
+          if(case==1) then
              call spline_ol_intval_new2(r,rad_tables(count)%rad_tbls(i)%&
                   &arr_vals(1:npts),rad_tables(count)%rad_tbls(i)%&
                   &arr_vals2(1:npts),npts,del_x,ind_val)
-             mat_val = mat_val + ind_val*ang_factor
-          else !case must eq 2
+          else if(case==2) then !case must eq 2
              call spline_ol_intval_new2(r,rad_tables_ke(count)%rad_tbls(i)%&
                   &arr_vals(1:npts),rad_tables_ke(count)%rad_tbls(i)%&
                   &arr_vals2(1:npts),npts,del_x,ind_val)
-             mat_val = mat_val + ind_val*ang_factor
+          else if(case==4) then
+             call spline_ol_intval_new2(r,rad_tables_paoNApao(count)%rad_tbls(i)%&
+                  &arr_vals(1:npts),rad_tables_paoNApao(count)%rad_tbls(i)%&
+                  &arr_vals2(1:npts),npts,del_x,ind_val)
           endif
+          mat_val = mat_val + ind_val*ang_factor
        enddo
     else
        del_x = rad_tables_nlpf_pao(count)%rad_tbls(1)%del_x
@@ -1016,7 +1019,7 @@ contains
     logical :: flag
     !just coding for the straight pao_pao case for now, first spline out the function 
     !values that we need
-    if(case.lt.3) then !either pao/pao or pao/ke/pao overlap matrix elements
+    if(case.lt.3.OR.case==4) then !either pao/pao or pao/ke/pao overlap matrix elements
        grad_valout = 0.0_double
        count = ol_index(sp1,sp2,nz1,nz2,l1,l2)
        n_lvals = rad_tables(count)%no_of_lvals
@@ -1025,12 +1028,15 @@ contains
           l3 = rad_tables(count)%l_values(i)
           del_x = rad_tables(count)%rad_tbls(1)%del_x
           npts = rad_tables(count)%rad_tbls(1)%npnts
-          if(case.eq.1) then
+          if(case==1) then
              call dsplint(del_x,rad_tables(count)%rad_tbls(i)%arr_vals(1:npts), &
                   rad_tables(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
-          else!case must equal 2
+          else if(case==2) then
              call dsplint(del_x,rad_tables_ke(count)%rad_tbls(i)%arr_vals(1:npts), &
                   rad_tables_ke(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
+          else if(case==4) then
+             call dsplint(del_x,rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals(1:npts), &
+                  rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
           endif
           !have now collected f_r and df_r, next to evaluate the required gradient
           call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)

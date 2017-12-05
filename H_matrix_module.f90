@@ -185,8 +185,11 @@ contains
                                            matS, matX,                  &
                                            matNLatomf, matKEatomf,      &
                                            matHatomf, matXatomf,        &
-                                           AtomF_to_SF_transform
-    use pseudopotential_common,      only: non_local, pseudopotential
+                                           AtomF_to_SF_transform, &
+                                           allocate_temp_matrix, free_temp_matrix, &
+                                           S_trans, matrix_product_trace, matK
+    use matrix_data, only: mat, aHa_range
+    use pseudopotential_common,      only: non_local, pseudopotential, flag_neutral_atom_projector
     use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
     use calc_matrix_elements_module, only: get_matrix_elements_new
     use GenComms,                    only: gsum, end_comms,             &
@@ -200,7 +203,8 @@ contains
                                            flag_perform_cDFT,           &
                                            area_ops, nspin,             &
                                            spin_factor, blips,          &
-                                           flag_analytic_blip_int
+                                           flag_analytic_blip_int,      &
+                                           flag_neutral_atom
     use functions_on_grid,           only: atomfns, H_on_atomfns,       &
                                            gridfunctions
     use io_module,                   only: dump_matrix, dump_blips,     &
@@ -224,7 +228,8 @@ contains
     use exx_types,                   only: exx_hgrid, exx_psolver, exx_radius
     use exx_io,                      only: exx_global_write
 !****lat>$
-
+    use energy, only: local_ps_energy
+    
     implicit none
 
     ! Passed variables
@@ -239,7 +244,7 @@ contains
     ! local variables
     real(double), dimension(:), allocatable :: rho_total
     real(double)   :: kinetic_energy, nl_energy
-    integer        :: stat, spin
+    integer        :: stat, spin, matNA
     type(cq_timer) :: tmr_l_hmatrix
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
@@ -313,6 +318,17 @@ contains
                                        H_on_atomfns(spin))
        end do
        if (inode == ionode .and. iprint_ops > 2) write (io_lun, *) 'Done integration'
+       if(flag_neutral_atom_projector) then
+          matNA = allocate_temp_matrix(aHa_range, S_trans, atomf, atomf)
+          call get_HNA_matrix(matNA)
+          local_ps_energy = zero
+          do spin = 1, nspin
+             call matrix_sum(one, matHatomf(spin), one, matNA)
+             local_ps_energy   = local_ps_energy   + spin_factor * &
+                     matrix_product_trace(matK(spin), matNA)
+          end do
+          call free_temp_matrix(matNA)
+       end if
        !
        !
        if (iprint_ops > 4) then
@@ -585,7 +601,7 @@ contains
                                            atomfns, H_on_atomfns
 
     use calc_matrix_elements_module, only: norb
-    use pseudopotential_common,      only: pseudopotential
+    use pseudopotential_common,      only: pseudopotential, flag_neutral_atom_projector
     use potential_module,            only: potential
     use maxima_module,               only: maxngrid
     use memory_module,               only: reg_alloc_mem,              &
@@ -930,8 +946,9 @@ contains
           call copy(n_my_grid_points, h_potential, 1, potential(:,spin), 1)
           call axpy(n_my_grid_points, one, xc_potential(:,spin), 1, &
                     potential(:,spin), 1)
-          call axpy(n_my_grid_points, one, pseudopotential, 1, &
-                    potential(:,spin), 1)
+          if(.NOT.flag_neutral_atom_projector) &
+               call axpy(n_my_grid_points, one, pseudopotential, 1, &
+               potential(:,spin), 1)
        end do
     end if
     !
@@ -1328,6 +1345,57 @@ contains
   end subroutine get_HNL_matrix
   !!***
 
+  subroutine get_HNA_matrix(matNA)
+
+    use datatypes
+    use numbers
+    use matrix_data, only: mat, aHa_range, halo
+    use mult_module, only: matrix_sum, matrix_transpose, store_matrix_value, return_matrix_value, &
+         allocate_temp_matrix, free_temp_matrix, S_trans, scale_matrix_value
+    use species_module,              only: species
+    use global_module,               only: flag_basis_set, PAOs,       &
+                                           blips, nlpf, atomf, iprint_ops, &
+                                           nspin, id_glob,             &
+                                           species_glob,               &
+                                           flag_analytic_blip_int
+    use build_PAO_matrices,          only: assemble_2
+    use primary_module ,             only: bundle
+    use pao_format, ONLY: pao
+    use pseudo_tm_info, only: pseudo
+    use cover_module,   only: BCS_parts
+      use group_module,   only: parts
+
+    implicit none
+
+    ! Passed variables
+    integer :: matNA
+
+    ! Local variables
+    integer      :: matNAT, np, i, ip, nsf1, nsf2
+
+    matNAT = allocate_temp_matrix(aHa_range, S_trans, atomf, atomf)
+    call assemble_2(aHa_range, matNA, 4)
+    call matrix_transpose(matNA, matNAT)
+    call matrix_sum(one,matNA,one,matNAT)
+    call free_temp_matrix(matNAT)
+
+    ip = 0
+    call start_timer(tmr_std_matrices)
+    do np = 1,bundle%groups_on_node
+       if (bundle%nm_nodgroup(np) > 0) then
+          do i = 1,bundle%nm_nodgroup(np)
+             ip = ip+1
+             do nsf1=1,mat(np,aHa_range)%ndimi(i)
+                do nsf2=1,mat(np,aHa_range)%ndimi(i)
+                   call scale_matrix_value(matNA, np, i, ip, 0, nsf1, nsf2, half,1)
+                end do
+             end do
+          end do
+       end if
+    end do
+    return
+  end subroutine get_HNA_matrix
+  
   ! -----------------------------------------------------------
   ! Subroutine get_T_matrix
   ! -----------------------------------------------------------

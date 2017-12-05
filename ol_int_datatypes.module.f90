@@ -82,6 +82,9 @@ module ol_int_datatypes
     type(ol_integral), allocatable, dimension(:) :: rad_tables
     type(ol_integral), allocatable, dimension(:) :: rad_tables_nlpf_pao
     type(ol_integral), allocatable, dimension(:) :: rad_tables_ke
+    ! Neutral atom Projector functions
+    ! One- and two-centre integrals i=k and/or j=k <phi_i|V_k|phi_j>
+    type(ol_integral), allocatable, dimension(:) :: rad_tables_paoNApao
 
 end module ol_int_datatypes
 !!***

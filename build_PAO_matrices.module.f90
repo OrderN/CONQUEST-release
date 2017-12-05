@@ -153,9 +153,12 @@ contains
                 neigh_species = species_glob(neigh_global_num)
                 if(iprint_basis>=6.AND.myid==0) write(io_lun,'(6x,"Processor, neighbour, spec: ",3i7)') myid,neigh,neigh_species
                 ! Now loop over support functions and PAOs and call routine
-                if(flag<3) then
+                if(flag<3.OR.flag==4) then
                    call loop_12(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,flag, &
                                 atom_spec,neigh_species,0,0)
+                !else if(flag==4) then
+                !   call loop_3_NA(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz, &
+                !               atom_spec,neigh_species,0,0)
                 else
                    call loop_3(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz, &
                                atom_spec,neigh_species,0,0)
@@ -305,7 +308,6 @@ contains
   end subroutine loop_3
     
 
-
 !!****f* build_PAO_matrices/assemble_deriv *
 !!
 !!  NAME 
@@ -401,7 +403,7 @@ contains
                 wheremat = matrix_pos(matA,iprim,halo(range)%i_halo(gcspart))
                 ! Now loop over support functions and PAOs and call routine
                 if(wheremat/=mat(part,range)%onsite(memb)) then
-                   if(flag<3) then
+                   if(flag<3.OR.flag==4) then
                       call loop_12(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,flag, &
                                    atom_spec,neigh_species,1,direction)
                    else
