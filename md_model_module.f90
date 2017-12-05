@@ -60,7 +60,7 @@ module md_model
     real(double), pointer                   :: T_ext    ! internal temperature
     real(double), pointer                   :: P_int    ! internal pressure
     real(double), pointer                   :: P_ext    ! internal pressure
-    real(double)                            :: PV
+    real(double), pointer                   :: PV
     real(double)                            :: enthalpy
 
     ! Thermostat
@@ -69,10 +69,16 @@ module md_model
     real(double), pointer                   :: tau_T    ! T coupling period
     integer, pointer                        :: n_nhc
     real(double), pointer                   :: nhc_energy
+    real(double), pointer                   :: nhc_cell_energy
+    real(double), pointer                   :: nhc_ion_energy
     real(double), pointer, dimension(:)     :: eta
     real(double), pointer, dimension(:)     :: v_eta
     real(double), pointer, dimension(:)     :: G_nhc
     real(double), pointer, dimension(:)     :: m_nhc
+    real(double), pointer, dimension(:)     :: eta_cell
+    real(double), pointer, dimension(:)     :: v_eta_cell
+    real(double), pointer, dimension(:)     :: G_nhc_cell
+    real(double), pointer, dimension(:)     :: m_nhc_cell
 
     ! Barostat
     character(20), pointer                  :: baro_type
@@ -137,16 +143,23 @@ contains
     mdl%lambda        => thermo%lambda
     mdl%tau_T         => thermo%tau_T
     mdl%n_nhc         => thermo%n_nhc
-    mdl%nhc_energy    => thermo%ke_nhc
+    mdl%nhc_energy    => thermo%e_nhc
+    mdl%nhc_ion_energy  => thermo%e_nhc_ion
+    mdl%nhc_cell_energy => thermo%e_nhc_cell
     mdl%eta           => thermo%eta
     mdl%v_eta         => thermo%v_eta
     mdl%G_nhc         => thermo%G_nhc
     mdl%m_nhc         => thermo%m_nhc
+    mdl%eta_cell      => thermo%eta_cell
+    mdl%v_eta_cell    => thermo%v_eta_cell
+    mdl%G_nhc_cell    => thermo%G_nhc_cell
+    mdl%m_nhc_cell    => thermo%m_nhc_cell
 
     ! Barostat
     mdl%P_int         => baro%P_int
     mdl%P_ext         => baro%P_ext
     mdl%volume        => baro%volume
+    mdl%PV            => baro%PV
     mdl%box_kinetic_energy => baro%ke_box
     mdl%baro_type     => baro%baro_type
     mdl%static_stress => baro%static_stress

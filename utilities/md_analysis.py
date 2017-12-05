@@ -1,4 +1,4 @@
-#!/home/zamaan/codes/anaconda3/bin/python3
+#!/usr/local/bin/python3
 
 import argparse
 import re
@@ -174,7 +174,7 @@ if cq_params['MD.Ensemble'][2] == 't':
 if cq_params['MD.Ensemble'][1] == 'p':
   if 'mttk' in cq_params['MD.Barostat']:
     ax1a.plot(data['time'], data['box'], 'c-', label='Box energy')
-  ax1.plot(data['time'], data['PV'], 'm-', label='pV')
+  ax1.plot(data['time'], data['pV'], 'm-', label='pV')
 ax2.plot(data['time'], data['H\''])
 ax2.plot((opts.nskip,data['time'][-1]), (avg['H\''],avg['H\'']), '-',
       label=r'$\langle H\' \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['H\''], std['H\'']))

@@ -20,8 +20,12 @@
 !!  CREATION DATE
 !!   2017/10/24 09:24
 !!  MODIFICATION HISTORY
-!!   2017/10/24 09:24 zamaan
+!!   2017/10/24 zamaan
 !!    Refactored original NVT code from NVTMD branch
+!!   2017/11/09 zamaan
+!!    Implemented isotropic MTTK barostat
+!!   2017/12/05 zamaan
+!!    Added separate NHC chain for cell degrees of freedom
 !!  SOURCE
 !!
 module md_control
@@ -42,9 +46,9 @@ module md_control
   real(double)  :: md_tau_T, md_tau_P, md_target_press, md_baro_beta, &
                    md_box_mass
   integer       :: md_n_nhc, md_n_ys, md_n_mts
-  logical       :: md_write_xsf
+  logical       :: md_write_xsf, md_cell_nhc
   real(double), dimension(3,3), target      :: lattice_vec
-  real(double), dimension(:), allocatable   :: md_nhc_mass
+  real(double), dimension(:), allocatable   :: md_nhc_mass, md_nhc_cell_mass
   real(double), dimension(:,:), allocatable, target :: ion_velocity
 
   !!****s* md_control/type_thermostat
@@ -68,6 +72,7 @@ module md_control
     real(double)        :: dt           ! time step
     integer             :: ndof         ! number of degrees of freedom
     logical             :: append
+    logical             :: cell_nhc     ! separate NHC for cell?
     real(double)        :: lambda       ! velocity scaling factor
 
     ! Weak coupling thermostat variables
@@ -77,14 +82,17 @@ module md_control
     integer             :: n_nhc        ! number of Nose-Hoover heat baths
     integer             :: n_ys         ! Yoshida-Suzuki order
     integer             :: n_mts_nhc    ! number of time steps for NHC
-    real(double)        :: ke_nhc       ! kinetic energy of NHC thermostats
+    real(double)        :: e_nhc        ! energy of NHC thermostats
+    real(double)        :: e_nhc_ion    ! energy of ionic NHC thermostats
+    real(double)        :: e_nhc_cell   ! energy of cell NHC thermostats
     real(double), dimension(:), allocatable :: eta    ! thermostat "position"
     real(double), dimension(:), allocatable :: v_eta  ! thermostat "velocity"
     real(double), dimension(:), allocatable :: G_nhc  ! "force" on thermostat
+    real(double), dimension(:), allocatable :: m_nhc  ! thermostat mass
     real(double), dimension(:), allocatable :: eta_cell  ! NHC for cell
     real(double), dimension(:), allocatable :: v_eta_cell
     real(double), dimension(:), allocatable :: G_nhc_cell
-    real(double), dimension(:), allocatable :: m_nhc  ! thermostat mass
+    real(double), dimension(:), allocatable :: m_nhc_cell
     real(double), dimension(:), allocatable :: dt_ys  ! Yoshida-Suzuki time steps
 
     contains
@@ -251,6 +259,7 @@ contains
     th%n_ys = n_ys
     th%n_mts_nhc = n_mts
     th%lambda = one
+    th%cell_nhc  = md_cell_nhc
     call th%get_temperature
 
     allocate(th%eta(n_nhc))
@@ -258,14 +267,17 @@ contains
     allocate(th%G_nhc(n_nhc))
     allocate(th%m_nhc(n_nhc))
     allocate(th%dt_ys(n_ys))
-    if (th%ensemble == "npt" .and. th%thermo_type == "nhc") then
+    if (th%ensemble == "npt" .and. th%cell_nhc) then
       allocate(th%eta_cell(n_nhc))    ! independent thermostat for cell DOFs
       allocate(th%v_eta_cell(n_nhc))
       allocate(th%G_nhc_cell(n_nhc))
+      allocate(th%m_nhc_cell(n_nhc))
     end if
 
+    th%m_nhc = md_nhc_mass
+    th%m_nhc_cell = md_nhc_cell_mass
+
     ! Defaults for heat bath positions, velocities, masses
-    th%m_nhc = one
     th%eta = zero
     th%v_eta = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
     th%G_nhc = zero
@@ -428,14 +440,28 @@ contains
     integer, intent(in)                   :: k      ! NH thermostat index
     real(double), intent(in)              :: ke_box ! box ke for pressure coupling
 
-    if (k == 1) then
-      th%G_nhc(k) = two*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree + &
-                    two*ke_box
+    if (th%cell_nhc) then
+      if (k == 1) then
+        th%G_nhc(k) = two*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree
+        th%G_nhc_cell(k) = two*ke_box - th%T_ext*fac_Kelvin2Hartree
+      else
+        th%G_nhc(k) = th%m_nhc(k-1)*th%v_eta(k-1)**2 - &
+                      th%T_ext*fac_Kelvin2Hartree
+        th%G_nhc_cell(k) = th%m_nhc_cell(k-1)*th%v_eta_cell(k-1)**2 - &
+                      th%T_ext*fac_Kelvin2Hartree
+      end if
+      th%G_nhc(k) = th%G_nhc(k)/th%m_nhc(k)
+      th%G_nhc_cell(k) = th%G_nhc_cell(k)/th%m_nhc_cell(k)
     else
-      th%G_nhc(k) = th%m_nhc(k-1)*th%v_eta(k-1)**2 - &
-                    th%T_ext*fac_Kelvin2Hartree
+      if (k == 1) then
+        th%G_nhc(k) = two*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree + &
+                      two*ke_box
+      else
+        th%G_nhc(k) = th%m_nhc(k-1)*th%v_eta(k-1)**2 - &
+                      th%T_ext*fac_Kelvin2Hartree
+      end if
+      th%G_nhc(k) = th%G_nhc(k)/th%m_nhc(k)
     end if
-    th%G_nhc(k) = th%G_nhc(k)/th%m_nhc(k)
 
   end subroutine update_G_eta
   !!***
@@ -460,6 +486,8 @@ contains
     real(double), intent(in)              :: dtfac  ! Trotter expansion factor
 
     th%eta(k) = th%eta(k) + dtfac*dt*th%v_eta(k)
+    if (th%cell_nhc) th%eta_cell(k) = th%eta_cell(k) + &
+                     dtfac*dt*th%v_eta_cell(k)
 
   end subroutine propagate_eta
   !!***
@@ -484,6 +512,8 @@ contains
     real(double), intent(in)              :: dtfac  ! Trotter expansion factor
 
     th%v_eta(k) = th%v_eta(k) + dtfac*dt*th%G_nhc(k)
+    if (th%cell_nhc) th%v_eta_cell(k) = th%v_eta_cell(k) + &
+                                        dtfac*dt*th%G_nhc_cell(k)
 
   end subroutine propagate_v_eta_lin
   !!***
@@ -508,6 +538,8 @@ contains
     real(double), intent(in)              :: dtfac  ! Trotter expansion factor
 
     th%v_eta(k) = th%v_eta(k)*exp(-dtfac*dt*th%v_eta(k+1))
+    if (th%cell_nhc) th%v_eta_cell(k) = &
+                          th%v_eta_cell(k)*exp(-dtfac*dt*th%v_eta_cell(k+1))
 
   end subroutine propagate_v_eta_exp
   !!***
@@ -589,7 +621,7 @@ contains
   !!  NAME
   !!   get_nhc_energy
   !!  PURPOSE
-  !!   compute the NHC contribution to the constant of motion
+  !!   compute the NHC contribution to the conserved quantity
   !!  AUTHOR
   !!   Zamaan Raza
   !!  CREATION DATE
@@ -601,9 +633,28 @@ contains
     ! passed variables
     class(type_thermostat), intent(inout) :: th
 
-    th%ke_nhc = half*sum(th%m_nhc*th%v_eta**2) ! TODO: check this
-    th%ke_nhc = th%ke_nhc + th%ndof*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
-    th%ke_nhc = th%ke_nhc + th%T_ext*fac_Kelvin2Hartree*sum(th%eta(2:))
+    ! local variables
+    integer                               :: k
+
+    th%e_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2 + &
+                   th%ndof*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
+    th%e_nhc_cell = zero
+    if (th%cell_nhc) then
+      th%e_nhc_cell = th%e_nhc_cell + &
+                      half*th%m_nhc_cell(1)*th%v_eta_cell(1)**2 + &
+                      th%T_ext*fac_Kelvin2Hartree*th%eta_cell(1)
+    end if
+
+    do k=2,th%n_nhc
+      th%e_nhc_ion = th%e_nhc_ion + half*th%m_nhc(k)*th%v_eta(k)**2 + &
+                     th%T_ext*fac_Kelvin2Hartree*th%eta(k)
+      if (th%cell_nhc) then
+        th%e_nhc_cell = th%e_nhc_cell + &
+                        half*th%m_nhc_cell(k)*th%v_eta_cell(k)**2 + &
+                        th%T_ext*fac_Kelvin2Hartree*th%eta_cell(k)
+      end if
+    end do
+    th%e_nhc = th%e_nhc_ion + th%e_nhc_cell
 
   end subroutine get_nhc_energy
   !!***
@@ -667,10 +718,17 @@ contains
       write(lun,'("ke_ions ",e12.4)') th%ke_ions
       write(lun,'("lambda  ",f12.4)') th%lambda
       if (th%thermo_type == 'nhc') then
-        write(lun,fmt) "eta:    ", th%eta
-        write(lun,fmt) "v_eta:  ", th%v_eta
-        write(lun,fmt) "G_nhc:  ", th%G_nhc
-        write(lun,'("e_nhc: ",e16.4)') th%ke_nhc
+        write(lun,fmt) "eta:        ", th%eta
+        write(lun,fmt) "v_eta:      ", th%v_eta
+        write(lun,fmt) "G_nhc:      ", th%G_nhc
+        write(lun,'("e_nhc_ion:  ",e16.4)') th%e_nhc_ion
+        if (th%cell_nhc) then
+          write(lun,fmt) "eta_cell:   ", th%eta
+          write(lun,fmt) "v_eta_cell: ", th%v_eta
+          write(lun,fmt) "G_nhc_cell: ", th%G_nhc
+          write(lun,'("e_nhc_cell: ",e16.4)') th%e_nhc_cell
+        end if
+        write(lun,'("e_nhc:      ",e16.4)') th%e_nhc
       else if (th%thermo_type == 'berendsen') then
         write(lun,'("lambda: ",e16.4)') th%lambda
       end if
@@ -1316,18 +1374,17 @@ contains
   !!   2017/11/17 15:55
   !!  SOURCE
   !!  
-  subroutine propagate_npt_mttk(baro, th, stress, ke, v)
+  subroutine propagate_npt_mttk(baro, th, ke, v)
 
     ! passed variables
     class(type_barostat), intent(inout)     :: baro
     type(type_thermostat), intent(inout)    :: th
     real(double), intent(in)                :: ke
-    real(double), dimension(3), intent(in)  :: stress
     real(double), dimension(3,3), intent(inout) :: v
 
     ! local variables
     integer                                 :: i_mts, i_ys, i_nhc
-    real(double)                            :: v_sfac
+    real(double)                            :: v_sfac, v_eta_couple
 
     if (inode==ionode .and. iprint_MD>0) write(io_lun,*) "MD_debug: &
                                                           propagate_npt_mttk"
@@ -1349,11 +1406,18 @@ contains
         end do
 
         ! update box velocities
+        if (th%cell_nhc) then
+          v_eta_couple = th%v_eta_cell(1) ! separate NHC for the cell
+        else
+          v_eta_couple = th%v_eta(1)      ! same NHC as ions
+        end if
         select case(baro%baro_type)
         case('iso-mttk')
-          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
+          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, &
+                                        v_eta_couple)
           call baro%propagate_v_eps_lin(th%dt_ys(i_ys), quarter)
-          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
+          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, &
+                                        v_eta_couple)
         end select
 
         ! update ionic velocities, scale ion kinetic energy
@@ -1368,11 +1432,18 @@ contains
         end do
 
         ! update box velocities
+        if (th%cell_nhc) then
+          v_eta_couple = th%v_eta_cell(1) ! separate NHC for the cell
+        else
+          v_eta_couple = th%v_eta(1)      ! same NHC as ions
+        end if
         select case(baro%baro_type)
         case('iso-mttk')
-          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
+          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, &
+                                        v_eta_couple)
           call baro%propagate_v_eps_lin(th%dt_ys(i_ys), quarter)
-          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, th%v_eta(1))
+          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, &
+                                        v_eta_couple)
         end select
 
         call th%update_G_eta(1, baro%ke_box)

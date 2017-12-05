@@ -516,7 +516,7 @@ contains
                               md_tau_P, md_n_nhc, md_n_ys, md_n_mts, &
                               md_nhc_mass, ion_velocity, lattice_vec, &
                               md_thermo_type, md_baro_type, md_target_press, &
-                              md_write_xsf
+                              md_write_xsf, md_cell_nhc
 
     implicit none
 
@@ -582,7 +582,6 @@ contains
       end do
     end do
 
-
     if (myid == 0 .and. iprint_gen > 0) write(io_lun, 2) MDn_steps
     ! Find energy and forces
     if (flag_fire_qMD) then
@@ -618,6 +617,7 @@ contains
       select case(md_baro_type)
       case('iso-mttk')
         md_ndof = md_ndof + md_n_nhc + 1
+        if (md_cell_nhc) md_ndof = md_ndof + md_n_nhc
         call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
                              md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
         call baro%init_baro(md_target_press, md_ndof, stress, &
@@ -706,8 +706,8 @@ contains
             call baro%get_berendsen_baro_sf(MDtimestep)
             call baro%propagate_berendsen
           case('iso-mttk')
-            call baro%propagate_npt_mttk(thermo, stress, &
-                                         mdl%ion_kinetic_energy, ion_velocity)
+            call baro%propagate_npt_mttk(thermo, mdl%ion_kinetic_energy, &
+                                         ion_velocity)
           case('mttk')
           end select
        end select
@@ -800,8 +800,8 @@ contains
          case('berendsen')
            call thermo%berendsen_v_rescale(ion_velocity)
          case('iso-mttk')
-           call baro%propagate_npt_mttk(thermo, stress, &
-                                        mdl%ion_kinetic_energy, ion_velocity)
+            call baro%propagate_npt_mttk(thermo, mdl%ion_kinetic_energy, &
+                                         ion_velocity)
          case('mttk')
          end select
        end select
