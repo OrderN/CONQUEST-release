@@ -60,6 +60,8 @@
 !!   2017/03/08 15:00 nakata
 !!    Removed dSrange, dHrange, PAOPrange, dSmatind, dHmatind and PAOPmatind
 !!    which are no longer used
+!!   2017/12/05 10:20 dave (with TM and NW (Mizuho))
+!!    Adding new matrix indices (aNA and NAa) for atom function - NA projectors
 !!  SOURCE
 !!
 module matrix_data
@@ -71,7 +73,7 @@ module matrix_data
   save
 
   ! This will need to change if the above parameters are changed
-  integer, parameter :: mx_matrices = 30
+  integer, parameter :: mx_matrices = 32
 
   ! Store ALL indices in a large array
   type(matrix),      allocatable, dimension(:,:), target :: mat
@@ -85,6 +87,7 @@ module matrix_data
   integer, dimension(:), pointer :: aSa_matind, aHa_matind, STr_matind, HTr_matind, &
                                     aSs_matind, aHs_matind, sSa_matind, sHa_matind, &
                                     SFcoeff_matind, SFcoeffTr_matind, LD_matind
+  integer, dimension(:), pointer :: aNAmatind, NAamatind
 
   ! Parameters for the different matrix ranges
   integer, parameter :: Srange   = 1   ! STS,TST,TS.TS
@@ -120,6 +123,9 @@ module matrix_data
   integer :: SFcoeff_range   ! 28
   integer :: SFcoeffTr_range ! 29
   integer :: LD_range        ! 30
+  ! Ranges for NA projectors set later also (dimens.module.f90)
+  integer :: aNArange        ! 31
+  integer :: NAarange        ! 32
 
   integer :: max_range ! Indexes matrix with largest range
 
