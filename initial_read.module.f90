@@ -702,7 +702,8 @@ contains
                           LinTol_DMM, n_dumpL
 !TM
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, &
-                                      STATE, ABINIT, flag_angular_new, flag_neutral_atom_projector
+         STATE, ABINIT, flag_angular_new, &
+         flag_neutral_atom_projector, maxL_neutral_atom_projector, numN_neutral_atom_projector
     use SelfCon, only: A, flag_linear_mixing, EndLinearMixing, q0, q1,&
                        n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
                        atomch_output, flag_Kerker, flag_wdmetric, minitersSC
@@ -1062,6 +1063,25 @@ contains
        flag_neutral_atom  = fdf_boolean('General.NeutralAtom',.true.) ! Default for now
        if( flag_neutral_atom ) then
           flag_neutral_atom_projector = fdf_boolean('General.NeutralAtomProjector',.false.)
+          if( flag_neutral_atom_projector ) then
+             maxL_neutral_atom_projector = &
+                  fdf_integer('General.NeutralAtomProjectorMaxL',3)
+             allocate( numN_neutral_atom_projector(0:maxL_neutral_atom_projector ) )
+             if(fdf_block('NeutralAtom.ProjectorNumbers')) then
+                if(1+block_end-block_start<maxL_neutral_atom_projector+1) &
+                     call cq_abort("Too few NA projector numbers; found/needed: ", &
+                     1+block_end-block_start,maxL_neutral_atom_projector+1)
+                do i=1,maxL_neutral_atom_projector+1
+                   read(unit=input_array(block_start+i-1),fmt=*) j,numN_neutral_atom_projector(i-1)
+                end do
+                call fdf_endblock
+             else
+                write(io_lun,fmt='(10x,"No NA projector numbers specified; defaulting to 5 per l")')
+                numN_neutral_atom_projector(:) = 5
+             end if
+          end if ! NA projector
+       else
+          flag_neutral_atom_projector = .false.
        end if
 !!$
 !!$

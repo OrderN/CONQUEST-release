@@ -34,6 +34,8 @@ module pseudopotential_common
 
   ! Neutral atom projectors
   logical :: flag_neutral_atom_projector
+  integer :: maxL_neutral_atom_projector
+  integer, allocatable :: numN_neutral_atom_projector(:)
   
   integer :: pseudo_type
   integer, parameter:: OLDPS=0, SIESTA=1, STATE=2, ABINIT=3
