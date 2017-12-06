@@ -40,7 +40,7 @@ contains
     character(len=4) :: ps_format
     integer :: i, j, k, maxl, n_paos
     character(len=30), dimension(:), allocatable :: species_label
-    real(double) :: temp
+    real(double) :: temp, width, prefac
     
     ! Load the Conquest_input files
     call load_input
@@ -118,8 +118,8 @@ contains
           else
              call cq_abort("Unrecognised zeta form flag "//input_string(1:8))
           end if
-          paos(i)%width = fdf_double("Atom.WidthConfine",one)
-          paos(i)%prefac = fdf_double("Atom.PrefacConfine",zero)
+          width = fdf_double("Atom.WidthConfine",one)
+          prefac = fdf_double("Atom.PrefacConfine",zero)
           input_string = fdf_string(8,"Atom.Cutoffs","default")
           if(leqi(input_string(1:2),'en')) then ! Take reasonable keyword
              paos(i)%flag_cutoff = pao_cutoff_energies
@@ -182,7 +182,10 @@ contains
              !     1+block_end-block_start,n_species)
              allocate(paos(i)%nzeta(paos(i)%n_shells),paos(i)%l(paos(i)%n_shells), &
                   paos(i)%n(paos(i)%n_shells),paos(i)%npao(paos(i)%n_shells), &
-                  paos(i)%has_semicore(paos(i)%n_shells),paos(i)%inner(paos(i)%n_shells))
+                  paos(i)%has_semicore(paos(i)%n_shells),paos(i)%inner(paos(i)%n_shells),&
+                  paos(i)%width(paos(i)%n_shells),paos(i)%prefac(paos(i)%n_shells))
+             paos(i)%width(:) = width
+             paos(i)%prefac(:) = prefac
              maxl = 0
              n_paos = 0
              if(paos(i)%flag_perturb_polarise) then
@@ -272,6 +275,22 @@ contains
                    if(paos(i)%cutoff(1,j)<two) &
                         write(*,fmt='("Warning: radius of ",f6.3,"a0 is rather small.  Are these energies ?")') paos(i)%cutoff(1,j)
                 end do
+             end if
+             ! Do we have confinement potentials ?
+             if(paos(i)%flag_perturb_polarise) then
+                if(1+block_end-block_start>2*paos(i)%n_shells-2) then
+                   do j=1,paos(i)%n_shells-1
+                      read (unit=input_array(block_start+2*paos(i)%n_shells-2+j-1),fmt=*) &
+                           paos(i)%width(j),paos(i)%prefac(j)
+                   end do
+                end if
+             else
+                if(1+block_end-block_start>2*paos(i)%n_shells) then
+                   do j=1,paos(i)%n_shells
+                      read (unit=input_array(block_start+2*paos(i)%n_shells+j-1),fmt=*) &
+                           paos(i)%width(j),paos(i)%prefac(j)
+                   end do
+                end if
              end if
              ! Sort the energies/cutoffs so that largest is first
              do j=1,paos(i)%n_shells
@@ -701,13 +720,16 @@ contains
           paos(i_species)%n_shells = n_shells
           allocate(paos(i_species)%nzeta(n_shells),paos(i_species)%l(n_shells), &
                paos(i_species)%n(n_shells),paos(i_species)%npao(n_shells),paos(i_species)%l_no(n_shells),&
-               paos(i_species)%has_semicore(n_shells),paos(i_species)%inner(n_shells))
+               paos(i_species)%has_semicore(n_shells),paos(i_species)%inner(n_shells),&
+               paos(i_species)%width(n_shells),paos(i_species)%prefac(n_shells))
           paos(i_species)%n = 0
           paos(i_species)%npao = 0
           paos(i_species)%nzeta = 0
           paos(i_species)%l = 0
           paos(i_species)%l_no = 0
           paos(i_species)%lmax = 0
+          paos(i_species)%width = one
+          paos(i_species)%prefac = zero
           ! For default, we have SZ (shallow core) and TZTP so maximum number of zetas is 3
           allocate(paos(i_species)%cutoff(max_zeta,n_shells))
           paos(i_species)%cutoff = zero

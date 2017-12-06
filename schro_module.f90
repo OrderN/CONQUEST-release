@@ -210,7 +210,7 @@ contains
                    paos(i_species)%energy(zeta,i_shell) = one!zero !paos(i_species)%energy(1,val(i_species)%n_occ)
                    call find_eigenstate_and_energy_vkb(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
                         paos(i_species)%psi(zeta,i_shell)%f,paos(i_species)%energy(zeta,i_shell), &
-                        vha,vxc,paos(i_species)%width,paos(i_species)%prefac)
+                        vha,vxc,paos(i_species)%width(i_shell),paos(i_species)%prefac(i_shell))
                    if(paos(i_species)%has_semicore(i_shell)) then
                       ! Dot product of two
                       dot_p = zero
@@ -243,7 +243,8 @@ contains
                 else
                    large_energy = val(i_species)%en_ps(i_shell) + paos(i_species)%energy(zeta,i_shell)
                    call find_eigenstate_and_energy_vkb(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
-                        paos(i_species)%psi(zeta,i_shell)%f,large_energy, vha,vxc,paos(i_species)%width,paos(i_species)%prefac)
+                        paos(i_species)%psi(zeta,i_shell)%f,large_energy, vha,vxc,&
+                        paos(i_species)%width(i_shell),paos(i_species)%prefac(i_shell))
                    if(iprint>2) write(*,fmt='(2x,"Final energy shift required: ",f10.5," Ha")') &
                         large_energy - val(i_species)%en_ps(i_shell)
                    paos(i_species)%energy(zeta,i_shell) = large_energy
