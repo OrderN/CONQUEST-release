@@ -831,6 +831,7 @@ contains
            write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
          enddo
        endif
+       if (inode.EQ.ionode) call dump_InfoGlobal(iter)
 
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)

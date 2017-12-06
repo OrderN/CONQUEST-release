@@ -43,6 +43,7 @@ module md_control
   ! Unit conversion factors
   real(double), parameter :: fac_HaBohr32GPa = 29421.02648438959
 
+  ! Module variables
   character(20) :: md_thermo_type, md_baro_type
   real(double)  :: md_tau_T, md_tau_P, md_target_press, md_baro_beta, &
                    md_box_mass
@@ -597,12 +598,12 @@ contains
     real(double)  :: v_sfac   ! ionic velocity scaling factor
     real(double)  :: fac
 
-    if (inode==ionode .and. flag_thermoDebug) write(io_lun,*) "thermoDebug: &
-                                                            propagate_nvt_nhc"
+    if (inode==ionode .and. flag_thermoDebug) &
+      write(io_lun,*) "thermoDebug: propagate_nvt_nhc"
 
     th%ke_ions = ke
     v_sfac = one
-    call th%update_G_eta(1, zero)
+    call th%update_G_eta(1, zero) ! update force on thermostat 1
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
         ! Reverse part of Trotter expansion: update thermostat force/velocity
@@ -614,14 +615,12 @@ contains
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
 
-        ! scale the ionic velocities and kinetic energy
+        ! adjust the velocity scaling factor, scale the kinetic energy
         fac = exp(-half*th%dt_ys(i_ys)*th%v_eta(1))
         v_sfac = v_sfac*fac
-        if (inode==ionode .and. flag_thermoDebug) write(io_lun,*) &
-                                            'thermoDebug:v_sfac = ', v_sfac
         th%ke_ions = th%ke_ions*v_sfac**2
 
-        call th%update_G_eta(1, zero)
+        call th%update_G_eta(1, zero) ! update force on thermostat 1
         ! update the thermostat "positions" eta
         do i_nhc=1,th%n_nhc
           call th%propagate_eta(i_nhc, th%dt_ys(i_ys), half)
@@ -641,6 +640,9 @@ contains
     end do    ! MTS loop
 
     ! scale the ionic velocities
+    if (inode==ionode .and. flag_thermoDebug) &
+      write(io_lun,*) 'thermoDebug: v_sfac = ', v_sfac
+
     v = v_sfac*v
     th%lambda = v_sfac
 
@@ -1093,9 +1095,8 @@ contains
     baro%G_eps = (baro%odnf*baro%ke_ions + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
     ! baro%G_eps = (three*baro%ke_ions/baro%ndof + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
 
-    if (inode==ionode .and. flag_baroDebug) then
+    if (inode==ionode .and. flag_baroDebug) &
       write(io_lun,*) "baroDebug: update_G_eps: G_eps = ", baro%G_eps
-    end if
 
   end subroutine update_G_eps
   !!***
@@ -1120,9 +1121,8 @@ contains
 
     baro%eps = baro%eps + dtfac*dt*baro%v_eps
 
-    if (inode==ionode .and. flag_baroDebug) then
+    if (inode==ionode .and. flag_baroDebug) &
       write(io_lun,*) "baroDebug: propagate_eps_lin: eps = ", baro%eps
-    end if
 
   end subroutine propagate_eps_lin
   !!***
@@ -1148,9 +1148,8 @@ contains
 
     baro%eps = baro%eps*exp(-dtfac*dt*v_eta_1)
 
-    if (inode==ionode .and. flag_baroDebug) then
+    if (inode==ionode .and. flag_baroDebug) &
       write(io_lun,*) "baroDebug: propagate_eps_exp: eps = ", baro%eps
-    end if
 
   end subroutine propagate_eps_exp
   !!***
@@ -1175,9 +1174,8 @@ contains
 
     baro%v_eps = baro%v_eps + dtfac*dt*baro%G_eps
 
-    if (inode==ionode .and. flag_baroDebug) then
+    if (inode==ionode .and. flag_baroDebug) &
       write(io_lun,*) "baroDebug: propagate_v_eps_lin: v_eps = ", baro%v_eps
-    end if
 
   end subroutine propagate_v_eps_lin
   !!***
@@ -1203,9 +1201,8 @@ contains
 
     baro%v_eps = baro%v_eps*exp(-dtfac*dt*v_eta_1)
 
-    if (inode==ionode .and. flag_baroDebug) then
+    if (inode==ionode .and. flag_baroDebug) &
       write(io_lun,*) "baroDebug: propagate_v_eps_lin: v_eps = ", baro%v_eps
-    end if
 
   end subroutine propagate_v_eps_exp
   !!***
@@ -1240,9 +1237,8 @@ contains
       baro%ke_ions = baro%ke_ions*expfac**2
     end select
 
-    if (inode==ionode .and. flag_baroDebug) then
+    if (inode==ionode .and. flag_baroDebug) &
       write(io_lun,*) "baroDebug: update_vscale_fac: v_sfac = ", v_sfac
-    end if
 
   end subroutine update_vscale_fac
   !!***
@@ -1278,8 +1274,8 @@ contains
     integer                               :: i, speca, gatom, ibeg_atom
     logical                               :: flagx, flagy, flagz
 
-    if (inode==ionode .and. flag_baroDebug) write(io_lun,*) "baroDebug: &
-                                                            propagate_r_mttk"
+    if (inode==ionode .and. flag_baroDebug) &
+      write(io_lun,*) "baroDebug: propagate_r_mttk"
 
     select case(baro%baro_type)
     case('iso-mttk')
@@ -1342,8 +1338,8 @@ contains
     ! local variables
     real(double)                          :: v_new, v_old, lat_sfac
 
-    if (inode==ionode .and. flag_baroDebug) write(io_lun,*) "baroDebug: &
-                                                            propagate_box_mttk"
+    if (inode==ionode .and. flag_baroDebug) &
+      write(io_lun,*) "baroDebug: propagate_box_mttk"
 
     select case(baro%baro_type)
     case('iso-mttk')
@@ -1355,9 +1351,8 @@ contains
       baro%lat = baro%lat*lat_sfac
     end select
 
-    if (inode==ionode .and. flag_baroDebug) then
+    if (inode==ionode .and. flag_baroDebug) &
       write(io_lun,*) "baroDebug: propagate_box_mttk: lat_sfac = ", lat_sfac
-    end if
 
   end subroutine propagate_box_mttk
   !!***
@@ -1411,14 +1406,17 @@ contains
     integer                                 :: i_mts, i_ys, i_nhc
     real(double)                            :: v_sfac, v_eta_couple
 
-    if (inode==ionode .and. flag_baroDebug) write(io_lun,*) "baroDebug: &
-                                                            propagate_npt_mttk"
+    if (inode==ionode .and. flag_baroDebug) &
+      write(io_lun,*) "baroDebug: propagate_npt_mttk"
 
     baro%ke_ions = ke
     v_sfac = one
     call baro%get_box_ke
     call th%update_G_eta(1, baro%ke_box)
-    call baro%update_G_eps
+    select case(baro%baro_type)
+    case('iso-mttk')
+      call baro%update_G_eps
+    end select
 
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
@@ -1449,7 +1447,10 @@ contains
         call baro%update_vscale_fac(th%dt_ys(i_ys), half, th%v_eta(1), v_sfac)
         th%ke_ions = baro%ke_ions
 
-        call baro%update_G_eps
+        select case(baro%baro_type)
+        case('iso-mttk')
+          call baro%update_G_eps
+        end select
         call baro%get_box_ke
         ! update the thermostat "positions" eta
         do i_nhc=1,th%n_nhc
@@ -1488,9 +1489,8 @@ contains
     v = v_sfac*v
     th%lambda = v_sfac
 
-    if (inode==ionode .and. flag_baroDebug) then
+    if (inode==ionode .and. flag_baroDebug) &
       write(io_lun,*) "baroDebug: propagate_npt_mttk: v_sfac = ", v_sfac
-    end if
 
   end subroutine propagate_npt_mttk
   !!***
@@ -1593,8 +1593,8 @@ contains
     real(double) :: orcellx, orcelly, orcellz, xvec, yvec, zvec, r2, scale
     integer :: i, j
 
-    if (inode==ionode .and. flag_baroDebug) write(io_lun,*) "baroDebug: &
-                                                            update_cell"
+    if (inode==ionode .and. flag_baroDebug) &
+      write(io_lun,*) "baroDebug: update_cell"
 
     orcellx = rcellx
     orcelly = rcelly
