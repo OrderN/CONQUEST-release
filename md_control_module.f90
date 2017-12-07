@@ -790,10 +790,12 @@ contains
     integer                                 :: i
 
     baro%baro_type = 'None'
+    baro%P_ext = zero
     baro%static_stress = zero
     do i=1,3
       baro%static_stress(i,i) = stress(i)
     end do
+    call baro%get_volume
 
   end subroutine init_baro_none
   !!***
