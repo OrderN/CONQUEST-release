@@ -323,9 +323,9 @@ contains
       end do
       write(lun,'(a)') "end cell_vectors"
       write(lun,'(a)') "stress_tensor"
-      write(lun,'(3e12.6)') mdl%stress(1), zero, zero
-      write(lun,'(3e12.6)') zero, mdl%stress(2), zero
-      write(lun,'(3e12.6)') zero, zero, mdl%stress(3)
+      write(lun,'(3f14.6)') mdl%stress(1), zero, zero
+      write(lun,'(3f14.6)') zero, mdl%stress(2), zero
+      write(lun,'(3f14.6)') zero, zero, mdl%stress(3)
       write(lun,'(a)') "end stress_tensor"
       write(lun,'(a)') "positions"
       call mdl%dump_mdl_atom_arr(lun, mdl%atom_coords)

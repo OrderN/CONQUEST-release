@@ -599,9 +599,11 @@ contains
     case('nve')
       ! Just for computing temperature
       call thermo%init_thermo_none(md_ndof, mdl%ion_kinetic_energy)
-      call baro%init_baro_none(stress) ! Just for computing pressure
+      call baro%init_baro(zero, md_ndof, stress, ion_velocity, &
+                          mdl%ion_kinetic_energy) ! to get the pressure
     case('nvt')
-      call baro%init_baro_none(stress) ! Just for computing pressure
+      call baro%init_baro(zero, md_ndof, stress, ion_velocity, &
+                          mdl%ion_kinetic_energy) ! to get the pressure
       select case(md_thermo_type)
       case('nhc')
         md_ndof = md_ndof + md_n_nhc
@@ -629,7 +631,7 @@ contains
         call thermo%init_berendsen_thermo(MDtimestep, temp_ion, md_ndof, &
                                           md_tau_T, mdl%ion_kinetic_energy)
         call baro%init_baro(md_target_press, md_ndof, stress, &
-                                 ion_velocity, mdl%ion_kinetic_energy)
+                            ion_velocity, mdl%ion_kinetic_energy)
       case default
         call cq_abort("Unknown barostat type")
       end select
@@ -773,11 +775,9 @@ contains
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
        end if
 
+       if (flag_FixCOM) call zero_COM_velocity(ion_velocity)
        call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
        thermo%ke_ions = mdl%ion_kinetic_energy
-       if (thermo%thermo_type == 'None') call thermo%update_ke_ions(mdl%ion_kinetic_energy)
-       if (baro%baro_type == 'None') call baro%update_static_stress(stress)
-       if (flag_FixCOM) call zero_COM_velocity(ion_velocity)
        call baro%update_static_stress(stress)
        call baro%get_ke_stress(ion_velocity)
        call baro%get_volume

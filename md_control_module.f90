@@ -175,7 +175,6 @@ module md_control
 
     contains
 
-      procedure, public   :: init_baro_none
       procedure, public   :: init_baro
       procedure, public   :: update_static_stress
       procedure, public   :: get_pressure
@@ -767,37 +766,6 @@ contains
     end if
 
   end subroutine dump_thermo_state
-  !!***
-
-  !!****m* md_control/init_baro_none *
-  !!  NAME
-  !!   init_baro_none
-  !!  PURPOSE
-  !!   initialise barostat for constant volume, just to compute pressure
-  !!  AUTHOR
-  !!    Zamaan Raza 
-  !!  CREATION DATE
-  !!   2017/11/08 12:23
-  !!  SOURCE
-  !!  
-  subroutine init_baro_none(baro, stress)
-
-    ! passed variables
-    class(type_barostat), intent(inout)     :: baro
-    real(double), dimension(3), intent(in)  :: stress
-
-    ! local variables
-    integer                                 :: i
-
-    baro%baro_type = 'None'
-    baro%P_ext = zero
-    baro%static_stress = zero
-    do i=1,3
-      baro%static_stress(i,i) = stress(i)
-    end do
-    call baro%get_volume
-
-  end subroutine init_baro_none
   !!***
 
   !!****m* md_control/init_baro *
