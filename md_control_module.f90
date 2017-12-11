@@ -33,7 +33,8 @@ module md_control
   use datatypes
   use numbers
   use global_module,    only: ni_in_cell, io_lun, iprint_MD, &
-                              flag_thermoDebug, flag_baroDebug
+                              flag_thermoDebug, flag_baroDebug, &
+                              temp_ion
   use move_atoms,       only: fac_Kelvin2Hartree
   use species_module,   only: species, mass
   use GenComms,         only: inode, ionode
@@ -46,9 +47,9 @@ module md_control
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
   real(double)  :: md_tau_T, md_tau_P, md_target_press, md_baro_beta, &
-                   md_box_mass
+                   md_box_mass, md_ndof_ions
   integer       :: md_n_nhc, md_n_ys, md_n_mts
-  logical       :: md_write_xsf, md_cell_nhc
+  logical       :: md_write_xsf, md_cell_nhc, md_calc_xlmass
   real(double), dimension(3,3), target      :: lattice_vec
   real(double), dimension(:), allocatable   :: md_nhc_mass, md_nhc_cell_mass
   real(double), dimension(:,:), allocatable, target :: ion_velocity
@@ -102,6 +103,7 @@ module md_control
 
       procedure, public   :: init_thermo_none
       procedure, public   :: init_nhc
+      procedure, public   :: init_ys
       procedure, public   :: init_berendsen_thermo
       procedure, public   :: update_ke_ions
       procedure, public   :: get_berendsen_thermo_sf
@@ -250,6 +252,8 @@ contains
 
     ! local variables
     character(40)                         :: fmt1, fmt2
+    real(double)                          :: omega_thermo, omega_baro, ndof_baro
+    integer                               :: i
 
     th%thermo_type = "nhc"
     th%append = .false.
@@ -269,7 +273,6 @@ contains
     allocate(th%v_eta(n_nhc))
     allocate(th%G_nhc(n_nhc))
     allocate(th%m_nhc(n_nhc))
-    allocate(th%dt_ys(n_ys))
     if (th%cell_nhc) then
       allocate(th%eta_cell(n_nhc))    ! independent thermostat for cell DOFs
       allocate(th%v_eta_cell(n_nhc))
@@ -277,8 +280,26 @@ contains
       allocate(th%m_nhc_cell(n_nhc))
     end if
 
-    th%m_nhc = md_nhc_mass
-    th%m_nhc_cell = md_nhc_cell_mass
+    ! Calculate the masses for extended lagrangian variables?
+    if (md_calc_xlmass) then
+      omega_thermo = twopi/md_tau_T
+      omega_baro = twopi/md_tau_P
+      th%m_nhc(1) = md_ndof_ions*th%T_ext/omega_thermo**2
+      if (th%cell_nhc) then
+        select case (md_baro_type)
+        case('iso-mttk')
+          ndof_baro = one
+        end select
+        th%m_nhc_cell(1) = (ndof_baro**2)*th%T_ext/omega_baro**2
+      end if
+      do i=2,n_nhc
+        th%m_nhc(i) = th%T_ext/omega_thermo**2
+        if (th%cell_nhc) th%m_nhc_cell(i) = th%T_ext/omega_thermo**2
+      end do
+    else
+      th%m_nhc = md_nhc_mass
+      th%m_nhc_cell = md_nhc_cell_mass
+    end if
 
     ! Defaults for heat bath positions, velocities, masses
     th%eta = zero
@@ -291,26 +312,10 @@ contains
     end if
 
     ! Yoshida-Suzuki time steps
-    select case(th%n_ys) ! The YS order
-    case(1)
-      th%dt_ys(1) = one
-    case(3)              ! n_ys = 3,5 taken from MTTK; higher orders possible
-      th%dt_ys(1) = one/(two - two**(one/three))
-      th%dt_ys(2) = one - two*th%dt_ys(1)
-      th%dt_ys(3) = th%dt_ys(1)
-    case(5)
-      th%dt_ys(1) = one/(four - four**(one/three))
-      th%dt_ys(2) = th%dt_ys(1)
-      th%dt_ys(3) = one - four*th%dt_ys(1)
-      th%dt_ys(4) = th%dt_ys(1)
-      th%dt_ys(5) = th%dt_ys(1)
-    case default
-      call cq_abort("Invalid Yoshida-Suzuki order")
-    end select
-    th%dt_ys = th%dt*th%dt_ys/th%n_mts_nhc
+    call th%init_ys(th%n_ys)
 
-    write(fmt1,'("(4x,a16,",i4,"f10.4)")') th%n_nhc
-    write(fmt2,'("(4x,a16,",i4,"f10.4)")') th%n_ys
+    write(fmt1,'("(4x,a16,",i4,"f12.2)")') th%n_nhc
+    write(fmt2,'("(4x,a16,",i4,"f12.2)")') th%n_ys
     if (inode==ionode) then
       write(io_lun,'(2x,a)') 'Welcome to init_nhc'
       write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
@@ -329,6 +334,120 @@ contains
     end if
 
   end subroutine init_nhc
+  !!***
+
+  !!****m* md_control/init_ys *
+  !!  NAME
+  !!   init_ys
+  !!  PURPOSE
+  !!   initialise Yoshida-Suzuki time steps
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/12/08 16:24
+  !!  SOURCE
+  !!  
+  subroutine init_ys(th, n_ys)
+
+    use GenComms,         only: cq_abort
+
+    ! passed variables
+    class(type_thermostat), intent(inout)     :: th
+    integer, intent(in)                       :: n_ys
+
+    ! local variables
+    integer                                   :: i, j, k, l, m
+    real(double), dimension(:,:), allocatable :: psuz
+    real(double)                              :: xnt
+
+    allocate(psuz(n_ys,5))
+    allocate(th%dt_ys(n_ys))
+
+    do i=2,n_ys
+      xnt = one/(two*real(i,double)-one)
+      do j=1,5
+        if (mod(j,3) == 0) then
+          psuz(i,j) = one - four/(four-four**xnt)
+        else
+          psuz(i,j) = one/(four-four**xnt)
+        end if
+      end do
+    end do
+
+    ! Yoshida-Suzuki time steps
+    k = 0
+    select case(th%n_ys) ! The YS order
+    case(1)
+      th%dt_ys(1) = one
+    case(3)
+      th%dt_ys(1) = one/(two - two**(one/three))
+      th%dt_ys(2) = one - two*th%dt_ys(1)
+      th%dt_ys(3) = th%dt_ys(1)
+    case(5)
+      do i=1,5
+        k = k+1
+        th%dt_ys(k) = psuz(2,i)
+      end do
+    case(7)
+      th%dt_ys(1) = -1.17767998417887_double
+      th%dt_ys(2) = 0.235573213359357_double
+      th%dt_ys(3) = 0.784513610477560_double
+      th%dt_ys(4) = one - two*(th%dt_ys(1)+th%dt_ys(2)+th%dt_ys(3))
+      th%dt_ys(5) = th%dt_ys(3)
+      th%dt_ys(6) = th%dt_ys(2)
+      th%dt_ys(7) = th%dt_ys(1)
+    case(15)
+      th%dt_ys(1) = 0.914844246229740_double
+      th%dt_ys(2) = 0.253693336566229_double
+      th%dt_ys(3) = -1.44485223686048_double
+      th%dt_ys(4) = -0.158240635368243_double
+      th%dt_ys(5) = 1.93813913762276_double
+      th%dt_ys(6) = -1.96061023297549_double
+      th%dt_ys(7) = 0.102799849391985_double
+      th%dt_ys(8) = one - two*(th%dt_ys(1)+th%dt_ys(2)+th%dt_ys(3)+&
+                               th%dt_ys(4)+th%dt_ys(5)+th%dt_ys(6)+&
+                               th%dt_ys(7))
+      th%dt_ys(9) = th%dt_ys(7)
+      th%dt_ys(10) = th%dt_ys(6)
+      th%dt_ys(11) = th%dt_ys(5)
+      th%dt_ys(12) = th%dt_ys(4)
+      th%dt_ys(13) = th%dt_ys(3)
+      th%dt_ys(14) = th%dt_ys(2)
+      th%dt_ys(15) = th%dt_ys(1)
+    case(25)
+      do j=1,5
+        do i=1,5
+          k = k+1
+          th%dt_ys(k) = psuz(2,i)*psuz(3,j)
+        end do
+      end do
+    case(125)
+      do l=1,5
+        do j=1,5
+          do i=1,5
+            k = k+1
+            th%dt_ys(k) = psuz(2,i)*psuz(3,j)*psuz(4,l)
+          end do
+        end do
+      end do
+    case(625)
+      do m=1,5
+        do l=1,5
+          do j=1,5
+            do i=1,5
+              k = k+1
+              th%dt_ys(k) = psuz(2,i)*psuz(3,j)*psuz(4,l)*psuz(5,m)
+            end do
+          end do
+        end do
+      end do
+    case default
+      call cq_abort("Invalid Yoshida-Suzuki order")
+    end select
+    th%dt_ys = th%dt*th%dt_ys/th%n_mts_nhc
+    deallocate(psuz)
+
+  end subroutine init_ys
   !!***
 
   !!****m* md_control/init_berendsen_thermo *
@@ -423,6 +542,11 @@ contains
     real(double), dimension(:,:), intent(inout) :: v
 
     v = v*th%lambda
+
+    if (inode==ionode .and. flag_thermoDebug) then
+      write(io_lun,'(a,i2)') "thermoDebug: berendsen_v_rescale"
+      write(io_lun,*) "lambda:     ", th%lambda
+    end if
 
   end subroutine berendsen_v_rescale
   !!***
@@ -758,8 +882,6 @@ contains
           write(lun,'("e_nhc_cell: ",e16.4)') th%e_nhc_cell
         end if
         write(lun,'("e_nhc:      ",e16.4)') th%e_nhc
-      else if (th%thermo_type == 'berendsen') then
-        write(lun,'("lambda: ",e16.4)') th%lambda
       end if
       write(lun,*)
       call io_close(lun)
@@ -793,7 +915,14 @@ contains
 
     ! Globals
     baro%baro_type = md_baro_type
-    baro%box_mass = md_box_mass
+    if (md_calc_xlmass) then
+      select case(md_baro_type)
+      case('iso-mttk')
+        baro%box_mass = (md_ndof_ions + one)*temp_ion/(twopi/md_tau_P)**2
+      end select
+    else
+      baro%box_mass = md_box_mass
+    end if
 
     ! constants for polynomial expanion
     baro%c2 = one/6.0_double
@@ -816,6 +945,7 @@ contains
     baro%volume_ref = baro%volume
 
     select case(baro%baro_type)
+    case('None')
     case('berendsen')
       baro%tau_P = md_tau_P
       baro%beta = md_baro_beta
@@ -825,17 +955,18 @@ contains
       baro%v_eps = zero
       baro%ke_box = zero
       baro%odnf = one + three/baro%ndof
+      baro%tau_P = md_tau_P
     case default
       call cq_abort("Invalid barostat")
     end select
 
     if (inode==ionode) then
       write(io_lun,('(2x,a)')) 'Welcome to init_baro'
-      write(io_lun,'(4x,a,f10.2)') 'Target pressure        P_ext = ', &
+      write(io_lun,'(4x,a,f14.2)') 'Target pressure        P_ext = ', &
                                     baro%P_ext
-      write(io_lun,'(4x,a,f10.2)') 'Instantaneous pressure P_int = ', &
+      write(io_lun,'(4x,a,f14.2)') 'Instantaneous pressure P_int = ', &
                                     baro%P_int
-      write(io_lun,'(4x,a,f10.2)') 'Box mass                     = ', &
+      write(io_lun,'(4x,a,f14.2)') 'Box mass                     = ', &
                                     baro%box_mass
     end if
 
@@ -992,31 +1123,49 @@ contains
   !!   2017/12/01 14:21
   !!  SOURCE
   !!  
-  subroutine propagate_berendsen(baro)
+  subroutine propagate_berendsen(baro, flag_movable)
 
     use global_module,      only: x_atom_cell, y_atom_cell, z_atom_cell, &
                                   atom_coord_diff, id_glob
 
     ! passed variables
     class(type_barostat), intent(inout)         :: baro
+    logical, dimension(:), intent(in)           :: flag_movable
 
     ! local variables
-    integer                                     :: i, gatom
+    integer                                     :: i, gatom, ibeg_atom
     real(double)                                :: x_old, y_old, z_old
+    logical                                     :: flagx, flagy, flagz
+
+    if (inode==ionode .and. flag_baroDebug) then
+      write(io_lun,*) "baroDebug: propagate_berendsen"
+      write(io_lun,*) "mu:   :     ", baro%mu
+    end if
 
     baro%lat = baro%lat*baro%mu
 
+    ibeg_atom = 1
     do i=1,ni_in_cell
       gatom = id_glob(i)
-      x_old = x_atom_cell(i)
-      y_old = y_atom_cell(i)
-      z_old = z_atom_cell(i)
-      x_atom_cell(i) = baro%mu*x_atom_cell(i)
-      y_atom_cell(i) = baro%mu*y_atom_cell(i)
-      z_atom_cell(i) = baro%mu*z_atom_cell(i)
-      atom_coord_diff(1,gatom) = x_atom_cell(i) - x_old
-      atom_coord_diff(2,gatom) = y_atom_cell(i) - y_old
-      atom_coord_diff(3,gatom) = z_atom_cell(i) - z_old
+      flagx = flag_movable(ibeg_atom)
+      flagy = flag_movable(ibeg_atom+1)
+      flagz = flag_movable(ibeg_atom+2)
+
+      if (flagx) then
+        x_old = x_atom_cell(i)
+        x_atom_cell(i) = baro%mu*x_atom_cell(i)
+        atom_coord_diff(1,gatom) = x_atom_cell(i) - x_old
+      end if
+      if (flagy) then
+        y_old = y_atom_cell(i)
+        y_atom_cell(i) = baro%mu*y_atom_cell(i)
+        atom_coord_diff(2,gatom) = y_atom_cell(i) - y_old
+      end if
+      if (flagz) then
+        z_old = z_atom_cell(i)
+        z_atom_cell(i) = baro%mu*z_atom_cell(i)
+        atom_coord_diff(3,gatom) = z_atom_cell(i) - z_old
+      end if
     end do
 
   end subroutine propagate_berendsen

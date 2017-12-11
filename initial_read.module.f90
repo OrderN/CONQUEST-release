@@ -765,7 +765,8 @@ contains
     use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
                           md_target_press, md_baro_type, md_tau_P, &
                           md_thermo_type, md_baro_beta, md_box_mass, &
-                          md_write_xsf, md_cell_nhc, md_nhc_cell_mass
+                          md_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
+                          md_calc_xlmass
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
 
@@ -1887,6 +1888,7 @@ contains
 
        md_ensemble        = fdf_string(3, 'MD.Ensemble', 'nve')
        md_write_xsf       = fdf_boolean('MD.WriteXSF', .true.)
+       md_calc_xlmass     = fdf_boolean('MD.CalculateXLMass', .false.)
 
        ! Thermostat
        md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')

@@ -504,19 +504,21 @@ contains
     use io_module2,     ONLY: dump_InfoGlobal,grab_InfoGlobal,grab_matrix2,InfoL
     !use DiagModule,     ONLY: diagon
     use mult_module,    ONLY: matL,L_trans,matK,S_trans, matrix_scale
-    use matrix_data,    ONLY: Lrange,Hrange
+    use matrix_data,    ONLY: Lrange,Hrange, rcut, max_range
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use XLBOMD_module,  ONLY: Ready_XLBOMD, Do_XLBOMD
     use Integrators,    ONLY: vVerlet_v_dthalf,vVerlet_r_dt, fire_qMD, fire_N_below_thresh
     use constraint_module, ONLY: correct_atomic_position,correct_atomic_velocity, &
          ready_constraint,flag_RigidBonds
     use input_module,   ONLY: io_assign, io_close
+    use cover_module,   only: BCS_parts, make_cs, deallocate_cs, make_iprim, &
+                              send_ncover
     use md_model,       only: type_md_model
     use md_control,     only: type_thermostat, type_barostat, md_tau_T, &
                               md_tau_P, md_n_nhc, md_n_ys, md_n_mts, &
                               md_nhc_mass, ion_velocity, lattice_vec, &
                               md_thermo_type, md_baro_type, md_target_press, &
-                              md_write_xsf, md_cell_nhc
+                              md_write_xsf, md_cell_nhc, md_ndof_ions
 
     implicit none
 
@@ -530,7 +532,7 @@ contains
     integer       ::  iter, i, j, k, length, stat, i_first, i_last, &
          nfile, symm, md_ndof
     integer       :: lun, ios, md_steps ! SA 150204; 150213 md_steps: counter for MD steps
-    real(double)  :: temp, energy1, energy0, dE, max, g0
+    real(double)  :: temp, energy1, energy0, dE, max, g0, rcut_BCS
     character(50) :: file_velocity='velocity.dat'
     logical       :: done,second_call
     logical,allocatable,dimension(:) :: flag_movable
@@ -576,6 +578,7 @@ contains
     call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
     ! Initialise number of degrees of freedom
     md_ndof = 3*ni_in_cell
+    md_ndof_ions = md_ndof
     do i=1,ni_in_cell
       do j=1,3
         if (flag_move_atom(j,i) .eqv. .false.) md_ndof = md_ndof-1
@@ -708,7 +711,7 @@ contains
           case('berendsen')
             call thermo%get_berendsen_thermo_sf
             call baro%get_berendsen_baro_sf(MDtimestep)
-            call baro%propagate_berendsen
+            call baro%propagate_berendsen(flag_movable)
           case('iso-mttk')
             call baro%propagate_npt_mttk(thermo, mdl%ion_kinetic_energy, &
                                          ion_velocity)
@@ -737,6 +740,7 @@ contains
           if (md_ensemble(2:2) == 'p') call baro%update_cell
           call wrap_xyz_atom_cell()
           call update_atom_coord()
+
           call updateIndices3(fixed_potential,ion_velocity)
           ! update rcellx, rcelly, rcellz, grid, scale density
           if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
