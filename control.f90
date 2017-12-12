@@ -520,6 +520,11 @@ contains
                               md_thermo_type, md_baro_type, md_target_press, &
                               md_write_xsf, md_cell_nhc, md_ndof_ions
 
+    use atoms,          only: distribute_atoms,deallocate_distribute_atom
+    use global_module,  only: atom_coord_diff
+
+    use io_module2,     only: scale_x, scale_y, scale_z
+
     implicit none
 
     ! Passed variables
@@ -545,6 +550,7 @@ contains
     integer :: step_qMD, n_stop_qMD, fire_N, fire_N2
     real(double) :: fire_step_max, fire_P0, fire_alpha
 
+    integer :: iter_MD
     ! model
     type(type_md_model)           :: mdl
 
@@ -689,12 +695,7 @@ contains
        mdl%step = iter
        if (myid == 0) &
             write (io_lun, fmt='(4x,"MD run, iteration ",i5)') iter
-       ! Fetch old relations
-       if (.NOT. flag_MDold) then
-         if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-         call gcopy(n_proc_old)
-         call gcopy(glob2node_old,ni_in_cell)
-       endif
+
        call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
 
        ! thermostat/barostat
@@ -706,7 +707,7 @@ contains
          case('berendsen')
            call thermo%get_berendsen_thermo_sf
          end select
-        case('npt')
+       case('npt')
           select case(md_baro_type)
           case('berendsen')
             call thermo%get_berendsen_thermo_sf
@@ -742,6 +743,18 @@ contains
           call update_atom_coord()
 
           call updateIndices3(fixed_potential,ion_velocity)
+
+      !TMTMTM
+         atom_coord_diff = zero
+         if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old,iter_MD)
+         call gcopy(n_proc_old)
+         call gcopy(scale_x)
+         call gcopy(scale_y)
+         call gcopy(scale_z)
+         call gcopy(glob2node_old,ni_in_cell)
+         call gcopy(atom_coord_diff, 3, ni_in_cell)
+
+      !TM    call updateIndices3(fixed_potential,ion_velocity)
           ! update rcellx, rcelly, rcellz, grid, scale density
           if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
              ! L-matrix reconstruction

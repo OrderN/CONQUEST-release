@@ -53,6 +53,10 @@ module io_module2
                                        InfoX7(:),InfoX8(:),InfoX9(:), &
                                        InfoX10(:)
   integer :: n_matrix
+!temporary 
+  real(double) :: scale_x, scale_y, scale_z
+!temporary 
+
 
   character(80),private :: RCSid = "$Id$"
 
@@ -244,9 +248,12 @@ contains
             j_global_num(atom_num,neigh) = id_glob(parts%icell_beg(j_global_part) &
                                                 +mat(np,range)%i_seq(ist)-1)
             beta_j(atom_num,neigh) = nsf_species(species_glob(j_global_num(atom_num,neigh)))
-            vec_Rij(1,neigh) = (bundle%xprim(atom_num) - BCS_parts%xcover(gcspart))/rcellx
-            vec_Rij(2,neigh) = (bundle%yprim(atom_num) - BCS_parts%ycover(gcspart))/rcelly
-            vec_Rij(3,neigh) = (bundle%zprim(atom_num) - BCS_parts%zcover(gcspart))/rcellz
+            !vec_Rij(1,neigh) = (bundle%xprim(atom_num) - BCS_parts%xcover(gcspart))/rcellx
+            !vec_Rij(2,neigh) = (bundle%yprim(atom_num) - BCS_parts%ycover(gcspart))/rcelly
+            !vec_Rij(3,neigh) = (bundle%zprim(atom_num) - BCS_parts%zcover(gcspart))/rcellz
+            vec_Rij(1,neigh) = (bundle%xprim(atom_num) - BCS_parts%xcover(gcspart))
+            vec_Rij(2,neigh) = (bundle%yprim(atom_num) - BCS_parts%ycover(gcspart))
+            vec_Rij(3,neigh) = (bundle%zprim(atom_num) - BCS_parts%zcover(gcspart))
 
             !! -------- DEBUG: -------- !!
             if (flag_MDdebug .AND. iprint_MDdebug.GT.3) then
@@ -264,7 +271,8 @@ contains
           write (lun,*) j_global_num(iprim,1:jmax_i(atom_num))
           do j = 1, jmax_i(atom_num)
             !DEBUG write (lun,*) j, vec_Rij(1:3,j)
-            write (lun,*) vec_Rij(1:3,j)
+            !ORI write (lun,*) vec_Rij(1:3,j)
+            write (lun,'(3f25.18)') vec_Rij(1:3,j)
           enddo
           len = jbeta_max_i(iprim)*nsf_species(bundle%species(iprim))
 
@@ -483,9 +491,9 @@ contains
             write (lun_db,*) Info(ifile)%idglob_j(ibeg:ibeg+Info(ifile)%jmax_i(i)-1)
           do j = 1, Info(ifile)%jmax_i(i)
              read (lun,*) Info(ifile)%rvec_Pij(1:3,Info(ifile)%ibeg_Pij(i)+j-1)
-             Info(ifile)%rvec_Pij(1,Info(ifile)%ibeg_Pij(i)+j-1) = Info(ifile)%rvec_Pij(1,Info(ifile)%ibeg_Pij(i)+j-1)*rcellx
-             Info(ifile)%rvec_Pij(2,Info(ifile)%ibeg_Pij(i)+j-1) = Info(ifile)%rvec_Pij(2,Info(ifile)%ibeg_Pij(i)+j-1)*rcelly
-             Info(ifile)%rvec_Pij(3,Info(ifile)%ibeg_Pij(i)+j-1) = Info(ifile)%rvec_Pij(3,Info(ifile)%ibeg_Pij(i)+j-1)*rcellz
+             !TM Info(ifile)%rvec_Pij(1,Info(ifile)%ibeg_Pij(i)+j-1) = Info(ifile)%rvec_Pij(1,Info(ifile)%ibeg_Pij(i)+j-1)*rcellx
+             !TM Info(ifile)%rvec_Pij(2,Info(ifile)%ibeg_Pij(i)+j-1) = Info(ifile)%rvec_Pij(2,Info(ifile)%ibeg_Pij(i)+j-1)*rcelly
+             !TM Info(ifile)%rvec_Pij(3,Info(ifile)%ibeg_Pij(i)+j-1) = Info(ifile)%rvec_Pij(3,Info(ifile)%ibeg_Pij(i)+j-1)*rcellz
             if (flag_MDdebug .AND. iprint_MDdebug.GT.3) &
               write (lun_db,*) Info(ifile)%rvec_Pij(1:3,Info(ifile)%ibeg_Pij(i)+j-1)
           enddo
@@ -605,12 +613,14 @@ contains
     if (stat.GT.0) call cq_abort('Fail in opening InfoGlobal.dat .')
     write (lun,*) ni_in_cell, numprocs
     write (lun,*) parts%ngcellx,parts%ngcelly,parts%ngcellz
-    write (lun,*) rcellx,rcelly,rcellz
+    !ORI write (lun,*) rcellx,rcelly,rcellz
+    write (lun,fmt='(3f25.18)') rcellx,rcelly,rcellz
     write (lun,*) glob_to_node_old_local(1:ni_in_cell)
     if (present(MDiter)) write (lun,*) MDiter
     ! DRB adding new code to write present atomic coordinates (so we can calculate atom_coord_diff)
     do i=1,ni_in_cell
-       write(lun,fmt='(3f20.12)') atom_coord(1:3,i)
+       !ORI write(lun,fmt='(3f20.12)') atom_coord(1:3,i)
+       write(lun,fmt='(3f25.18)') atom_coord(1:3,i)
     end do
     call io_close (lun)
     deallocate (glob_to_node_old_local, STAT=stat_alloc)
@@ -651,7 +661,7 @@ contains
     ! Module usage
     use numbers
     use GenComms, ONLY: inode,ionode,gcopy
-    use global_module, ONLY: atom_coord_diff, atom_coord, ni_in_cell, rcellx, rcelly, rcellz
+    use global_module, ONLY: atom_coord_diff, atom_coord, ni_in_cell, rcellx, rcelly, rcellz, io_lun
 
     ! passed variables
     integer :: n_proc_old, glob_to_node_old(:)
@@ -678,11 +688,33 @@ contains
     !   atom_coord_diff = zero
     !   write(*,*) 'Setting difference to zero'
     !else
+       !TMTMTM
+          scale_x=rcellx/rx; scale_y = rcelly/ry; scale_z=rcellz/rz
        do i=1,ni_in_cell
           read(lun,*) coords_i(1:3)
           atom_coord_diff(1,i) = atom_coord(1,i) - coords_i(1)*rcellx/rx ! Account for cell size change
           atom_coord_diff(2,i) = atom_coord(2,i) - coords_i(2)*rcelly/ry
           atom_coord_diff(3,i) = atom_coord(3,i) - coords_i(3)*rcellz/rz
+       !TMTMTM
+          !atom_coord_diff(1,i) = atom_coord(1,i) - coords_i(1)
+          !atom_coord_diff(2,i) = atom_coord(2,i) - coords_i(2)
+          !atom_coord_diff(3,i) = atom_coord(3,i) - coords_i(3)
+          if((atom_coord_diff(1,i)) > half*rcellx) atom_coord_diff(1,i)=atom_coord_diff(1,i)-rcellx
+          if((atom_coord_diff(1,i)) < -half*rcellx) atom_coord_diff(1,i)=atom_coord_diff(1,i)+rcellx
+          if((atom_coord_diff(2,i)) > half*rcelly) atom_coord_diff(2,i)=atom_coord_diff(2,i)-rcelly
+          if((atom_coord_diff(2,i)) < -half*rcelly) atom_coord_diff(2,i)=atom_coord_diff(2,i)+rcelly
+          if((atom_coord_diff(3,i)) > half*rcellz) atom_coord_diff(3,i)=atom_coord_diff(3,i)-rcellz
+          if((atom_coord_diff(3,i)) < -half*rcellz) atom_coord_diff(3,i)=atom_coord_diff(3,i)+rcellz
+        !DB  write(io_lun,fmt='(3x,a,i5,a,3f25.12)') &
+        !DB    ' grab_matrix2 : idglob=',i,' atom_coord_diff=',&
+        !DB     atom_coord_diff(1,i), atom_coord_diff(2,i), atom_coord_diff(3,i)
+        !DB  write(io_lun,fmt='(3x,a,i5,a,3f25.12)') &
+        !DB    ' grab_matrix2 : idglob=',i,'     atom_coord =',&
+        !DB     atom_coord(1,i), atom_coord(2,i), atom_coord(3,i)
+        !DB  write(io_lun,fmt='(3x,a,i5,a,3f25.12)') &
+        !DB    ' grab_matrix2 : idglob=',i,'     cooord =',&
+        !DB     coords_i(1), coords_i(2), coords_i(3)
+       !TMTMTM
        end do
     !end if
     call io_close(lun)

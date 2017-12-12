@@ -101,6 +101,7 @@ contains
     use group_module, ONLY: parts
     use mult_module, ONLY: mat_p
     
+    use io_module2, ONLY: scale_x, scale_y, scale_z
     implicit none
 
     ! passed variables
@@ -243,7 +244,7 @@ contains
     !!  call statement instead.                                             !!
     !! ------------------------------ NOTE: ------------------------------- !! 
     if (inode.EQ.ionode) write (io_lun,*) "Reorganise local matrix data"
-    call UpdateMatrix_local(Info,range,matA,flag_remote_iprim,nfile)
+     call UpdateMatrix_local(Info,range,matA,flag_remote_iprim,nfile)
     if (numprocs.NE.1) then
       if (LmatrixSend%nrecv_node.GT.0 .OR. LmatrixRecv%nsend_node.GT.0) then
         if (inode.EQ.ionode) write (io_lun,*) "Reorganise remote matrix data"
@@ -1923,7 +1924,11 @@ contains
     use matrix_data, ONLY: max_range
     use atom_dispenser, ONLY: allatom2part
     use GenComms, ONLY: ionode
-    use global_module, ONLY:  ni_in_cell, atom_coord
+    use global_module, ONLY:  ni_in_cell, atom_coord, shift_in_bohr
+
+    use dimens,        only: r_super_x, r_super_y, r_super_z
+    use io_module2, ONLY: scale_x, scale_y, scale_z
+
 
     implicit none
 
@@ -1956,6 +1961,9 @@ contains
     logical :: find
     character(20) :: file_name,file_name2,file_name3
 
+    real(double) :: eps, xcover, ycover, zcover, rr
+
+    !DB write(io_lun,fmt='(a,3f15.7)') ' scaling factor for lattice in Updatelocal = ',scale_x,scale_y,scale_z
     !! ---------- DEBUG ---------- !!
     if (flag_MDdebug) then
       call get_file_name('UpdateLlocal',numprocs,inode,file_name)
@@ -2139,9 +2147,14 @@ contains
             endif
             ! NOTE: I don't like this writing but keep it for now...
             !       zero-zero wouldn't be good...
-            xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)+deltaj_x-deltai_x
-            yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)+deltaj_y-deltai_y
-            zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
+            !ORI xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)+deltaj_x-deltai_x
+            !ORI yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)+deltaj_y-deltai_y
+            !ORI zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
+            
+            ! scaling factor (rcellx/rcellx_old) has been introduced for 
+            xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)*scale_x+deltaj_x-deltai_x
+            yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)*scale_y+deltaj_y-deltai_y
+            zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)*scale_z+deltaj_z-deltai_z
 
             !! -------- DEBUG -------- !!
             if (flag_MDdebug) then
@@ -2227,6 +2240,25 @@ contains
                 exit
               endif
             enddo !(jjj, n_ing_cover)
+!TMTMTM
+          !DB  if(find_jcover) then
+          !DB      eps=shift_in_bohr
+          !DB           xx_j = xx_j - floor((xx_j+eps)/r_super_x)*r_super_x
+          !DB           yy_j = yy_j - floor((yy_j+eps)/r_super_y)*r_super_y
+          !DB           zz_j = zz_j - floor((zz_j+eps)/r_super_z)*r_super_z
+
+          !DB           xcover = BCS_parts%xcover(BCS_parts%icover_ibeg(jpart_nopg)+jseq-1)
+          !DB           ycover = BCS_parts%ycover(BCS_parts%icover_ibeg(jpart_nopg)+jseq-1)
+          !DB           zcover = BCS_parts%zcover(BCS_parts%icover_ibeg(jpart_nopg)+jseq-1)
+          !DB           xcover = xcover - floor((xcover+eps)/r_super_x)*r_super_x
+          !DB           ycover = ycover - floor((ycover+eps)/r_super_y)*r_super_y
+          !DB           zcover = zcover - floor((zcover+eps)/r_super_z)*r_super_z
+  
+          !DB      rr = (xcover-xx_j)**2 + (ycover-yy_j)**2 + (zcover-zz_j)**2
+          !DB      rr = sqrt(rr)
+          !DB      write(lun_db,fmt='(4x," DIFF of J ",f12.5,3x," xyzcover, xx_j,.. ",6f20.10)')  rr, xcover,ycover,zcover,xx_j,yy_j,zz_j
+          !DB  endif
+!TMTMTM
             if (.NOT. find_jcover) then
              !! TM
              if(flag_MDdebug) then
@@ -2236,13 +2268,19 @@ contains
                write(lun_db,*) ' :ERROR: idglob_jj, idglob_jjj, jcover,jpart_nopg,#ofjjj = ', &
                                idglob_jj, idglob_jjj,jcover,jpart_nopg,BCS_parts%n_ing_cover(jpart_nopg)
                write(lun_db,*) ' :ERROR: jcoverxyz ',jcoverx,jcovery,jcoverz
-               write(lun_db,*) ' :ERROR: vecRij ', &
+               write(lun_db,199) ' :ERROR: vecRij    ', &
                                Info(ifile)%rvec_Pij(1,ibeg1+jj-1), Info(ifile)%rvec_Pij(2,ibeg1+jj-1), &
                                Info(ifile)%rvec_Pij(3,ibeg1+jj-1) 
-               write(lun_db,*) ' :ERROR: deltaj_x  ',deltaj_x,deltaj_y,deltaj_z
-               write(lun_db,*) ' :ERROR: deltai_x  ',deltai_x,deltai_y,deltai_z
-               write(lun_db,*) ' :ERROR: vecRi  ',xprim_i, yprim_i, zprim_i
-               write(lun_db,*) ' :ERROR: vecRj  ',xx_j, yy_j, zz_j
+               write(lun_db,199) ' :ERROR: deltaj_x  ',deltaj_x,deltaj_y,deltaj_z
+               write(lun_db,199) ' :ERROR: deltai_x  ',deltai_x,deltai_y,deltai_z
+               write(lun_db,199) ' :ERROR: vecRi     ',xprim_i, yprim_i, zprim_i
+               write(lun_db,199) ' :ERROR: vecRj     ',xx_j, yy_j, zz_j
+                       eps=shift_in_bohr
+                       xx_j = xx_j - floor((xx_j+eps)/r_super_x)*r_super_x
+                       yy_j = yy_j - floor((yy_j+eps)/r_super_y)*r_super_y
+                       zz_j = zz_j - floor((zz_j+eps)/r_super_z)*r_super_z
+               write(lun_db,199) ' :ERROR: Rj in cell',xx_j, yy_j, zz_j
+         199 format(3x,a19,3x,3f20.7)
              endif
              !write(*,*) ' :ERROR: idglob_jj, idglob_jjj, jcover,jpart_nopg,#ofjjj = ', &
              !                     idglob_jj, idglob_jjj,jcover,jpart_nopg,BCS_parts%n_ing_cover(jpart_nopg)
@@ -2399,7 +2437,7 @@ contains
     use matrix_module, ONLY: matrix_halo
     use matrix_data, ONLY: halo
     use mult_module, ONLY: mat_p
-    use io_module2, ONLY: n_matrix
+    use io_module2, ONLY: n_matrix, scale_x, scale_y, scale_z
     ! db
     use io_module, ONLY: get_file_name
     use global_module, ONLY: numprocs
@@ -2552,9 +2590,14 @@ contains
         endif
         ! NOTE: I hate the following way as in UpdateMatrix_local, but keep it
         !       for now.
-        xx_j = xprim_i - vec_Rij(1) + deltaj_x - deltai_x
-        yy_j = yprim_i - vec_Rij(2) + deltaj_y - deltai_y
-        zz_j = zprim_i - vec_Rij(3) + deltaj_z - deltai_z
+        !OLD xx_j = xprim_i - vec_Rij(1) + deltaj_x - deltai_x
+        !OLD yy_j = yprim_i - vec_Rij(2) + deltaj_y - deltai_y
+        !OLD zz_j = zprim_i - vec_Rij(3) + deltaj_z - deltai_z
+
+        ! Now, for NPT, we introduce scale factor
+        xx_j = xprim_i - vec_Rij(1)*scale_x + deltaj_x - deltai_x
+        yy_j = yprim_i - vec_Rij(2)*scale_y + deltaj_y - deltai_y
+        zz_j = zprim_i - vec_Rij(3)*scale_z + deltaj_z - deltai_z
  
         !! ---------- DEBUG ---------- !!
         if (flag_MDdebug) then

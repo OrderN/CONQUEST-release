@@ -332,7 +332,8 @@ module global_module
   logical :: flag_FixCOM 
   integer :: McWFreq
   integer :: MDinit_step  
-  real(double),parameter   :: shift_in_bohr = 1.0E-03_double
+  !ORI real(double),parameter   :: shift_in_bohr = 1.0E-03_double
+  real(double),parameter   :: shift_in_bohr = 1.0E-06_double
   ! Table showing atoms (global) in nodes
   integer :: n_proc_old
   integer,allocatable :: glob2node(:)        ! size: ni_in_cell
