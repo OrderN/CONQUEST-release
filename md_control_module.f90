@@ -113,7 +113,7 @@ module md_control
       procedure, public   :: dump_thermo_state
       procedure, public   :: propagate_nvt_nhc
 
-      procedure, private  :: update_G_eta
+      procedure, private  :: update_G_nhc
       procedure, private  :: propagate_eta
       procedure, private  :: propagate_v_eta_lin
       procedure, private  :: propagate_v_eta_exp
@@ -284,22 +284,23 @@ contains
     if (md_calc_xlmass) then
       omega_thermo = twopi/md_tau_T
       omega_baro = twopi/md_tau_P
-      th%m_nhc(1) = md_ndof_ions*th%T_ext/omega_thermo**2
+      th%m_nhc(1) = md_ndof_ions*th%T_ext*fac_Kelvin2Hartree/omega_thermo**2
       if (th%cell_nhc) then
         select case (md_baro_type)
         case('iso-mttk')
           ndof_baro = one
         end select
-        th%m_nhc_cell(1) = (ndof_baro**2)*th%T_ext/omega_baro**2
+        th%m_nhc_cell(1) = (ndof_baro**2)*th%T_ext*fac_Kelvin2Hartree/omega_baro**2
       end if
       do i=2,n_nhc
-        th%m_nhc(i) = th%T_ext/omega_thermo**2
-        if (th%cell_nhc) th%m_nhc_cell(i) = th%T_ext/omega_thermo**2
+        th%m_nhc(i) = th%T_ext*fac_Kelvin2Hartree/omega_thermo**2
+        if (th%cell_nhc) th%m_nhc_cell(i) = th%T_ext*fac_Kelvin2Hartree/omega_thermo**2
       end do
     else
       th%m_nhc = md_nhc_mass
       th%m_nhc_cell = md_nhc_cell_mass
     end if
+    if (inode==ionode) write(12,*) "m_nhc: ", th%m_nhc
 
     ! Defaults for heat bath positions, velocities, masses
     th%eta = zero
@@ -551,9 +552,9 @@ contains
   end subroutine berendsen_v_rescale
   !!***
 
-  !!****m* md_control/update_G_eta *
+  !!****m* md_control/update_G_nhc *
   !!  NAME
-  !!   update_G_eta
+  !!   update_G_nhc
   !!  PURPOSE
   !!   updates the "force" on thermostat k 
   !!  AUTHOR
@@ -562,7 +563,7 @@ contains
   !!   2017/10/24 10:41
   !!  SOURCE
   !!  
-  subroutine update_G_eta(th, k, ke_box)
+  subroutine update_G_nhc(th, k, ke_box)
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
@@ -593,12 +594,12 @@ contains
     end if
 
     if (inode==ionode .and. flag_thermoDebug) then
-      write(io_lun,'(a,i2)') "thermoDebug: update_G_eta, k = ", k
+      write(io_lun,'(a,i2)') "thermoDebug: update_G_nhc, k = ", k
       write(io_lun,*) "G_eta:      ", th%G_nhc(k)
       if (th%cell_nhc) write(io_lun,*) "G_eta_cell: ", th%G_nhc_cell(k)
     end if
 
-  end subroutine update_G_eta
+  end subroutine update_G_nhc
   !!***
 
   !!****m* md_control/propagate_eta *
@@ -726,9 +727,13 @@ contains
 
     th%ke_ions = ke
     v_sfac = one
-    call th%update_G_eta(1, zero) ! update force on thermostat 1
+    call th%update_G_nhc(1, zero) ! update force on thermostat 1
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
+        if (inode==ionode .and. flag_thermoDebug) then
+          write(io_lun,*) "thermoDebug: i_ys  = ", i_ys
+          write(io_lun,*) "thermoDebug: dt_ys = ", th%dt_ys(i_ys)
+        end if
         ! Reverse part of Trotter expansion: update thermostat force/velocity
         call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
         do i_nhc=th%n_nhc-1,1,-1 ! loop over NH thermostats in reverse order
@@ -743,7 +748,7 @@ contains
         v_sfac = v_sfac*fac
         th%ke_ions = th%ke_ions*v_sfac**2
 
-        call th%update_G_eta(1, zero) ! update force on thermostat 1
+        call th%update_G_nhc(1, zero) ! update force on thermostat 1
         ! update the thermostat "positions" eta
         do i_nhc=1,th%n_nhc
           call th%propagate_eta(i_nhc, th%dt_ys(i_ys), half)
@@ -753,11 +758,10 @@ contains
         do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
           ! Trotter expansion to avoid sinh singularity
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
-          if (i_nhc /= 1) call th%update_G_eta(i_nhc, zero)
+          call th%update_G_nhc(i_nhc+1, zero)
           call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
-        call th%update_G_eta(th%n_nhc, zero) ! box ke is zero in NVT ensemble
         call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
       end do  ! Yoshida-Suzuki loop
     end do    ! MTS loop
@@ -830,7 +834,7 @@ contains
     ! passed variables
     class(type_thermostat), intent(inout) :: th
 
-    th%T_int = two*th%ke_ions/fac_Kelvin2Hartree/th%ndof
+    th%T_int = two*th%ke_ions/fac_Kelvin2Hartree/md_ndof_ions
     if (inode==ionode) write(io_lun,'(4x,"T = ", f12.6)') th%T_int
 
   end subroutine get_temperature
@@ -918,7 +922,7 @@ contains
     if (md_calc_xlmass) then
       select case(md_baro_type)
       case('iso-mttk')
-        baro%box_mass = (md_ndof_ions + one)*temp_ion/(twopi/md_tau_P)**2
+        baro%box_mass = (md_ndof_ions + one)*temp_ion*fac_Kelvin2Hartree/(twopi/md_tau_P)**2
       end select
     else
       baro%box_mass = md_box_mass
@@ -1531,7 +1535,7 @@ contains
     baro%ke_ions = ke
     v_sfac = one
     call baro%get_box_ke
-    call th%update_G_eta(1, baro%ke_box)
+    call th%update_G_nhc(1, baro%ke_box)
     select case(baro%baro_type)
     case('iso-mttk')
       call baro%update_G_eps
@@ -1539,6 +1543,10 @@ contains
 
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
+        if (inode==ionode .and. flag_baroDebug) then
+          write(io_lun,*) "baroDebug: i_ys  = ", i_ys
+          write(io_lun,*) "baroDebug: dt_ys = ", th%dt_ys(i_ys)
+        end if
         call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
         do i_nhc=th%n_nhc-1,1,-1 ! loop over NH thermostats in reverse order
           ! Trotter expansion to avoid sinh singularity
@@ -1591,15 +1599,15 @@ contains
                                         v_eta_couple)
         end select
 
-        call th%update_G_eta(1, baro%ke_box)
+        call baro%get_box_ke
+        call th%update_G_nhc(1, baro%ke_box)
         do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
           ! Trotter expansion to avoid sinh singularity
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
-          if (i_nhc > 1) call th%update_G_eta(i_nhc, baro%ke_box)
+          call th%update_G_nhc(i_nhc+1, baro%ke_box)
           call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
-        call th%update_G_eta(th%n_nhc, baro%ke_box)
         call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
       end do  ! Yoshida-Suzuki loop
     end do    ! MTS loop

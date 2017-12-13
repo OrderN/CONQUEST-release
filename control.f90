@@ -615,7 +615,7 @@ contains
                           mdl%ion_kinetic_energy) ! to get the pressure
       select case(md_thermo_type)
       case('nhc')
-        md_ndof = md_ndof + md_n_nhc
+!        md_ndof = md_ndof + md_n_nhc
         call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
                              md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
         call thermo%get_nhc_energy
@@ -628,7 +628,7 @@ contains
     case('npt')
       select case(md_baro_type)
       case('iso-mttk')
-        md_ndof = md_ndof + md_n_nhc + 1
+!        md_ndof = md_ndof + md_n_nhc + 1
         if (md_cell_nhc) md_ndof = md_ndof + md_n_nhc
         call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
                              md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
