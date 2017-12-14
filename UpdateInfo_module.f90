@@ -253,7 +253,10 @@ contains
     ! symmetrise_L should be modified to be applicable to any sort of matrices [22/08/2013 michi]
     ! Must consider spin later as well.
     !ORI call symmetrise_L() ! if not calling this routine, IntEnergy gets unstable.. (ibeg2 was wrong.)
-    if (present(symm)) call symmetrise_matA(range,trans,matA)
+    if (present(symm)) then
+      if (inode.EQ.ionode) write (io_lun,*) "Symmetrisation !"
+      call symmetrise_matA(range,trans,matA)
+    endif
     call my_barrier()
     if (flag_MDdebug .AND. iprint_MDdebug.GT.3) write (lun_db6,*) mat_p(matA)%matrix(1:)
     if (inode.EQ.ionode) write (io_lun,*) &
@@ -1957,6 +1960,17 @@ contains
     logical :: find
     character(20) :: file_name,file_name2,file_name3
 
+    !! ---------- DEBUG ---------- !!
+    if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
+      call get_file_name('UpdateL1',numprocs,inode,file_name)
+      call io_assign(lun_db)
+      open (lun_db,file=file_name)
+      call get_file_name('UpdateL2',numprocs,inode,file_name)
+      call io_assign(lun_db2)
+      open (lun_db2,file=file_name)
+    endif
+    !! ---------- DEBUG ---------- !!
+
     matA_halo => halo(range)
 
     ! Need to consider spin later.
@@ -2050,6 +2064,28 @@ contains
             yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)+deltaj_y-deltai_y
             zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
 
+           !! -------- DEBUG -------- !!
+            if (flag_MDdebug) then
+              Rijx=xprim_i-xx_j
+              Rijy=yprim_i-yy_j
+              Rijz=zprim_i-zz_j
+              Rij = Rijx*Rijx + Rijy*Rijy + Rijz*Rijz
+              Rij = sqrt(Rij)
+
+              write (lun_db,*) "! --- Neighbours: j ---!"
+              write (lun_db,*) "ibeg1+jj-1:", ibeg1+jj-1
+              write (lun_db,*) "idglob_jj and its beta:", idglob_jj, n_beta
+              write (lun_db,*) "vec_Pij:" 
+              !OLD write (lun_db,*) Info(ifile)%rvec_Pij(1:3,ibeg1+jj-1,ia)
+              write (lun_db,*) Info(ifile)%rvec_Pij(1:3,ibeg1+jj-1)
+              write (lun_db,*) "delta_i or atom_coord_diff(1:3,idglob_ii):", deltai_x,deltai_y,deltai_z
+              write (lun_db,*) "delta_j or atom_coord_diff(1:3,idglob_jj):", deltaj_x,deltaj_y,deltaj_z
+              write (lun_db,*) "pos of jj (x,y,z):"
+              write (lun_db,*) xx_j, yy_j, zz_j
+              write (lun_db,*) ""
+            endif
+            !! -------- DEBUG -------- !!
+
             ! Get the partiton to which jj belongs.
             !call atom2part(xx_j,yy_j,zz_j,jcoverx,jcovery,jcoverz)
             call atom2part(xx_j,yy_j,zz_j,ind_part,jcoverx,jcovery,jcoverz,idglob_jj)
@@ -2138,7 +2174,7 @@ contains
 
                     !! --------------- DEBUG: --------------- !!
                     if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
-                      write (lun_db2,'(2f25.18,f10.5,i10)') mat_p(matA)%matrix(ibeg_Lij+n1-1), &
+                      write (lun_db2,'(2f25.18,f15.5,i10)') mat_p(matA)%matrix(ibeg_Lij+n1-1), &
                                                             Info(ifile)%data_Lold(ibeg2+n1-1,1), &
                                                             Rij, jcover
                     endif
@@ -2175,6 +2211,12 @@ contains
       enddo !(ia, natom_i)
     enddo !(ifile, nfile)
 
+    !! ---------- DEBUG ---------- !!
+    if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
+      call io_close(lun_db)
+      call io_close(lun_db2)
+    endif
+    !! ---------- DEBUG ---------- !!
     return
   end subroutine UpdateMatrix_local
   !!***

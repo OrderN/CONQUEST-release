@@ -77,7 +77,7 @@ module move_atoms
    integer, parameter :: updateL    = 1
    integer, parameter :: updateK    = 2
    integer, parameter :: updateLorK = 3
-   integer, parameter :: updateMS   = 4
+   integer, parameter :: updateSFcoeff = 4
    integer, parameter :: extrplL    = 5
    integer, parameter :: updateX    = 6
    integer, parameter :: updateXdiss= 7
@@ -769,7 +769,8 @@ contains
                               IPRINT_TIME_THRES1, flag_pcc_global,    &
                               atom_coord_diff,id_glob,flag_MDold,     &
                               n_proc_old, glob2node_old,              &
-                              flag_LmatrixReuse, flag_diagonalisation, nspin
+                              flag_LmatrixReuse, flag_diagonalisation, nspin, &
+                              flag_SFcoeffReuse 
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
                               n_L_iterations
     use GenComms,       only: my_barrier, myid, inode, ionode,        &
@@ -780,15 +781,19 @@ contains
     use io_module,      only: write_atomic_positions, pdb_template
     use density_module, only: density, flag_no_atomic_densities, set_density_pcc
     use maxima_module,  only: maxngrid
-    use matrix_data, ONLY: Lrange
-    use mult_module, ONLY: matL,L_trans
+    use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
+    use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
-    !use io_module2, ONLY: InfoL
-    use store_matrix, ONLY:dump_InfoMatGlobal, grab_InfoMatGlobal, matrix_store_global, grab_matrix2, InfoMatrixFile
+    use store_matrix, ONLY:dump_matrix_update, dump_InfoMatGlobal, grab_InfoMatGlobal, matrix_store_global, &
+                           grab_matrix2, InfoMatrixFile
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use multisiteSF_module, only: flag_LFD_minimise
     !use DiagModule, ONLY: diagon
+!for Debugging
+    use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
+    use global_module, ONLY: atomf, sf
+    use io_module, ONLY: dump_matrix
 
     implicit none
 
@@ -814,10 +819,19 @@ contains
     real(double) :: k3_old, k3_local, kmin_old
 
     type(matrix_store_global) :: InfoGlob
-    integer :: ig
-    type(InfoMatrixFile),pointer :: InfoL(:)
+    integer :: ig, both, mat
+    !type(InfoMatrixFile),pointer :: InfoL(:)
+
+! for debugging
+    integer :: mat_SFcoeff_old, mat_K_old
+! for debugging
 
     call start_timer(tmr_std_moveatoms)
+
+! for debugging
+!    mat_SFcoeff_old = allocate_temp_matrix(SFcoeff_range,SFcoeffTr_range,atomf,sf)
+!    mat_K_old = allocate_temp_matrix(Hrange,Htr_range,sf,sf)
+! for debugging
 
     !allocation of glob2node_old:  though I (TM) am planning to remove this array.
       if (.NOT. allocated(glob2node_old)) then
@@ -834,7 +848,26 @@ contains
     if (inode == ionode) &
          write (io_lun, fmt='(/4x,"Seeking bracketing triplet of points"/)')
     ! Unnecessary and over cautious !
+
     k0 = zero
+
+       !2017/12/4
+       !call dump_InfoMatGlobal()
+       both=0; mat=1
+       if(flag_SFcoeffReuse) then
+        call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,index_in=0,iprint_mode=mat)
+        if(nspin .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,index_in=0,iprint_mode=mat)
+       endif
+
+       if(flag_diagonalisation) then
+        call dump_matrix_update('K',matK(1),Hrange,index_in=0,iprint_mode=both)
+        if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=0,iprint_mode=both)
+       else
+        call dump_matrix_update('L',matL(1),Lrange,index_in=0,iprint_mode=both)
+        if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=0,iprint_mode=both)
+       endif
+       !2017/12/4
+
     !do i=1,ni_in_cell
     !   x_atom_cell(i) = start_x(i) + k0*direction(1,i)
     !   y_atom_cell(i) = start_y(i) + k0*direction(2,i)
@@ -909,6 +942,17 @@ contains
        !%%!end if
        ! Move atoms
        call start_timer(tmr_l_tmp1, WITH_LEVEL)
+
+    !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
+     !  k3 = zero
+     !     if (inode == ionode) write(io_lun,*) ' K3 = ZERO TO CHECK READING K_MATIRX AND SFCOEFF '
+      ! if(flag_SFCoeffReuse) then
+      !   call matrix_sum(zero, mat_SFcoeff_old, one, matSFcoeff(1))
+      !   call matrix_sum(zero, mat_K_old, one, matK(1))
+      !    call dump_matrix("SFcoeff_before_",  matSFcoeff(1), inode)
+      ! endif
+    !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
+
        do i = 1, ni_in_cell
           x_atom_cell(i) = start_x(i) + k3 * direction(1,i)
           y_atom_cell(i) = start_y(i) + k3 * direction(2,i)
@@ -920,7 +964,19 @@ contains
 
        if (.NOT. flag_MDold) then
          if (ionode.EQ.inode) write (io_lun,*) "CG: 1st stage, call updateIndices3"
-         call update_pos_and_matrices(updateLorK,direction)
+         if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
+    !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
+      !    call dump_matrix("SFcoeff_after_",  matSFcoeff(1), inode)
+      !    call matrix_sum(-one, matSFcoeff(1), one, mat_SFcoeff_old)
+      !    call dump_matrix("SFcoeff_diff",    matSFcoeff(1), inode)
+      !    call matrix_sum(-one, mat_K_old, one, matK(1))
+      !    call dump_matrix("K_diff",  mat_K_old, inode)
+      !    call matrix_sum(zero, matSFcoeff(1), one, mat_SFcoeff_old)
+    !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
+         else
+          call update_pos_and_matrices(updateLorK,direction)
+         endif
        else
          write (io_lun,*) "CG: 1st stage with old CQ."
          call updateIndices(.true., fixed_potential)
@@ -954,7 +1010,21 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
                         .false.)
-       call dump_InfoMatGlobal()
+       !2017/12/4
+       !call dump_InfoMatGlobal()
+       both=0
+       if(flag_SFcoeffReuse) then
+        call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,index_in=0,iprint_mode=mat)
+        if(nspin .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,index_in=0,iprint_mode=mat)
+       endif
+       if(flag_diagonalisation) then
+        call dump_matrix_update('K',matK(1),Hrange,index_in=0,iprint_mode=both)
+        if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=0,iprint_mode=both)
+       else
+        call dump_matrix_update('L',matL(1),Lrange,index_in=0,iprint_mode=both)
+        if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=0,iprint_mode=both)
+       endif
+       !2017/12/4
        if (inode == ionode .and. iprint_MD > 1) &
             write (io_lun, &
                    fmt='(4x,"In safemin2, iter ",i3," step and energy &
@@ -1030,7 +1100,11 @@ contains
 
     if (.NOT. flag_MDold) then
       write (io_lun,*) "CG: 2nd stage"
-      call update_pos_and_matrices(updateLorK,direction)
+      if(flag_SFcoeffReuse) then
+       call update_pos_and_matrices(updateSFcoeff,direction)
+      else
+       call update_pos_and_matrices(updateLorK,direction)
+      endif
     else
       call update_atom_coord
       call updateIndices(.true., fixed_potential)
@@ -1067,7 +1141,23 @@ contains
     else
        call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
     end if
-    call dump_InfoMatGlobal()
+
+    !2017/12/4
+    !call dump_InfoMatGlobal()
+    both=0
+       if(flag_SFcoeffReuse) then
+        call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,index_in=0,iprint_mode=mat)
+        if(nspin .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,index_in=0,iprint_mode=mat)
+       endif
+    if(flag_diagonalisation) then
+     call dump_matrix_update('K',matK(1),Hrange,index_in=0,iprint_mode=both)
+     if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=0,iprint_mode=both)
+    else
+     call dump_matrix_update('L',matL(1),Lrange,index_in=0,iprint_mode=both)
+     if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=0,iprint_mode=both)
+    endif
+    !2017/12/4
+
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
                 fmt='(4x,"In safemin2, Interpolation step and energy &
@@ -1098,7 +1188,11 @@ contains
 
        if (.NOT. flag_MDold) then
          write (io_lun,*) "CG: 3rd stage"
-         call update_pos_and_matrices(updateLorK,direction)
+         if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
+         else
+          call update_pos_and_matrices(updateLorK,direction)
+         endif
        else
          call update_atom_coord
          call updateIndices(.true., fixed_potential)
@@ -1139,7 +1233,23 @@ contains
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
                            .true., .false.)
        end if
-       call dump_InfoMatGlobal()
+
+       !2017/12/4
+       !call dump_InfoMatGlobal()
+       both=0
+       if(flag_SFcoeffReuse) then
+        call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,index_in=0,iprint_mode=mat)
+        if(nspin .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,index_in=0,iprint_mode=mat)
+       endif
+       if(flag_diagonalisation) then
+        call dump_matrix_update('K',matK(1),Hrange,index_in=0,iprint_mode=both)
+        if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=0,iprint_mode=both)
+       else
+        call dump_matrix_update('L',matL(1),Lrange,index_in=0,iprint_mode=both)
+        if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=0,iprint_mode=both)
+       endif
+       !2017/12/4
+
     end if
     dE = e0 - energy_out
 7   format(4x,3f15.8)
@@ -1153,6 +1263,12 @@ contains
              en_conv * energy_out, en_units(energy_units)
     end if
     !deallocate(store_density)
+
+!Debugging
+!    call free_temp_matrix(mat_K_old)
+!    call free_temp_matrix(mat_SFcoeff_old)
+!Debugging
+
     if (inode.EQ.ionode) write (io_lun,*) "Get out of safemin2 !" !db
     call stop_timer(tmr_std_moveatoms)
     return
@@ -1913,7 +2029,6 @@ contains
     !use DiagModule, ONLY: diagon
     use io_module, ONLY: append_coords,write_atomic_positions,pdb_template
     use matrix_data, ONLY: Lrange
-    !use io_module2, ONLY: InfoL
     use UpdateInfo_module, ONLY: make_glob2node,Matrix_CommRebuild
     use XLBOMD_module, ONLY: immi_XL,fmmi_XL
 
@@ -2091,12 +2206,14 @@ contains
   !!
   subroutine update_H(fixed_potential)
 
+    use numbers
     use logicals
     use timer_module    
     use S_matrix_module,        only: get_S_matrix
     use H_matrix_module,        only: get_H_matrix
     !use DiagModule,             only: diagon
-    use mult_module,            only: LNV_matrix_multiply, matrix_scale, matSFcoeff
+    use mult_module,            only: LNV_matrix_multiply, matrix_scale, matrix_transpose, &
+                                      matSFcoeff,matSFcoeff_tran 
     use ion_electrostatic,      only: ewald, screened_ion_interaction
     use pseudopotential_data,   only: init_pseudo
     use pseudo_tm_module,       only: set_tm_pseudo
@@ -2111,7 +2228,9 @@ contains
                                       flag_LmatrixReuse,               &
                                       flag_neutral_atom,               &
                                       atomf, sf, nspin_SF, flag_LFD,   &
-                                      flag_SFcoeffReuse, flag_diagonalisation
+                                      flag_SFcoeffReuse, flag_diagonalisation, &
+                                      ne_spin_in_cell,                 &
+                                      ne_in_cell, spin_factor
     use density_module,         only: set_atomic_density,              &
                                       flag_no_atomic_densities,        &
                                       density, set_density_pcc,        &
@@ -2131,7 +2250,9 @@ contains
     ! Local variables
     type(cq_timer) :: tmr_l_tmp1
     real(double), dimension(nspin) :: electrons, energy_tmp
-    integer :: spin_SF
+    real(double) :: scale
+    integer :: spin_SF, spin
+
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     ! (0) Pseudopotentials: choose correct form
@@ -2145,14 +2266,17 @@ contains
     end select
     ! (0) Prepare SF-PAO coefficients for contracted SFs
     if (atomf.ne.sf) then
-       do spin_SF = 1, nspin_SF
-          call matrix_scale(zero,matSFcoeff(spin_SF))
-       enddo
        if (flag_SFcoeffReuse) then
        ! Use the coefficients in the previous step   
-!          call Matrix_CommRebuild??
-          call cq_abort("update_H: SFcoeff in the previous MD step cannot be reused at present!")
+          !call cq_abort("update_H: SFcoeff in the previous MD step cannot be reused at present!")
+          ! SF coeffs are already updated before calling update_H, but we need its transpose
+         do spin_SF = 1,nspin_SF
+          call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+         enddo
        else
+        do spin_SF = 1, nspin_SF
+          call matrix_scale(zero,matSFcoeff(spin_SF))
+        enddo
        ! Make SF coefficients newly
           ! Use the atomic density if flag_LFD_MD_UseAtomicDensity=T,
           ! otherwise, use the density in the previous step
@@ -2189,8 +2313,7 @@ contains
     if(((.NOT. flag_self_consistent)     .AND. &
         (.NOT. flag_no_atomic_densities) .AND. &
         (.NOT. flag_mix_L_SC_min)).OR.flag_reset_dens_on_atom_move) then
-        ! if flag_LFD_MD_UseAtomicDensity=T, atomic density was already set in (0)
-        if (.not.flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.true.)
+        call set_atomic_density(.true.)
     ! For SCF-O(N) calculations
     elseif (.NOT.flag_diagonalisation .AND. .NOT.flag_MDold) then
        if (flag_self_consistent .OR. flag_mix_L_SC_min) then
@@ -2201,7 +2324,8 @@ contains
                   inode,ionode,maxngrid)
              ! if flag_LFD=T, update SF-PAO coefficients with the obtained density
              ! and update S with the coefficients
-             if (flag_LFD) then
+             !ORI if (flag_LFD) then
+             if (flag_LFD .and. .not.flag_SFcoeffReuse) then
                 call initial_SFcoeff(.false., .true., fixed_potential, .false.)
                 call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
              endif
@@ -2213,6 +2337,22 @@ contains
              (flag_no_atomic_densities)) then
        call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
     end if
+
+    ! If we have read K and are predicting density from it, then rebuild
+    if(flag_diagonalisation.AND.flag_LmatrixReuse.AND.(.NOT.flag_MDold)) then
+       call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
+            inode,ionode,maxngrid)
+       do spin=1,nspin
+          scale = ne_spin_in_cell(spin)/electrons(spin)
+          if(abs(scale-one)<0.01.AND.abs(scale-one)>RD_ERR) then
+             density(:,spin) = density(:,spin)*scale
+          else if (abs(scale-one)>=0.01) then
+             call set_atomic_density(.true.)
+             exit
+          end if
+       end do
+    end if
+
     if (flag_pcc_global) call set_density_pcc()
     ! (7) Now generate a new H matrix, including a new charge density
     if (flag_LFD .and. .not.flag_SFcoeffReuse) then
@@ -3262,15 +3402,15 @@ contains
     ! n_proc_old and glob2node_old should be removed soon...
     use global_module, only: n_proc_old, glob2node_old
   use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
-  use mult_module,     only: matL, L_trans, matK, matS, S_trans
-  use matrix_data,     only: Lrange, Hrange, Srange
+  use mult_module,     only: matL, L_trans, matK, matS, S_trans, matSFcoeff, SFcoeff_trans
+  use matrix_data,     only: Lrange, Hrange, Srange, SFcoeff_range
   use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2
   use UpdateInfo_module, only: Matrix_CommRebuild
 
   implicit none
   integer, intent(in) :: update_method
   real(double), intent(inout) :: velocity(3, ni_in_cell)
-  logical :: flag_L, flag_K, flag_S, flag_MS, flag_X
+  logical :: flag_L, flag_K, flag_S, flag_SFcoeff, flag_X
   integer :: nfile, symm, ig
   logical :: fixed_potential 
    ! should be removed in the future (calling update_H is outside of this routine)
@@ -3295,7 +3435,7 @@ contains
  flag_K=.false.
  flag_S=.false.
  flag_X=.false.
- flag_MS=.false.
+ flag_SFcoeff=.false.
 
  select case(update_method)
   case(updatePos)
@@ -3314,6 +3454,13 @@ contains
    flag_S=.true.
   case(updateX)
    if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: updateX is not implemented yet.'
+  case(updateSFcoeff)
+   flag_SFcoeff=.true.
+   if(flag_diagonalisation) then
+     flag_K=.true.
+   else
+     flag_L=.true.
+   endif
   case(extrplL)
    if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: updateX is not implemented yet.'
    ! TM plans to implement  L(n)=2L(n-1)-L(n-2)
@@ -3386,6 +3533,18 @@ contains
      !  call my_barrier()
      !  call Matrix_CommRebuild(Info,Srange,S_trans,matS(2),nfile,symm)
      !end if
+  endif
+
+  if(flag_SFcoeff) then
+     call grab_matrix2('SFcoeff',inode,nfile,Info)
+     call my_barrier()
+     call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(1),nfile)
+     if(nspin==2) then
+     !if(nspin_SF==2) then
+      call grab_matrix2('SFcoeff2',inode,nfile,Info)
+      call my_barrier()
+      call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(2),nfile)
+     end if
   endif
 
  return

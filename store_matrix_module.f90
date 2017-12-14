@@ -135,7 +135,7 @@ contains
   !!  SOURCE
   !!
 
-   subroutine dump_matrix_update(stub,matA,range,index,iprint_mode)
+   subroutine dump_matrix_update(stub,matA,range,index_in,iprint_mode)
     use GenComms, ONLY: inode, ionode, cq_abort
     use global_module, ONLY: numprocs, id_glob
     use io_module, ONLY: get_file_name
@@ -143,19 +143,21 @@ contains
     character(len=*),intent(in) :: stub
     integer,intent(in) :: matA
     integer,intent(in) :: range
-    integer,intent(in), optional :: index
+    integer,intent(in), optional :: index_in
     integer,intent(inout), optional :: iprint_mode
+    integer :: index_local
 
+    index_local=0; if(present(index_in)) index_local=index_in
     if(.not.present(iprint_mode)) iprint_mode = 0
 
      select case(iprint_mode)
       case(0)  ! Both "InfoGlobal.dat" and "*matrix2.dat" will be pinted out.
-        call dump_InfoMatGlobal(index)
-        call dump_matrix2(stub,matA,range,index)
+        call dump_InfoMatGlobal(index_local)
+        call dump_matrix2(stub,matA,range,index_local)
       case(1)  ! only "*matrix2.dat" will be printed out.
-        call dump_matrix2(stub,matA,range,index)
+        call dump_matrix2(stub,matA,range,index_local)
       case(2)  ! only "InfoGlobal.dat" will be printed out.
-        call dump_InfoMatGlobal(index)
+        call dump_InfoMatGlobal(index_local)
      end select ! case(iprint_mode)
  
     return
@@ -213,6 +215,8 @@ contains
     integer :: lun, iprim, nprim, jmax, jj, ibeg, jbeta_alpha, len
     character(32) :: file_name
     integer :: index
+
+    index=0; if(present(index_in)) index=index_in
 
     ! set_matrix_store : build tmp_matrix_store
     call set_matrix_store(stub,matA,range,tmp_matrix_store)
@@ -296,8 +300,8 @@ contains
 
    subroutine set_matrix_store(stub,matA,range,matinfo)
     use numbers
-    use global_module, ONLY: id_glob, species_glob, io_lun
-    use species_module, ONLY: nsf_species
+    use global_module, ONLY: id_glob, species_glob, io_lun, sf, nlpf, atomf
+    use species_module, ONLY: nsf_species, natomf_species, nlpf_species
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
@@ -313,6 +317,7 @@ contains
     integer :: nprim, istat
     integer :: np, ni, iprim, atom_num, jmax_i_max
     integer :: ist, n_beta, neigh, gcspart, ibeg, j_global_part, len
+    integer :: sf1, sf2  ! 2017/Dec/06 for reading SF_coeff
 
     !name & n_prim
       matinfo%name=stub
@@ -323,7 +328,18 @@ contains
                matinfo%jbeta_max_i(nprim), matinfo%ibeg_data_matrix(nprim), STAT=istat)
       if(istat .NE. 0) call cq_abort('Allocation 1 in set_matrix_store',istat,nprim)
     
+    !sf1_type , sf2_type
+    sf1 = mat_p(matA)%sf1_type;  sf2=mat_p(matA)%sf2_type
+    if(sf1 == sf) then
       matinfo%nsf_spec_i(1:nprim) =nsf_species(bundle%species(1:nprim))
+    elseif(sf1 == atomf) then
+      matinfo%nsf_spec_i(1:nprim) =natomf_species(bundle%species(1:nprim))
+    elseif(sf1 == nlpf) then
+      matinfo%nsf_spec_i(1:nprim) =nlpf_species(bundle%species(1:nprim))
+    else
+      call cq_abort(" ERROR in set_matrix_store: No sf1_type : ",sf1)
+    endif
+     
 
    !!set up : jmax_i, jbeta_max_i
 
@@ -376,14 +392,24 @@ contains
 
             matinfo%idglob_j(neigh,iprim) = id_glob(parts%icell_beg(j_global_part) &
                                                 +mat(np,range)%i_seq(ist)-1)
-            matinfo%beta_j(neigh,iprim) = nsf_species(species_glob(matinfo%idglob_j(neigh,iprim)))
+            if(sf2 == sf) then
+             matinfo%beta_j(neigh,iprim) = nsf_species(species_glob(matinfo%idglob_j(neigh,iprim)))
+            elseif(sf2 == atomf) then
+             matinfo%beta_j(neigh,iprim) = natomf_species(species_glob(matinfo%idglob_j(neigh,iprim)))
+            elseif(sf2 == nlpf) then
+             matinfo%beta_j(neigh,iprim) = nlpf_species(species_glob(matinfo%idglob_j(neigh,iprim)))
+            else
+             call cq_abort(" ERROR in set_matrix_store: No sf2_type : ",sf2)
+            endif
+
             matinfo%vec_Rij(1,neigh,iprim) = bundle%xprim(iprim) - BCS_parts%xcover(gcspart)
             matinfo%vec_Rij(2,neigh,iprim) = bundle%yprim(iprim) - BCS_parts%ycover(gcspart)
             matinfo%vec_Rij(3,neigh,iprim) = bundle%zprim(iprim) - BCS_parts%zcover(gcspart)
 
           enddo !neigh = 1, mat(np,range)%n_nab(ni)
 
-          len = matinfo%jbeta_max_i(iprim)*nsf_species(bundle%species(iprim))
+          !OLD len = matinfo%jbeta_max_i(iprim)*nsf_species(bundle%species(iprim))
+          len = matinfo%jbeta_max_i(iprim)*matinfo%nsf_spec_i(iprim)
           matinfo%matrix_size = matinfo%matrix_size + len
           matinfo%ibeg_data_matrix(iprim) = ibeg
           ibeg = ibeg + len
