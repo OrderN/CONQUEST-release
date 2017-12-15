@@ -300,7 +300,6 @@ contains
       th%m_nhc = md_nhc_mass
       th%m_nhc_cell = md_nhc_cell_mass
     end if
-    if (inode==ionode) write(12,*) "m_nhc: ", th%m_nhc
 
     ! Defaults for heat bath positions, velocities, masses
     th%eta = zero
@@ -934,7 +933,7 @@ contains
     baro%c6 = baro%c4/42.0_double
     baro%c8 = baro%c6/72.0_double
 
-    baro%P_ext = P_ext
+    baro%P_ext = P_ext/fac_HaBohr32GPa
     baro%ke_ions = ke_ions
     baro%ndof = ndof
     baro%lat_ref = zero

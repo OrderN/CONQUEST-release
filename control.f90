@@ -682,11 +682,9 @@ contains
     lattice_vec(3,3) = rcellz
     call mdl%init_model(md_ensemble, thermo, baro)
 
-    if (flag_thermoDebug) then
+    if (md_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
+    if (iprint_MD > 1) then
       call thermo%dump_thermo_state(i_first-1, 'thermostat.dat')
-      call write_xsf('trajectory.xsf', i_first-1)
-    end if
-    if (flag_baroDebug) then
       call baro%dump_baro_state(i_first-1, 'barostat.dat')
     end if
 
@@ -825,10 +823,8 @@ contains
          case('mttk')
          end select
        end select
-       if (flag_thermoDebug) then
+       if (iprint_MD > 1) then
          call thermo%dump_thermo_state(iter,'thermostat.dat')
-       end if
-       if (flag_baroDebug) then
          call baro%dump_baro_state(iter, 'barostat.dat')
        end if
 
