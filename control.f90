@@ -521,7 +521,7 @@ contains
                               md_write_xsf, md_cell_nhc, md_ndof_ions
 
     use atoms,          only: distribute_atoms,deallocate_distribute_atom
-    use global_module,  only: atom_coord_diff
+    use global_module,  only: atom_coord_diff, iprint_MD
 
     use io_module2,     only: scale_x, scale_y, scale_z
 
