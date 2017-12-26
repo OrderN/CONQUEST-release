@@ -122,6 +122,7 @@ contains
     use global_module,        only: runtype, flag_self_consistent, flag_out_wf, &
                                     flag_write_DOS, flag_opt_cell
     use input_module,         only: leqi
+    use store_matrix,         only: dump_pos_and_matrices
 
     implicit none
 
@@ -172,6 +173,7 @@ contains
     call stop_backtrace(t=backtrace_timer,who='control_run',echo=.true.)
 !****lat>$
 
+    call dump_pos_and_matrices
     return
   end subroutine control_run
   !!***
@@ -234,7 +236,7 @@ contains
                              check_stop
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
-    use store_matrix,  ONLY: dump_InfoMatGlobal
+    use store_matrix,  ONLY: dump_InfoMatGlobal, dump_pos_and_matrices
 
     implicit none
 
@@ -369,6 +371,9 @@ contains
                write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') &
                      max
        end if
+
+       call dump_pos_and_matrices
+       
        call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
        if (.not. done) call check_stop(done, iter)
     end do
@@ -1435,5 +1440,48 @@ contains
 
   end subroutine get_gamma_cell_cg
 !!***
+
+! SUB FLASH_POS_AND_MATRICES has been moved to "store_matrix"
+!  subroutine dump_pos_and_matrices
+!    use global_module, ONLY: nspin, nspin_SF, flag_diagonalisation, flag_Multisite
+!    use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
+!    use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
+!    use store_matrix, ONLY:dump_matrix_update
+!    use io_module, ONLY: append_coords, write_atomic_positions, pdb_template
+!
+!    implicit none
+!    integer:: both=0 , mat=1
+!    logical :: append_coords_bkup
+!
+!    !!! Check whether we should write out the files or not.  !!!
+!     !   1. check elapsed time 
+!     !   2. check some specific file
+!
+!    !!! Write out Files to restart..   
+!     !   InfoGlob.dat
+!     !     PAO coefficients of supports  or Blips
+!     !     L matrix of K matrix
+!     !     (for XL-BOMD, files in previous steps should be also printed out)
+!     !     coodinates file ?
+!
+!       if(flag_Multisite) then
+!        call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,index_in=0,iprint_mode=mat)
+!        if(nspin_SF .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,index_in=0,iprint_mode=mat)
+!       endif
+!
+!       if(flag_diagonalisation) then
+!        call dump_matrix_update('K',matK(1),Hrange,index_in=0,iprint_mode=both)
+!        if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=0,iprint_mode=both)
+!       else
+!        call dump_matrix_update('L',matL(1),Lrange,index_in=0,iprint_mode=both)
+!        if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=0,iprint_mode=both)
+!       endif
+!
+!       append_coords_bkup = append_coords; append_coords = .false.
+!        call write_atomic_positions('coord_next.dat',trim(pdb_template))
+!       append_coords = append_coords_bkup
+!
+!   return
+!  end subroutine dump_pos_and_matrices
 
 end module control

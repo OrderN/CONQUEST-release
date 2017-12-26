@@ -1020,11 +1020,12 @@ contains
     use logicals
     use mult_module,         only: LNV_matrix_multiply, matL, matphi, &
                                    matT, T_trans, L_trans, LS_trans,  &
+                                   SFcoeff_trans, matK,               &
                                    matrix_scale, matSFcoeff, matSFcoeff_tran, matrix_transpose
     use SelfCon,             only: new_SC_potl
     use global_module,       only: iprint_init, flag_self_consistent, &
                                    flag_basis_set, blips, PAOs,       &
-                                   restart_L,                         &
+                                   restart_LorK,                      &
                                    restart_rho, flag_test_forces,     &
                                    flag_dft_d2, nspin, spin_factor,   &
                                    flag_MDold,flag_MDcontinue,        &
@@ -1034,7 +1035,8 @@ contains
                                    flag_propagateX, flag_propagateL, restart_X, &
                                    flag_exx, exx_scf, flag_out_wf, wf_self_con, &
                                    flag_write_DOS, flag_neutral_atom, &
-                                   atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation
+                                   atomf, sf, flag_LFD, nspin_SF, flag_diagonalisation, &
+                                   atom_coord, atom_coord_diff, rcellx, rcelly, rcellz
     use ion_electrostatic,   only: ewald, screened_ion_interaction
     use S_matrix_module,     only: get_S_matrix
     use GenComms,            only: my_barrier,end_comms,inode,ionode, &
@@ -1052,8 +1054,7 @@ contains
     use minimise,            only: sc_tolerance, L_tolerance,         &
                                    n_L_iterations, expected_reduction
     use DFT_D2,              only: dispersion_D2
-    use matrix_data,         ONLY: Lrange,Trange,LSrange
-    !use io_module2,          ONLY: n_matrix,InfoL,InfoT
+    use matrix_data,         ONLY: Lrange,Trange,LSrange,SFcoeff_range,Hrange
     use store_matrix,        ONLY: matrix_store_global, grab_InfoMatGlobal, grab_matrix2, &
                                    n_matrix,InfoMatrixFile
     use UpdateInfo_module,   ONLY: make_glob2node,Matrix_CommRebuild
@@ -1077,9 +1078,12 @@ contains
     real(double)   :: electrons_tot, bandE
     real(double), dimension(nspin) :: electrons, energy_tmp
     integer        :: spin_SF
+ !H_trans is not prepared. If we need to symmetrise K, we need H_trans
+    integer        :: H_trans = 1
+    integer        :: ig
 
     type(matrix_store_global) :: InfoGlob
-    type(InfoMatrixFile),pointer :: InfoL(:), InfoT(:)
+    type(InfoMatrixFile),pointer :: Info(:)
 
     ! Dummy vars for MMM
 
@@ -1093,8 +1097,9 @@ contains
     ! (0) Get the global information
     !      --> Fetch and distribute date on old job
     if (.not.flag_MDold.and.(flag_MDcontinue.or. &
-                                restart_L   .or. &
-                                restart_T)  ) then
+                                restart_LorK.or. &
+                                restart_T   .or. &
+                                read_option)  ) then
       if (inode.eq.ionode) write (io_lun,*) "Get global info to load matrices"
       if (inode.eq.ionode) call make_glob2node
       call gcopy(glob2node, ni_in_cell)
@@ -1104,6 +1109,16 @@ contains
         n_proc_old = InfoGlob%numprocs
         glob2node_old(:) = InfoGlob%glob_to_node(:)
         MDinit_step = InfoGlob%MDstep
+
+        do ig = 1, ni_in_cell
+            atom_coord_diff(1:3,ig) = atom_coord(1:3,ig) - InfoGlob%atom_coord(1:3,ig)
+            if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
+            if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
+            if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
+            if((atom_coord_diff(2,ig)) < -half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)+rcelly
+            if((atom_coord_diff(3,ig)) > half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)-rcellz
+            if((atom_coord_diff(3,ig)) < -half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)+rcellz
+        enddo
 
       n_matrix = 1
       if (nspin.EQ.2) n_matrix = 2
@@ -1116,6 +1131,19 @@ contains
           call matrix_scale(zero,matSFcoeff(spin_SF))
        enddo
        if (read_option) then
+         if(.not.flag_MDold) then
+          if (inode == ionode) write (io_lun,*) 'Read supp_pao coefficients from SFcoeff files'
+
+          call grab_matrix2('SFcoeff',inode,nfile,Info)
+          call my_barrier()
+          call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(1),nfile)
+          if(nspin_SF==2) then
+           call grab_matrix2('SFcoeff2',inode,nfile,Info)
+           call my_barrier()
+           call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(2),nfile)
+          end if
+         
+         else 
           ! Read SF-PAO coefficients
           if (inode == ionode) write (io_lun,*) 'Read supp_pao coefficients from input files.'
           if (nspin_SF == 1) then
@@ -1124,12 +1152,14 @@ contains
              call grab_matrix("SFcoeff_up", matSFcoeff(1), inode)
              call grab_matrix("SFcoeff_dn", matSFcoeff(2), inode)
           endif
-          ! Added DRB 2017/04/10 to fix issue 26: transpose required before transformation can occur
-          ! Transpose
-          do spin_SF = 1,nspin_SF
-             call matrix_scale(zero,matSFcoeff_tran(spin_SF))
-             call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
-          enddo
+         endif
+
+         ! Added DRB 2017/04/10 to fix issue 26: transpose required before transformation can occur
+         ! Transpose
+         do spin_SF = 1,nspin_SF
+            call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+            call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+         enddo
        else
           if (restart_rho .and. flag_LFD) then
           ! read density from input files for LFD
@@ -1155,9 +1185,9 @@ contains
     ! If we're vary PAOs, allocate memory
     ! (1) Get S matrix
     if (.not. flag_MDold .and. restart_T) then
-      call grab_matrix2('T',inode,nfile,InfoT)
+      call grab_matrix2('T',inode,nfile,Info)
       call my_barrier()
-      call Matrix_CommRebuild(InfoT,Trange,T_trans,matT,nfile,symm)
+      call Matrix_CommRebuild(Info,Trange,T_trans,matT,nfile,symm)
     endif
     if (flag_LFD .and. .not.read_option) then
        ! Spao was already made in sub:initial_SFcoeff
@@ -1186,17 +1216,27 @@ contains
             call stop_timer(tmr_std_densitymat)
        end if
     end if
-    if (restart_L) then
+    if (restart_LorK) then
       if (.NOT. flag_MDold) then
-        call grab_matrix2('L',inode,nfile,InfoL)
+       if(.not.flag_diagonalisation) then
+        call grab_matrix2('L',inode,nfile,Info)
         call my_barrier()
-        call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-        ! DRB 2017/05/09 now extended to spin systems
+        call Matrix_CommRebuild(Info,Lrange,L_trans,matL(1),nfile,symm)
         if(nspin==2) then
-           call grab_matrix2('L2',inode,nfile,InfoL)
+           call grab_matrix2('L2',inode,nfile,Info)
            call my_barrier()
-           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
+           call Matrix_CommRebuild(Info,Lrange,L_trans,matL(2),nfile,symm)
         end if
+       else
+        call grab_matrix2('K',inode,nfile,Info)
+        call my_barrier()
+        call Matrix_CommRebuild(Info,Hrange,H_trans,matK(1),nfile)
+        if(nspin==2) then
+          call grab_matrix2('K2',inode,nfile,Info)
+          call my_barrier()
+          call Matrix_CommRebuild(Info,Hrange,H_trans,matK(2),nfile)
+        end if
+       endif
       else
         if(nspin==1) then
           call grab_matrix( "L",    matL(1), inode)
@@ -1221,7 +1261,7 @@ contains
 !!$
 !!$
     ! (3) get K matrix (and also get phi matrix)
-    if (.not. flag_diagonalisation .and. (find_chdens .or. restart_L)) then
+    if (.not. flag_diagonalisation .and. (find_chdens .or. restart_LorK)) then
        call LNV_matrix_multiply(electrons, energy_tmp, doK, dontM1,   &
                                 dontM2, dontM3, dontM4, dophi, dontE, &
                                 mat_phi=matphi)
@@ -1311,7 +1351,7 @@ contains
 !!$
     if ( flag_self_consistent ) then ! Vary only DM and charge density
        !
-       if ( restart_L ) then
+       if ( restart_LorK ) then
           record  = .true.
           reset_L = .false.
           call new_SC_potl(record, sc_tolerance, reset_L, &
@@ -1364,7 +1404,7 @@ contains
           wf_self_con=.true.
        endif
        
-       if ( .not. restart_L ) then
+       if ( .not. restart_LorK ) then
           record  = .false.   
           reset_L = .true.
           call FindMinDM(n_L_iterations, vary_mu, L_tolerance, inode, &

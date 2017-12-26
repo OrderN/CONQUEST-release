@@ -1908,7 +1908,7 @@ contains
     ! Module usage
     use numbers
     use global_module, ONLY: glob2node,id_glob,atom_coord_diff, &
-                             flag_move_atom,runtype,nspin
+                             flag_move_atom,runtype,nspin, rcellx, rcelly, rcellz
     use Gencomms, ONLY: inode,cq_abort
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
@@ -2060,9 +2060,13 @@ contains
             endif
             ! NOTE: I don't like this writing but keep it for now...
             !       zero-zero wouldn't be good...
-            xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)+deltaj_x-deltai_x
-            yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)+deltaj_y-deltai_y
-            zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
+            ! 2017Dec14: Changed vec_Rij from cartesian (bohr) to fractional coordinates 
+            xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)*rcellx+deltaj_x-deltai_x
+            yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)*rcelly+deltaj_y-deltai_y
+            zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)*rcellz+deltaj_z-deltai_z
+            !ori xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)+deltaj_x-deltai_x
+            !ori yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)+deltaj_y-deltai_y
+            !ori zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
 
            !! -------- DEBUG -------- !!
             if (flag_MDdebug) then
@@ -2130,9 +2134,12 @@ contains
             if (.NOT. find_jcover) then
              !! TM
              if(flag_MDdebug) then
-               xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)+deltaj_x-deltai_x
-               yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)+deltaj_y-deltai_y
-               zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
+               xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)*rcellx+deltaj_x-deltai_x
+               yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)*rcelly+deltaj_y-deltai_y
+               zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)*rcellz+deltaj_z-deltai_z
+               !old xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)+deltaj_x-deltai_x
+               !old yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)+deltaj_y-deltai_y
+               !old zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
                write(lun_db,*) ' :ERROR: idglob_jj, idglob_jjj, jcover,jpart_nopg,#ofjjj = ', &
                                idglob_jj, idglob_jjj,jcover,jpart_nopg,BCS_parts%n_ing_cover(jpart_nopg)
                write(lun_db,*) ' :ERROR: jcoverxyz ',jcoverx,jcovery,jcoverz
@@ -2252,7 +2259,7 @@ contains
 
     ! Module usage
     use numbers
-    use global_module, ONLY: nspin,atom_coord_diff,flag_move_atom,runtype,io_lun
+    use global_module, ONLY: nspin,atom_coord_diff,flag_move_atom,runtype,io_lun, rcellx, rcelly, rcellz
     use GenComms, ONLY: cq_abort
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
@@ -2414,9 +2421,13 @@ contains
         endif
         ! NOTE: I hate the following way as in UpdateMatrix_local, but keep it
         !       for now.
-        xx_j = xprim_i - vec_Rij(1) + deltaj_x - deltai_x
-        yy_j = yprim_i - vec_Rij(2) + deltaj_y - deltai_y
-        zz_j = zprim_i - vec_Rij(3) + deltaj_z - deltai_z
+        ! 2017Dec14: Changed vec_Rij from cartesian (bohr) to fractional coordinates 
+        xx_j = xprim_i - vec_Rij(1)*rcellx + deltaj_x - deltai_x
+        yy_j = yprim_i - vec_Rij(2)*rcelly + deltaj_y - deltai_y
+        zz_j = zprim_i - vec_Rij(3)*rcellz + deltaj_z - deltai_z
+        !ori xx_j = xprim_i - vec_Rij(1) + deltaj_x - deltai_x
+        !ori yy_j = yprim_i - vec_Rij(2) + deltaj_y - deltai_y
+        !ori zz_j = zprim_i - vec_Rij(3) + deltaj_z - deltai_z
  
         !! ---------- DEBUG ---------- !!
         if (flag_MDdebug) then

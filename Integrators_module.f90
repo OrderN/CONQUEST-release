@@ -74,7 +74,6 @@ contains
      gatom = id_glob(atom)
      !do k = 1, 3
      !  if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
-     !  atom_coord_diff(k,gatom) = dt*v(k,atom)
      !enddo
      flagx = flag_movable(ibeg_atom)
      flagy = flag_movable(ibeg_atom+1)
@@ -82,22 +81,16 @@ contains
      ibeg_atom = ibeg_atom + 3
      ! X
      if (flagx) then
-       !atom_coord_diff(1,gatom) = dt*v(1,atom)
-       !x_atom_cell(atom) = x_atom_cell(atom) + atom_coord_diff(1,gatom)
        dx = dt*v(1,atom)
        x_atom_cell(atom) = x_atom_cell(atom) + dx
      endif
      ! Y
      if (flagy) then
-       !atom_coord_diff(2,gatom) = dt*v(2,atom)
-       !y_atom_cell(atom) = y_atom_cell(atom) + atom_coord_diff(2,gatom)
        dy = dt*v(2,atom)
        y_atom_cell(atom) = y_atom_cell(atom) + dy
      endif
      ! Z
      if (flagz) then
-       !atom_coord_diff(3,gatom) = dt*v(3,atom)
-       !z_atom_cell(atom) = z_atom_cell(atom) + atom_coord_diff(3,gatom)
        dz = dt*v(3,atom)
        z_atom_cell(atom) = z_atom_cell(atom) + dz
      endif
@@ -368,22 +361,16 @@ contains
        flagz = flag_move_atom(3,gatom)
        ! X
        if (flagx) then
-          !atom_coord_diff(1,gatom) = dt * v(1,atom)
-          !x_atom_cell(atom) = x_atom_cell(atom) + atom_coord_diff(1,gatom)
           dx = dt * v(1,atom)
           x_atom_cell(atom) = x_atom_cell(atom) + dx
        endif
        ! Y
        if (flagy) then
-          !atom_coord_diff(2,gatom) = dt * v(2,atom)
-          !y_atom_cell(atom) = y_atom_cell(atom) + atom_coord_diff(2,gatom)
           dy = dt * v(2,atom)
           y_atom_cell(atom) = y_atom_cell(atom) + dy
        endif
        ! Z
        if (flagz) then
-          !atom_coord_diff(3,gatom) = dt * v(3,atom)
-          !z_atom_cell(atom) = z_atom_cell(atom) + atom_coord_diff(3,gatom)
           dz = dt * v(3,atom)
           z_atom_cell(atom) = z_atom_cell(atom) + dz
        endif

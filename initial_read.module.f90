@@ -628,7 +628,7 @@ contains
                              flag_fractional_atomic_coords,            &
                              flag_old_partitions, ne_in_cell,          &
                              max_L_iterations, flag_read_blocks,       &
-                             runtype, restart_L, restart_rho,          &
+                             runtype, restart_LorK, restart_rho,          &
                              flag_basis_set, blips, PAOs,              &
                              flag_test_forces, UseGemm,                &
                              flag_fractional_atomic_coords,            &
@@ -922,7 +922,7 @@ contains
           call cq_abort('read_input: you may not select restart for a run just now')
        endif
        init_blip_flag = fdf_string(10,'Basis.InitBlipFlag','pao')
-       restart_L      = fdf_boolean('General.LoadL',   .false.)
+       restart_LorK   = fdf_boolean('General.LoadL',   .false.)
        restart_rho    = fdf_boolean('General.LoadRho', .false.)
        restart_T      = fdf_boolean('General.LoadInvS',.false.)
        ! Is there a net charge on the cell ?

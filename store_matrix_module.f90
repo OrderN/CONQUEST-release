@@ -109,6 +109,52 @@ module store_matrix
 
 contains
   ! -----------------------------------------------------------------------
+  ! Subroutine dump_pos_and_matrices
+  ! -----------------------------------------------------------------------
+
+  !!****f* store_matrix/dump_pos_and_matrices *
+  subroutine dump_pos_and_matrices
+    use global_module, ONLY: nspin, nspin_SF, flag_diagonalisation, flag_Multisite
+    use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
+    use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
+    use io_module, ONLY: append_coords, write_atomic_positions, pdb_template
+
+    implicit none
+    integer :: both=0 , mat=1
+    logical :: append_coords_bkup
+
+    !!! Check whether we should write out the files or not.  !!!
+     !   1. check elapsed time
+     !   2. check some specific file
+
+    !!! Write out Files to restart..
+     !   InfoGlob.dat
+     !     PAO coefficients of supports  or Blips
+     !     L matrix of K matrix
+     !     (for XL-BOMD, files in previous steps should be also printed out)
+     !     coodinates file ?
+
+       if(flag_Multisite) then
+        call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,index_in=0,iprint_mode=mat)
+        if(nspin_SF .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,index_in=0,iprint_mode=mat)
+       endif
+
+       if(flag_diagonalisation) then
+        call dump_matrix_update('K',matK(1),Hrange,index_in=0,iprint_mode=both)
+        if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=0,iprint_mode=both)
+       else
+        call dump_matrix_update('L',matL(1),Lrange,index_in=0,iprint_mode=both)
+        if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=0,iprint_mode=both)
+       endif
+
+       append_coords_bkup = append_coords; append_coords = .false.
+        call write_atomic_positions('coord_next.dat',trim(pdb_template))
+       append_coords = append_coords_bkup
+
+   return
+  end subroutine dump_pos_and_matrices
+  !!***
+  ! -----------------------------------------------------------------------
   ! Subroutine dump_matrix_update
   ! -----------------------------------------------------------------------
 
@@ -307,6 +353,7 @@ contains
     use cover_module, ONLY: BCS_parts
     use matrix_data, ONLY: mat
     use mult_module, ONLY: mat_p
+    use global_module, ONLY: rcellx, rcelly, rcellz  !2017.Dec.14
 
     implicit none
     character(len=*),intent(in) :: stub
@@ -405,6 +452,11 @@ contains
             matinfo%vec_Rij(1,neigh,iprim) = bundle%xprim(iprim) - BCS_parts%xcover(gcspart)
             matinfo%vec_Rij(2,neigh,iprim) = bundle%yprim(iprim) - BCS_parts%ycover(gcspart)
             matinfo%vec_Rij(3,neigh,iprim) = bundle%zprim(iprim) - BCS_parts%zcover(gcspart)
+
+           !vec_Rij is changed from cartesian unit to fractional coordinate  : 2017Dec14
+            matinfo%vec_Rij(1,neigh,iprim) = matinfo%vec_Rij(1,neigh,iprim)/rcellx
+            matinfo%vec_Rij(2,neigh,iprim) = matinfo%vec_Rij(2,neigh,iprim)/rcelly
+            matinfo%vec_Rij(3,neigh,iprim) = matinfo%vec_Rij(3,neigh,iprim)/rcellz
 
           enddo !neigh = 1, mat(np,range)%n_nab(ni)
 
@@ -522,7 +574,7 @@ contains
      write (lun,*) flag_velocity, flag_MDstep,'  = flag_velocity, flag_MDstep'
      write (lun,*) mat_global_tmp%ni_in_cell, mat_global_tmp%numprocs, ' # of atoms, # of process '
      write (lun,*) mat_global_tmp%npcellx,mat_global_tmp%npcelly,mat_global_tmp%npcellz,' npcellx,y,z'
-     write (lun,*) mat_global_tmp%rcellx,mat_global_tmp%rcelly,mat_global_tmp%rcellz,' rcellx,y,z'
+     write (lun,fmt='(3f25.10,a)') mat_global_tmp%rcellx,mat_global_tmp%rcelly,mat_global_tmp%rcellz,' rcellx,y,z'
      write (lun,*) mat_global_tmp%glob_to_node(1:mat_global_tmp%ni_in_cell)   
      write (lun,*) mat_global_tmp%MDstep,'  MD step'
  

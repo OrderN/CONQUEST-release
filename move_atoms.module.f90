@@ -205,8 +205,7 @@ contains
     use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell, &
                               z_atom_cell, ni_in_cell, id_glob,    &
                               flag_reset_dens_on_atom_move,        &
-                              flag_move_atom,atom_coord_diff,      &
-                              flag_MDold
+                              flag_move_atom, flag_MDold
     use species_module, only: species, mass
     use GenComms,       only: myid
 
@@ -225,6 +224,7 @@ contains
     logical      :: flagx, flagy, flagz
     integer      :: part, memb, atom, speca, k, gatom
     real(double) :: massa, acc
+    real(double) :: dx, dy, dz
 
     call start_timer(tmr_std_moveatoms)
     if (myid == 0 .and. iprint_MD > 0) write (io_lun,1) step, quenchflag
@@ -277,22 +277,28 @@ contains
        ! X
        if (flagx) then
         acc = force(1,gatom) / massa
-        atom_coord_diff(1,gatom)=step*velocity(1,atom)+half*step*step*acc
-        x_atom_cell(atom) = x_atom_cell(atom) + atom_coord_diff(1,gatom)
+        !atom_coord_diff(1,gatom)=step*velocity(1,atom)+half*step*step*acc
+        !x_atom_cell(atom) = x_atom_cell(atom) + atom_coord_diff(1,gatom)
+        dx=step*velocity(1,atom)+half*step*step*acc
+        x_atom_cell(atom) = x_atom_cell(atom) + dx
         velocity(1,atom)  = velocity(1,atom) + half * step * acc
        end if
        ! Y
        if (flagy) then
         acc = force(2,gatom) / massa
-        atom_coord_diff(2,gatom)=step*velocity(2,atom)+half*step*step*acc
-        y_atom_cell(atom) = y_atom_cell(atom) + atom_coord_diff(2,gatom)
+        !atom_coord_diff(2,gatom)=step*velocity(2,atom)+half*step*step*acc
+        !y_atom_cell(atom) = y_atom_cell(atom) + atom_coord_diff(2,gatom)
+        dy=step*velocity(2,atom)+half*step*step*acc
+        y_atom_cell(atom) = y_atom_cell(atom) + dy
         velocity(2,atom) = velocity(2,atom) + half * step * acc
        end if
        ! Z
        if (flagz) then
         acc = force(3,gatom) / massa
-        atom_coord_diff(3,gatom)=step*velocity(3,atom)+half*step*step*acc
-        z_atom_cell(atom) = z_atom_cell(atom) + atom_coord_diff(3,gatom)
+        !atom_coord_diff(3,gatom)=step*velocity(3,atom)+half*step*step*acc
+        !z_atom_cell(atom) = z_atom_cell(atom) + atom_coord_diff(3,gatom)
+        dz=step*velocity(3,atom)+half*step*step*acc
+        z_atom_cell(atom) = z_atom_cell(atom) + dz
         velocity(3,atom) = velocity(3,atom) + half * step * acc
        end if
     end do
@@ -767,7 +773,7 @@ contains
                               rcellz, flag_self_consistent,           &
                               flag_reset_dens_on_atom_move,           &
                               IPRINT_TIME_THRES1, flag_pcc_global,    &
-                              atom_coord_diff,id_glob,flag_MDold,     &
+                              id_glob,flag_MDold,     &
                               n_proc_old, glob2node_old,              &
                               flag_LmatrixReuse, flag_diagonalisation, nspin, &
                               flag_SFcoeffReuse 
@@ -3398,7 +3404,7 @@ contains
   use datatypes
   use numbers,         only: half
   use global_module,   only: flag_diagonalisation, atom_coord, atom_coord_diff, &
-                             rcellx, rcelly, rcellz, ni_in_cell, nspin
+                             rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF
     ! n_proc_old and glob2node_old should be removed soon...
     use global_module, only: n_proc_old, glob2node_old
   use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
@@ -3493,8 +3499,7 @@ contains
   !    updateIndices3 : deallocates member of parts, bundles, covering sets, domain, ...
   !                     and allocates them following the new atomic positions.
   !   Now, old informaiton is stored in InfoGlob, thus some of the information is redundant 
-  !    I (TM) should make new routine like "updateIndices4" using InfoGlob, soon.
-  !                              2017.Nov.13  Tsuyoshi Miyazaki
+  !    I (TM) should make new routine like "updateIndices4" using InfoGlob, soon.  !                              2017.Nov.13  Tsuyoshi Miyazaki
      call updateIndices3(fixed_potential, velocity)
 
  !
@@ -3539,8 +3544,7 @@ contains
      call grab_matrix2('SFcoeff',inode,nfile,Info)
      call my_barrier()
      call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(1),nfile)
-     if(nspin==2) then
-     !if(nspin_SF==2) then
+     if(nspin_SF==2) then
       call grab_matrix2('SFcoeff2',inode,nfile,Info)
       call my_barrier()
       call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(2),nfile)
