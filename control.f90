@@ -510,7 +510,7 @@ contains
     use Integrators,    ONLY: vVerlet_v_dthalf,vVerlet_r_dt, fire_qMD, fire_N_below_thresh
     use constraint_module, ONLY: correct_atomic_position,correct_atomic_velocity, &
          ready_constraint,flag_RigidBonds
-    use input_module,   ONLY: io_assign, io_close
+    use input_module,   ONLY: io_assign, io_close, leqi
     use cover_module,   only: BCS_parts, make_cs, deallocate_cs, make_iprim, &
                               send_ncover
     use md_model,       only: type_md_model
@@ -703,14 +703,14 @@ contains
          case('nhc')
            call thermo%propagate_nvt_nhc(ion_velocity, mdl%ion_kinetic_energy)
          case('berendsen')
-           call thermo%get_berendsen_thermo_sf
+           call thermo%get_berendsen_thermo_sf(MDtimestep)
          end select
        case('npt')
           select case(md_baro_type)
           case('berendsen')
-            call thermo%get_berendsen_thermo_sf
+            call thermo%get_berendsen_thermo_sf(MDtimestep)
             call baro%get_berendsen_baro_sf(MDtimestep)
-            call baro%propagate_berendsen(flag_movable)
+!            call baro%propagate_berendsen(flag_movable)
           case('iso-mttk')
             call baro%propagate_npt_mttk(thermo, mdl%ion_kinetic_energy, &
                                          ion_velocity)
@@ -736,7 +736,9 @@ contains
        ! Reset-up
        if (.NOT.flag_MDold) then
           ! Update members
-          if (md_ensemble(2:2) == 'p') call baro%update_cell
+          if (md_ensemble(2:2) == 'p') then
+            if (.not. leqi(md_baro_type, "berendsen")) call baro%update_cell
+          end if
           call wrap_xyz_atom_cell()
           call update_atom_coord()
 
@@ -788,6 +790,13 @@ contains
        else
           call get_E_and_F(fixed_potential,vary_mu,energy1,.true.,.false.,iter)
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
+       end if
+
+       ! Rescale the ionic positions for the berendsen barostat AFTER the 
+       ! velocity updates to avoid rescaling velocities
+       if (leqi(md_baro_type, 'berendsen')) then
+         call baro%propagate_berendsen(flag_movable)
+         call baro%update_cell
        end if
 
        if (flag_FixCOM) call zero_COM_velocity(ion_velocity)

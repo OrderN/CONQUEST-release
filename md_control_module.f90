@@ -46,7 +46,7 @@ module md_control
 
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
-  real(double)  :: md_tau_T, md_tau_P, md_target_press, md_baro_beta, &
+  real(double)  :: md_tau_T, md_tau_P, md_target_press, md_bulkmod_est, &
                    md_box_mass, md_ndof_ions
   integer       :: md_n_nhc, md_n_ys, md_n_mts
   logical       :: md_write_xsf, md_cell_nhc, md_calc_xlmass
@@ -152,7 +152,7 @@ module md_control
 
     ! Weak coupling barostat variables
     real(double)        :: tau_P        ! pressure coupling time period
-    real(double)        :: beta         ! isothermal compressibility
+    real(double)        :: bulkmod      ! estimated bulk modulus
 
     ! Extended Lagrangian barostat variables
     real(double)        :: box_mass
@@ -474,6 +474,7 @@ contains
     th%ndof = ndof
     th%ke_ions = ke_ions
     th%tau_T = tau_T
+    call th%get_temperature
 
   end subroutine init_berendsen_thermo
   !!***
@@ -511,12 +512,14 @@ contains
   !!   2017/10/24 14:26
   !!  SOURCE
   !!  
-  subroutine get_berendsen_thermo_sf(th)
+  subroutine get_berendsen_thermo_sf(th, dt)
 
     ! passed variables
     class(type_thermostat), intent(inout)   :: th
+    real(double), intent(in)                :: dt
 
-    th%lambda = sqrt(one + (th%dt/th%tau_T)*(th%T_ext*fac_Kelvin2Hartree/th%T_int - one))
+    th%lambda = sqrt(one + (dt/th%tau_T)* &
+                     (th%T_ext/th%T_int - one))
 
   end subroutine get_berendsen_thermo_sf
   !!***
@@ -951,7 +954,7 @@ contains
     case('None')
     case('berendsen')
       baro%tau_P = md_tau_P
-      baro%beta = md_baro_beta
+      baro%bulkmod = md_bulkmod_est
     case('iso-mttk')
       baro%eps_ref = third*log(baro%volume/baro%volume_ref)
       baro%eps = baro%eps_ref
@@ -1108,7 +1111,8 @@ contains
     class(type_barostat), intent(inout)         :: baro
     real(double), intent(in)                    :: dt
 
-    baro%mu = (one - (dt/baro%tau_P)*baro%beta*(baro%P_ext-baro%P_int))**third
+    baro%mu = (one - (dt/baro%tau_P)*(baro%P_ext-baro%P_int)* &
+                fac_HaBohr32GPa/baro%bulkmod)**third
 
   end subroutine get_berendsen_baro_sf
   !!***
@@ -1652,7 +1656,7 @@ contains
         baro%append = .true.
       end if
       write(lun,'("step    ",i12)') step
-      write(lun,'("P_int   ",f12.4)') baro%P_int
+      write(lun,'("P_int   ",f12.4)') baro%P_int*fac_HaBohr32GPa
       write(lun,'("volume  ",f12.4)') baro%volume
       write(lun,'("static_stress: ",3e16.8)') &
             baro%static_stress(1,1)*fac_HaBohr32GPa, &
@@ -1670,6 +1674,8 @@ contains
         write(lun,'("v_eps   ",f12.6)') baro%v_eps
         write(lun,'("G_eps   ",f12.6)') baro%G_eps
         write(lun,'("ke_box  ",f12.6)') baro%ke_box
+        write(lun,'("mu      ",f12.6)') baro%mu
+      case('berendsen')
         write(lun,'("mu      ",f12.6)') baro%mu
       end select
       write(lun,*)

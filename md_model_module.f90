@@ -183,6 +183,8 @@ contains
   !!  
   subroutine get_cons_qty(mdl)
 
+    use input_module,     only: leqi
+
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
 
@@ -193,11 +195,15 @@ contains
       if (mdl%thermo_type == 'nhc') then
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
                       mdl%nhc_energy
+      else
+        mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy
       end if
     case("npt")
-      if (mdl%baro_type == 'iso-mttk' .or. mdl%baro_type == 'mttk') then
+      if (leqi(mdl%baro_type, 'iso-mttk') .or. leqi(mdl%baro_type, 'mttk')) then
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
                       mdl%nhc_energy + mdl%box_kinetic_energy + mdl%PV
+      else if (leqi(mdl%baro_type, 'berendsen')) then
+        mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + mdl%PV
       end if
     end select
 
@@ -244,12 +250,15 @@ contains
           if (mdl%thermo_type == 'nhc') then
             write(lun,'(a10,4a18,2a12)') "step", "pe", "ke", "nhc", "H'", "T", "P"
           else
-            write(lun,'(a10,3a16,2a12)') "step", "pe", "ke", "total", "T", "P"
+            write(lun,'(a10,3a16,2a12)') "step", "pe", "ke", "H'", "T", "P"
           end if
         case ('npt')
-          if (mdl%thermo_type == 'nhc') then
+          select case(mdl%baro_type)
+          case('iso-mttk')
             write(lun,'(a10,6a18,3a12)') "step", "pe", "ke", "nhc", "box", "pV", "H'", "T", "P", "V"
-          end if
+          case('berendsen')
+            write(lun,'(a10,4a18,3a12)') "step", "pe", "ke", "pV", "H'", "T", "P", "V"
+          end select
         case ('nph')
           write(lun,'(a10,5a18,3a12)') "step", "pe", "ke", "box", "pV", "H'", "T", "P", "V"
         end select
@@ -269,11 +278,16 @@ contains
             mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, P_GPa
         end if
       case ('npt')
-        if (mdl%thermo_type == 'nhc') then
+        select case(mdl%baro_type)
+        case('iso-mttk')
           write(lun,'(i10,6e18.8,3f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%nhc_energy, mdl%box_kinetic_energy, &
             mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
-        end if
+        case('berendsen')
+          write(lun,'(i10,4e18.8,3f12.4)') mdl%step, mdl%dft_total_energy, &
+            mdl%ion_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
+            mdl%volume
+        end select
       case ('nph')
           write(lun,'(i10,5e18.8,3f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%box_kinetic_energy, mdl%PV, &
