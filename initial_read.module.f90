@@ -1892,7 +1892,11 @@ contains
 
        ! Thermostat
        md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
-       md_tau_T           = fdf_double('MD.tauT', 10.0_double)
+       if (leqi(md_thermo_type, 'berendsen')) then
+         md_tau_T           = fdf_double('MD.tauT', one)
+       else
+         md_tau_T           = fdf_double('MD.tauT', 100.0_double)
+       end if
        md_n_nhc           = fdf_integer('MD.nNHC', 5) 
        md_n_ys            = fdf_integer('MD.nYoshida', 1)
        md_n_mts           = fdf_integer('MD.nMTS', 1)
@@ -1915,7 +1919,11 @@ contains
        md_target_press    = fdf_double('MD.TargetPressure', zero)
        md_baro_type       = fdf_string(20, 'MD.Barostat', 'None')
        md_box_mass        = fdf_double('MD.BoxMass', one)
-       md_tau_P           = fdf_double('MD.tauP', 10.0_double)
+       if (leqi(md_baro_type, 'berendsen')) then
+         md_tau_P           = fdf_double('MD.tauP', 10.0_double)
+       else
+         md_tau_P           = fdf_double('MD.tauP', 10000.0_double)
+       end if
        md_bulkmod_est     = fdf_double('MD.BulkModulusEst', one)
        md_cell_nhc        = fdf_boolean('MD.CellNHC', .false.)
        flag_baroDebug     = fdf_boolean('MD.BaroDebug',.false.)
