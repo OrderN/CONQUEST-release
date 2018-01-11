@@ -126,6 +126,7 @@ contains
     use dimens,            only: r_dft_d2
     use DFT_D2
     use pseudo_tm_module,   only: make_neutral_atom
+    use angular_coeff_routines, only: set_fact
 
     implicit none
 
@@ -178,6 +179,7 @@ contains
                                &building from initial K'
        find_chdens = .true.
     end if
+    call set_fact(8)
     if(flag_neutral_atom) call make_neutral_atom
     call set_up(find_chdens,std_level_loc+1)
     
@@ -341,6 +343,7 @@ contains
     use UpdateInfo_module,      ONLY: make_glob2node
     use XLBOMD_module,          ONLY: immi_XL
     use DiagModule,             only: init_blacs_pg, init_scalapack_format
+    use bessel_integrals, only: enum_bess_int, bess_coeff
     
     implicit none
 
@@ -535,9 +538,10 @@ contains
    end if
 
    ! external potential - first set up angular momentum bits
-   call set_fact
-   call set_prefac
-   call set_prefac_real
+   !call set_fact
+   call set_prefac(9)
+   call set_prefac_real(9)
+   call enum_bess_int(8)
     !  TM's pseudo or not : 15/11/2002 TM
    select case (pseudo_type)
    case(OLDPS)

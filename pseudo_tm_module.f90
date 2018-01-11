@@ -2211,7 +2211,8 @@ contains
     use pseudopotential_common, ONLY: flag_neutral_atom_projector, maxL_neutral_atom_projector, &
          numN_neutral_atom_projector
     use species_module, ONLY: napf_species, npao_species
-    use pao_format, ONLY: pao, paoVNA
+    use pao_format, ONLY: pao, paoVNA, paopao
+    use bessel_integrals, only: general_bessel
 
     implicit none
 
@@ -2223,9 +2224,9 @@ contains
     real(double) :: cutoff
     real(double) :: delta
     real(double) :: r, r_1, r_2, yp1, ypn, r1, r2, r3, r4
-    real(double) :: rr, a, b, c, d, step
+    real(double) :: rr, a, b, c, d, step, alpha, beta, gamma
     real(double) :: chatom_at, chlocal_at, chna_at
-    real(double) :: vlocal_at, vchatom_at, vna_here
+    real(double) :: vlocal_at, vchatom_at, vna_here, pao_here, dvna_here, dpao_here
     real(double) :: integ_inside, integ_outside
     real(double) :: k, overlap, norm, sum_chna
     real(double) :: sqrt_two_pi ! sqrt(two/pi)
@@ -2242,10 +2243,67 @@ contains
     integer :: j_pjna
     integer :: m
 
-    allocate(napf_species(n_species),paoVNA(n_species))
+    ! Bessel function variables
+    integer :: zeroind, bessel_order
+    real(double), allocatable, dimension(:,:) :: zeroloc
+    real(double), allocatable, dimension(:,:) :: qvec
+    real(double) :: rm, rn, jl, jm, jn, x, fac
+    logical :: not_done
+
     sqrt_two_pi = sqrt(two)/sqrt_pi
+    if(flag_neutral_atom_projector) then
+       allocate(napf_species(n_species),paoVNA(n_species),paopao(n_species))
+       allocate(zeroloc(15,0:6),qvec(15,0:8))
+       zeroloc = zero
+       qvec = zero
+       ! Find Bessel function zeroes
+       npoint = 1001
+       do bessel_order=0,6!lmax_ps+lmax_pao ! Bessel order
+          cutoff = 100.0_double
+          delta = cutoff/real(npoint-1,double)
+          zeroind = 1
+          do ir = 2,npoint
+             r = ir*delta
+             rm = (ir-1)*delta
+             jl = general_bessel(r,bessel_order)
+             jm = general_bessel(rm,bessel_order)
+             !jj = spherical_bessels(r,bessel_order)
+             !jm = spherical_bessels(rm,bessel_order)
+             if(jl*jm<zero) then ! Bracketed a zero
+                not_done = .true.
+                do while(not_done)
+                   rn = half*(r+rm)
+                   jn = general_bessel(rn,bessel_order)
+                   !jn = spherical_bessels(rn,bessel_order)
+                   if(jn*jm<zero) then !
+                      r = rn
+                      jl = jn
+                   else if(jn*jl<zero) then
+                      rm = rn
+                      jm = jn
+                   else if(abs(jn)<1e-8_double) then
+                      not_done = .false.
+                   end if
+                   if(abs(r-rm)<1e-8) not_done = .false.
+                end do
+                zeroloc(zeroind,bessel_order) = rn
+                !write(io_lun,*) '# zero is at ',zeroloc(zeroind)
+                zeroind = zeroind+1
+                if(zeroind>15) exit
+             end if
+          end do
+       end do
+    end if
     ! Loop over species
     do isp=1, n_species
+       if(flag_neutral_atom_projector) then
+          cutoff = pseudo(isp)%vna%cutoff
+          do bessel_order=0,6
+             do ir = 1, zeroind-1
+                qvec(ir, bessel_order) = zeroloc(ir,bessel_order)/cutoff
+             end do
+          end do
+       end if
        if( pseudo(isp)%tm_loc_pot==loc_pot ) then ! ABINIT PP
           cutoff = atomic_density_table(isp)%cutoff
           delta  = atomic_density_table(isp)%delta
@@ -2548,6 +2606,8 @@ contains
           !
           paoVNA(isp)%greatest_angmom = pao(isp)%greatest_angmom
           paoVNA(isp)%count = pao(isp)%count
+          paopao(isp)%greatest_angmom = pao(isp)%greatest_angmom
+          paopao(isp)%count = pao(isp)%count
           i_pjna = 0
           napf_species(isp) = 0
           do l=0, maxL_neutral_atom_projector
@@ -2555,11 +2615,11 @@ contains
                 i_pjna = i_pjna + 1
              end do
           end do
-          napf_species = i_pjna
+          napf_species(isp) = i_pjna
           pseudo(isp)%n_pjna = i_pjna
           npoint = pseudo(isp)%vna%n          
-          !write(*,*) 'n_pjna: ',pseudo(isp)%n_pjna
           allocate(paoVNA(isp)%angmom(0:pao(isp)%greatest_angmom))
+          allocate(paopao(isp)%angmom(0:pao(isp)%greatest_angmom))
           allocate( pseudo(isp)%pjna(pseudo(isp)%n_pjna) )
           allocate( pseudo(isp)%pjna_l(pseudo(isp)%n_pjna) )
           allocate( pseudo(isp)%pjna_n(pseudo(isp)%n_pjna) )
@@ -2571,7 +2631,9 @@ contains
           i_pjna = 0
           do l=0, pao(isp)%greatest_angmom
              paoVNA(isp)%angmom(l)%n_zeta_in_angmom = pao(isp)%angmom(l)%n_zeta_in_angmom
+             paopao(isp)%angmom(l)%n_zeta_in_angmom = pao(isp)%angmom(l)%n_zeta_in_angmom
              allocate(paoVNA(isp)%angmom(l)%zeta(pao(isp)%angmom(l)%n_zeta_in_angmom))
+             allocate(paopao(isp)%angmom(l)%zeta(pao(isp)%angmom(l)%n_zeta_in_angmom))
              do n=1, pao(isp)%angmom(l)%n_zeta_in_angmom
                 i_pjna = i_pjna + 1
                 paoVNA(isp)%angmom(l)%zeta(n)%length = pao(isp)%angmom(l)%zeta(n)%length
@@ -2581,6 +2643,14 @@ contains
                 allocate(paoVNA(isp)%angmom(l)%zeta(n)%table2(paoVNA(isp)%angmom(l)%zeta(n)%length))
                 paoVNA(isp)%angmom(l)%zeta(n)%table = zero
                 paoVNA(isp)%angmom(l)%zeta(n)%table2 = zero
+                ! pao-pao
+                paopao(isp)%angmom(l)%zeta(n)%length = pseudo(isp)%vna%n !pao(isp)%angmom(l)%zeta(n)%length
+                paopao(isp)%angmom(l)%zeta(n)%cutoff = pseudo(isp)%vna%cutoff!pao(isp)%angmom(l)%zeta(n)%cutoff
+                paopao(isp)%angmom(l)%zeta(n)%delta  = pseudo(isp)%vna%delta!pao(isp)%angmom(l)%zeta(n)%delta
+                allocate(paopao(isp)%angmom(l)%zeta(n)%table(paopao(isp)%angmom(l)%zeta(n)%length))
+                allocate(paopao(isp)%angmom(l)%zeta(n)%table2(paopao(isp)%angmom(l)%zeta(n)%length))
+                paopao(isp)%angmom(l)%zeta(n)%table = zero
+                paopao(isp)%angmom(l)%zeta(n)%table2 = zero
              end do
           end do
           ! 3-centre integrals via projectors
@@ -2603,7 +2673,7 @@ contains
                 !   ! |Vna_ln> = Vna(r) |PAO'_ln>
                 step = pseudo(isp)%vna%delta
                 do j=1,paoVNA(isp)%angmom(l)%zeta(n)%length
-                   r = paoVNA(isp)%angmom(l)%zeta(n)%delta * real(j,double)
+                   r = paoVNA(isp)%angmom(l)%zeta(n)%delta * real(j-1,double)
                    jj = aint(r/step) + 1
                    if(jj+1<=pseudo(isp)%vna%n) then
                       rr = real(jj,double) * step
@@ -2621,6 +2691,7 @@ contains
                       paoVNA(isp)%angmom(l)%zeta(n)%table(j) = zero
                    end if
                 end do
+                ! Spline paoVNA
                 delta = pao(isp)%angmom(l)%zeta(n)%delta
                 npoint = pao(isp)%angmom(l)%zeta(n)%length
                 yp1 = (paoVNA(isp)%angmom(l)%zeta(n)%table(2) &
@@ -2630,6 +2701,36 @@ contains
                 call spline( npoint, delta, &
                      paoVNA(isp)%angmom(l)%zeta(n)%table, yp1, ypn, &
                      paoVNA(isp)%angmom(l)%zeta(n)%table2 )
+                ! Create paopao: all PAOs on the same grid (for ease of multiplication)
+                step = pao(isp)%angmom(l)%zeta(n)%delta
+                do j=1,pseudo(isp)%vna%n
+                   r = pseudo(isp)%vna%delta * real(j-1,double)
+                   jj = aint(r/step) + 1
+                   if(jj+1<=pao(isp)%angmom(l)%zeta(n)%length) then
+                      rr = real(jj,double) * step
+                      a = ( rr - r ) / step
+                      b = one - a
+                      c = a * ( a * a - one ) * step * step / six
+                      d = b * ( b * b - one ) * step * step / six                   
+                      r1=pao(isp)%angmom(l)%zeta(n)%table(jj)
+                      r2=pao(isp)%angmom(l)%zeta(n)%table(jj+1)
+                      r3=pao(isp)%angmom(l)%zeta(n)%table2(jj)
+                      r4=pao(isp)%angmom(l)%zeta(n)%table2(jj+1)
+                      pao_here = a * r1 + b * r2 + c * r3 + d * r4
+                      paopao(isp)%angmom(l)%zeta(n)%table(j) = pao_here
+                   else
+                      paopao(isp)%angmom(l)%zeta(n)%table(j) = zero
+                   end if
+                end do
+                delta = paopao(isp)%angmom(l)%zeta(n)%delta
+                npoint = paopao(isp)%angmom(l)%zeta(n)%length
+                yp1 = (paopao(isp)%angmom(l)%zeta(n)%table(2) &
+                     - paopao(isp)%angmom(l)%zeta(n)%table(1)       )/delta
+                ypn = (paopao(isp)%angmom(l)%zeta(n)%table(npoint) &
+                     - paopao(isp)%angmom(l)%zeta(n)%table(npoint-1))/delta
+                call spline( npoint, delta, &
+                     paopao(isp)%angmom(l)%zeta(n)%table, yp1, ypn, &
+                     paopao(isp)%angmom(l)%zeta(n)%table2 )
              end do
           end do
           ! 3-centre integrals
@@ -2645,7 +2746,13 @@ contains
              Rad = zero
              do ir=1, npoint
                 r = (ir-1)*delta
-                Rad(ir) =  r**real(n-1,double)*exp(-a*r**2)
+                !if(l>0.AND.ir>1) then
+                !   fac = one/(r**l)
+                !else
+                   fac = one
+                !end if
+                Rad(ir) = fac*general_bessel(qvec(n,l)*r,l)!r**real(n-1,double) * exp(-a*r**2) ! n-1
+                !Rad(ir) =  r**real(n-1,double)*exp(-a*r**2)
              end do
              ! Normalise
              norm = overlapRadials(Rad,Rad,delta,l)
@@ -2669,7 +2776,6 @@ contains
 
              ! |Vna_ln> = Vna(r) |R'_ln>
              pseudo(isp)%pjna(i_pjna)%f(:) = pseudo(isp)%vna%f(:) * Radbar(:,n)
-
              ! calc <R'_ln|Vna_i>
              overlap = overlapRadials(Radbar(:,n),pseudo(isp)%pjna(i_pjna)%f(:),delta,l)
 
@@ -2857,7 +2963,8 @@ contains
     overlapRadials = zero
     do ir=1, nr
        r = (ir-1)*delta
-       overlapRadials = overlapRadials + delta*r**(2*l+2)*radial1(ir)*radial2(ir)
+       overlapRadials = overlapRadials + delta*r*r*radial1(ir)*radial2(ir)
+       !overlapRadials = overlapRadials + delta*r**(2*l+2)*radial1(ir)*radial2(ir)
     end do
 
     return

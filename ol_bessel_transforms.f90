@@ -40,8 +40,12 @@ module bessel_integrals
   ! -------------------------------------------------------
   character(len=80), private :: RCSid = "$Id$"
 
-  integer,parameter :: lmax_fact=22
-  real(double) :: fact(-1:lmax_fact)
+  !integer,parameter :: lmax_fact=22
+  !real(double) :: fact(-1:lmax_fact)
+  save
+  
+  real(double), allocatable, dimension(:) :: fact
+  real(double), allocatable, dimension(:,:) :: bess_coeff
 
 !!***
    
@@ -733,7 +737,7 @@ contains
 !!    Dimension of dummyout fixed
 !!  SOURCE
 !!
-   subroutine bessloop(dummyin,l,npts,npts_2,deltar,rcut,dummyout)
+   subroutine bessloop(dummyin,l,npts,npts_2,deltar,rcut,dummyout,sign)
 
      use datatypes
 
@@ -741,11 +745,17 @@ contains
 
      !choosing spherical Bessel transform subroutine 
      !for incoming angular momentum value l
-     integer, intent(in) :: l,npts,npts_2
+     integer, intent(in) :: l,npts,npts_2,sign
      real(double), intent(in), dimension(npts) :: dummyin
      real(double), intent(out), dimension(npts_2/2) :: dummyout 
      real(double), intent(in) :: deltar,rcut
 
+     !if(.true.) then
+     !   call general_bess_int(l,dummyin,npts,npts_2,rcut,deltar,dummyout,sign)
+     !   return
+     !end if
+
+     
      !if clause to select correct subroutine
      if(l.eq.0) then
         !write(io_lun,*) 'bessloop l=0'
@@ -855,7 +865,6 @@ contains
 
    end subroutine complx_fctr
 !!***
-   
 
 !!****f* bessel_integrals/maxtwon *
 !!
@@ -1034,5 +1043,302 @@ contains
 
    end function bess6_ser
 !!***
+
+   subroutine enum_bess_int(n)
+
+     use datatypes
+     use numbers, only: zero
+
+     implicit none
+
+     integer :: n
+
+     type bess_expand
+        integer :: n
+        ! term is 0 or 1 for j0 or j1
+        ! power is power of x scaling the term
+        ! coeff is the coefficient
+        integer, allocatable, dimension(:) :: term, power
+        real(double), allocatable, dimension(:) :: coeff
+     end type bess_expand
+
+     integer :: i,j,k, fibn, fibn1,tmp,i_acc
+     type(bess_expand), dimension(0:n) :: store
+
+     allocate(bess_coeff(n+1,0:n))
+     bess_coeff = zero
+     do i=0,n
+        if(i<2) then
+           fibn = 1
+        else
+           fibn = 1
+           fibn1 = 1
+           do j= 2,i
+              tmp = fibn
+              fibn = fibn + fibn1
+              fibn1 = tmp
+           end do
+        end if
+        allocate(store(i)%term(fibn),store(i)%power(fibn),store(i)%coeff(fibn))
+        !write(*,*) 'With i ',i,' we have ',fibn,' terms'
+        store(i)%n = fibn
+        if(i==0) then
+           ! j0
+           store(i)%term(1) = 0
+           store(i)%power(1) = 0
+           store(i)%coeff(1) = 1
+        else if(i==1) then
+           ! j1 only
+           store(i)%term(1) = 1
+           store(i)%power(1) = 0
+           store(i)%coeff(1) = 1
+        else ! Recurse using j_n = -j_{n-2} + (2n-1)j_{n-1}/x
+           ! Term 1: -j_{n-2}
+           do k=1,store(i-2)%n
+              store(i)%term(k) = store(i-2)%term(k)
+              store(i)%power(k) = store(i-2)%power(k)
+              store(i)%coeff(k) = -store(i-2)%coeff(k)
+           end do
+           i_acc = store(i-2)%n
+           ! Term 2: (2n-1)/x j_{n-1}
+           tmp = 2*(i-1)+1
+           do k=1,store(i-1)%n
+              store(i)%term(i_acc+k) = store(i-1)%term(k)
+              store(i)%power(i_acc+k) = store(i-1)%power(k)-1
+              store(i)%coeff(i_acc+k) = store(i-1)%coeff(k)*tmp
+           end do
+        end if
+        !write(*,fmt='(3x,"  Term Power Coeff")')
+        !do k=1,store(i)%n
+        !   write(*,fmt='(i3,3i6)') k,store(i)%term(k),store(i)%power(k),store(i)%coeff(k)
+        !end do
+        !write(*,*) 'Maximum power: ',i+1
+        !allocate(coeff_sin(i+1),coeff_cos(i+1))
+        bess_coeff(:,i) = zero
+        !coeff_sin = 0
+        !coeff_cos = 0
+        do k=store(i)%n,1,-1
+           if(store(i)%term(k)==0) then ! j0
+              ! sin
+              j=-store(i)%power(k)+1
+              bess_coeff(j,i) = bess_coeff(j,i)+store(i)%coeff(k)
+           else if(store(i)%term(k)==1) then ! j1 = sin/x^2 - cos/x
+              ! cos
+              j=-store(i)%power(k)+1
+              bess_coeff(j,i) = bess_coeff(j,i)-store(i)%coeff(k)
+              ! sin
+              j=-store(i)%power(k)+2
+              bess_coeff(j,i) = bess_coeff(j,i)+store(i)%coeff(k)
+           end if
+        end do
+        !write(*,*) 'sin: ',coeff_sin
+        !write(*,*) 'cos: ',coeff_cos
+        !deallocate(coeff_sin,coeff_cos)
+        !write(*,*) i,' Bessel coeff: ',bess_coeff(:,i)
+     end do
+   end subroutine enum_bess_int     
+
+   subroutine general_bess_int(n,func,npts,npts_2,rcut,delta_r,func_out,sign)
+
+     use fft_procedures, ONLY : sinft,cosft,realft,four1
+     use datatypes
+     use numbers, ONLY: zero, one, twopi, two
+     use GenComms, ONLY: cq_abort
+     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
+
+     implicit none
+
+     integer, intent(in) :: n,npts,npts_2,sign
+     !integer, intent(in) :: n,npts,npts_2
+     real(double), intent(in), dimension(npts) :: func
+     real(double), intent(out), dimension(npts_2/2) :: func_out
+     !real(double), intent(out), dimension(npts_2) :: func_out
+     real(double), intent(in) :: rcut, delta_r
+
+     real(double), dimension(:,:), allocatable :: dummy        
+     !real(double), dimension(:), allocatable :: dummy        
+     real(double) :: k,r,rcp_k,rcp_r,bess_ser,kr,rcp_kr,int_part,cumul,a,b
+     integer :: i, j, stat, flip,s,t,low
+
+     !write(20,*) 'On entry, ',npts_2,sign,n
+     !%%! allocate(dummy(npts_2), STAT=stat)
+     !%%! dummy = zero
+     !%%! do i=1,npts
+     !%%!    r = real((i-1),double)*delta_r
+     !%%!    dummy(i) = general_bessel(r,n)*func(i)*r*r
+     !%%!    !if(i<4) write(20,*) r,dummy(i)
+     !%%! end do
+     !%%! call realft(dummy,npts_2/2,sign)
+     !%%! !do i=3,npts_2,2
+     !%%! !func_out((i+1)/2) = dummy(i)
+     !%%! func_out = dummy
+     !%%! !end do
+     !%%! !func_out(1) = zero
+     !%%! !if(n==0) then
+     !%%! !   do i=1,npts
+     !%%! !      r = (i-1)*delta_r
+     !%%! !      func_out(1) = func_out(1)+(r*r*delta_r*func(i))
+     !%%! !   enddo
+     !%%! !end if
+     !%%! if(sign==-1) func_out = func_out/real(npts_2/2,double)
+     !%%! deallocate(dummy, STAT=stat)
+     !%%! return
+     
+     allocate(dummy(npts_2,n+1), STAT=stat)
+     if (stat /= 0) call cq_abort("bess6_int: Error alloc mem: ", npts_2)
+     call reg_alloc_mem(area_basis, (n+1)*npts_2, type_dbl)
+     
+     !write(*,*) 'Coeffs: ',bess_coeff(1:n+1,n)
+     ! Initialise dummy array: remember that the index gives NEGATIVE power of r
+     dummy = zero
+     do j=1,n+1
+        !dummy(1:npts,j) = bess_coeff(j,n)*delta_r
+        dummy(1:npts,j) = delta_r
+     end do
+     ! Create terms in f(r).j_n(r).r^2 expansion
+     low = 2
+     if(n==0) then
+        low = 1
+     else
+        dummy(1,:) = zero
+     end if
+     rcp_r = one
+     do i=low,npts
+        r = (i-1)*delta_r
+        if(n>0.AND.i>1) rcp_r = one/r
+        if(sign==1) then
+           cumul = r**(n+1)*func(i)
+        else !if(sign==0)
+           cumul = r*func(i)
+        end if
+        do j=1,n+1
+           dummy(i,j) = dummy(i,j)*cumul !*func(i)*cumul
+           cumul = cumul*rcp_r
+           !if(i<5) write(20,*) r,dummy(i,j),func(i),cumul
+        end do
+        !if(dummy(i,n+1)>1.0_double) dummy(i,:)=zero
+        !if(n>5.AND.r<0.01_double) dummy(i,:)=zero
+        !if(n>6.AND.r<0.2_double) dummy(i,:)=zero
+        !if(n>6.AND.r<0.2_double) dummy(i,:)=zero
+        !if(sign==0.AND.n>4.AND.r<0.1_double) dummy(i,:)=zero
+        !if(sign==0.AND.n>4.AND.dummy(i,n+1)>10.0_double) dummy(i,:)=zero
+     enddo
+     ! Now perform sin/cos transforms
+     do j=n+1,1,-2
+        call sinft(dummy(:,j),npts_2)
+     end do
+     if(n>0) then
+        do j=n,1,-2
+           call cosft(dummy(:,j),npts_2,+1)
+        end do
+     end if
+     
+     !added option for real-space quadrature of radial integrals as
+     !the FFT intgrals diverge for very small values of k.
+     do i=3,npts_2,2
+        k = ((i-1)/2)*twopi/(rcut+delta_r)
+        if(n>1.AND.k<5.0_double) then
+        !if(n>4.AND.k<0.5_double) then
+           int_part = zero
+           do j=1,npts-1
+              r = real(j,double)*delta_r
+              kr = k*r
+              rcp_kr = one/kr
+              if(sign==1) then
+                 bess_ser = r**n*general_bessel(kr,n)!bess6_ser(kr)
+              else
+                 bess_ser = general_bessel(kr,n)
+              end if
+              int_part = int_part+bess_ser*delta_r*r*r*func(j+1)
+           enddo
+           func_out((i+1)/2) = int_part
+        else
+           rcp_k = 1.0_double/k
+           func_out((i+1)/2) = rcp_k*dummy(i,n+1)*bess_coeff(n+1,n)
+           !write(20+n,*) k,dummy(i,n+1)
+           if(n>0) then
+              do j=n,1,-1
+                 func_out((i+1)/2) = rcp_k*(func_out((i+1)/2) + bess_coeff(j,n)*dummy(i,j))
+                 !write(20+n+j,*) k,dummy(i,j)
+              end do
+           end if
+        endif
+     enddo
+     func_out(1) = zero
+     if(n==0) then
+        do i=1,npts
+           r = (i-1)*delta_r
+           func_out(1) = func_out(1)+(r*r*delta_r*func(i))
+        enddo
+     end if
+     deallocate(dummy, STAT=stat)
+     if (stat /= 0) call cq_abort("bess6_int: Error dealloc mem")
+     call reg_dealloc_mem(area_basis, (n+1)*npts_2, type_dbl)
+
+   end subroutine general_bess_int
+
+   function general_bessel(r,n)
+
+     use datatypes
+     use numbers
+     use GenComms, only: cq_abort
+     
+     implicit none
+
+     real(double) :: general_bessel
+     ! Passed
+     real(double) :: r
+     integer :: n
+     
+     ! Local
+     real(double), dimension(0:n) :: sph_bess
+     integer :: i, s
+     real(double) :: term
+     logical :: flag_series
+
+     flag_series = .false.
+     if(n>2.AND.r<0.02_double) flag_series = .true.
+     if(n>3.AND.r<0.1_double) flag_series = .true.
+     if(n>4.AND.r<0.2_double) flag_series = .true.
+     if(n>5.AND.r<0.4_double) flag_series = .true.
+     if(n>6.AND.r<0.6_double) flag_series = .true.
+     if(n>7.AND.r<0.9_double) flag_series = .true.
+     if(n>8.AND.r<1.3_double) flag_series = .true.
+     if(n>9.AND.r<1.8_double) flag_series = .true.
+     if(n>10.AND.r<2.4_double) flag_series = .true.
+     if(n<0) call cq_abort("Error: Can't have spherical bessel with order less than zero ",n)
+     if(abs(r)<1e-8_double) then
+        if(n>0) then
+           general_bessel = zero
+        else
+           general_bessel = one - r*r/six ! Yes, I know... This is temporary !
+        end if
+     else if(flag_series) then
+        general_bessel = zero
+        do s=0,5
+           term = ((-1)**s)*fact(s+n)*(r**(2*s)) /(fact(s)*fact(2*s+2*n+1))
+           general_bessel = general_bessel + term
+        enddo
+        do i=1,n
+           general_bessel = general_bessel * two * r
+        end do
+     else
+        sph_bess(0) = sin(r)/r
+        if(n==0) then
+           general_bessel = sph_bess(0)
+        else
+           sph_bess(1) = (sph_bess(0) - cos(r))/r
+           if(n==1) then
+              general_bessel = sph_bess(1)
+           else
+              do i=2,n
+                 sph_bess(i) = sph_bess(i-1)*real(2*i-1,double)/r - sph_bess(i-2)
+              end do
+              general_bessel = sph_bess(n)
+           end if
+        end if
+     end if
+   end function general_bessel
+   
    
  end module bessel_integrals

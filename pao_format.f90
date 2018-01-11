@@ -84,7 +84,7 @@ module pao_format
      type(angmom_pao), pointer, dimension(:) :: angmom
   end type species_pao
 
-  type(species_pao), allocatable, dimension(:) :: pao, paoVNA
+  type(species_pao), allocatable, dimension(:) :: pao, paoVNA, paopao
 
   real(double) :: kcut, del_k
 

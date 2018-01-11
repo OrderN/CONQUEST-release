@@ -2375,7 +2375,7 @@ contains
     if( flag_neutral_atom_projector ) then
        trans_index(mataNA  ) = aNA_trans
        trans_index(matNAa  ) = aNA_trans
-       trans_index(matNA   ) = 0
+       trans_index(matNA  )  = S_trans
        if (atomf.ne.sf) then
           trans_index(matNAatomf) = 0
        end if
