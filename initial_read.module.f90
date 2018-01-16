@@ -1895,7 +1895,7 @@ contains
        if (leqi(md_thermo_type, 'berendsen')) then
          md_tau_T           = fdf_double('MD.tauT', one)
        else
-         md_tau_T           = fdf_double('MD.tauT', 100.0_double)
+         md_tau_T           = fdf_double('MD.tauT', one)
        end if
        md_n_nhc           = fdf_integer('MD.nNHC', 5) 
        md_n_ys            = fdf_integer('MD.nYoshida', 1)
@@ -1922,7 +1922,7 @@ contains
        if (leqi(md_baro_type, 'berendsen')) then
          md_tau_P           = fdf_double('MD.tauP', 10.0_double)
        else
-         md_tau_P           = fdf_double('MD.tauP', 10000.0_double)
+         md_tau_P           = fdf_double('MD.tauP', 100.0_double)
        end if
        md_bulkmod_est     = fdf_double('MD.BulkModulusEst', one)
        md_cell_nhc        = fdf_boolean('MD.CellNHC', .false.)
