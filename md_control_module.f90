@@ -43,6 +43,7 @@ module md_control
 
   ! Unit conversion factors
   real(double), parameter :: fac_HaBohr32GPa = 29421.02648438959
+  real(double), parameter :: fac_fs2atu = 41.3413745758
 
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
@@ -252,7 +253,8 @@ contains
 
     ! local variables
     character(40)                         :: fmt1, fmt2
-    real(double)                          :: omega_thermo, omega_baro, ndof_baro
+    real(double)                          :: omega_thermo, omega_baro, &
+                                             ndof_baro, tauT, tauP
     integer                               :: i
 
     th%thermo_type = "nhc"
@@ -282,8 +284,11 @@ contains
 
     ! Calculate the masses for extended lagrangian variables?
     if (md_calc_xlmass) then
-      omega_thermo = twopi/md_tau_T
-      omega_baro = twopi/md_tau_P
+      ! convert time scales from fs to atomic units
+      tauT = md_tau_T*fac_fs2atu 
+      tauP = md_tau_P*fac_fs2atu 
+      omega_thermo = twopi/tauT
+      omega_baro = twopi/tauP
       th%m_nhc(1) = md_ndof_ions*th%T_ext*fac_Kelvin2Hartree/omega_thermo**2
       if (th%cell_nhc) then
         select case (md_baro_type)
@@ -919,12 +924,17 @@ contains
     real(double), dimension(3), intent(in)    :: stress
     real(double), dimension(:,:), intent(in)  :: v
 
+    ! local variables
+    real(double)                              :: tauP, omega_P
+
     ! Globals
     baro%baro_type = md_baro_type
     if (md_calc_xlmass) then
       select case(md_baro_type)
       case('iso-mttk')
-        baro%box_mass = (md_ndof_ions + one)*temp_ion*fac_Kelvin2Hartree/(twopi/md_tau_P)**2
+        tauP = md_tau_P*fac_fs2atu 
+        omega_P = twopi/tauP
+        baro%box_mass = (md_ndof_ions+one)*temp_ion*fac_Kelvin2Hartree/omega_P**2
       end select
     else
       baro%box_mass = md_box_mass
