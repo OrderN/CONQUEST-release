@@ -731,7 +731,7 @@ contains
                                  flag_which_force, TF_direction, &
                                  TF_atom_moved, TF_delta
     use io_module, only: pdb_format, pdb_altloc, append_coords,  &
-                         pdb_output, banner, get_file_name
+                         pdb_output, banner, get_file_name, time_max
     use group_module,     only: part_method, HILBERT, PYTHON
     use energy,           only: flag_check_DFT
     use H_matrix_module,  only: locps_output, locps_choice
@@ -911,6 +911,9 @@ contains
        !
        !
        time_threshold = fdf_double('General.TimeThreshold',0.001_double)
+
+       time_max  = fdf_double('General.MaxTime', zero)
+
        ! Read run title
        titles = fdf_string(80,'IO.Title',def)
        ! Is this a restart run ? **NB NOT AVAILABLE RIGHT NOW**

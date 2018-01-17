@@ -78,6 +78,8 @@
 !!    they don't exist
 module io_module
 
+  use datatypes,              only: double
+  use numbers,                only: zero
   use global_module,          only: io_lun
   use GenComms,               only: cq_abort, gcopy
   use timer_module,           only: start_timer,     stop_timer,    cq_timer
@@ -91,6 +93,9 @@ module io_module
   character(len=1)  :: pdb_altloc
   character(len=80) :: pdb_template
 
+  !Maximum of wallclock time (in seconds): See subroutine 'check_stop' 2018.Jan.17 TM 
+  real(double)      :: time_max =zero
+   
   ! RCS tag for object file identification 
   character(len=80), save, private :: &
        RCSid = "$Id$"
@@ -4445,26 +4450,42 @@ second:   do
   !!  MODIFICATION HISTORY
   !!   2011/10/20 09:58 dave
   !!    Bug fix to call io_close
+  !!   2018/01/17 TM
+  !!    Introduced the control by Elapsed time & Iteration number in CQ.stop
   !!  SOURCE
   !!  
   subroutine check_stop(flag_userstop,iter)
 
-    use GenComms, only: inode, ionode, gsum
+    use datatypes, only: double
+    use numbers, only: very_small
+    use GenComms, only: inode, ionode, gsum, mtime
 
     implicit none
 
     ! Passed variables
     logical :: flag_userstop
     integer, OPTIONAL :: iter
+    real(double) :: present_time
 
     ! Local variables
-    integer :: lun, ios
+    integer :: lun, ios, ios2, iter_max
 
     flag_userstop = .false.
+
+    ! Option 1: Check "CQ.stop"
     if(inode==ionode) then
        call io_assign(lun)
        open(unit=lun,file='CQ.stop',status='old',iostat=ios)
-       if(ios==0) flag_userstop = .true.
+       if(ios==0) then
+        rewind lun
+        read(lun,*,iostat=ios2) iter_max
+        if(ios2 /= 0) then
+          flag_userstop = .true.
+        endif
+        if(PRESENT(iter)) then
+         if(iter_max>0 .and. iter > iter_max) flag_userstop = .true.
+        endif
+       endif
        if(flag_userstop) then
           if(PRESENT(iter)) then
              write(io_lun,fmt='(4x,"User requested stop at ieration ",i4)') iter
@@ -4475,6 +4496,13 @@ second:   do
        call io_close(lun)
     endif
     call gsum(flag_userstop)
+
+    ! Option 2: Check elapsed time < time_max
+    if(time_max > very_small) then
+     present_time = mtime()/1000.e0_double
+     if(present_time > time_max) flag_userstop=.true.
+    endif
+
     return
   end subroutine check_stop
   !!***

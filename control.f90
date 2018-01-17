@@ -699,6 +699,8 @@ contains
        call write_velocity(velocity, file_velocity)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        !to check IO of velocity files
+
+       call check_stop(done, iter)
        if (flag_fire_qMD) then
           if (abs(max) < MDcgtol) then
              if ((iter - step_qMD) > 1) then
@@ -713,9 +715,8 @@ contains
                 done = .true.
              end if
           end if
-       else
-          call check_stop(done, iter)
        end if
+
        if (done) exit
 
 !%%!   if (myid == 0) &
