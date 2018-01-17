@@ -1018,7 +1018,7 @@ contains
                         .false.)
        !2017/12/4
        !call dump_InfoMatGlobal()
-       both=0
+       both=0; mat=1
        if(flag_SFcoeffReuse) then
         call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,index_in=0,iprint_mode=mat)
         if(nspin .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,index_in=0,iprint_mode=mat)
@@ -3402,13 +3402,14 @@ contains
   !!
  subroutine update_pos_and_matrices(update_method, velocity)
   use datatypes
-  use numbers,         only: half
+  use numbers,         only: half, zero
   use global_module,   only: flag_diagonalisation, atom_coord, atom_coord_diff, &
                              rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF
     ! n_proc_old and glob2node_old should be removed soon...
     use global_module, only: n_proc_old, glob2node_old
   use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
-  use mult_module,     only: matL, L_trans, matK, matS, S_trans, matSFcoeff, SFcoeff_trans
+  use mult_module,     only: matL, L_trans, matK, matS, S_trans, matSFcoeff, SFcoeff_trans, &
+                             matrix_scale, matrix_transpose, matSFcoeff_tran
   use matrix_data,     only: Lrange, Hrange, Srange, SFcoeff_range
   use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2
   use UpdateInfo_module, only: Matrix_CommRebuild
@@ -3417,7 +3418,7 @@ contains
   integer, intent(in) :: update_method
   real(double), intent(inout) :: velocity(3, ni_in_cell)
   logical :: flag_L, flag_K, flag_S, flag_SFcoeff, flag_X
-  integer :: nfile, symm, ig
+  integer :: nfile, symm, ig, spin_SF
   logical :: fixed_potential 
    ! should be removed in the future (calling update_H is outside of this routine)
   
@@ -3470,6 +3471,8 @@ contains
   case(extrplL)
    if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: updateX is not implemented yet.'
    ! TM plans to implement  L(n)=2L(n-1)-L(n-2)
+  case default
+   if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: Invalid Flag !',update_method
  end select ! case (update_method)
 
 
@@ -3480,7 +3483,7 @@ contains
   !Before calling this routine, we need 1) call dump_InfoMatGlobal or 2) call set_InfoMatGlobal
   ! Then, we use InfoGlob read from the file or use InfoGlob as it is (in the case of 2))
   !       Now, we just assume 1).
-     call grab_InfoMatGlobal(InfoGlob,0)
+     call grab_InfoMatGlobal(InfoGlob,index=0)
        n_proc_old = InfoGlob%numprocs
        glob2node_old(:) = InfoGlob%glob_to_node(:)
       do ig = 1, ni_in_cell
@@ -3499,7 +3502,9 @@ contains
   !    updateIndices3 : deallocates member of parts, bundles, covering sets, domain, ...
   !                     and allocates them following the new atomic positions.
   !   Now, old informaiton is stored in InfoGlob, thus some of the information is redundant 
-  !    I (TM) should make new routine like "updateIndices4" using InfoGlob, soon.  !                              2017.Nov.13  Tsuyoshi Miyazaki
+  !    I (TM) should make new routine like "updateIndices4" using InfoGlob, soon.  ! 2017.Nov.13  Tsuyoshi Miyazaki
+  !   (NOTE) If CONQUEST stops before calling "finalise", coord_next.dat should be used in the next job.
+  !       coord_next.dat is made in "updateIndices3", at present.
      call updateIndices3(fixed_potential, velocity)
 
  !
@@ -3541,6 +3546,10 @@ contains
   endif
 
   if(flag_SFcoeff) then
+     do spin_SF = 1,nspin_SF
+      call matrix_scale(zero,matSFcoeff(spin_SF))
+     enddo !spin_SF = 1,nspin_SF
+
      call grab_matrix2('SFcoeff',inode,nfile,Info)
      call my_barrier()
      call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(1),nfile)
@@ -3549,6 +3558,11 @@ contains
       call my_barrier()
       call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(2),nfile)
      end if
+
+     do spin_SF = 1,nspin_SF
+      call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+      call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+     enddo
   endif
 
  return

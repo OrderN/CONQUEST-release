@@ -2133,24 +2133,26 @@ contains
             enddo !(jjj, n_ing_cover)
             if (.NOT. find_jcover) then
              !! TM
-             if(flag_MDdebug) then
+         !ORI!if(flag_MDdebug) then
                xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)*rcellx+deltaj_x-deltai_x
                yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)*rcelly+deltaj_y-deltai_y
                zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)*rcellz+deltaj_z-deltai_z
                !old xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)+deltaj_x-deltai_x
                !old yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)+deltaj_y-deltai_y
                !old zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
-               write(lun_db,*) ' :ERROR: idglob_jj, idglob_jjj, jcover,jpart_nopg,#ofjjj = ', &
+         !ORI  write(lun_db,*) ' :ERROR: idglob_jj, idglob_jjj, jcover,jpart_nopg,#ofjjj = ', &
+               write(io_lun,*) ' :ERROR: inode = ',inode
+               write(io_lun,*) ' :ERROR: idglob_jj, idglob_jjj, jcover,jpart_nopg,#ofjjj = ', &
                                idglob_jj, idglob_jjj,jcover,jpart_nopg,BCS_parts%n_ing_cover(jpart_nopg)
-               write(lun_db,*) ' :ERROR: jcoverxyz ',jcoverx,jcovery,jcoverz
-               write(lun_db,*) ' :ERROR: vecRij ', &
+               write(io_lun,*) ' :ERROR: jcoverxyz ',jcoverx,jcovery,jcoverz
+               write(io_lun,*) ' :ERROR: vecRij ', &
                                Info(ifile)%rvec_Pij(1,ibeg1+jj-1), Info(ifile)%rvec_Pij(2,ibeg1+jj-1), &
                                Info(ifile)%rvec_Pij(3,ibeg1+jj-1) 
-               write(lun_db,*) ' :ERROR: deltaj_x  ',deltaj_x,deltaj_y,deltaj_z
-               write(lun_db,*) ' :ERROR: deltai_x  ',deltai_x,deltai_y,deltai_z
-               write(lun_db,*) ' :ERROR: vecRi  ',xprim_i, yprim_i, zprim_i
-               write(lun_db,*) ' :ERROR: vecRj  ',xx_j, yy_j, zz_j
-             endif
+               write(io_lun,*) ' :ERROR: deltaj_x  ',deltaj_x,deltaj_y,deltaj_z
+               write(io_lun,*) ' :ERROR: deltai_x  ',deltai_x,deltai_y,deltai_z
+               write(io_lun,*) ' :ERROR: vecRi  ',xprim_i, yprim_i, zprim_i
+               write(io_lun,*) ' :ERROR: vecRj  ',xx_j, yy_j, zz_j
+         !ORI!endif
              !! TM 
              call cq_abort('Error: find_cover must be T - local.')
             endif

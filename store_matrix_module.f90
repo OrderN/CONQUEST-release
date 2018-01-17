@@ -40,11 +40,12 @@ module store_matrix
     integer, allocatable :: jmax_i(:)
     integer, allocatable :: jbeta_max_i(:)
     integer, allocatable :: ibeg_data_matrix(:)  ! initial address of data_matrix for (iprim)th atom
-   ! Size : (n_prim, jmax_i_max)
-    integer, allocatable :: idglob_j(:,:)
-    integer, allocatable :: beta_j(:,:)
-   ! Size : (3, jmax_i_max, iprim)
-    real(double), allocatable :: vec_Rij(:,:,:)
+    integer, allocatable :: ibeg_Rij(:)          ! initial address of ibeg_Pij
+   ! Size : (n_prim)
+    integer, allocatable :: idglob_j(:)
+    integer, allocatable :: beta_j(:)
+   ! Size : (3, # of j)
+    real(double), allocatable :: vec_Rij(:,:)
    ! Size : matrix_size
     real(double), allocatable :: data_matrix(:)
   end type matrix_store
@@ -113,15 +114,22 @@ contains
   ! -----------------------------------------------------------------------
 
   !!****f* store_matrix/dump_pos_and_matrices *
-  subroutine dump_pos_and_matrices
-    use global_module, ONLY: nspin, nspin_SF, flag_diagonalisation, flag_Multisite
-    use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
-    use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
+  subroutine dump_pos_and_matrices(index, MDstep, velocity)
+    use global_module, ONLY: ni_in_cell, nspin, nspin_SF, flag_diagonalisation, flag_Multisite, &
+                             flag_XLBOMD, flag_propagateX, flag_dissipation, integratorXL, flag_SFcoeffReuse
+    use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range, Srange, LSrange
+    use mult_module, ONLY: matL,L_trans, matK, matSFcoeff, matS
     use io_module, ONLY: append_coords, write_atomic_positions, pdb_template
+!    use XLBOMD_module, only: matX, matXvel, dump_XL
 
     implicit none
+    integer,intent(in), optional :: index
+    integer,intent(in), optional :: MDstep
     integer :: both=0 , mat=1
     logical :: append_coords_bkup
+    integer :: index_local, MDstep_local
+    real(double), intent(in), optional :: velocity(1:3,ni_in_cell)
+    
 
     !!! Check whether we should write out the files or not.  !!!
      !   1. check elapsed time
@@ -134,18 +142,61 @@ contains
      !     (for XL-BOMD, files in previous steps should be also printed out)
      !     coodinates file ?
 
-       if(flag_Multisite) then
-        call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,index_in=0,iprint_mode=mat)
-        if(nspin_SF .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,index_in=0,iprint_mode=mat)
+     index_local = 0; if(present(index)) index_local=index
+     MDstep_local = 0; if(present(MDstep)) MDstep_local=MDstep
+
+       if(flag_SFcoeffReuse .or. flag_Multisite) then
+        call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,&
+                                 index_in=index_local,iprint_mode=mat,MDstep=MDstep_local)
+        if(nspin_SF .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,&
+                                 index_in=index_local,iprint_mode=mat,MDstep=MDstep_local)
        endif
 
        if(flag_diagonalisation) then
-        call dump_matrix_update('K',matK(1),Hrange,index_in=0,iprint_mode=both)
-        if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=0,iprint_mode=both)
+        if(present(velocity)) then
+         call dump_matrix_update('K',matK(1),Hrange,&
+           index_in=index_local,iprint_mode=both,MDstep=MDstep_local,velocity=velocity)
+        else
+         call dump_matrix_update('K',matK(1),Hrange,index_in=index_local,iprint_mode=both,MDstep=MDstep_local)
+        endif
+         if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=index_local,iprint_mode=mat,MDstep=MDstep_local)
        else
-        call dump_matrix_update('L',matL(1),Lrange,index_in=0,iprint_mode=both)
-        if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=0,iprint_mode=both)
+        if(present(velocity)) then
+         call dump_matrix_update('L',matL(1),Lrange,&
+           index_in=index_local,iprint_mode=both,MDstep=MDstep_local,velocity=velocity)
+        else
+         call dump_matrix_update('L',matL(1),Lrange,index_in=index_local,iprint_mode=both,MDstep=MDstep_local)
+        endif
+         if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=index_local,iprint_mode=mat,MDstep=MDstep_local)
        endif
+
+! Since XLBOMD_module uses the subroutines in this module, we cannot 
+! call subroutines in XLBOMD_module.
+!   (Now the following part is in DMMMin_module)
+!
+!       !XLBOMD for DMM (X=LS) 
+!       if(.not.flag_diagonalisation) then
+!          if (flag_XLBOMD) then
+!             if (flag_propagateX) then
+!                call dump_matrix2('X',matX(1),LSrange)
+!                if(nspin==2) call dump_matrix2('X_2',matX(2),LSrange)
+!                call dump_matrix2('S',matS   ,Srange)
+!                if (integratorXL.EQ.'velocityVerlet') then
+!                   call dump_matrix2('Xvel',matXvel(1),LSrange)
+!                   if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),LSrange)
+!                end if
+!             else
+!                call dump_matrix2('X',matX(1),Lrange)
+!                if(nspin==2) call dump_matrix2('X_2',matX(2),LSrange)
+!                if (integratorXL.EQ.'velocityVerlet') then
+!                   call dump_matrix2('Xvel',matXvel(1),Lrange)
+!                   if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),LSrange)
+!                end if
+!             endif
+!             ! When dissipation applies
+!             if (flag_dissipation) call dump_XL()
+!          endif ! (flag_XLBOMD)
+!       endif ! (.not.flag_diagonalisation) 
 
        append_coords_bkup = append_coords; append_coords = .false.
         call write_atomic_positions('coord_next.dat',trim(pdb_template))
@@ -181,9 +232,9 @@ contains
   !!  SOURCE
   !!
 
-   subroutine dump_matrix_update(stub,matA,range,index_in,iprint_mode)
+   subroutine dump_matrix_update(stub,matA,range,index_in,iprint_mode,MDstep,velocity)
     use GenComms, ONLY: inode, ionode, cq_abort
-    use global_module, ONLY: numprocs, id_glob
+    use global_module, ONLY: numprocs, id_glob, ni_in_cell
     use io_module, ONLY: get_file_name
     implicit none
     character(len=*),intent(in) :: stub
@@ -191,6 +242,8 @@ contains
     integer,intent(in) :: range
     integer,intent(in), optional :: index_in
     integer,intent(inout), optional :: iprint_mode
+    integer,intent(inout), optional :: MDstep
+    real(double), intent(in), optional :: velocity(1:3,ni_in_cell)
     integer :: index_local
 
     index_local=0; if(present(index_in)) index_local=index_in
@@ -198,12 +251,20 @@ contains
 
      select case(iprint_mode)
       case(0)  ! Both "InfoGlobal.dat" and "*matrix2.dat" will be pinted out.
-        call dump_InfoMatGlobal(index_local)
+       if(present(velocity)) then
+        call dump_InfoMatGlobal(index_local,velocity=velocity,MDstep=MDstep)
+       else
+        call dump_InfoMatGlobal(index_local,MDstep=MDstep)
+       endif
         call dump_matrix2(stub,matA,range,index_local)
       case(1)  ! only "*matrix2.dat" will be printed out.
         call dump_matrix2(stub,matA,range,index_local)
       case(2)  ! only "InfoGlobal.dat" will be printed out.
-        call dump_InfoMatGlobal(index_local)
+       if(present(velocity)) then
+        call dump_InfoMatGlobal(index_local,velocity=velocity,MDstep=MDstep)
+       else
+        call dump_InfoMatGlobal(index_local,MDstep=MDstep)
+       endif
      end select ! case(iprint_mode)
  
     return
@@ -289,11 +350,12 @@ contains
       if(nprim .GT. 0) then
        do iprim=1,nprim
           jmax = tmp_matrix_store%jmax_i(iprim)
+          ibeg = tmp_matrix_store%ibeg_Rij(iprim)
           write (lun,*) tmp_matrix_store%idglob_i(iprim)
-          write (lun,*) tmp_matrix_store%beta_j(1:jmax,iprim)
-          write (lun,*) tmp_matrix_store%idglob_j(1:jmax,iprim)
+          write (lun,*) tmp_matrix_store%beta_j(ibeg:ibeg+jmax-1)
+          write (lun,*) tmp_matrix_store%idglob_j(ibeg:ibeg+jmax-1)
          do jj=1,jmax
-          write (lun,*) tmp_matrix_store%vec_Rij(1:3,jj,iprim)
+          write (lun,*) tmp_matrix_store%vec_Rij(1:3,ibeg+jj-1)
          enddo !jj=1,jmax
          if(iprim < nprim) then
            len = tmp_matrix_store%ibeg_data_matrix(iprim+1)-tmp_matrix_store%ibeg_data_matrix(iprim)
@@ -365,6 +427,7 @@ contains
     integer :: np, ni, iprim, atom_num, jmax_i_max
     integer :: ist, n_beta, neigh, gcspart, ibeg, j_global_part, len
     integer :: sf1, sf2  ! 2017/Dec/06 for reading SF_coeff
+    integer :: ibeg2, jcount, jst ! 2017/Dec/26 for introducing ibeg_Rij
 
     !name & n_prim
       matinfo%name=stub
@@ -372,7 +435,9 @@ contains
     !allocation 1 
       nprim=matinfo%n_prim   ! local variable
       allocate(matinfo%nsf_spec_i(nprim), matinfo%idglob_i(nprim), matinfo%jmax_i(nprim), &
-               matinfo%jbeta_max_i(nprim), matinfo%ibeg_data_matrix(nprim), STAT=istat)
+               matinfo%jbeta_max_i(nprim), matinfo%ibeg_data_matrix(nprim), &
+               matinfo%ibeg_Rij(nprim), STAT=istat)
+              !matinfo%jbeta_max_i(nprim), matinfo%ibeg_data_matrix(nprim), STAT=istat)
       if(istat .NE. 0) call cq_abort('Allocation 1 in set_matrix_store',istat,nprim)
     
     !sf1_type , sf2_type
@@ -393,6 +458,7 @@ contains
     iprim = 0
     jmax_i_max = -1
     matinfo%jbeta_max_i(:) = 0
+    jcount = 0
 
     do np = 1, bundle%groups_on_node
       if (bundle%nm_nodgroup(np).GT.0) then
@@ -402,6 +468,7 @@ contains
            if(iprim .NE. atom_num) call cq_abort('iprim .ne. atom_num ?',iprim,atom_num)
            matinfo%idglob_i(iprim) = bundle%ig_prim(iprim)
            matinfo%jmax_i(iprim) =  mat(np,range)%n_nab(ni)
+           jcount = jcount + matinfo%jmax_i(iprim)
            if (matinfo%jmax_i(iprim).GT.jmax_i_max) jmax_i_max = matinfo%jmax_i(iprim)
           do neigh = 1, matinfo%jmax_i(iprim)
             ist = mat(np,range)%i_acc(ni) + neigh - 1 ! Neighbour-labeling
@@ -411,19 +478,24 @@ contains
         enddo !(ni)
       endif
     enddo !(np)
+    if(jcount < 1 .or. jcount > nprim*jmax_i_max) call cq_abort(' ERROR: # of (j,i) = 0??',jcount)
 
     !allocation 2 
-      allocate(matinfo%idglob_j(jmax_i_max,nprim), matinfo%beta_j(jmax_i_max,nprim), STAT=istat)
-      if(istat .NE. 0) call cq_abort('Allocation 2 in set_matrix_store', nprim,jmax_i_max)
+      !OLD allocate(matinfo%idglob_j(jmax_i_max,nprim), matinfo%beta_j(jmax_i_max,nprim), STAT=istat)
+      !OLD if(istat .NE. 0) call cq_abort('Allocation 2 in set_matrix_store', nprim,jmax_i_max)
+      allocate(matinfo%idglob_j(jcount), matinfo%beta_j(jcount), STAT=istat)
+      if(istat .NE. 0) call cq_abort('Allocation 2 in set_matrix_store', jcount)
     !allocation 3 
-      allocate(matinfo%vec_Rij(3,jmax_i_max,nprim), STAT=istat)
-      if(istat .NE. 0) call cq_abort('Allocation 3 in set_matrix_store', nprim,jmax_i_max)
+      !OLD allocate(matinfo%vec_Rij(3,jmax_i_max,nprim), STAT=istat)
+      !OLD if(istat .NE. 0) call cq_abort('Allocation 3 in set_matrix_store', nprim,jmax_i_max)
+      allocate(matinfo%vec_Rij(3,jcount), STAT=istat)
+      if(istat .NE. 0) call cq_abort('Allocation 3 in set_matrix_store', jcount)
      
    !!set up : idglob_j, beta_j, vec_Rij
-    matinfo%idglob_j(:,:) = 0
-    matinfo%beta_j(:,:) = 0
+    matinfo%idglob_j(:) = 0
+    matinfo%beta_j(:) = 0
     iprim = 0
-    ibeg = 1
+    ibeg = 1; ibeg2 = 1
     matinfo%matrix_size = 0
     do np = 1, bundle%groups_on_node
       if (bundle%nm_nodgroup(np).GT.0) then
@@ -434,29 +506,32 @@ contains
 
           do neigh = 1, mat(np,range)%n_nab(ni)
             ist = mat(np,range)%i_acc(ni) + neigh - 1  ! Neighbour-labeling
+            jst = ibeg2 + neigh -1      
+
             gcspart=BCS_parts%icover_ibeg(mat(np,range)%i_part(ist))+mat(np,range)%i_seq(ist)-1
             j_global_part = BCS_parts%lab_cell(mat(np,range)%i_part(ist))
 
-            matinfo%idglob_j(neigh,iprim) = id_glob(parts%icell_beg(j_global_part) &
+            !OLD matinfo%idglob_j(neigh,iprim) = id_glob(parts%icell_beg(j_global_part) &
+            matinfo%idglob_j(jst) = id_glob(parts%icell_beg(j_global_part) &
                                                 +mat(np,range)%i_seq(ist)-1)
             if(sf2 == sf) then
-             matinfo%beta_j(neigh,iprim) = nsf_species(species_glob(matinfo%idglob_j(neigh,iprim)))
+             matinfo%beta_j(jst) = nsf_species(species_glob(matinfo%idglob_j(jst)))
             elseif(sf2 == atomf) then
-             matinfo%beta_j(neigh,iprim) = natomf_species(species_glob(matinfo%idglob_j(neigh,iprim)))
+             matinfo%beta_j(jst) = natomf_species(species_glob(matinfo%idglob_j(jst)))
             elseif(sf2 == nlpf) then
-             matinfo%beta_j(neigh,iprim) = nlpf_species(species_glob(matinfo%idglob_j(neigh,iprim)))
+             matinfo%beta_j(jst) = nlpf_species(species_glob(matinfo%idglob_j(jst)))
             else
              call cq_abort(" ERROR in set_matrix_store: No sf2_type : ",sf2)
             endif
 
-            matinfo%vec_Rij(1,neigh,iprim) = bundle%xprim(iprim) - BCS_parts%xcover(gcspart)
-            matinfo%vec_Rij(2,neigh,iprim) = bundle%yprim(iprim) - BCS_parts%ycover(gcspart)
-            matinfo%vec_Rij(3,neigh,iprim) = bundle%zprim(iprim) - BCS_parts%zcover(gcspart)
+            matinfo%vec_Rij(1,jst) = bundle%xprim(iprim) - BCS_parts%xcover(gcspart)
+            matinfo%vec_Rij(2,jst) = bundle%yprim(iprim) - BCS_parts%ycover(gcspart)
+            matinfo%vec_Rij(3,jst) = bundle%zprim(iprim) - BCS_parts%zcover(gcspart)
 
            !vec_Rij is changed from cartesian unit to fractional coordinate  : 2017Dec14
-            matinfo%vec_Rij(1,neigh,iprim) = matinfo%vec_Rij(1,neigh,iprim)/rcellx
-            matinfo%vec_Rij(2,neigh,iprim) = matinfo%vec_Rij(2,neigh,iprim)/rcelly
-            matinfo%vec_Rij(3,neigh,iprim) = matinfo%vec_Rij(3,neigh,iprim)/rcellz
+            matinfo%vec_Rij(1,jst) = matinfo%vec_Rij(1,jst)/rcellx
+            matinfo%vec_Rij(2,jst) = matinfo%vec_Rij(2,jst)/rcelly
+            matinfo%vec_Rij(3,jst) = matinfo%vec_Rij(3,jst)/rcellz
 
           enddo !neigh = 1, mat(np,range)%n_nab(ni)
 
@@ -464,7 +539,9 @@ contains
           len = matinfo%jbeta_max_i(iprim)*matinfo%nsf_spec_i(iprim)
           matinfo%matrix_size = matinfo%matrix_size + len
           matinfo%ibeg_data_matrix(iprim) = ibeg
+          matinfo%ibeg_Rij(iprim) = ibeg2
           ibeg = ibeg + len
+          ibeg2 = ibeg2 + matinfo%jmax_i(iprim)
         enddo !(ni)
       endif !(bundle%nm_nodgroup(np).GT.0) then
     enddo !(np)
@@ -482,7 +559,8 @@ contains
     type(matrix_store), intent(inout) :: matinfo
     integer :: istat
    
-     deallocate(matinfo%data_matrix, matinfo%vec_Rij, matinfo%beta_j, matinfo%idglob_j, &
+     !ORI deallocate(matinfo%data_matrix, matinfo%vec_Rij, matinfo%beta_j, matinfo%idglob_j, &
+     deallocate(matinfo%data_matrix, matinfo%vec_Rij, matinfo%beta_j, matinfo%idglob_j, matinfo%ibeg_Rij, &
                 matinfo%ibeg_data_matrix, matinfo%jbeta_max_i, matinfo%jmax_i, matinfo%idglob_i, &
                 matinfo%nsf_spec_i, STAT=istat)
      if(istat .NE. 0) call cq_abort("Error in deallocation at free_matrix_store",istat)
@@ -574,7 +652,7 @@ contains
      write (lun,*) flag_velocity, flag_MDstep,'  = flag_velocity, flag_MDstep'
      write (lun,*) mat_global_tmp%ni_in_cell, mat_global_tmp%numprocs, ' # of atoms, # of process '
      write (lun,*) mat_global_tmp%npcellx,mat_global_tmp%npcelly,mat_global_tmp%npcellz,' npcellx,y,z'
-     write (lun,fmt='(3f25.10,a)') mat_global_tmp%rcellx,mat_global_tmp%rcelly,mat_global_tmp%rcellz,' rcellx,y,z'
+     write (lun,fmt='(3f25.15,a)') mat_global_tmp%rcellx,mat_global_tmp%rcelly,mat_global_tmp%rcellz,' rcellx,y,z'
      write (lun,*) mat_global_tmp%glob_to_node(1:mat_global_tmp%ni_in_cell)   
      write (lun,*) mat_global_tmp%MDstep,'  MD step'
  
@@ -595,7 +673,7 @@ contains
      call io_close (lun)
     endif
 
-    call free_InfoMatGlobal(mat_global_tmp,flag_velocity)
+    call free_InfoMatGlobal(mat_global_tmp)
     return
   end subroutine dump_InfoMatGlobal
   !!***
@@ -637,14 +715,14 @@ contains
     mat_glob%npcellz     = parts%ngcellz
 
     !allocation of glob_to_node, atom_coord, atom_veloc
-    if(present(velocity_in)) then
+    !if(present(velocity_in)) then
        allocate(mat_glob%glob_to_node(ni_in_cell), mat_glob%atom_coord(3,ni_in_cell), &
                mat_glob%atom_veloc(3,ni_in_cell), STAT=istat)
        if(istat .NE. 0) call cq_abort('Error : allocation in set_InfoMatGlobal1',istat,ni_in_cell)
-    else
-       allocate(mat_glob%glob_to_node(ni_in_cell), mat_glob%atom_coord(3,ni_in_cell), STAT=istat)
-       if(istat .NE. 0) call cq_abort('Error : allocation in set_InfoMatGlobal2',istat,ni_in_cell)
-    endif
+    !else
+    !   allocate(mat_glob%glob_to_node(ni_in_cell), mat_glob%atom_coord(3,ni_in_cell), STAT=istat)
+    !   if(istat .NE. 0) call cq_abort('Error : allocation in set_InfoMatGlobal2',istat,ni_in_cell)
+    !endif
 
     do ind_part = 1, parts%mx_gcell
       id_node = parts%i_cc2node(ind_part) ! CC labeling
@@ -672,21 +750,21 @@ contains
   end subroutine set_InfoMatGlobal
 
   !!***
-  subroutine free_InfoMatGlobal(mat_glob,flag_velocity_in)
+  subroutine free_InfoMatGlobal(mat_glob)
     use GenComms, ONLY: cq_abort
     implicit none
-    logical, intent(in) :: flag_velocity_in
+    !logical, intent(in) :: flag_velocity_in
     integer :: istat
     !type(matrix_store_global),intent(out) :: mat_glob
     type(matrix_store_global) :: mat_glob
 
-    if(flag_velocity_in) then
+    !if(flag_velocity_in) then
      deallocate(mat_glob%atom_veloc, mat_glob%atom_coord, mat_glob%glob_to_node, STAT=istat)
      if(istat .NE. 0) call cq_abort('Error : deallocation in free_InfoMatGlobal1',istat)
-    else
-     deallocate(mat_glob%atom_coord, mat_glob%glob_to_node, STAT=istat)
-     if(istat .NE. 0) call cq_abort('Error : deallocation in free_InfoMatGlobal2',istat)
-    endif
+    !else
+    ! deallocate(mat_glob%atom_coord, mat_glob%glob_to_node, STAT=istat)
+    ! if(istat .NE. 0) call cq_abort('Error : deallocation in free_InfoMatGlobal2',istat)
+    !endif
  
    return
   end subroutine free_InfoMatGlobal
@@ -742,19 +820,20 @@ contains
     endif
 
     ! check whether members of InfoGlob has been allocated or not.
-     if(.not.allocated(InfoGlob%glob_to_node)) then
-      if(flag_velocity_local) then
-       !allocation of glob_to_node, atom_coord, atom_veloc
-        !write(io_lun,*) "allocation in grab_InfoMatGlobal1"
+     if(allocated(InfoGlob%glob_to_node)) call free_InfoMatGlobal(InfoGlob)
+     !if(.not.allocated(InfoGlob%glob_to_node)) then
+      !if(flag_velocity_local) then
+      ! !allocation of glob_to_node, atom_coord, atom_veloc
+      !  !write(io_lun,*) "allocation in grab_InfoMatGlobal1"
         allocate(InfoGlob%glob_to_node(ni_in_cell), InfoGlob%atom_coord(3,ni_in_cell), &
                  InfoGlob%atom_veloc(3,ni_in_cell), STAT=istat)
         if(istat .NE. 0) call cq_abort('Error : allocation in grab_InfoMatGlobal1',istat,ni_in_cell)
-      else
-        !write(io_lun,*) "allocation in grab_InfoMatGlobal2"
-        allocate(InfoGlob%glob_to_node(ni_in_cell), InfoGlob%atom_coord(3,ni_in_cell), STAT=istat)
-        if(istat .NE. 0) call cq_abort('Error : allocation in grab_InfoMatGlobal2',istat,ni_in_cell)
-      endif
-     endif
+      !else
+      !  !write(io_lun,*) "allocation in grab_InfoMatGlobal2"
+      !  allocate(InfoGlob%glob_to_node(ni_in_cell), InfoGlob%atom_coord(3,ni_in_cell), STAT=istat)
+      !  if(istat .NE. 0) call cq_abort('Error : allocation in grab_InfoMatGlobal2',istat,ni_in_cell)
+      !endif
+     !endif
 
     index_local=0
     if(present(index)) index_local=index
@@ -788,6 +867,10 @@ contains
      enddo !ig=1, InfoGlob%ni_in_cell
 
      if(flag_velocity_local) then
+      !if(.not.allocated(InfoGlob%atom_veloc)) then
+      ! allocate(InfoGlob%atom_veloc(3,ni_in_cell),stat=istat) 
+      ! if(istat .NE. 0) call cq_abort('Error : allocation3 in grab_InfoMatGlobal1',istat,ni_in_cell)
+      !endif
       write(io_lun,*) 'Reading velocity from ',filename
       read(lun,*)
       do ig=1, InfoGlob%ni_in_cell
@@ -803,6 +886,9 @@ contains
 
      call io_close (lun)
     endif !(inode == ionode) 
+
+   !flag_velocity_local
+    call gcopy(flag_velocity_local)
 
    !gcopy InfoGlob to all nodes
     call gcopy(InfoGlob%ni_in_cell)

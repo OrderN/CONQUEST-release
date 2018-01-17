@@ -1157,7 +1157,7 @@ contains
        if (inode == ionode) &
             write (io_lun, &
                    fmt='(2x,"In pao_min, iter ",i3," &
-                        &step and energy are ",2f15.10)') &
+                        &step and energy are ",f15.10,f25.10)') &
                   iter, k3, e3
        if (inode == ionode) &
             write (io_lun, &
@@ -1249,11 +1249,12 @@ contains
     end if
 
     if (inode == ionode) &
-         write (io_lun, fmt='(2x,"In pao_min, at exit energy is ",2f15.10)') &
+         write (io_lun, fmt='(2x,"In pao_min, at exit energy is ",f25.10)') &
                energy_out
     dE = total_energy_0 - energy_out
     if (inode == ionode) &
-         write (io_lun, *) 'On exit from pao line_min, dE is ', &
+         !write (io_lun, *) 'On exit from pao line_min, dE is ', &
+         write (io_lun, fmt='(2x,"On exit from pao line_min, dE is ",f25.10,2f25.10)') &
                            dE, total_energy_0, energy_out
     total_energy_0 = energy_out
 

@@ -236,7 +236,12 @@ contains
           if (flag_multisite .and. .not.flag_LFD_minimise) then
              if (inode==ionode) write(io_lun,'(/3x,A/)') &
                 'WARNING: Numerical PAO minimisation will be performed without doing LFD_minimisation!'   
+             !2017.Dec.28 TM: We need Selfconsistent Hamiltonian if this routine is called from control
+             call new_SC_potl(.false., sc_tolerance, reset_L,             &
+                              fixed_potential, vary_mu, n_L_iterations, &
+                              L_tolerance, total_energy, backtrace_level)
           endif
+
           if (UsePulay) then
              call pulay_min_pao(n_support_iterations, fixed_potential,&
                                 vary_mu, n_L_iterations, L_tolerance, &

@@ -1227,6 +1227,7 @@ contains
            call my_barrier()
            call Matrix_CommRebuild(Info,Lrange,L_trans,matL(2),nfile,symm)
         end if
+        if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Grabbed L  matrix'
        else
         call grab_matrix2('K',inode,nfile,Info)
         call my_barrier()
@@ -1236,7 +1237,8 @@ contains
           call my_barrier()
           call Matrix_CommRebuild(Info,Hrange,H_trans,matK(2),nfile)
         end if
-       endif
+        if (inode == ionode .and. iprint_init > 1) write (io_lun, *) 'Grabbed K  matrix'
+       end if
       else
         if(nspin==1) then
           call grab_matrix( "L",    matL(1), inode)

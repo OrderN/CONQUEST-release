@@ -458,7 +458,8 @@ contains
                               flag_MDold,n_proc_old,glob2node_old,    &
                               flag_LmatrixReuse,flag_XLBOMD,          &
                               flag_dissipation,flag_FixCOM,           &
-                              flag_fire_qMD, flag_diagonalisation, nspin
+                              flag_fire_qMD, flag_diagonalisation,    &
+                              nspin, flag_Multisite, flag_SFcoeffReuse
     use group_module,   only: parts
     use primary_module, only: bundle
     use minimise,       only: get_E_and_F
@@ -475,10 +476,10 @@ contains
     use io_module,      only: write_atomic_positions, pdb_template,   &
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use move_atoms,     only: fac_Kelvin2Hartree, update_pos_and_matrices, updateL
+    use move_atoms,     only: fac_Kelvin2Hartree, update_pos_and_matrices, updateL, updateLorK, updateSFcoeff
     !use io_module2,     ONLY: InfoL
     use store_matrix,   ONLY: dump_InfoMatGlobal,grab_InfoMatGlobal, &
-                    matrix_store_global, grab_matrix2, InfoMatrixFile
+                    matrix_store_global, grab_matrix2, InfoMatrixFile, dump_pos_and_matrices
     !use DiagModule,     ONLY: diagon
     use mult_module,    ONLY: matL,L_trans
     use matrix_data,    ONLY: Lrange
@@ -569,7 +570,8 @@ contains
     endif
     ! Dump global data
     if (.NOT. flag_MDold) then
-      call dump_InfoMatGlobal(index=0,MDstep=i_first)
+      !call dump_InfoMatGlobal(index=0,MDstep=i_first)
+      call dump_pos_and_matrices(index=0,MDstep=i_first,velocity=velocity)
     endif
 
     energy_md = energy0
@@ -600,6 +602,10 @@ contains
          
        endif
 
+  !! For Debuggging !!
+  !     call dump_pos_and_matrices(index=1,MDstep=i_first)
+  !! For Debuggging !!
+
        !%%! Evolve atoms - either FIRE (quenched MD) or velocity Verlet
        if (flag_fire_qMD) then
           call fire_qMD(fire_step_max,MDtimestep,velocity,tot_force,flag_movable,iter,&
@@ -611,16 +617,38 @@ contains
        ! Constrain position
        if (flag_RigidBonds) call correct_atomic_position(velocity,MDtimestep)
        ! Reset-up
-       call update_pos_and_matrices(updateL,velocity)
+       if(flag_SFcoeffReuse) then
+        call update_pos_and_matrices(updateSFcoeff,velocity)
+       else
+        call update_pos_and_matrices(updateLorK,velocity)
+       endif
 
        if (flag_XLBOMD) call Do_XLBOMD(iter,MDtimestep)
        call update_H(fixed_potential)
+
+  !2018.Jan.4 TM 
+  !   We need to update flag_movable, since the order of x_atom_cell (or id_glob) 
+  !   may change after the atomic positions are updated.
+  !
+       call check_move_atoms(flag_movable)
+
+  !! For Debuggging !!
+  !     call dump_pos_and_matrices(index=2,MDstep=i_first)
+  !! For Debuggging !!
+
        if (flag_fire_qMD) then
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .true.,iter)
+          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=velocity)
        else
-          call get_E_and_F(fixed_potential,vary_mu,energy1,.true.,.false.,iter)
+          call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .false.,iter)
+          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=velocity)
           call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable,second_call)
        end if
+
+  !! For Debuggging !!
+       !!call cq_abort(" STOP FOR DEBUGGING")
+  !! For Debuggging !!
+
        ! Constrain velocity
        if (flag_RigidBonds) call correct_atomic_velocity(velocity)
        !%%! END of Evolve atoms
@@ -643,9 +671,9 @@ contains
        endif
 
        ! Dump global data
-       if (.NOT. flag_MDold) then
-         call dump_InfoMatGlobal(index=0,MDstep=iter)
-       endif
+       !if (.NOT. flag_MDold) then
+       !  call dump_InfoMatGlobal(index=0,MDstep=iter)
+       !endif
        
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
@@ -1334,7 +1362,7 @@ contains
        if (abs(dE)<cell_en_tol) then
           done = .true.
           if (myid == 0 .and. iprint_gen > 0) &
-               write (io_lun, fmt='(4x,"Energy change below threshold: ",f12.10)') &
+               write (io_lun, fmt='(4x,"Energy change below threshold: ",f20.10)') &
                      max
        end if
 
