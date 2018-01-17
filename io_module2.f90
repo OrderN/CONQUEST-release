@@ -683,6 +683,14 @@ contains
           atom_coord_diff(1,i) = atom_coord(1,i) - coords_i(1)*rcellx/rx ! Account for cell size change
           atom_coord_diff(2,i) = atom_coord(2,i) - coords_i(2)*rcelly/ry
           atom_coord_diff(3,i) = atom_coord(3,i) - coords_i(3)*rcellz/rz
+        !TM 2018Jan05  Since atom_coord and coords_i are both wrapped into the simulation cell, 
+        !           atom_coord_diff calculated in the above way may be very large...
+          if((atom_coord_diff(1,i)) > half*rcellx) atom_coord_diff(1,i)=atom_coord_diff(1,i)-rcellx
+          if((atom_coord_diff(1,i)) < -half*rcellx) atom_coord_diff(1,i)=atom_coord_diff(1,i)+rcellx
+          if((atom_coord_diff(2,i)) > half*rcelly) atom_coord_diff(2,i)=atom_coord_diff(2,i)-rcelly
+          if((atom_coord_diff(2,i)) < -half*rcelly) atom_coord_diff(2,i)=atom_coord_diff(2,i)+rcelly
+          if((atom_coord_diff(3,i)) > half*rcellz) atom_coord_diff(3,i)=atom_coord_diff(3,i)-rcellz
+          if((atom_coord_diff(3,i)) < -half*rcellz) atom_coord_diff(3,i)=atom_coord_diff(3,i)+rcellz
        end do
     !end if
     call io_close(lun)

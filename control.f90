@@ -644,6 +644,11 @@ contains
        endif
        if (flag_XLBOMD) call Do_XLBOMD(iter,MDtimestep)
        call update_H(fixed_potential)
+
+       ! TM 2018Jan05: We need to update flag_movable, since the order of x_atom_cell
+       !   (or id_glob) may change after the atomic positions are updated.
+        call check_move_atoms(flag_movable)  
+
        if (flag_fire_qMD) then
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .true.,iter)
        else
