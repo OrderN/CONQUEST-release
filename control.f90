@@ -277,9 +277,8 @@ contains
     dE = zero
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
-    if (.NOT. flag_MDold) then
-      call dump_InfoMatGlobal()
-    endif
+    if (.NOT. flag_MDold) call dump_pos_and_matrices
+
     iter = 1
     ggold = zero
     energy1 = energy0

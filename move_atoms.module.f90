@@ -791,8 +791,7 @@ contains
     use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
-    use store_matrix, ONLY:dump_matrix_update, dump_InfoMatGlobal, grab_InfoMatGlobal, matrix_store_global, &
-                           grab_matrix2, InfoMatrixFile
+    use store_matrix, ONLY: dump_pos_and_matrices
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use multisiteSF_module, only: flag_LFD_minimise
     !use DiagModule, ONLY: diagon
@@ -824,9 +823,7 @@ contains
     real(double), dimension(:), allocatable :: store_density
     real(double) :: k3_old, k3_local, kmin_old
 
-    type(matrix_store_global) :: InfoGlob
     integer :: ig, both, mat
-    !type(InfoMatrixFile),pointer :: InfoL(:)
 
 ! for debugging
     integer :: mat_SFcoeff_old, mat_K_old
@@ -857,22 +854,20 @@ contains
 
     k0 = zero
 
-       !2017/12/4
-       !call dump_InfoMatGlobal()
-       both=0; mat=1
-       if(flag_SFcoeffReuse) then
-        call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,index_in=0,iprint_mode=mat)
-        if(nspin .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,index_in=0,iprint_mode=mat)
-       endif
-
-       if(flag_diagonalisation) then
-        call dump_matrix_update('K',matK(1),Hrange,index_in=0,iprint_mode=both)
-        if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=0,iprint_mode=both)
-       else
-        call dump_matrix_update('L',matL(1),Lrange,index_in=0,iprint_mode=both)
-        if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=0,iprint_mode=both)
-       endif
-       !2017/12/4
+    ! Now dump_pos_and_matrices are called before calling safemin2 : 2018.Jan19
+      ! both=0; mat=1
+      ! if(flag_SFcoeffReuse) then
+      !  call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,index_in=0,iprint_mode=mat)
+      !  if(nspin .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,index_in=0,iprint_mode=mat)
+      ! endif
+      !
+      ! if(flag_diagonalisation) then
+      !  call dump_matrix_update('K',matK(1),Hrange,index_in=0,iprint_mode=both)
+      !  if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=0,iprint_mode=both)
+      ! else
+      !  call dump_matrix_update('L',matL(1),Lrange,index_in=0,iprint_mode=both)
+      !  if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=0,iprint_mode=both)
+      ! endif
 
     !do i=1,ni_in_cell
     !   x_atom_cell(i) = start_x(i) + k0*direction(1,i)
@@ -1016,21 +1011,11 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
                         .false.)
-       !2017/12/4
-       !call dump_InfoMatGlobal()
-       both=0; mat=1
-       if(flag_SFcoeffReuse) then
-        call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,index_in=0,iprint_mode=mat)
-        if(nspin .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,index_in=0,iprint_mode=mat)
-       endif
-       if(flag_diagonalisation) then
-        call dump_matrix_update('K',matK(1),Hrange,index_in=0,iprint_mode=both)
-        if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=0,iprint_mode=both)
-       else
-        call dump_matrix_update('L',matL(1),Lrange,index_in=0,iprint_mode=both)
-        if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=0,iprint_mode=both)
-       endif
-       !2017/12/4
+       ! Now, we call dump_pos_and_matrices here. : 2018.Jan19 TM
+       !  but if we want to use the information of the matrices in the beginning of this line minimisation
+       !  you can comment the following line, in the future. 
+        call dump_pos_and_matrices
+
        if (inode == ionode .and. iprint_MD > 1) &
             write (io_lun, &
                    fmt='(4x,"In safemin2, iter ",i3," step and energy &
@@ -1148,21 +1133,8 @@ contains
        call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
     end if
 
-    !2017/12/4
-    !call dump_InfoMatGlobal()
-    both=0
-       if(flag_SFcoeffReuse) then
-        call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,index_in=0,iprint_mode=mat)
-        if(nspin .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,index_in=0,iprint_mode=mat)
-       endif
-    if(flag_diagonalisation) then
-     call dump_matrix_update('K',matK(1),Hrange,index_in=0,iprint_mode=both)
-     if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=0,iprint_mode=both)
-    else
-     call dump_matrix_update('L',matL(1),Lrange,index_in=0,iprint_mode=both)
-     if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=0,iprint_mode=both)
-    endif
-    !2017/12/4
+    ! 2018.Jan19  TM
+    call dump_pos_and_matrices
 
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
@@ -1240,21 +1212,9 @@ contains
                            .true., .false.)
        end if
 
-       !2017/12/4
-       !call dump_InfoMatGlobal()
-       both=0
-       if(flag_SFcoeffReuse) then
-        call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,index_in=0,iprint_mode=mat)
-        if(nspin .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,index_in=0,iprint_mode=mat)
-       endif
-       if(flag_diagonalisation) then
-        call dump_matrix_update('K',matK(1),Hrange,index_in=0,iprint_mode=both)
-        if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=0,iprint_mode=both)
-       else
-        call dump_matrix_update('L',matL(1),Lrange,index_in=0,iprint_mode=both)
-        if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=0,iprint_mode=both)
-       endif
-       !2017/12/4
+       ! 2018.Jan19  TM : probably we don't need to call dump_pos_and_matrices here, since
+       !                  we will call it after calling safemin2
+       call dump_pos_and_matrices
 
     end if
     dE = e0 - energy_out
@@ -2328,6 +2288,17 @@ contains
              if (inode.EQ.ionode.AND.iprint_MD>2) write (io_lun,*) "update_H: Get charge density from L-matrix"
              call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
                   inode,ionode,maxngrid)
+            do spin=1,nspin
+               scale = ne_spin_in_cell(spin)/electrons(spin)
+               if(abs(scale-one)<0.01.AND.abs(scale-one)>RD_ERR) then
+                  density(:,spin) = density(:,spin)*scale
+               else if (abs(scale-one)>=0.01) then
+                  if(inode == ionode) write(io_lun,*) &
+                    ' WARNING! in update_H: constructed charge density is strange.. ; scale = ', scale
+                  call set_atomic_density(.true.)
+                  exit
+               end if
+            end do
              ! if flag_LFD=T, update SF-PAO coefficients with the obtained density
              ! and update S with the coefficients
              !ORI if (flag_LFD) then
