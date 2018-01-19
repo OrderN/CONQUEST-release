@@ -948,19 +948,27 @@ contains
     use units
     use global_module,  only: iprint_MD, ni_in_cell, x_atom_cell,   &
                               y_atom_cell, z_atom_cell, id_glob,    &
-                              atom_coord, area_general, flag_pulay_simpleStep
+                              atom_coord, area_general, flag_pulay_simpleStep, &
+                              glob2node_old, n_proc_old, flag_MDold, &
+                              flag_diagonalisation, nspin, flag_LmatrixReuse, &
+                              flag_SFcoeffReuse
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
-                              updateIndices, update_atom_coord,     &
-                              safemin, update_H
-    use GenComms,       only: gsum, myid
+                              updateIndices, updateIndices3, update_atom_coord,     &
+                              safemin, safemin2, update_H, update_pos_and_matrices
+    use move_atoms,     only: updateL, updateLorK, updateSFcoeff
+    use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template, &
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use primary_module, only: bundle
+    use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
+    use matrix_data, ONLY: Hrange, Lrange
+    use UpdateInfo_module, ONLY: Matrix_CommRebuild
+    use store_matrix,   only: dump_pos_and_matrices
 
     implicit none
 
@@ -968,7 +976,7 @@ contains
     ! Shared variables needed by get_E_and_F for now (!)
     logical :: vary_mu, fixed_potential
     real(double) :: total_energy
-    
+
     ! Local variables
     real(double), allocatable, dimension(:,:)   :: velocity
     real(double), allocatable, dimension(:,:)   :: cg
@@ -978,11 +986,13 @@ contains
     real(double), allocatable, dimension(:,:,:) :: posnStore
     real(double), allocatable, dimension(:,:,:) :: forceStore
     real(double) :: energy0, energy1, max, g0, dE, gg, ggold, gamma, &
-                    temp, KE
+                    temp, KE, guess_step, step
     integer      :: i,j,k,iter,length, jj, lun, stat, npmod, pul_mx, &
-                    mx_pulay
+                    mx_pulay, i_first, i_last, &
+                    nfile, symm
     logical      :: done!, simpleStep
 
+    step = MDtimestep
     !simpleStep = .false.
     allocate(velocity(3,ni_in_cell),STAT=stat)
     if (stat /= 0) &
@@ -1005,6 +1015,12 @@ contains
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
     if (myid == 0) &
          write (io_lun, fmt='(/4x,"Starting Pulay atomic relaxation"/)')
+    if (myid == 0 .and. iprint_MD > 1) then
+       do i = 1, ni_in_cell
+          write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), &
+               z_atom_cell(i)
+       end do
+    end if
     posnStore = zero
     forceStore = zero
     ! Do we need to add MD.MaxCGDispl ?
@@ -1018,63 +1034,69 @@ contains
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
                      .false.)
+    if(.NOT.flag_MDold) call dump_pos_and_matrices
     iter = 1
     ggold = zero
     energy1 = energy0
     ! Store positions and forces on entry (primary set only)
     do i=1,ni_in_cell
-       posnStore(1,i,1) = x_atom_cell(i)
-       posnStore(2,i,1) = y_atom_cell(i)
-       posnStore(3,i,1) = z_atom_cell(i)
        jj = id_glob(i)
-       forceStore(:,i,1) = tot_force(:,jj)
+       posnStore (1,jj,1) = x_atom_cell(i)!i)
+       posnStore (2,jj,1) = y_atom_cell(i)!i)
+       posnStore (3,jj,1) = z_atom_cell(i)!i)
+       forceStore(:,jj,1) = tot_force(:,jj)
     end do
     do while (.not. done)
        ! Book-keeping
        npmod = mod(iter, mx_pulay)+1
        pul_mx = min(iter+1, mx_pulay)
        if (myid == 0 .and. iprint_MD > 2) &
-            write (io_lun, *) 'npmod: ', npmod, pul_mx
+            write(io_lun,fmt='(2x,"Pulay relaxation iteration ",i4)') iter
        x_atom_cell = zero
        y_atom_cell = zero
        z_atom_cell = zero
        tot_force = zero
        do i = 1, ni_in_cell
+          jj = id_glob(i)
           if (npmod > 1) then
-             x_atom_cell(i) = posnStore(1,i,npmod-1)
-             y_atom_cell(i) = posnStore(2,i,npmod-1)
-             z_atom_cell(i) = posnStore(3,i,npmod-1)
+             x_atom_cell(i) = posnStore(1,jj,npmod-1)
+             y_atom_cell(i) = posnStore(2,jj,npmod-1)
+             z_atom_cell(i) = posnStore(3,jj,npmod-1)
              jj = id_glob(i)
-             tot_force(:,jj) = forceStore(:,i,npmod-1)
+             tot_force(:,jj) = forceStore(:,jj,npmod-1)
+             !tot_force(:,jj) = forceStore(:,i,npmod-1)
           else
-             x_atom_cell(i) = posnStore(1,i,pul_mx)
-             y_atom_cell(i) = posnStore(2,i,pul_mx)
-             z_atom_cell(i) = posnStore(3,i,pul_mx)
+             x_atom_cell(i) = posnStore(1,jj,pul_mx)
+             y_atom_cell(i) = posnStore(2,jj,pul_mx)
+             z_atom_cell(i) = posnStore(3,jj,pul_mx)
              jj = id_glob(i)
-             tot_force(:,jj) = forceStore(:,i,pul_mx)
+             tot_force(:,jj) = forceStore(:,jj,pul_mx)
+             !tot_force(:,jj) = forceStore(:,i,pul_mx)
           end if
        end do
-       !call gsum(x_atom_cell,ni_in_cell)
-       !call gsum(y_atom_cell,ni_in_cell)
-       !call gsum(z_atom_cell,ni_in_cell)
-       !call gsum(tot_force,3,ni_in_cell)
        ! Take a trial step
        velocity = zero
        ! Move the atoms using velocity Verlet (why not ?)
        !call velocityVerlet(bundle,MDtimestep,temp,KE, &
        !     .false.,velocity,tot_force)
+       ! Moved so we can pass cg to updateIndices3
+       do j=1,ni_in_cell
+          jj=id_glob(j)
+          cg(1,j) = tot_force(1,jj)
+          cg(2,j) = tot_force(2,jj)
+          cg(3,j) = tot_force(3,jj)
+          x_new_pos(j) = x_atom_cell(j)
+          y_new_pos(j) = y_atom_cell(j)
+          z_new_pos(j) = z_atom_cell(j)
+       end do
+       if(myid==0) write(io_lun,*) 'Taking trial step'
        if (flag_pulay_simpleStep) then
-          if (myid == 0) write (io_lun, *) 'Step is ', MDtimestep
+          if (myid == 0) write (io_lun, *) 'Step is ', step
           do i = 1, ni_in_cell
-             jj = id_glob(i)
-             x_atom_cell(i) = x_atom_cell(i) + MDtimestep*tot_force(1,jj)
-             y_atom_cell(i) = y_atom_cell(i) + MDtimestep*tot_force(2,jj)
-             z_atom_cell(i) = z_atom_cell(i) + MDtimestep*tot_force(3,jj)
+             x_atom_cell(i) = x_atom_cell(i) + step*cg(1,i)
+             y_atom_cell(i) = y_atom_cell(i) + step*cg(2,i)
+             z_atom_cell(i) = z_atom_cell(i) + step*cg(3,i)
           end do
-          ! Do we want gsum or a scatter/gather ?
-          !call gsum(x_atom_cell,ni_in_cell)
-          !call gsum(y_atom_cell,ni_in_cell)
-          !call gsum(z_atom_cell,ni_in_cell)
           ! Output positions
           if (myid == 0 .and. iprint_MD > 1) then
              do i = 1, ni_in_cell
@@ -1082,50 +1104,29 @@ contains
                                   z_atom_cell(i)
              end do
           end if
-          call update_atom_coord
-          call updateIndices(.true., fixed_potential)
+          if(.NOT.flag_MDold) then
+           if(flag_SFcoeffReuse) then
+            call update_pos_and_matrices(updateSFcoeff,cg)
+           else
+            call update_pos_and_matrices(updateLorK,cg)
+           endif
+          else
+             call update_atom_coord
+             call updateIndices(.true., fixed_potential)
+          end if
           call update_H(fixed_potential)
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
                            .false.)
+          if(.NOT.flag_MDold) call dump_pos_and_matrices
        else
-          do j=1,ni_in_cell
-             jj=id_glob(j)
-             cg(1,j) = tot_force(1,jj)
-             cg(2,j) = tot_force(2,jj)
-             cg(3,j) = tot_force(3,jj)
-             x_new_pos(j) = x_atom_cell(j)
-             y_new_pos(j) = y_atom_cell(j)
-             z_new_pos(j) = z_atom_cell(j)
-          end do
-          call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-                       energy1, fixed_potential, vary_mu, energy1)
+          if (.NOT. flag_MDold) then
+             call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+                  energy1, fixed_potential, vary_mu, energy1)
+          else
+             call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+                  energy1, fixed_potential, vary_mu, energy1)
+          end if
        end if
-       ! Pass forces and positions down to pulayStep routine
-       do i = 1, ni_in_cell
-          posnStore(1,i,npmod) = x_atom_cell(i)
-          posnStore(2,i,npmod) = y_atom_cell(i)
-          posnStore(3,i,npmod) = z_atom_cell(i)
-          jj = id_glob(i)
-          forceStore(:,i,npmod) = tot_force(:,jj)
-       end do
-!       call pulayStep(npmod, posnStore, forceStore, x_atom_cell, &
-!                      y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
-       !call gsum(x_atom_cell,ni_in_cell)
-       !call gsum(y_atom_cell,ni_in_cell)
-       !call gsum(z_atom_cell,ni_in_cell)
-       ! Output positions
-       if (myid == 0 .and. iprint_MD > 1) then
-          do i = 1, ni_in_cell
-             write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), &
-                               z_atom_cell(i)
-          end do
-       end if
-       call update_atom_coord
-       call updateIndices(.true., fixed_potential)
-       call update_H(fixed_potential)
-       call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
-                        .false.)
-       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero
@@ -1135,7 +1136,71 @@ contains
           end do
        end do
        if (myid == 0) &
-            write (io_lun, 5) for_conv * sqrt(g0) / ni_in_cell, &
+            write (io_lun, 5) for_conv * sqrt(g0/real(ni_in_cell,double)), & !) / ni_in_cell, &
+                              en_units(energy_units), d_units(dist_units)
+       if (iter > MDn_steps) then
+          done = .true.
+          if (myid == 0) &
+          done = .true.
+          if (myid == 0) &
+               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') &
+                     iter
+       end if
+       if (abs(max) < MDcgtol) then
+          done = .true.
+          if (myid == 0) &
+               write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') &
+                     max
+       end if
+       if (.not. done) call check_stop(done, iter)
+       if(done) exit
+
+       ! Pass forces and positions down to pulayStep routine
+       if(myid==0) write(io_lun,*) 'Building optimal structure'
+       cg = zero
+       do i = 1, ni_in_cell
+          jj = id_glob(i)
+          posnStore (1,jj,npmod) = x_atom_cell(i)!i)
+          posnStore (2,jj,npmod) = y_atom_cell(i)!i)
+          posnStore (3,jj,npmod) = z_atom_cell(i)!i)
+          forceStore(:,jj,npmod) = tot_force(:,jj) !jj)
+       end do
+       call pulayStep(npmod, posnStore, forceStore, x_atom_cell, &
+                      y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
+
+       ! Output positions
+       if (myid == 0 .and. iprint_MD > 1) then
+          do i = 1, ni_in_cell
+             write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), &
+                               z_atom_cell(i)
+          end do
+       end if
+       if(.NOT.flag_MDold) then
+          if(flag_SFcoeffReuse) then
+           call update_pos_and_matrices(updateSFcoeff,cg)
+          else
+           call update_pos_and_matrices(updateLorK,cg)
+          endif
+       else
+          call update_atom_coord
+          call updateIndices(.true., fixed_potential)
+       end if
+       call update_H(fixed_potential)
+       call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
+                        .false.)
+       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+       if(.NOT.flag_MDold) call dump_pos_and_matrices
+
+       ! Analyse forces
+       g0 = dot(length, tot_force, 1, tot_force, 1)
+       max = zero
+       do i = 1, ni_in_cell
+          do k = 1, 3
+             if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
+          end do
+       end do
+       if (myid == 0) &
+            write (io_lun, 5) for_conv * sqrt(g0/real(ni_in_cell,double)), & !) / ni_in_cell, &
                               en_units(energy_units), d_units(dist_units)
        if (iter > MDn_steps) then
           done = .true.
@@ -1150,14 +1215,24 @@ contains
                      max
        end if
        do i = 1, ni_in_cell!bundle%n_prim !!! ERROR ?? !!!
-          posnStore(1,i,npmod) = x_atom_cell(i)
-          posnStore(2,i,npmod) = y_atom_cell(i)
-          posnStore(3,i,npmod) = z_atom_cell(i)
           jj = id_glob(i)
-          forceStore(:,i,npmod) = tot_force(:,jj)
-       end do       
+          posnStore (1,jj,npmod) = x_atom_cell(i)
+          posnStore (2,jj,npmod) = y_atom_cell(i)
+          posnStore (3,jj,npmod) = z_atom_cell(i)
+          forceStore(:,jj,npmod) = tot_force(:,jj)
+       end do
        if (.not. done) call check_stop(done, iter)
        iter = iter + 1
+       dE = energy0 - energy1
+       guess_step = dE*sqrt(real(ni_in_cell,double)/g0)!real(ni_in_cell,double)/sqrt(g0)
+       if(myid==0) write(*,*) 'Guessed step is ',guess_step
+       ! We really need a proper trust radius or something
+       if(guess_step>2.0_double) guess_step = 2.0_double
+       if(guess_step>MDtimestep) then
+          step=guess_step
+       else
+          step=MDtimestep
+       end if
        energy0 = energy1
     end do
     ! Output final positions

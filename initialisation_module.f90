@@ -1096,6 +1096,9 @@ contains
 
     ! (0) Get the global information
     !      --> Fetch and distribute date on old job
+    allocate(glob2node_old(ni_in_cell), STAT=stat)
+    if (stat .ne.0)      call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
+
     if (.not.flag_MDold.and.(flag_MDcontinue.or. &
                                 restart_LorK.or. &
                                 restart_T   .or. &
@@ -1103,9 +1106,7 @@ contains
       if (inode.eq.ionode) write (io_lun,*) "Get global info to load matrices"
       if (inode.eq.ionode) call make_glob2node
       call gcopy(glob2node, ni_in_cell)
-      allocate(glob2node_old(ni_in_cell), STAT=stat)
-      if (stat .ne.0)      call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
-       call grab_InfoMatGlobal(InfoGlob,MDinit_step)  
+      call grab_InfoMatGlobal(InfoGlob,MDinit_step)  
         n_proc_old = InfoGlob%numprocs
         glob2node_old(:) = InfoGlob%glob_to_node(:)
         MDinit_step = InfoGlob%MDstep
