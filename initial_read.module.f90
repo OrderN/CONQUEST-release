@@ -766,7 +766,7 @@ contains
                           md_target_press, md_baro_type, md_tau_P, &
                           md_thermo_type, md_bulkmod_est, md_box_mass, &
                           md_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
-                          md_calc_xlmass
+                          md_calc_xlmass, md_berendsen_equil
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
 
@@ -1927,6 +1927,7 @@ contains
        md_bulkmod_est     = fdf_double('MD.BulkModulusEst', one)
        md_cell_nhc        = fdf_boolean('MD.CellNHC', .false.)
        flag_baroDebug     = fdf_boolean('MD.BaroDebug',.false.)
+       md_berendsen_equil = fdf_integer('MD.BerendsenEquil', 0)
 
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")

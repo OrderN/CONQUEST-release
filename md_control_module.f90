@@ -49,7 +49,7 @@ module md_control
   character(20) :: md_thermo_type, md_baro_type
   real(double)  :: md_tau_T, md_tau_P, md_target_press, md_bulkmod_est, &
                    md_box_mass, md_ndof_ions
-  integer       :: md_n_nhc, md_n_ys, md_n_mts
+  integer       :: md_n_nhc, md_n_ys, md_n_mts, md_berendsen_equil
   logical       :: md_write_xsf, md_cell_nhc, md_calc_xlmass
   real(double), dimension(3,3), target      :: lattice_vec
   real(double), dimension(:), allocatable   :: md_nhc_mass, md_nhc_cell_mass
@@ -912,13 +912,15 @@ contains
   !!   2017/11/17 12:44
   !!  SOURCE
   !!  
-  subroutine init_baro(baro, P_ext, ndof, stress, v, ke_ions)
+  subroutine init_baro(baro, baro_type, P_ext, ndof, stress, v, ke_ions)
 
+    use input_module,     only: leqi
     use GenComms,         only: cq_abort
     use global_module,    only: rcellx, rcelly, rcellz
 
     ! passed variables
     class(type_barostat), intent(inout)       :: baro
+    character(*), intent(in)                  :: baro_type
     real(double), intent(in)                  :: P_ext, ke_ions
     integer, intent(in)                       :: ndof
     real(double), dimension(3), intent(in)    :: stress
@@ -928,9 +930,9 @@ contains
     real(double)                              :: tauP, omega_P
 
     ! Globals
-    baro%baro_type = md_baro_type
+    baro%baro_type = baro_type
     if (md_calc_xlmass) then
-      select case(md_baro_type)
+      select case(baro_type)
       case('iso-mttk')
         tauP = md_tau_P*fac_fs2atu 
         omega_P = twopi/tauP
@@ -973,17 +975,20 @@ contains
       baro%odnf = one + three/baro%ndof
       baro%tau_P = md_tau_P
     case default
-      call cq_abort("Invalid barostat")
+      call cq_abort("Invalid barostat type")
     end select
 
     if (inode==ionode) then
-      write(io_lun,('(2x,a)')) 'Welcome to init_baro'
+      write(io_lun,'(2x,a)') 'Welcome to init_baro'
+      write(io_lun,'(4x,"Barostat type: ",a)') baro%baro_type
       write(io_lun,'(4x,a,f14.2)') 'Target pressure        P_ext = ', &
                                     baro%P_ext
       write(io_lun,'(4x,a,f14.2)') 'Instantaneous pressure P_int = ', &
                                     baro%P_int
-      write(io_lun,'(4x,a,f14.2)') 'Box mass                     = ', &
-                                    baro%box_mass
+      if (leqi(baro%baro_type, 'iso-mttk')) then
+        write(io_lun,'(4x,a,f14.2)') 'Box mass                     = ', &
+                                      baro%box_mass
+      end if
     end if
 
   end subroutine init_baro
