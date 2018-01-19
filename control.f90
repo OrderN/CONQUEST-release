@@ -636,7 +636,7 @@ contains
         if (md_berendsen_equil > 0) then ! Equilibrate using Berendsen?
           if (inode == ionode) then
             write (io_lun, '(4x,"Equilibrating using Berendsen baro/thermostat &
-                             for ",8i," steps")') md_berendsen_equil
+                             for ",i8," steps")') md_berendsen_equil
           end if
           call thermo%init_berendsen_thermo(MDtimestep, temp_ion, md_ndof, &
                                             md_tau_T, mdl%ion_kinetic_energy)
