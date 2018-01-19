@@ -1277,7 +1277,7 @@ contains
          rcellz, flag_self_consistent,           &
          flag_reset_dens_on_atom_move,           &
          IPRINT_TIME_THRES1, flag_pcc_global, &
-         flag_diagonalisation, cell_constraint_flag
+         flag_diagonalisation, cell_constraint_flag, flag_SFcoeffReuse, flag_MDold
     use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
          n_L_iterations
     use GenComms,           only: my_barrier, myid, inode, ionode,        &
@@ -1295,6 +1295,7 @@ contains
          grid_point_volume, one_over_grid_point_volume, n_grid_x, n_grid_y, n_grid_z
     use fft_module, ONLY: recip_vector, hartree_factor, i0
     use DiagModule, ONLY: kk, nkp
+    use store_matrix, ONLY: dump_pos_and_matrices
 
     implicit none
 
@@ -1316,8 +1317,10 @@ contains
     real(double)   :: e0, e1, e2, e3, tmp, bottom, xvec, yvec, zvec, r2
     real(double), save :: kmin = zero, dE = zero
     real(double), dimension(:), allocatable :: store_density
+    real(double), dimension(3,ni_in_cell) :: direction
 
     call start_timer(tmr_std_moveatoms)
+    direction = zero
     !allocate(store_density(maxngrid))
     e0 = total_energy
     if (inode == ionode .and. iprint_MD > 0) &
@@ -1357,13 +1360,18 @@ contains
                              start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
                              k3, iter, search_dir_mean)
 
-       !Update atom_coord : TM 27Aug2003
-       call update_atom_coord
-       !Update atom_coord : TM 27Aug2003
-       ! Update indices and find energy and forces
-       !call updateIndices(.false.,fixed_potential, number_of_bands)
-       call updateIndices(.true., fixed_potential)
+       if(.NOT.flag_MDold) then
+        if(flag_SFcoeffReuse) then
+         call update_pos_and_matrices(updateSFcoeff,direction)
+        else
+         call update_pos_and_matrices(updateLorK,direction)
+        endif
+       else
+         call update_atom_coord
+         call updateIndices(.true., fixed_potential)
+       endif
        call update_H(fixed_potential)
+
        ! These lines add back on the atomic densities for NEW atomic positions
        ! Write out atomic positions
        if (iprint_MD > 2) then
@@ -1383,6 +1391,8 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
+       if(.NOT.flag_MDold) call dump_pos_and_matrices
+
        if (inode == ionode .and. iprint_MD > 1) &
             write (io_lun, &
             fmt='(4x,"In safemin_cell, iter ",i3," step and energy &
@@ -1433,13 +1443,18 @@ contains
     call update_cell_dims(start_rcellx, start_rcelly, &
                           start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
                           kmin, iter, search_dir_mean)
-    !Update atom_coord : TM 27Aug2003
-    call update_atom_coord
-    !Update atom_coord : TM 27Aug2003
-    ! Check minimum: update indices and find energy and forces
-    !call updateIndices(.false.,fixed_potential, number_of_bands)
-    call updateIndices(.true., fixed_potential)
+    if(.NOT.flag_MDold) then
+     if(flag_SFcoeffReuse) then
+      call update_pos_and_matrices(updateSFcoeff,direction)
+     else
+      call update_pos_and_matrices(updateLorK,direction)
+     endif
+    else
+     call update_atom_coord
+     call updateIndices(.true., fixed_potential)
+    endif
     call update_H(fixed_potential)
+
     !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
     ! Add on atomic densities
     !store_density = density
@@ -1467,6 +1482,8 @@ contains
     else
        call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
     end if
+       if(.NOT.flag_MDold) call dump_pos_and_matrices
+
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
          fmt='(4x,"In safemin_cell, Interpolation step and energy &
@@ -1483,10 +1500,17 @@ contains
        call update_cell_dims(start_rcellx, start_rcelly, &
                              start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
                              kmin, iter, search_dir_mean)
-       !Update atom_coord : TM 27Aug2003
-       call update_atom_coord
-       !Update atom_coord : TM 27Aug2003
-       call updateIndices(.true., fixed_potential)
+       if(.NOT.flag_MDold) then
+        if(flag_SFcoeffReuse) then
+         call update_pos_and_matrices(updateSFcoeff,direction)
+        else
+         call update_pos_and_matrices(updateLorK,direction)
+        endif
+       else
+         call update_atom_coord
+         call updateIndices(.true., fixed_potential)
+       endif
+
        call update_H(fixed_potential)
        if (iprint_MD > 2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
@@ -1513,6 +1537,8 @@ contains
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
                .true., .false.)
        end if
+       ! we may not need to call dump_pos_and_matrices here. (if it would be called in the part after calling safemin_cell)
+       if(.NOT.flag_MDold) call dump_pos_and_matrices  
     end if
     dE = e0 - energy_out
 7   format(4x,3f15.8)
@@ -2321,12 +2347,14 @@ contains
             inode,ionode,maxngrid)
        do spin=1,nspin
           scale = ne_spin_in_cell(spin)/electrons(spin)
-          if(abs(scale-one)<0.01.AND.abs(scale-one)>RD_ERR) then
+          !TMif(abs(scale-one)<0.01.AND.abs(scale-one)>RD_ERR) then
              density(:,spin) = density(:,spin)*scale
-          else if (abs(scale-one)>=0.01) then
-             call set_atomic_density(.true.)
-             exit
-          end if
+          !TMelse if (abs(scale-one)>=0.01) then
+             if(inode == ionode) write(io_lun,*) &
+              ' WARNING2! in update_H: constructed charge density is strange.. ; scale = ', scale
+          !TM   call set_atomic_density(.true.)
+          !TM   exit
+          !TMend if
        end do
     end if
 
@@ -3373,7 +3401,7 @@ contains
   !!
  subroutine update_pos_and_matrices(update_method, velocity)
   use datatypes
-  use numbers,         only: half, zero
+  use numbers,         only: half, zero, one, very_small
   use global_module,   only: flag_diagonalisation, atom_coord, atom_coord_diff, &
                              rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF
     ! n_proc_old and glob2node_old should be removed soon...
@@ -3392,6 +3420,8 @@ contains
   integer :: nfile, symm, ig, spin_SF
   logical :: fixed_potential 
    ! should be removed in the future (calling update_H is outside of this routine)
+  real(double) :: scale_x, scale_y, scale_z, rms_change
+  real(double) :: small_change = 0.3_double
   
  !H_trans is not prepared. If we need to symmetrise K, we need H_trans
   integer :: H_trans = 1
@@ -3457,8 +3487,26 @@ contains
      call grab_InfoMatGlobal(InfoGlob,index=0)
        n_proc_old = InfoGlob%numprocs
        glob2node_old(:) = InfoGlob%glob_to_node(:)
-      do ig = 1, ni_in_cell
+
+      scale_x = rcellx/InfoGlob%rcellx; scale_y = rcelly/InfoGlob%rcelly; scale_z = rcellz/InfoGlob%rcellz
+       rms_change = (scale_x - one)**2 + (scale_y - one)**2 + (scale_z - one)**2 
+       rms_change = sqrt(rms_change)
+      if(rms_change > small_change .and. inode == ionode) &
+        write(io_lun,fmt='(4x,a,3f20.10)') 'WARNING!! Big change of the cell', scale_x, scale_y,scale_z
+
+      if(rms_change < very_small) then
+       do ig = 1, ni_in_cell
           atom_coord_diff(1:3,ig) = atom_coord(1:3,ig) - InfoGlob%atom_coord(1:3,ig)
+       enddo
+      else
+       do ig = 1, ni_in_cell
+          atom_coord_diff(1,ig) = atom_coord(1,ig) - InfoGlob%atom_coord(1,ig)*scale_x
+          atom_coord_diff(2,ig) = atom_coord(2,ig) - InfoGlob%atom_coord(2,ig)*scale_y
+          atom_coord_diff(3,ig) = atom_coord(3,ig) - InfoGlob%atom_coord(3,ig)*scale_z
+       enddo
+      endif
+
+      do ig = 1, ni_in_cell
           if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
           if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
           if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
