@@ -942,6 +942,18 @@ contains
        !to check IO of velocity files
        call write_velocity(ion_velocity, file_velocity)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+       select case(md_ensemble)
+       case('nvt')
+         if (leqi(thermo%thermo_type, 'nhc')) then
+           call thermo%write_thermo_checkpoint
+         end if
+       case('npt')
+         if (leqi(baro%baro_type, 'iso-mttk')) then
+           call thermo%write_thermo_checkpoint
+           call baro%write_baro_checkpoint
+         end if
+       end select
+
        if (md_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
        call mdl%get_cons_qty
        call mdl%dump_stats("Stats")
