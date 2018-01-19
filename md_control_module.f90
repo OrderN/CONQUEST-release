@@ -34,7 +34,7 @@ module md_control
   use numbers
   use global_module,    only: ni_in_cell, io_lun, iprint_MD, &
                               flag_thermoDebug, flag_baroDebug, &
-                              temp_ion
+                              temp_ion, flag_MDcontinue
   use move_atoms,       only: fac_Kelvin2Hartree
   use species_module,   only: species, mass
   use GenComms,         only: inode, ionode
@@ -44,6 +44,10 @@ module md_control
   ! Unit conversion factors
   real(double), parameter :: fac_HaBohr32GPa = 29421.02648438959
   real(double), parameter :: fac_fs2atu = 41.3413745758
+
+  ! Checkpoint files
+  character(20) :: thermo_check_file = "cq.thermo"
+  character(20) :: baro_check_file = "cq.baro"
 
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
@@ -113,6 +117,8 @@ module md_control
       procedure, public   :: get_temperature
       procedure, public   :: dump_thermo_state
       procedure, public   :: propagate_nvt_nhc
+      procedure, public   :: write_thermo_checkpoint
+      procedure, public   :: read_thermo_checkpoint
 
       procedure, private  :: update_G_nhc
       procedure, private  :: propagate_eta
@@ -191,6 +197,8 @@ module md_control
       procedure, public   :: propagate_box_mttk
       procedure, public   :: dump_baro_state
       procedure, public   :: update_cell
+      procedure, public   :: write_baro_checkpoint
+      procedure, public   :: read_baro_checkpoint
 
       procedure, private  :: update_G_eps
       procedure, private  :: propagate_eps_lin
@@ -307,13 +315,17 @@ contains
     end if
 
     ! Defaults for heat bath positions, velocities, masses
-    th%eta = zero
-    th%v_eta = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
-    th%G_nhc = zero
-    if (th%cell_nhc) then
-      th%eta_cell = zero
-      th%v_eta_cell = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
-      th%G_nhc_cell = zero
+    if (flag_MDcontinue) then
+      call th%read_thermo_checkpoint
+    else
+      th%eta = zero
+      th%v_eta = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
+      th%G_nhc = zero
+      if (th%cell_nhc) then
+        th%eta_cell = zero
+        th%v_eta_cell = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
+        th%G_nhc_cell = zero
+      end if
     end if
 
     ! Yoshida-Suzuki time steps
@@ -783,6 +795,81 @@ contains
   end subroutine propagate_nvt_nhc
   !!***
 
+  !!****m* md_control/write_thermo_checkpoint *
+  !!  NAME
+  !!   write_thermo_checkpoint
+  !!  PURPOSE
+  !!   Write checkpoint for restarting NHC thermostat
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/01/19 13:12
+  !!  SOURCE
+  !!  
+  subroutine write_thermo_checkpoint(th)
+    
+    use input_module,     only: io_assign, io_close
+
+    ! passed variables
+    class(type_thermostat), intent(inout) :: th
+
+    ! local variables
+    integer                               :: lun
+
+    call io_assign(lun)
+    open(unit=lun,file=thermo_check_file,status='replace')
+
+    write(lun,th%nhc_fmt) "eta:        ", th%eta
+    write(lun,th%nhc_fmt) "v_eta:      ", th%v_eta
+    write(lun,th%nhc_fmt) "G_nhc:      ", th%G_nhc
+    if (th%cell_nhc) then
+      write(lun,th%nhc_fmt) "eta_cell:   ", th%eta_cell
+      write(lun,th%nhc_fmt) "v_eta_cell: ", th%v_eta_cell
+      write(lun,th%nhc_fmt) "G_nhc_cell: ", th%G_nhc_cell
+    end if
+    call io_close(lun)
+
+  end subroutine write_thermo_checkpoint
+  !!***
+
+  !!****m* md_control/read_thermo_checkpoint *
+  !!  NAME
+  !!   read_thermo_checkpoint
+  !!  PURPOSE
+  !!   Read checkpoint for restarting NHC thermostat
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/01/19 13:14
+  !!  SOURCE
+  !!  
+  subroutine read_thermo_checkpoint(th)
+    
+    use input_module,     only: io_assign, io_close
+
+    ! passed variables
+    class(type_thermostat), intent(inout) :: th
+
+    ! local variables
+    integer                               :: lun
+    character(20)                         :: name
+
+    call io_assign(lun)
+    open(unit=lun,file=thermo_check_file,status='old')
+
+    read(lun,*) name, th%eta
+    read(lun,*) name, th%v_eta
+    read(lun,*) name, th%G_nhc
+    if (th%cell_nhc) then
+      read(lun,*) name, th%eta_cell
+      read(lun,*) name, th%v_eta_cell
+      read(lun,*) name, th%G_nhc_cell
+    end if
+    call io_close(lun)
+
+  end subroutine read_thermo_checkpoint
+  !!***
+
   !!****m* md_control/get_nhc_energy *
   !!  NAME
   !!   get_nhc_energy
@@ -968,10 +1055,14 @@ contains
       baro%tau_P = md_tau_P
       baro%bulkmod = md_bulkmod_est
     case('iso-mttk')
-      baro%eps_ref = third*log(baro%volume/baro%volume_ref)
-      baro%eps = baro%eps_ref
-      baro%v_eps = zero
-      baro%ke_box = zero
+      if (flag_MDcontinue) then
+        call baro%read_baro_checkpoint
+      else
+        baro%eps_ref = third*log(baro%volume/baro%volume_ref)
+        baro%eps = baro%eps_ref
+        baro%v_eps = zero
+        baro%ke_box = zero
+      end if
       baro%odnf = one + three/baro%ndof
       baro%tau_P = md_tau_P
     case default
@@ -1793,6 +1884,82 @@ contains
     end if
 
   end subroutine update_cell
+  !!***
+
+  !!****m* md_control/write_baro_checkpoint *
+  !!  NAME
+  !!   write_baro_checkpoint
+  !!  PURPOSE
+  !!   Write checkpoint for restarting MTTK barostat
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/01/19 13:15
+  !!  SOURCE
+  !!  
+  subroutine write_baro_checkpoint(baro)
+
+    use input_module,     only: io_assign, io_close
+
+    ! passed variables
+    class(type_barostat), intent(inout) :: baro
+
+    ! local variables
+    integer                               :: lun
+
+    call io_assign(lun)
+    open(unit=lun,file=thermo_check_file,status='replace')
+
+    write(lun,*) "lat_a_ref", baro%lat_ref(1,:)
+    write(lun,*) "lat_b_ref", baro%lat_ref(2,:)
+    write(lun,*) "lat_c_ref", baro%lat_ref(3,:)
+    write(lun,*) "eps_ref ", baro%eps_ref
+    write(lun,*) "eps ", baro%eps
+    write(lun,*) "v_eps ", baro%v_eps
+    write(lun,*) "G_eps ", baro%G_eps
+    call io_close(lun)
+
+  end subroutine write_baro_checkpoint
+  !!***
+
+  !!****m* md_control/read_baro_checkpoint *
+  !!  NAME
+  !!   read_thermo_checkpoint
+  !!  PURPOSE
+  !!   Read checkpoint for restarting MTTK barostat
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/01/19 13:16
+  !!  SOURCE
+  !!  
+  subroutine read_baro_checkpoint(baro)
+    
+    use input_module,     only: io_assign, io_close
+
+    ! passed variables
+    class(type_barostat), intent(inout) :: baro
+
+    ! local variables
+    integer                               :: lun
+    character(20)                         :: name
+
+    call io_assign(lun)
+    open(unit=lun,file=baro_check_file,status='old')
+
+    select case(baro%baro_type)
+    case('iso-mttk')
+      read(lun,*) name, baro%lat_ref(1,:)
+      read(lun,*) name, baro%lat_ref(2,:)
+      read(lun,*) name, baro%lat_ref(3,:)
+      read(lun,*) name, baro%eps_ref
+      read(lun,*) name, baro%eps
+      read(lun,*) name, baro%v_eps
+      read(lun,*) name, baro%G_eps
+    end select
+    call io_close(lun)
+
+  end subroutine read_baro_checkpoint
   !!***
 
 end module md_control

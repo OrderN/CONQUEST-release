@@ -648,6 +648,7 @@ contains
           call thermo%get_nhc_energy
           call baro%init_baro('iso-mttk', md_target_press, md_ndof, stress, &
                               ion_velocity, mdl%ion_kinetic_energy)
+          call baro%get_box_ke
         end if
       case('mttk')
       case('berendsen')
@@ -954,6 +955,7 @@ contains
           call thermo%get_nhc_energy
           call baro%init_baro('iso-mttk', md_target_press, md_ndof, stress, &
                               ion_velocity, mdl%ion_kinetic_energy)
+          call baro%get_box_ke
         end if
       end if
 
