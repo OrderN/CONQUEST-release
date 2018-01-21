@@ -1107,6 +1107,8 @@ contains
           end if
        end if
        call my_barrier()
+       !TM 2018.Jan21 : Now, grab_InfoGlobal recalculates atom_coord_diff
+       call gcopy(atom_coord_diff,3,ni_in_cell)
        call gcopy(n_proc_old)
        call gcopy(glob2node_old, ni_in_cell)
        call gcopy(MDinit_step)

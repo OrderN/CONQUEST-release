@@ -470,7 +470,7 @@ contains
                               flag_MDold,n_proc_old,glob2node_old,    &
                               flag_LmatrixReuse,flag_XLBOMD,          &
                               flag_dissipation,flag_FixCOM,           &
-                              flag_fire_qMD, flag_diagonalisation, nspin
+                              flag_fire_qMD, flag_diagonalisation, nspin, atom_coord_diff
     use group_module,   only: parts
     use primary_module, only: bundle
     use minimise,       only: get_E_and_F
@@ -595,6 +595,8 @@ contains
        ! Fetch old relations
        if (.NOT. flag_MDold) then
          if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
+        !TM 2018.Jan21 : Now, grab_InfoGlobal recalculates atom_coord_diff
+         call gcopy(atom_coord_diff,3,ni_in_cell)
          call gcopy(n_proc_old)
          call gcopy(glob2node_old,ni_in_cell)
        endif
@@ -1122,6 +1124,8 @@ contains
              call update_atom_coord()
              if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
              call my_barrier
+            !TM 2018.Jan21 : Now, grab_InfoGlobal recalculates atom_coord_diff
+             call gcopy(atom_coord_diff,3,ni_in_cell)
              call gcopy(n_proc_old)
              call gcopy(glob2node_old,ni_in_cell)
              call updateIndices3(fixed_potential,cg)
@@ -1222,6 +1226,8 @@ contains
           call update_atom_coord()
           if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
           call my_barrier
+          !TM 2018.Jan21 : Now, grab_InfoGlobal recalculates atom_coord_diff
+          call gcopy(atom_coord_diff,3,ni_in_cell)
           call gcopy(n_proc_old)
           call gcopy(glob2node_old,ni_in_cell)
           call updateIndices3(fixed_potential,cg)

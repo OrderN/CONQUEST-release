@@ -928,6 +928,8 @@ contains
        !call updateIndices3(fixed_potential,direction,step)
        if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
        call my_barrier()
+       !TM 2018.Jan21 : Now, grab_InfoGlobal recalculates atom_coord_diff
+       call gcopy(atom_coord_diff,3,ni_in_cell)
        call gcopy(n_proc_old)
        call gcopy(glob2node_old,ni_in_cell)
        call updateIndices3(fixed_potential,direction)
@@ -1081,6 +1083,8 @@ contains
     write (io_lun,*) "CG: 2nd stage"
     !call updateIndices3(fixed_potential,direction,step)
     if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)!19/08/2013
+    !TM 2018.Jan21 : Now, grab_InfoGlobal recalculates atom_coord_diff
+    call gcopy(atom_coord_diff,3,ni_in_cell)
     call gcopy(n_proc_old)
     call gcopy(glob2node_old,ni_in_cell)
     call updateIndices3(fixed_potential,direction)
@@ -1223,6 +1227,8 @@ contains
        call update_atom_coord
        write (io_lun,*) "CG: 3rd stage"
        if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
+       !TM 2018.Jan21 : Now, grab_InfoGlobal recalculates atom_coord_diff
+       call gcopy(atom_coord_diff,3,ni_in_cell)
        call gcopy(n_proc_old)
        call gcopy(glob2node_old,ni_in_cell)
        call updateIndices3(fixed_potential,direction)
@@ -1439,6 +1445,8 @@ contains
        if(.NOT.flag_MDold) then
           if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
           call my_barrier()
+       !TM 2018.Jan21 : Now, grab_InfoGlobal recalculates atom_coord_diff
+          call gcopy(atom_coord_diff,3,ni_in_cell)
           call gcopy(n_proc_old)
           call gcopy(glob2node_old,ni_in_cell)
           call updateIndices3(fixed_potential,direction)
@@ -1554,6 +1562,8 @@ contains
     if(.NOT.flag_MDold) then
        if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
        call my_barrier()
+       !TM 2018.Jan21 : Now, grab_InfoGlobal recalculates atom_coord_diff
+       call gcopy(atom_coord_diff,3,ni_in_cell)
        call gcopy(n_proc_old)
        call gcopy(glob2node_old,ni_in_cell)
        call updateIndices3(fixed_potential,direction)
@@ -1641,6 +1651,8 @@ contains
        if(.NOT.flag_MDold) then
           if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
           call my_barrier()
+       !TM 2018.Jan21 : Now, grab_InfoGlobal recalculates atom_coord_diff
+          call gcopy(atom_coord_diff,3,ni_in_cell)
           call gcopy(n_proc_old)
           call gcopy(glob2node_old,ni_in_cell)
           call updateIndices3(fixed_potential,direction)
@@ -2473,6 +2485,15 @@ contains
              if (inode.EQ.ionode.AND.iprint_MD>2) write (io_lun,*) "update_H: Get charge density from L-matrix"
              call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
                   inode,ionode,maxngrid)
+            do spin=1,nspin
+               scale = ne_spin_in_cell(spin)/electrons(spin)
+               if(abs(scale-one)<0.01.AND.abs(scale-one)>RD_ERR) then
+                  density(:,spin) = density(:,spin)*scale
+               else if (abs(scale-one)>=0.01) then
+                  call set_atomic_density(.true.)
+                  exit
+               end if
+            end do
              ! if flag_LFD=T, update SF-PAO coefficients with the obtained density
              ! and update S with the coefficients
              if (flag_LFD) then
