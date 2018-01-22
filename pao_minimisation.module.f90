@@ -1253,7 +1253,6 @@ contains
                energy_out
     dE = total_energy_0 - energy_out
     if (inode == ionode) &
-         !write (io_lun, *) 'On exit from pao line_min, dE is ', &
          write (io_lun, fmt='(2x,"On exit from pao line_min, dE is ",f25.10,2f25.10)') &
                            dE, total_energy_0, energy_out
     total_energy_0 = energy_out

@@ -759,6 +759,8 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2017/05/09 dave
   !!    Adding code to load both L matrix for both spin channels
+  !!   2017/11/10 dave
+  !!    Removed calls to dump K matrix (now done in DMMinModule)
   !! SOURCE
   !!
   subroutine safemin2(start_x, start_y, start_z, direction, energy_in, &
@@ -1091,15 +1093,15 @@ contains
     k3_local = kmin - k3
 
     if (.NOT. flag_MDold) then
-      write (io_lun,*) "CG: 2nd stage"
-      if(flag_SFcoeffReuse) then
-       call update_pos_and_matrices(updateSFcoeff,direction)
-      else
-       call update_pos_and_matrices(updateLorK,direction)
-      endif
+       write (io_lun,*) "CG: 2nd stage"
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
+       else
+          call update_pos_and_matrices(updateLorK,direction)
+       endif
     else
-      call update_atom_coord
-      call updateIndices(.true., fixed_potential)
+       call update_atom_coord
+       call updateIndices(.true., fixed_potential)
     endif
     call update_H(fixed_potential)
 
@@ -1141,20 +1143,69 @@ contains
          write (io_lun, &
                 fmt='(4x,"In safemin2, Interpolation step and energy &
                       &are ",f15.10,f20.10" ",a2)') &
-               kmin, en_conv*energy_out, en_units(energy_units)
-    if (energy_out > e2 .and. abs(bottom) > very_small) then
-       ! The interpolation failed - go back
-       call start_timer(tmr_l_tmp1,WITH_LEVEL)
-       if (inode == ionode) &
-            write (io_lun,fmt='(/4x,"Interpolation failed; reverting"/)')
+                      kmin, en_conv*energy_out, en_units(energy_units)
+    ! If interpolation step failed, do interpolation AGAIN
+    if (energy_out > e2 .and. abs(bottom) > RD_ERR) then
+       if(e1<e3) then ! Keep k1
+          if(k2<kmin) then
+             k3 = kmin
+             e3 = energy_out
+          else
+             k3 = k2
+             e3 = e2
+             k2 = kmin
+             e2 = energy_out
+          end if
+       else ! Keep k3
+          if(k2<kmin) then
+             k1 = k2
+             e1 = e2
+             k2 = kmin
+             e2 = energy_out
+          end if
+       end if
        kmin_old = kmin
-       kmin = k2
-       !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-       !%%!   ! Subtract off atomic densities
-       !%%!   store_density = density
-       !%%!   call set_density()
-       !%%!   density = store_density - density
-       !%%!end if
+       if (inode == ionode .and. iprint_MD > 1) &
+            write (io_lun, fmt='(4x,"In safemin2, brackets are: ",6f18.10)') &
+            k1, e1, k2, e2, k3, e3
+       bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
+       if (abs(bottom) > very_small) then
+          kmin = 0.5_double * (((k1*k1 - k3*k3)*(e1 - e2) -    &
+               (k1*k1 - k2*k2) * (e1 - e3)) / &
+               ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
+          if (inode == ionode .and. iprint_MD > 1) &
+               write (io_lun, &
+               fmt='(4x,"In safemin2, second interpolation step is ", f15.10)') kmin
+          if(kmin<k1.OR.kmin>k3) then
+             write(io_lun,*) 'Second interpolation outside limits: ',k1,k3,kmin
+             dE = e0 - energy_out
+             kmin = kmin_old
+             if (inode == ionode .and. iprint_MD > 0) then
+                write (io_lun, &
+                     fmt='(4x,"In safemin2, exit after ",i4," &
+                     &iterations with energy ",f20.10," ",a2)') &
+                     iter, en_conv * energy_out, en_units(energy_units)
+             else if (inode == ionode) then
+                write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
+                     en_conv * energy_out, en_units(energy_units)
+             end if
+             if (inode.EQ.ionode) write (io_lun,*) "Get out of safemin2 !" !db
+             return
+          end if
+       else
+          dE = e0 - energy_out
+          if (inode == ionode .and. iprint_MD > 0) then
+             write (io_lun, &
+                  fmt='(4x,"In safemin2, exit after ",i4," &
+                  &iterations with energy ",f20.10," ",a2)') &
+                  iter, en_conv * energy_out, en_units(energy_units)
+          else if (inode == ionode) then
+             write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
+                  en_conv * energy_out, en_units(energy_units)
+          end if
+          if (inode.EQ.ionode) write (io_lun,*) "Get out of safemin2 !" !db
+          return
+       end if
        do i=1,ni_in_cell
           x_atom_cell(i) = start_x(i) + kmin*direction(1,i)
           y_atom_cell(i) = start_y(i) + kmin*direction(2,i)
@@ -1178,21 +1229,13 @@ contains
        endif
        call update_H(fixed_potential)
 
-       !call updateIndices(.false.,fixed_potential, number_of_bands)
        ! Update start_x,start_y & start_z
        call update_start_xyz(start_x,start_y,start_z)!25/01/2013
-       !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-          ! Add on atomic densities
-          !store_density = density
-          !call set_density()
-          !density = store_density + density
-       !end if
        if (iprint_MD > 2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
                                       trim(pdb_template))
        end if
        ! Now in update_H
-       !if(flag_reset_dens_on_atom_move) call set_density()
        if (flag_pcc_global) call set_density_pcc()
        call stop_print_timer(tmr_l_tmp1, &
                              "safemin2 - Failed interpolation + Retry", &
@@ -1260,6 +1303,10 @@ contains
   !!   2017/06/20 J.S.B
   !!    Moved Dave's changes to a separate subroutine "update_cell_dims" for
   !!    clarity.
+  !!   2017/11/10 dave
+  !!    Removed calls to dump K matrix (now done in DMMinModule)
+  !!    Sometime since September implemented fractional coordinates for coord diffs
+  !!    so that uniform volume scaling of cell doesn't generate atom position changes
   !! SOURCE
 
   subroutine safemin_cell(start_rcellx, start_rcelly, start_rcellz, search_dir_x,&
@@ -1282,7 +1329,7 @@ contains
     use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
          n_L_iterations
     use GenComms,           only: my_barrier, myid, inode, ionode,        &
-         cq_abort
+         cq_abort, gcopy
     use SelfCon,            only: new_SC_potl
     use GenBlas,            only: dot
     use force_module,       only: tot_force
@@ -1310,11 +1357,11 @@ contains
 
 
     ! Local variables
-    integer        :: i, j, iter, lun
+    integer        :: i, j, iter, lun, stat, nfile, symm
     logical        :: reset_L = .false.
     logical        :: done
     type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
-    real(double)   :: k0, k1, k2, k3, lambda, k3old, orcellx, orcelly, orcellz, scale
+    real(double)   :: k0, k1, k2, k3, lambda, k3old, orcellx, orcelly, orcellz, scale, ratio
     real(double)   :: e0, e1, e2, e3, tmp, bottom, xvec, yvec, zvec, r2
     real(double), save :: kmin = zero, dE = zero
     real(double), dimension(:), allocatable :: store_density
@@ -1673,7 +1720,7 @@ contains
                        y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
 
     use datatypes
-    use global_module,  only: iprint_MD, ni_in_cell
+    use global_module,  only: iprint_MD, ni_in_cell, id_glob_inv
     use numbers
     use GenBlas,        only: dot, axpy
     use GenComms,       only: gsum, myid, inode, ionode
@@ -1691,7 +1738,7 @@ contains
     integer :: npmod, mx_pulay, pul_mx
 
     ! Local variables
-    integer      :: i,j, length
+    integer      :: i,j, length, jj
     real(double) :: gg
     real(double), dimension(mx_pulay,mx_pulay) :: Aij
     real(double), dimension(mx_pulay)          :: alph
@@ -1715,9 +1762,10 @@ contains
     z_atom_cell(:) = 0.0_double
     do i=1,pul_mx
        do j=1,ni_in_cell
-          x_atom_cell(j) = x_atom_cell(j) + alph(i)*posnStore(1,j,i)
-          y_atom_cell(j) = y_atom_cell(j) + alph(i)*posnStore(2,j,i)
-          z_atom_cell(j) = z_atom_cell(j) + alph(i)*posnStore(3,j,i)
+          jj = id_glob_inv(j)
+          x_atom_cell(jj) = x_atom_cell(jj) + alph(i)*posnStore(1,j,i)
+          y_atom_cell(jj) = y_atom_cell(jj) + alph(i)*posnStore(2,j,i)
+          z_atom_cell(jj) = z_atom_cell(jj) + alph(i)*posnStore(3,j,i)
        enddo
     enddo
     call stop_timer(tmr_std_moveatoms)
@@ -2195,6 +2243,10 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2017/09/06 19:00 nakata
   !!    Changed to call set_atomic_density with ".true." before calling initial_SFcoeff
+  !!   2017/11/07 10:02 dave
+  !!    Added scaling of electron density after atom move
+  !!   2017/11/17 14:51 dave
+  !!    Bug fix: removed erroneous spin scaling on electron density
   !!  SOURCE
   !!
   subroutine update_H(fixed_potential)
@@ -2245,7 +2297,6 @@ contains
     real(double), dimension(nspin) :: electrons, energy_tmp
     real(double) :: scale
     integer :: spin_SF, spin
-
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     ! (0) Pseudopotentials: choose correct form
@@ -2321,7 +2372,8 @@ contains
                   density(:,spin) = density(:,spin)*scale
                else if (abs(scale-one)>=threshold_resetCD) then
                   if(inode == ionode) write(io_lun,*) &
-                 ' WARNING! in update_H: constructed charge density is strange.. ; scale = ', scale, threshold_resetCD
+                       ' WARNING! in update_H: constructed charge density is strange... ; scale = ', &
+                       scale, threshold_resetCD
                   call set_atomic_density(.true.)
                   exit
                end if
@@ -2341,7 +2393,6 @@ contains
              (flag_no_atomic_densities)) then
        call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
     end if
-
     ! If we have read K and are predicting density from it, then rebuild
     if(flag_diagonalisation.AND.flag_LmatrixReuse.AND.(.NOT.flag_MDold)) then
        call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
@@ -2352,13 +2403,13 @@ contains
              density(:,spin) = density(:,spin)*scale
           else if (abs(scale-one)>=threshold_resetCD) then
              if(inode == ionode) write(io_lun,*)  ' WARNING2! in update_H: &
-             & constructed charge density is strange.. ; scale,threshold = ', scale, threshold_resetCD
+                  & constructed charge density is strange... ; scale,threshold = ', &
+                  scale, threshold_resetCD
              call set_atomic_density(.true.)
              exit
           end if
        end do
     end if
-
     if (flag_pcc_global) call set_density_pcc()
     ! (7) Now generate a new H matrix, including a new charge density
     if (flag_LFD .and. .not.flag_SFcoeffReuse) then
