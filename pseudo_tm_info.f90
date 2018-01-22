@@ -568,6 +568,8 @@ contains
 !!    Added storage of spacing of PAO table
 !!   2017/11/10 14:22 dave
 !!    Bug fix: added Ry->Ha conversion for Siesta VNA d2 table (as well as f table)
+!!   2018/01/22 14:39 JST dave
+!!    Added test for lmax_pao/lmax_ps to find maximum PAO/PP angular momentum
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -581,6 +583,7 @@ contains
     use functions, ONLY: erfc
     use input_module, ONLY: io_assign, io_close
     use pseudopotential_common, ONLY: pseudo_type, SIESTA, ABINIT
+    use maxima_module, only: lmax_pao, lmax_ps
 
     implicit none
 
@@ -772,6 +775,7 @@ contains
     endif !  (inode == ionode) then
     ! Now broadcast the information
     call gcopy(lmax   )
+    if(lmax>lmax_pao) lmax_pao = lmax    
     call gcopy(n_pjnl )
     call gcopy(zval)
     call gcopy(z)
@@ -837,6 +841,7 @@ contains
           call gcopy(ps_info%pjnl(i)%f,ps_info%pjnl(i)%n)
           call gcopy(ps_info%pjnl(i)%d2,ps_info%pjnl(i)%n)
        end do
+       if(ps_info%lmax>lmax_ps) lmax_ps = ps_info%lmax
        if(pseudo_type==SIESTA) then
           !Chlocal
           call gcopy(ps_info%tm_loc_pot)

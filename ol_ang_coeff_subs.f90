@@ -28,6 +28,8 @@
 !!    Added timers
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2018/01/22 12:42 JST dave
+!!    Changes to make prefactor arrays allocatable (for NA projectors)
 !!  SOURCE
 !!
 
@@ -35,7 +37,7 @@ module angular_coeff_routines
 
   use datatypes
   use global_module,          only: io_lun
-  use bessel_integrals,       only: fact!, lmax_fact
+  use bessel_integrals,       only: fact, doublefact!, lmax_fact
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_allocation, tmr_std_basis
 
@@ -46,7 +48,7 @@ module angular_coeff_routines
   ! -------------------------------------------------------
   character(len=80), private :: RCSid = "$Id$"
 
-  integer,parameter :: lmax_prefac=8
+  !integer,parameter :: lmax_prefac=8
   real(double), allocatable, dimension(:,:) :: prefac
   real(double), allocatable, dimension(:,:) :: prefac_real
   !real(double) :: prefac(-1:lmax_prefac,-lmax_prefac:lmax_prefac)
@@ -1856,7 +1858,7 @@ contains
     call start_timer(tmr_std_basis)
     allocate(prefac(-1:n,-n:n))
     prefac(:,:) = one
-    do ll = 0, lmax_prefac
+    do ll = 0, n!lmax_prefac
        do mm = -ll, ll
           g = fact(ll-mm)/fact(ll+mm)
           h = (2*ll+1)/(four*pi)
@@ -1905,7 +1907,7 @@ contains
     call start_timer(tmr_std_basis)
     allocate(prefac_real(-1:n,-n:n))
     prefac_real(:,:) = one
-    do ll = 0, lmax_prefac
+    do ll = 0, n!lmax_prefac
        do mm = -ll, ll
           g = fact(ll-mm)/fact(ll+mm)
           if(mm/=0) then
@@ -2014,6 +2016,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2008/06/10 ast
 !!    Added timers
+!!   2018/01/22 12:43 dave
+!!    Added allocation of arrays and double factorial (n*(n-2)*...)
 !!  SOURCE
 !!
   subroutine set_fact(lmax)
@@ -2028,7 +2032,7 @@ contains
 
     call start_timer(tmr_std_basis)
     max_fact = 4*lmax+1
-    if(max_fact<2*lmax_prefac) max_fact = 2*lmax_prefac
+    !if(max_fact<2*lmax_prefac) max_fact = 2*lmax_prefac
     if(max_fact<(20+2*lmax+1))  max_fact = 20+2*lmax+1
     write(*,*) 'max_fact is ',max_fact,lmax
     allocate(fact(-1:max_fact))
@@ -2037,6 +2041,13 @@ contains
        xx = real(ii,double)
        fact(ii)=fact(ii-1)* xx
     enddo
+    ! Double factorial
+    allocate(doublefact(-1:max_fact))
+    doublefact(-1:max_fact) = one
+    do ii=2,max_fact
+       xx = real(ii,double)
+       doublefact(ii) = doublefact(ii-2)*xx
+    end do
     call stop_timer(tmr_std_basis)
     return
   end subroutine set_fact

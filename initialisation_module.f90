@@ -107,6 +107,8 @@ contains
   !!    - Added experimental backtrace
   !!   2016/03/15 13:54 dave
   !!    Removed restart_file from call to read_and_write and initial_phis (redundant)
+  !!   2018/01/22 12:39 JST dave
+  !!    Changes to find maximum angular momentum for PAOs and pseudopotentials (for factorial function)
   !!  SOURCE
   !!
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
@@ -127,7 +129,8 @@ contains
     use DFT_D2
     use pseudo_tm_module,   only: make_neutral_atom
     use angular_coeff_routines, only: set_fact
-
+    use maxima_module,          only: lmax_ps, lmax_pao
+    
     implicit none
 
     ! Passed variables
@@ -141,6 +144,7 @@ contains
     type(cq_timer)    :: backtrace_timer
     logical           :: start, start_L
     logical           :: read_phi
+    integer :: lmax_tot
 
     call init_timing_system(inode)
 
@@ -150,7 +154,8 @@ contains
     call start_backtrace(t=backtrace_timer,who='initialise',&
          where=area,level=std_level_loc,echo=.true.)
 !****lat>$
-
+    lmax_pao = 0
+    lmax_ps = 0
     ! Read input
     call read_and_write(start, start_L, inode, ionode, &
                         vary_mu, mu, find_chdens, read_phi)
@@ -179,7 +184,10 @@ contains
                                &building from initial K'
        find_chdens = .true.
     end if
-    call set_fact(8)
+    lmax_tot = lmax_pao+lmax_ps
+    if(2*lmax_pao>lmax_tot) lmax_tot = 2*lmax_pao
+    if(lmax_tot<8) lmax_tot = 8
+    call set_fact(lmax_tot)
     if(flag_neutral_atom) call make_neutral_atom
     call set_up(find_chdens,std_level_loc+1)
     
@@ -273,7 +281,9 @@ contains
   !!   2017/06/22 11:04 dave
   !!    Adding diagonalisation initialisation calls
   !!   2017/08/29 jack baker & dave
-  !!    Removed r_super_x references (redundant)  
+  !!    Removed r_super_x references (redundant)
+  !!   2018/01/22 12:41 JST dave
+  !!    Adding check for maximum angular momentum for Bessel functions
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -333,7 +343,7 @@ contains
     use io_module,              only: read_blocks
     use functions_on_grid,      only: associate_fn_on_grid
     use potential_module,       only: potential
-    use maxima_module,          only: maxngrid
+    use maxima_module,          only: maxngrid, lmax_ps, lmax_pao
     use species_module,         only: n_species
     use angular_coeff_routines, only: set_fact, set_prefac, set_prefac_real
     use numbers,                only: zero
@@ -343,7 +353,6 @@ contains
     use UpdateInfo_module,      ONLY: make_glob2node
     use XLBOMD_module,          ONLY: immi_XL
     use DiagModule,             only: init_blacs_pg, init_scalapack_format
-    use bessel_integrals, only: enum_bess_int, bess_coeff
     
     implicit none
 
@@ -354,7 +363,7 @@ contains
     ! Local variables
     complex(double_cplx), allocatable, &
          dimension(:) :: chdenr
-    integer           :: i, stat, spec
+    integer           :: i, stat, spec, lmax_tot
     real(double)      :: rcut_BCS  !TM 26/Jun/2003
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level
@@ -539,9 +548,11 @@ contains
 
    ! external potential - first set up angular momentum bits
    !call set_fact
-   call set_prefac(9)
-   call set_prefac_real(9)
-   call enum_bess_int(8)
+   lmax_tot = lmax_pao+lmax_ps
+   if(lmax_tot<2*lmax_pao) lmax_tot = 2*lmax_pao
+   if(lmax_tot<8) lmax_tot = 8
+   call set_prefac(lmax_tot+1)
+   call set_prefac_real(lmax_tot+1)
     !  TM's pseudo or not : 15/11/2002 TM
    select case (pseudo_type)
    case(OLDPS)

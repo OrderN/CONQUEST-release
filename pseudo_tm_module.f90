@@ -2213,7 +2213,8 @@ contains
     use species_module, ONLY: napf_species, npao_species
     use pao_format, ONLY: pao, paoVNA, paopao
     use bessel_integrals, only: general_bessel
-
+    use maxima_module, ONLY: lmax_pao, lmax_ps
+    
     implicit none
 
     integer      :: npoint
@@ -2244,21 +2245,33 @@ contains
     integer :: m
 
     ! Bessel function variables
-    integer :: zeroind, bessel_order
+    integer :: zeroind, bessel_order, lmax_tot, maxN
     real(double), allocatable, dimension(:,:) :: zeroloc
     real(double), allocatable, dimension(:,:) :: qvec
     real(double) :: rm, rn, jl, jm, jn, x, fac
     logical :: not_done
 
     sqrt_two_pi = sqrt(two)/sqrt_pi
+    ! Find the locations of the zeroes of spherical Bessel functions to allow
+    ! us to use them as projector functions (for a given l, we need several different
+    ! projectors, so we'll choose a wavevector q_{ln} such that j_l(q_{ln},r_c) = zero
+    ! where r_c is the VNA cutoff radius)
     if(flag_neutral_atom_projector) then
+       ! Find maximum number of functions that we will require
+       maxN = 0
+       do j=1,maxL_neutral_atom_projector + 1
+          if(numN_neutral_atom_projector(j-1)>maxN) maxN=numN_neutral_atom_projector(j-1)
+       end do
+       maxN = maxN + 1
+       lmax_tot = lmax_pao + lmax_ps
+       if(lmax_pao>lmax_ps) lmax_tot = 2*lmax_pao
        allocate(napf_species(n_species),paoVNA(n_species),paopao(n_species))
-       allocate(zeroloc(15,0:6),qvec(15,0:8))
+       allocate(zeroloc(maxN,0:lmax_tot),qvec(maxN,0:(lmax_tot)))
        zeroloc = zero
        qvec = zero
        ! Find Bessel function zeroes
        npoint = 1001
-       do bessel_order=0,6!lmax_ps+lmax_pao ! Bessel order
+       do bessel_order=0,lmax_tot ! Bessel order
           cutoff = 100.0_double
           delta = cutoff/real(npoint-1,double)
           zeroind = 1
@@ -2267,14 +2280,11 @@ contains
              rm = (ir-1)*delta
              jl = general_bessel(r,bessel_order)
              jm = general_bessel(rm,bessel_order)
-             !jj = spherical_bessels(r,bessel_order)
-             !jm = spherical_bessels(rm,bessel_order)
              if(jl*jm<zero) then ! Bracketed a zero
                 not_done = .true.
                 do while(not_done)
                    rn = half*(r+rm)
                    jn = general_bessel(rn,bessel_order)
-                   !jn = spherical_bessels(rn,bessel_order)
                    if(jn*jm<zero) then !
                       r = rn
                       jl = jn
@@ -2287,18 +2297,18 @@ contains
                    if(abs(r-rm)<1e-8) not_done = .false.
                 end do
                 zeroloc(zeroind,bessel_order) = rn
-                !write(io_lun,*) '# zero is at ',zeroloc(zeroind)
                 zeroind = zeroind+1
-                if(zeroind>15) exit
+                if(zeroind>maxN) exit
              end if
           end do
        end do
     end if
     ! Loop over species
     do isp=1, n_species
+       ! Find q vectors for species
        if(flag_neutral_atom_projector) then
           cutoff = pseudo(isp)%vna%cutoff
-          do bessel_order=0,6
+          do bessel_order=0,lmax_tot
              do ir = 1, zeroind-1
                 qvec(ir, bessel_order) = zeroloc(ir,bessel_order)/cutoff
              end do
@@ -2596,18 +2606,22 @@ contains
        !-------------------------------------------------------
 
        if( flag_neutral_atom_projector ) then
-          !-------------------------------------------------------
-          ! calculate pjna(r)
-          !
-          ! We need (at least) the same number of projectors as PAOs
-          ! Following simple 1- and 2-centre tests we may add projectors
-          ! for the 3-centre integrals; it would be easiest to add these
-          ! on-top of the other functions
-          !
+          ! -----------------------------------------------------
+          ! We find 1- and 2-centre integrals using the standard
+          ! approach to PAO-PAO integrals, while the 3-centre
+          ! terms are expanded in projectors similarly to the
+          ! non-local pseudopotentials
+          ! -----------------------------------------------------
+          ! First set up structures for 1- and 2-centre integrals
+          ! paoVNA is to store <i|VNA_i|j> and <j|VNA_j|j>
           paoVNA(isp)%greatest_angmom = pao(isp)%greatest_angmom
           paoVNA(isp)%count = pao(isp)%count
+          ! paopao will be used to create <i|VNA_j|i> but for now
+          ! we just interpolate all PAOs onto the same radial grid
+          ! (the grid for VNA)
           paopao(isp)%greatest_angmom = pao(isp)%greatest_angmom
           paopao(isp)%count = pao(isp)%count
+          ! Find number of projectors
           i_pjna = 0
           napf_species(isp) = 0
           do l=0, maxL_neutral_atom_projector
@@ -2617,6 +2631,7 @@ contains
           end do
           napf_species(isp) = i_pjna
           pseudo(isp)%n_pjna = i_pjna
+          ! Allocation
           npoint = pseudo(isp)%vna%n          
           allocate(paoVNA(isp)%angmom(0:pao(isp)%greatest_angmom))
           allocate(paopao(isp)%angmom(0:pao(isp)%greatest_angmom))
@@ -2626,7 +2641,9 @@ contains
           allocate( pseudo(isp)%pjna_ekb(pseudo(isp)%n_pjna) )
           allocate( Rad(npoint) )
           allocate( Radbar(npoint,maxval(numN_neutral_atom_projector(:))) )
-
+          ! -------------------------
+          ! Allocation
+          ! -------------------------
           ! 1- and 2-centre integrals
           i_pjna = 0
           do l=0, pao(isp)%greatest_angmom
@@ -2644,9 +2661,9 @@ contains
                 paoVNA(isp)%angmom(l)%zeta(n)%table = zero
                 paoVNA(isp)%angmom(l)%zeta(n)%table2 = zero
                 ! pao-pao
-                paopao(isp)%angmom(l)%zeta(n)%length = pseudo(isp)%vna%n !pao(isp)%angmom(l)%zeta(n)%length
-                paopao(isp)%angmom(l)%zeta(n)%cutoff = pseudo(isp)%vna%cutoff!pao(isp)%angmom(l)%zeta(n)%cutoff
-                paopao(isp)%angmom(l)%zeta(n)%delta  = pseudo(isp)%vna%delta!pao(isp)%angmom(l)%zeta(n)%delta
+                paopao(isp)%angmom(l)%zeta(n)%length = pseudo(isp)%vna%n 
+                paopao(isp)%angmom(l)%zeta(n)%cutoff = pseudo(isp)%vna%cutoff
+                paopao(isp)%angmom(l)%zeta(n)%delta  = pseudo(isp)%vna%delta
                 allocate(paopao(isp)%angmom(l)%zeta(n)%table(paopao(isp)%angmom(l)%zeta(n)%length))
                 allocate(paopao(isp)%angmom(l)%zeta(n)%table2(paopao(isp)%angmom(l)%zeta(n)%length))
                 paopao(isp)%angmom(l)%zeta(n)%table = zero
@@ -2667,10 +2684,11 @@ contains
                 napf_species(isp) = napf_species(isp) + (2*l+1)
              end do
           end do
-          ! Create Vna phi for each PAO for each species
+          ! Create |Vna phi_{i\alpha}> for each PAO for each species
+          ! Also interpolate PAOs onto identical grid (paopao) for <i|j|i> terms
           do l=0, pao(isp)%greatest_angmom
              do n=1, pao(isp)%angmom(l)%n_zeta_in_angmom
-                !   ! |Vna_ln> = Vna(r) |PAO'_ln>
+                ! |Vna_ln> = Vna(r) |PAO'_ln>
                 step = pseudo(isp)%vna%delta
                 do j=1,paoVNA(isp)%angmom(l)%zeta(n)%length
                    r = paoVNA(isp)%angmom(l)%zeta(n)%delta * real(j-1,double)
@@ -2701,7 +2719,7 @@ contains
                 call spline( npoint, delta, &
                      paoVNA(isp)%angmom(l)%zeta(n)%table, yp1, ypn, &
                      paoVNA(isp)%angmom(l)%zeta(n)%table2 )
-                ! Create paopao: all PAOs on the same grid (for ease of multiplication)
+                ! Create paopao: all PAOs on the same grid (for ease of multiplication later)
                 step = pao(isp)%angmom(l)%zeta(n)%delta
                 do j=1,pseudo(isp)%vna%n
                    r = pseudo(isp)%vna%delta * real(j-1,double)
@@ -2733,12 +2751,17 @@ contains
                      paopao(isp)%angmom(l)%zeta(n)%table2 )
              end do
           end do
-          ! 3-centre integrals
+          ! --------------
+          ! 3-centre terms
+          ! --------------
           delta = pseudo(isp)%vna%delta
           cutoff = pseudo(isp)%vna%cutoff
           npoint = pseudo(isp)%vna%n
+          ! Create projector functions and form into an orthonormal set using VNA in norm
+          ! following paper by Ozaki & Kino PRB 72, 045121  2005 
           Radbar = zero
           do i_pjna=1, pseudo(isp)%n_pjna
+             ! For l, n pair create function Rad (Bessel function at present)
              n = pseudo(isp)%pjna_n(i_pjna)
              l = pseudo(isp)%pjna_l(i_pjna)
              step = pseudo(isp)%pjna(i_pjna)%delta
@@ -2746,13 +2769,7 @@ contains
              Rad = zero
              do ir=1, npoint
                 r = (ir-1)*delta
-                !if(l>0.AND.ir>1) then
-                !   fac = one/(r**l)
-                !else
-                   fac = one
-                !end if
-                Rad(ir) = fac*general_bessel(qvec(n,l)*r,l)!r**real(n-1,double) * exp(-a*r**2) ! n-1
-                !Rad(ir) =  r**real(n-1,double)*exp(-a*r**2)
+                Rad(ir) = general_bessel(qvec(n,l)*r,l)
              end do
              ! Normalise
              norm = overlapRadials(Rad,Rad,delta,l)
@@ -2761,6 +2778,7 @@ contains
              ! |R'_ln>=|R_ln>
              Radbar(:,n) = Rad(:)
 
+             ! Orthogonalise to other functions
              do j_pjna=1, i_pjna-1
                 if( pseudo(isp)%pjna_l(j_pjna) /= l ) then
                    cycle

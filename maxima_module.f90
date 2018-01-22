@@ -26,6 +26,8 @@
 !!    Added RCS Id and Log tags, and static tag for object file id
 !!   12:40, 25/09/2002 mjg & drb 
 !!    Added maxima for neighbour tables of atomic charge densities
+!!   2018/01/19 14:11 JST dave
+!!    Added maxima for PAO and PS l values
 !!  SOURCE
 !!
 module maxima_module
@@ -40,7 +42,8 @@ module maxima_module
   integer :: maxnsf, maxngrid, maxblocks
   integer :: maxpartsproc, maxatomspart, maxatomsproc, maxpartscell
   integer :: maxnabaprocs
-
+  integer :: lmax_pao, lmax_ps
+  
   ! Temporary !
   integer,parameter :: max_blip_nu_int       =        5
 

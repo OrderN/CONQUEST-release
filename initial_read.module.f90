@@ -610,6 +610,8 @@ contains
   !!    Adding parameters for simulation cell optimisation
   !!   2017/10/15 dave & an
   !!    Reading atomic spins: small tweak to test on net spin (uses abs and RD_ERR)
+  !!   2018/01/19 dave
+  !!    Added test for lmax_ps and NA projector functions
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -712,7 +714,7 @@ contains
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
                                InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
-    use maxima_module, only: maxnsf
+    use maxima_module, only: maxnsf, lmax_ps
     use control,       only: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset
     use ion_electrostatic,  only: ewald_accuracy
     use minimise,      only: UsePulay, n_L_iterations,          &
@@ -1066,6 +1068,7 @@ contains
           if( flag_neutral_atom_projector ) then
              maxL_neutral_atom_projector = &
                   fdf_integer('General.NeutralAtomProjectorMaxL',3)
+             if(maxL_neutral_atom_projector>lmax_ps) lmax_ps = maxL_neutral_atom_projector
              allocate( numN_neutral_atom_projector(0:maxL_neutral_atom_projector ) )
              if(fdf_block('NeutralAtom.ProjectorNumbers')) then
                 if(1+block_end-block_start<maxL_neutral_atom_projector+1) &

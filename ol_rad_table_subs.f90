@@ -1367,6 +1367,7 @@ contains
                             call unnorm_siesta_tbl(fire1,fire2,n1,n2,&
                                  &pao(nsp1)%angmom(l1)%zeta(nz1)%table,pseudo(nsp2)%&
                                  &pjna(i_pfna)%f,del1,del2,l1,l2)
+                            ! NB this line restores the NA projector - we don't need the r**l scaling
                             fire2 = pseudo(nsp2)%pjna(i_pfna)%f
                             call make_rad_table_napfpao(n1,l1,del1,n2,l2,del2,fire1,fire2,count,del_k&
                                  &,kcut)
