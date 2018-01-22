@@ -819,13 +819,13 @@ contains
     call io_assign(lun)
     open(unit=lun,file=thermo_check_file,status='replace')
 
-    write(lun,th%nhc_fmt) "eta:        ", th%eta
-    write(lun,th%nhc_fmt) "v_eta:      ", th%v_eta
-    write(lun,th%nhc_fmt) "G_nhc:      ", th%G_nhc
+    write(lun,*) "eta:        ", th%eta
+    write(lun,*) "v_eta:      ", th%v_eta
+    write(lun,*) "G_nhc:      ", th%G_nhc
     if (th%cell_nhc) then
-      write(lun,th%nhc_fmt) "eta_cell:   ", th%eta_cell
-      write(lun,th%nhc_fmt) "v_eta_cell: ", th%v_eta_cell
-      write(lun,th%nhc_fmt) "G_nhc_cell: ", th%G_nhc_cell
+      write(lun,*) "eta_cell:   ", th%eta_cell
+      write(lun,*) "v_eta_cell: ", th%v_eta_cell
+      write(lun,*) "G_nhc_cell: ", th%G_nhc_cell
     end if
     call io_close(lun)
 
@@ -1908,7 +1908,7 @@ contains
     integer                               :: lun
 
     call io_assign(lun)
-    open(unit=lun,file=thermo_check_file,status='replace')
+    open(unit=lun,file=baro_check_file,status='replace')
 
     write(lun,*) "lat_a_ref", baro%lat_ref(1,:)
     write(lun,*) "lat_b_ref", baro%lat_ref(2,:)

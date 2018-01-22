@@ -1909,7 +1909,7 @@ contains
          read(unit=input_array(block_start), fmt=*) md_nhc_mass
        end if
        call fdf_endblock
-       if (fdf_block('MD.NHCMass')) then
+       if (fdf_block('MD.CellNHCMass')) then
          read(unit=input_array(block_start), fmt=*) md_nhc_cell_mass
        end if
        call fdf_endblock
@@ -1917,7 +1917,6 @@ contains
        ! Barostat
        md_baro_type       = fdf_string(20, 'MD.Barostat', 'None')
        md_target_press    = fdf_double('MD.TargetPressure', zero)
-       md_baro_type       = fdf_string(20, 'MD.Barostat', 'None')
        md_box_mass        = fdf_double('MD.BoxMass', one)
        if (leqi(md_baro_type, 'berendsen')) then
          md_tau_P           = fdf_double('MD.tauP', 10.0_double)

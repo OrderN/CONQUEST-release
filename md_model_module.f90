@@ -16,7 +16,7 @@ module md_model
   use datatypes
   use numbers
   use force_module,     only: tot_force, stress
-  use global_module,    only: ni_in_cell, io_lun, atom_coord
+  use global_module,    only: ni_in_cell, io_lun, atom_coord, flag_MDcontinue
   use species_module,   only: species
   use md_control,       only: md_n_nhc, ion_velocity, type_thermostat, &
                               type_barostat, lattice_vec
@@ -125,7 +125,11 @@ contains
     type(type_thermostat), intent(in), target :: thermo
     type(type_barostat), intent(in), target   :: baro
 
-    mdl%append = .false.
+    if (flag_MDcontinue) then
+      mdl%append = .true.
+    else
+      mdl%append = .false.
+    end if
 
     ! General MD arrays
     mdl%natoms = ni_in_cell
