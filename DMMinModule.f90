@@ -276,8 +276,8 @@ contains
     if (flag_dump_L) then
        if (.NOT. flag_MDold) then
           if (flag_diagonalisation) then ! Use exact diagonalisation to get K
-             call dump_matrix2('K',matK(1),inode,Hrange)
-             if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
+             call dump_matrix2('K',matK(1),Hrange)
+             if(nspin==2) call dump_matrix2('K2',matK(2),Hrange)
           else
              call dump_matrix2('L',matL(1),Lrange)
              ! DRB 2017/05/09 now extended to spin systems
