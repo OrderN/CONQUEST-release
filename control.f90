@@ -867,6 +867,8 @@ contains
   !!    Removed rcellx references (redundant)
   !!   2017/11/10 dave
   !!    Removed calls to dump K matrix (now done in DMMinModule)
+  !!   2018/01/22 tsuyoshi (with dave)
+  !!    Changes to use new atom update routines
   !!  SOURCE
   !!
   subroutine pulay_relax(fixed_potential, vary_mu, total_energy)

@@ -159,6 +159,8 @@ contains
   !!    Added code to dump X matrix (and associated) for both spin channels
   !!   2017/11/06 dave
   !!    Added dump of K matrix
+  !!   2018/01/22 tsuyoshi (with dave)
+  !!    Initial changes for atom updates
   !!  SOURCE
   !!
   subroutine FindMinDM(n_L_iterations, vary_mu, tolerance, inode, &
@@ -183,7 +185,7 @@ contains
     use timer_module,  only: cq_timer, start_timer, stop_print_timer,   &
                              WITH_LEVEL
     use store_matrix,  only: dump_matrix2, dump_InfoMatGlobal
-    use matrix_data,   only: Lrange, Srange, LSrange
+    use matrix_data,   only: Lrange, Srange, LSrange, Hrange
     use XLBOMD_module, only: matX, matXvel, dump_XL
 
     use exx_kernel_default, only: get_X_matrix
@@ -301,39 +303,8 @@ contains
                 ! When dissipation applies
                 if (flag_dissipation) call dump_XL()
              endif
-             if (runtype.EQ.'static') call dump_InfoMatGlobal(0)
-=======
-          if (flag_diagonalisation) then ! Use exact diagonalisation to get K
-             call dump_matrix2('K',matK(1),inode,Hrange)
-             if(nspin==2) call dump_matrix2('K2',matK(2),inode,Hrange)
-          else
-             call dump_matrix2('L',matL(1),inode,Lrange)
-             ! DRB 2017/05/09 now extended to spin systems
-             if(nspin==2) call dump_matrix2('L2',matL(2),inode,Lrange)
-             ! For XL-BOMD
-             if (flag_XLBOMD) then
-                if (flag_propagateX) then
-                   call dump_matrix2('X',matX(1),inode,LSrange)
-                   if(nspin==2) call dump_matrix2('X_2',matX(2),inode,LSrange)
-                   call dump_matrix2('S',matS   ,inode,Srange)
-                   if (integratorXL.EQ.'velocityVerlet') then
-                      call dump_matrix2('Xvel',matXvel(1),inode,LSrange)
-                      if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),inode,LSrange)
-                   end if
-                else
-                   call dump_matrix2('X',matX(1),inode,Lrange)
-                   if(nspin==2) call dump_matrix2('X_2',matX(2),inode,LSrange)
-                   if (integratorXL.EQ.'velocityVerlet') then
-                      call dump_matrix2('Xvel',matXvel(1),inode,Lrange)
-                      if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),inode,LSrange)
-                   end if
-                endif
-                ! When dissipation applies
-                if (flag_dissipation) call dump_XL()
-             endif
           end if
-          !if (runtype.EQ.'static') call dump_InfoGlobal(0)
->>>>>>> origin/master
+          if (runtype.EQ.'static') call dump_InfoMatGlobal(0)
        else
           if (flag_diagonalisation) then ! Use exact diagonalisation to get K
              if(inode==ionode.AND.iprint_DM>2) write(io_lun,fmt='(2x,"K matrix only saved if AtomMove.OldMemberUpdates is F")')

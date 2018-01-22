@@ -1908,7 +1908,7 @@ contains
     ! Module usage
     use numbers
     use global_module, ONLY: glob2node,id_glob,atom_coord_diff, &
-                             flag_move_atom,runtype,nspin, rcellx, rcelly, rcellz
+         flag_move_atom,runtype,nspin, rcellx, rcelly, rcellz
     use Gencomms, ONLY: inode,cq_abort
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
@@ -1945,7 +1945,7 @@ contains
     logical :: find_iprim,flag_ix,flag_iy,flag_iz
     ! --- Finding j --- !
     integer :: jj,n_beta,idglob_jj,jcoverx,jcovery,jcoverz,jpart,jpart_nopg, &
-               jjj,jcover,idglob_jjj,j_in_halo,jseq,ja,nj,idglob_jjjj
+         jjj,jcover,idglob_jjj,j_in_halo,jseq,ja,nj,idglob_jjjj
     integer :: BCSp_lx,BCSp_ly,BCSp_lz,BCSp_gx,BCSp_gy,BCSp_gz
     real(double) :: deltaj_x,deltaj_y,deltaj_z,xx_j,yy_j,zz_j
     logical :: find_jcover,flag_jx,flag_jy,flag_jz,flag_jseq
@@ -1962,12 +1962,12 @@ contains
 
     !! ---------- DEBUG ---------- !!
     if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
-      call get_file_name('UpdateL1',numprocs,inode,file_name)
-      call io_assign(lun_db)
-      open (lun_db,file=file_name)
-      call get_file_name('UpdateL2',numprocs,inode,file_name)
-      call io_assign(lun_db2)
-      open (lun_db2,file=file_name)
+       call get_file_name('UpdateL1',numprocs,inode,file_name)
+       call io_assign(lun_db)
+       open (lun_db,file=file_name)
+       call get_file_name('UpdateL2',numprocs,inode,file_name)
+       call io_assign(lun_db2)
+       open (lun_db2,file=file_name)
     endif
     !! ---------- DEBUG ---------- !!
 
@@ -1977,253 +1977,252 @@ contains
     !db write (io_lun,*) "inode, Size of mat_p(matA):", inode, mat_p(matA)%length
 
     do ifile = 1, nfile
-      ! Check if "ia" is my primary set of atom.
-      ! Loop over "i_old".
-      do ia = 1, Info(ifile)%natom_i
-        idglob_ii = Info(ifile)%idglob_i(ia)
-        ind_node  = glob2node(idglob_ii)
-        n_alpha   = Info(ifile)%alpha_i(ia)
+       ! Check if "ia" is my primary set of atom.
+       ! Loop over "i_old".
+       do ia = 1, Info(ifile)%natom_i
+          idglob_ii = Info(ifile)%idglob_i(ia)
+          ind_node  = glob2node(idglob_ii)
+          n_alpha   = Info(ifile)%alpha_i(ia)
 
-        if (ind_node.EQ.inode) then
-          find_iprim = .false.
-          iprim = 0
-          do ng = 1, bundle%groups_on_node
-            if (bundle%nm_nodgroup(ng).GT.0) then
-              do ni = 1, bundle%nm_nodgroup(ng)
-                iprim = iprim + 1
-                if (bundle%ig_prim(iprim).EQ.idglob_ii) then
-                  find_iprim = .true.
-                  exit
+          if (ind_node.EQ.inode) then
+             find_iprim = .false.
+             iprim = 0
+             do ng = 1, bundle%groups_on_node
+                if (bundle%nm_nodgroup(ng).GT.0) then
+                   do ni = 1, bundle%nm_nodgroup(ng)
+                      iprim = iprim + 1
+                      if (bundle%ig_prim(iprim).EQ.idglob_ii) then
+                         find_iprim = .true.
+                         exit
+                      endif
+                   enddo !(ni, nm_group)
                 endif
-              enddo !(ni, nm_group)
-            endif
-            if (find_iprim) then
-              npart = ng
-              exit
-            endif
-          enddo !(ng, groups_on_node)
-          if (.NOT. find_iprim) call cq_abort('Error: find_iprim must be T - local.')
-          if (flag_remote_iprim(iprim)) call cq_abort('Error: flag_remote_iprim must be F.', iprim)
-          flag_ix=flag_move_atom(1,idglob_ii)
-          flag_iy=flag_move_atom(2,idglob_ii)
-          flag_iz=flag_move_atom(3,idglob_ii)
-          ! Partitions and positions of "i_new".
-          ipartx=bundle%idisp_primx(npart) ; xprim_i=bundle%xprim(iprim)
-          iparty=bundle%idisp_primy(npart) ; yprim_i=bundle%yprim(iprim)
-          ipartz=bundle%idisp_primz(npart) ; zprim_i=bundle%zprim(iprim)
+                if (find_iprim) then
+                   npart = ng
+                   exit
+                endif
+             enddo !(ng, groups_on_node)
+             if (.NOT. find_iprim) call cq_abort('Error: find_iprim must be T - local.')
+             if (flag_remote_iprim(iprim)) call cq_abort('Error: flag_remote_iprim must be F.', iprim)
+             flag_ix=flag_move_atom(1,idglob_ii)
+             flag_iy=flag_move_atom(2,idglob_ii)
+             flag_iz=flag_move_atom(3,idglob_ii)
+             ! Partitions and positions of "i_new".
+             ipartx=bundle%idisp_primx(npart) ; xprim_i=bundle%xprim(iprim)
+             iparty=bundle%idisp_primy(npart) ; yprim_i=bundle%yprim(iprim)
+             ipartz=bundle%idisp_primz(npart) ; zprim_i=bundle%zprim(iprim)
 
-          ! If atoms move, we need to consider the displacements of each atom.
-          ! Displacement in X of PS of atoms 'i'.
-          if ((flag_ix)) then! .AND. .NOT. leqi(runtype,'static')) then
-           deltai_x=atom_coord_diff(1,idglob_ii)
-          else
-           deltai_x=zero
-          endif
-          ! Displacement in Y of PS of atoms 'i'.
-          if ((flag_iy)) then !  .AND. .NOT. leqi(runtype,'static')) then
-           deltai_y=atom_coord_diff(2,idglob_ii)
-          else
-           deltai_y=zero
-          endif
-          ! Displacement in Z of PS of atoms 'i'.
-          if ((flag_iz)) then ! .AND. .NOT. leqi(runtype,'static')) then
-           deltai_z=atom_coord_diff(3,idglob_ii)
-          else
-           deltai_z=zero
-          endif
-          ! Find i_new neighbours, "j_new", by referring to "j_old". Loop over "j_old" to begin with.
-          ibeg1 = Info(ifile)%ibeg_Pij(ia)
-          ibeg2 = Info(ifile)%ibeg_dataL(ia)
-          do jj = 1, Info(ifile)%jmax_i(ia)
-            n_beta = Info(ifile)%beta_j_i(ibeg1+jj-1)
-            idglob_jj = Info(ifile)%idglob_j(ibeg1+jj-1)
-            flag_jx=flag_move_atom(1,idglob_jj)
-            flag_jy=flag_move_atom(2,idglob_jj)
-            flag_jz=flag_move_atom(3,idglob_jj)
-            ! Displacement in X of neighbour 'j' of 'i'.
-            if ((flag_jx))then! .AND. .NOT. leqi(runtype,'static')) then
-              deltaj_x=atom_coord_diff(1,idglob_jj)
-            else
-              deltaj_x=zero
-            endif
-            ! Displacement in Y of neighbour 'j' of 'i'.
-            if ((flag_jy))then ! .AND. .NOT. leqi(runtype,'static')) then
-              deltaj_y=atom_coord_diff(2,idglob_jj)
-            else
-              deltaj_y=zero
-            endif
-            ! Displacement in Z of neighbour 'j' of 'i'.
-            if ((flag_jz))then! .AND. .NOT. leqi(runtype,'static')) then
-              deltaj_z=atom_coord_diff(3,idglob_jj)
-            else
-              deltaj_z=zero
-            endif
-            ! NOTE: I don't like this writing but keep it for now...
-            !       zero-zero wouldn't be good...
-            ! 2017Dec14: Changed vec_Rij from cartesian (bohr) to fractional coordinates 
-            xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)*rcellx+deltaj_x-deltai_x
-            yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)*rcelly+deltaj_y-deltai_y
-            zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)*rcellz+deltaj_z-deltai_z
-            !ori xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)+deltaj_x-deltai_x
-            !ori yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)+deltaj_y-deltai_y
-            !ori zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
+             ! If atoms move, we need to consider the displacements of each atom.
+             ! Displacement in X of PS of atoms 'i'.
+             if ((flag_ix)) then! .AND. .NOT. leqi(runtype,'static')) then
+                deltai_x=atom_coord_diff(1,idglob_ii)
+             else
+                deltai_x=zero
+             endif
+             ! Displacement in Y of PS of atoms 'i'.
+             if ((flag_iy)) then !  .AND. .NOT. leqi(runtype,'static')) then
+                deltai_y=atom_coord_diff(2,idglob_ii)
+             else
+                deltai_y=zero
+             endif
+             ! Displacement in Z of PS of atoms 'i'.
+             if ((flag_iz)) then ! .AND. .NOT. leqi(runtype,'static')) then
+                deltai_z=atom_coord_diff(3,idglob_ii)
+             else
+                deltai_z=zero
+             endif
+             ! Find i_new neighbours, "j_new", by referring to "j_old". Loop over "j_old" to begin with.
+             ibeg1 = Info(ifile)%ibeg_Pij(ia)
+             ibeg2 = Info(ifile)%ibeg_dataL(ia)
+             do jj = 1, Info(ifile)%jmax_i(ia)
+                n_beta = Info(ifile)%beta_j_i(ibeg1+jj-1)
+                idglob_jj = Info(ifile)%idglob_j(ibeg1+jj-1)
+                flag_jx=flag_move_atom(1,idglob_jj)
+                flag_jy=flag_move_atom(2,idglob_jj)
+                flag_jz=flag_move_atom(3,idglob_jj)
+                ! Displacement in X of neighbour 'j' of 'i'.
+                if ((flag_jx))then! .AND. .NOT. leqi(runtype,'static')) then
+                   deltaj_x=atom_coord_diff(1,idglob_jj)
+                else
+                   deltaj_x=zero
+                endif
+                ! Displacement in Y of neighbour 'j' of 'i'.
+                if ((flag_jy))then ! .AND. .NOT. leqi(runtype,'static')) then
+                   deltaj_y=atom_coord_diff(2,idglob_jj)
+                else
+                   deltaj_y=zero
+                endif
+                ! Displacement in Z of neighbour 'j' of 'i'.
+                if ((flag_jz))then! .AND. .NOT. leqi(runtype,'static')) then
+                   deltaj_z=atom_coord_diff(3,idglob_jj)
+                else
+                   deltaj_z=zero
+                endif
+                ! NOTE: I don't like this writing but keep it for now...
+                !       zero-zero wouldn't be good...
+                ! 2017Dec14: Changed vec_Rij from cartesian (bohr) to fractional coordinates 
+                xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)*rcellx+deltaj_x-deltai_x
+                yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)*rcelly+deltaj_y-deltai_y
+                zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)*rcellz+deltaj_z-deltai_z
+                !ori xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)+deltaj_x-deltai_x
+                !ori yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)+deltaj_y-deltai_y
+                !ori zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
 
-           !! -------- DEBUG -------- !!
-            if (flag_MDdebug) then
-              Rijx=xprim_i-xx_j
-              Rijy=yprim_i-yy_j
-              Rijz=zprim_i-zz_j
-              Rij = Rijx*Rijx + Rijy*Rijy + Rijz*Rijz
-              Rij = sqrt(Rij)
+                !! -------- DEBUG -------- !!
+                if (flag_MDdebug) then
+                   Rijx=xprim_i-xx_j
+                   Rijy=yprim_i-yy_j
+                   Rijz=zprim_i-zz_j
+                   Rij = Rijx*Rijx + Rijy*Rijy + Rijz*Rijz
+                   Rij = sqrt(Rij)
 
-              write (lun_db,*) "! --- Neighbours: j ---!"
-              write (lun_db,*) "ibeg1+jj-1:", ibeg1+jj-1
-              write (lun_db,*) "idglob_jj and its beta:", idglob_jj, n_beta
-              write (lun_db,*) "vec_Pij:" 
-              !OLD write (lun_db,*) Info(ifile)%rvec_Pij(1:3,ibeg1+jj-1,ia)
-              write (lun_db,*) Info(ifile)%rvec_Pij(1:3,ibeg1+jj-1)
-              write (lun_db,*) "delta_i or atom_coord_diff(1:3,idglob_ii):", deltai_x,deltai_y,deltai_z
-              write (lun_db,*) "delta_j or atom_coord_diff(1:3,idglob_jj):", deltaj_x,deltaj_y,deltaj_z
-              write (lun_db,*) "pos of jj (x,y,z):"
-              write (lun_db,*) xx_j, yy_j, zz_j
-              write (lun_db,*) ""
-            endif
-            !! -------- DEBUG -------- !!
+                   write (lun_db,*) "! --- Neighbours: j ---!"
+                   write (lun_db,*) "ibeg1+jj-1:", ibeg1+jj-1
+                   write (lun_db,*) "idglob_jj and its beta:", idglob_jj, n_beta
+                   write (lun_db,*) "vec_Pij:" 
+                   !OLD write (lun_db,*) Info(ifile)%rvec_Pij(1:3,ibeg1+jj-1,ia)
+                   write (lun_db,*) Info(ifile)%rvec_Pij(1:3,ibeg1+jj-1)
+                   write (lun_db,*) "delta_i or atom_coord_diff(1:3,idglob_ii):", deltai_x,deltai_y,deltai_z
+                   write (lun_db,*) "delta_j or atom_coord_diff(1:3,idglob_jj):", deltaj_x,deltaj_y,deltaj_z
+                   write (lun_db,*) "pos of jj (x,y,z):"
+                   write (lun_db,*) xx_j, yy_j, zz_j
+                   write (lun_db,*) ""
+                endif
+                !! -------- DEBUG -------- !!
 
-            ! Get the partiton to which jj belongs.
-            !call atom2part(xx_j,yy_j,zz_j,jcoverx,jcovery,jcoverz)
-            call atom2part(xx_j,yy_j,zz_j,ind_part,jcoverx,jcovery,jcoverz,idglob_jj)
-            !db if (inode.EQ.ionode) call allatom2part(ind_qart)
-            if (flag_MDdebug) write (lun_db,*) "atom2part -> jcover:", jcoverx,jcovery,jcoverz !db
-            ! Get the partition indices with (x,y,z) in CS.
-            ! -> NOTE: I'm not sure about the EXACT definition of nspanlx,y,z but 
-            ! -> without '+1' or '-1', the code doesn't work adequately...
-            ! => See trans_module. You will get it!
-            jcoverx = jcoverx - bundle%nx_origin + BCS_parts%nspanlx + 1
-            jcovery = jcovery - bundle%ny_origin + BCS_parts%nspanly + 1
-            jcoverz = jcoverz - bundle%nz_origin + BCS_parts%nspanlz + 1
-            if (flag_MDdebug) write (lun_db,*) "jcover in CS:", jcoverx,jcovery,jcoverz
-            ! The followings are NOT the error check. These are the treatment for the case
-            ! where atoms move and get out of CS.
-            if ( (jcoverx.GT.BCS_parts%ncoverx .OR. jcoverx.LT.1) .OR.   &
-                 (jcovery.GT.BCS_parts%ncovery .OR. jcovery.LT.1) .OR.   &
-                 (jcoverz.GT.BCS_parts%ncoverz .OR. jcoverz.LT.1) ) then
-              write (io_lun,*) 'jj is no longer a neighbour! - local', inode
-              ibeg2 = ibeg2 + n_alpha*n_beta
-              cycle
-              !exit
-            endif
-            ! Get the partition's indices in two manners; NOPG and CC (gcspart) in CS.
-            jpart = (jcoverx-1)*BCS_parts%ncovery*BCS_parts%ncoverz + &
-                    (jcovery-1)*BCS_parts%ncoverz + jcoverz
-            jpart_nopg = BCS_parts%inv_lab_cover(jpart)
+                ! Get the partiton to which jj belongs.
+                !call atom2part(xx_j,yy_j,zz_j,jcoverx,jcovery,jcoverz)
+                call atom2part(xx_j,yy_j,zz_j,ind_part,jcoverx,jcovery,jcoverz,idglob_jj)
+                !db if (inode.EQ.ionode) call allatom2part(ind_qart)
+                if (flag_MDdebug) write (lun_db,*) "atom2part -> jcover:", jcoverx,jcovery,jcoverz !db
+                ! Get the partition indices with (x,y,z) in CS.
+                ! -> NOTE: I'm not sure about the EXACT definition of nspanlx,y,z but 
+                ! -> without '+1' or '-1', the code doesn't work adequately...
+                ! => See trans_module. You will get it!
+                jcoverx = jcoverx - bundle%nx_origin + BCS_parts%nspanlx + 1
+                jcovery = jcovery - bundle%ny_origin + BCS_parts%nspanly + 1
+                jcoverz = jcoverz - bundle%nz_origin + BCS_parts%nspanlz + 1
+                if (flag_MDdebug) write (lun_db,*) "jcover in CS:", jcoverx,jcovery,jcoverz
+                ! The followings are NOT the error check. These are the treatment for the case
+                ! where atoms move and get out of CS.
+                if ( (jcoverx.GT.BCS_parts%ncoverx .OR. jcoverx.LT.1) .OR.   &
+                     (jcovery.GT.BCS_parts%ncovery .OR. jcovery.LT.1) .OR.   &
+                     (jcoverz.GT.BCS_parts%ncoverz .OR. jcoverz.LT.1) ) then
+                   write (io_lun,*) 'jj is no longer a neighbour! - local', inode
+                   ibeg2 = ibeg2 + n_alpha*n_beta
+                   cycle
+                   !exit
+                endif
+                ! Get the partition's indices in two manners; NOPG and CC (gcspart) in CS.
+                jpart = (jcoverx-1)*BCS_parts%ncovery*BCS_parts%ncoverz + &
+                     (jcovery-1)*BCS_parts%ncoverz + jcoverz
+                jpart_nopg = BCS_parts%inv_lab_cover(jpart)
 
-            find_jcover = .false.
-            ! Find out "j_new". 
-            do jjj = 1, BCS_parts%n_ing_cover(jpart_nopg)
-              jcover = BCS_parts%icover_ibeg(jpart_nopg) + jjj - 1      ! ID in CS
-              idglob_jjj = BCS_parts%ig_cover(jcover)                   ! CS --> glob
+                find_jcover = .false.
+                ! Find out "j_new". 
+                do jjj = 1, BCS_parts%n_ing_cover(jpart_nopg)
+                   jcover = BCS_parts%icover_ibeg(jpart_nopg) + jjj - 1      ! ID in CS
+                   idglob_jjj = BCS_parts%ig_cover(jcover)                   ! CS --> glob
+                   if (idglob_jj.EQ.idglob_jjj) then
+                      find_jcover = .true.
+                      jseq = jjj
+                      if (flag_MDdebug) write (lun_db,*) "idglob_jjj:", idglob_jjj
+                      exit
+                   endif
+                enddo !(jjj, n_ing_cover)
+                if (.NOT. find_jcover) then
+                   !! TM
+                   !ORI!if(flag_MDdebug) then
+                   xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)*rcellx+deltaj_x-deltai_x
+                   yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)*rcelly+deltaj_y-deltai_y
+                   zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)*rcellz+deltaj_z-deltai_z
+                   !old xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)+deltaj_x-deltai_x
+                   !old yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)+deltaj_y-deltai_y
+                   !old zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
+                   !ORI  write(lun_db,*) ' :ERROR: idglob_jj, idglob_jjj, jcover,jpart_nopg,#ofjjj = ', &
+                   write(io_lun,*) ' :ERROR: inode = ',inode
+                   write(io_lun,*) ' :ERROR: idglob_jj, idglob_jjj, jcover,jpart_nopg,#ofjjj = ', &
+                        idglob_jj, idglob_jjj,jcover,jpart_nopg,BCS_parts%n_ing_cover(jpart_nopg)
+                   write(io_lun,*) ' :ERROR: jcoverxyz ',jcoverx,jcovery,jcoverz
+                   write(io_lun,*) ' :ERROR: vecRij ', &
+                        Info(ifile)%rvec_Pij(1,ibeg1+jj-1), Info(ifile)%rvec_Pij(2,ibeg1+jj-1), &
+                        Info(ifile)%rvec_Pij(3,ibeg1+jj-1) 
+                   write(io_lun,*) ' :ERROR: deltaj_x  ',deltaj_x,deltaj_y,deltaj_z
+                   write(io_lun,*) ' :ERROR: deltai_x  ',deltai_x,deltai_y,deltai_z
+                   write(io_lun,*) ' :ERROR: vecRi  ',xprim_i, yprim_i, zprim_i
+                   write(io_lun,*) ' :ERROR: vecRj  ',xx_j, yy_j, zz_j
+                   !ORI!endif
+                   !! TM 
+                   call cq_abort('Error: find_cover must be T - local.')
+                endif
+                ! Now that we have known who "j_new" is w/ its global and CS ID and partition in CS, 
+                ! we are going to examine its neighbour ID of the primary set of atom "i_new".
+                j_in_halo = matA_halo%i_halo(matA_halo%i_hbeg(jpart)+jseq-1)
+                if (j_in_halo.GT.matA_halo%ni_in_halo) &
+                     call cq_abort('Error in j_in_halo - local: ', j_in_halo)
+                ibeg_Lij = 0
+                if (j_in_halo.NE.0) &
+                     ibeg_Lij = matA_halo%i_h2d((iprim-1)*matA_halo%ni_in_halo+j_in_halo)
+                if (flag_MDdebug) then
+                   write (lun_db,*) "id_glob(j) et ibeg_Lij:", idglob_jj, ibeg_Lij
+                   write (lun_db,*) ""
+                endif
+                ! Reorder Lmatrix elements.
+                if (ibeg_Lij.NE.0) then
+                   !if (nspin.EQ.1) then
+                   if (flag_MDdebug .AND. iprint_MDdebug.GT.1) write (lun_db2,*) "jpart(CC) in CS:", jpart
+                   jpart_x = 1 + (jpart-1) / (BCS_parts%ncovery*BCS_parts%ncoverz)
+                   jpart_y = 1 + (jpart-1-(jpart_x-1)*BCS_parts%ncovery*BCS_parts%ncoverz) / BCS_parts%ncoverz
+                   jpart_z = jpart - (jpart_x-1) * BCS_parts%ncovery * BCS_parts%ncoverz - (jpart_y-1) * BCS_parts%ncoverz
 
-              if (idglob_jj.EQ.idglob_jjj) then
-                find_jcover = .true.
-                jseq = jjj
-                if (flag_MDdebug) write (lun_db,*) "idglob_jjj:", idglob_jjj
-                exit
-              endif
-            enddo !(jjj, n_ing_cover)
-            if (.NOT. find_jcover) then
-             !! TM
-         !ORI!if(flag_MDdebug) then
-               xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)*rcellx+deltaj_x-deltai_x
-               yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)*rcelly+deltaj_y-deltai_y
-               zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)*rcellz+deltaj_z-deltai_z
-               !old xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)+deltaj_x-deltai_x
-               !old yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)+deltaj_y-deltai_y
-               !old zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
-         !ORI  write(lun_db,*) ' :ERROR: idglob_jj, idglob_jjj, jcover,jpart_nopg,#ofjjj = ', &
-               write(io_lun,*) ' :ERROR: inode = ',inode
-               write(io_lun,*) ' :ERROR: idglob_jj, idglob_jjj, jcover,jpart_nopg,#ofjjj = ', &
-                               idglob_jj, idglob_jjj,jcover,jpart_nopg,BCS_parts%n_ing_cover(jpart_nopg)
-               write(io_lun,*) ' :ERROR: jcoverxyz ',jcoverx,jcovery,jcoverz
-               write(io_lun,*) ' :ERROR: vecRij ', &
-                               Info(ifile)%rvec_Pij(1,ibeg1+jj-1), Info(ifile)%rvec_Pij(2,ibeg1+jj-1), &
-                               Info(ifile)%rvec_Pij(3,ibeg1+jj-1) 
-               write(io_lun,*) ' :ERROR: deltaj_x  ',deltaj_x,deltaj_y,deltaj_z
-               write(io_lun,*) ' :ERROR: deltai_x  ',deltai_x,deltai_y,deltai_z
-               write(io_lun,*) ' :ERROR: vecRi  ',xprim_i, yprim_i, zprim_i
-               write(io_lun,*) ' :ERROR: vecRj  ',xx_j, yy_j, zz_j
-         !ORI!endif
-             !! TM 
-             call cq_abort('Error: find_cover must be T - local.')
-            endif
-            ! Now that we have known who "j_new" is w/ its global and CS ID and partition in CS, 
-            ! we are going to examine its neighbour ID of the primary set of atom "i_new".
-            j_in_halo = matA_halo%i_halo(matA_halo%i_hbeg(jpart)+jseq-1)
-            if (j_in_halo.GT.matA_halo%ni_in_halo) &
-               call cq_abort('Error in j_in_halo - local: ', j_in_halo)
-            ibeg_Lij = 0
-            if (j_in_halo.NE.0) &
-              ibeg_Lij = matA_halo%i_h2d((iprim-1)*matA_halo%ni_in_halo+j_in_halo)
-              if (flag_MDdebug) then
-                write (lun_db,*) "id_glob(j) et ibeg_Lij:", idglob_jj, ibeg_Lij
-                write (lun_db,*) ""
-              endif
-            ! Reorder Lmatrix elements.
-            if (ibeg_Lij.NE.0) then
-               !if (nspin.EQ.1) then
-                if (flag_MDdebug .AND. iprint_MDdebug.GT.1) write (lun_db2,*) "jpart(CC) in CS:", jpart
-                jpart_x = 1 + (jpart-1) / (BCS_parts%ncovery*BCS_parts%ncoverz)
-                jpart_y = 1 + (jpart-1-(jpart_x-1)*BCS_parts%ncovery*BCS_parts%ncoverz) / BCS_parts%ncoverz
-                jpart_z = jpart - (jpart_x-1) * BCS_parts%ncovery * BCS_parts%ncoverz - (jpart_y-1) * BCS_parts%ncoverz
+                   !if (nspin.EQ.1) then
+                   do n1 = 1, n_alpha*n_beta
+                      mat_p(matA)%matrix(ibeg_Lij+n1-1) = &
+                           Info(ifile)%data_Lold(ibeg2+n1-1, 1)
 
-                !if (nspin.EQ.1) then
-                  do n1 = 1, n_alpha*n_beta
-                    mat_p(matA)%matrix(ibeg_Lij+n1-1) = &
-                      Info(ifile)%data_Lold(ibeg2+n1-1, 1)
+                      !! --------------- DEBUG: --------------- !!
+                      if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
+                         write (lun_db2,'(2f25.18,f15.5,i10)') mat_p(matA)%matrix(ibeg_Lij+n1-1), &
+                              Info(ifile)%data_Lold(ibeg2+n1-1,1), &
+                              Rij, jcover
+                      endif
+                      !! --------------- DEBUG: --------------- !!
 
-                    !! --------------- DEBUG: --------------- !!
-                    if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
-                      write (lun_db2,'(2f25.18,f15.5,i10)') mat_p(matA)%matrix(ibeg_Lij+n1-1), &
-                                                            Info(ifile)%data_Lold(ibeg2+n1-1,1), &
-                                                            Rij, jcover
-                    endif
-                    !! --------------- DEBUG: --------------- !!
+                   enddo
+                   !else
+                   !  do n1 = 1, n_alpha*n_beta
+                   !    mat_p(matA)%matrix(ibeg_Lij+n1-1) = &
+                   !      Info(ifile)%data_Lold(ibeg2+n1-1, 1)
+                   !    !mat_p(matB)%matrix(ibeg_Lij+n1-1) = &
+                   !    !  Info(ifile)%data_Lold(ibeg2+n1-1, 2)
+                   !
+                   !    !! --------------- DEBUG: --------------- !!
+                   !    !if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
+                   !    !  write (lun_db2,'(3f25.18,f10.5,i10)') mat_p(matA)%matrix(ibeg_Lij+n1-1), &
+                   !    !                                        Info(ifile)%data_Lold(ibeg2+n1-1,1), &
+                   !    !                                        Info(ifile)%data_Lold(ibeg2+n1-1,2), &
+                   !    !                                        Rij, jcover
+                   !    !endif
+                   !    !! --------------- DEBUG: --------------- !!
+                   !
+                   !  enddo
+                   !endif !(nspin)
 
-                  enddo
-                !else
-                !  do n1 = 1, n_alpha*n_beta
-                !    mat_p(matA)%matrix(ibeg_Lij+n1-1) = &
-                !      Info(ifile)%data_Lold(ibeg2+n1-1, 1)
-                !    !mat_p(matB)%matrix(ibeg_Lij+n1-1) = &
-                !    !  Info(ifile)%data_Lold(ibeg2+n1-1, 2)
-                !
-                !    !! --------------- DEBUG: --------------- !!
-                !    !if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
-                !    !  write (lun_db2,'(3f25.18,f10.5,i10)') mat_p(matA)%matrix(ibeg_Lij+n1-1), &
-                !    !                                        Info(ifile)%data_Lold(ibeg2+n1-1,1), &
-                !    !                                        Info(ifile)%data_Lold(ibeg2+n1-1,2), &
-                !    !                                        Rij, jcover
-                !    !endif
-                !    !! --------------- DEBUG: --------------- !!
-                !
-                !  enddo
-                !endif !(nspin)
+                   !endif
+                endif
+                ibeg2 = ibeg2 + n_alpha*n_beta
+             enddo !(jj, jmax_i)
+          endif !(ind_node.EQ.inode)
+          !ibeg1 = ibeg1 + Info(ifile)%jmax_i(ia)
+          !ibeg2 = ibeg2 + Info(ifile)%jbeta_max_i(ia)*n_alpha
 
-               !endif
-               endif
-            ibeg2 = ibeg2 + n_alpha*n_beta
-         enddo !(jj, jmax_i)
-      endif !(ind_node.EQ.inode)
-        !ibeg1 = ibeg1 + Info(ifile)%jmax_i(ia)
-        !ibeg2 = ibeg2 + Info(ifile)%jbeta_max_i(ia)*n_alpha
-
-      enddo !(ia, natom_i)
+       enddo !(ia, natom_i)
     enddo !(ifile, nfile)
 
     !! ---------- DEBUG ---------- !!
     if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
-      call io_close(lun_db)
-      call io_close(lun_db2)
+       call io_close(lun_db)
+       call io_close(lun_db2)
     endif
     !! ---------- DEBUG ---------- !!
     return

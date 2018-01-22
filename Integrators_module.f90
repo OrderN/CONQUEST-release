@@ -246,9 +246,6 @@ contains
     use numbers, ONLY: half,zero
     use global_module, ONLY: ni_in_cell,id_glob,x_atom_cell,y_atom_cell,z_atom_cell, &
          flag_move_atom, io_lun,  iprint_MD
-=======
-         atom_coord_diff,flag_move_atom, io_lun, iprint_MD
->>>>>>> origin/master
     use GenComms, ONLY: myid
     use io_module, ONLY: write_fire
 

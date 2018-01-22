@@ -150,7 +150,6 @@ contains
     use density_module,    only: density
     use multisiteSF_module,only: flag_LFD_minimise, LFD_minimise
     use units
-    use io_module2,        only: dump_InfoGlobal
 
     implicit none
 
@@ -372,13 +371,6 @@ contains
       call stop_print_timer(tmr_l_force, "calculating FORCE", &
                             IPRINT_TIME_THRES1)
     end if
-    if (.NOT. flag_MDold ) then
-       if(PRESENT(iter))then
-          if (inode.EQ.ionode) call dump_InfoGlobal(iter)
-       else
-          if (inode.EQ.ionode) call dump_InfoGlobal
-       end if
-    endif
 
     !% NOTE: This call should be outside this subroutine [2013/08/20 michi]
     ! Writes out L-matrix at the PREVIOUS step

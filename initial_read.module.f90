@@ -610,6 +610,10 @@ contains
   !!    Adding parameters for simulation cell optimisation
   !!   2017/10/15 dave & an
   !!    Reading atomic spins: small tweak to test on net spin (uses abs and RD_ERR)
+  !!   2018/01/22 tsuyoshi (with dave)
+  !!    Added new parameters:
+  !!     - threshold for resetting charge density to atomic density
+  !!     - time_max (General.MaxTime) to stop run after specified number of seconds in check_stop
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -761,7 +765,6 @@ contains
     use move_atoms,         only: threshold_resetCD
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
-
 
     implicit none
 

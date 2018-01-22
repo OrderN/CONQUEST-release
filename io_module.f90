@@ -149,6 +149,8 @@ contains
   !!    Bug fix & correct the if-statement
   !!   2015/06/08 lat
   !!    Added experimental backtrace
+  !!   2018/01/22 tsuyoshi (with dave)
+  !!    Allocate atom_coord_diff for all calculations
   !!  SOURCE
   !!
   subroutine read_atomic_positions(filename)
@@ -493,16 +495,15 @@ second:   do
     rcellx = r_super_x
     rcelly = r_super_y
     rcellz = r_super_z
-    !if ((leqi(runtype,'md')) .OR. (leqi(runtype,'cg'))) then
-      allocate(atom_coord_diff(3,ni_in_cell), STAT=stat)
-      if (stat.NE.0) call cq_abort('Error allocating atom_coord_diff: ', 3, ni_in_cell)
-      allocate(id_glob_old(ni_in_cell),id_glob_inv_old(ni_in_cell), STAT=stat)
-      if (stat.NE.0) call cq_abort('Error allocating id_glob_old/id_glob_inv_old: ', &
-                                   ni_in_cell)
-      atom_coord_diff=zero
-      !call gcopy(atom_coord_diff,3,ni_in_cell)
-      id_glob_old=0
-      id_glob_inv_old=0
+    allocate(atom_coord_diff(3,ni_in_cell), STAT=stat)
+    if (stat.NE.0) call cq_abort('Error allocating atom_coord_diff: ', 3, ni_in_cell)
+    allocate(id_glob_old(ni_in_cell),id_glob_inv_old(ni_in_cell), STAT=stat)
+    if (stat.NE.0) call cq_abort('Error allocating id_glob_old/id_glob_inv_old: ', &
+         ni_in_cell)
+    atom_coord_diff=zero
+    !call gcopy(atom_coord_diff,3,ni_in_cell)
+    id_glob_old=0
+    id_glob_inv_old=0
 
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_atomic_positions')
