@@ -72,6 +72,7 @@ module move_atoms
   real(double), parameter:: fac_Kelvin2Hartree = kB/ev
   !real(double), parameter:: fac_Kelvin2Hartree = 2.92126269e-6_double
 
+  real(double) :: threshold_resetCD
   ! Table to show the methods to update  (for update_pos_and_matrix)
    integer, parameter :: updatePos  = 0
    integer, parameter :: updateL    = 1
@@ -2316,11 +2317,11 @@ contains
                   inode,ionode,maxngrid)
             do spin=1,nspin
                scale = ne_spin_in_cell(spin)/electrons(spin)
-               if(abs(scale-one)<0.01.AND.abs(scale-one)>RD_ERR) then
+               if(abs(scale-one)<threshold_resetCD .AND. abs(scale-one)>RD_ERR) then
                   density(:,spin) = density(:,spin)*scale
-               else if (abs(scale-one)>=0.01) then
+               else if (abs(scale-one)>=threshold_resetCD) then
                   if(inode == ionode) write(io_lun,*) &
-                    ' WARNING! in update_H: constructed charge density is strange.. ; scale = ', scale
+                 ' WARNING! in update_H: constructed charge density is strange.. ; scale = ', scale, threshold_resetCD
                   call set_atomic_density(.true.)
                   exit
                end if
@@ -2347,14 +2348,14 @@ contains
             inode,ionode,maxngrid)
        do spin=1,nspin
           scale = ne_spin_in_cell(spin)/electrons(spin)
-          !TMif(abs(scale-one)<0.01.AND.abs(scale-one)>RD_ERR) then
+          if(abs(scale-one)<threshold_resetCD .AND.abs(scale-one)>RD_ERR) then
              density(:,spin) = density(:,spin)*scale
-          !TMelse if (abs(scale-one)>=0.01) then
-             if(inode == ionode) write(io_lun,*) &
-              ' WARNING2! in update_H: constructed charge density is strange.. ; scale = ', scale
-          !TM   call set_atomic_density(.true.)
-          !TM   exit
-          !TMend if
+          else if (abs(scale-one)>=threshold_resetCD) then
+             if(inode == ionode) write(io_lun,*)  ' WARNING2! in update_H: &
+             & constructed charge density is strange.. ; scale,threshold = ', scale, threshold_resetCD
+             call set_atomic_density(.true.)
+             exit
+          end if
        end do
     end if
 

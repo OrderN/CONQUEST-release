@@ -759,6 +759,7 @@ contains
                                   flag_LFD_minimise, LFD_ThreshE, LFD_ThreshD,           &
                                   LFD_Thresh_EnergyRise, LFD_max_iteration,              &
                                   flag_LFD_MD_UseAtomicDensity
+    use move_atoms,         only: threshold_resetCD
 
     implicit none
 
@@ -1348,6 +1349,10 @@ contains
                        fdf_string(80,'SC.ReadAtomicDensityFile','read_atomic_density.dat')
        ! Read atomic density initialisation flag
        atomic_density_method = fdf_string(10,'SC.AtomicDensityFlag','pao')
+       ! When constructing charge density from K matrix at last step, we check the total 
+       ! number of electrons. If the error of electron number (per total electron number) 
+       ! is larger than the following value, we use atomic charge density. (in update_H)
+       threshold_resetCD     = fdf_double('SC.Threshold.Reset',0.1_double)
 !!$
 !!$
 !!$
