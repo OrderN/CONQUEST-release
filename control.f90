@@ -280,7 +280,7 @@ contains
     dE = zero
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
-    if (.NOT. flag_MDold) call dump_pos_and_matrices
+    call dump_pos_and_matrices
 
     iter = 1
     ggold = zero
@@ -588,11 +588,9 @@ contains
       i_first = MDinit_step + 1
       i_last = i_first + MDn_steps - 1
     endif
-    if (.NOT. flag_MDold) then
-      call dump_pos_and_matrices(index=0,MDstep=i_first,velocity=velocity)
-    endif
+    call dump_pos_and_matrices(index=0,MDstep=i_first,velocity=velocity)
 
-   energy_md = energy0
+    energy_md = energy0
 
     if (flag_fire_qMD) then
        step_qMD = i_first ! SA 20150201
@@ -621,11 +619,16 @@ contains
        ! Constrain position
        if (flag_RigidBonds) call correct_atomic_position(velocity,MDtimestep)
        ! Reset-up
-       if(flag_SFcoeffReuse) then
-        call update_pos_and_matrices(updateSFcoeff,velocity)
+       if(.NOT.flag_MDold) then
+          if(flag_SFcoeffReuse) then
+             call update_pos_and_matrices(updateSFcoeff,velocity)
+          else
+             call update_pos_and_matrices(updateLorK,velocity)
+          endif
        else
-        call update_pos_and_matrices(updateLorK,velocity)
-       endif
+          call update_atom_coord
+          call updateIndices(.true., fixed_potential)
+       end if
 
        if (flag_XLBOMD) call Do_XLBOMD(iter,MDtimestep)
        call update_H(fixed_potential)
@@ -964,7 +967,7 @@ contains
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
                      .false.)
-    if(.NOT.flag_MDold) call dump_pos_and_matrices
+    call dump_pos_and_matrices
     iter = 1
     ggold = zero
     energy1 = energy0
@@ -1047,7 +1050,7 @@ contains
           call update_H(fixed_potential)
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
                .false.)
-          if(.NOT.flag_MDold) call dump_pos_and_matrices
+          call dump_pos_and_matrices
        else
           if (.NOT. flag_MDold) then
              call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
@@ -1114,7 +1117,7 @@ contains
        call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
                         .false.)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
-       if(.NOT.flag_MDold) call dump_pos_and_matrices
+       call dump_pos_and_matrices
 
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
@@ -1269,9 +1272,7 @@ contains
     reset_iter = 1
     ggold = zero
     energy1 = energy0
-    if (.NOT. flag_MDold) then
-      call dump_pos_and_matrices(index=0,MDstep=iter)
-    endif
+    call dump_pos_and_matrices(index=0,MDstep=iter)
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
        stressx = -stress(1)

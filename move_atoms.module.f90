@@ -839,12 +839,6 @@ contains
     !    mat_K_old = allocate_temp_matrix(Hrange,Htr_range,sf,sf)
     ! for debugging
 
-    !allocation of glob2node_old:  though I (TM) am planning to remove this array.
-    if (.NOT. allocated(glob2node_old)) then
-       allocate (glob2node_old(ni_in_cell), STAT=stat)
-       if (stat.NE.0) call cq_abort('Error deallocating glob2node_old: ', ni_in_cell)
-    endif
-
     !allocate(store_density(maxngrid))
     e0 = total_energy
     if (inode == ionode .and. iprint_MD > 0) &
@@ -857,43 +851,6 @@ contains
 
     k0 = zero
 
-    ! Now dump_pos_and_matrices are called before calling safemin2 : 2018.Jan19
-    ! both=0; mat=1
-    ! if(flag_SFcoeffReuse) then
-    !  call dump_matrix_update('SFcoeff',matSFcoeff(1),SFcoeff_range,index_in=0,iprint_mode=mat)
-    !  if(nspin .eq. 2) call dump_matrix_update('SFcoeff2',matSFcoeff(2),SFcoeff_range,index_in=0,iprint_mode=mat)
-    ! endif
-    !
-    ! if(flag_diagonalisation) then
-    !  call dump_matrix_update('K',matK(1),Hrange,index_in=0,iprint_mode=both)
-    !  if(nspin .eq. 2) call dump_matrix_update('K2',matK(2),Hrange,index_in=0,iprint_mode=both)
-    ! else
-    !  call dump_matrix_update('L',matL(1),Lrange,index_in=0,iprint_mode=both)
-    !  if(nspin .eq. 2) call dump_matrix_update('L2',matL(2),Lrange,index_in=0,iprint_mode=both)
-    ! endif
-
-    !do i=1,ni_in_cell
-    !   x_atom_cell(i) = start_x(i) + k0*direction(1,i)
-    !   y_atom_cell(i) = start_y(i) + k0*direction(2,i)
-    !   z_atom_cell(i) = start_z(i) + k0*direction(3,i)
-    !   !write(io_lun,*) 'Position:
-    !   ',i,x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
-    !end do
-    !!  Update atom_coord : TM 27Aug2003
-    !call update_atom_coord
-    !!  Update atom_coord : TM 27Aug2003
-    !
-    !!   Get energy and forces
-    !call my_barrier
-    !call updateIndices(.false.,fixed_potential, number_of_bands, &
-    !     potential, density, pseudopotential, &
-    !     N_GRID_MAX)
-    !call get_E_and_F(output_file, n_save_freq, n_run,
-    !n_minimisation_iterations, n_support_iterations,&
-    !     fixed_potential, vary_mu, n_CG_L_iterations, number_of_bands,
-    !     L_tolerance, sc_tolerance, energy_tolerance, mu, &
-    !     e0, potential, pseudopotential, density, expected_reduction,
-    !     N_GRID_MAX)
     iter = 1
     k1 = zero
     e1 = energy_in
@@ -914,37 +871,6 @@ contains
     ! Loop to find a bracketing triplet
     do while (.not. done) !e3<=e2)
        call start_timer(tmr_l_iter, WITH_LEVEL)
-       !if (k2==k0) then
-       !   !k3 = 0.001_double
-       !   !if(abs(kmin) < very_small) then
-       !   if(abs(dE) < very_small) then
-       !      if(k3<very_small) then ! First guess
-       !         k3 = 0.70_double!k3old/lambda
-       !      end if
-       !   else
-       !      tmp = dot(3*ni_in_cell,direction,1,tot_force,1)
-       !      k3 = abs(0.5_double*dE/tmp)!kmin/lambda
-       !      if(abs(k3)>abs(kmin)) k3 = kmin
-       !   endif
-       !   !   k3 = 0.1_double
-       !   !else
-       !   !   k3 = kmin/lambda
-       !   !endif
-       !elseif (k2==0.01_double) then
-       !   k3 = 0.01_double
-       !else
-       !   k3 = lambda*k2
-       !endif
-       !       k3 = 0.032_double
-       ! These lines calculate the difference between atomic densities and total
-       ! density
-       !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-       !%%!   ! Subtract off atomic densities
-       !%%!   store_density = density
-       !%%!   call set_density()
-       !%%!   density = store_density - density
-       !%%!end if
-       ! Move atoms
        call start_timer(tmr_l_tmp1, WITH_LEVEL)
 
        !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
@@ -1441,7 +1367,7 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
-       if(.NOT.flag_MDold) call dump_pos_and_matrices
+       call dump_pos_and_matrices
 
        if (inode == ionode .and. iprint_MD > 1) &
             write (io_lun, &
@@ -1532,7 +1458,7 @@ contains
     else
        call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
     end if
-    if(.NOT.flag_MDold) call dump_pos_and_matrices
+    call dump_pos_and_matrices
 
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
@@ -1588,7 +1514,7 @@ contains
                .true., .false.)
        end if
        ! we may not need to call dump_pos_and_matrices here. (if it would be called in the part after calling safemin_cell)
-       if(.NOT.flag_MDold) call dump_pos_and_matrices  
+       call dump_pos_and_matrices  
     end if
     dE = e0 - energy_out
 7   format(4x,3f15.8)
@@ -2094,7 +2020,7 @@ contains
     implicit none
 
      ! Passed variables
-    real(double):: velocity(3,ni_in_cell)
+    real(double) :: velocity(3,ni_in_cell)
     logical :: fixed_potential
 
     ! Local variables

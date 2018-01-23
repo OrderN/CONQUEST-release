@@ -88,7 +88,7 @@ contains
     ! Module usage
     use mpi
     use datatypes
-    use global_module, ONLY: io_lun,ni_in_cell,nspin,numprocs,glob2node,n_proc_old
+    use global_module, ONLY: io_lun,ni_in_cell,nspin,numprocs,glob2node,n_proc_old, iprint_MD
     use GenComms, ONLY: cq_abort,inode,ionode,gcopy,my_barrier
     use mult_module, ONLY: symmetrise_L,symmetrise_matA
     !use io_module2, ONLY: InfoL
@@ -254,8 +254,8 @@ contains
     ! Must consider spin later as well.
     !ORI call symmetrise_L() ! if not calling this routine, IntEnergy gets unstable.. (ibeg2 was wrong.)
     if (present(symm)) then
-      if (inode.EQ.ionode) write (io_lun,*) "Symmetrisation !"
-      call symmetrise_matA(range,trans,matA)
+       if (inode.EQ.ionode.AND.iprint_MD>2) write (io_lun,*) "Symmetrisation !"
+       call symmetrise_matA(range,trans,matA)
     endif
     call my_barrier()
     if (flag_MDdebug .AND. iprint_MDdebug.GT.3) write (lun_db6,*) mat_p(matA)%matrix(1:)
