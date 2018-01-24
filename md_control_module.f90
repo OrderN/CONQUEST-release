@@ -44,6 +44,7 @@ module md_control
   ! Unit conversion factors
   real(double), parameter :: fac_HaBohr32GPa = 29421.02648438959
   real(double), parameter :: fac_fs2atu = 41.3413745758
+  real(double), parameter :: fac_invcm2hartree = 4.5563352812122295E-6
 
   ! Checkpoint files
   character(20) :: thermo_check_file = "cq.thermo"
@@ -52,7 +53,7 @@ module md_control
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
   real(double)  :: md_tau_T, md_tau_P, md_target_press, md_bulkmod_est, &
-                   md_box_mass, md_ndof_ions
+                   md_box_mass, md_ndof_ions, md_omega_t, md_omega_p
   integer       :: md_n_nhc, md_n_ys, md_n_mts, md_berendsen_equil
   logical       :: md_write_xsf, md_cell_nhc, md_calc_xlmass
   real(double), dimension(3,3), target      :: lattice_vec

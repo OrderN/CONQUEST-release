@@ -766,7 +766,8 @@ contains
                           md_target_press, md_baro_type, md_tau_P, &
                           md_thermo_type, md_bulkmod_est, md_box_mass, &
                           md_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
-                          md_calc_xlmass, md_berendsen_equil
+                          md_calc_xlmass, md_berendsen_equil, &
+                          md_omega_t, md_omega_p
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
 
@@ -1897,6 +1898,7 @@ contains
        else
          md_tau_T           = fdf_double('MD.tauT', one)
        end if
+       md_omega_t         = fdf_double('MD.OmegaT', 500.0_double)
        md_n_nhc           = fdf_integer('MD.nNHC', 5) 
        md_n_ys            = fdf_integer('MD.nYoshida', 1)
        md_n_mts           = fdf_integer('MD.nMTS', 1)
@@ -1923,6 +1925,7 @@ contains
        else
          md_tau_P           = fdf_double('MD.tauP', 100.0_double)
        end if
+       md_omega_p         = fdf_double('MD.OmegaP', 100.0_double)
        md_bulkmod_est     = fdf_double('MD.BulkModulusEst', one)
        md_cell_nhc        = fdf_boolean('MD.CellNHC', .false.)
        flag_baroDebug     = fdf_boolean('MD.BaroDebug',.false.)

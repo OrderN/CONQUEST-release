@@ -584,7 +584,18 @@ contains
 
     ! thermostat/barostat initialisation
     call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
-    nequil = md_berendsen_equil 
+
+    ! initialisation/contintuation when we're using Berendsen equilibration
+    if (flag_MDcontinue) then
+      if (MDinit_step >= md_berendsen_equil) then
+        nequil = 0
+      else
+        nequil = md_berendsen_equil - MDinit_step
+      end if
+    else
+      nequil = md_berendsen_equil 
+    end if
+
     ! Initialise number of degrees of freedom
     md_ndof = 3*ni_in_cell
     md_ndof_ions = md_ndof
@@ -633,10 +644,10 @@ contains
       case('iso-mttk')
 !        md_ndof = md_ndof + md_n_nhc + 1
         if (md_cell_nhc) md_ndof = md_ndof + md_n_nhc
-        if (md_berendsen_equil > 0) then ! Equilibrate using Berendsen?
+        if (nequil > 0) then ! Equilibrate using Berendsen?
           if (inode == ionode) then
             write (io_lun, '(4x,"Equilibrating using Berendsen baro/thermostat &
-                             for ",i8," steps")') md_berendsen_equil
+                             for ",i8," steps")') nequil
           end if
           call thermo%init_berendsen_thermo(MDtimestep, temp_ion, md_ndof, &
                                             md_tau_T, mdl%ion_kinetic_energy)
@@ -942,6 +953,8 @@ contains
        !to check IO of velocity files
        call write_velocity(ion_velocity, file_velocity)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+       call baro%get_pressure
+       call thermo%get_temperature
        select case(md_ensemble)
        case('nvt')
          if (leqi(thermo%thermo_type, 'nhc')) then
