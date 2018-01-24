@@ -709,8 +709,10 @@ contains
     call mdl%init_model(md_ensemble, thermo, baro)
 
     if (md_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
-    if (iprint_MD > 1) then
+    if (flag_thermoDebug) then
       call thermo%dump_thermo_state(i_first-1, 'thermostat.dat')
+    end if
+    if (flag_baroDebug) then
       call baro%dump_baro_state(i_first-1, 'barostat.dat')
     end if
 

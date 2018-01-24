@@ -33,8 +33,7 @@ module md_control
   use datatypes
   use numbers
   use global_module,    only: ni_in_cell, io_lun, iprint_MD, &
-                              flag_thermoDebug, flag_baroDebug, &
-                              temp_ion, flag_MDcontinue
+                              temp_ion, flag_MDcontinue, flag_MDdebug
   use move_atoms,       only: fac_Kelvin2Hartree
   use species_module,   only: species, mass
   use GenComms,         only: inode, ionode
@@ -564,7 +563,7 @@ contains
 
     v = v*th%lambda
 
-    if (inode==ionode .and. flag_thermoDebug) then
+    if (inode==ionode .and. flag_MDdebug) then
       write(io_lun,'(a,i2)') "thermoDebug: berendsen_v_rescale"
       write(io_lun,*) "lambda:     ", th%lambda
     end if
@@ -613,7 +612,7 @@ contains
       th%G_nhc(k) = th%G_nhc(k)/th%m_nhc(k)
     end if
 
-    if (inode==ionode .and. flag_thermoDebug) then
+    if (inode==ionode .and. flag_MDdebug) then
       write(io_lun,'(a,i2)') "thermoDebug: update_G_nhc, k = ", k
       write(io_lun,*) "G_eta:      ", th%G_nhc(k)
       if (th%cell_nhc) write(io_lun,*) "G_eta_cell: ", th%G_nhc_cell(k)
@@ -645,7 +644,7 @@ contains
     if (th%cell_nhc) th%eta_cell(k) = th%eta_cell(k) + &
                      dtfac*dt*th%v_eta_cell(k)
 
-    if (inode==ionode .and. flag_thermoDebug) then
+    if (inode==ionode .and. flag_MDdebug) then
       write(io_lun,'(a,i2)') "thermoDebug: propagate_eta, k = ", k
       write(io_lun,*) "eta:        ", th%eta(k)
       if (th%cell_nhc) write(io_lun,*) "eta_cell:   ", th%eta_cell(k)
@@ -677,7 +676,7 @@ contains
     if (th%cell_nhc) th%v_eta_cell(k) = th%v_eta_cell(k) + &
                                         dtfac*dt*th%G_nhc_cell(k)
 
-    if (inode==ionode .and. flag_thermoDebug) then
+    if (inode==ionode .and. flag_MDdebug) then
       write(io_lun,'(a,i2)') "thermoDebug: propagate_v_eta_lin, k = ", k
       write(io_lun,*) "v_eta:      ", th%v_eta(k)
       if (th%cell_nhc) write(io_lun,*) "v_eta_cell: ", th%v_eta_cell(k)
@@ -709,7 +708,7 @@ contains
     if (th%cell_nhc) th%v_eta_cell(k) = &
                           th%v_eta_cell(k)*exp(-dtfac*dt*th%v_eta_cell(k+1))
 
-    if (inode==ionode .and. flag_thermoDebug) then
+    if (inode==ionode .and. flag_MDdebug) then
       write(io_lun,'(a,i2)') "thermoDebug: propagate_v_eta_exp, k = ", k
       write(io_lun,*) "v_eta:      ", th%v_eta(k)
       if (th%cell_nhc) write(io_lun,*) "v_eta_cell: ", th%v_eta_cell(k)
@@ -742,7 +741,7 @@ contains
     real(double)  :: v_sfac   ! ionic velocity scaling factor
     real(double)  :: fac
 
-    if (inode==ionode .and. flag_thermoDebug) &
+    if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) "thermoDebug: propagate_nvt_nhc"
 
     th%ke_ions = ke
@@ -750,7 +749,7 @@ contains
     call th%update_G_nhc(1, zero) ! update force on thermostat 1
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
-        if (inode==ionode .and. flag_thermoDebug) then
+        if (inode==ionode .and. flag_MDdebug) then
           write(io_lun,*) "thermoDebug: i_ys  = ", i_ys
           write(io_lun,*) "thermoDebug: dt_ys = ", th%dt_ys(i_ys)
         end if
@@ -787,7 +786,7 @@ contains
     end do    ! MTS loop
 
     ! scale the ionic velocities
-    if (inode==ionode .and. flag_thermoDebug) &
+    if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) 'thermoDebug: v_sfac = ', v_sfac
 
     v = v_sfac*v
@@ -1251,7 +1250,7 @@ contains
     real(double)                                :: x_old, y_old, z_old
     logical                                     :: flagx, flagy, flagz
 
-    if (inode==ionode .and. flag_baroDebug) then
+    if (inode==ionode .and. flag_MDdebug) then
       write(io_lun,*) "baroDebug: propagate_berendsen"
       write(io_lun,*) "mu:   :     ", baro%mu
     end if
@@ -1328,7 +1327,7 @@ contains
     baro%G_eps = (baro%odnf*baro%ke_ions + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
     ! baro%G_eps = (three*baro%ke_ions/baro%ndof + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
 
-    if (inode==ionode .and. flag_baroDebug) &
+    if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) "baroDebug: update_G_eps: G_eps = ", baro%G_eps
 
   end subroutine update_G_eps
@@ -1354,7 +1353,7 @@ contains
 
     baro%eps = baro%eps + dtfac*dt*baro%v_eps
 
-    if (inode==ionode .and. flag_baroDebug) &
+    if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) "baroDebug: propagate_eps_lin: eps = ", baro%eps
 
   end subroutine propagate_eps_lin
@@ -1381,7 +1380,7 @@ contains
 
     baro%eps = baro%eps*exp(-dtfac*dt*v_eta_1)
 
-    if (inode==ionode .and. flag_baroDebug) &
+    if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) "baroDebug: propagate_eps_exp: eps = ", baro%eps
 
   end subroutine propagate_eps_exp
@@ -1407,7 +1406,7 @@ contains
 
     baro%v_eps = baro%v_eps + dtfac*dt*baro%G_eps
 
-    if (inode==ionode .and. flag_baroDebug) &
+    if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) "baroDebug: propagate_v_eps_lin: v_eps = ", baro%v_eps
 
   end subroutine propagate_v_eps_lin
@@ -1434,7 +1433,7 @@ contains
 
     baro%v_eps = baro%v_eps*exp(-dtfac*dt*v_eta_1)
 
-    if (inode==ionode .and. flag_baroDebug) &
+    if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) "baroDebug: propagate_v_eps_lin: v_eps = ", baro%v_eps
 
   end subroutine propagate_v_eps_exp
@@ -1470,7 +1469,7 @@ contains
       baro%ke_ions = baro%ke_ions*expfac**2
     end select
 
-    if (inode==ionode .and. flag_baroDebug) &
+    if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) "baroDebug: update_vscale_fac: v_sfac = ", v_sfac
 
   end subroutine update_vscale_fac
@@ -1507,7 +1506,7 @@ contains
     integer                               :: i, speca, gatom, ibeg_atom
     logical                               :: flagx, flagy, flagz
 
-    if (inode==ionode .and. flag_baroDebug) &
+    if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) "baroDebug: propagate_r_mttk"
 
     select case(baro%baro_type)
@@ -1543,7 +1542,7 @@ contains
       end do
     end select
 
-    if (inode==ionode .and. flag_baroDebug) then
+    if (inode==ionode .and. flag_MDdebug) then
       write(io_lun,*) "baroDebug: propagate_r_mttk: fac_v = ", fac_v
       write(io_lun,*) "baroDebug: propagate_r_mttk: fac_r = ", fac_r
     end if
@@ -1571,7 +1570,7 @@ contains
     ! local variables
     real(double)                          :: v_new, v_old, lat_sfac
 
-    if (inode==ionode .and. flag_baroDebug) &
+    if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) "baroDebug: propagate_box_mttk"
 
     select case(baro%baro_type)
@@ -1584,7 +1583,7 @@ contains
       baro%lat = baro%lat*lat_sfac
     end select
 
-    if (inode==ionode .and. flag_baroDebug) &
+    if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) "baroDebug: propagate_box_mttk: lat_sfac = ", lat_sfac
 
   end subroutine propagate_box_mttk
@@ -1639,7 +1638,7 @@ contains
     integer                                 :: i_mts, i_ys, i_nhc
     real(double)                            :: v_sfac, v_eta_couple
 
-    if (inode==ionode .and. flag_baroDebug) &
+    if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) "baroDebug: propagate_npt_mttk"
 
     baro%ke_ions = ke
@@ -1653,7 +1652,7 @@ contains
 
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
-        if (inode==ionode .and. flag_baroDebug) then
+        if (inode==ionode .and. flag_MDdebug) then
           write(io_lun,*) "baroDebug: i_ys  = ", i_ys
           write(io_lun,*) "baroDebug: dt_ys = ", th%dt_ys(i_ys)
         end if
@@ -1726,7 +1725,7 @@ contains
     v = v_sfac*v
     th%lambda = v_sfac
 
-    if (inode==ionode .and. flag_baroDebug) &
+    if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) "baroDebug: propagate_npt_mttk: v_sfac = ", v_sfac
 
   end subroutine propagate_npt_mttk
@@ -1832,7 +1831,7 @@ contains
     real(double) :: orcellx, orcelly, orcellz, xvec, yvec, zvec, r2, scale
     integer :: i, j
 
-    if (inode==ionode .and. flag_baroDebug) &
+    if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) "baroDebug: update_cell"
 
     orcellx = rcellx
