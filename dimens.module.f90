@@ -196,9 +196,13 @@ contains
     if (atomf==sf) then
        aSa_range = Srange
        aHa_range = Hrange
-       aNArange = 20
-       NAarange = 21
-       mx_matrices_tmp = 21
+       if(flag_neutral_atom_projector) then
+          aNArange = 20
+          NAarange = 21
+          mx_matrices_tmp = 21
+       else
+          mx_matrices_tmp = 19
+       end if
     else
        aSa_range       = 20
        aHa_range       = 21

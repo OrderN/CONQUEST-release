@@ -68,6 +68,8 @@
 !!    Adding non-SCF and PCC stress components
 !!   2015/11/26 15:24 dave
 !!    Changing ewald_force and ewald_stress to ion_interaction_force and _stress
+!!   2018/01/24 11:45 JST dave
+!!    Added NA integral & projector approach to forces (flag_neutral_atom_projector)
 !!  SOURCE
 !!
 module force_module
@@ -302,10 +304,11 @@ contains
        call reg_alloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
        cdft_force = zero
     end if
-    !if(
-    allocate(s_pulay_for(3,ni_in_cell),phi_pulay_for(3,ni_in_cell))
-    s_pulay_for = zero
-    phi_pulay_for = zero
+    if(iprint_MD>3) then
+       allocate(s_pulay_for(3,ni_in_cell),phi_pulay_for(3,ni_in_cell))
+       s_pulay_for = zero
+       phi_pulay_for = zero
+    end if
     allocate(NA_force(3,ni_in_cell))
     NA_force = zero
     call stop_timer (tmr_std_allocation)
@@ -524,8 +527,10 @@ contains
              if(flag_neutral_atom_projector) write (io_lun, fmt='("Force NA     : ",3f15.10)') (for_conv*NA_force(j,i),j=1,3)
              write(io_lun, 112) (for_conv * HF_NL_force(j,i), j = 1, 3)
              write(io_lun, 103) (for_conv *     p_force(j,i), j = 1, 3)
-             write (io_lun, fmt='("Force phi    : ",3f15.10)') (for_conv*phi_pulay_for(j,i),j=1,3)
-             write (io_lun, fmt='("Force S      : ",3f15.10)') (for_conv*s_pulay_for(j,i),j=1,3)
+             if(iprint_MD>3) then
+                write (io_lun, fmt='("  Phi pulay  : ",3f15.10)') (for_conv*phi_pulay_for(j,i),j=1,3)
+                write (io_lun, fmt='("  S pulay    : ",3f15.10)') (for_conv*s_pulay_for(j,i),j=1,3)
+             end if
              write(io_lun, 104) (for_conv *    KE_force(j,i), j = 1, 3)
              if(flag_neutral_atom) then
                 write(io_lun, 106) (for_conv * screened_ion_force(j,i), j = 1, 3)
@@ -609,6 +614,7 @@ contains
     end if
 
     call my_barrier()
+    if(iprint_MD>3) deallocate(s_pulay_for,phi_pulay_for)
     if (inode == ionode .and. iprint_MD > 1 .and. write_forces) &
          write (io_lun, fmt='(4x,"Finished force")')
 
@@ -1164,7 +1170,7 @@ contains
                            return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
                       PP_stress(direction) = PP_stress(direction) - &  
                            return_matrix_value(mat_tmp2, np, ni, 0, 0, isf, isf, 1)
-                      phi_pulay_for(direction, i) = phi_pulay_for(direction, i) - &
+                      if(iprint_MD>3) phi_pulay_for(direction, i) = phi_pulay_for(direction, i) - &
                            return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
                    end do ! isf
                 end do ! ni
@@ -1252,7 +1258,7 @@ contains
                                ! respect to phi
                                thisG_dS_dR = two*matM12_value * return_matrix_value(mat_tmp, np, ni, iprim, neigh, jsf, isf)
                                p_force(direction,i) = p_force(direction,i) + thisG_dS_dR
-                               s_pulay_for(direction,i) = s_pulay_for(direction,i) + thisG_dS_dR
+                               if(iprint_MD>3) s_pulay_for(direction,i) = s_pulay_for(direction,i) + thisG_dS_dR
                                SP_stress(direction) = SP_stress(direction) + thisG_dS_dR * r_str
                             end do ! jsf
                          end do ! isf
@@ -1280,8 +1286,10 @@ contains
     !  In principle, the summation below is not needed.
     !  p_force should be calculated only for my primary set of atoms.
     call gsum(p_force, 3, n_atoms)
-    call gsum(s_pulay_for,3,n_atoms)
-    call gsum(phi_pulay_for,3,n_atoms)
+    if(iprint_MD>3) then
+       call gsum(s_pulay_for,3,n_atoms)
+       call gsum(phi_pulay_for,3,n_atoms)
+    end if
     call gsum(PP_stress,3)
     call gsum(SP_stress,3)
     SP_stress = half*SP_stress
