@@ -107,6 +107,8 @@ contains
   !!    - Added experimental backtrace
   !!   2016/03/15 13:54 dave
   !!    Removed restart_file from call to read_and_write and initial_phis (redundant)
+  !!   2018/01/22 12:39 JST dave
+  !!    Changes to find maximum angular momentum for PAOs and pseudopotentials (for factorial function)
   !!  SOURCE
   !!
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
@@ -126,7 +128,9 @@ contains
     use dimens,            only: r_dft_d2
     use DFT_D2
     use pseudo_tm_module,   only: make_neutral_atom
-
+    use angular_coeff_routines, only: set_fact
+    use maxima_module,          only: lmax_ps, lmax_pao
+    
     implicit none
 
     ! Passed variables
@@ -140,6 +144,7 @@ contains
     type(cq_timer)    :: backtrace_timer
     logical           :: start, start_L
     logical           :: read_phi
+    integer :: lmax_tot
 
     call init_timing_system(inode)
 
@@ -149,7 +154,8 @@ contains
     call start_backtrace(t=backtrace_timer,who='initialise',&
          where=area,level=std_level_loc,echo=.true.)
 !****lat>$
-
+    lmax_pao = 0
+    lmax_ps = 0
     ! Read input
     call read_and_write(start, start_L, inode, ionode, &
                         vary_mu, mu, find_chdens, read_phi)
@@ -178,6 +184,10 @@ contains
                                &building from initial K'
        find_chdens = .true.
     end if
+    lmax_tot = lmax_pao+lmax_ps
+    if(2*lmax_pao>lmax_tot) lmax_tot = 2*lmax_pao
+    if(lmax_tot<8) lmax_tot = 8
+    call set_fact(lmax_tot)
     if(flag_neutral_atom) call make_neutral_atom
     call set_up(find_chdens,std_level_loc+1)
     
@@ -271,7 +281,9 @@ contains
   !!   2017/06/22 11:04 dave
   !!    Adding diagonalisation initialisation calls
   !!   2017/08/29 jack baker & dave
-  !!    Removed r_super_x references (redundant)  
+  !!    Removed r_super_x references (redundant)
+  !!   2018/01/22 12:41 JST dave
+  !!    Adding check for maximum angular momentum for Bessel functions
   !!  SOURCE
   !!
   subroutine set_up(find_chdens,level)
@@ -331,7 +343,7 @@ contains
     use io_module,              only: read_blocks
     use functions_on_grid,      only: associate_fn_on_grid
     use potential_module,       only: potential
-    use maxima_module,          only: maxngrid
+    use maxima_module,          only: maxngrid, lmax_ps, lmax_pao
     use species_module,         only: n_species
     use angular_coeff_routines, only: set_fact, set_prefac, set_prefac_real
     use numbers,                only: zero
@@ -351,7 +363,7 @@ contains
     ! Local variables
     complex(double_cplx), allocatable, &
          dimension(:) :: chdenr
-    integer           :: i, stat, spec
+    integer           :: i, stat, spec, lmax_tot
     real(double)      :: rcut_BCS  !TM 26/Jun/2003
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level
@@ -535,9 +547,12 @@ contains
    end if
 
    ! external potential - first set up angular momentum bits
-   call set_fact
-   call set_prefac
-   call set_prefac_real
+   !call set_fact
+   lmax_tot = lmax_pao+lmax_ps
+   if(lmax_tot<2*lmax_pao) lmax_tot = 2*lmax_pao
+   if(lmax_tot<8) lmax_tot = 8
+   call set_prefac(lmax_tot+1)
+   call set_prefac_real(lmax_tot+1)
     !  TM's pseudo or not : 15/11/2002 TM
    select case (pseudo_type)
    case(OLDPS)
@@ -715,7 +730,7 @@ contains
     use global_module,               only: iprint_init,                &
                                            flag_basis_set, blips,      &
                                            PAOs, flag_onsite_blip_ana, &
-                                           flag_analytic_blip_int
+                                           flag_analytic_blip_int, flag_neutral_atom
     use matrix_data,                 only: Srange, mat
     use numbers,                     only: zero, RD_ERR, one
     use pao2blip,                    only: make_blips_from_paos
@@ -728,7 +743,8 @@ contains
     ! Temp
     use S_matrix_module,             only: get_onsite_S, get_S_matrix
     use make_rad_tables,             only: gen_rad_tables,             &
-                                           gen_nlpf_supp_tbls
+         gen_nlpf_supp_tbls, gen_paoNApao_tbls, &
+         gen_napf_supp_tbls
     use angular_coeff_routines,      only: make_ang_coeffs, set_fact,  &
                                            set_prefac, set_prefac_real
     use read_support_spec,           only: read_support
@@ -739,6 +755,7 @@ contains
                                            read_option
     use input_module,                only: leqi
     use nlpf2blip,                   only: make_blips_from_nlpfs
+    use pseudopotential_common,      only: flag_neutral_atom_projector
 
     implicit none
 
@@ -887,6 +904,11 @@ contains
     else if(flag_basis_set==PAOs) then
        call gen_rad_tables(inode,ionode)
        call gen_nlpf_supp_tbls(inode,ionode)
+       ! Neutral atom Projector functions
+       if( flag_neutral_atom .and. flag_neutral_atom_projector ) then
+          call gen_paoNApao_tbls(inode,ionode)
+          call gen_napf_supp_tbls(inode,ionode)
+       end if
        call make_ang_coeffs
        if(inode==ionode) &
             write(io_lun,&

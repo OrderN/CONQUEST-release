@@ -140,7 +140,7 @@ contains
     use numbers
     use units
     use mult_module,            only: matrix_product_trace, matH,     &
-                                      matK, matKE, matNL, matX
+                                      matK, matKE, matNL, matX, matNA
     use GenComms,               only: inode, ionode
     use global_module,          only: iprint_gen, nspin, spin_factor, &
                                       flag_dft_d2,                    &
@@ -150,7 +150,8 @@ contains
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha,            &
                                       flag_neutral_atom
-    use pseudopotential_common, only: core_correction
+    use pseudopotential_common, only: core_correction, &
+                                      flag_neutral_atom_projector
     use DFT_D2,                 only: disp_energy
     use density_module,         only: electron_number
     
@@ -204,10 +205,13 @@ contains
     nl_energy      = zero
     band_energy    = zero
     kinetic_energy = zero
+    if(flag_neutral_atom_projector) local_ps_energy     = zero
     exx_energy     = zero
     do spin = 1, nspin
        nl_energy   = nl_energy   + spin_factor * &
                      matrix_product_trace(matK(spin), matNL)
+       if(flag_neutral_atom_projector) local_ps_energy = local_ps_energy      &
+                        + spin_factor*matrix_product_trace(matK(spin), matNA)
        band_energy = band_energy + spin_factor * &
                      matrix_product_trace(matK(spin), matH(spin))
        ! note that matKE is < phi_i | - grad^2 | phi_j >
@@ -441,7 +445,7 @@ contains
     use mult_module,            only: matrix_product_trace, matH,     &
                                       matrix_product_trace_length,    &
                                       matrix_trace,                   &
-                                      matK, matKE, matNL, matX, matS
+                                      matK, matKE, matNL, matX, matS, matNA
 
     use global_module,          only: iprint_gen, nspin, spin_factor, &
                                       flag_dft_d2,                    &
@@ -450,10 +454,10 @@ contains
                                       flag_perform_cdft,              &
                                       flag_vdWDFT,                    &
                                       flag_exx, exx_alpha, flag_neutral_atom
-
     use DFT_D2,                 only: disp_energy
     use density_module,         only: electron_number
-    use pseudopotential_common, only: core_correction
+    use pseudopotential_common, only: core_correction, &
+                                      flag_neutral_atom_projector
 
 
     
@@ -487,6 +491,7 @@ contains
     nl_energy           = zero
     band_energy         = zero
     kinetic_energy      = zero
+    if(flag_neutral_atom_projector) local_ps_energy     = zero
     exx_energy          = zero
     one_electron_energy = zero
     potential_energy    = zero
@@ -499,6 +504,8 @@ contains
        if (inode == ionode) write (io_lun,*) 'nl_energy' 
        nl_energy      = nl_energy      &
                         + spin_factor*matrix_product_trace(matK(spin), matNL)
+       if(flag_neutral_atom_projector) local_ps_energy = local_ps_energy      &
+                        + spin_factor*matrix_product_trace(matK(spin), matNA)
        ! 2*Tr[K KE] with KE = - < grad**2 >
        if (inode == ionode) write (io_lun,*) 'k_energy'
        kinetic_energy = kinetic_energy &

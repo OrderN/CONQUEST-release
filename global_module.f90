@@ -124,6 +124,8 @@
 !!    Adding variables for cell optimisation
 !!   2017/10/20 09:19 dave
 !!    Moved fire variables to Integrators_module
+!!   2017/12/05 09:59 dave with TM & NW (MIZUHO)
+!!    Added new function type - NA projector function (napf)
 !!  SOURCE
 !!
 module global_module
@@ -238,6 +240,7 @@ module global_module
   integer, parameter :: nlpf = 2 ! Projector functions
   integer, parameter :: paof = 3 ! Pseudo-atomic orbitals
   integer, parameter :: dens = 4 ! Atomic charge density
+  integer, parameter :: napf = 5 ! Neutral atom projector functions
   integer            :: atomf    ! 1(=sf) for blips and primitive paos, 3(=paof) for contracted paos
 
   ! Define areas of the code

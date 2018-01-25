@@ -610,6 +610,8 @@ contains
   !!    Adding parameters for simulation cell optimisation
   !!   2017/10/15 dave & an
   !!    Reading atomic spins: small tweak to test on net spin (uses abs and RD_ERR)
+  !!   2018/01/19 dave
+  !!    Added test for lmax_ps and NA projector functions
   !!   2018/01/22 tsuyoshi (with dave)
   !!    Added new parameters:
   !!     - threshold for resetting charge density to atomic density
@@ -706,7 +708,8 @@ contains
                           LinTol_DMM, n_dumpL
 !TM
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, &
-                                      STATE, ABINIT, flag_angular_new
+         STATE, ABINIT, flag_angular_new, &
+         flag_neutral_atom_projector, maxL_neutral_atom_projector, numN_neutral_atom_projector
     use SelfCon, only: A, flag_linear_mixing, EndLinearMixing, q0, q1,&
                        n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
                        atomch_output, flag_Kerker, flag_wdmetric, minitersSC
@@ -715,7 +718,7 @@ contains
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
                                InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
-    use maxima_module, only: maxnsf
+    use maxima_module, only: maxnsf, lmax_ps
     use control,       only: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset
     use ion_electrostatic,  only: ewald_accuracy
     use minimise,      only: UsePulay, n_L_iterations,          &
@@ -1067,6 +1070,29 @@ contains
        end if
        ! Should we use neutral atom potential ?
        flag_neutral_atom  = fdf_boolean('General.NeutralAtom',.true.) ! Default for now
+       if( flag_neutral_atom ) then
+          flag_neutral_atom_projector = fdf_boolean('General.NeutralAtomProjector',.false.)
+          if( flag_neutral_atom_projector ) then
+             maxL_neutral_atom_projector = &
+                  fdf_integer('General.NeutralAtomProjectorMaxL',3)
+             if(maxL_neutral_atom_projector>lmax_ps) lmax_ps = maxL_neutral_atom_projector
+             allocate( numN_neutral_atom_projector(0:maxL_neutral_atom_projector ) )
+             if(fdf_block('NeutralAtom.ProjectorNumbers')) then
+                if(1+block_end-block_start<maxL_neutral_atom_projector+1) &
+                     call cq_abort("Too few NA projector numbers; found/needed: ", &
+                     1+block_end-block_start,maxL_neutral_atom_projector+1)
+                do i=1,maxL_neutral_atom_projector+1
+                   read(unit=input_array(block_start+i-1),fmt=*) j,numN_neutral_atom_projector(i-1)
+                end do
+                call fdf_endblock
+             else
+                write(io_lun,fmt='(10x,"No NA projector numbers specified; defaulting to 5 per l")')
+                numN_neutral_atom_projector(:) = 5
+             end if
+          end if ! NA projector
+       else
+          flag_neutral_atom_projector = .false.
+       end if
 !!$
 !!$
 !!$

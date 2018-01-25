@@ -156,6 +156,8 @@ contains
 !!    Removed dSrange, dHrange and PAOPrange which are no longer used
 !!   2017/02/23 dave
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+!!   2017/12/05 11:00 dave
+!!    Adding NA projector ranges
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -170,7 +172,7 @@ contains
                              n_pts_in_block, n_blocks
 
     use input_module,           only: leqi
-    use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, ABINIT
+    use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, ABINIT, flag_neutral_atom_projector
     !use DiagModule,             only: diagon
 
     implicit none
@@ -194,7 +196,13 @@ contains
     if (atomf==sf) then
        aSa_range = Srange
        aHa_range = Hrange
-       mx_matrices_tmp = 19
+       if(flag_neutral_atom_projector) then
+          aNArange = 20
+          NAarange = 21
+          mx_matrices_tmp = 21
+       else
+          mx_matrices_tmp = 19
+       end if
     else
        aSa_range       = 20
        aHa_range       = 21
@@ -207,7 +215,13 @@ contains
        SFcoeff_range   = 28
        SFcoeffTr_range = 29
        LD_range        = 30
-       mx_matrices_tmp = mx_matrices ! = 30
+       if(flag_neutral_atom_projector) then
+          aNArange        = 31
+          NAarange        = 32
+          mx_matrices_tmp = mx_matrices ! = 30
+       else
+          mx_matrices_tmp = 30
+       end if
     endif
 
     !n_my_grid_points = n_pts_in_block * n_blocks    
@@ -366,6 +380,12 @@ contains
        endif
        if (r_LD.eq.zero) rcut(LD_range) = 0.001_double
     endif
+    if(flag_neutral_atom_projector) then
+       rcut(aNArange)   = two*r_h
+       rcut(NAarange)   = rcut(aNArange)
+       mat_name(aNArange) = "aNA"
+       mat_name(NAarange) = "NAa"
+    end if
     rcutmax = zero
     do n=1,mx_matrices_tmp
        if(rcut(n)>rcutmax) then
