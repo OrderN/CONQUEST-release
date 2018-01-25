@@ -122,6 +122,7 @@ contains
     use global_module,        only: runtype, flag_self_consistent, flag_out_wf, &
                                     flag_write_DOS, flag_opt_cell
     use input_module,         only: leqi
+    use store_matrix,         only: dump_pos_and_matrices
 
     implicit none
 
@@ -172,6 +173,7 @@ contains
     call stop_backtrace(t=backtrace_timer,who='control_run',echo=.true.)
 !****lat>$
 
+    call dump_pos_and_matrices
     return
   end subroutine control_run
   !!***
@@ -236,6 +238,7 @@ contains
                              check_stop
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
+    use store_matrix,  ONLY: dump_InfoMatGlobal, dump_pos_and_matrices
 
     implicit none
 
@@ -277,6 +280,8 @@ contains
     dE = zero
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
+    call dump_pos_and_matrices
+
     iter = 1
     ggold = zero
     old_force = zero
@@ -376,6 +381,9 @@ contains
                write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') &
                      max
        end if
+
+       call dump_pos_and_matrices
+       
        call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
        if (.not. done) call check_stop(done, iter)
     end do
@@ -457,6 +465,8 @@ contains
 !!    Removed calls to dump K matrix (now done in DMMinModule)
 !!   2017/11/10 15:15 dave
 !!    Created variable fire_N_below_thresh to set number of consecutive steps below threshold
+!!   2018/01/22 tsuyoshi (with dave)
+!!    Changes to use new atom update routines
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -470,15 +480,15 @@ contains
                               flag_MDold,n_proc_old,glob2node_old,    &
                               flag_LmatrixReuse,flag_XLBOMD,          &
                               flag_dissipation,flag_FixCOM,           &
-                              flag_fire_qMD, flag_diagonalisation, nspin
+                              flag_fire_qMD, flag_diagonalisation,    &
+                              nspin, flag_Multisite, flag_SFcoeffReuse
     use group_module,   only: parts
     use primary_module, only: bundle
     use minimise,       only: get_E_and_F
     use move_atoms,     only: velocityVerlet, updateIndices,           &
                               init_velocity,update_H,check_move_atoms, &
                               update_atom_coord,wrap_xyz_atom_cell,    &
-                              updateIndices3,zero_COM_velocity,        &
-                              calculate_kinetic_energy
+                              zero_COM_velocity, calculate_kinetic_energy
     use GenComms,       only: gsum, myid, my_barrier, inode, ionode,  &
                               gcopy
     use GenBlas,        only: dot
@@ -488,9 +498,9 @@ contains
     use io_module,      only: write_atomic_positions, pdb_template,   &
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use move_atoms,     only: fac_Kelvin2Hartree
-    use io_module2,     ONLY: dump_InfoGlobal,grab_InfoGlobal,grab_matrix2,InfoL
-    !use DiagModule,     ONLY: diagon
+    use move_atoms,     only: fac_Kelvin2Hartree, update_pos_and_matrices, updateL, updateLorK, updateSFcoeff
+    use store_matrix,   ONLY: dump_InfoMatGlobal,grab_InfoMatGlobal, &
+                    matrix_store_global, grab_matrix2, InfoMatrixFile, dump_pos_and_matrices
     use mult_module,    ONLY: matL,L_trans,matK,S_trans, matrix_scale
     use matrix_data,    ONLY: Lrange,Hrange
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
@@ -517,6 +527,9 @@ contains
     character(50) :: file_velocity='velocity.dat'
     logical       :: done,second_call
     logical,allocatable,dimension(:) :: flag_movable
+
+    type(matrix_store_global) :: InfoGlob
+    type(InfoMatrixFile),pointer:: InfoL(:)
 
     !! quenched MD optimisation is stopped
     !! if the maximum force component is bellow threshold
@@ -575,11 +588,9 @@ contains
       i_first = MDinit_step + 1
       i_last = i_first + MDn_steps - 1
     endif
-    if (.NOT. flag_MDold) then
-      if (inode.EQ.ionode) call dump_InfoGlobal(i_first)
-   endif
+    call dump_pos_and_matrices(index=0,MDstep=i_first,velocity=velocity)
 
-   energy_md = energy0
+    energy_md = energy0
 
     if (flag_fire_qMD) then
        step_qMD = i_first ! SA 20150201
@@ -592,12 +603,10 @@ contains
     do iter = i_first, i_last
        if (myid == 0) &
             write (io_lun, fmt='(4x,"MD run, iteration ",i5)') iter
-       ! Fetch old relations
-       if (.NOT. flag_MDold) then
-         if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-         call gcopy(n_proc_old)
-         call gcopy(glob2node_old,ni_in_cell)
-       endif
+
+       !! For Debuggging !!
+       !     call dump_pos_and_matrices(index=1,MDstep=i_first)
+       !! For Debuggging !!
 
        !%%! Evolve atoms - either FIRE (quenched MD) or velocity Verlet
        if (flag_fire_qMD) then
@@ -610,46 +619,43 @@ contains
        ! Constrain position
        if (flag_RigidBonds) call correct_atomic_position(velocity,MDtimestep)
        ! Reset-up
-       if (.NOT.flag_MDold) then
-          ! Update members
-          call wrap_xyz_atom_cell()
-          call update_atom_coord()
-          call updateIndices3(fixed_potential,velocity)
-          if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
-             ! L-matrix reconstruction
-             call grab_matrix2('L',inode,nfile,InfoL)
-             call my_barrier()
-             call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-             ! DRB 2017/05/09 now extended to spin systems
-             if(nspin==2) then
-                call grab_matrix2('L2',inode,nfile,InfoL)
-                call my_barrier()
-                call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
-             end if
-          else if(flag_diagonalisation .AND. flag_LmatrixReuse) then
-             call grab_matrix2('K',inode,nfile,InfoL)
-             call my_barrier()
-             call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile)
-             if(nspin==2) then
-                call grab_matrix2('K2',inode,nfile,InfoL)
-                call my_barrier()
-                call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile)
-             !else
-             !   call matrix_scale(two,matK(1))
-             end if
+       if(.NOT.flag_MDold) then
+          if(flag_SFcoeffReuse) then
+             call update_pos_and_matrices(updateSFcoeff,velocity)
+          else
+             call update_pos_and_matrices(updateLorK,velocity)
           endif
        else
-          call update_atom_coord()
-          call updateIndices(.true.,fixed_potential)
-       endif
+          call update_atom_coord
+          call updateIndices(.true., fixed_potential)
+       end if
+
        if (flag_XLBOMD) call Do_XLBOMD(iter,MDtimestep)
        call update_H(fixed_potential)
+
+       !2018.Jan.4 TM 
+       !   We need to update flag_movable, since the order of x_atom_cell (or id_glob) 
+       !   may change after the atomic positions are updated.
+       !
+       call check_move_atoms(flag_movable)
+       
+       !! For Debuggging !!
+       !     call dump_pos_and_matrices(index=2,MDstep=i_first)
+       !! For Debuggging !!
+       
        if (flag_fire_qMD) then
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .true.,iter)
+          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=velocity)
        else
-          call get_E_and_F(fixed_potential,vary_mu,energy1,.true.,.false.,iter)
+          call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .false.,iter)
+          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=velocity)
           call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable,second_call)
        end if
+
+       !! For Debuggging !!
+       !!call cq_abort(" STOP FOR DEBUGGING")
+       !! For Debuggging !!
+
        ! Constrain velocity
        if (flag_RigidBonds) call correct_atomic_velocity(velocity)
        !%%! END of Evolve atoms
@@ -661,14 +667,14 @@ contains
        ! Print out energy
        energy_md = energy1
        if (myid == 0) &
-         write (io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
-                KE / (three / two * ni_in_cell) / fac_Kelvin2Hartree
+            write (io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
+            KE / (three / two * ni_in_cell) / fac_Kelvin2Hartree
        if (myid == 0) write (io_lun, 8) iter, KE, energy_md, KE+energy_md
        ! Output positions
        if (myid == 0 .and. iprint_gen > 1) then
-         do i = 1, ni_in_cell
-           write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
-         enddo
+          do i = 1, ni_in_cell
+             write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+          enddo
        endif
 
        ! Analyse forces
@@ -695,6 +701,8 @@ contains
        call write_velocity(velocity, file_velocity)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        !to check IO of velocity files
+
+       call check_stop(done, iter)
        if (flag_fire_qMD) then
           if (abs(max) < MDcgtol) then
              if ((iter - step_qMD) > 1) then
@@ -709,84 +717,10 @@ contains
                 done = .true.
              end if
           end if
-       else
-          call check_stop(done, iter)
        end if
+
        if (done) exit
 
-!%%!   if (myid == 0) &
-!%%!        write (io_lun, fmt='(4x,"MD run, iteration ",i5)') iter
-!%%!   ! Fetch old relations
-!%%!   if (.NOT. flag_MDold) then
-!%%!     if (.NOT. allocated(glob2node_old)) then
-!%%!       allocate (glob2node_old(ni_in_cell), STAT=stat)
-!%%!       if (stat.NE.0) call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
-!%%!     endif
-!%%!     if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-!%%!     call gcopy(n_proc_old)
-!%%!     call gcopy(glob2node_old,ni_in_cell)
-!%%!   endif
-
-!%%!   call velocityVerlet(fixed_potential, bundle, MDtimestep, temp, &
-!%%!                       KE, flag_quench_MD, velocity, tot_force, iter)
-!%%!   if (myid == 0) &
-!%%!        write (io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
-!%%!              KE / (three / two * ni_in_cell) / fac_Kelvin2Hartree
-!%%!   if (myid == 0) write (io_lun, 8) iter, KE, energy_md, KE+energy_md
-!%%!   ! Output positions
-!%%!   if (myid == 0 .and. iprint_gen > 1) then
-!%%!      do i = 1, ni_in_cell
-!%%!         write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
-!%%!      end do
-!%%!   end if
-!%%!   !Now, updateIndices and update_atom_coord are done in velocityVerlet 
-!%%!   !call updateIndices(.false.,fixed_potential, number_of_bands) 
-!%%!   ! L-matrix reconstruction (used to be called at updateIndices3)
-!%%!   if (.NOT.flag_MDold .AND. &
-!%%!       .NOT.diagon     .AND. &
-!%%!       flag_LmatrixReuse       ) then
-!%%!     call grab_matrix2('L',inode,nfile,InfoL)
-!%%!     call my_barrier()
-!%%!     call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-!%%!   endif
-!%%!   ! For XL-BOMD
-!%%!   if (flag_XLBOMD .AND. .NOT.diagon) call Do_XLBOMD(iter,MDtimestep)
-!%%!   ! Updates hamiltonian (used to be called at updateIndices3)
-!%%!   if (.NOT.flag_MDold) call update_H(fixed_potential)
-!%%!   !ORI call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
-!%%!   !ORI                  .false.)
-!%%!   call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
-!%%!                    .false., iter)
-!%%!    energy_md = energy1
-!%%!   ! Dump global data
-!%%!   if (.NOT. flag_MDold) then
-!%%!     if (inode.EQ.ionode) call dump_InfoGlobal(iter)
-!%%!   endif
-
-!%%!   ! Analyse forces
-!%%!   g0 = dot(length, tot_force, 1, tot_force, 1)
-!%%!   max = zero
-!%%!   do i = 1, ni_in_cell
-!%%!      do k = 1, 3
-!%%!         if (abs(tot_force(k,i)) > max) max = tot_force(k,i)
-!%%!      end do
-!%%!   end do
-!%%!   ! Output and energy changes
-!%%!   dE = energy0 - energy1
-!%%!   if (myid == 0) write (io_lun, 6) max
-!%%!   if (myid == 0) write (io_lun, 4) dE
-!%%!   if (myid == 0) write (io_lun, 5) sqrt(g0/ni_in_cell)
-!%%!   energy0 = energy1
-!%%!   energy1 = abs(dE)
-!%%!   if (myid == 0 .and. mod(iter, MDfreq) == 0) &
-!%%!        call write_positions(iter, parts)
-!%%!   call my_barrier
-!%%!   !to check IO of velocity files
-!%%!   call write_velocity(velocity, file_velocity)
-!%%!   call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
-!%%!   !to check IO of velocity files
-!%%!   call check_stop(done, iter)
-!%%!   if (done) exit
     end do
     deallocate(velocity, STAT=stat)
     if (stat /= 0) call cq_abort("Error deallocating velocity in md_run: ", &
@@ -936,6 +870,8 @@ contains
   !!    Removed rcellx references (redundant)
   !!   2017/11/10 dave
   !!    Removed calls to dump K matrix (now done in DMMinModule)
+  !!   2018/01/22 tsuyoshi (with dave)
+  !!    Changes to use new atom update routines
   !!  SOURCE
   !!
   subroutine pulay_relax(fixed_potential, vary_mu, total_energy)
@@ -947,12 +883,14 @@ contains
                               y_atom_cell, z_atom_cell, id_glob,    &
                               atom_coord, area_general, flag_pulay_simpleStep, &
                               glob2node_old, n_proc_old, flag_MDold, &
-                              flag_diagonalisation, nspin, flag_LmatrixReuse, atom_coord_diff
+                              flag_diagonalisation, nspin, flag_LmatrixReuse, &
+                              flag_SFcoeffReuse
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
                               updateIndices, updateIndices3, update_atom_coord,     &
-                              safemin, safemin2, update_H, wrap_xyz_atom_cell
+                              safemin, safemin2, update_H, update_pos_and_matrices
+    use move_atoms,     only: updateL, updateLorK, updateSFcoeff
     use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
     use GenBlas,        only: dot
     use force_module,   only: tot_force
@@ -960,7 +898,7 @@ contains
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use primary_module, only: bundle
-    use io_module2, ONLY: grab_InfoGlobal,InfoL,grab_matrix2
+    use store_matrix,   only: dump_pos_and_matrices
     use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
     use matrix_data, ONLY: Hrange, Lrange
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
@@ -971,7 +909,7 @@ contains
     ! Shared variables needed by get_E_and_F for now (!)
     logical :: vary_mu, fixed_potential
     real(double) :: total_energy
-    
+
     ! Local variables
     real(double), allocatable, dimension(:,:)   :: velocity
     real(double), allocatable, dimension(:,:)   :: cg
@@ -1029,6 +967,7 @@ contains
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
                      .false.)
+    call dump_pos_and_matrices
     iter = 1
     ggold = zero
     energy1 = energy0
@@ -1068,10 +1007,6 @@ contains
              !tot_force(:,jj) = forceStore(:,i,pul_mx)
           end if
        end do
-       !call gsum(x_atom_cell,ni_in_cell)
-       !call gsum(y_atom_cell,ni_in_cell)
-       !call gsum(z_atom_cell,ni_in_cell)
-       !call gsum(tot_force,3,ni_in_cell)
        ! Take a trial step
        velocity = zero
        ! Move the atoms using velocity Verlet (why not ?)
@@ -1091,19 +1026,10 @@ contains
        if (flag_pulay_simpleStep) then
           if (myid == 0) write (io_lun, *) 'Step is ', step
           do i = 1, ni_in_cell
-             !jj = id_glob(i)
              x_atom_cell(i) = x_atom_cell(i) + step*cg(1,i)
              y_atom_cell(i) = y_atom_cell(i) + step*cg(2,i)
              z_atom_cell(i) = z_atom_cell(i) + step*cg(3,i)
-             jj = id_glob(i)
-             atom_coord_diff(1, jj) = step * cg(1,i)
-             atom_coord_diff(2, jj) = step * cg(2,i)
-             atom_coord_diff(3, jj) = step * cg(3,i)
           end do
-          ! Do we want gsum or a scatter/gather ?
-          !call gsum(x_atom_cell,ni_in_cell)
-          !call gsum(y_atom_cell,ni_in_cell)
-          !call gsum(z_atom_cell,ni_in_cell)
           ! Output positions
           if (myid == 0 .and. iprint_MD > 1) then
              do i = 1, ni_in_cell
@@ -1112,36 +1038,10 @@ contains
              end do
           end if
           if(.NOT.flag_MDold) then
-             ! Update members
-             call wrap_xyz_atom_cell()
-             call update_atom_coord()
-             if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-             call my_barrier
-             call gcopy(n_proc_old)
-             call gcopy(glob2node_old,ni_in_cell)
-             call updateIndices3(fixed_potential,cg)
-             if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
-                ! L-matrix reconstruction
-                call grab_matrix2('L',inode,nfile,InfoL)
-                call my_barrier()
-                call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-                ! DRB 2017/05/09 now extended to spin systems
-                if(nspin==2) then
-                   call grab_matrix2('L2',inode,nfile,InfoL)
-                   call my_barrier()
-                   call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
-                end if
-             else if(flag_diagonalisation .AND. flag_LmatrixReuse) then
-                call grab_matrix2('K',inode,nfile,InfoL)
-                call my_barrier()
-                call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile)
-                if(nspin==2) then
-                   call grab_matrix2('K2',inode,nfile,InfoL)
-                   call my_barrier()
-                   call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile)
-                !else
-                !   call matrix_scale(two,matK(1))
-                end if
+             if(flag_SFcoeffReuse) then
+                call update_pos_and_matrices(updateSFcoeff,cg)
+             else
+                call update_pos_and_matrices(updateLorK,cg)
              endif
           else
              call update_atom_coord
@@ -1149,7 +1049,8 @@ contains
           end if
           call update_H(fixed_potential)
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
-                           .false.)
+               .false.)
+          call dump_pos_and_matrices
        else
           if (.NOT. flag_MDold) then
              call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
@@ -1173,16 +1074,16 @@ contains
        if (iter > MDn_steps) then
           done = .true.
           if (myid == 0) &
-               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') &
-                     iter
+               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') iter
        end if
        if (abs(max) < MDcgtol) then
           done = .true.
           if (myid == 0) &
-               write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') &
-                     max
+               write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
        end if
+       if (.not. done) call check_stop(done, iter)
        if(done) exit
+
        ! Pass forces and positions down to pulayStep routine
        if(myid==0) write(io_lun,*) 'Building optimal structure'
        cg = zero
@@ -1195,15 +1096,6 @@ contains
        end do
        call pulayStep(npmod, posnStore, forceStore, x_atom_cell, &
                       y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
-       !call gsum(x_atom_cell,ni_in_cell)
-       !call gsum(y_atom_cell,ni_in_cell)
-       !call gsum(z_atom_cell,ni_in_cell)
-       do i = 1, ni_in_cell
-          jj = id_glob(i)
-          atom_coord_diff(1, jj) = x_atom_cell(i) - posnStore(1,jj,npmod)
-          atom_coord_diff(2, jj) = y_atom_cell(i) - posnStore(2,jj,npmod)
-          atom_coord_diff(3, jj) = z_atom_cell(i) - posnStore(3,jj,npmod)
-       end do
        ! Output positions
        if (myid == 0 .and. iprint_MD > 1) then
           do i = 1, ni_in_cell
@@ -1212,36 +1104,10 @@ contains
           end do
        end if
        if(.NOT.flag_MDold) then
-          ! Update members
-          call wrap_xyz_atom_cell()
-          call update_atom_coord()
-          if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-          call my_barrier
-          call gcopy(n_proc_old)
-          call gcopy(glob2node_old,ni_in_cell)
-          call updateIndices3(fixed_potential,cg)
-          if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
-             ! L-matrix reconstruction
-             call grab_matrix2('L',inode,nfile,InfoL)
-             call my_barrier()
-             call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-             ! DRB 2017/05/09 now extended to spin systems
-             if(nspin==2) then
-                call grab_matrix2('L2',inode,nfile,InfoL)
-                call my_barrier()
-                call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
-             end if
-          else if(flag_diagonalisation .AND. flag_LmatrixReuse) then
-             call grab_matrix2('K',inode,nfile,InfoL)
-             call my_barrier()
-             call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(1),nfile)
-             if(nspin==2) then
-                call grab_matrix2('K2',inode,nfile,InfoL)
-                call my_barrier()
-                call Matrix_CommRebuild(InfoL,Hrange,S_trans,matK(2),nfile)
-             !else
-             !   call matrix_scale(two,matK(1))
-             end if
+          if(flag_SFcoeffReuse) then
+             call update_pos_and_matrices(updateSFcoeff,cg)
+          else
+             call update_pos_and_matrices(updateLorK,cg)
           endif
        else
           call update_atom_coord
@@ -1251,6 +1117,8 @@ contains
        call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
                         .false.)
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+       call dump_pos_and_matrices
+
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero
@@ -1364,6 +1232,7 @@ contains
     use timer_module
     use io_module,      only: leqi
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use store_matrix,  only: dump_pos_and_matrices
 
     implicit none
 
@@ -1403,6 +1272,7 @@ contains
     reset_iter = 1
     ggold = zero
     energy1 = energy0
+    call dump_pos_and_matrices(index=0,MDstep=iter)
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
        stressx = -stress(1)
@@ -1497,7 +1367,7 @@ contains
        if (abs(dE)<cell_en_tol) then
           done = .true.
           if (myid == 0 .and. iprint_gen > 0) &
-               write (io_lun, fmt='(4x,"Energy change below threshold: ",f12.10)') &
+               write (io_lun, fmt='(4x,"Energy change below threshold: ",f20.10)') &
                      max
        end if
 

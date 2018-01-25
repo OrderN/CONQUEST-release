@@ -612,6 +612,10 @@ contains
   !!    Reading atomic spins: small tweak to test on net spin (uses abs and RD_ERR)
   !!   2018/01/19 dave
   !!    Added test for lmax_ps and NA projector functions
+  !!   2018/01/22 tsuyoshi (with dave)
+  !!    Added new parameters:
+  !!     - threshold for resetting charge density to atomic density
+  !!     - time_max (General.MaxTime) to stop run after specified number of seconds in check_stop
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -630,7 +634,7 @@ contains
                              flag_fractional_atomic_coords,            &
                              flag_old_partitions, ne_in_cell,          &
                              max_L_iterations, flag_read_blocks,       &
-                             runtype, restart_L, restart_rho,          &
+                             runtype, restart_LorK, restart_rho,          &
                              flag_basis_set, blips, PAOs,              &
                              flag_test_forces, UseGemm,                &
                              flag_fractional_atomic_coords,            &
@@ -733,7 +737,7 @@ contains
                                  flag_which_force, TF_direction, &
                                  TF_atom_moved, TF_delta
     use io_module, only: pdb_format, pdb_altloc, append_coords,  &
-                         pdb_output, banner, get_file_name
+                         pdb_output, banner, get_file_name, time_max
     use group_module,     only: part_method, HILBERT, PYTHON
     use energy,           only: flag_check_DFT
     use H_matrix_module,  only: locps_output, locps_choice
@@ -761,9 +765,9 @@ contains
                                   flag_LFD_minimise, LFD_ThreshE, LFD_ThreshD,           &
                                   LFD_Thresh_EnergyRise, LFD_max_iteration,              &
                                   flag_LFD_MD_UseAtomicDensity
+    use move_atoms,         only: threshold_resetCD
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
-
 
     implicit none
 
@@ -916,6 +920,9 @@ contains
        !
        !
        time_threshold = fdf_double('General.TimeThreshold',0.001_double)
+
+       time_max  = fdf_double('General.MaxTime', zero)
+
        ! Read run title
        titles = fdf_string(80,'IO.Title',def)
        ! Is this a restart run ? **NB NOT AVAILABLE RIGHT NOW**
@@ -927,7 +934,7 @@ contains
           call cq_abort('read_input: you may not select restart for a run just now')
        endif
        init_blip_flag = fdf_string(10,'Basis.InitBlipFlag','pao')
-       restart_L      = fdf_boolean('General.LoadL',   .false.)
+       restart_LorK   = fdf_boolean('General.LoadL',   .false.)
        restart_rho    = fdf_boolean('General.LoadRho', .false.)
        restart_T      = fdf_boolean('General.LoadInvS',.false.)
        ! Is there a net charge on the cell ?
@@ -1374,6 +1381,10 @@ contains
                        fdf_string(80,'SC.ReadAtomicDensityFile','read_atomic_density.dat')
        ! Read atomic density initialisation flag
        atomic_density_method = fdf_string(10,'SC.AtomicDensityFlag','pao')
+       ! When constructing charge density from K matrix at last step, we check the total 
+       ! number of electrons. If the error of electron number (per total electron number) 
+       ! is larger than the following value, we use atomic charge density. (in update_H)
+       threshold_resetCD     = fdf_double('SC.Threshold.Reset',0.1_double)
 !!$
 !!$
 !!$
@@ -1907,6 +1918,8 @@ contains
        call cq_abort("Old-style CQ input no longer supported: please convert")
     end if ! new_format
 
+!**** TM 2017.Nov.3rd
+    call check_compatibility
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_input')
 !****lat>$
@@ -1914,6 +1927,20 @@ contains
     call my_barrier()
 
     return
+   contains
+    ! ------------------------------------------------------------------------------
+    ! subroutine check_compatibility
+    ! ------------------------------------------------------------------------------
+    subroutine check_compatibility 
+     ! this subroutine checks the compatibility between keywords defined in read_input
+     ! add the
+     !       2017.11(Nov).03   Tsuyoshi Miyazaki
+     implicit none
+      !check AtomMove.ExtendedLagrangian(flag_XLBOMD) &  AtomMove.TypeOfRun (runtype)
+       if(runtype .NE. 'md') flag_XLBOMD=.false.
+     
+     return
+    end subroutine check_compatibility 
   end subroutine read_input
   !!***
 
