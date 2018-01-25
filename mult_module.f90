@@ -173,15 +173,16 @@ module mult_module
   integer :: aHs_trans     ! 9
   integer :: SFcoeff_trans ! 10
   integer :: aNA_trans     ! 11
+  integer :: aNAa_trans    ! 12
 
-  integer(integ), parameter :: mx_trans = 11
+  integer(integ), parameter :: mx_trans = 12
 
   type(pair_data), allocatable, dimension(:,:) :: pairs
   integer, dimension(:), pointer :: Spairind, Lpairind, Tpairind, &
                                     APpairind, LSpairind, LHpairind, &
                                     LSLpairind, &
                                     aSs_pairind, aHs_pairind, SFcoeff_pairind, &
-                                    aNApairind
+                                    aNApairind, aNAapairind
 
   type(matrix_trans), dimension(mx_matrices), target :: ltrans
   type(trans_remote) :: gtrans(mx_trans)
@@ -341,10 +342,12 @@ contains
        aHs_trans     = 9
        SFcoeff_trans = 10
        aNA_trans = 11
+       aNAa_trans = 12
     else
        aNA_NAa_aHa = 23
        aHa_aNA_aNA = 24
        aNA_trans = 8
+       aNAa_trans = S_trans
     endif
 
     mat%sf1_type = sf
@@ -528,12 +531,21 @@ contains
        call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,SFcoeff_range),                &
                       myid-1, halo(SFcoeff_range), halo(SFcoeffTr_range), ltrans(SFcoeff_range), &
                       gtrans(SFcoeff_trans), pairs(:, SFcoeff_trans), SFcoeff_pairind)
-    endif
+       if(flag_neutral_atom_projector) then
+          call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,aNArange),     &
+               myid-1, halo(aNArange), halo(NAarange), ltrans(aNArange),    &
+               gtrans(aNA_trans), pairs(:,aNA_trans), aNApairind)
+          call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,aHa_range),     &
+               myid-1, halo(aHa_range), halo(aHa_range), ltrans(aHa_range),    &
+               gtrans(aNAa_trans), pairs(:,aNAa_trans), aNAapairind)
+       end if
     ! NA projectors
-    if(flag_neutral_atom_projector) then
+    else if(flag_neutral_atom_projector) then
        call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,aNArange),     &
             myid-1, halo(aNArange), halo(NAarange), ltrans(aNArange),    &
             gtrans(aNA_trans), pairs(:,aNA_trans), aNApairind)
+       !aNAapairind = Spairind
+       aNAa_trans = S_trans
     end if
 
     ! Now initialise the matrix multiplications
@@ -1031,7 +1043,7 @@ contains
     if(flag_neutral_atom_projector) then
        ra = rcut(aNArange)
        rc = rcut(aHa_range)
-       if (rc >= ra) then
+       !if (rc >= ra) then
           mult(aNA_NAa_aHa)%mult_type = 1
           mult(aNA_NAa_aHa)%amat    => mat(1:prim%groups_on_node,aNArange)
           mult(aNA_NAa_aHa)%bmat    => mat(1:prim%groups_on_node,NAarange)
@@ -1044,20 +1056,20 @@ contains
           mult(aNA_NAa_aHa)%prim    => prim
           mult(aNA_NAa_aHa)%gcs     => gcs
           call mult_ini(mult(aNA_NAa_aHa), NAamatind, myid-1, prim%n_prim, parts)
-       else
-          mult(aNA_NAa_aHa)%mult_type = 2
-          mult(aNA_NAa_aHa)%amat    => mat(1:prim%groups_on_node,aHa_range)
-          mult(aNA_NAa_aHa)%bmat    => mat(1:prim%groups_on_node,aNArange)
-          mult(aNA_NAa_aHa)%cmat    => mat(1:prim%groups_on_node,aNArange)
-          mult(aNA_NAa_aHa)%ahalo   => halo(aHa_range)
-          mult(aNA_NAa_aHa)%chalo   => halo(aNArange)
-          mult(aNA_NAa_aHa)%ltrans  => ltrans(aHa_range)
-          !mult(aNA_NAa_aHa)%bindex => aNAmatind
-          mult(aNA_NAa_aHa)%parts   => parts
-          mult(aNA_NAa_aHa)%prim    => prim
-          mult(aNA_NAa_aHa)%gcs     => gcs
-          call mult_ini(mult(aNA_NAa_aHa), aNAmatind, myid-1, prim%n_prim, parts)
-       end if
+       !else
+       !   mult(aNA_NAa_aHa)%mult_type = 2
+       !   mult(aNA_NAa_aHa)%amat    => mat(1:prim%groups_on_node,aHa_range)
+       !   mult(aNA_NAa_aHa)%bmat    => mat(1:prim%groups_on_node,aNArange)
+       !   mult(aNA_NAa_aHa)%cmat    => mat(1:prim%groups_on_node,aNArange)
+       !   mult(aNA_NAa_aHa)%ahalo   => halo(aHa_range)
+       !   mult(aNA_NAa_aHa)%chalo   => halo(aNArange)
+       !   mult(aNA_NAa_aHa)%ltrans  => ltrans(aHa_range)
+       !   !mult(aNA_NAa_aHa)%bindex => aNAmatind
+       !   mult(aNA_NAa_aHa)%parts   => parts
+       !   mult(aNA_NAa_aHa)%prim    => prim
+       !   mult(aNA_NAa_aHa)%gcs     => gcs
+       !   call mult_ini(mult(aNA_NAa_aHa), aNAmatind, myid-1, prim%n_prim, parts)
+       !end if
        mult(aHa_aNA_aNA)%mult_type = 2
        mult(aHa_aNA_aNA)%amat    => mat(1:prim%groups_on_node,aNArange)
        mult(aHa_aNA_aNA)%bmat    => mat(1:prim%groups_on_node,NAarange)
@@ -1332,7 +1344,10 @@ contains
     deallocate(Spairind, Lpairind, APpairind, LSpairind, LHpairind, &
                LSLpairind, Tpairind)
     if (atomf.ne.sf) deallocate(aSs_pairind, aHs_pairind, SFcoeff_pairind)
-    if(flag_neutral_atom_projector) deallocate(aNApairind)
+    if(flag_neutral_atom_projector) then
+       deallocate(aNApairind)
+       if(atomf.ne.sf) deallocate(aNAapairind)
+    end if
     !call dissociate_matrices
     ! Matrices
     call end_ops(prim,Srange,Smatind,S_trans)
@@ -2377,7 +2392,7 @@ contains
        trans_index(matNAa  ) = aNA_trans
        trans_index(matNA  )  = S_trans
        if (atomf.ne.sf) then
-          trans_index(matNAatomf) = 0
+          trans_index(matNAatomf) = aNAa_trans
        end if
     end if
 

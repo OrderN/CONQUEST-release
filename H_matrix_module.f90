@@ -1044,7 +1044,6 @@ contains
   end subroutine get_h_on_atomfns
   !!***
 
-
   ! -----------------------------------------------------------
   ! Subroutine get_HNL_matrix
   ! -----------------------------------------------------------
@@ -1345,6 +1344,33 @@ contains
   end subroutine get_HNL_matrix
   !!***
 
+  ! -----------------------------------------------------------
+  ! Subroutine get_HNA_matrix
+  ! -----------------------------------------------------------
+
+  !!****f* H_matrix_module/get_HNA_matrix *
+  !!
+  !!  NAME
+  !!   get_HNA_matrix
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Generates the neutral-atom matrix using PAO integrals for 
+  !!   1- and 2-centre terms, and projectors for the 3-centre terms
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D.R.Bowler
+  !!  CREATION DATE
+  !!   2017/11/10
+  !!  MODIFICATION HISTORY
+  !!   2018/01/25 12:50 JST dave
+  !!    Changed transpose type for matNA
+  !!  SOURCE
+  !!
   subroutine get_HNA_matrix(matNA)
 
     use datatypes
@@ -1353,7 +1379,7 @@ contains
     use mult_module, only: matrix_sum, matrix_transpose, store_matrix_value, return_matrix_value, &
          allocate_temp_matrix, free_temp_matrix, S_trans, scale_matrix_value,  aNA_NAa_aHa, &
          aNA_trans, matNAa, mataNA, matrix_scale, mult, matrix_product, matrix_pos, return_matrix_len, matK, &
-         matrix_product_trace
+         matrix_product_trace, aNAa_trans
     use species_module,              only: species
     use global_module,               only: flag_basis_set, PAOs,       &
                                            blips, nlpf, atomf, iprint_ops, &
@@ -1379,7 +1405,7 @@ contains
     real(double) :: val
 
     ! 1- and 2-centre terms: <ii|j> and <i|jj> by assemble, transpose and sum
-    matNAT = allocate_temp_matrix(aHa_range, S_trans, atomf, atomf)
+    matNAT = allocate_temp_matrix(aHa_range, aNAa_trans, atomf, atomf)
     call assemble_2(aHa_range, matNA, 4)
     call matrix_transpose(matNA, matNAT)
     call matrix_sum(one,matNA,one,matNAT)

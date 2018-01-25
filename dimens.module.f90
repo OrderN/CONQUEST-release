@@ -215,9 +215,13 @@ contains
        SFcoeff_range   = 28
        SFcoeffTr_range = 29
        LD_range        = 30
-       aNArange        = 31
-       NAarange        = 32
-       mx_matrices_tmp = mx_matrices ! = 30
+       if(flag_neutral_atom_projector) then
+          aNArange        = 31
+          NAarange        = 32
+          mx_matrices_tmp = mx_matrices ! = 30
+       else
+          mx_matrices_tmp = 30
+       end if
     endif
 
     !n_my_grid_points = n_pts_in_block * n_blocks    

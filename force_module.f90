@@ -2320,6 +2320,33 @@ contains
   end subroutine get_KE_force
   !!***
 
+  ! -----------------------------------------------------------
+  ! Subroutine get_HNA_force
+  ! -----------------------------------------------------------
+
+  !!****f* force_module/get_HNA_force *
+  !!
+  !!  NAME
+  !!   get_HNA_force
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Gets the neutral atom part of the HF force if using projectors
+  !!   This mixes Hellman-Feynman and Pulay forces (as with NL part above)
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2018/01/10
+  !!  MODIFICATION HISTORY
+  !!   2018/01/25 12:52 JST dave
+  !!    Changed transpose type for mat_dNA to aNAa_trans
+  !!  SOURCE
+  !!
   subroutine get_HNA_force(NA_force)
 
     use datatypes
@@ -2334,7 +2361,7 @@ contains
                                            matrix_pos, matrix_transpose, matrix_sum, &
                                            matrix_product, matrix_scale,               &
                                            S_trans, scale_matrix_value, aHa_aNA_aNA, aNA_trans, &
-                                           matU, matUT, matNAa, mataNA, &
+                                           matU, matUT, matNAa, mataNA, aNAa_trans, &
                                            return_matrix_value, store_matrix_value, mult, matK, matrix_product_trace
     use GenBlas
     use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
@@ -2524,8 +2551,8 @@ contains
     end do
 
     ! 1- and 2-centre terms
-    mat_dNA = allocate_temp_matrix(aHa_range,S_trans,atomf,atomf)
-    mat_dNAT = allocate_temp_matrix(aHa_range,S_trans,atomf,atomf)
+    mat_dNA = allocate_temp_matrix(aHa_range,aNAa_trans,atomf,atomf)
+    mat_dNAT = allocate_temp_matrix(aHa_range,aNAa_trans,atomf,atomf)
     ! Now, for the offsite part, done on the integration grid.
     do force_direction = 1, 3
        force_contrib = zero
