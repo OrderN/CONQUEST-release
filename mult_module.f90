@@ -96,6 +96,8 @@
 !!    matU is changed from (sf,nlpf) to (atomf,nlpf) (and its transpose matUT)
 !!   2017/03/08 15:00 nakata
 !!    Removed PAOP_PS_H, matdS and matdH which are no longer used
+!!   2017/12/05 10:21 dave with TM and NW (Mizuho)
+!!    Adding multiplications for NA projectors
 !!  SOURCE
 !!
 module mult_module
@@ -103,7 +105,7 @@ module mult_module
   use datatypes
   use matrix_module
   use matrix_data,            only: mx_matrices, matrix_pointer
-  use global_module,          only: sf, nlpf, paof, atomf, io_lun, nspin
+  use global_module,          only: sf, nlpf, paof, atomf, io_lun, nspin, napf
   use GenComms,               only: cq_abort
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_allocation
@@ -152,8 +154,10 @@ module mult_module
   integer :: sHs_sHa_sCa    ! 32, type 2             , H(sf   ,sf   )   * H(sf   ,atomf)   = C(sf   ,atomf)
   integer :: aLa_aSa_aLSa   ! 33, type 1, for LFD    , L(atomf,atomf)   * S(atomf,atomf)   = Local S(atomf,atomf)
   integer :: aLa_aHa_aLHa   ! 34, type 1, for LFD    , L(atomf,atomf)   * H(atomf,atomf)   = Local H(atomf,atomf)
+  integer :: aNA_NAa_aHa ! type 1 for building H: H(atomf, napf) * H(napf, atomf) = H(atomf, atomf)
+  integer :: aHa_aNA_aNA ! type 2 for gradients: aHa_NA_NA
 
-  integer(integ), parameter :: mx_mults  = 34
+  integer(integ), parameter :: mx_mults  = 36
 
   type(matrix_mult) :: mult(mx_mults)
 
@@ -168,14 +172,17 @@ module mult_module
   integer :: aSs_trans     ! 8
   integer :: aHs_trans     ! 9
   integer :: SFcoeff_trans ! 10
+  integer :: aNA_trans     ! 11
+  integer :: aNAa_trans    ! 12
 
-  integer(integ), parameter :: mx_trans = 10
+  integer(integ), parameter :: mx_trans = 12
 
   type(pair_data), allocatable, dimension(:,:) :: pairs
   integer, dimension(:), pointer :: Spairind, Lpairind, Tpairind, &
                                     APpairind, LSpairind, LHpairind, &
                                     LSLpairind, &
-                                    aSs_pairind, aHs_pairind, SFcoeff_pairind
+                                    aSs_pairind, aHs_pairind, SFcoeff_pairind, &
+                                    aNApairind, aNAapairind
 
   type(matrix_trans), dimension(mx_matrices), target :: ltrans
   type(trans_remote) :: gtrans(mx_trans)
@@ -184,14 +191,14 @@ module mult_module
   integer :: max_matrices, current_matrix
   ! spin independent matrices
   integer, public :: &
-       matS, matT, matTtran, matAP, matPA, matKE, matNL
+       matS, matT, matTtran, matAP, matPA, matKE, matNL, mataNA, matNAa, matNA
   ! spin dependent matrices
   integer, allocatable, dimension(:), public :: &
        matH, matL, matLS, matSL, matK, matphi, matM12, matM4, matU, &
        matUT, matX, matSX
   ! spin independent atomf-based matrices
   integer, public :: &
-       matSatomf, matKEatomf, matNLatomf
+       matSatomf, matKEatomf, matNLatomf, matNAatomf
   ! spin dependent atomf-based matrices
   integer, allocatable, dimension(:), public :: &
        matHatomf, matKatomf, matXatomf, &
@@ -246,6 +253,8 @@ contains
   !!    Added lines for atomf-based matrices and LFD matrices
   !!   2017/03/08 15:00 nakata
   !!    Removed dSrange, dHrange, PAOPrange and PAOP_PS_H which are no longer used
+  !!   2017/12/05 10:24 dave with TM and NW (Mizuho)
+  !!    Adding initialisation for NA projector matrices
   !!  SOURCE
   !!
   subroutine immi(parts, prim, gcs, myid, partial)
@@ -260,6 +269,7 @@ contains
     use matrix_comms_module, only: find_neighbour_procs
     use global_module,       only: area_matrices, mx_temp_matrices, flag_LFD
     use memory_module,       only: reg_alloc_mem, type_int
+    use pseudopotential_common, ONLY: flag_neutral_atom_projector
 
     implicit none
 
@@ -322,10 +332,22 @@ contains
        if (flag_LFD) then
           aLa_aSa_aLSa  = 33
           aLa_aHa_aLHa  = 34
+          aNA_NAa_aHa = 35
+          aHa_aNA_aNA = 36
+       else
+          aNA_NAa_aHa = 33
+          aHa_aNA_aNA = 34
        endif
        aSs_trans     = 8
        aHs_trans     = 9
        SFcoeff_trans = 10
+       aNA_trans = 11
+       aNAa_trans = 12
+    else
+       aNA_NAa_aHa = 23
+       aHa_aNA_aNA = 24
+       aNA_trans = 8
+       aNAa_trans = S_trans
     endif
 
     mat%sf1_type = sf
@@ -452,6 +474,19 @@ contains
                           halo(LD_range), ltrans(LD_range))
        endif
     endif ! atomf
+    ! NA projectors
+    if(flag_neutral_atom_projector) then
+       mat(1:prim%groups_on_node, aNArange)%sf1_type = atomf
+       mat(1:prim%groups_on_node, aNArange)%sf2_type = napf
+       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,aNArange),   &
+            aNAmatind, rcut(aNArange), myid-1, halo(aNArange),         &
+            ltrans(aNArange))
+       mat(1:prim%groups_on_node,NAarange)%sf1_type = napf
+       mat(1:prim%groups_on_node,NAarange)%sf2_type = atomf
+       call matrix_ini(parts, prim, gcs, mat(1:prim%groups_on_node,NAarange),   &
+            NAamatind, rcut(NAarange), myid-1, halo(NAarange),         &
+            ltrans(NAarange))
+    end if
     call associate_matrices
     call find_neighbour_procs(parts, halo(max_range))
     call start_timer(tmr_std_allocation)
@@ -496,7 +531,22 @@ contains
        call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,SFcoeff_range),                &
                       myid-1, halo(SFcoeff_range), halo(SFcoeffTr_range), ltrans(SFcoeff_range), &
                       gtrans(SFcoeff_trans), pairs(:, SFcoeff_trans), SFcoeff_pairind)
-    endif
+       if(flag_neutral_atom_projector) then
+          call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,aNArange),     &
+               myid-1, halo(aNArange), halo(NAarange), ltrans(aNArange),    &
+               gtrans(aNA_trans), pairs(:,aNA_trans), aNApairind)
+          call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,aHa_range),     &
+               myid-1, halo(aHa_range), halo(aHa_range), ltrans(aHa_range),    &
+               gtrans(aNAa_trans), pairs(:,aNAa_trans), aNAapairind)
+       end if
+    ! NA projectors
+    else if(flag_neutral_atom_projector) then
+       call trans_ini(parts, prim, gcs, mat(1:prim%groups_on_node,aNArange),     &
+            myid-1, halo(aNArange), halo(NAarange), ltrans(aNArange),    &
+            gtrans(aNA_trans), pairs(:,aNA_trans), aNApairind)
+       !aNAapairind = Spairind
+       aNAa_trans = S_trans
+    end if
 
     ! Now initialise the matrix multiplications
     ! Somewhere, we need to set mult_type 1/2 - probably here !
@@ -990,6 +1040,49 @@ contains
           call mult_ini(mult(aLa_aHa_aLHa), aHa_matind, myid-1, prim%n_prim, parts)
        endif
     endif ! atomf
+    if(flag_neutral_atom_projector) then
+       ra = rcut(aNArange)
+       rc = rcut(aHa_range)
+       !if (rc >= ra) then
+          mult(aNA_NAa_aHa)%mult_type = 1
+          mult(aNA_NAa_aHa)%amat    => mat(1:prim%groups_on_node,aNArange)
+          mult(aNA_NAa_aHa)%bmat    => mat(1:prim%groups_on_node,NAarange)
+          mult(aNA_NAa_aHa)%cmat    => mat(1:prim%groups_on_node,aHa_range)
+          mult(aNA_NAa_aHa)%ahalo   => halo(aNArange)
+          mult(aNA_NAa_aHa)%chalo   => halo(aHa_range)
+          mult(aNA_NAa_aHa)%ltrans  => ltrans(aNArange)
+          !mult(aNA_NAa_aHa)%bindex => NAamatind
+          mult(aNA_NAa_aHa)%parts   => parts
+          mult(aNA_NAa_aHa)%prim    => prim
+          mult(aNA_NAa_aHa)%gcs     => gcs
+          call mult_ini(mult(aNA_NAa_aHa), NAamatind, myid-1, prim%n_prim, parts)
+       !else
+       !   mult(aNA_NAa_aHa)%mult_type = 2
+       !   mult(aNA_NAa_aHa)%amat    => mat(1:prim%groups_on_node,aHa_range)
+       !   mult(aNA_NAa_aHa)%bmat    => mat(1:prim%groups_on_node,aNArange)
+       !   mult(aNA_NAa_aHa)%cmat    => mat(1:prim%groups_on_node,aNArange)
+       !   mult(aNA_NAa_aHa)%ahalo   => halo(aHa_range)
+       !   mult(aNA_NAa_aHa)%chalo   => halo(aNArange)
+       !   mult(aNA_NAa_aHa)%ltrans  => ltrans(aHa_range)
+       !   !mult(aNA_NAa_aHa)%bindex => aNAmatind
+       !   mult(aNA_NAa_aHa)%parts   => parts
+       !   mult(aNA_NAa_aHa)%prim    => prim
+       !   mult(aNA_NAa_aHa)%gcs     => gcs
+       !   call mult_ini(mult(aNA_NAa_aHa), aNAmatind, myid-1, prim%n_prim, parts)
+       !end if
+       mult(aHa_aNA_aNA)%mult_type = 2
+       mult(aHa_aNA_aNA)%amat    => mat(1:prim%groups_on_node,aNArange)
+       mult(aHa_aNA_aNA)%bmat    => mat(1:prim%groups_on_node,NAarange)
+       mult(aHa_aNA_aNA)%cmat    => mat(1:prim%groups_on_node,aHa_range)
+       mult(aHa_aNA_aNA)%ahalo   => halo(aNArange)
+       mult(aHa_aNA_aNA)%chalo   => halo(aHa_range)
+       mult(aHa_aNA_aNA)%ltrans  => ltrans(aNArange)
+       !mult(aHa_aNA_aNA)%bindex => NAamatind
+       mult(aHa_aNA_aNA)%parts   => parts
+       mult(aHa_aNA_aNA)%prim    => prim
+       mult(aHa_aNA_aNA)%gcs     => gcs
+       call mult_ini(mult(aHa_aNA_aNA), NAamatind, myid-1, prim%n_prim, parts)
+    end if
     !end if
     ! call stop_timer(tmr_std_matrices)
 
@@ -1026,6 +1119,8 @@ contains
   !!    Added lines for atomf-based matrices and LFD matrices
   !!   2017/03/08 15:00 nakata
   !!    Removed PAOP_PS_H, dSrange, dHrange and PAOPrange which are no longer used
+  !!   2017/12/05 10:33 dave with TM and NW (Mizuho)
+  !!    Deallocating NA projector matrices
   !!  SOURCE
   !!
   subroutine fmmi(prim)
@@ -1035,6 +1130,7 @@ contains
     use matrix_module, only: deallocate_comms_data
     use matrix_data
     use maxima_module, only: maxnabaprocs
+    use pseudopotential_common, ONLY: flag_neutral_atom_projector
 
     implicit none
 
@@ -1186,6 +1282,16 @@ contains
           mult(aLa_aHa_aLHa)%gcs)
        endif
     endif ! atomf
+    if( flag_neutral_atom_projector ) then
+       nullify(mult(aNA_NAa_aHa)%amat,mult(aNA_NAa_aHa)%bmat,mult(aNA_NAa_aHa)%cmat,       &
+            mult(aNA_NAa_aHa)%ahalo,mult(aNA_NAa_aHa)%chalo,mult(aNA_NAa_aHa)%ltrans,           &
+            mult(aNA_NAa_aHa)%bindex,mult(aNA_NAa_aHa)%parts,mult(aNA_NAa_aHa)%prim,            &
+            mult(aNA_NAa_aHa)%gcs)
+       nullify(mult(aHa_aNA_aNA)%amat,mult(aHa_aNA_aNA)%bmat,mult(aHa_aNA_aNA)%cmat,       &
+            mult(aHa_aNA_aNA)%ahalo,mult(aHa_aNA_aNA)%chalo,mult(aHa_aNA_aNA)%ltrans,           &
+            mult(aHa_aNA_aNA)%bindex,mult(aHa_aNA_aNA)%parts,mult(aHa_aNA_aNA)%prim,            &
+            mult(aHa_aNA_aNA)%gcs)
+    end if
     ! Comms
     call deallocate_comms_data(mult(aHa_AP_AP)%comms)
     call deallocate_comms_data(mult(L_S_LS)%comms)
@@ -1224,6 +1330,10 @@ contains
           call deallocate_comms_data(mult(aLa_aHa_aLHa)%comms)
        endif
     endif
+    if( flag_neutral_atom_projector ) then
+       call deallocate_comms_data(mult(aNA_NAa_aHa)%comms)
+       call deallocate_comms_data(mult(aHa_aNA_aNA)%comms)
+    end if
     do i=1,mx_trans
        do j = 1,gtrans(i)%n_rem_node!maxnabaprocs+1
           !if(associated(pairs(j,i)%submat)) deallocate(pairs(j,i)%submat)
@@ -1234,6 +1344,10 @@ contains
     deallocate(Spairind, Lpairind, APpairind, LSpairind, LHpairind, &
                LSLpairind, Tpairind)
     if (atomf.ne.sf) deallocate(aSs_pairind, aHs_pairind, SFcoeff_pairind)
+    if(flag_neutral_atom_projector) then
+       deallocate(aNApairind)
+       if(atomf.ne.sf) deallocate(aNAapairind)
+    end if
     !call dissociate_matrices
     ! Matrices
     call end_ops(prim,Srange,Smatind,S_trans)
@@ -1266,6 +1380,10 @@ contains
        call end_ops(prim,SFcoeffTr_range,SFcoeffTr_matind)
        if (flag_LFD) call end_ops(prim,LD_range,LD_matind)
     endif
+    if( flag_neutral_atom_projector ) then
+       call end_ops(prim,aNArange, aNAmatind,aNA_trans)
+       call end_ops(prim,NAarange,NAamatind)
+    end if
 !    call stop_timer(tmr_std_matrices)
 
     return
@@ -1891,6 +2009,8 @@ contains
   !!    Added lines for atomf-based matrices and LFD matrices
   !!   2017/03/08 15:00 nakata
   !!    Removed dSrange, dHrange, matdS and matdH which are no longer used
+  !!   2017/12/05 10:34 dave
+  !!    Associating NA-projector matrices
   !!  SOURCE
   !!
   subroutine associate_matrices
@@ -1900,7 +2020,7 @@ contains
                              LSrange, APrange, SLrange, TTrrange,     &
                              Xrange, SXrange, aSa_range, aHa_range,   &
                              SFcoeff_range, SFcoeffTr_range,          &
-                             mat
+                             mat, aNArange, NAarange
     use global_module, only: area_matrices, iprint_mat, nspin
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use GenComms,      only: inode, ionode
@@ -1908,6 +2028,7 @@ contains
 !%%!         data_LS, data_SL, data_SC, data_CS, data_K, data_M4, data_U, data_phi, &
 !%%!         data_M12, data_UT, data_KE, data_NL, Srange, Hrange, Lrange, Trange, PArange,&
 !%%!         LSrange, APrange, SLrange, dSrange, dHrange, data_dH, data_dS, mat,TTrrange
+    use pseudopotential_common, ONLY: flag_neutral_atom_projector
 
     implicit none
 
@@ -2010,6 +2131,20 @@ contains
           current_matrix     = current_matrix + 7  ! 48
        endif
     endif ! atomf
+    if( flag_neutral_atom_projector ) then
+       current_matrix = current_matrix + 1
+       mataNA = current_matrix
+       current_matrix = current_matrix + 1
+       matNAa = current_matrix
+       current_matrix = current_matrix + 1
+       matNA  = current_matrix
+       if (atomf.eq.sf) then
+          matNAatomf = matNA
+       else
+          current_matrix = current_matrix + 1
+          matNAatomf  = current_matrix
+       end if
+    end if
 
 !%%!! Now associate pointers with correct arrays
 !%%!    mat_p(matS  )%matrix => data_S
@@ -2067,6 +2202,14 @@ contains
           mat_p(matdSFcoeff_e(spin)  )%sf1_type = sf
        enddo
     endif
+    if( flag_neutral_atom_projector ) then
+       mat_p(mataNA  )%sf1_type = atomf
+       mat_p(matNAa  )%sf1_type = napf
+       mat_p(matNA   )%sf1_type = sf
+       if (atomf.ne.sf) then
+          mat_p(matNAatomf   )%sf1_type = atomf
+       end if
+    end if
     ! Type for f2
     mat_p(matS    )%sf2_type = sf
     mat_p(matT    )%sf2_type = sf
@@ -2103,6 +2246,14 @@ contains
           mat_p(matdSFcoeff_e(spin)  )%sf2_type = atomf
        enddo
     endif
+    if( flag_neutral_atom_projector ) then
+       mat_p(mataNA  )%sf2_type = napf
+       mat_p(matNAa  )%sf2_type = atomf
+       mat_p(matNA   )%sf2_type = atomf
+       if (atomf.ne.sf) then
+          mat_p(matNAatomf   )%sf2_type = atomf
+       end if
+    end if
     ! Set up index translation for ranges
     matrix_index(matS    ) = Srange
     matrix_index(matT    ) = Trange
@@ -2139,6 +2290,14 @@ contains
           matrix_index(matdSFcoeff_e(spin)  ) = SFcoeff_range
        end do
     endif
+    if( flag_neutral_atom_projector ) then
+       matrix_index(mataNA  ) = aNArange
+       matrix_index(matNAa  ) = NAarange
+       matrix_index(matNA   ) = Hrange    
+       if (atomf.ne.sf) then
+          matrix_index(matNAatomf) = aHa_range
+       end if
+    end if
     ! Real lengths
     ! Length
 !%%!    mat_p(matS  )%length = nsf*nsf*mx_at_prim*mx_snab
@@ -2228,6 +2387,14 @@ contains
           trans_index(matdSFcoeff_e(spin)  ) = SFcoeff_trans 
        end do
     endif
+    if( flag_neutral_atom_projector ) then
+       trans_index(mataNA  ) = aNA_trans
+       trans_index(matNAa  ) = aNA_trans
+       trans_index(matNA  )  = S_trans
+       if (atomf.ne.sf) then
+          trans_index(matNAatomf) = aNAa_trans
+       end if
+    end if
 
     return
   end subroutine associate_matrices
@@ -2253,167 +2420,26 @@ contains
   !!    Added lines for atomf-based matrices and LFD matrices
   !!   2017/03/08 15:00 nakata
   !!    Removed matdS and matdH which are no longer used
+  !!   2017/12/05 10:41 dave
+  !!    Changed to use loop (as associate_matrices does for allocation)
   !! SOURCE
   !!
   subroutine dissociate_matrices
 
-    use global_module, only: nspin
+    use global_module, only: nspin, area_matrices
+    use memory_module, only: reg_dealloc_mem, type_dbl
+
     implicit none
 
-    integer :: stat
+    integer :: stat, i
 
     call start_timer(tmr_std_allocation)
-    if (atomf.ne.sf) then
-       if (nspin == 2) then
-          deallocate(mat_p(matdSFcoeff_e(2))%matrix,STAT=stat)     !48
-          if (stat /= 0) call cq_abort("Error deallocating matrix dSFcoeff_e(2)", &
-                                       mat_p(matdSFcoeff_e(2))%length)
-          deallocate(mat_p(matdSFcoeff(2))%matrix,STAT=stat)       !47
-          if (stat /= 0) call cq_abort("Error deallocating matrix dSFcoeff(2)", &
-                                       mat_p(matdSFcoeff(2))%length)
-          deallocate(mat_p(matSFcoeff_tran(2))%matrix,STAT=stat)   !46
-          if (stat /= 0) call cq_abort("Error deallocating matrix SFcoeff_tran(2)", &
-                                       mat_p(matSFcoeff_tran(2))%length)
-          deallocate(mat_p(matSFcoeff(2))%matrix,STAT=stat)        !45
-          if (stat /= 0) call cq_abort("Error deallocating matrix SFcoeff(2)", &
-                                       mat_p(matSFcoeff(2))%length)
-          deallocate(mat_p(matXatomf(2))%matrix,STAT=stat)         !44
-          if (stat /= 0) call cq_abort("Error deallocating matrix Xatomf(2)", &
-                                       mat_p(matXatomf(2))%length)
-          deallocate(mat_p(matKatomf(2))%matrix,STAT=stat)         !43
-          if (stat /= 0) call cq_abort("Error deallocating matrix Katomf(2)", &
-                                       mat_p(matKatomf(2))%length)
-          deallocate(mat_p(matHatomf(2))%matrix,STAT=stat)         !42
-          if (stat /= 0) call cq_abort("Error deallocating matrix Hatomf(2)", &
-                                       mat_p(matHatomf(2))%length)
-       endif ! nspin
-       deallocate(mat_p(matdSFcoeff_e(1))%matrix,STAT=stat)        !29 or 41
-       if (stat /= 0) call cq_abort("Error deallocating matrix dSFcoeff_e(1)", &
-                                    mat_p(matdSFcoeff_e(1))%length)
-       deallocate(mat_p(matdSFcoeff(1))%matrix,STAT=stat)          !28 or 40
-       if (stat /= 0) call cq_abort("Error deallocating matrix dSFcoeff(1)", &
-                                    mat_p(matdSFcoeff(1))%length)
-       deallocate(mat_p(matSFcoeff_tran(1))%matrix,STAT=stat)      !27 or 39
-       if (stat /= 0) call cq_abort("Error deallocating matrix SFcoeff_tran(1)", &
-                                    mat_p(matSFcoeff_tran(1))%length)
-       deallocate(mat_p(matSFcoeff(1))%matrix,STAT=stat)           !26 or 38
-       if (stat /= 0) call cq_abort("Error deallocating matrix SFcoeff(1)", &
-                                    mat_p(matSFcoeff(1))%length)
-       deallocate(mat_p(matXatomf(1))%matrix,STAT=stat)            !25 or 37
-       if (stat /= 0) call cq_abort("Error deallocating matrix Xatomf(1)", &
-                                    mat_p(matXatomf(1))%length)
-       deallocate(mat_p(matNLatomf)%matrix,STAT=stat)              !24 or 36
-       if (stat /= 0) call cq_abort("Error deallocating matrix NLatomf", &
-                                    mat_p(matNLatomf)%length)
-       deallocate(mat_p(matKEatomf)%matrix,STAT=stat)              !23 or 35
-       if (stat /= 0) call cq_abort("Error deallocating matrix KEatomf", &
-                                    mat_p(matKEatomf)%length)
-       deallocate(mat_p(matKatomf(1))%matrix,STAT=stat)            !22 or 34
-       if (stat /= 0) call cq_abort("Error deallocating matrix Katomf(1)", &
-                                    mat_p(matKatomf(1))%length)
-       deallocate(mat_p(matHatomf(1))%matrix,STAT=stat)            !21 or 33
-       if (stat /= 0) call cq_abort("Error deallocating matrix Hatomf(1)", &
-                                    mat_p(matHatomf(1))%length)
-       deallocate(mat_p(matSatomf)%matrix,STAT=stat)               !20 or 32
-       if (stat /= 0) call cq_abort("Error deallocating matrix Satomf", &
-                                    mat_p(matSatomf)%length)
-    endif ! atomf
-    if (nspin == 2) then
-       ! order is important
-       deallocate(mat_p(matSX(2))%matrix,STAT=stat) !31
-       if (stat /= 0) call cq_abort("Error deallocating matrix SX(2)&
-            & ",mat_p(matSX(2))%length)
-       deallocate(mat_p(matX(2))%matrix,STAT=stat)  !30
-       if (stat /= 0) call cq_abort("Error deallocating matrix X(2)&
-            & ",mat_p(matX(2))%length)
-       deallocate(mat_p(matM4(2))%matrix, STAT=stat)!29
-       if (stat /= 0) call cq_abort("Error deallocating matrix M4(2) ",&
-                                    mat_p(matM4(2))%length)       
-       deallocate(mat_p(matM12(2))%matrix,STAT=stat)!28
-       if (stat /= 0) call cq_abort("Error deallocating matrix M12(2)&
-            & ",mat_p(matM12(2))%length)
-       deallocate(mat_p(matUT(2))%matrix,STAT=stat) !27
-       if (stat /= 0) call cq_abort("Error deallocating matrix UT(2)&
-            & ",mat_p(matU(2))%length)
-       deallocate(mat_p(matphi(2))%matrix,STAT=stat)!26
-       if (stat /= 0) call cq_abort("Error deallocating matrix U(2)&
-            & ",mat_p(matphi(2))%length)
-       deallocate(mat_p(matphi(2))%matrix,STAT=stat)!25
-       if (stat /= 0) call cq_abort("Error deallocating matrix phi(2)&
-            & ",mat_p(matphi(2))%length)
-       deallocate(mat_p(matSL(2) )%matrix,STAT=stat)!24
-       if (stat /= 0) call cq_abort("Error deallocating matrix SL(2)&
-            & ",mat_p(matSL(2))%length)
-       deallocate(mat_p(matLS(2) )%matrix,STAT=stat)!23
-       if (stat /= 0) call cq_abort("Error deallocating matrix LS(2)&
-            & ",mat_p(matLS(2))%length)
-       deallocate(mat_p(matK(2))%matrix,STAT=stat)  !22
-       if (stat /= 0) call cq_abort("Error deallocating matrix K(2)&
-            & ",mat_p(matK(2))%length)
-       deallocate(mat_p(matL(2))%matrix,STAT=stat)  !21
-       if (stat /= 0) call cq_abort("Error deallocating matrix L(2)&
-            & ",mat_p(matL(2))%length)
-       deallocate(mat_p(matH(2))%matrix,STAT=stat)  !20
-       if (stat /= 0) call cq_abort("Error deallocating matrix H(2)&
-            & ",mat_p(matH(2))%length)
-    end if
-    deallocate(mat_p(matSX(1))%matrix,STAT=stat)    !19
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix SX(1) ",mat_p(matSX(1))%length)
-    deallocate(mat_p(matX(1))%matrix,STAT=stat)     !18
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix X(1) ",mat_p(matX(1))%length)
-    deallocate(mat_p(matNL)%matrix,STAT=stat)       !17
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix NL ", mat_p(matNL)%length)
-    deallocate(mat_p(matKE)%matrix,STAT=stat)       !16
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix KE ", mat_p(matKE)%length)
-    deallocate(mat_p(matUT(1))%matrix,STAT=stat)    !15
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix UT(1) ", mat_p(matUT(1))%length)
-    deallocate(mat_p(matM12(1))%matrix,STAT=stat)   !14
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix M12(1) ", mat_p(matM12(1))%length)
-    deallocate(mat_p(matphi(1))%matrix,STAT=stat)   !13
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix phi(1) ", mat_p(matphi(1))%length)
-    deallocate(mat_p(matU(1))%matrix,STAT=stat)     !12
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix U(1) ", mat_p(matU(1))%length)
-    deallocate(mat_p(matM4(1))%matrix,STAT=stat)    !11
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix M4(1) ", mat_p(matM4(1))%length)
-    deallocate(mat_p(matK(1))%matrix,STAT=stat)     !10
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix K(1) ", mat_p(matK(1))%length)
-    deallocate(mat_p(matPA)%matrix,STAT=stat)       !9
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix PA ", mat_p(matPA)%length)
-    deallocate(mat_p(matAP)%matrix,STAT=stat)       !8
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix AP ", mat_p(matAP)%length)
-    deallocate(mat_p(matSL(1))%matrix,STAT=stat)    !7
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix SL(1) ", mat_p(matSL(1))%length)
-    deallocate(mat_p(matLS(1))%matrix,STAT=stat)    !6
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix LS(1) ", mat_p(matLS(1))%length)
-    deallocate(mat_p(matTtran)%matrix,STAT=stat)    !5
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix Ttran ", mat_p(matTtran)%length)
-    deallocate(mat_p(matT)%matrix,STAT=stat)        !4
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix T ", mat_p(matT)%length)
-    deallocate(mat_p(matL(1))%matrix,STAT=stat)     !3
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix L(1) ", mat_p(matL(1))%length)
-    deallocate(mat_p(matH(1))%matrix,STAT=stat)     !2
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix H(1)", mat_p(matH(1))%length)
-    deallocate(mat_p(matS)%matrix,STAT=stat)        !1
-    if (stat /= 0) &
-         call cq_abort("Error deallocating matrix S ", mat_p(matS)%length)
+    do i=current_matrix,1,-1
+       deallocate(mat_p(i)%matrix,STAT=stat) 
+       if (stat /= 0) call cq_abort("Error deallocating matrix ",i,mat_p(i)%length)
+       nullify(mat_p(i)%matrix)
+       call reg_dealloc_mem(area_matrices,mat_p(i)%length,type_dbl)
+    end do
     call stop_timer(tmr_std_allocation)
 
     return

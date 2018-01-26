@@ -612,6 +612,12 @@ contains
   !!    Reading atomic spins: small tweak to test on net spin (uses abs and RD_ERR)
   !!   2017/10/24 zamaan
   !!    added thermostat flags for refactored NVT
+  !!   2018/01/19 dave
+  !!    Added test for lmax_ps and NA projector functions
+  !!   2018/01/22 tsuyoshi (with dave)
+  !!    Added new parameters:
+  !!     - threshold for resetting charge density to atomic density
+  !!     - time_max (General.MaxTime) to stop run after specified number of seconds in check_stop
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -630,7 +636,7 @@ contains
                              flag_fractional_atomic_coords,            &
                              flag_old_partitions, ne_in_cell,          &
                              max_L_iterations, flag_read_blocks,       &
-                             runtype, restart_L, restart_rho,          &
+                             runtype, restart_LorK, restart_rho,          &
                              flag_basis_set, blips, PAOs,              &
                              flag_test_forces, UseGemm,                &
                              flag_fractional_atomic_coords,            &
@@ -705,7 +711,8 @@ contains
                           LinTol_DMM, n_dumpL
 !TM
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA, &
-                                      STATE, ABINIT, flag_angular_new
+         STATE, ABINIT, flag_angular_new, &
+         flag_neutral_atom_projector, maxL_neutral_atom_projector, numN_neutral_atom_projector
     use SelfCon, only: A, flag_linear_mixing, EndLinearMixing, q0, q1,&
                        n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
                        atomch_output, flag_Kerker, flag_wdmetric, minitersSC
@@ -714,7 +721,7 @@ contains
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
                                InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
-    use maxima_module, only: maxnsf
+    use maxima_module, only: maxnsf, lmax_ps
     use control,       only: MDn_steps, MDfreq, MDtimestep, MDcgtol, CGreset
     use ion_electrostatic,  only: ewald_accuracy
     use minimise,      only: UsePulay, n_L_iterations,          &
@@ -733,7 +740,7 @@ contains
                                  flag_which_force, TF_direction, &
                                  TF_atom_moved, TF_delta
     use io_module, only: pdb_format, pdb_altloc, append_coords,  &
-                         pdb_output, banner, get_file_name
+                         pdb_output, banner, get_file_name, time_max
     use group_module,     only: part_method, HILBERT, PYTHON
     use energy,           only: flag_check_DFT
     use H_matrix_module,  only: locps_output, locps_choice
@@ -768,6 +775,7 @@ contains
                           md_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
                           md_calc_xlmass, md_berendsen_equil, &
                           md_omega_t, md_omega_p
+    use move_atoms,         only: threshold_resetCD
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
 
@@ -922,6 +930,9 @@ contains
        !
        !
        time_threshold = fdf_double('General.TimeThreshold',0.001_double)
+
+       time_max  = fdf_double('General.MaxTime', zero)
+
        ! Read run title
        titles = fdf_string(80,'IO.Title',def)
        ! Is this a restart run ? **NB NOT AVAILABLE RIGHT NOW**
@@ -933,7 +944,7 @@ contains
           call cq_abort('read_input: you may not select restart for a run just now')
        endif
        init_blip_flag = fdf_string(10,'Basis.InitBlipFlag','pao')
-       restart_L      = fdf_boolean('General.LoadL',   .false.)
+       restart_LorK   = fdf_boolean('General.LoadL',   .false.)
        restart_rho    = fdf_boolean('General.LoadRho', .false.)
        restart_T      = fdf_boolean('General.LoadInvS',.false.)
        ! Is there a net charge on the cell ?
@@ -1069,6 +1080,29 @@ contains
        end if
        ! Should we use neutral atom potential ?
        flag_neutral_atom  = fdf_boolean('General.NeutralAtom',.true.) ! Default for now
+       if( flag_neutral_atom ) then
+          flag_neutral_atom_projector = fdf_boolean('General.NeutralAtomProjector',.false.)
+          if( flag_neutral_atom_projector ) then
+             maxL_neutral_atom_projector = &
+                  fdf_integer('General.NeutralAtomProjectorMaxL',3)
+             if(maxL_neutral_atom_projector>lmax_ps) lmax_ps = maxL_neutral_atom_projector
+             allocate( numN_neutral_atom_projector(0:maxL_neutral_atom_projector ) )
+             if(fdf_block('NeutralAtom.ProjectorNumbers')) then
+                if(1+block_end-block_start<maxL_neutral_atom_projector+1) &
+                     call cq_abort("Too few NA projector numbers; found/needed: ", &
+                     1+block_end-block_start,maxL_neutral_atom_projector+1)
+                do i=1,maxL_neutral_atom_projector+1
+                   read(unit=input_array(block_start+i-1),fmt=*) j,numN_neutral_atom_projector(i-1)
+                end do
+                call fdf_endblock
+             else
+                write(io_lun,fmt='(10x,"No NA projector numbers specified; defaulting to 5 per l")')
+                numN_neutral_atom_projector(:) = 5
+             end if
+          end if ! NA projector
+       else
+          flag_neutral_atom_projector = .false.
+       end if
 !!$
 !!$
 !!$
@@ -1357,6 +1391,10 @@ contains
                        fdf_string(80,'SC.ReadAtomicDensityFile','read_atomic_density.dat')
        ! Read atomic density initialisation flag
        atomic_density_method = fdf_string(10,'SC.AtomicDensityFlag','pao')
+       ! When constructing charge density from K matrix at last step, we check the total 
+       ! number of electrons. If the error of electron number (per total electron number) 
+       ! is larger than the following value, we use atomic charge density. (in update_H)
+       threshold_resetCD     = fdf_double('SC.Threshold.Reset',0.1_double)
 !!$
 !!$
 !!$
@@ -1935,6 +1973,8 @@ contains
        call cq_abort("Old-style CQ input no longer supported: please convert")
     end if ! new_format
 
+!**** TM 2017.Nov.3rd
+    call check_compatibility
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_input')
 !****lat>$
@@ -1942,6 +1982,20 @@ contains
     call my_barrier()
 
     return
+   contains
+    ! ------------------------------------------------------------------------------
+    ! subroutine check_compatibility
+    ! ------------------------------------------------------------------------------
+    subroutine check_compatibility 
+     ! this subroutine checks the compatibility between keywords defined in read_input
+     ! add the
+     !       2017.11(Nov).03   Tsuyoshi Miyazaki
+     implicit none
+      !check AtomMove.ExtendedLagrangian(flag_XLBOMD) &  AtomMove.TypeOfRun (runtype)
+       if(runtype .NE. 'md') flag_XLBOMD=.false.
+     
+     return
+    end subroutine check_compatibility 
   end subroutine read_input
   !!***
 

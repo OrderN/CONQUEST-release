@@ -150,7 +150,6 @@ contains
     use density_module,    only: density
     use multisiteSF_module,only: flag_LFD_minimise, LFD_minimise
     use units
-    use io_module2,        only: dump_InfoGlobal
 
     implicit none
 
@@ -236,7 +235,12 @@ contains
           if (flag_multisite .and. .not.flag_LFD_minimise) then
              if (inode==ionode) write(io_lun,'(/3x,A/)') &
                 'WARNING: Numerical PAO minimisation will be performed without doing LFD_minimisation!'   
+             !2017.Dec.28 TM: We need Selfconsistent Hamiltonian if this routine is called from control
+             call new_SC_potl(.false., sc_tolerance, reset_L,             &
+                              fixed_potential, vary_mu, n_L_iterations, &
+                              L_tolerance, total_energy, backtrace_level)
           endif
+
           if (UsePulay) then
              call pulay_min_pao(n_support_iterations, fixed_potential,&
                                 vary_mu, n_L_iterations, L_tolerance, &
@@ -367,13 +371,6 @@ contains
       call stop_print_timer(tmr_l_force, "calculating FORCE", &
                             IPRINT_TIME_THRES1)
     end if
-    if (.NOT. flag_MDold ) then
-       if(PRESENT(iter))then
-          if (inode.EQ.ionode) call dump_InfoGlobal(iter)
-       else
-          if (inode.EQ.ionode) call dump_InfoGlobal
-       end if
-    endif
 
     !% NOTE: This call should be outside this subroutine [2013/08/20 michi]
     ! Writes out L-matrix at the PREVIOUS step

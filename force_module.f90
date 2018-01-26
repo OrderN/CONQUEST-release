@@ -68,8 +68,10 @@
 !!    Adding non-SCF and PCC stress components
 !!   2015/11/26 15:24 dave
 !!    Changing ewald_force and ewald_stress to ion_interaction_force and _stress
-!!   2017/11/8 10:44
+!!   2017/11/8 10:44 zamaan
 !!    added target attribute to stress
+!!   2018/01/24 11:45 JST dave
+!!    Added NA integral & projector approach to forces (flag_neutral_atom_projector)
 !!  SOURCE
 !!
 module force_module
@@ -86,10 +88,12 @@ module force_module
   save
 
   real(double), dimension(:,:), allocatable, target :: tot_force
+  real(double), dimension(:,:), allocatable :: s_pulay_for, phi_pulay_for
 
   ! On-site part of stress tensor as Conquest uses orthorhombic cells (easily extended)
   real(double), dimension(3), target :: stress
-  real(double), dimension(3) :: SP_stress, KE_stress, NL_stress, PP_stress, GPV_stress, XC_stress, nonSCF_stress, pcc_stress
+  real(double), dimension(3) :: SP_stress, KE_stress, NL_stress, PP_stress, GPV_stress, &
+       XC_stress, nonSCF_stress, pcc_stress, NA_stress
 
   ! Useful parameters for selecting force calculations in NL part
   integer, parameter :: HF = 1
@@ -214,7 +218,7 @@ contains
                                       cq_abort
     ! TM new pseudo
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA,      &
-                                      STATE, ABINIT, core_correction
+                                      STATE, ABINIT, core_correction, flag_neutral_atom_projector
     use pseudo_tm_module,       only: loc_pp_derivative_tm, loc_HF_stress, loc_G_stress
     use global_module,          only: flag_self_consistent,            &
                                       flag_move_atom, id_glob,         &
@@ -240,7 +244,7 @@ contains
                                        delta_E_xc, xc_energy, hartree_energy_drho
     use hartree_module, only: Hartree_stress
     use XC_module, ONLY: XC_GGA_stress
-    
+
     implicit none
 
     ! Passed variables
@@ -265,7 +269,7 @@ contains
                                                  HF_NL_force,     &
                                                  KE_force,        &
                                                  nonSC_force,     &
-                                                 pcc_force
+                                                 pcc_force, NA_force
     real(double), dimension(:),   allocatable :: density_out_tot
     real(double), dimension(:,:), allocatable :: density_out
 
@@ -303,6 +307,13 @@ contains
        call reg_alloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
        cdft_force = zero
     end if
+    if(iprint_MD>3) then
+       allocate(s_pulay_for(3,ni_in_cell),phi_pulay_for(3,ni_in_cell))
+       s_pulay_for = zero
+       phi_pulay_for = zero
+    end if
+    allocate(NA_force(3,ni_in_cell))
+    NA_force = zero
     call stop_timer (tmr_std_allocation)
     ! get total density
     density_total = zero
@@ -330,12 +341,17 @@ contains
     XC_stress = zero
     pcc_stress = zero
     nonSCF_stress = zero
+    if(flag_neutral_atom_projector) NA_stress = zero
     ! Probably wrong to call this GPV; it's really a jacobian term, from the change in the
     ! integration volume element for grid-based integrals
     ! Different definitions for non-SCF and SCF
     do direction = 1,3
        if(flag_neutral_atom) then
-          GPV_stress(direction) = (hartree_energy_drho + local_ps_energy)
+          if(flag_neutral_atom_projector) then
+             GPV_stress(direction) = hartree_energy_drho ! NA is not done on grid
+          else
+             GPV_stress(direction) = (hartree_energy_drho + local_ps_energy)
+          end if
        else
           GPV_stress(direction) = (hartree_energy_total_rho + local_ps_energy - core_correction) ! core contains 1/V term
        end if
@@ -462,7 +478,7 @@ contains
     if(flag_basis_set==PAOs.OR.(flag_basis_set==blips.AND.(.NOT.flag_analytic_blip_int))) call get_KE_force(KE_force, ni_in_cell)
     call stop_print_timer(tmr_l_tmp1, "kinetic energy force", &
                           IPRINT_TIME_THRES2)
-
+    if(flag_neutral_atom_projector) call get_HNA_force(NA_force)
     max_force = zero
     max_atom  = 0
     max_compt = 0
@@ -495,6 +511,8 @@ contains
           ! DFT-D2
           if (flag_dft_d2) &
                tot_force(j,i) = tot_force(j,i) + disp_force(j,i)
+          if(flag_neutral_atom_projector) &
+               tot_force(j,i) = tot_force(j,i) + NA_force(j,i)
           ! Zero force on fixed atoms
           if (.not. flag_move_atom(j,i)) then
              tot_force(j,i) = zero
@@ -509,8 +527,13 @@ contains
           if(iprint_MD > 2) then
              write(io_lun, 101) i
              write(io_lun, 102) (for_conv *   HF_force(j,i),  j = 1, 3)
+             if(flag_neutral_atom_projector) write (io_lun, fmt='("Force NA     : ",3f15.10)') (for_conv*NA_force(j,i),j=1,3)
              write(io_lun, 112) (for_conv * HF_NL_force(j,i), j = 1, 3)
              write(io_lun, 103) (for_conv *     p_force(j,i), j = 1, 3)
+             if(iprint_MD>3) then
+                write (io_lun, fmt='("  Phi pulay  : ",3f15.10)') (for_conv*phi_pulay_for(j,i),j=1,3)
+                write (io_lun, fmt='("  S pulay    : ",3f15.10)') (for_conv*s_pulay_for(j,i),j=1,3)
+             end if
              write(io_lun, 104) (for_conv *    KE_force(j,i), j = 1, 3)
              if(flag_neutral_atom) then
                 write(io_lun, 106) (for_conv * screened_ion_force(j,i), j = 1, 3)
@@ -549,6 +572,7 @@ contains
                screened_ion_stress(direction) + Hartree_stress(direction) + &
                loc_HF_stress(direction) +  &
                pcc_stress(direction) + nonSCF_stress(direction)
+          if(flag_neutral_atom_projector) stress(direction) = stress(direction) + NA_stress(direction)
        end do
     else
        do direction = 1, 3
@@ -575,6 +599,9 @@ contains
           write (io_lun,fmt='(4x,"XC stress:        ",3f15.8,a3)') XC_stress(1:3), en_units(energy_units)
           if(flag_neutral_atom) then
              write (io_lun,fmt='(4x,"Ion-Ion stress:   ",3f15.8,a3)') screened_ion_stress(1:3), en_units(energy_units)
+             if(flag_neutral_atom_projector) &
+                  write (io_lun,fmt='(4x,"Neutral atom stress: ",f12.8,2f15.8,a3)') NA_stress(1:3), en_units(energy_units)
+
           else
              write (io_lun,fmt='(4x,"Ion-Ion stress:   ",3f15.8,a3)') ion_interaction_stress(1:3), en_units(energy_units)
           end if
@@ -590,6 +617,7 @@ contains
     end if
 
     call my_barrier()
+    if(iprint_MD>3) deallocate(s_pulay_for,phi_pulay_for)
     if (inode == ionode .and. iprint_MD > 1 .and. write_forces) &
          write (io_lun, fmt='(4x,"Finished force")')
 
@@ -1145,6 +1173,8 @@ contains
                            return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
                       PP_stress(direction) = PP_stress(direction) - &  
                            return_matrix_value(mat_tmp2, np, ni, 0, 0, isf, isf, 1)
+                      if(iprint_MD>3) phi_pulay_for(direction, i) = phi_pulay_for(direction, i) - &
+                           return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
                    end do ! isf
                 end do ! ni
              end if ! if the partition has atoms
@@ -1231,6 +1261,7 @@ contains
                                ! respect to phi
                                thisG_dS_dR = two*matM12_value * return_matrix_value(mat_tmp, np, ni, iprim, neigh, jsf, isf)
                                p_force(direction,i) = p_force(direction,i) + thisG_dS_dR
+                               if(iprint_MD>3) s_pulay_for(direction,i) = s_pulay_for(direction,i) + thisG_dS_dR
                                SP_stress(direction) = SP_stress(direction) + thisG_dS_dR * r_str
                             end do ! jsf
                          end do ! isf
@@ -1258,6 +1289,10 @@ contains
     !  In principle, the summation below is not needed.
     !  p_force should be calculated only for my primary set of atoms.
     call gsum(p_force, 3, n_atoms)
+    if(iprint_MD>3) then
+       call gsum(s_pulay_for,3,n_atoms)
+       call gsum(phi_pulay_for,3,n_atoms)
+    end if
     call gsum(PP_stress,3)
     call gsum(SP_stress,3)
     SP_stress = half*SP_stress
@@ -2288,6 +2323,361 @@ contains
   end subroutine get_KE_force
   !!***
 
+  ! -----------------------------------------------------------
+  ! Subroutine get_HNA_force
+  ! -----------------------------------------------------------
+
+  !!****f* force_module/get_HNA_force *
+  !!
+  !!  NAME
+  !!   get_HNA_force
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Gets the neutral atom part of the HF force if using projectors
+  !!   This mixes Hellman-Feynman and Pulay forces (as with NL part above)
+  !!  INPUTS
+  !!
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2018/01/10
+  !!  MODIFICATION HISTORY
+  !!   2018/01/25 12:52 JST dave
+  !!    Changed transpose type for mat_dNA to aNAa_trans
+  !!  SOURCE
+  !!
+  subroutine get_HNA_force(NA_force)
+
+    use datatypes
+    use numbers
+    use primary_module,              only: bundle
+    use matrix_module,               only: matrix, matrix_halo
+    use matrix_data,                 only: mat, aHa_range, halo, aNArange, NAarange, Hrange
+    use cover_module,                only: BCS_parts
+    use mult_module,                 only: allocate_temp_matrix,      &
+                                           free_temp_matrix,          &
+                                           return_matrix_value, matKatomf, &
+                                           matrix_pos, matrix_transpose, matrix_sum, &
+                                           matrix_product, matrix_scale,               &
+                                           S_trans, scale_matrix_value, aHa_aNA_aNA, aNA_trans, &
+                                           matU, matUT, matNAa, mataNA, aNAa_trans, &
+                                           return_matrix_value, store_matrix_value, mult, matK, matrix_product_trace
+    use GenBlas
+    use set_bucket_module,           only: rem_bucket, atomf_H_atomf_rem
+    use calc_matrix_elements_module, only: get_matrix_elements_new
+    use blip_grid_transform_module,  only: blip_to_grad_new,          &
+                                           blip_to_gradgrad_new
+    use GenComms,                    only: my_barrier, gsum, inode,   &
+                                           ionode
+    use global_module,               only: iprint_MD, flag_basis_set, &
+                                           blips, PAOs, atomf,        &
+                                           flag_onsite_blip_ana,      &
+                                           nspin, spin_factor, ni_in_cell, napf, id_glob
+    use build_PAO_matrices,          only: assemble_deriv_2
+    use functions_on_grid,           only: H_on_atomfns,              &
+                                           allocate_temp_fn_on_grid,  &
+                                           free_temp_fn_on_grid
+    use group_module, ONLY: parts
+
+    implicit none
+
+    ! Passed variables
+    real(double), dimension(3, ni_in_cell) :: NA_force
+    ! local variables
+    integer :: i, j, grad_direction, force_direction, element, np, nn,&
+               atom, n1, n2, mat_grad_T, ist, gcspart, iprim, tmp_fn, &
+               spin, mat_dNA, mat_dNAT, j_atom
+    integer :: ip, nsf1, nsf2
+    real(double) :: r_str, thisK_gradT
+
+    integer, dimension(3) :: matdaNA, matdNAa, matdaNAr, matdNAar
+    integer      :: direction, k, stat, dpseudofns, i1, i2, &
+         spec, this_nsf, this_nlpf, ni, isf, jsf
+    integer, dimension(2) :: matKzero
+    integer      :: nab, neigh_global_num,        &
+                    neigh_global_part, neigh_species, wheremat, matU_NA, matUT_NA
+    real(double) :: dx, dy, dz, thisdAP, locforce
+    real(double), dimension(:,:), allocatable ::  NA_P_stress, NA_HF_stress
+    real(double), dimension(:), allocatable :: force_contrib, f_c2
+    
+!    ! First, clear the diagonal blocks of data K; this is the easiest way
+!    ! to avoid doing the onsite terms
+    NA_force = zero
+    allocate(force_contrib(ni_in_cell))
+    force_contrib = zero
+    ! 3-centre terms
+    do k = 1, 3
+       matdaNA(k) = allocate_temp_matrix (aNArange, aNA_trans, atomf, napf)
+       matdNAa(k) = allocate_temp_matrix (NAarange, aNA_trans, napf, atomf)
+       matdaNAr(k) = allocate_temp_matrix (aNArange, aNA_trans, atomf, napf)
+       matdNAar(k) = allocate_temp_matrix (NAarange, aNA_trans, napf, atomf)
+    end do
+    matU_NA = allocate_temp_matrix(aNArange,aNA_trans,atomf,napf)
+    matUT_NA = allocate_temp_matrix(NAarange,aNA_trans,napf,atomf)
+    do spin = 1,nspin
+       matKzero(spin) = allocate_temp_matrix(aHa_range,0,atomf,atomf)
+    end do
+    allocate(NA_HF_stress(3,ni_in_cell),NA_P_stress(3,ni_in_cell))
+    NA_P_stress = zero
+    NA_HF_stress = zero
+    NA_stress = zero
+
+    do spin = 1,nspin
+       call matrix_sum(zero,matKzero(spin),one,matKatomf(spin))
+    end do
+    ip = 0
+    do np = 1,bundle%groups_on_node
+       if (bundle%nm_nodgroup(np) > 0) then
+          do i = 1,bundle%nm_nodgroup(np)
+             ip = ip+1
+             do nsf1=1,mat(np,aHa_range)%ndimi(i)
+                do nsf2=1,mat(np,aHa_range)%ndimi(i)
+                   call scale_matrix_value(matKzero(1), np, i, ip, 0, nsf1, nsf2, zero,1)
+                   if(nspin==2) call scale_matrix_value(matKzero(2), np, i, ip, 0, nsf1, nsf2, zero,1)
+                end do
+             end do
+          end do
+       end if
+    end do
+    ! to save memory we do each direction in turn...
+    do direction = 1, 3
+       call matrix_scale(zero, matdaNA(direction))
+       call matrix_scale(zero, matdNAa(direction))
+       call matrix_scale(zero, matdaNAr(direction))
+       call matrix_scale(zero, matdNAar(direction))
+          ! Get matrix elements between derivative of projectors and
+          ! support functions
+       call assemble_deriv_2(direction, aNArange, matdaNA(direction), 5)
+       call matrix_scale(-one, matdaNA(direction))
+
+       ! Get matrix elements between projectors and derivative of
+       ! support functions BY TRANSPOSE. This is fine (I think)
+       ! because the transpose ought to be exact
+       call matrix_transpose(matdaNA(direction), matdNAa(direction))
+       call matrix_scale(-one, matdNAa(direction))
+       ! Now scale dAP and dPA by R_{ji} for stress
+       ! 2014/08/06 11:45 Shereif
+       iprim = 0
+       do np = 1, bundle%groups_on_node
+          if (bundle%nm_nodgroup(np) > 0) then
+             do ni = 1, bundle%nm_nodgroup(np)
+                iprim = iprim + 1
+                do nab = 1, mat(np,aNArange)%n_nab(ni)
+                   ist = mat(np,aNArange)%i_acc(ni) + nab - 1
+                   gcspart = BCS_parts%icover_ibeg(mat(np,aNArange)%i_part(ist)) + mat(np,aNArange)%i_seq(ist) - 1
+                   if(direction==1) then
+                      r_str=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                   else if(direction==2) then
+                      r_str=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                   else if(direction==3) then
+                      r_str=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
+                   end if
+                   do isf = 1, mat(np,aNArange)%ndimj(ist)
+                      do jsf = 1, mat(np,aNArange)%ndimi(ni)
+                         thisdAP = return_matrix_value(matdaNA(direction), np, ni, iprim, nab, jsf, isf)
+                         call store_matrix_value(matdaNAr(direction), np, ni, iprim, nab, jsf, isf, r_str*thisdAP)
+                      end do
+                   end do
+                end do
+             end do
+          end if
+       end do
+       call matrix_transpose(matdaNAr(direction), matdNAar(direction))
+       
+       
+    end do ! Now end the direction loop
+
+    
+    
+    ! First of all, find U (= K.SC)
+    call matrix_transpose(mataNA, matNAa)
+    do spin = 1, nspin
+       call matrix_scale(zero, matU_NA)
+       call matrix_product(matKzero(spin), matNAa, matU_NA, mult(aHa_aNA_aNA))
+       !call matrix_product(matKatomf(spin), matNAa, matU_NA, mult(aHa_aNA_aNA))
+
+      ! we factor matU(1) with spin_factor for spin non-polarised
+      ! calculation. This may cause slight confusion, as the factor
+      ! are not applied to other matrices of the spin channels, and
+      ! matU(1) is supposed to be U for spin up, but doing this way
+      ! we make the calculations more efficient.
+      call matrix_scale(minus_two * spin_factor, matU_NA)
+      ! Find the transpose of U (= K.SC)
+      call matrix_transpose(matU_NA, matUT_NA)
+
+      ! For PAOs, we need to zero the on-site terms
+      ! Evaluate the pulay term - due to the phis changing
+      ! NB We want sum_k dSC_ik.UT_ki, so let's do sum_k dSC_ik.U_ik
+      !if (what_force == Pulay .OR. what_force == HF_and_Pulay) then
+        do k = 1, 3
+          ! Note that matrix_diagonal accumulates HF_NA_force(k,:)
+          call matrix_diagonal(matdaNA(k), matU_NA, &
+            NA_force(k,:), aNArange, inode)
+          call matrix_diagonal(matdaNAr(k), matU_NA, &
+            NA_P_stress(k,:), aNArange, inode)
+        end do ! k
+        !end if
+      ! Evaluate the Hellmann-Feynman term - due to the chis changing
+
+      !if (what_force == HF .or. what_force == HF_and_Pulay) then
+        do k = 1, 3
+          ! Note that matrix_diagonal accumulates HF_NA_force(k,:)
+          call matrix_diagonal(matdNAa(k), matUT_NA, &
+            NA_force(k,:), NAarange,inode)
+          call matrix_diagonal(matdNAar(k), matUT_NA, &
+            NA_HF_stress(k,:), NAarange,inode)
+        end do ! k
+      !end if
+    end do ! spin
+
+    do i = 1, ni_in_cell!n_atoms
+       do k=1,3
+          NA_stress(k) = NA_stress(k) + half*(NA_P_stress(k,i) + NA_HF_stress(k,i))
+       end do
+    end do
+    call gsum(NA_stress,3)
+    deallocate(NA_P_stress,NA_HF_stress)
+    do spin = nspin,1,-1
+       call free_temp_matrix(matKzero(spin))
+    end do
+    call free_temp_matrix(matUT_NA)
+    call free_temp_matrix(matU_NA)
+    do k = 3, 1, -1
+       call free_temp_matrix(matdNAar(k))
+       call free_temp_matrix(matdaNAr(k))
+       call free_temp_matrix(matdNAa(k))
+       call free_temp_matrix(matdaNA(k))
+    end do
+
+    ! 1- and 2-centre terms
+    mat_dNA = allocate_temp_matrix(aHa_range,aNAa_trans,atomf,atomf)
+    mat_dNAT = allocate_temp_matrix(aHa_range,aNAa_trans,atomf,atomf)
+    ! Now, for the offsite part, done on the integration grid.
+    do force_direction = 1, 3
+       force_contrib = zero
+       ! Build derivatives
+       call assemble_deriv_2(force_direction,aHa_range, mat_dNA, 4)
+       call matrix_transpose(mat_dNA, mat_dNAT)
+       call matrix_sum(one,mat_dNA,-one,mat_dNAT)
+       ! Add < i | VNA_j | i >
+       call start_timer(tmr_std_matrices)
+       iprim = 0
+       do np = 1, bundle%groups_on_node
+          if (bundle%nm_nodgroup(np) > 0) then
+             do i = 1, bundle%nm_nodgroup(np)
+                ! The numbering of the ig_prim index is the same as
+                ! a sequential index running over atoms in the
+                ! primary set (seen in pulay force for instance)
+                ! DRB and TM 10:38, 29/08/2003
+                atom = bundle%ig_prim(bundle%nm_nodbeg(np)+i-1)
+                iprim = iprim + 1
+                do j = 1, mat(np,aHa_range)%n_nab(i)
+                   ist = mat(np,aHa_range)%i_acc(i) + j - 1
+                   gcspart =                                                &
+                        BCS_parts%icover_ibeg(mat(np,aHa_range)%i_part(ist)) + &
+                        mat(np,aHa_range)%i_seq(ist) - 1
+                   if(force_direction==1) then
+                      r_str=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                   else if(force_direction==2) then
+                      r_str=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                   else if(force_direction==3) then
+                      r_str=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
+                   end if
+                   ! matKatomf(1) is used to just to get the position
+                   element =                    &
+                        matrix_pos(matKatomf(1), iprim, &
+                        halo(aHa_range)%i_halo(gcspart), 1, 1)
+                   if (element /= mat(np,aHa_range)%onsite(i)) then
+                      do n1 = 1, mat(np,aHa_range)%ndimj(ist)
+                         do n2 = 1, mat(np,aHa_range)%ndimi(i)
+                            do spin = 1, nspin
+                               thisK_gradT = spin_factor *                     &
+                                    return_matrix_value(matKatomf(spin),   &
+                                    np, i, iprim, &
+                                    j, n2, n1) *  &
+                                    return_matrix_value(mat_dNA,   &
+                                    np, i, iprim, &
+                                    j, n2, n1)
+                               NA_force(force_direction,atom) =       &
+                                    NA_force(force_direction,atom) +  &
+                                    two*thisK_gradT
+                               force_contrib(atom) = force_contrib(atom) + two*thisK_gradT
+                               NA_stress(force_direction) = NA_stress(force_direction) + &
+                                    thisK_gradT * r_str
+                            end do ! spin
+                         end do ! n2
+                      end do ! n1
+                   end if
+                end do ! j
+             end do ! i
+          end if  ! (bundle%nm_nodgroup(np) > 0)
+       end do ! np
+       call matrix_scale(zero,mat_dNAT)
+       call assemble_deriv_2(force_direction,aHa_range, mat_dNAT, 6)
+       force_contrib = zero
+       !f_c2 = zero
+       iprim = 0
+       do np = 1, bundle%groups_on_node
+          if (bundle%nm_nodgroup(np) > 0) then
+             do i = 1, bundle%nm_nodgroup(np)
+                ! The numbering of the ig_prim index is the same as
+                ! a sequential index running over atoms in the
+                ! primary set (seen in pulay force for instance)
+                ! DRB and TM 10:38, 29/08/2003
+                atom = bundle%ig_prim(bundle%nm_nodbeg(np)+i-1)
+                iprim = iprim + 1
+                do j = 1, mat(np,aHa_range)%n_nab(i)
+                   ist = mat(np,aHa_range)%i_acc(i) + j - 1
+                   gcspart =                                                &
+                        BCS_parts%icover_ibeg(mat(np,aHa_range)%i_part(ist)) + &
+                        mat(np,aHa_range)%i_seq(ist) - 1
+                   if(force_direction==1) then
+                      r_str=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                   else if(force_direction==2) then
+                      r_str=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                   else if(force_direction==3) then
+                      r_str=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
+                   end if
+                   ! Global number of neighbour: id_glob( parts%icell_beg(gcs%lab_cell(np)) +ni-1 )
+                      j_atom = id_glob( parts%icell_beg( BCS_parts%lab_cell(mat(np,aHa_range)%i_part(ist))) &
+                           + mat(np,aHa_range)%i_seq(ist)-1 )
+                      NA_force(force_direction,j_atom) =       &
+                           NA_force(force_direction,j_atom) - &
+                           spin_factor * return_matrix_value(mat_dNAT,   &
+                           np, i, iprim, j, 1, 1)
+                      NA_force(force_direction,atom) =       &
+                           NA_force(force_direction,atom) + &
+                           spin_factor * return_matrix_value(mat_dNAT,   &
+                           np, i, iprim, j, 1, 1)
+                      NA_stress(force_direction) = NA_stress(force_direction) + &
+                           spin_factor * return_matrix_value(mat_dNAT,   &
+                           np, i, iprim, j, 1, 1) * r_str
+                      force_contrib(j_atom) = force_contrib(j_atom)-spin_factor * return_matrix_value(mat_dNAT,   &
+                           np, i, iprim, j, 1, 1)
+                      force_contrib(atom) = force_contrib(atom)+spin_factor * return_matrix_value(mat_dNAT,   &
+                           np, i, iprim, j, 1, 1)
+                   end do ! j
+                end do ! i
+             end if  ! (bundle%nm_nodgroup(np) > 0)
+          end do ! np
+       call stop_timer(tmr_std_matrices)
+    end do ! force directions
+
+    call gsum(NA_force, 3, ni_in_cell)
+    !KE_stress = half*KE_stress
+    call gsum(NA_stress, 3)
+
+    call free_temp_matrix(mat_dNAT)
+    call free_temp_matrix(mat_dNA)
+    deallocate(force_contrib)
+    return
+  end subroutine get_HNA_force
+  !!***
+
 
 ! -----------------------------------------------------------
 ! Subroutine matrix_diagonal
@@ -2343,7 +2733,7 @@ contains
 
     ! Local variables
     integer :: iprim, np, i, j, atom,element, n1,n2, ist, gcspart
-
+    
     iprim = 0
     call start_timer(tmr_std_matrices)
     do np = 1,bundle%groups_on_node

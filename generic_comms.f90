@@ -2105,7 +2105,7 @@ contains
 !!  USAGE
 !!   mtime()
 !!  PURPOSE
-!!   Records elapsed time in seconds using the
+!!   Records elapsed time in milli-seconds using the
 !!   MPI standard timing function
 !!  INPUTS
 !! 

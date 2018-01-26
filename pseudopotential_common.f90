@@ -12,7 +12,8 @@
 !!  CREATION DATE
 !!   15/11/2002
 !!  MODIFICATION HISTORY
-!!
+!!   2017/11/27 15:49 dave with TM & NW
+!!    Adding neutral atom projector variables
 !!  SOURCE
 !!
 module pseudopotential_common
@@ -31,6 +32,11 @@ module pseudopotential_common
   logical :: non_local
   logical :: flag_angular_new
 
+  ! Neutral atom projectors
+  logical :: flag_neutral_atom_projector
+  integer :: maxL_neutral_atom_projector
+  integer, allocatable :: numN_neutral_atom_projector(:)
+  
   integer :: pseudo_type
   integer, parameter:: OLDPS=0, SIESTA=1, STATE=2, ABINIT=3
   

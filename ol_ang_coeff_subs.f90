@@ -28,6 +28,8 @@
 !!    Added timers
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2018/01/22 12:42 JST dave
+!!    Changes to make prefactor arrays allocatable (for NA projectors)
 !!  SOURCE
 !!
 
@@ -35,7 +37,7 @@ module angular_coeff_routines
 
   use datatypes
   use global_module,          only: io_lun
-  use bessel_integrals,       only: fact, lmax_fact
+  use bessel_integrals,       only: fact, doublefact!, lmax_fact
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_allocation, tmr_std_basis
 
@@ -46,9 +48,11 @@ module angular_coeff_routines
   ! -------------------------------------------------------
   character(len=80), private :: RCSid = "$Id$"
 
-  integer,parameter :: lmax_prefac=8
-  real(double) :: prefac(-1:lmax_prefac,-lmax_prefac:lmax_prefac)
-  real(double) :: prefac_real(-1:lmax_prefac,-lmax_prefac:lmax_prefac)
+  !integer,parameter :: lmax_prefac=8
+  real(double), allocatable, dimension(:,:) :: prefac
+  real(double), allocatable, dimension(:,:) :: prefac_real
+  !real(double) :: prefac(-1:lmax_prefac,-lmax_prefac:lmax_prefac)
+  !real(double) :: prefac_real(-1:lmax_prefac,-lmax_prefac:lmax_prefac)
 
 !!***
 
@@ -150,6 +154,7 @@ contains
   subroutine calc_mat_elem_gen(case,sp1,l1,nz1,m1,sp2,l2,nz2,m2,dx,dy,dz,mat_val)
 
     use datatypes
+    use numbers, only: zero
     use ol_int_datatypes !,ONLY : rad_tables,rad_tables_ke,rad_tables_nlpf_pao,ol_index&
     !&,ol_index_nlpf_pao
     use cubic_spline_routines, ONLY: spline_ol_intval_new2
@@ -168,39 +173,49 @@ contains
     !real(double), allocatable, dimension(:) :: radial_table
     
     !find required set of radial tables through indices
-    if(case.lt.3) then !either case 1 or 2
+    if(case.lt.3.OR.case==4) then !either case 1 or 2
        count = ol_index(sp1,sp2,nz1,nz2,l1,l2)
        n_lvals = rad_tables(count)%no_of_lvals
        npts = rad_tables(count)%rad_tbls(1)%npnts
-    else
+    else if(case==3) then
        count = ol_index_nlpf_pao(sp1,sp2,nz1,nz2,l1,l2)
-       !write(48+myid,*) l1,l2,count
        n_lvals = rad_tables_nlpf_pao(count)%no_of_lvals
        npts = rad_tables_nlpf_pao(count)%rad_tbls(1)%npnts
+    else if(case==5) then
+       count = ol_index_napf_pao(sp1,sp2,nz1,nz2,l1,l2)
+       n_lvals = rad_tables_napf_pao(count)%no_of_lvals
+       npts = rad_tables_napf_pao(count)%rad_tbls(1)%npnts
+    else if(case==6) then
+       count = ol_index_paopao(sp1,sp2,nz1,nz2,l1,l2)
+       n_lvals = rad_tables_paopaoNA(count)%no_of_lvals
+       npts = rad_tables_paopaoNA(count)%rad_tbls(1)%npnts
     endif
     
     call convert_basis(dx,dy,dz,r,theta,phi)
     
     mat_val = 0.0_double ; ind_val = 0.0_double
-    if(case.lt.3) then
+    if(case.lt.3.OR.case==4) then
        del_x = rad_tables(count)%rad_tbls(1)%del_x
        do i = 1,n_lvals
           l3 = rad_tables(count)%l_values(i)
           call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
           !multiply radial table(l3) by the associated angular factor
-          if(case.eq.1) then
+          if(case==1) then
              call spline_ol_intval_new2(r,rad_tables(count)%rad_tbls(i)%&
                   &arr_vals(1:npts),rad_tables(count)%rad_tbls(i)%&
                   &arr_vals2(1:npts),npts,del_x,ind_val)
-             mat_val = mat_val + ind_val*ang_factor
-          else !case must eq 2
+          else if(case==2) then !case must eq 2
              call spline_ol_intval_new2(r,rad_tables_ke(count)%rad_tbls(i)%&
                   &arr_vals(1:npts),rad_tables_ke(count)%rad_tbls(i)%&
                   &arr_vals2(1:npts),npts,del_x,ind_val)
-             mat_val = mat_val + ind_val*ang_factor
+          else if(case==4) then
+             call spline_ol_intval_new2(r,rad_tables_paoNApao(count)%rad_tbls(i)%&
+                  &arr_vals(1:npts),rad_tables_paoNApao(count)%rad_tbls(i)%&
+                  &arr_vals2(1:npts),npts,del_x,ind_val)
           endif
+          mat_val = mat_val + ind_val*ang_factor
        enddo
-    else
+    else if(case==3) then
        del_x = rad_tables_nlpf_pao(count)%rad_tbls(1)%del_x
        do i = 1,n_lvals
           l3 = rad_tables_nlpf_pao(count)%l_values(i)
@@ -211,8 +226,29 @@ contains
                &arr_vals2(1:npts),npts,del_x,ind_val)
           mat_val = mat_val + ind_val*ang_factor
        enddo
+    else if(case==5) then
+       del_x = rad_tables_napf_pao(count)%rad_tbls(1)%del_x
+       do i = 1,n_lvals
+          l3 = rad_tables_napf_pao(count)%l_values(i)
+          call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
+          !multiply radial table(l3) by the associated angular factor
+          call spline_ol_intval_new2(r,rad_tables_napf_pao(count)%rad_tbls(i)%&
+               &arr_vals(1:npts),rad_tables_napf_pao(count)%rad_tbls(i)%&
+               &arr_vals2(1:npts),npts,del_x,ind_val)
+          mat_val = mat_val + ind_val*ang_factor
+       enddo
+    else if(case==6) then
+       del_x = rad_tables_paopaoNA(count)%rad_tbls(1)%del_x
+       do i = 1,n_lvals
+          l3 = rad_tables_paopaoNA(count)%l_values(i)
+          call ol_ang_factor_new(l1,l2,l3,m1,m2,theta,phi,ang_factor)
+          !multiply radial table(l3) by the associated angular factor
+          call spline_ol_intval_new2(r,rad_tables_paopaoNA(count)%rad_tbls(i)%&
+               &arr_vals(1:npts),rad_tables_paopaoNA(count)%rad_tbls(i)%&
+               &arr_vals2(1:npts),npts,del_x,ind_val)
+          mat_val = mat_val + ind_val*ang_factor
+       enddo
     endif
-    
   end subroutine calc_mat_elem_gen
 !!***  
 
@@ -377,18 +413,24 @@ contains
 
     use datatypes
     use ol_int_datatypes !, ONLY : coefficients
-    use make_rad_tables, ONLY : get_max_pao_nlpfparams
+    use make_rad_tables, ONLY : get_max_pao_nlpfparams, get_max_pao_napfparams
+    use pseudopotential_common, only: flag_neutral_atom_projector    
 
     implicit none
 
     !code to calculate and list the integrals
     !of triple spherical harmonics
     integer :: l1,l2,l3,m1,m2,m3,lmax,i,j,n_elements_l,tot_l_trips
-    integer :: tot,no_m_combs,ncount,m_combo,l,m,n,k,mtot,nzmax
+    integer :: tot,no_m_combs,ncount,m_combo,l,m,n,k,mtot,nzmax, lmaxna, nzmaxna
     real(double) :: int_val,coeff,index
         
     call start_timer(tmr_std_basis)
     call get_max_pao_nlpfparams(lmax,nzmax)
+    if( flag_neutral_atom_projector ) then
+       call get_max_pao_napfparams(lmaxna,nzmaxna)
+       if( lmax<lmaxna ) lmax = lmaxna
+       if( nzmax<nzmaxna ) nzmax = nzmaxna
+    end if
     !allocating array to hold angular coefficients information..
     call get_ang_coeffparams(lmax,tot_l_trips) !size for coefficients array
     call start_timer(tmr_std_allocation)
@@ -1000,6 +1042,7 @@ contains
     !&,rad_tables_nlpf_pao
 
     use spline_module, ONLY: dsplint
+    use cubic_spline_routines, ONLY : spline_ol_intval_new2
     use GenComms, ONLY: inode, ionode, myid !for debugging purposes
     implicit none
     !improved routine to evaluate matrix element derivatives for the following cases
@@ -1009,14 +1052,14 @@ contains
     integer :: m1dum,m2dum,l1dum,l2dum
     real(double), intent(in) :: x,y,z
     real(double), intent(out) :: grad_valout
-    real(double) :: r,theta,phi,ang_factor,del_x,ind_val,f_r,df_r,grad_val
+    real(double) :: r,theta,phi,ang_factor,del_x,ind_val,f_r,df_r,grad_val,df_r1,df_r2
     real(double) :: c_r,c_theta,c_phi,ylm_factor,dtheta_factor,dphi_factor,num_grad  
     real(double) :: ang_coeff1,ang_coeff2,out_val,arg,grad1,grad2,dummy,grad_val2
     real(double), parameter :: mintol = 0.000000001_double
     logical :: flag
     !just coding for the straight pao_pao case for now, first spline out the function 
     !values that we need
-    if(case.lt.3) then !either pao/pao or pao/ke/pao overlap matrix elements
+    if(case.lt.3.OR.case==4.OR.case==7) then !either pao/pao or pao/ke/pao overlap matrix elements
        grad_valout = 0.0_double
        count = ol_index(sp1,sp2,nz1,nz2,l1,l2)
        n_lvals = rad_tables(count)%no_of_lvals
@@ -1025,18 +1068,21 @@ contains
           l3 = rad_tables(count)%l_values(i)
           del_x = rad_tables(count)%rad_tbls(1)%del_x
           npts = rad_tables(count)%rad_tbls(1)%npnts
-          if(case.eq.1) then
+          if(case==1) then
              call dsplint(del_x,rad_tables(count)%rad_tbls(i)%arr_vals(1:npts), &
                   rad_tables(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
-          else!case must equal 2
+          else if(case==2) then
              call dsplint(del_x,rad_tables_ke(count)%rad_tbls(i)%arr_vals(1:npts), &
                   rad_tables_ke(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
+          else if(case==4) then
+             call dsplint(del_x,rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals(1:npts), &
+                  rad_tables_paoNApao(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
           endif
           !have now collected f_r and df_r, next to evaluate the required gradient
           call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
           grad_valout = grad_valout+grad_val
        enddo
-    else !case must be 3 nlpf/pao tables
+    else if(case==3) then ! NLPF
        grad_valout = 0.0_double
        count = ol_index_nlpf_pao(sp1,sp2,nz1,nz2,l1,l2)
        n_lvals = rad_tables_nlpf_pao(count)%no_of_lvals
@@ -1050,9 +1096,36 @@ contains
           call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
           grad_valout = grad_valout+grad_val
        enddo
-       continue
+    else if(case==5) then ! NAPF
+       grad_valout = 0.0_double
+       count = ol_index_napf_pao(sp1,sp2,nz1,nz2,l1,l2)
+       n_lvals = rad_tables_napf_pao(count)%no_of_lvals
+       call convert_basis(x,y,z,r,theta,phi)
+       do i = 1,n_lvals
+          l3 = rad_tables_napf_pao(count)%l_values(i)
+          del_x = rad_tables_napf_pao(count)%rad_tbls(1)%del_x
+          npts = rad_tables_napf_pao(count)%rad_tbls(1)%npnts
+          call dsplint(del_x,rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals(1:npts), &
+                  rad_tables_napf_pao(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
+          call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          grad_valout = grad_valout+grad_val
+       enddo
+    else if(case==6) then !either pao/pao or pao/ke/pao overlap matrix elements
+       grad_valout = 0.0_double
+       count = ol_index_paopao(sp1,sp2,nz1,nz2,l1,l2)
+       n_lvals = rad_tables_paopaoNA(count)%no_of_lvals
+       call convert_basis(x,y,z,r,theta,phi)
+       do i = 1,n_lvals
+          l3 = rad_tables_paopaoNA(count)%l_values(i)
+          del_x = rad_tables_paopaoNA(count)%rad_tbls(1)%del_x
+          npts = rad_tables_paopaoNA(count)%rad_tbls(1)%npnts
+          call dsplint(del_x,rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals(1:npts), &
+               rad_tables_paopaoNA(count)%rad_tbls(i)%arr_vals2(1:npts),npts,r,f_r,df_r,flag)
+          !have now collected f_r and df_r, next to evaluate the required gradient
+          call construct_gradient(l1,l2,l3,m1,m2,dir,f_r,df_r,x,y,z,grad_val)
+          grad_valout = grad_valout+grad_val
+       enddo
     endif
-    
   end subroutine grad_mat_elem_gen2_prot
 !!***
 
@@ -1770,19 +1843,22 @@ contains
 !!    Added timers
 !!  SOURCE
 !!
-  subroutine set_prefac
+  subroutine set_prefac(n)
 
     use datatypes
     use numbers, ONLY: one, four, pi
 
     implicit none
 
+    integer :: n
+    
     integer :: ll, mm
     real(double) :: g, h
 
     call start_timer(tmr_std_basis)
+    allocate(prefac(-1:n,-n:n))
     prefac(:,:) = one
-    do ll = 0, lmax_prefac
+    do ll = 0, n!lmax_prefac
        do mm = -ll, ll
           g = fact(ll-mm)/fact(ll+mm)
           h = (2*ll+1)/(four*pi)
@@ -1816,19 +1892,22 @@ contains
 !!    Added timers
 !!  SOURCE
 !!
-  subroutine set_prefac_real
+  subroutine set_prefac_real(n)
 
     use datatypes
     use numbers, ONLY: one, two, four, twopi
 
     implicit none
 
+    integer :: n
+    
     integer :: ll, mm
     real(double) :: g, h
 
     call start_timer(tmr_std_basis)
+    allocate(prefac_real(-1:n,-n:n))
     prefac_real(:,:) = one
-    do ll = 0, lmax_prefac
+    do ll = 0, n!lmax_prefac
        do mm = -ll, ll
           g = fact(ll-mm)/fact(ll+mm)
           if(mm/=0) then
@@ -1937,21 +2016,38 @@ contains
 !!  MODIFICATION HISTORY
 !!   2008/06/10 ast
 !!    Added timers
+!!   2018/01/22 12:43 dave
+!!    Added allocation of arrays and double factorial (n*(n-2)*...)
 !!  SOURCE
 !!
-  subroutine set_fact
+  subroutine set_fact(lmax)
     use datatypes
     use numbers, ONLY: one
     implicit none
+
+    integer :: lmax
+    
     real(double) :: xx
-    integer :: ii
+    integer :: ii, max_fact
 
     call start_timer(tmr_std_basis)
-    fact(-1:lmax_fact) = one
-    do ii=1, lmax_fact
+    max_fact = 4*lmax+1
+    !if(max_fact<2*lmax_prefac) max_fact = 2*lmax_prefac
+    if(max_fact<(20+2*lmax+1))  max_fact = 20+2*lmax+1
+    write(*,*) 'max_fact is ',max_fact,lmax
+    allocate(fact(-1:max_fact))
+    fact(-1:max_fact) = one
+    do ii=2, max_fact
        xx = real(ii,double)
        fact(ii)=fact(ii-1)* xx
     enddo
+    ! Double factorial
+    allocate(doublefact(-1:max_fact))
+    doublefact(-1:max_fact) = one
+    do ii=2,max_fact
+       xx = real(ii,double)
+       doublefact(ii) = doublefact(ii-2)*xx
+    end do
     call stop_timer(tmr_std_basis)
     return
   end subroutine set_fact
