@@ -266,7 +266,6 @@ contains
     integer                               :: i
 
     th%thermo_type = "nhc"
-    th%append = .false.
     th%dt = dt
     th%T_ext = T_ext
     th%ndof = ndof
@@ -316,8 +315,10 @@ contains
 
     ! Defaults for heat bath positions, velocities, masses
     if (flag_MDcontinue) then
+      th%append = .true.
       call th%read_thermo_checkpoint
     else
+      th%append = .false.
       th%eta = zero
       th%v_eta = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
       th%G_nhc = zero
@@ -327,6 +328,7 @@ contains
         th%G_nhc_cell = zero
       end if
     end if
+    call th%get_nhc_energy
 
     ! Yoshida-Suzuki time steps
     call th%init_ys(th%n_ys)
@@ -1056,12 +1058,15 @@ contains
       baro%bulkmod = md_bulkmod_est
     case('iso-mttk')
       if (flag_MDcontinue) then
+        baro%append = .true.
         call baro%read_baro_checkpoint
+        call baro%get_box_ke
       else
+        baro%append = .false.
         baro%eps_ref = third*log(baro%volume/baro%volume_ref)
         baro%eps = baro%eps_ref
         baro%v_eps = zero
-        baro%ke_box = zero
+        call baro%get_box_ke
       end if
       baro%odnf = one + three/baro%ndof
       baro%tau_P = md_tau_P
@@ -1324,7 +1329,7 @@ contains
     ! passed variables
     class(type_barostat), intent(inout)         :: baro
 
-    baro%G_eps = (baro%odnf*baro%ke_ions + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
+    baro%G_eps = (two*baro%odnf*baro%ke_ions + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
     ! baro%G_eps = (three*baro%ke_ions/baro%ndof + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
 
     if (inode==ionode .and. flag_MDdebug) &
