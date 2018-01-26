@@ -73,15 +73,23 @@ module ol_int_datatypes
        real(double), pointer, dimension(:) :: m_combs
     end type ang_coeff
     
-    real(double), allocatable, dimension(:,:,:,:,:,:) :: ol_index
-    real(double), allocatable, dimension(:,:,:,:,:,:) :: ol_index_nlpf_pao
-    real(double), allocatable, dimension(:,:,:,:,:,:) :: ol_index_ke
+    integer, allocatable, dimension(:,:,:,:,:,:) :: ol_index
+    integer, allocatable, dimension(:,:,:,:,:,:) :: ol_index_nlpf_pao
+    integer, allocatable, dimension(:,:,:,:,:,:) :: ol_index_napf_pao ! NA projectors
+    integer, allocatable, dimension(:,:,:,:,:,:) :: ol_index_ke
+    integer, allocatable, dimension(:,:,:,:,:,:) :: ol_index_paopao
  
     type(ang_coeff), allocatable, dimension(:) :: coefficients
 
     type(ol_integral), allocatable, dimension(:) :: rad_tables
     type(ol_integral), allocatable, dimension(:) :: rad_tables_nlpf_pao
     type(ol_integral), allocatable, dimension(:) :: rad_tables_ke
+    ! Neutral atom Projector functions
+    ! One- and two-centre integrals i=k and/or j=k <phi_i|V_k|phi_j>
+    type(ol_integral), allocatable, dimension(:) :: rad_tables_paoNApao
+    type(ol_integral), allocatable, dimension(:) :: rad_tables_paopaoNA
+    ! PAO-Projector for k/=i and k/=j
+    type(ol_integral), allocatable, dimension(:) :: rad_tables_napf_pao
 
 end module ol_int_datatypes
 !!***

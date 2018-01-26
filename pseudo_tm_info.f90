@@ -33,6 +33,8 @@
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2015/11/09 17:21 dave with TM, NW (Mizuho)
 !!    Adding new members to pseudo_info derived type for neutral atom
+!!   2017/11/27 15:52 dave with TM, NW
+!!    NA projectors added to pseudo_info type
 !!  SOURCE
 !!
 module pseudo_tm_info
@@ -91,6 +93,14 @@ module pseudo_tm_info
      integer, pointer :: pjnl_l(:)        ! size = n_pjnl, angular momentum
      integer, pointer :: pjnl_n(:)        ! size = n_pjnl, index for projectors
      real(double), pointer :: pjnl_ekb(:) ! size = n_pjnl, <phi_ln|dV_l|phi_ln>
+     
+     ! Neutral atom projectors
+     integer :: n_pjna               ! number of NA projector functions
+     type(rad_func), pointer :: pjna(:)   ! size = n_pjna, projector functions
+     integer, pointer :: pjna_l(:)        ! size = n_pjna, angular momentum
+     integer, pointer :: pjna_n(:)        ! size = n_pjna, index for projectors
+     real(double), pointer :: pjna_ekb(:) ! size = n_pjna, <phi_ln|V_na|phi_ln>
+     
   end type pseudo_info
 
   type(pseudo_info), allocatable :: pseudo(:)
@@ -558,6 +568,8 @@ contains
 !!    Added storage of spacing of PAO table
 !!   2017/11/10 14:22 dave
 !!    Bug fix: added Ry->Ha conversion for Siesta VNA d2 table (as well as f table)
+!!   2018/01/22 14:39 JST dave
+!!    Added test for lmax_pao/lmax_ps to find maximum PAO/PP angular momentum
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -571,6 +583,7 @@ contains
     use functions, ONLY: erfc
     use input_module, ONLY: io_assign, io_close
     use pseudopotential_common, ONLY: pseudo_type, SIESTA, ABINIT
+    use maxima_module, only: lmax_pao, lmax_ps
 
     implicit none
 
@@ -762,6 +775,7 @@ contains
     endif !  (inode == ionode) then
     ! Now broadcast the information
     call gcopy(lmax   )
+    if(lmax>lmax_pao) lmax_pao = lmax    
     call gcopy(n_pjnl )
     call gcopy(zval)
     call gcopy(z)
@@ -827,6 +841,7 @@ contains
           call gcopy(ps_info%pjnl(i)%f,ps_info%pjnl(i)%n)
           call gcopy(ps_info%pjnl(i)%d2,ps_info%pjnl(i)%n)
        end do
+       if(ps_info%lmax>lmax_ps) lmax_ps = ps_info%lmax
        if(pseudo_type==SIESTA) then
           !Chlocal
           call gcopy(ps_info%tm_loc_pot)

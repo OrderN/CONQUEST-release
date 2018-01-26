@@ -23,6 +23,8 @@
 !!    Moved fire parameters here from global, and added user parameter fire_max_step
 !!   2017/11/10 15:16 dave
 !!    Added fire_N_below_thresh
+!!   2017/11/14 tsuyoshi
+!!    Removed atom_coord_diff
 !! SOURCE
 !!
 module Integrators
@@ -59,7 +61,7 @@ contains
   subroutine vVerlet_r_dt(dt,v,flag_movable)
    ! Module usage
    use global_module, ONLY: ni_in_cell,id_glob,x_atom_cell,y_atom_cell,z_atom_cell, &
-                            atom_coord_diff,flag_move_atom, iprint_MD, io_lun
+                            iprint_MD, io_lun
    use GenComms, only: myid
    use species_module, ONLY: species,mass
    use move_atoms, ONLY: fac
@@ -73,6 +75,7 @@ contains
    integer :: atom,speca,gatom,k,ibeg_atom
    real(double) :: massa
    logical :: flagx,flagy,flagz
+   real(double) :: dx, dy, dz
 
    if (myid==0 .and. iprint_MD>1) write(io_lun,*) "Welcome to vVerlet_r_dt"
 
@@ -83,7 +86,6 @@ contains
      gatom = id_glob(atom)
      !do k = 1, 3
      !  if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
-     !  atom_coord_diff(k,gatom) = dt*v(k,atom)
      !enddo
      flagx = flag_movable(ibeg_atom)
      flagy = flag_movable(ibeg_atom+1)
@@ -91,18 +93,18 @@ contains
      ibeg_atom = ibeg_atom + 3
      ! X
      if (flagx) then
-       atom_coord_diff(1,gatom) = dt*v(1,atom)
-       x_atom_cell(atom) = x_atom_cell(atom) + atom_coord_diff(1,gatom)
+       dx = dt*v(1,atom)
+       x_atom_cell(atom) = x_atom_cell(atom) + dx
      endif
      ! Y
      if (flagy) then
-       atom_coord_diff(2,gatom) = dt*v(2,atom)
-       y_atom_cell(atom) = y_atom_cell(atom) + atom_coord_diff(2,gatom)
+       dy = dt*v(2,atom)
+       y_atom_cell(atom) = y_atom_cell(atom) + dy
      endif
      ! Z
      if (flagz) then
-       atom_coord_diff(3,gatom) = dt*v(3,atom)
-       z_atom_cell(atom) = z_atom_cell(atom) + atom_coord_diff(3,gatom)
+       dz = dt*v(3,atom)
+       z_atom_cell(atom) = z_atom_cell(atom) + dz
      endif
    enddo
 
@@ -139,10 +141,10 @@ contains
   subroutine vVerlet_v_dthalf(dt,v,f,flag_movable,second_call)
    ! Module usage
    use numbers, ONLY: half,zero
-   use global_module, ONLY: ni_in_cell,id_glob,flag_quench_MD, iprint_MD, io_lun
+   use global_module, ONLY: ni_in_cell,id_glob,flag_quench_MD, flag_MDdebug, io_lun
    use species_module, oNLY: species,mass
    use move_atoms, ONLY: fac
-   use GenComms, only: myid
+   use GenComms, only: inode,ionode
 
    implicit none
    ! passed variables
@@ -156,7 +158,7 @@ contains
    real(double) :: vf,massa
    logical :: flagx,flagy,flagz
 
-   if (myid==0 .and. iprint_MD>1) write(io_lun,*) "Welcome to vVerlet_v_dthalf"
+   if (inode==ionode .and. flag_MDdebug) write(io_lun,*) "Welcome to vVerlet_v_dthalf"
    ibeg_atom=1
    ! for quenched-MD
    if (present(second_call) .AND. flag_quench_MD) then
@@ -248,7 +250,7 @@ contains
 
     use numbers, ONLY: half,zero
     use global_module, ONLY: ni_in_cell,id_glob,x_atom_cell,y_atom_cell,z_atom_cell, &
-         atom_coord_diff,flag_move_atom, io_lun, iprint_MD
+         flag_move_atom, io_lun,  iprint_MD
     use GenComms, ONLY: myid
     use io_module, ONLY: write_fire
 
@@ -267,6 +269,7 @@ contains
     integer :: lun
     real(double) :: vf,massa
     logical :: flagx,flagy,flagz
+    real(double) :: dx, dy, dz
 
     ! modified FIRE quenched MD
     real(double) :: fire_P, fire_norm_F, fire_norm_v, fire_r
@@ -372,18 +375,18 @@ contains
        flagz = flag_move_atom(3,gatom)
        ! X
        if (flagx) then
-          atom_coord_diff(1,gatom) = dt * v(1,atom)
-          x_atom_cell(atom) = x_atom_cell(atom) + atom_coord_diff(1,gatom)
+          dx = dt * v(1,atom)
+          x_atom_cell(atom) = x_atom_cell(atom) + dx
        endif
        ! Y
        if (flagy) then
-          atom_coord_diff(2,gatom) = dt * v(2,atom)
-          y_atom_cell(atom) = y_atom_cell(atom) + atom_coord_diff(2,gatom)
+          dy = dt * v(2,atom)
+          y_atom_cell(atom) = y_atom_cell(atom) + dy
        endif
        ! Z
        if (flagz) then
-          atom_coord_diff(3,gatom) = dt * v(3,atom)
-          z_atom_cell(atom) = z_atom_cell(atom) + atom_coord_diff(3,gatom)
+          dz = dt * v(3,atom)
+          z_atom_cell(atom) = z_atom_cell(atom) + dz
        endif
     end do
 

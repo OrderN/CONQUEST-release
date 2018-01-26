@@ -752,12 +752,12 @@ contains
     use pseudo_tm_module,       only: set_tm_pseudo,                &
                                       loc_pp_derivative_tm
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA,   &
-                                      STATE, ABINIT, core_correction
+                                      STATE, ABINIT, core_correction, flag_neutral_atom_projector
     use energy,                 only: nl_energy, get_energy,        &
                                       local_ps_energy, hartree_energy_drho
     use force_module,           only: get_HF_force,                 &
                                       get_HF_non_local_force,       &
-                                      HF_and_Pulay, HF
+                                      HF_and_Pulay, HF, get_HNA_force
     use GenComms,               only: myid, inode, ionode, cq_abort
     use H_matrix_module,        only: get_H_matrix
     use density_module,         only: get_electronic_density, density
@@ -780,14 +780,14 @@ contains
     ! Local variables
     integer      :: stat, spin
     real(double) :: E0, F0, E1, F1, analytic_force, numerical_force, &
-                    Enl0, Enl1, Fnl0, Fnl1, KE0
+                    Enl0, Enl1, Fnl0, Fnl1, KE0, Ena0, Ena1,Fna0,Fna1
     real(double), dimension(nspin)          :: electrons
-    real(double), dimension(:,:), allocatable :: HF_force
+    real(double), dimension(:,:), allocatable :: HF_force, NA_force
     real(double), dimension(:,:), allocatable :: HF_NL_force
     real(double), dimension(:),   allocatable :: density_out_tot
     real(double), dimension(:,:), allocatable :: density_out
 
-    allocate(HF_force(3,ni_in_cell), HF_NL_force(3,ni_in_cell), &
+    allocate(HF_force(3,ni_in_cell), HF_NL_force(3,ni_in_cell), NA_force(3,ni_in_cell), &
              density_out_tot(maxngrid), density_out(maxngrid,nspin), &
              STAT=stat)
     if (stat /= 0) &
@@ -843,7 +843,12 @@ contains
     ! Non-local
     Enl0 = nl_energy
     ! Local energy
-    E0 = local_ps_energy
+    if(flag_neutral_atom_projector) then
+       Ena0 = local_ps_energy
+       E0 = zero ! The NA energy is found via integrals
+    else
+       E0 = local_ps_energy
+    end if
     ! Correction required because the force contains change in hartree_energy_drho
     if(flag_neutral_atom) E0 = E0 + hartree_energy_drho
     ! Find force: local
@@ -877,6 +882,10 @@ contains
                                    ni_in_cell)
     else if (flag_basis_set == blips) then
        call get_HF_non_local_force(HF_NL_force, HF, ni_in_cell)
+    end if
+    if(flag_neutral_atom_projector) then
+       call get_HNA_force(NA_force)
+       Fna0 = NA_force(TF_direction,TF_atom_moved)
     end if
     ! Find out direction and atom for displacement
     if (inode == ionode) &
@@ -933,7 +942,12 @@ contains
                       maxngrid)
     call get_energy(total_energy)
     Enl1 = nl_energy
-    E1 = local_ps_energy
+    if(flag_neutral_atom_projector) then
+       Ena1 = local_ps_energy
+       E1 = zero ! The NA energy is found via integrals
+    else
+       E1 = local_ps_energy
+    end if
     ! Correction required because the force contains change in hartree_energy_drho
     if(flag_neutral_atom) E1 = E1 + hartree_energy_drho
     ! Find force
@@ -952,6 +966,10 @@ contains
                                    ni_in_cell)
     else if(flag_basis_set == blips) then
        call get_HF_non_local_force(HF_NL_force, HF, ni_in_cell)
+    end if
+    if(flag_neutral_atom_projector) then
+       call get_HNA_force(NA_force)
+       Fna1 = NA_force(TF_direction,TF_atom_moved)
     end if
     Fnl1 = HF_NL_force(TF_direction,TF_atom_moved)
     ! LT 2011/11/29: is this redundant?
@@ -976,13 +994,33 @@ contains
                              &"Final HF force : ",f20.12)') E1, F1
     numerical_force = -(E1 - E0) / TF_delta
     analytic_force = half * (F1 + F0)
-    if (inode == ionode) &
-         write (io_lun,fmt='(2x,"Numerical local Force: ",f20.12,/,2x,&
-                             &"Analytic local Force : ",f20.12)') &
-               numerical_force, analytic_force
-    if (inode==ionode) &
-         write (io_lun,fmt='(2x,"Force error: ",e20.12)') &
-               numerical_force - analytic_force
+    if(flag_neutral_atom_projector) then
+       if (inode == ionode) &
+            write (io_lun,fmt='(2x,"Numerical drho Force: ",f20.12,/,2x,&
+            &"Analytic drho Force : ",f20.12)') &
+            numerical_force, analytic_force
+       if (inode==ionode) &
+            write (io_lun,fmt='(2x,"Force error: ",e20.12)') &
+            numerical_force - analytic_force
+       ! NA
+       numerical_force = -(Ena1 - Ena0) / TF_delta
+       analytic_force = half * (Fna1 + Fna0)
+       if (inode == ionode) &
+            write (io_lun,fmt='(2x,"Numerical NA Force: ",f20.12,/,2x,&
+            &"Analytic NA Force : ",f20.12)') &
+            numerical_force, analytic_force
+       if (inode==ionode) &
+            write (io_lun,fmt='(2x,"Force error: ",e20.12)') &
+            numerical_force - analytic_force
+    else
+       if (inode == ionode) &
+            write (io_lun,fmt='(2x,"Numerical local Force: ",f20.12,/,2x,&
+            &"Analytic local Force : ",f20.12)') &
+            numerical_force, analytic_force
+       if (inode==ionode) &
+            write (io_lun,fmt='(2x,"Force error: ",e20.12)') &
+            numerical_force - analytic_force
+    end if
     ! Move the specified atom back
     if (TF_direction == 1) then
        x_atom_cell(id_glob_inv(TF_atom_moved)) = &

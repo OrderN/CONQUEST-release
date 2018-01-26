@@ -124,6 +124,8 @@
 !!    Adding variables for cell optimisation
 !!   2017/10/20 09:19 dave
 !!    Moved fire variables to Integrators_module
+!!   2017/12/05 09:59 dave with TM & NW (MIZUHO)
+!!    Added new function type - NA projector function (napf)
 !!  SOURCE
 !!
 module global_module
@@ -157,7 +159,7 @@ module global_module
   integer,      dimension(:,:), allocatable :: sorted_coord ! Atom IDs of atoms sorted according to x, y, z coords
   logical,      dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
   integer,      dimension(:),   allocatable :: flag_cdft_atom
-  logical :: restart_L, restart_rho, restart_T, restart_X
+  logical :: restart_LorK, restart_rho, restart_T, restart_X
 
   integer :: global_maxatomspart ! Maximum atoms per partition, if exceeded, triggers partitioning refinement
 
@@ -238,6 +240,7 @@ module global_module
   integer, parameter :: nlpf = 2 ! Projector functions
   integer, parameter :: paof = 3 ! Pseudo-atomic orbitals
   integer, parameter :: dens = 4 ! Atomic charge density
+  integer, parameter :: napf = 5 ! Neutral atom projector functions
   integer            :: atomf    ! 1(=sf) for blips and primitive paos, 3(=paof) for contracted paos
 
   ! Define areas of the code
