@@ -173,7 +173,8 @@ contains
                                       flag_SpinDependentSF, nspin_SF,  &
                                       flag_Multisite,                  &
                                       flag_cdft_atom, flag_local_excitation, &
-                                      flag_diagonalisation, flag_vary_basis
+                                      flag_diagonalisation, flag_vary_basis, &
+                                      flag_MDcontinue
     use cdft_data, only: cDFT_NAtoms, &
                          cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
@@ -242,7 +243,11 @@ contains
     end if    
     def = 'make_prt.dat'
     part_coord_file = fdf_string(80,'IO.Partitions',def)
-    call read_atomic_positions(trim(atom_coord_file))
+    if (.not. flag_MDcontinue) then
+      call read_atomic_positions(trim(atom_coord_file))
+    else
+      call read_atomic_positions('coord_next.dat')
+    end if
     if(iprint_init>4) call print_process_info()
     ! By now, we'll have unit cell sizes and grid cutoff
     call find_grid

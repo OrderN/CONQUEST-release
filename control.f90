@@ -177,7 +177,8 @@ contains
     call stop_backtrace(t=backtrace_timer,who='control_run',echo=.true.)
 !****lat>$
 
-    call dump_pos_and_matrices
+    ! Added if, otherwise step numbering is broken on MD restart - zamaan
+    if (.not. leqi(runtype, 'md')) call dump_pos_and_matrices
     return
   end subroutine control_run
   !!***
@@ -702,7 +703,7 @@ contains
       i_first = MDinit_step + 1
       i_last = i_first + MDn_steps - 1
     endif
-    call dump_pos_and_matrices(index=0,MDstep=i_first,velocity=velocity)
+    call dump_pos_and_matrices(index=0,MDstep=i_first,velocity=ion_velocity)
 
     mdl%dft_total_energy = energy0
 
@@ -794,9 +795,9 @@ contains
             end if
           end if
           if(flag_SFcoeffReuse) then
-             call update_pos_and_matrices(updateSFcoeff,velocity)
+             call update_pos_and_matrices(updateSFcoeff,ion_velocity)
           else
-             call update_pos_and_matrices(updateLorK,velocity)
+             call update_pos_and_matrices(updateLorK,ion_velocity)
           endif
        else
           call update_atom_coord
@@ -818,7 +819,7 @@ contains
        
        if (flag_fire_qMD) then
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .true.,iter)
-          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=velocity)
+          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
        else
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .false.,iter)
           if (inode == ionode) then
@@ -826,8 +827,8 @@ contains
               baro%ke_stress(1,1), baro%ke_stress(2,2), baro%ke_stress(3,3), &
               en_units(energy_units)
           end if
-          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=velocity)
-          call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable,second_call)
+          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
+          call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
        end if
        ! Rescale the ionic positions for the berendsen barostat AFTER the 
        ! velocity updates to avoid rescaling velocities
