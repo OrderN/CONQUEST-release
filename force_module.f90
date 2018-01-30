@@ -2345,6 +2345,9 @@ contains
   !!  MODIFICATION HISTORY
   !!   2018/01/25 12:52 JST dave
   !!    Changed transpose type for mat_dNA to aNAa_trans
+  !!   2018/01/30 10:06 dave
+  !!    Bug fix (found by Jack Baker): removed premature gsum call on NA_stress
+  !!    which led to erroneous stress values on multiple processors
   !!  SOURCE
   !!
   subroutine get_HNA_force(NA_force)
@@ -2536,7 +2539,6 @@ contains
           NA_stress(k) = NA_stress(k) + half*(NA_P_stress(k,i) + NA_HF_stress(k,i))
        end do
     end do
-    call gsum(NA_stress,3)
     deallocate(NA_P_stress,NA_HF_stress)
     do spin = nspin,1,-1
        call free_temp_matrix(matKzero(spin))
