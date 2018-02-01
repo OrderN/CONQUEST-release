@@ -1307,7 +1307,7 @@ contains
 
     select case(baro%baro_type)
     case('iso-mttk')
-      baro%ke_box = half*baro%v_eps**2/baro%box_mass 
+      baro%ke_box = half*baro%box_mass*baro%v_eps**2
     end select
 
   end subroutine get_box_ke
@@ -1685,7 +1685,8 @@ contains
         end select
 
         ! update ionic velocities, scale ion kinetic energy
-        call baro%update_vscale_fac(th%dt_ys(i_ys), half, th%v_eta(1), v_sfac)
+        call baro%update_vscale_fac(th%dt_ys(i_ys), half, v_eta_couple, &
+                                    v_sfac)
         th%ke_ions = baro%ke_ions
 
         select case(baro%baro_type)
