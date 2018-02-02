@@ -171,6 +171,9 @@ contains
   !!   Removed dHrange, matdH, paof and sf, which are no longer needed.
   !!  2017/01/26 20:00 nakata
   !!   Added optional passed variables build_AtomF_matrix and transform_AtomF_to_SF
+  !!  2018/01/30 10:06 dave
+  !!   Moved call to NA projector matrix build inside the rebuild_KE_NL loop to improve
+  !!   efficiency (it should have been in there in the first place)
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -299,13 +302,12 @@ contains
           end if
           if (iprint_ops > 4) call dump_matrix("NNL_atomf", matNLatomf, inode)
           if (iprint_ops > 4) call dump_matrix("NKE_atomf", matKEatomf, inode)
-       end if
           if(flag_neutral_atom_projector) then
              call matrix_scale(zero, matNAatomf)
              call get_HNA_matrix(matNAatomf)
              if (iprint_ops > 4) call dump_matrix("NNA_atomf", matNAatomf, inode)
           end if
-       !end if
+       end if
        !
        !
        ! from here on, workspace support becomes h_on_atomfns...
