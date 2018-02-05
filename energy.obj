@@ -29,6 +29,8 @@ ENERGY_OBJS = H_matrix_module.o \
               cdft_module.o\
               DFT_D2_module.o\
               XC_module.o\
+              libxc_master.o\
+              libxc_funcs.o\
               vdWMesh_module.o\
               vdWDFT_module.o
 
