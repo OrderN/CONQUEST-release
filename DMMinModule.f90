@@ -1524,7 +1524,7 @@ contains
 
     if (SQ < 0) then
        ! point of inflexion - problem !
-       if (inode == ionode) write (*, *) 'Inflexion approximation:'
+       if (inode == ionode) write (io_lun, *) 'Inflexion approximation:'
        if (inode == ionode) write (io_lun, *) 'A, B, C, D: ', A, B, C, D
        inflex = .true.
        do spin = nspin, 1, -1
