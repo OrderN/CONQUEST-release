@@ -3420,26 +3420,47 @@ end if
     integer :: vmajor, vminor, vmicro, i, j
     integer, dimension(2) :: xcpart
     character(len=120) :: name, kind, family, ref
+    type(xc_f90_pointer_t) :: temp_xc_func
+    type(xc_f90_pointer_t) :: temp_xc_info
+
 
     call xc_f90_version(vmajor, vminor, vmicro)
     if(inode==ionode.AND.iprint_ops>0) &
          write(io_lun,'("Libxc version: ",I1,".",I1,".",I1)') vmajor, vminor, vmicro
 
-    if(-functional_id<1000) then ! Only exchange
+    ! Identify the functional
+    if(-functional_id<1000) then ! Only exchange OR combined exchange-correlation
        n_xc_terms = 1
        xcpart(1) = -functional_id
     else ! Separate the two parts
        n_xc_terms = 2
-       xcpart(1) = floor(-functional_id/1000.0_double)
-       xcpart(2) = -functional_id - xcpart(1)*1000
+       ! Make exchange first, correlation second for consistency
+       i = floor(-functional_id/1000.0_double)
+       ! Temporary init to find exchange or correlation
+       if(nspin==1) then
+          call xc_f90_func_init(temp_xc_func, temp_xc_info, i, XC_UNPOLARIZED)
+       else if(nspin==2) then
+          call xc_f90_func_init(temp_xc_func, temp_xc_info, i, XC_POLARIZED)
+       end if
+       select case(xc_f90_info_kind(temp_xc_info))
+       case(XC_EXCHANGE)
+          xcpart(1) = i
+          xcpart(2) = -functional_id - xcpart(1)*1000
+       case(XC_CORRELATION)
+          xcpart(2) = i
+          xcpart(1) = -functional_id - xcpart(2)*1000
+       end select
+       call xc_f90_func_end(temp_xc_func)
     end if
+    ! Now initialise and output
     allocate(xc_func(n_xc_terms),xc_info(n_xc_terms))
     do i=1,n_xc_terms
        if(nspin==1) then
-          call xc_f90_func_init(xc_func(i), xc_info(i), functional_id, XC_UNPOLARIZED)
+          call xc_f90_func_init(xc_func(i), xc_info(i), xcpart(i), XC_UNPOLARIZED)
        else if(nspin==2) then
-          call xc_f90_func_init(xc_func(i), xc_info(i), functional_id, XC_POLARIZED)
+          call xc_f90_func_init(xc_func(i), xc_info(i), xcpart(i), XC_POLARIZED)
        end if
+       call xc_f90_info_name(xc_info(i), name)
        i_xc_family(i) = xc_f90_info_family(xc_info(i))
        if(inode==ionode) then
           select case(xc_f90_info_kind(xc_info(i)))
@@ -3497,7 +3518,7 @@ end if
     use numbers
     use GenComms,      only: gsum
     use dimens,        only: grid_point_volume, n_my_grid_points
-    use global_module, only : nspin
+    use global_module, only : nspin, io_lun
     use fft_module,    only: fft3, hartree_factor
 
     implicit none
@@ -3519,12 +3540,20 @@ end if
     real(double), dimension(:,:), allocatable :: grad_density, alt_dens
     real(double) :: rho_tot
     integer :: stat, i, spin, n
+    logical :: flag_exchange_e = .false.
+    logical :: flag_exchange_v = .false.
 
+    if(PRESENT(x_epsilon)) flag_exchange_v = .true.
+    if(PRESENT(x_energy)) flag_exchange_e = .true.
     ! Storage space for individual components
-    select case (i_xc_family(i))
+    select case (i_xc_family(1))
     case(XC_FAMILY_LDA)
        allocate(pot(n_my_grid_points*nspin),eps(n_my_grid_points))
-       if(nspin>1) allocate(alt_dens(nspin,n_my_grid_points))
+       if(nspin>1) then
+          allocate(alt_dens(nspin,n_my_grid_points))
+       else
+          allocate(alt_dens(n_my_grid_points,1))
+       end if
     case(XC_FAMILY_GGA)
        allocate(vrho(n_my_grid_points*nspin),eps(n_my_grid_points))
        if(nspin>1) then
@@ -3532,8 +3561,13 @@ end if
        else
           allocate(vsigma(n_my_grid_points))
        endif
+       if(nspin>1) then
+          allocate(alt_dens(nspin,n_my_grid_points))
+       else
+          allocate(alt_dens(n_my_grid_points,1))
+       end if
        ! If GGA, we need to find and adapt gradient
-       allocate(grad_density(size,3),sigma(n_my_grid_points,nspin),STAT=stat)
+       allocate(grad_density(size,3),sigma(nspin,n_my_grid_points),STAT=stat)
        sigma = zero
        do spin = 1, nspin
           grad_density = zero
@@ -3550,18 +3584,21 @@ end if
     xc_epsilon = zero
     xc_potential = zero
     ! If we have spin, re-order density to have spin index first
+    ! Otherwise scale
     if(nspin>1) then
        do i = 1, n_my_grid_points
           do spin=1,nspin
              alt_dens(spin,i) = density(i,spin)
           end do
        end do
+    else
+       alt_dens(1:n_my_grid_points,1) = two*density(1:n_my_grid_points,1)
     end if
     do n = 1,n_xc_terms
        pot = zero
        eps = zero
        if(nspin>1) then
-          select case (i_xc_family(i))
+          select case (i_xc_family(n))
           case(XC_FAMILY_LDA)
              call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1,1),eps(1),pot(1))
              ! d e_xc/d n
@@ -3576,40 +3613,56 @@ end if
              ! d e_xc/d n
              do i=1,n_my_grid_points
                 do spin=1,nspin
-                   xc_potential(i,spin) = xc_potential(i,spin) + pot(spin + (i-1)*nspin)
+                   xc_potential(i,spin) = xc_potential(i,spin) +vrho(spin + (i-1)*nspin)
                 end do
              end do
           end select
        else ! No spin
-          select case (i_xc_family(i))
+          select case (i_xc_family(n))
           case(XC_FAMILY_LDA)
-             call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,density(1,1),eps(1),pot(1))
+             call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1,1),eps(1),pot(1))
              ! d e_xc/d n
              xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + pot(1:n_my_grid_points)
           case(XC_FAMILY_GGA)
+             !write(io_lun,*) 'LibXC call'
              call xc_f90_gga_exc_vxc(xc_func(n),n_my_grid_points,density(1,1),sigma(1,1), &
                   eps(1),vrho(1),vsigma(1))
              ! d e_xc/d n
-             xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + pot(1:n_my_grid_points)
+             !write(io_lun,*) 'd exc/d n'
+             xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + vrho(1:n_my_grid_points)
              ! d e_xc/d sigma d sigma/d n
              allocate(ng(size),deg(size))
              ! FFT d Exc/d sigma and n to reciprocal space
+             !write(io_lun,*) 'd exc/d sigma: FFT'
              call fft3(vsigma(:), deg(:), size, -1)
              call fft3(density(:,1), ng(:), size, -1)
+             !write(io_lun,*) 'd exc/d sigma: accumulate'             
              do i=1,size
                 deg(i) = -deg(i) * two * ng(i)*hartree_factor(i) ! We may need 4pi^2
              end do
              vsigma = zero
+             !write(io_lun,*) 'd exc/d sigma: FFT'             
              call fft3(vsigma(:), deg(:), size, +1)
+             !write(io_lun,*) 'd exc/d sigma: sum'             
              xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + vsigma(1:n_my_grid_points)
              deallocate(ng,deg)
           end select
        end if
        xc_epsilon(1:n_my_grid_points) = xc_epsilon(1:n_my_grid_points) + eps(1:n_my_grid_points)
+       if(n==1.AND.flag_exchange_v) then
+          x_epsilon(1:n_my_grid_points) = eps(1:n_my_grid_points)
+       end if
+       if(n==1.AND.flag_exchange_e) then
+          x_energy = zero
+          do i=1,n_my_grid_points
+             rho_tot = density(i,1) + density(i,nspin)
+             x_energy = x_energy + eps(i)*rho_tot
+          end do
+       end if
     end do
-    select case (i_xc_family(i))
+    select case (i_xc_family(1))
     case(XC_FAMILY_LDA)
-       deallocate(sigma,pot,eps)
+       deallocate(pot,eps,alt_dens)
     case(XC_FAMILY_GGA)
        deallocate(sigma,eps,vrho,vsigma)
     end select
@@ -3622,6 +3675,10 @@ end if
     call gsum(xc_energy)
     ! and 'integrate' the energy over the volume of the grid point
     xc_energy = xc_energy * grid_point_volume
+    if(flag_exchange_e) then
+       call gsum(x_energy)
+       x_energy = x_energy * grid_point_volume
+    end if
     return
   end subroutine lib_xc_potential
   

@@ -686,7 +686,7 @@ contains
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
                              flag_readAtomicSpin, &
-                             flag_opt_cell, cell_constraint_flag, cell_en_tol
+                             flag_opt_cell, cell_constraint_flag, cell_en_tol, flag_use_libxc
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -1614,7 +1614,9 @@ contains
 !!$
 !!$
 !!$       
+       flag_use_libxc = .false.
        flag_functional_type = fdf_integer('General.FunctionalType', 3)   ! LDA PW92
+       if(flag_functional_type<0) flag_use_libxc = .true.
 !!$
 !!$
 !!$
@@ -2140,7 +2142,7 @@ contains
     use global_module,        only: flag_basis_set, PAOs,blips,        &
                                     functional_description,            &
                                     flag_precondition_blips, io_lun,   &
-                                    flag_Multisite, flag_diagonalisation
+                                    flag_Multisite, flag_diagonalisation, flag_use_libxc
     use minimise,             only: energy_tolerance, L_tolerance,     &
                                     sc_tolerance,                      &
                                     n_support_iterations,              &
@@ -2255,7 +2257,7 @@ contains
 
     write(io_lun,7) NODES
 
-    write(io_lun,8) functional_description
+    if(.NOT.flag_use_libxc) write(io_lun,8) functional_description
 
     write(io_lun,11) n_support_iterations, n_L_iterations
 

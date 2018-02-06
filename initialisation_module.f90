@@ -116,7 +116,8 @@ contains
     use datatypes
     use global_module,     only: x_atom_cell, y_atom_cell, &
                                  z_atom_cell, ni_in_cell,  &
-                                 flag_only_dispersion, flag_neutral_atom
+                                 flag_only_dispersion, flag_neutral_atom, &
+                                 flag_functional_type, flag_use_libxc
     use GenComms,          only: inode, ionode, my_barrier, end_comms
     use initial_read,      only: read_and_write
     use ionic_data,        only: get_ionic_data
@@ -130,6 +131,7 @@ contains
     use pseudo_tm_module,   only: make_neutral_atom
     use angular_coeff_routines, only: set_fact
     use maxima_module,          only: lmax_ps, lmax_pao
+    use XC_module, only: init_libxc
     
     implicit none
 
@@ -159,7 +161,7 @@ contains
     ! Read input
     call read_and_write(start, start_L, inode, ionode, &
                         vary_mu, mu, find_chdens, read_phi)
-
+    if(flag_use_libxc) call init_libxc(flag_functional_type)
     ! IMPORTANT!!!!! No timers allowed before this point
     !                We need to know if the user wants them or not
     !                  before actually starting one

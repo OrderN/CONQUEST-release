@@ -571,14 +571,14 @@ contains
                                            functional_hyb_pbe0,        &
                                            functional_hartree_fock,    &
                                            exx_alpha, exx_niter, exx_siter, &
-                                           flag_neutral_atom
+                                           flag_neutral_atom, flag_use_libxc
      
     use XC_module,                   only: get_xc_potential,           &
                                            get_GTH_xc_potential,       &
                                            get_xc_potential_LSDA_PW92, &
                                            get_xc_potential_GGA_PBE,   &
-                                           get_xc_potential_hyb_PBE0
-
+                                           get_xc_potential_hyb_PBE0,  &
+                                           lib_xc_potential
     use GenBlas,                     only: copy, axpy, dot, rsum
     use dimens,                      only: grid_point_volume,          &
                                            n_my_grid_points, n_grid_z
@@ -731,6 +731,15 @@ contains
     end if
     !  
     !
+    if(flag_use_libxc) then
+       if (flag_pcc_global) then
+          call lib_xc_potential(density_wk, xc_potential, xc_epsilon,     &
+               xc_energy, size, x_energy    =x_energy)
+       else
+          call lib_xc_potential(rho, xc_potential, xc_epsilon,     &
+               xc_energy, size, x_energy    =x_energy)
+       end if
+    else
     select case(flag_functional_type)
     case (functional_lda_pz81)
        ! NOT SPIN POLARISED
@@ -917,6 +926,7 @@ contains
        !
        !
     end select
+    end if
     !
     !
     ! Calculation of delta_E_xc

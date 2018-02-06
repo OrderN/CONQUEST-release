@@ -228,7 +228,9 @@ module global_module
   integer, parameter :: functional_gga_pbe96_wc    = 104  ! WC   (Wu-Cohen 2006)
 
   integer, parameter :: functional_hyb_pbe0        = 201  ! PBE0   (hybrid PBE with exx_alpha=0.25)
- 
+
+  logical :: flag_use_libxc
+  
   ! Switch for variation of blips in get_support_gradient
   integer :: WhichPulay
   integer, parameter :: PhiPulay  = 1
