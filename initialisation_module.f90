@@ -1037,6 +1037,8 @@ contains
   !!    Added allocation of glob2node_old
   !!   2018/01/22 tsuyoshi (with dave)
   !!    Updates for new atom movement routines
+  !!   2018/02/08 tsuyoshi (with dave)
+  !!    Bug fix for reading K after atom movement
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1109,6 +1111,9 @@ contains
     integer        :: H_trans = 1
     integer        :: ig
 
+    real(double) :: scale_x, scale_y, scale_z, rms_change
+    real(double) :: small_change = 0.3_double
+
     type(matrix_store_global) :: InfoGlob
     type(InfoMatrixFile),pointer :: Info(:)
 
@@ -1138,8 +1143,26 @@ contains
        glob2node_old(:) = InfoGlob%glob_to_node(:)
        MDinit_step = InfoGlob%MDstep
 
+       ! Test for unit cell size change 
+       scale_x = rcellx/InfoGlob%rcellx; scale_y = rcelly/InfoGlob%rcelly; scale_z = rcellz/InfoGlob%rcellz
+       rms_change = (scale_x - one)**2 + (scale_y - one)**2 + (scale_z - one)**2
+       rms_change = sqrt(rms_change)
+       if(rms_change > small_change .and. inode == ionode) &
+            write(io_lun,fmt='(4x,a,3f20.10)') 'WARNING!! Big change of the cell', scale_x, scale_y,scale_z
+
+       if(rms_change < very_small) then
+          do ig = 1, ni_in_cell
+             atom_coord_diff(1:3,ig) = atom_coord(1:3,ig) - InfoGlob%atom_coord(1:3,ig)
+          enddo
+       else
+          do ig = 1, ni_in_cell
+             atom_coord_diff(1,ig) = atom_coord(1,ig) - InfoGlob%atom_coord(1,ig)*scale_x
+             atom_coord_diff(2,ig) = atom_coord(2,ig) - InfoGlob%atom_coord(2,ig)*scale_y
+             atom_coord_diff(3,ig) = atom_coord(3,ig) - InfoGlob%atom_coord(3,ig)*scale_z
+          enddo
+       endif
+
        do ig = 1, ni_in_cell
-          atom_coord_diff(1:3,ig) = atom_coord(1:3,ig) - InfoGlob%atom_coord(1:3,ig)
           if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
           if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
           if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
