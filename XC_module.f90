@@ -3519,7 +3519,7 @@ end if
     use GenComms,      only: gsum
     use dimens,        only: grid_point_volume, n_my_grid_points
     use global_module, only : nspin, io_lun
-    use fft_module,    only: fft3, hartree_factor
+    use fft_module,    only: fft3, recip_vector
 
     implicit none
 
@@ -3534,8 +3534,8 @@ end if
     real(double),               intent(out), optional :: x_energy
 
     ! local variables
-    real(double), dimension(:),   allocatable :: pot, eps, vrho, vsigma ! Temporary variables
-    complex(double), dimension(:), allocatable :: ng,deg
+    real(double), dimension(:),   allocatable :: eps, vrho, vsigma, temp ! Temporary variables
+    complex(double), dimension(:,:), allocatable :: ng
     real(double), dimension(:,:),   allocatable :: sigma ! square modulus of grad density
     real(double), dimension(:,:), allocatable :: grad_density, alt_dens
     real(double) :: rho_tot
@@ -3546,28 +3546,20 @@ end if
     if(PRESENT(x_epsilon)) flag_exchange_v = .true.
     if(PRESENT(x_energy)) flag_exchange_e = .true.
     ! Storage space for individual components
-    select case (i_xc_family(1))
-    case(XC_FAMILY_LDA)
-       allocate(pot(n_my_grid_points*nspin),eps(n_my_grid_points))
-       if(nspin>1) then
-          allocate(alt_dens(nspin,n_my_grid_points))
-       else
-          allocate(alt_dens(n_my_grid_points,1))
-       end if
-    case(XC_FAMILY_GGA)
-       allocate(vrho(n_my_grid_points*nspin),eps(n_my_grid_points))
+    allocate(vrho(n_my_grid_points*nspin),eps(n_my_grid_points))
+    if(nspin>1) then
+       allocate(alt_dens(nspin,n_my_grid_points))
+    else
+       allocate(alt_dens(n_my_grid_points,1))
+    end if
+    if(i_xc_family(1)==XC_FAMILY_GGA) then
        if(nspin>1) then
           allocate(vsigma(n_my_grid_points*3))
        else
           allocate(vsigma(n_my_grid_points))
        endif
-       if(nspin>1) then
-          allocate(alt_dens(nspin,n_my_grid_points))
-       else
-          allocate(alt_dens(n_my_grid_points,1))
-       end if
        ! If GGA, we need to find and adapt gradient
-       allocate(grad_density(size,3),sigma(nspin,n_my_grid_points),STAT=stat)
+       allocate(grad_density(size,3),sigma(nspin,n_my_grid_points),temp(size),ng(size,3),STAT=stat)
        sigma = zero
        do spin = 1, nspin
           grad_density = zero
@@ -3579,8 +3571,7 @@ end if
                   grad_density(i,3)*grad_density(i,3)
           end do
        end do
-       deallocate(grad_density)
-    end select
+    end if
     xc_epsilon = zero
     xc_potential = zero
     ! If we have spin, re-order density to have spin index first
@@ -3592,61 +3583,54 @@ end if
           end do
        end do
     else
+       ! Scaling for spin; sigma needs four because it is nabla n .dot. nabla n
        alt_dens(1:n_my_grid_points,1) = two*density(1:n_my_grid_points,1)
+       sigma(:,:) = four*sigma(:,:)
+       grad_density(:,:) = two*grad_density(:,:)
     end if
     do n = 1,n_xc_terms
-       pot = zero
+       vrho = zero
        eps = zero
        if(nspin>1) then
           select case (i_xc_family(n))
           case(XC_FAMILY_LDA)
-             call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1,1),eps(1),pot(1))
-             ! d e_xc/d n
-             do i=1,n_my_grid_points
-                do spin=1,nspin
-                   xc_potential(i,spin) = xc_potential(i,spin) + pot(spin + (i-1)*nspin)
-                end do
-             end do
+             call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1,1),eps(1),vrho(1))
           case(XC_FAMILY_GGA)
              call xc_f90_gga_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1,1),sigma(1,1), &
                   eps(1),vrho(1),vsigma(1))
-             ! d e_xc/d n
-             do i=1,n_my_grid_points
-                do spin=1,nspin
-                   xc_potential(i,spin) = xc_potential(i,spin) +vrho(spin + (i-1)*nspin)
-                end do
-             end do
           end select
+          ! d e_xc/d n
+          do i=1,n_my_grid_points
+             do spin=1,nspin
+                xc_potential(i,spin) = xc_potential(i,spin) +vrho(spin + (i-1)*nspin)
+             end do
+          end do
        else ! No spin
           select case (i_xc_family(n))
           case(XC_FAMILY_LDA)
-             call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1,1),eps(1),pot(1))
-             ! d e_xc/d n
-             xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + pot(1:n_my_grid_points)
+             call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1,1),eps(1),vrho(1))
           case(XC_FAMILY_GGA)
-             !write(io_lun,*) 'LibXC call'
-             call xc_f90_gga_exc_vxc(xc_func(n),n_my_grid_points,density(1,1),sigma(1,1), &
+             call xc_f90_gga_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1,1),sigma(1,1), &
                   eps(1),vrho(1),vsigma(1))
-             ! d e_xc/d n
-             !write(io_lun,*) 'd exc/d n'
-             xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + vrho(1:n_my_grid_points)
              ! d e_xc/d sigma d sigma/d n
-             allocate(ng(size),deg(size))
-             ! FFT d Exc/d sigma and n to reciprocal space
-             !write(io_lun,*) 'd exc/d sigma: FFT'
-             call fft3(vsigma(:), deg(:), size, -1)
-             call fft3(density(:,1), ng(:), size, -1)
-             !write(io_lun,*) 'd exc/d sigma: accumulate'             
-             do i=1,size
-                deg(i) = -deg(i) * two * ng(i)*hartree_factor(i) ! We may need 4pi^2
+             ng = zero
+             ! FFT d Exc/d sigma \nabla n to reciprocal space
+             temp = zero
+             do i=1,3
+                temp = vsigma(1:n_my_grid_points)*grad_density(1:n_my_grid_points,i)
+                call fft3(temp, ng(:,i), size, -1)
              end do
+             ng(:,1) = two * minus_i * ( ng(:,1)*recip_vector(:,1) + &
+                  ng(:,2)*recip_vector(:,2) + ng(:,3)*recip_vector(:,3))
+             ! Use vsigma for the second term in the GGA
              vsigma = zero
-             !write(io_lun,*) 'd exc/d sigma: FFT'             
-             call fft3(vsigma(:), deg(:), size, +1)
-             !write(io_lun,*) 'd exc/d sigma: sum'             
-             xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + vsigma(1:n_my_grid_points)
-             deallocate(ng,deg)
+             call fft3(vsigma(:), ng(:,1), size, +1)
+             xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + &
+                  vsigma(1:n_my_grid_points)
           end select
+          ! d e_xc/d n
+          xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + &
+               vrho(1:n_my_grid_points)
        end if
        xc_epsilon(1:n_my_grid_points) = xc_epsilon(1:n_my_grid_points) + eps(1:n_my_grid_points)
        if(n==1.AND.flag_exchange_v) then
@@ -3660,12 +3644,10 @@ end if
           end do
        end if
     end do
-    select case (i_xc_family(1))
-    case(XC_FAMILY_LDA)
-       deallocate(pot,eps,alt_dens)
-    case(XC_FAMILY_GGA)
-       deallocate(sigma,eps,vrho,vsigma)
-    end select
+    deallocate(vrho,eps,alt_dens)
+    if(i_xc_family(1)==XC_FAMILY_GGA)then
+       deallocate(grad_density,sigma,vsigma,ng,temp)
+    end if
     ! Sum to get energy
     xc_energy = zero
     do i=1,n_my_grid_points
