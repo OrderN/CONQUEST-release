@@ -3517,6 +3517,7 @@ end if
     use datatypes
     use numbers
     use GenComms,      only: gsum
+    use GenBlas,       only: dot
     use dimens,        only: grid_point_volume, n_my_grid_points
     use global_module, only : nspin, io_lun
     use fft_module,    only: fft3, recip_vector
@@ -3574,6 +3575,7 @@ end if
     end if
     xc_epsilon = zero
     xc_potential = zero
+    XC_GGA_stress = zero
     ! If we have spin, re-order density to have spin index first
     ! Otherwise scale
     if(nspin>1) then
@@ -3617,7 +3619,8 @@ end if
              ! FFT d Exc/d sigma \nabla n to reciprocal space
              temp = zero
              do i=1,3
-                temp = vsigma(1:n_my_grid_points)*grad_density(1:n_my_grid_points,i)
+                temp(1:n_my_grid_points) = vsigma(1:n_my_grid_points)*grad_density(1:n_my_grid_points,i)
+                XC_GGA_stress(i) = XC_GGA_stress(i) - dot(n_my_grid_points,temp(:),1,grad_density(:,i),1)
                 call fft3(temp, ng(:,i), size, -1)
              end do
              ng(:,1) = two * minus_i * ( ng(:,1)*recip_vector(:,1) + &
@@ -3647,6 +3650,8 @@ end if
     deallocate(vrho,eps,alt_dens)
     if(i_xc_family(1)==XC_FAMILY_GGA)then
        deallocate(grad_density,sigma,vsigma,ng,temp)
+       XC_GGA_stress = XC_GGA_stress*grid_point_volume
+       call gsum(XC_GGA_stress,3)
     end if
     ! Sum to get energy
     xc_energy = zero
