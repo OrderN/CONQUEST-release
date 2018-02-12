@@ -3618,6 +3618,8 @@ contains
   !!    Renamed naba_atm -> naba_atoms_of_blocks
   !!   2017/10/20 12:08 dave
   !!    Added extra optional argument to allow return of XC energy (for force testing)
+  !!   2018/02/09 14:41 dave
+  !!    Adding call for LibXC integration
   !!  SOURCE
   !!
   subroutine get_pcc_force(pcc_force, inode, ionode, n_atoms, size, density_out,xc_energy_ret)
@@ -3636,7 +3638,7 @@ contains
                                    functional_gga_pbe96_rev98,         &
                                    functional_gga_pbe96_r99,           &
                                    area_moveatoms, IPRINT_TIME_THRES3, &
-                                   nspin, spin_factor, flag_self_consistent
+                                   nspin, spin_factor, flag_self_consistent, flag_use_libxc
     use block_module,        only: nx_in_block,ny_in_block,            &
                                    nz_in_block, n_pts_in_block
     use group_module,        only: blocks, parts
@@ -3652,7 +3654,7 @@ contains
     use XC_module,           only: get_xc_potential,                   &
                                    get_GTH_xc_potential,               &
                                    get_xc_potential_GGA_PBE,           &
-                                   get_xc_potential_LSDA_PW92
+                                   get_xc_potential_LSDA_PW92, lib_xc_potential
     use maxima_module,       only: maxngrid
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem,     &
                                    type_dbl
@@ -3716,37 +3718,43 @@ contains
        density_wk_tot(:) = density_wk_tot(:) + spin_factor * density_wk(:,spin)
     end do
 
-    select case (flag_functional_type)
-    case (functional_lda_pz81)
-       ! NOT SPIN POLARISED
-       call get_xc_potential(density_wk_tot, xc_potential(:,1),     &
-                             xc_epsilon, xc_energy, size)
-    case (functional_lda_gth96)
-       ! NOT SPIN POLARISED
-       call get_GTH_xc_potential(density_wk_tot, xc_potential(:,1), &
-                                 xc_epsilon, xc_energy, size)
-    case (functional_lda_pw92)
-       call get_xc_potential_LSDA_PW92(density_wk, xc_potential,    &
-                                       xc_epsilon, xc_energy, size)
-    case (functional_gga_pbe96)
-       ! Original PBE
-       call get_xc_potential_GGA_PBE(density_wk,                &
-                                     xc_potential, xc_epsilon, &
-                                     xc_energy, size)
-    case (functional_gga_pbe96_rev98)
-       ! PBE with kappa of PRL 80, 890 (1998)
-       call get_xc_potential_GGA_PBE(density_wk,                &
-                                     xc_potential, xc_epsilon, &
-                                     xc_energy, size)
-    case (functional_gga_pbe96_r99)
-       ! PBE with form of PRB 59, 7413 (1999)
-       call get_xc_potential_GGA_PBE(density_wk,                &
-                                     xc_potential, xc_epsilon, &
-                                     xc_energy, size)
-    case default
-       call get_xc_potential_LSDA_PW92(density_wk, xc_potential,    &
-                                       xc_epsilon, xc_energy, size)
-    end select
+    if(flag_use_libxc) then
+       write(*,*) 'Calling libxc'
+       call lib_xc_potential(density_wk, xc_potential, xc_epsilon,     &
+            xc_energy, size)
+    else
+       select case (flag_functional_type)
+       case (functional_lda_pz81)
+          ! NOT SPIN POLARISED
+          call get_xc_potential(density_wk_tot, xc_potential(:,1),     &
+               xc_epsilon, xc_energy, size)
+       case (functional_lda_gth96)
+          ! NOT SPIN POLARISED
+          call get_GTH_xc_potential(density_wk_tot, xc_potential(:,1), &
+               xc_epsilon, xc_energy, size)
+       case (functional_lda_pw92)
+          call get_xc_potential_LSDA_PW92(density_wk, xc_potential,    &
+               xc_epsilon, xc_energy, size)
+       case (functional_gga_pbe96)
+          ! Original PBE
+          call get_xc_potential_GGA_PBE(density_wk,                &
+               xc_potential, xc_epsilon, &
+               xc_energy, size)
+       case (functional_gga_pbe96_rev98)
+          ! PBE with kappa of PRL 80, 890 (1998)
+          call get_xc_potential_GGA_PBE(density_wk,                &
+               xc_potential, xc_epsilon, &
+               xc_energy, size)
+       case (functional_gga_pbe96_r99)
+          ! PBE with form of PRB 59, 7413 (1999)
+          call get_xc_potential_GGA_PBE(density_wk,                &
+               xc_potential, xc_epsilon, &
+               xc_energy, size)
+       case default
+          call get_xc_potential_LSDA_PW92(density_wk, xc_potential,    &
+               xc_epsilon, xc_energy, size)
+       end select
+    end if
     if(PRESENT(xc_energy_ret)) xc_energy_ret = xc_energy
     ! We do this here to re-use xc_potential - for non-PCC we do it in get_nonSC_correction_force
     if(.NOT.flag_self_consistent) then

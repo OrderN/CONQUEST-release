@@ -3535,43 +3535,58 @@ end if
     real(double),               intent(out), optional :: x_energy
 
     ! local variables
-    real(double), dimension(:),   allocatable :: eps, vrho, vsigma, temp ! Temporary variables
+    real(double), dimension(:),   allocatable :: sigma, eps, vrho, vsigma, temp ! Temporary variables
     complex(double), dimension(:,:), allocatable :: ng
-    real(double), dimension(:,:),   allocatable :: sigma ! square modulus of grad density
-    real(double), dimension(:,:), allocatable :: grad_density, alt_dens
+    real(double), dimension(:), allocatable :: alt_dens
+    real(double), dimension(:,:,:), allocatable :: grad_density
     real(double) :: rho_tot
-    integer :: stat, i, spin, n
+    integer :: stat, i, spin, n, j
     logical :: flag_exchange_e = .false.
     logical :: flag_exchange_v = .false.
 
-    if(PRESENT(x_epsilon)) flag_exchange_v = .true.
-    if(PRESENT(x_energy)) flag_exchange_e = .true.
+    flag_exchange_v = PRESENT(x_epsilon)
+    flag_exchange_e = PRESENT(x_energy)
     ! Storage space for individual components
-    allocate(vrho(n_my_grid_points*nspin),eps(n_my_grid_points))
-    if(nspin>1) then
-       allocate(alt_dens(nspin,n_my_grid_points))
-    else
-       allocate(alt_dens(n_my_grid_points,1))
-    end if
+    allocate(vrho(n_my_grid_points*nspin),eps(n_my_grid_points),alt_dens(n_my_grid_points*nspin))
     if(i_xc_family(1)==XC_FAMILY_GGA) then
        if(nspin>1) then
-          allocate(vsigma(n_my_grid_points*3))
+          allocate(vsigma(n_my_grid_points*3),sigma(n_my_grid_points*3))
        else
-          allocate(vsigma(n_my_grid_points))
+          allocate(vsigma(n_my_grid_points),sigma(n_my_grid_points))
        endif
        ! If GGA, we need to find and adapt gradient
-       allocate(grad_density(size,3),sigma(nspin,n_my_grid_points),temp(size),ng(size,3),STAT=stat)
+       allocate(grad_density(size,3,nspin),temp(size),ng(size,3),STAT=stat)
        sigma = zero
+       grad_density = zero
        do spin = 1, nspin
-          grad_density = zero
-          call build_gradient(density(:,spin), grad_density(:,:), size)
-          ! Build modulus - NB LibXC uses spin, point for density ! 
-          do i = 1, n_my_grid_points
-             sigma(spin,i) = grad_density(i,1)*grad_density(i,1) + &
-                  grad_density(i,2)*grad_density(i,2) + &
-                  grad_density(i,3)*grad_density(i,3)
-          end do
+          call build_gradient(density(:,spin), grad_density(:,:,spin), size)
        end do
+       ! Build modulus - NB LibXC uses spin, point for density !
+       if(nspin>1) then
+          ! This is ugly, but there's not really a better way
+          do i=1,n_my_grid_points
+             ! \nabla n_alpha dot \nabla n_alpha
+             sigma(1+(i-1)*3) = &
+               grad_density(i,1,1)*grad_density(i,1,1) + &
+               grad_density(i,2,1)*grad_density(i,2,1) + &
+               grad_density(i,3,1)*grad_density(i,3,1)
+             ! \nabla n_alpha dot \nabla n_beta
+             sigma(2+(i-1)*3) = &
+               grad_density(i,1,1)*grad_density(i,1,2) + &
+               grad_density(i,2,1)*grad_density(i,2,2) + &
+               grad_density(i,3,1)*grad_density(i,3,2)
+             ! \nabla n_beta dot \nabla n_beta
+             sigma(3+(i-1)*3) = &
+               grad_density(i,1,2)*grad_density(i,1,2) + &
+               grad_density(i,2,2)*grad_density(i,2,2) + &
+               grad_density(i,3,2)*grad_density(i,3,2)
+          end do
+       else
+          sigma(1:n_my_grid_points) = &
+               grad_density(1:n_my_grid_points,1,1)*grad_density(1:n_my_grid_points,1,1) + &
+               grad_density(1:n_my_grid_points,2,1)*grad_density(1:n_my_grid_points,2,1) + &
+               grad_density(1:n_my_grid_points,3,1)*grad_density(1:n_my_grid_points,3,1)
+       end if
     end if
     xc_epsilon = zero
     xc_potential = zero
@@ -3581,14 +3596,14 @@ end if
     if(nspin>1) then
        do i = 1, n_my_grid_points
           do spin=1,nspin
-             alt_dens(spin,i) = density(i,spin)
+             alt_dens(spin + (i-1)*nspin) = density(i,spin)
           end do
        end do
     else
        ! Scaling for spin; sigma needs four because it is nabla n .dot. nabla n
-       alt_dens(1:n_my_grid_points,1) = two*density(1:n_my_grid_points,1)
-       sigma(:,:) = four*sigma(:,:)
-       grad_density(:,:) = two*grad_density(:,:)
+       alt_dens(1:n_my_grid_points) = two*density(1:n_my_grid_points,1)
+       sigma(:) = four*sigma(:)
+       grad_density(:,:,1) = two*grad_density(:,:,1)
     end if
     do n = 1,n_xc_terms
        vrho = zero
@@ -3596,10 +3611,56 @@ end if
        if(nspin>1) then
           select case (i_xc_family(n))
           case(XC_FAMILY_LDA)
-             call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1,1),eps(1),vrho(1))
+             call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1),eps(1),vrho(1))
           case(XC_FAMILY_GGA)
-             call xc_f90_gga_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1,1),sigma(1,1), &
+             call xc_f90_gga_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1),sigma(1), &
                   eps(1),vrho(1),vsigma(1))
+             ! Calculate the second term, from d (n eps_xc) / d sigma
+             ng = zero
+             ! FFT d n Exc/d sigma \nabla n to reciprocal space
+             ! spin up
+             temp = zero
+             do i=1,3
+                do j=1,n_my_grid_points
+                   ! d eps / d sigma(up.up) grad rho(up) + d eps / d sigma(up.down) grad rho(down)
+                   temp(j) = two*vsigma(1+(j-1)*3)*grad_density(j,i,1) + &
+                        vsigma(2+(j-1)*3)*grad_density(j,i,2)
+                end do
+                ! For non-orthogonal stresses, introduce another loop and dot with grad_density(:,j)
+                XC_GGA_stress(i) = XC_GGA_stress(i) - dot(n_my_grid_points,temp(:),1,grad_density(:,i,1),1)
+                call fft3(temp, ng(:,i), size, -1)
+             end do
+             ! Dot product with iG to get the second term in reciprocal space
+             ! Accumulate in ng(:,1) as it won't be used again
+             ng(:,1) = minus_i * ( ng(:,1)*recip_vector(:,1) + &
+                  ng(:,2)*recip_vector(:,2) + ng(:,3)*recip_vector(:,3))
+             ! Use temp for the second term in real space
+             temp = zero
+             call fft3(temp(:), ng(:,1), size, +1)
+             xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + &
+                  temp(1:n_my_grid_points)
+             ! spin down
+             temp = zero
+             ng = zero
+             do i=1,3
+                do j=1,n_my_grid_points
+                   ! d eps / d sigma(down.down) grad rho(down) + d eps / d sigma(up.down) grad rho(up)
+                   temp(j) = vsigma(2+(j-1)*3)*grad_density(j,i,1) + &
+                        two*vsigma(3+(j-1)*3)*grad_density(j,i,2)
+                end do
+                ! For non-orthogonal stresses, introduce another loop and dot with grad_density(:,j)
+                XC_GGA_stress(i) = XC_GGA_stress(i) - dot(n_my_grid_points,temp(:),1,grad_density(:,i,2),1)
+                call fft3(temp, ng(:,i), size, -1)
+             end do
+             ! Dot product with iG to get the second term in reciprocal space
+             ! Accumulate in ng(:,1) as it won't be used again
+             ng(:,1) = minus_i * ( ng(:,1)*recip_vector(:,1) + &
+                  ng(:,2)*recip_vector(:,2) + ng(:,3)*recip_vector(:,3))
+             ! Use vsigma for the second term in real space
+             temp = zero
+             call fft3(temp(:), ng(:,1), size, +1)
+             xc_potential(1:n_my_grid_points,2) = xc_potential(1:n_my_grid_points,2) + &
+                  temp(1:n_my_grid_points)
           end select
           ! d e_xc/d n
           do i=1,n_my_grid_points
@@ -3610,22 +3671,25 @@ end if
        else ! No spin
           select case (i_xc_family(n))
           case(XC_FAMILY_LDA)
-             call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1,1),eps(1),vrho(1))
+             call xc_f90_lda_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1),eps(1),vrho(1))
           case(XC_FAMILY_GGA)
-             call xc_f90_gga_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1,1),sigma(1,1), &
+             call xc_f90_gga_exc_vxc(xc_func(n),n_my_grid_points,alt_dens(1),sigma(1), &
                   eps(1),vrho(1),vsigma(1))
-             ! d e_xc/d sigma d sigma/d n
+             ! Calculate the second term, from d (n eps_xc) / d sigma
              ng = zero
-             ! FFT d Exc/d sigma \nabla n to reciprocal space
+             ! FFT d n Exc/d sigma \nabla n to reciprocal space
              temp = zero
              do i=1,3
-                temp(1:n_my_grid_points) = vsigma(1:n_my_grid_points)*grad_density(1:n_my_grid_points,i)
-                XC_GGA_stress(i) = XC_GGA_stress(i) - dot(n_my_grid_points,temp(:),1,grad_density(:,i),1)
+                temp(1:n_my_grid_points) = vsigma(1:n_my_grid_points)*grad_density(1:n_my_grid_points,i,1)
+                ! For non-orthogonal stresses, introduce another loop and dot with grad_density(:,j)
+                XC_GGA_stress(i) = XC_GGA_stress(i) - dot(n_my_grid_points,temp(:),1,grad_density(:,i,1),1)
                 call fft3(temp, ng(:,i), size, -1)
              end do
+             ! Dot product with iG to get the second term in reciprocal space
+             ! Accumulate in ng(:,1) as it won't be used again
              ng(:,1) = two * minus_i * ( ng(:,1)*recip_vector(:,1) + &
                   ng(:,2)*recip_vector(:,2) + ng(:,3)*recip_vector(:,3))
-             ! Use vsigma for the second term in the GGA
+             ! Use vsigma for the second term in real space
              vsigma = zero
              call fft3(vsigma(:), ng(:,1), size, +1)
              xc_potential(1:n_my_grid_points,1) = xc_potential(1:n_my_grid_points,1) + &
@@ -3636,15 +3700,18 @@ end if
                vrho(1:n_my_grid_points)
        end if
        xc_epsilon(1:n_my_grid_points) = xc_epsilon(1:n_my_grid_points) + eps(1:n_my_grid_points)
-       if(n==1.AND.flag_exchange_v) then
-          x_epsilon(1:n_my_grid_points) = eps(1:n_my_grid_points)
-       end if
-       if(n==1.AND.flag_exchange_e) then
-          x_energy = zero
-          do i=1,n_my_grid_points
-             rho_tot = density(i,1) + density(i,nspin)
-             x_energy = x_energy + eps(i)*rho_tot
-          end do
+       if(n==1) then
+          if(flag_exchange_v) then
+             write(*,*) 'Finding x_eps'
+             x_epsilon(1:n_my_grid_points) = eps(1:n_my_grid_points)
+          end if
+          if(flag_exchange_e) then
+             x_energy = zero
+             do i=1,n_my_grid_points
+                rho_tot = density(i,1) + density(i,nspin)
+                x_energy = x_energy + eps(i)*rho_tot
+             end do
+          end if
        end if
     end do
     deallocate(vrho,eps,alt_dens)
