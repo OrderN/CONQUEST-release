@@ -862,10 +862,10 @@ contains
        call free_temp_matrix(matT1)
        call free_temp_matrix(matI)
        ! Dump T-matrix
-       if (.NOT. flag_MDold .AND. .NOT. leqi(runtype,'static') .AND. flag_TmatrixReuse) then
-         call dump_matrix2('T',matT,Trange)
-         flag_readT = .true.
-       endif
+       !if (.NOT. flag_MDold .AND. .NOT. leqi(runtype,'static') .AND. flag_TmatrixReuse) then
+       !  call dump_matrix2('T',matT,Trange)
+       !  flag_readT = .true.
+       !endif
     end if ! End if (atomf.ne.sf .and. .not.flag_do_SFtransform)
 
 1   format(20x,'Starting functional value: ',f15.7,' a.u.')

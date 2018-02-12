@@ -275,13 +275,15 @@ contains
 
     if (flag_dump_L) then
        if (.NOT. flag_MDold) then
-          if (flag_diagonalisation) then ! Use exact diagonalisation to get K
-             call dump_matrix2('K',matK(1),Hrange)
-             if(nspin==2) call dump_matrix2('K2',matK(2),Hrange)
-          else
-             call dump_matrix2('L',matL(1),Lrange)
-             ! DRB 2017/05/09 now extended to spin systems
-             if(nspin==2) call dump_matrix2('L2',matL(2),Lrange)
+
+         !2018Feb12 TM@UCL: 
+         !   Calls of dump_matrix2 for Kmatrix or Lmatrix were removed.
+         !   We may put dump_pos_and_matrices in the future, if needed.
+         !    Kmatrix2.i**.p**** and InfoGlobal.i** must be printed out simultaneously.
+         !   I also plan to revise the parts calling dump_matrix2 for XLBOMD.
+         !2018Feb12 TM@UCL: 
+
+          if (.NOT. flag_diagonalisation) then 
              ! For XL-BOMD
              if (flag_XLBOMD) then
                 if (flag_propagateX) then
@@ -304,7 +306,6 @@ contains
                 if (flag_dissipation) call dump_XL()
              endif
           end if
-          if (runtype.EQ.'static') call dump_InfoMatGlobal(0)
        else
           if (flag_diagonalisation) then ! Use exact diagonalisation to get K
              if(inode==ionode.AND.iprint_DM>2) write(io_lun,fmt='(2x,"K matrix only saved if AtomMove.OldMemberUpdates is F")')
@@ -1236,12 +1237,6 @@ contains
        ! dump the L matrix if required
        if (flag_dump_L) then
           if (mod (n_iter, n_dumpL) == 0) then
-            !ORI if (nspin == 1) then
-            !ORI    call dump_matrix("L", matL(1), inode)
-            !ORI else
-            !ORI    call dump_matrix("L_up", matL(1), inode)
-            !ORI    call dump_matrix("L_dn", matL(2), inode)
-            !ORI end if
             if (.NOT. flag_MDold) then
               call dump_matrix2('L',matL(1),Lrange)
               ! DRB 2017/05/09 now extended to spin systems

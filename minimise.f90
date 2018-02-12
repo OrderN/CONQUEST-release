@@ -376,12 +376,6 @@ contains
     ! Writes out L-matrix at the PREVIOUS step
     !   --> Removed and moved to FindMinDM [2013/12/03 michi]
 
-!   if (.NOT. flag_MDold) & ! should add '.NOT. leqi(runtype,'static')' also ?
-!     call dump_matrix2('L',matL(1),inode,Lrange)
-!   if (.NOT. flag_MDold .AND. leqi(runtype,'static')) then
-!     if (inode.EQ.ionode) call dump_InfoGlobal(0)
-!   endif
-
     !  Print results of local timers
     call stop_timer(tmr_std_eminimisation)
 

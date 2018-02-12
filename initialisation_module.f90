@@ -1142,6 +1142,9 @@ contains
        n_proc_old = InfoGlob%numprocs
        glob2node_old(:) = InfoGlob%glob_to_node(:)
        MDinit_step = InfoGlob%MDstep
+     
+      ! 2018JFeb12 TM 
+       if(restart_LorK) find_chdens=.true.
 
        ! Test for unit cell size change 
        scale_x = rcellx/InfoGlob%rcellx; scale_y = rcelly/InfoGlob%rcelly; scale_z = rcellz/InfoGlob%rcellz
