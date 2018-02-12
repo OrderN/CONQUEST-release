@@ -500,7 +500,7 @@ contains
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use move_atoms,     only: fac_Kelvin2Hartree, update_pos_and_matrices, updateL, updateLorK, updateSFcoeff
     use store_matrix,   ONLY: dump_InfoMatGlobal,grab_InfoMatGlobal, &
-                    matrix_store_global, grab_matrix2, InfoMatrixFile, dump_pos_and_matrices
+                    matrix_store_global, InfoMatrixFile, dump_pos_and_matrices
     use mult_module,    ONLY: matL,L_trans,matK,S_trans, matrix_scale
     use matrix_data,    ONLY: Lrange,Hrange
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
