@@ -1237,11 +1237,7 @@ contains
        ! dump the L matrix if required
        if (flag_dump_L) then
           if (mod (n_iter, n_dumpL) == 0) then
-            if (.NOT. flag_MDold) then
-              call dump_matrix2('L',matL(1),Lrange)
-              ! DRB 2017/05/09 now extended to spin systems
-              if(nspin==2) call dump_matrix2('L2',matL(2),Lrange)
-            else
+            if (flag_MDold) then
               if (nspin == 1) then
                  call dump_matrix("L", matL(1), inode)
               else
