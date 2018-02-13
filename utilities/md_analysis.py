@@ -5,6 +5,7 @@ import re
 import scipy as sp
 import matplotlib.pyplot as plt
 from frame import Frame
+from pdb import set_trace
 
 cq_input_file = 'Conquest_input'
 
@@ -48,12 +49,15 @@ def parse_init_config(conf_filename):
     data['species'] = sp.array(species)
   return data
 
-def read_stats(stats_file):
+def read_stats(stats_file, nstop):
   nstep = 0
   data = {}
   header = True
   with open(stats_file, 'r') as statfile:
     for line in statfile:
+      if nstop != -1:
+        if nstep >= nstop:
+          break
       if header:
         col_id = line.strip().split()
         for col in col_id:
@@ -67,6 +71,7 @@ def read_stats(stats_file):
           else:
             info = float(bit)
           data[col_id[i]].append(info)
+      nstep += 1
   return data
 
 
@@ -128,12 +133,16 @@ parser.add_argument('--skip', action='store', dest='nskip', default=0,
                     type=int, help='Number of equilibration steps to skip')
 parser.add_argument('--stop', action='store', dest='nstop', default=-1, 
                     type=int, help='Number of last frame in analysis')
+parser.add_argument('--equil', action='store', dest='nequil', default=0, 
+                    type=int, help='Number of equilibration steps')
 parser.add_argument('--vacf', action='store_true', dest='vacf', 
                     help='Compute the velocity autocorrelation function')
 parser.add_argument('--msd', action='store_true', dest='msd', 
                     help='Compute the mean squared deviation')
 parser.add_argument('--vdist', action='store_true', dest='vdist', 
                     help='Compute the velocity distribution')
+parser.add_argument('--landscape', action='store_true', dest='landscape', 
+                    help='Generate plot with landscape orientation')
 parser.add_argument('--stress', action='store_true', dest='stress', 
                     help='Plot the stress')
 parser.add_argument('--nbins', action='store', dest='nbins', default=100,
@@ -145,25 +154,32 @@ if (opts.vacf or opts.msd or opts.vdist or opts.stress):
 else:
   read_frames = False
 
+if opts.nskip > 0:
+  opts.nequil = opts.nskip
+
 # Parse the md.in parameters file
 cq_params = parse_cq_input(cq_input_file)
 init_config = parse_init_config(cq_params['IO.Coordinates'])
 natoms = init_config['natoms']
 dt = float(cq_params['AtomMove.Timestep'])
 
-# Parse the stat.out statistics file
-data = read_stats(opts.statfile)
+# Parse the statistics file
+data = read_stats(opts.statfile,opts.nstop)
 avg = {}
 std = {}
 for key in data:
   data[key] = sp.array(data[key])
-  avg[key] = sp.mean(data[key][opts.nskip:-1])
-  std[key] = sp.std(data[key][opts.nskip:-1])
+  avg[key] = sp.mean(data[key][opts.nequil:-1])
+  std[key] = sp.std(data[key][opts.nequil:-1])
 time = [float(s)*dt for s in data['step']]
 data['time'] = sp.array(time)
 
 # Plot the statistics
-fig1, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, ncols=1, sharex=True, figsize=(7,10))
+if opts.landscape:
+  fig1, ((ax1, ax2), (ax3, ax4)) = plt.subplots(nrows=2, ncols=2, sharex=True, figsize=(11,7))
+  plt.tight_layout(pad=6.5)
+else:
+  fig1, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, ncols=1, sharex=True, figsize=(7,10))
 
 ax1.plot(data['time'], data['pe'], 'r-', label='Potential energy')
 ax1a = ax1.twinx()
@@ -196,10 +212,6 @@ ax4.set_ylabel("P", color='b')
 if cq_params['MD.Ensemble'][1] == 'p':
   ax4a.set_ylabel("V", color='r')
 ax4.set_xlabel("time (fs)")
-ax1.get_yaxis().set_label_coords(-0.1, 0.5)
-ax2.get_yaxis().set_label_coords(-0.1, 0.5)
-ax3.get_yaxis().set_label_coords(-0.1, 0.5)
-ax4.get_yaxis().set_label_coords(-0.1, 0.5)
 ax1.legend(loc="upper left")
 ax1a.legend(loc="lower right")
 ax2.legend()
