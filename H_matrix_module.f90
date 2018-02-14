@@ -551,6 +551,8 @@ contains
   !!    Renamed supportfns -> atomfns
   !!   2016/12/19 18:30 nakata
   !!    Removed unused fn_on_grid
+  !!   2018/02/13 12:17 dave
+  !!    New XC interface implemented
   !!  SOURCE
   !!
   subroutine get_h_on_atomfns(output_level, fixed_potential, &
@@ -558,27 +560,13 @@ contains
 
     use datatypes
     use numbers
-    use global_module,               only: atomf, flag_functional_type,&
+    use global_module,               only: atomf,&
                                            nspin, spin_factor,         &
                                            flag_pcc_global, area_ops,  &
-                                           functional_lda_pz81,        &
-                                           functional_lda_gth96,       &
-                                           functional_lda_pw92,        &
-                                           functional_gga_pbe96,       &
-                                           functional_gga_pbe96_rev98, &
-                                           functional_gga_pbe96_r99,   &
-                                           functional_gga_pbe96_wc,    &
-                                           functional_hyb_pbe0,        &
-                                           functional_hartree_fock,    &
                                            exx_alpha, exx_niter, exx_siter, &
-                                           flag_neutral_atom, flag_use_libxc
+                                           flag_neutral_atom
      
-    use XC_module,                   only: get_xc_potential,           &
-                                           get_GTH_xc_potential,       &
-                                           get_xc_potential_LSDA_PW92, &
-                                           get_xc_potential_GGA_PBE,   &
-                                           get_xc_potential_hyb_PBE0,  &
-                                           lib_xc_potential
+    use XC,                          only: get_xc_potential
     use GenBlas,                     only: copy, axpy, dot, rsum
     use dimens,                      only: grid_point_volume,          &
                                            n_my_grid_points, n_grid_z
@@ -731,201 +719,18 @@ contains
     end if
     !  
     !
-    if(flag_use_libxc) then
-       if (flag_pcc_global) then
-          call lib_xc_potential(density_wk, xc_potential, xc_epsilon,     &
-               xc_energy, size, x_energy    =x_energy)
-       else
-          call lib_xc_potential(rho, xc_potential, xc_epsilon,     &
-               xc_energy, size, x_energy    =x_energy)
-       end if
+    if (flag_pcc_global) then
+       call get_xc_potential(density=density_wk, size=size, &
+            xc_potential=xc_potential,    &
+            xc_epsilon  =xc_epsilon, &
+            xc_energy   =xc_energy,  &
+            x_energy    =x_energy    )
     else
-    select case(flag_functional_type)
-    case (functional_lda_pz81)
-       ! NOT SPIN POLARISED
-       if (flag_pcc_global) then
-          call get_xc_potential(density=density_wk_tot, size=size, &
-                                xc_potential=xc_potential(:,1),    &
-                                xc_epsilon  =xc_epsilon, &
-                                xc_energy   =xc_energy,  &
-                                x_energy    =x_energy    )
-       else
-          call get_xc_potential(density=rho_tot, size=size,     &
-                                xc_potential=xc_potential(:,1), &
-                                xc_epsilon  =xc_epsilon,        & 
-                                xc_energy   =xc_energy,         &
-                                x_energy    =x_energy)
-       end if
-       !
-       !
-    case (functional_lda_gth96)
-       ! NOT SPIN POLARISED       
-       if (flag_pcc_global) then
-          call get_GTH_xc_potential(density_wk_tot, xc_potential(:,1), &
-                                    xc_epsilon, xc_energy, size)
-       else
-          call get_GTH_xc_potential(rho_tot, xc_potential(:,1), &
-                                    xc_epsilon, xc_energy, size)
-       end if
-       ! not possible to decompose the xc energy...
-       x_energy = zero
-       !
-       !
-    case (functional_lda_pw92)
-       if (flag_pcc_global) then
-          call get_xc_potential_LSDA_PW92(density=density_wk, size=size,&
-               xc_potential    =xc_potential,    &
-               xc_epsilon      =xc_epsilon,      &
-               xc_energy_total =xc_energy,       &
-               x_energy_total  =x_energy         )
-       else
-          call get_xc_potential_LSDA_PW92(density=rho,  size=size,  &
-               xc_potential   =xc_potential,&
-               xc_epsilon     =xc_epsilon,  &  
-               xc_energy_total=xc_energy,   &
-               x_energy_total =x_energy     )
-       end if
-       !
-       !
-    case (functional_gga_pbe96)
-       if (flag_pcc_global) then
-          call get_xc_potential_GGA_PBE(density=density_wk, grid_size=size, &
-               xc_potential=xc_potential,  &
-               xc_epsilon  =xc_epsilon,    &
-               xc_energy   =xc_energy,     &
-               x_energy    =x_energy       )         
-
-       else
-          call get_xc_potential_GGA_PBE(density=rho, grid_size=size,&
-               xc_potential=xc_potential,  &
-               xc_epsilon  =xc_epsilon,    &
-               xc_energy   =xc_energy,     &
-               x_energy    =x_energy       )
-       end if
-       !
-       !
-    case (functional_gga_pbe96_rev98)
-       if (flag_pcc_global) then
-          call get_xc_potential_GGA_PBE(density=density_wk, grid_size=size, &
-               xc_potential=xc_potential,  &
-               xc_epsilon  =xc_epsilon,    &
-               xc_energy   =xc_energy,     &
-               x_energy    =x_energy,      &
-               flavour=functional_gga_pbe96_rev98 )  
-       else
-          call get_xc_potential_GGA_PBE(density=rho, grid_size=size, &
-               xc_potential=xc_potential,  &
-               xc_epsilon  =xc_epsilon,    &
-               xc_energy   =xc_energy,     &
-               x_energy    =x_energy,      &
-               flavour=functional_gga_pbe96_rev98 )
-       end if
-       !
-       !
-    case (functional_gga_pbe96_r99)
-       if (flag_pcc_global) then
-          call get_xc_potential_GGA_PBE(density=density_wk, grid_size=size, &
-               xc_potential=xc_potential,  &
-               xc_epsilon  =xc_epsilon,    &
-               xc_energy   =xc_energy,     &
-               x_energy    =x_energy,      &
-               flavour=functional_gga_pbe96_r99 )  
-       else
-          call get_xc_potential_GGA_PBE(density=rho, grid_size=size,&
-               xc_potential=xc_potential,  &
-               xc_epsilon  =xc_epsilon,    &
-               xc_energy   =xc_energy,     &
-               x_energy    =x_energy,      &
-               flavour=functional_gga_pbe96_r99 )
-       end if
-       !
-       !
-    case (functional_gga_pbe96_wc)
-      if (flag_pcc_global) then
-          call get_xc_potential_GGA_PBE(density=density_wk, grid_size=size, &
-               xc_potential=xc_potential,  &
-               xc_epsilon  =xc_epsilon,    &
-               xc_energy   =xc_energy,     &
-               x_energy    =x_energy,      &
-               flavour=functional_gga_pbe96_wc )
-       else
-          call get_xc_potential_GGA_PBE(density=rho, grid_size=size,&
-               xc_potential=xc_potential,  &
-               xc_epsilon  =xc_epsilon,    &
-               xc_energy   =xc_energy,     &
-               x_energy    =x_energy,      &
-               flavour=functional_gga_pbe96_wc )
-       end if
-       !
-       !   
-    case (functional_hyb_pbe0)
-       !
-       if ( exx_niter < exx_siter ) then
-          exx_tmp = one
-       else
-          exx_tmp = one - exx_alpha
-       end if
-       !
-       if (flag_pcc_global) then
-          call get_xc_potential_hyb_PBE0(density=density_wk, grid_size=size, &
-               xc_potential=xc_potential,   &
-               xc_epsilon  =xc_epsilon,     &
-               exx_a       =exx_tmp,        &
-               xc_energy   =xc_energy,      &
-               x_energy    =x_energy,       &
-               flavour=functional_gga_pbe96 ) 
-          
-       else
-          call get_xc_potential_hyb_PBE0(density=rho, grid_size=size, &
-               xc_potential=xc_potential,   &
-               exx_a       =exx_tmp,        &
-               xc_epsilon  =xc_epsilon,     &
-               xc_energy   =xc_energy,      &
-               x_energy    =x_energy,       &
-               flavour=functional_gga_pbe96 )
-       end if
-       !
-       !
-    case (functional_hartree_fock)
-       ! **<lat>** 
-       ! not optimal but experimental
-       if (exx_niter < exx_siter) then
-          ! for the first call of get_H_matrix using Hartree-Fock method
-          ! to get something not to much stupid ; use pure exchange functional
-          ! in near futur such as Xalpha
-          if (flag_pcc_global) then
-             call get_xc_potential_LSDA_PW92(density=density_wk, size=size,&
-                  xc_potential    =xc_potential,    &
-                  xc_epsilon      =xc_epsilon,      &
-                  xc_energy_total =xc_energy,       &
-                  x_energy_total  =x_energy         )
-          else 
-             call get_xc_potential_LSDA_PW92(density=rho,  size=size,  &
-                  xc_potential   =xc_potential,&
-                  xc_epsilon     =xc_epsilon,  &  
-                  xc_energy_total=xc_energy,   &
-                  x_energy_total =x_energy     )
-          end if
-       else
-          xc_epsilon   = zero
-          xc_energy    = zero
-          xc_epsilon   = zero
-          xc_potential = zero
-          x_energy     = zero
-       end if
-        !
-        !
-    case default
-       if (flag_pcc_global) then
-          call get_xc_potential_LSDA_PW92(density_wk, xc_potential, &
-                                          xc_epsilon, xc_energy, size)
-       else
-          call get_xc_potential_LSDA_PW92(rho, xc_potential, &
-                                          xc_epsilon, xc_energy, size)
-       end if
-       !
-       !
-    end select
+       call get_xc_potential(density=rho, size=size,     &
+            xc_potential=xc_potential, &
+            xc_epsilon  =xc_epsilon,        & 
+            xc_energy   =xc_energy,         &
+            x_energy    =x_energy)
     end if
     !
     !

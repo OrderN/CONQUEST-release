@@ -641,17 +641,7 @@ contains
                              flag_old_partitions, ne_in_cell,          &
                              ne_spin_in_cell, nspin, spin_factor,      &
                              ne_magn_in_cell,                          &
-                             max_L_iterations, flag_functional_type,   &
-                             functional_description,                   &
-                             functional_lda_pz81,                      &
-                             functional_lda_gth96,                     &
-                             functional_lda_pw92,                      &
-                             functional_gga_pbe96,                     &
-                             functional_gga_pbe96_rev98,               &
-                             functional_gga_pbe96_r99,                 &
-                             functional_gga_pbe96_wc,                  &
-                             functional_hyb_pbe0,                      &
-                             functional_hartree_fock,                  &
+                             max_L_iterations,    &
                              flag_reset_dens_on_atom_move,             &
                              flag_continue_on_SC_fail, iprint_init,    &
                              iprint_mat, iprint_ops, iprint_DM,        &
@@ -686,7 +676,7 @@ contains
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
                              flag_readAtomicSpin, &
-                             flag_opt_cell, cell_constraint_flag, cell_en_tol, flag_use_libxc
+                             flag_opt_cell, cell_constraint_flag, cell_en_tol
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -768,6 +758,7 @@ contains
     use move_atoms,         only: threshold_resetCD
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
+    use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0
 
     implicit none
 
@@ -1614,32 +1605,7 @@ contains
 !!$
 !!$
 !!$       
-       flag_use_libxc = .false.
        flag_functional_type = fdf_integer('General.FunctionalType', 3)   ! LDA PW92
-       if(flag_functional_type<0) flag_use_libxc = .true.
-!!$
-!!$
-!!$
-!!$
-       ! check if functional types are set correctly
-       ! **<lat>** added PBE0 and HF
-       if (flag_spin_polarisation) then
-          !
-          if ( flag_functional_type == functional_lda_pz81       .or. &
-               !flag_functional_type == functional_hyb_PBE0       .or. &
-               !flag_functional_type == functional_hartree_fock ) .or. & 
-               flag_functional_type == functional_lda_gth96     ) then
-             !
-             if (inode == ionode) &
-                  write (io_lun,'(/,a,/)') &
-                  '*** WARNING: the chosen xc-functional is not &
-                  &implemented for spin polarised calculation, &
-                  &reverting to LDA-PW92. ***'
-             flag_functional_type = functional_lda_pw92
-             !
-             !
-          end if          
-       end if
 !!$
 !!$
 !!$  E X X 
@@ -1696,31 +1662,6 @@ contains
           exx_mem       = 1
           exx_debug     = .false.
        end if
-!!$
-!!$
-!!$ 
-!!$
-!!$
-       select case(flag_functional_type)
-       case (functional_lda_pz81)
-          functional_description = 'LDA PZ81'
-       case (functional_lda_gth96)
-          functional_description = 'LDA GTH96'
-       case (functional_lda_pw92)
-          functional_description = 'LSDA PW92'
-       case (functional_gga_pbe96)
-          functional_description = 'GGA PBE96'
-       case (functional_gga_pbe96_rev98)            ! This is PBE with the parameter correction
-          functional_description = 'GGA revPBE98'   !   in Zhang & Yang, PRL 80:4, 890 (1998)
-       case (functional_gga_pbe96_r99)              ! This is PBE with the functional form redefinition
-          functional_description = 'GGA RPBE99'     !   in Hammer et al., PRB 59:11, 7413-7421 (1999)
-       case (functional_gga_pbe96_wc)               ! Wu-Cohen nonempirical GGA functional
-          functional_description = 'GGA WC'         !   in Wu and Cohen, PRB 73. 235116, (2006)
-       case (functional_hyb_pbe0)                   ! This is PB0E with the functional form redefinition
-          functional_description = 'hyb PBE0'        
-       case default
-          functional_description = 'LSDA PW92'
-       end select
 !!$
 !!$
 !!$  U N I T S
@@ -2140,9 +2081,8 @@ contains
                                     iMethfessel_Paxton
     use blip,                 only: blip_info
     use global_module,        only: flag_basis_set, PAOs,blips,        &
-                                    functional_description,            &
                                     flag_precondition_blips, io_lun,   &
-                                    flag_Multisite, flag_diagonalisation, flag_use_libxc
+                                    flag_Multisite, flag_diagonalisation
     use minimise,             only: energy_tolerance, L_tolerance,     &
                                     sc_tolerance,                      &
                                     n_support_iterations,              &
@@ -2257,8 +2197,6 @@ contains
 
     write(io_lun,7) NODES
 
-    if(.NOT.flag_use_libxc) write(io_lun,8) functional_description
-
     write(io_lun,11) n_support_iterations, n_L_iterations
 
     write(io_lun,13) dist_conv*r_h, d_units(dist_units), &
@@ -2276,7 +2214,6 @@ contains
 5   format(/10x,'The simulation box contains ',i7,' atoms.')
 ! 6   format(/10x,'The number of bands is ',f8.2)
 7   format(/10x,'The calculation will be performed on ',i5,' processors')
-8   format(/10x, 'The functional used will be ', a15)
 9   format(/10x,'The number of cell grid points in each direction is :',/, &
            20x,i5,' cell grid points along x',/, &
            20x,i5,' cell grid points along y',/, &
