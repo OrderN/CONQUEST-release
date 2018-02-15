@@ -2848,6 +2848,10 @@ contains
   !!    Renamed naba_atm -> naba_atoms_of_blocks
   !!   2016/11/02 10:24 dave
   !!    - Subtle GGA error: return is inside if(inode==ionode) loop causing hang !
+  !!   2018/02/14 13:26 dave
+  !!    More subtle errors ! The non-PCC, non-SCF XC stress did not have spin
+  !!    factor applied, and used only one call (get_xc_potential) where it should
+  !!    have had the call to the appropriate functional routine
   !!  SOURCE
   !!
   subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
@@ -2871,7 +2875,10 @@ contains
     use XC_module,           only: get_dxc_potential,                  &
                                    get_GTH_dxc_potential,              &
                                    get_dxc_potential_LSDA_PW92,        &
-                                   get_dxc_potential_GGA_PBE, get_xc_potential
+                                   get_dxc_potential_GGA_PBE, get_xc_potential, &
+                                   get_GTH_xc_potential,               &
+                                   get_xc_potential_GGA_PBE,           &
+                                   get_xc_potential_LSDA_PW92
     use block_module,        only: nx_in_block, ny_in_block,           &
                                    nz_in_block, n_pts_in_block
     use group_module,        only: blocks, parts
@@ -3042,13 +3049,39 @@ contains
     ! DeltaXC is added in the main force routine
     ! For PCC we will do this in the PCC force routine (easier)
     if (.NOT.flag_pcc_global) then
-       call get_xc_potential(density=density_total, size=nsize,     &
-            xc_potential=potential(:,1), &
-            xc_epsilon  =dVxc_drho(:,1,1),        & 
-            xc_energy   =y_pcc)
+       select case (flag_functional_type)
+       case (functional_lda_pz81)
+          ! NOT SPIN POLARISED
+          call get_xc_potential(density_total, dVxc_drho(:,1,1),     &
+               potential(:,1), y_pcc, nsize)
+       case (functional_lda_gth96)
+          ! NOT SPIN POLARISED
+          call get_GTH_xc_potential(density_total, dVxc_drho(:,1,1), &
+               potential(:,1), y_pcc, nsize)
+       case (functional_lda_pw92)
+          call get_xc_potential_LSDA_PW92(density, dVxc_drho(:,:,1),    &
+               potential(:,1), y_pcc, nsize)
+       case (functional_gga_pbe96)
+          call get_xc_potential_GGA_PBE(density,                &
+               dVxc_drho(:,:,1), potential(:,1), &
+               y_pcc, nsize)
+       case (functional_gga_pbe96_rev98)
+          call get_xc_potential_GGA_PBE(density,                &
+               dVxc_drho(:,:,1), potential(:,1), &
+               y_pcc, nsize)
+       case (functional_gga_pbe96_r99)
+          call get_xc_potential_GGA_PBE(density,                &
+               dVxc_drho(:,:,1), potential(:,1), &
+               y_pcc, nsize)
+       case default
+          call get_xc_potential_LSDA_PW92(density, dVxc_drho(:,:,1),    &
+               potential(:,1), y_pcc, nsize)
+       end select
        jacobian = zero
-       do ipoint = 1,nsize
-          jacobian = jacobian + density_out_total(ipoint)*potential(ipoint,1)
+       do spin = 1, nspin
+          do ipoint = 1,nsize
+             jacobian = jacobian + spin_factor*density_out(ipoint,spin)*dVxc_drho(ipoint,spin,1)
+          end do
        end do
        jacobian = jacobian*grid_point_volume
        call gsum(jacobian) ! gsum as XC_stress isn't summed elsewhere
@@ -3621,6 +3654,9 @@ contains
   !!    Renamed naba_atm -> naba_atoms_of_blocks
   !!   2017/10/20 12:08 dave
   !!    Added extra optional argument to allow return of XC energy (for force testing)
+  !!   2018/02/14 13:26 dave
+  !!    More subtle errors ! The PCC, non-SCF XC stress did not have spin
+  !!    factor applied (as above in non-SCF routine)
   !!  SOURCE
   !!
   subroutine get_pcc_force(pcc_force, inode, ionode, n_atoms, size, density_out,xc_energy_ret)
@@ -3757,7 +3793,7 @@ contains
        jacobian = zero
        do spin=1,nspin
           do ipoint = 1,size
-             jacobian = jacobian + density_out(ipoint,spin)*xc_potential(ipoint,spin)
+             jacobian = jacobian + spin_factor*density_out(ipoint,spin)*xc_potential(ipoint,spin)
           end do
        end do
        jacobian = jacobian*grid_point_volume

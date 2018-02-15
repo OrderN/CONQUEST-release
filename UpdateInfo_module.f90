@@ -1900,7 +1900,9 @@ contains
   !!   2016/04/06 dave
   !!    Changed Info to pointer from allocatable (gcc 4.4.7 issue)
   !!   2017/05/09 dave
-  !!    Removed restriction spin and on L-matrix update 
+  !!    Removed restriction spin and on L-matrix update
+  !!   2018/02/12 dave
+  !!    Removed delta_ix/y/z=zero condition when flag_move_atom is false
   !!  SOURCE
   !!
   subroutine UpdateMatrix_local(Info,range,matA,flag_remote_iprim,nfile)
@@ -1908,7 +1910,7 @@ contains
     ! Module usage
     use numbers
     use global_module, ONLY: glob2node,id_glob,atom_coord_diff, &
-         flag_move_atom,runtype,nspin, rcellx, rcelly, rcellz
+         runtype,nspin, rcellx, rcelly, rcellz
     use Gencomms, ONLY: inode,cq_abort
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
@@ -1945,13 +1947,13 @@ contains
     integer :: ia,idglob_ii,ind_node,n_alpha,ng,ni,iprim
     integer :: npart,ipartx,iparty,ipartz
     real(double) :: xprim_i,yprim_i,zprim_i,deltai_x,deltai_y,deltai_z
-    logical :: find_iprim,flag_ix,flag_iy,flag_iz
+    logical :: find_iprim
     ! --- Finding j --- !
     integer :: jj,n_beta,idglob_jj,jcoverx,jcovery,jcoverz,jpart,jpart_nopg, &
          jjj,jcover,idglob_jjj,j_in_halo,jseq,ja,nj,idglob_jjjj
     integer :: BCSp_lx,BCSp_ly,BCSp_lz,BCSp_gx,BCSp_gy,BCSp_gz
     real(double) :: deltaj_x,deltaj_y,deltaj_z,xx_j,yy_j,zz_j
-    logical :: find_jcover,flag_jx,flag_jy,flag_jz,flag_jseq
+    logical :: find_jcover,flag_jseq
 
     type(matrix_halo), pointer :: matA_halo
     ! db
@@ -2010,60 +2012,26 @@ contains
              enddo !(ng, groups_on_node)
              if (.NOT. find_iprim) call cq_abort('Error: find_iprim must be T - local.')
              if (flag_remote_iprim(iprim)) call cq_abort('Error: flag_remote_iprim must be F.', iprim)
-             flag_ix=flag_move_atom(1,idglob_ii)
-             flag_iy=flag_move_atom(2,idglob_ii)
-             flag_iz=flag_move_atom(3,idglob_ii)
              ! Partitions and positions of "i_new".
              ipartx=bundle%idisp_primx(npart) ; xprim_i=bundle%xprim(iprim)
              iparty=bundle%idisp_primy(npart) ; yprim_i=bundle%yprim(iprim)
              ipartz=bundle%idisp_primz(npart) ; zprim_i=bundle%zprim(iprim)
 
              ! If atoms move, we need to consider the displacements of each atom.
-             ! Displacement in X of PS of atoms 'i'.
-             if ((flag_ix)) then! .AND. .NOT. leqi(runtype,'static')) then
-                deltai_x=atom_coord_diff(1,idglob_ii)
-             else
-                deltai_x=zero
-             endif
-             ! Displacement in Y of PS of atoms 'i'.
-             if ((flag_iy)) then !  .AND. .NOT. leqi(runtype,'static')) then
-                deltai_y=atom_coord_diff(2,idglob_ii)
-             else
-                deltai_y=zero
-             endif
-             ! Displacement in Z of PS of atoms 'i'.
-             if ((flag_iz)) then ! .AND. .NOT. leqi(runtype,'static')) then
-                deltai_z=atom_coord_diff(3,idglob_ii)
-             else
-                deltai_z=zero
-             endif
+             ! Displacement in x/y/z of PS of atoms 'i'.
+             deltai_x=atom_coord_diff(1,idglob_ii)
+             deltai_y=atom_coord_diff(2,idglob_ii)
+             deltai_z=atom_coord_diff(3,idglob_ii)
              ! Find i_new neighbours, "j_new", by referring to "j_old". Loop over "j_old" to begin with.
              ibeg1 = Info(ifile)%ibeg_Pij(ia)
              ibeg2 = Info(ifile)%ibeg_dataL(ia)
              do jj = 1, Info(ifile)%jmax_i(ia)
                 n_beta = Info(ifile)%beta_j_i(ibeg1+jj-1)
                 idglob_jj = Info(ifile)%idglob_j(ibeg1+jj-1)
-                flag_jx=flag_move_atom(1,idglob_jj)
-                flag_jy=flag_move_atom(2,idglob_jj)
-                flag_jz=flag_move_atom(3,idglob_jj)
-                ! Displacement in X of neighbour 'j' of 'i'.
-                if ((flag_jx))then! .AND. .NOT. leqi(runtype,'static')) then
-                   deltaj_x=atom_coord_diff(1,idglob_jj)
-                else
-                   deltaj_x=zero
-                endif
-                ! Displacement in Y of neighbour 'j' of 'i'.
-                if ((flag_jy))then ! .AND. .NOT. leqi(runtype,'static')) then
-                   deltaj_y=atom_coord_diff(2,idglob_jj)
-                else
-                   deltaj_y=zero
-                endif
-                ! Displacement in Z of neighbour 'j' of 'i'.
-                if ((flag_jz))then! .AND. .NOT. leqi(runtype,'static')) then
-                   deltaj_z=atom_coord_diff(3,idglob_jj)
-                else
-                   deltaj_z=zero
-                endif
+                ! Displacement in x/y/z of neighbour 'j' of 'i'.
+                deltaj_x=atom_coord_diff(1,idglob_jj)
+                deltaj_y=atom_coord_diff(2,idglob_jj)
+                deltaj_z=atom_coord_diff(3,idglob_jj)
                 ! NOTE: I don't like this writing but keep it for now...
                 !       zero-zero wouldn't be good...
                 ! 2017Dec14: Changed vec_Rij from cartesian (bohr) to fractional coordinates 
@@ -2259,14 +2227,15 @@ contains
   !!  MODIFICATION
   !!   2017/05/09 dave
   !!    Removed restriction spin and on L-matrix update 
-  !!
+  !!   2018/02/12 dave
+  !!    Removed delta_ix/y/z=zero condition when flag_move_atom is false
   !!  SOURCE
   !!
   subroutine UpdateMatrix_remote(range,matA,LmatrixRecv,flag_remote_iprim,irecv2_array,recv_array)
 
     ! Module usage
     use numbers
-    use global_module, ONLY: nspin,atom_coord_diff,flag_move_atom,runtype,io_lun, rcellx, rcelly, rcellz
+    use global_module, ONLY: nspin,atom_coord_diff,runtype,io_lun, rcellx, rcelly, rcellz
     use GenComms, ONLY: cq_abort
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
@@ -2296,14 +2265,13 @@ contains
     ! --- Finding remote i --- !
     integer :: iprim_remote,iprim,idglob_ii,n_alpha
     real(double) :: xprim_i,yprim_i,zprim_i,deltai_x,deltai_y,deltai_z
-    logical :: flag_ix,flag_iy,flag_iz
     ! --- Finding j --- !
     integer :: ibeg1,ibeg2,nsize1,nsize2,jj,n_beta,idglob_jj,ibeg_dataL, &
                jcoverx,jcovery,jcoverz,jpart,jpart_nopg,jjj,idglob_jjj,  &
                jcover,j_in_halo,jbeg,jseq,ibeg_Lij
     real(double) :: xx_j,yy_j,zz_j,deltaj_x,deltaj_y,deltaj_z
     real(double) :: vec_Rij(3)
-    logical :: find_jcover,flag_jx,flag_jy,flag_jz
+    logical :: find_jcover
     ! --- Finding P and Pdot --- !
     integer :: ibeg_dataP, ibeg_dataPdot
 
@@ -2351,31 +2319,11 @@ contains
       xprim_i = bundle%xprim(iprim)
       yprim_i = bundle%yprim(iprim)
       zprim_i = bundle%zprim(iprim)
-      flag_ix = flag_move_atom(1,idglob_ii)
-      flag_iy = flag_move_atom(2,idglob_ii)
-      flag_iz = flag_move_atom(3,idglob_ii)
-      ! Displacement in X of PS of atoms 'i'.
-      !ORI if ((flag_ix).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-      if ((flag_ix))then! .AND. .NOT.leqi(runtype,'static')) then
-        deltai_x=atom_coord_diff(1,idglob_ii)
-      else
-        deltai_x=zero
-      endif
-      ! Displacement in Y of PS of atoms 'i'.
-      !ORI if ((flag_iy).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-      if ((flag_iy))then! .AND. .NOT.leqi(runtype,'static')) then
-        deltai_y=atom_coord_diff(2,idglob_ii)
-      else
-        deltai_y=zero
-      endif
-      ! Displacement in Z of PS of atoms 'i'.
-      !ORI if ((flag_iz).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-      if ((flag_iz))then! .AND. .NOT.leqi(runtype,'static')) then
-        deltai_z=atom_coord_diff(3,idglob_ii)
-      else
-        deltai_z=zero
-      endif
-
+      ! Displacement in x/y/z of PS of atoms 'i'.
+      deltai_x=atom_coord_diff(1,idglob_ii)
+      deltai_y=atom_coord_diff(2,idglob_ii)
+      deltai_z=atom_coord_diff(3,idglob_ii)
+      
       !! ---------- DEBUG ---------- !!
       if (flag_MDdebug) then
         write (lun_db,*) ""
@@ -2401,31 +2349,10 @@ contains
         vec_Rij(1) = recv_array(ibeg2+jj-1)
         vec_Rij(2) = recv_array(ibeg2+jj)
         vec_Rij(3) = recv_array(ibeg2+jj+1)
-        flag_jx = flag_move_atom(1,idglob_jj)
-        flag_jy = flag_move_atom(2,idglob_jj)
-        flag_jz = flag_move_atom(3,idglob_jj)
-        !ibeg_dataL = ibeg_dataL + ibeg2
-        ! Displacement in X of neighbour 'i'.
-        !ORI if ((flag_jx).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-        if ((flag_jx))then! .AND. .NOT.leqi(runtype,'static')) then
-          deltaj_x=atom_coord_diff(1,idglob_jj)
-        else
-          deltaj_x=zero
-        endif
-        ! Displacement in Y of neighbour 'i'.
-        !ORI if ((flag_jy).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-        if ((flag_jy))then! .AND. .NOT.leqi(runtype,'static')) then
-          deltaj_y=atom_coord_diff(2,idglob_jj)
-        else
-          deltaj_y=zero
-        endif
-        ! Displacement in Z of neighbour 'i'.
-        !ORI if ((flag_jz).AND.(leqi(runtype, 'md').OR.(leqi(runtype, 'cg')))) then
-        if ((flag_jz))then! .AND. .NOT.leqi(runtype,'static')) then
-          deltaj_z=atom_coord_diff(3,idglob_jj)
-        else
-          deltaj_z=zero
-        endif
+        ! Displacement in x/y/z of neighbour 'i'.
+        deltaj_x=atom_coord_diff(1,idglob_jj)
+        deltaj_y=atom_coord_diff(2,idglob_jj)
+        deltaj_z=atom_coord_diff(3,idglob_jj)
         ! NOTE: I hate the following way as in UpdateMatrix_local, but keep it
         !       for now.
         ! 2017Dec14: Changed vec_Rij from cartesian (bohr) to fractional coordinates 
