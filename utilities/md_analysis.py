@@ -165,8 +165,6 @@ cq_params = parse_cq_input(cq_input_file)
 init_config = parse_init_config(cq_params['IO.Coordinates'])
 natoms = init_config['natoms']
 dt = float(cq_params['AtomMove.Timestep'])
-thermo_type = cq_params['MD.Thermostat']
-baro_type = cq_params['MD.Barostat']
 
 # Parse the statistics file
 data = read_stats(opts.statfile,opts.nstop)
