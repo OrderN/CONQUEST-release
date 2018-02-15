@@ -911,6 +911,12 @@ contains
     end do
     th%e_nhc = th%e_nhc_ion + th%e_nhc_cell
 
+    if (inode==ionode .and. flag_MDdebug) then
+      write(io_lun,*) "thermoDebug: get_nhc_energy: e_nhc = ", th%e_nhc
+      write(io_lun,*) "                        e_nhc_ion  = ", th%e_nhc_ion
+      write(io_lun,*) "                        e_nhc_cell = ", th%e_nhc_cell
+    end if
+
   end subroutine get_nhc_energy
   !!***
 
