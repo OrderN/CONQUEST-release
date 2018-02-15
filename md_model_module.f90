@@ -260,19 +260,20 @@ contains
         case ('npt')
           select case(mdl%baro_type)
           case('iso-mttk')
-            write(lun,'(a10,6a18,3a12)') "step", "pe", "ke", "nhc", "box", "pV", "H'", "T", "P", "V"
+            write(lun,'(a10,6a18,2a12,a16)') "step", "pe", "ke", "nhc", &
+              "box", "pV", "H'", "T", "P", "V"
           case('berendsen')
             if (md_berendsen_equil > 0) then
-              write(lun,'(a10,6a18,3a12)') "step", "pe", "ke", "nhc", "box", &
-                                           "pV", "H'", "T", "P", "V"
+              write(lun,'(a10,6a18,2a12,a16)') "step", "pe", "ke", "nhc", &
+                "box", "pV", "H'", "T", "P", "V"
             else
-              write(lun,'(a10,4a18,3a12)') "step", "pe", "ke", "pV", "H'", &
-                                           "T", "P", "V"
+              write(lun,'(a10,4a18,2a12,a16)') "step", "pe", "ke", "pV", &
+                "H'", "T", "P", "V"
             end if
           end select
         case ('nph')
-          write(lun,'(a10,5a18,3a12)') "step", "pe", "ke", "box", "pV", "H'", &
-                                       "T", "P", "V"
+          write(lun,'(a10,5a18,2a12,a16)') "step", "pe", "ke", "box", "pV", &
+            "H'", "T", "P", "V"
         end select
         mdl%append = .true.
       end if
@@ -292,24 +293,26 @@ contains
       case ('npt')
         select case(mdl%baro_type)
         case('iso-mttk')
-          write(lun,'(i10,6e18.8,3f12.4)') mdl%step, mdl%dft_total_energy, &
-            mdl%ion_kinetic_energy, mdl%nhc_energy, mdl%box_kinetic_energy, &
-            mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
+          write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
+            mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%nhc_energy, &
+            mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
+            mdl%volume
         case('berendsen')
           if (md_berendsen_equil > 0) then
-            write(lun,'(i10,6e18.8,3f12.4)') mdl%step, mdl%dft_total_energy, &
-              mdl%ion_kinetic_energy, zero, zero, mdl%PV, mdl%h_prime, &
-              mdl%T_int, P_GPa, mdl%volume
+            write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
+              mdl%dft_total_energy, mdl%ion_kinetic_energy, zero, zero, &
+              mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
           else
-            write(lun,'(i10,4e18.8,3f12.4)') mdl%step, mdl%dft_total_energy, &
-              mdl%ion_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
-              mdl%volume
+            write(lun,'(i10,4e18.8,2f12.4,e16.8)') mdl%step, &
+              mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%PV, &
+              mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
           end if
         end select
       case ('nph')
-          write(lun,'(i10,5e18.8,3f12.4)') mdl%step, mdl%dft_total_energy, &
-            mdl%ion_kinetic_energy, mdl%box_kinetic_energy, mdl%PV, &
-            mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
+          write(lun,'(i10,5e18.8,2f12.4,e16.8)') mdl%step, &
+            mdl%dft_total_energy, mdl%ion_kinetic_energy, &
+            mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
+            mdl%volume
       end select
       call io_close(lun)
     end if
