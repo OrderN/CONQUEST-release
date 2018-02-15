@@ -29,6 +29,8 @@ module XC
 
   implicit none
 
+  save
+
   ! Public, general variables
   real(double), dimension(3), public :: XC_GGA_stress
   real(double), public :: s_6  ! For DFT D2
@@ -42,7 +44,7 @@ module XC
   ! LibXC variables
   integer :: n_xc_terms
   integer, dimension(2) :: i_xc_family
-  type(xc_f90_pointer_t), dimension(:), allocatable, save :: xc_func, xc_info
+  type(xc_f90_pointer_t), dimension(:), allocatable :: xc_func, xc_info
   logical :: flag_use_libxc
 
   ! Conquest functional identifiers
@@ -65,6 +67,27 @@ module XC
 
 contains
 
+  !!****f* XC_module/init_xc *
+  !!
+  !!  NAME
+  !!   init_xc
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Initialises the exchange-correlation calculations
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2018/02/05
+  !!  MODIFICATION HISTORY
+  !!   2018/02/15 11:56 dave
+  !!    Define flag_is_GGA for LibXC
+  !!  SOURCE
+  !!
   subroutine init_xc
 
     use global_module, ONLY : nspin, flag_dft_d2
@@ -82,14 +105,19 @@ contains
 
     ! Test for LibXC or CQ
     if(flag_functional_type<0) then
+       flag_is_GGA = .false.
        ! --------------------------
        ! LibXC functional specified
        ! --------------------------
        flag_use_libxc = .true.
        call xc_f90_version(vmajor, vminor, vmicro)
-       if(inode==ionode.AND.iprint_ops>0) &
-            write(io_lun,'("LibXC version: ",I1,".",I1,".",I2)') vmajor, vminor, vmicro
-
+       if(inode==ionode.AND.iprint_ops>0) then
+          if(vmajor>2) then
+             write(io_lun,'("LibXC version: ",I1,".",I1,".",I2)') vmajor, vminor, vmicro
+          else
+             write(io_lun,'("LibXC version: ",I1,".",I1)') vmajor, vminor
+          end if
+       end if
        ! Identify the functional
        if(-flag_functional_type<1000) then ! Only exchange OR combined exchange-correlation
           n_xc_terms = 1
@@ -122,8 +150,11 @@ contains
           else if(nspin==2) then
              call xc_f90_func_init(xc_func(i), xc_info(i), xcpart(i), XC_POLARIZED)
           end if
+          ! Consistent threshold with Conquest
+          if(vmajor>2) call xc_f90_func_set_dens_threshold(xc_func(i),RD_ERR)
           call xc_f90_info_name(xc_info(i), name)
           i_xc_family(i) = xc_f90_info_family(xc_info(i))
+          if(i_xc_family(i)==XC_FAMILY_GGA) flag_is_GGA = .true.
           if(inode==ionode) then
              select case(xc_f90_info_kind(xc_info(i)))
              case (XC_EXCHANGE)
@@ -143,7 +174,6 @@ contains
                 write(family,'(a)') "LDA"
              case (XC_FAMILY_GGA);
                 write(family,'(a)') "GGA"
-                flag_is_GGA = .true.
              case (XC_FAMILY_HYB_GGA);
                 write(family,'(a)') "Hybrid GGA"
              case (XC_FAMILY_MGGA);
@@ -155,15 +185,21 @@ contains
              end select
 
              if(iprint_ops>2) then
-                write(io_lun,'("The functional ", a, " is ", a, ", it belongs to the ", a, &
-                     " family and is defined in the reference(s):")') &
-                     trim(name), trim(kind), trim(family)
-                j = 0
-                call xc_f90_info_refs(xc_info(i), j, ref)
-                do while(j >= 0)
-                   write(io_lun, '(a,i1,2a)') '[', j, '] ', trim(ref)
+                if(vmajor>2) then
+                   write(io_lun,'("The functional ", a, " is ", a, ", it belongs to the ", a, &
+                        " family and is defined in the reference(s):")') &
+                        trim(name), trim(kind), trim(family)
+                   j = 0
                    call xc_f90_info_refs(xc_info(i), j, ref)
-                end do
+                   do while(j >= 0)
+                      write(io_lun, '(a,i1,2a)') '[', j, '] ', trim(ref)
+                      call xc_f90_info_refs(xc_info(i), j, ref)
+                   end do
+                else
+                   write(io_lun,'("The functional ", a, " is ", a, ", and it belongs to the ", a, &
+                        " family")') &
+                        trim(name), trim(kind), trim(family)
+                end if
              else if(iprint_ops>0) then
                 write(io_lun,'(2x,"Using the ",a," functional ",a)') trim(family),trim(name)
              else
@@ -227,6 +263,7 @@ contains
        end if
     end if ! if selecting LibXC or CQ
   end subroutine init_xc
+  !!***
   
   !!****f* XC/get_xc_potential *
   !!
@@ -420,6 +457,7 @@ contains
     real(double), dimension(:,:), optional :: density_out
 
     if(flag_use_libxc) then
+       call get_libxc_dpotential(density, dxc_potential,nsize)
     else
        select case (flag_functional_type)
        case (functional_lda_pz81)
@@ -463,6 +501,29 @@ contains
   end subroutine get_dxc_potential
   !!***
 
+  !!****f* XC_module/get_libxc_potential *
+  !!
+  !!  NAME
+  !!   get_libxc_potential
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Calculates the exchange-correlation potential
+  !!   on the grid using LibXC
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2018/02/05
+  !!  MODIFICATION HISTORY
+  !!   2018/02/15 11:56 dave
+  !!    Bug fix: only scale sigma and build_gradient if we have a GGA functional
+  !!    Changed to use flag_is_GGA
+  !!  SOURCE
+  !!
   subroutine get_libxc_potential(density, xc_potential, xc_epsilon,     &
        xc_energy, size, &!x_epsilon, c_epsilon, &
        x_energy)
@@ -501,7 +562,8 @@ contains
     flag_exchange_e = PRESENT(x_energy)
     ! Storage space for individual components
     allocate(vrho(n_my_grid_points*nspin),eps(n_my_grid_points),alt_dens(n_my_grid_points*nspin))
-    if(i_xc_family(1)==XC_FAMILY_GGA) then
+    ! For GGA, create sigma (\nabla n dot \nabla n) from gradient
+    if(flag_is_GGA) then
        if(nspin>1) then
           allocate(vsigma(n_my_grid_points*3),sigma(n_my_grid_points*3))
        else
@@ -555,9 +617,12 @@ contains
     else
        ! Scaling for spin; sigma needs four because it is nabla n .dot. nabla n
        alt_dens(1:n_my_grid_points) = two*density(1:n_my_grid_points,1)
-       sigma(:) = four*sigma(:)
-       grad_density(:,:,1) = two*grad_density(:,:,1)
+       if(flag_is_GGA) then
+          sigma(:) = four*sigma(:)
+          grad_density(:,:,1) = two*grad_density(:,:,1)
+       end if
     end if
+    ! Create XC energy and potential
     do n = 1,n_xc_terms
        vrho = zero
        eps = zero
@@ -668,7 +733,7 @@ contains
        end if
     end do
     deallocate(vrho,eps,alt_dens)
-    if(i_xc_family(1)==XC_FAMILY_GGA)then
+    if(flag_is_GGA)then
        deallocate(grad_density,sigma,vsigma,ng,temp)
        XC_GGA_stress = XC_GGA_stress*grid_point_volume
        call gsum(XC_GGA_stress,3)
@@ -688,6 +753,93 @@ contains
     end if
     return
   end subroutine get_libxc_potential
+  !!***
+
+  !!****f* XC_module/get_libxc_dpotential *
+  !!
+  !!  NAME
+  !!   get_libxc_dpotential
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Calculates the derivative of the exchange-correlation potential
+  !!   on the grid using LibXC
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2018/02/15
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine get_libxc_dpotential(density, dxc_potential, size)
+
+    use datatypes
+    use numbers
+    use GenComms,      only: gsum
+    use GenBlas,       only: dot
+    use dimens,        only: grid_point_volume, n_my_grid_points
+    use global_module, only : nspin, io_lun
+    use fft_module,    only: fft3, recip_vector
+
+    implicit none
+
+    ! Passed variables
+    integer,                      intent(in)  :: size
+    real(double), dimension(:,:), intent(in)  :: density
+    real(double), dimension(:,:,:), intent(out) :: dxc_potential
+
+    ! Local variables
+    real(double), dimension(:), allocatable :: alt_dens, vrho
+    integer :: stat, i, spin, n, j
+
+    ! Initialise - allocate and zero
+    allocate(alt_dens(n_my_grid_points*nspin))
+    alt_dens = zero
+    dxc_potential = zero
+    ! Re-order density (spin) or scale (no spin)
+    if(nspin>1) then
+       allocate(vrho(n_my_grid_points*3))
+       do i = 1, n_my_grid_points
+          do spin=1,nspin
+             alt_dens(spin + (i-1)*nspin) = density(i,spin)
+          end do
+       end do
+    else
+       allocate(vrho(n_my_grid_points))
+       ! Scaling for spin; sigma needs four because it is nabla n .dot. nabla n
+       alt_dens(1:n_my_grid_points) = two*density(1:n_my_grid_points,1)
+    end if
+    ! Loop over terms and calculate potential
+    do n = 1,n_xc_terms
+       vrho = zero
+       if(nspin>1) then
+          select case (i_xc_family(n))
+          case(XC_FAMILY_LDA)
+             call xc_f90_lda_fxc(xc_func(n),n_my_grid_points,alt_dens(1),vrho(1))
+          end select
+          do i=1,n_my_grid_points
+             dxc_potential(i,1,1) = dxc_potential(i,1,1) +vrho(1 + (i-1)*3)
+             dxc_potential(i,1,2) = dxc_potential(i,1,2) +vrho(2 + (i-1)*3)
+             dxc_potential(i,2,1) = dxc_potential(i,2,1) +vrho(2 + (i-1)*3)
+             dxc_potential(i,2,2) = dxc_potential(i,2,2) +vrho(3 + (i-1)*3)
+          end do
+       else
+          select case (i_xc_family(n))
+          case(XC_FAMILY_LDA)
+             call xc_f90_lda_fxc(xc_func(n),n_my_grid_points,alt_dens(1),vrho(1))
+          end select
+          dxc_potential(1:n_my_grid_points,1,1) = dxc_potential(1:n_my_grid_points,1,1) + &
+               vrho(1:n_my_grid_points)
+       end if
+    end do
+    deallocate(vrho,alt_dens)
+    return
+  end subroutine get_libxc_dpotential
+  !!***
 
   ! **********************************
   ! Conquest XC routines go below here

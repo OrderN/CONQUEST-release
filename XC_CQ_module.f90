@@ -36,6 +36,8 @@ module XC
 
   implicit none
 
+  save
+
   ! Public, general variables
   real(double), dimension(3), public :: XC_GGA_stress
   real(double), public :: s_6  ! For DFT D2
@@ -66,6 +68,25 @@ module XC
 
 contains
 
+  !!****f* XC_module/init_xc *
+  !!
+  !!  NAME
+  !!   init_xc
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Initialises the exchange-correlation calculations
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2018/02/05
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
   subroutine init_xc
 
     use global_module, ONLY: flag_dft_d2, nspin
@@ -129,6 +150,7 @@ contains
     end if
     return
   end subroutine init_xc
+  !!***
 
   !!****f* XC/get_xc_potential *
   !!
