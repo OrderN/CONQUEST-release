@@ -5,9 +5,11 @@ import re
 import scipy as sp
 import matplotlib.pyplot as plt
 from frame import Frame
+from pdb import set_trace
 
 cq_input_file = 'Conquest_input'
 
+# Regular expressions
 frame_re = re.compile('frame')
 endframe_re = re.compile('end frame')
 cell_re = re.compile('cell_vectors(.*?)end cell_vectors', re.M | re.S)
@@ -17,6 +19,7 @@ position_re = re.compile('positions(.*?)end positions', re.M | re.S)
 velocity_re = re.compile('velocities(.*?)end velocities', re.M | re.S)
 force_re = re.compile('forces(.*?)end forces', re.M | re.S)
 
+# Parsing functions
 def parse_cq_input(cq_input_file):
   cq_params = {}
   with open(cq_input_file, 'r') as cqip:
@@ -48,12 +51,15 @@ def parse_init_config(conf_filename):
     data['species'] = sp.array(species)
   return data
 
-def read_stats(stats_file):
+def read_stats(stats_file, nstop):
   nstep = 0
   data = {}
   header = True
   with open(stats_file, 'r') as statfile:
     for line in statfile:
+      if nstop != -1:
+        if nstep >= nstop:
+          break
       if header:
         col_id = line.strip().split()
         for col in col_id:
@@ -67,6 +73,7 @@ def read_stats(stats_file):
           else:
             info = float(bit)
           data[col_id[i]].append(info)
+      nstep += 1
   return data
 
 
@@ -116,6 +123,7 @@ def parse_frame(buf, f):
     for j in range(3):
       f.f[i,j] = float(bits[j])
 
+# Command line arguments
 parser = argparse.ArgumentParser(description='Analyse a Conquest MD \
         trajectory', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-d', '--dirs', nargs='+', default='.', dest='dirs',
@@ -128,12 +136,16 @@ parser.add_argument('--skip', action='store', dest='nskip', default=0,
                     type=int, help='Number of equilibration steps to skip')
 parser.add_argument('--stop', action='store', dest='nstop', default=-1, 
                     type=int, help='Number of last frame in analysis')
+parser.add_argument('--equil', action='store', dest='nequil', default=0, 
+                    type=int, help='Number of equilibration steps')
 parser.add_argument('--vacf', action='store_true', dest='vacf', 
                     help='Compute the velocity autocorrelation function')
 parser.add_argument('--msd', action='store_true', dest='msd', 
                     help='Compute the mean squared deviation')
 parser.add_argument('--vdist', action='store_true', dest='vdist', 
                     help='Compute the velocity distribution')
+parser.add_argument('--landscape', action='store_true', dest='landscape', 
+                    help='Generate plot with landscape orientation')
 parser.add_argument('--stress', action='store_true', dest='stress', 
                     help='Plot the stress')
 parser.add_argument('--nbins', action='store', dest='nbins', default=100,
@@ -145,25 +157,34 @@ if (opts.vacf or opts.msd or opts.vdist or opts.stress):
 else:
   read_frames = False
 
+if opts.nskip > 0:
+  opts.nequil = opts.nskip
+
 # Parse the md.in parameters file
 cq_params = parse_cq_input(cq_input_file)
 init_config = parse_init_config(cq_params['IO.Coordinates'])
 natoms = init_config['natoms']
 dt = float(cq_params['AtomMove.Timestep'])
+thermo_type = cq_params['MD.Thermostat']
+baro_type = cq_params['MD.Barostat']
 
-# Parse the stat.out statistics file
-data = read_stats(opts.statfile)
+# Parse the statistics file
+data = read_stats(opts.statfile,opts.nstop)
 avg = {}
 std = {}
 for key in data:
   data[key] = sp.array(data[key])
-  avg[key] = sp.mean(data[key][opts.nskip:-1])
-  std[key] = sp.std(data[key][opts.nskip:-1])
+  avg[key] = sp.mean(data[key][opts.nequil:-1])
+  std[key] = sp.std(data[key][opts.nequil:-1])
 time = [float(s)*dt for s in data['step']]
 data['time'] = sp.array(time)
 
 # Plot the statistics
-fig1, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, ncols=1, sharex=True, figsize=(7,10))
+if opts.landscape:
+  fig1, ((ax1, ax2), (ax3, ax4)) = plt.subplots(nrows=2, ncols=2, sharex=True, figsize=(11,7))
+  plt.tight_layout(pad=6.5)
+else:
+  fig1, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, ncols=1, sharex=True, figsize=(7,10))
 
 ax1.plot(data['time'], data['pe'], 'r-', label='Potential energy')
 ax1a = ax1.twinx()
@@ -196,10 +217,6 @@ ax4.set_ylabel("P", color='b')
 if cq_params['MD.Ensemble'][1] == 'p':
   ax4a.set_ylabel("V", color='r')
 ax4.set_xlabel("time (fs)")
-ax1.get_yaxis().set_label_coords(-0.1, 0.5)
-ax2.get_yaxis().set_label_coords(-0.1, 0.5)
-ax3.get_yaxis().set_label_coords(-0.1, 0.5)
-ax4.get_yaxis().set_label_coords(-0.1, 0.5)
 ax1.legend(loc="upper left")
 ax1a.legend(loc="lower right")
 ax2.legend()
@@ -276,11 +293,11 @@ if read_frames:
     fig2, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True)
     plt.xlabel("t")
     ax1.set_ylabel("Stress")
-    ax2.set_ylabel("Stress")
+    ax2.set_ylabel("Pressure")
     plt.xlim((time[0], time[-1]))
-    ax1.plot(time, stress[:,0,0], 'r-', label='xx')
-    ax1.plot(time, stress[:,1,1], 'g-', label='yy')
-    ax1.plot(time, stress[:,2,2], 'b-', label='zz')
+    ax1.plot(time, stress[:,0,0], 'r-', label='xx', linewidth=1.0)
+    ax1.plot(time, stress[:,1,1], 'g-', label='yy', linewidth=1.0)
+    ax1.plot(time, stress[:,2,2], 'b-', label='zz', linewidth=1.0)
     ax1.plot((time[0],time[-1]), (mean_stress[0,0], mean_stress[0,0]), 'r-',
             label=r'$\langle S_{{xx}} \rangle$ = {0:<10.4f}'.format(mean_stress[0,0]))
     ax1.plot((time[0],time[-1]), (mean_stress[1,1], mean_stress[1,1]), 'g-',
@@ -288,17 +305,19 @@ if read_frames:
     ax1.plot((time[0],time[-1]), (mean_stress[2,2], mean_stress[2,2]), 'b-',
             label=r'$\langle S_{{zz}} \rangle$ = {0:<10.4f}'.format(mean_stress[2,2]))
 
-    ax2.plot(time, stress[:,0,1], 'r-', label='xy')
-    ax2.plot(time, stress[:,1,0], 'r--', label='yx')
-    ax2.plot(time, stress[:,1,2], 'g-', label='yz')
-    ax2.plot((time[0],time[-1]), (mean_stress[0,1], mean_stress[0,1]), 'r-',
-            label=r'$\langle S_{{xy}} \rangle$ = {0:<10.4f}'.format(mean_stress[0,1]))
-    ax2.plot((time[0],time[-1]), (mean_stress[0,2], mean_stress[0,2]), 'g-',
-            label=r'$\langle S_{{xz}} \rangle$ = {0:<10.4f}'.format(mean_stress[0,2]))
-    ax2.plot((time[0],time[-1]), (mean_stress[1,2], mean_stress[1,2]), 'b-',
-            label=r'$\langle S_{{yz}} \rangle$ = {0:<10.4f}'.format(mean_stress[1,2]))
+    ax2.plot(data['time'], data['P'])
+
+#    ax2.plot(time, stress[:,0,1], 'r-', label='xy')
+#    ax2.plot(time, stress[:,1,0], 'r--', label='yx')
+#    ax2.plot(time, stress[:,1,2], 'g-', label='yz')
+#    ax2.plot((time[0],time[-1]), (mean_stress[0,1], mean_stress[0,1]), 'r-',
+#            label=r'$\langle S_{{xy}} \rangle$ = {0:<10.4f}'.format(mean_stress[0,1]))
+#    ax2.plot((time[0],time[-1]), (mean_stress[0,2], mean_stress[0,2]), 'g-',
+#            label=r'$\langle S_{{xz}} \rangle$ = {0:<10.4f}'.format(mean_stress[0,2]))
+#    ax2.plot((time[0],time[-1]), (mean_stress[1,2], mean_stress[1,2]), 'b-',
+#            label=r'$\langle S_{{yz}} \rangle$ = {0:<10.4f}'.format(mean_stress[1,2]))
     ax1.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
-    ax2.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
+#    ax2.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
     fig2.subplots_adjust(hspace=0)
     plt.setp([a.get_xticklabels() for a in fig1.axes[:-1]], visible=False)
     fig2.savefig("stress.pdf", bbox_inches='tight')
