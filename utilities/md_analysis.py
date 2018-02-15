@@ -9,6 +9,7 @@ from pdb import set_trace
 
 cq_input_file = 'Conquest_input'
 
+# Regular expressions
 frame_re = re.compile('frame')
 endframe_re = re.compile('end frame')
 cell_re = re.compile('cell_vectors(.*?)end cell_vectors', re.M | re.S)
@@ -18,6 +19,7 @@ position_re = re.compile('positions(.*?)end positions', re.M | re.S)
 velocity_re = re.compile('velocities(.*?)end velocities', re.M | re.S)
 force_re = re.compile('forces(.*?)end forces', re.M | re.S)
 
+# Parsing functions
 def parse_cq_input(cq_input_file):
   cq_params = {}
   with open(cq_input_file, 'r') as cqip:
@@ -121,6 +123,7 @@ def parse_frame(buf, f):
     for j in range(3):
       f.f[i,j] = float(bits[j])
 
+# Command line arguments
 parser = argparse.ArgumentParser(description='Analyse a Conquest MD \
         trajectory', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 parser.add_argument('-d', '--dirs', nargs='+', default='.', dest='dirs',
@@ -162,6 +165,8 @@ cq_params = parse_cq_input(cq_input_file)
 init_config = parse_init_config(cq_params['IO.Coordinates'])
 natoms = init_config['natoms']
 dt = float(cq_params['AtomMove.Timestep'])
+thermo_type = cq_params['MD.Thermostat']
+baro_type = cq_params['MD.Barostat']
 
 # Parse the statistics file
 data = read_stats(opts.statfile,opts.nstop)
@@ -288,11 +293,11 @@ if read_frames:
     fig2, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True)
     plt.xlabel("t")
     ax1.set_ylabel("Stress")
-    ax2.set_ylabel("Stress")
+    ax2.set_ylabel("Pressure")
     plt.xlim((time[0], time[-1]))
-    ax1.plot(time, stress[:,0,0], 'r-', label='xx')
-    ax1.plot(time, stress[:,1,1], 'g-', label='yy')
-    ax1.plot(time, stress[:,2,2], 'b-', label='zz')
+    ax1.plot(time, stress[:,0,0], 'r-', label='xx', linewidth=1.0)
+    ax1.plot(time, stress[:,1,1], 'g-', label='yy', linewidth=1.0)
+    ax1.plot(time, stress[:,2,2], 'b-', label='zz', linewidth=1.0)
     ax1.plot((time[0],time[-1]), (mean_stress[0,0], mean_stress[0,0]), 'r-',
             label=r'$\langle S_{{xx}} \rangle$ = {0:<10.4f}'.format(mean_stress[0,0]))
     ax1.plot((time[0],time[-1]), (mean_stress[1,1], mean_stress[1,1]), 'g-',
@@ -300,17 +305,19 @@ if read_frames:
     ax1.plot((time[0],time[-1]), (mean_stress[2,2], mean_stress[2,2]), 'b-',
             label=r'$\langle S_{{zz}} \rangle$ = {0:<10.4f}'.format(mean_stress[2,2]))
 
-    ax2.plot(time, stress[:,0,1], 'r-', label='xy')
-    ax2.plot(time, stress[:,1,0], 'r--', label='yx')
-    ax2.plot(time, stress[:,1,2], 'g-', label='yz')
-    ax2.plot((time[0],time[-1]), (mean_stress[0,1], mean_stress[0,1]), 'r-',
-            label=r'$\langle S_{{xy}} \rangle$ = {0:<10.4f}'.format(mean_stress[0,1]))
-    ax2.plot((time[0],time[-1]), (mean_stress[0,2], mean_stress[0,2]), 'g-',
-            label=r'$\langle S_{{xz}} \rangle$ = {0:<10.4f}'.format(mean_stress[0,2]))
-    ax2.plot((time[0],time[-1]), (mean_stress[1,2], mean_stress[1,2]), 'b-',
-            label=r'$\langle S_{{yz}} \rangle$ = {0:<10.4f}'.format(mean_stress[1,2]))
+    ax2.plot(data['time'], data['P'])
+
+#    ax2.plot(time, stress[:,0,1], 'r-', label='xy')
+#    ax2.plot(time, stress[:,1,0], 'r--', label='yx')
+#    ax2.plot(time, stress[:,1,2], 'g-', label='yz')
+#    ax2.plot((time[0],time[-1]), (mean_stress[0,1], mean_stress[0,1]), 'r-',
+#            label=r'$\langle S_{{xy}} \rangle$ = {0:<10.4f}'.format(mean_stress[0,1]))
+#    ax2.plot((time[0],time[-1]), (mean_stress[0,2], mean_stress[0,2]), 'g-',
+#            label=r'$\langle S_{{xz}} \rangle$ = {0:<10.4f}'.format(mean_stress[0,2]))
+#    ax2.plot((time[0],time[-1]), (mean_stress[1,2], mean_stress[1,2]), 'b-',
+#            label=r'$\langle S_{{yz}} \rangle$ = {0:<10.4f}'.format(mean_stress[1,2]))
     ax1.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
-    ax2.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
+#    ax2.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
     fig2.subplots_adjust(hspace=0)
     plt.setp([a.get_xticklabels() for a in fig1.axes[:-1]], visible=False)
     fig2.savefig("stress.pdf", bbox_inches='tight')
