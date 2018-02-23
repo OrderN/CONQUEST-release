@@ -786,6 +786,8 @@ contains
   !!   2018/02/16 10:11 dave
   !!    Moved calculation of dxc inside case
   !!    Non-spin GGA implementation started
+  !!   2018/02/23 15:09 dave
+  !!    Bug fix: moved scaling of diff_rho inside GGA if loop
   !!  SOURCE
   !!
   subroutine get_libxc_dpotential(density, dxc_potential, size, density_out)
@@ -880,8 +882,8 @@ contains
     else
        ! Scaling for spin; sigma needs four because it is nabla n .dot. nabla n
        alt_dens(1:n_my_grid_points) = two*density(1:n_my_grid_points,1)
-       diff_rho(1:n_my_grid_points) = two*diff_rho(1:n_my_grid_points)
        if(flag_is_GGA) then
+          diff_rho(1:n_my_grid_points) = two*diff_rho(1:n_my_grid_points)
           sigma(:) = four*sigma(:)
           grad_density(:,:,1) = two*grad_density(:,:,1)
        end if
