@@ -444,10 +444,13 @@ contains
   !!  MODIFICATION HISTORY
   !!   2018/02/14 11:00 dave
   !!    Bug fix: introduced test for presence of density_out (only used for GGA, PCC)
+  !!   2018/02/15 10:46 dave
+  !!    Added branch based on presence of density_out to call to libxc_dpotential
   !!  SOURCE
   !!
   subroutine get_dxc_potential(density, dxc_potential, nsize, density_out)
 
+    use GenComms, only: cq_abort
     implicit none
 
     ! Passed variables
@@ -456,8 +459,15 @@ contains
     real(double), dimension(:,:,:) :: dxc_potential
     real(double), dimension(:,:), optional :: density_out
 
+    if(flag_is_GGA) then
+       if(.NOT.present(density_out)) call cq_abort("Error: get_dxc_potential called without density_out for GGA")
+    end if
     if(flag_use_libxc) then
-       call get_libxc_dpotential(density, dxc_potential,nsize)
+       if(present(density_out)) then
+          call get_libxc_dpotential(density, dxc_potential,nsize,density_out)
+       else
+          call get_libxc_dpotential(density, dxc_potential,nsize)
+       end if
     else
        select case (flag_functional_type)
        case (functional_lda_pz81)
@@ -773,9 +783,12 @@ contains
   !!  CREATION DATE
   !!   2018/02/15
   !!  MODIFICATION HISTORY
+  !!   2018/02/16 10:11 dave
+  !!    Moved calculation of dxc inside case
+  !!    Non-spin GGA implementation started
   !!  SOURCE
   !!
-  subroutine get_libxc_dpotential(density, dxc_potential, size)
+  subroutine get_libxc_dpotential(density, dxc_potential, size, density_out)
 
     use datatypes
     use numbers
@@ -791,52 +804,195 @@ contains
     integer,                      intent(in)  :: size
     real(double), dimension(:,:), intent(in)  :: density
     real(double), dimension(:,:,:), intent(out) :: dxc_potential
+    real(double), dimension(:,:), intent(in), optional  :: density_out
 
     ! Local variables
-    real(double), dimension(:), allocatable :: alt_dens, vrho
+    real(double) :: tmp_factor
+    real(double),    dimension(:),     allocatable :: alt_dens, sigma,vrho,vsigma, &
+         v2rho2, v2rhosigma, v2sigma2, diff_rho
+    real(double),    dimension(:,:),   allocatable :: tmp3
+    real(double),    dimension(:,:,:), allocatable :: grad_density
+    complex(double), dimension(:),     allocatable :: tmp1
+    complex(double), dimension(:,:),   allocatable :: ng, tmp2
     integer :: stat, i, spin, n, j
 
     ! Initialise - allocate and zero
-    allocate(alt_dens(n_my_grid_points*nspin))
+    allocate(alt_dens(n_my_grid_points*nspin),vrho(n_my_grid_points*nspin))
     alt_dens = zero
+    if(flag_is_GGA) then
+       allocate(diff_rho(size))
+       if(nspin>1) then
+          allocate(sigma(n_my_grid_points*3),&
+               vsigma(n_my_grid_points*3), v2rho2(n_my_grid_points*3), &
+               v2rhosigma(n_my_grid_points*6), v2sigma2(n_my_grid_points*6))
+          allocate(tmp1(size),tmp2(size,3),tmp3(size,3))
+       else
+          allocate(sigma(n_my_grid_points), &
+               vsigma(n_my_grid_points), v2rho2(n_my_grid_points), &
+               v2rhosigma(n_my_grid_points), v2sigma2(n_my_grid_points))
+          allocate(tmp1(size),tmp2(size,3),tmp3(size,3))
+       endif
+       ! If GGA, we need to find and adapt gradient
+       allocate(grad_density(size,3,nspin),ng(size,3),STAT=stat)
+       sigma = zero
+       grad_density = zero
+       diff_rho = zero
+       do spin = 1, nspin
+          call build_gradient(density(:,spin), grad_density(:,:,spin), size)
+       end do
+       ! Build modulus - NB LibXC uses spin, point for density !
+       if(nspin>1) then
+          ! This is ugly, but there's not really a better way
+          do i=1,n_my_grid_points
+             ! \nabla n_alpha dot \nabla n_alpha
+             sigma(1+(i-1)*3) = &
+               grad_density(i,1,1)*grad_density(i,1,1) + &
+               grad_density(i,2,1)*grad_density(i,2,1) + &
+               grad_density(i,3,1)*grad_density(i,3,1)
+             ! \nabla n_alpha dot \nabla n_beta
+             sigma(2+(i-1)*3) = &
+               grad_density(i,1,1)*grad_density(i,1,2) + &
+               grad_density(i,2,1)*grad_density(i,2,2) + &
+               grad_density(i,3,1)*grad_density(i,3,2)
+             ! \nabla n_beta dot \nabla n_beta
+             sigma(3+(i-1)*3) = &
+               grad_density(i,1,2)*grad_density(i,1,2) + &
+               grad_density(i,2,2)*grad_density(i,2,2) + &
+               grad_density(i,3,2)*grad_density(i,3,2)
+          end do
+       else
+          sigma(1:n_my_grid_points) = &
+               grad_density(1:n_my_grid_points,1,1)*grad_density(1:n_my_grid_points,1,1) + &
+               grad_density(1:n_my_grid_points,2,1)*grad_density(1:n_my_grid_points,2,1) + &
+               grad_density(1:n_my_grid_points,3,1)*grad_density(1:n_my_grid_points,3,1)
+          diff_rho(1:n_my_grid_points) = &
+               density(1:n_my_grid_points,1) - density_out(1:n_my_grid_points,1)
+       end if
+    end if
     dxc_potential = zero
     ! Re-order density (spin) or scale (no spin)
     if(nspin>1) then
-       allocate(vrho(n_my_grid_points*3))
        do i = 1, n_my_grid_points
           do spin=1,nspin
              alt_dens(spin + (i-1)*nspin) = density(i,spin)
           end do
        end do
     else
-       allocate(vrho(n_my_grid_points))
        ! Scaling for spin; sigma needs four because it is nabla n .dot. nabla n
        alt_dens(1:n_my_grid_points) = two*density(1:n_my_grid_points,1)
+       diff_rho(1:n_my_grid_points) = two*diff_rho(1:n_my_grid_points)
+       if(flag_is_GGA) then
+          sigma(:) = four*sigma(:)
+          grad_density(:,:,1) = two*grad_density(:,:,1)
+       end if
     end if
     ! Loop over terms and calculate potential
-    do n = 1,n_xc_terms
+    do j = 1,n_xc_terms
        vrho = zero
        if(nspin>1) then
-          select case (i_xc_family(n))
+          select case (i_xc_family(j))
           case(XC_FAMILY_LDA)
-             call xc_f90_lda_fxc(xc_func(n),n_my_grid_points,alt_dens(1),vrho(1))
+             call xc_f90_lda_fxc(xc_func(j),n_my_grid_points,alt_dens(1),vrho(1))
+             do i=1,n_my_grid_points
+                dxc_potential(i,1,1) = dxc_potential(i,1,1) +vrho(1 + (i-1)*3)
+                dxc_potential(i,1,2) = dxc_potential(i,1,2) +vrho(2 + (i-1)*3)
+                dxc_potential(i,2,1) = dxc_potential(i,2,1) +vrho(2 + (i-1)*3)
+                dxc_potential(i,2,2) = dxc_potential(i,2,2) +vrho(3 + (i-1)*3)
+             end do
           end select
-          do i=1,n_my_grid_points
-             dxc_potential(i,1,1) = dxc_potential(i,1,1) +vrho(1 + (i-1)*3)
-             dxc_potential(i,1,2) = dxc_potential(i,1,2) +vrho(2 + (i-1)*3)
-             dxc_potential(i,2,1) = dxc_potential(i,2,1) +vrho(2 + (i-1)*3)
-             dxc_potential(i,2,2) = dxc_potential(i,2,2) +vrho(3 + (i-1)*3)
-          end do
        else
-          select case (i_xc_family(n))
+          select case (i_xc_family(j))
           case(XC_FAMILY_LDA)
-             call xc_f90_lda_fxc(xc_func(n),n_my_grid_points,alt_dens(1),vrho(1))
+             call xc_f90_lda_fxc(xc_func(j),n_my_grid_points,alt_dens(1),vrho(1))
+             dxc_potential(1:n_my_grid_points,1,1) = dxc_potential(1:n_my_grid_points,1,1) + &
+                  vrho(1:n_my_grid_points)
+          case(XC_FAMILY_GGA)
+             call xc_f90_gga_vxc(xc_func(j),n_my_grid_points,alt_dens(1),sigma(1),vrho(1),&
+                  vsigma(1))
+             call xc_f90_gga_fxc(xc_func(j),n_my_grid_points,alt_dens(1),sigma(1),&
+                  v2rho2(1),v2rhosigma(1),v2sigma2(1))
+             ! Add term L1 (in paper) to potential
+             dxc_potential(1:n_my_grid_points,1,1) = dxc_potential(1:n_my_grid_points,1,1) + &
+                  diff_rho(1:n_my_grid_points) * v2rho2(1:n_my_grid_points)
+             ! Create \sum_l' delta n_l' e_{l,l'}
+             ! Fourier transform the difference of densities
+             tmp1(:)=cmplx(zero,zero,double_cplx)
+             call fft3(diff_rho, tmp1, size, -1)
+
+             do i=1,3
+                ! Product by reciprocal vector stored for later use
+                tmp2(1:size,i) = -minus_i*recip_vector(1:size,i)*tmp1(1:size)
+             end do
+
+             ! Fourier transform the vector back to the grid
+             call fft3(tmp3(:,1), tmp2(:,1), size, 1)
+             call fft3(tmp3(:,2), tmp2(:,2), size, 1)
+             call fft3(tmp3(:,3), tmp2(:,3), size, 1)
+
+             ! Add term L2 to potential (L2 in paper - confusingly this is L3 in CQ code below) 
+             ! NB the 1/|grad_density| factor cancels with dsigma/dg
+             do n=1, n_my_grid_points
+                do i=1,3
+                   dxc_potential(n,1,1) = dxc_potential(n,1,1) + two * (tmp3(n,i) &
+                        * v2rhosigma(n) * grad_density(n,i,1) )
+                end do
+             end do
+             
+             ! Build the term M from paper (in CQ routines below, this is called L4)
+             do n=1, n_my_grid_points
+                !if(sigma(n) > RD_ERR) then
+                   tmp_factor =(tmp3(n,1) * grad_density(n,1,1) &
+                        + tmp3(n,2) * grad_density(n,2,1) &
+                        + tmp3(n,3) * grad_density(n,3,1)) &
+                        * (four*v2sigma2(n))
+                        !* (four*sigma(n)*v2sigma2(n))&
+                        !+ two*vsigma(n)) !/ (sigma(n))
+                !else
+                !   tmp_factor = zero
+                !end if
+                ! Reuse tmp3
+                do i=1,3
+                   tmp3(n,i) = tmp_factor * grad_density(n,i,1) &
+                        + two*vsigma(n) * tmp3(n,i)
+                end do
+             end do
+             
+             ! Terms L3 and L4 (using M) in paper
+             ! (In CQ GGA routines below, these are referred to as L2, L5 and L4)
+             do n=1, n_my_grid_points
+                do i=1,3
+                   tmp3(n,i) = tmp3(n,i) &
+                        + two * diff_rho(n) * v2rhosigma(n)* grad_density(n,i,1)
+                end do
+             end do
+
+             ! This process of FFT, scale by iG and FFT back avoids convolution
+             tmp2(:,:) = cmplx(zero,zero,double_cplx) ! 25Oct2007 TM
+             call fft3(tmp3(:,1), tmp2(:,1), size, -1)
+             call fft3(tmp3(:,2), tmp2(:,2), size, -1)
+             call fft3(tmp3(:,3), tmp2(:,3), size, -1)
+
+             do n=1, size
+                tmp1(n) = -minus_i &
+                     *(recip_vector(n,1)*tmp2(n,1) &
+                     + recip_vector(n,2)*tmp2(n,2) &
+                     + recip_vector(n,3)*tmp2(n,3))
+             end do
+
+             ! Use first component of tmp3 to store final vector
+             call fft3(tmp3(:,1), tmp1, size, 1)
+
+             do n=1, n_my_grid_points
+                dxc_potential(n,1,1) = dxc_potential(n,1,1) - tmp3(n,1)
+             end do
           end select
-          dxc_potential(1:n_my_grid_points,1,1) = dxc_potential(1:n_my_grid_points,1,1) + &
-               vrho(1:n_my_grid_points)
        end if
     end do
     deallocate(vrho,alt_dens)
+    if(flag_is_GGA) then
+       deallocate(diff_rho,sigma,vsigma,v2rho2,v2rhosigma,v2sigma2,tmp1,tmp2,tmp3)
+       deallocate(grad_density,ng)
+    end if
     return
   end subroutine get_libxc_dpotential
   !!***
@@ -3448,23 +3604,23 @@ if(selector == fx_alternative) then
   print *,"!!!!!!!!WARNING!!!!!!!!!!!"
 end if
 
+    ! Get the LDA part of the functional
+    grad_density(:) = two*density(:)
+    call get_dxc_potential_LDA_PW92(grad_density, dxc_potential_lda, size, &
+                                    eclda, declda_drho, d2eclda_drho2)
+    grad_density = zero
     ! Build the gradient of the density
     call build_gradient(density, grad_density_xyz, size)
-
+    grad_density_xyz(:,:) = two*grad_density_xyz(:,:)
     grad_density(:) = sqrt(grad_density_xyz(:,1)**2 + &
                            grad_density_xyz(:,2)**2 + &
                            grad_density_xyz(:,3)**2)
 
-    ! Get the LDA part of the functional
-
-    call get_dxc_potential_LDA_PW92(density, dxc_potential_lda, size, &
-                                    eclda, declda_drho, d2eclda_drho2)
-
     do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
+       rho = two*density(n)
        grad_rho = grad_density(n)
 
-       diff_rho(n) = density(n) - density_out(n)
+       diff_rho(n) = two*(density(n) - density_out(n))
 
        !!!!   EXCHANGE
 
@@ -3718,7 +3874,6 @@ end if
           end if
        end do
     end do
-
     ! Term L4
     do n=1, n_my_grid_points
        if(grad_density(n) > RD_ERR) then
@@ -3740,7 +3895,6 @@ end if
           end if
        end do
     end do
-
     ! Terms L2 and L5 (using L4)
     do n=1, n_my_grid_points
        do i=1,3
@@ -3774,7 +3928,6 @@ end if
     do n=1, n_my_grid_points
        dxc_potential(n) = dxc_potential(n) - tmp3(n,1)
     end do
-
     return
   end subroutine get_dxc_potential_GGA_PBE
   !!***

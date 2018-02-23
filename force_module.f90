@@ -2932,7 +2932,6 @@ contains
 !****lat<$
     call start_backtrace(t=backtrace_timer,who='get_nonSC_correction_force',where=7,level=3,echo=.true.)
 !****lat>$ 
-
     ! Spin-polarised PBE non-SCF forces not implemented, so exit if necessary
     if ((nspin == 2) .and. flag_is_GGA) then ! Only true for CQ not LibXC
        if (inode == ionode) then
@@ -3096,7 +3095,7 @@ contains
        if(flag_is_GGA) then
           call get_dxc_potential(wk_grid, dVxc_drho, nsize, density_out_GGA)
           ! GGA with spin not implemented ! 
-          potential(:,1) = dVxc_drho(:,1,1) 
+          potential(:,1) = potential(:,1) + dVxc_drho(:,1,1) 
        else
           call get_dxc_potential(wk_grid, dVxc_drho, nsize)
        end if
@@ -3104,12 +3103,11 @@ contains
        if(flag_is_GGA) then
           call get_dxc_potential(density, dVxc_drho, nsize, density_out)
           ! GGA with spin not implemented ! 
-          potential(:,1) = dVxc_drho(:,1,1) 
+          potential(:,1) = potential(:,1) + dVxc_drho(:,1,1) 
        else
           call get_dxc_potential(density, dVxc_drho, nsize)
        end if
     end if
-
     ! deallocating density_out_GGA: only for P.C.C.
     if (flag_pcc_global)  then
        if (flag_is_GGA) then
@@ -3575,7 +3573,9 @@ contains
     ! allocatable arrays
     real(double), dimension(:),   allocatable :: xc_epsilon, density_wk_tot
     real(double), dimension(:,:), allocatable :: xc_potential, density_wk
+    type(cq_timer) :: backtrace_timer
 
+    call start_backtrace(t=backtrace_timer,who='get_PCC_force',where=7,level=3,echo=.true.)
     allocate(xc_epsilon(size), density_wk_tot(size), &
              xc_potential(size,nspin), density_wk(size,nspin), STAT=stat)
     if (stat /= 0) call cq_abort("get_pcc_force: Error alloc mem: ", size)
@@ -3741,6 +3741,7 @@ contains
     deallocate(xc_epsilon, density_wk_tot, xc_potential, density_wk, STAT=stat)
     if (stat /= 0) call cq_abort("get_pcc_force: Error dealloc mem")
     call reg_dealloc_mem(area_moveatoms, (2+2*nspin)*size, type_dbl)
+    call stop_backtrace(t=backtrace_timer,who='get_PCC_force',echo=.true.)
 
     return
   end subroutine get_pcc_force
