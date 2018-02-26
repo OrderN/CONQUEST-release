@@ -746,8 +746,6 @@ contains
   !!    Update for NA local HF (which contains the force due to hartree_energy_drho changing !)
   !!   2018/02/22 14:48 dave
   !!    Further update for NA local HF without SCF: contains non-SCF force contribution
-  !!   2018/02/26 14:47 dave
-  !!    And another ! Non-SCF local HF requires PCC force to be included (if using PCC)
   !!  SOURCE
   !!
   subroutine test_HF(fixed_potential, vary_mu, n_L_iterations, &
@@ -779,8 +777,7 @@ contains
          delta_E_xc, hartree_energy_drho_atom_rho, kinetic_energy
     use force_module,           only: get_HF_force,                 &
                                       get_HF_non_local_force,       &
-                                      HF_and_Pulay, HF, get_HNA_force, &
-                                      get_nonSC_correction_force, get_pcc_force
+                                      HF_and_Pulay, HF, get_HNA_force, get_nonSC_correction_force
     use GenComms,               only: myid, inode, ionode, cq_abort
     use H_matrix_module,        only: get_H_matrix
     use density_module,         only: get_electronic_density, density
@@ -915,15 +912,6 @@ contains
           allocate(nonSC_force(3,ni_in_cell))
           call get_nonSC_correction_force(nonSC_force, density_out, inode, &
                ionode, ni_in_cell, maxngrid)
-          if(flag_pcc_global) then
-             ! With non-SCF, PCC we need to add the PCC force
-             Fsupp = nonSC_force(TF_direction,TF_atom_moved)
-             nonSC_force = zero
-             call get_pcc_force(nonSC_force, inode, ionode, ni_in_cell, &
-                  maxngrid, density_out)
-             nonSC_force(TF_direction,TF_atom_moved) = &
-                  nonSC_force(TF_direction,TF_atom_moved) + Fsupp
-          end if
        end if
     else
        do spin = 1, nspin 
@@ -1066,13 +1054,6 @@ contains
        call get_nonSC_correction_force(nonSC_force, density_out, inode, &
             ionode, ni_in_cell, maxngrid)
        F1 = F1 + nonSC_force(TF_direction,TF_atom_moved)
-       if(flag_pcc_global) then
-          ! With non-SCF, PCC we need to add the PCC force
-          nonSC_force = zero
-          call get_pcc_force(nonSC_force, inode, ionode, ni_in_cell, &
-               maxngrid, density_out)
-          F1 = F1 + nonSC_force(TF_direction,TF_atom_moved)
-       end if
        deallocate(nonSC_force)
     end if
     if (inode == ionode) &
@@ -2006,8 +1987,6 @@ contains
   !!   2018/02/22 14:43 dave
   !!    Bug fix: non-SCF forces with neutral atom potential was not working
   !!    I have combined non-SCF forces with HF local forces (required)
-  !!   2018/02/26 14:48 dave
-  !!    As in test_HF, non-SCF with PCC requires PCC force to be included
   !!  SOURCE
   !!
   subroutine test_nonSC(fixed_potential, vary_mu, n_L_iterations, &
@@ -2023,15 +2002,15 @@ contains
     use primary_module,    only: bundle
     use global_module,     only: iprint_MD, x_atom_cell, y_atom_cell,  &
                                  z_atom_cell, id_glob_inv, ni_in_cell, &
-                                 nspin, flag_neutral_atom, spin_factor, flag_pcc_global
+                                 nspin, flag_neutral_atom, spin_factor
     use energy,            only: get_energy, band_energy,   &
          delta_E_hartree, delta_E_xc, &
          hartree_energy_drho, hartree_energy_drho_atom_rho
-    use force_module,      only: get_nonSC_correction_force, get_HF_force, get_pcc_force
+    use force_module,      only: get_nonSC_correction_force, get_HF_force
     use GenComms,          only: myid, inode, ionode, cq_abort
     use H_matrix_module,   only: get_H_matrix
     use density_module,    only: set_atomic_density, get_electronic_density,  &
-                                 density, density_atom,set_density_pcc
+                                 density, density_atom
     use functions_on_grid, only: atomfns, H_on_atomfns
     use maxima_module,     only: maxngrid
     use memory_module,     only: reg_alloc_mem, reg_dealloc_mem, type_dbl
@@ -2057,7 +2036,7 @@ contains
     real(double) :: E0, F0, E1, F1, analytic_force, numerical_force, &
                     electrons_tot, temp
     real(double), dimension(nspin) :: electrons
-    real(double), dimension(:,:), allocatable :: nonSC_force, HF_force, PCC_force
+    real(double), dimension(:,:), allocatable :: nonSC_force, HF_force
     real(double), dimension(:,:), allocatable :: density_out
     real(double), dimension(:)  , allocatable :: density_out_tot
     
@@ -2131,7 +2110,6 @@ contains
     else
        F0 = nonSC_force(TF_direction,TF_atom_moved)
     end if
-    if(flag_pcc_global) F0 = F0 + PCC_force(TF_direction,TF_atom_moved)
     if (inode == ionode) &
          write (io_lun,fmt='(2x,"Initial energy: ",f20.12,/,2x,&
                              &"Initial NSC force: ",f20.12)') E0, F0
@@ -2157,7 +2135,6 @@ contains
     call cover_update(x_atom_cell, y_atom_cell, z_atom_cell, ion_ion_CS, parts)
     ! Recalculate atomic densities
     call set_atomic_density(.true.)
-    if(flag_pcc_global) call set_density_pcc()
     if(flag_neutral_atom) then
        ! Recalculate neutral atom potential on grid (without projectors !)
        select case (pseudo_type) 
@@ -2177,8 +2154,6 @@ contains
     ! Find force
     call get_nonSC_correction_force(nonSC_force, density_out, inode, &
                                     ionode, ni_in_cell, maxngrid)
-    if(flag_pcc_global) call get_pcc_force(PCC_force, inode, ionode, ni_in_cell, &
-         maxngrid, density_out)
     if(flag_neutral_atom) then
        E1 = band_energy - hartree_energy_drho - hartree_energy_drho_atom_rho + &
             delta_E_xc
@@ -2198,7 +2173,6 @@ contains
     else
        F1 = nonSC_force(TF_direction,TF_atom_moved)
     end if
-    if(flag_pcc_global) F1 = F1 + PCC_force(TF_direction,TF_atom_moved)
     if (inode == ionode) &
          write (io_lun,fmt='(2x,"Final energy: ",f20.12,/,2x,"Final &
                              &NSC force: ",f20.12)') E1, F1
