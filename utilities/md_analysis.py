@@ -148,6 +148,8 @@ parser.add_argument('--landscape', action='store_true', dest='landscape',
                     help='Generate plot with landscape orientation')
 parser.add_argument('--stress', action='store_true', dest='stress', 
                     help='Plot the stress')
+parser.add_argument('--pub', action='store_true', dest='pub', 
+                    help='Publication text size')
 parser.add_argument('--nbins', action='store', dest='nbins', default=100,
                     help='Number of histogram bins')
 
@@ -232,6 +234,7 @@ if read_frames:
   buf = ""
   time = []
   stress = []
+  lat = []
   vacf = []
   msd = []
   sdistr = sp.zeros(opts.nbins, dtype='float')
@@ -261,6 +264,7 @@ if read_frames:
         time.append(n*dt)
         if opts.stress:
           stress.append(f.stress)
+          lat.append(f.lat)
         if opts.vacf:
           vacf.append(f.update_vacf(f1))
         if opts.msd:
@@ -283,15 +287,18 @@ if read_frames:
 # Plot the stress
   if opts.stress:
     stress = sp.array(stress)
+    lat = sp.array(lat)
     mean_stress = sp.zeros((3,3))
+    mean_lat = sp.zeros((3,3))
     for i in range(3):
       for j in range(3):
         mean_stress[i,j] = sp.mean(stress[:,i,j])
+        mean_lat[i,j] = sp.mean(lat[:,i,j])
     plt.figure("Stress")
     fig2, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True)
     plt.xlabel("t")
     ax1.set_ylabel("Stress")
-    ax2.set_ylabel("Pressure")
+    ax2.set_ylabel("Cell dimension")
     plt.xlim((time[0], time[-1]))
     ax1.plot(time, stress[:,0,0], 'r-', label='xx', linewidth=1.0)
     ax1.plot(time, stress[:,1,1], 'g-', label='yy', linewidth=1.0)
@@ -303,19 +310,18 @@ if read_frames:
     ax1.plot((time[0],time[-1]), (mean_stress[2,2], mean_stress[2,2]), 'b-',
             label=r'$\langle S_{{zz}} \rangle$ = {0:<10.4f}'.format(mean_stress[2,2]))
 
-    ax2.plot(data['time'], data['P'])
 
-#    ax2.plot(time, stress[:,0,1], 'r-', label='xy')
-#    ax2.plot(time, stress[:,1,0], 'r--', label='yx')
-#    ax2.plot(time, stress[:,1,2], 'g-', label='yz')
-#    ax2.plot((time[0],time[-1]), (mean_stress[0,1], mean_stress[0,1]), 'r-',
-#            label=r'$\langle S_{{xy}} \rangle$ = {0:<10.4f}'.format(mean_stress[0,1]))
-#    ax2.plot((time[0],time[-1]), (mean_stress[0,2], mean_stress[0,2]), 'g-',
-#            label=r'$\langle S_{{xz}} \rangle$ = {0:<10.4f}'.format(mean_stress[0,2]))
-#    ax2.plot((time[0],time[-1]), (mean_stress[1,2], mean_stress[1,2]), 'b-',
-#            label=r'$\langle S_{{yz}} \rangle$ = {0:<10.4f}'.format(mean_stress[1,2]))
+    ax2.plot(time, lat[:,0,0], 'r-', label='a', linewidth=1.0)
+    ax2.plot(time, lat[:,1,1], 'g-', label='b', linewidth=1.0)
+    ax2.plot(time, lat[:,2,2], 'b-', label='c', linewidth=1.0)
+    ax2.plot((time[0],time[-1]), (mean_lat[0,0], mean_lat[0,0]), 'r-',
+            label=r'$\langle a \rangle$ = {0:<10.4f}'.format(mean_lat[0,0]))
+    ax2.plot((time[0],time[-1]), (mean_lat[1,1], mean_lat[1,1]), 'g-',
+            label=r'$\langle b \rangle$ = {0:<10.4f}'.format(mean_lat[1,1]))
+    ax2.plot((time[0],time[-1]), (mean_lat[2,2], mean_lat[2,2]), 'b-',
+            label=r'$\langle c \rangle$ = {0:<10.4f}'.format(mean_lat[2,2]))
     ax1.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
-#    ax2.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
+    ax2.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
     fig2.subplots_adjust(hspace=0)
     plt.setp([a.get_xticklabels() for a in fig1.axes[:-1]], visible=False)
     fig2.savefig("stress.pdf", bbox_inches='tight')
