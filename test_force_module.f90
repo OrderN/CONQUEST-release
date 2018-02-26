@@ -455,6 +455,9 @@ contains
   !!   Update for analytic blips
   !!  2015/11/24 08:38 dave
   !!   Adjusted use of energy_module
+  !!  2018/02/26 15:29 dave
+  !!   Changed to account for NA projectors: now include the NA force in the total Pulay
+  !!   force (compare NL projectors)
   !!  SOURCE
   !!
   subroutine test_FullPulay(fixed_potential, vary_mu, n_L_iterations, &
@@ -475,7 +478,7 @@ contains
                                ni_in_cell, nspin, flag_analytic_blip_int
     use energy,          only: get_energy
     use force_module,    only: pulay_force, Pulay, HF_and_Pulay,     &
-                               get_HF_non_local_force, get_KE_force
+                               get_HF_non_local_force, get_KE_force, get_HNA_force
     use GenComms,        only: myid, inode, ionode, cq_abort
     use H_matrix_module, only: get_H_matrix
     use S_matrix_module, only: get_S_matrix
@@ -487,6 +490,7 @@ contains
     use density_module,  only: density
     use maxima_module,   only: maxngrid
     use memory_module,   only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use pseudopotential_common, only: flag_neutral_atom_projector
 
     implicit none
 
@@ -505,13 +509,17 @@ contains
     real(double) :: E0, F0, E1, F1, analytic_force, numerical_force
     integer,      dimension(nspin)        :: matKold
     real(double), dimension(nspin)        :: electrons
-    real(double), dimension(:,:), allocatable :: p_force, HF_NL_force, KE_force
+    real(double), dimension(:,:), allocatable :: p_force, HF_NL_force, KE_force, NA_force
 
     allocate(p_force(3,ni_in_cell), HF_NL_force(3,ni_in_cell), &
              KE_force(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("test_FullPulay: Error alloc mem: ", ni_in_cell)
     call reg_alloc_mem(area_moveatoms, 9*ni_in_cell, type_dbl)
+    if(flag_neutral_atom_projector) then
+       allocate(NA_force(3,ni_in_cell))
+       NA_force = zero
+    end if
 
     ! Warn user that we're NOT getting just HF with PAOs !
     if (flag_basis_set==PAOs.OR.(flag_basis_set==blips.AND.flag_analytic_blip_int)) then
@@ -542,6 +550,8 @@ contains
     KE_force = zero
     WhichPulay = BothPulay
     call get_S_matrix(inode, ionode)
+    call get_H_matrix(.false., fixed_potential, electrons, density, &
+         maxngrid)
     call pulay_force(p_force, KE_force, fixed_potential, vary_mu,      &
                      n_L_iterations, L_tolerance, tolerance, &
                      total_energy, expected_reduction, ni_in_cell)
@@ -553,17 +563,18 @@ contains
     else if (flag_basis_set==blips) then
        call get_HF_non_local_force(HF_NL_force, Pulay, ni_in_cell)
     end if
+    if(flag_neutral_atom_projector) call get_HNA_force(NA_force)
     ! Get the kinetic energy force component
-    do spin = 1, nspin
-       matKold(spin) = allocate_temp_matrix(Hrange, 0)
-       call matrix_sum(zero, matKold(spin), one, matK(spin))
-    end do
+    !do spin = 1, nspin
+    !   matKold(spin) = allocate_temp_matrix(Hrange, 0)
+    !   call matrix_sum(zero, matKold(spin), one, matK(spin))
+    !end do
     ! get_KE_force changes matK, that is why we need to use matKold to
     ! get back the correct matK
     if(.NOT.flag_analytic_blip_int) call get_KE_force(KE_force, ni_in_cell)
-    do spin = 1, nspin
-       call matrix_sum(zero, matK(spin), one, matKold(spin))
-    end do
+    !do spin = 1, nspin
+    !   call matrix_sum(zero, matK(spin), one, matKold(spin))
+    !end do
     ! end LT 2011/11/29
     ! Store local energy
     ! Find out direction and atom for displacement
@@ -574,6 +585,7 @@ contains
     F0 = p_force(TF_direction,TF_atom_moved) +      &
          HF_NL_force(TF_direction, TF_atom_moved) + &
          KE_force(TF_direction,TF_atom_moved)
+    if(flag_neutral_atom_projector) F0 = F0 + NA_force(TF_direction, TF_atom_moved)
     if (inode == ionode) &
          write (io_lun,fmt='(2x,"Initial energy: ",f20.12,/,2x,&
                              &"Initial pulay force: ",f20.12)') E0, F0
@@ -629,21 +641,26 @@ contains
     else if (flag_basis_set == blips) then
        call get_HF_non_local_force(HF_NL_force, Pulay, ni_in_cell)
     end if
+    if(flag_neutral_atom_projector) then
+       NA_force = zero
+       call get_HNA_force(NA_force)
+    end if
     ! Get the kinetic energy force component
-    do spin = 1, nspin
-       call matrix_sum(zero, matKold(spin), one, matK(spin))
-    end do
+    !do spin = 1, nspin
+    !   call matrix_sum(zero, matKold(spin), one, matK(spin))
+    !end do
     if(.NOT.flag_analytic_blip_int) call get_KE_force(KE_force, ni_in_cell)
-    do spin = 1, nspin
-       call matrix_sum(zero, matK(spin), one, matKold(spin))
-    end do
-    do spin = nspin, 1, -1
-       call free_temp_matrix(matKold(spin))
-    end do
+    !do spin = 1, nspin
+    !   call matrix_sum(zero, matK(spin), one, matKold(spin))
+    !end do
+    !do spin = nspin, 1, -1
+    !   call free_temp_matrix(matKold(spin))
+    !end do
     E1 = total_energy
     F1 = p_force(TF_direction,TF_atom_moved) +     &
          HF_NL_force(TF_direction,TF_atom_moved) + &
          KE_force(TF_direction,TF_atom_moved)
+    if(flag_neutral_atom_projector) F1 = F1 + NA_force(TF_direction, TF_atom_moved)
     if (inode == ionode) &
          write (io_lun,fmt='(2x,"Final energy: ",f20.12,/,2x,&
                              &"Final pulay force: ",f20.12)') E1, F1
