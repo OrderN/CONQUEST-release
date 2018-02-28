@@ -19,7 +19,7 @@ contains
     real(double), allocatable, dimension(:) :: exc_array
 
     integer :: i
-    logical :: flag_energy
+    logical :: flag_energy, flag_libxc ! This will be in global later
 
     flag_energy = .false.
     if(PRESENT(exc)) then
@@ -28,26 +28,33 @@ contains
        exc_array = zero
     end if
 
-    select case(functional)
-    case(functional_lda_pz81)
-       if(flag_energy) then
-          call vxc_pz_ca(n_tot, rr, rho, vxc, exc_array)
-       else
-          call vxc_pz_ca(n_tot, rr, rho, vxc)
+    flag_libxc = .false.
+    ! Choose LibXC or Conquest
+    if(flag_libxc) then
+       ! Make derivatives
+       ! Call routine
+    else
+       select case(functional)
+       case(functional_lda_pz81)
+          if(flag_energy) then
+             call vxc_pz_ca(n_tot, rr, rho, vxc, exc_array)
+          else
+             call vxc_pz_ca(n_tot, rr, rho, vxc)
+          end if
+       case(functional_gga_pbe96)
+          if(flag_energy) then
+             call vxc_gga_pbe(n_tot, rr, rho, vxc, exc_array)
+          else
+             call vxc_gga_pbe(n_tot, rr, rho, vxc)
+          end if
+       end select
+       if(PRESENT(exc)) then
+          exc = zero
+          do i = 1, n_tot
+             exc = exc + exc_array(i)
+          end do
+          ! Potentially also find Exc correction
        end if
-    case(functional_gga_pbe96)
-       if(flag_energy) then
-          call vxc_gga_pbe(n_tot, rr, rho, vxc, exc_array)
-       else
-          call vxc_gga_pbe(n_tot, rr, rho, vxc)
-       end if
-    end select
-    if(PRESENT(exc)) then
-       exc = zero
-       do i = 1, n_tot
-          exc = exc + exc_array(i)
-       end do
-       ! Potentially also find Exc correction
     end if
   end subroutine get_vxc
   
