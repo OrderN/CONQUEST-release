@@ -240,10 +240,11 @@ contains
     use GenBlas,       only: dot
     use force_module,  only: tot_force
     use io_module,     only: write_atomic_positions, pdb_template, &
-                             check_stop
+                             check_stop, write_xsf
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use store_matrix,  ONLY: dump_InfoMatGlobal, dump_pos_and_matrices
+    use md_control,    only: flag_write_xsf
 
     implicit none
 
@@ -356,6 +357,7 @@ contains
           end do
        end if
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+       if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero
@@ -512,7 +514,7 @@ contains
     use io_module,      only: write_positions, read_velocity,         &
                               write_velocity, read_fire, write_xsf
     use io_module,      only: write_atomic_positions, pdb_template,   &
-                              check_stop
+                              check_stop, append_coords
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use move_atoms,     only: fac_Kelvin2Hartree, update_pos_and_matrices, updateL, updateLorK, updateSFcoeff
     use store_matrix,   ONLY: dump_InfoMatGlobal,grab_InfoMatGlobal, &
@@ -532,7 +534,7 @@ contains
                               md_tau_P, md_n_nhc, md_n_ys, md_n_mts, &
                               md_nhc_mass, ion_velocity, lattice_vec, &
                               md_thermo_type, md_baro_type, md_target_press, &
-                              md_write_xsf, md_cell_nhc, md_ndof_ions, &
+                              flag_write_xsf, md_cell_nhc, md_ndof_ions, &
                               md_berendsen_equil
 
     use atoms,          only: distribute_atoms,deallocate_distribute_atom
@@ -553,7 +555,7 @@ contains
     integer       :: nequil ! number of Berendsen equilibration steps - zamaan
     real(double)  :: temp, energy1, energy0, dE, max, g0, rcut_BCS
     character(50) :: file_velocity='velocity.dat'
-    logical       :: done,second_call
+    logical       :: done,second_call,append_coords_bak
     logical,allocatable,dimension(:) :: flag_movable
 
     type(matrix_store_global) :: InfoGlob
@@ -718,7 +720,7 @@ contains
     lattice_vec(3,3) = rcellz
     call mdl%init_model(md_ensemble, thermo, baro)
 
-    if (md_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
+    if (flag_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
     if (flag_thermoDebug) then
       call thermo%dump_thermo_state(i_first-1, 'thermostat.dat')
     end if
@@ -941,6 +943,7 @@ contains
        end if
        energy0 = energy1
        energy1 = abs(dE)
+!       call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
        if (myid == 0 .and. mod(iter, MDfreq) == 0) then
          call write_positions(iter, parts)
          call mdl%dump_frame("Frames")
@@ -948,7 +951,14 @@ contains
        call my_barrier
        !to check IO of velocity files
        call write_velocity(ion_velocity, file_velocity)
-       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+
+       ! coord_next.dat is meant to be consistent with the electronic matrices,
+       ! so we need a separate checkpoint for restarting
+       append_coords_bak = append_coords
+       append_coords = .false.
+       call write_atomic_positions("cq.position", trim(pdb_template))
+       append_coords = append_coords_bak
+
        call baro%get_pressure
        call thermo%get_temperature
        select case(md_ensemble)
@@ -963,7 +973,7 @@ contains
          end if
        end select
 
-       if (md_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
+       if (flag_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
        call mdl%get_cons_qty
        call mdl%dump_stats("Stats")
        if (nequil > 0) then

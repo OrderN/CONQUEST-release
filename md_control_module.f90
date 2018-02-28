@@ -54,7 +54,7 @@ module md_control
   real(double)  :: md_tau_T, md_tau_P, md_target_press, md_bulkmod_est, &
                    md_box_mass, md_ndof_ions, md_omega_t, md_omega_p
   integer       :: md_n_nhc, md_n_ys, md_n_mts, md_berendsen_equil
-  logical       :: md_write_xsf, md_cell_nhc, md_calc_xlmass
+  logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass
   real(double), dimension(3,3), target      :: lattice_vec
   real(double), dimension(:), allocatable   :: md_nhc_mass, md_nhc_cell_mass
   real(double), dimension(:,:), allocatable, target :: ion_velocity

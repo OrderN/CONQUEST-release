@@ -2043,7 +2043,7 @@ contains
                 !ori zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
 
                 !! -------- DEBUG -------- !!
-                if (flag_MDdebug) then
+                if (flag_MDdebug .and. iprint_MDdebug .gt. 1) then
                    Rijx=xprim_i-xx_j
                    Rijy=yprim_i-yy_j
                    Rijz=zprim_i-zz_j
@@ -2068,7 +2068,9 @@ contains
                 !call atom2part(xx_j,yy_j,zz_j,jcoverx,jcovery,jcoverz)
                 call atom2part(xx_j,yy_j,zz_j,ind_part,jcoverx,jcovery,jcoverz,idglob_jj)
                 !db if (inode.EQ.ionode) call allatom2part(ind_qart)
-                if (flag_MDdebug) write (lun_db,*) "atom2part -> jcover:", jcoverx,jcovery,jcoverz !db
+                if (flag_MDdebug .and. iprint_MDdebug .gt. 1) then
+                  write (lun_db,*) "atom2part -> jcover:", jcoverx,jcovery,jcoverz !db
+                end if
                 ! Get the partition indices with (x,y,z) in CS.
                 ! -> NOTE: I'm not sure about the EXACT definition of nspanlx,y,z but 
                 ! -> without '+1' or '-1', the code doesn't work adequately...

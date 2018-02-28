@@ -16,7 +16,8 @@ module md_model
   use datatypes
   use numbers
   use force_module,     only: tot_force, stress
-  use global_module,    only: ni_in_cell, io_lun, atom_coord, flag_MDcontinue
+  use global_module,    only: ni_in_cell, io_lun, atom_coord, &
+                              flag_MDcontinue, flag_MDdebug
   use species_module,   only: species
   use md_control,       only: md_n_nhc, ion_velocity, type_thermostat, &
                               type_barostat, lattice_vec
@@ -238,6 +239,10 @@ contains
     integer                               :: lun
     real(double)                          :: P_GPa
 
+    if (flag_MDdebug .and. inode==ionode) then
+      write(io_lun,*) "Writing statistics to ", filename
+    end if
+
     ! Convert units if necessary
     P_GPa = mdl%P_int*fac_HaBohr32GPA
 
@@ -341,6 +346,9 @@ contains
     ! local variables
     integer                               :: lun, i
 
+    if (flag_MDdebug .and. inode==ionode) then
+      write(io_lun,*) "Writing frame to ", filename
+    end if
 
     if (inode==ionode) then
       call io_assign(lun)
