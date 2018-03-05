@@ -623,6 +623,10 @@ contains
   !!    Added new parameters:
   !!     - threshold for resetting charge density to atomic density
   !!     - time_max (General.MaxTime) to stop run after specified number of seconds in check_stop
+  !!   2018/02/26 12:22 dave
+  !!    Bug fix: turn off mixed L-SCF with diagonalisation (was breaking force tests)
+  !!    Second issue (14:08) set SC.MinIters to 0 as was breaking force tests; also tweaked
+  !!    linear mixing end default
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1374,13 +1378,15 @@ contains
        InitStep_paomin      = fdf_double ('minE.InitStep_paomin',  5.0_double)
        flag_self_consistent = fdf_boolean('minE.SelfConsistent',      .true. )
        flag_mix_L_SC_min    = fdf_boolean('minE.MixedLSelfConsistent',.false.)
+       ! DRB 2018/02/26 turn off mixed L-SCF with diagonalisation
+       if(flag_mix_L_SC_min.AND.flag_diagonalisation) flag_mix_L_SC_min = .false.
        ! Tweak 2007/03/23 DRB Make Pulay mixing default
        flag_linear_mixing   = fdf_boolean('SC.LinearMixingSC',        .true. )
        A(1)                 = fdf_double ('SC.LinearMixingFactor', 0.5_double)
        ! 2011/09/19 L.Tong, for spin polarised calculation
        A(2)                 = fdf_double ('SC.LinearMixingFactor_SpinDown', A(1))
        ! end 2011/09/19 L.Tong
-       EndLinearMixing = fdf_double ('SC.LinearMixingEnd',sc_tolerance)
+       EndLinearMixing = fdf_double ('SC.LinearMixingEnd',sc_tolerance*1e-4_double) ! DRB 2018/02/26
        flag_Kerker     = fdf_boolean('SC.KerkerPreCondition',  .false.)
        q0              = fdf_double ('SC.KerkerFactor',     0.1_double)
        flag_wdmetric   = fdf_boolean('SC.WaveDependentMetric', .false.)
@@ -1389,7 +1395,7 @@ contains
        flag_reset_dens_on_atom_move = fdf_boolean('SC.ResetDensOnAtomMove',.false.)
        flag_continue_on_SC_fail     = fdf_boolean('SC.ContinueOnSCFail',   .false.)
        maxitersSC      = fdf_integer('SC.MaxIters',50)
-       minitersSC      = fdf_integer('SC.MinIters',2)
+       minitersSC      = fdf_integer('SC.MinIters',0) ! Changed default 2->0 DRB 2018/02/26
        maxearlySC      = fdf_integer('SC.MaxEarly',3 )
        maxpulaySC      = fdf_integer('SC.MaxPulay',5 )
        read_atomic_density_file = &
