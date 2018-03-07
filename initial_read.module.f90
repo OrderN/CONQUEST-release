@@ -2146,12 +2146,14 @@ contains
     use global_module,        only: flag_basis_set, PAOs,blips,        &
                                     functional_description,            &
                                     flag_precondition_blips, io_lun,   &
-                                    flag_Multisite, flag_diagonalisation
+                                    flag_Multisite, flag_diagonalisation, flag_neutral_atom
     use minimise,             only: energy_tolerance, L_tolerance,     &
                                     sc_tolerance,                      &
                                     n_support_iterations,              &
                                     n_L_iterations
     use datestamp,            only: datestr, commentver
+    use pseudopotential_common, only: flag_neutral_atom_projector, maxL_neutral_atom_projector, &
+         numN_neutral_atom_projector
 
     implicit none
 
@@ -2238,6 +2240,15 @@ contains
           write(io_lun,22) species_label(n), 'Local    '
        end if
     end do
+
+    if(flag_neutral_atom) then
+       write(io_lun,fmt='(/13x,"Using neutral atom potential (NAP) formalism")')
+       if(flag_neutral_atom_projector) then
+          write(io_lun,fmt='(/13x,"Calculating 1- and 2-centre NAP integrals analytically")')
+          write(io_lun,fmt='(13x,"Expanding 3-centre NAP integrals with ",i2," projectors up to l=",i2)') &
+               maxval(numN_neutral_atom_projector),maxL_neutral_atom_projector
+       end if
+    end if
 
     !if(.NOT.find_chdens) then
     !   write(io_lun,261)
