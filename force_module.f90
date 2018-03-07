@@ -198,6 +198,8 @@ contains
   !!    Renamed H_on_supportfns -> H_on_atomfns
   !!   2016/08/08 15:30 nakata
   !!    Renamed supportfns -> atomfns
+  !!   2018/03/06 15:46 dave
+  !!    Added output in GPa for pressure (along with conventional sign change)
   !!  SOURCE
   !!
   subroutine force(fixed_potential, vary_mu, n_cg_L_iterations, &
@@ -226,7 +228,8 @@ contains
                                       IPRINT_TIME_THRES2,              &
                                       area_moveatoms, flag_pcc_global, &
                                       flag_perform_cdft, flag_dft_d2,  &
-                                      nspin, spin_factor, flag_analytic_blip_int, flag_neutral_atom
+                                      nspin, spin_factor, flag_analytic_blip_int, flag_neutral_atom, &
+                                      rcellx, rcelly, rcellz
     use density_module,         only: get_electronic_density, density, &
                                       build_Becke_weight_forces
     use functions_on_grid,      only: atomfns, H_on_atomfns
@@ -253,7 +256,7 @@ contains
 
     ! Local variables
     integer        :: i, j, ii, stat, max_atom, max_compt, ispin, direction
-    real(double)   :: max_force
+    real(double)   :: max_force, volume, scale
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
     integer        :: backtrace_level
@@ -611,6 +614,11 @@ contains
           end if
        end if
        write (io_lun,fmt='(/4x,"Total stress:     ", 3f15.8,a3)') stress(1:3), en_units(energy_units)
+       volume = rcellx*rcelly*rcellz
+       ! Include Ha/cubic bohr to GPa conversion and 1/volume factor
+       ! Factor of 1e21 comes from Ang to m (1e30) and Pa to GPa (1e-9) 
+       scale = -(HaToeV*eVToJ*1e21_double)/(volume*BohrToAng*BohrToAng*BohrToAng)
+       write(io_lun,fmt='(/4x,"Total pressure:   ",3f15.8," GPa"/)') stress(1)*scale,stress(2)*scale,stress(3)*scale
     end if
 
     call my_barrier()
