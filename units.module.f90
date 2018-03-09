@@ -17,7 +17,8 @@
 !!  CREATION DATE
 !!   2006/11/03
 !!  MODIFICATION HISTORY
-!! 
+!!   2018/03/07 10:29 dave
+!!    Adding further useful constants and updating values to CODATA
 !!  SOURCE
 !!
 module units
@@ -28,11 +29,17 @@ module units
   implicit none
   save
 
+  ! Energy
   real(double), parameter :: HaToRy = two
-  real(double), parameter :: HaToeV = 27.211383_double
-  real(double), parameter :: RyToeV = 13.605691_double
-  real(double), parameter :: BohrToAng = 0.52917721_double
-  real(double), parameter :: AngToBohr = 1.88972613_double
+  real(double), parameter :: HaToeV = 27.21138602_double      ! 2014 CODATA value
+  real(double), parameter :: RyToeV = half*HaToeV
+  real(double), parameter :: eVToJ  = 1.602176634e-19_double  ! Exact following 2018-2019 SI Redefinitions
+  
+  ! Distance
+  real(double), parameter :: BohrToAng = 0.52917721067_double ! 2014 CODATA value
+  real(double), parameter :: AngToBohr = one/BohrToAng
+
+  ! Memory (?!)
   real(double), parameter :: kB = 0.0009765625_double
   real(double), parameter :: MB = 9.5367431640625e-07_double
   real(double), parameter :: GB = 9.3132257461547852e-10_double
