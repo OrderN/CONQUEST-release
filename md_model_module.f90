@@ -356,7 +356,6 @@ contains
         open(unit=lun,file=filename,position='append')
       else 
         open(unit=lun,file=filename,status='replace')
-        mdl%append = .true.
       end if
 
       write(lun,'("frame ",i8)') mdl%step

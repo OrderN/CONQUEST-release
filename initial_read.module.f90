@@ -246,7 +246,7 @@ contains
     if (.not. flag_MDcontinue) then
       call read_atomic_positions(trim(atom_coord_file))
     else
-      call read_atomic_positions('coord_next.dat')
+      call read_atomic_positions('cq.position')
     end if
     if(iprint_init>4) call print_process_info()
     ! By now, we'll have unit cell sizes and grid cutoff
@@ -627,6 +627,8 @@ contains
   !!    Bug fix: turn off mixed L-SCF with diagonalisation (was breaking force tests)
   !!    Second issue (14:08) set SC.MinIters to 0 as was breaking force tests; also tweaked
   !!    linear mixing end default
+  !!   2018/03/09 zamaan
+  !!    Set some flags to true when restarting MD (loading matrices)
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -953,8 +955,6 @@ contains
           call cq_abort('read_input: you may not select restart for a run just now')
        endif
        init_blip_flag = fdf_string(10,'Basis.InitBlipFlag','pao')
-       restart_LorK   = fdf_boolean('General.LoadL',   .false.)
-       restart_rho    = fdf_boolean('General.LoadRho', .false.)
        restart_T      = fdf_boolean('General.LoadInvS',.false.)
        ! Is there a net charge on the cell ?
        ne_in_cell     = fdf_double('General.NetCharge',zero)
@@ -1575,8 +1575,8 @@ contains
           if(inode==ionode) write(io_lun,*) ' As ghost atoms are included, UseGemm must be false.'
           UseGemm = .false.
        endif
+
        flag_check_DFT     = fdf_boolean('General.CheckDFT',.false.)
-       flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        flag_quench_MD     = fdf_boolean('AtomMove.QuenchMD',.false.)
        flag_fire_qMD = fdf_boolean('AtomMove.FIRE',.false.)
        if(flag_fire_qMD) then
@@ -1855,12 +1855,30 @@ contains
        !if(flag_spin_polarisation.AND.flag_LmatrixReuse) then
        !   call cq_abort("L matrix re-use and spin polarisation not implemented !")
        !end if
+
        flag_TmatrixReuse = fdf_boolean('AtomMove.ReuseInvS',.false.)
        flag_SkipEarlyDM  = fdf_boolean('AtomMove.SkipEarlyDM',.false.)
        McWFreq           = fdf_integer('AtomMove.McWeenyFreq',0)
        flag_FixCOM       = fdf_boolean('AtomMove.FixCentreOfMass', .false.)
        ! XL-BOMD
        flag_XLBOMD       = fdf_boolean('AtomMove.ExtendedLagrangian',.false.)
+
+       ! zamaan 2018/03/03 I can't imagine a case where you would want to
+       ! restart a MD run without loading the various matrices, so I'm 
+       ! Defaulting some flags to true. Calling fdf to ensure that input.log
+       ! remains consistent
+       if (flag_MDcontinue) then
+         flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.true.)
+         restart_rho    = fdf_boolean('General.LoadRho', .true.)
+         restart_LorK   = fdf_boolean('General.LoadL', .true.)
+         if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .true.)
+       else
+         flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
+         restart_LorK   = fdf_boolean('General.LoadL', .false.)
+         restart_rho    = fdf_boolean('General.LoadRho', .false.)
+         if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
+       end if
+
        if (flag_XLBOMD) then
          kappa=fdf_double('XL.Kappa',2.0_double)
          if (kappa.GT.2.0_double) then
@@ -1904,7 +1922,6 @@ contains
              "WARNING: integrator must be velocity Verlet when dissipation &
              &does not apply ! Setting to velocity Verlet "
          endif
-         restart_X=fdf_boolean('XL.LoadX',.false.)
        endif ! XL-BOMD
        ! Constraints
        flag_RigidBonds=fdf_boolean('AtomMove.RigidBonds', .false.)

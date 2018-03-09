@@ -253,6 +253,8 @@ contains
   subroutine init_nhc(th, dt, T_ext, ndof, n_nhc, n_ys, n_mts, ke_ions)
 
     use GenComms,         only: cq_abort
+    use memory_module,    only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use global_module,    only: area_moveatoms
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
@@ -282,11 +284,13 @@ contains
     allocate(th%v_eta(n_nhc))
     allocate(th%G_nhc(n_nhc))
     allocate(th%m_nhc(n_nhc))
+    call reg_alloc_mem(area_moveatoms, 4*n_nhc, type_dbl)
     if (th%cell_nhc) then
       allocate(th%eta_cell(n_nhc))    ! independent thermostat for cell DOFs
       allocate(th%v_eta_cell(n_nhc))
       allocate(th%G_nhc_cell(n_nhc))
       allocate(th%m_nhc_cell(n_nhc))
+      call reg_alloc_mem(area_moveatoms, 4*n_nhc, type_dbl)
     end if
 
     ! Calculate the masses for extended lagrangian variables?
@@ -369,6 +373,8 @@ contains
   subroutine init_ys(th, n_ys)
 
     use GenComms,         only: cq_abort
+    use memory_module,    only: reg_alloc_mem, reg_dealloc_mem, type_dbl
+    use global_module,    only: area_moveatoms
 
     ! passed variables
     class(type_thermostat), intent(inout)     :: th
@@ -381,6 +387,7 @@ contains
 
     allocate(psuz(n_ys,5))
     allocate(th%dt_ys(n_ys))
+    call reg_alloc_mem(area_moveatoms, n_ys, type_dbl)
 
     do i=2,n_ys
       xnt = one/(two*real(i,double)-one)

@@ -497,7 +497,7 @@ contains
                               flag_fire_qMD, flag_diagonalisation,    &
                               nspin, flag_thermoDebug, flag_baroDebug,&
                               flag_move_atom,rcellx, rcelly, rcellz,  &
-                              flag_Multisite,flag_SFcoeffReuse
+                              flag_Multisite,flag_SFcoeffReuse, atom_coord
     use group_module,   only: parts
     use primary_module, only: bundle
     use minimise,       only: get_E_and_F
@@ -538,7 +538,7 @@ contains
                               md_berendsen_equil
 
     use atoms,          only: distribute_atoms,deallocate_distribute_atom
-    use global_module,  only: atom_coord_diff, iprint_MD
+    use global_module,  only: atom_coord_diff, iprint_MD, area_moveatoms
 
     implicit none
 
@@ -581,7 +581,7 @@ contains
     if (stat /= 0) &
          call cq_abort("Error allocating velocity in md_run: ", &
                        ni_in_cell, stat)
-    call reg_alloc_mem(area_general, 3*ni_in_cell, type_dbl)
+    call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
     ion_velocity = zero
     if (flag_read_velocity) then
        call read_velocity(ion_velocity, file_velocity)
@@ -720,12 +720,14 @@ contains
     lattice_vec(3,3) = rcellz
     call mdl%init_model(md_ensemble, thermo, baro)
 
-    if (flag_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
-    if (flag_thermoDebug) then
-      call thermo%dump_thermo_state(i_first-1, 'thermostat.dat')
-    end if
-    if (flag_baroDebug) then
-      call baro%dump_baro_state(i_first-1, 'barostat.dat')
+    if (.not. flag_MDcontinue) then
+      if (flag_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
+      if (flag_thermoDebug) then
+        call thermo%dump_thermo_state(i_first-1, 'thermostat.dat')
+      end if
+      if (flag_baroDebug) then
+        call baro%dump_baro_state(i_first-1, 'barostat.dat')
+      end if
     end if
 
     !ORI do iter = 1, MDn_steps
@@ -826,7 +828,7 @@ contains
               baro%ke_stress(1,1), baro%ke_stress(2,2), baro%ke_stress(3,3), &
               en_units(energy_units)
           end if
-          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
+!          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
        end if
        ! Rescale the ionic positions for the berendsen barostat AFTER the 
@@ -943,7 +945,7 @@ contains
        end if
        energy0 = energy1
        energy1 = abs(dE)
-!       call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
+       call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
        if (myid == 0 .and. mod(iter, MDfreq) == 0) then
          call write_positions(iter, parts)
          call mdl%dump_frame("Frames")
@@ -1016,7 +1018,7 @@ contains
     deallocate(ion_velocity, STAT=stat)
     if (stat /= 0) call cq_abort("Error deallocating velocity in md_run: ", &
                                  ni_in_cell, stat)
-    call reg_dealloc_mem(area_general, 3 * ni_in_cell, type_dbl)
+    call reg_dealloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
     return
 1   format(4x,'Atom ',i4,' Position ',3f15.8)
 2   format(4x,'Welcome to md_run. Doing ',i4,' steps')

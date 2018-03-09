@@ -400,7 +400,7 @@ second:   do
           end do
           call io_close(lun)
        else
-          if(iprint_init>2) write(io_lun,'(10x,a30)') 'Entering read_atomic_positions'
+          if(iprint_init>2) write(io_lun,'(10x,a40,a20)') 'Entering read_atomic_positions; reading ', filename
           call io_assign(lun)
           open(unit=lun,file=filename,status='old')
           ! Read supercell vector - for now it must be orthorhombic so
@@ -4347,7 +4347,7 @@ second:   do
   !!
   subroutine read_velocity(velocity, filename)
     use numbers
-    use global_module, only: id_glob, ni_in_cell,id_glob_inv
+    use global_module, only: id_glob, ni_in_cell,id_glob_inv, iprint_init
     use GenComms, only: inode, ionode, cq_abort, gcopy
 
     implicit none
@@ -4361,6 +4361,7 @@ second:   do
     integer :: lun
 
     if(inode == ionode) then
+       if(iprint_init>2) write(io_lun,'(10x,a40,a20)') 'Entering read_velocity; reading ', filename
        call io_assign(lun)
        open(unit=lun,file=filename)
        rewind(unit=lun)
