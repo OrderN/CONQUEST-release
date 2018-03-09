@@ -469,11 +469,13 @@ contains
 !!    Changed formatting for reads to read new Siesta (1.3) pseudos
 !!   2017/11/10 14:24 dave
 !!    Changed yp1 and ypn to use first derivative (simple FD) instead of zero
+!!   2018/03/08 09:54 dave
+!!    Added consistency check between cutoff and step size/number of points
 !!  SOURCE
 !!
   subroutine radial_read_ascii(op,lun)
 
-    use numbers, ONLY: BIG, zero
+    use numbers, ONLY: BIG, zero, RD_ERR
     use spline_module, ONLY: spline
     use global_module, ONLY: iprint_pseudo
     use GenComms, ONLY: myid
@@ -484,18 +486,32 @@ contains
     integer,intent(in)         :: lun
 
     integer :: j, npts
-    real(double) :: dummy
+    real(double) :: dummy, r0, r1
     real(double) :: yp1, ypn
     real(double) :: delta, cutoff
 
     !ori read(lun,'(i4,2g25.15)') npts, op%delta, op%cutoff
 !    read(lun,'(i4,2g25.15)') npts, delta, cutoff
     read(lun,*) npts, delta, cutoff
+    ! DRB 2018/03/08 Adding consistency check between cutoff and delta
+    if(abs(cutoff - delta*real(npts-1,double))>RD_ERR) then
+       if(myid==0) write(io_lun,fmt='(/4x,"Warning: cutoff and step inconsistent, cutoff will be adjusted: ",2f8.3/)') &
+            cutoff,delta*real(npts-1,double)
+       cutoff=delta*real(npts-1,double)
+    end if
     if(myid==0.AND.iprint_pseudo>3) write(io_lun,fmt='(10x,"Radius: ",f15.10)') cutoff
     op%delta = delta
     op%cutoff= cutoff
     call rad_alloc(op,npts)
-    do j=1,npts
+    ! Test step size in radial grid is consistent
+    read(lun,*) r0, op%f(1)
+    read(lun,*) r1, op%f(2)
+    if(abs(r1-r0-delta)>RD_ERR) then
+       if(myid==0) write(io_lun,fmt='(/4x,"Warning: radial grid and step inconsistent ! ",2f8.3/)') r1-r0,delta
+       ! DRB 2018/03/08 10:55
+       ! I can see an argument to abort here - if the step size and grid are inconsistent we may have problems
+    end if
+    do j=3,npts
 !       read(lun,'(2g25.15)') dummy, op%f(j)
        read(lun,*) dummy, op%f(j)
     enddo
