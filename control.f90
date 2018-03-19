@@ -828,7 +828,7 @@ contains
               baro%ke_stress(1,1), baro%ke_stress(2,2), baro%ke_stress(3,3), &
               en_units(energy_units)
           end if
-!          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
+          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
           call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
        end if
        ! Rescale the ionic positions for the berendsen barostat AFTER the 
@@ -945,7 +945,7 @@ contains
        end if
        energy0 = energy1
        energy1 = abs(dE)
-       call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
+!       call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
        if (myid == 0 .and. mod(iter, MDfreq) == 0) then
          call write_positions(iter, parts)
          call mdl%dump_frame("Frames")
