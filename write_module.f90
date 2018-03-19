@@ -25,7 +25,7 @@ contains
     use pseudo_tm_info, ONLY: alloc_pseudo_info, pseudo, rad_alloc
     use pao_info, ONLY: paos, valence_info
     use periodic_table, ONLY: atomic_mass
-    use global_module, ONLY: functional_lda_pz81, functional_gga_pbe96, functional_description
+    use radial_xc, ONLY: flag_functional_type, functional_lda_pz81, functional_gga_pbe96, functional_description
     
     implicit none
 
@@ -43,17 +43,13 @@ contains
        write(lun,fmt='("<preamble>")')
        write(lun,fmt='("<Conquest_basis_specs>")')
        ! Give XC functional and seet functional label for later
-       select case(val(i_species)%functional)
+       select case(flag_functional_type(i_species))
        case (functional_lda_pz81)
-          functional_description = 'LDA PZ81'
           string_xc = 'ca'
-       !case (functional_lda_gth96)
-       !   functional_description = 'LDA GTH96'
-       !case (functional_lda_pw92)
-       !   functional_description = 'LSDA PW92'
        case (functional_gga_pbe96)
-          functional_description = 'GGA PBE96'
           string_xc = 'pb'
+       case default
+          string_xc = 'xx'
        end select
        write(lun,fmt='((a)," basis set with ",(a)," functional")') trim(pte(pseudo(i_species)%z)), trim(functional_description)
        ! Loop over l

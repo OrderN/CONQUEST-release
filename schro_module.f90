@@ -69,11 +69,13 @@ contains
        ! We need max cutoff to work out largest PAO radius (for neutral atom)
        max_cutoff = zero
        atomic_rho = zero
+       vha = zero
+       vxc = zero
        ! Find VHa and VXC for atom to screen the semi-local potentials
        call radial_hartree(nmesh,local_and_vkb(i_species)%charge,vha,i_species)
        if(flag_pcc_global) & 
             local_and_vkb(i_species)%charge = local_and_vkb(i_species)%charge + local_and_vkb(i_species)%pcc
-       call get_vxc(nmesh,rr,local_and_vkb(i_species)%charge,val(i_species)%functional,vxc)
+       call get_vxc(nmesh,rr,local_and_vkb(i_species)%charge,i_species,vxc)
        if(flag_run_debug) then
           call io_assign(lun)
           open(unit=lun,file=pte(pseudo(i_species)%z)//"_AtomicVHaVXC.dat")
@@ -407,7 +409,7 @@ contains
        if(iprint>1) write(*,fmt='(/4x,"XC potential")')
        vxc = zero
        energy = zero
-       call get_vxc(nmesh,rr,atomic_rho,val(i_species)%functional,vxc,energy)
+       call get_vxc(nmesh,rr,atomic_rho,i_species,vxc,energy)
        if(iprint>5) then
           write(*,*) '# XC energy w/o core: ',energy
           do i=1,nmesh
@@ -418,7 +420,7 @@ contains
        energy = zero
        if(flag_pcc_global) & 
             atomic_rho = atomic_rho + local_and_vkb(i_species)%pcc
-       call get_vxc(nmesh,rr,atomic_rho,val(i_species)%functional,vxc,energy)
+       call get_vxc(nmesh,rr,atomic_rho,i_species,vxc,energy)
        if(iprint>5) then
           write(*,*) '# XC energy with core: ',energy
           do i=1,nmesh
@@ -702,7 +704,7 @@ contains
        call radial_hartree(nmesh,local_and_vkb(i_species)%charge,vha,i_species)
        if(flag_pcc_global) & 
             local_and_vkb(i_species)%charge = local_and_vkb(i_species)%charge + local_and_vkb(i_species)%pcc
-       call get_vxc(nmesh,rr,local_and_vkb(i_species)%charge,val(i_species)%functional,vxc)
+       call get_vxc(nmesh,rr,local_and_vkb(i_species)%charge,i_species,vxc)
        if(flag_pcc_global) & 
             local_and_vkb(i_species)%charge = local_and_vkb(i_species)%charge - local_and_vkb(i_species)%pcc
        do i=1,nmesh
@@ -758,7 +760,7 @@ contains
        call radial_hartree(nmesh,local_and_vkb(i_species)%charge,vha,i_species)
        if(flag_pcc_global) & 
             local_and_vkb(i_species)%charge = local_and_vkb(i_species)%charge + local_and_vkb(i_species)%pcc
-       call get_vxc(nmesh,rr,local_and_vkb(i_species)%charge,val(i_species)%functional,vxc)
+       call get_vxc(nmesh,rr,local_and_vkb(i_species)%charge,i_species,vxc)
        do i=1,nmesh
           write(35,*) rr(i),vha(i),vxc(i)
        end do

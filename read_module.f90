@@ -33,6 +33,7 @@ contains
          flag_plot_output, local_and_vkb, val, n_debug_run, l_debug_run, E_debug_run
     use pao_info, ONLY: paos
     use units, ONLY: HaToeV
+    use radial_xc, ONLY: alloc_xc
     
     implicit none
 
@@ -77,6 +78,8 @@ contains
     allocate(pseudo_file_name(n_species),vps_file_name(n_species),species_label(n_species),&
          paos(n_species),vkb_file_name(n_species))
     allocate(local_and_vkb(n_species),val(n_species))
+    ! Allocate space for XC functionals
+    call alloc_xc(n_species)
     ! Loop over species, finding their labels in the file
     ! All other species-dependent data will then be in the block with that label
     if(fdf_block('SpeciesLabels')) then
@@ -528,14 +531,15 @@ contains
 
   subroutine read_hamann_input
 
-    use global_module, ONLY: flag_pcc_global, flag_functional_type, functional_lda_pz81, functional_gga_pbe96, &
-         functional_description
     use numbers
     use species_module, ONLY: n_species
     use input_module, ONLY: io_assign, io_close
     use pseudo_tm_info, ONLY: alloc_pseudo_info, pseudo
     use spline_module, ONLY: spline
     use schro, ONLY: n_proj, val
+    use radial_xc, ONLY: flag_functional_type, init_xc, functional_lda_pz81, functional_gga_pbe96, &
+         functional_description
+    use global_module, ONLY: flag_pcc_global
     
     implicit none
 
@@ -558,35 +562,18 @@ contains
        read(a,*) sym,z,nc,nv,iexc,file_format
        write(*,fmt='(/"Information about pseudopotential for species: ",a2/)') sym
        pseudo(i_species)%z = z
+       ! Assign and initialise XC functional for species
        if(iexc==3) then
-          val(i_species)%functional = functional_lda_pz81
+          flag_functional_type(i_species) = functional_lda_pz81
        else if(iexc==4) then
-          val(i_species)%functional = functional_gga_pbe96
+          flag_functional_type(i_species) = functional_gga_pbe96
+       else if(iexc<0) then
+          flag_functional_type(i_species) = iexc
        else
           call cq_abort("Error: unrecognised iexc value: ",iexc)
        end if
-       ! DRB taken from initial_read.module.f90 in Conquest
-       select case(val(i_species)%functional)
-       case (functional_lda_pz81)
-          functional_description = 'LDA PZ81'
-       !case (functional_lda_gth96)
-       !   functional_description = 'LDA GTH96'
-       !case (functional_lda_pw92)
-       !   functional_description = 'LSDA PW92'
-       case (functional_gga_pbe96)
-          functional_description = 'GGA PBE96'
-       !case (functional_gga_pbe96_rev98)            ! This is PBE with the parameter correction
-       !   functional_description = 'GGA revPBE98'   !   in Zhang & Yang, PRL 80:4, 890 (1998)
-       !case (functional_gga_pbe96_r99)              ! This is PBE with the functional form redefinition
-       !   functional_description = 'GGA RPBE99'     !   in Hammer et al., PRB 59:11, 7413-7421 (1999)
-       !case (functional_gga_pbe96_wc)               ! Wu-Cohen nonempirical GGA functional
-       !   functional_description = 'GGA WC'         !   in Wu and Cohen, PRB 73. 235116, (2006)
-       !case (functional_hyb_pbe0)                   ! This is PB0E with the functional form redefinition
-       !   functional_description = 'hyb PBE0'        
-       !case default
-       !   functional_description = 'LSDA PW92'
-       end select
-       write(*,fmt='("Using XC functional: ",a12)') functional_description
+       call init_xc(i_species)
+       !write(*,fmt='("For species ",i2," we are using XC functional: ",a12)') i_species,functional_description
        write(*,fmt='("There are ",i2," core and ",i2," valence shells")') nc,nv
        a = get_hamann_line(lun)
        ! Read n, l, filling for core
@@ -691,6 +678,7 @@ contains
     integer :: i_species, j, i_highest_occ
     integer :: i_shell, ell, en, n_paos, n_shells, ell_hocc, max_zeta, n_pol_zeta
     integer, dimension(0:4) :: count_func
+    logical :: flag_confine = .false.
 
     ! If we are using defaults, then set up the structures
     if(flag_default_cutoffs) then 
@@ -934,6 +922,7 @@ contains
           paos(i_species)%inner = 0
           paos(i_species)%has_semicore(:) = .false.
           do i_shell = 1,paos(i_species)%n_shells
+             if(paos(i_species)%prefac(i_shell)>RD_ERR) flag_confine = .true.
              count_func(paos(i_species)%l(i_shell)) = count_func(paos(i_species)%l(i_shell))+1
              if(paos(i_species)%flag_perturb_polarise.AND.i_shell==paos(i_species)%n_shells) then
                 if(paos(i_species)%l(i_shell)+1>paos(i_species)%lmax) paos(i_species)%lmax=paos(i_species)%l(i_shell)+1
@@ -991,6 +980,13 @@ contains
                   paos(i_species)%n(val(i_species)%n_occ+1), paos(i_species)%l(val(i_species)%n_occ+1)
              if(paos(i_species)%n_shells-val(i_species)%n_occ>1) &
                   write(*,fmt='("Using normal Schrodinger solver for further shells")')
+          end if
+          if(flag_confine) then
+             write(*,fmt='("Using exponential confinement for PAOs")')
+             write(*,fmt='("   Prefactor       Width")')
+             do i_shell = 1,paos(i_species)%n_shells
+                write(*,fmt='(2f12.3)') paos(i_species)%prefac(i_shell), paos(i_species)%width(i_shell)
+             end do
           end if
        end do ! n_species
     end if
