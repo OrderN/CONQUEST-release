@@ -1,9 +1,6 @@
 ! Contains routines to evaluate XC energy and potential for radial charge distributions
 module radial_xc
 
-  use xc_f90_types_m
-  use xc_f90_lib_m
-
   implicit none
 
   ! Numerical flag choosing functional type
@@ -26,7 +23,6 @@ module radial_xc
   ! LibXC variables
   integer, allocatable, dimension(:) :: n_xc_terms
   integer, allocatable, dimension(:,:) :: i_xc_family
-  type(xc_f90_pointer_t), dimension(:,:), allocatable :: xc_func, xc_info
   logical, allocatable, dimension(:) :: flag_use_libxc
 
 contains
@@ -39,7 +35,7 @@ contains
     integer :: n_species
     
     allocate(flag_functional_type(n_species),n_xc_terms(n_species),i_xc_family(2,n_species), &
-         xc_func(2,n_species),xc_info(2,n_species),flag_use_libxc(n_species))
+         flag_use_libxc(n_species))
     return
   end subroutine alloc_xc
   
@@ -57,110 +53,14 @@ contains
     integer :: vmajor, vminor, vmicro, i, j
     integer, dimension(2) :: xcpart
     character(len=120) :: name, kind, family, ref
-    type(xc_f90_pointer_t) :: temp_xc_func
-    type(xc_f90_pointer_t) :: temp_xc_info
 
     ! Test for LibXC or CQ
     if(flag_functional_type(species)<0) then
        ! --------------------------
        ! LibXC functional specified
        ! --------------------------
-       flag_use_libxc(species) = .true.
-       call xc_f90_version(vmajor, vminor, vmicro)
-       if(inode==ionode.AND.iprint>0) then
-          if(vmajor>2) then
-             write(*,'("LibXC version: ",I1,".",I1,".",I1)') vmajor, vminor, vmicro
-          else
-             write(*,'("LibXC version: ",I1,".",I1)') vmajor, vminor
-          end if
-       end if
-       ! Identify the functional
-       if(-flag_functional_type(species)<1000) then ! Only exchange OR combined exchange-correlation
-          n_xc_terms(species) = 1
-          xcpart(1) = -flag_functional_type(species)
-       else ! Separate the two parts
-          n_xc_terms(species) = 2
-          ! Make exchange first, correlation second for consistency
-          i = floor(-flag_functional_type(species)/1000.0_double)
-          ! Temporary init to find exchange or correlation
-          if(nspin==1) then
-             call xc_f90_func_init(temp_xc_func, temp_xc_info, i, XC_UNPOLARIZED)
-          else if(nspin==2) then
-             call xc_f90_func_init(temp_xc_func, temp_xc_info, i, XC_POLARIZED)
-          end if
-          select case(xc_f90_info_kind(temp_xc_info))
-          case(XC_EXCHANGE)
-             xcpart(1) = i
-             xcpart(2) = -flag_functional_type(species) - xcpart(1)*1000
-          case(XC_CORRELATION)
-             xcpart(2) = i
-             xcpart(1) = -flag_functional_type(species) - xcpart(2)*1000
-          end select
-          call xc_f90_func_end(temp_xc_func)
-       end if
-       ! Now initialise and output
-       do i=1,n_xc_terms(species)
-          if(nspin==1) then
-             call xc_f90_func_init(xc_func(i,species), xc_info(i,species), xcpart(i), XC_UNPOLARIZED)
-          else if(nspin==2) then
-             call xc_f90_func_init(xc_func(i,species), xc_info(i,species), xcpart(i), XC_POLARIZED)
-          end if
-          ! Consistent threshold with Conquest
-          !if(vmajor>2) call xc_f90_func_set_dens_threshold(xc_func(i,species),RD_ERR)
-          call xc_f90_info_name(xc_info(i,species), name)
-          i_xc_family(i,species) = xc_f90_info_family(xc_info(i,species))
-          if(inode==ionode) then
-             select case(xc_f90_info_kind(xc_info(i,species)))
-             case (XC_EXCHANGE)
-                write(kind, '(a)') 'an exchange functional'
-             case (XC_CORRELATION)
-                write(kind, '(a)') 'a correlation functional'
-             case (XC_EXCHANGE_CORRELATION)
-                write(kind, '(a)') 'an exchange-correlation functional'
-             case (XC_KINETIC)
-                write(kind, '(a)') 'a kinetic energy functional'
-             case default
-                write(kind, '(a)') 'of unknown kind'
-             end select
-
-             select case (i_xc_family(i,species))
-             case (XC_FAMILY_LDA);
-                write(family,'(a)') "LDA"
-             case (XC_FAMILY_GGA);
-                write(family,'(a)') "GGA"
-             case (XC_FAMILY_HYB_GGA);
-                write(family,'(a)') "Hybrid GGA"
-             case (XC_FAMILY_MGGA);
-                write(family,'(a)') "MGGA"
-             case (XC_FAMILY_HYB_MGGA);
-                write(family,'(a)') "Hybrid MGGA"
-             case default;
-                write(family,'(a)') "unknown"
-             end select
-             functional_description = trim(name)
-             if(iprint>2) then
-                if(vmajor>2) then
-                   write(*,'("The functional ", a, " is ", a, ", it belongs to the ", a, &
-                        " family and is defined in the reference(s):")') &
-                        trim(name), trim(kind), trim(family)
-                   j = 0
-                   call xc_f90_info_refs(xc_info(i,species), j, ref)
-                   do while(j >= 0)
-                      write(*, '(a,i1,2a)') '[', j, '] ', trim(ref)
-                      call xc_f90_info_refs(xc_info(i,species), j, ref)
-                   end do
-                else
-                   write(*,'("The functional ", a, " is ", a, ", and it belongs to the ", a, &
-                        " family")') &
-                        trim(name), trim(kind), trim(family)
-                end if
-             else if(iprint>0) then
-                write(*,'(2x,"Using the ",a," functional ",a)') trim(family),trim(name)
-             else
-                write(*,fmt='(2x,"Using functional ",a)') trim(name)
-             end if
-          end if
-       end do
+       call cq_abort("This binary was not compiled against LibXC: aborting as functional < 0 ", &
+            flag_functional_type(species))
     else
        ! -----------------------------
        ! Conquest functional specified
@@ -236,49 +136,26 @@ contains
     end if
     vxc = zero
     ! Choose LibXC or Conquest
-    if(flag_use_libxc(i_species)) then
-       allocate(drho_dr(n_tot),sigma(n_tot),vrho(n_tot),vsigma(n_tot),loc_rho(n_tot),d2term(n_tot))
-       ! Make derivatives
-       loc_rho = rho/(four*pi)
-       call make_derivatives(loc_rho, drho_dr, sigma)
-       do n=1,n_xc_terms(i_species)
-          ! Call routine
-          select case (i_xc_family(n,i_species))
-          case(XC_FAMILY_LDA)
-             call xc_f90_lda_exc_vxc(xc_func(n,i_species),n_tot,loc_rho(1),exc_array(1),vrho(1))
-             vxc = vxc + vrho
-          case(XC_FAMILY_GGA)
-             call xc_f90_gga_exc_vxc(xc_func(n,i_species),n_tot,loc_rho(1),sigma(1),exc_array(1),vrho(1),vsigma(1))
-             vxc = vxc + vrho
-             d2term = zero
-             vsigma = vsigma*two*drho_dr
-             call make_derivatives(vsigma,d2term)!drho_dr) ! Re-use variable - we only need sigma
-             vxc = vxc - (two*vsigma/rr + d2term)!drho_dr) ! Radial part of div.(df/dg)
-          end select
-       end do
-       deallocate(drho_dr,sigma,vrho,vsigma)
-    else
-       select case(flag_functional_type(i_species))
-       case(functional_lda_pz81)
-          if(flag_energy) then
-             call vxc_pz_ca(n_tot, rr, rho, vxc, exc_array)
-          else
-             call vxc_pz_ca(n_tot, rr, rho, vxc)
-          end if
-       case(functional_gga_pbe96)
-          if(flag_energy) then
-             call vxc_gga_pbe(n_tot, rr, rho, vxc, exc_array)
-          else
-             call vxc_gga_pbe(n_tot, rr, rho, vxc)
-          end if
-       end select
-       if(PRESENT(exc)) then
-          exc = zero
-          do i = 1, n_tot
-             exc = exc + exc_array(i)
-          end do
-          ! Potentially also find Exc correction
+    select case(flag_functional_type(i_species))
+    case(functional_lda_pz81)
+       if(flag_energy) then
+          call vxc_pz_ca(n_tot, rr, rho, vxc, exc_array)
+       else
+          call vxc_pz_ca(n_tot, rr, rho, vxc)
        end if
+    case(functional_gga_pbe96)
+       if(flag_energy) then
+          call vxc_gga_pbe(n_tot, rr, rho, vxc, exc_array)
+       else
+          call vxc_gga_pbe(n_tot, rr, rho, vxc)
+       end if
+    end select
+    if(PRESENT(exc)) then
+       exc = zero
+       do i = 1, n_tot
+          exc = exc + exc_array(i)
+       end do
+       ! Potentially also find Exc correction
     end if
   end subroutine get_vxc
   
