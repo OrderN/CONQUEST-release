@@ -233,6 +233,7 @@ contains
        flag_energy = .true.
        allocate(exc_array(n_tot))
        exc_array = zero
+       exc = zero
     end if
     vxc = zero
     ! Choose LibXC or Conquest
@@ -255,6 +256,12 @@ contains
              call make_derivatives(vsigma,d2term)!drho_dr) ! Re-use variable - we only need sigma
              vxc = vxc - (two*vsigma/rr + d2term)!drho_dr) ! Radial part of div.(df/dg)
           end select
+          if(PRESENT(exc)) then
+             do i = 1, n_tot
+                exc = exc + exc_array(i)
+             end do
+             ! Potentially also find Exc correction
+          end if
        end do
        deallocate(drho_dr,sigma,vrho,vsigma)
     else
