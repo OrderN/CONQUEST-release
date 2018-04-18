@@ -1,23 +1,21 @@
 #!/usr/local/bin/python3
 
 import argparse
+import sys
 import re
 import scipy as sp
 import matplotlib.pyplot as plt
 from frame import Frame
+from md_tools import Pairdist, MSER, VACF, MSD
 from pdb import set_trace
 
-cq_input_file = 'Conquest_input'
+ha2ev = 27.211399
 
 # Regular expressions
 frame_re = re.compile('frame')
 endframe_re = re.compile('end frame')
-cell_re = re.compile('cell_vectors(.*?)end cell_vectors', re.M | re.S)
-stress_re = re.compile('stress_tensor(.*?)end stress_tensor', re.M | re.S)
-position_re = re.compile('positions(.*?)end positions', re.M | re.S)
-position_re = re.compile('positions(.*?)end positions', re.M | re.S)
-velocity_re = re.compile('velocities(.*?)end velocities', re.M | re.S)
-force_re = re.compile('forces(.*?)end forces', re.M | re.S)
+
+cq_input_file = 'Conquest_input'
 
 # Parsing functions
 def parse_cq_input(cq_input_file):
@@ -49,6 +47,14 @@ def parse_init_config(conf_filename):
       species.append(int(spec))
     data['coords'] = sp.array(coords)
     data['species'] = sp.array(species)
+    scount = {}
+    for i in range(natoms):
+      if data['species'][i] in scount.keys():
+        scount[data['species'][i]] += 1
+      else:
+        scount[data['species'][i]] = 1
+    data['species_count'] = scount
+    data['nspecies'] = len(scount.keys())
   return data
 
 def read_stats(stats_file, nstop):
@@ -58,7 +64,7 @@ def read_stats(stats_file, nstop):
   with open(stats_file, 'r') as statfile:
     for line in statfile:
       if nstop != -1:
-        if nstep >= nstop:
+        if nstep > nstop:
           break
       if header:
         col_id = line.strip().split()
@@ -74,54 +80,7 @@ def read_stats(stats_file, nstop):
             info = float(bit)
           data[col_id[i]].append(info)
       nstep += 1
-  return data
-
-
-def parse_frame(buf, f):
-  m = re.search(cell_re, buf)
-  lines = m.group(1).strip().splitlines()
-  for i in range(3):
-    bits = lines[i].strip().split()
-    for j in range(3):
-      f.lat[i,j] = float(bits[j])
-
-  m = re.search(stress_re, buf)
-  if m:
-    lines = m.group(1).strip().splitlines()
-    for i in range(3):
-      bits = lines[i].strip().split()
-      for j in range(3):
-        f.stress[i,j] = float(bits[j])
-
-  m = re.search(position_re, buf)
-  lines = m.group(1).strip().splitlines()
-  nat = len(lines)
-  for i in range(nat):
-    bits = lines[i].strip().split()
-    bits.pop(0)
-    f.species[i] = int(bits.pop(0))
-    for j in range(3):
-      f.r[i,j] = float(bits[j])
-
-  m = re.search(velocity_re, buf)
-  lines = m.group(1).strip().splitlines()
-  nat = len(lines)
-  for i in range(nat):
-    bits = lines[i].strip().split()
-    bits.pop(0)
-    bits.pop(0)
-    for j in range(3):
-      f.v[i,j] = float(bits[j])
-
-  m = re.search(force_re, buf)
-  lines = m.group(1).strip().splitlines()
-  nat = len(lines)
-  for i in range(nat):
-    bits = lines[i].strip().split()
-    bits.pop(0)
-    bits.pop(0)
-    for j in range(3):
-      f.f[i,j] = float(bits[j])
+  return nstep, data
 
 # Command line arguments
 parser = argparse.ArgumentParser(description='Analyse a Conquest MD \
@@ -139,22 +98,30 @@ parser.add_argument('--stop', action='store', dest='nstop', default=-1,
 parser.add_argument('--equil', action='store', dest='nequil', default=0, 
                     type=int, help='Number of equilibration steps')
 parser.add_argument('--vacf', action='store_true', dest='vacf', 
-                    help='Compute the velocity autocorrelation function')
+                    help='Plot velocity autocorrelation function')
 parser.add_argument('--msd', action='store_true', dest='msd', 
-                    help='Compute the mean squared deviation')
-parser.add_argument('--vdist', action='store_true', dest='vdist', 
-                    help='Compute the velocity distribution')
+                    help='Plot mean squared deviation')
+parser.add_argument('--rdf', action='store_true', dest='rdf', 
+                    help='Plot radial distribution function')
+parser.add_argument('--stress', action='store_true', dest='stress', 
+                    help='Plot stress')
 parser.add_argument('--landscape', action='store_true', dest='landscape', 
                     help='Generate plot with landscape orientation')
-parser.add_argument('--stress', action='store_true', dest='stress', 
-                    help='Plot the stress')
 parser.add_argument('--pub', action='store_true', dest='pub', 
                     help='Publication text size')
 parser.add_argument('--nbins', action='store', dest='nbins', default=100,
                     help='Number of histogram bins')
+parser.add_argument('--rdfwidth', action='store', dest='rdfwidth',
+                    default=0.05, help='RDF histogram bin width (A)')
+parser.add_argument('--rdfcut', action='store', dest='rdfcut', default=10.0,
+                    help='Distance cutoff for RDF')
+parser.add_argument('--dump', action='store_true', dest='dump', 
+                    help='Dump secondary data used to generate plots')
+parser.add_argument('--mser', action='store', dest='mser_var', default=None,
+                    type=str, help='Compute MSER for the given property')
 
 opts = parser.parse_args()
-if (opts.vacf or opts.msd or opts.vdist or opts.stress):
+if (opts.vacf or opts.msd or opts.stress or opts.rdf):
   read_frames = True
 else:
   read_frames = False
@@ -169,7 +136,7 @@ natoms = init_config['natoms']
 dt = float(cq_params['AtomMove.Timestep'])
 
 # Parse the statistics file
-data = read_stats(opts.statfile,opts.nstop)
+nsteps, data = read_stats(opts.statfile,opts.nstop)
 avg = {}
 std = {}
 for key in data:
@@ -228,6 +195,15 @@ plt.xlim((opts.nskip,data['time'][-1]))
 fig1.subplots_adjust(hspace=0)
 fig1.savefig("stats.pdf", bbox_inches='tight')
 
+# Plot MSER
+if opts.mser_var:
+  traj = MSER(nsteps, opts.mser_var, data[opts.mser_var])
+  traj.get_mser()
+  traj.plot_mser(data['step'])
+  if opts.dump:
+    traj.dump_mser(data['step'])
+
+# Parse the frames file
 if read_frames:
   nframes = 0
   newframe = True
@@ -235,10 +211,7 @@ if read_frames:
   time = []
   stress = []
   lat = []
-  vacf = []
-  msd = []
-  sdistr = sp.zeros(opts.nbins, dtype='float')
-  vdistr = sp.zeros((opts.nbins,3), dtype='float')
+  first_frame = True
   with open(opts.framesfile, 'r') as framesfile:
     while True:
       line = framesfile.readline()
@@ -251,29 +224,37 @@ if read_frames:
         newframe = True
         if n < opts.nskip:
           continue
-        if n == opts.nstop:
-          break
         else:
           nframes += 1
-        if nframes == 1:
+        if opts.nstop != -1:
+          if n > opts.nstop:
+            break
+        sys.stdout.write("Processing frame {}\r".format(n))
+        if first_frame:
+          first_frame = False
           f1 = Frame(natoms,n)
-          parse_frame(buf,f1)
+          f1.parse_frame(buf)
+          if opts.rdf:
+            pairdist = Pairdist(natoms, init_config['nspecies'], opts.rdfcut, 
+                                opts.rdfwidth, f1)
+          if opts.vacf:
+            c = VACF(natoms, dt, f1)
+          if opts.msd:
+            m = MSD(natoms, dt, f1)
+
         f = Frame(natoms, n)
-        parse_frame(buf, f)
+        f.parse_frame(buf)
 
         time.append(n*dt)
         if opts.stress:
           stress.append(f.stress)
           lat.append(f.lat)
+        if opts.rdf:
+          pairdist.update_rdf(f)
         if opts.vacf:
-          vacf.append(f.update_vacf(f1))
+          c.update_vacf(n, f)
         if opts.msd:
-          msd.append(f.update_msd(f1))
-        if opts.vdist:
-          sdistr_tmp, bin_edges = f.update_sdistr(opts.nbins)
-          vdistr_tmp, bin_edges = f.update_vdistr(opts.nbins)
-          sdistr += sdistr_tmp
-          vdistr += vdistr_tmp
+          m.update_msd(n, f)
         continue
       if newframe:
         buf = ""
@@ -281,8 +262,10 @@ if read_frames:
       else:
         buf += line
 
-  time = sp.array(time)
+  time = data['time']
   time = time - time[0]
+  print()
+  print("Analysing {} frames...".format(nframes))
 
 # Plot the stress
   if opts.stress:
@@ -310,7 +293,6 @@ if read_frames:
     ax1.plot((time[0],time[-1]), (mean_stress[2,2], mean_stress[2,2]), 'b-',
             label=r'$\langle S_{{zz}} \rangle$ = {0:<10.4f}'.format(mean_stress[2,2]))
 
-
     ax2.plot(time, lat[:,0,0], 'r-', label='a', linewidth=1.0)
     ax2.plot(time, lat[:,1,1], 'g-', label='b', linewidth=1.0)
     ax2.plot(time, lat[:,2,2], 'b-', label='c', linewidth=1.0)
@@ -326,38 +308,24 @@ if read_frames:
     plt.setp([a.get_xticklabels() for a in fig1.axes[:-1]], visible=False)
     fig2.savefig("stress.pdf", bbox_inches='tight')
 
+  # Plot the rdf
+  if opts.rdf:
+    pairdist.norm_rdf()
+    pairdist.get_coordination()
+    pairdist.plot_gr()
+    if opts.dump:
+      pairdist.dump_gr()
 
-# Plot the VACF
+  # Plot the VACF
   if opts.vacf:
-    vacf = sp.array(vacf)
-    plt.figure("VACF")
-    plt.xlabel("t")
-    plt.ylabel("C(t)")
-    plt.xlim((time[0],time[-1]))
-    plt.plot(time, vacf)
-    plt.plot((0,time[-1]), (0, 0), 'k-')
-    plt.savefig("vacf.pdf", bbox_inches='tight')
+    c.norm_vacf()
+    c.plot_vacf()
+    if opts.dump:
+      c.dump_vacf()
 
-# Plot the MSD
+  # Plot the MSD
   if opts.msd:
-    msd = sp.array(msd)
-    plt.figure("MSD")
-    plt.xlabel("t")
-    plt.ylabel("MSD(t)")
-    plt.xlim((time[0],time[-1]))
-    plt.plot(time, msd)
-    plt.plot((0,time[-1]), (0, 0), 'k-')
-    plt.ylim(ymin=0)
-    plt.savefig("msd.pdf", bbox_inches='tight')
-
-# Plot the velocity distribution
-  if opts.vdist:
-    vdistr = vdistr/float(nframes)
-    sdistr = sdistr/float(nframes)
-    plt.figure("v_distribution")
-    fig3, ((ax1, ax2), (ax3, ax4)) = plt.subplots(nrows=2, ncols=2)
-    ax1.hist(sdistr, bins=bin_edges, label='speed')
-    ax2.hist(vdistr[:,0], bins=bin_edges, label=r'$v_x$')
-    ax3.hist(vdistr[:,1], bins=bin_edges, label=r'$v_y$')
-    ax4.hist(vdistr[:,2], bins=bin_edges, label=r'$v_z$')
-    plt.savefig("vdistr.pdf", bbox_inches='tight')
+    m.norm_msd()
+    m.plot_msd()
+    if opts.dump:
+      m.dump_msd()
