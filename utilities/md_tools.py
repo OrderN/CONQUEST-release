@@ -20,7 +20,7 @@ def diff_mic(pos1, pos2, cell):
 
 def disp_mic_npt(pos1, pos2, cell1, cell2):
   """MIC displacement when cell dimensions change"""
-  disp = pos2*cell1 - pos1*cell2
+  disp = pos2/cell2 - pos1/cell1
   for i in range(3):
     disp[i] -= round(disp[i]/cell2[i])
   return disp
@@ -244,25 +244,26 @@ class MSD:
     self.nat = nat
     self.dt = dt
     self.init_r = init_frame.r
+    self.r_prev = sp.copy(self.init_r)
     self.msd = []
     self.steps = []
     self.init_cell = sp.zeros(3, dtype='float')
+    self.r_diff = sp.zeros((self.nat,3), dtype='float')
     for i in range(3):
       self.init_cell[i] = init_frame.lat[i,i]
 
   def update_msd(self, step, frame):
+    self.steps.append(step)
+    self.nframes += 1
     cell = sp.zeros(3, dtype='float')
     for i in range(3):
       cell[i] = frame.lat[i,i]
-    self.nframes += 1
-    self.steps.append(step)
     self.msd.append(0.0)
     for i in range(self.nat):
-      # this is a difficult to define for the NPT case, fix it at some point
-      disp = disp_mic_npt(self.init_r[i,:], frame.r[i,:],
-                          self.init_cell, cell)
-      set_trace()
-      self.msd[-1] += sp.sum(disp**2)
+      diff = diff_mic(frame.r[i,:], self.r_prev[i,:], cell) # is this right?
+      self.r_diff[i,:] += diff
+      self.msd[-1] += sp.sum(self.r_diff[i,:]**2)
+    self.r_prev = sp.copy(frame.r)
 
   def norm_msd(self):
     self.msd = sp.array(self.msd)/self.nat
