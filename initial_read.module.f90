@@ -1859,7 +1859,7 @@ contains
        flag_TmatrixReuse = fdf_boolean('AtomMove.ReuseInvS',.false.)
        flag_SkipEarlyDM  = fdf_boolean('AtomMove.SkipEarlyDM',.false.)
        McWFreq           = fdf_integer('AtomMove.McWeenyFreq',0)
-       flag_FixCOM       = fdf_boolean('AtomMove.FixCentreOfMass', .false.)
+       flag_FixCOM       = fdf_boolean('AtomMove.FixCentreOfMass', .true.)
        ! XL-BOMD
        flag_XLBOMD       = fdf_boolean('AtomMove.ExtendedLagrangian',.false.)
 
