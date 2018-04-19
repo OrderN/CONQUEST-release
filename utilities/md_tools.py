@@ -52,35 +52,6 @@ class Pairdist:
         if (frame.species[j] == i+1):
           self.spec_count[i] += 1
 
-  def get_dt(self, frame):
-    """Generate the distance table"""
-    cell = sp.zeros(3)
-    for i in range(3):
-      cell[i] = frame.lat[i,i]
-
-    self.volume = cell[0]*cell[1]*cell[2]*bohr2ang**3
-    self.rho = float(self.nat)/self.volume
-
-    for i in range(self.nat):
-      for j in range(i+1, self.nat):
-        diff = diff_mic(frame.r[i,:], frame.r[j,:], cell)*bohr2ang
-        self.dt[i,j] = norm(diff)
-        self.dt[j,i] = self.dt[i,j]
-
-  def update_rdf_dt(self, frame):
-    """update the radial distribution function"""
-    self.get_dt(frame)
-    for i in range(self.nat):
-      for j in range(i+1,self.nat):
-        if (self.dt[i,j] < self.rcut):
-          ind = int(round((self.dt[i,j]+self.binwidth)/self.binwidth))-1
-          self.freq_total[ind] += 2
-          if self.nspec > 1:
-            for ispec in range(self.nspec):
-              for jspec in range(self.nspec):
-                if (ispec == frame.species[i] and jspec == frame.species[j]):
-                  self.freq[ind, ispec, jspec] += 1
-
   def update_rdf(self, frame):
     self.nframes += 1
     cell = sp.zeros(3)
