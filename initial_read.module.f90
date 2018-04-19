@@ -629,6 +629,8 @@ contains
   !!    linear mixing end default
   !!   2018/03/09 zamaan
   !!    Set some flags to true when restarting MD (loading matrices)
+  !!   2018/04/12 22:00 nakata
+  !!    Bug fix: turn on flag_LFD_MD_UseAtomicDensity only when flag_SFcoeffReuse is .false.
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1332,10 +1334,8 @@ contains
              LFD_Thresh_EnergyRise = fdf_double('Multisite.LFD.Min.ThreshEnergyRise',LFD_threshE*ten)
              LFD_max_iteration = fdf_integer('Multisite.LFD.Min.MaxIteration',50)
           endif
-          flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
-       else 
-          flag_LFD_MD_UseAtomicDensity = .false.
        endif
+       flag_LFD_MD_UseAtomicDensity = .false.
 !!$
 !!$
 !!$
@@ -1851,6 +1851,10 @@ contains
        flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.)
        flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseL',.false.)
        flag_write_xsf    = fdf_boolean('AtomMove.WriteXSF', .true.)
+       if (flag_LFD .and. .not.flag_SFcoeffReuse) then
+          ! if LFD, use atomic density in default when we don't reuse SFcoeff
+          flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
+       endif
        ! DRB 2017/05/09 Removing restriction (now implemented)
        !if(flag_spin_polarisation.AND.flag_LmatrixReuse) then
        !   call cq_abort("L matrix re-use and spin polarisation not implemented !")
