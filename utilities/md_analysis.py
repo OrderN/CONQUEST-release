@@ -14,20 +14,42 @@ ha2ev = 27.211399
 # Regular expressions
 frame_re = re.compile('frame')
 endframe_re = re.compile('end frame')
+specblock_re = re.compile(r'%block ChemicalSpeciesLabel\n(.*?)\n%endblock',
+                          re.M | re.S | re.I)
 
 cq_input_file = 'Conquest_input'
 
 # Parsing functions
+
+def strip_comments(line, separator):
+  for s in separator:
+    i = line.find(s)
+    if i >= 0:
+      line = line[:i]
+  return line.strip()
+
+
 def parse_cq_input(cq_input_file):
   cq_params = {}
   with open(cq_input_file, 'r') as cqip:
     for line in cqip:
-      if (line.strip() and (line.strip()[0] != '#') and (line.strip()[0] != '%')):
-        bits = line.strip().split()
+      stripped = strip_comments(line, "#%!")
+      if stripped:
+        bits = stripped.split()
         if len(bits[1:]) == 1:
           cq_params[bits[0]] = bits[1:][0]
         else:
           cq_params[bits[0]] = bits[1:]
+
+  # get the species labels
+  cq_params['species'] = {}
+  with open(cq_input_file, 'r') as cqip:
+    m = re.search(specblock_re, cqip.read())
+    specinfo = m.group(1).splitlines()
+    for line in specinfo:
+      bits = line.split()
+      cq_params['species'][int(bits[0])] = bits[2]
+
   return cq_params
 
 def parse_init_config(conf_filename):
@@ -134,6 +156,7 @@ cq_params = parse_cq_input(cq_input_file)
 init_config = parse_init_config(cq_params['IO.Coordinates'])
 natoms = init_config['natoms']
 dt = float(cq_params['AtomMove.Timestep'])
+species = cq_params['species']
 
 # Parse the statistics file
 nsteps, data = read_stats(opts.statfile,opts.nstop)
@@ -178,7 +201,7 @@ if cq_params['MD.Ensemble'][1] == 'p':
   ax4a.plot((opts.nskip,data['time'][-1]), (avg['V'],avg['V']), 'r--',
         label=r'$\langle V \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['V'], std['V']))
 ax1.set_ylabel("E (Ha)")
-ax2.set_ylabel("E (Ha)")
+ax2.set_ylabel("H$'$ (Ha)")
 ax3.set_ylabel("T (K)")
 ax4.set_ylabel("P (GPa)", color='b')
 if cq_params['MD.Ensemble'][1] == 'p':
@@ -236,7 +259,8 @@ if read_frames:
           f1.parse_frame(buf)
           if opts.rdf:
             pairdist = Pairdist(natoms, init_config['nspecies'], opts.rdfcut, 
-                                opts.rdfwidth, f1)
+                                opts.rdfwidth, cq_params['species'],
+                                init_config['species_count'])
           if opts.vacf:
             c = VACF(natoms, dt, f1)
           if opts.msd:

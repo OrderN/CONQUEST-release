@@ -28,13 +28,15 @@ def disp_mic_npt(pos1, pos2, cell1, cell2):
 class Pairdist:
   """Object for computing pair distribution functions"""
 
-  def __init__(self, nat, nspec, rcut, binwidth, frame):
+  def __init__(self, nat, nspec, rcut, binwidth, species, species_count):
     self.nframes = 0
     self.nat = nat
     self.nspec = nspec
     self.rcut = rcut
     self.binwidth = binwidth
     self.nbins = ceil(rcut/binwidth)+1
+    self.spec_count = species_count
+    self.species = species
     self.bins = []
     for i in range(self.nbins):
       self.bins.append((float(i)*binwidth + binwidth/2.))
@@ -46,11 +48,6 @@ class Pairdist:
     self.nfac = sp.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
     self.gr_total = sp.zeros(self.nbins, dtype='float')
     self.gr = sp.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
-    self.spec_count = sp.zeros(self.nspec, dtype='int')
-    for i in range(self.nspec):
-      for j in range(self.nat):
-        if (frame.species[j] == i+1):
-          self.spec_count[i] += 1
 
   def update_rdf(self, frame):
     self.nframes += 1
@@ -71,7 +68,7 @@ class Pairdist:
           if self.nspec > 1:
             for ispec in range(self.nspec):
               for jspec in range(ispec, self.nspec):
-                if (ispec == frame.species[i] and jspec == frame.species[j]):
+                if (ispec == frame.species[i]-1 and jspec == frame.species[j]-1):
                   self.freq[ind, ispec, jspec] += 2
 
   def norm_rdf(self):
@@ -84,7 +81,7 @@ class Pairdist:
       if self.nspec > 1:
         for ispec in range(self.nspec):
           for jspec in range(self.nspec):
-            const3 = self.rho*self.spec_count[ispec]*self.spec_count[jspec]/self.nat
+            const3 = self.rho*self.spec_count[ispec+1]*self.spec_count[jspec+1]/self.nat
             self.nfac[i,ispec,jspec] = vshell*const3*self.nframes
     self.gr_total = self.freq_total.astype(float)/self.nfac_total
     if self.nspec > 1:
@@ -96,32 +93,79 @@ class Pairdist:
     self.coord_total = sp.zeros(self.nbins, dtype='float')
     self.coord_total[1:] = cumtrapz(gxrsq,self.bins)
     self.coord_total *= 4.*pi*self.rho
+    if self.nspec > 1:
+      self.coord = sp.zeros((self.nbins,self.nspec,self.nspec), dtype='float')
+      for ispec in range(self.nspec):
+        for jspec in range(ispec,self.nspec):
+          gxrsq = self.gr[:,ispec,jspec]*self.bins**2
+          self.coord[1:,ispec,jspec] = cumtrapz(gxrsq[:], self.bins)
+          self.coord *= 4.*pi*self.rho # check this
 
   def plot_gr(self):
     plt.figure("RDF")
     filename = "rdf.pdf"
-    fig3, axl = plt.subplots()
-    plt.grid(b=True, which='major', axis='both', color='gray', linestyle='-')
-    plt.grid(b=True, which='minor', axis='both', color='gray', linestyle='--')
+    if (self.nspec > 1):
+      fig3, (axl, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True)
+    else:
+      fig3, axl = plt.subplots()
+    axl.minorticks_on()
+    axl.grid(b=True, which='major', axis='x', color='gray', linestyle='-')
+    axl.grid(b=True, which='minor', axis='x', color='gray', linestyle='--')
+    axl.grid(b=True, which='major', axis='y', color='gray', linestyle='-')
+    # axl.grid(b=True, which='minor', axis='y', color='gray', linestyle='--')
     axr = axl.twinx()
-    axl.set_xlabel("r (A)")
-    axl.set_ylabel("g(r)")
-    axr.set_ylabel("Coordination")
+    axl.set_ylabel("g(r)", color='b')
+    axr.set_ylabel("Coordination", color='r')
     axl.plot(self.bins, self.gr_total,'b-', label="total", linewidth=1.0)
     axr.plot(self.bins, self.coord_total, 'r-', label="total", linewidth=1.0)
     plt.xlim((0,self.rcut))
-    plt.minorticks_on()
     axl.set_ylim(bottom=0)
-    axr.set_ylim(bottom=0)
+    axr.set_ylim(bottom=axl.get_ylim()[0], top=axl.get_ylim()[1]*10.0)
+    if self.nspec > 1:
+      ax2.minorticks_on()
+      ax2.grid(b=True, which='major', axis='x', color='gray', linestyle='-')
+      ax2.grid(b=True, which='minor', axis='x', color='gray', linestyle='--')
+      ax2.grid(b=True, which='major', axis='y', color='gray', linestyle='-')
+      # ax2.grid(b=True, which='minor', axis='y', color='gray', linestyle='--')
+      # ax2.set_ylim(auto=True)
+      for ispec in range(self.nspec):
+        for jspec in range(ispec,self.nspec):
+          pair = "{}-{}".format(self.species[ispec+1], self.species[jspec+1])
+          ax2.plot(self.bins, self.gr[:,ispec,jspec], label=pair, linewidth=1.0)
+      ax2.set_ylim(bottom=0)
+      ax2.set_xlabel("r (A)")
+      ax2.set_ylabel("partial g(r)")
+      ax2.legend(loc="upper right")
+    else:
+      axl.set_xlabel("r (A)")
     fig3.savefig(filename, bbox_inches='tight')
 
   def dump_gr(self):
-    rdf_fmt = "{0:>16.6f}{1:>16.6f}{2:>16.6f}\n"
+    header_bit = "{0:>16s}"
+    rdf_bit = "{0:>16.6f}"
+    header_fmt = "{0:>16s}{1:>16s}{2:>16f}"
+    rdf_fmt = "{0:>16.6f}{1:>16.6f}{2:>16.6f}"
     filename = "rdf.dat"
+
+    header = header_fmt.format("r (A)", "total", "coordination")
+    if self.nspec > 1:
+      for ispec in range(self.nspec):
+        for jspec in range(ispec,self.nspec):
+          pair = "{}-{}".format(self.species[ispec+1], self.species[jspec+1])
+          header += header_bit.format(pair)
+    header += "\n"
+
     with open(filename, 'w') as outfile:
+      outfile.write(header)
       for i in range(self.nbins):
-        outfile.write(rdf_fmt.format(self.bins[i], self.gr_total[i],
-                      self.coord_total[i]))
+        rdf_line = rdf_fmt.format(self.bins[i], self.gr_total[i],
+                                  self.coord_total[i])
+        if self.nspec > 1:
+          for ispec in range(self.nsepc):
+            for jspec in range(ispec,self.nspec):
+              rdf_line += rdf_bit.format(gr[i,ispec,jspec])
+        rdf_line += "\n"
+            
 
 class MSER:
   """Marginal Standard Error Rule heuristic 
@@ -155,7 +199,7 @@ class MSER:
     plt.xlabel("step")
     plt.ylabel("MSER ({})".format(self.propname))
     plt.plot(steps[:-200], self.mser[:-200], 'k-')
-    mser_min = traj.mser_min()
+    mser_min = self.mser_min()
     lab = "Minimum at step {}".format(mser_min)
     plt.axvline(x=mser_min, label=lab)
     plt.legend(loc="upper left")
