@@ -467,6 +467,8 @@ contains
 !!    Created variable fire_N_below_thresh to set number of consecutive steps below threshold
 !!   2018/01/22 tsuyoshi (with dave)
 !!    Changes to use new atom update routines
+!!   2018/04/20 nakata
+!!    Changed to initialise n_stop_qMD
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -539,6 +541,7 @@ contains
     integer :: step_qMD, n_stop_qMD, fire_N, fire_N2
     real(double) :: fire_step_max, fire_P0, fire_alpha
 
+    n_stop_qMD = 0
     allocate(velocity(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating velocity in md_run: ", &
