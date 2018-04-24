@@ -594,7 +594,6 @@ contains
     dE = zero
     length = 3*ni_in_cell
 
-    ! thermostat/barostat initialisation
     call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
 
     ! initialisation/contintuation when we're using Berendsen equilibration
@@ -633,8 +632,7 @@ contains
     if (flag_XLBOMD .AND. flag_dissipation .AND. .NOT.flag_MDold) &
       call Ready_XLBOMD()
 
-
-    ! Initialise thermostat/barostat accordint to md_ensemble
+    ! Thermostat/barostat initialisation
     call init_ensemble(baro, thermo, mdl, md_ndof, nequil)
 
     ! Get converted 1-D array for flag_atom_move
@@ -672,7 +670,6 @@ contains
       end if
     end if
 
-    !ORI do iter = 1, MDn_steps
     do iter = i_first, i_last ! Main MD loop
        mdl%step = iter
        if (inode==ionode) &
@@ -680,7 +677,7 @@ contains
 
        call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
 
-       ! thermostat/barostat
+       ! thermostat/barostat (MTTK splitting of Liouvillian)
        call integrate_pt_mttk(baro, thermo, mdl, ion_velocity)
 
        !! For Debuggging !!
@@ -730,7 +727,6 @@ contains
        !2018.Jan.4 TM 
        !   We need to update flag_movable, since the order of x_atom_cell (or id_glob) 
        !   may change after the atomic positions are updated.
-       !
        call check_move_atoms(flag_movable)
        
        !! For Debuggging !!
@@ -768,11 +764,7 @@ contains
        !!call cq_abort(" STOP FOR DEBUGGING")
        !! For Debuggging !!
 
-       ! Constrain velocity
-       if (flag_RigidBonds) call correct_atomic_velocity(ion_velocity)
-       !%%! END of Evolve atoms
-
-       ! thermostat/barostat
+       ! thermostat/barostat (MTTK splitting of Liouvillian)
        call integrate_pt_mttk(baro, thermo, mdl, ion_velocity, second_call)
 
        if (flag_thermoDebug) then
@@ -782,8 +774,10 @@ contains
          call baro%dump_baro_state(iter, 'barostat.dat')
        end if
 
-       ! Let's analyse
+       ! Constrain velocity
+       if (flag_RigidBonds) call correct_atomic_velocity(ion_velocity)
        if (flag_FixCOM) call zero_COM_velocity(ion_velocity)
+       !%%! END of Evolve atoms
 
        ! Print out energy
        mdl%dft_total_energy = energy1
@@ -793,8 +787,8 @@ contains
                iter, mdl%ion_kinetic_energy, mdl%dft_total_energy, &
                mdl%ion_kinetic_energy+mdl%dft_total_energy
          write(io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
-               mdl%ion_kinetic_energy / (three / two * ni_in_cell) &
-               / fac_Kelvin2Hartree
+               mdl%ion_kinetic_energy / (three / two * ni_in_cell) / &
+               fac_Kelvin2Hartree
        end if
 
        ! Analyse forces
