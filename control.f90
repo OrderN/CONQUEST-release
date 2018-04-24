@@ -480,6 +480,8 @@ contains
 !!    Created variable fire_N_below_thresh to set number of consecutive steps below threshold
 !!   2018/01/22 tsuyoshi (with dave)
 !!    Changes to use new atom update routines
+!!   2018/04/24 zamaan
+!!    Initial NPT implementation (isotropic fluctuations only)
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -499,7 +501,6 @@ contains
                               flag_move_atom,rcellx, rcelly, rcellz,  &
                               flag_Multisite,flag_SFcoeffReuse, atom_coord
     use group_module,   only: parts
-    use primary_module, only: bundle
     use minimise,       only: get_E_and_F
     use move_atoms,     only: velocityVerlet, updateIndices,           &
                               init_velocity,update_H,check_move_atoms, &
@@ -507,8 +508,7 @@ contains
                               zero_COM_velocity,                       &
                               calculate_kinetic_energy,                &
                               fac_Kelvin2Hartree
-    use GenComms,       only: gsum, myid, my_barrier, inode, ionode,  &
-                              gcopy
+    use GenComms,       only: gsum, my_barrier, inode, ionode, gcopy
     use GenBlas,        only: dot
     use force_module,   only: tot_force, stress
     use io_module,      only: write_positions, read_velocity,         &
@@ -530,12 +530,10 @@ contains
     use cover_module,   only: BCS_parts, make_cs, deallocate_cs, make_iprim, &
                               send_ncover
     use md_model,       only: type_md_model
-    use md_control,     only: type_thermostat, type_barostat, md_tau_T, &
-                              md_tau_P, md_n_nhc, md_n_ys, md_n_mts, &
-                              md_nhc_mass, ion_velocity, lattice_vec, &
-                              md_thermo_type, md_baro_type, md_target_press, &
-                              flag_write_xsf, md_cell_nhc, md_ndof_ions, &
-                              md_berendsen_equil
+    use md_control,     only: type_thermostat, type_barostat, md_n_nhc, &
+                              md_n_ys, md_n_mts, ion_velocity, lattice_vec, &
+                              md_baro_type, md_target_press, flag_write_xsf, &
+                              md_ndof_ions, md_berendsen_equil
 
     use atoms,          only: distribute_atoms,deallocate_distribute_atom
     use global_module,  only: atom_coord_diff, iprint_MD, area_moveatoms
@@ -548,14 +546,11 @@ contains
     real(double) :: total_energy
     
     ! Local variables
-    real(double), allocatable, target, dimension(:,:) :: velocity
-    integer       ::  iter, i, j, k, length, stat, i_first, i_last, &
-         nfile, symm, md_ndof
-    integer       :: lun, ios, md_steps ! SA 150204; 150213 md_steps: counter for MD steps
+    integer       ::  iter, i, j, k, length, stat, i_first, i_last, md_ndof
     integer       :: nequil ! number of Berendsen equilibration steps - zamaan
-    real(double)  :: temp, energy1, energy0, dE, max, g0, rcut_BCS
+    real(double)  :: energy1, energy0, dE, max, g0
     character(50) :: file_velocity='velocity.dat'
-    logical       :: done,second_call,append_coords_bak
+    logical       :: done,second_call
     logical,allocatable,dimension(:) :: flag_movable
 
     type(matrix_store_global) :: InfoGlob
@@ -568,9 +563,9 @@ contains
     ! FIRE parameters
     integer :: step_qMD, n_stop_qMD, fire_N, fire_N2
     real(double) :: fire_step_max, fire_P0, fire_alpha
-
     integer :: iter_MD
-    ! model
+
+    ! Storage for MD data
     type(type_md_model)           :: mdl
 
     ! thermostat, barostat
@@ -622,69 +617,25 @@ contains
       end do
     end do
 
-    if (myid == 0 .and. iprint_gen > 0) write(io_lun, 2) MDn_steps
+    if (inode==ionode .and. iprint_gen > 0) &
+      write(io_lun,'(4x,"Welcome to md_run. Doing ",i4," steps")') &
+            MDn_steps
+
     ! Find energy and forces
     if (flag_fire_qMD) then
        call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     else
        call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
     end if
+    mdl%dft_total_energy = energy0
 
     ! XL-BOMD
     if (flag_XLBOMD .AND. flag_dissipation .AND. .NOT.flag_MDold) &
       call Ready_XLBOMD()
 
+
     ! Initialise thermostat/barostat accordint to md_ensemble
-    select case(md_ensemble)
-    case('nve')
-      ! Just for computing temperature
-      call thermo%init_thermo_none(md_ndof, mdl%ion_kinetic_energy)
-      call baro%init_baro('None', zero, md_ndof, stress, ion_velocity, &
-                          mdl%ion_kinetic_energy) ! to get the pressure
-    case('nvt')
-      call baro%init_baro('None', zero, md_ndof, stress, ion_velocity, &
-                          mdl%ion_kinetic_energy) ! to get the pressure
-      select case(md_thermo_type)
-      case('nhc')
-        call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
-                             md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
-        call thermo%get_nhc_energy
-      case('berendsen')
-        call thermo%init_berendsen_thermo(MDtimestep, temp_ion, md_ndof, &
-                                          md_tau_T, mdl%ion_kinetic_energy)
-      case default
-        call cq_abort("Unknown thermostat type")
-      end select
-    case('npt')
-      select case(md_baro_type)
-      case('iso-mttk')
-        if (nequil > 0) then ! Equilibrate using Berendsen?
-          if (inode == ionode) then
-            write (io_lun, '(4x,"Equilibrating using Berendsen baro/thermostat &
-                             for ",i8," steps")') nequil
-          end if
-          call thermo%init_berendsen_thermo(MDtimestep, temp_ion, md_ndof, &
-                                            md_tau_T, mdl%ion_kinetic_energy)
-          call baro%init_baro('berendsen', md_target_press, md_ndof, stress, &
-                              ion_velocity, mdl%ion_kinetic_energy)
-        else
-          call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
-                               md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
-          call thermo%get_nhc_energy
-          call baro%init_baro('iso-mttk', md_target_press, md_ndof, stress, &
-                              ion_velocity, mdl%ion_kinetic_energy)
-          call baro%get_box_ke
-        end if
-      case('mttk')
-      case('berendsen')
-        call thermo%init_berendsen_thermo(MDtimestep, temp_ion, md_ndof, &
-                                          md_tau_T, mdl%ion_kinetic_energy)
-        call baro%init_baro('berendsen', md_target_press, md_ndof, stress, &
-                            ion_velocity, mdl%ion_kinetic_energy)
-      case default
-        call cq_abort("Unknown barostat type")
-      end select
-    end select
+    call init_ensemble(baro, thermo, mdl, md_ndof, nequil)
 
     ! Get converted 1-D array for flag_atom_move
     allocate (flag_movable(3*ni_in_cell), STAT=stat)
@@ -704,21 +655,12 @@ contains
     endif
     call dump_pos_and_matrices(index=0,MDstep=i_first,velocity=ion_velocity)
 
-    mdl%dft_total_energy = energy0
-
     if (flag_fire_qMD) then
        step_qMD = i_first ! SA 20150201
        done = .false.     ! SA 20150201
        ! reading FIRE parameters of the last run
        call read_fire(fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha)
     endif
-
-    ! Initialise the model
-    lattice_vec = zero
-    lattice_vec(1,1) = rcellx
-    lattice_vec(2,2) = rcelly
-    lattice_vec(3,3) = rcellz
-    call mdl%init_model(md_ensemble, thermo, baro)
 
     if (.not. flag_MDcontinue) then
       if (flag_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
@@ -731,39 +673,16 @@ contains
     end if
 
     !ORI do iter = 1, MDn_steps
-    do iter = i_first, i_last
+    do iter = i_first, i_last ! Main MD loop
        mdl%step = iter
-       if (myid == 0) &
-            write (io_lun, fmt='(4x,"MD run, iteration ",i5)') iter
+       if (inode==ionode) &
+            write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
 
        call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
 
        ! thermostat/barostat
-       select case(md_ensemble)
-       case('nvt')
-         select case(md_thermo_type)
-         case('nhc')
-           call thermo%propagate_nvt_nhc(ion_velocity, mdl%ion_kinetic_energy)
-         case('berendsen')
-           call thermo%get_berendsen_thermo_sf(MDtimestep)
-         end select
-       case('npt')
-          select case(md_baro_type)
-          case('berendsen')
-            call thermo%get_berendsen_thermo_sf(MDtimestep)
-            call baro%get_berendsen_baro_sf(MDtimestep)
-!            call baro%propagate_berendsen(flag_movable)
-          case('iso-mttk')
-            if (nequil  > 0) then
-              call thermo%get_berendsen_thermo_sf(MDtimestep)
-              call baro%get_berendsen_baro_sf(MDtimestep)
-            else
-              call baro%propagate_npt_mttk(thermo, mdl%ion_kinetic_energy, &
-                                           ion_velocity)
-            end if
-          case('mttk')
-          end select
-       end select
+       call integrate_pt_mttk(baro, thermo, mdl, ion_velocity)
+
        !! For Debuggging !!
        !     call dump_pos_and_matrices(index=1,MDstep=i_first)
        !! For Debuggging !!
@@ -824,7 +743,7 @@ contains
        else
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .false.,iter)
           if (inode == ionode) then
-            write (io_lun,fmt='(/4x,"Kinetic stress    ", 3f15.8,a3)') &
+            write(io_lun,fmt='(/4x,"Kinetic stress    ", 3f15.8,a3)') &
               baro%ke_stress(1,1), baro%ke_stress(2,2), baro%ke_stress(3,3), &
               en_units(energy_units)
           end if
@@ -854,29 +773,8 @@ contains
        !%%! END of Evolve atoms
 
        ! thermostat/barostat
-       select case(md_ensemble)
-       case('nvt')
-         select case(md_thermo_type)
-         case('nhc')
-           call thermo%propagate_nvt_nhc(ion_velocity, mdl%ion_kinetic_energy)
-           call thermo%get_nhc_energy
-         case('berendsen')
-           call thermo%berendsen_v_rescale(ion_velocity)
-         end select
-       case('npt')
-         select case(md_baro_type)
-         case('berendsen')
-           call thermo%berendsen_v_rescale(ion_velocity)
-         case('iso-mttk')
-            if (nequil > 0) then
-              call thermo%berendsen_v_rescale(ion_velocity)
-            else
-              call baro%propagate_npt_mttk(thermo, mdl%ion_kinetic_energy, &
-                                           ion_velocity)
-            end if
-         case('mttk')
-         end select
-       end select
+       call integrate_pt_mttk(baro, thermo, mdl, ion_velocity, second_call)
+
        if (flag_thermoDebug) then
          call thermo%dump_thermo_state(iter,'thermostat.dat')
        end if
@@ -889,18 +787,15 @@ contains
 
        ! Print out energy
        mdl%dft_total_energy = energy1
-       if (myid == 0) &
-         write (io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
-                mdl%ion_kinetic_energy / (three / two * ni_in_cell) / fac_Kelvin2Hartree
-       if (myid == 0) write (io_lun, 8) iter, mdl%ion_kinetic_energy, &
-                                  mdl%dft_total_energy, &
-                                  mdl%ion_kinetic_energy+mdl%dft_total_energy
-       ! Output positions
-       if (myid == 0 .and. iprint_gen > 1) then
-          do i = 1, ni_in_cell
-             write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
-          enddo
-       endif
+       if (inode==ionode) then
+         write(io_lun,'(4x,"***MD step ",i6," KE: ",f18.8," &
+                        IntEnergy: ",f20.8," TotalEnergy: ",f20.8)') &
+               iter, mdl%ion_kinetic_energy, mdl%dft_total_energy, &
+               mdl%ion_kinetic_energy+mdl%dft_total_energy
+         write(io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
+               mdl%ion_kinetic_energy / (three / two * ni_in_cell) &
+               / fac_Kelvin2Hartree
+       end if
 
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
@@ -910,56 +805,40 @@ contains
              if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
           end do
        end do
+
        ! Output and energy changes
        dE = energy0 - energy1
-       ! Compute the conserved quantity
-       call mdl%get_cons_qty
-
-       if(myid==0) then
-         write (io_lun, '(6x,a)') "Components of conserved quantity"
-         write (io_lun, 9) mdl%ion_kinetic_energy
-         write (io_lun, 10) mdl%dft_total_energy
-         select case(md_ensemble)
-         case('nvt')
-           select case(md_thermo_type)
-           case('nhc')
-             call thermo%get_nhc_energy
-             write(io_lun, 11) mdl%nhc_energy
-           end select
-         case('npt')
-           select case(md_baro_type)
-           case('iso-mttk')
-             if (nequil < 1) then
-               call thermo%get_nhc_energy
-               call baro%get_box_ke
-               write(io_lun, 11) mdl%nhc_energy
-               write(io_lun, 12) mdl%box_kinetic_energy
-               write(io_lun, 13) mdl%PV
-             end if
-           end select
-         end select
-         write (io_lun, 7) mdl%h_prime
-         write (io_lun, 6) max
-         write (io_lun, 4) dE
-         write (io_lun, 5) sqrt(g0/ni_in_cell)
-       end if
        energy0 = energy1
        energy1 = abs(dE)
-!       call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
-       if (myid == 0 .and. mod(iter, MDfreq) == 0) then
+       if(inode==ionode) then
+         write (io_lun,'(4x,"Maximum force component : ",f15.8)') max
+         write (io_lun,'(4x,"Force Residual          : ",f15.8)') &
+                sqrt(g0/ni_in_cell)
+         write (io_lun,'(4x,"Energy change           : ",f15.8)') dE
+       end if
+
+       ! Compute and print the conserved quantity and its components
+       if (mdl%thermo_type == 'nhc') call thermo%get_nhc_energy
+       if (mdl%baro_type == 'iso-mttk') call baro%get_box_ke
+       call mdl%get_cons_qty
+       call mdl%print_md_energy()
+       call mdl%dump_stats("Stats")
+
+       ! Output positions
+       if (inode==ionode .and. iprint_gen > 1) then
+          do i = 1, ni_in_cell
+            write(io_lun,'(4x,"Atom ",i4," Position ",3f15.8)') &
+                  i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+          enddo
+       endif
+       if (inode == ionode .and. mod(iter, MDfreq) == 0) then
          call write_positions(iter, parts)
          call mdl%dump_frame("Frames")
        end if
+       if (flag_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
        call my_barrier
        !to check IO of velocity files
        call write_velocity(ion_velocity, file_velocity)
-
-       ! coord_next.dat is meant to be consistent with the electronic matrices,
-       ! so we need a separate checkpoint for restarting
-       append_coords_bak = append_coords
-       append_coords = .false.
-       call write_atomic_positions("cq.position", trim(pdb_template))
-       append_coords = append_coords_bak
 
        call baro%get_pressure
        call thermo%get_temperature
@@ -975,24 +854,17 @@ contains
          end if
        end select
 
-       if (flag_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
-       call mdl%get_cons_qty
-       call mdl%dump_stats("Stats")
        if (nequil > 0) then
         nequil = nequil - 1
         if (nequil == 0) then
-          write (io_lun, '(4x,a)') "Berendsen equilibration finished, starting &
-                                    extended Lagrangian dynamics."
+          write (io_lun, '(4x,a)') "Berendsen equilibration finished, &
+                                    starting extended system dynamics."
           call thermo%init_nhc(MDtimestep, thermo%T_int, md_ndof, md_n_nhc, &
                                md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
-          call thermo%get_nhc_energy
           call baro%init_baro('iso-mttk', md_target_press, md_ndof, stress, &
                               ion_velocity, mdl%ion_kinetic_energy)
-          call baro%get_box_ke
         end if
       end if
-
-       !to check IO of velocity files
 
        call check_stop(done, iter)
        if (flag_fire_qMD) then
@@ -1002,8 +874,9 @@ contains
              end if
              n_stop_qMD = n_stop_qMD + 1
              step_qMD = iter
-             if (myid == 0) then
-                write (io_lun, fmt='(4x,i4,4x,"Maximum force below threshold: ",f12.6)') n_stop_qMD, max
+             if (inode==ionode) then
+                write(io_lun,fmt='(4x,i4,4x,"Maximum force below &
+                      threshold: ",f12.6)') n_stop_qMD, max
              end if
              if (n_stop_qMD > fire_N_below_thresh) then
                 done = .true.
@@ -1012,31 +885,176 @@ contains
        end if
 
        if (done) exit
-
-    end do
+    end do ! Main MD loop
 
     deallocate(ion_velocity, STAT=stat)
     if (stat /= 0) call cq_abort("Error deallocating velocity in md_run: ", &
                                  ni_in_cell, stat)
     call reg_dealloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
     return
-1   format(4x,'Atom ',i4,' Position ',3f15.8)
-2   format(4x,'Welcome to md_run. Doing ',i4,' steps')
-3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
-4   format(4x,'Energy change           : ',f15.8)
-5   format(4x,'Force Residual          : ',f15.8)
-6   format(4x,'Maximum force component : ',f15.8)
-7   format(4x,'Conserved qty h_prime   : ',f15.8)
-8   format(4x,'*** MD step ',i4,' KE: ',f18.8,&
-           ' IntEnergy',f20.8,' TotalEnergy',f20.8)
-9   format(6x,'Potential energy        : ',f15.8)
-10  format(6x,'Kinetic energy          : ',f15.8)
-11  format(6x,'Nose-Hoover energy      : ',f15.8)
-12  format(6x,'Box kinetic energy      : ',f15.8)
-13  format(6x,'PV                      : ',f15.8)
   end subroutine md_run
   !!***
 
+  !!****m* control/init_ensemble *
+  !!  NAME
+  !!   integrate_ensemble
+  !!  PURPOSE
+  !!   Initialise all ensemble-related MD variables
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/04/32  16:52
+  !!  SOURCE
+  !!  
+  subroutine init_ensemble(baro, thermo, mdl, md_ndof, nequil)
+
+    use numbers
+    use force_module,   only: stress
+    use md_model,       only: type_md_model
+    use GenComms,       only: inode, ionode
+    use global_module,  only: rcellx, rcelly, rcellz, temp_ion
+    use md_control,     only: type_thermostat, type_barostat, md_tau_T, &
+                              md_tau_P, md_n_nhc, md_n_ys, md_n_mts, &
+                              md_nhc_mass, ion_velocity, lattice_vec, &
+                              md_thermo_type, md_baro_type, md_target_press, &
+                              md_ndof_ions
+
+    ! passed variables
+    type(type_barostat), intent(inout)    :: baro
+    type(type_thermostat), intent(inout)  :: thermo
+    type(type_md_model), intent(inout)    :: mdl
+    integer, intent(in)                   :: md_ndof
+    integer, intent(in)                   :: nequil
+
+    ! Initialise the model
+    lattice_vec = zero
+    lattice_vec(1,1) = rcellx
+    lattice_vec(2,2) = rcelly
+    lattice_vec(3,3) = rcellz
+    call mdl%init_model(md_ensemble, thermo, baro)
+
+    select case(md_ensemble)
+    case('nve')
+      ! Just for computing temperature
+      call thermo%init_thermo_none(md_ndof, mdl%ion_kinetic_energy)
+      call baro%init_baro('None', zero, md_ndof, stress, ion_velocity, &
+                          mdl%ion_kinetic_energy) ! to get the pressure
+    case('nvt')
+      call baro%init_baro('None', zero, md_ndof, stress, ion_velocity, &
+                          mdl%ion_kinetic_energy) ! to get the pressure
+      select case(md_thermo_type)
+      case('nhc')
+        call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
+                             md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
+        call thermo%get_nhc_energy
+      case('berendsen')
+        call thermo%init_berendsen_thermo(MDtimestep, temp_ion, md_ndof, &
+                                          md_tau_T, mdl%ion_kinetic_energy)
+      case default
+        call cq_abort("Unknown thermostat type")
+      end select
+    case('npt')
+      select case(md_baro_type)
+      case('iso-mttk')
+        if (nequil > 0) then ! Equilibrate using Berendsen?
+          if (inode == ionode) then
+            write (io_lun, '(4x,"Equilibrating using Berendsen &
+                             baro/thermostat for ",i8," steps")') nequil
+          end if
+          call thermo%init_berendsen_thermo(MDtimestep, temp_ion, md_ndof, &
+                                            md_tau_T, mdl%ion_kinetic_energy)
+          call baro%init_baro('berendsen', md_target_press, md_ndof, stress, &
+                              ion_velocity, mdl%ion_kinetic_energy)
+        else
+          call thermo%init_nhc(MDtimestep, temp_ion, md_ndof, md_n_nhc, &
+                               md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
+          call thermo%get_nhc_energy
+          call baro%init_baro('iso-mttk', md_target_press, md_ndof, stress, &
+                              ion_velocity, mdl%ion_kinetic_energy)
+          call baro%get_box_ke
+        end if
+      case('ortho-mttk')
+      case('mttk')
+      case('berendsen')
+        call thermo%init_berendsen_thermo(MDtimestep, temp_ion, md_ndof, &
+                                          md_tau_T, mdl%ion_kinetic_energy)
+        call baro%init_baro('berendsen', md_target_press, md_ndof, stress, &
+                            ion_velocity, mdl%ion_kinetic_energy)
+      case default
+        call cq_abort("Unknown barostat type")
+      end select
+    end select
+  end subroutine init_ensemble
+
+  !!****m* control/integrate_pt_mttk *
+  !!  NAME
+  !!   integrate_pt
+  !!  PURPOSE
+  !!   Integrate the thermostat and barostat using the
+  !!    Martyna/Tobias/Tuckerman/Klein splitting of the Liouvillian
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/04/23 11:49
+  !!  SOURCE
+  !!  
+  subroutine integrate_pt_mttk(baro, thermo, mdl, velocity, second_call)
+
+    use md_model,         only: type_md_model
+    use md_control,       only: type_thermostat, type_barostat, &
+                                md_thermo_type, md_baro_type
+
+    ! passed variables
+    type(type_barostat), intent(inout)          :: baro
+    type(type_thermostat), intent(inout)        :: thermo
+    type(type_md_model), intent(inout)          :: mdl
+    real(double), dimension(:,:), intent(inout) :: velocity
+    logical, optional                           :: second_call
+
+    ! local variables
+  
+    select case(md_ensemble)
+    case('nvt')
+      select case(md_thermo_type)
+      case('nhc')
+        call thermo%propagate_nvt_nhc(velocity, mdl%ion_kinetic_energy)
+        if (second_call) call thermo%get_nhc_energy
+      case('berendsen')
+        if (second_call) then
+          call thermo%berendsen_v_rescale(velocity)
+        else
+          call thermo%get_berendsen_thermo_sf(MDtimestep)
+        end if
+     end select
+   case('npt')
+      select case(md_baro_type)
+      case('berendsen')
+        if (second_call) then
+          call thermo%berendsen_v_rescale(velocity)
+          ! Berendsen barostat propagation occurs after second
+          ! vVerlet_v_dthalf step
+        else
+          call thermo%get_berendsen_thermo_sf(MDtimestep)
+          call baro%get_berendsen_baro_sf(MDtimestep)
+        end if
+!            call baro%propagate_berendsen(flag_movable)
+      case('iso-mttk')
+        if (mdl%nequil  > 0) then
+          if (second_call) then
+            call thermo%berendsen_v_rescale(velocity)
+          else
+            call thermo%get_berendsen_thermo_sf(MDtimestep)
+            call baro%get_berendsen_baro_sf(MDtimestep)
+          end if
+        else
+          call baro%propagate_npt_mttk(thermo, mdl%ion_kinetic_energy, &
+                                       velocity)
+        end if
+      case('ortho-mttk')
+      case('mttk')
+      end select
+   end select
+end subroutine integrate_pt_mttk
 
   !!****f* control/dummy_run *
   !! PURPOSE

@@ -246,7 +246,7 @@ contains
     if (.not. flag_MDcontinue) then
       call read_atomic_positions(trim(atom_coord_file))
     else
-      call read_atomic_positions('cq.position')
+      call read_atomic_positions('coord_next.dat')
     end if
     if(iprint_init>4) call print_process_info()
     ! By now, we'll have unit cell sizes and grid cutoff
@@ -631,6 +631,9 @@ contains
   !!    Set some flags to true when restarting MD (loading matrices)
   !!   2018/04/12 22:00 nakata
   !!    Bug fix: turn on flag_LFD_MD_UseAtomicDensity only when flag_SFcoeffReuse is .false.
+  !!   2018/04/24 zamaan
+  !!    Changed AtomMove.FixCentreOfMass default to .true. except when running
+  !!    FIRE qMD. minE.GlobalTolerance now defaults to .false. for MD.
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1343,7 +1346,11 @@ contains
 !!$ 
        !blip_width = support_grid_spacing *
        !             fdf_double('blip_width_over_support_grid_spacing',four)
-       flag_global_tolerance = fdf_boolean('minE.GlobalTolerance',     .true. )
+       if (leqi(runtype,'md')) then
+         flag_global_tolerance = fdf_boolean('minE.GlobalTolerance', .true.)
+       else
+         flag_global_tolerance = fdf_boolean('minE.GlobalTolerance', .false.)
+       end if
        L_tolerance           = fdf_double ('minE.LTolerance',    1.0e-7_double)
        sc_tolerance          = fdf_double ('minE.SCTolerance',   1.0e-6_double)
        maxpulayDMM           = fdf_integer('DM.MaxPulay',        5            )
@@ -1579,6 +1586,15 @@ contains
        flag_check_DFT     = fdf_boolean('General.CheckDFT',.false.)
        flag_quench_MD     = fdf_boolean('AtomMove.QuenchMD',.false.)
        flag_fire_qMD = fdf_boolean('AtomMove.FIRE',.false.)
+       ! If we're doing MD, then the centre of mass should generally be fixed,
+       ! except for FIRE quenched MD
+       if (leqi(runtype, 'md')) then
+          if (flag_fire_qMD) then
+            flag_FixCOM = fdf_boolean('AtomMove.FixCentreOfMass', .false.)
+          else
+            flag_FixCOM = fdf_boolean('AtomMove.FixCentreOfMass', .true.)
+          end if
+       end if
        if(flag_fire_qMD) then
           fire_N_min         = fdf_integer('AtomMove.FireNMin',5)
           fire_N_max         = fdf_integer('AtomMove.FireNMaxSlowQMD',10)
@@ -1863,7 +1879,6 @@ contains
        flag_TmatrixReuse = fdf_boolean('AtomMove.ReuseInvS',.false.)
        flag_SkipEarlyDM  = fdf_boolean('AtomMove.SkipEarlyDM',.false.)
        McWFreq           = fdf_integer('AtomMove.McWeenyFreq',0)
-       flag_FixCOM       = fdf_boolean('AtomMove.FixCentreOfMass', .true.)
        ! XL-BOMD
        flag_XLBOMD       = fdf_boolean('AtomMove.ExtendedLagrangian',.false.)
 

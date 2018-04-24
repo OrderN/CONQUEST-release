@@ -36,7 +36,7 @@ module md_control
                               temp_ion, flag_MDcontinue, flag_MDdebug
   use move_atoms,       only: fac_Kelvin2Hartree
   use species_module,   only: species, mass
-  use GenComms,         only: inode, ionode
+  use GenComms,         only: inode, ionode, cq_abort
 
   implicit none
 
@@ -252,7 +252,6 @@ contains
   !!  
   subroutine init_nhc(th, dt, T_ext, ndof, n_nhc, n_ys, n_mts, ke_ions)
 
-    use GenComms,         only: cq_abort
     use memory_module,    only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use global_module,    only: area_moveatoms
 
@@ -372,7 +371,6 @@ contains
   !!  
   subroutine init_ys(th, n_ys)
 
-    use GenComms,         only: cq_abort
     use memory_module,    only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use global_module,    only: area_moveatoms
 
@@ -1017,7 +1015,6 @@ contains
   subroutine init_baro(baro, baro_type, P_ext, ndof, stress, v, ke_ions)
 
     use input_module,     only: leqi
-    use GenComms,         only: cq_abort
     use global_module,    only: rcellx, rcelly, rcellz
 
     ! passed variables
@@ -1083,6 +1080,8 @@ contains
       end if
       baro%odnf = one + three/baro%ndof
       baro%tau_P = md_tau_P
+    case('ortho-mttk')
+    case('mttk')
     case default
       call cq_abort("Invalid barostat type")
     end select
@@ -1321,6 +1320,8 @@ contains
     select case(baro%baro_type)
     case('iso-mttk')
       baro%ke_box = half*baro%box_mass*baro%v_eps**2
+    case('ortho-mttk')
+    case('mttk')
     end select
 
   end subroutine get_box_ke
@@ -1558,6 +1559,8 @@ contains
           atom_coord_diff(3,gatom) = z_atom_cell(i) - z_old
         end if
       end do
+    case('ortho-mttk')
+    case('mttk')
     end select
 
     if (inode==ionode .and. flag_MDdebug) then
@@ -1599,6 +1602,8 @@ contains
       lat_sfac = (v_new/v_old)**third
       baro%mu = lat_sfac
       baro%lat = baro%lat*lat_sfac
+    case('ortho-mttk')
+    case('mttk')
     end select
 
     if (inode==ionode .and. flag_MDdebug) &
@@ -1695,6 +1700,8 @@ contains
           call baro%propagate_v_eps_lin(th%dt_ys(i_ys), quarter)
           call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, &
                                         v_eta_couple)
+        case('ortho-mttk')
+        case('mttk')
         end select
 
         ! update ionic velocities, scale ion kinetic energy
@@ -1705,6 +1712,8 @@ contains
         select case(baro%baro_type)
         case('iso-mttk')
           call baro%update_G_eps
+        case('ortho-mttk')
+        case('mttk')
         end select
         call baro%get_box_ke
         ! update the thermostat "positions" eta
@@ -1725,6 +1734,8 @@ contains
           call baro%propagate_v_eps_lin(th%dt_ys(i_ys), quarter)
           call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, &
                                         v_eta_couple)
+        case('ortho-mttk')
+        case('mttk')
         end select
 
         call baro%get_box_ke
@@ -1800,6 +1811,8 @@ contains
         write(lun,'("G_eps   ",f12.6)') baro%G_eps
         write(lun,'("ke_box  ",f12.6)') baro%ke_box
         write(lun,'("mu      ",f12.6)') baro%mu
+      case('ortho-mttk')
+      case('mttk')
       case('berendsen')
         write(lun,'("mu      ",f12.6)') baro%mu
       end select
@@ -1975,6 +1988,8 @@ contains
       read(lun,*) name, baro%eps
       read(lun,*) name, baro%v_eps
       read(lun,*) name, baro%G_eps
+    case('ortho-mttk')
+    case('mttk')
     end select
     call io_close(lun)
 

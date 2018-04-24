@@ -99,6 +99,7 @@ module md_model
 
       procedure, public   :: init_model
       procedure, public   :: get_cons_qty
+      procedure, public   :: print_md_energy
       procedure, public   :: dump_stats
       procedure, public   :: dump_frame
 
@@ -215,6 +216,55 @@ contains
 
   end subroutine get_cons_qty
   !!***
+
+  !!****m* md_model/print_md_energy *
+  !!  NAME
+  !!   print_md_energy 
+  !!  PURPOSE
+  !!   Print MD output at the end of each ionic step
+  !!  AUTHOR
+  !!   Zamaan Raza 
+  !!  SOURCE
+  !!  
+  subroutine print_md_energy(mdl)
+
+    use GenComms,         only: inode, ionode
+
+    ! passed variables
+    class(type_md_model), intent(inout)   :: mdl
+
+    ! local variables
+
+    if (inode==ionode) then
+      write (io_lun, '(4x,"Conserved quantity H''  : ",f15.8)') &
+        mdl%h_prime
+      write (io_lun, '(4x,a)') "Components of conserved quantity"
+      write (io_lun, '(4x,"Kinetic energy          : ",f15.8)') &
+        mdl%ion_kinetic_energy
+      write (io_lun, '(4x,"Potential energy        : ",f15.8)') &
+        mdl%dft_total_energy
+      select case(mdl%ensemble)
+      case('nvt')
+        select case(mdl%thermo_type)
+        case('nhc')
+          write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
+            mdl%nhc_energy
+        end select
+      case('npt')
+        select case(mdl%baro_type)
+        case('iso-mttk')
+          if (mdl%nequil < 1) then
+            write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
+              mdl%nhc_energy
+            write (io_lun, '(4x,"Box kinetic energy      : ",f15.8)') &
+              mdl%box_kinetic_energy
+            write (io_lun, '(4x,"PV                      : ",f15.8)') &
+              mdl%PV
+          end if
+        end select
+      end select
+    end if
+  end subroutine print_md_energy
 
   !!****m* md_model/dump_stats *
   !!  NAME

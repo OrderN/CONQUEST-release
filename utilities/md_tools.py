@@ -127,7 +127,6 @@ class Pairdist:
       ax2.grid(b=True, which='minor', axis='x', color='gray', linestyle='--')
       ax2.grid(b=True, which='major', axis='y', color='gray', linestyle='-')
       # ax2.grid(b=True, which='minor', axis='y', color='gray', linestyle='--')
-      # ax2.set_ylim(auto=True)
       for ispec in range(self.nspec):
         for jspec in range(ispec,self.nspec):
           pair = "{}-{}".format(self.species[ispec+1], self.species[jspec+1])
