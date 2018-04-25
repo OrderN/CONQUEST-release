@@ -550,7 +550,7 @@ contains
     integer       :: nequil ! number of Berendsen equilibration steps - zamaan
     real(double)  :: energy1, energy0, dE, max, g0
     character(50) :: file_velocity='velocity.dat'
-    logical       :: done,second_call
+    logical       :: done,second_call,append_coords_bak
     logical,allocatable,dimension(:) :: flag_movable
 
     type(matrix_store_global) :: InfoGlob
@@ -834,6 +834,12 @@ contains
        !to check IO of velocity files
        call write_velocity(ion_velocity, file_velocity)
 
+      append_coords_bak = append_coords
+      append_coords = .false.
+      call write_atomic_positions("cq.position", trim(pdb_template))
+      append_coords = append_coords_bak
+
+
        call baro%get_pressure
        call thermo%get_temperature
        select case(md_ensemble)
@@ -994,6 +1000,7 @@ contains
   !!  
   subroutine integrate_pt_mttk(baro, thermo, mdl, velocity, second_call)
 
+    use GenComms,         only: inode, ionode
     use md_model,         only: type_md_model
     use md_control,       only: type_thermostat, type_barostat, &
                                 md_thermo_type, md_baro_type
@@ -1007,14 +1014,22 @@ contains
 
     ! local variables
   
+    if (inode==ionode) then
+      if (present(second_call)) then
+        write(io_lun,*) "Welcome to integrate_pt_mttk"
+      else
+        write(io_lun,*) "Welcome to integrate_pt_mttk, second call"
+      end if
+    end if
+
     select case(md_ensemble)
     case('nvt')
       select case(md_thermo_type)
       case('nhc')
         call thermo%propagate_nvt_nhc(velocity, mdl%ion_kinetic_energy)
-        if (second_call) call thermo%get_nhc_energy
+        if (present(second_call)) call thermo%get_nhc_energy
       case('berendsen')
-        if (second_call) then
+        if (present(second_call)) then
           call thermo%berendsen_v_rescale(velocity)
         else
           call thermo%get_berendsen_thermo_sf(MDtimestep)
@@ -1023,7 +1038,7 @@ contains
    case('npt')
       select case(md_baro_type)
       case('berendsen')
-        if (second_call) then
+        if (present(second_call)) then
           call thermo%berendsen_v_rescale(velocity)
           ! Berendsen barostat propagation occurs after second
           ! vVerlet_v_dthalf step
@@ -1034,7 +1049,7 @@ contains
 !            call baro%propagate_berendsen(flag_movable)
       case('iso-mttk')
         if (mdl%nequil  > 0) then
-          if (second_call) then
+          if (present(second_call)) then
             call thermo%berendsen_v_rescale(velocity)
           else
             call thermo%get_berendsen_thermo_sf(MDtimestep)

@@ -1127,6 +1127,14 @@ contains
       baro%static_stress(i,i) = stress(i)
     end do
 
+    if (inode==ionode .and. flag_MDdebug) then
+      write(io_lun,*) "baroDebug: update_static_stress"
+      write(io_lun,'(a,3f15.8)') "static_stress: ", baro%static_stress(:,1)
+      write(io_lun,'(a,3f15.8)') "static_stress: ", baro%static_stress(:,2)
+      write(io_lun,'(a,3f15.8)') "static_stress: ", baro%static_stress(:,3)
+      write(io_lun,*)
+    end if
+
   end subroutine update_static_stress
   !!***
 
@@ -1164,6 +1172,14 @@ contains
     end do 
     baro%ke_stress = baro%ke_stress/baro%volume
 
+    if (inode==ionode .and. flag_MDdebug) then
+      write(io_lun,*) "baroDebug: get_ke_stress"
+      write(io_lun,'(a,3f15.8)') "ke_stress:  ", baro%ke_stress(:,1)
+      write(io_lun,'(a,3f15.8)') "ke_stress:  ", baro%ke_stress(:,2)
+      write(io_lun,'(a,3f15.8)') "ke_stress:  ", baro%ke_stress(:,3)
+      write(io_lun,*)
+    end if
+
   end subroutine get_ke_stress
   !!***
 
@@ -1192,6 +1208,11 @@ contains
     end do
     baro%P_int = -baro%P_int*third/baro%volume
 
+    if (inode==ionode .and. flag_MDdebug) then
+      write(io_lun,*) "baroDebug: get_pressure"
+      write(io_lun,*) "P_int:      ", baro%P_int
+    end if
+
   end subroutine get_pressure
   !!***
 
@@ -1213,6 +1234,12 @@ contains
 
     baro%volume = baro%lat(1,1)*baro%lat(2,2)*baro%lat(3,3)
     baro%PV = baro%volume*baro%P_ext
+
+    if (inode==ionode .and. flag_MDdebug) then
+      write(io_lun,*) "baroDebug: get_volume"
+      write(io_lun,*) "volume:     ", baro%volume
+      write(io_lun,*) "PV    :     ", baro%PV
+    end if
 
   end subroutine get_volume
   !!***
@@ -1945,6 +1972,7 @@ contains
     write(lun,*) "lat_a_ref", baro%lat_ref(1,:)
     write(lun,*) "lat_b_ref", baro%lat_ref(2,:)
     write(lun,*) "lat_c_ref", baro%lat_ref(3,:)
+    write(lun,*) "volume_ref", baro%volume_ref
     write(lun,*) "eps_ref ", baro%eps_ref
     write(lun,*) "eps ", baro%eps
     write(lun,*) "v_eps ", baro%v_eps
@@ -1984,6 +2012,7 @@ contains
       read(lun,*) name, baro%lat_ref(1,:)
       read(lun,*) name, baro%lat_ref(2,:)
       read(lun,*) name, baro%lat_ref(3,:)
+      read(lun,*) name, baro%volume_ref
       read(lun,*) name, baro%eps_ref
       read(lun,*) name, baro%eps
       read(lun,*) name, baro%v_eps

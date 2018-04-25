@@ -246,7 +246,7 @@ contains
     if (.not. flag_MDcontinue) then
       call read_atomic_positions(trim(atom_coord_file))
     else
-      call read_atomic_positions('coord_next.dat')
+      call read_atomic_positions('cq.position')
     end if
     if(iprint_init>4) call print_process_info()
     ! By now, we'll have unit cell sizes and grid cutoff
@@ -960,6 +960,7 @@ contains
           call cq_abort('read_input: you may not select restart for a run just now')
        endif
        init_blip_flag = fdf_string(10,'Basis.InitBlipFlag','pao')
+       restart_rho    = fdf_boolean('General.LoadRho', .false.)
        restart_T      = fdf_boolean('General.LoadInvS',.false.)
        ! Is there a net charge on the cell ?
        ne_in_cell     = fdf_double('General.NetCharge',zero)
@@ -1051,7 +1052,7 @@ contains
        flag_analytic_blip_int = fdf_boolean('Basis.AnalyticBlipIntegrals',.false.)
        !
        !
-       find_chdens            = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
+!       find_chdens            = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        flag_Becke_weights     = fdf_boolean('SC.BeckeWeights',          .false.)
        flag_Becke_atomic_radii= fdf_boolean('SC.BeckeAtomicRadii',      .false.)
        ! Number of species
@@ -1888,13 +1889,13 @@ contains
        ! remains consistent
        if (flag_MDcontinue) then
          flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.true.)
-         restart_rho    = fdf_boolean('General.LoadRho', .true.)
          restart_LorK   = fdf_boolean('General.LoadL', .true.)
+         find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
          if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .true.)
        else
          flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
          restart_LorK   = fdf_boolean('General.LoadL', .false.)
-         restart_rho    = fdf_boolean('General.LoadRho', .false.)
+         find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
          if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
        end if
 
