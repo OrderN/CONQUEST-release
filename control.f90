@@ -480,6 +480,8 @@ contains
 !!    Created variable fire_N_below_thresh to set number of consecutive steps below threshold
 !!   2018/01/22 tsuyoshi (with dave)
 !!    Changes to use new atom update routines
+!!   2018/04/20 nakata
+!!    Changed to initialise n_stop_qMD
 !!   2018/04/24 zamaan
 !!    Initial NPT implementation (isotropic fluctuations only)
 !!  SOURCE
@@ -571,7 +573,8 @@ contains
     ! thermostat, barostat
     type(type_thermostat), target :: thermo
     type(type_barostat), target   :: baro
-    
+
+    n_stop_qMD = 0
     allocate(ion_velocity(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating velocity in md_run: ", &
