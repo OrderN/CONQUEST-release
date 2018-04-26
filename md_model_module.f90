@@ -350,7 +350,6 @@ contains
           write(lun,'(a10,5a18,2a12,a16)') "step", "pe", "ke", "box", "pV", &
             "H'", "T", "P", "V"
         end select
-        mdl%append = .true.
       end if
       select case (mdl%ensemble)
       case ('nve')

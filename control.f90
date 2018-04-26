@@ -838,37 +838,39 @@ contains
        !to check IO of velocity files
        call write_velocity(ion_velocity, file_velocity)
 
-      append_coords_bak = append_coords
-      append_coords = .false.
-      call write_atomic_positions("cq.position", trim(pdb_template))
-      append_coords = append_coords_bak
-
-
-       call baro%get_pressure
-       call thermo%get_temperature
-       select case(md_ensemble)
-       case('nvt')
-         if (leqi(thermo%thermo_type, 'nhc')) then
-           call thermo%write_thermo_checkpoint
+       append_coords_bak = append_coords
+       append_coords = .false.
+       call write_atomic_positions("cq.position", trim(pdb_template))
+       append_coords = append_coords_bak
+ 
+ 
+        call baro%get_pressure
+        call thermo%get_temperature
+        select case(md_ensemble)
+        case('nvt')
+          if (leqi(thermo%thermo_type, 'nhc')) then
+            call thermo%write_thermo_checkpoint
+          end if
+        case('npt')
+          if (leqi(baro%baro_type, 'iso-mttk')) then
+            call thermo%write_thermo_checkpoint
+            call baro%write_baro_checkpoint
+          end if
+        end select
+ 
+        if (nequil > 0) then
+         nequil = nequil - 1
+         if (nequil == 0) then
+           write (io_lun, '(4x,a)') "Berendsen equilibration finished, &
+                                     starting extended system dynamics."
+           call thermo%init_nhc(MDtimestep, thermo%T_int, md_ndof, md_n_nhc, &
+                                md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
+           call baro%init_baro('iso-mttk', md_target_press, md_ndof, stress, &
+                               ion_velocity, mdl%ion_kinetic_energy)
          end if
-       case('npt')
-         if (leqi(baro%baro_type, 'iso-mttk')) then
-           call thermo%write_thermo_checkpoint
-           call baro%write_baro_checkpoint
-         end if
-       end select
+       end if
 
-       if (nequil > 0) then
-        nequil = nequil - 1
-        if (nequil == 0) then
-          write (io_lun, '(4x,a)') "Berendsen equilibration finished, &
-                                    starting extended system dynamics."
-          call thermo%init_nhc(MDtimestep, thermo%T_int, md_ndof, md_n_nhc, &
-                               md_n_ys, md_n_mts, mdl%ion_kinetic_energy)
-          call baro%init_baro('iso-mttk', md_target_press, md_ndof, stress, &
-                              ion_velocity, mdl%ion_kinetic_energy)
-        end if
-      end if
+       mdl%append = .true.
 
        call check_stop(done, iter)
        if (flag_fire_qMD) then
