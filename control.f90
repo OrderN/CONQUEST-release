@@ -531,7 +531,7 @@ contains
     use input_module,   ONLY: io_assign, io_close, leqi
     use cover_module,   only: BCS_parts, make_cs, deallocate_cs, make_iprim, &
                               send_ncover
-    use md_model,       only: type_md_model
+    use md_model,       only: type_md_model, md_tdep
     use md_control,     only: type_thermostat, type_barostat, md_n_nhc, &
                               md_n_ys, md_n_mts, ion_velocity, lattice_vec, &
                               md_baro_type, md_target_press, flag_write_xsf, &
@@ -831,6 +831,7 @@ contains
        if (inode == ionode .and. mod(iter, MDfreq) == 0) then
          call write_positions(iter, parts)
          call mdl%dump_frame("Frames")
+         if (md_tdep) call mdl%dump_tdep
        end if
        if (flag_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
        call my_barrier
@@ -934,7 +935,7 @@ contains
     lattice_vec(1,1) = rcellx
     lattice_vec(2,2) = rcelly
     lattice_vec(3,3) = rcellz
-    call mdl%init_model(md_ensemble, thermo, baro)
+    call mdl%init_model(md_ensemble, MDtimestep, thermo, baro)
 
     select case(md_ensemble)
     case('nve')

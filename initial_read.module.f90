@@ -634,6 +634,8 @@ contains
   !!   2018/04/24 zamaan
   !!    Changed AtomMove.FixCentreOfMass default to .true. except when running
   !!    FIRE qMD. minE.GlobalTolerance now defaults to .false. for MD.
+  !!   2018/4/25 zamaan
+  !!    added md_tdep flag for TDEP output dump
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -791,6 +793,7 @@ contains
                           flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
                           md_calc_xlmass, md_berendsen_equil, &
                           md_omega_t, md_omega_p
+    use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
@@ -2016,6 +2019,7 @@ contains
        md_cell_nhc        = fdf_boolean('MD.CellNHC', .false.)
        flag_baroDebug     = fdf_boolean('MD.BaroDebug',.false.)
        md_berendsen_equil = fdf_integer('MD.BerendsenEquil', 0)
+       md_tdep            = fdf_boolean('MD.TDEP', .false.)
 
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")

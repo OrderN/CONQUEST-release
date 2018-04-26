@@ -126,6 +126,8 @@
 !!    Moved fire variables to Integrators_module
 !!   2017/12/05 09:59 dave with TM & NW (MIZUHO)
 !!    Added new function type - NA projector function (napf)
+!!   2018/04/25 10:00 zamaan
+!!    Added target attribute to rcellx, x_atom_cell etc.
 !!  SOURCE
 !!
 module global_module
@@ -146,11 +148,11 @@ module global_module
   integer, allocatable, dimension(:) :: id_glob_inv  ! gives global number for a CC atom
   integer, dimension(:), allocatable :: species_glob ! gives species 
   integer :: numprocs               ! number of processors
-  real(double) :: rcellx,rcelly,rcellz  ! cell side lengths
-  real(double), allocatable, dimension(:) :: x_atom_cell ! position of atom in sim cell (CC)
-  real(double), allocatable, dimension(:) :: y_atom_cell
-  real(double), allocatable, dimension(:) :: z_atom_cell
-  integer,      allocatable, dimension(:) :: coord_to_glob
+  real(double), target :: rcellx,rcelly,rcellz  ! cell side lengths
+  real(double), allocatable, dimension(:), target :: x_atom_cell ! position of atom in sim cell (CC)
+  real(double), allocatable, dimension(:), target :: y_atom_cell
+  real(double), allocatable, dimension(:), target :: z_atom_cell
+  integer,      allocatable, dimension(:), target :: coord_to_glob
   integer      :: ni_in_cell ! Atoms in cell
   real(double) :: ne_in_cell ! Electrons in cell
   ! atom_coord : Use global labelling, in the future this array should

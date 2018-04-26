@@ -1,4 +1,4 @@
-!!****h* Conquest/md_model
+!!****h* Conquest/md_model *
 !!  NAME
 !!   md_model
 !!  PURPOSE
@@ -17,22 +17,30 @@ module md_model
   use numbers
   use force_module,     only: tot_force, stress
   use global_module,    only: ni_in_cell, io_lun, atom_coord, &
-                              flag_MDcontinue, flag_MDdebug
+                              flag_MDcontinue, flag_MDdebug, x_atom_cell, &
+                              y_atom_cell, z_atom_cell, rcellx, rcelly, rcellz
   use species_module,   only: species
   use md_control,       only: md_n_nhc, ion_velocity, type_thermostat, &
                               type_barostat, lattice_vec
 
   implicit none
 
-!!****s* md_model/type_md_model
-!!  NAME
-!!   type_md_model
-!!  PURPOSE
-!!   Container for one step of MD data 
-!!  AUTHOR
-!!   Zamaan Raza
-!!  SOURCE
-!!  
+  logical       :: md_tdep ! Dump output for a TDEP calculation?
+  character(20) :: file_meta      = 'infile.meta' ! filenames for TDEP
+  character(20) :: file_positions = 'infile.positions'
+  character(20) :: file_forces    = 'infile.forces'
+  character(20) :: file_stat      = 'infile.stat'
+  character(20) :: file_loto      = 'infile.lotosplitting'
+
+  !!****s* md_model/type_md_model *
+  !!  NAME
+  !!   type_md_model
+  !!  PURPOSE
+  !!   Container for one step of MD data 
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  SOURCE
+  !!  
   type type_md_model
 
     logical                                 :: append   ! append to file?
@@ -43,11 +51,14 @@ module md_model
     character(3)                            :: ensemble ! nve, nvt, npt etc
     real(double), dimension(:,:), pointer   :: lattice_vec
     real(double), pointer                   :: volume
+    real(double)                            :: timestep
     integer                                 :: nequil   ! equilibration steps
 
     ! ionic variables
     integer                                 :: natoms
     integer, pointer, dimension(:)          :: species
+    real(double), pointer                   :: lat_a, lat_b, lat_c
+    real(double), pointer, dimension(:)     :: pos_x, pos_y, pos_z
     real(double), pointer, dimension(:,:)   :: atom_coords
     real(double), pointer, dimension(:,:)   :: atom_velocity
     real(double), pointer, dimension(:,:)   :: atom_force
@@ -102,6 +113,7 @@ module md_model
       procedure, public   :: print_md_energy
       procedure, public   :: dump_stats
       procedure, public   :: dump_frame
+      procedure, public   :: dump_tdep
 
       procedure, private  :: dump_mdl_atom_arr
 
@@ -119,11 +131,12 @@ contains
   !!   Zamaan Raza 
   !!  SOURCE
   !!  
-  subroutine init_model(mdl, ensemble, thermo, baro)
+  subroutine init_model(mdl, ensemble, timestep, thermo, baro)
 
     ! passed variables
-    class(type_md_model), intent(inout)   :: mdl
-    character(3), intent(in)              :: ensemble
+    class(type_md_model), intent(inout)       :: mdl
+    character(3), intent(in)                  :: ensemble
+    real(double), intent(in)                  :: timestep
     type(type_thermostat), intent(in), target :: thermo
     type(type_barostat), intent(in), target   :: baro
 
@@ -136,7 +149,14 @@ contains
     ! General MD arrays
     mdl%natoms = ni_in_cell
     mdl%ensemble = ensemble
+    mdl%timestep = timestep
     mdl%species       => species
+    mdl%lat_a         => rcellx
+    mdl%lat_b         => rcelly
+    mdl%lat_c         => rcellz
+    mdl%pos_x         => x_atom_cell
+    mdl%pos_y         => y_atom_cell
+    mdl%pos_z         => z_atom_cell
     mdl%atom_coords   => atom_coord
     mdl%atom_force    => tot_force
     mdl%atom_velocity => ion_velocity
@@ -460,6 +480,78 @@ contains
     end do
 
   end subroutine dump_mdl_atom_arr
+  !!***
+
+  !!****m* md_model/dump_tdep *
+  !!  NAME
+  !!   dump_tdep_frame
+  !!  PURPOSE
+  !!   Dump a MD step for TDEP postprocessing
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  SOURCE
+  !!
+  subroutine dump_tdep(mdl)
+ 
+    use input_module,     only: io_assign, io_close
+    use GenComms,         only: inode, ionode
+    use units,            only: HaToEv, BohrToAng
+    use md_control,       only: fac_HaBohr32GPa
+ 
+    ! passed variables
+    class(type_md_model), intent(inout)   :: mdl
+ 
+    ! local variables
+    integer                               :: lunp, lunm, lunf, luns, lunl, i
+ 
+    if (inode==ionode) then
+      if (flag_MDdebug) write(io_lun,*) "Writing TDEP output"
+      call io_assign(lunm)
+      call io_assign(lunp)
+      call io_assign(lunf)
+      call io_assign(luns)
+      call io_assign(lunl)
+ 
+      open(unit=lunm,file=file_meta,status='replace')
+      if (mdl%append) then
+        open(unit=lunp,file=file_positions,status='old',position='append')
+        open(unit=lunf,file=file_forces,status='old',position='append')
+        open(unit=luns,file=file_stat,status='old',position='append')
+        open(unit=lunl,file=file_loto,status='old',position='append')
+      else 
+        open(unit=lunp,file=file_positions,status='replace')
+        open(unit=lunf,file=file_forces,status='replace')
+        open(unit=luns,file=file_stat,status='replace')
+        open(unit=lunl,file=file_loto,status='replace')
+      end if
+
+      write(lunm,'(i12,a)') mdl%natoms, " # N atoms"
+      write(lunm,'(i12,a)') mdl%step, " # N time steps"
+      write(lunm,'(f12.2,a)') mdl%timestep, " # time step in fs"
+      write(lunm,'(f12.2,a)') mdl%T_ext, " # temperature in K"
+      call io_close(lunm)
+ 
+      do i=1,mdl%natoms
+        write(lunp,'(3e20.12)') mdl%pos_x(i)/mdl%lat_a, &
+                                mdl%pos_y(i)/mdl%lat_b, &
+                                mdl%pos_z(i)/mdl%lat_c
+        write(lunf,'(3e20.12)') mdl%atom_force(:,i)*HaToeV/BohrToAng
+      end do
+      call io_close(lunp)
+      call io_close(lunf)
+
+      write(luns,'(i7,f10.1,3e16.8,8e14.6)') mdl%step, mdl%step*mdl%timestep, &
+        (mdl%dft_total_energy+mdl%ion_kinetic_energy)*HaToeV, &
+        mdl%dft_total_energy*HaToeV, &
+        mdl%ion_kinetic_energy*HaToeV, mdl%T_int, mdl%P_int, &
+        mdl%stress(1)*fac_HaBohr32GPa, mdl%stress(2)*fac_HaBohr32GPa, &
+        mdl%stress(3)*fac_HaBohr32GPa, zero, zero, zero
+ 
+      call io_close(luns)
+      call io_close(lunl)
+    end if
+
+  end subroutine dump_tdep
   !!***
 
 end module md_model
