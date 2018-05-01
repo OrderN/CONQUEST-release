@@ -266,6 +266,7 @@ contains
                                              ndof_baro, tauT, tauP
     integer                               :: i
 
+    if (inode==ionode) write(io_lun,*) "*******************"
     th%thermo_type = "nhc"
     th%dt = dt
     th%T_ext = T_ext
@@ -1351,6 +1352,9 @@ contains
     case('mttk')
     end select
 
+    if (inode==ionode .and. flag_MDdebug) &
+      write(io_lun,*) "baroDebug: get_box_ke: ke_box = ", baro%ke_box
+
   end subroutine get_box_ke
   !!***
 
@@ -1694,7 +1698,7 @@ contains
     baro%ke_ions = ke
     v_sfac = one
     call baro%get_box_ke
-    call th%update_G_nhc(1, baro%ke_box)
+    call th%update_G_nhc(1, baro%ke_box) ! HERE
     select case(baro%baro_type)
     case('iso-mttk')
       call baro%update_G_eps

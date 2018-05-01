@@ -151,7 +151,7 @@ contains
        if(.NOT.flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS)) return
        call get_E_and_F(fixed_potential,vary_mu, total_energy,&
                         .true.,.true.,level=backtrace_level)
-       ! 
+       !
     else if ( leqi(runtype, 'cg')    ) then
         if (flag_opt_cell) then
             call cell_cg_run(fixed_potential, vary_mu, total_energy)
@@ -681,7 +681,7 @@ contains
        call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
 
        ! thermostat/barostat (MTTK splitting of Liouvillian)
-       call integrate_pt_mttk(baro, thermo, mdl, ion_velocity)
+       call integrate_pt(baro, thermo, mdl, ion_velocity)
 
        !! For Debuggging !!
        !     call dump_pos_and_matrices(index=1,MDstep=i_first)
@@ -768,7 +768,7 @@ contains
        !! For Debuggging !!
 
        ! thermostat/barostat (MTTK splitting of Liouvillian)
-       call integrate_pt_mttk(baro, thermo, mdl, ion_velocity, second_call)
+       call integrate_pt(baro, thermo, mdl, ion_velocity, second_call)
 
        if (flag_thermoDebug) then
          call thermo%dump_thermo_state(iter,'thermostat.dat')
@@ -992,7 +992,7 @@ contains
     end select
   end subroutine init_ensemble
 
-  !!****m* control/integrate_pt_mttk *
+  !!****m* control/integrate_pt *
   !!  NAME
   !!   integrate_pt
   !!  PURPOSE
@@ -1004,7 +1004,7 @@ contains
   !!   2018/04/23 11:49
   !!  SOURCE
   !!  
-  subroutine integrate_pt_mttk(baro, thermo, mdl, velocity, second_call)
+  subroutine integrate_pt(baro, thermo, mdl, velocity, second_call)
 
     use GenComms,         only: inode, ionode
     use md_model,         only: type_md_model
@@ -1022,15 +1022,15 @@ contains
   
     if (inode==ionode) then
       if (present(second_call)) then
-        write(io_lun,*) "Welcome to integrate_pt_mttk"
+        write(io_lun,*) "Welcome to integrate_pt, second call"
       else
-        write(io_lun,*) "Welcome to integrate_pt_mttk, second call"
+        write(io_lun,*) "Welcome to integrate_pt"
       end if
     end if
 
     select case(md_ensemble)
     case('nvt')
-      select case(md_thermo_type)
+      select case(thermo%thermo_type)
       case('nhc')
         call thermo%propagate_nvt_nhc(velocity, mdl%ion_kinetic_energy)
         if (present(second_call)) call thermo%get_nhc_energy
@@ -1042,7 +1042,7 @@ contains
         end if
      end select
    case('npt')
-      select case(md_baro_type)
+      select case(baro%baro_type)
       case('berendsen')
         if (present(second_call)) then
           call thermo%berendsen_v_rescale(velocity)
@@ -1069,7 +1069,7 @@ contains
       case('mttk')
       end select
    end select
-end subroutine integrate_pt_mttk
+end subroutine integrate_pt
 
   !!****f* control/dummy_run *
   !! PURPOSE
