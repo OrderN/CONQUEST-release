@@ -248,7 +248,7 @@ if read_frames:
 
       if re.match(endframe_re, line):
         newframe = True
-        if n < opts.nskip:
+        if n <= opts.nskip:
           continue
         else:
           nframes += 1
@@ -305,7 +305,12 @@ if read_frames:
         mean_stress[i,j] = sp.mean(stress[:,i,j])
         mean_lat[i,j] = sp.mean(lat[:,i,j])
     plt.figure("Stress")
-    fig2, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True)
+
+    if cq_params['MD.Ensemble'][1] == "p":
+      fig2, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, sharex=True)
+    else:
+      fig2, (ax1,) = plt.subplots(nrows=1, ncols=1)
+
     plt.xlabel("t (fs)")
     ax1.set_ylabel("Stress (GPa)")
     ax2.set_ylabel("Cell dimension ($a_0$)")
@@ -320,21 +325,21 @@ if read_frames:
     ax1.plot((time[0],time[-1]), (mean_stress[2,2], mean_stress[2,2]), 'b-',
             label=r'$\langle S_{{zz}} \rangle$ = {0:<10.4f}'.format(mean_stress[2,2]))
 
-    set_trace()
-    ax2.plot(time[opts.nskip:], lat[:,0,0], 'r-', label='a', linewidth=1.0)
-    ax2.plot(time[opts.nskip:], lat[:,1,1], 'g-', label='b', linewidth=1.0)
-    ax2.plot(time[opts.nskip:], lat[:,2,2], 'b-', label='c', linewidth=1.0)
-    ax2.plot((time[0],time[-1]), (mean_lat[0,0], mean_lat[0,0]), 'r-',
-            label=r'$\langle a \rangle$ = {0:<10.4f}'.format(mean_lat[0,0]))
-    ax2.plot((time[0],time[-1]), (mean_lat[1,1], mean_lat[1,1]), 'g-',
-            label=r'$\langle b \rangle$ = {0:<10.4f}'.format(mean_lat[1,1]))
-    ax2.plot((time[0],time[-1]), (mean_lat[2,2], mean_lat[2,2]), 'b-',
-            label=r'$\langle c \rangle$ = {0:<10.4f}'.format(mean_lat[2,2]))
-    ax1.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
-    ax2.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
-    fig2.subplots_adjust(hspace=0)
-    plt.setp([a.get_xticklabels() for a in fig1.axes[:-1]], visible=False)
-    fig2.savefig("stress.pdf", bbox_inches='tight')
+    if cq_params['MD.Ensemble'][1] == "p":
+      ax2.plot(time[opts.nskip:], lat[:,0,0], 'r-', label='a', linewidth=1.0)
+      ax2.plot(time[opts.nskip:], lat[:,1,1], 'g-', label='b', linewidth=1.0)
+      ax2.plot(time[opts.nskip:], lat[:,2,2], 'b-', label='c', linewidth=1.0)
+      ax2.plot((time[0],time[-1]), (mean_lat[0,0], mean_lat[0,0]), 'r-',
+              label=r'$\langle a \rangle$ = {0:<10.4f}'.format(mean_lat[0,0]))
+      ax2.plot((time[0],time[-1]), (mean_lat[1,1], mean_lat[1,1]), 'g-',
+              label=r'$\langle b \rangle$ = {0:<10.4f}'.format(mean_lat[1,1]))
+      ax2.plot((time[0],time[-1]), (mean_lat[2,2], mean_lat[2,2]), 'b-',
+              label=r'$\langle c \rangle$ = {0:<10.4f}'.format(mean_lat[2,2]))
+      ax1.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
+      ax2.legend(bbox_to_anchor=(1.05,1), loc=2, borderaxespad=0.)
+      fig2.subplots_adjust(hspace=0)
+      plt.setp([a.get_xticklabels() for a in fig1.axes[:-1]], visible=False)
+      fig2.savefig("stress.pdf", bbox_inches='tight')
 
   # Plot the rdf
   if opts.rdf:
