@@ -1904,6 +1904,10 @@ contains
     rcelly = baro%lat(2,2)
     rcellz = baro%lat(3,3)
 
+    lattice_vec(1,1) = rcellx
+    lattice_vec(2,2) = rcelly
+    lattice_vec(3,3) = rcellz
+
     r_super_x = rcellx
     r_super_y = rcelly
     r_super_z = rcellz

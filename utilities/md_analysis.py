@@ -148,7 +148,10 @@ if (opts.vacf or opts.msd or opts.stress or opts.rdf):
 else:
   read_frames = False
 
-if opts.nskip > 0:
+# if opts.nskip > 0:
+#   opts.nequil = opts.nskip
+
+if opts.nequil == 0:
   opts.nequil = opts.nskip
 
 # Parse the md.in parameters file
@@ -176,28 +179,28 @@ if opts.landscape:
 else:
   fig1, (ax1, ax2, ax3, ax4) = plt.subplots(nrows=4, ncols=1, sharex=True, figsize=(7,10))
 
-ax1.plot(data['time'], data['pe'], 'r-', label='Potential energy')
+ax1.plot(data['time'][opts.nskip:], data['pe'][opts.nskip:], 'r-', label='Potential energy')
 ax1a = ax1.twinx()
-ax1a.plot(data['time'], data['ke'], 'b-', label='Kinetic energy')
+ax1a.plot(data['time'][opts.nskip:], data['ke'][opts.nskip:], 'b-', label='Kinetic energy')
 if cq_params['MD.Ensemble'][2] == 't':
   if cq_params['MD.Thermostat'] == 'nhc':
-    ax1a.plot(data['time'], data['nhc'], 'g-', label='NHC energy')
+    ax1a.plot(data['time'][opts.nskip:], data['nhc'][opts.nskip:], 'g-', label='NHC energy')
 if cq_params['MD.Ensemble'][1] == 'p':
   if 'mttk' in cq_params['MD.Barostat']:
-    ax1a.plot(data['time'], data['box'], 'c-', label='Box energy')
-  ax1a.plot(data['time'], data['pV'], 'm-', label='pV')
-ax2.plot(data['time'], data['H\''])
+    ax1a.plot(data['time'][opts.nskip:], data['box'][opts.nskip:], 'c-', label='Box energy')
+  ax1a.plot(data['time'][opts.nskip:], data['pV'][opts.nskip:], 'm-', label='pV')
+ax2.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:])
 ax2.plot((opts.nskip,data['time'][-1]), (avg['H\''],avg['H\'']), '-',
       label=r'$\langle H\' \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['H\''], std['H\'']))
-ax3.plot(data['time'], data['T'])
+ax3.plot(data['time'][opts.nskip:], data['T'][opts.nskip:])
 ax3.plot((opts.nskip,data['time'][-1]), (avg['T'],avg['T']), '-',
       label=r'$\langle T \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['T'], std['T']))
-ax4.plot(data['time'], data['P'], 'b-')
+ax4.plot(data['time'][opts.nskip:], data['P'][opts.nskip:], 'b-')
 ax4.plot((opts.nskip,data['time'][-1]), (avg['P'],avg['P']), 'b--',
       label=r'$\langle P \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['P'], std['P']))
 if cq_params['MD.Ensemble'][1] == 'p':
   ax4a = ax4.twinx()
-  ax4a.plot(data['time'], data['V'], 'r-')
+  ax4a.plot(data['time'][opts.nskip:], data['V'][opts.nskip:], 'r-')
   ax4a.plot((opts.nskip,data['time'][-1]), (avg['V'],avg['V']), 'r--',
         label=r'$\langle V \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['V'], std['V']))
 ax1.set_ylabel("E (Ha)")
@@ -306,10 +309,10 @@ if read_frames:
     plt.xlabel("t (fs)")
     ax1.set_ylabel("Stress (GPa)")
     ax2.set_ylabel("Cell dimension ($a_0$)")
-    plt.xlim((time[0], time[-1]))
-    ax1.plot(time, stress[:,0,0], 'r-', label='xx', linewidth=1.0)
-    ax1.plot(time, stress[:,1,1], 'g-', label='yy', linewidth=1.0)
-    ax1.plot(time, stress[:,2,2], 'b-', label='zz', linewidth=1.0)
+    plt.xlim((time[opts.nskip], time[-1]))
+    ax1.plot(time[opts.nskip:], stress[:,0,0], 'r-', label='xx', linewidth=1.0)
+    ax1.plot(time[opts.nskip:], stress[:,1,1], 'g-', label='yy', linewidth=1.0)
+    ax1.plot(time[opts.nskip:], stress[:,2,2], 'b-', label='zz', linewidth=1.0)
     ax1.plot((time[0],time[-1]), (mean_stress[0,0], mean_stress[0,0]), 'r-',
             label=r'$\langle S_{{xx}} \rangle$ = {0:<10.4f}'.format(mean_stress[0,0]))
     ax1.plot((time[0],time[-1]), (mean_stress[1,1], mean_stress[1,1]), 'g-',
@@ -317,9 +320,10 @@ if read_frames:
     ax1.plot((time[0],time[-1]), (mean_stress[2,2], mean_stress[2,2]), 'b-',
             label=r'$\langle S_{{zz}} \rangle$ = {0:<10.4f}'.format(mean_stress[2,2]))
 
-    ax2.plot(time, lat[:,0,0], 'r-', label='a', linewidth=1.0)
-    ax2.plot(time, lat[:,1,1], 'g-', label='b', linewidth=1.0)
-    ax2.plot(time, lat[:,2,2], 'b-', label='c', linewidth=1.0)
+    set_trace()
+    ax2.plot(time[opts.nskip:], lat[:,0,0], 'r-', label='a', linewidth=1.0)
+    ax2.plot(time[opts.nskip:], lat[:,1,1], 'g-', label='b', linewidth=1.0)
+    ax2.plot(time[opts.nskip:], lat[:,2,2], 'b-', label='c', linewidth=1.0)
     ax2.plot((time[0],time[-1]), (mean_lat[0,0], mean_lat[0,0]), 'r-',
             label=r'$\langle a \rangle$ = {0:<10.4f}'.format(mean_lat[0,0]))
     ax2.plot((time[0],time[-1]), (mean_lat[1,1], mean_lat[1,1]), 'g-',
