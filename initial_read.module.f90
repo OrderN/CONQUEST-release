@@ -142,6 +142,8 @@ contains
   !!    Changed to check consistence between flag_one_to_one and flag_Multisite
   !!   2017/07/11 16:36 dave
   !!    Bug fix (GitHub issue #36) to turn off basis optimisation if NSF=NPAO
+  !!   2018/05/11 10:26 dave
+  !!    Bug fix (GitHub issue #80) to set flag_SFcoeffReuse false if NSF=NPAO
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -173,7 +175,7 @@ contains
                                       flag_SpinDependentSF, nspin_SF,  &
                                       flag_Multisite,                  &
                                       flag_cdft_atom, flag_local_excitation, &
-                                      flag_diagonalisation, flag_vary_basis
+                                      flag_diagonalisation, flag_vary_basis, flag_SFcoeffReuse
     use cdft_data, only: cDFT_NAtoms, &
                          cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
@@ -323,8 +325,12 @@ contains
        if (flag_one_to_one .and. flag_Multisite) then
           call cq_abort("flag_Multisite is .true., but the number of SFs is the same as the number of PAOs.")
        endif
-       if (.not.flag_one_to_one) atomf = paof
-       if (flag_one_to_one) flag_SpinDependentSF = .false. ! spin-dependent SFs will be available only for contracted SFs
+       if (flag_one_to_one) then
+          flag_SpinDependentSF = .false. ! spin-dependent SFs will be available only for contracted SFs
+          flag_SFcoeffReuse = .false.
+       else
+          atomf = paof
+       end if
        if (flag_SpinDependentSF) nspin_SF = nspin
        if (flag_one_to_one.AND.flag_vary_basis) then
           write(io_lun,fmt='(/2x,"************")')
