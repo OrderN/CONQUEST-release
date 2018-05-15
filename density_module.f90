@@ -172,6 +172,8 @@ contains
   !!    Renamed naba_atm -> naba_atoms_of_blocks
   !!   2017/04/05 18:00 nakata
   !!    Added flag_readAtomicSpin, charge, charge_up and charge_dn to initialise spin from input file
+  !!   2018/05/15 18:45 nakata
+  !!    Bug fixed: density was doubly scaled by "scale" and "density_scale".
   !!  SOURCE
   !!
   subroutine set_atomic_density(flag_set_density,level)
@@ -415,6 +417,7 @@ contains
           local_density = half*local_density
           do spin = 1, nspin
              density_scale(spin) = ne_spin_in_cell(spin) / local_density         ! spin factor, renormalise
+             density_scale(spin) = density_scale(spin) / scale                   ! avoid scaling store_density_atom doubly
              density(:,spin) = density_scale(spin) * half* store_density_atom(:) ! Check later
              if (inode == ionode .and. iprint_SC > 0) &
                   write (io_lun, &
