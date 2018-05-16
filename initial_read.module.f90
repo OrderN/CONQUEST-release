@@ -792,7 +792,7 @@ contains
                           md_thermo_type, md_bulkmod_est, md_box_mass, &
                           flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
                           md_calc_xlmass, md_berendsen_equil, &
-                          md_omega_t, md_omega_p
+                          md_omega_t, md_omega_p, md_tau_T_equil, md_tau_P_equil
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
@@ -1987,6 +1987,7 @@ contains
        else
          md_tau_T           = fdf_double('MD.tauT', one)
        end if
+       md_tau_T_equil     = fdf_double('MD.tauTEquil', one)
        md_omega_t         = fdf_double('MD.OmegaT', 500.0_double)
        md_n_nhc           = fdf_integer('MD.nNHC', 5) 
        md_n_ys            = fdf_integer('MD.nYoshida', 1)
@@ -2014,6 +2015,7 @@ contains
        else
          md_tau_P           = fdf_double('MD.tauP', 100.0_double)
        end if
+       md_tau_P_equil     = fdf_double('MD.tauPEquil', 100.0_double)
        md_omega_p         = fdf_double('MD.OmegaP', 100.0_double)
        md_bulkmod_est     = fdf_double('MD.BulkModulusEst', one)
        md_cell_nhc        = fdf_boolean('MD.CellNHC', .false.)

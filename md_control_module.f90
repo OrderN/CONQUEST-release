@@ -52,7 +52,8 @@ module md_control
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
   real(double)  :: md_tau_T, md_tau_P, md_target_press, md_bulkmod_est, &
-                   md_box_mass, md_ndof_ions, md_omega_t, md_omega_p
+                   md_box_mass, md_ndof_ions, md_omega_t, md_omega_p, &
+                   md_tau_T_equil, md_tau_P_equil
   integer       :: md_n_nhc, md_n_ys, md_n_mts, md_berendsen_equil
   logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass
   real(double), dimension(3,3), target      :: lattice_vec
@@ -106,10 +107,9 @@ module md_control
 
     contains
 
-      procedure, public   :: init_thermo_none
+      procedure, public   :: init_thermo
       procedure, public   :: init_nhc
       procedure, public   :: init_ys
-      procedure, public   :: init_berendsen_thermo
       procedure, public   :: update_ke_ions
       procedure, public   :: get_berendsen_thermo_sf
       procedure, public   :: berendsen_v_rescale
@@ -213,30 +213,53 @@ module md_control
 
 contains
 
-  !!****m* md_control/init_thermo_none *
+  !!****m* md_control/init_thermo *
   !!  NAME
-  !!   init_thermo_none
+  !!   init_thermo
   !!  PURPOSE
-  !!   initialise thermostat just for calculating temperature
+  !!   initialise thermostat
   !!  AUTHOR
   !!    Zamaan Raza 
   !!  CREATION DATE
-  !!   2017/11/09 10:11
+  !!   2018/05/16 16:45
   !!  SOURCE
   !!  
-  subroutine init_thermo_none(th, ndof, ke_ions)
+  subroutine init_thermo(th, thermo_type, ndof, tau_T, ke_ions)
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
+    character(*), intent(in)              :: thermo_type
     integer, intent(in)                   :: ndof
-    real(double), intent(in)              :: ke_ions
+    real(double), intent(in)              :: ke_ions, tau_T
 
-    th%thermo_type = "None"
+    if (inode==ionode) write(io_lun,'(2x,a)') 'Welcome to init_thermo'
+    th%T_ext = temp_ion
     th%ndof = ndof
     th%ke_ions = ke_ions
-    call th%get_temperature
+    th%tau_T = tau_T
+    th%thermo_type = thermo_type
 
-  end subroutine init_thermo_none
+    call th%get_temperature
+    if (inode==ionode) then
+      write(io_lun,'(4x,"Thermostat type: ",a)') th%thermo_type
+      write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
+                                   th%T_ext
+      write(io_lun,'(4x,a,f10.2)') 'Instantaneous temperature T_int = ', &
+                                   th%T_int
+      write(io_lun,'(4x,a,f10.2)') 'Coupling time period      tau_T = ', &
+                                   th%tau_T
+    end if
+
+    select case(th%thermo_type)
+    case('none')
+    case('berendsen')
+    case('nhc')
+      call th%init_nhc
+    case default
+      call cq_abort("Unknown thermostat type")
+    end select
+
+  end subroutine init_thermo
   !!***
 
   !!****m* md_control/init_nhc *
@@ -250,15 +273,13 @@ contains
   !!   2017/10/24 10:30
   !!  SOURCE
   !!  
-  subroutine init_nhc(th, dt, T_ext, ndof, n_nhc, n_ys, n_mts, ke_ions)
+  subroutine init_nhc(th)
 
     use memory_module,    only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use global_module,    only: area_moveatoms
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
-    integer, intent(in)                   :: ndof, n_nhc, n_ys, n_mts
-    real(double), intent(in)              :: T_ext, ke_ions, dt
 
     ! local variables
     character(40)                         :: fmt1, fmt2
@@ -266,30 +287,25 @@ contains
                                              ndof_baro, tauT, tauP
     integer                               :: i
 
-    th%thermo_type = "nhc"
-    th%dt = dt
-    th%T_ext = T_ext
-    th%ndof = ndof
-    th%n_nhc = n_nhc
-    th%ke_ions = ke_ions
-    th%n_ys = n_ys
-    th%n_mts_nhc = n_mts
+    th%n_nhc = md_n_nhc
+    th%n_ys = md_n_ys
+    th%n_mts_nhc = md_n_mts
     th%lambda = one
     th%cell_nhc  = md_cell_nhc
     call th%get_temperature
     write(th%nhc_fmt,'("(4x,a12,",i4,"f10.4)")') th%n_nhc
 
-    allocate(th%eta(n_nhc))
-    allocate(th%v_eta(n_nhc))
-    allocate(th%G_nhc(n_nhc))
-    allocate(th%m_nhc(n_nhc))
-    call reg_alloc_mem(area_moveatoms, 4*n_nhc, type_dbl)
+    allocate(th%eta(th%n_nhc))
+    allocate(th%v_eta(th%n_nhc))
+    allocate(th%G_nhc(th%n_nhc))
+    allocate(th%m_nhc(th%n_nhc))
+    call reg_alloc_mem(area_moveatoms, 4*th%n_nhc, type_dbl)
     if (th%cell_nhc) then
-      allocate(th%eta_cell(n_nhc))    ! independent thermostat for cell DOFs
-      allocate(th%v_eta_cell(n_nhc))
-      allocate(th%G_nhc_cell(n_nhc))
-      allocate(th%m_nhc_cell(n_nhc))
-      call reg_alloc_mem(area_moveatoms, 4*n_nhc, type_dbl)
+      allocate(th%eta_cell(th%n_nhc))    ! independent thermostat for cell DOFs
+      allocate(th%v_eta_cell(th%n_nhc))
+      allocate(th%G_nhc_cell(th%n_nhc))
+      allocate(th%m_nhc_cell(th%n_nhc))
+      call reg_alloc_mem(area_moveatoms, 4*th%n_nhc, type_dbl)
     end if
 
     ! Calculate the masses for extended lagrangian variables?
@@ -307,7 +323,7 @@ contains
         end select
         th%m_nhc_cell(1) = (ndof_baro**2)*th%T_ext*fac_Kelvin2Hartree/omega_baro**2
       end if
-      do i=2,n_nhc
+      do i=2,th%n_nhc
         th%m_nhc(i) = th%T_ext*fac_Kelvin2Hartree/omega_thermo**2
         if (th%cell_nhc) th%m_nhc_cell(i) = th%T_ext*fac_Kelvin2Hartree/omega_thermo**2
       end do
@@ -340,10 +356,6 @@ contains
     write(fmt2,'("(4x,a16,",i4,"f12.2)")') th%n_ys
     if (inode==ionode) then
       write(io_lun,'(2x,a)') 'Welcome to init_nhc'
-      write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
-                                   th%T_ext
-      write(io_lun,'(4x,a,f10.2)') 'Instantaneous temperature T_int = ', &
-                                   th%T_int
       write(io_lun,'(4x,a,i10)')   'Number of NHC thermostats n_nhc = ', &
                                    th%n_nhc
       write(io_lun,'(4x,a,i10)')   'Multiple time step order  n_mts = ', &
@@ -472,35 +484,6 @@ contains
     deallocate(psuz)
 
   end subroutine init_ys
-  !!***
-
-  !!****m* md_control/init_berendsen_thermo *
-  !!  NAME
-  !!   init_berendsen_thermo
-  !!  PURPOSE
-  !!   initialise Berendsen weak coupling thermostat variables
-  !!  AUTHOR
-  !!    Zamaan Raza 
-  !!  CREATION DATE
-  !!   2017/10/24 10:39
-  !!  SOURCE
-  !!  
-  subroutine init_berendsen_thermo(th, dt, T_ext, ndof, tau_T, ke_ions)
-
-    ! passed variables
-    class(type_thermostat), intent(inout) :: th
-    integer, intent(in)                   :: ndof
-    real(double), intent(in)              :: T_ext, ke_ions, dt, tau_T
-
-    th%thermo_type = "berendsen"
-    th%dt = dt
-    th%T_ext = T_ext
-    th%ndof = ndof
-    th%ke_ions = ke_ions
-    th%tau_T = tau_T
-    call th%get_temperature
-
-  end subroutine init_berendsen_thermo
   !!***
 
   !!****m* md_control/update_ke_ions *
@@ -1012,7 +995,7 @@ contains
   !!   2017/11/17 12:44
   !!  SOURCE
   !!  
-  subroutine init_baro(baro, baro_type, P_ext, ndof, stress, v, ke_ions)
+  subroutine init_baro(baro, baro_type, ndof, stress, v, tau_P, ke_ions)
 
     use input_module,     only: leqi
     use global_module,    only: rcellx, rcelly, rcellz
@@ -1020,7 +1003,7 @@ contains
     ! passed variables
     class(type_barostat), intent(inout)       :: baro
     character(*), intent(in)                  :: baro_type
-    real(double), intent(in)                  :: P_ext, ke_ions
+    real(double), intent(in)                  :: ke_ions, tau_P
     integer, intent(in)                       :: ndof
     real(double), dimension(3), intent(in)    :: stress
     real(double), dimension(:,:), intent(in)  :: v
@@ -1047,7 +1030,7 @@ contains
     baro%c6 = baro%c4/42.0_double
     baro%c8 = baro%c6/72.0_double
 
-    baro%P_ext = P_ext/fac_HaBohr32GPa
+    baro%P_ext = md_target_press/fac_HaBohr32GPa
     baro%ke_ions = ke_ions
     baro%ndof = ndof
     baro%lat_ref = zero
@@ -1060,11 +1043,11 @@ contains
     call baro%get_ke_stress(v)
     call baro%get_pressure
     baro%volume_ref = baro%volume
+    baro%tau_P = tau_P
 
     select case(baro%baro_type)
     case('None')
     case('berendsen')
-      baro%tau_P = md_tau_P
       baro%bulkmod = md_bulkmod_est
     case('iso-mttk')
       if (flag_MDcontinue) then
@@ -1079,7 +1062,6 @@ contains
         call baro%get_box_ke
       end if
       baro%odnf = one + three/baro%ndof
-      baro%tau_P = md_tau_P
     case('ortho-mttk')
     case('mttk')
     case default
@@ -1093,6 +1075,8 @@ contains
                                     baro%P_ext
       write(io_lun,'(4x,a,f14.2)') 'Instantaneous pressure P_int = ', &
                                     baro%P_int
+      write(io_lun,'(4x,a,f14.2)') 'Coupling time period   tau_P = ', &
+                                    baro%tau_P
       if (leqi(baro%baro_type, 'iso-mttk')) then
         write(io_lun,'(4x,a,f14.2)') 'Box mass                     = ', &
                                       baro%box_mass
