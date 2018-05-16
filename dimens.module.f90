@@ -158,6 +158,8 @@ contains
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
 !!   2017/12/05 11:00 dave
 !!    Adding NA projector ranges
+!!   2018/05/15 12:21 dave
+!!    Bug fix: mataNA range was wrong with MSSF (didn't correctly use atom function ranges)
 !!  SOURCE
 !!
   subroutine set_dimensions(inode, ionode,HNL_fac,non_local, n_species, non_local_species, core_radius)
@@ -381,7 +383,7 @@ contains
        if (r_LD.eq.zero) rcut(LD_range) = 0.001_double
     endif
     if(flag_neutral_atom_projector) then
-       rcut(aNArange)   = two*r_h
+       rcut(aNArange)   = r_s_atomf + r_h_atomf
        rcut(NAarange)   = rcut(aNArange)
        mat_name(aNArange) = "aNA"
        mat_name(NAarange) = "NAa"
