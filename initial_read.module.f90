@@ -628,6 +628,8 @@ contains
   !!    linear mixing end default
   !!   2018/04/12 22:00 nakata
   !!    Bug fix: turn on flag_LFD_MD_UseAtomicDensity only when flag_SFcoeffReuse is .false.
+  !!   2018/05/17 12:54 dave with Ayako Nakata
+  !!    flag_InitialAtomicSpin now comes from density_module (not global)
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -697,7 +699,6 @@ contains
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
-                             flag_readAtomicSpin, &
                              flag_opt_cell, cell_constraint_flag, cell_en_tol
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
@@ -726,7 +727,8 @@ contains
                        n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
                        atomch_output, flag_Kerker, flag_wdmetric, minitersSC
     use atomic_density,  only: read_atomic_density_file, &
-                              atomic_density_method
+         atomic_density_method
+    use density_module, only: flag_InitialAtomicSpin
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
                                InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
@@ -1203,7 +1205,7 @@ contains
              charge_dn(i)     = fdf_double ('Atom.SpinNeDn',zero)
              sum_elecN_spin   = charge_up(i)+charge_dn(i)
              if (abs(sum_elecN_spin)>RD_ERR) then
-                flag_readAtomicSpin = .true.
+                flag_InitialAtomicSpin = .true.
                 if (abs(sum_elecN_spin-charge(i))>RD_ERR) &
                    call cq_abort('read_input: sum of number of electrons &
                                  &in spin channels is different from total &

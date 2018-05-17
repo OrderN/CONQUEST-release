@@ -126,6 +126,8 @@
 !!    Moved fire variables to Integrators_module
 !!   2017/12/05 09:59 dave with TM & NW (MIZUHO)
 !!    Added new function type - NA projector function (napf)
+!!   2018/05/17 12:51 dave with Ayako Nakata
+!!    Changed flag_readAtomicSpin to flag_InitialAtomicSpin (more descriptive) and moved to density_module
 !!  SOURCE
 !!
 module global_module
@@ -379,8 +381,5 @@ module global_module
   ! diagonalise or linear scaling
   logical :: flag_diagonalisation
 
-  ! Initialise spin
-  logical :: flag_readAtomicSpin
-  
 end module global_module
 !!***
