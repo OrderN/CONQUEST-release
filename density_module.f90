@@ -181,6 +181,8 @@ contains
   !!    Bug fixed: density was doubly scaled by "scale" and "density_scale".
   !!   2018/05/17 11:41 dave
   !!    Following on from fix for Bug #82, changes to variable names for clarity
+  !!   2018/05/21 15:53 dave with Ayako Nakata
+  !!    Bug fix: allocate/deallocate density_atom when not using neutral atom
   !!  SOURCE
   !!
   subroutine set_atomic_density(flag_set_density,level)
@@ -194,7 +196,7 @@ contains
                                    IPRINT_TIME_THRES3, nspin,       &
                                    spin_factor,                     &
                                    flag_fix_spin_population, &
-                                   flag_neutral_atom
+                                   flag_neutral_atom, area_SC
     use block_module,        only: nx_in_block, ny_in_block,        &
                                    nz_in_block, n_pts_in_block
     use group_module,        only: blocks, parts
@@ -209,6 +211,8 @@ contains
     use timer_module,        only: WITH_LEVEL
     use maxima_module,  only: maxngrid
     use species_module, only: charge, charge_up, charge_dn
+    use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
+                                      type_dbl
 
     implicit none
 
@@ -255,6 +259,13 @@ contains
     !call sub_enter_output('set_density',2,'5')
 
     ! initialize density
+    if(.NOT.flag_neutral_atom) then
+       allocate(density_atom(maxngrid), STAT=stat)
+       if (stat /= 0) &
+            call cq_abort("Error allocating density_atom: ", &
+            maxngrid, stat)
+       call reg_alloc_mem(area_SC, maxngrid, type_dbl)
+    end if
     density_atom = zero
     if(flag_set_density) then
        density = zero
@@ -421,6 +432,10 @@ contains
     ! Renormalize the atomic density
     density_atom(:) = density_atom(:) * scale
 
+    if(.NOT.flag_neutral_atom) then
+       deallocate(density_atom, STAT=stat)
+       call reg_dealloc_mem(area_SC, maxngrid, type_dbl)
+    end if
     call my_barrier()
 
     call stop_print_timer(tmr_l_tmp1, "set_density", IPRINT_TIME_THRES3)
