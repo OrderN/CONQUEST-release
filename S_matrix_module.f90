@@ -288,6 +288,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   2016/09/28 nakata
 !!   This subroutine is the part for blips in previous get_S_matrix
+!!   2018/05/24 nakata
+!!   Changed matS and matKE to matS(1) and matKE(1)
 !!
 !!  TODO
 !!    
@@ -348,8 +350,9 @@ contains
          write (io_lun, *) 'Doing integration ', atomfns
     ! Integrate
     if(flag_analytic_blip_int) then
+!       call matrix_scale(zero,matS(1))   ! 2018.5.24 nakata, this will be done soon.
        call matrix_scale(zero,matS)
-       call matrix_scale(zero,matKE)
+       call matrix_scale(zero,matKE(1))
        grad_coeff_array = zero
        allocate(nreqs(blip_trans%npart_send))
        ! For speed, we should have a blip_trans%max_len and max_nsf and allocate once
@@ -418,7 +421,8 @@ contains
                    call return_matrix_block_pos(matM12(spin),wheremat,this_data_M12(:,:,spin),this_nsfi*this_nsfj)
                 end do
                 call get_S_analytic(blips_on_atom(i_in_prim),supp_on_j,support_gradient(i_in_prim), &
-                     matS,matKE,this_data_M12,this_data_K, i_in_prim, &
+                     matS,matKE(1),this_data_M12,this_data_K, i_in_prim, &
+!                     matS(1),matKE(1),this_data_M12,this_data_K, i_in_prim, & ! 2018.5.24 nakata, this will be done soon.
                      j_in_halo,dx,dy,dz,speci,specj,this_nsfi,this_nsfj)
                 deallocate(this_data_M12,this_data_K)
              end do
@@ -445,6 +449,7 @@ contains
        call my_barrier
        deallocate(nreqs)
     else
+!       call get_matrix_elements_new(inode-1, rem_bucket(1), matS(1), & ! 2018.5.24 nakata, this will be done soon.
        call get_matrix_elements_new(inode-1, rem_bucket(1), matS, &
             atomfns, atomfns)
        ! Do the onsite elements analytically
@@ -456,6 +461,7 @@ contains
                    iprim = iprim + 1
                    spec = bundle%species(iprim)
                    this_nsf = nsf_species(spec)
+!                   call get_onsite_S(blips_on_atom(iprim), matS(1), & ! 2018.5.24 nakata, this will be done soon.
                    call get_onsite_S(blips_on_atom(iprim), matS, &
                         np, ni, iprim, this_nsf, spec)
                 end do
