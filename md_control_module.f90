@@ -385,6 +385,7 @@ contains
 
     use memory_module,    only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use global_module,    only: area_moveatoms
+    use control,          only: MDtimestep
 
     ! passed variables
     class(type_thermostat), intent(inout)     :: th
@@ -480,7 +481,7 @@ contains
     case default
       call cq_abort("Invalid Yoshida-Suzuki order")
     end select
-    th%dt_ys = th%dt*th%dt_ys/th%n_mts_nhc
+    th%dt_ys = MDtimestep*th%dt_ys/th%n_mts_nhc
     deallocate(psuz)
 
   end subroutine init_ys
