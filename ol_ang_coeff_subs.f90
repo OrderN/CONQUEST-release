@@ -2023,6 +2023,8 @@ contains
   subroutine set_fact(lmax)
     use datatypes
     use numbers, ONLY: one
+    use GenComms, only: inode, ionode
+    use global_module, only: io_lun
     implicit none
 
     integer :: lmax

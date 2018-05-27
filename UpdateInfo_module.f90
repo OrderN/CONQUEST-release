@@ -99,7 +99,7 @@ contains
     use io_module, ONLY: get_file_name
     use group_module, ONLY: parts
     use mult_module, ONLY: mat_p
-    
+
     implicit none
 
     ! passed variables
@@ -242,7 +242,7 @@ contains
     !!  call statement instead.                                             !!
     !! ------------------------------ NOTE: ------------------------------- !! 
     if (inode.EQ.ionode) write (io_lun,*) "Reorganise local matrix data"
-    call UpdateMatrix_local(Info,range,matA,flag_remote_iprim,nfile)
+     call UpdateMatrix_local(Info,range,matA,flag_remote_iprim,nfile)
     if (numprocs.NE.1) then
       if (LmatrixSend%nrecv_node.GT.0 .OR. LmatrixRecv%nsend_node.GT.0) then
         if (inode.EQ.ionode) write (io_lun,*) "Reorganise remote matrix data"
@@ -1929,7 +1929,10 @@ contains
     use matrix_data, ONLY: max_range
     use atom_dispenser, ONLY: allatom2part
     use GenComms, ONLY: ionode
-    use global_module, ONLY:  ni_in_cell, atom_coord
+    use global_module, ONLY:  ni_in_cell, atom_coord, shift_in_bohr
+
+    use dimens,        only: r_super_x, r_super_y, r_super_z
+
 
     implicit none
 
@@ -1962,6 +1965,9 @@ contains
     logical :: find
     character(20) :: file_name,file_name2,file_name3
 
+    real(double) :: eps, xcover, ycover, zcover, rr
+
+    !DB write(io_lun,fmt='(a,3f15.7)') ' scaling factor for lattice in Updatelocal = ',scale_x,scale_y,scale_z
     !! ---------- DEBUG ---------- !!
     if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
        call get_file_name('UpdateL1',numprocs,inode,file_name)
@@ -2037,7 +2043,7 @@ contains
                 !ori zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
 
                 !! -------- DEBUG -------- !!
-                if (flag_MDdebug) then
+                if (flag_MDdebug .and. iprint_MDdebug .gt. 1) then
                    Rijx=xprim_i-xx_j
                    Rijy=yprim_i-yy_j
                    Rijz=zprim_i-zz_j
@@ -2062,7 +2068,9 @@ contains
                 !call atom2part(xx_j,yy_j,zz_j,jcoverx,jcovery,jcoverz)
                 call atom2part(xx_j,yy_j,zz_j,ind_part,jcoverx,jcovery,jcoverz,idglob_jj)
                 !db if (inode.EQ.ionode) call allatom2part(ind_qart)
-                if (flag_MDdebug) write (lun_db,*) "atom2part -> jcover:", jcoverx,jcovery,jcoverz !db
+                if (flag_MDdebug .and. iprint_MDdebug .gt. 1) then
+                  write (lun_db,*) "atom2part -> jcover:", jcoverx,jcovery,jcoverz !db
+                end if
                 ! Get the partition indices with (x,y,z) in CS.
                 ! -> NOTE: I'm not sure about the EXACT definition of nspanlx,y,z but 
                 ! -> without '+1' or '-1', the code doesn't work adequately...

@@ -400,7 +400,7 @@ second:   do
           end do
           call io_close(lun)
        else
-          if(iprint_init>2) write(io_lun,'(10x,a30)') 'Entering read_atomic_positions'
+          if(iprint_init>2) write(io_lun,'(10x,a40,a20)') 'Entering read_atomic_positions; reading ', filename
           call io_assign(lun)
           open(unit=lun,file=filename,status='old')
           ! Read supercell vector - for now it must be orthorhombic so
@@ -3962,6 +3962,70 @@ second:   do
   end subroutine write_positions
   !!***
 
+  !!****f* io_module/write_xsf *
+  !!
+  !!  NAME 
+  !!   write_xsf
+  !!  PURPOSE
+  !!   Writes atomic positions to a .xsf file, viewable using VMD
+  !!  INPUTS
+  !!   type(group_set) :: parts
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/10/26
+  !!  MODIFICATION HISTORY
+  !!   
+  !!  SOURCE
+  !!
+  subroutine write_xsf(filename, step)
+
+    use datatypes
+    use numbers,        only: zero
+    use dimens,         only: r_super_x, r_super_y, r_super_z
+    use global_module,  only: ni_in_cell, iprint_init, atom_coord, &
+                              species_glob
+    use species_module, only: species_label
+    use GenComms,       only: inode, ionode, cq_abort
+    use units,          only: BohrToAng
+    use timer_module
+
+    ! Passed variables
+    character(len=*)  :: filename
+    integer           :: step
+
+    ! Local variables
+    integer                    :: lun, i
+    character(len=2)           :: atom_name
+
+    if(inode==ionode) then
+      if (iprint_init>2) write(io_lun,*) 'Writing atomic positions to .xsf'
+      call io_assign(lun)
+      if(append_coords) then
+         open(unit=lun,file=filename,position='append')
+         write(lun,*)
+      else
+         open(unit=lun,file=filename)
+      end if
+      write(lun,'(a)') "CRYSTAL"
+      write(lun,'("PRIMVEC   ",i8)') step
+      write(lun,fmt='(3f14.8)') r_super_x*BohrToAng, zero, zero
+      write(lun,fmt='(3f14.8)') zero, r_super_y*BohrToAng, zero
+      write(lun,fmt='(3f14.8)') zero, zero, r_super_z*BohrToAng
+      write(lun,'("PRIMCOORD ",i8)') step
+      write(lun,fmt='(2i8)') ni_in_cell, 1
+      do i=1,ni_in_cell
+        atom_name = adjustr(species_label(species_glob(i))(1:2))
+        write(lun,'(a4,3f16.8)') atom_name, atom_coord(:,i)*BohrToAng
+                 ! species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
+      end do
+      call io_close(lun)
+    end if
+  end subroutine write_xsf
+  !!***
+
   ! Hopefully we'll never need this kludgy but portable way of flushing buffers !
   !  subroutine force_buffers(lun)
   !
@@ -4283,7 +4347,7 @@ second:   do
   !!
   subroutine read_velocity(velocity, filename)
     use numbers
-    use global_module, only: id_glob, ni_in_cell,id_glob_inv
+    use global_module, only: id_glob, ni_in_cell,id_glob_inv, iprint_init
     use GenComms, only: inode, ionode, cq_abort, gcopy
 
     implicit none
@@ -4297,6 +4361,7 @@ second:   do
     integer :: lun
 
     if(inode == ionode) then
+       if(iprint_init>2) write(io_lun,'(10x,a40,a20)') 'Entering read_velocity; reading ', filename
        call io_assign(lun)
        open(unit=lun,file=filename)
        rewind(unit=lun)

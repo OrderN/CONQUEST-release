@@ -126,6 +126,8 @@
 !!    Moved fire variables to Integrators_module
 !!   2017/12/05 09:59 dave with TM & NW (MIZUHO)
 !!    Added new function type - NA projector function (napf)
+!!   2018/04/25 10:00 zamaan
+!!    Added target attribute to rcellx, x_atom_cell etc.
 !!  SOURCE
 !!
 module global_module
@@ -146,16 +148,16 @@ module global_module
   integer, allocatable, dimension(:) :: id_glob_inv  ! gives global number for a CC atom
   integer, dimension(:), allocatable :: species_glob ! gives species 
   integer :: numprocs               ! number of processors
-  real(double) :: rcellx,rcelly,rcellz  ! cell side lengths
-  real(double), allocatable, dimension(:) :: x_atom_cell ! position of atom in sim cell (CC)
-  real(double), allocatable, dimension(:) :: y_atom_cell
-  real(double), allocatable, dimension(:) :: z_atom_cell
-  integer,      allocatable, dimension(:) :: coord_to_glob
+  real(double), target :: rcellx,rcelly,rcellz  ! cell side lengths
+  real(double), allocatable, dimension(:), target :: x_atom_cell ! position of atom in sim cell (CC)
+  real(double), allocatable, dimension(:), target :: y_atom_cell
+  real(double), allocatable, dimension(:), target :: z_atom_cell
+  integer,      allocatable, dimension(:), target :: coord_to_glob
   integer      :: ni_in_cell ! Atoms in cell
   real(double) :: ne_in_cell ! Electrons in cell
   ! atom_coord : Use global labelling, in the future this array should
   ! be used instead of x, y, z_atom_cell. by T. Miyazaki
-  real(double), dimension(:,:), allocatable :: atom_coord ! Atomic coordinates
+  real(double), dimension(:,:), allocatable, target :: atom_coord ! Atomic coordinates
   integer,      dimension(:,:), allocatable :: sorted_coord ! Atom IDs of atoms sorted according to x, y, z coords
   logical,      dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
   integer,      dimension(:),   allocatable :: flag_cdft_atom
@@ -330,10 +332,13 @@ module global_module
   logical :: flag_SkipEarlyDM
   logical :: flag_MDcontinue
   logical :: flag_MDdebug
+  logical :: flag_thermoDebug
+  logical :: flag_baroDebug
   logical :: flag_FixCOM 
   integer :: McWFreq
   integer :: MDinit_step  
-  real(double),parameter   :: shift_in_bohr = 1.0E-03_double
+  !ORI real(double),parameter   :: shift_in_bohr = 1.0E-03_double
+  real(double),parameter   :: shift_in_bohr = 1.0E-06_double
   ! Table showing atoms (global) in nodes
   integer :: n_proc_old
   integer,allocatable :: glob2node(:)        ! size: ni_in_cell
