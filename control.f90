@@ -864,8 +864,8 @@ contains
          if (nequil == 0) then
            write (io_lun, '(4x,a)') "Berendsen equilibration finished, &
                                      starting extended system dynamics."
-           call thermo%init_thermo('nhc', md_ndof, md_tau_T, &
-                                   mdl%ion_kinetic_energy)
+           call thermo%init_thermo('nhc', 'iso-mttk', MDtimestep, md_ndof, &
+                                   md_tau_T, mdl%ion_kinetic_energy)
            call baro%init_baro('iso-mttk', md_ndof, stress, ion_velocity, &
                                md_tau_P, mdl%ion_kinetic_energy)
          end if
@@ -943,14 +943,15 @@ contains
     select case(md_ensemble)
     case('nve')
       ! Just for computing temperature
-      call thermo%init_thermo('None', md_ndof, md_tau_T, mdl%ion_kinetic_energy)
+      call thermo%init_thermo('none', 'none', MDtimestep, md_ndof, md_tau_T, &
+                              mdl%ion_kinetic_energy)
       call baro%init_baro('None', md_ndof, stress, ion_velocity, &
                           md_tau_P, mdl%ion_kinetic_energy) ! to get the pressure
     case('nvt')
       call baro%init_baro('None', md_ndof, stress, ion_velocity, &
                           md_tau_P, mdl%ion_kinetic_energy) ! to get the pressure
-      call thermo%init_thermo(md_thermo_type, md_ndof, md_tau_T, &
-                              mdl%ion_kinetic_energy)
+      call thermo%init_thermo(md_thermo_type, 'none', MDtimestep, md_ndof, &
+                              md_tau_T, mdl%ion_kinetic_energy)
     case('npt')
       select case(md_baro_type)
       case('iso-mttk')
@@ -959,21 +960,22 @@ contains
             write (io_lun, '(4x,"Equilibrating using Berendsen &
                              baro/thermostat for ",i8," steps")') nequil
           end if
-          call thermo%init_thermo('berendsen', md_ndof, md_tau_T_equil, &
+          call thermo%init_thermo('berendsen', 'berendsen', MDtimestep, &
+                                  md_ndof, md_tau_T_equil, &
                                   mdl%ion_kinetic_energy)
           call baro%init_baro('berendsen', md_ndof, stress, ion_velocity, &
                               md_tau_P_equil, mdl%ion_kinetic_energy)
         else
-          call thermo%init_thermo('nhc', md_ndof, md_tau_T, &
-                                  mdl%ion_kinetic_energy)
+          call thermo%init_thermo('nhc', 'iso-mttk',  MDtimestep, md_ndof, &
+                                  md_tau_T, mdl%ion_kinetic_energy)
           call baro%init_baro('iso-mttk', md_ndof, stress, ion_velocity, &
                               md_tau_P, mdl%ion_kinetic_energy)
         end if
       case('ortho-mttk')
       case('mttk')
       case('berendsen')
-        call thermo%init_thermo('berendsen', md_ndof, md_tau_T, &
-                                mdl%ion_kinetic_energy)
+        call thermo%init_thermo('berendsen', 'berendsen', MDtimestep, &
+                                md_ndof, md_tau_T, mdl%ion_kinetic_energy)
         call baro%init_baro('berendsen', md_ndof, stress, ion_velocity, &
                             md_tau_P, mdl%ion_kinetic_energy)
       case default
