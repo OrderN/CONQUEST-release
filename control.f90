@@ -484,6 +484,8 @@ contains
 !!    Changed to initialise n_stop_qMD
 !!   2018/04/24 zamaan
 !!    Initial NPT implementation (isotropic fluctuations only)
+!!   2018/05/29 zamaan
+!!    Added time step argument to init_thermo calls
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)

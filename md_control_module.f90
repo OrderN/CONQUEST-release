@@ -26,6 +26,9 @@
 !!    Implemented isotropic MTTK barostat
 !!   2017/12/05 zamaan
 !!    Added separate NHC chain for cell degrees of freedom
+!!   2017/05/29 zamaan
+!!    Corrected sign of potential energy contribution in get_nhc_energy. Added
+!!    cell degrees of freedom (cell_ndof) to equations for clarity.
 !!  SOURCE
 !!
 module md_control
@@ -884,6 +887,9 @@ contains
   !!   Zamaan Raza
   !!  CREATION DATE
   !!   2017/10/24 13:19
+  !!  MODIFICATION HISTORY
+  !!   2018/05/29 zamaan
+  !!    Corrected sign of potential energy contribution, added cell_ndof
   !!  SOURCE
   !!  
   subroutine get_nhc_energy(th)
