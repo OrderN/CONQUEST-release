@@ -61,7 +61,8 @@ contains
   subroutine vVerlet_r_dt(dt,v,flag_movable)
    ! Module usage
    use global_module, ONLY: ni_in_cell,id_glob,x_atom_cell,y_atom_cell,z_atom_cell, &
-                            flag_move_atom
+                            iprint_MD, io_lun
+   use GenComms, only: myid
    use species_module, ONLY: species,mass
    use move_atoms, ONLY: fac
 
@@ -75,6 +76,8 @@ contains
    real(double) :: massa
    logical :: flagx,flagy,flagz
    real(double) :: dx, dy, dz
+
+   if (myid==0 .and. iprint_MD>1) write(io_lun,*) "Welcome to vVerlet_r_dt"
 
    ibeg_atom = 1
    do atom = 1, ni_in_cell
@@ -138,9 +141,10 @@ contains
   subroutine vVerlet_v_dthalf(dt,v,f,flag_movable,second_call)
    ! Module usage
    use numbers, ONLY: half,zero
-   use global_module, ONLY: ni_in_cell,id_glob,flag_quench_MD
+   use global_module, ONLY: ni_in_cell,id_glob,flag_quench_MD, flag_MDdebug, io_lun
    use species_module, oNLY: species,mass
    use move_atoms, ONLY: fac
+   use GenComms, only: inode,ionode
 
    implicit none
    ! passed variables
@@ -154,6 +158,7 @@ contains
    real(double) :: vf,massa
    logical :: flagx,flagy,flagz
 
+   if (inode==ionode .and. flag_MDdebug) write(io_lun,*) "Welcome to vVerlet_v_dthalf"
    ibeg_atom=1
    ! for quenched-MD
    if (present(second_call) .AND. flag_quench_MD) then

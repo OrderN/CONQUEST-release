@@ -68,6 +68,8 @@
 !!    Adding non-SCF and PCC stress components
 !!   2015/11/26 15:24 dave
 !!    Changing ewald_force and ewald_stress to ion_interaction_force and _stress
+!!   2017/11/8 10:44 zamaan
+!!    added target attribute to stress
 !!   2018/01/24 11:45 JST dave
 !!    Added NA integral & projector approach to forces (flag_neutral_atom_projector)
 !!  SOURCE
@@ -85,10 +87,11 @@ module force_module
 
   save
 
-  real(double), dimension(:,:), allocatable :: tot_force, s_pulay_for, phi_pulay_for
+  real(double), dimension(:,:), allocatable, target :: tot_force
+  real(double), dimension(:,:), allocatable :: s_pulay_for, phi_pulay_for
 
   ! On-site part of stress tensor as Conquest uses orthorhombic cells (easily extended)
-  real(double), dimension(3) :: stress
+  real(double), dimension(3), target :: stress
   real(double), dimension(3) :: SP_stress, KE_stress, NL_stress, PP_stress, GPV_stress, &
        XC_stress, nonSCF_stress, pcc_stress, NA_stress
 
