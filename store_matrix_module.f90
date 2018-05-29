@@ -1050,7 +1050,7 @@ contains
         !file_name=trim(file_name)//num
 
         call get_file_name_2rank(stub//'matrix2',file_name,index,index_file)
-         write(*,*) ' FILE NAME :: inode,ifile = ',inode,ifile,'  NAME ',file_name
+!         write(*,*) ' FILE NAME :: inode,ifile = ',inode,ifile,'  NAME ',file_name
 
         call io_assign(lun)
         open (lun,file=file_name,status='old',iostat=stat)

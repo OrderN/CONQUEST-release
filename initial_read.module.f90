@@ -142,6 +142,8 @@ contains
   !!    Changed to check consistence between flag_one_to_one and flag_Multisite
   !!   2017/07/11 16:36 dave
   !!    Bug fix (GitHub issue #36) to turn off basis optimisation if NSF=NPAO
+  !!   2018/05/11 10:26 dave
+  !!    Bug fix (GitHub issue #80) to set flag_SFcoeffReuse false if NSF=NPAO
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -173,7 +175,8 @@ contains
                                       flag_SpinDependentSF, nspin_SF,  &
                                       flag_Multisite,                  &
                                       flag_cdft_atom, flag_local_excitation, &
-                                      flag_diagonalisation, flag_vary_basis
+                                      flag_diagonalisation, flag_vary_basis, &
+                                      flag_MDcontinue, flag_SFcoeffReuse
     use cdft_data, only: cDFT_NAtoms, &
                          cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
@@ -242,7 +245,11 @@ contains
     end if    
     def = 'make_prt.dat'
     part_coord_file = fdf_string(80,'IO.Partitions',def)
-    call read_atomic_positions(trim(atom_coord_file))
+    if (.not. flag_MDcontinue) then
+      call read_atomic_positions(trim(atom_coord_file))
+    else
+      call read_atomic_positions('cq.position')
+    end if
     if(iprint_init>4) call print_process_info()
     ! By now, we'll have unit cell sizes and grid cutoff
     call find_grid
@@ -323,8 +330,12 @@ contains
        if (flag_one_to_one .and. flag_Multisite) then
           call cq_abort("flag_Multisite is .true., but the number of SFs is the same as the number of PAOs.")
        endif
-       if (.not.flag_one_to_one) atomf = paof
-       if (flag_one_to_one) flag_SpinDependentSF = .false. ! spin-dependent SFs will be available only for contracted SFs
+       if (flag_one_to_one) then
+          flag_SpinDependentSF = .false. ! spin-dependent SFs will be available only for contracted SFs
+          flag_SFcoeffReuse = .false.
+       else
+          atomf = paof
+       end if
        if (flag_SpinDependentSF) nspin_SF = nspin
        if (flag_one_to_one.AND.flag_vary_basis) then
           write(io_lun,fmt='(/2x,"************")')
@@ -610,6 +621,8 @@ contains
   !!    Adding parameters for simulation cell optimisation
   !!   2017/10/15 dave & an
   !!    Reading atomic spins: small tweak to test on net spin (uses abs and RD_ERR)
+  !!   2017/10/24 zamaan
+  !!    added thermostat flags for refactored NVT
   !!   2018/01/19 dave
   !!    Added test for lmax_ps and NA projector functions
   !!   2018/01/22 tsuyoshi (with dave)
@@ -620,6 +633,15 @@ contains
   !!    Bug fix: turn off mixed L-SCF with diagonalisation (was breaking force tests)
   !!    Second issue (14:08) set SC.MinIters to 0 as was breaking force tests; also tweaked
   !!    linear mixing end default
+  !!   2018/03/09 zamaan
+  !!    Set some flags to true when restarting MD (loading matrices)
+  !!   2018/04/12 22:00 nakata
+  !!    Bug fix: turn on flag_LFD_MD_UseAtomicDensity only when flag_SFcoeffReuse is .false.
+  !!   2018/04/24 zamaan
+  !!    Changed AtomMove.FixCentreOfMass default to .true. except when running
+  !!    FIRE qMD. minE.GlobalTolerance now defaults to .false. for MD.
+  !!   2018/4/25 zamaan
+  !!    added md_tdep flag for TDEP output dump
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -670,6 +692,7 @@ contains
                              dscf_target_nfold, flag_local_excitation, dscf_HOMO_thresh,   &
                              dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit,           &
                              flag_MDcontinue,flag_MDdebug,flag_MDold,  &
+                             flag_thermoDebug, flag_baroDebug, &
                              flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
                              restart_T,restart_X,flag_XLBOMD,flag_propagateX,              &
                              flag_propagateL,flag_dissipation,integratorXL, flag_FixCOM,   &
@@ -759,6 +782,14 @@ contains
                                   flag_LFD_minimise, LFD_ThreshE, LFD_ThreshD,           &
                                   LFD_Thresh_EnergyRise, LFD_max_iteration,              &
                                   flag_LFD_MD_UseAtomicDensity
+    use control,    only: md_ensemble
+    use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
+                          md_target_press, md_baro_type, md_tau_P, &
+                          md_thermo_type, md_bulkmod_est, md_box_mass, &
+                          flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
+                          md_calc_xlmass, md_berendsen_equil, &
+                          md_omega_t, md_omega_p, md_tau_T_equil, md_tau_P_equil
+    use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
@@ -929,7 +960,6 @@ contains
           call cq_abort('read_input: you may not select restart for a run just now')
        endif
        init_blip_flag = fdf_string(10,'Basis.InitBlipFlag','pao')
-       restart_LorK   = fdf_boolean('General.LoadL',   .false.)
        restart_rho    = fdf_boolean('General.LoadRho', .false.)
        restart_T      = fdf_boolean('General.LoadInvS',.false.)
        ! Is there a net charge on the cell ?
@@ -1022,7 +1052,7 @@ contains
        flag_analytic_blip_int = fdf_boolean('Basis.AnalyticBlipIntegrals',.false.)
        !
        !
-       find_chdens            = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
+!       find_chdens            = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        flag_Becke_weights     = fdf_boolean('SC.BeckeWeights',          .false.)
        flag_Becke_atomic_radii= fdf_boolean('SC.BeckeAtomicRadii',      .false.)
        ! Number of species
@@ -1308,10 +1338,8 @@ contains
              LFD_Thresh_EnergyRise = fdf_double('Multisite.LFD.Min.ThreshEnergyRise',LFD_threshE*ten)
              LFD_max_iteration = fdf_integer('Multisite.LFD.Min.MaxIteration',50)
           endif
-          flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
-       else 
-          flag_LFD_MD_UseAtomicDensity = .false.
        endif
+       flag_LFD_MD_UseAtomicDensity = .false.
 !!$
 !!$
 !!$
@@ -1319,7 +1347,11 @@ contains
 !!$ 
        !blip_width = support_grid_spacing *
        !             fdf_double('blip_width_over_support_grid_spacing',four)
-       flag_global_tolerance = fdf_boolean('minE.GlobalTolerance',     .true. )
+       if (leqi(runtype,'md')) then
+         flag_global_tolerance = fdf_boolean('minE.GlobalTolerance', .true.)
+       else
+         flag_global_tolerance = fdf_boolean('minE.GlobalTolerance', .false.)
+       end if
        L_tolerance           = fdf_double ('minE.LTolerance',    1.0e-7_double)
        sc_tolerance          = fdf_double ('minE.SCTolerance',   1.0e-6_double)
        maxpulayDMM           = fdf_integer('DM.MaxPulay',        5            )
@@ -1551,10 +1583,19 @@ contains
           if(inode==ionode) write(io_lun,*) ' As ghost atoms are included, UseGemm must be false.'
           UseGemm = .false.
        endif
+
        flag_check_DFT     = fdf_boolean('General.CheckDFT',.false.)
-       flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        flag_quench_MD     = fdf_boolean('AtomMove.QuenchMD',.false.)
        flag_fire_qMD = fdf_boolean('AtomMove.FIRE',.false.)
+       ! If we're doing MD, then the centre of mass should generally be fixed,
+       ! except for FIRE quenched MD
+       if (leqi(runtype, 'md')) then
+          if (flag_fire_qMD) then
+            flag_FixCOM = fdf_boolean('AtomMove.FixCentreOfMass', .false.)
+          else
+            flag_FixCOM = fdf_boolean('AtomMove.FixCentreOfMass', .true.)
+          end if
+       end if
        if(flag_fire_qMD) then
           fire_N_min         = fdf_integer('AtomMove.FireNMin',5)
           fire_N_max         = fdf_integer('AtomMove.FireNMaxSlowQMD',10)
@@ -1778,16 +1819,38 @@ contains
        flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
        flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.)
        flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseL',.false.)
+       flag_write_xsf    = fdf_boolean('AtomMove.WriteXSF', .true.)
+       if (flag_LFD .and. .not.flag_SFcoeffReuse) then
+          ! if LFD, use atomic density in default when we don't reuse SFcoeff
+          flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
+       endif
        ! DRB 2017/05/09 Removing restriction (now implemented)
        !if(flag_spin_polarisation.AND.flag_LmatrixReuse) then
        !   call cq_abort("L matrix re-use and spin polarisation not implemented !")
        !end if
+
        flag_TmatrixReuse = fdf_boolean('AtomMove.ReuseInvS',.false.)
        flag_SkipEarlyDM  = fdf_boolean('AtomMove.SkipEarlyDM',.false.)
        McWFreq           = fdf_integer('AtomMove.McWeenyFreq',0)
-       flag_FixCOM       = fdf_boolean('AtomMove.FixCentreOfMass', .false.)
        ! XL-BOMD
        flag_XLBOMD       = fdf_boolean('AtomMove.ExtendedLagrangian',.false.)
+
+       ! zamaan 2018/03/03 I can't imagine a case where you would want to
+       ! restart a MD run without loading the various matrices, so I'm 
+       ! Defaulting some flags to true. Calling fdf to ensure that input.log
+       ! remains consistent
+       if (flag_MDcontinue) then
+         flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.true.)
+         restart_LorK   = fdf_boolean('General.LoadL', .true.)
+         find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
+         if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .true.)
+       else
+         flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
+         restart_LorK   = fdf_boolean('General.LoadL', .false.)
+         find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
+         if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
+       end if
+
        if (flag_XLBOMD) then
          kappa=fdf_double('XL.Kappa',2.0_double)
          if (kappa.GT.2.0_double) then
@@ -1831,7 +1894,6 @@ contains
              "WARNING: integrator must be velocity Verlet when dissipation &
              &does not apply ! Setting to velocity Verlet "
          endif
-         restart_X=fdf_boolean('XL.LoadX',.false.)
        endif ! XL-BOMD
        ! Constraints
        flag_RigidBonds=fdf_boolean('AtomMove.RigidBonds', .false.)
@@ -1863,6 +1925,53 @@ contains
            call fdf_endblock
          enddo
        endif ! Constraints
+
+       md_ensemble        = fdf_string(3, 'MD.Ensemble', 'nve')
+       md_calc_xlmass     = fdf_boolean('MD.CalculateXLMass', .false.)
+
+       ! Thermostat
+       md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
+       if (leqi(md_thermo_type, 'berendsen')) then
+         md_tau_T           = fdf_double('MD.tauT', one)
+       else
+         md_tau_T           = fdf_double('MD.tauT', one)
+       end if
+       md_tau_T_equil     = fdf_double('MD.tauTEquil', one)
+       md_omega_t         = fdf_double('MD.OmegaT', 500.0_double)
+       md_n_nhc           = fdf_integer('MD.nNHC', 5) 
+       md_n_ys            = fdf_integer('MD.nYoshida', 1)
+       md_n_mts           = fdf_integer('MD.nMTS', 1)
+       flag_thermoDebug   = fdf_boolean('MD.ThermoDebug',.false.)
+       allocate(md_nhc_mass(md_n_nhc)) 
+       allocate(md_nhc_cell_mass(md_n_nhc)) 
+       md_nhc_mass = one
+       md_nhc_cell_mass = one
+       if (fdf_block('MD.NHCMass')) then
+         read(unit=input_array(block_start), fmt=*) md_nhc_mass
+       end if
+       call fdf_endblock
+       if (fdf_block('MD.CellNHCMass')) then
+         read(unit=input_array(block_start), fmt=*) md_nhc_cell_mass
+       end if
+       call fdf_endblock
+
+       ! Barostat
+       md_baro_type       = fdf_string(20, 'MD.Barostat', 'None')
+       md_target_press    = fdf_double('MD.TargetPressure', zero)
+       md_box_mass        = fdf_double('MD.BoxMass', one)
+       if (leqi(md_baro_type, 'berendsen')) then
+         md_tau_P           = fdf_double('MD.tauP', 10.0_double)
+       else
+         md_tau_P           = fdf_double('MD.tauP', 100.0_double)
+       end if
+       md_tau_P_equil     = fdf_double('MD.tauPEquil', 100.0_double)
+       md_omega_p         = fdf_double('MD.OmegaP', 100.0_double)
+       md_bulkmod_est     = fdf_double('MD.BulkModulusEst', one)
+       md_cell_nhc        = fdf_boolean('MD.CellNHC', .false.)
+       flag_baroDebug     = fdf_boolean('MD.BaroDebug',.false.)
+       md_berendsen_equil = fdf_integer('MD.BerendsenEquil', 0)
+       md_tdep            = fdf_boolean('MD.TDEP', .false.)
+
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")
     end if ! new_format
@@ -2088,12 +2197,14 @@ contains
     use blip,                 only: blip_info
     use global_module,        only: flag_basis_set, PAOs,blips,        &
                                     flag_precondition_blips, io_lun,   &
-                                    flag_Multisite, flag_diagonalisation
+                                    flag_Multisite, flag_diagonalisation, flag_neutral_atom
     use minimise,             only: energy_tolerance, L_tolerance,     &
                                     sc_tolerance,                      &
                                     n_support_iterations,              &
                                     n_L_iterations
     use datestamp,            only: datestr, commentver
+    use pseudopotential_common, only: flag_neutral_atom_projector, maxL_neutral_atom_projector, &
+         numN_neutral_atom_projector
 
     implicit none
 
@@ -2180,6 +2291,15 @@ contains
           write(io_lun,22) species_label(n), 'Local    '
        end if
     end do
+
+    if(flag_neutral_atom) then
+       write(io_lun,fmt='(/13x,"Using neutral atom potential (NAP) formalism")')
+       if(flag_neutral_atom_projector) then
+          write(io_lun,fmt='(/13x,"Calculating 1- and 2-centre NAP integrals analytically")')
+          write(io_lun,fmt='(13x,"Expanding 3-centre NAP integrals with ",i2," projectors up to l=",i2)') &
+               maxval(numN_neutral_atom_projector),maxL_neutral_atom_projector
+       end if
+    end if
 
     !if(.NOT.find_chdens) then
     !   write(io_lun,261)

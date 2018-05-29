@@ -2023,6 +2023,8 @@ contains
   subroutine set_fact(lmax)
     use datatypes
     use numbers, ONLY: one
+    use GenComms, only: inode, ionode
+    use global_module, only: io_lun
     implicit none
 
     integer :: lmax
@@ -2034,7 +2036,7 @@ contains
     max_fact = 4*lmax+1
     !if(max_fact<2*lmax_prefac) max_fact = 2*lmax_prefac
     if(max_fact<(20+2*lmax+1))  max_fact = 20+2*lmax+1
-    write(*,*) 'max_fact is ',max_fact,lmax
+    !write(*,*) 'max_fact is ',max_fact,lmax
     allocate(fact(-1:max_fact))
     fact(-1:max_fact) = one
     do ii=2, max_fact

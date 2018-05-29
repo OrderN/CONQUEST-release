@@ -2195,7 +2195,9 @@ contains
 !!   2015/11/09 08:29 dave
 !!    Moved to pseudo_tm_module and included in main trunk
 !!   2016/01/07 08:37 dave
-!!    Changed splint calls into explicit calculations (faster, removed some bug)  
+!!    Changed splint calls into explicit calculations (faster, removed some bug)
+!!   2018/03/08 11:04 dave  
+!!    Tiny correction to use paoVNA delta in splining instead of pao (though they are same)
 !!  SOURCE
 !!  
   subroutine make_neutral_atom
@@ -2710,8 +2712,8 @@ contains
                    end if
                 end do
                 ! Spline paoVNA
-                delta = pao(isp)%angmom(l)%zeta(n)%delta
-                npoint = pao(isp)%angmom(l)%zeta(n)%length
+                delta = paoVNA(isp)%angmom(l)%zeta(n)%delta
+                npoint = paoVNA(isp)%angmom(l)%zeta(n)%length
                 yp1 = (paoVNA(isp)%angmom(l)%zeta(n)%table(2) &
                      - paoVNA(isp)%angmom(l)%zeta(n)%table(1)       )/delta
                 ypn = (paoVNA(isp)%angmom(l)%zeta(n)%table(npoint) &
