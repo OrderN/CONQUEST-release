@@ -1,24 +1,40 @@
-# -*- mode: makefile; mode: font-lock; column-number-mode: true; vc-back-end: CVS -*-
-#
-# $Id: system.make,v 1.2 2013/04/10 22:07:21 lat Exp $
-#
-# ISM RATM system.make
-#
 #
 
+# Set compilers
 FC=mpif90
 F77=mpif77
 
-# If you need 64-bit flags for compiling, add them for linking
+# Linking flags
 LINKFLAGS= -L/opt/local/lib
 ARFLAGS=
 
-# L.A. Truflandier intel/mkl/mpich2 compilation
-COMPFLAGS= -O3 -fbounds-check
+# Compilation flags
+COMPFLAGS= -O3 $(XC_COMPFLAGS)
 COMPFLAGS_F77= $(COMPFLAGS)
-LIBS=  $(FFT_LIB) -lscalapack ${BLACS} -latlas -llapack -lf77blas -lcblas
 
-# **<lat>** EXX is "stable" with FFTW (need to fix for the others) 
+# Set BLAS and LAPACK libraries
+BLAS= -latlas -llapack -lf77blas -lcblas
+
+# Full library call; remove scalapack if using dummy diag module
+LIBS= $(FFT_LIB) $(XC_LIB) -lscalapack $(BLAS)
+
+# LibXC compatibility (LibXC below) or Conquest XC library
+
+# Conquest XC library
+#XC_LIBRARY = CQ
+#XC_LIB =
+#XC_COMPFLAGS =
+
+# LibXC compatibility
+# Choose old LibXC (v2.x) or modern versions
+#XC_LIBRARY = LibXC_v2
+XC_LIBRARY = LibXC
+XC_LIB = -lxcf90 -lxc
+XC_COMPFLAGS = -I/opt/local/include
+
+# Set FFT library
+
+# EXX is "stable" with FFTW (need to fix for the others) 
 FFT_LIB=-lfftw3
 FFT_OBJ=fft_fftw3.o
 

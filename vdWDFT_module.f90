@@ -1555,6 +1555,8 @@ contains
   !! CREATION DATE
   !!   2012/03/01
   !! MODIFICATION HISTORY
+  !!   2018/02/13 12:23 dave
+  !!    Changed call for Vxc to XC_CQ
   !! SOURCE
   !!
   subroutine qofrho(rho_r, grho_r, q_r)
@@ -1563,7 +1565,7 @@ contains
     use numbers
     use GenComms,      only: cq_abort
     use global_module, only: nspin
-    use XC_module,     only: Vxc_of_r_LSDA_PW92
+    use XC,     only: Vxc_of_r_LSDA_PW92
 
     implicit none
 
@@ -2557,12 +2559,11 @@ contains
     use numbers
     use dimens
     use global_module, only: nspin, spin_factor,       &
-                             functional_gga_pbe96_rev98, &
                              IPRINT_TIME_THRES2
     use maxima_module, only: maxngrid
-    use XC_module,     only: build_gradient,           &
+    use XC,     only: build_gradient,           &
                              eps_xc_of_r_GGA_PBE,      &
-                             Vxc_of_r_LSDA_PW92
+                             Vxc_of_r_LSDA_PW92, functional_gga_pbe96_rev98
     use fft_module,    only: fft3, z_columns_node, recip_vector
     use GenComms,      only: gsum, inode, ionode, cq_abort
     use timer_module
@@ -3048,11 +3049,10 @@ contains
 
     use datatypes
     use numbers
-    use global_module, only: nspin, spin_factor,                  &
-                             functional_gga_pbe96_rev98
-    use XC_module,     only: build_gradient,                      &
+    use global_module, only: nspin, spin_factor
+    use XC,     only: build_gradient,                      &
                              eps_xc_of_r_GGA_PBE,                 &
-                             Vxc_of_r_LSDA_PW92
+                             Vxc_of_r_LSDA_PW92, functional_gga_pbe96_rev98
     use maxima_module, only: maxngrid
     use dimens,        only: n_my_grid_points, grid_point_volume, &
                              x_grid, y_grid, z_grid
