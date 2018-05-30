@@ -128,6 +128,8 @@
 !!    Added new function type - NA projector function (napf)
 !!   2018/04/25 10:00 zamaan
 !!    Added target attribute to rcellx, x_atom_cell etc.
+!!   2018/05/17 12:51 dave with Ayako Nakata
+!!    Changed flag_readAtomicSpin to flag_InitialAtomicSpin (more descriptive) and moved to density_module
 !!  SOURCE
 !!
 module global_module
@@ -384,8 +386,5 @@ module global_module
   ! diagonalise or linear scaling
   logical :: flag_diagonalisation
 
-  ! Initialise spin
-  logical :: flag_readAtomicSpin
-  
 end module global_module
 !!***
