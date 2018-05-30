@@ -17,8 +17,7 @@ ARFLAGS=
 #COMPFLAGS= -O3 -fbounds-check
 COMPFLAGS= -O3 $(XC_COMPFLAGS)
 COMPFLAGS_F77= $(COMPFLAGS)
-#LIBS=  $(FFT_LIB) -lscalapack ${BLACS} -latlas -llapack -lf77blas -lcblas
-LIBS=  $(FFT_LIB) -lscalapack -lvecLibFort $(XC_LIB)
+LIBS=  $(FFT_LIB) -lscalapack ${BLACS} -latlas -llapack -lf77blas -lcblas
 
 # XC library or not ?
 #XC_LIBRARY = CQ
