@@ -26,6 +26,9 @@
 !!    Implemented isotropic MTTK barostat
 !!   2017/12/05 zamaan
 !!    Added separate NHC chain for cell degrees of freedom
+!!   2017/05/29 zamaan
+!!    Corrected sign of potential energy contribution in get_nhc_energy. Added
+!!    cell degrees of freedom (cell_ndof) to equations for clarity.
 !!  SOURCE
 !!
 module md_control
@@ -74,12 +77,14 @@ module md_control
   type type_thermostat
     ! General thermostat variables
     character(20)       :: thermo_type  ! thermostat type
+    character(20)       :: baro_type
     character(3)        :: ensemble
     real(double)        :: T_int        ! instantateous temperature
     real(double)        :: T_ext        ! target temperature
     real(double)        :: ke_ions      ! kinetic energy of ions
     real(double)        :: dt           ! time step
     integer             :: ndof         ! number of degrees of freedom
+    integer             :: cell_ndof    ! cell degrees of freedom
     logical             :: append
     logical             :: cell_nhc     ! separate NHC for cell?
     real(double)        :: lambda       ! velocity scaling factor
@@ -224,11 +229,12 @@ contains
   !!   2018/05/16 16:45
   !!  SOURCE
   !!  
-  subroutine init_thermo(th, thermo_type, ndof, tau_T, ke_ions)
+  subroutine init_thermo(th, thermo_type, baro_type, dt, ndof, tau_T, ke_ions)
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
-    character(*), intent(in)              :: thermo_type
+    character(*), intent(in)              :: thermo_type, baro_type
+    real(double), intent(in)              :: dt
     integer, intent(in)                   :: ndof
     real(double), intent(in)              :: ke_ions, tau_T
 
@@ -238,6 +244,16 @@ contains
     th%ke_ions = ke_ions
     th%tau_T = tau_T
     th%thermo_type = thermo_type
+    th%baro_type = baro_type
+
+    select case(baro_type)
+    case('iso-mttk')
+      th%cell_ndof = 1
+    case('ortho-mttk')
+      th%cell_ndof = 3
+    case('mttk')
+      th%cell_ndof = 3
+    end select
 
     call th%get_temperature
     if (inode==ionode) then
@@ -254,7 +270,7 @@ contains
     case('none')
     case('berendsen')
     case('nhc')
-      call th%init_nhc
+      call th%init_nhc(dt)
     case default
       call cq_abort("Unknown thermostat type")
     end select
@@ -273,13 +289,14 @@ contains
   !!   2017/10/24 10:30
   !!  SOURCE
   !!  
-  subroutine init_nhc(th)
+  subroutine init_nhc(th, dt)
 
     use memory_module,    only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use global_module,    only: area_moveatoms
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
+    real(double), intent(in)              :: dt
 
     ! local variables
     character(40)                         :: fmt1, fmt2
@@ -350,7 +367,7 @@ contains
     call th%get_nhc_energy
 
     ! Yoshida-Suzuki time steps
-    call th%init_ys(th%n_ys)
+    call th%init_ys(dt, th%n_ys)
 
     write(fmt1,'("(4x,a16,",i4,"f12.2)")') th%n_nhc
     write(fmt2,'("(4x,a16,",i4,"f12.2)")') th%n_ys
@@ -381,14 +398,14 @@ contains
   !!   2017/12/08 16:24
   !!  SOURCE
   !!  
-  subroutine init_ys(th, n_ys)
+  subroutine init_ys(th, dt, n_ys)
 
     use memory_module,    only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use global_module,    only: area_moveatoms
-    use control,          only: MDtimestep
 
     ! passed variables
     class(type_thermostat), intent(inout)     :: th
+    real(double), intent(in)                  :: dt
     integer, intent(in)                       :: n_ys
 
     ! local variables
@@ -481,7 +498,7 @@ contains
     case default
       call cq_abort("Invalid Yoshida-Suzuki order")
     end select
-    th%dt_ys = MDtimestep*th%dt_ys/th%n_mts_nhc
+    th%dt_ys = dt*th%dt_ys/th%n_mts_nhc
     deallocate(psuz)
 
   end subroutine init_ys
@@ -870,6 +887,9 @@ contains
   !!   Zamaan Raza
   !!  CREATION DATE
   !!   2017/10/24 13:19
+  !!  MODIFICATION HISTORY
+  !!   2018/05/29 zamaan
+  !!    Corrected sign of potential energy contribution, added cell_ndof
   !!  SOURCE
   !!  
   subroutine get_nhc_energy(th)
@@ -880,21 +900,25 @@ contains
     ! local variables
     integer                               :: k
 
-    th%e_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2 + &
-                   th%ndof*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
     th%e_nhc_cell = zero
     if (th%cell_nhc) then
+      th%e_nhc_ion = th%m_nhc(1)*th%v_eta(1)**2 - &
+                     real(th%ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
       th%e_nhc_cell = th%e_nhc_cell + &
-                      half*th%m_nhc_cell(1)*th%v_eta_cell(1)**2 + &
-                      th%T_ext*fac_Kelvin2Hartree*th%eta_cell(1)
+                      th%m_nhc_cell(1)*th%v_eta_cell(1)**2 - &
+                      th%cell_ndof*th%T_ext*fac_Kelvin2Hartree*th%eta_cell(1)
+    else
+      th%e_nhc_ion = th%m_nhc(1)*th%v_eta(1)**2 - &
+                     real((th%ndof+th%cell_ndof), double) * &
+                     th%T_ext*fac_Kelvin2Hartree*th%eta(1)
     end if
 
     do k=2,th%n_nhc
-      th%e_nhc_ion = th%e_nhc_ion + half*th%m_nhc(k)*th%v_eta(k)**2 + &
+      th%e_nhc_ion = th%e_nhc_ion + th%m_nhc(k)*th%v_eta(k)**2 - &
                      th%T_ext*fac_Kelvin2Hartree*th%eta(k)
       if (th%cell_nhc) then
         th%e_nhc_cell = th%e_nhc_cell + &
-                        half*th%m_nhc_cell(k)*th%v_eta_cell(k)**2 + &
+                        th%m_nhc_cell(k)*th%v_eta_cell(k)**2 - &
                         th%T_ext*fac_Kelvin2Hartree*th%eta_cell(k)
       end if
     end do
@@ -970,9 +994,9 @@ contains
         write(lun,th%nhc_fmt) "v_eta:      ", th%v_eta
         write(lun,th%nhc_fmt) "G_nhc:      ", th%G_nhc
         if (th%cell_nhc) then
-          write(lun,th%nhc_fmt) "eta_cell:   ", th%eta
-          write(lun,th%nhc_fmt) "v_eta_cell: ", th%v_eta
-          write(lun,th%nhc_fmt) "G_nhc_cell: ", th%G_nhc
+          write(lun,th%nhc_fmt) "eta_cell:   ", th%eta_cell
+          write(lun,th%nhc_fmt) "v_eta_cell: ", th%v_eta_cell
+          write(lun,th%nhc_fmt) "G_nhc_cell: ", th%G_nhc_cell
           write(lun,'("e_nhc_ion:  ",e16.4)') th%e_nhc_ion
           write(lun,'("e_nhc_cell: ",e16.4)') th%e_nhc_cell
         end if
