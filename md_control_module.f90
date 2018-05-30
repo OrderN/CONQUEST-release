@@ -231,6 +231,8 @@ contains
   !!  
   subroutine init_thermo(th, thermo_type, baro_type, dt, ndof, tau_T, ke_ions)
 
+    use input_module,     only: leqi
+
     ! passed variables
     class(type_thermostat), intent(inout) :: th
     character(*), intent(in)              :: thermo_type, baro_type
@@ -258,12 +260,14 @@ contains
     call th%get_temperature
     if (inode==ionode) then
       write(io_lun,'(4x,"Thermostat type: ",a)') th%thermo_type
-      write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
-                                   th%T_ext
       write(io_lun,'(4x,a,f10.2)') 'Instantaneous temperature T_int = ', &
                                    th%T_int
-      write(io_lun,'(4x,a,f10.2)') 'Coupling time period      tau_T = ', &
-                                   th%tau_T
+      if (.not. leqi(thermo_type, 'none')) then
+        write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
+                                     th%T_ext
+        write(io_lun,'(4x,a,f10.2)') 'Coupling time period      tau_T = ', &
+                                     th%tau_T
+      end if
     end if
 
     select case(th%thermo_type)
@@ -1071,7 +1075,7 @@ contains
     baro%tau_P = tau_P
 
     select case(baro%baro_type)
-    case('None')
+    case('none')
     case('berendsen')
       baro%bulkmod = md_bulkmod_est
     case('iso-mttk')
@@ -1096,15 +1100,17 @@ contains
     if (inode==ionode) then
       write(io_lun,'(2x,a)') 'Welcome to init_baro'
       write(io_lun,'(4x,"Barostat type: ",a)') baro%baro_type
-      write(io_lun,'(4x,a,f14.2)') 'Target pressure        P_ext = ', &
-                                    baro%P_ext
       write(io_lun,'(4x,a,f14.2)') 'Instantaneous pressure P_int = ', &
                                     baro%P_int
-      write(io_lun,'(4x,a,f14.2)') 'Coupling time period   tau_P = ', &
-                                    baro%tau_P
-      if (leqi(baro%baro_type, 'iso-mttk')) then
-        write(io_lun,'(4x,a,f14.2)') 'Box mass                     = ', &
-                                      baro%box_mass
+      if (.not. leqi(baro_type, 'none')) then
+        write(io_lun,'(4x,a,f14.2)') 'Target pressure        P_ext = ', &
+                                      baro%P_ext
+        write(io_lun,'(4x,a,f14.2)') 'Coupling time period   tau_P = ', &
+                                      baro%tau_P
+        if (leqi(baro%baro_type, 'iso-mttk')) then
+          write(io_lun,'(4x,a,f14.2)') 'Box mass                     = ', &
+                                        baro%box_mass
+        end if
       end if
     end if
 

@@ -8,9 +8,12 @@
 !!  CREATION DATE
 !!   2017/10/31 11:50
 !!  MODIFICATION HISTORY
-!!   
+!!   2018/05/30 zamaan
+!!    Modified dump_stats to print correct header and columns when using
+!!    Berendsen equilibration in NVT ensemble
+!!
 !!  SOURCE
-!!  
+!!
 module md_model
 
   use datatypes
@@ -327,7 +330,7 @@ contains
         case ('nve')
           write(lun,'(a10,3a18,2a12)') "step", "pe", "ke", "H'", "T", "P"
         case ('nvt')
-          if (mdl%thermo_type == 'nhc') then
+          if (mdl%thermo_type == 'nhc' .or. md_berendsen_equil > 0) then
             write(lun,'(a10,4a18,2a12)') "step", "pe", "ke", "nhc", "H'", "T", "P"
           else
             write(lun,'(a10,3a16,2a12)') "step", "pe", "ke", "H'", "T", "P"
@@ -356,7 +359,7 @@ contains
         write(lun,'(i10,3e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
           mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, P_GPa
       case ('nvt')
-        if (mdl%thermo_type == 'nhc') then
+        if (mdl%thermo_type == 'nhc' .or. md_berendsen_equil > 0) then
           write(lun,'(i10,4e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%nhc_energy, mdl%h_prime, mdl%T_int, &
             P_GPa
