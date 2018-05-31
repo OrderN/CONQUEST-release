@@ -33,6 +33,8 @@
 !!    - Added experimental backtrace
 !!   2017/10/24 zamaan
 !!    Added md_ensemble variable for md_run
+!!   2018/05/30 zamaan
+!!    Implemented Berendsen thermostat and BerendsenEquil in NVT ensemble
 !!  SOURCE
 !!
 module control
@@ -486,6 +488,8 @@ contains
 !!    Initial NPT implementation (isotropic fluctuations only)
 !!   2018/05/29 zamaan
 !!    Added time step argument to init_thermo calls
+!!   2018/05/30 zamaan
+!!    Switch on NHC after using BerendsenEquil in NVT ensemble
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -555,7 +559,7 @@ contains
     integer       :: nequil ! number of Berendsen equilibration steps - zamaan
     real(double)  :: energy1, energy0, dE, max, g0
     character(50) :: file_velocity='velocity.dat'
-    logical       :: done,second_call,append_coords_bak
+    logical       :: done,second_call,append_coords_bak,flag_store
     logical,allocatable,dimension(:) :: flag_movable
 
     type(matrix_store_global) :: InfoGlob
@@ -754,9 +758,11 @@ contains
        end if
        ! Rescale the ionic positions for the berendsen barostat AFTER the 
        ! velocity updates to avoid rescaling velocities
-       if (leqi(md_baro_type, 'berendsen') .or. nequil > 0) then
-         call baro%propagate_berendsen(flag_movable)
-         call baro%update_cell
+       if (leqi(md_ensemble, 'npt')) then
+         if (leqi(md_baro_type, 'berendsen') .or. nequil > 0) then
+           call baro%propagate_berendsen(flag_movable)
+           call baro%update_cell
+         end if
        end if
        call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
        thermo%ke_ions = mdl%ion_kinetic_energy
@@ -866,10 +872,22 @@ contains
          if (nequil == 0) then
            write (io_lun, '(4x,a)') "Berendsen equilibration finished, &
                                      starting extended system dynamics."
-           call thermo%init_thermo('nhc', 'iso-mttk', MDtimestep, md_ndof, &
-                                   md_tau_T, mdl%ion_kinetic_energy)
-           call baro%init_baro('iso-mttk', md_ndof, stress, ion_velocity, &
-                               md_tau_P, mdl%ion_kinetic_energy)
+           ! If the run was restarted during Berendsen equilibration, the
+           ! MDcontinue flag would cause init_nhc to read a non-existent
+           ! thermostat checkpoint. Not pretty, bug good enough for now.
+           flag_store = flag_MDcontinue
+           flag_MDcontinue = .false.
+           select case(md_ensemble)
+           case('nvt')
+             call thermo%init_thermo('nhc', 'none', MDtimestep, md_ndof, &
+                                     md_tau_T, mdl%ion_kinetic_energy)
+           case('npt')
+             call thermo%init_thermo('nhc', 'iso-mttk', MDtimestep, md_ndof, &
+                                     md_tau_T, mdl%ion_kinetic_energy)
+             call baro%init_baro('iso-mttk', md_ndof, stress, ion_velocity, &
+                                 md_tau_P, mdl%ion_kinetic_energy)
+           end select
+           flag_MDcontinue = flag_store
          end if
        end if
 
@@ -913,6 +931,9 @@ contains
   !!   Zamaan Raza
   !!  CREATION DATE
   !!   2018/04/32  16:52
+  !!  MODIFICATION HISTORY
+  !!   2018/05/30 zamaan
+  !!    Made BerendsenEquil work with NVT ensemble.
   !!  SOURCE
   !!  
   subroutine init_ensemble(baro, thermo, mdl, md_ndof, nequil)
@@ -947,13 +968,22 @@ contains
       ! Just for computing temperature
       call thermo%init_thermo('none', 'none', MDtimestep, md_ndof, md_tau_T, &
                               mdl%ion_kinetic_energy)
-      call baro%init_baro('None', md_ndof, stress, ion_velocity, &
-                          md_tau_P, mdl%ion_kinetic_energy) ! to get the pressure
+      call baro%init_baro('none', md_ndof, stress, ion_velocity, &
+                          md_tau_P, mdl%ion_kinetic_energy) !to get the pressure
     case('nvt')
-      call baro%init_baro('None', md_ndof, stress, ion_velocity, &
-                          md_tau_P, mdl%ion_kinetic_energy) ! to get the pressure
-      call thermo%init_thermo(md_thermo_type, 'none', MDtimestep, md_ndof, &
-                              md_tau_T, mdl%ion_kinetic_energy)
+      if (nequil > 0) then ! Equilibrate using Berendsen?
+        if (inode==ionode) then
+          write (io_lun, '(4x,"Equilibrating using Berendsen &
+                           baro/thermostat for ",i8," steps")') nequil
+        end if
+        call thermo%init_thermo('berendsen', 'none', MDtimestep, md_ndof, &
+                                md_tau_T, mdl%ion_kinetic_energy)
+      else
+        call thermo%init_thermo(md_thermo_type, 'none', MDtimestep, md_ndof, &
+                                md_tau_T, mdl%ion_kinetic_energy)
+      end if
+      call baro%init_baro('none', md_ndof, stress, ion_velocity, &
+                          md_tau_P, mdl%ion_kinetic_energy) !to get the pressure
     case('npt')
       select case(md_baro_type)
       case('iso-mttk')
