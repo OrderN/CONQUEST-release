@@ -559,7 +559,7 @@ contains
     integer       :: nequil ! number of Berendsen equilibration steps - zamaan
     real(double)  :: energy1, energy0, dE, max, g0
     character(50) :: file_velocity='velocity.dat'
-    logical       :: done,second_call,append_coords_bak
+    logical       :: done,second_call,append_coords_bak,flag_store
     logical,allocatable,dimension(:) :: flag_movable
 
     type(matrix_store_global) :: InfoGlob
@@ -872,6 +872,11 @@ contains
          if (nequil == 0) then
            write (io_lun, '(4x,a)') "Berendsen equilibration finished, &
                                      starting extended system dynamics."
+           ! If the run was restarted during Berendsen equilibration, the
+           ! MDcontinue flag would cause init_nhc to read a non-existent
+           ! thermostat checkpoint. Not pretty, bug good enough for now.
+           flag_store = flag_MDcontinue
+           flag_MDcontinue = .false.
            select case(md_ensemble)
            case('nvt')
              call thermo%init_thermo('nhc', 'none', MDtimestep, md_ndof, &
@@ -882,6 +887,7 @@ contains
              call baro%init_baro('iso-mttk', md_ndof, stress, ion_velocity, &
                                  md_tau_P, mdl%ion_kinetic_energy)
            end select
+           flag_MDcontinue = flag_store
          end if
        end if
 
