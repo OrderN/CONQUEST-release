@@ -1044,6 +1044,8 @@ contains
   !!   - Added optional x_energy for output
   !!   2018/02/13 11:03 dave
   !!    Renamed (added _LDA_PZ81) as part of refactoring
+  !!   2018/06/11 17:38 dave
+  !!    Bug fix for bug #91 - factor of two required for non-spin polarised
   !!  SOURCE
   !!
   subroutine get_xc_potential_LDA_PZ81(density, xc_potential, xc_epsilon,     &
@@ -1086,7 +1088,7 @@ contains
     if (present(x_energy))  x_energy  = zero
 
     do n = 1, n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
+       rho = two * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
        if (rho > RD_ERR) then ! Find radius of hole
           rcp_rs = ( four_thirds * pi * rho )**(third)
        else
@@ -1118,9 +1120,9 @@ contains
           v_correlation = zero
        end if
        if (present(c_epsilon)) c_epsilon(n) = e_correlation
-       if (present(x_energy))  x_energy     = x_energy + e_exchange * density(n)
+       if (present(x_energy))  x_energy     = x_energy + e_exchange * two * density(n) ! DRB Added to correct for lack of spin 2018/06/11
        ! Both X and C
-       xc_energy       = xc_energy  + (e_exchange + e_correlation) * density(n)
+       xc_energy       = xc_energy  + (e_exchange + e_correlation) * two * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
        xc_potential(n) = v_exchange + v_correlation
        xc_epsilon(n)   = e_exchange + e_correlation
        ! These two for testing
@@ -1171,6 +1173,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2011/12/12 L.Tong
   !!     Removed third, it is now defined in numbers module
+  !!   2018/06/11 17:39 dave
+  !!     Bug fix for bug #91 adding factor of two to account for lack of spin
   !!  SOURCE
   !!
   subroutine get_GTH_xc_potential(density, xc_potential, xc_epsilon, &
@@ -1207,7 +1211,7 @@ contains
 
     xc_energy = zero
     do n = 1, n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
+       rho = two * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
        if (rho > RD_ERR) then ! Find radius of hole
           rcp_rs = ( four*third * pi * rho )**(third)
           rs     = one/rcp_rs
@@ -1333,7 +1337,7 @@ contains
     if (present(c_epsilon)) c_epsilon = zero
 
     do n = 1, n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
+       rho = two * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
 
        if (rho > RD_ERR) then ! Find radius of hole
           rcp_rs = k00 * ( rho**third )
@@ -3078,6 +3082,8 @@ contains
   !!    Removed third, as it is now defined in numbers module
   !!   2018/02/13 11:03 dave
   !!    Renamed (added _LDA_PZ81) as part of refactoring
+  !!   2018/06/11 17:40 dave
+  !!    Bug fix for bug #91 adding factor of two to account for lack of spin
   !!  SOURCE
   !!
   subroutine get_dxc_potential_LDA_PZ81(density, dxc_potential, size)
@@ -3109,8 +3115,8 @@ contains
     real(double), parameter :: ninth = 1.0_double/9.0_double
     real(double), parameter :: sixth = 1.0_double/6.0_double
 
-    do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
+    do n=1,n_my_grid_points   ! loop over grid pts and store potl on each
+       rho = two * density(n) ! DRB Added to correct for lack of spin 2018/06/11
        if (rho>RD_ERR) then ! Find radius of hole
           rcp_rs = ( four_thirds * pi * rho )**(third)
        else
@@ -3190,6 +3196,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2011/12/13 L.Tong
   !!    Removed third, it is now defined in numbers module
+  !    2018/06/11 17:40 dave
+  !!    Bug fix for bug #91 adding factor of two to account for lack of spin
   !!  SOURCE
   !!
   subroutine get_GTH_dxc_potential(density, dxc_potential, size)
@@ -3221,9 +3229,9 @@ contains
     real(double), parameter :: b3=1.110667363742916_double
     real(double), parameter :: b4=0.02359291751427506_double
 
-    do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
-       if (rho>RD_ERR) then ! Find radius of hole
+    do n=1,n_my_grid_points   ! loop over grid pts and store potl on each
+       rho = two * density(n) ! DRB Added to correct for lack of spin 2018/06/11
+       if (rho>RD_ERR) then   ! Find radius of hole
           rcp_rs = ( 4.0_double*third * pi * rho )**(third)
           rs = one/rcp_rs
        else
@@ -3481,6 +3489,8 @@ contains
   !!    Removed third, and eight, they are now defined in numbers module
   !!   2017/08/29 jack baker & dave
   !!    Removed rcellx references (redundant)
+  !!   2018/06/12 11:11 dave
+  !!    Fixing missing factors of two for non-spin polarisation (this routine only does zero spin)
   !!  SOURCE
   !!
   subroutine get_dxc_potential_GGA_PBE(density, density_out, &
@@ -3590,22 +3600,23 @@ if(selector == fx_alternative) then
 end if
 
     ! Get the LDA part of the functional
-    grad_density(:) = two*density(:)
+    grad_density = two * density ! Factor of two to account for lack of spin
     call get_dxc_potential_LDA_PW92(grad_density, dxc_potential_lda, size, &
                                     eclda, declda_drho, d2eclda_drho2)
     grad_density = zero
     ! Build the gradient of the density
     call build_gradient(density, grad_density_xyz, size)
-    grad_density_xyz(:,:) = two*grad_density_xyz(:,:)
+    grad_density_xyz(:,:) = two * grad_density_xyz(:,:)
     grad_density(:) = sqrt(grad_density_xyz(:,1)**2 + &
                            grad_density_xyz(:,2)**2 + &
                            grad_density_xyz(:,3)**2)
 
+
     do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = two*density(n)
+       rho = two * density(n)
        grad_rho = grad_density(n)
 
-       diff_rho(n) = two*(density(n) - density_out(n))
+       diff_rho(n) = two * (density(n) - density_out(n))
 
        !!!!   EXCHANGE
 
@@ -3859,6 +3870,7 @@ end if
           end if
        end do
     end do
+
     ! Term L4
     do n=1, n_my_grid_points
        if(grad_density(n) > RD_ERR) then
@@ -3880,6 +3892,7 @@ end if
           end if
        end do
     end do
+
     ! Terms L2 and L5 (using L4)
     do n=1, n_my_grid_points
        do i=1,3
@@ -3913,6 +3926,7 @@ end if
     do n=1, n_my_grid_points
        dxc_potential(n) = dxc_potential(n) - tmp3(n,1)
     end do
+
     return
   end subroutine get_dxc_potential_GGA_PBE
   !!***
