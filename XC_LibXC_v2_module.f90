@@ -18,12 +18,14 @@
 !! CREATION DATE
 !!   2018/02/13
 !! MODIFICATION HISTORY
+!!   2018/06/15 12:21 dave
+!!    Added spin_factor in module use statements
 !! SOURCE
 !!
 module XC
 
   use datatypes
-  use global_module, only: area_ops, io_lun, iprint_ops
+  use global_module, only: area_ops, io_lun, iprint_ops, spin_factor
   use xc_f90_types_m
   use xc_f90_lib_m
 
@@ -1045,7 +1047,7 @@ contains
   !!   2018/02/13 11:03 dave
   !!    Renamed (added _LDA_PZ81) as part of refactoring
   !!   2018/06/11 17:38 dave
-  !!    Bug fix for bug #91 - factor of two required for non-spin polarised
+  !!    Bug fix for bug #91 - factor of spin_factor required for non-spin polarised
   !!  SOURCE
   !!
   subroutine get_xc_potential_LDA_PZ81(density, xc_potential, xc_epsilon,     &
@@ -1088,7 +1090,7 @@ contains
     if (present(x_energy))  x_energy  = zero
 
     do n = 1, n_my_grid_points ! loop over grid pts and store potl on each
-       rho = two * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
+       rho = spin_factor * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
        if (rho > RD_ERR) then ! Find radius of hole
           rcp_rs = ( four_thirds * pi * rho )**(third)
        else
@@ -1120,9 +1122,9 @@ contains
           v_correlation = zero
        end if
        if (present(c_epsilon)) c_epsilon(n) = e_correlation
-       if (present(x_energy))  x_energy     = x_energy + e_exchange * two * density(n) ! DRB Added to correct for lack of spin 2018/06/11
+       if (present(x_energy))  x_energy     = x_energy + e_exchange * spin_factor * density(n) ! DRB Added to correct for lack of spin 2018/06/11
        ! Both X and C
-       xc_energy       = xc_energy  + (e_exchange + e_correlation) * two * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
+       xc_energy       = xc_energy  + (e_exchange + e_correlation) * spin_factor * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
        xc_potential(n) = v_exchange + v_correlation
        xc_epsilon(n)   = e_exchange + e_correlation
        ! These two for testing
@@ -1174,7 +1176,7 @@ contains
   !!   2011/12/12 L.Tong
   !!     Removed third, it is now defined in numbers module
   !!   2018/06/11 17:39 dave
-  !!     Bug fix for bug #91 adding factor of two to account for lack of spin
+  !!     Bug fix for bug #91 adding factor of spin_factor to account for lack of spin
   !!  SOURCE
   !!
   subroutine get_GTH_xc_potential(density, xc_potential, xc_epsilon, &
@@ -1211,7 +1213,7 @@ contains
 
     xc_energy = zero
     do n = 1, n_my_grid_points ! loop over grid pts and store potl on each
-       rho = two * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
+       rho = spin_factor * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
        if (rho > RD_ERR) then ! Find radius of hole
           rcp_rs = ( four*third * pi * rho )**(third)
           rs     = one/rcp_rs
@@ -1337,7 +1339,7 @@ contains
     if (present(c_epsilon)) c_epsilon = zero
 
     do n = 1, n_my_grid_points ! loop over grid pts and store potl on each
-       rho = two * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
+       rho = spin_factor * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
 
        if (rho > RD_ERR) then ! Find radius of hole
           rcp_rs = k00 * ( rho**third )
@@ -1863,6 +1865,8 @@ contains
   !! CREATION DATE
   !!   2012/04/25
   !! MODIFICATION HISTORY
+  !!   2018/06/15 12:25 dave
+  !!    Removed local spin_factor variable (now use equivalent from global_module)
   !! SOURCE
   !!
   subroutine eps_xc_of_r_GGA_PBE(nspin, flavour, rho_r, grho_r, eps_x,&
@@ -1894,7 +1898,6 @@ contains
                     F3, F4, dFx_drho, ds_drho, ds_dgrho, dt_drho,     &
                     dt_dgrho, dF1_drho, dF2_drho, dF3_drho, dF4_drho, &
                     dF3_dgrho, dF4_dgrho, Xwc, dXwc_ds,  dF1_dgrho
-    real(double) :: spin_factor
     real(double), dimension(1)       :: rho_s
     real(double), dimension(1:3,1)   :: grho_s
     real(double), dimension(1:3)     :: grho_tot_r
@@ -1965,13 +1968,6 @@ contains
     mod_grho_tot_r = &
          sqrt(grho_tot_r(1)**2 + grho_tot_r(2)**2 + grho_tot_r(3)**2)
     mod_grho_tot_r = max(min_mod_grho, mod_grho_tot_r)
-
-    ! work out spin_factor
-    if (nspin == 1) then
-       spin_factor = two
-    else
-       spin_factor = one
-    end if
 
     ! Exchange part
     if (present(eps_x)) then
@@ -2208,6 +2204,8 @@ contains
   !!   - Added stress term
   !!   2017/08/29 jack baker & dave
   !!     Removed rcellx references (redundant)
+  !!   2018/06/15 12:25 dave
+  !!    Removed spin_factor from use statement (global to module now)
   !! SOURCE
   !!
   subroutine get_xc_potential_GGA_PBE(density, xc_potential,            &
@@ -2215,7 +2213,7 @@ contains
                                       flavour, x_energy )
     use datatypes
     use numbers
-    use global_module, only: nspin, spin_factor
+    use global_module, only: nspin
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum, cq_abort
     use fft_module,    only: fft3, recip_vector
@@ -2363,6 +2361,8 @@ contains
   !!     Added GGA XC stress term
   !!   2017/08/29 jack baker & dave
   !!     Removed rcellx references (redundant)
+  !!   2018/06/15 12:25 dave
+  !!    Removed spin_factor from use statement (global to module now)
   !! SOURCE
   !!
   subroutine get_xc_potential_hyb_PBE0(density, xc_potential, exx_a,     &
@@ -2370,7 +2370,7 @@ contains
                                        flavour, x_energy )
     use datatypes
     use numbers
-    use global_module, only: spin_factor, nspin
+    use global_module, only: nspin
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum, cq_abort
     use fft_module,    only: fft3, recip_vector
@@ -3083,7 +3083,7 @@ contains
   !!   2018/02/13 11:03 dave
   !!    Renamed (added _LDA_PZ81) as part of refactoring
   !!   2018/06/11 17:40 dave
-  !!    Bug fix for bug #91 adding factor of two to account for lack of spin
+  !!    Bug fix for bug #91 adding factor of spin_factor to account for lack of spin
   !!  SOURCE
   !!
   subroutine get_dxc_potential_LDA_PZ81(density, dxc_potential, size)
@@ -3116,7 +3116,7 @@ contains
     real(double), parameter :: sixth = 1.0_double/6.0_double
 
     do n=1,n_my_grid_points   ! loop over grid pts and store potl on each
-       rho = two * density(n) ! DRB Added to correct for lack of spin 2018/06/11
+       rho = spin_factor * density(n) ! DRB Added to correct for lack of spin 2018/06/11
        if (rho>RD_ERR) then ! Find radius of hole
           rcp_rs = ( four_thirds * pi * rho )**(third)
        else
@@ -3197,7 +3197,7 @@ contains
   !!   2011/12/13 L.Tong
   !!    Removed third, it is now defined in numbers module
   !    2018/06/11 17:40 dave
-  !!    Bug fix for bug #91 adding factor of two to account for lack of spin
+  !!    Bug fix for bug #91 adding factor of spin_factor to account for lack of spin
   !!  SOURCE
   !!
   subroutine get_GTH_dxc_potential(density, dxc_potential, size)
@@ -3230,7 +3230,7 @@ contains
     real(double), parameter :: b4=0.02359291751427506_double
 
     do n=1,n_my_grid_points   ! loop over grid pts and store potl on each
-       rho = two * density(n) ! DRB Added to correct for lack of spin 2018/06/11
+       rho = spin_factor * density(n) ! DRB Added to correct for lack of spin 2018/06/11
        if (rho>RD_ERR) then   ! Find radius of hole
           rcp_rs = ( 4.0_double*third * pi * rho )**(third)
           rs = one/rcp_rs
@@ -3490,7 +3490,7 @@ contains
   !!   2017/08/29 jack baker & dave
   !!    Removed rcellx references (redundant)
   !!   2018/06/12 11:11 dave
-  !!    Fixing missing factors of two for non-spin polarisation (this routine only does zero spin)
+  !!    Fixing missing factors of spin_factor for non-spin polarisation (this routine only does zero spin)
   !!  SOURCE
   !!
   subroutine get_dxc_potential_GGA_PBE(density, density_out, &
@@ -3600,23 +3600,23 @@ if(selector == fx_alternative) then
 end if
 
     ! Get the LDA part of the functional
-    grad_density = two * density ! Factor of two to account for lack of spin
+    grad_density = spin_factor * density ! Factor of spin_factor to account for lack of spin
     call get_dxc_potential_LDA_PW92(grad_density, dxc_potential_lda, size, &
                                     eclda, declda_drho, d2eclda_drho2)
     grad_density = zero
     ! Build the gradient of the density
     call build_gradient(density, grad_density_xyz, size)
-    grad_density_xyz(:,:) = two * grad_density_xyz(:,:)
+    grad_density_xyz(:,:) = spin_factor * grad_density_xyz(:,:)
     grad_density(:) = sqrt(grad_density_xyz(:,1)**2 + &
                            grad_density_xyz(:,2)**2 + &
                            grad_density_xyz(:,3)**2)
 
 
     do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = two * density(n)
+       rho = spin_factor * density(n)
        grad_rho = grad_density(n)
 
-       diff_rho(n) = two * (density(n) - density_out(n))
+       diff_rho(n) = spin_factor * (density(n) - density_out(n))
 
        !!!!   EXCHANGE
 
@@ -3955,6 +3955,8 @@ end if
   !!   - (maxngrid,nspin,nspin), so
   !!     dxc_potential_ddensity(n,spin1,spin2) corresponds to
   !!     dVxc(spin1) / drho(spin2) at grid point n.
+  !!   2018/06/15 12:25 dave
+  !!    Removed spin_factor from use statement (global to module now)
   !! SOURCE
   !!
   subroutine get_dxc_potential_LSDA_PW92(density,                &
@@ -3964,7 +3966,7 @@ end if
     use numbers
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum
-    use global_module, only: nspin, spin_factor
+    use global_module, only: nspin
 
     implicit none
 
