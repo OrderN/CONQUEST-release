@@ -143,6 +143,8 @@ contains
 !!    Added possibility of user defined filename for PAO/pseudo *ion
 !!   2017/02/17 15:59 dave
 !!    Changes to allow reading of Hamann's optimised norm-conserving pseudopotentials (remove ABINIT)
+!!   2018/06/19 20:30 nakata
+!!    Add IF with pseudo_type for calling init_rad when ghost atoms are used
 !!  SOURCE
 !!
   subroutine setup_pseudo_info
@@ -212,8 +214,8 @@ contains
              call init_rad(pseudo(ispecies)%pjnl(ii))
             enddo
            endif
-            call init_rad(pseudo(ispecies)%vlocal)
-            call init_rad(pseudo(ispecies)%chlocal)
+            if(pseudo_type==ABINIT) call init_rad(pseudo(ispecies)%vlocal)
+            if(pseudo_type==SIESTA) call init_rad(pseudo(ispecies)%chlocal)
             if(pseudo(ispecies)%flag_pcc) call init_rad(pseudo(ispecies)%chpcc)
             pseudo(ispecies)%n_pjnl      = 0
             pseudo(ispecies)%flag_pcc    = .false.
