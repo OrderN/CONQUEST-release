@@ -789,7 +789,7 @@ contains
         do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
           ! Trotter expansion to avoid sinh singularity
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
-          call th%update_G_nhc(i_nhc+1, zero)
+          call th%update_G_nhc(i_nhc, zero)
           call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
@@ -906,23 +906,23 @@ contains
 
     th%e_nhc_cell = zero
     if (th%cell_nhc) then
-      th%e_nhc_ion = th%m_nhc(1)*th%v_eta(1)**2 - &
+      th%e_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2 - &
                      real(th%ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
       th%e_nhc_cell = th%e_nhc_cell + &
-                      th%m_nhc_cell(1)*th%v_eta_cell(1)**2 - &
+                      half*th%m_nhc_cell(1)*th%v_eta_cell(1)**2 - &
                       th%cell_ndof*th%T_ext*fac_Kelvin2Hartree*th%eta_cell(1)
     else
-      th%e_nhc_ion = th%m_nhc(1)*th%v_eta(1)**2 - &
+      th%e_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2 - &
                      real((th%ndof+th%cell_ndof), double) * &
                      th%T_ext*fac_Kelvin2Hartree*th%eta(1)
     end if
 
     do k=2,th%n_nhc
-      th%e_nhc_ion = th%e_nhc_ion + th%m_nhc(k)*th%v_eta(k)**2 - &
+      th%e_nhc_ion = th%e_nhc_ion + half*th%m_nhc(k)*th%v_eta(k)**2 - &
                      th%T_ext*fac_Kelvin2Hartree*th%eta(k)
       if (th%cell_nhc) then
         th%e_nhc_cell = th%e_nhc_cell + &
-                        th%m_nhc_cell(k)*th%v_eta_cell(k)**2 - &
+                        half*th%m_nhc_cell(k)*th%v_eta_cell(k)**2 - &
                         th%T_ext*fac_Kelvin2Hartree*th%eta_cell(k)
       end if
     end do
@@ -1750,12 +1750,11 @@ contains
         end select
 
         ! update ionic velocities, scale ion kinetic energy
-        call baro%update_vscale_fac(th%dt_ys(i_ys), half, v_eta_couple, &
-                                    v_sfac)
-        th%ke_ions = baro%ke_ions
-
         select case(baro%baro_type)
         case('iso-mttk')
+          call baro%update_vscale_fac(th%dt_ys(i_ys), half, v_eta_couple, &
+                                      v_sfac)
+          th%ke_ions = baro%ke_ions
           call baro%update_G_eps
         case('ortho-mttk')
         case('mttk')
@@ -1788,7 +1787,7 @@ contains
         do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
           ! Trotter expansion to avoid sinh singularity
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
-          call th%update_G_nhc(i_nhc+1, baro%ke_box)
+          call th%update_G_nhc(i_nhc, baro%ke_box)
           call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
