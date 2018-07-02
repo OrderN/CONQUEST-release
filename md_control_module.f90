@@ -1248,7 +1248,7 @@ contains
     class(type_barostat), intent(inout)         :: baro
 
     baro%volume = baro%lat(1,1)*baro%lat(2,2)*baro%lat(3,3)
-    baro%PV = baro%volume*baro%P_ext
+    baro%PV = baro%volume*baro%P_ext/fac_HaBohr32GPa
 
     if (inode==ionode .and. flag_MDdebug) then
       write(io_lun,*) "baroDebug: get_volume"
