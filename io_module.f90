@@ -801,9 +801,7 @@ second:   do
        y_atom_cell(ni) = atom_coord(2,id_global)
        z_atom_cell(ni) = atom_coord(3,id_global)
        species(ni)     = species_glob(id_global)
-       !id_glob_inv(id_global) = ni  !in read_partitions
     end do
-
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_mult')
 !****lat>$
