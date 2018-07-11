@@ -644,6 +644,7 @@ contains
 
     ! Thermostat/barostat initialisation
     call init_ensemble(baro, thermo, mdl, md_ndof, nequil)
+    call baro%get_ke_stress(ion_velocity)
 
     ! Get converted 1-D array for flag_atom_move
     allocate (flag_movable(3*ni_in_cell), STAT=stat)
@@ -852,7 +853,9 @@ contains
        call write_atomic_positions("cq.position", trim(pdb_template))
        append_coords = append_coords_bak
  
- 
+        ! The kinetic component of stress changes after the second velocity
+        ! update 
+        call baro%get_ke_stress(ion_velocity)
         call baro%get_pressure
         call thermo%get_temperature
         select case(md_ensemble)
@@ -884,8 +887,8 @@ contains
            case('npt')
              call thermo%init_thermo('nhc', 'iso-mttk', MDtimestep, md_ndof, &
                                      md_tau_T, mdl%ion_kinetic_energy)
-             call baro%init_baro('iso-mttk', md_ndof, stress, ion_velocity, &
-                                 md_tau_P, mdl%ion_kinetic_energy)
+             call baro%init_baro('iso-mttk', MDtimestep, md_ndof, stress, &
+                                 ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
            end select
            flag_MDcontinue = flag_store
          end if
@@ -968,7 +971,7 @@ contains
       ! Just for computing temperature
       call thermo%init_thermo('none', 'none', MDtimestep, md_ndof, md_tau_T, &
                               mdl%ion_kinetic_energy)
-      call baro%init_baro('none', md_ndof, stress, ion_velocity, &
+      call baro%init_baro('none', MDtimestep, md_ndof, stress, ion_velocity, &
                           md_tau_P, mdl%ion_kinetic_energy) !to get the pressure
     case('nvt')
       if (nequil > 0) then ! Equilibrate using Berendsen?
@@ -982,7 +985,7 @@ contains
         call thermo%init_thermo(md_thermo_type, 'none', MDtimestep, md_ndof, &
                                 md_tau_T, mdl%ion_kinetic_energy)
       end if
-      call baro%init_baro('none', md_ndof, stress, ion_velocity, &
+      call baro%init_baro('none', MDtimestep, md_ndof, stress, ion_velocity, &
                           md_tau_P, mdl%ion_kinetic_energy) !to get the pressure
     case('npt')
       select case(md_baro_type)
@@ -995,21 +998,22 @@ contains
           call thermo%init_thermo('berendsen', 'berendsen', MDtimestep, &
                                   md_ndof, md_tau_T_equil, &
                                   mdl%ion_kinetic_energy)
-          call baro%init_baro('berendsen', md_ndof, stress, ion_velocity, &
-                              md_tau_P_equil, mdl%ion_kinetic_energy)
+          call baro%init_baro('berendsen', MDtimestep, md_ndof, stress, &
+                              ion_velocity, md_tau_P_equil, &
+                              mdl%ion_kinetic_energy)
         else
           call thermo%init_thermo('nhc', 'iso-mttk',  MDtimestep, md_ndof, &
                                   md_tau_T, mdl%ion_kinetic_energy)
-          call baro%init_baro('iso-mttk', md_ndof, stress, ion_velocity, &
-                              md_tau_P, mdl%ion_kinetic_energy)
+          call baro%init_baro('iso-mttk', MDtimestep, md_ndof, stress, &
+                              ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
         end if
       case('ortho-mttk')
       case('mttk')
       case('berendsen')
         call thermo%init_thermo('berendsen', 'berendsen', MDtimestep, &
                                 md_ndof, md_tau_T, mdl%ion_kinetic_energy)
-        call baro%init_baro('berendsen', md_ndof, stress, ion_velocity, &
-                            md_tau_P, mdl%ion_kinetic_energy)
+        call baro%init_baro('berendsen', MDtimestep, md_ndof, stress, &
+                            ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
       case default
         call cq_abort("Unknown barostat type")
       end select

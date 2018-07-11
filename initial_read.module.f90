@@ -790,7 +790,8 @@ contains
                           md_thermo_type, md_bulkmod_est, md_box_mass, &
                           flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
                           md_calc_xlmass, md_berendsen_equil, &
-                          md_omega_t, md_omega_p, md_tau_T_equil, md_tau_P_equil
+                          md_omega_t, md_omega_p, md_tau_T_equil, &
+                          md_tau_P_equil, md_p_drag, md_t_drag
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
@@ -1944,6 +1945,7 @@ contains
        md_n_ys            = fdf_integer('MD.nYoshida', 1)
        md_n_mts           = fdf_integer('MD.nMTS', 1)
        flag_thermoDebug   = fdf_boolean('MD.ThermoDebug',.false.)
+       md_t_drag          = fdf_double('MD.TDrag', zero)
        allocate(md_nhc_mass(md_n_nhc)) 
        allocate(md_nhc_cell_mass(md_n_nhc)) 
        md_nhc_mass = one
@@ -1973,6 +1975,7 @@ contains
        flag_baroDebug     = fdf_boolean('MD.BaroDebug',.false.)
        md_berendsen_equil = fdf_integer('MD.BerendsenEquil', 0)
        md_tdep            = fdf_boolean('MD.TDEP', .false.)
+       md_p_drag          = fdf_double('MD.PDrag', zero)
 
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")

@@ -56,7 +56,7 @@ module md_control
   character(20) :: md_thermo_type, md_baro_type
   real(double)  :: md_tau_T, md_tau_P, md_target_press, md_bulkmod_est, &
                    md_box_mass, md_ndof_ions, md_omega_t, md_omega_p, &
-                   md_tau_T_equil, md_tau_P_equil
+                   md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
   integer       :: md_n_nhc, md_n_ys, md_n_mts, md_berendsen_equil
   logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass
   real(double), dimension(3,3), target      :: lattice_vec
@@ -99,6 +99,7 @@ module md_control
     real(double)        :: e_nhc        ! energy of NHC thermostats
     real(double)        :: e_nhc_ion    ! energy of ionic NHC thermostats
     real(double)        :: e_nhc_cell   ! energy of cell NHC thermostats
+    real(double)        :: t_drag       ! drag factor for thermostat
     character(40)       :: nhc_fmt      ! format string for printing NHC arrays
     real(double), dimension(:), allocatable :: eta    ! thermostat "position"
     real(double), dimension(:), allocatable :: v_eta  ! thermostat "velocity"
@@ -169,6 +170,7 @@ module md_control
     ! Extended Lagrangian barostat variables
     real(double)        :: box_mass
     real(double)        :: ke_box
+    real(double)        :: p_drag       ! drag factor for barostat
 
     ! Isotropic variables
     real(double)        :: odnf
@@ -313,6 +315,7 @@ contains
     th%n_mts_nhc = md_n_mts
     th%lambda = one
     th%cell_nhc  = md_cell_nhc
+    th%t_drag = one - md_t_drag*dt/md_tau_T
     call th%get_temperature
     write(th%nhc_fmt,'("(4x,a12,",i4,"f10.4)")') th%n_nhc
 
@@ -379,6 +382,8 @@ contains
       write(io_lun,'(2x,a)') 'Welcome to init_nhc'
       write(io_lun,'(4x,a,i10)')   'Number of NHC thermostats n_nhc = ', &
                                    th%n_nhc
+      write(io_lun,'(4x,a,f10.4)')   'NHC velocity drag factor t_drag = ', &
+                                   th%t_drag
       write(io_lun,'(4x,a,i10)')   'Multiple time step order  n_mts = ', &
                                    th%n_mts_nhc
       write(io_lun,'(4x,a,i10)')   'Yoshida-Suzuki order      n_ys  = ', &
@@ -1024,7 +1029,7 @@ contains
   !!   2017/11/17 12:44
   !!  SOURCE
   !!  
-  subroutine init_baro(baro, baro_type, ndof, stress, v, tau_P, ke_ions)
+  subroutine init_baro(baro, baro_type, dt, ndof, stress, v, tau_P, ke_ions)
 
     use input_module,     only: leqi
     use global_module,    only: rcellx, rcelly, rcellz
@@ -1032,7 +1037,7 @@ contains
     ! passed variables
     class(type_barostat), intent(inout)       :: baro
     character(*), intent(in)                  :: baro_type
-    real(double), intent(in)                  :: ke_ions, tau_P
+    real(double), intent(in)                  :: ke_ions, tau_P, dt
     integer, intent(in)                       :: ndof
     real(double), dimension(3), intent(in)    :: stress
     real(double), dimension(:,:), intent(in)  :: v
@@ -1091,6 +1096,7 @@ contains
         call baro%get_box_ke
       end if
       baro%odnf = one + three/baro%ndof
+      baro%p_drag = one - md_p_drag*dt/md_tau_P
     case('ortho-mttk')
     case('mttk')
     case default
@@ -1110,6 +1116,8 @@ contains
         if (leqi(baro%baro_type, 'iso-mttk')) then
           write(io_lun,'(4x,a,f14.2)') 'Box mass                     = ', &
                                         baro%box_mass
+          write(io_lun,'(4x,a,f14.2)') 'Pressre drag factor   p_drag = ', &
+                                        baro%p_drag
         end if
       end if
     end if
@@ -1139,7 +1147,7 @@ contains
 
     baro%static_stress = zero
     do i=1,3
-      baro%static_stress(i,i) = stress(i)
+      baro%static_stress(i,i) = -stress(i)
     end do
 
     if (inode==ionode .and. flag_MDdebug) then
@@ -1219,9 +1227,10 @@ contains
 
     baro%P_int = zero
     do i=1,3
+      ! The sign of static_stress was corrected in update_static_stress
       baro%P_int = baro%P_int + baro%ke_stress(i,i) + baro%static_stress(i,i)
     end do
-    baro%P_int = -baro%P_int*third/baro%volume
+    baro%P_int = baro%P_int*third/baro%volume
 
     if (inode==ionode .and. flag_MDdebug) then
       write(io_lun,*) "baroDebug: get_pressure"
@@ -1704,7 +1713,8 @@ contains
 
     ! local variables
     integer                                 :: i_mts, i_ys, i_nhc
-    real(double)                            :: v_sfac, v_eta_couple
+    real(double)                            :: v_sfac, v_eta_couple, &
+                                               pdrag, tdrag
 
     if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,*) "baroDebug: propagate_npt_mttk"
@@ -1716,6 +1726,8 @@ contains
     select case(baro%baro_type)
     case('iso-mttk')
       call baro%update_G_eps
+      tdrag = th%t_drag/th%n_mts_nhc/th%n_ys
+      pdrag = baro%p_drag/th%n_mts_nhc/th%n_ys
     end select
 
     do i_mts=1,th%n_mts_nhc ! MTS loop
@@ -1725,10 +1737,14 @@ contains
           write(io_lun,*) "baroDebug: dt_ys = ", th%dt_ys(i_ys)
         end if
         call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
+        th%v_eta(th%n_nhc) = th%v_eta(th%n_nhc)*tdrag
+        th%v_eta_cell(th%n_nhc) = th%v_eta_cell(th%n_nhc)*pdrag
         do i_nhc=th%n_nhc-1,1,-1 ! loop over NH thermostats in reverse order
           ! Trotter expansion to avoid sinh singularity
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
           call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
+          th%v_eta(i_nhc) = th%v_eta(i_nhc)*tdrag
+          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*pdrag
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
 
@@ -1743,6 +1759,7 @@ contains
           call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, &
                                         v_eta_couple)
           call baro%propagate_v_eps_lin(th%dt_ys(i_ys), quarter)
+          baro%v_eps = baro%v_eps*pdrag
           call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, &
                                         v_eta_couple)
         case('ortho-mttk')
