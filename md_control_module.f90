@@ -794,7 +794,7 @@ contains
         do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
           ! Trotter expansion to avoid sinh singularity
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
-          call th%update_G_nhc(i_nhc, zero)
+          call th%update_G_nhc(i_nhc+1, zero)
           call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
@@ -1804,7 +1804,7 @@ contains
         do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
           ! Trotter expansion to avoid sinh singularity
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
-          call th%update_G_nhc(i_nhc, baro%ke_box)
+          call th%update_G_nhc(i_nhc+1, baro%ke_box)
           call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
