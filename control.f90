@@ -856,6 +856,7 @@ contains
         ! The kinetic component of stress changes after the second velocity
         ! update 
         call baro%get_ke_stress(ion_velocity)
+        call baro%get_volume
         call baro%get_pressure
         call thermo%get_temperature
         select case(md_ensemble)
