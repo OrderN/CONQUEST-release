@@ -705,6 +705,10 @@ contains
           if (leqi(md_ensemble, 'npt')) then
             if (leqi(md_baro_type, "berendsen") .or. nequil > 0) then
               call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
+            else if (leqi(md_baro_type, "ssm")) then
+              call baro%propagate_box_ssm
+              call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
+              call baro%propagate_box_ssm
             else
               call baro%propagate_r_mttk(MDtimestep, ion_velocity, flag_movable)
               call baro%propagate_box_mttk(MDtimestep)
@@ -1096,6 +1100,26 @@ contains
         end if
       case('ortho-mttk')
       case('mttk')
+      case('ssm')
+        if (present(second_call)) then
+          call baro%couple_box_particle_velocity(velocity)
+          call baro%get_ke_stress(velocity)
+          call baro%get_volume
+          call baro%get_pressure
+          call thermo%get_temperature
+          call baro%integrate_box
+          call thermo%integrate_particle_nhc(velocity)
+          call baro%integrate_box_nhc(thermo)
+        else
+          call baro%integrate_box_nhc(thermo)
+          call thermo%integrate_particle_nhc(velocity)
+          call baro%get_ke_stress(velocity)
+          call baro%get_volume
+          call baro%get_pressure
+          call thermo%get_temperature
+          call baro%integrate_box
+          call baro%couple_box_particle_velocity(velocity)
+        end if
       end select
    end select
 end subroutine integrate_pt
