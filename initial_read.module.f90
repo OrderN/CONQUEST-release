@@ -647,6 +647,8 @@ contains
   !!    added md_tdep flag for TDEP output dump
   !!   2018/05/17 12:54 dave with Ayako Nakata
   !!    flag_InitialAtomicSpin now comes from density_module (not global)
+  !!   2018/07/16 16:02 dave
+  !!    Bug fix: only read RadiusMS when flag_Multisite is true
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1231,7 +1233,8 @@ contains
              nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
              RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',r_h)
              RadiusAtomf(i)   = RadiusSupport(i) ! = r_pao for (atomf=paof) or r_sf for (atomf==sf)
-             RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
+             ! Added DRB 2018/07/16 for safety
+             if(flag_Multisite) RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
              RadiusLD(i)      = fdf_double ('Atom.LFDRange',zero)
              if (flag_Multisite) RadiusSupport(i) = RadiusAtomf(i) + RadiusMS(i)
              ! DRB 2016/08/05 Keep track of maximum support radius
