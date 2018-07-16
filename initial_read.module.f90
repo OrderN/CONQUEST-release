@@ -649,6 +649,8 @@ contains
   !!    flag_InitialAtomicSpin now comes from density_module (not global)
   !!   2018/07/16 16:02 dave
   !!    Bug fix: only read RadiusMS when flag_Multisite is true
+  !!   2018/07/16 17:09 dave
+  !!    Adding zero T requirement for flag_quench_MD as well as FIRE
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1614,6 +1616,8 @@ contains
           fire_f_alpha       = fdf_double ('AtomMove.Fire_f_alpha',0.99_double)
           fire_max_step      = fdf_double ('AtomMove.FireMaxStep',2.0_double)
           fire_N_below_thresh= fdf_integer('AtomMove.FireNBelowThresh',3)
+       end if
+       if(flag_fire_qMD.OR.flag_quench_MD) then
           temp_ion           = fdf_double ('AtomMove.IonTemperature',0.0_double)
        else
           temp_ion           = fdf_double ('AtomMove.IonTemperature',300.0_double)
