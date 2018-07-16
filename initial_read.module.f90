@@ -144,6 +144,8 @@ contains
   !!    Bug fix (GitHub issue #36) to turn off basis optimisation if NSF=NPAO
   !!   2018/05/11 10:26 dave
   !!    Bug fix (GitHub issue #80) to set flag_SFcoeffReuse false if NSF=NPAO
+  !!   2018/07/13 09:37 dave
+  !!    Added test for missing coordinate file name
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -195,7 +197,7 @@ contains
     use pseudopotential_common, only: core_radius, pseudo_type, OLDPS, &
                                       SIESTA, ABINIT
     use pseudo_tm_module,       only: init_pseudo_tm
-    use input_module,           only: fdf_string, fdf_out, io_close
+    use input_module,           only: fdf_string, fdf_out, io_close, leqi
     use force_module,           only: tot_force
     !use DiagModule,             only: diagon
     use constraint_module,      only: flag_RigidBonds,constraints
@@ -238,6 +240,7 @@ contains
     call my_barrier()
     def = ' '
     atom_coord_file = fdf_string(80,'IO.Coordinates',def)
+    if(leqi(def,atom_coord_file)) call cq_abort("No coordinate file specified: please set with IO.Coordinates")
     if ( pdb_format ) then
        pdb_template = fdf_string(80,'IO.PdbTemplate',atom_coord_file)
     else
@@ -644,6 +647,8 @@ contains
   !!    added md_tdep flag for TDEP output dump
   !!   2018/05/17 12:54 dave with Ayako Nakata
   !!    flag_InitialAtomicSpin now comes from density_module (not global)
+  !!   2018/07/16 16:02 dave
+  !!    Bug fix: only read RadiusMS when flag_Multisite is true
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -1228,7 +1233,8 @@ contains
              nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
              RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',r_h)
              RadiusAtomf(i)   = RadiusSupport(i) ! = r_pao for (atomf=paof) or r_sf for (atomf==sf)
-             RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
+             ! Added DRB 2018/07/16 for safety
+             if(flag_Multisite) RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
              RadiusLD(i)      = fdf_double ('Atom.LFDRange',zero)
              if (flag_Multisite) RadiusSupport(i) = RadiusAtomf(i) + RadiusMS(i)
              ! DRB 2016/08/05 Keep track of maximum support radius
