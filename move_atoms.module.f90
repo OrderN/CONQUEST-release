@@ -48,6 +48,8 @@
 !!    Added sbrt: safemin2 & update_start_xyz
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2018/07/16 16:32 dave
+!!    Added user-control flag_stop_on_empty_bundle
 !!  SOURCE
 !!
 module move_atoms
@@ -73,6 +75,9 @@ module move_atoms
   !real(double), parameter:: fac_Kelvin2Hartree = 2.92126269e-6_double
 
   real(double) :: threshold_resetCD
+
+  logical :: flag_stop_on_empty_bundle
+  
   ! Table to show the methods to update  (for update_pos_and_matrix)
    integer, parameter :: updatePos  = 0
    integer, parameter :: updateL    = 1
@@ -1997,7 +2002,7 @@ contains
                              IPRINT_TIME_THRES2,glob2node,flag_LmatrixReuse,      &
                              flag_XLBOMD, flag_diagonalisation, flag_neutral_atom, &
                              numprocs, atom_coord, species_glob, iprint_MD
-    use GenComms, ONLY: inode,ionode,my_barrier,myid,gcopy
+    use GenComms, ONLY: inode,ionode,my_barrier,myid,gcopy, cq_abort
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts,DCS_parts,ion_ion_CS
@@ -2071,7 +2076,9 @@ contains
     if (flag_XLBOMD) call fmmi_XL()
     call fmmi(bundle)
     ! Now we need to redistribute
-    if(flag_empty_bundle) then
+    if(flag_empty_bundle.and.flag_stop_on_empty_bundle) then
+       call cq_abort("Empty bundle detected: user set stop_on_empty_bundle, so stopping...")
+    else if(flag_empty_bundle) then
        if(inode==ionode) write(io_lun,fmt='(2x,"Empty bundle detected: redistributing atoms between processes")')
        ! Deallocate parts and covering sets
        call deallocate_cs(BCS_parts,.true.)
