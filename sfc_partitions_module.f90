@@ -471,6 +471,9 @@ contains
   !   2013/08/25 M.Arita
   !   - Introduced shift_in_bohr to make partitioning consistent to
   !     shift in matrix reconstruction
+  !  2018/07/17 10:36 dave
+  !   Reworked so that we find the maximum number of atoms in a partition before allocating
+  !   iglob_atom_part
   ! SOURCE
   !
   subroutine setup_partitions()
@@ -481,9 +484,9 @@ contains
     ! parts array are assumed to be indexed by hilbert indices
     use datatypes
     use numbers
-    use GenComms,       only: cq_abort
+    use GenComms,       only: cq_abort, inode, ionode
     use global_module,  only: atom_coord, ni_in_cell, species_glob, &
-                              area_init, shift_in_bohr
+                              area_init, shift_in_bohr, io_lun, global_maxatomspart
     use species_module, only: nsf_species
     use Hilbert3D,      only: Hilbert3D_Initialise, Hilbert3D_IntTOCoords, &
                               Hilbert3D_CoordsToInt
@@ -506,88 +509,101 @@ contains
     call get_cell_info()
     ! get initial guess for number of partitions
     call get_initial_partitions()
-    ! assign atoms to the partitions and find the optimal number of
-    ! partitions based on the max number of atoms in each partition
-    refine = .true.
-    loop_refine: do while (refine)
-       refine = .false.
-       ! allocate  array
+    ! Refine partitioning if automatic
+    if(n_dim_auto>0) then 
+       refine = .true.
+       loop_refine: do while (refine)
+          refine = .false.
+          n_parts_total = product(n_parts)
+          allocate(parts(n_parts_total), STAT=stat)
+          if (stat /= 0) call cq_abort("setup_partitions: Error allocating parts", n_parts_total)
+          call reg_alloc_mem(area_init, n_parts_total, type_int)
+          ! initialise number of atoms and support functions
+          do ihilbert = 1, n_parts_total
+             parts(ihilbert)%n_atoms = 0
+             parts(ihilbert)%n_sf = 0
+          end do
+          call Hilbert3D_Initialise(n_divs(1), n_divs(2), n_divs(3))
+          ! get dimensions of each partition cell
+          r_part(1:3) = FSC%dims(1:3) / real(n_parts(1:3),double)
+          ! Assign atoms in cell to partitions and count
+          loop_atoms_refine: do ia = 1, ni_in_cell
+             ! get the partition x,y,z indices for the partition containing the atoms
+             ipart_xyz(1:3) = floor((atom_coord(1:3,ia)+shift_in_bohr) / r_part(1:3) )
+             ! get the corresponding Hilbert curve index corresponding to the partition
+             call Hilbert3D_CoordsToInt(ipart_xyz, ihilbert)
+             ! accumulate the atoms count
+             parts(ihilbert)%n_atoms = parts(ihilbert)%n_atoms + 1
+             ! check whether the partitioning needs to be refined
+             if ((parts(ihilbert)%n_atoms > max_natoms_part) .and. &
+                  (minval(r_part) > 1.0_double)) then
+                refine = .true.
+                ii = refine_direction(r_part, n_dim_auto, dim_nparts_auto)
+                n_divs(ii) = n_divs(ii) + 1
+                n_parts(ii) = 2**n_divs(ii)
+                r_part(ii) = FSC%dims(ii) / real(n_parts(ii),double)
+                deallocate(parts, STAT=stat)
+                if (stat /= 0) call cq_abort("setup_partitions: Error deallocating parts")
+                call reg_dealloc_mem(area_init, n_parts_total, type_int)
+                cycle loop_refine
+             end if
+          end do loop_atoms_refine
+       end do loop_refine
+    else ! User has set partitions
        n_parts_total = product(n_parts)
        allocate(parts(n_parts_total), STAT=stat)
-       if (stat /= 0) then
-          call cq_abort("setup_partitions: Error allocating parts", &
-                        n_parts_total)
-       end if
+       if (stat /= 0) call cq_abort("setup_partitions: Error allocating parts", n_parts_total)
        call reg_alloc_mem(area_init, n_parts_total, type_int)
-       allocate(iglob_atom_part(max_natoms_part,n_parts_total), STAT=stat)
-       if (stat /= 0) then
-          call cq_abort("setup_partitions: Error allocating parts", &
-                        max_natoms_part, n_parts_total)
-       end if
-       call reg_alloc_mem(area_init, max_natoms_part * n_parts_total, &
-                          type_int)
-       ! initialise number of atoms and support functions
-       iglob_atom_part = 0
        do ihilbert = 1, n_parts_total
           parts(ihilbert)%n_atoms = 0
           parts(ihilbert)%n_sf = 0
        end do
-       call Hilbert3D_Initialise(n_divs(1), n_divs(2), n_divs(3))
-       ! get dimensions of each partition cell
-       r_part(1:3) = FSC%dims(1:3) / real(n_parts(1:3),double)
-       ! loop over atoms in cell, work out which partitions they are
-       ! in, and do the counting
-       loop_atoms: do ia = 1, ni_in_cell
-          ! get the partition x,y,z indices for the partition containing the atoms
-          !ORI ipart_xyz(1:3) = floor(atom_coord(1:3,ia) / r_part(1:3) + RD_ERR)
-          ipart_xyz(1:3) = floor((atom_coord(1:3,ia)+shift_in_bohr) / r_part(1:3) )
-          ! get the corresponding Hilbert curve index corresponding to
-          ! the partition
-          call Hilbert3D_CoordsToInt(ipart_xyz, ihilbert)
-          ! accumulate the atoms count
-          parts(ihilbert)%n_atoms = parts(ihilbert)%n_atoms + 1
-          ! check if the number of atoms per partition exceeds number allowed
-          ! and if the partitioning needs to be refined
-          if ((parts(ihilbert)%n_atoms > max_natoms_part) .and. &
-              (n_dim_auto > 0) .and. &
-              (minval(r_part) > 1.0_double)) then
-             refine = .true.
-             ii = refine_direction(r_part, n_dim_auto, dim_nparts_auto)
-             n_divs(ii) = n_divs(ii) + 1
-             n_parts(ii) = 2**n_divs(ii)
-             r_part(ii) = FSC%dims(ii) / real(n_parts(ii),double)
-             deallocate(parts, STAT=stat)
-             if (stat /= 0) then
-                call cq_abort("setup_partitions: Error deallocating parts")
-             end if
-             call reg_dealloc_mem(area_init, n_parts_total, type_int)
-             deallocate(iglob_atom_part, STAT=stat)
-             if (stat /= 0) then
-                call cq_abort("setup_partitions: Error deallocating parts")
-             end if
-             call reg_dealloc_mem(area_init, max_natoms_part * n_parts_total, &
-                                  type_int)
-             cycle loop_refine
-          end if
-          ! accumulate the number of support functions
-          parts(ihilbert)%n_sf = parts(ihilbert)%n_sf + &
-                                 nsf_species(species_glob(ia))
-          ! record the atomic number
-          iglob_atom_part(parts(ihilbert)%n_atoms,ihilbert) = ia
-       end do loop_atoms
-       ! after obtaining the optimal partitioning levels, get rest
-       ! partition information
-       do ihilbert = 1, n_parts_total
-          call Hilbert3D_IntToCoords(ihilbert, ipart_xyz)
-          ! get cc index (start counting from 1)
-          icc = ipart_xyz(1) * n_parts(2) * n_parts(3) + &
-                ipart_xyz(2) * n_parts(3) + &
-                ipart_xyz(3) + 1
-          ! set relevent parts data
-          parts(ihilbert)%i_cc = icc
-          parts(ihilbert)%i_hilbert = ihilbert
-       end do ! ihilbert
-    end do loop_refine
+    end if
+    ! Now calculate sizes and assign atoms to partitions
+    call Hilbert3D_Initialise(n_divs(1), n_divs(2), n_divs(3))
+    ! get dimensions of each partition cell
+    r_part(1:3) = FSC%dims(1:3) / real(n_parts(1:3),double)
+    ! Assign atoms in cell to partitions and count
+    parts(:)%n_atoms = 0
+    loop_atoms_check: do ia = 1, ni_in_cell
+       ! Assign to partition
+       ipart_xyz(1:3) = floor((atom_coord(1:3,ia)+shift_in_bohr) / r_part(1:3) )
+       call Hilbert3D_CoordsToInt(ipart_xyz, ihilbert)
+       ! accumulate the atoms count
+       parts(ihilbert)%n_atoms = parts(ihilbert)%n_atoms + 1
+       if (parts(ihilbert)%n_atoms > max_natoms_part) max_natoms_part = parts(ihilbert)%n_atoms
+    end do loop_atoms_check
+    if(max_natoms_part>global_maxatomspart.AND.inode==ionode) &
+         write(io_lun,fmt='(2x,"Warning: Adjusted max. atoms per partitions to ",i3)') max_natoms_part
+    allocate(iglob_atom_part(max_natoms_part,n_parts_total), STAT=stat)
+    if (stat /= 0) call cq_abort("setup_partitions: Error allocating parts", max_natoms_part, n_parts_total)
+    call reg_alloc_mem(area_init, max_natoms_part * n_parts_total, type_int)
+    ! initialise number of atoms and support functions
+    iglob_atom_part = 0
+    parts(:)%n_atoms = 0
+    loop_atoms_assign: do ia = 1, ni_in_cell
+       ! Assign to partition
+       ipart_xyz(1:3) = floor((atom_coord(1:3,ia)+shift_in_bohr) / r_part(1:3) )
+       call Hilbert3D_CoordsToInt(ipart_xyz, ihilbert)
+       ! accumulate the atoms count
+       parts(ihilbert)%n_atoms = parts(ihilbert)%n_atoms + 1
+       ! accumulate the number of support functions
+       parts(ihilbert)%n_sf = parts(ihilbert)%n_sf + nsf_species(species_glob(ia))
+       ! record the atomic number
+       iglob_atom_part(parts(ihilbert)%n_atoms,ihilbert) = ia
+    end do loop_atoms_assign
+    ! after obtaining the optimal partitioning levels, get rest
+    ! partition information
+    do ihilbert = 1, n_parts_total
+       call Hilbert3D_IntToCoords(ihilbert, ipart_xyz)
+       ! get cc index (start counting from 1)
+       icc = ipart_xyz(1) * n_parts(2) * n_parts(3) + &
+            ipart_xyz(2) * n_parts(3) + &
+            ipart_xyz(3) + 1
+       ! set relevent parts data
+       parts(ihilbert)%i_cc = icc
+       parts(ihilbert)%i_hilbert = ihilbert
+    end do ! ihilbert
     return
   end subroutine setup_partitions
   !*****
@@ -622,6 +638,7 @@ contains
     use numbers
     use global_module, only: atom_coord, global_maxatomspart, &
                              ni_in_cell, numprocs
+
     implicit none
 
     ! local variables
