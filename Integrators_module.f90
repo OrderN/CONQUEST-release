@@ -141,7 +141,7 @@ contains
   subroutine vVerlet_v_dthalf(dt,v,f,flag_movable,second_call)
    ! Module usage
    use numbers, ONLY: half,zero
-   use global_module, ONLY: ni_in_cell,id_glob,flag_quench_MD, flag_MDdebug, io_lun
+   use global_module, ONLY: ni_in_cell,id_glob,flag_quench_MD, flag_MDdebug, io_lun, iprint_MD
    use species_module, oNLY: species,mass
    use move_atoms, ONLY: fac
    use GenComms, only: inode,ionode
@@ -177,7 +177,7 @@ contains
       ibeg_atom=1
       ! Now zero or update
       if(vf<zero) then
-         if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='2x,"In quenched MD, zeroing velocities")')
+         if(inode==ionode.AND.iprint_MD>2) write(io_lun,fmt='(2x,"In quenched MD, zeroing velocities")')
          v(:,:) = zero
       else
          do atom = 1, ni_in_cell
