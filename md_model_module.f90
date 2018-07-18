@@ -232,6 +232,9 @@ contains
       if (leqi(mdl%baro_type, 'iso-mttk') .or. leqi(mdl%baro_type, 'mttk')) then
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
                       mdl%nhc_energy + mdl%box_kinetic_energy + mdl%PV
+      else if (leqi(mdl%baro_type, 'ssm')) then
+        mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
+                      mdl%nhc_energy + mdl%box_kinetic_energy + mdl%PV
       else if (leqi(mdl%baro_type, 'berendsen')) then
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + mdl%PV
       end if
@@ -276,6 +279,15 @@ contains
       case('npt')
         select case(mdl%baro_type)
         case('iso-mttk')
+          if (mdl%nequil < 1) then
+            write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
+              mdl%nhc_energy
+            write (io_lun, '(4x,"Box kinetic energy      : ",f15.8)') &
+              mdl%box_kinetic_energy
+            write (io_lun, '(4x,"PV                      : ",f15.8)') &
+              mdl%PV
+          end if
+        case('ssm')
           if (mdl%nequil < 1) then
             write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
               mdl%nhc_energy
@@ -340,6 +352,9 @@ contains
           case('iso-mttk')
             write(lun,'(a10,6a18,2a12,a16)') "step", "pe", "ke", "nhc", &
               "box", "pV", "H'", "T", "P", "V"
+          case('ssm')
+            write(lun,'(a10,6a18,2a12,a16)') "step", "pe", "ke", "nhc", &
+              "box", "pV", "H'", "T", "P", "V"
           case('berendsen')
             if (md_berendsen_equil > 0) then
               write(lun,'(a10,6a18,2a12,a16)') "step", "pe", "ke", "nhc", &
@@ -370,6 +385,11 @@ contains
       case ('npt')
         select case(mdl%baro_type)
         case('iso-mttk')
+          write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
+            mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%nhc_energy, &
+            mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
+            mdl%volume
+        case('ssm')
           write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
             mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%nhc_energy, &
             mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &

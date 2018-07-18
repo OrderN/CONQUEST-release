@@ -265,6 +265,8 @@ contains
       th%cell_ndof = 3
     case('mttk')
       th%cell_ndof = 3
+    case('ssm')
+      th%cell_ndof = 1
     end select
 
     call th%get_temperature
@@ -345,12 +347,16 @@ contains
       ! convert time scales from fs to atomic units
       tauT = md_tau_T*fac_fs2atu 
       tauP = md_tau_P*fac_fs2atu 
-      omega_thermo = twopi/tauT
-      omega_baro = twopi/tauP
+!      omega_thermo = twopi/tauT
+!      omega_baro = twopi/tauP
+      omega_thermo = one/tauT
+      omega_baro = one/tauP
       th%m_nhc(1) = md_ndof_ions*th%T_ext*fac_Kelvin2Hartree/omega_thermo**2
       if (th%cell_nhc) then
         select case (md_baro_type)
         case('iso-mttk')
+          ndof_baro = one
+        case('ssm')
           ndof_baro = one
         end select
         th%m_nhc_cell(1) = (ndof_baro**2)*th%T_ext*fac_Kelvin2Hartree/omega_baro**2
@@ -369,14 +375,25 @@ contains
       th%append = .true.
       call th%read_thermo_checkpoint
     else
+      ! initialise thermostat velocities and forces
       th%append = .false.
       th%eta = zero
-      th%v_eta = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
+!      th%v_eta = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
+      th%v_eta = zero
       th%G_nhc = zero
+      do i=2,th%n_nhc
+        th%G_nhc(i) = (th%m_nhc(i-1)*th%v_eta(i-1)**2 - &
+                      & th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(i)
+      end do
       if (th%cell_nhc) then
         th%eta_cell = zero
-        th%v_eta_cell = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
+!        th%v_eta_cell = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
+        th%v_eta_cell = zero
         th%G_nhc_cell = zero
+        do i=2,th%n_nhc
+          th%G_nhc_cell(i) = (th%m_nhc_cell(i-1)*th%v_eta_cell(i-1)**2 - &
+                             & th%T_ext*fac_Kelvin2Hartree)/th%m_nhc_cell(i)
+        end do
       end if
     end if
     call th%get_nhc_energy
@@ -1064,8 +1081,9 @@ contains
         baro%box_mass = (md_ndof_ions+one)*temp_ion*fac_Kelvin2Hartree/omega_P**2
       case('ssm')
         tauP = md_tau_P*fac_fs2atu 
-        omega_P = twopi/tauP
-        baro%box_mass = (md_ndof_ions+one)*temp_ion*fac_Kelvin2Hartree/omega_P**2
+        omega_P = one/tauP
+!        baro%box_mass = (md_ndof_ions+one)*temp_ion*fac_Kelvin2Hartree/omega_P**2
+        baro%box_mass = ni_in_cell*temp_ion*fac_Kelvin2Hartree/omega_P**2
       end select
     else
       baro%box_mass = md_box_mass
@@ -1106,6 +1124,7 @@ contains
         baro%eps_ref = third*log(baro%volume/baro%volume_ref)
         baro%eps = baro%eps_ref
         baro%v_eps = zero
+        baro%G_eps = zero
         call baro%get_box_ke
       end if
       baro%odnf = one + three/baro%ndof
@@ -1121,6 +1140,7 @@ contains
         baro%append = .false.
         baro%eps = zero
         baro%v_eps = zero
+        baro%G_eps = zero
         call baro%get_box_ke
       end if
       baro%odnf = one + three/baro%ndof
@@ -1140,6 +1160,11 @@ contains
         write(io_lun,'(4x,a,f14.2)') 'Coupling time period   tau_P = ', &
                                       baro%tau_P
         if (leqi(baro%baro_type, 'iso-mttk')) then
+          write(io_lun,'(4x,a,f14.2)') 'Box mass                     = ', &
+                                        baro%box_mass
+          write(io_lun,'(4x,a,f14.2)') 'Pressre drag factor   p_drag = ', &
+                                        baro%p_drag
+        else if (leqi(baro%baro_type, 'ssm')) then
           write(io_lun,'(4x,a,f14.2)') 'Box mass                     = ', &
                                         baro%box_mass
           write(io_lun,'(4x,a,f14.2)') 'Pressre drag factor   p_drag = ', &
@@ -1847,154 +1872,189 @@ contains
 
   subroutine integrate_box_nhc(baro, th)
 
-      ! passed variables
-      class(type_barostat), intent(inout)     :: baro
-      type(type_thermostat), intent(inout)    :: th
+    ! passed variables
+    class(type_barostat), intent(inout)     :: baro
+    type(type_thermostat), intent(inout)    :: th
 
-      ! local variables
-      integer                                 :: i_mts, i_ys, i_nhc
-      real(double)                            :: v_sfac, v_eta_couple, &
-                                                 expfac_p, mts_fac, expfac_vbox
+    ! local variables
+    integer                                 :: i_mts, i_ys, i_nhc
+    real(double)                            :: v_sfac, v_eta_couple, &
+                                               expfac_p, mts_fac, expfac_vbox
 
-      mts_fac = one/real(th%n_mts_nhc, double)
-      do i_mts = 1,th%n_mts_nhc
-        do i_nhc = th%n_nhc, 2, -1
-          expfac_p = exp(-mts_fac*one_eighth*baro%dt*th%v_eta_cell(i_nhc+1))
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc) + &
-                                 th%G_nhc_cell(i_nhc)*baro%dt*quarter*mts_fac
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*baro%p_drag
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
-        end do
+  if (inode==ionode .and. flag_MDdebug) &
+    write(io_lun,*) "baroDebug: integrate_box_nhc"
 
-        expfac_p = exp(-mts_fac*one_eighth*baro%dt*th%v_eta_cell(1))
-        th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
-        th%v_eta_cell(1) = th%v_eta_cell(1) + th%dt*quarter*th%G_nhc(1)
-        th%v_eta_cell(1) = th%v_eta_cell(1)*baro%p_drag
-        th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
-
-        ! Couple box velocity to box NHC velocity
-        expfac_vbox = exp(-mts_fac*half*baro%dt*th%v_eta_cell(1))
-        baro%v_eps = baro%v_eps*expfac_vbox
-
-        call baro%get_box_ke
-        th%G_nhc_cell(1) = (two*baro%ke_box - th%T_ext*fac_Kelvin2Hartree)/th%m_nhc_cell(1)
-        th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
-        th%v_eta_cell(1) = th%v_eta_cell(1) + th%dt*quarter*th%G_nhc(1)
-        th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
-
-        do i_nhc = 1, th%n_nhc-1
-          expfac_p = exp(-mts_fac*one_eighth*baro%dt*th%v_eta_cell(i_nhc+1))
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
-          th%G_nhc_cell(i_nhc) = (th%m_nhc(i_nhc-1)*th%v_eta_cell(i_nhc-1)**2 &
-                                 - th%T_ext*fac_Kelvin2Hartree)/&
-                                 th%m_nhc_cell(i_nhc)
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc) + &
-                                 th%G_nhc_cell(i_nhc)*baro%dt*quarter*mts_fac
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*baro%p_drag
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
-        end do
-
+    mts_fac = one/real(th%n_mts_nhc, double)
+    do i_mts = 1,th%n_mts_nhc
+      do i_nhc = th%n_nhc, 2, -1
+        expfac_p = exp(-mts_fac*one_eighth*baro%dt*th%v_eta_cell(i_nhc+1))
+        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
+        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc) + &
+                               th%G_nhc_cell(i_nhc)*baro%dt*quarter*mts_fac
+        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*baro%p_drag
+        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
       end do
+
+      expfac_p = exp(-mts_fac*one_eighth*baro%dt*th%v_eta_cell(1))
+      th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
+      th%v_eta_cell(1) = th%v_eta_cell(1) + th%dt*quarter*th%G_nhc(1)
+      th%v_eta_cell(1) = th%v_eta_cell(1)*baro%p_drag
+      th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
+
+      ! Couple box velocity to box NHC velocity
+      expfac_vbox = exp(-mts_fac*half*baro%dt*th%v_eta_cell(1))
+      baro%v_eps = baro%v_eps*expfac_vbox
+
+      call baro%get_box_ke
+      th%G_nhc_cell(1) = (two*baro%ke_box - th%T_ext*fac_Kelvin2Hartree)/th%m_nhc_cell(1)
+      th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
+      th%v_eta_cell(1) = th%v_eta_cell(1) + th%dt*quarter*th%G_nhc(1)
+      th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
+
+      do i_nhc = 1, th%n_nhc-1
+        expfac_p = exp(-mts_fac*one_eighth*baro%dt*th%v_eta_cell(i_nhc+1))
+        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
+        th%G_nhc_cell(i_nhc) = (th%m_nhc(i_nhc-1)*th%v_eta_cell(i_nhc-1)**2 &
+                               - th%T_ext*fac_Kelvin2Hartree)/&
+                               th%m_nhc_cell(i_nhc)
+        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc) + &
+                               th%G_nhc_cell(i_nhc)*baro%dt*quarter*mts_fac
+        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*baro%p_drag
+        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
+      end do
+    end do
+
+    if (inode==ionode .and. flag_MDdebug) then 
+      write(io_lun,*) "eta_cell:   ", th%eta_cell
+      write(io_lun,*) "v_eta_cell: ", th%v_eta_cell
+      write(io_lun,*) "G_nhc_cell: ", th%G_nhc_cell
+    end if
   end subroutine integrate_box_nhc
 
   subroutine integrate_particle_nhc(th, v)
 
-      ! passed variables
-      class(type_thermostat), intent(inout)       :: th
-      real(double), dimension(3,3), intent(inout) :: v
+    ! passed variables
+    class(type_thermostat), intent(inout)       :: th
+    real(double), dimension(3,3), intent(inout) :: v
 
-      ! local variables
-      integer                                 :: i_mts, i_ys, i_nhc
-      real(double)                            :: v_sfac, v_eta_couple, &
-                                                 expfac_t, mts_fac, &
-                                                 expfac_vpart
+    ! local variables
+    integer                                 :: i_mts, i_ys, i_nhc
+    real(double)                            :: v_sfac, v_eta_couple, &
+                                               expfac_t, mts_fac, &
+                                               expfac_vpart
 
-      mts_fac = one/real(th%n_mts_nhc, double)
-      do i_mts=1,th%n_mts_nhc
-        do i_nhc = th%n_nhc, 2, -1
-          expfac_t = exp(-mts_fac*one_eighth*th%dt*th%v_eta(i_nhc+1))
-          th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
-          th%v_eta(i_nhc) = th%v_eta(i_nhc) + &
-                            th%G_nhc(i_nhc)*th%dt*quarter*mts_fac
-          th%v_eta(i_nhc) = th%v_eta(i_nhc)*th%t_drag
-          th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
-        end do
+  if (inode==ionode .and. flag_MDdebug) &
+    write(io_lun,*) "baroDebug: integrate_particle_nhc"
 
-        expfac_t = exp(-mts_fac*one_eighth*th%dt*th%v_eta(1))
-        th%v_eta(1) = th%v_eta(1)*expfac_t
-        th%v_eta(1) = th%v_eta(1) + th%dt*quarter*th%G_nhc(1)
-        th%v_eta(1) = th%v_eta(1)*th%t_drag
-        th%v_eta(1) = th%v_eta(1)*expfac_t
-
-        ! Couple particle velocities to NHC velocity
-        expfac_vpart = exp(-mts_fac*half*th%dt*th%v_eta(1))
-        v = expfac_vpart*v
-
-        th%ke_ions = th%ke_ions*expfac_vpart**2
-        th%T_int = th%T_int*expfac_vpart**2
-
-        th%G_nhc(1) = (two*th%ke_ions - th%T_ext*fac_Kelvin2Hartree)/ &
-                      th%m_nhc(1)
-        th%v_eta(1) = th%v_eta(1)*expfac_t
-        th%v_eta(1) = th%v_eta(1) + th%dt*quarter*th%G_nhc(1)
-        th%v_eta(1) = th%v_eta(1)*expfac_t
-
-        do i_nhc = 1, th%n_nhc-1
-          expfac_t = exp(-mts_fac*one_eighth*th%dt*th%v_eta(i_nhc+1))
-          th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
-          th%G_nhc(i_nhc) = (th%m_nhc(i_nhc-1)*th%v_eta(i_nhc-1)**2 - &
-                            th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(i_nhc)
-          th%v_eta(i_nhc) = th%v_eta_cell(i_nhc) + &
-                            th%G_nhc(i_nhc)*th%dt*quarter*mts_fac
-          th%v_eta(i_nhc) = th%v_eta(i_nhc)*th%t_drag
-          th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
-        end do
+    mts_fac = one/real(th%n_mts_nhc, double)
+    do i_mts=1,th%n_mts_nhc
+      do i_nhc = th%n_nhc, 2, -1
+        expfac_t = exp(-mts_fac*one_eighth*th%dt*th%v_eta(i_nhc+1))
+        th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
+        th%v_eta(i_nhc) = th%v_eta(i_nhc) + &
+                          th%G_nhc(i_nhc)*th%dt*quarter*mts_fac
+        th%v_eta(i_nhc) = th%v_eta(i_nhc)*th%t_drag
+        th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
       end do
+
+      expfac_t = exp(-mts_fac*one_eighth*th%dt*th%v_eta(1))
+      th%v_eta(1) = th%v_eta(1)*expfac_t
+      th%v_eta(1) = th%v_eta(1) + th%dt*quarter*th%G_nhc(1)
+      th%v_eta(1) = th%v_eta(1)*th%t_drag
+      th%v_eta(1) = th%v_eta(1)*expfac_t
+
+      ! Couple particle velocities to NHC velocity
+      expfac_vpart = exp(-mts_fac*half*th%dt*th%v_eta(1))
+      v = expfac_vpart*v
+
+      th%ke_ions = th%ke_ions*expfac_vpart**2
+      th%T_int = th%T_int*expfac_vpart**2
+
+      th%G_nhc(1) = (two*th%ke_ions - th%T_ext*fac_Kelvin2Hartree)/ &
+                    th%m_nhc(1)
+      th%v_eta(1) = th%v_eta(1)*expfac_t
+      th%v_eta(1) = th%v_eta(1) + th%dt*quarter*th%G_nhc(1)
+      th%v_eta(1) = th%v_eta(1)*expfac_t
+
+      do i_nhc = 1, th%n_nhc-1
+        expfac_t = exp(-mts_fac*one_eighth*th%dt*th%v_eta(i_nhc+1))
+        th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
+        th%G_nhc(i_nhc) = (th%m_nhc(i_nhc-1)*th%v_eta(i_nhc-1)**2 - &
+                          th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(i_nhc)
+        th%v_eta(i_nhc) = th%v_eta_cell(i_nhc) + &
+                          th%G_nhc(i_nhc)*th%dt*quarter*mts_fac
+        th%v_eta(i_nhc) = th%v_eta(i_nhc)*th%t_drag
+        th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
+      end do
+    end do
+
+    if (inode==ionode .and. flag_MDdebug) then 
+      write(io_lun,*) "eta:   ", th%eta
+      write(io_lun,*) "v_eta: ", th%v_eta
+      write(io_lun,*) "G_nhc: ", th%G_nhc
+    end if
+
   end subroutine integrate_particle_nhc
 
   subroutine integrate_box(baro)
 
-      ! passed variables
-      class(type_barostat), intent(inout)     :: baro
+    ! passed variables
+    class(type_barostat), intent(inout)     :: baro
 
-      ! local variables
+    ! local variables
 
-      baro%G_eps = (two*baro%odnf*baro%ke_ions + &
-                   three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
-      baro%v_eps = baro%v_eps + baro%G_eps*baro%dt*half
-      baro%v_eps = baro%v_eps*baro%p_drag
+    if (inode==ionode .and. flag_MDdebug) &
+      write(io_lun,*) "baroDebug: integrate_box"
+
+    baro%G_eps = (two*baro%odnf*baro%ke_ions + &
+                 three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
+    baro%v_eps = baro%v_eps + baro%G_eps*baro%dt*half
+    baro%v_eps = baro%v_eps*baro%p_drag
+
+    if (inode==ionode .and. flag_MDdebug) then 
+      write(io_lun,*) "v_eps: ", baro%v_eps
+      write(io_lun,*) "G_eps: ", baro%G_eps
+    end if
 
   end subroutine integrate_box
 
   subroutine couple_box_particle_velocity(baro, v)
 
-      ! passed variables
-      class(type_barostat), intent(inout)     :: baro
-      real(double), dimension(:,:), intent(inout) :: v
+    ! passed variables
+    class(type_barostat), intent(inout)     :: baro
+    real(double), dimension(:,:), intent(inout) :: v
 
-      ! local variables
-      real(double)                            :: expfac
+    ! local variables
+    real(double)                            :: expfac
 
-      expfac = exp(-baro%odnf*baro%v_eps)
-      v  = v*expfac
-      baro%ke_ions = baro%ke_ions*expfac**2
+    if (inode==ionode .and. flag_MDdebug) &
+    write(io_lun,*) "baroDebug: couple_box_particle_velocity"
+
+    expfac = exp(-quarter*baro%dt*baro%odnf*baro%v_eps)
+    v  = v*expfac**2
+    baro%ke_ions = baro%ke_ions*expfac**4
 
   end subroutine couple_box_particle_velocity
 
   subroutine propagate_box_ssm(baro)
 
-      ! passed variables
-      class(type_barostat), intent(inout)     :: baro
+    ! passed variables
+    class(type_barostat), intent(inout)     :: baro
 
-      ! local variables
-      real(double)                            :: expfac_h
+    ! local variables
+    real(double)                            :: expfac_h
 
-      baro%eps = baro%eps + baro%dt*baro%v_eps
-      expfac_h = baro%eps*exp(baro%dt*baro%v_eps)
-      baro%lat(1,1) = baro%lat(1,1)*expfac_h
-      baro%lat(2,2) = baro%lat(2,2)*expfac_h
-      baro%lat(3,3) = baro%lat(3,3)*expfac_h
+    if (inode==ionode .and. flag_MDdebug) &
+    write(io_lun,*) "baroDebug: propagate_box_ssm"
+
+    baro%eps = baro%eps + baro%dt*baro%v_eps
+    expfac_h = exp(baro%dt*baro%v_eps)
+    if (inode==ionode) write(io_lun,*) "v_eps ", baro%v_eps
+    if (inode==ionode) write(io_lun,*) "expfac_h ", expfac_h
+    baro%lat(1,1) = baro%lat(1,1)*expfac_h
+    baro%lat(2,2) = baro%lat(2,2)*expfac_h
+    baro%lat(3,3) = baro%lat(3,3)*expfac_h
+
   end subroutine propagate_box_ssm
 
   !!****m* md_control/dump_baro_state *

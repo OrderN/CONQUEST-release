@@ -1019,6 +1019,11 @@ contains
                                 md_ndof, md_tau_T, mdl%ion_kinetic_energy)
         call baro%init_baro('berendsen', MDtimestep, md_ndof, stress, &
                             ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
+      case('ssm')
+        call thermo%init_thermo('nhc', 'ssm',  MDtimestep, md_ndof, &
+                                md_tau_T, mdl%ion_kinetic_energy)
+        call baro%init_baro('ssm', MDtimestep, md_ndof, stress, &
+                            ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
       case default
         call cq_abort("Unknown barostat type")
       end select
