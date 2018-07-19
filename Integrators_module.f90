@@ -140,7 +140,7 @@ contains
   !! 
   subroutine vVerlet_v_dthalf(dt,v,f,flag_movable,second_call)
    ! Module usage
-   use numbers, ONLY: half,zero
+   use numbers, ONLY: half,zero, one
    use global_module, ONLY: ni_in_cell,id_glob,flag_quench_MD, flag_MDdebug, io_lun, iprint_MD
    use species_module, oNLY: species,mass
    use move_atoms, ONLY: fac
@@ -155,25 +155,40 @@ contains
    logical,optional :: second_call
    ! local variables
    integer :: atom,speca,gatom,k,ibeg_atom
-   real(double) :: vf,massa
-   logical :: flagx,flagy,flagz
+   real(double) :: vf,massa,ff,scale_fac
+   logical :: flag_first
 
+   flag_first=.true.
+   if(present(second_call)) flag_first = .false.
    if (inode==ionode .and. flag_MDdebug) write(io_lun,*) "Welcome to vVerlet_v_dthalf"
    ibeg_atom=1
    ! For quenched-MD
    ! 2018/07/16 DRB It seems that zeroing velocities after either call is more efficient
-   if(flag_quench_MD) then
+   if(flag_quench_MD.and.flag_first) then
+      ! Alternative implementation: update v
+      do atom = 1, ni_in_cell
+         speca = species(atom)
+         massa = fac ! MDMin routine sets all masses = 1
+         gatom = id_glob(atom)
+         do k = 1, 3
+            if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
+            v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
+         enddo
+         ibeg_atom = ibeg_atom + 3
+      enddo
       ! Accumulate system-wide F.v and set v=0 if F.v<0
       vf = zero
+      ff = zero
       do atom = 1, ni_in_cell
-         vf = zero
          gatom = id_glob(atom)
          do k = 1, 3
             if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
             vf = vf + v(k,atom)*f(k,gatom)
+            ff = ff + f(k,gatom)*f(k,gatom)
          enddo
          ibeg_atom = ibeg_atom + 3
       enddo
+      scale_fac = vf/ff
       ibeg_atom=1
       ! Now zero or update
       if(vf<zero) then
@@ -182,20 +197,35 @@ contains
       else
          do atom = 1, ni_in_cell
             speca = species(atom)
-            massa = fac!mass(speca)*fac ! MDMin routine sets all masses = 1
+            massa = fac ! MDMin routine sets all masses = 1
             gatom = id_glob(atom)
             do k = 1, 3
                if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
-               v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
+               ! Original
+               !v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
+               ! Alternative ! Hack by DRB - choose proportion of force direction to add
+               v(k,atom) = (one - fire_alpha0)*v(k,atom) + fire_alpha0*f(k,gatom)*scale_fac
             enddo
             ibeg_atom = ibeg_atom + 3
          enddo
       end if
+      ! Alternative implementation: update v
+      do atom = 1, ni_in_cell
+         speca = species(atom)
+         massa = fac ! MDMin routine sets all masses = 1
+         gatom = id_glob(atom)
+         do k = 1, 3
+            if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
+            v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
+         enddo
+         ibeg_atom = ibeg_atom + 3
+      enddo
    ! Ordinary MD update
-   else
+   else if(.NOT.flag_quench_MD) then
       do atom = 1, ni_in_cell
          speca = species(atom)
          massa = mass(speca)*fac
+         if(flag_quench_MD) massa = fac
          gatom = id_glob(atom)
          do k = 1, 3
             if (.NOT.flag_movable(ibeg_atom+k-1)) cycle

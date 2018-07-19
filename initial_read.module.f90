@@ -1616,9 +1616,10 @@ contains
           fire_f_alpha       = fdf_double ('AtomMove.Fire_f_alpha',0.99_double)
           fire_max_step      = fdf_double ('AtomMove.FireMaxStep',2.0_double)
           fire_N_below_thresh= fdf_integer('AtomMove.FireNBelowThresh',3)
-       end if
-       if(flag_fire_qMD.OR.flag_quench_MD) then
           temp_ion           = fdf_double ('AtomMove.IonTemperature',0.0_double)
+       else if(flag_quench_MD) then
+          temp_ion           = fdf_double ('AtomMove.IonTemperature',0.0_double)
+          fire_alpha0        = fdf_double ('AtomMove.QMDAlpha',0.5_double)
        else
           temp_ion           = fdf_double ('AtomMove.IonTemperature',300.0_double)
        end if
