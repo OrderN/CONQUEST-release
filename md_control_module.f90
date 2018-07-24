@@ -99,6 +99,7 @@ module md_control
     real(double)        :: e_nhc        ! energy of NHC thermostats
     real(double)        :: e_nhc_ion    ! energy of ionic NHC thermostats
     real(double)        :: e_nhc_cell   ! energy of cell NHC thermostats
+    real(double)        :: ke_target    ! for computing NHC force
     real(double)        :: t_drag       ! drag factor for thermostat
     character(40)       :: nhc_fmt      ! format string for printing NHC arrays
     real(double), dimension(:), allocatable :: eta    ! thermostat "position"
@@ -322,6 +323,7 @@ contains
     th%lambda = one
     th%cell_nhc  = md_cell_nhc
     th%t_drag = (one - md_t_drag*dt/md_tau_T)/md_n_mts/md_n_ys
+    th%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*th%T_ext
     write(th%nhc_fmt,'("(4x,a12,",i4,"f10.4)")') th%n_nhc
 
     allocate(th%eta(th%n_nhc))
@@ -1380,6 +1382,8 @@ contains
       baro%ke_box = half*baro%box_mass*baro%v_eps**2
     case('ortho-mttk')
     case('mttk')
+    case('ssm')
+      baro%ke_box = half*baro%box_mass*baro%v_eps**2
     end select
 
     if (inode==ionode .and. flag_MDdebug) then
@@ -1855,8 +1859,12 @@ contains
     real(double)                            :: v_sfac, v_eta_couple, &
                                                expfac_p, mts_fac, expfac_vbox
 
-  if (inode==ionode .and. flag_MDdebug) &
-    write(io_lun,'(2x,a)') "baroDebug: integrate_box_nhc"
+    if (inode==ionode .and. flag_MDdebug) &
+      write(io_lun,'(2x,a)') "baroDebug: integrate_box_nhc"
+
+    call baro%get_box_ke
+    th%G_nhc_cell(1) = (two*baro%ke_box - th%cell_ndof*th%T_ext*fac_Kelvin2Hartree) / &
+                       th%m_nhc_cell(1)
 
     mts_fac = one/real(th%n_mts_nhc, double)
     do i_mts = 1,th%n_mts_nhc
@@ -1927,6 +1935,8 @@ contains
                                                expfac_t, mts_fac, &
                                                expfac_vpart
 
+  th%G_nhc(1) = (th%ke_ions - th%ke_target)/th%m_nhc(1)
+
   if (inode==ionode .and. flag_MDdebug) &
     write(io_lun,'(2x,a)') "baroDebug: integrate_particle_nhc"
 
@@ -1951,7 +1961,7 @@ contains
       th%v_eta(1) = th%v_eta(1)*th%t_drag
       th%v_eta(1) = th%v_eta(1)*expfac_t
 
-      ! Propagate eta_cell (bookkeeping)
+      ! Propagate eta (bookkeeping)
       do i_nhc=1,th%n_nhc
         th%eta(i_nhc) = th%eta(i_nhc) + mts_fac*th%dt*half*th%v_eta(i_nhc)
       end do
@@ -1963,10 +1973,12 @@ contains
       th%ke_ions = th%ke_ions*expfac_vpart**2
       th%T_int = th%T_int*expfac_vpart**2
 
-      th%G_nhc(1) = (two*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree)/ &
-                    th%m_nhc(1)
+!      th%G_nhc(1) = (two*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree)/ &
+!                    th%m_nhc(1)
+      th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
       if (inode==ionode) then
-        write(io_lun,*) "T_diff: ", th%ke_ions/fac_Kelvin2Hartree/th%ndof - th%T_ext
+        write(io_lun,*) "T_diff: ", two*(th%ke_ions - &
+          th%ke_target)/md_ndof_ions/fac_Kelvin2Hartree
       end if
       th%v_eta(1) = th%v_eta(1)*expfac_t
       th%v_eta(1) = th%v_eta(1) + th%dt*quarter*th%G_nhc(1)
