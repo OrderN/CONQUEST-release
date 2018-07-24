@@ -171,7 +171,7 @@ contains
          massa = fac ! MDMin routine sets all masses = 1
          gatom = id_glob(atom)
          do k = 1, 3
-            if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
+            !if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
             v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
          enddo
          ibeg_atom = ibeg_atom + 3
@@ -182,7 +182,7 @@ contains
       do atom = 1, ni_in_cell
          gatom = id_glob(atom)
          do k = 1, 3
-            if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
+            !if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
             vf = vf + v(k,atom)*f(k,gatom)
             ff = ff + f(k,gatom)*f(k,gatom)
          enddo
@@ -200,7 +200,7 @@ contains
             massa = fac ! MDMin routine sets all masses = 1
             gatom = id_glob(atom)
             do k = 1, 3
-               if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
+               !if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
                ! Original
                !v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
                ! Alternative ! Hack by DRB - choose proportion of force direction to add
@@ -215,7 +215,7 @@ contains
          massa = fac ! MDMin routine sets all masses = 1
          gatom = id_glob(atom)
          do k = 1, 3
-            if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
+            !if (.NOT.flag_movable(ibeg_atom+k-1)) cycle
             v(k,atom) = v(k,atom) + half*dt*f(k,gatom)/massa
          enddo
          ibeg_atom = ibeg_atom + 3
