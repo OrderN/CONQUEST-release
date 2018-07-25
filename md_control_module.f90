@@ -284,6 +284,8 @@ contains
     case('berendsen')
     case('nhc')
       call th%init_nhc(dt)
+    case('ssm')
+      call th%init_nhc(dt)
     case default
       call cq_abort("Unknown thermostat type")
     end select
@@ -1989,7 +1991,7 @@ contains
         th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
         th%G_nhc(i_nhc) = (th%m_nhc(i_nhc-1)*th%v_eta(i_nhc-1)**2 - &
                           th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(i_nhc)
-        th%v_eta(i_nhc) = th%v_eta_cell(i_nhc) + &
+        th%v_eta(i_nhc) = th%v_eta(i_nhc) + &
                           th%G_nhc(i_nhc)*th%dt*quarter*mts_fac
         th%v_eta(i_nhc) = th%v_eta(i_nhc)*th%t_drag
         th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
@@ -2055,13 +2057,18 @@ contains
     class(type_barostat), intent(inout)     :: baro
 
     ! local variables
-    real(double)                            :: expfac_h
+    real(double)                            :: expfac_h, mtk_term
 
     if (inode==ionode .and. flag_MDdebug) &
     write(io_lun,'(2x,a)') "baroDebug: propagate_box_ssm"
 
     baro%eps = baro%eps + half*baro%dt*baro%v_eps
-    expfac_h = exp(half*baro%dt*baro%v_eps)
+
+!    mtk_term = baro%v_eps/ni_in_cell
+    mtk_term = zero
+    
+
+    expfac_h = exp(half*baro%dt*baro%v_eps + mtk_term)
     if (inode==ionode .and. flag_MDdebug) then
       write(io_lun,'(4x,"v_eps:    ",f16.8)') baro%v_eps
       write(io_lun,'(4x,"expfac_h: ",f16.8)') expfac_h
