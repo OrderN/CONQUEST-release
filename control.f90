@@ -490,6 +490,9 @@ contains
 !!    Added time step argument to init_thermo calls
 !!   2018/05/30 zamaan
 !!    Switch on NHC after using BerendsenEquil in NVT ensemble
+!!   2018/7/23 zamaan
+!!    Replaced calculate_kinetic_energy calls with get_temperature_and ke, which
+!!    also computes the kinteic stress
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -514,7 +517,6 @@ contains
                               init_velocity,update_H,check_move_atoms, &
                               update_atom_coord,wrap_xyz_atom_cell,    &
                               zero_COM_velocity,                       &
-                              calculate_kinetic_energy,                &
                               fac_Kelvin2Hartree
     use GenComms,       only: gsum, my_barrier, inode, ionode, gcopy
     use GenBlas,        only: dot
@@ -604,8 +606,6 @@ contains
     dE = zero
     length = 3*ni_in_cell
 
-    call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
-
     ! initialisation/contintuation when we're using Berendsen equilibration
     if (flag_MDcontinue) then
       if (MDinit_step >= md_berendsen_equil) then
@@ -644,7 +644,6 @@ contains
 
     ! Thermostat/barostat initialisation
     call init_ensemble(baro, thermo, mdl, md_ndof, nequil)
-    call baro%get_ke_stress(ion_velocity)
 
     ! Get converted 1-D array for flag_atom_move
     allocate (flag_movable(3*ni_in_cell), STAT=stat)
@@ -686,7 +685,9 @@ contains
        if (inode==ionode) &
             write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
 
-       call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
+       call thermo%get_temperature_and_ke(baro, ion_velocity, &
+                                          mdl%ion_kinetic_energy)
+       call baro%get_pressure_and_stress
 
        ! thermostat/barostat (MTTK splitting of Liouvillian)
        call integrate_pt(baro, thermo, mdl, ion_velocity)
@@ -765,13 +766,10 @@ contains
            call baro%update_cell
          end if
        end if
-       call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
        thermo%ke_ions = mdl%ion_kinetic_energy
-       call baro%update_static_stress(stress)
-       call baro%get_ke_stress(ion_velocity)
-       call baro%get_volume
-       call baro%get_pressure
-       call thermo%get_temperature
+       call thermo%get_temperature_and_ke(baro, ion_velocity, &
+                                          mdl%ion_kinetic_energy)
+       call baro%get_pressure_and_stress
 
        !! For Debuggging !!
        !!call cq_abort(" STOP FOR DEBUGGING")
@@ -855,10 +853,9 @@ contains
  
         ! The kinetic component of stress changes after the second velocity
         ! update 
-        call baro%get_ke_stress(ion_velocity)
-        call baro%get_volume
-        call baro%get_pressure
-        call thermo%get_temperature
+        call thermo%get_temperature_and_ke(baro, ion_velocity, &
+                                           mdl%ion_kinetic_energy)
+        call baro%get_pressure_and_stress
         select case(md_ensemble)
         case('nvt')
           if (leqi(thermo%thermo_type, 'nhc')) then
