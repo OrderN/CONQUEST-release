@@ -145,6 +145,8 @@ contains
 !!    - Added memory registration
 !!   2015/06/08 lat
 !!    - Added experimental backtrace
+!!   2018/07/11 12:04 dave
+!!    Initialise group members to zero
 !!  SOURCE
 !!
   subroutine allocate_group_set(groups,mx_node)
@@ -206,6 +208,14 @@ contains
     endif
     call reg_alloc_mem(area_index,6*groups%mx_gcell,type_int)
     call stop_timer(tmr_std_allocation)
+    groups%ng_on_node = 0 
+    groups%inode_beg  = 0
+    groups%ngnode     = 0
+    groups%i_cc2node  = 0
+    groups%i_cc2seq   = 0
+    groups%nm_group   = 0
+    groups%icell_beg  = 0
+    groups%inv_ngnode = 0
 
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='allocate_group_set')
@@ -239,6 +249,8 @@ contains
 !!    Added timer
 !!   2009/11/03 16:43 dave
 !!    Added memory registration
+!!   2018/07/11 12:04 dave
+!!    Deallocate nm_group
 !!  SOURCE
 !!
   subroutine deallocate_group_set(groups)
@@ -257,7 +269,7 @@ contains
     integer :: stat
 
     call start_timer(tmr_std_allocation)
-    deallocate(groups%inv_ngnode,groups%icell_beg,groups%i_cc2seq, &
+    deallocate(groups%inv_ngnode,groups%icell_beg,groups%nm_group,groups%i_cc2seq, &
          groups%i_cc2node,groups%ngnode,groups%inode_beg, &
          groups%ng_on_node,STAT=stat)
     if(stat/=0) then

@@ -144,6 +144,8 @@ contains
   !!    Bug fix (GitHub issue #36) to turn off basis optimisation if NSF=NPAO
   !!   2018/05/11 10:26 dave
   !!    Bug fix (GitHub issue #80) to set flag_SFcoeffReuse false if NSF=NPAO
+  !!   2018/07/13 09:37 dave
+  !!    Added test for missing coordinate file name
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -195,7 +197,7 @@ contains
     use pseudopotential_common, only: core_radius, pseudo_type, OLDPS, &
                                       SIESTA, ABINIT
     use pseudo_tm_module,       only: init_pseudo_tm
-    use input_module,           only: fdf_string, fdf_out, io_close
+    use input_module,           only: fdf_string, fdf_out, io_close, leqi
     use force_module,           only: tot_force
     !use DiagModule,             only: diagon
     use constraint_module,      only: flag_RigidBonds,constraints
@@ -238,6 +240,7 @@ contains
     call my_barrier()
     def = ' '
     atom_coord_file = fdf_string(80,'IO.Coordinates',def)
+    if(leqi(def,atom_coord_file)) call cq_abort("No coordinate file specified: please set with IO.Coordinates")
     if ( pdb_format ) then
        pdb_template = fdf_string(80,'IO.PdbTemplate',atom_coord_file)
     else
@@ -644,6 +647,8 @@ contains
   !!    added md_tdep flag for TDEP output dump
   !!   2018/05/17 12:54 dave with Ayako Nakata
   !!    flag_InitialAtomicSpin now comes from density_module (not global)
+  !!   2018/07/16 16:02 dave
+  !!    Bug fix: only read RadiusMS when flag_Multisite is true
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -793,7 +798,7 @@ contains
                           md_omega_t, md_omega_p, md_tau_T_equil, &
                           md_tau_P_equil, md_p_drag, md_t_drag
     use md_model,   only: md_tdep
-    use move_atoms,         only: threshold_resetCD
+    use move_atoms,         only: threshold_resetCD, flag_stop_on_empty_bundle
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
     use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0
@@ -1229,7 +1234,8 @@ contains
              nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
              RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',r_h)
              RadiusAtomf(i)   = RadiusSupport(i) ! = r_pao for (atomf=paof) or r_sf for (atomf==sf)
-             RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
+             ! Added DRB 2018/07/16 for safety
+             if(flag_Multisite) RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
              RadiusLD(i)      = fdf_double ('Atom.LFDRange',zero)
              if (flag_Multisite) RadiusSupport(i) = RadiusAtomf(i) + RadiusMS(i)
              ! DRB 2016/08/05 Keep track of maximum support radius
@@ -1379,6 +1385,7 @@ contains
        flag_opt_cell         = fdf_boolean('AtomMove.OptCell',          .false.)
        cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
        cell_en_tol           = fdf_double('AtomMove.OptCell.EnTol',0.00001_double)
+       flag_stop_on_empty_bundle = fdf_boolean('AtomMove.StopOnEmptyBundle',.false.)
        !
        flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
        if(.NOT.flag_vary_basis) then

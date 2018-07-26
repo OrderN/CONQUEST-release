@@ -841,9 +841,11 @@ contains
 !!    Added ROBODoc header and cq_abort
 !!   2008/05/16 ast
 !!    Added timer
+!!   2018/07/04 08:47 dave
+!!    Added members logical to be consistent with allocate
 !!  SOURCE
 !!
-  subroutine deallocate_cs(set)
+  subroutine deallocate_cs(set,members)
 
     ! Module usage
     use basic_types
@@ -855,6 +857,7 @@ contains
 
     ! Passed variables
     type(cover_set) :: set
+    logical :: members
 
     ! Local variables
     integer :: stat,irc,ierr
@@ -867,14 +870,12 @@ contains
        call reg_dealloc_mem(area_index,size(set%iprim_group),type_int)
        deallocate(set%iprim_group,STAT=stat)
     endif
-    if(stat/=0) then
-       call cq_abort('deallocate_cs: error(1)')
-    endif
-    deallocate(set%ncover_rem,set%zcover,set%ycover,set%xcover, &
-         set%lab_cover,set%lab_cell,set%icover_ibeg,set%n_ing_cover, &
-         STAT=stat)
-    if(stat/=0) then
-       call cq_abort('deallocate_cs: error(2)')
+    if(stat/=0) call cq_abort('deallocate_cs: error(1)')
+    if(members) then
+       deallocate(set%ncover_rem,set%zcover,set%ycover,set%xcover, &
+            set%lab_cover,set%lab_cell,set%icover_ibeg,set%n_ing_cover, &
+            STAT=stat)
+       if(stat/=0) call cq_abort('deallocate_cs: error(2)')
     endif
     call stop_timer(tmr_std_allocation)
     return

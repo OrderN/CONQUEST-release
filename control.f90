@@ -794,7 +794,7 @@ contains
        mdl%dft_total_energy = energy1
        if (inode==ionode) then
          write(io_lun,'(4x,"***MD step ",i6," KE: ",f18.8," &
-                        IntEnergy: ",f20.8," TotalEnergy: ",f20.8)') &
+                       &IntEnergy: ",f20.8," TotalEnergy: ",f20.8)') &
                iter, mdl%ion_kinetic_energy, mdl%dft_total_energy, &
                mdl%ion_kinetic_energy+mdl%dft_total_energy
          write(io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
@@ -872,7 +872,7 @@ contains
          nequil = nequil - 1
          if (nequil == 0) then
            write (io_lun, '(4x,a)') "Berendsen equilibration finished, &
-                                     starting extended system dynamics."
+                                    &starting extended system dynamics."
            ! If the run was restarted during Berendsen equilibration, the
            ! MDcontinue flag would cause init_nhc to read a non-existent
            ! thermostat checkpoint. Not pretty, bug good enough for now.
@@ -904,7 +904,7 @@ contains
              step_qMD = iter
              if (inode==ionode) then
                 write(io_lun,fmt='(4x,i4,4x,"Maximum force below &
-                      threshold: ",f12.6)') n_stop_qMD, max
+                     &threshold: ",f12.6)') n_stop_qMD, max
              end if
              if (n_stop_qMD > fire_N_below_thresh) then
                 done = .true.
@@ -975,7 +975,7 @@ contains
       if (nequil > 0) then ! Equilibrate using Berendsen?
         if (inode==ionode) then
           write (io_lun, '(4x,"Equilibrating using Berendsen &
-                           baro/thermostat for ",i8," steps")') nequil
+                          &baro/thermostat for ",i8," steps")') nequil
         end if
         call thermo%init_thermo('berendsen', 'none', MDtimestep, md_ndof, &
                                 md_tau_T, mdl%ion_kinetic_energy)
@@ -991,7 +991,7 @@ contains
         if (nequil > 0) then ! Equilibrate using Berendsen?
           if (inode == ionode) then
             write (io_lun, '(4x,"Equilibrating using Berendsen &
-                             baro/thermostat for ",i8," steps")') nequil
+                            &baro/thermostat for ",i8," steps")') nequil
           end if
           call thermo%init_thermo('berendsen', 'berendsen', MDtimestep, &
                                   md_ndof, md_tau_T_equil, &

@@ -1121,6 +1121,8 @@ contains
   !!    Removed PAOP_PS_H, dSrange, dHrange and PAOPrange which are no longer used
   !!   2017/12/05 10:33 dave with TM and NW (Mizuho)
   !!    Deallocating NA projector matrices
+  !!   2018/07/11 12:12 dave
+  !!    Adding dissociate_matrices and deallocation of mat for empty bundle fix
   !!  SOURCE
   !!
   subroutine fmmi(prim)
@@ -1348,7 +1350,7 @@ contains
        deallocate(aNApairind)
        if(atomf.ne.sf) deallocate(aNAapairind)
     end if
-    !call dissociate_matrices
+    call dissociate_matrices
     ! Matrices
     call end_ops(prim,Srange,Smatind,S_trans)
     call end_ops(prim,Lrange,Lmatind,L_trans)
@@ -1385,7 +1387,7 @@ contains
        call end_ops(prim,NAarange,NAamatind)
     end if
 !    call stop_timer(tmr_std_matrices)
-
+    deallocate(mat)
     return
   end subroutine fmmi
   !!***
@@ -2439,6 +2441,7 @@ contains
        if (stat /= 0) call cq_abort("Error deallocating matrix ",i,mat_p(i)%length)
        nullify(mat_p(i)%matrix)
        call reg_dealloc_mem(area_matrices,mat_p(i)%length,type_dbl)
+       mat_p(i)%length = 0
     end do
     call stop_timer(tmr_std_allocation)
 
