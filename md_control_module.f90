@@ -47,6 +47,7 @@ module md_control
   real(double), parameter :: fac_HaBohr32GPa = 29421.02648438959
   real(double), parameter :: fac_fs2atu = 41.3413745758
   real(double), parameter :: fac_invcm2hartree = 4.5563352812122295E-6
+  real(double), parameter :: fac_thz2hartree = 0.0001519828500716
 
   ! Checkpoint files
   character(20) :: thermo_check_file = "cq.thermo"
@@ -332,11 +333,8 @@ contains
 
     ! Calculate the masses for extended lagrangian variables?
     if (md_calc_xlmass) then
-      ! convert time scales from fs to atomic units
-      tauT = md_tau_T*fac_fs2atu 
-      tauP = md_tau_P*fac_fs2atu 
-      omega_thermo = twopi/tauT
-      omega_baro = twopi/tauP
+      omega_thermo = one/md_tau_T
+      omega_baro = one/md_tau_P
       th%m_nhc(1) = md_ndof_ions*th%T_ext*fac_Kelvin2Hartree/omega_thermo**2
       if (th%cell_nhc) then
         select case (md_baro_type)
@@ -1066,8 +1064,7 @@ contains
     if (md_calc_xlmass) then
       select case(baro_type)
       case('iso-mttk')
-        tauP = md_tau_P*fac_fs2atu 
-        omega_P = twopi/tauP
+        omega_P = one/md_tau_P
         baro%box_mass = (md_ndof_ions+one)*temp_ion*fac_Kelvin2Hartree/omega_P**2
       end select
     else
