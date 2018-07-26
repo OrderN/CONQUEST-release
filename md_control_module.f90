@@ -343,13 +343,8 @@ contains
 
     ! Calculate the masses for extended lagrangian variables?
     if (md_calc_xlmass) then
-      ! convert time scales from fs to atomic units
-      tauT = md_tau_T*fac_fs2atu 
-      tauP = md_tau_P*fac_fs2atu 
-!      omega_thermo = twopi/tauT
-!      omega_baro = twopi/tauP
-      omega_thermo = one/tauT
-      omega_baro = one/tauP
+      omega_thermo = one/md_tau_T
+      omega_baro = one/md_tau_P
       th%m_nhc(1) = md_ndof_ions*th%T_ext*fac_Kelvin2Hartree/omega_thermo**2
       if (th%cell_nhc) then
         select case (md_baro_type)
@@ -1091,14 +1086,11 @@ contains
     if (md_calc_xlmass) then
       select case(baro_type)
       case('iso-mttk')
-        tauP = md_tau_P*fac_fs2atu 
-        omega_P = twopi/tauP
+        omega_P = one/md_tau_P
         baro%box_mass = (md_ndof_ions+one)*temp_ion*fac_Kelvin2Hartree/omega_P**2
       case('ssm')
-        tauP = md_tau_P*fac_fs2atu 
-        omega_P = one/tauP
-!        baro%box_mass = (md_ndof_ions+one)*temp_ion*fac_Kelvin2Hartree/omega_P**2
-        baro%box_mass = ni_in_cell*temp_ion*fac_Kelvin2Hartree/omega_P**2
+        omega_P = one/md_tau_T
+        baro%box_mass = (md_ndof_ions+one)*temp_ion*fac_Kelvin2Hartree/omega_P**2
       end select
     else
       baro%box_mass = md_box_mass
@@ -2098,7 +2090,7 @@ contains
     integer, intent(in)                   :: step
     character(len=*), intent(in)          :: filename
 
-    ! local variablesG
+    ! local variables
     integer                               :: lun
 
     if (inode==ionode) then
