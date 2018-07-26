@@ -798,7 +798,6 @@ contains
        do nn=1,data%n_pair(nr)   ! Put it in place
           count = pairs(nr)%submat(nn)
           if(data%itran_addr(ic+nn-1)+count-1>lenat) then
-             write(*,*) nr,ic,nn,count,data%itran_addr(ic+nn-1),lenat
              call cq_abort('mat_tran: itran_addr wrong ', data%itran_addr(ic+nn-1)+count-1,lenat)
           end if
           atrans(data%itran_addr(ic+nn-1):data%itran_addr(ic+nn-1)+count-1)=a_store(posn+1:posn+count)
