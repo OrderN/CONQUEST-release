@@ -1970,10 +1970,6 @@ contains
 !      th%G_nhc(1) = (two*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree)/ &
 !                    th%m_nhc(1)
       th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
-      if (inode==ionode) then
-        write(io_lun,*) "T_diff: ", two*(th%ke_ions - &
-          th%ke_target)/md_ndof_ions/fac_Kelvin2Hartree
-      end if
       th%v_eta(1) = th%v_eta(1)*expfac_t
       th%v_eta(1) = th%v_eta(1) + th%dt*quarter*th%G_nhc(1)
       th%v_eta(1) = th%v_eta(1)*expfac_t
