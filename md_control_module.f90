@@ -253,6 +253,8 @@ contains
     th%baro_type = baro_type
 
     select case(baro_type)
+    case('none')
+      th%cell_ndof = 0
     case('iso-mttk')
       th%cell_ndof = 1
     case('ortho-mttk')
