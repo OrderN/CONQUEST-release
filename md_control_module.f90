@@ -357,7 +357,7 @@ contains
       end if
       do i=2,th%n_nhc
         th%m_nhc(i) = th%T_ext*fac_Kelvin2Hartree/omega_thermo**2
-        if (th%cell_nhc) th%m_nhc_cell(i) = th%T_ext*fac_Kelvin2Hartree/omega_thermo**2
+        if (th%cell_nhc) th%m_nhc_cell(i) = th%T_ext*fac_Kelvin2Hartree/omega_baro**2
       end do
     else
       th%m_nhc = md_nhc_mass
@@ -1089,7 +1089,7 @@ contains
         omega_P = one/md_tau_P
         baro%box_mass = (md_ndof_ions+one)*temp_ion*fac_Kelvin2Hartree/omega_P**2
       case('ssm')
-        omega_P = one/md_tau_T
+        omega_P = one/md_tau_P
         baro%box_mass = (md_ndof_ions+one)*temp_ion*fac_Kelvin2Hartree/omega_P**2
       end select
     else
