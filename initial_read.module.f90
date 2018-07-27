@@ -795,8 +795,7 @@ contains
                           md_thermo_type, md_bulkmod_est, md_box_mass, &
                           flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
                           md_calc_xlmass, md_berendsen_equil, &
-                          md_omega_t, md_omega_p, md_tau_T_equil, &
-                          md_tau_P_equil, md_p_drag, md_t_drag
+                          md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, flag_stop_on_empty_bundle
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
@@ -1937,17 +1936,16 @@ contains
        endif ! Constraints
 
        md_ensemble        = fdf_string(3, 'MD.Ensemble', 'nve')
-       md_calc_xlmass     = fdf_boolean('MD.CalculateXLMass', .false.)
+       md_calc_xlmass     = fdf_boolean('MD.CalculateXLMass', .true.)
 
        ! Thermostat
-       md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
+       md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'none')
        if (leqi(md_thermo_type, 'berendsen')) then
          md_tau_T           = fdf_double('MD.tauT', one)
        else
          md_tau_T           = fdf_double('MD.tauT', one)
        end if
        md_tau_T_equil     = fdf_double('MD.tauTEquil', one)
-       md_omega_t         = fdf_double('MD.OmegaT', 500.0_double)
        md_n_nhc           = fdf_integer('MD.nNHC', 5) 
        md_n_ys            = fdf_integer('MD.nYoshida', 1)
        md_n_mts           = fdf_integer('MD.nMTS', 1)
@@ -1967,18 +1965,17 @@ contains
        call fdf_endblock
 
        ! Barostat
-       md_baro_type       = fdf_string(20, 'MD.Barostat', 'None')
+       md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
        md_target_press    = fdf_double('MD.TargetPressure', zero)
        md_box_mass        = fdf_double('MD.BoxMass', one)
        if (leqi(md_baro_type, 'berendsen')) then
-         md_tau_P           = fdf_double('MD.tauP', 10.0_double)
+         md_tau_P           = fdf_double('MD.tauP', 50.0_double)
        else
          md_tau_P           = fdf_double('MD.tauP', 100.0_double)
        end if
        md_tau_P_equil     = fdf_double('MD.tauPEquil', 100.0_double)
-       md_omega_p         = fdf_double('MD.OmegaP', 100.0_double)
-       md_bulkmod_est     = fdf_double('MD.BulkModulusEst', one)
-       md_cell_nhc        = fdf_boolean('MD.CellNHC', .false.)
+       md_bulkmod_est     = fdf_double('MD.BulkModulusEst', 100.0_double)
+       md_cell_nhc        = fdf_boolean('MD.CellNHC', .true.)
        flag_baroDebug     = fdf_boolean('MD.BaroDebug',.false.)
        md_berendsen_equil = fdf_integer('MD.BerendsenEquil', 0)
        md_tdep            = fdf_boolean('MD.TDEP', .false.)

@@ -47,6 +47,7 @@ module md_control
   real(double), parameter :: fac_HaBohr32GPa = 29421.02648438959
   real(double), parameter :: fac_fs2atu = 41.3413745758
   real(double), parameter :: fac_invcm2hartree = 4.5563352812122295E-6
+  real(double), parameter :: fac_thz2hartree = 0.0001519828500716
 
   ! Checkpoint files
   character(20) :: thermo_check_file = "cq.thermo"
@@ -259,6 +260,8 @@ contains
     th%baro_type = baro_type
 
     select case(baro_type)
+    case('none')
+      th%cell_ndof = 0
     case('iso-mttk')
       th%cell_ndof = 1
     case('ortho-mttk')
@@ -1084,12 +1087,11 @@ contains
     baro%baro_type = baro_type
     baro%dt = dt
     if (md_calc_xlmass) then
+      omega_P = one/md_tau_P
       select case(baro_type)
       case('iso-mttk')
-        omega_P = one/md_tau_P
         baro%box_mass = (md_ndof_ions+one)*temp_ion*fac_Kelvin2Hartree/omega_P**2
       case('ssm')
-        omega_P = one/md_tau_P
         baro%box_mass = (md_ndof_ions+one)*temp_ion*fac_Kelvin2Hartree/omega_P**2
       end select
     else
