@@ -314,7 +314,7 @@ contains
     th%n_mts_nhc = md_n_mts
     th%lambda = one
     th%cell_nhc  = md_cell_nhc
-    th%t_drag = (one - md_t_drag*dt/md_tau_T)/md_n_mts/md_n_ys
+    th%t_drag = one - (md_t_drag*dt/md_tau_T/md_n_mts/md_n_ys)
     th%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*th%T_ext
     write(th%nhc_fmt,'("(4x,a12,",i4,"f10.4)")') th%n_nhc
 
@@ -1106,7 +1106,7 @@ contains
         call baro%get_box_ke
       end if
       baro%odnf = one + three/baro%ndof
-      baro%p_drag = (one - md_p_drag*dt/md_tau_P)/md_n_mts/md_n_ys
+      baro%p_drag = one - (md_p_drag*dt/md_tau_P/md_n_mts/md_n_ys)
     case('ortho-mttk')
     case('mttk')
     case default
