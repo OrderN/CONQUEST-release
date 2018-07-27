@@ -681,6 +681,8 @@ contains
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
 !!   2017/11/11 Tsuyoshi
 !!      io_module2 -> store_matrix, InfoT is defined locally
+!!   2018/07/13 13:21 dave  
+!!    Copy oldomega to omega on termination for consistency
 !!  SOURCE
 !!
   subroutine Iter_Hott_InvS(output_level, n_L_iterations, tolerance,n_atoms,&
@@ -827,6 +829,7 @@ contains
                 if ( omega>oldomega.and.oldomega/=0.0_double) then
                    if(inode==ionode) write(io_lun,*) 'Truncation error reached !'
                    call matrix_sum(zero,matT,one,matTold)
+                   omega = oldomega ! This is consistent with Told
                    call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
                    exit
                 endif
