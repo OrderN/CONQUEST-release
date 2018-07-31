@@ -100,6 +100,10 @@ module md_control
     real(double)        :: e_nhc        ! energy of NHC thermostats
     real(double)        :: e_nhc_ion    ! energy of ionic NHC thermostats
     real(double)        :: e_nhc_cell   ! energy of cell NHC thermostats
+    real(double)        :: ke_nhc_ion   ! ke of ionic NHC thermostats
+    real(double)        :: ke_nhc_cell  ! ke of cell NHC thermostats
+    real(double)        :: pe_nhc_ion   ! pe of ionic NHC thermostats
+    real(double)        :: pe_nhc_cell  ! pe of cell NHC thermostats
     real(double)        :: ke_target    ! for computing NHC force
     real(double)        :: t_drag       ! drag factor for thermostat
     character(40)       :: nhc_fmt      ! format string for printing NHC arrays
@@ -153,7 +157,7 @@ module md_control
     real(double)        :: P_int        ! instantateous pressure
     real(double)        :: P_ext        ! target pressure
     real(double)        :: PV           ! pressure*volume enthalpy term
-    real(double)        :: volume, volume_ref
+    real(double)        :: volume, volume_ref, v_old
     real(double)        :: ke_ions      ! kinetic energy of ions
     real(double)        :: dt           ! time step
     integer             :: ndof         ! number of degrees of freedom
@@ -200,7 +204,7 @@ module md_control
       procedure, public   :: get_volume
       procedure, public   :: get_berendsen_baro_sf
       procedure, public   :: propagate_berendsen
-      procedure, public   :: get_box_ke
+      procedure, public   :: get_box_energy
       procedure, public   :: propagate_npt_mttk
       procedure, public   :: propagate_r_mttk
       procedure, public   :: propagate_box_mttk
@@ -393,7 +397,6 @@ contains
         end do
       end if
     end if
-    call th%get_nhc_energy
 
     ! Yoshida-Suzuki time steps
     call th%init_ys(dt, th%n_ys)
@@ -960,43 +963,61 @@ contains
   !!  
   subroutine get_nhc_energy(th)
 
+    use input_module,     only: io_assign, io_close
+
     ! passed variables
     class(type_thermostat), intent(inout) :: th
 
     ! local variables
-    integer                               :: k
+    integer                               :: k, lun
 
     if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,'(2x,a)') "thermoDebug: get_nhc_energy"
 
-    th%e_nhc_cell = zero
+    th%ke_nhc_cell = zero
+    th%pe_nhc_cell = zero
     if (th%cell_nhc) then
-      th%e_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2 - &
-                     real(th%ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
-      th%e_nhc_cell = th%e_nhc_cell + &
-                      half*th%m_nhc_cell(1)*th%v_eta_cell(1)**2 - &
-                      th%cell_ndof*th%T_ext*fac_Kelvin2Hartree*th%eta_cell(1)
+      th%ke_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2
+      th%pe_nhc_ion = real(th%ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
+      th%ke_nhc_cell = half*th%m_nhc_cell(1)*th%v_eta_cell(1)**2
+      th%pe_nhc_cell = real(th%cell_ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta_cell(1)
     else
-      th%e_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2 - &
-                     real((th%ndof+th%cell_ndof), double) * &
-                     th%T_ext*fac_Kelvin2Hartree*th%eta(1)
+      th%ke_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2
+      th%pe_nhc_ion = real((th%ndof+th%cell_ndof), double) * &
+                      th%T_ext*fac_Kelvin2Hartree*th%eta(1)
     end if
 
     do k=2,th%n_nhc
-      th%e_nhc_ion = th%e_nhc_ion + half*th%m_nhc(k)*th%v_eta(k)**2 - &
-                     th%T_ext*fac_Kelvin2Hartree*th%eta(k)
+      th%ke_nhc_ion = th%ke_nhc_ion + half*th%m_nhc(k)*th%v_eta(k)**2
+      th%pe_nhc_ion = th%pe_nhc_ion + th%T_ext*fac_Kelvin2Hartree*th%eta(k)
       if (th%cell_nhc) then
-        th%e_nhc_cell = th%e_nhc_cell + &
-                        half*th%m_nhc_cell(k)*th%v_eta_cell(k)**2 - &
-                        th%T_ext*fac_Kelvin2Hartree*th%eta_cell(k)
+        th%ke_nhc_cell = th%ke_nhc_cell + &
+                         half*th%m_nhc_cell(k)*th%v_eta_cell(k)**2
+        th%pe_nhc_cell = th%pe_nhc_cell + &
+                         th%T_ext*fac_Kelvin2Hartree*th%eta_cell(k)
       end if
     end do
-    th%e_nhc = th%e_nhc_ion + th%e_nhc_cell
+    th%e_nhc = th%ke_nhc_ion - th%pe_nhc_ion + th%ke_nhc_cell - th%pe_nhc_cell
 
     if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(4x,"e_nhc_ion:  ",f15.8)') th%e_nhc_ion
-      write(io_lun,'(4x,"e_nhc_cell: ",f15.8)') th%e_nhc_cell
+      write(io_lun,'(4x,"ke_nhc_ion: ",f15.8)') th%ke_nhc_ion
+      write(io_lun,'(4x,"pe_nhc_ion: ",f15.8)') th%pe_nhc_ion
+      write(io_lun,'(4x,"ke_nhc_cell:",f15.8)') th%ke_nhc_cell
+      write(io_lun,'(4x,"pe_nhc_cell:",f15.8)') th%pe_nhc_cell
       write(io_lun,'(4x,"e_nhc:      ",f15.8)') th%e_nhc
+    end if
+
+    if (inode==ionode .and. flag_MDdebug) then
+      call io_assign(lun)
+      if (th%append) then
+        open(unit=lun,file='nhc.dat',position='append')
+      else 
+        open(unit=lun,file='nhc.dat',status='replace')
+        th%append = .true.
+      end if
+      write(lun,'(5f15.8)') th%ke_nhc_ion, th%pe_nhc_ion, th%ke_nhc_cell, &
+                            th%pe_nhc_cell, th%e_nhc
+      call io_close(lun)
     end if
 
   end subroutine get_nhc_energy
@@ -1044,8 +1065,10 @@ contains
           write(lun,th%nhc_fmt) "eta_cell:   ", th%eta_cell
           write(lun,th%nhc_fmt) "v_eta_cell: ", th%v_eta_cell
           write(lun,th%nhc_fmt) "G_nhc_cell: ", th%G_nhc_cell
-          write(lun,'("e_nhc_ion:  ",e16.4)') th%e_nhc_ion
-          write(lun,'("e_nhc_cell: ",e16.4)') th%e_nhc_cell
+          write(lun,'("ke_nhc_ion: ",e16.4)') th%ke_nhc_ion
+          write(lun,'("pe_nhc_ion: ",e16.4)') th%pe_nhc_ion
+          write(lun,'("ke_nhc_cell:",e16.4)') th%ke_nhc_cell
+          write(lun,'("pe_nhc_cell:",e16.4)') th%pe_nhc_cell
         end if
         write(lun,'("e_nhc:      ",e16.4)') th%e_nhc
       end if
@@ -1113,6 +1136,7 @@ contains
     baro%lat = baro%lat_ref
     call baro%get_pressure_and_stress
     baro%volume_ref = baro%volume
+    baro%v_old = baro%volume
     baro%tau_P = tau_P
 
     select case(baro%baro_type)
@@ -1123,14 +1147,14 @@ contains
       if (flag_MDcontinue) then
         baro%append = .true.
         call baro%read_baro_checkpoint
-        call baro%get_box_ke
+        call baro%get_box_energy
       else
         baro%append = .false.
         baro%eps_ref = third*log(baro%volume/baro%volume_ref)
         baro%eps = baro%eps_ref
         baro%v_eps = zero
         baro%G_eps = zero
-        call baro%get_box_ke
+        call baro%get_box_energy
       end if
       baro%odnf = one + three/baro%ndof
       baro%p_drag = one - (md_p_drag*dt/md_tau_P/md_n_mts/md_n_ys)
@@ -1140,13 +1164,13 @@ contains
       if (flag_MDcontinue) then
         baro%append = .true.
         call baro%read_baro_checkpoint
-        call baro%get_box_ke
+        call baro%get_box_energy
       else
         baro%append = .false.
         baro%eps = zero
         baro%v_eps = zero
         baro%G_eps = zero
-        call baro%get_box_ke
+        call baro%get_box_energy
       end if
       baro%odnf = one + three/baro%ndof
       baro%p_drag = one - md_p_drag*dt/md_tau_P
@@ -1357,9 +1381,9 @@ contains
   end subroutine propagate_berendsen
   !!***
 
-  !!****m* md_control/get_box_ke *
+  !!****m* md_control/get_box_energy *
   !!  NAME
-  !!   get_box_ke
+  !!   get_box_energy
   !!  PURPOSE
   !!   get the box kinetic energy
   !!  AUTHOR
@@ -1368,7 +1392,7 @@ contains
   !!   2017/11/17 14:09
   !!  SOURCE
   !!  
-  subroutine get_box_ke(baro)
+  subroutine get_box_energy(baro)
 
     ! passed variables
     class(type_barostat), intent(inout)         :: baro
@@ -1383,11 +1407,11 @@ contains
     end select
 
     if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a)') "baroDebug: get_box_ke"
+      write(io_lun,'(2x,a)') "baroDebug: get_box_energy"
       write(io_lun,'(4x,a,f15.8)') "ke_box:     ", baro%ke_box
     end if
 
-  end subroutine get_box_ke
+  end subroutine get_box_energy
   !!***
 
   !!****m* md_control/update_G_eps *
@@ -1671,6 +1695,7 @@ contains
     if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,'(2x,a)') "baroDebug: propagate_box_mttk"
 
+    baro%v_old = baro%volume
     select case(baro%baro_type)
     case('iso-mttk')
       call baro%propagate_eps_lin(dt, one)
@@ -1744,7 +1769,7 @@ contains
       write(io_lun,'(2x,a)') "baroDebug: propagate_npt_mttk"
 
     v_sfac = one
-    call baro%get_box_ke
+    call baro%get_box_energy
     call th%update_G_nhc(1, baro%ke_box)
     select case(baro%baro_type)
     case('iso-mttk')
@@ -1796,7 +1821,7 @@ contains
         case('ortho-mttk')
         case('mttk')
         end select
-        call baro%get_box_ke
+        call baro%get_box_energy
         ! update the thermostat "positions" eta
         do i_nhc=1,th%n_nhc
           call th%propagate_eta(i_nhc, th%dt_ys(i_ys), half)
@@ -1819,7 +1844,7 @@ contains
         case('mttk')
         end select
 
-        call baro%get_box_ke
+        call baro%get_box_energy
         call th%update_G_nhc(1, baro%ke_box)
         do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
           ! Trotter expansion to avoid sinh singularity
@@ -1858,7 +1883,7 @@ contains
     if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,'(2x,a)') "baroDebug: integrate_box_nhc"
 
-    call baro%get_box_ke
+    call baro%get_box_energy
     th%G_nhc_cell(1) = (two*baro%ke_box - th%cell_ndof*th%T_ext*fac_Kelvin2Hartree) / &
                        th%m_nhc_cell(1)
 
@@ -1892,7 +1917,7 @@ contains
       expfac_vbox = exp(-mts_fac*half*baro%dt*th%v_eta_cell(1))
       baro%v_eps = baro%v_eps*expfac_vbox
 
-      call baro%get_box_ke
+      call baro%get_box_energy
       th%G_nhc_cell(1) = (two*baro%ke_box - th%cell_ndof*th%T_ext*fac_Kelvin2Hartree) / &
                          th%m_nhc_cell(1)
       th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
@@ -2052,6 +2077,7 @@ contains
     if (inode==ionode .and. flag_MDdebug) &
     write(io_lun,'(2x,a)') "baroDebug: propagate_box_ssm"
 
+    baro%v_old = baro%volume
     baro%eps = baro%eps + half*baro%dt*baro%v_eps
 
 !    mtk_term = baro%v_eps/ni_in_cell

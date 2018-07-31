@@ -828,7 +828,7 @@ contains
 
        ! Compute and print the conserved quantity and its components
        if (mdl%thermo_type == 'nhc') call thermo%get_nhc_energy
-       if (mdl%baro_type == 'iso-mttk') call baro%get_box_ke
+       if (mdl%baro_type == 'iso-mttk') call baro%get_box_energy
        call mdl%get_cons_qty
        call mdl%print_md_energy()
        call mdl%dump_stats("Stats")
