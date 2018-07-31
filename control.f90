@@ -1016,10 +1016,15 @@ contains
                                 md_ndof, md_tau_T, mdl%ion_kinetic_energy)
         call baro%init_baro('berendsen', MDtimestep, md_ndof, stress, &
                             ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
-      case('ssm')
-        call thermo%init_thermo('nhc', 'ssm',  MDtimestep, md_ndof, &
+      case('iso-ssm')
+        call thermo%init_thermo('nhc', 'iso-ssm',  MDtimestep, md_ndof, &
                                 md_tau_T, mdl%ion_kinetic_energy)
-        call baro%init_baro('ssm', MDtimestep, md_ndof, stress, &
+        call baro%init_baro('iso-ssm', MDtimestep, md_ndof, stress, &
+                            ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
+      case('ortho-ssm')
+        call thermo%init_thermo('nhc', 'ortho-ssm',  MDtimestep, md_ndof, &
+                                md_tau_T, mdl%ion_kinetic_energy)
+        call baro%init_baro('ortho-ssm', MDtimestep, md_ndof, stress, &
                             ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
       case default
         call cq_abort("Unknown barostat type")
@@ -1114,7 +1119,25 @@ contains
         end if
       case('ortho-mttk')
       case('mttk')
-      case('ssm')
+      case('iso-ssm')
+        if (present(second_call)) then
+          call baro%couple_box_particle_velocity(thermo, velocity)
+          call thermo%get_temperature_and_ke(baro, velocity, &
+                                             mdl%ion_kinetic_energy)
+          call baro%get_pressure_and_stress
+          call baro%integrate_box(thermo)
+          call thermo%integrate_particle_nhc(velocity)
+          call baro%integrate_box_nhc(thermo)
+        else
+          call baro%integrate_box_nhc(thermo)
+          call thermo%integrate_particle_nhc(velocity)
+          call thermo%get_temperature_and_ke(baro, velocity, &
+                                             mdl%ion_kinetic_energy)
+          call baro%get_pressure_and_stress
+          call baro%integrate_box(thermo)
+          call baro%couple_box_particle_velocity(thermo, velocity)
+        end if
+      case('ortho-ssm')
         if (present(second_call)) then
           call baro%couple_box_particle_velocity(thermo, velocity)
           call thermo%get_temperature_and_ke(baro, velocity, &
