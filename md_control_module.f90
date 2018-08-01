@@ -414,7 +414,7 @@ contains
       write(io_lun,'(2x,a)') 'Welcome to init_nhc'
       write(io_lun,'(4x,a,i10)')   'Number of NHC thermostats n_nhc = ', &
                                    th%n_nhc
-      write(io_lun,'(4x,a,f10.4)')   'NHC velocity drag factor t_drag = ', &
+      write(io_lun,'(4x,a,f15.8)')   'NHC velocity drag factor t_drag = ', &
                                    th%t_drag
       write(io_lun,'(4x,a,i10)')   'Multiple time step order  n_mts = ', &
                                    th%n_mts_nhc
@@ -1210,19 +1210,19 @@ contains
         write(io_lun,'(4x,a,f14.2)') 'Coupling time period   tau_P = ', &
                                       baro%tau_P
         if (leqi(baro%baro_type, 'iso-mttk')) then
-          write(io_lun,'(4x,a,f14.2)') 'Box mass                     = ', &
+          write(io_lun,'(4x,a,f15.8)') 'Box mass                     = ', &
                                         baro%box_mass
-          write(io_lun,'(4x,a,f14.2)') 'Pressure drag factor  p_drag = ', &
+          write(io_lun,'(4x,a,f15.8)') 'Pressure drag factor  p_drag = ', &
                                         baro%p_drag
         else if (leqi(baro%baro_type, 'iso-ssm')) then
-          write(io_lun,'(4x,a,f14.2)') 'Box mass                     = ', &
+          write(io_lun,'(4x,a,f15.8)') 'Box mass                     = ', &
                                         baro%box_mass
-          write(io_lun,'(4x,a,f14.2)') 'Pressure drag factor  p_drag = ', &
+          write(io_lun,'(4x,a,f15.8)') 'Pressure drag factor  p_drag = ', &
                                         baro%p_drag
         else if (leqi(baro%baro_type, 'ortho-ssm')) then
-          write(io_lun,'(4x,a,f14.2)') 'Box mass                     = ', &
+          write(io_lun,'(4x,a,f15.8)') 'Box mass                     = ', &
                                         baro%box_mass
-          write(io_lun,'(4x,a,f14.2)') 'Pressure drag factor  p_drag = ', &
+          write(io_lun,'(4x,a,f15.8)') 'Pressure drag factor  p_drag = ', &
                                         baro%p_drag
         end if
       end if
@@ -2039,12 +2039,12 @@ contains
 
 !      th%G_nhc(1) = (two*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree)/ &
 !                    th%m_nhc(1)
-      th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
+      th%G_nhc(1) = (th%ke_ions - th%ke_target)/th%m_nhc(1)
       th%v_eta(1) = th%v_eta(1)*expfac_t
       th%v_eta(1) = th%v_eta(1) + th%dt*quarter*th%G_nhc(1)
       th%v_eta(1) = th%v_eta(1)*expfac_t
 
-      do i_nhc = 1, th%n_nhc-1
+      do i_nhc = 2, th%n_nhc
         expfac_t = exp(-mts_fac*one_eighth*th%dt*th%v_eta(i_nhc+1))
         th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
         th%G_nhc(i_nhc) = (th%m_nhc(i_nhc-1)*th%v_eta(i_nhc-1)**2 - &
