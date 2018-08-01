@@ -706,7 +706,8 @@ contains
           if (leqi(md_ensemble, 'npt')) then
             if (leqi(md_baro_type, "berendsen") .or. nequil > 0) then
               call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
-            else if (leqi(md_baro_type, "ssm")) then
+            else if (leqi(md_baro_type, "iso-ssm") .or. &
+                     leqi(md_baro_type, "ortho-ssm")) then
               call baro%propagate_box_ssm
               call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
               call baro%propagate_box_ssm
@@ -1074,7 +1075,7 @@ contains
       case('nhc')
         call thermo%propagate_nvt_nhc(velocity, mdl%ion_kinetic_energy)
         if (present(second_call)) call thermo%get_nhc_energy
-      case('ssm')
+      case('iso-ssm')
         if (present(second_call)) then
           call thermo%get_temperature_and_ke(baro, velocity, &
                                              mdl%ion_kinetic_energy)

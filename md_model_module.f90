@@ -235,6 +235,9 @@ contains
       else if (leqi(mdl%baro_type, 'iso-ssm')) then
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
                       mdl%nhc_energy + mdl%box_kinetic_energy + mdl%PV
+      else if (leqi(mdl%baro_type, 'ortho-ssm')) then
+        mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
+                      mdl%nhc_energy + mdl%box_kinetic_energy + mdl%PV
       else if (leqi(mdl%baro_type, 'berendsen')) then
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + mdl%PV
       end if

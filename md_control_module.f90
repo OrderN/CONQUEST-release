@@ -2171,7 +2171,9 @@ contains
       baro%lat(2,2) = baro%lat(2,2)*expfac
       baro%lat(3,3) = baro%lat(3,3)*expfac
     case('ortho-ssm')
+      mtk_term = zero
       do i=1,3
+        baro%h(i,i) = baro%h(i,i) + half*baro%dt*baro%v_h(i,i)
         expfac_h(i) = exp(half*baro%dt*baro%v_h(i,i) + mtk_term)
         baro%lat(i,i) = baro%lat(i,i)*expfac_h(i)
       end do
