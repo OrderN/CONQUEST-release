@@ -386,8 +386,8 @@ contains
       ! initialise thermostat velocities and forces
       th%append = .false.
       th%eta = zero
-!      th%v_eta = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
-      th%v_eta = zero
+      th%v_eta = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
+!      th%v_eta = zero
       th%G_nhc = zero
       do i=2,th%n_nhc
         th%G_nhc(i) = (th%m_nhc(i-1)*th%v_eta(i-1)**2 - &
@@ -569,7 +569,7 @@ contains
 
     ! local variables
     integer                                   :: j, k, iatom
-    real(double)                              :: m
+    real(double)                              :: m, trace
 
     if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,'(2x,a)') "thermoDebug: get_temperature_and_ke"
@@ -589,9 +589,11 @@ contains
     th%T_int = KE/fac_Kelvin2Hartree/md_ndof_ions
     KE = half*KE
     th%ke_ions = KE
+    trace = baro%ke_stress(1,1) + baro%ke_stress(2,2) + baro%ke_stress(3,3)
 
     if (inode==ionode) then
       write(io_lun,'(4x,"KE: ",f12.6," Ha")') KE
+!      write(io_lun,'(4x,"Tr(ke_stress): ",f12.6," Ha")') trace/three
       write(io_lun,'(4x,"T:  ",f12.6," K")') th%T_int
     end if
     if (inode==ionode .and. flag_MDdebug) then
@@ -1434,7 +1436,7 @@ contains
     case('ortho-mttk')
     case('mttk')
     case('iso-ssm')
-      baro%ke_box = half*baro%box_mass*baro%v_eps**2
+      baro%ke_box = three*half*baro%box_mass*baro%v_eps**2
     case('ortho-ssm')
       baro%ke_box = zero
       do i=1,3
@@ -1975,7 +1977,6 @@ contains
                                th%m_nhc_cell(i_nhc)
         th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc) + &
                                th%G_nhc_cell(i_nhc)*baro%dt*quarter*mts_fac
-        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*baro%p_drag
         th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
       end do
     end do
@@ -1999,7 +2000,7 @@ contains
                                                expfac_t, mts_fac, &
                                                expfac_vpart
 
-  th%G_nhc(1) = (th%ke_ions - th%ke_target)/th%m_nhc(1)
+  th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
 
   if (inode==ionode .and. flag_MDdebug) &
     write(io_lun,'(2x,a)') "baroDebug: integrate_particle_nhc"
@@ -2039,7 +2040,7 @@ contains
 
 !      th%G_nhc(1) = (two*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree)/ &
 !                    th%m_nhc(1)
-      th%G_nhc(1) = (th%ke_ions - th%ke_target)/th%m_nhc(1)
+      th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
       th%v_eta(1) = th%v_eta(1)*expfac_t
       th%v_eta(1) = th%v_eta(1) + th%dt*quarter*th%G_nhc(1)
       th%v_eta(1) = th%v_eta(1)*expfac_t
@@ -2051,7 +2052,6 @@ contains
                           th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(i_nhc)
         th%v_eta(i_nhc) = th%v_eta(i_nhc) + &
                           th%G_nhc(i_nhc)*th%dt*quarter*mts_fac
-        th%v_eta(i_nhc) = th%v_eta(i_nhc)*th%t_drag
         th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
       end do
     end do
@@ -2072,19 +2072,25 @@ contains
 
     ! local variables
     integer                                 :: i
+    real(double)                            :: tr_ke_stress
 
     if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,'(2x,a)') "baroDebug: integrate_box"
 
     select case(baro%baro_type)
     case('iso-ssm')
-      baro%G_eps = (two*baro%odnf*th%ke_ions + &
-                   three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
+      baro%G_eps = (two*th%ke_ions/md_ndof_ions + &
+!                   three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
+                   (baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
       baro%v_eps = baro%v_eps + baro%G_eps*baro%dt*half
       baro%v_eps = baro%v_eps*baro%p_drag
     case('ortho-ssm')
+      tr_ke_stress = zero
       do i=1,3
-        baro%G_h(i,i) = (two*baro%odnf*th%ke_ions + &
+        tr_ke_stress = tr_ke_stress + baro%ke_stress(i,i)
+      end do
+      do i=1,3
+        baro%G_h(i,i) = (two*tr_ke_stress/md_ndof_ions + &
                         (baro%total_stress(i,i) - baro%P_ext)*baro%volume) / &
                          baro%box_mass
         baro%v_h(i,i) = baro%v_h(i,i) + baro%G_h(i,i)*baro%dt*half
@@ -2146,7 +2152,7 @@ contains
     class(type_barostat), intent(inout)     :: baro
 
     ! local variables
-    real(double)                            :: expfac, mtk_term
+    real(double)                            :: expfac, tr_vh
     real(double), dimension(3)              :: expfac_h
     integer                                 :: i
 
@@ -2158,11 +2164,7 @@ contains
     select case(baro%baro_type)
     case('iso-ssm')
       baro%eps = baro%eps + half*baro%dt*baro%v_eps
-
-  !    mtk_term = baro%v_eps/ni_in_cell
-      mtk_term = zero
-
-      expfac= exp(half*baro%dt*baro%v_eps + mtk_term)
+      expfac= exp(half*baro%dt*(baro%v_eps + three*baro%v_eps/ni_in_cell))
       if (inode==ionode .and. flag_MDdebug) then
         write(io_lun,'(4x,"v_eps:    ",f16.8)') baro%v_eps
         write(io_lun,'(4x,"expfac:   ",f16.8)') expfac
@@ -2171,10 +2173,13 @@ contains
       baro%lat(2,2) = baro%lat(2,2)*expfac
       baro%lat(3,3) = baro%lat(3,3)*expfac
     case('ortho-ssm')
-      mtk_term = zero
+      tr_vh = zero
+      do i=1,3
+        tr_vh = tr_vh + baro%v_h(i,i)
+      end do
       do i=1,3
         baro%h(i,i) = baro%h(i,i) + half*baro%dt*baro%v_h(i,i)
-        expfac_h(i) = exp(half*baro%dt*baro%v_h(i,i) + mtk_term)
+        expfac_h(i) = exp(half*baro%dt*(baro%v_h(i,i) + tr_vh/md_ndof_ions))
         baro%lat(i,i) = baro%lat(i,i)*expfac_h(i)
       end do
       if (inode==ionode .and. flag_MDdebug) then
