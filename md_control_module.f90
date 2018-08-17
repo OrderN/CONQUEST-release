@@ -1916,7 +1916,7 @@ contains
     ! local variables
     integer                                 :: i_mts, i_ys, i_nhc, i
     real(double)                            :: v_sfac, v_eta_couple, &
-                                               expfac_p, mts_fac, expfac_vbox
+                                               expfac_p, dt_mts, expfac_vbox
 
     if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,'(2x,a)') "baroDebug: integrate_box_nhc"
@@ -1925,61 +1925,63 @@ contains
     th%G_nhc_cell(1) = (two*baro%ke_box - th%cell_ndof*th%T_ext*fac_Kelvin2Hartree) / &
                        th%m_nhc_cell(1)
 
-    mts_fac = one/real(th%n_mts_nhc, double)
-    do i_mts = 1,th%n_mts_nhc
-      do i_nhc = th%n_nhc, 2, -1
-        expfac_p = exp(-mts_fac*one_eighth*baro%dt*th%v_eta_cell(i_nhc+1))
-        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
-        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc) + &
-                               th%G_nhc_cell(i_nhc)*baro%dt*quarter*mts_fac
-        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*baro%p_drag
-        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
-      end do
-
-      if (th%n_nhc > 1) then
-        expfac_p = exp(-mts_fac*one_eighth*baro%dt*th%v_eta_cell(2))
-      else
-        expfac_p = one
-      end if
-      th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
-      th%v_eta_cell(1) = th%v_eta_cell(1) + th%dt*quarter*th%G_nhc(1)
-      th%v_eta_cell(1) = th%v_eta_cell(1)*baro%p_drag
-      th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
-
-      ! Propagate eta_cell (bookkeeping)
-      do i_nhc=1,th%n_nhc
-        th%eta_cell(i_nhc) = th%eta_cell(i_nhc) + mts_fac*th%dt*half*th%v_eta_cell(i_nhc)
-      end do
-
-      ! Couple box velocity to box NHC velocity
-      expfac_vbox = exp(-mts_fac*half*baro%dt*th%v_eta_cell(1))
-      select case(baro%baro_type)
-      case('iso-ssm')
-        baro%v_eps = baro%v_eps*expfac_vbox
-      case('ortho-ssm')
-        do i=1,3
-          baro%v_h(i,i) = baro%v_h(i,i)*expfac_vbox
+    do i_ys = 1,th%n_ys ! Yoshida-Suzuki loop
+      do i_mts = 1,th%n_mts_nhc ! multiple time step loop
+        dt_mts = th%dt_ys(i_ys)/real(th%n_mts_nhc, double)/real(th%n_ys, double)
+        do i_nhc = th%n_nhc, 2, -1
+          expfac_p = exp(-one_eighth*dt_mts*th%v_eta_cell(i_nhc+1))
+          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
+          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc) + &
+                                 th%G_nhc_cell(i_nhc)*dt_mts*quarter
+          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*baro%p_drag
+          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
         end do
-      end select
 
-      call baro%get_box_energy
-      th%G_nhc_cell(1) = (two*baro%ke_box - th%cell_ndof*th%T_ext*fac_Kelvin2Hartree) / &
-                         th%m_nhc_cell(1)
-      th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
-      th%v_eta_cell(1) = th%v_eta_cell(1) + th%dt*quarter*th%G_nhc(1)
-      th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
+        if (th%n_nhc > 1) then
+          expfac_p = exp(-one_eighth*dt_mts*th%v_eta_cell(2))
+        else
+          expfac_p = one
+        end if
+        th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
+        th%v_eta_cell(1) = th%v_eta_cell(1) + dt_mts*quarter*th%G_nhc(1)
+        th%v_eta_cell(1) = th%v_eta_cell(1)*baro%p_drag
+        th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
 
-      do i_nhc = 1, th%n_nhc-1
-        expfac_p = exp(-mts_fac*one_eighth*baro%dt*th%v_eta_cell(i_nhc+1))
-        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
-        th%G_nhc_cell(i_nhc) = (th%m_nhc(i_nhc-1)*th%v_eta_cell(i_nhc-1)**2 &
-                               - th%T_ext*fac_Kelvin2Hartree)/&
-                               th%m_nhc_cell(i_nhc)
-        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc) + &
-                               th%G_nhc_cell(i_nhc)*baro%dt*quarter*mts_fac
-        th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
-      end do
-    end do
+        ! Propagate eta_cell (bookkeeping)
+        do i_nhc=1,th%n_nhc
+          th%eta_cell(i_nhc) = th%eta_cell(i_nhc) + dt_mts*half*th%v_eta_cell(i_nhc)
+        end do
+
+        ! Couple box velocity to box NHC velocity
+        expfac_vbox = exp(-half*dt_mts*th%v_eta_cell(1))
+        select case(baro%baro_type)
+        case('iso-ssm')
+          baro%v_eps = baro%v_eps*expfac_vbox
+        case('ortho-ssm')
+          do i=1,3
+            baro%v_h(i,i) = baro%v_h(i,i)*expfac_vbox
+          end do
+        end select
+
+        call baro%get_box_energy
+        th%G_nhc_cell(1) = (two*baro%ke_box - th%cell_ndof*th%T_ext*fac_Kelvin2Hartree) / &
+                           th%m_nhc_cell(1)
+        th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
+        th%v_eta_cell(1) = th%v_eta_cell(1) + dt_mts*quarter*th%G_nhc(1)
+        th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
+
+        do i_nhc = 1, th%n_nhc-1
+          expfac_p = exp(-one_eighth*dt_mts*th%v_eta_cell(i_nhc+1))
+          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
+          th%G_nhc_cell(i_nhc) = (th%m_nhc(i_nhc-1)*th%v_eta_cell(i_nhc-1)**2 &
+                                 - th%T_ext*fac_Kelvin2Hartree)/&
+                                 th%m_nhc_cell(i_nhc)
+          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc) + &
+                                 th%G_nhc_cell(i_nhc)*dt_mts*quarter
+          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
+        end do
+      end do ! Multiple time step loop
+    end do ! Yoshida-Suzuki loop
 
     if (inode==ionode .and. flag_MDdebug) then 
       write(io_lun,*) "eta_cell:   ", th%eta_cell
@@ -1997,64 +1999,66 @@ contains
     ! local variables
     integer                                 :: i_mts, i_ys, i_nhc
     real(double)                            :: v_sfac, v_eta_couple, &
-                                               expfac_t, mts_fac, &
+                                               expfac_t, dt_mts, &
                                                expfac_vpart
 
-  th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
+    th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
 
-  if (inode==ionode .and. flag_MDdebug) &
-    write(io_lun,'(2x,a)') "baroDebug: integrate_particle_nhc"
+    if (inode==ionode .and. flag_MDdebug) &
+      write(io_lun,'(2x,a)') "baroDebug: integrate_particle_nhc"
 
-    mts_fac = one/real(th%n_mts_nhc, double)
-    do i_mts=1,th%n_mts_nhc
-      do i_nhc = th%n_nhc, 2, -1
-        expfac_t = exp(-mts_fac*one_eighth*th%dt*th%v_eta(i_nhc+1))
-        th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
-        th%v_eta(i_nhc) = th%v_eta(i_nhc) + &
-                          th%G_nhc(i_nhc)*th%dt*quarter*mts_fac
-        th%v_eta(i_nhc) = th%v_eta(i_nhc)*th%t_drag
-        th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
-      end do
+    do i_ys=1,th%n_ys ! Yoshida-Suzuki loop
+      do i_mts=1,th%n_mts_nhc ! Multiple time step loop
+        dt_mts = th%dt_ys(i_ys)/real(th%n_mts_nhc, double)/real(th%n_ys, double)
+        do i_nhc = th%n_nhc, 2, -1
+          expfac_t = exp(-one_eighth*dt_mts*th%v_eta(i_nhc+1))
+          th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
+          th%v_eta(i_nhc) = th%v_eta(i_nhc) + &
+                            th%G_nhc(i_nhc)*dt_mts*quarter
+          th%v_eta(i_nhc) = th%v_eta(i_nhc)*th%t_drag
+          th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
+        end do
 
-      if (th%n_nhc > 1) then
-        expfac_t = exp(-mts_fac*one_eighth*th%dt*th%v_eta(2))
-      else
-        expfac_t = one
-      end if
-      th%v_eta(1) = th%v_eta(1)*expfac_t
-      th%v_eta(1) = th%v_eta(1) + th%dt*quarter*th%G_nhc(1)
-      th%v_eta(1) = th%v_eta(1)*th%t_drag
-      th%v_eta(1) = th%v_eta(1)*expfac_t
+        if (th%n_nhc > 1) then
+          expfac_t = exp(-one_eighth*dt_mts*th%v_eta(2))
+        else
+          expfac_t = one
+        end if
+        th%v_eta(1) = th%v_eta(1)*expfac_t
+        th%v_eta(1) = th%v_eta(1) + dt_mts*quarter*th%G_nhc(1)
+        th%v_eta(1) = th%v_eta(1)*th%t_drag
+        th%v_eta(1) = th%v_eta(1)*expfac_t
 
-      ! Propagate eta (bookkeeping)
-      do i_nhc=1,th%n_nhc
-        th%eta(i_nhc) = th%eta(i_nhc) + mts_fac*th%dt*half*th%v_eta(i_nhc)
-      end do
+        ! Propagate eta (bookkeeping)
+        do i_nhc=1,th%n_nhc
+          th%eta(i_nhc) = th%eta(i_nhc) + dt_mts*half*th%v_eta(i_nhc)
+        end do
 
-      ! Couple particle velocities to NHC velocity
-      expfac_vpart = exp(-mts_fac*half*th%dt*th%v_eta(1))
-      v = expfac_vpart*v
+        ! Couple particle velocities to NHC velocity
+        expfac_vpart = exp(-half*dt_mts*th%v_eta(1))
+        v = expfac_vpart*v
 
-      th%ke_ions = th%ke_ions*expfac_vpart**2
-      th%T_int = th%T_int*expfac_vpart**2
+        th%ke_ions = th%ke_ions*expfac_vpart**2
+        th%T_int = th%T_int*expfac_vpart**2
 
-!      th%G_nhc(1) = (two*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree)/ &
-!                    th%m_nhc(1)
-      th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
-      th%v_eta(1) = th%v_eta(1)*expfac_t
-      th%v_eta(1) = th%v_eta(1) + th%dt*quarter*th%G_nhc(1)
-      th%v_eta(1) = th%v_eta(1)*expfac_t
+  !      th%G_nhc(1) = (two*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree)/ &
+  !                    th%m_nhc(1)
+        th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
+        th%v_eta(1) = th%v_eta(1)*expfac_t
+        th%v_eta(1) = th%v_eta(1) + th%dt*quarter*th%G_nhc(1)
+        th%v_eta(1) = th%v_eta(1)*expfac_t
 
-      do i_nhc = 2, th%n_nhc
-        expfac_t = exp(-mts_fac*one_eighth*th%dt*th%v_eta(i_nhc+1))
-        th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
-        th%G_nhc(i_nhc) = (th%m_nhc(i_nhc-1)*th%v_eta(i_nhc-1)**2 - &
-                          th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(i_nhc)
-        th%v_eta(i_nhc) = th%v_eta(i_nhc) + &
-                          th%G_nhc(i_nhc)*th%dt*quarter*mts_fac
-        th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
-      end do
-    end do
+        do i_nhc = 2, th%n_nhc
+          expfac_t = exp(-one_eighth*dt_mts*th%v_eta(i_nhc+1))
+          th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
+          th%G_nhc(i_nhc) = (th%m_nhc(i_nhc-1)*th%v_eta(i_nhc-1)**2 - &
+                            th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(i_nhc)
+          th%v_eta(i_nhc) = th%v_eta(i_nhc) + &
+                            th%G_nhc(i_nhc)*dt_mts*quarter
+          th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
+        end do
+      end do ! Multiple time step loop
+    end do ! Yoshida-Suzuki loop
 
     if (inode==ionode .and. flag_MDdebug) then 
       write(io_lun,*) "eta:   ", th%eta
