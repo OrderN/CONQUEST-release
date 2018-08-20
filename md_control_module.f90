@@ -294,9 +294,7 @@ contains
     case('berendsen')
     case('nhc')
       call th%init_nhc(dt)
-    case('iso-ssm')
-      call th%init_nhc(dt)
-    case('ortho-ssm')
+    case('ssm')
       call th%init_nhc(dt)
     case default
       call cq_abort("Unknown thermostat type")
