@@ -863,11 +863,11 @@ contains
         call baro%get_pressure_and_stress
         select case(md_ensemble)
         case('nvt')
-          if (leqi(thermo%thermo_type, 'nhc')) then
+          if (.not. leqi(thermo%thermo_type, 'berendsen')) then
             call thermo%write_thermo_checkpoint
           end if
         case('npt')
-          if (leqi(baro%baro_type, 'iso-mttk')) then
+          if (.not. leqi(baro%baro_type, 'berendsen')) then
             call thermo%write_thermo_checkpoint
             call baro%write_baro_checkpoint
           end if
@@ -1075,7 +1075,7 @@ contains
       case('nhc')
         call thermo%propagate_nvt_nhc(velocity, mdl%ion_kinetic_energy)
         if (present(second_call)) call thermo%get_nhc_energy
-      case('iso-ssm')
+      case('ssm')
         if (present(second_call)) then
           call thermo%get_temperature_and_ke(baro, velocity, &
                                              mdl%ion_kinetic_energy)
