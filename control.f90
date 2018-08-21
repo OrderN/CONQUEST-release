@@ -53,7 +53,6 @@ module control
   real(double) :: MDcgtol 
   logical      :: CGreset
   character(3)  :: md_ensemble
-  character(20) :: md_thermo_type
 
   ! Area identification
   integer, parameter, private :: area = 9
@@ -544,7 +543,7 @@ contains
                               md_n_ys, md_n_mts, ion_velocity, lattice_vec, &
                               md_baro_type, md_target_press, flag_write_xsf, &
                               md_ndof_ions, md_berendsen_equil, md_tau_T, &
-                              md_tau_P
+                              md_tau_P, md_thermo_type
 
     use atoms,          only: distribute_atoms,deallocate_distribute_atom
     use global_module,  only: atom_coord_diff, iprint_MD, area_moveatoms
@@ -880,17 +879,17 @@ contains
                                     &starting extended system dynamics."
            ! If the run was restarted during Berendsen equilibration, the
            ! MDcontinue flag would cause init_nhc to read a non-existent
-           ! thermostat checkpoint. Not pretty, bug good enough for now.
+           ! thermostat checkpoint. Not pretty, but good enough for now.
            flag_store = flag_MDcontinue
            flag_MDcontinue = .false.
            select case(md_ensemble)
            case('nvt')
-             call thermo%init_thermo('nhc', 'none', MDtimestep, md_ndof, &
+             call thermo%init_thermo(md_thermo_type, 'none', MDtimestep, md_ndof, &
                                      md_tau_T, mdl%ion_kinetic_energy)
            case('npt')
-             call thermo%init_thermo('nhc', 'iso-mttk', MDtimestep, md_ndof, &
+             call thermo%init_thermo(md_thermo_type, md_baro_type, MDtimestep, md_ndof, &
                                      md_tau_T, mdl%ion_kinetic_energy)
-             call baro%init_baro('iso-mttk', MDtimestep, md_ndof, stress, &
+             call baro%init_baro(md_baro_type, MDtimestep, md_ndof, stress, &
                                  ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
            end select
            flag_MDcontinue = flag_store
@@ -946,6 +945,7 @@ contains
 
     use numbers
     use force_module,   only: stress
+    use input_module,   only: leqi
     use md_model,       only: type_md_model
     use GenComms,       only: inode, ionode
     use global_module,  only: rcellx, rcelly, rcellz, temp_ion
@@ -991,8 +991,14 @@ contains
       call baro%init_baro('none', MDtimestep, md_ndof, stress, ion_velocity, &
                           md_tau_P, mdl%ion_kinetic_energy) !to get the pressure
     case('npt')
-      select case(md_baro_type)
-      case('iso-mttk')
+      if (leqi(md_baro_type, 'berendsen')) then
+        md_thermo_type = 'berendsen'
+        call thermo%init_thermo('berendsen', 'berendsen', MDtimestep, &
+                                md_ndof, md_tau_T, mdl%ion_kinetic_energy)
+        call baro%init_baro('berendsen', MDtimestep, md_ndof, stress, &
+                            ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
+      else
+        md_thermo_type = 'nhc'
         if (nequil > 0) then ! Equilibrate using Berendsen?
           if (inode == ionode) then
             write (io_lun, '(4x,"Equilibrating using Berendsen &
@@ -1005,31 +1011,13 @@ contains
                               ion_velocity, md_tau_P_equil, &
                               mdl%ion_kinetic_energy)
         else
-          call thermo%init_thermo('nhc', 'iso-mttk',  MDtimestep, md_ndof, &
+          call thermo%init_thermo(md_thermo_type, md_baro_type,  MDtimestep, md_ndof, &
                                   md_tau_T, mdl%ion_kinetic_energy)
-          call baro%init_baro('iso-mttk', MDtimestep, md_ndof, stress, &
+          call baro%init_baro(md_baro_type, MDtimestep, md_ndof, stress, &
                               ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
         end if
-      case('ortho-mttk')
-      case('mttk')
-      case('berendsen')
-        call thermo%init_thermo('berendsen', 'berendsen', MDtimestep, &
-                                md_ndof, md_tau_T, mdl%ion_kinetic_energy)
-        call baro%init_baro('berendsen', MDtimestep, md_ndof, stress, &
-                            ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
-      case('iso-ssm')
-        call thermo%init_thermo('nhc', 'iso-ssm',  MDtimestep, md_ndof, &
-                                md_tau_T, mdl%ion_kinetic_energy)
-        call baro%init_baro('iso-ssm', MDtimestep, md_ndof, stress, &
-                            ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
-      case('ortho-ssm')
-        call thermo%init_thermo('nhc', 'ortho-ssm',  MDtimestep, md_ndof, &
-                                md_tau_T, mdl%ion_kinetic_energy)
-        call baro%init_baro('ortho-ssm', MDtimestep, md_ndof, stress, &
-                            ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
-      case default
-        call cq_abort("Unknown barostat type")
-      end select
+      end if
+
     end select
   end subroutine init_ensemble
 

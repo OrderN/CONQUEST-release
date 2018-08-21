@@ -1939,7 +1939,17 @@ contains
        md_calc_xlmass     = fdf_boolean('MD.CalculateXLMass', .true.)
 
        ! Thermostat
-       md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'none')
+       select case(md_ensemble)
+       case('nve')
+         md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'none')
+         md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
+       case('nvt') 
+         md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'ssm')
+         md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
+       case('npt')
+         md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
+         md_baro_type       = fdf_string(20, 'MD.Barostat', 'iso-ssm')
+       end select
        if (leqi(md_thermo_type, 'berendsen')) then
          md_tau_T           = fdf_double('MD.tauT', one)
        else
@@ -1965,7 +1975,6 @@ contains
        call fdf_endblock
 
        ! Barostat
-       md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
        md_target_press    = fdf_double('MD.TargetPressure', zero)
        md_box_mass        = fdf_double('MD.BoxMass', one)
        if (leqi(md_baro_type, 'berendsen')) then
