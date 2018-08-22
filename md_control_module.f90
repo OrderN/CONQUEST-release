@@ -903,6 +903,9 @@ contains
     ! local variables
     integer                               :: lun
 
+    if (inode==ionode .and. flag_MDdebug) &
+      write(io_lun,'(2x,a)') "thermoDebug: write_thermo_checkpoint"
+
     call io_assign(lun)
     open(unit=lun,file=thermo_check_file,status='replace')
 
@@ -940,6 +943,9 @@ contains
     ! local variables
     integer                               :: lun
     character(20)                         :: name
+
+    if (inode==ionode .and. flag_MDdebug) &
+      write(io_lun,'(2x,a)') "thermoDebug: read_thermo_checkpoint"
 
     call io_assign(lun)
     open(unit=lun,file=thermo_check_file,status='old')
@@ -2444,6 +2450,9 @@ contains
     ! local variables
     integer                               :: lun
 
+    if (inode==ionode .and. flag_MDdebug) &
+      write(io_lun,'(2x,a)') "baroDebug: write_baro_checkpoint"
+
     call io_assign(lun)
     open(unit=lun,file=baro_check_file,status='replace')
 
@@ -2494,6 +2503,9 @@ contains
     integer                               :: lun
     character(20)                         :: name
 
+    if (inode==ionode .and. flag_MDdebug) &
+      write(io_lun,'(2x,a)') "baroDebug: read_baro_checkpoint"
+
     call io_assign(lun)
     open(unit=lun,file=baro_check_file,status='old')
 
@@ -2514,10 +2526,11 @@ contains
       read(lun,*) name, baro%eps
       read(lun,*) name, baro%v_eps
       read(lun,*) name, baro%G_eps
-    end select
+    case('ortho-ssm')
       read(lun,*) name, baro%h
       read(lun,*) name, baro%v_h
       read(lun,*) name, baro%G_h
+    end select
     call io_close(lun)
 
   end subroutine read_baro_checkpoint
