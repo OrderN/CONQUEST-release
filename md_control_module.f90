@@ -29,6 +29,9 @@
 !!   2017/05/29 zamaan
 !!    Corrected sign of potential energy contribution in get_nhc_energy. Added
 !!    cell degrees of freedom (cell_ndof) to equations for clarity.
+!!   2018/07/12 zamaan
+!!    Added SSM integrator, adapted from W. Shinoda et al., PRB 69:134103
+!!    (2004)
 !!  SOURCE
 !!
 module md_control
@@ -1905,6 +1908,17 @@ contains
   end subroutine propagate_npt_mttk
   !!***
 
+  !!****m* md_control/integrate_box_nhc *
+  !!  NAME
+  !!   integrate_box_nhc
+  !!  PURPOSE
+  !!   Integrate the NHC coupled to the box degrees of freedom, SSM integrator
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/07/12
+  !!  SOURCE
+  !!  
   subroutine integrate_box_nhc(baro, th)
 
     ! passed variables
@@ -1988,6 +2002,18 @@ contains
     end if
   end subroutine integrate_box_nhc
 
+  !!****m* md_control/integrate_particle_nhc *
+  !!  NAME
+  !!   integrate_particle_nhc
+  !!  PURPOSE
+  !!   Integrate the NHC coupled to the particle degrees of freedom, SSM
+  !!   integrator
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/07/12
+  !!  SOURCE
+  !!  
   subroutine integrate_particle_nhc(th, v)
 
     ! passed variables
@@ -2039,8 +2065,6 @@ contains
         th%ke_ions = th%ke_ions*expfac_vpart**2
         th%T_int = th%T_int*expfac_vpart**2
 
-  !      th%G_nhc(1) = (two*th%ke_ions - th%ndof*th%T_ext*fac_Kelvin2Hartree)/ &
-  !                    th%m_nhc(1)
         th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
         th%v_eta(1) = th%v_eta(1)*expfac_t
         th%v_eta(1) = th%v_eta(1) + th%dt*quarter*th%G_nhc(1)
@@ -2066,6 +2090,17 @@ contains
 
   end subroutine integrate_particle_nhc
 
+  !!****m* md_control/integrate_box *
+  !!  NAME
+  !!   integrate_box
+  !!  PURPOSE
+  !!   Integrate the box variables, SSM integrator
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/07/12
+  !!  SOURCE
+  !!  
   subroutine integrate_box(baro, th)
 
     ! passed variables
@@ -2115,6 +2150,17 @@ contains
 
   end subroutine integrate_box
 
+  !!****m* md_control/couple_box_particle_velocity *
+  !!  NAME
+  !!   couple_box_particle_velocity
+  !!  PURPOSE
+  !!   Couple the box and particle velcities, SSM integrator
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/07/12
+  !!  SOURCE
+  !!  
   subroutine couple_box_particle_velocity(baro, th, v)
 
     ! passed variables
@@ -2148,6 +2194,17 @@ contains
 
   end subroutine couple_box_particle_velocity
 
+  !!****m* md_control/propagate_box_ssm *
+  !!  NAME
+  !!   propagate_box_ssm
+  !!  PURPOSE
+  !!   Propagate the box, SSM integrator
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/07/12
+  !!  SOURCE
+  !!  
   subroutine propagate_box_ssm(baro)
 
     ! passed variables
