@@ -1980,9 +1980,9 @@ contains
        if (leqi(md_baro_type, 'berendsen')) then
          md_tau_P           = fdf_double('MD.tauP', 50.0_double)
        else
-         md_tau_P           = fdf_double('MD.tauP', 100.0_double)
+         md_tau_P           = fdf_double('MD.tauP', 40.0_double)
        end if
-       md_tau_P_equil     = fdf_double('MD.tauPEquil', 100.0_double)
+       md_tau_P_equil     = fdf_double('MD.tauPEquil', 50.0_double)
        md_bulkmod_est     = fdf_double('MD.BulkModulusEst', 100.0_double)
        md_cell_nhc        = fdf_boolean('MD.CellNHC', .true.)
        flag_baroDebug     = fdf_boolean('MD.BaroDebug',.false.)

@@ -297,8 +297,10 @@ contains
     case('berendsen')
     case('nhc')
       call th%init_nhc(dt)
+      call th%write_thermo_checkpoint
     case('ssm')
       call th%init_nhc(dt)
+      call th%write_thermo_checkpoint
     case default
       call cq_abort("Unknown thermostat type")
     end select
@@ -321,6 +323,7 @@ contains
 
     use memory_module,    only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use global_module,    only: area_moveatoms
+    use input_module,     only: leqi
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
@@ -382,7 +385,7 @@ contains
     ! Defaults for heat bath positions, velocities, masses
     if (flag_MDcontinue) then
       th%append = .true.
-      call th%read_thermo_checkpoint
+      if (.not. leqi(th%thermo_type,'berendsen')) call th%read_thermo_checkpoint
     else
       ! initialise thermostat velocities and forces
       th%append = .false.
@@ -942,7 +945,7 @@ contains
 
     ! local variables
     integer                               :: lun
-    character(20)                         :: name
+    character(20)                         :: junk
 
     if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,'(2x,a)') "thermoDebug: read_thermo_checkpoint"
@@ -950,13 +953,13 @@ contains
     call io_assign(lun)
     open(unit=lun,file=thermo_check_file,status='old')
 
-    read(lun,*) name, th%eta
-    read(lun,*) name, th%v_eta
-    read(lun,*) name, th%G_nhc
+    read(lun,*) junk, th%eta
+    read(lun,*) junk, th%v_eta
+    read(lun,*) junk, th%G_nhc
     if (th%cell_nhc) then
-      read(lun,*) name, th%eta_cell
-      read(lun,*) name, th%v_eta_cell
-      read(lun,*) name, th%G_nhc_cell
+      read(lun,*) junk, th%eta_cell
+      read(lun,*) junk, th%v_eta_cell
+      read(lun,*) junk, th%G_nhc_cell
     end if
     call io_close(lun)
 
@@ -1050,13 +1053,13 @@ contains
   !!   2017/10/24 13:36
   !!  SOURCE
   !!  
-  subroutine dump_thermo_state(th, step, filename)
+  subroutine dump_thermo_state(th, step, filejunk)
     use input_module,     only: io_assign, io_close
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
     integer, intent(in)                   :: step
-    character(len=*), intent(in)          :: filename
+    character(len=*), intent(in)          :: filejunk
 
     ! local variables
     integer                               :: lun
@@ -1064,9 +1067,9 @@ contains
     if (inode==ionode) then
       call io_assign(lun)
       if (th%append) then
-        open(unit=lun,file=filename,position='append')
+        open(unit=lun,file=filejunk,position='append')
       else 
-        open(unit=lun,file=filename,status='replace')
+        open(unit=lun,file=filejunk,status='replace')
         th%append = .true.
       end if
       write(lun,'("step        ",i12)') step
@@ -1236,6 +1239,7 @@ contains
         end if
       end if
     end if
+    if (.not. leqi(baro%baro_type, 'berendsen')) call baro%write_baro_checkpoint
 
   end subroutine init_baro
   !!***
@@ -2267,13 +2271,13 @@ contains
   !!   2017/11/09 11:49
   !!  SOURCE
   !!  
-  subroutine dump_baro_state(baro, step, filename)
+  subroutine dump_baro_state(baro, step, filejunk)
     use input_module,     only: io_assign, io_close
 
     ! passed variables
     class(type_barostat), intent(inout)   :: baro
     integer, intent(in)                   :: step
-    character(len=*), intent(in)          :: filename
+    character(len=*), intent(in)          :: filejunk
 
     ! local variables
     integer                               :: lun
@@ -2281,9 +2285,9 @@ contains
     if (inode==ionode) then
       call io_assign(lun)
       if (baro%append) then
-        open(unit=lun,file=filename,position='append')
+        open(unit=lun,file=filejunk,position='append')
       else 
-        open(unit=lun,file=filename,status='replace')
+        open(unit=lun,file=filejunk,status='replace')
         baro%append = .true.
       end if
       write(lun,'("step    ",i12)') step
@@ -2501,7 +2505,7 @@ contains
 
     ! local variables
     integer                               :: lun
-    character(20)                         :: name
+    character(20)                         :: junk
 
     if (inode==ionode .and. flag_MDdebug) &
       write(io_lun,'(2x,a)') "baroDebug: read_baro_checkpoint"
@@ -2509,27 +2513,27 @@ contains
     call io_assign(lun)
     open(unit=lun,file=baro_check_file,status='old')
 
-    read(lun,*) name, baro%lat_ref(1,:)
-    read(lun,*) name, baro%lat_ref(2,:)
-    read(lun,*) name, baro%lat_ref(3,:)
-    read(lun,*) name, baro%volume_ref
+    read(lun,*) junk, baro%lat_ref(1,:)
+    read(lun,*) junk, baro%lat_ref(2,:)
+    read(lun,*) junk, baro%lat_ref(3,:)
+    read(lun,*) junk, baro%volume_ref
     select case(baro%baro_type)
     case('iso-mttk')
-      read(lun,*) name, baro%eps_ref
-      read(lun,*) name, baro%eps
-      read(lun,*) name, baro%v_eps
-      read(lun,*) name, baro%G_eps
+      read(lun,*) junk, baro%eps_ref
+      read(lun,*) junk, baro%eps
+      read(lun,*) junk, baro%v_eps
+      read(lun,*) junk, baro%G_eps
     case('ortho-mttk')
     case('mttk')
     case('iso-ssm')
-      read(lun,*) name, baro%eps_ref
-      read(lun,*) name, baro%eps
-      read(lun,*) name, baro%v_eps
-      read(lun,*) name, baro%G_eps
+      read(lun,*) junk, baro%eps_ref
+      read(lun,*) junk, baro%eps
+      read(lun,*) junk, baro%v_eps
+      read(lun,*) junk, baro%G_eps
     case('ortho-ssm')
-      read(lun,*) name, baro%h
-      read(lun,*) name, baro%v_h
-      read(lun,*) name, baro%G_h
+      read(lun,*) junk, baro%h
+      read(lun,*) junk, baro%v_h
+      read(lun,*) junk, baro%G_h
     end select
     call io_close(lun)
 
