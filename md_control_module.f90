@@ -1159,59 +1159,47 @@ contains
     baro%volume_ref = baro%volume
     baro%v_old = baro%volume
     baro%tau_P = tau_P
+    baro%bulkmod = md_bulkmod_est
 
-    select case(baro%baro_type)
-    case('none')
-    case('berendsen')
-      baro%bulkmod = md_bulkmod_est
-    case('iso-mttk')
+    if (.not. leqi(baro%baro_type, 'berendsen')) then
       if (flag_MDcontinue) then
         baro%append = .true.
         call baro%read_baro_checkpoint
         call baro%get_box_energy
       else
-        baro%append = .false.
-        baro%eps_ref = third*log(baro%volume/baro%volume_ref)
-        baro%eps = baro%eps_ref
-        baro%v_eps = zero
-        baro%G_eps = zero
-        call baro%get_box_energy
+        select case(baro%baro_type)
+        case('iso-mttk')
+          baro%append = .false.
+          baro%eps_ref = third*log(baro%volume/baro%volume_ref)
+          baro%eps = baro%eps_ref
+          baro%v_eps = zero
+          baro%G_eps = zero
+          call baro%get_box_energy
+          baro%odnf = one + three/baro%ndof
+          baro%p_drag = one - (md_p_drag*dt/md_tau_P/md_n_mts/md_n_ys)
+        case('ortho-mttk')
+        case('mttk')
+        case('iso-ssm')
+          baro%append = .false.
+          baro%eps = zero
+          baro%v_eps = zero
+          baro%G_eps = zero
+          call baro%get_box_energy
+          baro%odnf = one + three/baro%ndof
+          baro%p_drag = one - md_p_drag*dt/md_tau_P
+        case('ortho-ssm')
+          baro%append = .false.
+          baro%h = zero
+          baro%v_h = zero
+          baro%G_h = zero
+          call baro%get_box_energy
+          baro%odnf = one + three/baro%ndof
+          baro%p_drag = one - md_p_drag*dt/md_tau_P
+        case default
+          call cq_abort("Invalid barostat type")
+        end select
       end if
-      baro%odnf = one + three/baro%ndof
-      baro%p_drag = one - (md_p_drag*dt/md_tau_P/md_n_mts/md_n_ys)
-    case('ortho-mttk')
-    case('mttk')
-    case('iso-ssm')
-      if (flag_MDcontinue) then
-        baro%append = .true.
-        call baro%read_baro_checkpoint
-        call baro%get_box_energy
-      else
-        baro%append = .false.
-        baro%eps = zero
-        baro%v_eps = zero
-        baro%G_eps = zero
-        call baro%get_box_energy
-      end if
-      baro%odnf = one + three/baro%ndof
-      baro%p_drag = one - md_p_drag*dt/md_tau_P
-    case('ortho-ssm')
-      if (flag_MDcontinue) then
-        baro%append = .true.
-        call baro%read_baro_checkpoint
-        call baro%get_box_energy
-      else
-        baro%append = .false.
-        baro%h = zero
-        baro%v_h = zero
-        baro%G_h = zero
-        call baro%get_box_energy
-      end if
-      baro%odnf = one + three/baro%ndof
-      baro%p_drag = one - md_p_drag*dt/md_tau_P
-    case default
-      call cq_abort("Invalid barostat type")
-    end select
+    end if
 
     if (inode==ionode) then
       write(io_lun,'(2x,a)') 'Welcome to init_baro'
@@ -1951,7 +1939,11 @@ contains
       do i_mts = 1,th%n_mts_nhc ! multiple time step loop
         dt_mts = th%dt_ys(i_ys)/real(th%n_mts_nhc, double)/real(th%n_ys, double)
         do i_nhc = th%n_nhc, 2, -1
-          expfac_p = exp(-one_eighth*dt_mts*th%v_eta_cell(i_nhc+1))
+          if (i_nhc==th%n_nhc) then
+            expfac_p = one
+          else
+            expfac_p = exp(-one_eighth*dt_mts*th%v_eta_cell(i_nhc+1))
+          end if
           th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
           th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc) + &
                                  th%G_nhc_cell(i_nhc)*dt_mts*quarter
@@ -1992,8 +1984,12 @@ contains
         th%v_eta_cell(1) = th%v_eta_cell(1) + dt_mts*quarter*th%G_nhc(1)
         th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
 
-        do i_nhc = 1, th%n_nhc-1
-          expfac_p = exp(-one_eighth*dt_mts*th%v_eta_cell(i_nhc+1))
+        do i_nhc = 2, th%n_nhc-1
+          if (i_nhc==th%n_nhc) then
+            expfac_p = one
+          else
+            expfac_p = exp(-one_eighth*dt_mts*th%v_eta_cell(i_nhc+1))
+          end if
           th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
           th%G_nhc_cell(i_nhc) = (th%m_nhc(i_nhc-1)*th%v_eta_cell(i_nhc-1)**2 &
                                  - th%T_ext*fac_Kelvin2Hartree)/&
@@ -2045,7 +2041,11 @@ contains
       do i_mts=1,th%n_mts_nhc ! Multiple time step loop
         dt_mts = th%dt_ys(i_ys)/real(th%n_mts_nhc, double)/real(th%n_ys, double)
         do i_nhc = th%n_nhc, 2, -1
-          expfac_t = exp(-one_eighth*dt_mts*th%v_eta(i_nhc+1))
+          if (i_nhc==th%n_nhc) then
+            expfac_t = one
+          else
+            expfac_t = exp(-one_eighth*dt_mts*th%v_eta(i_nhc+1))
+          end if
           th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
           th%v_eta(i_nhc) = th%v_eta(i_nhc) + &
                             th%G_nhc(i_nhc)*dt_mts*quarter
@@ -2081,7 +2081,11 @@ contains
         th%v_eta(1) = th%v_eta(1)*expfac_t
 
         do i_nhc = 2, th%n_nhc
-          expfac_t = exp(-one_eighth*dt_mts*th%v_eta(i_nhc+1))
+          if (i_nhc==th%n_nhc) then
+            expfac_t = one
+          else
+            expfac_t = exp(-one_eighth*dt_mts*th%v_eta(i_nhc+1))
+          end if
           th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
           th%G_nhc(i_nhc) = (th%m_nhc(i_nhc-1)*th%v_eta(i_nhc-1)**2 - &
                             th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(i_nhc)
@@ -2460,18 +2464,18 @@ contains
     call io_assign(lun)
     open(unit=lun,file=baro_check_file,status='replace')
 
-    write(lun,*) "lat_a_ref", baro%lat_ref(1,:)
-    write(lun,*) "lat_b_ref", baro%lat_ref(2,:)
-    write(lun,*) "lat_c_ref", baro%lat_ref(3,:)
-    write(lun,*) "volume_ref", baro%volume_ref
     select case(baro%baro_type)
     case('iso-mttk')
+      write(lun,*) "lat_a_ref", baro%lat_ref(1,:)
+      write(lun,*) "lat_b_ref", baro%lat_ref(2,:)
+      write(lun,*) "lat_c_ref", baro%lat_ref(3,:)
+      write(lun,*) "volume_ref", baro%volume_ref
       write(lun,*) "eps_ref ", baro%eps_ref
       write(lun,*) "eps ", baro%eps
       write(lun,*) "v_eps ", baro%v_eps
       write(lun,*) "G_eps ", baro%G_eps
     case('iso-ssm')
-      write(lun,*) "eps_ref ", baro%eps_ref
+!      write(lun,*) "eps_ref ", baro%eps_ref
       write(lun,*) "eps ", baro%eps
       write(lun,*) "v_eps ", baro%v_eps
       write(lun,*) "G_eps ", baro%G_eps
@@ -2513,12 +2517,12 @@ contains
     call io_assign(lun)
     open(unit=lun,file=baro_check_file,status='old')
 
-    read(lun,*) junk, baro%lat_ref(1,:)
-    read(lun,*) junk, baro%lat_ref(2,:)
-    read(lun,*) junk, baro%lat_ref(3,:)
-    read(lun,*) junk, baro%volume_ref
     select case(baro%baro_type)
     case('iso-mttk')
+      read(lun,*) junk, baro%lat_ref(1,:)
+      read(lun,*) junk, baro%lat_ref(2,:)
+      read(lun,*) junk, baro%lat_ref(3,:)
+      read(lun,*) junk, baro%volume_ref
       read(lun,*) junk, baro%eps_ref
       read(lun,*) junk, baro%eps
       read(lun,*) junk, baro%v_eps
@@ -2526,7 +2530,6 @@ contains
     case('ortho-mttk')
     case('mttk')
     case('iso-ssm')
-      read(lun,*) junk, baro%eps_ref
       read(lun,*) junk, baro%eps
       read(lun,*) junk, baro%v_eps
       read(lun,*) junk, baro%G_eps
