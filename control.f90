@@ -35,6 +35,9 @@
 !!    Added md_ensemble variable for md_run
 !!   2018/05/30 zamaan
 !!    Implemented Berendsen thermostat and BerendsenEquil in NVT ensemble
+!!   2018/07/12 zamaan
+!!    Added SSM integrator, adapted from W. Shinoda et al., PRB 69:134103
+!!    (2004)
 !!  SOURCE
 !!
 module control

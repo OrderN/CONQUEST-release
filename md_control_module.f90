@@ -1160,6 +1160,7 @@ contains
     baro%v_old = baro%volume
     baro%tau_P = tau_P
     baro%bulkmod = md_bulkmod_est
+    baro%p_drag = one - (md_p_drag*dt/md_tau_P/md_n_mts/md_n_ys)
 
     if (.not. leqi(baro%baro_type, 'berendsen')) then
       if (flag_MDcontinue) then
@@ -1176,7 +1177,6 @@ contains
           baro%G_eps = zero
           call baro%get_box_energy
           baro%odnf = one + three/baro%ndof
-          baro%p_drag = one - (md_p_drag*dt/md_tau_P/md_n_mts/md_n_ys)
         case('ortho-mttk')
         case('mttk')
         case('iso-ssm')
@@ -1186,7 +1186,6 @@ contains
           baro%G_eps = zero
           call baro%get_box_energy
           baro%odnf = one + three/baro%ndof
-          baro%p_drag = one - md_p_drag*dt/md_tau_P
         case('ortho-ssm')
           baro%append = .false.
           baro%h = zero
@@ -1194,7 +1193,6 @@ contains
           baro%G_h = zero
           call baro%get_box_energy
           baro%odnf = one + three/baro%ndof
-          baro%p_drag = one - md_p_drag*dt/md_tau_P
         case default
           call cq_abort("Invalid barostat type")
         end select
