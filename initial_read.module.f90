@@ -146,6 +146,8 @@ contains
   !!    Bug fix (GitHub issue #80) to set flag_SFcoeffReuse false if NSF=NPAO
   !!   2018/07/13 09:37 dave
   !!    Added test for missing coordinate file name
+  !!   2018/09/06 16:45 nakata
+  !!    Changed to allow to use MSSFs larger than single-zeta size (i.e., not minimal)
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -202,6 +204,7 @@ contains
     !use DiagModule,             only: diagon
     use constraint_module,      only: flag_RigidBonds,constraints
     use support_spec_format,    only: flag_one_to_one, symmetry_breaking, read_option
+    use multisiteSF_module,     only: flag_LFD_ReadTVEC
     use pao_format
 
     implicit none
@@ -367,18 +370,27 @@ contains
                    enddo
                 endif
              enddo
-             ! If number of support functions is less than total number of ang. mom. components (ignoring
-             ! for now multiple zetas) then there is a formal problem with basis set: we require the user
-             ! to set an additional flag to assert that this is really desired
              if (flag_Multisite) then
-                ! multisite SFs are symmetry-breaking usually
-                ! multisite SFs should be in SZ-size at present
+                ! multi-site SFs are symmetry-breaking usually.
+                ! multi-site SFs should be in SingleZeta-size in default.
+                ! If the user wants to increase the number of the multi-site SFs, 
+                ! the user must provide the initial SFcoeffmatrix or the trial vectors for the LFD method. 
                 if (count_SZ.ne.nsf_species(i)) then
-                   if(inode==ionode) write(io_lun,'(A,I3,A,I3)') "Number of multi-site SFs", nsf_species(i), &
-                                                                 " is not equal to single-zeta size", count_SZ
-                   call cq_abort("Basis set error for species ",i)
+                   if (.not.flag_LFD_ReadTVEC .and. .not.read_option) then
+                      if(inode==ionode) then
+                         write(io_lun,fmt='("You have a major problem with your multi-site support functions.")')
+                         write(io_lun,'(A,I3,A,I3)') "Number of multi-site SFs", nsf_species(i), &
+                                                     " is not equal to single-zeta size", count_SZ
+                         write(io_lun,'(A/A)') "You must provide initial SFcoeffmatrix or trial vectors for the LFD method,", &
+                                               "or fix Atom.NumberOfSupports."
+                      endif
+                      call cq_abort("Multi-site support function error for species ",i)
+                   endif
                 endif
              else 
+                ! If number of support functions is less than total number of ang. mom. components (ignoring
+                ! for now multiple zetas) then there is a formal problem with basis set: we require the user
+                ! to set an additional flag to assert that this is really desired
                 if(count_SZP>nsf_species(i)) then
                    if(.NOT.symmetry_breaking.OR..NOT.read_option) then
                       if(inode==ionode) then
