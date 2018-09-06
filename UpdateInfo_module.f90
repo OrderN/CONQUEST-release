@@ -1930,7 +1930,8 @@ contains
     ! Module usage
     use numbers
     use global_module, ONLY: glob2node,id_glob,atom_coord_diff, &
-         runtype,nspin, rcellx, rcelly, rcellz
+         runtype,nspin, rcellx, rcelly, rcellz, sf, nlpf, atomf
+    use species_module, ONLY: nsf_species, natomf_species, nlpf_species
     use Gencomms, ONLY: inode,cq_abort
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
@@ -1962,7 +1963,7 @@ contains
     type(InfoMatrixFile), pointer :: Info(:)
 
     ! local variables
-    integer :: ifile,ibeg1,ibeg2,ibeg_Lij,n1,n2,nLaddr,nLaddr_old
+    integer :: ifile,ibeg1,ibeg2,ibeg_Lij,n1,n2,nLaddr,nLaddr_old, sf1, nprim
     ! --- Finding i --- !
     integer :: ia,idglob_ii,ind_node,n_alpha,ng,ni,iprim
     integer :: npart,ipartx,iparty,ipartz
@@ -1980,7 +1981,8 @@ contains
     integer :: lun_db,lun_db2,lun_db3,stat_alloc
     integer :: ind_part,atom_id,n,jpart_cell,gcspart,k_off,hp,l,nx,ny,nz,npx,npy,npz
     integer :: alpha,beta,jpart_x,jpart_y,jpart_z
-    integer, allocatable :: ind_qart(:)
+    !integer, allocatable :: ind_qart(:)
+    integer, allocatable :: alpha_i2(:)
     real(double) :: Rijx,Rijy,Rijz,Rij
     logical :: find
     character(20) :: file_name,file_name2,file_name3
@@ -2009,6 +2011,20 @@ contains
 
     ! Need to consider spin later.
     !db write (io_lun,*) "inode, Size of mat_p(matA):", inode, mat_p(matA)%length
+
+    !For checking the consistency of nsf1 between read and present matrices
+     sf1 = mat_p(matA)%sf1_type; nprim = bundle%n_prim
+      allocate(alpha_i2(1:nprim), STAT = stat_alloc)
+       if(stat_alloc .ne. 0) call cq_abort('Error in allocating alpha_i2 in UpdateMatrix_local',nprim)
+      if(sf1 == sf) then
+        alpha_i2(1:nprim) =nsf_species(bundle%species(1:nprim))
+      elseif(sf1 == atomf) then
+        alpha_i2(1:nprim) =natomf_species(bundle%species(1:nprim))
+      elseif(sf1 == nlpf) then
+        alpha_i2(1:nprim) =nlpf_species(bundle%species(1:nprim))
+      else
+        call cq_abort(" ERROR in UpdateMatrix_local: No sf1_type : ",sf1)
+      endif
 
     ifile_local = nfile
     do ifile = 1, nfile
@@ -2039,6 +2055,8 @@ contains
              enddo !(ng, groups_on_node)
              if (.NOT. find_iprim) call cq_abort('Error: find_iprim must be T - local.')
              if (flag_remote_iprim(iprim)) call cq_abort('Error: flag_remote_iprim must be F.', iprim)
+
+             if (n_alpha .ne. alpha_i2(iprim)) call cq_abort('Error: alpha mismach !',n_alpha, alpha_i2(iprim))
              iatom_local = iatom_local+1
      
              ! Partitions and positions of "i_new".
@@ -2235,6 +2253,9 @@ contains
       ave_Rij_fail_local = zero
     endif
 
+    deallocate(alpha_i2, STAT = stat_alloc)
+     if(stat_alloc .ne. 0) call cq_abort('Error in deallocating alpha_i2 in UpdateMatrix_local')
+
     !! ---------- DEBUG ---------- !!
     if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
        call io_close(lun_db)
@@ -2287,6 +2308,8 @@ contains
     use matrix_data, ONLY: halo
     use mult_module, ONLY: mat_p
     use store_matrix, ONLY: n_matrix
+    use global_module, ONLY: sf, nlpf, atomf
+    use species_module, ONLY: nsf_species, natomf_species, nlpf_species
     ! db
     use io_module, ONLY: get_file_name
     use global_module, ONLY: numprocs
@@ -2303,7 +2326,9 @@ contains
     type(Lmatrix_comm_recv) :: LmatrixRecv
 
     ! local variables
-    integer :: n1,len
+    integer :: n1,len, nprim, sf1, stat_alloc
+    integer, allocatable :: alpha_i2(:)
+
     ! --- Finding remote i --- !
     integer :: iprim_remote,iprim,idglob_ii,n_alpha
     real(double) :: xprim_i,yprim_i,zprim_i,deltai_x,deltai_y,deltai_z
@@ -2357,6 +2382,20 @@ contains
     !ORI matA_halo => halo(Lrange)
     matA_halo => halo(range)
 
+    !For checking the consistency of nsf1 between read and present matrices
+     sf1 = mat_p(matA)%sf1_type; nprim = bundle%n_prim
+      allocate(alpha_i2(1:nprim), STAT = stat_alloc)
+       if(stat_alloc .ne. 0) call cq_abort('Error in allocating alpha_i2 in UpdateMatrix_local',nprim)
+      if(sf1 == sf) then
+        alpha_i2(1:nprim) =nsf_species(bundle%species(1:nprim))
+      elseif(sf1 == atomf) then
+        alpha_i2(1:nprim) =natomf_species(bundle%species(1:nprim))
+      elseif(sf1 == nlpf) then
+        alpha_i2(1:nprim) =nlpf_species(bundle%species(1:nprim))
+      else
+        call cq_abort(" ERROR in UpdateMatrix_local: No sf1_type : ",sf1)
+      endif
+
     do iprim_remote = 1, LmatrixRecv%natom_remote
       ! Find my REMOTE primary atoms.
       iprim = LmatrixRecv%id_prim_recv(iprim_remote)  ! ID in bundle
@@ -2367,6 +2406,8 @@ contains
 
       idglob_ii = bundle%ig_prim(iprim)
       n_alpha = LmatrixRecv%nalpha_prim_recv(iprim_remote)
+       if(n_alpha .ne. alpha_i2(iprim)) &
+        call cq_abort('Error in UpdateMatrix_remote: alpha mismach !',n_alpha, alpha_i2(iprim))
       xprim_i = bundle%xprim(iprim)
       yprim_i = bundle%yprim(iprim)
       zprim_i = bundle%zprim(iprim)
@@ -2544,6 +2585,8 @@ contains
       ave_Rij_fail_remote = zero
     endif
 
+    deallocate(alpha_i2, STAT = stat_alloc)
+     if(stat_alloc .ne. 0) call cq_abort('Error in deallocating alpha_i2 in UpdateMatrix_local')
 
     !! ---------- DEBUG ---------- !!
     if (flag_MDdebug) then
