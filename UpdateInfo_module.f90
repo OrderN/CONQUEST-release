@@ -2407,7 +2407,7 @@ contains
       idglob_ii = bundle%ig_prim(iprim)
       n_alpha = LmatrixRecv%nalpha_prim_recv(iprim_remote)
        if(n_alpha .ne. alpha_i2(iprim)) &
-        call cq_abort('Error in UpdateMatrix_remote: alpha mismach !',n_alpha, alpha_i2(iprim))
+        call cq_abort('Error in UpdateMatrix_remote: alpha mismatch !',n_alpha, alpha_i2(iprim))
       xprim_i = bundle%xprim(iprim)
       yprim_i = bundle%yprim(iprim)
       zprim_i = bundle%zprim(iprim)
