@@ -10,6 +10,10 @@
 !!  CREATION DATE
 !!   2013/08/22
 !!  MODIFICATION HISTORY
+!!   2018/Sep/08 tsuyoshi
+!!    Added the check for the consistency of the orbitals between the present matrix 
+!!    and the one read from the file.
+!!    Also added the subroutine ReportMatrixUpdate to check the missing pairs.
 !!   
 !!  SOURCE
 !!  
@@ -1923,6 +1927,10 @@ contains
   !!    Removed restriction spin and on L-matrix update
   !!   2018/02/12 dave
   !!    Removed delta_ix/y/z=zero condition when flag_move_atom is false
+  !!   2018/Sep/07 tsuyoshi
+  !!    Added the check of the inconsistency for the number of orbitals (sf1)
+  !!    between the present matrix and the one read from the file. 
+  !!    Also added the part collecting the information of missing pairs
   !!  SOURCE
   !!
   subroutine UpdateMatrix_local(Info,range,matA,flag_remote_iprim,nfile)
@@ -2292,6 +2300,9 @@ contains
   !!    Removed restriction spin and on L-matrix update 
   !!   2018/02/12 dave
   !!    Removed delta_ix/y/z=zero condition when flag_move_atom is false
+  !!   2018/Sep/07 tsuyoshi
+  !!    Added the check of the inconsistency for the number of orbitals (sf1)
+  !!    between the present matrix and the one read from the file. 
   !!  SOURCE
   !!
   subroutine UpdateMatrix_remote(range,matA,LmatrixRecv,flag_remote_iprim,irecv2_array,recv_array)
