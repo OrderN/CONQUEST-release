@@ -2078,7 +2078,8 @@ contains
                 jcoverx = jcoverx - bundle%nx_origin + BCS_parts%nspanlx + 1
                 jcovery = jcovery - bundle%ny_origin + BCS_parts%nspanly + 1
                 jcoverz = jcoverz - bundle%nz_origin + BCS_parts%nspanlz + 1
-                if (flag_MDdebug) write (lun_db,*) "jcover in CS:", jcoverx,jcovery,jcoverz
+                if (inode==ionode .and. flag_MDdebug) &
+                  write (lun_db,*) "jcover in CS:", jcoverx,jcovery,jcoverz
                 ! The followings are NOT the error check. These are the treatment for the case
                 ! where atoms move and get out of CS.
                 if ( (jcoverx.GT.BCS_parts%ncoverx .OR. jcoverx.LT.1) .OR.   &
@@ -2251,7 +2252,7 @@ contains
     use io_module, ONLY: get_file_name
     use global_module, ONLY: numprocs
     use input_module, ONLY: io_assign,io_close
-    use GenComms, ONLY: inode
+    use GenComms, ONLY: inode, ionode
 
     implicit none
 
@@ -2384,7 +2385,8 @@ contains
         jcoverx=jcoverx-bundle%nx_origin+BCS_parts%nspanlx+1
         jcovery=jcovery-bundle%ny_origin+BCS_parts%nspanly+1
         jcoverz=jcoverz-bundle%nz_origin+BCS_parts%nspanlz+1
-        if (flag_MDdebug) write (lun_db,*) "jcover in CS:", jcoverx,jcovery,jcoverz
+        if (inode==ionode .and. flag_MDdebug) &
+          write (lun_db,*) "jcover in CS:", jcoverx,jcovery,jcoverz
         if ( (jcoverx.GT.BCS_parts%ncoverx .OR. jcoverx.LT.1) .OR. &
              (jcovery.GT.BCS_parts%ncovery .OR. jcovery.LT.1) .OR. &
              (jcoverz.GT.BCS_parts%ncoverz .OR. jcoverz.LT.1) ) then
