@@ -540,7 +540,7 @@ contains
                               fire_N_below_thresh
     use constraint_module, ONLY: correct_atomic_position,correct_atomic_velocity, &
          ready_constraint,flag_RigidBonds
-    use input_module,   ONLY: io_assign, io_close, leqi
+    use input_module,   ONLY: leqi
     use cover_module,   only: BCS_parts, make_cs, deallocate_cs, make_iprim, &
                               send_ncover
     use md_model,       only: type_md_model
@@ -922,8 +922,8 @@ contains
         if(temp_ion > RD_ERR) then
           if (inode == ionode) then
             call init_velocity(ni_in_cell, temp_ion, ion_velocity)
-            call gcopy(ion_velocity, 3, ni_in_cell)
           end if
+          call gcopy(ion_velocity, 3, ni_in_cell)
         else
           ion_velocity = zero
         end if

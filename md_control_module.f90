@@ -956,7 +956,7 @@ contains
                          th%T_ext*fac_Kelvin2Hartree*th%eta_cell(k)
       end if
     end do
-    th%e_nhc = th%ke_nhc_ion - th%pe_nhc_ion + th%ke_nhc_cell - th%pe_nhc_cell
+    th%e_nhc = th%ke_nhc_ion + th%pe_nhc_ion + th%ke_nhc_cell + th%pe_nhc_cell
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
       write(io_lun,'(4x,"ke_nhc_ion: ",e16.8)') th%ke_nhc_ion
@@ -2425,6 +2425,7 @@ contains
       append_coords = append_coords_bak
 
       call io_assign(lun)
+      write(io_lun,*) "lun = ", lun
       open(unit=lun,file=md_check_file,status='replace')
 
       ! Write the ionic velocities (taken from write_velocity in io_module)
@@ -2471,8 +2472,8 @@ contains
           write(lun,'(3e20.12)') baro%G_h(2,:)
           write(lun,'(3e20.12)') baro%G_h(3,:)
         end select
-        call io_close(lun)
       end if
+      call io_close(lun)
     end if
 
   end subroutine write_md_checkpoint
