@@ -50,6 +50,8 @@
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2018/07/16 16:32 dave
 !!    Added user-control flag_stop_on_empty_bundle
+!!   2018/09/07 tsuyoshi
+!!    introduced flag_debug_move_atoms for debugging
 !!  SOURCE
 !!
 module move_atoms
@@ -61,6 +63,7 @@ module move_atoms
                                     tmr_std_indexing, &
                                     tmr_std_allocation
 
+  logical :: flag_debug_move_atoms = .false.
 
   ! Useful physical constants
   real(double), parameter:: amu = 1.660566e-27_double
@@ -3470,6 +3473,8 @@ contains
   !!  CREATION DATE
   !!   2017/Nov/12
   !!  MODIFICATION
+  !!   2018/Sep/07  tsuyoshi
+  !!       added calling ReportUpdateMatrix when flag_debug_move_atoms is true.
   !!
   !!  SOURCE
   !!
@@ -3485,7 +3490,7 @@ contains
                              matrix_scale, matrix_transpose, matSFcoeff_tran
   use matrix_data,     only: Lrange, Hrange, Srange, SFcoeff_range
   use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2
-  use UpdateInfo_module, only: Matrix_CommRebuild
+  use UpdateInfo_module, only: Matrix_CommRebuild, Report_UpdateMatrix
 
   implicit none
   integer, intent(in) :: update_method
@@ -3504,6 +3509,9 @@ contains
  ! for extrapolation, we need to prepare multiple InfoGlob and Info.
   type(matrix_store_global) :: InfoGlob
   type(InfoMatrixFile),pointer :: Info(:)
+
+ !Switch on Debugging
+ !  flag_debug_move_atoms = .true.
 
   real(double), dimension(3,ni_in_cell) :: velocity_global
   integer :: i
@@ -3619,11 +3627,13 @@ contains
      call grab_matrix2('L',inode,nfile,Info)
      call my_barrier()
      call Matrix_CommRebuild(Info,Lrange,L_trans,matL(1),nfile,symm)
+      if(flag_debug_move_atoms) call Report_UpdateMatrix("Lmat")
      ! DRB 2017/05/09 now extended to spin systems
      if(nspin==2) then
        call grab_matrix2('L2',inode,nfile,Info)
        call my_barrier()
        call Matrix_CommRebuild(Info,Lrange,L_trans,matL(2),nfile,symm)
+        if(flag_debug_move_atoms) call Report_UpdateMatrix("L2  ")
      end if
   endif
 
@@ -3631,10 +3641,12 @@ contains
      call grab_matrix2('K',inode,nfile,Info)
      call my_barrier()
      call Matrix_CommRebuild(Info,Hrange,H_trans,matK(1),nfile)
+      if(flag_debug_move_atoms) call Report_UpdateMatrix("Kmat")
      if(nspin==2) then
        call grab_matrix2('K2',inode,nfile,Info)
        call my_barrier()
        call Matrix_CommRebuild(Info,Hrange,H_trans,matK(2),nfile)
+        if(flag_debug_move_atoms) call Report_UpdateMatrix("K2  ")
      end if
   endif
 
@@ -3642,11 +3654,13 @@ contains
      call grab_matrix2('S',inode,nfile,Info)
      call my_barrier()
      call Matrix_CommRebuild(Info,Srange,S_trans,matS,nfile)
+      if(flag_debug_move_atoms) call Report_UpdateMatrix("Smat")
      ! If we introduce spin-dependent support ...
      !if(nspin==2) then
      !  call grab_matrix2('S2',inode,nfile,Info)
      !  call my_barrier()
      !  call Matrix_CommRebuild(Info,Srange,S_trans,matS(2),nfile,symm)
+     !   if(flag_debug_move_atoms) call Report_UpdateMatrix("S2  ")
      !end if
   endif
 
@@ -3658,10 +3672,12 @@ contains
      call grab_matrix2('SFcoeff',inode,nfile,Info)
      call my_barrier()
      call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(1),nfile)
+      if(flag_debug_move_atoms) call Report_UpdateMatrix("SFc1")
      if(nspin_SF==2) then
       call grab_matrix2('SFcoeff2',inode,nfile,Info)
       call my_barrier()
       call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(2),nfile)
+       if(flag_debug_move_atoms) call Report_UpdateMatrix("SFc2")
      end if
 
      do spin_SF = 1,nspin_SF
@@ -3669,6 +3685,9 @@ contains
       call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
      enddo
   endif
+
+ !Switch off Debugging
+ !  flag_debug_move_atoms = .false.
 
  return
  end subroutine update_pos_and_matrices

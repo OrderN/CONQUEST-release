@@ -10,11 +10,16 @@
 !!  CREATION DATE
 !!   2013/08/22
 !!  MODIFICATION HISTORY
+!!   2018/Sep/08 tsuyoshi
+!!    Added the check for the consistency of the orbitals between the present matrix 
+!!    and the one read from the file.
+!!    Also added the subroutine ReportMatrixUpdate to check the missing pairs.
 !!   
 !!  SOURCE
 !!  
 module UpdateInfo_module
 
+  use datatypes
   use global_module, ONLY: flag_MDdebug,iprint_MDdebug
 
   implicit none
@@ -45,6 +50,25 @@ module UpdateInfo_module
     integer, pointer :: ibeg1_recv_array(:)
     integer, pointer :: ibeg2_recv_array(:)
   end type Lmatrix_comm_recv
+
+  ! For the report of constructing M_{ia,jb}
+  !    2018/Aug/16   Tsuyoshi Miyazaki
+  private :: ifile_local, iatom_local, ij_local, ij_success_local, ij_fail_local, &
+             min_Rij_fail_local, max_Rij_fail_local, ave_Rij_fail_local, matrix_name
+   character(4) :: matrix_name = 'Kmat'
+        integer :: ifile_local       ! # of files 
+        integer :: iatom_local       ! # of iatom 
+        integer :: ij_local          ! # of (ij) pair
+        integer :: ij_success_local  ! # of (ij) pair, whose elements are found
+        integer :: ij_fail_local     ! # of (ij) pair, whose elements are not found
+   real(double) :: min_Rij_fail_local, max_Rij_fail_local, ave_Rij_fail_local  
+
+        integer :: ifile_remote       ! # of files 
+        integer :: iatom_remote       ! # of iatom 
+        integer :: ij_remote          ! # of (ij) pair
+        integer :: ij_success_remote  ! # of (ij) pair, whose elements are found
+        integer :: ij_fail_remote     ! # of (ij) pair, whose elements are not found
+   real(double) :: min_Rij_fail_remote, max_Rij_fail_remote, ave_Rij_fail_remote  
 
   character(80),private :: RCSid = "$Id$"
 
@@ -1903,6 +1927,10 @@ contains
   !!    Removed restriction spin and on L-matrix update
   !!   2018/02/12 dave
   !!    Removed delta_ix/y/z=zero condition when flag_move_atom is false
+  !!   2018/Sep/07 tsuyoshi
+  !!    Added the check of the inconsistency for the number of orbitals (sf1)
+  !!    between the present matrix and the one read from the file. 
+  !!    Also added the part collecting the information of missing pairs
   !!  SOURCE
   !!
   subroutine UpdateMatrix_local(Info,range,matA,flag_remote_iprim,nfile)
@@ -1910,7 +1938,8 @@ contains
     ! Module usage
     use numbers
     use global_module, ONLY: glob2node,id_glob,atom_coord_diff, &
-         runtype,nspin, rcellx, rcelly, rcellz
+         runtype,nspin, rcellx, rcelly, rcellz, sf, nlpf, atomf
+    use species_module, ONLY: nsf_species, natomf_species, nlpf_species
     use Gencomms, ONLY: inode,cq_abort
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
@@ -1942,7 +1971,7 @@ contains
     type(InfoMatrixFile), pointer :: Info(:)
 
     ! local variables
-    integer :: ifile,ibeg1,ibeg2,ibeg_Lij,n1,n2,nLaddr,nLaddr_old
+    integer :: ifile,ibeg1,ibeg2,ibeg_Lij,n1,n2,nLaddr,nLaddr_old, sf1, nprim
     ! --- Finding i --- !
     integer :: ia,idglob_ii,ind_node,n_alpha,ng,ni,iprim
     integer :: npart,ipartx,iparty,ipartz
@@ -1960,12 +1989,19 @@ contains
     integer :: lun_db,lun_db2,lun_db3,stat_alloc
     integer :: ind_part,atom_id,n,jpart_cell,gcspart,k_off,hp,l,nx,ny,nz,npx,npy,npz
     integer :: alpha,beta,jpart_x,jpart_y,jpart_z
-    integer, allocatable :: ind_qart(:)
+    !integer, allocatable :: ind_qart(:)
+    integer, allocatable :: alpha_i2(:)
     real(double) :: Rijx,Rijy,Rijz,Rij
     logical :: find
     character(20) :: file_name,file_name2,file_name3
 
     real(double) :: eps, xcover, ycover, zcover, rr
+    real(double) :: sum_Rij_fail
+
+   !For Report_UpdateMatrix_Local&Remote
+        iatom_local=0; ij_local=0; ij_success_local=0; ij_fail_local=0
+        min_Rij_fail_local=zero; max_Rij_fail_local=zero; sum_Rij_fail=zero
+   !For Report_UpdateMatrix_Local&Remote
 
     !DB write(io_lun,fmt='(a,3f15.7)') ' scaling factor for lattice in Updatelocal = ',scale_x,scale_y,scale_z
     !! ---------- DEBUG ---------- !!
@@ -1984,6 +2020,21 @@ contains
     ! Need to consider spin later.
     !db write (io_lun,*) "inode, Size of mat_p(matA):", inode, mat_p(matA)%length
 
+    !For checking the consistency of nsf1 between read and present matrices
+     sf1 = mat_p(matA)%sf1_type; nprim = bundle%n_prim
+      allocate(alpha_i2(1:nprim), STAT = stat_alloc)
+       if(stat_alloc .ne. 0) call cq_abort('Error in allocating alpha_i2 in UpdateMatrix_local',nprim)
+      if(sf1 == sf) then
+        alpha_i2(1:nprim) =nsf_species(bundle%species(1:nprim))
+      elseif(sf1 == atomf) then
+        alpha_i2(1:nprim) =natomf_species(bundle%species(1:nprim))
+      elseif(sf1 == nlpf) then
+        alpha_i2(1:nprim) =nlpf_species(bundle%species(1:nprim))
+      else
+        call cq_abort(" ERROR in UpdateMatrix_local: No sf1_type : ",sf1)
+      endif
+
+    ifile_local = nfile
     do ifile = 1, nfile
        ! Check if "ia" is my primary set of atom.
        ! Loop over "i_old".
@@ -2012,6 +2063,10 @@ contains
              enddo !(ng, groups_on_node)
              if (.NOT. find_iprim) call cq_abort('Error: find_iprim must be T - local.')
              if (flag_remote_iprim(iprim)) call cq_abort('Error: flag_remote_iprim must be F.', iprim)
+
+             if (n_alpha .ne. alpha_i2(iprim)) call cq_abort('Error: alpha mismach !',n_alpha, alpha_i2(iprim))
+             iatom_local = iatom_local+1
+     
              ! Partitions and positions of "i_new".
              ipartx=bundle%idisp_primx(npart) ; xprim_i=bundle%xprim(iprim)
              iparty=bundle%idisp_primy(npart) ; yprim_i=bundle%yprim(iprim)
@@ -2025,7 +2080,9 @@ contains
              ! Find i_new neighbours, "j_new", by referring to "j_old". Loop over "j_old" to begin with.
              ibeg1 = Info(ifile)%ibeg_Pij(ia)
              ibeg2 = Info(ifile)%ibeg_dataL(ia)
+
              do jj = 1, Info(ifile)%jmax_i(ia)
+                ij_local = ij_local+1
                 n_beta = Info(ifile)%beta_j_i(ibeg1+jj-1)
                 idglob_jj = Info(ifile)%idglob_j(ibeg1+jj-1)
                 ! Displacement in x/y/z of neighbour 'j' of 'i'.
@@ -2038,23 +2095,19 @@ contains
                 xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)*rcellx+deltaj_x-deltai_x
                 yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)*rcelly+deltaj_y-deltai_y
                 zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)*rcellz+deltaj_z-deltai_z
-                !ori xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)+deltaj_x-deltai_x
-                !ori yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)+deltaj_y-deltai_y
-                !ori zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
 
-                !! -------- DEBUG -------- !!
-                if (flag_MDdebug .and. iprint_MDdebug .gt. 1) then
                    Rijx=xprim_i-xx_j
                    Rijy=yprim_i-yy_j
                    Rijz=zprim_i-zz_j
                    Rij = Rijx*Rijx + Rijy*Rijy + Rijz*Rijz
                    Rij = sqrt(Rij)
 
+                !! -------- DEBUG -------- !!
+                if (flag_MDdebug .and. iprint_MDdebug .gt. 1) then
                    write (lun_db,*) "! --- Neighbours: j ---!"
                    write (lun_db,*) "ibeg1+jj-1:", ibeg1+jj-1
                    write (lun_db,*) "idglob_jj and its beta:", idglob_jj, n_beta
                    write (lun_db,*) "vec_Pij:" 
-                   !OLD write (lun_db,*) Info(ifile)%rvec_Pij(1:3,ibeg1+jj-1,ia)
                    write (lun_db,*) Info(ifile)%rvec_Pij(1:3,ibeg1+jj-1)
                    write (lun_db,*) "delta_i or atom_coord_diff(1:3,idglob_ii):", deltai_x,deltai_y,deltai_z
                    write (lun_db,*) "delta_j or atom_coord_diff(1:3,idglob_jj):", deltaj_x,deltaj_y,deltaj_z
@@ -2089,6 +2142,12 @@ contains
                    ibeg2 = ibeg2 + n_alpha*n_beta
                    cycle
                    !exit
+
+                   ij_fail_local = ij_fail_local+1
+                   sum_Rij_fail = sum_Rij_fail + Rij
+                   if(Rij < min_Rij_fail_local) min_Rij_fail_local = Rij
+                   if(Rij > max_Rij_fail_local) max_Rij_fail_local = Rij
+
                 endif
                 ! Get the partition's indices in two manners; NOPG and CC (gcspart) in CS.
                 jpart = (jcoverx-1)*BCS_parts%ncovery*BCS_parts%ncoverz + &
@@ -2108,15 +2167,9 @@ contains
                    endif
                 enddo !(jjj, n_ing_cover)
                 if (.NOT. find_jcover) then
-                   !! TM
-                   !ORI!if(flag_MDdebug) then
                    xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)*rcellx+deltaj_x-deltai_x
                    yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)*rcelly+deltaj_y-deltai_y
                    zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)*rcellz+deltaj_z-deltai_z
-                   !old xx_j=xprim_i-Info(ifile)%rvec_Pij(1,ibeg1+jj-1)+deltaj_x-deltai_x
-                   !old yy_j=yprim_i-Info(ifile)%rvec_Pij(2,ibeg1+jj-1)+deltaj_y-deltai_y
-                   !old zz_j=zprim_i-Info(ifile)%rvec_Pij(3,ibeg1+jj-1)+deltaj_z-deltai_z
-                   !ORI  write(lun_db,*) ' :ERROR: idglob_jj, idglob_jjj, jcover,jpart_nopg,#ofjjj = ', &
                    write(io_lun,*) ' :ERROR: inode = ',inode
                    write(io_lun,*) ' :ERROR: idglob_jj, idglob_jjj, jcover,jpart_nopg,#ofjjj = ', &
                         idglob_jj, idglob_jjj,jcover,jpart_nopg,BCS_parts%n_ing_cover(jpart_nopg)
@@ -2128,8 +2181,6 @@ contains
                    write(io_lun,*) ' :ERROR: deltai_x  ',deltai_x,deltai_y,deltai_z
                    write(io_lun,*) ' :ERROR: vecRi  ',xprim_i, yprim_i, zprim_i
                    write(io_lun,*) ' :ERROR: vecRj  ',xx_j, yy_j, zz_j
-                   !ORI!endif
-                   !! TM 
                    call cq_abort('Error: find_cover must be T - local.')
                 endif
                 ! Now that we have known who "j_new" is w/ its global and CS ID and partition in CS, 
@@ -2186,6 +2237,15 @@ contains
                    !endif !(nspin)
 
                    !endif
+                  ij_success_local = ij_success_local+1
+                else
+                  ij_fail_local = ij_fail_local + 1
+                   if(ij_fail_local == 1) then
+                       min_Rij_fail_local = Rij; max_Rij_fail_local = Rij
+                   endif
+                   sum_Rij_fail = sum_Rij_fail + Rij
+                   if(Rij < min_Rij_fail_local) min_Rij_fail_local = Rij
+                   if(Rij > max_Rij_fail_local) max_Rij_fail_local = Rij
                 endif
                 ibeg2 = ibeg2 + n_alpha*n_beta
              enddo !(jj, jmax_i)
@@ -2195,6 +2255,15 @@ contains
 
        enddo !(ia, natom_i)
     enddo !(ifile, nfile)
+
+    if(ij_fail_local > 0) then
+      ave_Rij_fail_local = sum_Rij_fail/ij_fail_local
+    else
+      ave_Rij_fail_local = zero
+    endif
+
+    deallocate(alpha_i2, STAT = stat_alloc)
+     if(stat_alloc .ne. 0) call cq_abort('Error in deallocating alpha_i2 in UpdateMatrix_local')
 
     !! ---------- DEBUG ---------- !!
     if (flag_MDdebug .AND. iprint_MDdebug.GT.1) then
@@ -2232,6 +2301,9 @@ contains
   !!    Removed restriction spin and on L-matrix update 
   !!   2018/02/12 dave
   !!    Removed delta_ix/y/z=zero condition when flag_move_atom is false
+  !!   2018/Sep/07 tsuyoshi
+  !!    Added the check of the inconsistency for the number of orbitals (sf1)
+  !!    between the present matrix and the one read from the file. 
   !!  SOURCE
   !!
   subroutine UpdateMatrix_remote(range,matA,LmatrixRecv,flag_remote_iprim,irecv2_array,recv_array)
@@ -2248,6 +2320,8 @@ contains
     use matrix_data, ONLY: halo
     use mult_module, ONLY: mat_p
     use store_matrix, ONLY: n_matrix
+    use global_module, ONLY: sf, nlpf, atomf
+    use species_module, ONLY: nsf_species, natomf_species, nlpf_species
     ! db
     use io_module, ONLY: get_file_name
     use global_module, ONLY: numprocs
@@ -2264,7 +2338,9 @@ contains
     type(Lmatrix_comm_recv) :: LmatrixRecv
 
     ! local variables
-    integer :: n1,len
+    integer :: n1,len, nprim, sf1, stat_alloc
+    integer, allocatable :: alpha_i2(:)
+
     ! --- Finding remote i --- !
     integer :: iprim_remote,iprim,idglob_ii,n_alpha
     real(double) :: xprim_i,yprim_i,zprim_i,deltai_x,deltai_y,deltai_z
@@ -2283,6 +2359,12 @@ contains
     integer :: lun_db,lun_db2
     integer :: ind_part
     character(20) :: file_name,file_name2
+    real(double) :: Rijx,Rijy,Rijz,Rij, sum_Rij_fail
+
+   !For Report_UpdateMatrix_Local&Remote
+        iatom_remote=0; ij_remote=0; ij_success_remote=0; ij_fail_remote=0
+        min_Rij_fail_remote=zero; max_Rij_fail_remote=zero; sum_Rij_fail=zero
+   !For Report_UpdateMatrix_Local&Remote
 
     if (LmatrixRecv%natom_remote.LT.1) return
 
@@ -2312,13 +2394,32 @@ contains
     !ORI matA_halo => halo(Lrange)
     matA_halo => halo(range)
 
+    !For checking the consistency of nsf1 between read and present matrices
+     sf1 = mat_p(matA)%sf1_type; nprim = bundle%n_prim
+      allocate(alpha_i2(1:nprim), STAT = stat_alloc)
+       if(stat_alloc .ne. 0) call cq_abort('Error in allocating alpha_i2 in UpdateMatrix_local',nprim)
+      if(sf1 == sf) then
+        alpha_i2(1:nprim) =nsf_species(bundle%species(1:nprim))
+      elseif(sf1 == atomf) then
+        alpha_i2(1:nprim) =natomf_species(bundle%species(1:nprim))
+      elseif(sf1 == nlpf) then
+        alpha_i2(1:nprim) =nlpf_species(bundle%species(1:nprim))
+      else
+        call cq_abort(" ERROR in UpdateMatrix_local: No sf1_type : ",sf1)
+      endif
+
     do iprim_remote = 1, LmatrixRecv%natom_remote
       ! Find my REMOTE primary atoms.
       iprim = LmatrixRecv%id_prim_recv(iprim_remote)  ! ID in bundle
       if (.NOT. flag_remote_iprim(iprim)) &
          call cq_abort('Error: flag_remote_iprim must be T.', iprim)
+
+      iatom_remote = iatom_remote+1
+
       idglob_ii = bundle%ig_prim(iprim)
       n_alpha = LmatrixRecv%nalpha_prim_recv(iprim_remote)
+       if(n_alpha .ne. alpha_i2(iprim)) &
+        call cq_abort('Error in UpdateMatrix_remote: alpha mismatch !',n_alpha, alpha_i2(iprim))
       xprim_i = bundle%xprim(iprim)
       yprim_i = bundle%yprim(iprim)
       zprim_i = bundle%zprim(iprim)
@@ -2347,6 +2448,7 @@ contains
       if (flag_MDdebug) write (lun_db,*) "ibeg1 et ibeg2 (iprim_remote)", ibeg1, ibeg2, iprim_remote
       ibeg_dataL = ibeg2 + nsize1*3
       do jj = 1, nsize1
+        ij_remote = ij_remote+1
         n_beta = irecv2_array(ibeg1+jj-1)
         idglob_jj  = irecv2_array(ibeg1+nsize1+jj-1)
         vec_Rij(1) = recv_array(ibeg2+jj-1)
@@ -2362,10 +2464,13 @@ contains
         xx_j = xprim_i - vec_Rij(1)*rcellx + deltaj_x - deltai_x
         yy_j = yprim_i - vec_Rij(2)*rcelly + deltaj_y - deltai_y
         zz_j = zprim_i - vec_Rij(3)*rcellz + deltaj_z - deltai_z
-        !ori xx_j = xprim_i - vec_Rij(1) + deltaj_x - deltai_x
-        !ori yy_j = yprim_i - vec_Rij(2) + deltaj_y - deltai_y
-        !ori zz_j = zprim_i - vec_Rij(3) + deltaj_z - deltai_z
  
+           Rijx=xprim_i-xx_j
+           Rijy=yprim_i-yy_j
+           Rijz=zprim_i-zz_j
+           Rij = Rijx*Rijx + Rijy*Rijy + Rijz*Rijz
+           Rij = sqrt(Rij)
+
         !! ---------- DEBUG ---------- !!
         if (flag_MDdebug) then
           write (lun_db,*) "jj, idglob_jj et beta:", jj,idglob_jj, n_beta
@@ -2395,6 +2500,14 @@ contains
              !db write (io_lun,*) iprim_remote, jj, nsize1
              ibeg_dataL = ibeg_dataL + n_alpha*n_beta
           !exit
+
+           ij_fail_remote = ij_fail_remote + 1
+              if(ij_fail_remote == 1) then 
+                  min_Rij_fail_remote = Rij; max_Rij_fail_remote = Rij
+              endif
+              sum_Rij_fail = sum_Rij_fail + Rij
+              if(Rij < min_Rij_fail_remote) min_Rij_fail_remote = Rij
+              if(Rij > max_Rij_fail_remote) max_Rij_fail_remote = Rij
           cycle
         endif
         ! Get local labeling of jj in two ways; NOPG and CC.
@@ -2467,11 +2580,26 @@ contains
           !  ibeg_dataPdot = ibeg_dataP + nsize2
           !endif
 
+        else
+           ij_fail_remote = ij_fail_remote + 1
+              sum_Rij_fail = sum_Rij_fail + Rij
+              if(Rij < min_Rij_fail_remote) min_Rij_fail_remote = Rij
+              if(Rij > max_Rij_fail_remote) max_Rij_fail_remote = Rij
+
         endif !(ibeg_Lij.NE.0)
         ibeg_dataL = ibeg_dataL + len
         ! ibeg_dataL = ibeg_dataL + len*n_matrix
       enddo !(jj, nzise1)
     enddo !(iprim_remote, natom_remote)
+
+    if(ij_fail_remote > 0) then
+      ave_Rij_fail_remote = sum_Rij_fail/ij_fail_remote
+    else
+      ave_Rij_fail_remote = zero
+    endif
+
+    deallocate(alpha_i2, STAT = stat_alloc)
+     if(stat_alloc .ne. 0) call cq_abort('Error in deallocating alpha_i2 in UpdateMatrix_local')
 
     !! ---------- DEBUG ---------- !!
     if (flag_MDdebug) then
@@ -2550,6 +2678,59 @@ contains
 
     return
   end subroutine deallocate_CommMatArrays
+  !!***
+
+  ! ------------------------------------------------------------
+  ! Subroutine Report_UpdateMatrix
+  ! ------------------------------------------------------------
+  
+  !!****f* UpdateInfo_module/Report_UpdateMatrix *
+  !!
+  !!  NAME
+  !!   Report_UpdateMatrix
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Reports the statistics of UpdateMatrix_local and UpdateMatrix_remote
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Tsuyoshi Miyazaki
+  !!  CREATION DATE
+  !!   2018/08/16
+  !!  MODIFICATION
+  !!
+  !!  SOURCE
+  subroutine Report_UpdateMatrix(matname)
+    use datatypes
+    use global_module,  only: io_lun, numprocs
+    use GenComms,       only: inode, ionode, my_barrier
+
+   implicit none
+    character(4), optional :: matname
+    integer :: ii
+
+   if(present(matname)) matrix_name=matname
+   if(inode == ionode) write(io_lun,'(4x," *** REPORT of UpdateMatrix_Local& Remote for matrix ", 4a)')  matrix_name
+   do ii = 1, numprocs
+    if(ii == inode) then
+     write(io_lun,'(6x," inode = ",i8)') ii
+     write(io_lun,'(6x," iatom_local, ij_local, success, fail  = ",4i8)') iatom_local, ij_local, ij_success_local, ij_fail_local
+     write(io_lun,'(8x," min_Rij, max_Rij, ave_Rij for local  = ",3f15.5)') &
+           min_Rij_fail_local, max_Rij_fail_local, ave_Rij_fail_local  
+
+     write(io_lun,'(6x," iatom_remote, ij_remote, success, fail  = ",4i8)') &
+           iatom_remote, ij_remote, ij_success_remote, ij_fail_remote
+     write(io_lun,'(8x," min_Rij, max_Rij, ave_Rij for remote  = ",3f15.5)') &
+           min_Rij_fail_remote, max_Rij_fail_remote, ave_Rij_fail_remote  
+     
+    endif
+    call my_barrier()
+   enddo
+  return
+  end subroutine Report_UpdateMatrix
   !!***
 
 end module UpdateInfo_module
