@@ -1053,13 +1053,13 @@ contains
   !!   2017/10/24 13:36
   !!  SOURCE
   !!  
-  subroutine dump_thermo_state(th, step, filejunk)
+  subroutine dump_thermo_state(th, step, filename)
     use input_module,     only: io_assign, io_close
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
     integer, intent(in)                   :: step
-    character(len=*), intent(in)          :: filejunk
+    character(len=*), intent(in)          :: filename
 
     ! local variables
     integer                               :: lun
@@ -1067,9 +1067,9 @@ contains
     if (inode==ionode) then
       call io_assign(lun)
       if (th%append) then
-        open(unit=lun,file=filejunk,position='append')
+        open(unit=lun,file=filename,position='append')
       else 
-        open(unit=lun,file=filejunk,status='replace')
+        open(unit=lun,file=filename,status='replace')
         th%append = .true.
       end if
       write(lun,'("step        ",i12)') step
@@ -2273,13 +2273,13 @@ contains
   !!   2017/11/09 11:49
   !!  SOURCE
   !!  
-  subroutine dump_baro_state(baro, step, filejunk)
+  subroutine dump_baro_state(baro, step, filename)
     use input_module,     only: io_assign, io_close
 
     ! passed variables
     class(type_barostat), intent(inout)   :: baro
     integer, intent(in)                   :: step
-    character(len=*), intent(in)          :: filejunk
+    character(len=*), intent(in)          :: filename
 
     ! local variables
     integer                               :: lun
@@ -2287,9 +2287,9 @@ contains
     if (inode==ionode) then
       call io_assign(lun)
       if (baro%append) then
-        open(unit=lun,file=filejunk,position='append')
+        open(unit=lun,file=filename,position='append')
       else 
-        open(unit=lun,file=filejunk,status='replace')
+        open(unit=lun,file=filename,status='replace')
         baro%append = .true.
       end if
       write(lun,'("step    ",i12)') step

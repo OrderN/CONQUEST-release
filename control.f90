@@ -383,7 +383,7 @@ contains
        if (iter > MDn_steps) then
           done = .true.
           if (myid == 0) &
-               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') &
+               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i6)') &
                      iter
        end if
        if (abs(max) < MDcgtol) then
@@ -629,7 +629,7 @@ contains
     end do
 
     if (inode==ionode .and. iprint_gen > 0) &
-      write(io_lun,'(4x,"Welcome to md_run. Doing ",i4," steps")') &
+      write(io_lun,'(4x,"Welcome to md_run. Doing ",i6," steps")') &
             MDn_steps
 
     ! Find energy and forces
