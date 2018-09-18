@@ -32,6 +32,12 @@
 !!   2018/07/12 zamaan
 !!    Added SSM integrator, adapted from W. Shinoda et al., PRB 69:134103
 !!    (2004)
+!!   2018/08/11 zamaan
+!!    Added iprint_MD level to all write (Conquest_out) statements to tidy
+!!    up output
+!!   2018/08/12 zamaan
+!!    Removed read/write_thermo/baro_checkpoint, replaced with a unified &
+!!    checkpoint that includes ionic velocities
 !!  SOURCE
 !!
 module md_control
@@ -52,9 +58,14 @@ module md_control
   real(double), parameter :: fac_invcm2hartree = 4.5563352812122295E-6
   real(double), parameter :: fac_thz2hartree = 0.0001519828500716
 
-  ! Checkpoint files
-  character(20) :: thermo_check_file = "cq.thermo"
-  character(20) :: baro_check_file = "cq.baro"
+  ! Files
+  character(20) :: md_position_file = 'md.position'
+  character(20) :: md_check_file = "md.checkpoint"
+  character(20) :: md_thermo_file = "md.thermostat"
+  character(20) :: md_baro_file = "md.barostat"
+  character(20) :: md_trajectory_file = "md.barostat"
+  character(20) :: md_frames_file = "Frames"
+  character(20) :: md_stats_file = "Stats"
 
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
@@ -63,6 +74,7 @@ module md_control
                    md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
   integer       :: md_n_nhc, md_n_ys, md_n_mts, md_berendsen_equil
   logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass
+  logical       :: flag_extended_system = .false.
   real(double), dimension(3,3), target      :: lattice_vec
   real(double), dimension(:), allocatable   :: md_nhc_mass, md_nhc_cell_mass
   real(double), dimension(:,:), allocatable, target :: ion_velocity
@@ -110,6 +122,7 @@ module md_control
     real(double)        :: ke_target    ! for computing NHC force
     real(double)        :: t_drag       ! drag factor for thermostat
     character(40)       :: nhc_fmt      ! format string for printing NHC arrays
+    character(40)       :: nhc_fmt2
     real(double), dimension(:), allocatable :: eta    ! thermostat "position"
     real(double), dimension(:), allocatable :: v_eta  ! thermostat "velocity"
     real(double), dimension(:), allocatable :: G_nhc  ! "force" on thermostat
@@ -131,8 +144,6 @@ module md_control
       procedure, public   :: get_temperature_and_ke
       procedure, public   :: dump_thermo_state
       procedure, public   :: propagate_nvt_nhc
-      procedure, public   :: write_thermo_checkpoint
-      procedure, public   :: read_thermo_checkpoint
 
       procedure, private  :: update_G_nhc
       procedure, private  :: propagate_eta
@@ -214,8 +225,6 @@ module md_control
       procedure, public   :: propagate_box_mttk
       procedure, public   :: dump_baro_state
       procedure, public   :: update_cell
-      procedure, public   :: write_baro_checkpoint
-      procedure, public   :: read_baro_checkpoint
 
       procedure, private  :: update_G_eps
       procedure, private  :: propagate_eps_lin
@@ -257,7 +266,8 @@ contains
     integer, intent(in)                   :: ndof
     real(double), intent(in)              :: ke_ions, tau_T
 
-    if (inode==ionode) write(io_lun,'(2x,a)') 'Welcome to init_thermo'
+    if (inode==ionode .and. iprint_MD > 1) &
+      write(io_lun,'(2x,a)') 'Welcome to init_thermo'
     th%T_int = two*ke_ions/fac_Kelvin2Hartree/md_ndof_ions
     th%T_ext = temp_ion
     th%dt = dt
@@ -282,7 +292,7 @@ contains
       th%cell_ndof = 3
     end select
 
-    if (inode==ionode) then
+    if (inode==ionode .and. iprint_MD > 1) then
       write(io_lun,'(4x,"Thermostat type: ",a)') th%thermo_type
       if (.not. leqi(thermo_type, 'none')) then
         write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
@@ -297,10 +307,8 @@ contains
     case('berendsen')
     case('nhc')
       call th%init_nhc(dt)
-      call th%write_thermo_checkpoint
     case('ssm')
       call th%init_nhc(dt)
-      call th%write_thermo_checkpoint
     case default
       call cq_abort("Unknown thermostat type")
     end select
@@ -335,6 +343,7 @@ contains
                                              ndof_baro, tauT, tauP
     integer                               :: i
 
+    flag_extended_system = .true.
     th%n_nhc = md_n_nhc
     th%n_ys = md_n_ys
     th%n_mts_nhc = md_n_mts
@@ -342,7 +351,8 @@ contains
     th%cell_nhc  = md_cell_nhc
     th%t_drag = one - (md_t_drag*dt/md_tau_T/md_n_mts/md_n_ys)
     th%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*th%T_ext
-    write(th%nhc_fmt,'("(4x,a12,",i4,"f10.4)")') th%n_nhc
+    write(th%nhc_fmt,'("(4x,a12,",i4,"e14.6)")') th%n_nhc
+    write(th%nhc_fmt2,'("(",i4,"e20.12)")') th%n_nhc
 
     allocate(th%eta(th%n_nhc))
     allocate(th%v_eta(th%n_nhc))
@@ -383,30 +393,26 @@ contains
     end if
 
     ! Defaults for heat bath positions, velocities, masses
-    if (flag_MDcontinue) then
-      th%append = .true.
-      if (.not. leqi(th%thermo_type,'berendsen')) call th%read_thermo_checkpoint
-    else
-      ! initialise thermostat velocities and forces
-      th%append = .false.
-      th%eta = zero
-      th%v_eta = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
+    th%append = .false.
+    if (flag_MDcontinue) th%append = .true.
+    ! initialise thermostat velocities and forces
+    th%eta = zero
+    th%v_eta = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
 !      th%v_eta = zero
-      th%G_nhc = zero
-      do i=2,th%n_nhc
-        th%G_nhc(i) = (th%m_nhc(i-1)*th%v_eta(i-1)**2 - &
-                      & th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(i)
-      end do
-      if (th%cell_nhc) then
-        th%eta_cell = zero
+    th%G_nhc = zero
+    do i=2,th%n_nhc
+      th%G_nhc(i) = (th%m_nhc(i-1)*th%v_eta(i-1)**2 - &
+                    & th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(i)
+    end do
+    if (th%cell_nhc) then
+      th%eta_cell = zero
 !        th%v_eta_cell = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
-        th%v_eta_cell = zero
-        th%G_nhc_cell = zero
-        do i=2,th%n_nhc
-          th%G_nhc_cell(i) = (th%m_nhc_cell(i-1)*th%v_eta_cell(i-1)**2 - &
-                             & th%T_ext*fac_Kelvin2Hartree)/th%m_nhc_cell(i)
-        end do
-      end if
+      th%v_eta_cell = zero
+      th%G_nhc_cell = zero
+      do i=2,th%n_nhc
+        th%G_nhc_cell(i) = (th%m_nhc_cell(i-1)*th%v_eta_cell(i-1)**2 - &
+                           & th%T_ext*fac_Kelvin2Hartree)/th%m_nhc_cell(i)
+      end do
     end if
 
     ! Yoshida-Suzuki time steps
@@ -414,7 +420,7 @@ contains
 
     write(fmt1,'("(4x,a16,",i4,"f12.2)")') th%n_nhc
     write(fmt2,'("(4x,a16,",i4,"f12.2)")') th%n_ys
-    if (inode==ionode) then
+    if (inode==ionode .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') 'Welcome to init_nhc'
       write(io_lun,'(4x,a,i10)')   'Number of NHC thermostats n_nhc = ', &
                                    th%n_nhc
@@ -559,9 +565,12 @@ contains
   !!  CREATION DATE
   !!   2018/07/23 10:12
   !!  MODIFICATION HISTORY
+  !!   2018/08/11 zamaan
+  !!   Added final_call optional argument so that we only print to
+  !!   Conquest_out once per step
   !!  SOURCE
   !!  
-  subroutine get_temperature_and_ke(th, baro, v, KE)
+  subroutine get_temperature_and_ke(th, baro, v, KE, final_call)
 
     use move_atoms,       only: fac
 
@@ -570,13 +579,14 @@ contains
     type(type_barostat), intent(inout)        :: baro
     real(double), dimension(3,ni_in_cell), intent(in)  :: v  ! ion velocities
     real(double), intent(out)                 :: KE
+    integer, optional                         :: final_call
 
     ! local variables
     integer                                   :: j, k, iatom
     real(double)                              :: m, trace
 
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "thermoDebug: get_temperature_and_ke"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "get_temperature_and_ke"
 
     ! Update the kinetic energy and stress
     baro%ke_stress = zero
@@ -584,7 +594,9 @@ contains
     do iatom=1,ni_in_cell
       m = mass(species(iatom))*fac
       do j=1,3
+        ! Kinetic energy
         KE = KE + m*v(j,iatom)**2
+        ! Kinetic contribution to stress tensor
         do k=1,3
           baro%ke_stress(j,k) = baro%ke_stress(j,k) + m*v(j,iatom)*v(k,iatom)
         end do
@@ -595,16 +607,18 @@ contains
     th%ke_ions = KE
     trace = baro%ke_stress(1,1) + baro%ke_stress(2,2) + baro%ke_stress(3,3)
 
-    if (inode==ionode) then
-      write(io_lun,'(4x,"KE: ",f12.6," Ha")') KE
-!      write(io_lun,'(4x,"Tr(ke_stress): ",f12.6," Ha")') trace/three
-      write(io_lun,'(4x,"T:  ",f12.6," K")') th%T_int
-    end if
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(4x,a,3f15.8)') "ke_stress:     ", baro%ke_stress(:,1)
-      write(io_lun,'(4x,a,3f15.8)') "               ", baro%ke_stress(:,2)
-      write(io_lun,'(4x,a,3f15.8)') "               ", baro%ke_stress(:,3)
-      write(io_lun,*)
+    if (present(final_call)) then
+      if (inode==ionode .and. iprint_MD > 1) then
+        write(io_lun,'(4x,"KE: ",f12.6," Ha")') KE
+  !      write(io_lun,'(4x,"Tr(ke_stress): ",f12.6," Ha")') trace/three
+        write(io_lun,'(4x,"T:  ",f12.6," K")') th%T_int
+        if (flag_MDdebug .and. iprint_MD > 3) then
+          write(io_lun,'(4x,a,3e16.8)') "ke_stress:     ", baro%ke_stress(:,1)
+          write(io_lun,'(4x,a,3e16.8)') "               ", baro%ke_stress(:,2)
+          write(io_lun,'(4x,a,3e16.8)') "               ", baro%ke_stress(:,3)
+          write(io_lun,*)
+        end if
+      end if
     end if
   end subroutine get_temperature_and_ke
 
@@ -628,6 +642,10 @@ contains
     th%lambda = sqrt(one + (dt/th%tau_T)* &
                      (th%T_ext/th%T_int - one))
 
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+      write(io_lun,'(2x,a)') "get_berendsen_thermo_sf"
+      write(io_lun,'(4x,"lambda: ",e16.8)') th%lambda
+    end if
   end subroutine get_berendsen_thermo_sf
   !!***
 
@@ -653,9 +671,9 @@ contains
 
     v = v*th%lambda
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a)') "thermoDebug: berendsen_v_rescale"
-      write(io_lun,'(4x,"lambda: ",f15.8)') th%lambda
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+      write(io_lun,'(2x,a)') "berendsen_v_rescale"
+      write(io_lun,'(4x,"lambda: ",e16.8)') th%lambda
     end if
 
   end subroutine berendsen_v_rescale
@@ -702,10 +720,11 @@ contains
       th%G_nhc(k) = th%G_nhc(k)/th%m_nhc(k)
     end if
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a,i2)') "thermoDebug: update_G_nhc, k = ", k
-      write(io_lun,*) "G_eta:      ", th%G_nhc(k)
-      if (th%cell_nhc) write(io_lun,*) "G_eta_cell: ", th%G_nhc_cell(k)
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      write(io_lun,'(2x,a,i2)') "update_G_nhc, k = ", k
+      write(io_lun,th%nhc_fmt) "G_nhc:      ", th%G_nhc(k)
+      if (th%cell_nhc) write(io_lun,th%nhc_fmt) &
+        "G_nhc_cell: ", th%G_nhc_cell(k)
     end if
 
   end subroutine update_G_nhc
@@ -734,10 +753,10 @@ contains
     if (th%cell_nhc) th%eta_cell(k) = th%eta_cell(k) + &
                      dtfac*dt*th%v_eta_cell(k)
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a,i2)') "thermoDebug: propagate_eta, k = ", k
-      write(io_lun,*) "eta:        ", th%eta(k)
-      if (th%cell_nhc) write(io_lun,*) "eta_cell:   ", th%eta_cell(k)
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      write(io_lun,'(2x,a,i2)') "propagate_eta, k = ", k
+      write(io_lun,th%nhc_fmt) "eta:        ", th%eta(k)
+      if (th%cell_nhc) write(io_lun,th%nhc_fmt) "eta_cell:   ", th%eta_cell(k)
     end if
 
   end subroutine propagate_eta
@@ -766,10 +785,11 @@ contains
     if (th%cell_nhc) th%v_eta_cell(k) = th%v_eta_cell(k) + &
                                         dtfac*dt*th%G_nhc_cell(k)
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a,i2)') "thermoDebug: propagate_v_eta_lin, k = ", k
-      write(io_lun,*) "v_eta:      ", th%v_eta(k)
-      if (th%cell_nhc) write(io_lun,*) "v_eta_cell: ", th%v_eta_cell(k)
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      write(io_lun,'(2x,a,i2)') "propagate_v_eta_lin, k = ", k
+      write(io_lun,th%nhc_fmt) "v_eta:      ", th%v_eta(k)
+      if (th%cell_nhc) write(io_lun,th%nhc_fmt) &
+        "v_eta_cell: ", th%v_eta_cell(k)
     end if
 
   end subroutine propagate_v_eta_lin
@@ -798,10 +818,11 @@ contains
     if (th%cell_nhc) th%v_eta_cell(k) = &
                           th%v_eta_cell(k)*exp(-dtfac*dt*th%v_eta_cell(k+1))
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a,i2)') "thermoDebug: propagate_v_eta_exp, k = ", k
-      write(io_lun,*) "v_eta:      ", th%v_eta(k)
-      if (th%cell_nhc) write(io_lun,*) "v_eta_cell: ", th%v_eta_cell(k)
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      write(io_lun,'(2x,a,i2)') "propagate_v_eta_exp, k = ", k
+      write(io_lun,th%nhc_fmt) "v_eta:      ", th%v_eta(k)
+      if (th%cell_nhc) &
+        write(io_lun,th%nhc_fmt) "v_eta_cell: ", th%v_eta_cell(k)
     end if
 
   end subroutine propagate_v_eta_exp
@@ -831,17 +852,17 @@ contains
     real(double)  :: v_sfac   ! ionic velocity scaling factor
     real(double)  :: fac
 
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "thermoDebug: propagate_nvt_nhc"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "propagate_nvt_nhc"
 
     th%ke_ions = ke
     v_sfac = one
     call th%update_G_nhc(1, zero) ! update force on thermostat 1
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
-        if (inode==ionode .and. flag_MDdebug) then
-          write(io_lun,*) "thermoDebug: i_ys  = ", i_ys
-          write(io_lun,*) "thermoDebug: dt_ys = ", th%dt_ys(i_ys)
+        if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+          write(io_lun,*) "i_ys  = ", i_ys
+          write(io_lun,*) "dt_ys = ", th%dt_ys(i_ys)
         end if
         ! Reverse part of Trotter expansion: update thermostat force/velocity
         call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
@@ -876,94 +897,13 @@ contains
     end do    ! MTS loop
 
     ! scale the ionic velocities
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a,f15.8)') 'thermoDebug: v_sfac = ', v_sfac
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
+      write(io_lun,'(2x,a,e16.8)') 'v_sfac = ', v_sfac
 
     v = v_sfac*v
     th%lambda = v_sfac
 
   end subroutine propagate_nvt_nhc
-  !!***
-
-  !!****m* md_control/write_thermo_checkpoint *
-  !!  NAME
-  !!   write_thermo_checkpoint
-  !!  PURPOSE
-  !!   Write checkpoint for restarting NHC thermostat
-  !!  AUTHOR
-  !!   Zamaan Raza
-  !!  CREATION DATE
-  !!   2018/01/19 13:12
-  !!  SOURCE
-  !!  
-  subroutine write_thermo_checkpoint(th)
-    
-    use input_module,     only: io_assign, io_close
-
-    ! passed variables
-    class(type_thermostat), intent(inout) :: th
-
-    ! local variables
-    integer                               :: lun
-
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "thermoDebug: write_thermo_checkpoint"
-
-    call io_assign(lun)
-    open(unit=lun,file=thermo_check_file,status='replace')
-
-    write(lun,*) "eta:        ", th%eta
-    write(lun,*) "v_eta:      ", th%v_eta
-    write(lun,*) "G_nhc:      ", th%G_nhc
-    if (th%cell_nhc) then
-      write(lun,*) "eta_cell:   ", th%eta_cell
-      write(lun,*) "v_eta_cell: ", th%v_eta_cell
-      write(lun,*) "G_nhc_cell: ", th%G_nhc_cell
-    end if
-    call io_close(lun)
-
-  end subroutine write_thermo_checkpoint
-  !!***
-
-  !!****m* md_control/read_thermo_checkpoint *
-  !!  NAME
-  !!   read_thermo_checkpoint
-  !!  PURPOSE
-  !!   Read checkpoint for restarting NHC thermostat
-  !!  AUTHOR
-  !!   Zamaan Raza
-  !!  CREATION DATE
-  !!   2018/01/19 13:14
-  !!  SOURCE
-  !!  
-  subroutine read_thermo_checkpoint(th)
-    
-    use input_module,     only: io_assign, io_close
-
-    ! passed variables
-    class(type_thermostat), intent(inout) :: th
-
-    ! local variables
-    integer                               :: lun
-    character(20)                         :: junk
-
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "thermoDebug: read_thermo_checkpoint"
-
-    call io_assign(lun)
-    open(unit=lun,file=thermo_check_file,status='old')
-
-    read(lun,*) junk, th%eta
-    read(lun,*) junk, th%v_eta
-    read(lun,*) junk, th%G_nhc
-    if (th%cell_nhc) then
-      read(lun,*) junk, th%eta_cell
-      read(lun,*) junk, th%v_eta_cell
-      read(lun,*) junk, th%G_nhc_cell
-    end if
-    call io_close(lun)
-
-  end subroutine read_thermo_checkpoint
   !!***
 
   !!****m* md_control/get_nhc_energy *
@@ -990,8 +930,8 @@ contains
     ! local variables
     integer                               :: k, lun
 
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "thermoDebug: get_nhc_energy"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "get_nhc_energy"
 
     th%ke_nhc_cell = zero
     th%pe_nhc_cell = zero
@@ -1016,17 +956,17 @@ contains
                          th%T_ext*fac_Kelvin2Hartree*th%eta_cell(k)
       end if
     end do
-    th%e_nhc = th%ke_nhc_ion - th%pe_nhc_ion + th%ke_nhc_cell - th%pe_nhc_cell
+    th%e_nhc = th%ke_nhc_ion + th%pe_nhc_ion + th%ke_nhc_cell + th%pe_nhc_cell
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(4x,"ke_nhc_ion: ",f15.8)') th%ke_nhc_ion
-      write(io_lun,'(4x,"pe_nhc_ion: ",f15.8)') th%pe_nhc_ion
-      write(io_lun,'(4x,"ke_nhc_cell:",f15.8)') th%ke_nhc_cell
-      write(io_lun,'(4x,"pe_nhc_cell:",f15.8)') th%pe_nhc_cell
-      write(io_lun,'(4x,"e_nhc:      ",f15.8)') th%e_nhc
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      write(io_lun,'(4x,"ke_nhc_ion: ",e16.8)') th%ke_nhc_ion
+      write(io_lun,'(4x,"pe_nhc_ion: ",e16.8)') th%pe_nhc_ion
+      write(io_lun,'(4x,"ke_nhc_cell:",e16.8)') th%ke_nhc_cell
+      write(io_lun,'(4x,"pe_nhc_cell:",e16.8)') th%pe_nhc_cell
+      write(io_lun,'(4x,"e_nhc:      ",e16.8)') th%e_nhc
     end if
 
-    if (inode==ionode .and. flag_MDdebug) then
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
       call io_assign(lun)
       if (th%append) then
         open(unit=lun,file='nhc.dat',position='append')
@@ -1034,7 +974,7 @@ contains
         open(unit=lun,file='nhc.dat',status='replace')
         th%append = .true.
       end if
-      write(lun,'(5f15.8)') th%ke_nhc_ion, th%pe_nhc_ion, th%ke_nhc_cell, &
+      write(lun,'(5e16.8)') th%ke_nhc_ion, th%pe_nhc_ion, th%ke_nhc_cell, &
                             th%pe_nhc_cell, th%e_nhc
       call io_close(lun)
     end if
@@ -1162,44 +1102,41 @@ contains
     baro%bulkmod = md_bulkmod_est
     baro%p_drag = one - (md_p_drag*dt/md_tau_P/md_n_mts/md_n_ys)
 
-    if (.not. leqi(baro%baro_type, 'berendsen')) then
-      if (flag_MDcontinue) then
-        baro%append = .true.
-        call baro%read_baro_checkpoint
-        call baro%get_box_energy
-      else
-        select case(baro%baro_type)
-        case('iso-mttk')
-          baro%append = .false.
-          baro%eps_ref = third*log(baro%volume/baro%volume_ref)
-          baro%eps = baro%eps_ref
-          baro%v_eps = zero
-          baro%G_eps = zero
-          call baro%get_box_energy
-          baro%odnf = one + three/baro%ndof
-        case('ortho-mttk')
-        case('mttk')
-        case('iso-ssm')
-          baro%append = .false.
-          baro%eps = zero
-          baro%v_eps = zero
-          baro%G_eps = zero
-          call baro%get_box_energy
-          baro%odnf = one + three/baro%ndof
-        case('ortho-ssm')
-          baro%append = .false.
-          baro%h = zero
-          baro%v_h = zero
-          baro%G_h = zero
-          call baro%get_box_energy
-          baro%odnf = one + three/baro%ndof
-        case default
-          call cq_abort("Invalid barostat type")
-        end select
-      end if
-    end if
+    if (flag_MDcontinue) baro%append = .true.
+    select case(baro%baro_type)
+    case('berendsen')
+    case('iso-mttk')
+      flag_extended_system = .true.
+      baro%append = .false.
+      baro%eps_ref = third*log(baro%volume/baro%volume_ref)
+      baro%eps = baro%eps_ref
+      baro%v_eps = zero
+      baro%G_eps = zero
+      call baro%get_box_energy
+      baro%odnf = one + three/baro%ndof
+    case('ortho-mttk')
+    case('mttk')
+    case('iso-ssm')
+      flag_extended_system = .true.
+      baro%append = .false.
+      baro%eps = zero
+      baro%v_eps = zero
+      baro%G_eps = zero
+      call baro%get_box_energy
+      baro%odnf = one + three/baro%ndof
+    case('ortho-ssm')
+      flag_extended_system = .true.
+      baro%append = .false.
+      baro%h = zero
+      baro%v_h = zero
+      baro%G_h = zero
+      call baro%get_box_energy
+      baro%odnf = one + three/baro%ndof
+    case default
+      call cq_abort("Invalid barostat type")
+    end select
 
-    if (inode==ionode) then
+    if (inode==ionode .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') 'Welcome to init_baro'
       write(io_lun,'(4x,"Barostat type: ",a)') baro%baro_type
       if (.not. leqi(baro_type, 'none')) then
@@ -1225,7 +1162,6 @@ contains
         end if
       end if
     end if
-    if (.not. leqi(baro%baro_type, 'berendsen')) call baro%write_baro_checkpoint
 
   end subroutine init_baro
   !!***
@@ -1241,24 +1177,28 @@ contains
   !!   2017/11/08 13:27
   !!  MODIFICATION HISTORY
   !!   2018/7/23 zamaan
-  !!   changed get_pressure to get_pressure_and_stress, incorporating the
-  !    subroutines get_ke_stress and update_static_stress. Now only need one
-  !    subroutine to update these quantities for less confusion in control
+  !!    changed get_pressure to get_pressure_and_stress, incorporating the
+  !!    subroutines get_ke_stress and update_static_stress. Now only need one
+  !!    subroutine to update these quantities for less confusion in control
+  !!   2018/08/11 zamaan
+  !!    Added final_call optional argument so that we only print to
+  !!    Conquest_out once per step
   !!  SOURCE
   !!  
-  subroutine get_pressure_and_stress(baro)
+  subroutine get_pressure_and_stress(baro, final_call)
 
     use force_module,     only: stress
     use move_atoms,       only: fac
 
     ! passed variables
     class(type_barostat), intent(inout)       :: baro
+    integer, optional                         :: final_call
 
     ! local variables
     integer                                   :: i
 
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "baroDebug: get_pressure_and_stress"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "get_pressure_and_stress"
 
     ! Get the static stress from the global variable
     baro%static_stress = zero
@@ -1266,11 +1206,16 @@ contains
       baro%static_stress(i,i) = -stress(i) ! note the sign convention!!
     end do
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(4x,a,3f15.8)') "static_stress: ", baro%static_stress(:,1)
-      write(io_lun,'(4x,a,3f15.8)') "               ", baro%static_stress(:,2)
-      write(io_lun,'(4x,a,3f15.8)') "               ", baro%static_stress(:,3)
-      write(io_lun,*)
+    if (present(final_call)) then
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+        write(io_lun,'(4x,a,3e16.8)') "static_stress: ", &
+                                      baro%static_stress(:,1)
+        write(io_lun,'(4x,a,3e16.8)') "               ", &
+                                      baro%static_stress(:,2)
+        write(io_lun,'(4x,a,3e16.8)') "               ", &
+                                      baro%static_stress(:,3)
+        write(io_lun,*)
+      end if
     end if
 
     ! Update the total stress and pressure pressure
@@ -1278,21 +1223,25 @@ contains
     baro%total_stress = zero
     baro%P_int = zero
     baro%total_stress = (baro%ke_stress + baro%static_stress)/baro%volume
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(4x,a,3f15.8)') "total_stress:  ", baro%total_stress(:,1)
-      write(io_lun,'(4x,a,3f15.8)') "               ", baro%total_stress(:,2)
-      write(io_lun,'(4x,a,3f15.8)') "               ", baro%total_stress(:,3)
-      write(io_lun,*)
+    if (present(final_call)) then
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+        write(io_lun,'(4x,a,3e16.8)') "total_stress:  ", baro%total_stress(:,1)
+        write(io_lun,'(4x,a,3e16.8)') "               ", baro%total_stress(:,2)
+        write(io_lun,'(4x,a,3e16.8)') "               ", baro%total_stress(:,3)
+        write(io_lun,*)
+      end if
     end if
+
     do i=1,3
       baro%P_int = baro%P_int + baro%total_stress(i,i)
     end do
     baro%P_int = baro%P_int*third
     baro%PV = baro%volume*baro%P_ext/fac_HaBohr32GPa
-
-    if (inode==ionode) then
-      write(io_lun,'(4x,"P:  ",f12.6," GPa")') baro%P_int*fac_HaBohr32GPa
-      write(io_lun,'(4x,"PV: ",f12.6," Ha")') baro%PV
+    if (present(final_call)) then
+      if (inode==ionode .and. iprint_MD > 1) then
+        write(io_lun,'(4x,"P:  ",f12.6," GPa")') baro%P_int*fac_HaBohr32GPa
+        write(io_lun,'(4x,"PV: ",f12.6," Ha")') baro%PV
+      end if
     end if
 
   end subroutine get_pressure_and_stress
@@ -1316,9 +1265,9 @@ contains
 
     baro%volume = baro%lat(1,1)*baro%lat(2,2)*baro%lat(3,3)
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a)') "baroDebug: get_volume"
-      write(io_lun,'(4x,a,f15.8)') "volume:     ", baro%volume
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+      write(io_lun,'(2x,a)') "get_volume"
+      write(io_lun,'(4x,a,e16.8)') "volume:     ", baro%volume
     end if
 
   end subroutine get_volume
@@ -1374,9 +1323,9 @@ contains
     real(double)                                :: x_old, y_old, z_old
     logical                                     :: flagx, flagy, flagz
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a)') "baroDebug: propagate_berendsen"
-      write(io_lun,'(4x,a,f15.8)') "mu:   :     ", baro%mu
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+      write(io_lun,'(2x,a)') "propagate_berendsen"
+      write(io_lun,'(4x,a,e16.8)') "mu:   :     ", baro%mu
     end if
 
     baro%lat = baro%lat*baro%mu
@@ -1404,6 +1353,7 @@ contains
         atom_coord_diff(3,gatom) = z_atom_cell(i) - z_old
       end if
     end do
+    call baro%update_cell
 
   end subroutine propagate_berendsen
   !!***
@@ -1441,9 +1391,9 @@ contains
       end do
     end select
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a)') "baroDebug: get_box_energy"
-      write(io_lun,'(4x,a,f15.8)') "ke_box:     ", baro%ke_box
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+      write(io_lun,'(2x,a)') "get_box_energy"
+      write(io_lun,'(4x,a,e16.8)') "ke_box:     ", baro%ke_box
     end if
 
   end subroutine get_box_energy
@@ -1469,9 +1419,9 @@ contains
     baro%G_eps = (two*baro%odnf*th%ke_ions + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
     ! baro%G_eps = (three*th%ke_ions/baro%ndof + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a)') "baroDebug: update_G_eps"
-      write(io_lun,'(4x,a,f15.8)') "G_eps:      ", baro%G_eps
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      write(io_lun,'(2x,a)') "update_G_eps"
+      write(io_lun,'(4x,a,e16.8)') "G_eps:      ", baro%G_eps
     end if
 
   end subroutine update_G_eps
@@ -1497,9 +1447,9 @@ contains
 
     baro%eps = baro%eps + dtfac*dt*baro%v_eps
 
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "baroDebug: propagate_eps_lin"
-      write(io_lun,'(4x,a,f15.8)') "eps:        ", baro%eps
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
+      write(io_lun,'(2x,a)') "propagate_eps_lin"
+      write(io_lun,'(4x,a,e16.8)') "eps:        ", baro%eps
 
   end subroutine propagate_eps_lin
   !!***
@@ -1525,9 +1475,9 @@ contains
 
     baro%eps = baro%eps*exp(-dtfac*dt*v_eta_1)
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,*) "baroDebug: propagate_eps_exp"
-      write(io_lun,'(4x,a,f15.8)') "eps:        ", baro%eps
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      write(io_lun,*) "propagate_eps_exp"
+      write(io_lun,'(4x,a,e16.8)') "eps:        ", baro%eps
     end if
 
   end subroutine propagate_eps_exp
@@ -1553,9 +1503,9 @@ contains
 
     baro%v_eps = baro%v_eps + dtfac*dt*baro%G_eps
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,*) "baroDebug: propagate_v_eps_lin"
-      write(io_lun,'(4x,a,f15.8)') "v_eps       ", baro%v_eps
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      write(io_lun,*) "propagate_v_eps_lin"
+      write(io_lun,'(4x,a,e16.8)') "v_eps       ", baro%v_eps
     end if
 
   end subroutine propagate_v_eps_lin
@@ -1582,9 +1532,9 @@ contains
 
     baro%v_eps = baro%v_eps*exp(-dtfac*dt*v_eta_1)
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a)') "baroDebug: propagate_v_eps_lin"
-      write(io_lun,'(4x,a,f15.8)') "v_eps       ", baro%v_eps
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      write(io_lun,'(2x,a)') "propagate_v_eps_lin"
+      write(io_lun,'(4x,a,e16.8)') "v_eps       ", baro%v_eps
     end if
 
   end subroutine propagate_v_eps_exp
@@ -1621,9 +1571,9 @@ contains
       th%ke_ions = th%ke_ions*expfac**2
     end select
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a)') "baroDebug: update_vscale_fac"
-      write(io_lun,'(4x,a,f15.8)') "v_sfac:     ", v_sfac
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      write(io_lun,'(2x,a)') "update_vscale_fac"
+      write(io_lun,'(4x,a,e16.8)') "v_sfac:     ", v_sfac
     end if
 
   end subroutine update_vscale_fac
@@ -1660,8 +1610,8 @@ contains
     integer                               :: i, speca, gatom, ibeg_atom
     logical                               :: flagx, flagy, flagz
 
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "baroDebug: propagate_r_mttk"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "propagate_r_mttk"
 
     select case(baro%baro_type)
     case('iso-mttk')
@@ -1698,10 +1648,9 @@ contains
     case('mttk')
     end select
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a)') "baroDebug: propagate_r_mttk"
-      write(io_lun,'(4x,a,f15.8)') "fac_v:      ", fac_v
-      write(io_lun,'(4x,a,f15.8)') "fac_r:      ", fac_r
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      write(io_lun,'(4x,a,e16.8)') "fac_v:      ", fac_v
+      write(io_lun,'(4x,a,e16.8)') "fac_r:      ", fac_r
     end if
 
   end subroutine propagate_r_mttk
@@ -1727,8 +1676,8 @@ contains
     ! local variables
     real(double)                          :: v_new, v_old, lat_sfac
 
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "baroDebug: propagate_box_mttk"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "propagate_box_mttk"
 
     baro%v_old = baro%volume
     select case(baro%baro_type)
@@ -1743,9 +1692,8 @@ contains
     case('mttk')
     end select
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a)') "baroDebug: propagate_box_mttk"
-      write(io_lun,'(4x,a,f15.8)') "lat_sfac:   ", lat_sfac
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      write(io_lun,'(4x,a,e16.8)') "lat_sfac:   ", lat_sfac
     end if
 
   end subroutine propagate_box_mttk
@@ -1800,8 +1748,8 @@ contains
     integer                                 :: i_mts, i_ys, i_nhc
     real(double)                            :: v_sfac, v_eta_couple
 
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "baroDebug: propagate_npt_mttk"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "propagate_npt_mttk"
 
     v_sfac = one
     call baro%get_box_energy
@@ -1813,9 +1761,9 @@ contains
 
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
-        if (inode==ionode .and. flag_MDdebug) then
-          write(io_lun,*) "baroDebug: i_ys  = ", i_ys
-          write(io_lun,*) "baroDebug: dt_ys = ", th%dt_ys(i_ys)
+        if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+          write(io_lun,*) "i_ys  = ", i_ys
+          write(io_lun,*) "dt_ys = ", th%dt_ys(i_ys)
         end if
         call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
         th%v_eta(th%n_nhc) = th%v_eta(th%n_nhc)*th%t_drag
@@ -1896,9 +1844,8 @@ contains
     v = v_sfac*v
     th%lambda = v_sfac
 
-    if (inode==ionode .and. flag_MDdebug) then
-      write(io_lun,'(2x,a)') "baroDebug: propagate_npt_mttk"
-      write(io_lun,'(4x,a,f15.8)') "v_sfac:     ", v_sfac
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      write(io_lun,'(4x,a,e16.8)') "v_sfac:     ", v_sfac
     end if
 
   end subroutine propagate_npt_mttk
@@ -1926,8 +1873,8 @@ contains
     real(double)                            :: v_sfac, v_eta_couple, &
                                                expfac_p, dt_mts, expfac_vbox
 
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "baroDebug: integrate_box_nhc"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "integrate_box_nhc"
 
     call baro%get_box_energy
     th%G_nhc_cell(1) = (two*baro%ke_box - th%cell_ndof*th%T_ext*fac_Kelvin2Hartree) / &
@@ -1936,6 +1883,7 @@ contains
     do i_ys = 1,th%n_ys ! Yoshida-Suzuki loop
       do i_mts = 1,th%n_mts_nhc ! multiple time step loop
         dt_mts = th%dt_ys(i_ys)/real(th%n_mts_nhc, double)/real(th%n_ys, double)
+        ! Box NHC velocity update
         do i_nhc = th%n_nhc, 2, -1
           if (i_nhc==th%n_nhc) then
             expfac_p = one
@@ -1976,8 +1924,10 @@ contains
         end select
 
         call baro%get_box_energy
-        th%G_nhc_cell(1) = (two*baro%ke_box - th%cell_ndof*th%T_ext*fac_Kelvin2Hartree) / &
-                           th%m_nhc_cell(1)
+        th%G_nhc_cell(1) = (two*baro%ke_box - &
+          th%cell_ndof*th%T_ext*fac_Kelvin2Hartree) / th%m_nhc_cell(1)
+
+        ! Box NHC velocity and force update
         th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
         th%v_eta_cell(1) = th%v_eta_cell(1) + dt_mts*quarter*th%G_nhc(1)
         th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
@@ -1999,10 +1949,10 @@ contains
       end do ! Multiple time step loop
     end do ! Yoshida-Suzuki loop
 
-    if (inode==ionode .and. flag_MDdebug) then 
-      write(io_lun,*) "eta_cell:   ", th%eta_cell
-      write(io_lun,*) "v_eta_cell: ", th%v_eta_cell
-      write(io_lun,*) "G_nhc_cell: ", th%G_nhc_cell
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then 
+      write(io_lun,th%nhc_fmt) "eta_cell:   ", th%eta_cell
+      write(io_lun,th%nhc_fmt) "v_eta_cell: ", th%v_eta_cell
+      write(io_lun,th%nhc_fmt) "G_nhc_cell: ", th%G_nhc_cell
     end if
   end subroutine integrate_box_nhc
 
@@ -2032,12 +1982,14 @@ contains
 
     th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
 
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "baroDebug: integrate_particle_nhc"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "integrate_particle_nhc"
 
     do i_ys=1,th%n_ys ! Yoshida-Suzuki loop
       do i_mts=1,th%n_mts_nhc ! Multiple time step loop
         dt_mts = th%dt_ys(i_ys)/real(th%n_mts_nhc, double)/real(th%n_ys, double)
+
+        ! Particle NHC velocity update
         do i_nhc = th%n_nhc, 2, -1
           if (i_nhc==th%n_nhc) then
             expfac_t = one
@@ -2066,13 +2018,13 @@ contains
           th%eta(i_nhc) = th%eta(i_nhc) + dt_mts*half*th%v_eta(i_nhc)
         end do
 
-        ! Couple particle velocities to NHC velocity
+        ! Couple particle velocities to NHC velocity, update KE and T
         expfac_vpart = exp(-half*dt_mts*th%v_eta(1))
         v = expfac_vpart*v
-
         th%ke_ions = th%ke_ions*expfac_vpart**2
         th%T_int = th%T_int*expfac_vpart**2
 
+        ! Particle NHC velocity and force update
         th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
         th%v_eta(1) = th%v_eta(1)*expfac_t
         th%v_eta(1) = th%v_eta(1) + th%dt*quarter*th%G_nhc(1)
@@ -2094,10 +2046,10 @@ contains
       end do ! Multiple time step loop
     end do ! Yoshida-Suzuki loop
 
-    if (inode==ionode .and. flag_MDdebug) then 
-      write(io_lun,*) "eta:   ", th%eta
-      write(io_lun,*) "v_eta: ", th%v_eta
-      write(io_lun,*) "G_nhc: ", th%G_nhc
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then 
+      write(io_lun,th%nhc_fmt) "eta:   ", th%eta
+      write(io_lun,th%nhc_fmt) "v_eta: ", th%v_eta
+      write(io_lun,th%nhc_fmt) "G_nhc: ", th%G_nhc
     end if
 
   end subroutine integrate_particle_nhc
@@ -2123,13 +2075,12 @@ contains
     integer                                 :: i
     real(double)                            :: tr_ke_stress
 
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "baroDebug: integrate_box"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "integrate_box"
 
     select case(baro%baro_type)
     case('iso-ssm')
       baro%G_eps = (two*th%ke_ions/md_ndof_ions + &
-!                   three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
                    (baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
       baro%v_eps = baro%v_eps + baro%G_eps*baro%dt*half
       baro%v_eps = baro%v_eps*baro%p_drag
@@ -2147,15 +2098,15 @@ contains
       end do
     end select
 
-    if (inode==ionode .and. flag_MDdebug) then 
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then 
       select case(baro%baro_type)
       case('iso-ssm')
-        write(io_lun,'(2x,a,f15.8)') "v_eps: ", baro%v_eps
-        write(io_lun,'(2x,a,f15.8)') "G_eps: ", baro%G_eps
+        write(io_lun,'(2x,a,e16.8)') "v_eps: ", baro%v_eps
+        write(io_lun,'(2x,a,e16.8)') "G_eps: ", baro%G_eps
       case('ortho-ssm')
-        write(io_lun,'(2x,a,3f15.8)') "v_h:   ", baro%v_h(1,1), &
+        write(io_lun,'(2x,a,3e16.8)') "v_h:   ", baro%v_h(1,1), &
                                        baro%v_h(2,2), baro%v_h(3,3)
-        write(io_lun,'(2x,a,3f15.8)') "G_h:   ", baro%G_h(1,1), &
+        write(io_lun,'(2x,a,3e16.8)') "G_h:   ", baro%G_h(1,1), &
                                        baro%G_h(2,2), baro%G_h(3,3)
       end select
     end if
@@ -2184,22 +2135,20 @@ contains
     real(double)                            :: expfac
     integer                                 :: i
 
-    if (inode==ionode .and. flag_MDdebug) &
-    write(io_lun,'(2x,a)') "baroDebug: couple_box_particle_velocity"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "couple_box_particle_velocity"
 
     select case(baro%baro_type)
     case('iso-ssm')
       expfac = exp(-quarter*baro%dt*baro%odnf*baro%v_eps)
       v  = v*expfac**2
-      ! th%ke_ions = th%ke_ions*expfac**4
-      ! th%T_int = th%T_int*expfac**4
-      if (inode==ionode .and. flag_MDdebug) &
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
         write(io_lun,'(4x,"expfac: ",f16.8)') expfac
     case('ortho-ssm')
       do i=1,3
         expfac = exp(-quarter*baro%dt*baro%odnf*baro%v_h(i,i))
         v(i,:) = v(i,:)*expfac
-      if (inode==ionode .and. flag_MDdebug) &
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
         write(io_lun,'(4x,"expfac ",i2,": ",f16.8)') i, expfac
       end do
     end select
@@ -2227,19 +2176,21 @@ contains
     real(double), dimension(3)              :: expfac_h
     integer                                 :: i
 
-    if (inode==ionode .and. flag_MDdebug) &
-    write(io_lun,'(2x,a)') "baroDebug: propagate_box_ssm"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "propagate_box_ssm"
 
     baro%v_old = baro%volume
 
     select case(baro%baro_type)
     case('iso-ssm')
+      ! Propagate box velocity and compute scaling factor
       baro%eps = baro%eps + half*baro%dt*baro%v_eps
       expfac= exp(half*baro%dt*(baro%v_eps + three*baro%v_eps/ni_in_cell))
-      if (inode==ionode .and. flag_MDdebug) then
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
         write(io_lun,'(4x,"v_eps:    ",f16.8)') baro%v_eps
         write(io_lun,'(4x,"expfac:   ",f16.8)') expfac
       end if
+      ! Rescale the box
       baro%lat(1,1) = baro%lat(1,1)*expfac
       baro%lat(2,2) = baro%lat(2,2)*expfac
       baro%lat(3,3) = baro%lat(3,3)*expfac
@@ -2253,7 +2204,7 @@ contains
         expfac_h(i) = exp(half*baro%dt*(baro%v_h(i,i) + tr_vh/md_ndof_ions))
         baro%lat(i,i) = baro%lat(i,i)*expfac_h(i)
       end do
-      if (inode==ionode .and. flag_MDdebug) then
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
         write(io_lun,'(4x,"v_h:      ",3f16.8)') baro%v_h(1,1), &
                                                  baro%v_h(2,2), baro%v_h(3,3)
         write(io_lun,'(4x,"expfac_h: ",3f16.8)') expfac_h
@@ -2376,8 +2327,8 @@ contains
     real(double) :: orcellx, orcelly, orcellz, xvec, yvec, zvec, r2, scale
     integer :: i, j
 
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "baroDebug: update_cell"
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "update_cell"
 
     orcellx = rcellx
     orcelly = rcelly
@@ -2425,7 +2376,7 @@ contains
        r2 = xvec*xvec + yvec*yvec + zvec*zvec
        if(j/=i0) hartree_factor(j) = one/r2 ! i0 notates gamma point
     end do
-    if (inode == ionode) then
+    if (inode == ionode .and. iprint_MD > 1) then
       write(io_lun,'(a,3f12.6)') "cell scaling factors: ", rcellx/orcellx, &
                                  rcelly/orcelly, rcellz/orcellz
       write(io_lun,'(a,3f12.6)') "new cell dimensions:  ", rcellx, rcelly, &
@@ -2435,110 +2386,248 @@ contains
   end subroutine update_cell
   !!***
 
-  !!****m* md_control/write_baro_checkpoint *
+  !!****m* md_control/write_md_checkpoint *
   !!  NAME
-  !!   write_baro_checkpoint
+  !!   write_md_checkpoint
   !!  PURPOSE
-  !!   Write checkpoint for restarting MTTK barostat
+  !!   Write unified checkpoint file for MD restart (contains ionic 
+  !!   velocities and extended system variables)
   !!  AUTHOR
   !!   Zamaan Raza
   !!  CREATION DATE
-  !!   2018/01/19 13:15
+  !!   2018/08/12 10:19
   !!  SOURCE
   !!  
-  subroutine write_baro_checkpoint(baro)
+  subroutine write_md_checkpoint(th, baro)
 
+    use GenComms,         only: cq_abort
     use input_module,     only: io_assign, io_close
+    use global_module,    only: id_glob, id_glob_inv
+    use io_module,        only: append_coords, write_atomic_positions, &
+                                pdb_template
 
     ! passed variables
-    class(type_barostat), intent(inout) :: baro
+    class(type_thermostat), intent(inout) :: th
+    class(type_barostat), intent(inout)   :: baro
 
     ! local variables
-    integer                               :: lun
+    integer                               :: lun, id_global, ni
+    logical                               :: append_coords_bak
 
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "baroDebug: write_baro_checkpoint"
+    if (inode==ionode) then
+      if (iprint_MD > 1) &
+        write(io_lun,'(2x,"Writing MD checkpoint: ",a)') md_check_file
 
-    call io_assign(lun)
-    open(unit=lun,file=baro_check_file,status='replace')
+      ! Write the ionic positions
+      append_coords_bak = append_coords
+      append_coords = .false.
+      call write_atomic_positions(md_position_file, trim(pdb_template))
+      append_coords = append_coords_bak
 
-    select case(baro%baro_type)
-    case('iso-mttk')
-      write(lun,*) "lat_a_ref", baro%lat_ref(1,:)
-      write(lun,*) "lat_b_ref", baro%lat_ref(2,:)
-      write(lun,*) "lat_c_ref", baro%lat_ref(3,:)
-      write(lun,*) "volume_ref", baro%volume_ref
-      write(lun,*) "eps_ref ", baro%eps_ref
-      write(lun,*) "eps ", baro%eps
-      write(lun,*) "v_eps ", baro%v_eps
-      write(lun,*) "G_eps ", baro%G_eps
-    case('iso-ssm')
-!      write(lun,*) "eps_ref ", baro%eps_ref
-      write(lun,*) "eps ", baro%eps
-      write(lun,*) "v_eps ", baro%v_eps
-      write(lun,*) "G_eps ", baro%G_eps
-    case('ortho-ssm')
-      write(lun,*) "h ", baro%h
-      write(lun,*) "v_h ", baro%v_h
-      write(lun,*) "G_h ", baro%G_h
-    end select
-    call io_close(lun)
+      call io_assign(lun)
+      write(io_lun,*) "lun = ", lun
+      open(unit=lun,file=md_check_file,status='replace')
 
-  end subroutine write_baro_checkpoint
+      ! Write the ionic velocities (taken from write_velocity in io_module)
+      do id_global=1,ni_in_cell
+        ni = id_glob_inv(id_global)
+        if (id_glob(ni) /= id_global) &
+          call cq_abort('Error in global labelling', id_global, id_glob(ni))
+          write(lun,'(2i8,3e20.12)') id_global, ni, ion_velocity(1:3,ni)
+      end do
+
+      ! Write the extended system variables
+      if (flag_extended_system) then
+        write(lun,th%nhc_fmt2) th%eta
+        write(lun,th%nhc_fmt2) th%v_eta
+        write(lun,th%nhc_fmt2) th%G_nhc
+        if (th%cell_nhc) then
+          write(lun,th%nhc_fmt2) th%eta_cell
+          write(lun,th%nhc_fmt2) th%v_eta_cell
+          write(lun,th%nhc_fmt2) th%G_nhc_cell
+        end if
+
+        select case(baro%baro_type)
+        case('iso-mttk')
+          write(lun,'(3e20.12)') baro%lat_ref(1,:)
+          write(lun,'(3e20.12)') baro%lat_ref(2,:)
+          write(lun,'(3e20.12)') baro%lat_ref(3,:)
+          write(lun,'(e20.12)') baro%volume_ref
+          write(lun,'(e20.12)') baro%eps_ref
+          write(lun,'(e20.12)') baro%eps
+          write(lun,'(e20.12)') baro%v_eps
+          write(lun,'(e20.12)') baro%G_eps
+        case('iso-ssm')
+          write(lun,'(e20.12)') baro%eps
+          write(lun,'(e20.12)') baro%v_eps
+          write(lun,'(e20.12)') baro%G_eps
+        case('ortho-ssm')
+          write(lun,'(3e20.12)') baro%h(1,:)
+          write(lun,'(3e20.12)') baro%h(2,:)
+          write(lun,'(3e20.12)') baro%h(3,:)
+          write(lun,'(3e20.12)') baro%v_h(1,:)
+          write(lun,'(3e20.12)') baro%v_h(2,:)
+          write(lun,'(3e20.12)') baro%v_h(3,:)
+          write(lun,'(3e20.12)') baro%G_h(1,:)
+          write(lun,'(3e20.12)') baro%G_h(2,:)
+          write(lun,'(3e20.12)') baro%G_h(3,:)
+        end select
+      end if
+      call io_close(lun)
+    end if
+
+  end subroutine write_md_checkpoint
   !!***
 
-  !!****m* md_control/read_baro_checkpoint *
+  !!****m* md_control/read_md_checkpoint *
   !!  NAME
-  !!   read_thermo_checkpoint
+  !!   read_md_checkpoint
   !!  PURPOSE
-  !!   Read checkpoint for restarting MTTK barostat
+  !!   Write checkpoint files for MD restart
   !!  AUTHOR
   !!   Zamaan Raza
   !!  CREATION DATE
-  !!   2018/01/19 13:16
+  !!   2018/08/12 10:19
   !!  SOURCE
   !!  
-  subroutine read_baro_checkpoint(baro)
-    
+  subroutine read_md_checkpoint(th, baro)
+
+    use GenComms,         only: cq_abort, gcopy
     use input_module,     only: io_assign, io_close
+    use global_module,    only: id_glob, id_glob_inv, flag_read_velocity
 
     ! passed variables
-    class(type_barostat), intent(inout) :: baro
+    class(type_thermostat), intent(inout) :: th
+    class(type_barostat), intent(inout)   :: baro
 
     ! local variables
-    integer                               :: lun
-    character(20)                         :: junk
+    integer                               :: lun, id_global, ni, ni2, id_tmp
+    real(double), dimension(3,ni_in_cell) :: v
 
-    if (inode==ionode .and. flag_MDdebug) &
-      write(io_lun,'(2x,a)') "baroDebug: read_baro_checkpoint"
+    if (inode==ionode) then
+      if (iprint_MD > 1) &
+        write(io_lun,'(2x,"Reading MD checkpoint: ",a)') md_check_file
+      call io_assign(lun)
+      open(unit=lun,file=md_check_file,status='old')
 
-    call io_assign(lun)
-    open(unit=lun,file=baro_check_file,status='old')
+      ! Position restart read in initial_read - zamaan
+      ! read the ionic velocities
+      do id_global=1,ni_in_cell
+         ni=id_glob_inv(id_global)
+         if(id_glob(ni) /= id_global) &
+           call cq_abort(' ERROR in global labelling ',id_global,id_glob( ni))
+         read(lun,'(2i8,3e20.12)') id_tmp, ni2, v(1:3,ni)
+         if(ni2 /= ni) then
+           write(io_lun,*) &
+           ' Order of atom has changed for global id (file_labelling) = ', &
+             id_global, &
+           ' : corresponding labelling (NOprt labelling) used to be ',ni2, &
+           ' : but now it is ',ni
+         end if
+      end do
+      if (flag_read_velocity) ion_velocity = v
 
-    select case(baro%baro_type)
-    case('iso-mttk')
-      read(lun,*) junk, baro%lat_ref(1,:)
-      read(lun,*) junk, baro%lat_ref(2,:)
-      read(lun,*) junk, baro%lat_ref(3,:)
-      read(lun,*) junk, baro%volume_ref
-      read(lun,*) junk, baro%eps_ref
-      read(lun,*) junk, baro%eps
-      read(lun,*) junk, baro%v_eps
-      read(lun,*) junk, baro%G_eps
-    case('ortho-mttk')
-    case('mttk')
-    case('iso-ssm')
-      read(lun,*) junk, baro%eps
-      read(lun,*) junk, baro%v_eps
-      read(lun,*) junk, baro%G_eps
-    case('ortho-ssm')
-      read(lun,*) junk, baro%h
-      read(lun,*) junk, baro%v_h
-      read(lun,*) junk, baro%G_h
-    end select
-    call io_close(lun)
+      ! Read the extended system variables
+      if (flag_extended_system) then
+        read(lun,*) th%eta
+        read(lun,*) th%v_eta
+        read(lun,*) th%G_nhc
+        if (th%cell_nhc) then
+          read(lun,*) th%eta_cell
+          read(lun,*) th%v_eta_cell
+          read(lun,*) th%G_nhc_cell
+        end if
 
-  end subroutine read_baro_checkpoint
+        select case(baro%baro_type)
+        case('iso-mttk')
+          read(lun,*) baro%lat_ref(1,:)
+          read(lun,*) baro%lat_ref(2,:)
+          read(lun,*) baro%lat_ref(3,:)
+          read(lun,*) baro%volume_ref
+          read(lun,*) baro%eps_ref
+          read(lun,*) baro%eps
+          read(lun,*) baro%v_eps
+          read(lun,*) baro%G_eps
+        case('iso-ssm')
+          read(lun,*) baro%eps
+          read(lun,*) baro%v_eps
+          write(io_lun,*) "######", baro%v_eps
+          read(lun,*) baro%G_eps
+        case('ortho-ssm')
+          read(lun,*) baro%h(1,:)
+          read(lun,*) baro%h(2,:)
+          read(lun,*) baro%h(3,:)
+          read(lun,*) baro%v_h(1,:)
+          read(lun,*) baro%v_h(2,:)
+          read(lun,*) baro%v_h(3,:)
+          read(lun,*) baro%G_h(1,:)
+          read(lun,*) baro%G_h(2,:)
+          read(lun,*) baro%G_h(3,:)
+        end select
+      end if
+
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+        write(io_lun,'(2x,"flag_extended_system ",l)') flag_extended_system
+        write(io_lun,th%nhc_fmt) "eta:", th%eta
+        write(io_lun,th%nhc_fmt) "v_eta:", th%v_eta
+        write(io_lun,th%nhc_fmt) "G_nhc:", th%G_nhc
+        if (th%cell_nhc) then
+          write(io_lun,th%nhc_fmt) "eta_cell:", th%eta_cell
+          write(io_lun,th%nhc_fmt) "v_eta_cell:", th%v_eta_cell
+          write(io_lun,th%nhc_fmt) "G_eta_cell:", th%G_nhc_cell
+        end if
+        select case(baro%baro_type)
+        case('iso-mttk')
+          write(io_lun,'(2x,12a,3e20.12)') "lat_ref(1,:):", baro%lat_ref(1,:)
+          write(io_lun,'(2x,12a,3e20.12)') "lat_ref(2,:):", baro%lat_ref(2,:)
+          write(io_lun,'(2x,12a,3e20.12)') "lat_ref(3,:):", baro%lat_ref(3,:)
+          write(io_lun,'(2x,12a,e20.12)') "volume_ref:", baro%volume_ref
+          write(io_lun,'(2x,12a,e20.12)') "eps_ref:", baro%eps_ref
+          write(io_lun,'(2x,12a,e20.12)') "eps:", baro%eps
+          write(io_lun,'(2x,12a,e20.12)') "v_eps:", baro%v_eps
+          write(io_lun,'(2x,12a,e20.12)') "G_eps:", baro%G_eps
+        case('iso-ssm')
+          write(io_lun,'(2x,12a,e20.12)') "eps:", baro%eps
+          write(io_lun,'(2x,12a,e20.12)') "v_eps:", baro%v_eps
+          write(io_lun,'(2x,12a,e20.12)') "G_eps:", baro%G_eps
+        case('ortho-ssm')
+          write(io_lun,'(2x,12a,3e20.12)') "h(1,:):", baro%h(1,:)
+          write(io_lun,'(2x,12a,3e20.12)') "h(2,:):", baro%h(2,:)
+          write(io_lun,'(2x,12a,3e20.12)') "h(3,:):", baro%h(3,:)
+          write(io_lun,'(2x,12a,3e20.12)') "v_h(1,:):", baro%v_h(1,:)
+          write(io_lun,'(2x,12a,3e20.12)') "v_h(2,:):", baro%v_h(2,:)
+          write(io_lun,'(2x,12a,3e20.12)') "v_h(3,:):", baro%v_h(3,:)
+          write(io_lun,'(2x,12a,3e20.12)') "G_h(1,:):", baro%G_h(1,:)
+          write(io_lun,'(2x,12a,3e20.12)') "G_h(2,:):", baro%G_h(2,:)
+          write(io_lun,'(2x,12a,3e20.12)') "G_h(3,:):", baro%G_h(3,:)
+        end select
+      end if
+
+      call io_close(lun)
+    end if
+
+    call gcopy(ion_velocity,3,ni_in_cell)
+    if (flag_extended_system) then
+      call gcopy(th%eta,th%n_nhc)
+      call gcopy(th%v_eta,th%n_nhc)
+      call gcopy(th%G_nhc,th%n_nhc)
+      if (md_cell_nhc) then
+        call gcopy(th%eta_cell,th%n_nhc)
+        call gcopy(th%v_eta_cell,th%n_nhc)
+        call gcopy(th%G_nhc_cell,th%n_nhc)
+      end if
+      call gcopy(baro%lat_ref,3,3)
+      call gcopy(baro%volume_ref)
+      call gcopy(baro%eps_ref)
+      call gcopy(baro%eps)
+      call gcopy(baro%v_eps)
+      call gcopy(baro%G_eps)
+      call gcopy(baro%h,3,3)
+      call gcopy(baro%v_h,3,3)
+      call gcopy(baro%G_h,3,3)
+    end if
+
+  end subroutine read_md_checkpoint
   !!***
 
 end module md_control

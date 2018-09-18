@@ -202,6 +202,7 @@ contains
     !use DiagModule,             only: diagon
     use constraint_module,      only: flag_RigidBonds,constraints
     use support_spec_format,    only: flag_one_to_one, symmetry_breaking, read_option
+    use md_control,             only: md_position_file
     use pao_format
 
     implicit none
@@ -251,7 +252,7 @@ contains
     if (.not. flag_MDcontinue) then
       call read_atomic_positions(trim(atom_coord_file))
     else
-      call read_atomic_positions('cq.position')
+      call read_atomic_positions(md_position_file)
     end if
     if(iprint_init>4) call print_process_info()
     ! By now, we'll have unit cell sizes and grid cutoff

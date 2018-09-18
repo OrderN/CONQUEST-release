@@ -19,7 +19,7 @@ module md_model
   use datatypes
   use numbers
   use force_module,     only: tot_force, stress
-  use global_module,    only: ni_in_cell, io_lun, atom_coord, &
+  use global_module,    only: ni_in_cell, io_lun, atom_coord, iprint_MD, &
                               flag_MDcontinue, flag_MDdebug, x_atom_cell, &
                               y_atom_cell, z_atom_cell, rcellx, rcelly, rcellz
   use species_module,   only: species
@@ -336,9 +336,8 @@ contains
     integer                               :: lun
     real(double)                          :: P_GPa
 
-    if (flag_MDdebug .and. inode==ionode) then
-      write(io_lun,*) "Writing statistics to ", filename
-    end if
+    if (inode==ionode .and. iprint_MD > 1) &
+      write(io_lun,'("Writing statistics to ",a)') filename
 
     ! Convert units if necessary
     P_GPa = mdl%P_int*fac_HaBohr32GPA
@@ -458,11 +457,8 @@ contains
     ! local variables
     integer                               :: lun, i
 
-    if (flag_MDdebug .and. inode==ionode) then
-      write(io_lun,*) "Writing frame to ", filename
-    end if
-
     if (inode==ionode) then
+      if (iprint_MD > 1) write(io_lun,'("Writing frame to ",a)') filename
       call io_assign(lun)
       if (mdl%append) then
         open(unit=lun,file=filename,position='append')
@@ -547,7 +543,8 @@ contains
     integer                               :: lunp, lunm, lunf, luns, lunl, i
  
     if (inode==ionode) then
-      if (flag_MDdebug) write(io_lun,*) "Writing TDEP output"
+      if (flag_MDdebug .and. iprint_MD > 1) &
+        write(io_lun,*) "Writing TDEP output"
       call io_assign(lunm)
       call io_assign(lunp)
       call io_assign(lunf)
