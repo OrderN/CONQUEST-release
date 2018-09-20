@@ -933,50 +933,53 @@ contains
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
       write(io_lun,'(2x,a)') "get_nhc_energy"
 
+    th%ke_nhc_ion = zero
+    th%pe_nhc_ion = zero
     th%ke_nhc_cell = zero
     th%pe_nhc_cell = zero
-    if (th%cell_nhc) then
-      th%ke_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2
-      th%pe_nhc_ion = real(th%ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
-      th%ke_nhc_cell = half*th%m_nhc_cell(1)*th%v_eta_cell(1)**2
-      th%pe_nhc_cell = real(th%cell_ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta_cell(1)
-    else
-      th%ke_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2
-      th%pe_nhc_ion = real((th%ndof+th%cell_ndof), double) * &
-                      th%T_ext*fac_Kelvin2Hartree*th%eta(1)
-    end if
-
-    do k=2,th%n_nhc
-      th%ke_nhc_ion = th%ke_nhc_ion + half*th%m_nhc(k)*th%v_eta(k)**2
-      th%pe_nhc_ion = th%pe_nhc_ion + th%T_ext*fac_Kelvin2Hartree*th%eta(k)
+    th%e_nhc = zero
+    if (flag_extended_system) then
       if (th%cell_nhc) then
-        th%ke_nhc_cell = th%ke_nhc_cell + &
-                         half*th%m_nhc_cell(k)*th%v_eta_cell(k)**2
-        th%pe_nhc_cell = th%pe_nhc_cell + &
-                         th%T_ext*fac_Kelvin2Hartree*th%eta_cell(k)
+        th%ke_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2
+        th%pe_nhc_ion = real(th%ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
+        th%ke_nhc_cell = half*th%m_nhc_cell(1)*th%v_eta_cell(1)**2
+        th%pe_nhc_cell = &
+          real(th%cell_ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta_cell(1)
+      else
+        th%ke_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2
+        th%pe_nhc_ion = real((th%ndof+th%cell_ndof), double) * &
+                        th%T_ext*fac_Kelvin2Hartree*th%eta(1)
       end if
-    end do
-    th%e_nhc = th%ke_nhc_ion + th%pe_nhc_ion + th%ke_nhc_cell + th%pe_nhc_cell
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-      write(io_lun,'(4x,"ke_nhc_ion: ",e16.8)') th%ke_nhc_ion
-      write(io_lun,'(4x,"pe_nhc_ion: ",e16.8)') th%pe_nhc_ion
-      write(io_lun,'(4x,"ke_nhc_cell:",e16.8)') th%ke_nhc_cell
-      write(io_lun,'(4x,"pe_nhc_cell:",e16.8)') th%pe_nhc_cell
-      write(io_lun,'(4x,"e_nhc:      ",e16.8)') th%e_nhc
-    end if
+      do k=2,th%n_nhc
+        th%ke_nhc_ion = th%ke_nhc_ion + half*th%m_nhc(k)*th%v_eta(k)**2
+        th%pe_nhc_ion = th%pe_nhc_ion + th%T_ext*fac_Kelvin2Hartree*th%eta(k)
+        if (th%cell_nhc) then
+          th%ke_nhc_cell = th%ke_nhc_cell + &
+                           half*th%m_nhc_cell(k)*th%v_eta_cell(k)**2
+          th%pe_nhc_cell = th%pe_nhc_cell + &
+                           th%T_ext*fac_Kelvin2Hartree*th%eta_cell(k)
+        end if
+      end do
+      th%e_nhc = th%ke_nhc_ion + th%pe_nhc_ion + th%ke_nhc_cell + th%pe_nhc_cell
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-      call io_assign(lun)
-      if (th%append) then
-        open(unit=lun,file='nhc.dat',position='append')
-      else 
-        open(unit=lun,file='nhc.dat',status='replace')
-        th%append = .true.
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+        write(io_lun,'(4x,"ke_nhc_ion: ",e16.8)') th%ke_nhc_ion
+        write(io_lun,'(4x,"pe_nhc_ion: ",e16.8)') th%pe_nhc_ion
+        write(io_lun,'(4x,"ke_nhc_cell:",e16.8)') th%ke_nhc_cell
+        write(io_lun,'(4x,"pe_nhc_cell:",e16.8)') th%pe_nhc_cell
+        write(io_lun,'(4x,"e_nhc:      ",e16.8)') th%e_nhc
+        call io_assign(lun)
+        if (th%append) then
+          open(unit=lun,file='nhc.dat',position='append')
+        else 
+          open(unit=lun,file='nhc.dat',status='replace')
+          th%append = .true.
+        end if
+        write(lun,'(5e16.8)') th%ke_nhc_ion, th%pe_nhc_ion, th%ke_nhc_cell, &
+                              th%pe_nhc_cell, th%e_nhc
+        call io_close(lun)
       end if
-      write(lun,'(5e16.8)') th%ke_nhc_ion, th%pe_nhc_ion, th%ke_nhc_cell, &
-                            th%pe_nhc_cell, th%e_nhc
-      call io_close(lun)
     end if
 
   end subroutine get_nhc_energy
@@ -1377,19 +1380,22 @@ contains
     ! local variables
     integer                                     :: i
 
-    select case(baro%baro_type)
-    case('iso-mttk')
-      baro%ke_box = half*baro%box_mass*baro%v_eps**2
-    case('ortho-mttk')
-    case('mttk')
-    case('iso-ssm')
-      baro%ke_box = three*half*baro%box_mass*baro%v_eps**2
-    case('ortho-ssm')
-      baro%ke_box = zero
-      do i=1,3
-        baro%ke_box = baro%ke_box + half*baro%box_mass*baro%v_h(i,i)**2
-      end do
-    end select
+    baro%ke_box = zero
+    if (flag_extended_system) then
+      select case(baro%baro_type)
+      case('iso-mttk')
+        baro%ke_box = half*baro%box_mass*baro%v_eps**2
+      case('ortho-mttk')
+      case('mttk')
+      case('iso-ssm')
+        baro%ke_box = three*half*baro%box_mass*baro%v_eps**2
+      case('ortho-ssm')
+        baro%ke_box = zero
+        do i=1,3
+          baro%ke_box = baro%ke_box + half*baro%box_mass*baro%v_h(i,i)**2
+        end do
+      end select
+    end if
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
       write(io_lun,'(2x,a)') "get_box_energy"
@@ -2425,7 +2431,6 @@ contains
       append_coords = append_coords_bak
 
       call io_assign(lun)
-      write(io_lun,*) "lun = ", lun
       open(unit=lun,file=md_check_file,status='replace')
 
       ! Write the ionic velocities (taken from write_velocity in io_module)

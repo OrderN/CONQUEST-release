@@ -637,6 +637,10 @@ contains
 
     ! Thermostat/barostat initialisation
     call init_ensemble(baro, thermo, mdl, md_ndof, nequil, first_init)
+    call thermo%get_temperature_and_ke(baro, ion_velocity, &
+                                       mdl%ion_kinetic_energy, final_call)
+    call baro%get_pressure_and_stress(final_call)
+    call mdl%get_cons_qty
 
     ! Get converted 1-D array for flag_atom_move
     allocate (flag_movable(3*ni_in_cell), STAT=stat)
@@ -795,8 +799,8 @@ contains
        end if
 
        ! Compute and print the conserved quantity and its components
-       if (.not. mdl%thermo_type == 'berendsen') call thermo%get_nhc_energy
-       if (.not. mdl%baro_type == 'berendsen') call baro%get_box_energy
+       call thermo%get_nhc_energy
+       call baro%get_box_energy
        call mdl%get_cons_qty
        call mdl%print_md_energy()
 
@@ -901,29 +905,30 @@ contains
     ! local variables
     character(50) :: file_velocity='velocity.dat'
 
-    if (.not. flag_MDcontinue .and. first_init) then
+    if (first_init) then
       ! Initialise the model
       lattice_vec = zero
       lattice_vec(1,1) = rcellx
       lattice_vec(2,2) = rcelly
       lattice_vec(3,3) = rcellz
       call mdl%init_model(md_ensemble, MDtimestep, thermo, baro)
-
-      ! I've moved the velocity initialisation here to make reading the new
-      ! unified md checkpoint file easier - zamaan
-      ion_velocity = zero
-      if (flag_read_velocity) then
-        call read_velocity(ion_velocity, file_velocity)
-      else
-        if(temp_ion > RD_ERR) then
-          if (inode == ionode) then
-            call init_velocity(ni_in_cell, temp_ion, ion_velocity)
-          end if
+      if (.not. flag_MDcontinue) then
+        ! I've moved the velocity initialisation here to make reading the new
+        ! unified md checkpoint file easier - zamaan
+        ion_velocity = zero
+        if (flag_read_velocity) then
+          call read_velocity(ion_velocity, file_velocity)
         else
-          ion_velocity = zero
+          if(temp_ion > RD_ERR) then
+            if (inode == ionode) then
+              call init_velocity(ni_in_cell, temp_ion, ion_velocity)
+            end if
+          else
+            ion_velocity = zero
+          end if
         end if
+        call gcopy(ion_velocity, 3, ni_in_cell)
       end if
-      call gcopy(ion_velocity, 3, ni_in_cell)
     end if
 
     select case(md_ensemble)
