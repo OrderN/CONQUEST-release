@@ -122,6 +122,10 @@
 !!    Added flag_readAtomicSpin to initialise spin
 !!   2017/08/29 jack baker & dave
 !!    Adding variables for cell optimisation
+!!   2017/11/13 18:15 nakata
+!!    Added a flag to normalise pDOS
+!!   2018/09/19 18:30 nakata
+!!    Added a flag for orbital angular momentum resolved PDOS
 !!  SOURCE
 !!
 module global_module
@@ -359,7 +363,7 @@ module global_module
   integer :: mx_temp_matrices                   ! Defaults to 100; used in mult_module (immi)
   
   ! DOS output
-  logical :: flag_write_DOS, flag_write_projected_DOS, flag_normalise_pDOS
+  logical :: flag_write_DOS, flag_write_projected_DOS, flag_normalise_pDOS, flag_pDOS_angmom
   real(double) :: E_DOS_min, E_DOS_max, sigma_DOS
   integer :: n_DOS
 
