@@ -63,7 +63,7 @@ module md_control
   character(20) :: md_check_file = "md.checkpoint"
   character(20) :: md_thermo_file = "md.thermostat"
   character(20) :: md_baro_file = "md.barostat"
-  character(20) :: md_trajectory_file = "md.barostat"
+  character(20) :: md_trajectory_file = "trajectory.xsf"
   character(20) :: md_frames_file = "Frames"
   character(20) :: md_stats_file = "Stats"
 
