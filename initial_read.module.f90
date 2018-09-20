@@ -1397,7 +1397,7 @@ contains
              E_DOS_max = fdf_double('IO.max_DOS_E',zero)
              sigma_DOS = fdf_double('IO.sigma_DOS',0.001_double)
              n_DOS = fdf_integer('IO.n_DOS',201)
-             flag_normalise_pDOS = fdf_boolean('IO.normalize_PDOS',.true.)
+             flag_normalise_pDOS = fdf_boolean('IO.normalise_PDOS',.true.)
              flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
              if (.not.flag_write_projected_DOS) then
                 flag_normalise_pDOS = .false.
