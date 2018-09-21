@@ -4122,6 +4122,8 @@ contains
   !!    (passed) kpoint.  In this case, set index_kpoint to one.
   !!   2017/10/19 09:05 dave
   !!    Added abort if we pass k-point with multiple process groups (not possible at present)
+  !!   2018/09/05 14:25 dave
+  !!    Updating the behaviour when info/=0
   !!  SOURCE
   !!
   subroutine distrib_and_diag(spin,index_kpoint,mode,flag_store_w,kpassed)
@@ -4176,8 +4178,18 @@ contains
             orfac, z(:,:,spin), 1, 1, descz, work, lwork,    &
             rwork, lrwork, iwork, liwork, ifail, iclustr,    &
             gap, info)
-       if (info /= 0) &
-            call cq_abort ("FindEvals: pzheev failed !", info)
+       if (info /= 0) then
+          if(info==2.OR.info==4) then ! These are safe to continue
+             if(inode==ionode) then
+                write(io_lun,fmt='(2x,"************************************")')
+                write(io_lun,fmt='(2x,"** ScaLAPACK pzhegvx evec warning **")')
+                write(io_lun,fmt='(2x,"** INFO=",i2," but continuing  **")') info
+                write(io_lun,fmt='(2x,"************************************")')
+             end if
+          else
+             call cq_abort ("FindEvals: pzhegvx failed for mode "//mode//" with INFO=", info)
+          end if
+       end if
        ! Copy local_w into appropriate place in w
        if(flag_store_w) w(1:matrix_size, pg_kpoints(pgid, index_kpoint), spin) = &
             scale * local_w(1:matrix_size, spin)

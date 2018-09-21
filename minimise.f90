@@ -117,6 +117,8 @@ contains
   !!    Turned off force calculation when writing out bands
   !!   2017/02/15 (or earlier) nakata
   !!    Added LFD minimisation for multisite support functions
+  !!   2017/11/10 dave
+  !!    Removed calls to dump K matrix (now done in DMMinModule)
   !!  SOURCE
   !!
   !subroutine get_E_and_F(fixed_potential, vary_mu, total_energy, &
@@ -136,7 +138,8 @@ contains
                                  flag_DeltaSCF, flag_excite, runtype,  &
                                  flag_MDold,flag_LmatrixReuse,McWFreq, &
                                  flag_multisite,                       &
-                                 io_lun, flag_out_wf, wf_self_con, flag_write_DOS
+                                 io_lun, flag_out_wf, wf_self_con, flag_write_DOS, &
+                                 flag_diagonalisation, nspin
     use energy,            only: get_energy, xc_energy, final_energy
     use GenComms,          only: cq_abort, inode, ionode
     use blip_minimisation, only: vary_support
@@ -147,10 +150,6 @@ contains
     use density_module,    only: density
     use multisiteSF_module,only: flag_LFD_minimise, LFD_minimise
     use units
-    ! Deleted later ?
-!   use io_module2,        ONLY: dump_matrix2,dump_InfoGlobal
-!   use matrix_data,       ONLY: Lrange
-!   use mult_module,       ONLY: matL
 
     implicit none
 
@@ -236,7 +235,12 @@ contains
           if (flag_multisite .and. .not.flag_LFD_minimise) then
              if (inode==ionode) write(io_lun,'(/3x,A/)') &
                 'WARNING: Numerical PAO minimisation will be performed without doing LFD_minimisation!'   
+             !2017.Dec.28 TM: We need Selfconsistent Hamiltonian if this routine is called from control
+             call new_SC_potl(.false., sc_tolerance, reset_L,             &
+                              fixed_potential, vary_mu, n_L_iterations, &
+                              L_tolerance, total_energy, backtrace_level)
           endif
+
           if (UsePulay) then
              call pulay_min_pao(n_support_iterations, fixed_potential,&
                                 vary_mu, n_L_iterations, L_tolerance, &
@@ -371,12 +375,6 @@ contains
     !% NOTE: This call should be outside this subroutine [2013/08/20 michi]
     ! Writes out L-matrix at the PREVIOUS step
     !   --> Removed and moved to FindMinDM [2013/12/03 michi]
-
-!   if (.NOT. flag_MDold) & ! should add '.NOT. leqi(runtype,'static')' also ?
-!     call dump_matrix2('L',matL(1),inode,Lrange)
-!   if (.NOT. flag_MDold .AND. leqi(runtype,'static')) then
-!     if (inode.EQ.ionode) call dump_InfoGlobal(0)
-!   endif
 
     !  Print results of local timers
     call stop_timer(tmr_std_eminimisation)

@@ -102,7 +102,7 @@ contains
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts
-    use mult_module, ONLY: matrix_scale
+    use mult_module, ONLY: matrix_scale, matrix_pos
     use matrix_data, ONLY: mat, halo
     use timer_module
     
@@ -153,19 +153,28 @@ contains
                 neigh_species = species_glob(neigh_global_num)
                 if(iprint_basis>=6.AND.myid==0) write(io_lun,'(6x,"Processor, neighbour, spec: ",3i7)') myid,neigh,neigh_species
                 ! Now loop over support functions and PAOs and call routine
-                if(flag<3) then
-                   call loop_12(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,flag, &
+                if(flag<3.OR.flag==4) then
+                   call loop_12(matA,part,memb,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,flag, &
                                 atom_spec,neigh_species,0,0)
-                else
+                else if(flag==3) then
                    call loop_3(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz, &
                                atom_spec,neigh_species,0,0)
+                else if(flag==5) then
+                   if((dx*dx+dy*dy+dz*dz)>RD_ERR) then
+                      call loop_3_NA(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz, &
+                           atom_spec,neigh_species,0,0)
+                   end if
+                else if(flag==6) then
+                   if((dx*dx+dy*dy+dz*dz)>RD_ERR) then
+                      call loop_12(matA,part,memb,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,flag, & ! We store on-site
+                           atom_spec,neigh_species,0,0)
+                   end if
                 endif
              end do ! End do neigh=1,mat%n_nab
           end do ! End do memb =1,nm_nodgroup
        end if ! End if nm_nodgroup > 0
     end do ! End do part=1,groups_on_node
     call stop_timer(tmr_std_matrices)
-
     call stop_print_timer(tmr_l_tmp1,"S matrix assembly",IPRINT_TIME_THRES2)
     call stop_timer(tmr_std_basis)
   end subroutine assemble_2
@@ -179,57 +188,90 @@ contains
 !!    Removed blips_on_atom, atom_i and atom_j, and introduced pao_format
 !!   2016/12/19 18:30 nakata
 !!    Removed matAD which is no longer needed.
-  subroutine loop_12(matA,iprim,j_in_halo,dx,dy,dz,flag, &
+  subroutine loop_12(matA,np,ni,iprim,j_in_halo,dx,dy,dz,flag, &
                      atom_spec,neigh_species,deriv_flag,direction)
 
     use datatypes
     use angular_coeff_routines, ONLY: calc_mat_elem_gen, grad_mat_elem_gen2_prot
     use GenComms, ONLY: myid, cq_abort
-    use mult_module, ONLY: store_matrix_value_pos, matrix_pos, return_matrix_value_pos
+    use mult_module, ONLY: store_matrix_value_pos, matrix_pos, store_matrix_value, return_matrix_value,matKatomf
+    use primary_module, ONLY: bundle
     use pao_format
+    use global_module, only: nspin
 
     implicit none
 
     !routine to calculate the case(1) pao_pao and case(2) pao_ke_pao
     !matrix elements
-    integer, intent(in) ::  iprim,j_in_halo,flag,matA
+    integer, intent(in) ::  iprim,j_in_halo,flag,matA, np, ni
     integer, intent(in) :: atom_spec,neigh_species,deriv_flag,direction
     real(double), intent(in) :: dx,dy,dz
     ! Local variables
     integer :: wheremat
-    real(double) :: mat_val,mat_val_dummy, coeff_j
-    integer :: i1,j1,k1,l1,m1,i2,j2,i3,j3,k2,l2,m2,count1,count2,nacz1,nacz2
+    real(double) :: mat_val,mat_val_dummy, coeff_j, for6, matKelem
+    integer :: i1,j1,k1,l1,m1,i2,j2,i3,j3,k2,l2,m2,count1,count2,nacz1,nacz2, ip
     integer :: i4,j4, n_support1,n_support2,myflag
 
     mat_val = 0.0_double
+    for6 = 0.0_double
     count1 = 1
     ! Loop over PAOs on i
     do l1 = 0, pao(atom_spec)%greatest_angmom
        do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
           do m1 = -l1,l1
              count2 = 1
-             ! Loop over PAOs on j
-             do l2 = 0, pao(neigh_species)%greatest_angmom
-                do nacz2 = 1, pao(neigh_species)%angmom(l2)%n_zeta_in_angmom
-                   do m2 = -l2,l2
-                      if(deriv_flag.eq.0) then
-                         call calc_mat_elem_gen(flag,atom_spec,l1,nacz1,m1,neigh_species, &
-                              l2,nacz2,m2,dx,dy,dz,mat_val)
-                      else if(deriv_flag.eq.1) then
-                         call grad_mat_elem_gen2_prot(direction,flag,atom_spec,l1,nacz1,m1,neigh_species, &
-                              l2,nacz2,m2,dx,dy,dz,mat_val)
-                      endif
-                      mat_val_dummy = mat_val
-                      wheremat = matrix_pos(matA,iprim,j_in_halo,count1,count2)
-                      call store_matrix_value_pos(matA,wheremat,mat_val)
-                      count2 = count2 +1
-                   enddo ! m2
-                enddo ! nacz2
-             enddo !l2
+             if(flag==6) then ! < i | VNA_j | i >
+                ! Loop over PAOs on j
+                do l2 = 0, pao(atom_spec)%greatest_angmom
+                   do nacz2 = 1, pao(atom_spec)%angmom(l2)%n_zeta_in_angmom
+                      do m2 = -l2,l2
+                         if(deriv_flag.eq.0) then
+                            call calc_mat_elem_gen(flag,atom_spec,l1,nacz1,m1,neigh_species, &
+                                 l2,nacz2,m2,dx,dy,dz,mat_val)
+                            call store_matrix_value(matA,np,ni,iprim,0,count1,count2,mat_val,1)
+                         else if(deriv_flag.eq.1) then
+                            call grad_mat_elem_gen2_prot(direction,flag,atom_spec,l1,nacz1,m1,neigh_species, &
+                                 l2,nacz2,m2,dx,dy,dz,mat_val)
+                            ! For forces, we trace over on-site K matrix and store one element below
+                            !call store_matrix_value(matA,np,ni,iprim,0,count1,count2,mat_val,1)
+                            matKelem = return_matrix_value(matKatomf(1),np,ni,iprim,0,count1,count2,1)
+                            if(nspin==2) matKelem = matKelem + &
+                                 return_matrix_value(matKatomf(2),np,ni,iprim,0,count1,count2,1)
+                            for6 = for6 + mat_val*matKelem
+                         endif
+                         count2 = count2 +1
+                      enddo ! m2
+                   enddo ! nacz2
+                enddo !l2
+             else
+                ! Loop over PAOs on j
+                do l2 = 0, pao(neigh_species)%greatest_angmom
+                   do nacz2 = 1, pao(neigh_species)%angmom(l2)%n_zeta_in_angmom
+                      do m2 = -l2,l2
+                         if(deriv_flag.eq.0) then
+                            call calc_mat_elem_gen(flag,atom_spec,l1,nacz1,m1,neigh_species, &
+                                 l2,nacz2,m2,dx,dy,dz,mat_val)
+                         else if(deriv_flag.eq.1) then
+                            call grad_mat_elem_gen2_prot(direction,flag,atom_spec,l1,nacz1,m1,neigh_species, &
+                                 l2,nacz2,m2,dx,dy,dz,mat_val)
+                         endif
+                         mat_val_dummy = mat_val
+                         wheremat = matrix_pos(matA,iprim,j_in_halo,count1,count2)
+                         call store_matrix_value_pos(matA,wheremat,mat_val)
+                         count2 = count2 +1
+                      enddo ! m2
+                   enddo ! nacz2
+                enddo !l2
+             end if
              count1 = count1 + 1
           enddo ! m1
        enddo ! nacz1
     enddo ! l1
+    ! Force
+    if(flag==6.AND.deriv_flag==1) then
+       wheremat = matrix_pos(matA,iprim,j_in_halo,1,1)
+       call store_matrix_value_pos(matA,wheremat,for6)
+    end if
   end subroutine loop_12
   
 !!   2009/07/08 16:48 dave
@@ -304,7 +346,71 @@ contains
     enddo ! l1
   end subroutine loop_3
     
+  subroutine loop_3_NA(matA,iprim,j_in_halo,dx,dy,dz&
+       &,atom_spec,neigh_species,deriv_flag,direction,matAD)
 
+    use datatypes
+    use pseudo_tm_info, ONLY: pseudo
+    use angular_coeff_routines, ONLY: calc_mat_elem_gen, grad_mat_elem_gen2_prot
+    use GenComms, ONLY: myid, cq_abort
+    use mult_module, ONLY: store_matrix_value_pos, matrix_pos, return_matrix_value_pos
+    use pao_format
+
+    implicit none
+
+    !routine to generate <napf|pao> matrix elements
+    integer, intent(in) ::  iprim,j_in_halo, matA
+    integer, intent(in) :: atom_spec,neigh_species,deriv_flag,direction
+    real(double), intent(in) :: dx,dy,dz
+    ! Optional variables - do we want dmatrix/dPAOcoefficient ? 
+    integer, OPTIONAL :: matAD
+    ! Local variables
+    real(double) :: mat_val,mat_val_dummy
+    integer :: i1,k1,l1,m1,i2,i3,i4,k2,l2,m2,count1,count2,nacz1,nacz2,n,n_support1
+    integer :: n_pfnas,i_pfna,nzeta2,index_j,index_i,part_index_j,wheremat
+
+    !now the loop over support functions using the new datatype
+
+    n_pfnas = pseudo(neigh_species)%n_pjna !no of projector functions
+    mat_val = 0.0_double
+
+    count1 = 1
+    do l1 = 0,pao(atom_spec)%greatest_angmom
+       do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
+          do m1 = -l1,l1
+             ! Fix DRB 2007/03/22
+             part_index_j = 0
+             if(n_pfnas>0) then
+                do i_pfna = 1, n_pfnas
+                   l2 = pseudo(neigh_species)%pjna_l(i_pfna)
+                   nzeta2 = pseudo(neigh_species)%pjna_n(i_pfna)
+                   do m2 = -l2,l2
+                      if(deriv_flag.eq.0) then
+                         call calc_mat_elem_gen(5,atom_spec,l1,nacz1,m1,neigh_species,l2,nzeta2,m2,dx,dy,dz,mat_val)
+                      else if(deriv_flag.eq.1) then
+                         call grad_mat_elem_gen2_prot(direction,5,atom_spec,l1,nacz1,m1,neigh_species,&
+                              l2,nzeta2,m2,dx,dy,dz,mat_val)
+                      endif
+                      ! Fix DRB 2007/03/22
+                      !part_index_j = 0
+                      !if(l2>0) then
+                      !   do n = 0,l2-1
+                      !      part_index_j = part_index_j+(2*n+1)
+                      !   enddo
+                      !end if
+                      index_j = part_index_j + (m2+l2+1)
+                      wheremat = matrix_pos(matA,iprim,j_in_halo,count1,index_j)
+                      call store_matrix_value_pos(matA,wheremat,mat_val)
+                   enddo ! m2
+                   ! Fix DRB 2007/03/22
+                   part_index_j = part_index_j + (2*l2+1)
+                enddo ! i_pfna
+             endif ! (n_pfnas>0) then
+             count1 = count1+1
+          enddo ! m1
+       enddo ! nacz1
+    enddo ! l1
+  end subroutine loop_3_NA
 
 !!****f* build_PAO_matrices/assemble_deriv *
 !!
@@ -401,12 +507,22 @@ contains
                 wheremat = matrix_pos(matA,iprim,halo(range)%i_halo(gcspart))
                 ! Now loop over support functions and PAOs and call routine
                 if(wheremat/=mat(part,range)%onsite(memb)) then
-                   if(flag<3) then
-                      call loop_12(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,flag, &
+                   if(flag<3.OR.flag==4) then
+                      call loop_12(matA,part,memb,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,flag, &
                                    atom_spec,neigh_species,1,direction)
-                   else
+                   else if(flag==3) then
                       call loop_3(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz, &
                                   atom_spec,neigh_species,1,direction)
+                   else if(flag==5) then
+                      if((dx*dx+dy*dy+dz*dz)>RD_ERR) then
+                         call loop_3_NA(matA,iprim,halo(range)%i_halo(gcspart),dx,dy,dz, &
+                              atom_spec,neigh_species,1,direction)
+                      end if
+                   else if(flag==6) then
+                      if((dx*dx+dy*dy+dz*dz)>RD_ERR) then
+                         call loop_12(matA,part,memb,iprim,halo(range)%i_halo(gcspart),dx,dy,dz,flag, & ! We store on-site
+                              atom_spec,neigh_species,1,direction)
+                      end if
                    endif
                 end if
              end do ! End do neigh=1,mat%n_nab

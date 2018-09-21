@@ -26,6 +26,9 @@
 !!    Changed lmax_fact to 22 to accomodate f functions
 !!   2008/02/06 08:28 dave
 !!    Changed for output to file not stdout
+!!   2018/01/22 12:46 dave
+!!    Completely new approach for Bessel transform and changes to calculate
+!!    general Bessel function for NA projector functions
 !!  SOURCE
 !!
 module bessel_integrals
@@ -40,671 +43,15 @@ module bessel_integrals
   ! -------------------------------------------------------
   character(len=80), private :: RCSid = "$Id$"
 
-  integer,parameter :: lmax_fact=22
-  real(double) :: fact(-1:lmax_fact)
+  save
+
+  ! Store factorial (n!) and double factorial (n!!=n*(n-2)*...)
+  real(double), allocatable, dimension(:) :: fact, doublefact
+  real(double), allocatable, dimension(:,:) :: bess_coeff
 
 !!***
    
 contains
-
-!!****f* bessel_integrals/bess0_int *
-!!
-!!  NAME 
-!!   bess0_int
-!!  USAGE
-!!   bess0_int(func,npts,npts_2,rcut,delta_r,func_out)
-!!  PURPOSE
-!!   Calculate 0th order spherical Bessel transform
-!!  INPUTS
-!!   func - input data array
-!!   npts - no of non-zero data points in func
-!!   npts_2 - total size of func, inc. padding up to 2^n
-!!   rcut - cut off radius of func
-!!   delta_r - grid spacing of func
-!!   func_out - Bessel Transform output
-!!  USES
-!!   fft_procedures, datatypes
-!!  AUTHOR
-!!   R Choudhury
-!!  CREATION DATE
-!!   24/07/03
-!!  MODIFICATION HISTORY
-!!
-!!  SOURCE
-!!
-  subroutine bess0_int(func,npts,npts_2,rcut,delta_r,func_out)
-    
-    use fft_procedures, only: sinft
-    use datatypes
-    use numbers, only: zero, twopi
-    use GenComms, only: cq_abort
-    use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
-
-    implicit none
-
-    !subroutine to evaluate integral against spherical 
-    !Bessel function j_0(kr) using FFT's
-    integer, intent(in) :: npts,npts_2
-    real(double), intent(in), dimension(npts) :: func
-    real(double), intent(out), dimension(npts_2/2) :: func_out
-    real(double), intent(in) :: rcut, delta_r
-
-    real(double), dimension(:), allocatable :: dummy1
-    real(double) :: k,r,rcp_k,n
-    integer :: i, stat
-
-    allocate(dummy1(npts_2), STAT=stat)
-    if (stat /= 0) call cq_abort("bess0_int: Error alloc mem: ", npts_2)
-    call reg_alloc_mem(area_basis, npts_2, type_dbl)
-
-    !assign different sin/cos component first..
-    dummy1(1:npts_2)=zero
-    do i=1,npts
-       r = (i-1)*delta_r
-       dummy1(i)=r*delta_r*func(i)
-    enddo
-
-    call sinft(dummy1,npts_2)
-
-    do i=3,npts_2,2
-       k = ((i-1)/2)*twopi/(rcut+delta_r)
-       rcp_k = 1.0_double/k
-       !phase shifting 
-       func_out((i+1)/2) = rcp_k*dummy1(i)
-    enddo
-    !need to put in a quadrature here to evaluate 
-    !the freq.=0 element of the output.
-    func_out(1) = zero
-    do i=1,npts
-       r = (i-1)*delta_r
-       func_out(1) = func_out(1)+(r*r*delta_r*func(i))
-    enddo
-
-    deallocate(dummy1, STAT=stat)
-    if (stat /= 0) call cq_abort("bess0_int: Error dealloc mem")
-    call reg_dealloc_mem(area_basis, npts_2, type_dbl)
-
-  end subroutine bess0_int
-!!***
-
-!!****f* bessel_integrals/bess1_int *
-!!
-!!  NAME 
-!!   bess1_int
-!!  USAGE
-!!   bess1_int(func,npts,npts_2,rcut,delta_r,func_out)
-!!  PURPOSE
-!!   Calculate 1st order spherical Bessel transform
-!!  INPUTS
-!!   func - input data array
-!!   npts - no of non-zero data points in func
-!!   npts_2 - total size of func, inc. padding up to 2^n
-!!   rcut - cut off radius of func
-!!   delta_r - grid spacing of func
-!!   func_out - Bessel Transform output
-!!  USES
-!!   fft_procedures, datatypes
-!!  AUTHOR
-!!   R Choudhury
-!!  CREATION DATE
-!!   24/07/03
-!!  MODIFICATION HISTORY
-!!   08:59, 2003/11/13 dave
-!!    Corrected dimension of func_out to npts_2/2 (TM found)
-!!  SOURCE
-!!
-   subroutine bess1_int(func,npts,npts_2,rcut,delta_r,func_out)
-  
-     use datatypes
-     use fft_procedures, ONLY: sinft,cosft
-     use numbers, ONLY: zero, one, twopi
-     use GenComms, ONLY: cq_abort
-     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
-
-     implicit none
-
-     !subroutine to evaluate integral against spherical 
-     !Bessel function j_1(kr) using FFT's
-
-     integer, intent(in) :: npts,npts_2
-     real(double), intent(in), dimension(npts) :: func
-     real(double), intent(out), dimension(npts_2/2) :: func_out
-     real(double), intent(in) :: rcut, delta_r
-
-     real(double), dimension(:), allocatable :: dummy1, dummy2
-     real(double) :: k,r,rcp_k,n,rcp_r
-     integer :: i, stat
-
-     allocate(dummy1(npts_2), dummy2(npts_2), STAT=stat)
-     if (stat /= 0) call cq_abort("bess1_int: Error alloc mem: ", npts_2)
-     call reg_alloc_mem(area_basis, 2*npts_2, type_dbl)
-
-     !assign different sin/cos component first..
-     dummy1 = zero
-     dummy2 = zero
-     do i=2,npts
-        r = (i-1)*delta_r
-        rcp_r = one/r
-        dummy1(i) = delta_r*func(i)
-        dummy2(i) = -delta_r*r*func(i)
-     enddo
-
-     call sinft(dummy1,npts_2)
-     call cosft(dummy2,npts_2,+1)
-
-     do i=3,npts_2,2
-        k = ((i-1)/2)*twopi/(rcut+delta_r)
-        rcp_k = one/k
-        !phase shifting 
-        func_out((i+1)/2) = rcp_k*(dummy2(i)+rcp_k*dummy1(i))
-     enddo
-     func_out(1) = zero
-
-     deallocate(dummy1, dummy2, STAT=stat)
-     if (stat /= 0) call cq_abort("bess1_int: Error dealloc mem")
-     call reg_dealloc_mem(area_basis, 2*npts_2, type_dbl)
-
-   end subroutine bess1_int
-!!***
-
-!!****f* bessel_integrals/bess2_int *
-!!
-!!  NAME 
-!!   bess2_int
-!!  USAGE
-!!   bess2_int(func,npts,npts_2,rcut,delta_r,func_out)
-!!  PURPOSE
-!!   Calculate 2nd order spherical Bessel transform
-!!  INPUTS
-!!   func - input data array
-!!   npts - no of non-zero data points in func
-!!   npts_2 - total size of func, inc. padding up to 2^n
-!!   rcut - cut off radius of func
-!!   delta_r - grid spacing of func
-!!   func_out - Bessel Transform output
-!!  USES
-!!   fft_procedures, datatypes
-!!  AUTHOR
-!!   R Choudhury
-!!  CREATION DATE
-!!   24/07/03
-!!  MODIFICATION HISTORY
-!!
-!!  SOURCE
-!!
-   subroutine bess2_int(func,npts,npts_2,rcut,delta_r,func_out)
-
-     use datatypes
-     use fft_procedures, only : sinft,cosft
-     use numbers, only: zero, one, three, twopi
-     use GenComms, only: cq_abort
-     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
-
-     implicit none
-
-     !subroutine to evaluate integral against spherical 
-     !Bessel function j_2(kr) using FFT's
-
-     integer, intent(in) :: npts,npts_2
-     real(double), intent(in), dimension(npts) :: func
-     real(double), intent(out), dimension(npts_2/2) :: func_out
-     real(double), intent(in) :: rcut, delta_r
-
-     real(double), dimension(:), allocatable :: dummy1,dummy2,dummy3
-     real(double) :: k,r,rcp_k,n,rcp_r
-     integer :: i, stat
-
-     allocate(dummy1(npts_2), dummy2(npts_2), dummy3(npts_2), STAT=stat)
-     if (stat /= 0) call cq_abort("bess2_int: Error alloc mem: ", npts_2)
-     call reg_alloc_mem(area_basis, 3*npts_2, type_dbl)
-
-     !assign different sin/cos component first..
-     dummy1 = zero
-     dummy2 = zero
-     dummy3 = zero
-     do i=2,npts
-        r = (i-1)*delta_r
-        rcp_r = one/r
-        dummy1(i) = three*delta_r*func(i)*rcp_r
-        dummy2(i) = -three*delta_r*func(i)
-        dummy3(i) = -one*delta_r*r*func(i)
-     enddo
-
-     call sinft(dummy1,npts_2)
-     call cosft(dummy2,npts_2,+1)
-     call sinft(dummy3,npts_2)
-
-     do i=3,npts_2,2
-        k = ((i-1)/2)*twopi/(rcut+delta_r)
-        rcp_k = one/k
-        !phase shifting
-        func_out((i+1)/2) = rcp_k*(dummy3(i)+rcp_k* (dummy2(i)+rcp_k*dummy1(i)))
-     enddo
-     func_out(1) = zero
-
-     deallocate(dummy1, dummy2, dummy3, STAT=stat)
-     if (stat /= 0) call cq_abort("bess2_int: Error dealloc mem")
-     call reg_dealloc_mem(area_basis, 3*npts_2, type_dbl)
-
-   end subroutine bess2_int
-!!***
-
-!!****f* bessel_integrals/bess3_int *
-!!
-!!  NAME 
-!!   bess3_int
-!!  USAGE
-!!   bess3_int(func,npts,npts_2,rcut,delta_r,func_out)
-!!  PURPOSE
-!!   Calculate 3th order spherical Bessel transform
-!!  INPUTS
-!!   func - input data array
-!!   npts - no of non-zero data points in func
-!!   npts_2 - total size of func, inc. padding up to 2^n
-!!   rcut - cut off radius of func
-!!   delta_r - grid spacing of func
-!!   func_out - Bessel Transform output
-!!  USES
-!!   fft_procedures, datatypes
-!!  AUTHOR
-!!   R Choudhury
-!!  CREATION DATE
-!!   24/07/03
-!!  MODIFICATION HISTORY
-!!
-!!  SOURCE
-!!
-   subroutine bess3_int(func,npts,npts_2,rcut,delta_r,func_out)
-
-     use datatypes
-     use fft_procedures, ONLY : sinft,cosft
-     use numbers, ONLY: zero, one, six, twopi, fifteen
-     use GenComms, ONLY: cq_abort
-     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
-
-     implicit none
-
-     !subroutine to evaluate integral against spherical 
-     !Bessel function j_3(kr) using FFT's
-
-     integer, intent(in) :: npts,npts_2
-     real(double), intent(in), dimension(npts) :: func
-     real(double), intent(out), dimension(npts_2/2) :: func_out
-     real(double), intent(in) :: rcut, delta_r
-
-     real(double), dimension(:), allocatable :: dummy1,dummy2,dummy3,dummy4
-     real(double) :: k,r,rcp_k,n,rcp_r
-     integer :: i, stat
-
-     allocate(dummy1(npts_2), dummy2(npts_2), dummy3(npts_2), &
-              dummy4(npts_2), STAT=stat)
-     if (stat /= 0) call cq_abort("bess3_int: Error alloc mem: ", npts_2)
-     call reg_alloc_mem(area_basis, 4*npts_2, type_dbl)
-
-     !assign different sin/cos component first..
-     dummy1 = zero
-     dummy2 = zero
-     dummy3 = zero
-     dummy4 = zero
-     do i=2,npts
-        r = (i-1)*delta_r
-        rcp_r = one/r
-        dummy1(i) = fifteen*delta_r*func(i)*rcp_r*rcp_r
-        dummy2(i) = -fifteen*delta_r*func(i)*rcp_r
-        dummy3(i) = -six*delta_r*func(i)
-        dummy4(i) = r*delta_r*func(i)
-     enddo
-
-     call sinft(dummy1,npts_2)
-     call cosft(dummy2,npts_2,+1)
-     call sinft(dummy3,npts_2)
-     call cosft(dummy4,npts_2,+1)
-
-     do i=3,npts,2
-        k = ((i-1)/2)*twopi/(rcut+delta_r)
-        rcp_k = one/k
-        !phase shift
-        func_out((i+1)/2) = rcp_k*(dummy4(i)+rcp_k*(dummy3(i)+rcp_k* (dummy2(i)+rcp_k*dummy1(i))))
-     enddo
-     func_out(1) = zero
-
-     deallocate(dummy1, dummy2, dummy3, dummy4, STAT=stat)
-     if (stat /= 0) call cq_abort("bess3_int: Error dealloc mem")
-     call reg_dealloc_mem(area_basis, 4*npts_2, type_dbl)
-
-   end subroutine bess3_int
-!!***
-
-!!****f* bessel_integrals/bess4_int *
-!!
-!!  NAME 
-!!   bess4_int
-!!  USAGE
-!!   bess4_int(func,npts,npts_2,rcut,delta_r,func_out)
-!!  PURPOSE
-!!   Calculate 4th order spherical Bessel transform
-!!  INPUTS
-!!   func - input data array
-!!   npts - no of non-zero data points in func
-!!   npts_2 - total size of func, inc. padding up to 2^n
-!!   rcut - cut off radius of func
-!!   delta_r - grid spacing of func
-!!   func_out - Bessel Transform output
-!!  USES
-!!   fft_procedures, datatypes
-!!  AUTHOR
-!!   R Choudhury
-!!  CREATION DATE
-!!   24/07/03
-!!  MODIFICATION HISTORY
-!!
-!!  SOURCE
-!!
-   subroutine bess4_int(func,npts,npts_2,rcut,delta_r,func_out)
-
-     use fft_procedures, ONLY : sinft,cosft
-     use datatypes
-     use numbers, ONLY: zero, one, twopi
-     use GenComms, ONLY: cq_abort
-     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
-
-     implicit none
-
-     !subroutine to evaluate integral against spherical 
-     !Bessel function j_4(kr) using FFT's
-     integer, intent(in) :: npts,npts_2
-     real(double), intent(in), dimension(npts) :: func
-     real(double), intent(out), dimension(npts_2/2) :: func_out
-     real(double), intent(in) :: rcut, delta_r
-
-     real(double), dimension(:), allocatable :: dummy1, dummy2, &
-                                                dummy3, dummy4, dummy5
-     real(double) :: k,r,rcp_k,n,rcp_r
-     integer :: i, stat
-
-     allocate(dummy1(npts_2), dummy2(npts_2), dummy3(npts_2), &
-              dummy4(npts_2), dummy5(npts_2), STAT=stat)
-     if (stat /= 0) call cq_abort("bess4_int: Error alloc mem: ", npts_2)
-     call reg_alloc_mem(area_basis, 5*npts_2, type_dbl)
-
-     !assign different sin/cos component first..
-     dummy1 = zero
-     dummy2 = zero
-     dummy3 = zero
-     dummy4 = zero
-     dummy5 = zero
-     do i=2,npts
-        r = (i-1)*delta_r
-        rcp_r = one/r
-        dummy1(i) =  105.0_double*delta_r*func(i)*rcp_r*rcp_r*rcp_r
-        dummy2(i) = -105.0_double*delta_r*func(i)*rcp_r*rcp_r
-        dummy3(i) =  -45.0_double*delta_r*func(i)*rcp_r
-        dummy4(i) =   10.0_double*delta_r*func(i)
-        dummy5(i) = delta_r*r*func(i)
-     enddo
-
-     call sinft(dummy1,npts_2)
-     call cosft(dummy2,npts_2,+1)
-     call sinft(dummy3,npts_2)
-     call cosft(dummy4,npts_2,+1)
-     call sinft(dummy5,npts_2)
-
-     do i=3,npts,2
-        k = ((i-1)/2)*twopi/(rcut+delta_r)
-        rcp_k = one/k
-        !phase shifting
-        func_out((i+1)/2) = rcp_k*(dummy5(i)+rcp_k*&
-             &(dummy4(i)+rcp_k*(dummy3(i)+rcp_k* (dummy2(i)+rcp_k*dummy1(i)))))
-     enddo
-     func_out(1) = zero
-
-     deallocate(dummy1, dummy2, dummy3, dummy4, dummy5, STAT=stat)
-     if (stat /= 0) call cq_abort("bess4_int: Error dealloc mem")
-     call reg_dealloc_mem(area_basis, 5*npts_2, type_dbl)
-
-   end subroutine bess4_int
-!!***
-
-!!****f* bessel_integrals/bess5_int *
-!!
-!!  NAME 
-!!   bess5_int
-!!  USAGE
-!!   bess5_int(func,npts,npts_2,rcut,delta_r,func_out)
-!!  PURPOSE
-!!   Calculate 5th order spherical Bessel transform
-!!  INPUTS
-!!   func - input data array
-!!   npts - no of non-zero data points in func
-!!   npts_2 - total size of func, inc. padding up to 2^n
-!!   rcut - cut off radius of func
-!!   delta_r - grid spacing of func
-!!   func_out - Bessel Transform output
-!!  USES
-!!   fft_procedures, datatypes
-!!  AUTHOR
-!!   R Choudhury
-!!  CREATION DATE
-!!   24/07/03
-!!  MODIFICATION HISTORY
-!!
-!!  SOURCE
-!!    
-   subroutine bess5_int(func,npts,npts_2,rcut,delta_r,func_out)
-
-     use fft_procedures, ONLY : sinft,cosft
-     use datatypes
-     use numbers, ONLY: zero, one, twopi, fifteen
-     use GenComms, ONLY: cq_abort
-     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
-
-     implicit none
-
-     !subroutine to evaluate integral against spherical 
-     !Bessel function j_5(kr) using FFT's
-     !integer, parameter :: dp = selected_real_kind(p=14,r=30)
-     integer, intent(in) :: npts,npts_2
-     real(double), intent(in), dimension(npts) :: func
-     real(double), intent(out), dimension(npts_2/2) :: func_out
-     real(double), intent(in) :: rcut, delta_r
-
-     real(double), dimension(:), allocatable :: dummy1, dummy2, &
-                                                dummy3, dummy4, &
-                                                dummy5, dummy6
-     real(double) :: k,r,rcp_k,n,rcp_r,int_part,bess5,rcp_kr,kr
-     integer :: i, j, stat
-
-     allocate(dummy1(npts_2), dummy2(npts_2), dummy3(npts_2), &
-              dummy4(npts_2), dummy5(npts_2), dummy6(npts_2), STAT=stat)
-     if (stat /= 0) call cq_abort("bess5_int: Error alloc mem: ", npts_2)
-     call reg_alloc_mem(area_basis, 6*npts_2, type_dbl)
-
-     !assign different sin/cos component first..
-     dummy1 = zero
-     dummy2 = zero
-     dummy3 = zero
-     dummy4 = zero
-     dummy5 = zero
-     dummy6 = zero
-     do i=2,npts
-        r = (i-1)*delta_r
-        rcp_r = one/r
-        dummy1(i) =  945.0_double*delta_r*func(i)*rcp_r*rcp_r*rcp_r*rcp_r
-        dummy2(i) = -945.0_double*delta_r*func(i)*rcp_r*rcp_r*rcp_r
-        dummy3(i) = -420.0_double*delta_r*func(i)*rcp_r*rcp_r
-        dummy4(i) =  105.0_double*delta_r*func(i)*rcp_r
-        dummy5(i) =       fifteen*delta_r*func(i)
-        dummy6(i) =          -one*delta_r*func(i)*r
-     enddo
-
-     call sinft(dummy1,npts_2)
-     call cosft(dummy2,npts_2,+1)
-     call sinft(dummy3,npts_2)
-     call cosft(dummy4,npts_2,+1)
-     call sinft(dummy5,npts_2)
-     call cosft(dummy6,npts_2,+1)
-
-
-     !added option for real space quadrature of overlap integral
-     !for small values of k as the FFT transforms diverge.
-     do i=3,npts_2,2
-        k = ((i-1)/2)*twopi/(rcut+delta_r)
-
-        if(k<0.2_double) then
-           int_part = zero
-           do j=1,npts-1
-              r = j*delta_r
-              kr = r*k
-              rcp_kr = one/kr
-              if(kr<0.01_double) then
-                 bess5 = bess5_ser(kr)
-              else
-                 bess5 = rcp_kr*(-1.0_double*cos(kr)+rcp_kr*(15.0_double*sin(kr)&
-                      &+rcp_kr*(105.0_double*cos(kr)+rcp_kr*(-420.0_double*sin(kr)&
-                      &+rcp_kr*(-945.0_double*cos(kr)+945.0_double*sin(kr)*rcp_kr)))))
-              endif
-              int_part = int_part+bess5*delta_r*r*r*func(j+1)
-           enddo
-           func_out((i-1)/2) = int_part
-        else
-           rcp_k = one/k
-           func_out((i-1)/2) = rcp_k*(dummy6(i)+rcp_k*&
-                &(dummy5(i)+rcp_k*(dummy4(i)+rcp_k*(dummy3(i)+rcp_k*&
-                &(dummy2(i)+rcp_k*dummy1(i))))))
-        endif
-     enddo
-     func_out(1) = zero
-
-     deallocate(dummy1, dummy2, dummy3, dummy4, dummy5, dummy6, STAT=stat)
-     if (stat /= 0) call cq_abort("bess5_int: Error dealloc mem")
-     call reg_dealloc_mem(area_basis, 6*npts_2, type_dbl)
-
-   end subroutine bess5_int
-!!***
-
-!!****f* bessel_integrals/bess6_int *
-!!
-!!  NAME 
-!!   bess6_int
-!!  USAGE
-!!   bess6_int(func,npts,npts_2,rcut,delta_r,func_out)
-!!  PURPOSE
-!!   Calculate 6th order spherical Bessel transform
-!!  INPUTS
-!!   func - input data array
-!!   npts - no of non-zero data points in func
-!!   npts_2 - total size of func, inc. padding up to 2^n
-!!   rcut - cut off radius of func
-!!   delta_r - grid spacing of func
-!!   func_out - Bessel Transform output
-!!  USES
-!!   fft_procedures, datatypes
-!!  AUTHOR
-!!   R Choudhury
-!!  CREATION DATE
-!!   24/07/03
-!!  MODIFICATION HISTORY
-!!
-!!  SOURCE
-!!
-   subroutine bess6_int(func,npts,npts_2,rcut,delta_r,func_out)
-
-     use fft_procedures, ONLY : sinft,cosft
-     use datatypes
-     use numbers, ONLY: zero, one, twopi
-     use GenComms, ONLY: cq_abort
-     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
-
-     implicit none
-
-     !subroutine to evaluate integral against spherical 
-     !Bessel function j_6(kr) using FFT's
-     integer, intent(in) :: npts,npts_2
-     real(double), intent(in), dimension(npts) :: func
-     real(double), intent(out), dimension(npts_2/2) :: func_out
-     real(double), intent(in) :: rcut, delta_r
-
-     real(double), dimension(:), allocatable :: dummy1, dummy2, &
-                                                dummy3, dummy4, &
-                                                dummy5, dummy6, &
-                                                dummy7        
-     real(double) :: k,r,rcp_k,n,rcp_r,bess6,kr,rcp_kr,int_part
-     integer :: i, j, stat
-
-     allocate(dummy1(npts_2), dummy2(npts_2), dummy3(npts_2), &
-              dummy4(npts_2), dummy5(npts_2), dummy6(npts_2), &
-              dummy7(npts_2), STAT=stat)
-     if (stat /= 0) call cq_abort("bess6_int: Error alloc mem: ", npts_2)
-     call reg_alloc_mem(area_basis, 7*npts_2, type_dbl)
-
-     !assign different sin/cos component first..
-     dummy1 = zero
-     dummy2 = zero
-     dummy3 = zero
-     dummy4 = zero
-     dummy5 = zero
-     dummy6 = zero
-     dummy7 = zero
-     do i=2,npts
-        r = (i-1)*delta_r
-        rcp_r = one/r
-        dummy1(i) =  10395.0_double*delta_r*func(i)*rcp_r*rcp_r*rcp_r*rcp_r*rcp_r
-        dummy2(i) = -10395.0_double*delta_r*func(i)*rcp_r*rcp_r*rcp_r*rcp_r
-        dummy3(i) =  -4725.0_double*delta_r*func(i)*rcp_r*rcp_r*rcp_r
-        dummy4(i) =   1260.0_double*delta_r*func(i)*rcp_r*rcp_r
-        dummy5(i) =    210.0_double*delta_r*func(i)*rcp_r
-        dummy6(i) =    -21.0_double*delta_r*func(i)
-        dummy7(i) =            -one*delta_r*func(i)*r
-     enddo
-
-     call sinft(dummy1,npts_2)
-     call cosft(dummy2,npts_2,+1)
-     call sinft(dummy3,npts_2)
-     call cosft(dummy4,npts_2,+1)
-     call sinft(dummy5,npts_2)
-     call cosft(dummy6,npts_2,+1)
-     call sinft(dummy7,npts_2)
-
-     !added option for real-space quadrature of radial integrals as
-     !the FFT intgrals diverge for very small values of k.
-     do i=3,npts_2,2
-        k = ((i-1)/2)*twopi/(rcut+delta_r)
-        if(k<0.2_double) then
-           int_part = zero
-           do j=1,npts-1
-              r = j*delta_r
-              kr = k*r
-              rcp_kr = one/kr
-              if(kr<0.02_double) then
-                 bess6 = bess6_ser(kr)
-              else
-                 bess6 = rcp_kr*(-1.0_double*sin(kr)+rcp_kr*(-21.0_double*cos(kr)&
-                      &+rcp_kr*(210.0_double*sin(kr)+rcp_kr*(1260.0_double*cos(kr)&
-                      &+rcp_kr*(-4725.0_double*sin(kr)+rcp_kr*(-10395.0_double*cos(kr)&
-                      &+rcp_kr*10395.0_double*sin(kr)))))))
-              endif
-              int_part = int_part+bess6*delta_r*r*r*func(j+1)
-           enddo
-           func_out((i-1)/2) = int_part
-        else
-
-
-           rcp_k = 1.0_double/k
-           func_out((i-1)/2) = rcp_k*(dummy7(i)+rcp_k*&
-                &(dummy6(i)+rcp_k*(dummy5(i)+rcp_k*(dummy4(i)&
-                &+rcp_k*(dummy3(i)+rcp_k*&
-                &(dummy2(i)+rcp_k*dummy1(i)))))))
-        endif
-     enddo
-     func_out(1) = zero
-
-     deallocate(dummy1, dummy2, dummy3, dummy4, dummy5, dummy6, &
-                dummy7, STAT=stat)
-     if (stat /= 0) call cq_abort("bess6_int: Error dealloc mem")
-     call reg_dealloc_mem(area_basis, 7*npts_2, type_dbl)
-
-   end subroutine bess6_int
-!!***
 
 !!****f* bessel_integrals/bessloop *
 !!
@@ -731,9 +78,11 @@ contains
 !!  MODIFICATION HISTORY
 !!   2007/01/09 08:09 dave
 !!    Dimension of dummyout fixed
+!!   2018/01/22 12:51 JST dave
+!!    Now calls new Bessel transform routines (based on integral representation of Bessel function)
 !!  SOURCE
 !!
-   subroutine bessloop(dummyin,l,npts,npts_2,deltar,rcut,dummyout)
+   subroutine bessloop(dummyin,l,npts,npts_2,deltar,rcut,dummyout,sign)
 
      use datatypes
 
@@ -741,40 +90,17 @@ contains
 
      !choosing spherical Bessel transform subroutine 
      !for incoming angular momentum value l
-     integer, intent(in) :: l,npts,npts_2
+     integer, intent(in) :: l,npts,npts_2,sign
      real(double), intent(in), dimension(npts) :: dummyin
      real(double), intent(out), dimension(npts_2/2) :: dummyout 
      real(double), intent(in) :: deltar,rcut
 
-     !if clause to select correct subroutine
-     if(l.eq.0) then
-        !write(io_lun,*) 'bessloop l=0'
-        !RC for debugging purposes
-        !call bess0_int_test(dummyin,npts,npts_2,rcut,deltar,dummyout)
-        call bess0_int(dummyin,npts,npts_2,rcut,deltar,dummyout)
-     else if(l.eq.1) then
-        !write(io_lun,*) 'bessloop l=1'
-        call bess1_int(dummyin,npts,npts_2,rcut,deltar,dummyout)
-     else if(l.eq.2) then
-        !write(io_lun,*) 'bessloop l=2'
-        call bess2_int(dummyin,npts,npts_2,rcut,deltar,dummyout)
-     else if(l.eq.3) then 
-        !write(io_lun,*) 'bessloop l=3'
-        call bess3_int(dummyin,npts,npts_2,rcut,deltar,dummyout)
-     else if(l.eq.4) then
-        !write(io_lun,*) 'bessloop l=4'
-        call bess4_int(dummyin,npts,npts_2,rcut,deltar,dummyout)
-     else if(l.eq.5) then
-        !write(io_lun,*) 'bessloop l=5'
-        call bess5_int(dummyin,npts,npts_2,rcut,deltar,dummyout)
-     else if(l.eq.6) then
-        !write(io_lun,*) 'bessloop l=6'
-        call bess6_int(dummyin,npts,npts_2,rcut,deltar,dummyout)
+     if(mod(l,2)==0) then
+        call new_bessel_transform_even(l,dummyin,npts,npts_2,rcut,deltar,dummyout)
      else 
-        write(io_lun,*) 'steady on, this value of the total&
-             &angular momentum has made me dizzy!'
-     endif
-
+        call new_bessel_transform_odd(l,dummyin,npts,npts_2,rcut,deltar,dummyout)
+     end if
+     return
    end subroutine bessloop
 !!***
 
@@ -855,7 +181,6 @@ contains
 
    end subroutine complx_fctr
 !!***
-   
 
 !!****f* bessel_integrals/maxtwon *
 !!
@@ -937,102 +262,328 @@ contains
      integer i
      
      do i=1,n
-        k = (i-1)*dk
+        k = real(i-1,double)*dk
         y(i) = k*k*y(i)
      enddo
 
    end subroutine multiply_ksq
 !!***
-        
-!!****f* bessel_integrals/bess5_ser *
+
+!!****f* bessel_integrals/general_bessel *
 !!
 !!  NAME 
-!!   bess5_ser
+!!   general_bessel
 !!  USAGE
-!!   bess5_ser(x)
+!!   general_bessel(x)
 !!  PURPOSE
-!!   Calculate 5th order spherical Bessel function with small
-!!   argument x using small argument expansion. 
+!!   Calculates a general Bessel function using either recursion or
+!!   (for small r) series expansion
 !!  INPUTS
-!!   x : argument
-!! 
+!!   r : value of r
+!!   n : order of Bessel function
 !!  USES
-!!   none
+!!   
 !!  AUTHOR
-!!   R Choudhury
+!!   D. R. Bowler
 !!  CREATION DATE
-!!   24/07/03
+!!   22/01/18
 !!  MODIFICATION HISTORY
 !!
 !!  SOURCE
 !!
-   function bess5_ser(x)
+   function general_bessel(r,n)
 
      use datatypes
-     use numbers, ONLY: zero,two
+     use numbers
+     use GenComms, only: cq_abort
+     
      implicit none
 
-     integer :: s
-     real(double) :: bess5_ser
-     real(double) :: bess5_part
-     real(double), intent(in) :: x
+     real(double) :: general_bessel
+     ! Passed
+     real(double) :: r
+     integer :: n
+     
+     ! Local
+     real(double), dimension(0:n) :: sph_bess
+     integer :: i, s
+     real(double) :: term
+     logical :: flag_series
 
-     bess5_part = zero
-     bess5_ser = zero
-
-     do s=0,4
-        bess5_part = ((-1)**s)*fact(s+5)*(x**(2*s)) /(fact(s)*fact(2*s+11))
-        bess5_ser = bess5_ser + bess5_part
-     enddo
-
-     bess5_ser = bess5_ser*two*two*two*two*two*x*x*x*x*x
-
-   end function bess5_ser
+     ! Do we need series expansion ? These numbers should have a more quantitative basis !
+     flag_series = .false.
+     if(n>2.AND.r<0.05_double) flag_series = .true.
+     if(n>3.AND.r<0.2_double) flag_series = .true.
+     if(n>4.AND.r<0.4_double) flag_series = .true.
+     if(n>5.AND.r<0.7_double) flag_series = .true.
+     if(n>6.AND.r<1.0_double) flag_series = .true.
+     if(n>7.AND.r<1.6_double) flag_series = .true.
+     if(n>8.AND.r<2.5_double) flag_series = .true.
+     if(n>9.AND.r<3.0_double) flag_series = .true.
+     if(n>10.AND.r<3.4_double) flag_series = .true.
+     if(n<0) call cq_abort("Error: Can't have spherical bessel with order less than zero ",n)
+     ! Find Bessel function based on r and need for series expansion
+     if(abs(r)<1e-8_double) then
+        if(n>0) then
+           general_bessel = zero
+        else
+           general_bessel = one - r*r/six ! Yes, I know... It should be accurate
+        end if
+     else if(flag_series) then
+        general_bessel = zero
+        do s=0,5
+           term = ((-1)**s)*fact(s+n)*(r**(2*s)) /(fact(s)*fact(2*s+2*n+1))
+           general_bessel = general_bessel + term
+        enddo
+        do i=1,n
+           general_bessel = general_bessel * two * r
+        end do
+     else
+        sph_bess(0) = sin(r)/r
+        if(n==0) then
+           general_bessel = sph_bess(0)
+        else
+           sph_bess(1) = (sph_bess(0) - cos(r))/r
+           if(n==1) then
+              general_bessel = sph_bess(1)
+           else
+              do i=2,n
+                 sph_bess(i) = sph_bess(i-1)*real(2*i-1,double)/r - sph_bess(i-2)
+              end do
+              general_bessel = sph_bess(n)
+           end if
+        end if
+     end if
+   end function general_bessel
 !!***
-    
-!!****f* bessel_integrals/bess6_ser *
+   
+!!****f* bessel_integrals/new_bessel_transform_even *
 !!
 !!  NAME 
-!!   bess6_ser
+!!   new_bessel_transform_even
 !!  USAGE
-!!   bess6_ser(x)
+!!   new_bessel_transform_even
 !!  PURPOSE
-!!   Calculate 6th spherical Bessel function with (small) argument x
+!!   Calculates a general Bessel transform for even order
 !!  INPUTS
-!!   x : small argument
-!! 
+!!   n : order of Bessel function
 !!  USES
-!!   none
+!!   
 !!  AUTHOR
-!!   R Choudhury
+!!   D. R. Bowler
 !!  CREATION DATE
-!!   24/07/03
+!!   22/01/18
 !!  MODIFICATION HISTORY
 !!
 !!  SOURCE
 !!
-   function bess6_ser(x)
+   subroutine new_bessel_transform_even(n,function_in,npts_in,npts2,rcut,delta_r,function_out)
+
      use datatypes
+     use numbers
+     use fft_procedures, only: sinft, cosft
+
      implicit none
-     !j_6(x) series approximation
-     integer s
-     real(double) :: bess6_ser
-     real(double) :: bess6_part
-     real(double), intent(in) :: x
 
-     bess6_part = 0.0_double
-     bess6_ser = 0.0_double
+     ! Passed variables
+     integer :: n, npts_in, npts2
+     real(double) :: rcut, delta_r
+     real(double), dimension(npts_in) :: function_in
+     real(double), dimension(npts2/2) :: function_out
 
-     do s=0,4
-        bess6_part = ((-1)**s)*fact(s+6)*(x**(2*s)) /(fact(s)*fact(2*s+13))
-        bess6_ser = bess6_ser + bess6_part
-     enddo
+     ! Local variables
+     integer :: i, j, en, l, poly_order, xi
+     real(double) :: k, fac, dk, dk2, dk3, x1,x0,x0_in, x1_in, pmj, r, tee_nm
+     real(double), dimension(:), allocatable :: dummy1, dummy2, ess, coeff_poly, coeff_poly1, prefac
 
-     bess6_ser = bess6_ser*2.0*2.0*2.0&
-          &*2.0*x*x*x*x&
-          &*2.0*x*2.0*x
+     poly_order = 3
+     ! en is found such that n = 2*en
+     en = floor(half*n)
+     ! Allocate
+     allocate(dummy1(npts2),dummy2(npts2),ess(0:en),coeff_poly(0:poly_order), &
+          coeff_poly1(0:poly_order),prefac(0:en))
+     dummy1 = zero
+     dummy2 = zero
+     ess = zero
+     do i=1,npts_in
+        r = real(i-1,double) * delta_r
+        dummy1(i) = r*r*delta_r*function_in(i)
+        dummy2(i) = r*r*r*delta_r*function_in(i)
+     end do
+     ! Cosine transform for function
+     call cosft(dummy1,npts2,+1)
+     ! Sine transform for first derivative (for polynomial fitting)
+     call sinft(dummy2,npts2)
+     dummy2 = -one*dummy2
+     ! Set k-space interval
+     dk = twopi/(rcut+delta_r)
+     dk2 = dk*dk
+     dk3 = dk2*dk
+     ! Calculate prefactors for Legendre polynomial
+     pmj = one
+     do j=0,en
+        prefac(j) = pmj*doublefact(2*en+2*j-1)/(fact(2*j)*doublefact(2*en-2*j))
+        pmj = -pmj
+     end do
+     ! Loop to perform transform
+     do i=3,npts2,2
+        k = ((i-1)/2)*dk
+        fac = one/k
+        x0_in = (k-dk)
+        x1_in = k
+        ! Cubic coefficients in powers of (x-x0)
+        coeff_poly1(0) = dummy1(i-2)
+        coeff_poly1(1) = dummy2(i-2)
+        coeff_poly1(2) = three*(dummy1(i)-dummy1(i-2))/dk2 - (dummy2(i) + two*dummy2(i-2))/dk
+        coeff_poly1(3) =  -two*(dummy1(i)-dummy1(i-2))/dk3 + (dummy2(i) + dummy2(i-2))/dk2
+        ! Convert to x
+        coeff_poly(3) = coeff_poly1(3)
+        coeff_poly(2) = coeff_poly1(2) - three*coeff_poly1(3)*(k-dk)
+        coeff_poly(1) = coeff_poly1(1) - two*coeff_poly1(2)*(k-dk) + &
+             three*(k-dk)*(k-dk)*coeff_poly1(3)
+        coeff_poly(0) = coeff_poly1(0) - coeff_poly1(1)*(k-dk) + &
+             (k-dk)*(k-dk)*coeff_poly1(2) - (k-dk)*(k-dk)*(k-dk)*coeff_poly1(3)
+        function_out((i+1)/2) = zero
+        ! Build Bessel transform
+        do j=0,en
+           ! k^{2j+1} 
+           x0 = x0_in
+           x1 = x1_in
+           ! Interpolate to find T_nm
+           tee_nm = zero
+           do xi=0,poly_order 
+              tee_nm = tee_nm + coeff_poly(xi)*(x1-x0)/real(2*j+xi+1,double)
+              x1 = x1*k
+              x0 = x0*(k-dk)
+           end do
+           x0_in = x0_in*(k-dk)*(k-dk)
+           x1_in = x1_in*k*k
+           ! Accumulate into S_nm
+           ess(j) = ess(j) + tee_nm
+           ! Sum over n to get transform
+           function_out((i+1)/2) = function_out((i+1)/2) + prefac(j)*ess(j)*fac
+           fac = fac/(k*k) ! 1/k^{2j+1}
+        end do
+     end do
+     function_out(1) = zero
+     if(n==0) then ! Quadrature for k=0
+        do i=1,npts_in
+           r = (i-1)*delta_r
+           function_out(1) = function_out(1)+(r*r*delta_r*function_in(i))
+        enddo
+     end if
+   end subroutine new_bessel_transform_even
+!!***
 
-   end function bess6_ser
+!!****f* bessel_integrals/new_bessel_transform_odd *
+!!
+!!  NAME 
+!!   new_bessel_transform_odd
+!!  USAGE
+!!   new_bessel_transform_odd
+!!  PURPOSE
+!!   Calculates a general Bessel transform for odd order
+!!  INPUTS
+!!   n : order of Bessel function
+!!  USES
+!!   
+!!  AUTHOR
+!!   D. R. Bowler
+!!  CREATION DATE
+!!   22/01/18
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+   subroutine new_bessel_transform_odd(n,function_in,npts_in,npts2,rcut,delta_r,function_out)
+
+     use datatypes
+     use numbers
+     use fft_procedures, only: sinft, cosft
+
+     implicit none
+
+     ! Passed variables
+     integer :: n, npts_in, npts2
+     real(double) :: rcut, delta_r
+     real(double), dimension(npts_in) :: function_in
+     real(double), dimension(npts2/2) :: function_out
+
+     ! Local variables
+     integer :: i, j, en, l, poly_order, xi
+     real(double) :: k, fac, dk, dk2, dk3, x1,x0,x0_in, x1_in, pmj, r, tee_nm
+     real(double), dimension(:), allocatable :: dummy1, dummy2, ess, coeff_poly, prefac, coeff_poly1
+
+     poly_order = 3
+     ! en is found such that 2*en+1
+     en = floor(half*n)
+     ! Allocate
+     allocate(dummy1(npts2),dummy2(npts2),ess(0:en),coeff_poly(0:poly_order), &
+          coeff_poly1(0:poly_order),prefac(0:en))
+     dummy1 = zero
+     dummy2 = zero
+     ess = zero
+     do i=1,npts_in
+        r = real(i-1,double) * delta_r
+        dummy1(i) = r*r*delta_r*function_in(i)
+        dummy2(i) = r*r*r*delta_r*function_in(i)
+     end do
+     ! Sine transform for function
+     call sinft(dummy1,npts2)
+     ! Cosine transform for first derivative (for polynomial fitting)
+     call cosft(dummy2,npts2,+1)
+     ! Set k-space interval
+     dk = twopi/(rcut+delta_r)
+     dk2 = dk*dk
+     dk3 = dk2*dk
+     ! Calculate prefactors for Legendre polynomial
+     pmj = one
+     do j=0,en
+        prefac(j) = pmj*doublefact(2*en+2*j+1)/(fact(2*j+1)*doublefact(2*en-2*j))
+        pmj = -pmj
+     end do
+     ! Loop to perform transform
+     do i=3,npts2,2
+        k = ((i-1)/2)*dk
+        fac = one/(k*k)
+        x0_in = (k-dk)*(k-dk)
+        x1_in = k*k
+        ! Cubic coefficients in powers of (x-x0)
+        coeff_poly1(0) = dummy1(i-2)
+        coeff_poly1(1) = dummy2(i-2)
+        coeff_poly1(2) = three*(dummy1(i)-dummy1(i-2))/dk2 - (dummy2(i) + two*dummy2(i-2))/dk
+        coeff_poly1(3) =  -two*(dummy1(i)-dummy1(i-2))/dk3 + (dummy2(i) + dummy2(i-2))/dk2
+        ! Convert to x
+        coeff_poly(3) = coeff_poly1(3)
+        coeff_poly(2) = coeff_poly1(2) - three*coeff_poly1(3)*(k-dk)
+        coeff_poly(1) = coeff_poly1(1) - two*coeff_poly1(2)*(k-dk) + &
+             three*(k-dk)*(k-dk)*coeff_poly1(3)
+        coeff_poly(0) = coeff_poly1(0) - coeff_poly1(1)*(k-dk) + &
+             (k-dk)*(k-dk)*coeff_poly1(2) - (k-dk)*(k-dk)*(k-dk)*coeff_poly1(3)
+        function_out((i+1)/2) = zero
+        ! Build Bessel transform
+        do j=0,en
+           ! k^{2j+1 +1}
+           x0 = x0_in
+           x1 = x1_in
+           ! Interpolate to find T_nm
+           tee_nm = zero
+           do xi=0,poly_order ! Interpolation to find T_nm
+              tee_nm = tee_nm + coeff_poly(xi)*(x1-x0)/real(2*j+1+xi+1,double)
+              x1 = x1*k
+              x0 = x0*(k-dk)
+           end do
+           x0_in = x0_in*(k-dk)*(k-dk)
+           x1_in = x1_in*k*k
+           ! Accumulate into S_nm
+           ess(j) = ess(j) + tee_nm
+           ! Sum over n to get transform
+           function_out((i+1)/2) = function_out((i+1)/2) + prefac(j)*ess(j)*fac
+           fac = fac/(k*k) ! 1/k^{2j+1+1}
+        end do
+     end do
+     function_out(1) = zero
+   end subroutine new_bessel_transform_odd
 !!***
    
  end module bessel_integrals

@@ -48,6 +48,10 @@
 !!    Added sbrt: safemin2 & update_start_xyz
 !!   2014/09/15 18:30 lat
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
+!!   2018/07/16 16:32 dave
+!!    Added user-control flag_stop_on_empty_bundle
+!!   2018/09/07 tsuyoshi
+!!    introduced flag_debug_move_atoms for debugging
 !!  SOURCE
 !!
 module move_atoms
@@ -59,6 +63,7 @@ module move_atoms
                                     tmr_std_indexing, &
                                     tmr_std_allocation
 
+  logical :: flag_debug_move_atoms = .false.
 
   ! Useful physical constants
   real(double), parameter:: amu = 1.660566e-27_double
@@ -71,6 +76,21 @@ module move_atoms
   real(double), parameter:: kB = 1.3806503e-23_double
   real(double), parameter:: fac_Kelvin2Hartree = kB/ev
   !real(double), parameter:: fac_Kelvin2Hartree = 2.92126269e-6_double
+
+  real(double) :: threshold_resetCD
+
+  logical :: flag_stop_on_empty_bundle
+  
+  ! Table to show the methods to update  (for update_pos_and_matrix)
+   integer, parameter :: updatePos  = 0
+   integer, parameter :: updateL    = 1
+   integer, parameter :: updateK    = 2
+   integer, parameter :: updateLorK = 3
+   integer, parameter :: updateSFcoeff = 4
+   integer, parameter :: extrplL    = 5
+   integer, parameter :: updateX    = 6
+   integer, parameter :: updateXdiss= 7
+   integer, parameter :: updateS    = 8
 
   ! -------------------------------------------------------
   ! RCS ident string for object file id
@@ -194,8 +214,7 @@ contains
     use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell, &
                               z_atom_cell, ni_in_cell, id_glob,    &
                               flag_reset_dens_on_atom_move,        &
-                              flag_move_atom,atom_coord_diff,      &
-                              flag_MDold
+                              flag_move_atom, flag_MDold
     use species_module, only: species, mass
     use GenComms,       only: myid
 
@@ -214,6 +233,7 @@ contains
     logical      :: flagx, flagy, flagz
     integer      :: part, memb, atom, speca, k, gatom
     real(double) :: massa, acc
+    real(double) :: dx, dy, dz
 
     call start_timer(tmr_std_moveatoms)
     if (myid == 0 .and. iprint_MD > 0) write (io_lun,1) step, quenchflag
@@ -266,22 +286,28 @@ contains
        ! X
        if (flagx) then
         acc = force(1,gatom) / massa
-        atom_coord_diff(1,gatom)=step*velocity(1,atom)+half*step*step*acc
-        x_atom_cell(atom) = x_atom_cell(atom) + atom_coord_diff(1,gatom)
+        !atom_coord_diff(1,gatom)=step*velocity(1,atom)+half*step*step*acc
+        !x_atom_cell(atom) = x_atom_cell(atom) + atom_coord_diff(1,gatom)
+        dx=step*velocity(1,atom)+half*step*step*acc
+        x_atom_cell(atom) = x_atom_cell(atom) + dx
         velocity(1,atom)  = velocity(1,atom) + half * step * acc
        end if
        ! Y
        if (flagy) then
         acc = force(2,gatom) / massa
-        atom_coord_diff(2,gatom)=step*velocity(2,atom)+half*step*step*acc
-        y_atom_cell(atom) = y_atom_cell(atom) + atom_coord_diff(2,gatom)
+        !atom_coord_diff(2,gatom)=step*velocity(2,atom)+half*step*step*acc
+        !y_atom_cell(atom) = y_atom_cell(atom) + atom_coord_diff(2,gatom)
+        dy=step*velocity(2,atom)+half*step*step*acc
+        y_atom_cell(atom) = y_atom_cell(atom) + dy
         velocity(2,atom) = velocity(2,atom) + half * step * acc
        end if
        ! Z
        if (flagz) then
         acc = force(3,gatom) / massa
-        atom_coord_diff(3,gatom)=step*velocity(3,atom)+half*step*step*acc
-        z_atom_cell(atom) = z_atom_cell(atom) + atom_coord_diff(3,gatom)
+        !atom_coord_diff(3,gatom)=step*velocity(3,atom)+half*step*step*acc
+        !z_atom_cell(atom) = z_atom_cell(atom) + atom_coord_diff(3,gatom)
+        dz=step*velocity(3,atom)+half*step*step*acc
+        z_atom_cell(atom) = z_atom_cell(atom) + dz
         velocity(3,atom) = velocity(3,atom) + half * step * acc
        end if
     end do
@@ -741,6 +767,10 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2017/05/09 dave
   !!    Adding code to load both L matrix for both spin channels
+  !!   2017/11/10 dave
+  !!    Removed calls to dump K matrix (now done in DMMinModule)
+  !!   2018/07/11 12:07 dave
+  !!    Tidying: only output on ionode, remove redundant call to wrap_xyz
   !! SOURCE
   !!
   subroutine safemin2(start_x, start_y, start_z, direction, energy_in, &
@@ -751,32 +781,37 @@ contains
     use numbers
     use units
     use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell,    &
-                              z_atom_cell, flag_vary_basis,           &
-                              atom_coord, ni_in_cell, rcellx, rcelly, &
-                              rcellz, flag_self_consistent,           &
-                              flag_reset_dens_on_atom_move,           &
-                              IPRINT_TIME_THRES1, flag_pcc_global,    &
-                              atom_coord_diff,id_glob,flag_MDold,     &
-                              n_proc_old, glob2node_old,              &
-                              flag_LmatrixReuse, flag_diagonalisation, nspin
+         z_atom_cell, flag_vary_basis,           &
+         atom_coord, ni_in_cell, rcellx, rcelly, &
+         rcellz, flag_self_consistent,           &
+         flag_reset_dens_on_atom_move,           &
+         IPRINT_TIME_THRES1, flag_pcc_global,    &
+         id_glob,flag_MDold,     &
+         n_proc_old, glob2node_old,              &
+         flag_LmatrixReuse, flag_diagonalisation, nspin, &
+         flag_SFcoeffReuse 
     use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
-                              n_L_iterations
+         n_L_iterations
     use GenComms,       only: my_barrier, myid, inode, ionode,        &
-                              cq_abort, gcopy
+         cq_abort, gcopy
     use SelfCon,        only: new_SC_potl
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template
     use density_module, only: density, flag_no_atomic_densities, set_density_pcc
     use maxima_module,  only: maxngrid
-    use matrix_data, ONLY: Lrange
-    use mult_module, ONLY: matL,L_trans
+    use matrix_data, ONLY: Lrange, Hrange, SFcoeff_range, SFcoeffTr_range, HTr_range
+    use mult_module, ONLY: matL,L_trans, matK, matSFcoeff
     use timer_module
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
-    use io_module2, ONLY: grab_InfoGlobal,dump_InfoGlobal,InfoL,grab_matrix2
+    use store_matrix, ONLY: dump_pos_and_matrices
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use multisiteSF_module, only: flag_LFD_minimise
     !use DiagModule, ONLY: diagon
+    !for Debugging
+    use mult_module, ONLY: allocate_temp_matrix, free_temp_matrix, matrix_sum
+    use global_module, ONLY: atomf, sf
+    use io_module, ONLY: dump_matrix
 
     implicit none
 
@@ -801,39 +836,31 @@ contains
     real(double), dimension(:), allocatable :: store_density
     real(double) :: k3_old, k3_local, kmin_old
 
+    integer :: ig, both, mat
+
+    ! for debugging
+    integer :: mat_SFcoeff_old, mat_K_old
+    ! for debugging
+
     call start_timer(tmr_std_moveatoms)
+
+    ! for debugging
+    !    mat_SFcoeff_old = allocate_temp_matrix(SFcoeff_range,SFcoeffTr_range,atomf,sf)
+    !    mat_K_old = allocate_temp_matrix(Hrange,Htr_range,sf,sf)
+    ! for debugging
+
     !allocate(store_density(maxngrid))
     e0 = total_energy
     if (inode == ionode .and. iprint_MD > 0) &
          write (io_lun, &
-                fmt='(4x,"In safemin2, initial energy is ",f20.10," ",a2)') &
-               en_conv * energy_in, en_units(energy_units)
+         fmt='(4x,"In safemin2, initial energy is ",f20.10," ",a2)') &
+         en_conv * energy_in, en_units(energy_units)
     if (inode == ionode) &
          write (io_lun, fmt='(/4x,"Seeking bracketing triplet of points"/)')
     ! Unnecessary and over cautious !
+
     k0 = zero
-    !do i=1,ni_in_cell
-    !   x_atom_cell(i) = start_x(i) + k0*direction(1,i)
-    !   y_atom_cell(i) = start_y(i) + k0*direction(2,i)
-    !   z_atom_cell(i) = start_z(i) + k0*direction(3,i)
-    !   !write(io_lun,*) 'Position:
-    !   ',i,x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
-    !end do
-    !!  Update atom_coord : TM 27Aug2003
-    !call update_atom_coord
-    !!  Update atom_coord : TM 27Aug2003
-    !
-    !!   Get energy and forces
-    !call my_barrier
-    !call updateIndices(.false.,fixed_potential, number_of_bands, &
-    !     potential, density, pseudopotential, &
-    !     N_GRID_MAX)
-    !call get_E_and_F(output_file, n_save_freq, n_run,
-    !n_minimisation_iterations, n_support_iterations,&
-    !     fixed_potential, vary_mu, n_CG_L_iterations, number_of_bands,
-    !     L_tolerance, sc_tolerance, energy_tolerance, mu, &
-    !     e0, potential, pseudopotential, density, expected_reduction,
-    !     N_GRID_MAX)
+
     iter = 1
     k1 = zero
     e1 = energy_in
@@ -854,126 +881,62 @@ contains
     ! Loop to find a bracketing triplet
     do while (.not. done) !e3<=e2)
        call start_timer(tmr_l_iter, WITH_LEVEL)
-       !if (k2==k0) then
-       !   !k3 = 0.001_double
-       !   !if(abs(kmin) < very_small) then
-       !   if(abs(dE) < very_small) then
-       !      if(k3<very_small) then ! First guess
-       !         k3 = 0.70_double!k3old/lambda
-       !      end if
-       !   else
-       !      tmp = dot(3*ni_in_cell,direction,1,tot_force,1)
-       !      k3 = abs(0.5_double*dE/tmp)!kmin/lambda
-       !      if(abs(k3)>abs(kmin)) k3 = kmin
-       !   endif
-       !   !   k3 = 0.1_double
-       !   !else
-       !   !   k3 = kmin/lambda
-       !   !endif
-       !elseif (k2==0.01_double) then
-       !   k3 = 0.01_double
-       !else
-       !   k3 = lambda*k2
-       !endif
-!       k3 = 0.032_double
-       ! These lines calculate the difference between atomic densities and total
-       ! density
-       !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-       !%%!   ! Subtract off atomic densities
-       !%%!   store_density = density
-       !%%!   call set_density()
-       !%%!   density = store_density - density
-       !%%!end if
-       ! Move atoms
        call start_timer(tmr_l_tmp1, WITH_LEVEL)
+
+       !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
+       !  k3 = zero
+       !     if (inode == ionode) write(io_lun,*) ' K3 = ZERO TO CHECK READING K_MATIRX AND SFCOEFF '
+       ! if(flag_SFCoeffReuse) then
+       !   call matrix_sum(zero, mat_SFcoeff_old, one, matSFcoeff(1))
+       !   call matrix_sum(zero, mat_K_old, one, matK(1))
+       !    call dump_matrix("SFcoeff_before_",  matSFcoeff(1), inode)
+       ! endif
+       !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
+
        do i = 1, ni_in_cell
           x_atom_cell(i) = start_x(i) + k3 * direction(1,i)
           y_atom_cell(i) = start_y(i) + k3 * direction(2,i)
           z_atom_cell(i) = start_z(i) + k3 * direction(3,i)
-          if (inode == ionode .and. iprint_MD > 2) &
-               write (io_lun,*) 'Position: ', i, x_atom_cell(i), &
-                                y_atom_cell(i), z_atom_cell(i)
        end do
-       if (.NOT. flag_MDold) call wrap_xyz_atom_cell
-       ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
-       if (inode.EQ.ionode) write (io_lun,*) "k3, k3_local:", k3,k3_local
-       do i = 1, ni_in_cell
-         gatom = id_glob(i)
-         atom_coord_diff(1, gatom) = k3_local * direction(1,i)
-         atom_coord_diff(2, gatom) = k3_local * direction(2,i)
-         atom_coord_diff(3, gatom) = k3_local * direction(3,i)
 
-         ! ---- DEBUG: ---- !!
-         !if (inode.EQ.ionode) then
-         !  write (io_lun,*) ""
-         !  write (io_lun,*) "i & gatom:", i, gatom
-         !  write (io_lun,'(a,1x,3f15.10)') "Initial:",start_x(i),start_y(i),start_z(i)
-         !  write (io_lun,'(a,1x,3f15.10)') "New    :",x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
-         !  write (io_lun,'(a,1x,3f15.10)') "diff   :",atom_coord_diff(1:3,gatom)
-         !  write (io_lun,*) ""
-         !endif
-         !! ---- DEBUG: ---- !!
-
-       enddo                                  
-       !Update atom_coord : TM 27Aug2003
-       call update_atom_coord
-       !Update atom_coord : TM 27Aug2003
-       ! Update indices and find energy and forces
-       !call updateIndices(.false.,fixed_potential, number_of_bands)
-!ORI    call updateIndices(.true., fixed_potential)
        if (.NOT. flag_MDold) then
-         if (ionode.EQ.inode) write (io_lun,*) "CG: 1st stage, callupdateIndices3"
-         !ORI call updateIndices3(fixed_potential)
-         !call updateIndices3(fixed_potential,direction,step)
-         if (.NOT. allocated(glob2node_old)) then
-           allocate (glob2node_old(ni_in_cell), STAT=stat)
-           if (stat.NE.0) call cq_abort('Error deallocating glob2node_old: ', &
-                                        ni_in_cell)
-         endif
-
-
-         !**< lat >**
-         call my_barrier
-         !
-         if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-         !**< lat >**  
-         call my_barrier
-         !
-
-         call gcopy(n_proc_old)
-         call gcopy(glob2node_old,ni_in_cell)
-         call updateIndices3(fixed_potential,direction)
-         ! L-matrix reconstruction (used to be called at updateIndices3)
-         if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
-           call grab_matrix2('L',inode,nfile,InfoL)
-           call my_barrier()
-           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-           ! DRB 2017/05/09 now extended to spin systems
-           if(nspin==2) then
-              call grab_matrix2('L2',inode,nfile,InfoL)
-              call my_barrier()
-              call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
-           end if
-         endif
-         if (ionode.EQ.inode) write (io_lun,*) "get through CG: 1st stage"
+          if (ionode.EQ.inode) write (io_lun,*) "CG: 1st stage, call updateIndices3"
+          if(flag_SFcoeffReuse) then
+             call update_pos_and_matrices(updateSFcoeff,direction)
+             !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
+             !    call dump_matrix("SFcoeff_after_",  matSFcoeff(1), inode)
+             !    call matrix_sum(-one, matSFcoeff(1), one, mat_SFcoeff_old)
+             !    call dump_matrix("SFcoeff_diff",    matSFcoeff(1), inode)
+             !    call matrix_sum(-one, mat_K_old, one, matK(1))
+             !    call dump_matrix("K_diff",  mat_K_old, inode)
+             !    call matrix_sum(zero, matSFcoeff(1), one, mat_SFcoeff_old)
+             !CHECK READING K_MATRIX AND SFCOEFF   2017/12/04
+          else
+             call update_pos_and_matrices(updateLorK,direction)
+          endif
        else
-         write (io_lun,*) "CG: 1st stage with old CQ."
-         call updateIndices(.true., fixed_potential)
+          write (io_lun,*) "CG: 1st stage with old CQ."
+          call updateIndices(.true., fixed_potential)
        endif
+       if (inode == ionode .and. iprint_MD > 2) then
+          do i=1,ni_in_cell
+             write (io_lun,*) 'Position: ', i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+          end do
+       end if
        call update_H(fixed_potential)
        !Update start_x,start_y & start_z
        call update_start_xyz(start_x,start_y,start_z)
        ! These lines add back on the atomic densities for NEW atomic positions
        !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-          ! Add on atomic densities
-          !store_density = density
-          !call set_density()
-          !density = store_density + density
+       ! Add on atomic densities
+       !store_density = density
+       !call set_density()
+       !density = store_density + density
        !end if
        ! Write out atomic positions
        if (iprint_MD > 2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
-                                      trim(pdb_template))
+               trim(pdb_template))
        end if
        ! Now in update_H
        !if (flag_reset_dens_on_atom_move) call set_density()
@@ -983,17 +946,21 @@ contains
        ! state before we can minimise blips !
        if (flag_vary_basis .or. flag_LFD_minimise) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
-                           fixed_potential, vary_mu, n_L_iterations, &
-                           L_tolerance, e3)
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, e3)
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
-                        .false.)
-       if (inode.EQ.ionode) call dump_InfoGlobal()
+            .false.)
+       ! Now, we call dump_pos_and_matrices here. : 2018.Jan19 TM
+       !  but if we want to use the information of the matrices in the beginning of this line minimisation
+       !  you can comment the following line, in the future. 
+       call dump_pos_and_matrices
+
        if (inode == ionode .and. iprint_MD > 1) &
             write (io_lun, &
-                   fmt='(4x,"In safemin2, iter ",i3," step and energy &
-                         &are ",2f20.10" ",a2)') &
-                  iter, k3, en_conv * e3, en_units(energy_units)
+            fmt='(4x,"In safemin2, iter ",i3," step and energy &
+            &are ",2f20.10" ",a2)') &
+            iter, k3, en_conv * e3, en_units(energy_units)
        k3_old = k3
        if (e3 < e2) then ! We're still going down hill
           k1 = k2
@@ -1021,10 +988,10 @@ contains
        endif
        k3_local = k3 - k3_old
        if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3,k3_old,k3_local:", &
-                                  k3,k3_old,k3_local
+            k3,k3_old,k3_local
        if (k3 <= very_small) call cq_abort("Step too small: safemin2 failed!")
        call stop_print_timer(tmr_l_iter, "a safemin2 iteration", &
-                             IPRINT_TIME_THRES1)
+            IPRINT_TIME_THRES1)
        if (inode.EQ.ionode) write (io_lun,*) "Cycle the loop! -- CG"
        if (inode.EQ.ionode) write (io_lun,*) "iter & k3:", iter, k3
     end do ! while (.not. done)
@@ -1032,18 +999,18 @@ contains
     if (inode == ionode) write(io_lun, fmt='(/4x,"Interpolating minimum"/)')
     ! Interpolate to find minimum.
     if (inode == ionode .and. iprint_MD > 1) &
-            write (io_lun, fmt='(4x,"In safemin2, brackets are: ",6f18.10)') &
-                  k1, e1, k2, e2, k3, e3
+         write (io_lun, fmt='(4x,"In safemin2, brackets are: ",6f18.10)') &
+         k1, e1, k2, e2, k3, e3
     bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
     if (abs(bottom) > very_small) then
        kmin = 0.5_double * (((k1*k1 - k3*k3)*(e1 - e2) -    &
-                             (k1*k1 - k2*k2) * (e1 - e3)) / &
-                            ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
+            (k1*k1 - k2*k2) * (e1 - e3)) / &
+            ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
     else
        if (inode == ionode) then
           write (io_lun, fmt='(4x,"Error in safemin2 !")')
           write (io_lun, fmt='(4x,"Interpolation failed: ",6f15.10)') &
-                k1, e1, k2, e2, k3, e3
+               k1, e1, k2, e2, k3, e3
        end if
        kmin = k2
     end if
@@ -1058,64 +1025,35 @@ contains
        y_atom_cell(i) = start_y(i) + kmin*direction(2,i)
        z_atom_cell(i) = start_z(i) + kmin*direction(3,i)
     end do
-    if (.NOT. flag_MDold) call wrap_xyz_atom_cell
+    !!if (.NOT. flag_MDold) call wrap_xyz_atom_cell
     ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
     k3_local = kmin - k3
-    if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3, kmin, k3_local:",k3,kmin,k3_local
-    do i = 1, ni_in_cell
-      gatom = id_glob(i)
-      atom_coord_diff(1, gatom) = k3_local * direction(1,i)
-      atom_coord_diff(2, gatom) = k3_local * direction(2,i)
-      atom_coord_diff(3, gatom) = k3_local * direction(3,i)
 
-      !! ---- DEBUG: ---- !!
-      if (inode.EQ.ionode) then
-        write (io_lun,*) ""
-        write (io_lun,*) "i & gatom:", i, gatom
-        write (io_lun,'(a,1x,3f15.10)') "Before:",start_x(i),start_y(i),start_z(i)
-        write (io_lun,'(a,1x,3f15.10)') "After :",x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
-        write (io_lun,'(a,1x,3f15.10)') "diff  :", atom_coord_diff(1:3,gatom)
-        write (io_lun,*) ""
-      endif
-      !! ---- DEBUG: ---- !!
-
-    enddo                   
-    !Update atom_coord : TM 27Aug2003
-    call update_atom_coord
-    !Update atom_coord : TM 27Aug2003
-    ! Check minimum: update indices and find energy and forces
-    !call updateIndices(.false.,fixed_potential, number_of_bands)
-!ORI    call updateIndices(.true., fixed_potential)
     if (.NOT. flag_MDold) then
-      write (io_lun,*) "CG: 2nd stage"
-      !call updateIndices3(fixed_potential,direction,step)
-      if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)!19/08/2013
-      call gcopy(n_proc_old)
-      call gcopy(glob2node_old,ni_in_cell)
-      call updateIndices3(fixed_potential,direction)
-      ! L-matrix reconstruction (used to be called at updateIndices3)
-      if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
-        call grab_matrix2('L',inode,nfile,InfoL)
-        call my_barrier()
-        call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-        ! DRB 2017/05/09 now extended to spin systems
-        if(nspin==2) then
-           call grab_matrix2('L2',inode,nfile,InfoL)
-           call my_barrier()
-           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
-        end if
-      endif
+       if(inode==ionode.AND.iprint_MD>0) write (io_lun,*) "CG: 2nd stage"
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
+       else
+          call update_pos_and_matrices(updateLorK,direction)
+       endif
     else
-      call updateIndices(.true., fixed_potential)
+       call update_atom_coord
+       call updateIndices(.true., fixed_potential)
     endif
+    if (inode == ionode .and. iprint_MD > 2) then
+       do i=1,ni_in_cell
+          write (io_lun,*) 'Position: ', i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+       end do
+    end if
     call update_H(fixed_potential)
+
     !Update start_x,start_y & start_z
     call update_start_xyz(start_x,start_y,start_z)
     !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-       ! Add on atomic densities
-       !store_density = density
-       !call set_density()
-       !density = store_density + density
+    ! Add on atomic densities
+    !store_density = density
+    !call set_density()
+    !density = store_density + density
     !end if
     if (iprint_MD > 2) then
        call write_atomic_positions("UpdatedAtoms_tmp.dat", trim(pdb_template))
@@ -1124,14 +1062,14 @@ contains
     !if(flag_reset_dens_on_atom_move) call set_density()
     if (flag_pcc_global) call set_density_pcc()
     call stop_print_timer(tmr_l_tmp1, &
-                          "safemin2 - Final interpolation and updates", &
-                          IPRINT_TIME_THRES1)
+         "safemin2 - Final interpolation and updates", &
+         IPRINT_TIME_THRES1)
     ! We've just moved the atoms - we need a self-consistent ground state before
     ! we can minimise blips !
     if (flag_vary_basis .or. flag_LFD_minimise) then
        call new_SC_potl(.false., sc_tolerance, reset_L,           &
-                        fixed_potential, vary_mu, n_L_iterations, &
-                        L_tolerance, e3)
+            fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, e3)
     end if
     energy_out = e3
     if (iprint_MD > 0) then
@@ -1139,126 +1077,156 @@ contains
     else
        call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
     end if
-    if (inode.EQ.ionode) call dump_InfoGlobal()
+
+    ! 2018.Jan19  TM
+    call dump_pos_and_matrices
+
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
-                fmt='(4x,"In safemin2, Interpolation step and energy &
-                      &are ",f15.10,f20.10" ",a2)') &
-               kmin, en_conv*energy_out, en_units(energy_units)
-    if (energy_out > e2 .and. abs(bottom) > very_small) then
-       ! The interpolation failed - go back
-       call start_timer(tmr_l_tmp1,WITH_LEVEL)
-       if (inode == ionode) &
-            write (io_lun,fmt='(/4x,"Interpolation failed; reverting"/)')
+         fmt='(4x,"In safemin2, Interpolation step and energy &
+         &are ",f15.10,f20.10" ",a2)') &
+         kmin, en_conv*energy_out, en_units(energy_units)
+    ! If interpolation step failed, do interpolation AGAIN
+    if (energy_out > e2 .and. abs(bottom) > RD_ERR) then
+       if(e1<e3) then ! Keep k1
+          if(k2<kmin) then
+             k3 = kmin
+             e3 = energy_out
+          else
+             k3 = k2
+             e3 = e2
+             k2 = kmin
+             e2 = energy_out
+          end if
+       else ! Keep k3
+          if(k2<kmin) then
+             k1 = k2
+             e1 = e2
+             k2 = kmin
+             e2 = energy_out
+          end if
+       end if
        kmin_old = kmin
-       kmin = k2
-       !%%!if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-       !%%!   ! Subtract off atomic densities
-       !%%!   store_density = density
-       !%%!   call set_density()
-       !%%!   density = store_density - density
-       !%%!end if
+       if (inode == ionode .and. iprint_MD > 1) &
+            write (io_lun, fmt='(4x,"In safemin2, brackets are: ",6f18.10)') &
+            k1, e1, k2, e2, k3, e3
+       bottom = ((k1-k3)*(e1-e2)-(k1-k2)*(e1-e3))
+       if (abs(bottom) > very_small) then
+          kmin = 0.5_double * (((k1*k1 - k3*k3)*(e1 - e2) -    &
+               (k1*k1 - k2*k2) * (e1 - e3)) / &
+               ((k1-k3)*(e1-e2) - (k1-k2)*(e1-e3)))
+          if (inode == ionode .and. iprint_MD > 1) &
+               write (io_lun, &
+               fmt='(4x,"In safemin2, second interpolation step is ", f15.10)') kmin
+          if(kmin<k1.OR.kmin>k3) then
+             if(inode == ionode .and. iprint_MD > 0) &
+                  write(io_lun,*) 'Second interpolation outside limits: ',k1,k3,kmin
+             dE = e0 - energy_out
+             kmin = kmin_old
+             if (inode == ionode .and. iprint_MD > 0) then
+                write (io_lun, &
+                     fmt='(4x,"In safemin2, exit after ",i4," &
+                     &iterations with energy ",f20.10," ",a2)') &
+                     iter, en_conv * energy_out, en_units(energy_units)
+             else if (inode == ionode) then
+                write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
+                     en_conv * energy_out, en_units(energy_units)
+             end if
+             if (inode.EQ.ionode) write (io_lun,*) "Get out of safemin2 !" !db
+             return
+          end if
+       else
+          dE = e0 - energy_out
+          if (inode == ionode .and. iprint_MD > 0) then
+             write (io_lun, &
+                  fmt='(4x,"In safemin2, exit after ",i4," &
+                  &iterations with energy ",f20.10," ",a2)') &
+                  iter, en_conv * energy_out, en_units(energy_units)
+          else if (inode == ionode) then
+             write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
+                  en_conv * energy_out, en_units(energy_units)
+          end if
+          if (inode.EQ.ionode) write (io_lun,*) "Get out of safemin2 !" !db
+          return
+       end if
        do i=1,ni_in_cell
           x_atom_cell(i) = start_x(i) + kmin*direction(1,i)
           y_atom_cell(i) = start_y(i) + kmin*direction(2,i)
           z_atom_cell(i) = start_z(i) + kmin*direction(3,i)
        end do
-       if (.NOT. flag_MDold) call wrap_xyz_atom_cell
+       !if (.NOT. flag_MDold) call wrap_xyz_atom_cell
        ! Get atomic displacements: atom_coord_diff(1:3, ni_in_cell)
-!WRONG k3_local = kmin - k3!!03/07/2013
        k3_local = kmin-kmin_old!03/07/2013
-       if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3, kmin,k3_local:", k3,kmin,k3_local
-       do i = 1, ni_in_cell
-         gatom = id_glob(i)
-         atom_coord_diff(1, gatom) = k3_local * direction(1,i)
-         atom_coord_diff(2, gatom) = k3_local * direction(2,i)
-         atom_coord_diff(3, gatom) = k3_local * direction(3,i)
-         ! ---- DEBUG: ---- !!
-         !if (inode.EQ.ionode) then
-         !  write (io_lun,*) ""
-         !  write (io_lun,*) "i & gatom:", i, gatom
-         !  write (io_lun,'(a,1x,3f15.10)') "Before:",start_x(i),start_y(i),start_z(i)
-         !  write (io_lun,'(a,1x,3f15.10)') "After :",x_atom_cell(i),y_atom_cell(i),z_atom_cell(i)
-         !  write (io_lun,'(a,1x,3f15.10)') "diff  :", atom_coord_diff(1:3,gatom)
-         !  write (io_lun,*) ""
-         !endif
-         !! ---- DEBUG: ---- !!
-       enddo
-!Update atom_coord : TM 27Aug2003
-       call update_atom_coord
-!Update atom_coord : TM 27Aug2003
-!ORI       call updateIndices(.true., fixed_potential)
+       !if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3, kmin,k3_local:", k3,kmin,k3_local
+
        if (.NOT. flag_MDold) then
-         write (io_lun,*) "CG: 3rd stage"
-         !call updateIndices3(fixed_potential,direction,step)
-         if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-         call gcopy(n_proc_old)
-         call gcopy(glob2node_old,ni_in_cell)
-         call updateIndices3(fixed_potential,direction)
-         ! L-matrix reconstruction (used to be called at updateIndices3)
-         if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
-           call grab_matrix2('L',inode,nfile,InfoL)
-           call my_barrier()
-           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-           ! DRB 2017/05/09 now extended to spin systems
-           if(nspin==2) then
-              call grab_matrix2('L2',inode,nfile,InfoL)
-              call my_barrier()
-              call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
-           end if
-         endif
+          write (io_lun,*) "CG: 3rd stage"
+          if(flag_SFcoeffReuse) then
+             call update_pos_and_matrices(updateSFcoeff,direction)
+          else
+             call update_pos_and_matrices(updateLorK,direction)
+          endif
        else
-         call updateIndices(.true., fixed_potential)
+          call update_atom_coord
+          call updateIndices(.true., fixed_potential)
        endif
+       if (inode == ionode .and. iprint_MD > 2) then
+          do i=1,ni_in_cell
+             write (io_lun,*) 'Position: ', i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+          end do
+       end if
        call update_H(fixed_potential)
-       !call updateIndices(.false.,fixed_potential, number_of_bands)
+
        ! Update start_x,start_y & start_z
        call update_start_xyz(start_x,start_y,start_z)!25/01/2013
-       !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
-          ! Add on atomic densities
-          !store_density = density
-          !call set_density()
-          !density = store_density + density
-       !end if
        if (iprint_MD > 2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
-                                      trim(pdb_template))
+               trim(pdb_template))
        end if
        ! Now in update_H
-       !if(flag_reset_dens_on_atom_move) call set_density()
        if (flag_pcc_global) call set_density_pcc()
        call stop_print_timer(tmr_l_tmp1, &
-                             "safemin2 - Failed interpolation + Retry", &
-                             IPRINT_TIME_THRES1)
+            "safemin2 - Failed interpolation + Retry", &
+            IPRINT_TIME_THRES1)
        ! We've just moved the atoms - we need a self-consistent ground
        ! state before we can minimise blips !
        if(flag_vary_basis .or. flag_LFD_minimise) then
           call new_SC_potl(.false., sc_tolerance, reset_L,           &
-                           fixed_potential, vary_mu, n_L_iterations, &
-                           L_tolerance, e3)
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, e3)
        end if
        energy_out = e3
        if (iprint_MD > 0) then
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
-                           .true., .true.)
+               .true., .true.)
        else
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
-                           .true., .false.)
+               .true., .false.)
        end if
-       if (inode.EQ.ionode) call dump_InfoGlobal()
+
+       ! 2018.Jan19  TM : probably we don't need to call dump_pos_and_matrices here, since
+       !                  we will call it after calling safemin2
+       call dump_pos_and_matrices
+
     end if
     dE = e0 - energy_out
 7   format(4x,3f15.8)
     if (inode == ionode .and. iprint_MD > 0) then
        write (io_lun, &
-              fmt='(4x,"In safemin2, exit after ",i4," &
-                    &iterations with energy ",f20.10," ",a2)') &
+            fmt='(4x,"In safemin2, exit after ",i4," &
+            &iterations with energy ",f20.10," ",a2)') &
             iter, en_conv * energy_out, en_units(energy_units)
     else if (inode == ionode) then
        write (io_lun, fmt='(/4x,"Final energy: ",f20.10," ",a2)') &
-             en_conv * energy_out, en_units(energy_units)
+            en_conv * energy_out, en_units(energy_units)
     end if
     !deallocate(store_density)
+
+    !Debugging
+    !    call free_temp_matrix(mat_K_old)
+    !    call free_temp_matrix(mat_SFcoeff_old)
+    !Debugging
+
     if (inode.EQ.ionode) write (io_lun,*) "Get out of safemin2 !" !db
     call stop_timer(tmr_std_moveatoms)
     return
@@ -1283,11 +1251,17 @@ contains
   !!   2017/06/20 J.S.B
   !!    Moved Dave's changes to a separate subroutine "update_cell_dims" for
   !!    clarity.
+  !!   2017/11/10 dave
+  !!    Removed calls to dump K matrix (now done in DMMinModule)
+  !!    Sometime since September implemented fractional coordinates for coord diffs
+  !!    so that uniform volume scaling of cell doesn't generate atom position changes
+  !!   2018/01/22 tsuyoshi (with dave)
+  !!    Updated to use new matrix rebuilding following atom movement
   !! SOURCE
 
   subroutine safemin_cell(start_rcellx, start_rcelly, start_rcellz, search_dir_x,&
-                          search_dir_y, search_dir_z, energy_in, energy_out,&
-                          fixed_potential, vary_mu, total_energy, search_dir_mean)
+       search_dir_y, search_dir_z, energy_in, energy_out,&
+       fixed_potential, vary_mu, total_energy, search_dir_mean)
 
     ! Module usage
 
@@ -1301,11 +1275,11 @@ contains
          rcellz, flag_self_consistent,           &
          flag_reset_dens_on_atom_move,           &
          IPRINT_TIME_THRES1, flag_pcc_global, &
-         flag_diagonalisation, cell_constraint_flag
+         flag_diagonalisation, cell_constraint_flag, flag_SFcoeffReuse, flag_MDold
     use minimise,           only: get_E_and_F, sc_tolerance, L_tolerance, &
          n_L_iterations
     use GenComms,           only: my_barrier, myid, inode, ionode,        &
-         cq_abort
+         cq_abort, gcopy
     use SelfCon,            only: new_SC_potl
     use GenBlas,            only: dot
     use force_module,       only: tot_force
@@ -1319,6 +1293,7 @@ contains
          grid_point_volume, one_over_grid_point_volume, n_grid_x, n_grid_y, n_grid_z
     use fft_module, ONLY: recip_vector, hartree_factor, i0
     use DiagModule, ONLY: kk, nkp
+    use store_matrix, ONLY: dump_pos_and_matrices
 
     implicit none
 
@@ -1332,16 +1307,18 @@ contains
 
 
     ! Local variables
-    integer        :: i, j, iter, lun
+    integer        :: i, j, iter, lun, stat, nfile, symm
     logical        :: reset_L = .false.
     logical        :: done
     type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
-    real(double)   :: k0, k1, k2, k3, lambda, k3old, orcellx, orcelly, orcellz, scale
+    real(double)   :: k0, k1, k2, k3, lambda, k3old, orcellx, orcelly, orcellz, scale, ratio
     real(double)   :: e0, e1, e2, e3, tmp, bottom, xvec, yvec, zvec, r2
     real(double), save :: kmin = zero, dE = zero
     real(double), dimension(:), allocatable :: store_density
+    real(double), dimension(3,ni_in_cell) :: direction
 
     call start_timer(tmr_std_moveatoms)
+    direction = zero
     !allocate(store_density(maxngrid))
     e0 = total_energy
     if (inode == ionode .and. iprint_MD > 0) &
@@ -1378,16 +1355,21 @@ contains
        ! update_cell_dims updates the cell according to the user set
        ! constraints.
        call update_cell_dims(start_rcellx, start_rcelly, &
-                             start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
-                             k3, iter, search_dir_mean)
+            start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
+            k3, iter, search_dir_mean)
 
-       !Update atom_coord : TM 27Aug2003
-       call update_atom_coord
-       !Update atom_coord : TM 27Aug2003
-       ! Update indices and find energy and forces
-       !call updateIndices(.false.,fixed_potential, number_of_bands)
-       call updateIndices(.true., fixed_potential)
+       if(.NOT.flag_MDold) then
+          if(flag_SFcoeffReuse) then
+             call update_pos_and_matrices(updateSFcoeff,direction)
+          else
+             call update_pos_and_matrices(updateLorK,direction)
+          endif
+       else
+          call update_atom_coord
+          call updateIndices(.true., fixed_potential)
+       endif
        call update_H(fixed_potential)
+
        ! These lines add back on the atomic densities for NEW atomic positions
        ! Write out atomic positions
        if (iprint_MD > 2) then
@@ -1407,6 +1389,8 @@ contains
        end if
        call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
             .false.)
+       call dump_pos_and_matrices
+
        if (inode == ionode .and. iprint_MD > 1) &
             write (io_lun, &
             fmt='(4x,"In safemin_cell, iter ",i3," step and energy &
@@ -1455,15 +1439,20 @@ contains
 
     if (inode == ionode .and. iprint_MD > 0) write(io_lun,*) 'kmin is ',kmin
     call update_cell_dims(start_rcellx, start_rcelly, &
-                          start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
-                          kmin, iter, search_dir_mean)
-    !Update atom_coord : TM 27Aug2003
-    call update_atom_coord
-    !Update atom_coord : TM 27Aug2003
-    ! Check minimum: update indices and find energy and forces
-    !call updateIndices(.false.,fixed_potential, number_of_bands)
-    call updateIndices(.true., fixed_potential)
+         start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
+         kmin, iter, search_dir_mean)
+    if(.NOT.flag_MDold) then
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,direction)
+       else
+          call update_pos_and_matrices(updateLorK,direction)
+       endif
+    else
+       call update_atom_coord
+       call updateIndices(.true., fixed_potential)
+    endif
     call update_H(fixed_potential)
+
     !if(flag_self_consistent.AND.(.NOT.flag_no_atomic_densities)) then
     ! Add on atomic densities
     !store_density = density
@@ -1491,6 +1480,8 @@ contains
     else
        call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
     end if
+    call dump_pos_and_matrices
+
     if (inode == ionode .and. iprint_MD > 1) &
          write (io_lun, &
          fmt='(4x,"In safemin_cell, Interpolation step and energy &
@@ -1505,12 +1496,19 @@ contains
        ! DRB added 2017/05/24 17:13
        ! Keep previous cell to allow scaling
        call update_cell_dims(start_rcellx, start_rcelly, &
-                             start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
-                             kmin, iter, search_dir_mean)
-       !Update atom_coord : TM 27Aug2003
-       call update_atom_coord
-       !Update atom_coord : TM 27Aug2003
-       call updateIndices(.true., fixed_potential)
+            start_rcellz, search_dir_x, search_dir_y, search_dir_z,&
+            kmin, iter, search_dir_mean)
+       if(.NOT.flag_MDold) then
+          if(flag_SFcoeffReuse) then
+             call update_pos_and_matrices(updateSFcoeff,direction)
+          else
+             call update_pos_and_matrices(updateLorK,direction)
+          endif
+       else
+          call update_atom_coord
+          call updateIndices(.true., fixed_potential)
+       endif
+
        call update_H(fixed_potential)
        if (iprint_MD > 2) then
           call write_atomic_positions("UpdatedAtoms_tmp.dat", &
@@ -1537,6 +1535,8 @@ contains
           call get_E_and_F(fixed_potential, vary_mu, energy_out, &
                .true., .false.)
        end if
+       ! we may not need to call dump_pos_and_matrices here. (if it would be called in the part after calling safemin_cell)
+       call dump_pos_and_matrices  
     end if
     dE = e0 - energy_out
 7   format(4x,3f15.8)
@@ -1670,7 +1670,7 @@ contains
                        y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
 
     use datatypes
-    use global_module,  only: iprint_MD, ni_in_cell
+    use global_module,  only: iprint_MD, ni_in_cell, id_glob_inv
     use numbers
     use GenBlas,        only: dot, axpy
     use GenComms,       only: gsum, myid, inode, ionode
@@ -1688,7 +1688,7 @@ contains
     integer :: npmod, mx_pulay, pul_mx
 
     ! Local variables
-    integer      :: i,j, length
+    integer      :: i,j, length, jj
     real(double) :: gg
     real(double), dimension(mx_pulay,mx_pulay) :: Aij
     real(double), dimension(mx_pulay)          :: alph
@@ -1712,9 +1712,10 @@ contains
     z_atom_cell(:) = 0.0_double
     do i=1,pul_mx
        do j=1,ni_in_cell
-          x_atom_cell(j) = x_atom_cell(j) + alph(i)*posnStore(1,j,i)
-          y_atom_cell(j) = y_atom_cell(j) + alph(i)*posnStore(2,j,i)
-          z_atom_cell(j) = z_atom_cell(j) + alph(i)*posnStore(3,j,i)
+          jj = id_glob_inv(j)
+          x_atom_cell(jj) = x_atom_cell(jj) + alph(i)*posnStore(1,j,i)
+          y_atom_cell(jj) = y_atom_cell(jj) + alph(i)*posnStore(2,j,i)
+          z_atom_cell(jj) = z_atom_cell(jj) + alph(i)*posnStore(3,j,i)
        enddo
     enddo
     call stop_timer(tmr_std_moveatoms)
@@ -1990,6 +1991,8 @@ contains
   !!    Used RadiusAtomf instead of RadiusSupport
   !!   2017/02/23 dave
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+  !!   2018/07/11 12:08 dave
+  !!    Added routines to redistribute atoms to partitions and partitions to processes if an empty bundle is found
   !! SOURCE
   !!
   !OLD subroutine updateIndices3(fixed_potential,velocity,step,iteration)
@@ -2000,8 +2003,9 @@ contains
     use global_module, ONLY: flag_basis_set,flag_Becke_weights,flag_dft_d2,blips, &
                              ni_in_cell,x_atom_cell,y_atom_cell,z_atom_cell,      &
                              IPRINT_TIME_THRES2,glob2node,flag_LmatrixReuse,      &
-                             flag_XLBOMD, flag_diagonalisation
-    use GenComms, ONLY: inode,ionode,my_barrier,myid,gcopy
+                             flag_XLBOMD, flag_diagonalisation, flag_neutral_atom, &
+                             numprocs, atom_coord, species_glob, iprint_MD
+    use GenComms, ONLY: inode,ionode,my_barrier,myid,gcopy, cq_abort
     use group_module, ONLY: parts
     use primary_module, ONLY: bundle
     use cover_module, ONLY: BCS_parts,DCS_parts,ion_ion_CS
@@ -2019,25 +2023,29 @@ contains
     !use DiagModule, ONLY: diagon
     use io_module, ONLY: append_coords,write_atomic_positions,pdb_template
     use matrix_data, ONLY: Lrange
-    use io_module2, ONLY: grab_matrix2,InfoL
     use UpdateInfo_module, ONLY: make_glob2node,Matrix_CommRebuild
     use XLBOMD_module, ONLY: immi_XL,fmmi_XL
 
     ! DB
     use global_module, ONLY: io_lun
     ! Check if updating PS and CS are correct
-    use global_module,       ONLY: id_glob
+    use global_module,       ONLY: id_glob, id_glob_inv_old
     use UpdateMember_module, ONLY: deallocate_PSmember,allocate_PSmember, &
                                    deallocate_CSmember
-    use group_module,   ONLY: blocks
-    use primary_module, ONLY: make_prim,domain
-    use cover_module,   ONLY: make_cs,make_iprim,send_ncover
-    use ion_electrostatic,   ONLY: ewald_real_cutoff
+    use group_module,   ONLY: blocks, deallocate_group_set, make_cc2
+    use primary_module, ONLY: deallocate_primary_set, bundle, make_prim, domain
+    use construct_module, ONLY: init_primary
+    use cover_module,   ONLY: make_cs,make_iprim,send_ncover, deallocate_cs
+    use cover_module, ONLY: BCS_parts,DCS_parts,ion_ion_CS,D2_CS
+    use cover_module, only: BCS_blocks
+    use sfc_partitions_module, ONLY: sfc_partitions_to_processors
+    use ion_electrostatic, ONLY: ewald_real_cutoff, ion_ion_cutoff
     use species_module, ONLY: species
     use matrix_data,    ONLY: rcut,max_range
-    use dimens,         ONLY: r_core_squared,r_h
+    use dimens,         ONLY: r_core_squared,r_h, r_dft_d2
     ! Check if updating PS and CS are correct
     use DiagModule, only: end_scalapack_format, init_scalapack_format
+    use maxima_module, ONLY: maxpartsproc, maxatomsproc, maxatomspart
 
     implicit none
 
@@ -2046,36 +2054,19 @@ contains
     logical :: fixed_potential
 
     ! Local variables
-    integer :: nfile,symm
-    logical :: append_coords_bkup
+    integer :: nfile,symm,np, ni, id_global, ni_old
+    logical :: append_coords_bkup, flag_empty_bundle
     type(cq_timer) :: tmr_l_tmp1,tmr_l_tmp2
+    real(double) :: rcut_max
+    real(double) :: velocity_tmp(3,ni_in_cell)
 
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
 
-    ! Update members - be sure atoms are all wrapped back in the sim-cell.
-    !OLD if (present(iteration)) then
-    !OLD   call updateMembers(fixed_potential,velocity,iteration)    ! for MD
-    !OLD else
-    !OLD   ! This is NOT velocity, rather 'direction'
-    !OLD   call updateMembers(fixed_potential,velocity)              ! for CG
-    !OLD endif
     ! [NOTE:] In md, velocity is exactly velocity, but when running cg,
     !         velocity corresponds to 'search direction'
-    call updateMembers(fixed_potential,velocity)
+    call updateMembers(fixed_potential,velocity, flag_empty_bundle)
 
-    ! Bug fixed by Zakkie: now Lmatrix2.*, make_prt.dat & coord_next.dat are
-    ! consistent
-    append_coords_bkup = append_coords
-    append_coords = .false.
-    call write_atomic_positions('coord_next.dat',trim(pdb_template))
-    append_coords = append_coords_bkup
-
-!!  if (inode.EQ.ionode) call dump_idglob_old  !maybe needed when changing computation resources
-
-    ! Used in BtoG-transformation.
-    call deallocate_distribute_atom
-    call distribute_atoms(inode,ionode)
     call my_barrier()
     !if (inode.EQ.ionode) write (io_lun,*) "Complete distribute_atoms()"
 
@@ -2087,10 +2078,91 @@ contains
     ! finish matrix multiplication indexing
     if (flag_XLBOMD) call fmmi_XL()
     call fmmi(bundle)
-    ! Reallocate and find new indices
-    call immi(parts,bundle,BCS_parts,myid+1)
-    if (flag_XLBOMD) call immi_XL(parts,bundle,BCS_parts,myid+1)
-    call my_barrier()
+    ! Now we need to redistribute
+    if(flag_empty_bundle.and.flag_stop_on_empty_bundle) then
+       call cq_abort("Empty bundle detected: user set stop_on_empty_bundle, so stopping...")
+    else if(flag_empty_bundle) then
+       if(inode==ionode) write(io_lun,fmt='(2x,"Empty bundle detected: redistributing atoms between processes")')
+       ! Deallocate parts and covering sets
+       call deallocate_cs(BCS_parts,.true.)
+       call deallocate_cs(DCS_parts,.true.)
+       call deallocate_cs(BCS_blocks,.false.)
+       call deallocate_cs(ion_ion_CS,.true.)
+       if(flag_dft_d2) call deallocate_cs(D2_CS,.true.)
+       call deallocate_distribute_atom
+       call deallocate_primary_set(bundle)
+       call deallocate_group_set(parts)
+       ! Call Hilbert curve
+       call sfc_partitions_to_processors(parts)
+       ! inverse table to npnode
+       do np=1,parts%ngcellx*parts%ngcelly*parts%ngcellz
+          parts%inv_ngnode(parts%ngnode(np))=np
+       end do
+       call make_cc2(parts,numprocs)
+       ! NB  velocity update is done in update_pos_and_matrices
+       do ni = 1, ni_in_cell
+          id_global= id_glob(ni)
+          x_atom_cell(ni) = atom_coord(1,id_global)
+          y_atom_cell(ni) = atom_coord(2,id_global)
+          z_atom_cell(ni) = atom_coord(3,id_global)
+          species(ni)     = species_glob(id_global)
+       end do
+       ! Covering sets are made in setgrid
+       ! Create primary set for atoms: bundle of partitions
+       call init_primary(bundle, maxatomsproc, maxpartsproc, .true.)
+       call make_prim(parts, bundle, inode-1, id_glob, x_atom_cell, &
+            y_atom_cell, z_atom_cell, species)
+       ! Sorts out which processor owns which atoms
+       call distribute_atoms(inode, ionode)
+       call my_barrier
+       call make_cs(inode-1, rcut(max_range), BCS_parts, parts, bundle, &
+            ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell)
+       call my_barrier
+       call make_iprim(BCS_parts, bundle, inode-1)
+       call send_ncover(BCS_parts, inode)
+       call my_barrier
+       ! Write out new coordinates
+       append_coords_bkup = append_coords
+       append_coords = .false.
+       call write_atomic_positions('coord_next.dat',trim(pdb_template))
+       append_coords = append_coords_bkup
+       ! Reallocate and find new indices
+       call immi(parts,bundle,BCS_parts,myid+1)
+       if (flag_XLBOMD) call immi_XL(parts,bundle,BCS_parts,myid+1)
+       call my_barrier()
+       rcut_max = max(sqrt(r_core_squared),r_h) + very_small
+       call make_cs(myid,rcut_max, DCS_parts , parts , domain, &
+            ni_in_cell, x_atom_cell, y_atom_cell, z_atom_cell)
+       call make_cs(myid,rcut_max, BCS_blocks, blocks, bundle)
+       call my_barrier
+       call send_ncover(DCS_parts, myid + 1)
+       call my_barrier
+       call send_ncover(BCS_blocks, myid + 1)
+       call my_barrier
+       
+       ! Initialise the routines to calculate ion-ion interactions
+       if(flag_neutral_atom) then
+          call make_cs(inode-1,ion_ion_cutoff,ion_ion_CS,parts,bundle,&
+               ni_in_cell, x_atom_cell,y_atom_cell,z_atom_cell)
+       else
+          call make_cs(inode-1,ewald_real_cutoff,ion_ion_CS,parts,bundle,&
+               ni_in_cell, x_atom_cell,y_atom_cell,z_atom_cell)
+       end if
+       if (flag_dft_d2) call make_cs(inode-1, r_dft_d2, D2_CS, parts, bundle, ni_in_cell, &
+               x_atom_cell, y_atom_cell, z_atom_cell)
+    else
+       ! Write out new coordinates
+       append_coords_bkup = append_coords
+       append_coords = .false.
+       call write_atomic_positions('coord_next.dat',trim(pdb_template))
+       append_coords = append_coords_bkup
+       ! Reallocate and find new indices
+       call deallocate_distribute_atom
+       call distribute_atoms(inode,ionode)
+       call immi(parts,bundle,BCS_parts,myid+1)
+       if (flag_XLBOMD) call immi_XL(parts,bundle,BCS_parts,myid+1)
+       call my_barrier()
+    end if
 
     !% NOTE: The author (michi) thinks L-matrix reconstruction, its preparation
     !%       and hamiltonian update should be called outside updateIndices3.
@@ -2193,16 +2265,22 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2017/09/06 19:00 nakata
   !!    Changed to call set_atomic_density with ".true." before calling initial_SFcoeff
+  !!   2017/11/07 10:02 dave
+  !!    Added scaling of electron density after atom move
+  !!   2017/11/17 14:51 dave
+  !!    Bug fix: removed erroneous spin scaling on electron density
   !!  SOURCE
   !!
   subroutine update_H(fixed_potential)
 
+    use numbers
     use logicals
     use timer_module    
     use S_matrix_module,        only: get_S_matrix
     use H_matrix_module,        only: get_H_matrix
     !use DiagModule,             only: diagon
-    use mult_module,            only: LNV_matrix_multiply, matrix_scale, matSFcoeff
+    use mult_module,            only: LNV_matrix_multiply, matrix_scale, matrix_transpose, &
+                                      matSFcoeff,matSFcoeff_tran 
     use ion_electrostatic,      only: ewald, screened_ion_interaction
     use pseudopotential_data,   only: init_pseudo
     use pseudo_tm_module,       only: set_tm_pseudo
@@ -2217,7 +2295,9 @@ contains
                                       flag_LmatrixReuse,               &
                                       flag_neutral_atom,               &
                                       atomf, sf, nspin_SF, flag_LFD,   &
-                                      flag_SFcoeffReuse, flag_diagonalisation
+                                      flag_SFcoeffReuse, flag_diagonalisation, &
+                                      ne_spin_in_cell,                 &
+                                      ne_in_cell, spin_factor
     use density_module,         only: set_atomic_density,              &
                                       flag_no_atomic_densities,        &
                                       density, set_density_pcc,        &
@@ -2237,7 +2317,8 @@ contains
     ! Local variables
     type(cq_timer) :: tmr_l_tmp1
     real(double), dimension(nspin) :: electrons, energy_tmp
-    integer :: spin_SF
+    real(double) :: scale
+    integer :: spin_SF, spin
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     ! (0) Pseudopotentials: choose correct form
@@ -2251,14 +2332,17 @@ contains
     end select
     ! (0) Prepare SF-PAO coefficients for contracted SFs
     if (atomf.ne.sf) then
-       do spin_SF = 1, nspin_SF
-          call matrix_scale(zero,matSFcoeff(spin_SF))
-       enddo
        if (flag_SFcoeffReuse) then
        ! Use the coefficients in the previous step   
-!          call Matrix_CommRebuild??
-          call cq_abort("update_H: SFcoeff in the previous MD step cannot be reused at present!")
+          !call cq_abort("update_H: SFcoeff in the previous MD step cannot be reused at present!")
+          ! SF coeffs are already updated before calling update_H, but we need its transpose
+         do spin_SF = 1,nspin_SF
+          call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+         enddo
        else
+        do spin_SF = 1, nspin_SF
+          call matrix_scale(zero,matSFcoeff(spin_SF))
+        enddo
        ! Make SF coefficients newly
           ! Use the atomic density if flag_LFD_MD_UseAtomicDensity=T,
           ! otherwise, use the density in the previous step
@@ -2295,8 +2379,7 @@ contains
     if(((.NOT. flag_self_consistent)     .AND. &
         (.NOT. flag_no_atomic_densities) .AND. &
         (.NOT. flag_mix_L_SC_min)).OR.flag_reset_dens_on_atom_move) then
-        ! if flag_LFD_MD_UseAtomicDensity=T, atomic density was already set in (0)
-        if (.not.flag_LFD_MD_UseAtomicDensity) call set_atomic_density(.true.)
+        call set_atomic_density(.true.)
     ! For SCF-O(N) calculations
     elseif (.NOT.flag_diagonalisation .AND. .NOT.flag_MDold) then
        if (flag_self_consistent .OR. flag_mix_L_SC_min) then
@@ -2305,9 +2388,22 @@ contains
              if (inode.EQ.ionode.AND.iprint_MD>2) write (io_lun,*) "update_H: Get charge density from L-matrix"
              call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
                   inode,ionode,maxngrid)
+            do spin=1,nspin
+               scale = ne_spin_in_cell(spin)/electrons(spin)
+               if(abs(scale-one)<threshold_resetCD .AND. abs(scale-one)>RD_ERR) then
+                  density(:,spin) = density(:,spin)*scale
+               else if (abs(scale-one)>=threshold_resetCD) then
+                  if(inode == ionode) write(io_lun,*) &
+                       ' WARNING! in update_H: constructed charge density is strange... ; scale = ', &
+                       scale, threshold_resetCD
+                  call set_atomic_density(.true.)
+                  exit
+               end if
+            end do
              ! if flag_LFD=T, update SF-PAO coefficients with the obtained density
              ! and update S with the coefficients
-             if (flag_LFD) then
+             !ORI if (flag_LFD) then
+             if (flag_LFD .and. .not.flag_SFcoeffReuse) then
                 call initial_SFcoeff(.false., .true., fixed_potential, .false.)
                 call get_S_matrix(inode, ionode, build_AtomF_matrix=.false.)
              endif
@@ -2318,6 +2414,23 @@ contains
     else if ((.not. flag_self_consistent) .and. &
              (flag_no_atomic_densities)) then
        call cq_abort("update_H: Can't run non-self-consistent without PAOs !")
+    end if
+    ! If we have read K and are predicting density from it, then rebuild
+    if(flag_diagonalisation.AND.flag_LmatrixReuse.AND.(.NOT.flag_MDold)) then
+       call get_electronic_density(density,electrons,atomfns,H_on_atomfns(1), &
+            inode,ionode,maxngrid)
+       do spin=1,nspin
+          scale = ne_spin_in_cell(spin)/electrons(spin)
+          if(abs(scale-one)<threshold_resetCD .AND.abs(scale-one)>RD_ERR) then
+             density(:,spin) = density(:,spin)*scale
+          else if (abs(scale-one)>=threshold_resetCD) then
+             if(inode == ionode) write(io_lun,*)  ' WARNING2! in update_H: &
+                  & constructed charge density is strange... ; scale,threshold = ', &
+                  scale, threshold_resetCD
+             call set_atomic_density(.true.)
+             exit
+          end if
+       end do
     end if
     if (flag_pcc_global) call set_density_pcc()
     ! (7) Now generate a new H matrix, including a new charge density
@@ -2768,6 +2881,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2008/05/25
   !!    Added timers
+  !!   2018/07/11 12:11 dave
+  !!    Changed iprint level for output of partition boundary crossing to > 3
   !!  SOURCE
   !!
   subroutine update_atom_coord
@@ -2779,7 +2894,8 @@ contains
     use dimens,        only: r_super_x, r_super_y, r_super_z
     use group_module,  only: parts
     use timer_module
-
+    use GenComms, only: inode, ionode
+    
     implicit none
 
     integer        :: ni, id_global
@@ -2794,22 +2910,22 @@ contains
 
     do ni = 1, ni_in_cell
        id_global = id_glob(ni)
-       if (iprint_MD > 2) then
+       if (iprint_MD > 3) then
           if (floor(atom_coord(1,id_global)/dx) /= &
               floor(x_atom_cell(ni)/dx)) then
-             write (io_lun, *) id_global, &
+             write (io_lun, *) inode, id_global, &
                                ' Partition boundary crossed in x ! ', &
                                dx, atom_coord(1,id_global), x_atom_cell(ni)
           end if
           if (floor(atom_coord(2,id_global)/dy) /= &
               floor(y_atom_cell(ni)/dy)) then
-             write (io_lun, *) id_global, &
+             write (io_lun, *) inode, id_global, &
                                'Partition boundary crossed in y ! ', &
                                dy, atom_coord(2,id_global), y_atom_cell(ni)
           end if
           if (floor(atom_coord(3,id_global)/dz) /= &
               floor(z_atom_cell(ni)/dz)) then
-             write (io_lun, *) id_global, &
+             write (io_lun, *) inode, id_global, &
                                'Partition boundary crossed in z ! ', &
                                dz, atom_coord(3,id_global), z_atom_cell(ni)
           end if
@@ -3334,7 +3450,246 @@ contains
 
   end subroutine update_cell_dims
 
+  ! -----------------------------------------------------------------------
+  ! Subroutine update_pos_and_matrices
+  ! -----------------------------------------------------------------------
+
+  !!****f* move_atoms/update_pos_and_matrices *
+  !!
+  !!  NAME
+  !!    update_pos_and_matrices
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!    Update information of atomic positions, neighbour lists, ...
+  !!     AND...     matrices  
+  !!
+  !!  INPUTS
+  !!    update_method :: showing which matrices will be updated.
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Tsuyoshi Miyazaki
+  !!  CREATION DATE
+  !!   2017/Nov/12
+  !!  MODIFICATION
+  !!   2018/Sep/07  tsuyoshi
+  !!       added calling ReportUpdateMatrix when flag_debug_move_atoms is true.
+  !!
+  !!  SOURCE
+  !!
+ subroutine update_pos_and_matrices(update_method, velocity)
+  use datatypes
+  use numbers,         only: half, zero, one, very_small
+  use global_module,   only: flag_diagonalisation, atom_coord, atom_coord_diff, &
+                             rcellx, rcelly, rcellz, ni_in_cell, nspin, nspin_SF, id_glob
+    ! n_proc_old and glob2node_old should be removed soon...
+    use global_module, only: n_proc_old, glob2node_old
+  use GenComms,        only: my_barrier, inode, ionode, cq_abort, gcopy
+  use mult_module,     only: matL, L_trans, matK, matS, S_trans, matSFcoeff, SFcoeff_trans, &
+                             matrix_scale, matrix_transpose, matSFcoeff_tran
+  use matrix_data,     only: Lrange, Hrange, Srange, SFcoeff_range
+  use store_matrix,    only: matrix_store_global, InfoMatrixFile, grab_InfoMatGlobal, grab_matrix2
+  use UpdateInfo_module, only: Matrix_CommRebuild, Report_UpdateMatrix
+
+  implicit none
+  integer, intent(in) :: update_method
+  real(double), intent(inout) :: velocity(3, ni_in_cell)
+  logical :: flag_L, flag_K, flag_S, flag_SFcoeff, flag_X
+  integer :: nfile, symm, ig, spin_SF
+  logical :: fixed_potential 
+   ! should be removed in the future (calling update_H is outside of this routine)
+  real(double) :: scale_x, scale_y, scale_z, rms_change
+  real(double) :: small_change = 0.3_double
+  
+ !H_trans is not prepared. If we need to symmetrise K, we need H_trans
+  integer :: H_trans = 1
+ 
+ !InfoGlob and Info can be defined locally.
+ ! for extrapolation, we need to prepare multiple InfoGlob and Info.
+  type(matrix_store_global) :: InfoGlob
+  type(InfoMatrixFile),pointer :: Info(:)
+
+ !Switch on Debugging
+ !  flag_debug_move_atoms = .true.
+
+  real(double), dimension(3,ni_in_cell) :: velocity_global
+  integer :: i
+
+ !!! Note: for developers  !!!
+ !  if you want to update some new matrix, you should
+ !   1)define  updateXXX
+ !   2)define  flagXXX
+ !   3)check mult_module, and add "use mult_module, ONLY: matXXX, XXX_trans (if symm is needed).
+ !   4)add if(flagXXX) statement
+ !
+
+ flag_L=.false.
+ flag_K=.false.
+ flag_S=.false.
+ flag_X=.false.
+ flag_SFcoeff=.false.
+
+ select case(update_method)
+  case(updatePos)
+   if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: only Positions are updated '
+  case(updateL)
+   flag_L = .true.
+  case(updateK)
+   flag_K = .true.
+  case(updateLorK)
+   if(flag_diagonalisation) then
+     flag_K=.true.
+   else
+     flag_L=.true.
+   endif
+  case(updateS)
+   flag_S=.true.
+  case(updateX)
+   if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: updateX is not implemented yet.'
+  case(updateSFcoeff)
+   flag_SFcoeff=.true.
+   if(flag_diagonalisation) then
+     flag_K=.true.
+   else
+     flag_L=.true.
+   endif
+  case(extrplL)
+   if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: updateX is not implemented yet.'
+   ! TM plans to implement  L(n)=2L(n-1)-L(n-2)
+  case default
+   if(inode .eq. ionode) write(io_lun,*) 'Update_Pos_and_Matrices:: Invalid Flag !',update_method
+ end select ! case (update_method)
 
 
+ !First updating information of atomic positions, neighbour lists, etc...
+     call wrap_xyz_atom_cell
+     call update_atom_coord
+     do i=1,ni_in_cell
+        velocity_global(1,id_glob(i)) = velocity(1,i)
+        velocity_global(2,id_glob(i)) = velocity(2,i)
+        velocity_global(3,id_glob(i)) = velocity(3,i)
+     end do
+  !Before calling this routine, we need 1) call dump_InfoMatGlobal or 2) call set_InfoMatGlobal
+  ! Then, we use InfoGlob read from the file or use InfoGlob as it is (in the case of 2))
+  !       Now, we just assume 1).
+     call grab_InfoMatGlobal(InfoGlob,index=0)
+       n_proc_old = InfoGlob%numprocs
+       glob2node_old(:) = InfoGlob%glob_to_node(:)
+
+      scale_x = rcellx/InfoGlob%rcellx; scale_y = rcelly/InfoGlob%rcelly; scale_z = rcellz/InfoGlob%rcellz
+       rms_change = (scale_x - one)**2 + (scale_y - one)**2 + (scale_z - one)**2 
+       rms_change = sqrt(rms_change)
+      if(rms_change > small_change .and. inode == ionode) &
+        write(io_lun,fmt='(4x,a,3f20.10)') 'WARNING!! Big change of the cell', scale_x, scale_y,scale_z
+
+      if(rms_change < very_small) then
+       do ig = 1, ni_in_cell
+          atom_coord_diff(1:3,ig) = atom_coord(1:3,ig) - InfoGlob%atom_coord(1:3,ig)
+       enddo
+      else
+       do ig = 1, ni_in_cell
+          atom_coord_diff(1,ig) = atom_coord(1,ig) - InfoGlob%atom_coord(1,ig)*scale_x
+          atom_coord_diff(2,ig) = atom_coord(2,ig) - InfoGlob%atom_coord(2,ig)*scale_y
+          atom_coord_diff(3,ig) = atom_coord(3,ig) - InfoGlob%atom_coord(3,ig)*scale_z
+       enddo
+      endif
+
+      do ig = 1, ni_in_cell
+          if((atom_coord_diff(1,ig)) > half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)-rcellx
+          if((atom_coord_diff(1,ig)) < -half*rcellx) atom_coord_diff(1,ig)=atom_coord_diff(1,ig)+rcellx
+          if((atom_coord_diff(2,ig)) > half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)-rcelly
+          if((atom_coord_diff(2,ig)) < -half*rcelly) atom_coord_diff(2,ig)=atom_coord_diff(2,ig)+rcelly
+          if((atom_coord_diff(3,ig)) > half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)-rcellz
+          if((atom_coord_diff(3,ig)) < -half*rcellz) atom_coord_diff(3,ig)=atom_coord_diff(3,ig)+rcellz
+      enddo
+
+  ! Since the order of the atoms in x,y,z_atom_cell and velocity (or direction in CG) changes 
+  ! depending on their partitions, they are rearranged in updateIndices3.
+  ! (these arrays should be replaced by atom_coord and atom_veloc in the future.)
+  !    updateIndices3 : deallocates member of parts, bundles, covering sets, domain, ...
+  !                     and allocates them following the new atomic positions.
+  !   Now, old informaiton is stored in InfoGlob, thus some of the information is redundant 
+  !    I (TM) should make new routine like "updateIndices4" using InfoGlob, soon.  ! 2017.Nov.13  Tsuyoshi Miyazaki
+  !   (NOTE) If CONQUEST stops before calling "finalise", coord_next.dat should be used in the next job.
+  !       coord_next.dat is made in "updateIndices3", at present.
+     call updateIndices3(fixed_potential, velocity)
+     do i=1,ni_in_cell
+        velocity(1,i) = velocity_global(1,id_glob(i))
+        velocity(2,i) = velocity_global(2,id_glob(i))
+        velocity(3,i) = velocity_global(3,id_glob(i))
+     end do
+
+ !
+ ! Then, matrices will be read from the corresponding files
+ !
+  if(flag_L) then
+     call grab_matrix2('L',inode,nfile,Info)
+     call my_barrier()
+     call Matrix_CommRebuild(Info,Lrange,L_trans,matL(1),nfile,symm)
+      if(flag_debug_move_atoms) call Report_UpdateMatrix("Lmat")
+     ! DRB 2017/05/09 now extended to spin systems
+     if(nspin==2) then
+       call grab_matrix2('L2',inode,nfile,Info)
+       call my_barrier()
+       call Matrix_CommRebuild(Info,Lrange,L_trans,matL(2),nfile,symm)
+        if(flag_debug_move_atoms) call Report_UpdateMatrix("L2  ")
+     end if
+  endif
+
+  if(flag_K) then
+     call grab_matrix2('K',inode,nfile,Info)
+     call my_barrier()
+     call Matrix_CommRebuild(Info,Hrange,H_trans,matK(1),nfile)
+      if(flag_debug_move_atoms) call Report_UpdateMatrix("Kmat")
+     if(nspin==2) then
+       call grab_matrix2('K2',inode,nfile,Info)
+       call my_barrier()
+       call Matrix_CommRebuild(Info,Hrange,H_trans,matK(2),nfile)
+        if(flag_debug_move_atoms) call Report_UpdateMatrix("K2  ")
+     end if
+  endif
+
+  if(flag_S) then
+     call grab_matrix2('S',inode,nfile,Info)
+     call my_barrier()
+     call Matrix_CommRebuild(Info,Srange,S_trans,matS,nfile)
+      if(flag_debug_move_atoms) call Report_UpdateMatrix("Smat")
+     ! If we introduce spin-dependent support ...
+     !if(nspin==2) then
+     !  call grab_matrix2('S2',inode,nfile,Info)
+     !  call my_barrier()
+     !  call Matrix_CommRebuild(Info,Srange,S_trans,matS(2),nfile,symm)
+     !   if(flag_debug_move_atoms) call Report_UpdateMatrix("S2  ")
+     !end if
+  endif
+
+  if(flag_SFcoeff) then
+     do spin_SF = 1,nspin_SF
+      call matrix_scale(zero,matSFcoeff(spin_SF))
+     enddo !spin_SF = 1,nspin_SF
+
+     call grab_matrix2('SFcoeff',inode,nfile,Info)
+     call my_barrier()
+     call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(1),nfile)
+      if(flag_debug_move_atoms) call Report_UpdateMatrix("SFc1")
+     if(nspin_SF==2) then
+      call grab_matrix2('SFcoeff2',inode,nfile,Info)
+      call my_barrier()
+      call Matrix_CommRebuild(Info,SFcoeff_range,SFcoeff_trans,matSFcoeff(2),nfile)
+       if(flag_debug_move_atoms) call Report_UpdateMatrix("SFc2")
+     end if
+
+     do spin_SF = 1,nspin_SF
+      call matrix_scale(zero,matSFcoeff_tran(spin_SF))
+      call matrix_transpose(matSFcoeff(spin_SF), matSFcoeff_tran(spin_SF))
+     enddo
+  endif
+
+ !Switch off Debugging
+ !  flag_debug_move_atoms = .false.
+
+ return
+ end subroutine update_pos_and_matrices
 
 end module move_atoms

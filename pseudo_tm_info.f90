@@ -33,6 +33,8 @@
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2015/11/09 17:21 dave with TM, NW (Mizuho)
 !!    Adding new members to pseudo_info derived type for neutral atom
+!!   2017/11/27 15:52 dave with TM, NW
+!!    NA projectors added to pseudo_info type
 !!  SOURCE
 !!
 module pseudo_tm_info
@@ -91,6 +93,14 @@ module pseudo_tm_info
      integer, pointer :: pjnl_l(:)        ! size = n_pjnl, angular momentum
      integer, pointer :: pjnl_n(:)        ! size = n_pjnl, index for projectors
      real(double), pointer :: pjnl_ekb(:) ! size = n_pjnl, <phi_ln|dV_l|phi_ln>
+     
+     ! Neutral atom projectors
+     integer :: n_pjna               ! number of NA projector functions
+     type(rad_func), pointer :: pjna(:)   ! size = n_pjna, projector functions
+     integer, pointer :: pjna_l(:)        ! size = n_pjna, angular momentum
+     integer, pointer :: pjna_n(:)        ! size = n_pjna, index for projectors
+     real(double), pointer :: pjna_ekb(:) ! size = n_pjna, <phi_ln|V_na|phi_ln>
+     
   end type pseudo_info
 
   type(pseudo_info), allocatable :: pseudo(:)
@@ -133,6 +143,8 @@ contains
 !!    Added possibility of user defined filename for PAO/pseudo *ion
 !!   2017/02/17 15:59 dave
 !!    Changes to allow reading of Hamann's optimised norm-conserving pseudopotentials (remove ABINIT)
+!!   2018/06/19 20:30 nakata
+!!    Add IF with pseudo_type for calling init_rad when ghost atoms are used
 !!  SOURCE
 !!
   subroutine setup_pseudo_info
@@ -202,8 +214,8 @@ contains
              call init_rad(pseudo(ispecies)%pjnl(ii))
             enddo
            endif
-            call init_rad(pseudo(ispecies)%vlocal)
-            call init_rad(pseudo(ispecies)%chlocal)
+            if(pseudo_type==ABINIT) call init_rad(pseudo(ispecies)%vlocal)
+            if(pseudo_type==SIESTA) call init_rad(pseudo(ispecies)%chlocal)
             if(pseudo(ispecies)%flag_pcc) call init_rad(pseudo(ispecies)%chpcc)
             pseudo(ispecies)%n_pjnl      = 0
             pseudo(ispecies)%flag_pcc    = .false.
@@ -459,11 +471,13 @@ contains
 !!    Changed formatting for reads to read new Siesta (1.3) pseudos
 !!   2017/11/10 14:24 dave
 !!    Changed yp1 and ypn to use first derivative (simple FD) instead of zero
+!!   2018/03/08 09:54 dave
+!!    Added consistency check between cutoff and step size/number of points
 !!  SOURCE
 !!
   subroutine radial_read_ascii(op,lun)
 
-    use numbers, ONLY: BIG, zero
+    use numbers, ONLY: BIG, zero, RD_ERR
     use spline_module, ONLY: spline
     use global_module, ONLY: iprint_pseudo
     use GenComms, ONLY: myid
@@ -474,18 +488,32 @@ contains
     integer,intent(in)         :: lun
 
     integer :: j, npts
-    real(double) :: dummy
+    real(double) :: dummy, r0, r1
     real(double) :: yp1, ypn
     real(double) :: delta, cutoff
 
     !ori read(lun,'(i4,2g25.15)') npts, op%delta, op%cutoff
 !    read(lun,'(i4,2g25.15)') npts, delta, cutoff
     read(lun,*) npts, delta, cutoff
+    ! DRB 2018/03/08 Adding consistency check between cutoff and delta
+    if(abs(cutoff - delta*real(npts-1,double))>RD_ERR) then
+       if(myid==0) write(io_lun,fmt='(/4x,"Warning: cutoff and step inconsistent, cutoff will be adjusted: ",2f8.3/)') &
+            cutoff,delta*real(npts-1,double)
+       cutoff=delta*real(npts-1,double)
+    end if
     if(myid==0.AND.iprint_pseudo>3) write(io_lun,fmt='(10x,"Radius: ",f15.10)') cutoff
     op%delta = delta
     op%cutoff= cutoff
     call rad_alloc(op,npts)
-    do j=1,npts
+    ! Test step size in radial grid is consistent
+    read(lun,*) r0, op%f(1)
+    read(lun,*) r1, op%f(2)
+    if(abs(r1-r0-delta)>RD_ERR) then
+       if(myid==0) write(io_lun,fmt='(/4x,"Warning: radial grid and step inconsistent ! ",2f8.3/)') r1-r0,delta
+       ! DRB 2018/03/08 10:55
+       ! I can see an argument to abort here - if the step size and grid are inconsistent we may have problems
+    end if
+    do j=3,npts
 !       read(lun,'(2g25.15)') dummy, op%f(j)
        read(lun,*) dummy, op%f(j)
     enddo
@@ -558,6 +586,8 @@ contains
 !!    Added storage of spacing of PAO table
 !!   2017/11/10 14:22 dave
 !!    Bug fix: added Ry->Ha conversion for Siesta VNA d2 table (as well as f table)
+!!   2018/01/22 14:39 JST dave
+!!    Added test for lmax_pao/lmax_ps to find maximum PAO/PP angular momentum
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -571,6 +601,7 @@ contains
     use functions, ONLY: erfc
     use input_module, ONLY: io_assign, io_close
     use pseudopotential_common, ONLY: pseudo_type, SIESTA, ABINIT
+    use maxima_module, only: lmax_pao, lmax_ps
 
     implicit none
 
@@ -762,6 +793,7 @@ contains
     endif !  (inode == ionode) then
     ! Now broadcast the information
     call gcopy(lmax   )
+    if(lmax>lmax_pao) lmax_pao = lmax    
     call gcopy(n_pjnl )
     call gcopy(zval)
     call gcopy(z)
@@ -827,6 +859,7 @@ contains
           call gcopy(ps_info%pjnl(i)%f,ps_info%pjnl(i)%n)
           call gcopy(ps_info%pjnl(i)%d2,ps_info%pjnl(i)%n)
        end do
+       if(ps_info%lmax>lmax_ps) lmax_ps = ps_info%lmax
        if(pseudo_type==SIESTA) then
           !Chlocal
           call gcopy(ps_info%tm_loc_pot)

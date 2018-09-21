@@ -327,6 +327,8 @@ contains
 !!    ROBODoc header
 !!   20/06/2001 dave
 !!    Added cq_abort
+!!   2018/07/11 12:13 dave
+!!    Added initialisation of variables to zero
 !!  SOURCE
 !!
   subroutine allocate_primary_set(prim,members)
@@ -334,6 +336,7 @@ contains
     ! Module usage
     use datatypes
     use basic_types
+    use numbers, only : zero
 
     ! Passed variables
     type(primary_set) :: prim
@@ -362,6 +365,11 @@ contains
     if(stat/=0) then
        call cq_abort('alloc_prim: error(5) nm_nodbeg')
     endif
+    prim%idisp_primx = 0
+    prim%idisp_primy = 0
+    prim%idisp_primz = 0
+    prim%nm_nodgroup = 0
+    prim%nm_nodbeg   = 0
     if(members) then
        allocate(prim%iprim_seq(prim%mx_iprim),STAT=stat)
        if(stat/=0) then
@@ -391,6 +399,12 @@ contains
        if(stat/=0) then
           call cq_abort('alloc_prim: error(12) iprim_part')
        endif
+       prim%iprim_seq  = 0
+       prim%iprim_part = 0
+       prim%ig_prim    = 0
+       prim%xprim = zero
+       prim%yprim = zero
+       prim%zprim = zero
     else
        nullify(prim%iprim_seq,prim%ig_prim,   &
             prim%xprim,prim%yprim,prim%zprim, &

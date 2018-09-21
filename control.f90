@@ -31,6 +31,10 @@
 !!    Changes for output to file not stdout
 !!   2015/06/08 lat
 !!    - Added experimental backtrace
+!!   2017/10/24 zamaan
+!!    Added md_ensemble variable for md_run
+!!   2018/05/30 zamaan
+!!    Implemented Berendsen thermostat and BerendsenEquil in NVT ensemble
 !!  SOURCE
 !!
 module control
@@ -48,6 +52,8 @@ module control
   real(double) :: MDtimestep 
   real(double) :: MDcgtol 
   logical      :: CGreset
+  character(3)  :: md_ensemble
+  character(20) :: md_thermo_type
 
   ! Area identification
   integer, parameter, private :: area = 9
@@ -122,6 +128,7 @@ contains
     use global_module,        only: runtype, flag_self_consistent, flag_out_wf, &
                                     flag_write_DOS, flag_opt_cell
     use input_module,         only: leqi
+    use store_matrix,         only: dump_pos_and_matrices
 
     implicit none
 
@@ -146,7 +153,7 @@ contains
        if(.NOT.flag_self_consistent.AND.(flag_out_wf.OR.flag_write_DOS)) return
        call get_E_and_F(fixed_potential,vary_mu, total_energy,&
                         .true.,.true.,level=backtrace_level)
-       ! 
+       !
     else if ( leqi(runtype, 'cg')    ) then
         if (flag_opt_cell) then
             call cell_cg_run(fixed_potential, vary_mu, total_energy)
@@ -172,6 +179,8 @@ contains
     call stop_backtrace(t=backtrace_timer,who='control_run',echo=.true.)
 !****lat>$
 
+    ! Added if, otherwise step numbering is broken on MD restart - zamaan
+    if (.not. leqi(runtype, 'md')) call dump_pos_and_matrices
     return
   end subroutine control_run
   !!***
@@ -212,6 +221,8 @@ contains
   !!   - Added call for safemin2 necessary in reusibg L-matrix
   !!    2017/08/29 jack baker & dave
   !!     Removed rcellx references (redundant)
+  !!   2017/11/10 14:06 dave
+  !!    Removing dump_InfoGlobal calls
   !!  SOURCE
   !!
   subroutine cg_run(fixed_potential, vary_mu, total_energy)
@@ -231,10 +242,11 @@ contains
     use GenBlas,       only: dot
     use force_module,  only: tot_force
     use io_module,     only: write_atomic_positions, pdb_template, &
-                             check_stop
+                             check_stop, write_xsf
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
-    use io_module2,    ONLY: dump_InfoGlobal
+    use store_matrix,  ONLY: dump_InfoMatGlobal, dump_pos_and_matrices
+    use md_control,    only: flag_write_xsf
 
     implicit none
 
@@ -244,18 +256,19 @@ contains
     real(double) :: total_energy
     
     ! Local variables
-    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma
+    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma,gg1
     integer        :: i,j,k,iter,length, jj, lun, stat
     logical        :: done
     type(cq_timer) :: tmr_l_iter
-    real(double), allocatable, dimension(:,:) :: cg
+    real(double), allocatable, dimension(:,:) :: cg, old_force
     real(double), allocatable, dimension(:)   :: x_new_pos, y_new_pos,&
-                                                 z_new_pos
+         z_new_pos
 
     allocate(cg(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating cg in control: ",&
                        ni_in_cell, stat)
+    allocate(old_force(3,ni_in_cell), STAT=stat)
     allocate(x_new_pos(ni_in_cell), y_new_pos(ni_in_cell), &
              z_new_pos(ni_in_cell), STAT=stat)
     if(stat/=0) &
@@ -275,27 +288,33 @@ contains
     dE = zero
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
-    if (.NOT. flag_MDold) then
-      call dump_InfoGlobal()
-    endif
+    call dump_pos_and_matrices
+
     iter = 1
     ggold = zero
+    old_force = zero
     energy1 = energy0
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
        ! Construct ratio for conjugacy
        gg = zero
+       gg1 = zero! PR
        do j = 1, ni_in_cell
           gg = gg +                              &
                tot_force(1,j) * tot_force(1,j) + &
                tot_force(2,j) * tot_force(2,j) + &
                tot_force(3,j) * tot_force(3,j)
+          gg1 = gg1 +                              &
+               tot_force(1,j) * old_force(1,j) + &
+               tot_force(2,j) * old_force(2,j) + &
+               tot_force(3,j) * old_force(3,j)
        end do
        if (abs(ggold) < 1.0e-6_double) then
           gamma = zero
        else
-          gamma = gg/ggold
+          gamma = (gg-gg1)/ggold ! PR - change to gg/ggold for FR
        end if
+       if(gamma<zero) gamma = zero
        if (inode == ionode .and. iprint_MD > 2) &
             write (io_lun,*) ' CHECK :: Force Residual = ', &
                              for_conv * sqrt(gg)/ni_in_cell
@@ -321,6 +340,7 @@ contains
           y_new_pos(j) = y_atom_cell(j)
           z_new_pos(j) = z_atom_cell(j)
        end do
+       old_force = tot_force
        ! Minimise in this direction
        !ORI call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
        !ORI              energy1, fixed_potential, vary_mu, energy1)
@@ -339,6 +359,7 @@ contains
           end do
        end if
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+       if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero
@@ -369,6 +390,9 @@ contains
                write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') &
                      max
        end if
+
+       call dump_pos_and_matrices
+       
        call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
        if (.not. done) call check_stop(done, iter)
     end do
@@ -378,6 +402,7 @@ contains
     if (stat /= 0) &
          call cq_abort("Error deallocating _new_pos in control: ", &
                        ni_in_cell,stat)
+    deallocate(old_force, STAT=stat)
     deallocate(cg, STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error deallocating cg in control: ", ni_in_cell,stat)
@@ -403,6 +428,9 @@ contains
 !!  PURPOSE
 !!   Does a QUENCHED MD run
 !!   Now, this can also employ NVE-MD
+!!
+!!   Note that we require fire_N_below_thresh consecutive steps with the force below threshold
+!!   before convergence is accepted
 !!  INPUTS
 !! 
 !! 
@@ -440,12 +468,35 @@ contains
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
 !!   2017/05/09 dave
 !!    Added calls to read L-matrix for both spin channels
+!!   2017/10/20 09:32 dave
+!!    Removed fire_step_max from call to fire_qMD (now module variable set by user)
+!!   2017/10/25 zamaan
+!!    Added refactored NVT
+!!   2017/11/02 zamaan
+!!    Changed velocity local variable to ion_velocity from md_control
+!!   2017/11/06 zamaan
+!!    added lattice_vec for md_model to track cell vectors
+!!   2017/11/10 dave
+!!    Removed calls to dump K matrix (now done in DMMinModule)
+!!   2017/11/10 15:15 dave
+!!    Created variable fire_N_below_thresh to set number of consecutive steps below threshold
+!!   2018/01/22 tsuyoshi (with dave)
+!!    Changes to use new atom update routines
+!!   2018/04/20 nakata
+!!    Changed to initialise n_stop_qMD
+!!   2018/04/24 zamaan
+!!    Initial NPT implementation (isotropic fluctuations only)
+!!   2018/05/29 zamaan
+!!    Added time step argument to init_thermo calls
+!!   2018/05/30 zamaan
+!!    Switch on NHC after using BerendsenEquil in NVT ensemble
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
 
     ! Module usage
     use numbers
+    use units
     use global_module,  only: iprint_gen, ni_in_cell, x_atom_cell,    &
                               y_atom_cell, z_atom_cell, area_general, &
                               flag_read_velocity, flag_quench_MD,     &
@@ -453,35 +504,48 @@ contains
                               flag_MDold,n_proc_old,glob2node_old,    &
                               flag_LmatrixReuse,flag_XLBOMD,          &
                               flag_dissipation,flag_FixCOM,           &
-                              flag_fire_qMD, flag_diagonalisation, nspin
+                              flag_fire_qMD, flag_diagonalisation,    &
+                              nspin, flag_thermoDebug, flag_baroDebug,&
+                              flag_move_atom,rcellx, rcelly, rcellz,  &
+                              flag_Multisite,flag_SFcoeffReuse, atom_coord
     use group_module,   only: parts
-    use primary_module, only: bundle
     use minimise,       only: get_E_and_F
     use move_atoms,     only: velocityVerlet, updateIndices,           &
                               init_velocity,update_H,check_move_atoms, &
                               update_atom_coord,wrap_xyz_atom_cell,    &
-                              updateIndices3,zero_COM_velocity,        &
-                              calculate_kinetic_energy
-    use GenComms,       only: gsum, myid, my_barrier, inode, ionode,  &
-                              gcopy
+                              zero_COM_velocity,                       &
+                              calculate_kinetic_energy,                &
+                              fac_Kelvin2Hartree
+    use GenComms,       only: gsum, my_barrier, inode, ionode, gcopy
     use GenBlas,        only: dot
-    use force_module,   only: tot_force
+    use force_module,   only: tot_force, stress
     use io_module,      only: write_positions, read_velocity,         &
-                              write_velocity, read_fire
+                              write_velocity, read_fire, write_xsf
     use io_module,      only: write_atomic_positions, pdb_template,   &
-                              check_stop
+                              check_stop, append_coords
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
-    use move_atoms,     only: fac_Kelvin2Hartree
-    use io_module2,     ONLY: dump_InfoGlobal,grab_InfoGlobal,grab_matrix2,InfoL
-    !use DiagModule,     ONLY: diagon
-    use mult_module,    ONLY: matL,L_trans
-    use matrix_data,    ONLY: Lrange
+    use move_atoms,     only: fac_Kelvin2Hartree, update_pos_and_matrices, updateL, updateLorK, updateSFcoeff
+    use store_matrix,   ONLY: dump_InfoMatGlobal,grab_InfoMatGlobal, &
+                    matrix_store_global, InfoMatrixFile, dump_pos_and_matrices
+    use mult_module,    ONLY: matL,L_trans,matK,S_trans, matrix_scale
+    use matrix_data,    ONLY: Lrange,Hrange, rcut, max_range
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
     use XLBOMD_module,  ONLY: Ready_XLBOMD, Do_XLBOMD
-    use Integrators,    ONLY: vVerlet_v_dthalf,vVerlet_r_dt, fire_qMD
+    use Integrators,    ONLY: vVerlet_v_dthalf,vVerlet_r_dt, fire_qMD, fire_N_below_thresh
     use constraint_module, ONLY: correct_atomic_position,correct_atomic_velocity, &
          ready_constraint,flag_RigidBonds
-    use input_module,   ONLY: io_assign, io_close
+    use input_module,   ONLY: io_assign, io_close, leqi
+    use cover_module,   only: BCS_parts, make_cs, deallocate_cs, make_iprim, &
+                              send_ncover
+    use md_model,       only: type_md_model, md_tdep
+    use md_control,     only: type_thermostat, type_barostat, md_n_nhc, &
+                              md_n_ys, md_n_mts, ion_velocity, lattice_vec, &
+                              md_baro_type, md_target_press, flag_write_xsf, &
+                              md_ndof_ions, md_berendsen_equil, md_tau_T, &
+                              md_tau_P
+
+    use atoms,          only: distribute_atoms,deallocate_distribute_atom
+    use global_module,  only: atom_coord_diff, iprint_MD, area_moveatoms
 
     implicit none
 
@@ -491,15 +555,15 @@ contains
     real(double) :: total_energy
     
     ! Local variables
-    real(double), allocatable, dimension(:,:) :: velocity
-    integer       ::  iter, i, k, length, stat, i_first, i_last, &
-         nfile, symm
-    integer       :: lun, ios, md_steps ! SA 150204; 150213 md_steps: counter for MD steps
-    real(double)  :: temp, KE, energy1, energy0, dE, max, g0
-    real(double)  :: energy_md
+    integer       ::  iter, i, j, k, length, stat, i_first, i_last, md_ndof
+    integer       :: nequil ! number of Berendsen equilibration steps - zamaan
+    real(double)  :: energy1, energy0, dE, max, g0
     character(50) :: file_velocity='velocity.dat'
-    logical       :: done,second_call
+    logical       :: done,second_call,append_coords_bak,flag_store
     logical,allocatable,dimension(:) :: flag_movable
+
+    type(matrix_store_global) :: InfoGlob
+    type(InfoMatrixFile),pointer:: InfoL(:)
 
     !! quenched MD optimisation is stopped
     !! if the maximum force component is bellow threshold
@@ -508,39 +572,78 @@ contains
     ! FIRE parameters
     integer :: step_qMD, n_stop_qMD, fire_N, fire_N2
     real(double) :: fire_step_max, fire_P0, fire_alpha
-    
-    allocate(velocity(3,ni_in_cell), STAT=stat)
+    integer :: iter_MD
+
+    ! Storage for MD data
+    type(type_md_model)           :: mdl
+
+    ! thermostat, barostat
+    type(type_thermostat), target :: thermo
+    type(type_barostat), target   :: baro
+
+    n_stop_qMD = 0
+    allocate(ion_velocity(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating velocity in md_run: ", &
                        ni_in_cell, stat)
-    call reg_alloc_mem(area_general, 3*ni_in_cell, type_dbl)
-    velocity = zero
+    call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
+    ion_velocity = zero
     if (flag_read_velocity) then
-       call read_velocity(velocity, file_velocity)
+       call read_velocity(ion_velocity, file_velocity)
     else
        if(temp_ion > RD_ERR) then
           if(inode == ionode) &
-               call init_velocity(ni_in_cell, temp_ion, velocity)
-          call gcopy(velocity, 3, ni_in_cell)
+               call init_velocity(ni_in_cell, temp_ion, ion_velocity)
+          call gcopy(ion_velocity, 3, ni_in_cell)
        else
-          velocity = zero
+          ion_velocity = zero
        end if
     end if
     energy0 = zero
     energy1 = zero
     dE = zero
     length = 3*ni_in_cell
-    if (myid == 0 .and. iprint_gen > 0) write(io_lun, 2) MDn_steps
+
+    call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
+
+    ! initialisation/contintuation when we're using Berendsen equilibration
+    if (flag_MDcontinue) then
+      if (MDinit_step >= md_berendsen_equil) then
+        nequil = 0
+      else
+        nequil = md_berendsen_equil - MDinit_step
+      end if
+    else
+      nequil = md_berendsen_equil 
+    end if
+
+    ! Initialise number of degrees of freedom
+    md_ndof = 3*ni_in_cell
+    md_ndof_ions = md_ndof
+    do i=1,ni_in_cell
+      do j=1,3
+        if (flag_move_atom(j,i) .eqv. .false.) md_ndof = md_ndof-1
+      end do
+    end do
+
+    if (inode==ionode .and. iprint_gen > 0) &
+      write(io_lun,'(4x,"Welcome to md_run. Doing ",i4," steps")') &
+            MDn_steps
+
     ! Find energy and forces
     if (flag_fire_qMD) then
        call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     else
        call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .false.)
     end if
+    mdl%dft_total_energy = energy0
 
     ! XL-BOMD
     if (flag_XLBOMD .AND. flag_dissipation .AND. .NOT.flag_MDold) &
       call Ready_XLBOMD()
+
+    ! Thermostat/barostat initialisation
+    call init_ensemble(baro, thermo, mdl, md_ndof, nequil)
 
     ! Get converted 1-D array for flag_atom_move
     allocate (flag_movable(3*ni_in_cell), STAT=stat)
@@ -558,102 +661,148 @@ contains
       i_first = MDinit_step + 1
       i_last = i_first + MDn_steps - 1
     endif
-    ! Dump global data
-    if (.NOT. flag_MDold) then
-      if (inode.EQ.ionode) call dump_InfoGlobal(i_first)
-    endif
-
-    energy_md = energy0
+    call dump_pos_and_matrices(index=0,MDstep=i_first,velocity=ion_velocity)
 
     if (flag_fire_qMD) then
        step_qMD = i_first ! SA 20150201
        done = .false.     ! SA 20150201
-       fire_step_max = 10.0_double * MDtimestep
        ! reading FIRE parameters of the last run
        call read_fire(fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha)
     endif
 
-    !ORI do iter = 1, MDn_steps
-    do iter = i_first, i_last
-       if (myid == 0) &
-            write (io_lun, fmt='(4x,"MD run, iteration ",i5)') iter
-       ! Fetch old relations
-       if (.NOT. flag_MDold) then
-         if (.NOT. allocated(glob2node_old)) then
-           allocate (glob2node_old(ni_in_cell), STAT=stat)
-           if (stat.NE.0) call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
-         endif
-         if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-         call gcopy(n_proc_old)
-         call gcopy(glob2node_old,ni_in_cell)
-       endif
+    if (.not. flag_MDcontinue) then
+      if (flag_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
+      if (flag_thermoDebug) then
+        call thermo%dump_thermo_state(i_first-1, 'thermostat.dat')
+      end if
+      if (flag_baroDebug) then
+        call baro%dump_baro_state(i_first-1, 'barostat.dat')
+      end if
+    end if
+
+    do iter = i_first, i_last ! Main MD loop
+       mdl%step = iter
+       if (inode==ionode) &
+            write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
+
+       call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
+
+       ! thermostat/barostat (MTTK splitting of Liouvillian)
+       call integrate_pt(baro, thermo, mdl, ion_velocity)
+
+       !! For Debuggging !!
+       !     call dump_pos_and_matrices(index=1,MDstep=i_first)
+       !! For Debuggging !!
 
        !%%! Evolve atoms - either FIRE (quenched MD) or velocity Verlet
        if (flag_fire_qMD) then
-          call fire_qMD(fire_step_max,MDtimestep,velocity,tot_force,flag_movable,iter,&
+          call fire_qMD(MDtimestep,ion_velocity,tot_force,flag_movable,iter, &
                         fire_N,fire_N2,fire_P0,fire_alpha) ! SA 20150204
        else
-          call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable)
-          call vVerlet_r_dt(MDtimestep,velocity,flag_movable)
+          call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable)
+
+          if (leqi(md_ensemble, 'npt')) then
+            if (leqi(md_baro_type, "berendsen") .or. nequil > 0) then
+              call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
+            else
+              call baro%propagate_r_mttk(MDtimestep, ion_velocity, flag_movable)
+              call baro%propagate_box_mttk(MDtimestep)
+            end if
+          else
+            call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
+          end if
        end if
        ! Constrain position
-       if (flag_RigidBonds) call correct_atomic_position(velocity,MDtimestep)
+       if (flag_RigidBonds) call correct_atomic_position(ion_velocity,MDtimestep)
        ! Reset-up
-       if (.NOT.flag_MDold) then
-         ! Update members
-         call wrap_xyz_atom_cell()
-         call update_atom_coord()
-         call updateIndices3(fixed_potential,velocity)
-         if (.NOT.flag_diagonalisation .AND. flag_LmatrixReuse) then
-           ! L-matrix reconstruction
-           call grab_matrix2('L',inode,nfile,InfoL)
-           call my_barrier()
-           call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-           ! DRB 2017/05/09 now extended to spin systems
-           if(nspin==2) then
-              call grab_matrix2('L2',inode,nfile,InfoL)
-              call my_barrier()
-              call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(2),nfile,symm)
-           end if
-         endif
+       if(.NOT.flag_MDold) then
+          if (md_ensemble(2:2) == 'p') then
+            if (.not. leqi(md_baro_type, "berendsen") .or. nequil < 1) then
+              call baro%update_cell
+            end if
+          end if
+          if(flag_SFcoeffReuse) then
+             call update_pos_and_matrices(updateSFcoeff,ion_velocity)
+          else
+             call update_pos_and_matrices(updateLorK,ion_velocity)
+          endif
        else
-         call update_atom_coord()
-         call updateIndices(.true.,fixed_potential)
-       endif
+          call update_atom_coord
+          call updateIndices(.true., fixed_potential)
+       end if
+
        if (flag_XLBOMD) call Do_XLBOMD(iter,MDtimestep)
        call update_H(fixed_potential)
+
+       !2018.Jan.4 TM 
+       !   We need to update flag_movable, since the order of x_atom_cell (or id_glob) 
+       !   may change after the atomic positions are updated.
+       call check_move_atoms(flag_movable)
+       
+       !! For Debuggging !!
+       !     call dump_pos_and_matrices(index=2,MDstep=i_first)
+       !! For Debuggging !!
+       
        if (flag_fire_qMD) then
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .true.,iter)
+          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
        else
-          call get_E_and_F(fixed_potential,vary_mu,energy1,.true.,.false.,iter)
-          call vVerlet_v_dthalf(MDtimestep,velocity,tot_force,flag_movable,second_call)
+          call get_E_and_F(fixed_potential, vary_mu, energy1, .true., .false.,iter)
+          if (inode == ionode) then
+            write(io_lun,fmt='(/4x,"Kinetic stress    ", 3f15.8,a3)') &
+              baro%ke_stress(1,1), baro%ke_stress(2,2), baro%ke_stress(3,3), &
+              en_units(energy_units)
+          end if
+          call dump_pos_and_matrices(index=0,MDstep=iter,velocity=ion_velocity)
+          call vVerlet_v_dthalf(MDtimestep,ion_velocity,tot_force,flag_movable,second_call)
        end if
+       ! Rescale the ionic positions for the berendsen barostat AFTER the 
+       ! velocity updates to avoid rescaling velocities
+       if (leqi(md_ensemble, 'npt')) then
+         if (leqi(md_baro_type, 'berendsen') .or. nequil > 0) then
+           call baro%propagate_berendsen(flag_movable)
+           call baro%update_cell
+         end if
+       end if
+       call calculate_kinetic_energy(ion_velocity,mdl%ion_kinetic_energy)
+       thermo%ke_ions = mdl%ion_kinetic_energy
+       call baro%update_static_stress(stress)
+       call baro%get_ke_stress(ion_velocity)
+       call baro%get_volume
+       call baro%get_pressure
+       call thermo%get_temperature
+
+       !! For Debuggging !!
+       !!call cq_abort(" STOP FOR DEBUGGING")
+       !! For Debuggging !!
+
+       ! thermostat/barostat (MTTK splitting of Liouvillian)
+       call integrate_pt(baro, thermo, mdl, ion_velocity, second_call)
+
+       if (flag_thermoDebug) then
+         call thermo%dump_thermo_state(iter,'thermostat.dat')
+       end if
+       if (flag_baroDebug) then
+         call baro%dump_baro_state(iter, 'barostat.dat')
+       end if
+
        ! Constrain velocity
-       if (flag_RigidBonds) call correct_atomic_velocity(velocity)
+       if (flag_RigidBonds) call correct_atomic_velocity(ion_velocity)
+       if (flag_FixCOM) call zero_COM_velocity(ion_velocity)
        !%%! END of Evolve atoms
 
-       ! Let's analyse
-       if (flag_FixCOM) call zero_COM_velocity(velocity)
-       call calculate_kinetic_energy(velocity,KE)
-
        ! Print out energy
-       energy_md = energy1
-       if (myid == 0) &
-         write (io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
-                KE / (three / two * ni_in_cell) / fac_Kelvin2Hartree
-       if (myid == 0) write (io_lun, 8) iter, KE, energy_md, KE+energy_md
-       ! Output positions
-       if (myid == 0 .and. iprint_gen > 1) then
-         do i = 1, ni_in_cell
-           write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
-         enddo
-       endif
+       mdl%dft_total_energy = energy1
+       if (inode==ionode) then
+         write(io_lun,'(4x,"***MD step ",i6," KE: ",f18.8," &
+                       &IntEnergy: ",f20.8," TotalEnergy: ",f20.8)') &
+               iter, mdl%ion_kinetic_energy, mdl%dft_total_energy, &
+               mdl%ion_kinetic_energy+mdl%dft_total_energy
+         write(io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
+               mdl%ion_kinetic_energy / (three / two * ni_in_cell) / &
+               fac_Kelvin2Hartree
+       end if
 
-       ! Dump global data
-       if (.NOT. flag_MDold) then
-         if (inode.EQ.ionode) call dump_InfoGlobal(iter)
-       endif
-       
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero
@@ -662,22 +811,89 @@ contains
              if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
           end do
        end do
+
        ! Output and energy changes
        dE = energy0 - energy1
-       if(myid==0) then
-          write (io_lun, 6) max
-          write (io_lun, 4) dE
-          write (io_lun, 5) sqrt(g0/ni_in_cell)
-       end if
        energy0 = energy1
        energy1 = abs(dE)
-       if (myid == 0 .and. mod(iter, MDfreq) == 0) &
-            call write_positions(iter, parts)
+       if(inode==ionode) then
+         write (io_lun,'(4x,"Maximum force component : ",f15.8)') max
+         write (io_lun,'(4x,"Force Residual          : ",f15.8)') &
+                sqrt(g0/ni_in_cell)
+         write (io_lun,'(4x,"Energy change           : ",f15.8)') dE
+       end if
+
+       ! Compute and print the conserved quantity and its components
+       if (mdl%thermo_type == 'nhc') call thermo%get_nhc_energy
+       if (mdl%baro_type == 'iso-mttk') call baro%get_box_ke
+       call mdl%get_cons_qty
+       call mdl%print_md_energy()
+       call mdl%dump_stats("Stats")
+
+       ! Output positions
+       if (inode==ionode .and. iprint_gen > 1) then
+          do i = 1, ni_in_cell
+            write(io_lun,'(4x,"Atom ",i4," Position ",3f15.8)') &
+                  i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+          enddo
+       endif
+       if (inode == ionode .and. mod(iter, MDfreq) == 0) then
+         call write_positions(iter, parts)
+         call mdl%dump_frame("Frames")
+         if (md_tdep) call mdl%dump_tdep
+       end if
+       if (flag_write_xsf) call write_xsf('trajectory.xsf', i_first-1)
        call my_barrier
        !to check IO of velocity files
-       call write_velocity(velocity, file_velocity)
-       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
-       !to check IO of velocity files
+       call write_velocity(ion_velocity, file_velocity)
+
+       append_coords_bak = append_coords
+       append_coords = .false.
+       call write_atomic_positions("cq.position", trim(pdb_template))
+       append_coords = append_coords_bak
+ 
+ 
+        call baro%get_pressure
+        call thermo%get_temperature
+        select case(md_ensemble)
+        case('nvt')
+          if (leqi(thermo%thermo_type, 'nhc')) then
+            call thermo%write_thermo_checkpoint
+          end if
+        case('npt')
+          if (leqi(baro%baro_type, 'iso-mttk')) then
+            call thermo%write_thermo_checkpoint
+            call baro%write_baro_checkpoint
+          end if
+        end select
+ 
+        if (nequil > 0) then
+         nequil = nequil - 1
+         if (nequil == 0) then
+           write (io_lun, '(4x,a)') "Berendsen equilibration finished, &
+                                    &starting extended system dynamics."
+           ! If the run was restarted during Berendsen equilibration, the
+           ! MDcontinue flag would cause init_nhc to read a non-existent
+           ! thermostat checkpoint. Not pretty, bug good enough for now.
+           flag_store = flag_MDcontinue
+           flag_MDcontinue = .false.
+           select case(md_ensemble)
+           case('nvt')
+             call thermo%init_thermo('nhc', 'none', MDtimestep, md_ndof, &
+                                     md_tau_T, mdl%ion_kinetic_energy)
+           case('npt')
+             call thermo%init_thermo('nhc', 'iso-mttk', MDtimestep, md_ndof, &
+                                     md_tau_T, mdl%ion_kinetic_energy)
+             call baro%init_baro('iso-mttk', md_ndof, stress, ion_velocity, &
+                                 md_tau_P, mdl%ion_kinetic_energy)
+           end select
+           flag_MDcontinue = flag_store
+         end if
+       end if
+
+       mdl%append = .true.
+
+       call check_stop(done, iter)
        if (flag_fire_qMD) then
           if (abs(max) < MDcgtol) then
              if ((iter - step_qMD) > 1) then
@@ -685,108 +901,199 @@ contains
              end if
              n_stop_qMD = n_stop_qMD + 1
              step_qMD = iter
-             if (myid == 0) then
-                write (io_lun, fmt='(4x,i4,4x,"Maximum force below threshold: ",f12.6)') n_stop_qMD, max
+             if (inode==ionode) then
+                write(io_lun,fmt='(4x,i4,4x,"Maximum force below &
+                     &threshold: ",f12.6)') n_stop_qMD, max
              end if
-             if (n_stop_qMD > 2) then
+             if (n_stop_qMD > fire_N_below_thresh) then
                 done = .true.
              end if
           end if
-       else
-          call check_stop(done, iter)
        end if
+
        if (done) exit
+    end do ! Main MD loop
 
-!%%!   if (myid == 0) &
-!%%!        write (io_lun, fmt='(4x,"MD run, iteration ",i5)') iter
-!%%!   ! Fetch old relations
-!%%!   if (.NOT. flag_MDold) then
-!%%!     if (.NOT. allocated(glob2node_old)) then
-!%%!       allocate (glob2node_old(ni_in_cell), STAT=stat)
-!%%!       if (stat.NE.0) call cq_abort('Error allocating glob2node_old: ', ni_in_cell)
-!%%!     endif
-!%%!     if (inode.EQ.ionode) call grab_InfoGlobal(n_proc_old,glob2node_old)
-!%%!     call gcopy(n_proc_old)
-!%%!     call gcopy(glob2node_old,ni_in_cell)
-!%%!   endif
-
-!%%!   call velocityVerlet(fixed_potential, bundle, MDtimestep, temp, &
-!%%!                       KE, flag_quench_MD, velocity, tot_force, iter)
-!%%!   if (myid == 0) &
-!%%!        write (io_lun, fmt='(4x,"Kinetic Energy in K     : ",f15.8)') &
-!%%!              KE / (three / two * ni_in_cell) / fac_Kelvin2Hartree
-!%%!   if (myid == 0) write (io_lun, 8) iter, KE, energy_md, KE+energy_md
-!%%!   ! Output positions
-!%%!   if (myid == 0 .and. iprint_gen > 1) then
-!%%!      do i = 1, ni_in_cell
-!%%!         write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
-!%%!      end do
-!%%!   end if
-!%%!   !Now, updateIndices and update_atom_coord are done in velocityVerlet 
-!%%!   !call updateIndices(.false.,fixed_potential, number_of_bands) 
-!%%!   ! L-matrix reconstruction (used to be called at updateIndices3)
-!%%!   if (.NOT.flag_MDold .AND. &
-!%%!       .NOT.diagon     .AND. &
-!%%!       flag_LmatrixReuse       ) then
-!%%!     call grab_matrix2('L',inode,nfile,InfoL)
-!%%!     call my_barrier()
-!%%!     call Matrix_CommRebuild(InfoL,Lrange,L_trans,matL(1),nfile,symm)
-!%%!   endif
-!%%!   ! For XL-BOMD
-!%%!   if (flag_XLBOMD .AND. .NOT.diagon) call Do_XLBOMD(iter,MDtimestep)
-!%%!   ! Updates hamiltonian (used to be called at updateIndices3)
-!%%!   if (.NOT.flag_MDold) call update_H(fixed_potential)
-!%%!   !ORI call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
-!%%!   !ORI                  .false.)
-!%%!   call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
-!%%!                    .false., iter)
-!%%!    energy_md = energy1
-!%%!   ! Dump global data
-!%%!   if (.NOT. flag_MDold) then
-!%%!     if (inode.EQ.ionode) call dump_InfoGlobal(iter)
-!%%!   endif
-
-!%%!   ! Analyse forces
-!%%!   g0 = dot(length, tot_force, 1, tot_force, 1)
-!%%!   max = zero
-!%%!   do i = 1, ni_in_cell
-!%%!      do k = 1, 3
-!%%!         if (abs(tot_force(k,i)) > max) max = tot_force(k,i)
-!%%!      end do
-!%%!   end do
-!%%!   ! Output and energy changes
-!%%!   dE = energy0 - energy1
-!%%!   if (myid == 0) write (io_lun, 6) max
-!%%!   if (myid == 0) write (io_lun, 4) dE
-!%%!   if (myid == 0) write (io_lun, 5) sqrt(g0/ni_in_cell)
-!%%!   energy0 = energy1
-!%%!   energy1 = abs(dE)
-!%%!   if (myid == 0 .and. mod(iter, MDfreq) == 0) &
-!%%!        call write_positions(iter, parts)
-!%%!   call my_barrier
-!%%!   !to check IO of velocity files
-!%%!   call write_velocity(velocity, file_velocity)
-!%%!   call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
-!%%!   !to check IO of velocity files
-!%%!   call check_stop(done, iter)
-!%%!   if (done) exit
-    end do
-    deallocate(velocity, STAT=stat)
+    deallocate(ion_velocity, STAT=stat)
     if (stat /= 0) call cq_abort("Error deallocating velocity in md_run: ", &
                                  ni_in_cell, stat)
-    call reg_dealloc_mem(area_general, 3 * ni_in_cell, type_dbl)
+    call reg_dealloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
     return
-1   format(4x,'Atom ',i4,' Position ',3f15.8)
-2   format(4x,'Welcome to md_run. Doing ',i4,' steps')
-3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
-4   format(4x,'Energy change           : ',f15.8)
-5   format(4x,'Force Residual          : ',f15.8)
-6   format(4x,'Maximum force component : ',f15.8)
-8   format(4x,'*** MD step ',i4,' KE: ',f18.8,&
-           ' IntEnergy',f20.8,' TotalEnergy',f20.8)
   end subroutine md_run
   !!***
 
+  !!****m* control/init_ensemble *
+  !!  NAME
+  !!   integrate_ensemble
+  !!  PURPOSE
+  !!   Initialise all ensemble-related MD variables
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/04/32  16:52
+  !!  MODIFICATION HISTORY
+  !!   2018/05/30 zamaan
+  !!    Made BerendsenEquil work with NVT ensemble.
+  !!  SOURCE
+  !!  
+  subroutine init_ensemble(baro, thermo, mdl, md_ndof, nequil)
+
+    use numbers
+    use force_module,   only: stress
+    use md_model,       only: type_md_model
+    use GenComms,       only: inode, ionode
+    use global_module,  only: rcellx, rcelly, rcellz, temp_ion
+    use md_control,     only: type_thermostat, type_barostat, md_tau_T, &
+                              md_tau_P, md_n_nhc, md_n_ys, md_n_mts, &
+                              md_nhc_mass, ion_velocity, lattice_vec, &
+                              md_thermo_type, md_baro_type, md_target_press, &
+                              md_ndof_ions, md_tau_P_equil, md_tau_T_equil
+
+    ! passed variables
+    type(type_barostat), intent(inout)    :: baro
+    type(type_thermostat), intent(inout)  :: thermo
+    type(type_md_model), intent(inout)    :: mdl
+    integer, intent(in)                   :: md_ndof
+    integer, intent(in)                   :: nequil
+
+    ! Initialise the model
+    lattice_vec = zero
+    lattice_vec(1,1) = rcellx
+    lattice_vec(2,2) = rcelly
+    lattice_vec(3,3) = rcellz
+    call mdl%init_model(md_ensemble, MDtimestep, thermo, baro)
+
+    select case(md_ensemble)
+    case('nve')
+      ! Just for computing temperature
+      call thermo%init_thermo('none', 'none', MDtimestep, md_ndof, md_tau_T, &
+                              mdl%ion_kinetic_energy)
+      call baro%init_baro('none', md_ndof, stress, ion_velocity, &
+                          md_tau_P, mdl%ion_kinetic_energy) !to get the pressure
+    case('nvt')
+      if (nequil > 0) then ! Equilibrate using Berendsen?
+        if (inode==ionode) then
+          write (io_lun, '(4x,"Equilibrating using Berendsen &
+                          &baro/thermostat for ",i8," steps")') nequil
+        end if
+        call thermo%init_thermo('berendsen', 'none', MDtimestep, md_ndof, &
+                                md_tau_T, mdl%ion_kinetic_energy)
+      else
+        call thermo%init_thermo(md_thermo_type, 'none', MDtimestep, md_ndof, &
+                                md_tau_T, mdl%ion_kinetic_energy)
+      end if
+      call baro%init_baro('none', md_ndof, stress, ion_velocity, &
+                          md_tau_P, mdl%ion_kinetic_energy) !to get the pressure
+    case('npt')
+      select case(md_baro_type)
+      case('iso-mttk')
+        if (nequil > 0) then ! Equilibrate using Berendsen?
+          if (inode == ionode) then
+            write (io_lun, '(4x,"Equilibrating using Berendsen &
+                            &baro/thermostat for ",i8," steps")') nequil
+          end if
+          call thermo%init_thermo('berendsen', 'berendsen', MDtimestep, &
+                                  md_ndof, md_tau_T_equil, &
+                                  mdl%ion_kinetic_energy)
+          call baro%init_baro('berendsen', md_ndof, stress, ion_velocity, &
+                              md_tau_P_equil, mdl%ion_kinetic_energy)
+        else
+          call thermo%init_thermo('nhc', 'iso-mttk',  MDtimestep, md_ndof, &
+                                  md_tau_T, mdl%ion_kinetic_energy)
+          call baro%init_baro('iso-mttk', md_ndof, stress, ion_velocity, &
+                              md_tau_P, mdl%ion_kinetic_energy)
+        end if
+      case('ortho-mttk')
+      case('mttk')
+      case('berendsen')
+        call thermo%init_thermo('berendsen', 'berendsen', MDtimestep, &
+                                md_ndof, md_tau_T, mdl%ion_kinetic_energy)
+        call baro%init_baro('berendsen', md_ndof, stress, ion_velocity, &
+                            md_tau_P, mdl%ion_kinetic_energy)
+      case default
+        call cq_abort("Unknown barostat type")
+      end select
+    end select
+  end subroutine init_ensemble
+
+  !!****m* control/integrate_pt *
+  !!  NAME
+  !!   integrate_pt
+  !!  PURPOSE
+  !!   Integrate the thermostat and barostat using the
+  !!    Martyna/Tobias/Tuckerman/Klein splitting of the Liouvillian
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/04/23 11:49
+  !!  SOURCE
+  !!  
+  subroutine integrate_pt(baro, thermo, mdl, velocity, second_call)
+
+    use GenComms,         only: inode, ionode
+    use md_model,         only: type_md_model
+    use md_control,       only: type_thermostat, type_barostat, &
+                                md_thermo_type, md_baro_type
+
+    ! passed variables
+    type(type_barostat), intent(inout)          :: baro
+    type(type_thermostat), intent(inout)        :: thermo
+    type(type_md_model), intent(inout)          :: mdl
+    real(double), dimension(:,:), intent(inout) :: velocity
+    logical, optional                           :: second_call
+
+    ! local variables
+  
+    if (inode==ionode) then
+      if (present(second_call)) then
+        write(io_lun,*) "Welcome to integrate_pt, second call"
+      else
+        write(io_lun,*) "Welcome to integrate_pt"
+      end if
+    end if
+
+    select case(md_ensemble)
+    case('nvt')
+      select case(thermo%thermo_type)
+      case('nhc')
+        call thermo%propagate_nvt_nhc(velocity, mdl%ion_kinetic_energy)
+        if (present(second_call)) call thermo%get_nhc_energy
+      case('berendsen')
+        if (present(second_call)) then
+          call thermo%berendsen_v_rescale(velocity)
+        else
+          call thermo%get_berendsen_thermo_sf(MDtimestep)
+        end if
+     end select
+   case('npt')
+      select case(baro%baro_type)
+      case('berendsen')
+        if (present(second_call)) then
+          call thermo%berendsen_v_rescale(velocity)
+          ! Berendsen barostat propagation occurs after second
+          ! vVerlet_v_dthalf step
+        else
+          call thermo%get_berendsen_thermo_sf(MDtimestep)
+          call baro%get_berendsen_baro_sf(MDtimestep)
+        end if
+!            call baro%propagate_berendsen(flag_movable)
+      case('iso-mttk')
+        if (mdl%nequil  > 0) then
+          if (present(second_call)) then
+            call thermo%berendsen_v_rescale(velocity)
+          else
+            call thermo%get_berendsen_thermo_sf(MDtimestep)
+            call baro%get_berendsen_baro_sf(MDtimestep)
+          end if
+        else
+          call baro%propagate_npt_mttk(thermo, mdl%ion_kinetic_energy, &
+                                       velocity)
+        end if
+      case('ortho-mttk')
+      case('mttk')
+      end select
+   end select
+end subroutine integrate_pt
 
   !!****f* control/dummy_run *
   !! PURPOSE
@@ -917,6 +1224,10 @@ contains
   !!     updateIndices any longer
   !!   2017/08/29 jack baker & dave
   !!    Removed rcellx references (redundant)
+  !!   2017/11/10 dave
+  !!    Removed calls to dump K matrix (now done in DMMinModule)
+  !!   2018/01/22 tsuyoshi (with dave)
+  !!    Changes to use new atom update routines
   !!  SOURCE
   !!
   subroutine pulay_relax(fixed_potential, vary_mu, total_energy)
@@ -926,19 +1237,27 @@ contains
     use units
     use global_module,  only: iprint_MD, ni_in_cell, x_atom_cell,   &
                               y_atom_cell, z_atom_cell, id_glob,    &
-                              atom_coord, area_general, flag_pulay_simpleStep
+                              atom_coord, area_general, flag_pulay_simpleStep, &
+                              glob2node_old, n_proc_old, flag_MDold, &
+                              flag_diagonalisation, nspin, flag_LmatrixReuse, &
+                              flag_SFcoeffReuse
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: pulayStep, velocityVerlet,            &
-                              updateIndices, update_atom_coord,     &
-                              safemin, update_H
-    use GenComms,       only: gsum, myid
+                              updateIndices, updateIndices3, update_atom_coord,     &
+                              safemin, safemin2, update_H, update_pos_and_matrices
+    use move_atoms,     only: updateL, updateLorK, updateSFcoeff
+    use GenComms,       only: gsum, myid, inode, ionode, gcopy, my_barrier
     use GenBlas,        only: dot
     use force_module,   only: tot_force
     use io_module,      only: write_atomic_positions, pdb_template, &
                               check_stop
     use memory_module,  only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use primary_module, only: bundle
+    use store_matrix,   only: dump_pos_and_matrices
+    use mult_module, ONLY: matK, S_trans, matrix_scale, matL, L_trans
+    use matrix_data, ONLY: Hrange, Lrange
+    use UpdateInfo_module, ONLY: Matrix_CommRebuild
 
     implicit none
 
@@ -946,7 +1265,7 @@ contains
     ! Shared variables needed by get_E_and_F for now (!)
     logical :: vary_mu, fixed_potential
     real(double) :: total_energy
-    
+
     ! Local variables
     real(double), allocatable, dimension(:,:)   :: velocity
     real(double), allocatable, dimension(:,:)   :: cg
@@ -956,11 +1275,13 @@ contains
     real(double), allocatable, dimension(:,:,:) :: posnStore
     real(double), allocatable, dimension(:,:,:) :: forceStore
     real(double) :: energy0, energy1, max, g0, dE, gg, ggold, gamma, &
-                    temp, KE
+                    temp, KE, guess_step, step
     integer      :: i,j,k,iter,length, jj, lun, stat, npmod, pul_mx, &
-                    mx_pulay
+                    mx_pulay, i_first, i_last, &
+                    nfile, symm
     logical      :: done!, simpleStep
 
+    step = MDtimestep
     !simpleStep = .false.
     allocate(velocity(3,ni_in_cell),STAT=stat)
     if (stat /= 0) &
@@ -983,6 +1304,12 @@ contains
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
     if (myid == 0) &
          write (io_lun, fmt='(/4x,"Starting Pulay atomic relaxation"/)')
+    if (myid == 0 .and. iprint_MD > 1) then
+       do i = 1, ni_in_cell
+          write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), &
+               z_atom_cell(i)
+       end do
+    end if
     posnStore = zero
     forceStore = zero
     ! Do we need to add MD.MaxCGDispl ?
@@ -996,63 +1323,69 @@ contains
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., &
                      .false.)
+    call dump_pos_and_matrices
     iter = 1
     ggold = zero
     energy1 = energy0
     ! Store positions and forces on entry (primary set only)
     do i=1,ni_in_cell
-       posnStore(1,i,1) = x_atom_cell(i)
-       posnStore(2,i,1) = y_atom_cell(i)
-       posnStore(3,i,1) = z_atom_cell(i)
        jj = id_glob(i)
-       forceStore(:,i,1) = tot_force(:,jj)
+       posnStore (1,jj,1) = x_atom_cell(i)!i)
+       posnStore (2,jj,1) = y_atom_cell(i)!i)
+       posnStore (3,jj,1) = z_atom_cell(i)!i)
+       forceStore(:,jj,1) = tot_force(:,jj)
     end do
     do while (.not. done)
        ! Book-keeping
        npmod = mod(iter, mx_pulay)+1
        pul_mx = min(iter+1, mx_pulay)
        if (myid == 0 .and. iprint_MD > 2) &
-            write (io_lun, *) 'npmod: ', npmod, pul_mx
+            write(io_lun,fmt='(2x,"Pulay relaxation iteration ",i4)') iter
        x_atom_cell = zero
        y_atom_cell = zero
        z_atom_cell = zero
        tot_force = zero
        do i = 1, ni_in_cell
+          jj = id_glob(i)
           if (npmod > 1) then
-             x_atom_cell(i) = posnStore(1,i,npmod-1)
-             y_atom_cell(i) = posnStore(2,i,npmod-1)
-             z_atom_cell(i) = posnStore(3,i,npmod-1)
+             x_atom_cell(i) = posnStore(1,jj,npmod-1)
+             y_atom_cell(i) = posnStore(2,jj,npmod-1)
+             z_atom_cell(i) = posnStore(3,jj,npmod-1)
              jj = id_glob(i)
-             tot_force(:,jj) = forceStore(:,i,npmod-1)
+             tot_force(:,jj) = forceStore(:,jj,npmod-1)
+             !tot_force(:,jj) = forceStore(:,i,npmod-1)
           else
-             x_atom_cell(i) = posnStore(1,i,pul_mx)
-             y_atom_cell(i) = posnStore(2,i,pul_mx)
-             z_atom_cell(i) = posnStore(3,i,pul_mx)
+             x_atom_cell(i) = posnStore(1,jj,pul_mx)
+             y_atom_cell(i) = posnStore(2,jj,pul_mx)
+             z_atom_cell(i) = posnStore(3,jj,pul_mx)
              jj = id_glob(i)
-             tot_force(:,jj) = forceStore(:,i,pul_mx)
+             tot_force(:,jj) = forceStore(:,jj,pul_mx)
+             !tot_force(:,jj) = forceStore(:,i,pul_mx)
           end if
        end do
-       !call gsum(x_atom_cell,ni_in_cell)
-       !call gsum(y_atom_cell,ni_in_cell)
-       !call gsum(z_atom_cell,ni_in_cell)
-       !call gsum(tot_force,3,ni_in_cell)
        ! Take a trial step
        velocity = zero
        ! Move the atoms using velocity Verlet (why not ?)
        !call velocityVerlet(bundle,MDtimestep,temp,KE, &
        !     .false.,velocity,tot_force)
+       ! Moved so we can pass cg to updateIndices3
+       do j=1,ni_in_cell
+          jj=id_glob(j)
+          cg(1,j) = tot_force(1,jj)
+          cg(2,j) = tot_force(2,jj)
+          cg(3,j) = tot_force(3,jj)
+          x_new_pos(j) = x_atom_cell(j)
+          y_new_pos(j) = y_atom_cell(j)
+          z_new_pos(j) = z_atom_cell(j)
+       end do
+       if(myid==0) write(io_lun,*) 'Taking trial step'
        if (flag_pulay_simpleStep) then
-          if (myid == 0) write (io_lun, *) 'Step is ', MDtimestep
+          if (myid == 0) write (io_lun, *) 'Step is ', step
           do i = 1, ni_in_cell
-             jj = id_glob(i)
-             x_atom_cell(i) = x_atom_cell(i) + MDtimestep*tot_force(1,jj)
-             y_atom_cell(i) = y_atom_cell(i) + MDtimestep*tot_force(2,jj)
-             z_atom_cell(i) = z_atom_cell(i) + MDtimestep*tot_force(3,jj)
+             x_atom_cell(i) = x_atom_cell(i) + step*cg(1,i)
+             y_atom_cell(i) = y_atom_cell(i) + step*cg(2,i)
+             z_atom_cell(i) = z_atom_cell(i) + step*cg(3,i)
           end do
-          ! Do we want gsum or a scatter/gather ?
-          !call gsum(x_atom_cell,ni_in_cell)
-          !call gsum(y_atom_cell,ni_in_cell)
-          !call gsum(z_atom_cell,ni_in_cell)
           ! Output positions
           if (myid == 0 .and. iprint_MD > 1) then
              do i = 1, ni_in_cell
@@ -1060,50 +1393,29 @@ contains
                                   z_atom_cell(i)
              end do
           end if
-          call update_atom_coord
-          call updateIndices(.true., fixed_potential)
+          if(.NOT.flag_MDold) then
+             if(flag_SFcoeffReuse) then
+                call update_pos_and_matrices(updateSFcoeff,cg)
+             else
+                call update_pos_and_matrices(updateLorK,cg)
+             endif
+          else
+             call update_atom_coord
+             call updateIndices(.true., fixed_potential)
+          end if
           call update_H(fixed_potential)
           call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
-                           .false.)
+               .false.)
+          call dump_pos_and_matrices
        else
-          do j=1,ni_in_cell
-             jj=id_glob(j)
-             cg(1,j) = tot_force(1,jj)
-             cg(2,j) = tot_force(2,jj)
-             cg(3,j) = tot_force(3,jj)
-             x_new_pos(j) = x_atom_cell(j)
-             y_new_pos(j) = y_atom_cell(j)
-             z_new_pos(j) = z_atom_cell(j)
-          end do
-          call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
-                       energy1, fixed_potential, vary_mu, energy1)
+          if (.NOT. flag_MDold) then
+             call safemin2(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+                  energy1, fixed_potential, vary_mu, energy1)
+          else
+             call safemin(x_new_pos, y_new_pos, z_new_pos, cg, energy0, &
+                  energy1, fixed_potential, vary_mu, energy1)
+          end if
        end if
-       ! Pass forces and positions down to pulayStep routine
-       do i = 1, ni_in_cell
-          posnStore(1,i,npmod) = x_atom_cell(i)
-          posnStore(2,i,npmod) = y_atom_cell(i)
-          posnStore(3,i,npmod) = z_atom_cell(i)
-          jj = id_glob(i)
-          forceStore(:,i,npmod) = tot_force(:,jj)
-       end do
-!       call pulayStep(npmod, posnStore, forceStore, x_atom_cell, &
-!                      y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
-       !call gsum(x_atom_cell,ni_in_cell)
-       !call gsum(y_atom_cell,ni_in_cell)
-       !call gsum(z_atom_cell,ni_in_cell)
-       ! Output positions
-       if (myid == 0 .and. iprint_MD > 1) then
-          do i = 1, ni_in_cell
-             write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), &
-                               z_atom_cell(i)
-          end do
-       end if
-       call update_atom_coord
-       call updateIndices(.true., fixed_potential)
-       call update_H(fixed_potential)
-       call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
-                        .false.)
-       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
        ! Analyse forces
        g0 = dot(length, tot_force, 1, tot_force, 1)
        max = zero
@@ -1113,7 +1425,66 @@ contains
           end do
        end do
        if (myid == 0) &
-            write (io_lun, 5) for_conv * sqrt(g0) / ni_in_cell, &
+            write (io_lun, 5) for_conv * sqrt(g0/real(ni_in_cell,double)), & !) / ni_in_cell, &
+                              en_units(energy_units), d_units(dist_units)
+       if (iter > MDn_steps) then
+          done = .true.
+          if (myid == 0) &
+               write (io_lun, fmt='(4x,"Exceeded number of MD steps: ",i4)') iter
+       end if
+       if (abs(max) < MDcgtol) then
+          done = .true.
+          if (myid == 0) &
+               write (io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') max
+       end if
+       if (.not. done) call check_stop(done, iter)
+       if(done) exit
+
+       ! Pass forces and positions down to pulayStep routine
+       if(myid==0) write(io_lun,*) 'Building optimal structure'
+       cg = zero
+       do i = 1, ni_in_cell
+          jj = id_glob(i)
+          posnStore (1,jj,npmod) = x_atom_cell(i)!i)
+          posnStore (2,jj,npmod) = y_atom_cell(i)!i)
+          posnStore (3,jj,npmod) = z_atom_cell(i)!i)
+          forceStore(:,jj,npmod) = tot_force(:,jj) !jj)
+       end do
+       call pulayStep(npmod, posnStore, forceStore, x_atom_cell, &
+                      y_atom_cell, z_atom_cell, mx_pulay, pul_mx)
+       ! Output positions
+       if (myid == 0 .and. iprint_MD > 1) then
+          do i = 1, ni_in_cell
+             write (io_lun, 1) i, x_atom_cell(i), y_atom_cell(i), &
+                               z_atom_cell(i)
+          end do
+       end if
+       if(.NOT.flag_MDold) then
+          if(flag_SFcoeffReuse) then
+             call update_pos_and_matrices(updateSFcoeff,cg)
+          else
+             call update_pos_and_matrices(updateLorK,cg)
+          endif
+       else
+          call update_atom_coord
+          call updateIndices(.true., fixed_potential)
+       end if
+       call update_H(fixed_potential)
+       call get_E_and_F(fixed_potential, vary_mu, energy1, .true., &
+                        .false.)
+       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
+       call dump_pos_and_matrices
+
+       ! Analyse forces
+       g0 = dot(length, tot_force, 1, tot_force, 1)
+       max = zero
+       do i = 1, ni_in_cell
+          do k = 1, 3
+             if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
+          end do
+       end do
+       if (myid == 0) &
+            write (io_lun, 5) for_conv * sqrt(g0/real(ni_in_cell,double)), & !) / ni_in_cell, &
                               en_units(energy_units), d_units(dist_units)
        if (iter > MDn_steps) then
           done = .true.
@@ -1128,14 +1499,24 @@ contains
                      max
        end if
        do i = 1, ni_in_cell!bundle%n_prim !!! ERROR ?? !!!
-          posnStore(1,i,npmod) = x_atom_cell(i)
-          posnStore(2,i,npmod) = y_atom_cell(i)
-          posnStore(3,i,npmod) = z_atom_cell(i)
           jj = id_glob(i)
-          forceStore(:,i,npmod) = tot_force(:,jj)
+          posnStore (1,jj,npmod) = x_atom_cell(i)
+          posnStore (2,jj,npmod) = y_atom_cell(i)
+          posnStore (3,jj,npmod) = z_atom_cell(i)
+          forceStore(:,jj,npmod) = tot_force(:,jj)
        end do       
        if (.not. done) call check_stop(done, iter)
        iter = iter + 1
+       dE = energy0 - energy1
+       guess_step = dE*sqrt(real(ni_in_cell,double)/g0)!real(ni_in_cell,double)/sqrt(g0)
+       if(myid==0) write(*,*) 'Guessed step is ',guess_step
+       ! We really need a proper trust radius or something
+       if(guess_step>2.0_double) guess_step = 2.0_double 
+       if(guess_step>MDtimestep) then
+          step=guess_step
+       else
+          step=MDtimestep
+       end if
        energy0 = energy1
     end do
     ! Output final positions
@@ -1206,8 +1587,8 @@ contains
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use io_module,      only: leqi
-    use io_module2,    ONLY: dump_InfoGlobal
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
+    use store_matrix,  only: dump_pos_and_matrices
 
     implicit none
 
@@ -1247,6 +1628,7 @@ contains
     reset_iter = 1
     ggold = zero
     energy1 = energy0
+    call dump_pos_and_matrices(index=0,MDstep=iter)
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
        stressx = -stress(1)
@@ -1302,7 +1684,6 @@ contains
        call safemin_cell(new_rcellx, new_rcelly, new_rcellz, search_dir_x, &
                          search_dir_y, search_dir_z, energy0, energy1, &
                          fixed_potential, vary_mu, energy1, search_dir_mean)
-
        ! Output positions to UpdatedAtoms.dat
        if (myid == 0 .and. iprint_gen > 1) then
           do i = 1, ni_in_cell
@@ -1342,7 +1723,7 @@ contains
        if (abs(dE)<cell_en_tol) then
           done = .true.
           if (myid == 0 .and. iprint_gen > 0) &
-               write (io_lun, fmt='(4x,"Energy change below threshold: ",f12.10)') &
+               write (io_lun, fmt='(4x,"Energy change below threshold: ",f20.10)') &
                      max
        end if
 

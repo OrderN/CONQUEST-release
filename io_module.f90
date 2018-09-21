@@ -78,6 +78,8 @@
 !!    they don't exist
 module io_module
 
+  use datatypes,              only: double
+  use numbers,                only: zero
   use global_module,          only: io_lun
   use GenComms,               only: cq_abort, gcopy
   use timer_module,           only: start_timer,     stop_timer,    cq_timer
@@ -91,6 +93,9 @@ module io_module
   character(len=1)  :: pdb_altloc
   character(len=80) :: pdb_template
 
+  !Maximum of wallclock time (in seconds): See subroutine 'check_stop' 2018.Jan.17 TM 
+  real(double)      :: time_max =zero
+   
   ! RCS tag for object file identification 
   character(len=80), save, private :: &
        RCSid = "$Id$"
@@ -144,6 +149,8 @@ contains
   !!    Bug fix & correct the if-statement
   !!   2015/06/08 lat
   !!    Added experimental backtrace
+  !!   2018/01/22 tsuyoshi (with dave)
+  !!    Allocate atom_coord_diff for all calculations
   !!  SOURCE
   !!
   subroutine read_atomic_positions(filename)
@@ -393,7 +400,7 @@ second:   do
           end do
           call io_close(lun)
        else
-          if(iprint_init>2) write(io_lun,'(10x,a30)') 'Entering read_atomic_positions'
+          if(iprint_init>2) write(io_lun,'(10x,a40,a20)') 'Entering read_atomic_positions; reading ', filename
           call io_assign(lun)
           open(unit=lun,file=filename,status='old')
           ! Read supercell vector - for now it must be orthorhombic so
@@ -488,18 +495,15 @@ second:   do
     rcellx = r_super_x
     rcelly = r_super_y
     rcellz = r_super_z
-    !if ((leqi(runtype,'md')) .OR. (leqi(runtype,'cg'))) then
-    if (.NOT. leqi(runtype,'static')) then
-      allocate(atom_coord_diff(3,ni_in_cell), STAT=stat)
-      if (stat.NE.0) call cq_abort('Error allocating atom_coord_diff: ', 3, ni_in_cell)
-      allocate(id_glob_old(ni_in_cell),id_glob_inv_old(ni_in_cell), STAT=stat)
-      if (stat.NE.0) call cq_abort('Error allocating id_glob_old/id_glob_inv_old: ', &
-                                   ni_in_cell)
-      atom_coord_diff=zero
-      !call gcopy(atom_coord_diff,3,ni_in_cell)
-      id_glob_old=0
-      id_glob_inv_old=0
-    endif
+    allocate(atom_coord_diff(3,ni_in_cell), STAT=stat)
+    if (stat.NE.0) call cq_abort('Error allocating atom_coord_diff: ', 3, ni_in_cell)
+    allocate(id_glob_old(ni_in_cell),id_glob_inv_old(ni_in_cell), STAT=stat)
+    if (stat.NE.0) call cq_abort('Error allocating id_glob_old/id_glob_inv_old: ', &
+         ni_in_cell)
+    atom_coord_diff=zero
+    !call gcopy(atom_coord_diff,3,ni_in_cell)
+    id_glob_old=0
+    id_glob_inv_old=0
 
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_atomic_positions')
@@ -797,9 +801,7 @@ second:   do
        y_atom_cell(ni) = atom_coord(2,id_global)
        z_atom_cell(ni) = atom_coord(3,id_global)
        species(ni)     = species_glob(id_global)
-       !id_glob_inv(id_global) = ni  !in read_partitions
     end do
-
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_mult')
 !****lat>$
@@ -3990,6 +3992,70 @@ second:   do
   end subroutine write_positions
   !!***
 
+  !!****f* io_module/write_xsf *
+  !!
+  !!  NAME 
+  !!   write_xsf
+  !!  PURPOSE
+  !!   Writes atomic positions to a .xsf file, viewable using VMD
+  !!  INPUTS
+  !!   type(group_set) :: parts
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/10/26
+  !!  MODIFICATION HISTORY
+  !!   
+  !!  SOURCE
+  !!
+  subroutine write_xsf(filename, step)
+
+    use datatypes
+    use numbers,        only: zero
+    use dimens,         only: r_super_x, r_super_y, r_super_z
+    use global_module,  only: ni_in_cell, iprint_init, atom_coord, &
+                              species_glob
+    use species_module, only: species_label
+    use GenComms,       only: inode, ionode, cq_abort
+    use units,          only: BohrToAng
+    use timer_module
+
+    ! Passed variables
+    character(len=*)  :: filename
+    integer           :: step
+
+    ! Local variables
+    integer                    :: lun, i
+    character(len=2)           :: atom_name
+
+    if(inode==ionode) then
+      if (iprint_init>2) write(io_lun,*) 'Writing atomic positions to .xsf'
+      call io_assign(lun)
+      if(append_coords) then
+         open(unit=lun,file=filename,position='append')
+         write(lun,*)
+      else
+         open(unit=lun,file=filename)
+      end if
+      write(lun,'(a)') "CRYSTAL"
+      write(lun,'("PRIMVEC   ",i8)') step
+      write(lun,fmt='(3f14.8)') r_super_x*BohrToAng, zero, zero
+      write(lun,fmt='(3f14.8)') zero, r_super_y*BohrToAng, zero
+      write(lun,fmt='(3f14.8)') zero, zero, r_super_z*BohrToAng
+      write(lun,'("PRIMCOORD ",i8)') step
+      write(lun,fmt='(2i8)') ni_in_cell, 1
+      do i=1,ni_in_cell
+        atom_name = adjustr(species_label(species_glob(i))(1:2))
+        write(lun,'(a4,3f16.8)') atom_name, atom_coord(:,i)*BohrToAng
+                 ! species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
+      end do
+      call io_close(lun)
+    end if
+  end subroutine write_xsf
+  !!***
+
   ! Hopefully we'll never need this kludgy but portable way of flushing buffers !
   !  subroutine force_buffers(lun)
   !
@@ -4078,6 +4144,65 @@ second:   do
     end do
     filename = TRIM (filename)//num
   end subroutine get_file_name
+  !!***
+
+  !!****f* io_module/get_file_name_2rank *
+  !!
+  !!  NAME
+  !!   get_file_name_2rank - creates a file name with an index (MD step), and process number.
+  !!  USAGE
+  !!   get_file_name_2rank(fileroot,filename,step,inode)
+  !!  PURPOSE
+  !!   Returns a file name with the number of step, and inode (optional) 
+  !!   At present, we assume 6 digits for each number, though it can be 
+  !!   easily changed by changing the line 
+  !!  INPUTS
+  !!   character(lem=*) :: fileroot  ! The root of the filename, e.g. chden
+  !!   integer :: step               ! MD step or some index
+  !!   integer :: inode              ! Process Number
+  !!  OUTPUTS
+  !!   character(len=*) :: filename  ! The formatted filename
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   T. Miyazaki
+  !!  CREATION DATE
+  !!   02/06/2017
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine get_file_name_2rank(fileroot, filename, index, inode)
+    use datatypes
+    implicit none
+
+    ! Passed variables
+    character(len=*), intent(in) :: fileroot
+    integer, intent(in) :: index
+    integer, intent(in),optional :: inode
+    character(len=*), intent(out) :: filename
+
+    ! Parameters
+    integer, parameter :: maxlen=80
+
+    ! Local variables
+    integer :: i
+    character(len=maxlen) :: num_index
+    character(len=maxlen) :: num_inode
+
+    if (LEN_TRIM (fileroot) + 1 > maxlen) &
+         call cq_abort('get_file_name: error : string overflow')
+
+    write (num_index,'(i2.2)') index
+     filename = TRIM (fileroot)//'.i'//num_index
+
+    if(present(inode)) then
+     write (num_inode,'(i6.6)') inode
+     filename = TRIM (filename)//'.p'//num_inode
+    endif
+ 
+   return
+  end subroutine get_file_name_2rank
   !!***
 
 
@@ -4252,7 +4377,7 @@ second:   do
   !!
   subroutine read_velocity(velocity, filename)
     use numbers
-    use global_module, only: id_glob, ni_in_cell,id_glob_inv
+    use global_module, only: id_glob, ni_in_cell,id_glob_inv, iprint_init
     use GenComms, only: inode, ionode, cq_abort, gcopy
 
     implicit none
@@ -4266,6 +4391,7 @@ second:   do
     integer :: lun
 
     if(inode == ionode) then
+       if(iprint_init>2) write(io_lun,'(10x,a40,a20)') 'Entering read_velocity; reading ', filename
        call io_assign(lun)
        open(unit=lun,file=filename)
        rewind(unit=lun)
@@ -4418,26 +4544,42 @@ second:   do
   !!  MODIFICATION HISTORY
   !!   2011/10/20 09:58 dave
   !!    Bug fix to call io_close
+  !!   2018/01/17 TM
+  !!    Introduced the control by Elapsed time & Iteration number in CQ.stop
   !!  SOURCE
   !!  
   subroutine check_stop(flag_userstop,iter)
 
-    use GenComms, only: inode, ionode, gsum
+    use datatypes, only: double
+    use numbers, only: very_small
+    use GenComms, only: inode, ionode, gsum, mtime
 
     implicit none
 
     ! Passed variables
     logical :: flag_userstop
     integer, OPTIONAL :: iter
+    real(double) :: present_time
 
     ! Local variables
-    integer :: lun, ios
+    integer :: lun, ios, ios2, iter_max
 
     flag_userstop = .false.
+
+    ! Option 1: Check "CQ.stop"
     if(inode==ionode) then
        call io_assign(lun)
        open(unit=lun,file='CQ.stop',status='old',iostat=ios)
-       if(ios==0) flag_userstop = .true.
+       if(ios==0) then
+        rewind lun
+        read(lun,*,iostat=ios2) iter_max
+        if(ios2 /= 0) then
+          flag_userstop = .true.
+        endif
+        if(PRESENT(iter)) then
+         if(iter_max>0 .and. iter > iter_max) flag_userstop = .true.
+        endif
+       endif
        if(flag_userstop) then
           if(PRESENT(iter)) then
              write(io_lun,fmt='(4x,"User requested stop at ieration ",i4)') iter
@@ -4448,6 +4590,13 @@ second:   do
        call io_close(lun)
     endif
     call gsum(flag_userstop)
+
+    ! Option 2: Check elapsed time < time_max
+    if(time_max > very_small) then
+     present_time = mtime()/1000.e0_double
+     if(present_time > time_max) flag_userstop=.true.
+    endif
+
     return
   end subroutine check_stop
   !!***

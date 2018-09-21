@@ -41,6 +41,8 @@
 !!    Added natomf_species
 !!   2017/04/05 18:00 nakata
 !!    Added charge_up and charge_dn
+!!   2017/11/27 15:50 dave
+!!    Added NA projector count per species
 !!  SOURCE
 !!
 module species_module
@@ -57,7 +59,7 @@ module species_module
   integer :: n_species
   logical :: species_from_files
   !
-  integer,           allocatable, dimension(:) :: species
+  integer, target,   allocatable, dimension(:) :: species
   real(double),      allocatable, dimension(:) :: charge, charge_up, charge_dn, mass
   character(len=50), allocatable, dimension(:) :: ps_file
   character(len=40), allocatable, dimension(:) :: ch_file
@@ -72,6 +74,7 @@ module species_module
   integer, allocatable, dimension(:)  :: npao_species
   integer, allocatable, dimension(:)  :: natomf_species
   integer, allocatable, dimension(:)  :: type_species
+  integer, allocatable, dimension(:)  :: napf_species       ! NA projector functions
 
 !!***
 

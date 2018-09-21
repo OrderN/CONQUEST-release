@@ -679,6 +679,10 @@ contains
 !!    Added IF for contracted SFs
 !!   2017/02/23 dave
 !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+!!   2017/11/11 Tsuyoshi
+!!      io_module2 -> store_matrix, InfoT is defined locally
+!!   2018/07/13 13:21 dave  
+!!    Copy oldomega to omega on termination for consistency
 !!  SOURCE
 !!
   subroutine Iter_Hott_InvS(output_level, n_L_iterations, tolerance,n_atoms,&
@@ -697,7 +701,9 @@ contains
     use species_module, ONLY: nsf_species, species
     use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
     use input_module, ONLY: leqi
-    use io_module2, ONLY: grab_matrix2,dump_matrix2,InfoT
+    !use io_module2, ONLY: grab_matrix2,InfoT
+    use store_matrix, ONLY: dump_matrix2, grab_matrix2, InfoMatrixFile
+
     use UpdateInfo_module, ONLY: Matrix_CommRebuild
 
     implicit none
@@ -713,6 +719,8 @@ contains
     real(double) :: step, tot, eps, x, omega, oldomega, deltaomega, n_orbs
     type(cq_timer) :: tmr_l_tmp1
     logical,save :: flag_readT = .false.
+
+    type(InfoMatrixFile),pointer :: InfoT(:)   ! why pointer ?
 
     if (atomf.ne.sf .and. .not.flag_do_SFtransform) then
        if (inode.eq.ionode.and.output_level>=2) write(io_lun,*) &
@@ -821,6 +829,7 @@ contains
                 if ( omega>oldomega.and.oldomega/=0.0_double) then
                    if(inode==ionode) write(io_lun,*) 'Truncation error reached !'
                    call matrix_sum(zero,matT,one,matTold)
+                   omega = oldomega ! This is consistent with Told
                    call stop_print_timer(tmr_l_tmp1,"an inverse S iteration",IPRINT_TIME_THRES1)
                    exit
                 endif
@@ -856,10 +865,10 @@ contains
        call free_temp_matrix(matT1)
        call free_temp_matrix(matI)
        ! Dump T-matrix
-       if (.NOT. flag_MDold .AND. .NOT. leqi(runtype,'static') .AND. flag_TmatrixReuse) then
-         call dump_matrix2('T',matT,inode,Trange)
-         flag_readT = .true.
-       endif
+       !if (.NOT. flag_MDold .AND. .NOT. leqi(runtype,'static') .AND. flag_TmatrixReuse) then
+       !  call dump_matrix2('T',matT,Trange)
+       !  flag_readT = .true.
+       !endif
     end if ! End if (atomf.ne.sf .and. .not.flag_do_SFtransform)
 
 1   format(20x,'Starting functional value: ',f15.7,' a.u.')
