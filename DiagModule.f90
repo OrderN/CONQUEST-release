@@ -131,6 +131,10 @@
 !!    To perform a set of diagonalisations call initDiag, distrib_and_diag, endDiag
 !!   2017/10/18 11:06 dave
 !!    Change to allow arbitrary k-points to be passed to distrib_and_diag
+!!   2017/11/13 18:15 nakata
+!!    Added subroutine get_weight_pDOS
+!!   2018/09/19 18:30 nakata
+!!    Added orbital angular momentum resolved DOS (pDOS_angmom)
 !!***
 module DiagModule
 
@@ -304,6 +308,8 @@ module DiagModule
   ! DOS-related variables
   real(double), allocatable, dimension(:,:) :: total_DOS
   real(double), allocatable, dimension(:,:,:) :: pDOS
+  real(double), allocatable, dimension(:,:,:,:) :: pDOS_angmom
+  real(double), allocatable, dimension(:) :: w_pDOS
   real(double) :: dE_DOS, pf_DOS
   integer :: n_DOS_max, n_DOS_wid
 
@@ -446,6 +452,10 @@ contains
   !!    Continued tidying: removing print_info
   !!   2017/06/29 14:00 nakata
   !!    Changed the position to deallocate matBand_atomf
+  !!   2017/11/09 16:00 nakata
+  !!    Introduced PDOS with MSSFs (tentative)
+  !!   2017/11/13 18:15 nakata
+  !!    Added optional normalization of each eigenstate of PDOS
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -462,7 +472,8 @@ contains
          dscf_HOMO_limit, dscf_LUMO_limit, &
          flag_out_wf,wf_self_con, max_wf, paof, sf, atomf, flag_out_wf_by_kp, &
          out_wf, n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, &
-         flag_write_projected_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef
+         flag_write_projected_DOS, flag_normalise_pDOS, flag_pDOS_angmom, &
+         E_wf_min, E_wf_max, flag_wf_range_Ef
     use GenComms,        only: my_barrier, cq_abort, mtime, gsum, myid
     use ScalapackFormat, only: matrix_size, proc_rows, proc_cols,     &
          block_size_r,       &
@@ -473,7 +484,7 @@ contains
          matrix_scale, matrix_product_trace, allocate_temp_matrix, free_temp_matrix
     use matrix_data,     only: Hrange, Srange, aHa_range
     use primary_module,  only: bundle
-    use species_module,  only: species, nsf_species, species_label
+    use species_module,  only: species, nsf_species, species_label, n_species
     use memory_module,   only: type_dbl, type_int, type_cplx,         &
          reg_alloc_mem, reg_dealloc_mem
     use energy,          only: entropy
@@ -484,6 +495,7 @@ contains
          free_temp_fn_on_grid
     use density_module, ONLY: get_band_density
     use io_module, ONLY: dump_DOS, dump_projected_DOS, write_eigenvalues
+    use pao_format, ONLY: pao
 
     implicit none
 
@@ -504,6 +516,7 @@ contains
     integer, allocatable, dimension(:) :: matBand
     integer, allocatable, dimension(:,:) :: matBand_kp
     integer :: matBand_atomf
+    integer :: iatom_spec, Nangmom ! number of orbital angular momentum to be dumped (ex. (s,p,d)=3)
 
     logical :: flag_keepexcite, flag_full_DOS
 
@@ -608,8 +621,23 @@ contains
        total_DOS = zero
        ! Only if projecting DOS onto atoms
        if(flag_write_projected_DOS) then
-          allocate(pDOS(n_DOS,bundle%n_prim,nspin))
+          if (atomf==sf) allocate(pDOS(n_DOS,bundle%n_prim,nspin))
+          if (atomf/=sf) allocate(pDOS(n_DOS,ni_in_cell,   nspin))
           pDOS = zero
+          if (flag_pDOS_angmom) then
+             Nangmom = 0
+             do iatom_spec = 1, n_species
+                Nangmom = max(Nangmom, pao(iatom_spec)%greatest_angmom)
+             enddo
+             Nangmom = Nangmom + 1 ! Nangmom should be 1 larger than greatest_angmom
+             if (atomf==sf) allocate(pDOS_angmom(n_DOS,bundle%n_prim,Nangmom,nspin))
+             if (atomf/=sf) allocate(pDOS_angmom(n_DOS,ni_in_cell,   Nangmom,nspin))
+             pDOS_angmom = zero
+          endif
+          if (flag_normalise_pDOS) then
+             allocate(w_pDOS(matrix_size))
+             w_pDOS = zero
+          end if
        end if
        ! If the user hasn't specified limits
        if(E_DOS_min==zero.AND.E_DOS_max==zero) then
@@ -842,11 +870,30 @@ contains
                      expH(:,:,spin))
                 if(flag_write_DOS) then
                    if(flag_write_projected_DOS) then
-                      call accumulate_DOS(wtk(kp),w(:,kp,spin), &
-                           expH(:,:,spin),total_DOS(:,spin),pDOS(:,:,spin))
+                      if (flag_normalise_pDOS) then
+                         call get_weight_pDOS(expH(:,:,spin),w_pDOS)
+                         call gsum(w_PDOS(:), matrix_size)
+                      endif
+                      if (flag_pDOS_angmom) then
+                         if (flag_normalise_pDOS) then
+                            call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin),spin, &
+                                                projDOS=pDOS(:,:,spin),projDOS_angmom=pDOS_angmom(:,:,:,spin), &
+                                                weight_pDOS=w_pDOS)
+                         else
+                            call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin),spin, &
+                                                projDOS=pDOS(:,:,spin),projDOS_angmom=pDOS_angmom(:,:,:,spin))
+                         endif
+                      else
+                         if (flag_normalise_pDOS) then
+                            call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin),spin, &
+                                                projDOS=pDOS(:,:,spin),weight_pDOS=w_pDOS)
+                         else
+                            call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin),spin, &
+                                                projDOS=pDOS(:,:,spin))
+                         endif
+                      endif
                    else
-                      call accumulate_DOS(wtk(kp),w(:,kp,spin), &
-                           expH(:,:,spin),total_DOS(:,spin))
+                      call accumulate_DOS(wtk(kp),w(:,kp,spin),expH(:,:,spin),total_DOS(:,spin),spin)
                    end if
                 end if
                 ! Build K and K_dn from the eigenvectors
@@ -994,7 +1041,21 @@ contains
        if(inode==ionode) call dump_DOS(total_DOS,Efermi)
        call my_barrier()
        if(flag_write_projected_DOS) then
-          call dump_projected_DOS(pDOS,Efermi)
+          if (atomf==sf) then
+             if (.not.flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi)
+             if (     flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
+          else
+             call gsum(pDOS(:,:,:),n_DOS,ni_in_cell,nspin)
+             do spin = 1, nspin
+                call gsum(pDOS_angmom(:,:,:,spin),n_DOS,ni_in_cell,Nangmom)
+             enddo
+             if (inode==ionode) then
+                if (.not.flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi)
+                if (     flag_pDOS_angmom) call dump_projected_DOS(pDOS,Efermi,pDOS_angmom=pDOS_angmom,Nangmom=Nangmom)
+             endif
+          endif
+          if (flag_normalise_pDOS) deallocate(w_pDOS)
+          if (flag_pDOS_angmom) deallocate(pDOS_angmom)
           deallocate(pDOS)
        end if
        deallocate(total_DOS)
@@ -3784,17 +3845,33 @@ contains
   !!  CREATION DATE
   !!   2016 ?
   !!  MODIFICATION HISTORY
+  !!   2017/11/01 18:00 nakata
+  !!    Introduced PDOS with MSSFs, projecting on neighbor atoms with global ID.
+  !!    Added spinSF to specify the spin of the MSSF coefficients.
+  !!    SpinSF is not used for primitive PAOs.
+  !!   2017/11/13 18:15 nakata
+  !!    Introduced the normalization of each eigenstate of PDOS.
+  !!    Added optional argument weight_pDOS, the normalisation weight.
+  !!   2018/09/19 18:30 nakata
+  !!    Introduced orbital angular momentum resolved DOS.
+  !!    Added optional projDOS_angmom, l-projected PDOS.
   !!  SOURCE
   !!
-  subroutine accumulate_DOS(weight,eval,evec,DOS,projDOS)
+  subroutine accumulate_DOS(weight,eval,evec,DOS,spinSF,projDOS,projDOS_angmom,weight_pDOS)
 
     use datatypes
-    use numbers, ONLY: half, zero
-    use global_module, ONLY: n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, flag_write_projected_DOS
+    use numbers,         only: half, zero
+    use global_module,   only: n_DOS, E_DOS_max, E_DOS_min, flag_write_DOS, sigma_DOS, flag_write_projected_DOS, &
+                               sf, atomf, id_glob, species_glob, nspin_SF, flag_normalise_pDOS, flag_pDOS_angmom
     use ScalapackFormat, only: matrix_size
-    use species_module,  only: nsf_species
+    use species_module,  only: nsf_species, natomf_species
+    use group_module,    only: parts
     use primary_module,  only: bundle
-    use GenComms, ONLY: cq_abort
+    use cover_module,    only: BCS_parts
+    use matrix_data,     only: mat, halo, SFcoeff_range
+    use mult_module,     only: matSFcoeff, matrix_pos, mat_p
+    use GenComms,        only: cq_abort
+    use pao_format
     
     implicit none
 
@@ -3803,14 +3880,24 @@ contains
     complex(double_cplx), dimension(:,:), intent(in) :: evec
     real(double), dimension(:) :: eval
     real(double), dimension(n_DOS) :: DOS
+    integer, intent(in) :: spinSF ! used only if atomf/=sf
     real(double), OPTIONAL, dimension(:,:) :: projDOS
+    real(double), OPTIONAL, dimension(:,:,:) :: projDOS_angmom
+    real(double), OPTIONAL, dimension(:) :: weight_pDOS
 
     ! Local variables
-    integer :: iwf, n_band, n_min, n_max, i, acc, atom, nsf
-    real(double) :: Ebin, a, fac
+    integer :: iwf, n_band, n_min, n_max, i, acc, spin_SF, &
+               atom, isf1, nsf1, atom_spec, l1, nacz1, m1, &
+               neigh_global_num, iatomf2, natomf2, neigh_species, l2, nacz2, m2, &
+               atom_num, gcspart, neigh_global_part, j_in_halo, wheremat
+    integer :: iprim, part, memb, neigh, ist
+    real(double) :: Ebin, a, fac, fac1, fac2, val
+    real(double), dimension(6) :: fac_angmom, fac2_angmom ! up to h-orbital
     real(double), dimension(n_DOS) :: tmp
 
     if(present(projDOS).AND.(.NOT.flag_write_projected_DOS)) call cq_abort("Called pDOS without flag")
+    if(present(projDOS_angmom).AND.(.NOT.flag_pDOS_angmom))  call cq_abort("Called pDOS_angmom without flag")
+    if(present(weight_pDOS) .AND.(.NOT.flag_normalise_pDOS)) call cq_abort("Normalised pDOS without flag")
     ! ---------------
     ! DOS calculation
     ! ---------------
@@ -3828,24 +3915,184 @@ contains
           tmp(i) = weight*pf_DOS*exp(-half*a*a)
           DOS(i) = DOS(i) + tmp(i)
        end do
+
        ! Having found DOS, we now project onto atoms
        if(flag_write_projected_DOS) then
-          acc = 0
-          do atom=1,bundle%n_prim
-             fac = zero
-             do nsf = 1,nsf_species(bundle%species(atom))
-                fac = fac + real(evec(iwf,acc+nsf)*conjg(evec(iwf,acc+nsf)),double)
-             end do
-             do i=n_min,n_max
-                projDOS(i,atom) = projDOS(i,atom) + tmp(i)*fac
-             end do
-             acc = acc + nsf_species(bundle%species(atom))
-          end do
-       end if
-    end do
+          if (atomf == sf) then
+             acc = 0
+             do atom=1,bundle%n_prim
+                atom_spec = bundle%species(atom)
+                fac = zero
+                if (.not.flag_pDOS_angmom) then
+                   do isf1 = 1,nsf_species(atom_spec)
+                      fac = fac + real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
+                   end do
+                else 
+                   fac_angmom(:) = zero
+                   isf1 = 0
+                   do l1 = 0, pao(atom_spec)%greatest_angmom
+                      do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
+                         do m1 = -l1,l1
+                            isf1 = isf1 + 1
+                            fac = fac + real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
+                            fac_angmom(l1+1) = fac_angmom(l1+1) &
+                                             + real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
+                         enddo
+                      enddo
+                   enddo
+                   if (isf1.ne.nsf_species(atom_spec)) call cq_abort("Error in NSF in the PDOS calculation.")
+                endif
+                if (flag_normalise_pDOS) then
+                   fac = fac / weight_pDOS(iwf)
+                   if (flag_pDOS_angmom) fac_angmom(:) = fac_angmom(:) / weight_pDOS(iwf)
+                endif
+                do i=n_min,n_max
+                   projDOS(i,atom) = projDOS(i,atom) + tmp(i)*fac
+                end do
+                if (flag_pDOS_angmom) then
+                   do l1 = 0, pao(atom_spec)%greatest_angmom
+                      do i=n_min,n_max
+                         projDOS_angmom(i,atom,l1+1) = projDOS_angmom(i,atom,l1+1) + tmp(i)*fac_angmom(l1+1)
+                      end do
+                   end do
+                endif
+                acc = acc + nsf_species(atom_spec)
+             end do ! atom
+          else
+             spin_SF = spinSF
+             if (nspin_SF == 1) spin_SF = 1
+             acc = 0 
+             iprim = 0
+             do part = 1,bundle%groups_on_node ! Loop over primary set partitions
+                if(bundle%nm_nodgroup(part)>0) then ! If there are atoms in partition
+                   do memb = 1,bundle%nm_nodgroup(part) ! Loop over primary atoms
+                      atom_num = bundle%nm_nodbeg(part)+memb-1
+                      iprim=iprim+1
+                      nsf1 = nsf_species(bundle%species(atom_num)) ! = mat(part,SFcoeff_range)%ndimi(memb)
+                      do neigh = 1, mat(part,SFcoeff_range)%n_nab(memb) ! Loop over neighbours of atom
+                         fac = zero
+                         if (flag_pDOS_angmom) fac_angmom(:) = zero
+                         ist = mat(part,SFcoeff_range)%i_acc(memb)+neigh-1
+                         gcspart = BCS_parts%icover_ibeg(mat(part,SFcoeff_range)%i_part(ist))+ &
+                                   mat(part,SFcoeff_range)%i_seq(ist)-1
+                         neigh_global_part = BCS_parts%lab_cell(mat(part,SFcoeff_range)%i_part(ist))
+                         neigh_global_num  = id_glob(parts%icell_beg(neigh_global_part)+ &
+                                             mat(part,SFcoeff_range)%i_seq(ist)-1)
+                         neigh_species = species_glob(neigh_global_num)
+                         j_in_halo = halo(SFcoeff_range)%i_halo(gcspart)
+                         natomf2 =  natomf_species(neigh_species)
+                         ! Now loop over support functions and atomf (basically PAOs)
+                         do isf1 = 1, nsf1
+                            fac1 = real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
+                            fac2 = zero
+                            if (.not.flag_pDOS_angmom) then
+                               do iatomf2 = 1, natomf2
+                                  wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,isf1,iatomf2)
+                                  val = mat_p(matSFcoeff(spin_SF))%matrix(wheremat)
+                                  fac2 = fac2 + val*val
+                               enddo
+                               fac = fac + fac1 * fac2
+                            else
+                               fac2_angmom(:) = zero
+                               iatomf2 = 0
+                               do l2 = 0, pao(neigh_species)%greatest_angmom
+                                  do nacz2 = 1, pao(neigh_species)%angmom(l2)%n_zeta_in_angmom
+                                     do m2 = -l2,l2
+                                        iatomf2 = iatomf2 + 1
+                                        wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,isf1,iatomf2)
+                                        val = mat_p(matSFcoeff(spin_SF))%matrix(wheremat)
+                                        fac2 = fac2 + val*val
+                                        fac2_angmom(l2+1) = fac2_angmom(l2+1) + val*val
+                                     enddo ! m2
+                                  enddo ! nacz2
+                               enddo ! l2
+                               fac = fac + fac1 * fac2
+                               fac_angmom(:) = fac_angmom(:) + fac1 * fac2_angmom(:)
+                               if (iatomf2.ne.natomf2) call cq_abort("Error in NATOMF in the PDOS calculation.")
+                            endif ! flag_pDOS_angmom
+                         enddo ! isf1
+                         if (flag_normalise_pDOS) then
+                            fac = fac / weight_pDOS(iwf)
+                            if (flag_pDOS_angmom) fac_angmom(:) = fac_angmom(:) / weight_pDOS(iwf)
+                         endif
+                         ! project on the neighbour atom 
+                         do i=n_min,n_max
+                            projDOS(i,neigh_global_num) = projDOS(i,neigh_global_num) + tmp(i)*fac
+                         end do
+                         if (flag_pDOS_angmom) then
+                            do l2 = 0, pao(neigh_species)%greatest_angmom
+                               do i=n_min,n_max
+                                  projDOS_angmom(i,neigh_global_num,l2+1) = projDOS_angmom(i,neigh_global_num,l2+1) &
+                                                                          + tmp(i)*fac_angmom(l2+1)
+                               end do ! i
+                            end do ! l2
+                         endif ! flag_pDOS_angmom
+                      end do ! neigh
+                      acc = acc + nsf1
+                   end do ! memb
+                end if ! nm_nodgroup
+             end do ! part
+          endif ! atomf
+       end if ! flag_write_projected_DOS
+    end do ! iwf
   end subroutine accumulate_DOS
   !!***
-  
+ 
+  !!****f*  DiagModule/weight_pDOS
+  !!
+  !!  NAME
+  !!   weight_pDOS
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Normalise projected DOS
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   A. Nakata
+  !!  CREATION DATE
+  !!   07/09/2017
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine get_weight_pDOS(evec,w_pDOS)
+
+    use datatypes
+    use numbers, ONLY: zero
+    use ScalapackFormat, only: matrix_size
+    use species_module,  only: nsf_species
+    use primary_module,  only: bundle
+
+    implicit none
+
+    ! Passed variables
+    complex(double_cplx), dimension(:,:), intent(in) :: evec
+    real(double), dimension(:) :: w_pDOS
+
+    ! Local variables
+    integer :: iwf, acc, atom, nsf
+    real(double) :: fac
+
+    ! ---------------
+    ! Calculate weight for each band to normalise pDOS
+    ! ---------------
+    w_pDOS = zero
+    do iwf=1,matrix_size ! Effectively all bands
+       acc = 0
+       fac = zero
+       do atom=1,bundle%n_prim
+          do nsf = 1,nsf_species(bundle%species(atom))
+             fac = fac + real(evec(iwf,acc+nsf)*conjg(evec(iwf,acc+nsf)),double)
+          end do
+          acc = acc + nsf_species(bundle%species(atom))
+       end do
+       w_pDOS(iwf) = fac
+    end do
+  end subroutine get_weight_pDOS
+  !!***
+ 
   !!****f*  DiagModule/distrib_and_diag
   !!
   !!  NAME 
