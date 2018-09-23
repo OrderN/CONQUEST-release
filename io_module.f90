@@ -2971,7 +2971,7 @@ second:   do
     integer, OPTIONAL :: Nangmom
 
     ! Local variables
-    integer :: lun, i, iprim, natom
+    integer :: lun, i, j, iprim, natom
     real(double) :: dE, thisE
     character(len=50) :: filename, fmt_DOS
 
