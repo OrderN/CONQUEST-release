@@ -1107,6 +1107,7 @@ contains
 
     if (flag_MDcontinue) baro%append = .true.
     select case(baro%baro_type)
+    case('none')
     case('berendsen')
     case('iso-mttk')
       flag_extended_system = .true.
