@@ -626,6 +626,8 @@ contains
   !!    Reading atomic spins: small tweak to test on net spin (uses abs and RD_ERR)
   !!   2017/10/24 zamaan
   !!    added thermostat flags for refactored NVT
+  !!   2017/11/13 18:15 nakata
+  !!    Added flag_normalise to normalise each eigenstate of PDOS
   !!   2018/01/19 dave
   !!    Added test for lmax_ps and NA projector functions
   !!   2018/01/22 tsuyoshi (with dave)
@@ -651,6 +653,8 @@ contains
   !!    Bug fix: only read RadiusMS when flag_Multisite is true
   !!   2018/07/16 17:09 dave
   !!    Adding zero T requirement for flag_quench_MD as well as FIRE
+  !!   2018/09/19 18:30 nakata
+  !!    Added flag_pDOS_angmom for orbital angular momentum resolved PDOS
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -708,6 +712,7 @@ contains
                              flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter,         &
                              flag_out_wf,flag_out_wf_by_kp,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
                              flag_write_DOS, flag_write_projected_DOS, &
+                             flag_normalise_pDOS, flag_pDOS_angmom, &
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
@@ -1472,6 +1477,16 @@ contains
              E_DOS_max = fdf_double('IO.max_DOS_E',zero)
              sigma_DOS = fdf_double('IO.sigma_DOS',0.001_double)
              n_DOS = fdf_integer('IO.n_DOS',201)
+             flag_normalise_pDOS = fdf_boolean('IO.normalise_PDOS',.true.)
+             flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
+             if (.not.flag_write_projected_DOS) then
+                flag_normalise_pDOS = .false.
+                flag_pDOS_angmom = .false.
+             endif
+             if (flag_pDOS_angmom .and. flag_basis_set==blips) then
+                flag_pDOS_angmom = .false.
+                if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom F as using blips")')
+             endif               
           else
              flag_write_DOS = .false.
              if(inode==ionode) write(io_lun,'(2x,"Setting IO.writeDOS F as solving O(N)")')

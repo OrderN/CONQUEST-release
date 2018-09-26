@@ -2949,25 +2949,38 @@ second:   do
   !! CREATION DATE 
   !!   2015/07/02 17:21
   !! MODIFICATION HISTORY
+  !!   2017/11/09 16:00 nakata
+  !!    Added atomf to find whether the PDOS is with PAOs or MSSFs
+  !!   2018/09/19 18:00 nakata
+  !!    Corrected the order of dimension of pDOS
+  !!   2018/09/19 18:30 nakata
+  !!    Added orbital angular momentum resolved DOS (pDOS_angmom)
   !! SOURCE
   !!
-  subroutine dump_projected_DOS(pDOS,Ef)
+  subroutine dump_projected_DOS(pDOS,Ef,pDOS_angmom,Nangmom)
 
     use datatypes
-    use global_module, only: n_DOS, E_DOS_max, E_DOS_min, sigma_DOS, nspin
+    use global_module, only: n_DOS, E_DOS_max, E_DOS_min, sigma_DOS, flag_pDOS_angmom, &
+                             nspin, atomf, sf, ni_in_cell
     use primary_module,  only: bundle
 
     ! Passed variables
-    real(double), dimension(n_DOS,nspin,bundle%n_prim) :: pDOS
+    real(double), dimension(n_DOS,bundle%n_prim,nspin) :: pDOS
     real(double), dimension(nspin) :: Ef
+    real(double), OPTIONAL, dimension(:,:,:,:) :: pDOS_angmom
+    integer, OPTIONAL :: Nangmom
 
     ! Local variables
-    integer :: lun, i, iprim
+    integer :: lun, i, j, iprim, natom
     real(double) :: dE, thisE
-    character(len=50) :: filename
+    character(len=50) :: filename, fmt_DOS
 
-    do iprim = 1,bundle%n_prim
-       write(filename,'("Atom",I0.7,"DOS.dat")') bundle%ig_prim(iprim)
+    if (atomf==sf) natom = bundle%n_prim
+    if (atomf/=sf) natom = ni_in_cell
+
+    do iprim = 1,natom
+       if (atomf==sf) write(filename,'("Atom",I0.7,"DOS.dat")') bundle%ig_prim(iprim)
+       if (atomf/=sf) write(filename,'("Atom",I0.7,"DOS.dat")') iprim ! iprim is equal to global ID if atomf = paof (MSSFs)
        ! Open file
        call io_assign (lun)
        open (unit = lun, file = filename)
@@ -2983,15 +2996,34 @@ second:   do
        dE = (E_DOS_max - E_DOS_min)/real(n_DOS - 1,double)
        thisE = E_DOS_min
        if(nspin==1) then
-          do i=1,n_DOS
-             write(lun,fmt='(2f17.10)') thisE,pDOS(i,1,iprim)
-             thisE = thisE + dE
-          end do
+          if (flag_PDOS_angmom) then
+             write(fmt_DOS,*) Nangmom+2
+             fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
+             do i=1,n_DOS
+                write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),(pDOS_angmom(i,iprim,j,1),j=1,Nangmom)
+                thisE = thisE + dE
+             end do
+          else
+             do i=1,n_DOS
+                write(lun,fmt='(2f17.10)') thisE,pDOS(i,iprim,1)
+                thisE = thisE + dE
+             end do
+          endif
        else if(nspin==2) then
-          do i=1,n_DOS
-             write(lun,fmt='(3f17.10)') thisE,pDOS(i,iprim,1),-pDOS(i,iprim,2)
-             thisE = thisE + dE
-          end do
+          if (flag_PDOS_angmom) then
+             write(fmt_DOS,*) Nangmom*2+3
+             fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
+             do i=1,n_DOS
+                write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),(pDOS_angmom(i,iprim,j,1),j=1,Nangmom), &
+                                        -pDOS(i,iprim,2),(-pDOS_angmom(i,iprim,j,2),j=1,Nangmom)
+                thisE = thisE + dE
+             end do
+          else
+             do i=1,n_DOS
+                write(lun,fmt='(3f17.10)') thisE,pDOS(i,iprim,1),-pDOS(i,iprim,2)
+                thisE = thisE + dE
+             end do
+          end if
        end if
        call io_close (lun)
     end do
