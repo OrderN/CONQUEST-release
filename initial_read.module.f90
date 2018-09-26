@@ -651,6 +651,8 @@ contains
   !!    flag_InitialAtomicSpin now comes from density_module (not global)
   !!   2018/07/16 16:02 dave
   !!    Bug fix: only read RadiusMS when flag_Multisite is true
+  !!   2018/07/16 17:09 dave
+  !!    Adding zero T requirement for flag_quench_MD as well as FIRE
   !!   2018/09/19 18:30 nakata
   !!    Added flag_pDOS_angmom for orbital angular momentum resolved PDOS
   !!  TODO
@@ -1630,6 +1632,9 @@ contains
           fire_max_step      = fdf_double ('AtomMove.FireMaxStep',2.0_double)
           fire_N_below_thresh= fdf_integer('AtomMove.FireNBelowThresh',3)
           temp_ion           = fdf_double ('AtomMove.IonTemperature',0.0_double)
+       else if(flag_quench_MD) then
+          temp_ion           = fdf_double ('AtomMove.IonTemperature',0.0_double)
+          fire_alpha0        = fdf_double ('AtomMove.QMDAlpha',0.5_double)
        else
           temp_ion           = fdf_double ('AtomMove.IonTemperature',300.0_double)
        end if

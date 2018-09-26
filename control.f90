@@ -507,7 +507,7 @@ contains
                               flag_fire_qMD, flag_diagonalisation,    &
                               nspin, flag_thermoDebug, flag_baroDebug,&
                               flag_move_atom,rcellx, rcelly, rcellz,  &
-                              flag_Multisite,flag_SFcoeffReuse, atom_coord
+                              flag_Multisite,flag_SFcoeffReuse, atom_coord, flag_quench_MD
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: velocityVerlet, updateIndices,           &
@@ -894,7 +894,7 @@ contains
        mdl%append = .true.
 
        call check_stop(done, iter)
-       if (flag_fire_qMD) then
+       if (flag_fire_qMD.OR.flag_quench_MD) then
           if (abs(max) < MDcgtol) then
              if ((iter - step_qMD) > 1) then
                 n_stop_qMD = 0

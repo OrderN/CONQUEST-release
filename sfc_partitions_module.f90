@@ -1306,7 +1306,7 @@ contains
           deallocate(atoms_in_parts, STAT=stat)
           call cq_abort("sfc_partitions_module: &
                          &atoms are not correctly assigned to partitions.&
-                         &Found duplicated atomic indices.")
+                         &Found duplicated atomic indices. ",ii,jj)
        else
           if ((inode == ionode) .and. (iprint_init >= 2)) then
              write (io_lun, "(a)") "PASS"
