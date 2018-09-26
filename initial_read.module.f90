@@ -1301,7 +1301,7 @@ contains
         !    2018/Sep/26   Tsuyoshi Miyazaki
          if(flag_neutral_atom) then
            if(inode==ionode) write(io_lun,'(10x,A)') &
-             ' Now, we cannot use neutral atom potential for ghost atoms. Please set General.NeutralAtom as false.'
+             'Now, we cannot use neutral atom potential for ghost atoms. Please set General.NeutralAtom as false.'
            call cq_abort("Error: Neutral Atom potential cannot be used for ghost atom, at present.")
          endif
        endif
