@@ -316,10 +316,11 @@ contains
     real(double)                          :: P_GPa
 
     if (inode==ionode .and. iprint_MD > 1) &
-      write(io_lun,'("Writing statistics to ",a)') filename
+      write(io_lun,'(2x,"Writing statistics to ",a)') filename
 
+    if (inode==ionode) write(io_lun,*) mdl%P_int
     ! Convert units if necessary
-    P_GPa = mdl%P_int*fac_HaBohr32GPA
+    P_GPa = mdl%P_int*fac_HaBohr32GPa
 
     if (inode==ionode) then
       call io_assign(lun)
