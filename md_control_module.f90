@@ -63,7 +63,7 @@ module md_control
   character(20) :: md_check_file = "md.checkpoint"
   character(20) :: md_thermo_file = "md.thermostat"
   character(20) :: md_baro_file = "md.barostat"
-  character(20) :: md_trajectory_file = "md.barostat"
+  character(20) :: md_trajectory_file = "trajectory.xsf"
   character(20) :: md_frames_file = "Frames"
   character(20) :: md_stats_file = "Stats"
 
@@ -305,6 +305,7 @@ contains
     select case(th%thermo_type)
     case('none')
     case('berendsen')
+      flag_extended_system = .false.
     case('nhc')
       call th%init_nhc(dt)
     case('ssm')
@@ -434,6 +435,7 @@ contains
       write(io_lun,fmt1) 'ion  NHC masses:', th%m_nhc
       if (th%cell_nhc) write(io_lun,fmt1) 'cell NHC masses:', th%m_nhc_cell
     end if
+    call th%get_nhc_energy
 
   end subroutine init_nhc
   !!***
@@ -958,7 +960,7 @@ contains
     end do
     th%e_nhc = th%ke_nhc_ion + th%pe_nhc_ion + th%ke_nhc_cell + th%pe_nhc_cell
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
       write(io_lun,'(4x,"ke_nhc_ion: ",e16.8)') th%ke_nhc_ion
       write(io_lun,'(4x,"pe_nhc_ion: ",e16.8)') th%pe_nhc_ion
       write(io_lun,'(4x,"ke_nhc_cell:",e16.8)') th%ke_nhc_cell
@@ -1104,7 +1106,9 @@ contains
 
     if (flag_MDcontinue) baro%append = .true.
     select case(baro%baro_type)
+    case('none')
     case('berendsen')
+      flag_extended_system = .false.
     case('iso-mttk')
       flag_extended_system = .true.
       baro%append = .false.
@@ -2425,7 +2429,6 @@ contains
       append_coords = append_coords_bak
 
       call io_assign(lun)
-      write(io_lun,*) "lun = ", lun
       open(unit=lun,file=md_check_file,status='replace')
 
       ! Write the ionic velocities (taken from write_velocity in io_module)
@@ -2494,7 +2497,8 @@ contains
 
     use GenComms,         only: cq_abort, gcopy
     use input_module,     only: io_assign, io_close
-    use global_module,    only: id_glob, id_glob_inv, flag_read_velocity
+    use global_module,    only: id_glob, id_glob_inv, flag_read_velocity, &
+                                species_glob
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
@@ -2551,7 +2555,6 @@ contains
         case('iso-ssm')
           read(lun,*) baro%eps
           read(lun,*) baro%v_eps
-          write(io_lun,*) "######", baro%v_eps
           read(lun,*) baro%G_eps
         case('ortho-ssm')
           read(lun,*) baro%h(1,:)
@@ -2576,31 +2579,50 @@ contains
           write(io_lun,th%nhc_fmt) "v_eta_cell:", th%v_eta_cell
           write(io_lun,th%nhc_fmt) "G_eta_cell:", th%G_nhc_cell
         end if
-        select case(baro%baro_type)
-        case('iso-mttk')
-          write(io_lun,'(2x,12a,3e20.12)') "lat_ref(1,:):", baro%lat_ref(1,:)
-          write(io_lun,'(2x,12a,3e20.12)') "lat_ref(2,:):", baro%lat_ref(2,:)
-          write(io_lun,'(2x,12a,3e20.12)') "lat_ref(3,:):", baro%lat_ref(3,:)
-          write(io_lun,'(2x,12a,e20.12)') "volume_ref:", baro%volume_ref
-          write(io_lun,'(2x,12a,e20.12)') "eps_ref:", baro%eps_ref
-          write(io_lun,'(2x,12a,e20.12)') "eps:", baro%eps
-          write(io_lun,'(2x,12a,e20.12)') "v_eps:", baro%v_eps
-          write(io_lun,'(2x,12a,e20.12)') "G_eps:", baro%G_eps
-        case('iso-ssm')
-          write(io_lun,'(2x,12a,e20.12)') "eps:", baro%eps
-          write(io_lun,'(2x,12a,e20.12)') "v_eps:", baro%v_eps
-          write(io_lun,'(2x,12a,e20.12)') "G_eps:", baro%G_eps
-        case('ortho-ssm')
-          write(io_lun,'(2x,12a,3e20.12)') "h(1,:):", baro%h(1,:)
-          write(io_lun,'(2x,12a,3e20.12)') "h(2,:):", baro%h(2,:)
-          write(io_lun,'(2x,12a,3e20.12)') "h(3,:):", baro%h(3,:)
-          write(io_lun,'(2x,12a,3e20.12)') "v_h(1,:):", baro%v_h(1,:)
-          write(io_lun,'(2x,12a,3e20.12)') "v_h(2,:):", baro%v_h(2,:)
-          write(io_lun,'(2x,12a,3e20.12)') "v_h(3,:):", baro%v_h(3,:)
-          write(io_lun,'(2x,12a,3e20.12)') "G_h(1,:):", baro%G_h(1,:)
-          write(io_lun,'(2x,12a,3e20.12)') "G_h(2,:):", baro%G_h(2,:)
-          write(io_lun,'(2x,12a,3e20.12)') "G_h(3,:):", baro%G_h(3,:)
-        end select
+        if (flag_read_velocity) then
+          write(io_lun,'(a)') "Reading velocities from md.checkpoint"
+          do ni=1,ni_in_cell
+            write(io_lun,'(2i8,3e20.12)') ni, species_glob(ni), &
+                                          ion_velocity(:,ni)
+          end do
+        end if
+        if (flag_extended_system) then
+          write(io_lun,'(a)') "Reading extended system variables &
+                                &from md.checkpoint"
+          write(io_lun,th%nhc_fmt) "eta:", th%eta
+          write(io_lun,th%nhc_fmt) "v_eta:", th%v_eta
+          write(io_lun,th%nhc_fmt) "G_nhc:", th%G_nhc
+          if (th%cell_nhc) then
+            write(io_lun,th%nhc_fmt) "eta_cell:", th%eta_cell
+            write(io_lun,th%nhc_fmt) "v_eta_cell:", th%v_eta_cell
+            write(io_lun,th%nhc_fmt) "G_eta_cell:", th%G_nhc_cell
+          end if
+          select case(baro%baro_type)
+          case('iso-mttk')
+            write(io_lun,'(2x,12a,3e20.12)') "lat_ref(1,:):", baro%lat_ref(1,:)
+            write(io_lun,'(2x,12a,3e20.12)') "lat_ref(2,:):", baro%lat_ref(2,:)
+            write(io_lun,'(2x,12a,3e20.12)') "lat_ref(3,:):", baro%lat_ref(3,:)
+            write(io_lun,'(2x,12a,e20.12)') "volume_ref:", baro%volume_ref
+            write(io_lun,'(2x,12a,e20.12)') "eps_ref:", baro%eps_ref
+            write(io_lun,'(2x,12a,e20.12)') "eps:", baro%eps
+            write(io_lun,'(2x,12a,e20.12)') "v_eps:", baro%v_eps
+            write(io_lun,'(2x,12a,e20.12)') "G_eps:", baro%G_eps
+          case('iso-ssm')
+            write(io_lun,'(2x,12a,e20.12)') "eps:", baro%eps
+            write(io_lun,'(2x,12a,e20.12)') "v_eps:", baro%v_eps
+            write(io_lun,'(2x,12a,e20.12)') "G_eps:", baro%G_eps
+          case('ortho-ssm')
+            write(io_lun,'(2x,12a,3e20.12)') "h(1,:):", baro%h(1,:)
+            write(io_lun,'(2x,12a,3e20.12)') "h(2,:):", baro%h(2,:)
+            write(io_lun,'(2x,12a,3e20.12)') "h(3,:):", baro%h(3,:)
+            write(io_lun,'(2x,12a,3e20.12)') "v_h(1,:):", baro%v_h(1,:)
+            write(io_lun,'(2x,12a,3e20.12)') "v_h(2,:):", baro%v_h(2,:)
+            write(io_lun,'(2x,12a,3e20.12)') "v_h(3,:):", baro%v_h(3,:)
+            write(io_lun,'(2x,12a,3e20.12)') "G_h(1,:):", baro%G_h(1,:)
+            write(io_lun,'(2x,12a,3e20.12)') "G_h(2,:):", baro%G_h(2,:)
+            write(io_lun,'(2x,12a,3e20.12)') "G_h(3,:):", baro%G_h(3,:)
+          end select
+        end if
       end if
 
       call io_close(lun)

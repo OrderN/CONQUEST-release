@@ -564,7 +564,7 @@ contains
     integer       ::  iter, i, j, k, length, stat, i_first, i_last, md_ndof
     integer       :: nequil ! number of Berendsen equilibration steps - zamaan
     real(double)  :: energy1, energy0, dE, max, g0
-    logical       :: done,second_call,append_coords_bak,flag_store
+    logical       :: done,second_call
     logical,allocatable,dimension(:) :: flag_movable
 
     type(matrix_store_global) :: InfoGlob
@@ -636,6 +636,9 @@ contains
 
     ! Thermostat/barostat initialisation
     call init_ensemble(baro, thermo, mdl, md_ndof, nequil)
+    call thermo%get_temperature_and_ke(baro, ion_velocity, &
+                                      mdl%ion_kinetic_energy)
+    call baro%get_pressure_and_stress
 
     ! Get converted 1-D array for flag_atom_move
     allocate (flag_movable(3*ni_in_cell), STAT=stat)
@@ -662,7 +665,8 @@ contains
        call read_fire(fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha)
     endif
 
-    if (.not. flag_MDcontinue) call write_md_data(i_first-1, thermo, baro, mdl)
+    if (.not. flag_MDcontinue) &
+      call write_md_data(i_first-1, thermo, baro, mdl, nequil)
 
     do iter = i_first, i_last ! Main MD loop
        mdl%step = iter
@@ -820,19 +824,12 @@ contains
          if (inode==ionode .and. nequil == 0) then
            write (io_lun, '(4x,a)') "Berendsen equilibration finished, &
                                     &starting extended system dynamics."
-           ! If the run was restarted during Berendsen equilibration, the
-           ! MDcontinue flag would cause init_nhc to read a non-existent
-           ! thermostat checkpoint. Not pretty, but good enough for now.
-           flag_store = flag_MDcontinue
-           flag_MDcontinue = .false.
-           call init_ensemble(baro, thermo, mdl, md_ndof, nequil)
-           flag_MDcontinue = flag_store
+           call init_ensemble(baro, thermo, mdl, md_ndof, nequil, second_call)
          end if
        end if
 
        ! Write all MD data and checkpoints to disk
-       call write_md_data(iter, thermo, baro, mdl)
-       mdl%append = .true.
+       call write_md_data(iter, thermo, baro, mdl, nequil)
 
        call check_stop(done, iter)
        if (flag_fire_qMD) then
@@ -877,7 +874,7 @@ contains
   !!    Made BerendsenEquil work with NVT ensemble.
   !!  SOURCE
   !!  
-  subroutine init_ensemble(baro, thermo, mdl, md_ndof, nequil)
+  subroutine init_ensemble(baro, thermo, mdl, md_ndof, nequil, second_call)
 
     use numbers
     use force_module,   only: stress
@@ -886,14 +883,16 @@ contains
     use md_model,       only: type_md_model
     use GenComms,       only: inode, ionode, gcopy
     use global_module,  only: rcellx, rcelly, rcellz, temp_ion, ni_in_cell, &
-                              flag_MDcontinue, flag_read_velocity
+                              flag_MDcontinue, flag_read_velocity, &
+                              flag_MDdebug, iprint_MD
     use move_atoms,     only: init_velocity
     use md_control,     only: type_thermostat, type_barostat, md_tau_T, &
                               md_tau_P, md_n_nhc, md_n_ys, md_n_mts, &
                               md_nhc_mass, ion_velocity, lattice_vec, &
                               md_thermo_type, md_baro_type, md_target_press, &
                               md_ndof_ions, md_tau_P_equil, md_tau_T_equil, &
-                              write_md_checkpoint, read_md_checkpoint
+                              write_md_checkpoint, read_md_checkpoint, &
+                              flag_extended_system
 
     ! passed variableariables
     type(type_barostat), intent(inout)    :: baro
@@ -901,16 +900,22 @@ contains
     type(type_md_model), intent(inout)    :: mdl
     integer, intent(in)                   :: md_ndof
     integer, intent(in)                   :: nequil
+    logical, optional                     :: second_call
 
     ! local variables
     character(50) :: file_velocity='velocity.dat'
 
-    ! Initialise the model
-    lattice_vec = zero
-    lattice_vec(1,1) = rcellx
-    lattice_vec(2,2) = rcelly
-    lattice_vec(3,3) = rcellz
-    call mdl%init_model(md_ensemble, MDtimestep, thermo, baro)
+    if (inode==ionode .and. iprint_MD > 1) &
+      write(io_lun,'(2x,a)') "Welcome to init_ensemble"
+
+    if (.not. present(second_call)) then
+    ! Initialise the model only once per run
+      lattice_vec = zero
+      lattice_vec(1,1) = rcellx
+      lattice_vec(2,2) = rcelly
+      lattice_vec(3,3) = rcellz
+      call mdl%init_model(md_ensemble, MDtimestep, thermo, baro)
+    end if
 
     ! I've moved the velocity initialisation here to make reading the new
     ! unified md checkpoint file easier - zamaan
@@ -1184,7 +1189,7 @@ end subroutine update_pos_and_box
 !!   2018/08/11 10:27
 !!  SOURCE
 !!  
-subroutine write_md_data(iter, thermo, baro, mdl)
+subroutine write_md_data(iter, thermo, baro, mdl, nequil)
 
   use GenComms,      only: inode, ionode
   use io_module,     only: write_xsf
@@ -1200,10 +1205,13 @@ subroutine write_md_data(iter, thermo, baro, mdl)
   type(type_barostat), intent(inout)    :: baro
   type(type_thermostat), intent(inout)  :: thermo
   type(type_md_model), intent(inout)    :: mdl
-  integer, intent(in)                   :: iter
+  integer, intent(in)                   :: iter, nequil
+
+    if (inode==ionode .and. iprint_MD > 1) &
+        write(io_lun,'(2x,a)') "Welcome to write_md_data"
 
   call write_md_checkpoint(thermo, baro)
-  call mdl%dump_stats(md_stats_file)
+  call mdl%dump_stats(md_stats_file, nequil)
   if (inode == ionode .and. mod(iter, MDfreq) == 0) then
     call mdl%dump_frame(md_frames_file)
     if (md_tdep) call mdl%dump_tdep
@@ -1213,6 +1221,7 @@ subroutine write_md_data(iter, thermo, baro, mdl)
     call thermo%dump_thermo_state(iter, md_thermo_file)
   if (flag_baroDebug) &
     call baro%dump_baro_state(iter, md_baro_file)
+  mdl%append = .true.
 
 end subroutine write_md_data
 !!*****

@@ -18,13 +18,14 @@ module md_model
 
   use datatypes
   use numbers
+  use GenComms,         only: inode, ionode
   use force_module,     only: tot_force, stress
   use global_module,    only: ni_in_cell, io_lun, atom_coord, iprint_MD, &
                               flag_MDcontinue, flag_MDdebug, x_atom_cell, &
                               y_atom_cell, z_atom_cell, rcellx, rcelly, rcellz
   use species_module,   only: species
   use md_control,       only: md_n_nhc, ion_velocity, type_thermostat, &
-                              type_barostat, lattice_vec
+                              type_barostat, lattice_vec, flag_extended_system
 
   implicit none
 
@@ -143,13 +144,14 @@ contains
     type(type_thermostat), intent(in), target :: thermo
     type(type_barostat), intent(in), target   :: baro
 
-    if (flag_MDcontinue) then
-      mdl%append = .true.
-    else
-      mdl%append = .false.
-    end if
+    if (inode==ionode .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "Initialising model"
+
+    mdl%append = .false.
+    if (flag_MDcontinue) mdl%append = .true.
 
     ! General MD arrays
+    mdl%step = 0
     mdl%natoms = ni_in_cell
     mdl%ensemble = ensemble
     mdl%timestep = timestep
@@ -218,27 +220,24 @@ contains
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
 
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
+      write(io_lun,'(2x,a)') "get_cons_qty"
+
     select case(mdl%ensemble)
     case("nve")
       mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy
     case("nvt")
-      if (mdl%thermo_type == 'nhc') then
+      if (flag_extended_system) then
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
                       mdl%nhc_energy
       else
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy
       end if
     case("npt")
-      if (leqi(mdl%baro_type, 'iso-mttk') .or. leqi(mdl%baro_type, 'mttk')) then
+      if (flag_extended_system) then
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
                       mdl%nhc_energy + mdl%box_kinetic_energy + mdl%PV
-      else if (leqi(mdl%baro_type, 'iso-ssm')) then
-        mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
-                      mdl%nhc_energy + mdl%box_kinetic_energy + mdl%PV
-      else if (leqi(mdl%baro_type, 'ortho-ssm')) then
-        mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
-                      mdl%nhc_energy + mdl%box_kinetic_energy + mdl%PV
-      else if (leqi(mdl%baro_type, 'berendsen')) then
+      else
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + mdl%PV
       end if
     end select
@@ -257,12 +256,13 @@ contains
   !!  
   subroutine print_md_energy(mdl)
 
-    use GenComms,         only: inode, ionode
-
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
 
     ! local variables
+
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
+      write(io_lun,'(2x,a)') "print_md_energy"
 
     if (inode==ionode) then
       write (io_lun, '(4x,"Conserved quantity H''  : ",f15.8)') &
@@ -274,14 +274,11 @@ contains
         mdl%dft_total_energy
       select case(mdl%ensemble)
       case('nvt')
-        select case(mdl%thermo_type)
-        case('nhc')
+        if (flag_extended_system) & 
           write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
             mdl%nhc_energy
-        end select
       case('npt')
-        select case(mdl%baro_type)
-        case('iso-mttk')
+        if (flag_extended_system) then
           if (mdl%nequil < 1) then
             write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
               mdl%nhc_energy
@@ -290,25 +287,7 @@ contains
             write (io_lun, '(4x,"PV                      : ",f15.8)') &
               mdl%PV
           end if
-        case('iso-ssm')
-          if (mdl%nequil < 1) then
-            write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
-              mdl%nhc_energy
-            write (io_lun, '(4x,"Box kinetic energy      : ",f15.8)') &
-              mdl%box_kinetic_energy
-            write (io_lun, '(4x,"PV                      : ",f15.8)') &
-              mdl%PV
-          end if
-        case('ortho-ssm')
-          if (mdl%nequil < 1) then
-            write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
-              mdl%nhc_energy
-            write (io_lun, '(4x,"Box kinetic energy      : ",f15.8)') &
-              mdl%box_kinetic_energy
-            write (io_lun, '(4x,"PV                      : ",f15.8)') &
-              mdl%PV
-          end if
-        end select
+        end if
       end select
     end if
   end subroutine print_md_energy
@@ -322,15 +301,15 @@ contains
   !!   Zamaan Raza 
   !!  SOURCE
   !!  
-  subroutine dump_stats(mdl, filename)
+  subroutine dump_stats(mdl, filename, nequil)
 
     use input_module,     only: io_assign, io_close
-    use GenComms,         only: inode, ionode
     use md_control,       only: fac_HaBohr32GPa, md_berendsen_equil
 
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
     character(len=*), intent(in)          :: filename
+    integer, intent(in)                   :: nequil
 
     ! local variables
     integer                               :: lun
@@ -353,34 +332,19 @@ contains
         case ('nve')
           write(lun,'(a10,3a18,2a12)') "step", "pe", "ke", "H'", "T", "P"
         case ('nvt')
-          if (mdl%thermo_type == 'nhc' .or. md_berendsen_equil > 0) then
+          if (flag_extended_system .or. md_berendsen_equil > 0) then
             write(lun,'(a10,4a18,2a12)') "step", "pe", "ke", "nhc", "H'", "T", "P"
           else
             write(lun,'(a10,3a16,2a12)') "step", "pe", "ke", "H'", "T", "P"
           end if
         case ('npt')
-          select case(mdl%baro_type)
-          case('iso-mttk')
+          if (flag_extended_system .or. md_berendsen_equil > 0) then
             write(lun,'(a10,6a18,2a12,a16)') "step", "pe", "ke", "nhc", &
               "box", "pV", "H'", "T", "P", "V"
-          case('iso-ssm')
-            write(lun,'(a10,6a18,2a12,a16)') "step", "pe", "ke", "nhc", &
-              "box", "pV", "H'", "T", "P", "V"
-          case('ortho-ssm')
-            write(lun,'(a10,6a18,2a12,a16)') "step", "pe", "ke", "nhc", &
-              "box", "pV", "H'", "T", "P", "V"
-          case('berendsen')
-            if (md_berendsen_equil > 0) then
-              write(lun,'(a10,6a18,2a12,a16)') "step", "pe", "ke", "nhc", &
-                "box", "pV", "H'", "T", "P", "V"
-            else
-              write(lun,'(a10,4a18,2a12,a16)') "step", "pe", "ke", "pV", &
-                "H'", "T", "P", "V"
-            end if
-          end select
-        case ('nph')
-          write(lun,'(a10,5a18,2a12,a16)') "step", "pe", "ke", "box", "pV", &
-            "H'", "T", "P", "V"
+          else
+            write(lun,'(a10,4a18,2a12,a16)') "step", "pe", "ke", "pV", &
+              "H'", "T", "P", "V"
+          end if
         end select
       end if
       select case (mdl%ensemble)
@@ -388,47 +352,33 @@ contains
         write(lun,'(i10,3e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
           mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, P_GPa
       case ('nvt')
-        if (mdl%thermo_type == 'nhc' .or. md_berendsen_equil > 0) then
+        if (flag_extended_system .or. nequil == 0) then
           write(lun,'(i10,4e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%nhc_energy, mdl%h_prime, mdl%T_int, &
+            P_GPa
+        else if (nequil > 0) then
+          write(lun,'(i10,4e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
+            mdl%ion_kinetic_energy, zero, mdl%h_prime, mdl%T_int, &
             P_GPa
         else
           write(lun,'(i10,3e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, P_GPa
         end if
       case ('npt')
-        select case(mdl%baro_type)
-        case('iso-mttk')
+        if (flag_extended_system .and. nequil == 0) then
           write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
             mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%nhc_energy, &
             mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
             mdl%volume
-        case('iso-ssm')
+        else if (nequil > 0) then
           write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
-            mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%nhc_energy, &
-            mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
-            mdl%volume
-        case('ortho-ssm')
-          write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
-            mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%nhc_energy, &
-            mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
-            mdl%volume
-        case('berendsen')
-          if (md_berendsen_equil > 0) then
-            write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
-              mdl%dft_total_energy, mdl%ion_kinetic_energy, zero, zero, &
-              mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
-          else
-            write(lun,'(i10,4e18.8,2f12.4,e16.8)') mdl%step, &
-              mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%PV, &
-              mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
-          end if
-        end select
-      case ('nph')
-          write(lun,'(i10,5e18.8,2f12.4,e16.8)') mdl%step, &
-            mdl%dft_total_energy, mdl%ion_kinetic_energy, &
-            mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
-            mdl%volume
+            mdl%dft_total_energy, mdl%ion_kinetic_energy, zero, zero, &
+            mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
+        else
+          write(lun,'(i10,4e18.8,2f12.4,e16.8)') mdl%step, &
+            mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%PV, &
+            mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
+        end if
       end select
       call io_close(lun)
     end if
@@ -448,7 +398,6 @@ contains
   subroutine dump_frame(mdl, filename)
 
     use input_module,     only: io_assign, io_close
-    use GenComms,         only: inode, ionode
 
     ! passed variables
     class(type_md_model), intent(inout)   :: mdl
@@ -532,7 +481,6 @@ contains
   subroutine dump_tdep(mdl)
  
     use input_module,     only: io_assign, io_close
-    use GenComms,         only: inode, ionode
     use units,            only: HaToEv, BohrToAng
     use md_control,       only: fac_HaBohr32GPa
  
