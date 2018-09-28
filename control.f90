@@ -564,11 +564,7 @@ contains
     integer       ::  iter, i, j, k, length, stat, i_first, i_last, md_ndof
     integer       :: nequil ! number of Berendsen equilibration steps - zamaan
     real(double)  :: energy1, energy0, dE, max, g0
-<<<<<<< HEAD
     logical       :: done,second_call
-=======
-    logical       :: done,second_call,first_init
->>>>>>> 70d374890e3f2300e79930dcf8474b841eeb753f
     logical,allocatable,dimension(:) :: flag_movable
 
     type(matrix_store_global) :: InfoGlob
@@ -592,7 +588,6 @@ contains
 
     n_stop_qMD = 0
     final_call = 1
-    first_init = .true.
     allocate(ion_velocity(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
          call cq_abort("Error allocating velocity in md_run: ", &
@@ -640,18 +635,11 @@ contains
       call Ready_XLBOMD()
 
     ! Thermostat/barostat initialisation
-<<<<<<< HEAD
     call init_ensemble(baro, thermo, mdl, md_ndof, nequil)
     call thermo%get_temperature_and_ke(baro, ion_velocity, &
                                       mdl%ion_kinetic_energy)
     call baro%get_pressure_and_stress
-=======
-    call init_ensemble(baro, thermo, mdl, md_ndof, nequil, first_init)
-    call thermo%get_temperature_and_ke(baro, ion_velocity, &
-                                       mdl%ion_kinetic_energy, final_call)
-    call baro%get_pressure_and_stress(final_call)
     call mdl%get_cons_qty
->>>>>>> 70d374890e3f2300e79930dcf8474b841eeb753f
 
     ! Get converted 1-D array for flag_atom_move
     allocate (flag_movable(3*ni_in_cell), STAT=stat)
@@ -834,27 +822,16 @@ contains
  
        if (nequil > 0) then
          nequil = nequil - 1
-<<<<<<< HEAD
-         if (inode==ionode .and. nequil == 0) then
-           write (io_lun, '(4x,a)') "Berendsen equilibration finished, &
-                                    &starting extended system dynamics."
-           call init_ensemble(baro, thermo, mdl, md_ndof, nequil, second_call)
-=======
          if (nequil == 0) then
            if (inode==ionode) &
              write (io_lun, '(4x,a)') "Berendsen equilibration finished, &
                                       &starting extended system dynamics."
-           call init_ensemble(baro, thermo, mdl, md_ndof, nequil, first_init)
->>>>>>> 70d374890e3f2300e79930dcf8474b841eeb753f
+           call init_ensemble(baro, thermo, mdl, md_ndof, nequil, second_call)
          end if
        end if
 
        ! Write all MD data and checkpoints to disk
-<<<<<<< HEAD
        call write_md_data(iter, thermo, baro, mdl, nequil)
-=======
-       call write_md_data(iter, thermo, baro, mdl)
->>>>>>> 70d374890e3f2300e79930dcf8474b841eeb753f
 
        call check_stop(done, iter)
        if (flag_fire_qMD) then
@@ -899,11 +876,7 @@ contains
   !!    Made BerendsenEquil work with NVT ensemble.
   !!  SOURCE
   !!  
-<<<<<<< HEAD
   subroutine init_ensemble(baro, thermo, mdl, md_ndof, nequil, second_call)
-=======
-  subroutine init_ensemble(baro, thermo, mdl, md_ndof, nequil, first_init)
->>>>>>> 70d374890e3f2300e79930dcf8474b841eeb753f
 
     use numbers
     use force_module,   only: stress
@@ -929,37 +902,27 @@ contains
     type(type_md_model), intent(inout)    :: mdl
     integer, intent(in)                   :: md_ndof
     integer, intent(in)                   :: nequil
-<<<<<<< HEAD
     logical, optional                     :: second_call
-=======
-    logical, intent(inout)                :: first_init
->>>>>>> 70d374890e3f2300e79930dcf8474b841eeb753f
 
     ! local variables
     character(50) :: file_velocity='velocity.dat'
 
-<<<<<<< HEAD
     if (inode==ionode .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "Welcome to init_ensemble"
 
     if (.not. present(second_call)) then
     ! Initialise the model only once per run
-=======
-    if (first_init) then
-      ! Initialise the model
->>>>>>> 70d374890e3f2300e79930dcf8474b841eeb753f
       lattice_vec = zero
       lattice_vec(1,1) = rcellx
       lattice_vec(2,2) = rcelly
       lattice_vec(3,3) = rcellz
       call mdl%init_model(md_ensemble, MDtimestep, thermo, baro)
-<<<<<<< HEAD
     end if
 
-    ! I've moved the velocity initialisation here to make reading the new
-    ! unified md checkpoint file easier - zamaan
-    ion_velocity = zero
     if (.not. flag_MDcontinue) then
+      ! I've moved the velocity initialisation here to make reading the new
+      ! unified md checkpoint file easier - zamaan
+      ion_velocity = zero
       if (flag_read_velocity) then
         call read_velocity(ion_velocity, file_velocity)
       else
@@ -967,26 +930,9 @@ contains
           if (inode == ionode) then
             call init_velocity(ni_in_cell, temp_ion, ion_velocity)
           end if
-          call gcopy(ion_velocity, 3, ni_in_cell)
-=======
-      if (.not. flag_MDcontinue) then
-        ! I've moved the velocity initialisation here to make reading the new
-        ! unified md checkpoint file easier - zamaan
-        ion_velocity = zero
-        if (flag_read_velocity) then
-          call read_velocity(ion_velocity, file_velocity)
->>>>>>> 70d374890e3f2300e79930dcf8474b841eeb753f
-        else
-          if(temp_ion > RD_ERR) then
-            if (inode == ionode) then
-              call init_velocity(ni_in_cell, temp_ion, ion_velocity)
-            end if
-          else
-            ion_velocity = zero
-          end if
         end if
-        call gcopy(ion_velocity, 3, ni_in_cell)
       end if
+      call gcopy(ion_velocity, 3, ni_in_cell)
     end if
 
     select case(md_ensemble)
@@ -1039,7 +985,6 @@ contains
       end if
     end select
     if (flag_MDcontinue) call read_md_checkpoint(thermo, baro)
-    first_init = .false.
 
   end subroutine init_ensemble
 
@@ -1265,7 +1210,6 @@ subroutine write_md_data(iter, thermo, baro, mdl, nequil)
     if (inode==ionode .and. iprint_MD > 1) &
         write(io_lun,'(2x,a)') "Welcome to write_md_data"
 
-<<<<<<< HEAD
   call write_md_checkpoint(thermo, baro)
   call mdl%dump_stats(md_stats_file, nequil)
   if (inode == ionode .and. mod(iter, MDfreq) == 0) then
@@ -1278,22 +1222,6 @@ subroutine write_md_data(iter, thermo, baro, mdl, nequil)
   if (flag_baroDebug) &
     call baro%dump_baro_state(iter, md_baro_file)
   mdl%append = .true.
-=======
-  if (inode==ionode) then
-    call write_md_checkpoint(thermo, baro)
-    call mdl%dump_stats(md_stats_file)
-    if (mod(iter, MDfreq) == 0) then
-      call mdl%dump_frame(md_frames_file)
-      if (md_tdep) call mdl%dump_tdep
-    end if
-    if (flag_write_xsf) call write_xsf(md_trajectory_file, iter)
-    if (flag_thermoDebug) &
-      call thermo%dump_thermo_state(iter, md_thermo_file)
-    if (flag_baroDebug) &
-      call baro%dump_baro_state(iter, md_baro_file)
-    mdl%append = .true.
-  end if
->>>>>>> 70d374890e3f2300e79930dcf8474b841eeb753f
 
 end subroutine write_md_data
 !!*****

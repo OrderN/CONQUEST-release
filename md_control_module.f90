@@ -953,15 +953,6 @@ contains
                         th%T_ext*fac_Kelvin2Hartree*th%eta(1)
       end if
 
-<<<<<<< HEAD
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
-      write(io_lun,'(4x,"ke_nhc_ion: ",e16.8)') th%ke_nhc_ion
-      write(io_lun,'(4x,"pe_nhc_ion: ",e16.8)') th%pe_nhc_ion
-      write(io_lun,'(4x,"ke_nhc_cell:",e16.8)') th%ke_nhc_cell
-      write(io_lun,'(4x,"pe_nhc_cell:",e16.8)') th%pe_nhc_cell
-      write(io_lun,'(4x,"e_nhc:      ",e16.8)') th%e_nhc
-    end if
-=======
       do k=2,th%n_nhc
         th%ke_nhc_ion = th%ke_nhc_ion + half*th%m_nhc(k)*th%v_eta(k)**2
         th%pe_nhc_ion = th%pe_nhc_ion + th%T_ext*fac_Kelvin2Hartree*th%eta(k)
@@ -973,7 +964,6 @@ contains
         end if
       end do
       th%e_nhc = th%ke_nhc_ion + th%pe_nhc_ion + th%ke_nhc_cell + th%pe_nhc_cell
->>>>>>> 70d374890e3f2300e79930dcf8474b841eeb753f
 
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
         write(io_lun,'(4x,"ke_nhc_ion: ",e16.8)') th%ke_nhc_ion
