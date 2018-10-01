@@ -12,10 +12,10 @@ from pdb import set_trace
 bohr2ang = 0.529177249
 
 def diff_mic(pos1, pos2, cell):
-  """Minimum image convenciton relative vector (orthorhombic ell only)"""
+  """Minimum image convention relative vector (orthorhombic cell only)"""
   diff = pos2 - pos1
   for i in range(3):
-    diff[i] -= round(diff[i]/cell[i])
+    diff[i] -= round(diff[i]/cell[i])*cell[i]
   return diff
 
 def disp_mic_npt(pos1, pos2, cell1, cell2):
