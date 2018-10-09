@@ -79,9 +79,17 @@ contains
        if(flag_run_debug) then
           call io_assign(lun)
           open(unit=lun,file=pte(pseudo(i_species)%z)//"_AtomicVHaVXC.dat")
-          do i=1,nmesh
-             write(lun,fmt='(3e18.10)') rr(i),vha(i),vxc(i)
-          end do
+          ! Write out charge, VHa, VXC and PCC if applicable
+          if(flag_pcc_global) then
+             do i=1,nmesh
+                write(lun,fmt='(5e18.10)') rr(i),local_and_vkb(i_species)%charge(i),vha(i),vxc(i), &
+                     local_and_vkb(i_species)%pcc(i)
+             end do
+          else
+             do i=1,nmesh
+                write(lun,fmt='(4e18.10)') rr(i),local_and_vkb(i_species)%charge(i),vha(i),vxc(i)
+             end do
+          end if
           call io_close(lun)
        end if
        ! Polarisation will be done separately at the end
@@ -193,7 +201,9 @@ contains
                    call find_split_norm(i_species,en,ell+1,paos(i_species)%cutoff(zeta,i_shell),&
                         paos(i_species)%psi(zeta,i_shell)%f,paos(i_species)%psi(1,i_shell)%f)
                 else
-                   call find_polarisation(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell-1),&
+                   ! Set radius of polarisation PAO
+                   paos(i_species)%cutoff(zeta,i_shell) = paos(i_species)%cutoff(zeta,i_shell-1)
+                   call find_polarisation(i_species,en,ell,paos(i_species)%cutoff(zeta,i_shell),&
                         paos(i_species)%psi(zeta,i_shell-1)%f,paos(i_species)%psi(zeta,i_shell)%f,&
                         paos(i_species)%energy(zeta,i_shell-1),vha,vxc)
                 end if
@@ -808,6 +818,7 @@ contains
     logical :: flag_find_radius = .false.
     logical :: flag_confine = .false.
 
+    if(iprint>2) write(*,fmt='(2x,"Entering find_eigenstate_and_energy_vkb")')
     if(present(width).AND.present(prefac)) flag_confine = .true.
     l_half_sq = real(ell,double) + half
     l_half_sq = l_half_sq*l_half_sq
@@ -1009,7 +1020,7 @@ contains
 
     ! Local variables
     integer :: nrc, i
-    real(double) :: psi_val, dpsi_val, a, b, rmatch, norm, rl
+    real(double) :: psi_val, dpsi_val, a, b, c, d, rmatch, norm, rl, dpsip, dpsim, d2psi
     
     ! Find matching point
     call convert_r_to_i(Rc,nrc)
@@ -1018,19 +1029,76 @@ contains
     ! Values of psi and dpsi at Rc
     psi_val = rr(nrc)**ell*psi_match(nrc)
     dpsi_val = half*(rr(nrc+1)**ell*psi_match(nrc+1) - rr(nrc-1)**ell*psi_match(nrc-1)) / drdi(nrc)
+    ! These are used for higher-order polynomial matching
+    !dpsip = half*(rr(nrc+2)**ell*psi_match(nrc+2) - rr(nrc)**ell*psi_match(nrc)) / drdi(nrc+1)
+    !dpsim = half*(rr(nrc)**ell*psi_match(nrc) - rr(nrc-2)**ell*psi_match(nrc-2)) / drdi(nrc-1)
+    !d2psi = half*(dpsip - dpsim) / drdi(nrc)
     ! Coefficients of polynomial
     rl = one
     do i=1,ell
        rl = rl*rmatch
     end do
+    ! Original, simple quadratic a - b*r*r, matching psi and dpsi at rc
     b = half*(dpsi_val*rmatch - real(ell,double)*psi_val)/(rl*rmatch*rmatch)
     a = psi_val/rl - b*rmatch*rmatch
+    if(iprint>3) write(*,*) "Split norm coefficients, radius: ",a,b,rmatch
+    ! -------------------------------------------------------------
+    ! General quadratic a + b*r + c*r*r (added matching psi at r=0)
+    ! -------------------------------------------------------------
+    !if(ell>0) then
+    !   a = zero
+    !else
+    !   a = psi_match(1)
+    !end if
+    !c = (dpsi_val*rmatch + rl*a - real(ell+1,double)*psi_val)/(rl*rmatch*rmatch)
+    !b = (dpsi_val - real(ell,double) * psi_val/rmatch - two*c*rl*rmatch)/rl
+    !if(iprint>3) write(*,*) "Split norm coefficients, radius: ",a,b,c,rmatch
+    ! -------------------------------------------------------------
+    ! Alternate general quadratic a + b*r + c*r*r (added matching d2psi at rc)
+    ! -------------------------------------------------------------
+    !c = half*(d2psi*rmatch*rmatch - real(ell,double) * (dpsi_val * rmatch - psi_val) )/(rl*rmatch*rmatch)
+    !b = (dpsi_val - real(ell,double) * psi_val/rmatch - two*c*rl*rmatch)/rl
+    !a = psi_val/rl - c * rmatch * rmatch - b * rmatch
+    !if(iprint>3) write(*,*) "Split norm coefficients, radius: ",a,b,c,rmatch
+    ! -------------------------------------------------------------
+    ! Cubic a + b*r + c*r*r + d*r*r*r (added d2psi = 0 at rc)
+    ! -------------------------------------------------------------
+    !if(ell>0) then
+    !   a = zero
+    !else
+    !   a = psi_match(1)
+    !end if
+    !d = ( (psi_val - a) - dpsi_val * rmatch) / (rmatch * rmatch * rmatch)
+    !c = -three * d * rmatch
+    !b = dpsi_val - two * c * rmatch - three * d * rmatch * rmatch 
+    !if(iprint>3) write(*,*) "Split norm coefficients, radius: ",a,b,c,d,rmatch
+    ! -------------------------------------------------------------
+    ! Cubic a + b*r + c*r*r + d*r*r*r (added d2psi matches zeta at rc)
+    ! -------------------------------------------------------------
+    !if(ell>0) then
+    !   a = zero
+    !else
+    !   a = psi_match(1)
+    !end if
+    !d = half*( d2psi * rmatch * rmatch - real(2*(ell+1),double) * dpsi_val * rmatch &
+    !     + real((ell+1)*(ell+2),double) * psi_val - two * a) / (rl * rmatch * rmatch * rmatch)
+    !c = dpsi_val/(rl*rmatch) - real(ell+1,double) * psi_val/(rl*rmatch*rmatch) - &
+    !     two * d * rmatch + a/(rmatch * rmatch)
+    !b = psi_val/(rl*rmatch) - c * rmatch - d * rmatch * rmatch  - a/rmatch
+    !if(iprint>3) write(*,*) "Split norm coefficients, radius: ",a,b,c,d,rmatch
     ! Now create the difference between smooth and original
     do i=1,nrc
+       ! Cubic
+       !psi(i) = psi_match(i) - (a + b*rr(i) + c*rr(i)*rr(i) + d*rr(i)*rr(i)*rr(i))
+       ! General quadratic
+       !psi(i) = psi_match(i) - (a + b*rr(i) + c*rr(i)*rr(i))
+       ! Original quadratic
        psi(i) = psi_match(i) - (a + b*rr(i)*rr(i))
     end do
     ! Normalise
+    norm = zero
     do i=1,nrc
+       !norm = norm + rr(i)**(2*ell+2)*psi(i)*psi(i)*drdi_squared(i)
        norm = norm + rr(i)**(2*ell+2)*psi(i)*psi(i)*drdi(i)
     end do
     psi = psi/sqrt(norm)
@@ -1221,6 +1289,7 @@ contains
        if(iprint>6) write(*,fmt='("In integrate_vkb, homogeneous integral is ",f18.10)') integral
        pot_vector(i_proj) = integral*pseudo(species)%pjnl_ekb(nproj_acc + i_proj)
     end do
+    !stop
     ! Inhomogeneous - add VKB projector as source term
     do i_proj = 1,n_proj(ell)
        s(1:n_kink) = two*local_and_vkb(species)%projector(1:n_kink,i_proj,ell)*drdi(1:n_kink)*sqrt(drdi(1:n_kink))
@@ -1636,6 +1705,10 @@ contains
     !Rc = 8.0_double
     call convert_r_to_i(Rc,nmax)
     nmax = nmax - 1
+    ! NEW !
+    write(*,*) 'Rc and rr(nmax) are: ',Rc,rr(nmax)
+    Rc = rr(nmax)
+    ! NEW !
     !write(*,*) "# Nmax is ",nmax
     ! Numerov
     do i=1,nmax
