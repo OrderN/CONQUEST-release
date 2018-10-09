@@ -1898,6 +1898,8 @@ contains
   !!    Added optional argument kpassed to allow for calling of diagonalisation for
   !!    arbitrary k-points (NB at present ONLY works for ONE process group).  Changed
   !!    to define k-point location at start of routine
+  !!   2018/10/08 16:38 dave
+  !!    Changing MPI tags to conform to MPI standard
   !!  SOURCE
   !!
   subroutine DistributeCQ_to_SC(Distrib,matA,pgk,SCmat,kpassed)
@@ -1951,6 +1953,9 @@ contains
     SCmat = zero
     send_size = 0
     recv_size = 0
+    ! We only send one message to each process
+    sendtag = 1
+    recvtag = 1
     call start_timer(tmr_std_matrices)
     do i=1,numprocs
        if(iprint_DM>=4.AND.myid==0) write(io_lun,1) myid,i,send_proc,recv_proc
@@ -2049,7 +2054,6 @@ contains
           ! Do the transfer
           ! ---------------
           if (pgk <= N_kpoints_in_pg(send_pgid)) then
-             sendtag = myid + send_proc*numprocs  ! so that if 1 sends to 3 (5 proc total), sendtag = 16, and receice tag on 3 is 16 too.
              ! Debugging output
              if(iprint_DM>=5.AND.myid==0) then
                 write(io_lun,*) 'Proc: ',myid,' Sizes: ',send_size,recv_size
@@ -2063,7 +2067,6 @@ contains
              end if
           end if
           if (pgk <= N_kpoints_in_pg(pgid)) then
-             recvtag = recv_proc + myid*numprocs
              if(recv_size>0) then
                 call MPI_recv(RecvBuffer,recv_size,MPI_DOUBLE_COMPLEX,&
                      recv_proc,recvtag,MPI_COMM_WORLD,mpi_stat,ierr)
@@ -2180,6 +2183,8 @@ contains
   !!    (i.e. send_size greater than zero)
   !!   2011/02/13 L.Tong
   !!    Added k-point parallelisation
+  !!   2018/10/08 16:38 dave
+  !!    Changing MPI tags to conform to MPI standard
   !!  SOURCE
   !!
   subroutine DistributeSC_to_ref(Distrib,ng,SCeig,localEig)
@@ -2216,6 +2221,9 @@ contains
     localEig = zero
     send_size = 0
     recv_size = 0
+    ! We send two messages; below, we use tag and tag+1
+    sendtag = 1
+    recvtag = 1
     do i=1,numprocs
        if(iprint_DM>=4.AND.myid==0) write(io_lun,1) myid,i,send_proc,recv_proc
        ! Sizes
@@ -2287,8 +2295,6 @@ contains
              ! ---------------
              ! Do the transfer
              ! ---------------
-             ! MPI tags
-             sendtag = myid + send_proc*2*numprocs
              ! Debugging output
              if(iprint_DM>=5.AND.myid==0) then
                 write(io_lun,*) 'Proc: ',myid,' Sizes: ',send_size,recv_size
@@ -2304,8 +2310,6 @@ contains
           end if ! End if (pgid == ng)
 
           if (pgroup(recv_proc + 1) == ng) then ! we only receive from procs in proc_group ng
-             ! MPI tags
-             recvtag = recv_proc + myid*2*numprocs
              if(recv_size>0) then
                 call MPI_recv(roff,1,MPI_INTEGER,recv_proc,recvtag,MPI_COMM_WORLD,mpi_stat,ierr)
                 call MPI_recv(RecvBuffer,recv_size,MPI_DOUBLE_COMPLEX,recv_proc,recvtag+1,MPI_COMM_WORLD,mpi_stat,ierr)
@@ -3358,6 +3362,8 @@ contains
   !!    - Changed length of sent array to include all bands up to last occupied
   !!   2015/06/05 16:43 dave
   !!    Added code to calculate K matrix for individual bands (to allow output of charge density from bands)
+  !!   2018/10/08 16:38 dave
+  !!    Changing MPI tags to conform to MPI standard
   !!  SOURCE
   !!
   subroutine buildK(range, matA, occs, kps, weight, localEig,matBand,locw)
@@ -3623,6 +3629,9 @@ contains
     mapchunk = 0
     send_proc = myid
     recv_proc = myid
+    ! Two messages per process; use tag and tag + 1 below
+    sendtag = 1
+    recvtag = 1
     do i=1,numprocs
        send_size = len*norb_send(send_proc+1)!num_send(send_proc+1)*nsf
        recv_size = len*recv_info(recv_proc+1)%orbs!current_loc_atoms(recv_proc+1)*nsf
@@ -3643,8 +3652,6 @@ contains
                bundle%ig_prim(send_info(send_proc+1,j)),send_FSC(j)
        end do
        if(orb_count/=norb_send(send_proc+1)) call cq_abort("Orbital mismatch in buildK: ",orb_count,norb_send(send_proc+1))
-       sendtag = myid + send_proc*2*numprocs
-       recvtag = recv_proc + myid*2*numprocs
        if(iprint_DM>=4.AND.myid==0) write(io_lun,*) 'Sending'
        ! Now send
        if(send_size>0) then

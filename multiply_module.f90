@@ -111,6 +111,9 @@ contains
   !!     The choice will be done during compilation time.
   !!   2012/09/05 L.Tomg
   !!   - Added timer for matrix multiplication
+  !!   2018/10/04 17:26 dave
+  !!    Added counter for partitions received from different processes (nodes)
+  !!    to use for tags to be compliant with MPI standard
   !!  SOURCE
   !!
   subroutine mat_mult(myid,a,lena,b,lenb,c,lenc,a_b_c,debug)
@@ -164,6 +167,7 @@ contains
     integer, dimension(:), allocatable :: nreqs
     integer :: offset,sends,i,j
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
+    integer, allocatable, dimension(:) :: recv_part
 
     logical flag,call_flag
     real(double) :: t0,t1
@@ -178,6 +182,9 @@ contains
     !allocate(atrans(a_b_c%amat(1)%length),STAT=stat)
     allocate(atrans(lena),STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error allocating atrans')
+    allocate(recv_part(0:a_b_c%comms%inode),STAT=stat)
+    if(stat/=0) call cq_abort('mat_mult: error allocating recv_part')
+    recv_part = zero
     call stop_timer(tmr_std_allocation)
     !write(io_lun,*) 'Sizes: ',a_b_c%comms%mx_dim3*a_b_c%comms%mx_dim2*a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs,&
     !     a_b_c%parts%mx_mem_grp*a_b_c%bmat(1)%mx_abs,a_b_c%comms%mx_dim3*a_b_c%comms%mx_dim1* &
@@ -234,6 +241,7 @@ contains
              ipart = a_b_c%parts%i_cc2seq(ind_part)
              !write(io_lun,*) myid,' Alloc b_rem part: ',ipart
              nnode = a_b_c%comms%neigh_node_list(kpart)
+             recv_part(nnode) = recv_part(nnode)+1
              !write(io_lun,*) myid,' Alloc b_rem node: ',nnode
              !write(io_lun,*) myid,' Alloc b_rem icc: ', a_b_c%parts%i_cc2node(ind_part)
              !write(io_lun,*) myid,' Alloc b_rem alloc: ',allocated(b_rem)
@@ -246,7 +254,7 @@ contains
              allocate(b_rem(lenb_rem))
              call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,icall,&
                   n_cont,part_array,a_b_c%bindex,b_rem,lenb_rem,b,myid,ilen2,&
-                  mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs)
+                  mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs,(recv_part(nnode)-1)*2)
              !write(io_lun,*) 'b_rem: ',lenb_rem
              ! Now point the _rem variables at the appropriate parts of
              ! the array where we will receive the data
@@ -275,6 +283,7 @@ contains
           ipart = a_b_c%parts%i_cc2seq(ind_part)
           !write(io_lun,*) myid,' Alloc b_rem part: ',ipart
           nnode = a_b_c%comms%neigh_node_list(kpart)
+          recv_part(nnode) = recv_part(nnode)+1
           !write(io_lun,*) myid,' Alloc b_rem node: ',nnode
           !write(io_lun,*) myid,' Alloc b_rem icc: ',a_b_c%parts%i_cc2node(ind_part)
           !write(io_lun,*) myid,' Alloc b_rem alloc: ',allocated(b_rem)
@@ -289,7 +298,7 @@ contains
           call stop_timer(tmr_std_allocation)
           call prefetch(kpart,a_b_c%ahalo,a_b_c%comms,a_b_c%bmat,icall,&
                n_cont,part_array,a_b_c%bindex,b_rem,lenb_rem,b,myid,ilen2,&
-               mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs)
+               mx_msg_per_part,a_b_c%parts,a_b_c%prim,a_b_c%gcs,(recv_part(nnode)-1)*2)
           lenb_rem = size(b_rem)
           !write(io_lun,*) 'b_rem: ',lenb_rem
           ! Now point the _rem variables at the appropriate parts of the array
@@ -380,6 +389,8 @@ contains
     call start_timer(tmr_std_allocation)
     deallocate(ibpart_rem,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating ibpart_rem')
+    deallocate(recv_part,STAT=stat)
+    if(stat/=0) call cq_abort('mat_mult: error deallocating recv_part')
     call stop_timer(tmr_std_allocation)
     call my_barrier
     !deallocate(b_rem,STAT=stat)
@@ -598,11 +609,13 @@ contains
   !!  MODIFICATION HISTORY
   !!   20/06/2001 dave
   !!    Added ROBODoc header
+  !!   2018/10/04 17:31 dave
+  !!    Adding tag for MPI compliance
   !!  SOURCE
   !!
   subroutine prefetch(this_part,ahalo,a_b_c,bmat,icall,&
        n_cont,bind_rem,bind,b_rem,lenb_rem,b,myid,ilen2,mx_mpp, &
-       parts,prim,gcs)
+       parts,prim,gcs,tag)
 
     ! Module usage
     use datatypes
@@ -624,7 +637,7 @@ contains
     type(matrix_halo) :: ahalo
     type(comms_data) :: a_b_c
     integer(integ), dimension(:)  :: bind_rem,bind
-    integer :: lenb_rem
+    integer :: lenb_rem, tag
     real(double), dimension(lenb_rem) :: b_rem
     real(double) :: b(:)
     ! Local variables
@@ -652,7 +665,7 @@ contains
             n_cont,inode,ipart,myid,&
             bind_rem,b_rem,lenb_rem,bind,b,&
             a_b_c%istart(ipart,nnode), &
-            bmat(1)%mx_abs,parts%mx_mem_grp)
+            bmat(1)%mx_abs,parts%mx_mem_grp,tag)
     end if
     return
   end subroutine prefetch

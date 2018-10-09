@@ -84,7 +84,10 @@ contains
   !!   2013/10/30
   !!
   !!  MODIFICATION HISTORY
-  !!
+  !!   2018/10/08 07:59 dave
+  !!    Adding recv_part variable to count partitions received from processes
+  !!    to follow update of multiplies (to conform to MPI standard for
+  !!    tags)
   !!  SOURCE
   !!
   subroutine get_X_matrix( exxspin, level )
@@ -167,6 +170,7 @@ contains
          5*mult(S_X_SX)%parts%mx_mem_grp*mult(S_X_SX)%bmat(  exxspin  )%mx_abs)
 
 
+    integer, allocatable, dimension(:) :: recv_part
 
     integer, dimension(:), allocatable  :: nreqs
     integer, dimension(MPI_STATUS_SIZE) :: mpi_stat
@@ -340,6 +344,9 @@ contains
     allocate(nreqs(sends*2),STAT=stat)
     if(stat/=0) call cq_abort("mat_mult: Error allocating nreqs",sends,stat)
     call stop_timer(tmr_std_exx_allocat,.true.)
+    allocate(recv_part(0:mult(S_X_SX)%comms%inode),STAT=stat)
+    if(stat/=0) call cq_abort('mat_mult: error allocating recv_part')
+    recv_part = zero
     !
     sends  = 0
     invdir = 0
@@ -385,6 +392,7 @@ contains
           else ! Get the data
              ipart = mult(S_X_SX)%parts%i_cc2seq(ind_part)
              nnode = mult(S_X_SX)%comms%neigh_node_list(kpart)
+             recv_part(nnode) = recv_part(nnode)+1
              !
              if(allocated(b_rem)) deallocate(b_rem)
              if(mult(S_X_SX)%parts%i_cc2node(ind_part)==myid+1) then
@@ -397,7 +405,8 @@ contains
              !
              call prefetch(kpart,mult(S_X_SX)%ahalo,mult(S_X_SX)%comms,mult(S_X_SX)%bmat,icall, &
                   n_cont,part_array,mult(S_X_SX)%bindex,b_rem,lenb_rem,mat_p(matK(  exxspin  ))%matrix,   &
-                  myid,ilen2,mx_msg_per_part,mult(S_X_SX)%parts,mult(S_X_SX)%prim,mult(S_X_SX)%gcs)
+                  myid,ilen2,mx_msg_per_part,mult(S_X_SX)%parts,mult(S_X_SX)%prim,mult(S_X_SX)%gcs,&
+                  (recv_part(nnode)-1)*2)
              !
              offset = 0
              nbnab_rem => part_array(offset+1:offset+n_cont)
@@ -423,6 +432,7 @@ contains
        else ! Get the data
           ipart = mult(S_X_SX)%parts%i_cc2seq(ind_part)
           nnode = mult(S_X_SX)%comms%neigh_node_list(kpart)
+          recv_part(nnode) = recv_part(nnode)+1
           !
           !
           if(allocated(b_rem)) deallocate(b_rem)
@@ -441,7 +451,8 @@ contains
           !
           call prefetch(kpart,mult(S_X_SX)%ahalo,mult(S_X_SX)%comms,mult(S_X_SX)%bmat,icall, &
                n_cont,part_array,mult(S_X_SX)%bindex,b_rem,lenb_rem,mat_p(matK(  exxspin  ))%matrix,   & 
-               myid,ilen2,mx_msg_per_part,mult(S_X_SX)%parts,mult(S_X_SX)%prim,mult(S_X_SX)%gcs)
+               myid,ilen2,mx_msg_per_part,mult(S_X_SX)%parts,mult(S_X_SX)%prim,mult(S_X_SX)%gcs,&
+               (recv_part(nnode)-1)*2)
           !
           lenb_rem = size(b_rem)
           !
@@ -499,13 +510,15 @@ contains
     call start_timer(tmr_std_exx_dealloc)
     deallocate(nreqs,STAT=stat)
     if(stat/=0) call cq_abort('mat_mult: error deallocating nreqs')
+    deallocate(recv_part,STAT=stat)
+    if(stat/=0) call cq_abort('mat_mult: error deallocating ibpart_rem')
     call stop_timer(tmr_std_exx_dealloc,.true.)
     !
     call my_barrier
     !
     call start_timer(tmr_std_exx_dealloc)
     deallocate(ibpart_rem,STAT=stat)
-    if(stat/=0) call cq_abort('mat_mult: error deallocating ibpart_rem')
+    if(stat/=0) call cq_abort('mat_mult: error deallocating recv_part')
     call stop_timer(tmr_std_exx_dealloc,.true.)
     !
     call my_barrier
