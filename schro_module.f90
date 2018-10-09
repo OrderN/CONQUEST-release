@@ -16,6 +16,8 @@ module schro
   integer, dimension(0:6) :: n_proj ! Number of KB projectors for each l (declare as 6 to avoid alloc)
   logical :: flag_run_debug = .false.
   logical :: flag_plot_output
+  ! Do we use V_{l} (deprecated) ? 
+  logical :: flag_use_Vl
 
   integer :: n_debug_run, l_debug_run
   real(double) :: E_debug_run
@@ -76,6 +78,8 @@ contains
        if(flag_pcc_global) & 
             local_and_vkb(i_species)%charge = local_and_vkb(i_species)%charge + local_and_vkb(i_species)%pcc
        call get_vxc(nmesh,rr,local_and_vkb(i_species)%charge,i_species,vxc)
+       if(flag_pcc_global) & 
+            local_and_vkb(i_species)%charge = local_and_vkb(i_species)%charge - local_and_vkb(i_species)%pcc
        if(flag_run_debug) then
           call io_assign(lun)
           open(unit=lun,file=pte(pseudo(i_species)%z)//"_AtomicVHaVXC.dat")
@@ -1694,9 +1698,19 @@ contains
     !call radial_hartree(nmesh,semilocal(species)%charge,vha,species)
     !call vxc_pz_ca(nmesh,rr,semilocal(species)%charge,vxc)
     e_lower = zero!-zval*zval/real(en*en,double)
-    do i=1,nmesh
-       potential(i) = local_and_vkb(species)%semilocal_potential(i,ell) + vha(i) + vxc(i)
-    end do
+    ! It is both correct and better to use V_{l+1} in semi-local but we allow V_{l} both for
+    ! compatibility with old Siesta pseudopotentials and for cases where we do not have semi-local
+    ! potentials for l+1
+    if((ell+1>pseudo(species)%lmax).OR.flag_use_Vl) then
+       if(ell+1>pseudo(species)%lmax) write(*,*) 'lmax is ',pseudo(species)%lmax,' so perturbing using l not l+1'
+       do i=1,nmesh
+          potential(i) = local_and_vkb(species)%semilocal_potential(i,ell) + vha(i) + vxc(i)
+       end do
+    else 
+       do i=1,nmesh
+          potential(i) = local_and_vkb(species)%semilocal_potential(i,ell+1) + vha(i) + vxc(i)
+       end do
+    end if
     n_loop = 100
     tol = 1.0e-8_double
     ! Energy bounds - allow for unbound states

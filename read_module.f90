@@ -30,7 +30,7 @@ contains
     use mesh, ONLY: mesh_type, hamann, siesta, alpha, beta, nmesh_reg, delta_r_reg
     use schro, ONLY: pseudo_type, flag_user_specified, flag_default_cutoffs, flag_run_debug, &
          pao_cutoff_energies, pao_cutoff_radii, pao_cutoff_default, deltaE_large_radius, deltaE_small_radius, &
-         flag_plot_output, local_and_vkb, val, n_debug_run, l_debug_run, E_debug_run
+         flag_plot_output, local_and_vkb, val, n_debug_run, l_debug_run, E_debug_run, flag_use_Vl
     use pao_info, ONLY: paos
     use units, ONLY: HaToeV
     use radial_xc, ONLY: alloc_xc
@@ -95,6 +95,7 @@ contains
     end if
     ! Is this a debug run ? 
     flag_run_debug = fdf_boolean('General.RunDebug',.false.)
+    flag_use_Vl = fdf_boolean('General.UseVl',.false.) ! Check later whether this is valid
     energy_semicore = fdf_double('General.SemicoreEnergy',-one)
     if(energy_semicore>zero) write(*,fmt='(4x,"Possible error: your semi-core threshold is positive ! ",f6.3)') energy_semicore
     ! Energy cutoffs
