@@ -407,8 +407,8 @@ contains
     end do
     if (th%cell_nhc) then
       th%eta_cell = zero
-!        th%v_eta_cell = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
-      th%v_eta_cell = zero
+      th%v_eta_cell = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
+!      th%v_eta_cell = zero
       th%G_nhc_cell = zero
       do i=2,th%n_nhc
         th%G_nhc_cell(i) = (th%m_nhc_cell(i-1)*th%v_eta_cell(i-1)**2 - &
