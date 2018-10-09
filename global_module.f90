@@ -112,6 +112,20 @@
 !!    Added neutral atom flag
 !!   2016/02/16 JKS
 !!    Added Wu-Cohen XC functional  (PRB 73, 235116  (2006) )
+!!   2016/08/01 17:30 nakata
+!!    Introduced atomf
+!!   2016/08/09 21:30 nakata
+!!    Added parameters for Contracted SFs and multi-site SFs
+!!   2017/02/23 dave
+!!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
+!!   2017/04/05 18:00 nakata
+!!    Added flag_readAtomicSpin to initialise spin
+!!   2017/08/29 jack baker & dave
+!!    Adding variables for cell optimisation
+!!   2017/10/20 09:19 dave
+!!    Moved fire variables to Integrators_module
+!!   2017/12/05 09:59 dave with TM & NW (MIZUHO)
+!!    Added new function type - NA projector function (napf)
 !!  SOURCE
 !!
 module global_module
@@ -145,7 +159,7 @@ module global_module
   integer,      dimension(:,:), allocatable :: sorted_coord ! Atom IDs of atoms sorted according to x, y, z coords
   logical,      dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
   integer,      dimension(:),   allocatable :: flag_cdft_atom
-  logical :: restart_L, restart_rho, restart_T, restart_X
+  logical :: restart_LorK, restart_rho, restart_T, restart_X
 
   integer :: global_maxatomspart ! Maximum atoms per partition, if exceeded, triggers partitioning refinement
 
@@ -153,6 +167,14 @@ module global_module
   logical :: many_processors ! Selects appropriate algorithm for partitioning
 
   character(len=20), save :: runtype ! What type of run is it ?
+
+
+  logical :: flag_opt_cell ! optimize the simulation cell?
+  ! specify sim cell dims/ratios of dims to be held constant.
+  character(len=20), save :: cell_constraint_flag
+  ! Termination condition to exit cell_cg_run
+  real(double) :: cell_en_tol
+
 
   ! Logical flags controlling run
   logical :: flag_vary_basis, flag_self_consistent, flag_residual_done
@@ -191,22 +213,6 @@ module global_module
   integer, parameter :: blips = 1
   integer, parameter :: PAOS  = 2
 
-  ! Numerical flag choosing functional type
-  integer :: flag_functional_type
-  character(len=15)  :: functional_description 
-  integer, parameter :: functional_lda_pz81        = 1
-  integer, parameter :: functional_lda_gth96       = 2
-  integer, parameter :: functional_lda_pw92        = 3    ! PRB 45, 13244 (1992) + PRL 45, 566 (1980)
-  integer, parameter :: functional_xalpha          = 4    ! Slater/Dirac exchange only  ; no correlation
-  integer, parameter :: functional_hartree_fock    = 10   ! Hartree-Fock exact exchange ; no correlation  
-
-  integer, parameter :: functional_gga_pbe96       = 101  ! Standard PBE
-  integer, parameter :: functional_gga_pbe96_rev98 = 102  ! revPBE (PBE + Zhang-Yang 1998)
-  integer, parameter :: functional_gga_pbe96_r99   = 103  ! RPBE   (PBE + Hammer-Hansen-Norskov 1999)
-  integer, parameter :: functional_gga_pbe96_wc    = 104  ! WC   (Wu-Cohen 2006)
-
-  integer, parameter :: functional_hyb_pbe0        = 201  ! PBE0   (hybrid PBE with exx_alpha=0.25)
- 
   ! Switch for variation of blips in get_support_gradient
   integer :: WhichPulay
   integer, parameter :: PhiPulay  = 1
@@ -218,6 +224,8 @@ module global_module
   integer, parameter :: nlpf = 2 ! Projector functions
   integer, parameter :: paof = 3 ! Pseudo-atomic orbitals
   integer, parameter :: dens = 4 ! Atomic charge density
+  integer, parameter :: napf = 5 ! Neutral atom projector functions
+  integer            :: atomf    ! 1(=sf) for blips and primitive paos, 3(=paof) for contracted paos
 
   ! Define areas of the code
   integer, parameter :: n_areas        = 13
@@ -321,10 +329,6 @@ module global_module
   logical :: flag_propagateX,flag_propagateL
   logical :: flag_dissipation
   character(20) :: integratorXL
-  ! FIRE relaxation method
-  ! Parameters adjusted after this many steps if there is slow convergence
-  integer :: fire_N_max, fire_N_min
-  real(double) :: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha
   
   ! Wavefunction output
   logical :: flag_out_wf                        !output WFs?
@@ -346,6 +350,21 @@ module global_module
 
   ! Neutral atom potential
   logical :: flag_neutral_atom
+
+  ! Contracted SF
+  logical :: flag_SpinDependentSF
+  integer :: nspin_SF
+  logical :: flag_SFcoeffReuse
+
+  ! Multisite
+  logical :: flag_Multisite
+  logical :: flag_LFD
+
+  ! diagonalise or linear scaling
+  logical :: flag_diagonalisation
+
+  ! Initialise spin
+  logical :: flag_readAtomicSpin
   
 end module global_module
 !!***

@@ -14,10 +14,21 @@ LINKFLAGS= -L/opt/local/lib
 ARFLAGS=
 
 # L.A. Truflandier intel/mkl/mpich2 compilation
-COMPFLAGS= -g -O3 -fbounds-check
+COMPFLAGS= -O3 $(XC_COMPFLAGS)
 COMPFLAGS_F77= $(COMPFLAGS)
-LIBS=  $(FFT_LIB) -lscalapack ${BLACS} -latlas -llapack -lf77blas -lcblas
+#LIBS=  $(FFT_LIB) -lscalapack ${BLACS} -latlas -llapack -lf77blas -lcblas
+LIBS=  $(FFT_LIB) -lscalapack -lvecLibFort $(XC_LIB)
 
+# XC library or not ?
+XC_LIBRARY = CQ
+XC_LIB =
+XC_COMPFLAGS =
+#XC_LIBRARY = LibXC
+#XC_LIB = -lxcf90 -lxc
+#XC_COMPFLAGS = -I/opt/local/include
+#XC_LIB = -L/Users/dave/lib/lib -lxcf90 -lxc
+#XC_LIB = /Users/dave/lib/lib/libxcf90.a /Users/dave/lib/lib/libxc.a
+#XC_COMPFLAGS = -I/Users/dave/lib/include
 # **<lat>** EXX is "stable" with FFTW (need to fix for the others) 
 FFT_LIB=-lfftw3
 FFT_OBJ=fft_fftw3.o

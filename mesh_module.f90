@@ -321,4 +321,62 @@ contains
     end if
     return
   end subroutine convert_r_to_i
+
+  ! Initially just find gradient (radial)
+  subroutine make_derivatives(func,dfdr,sigma) 
+
+    use datatypes
+    use numbers
+    
+    implicit none
+
+    ! Passed variables
+    real(double), dimension(nmesh) :: func, dfdr
+    real(double), dimension(nmesh), optional :: sigma
+
+    ! Local variables
+    integer :: i
+    real(double) :: c1, c2, c3, c4, c5 ! FD coefficients for mid-points
+    real(double) :: d1, d2, d3, d4, d5 ! FD coefficients for end points
+    real(double) :: dfdn
+
+    c1 = one/twelve
+    c2 = -eight/twelve
+    c3 = zero
+    c4 = eight/twelve
+    c5 = -one/twelve
+
+    d1 = -five*five/twelve
+    d2 = four
+    d3 = -three
+    d4 = four/three
+    d5 = -one/four
+
+    ! Find df/dn then df/dr
+    ! i=1 and i=2 done separately
+    i=1
+    dfdn = d1*func(i) + d2*func(i+1) + d3*func(i+2) + d4*func(i+3) + d5*func(i+4)
+    dfdr(i) = dfdn/(drdi(i))
+    i=2
+    dfdn = d1*func(i) + d2*func(i+1) + d3*func(i+2) + d4*func(i+3) + d5*func(i+4)
+    dfdr(i) = dfdn/(drdi(i))
+    ! Mid points
+    do i=3,nmesh-2
+       ! Omit redundant func(i) as it's scaled by c3=0
+       dfdn = c1*func(i-2) + c2*func(i-1) + c4*func(i+1) + c5*func(i+2)
+       dfdr(i) = dfdn/(drdi(i))
+    end do
+    ! For the last two points use d1->d5 with signs reversed
+    i=nmesh-1
+    dfdn = -d1*func(i) -d2*func(i-1) -d3*func(i-2) -d4*func(i-3) -d5*func(i-4)
+    dfdr(i) = dfdn/(drdi(i))
+    i=nmesh
+    dfdn = -d1*func(i) -d2*func(i-1) -d3*func(i-2) -d4*func(i-3) -d5*func(i-4)
+    dfdr(i) = dfdn/(drdi(i))
+    if(present(sigma)) then
+       do i=1,nmesh
+          sigma(i) = dfdr(i)*dfdr(i)
+       end do
+    end if
+  end subroutine make_derivatives
 end module mesh
