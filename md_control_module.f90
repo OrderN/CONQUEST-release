@@ -968,18 +968,26 @@ contains
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
         write(io_lun,'(4x,"ke_nhc_ion: ",e16.8)') th%ke_nhc_ion
         write(io_lun,'(4x,"pe_nhc_ion: ",e16.8)') th%pe_nhc_ion
-        write(io_lun,'(4x,"ke_nhc_cell:",e16.8)') th%ke_nhc_cell
-        write(io_lun,'(4x,"pe_nhc_cell:",e16.8)') th%pe_nhc_cell
+        if (th%cell_nhc) then
+          write(io_lun,'(4x,"ke_nhc_cell:",e16.8)') th%ke_nhc_cell
+          write(io_lun,'(4x,"pe_nhc_cell:",e16.8)') th%pe_nhc_cell
+        end if
         write(io_lun,'(4x,"e_nhc:      ",e16.8)') th%e_nhc
         call io_assign(lun)
         if (th%append) then
           open(unit=lun,file='nhc.dat',position='append')
         else 
           open(unit=lun,file='nhc.dat',status='replace')
+          write(lun,'(5a16)') "KE ion", "PE ion", "KE cell", "PE cell", "total"
           th%append = .true.
         end if
-        write(lun,'(5e16.8)') th%ke_nhc_ion, th%pe_nhc_ion, th%ke_nhc_cell, &
-                              th%pe_nhc_cell, th%e_nhc
+        if (th%cell_nhc) then
+          write(lun,'(5e16.8)') th%ke_nhc_ion, th%pe_nhc_ion, &
+            th%ke_nhc_cell, th%pe_nhc_cell, th%e_nhc
+        else
+          write(lun,'(5e16.8)') th%ke_nhc_ion, th%pe_nhc_ion, &
+            zero, zero, th%e_nhc
+        end if
         call io_close(lun)
       end if
     end if

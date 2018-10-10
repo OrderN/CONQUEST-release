@@ -165,12 +165,25 @@ if opts.nequil == 0:
   opts.nequil = opts.nskip
 
 if not opts.compare:
-  # Parse the md.in parameters file
+  # Parse the input structure and Conquest_input files
   cq_params = parse_cq_input(cq_input_file)
   init_config = parse_init_config(cq_params['IO.Coordinates'])
   natoms = init_config['natoms']
   dt = float(cq_params['AtomMove.Timestep'])
   species = cq_params['species']
+  extended_system = False
+  if 'MD.Thermostat' in cq_params.keys():
+    if cq_params['MD.Thermostat'] == 'nhc':
+      extended_system = True
+    if cq_params['MD.Thermostat'] == 'ssm':
+      extended_system = True
+  if 'MD.Barostat' in cq_params.keys():
+    if cq_params['MD.Barostat'] == 'iso-ssm':
+      extended_system = True
+    if cq_params['MD.Barostat'] == 'ortho-ssm':
+      extended_system = True
+    if cq_params['MD.Barostat'] == 'iso-mttk':
+      extended_system = True
 
   # Parse the statistics file
   nsteps, data = read_stats(opts.statfile,opts.nstop)
@@ -194,10 +207,10 @@ if not opts.compare:
   ax1a = ax1.twinx()
   ax1a.plot(data['time'][opts.nskip:], data['ke'][opts.nskip:], 'b-', label='Kinetic energy')
   if cq_params['MD.Ensemble'][2] == 't':
-    if cq_params['MD.Thermostat'] == 'nhc':
+    if extended_system:
       ax1a.plot(data['time'][opts.nskip:], data['nhc'][opts.nskip:], 'g-', label='NHC energy')
   if cq_params['MD.Ensemble'][1] == 'p':
-    if 'mttk' in cq_params['MD.Barostat']:
+    if extended_system:
       ax1a.plot(data['time'][opts.nskip:], data['box'][opts.nskip:], 'c-', label='Box energy')
     ax1a.plot(data['time'][opts.nskip:], data['pV'][opts.nskip:], 'm-', label='pV')
   ax2.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:])
