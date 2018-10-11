@@ -276,10 +276,12 @@ contains
     th%tau_T = tau_T
     th%thermo_type = thermo_type
     th%baro_type = baro_type
+    th%cell_nhc = md_cell_nhc
 
     select case(baro_type)
     case('none')
       th%cell_ndof = 0
+      th%cell_nhc = .false.
     case('iso-mttk')
       th%cell_ndof = 1
     case('ortho-mttk')
@@ -299,6 +301,8 @@ contains
                                      th%T_ext
         write(io_lun,'(4x,a,f10.2)') 'Coupling time period      tau_T = ', &
                                      th%tau_T
+        write(io_lun,'(4x,a,l)')     'Cell NHC                          ', &
+                                     th%cell_nhc
       end if
     end if
 
@@ -349,7 +353,6 @@ contains
     th%n_ys = md_n_ys
     th%n_mts_nhc = md_n_mts
     th%lambda = one
-    th%cell_nhc  = md_cell_nhc
     th%t_drag = one - (md_t_drag*dt/md_tau_T/md_n_mts/md_n_ys)
     th%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*th%T_ext
     write(th%nhc_fmt,'("(4x,a12,",i4,"e14.6)")') th%n_nhc
@@ -359,14 +362,11 @@ contains
     allocate(th%v_eta(th%n_nhc))
     allocate(th%G_nhc(th%n_nhc))
     allocate(th%m_nhc(th%n_nhc))
-    call reg_alloc_mem(area_moveatoms, 4*th%n_nhc, type_dbl)
-    if (th%cell_nhc) then
-      allocate(th%eta_cell(th%n_nhc))    ! independent thermostat for cell DOFs
-      allocate(th%v_eta_cell(th%n_nhc))
-      allocate(th%G_nhc_cell(th%n_nhc))
-      allocate(th%m_nhc_cell(th%n_nhc))
-      call reg_alloc_mem(area_moveatoms, 4*th%n_nhc, type_dbl)
-    end if
+    allocate(th%eta_cell(th%n_nhc))    ! independent thermostat for cell DOFs
+    allocate(th%v_eta_cell(th%n_nhc))
+    allocate(th%G_nhc_cell(th%n_nhc))
+    allocate(th%m_nhc_cell(th%n_nhc))
+    call reg_alloc_mem(area_moveatoms, 8*th%n_nhc, type_dbl)
 
     ! Calculate the masses for extended lagrangian variables?
     if (md_calc_xlmass) then
@@ -405,11 +405,11 @@ contains
       th%G_nhc(i) = (th%m_nhc(i-1)*th%v_eta(i-1)**2 - &
                     & th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(i)
     end do
+    th%eta_cell = zero
+    th%v_eta_cell = zero
+    th%G_nhc_cell = zero
     if (th%cell_nhc) then
-      th%eta_cell = zero
       th%v_eta_cell = sqrt(two*th%T_ext*fac_Kelvin2Hartree/th%m_nhc(1)) 
-!      th%v_eta_cell = zero
-      th%G_nhc_cell = zero
       do i=2,th%n_nhc
         th%G_nhc_cell(i) = (th%m_nhc_cell(i-1)*th%v_eta_cell(i-1)**2 - &
                            & th%T_ext*fac_Kelvin2Hartree)/th%m_nhc_cell(i)
@@ -1029,7 +1029,7 @@ contains
       write(lun,'("T_int       ",f12.4)') th%T_int
       write(lun,'("ke_ions     ",e12.4)') th%ke_ions
       write(lun,'("lambda      ",f12.4)') th%lambda
-      if (th%thermo_type == 'nhc') then
+      if (flag_extended_system) then
         write(lun,th%nhc_fmt) "eta:        ", th%eta
         write(lun,th%nhc_fmt) "v_eta:      ", th%v_eta
         write(lun,th%nhc_fmt) "G_nhc:      ", th%G_nhc
