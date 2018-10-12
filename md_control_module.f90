@@ -551,7 +551,7 @@ contains
     case default
       call cq_abort("Invalid Yoshida-Suzuki order")
     end select
-    th%dt_ys = dt*th%dt_ys/th%n_mts_nhc
+    th%dt_ys = dt*th%dt_ys
     deallocate(psuz)
 
   end subroutine init_ys
@@ -1900,7 +1900,7 @@ contains
 
     do i_ys = 1,th%n_ys ! Yoshida-Suzuki loop
       do i_mts = 1,th%n_mts_nhc ! multiple time step loop
-        dt_mts = th%dt_ys(i_ys)/real(th%n_mts_nhc, double)/real(th%n_ys, double)
+        dt_mts = th%dt_ys(i_ys)/real(th%n_mts_nhc, double)
         ! Box NHC velocity update
         do i_nhc = th%n_nhc, 2, -1
           if (i_nhc==th%n_nhc) then
@@ -2005,7 +2005,7 @@ contains
 
     do i_ys=1,th%n_ys ! Yoshida-Suzuki loop
       do i_mts=1,th%n_mts_nhc ! Multiple time step loop
-        dt_mts = th%dt_ys(i_ys)/real(th%n_mts_nhc, double)/real(th%n_ys, double)
+        dt_mts = th%dt_ys(i_ys)/real(th%n_mts_nhc, double)
 
         ! Particle NHC velocity update
         do i_nhc = th%n_nhc, 2, -1
