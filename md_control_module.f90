@@ -1384,10 +1384,11 @@ contains
   !!   2017/11/17 14:09
   !!  SOURCE
   !!  
-  subroutine get_box_energy(baro)
+  subroutine get_box_energy(baro, final_call)
 
     ! passed variables
     class(type_barostat), intent(inout)         :: baro
+    integer, optional                           :: final_call
 
     ! local variables
     integer                                     :: i
@@ -1409,9 +1410,11 @@ contains
       end select
     end if
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
-      write(io_lun,'(2x,a)') "get_box_energy"
-      write(io_lun,'(4x,a,e16.8)') "ke_box:     ", baro%ke_box
+    if (present(final_call)) then
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+        write(io_lun,'(2x,a)') "get_box_energy"
+        write(io_lun,'(4x,a,e16.8)') "ke_box:     ", baro%ke_box
+      end if
     end if
 
   end subroutine get_box_energy
@@ -1898,8 +1901,8 @@ contains
     th%G_nhc_cell(1) = (two*baro%ke_box - th%cell_ndof*th%T_ext*fac_Kelvin2Hartree) / &
                        th%m_nhc_cell(1)
 
-    do i_ys = 1,th%n_ys ! Yoshida-Suzuki loop
-      do i_mts = 1,th%n_mts_nhc ! multiple time step loop
+    do i_mts = 1,th%n_mts_nhc ! multiple time step loop
+      do i_ys = 1,th%n_ys ! Yoshida-Suzuki loop
         dt_mts = th%dt_ys(i_ys)/real(th%n_mts_nhc, double)
         ! Box NHC velocity update
         do i_nhc = th%n_nhc, 2, -1
@@ -1964,8 +1967,8 @@ contains
                                  th%G_nhc_cell(i_nhc)*dt_mts*quarter
           th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
         end do
-      end do ! Multiple time step loop
-    end do ! Yoshida-Suzuki loop
+      end do ! Yoshida-Suzuki loop
+    end do ! Multiple time step loop
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then 
       write(io_lun,th%nhc_fmt) "eta_cell:   ", th%eta_cell
@@ -2003,8 +2006,8 @@ contains
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
       write(io_lun,'(2x,a)') "integrate_particle_nhc"
 
-    do i_ys=1,th%n_ys ! Yoshida-Suzuki loop
-      do i_mts=1,th%n_mts_nhc ! Multiple time step loop
+    do i_mts=1,th%n_mts_nhc ! Multiple time step loop
+      do i_ys=1,th%n_ys ! Yoshida-Suzuki loop
         dt_mts = th%dt_ys(i_ys)/real(th%n_mts_nhc, double)
 
         ! Particle NHC velocity update
@@ -2045,7 +2048,7 @@ contains
         ! Particle NHC velocity and force update
         th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
         th%v_eta(1) = th%v_eta(1)*expfac_t
-        th%v_eta(1) = th%v_eta(1) + th%dt*quarter*th%G_nhc(1)
+        th%v_eta(1) = th%v_eta(1) + dt_mts*quarter*th%G_nhc(1)
         th%v_eta(1) = th%v_eta(1)*expfac_t
 
         do i_nhc = 2, th%n_nhc
@@ -2061,8 +2064,8 @@ contains
                             th%G_nhc(i_nhc)*dt_mts*quarter
           th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
         end do
-      end do ! Multiple time step loop
-    end do ! Yoshida-Suzuki loop
+      end do ! Yoshida-Suzuki loop
+    end do ! Multiple time step loop
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then 
       write(io_lun,th%nhc_fmt) "eta:   ", th%eta

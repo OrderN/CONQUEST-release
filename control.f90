@@ -800,7 +800,7 @@ contains
 
        ! Compute and print the conserved quantity and its components
        call thermo%get_nhc_energy
-       call baro%get_box_energy
+       call baro%get_box_energy(final_call)
        call mdl%get_cons_qty
        call mdl%print_md_energy()
 
