@@ -2153,22 +2153,29 @@ contains
     real(double), dimension(:,:), intent(inout) :: v
 
     ! local variables
-    real(double)                            :: expfac
+    real(double)                            :: expfac, const
     integer                                 :: i
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
       write(io_lun,'(2x,a)') "couple_box_particle_velocity"
 
+    const = zero
     select case(baro%baro_type)
     case('iso-ssm')
-      expfac = exp(-quarter*baro%dt*baro%odnf*baro%v_eps)
+      const = three*baro%v_eps/md_ndof_ions
+!      expfac = exp(-quarter*baro%dt*baro%odnf*baro%v_eps)
+      expfac = exp(-quarter*baro%dt*baro%odnf*(baro%v_eps + const))
       v  = v*expfac**2
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
         write(io_lun,'(4x,"expfac: ",f16.8)') expfac
     case('ortho-ssm')
       do i=1,3
-        expfac = exp(-quarter*baro%dt*baro%odnf*baro%v_h(i,i))
-        v(i,:) = v(i,:)*expfac
+        const = const + baro%v_h(i,i)
+      end do
+      const = const/md_ndof_ions
+      do i=1,3
+        expfac = exp(-quarter*baro%dt*baro%odnf*(baro%v_h(i,i)+const))
+        v(i,:) = v(i,:)*expfac**2
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
         write(io_lun,'(4x,"expfac ",i2,": ",f16.8)') i, expfac
       end do
