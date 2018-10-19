@@ -1960,6 +1960,9 @@ contains
                                  th%G_nhc_cell(i_nhc)*th%dt_ys(i_ys)*quarter
           th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
         end do
+        th%G_nhc_cell(th%n_nhc) = (th%m_nhc(th%n_nhc-1)*th%v_eta_cell(th%n_nhc-1)**2 &
+                                  - th%T_ext*fac_Kelvin2Hartree) &
+                                  / th%m_nhc_cell(th%n_nhc)
         th%v_eta_cell(th%n_nhc) = th%v_eta_cell(th%n_nhc) + &
                                   th%G_nhc_cell(th%n_nhc)*th%dt_ys(i_ys)*quarter
       end do ! Yoshida-Suzuki loop
@@ -1996,13 +1999,12 @@ contains
     real(double)                            :: v_sfac, v_eta_couple, &
                                                expfac_t, expfac_vpart
 
-    th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
-
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
       write(io_lun,'(2x,a)') "integrate_particle_nhc"
 
     th%ke_ions = ke
     v_sfac = one
+    th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
     do i_mts=1,th%n_mts_nhc ! Multiple time step loop
       do i_ys=1,th%n_ys ! Yoshida-Suzuki loop
         ! Particle NHC velocity update
@@ -2051,6 +2053,8 @@ contains
                             th%G_nhc(i_nhc)*th%dt_ys(i_ys)*quarter
           th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
         end do
+        th%G_nhc(th%n_nhc) = (th%m_nhc(th%n_nhc-1)*th%v_eta(th%n_nhc-1)**2 - &
+                          th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(th%n_nhc)
         th%v_eta(th%n_nhc) = th%v_eta(th%n_nhc) + &
                              th%G_nhc(th%n_nhc)*th%dt_ys(i_ys)*quarter
       end do ! Yoshida-Suzuki loop
