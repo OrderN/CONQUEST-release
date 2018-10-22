@@ -656,6 +656,8 @@ contains
   !!    Adding zero T requirement for flag_quench_MD as well as FIRE
   !!   2018/09/19 18:30 nakata
   !!    Added flag_pDOS_angmom for orbital angular momentum resolved PDOS
+  !!   2018/10/22 14:26 dave & jsb
+  !!    Added flag_PDOS_lm for (l,m) projected DOS
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -713,7 +715,7 @@ contains
                              flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter,         &
                              flag_out_wf,flag_out_wf_by_kp,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
                              flag_write_DOS, flag_write_projected_DOS, &
-                             flag_normalise_pDOS, flag_pDOS_angmom, &
+                             flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm, &
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
@@ -1487,6 +1489,7 @@ contains
              n_DOS = fdf_integer('IO.n_DOS',201)
              flag_normalise_pDOS = fdf_boolean('IO.normalise_PDOS',.true.)
              flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
+             flag_pDOS_lm = fdf_boolean('IO.PDOS_lm_resolved',.false.)
              if (.not.flag_write_projected_DOS) then
                 flag_normalise_pDOS = .false.
                 flag_pDOS_angmom = .false.
