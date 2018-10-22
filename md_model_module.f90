@@ -489,54 +489,54 @@ contains
     class(type_md_model), intent(inout)   :: mdl
  
     ! local variables
-    integer                               :: lunp, lunm, lunf, luns, lunl, i
+    integer                               :: lun1, lun2, i
  
     if (inode==ionode) then
       if (flag_MDdebug .and. iprint_MD > 1) &
         write(io_lun,*) "Writing TDEP output"
-      call io_assign(lunm)
-      call io_assign(lunp)
-      call io_assign(lunf)
-      call io_assign(luns)
-      call io_assign(lunl)
- 
-      open(unit=lunm,file=file_meta,status='replace')
-      if (mdl%append) then
-        open(unit=lunp,file=file_positions,status='old',position='append')
-        open(unit=lunf,file=file_forces,status='old',position='append')
-        open(unit=luns,file=file_stat,status='old',position='append')
-        open(unit=lunl,file=file_loto,status='old',position='append')
-      else 
-        open(unit=lunp,file=file_positions,status='replace')
-        open(unit=lunf,file=file_forces,status='replace')
-        open(unit=luns,file=file_stat,status='replace')
-        open(unit=lunl,file=file_loto,status='replace')
-      end if
+      call io_assign(lun1)
+      open(unit=lun1,file=file_meta,status='replace')
+      write(lun1,'(i12,a)') mdl%natoms, " # N atoms"
+      write(lun1,'(i12,a)') mdl%step, " # N time steps"
+      write(lun1,'(f12.2,a)') mdl%timestep, " # time step in fs"
+      write(lun1,'(f12.2,a)') mdl%T_ext, " # temperature in K"
+      call io_close(lun1)
 
-      write(lunm,'(i12,a)') mdl%natoms, " # N atoms"
-      write(lunm,'(i12,a)') mdl%step, " # N time steps"
-      write(lunm,'(f12.2,a)') mdl%timestep, " # time step in fs"
-      write(lunm,'(f12.2,a)') mdl%T_ext, " # temperature in K"
-      call io_close(lunm)
+      call io_assign(lun1)
+      call io_assign(lun2)
+ 
+      if (mdl%append) then
+        open(unit=lun1,file=file_positions,status='old',position='append')
+        open(unit=lun2,file=file_forces,status='old',position='append')
+      else 
+        open(unit=lun1,file=file_positions,status='replace')
+        open(unit=lun2,file=file_forces,status='replace')
+      end if
  
       do i=1,mdl%natoms
-        write(lunp,'(3e20.12)') mdl%pos_x(i)/mdl%lat_a, &
+        write(lun1,'(3e20.12)') mdl%pos_x(i)/mdl%lat_a, &
                                 mdl%pos_y(i)/mdl%lat_b, &
                                 mdl%pos_z(i)/mdl%lat_c
-        write(lunf,'(3e20.12)') mdl%atom_force(:,i)*HaToeV/BohrToAng
+        write(lun2,'(3e20.12)') mdl%atom_force(:,i)*HaToeV/BohrToAng
       end do
-      call io_close(lunp)
-      call io_close(lunf)
+      call io_close(lun1)
+      call io_close(lun2)
 
-      write(luns,'(i7,f10.1,3e16.8,8e14.6)') mdl%step, mdl%step*mdl%timestep, &
+      call io_assign(lun1)
+      if (mdl%append) then
+        open(unit=lun1,file=file_stat,status='old',position='append')
+      else 
+        open(unit=lun1,file=file_stat,status='replace')
+      end if
+
+      write(lun1,'(i7,f10.1,3e16.8,8e14.6)') mdl%step, mdl%step*mdl%timestep, &
         (mdl%dft_total_energy+mdl%ion_kinetic_energy)*HaToeV, &
         mdl%dft_total_energy*HaToeV, &
         mdl%ion_kinetic_energy*HaToeV, mdl%T_int, mdl%P_int, &
         mdl%stress(1)*fac_HaBohr32GPa, mdl%stress(2)*fac_HaBohr32GPa, &
         mdl%stress(3)*fac_HaBohr32GPa, zero, zero, zero
  
-      call io_close(luns)
-      call io_close(lunl)
+      call io_close(lun1)
     end if
 
   end subroutine dump_tdep
