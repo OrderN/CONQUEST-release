@@ -1032,17 +1032,8 @@ contains
         call thermo%propagate_nvt_nhc(velocity, mdl%ion_kinetic_energy)
         if (present(second_call)) call thermo%get_nhc_energy
       case('ssm')
-        if (present(second_call)) then
-          call thermo%get_temperature_and_ke(baro, velocity, &
-                                             mdl%ion_kinetic_energy)
-          call baro%get_pressure_and_stress
-          call thermo%integrate_particle_nhc(velocity, mdl%ion_kinetic_energy)
-        else
-          call thermo%integrate_particle_nhc(velocity, mdl%ion_kinetic_energy)
-          call thermo%get_temperature_and_ke(baro, velocity, &
-                                             mdl%ion_kinetic_energy)
-          call baro%get_pressure_and_stress
-        end if
+        call thermo%integrate_particle_nhc(velocity, mdl%ion_kinetic_energy)
+        if (present(second_call)) call thermo%get_nhc_energy
       case('berendsen')
         if (present(second_call)) then
           call thermo%berendsen_v_rescale(velocity)

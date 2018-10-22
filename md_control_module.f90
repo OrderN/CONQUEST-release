@@ -755,7 +755,7 @@ contains
     if (th%cell_nhc) th%eta_cell(k) = th%eta_cell(k) + &
                      dtfac*dt*th%v_eta_cell(k)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
       write(io_lun,'(2x,a,i2)') "propagate_eta, k = ", k
       write(io_lun,th%nhc_fmt) "eta:        ", th%eta(k)
       if (th%cell_nhc) write(io_lun,th%nhc_fmt) "eta_cell:   ", th%eta_cell(k)
@@ -787,7 +787,7 @@ contains
     if (th%cell_nhc) th%v_eta_cell(k) = th%v_eta_cell(k) + &
                                         dtfac*dt*th%G_nhc_cell(k)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
       write(io_lun,'(2x,a,i2)') "propagate_v_eta_lin, k = ", k
       write(io_lun,th%nhc_fmt) "v_eta:      ", th%v_eta(k)
       if (th%cell_nhc) write(io_lun,th%nhc_fmt) &
@@ -820,7 +820,7 @@ contains
     if (th%cell_nhc) th%v_eta_cell(k) = &
                           th%v_eta_cell(k)*exp(-dtfac*dt*th%v_eta_cell(k+1))
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
       write(io_lun,'(2x,a,i2)') "propagate_v_eta_exp, k = ", k
       write(io_lun,th%nhc_fmt) "v_eta:      ", th%v_eta(k)
       if (th%cell_nhc) &
@@ -904,6 +904,12 @@ contains
 
     v = v_sfac*v
     th%lambda = v_sfac
+
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then 
+      write(io_lun,th%nhc_fmt) "eta:   ", th%eta
+      write(io_lun,th%nhc_fmt) "v_eta: ", th%v_eta
+      write(io_lun,th%nhc_fmt) "G_nhc: ", th%G_nhc
+    end if
 
   end subroutine propagate_nvt_nhc
   !!***
@@ -1468,7 +1474,7 @@ contains
 
     baro%eps = baro%eps + dtfac*dt*baro%v_eps
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) &
       write(io_lun,'(2x,a)') "propagate_eps_lin"
       write(io_lun,'(4x,a,e16.8)') "eps:        ", baro%eps
 
@@ -1496,7 +1502,7 @@ contains
 
     baro%eps = baro%eps*exp(-dtfac*dt*v_eta_1)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
       write(io_lun,*) "propagate_eps_exp"
       write(io_lun,'(4x,a,e16.8)') "eps:        ", baro%eps
     end if
@@ -1524,7 +1530,7 @@ contains
 
     baro%v_eps = baro%v_eps + dtfac*dt*baro%G_eps
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
       write(io_lun,*) "propagate_v_eps_lin"
       write(io_lun,'(4x,a,e16.8)') "v_eps       ", baro%v_eps
     end if
@@ -1553,7 +1559,7 @@ contains
 
     baro%v_eps = baro%v_eps*exp(-dtfac*dt*v_eta_1)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
       write(io_lun,'(2x,a)') "propagate_v_eps_lin"
       write(io_lun,'(4x,a,e16.8)') "v_eps       ", baro%v_eps
     end if
@@ -1592,7 +1598,7 @@ contains
       th%ke_ions = th%ke_ions*expfac**2
     end select
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
       write(io_lun,'(2x,a)') "update_vscale_fac"
       write(io_lun,'(4x,a,e16.8)') "v_sfac:     ", v_sfac
     end if
@@ -1906,7 +1912,7 @@ contains
         ! Box NHC velocity update
         th%v_eta_cell(th%n_nhc) = th%v_eta_cell(th%n_nhc) + &
                                   th%G_nhc_cell(th%n_nhc)*th%dt_ys(i_ys)*quarter
-        do i_nhc = th%n_nhc-1, 2, -1
+        do i_nhc = th%n_nhc-1, 1, -1
           expfac_p = exp(-one_eighth*th%dt_ys(i_ys)*th%v_eta_cell(i_nhc+1))
           th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
           th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc) + &
@@ -1914,16 +1920,6 @@ contains
           th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*baro%p_drag
           th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
         end do
-
-        if (th%n_nhc > 1) then
-          expfac_p = exp(-one_eighth*th%dt_ys(i_ys)*th%v_eta_cell(2))
-        else
-          expfac_p = one
-        end if
-        th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
-        th%v_eta_cell(1) = th%v_eta_cell(1) + th%dt_ys(i_ys)*quarter*th%G_nhc(1)
-        th%v_eta_cell(1) = th%v_eta_cell(1)*baro%p_drag
-        th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
 
         ! Propagate eta_cell (bookkeeping)
         do i_nhc=1,th%n_nhc
@@ -1945,24 +1941,16 @@ contains
         th%G_nhc_cell(1) = (two*baro%ke_box - &
           th%cell_ndof*th%T_ext*fac_Kelvin2Hartree) / th%m_nhc_cell(1)
 
-        ! Box NHC velocity and force update
-        th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
-        th%v_eta_cell(1) = th%v_eta_cell(1) + th%dt_ys(i_ys)*quarter*th%G_nhc(1)
-        th%v_eta_cell(1) = th%v_eta_cell(1)*expfac_p
-
-        do i_nhc = 2, th%n_nhc-1
+        do i_nhc = 1, th%n_nhc-1
           expfac_p = exp(-one_eighth*th%dt_ys(i_ys)*th%v_eta_cell(i_nhc+1))
           th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
-          th%G_nhc_cell(i_nhc) = (th%m_nhc(i_nhc-1)*th%v_eta_cell(i_nhc-1)**2 &
+          th%G_nhc_cell(i_nhc+1) = (th%m_nhc(i_nhc)*th%v_eta_cell(i_nhc)**2 &
                                  - th%T_ext*fac_Kelvin2Hartree)/&
-                                 th%m_nhc_cell(i_nhc)
+                                 th%m_nhc_cell(i_nhc+1)
           th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc) + &
                                  th%G_nhc_cell(i_nhc)*th%dt_ys(i_ys)*quarter
           th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
         end do
-        th%G_nhc_cell(th%n_nhc) = (th%m_nhc(th%n_nhc-1)*th%v_eta_cell(th%n_nhc-1)**2 &
-                                  - th%T_ext*fac_Kelvin2Hartree) &
-                                  / th%m_nhc_cell(th%n_nhc)
         th%v_eta_cell(th%n_nhc) = th%v_eta_cell(th%n_nhc) + &
                                   th%G_nhc_cell(th%n_nhc)*th%dt_ys(i_ys)*quarter
       end do ! Yoshida-Suzuki loop
@@ -2010,7 +1998,7 @@ contains
         ! Particle NHC velocity update
         th%v_eta(th%n_nhc) = th%v_eta(th%n_nhc) + &
                              th%G_nhc(th%n_nhc)*th%dt_ys(i_ys)*quarter
-        do i_nhc = th%n_nhc-1, 2, -1
+        do i_nhc = th%n_nhc-1, 1, -1
           expfac_t = exp(-one_eighth*th%dt_ys(i_ys)*th%v_eta(i_nhc+1))
           th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
           th%v_eta(i_nhc) = th%v_eta(i_nhc) + &
@@ -2018,16 +2006,6 @@ contains
           th%v_eta(i_nhc) = th%v_eta(i_nhc)*th%t_drag
           th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
         end do
-
-        if (th%n_nhc > 1) then
-          expfac_t = exp(-one_eighth*th%dt_ys(i_ys)*th%v_eta(2))
-        else
-          expfac_t = one
-        end if
-        th%v_eta(1) = th%v_eta(1)*expfac_t
-        th%v_eta(1) = th%v_eta(1) + th%dt_ys(i_ys)*quarter*th%G_nhc(1)
-        th%v_eta(1) = th%v_eta(1)*th%t_drag
-        th%v_eta(1) = th%v_eta(1)*expfac_t
 
         ! Propagate eta (bookkeeping)
         do i_nhc=1,th%n_nhc
@@ -2041,26 +2019,24 @@ contains
 
         ! Particle NHC velocity and force update
         th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
-        th%v_eta(1) = th%v_eta(1)*expfac_t
-        th%v_eta(1) = th%v_eta(1) + th%dt_ys(i_ys)*quarter*th%G_nhc(1)
-        th%v_eta(1) = th%v_eta(1)*expfac_t
-        do i_nhc = 2, th%n_nhc-1
+        do i_nhc = 1, th%n_nhc-1
           expfac_t = exp(-one_eighth*th%dt_ys(i_ys)*th%v_eta(i_nhc+1))
           th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
-          th%G_nhc(i_nhc) = (th%m_nhc(i_nhc-1)*th%v_eta(i_nhc-1)**2 - &
-                            th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(i_nhc)
+          th%G_nhc(i_nhc+1) = (th%m_nhc(i_nhc)*th%v_eta(i_nhc)**2 - &
+                            th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(i_nhc+1)
           th%v_eta(i_nhc) = th%v_eta(i_nhc) + &
                             th%G_nhc(i_nhc)*th%dt_ys(i_ys)*quarter
           th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
         end do
-        th%G_nhc(th%n_nhc) = (th%m_nhc(th%n_nhc-1)*th%v_eta(th%n_nhc-1)**2 - &
-                          th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(th%n_nhc)
         th%v_eta(th%n_nhc) = th%v_eta(th%n_nhc) + &
                              th%G_nhc(th%n_nhc)*th%dt_ys(i_ys)*quarter
       end do ! Yoshida-Suzuki loop
     end do ! Multiple time step loop
 
     ! Scale the velocities
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
+      write(io_lun,'(2x,a,e16.8)') 'v_sfac = ', v_sfac
+
     th%lambda = v_sfac
     v = v_sfac*v
 
@@ -2283,27 +2259,27 @@ contains
             baro%lat(1,1), baro%lat(2,2), baro%lat(3,3)
       select case(baro%baro_type)
       case('iso-mttk')
-        write(lun,'("eps     ",f12.6)') baro%eps
-        write(lun,'("v_eps   ",f12.6)') baro%v_eps
-        write(lun,'("G_eps   ",f12.6)') baro%G_eps
-        write(lun,'("ke_box  ",f12.6)') baro%ke_box
-        write(lun,'("mu      ",f12.6)') baro%mu
+        write(lun,'("eps     ",e14.6)') baro%eps
+        write(lun,'("v_eps   ",e14.6)') baro%v_eps
+        write(lun,'("G_eps   ",e14.6)') baro%G_eps
+        write(lun,'("ke_box  ",e14.6)') baro%ke_box
+        write(lun,'("mu      ",e14.6)') baro%mu
       case('ortho-mttk')
       case('mttk')
       case('iso-ssm')
-        write(lun,'("eps     ",f12.6)') baro%eps
-        write(lun,'("v_eps   ",f12.6)') baro%v_eps
-        write(lun,'("G_eps   ",f12.6)') baro%G_eps
-        write(lun,'("ke_box  ",f12.6)') baro%ke_box
+        write(lun,'("eps     ",e14.6)') baro%eps
+        write(lun,'("v_eps   ",e14.6)') baro%v_eps
+        write(lun,'("G_eps   ",e14.6)') baro%G_eps
+        write(lun,'("ke_box  ",e14.6)') baro%ke_box
       case('ortho-ssm')
-        write(lun,'("h       ",3f12.6)') baro%h(1,1), baro%h(2,2), baro%h(3,3)
-        write(lun,'("v_h     ",3f12.6)') baro%v_h(1,1), baro%v_h(2,2), &
+        write(lun,'("h       ",3e14.6)') baro%h(1,1), baro%h(2,2), baro%h(3,3)
+        write(lun,'("v_h     ",3e14.6)') baro%v_h(1,1), baro%v_h(2,2), &
                                          baro%v_h(3,3)
-        write(lun,'("G_h     ",3f12.6)') baro%G_h(1,1), baro%G_h(2,2), &
+        write(lun,'("G_h     ",3e14.6)') baro%G_h(1,1), baro%G_h(2,2), &
                                          baro%G_h(3,3)
-        write(lun,'("ke_box  ",3f12.6)') baro%ke_box
+        write(lun,'("ke_box  ",3e14.6)') baro%ke_box
       case('berendsen')
-        write(lun,'("mu      ",f12.6)') baro%mu
+        write(lun,'("mu      ",e14.6)') baro%mu
       end select
       write(lun,*)
       call io_close(lun)
