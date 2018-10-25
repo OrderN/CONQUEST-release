@@ -175,6 +175,7 @@ module md_control
     real(double)        :: ke_ions      ! kinetic energy of ions
     real(double)        :: dt           ! time step
     integer             :: ndof         ! number of degrees of freedom
+    integer             :: cell_ndof    ! cell degrees of freedom
     logical             :: append
     real(double), dimension(3,3)  :: lat       ! lattice vectors
     real(double), dimension(3,3)  :: lat_ref   ! reference lattice vectors
@@ -294,18 +295,6 @@ contains
       th%cell_ndof = 3
     end select
 
-    if (inode==ionode .and. iprint_MD > 1) then
-      write(io_lun,'(4x,"Thermostat type: ",a)') th%thermo_type
-      if (.not. leqi(thermo_type, 'none')) then
-        write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
-                                     th%T_ext
-        write(io_lun,'(4x,a,f10.2)') 'Coupling time period      tau_T = ', &
-                                     th%tau_T
-        write(io_lun,'(4x,a,l)')     'Cell NHC                          ', &
-                                     th%cell_nhc
-      end if
-    end if
-
     select case(th%thermo_type)
     case('none')
     case('berendsen')
@@ -317,6 +306,18 @@ contains
     case default
       call cq_abort("Unknown thermostat type")
     end select
+
+    if (inode==ionode .and. iprint_MD > 1) then
+      write(io_lun,'(4x,"Thermostat type: ",a)') th%thermo_type
+      if (.not. leqi(thermo_type, 'none')) then
+        write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
+                                     th%T_ext
+        write(io_lun,'(4x,a,f10.2)') 'Coupling time period      tau_T = ', &
+                                     th%tau_T
+        write(io_lun,'(4x,a,l)')     'Cell NHC                          ', &
+                                     th%cell_nhc
+      end if
+    end if
 
   end subroutine init_thermo
   !!***
@@ -370,8 +371,15 @@ contains
 
     ! Calculate the masses for extended lagrangian variables?
     if (md_calc_xlmass) then
-      omega_thermo = one/md_tau_T
-      omega_baro = one/md_tau_P
+      ! Guess for thermostat/barostat time constants if not specified during
+      ! initial_read
+      if (md_tau_T < zero) md_tau_T = dt*ten
+      if (md_tau_P < zero) md_tau_P = dt*ten*ten
+      th%tau_T = md_tau_T
+      ! Seems to work better with the factor twopi (angular frequency)
+      omega_thermo = twopi/md_tau_T
+      omega_baro = twopi/md_tau_P
+
       th%m_nhc(1) = md_ndof_ions*th%T_ext*fac_Kelvin2Hartree/omega_thermo**2
       if (th%cell_nhc) then
         select case (md_baro_type)
@@ -419,7 +427,7 @@ contains
     ! Yoshida-Suzuki time steps
     call th%init_ys(dt, th%n_ys)
 
-    write(fmt1,'("(4x,a16,",i4,"f12.2)")') th%n_nhc
+    write(fmt1,'("(4x,a16,",i4,"f12.6)")') th%n_nhc
     write(fmt2,'("(4x,a16,",i4,"f12.2)")') th%n_ys
     if (inode==ionode .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') 'Welcome to init_nhc'
@@ -1087,15 +1095,28 @@ contains
     ! Globals
     baro%baro_type = baro_type
     baro%dt = dt
+    baro%ndof = ndof
+    if (md_tau_P < zero) md_tau_P = dt*ten*ten
     if (md_calc_xlmass) then
-      omega_P = one/md_tau_P
+      omega_P = twopi/md_tau_P
+
       select case(baro_type)
       case('iso-mttk')
-        baro%box_mass = (md_ndof_ions+one)*temp_ion*fac_Kelvin2Hartree/omega_P**2
+        baro%cell_ndof = 1
       case('iso-ssm')
-        baro%box_mass = (md_ndof_ions+one)*temp_ion*fac_Kelvin2Hartree/omega_P**2
+        baro%cell_ndof = 1
       case('ortho-ssm')
-        baro%box_mass = ((md_ndof_ions+three)*temp_ion*fac_Kelvin2Hartree/omega_P**2)/three
+        baro%cell_ndof = 3
+      end select
+
+      baro%box_mass = &
+        (baro%ndof+baro%cell_ndof)*temp_ion*fac_Kelvin2Hartree/omega_P**2
+
+      select case(baro_type)
+      case('iso-mttk')
+      case('iso-ssm')
+      case('ortho-ssm')
+        baro%box_mass = baro%box_mass/three
       end select
     else
       baro%box_mass = md_box_mass
@@ -1108,7 +1129,6 @@ contains
     baro%c8 = baro%c6/72.0_double
 
     baro%P_ext = md_target_press/fac_HaBohr32GPa
-    baro%ndof = ndof
     baro%lat_ref = zero
     baro%lat_ref(1,1) = rcellx
     baro%lat_ref(2,2) = rcelly

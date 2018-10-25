@@ -1978,11 +1978,7 @@ contains
          md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
          md_baro_type       = fdf_string(20, 'MD.Barostat', 'iso-ssm')
        end select
-       if (leqi(md_thermo_type, 'berendsen')) then
-         md_tau_T           = fdf_double('MD.tauT', one)
-       else
-         md_tau_T           = fdf_double('MD.tauT', one)
-       end if
+       md_tau_T           = fdf_double('MD.tauT', -one)
        md_tau_T_equil     = fdf_double('MD.tauTEquil', one)
        md_n_nhc           = fdf_integer('MD.nNHC', 5) 
        md_n_ys            = fdf_integer('MD.nYoshida', 1)
@@ -2005,12 +2001,8 @@ contains
        ! Barostat
        md_target_press    = fdf_double('MD.TargetPressure', zero)
        md_box_mass        = fdf_double('MD.BoxMass', one)
-       if (leqi(md_baro_type, 'berendsen')) then
-         md_tau_P           = fdf_double('MD.tauP', 50.0_double)
-       else
-         md_tau_P           = fdf_double('MD.tauP', 40.0_double)
-       end if
-       md_tau_P_equil     = fdf_double('MD.tauPEquil', 50.0_double)
+       md_tau_P           = fdf_double('MD.tauP', -one)
+       md_tau_P_equil     = fdf_double('MD.tauPEquil', 100.0_double)
        md_bulkmod_est     = fdf_double('MD.BulkModulusEst', 100.0_double)
        md_cell_nhc        = fdf_boolean('MD.CellNHC', .true.)
        flag_baroDebug     = fdf_boolean('MD.BaroDebug',.false.)
