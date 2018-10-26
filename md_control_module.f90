@@ -1932,6 +1932,7 @@ contains
         ! Box NHC velocity update
         th%v_eta_cell(th%n_nhc) = th%v_eta_cell(th%n_nhc) + &
                                   th%G_nhc_cell(th%n_nhc)*th%dt_ys(i_ys)*quarter
+        th%v_eta_cell(th%n_nhc) = th%v_eta_cell(th%n_nhc)*baro%p_drag
         do i_nhc = th%n_nhc-1, 1, -1
           expfac_p = exp(-one_eighth*th%dt_ys(i_ys)*th%v_eta_cell(i_nhc+1))
           th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
@@ -1973,6 +1974,7 @@ contains
         end do
         th%v_eta_cell(th%n_nhc) = th%v_eta_cell(th%n_nhc) + &
                                   th%G_nhc_cell(th%n_nhc)*th%dt_ys(i_ys)*quarter
+        th%v_eta_cell(th%n_nhc) = th%v_eta_cell(th%n_nhc)*baro%p_drag
       end do ! Yoshida-Suzuki loop
     end do ! Multiple time step loop
 
@@ -2018,6 +2020,7 @@ contains
         ! Particle NHC velocity update
         th%v_eta(th%n_nhc) = th%v_eta(th%n_nhc) + &
                              th%G_nhc(th%n_nhc)*th%dt_ys(i_ys)*quarter
+        th%v_eta(th%n_nhc) = th%v_eta(th%n_nhc)*th%t_drag
         do i_nhc = th%n_nhc-1, 1, -1
           expfac_t = exp(-one_eighth*th%dt_ys(i_ys)*th%v_eta(i_nhc+1))
           th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
@@ -2050,6 +2053,7 @@ contains
         end do
         th%v_eta(th%n_nhc) = th%v_eta(th%n_nhc) + &
                              th%G_nhc(th%n_nhc)*th%dt_ys(i_ys)*quarter
+        th%v_eta(th%n_nhc) = th%v_eta(th%n_nhc)*th%t_drag
       end do ! Yoshida-Suzuki loop
     end do ! Multiple time step loop
 
