@@ -14,6 +14,8 @@
 !!    Added the check for the consistency of the orbitals between the present matrix 
 !!    and the one read from the file.
 !!    Also added the subroutine ReportMatrixUpdate to check the missing pairs.
+!!   2018/10/03 17:10 dave
+!!    Changing MPI tags to conform to standard
 !!   
 !!  SOURCE
 !!  
@@ -1036,7 +1038,8 @@ contains
   !!  CREATION DATE
   !!   2013/08/22
   !!  MODIFICATION
-  !!
+  !!   2018/10/03 17:10 dave
+  !!    Changing MPI tag to conform to standard
   !!  SOURCE
   !!
   subroutine CommMat_send_size(LmatrixSend,isend_array)
@@ -1082,7 +1085,7 @@ contains
       inode_recv = LmatrixSend%list_recv_node(nnd)
       natom_send = LmatrixSend%natom_recv_node(nnd)
       if (natom_send.LT.1) call cq_abort('Error: natom_send should take at least 1.')
-      tag = inode + numprocs*inode_recv
+      tag = 1 
       isize = 4 * natom_send
 
       !! ------ DEBUG ------ !!
@@ -1139,6 +1142,8 @@ contains
   !!  MODIFICATION
   !!   2016/04/06 dave
   !!    Changed Info to pointer from allocatable (gcc 4.4.7 issue)
+  !!   2018/10/03 17:10 dave
+  !!    Changing MPI tag to conform to standard
   !!
   !!  SOURCE
   !!
@@ -1187,8 +1192,7 @@ contains
     do nnd = 1, LmatrixSend%nrecv_node
       inode_recv = LmatrixSend%list_recv_node(nnd)
       natom_send = LmatrixSend%natom_recv_node(nnd)
-      !ORI tag2 = inode + numprocs*inode_recv
-      tag2 = inode + numprocs*2*inode_recv
+      tag2 = 2
       if (natom_send.LT.1) call cq_abort('Error: natom_send should take at least 1.')
       if (inode_recv.EQ.inode) call cq_abort('Error: Receiving nodes must differ from inode!')
       isize = 0
@@ -1246,6 +1250,8 @@ contains
   !!  MODIFICATION
   !!   2016/04/06 dave
   !!    Changed Info to pointer from allocatable (gcc 4.4.7 issue)
+  !!   2018/10/03 17:10 dave
+  !!    Changing MPI tag to conform to standard
   !!
   !!  SOURCE
   !!
@@ -1293,7 +1299,7 @@ contains
     do nnd = 1, LmatrixSend%nrecv_node
       inode_recv = LmatrixSend%list_recv_node(nnd)
       natom_send = LmatrixSend%natom_recv_node(nnd)
-      tag3 = (inode + numprocs*2*inode_recv)*2
+      tag3 = 3
       if (natom_send.LT.1) call cq_abort('Error: natom_send should take at least 1.')
       if (inode_recv.EQ.inode) call cq_abort('Error: Receiving node must differ from inode!')
       isize = 0
@@ -1365,6 +1371,8 @@ contains
   !!  MODIFICATION
   !!   2014/02/03 michi
   !!   - Bug fix for changing the number of processors at the sequential job
+  !!   2018/10/03 17:10 dave
+  !!    Changing MPI tag to conform to standard
   !!  SOURCE
   !!
   subroutine alloc_recv_array(irecv_array,irecv2_array,recv_array, &
@@ -1534,7 +1542,7 @@ contains
         ibeg = (LmatrixRecv%ibeg_send_node(nnd)-1) * 4 + 1
         isize = LmatrixRecv%natom_send_node(nnd) * 4
         inode_send = LmatrixRecv%list_send_node(nnd)
-        tag = inode_send + numprocs*inode
+        tag = 1
 
         !! ------ DEBUG ------ !!
         if (flag_MDdebug .AND. iprint_MDdebug.GT.2) then
@@ -1731,6 +1739,8 @@ contains
   !!  CREATION DATE
   !!   2013/08/22
   !!  MODIFICATION
+  !!   2018/10/03 17:10 dave
+  !!    Changing MPI tags to conform to standard
   !!
   !!  SOURCE
   !!
@@ -1778,9 +1788,8 @@ contains
       inode_send = LmatrixRecv%list_send_node(nnd)
       natom_send = LmatrixRecv%natom_send_node(nnd)
       if (inode_send.EQ.inode) call cq_abort('Error: Sending nodes must differ from inode!')
-      !tag2 = inode_send + numprocs*inode
-      tag2 = inode_send + numprocs*2*inode
-      tag3 = tag2*2
+      tag2 = 2
+      tag3 = 3
       if (natom_send.LT.1) call cq_abort('Error: natom_send should take at least 1.')
       isize1 = 0 ; isize2 = 0
       do ia = 1, natom_send
