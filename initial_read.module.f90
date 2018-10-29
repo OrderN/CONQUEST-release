@@ -1490,6 +1490,10 @@ contains
              flag_normalise_pDOS = fdf_boolean('IO.normalise_PDOS',.true.)
              flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
              flag_pDOS_lm = fdf_boolean('IO.PDOS_lm_resolved',.false.)
+             if(flag_pDOS_lm.AND.(.NOT.flag_pDOS_angmom)) then
+                if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom T as (l,m)-resolved PDOS requested")')
+                flag_pDOS_angmom = .true.
+             end if
              if (.not.flag_write_projected_DOS) then
                 flag_normalise_pDOS = .false.
                 flag_pDOS_angmom = .false.
