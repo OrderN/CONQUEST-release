@@ -137,6 +137,8 @@
 !!    Added orbital angular momentum resolved DOS (pDOS_angmom)
 !!   2018/10/22 14:24 dave & jsb
 !!    Implementing (l,m)-projected DOS and moving flag into this routine
+!!   2018/10/30 11:50 dave
+!!    Added flag_pDOS_include_semicore and lines to exclude semi-core states from pDOS if required
 !!***
 module DiagModule
 
@@ -314,7 +316,8 @@ module DiagModule
   real(double), allocatable, dimension(:) :: w_pDOS
   real(double) :: dE_DOS, pf_DOS
   integer :: n_DOS_max, n_DOS_wid
-
+  logical :: flag_pDOS_include_semicore
+  
 contains
 
   ! -------------------------------------------------------------------
@@ -3873,6 +3876,9 @@ contains
   !!    Added optional projDOS_angmom, l-projected PDOS.
   !!   2018/10/22 14:18 dave & jsb
   !!    Adding (l,m) projection for pDOS
+  !!   2018/10/30 11:43 dave
+  !!    Implementing semi-core exclusion given right flags
+  !!    (NB at present, semi-core states are not flagged but will be !)
   !!  SOURCE
   !!
   subroutine accumulate_DOS(weight,eval,evec,DOS,spinSF,projDOS,projDOS_angmom,weight_pDOS)
@@ -3950,13 +3956,16 @@ contains
                    isf1 = 0
                    do l1 = 0, pao(atom_spec)%greatest_angmom
                       do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
-                         do m1 = -l1,l1
-                            isf1 = isf1 + 1
-                            fac = fac + real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
-                            ! l, m so shift m1 by l1+1 so it runs from 1 to 2*l1+1
-                            fac_angmom(l1+1,m1+l1+1) = fac_angmom(l1+1,m1+l1+1) + &
-                                 real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
-                         enddo
+                         if((pao(atom_spec)%angmom(l1)%semicore(nacz1)==0) .OR. &
+                              (flag_pDOS_include_semicore)) then
+                            do m1 = -l1,l1
+                               isf1 = isf1 + 1
+                               fac = fac + real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
+                               ! l, m so shift m1 by l1+1 so it runs from 1 to 2*l1+1
+                               fac_angmom(l1+1,m1+l1+1) = fac_angmom(l1+1,m1+l1+1) + &
+                                    real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
+                            enddo
+                         end if
                       enddo
                    enddo
                 else
@@ -3964,12 +3973,15 @@ contains
                    isf1 = 0
                    do l1 = 0, pao(atom_spec)%greatest_angmom
                       do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
-                         do m1 = -l1,l1
-                            isf1 = isf1 + 1
-                            fac = fac + real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
-                            fac_angmom(l1+1,1) = fac_angmom(l1+1,1) &
-                                             + real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
-                         enddo
+                         if((pao(atom_spec)%angmom(l1)%semicore(nacz1)==0) .OR. &
+                              (flag_pDOS_include_semicore)) then
+                            do m1 = -l1,l1
+                               isf1 = isf1 + 1
+                               fac = fac + real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
+                               fac_angmom(l1+1,1) = fac_angmom(l1+1,1) &
+                                    + real(evec(iwf,acc+isf1)*conjg(evec(iwf,acc+isf1)),double)
+                            enddo
+                         end if
                       enddo
                    enddo
                    if (isf1.ne.nsf_species(atom_spec)) call cq_abort("Error in NSF in the PDOS calculation.")
@@ -4040,13 +4052,16 @@ contains
                                iatomf2 = 0
                                do l2 = 0, pao(neigh_species)%greatest_angmom
                                   do nacz2 = 1, pao(neigh_species)%angmom(l2)%n_zeta_in_angmom
-                                     do m2 = -l2,l2
-                                        iatomf2 = iatomf2 + 1
-                                        wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,isf1,iatomf2)
-                                        val = mat_p(matSFcoeff(spin_SF))%matrix(wheremat)
-                                        fac2 = fac2 + val*val
-                                        fac2_angmom(l2+1,m2+l2+1) = fac2_angmom(l2+1,m2+l2+1) + val*val
-                                     enddo ! m2
+                                     if((pao(atom_spec)%angmom(l2)%semicore(nacz2)==0) .OR. &
+                                          (flag_pDOS_include_semicore)) then
+                                        do m2 = -l2,l2
+                                           iatomf2 = iatomf2 + 1
+                                           wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,isf1,iatomf2)
+                                           val = mat_p(matSFcoeff(spin_SF))%matrix(wheremat)
+                                           fac2 = fac2 + val*val
+                                           fac2_angmom(l2+1,m2+l2+1) = fac2_angmom(l2+1,m2+l2+1) + val*val
+                                        enddo ! m2
+                                     end if
                                   enddo ! nacz2
                                enddo ! l2
                                fac = fac + fac1 * fac2
@@ -4056,13 +4071,16 @@ contains
                                iatomf2 = 0
                                do l2 = 0, pao(neigh_species)%greatest_angmom
                                   do nacz2 = 1, pao(neigh_species)%angmom(l2)%n_zeta_in_angmom
-                                     do m2 = -l2,l2
-                                        iatomf2 = iatomf2 + 1
-                                        wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,isf1,iatomf2)
-                                        val = mat_p(matSFcoeff(spin_SF))%matrix(wheremat)
-                                        fac2 = fac2 + val*val
-                                        fac2_angmom(l2+1,1) = fac2_angmom(l2+1,1) + val*val
-                                     enddo ! m2
+                                     if((pao(atom_spec)%angmom(l2)%semicore(nacz2)==0) .OR. &
+                                          (flag_pDOS_include_semicore)) then
+                                        do m2 = -l2,l2
+                                           iatomf2 = iatomf2 + 1
+                                           wheremat = matrix_pos(matSFcoeff(spin_SF),iprim,j_in_halo,isf1,iatomf2)
+                                           val = mat_p(matSFcoeff(spin_SF))%matrix(wheremat)
+                                           fac2 = fac2 + val*val
+                                           fac2_angmom(l2+1,1) = fac2_angmom(l2+1,1) + val*val
+                                        enddo ! m2
+                                     end if
                                   enddo ! nacz2
                                enddo ! l2
                                fac = fac + fac1 * fac2

@@ -199,7 +199,6 @@ contains
     use pseudo_tm_module,       only: init_pseudo_tm
     use input_module,           only: fdf_string, fdf_out, io_close, leqi
     use force_module,           only: tot_force
-    !use DiagModule,             only: diagon
     use constraint_module,      only: flag_RigidBonds,constraints
     use support_spec_format,    only: flag_one_to_one, symmetry_breaking, read_option
     use md_control,             only: md_position_file
@@ -658,6 +657,8 @@ contains
   !!    Added flag_pDOS_angmom for orbital angular momentum resolved PDOS
   !!   2018/10/22 14:26 dave & jsb
   !!    Added flag_PDOS_lm for (l,m) projected DOS
+  !!   2018/10/30 11:52 dave
+  !!    added flag_PDOS_include_semicore to allow inclusion/exclusion of semi-core states from PDOS
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -736,6 +737,7 @@ contains
                               species_file, species_from_files
     use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode
     !use DiagModule, only: diagon
+    use DiagModule,             only: flag_pDOS_include_semicore
     use energy,     only: flag_check_Diag
     use DMMin,      only: maxpulayDMM, maxpulaystepDMM, minpulaystepDMM, &
                           LinTol_DMM, n_dumpL
@@ -1490,6 +1492,7 @@ contains
              flag_normalise_pDOS = fdf_boolean('IO.normalise_PDOS',.true.)
              flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
              flag_pDOS_lm = fdf_boolean('IO.PDOS_lm_resolved',.false.)
+             flag_pDOS_include_semicore = fdf_boolean('IO.PDOS_include_semicore',.true.)
              if(flag_pDOS_lm.AND.(.NOT.flag_pDOS_angmom)) then
                 if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom T as (l,m)-resolved PDOS requested")')
                 flag_pDOS_angmom = .true.

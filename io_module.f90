@@ -2976,6 +2976,7 @@ second:   do
     integer :: lun, i, j, k, iprim, natom, tmp_col
     real(double) :: dE, thisE
     character(len=50) :: filename, fmt_DOS
+    character(len=200) :: colstr
 
     if (atomf==sf) natom = bundle%n_prim
     if (atomf/=sf) natom = ni_in_cell
@@ -2995,6 +2996,20 @@ second:   do
                Ef(1:nspin),E_DOS_min,E_DOS_max, n_DOS
        end if
        write(lun,fmt='(2x,"# Broadening: ",f12.5)') sigma_DOS
+       ! Indicate columns
+       if(flag_PDOS_angmom) then
+          if(flag_pDOS_lm) then
+             colstr = "  #     Energy     |   Total pDOS   |    l=0, m= 0   |    l=1, m=-1   |&
+                  &    l=1, m= 0   |    l=1, m= 1   |    l=2, m=-2   |    l=2, m=-1   |&
+                  &    l=2, m= 0   |    l=2, m= 1   |    l=2, m= 2   "
+          else
+             colstr = "  #     Energy     |   Total pDOS   |      l=0       |      l=1       |&
+                  &      l=2       "
+          end if
+       else
+          colstr =    "  #     Energy     |   Total pDOS    "
+       end if
+       write(lun,fmt='(a)') colstr
        dE = (E_DOS_max - E_DOS_min)/real(n_DOS - 1,double)
        thisE = E_DOS_min
        if(nspin==1) then
