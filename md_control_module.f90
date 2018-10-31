@@ -149,8 +149,10 @@ module md_control
       procedure, private  :: propagate_eta
       procedure, private  :: propagate_v_eta_lin
       procedure, private  :: propagate_v_eta_exp
+      procedure, private  :: apply_nhc_drag
 
       procedure, public   :: integrate_particle_nhc
+      procedure, public   :: propagate_nhc
   end type type_thermostat
 !!***
 
@@ -227,17 +229,18 @@ module md_control
       procedure, public   :: dump_baro_state
       procedure, public   :: update_cell
 
-      procedure, private  :: update_G_eps
+      procedure, private  :: update_G_box
       procedure, private  :: propagate_eps_lin
       procedure, private  :: propagate_eps_exp
-      procedure, private  :: propagate_v_eps_lin
-      procedure, private  :: propagate_v_eps_exp
+      procedure, private  :: propagate_v_box_lin
+      procedure, private  :: propagate_v_box_exp
+      procedure, private  :: apply_box_drag
       procedure, private  :: update_vscale_fac
       procedure, private  :: poly_sinhx_x
 
       procedure, public   :: integrate_box_nhc
       procedure, public   :: integrate_box
-      procedure, public   ::couple_box_particle_velocity
+      procedure, public   :: couple_box_particle_velocity
       procedure, public   :: propagate_box_ssm
 
   end type type_barostat
@@ -836,6 +839,155 @@ contains
     end if
 
   end subroutine propagate_v_eta_exp
+  !!***
+
+  !!****m* md_control/apply_nhc_drag *
+  !!  NAME
+  !!   apply_nhc_drag
+  !!  PURPOSE
+  !!   Scale the NHC velocities by the ad-hoc drag factor
+  !!  AUTHOR
+  !!   Zamaan Raza 
+  !!  CREATION DATE
+  !!   2018/10/31 10:00
+  !!  SOURCE
+  !!  
+  subroutine apply_nhc_drag(th, baro, k)
+
+    ! passed variables
+    class(type_thermostat), intent(inout) :: th
+    class(type_barostat), intent(inout)   :: baro
+    integer, intent(in)                   :: k
+
+    th%v_eta(k) = th%v_eta(k)*th%t_drag
+    if (th%cell_nhc) th%v_eta_cell(k) = th%v_eta_cell(k)*baro%p_drag
+
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
+      write(io_lun,'(2x,a)') "apply_nhc_drag"
+    end if
+
+  end subroutine apply_nhc_drag
+  !!***
+
+  !!****m* md_control/propagate_nhc *
+  !!  NAME
+  !!   propagate_nhc
+  !!  PURPOSE
+  !!   propagate the particle and cell Nose-Hoover chains.
+  !!   G. Martyna et al. Mol. Phys. 5, 1117 (1996)
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/10/24 11:44
+  !!  MODIFICATION HISTORY
+  !!   2018/10/31 zamaan
+  !!    Now does both particle and box NHC integration, since they are
+  !!    orthogonal. Renamed from propagte_nvt_nhc to propagate_nhc.
+  !!  SOURCE
+  !!  
+  subroutine propagate_nhc(th, baro, v, ke)
+
+    ! passed variables
+    class(type_thermostat), intent(inout) :: th
+    class(type_barostat), intent(inout)   :: baro
+    real(double), intent(in)              :: ke
+    real(double), dimension(:,:), intent(inout) :: v  ! ion velocities
+
+    ! local variables
+    integer       :: i_mts, i_ys, i_nhc, i
+    real(double)  :: v_sfac   ! ionic velocity scaling factor
+    real(double)  :: box_sfac ! box velocity scaling factor
+    real(double)  :: fac
+
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "propagate_nhc"
+
+    th%ke_ions = ke
+    v_sfac = one
+    box_sfac = one
+    if (th%cell_nhc) call baro%get_box_energy
+    call th%update_G_nhc(1, zero) ! update force on thermostat 1
+    do i_mts=1,th%n_mts_nhc ! MTS loop
+      do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
+        if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+          write(io_lun,*) "i_ys  = ", i_ys
+          write(io_lun,*) "dt_ys = ", th%dt_ys(i_ys)
+        end if
+        ! Reverse part of Trotter expansion: update thermostat force/velocity
+        call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
+        call th%apply_nhc_drag(baro, th%n_nhc)
+        do i_nhc=th%n_nhc-1,1,-1 ! loop over NH thermostats in reverse order
+          ! Trotter expansion to avoid sinh singularity
+          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
+          call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
+          call th%apply_nhc_drag(baro, i_nhc)
+          if (th%cell_nhc) th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*baro%p_drag
+          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
+        end do
+
+        ! adjust the velocity scaling factor, scale the kinetic energy
+        fac = exp(-half*th%dt_ys(i_ys)*th%v_eta(1))
+        v_sfac = v_sfac*fac
+        th%ke_ions = th%ke_ions*v_sfac**2
+
+        if (th%cell_nhc) then
+          ! Update the box velocities
+          fac = exp(-half*th%dt_ys(i_ys)*th%v_eta_cell(1))
+          select case(baro%baro_type)
+          case('iso-ssm')
+            baro%v_eps = baro%v_eps*fac
+          case('ortho-ssm')
+            do i=1,3
+              baro%v_h(i,i) = baro%v_h(i,i)*fac
+            end do
+          end select
+          box_sfac = box_sfac*fac
+          call baro%get_box_energy
+        end if
+
+        call th%update_G_nhc(1, zero) ! update force on thermostat 1
+        ! update the thermostat "positions" eta
+        do i_nhc=1,th%n_nhc
+          call th%propagate_eta(i_nhc, th%dt_ys(i_ys), half)
+        end do
+
+        ! Forward part of Trotter expansion: update thermostat force/velocity
+        do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
+          ! Trotter expansion to avoid sinh singularity
+          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
+          call th%update_G_nhc(i_nhc+1, zero)
+          call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
+          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
+        end do
+        call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
+      end do  ! Yoshida-Suzuki loop
+    end do    ! MTS loop
+
+    ! scale the ionic velocities
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
+      write(io_lun,'(2x,a,e16.8)') 'v_sfac = ', v_sfac
+
+    v = v_sfac*v
+    th%lambda = v_sfac
+
+    ! scale the box velocity
+    if (th%cell_nhc) then
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
+        write(io_lun,'(2x,a,e16.8)') 'box_sfac = ', box_sfac
+    end if
+
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then 
+      write(io_lun,th%nhc_fmt) "eta:        ", th%eta
+      write(io_lun,th%nhc_fmt) "v_eta:      ", th%v_eta
+      write(io_lun,th%nhc_fmt) "G_nhc:      ", th%G_nhc
+      if (th%cell_nhc) then
+        write(io_lun,th%nhc_fmt) "eta_cell:   ", th%eta_cell
+        write(io_lun,th%nhc_fmt) "v_eta_cell: ", th%v_eta_cell
+        write(io_lun,th%nhc_fmt) "G_nhc_cell: ", th%G_nhc_cell
+      end if
+    end if
+
+  end subroutine propagate_nhc
   !!***
 
   !!****m* md_control/propagate_nvt_nhc *
@@ -1446,9 +1598,9 @@ contains
   end subroutine get_box_energy
   !!***
 
-  !!****m* md_control/update_G_eps *
+  !!****m* md_control/update_G_box *
   !!  NAME
-  !!   update_G_eps
+  !!   update_G_box
   !!  PURPOSE
   !!   update force on isotropic MTTK barostat
   !!  AUTHOR
@@ -1457,21 +1609,49 @@ contains
   !!   2017/11/17 13:59
   !!  SOURCE
   !!  
-  subroutine update_G_eps(baro, th)
+  subroutine update_G_box(baro, th)
 
     ! passed variables
     class(type_barostat), intent(inout)         :: baro
     type(type_thermostat), intent(in)           :: th
 
-    baro%G_eps = (two*baro%odnf*th%ke_ions + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
-    ! baro%G_eps = (three*th%ke_ions/baro%ndof + three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
+    ! local variables
+    integer                                     :: i
+    real(double)                                :: tr_ke_stress
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-      write(io_lun,'(2x,a)') "update_G_eps"
-      write(io_lun,'(4x,a,e16.8)') "G_eps:      ", baro%G_eps
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
+      write(io_lun,'(2x,a)') "update_G_box"
+
+    select case(baro%baro_type)
+    case('iso-mttk')
+      baro%G_eps = (two*baro%odnf*th%ke_ions + &
+                    three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
+    case('iso-ssm')
+      baro%G_eps = (two*th%ke_ions/md_ndof_ions + &
+                   (baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
+    case('ortho-ssm')
+      tr_ke_stress = zero
+      do i=1,3
+        tr_ke_stress = tr_ke_stress + baro%ke_stress(i,i)
+      end do
+      do i=1,3
+        baro%G_h(i,i) = (two*tr_ke_stress/md_ndof_ions + &
+                        (baro%total_stress(i,i) - baro%P_ext)*baro%volume) / &
+                         baro%box_mass
+      end do
+    end select
+
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then 
+      select case(baro%baro_type)
+      case('iso-ssm')
+        write(io_lun,'(2x,a,e16.8)') "G_eps: ", baro%G_eps
+      case('ortho-ssm')
+        write(io_lun,'(2x,a,3e16.8)') "G_h:   ", baro%G_h(1,1), &
+                                       baro%G_h(2,2), baro%G_h(3,3)
+      end select
     end if
 
-  end subroutine update_G_eps
+  end subroutine update_G_box
   !!***
 
   !!****m* md_control/propagate_eps_lin *
@@ -1523,16 +1703,16 @@ contains
     baro%eps = baro%eps*exp(-dtfac*dt*v_eta_1)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
-      write(io_lun,*) "propagate_eps_exp"
+      write(io_lun,'(2x,a)') "propagate_eps_exp"
       write(io_lun,'(4x,a,e16.8)') "eps:        ", baro%eps
     end if
 
   end subroutine propagate_eps_exp
   !!***
 
-  !!****m* md_control/propagate_v_eps_lin *
+  !!****m* md_control/propagate_v_box_lin *
   !!  NAME
-  !!   propagate_v_eps_lin
+  !!   propagate_v_box_lin
   !!  PURPOSE
   !!   propagate box velocity, linear shift
   !!  AUTHOR
@@ -1541,26 +1721,49 @@ contains
   !!   2017/11/17 14:17
   !!  SOURCE
   !!  
-  subroutine propagate_v_eps_lin(baro, dt, dtfac)
+  subroutine propagate_v_box_lin(baro, dt, dtfac)
 
     ! passed variables
     class(type_barostat), intent(inout)   :: baro
     real(double), intent(in)              :: dt     ! time step
     real(double), intent(in)              :: dtfac  ! Trotter epxansion factor
 
-    baro%v_eps = baro%v_eps + dtfac*dt*baro%G_eps
+    ! local variables
+    integer                               :: i
+
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) &
+      write(io_lun,'(2x,a)') "propagate_v_box_lin"
+
+    select case(baro%baro_type)
+    case('iso-mttk')
+      baro%v_eps = baro%v_eps + dtfac*dt*baro%G_eps
+    case('iso-ssm')
+      baro%v_eps = baro%v_eps + dtfac*dt*baro%G_eps
+    case('ortho-ssm')
+      do i=1,3
+        baro%v_h(i,i) = baro%v_h(i,i) + dt*dtfac*baro%G_h(i,i)
+      end do
+    end select
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
-      write(io_lun,*) "propagate_v_eps_lin"
-      write(io_lun,'(4x,a,e16.8)') "v_eps       ", baro%v_eps
+      write(io_lun,*) "propagate_v_box_lin"
+      select case(baro%baro_type)
+      case('iso-mttk')
+        write(io_lun,'(4x,a,e16.8)') "v_eps       ", baro%v_eps
+      case('iso-ssm')
+        write(io_lun,'(4x,a,e16.8)') "v_eps       ", baro%v_eps
+      case('ortho-ssm')
+        write(io_lun,'(4x,a,3e16.8)') "v_h         ", &
+          baro%v_h(1,1), baro%v_h(2,2), baro%v_h(3,3)
+      end select
     end if
 
-  end subroutine propagate_v_eps_lin
+  end subroutine propagate_v_box_lin
   !!***
 
-  !!****m* md_control/propagate_v_eps_exp *
+  !!****m* md_control/propagate_v_box_exp *
   !!  NAME
-  !!   propagate_v_eps_lin
+  !!   propagate_v_box_lin
   !!  PURPOSE
   !!   propagate box velocity, exponential factor
   !!  AUTHOR
@@ -1569,7 +1772,7 @@ contains
   !!   2017/11/17 14:18
   !!  SOURCE
   !!  
-  subroutine propagate_v_eps_exp(baro, dt, dtfac, v_eta_1)
+  subroutine propagate_v_box_exp(baro, dt, dtfac, v_eta_1)
 
     ! passed variables
     class(type_barostat), intent(inout)   :: baro
@@ -1577,14 +1780,51 @@ contains
     real(double), intent(in)              :: dtfac  ! Trotter epxansion factor
     real(double), intent(in)              :: v_eta_1  ! v of first NHC thermo
 
-    baro%v_eps = baro%v_eps*exp(-dtfac*dt*v_eta_1)
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) &
+      write(io_lun,'(2x,a)') "propagate_v_box_lin"
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) then
-      write(io_lun,'(2x,a)') "propagate_v_eps_lin"
-      write(io_lun,'(4x,a,e16.8)') "v_eps       ", baro%v_eps
-    end if
+    select case(baro%baro_type)
+    case('iso-mttk')
+      baro%v_eps = baro%v_eps*exp(-dtfac*dt*v_eta_1)
+    case('iso-ssm')
+    case('ortho-ssm')
+    end select
 
-  end subroutine propagate_v_eps_exp
+  end subroutine propagate_v_box_exp
+  !!***
+
+  !!****m* md_control/apply_box_drag *
+  !!  NAME
+  !!   apply_box_drag
+  !!  PURPOSE
+  !!   Scale the box velocities by the ad-hoc drag factor
+  !!  AUTHOR
+  !!   Zamaan Raza 
+  !!  CREATION DATE
+  !!   2018/10/31 10:00
+  !!  SOURCE
+  !!  
+  subroutine apply_box_drag(baro)
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+
+    ! local variables
+    integer                               :: i
+
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 4) &
+      write(io_lun,'(2x,a)') "apply_box_drag"
+
+    select case(baro%baro_type)
+    case('iso-ssm')
+      baro%v_eps = baro%v_eps*baro%p_drag
+    case('ortho-ssm')
+      do i=1,3
+        baro%v_h(i,i) = baro%v_h(i,i)*baro%p_drag
+      end do
+    end select
+
+  end subroutine apply_box_drag
   !!***
 
   !!****m* md_control/update_vscale_fac *
@@ -1803,7 +2043,7 @@ contains
     call th%update_G_nhc(1, baro%ke_box)
     select case(baro%baro_type)
     case('iso-mttk')
-      call baro%update_G_eps(th)
+      call baro%update_G_box(th)
     end select
 
     do i_mts=1,th%n_mts_nhc ! MTS loop
@@ -1832,11 +2072,11 @@ contains
         end if
         select case(baro%baro_type)
         case('iso-mttk')
-          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, &
+          call baro%propagate_v_box_exp(th%dt_ys(i_ys), one_eighth, &
                                         v_eta_couple)
-          call baro%propagate_v_eps_lin(th%dt_ys(i_ys), quarter)
+          call baro%propagate_v_box_lin(th%dt_ys(i_ys), quarter)
           baro%v_eps = baro%v_eps*baro%p_drag
-          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, &
+          call baro%propagate_v_box_exp(th%dt_ys(i_ys), one_eighth, &
                                         v_eta_couple)
         case('ortho-mttk')
         case('mttk')
@@ -1847,7 +2087,7 @@ contains
         case('iso-mttk')
           call baro%update_vscale_fac(th, th%dt_ys(i_ys), half, v_eta_couple, &
                                       v_sfac)
-          call baro%update_G_eps(th)
+          call baro%update_G_box(th)
         case('ortho-mttk')
         case('mttk')
         end select
@@ -1865,10 +2105,10 @@ contains
         end if
         select case(baro%baro_type)
         case('iso-mttk')
-          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, &
+          call baro%propagate_v_box_exp(th%dt_ys(i_ys), one_eighth, &
                                         v_eta_couple)
-          call baro%propagate_v_eps_lin(th%dt_ys(i_ys), quarter)
-          call baro%propagate_v_eps_exp(th%dt_ys(i_ys), one_eighth, &
+          call baro%propagate_v_box_lin(th%dt_ys(i_ys), quarter)
+          call baro%propagate_v_box_exp(th%dt_ys(i_ys), one_eighth, &
                                         v_eta_couple)
         case('ortho-mttk')
         case('mttk')
@@ -2096,6 +2336,10 @@ contains
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
       write(io_lun,'(2x,a)') "integrate_box"
 
+!    call baro%update_G_box(th)
+!    call baro%propagate_v_box_lin(baro%dt, half)
+!    call baro%apply_box_drag
+
     select case(baro%baro_type)
     case('iso-ssm')
       baro%G_eps = (two*th%ke_ions/md_ndof_ions + &
@@ -2161,7 +2405,7 @@ contains
     case('iso-ssm')
       const = three*baro%v_eps/md_ndof_ions
 !      expfac = exp(-quarter*baro%dt*baro%odnf*baro%v_eps)
-      expfac = exp(-quarter*baro%dt*baro%odnf*(baro%v_eps + const))
+      expfac = exp(-quarter*baro%dt*(baro%v_eps + const))
       v  = v*expfac**2
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
         write(io_lun,'(4x,"expfac: ",f16.8)') expfac
