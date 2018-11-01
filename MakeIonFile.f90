@@ -38,22 +38,9 @@ program MakeIonFiles
   call read_hamann_input
   call read_vkb
   call set_pao_initial
-  !if(flag_run_debug) then
-  !   write(*,*) '# Debug output selected'
-  !   !write(*,*) '# Reading semi-local'
-  !   !call read_semilocal
-  !   write(*,*) '# Solving semi-local'
-  !   call find_valence_states_semilocal
-  !   write(*,*) '# Solving VKB'
-  !   call find_valence_states_vkb
-  !else
-     ! Create PAOs
-     !call set_pao_specification
-     call make_paos
-     !return
-     ! Write .ion file
-     call write_header(val)
-     call write_paos(val)
-     call write_pseudopotential
-  !end if
+  call make_paos
+  call write_header(val)
+  call write_paos(val)
+  call write_pseudopotential
+
 end program MakeIonFiles
