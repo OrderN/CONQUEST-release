@@ -143,7 +143,6 @@ module md_control
       procedure, public   :: get_nhc_energy
       procedure, public   :: get_temperature_and_ke
       procedure, public   :: dump_thermo_state
-      procedure, public   :: propagate_nvt_nhc
 
       procedure, private  :: update_G_nhc
       procedure, private  :: propagate_eta
@@ -151,7 +150,6 @@ module md_control
       procedure, private  :: propagate_v_eta_exp
       procedure, private  :: apply_nhc_drag
 
-      procedure, public   :: integrate_particle_nhc
       procedure, public   :: propagate_nhc
   end type type_thermostat
 !!***
@@ -238,7 +236,6 @@ module md_control
       procedure, private  :: update_vscale_fac
       procedure, private  :: poly_sinhx_x
 
-      procedure, public   :: integrate_box_nhc
       procedure, public   :: integrate_box
       procedure, public   :: couple_box_particle_velocity
       procedure, public   :: propagate_box_ssm
@@ -986,90 +983,6 @@ contains
     end if
 
   end subroutine propagate_nhc
-  !!***
-
-  !!****m* md_control/propagate_nvt_nhc *
-  !!  NAME
-  !!   propagate_nvt_nhc
-  !!  PURPOSE
-  !!   propagate the Nose-Hoover chain. 
-  !!   G. Martyna et al. Mol. Phys. 5, 1117 (1996)
-  !!  AUTHOR
-  !!   Zamaan Raza
-  !!  CREATION DATE
-  !!   2017/10/24 11:44
-  !!  SOURCE
-  !!  
-  subroutine propagate_nvt_nhc(th, v, ke)
-
-    ! passed variables
-    class(type_thermostat), intent(inout) :: th
-    real(double), intent(in)              :: ke
-    real(double), dimension(:,:), intent(inout) :: v  ! ion velocities
-
-    ! local variables
-    integer       :: i_mts, i_ys, i_nhc
-    real(double)  :: v_sfac   ! ionic velocity scaling factor
-    real(double)  :: fac
-
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
-      write(io_lun,'(2x,a)') "propagate_nvt_nhc"
-
-    th%ke_ions = ke
-    v_sfac = one
-    call th%update_G_nhc(1, zero) ! update force on thermostat 1
-    do i_mts=1,th%n_mts_nhc ! MTS loop
-      do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
-        if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-          write(io_lun,*) "i_ys  = ", i_ys
-          write(io_lun,*) "dt_ys = ", th%dt_ys(i_ys)
-        end if
-        ! Reverse part of Trotter expansion: update thermostat force/velocity
-        call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
-        do i_nhc=th%n_nhc-1,1,-1 ! loop over NH thermostats in reverse order
-          ! Trotter expansion to avoid sinh singularity
-          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
-          call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
-          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
-        end do
-
-        ! adjust the velocity scaling factor, scale the kinetic energy
-        fac = exp(-half*th%dt_ys(i_ys)*th%v_eta(1))
-        v_sfac = v_sfac*fac
-        th%ke_ions = th%ke_ions*v_sfac**2
-
-        call th%update_G_nhc(1, zero) ! update force on thermostat 1
-        ! update the thermostat "positions" eta
-        do i_nhc=1,th%n_nhc
-          call th%propagate_eta(i_nhc, th%dt_ys(i_ys), half)
-        end do
-
-        ! Forward part of Trotter expansion: update thermostat force/velocity
-        do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
-          ! Trotter expansion to avoid sinh singularity
-          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
-          call th%update_G_nhc(i_nhc+1, zero)
-          call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
-          call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
-        end do
-        call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
-      end do  ! Yoshida-Suzuki loop
-    end do    ! MTS loop
-
-    ! scale the ionic velocities
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
-      write(io_lun,'(2x,a,e16.8)') 'v_sfac = ', v_sfac
-
-    v = v_sfac*v
-    th%lambda = v_sfac
-
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then 
-      write(io_lun,th%nhc_fmt) "eta:   ", th%eta
-      write(io_lun,th%nhc_fmt) "v_eta: ", th%v_eta
-      write(io_lun,th%nhc_fmt) "G_nhc: ", th%G_nhc
-    end if
-
-  end subroutine propagate_nvt_nhc
   !!***
 
   !!****m* md_control/get_nhc_energy *
@@ -2136,180 +2049,6 @@ contains
 
   end subroutine propagate_npt_mttk
   !!***
-
-  !!****m* md_control/integrate_box_nhc *
-  !!  NAME
-  !!   integrate_box_nhc
-  !!  PURPOSE
-  !!   Integrate the NHC coupled to the box degrees of freedom, SSM integrator
-  !!  AUTHOR
-  !!   Zamaan Raza
-  !!  CREATION DATE
-  !!   2018/07/12
-  !!  SOURCE
-  !!  
-  subroutine integrate_box_nhc(baro, th)
-
-    ! passed variables
-    class(type_barostat), intent(inout)     :: baro
-    type(type_thermostat), intent(inout)    :: th
-
-    ! local variables
-    integer                                 :: i_mts, i_ys, i_nhc, i
-    real(double)                            :: v_sfac, v_eta_couple, &
-                                               expfac_p, expfac_vbox
-
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
-      write(io_lun,'(2x,a)') "integrate_box_nhc"
-
-    call baro%get_box_energy
-    th%G_nhc_cell(1) = (two*baro%ke_box - th%cell_ndof*th%T_ext*fac_Kelvin2Hartree) / &
-                       th%m_nhc_cell(1)
-
-    do i_mts = 1,th%n_mts_nhc ! multiple time step loop
-      do i_ys = 1,th%n_ys ! Yoshida-Suzuki loop
-        ! Box NHC velocity update
-        th%v_eta_cell(th%n_nhc) = th%v_eta_cell(th%n_nhc) + &
-                                  th%G_nhc_cell(th%n_nhc)*th%dt_ys(i_ys)*quarter
-        th%v_eta_cell(th%n_nhc) = th%v_eta_cell(th%n_nhc)*baro%p_drag
-        do i_nhc = th%n_nhc-1, 1, -1
-          expfac_p = exp(-one_eighth*th%dt_ys(i_ys)*th%v_eta_cell(i_nhc+1))
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc) + &
-                                 th%G_nhc_cell(i_nhc)*th%dt_ys(i_ys)*quarter
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*baro%p_drag
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
-        end do
-
-        ! Propagate eta_cell (bookkeeping)
-        do i_nhc=1,th%n_nhc
-          th%eta_cell(i_nhc) = th%eta_cell(i_nhc) + th%dt_ys(i_ys)*half*th%v_eta_cell(i_nhc)
-        end do
-
-        ! Couple box velocity to box NHC velocity
-        expfac_vbox = exp(-half*th%dt_ys(i_ys)*th%v_eta_cell(1))
-        select case(baro%baro_type)
-        case('iso-ssm')
-          baro%v_eps = baro%v_eps*expfac_vbox
-        case('ortho-ssm')
-          do i=1,3
-            baro%v_h(i,i) = baro%v_h(i,i)*expfac_vbox
-          end do
-        end select
-
-        call baro%get_box_energy
-        th%G_nhc_cell(1) = (two*baro%ke_box - &
-          th%cell_ndof*th%T_ext*fac_Kelvin2Hartree) / th%m_nhc_cell(1)
-
-        do i_nhc = 1, th%n_nhc-1
-          expfac_p = exp(-one_eighth*th%dt_ys(i_ys)*th%v_eta_cell(i_nhc+1))
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
-          th%G_nhc_cell(i_nhc+1) = (th%m_nhc(i_nhc)*th%v_eta_cell(i_nhc)**2 &
-                                 - th%T_ext*fac_Kelvin2Hartree)/&
-                                 th%m_nhc_cell(i_nhc+1)
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc) + &
-                                 th%G_nhc_cell(i_nhc)*th%dt_ys(i_ys)*quarter
-          th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*expfac_p
-        end do
-        th%v_eta_cell(th%n_nhc) = th%v_eta_cell(th%n_nhc) + &
-                                  th%G_nhc_cell(th%n_nhc)*th%dt_ys(i_ys)*quarter
-        th%v_eta_cell(th%n_nhc) = th%v_eta_cell(th%n_nhc)*baro%p_drag
-      end do ! Yoshida-Suzuki loop
-    end do ! Multiple time step loop
-
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then 
-      write(io_lun,th%nhc_fmt) "eta_cell:   ", th%eta_cell
-      write(io_lun,th%nhc_fmt) "v_eta_cell: ", th%v_eta_cell
-      write(io_lun,th%nhc_fmt) "G_nhc_cell: ", th%G_nhc_cell
-    end if
-  end subroutine integrate_box_nhc
-
-  !!****m* md_control/integrate_particle_nhc *
-  !!  NAME
-  !!   integrate_particle_nhc
-  !!  PURPOSE
-  !!   Integrate the NHC coupled to the particle degrees of freedom, SSM
-  !!   integrator
-  !!  AUTHOR
-  !!   Zamaan Raza
-  !!  CREATION DATE
-  !!   2018/07/12
-  !!  SOURCE
-  !!  
-  subroutine integrate_particle_nhc(th, v, ke)
-
-    ! passed variables
-    class(type_thermostat), intent(inout)       :: th
-    real(double), dimension(3,3), intent(inout) :: v
-    real(double), intent(in)                    :: ke
-
-    ! local variables
-    integer                                 :: i_mts, i_ys, i_nhc
-    real(double)                            :: v_sfac, v_eta_couple, &
-                                               expfac_t, expfac_vpart
-
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
-      write(io_lun,'(2x,a)') "integrate_particle_nhc"
-
-    th%ke_ions = ke
-    v_sfac = one
-    th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
-    do i_mts=1,th%n_mts_nhc ! Multiple time step loop
-      do i_ys=1,th%n_ys ! Yoshida-Suzuki loop
-        ! Particle NHC velocity update
-        th%v_eta(th%n_nhc) = th%v_eta(th%n_nhc) + &
-                             th%G_nhc(th%n_nhc)*th%dt_ys(i_ys)*quarter
-        th%v_eta(th%n_nhc) = th%v_eta(th%n_nhc)*th%t_drag
-        do i_nhc = th%n_nhc-1, 1, -1
-          expfac_t = exp(-one_eighth*th%dt_ys(i_ys)*th%v_eta(i_nhc+1))
-          th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
-          th%v_eta(i_nhc) = th%v_eta(i_nhc) + &
-                            th%G_nhc(i_nhc)*th%dt_ys(i_ys)*quarter
-          th%v_eta(i_nhc) = th%v_eta(i_nhc)*th%t_drag
-          th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
-        end do
-
-        ! Propagate eta (bookkeeping)
-        do i_nhc=1,th%n_nhc
-          th%eta(i_nhc) = th%eta(i_nhc) + th%dt_ys(i_ys)*half*th%v_eta(i_nhc)
-        end do
-
-        ! update the velocity scaling factor and kinetic energy
-        expfac_vpart = exp(-half*th%dt_ys(i_ys)*th%v_eta(1))
-        th%ke_ions = th%ke_ions*expfac_vpart**2
-        v_sfac = expfac_vpart*v_sfac
-
-        ! Particle NHC velocity and force update
-        th%G_nhc(1) = two*(th%ke_ions - th%ke_target)/th%m_nhc(1)
-        do i_nhc = 1, th%n_nhc-1
-          expfac_t = exp(-one_eighth*th%dt_ys(i_ys)*th%v_eta(i_nhc+1))
-          th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
-          th%G_nhc(i_nhc+1) = (th%m_nhc(i_nhc)*th%v_eta(i_nhc)**2 - &
-                            th%T_ext*fac_Kelvin2Hartree)/th%m_nhc(i_nhc+1)
-          th%v_eta(i_nhc) = th%v_eta(i_nhc) + &
-                            th%G_nhc(i_nhc)*th%dt_ys(i_ys)*quarter
-          th%v_eta(i_nhc) = th%v_eta(i_nhc)*expfac_t
-        end do
-        th%v_eta(th%n_nhc) = th%v_eta(th%n_nhc) + &
-                             th%G_nhc(th%n_nhc)*th%dt_ys(i_ys)*quarter
-        th%v_eta(th%n_nhc) = th%v_eta(th%n_nhc)*th%t_drag
-      end do ! Yoshida-Suzuki loop
-    end do ! Multiple time step loop
-
-    ! Scale the velocities
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
-      write(io_lun,'(2x,a,e16.8)') 'v_sfac = ', v_sfac
-
-    th%lambda = v_sfac
-    v = v_sfac*v
-
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then 
-      write(io_lun,th%nhc_fmt) "eta:   ", th%eta
-      write(io_lun,th%nhc_fmt) "v_eta: ", th%v_eta
-      write(io_lun,th%nhc_fmt) "G_nhc: ", th%G_nhc
-    end if
-
-  end subroutine integrate_particle_nhc
 
   !!****m* md_control/integrate_box *
   !!  NAME

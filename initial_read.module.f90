@@ -1972,7 +1972,7 @@ contains
          md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'none')
          md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
        case('nvt') 
-         md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'ssm')
+         md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
          md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
        case('npt')
          md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
