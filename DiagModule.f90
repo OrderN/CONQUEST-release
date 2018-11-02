@@ -3879,6 +3879,8 @@ contains
   !!   2018/10/30 11:43 dave
   !!    Implementing semi-core exclusion given right flags
   !!    (NB at present, semi-core states are not flagged but will be !)
+  !!   2018/11/02 16:30 nakata
+  !!    Bug fix: changed atom_spec to neigh_species for semicore of neighbour atoms
   !!  SOURCE
   !!
   subroutine accumulate_DOS(weight,eval,evec,DOS,spinSF,projDOS,projDOS_angmom,weight_pDOS)
@@ -4052,7 +4054,7 @@ contains
                                iatomf2 = 0
                                do l2 = 0, pao(neigh_species)%greatest_angmom
                                   do nacz2 = 1, pao(neigh_species)%angmom(l2)%n_zeta_in_angmom
-                                     if((pao(atom_spec)%angmom(l2)%semicore(nacz2)==0) .OR. &
+                                     if((pao(neigh_species)%angmom(l2)%semicore(nacz2)==0) .OR. &
                                           (flag_pDOS_include_semicore)) then
                                         do m2 = -l2,l2
                                            iatomf2 = iatomf2 + 1
@@ -4071,7 +4073,7 @@ contains
                                iatomf2 = 0
                                do l2 = 0, pao(neigh_species)%greatest_angmom
                                   do nacz2 = 1, pao(neigh_species)%angmom(l2)%n_zeta_in_angmom
-                                     if((pao(atom_spec)%angmom(l2)%semicore(nacz2)==0) .OR. &
+                                     if((pao(neigh_species)%angmom(l2)%semicore(nacz2)==0) .OR. &
                                           (flag_pDOS_include_semicore)) then
                                         do m2 = -l2,l2
                                            iatomf2 = iatomf2 + 1
