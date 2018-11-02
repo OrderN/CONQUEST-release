@@ -906,7 +906,7 @@ contains
     v_sfac = one
     box_sfac = one
     if (th%cell_nhc) call baro%get_box_energy
-    call th%update_G_nhc(1, zero) ! update force on thermostat 1
+    call th%update_G_nhc(1, baro%ke_box) ! update force on thermostat 1
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
         if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
@@ -945,7 +945,7 @@ contains
           call baro%get_box_energy
         end if
 
-        call th%update_G_nhc(1, zero) ! update force on thermostat 1
+        call th%update_G_nhc(1, baro%ke_box) ! update force on thermostat 1
         ! update the thermostat "positions" eta
         do i_nhc=1,th%n_nhc
           call th%propagate_eta(i_nhc, th%dt_ys(i_ys), half)
@@ -955,7 +955,7 @@ contains
         do i_nhc=1,th%n_nhc-1 ! loop over NH thermostats in forward order
           ! Trotter expansion to avoid sinh singularity
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
-          call th%update_G_nhc(i_nhc+1, zero)
+          call th%update_G_nhc(i_nhc+1, baro%ke_box)
           call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
@@ -966,11 +966,9 @@ contains
     ! scale the ionic velocities
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
       write(io_lun,'(2x,a,e16.8)') 'v_sfac = ', v_sfac
-
     v = v_sfac*v
     th%lambda = v_sfac
 
-    ! scale the box velocity
     if (th%cell_nhc) then
       if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) &
         write(io_lun,'(2x,a,e16.8)') 'box_sfac = ', box_sfac
@@ -1248,6 +1246,7 @@ contains
     baro%baro_type = baro_type
     baro%dt = dt
     baro%ndof = ndof
+    baro%ke_box = zero
     if (md_tau_P < zero) md_tau_P = dt*ten*ten
     if (md_calc_xlmass) then
       omega_P = twopi/md_tau_P
