@@ -150,7 +150,7 @@ module md_control
       procedure, private  :: propagate_v_eta_exp
       procedure, private  :: apply_nhc_drag
 
-      procedure, public   :: propagate_nhc
+      procedure, public   :: integrate_nhc
   end type type_thermostat
 !!***
 
@@ -866,9 +866,9 @@ contains
   end subroutine apply_nhc_drag
   !!***
 
-  !!****m* md_control/propagate_nhc *
+  !!****m* md_control/integrate_nhc *
   !!  NAME
-  !!   propagate_nhc
+  !!   integrate_nhc
   !!  PURPOSE
   !!   propagate the particle and cell Nose-Hoover chains.
   !!   G. Martyna et al. Mol. Phys. 5, 1117 (1996)
@@ -879,10 +879,10 @@ contains
   !!  MODIFICATION HISTORY
   !!   2018/10/31 zamaan
   !!    Now does both particle and box NHC integration, since they are
-  !!    orthogonal. Renamed from propagte_nvt_nhc to propagate_nhc.
+  !!    orthogonal. Renamed from propagte_nvt_nhc to integrate_nhc.
   !!  SOURCE
   !!  
-  subroutine propagate_nhc(th, baro, v, ke)
+  subroutine integrate_nhc(th, baro, v, ke)
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
@@ -897,7 +897,7 @@ contains
     real(double)  :: fac
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
-      write(io_lun,'(2x,a)') "propagate_nhc"
+      write(io_lun,'(2x,a)') "integrate_nhc"
 
     th%ke_ions = ke
     v_sfac = one
@@ -982,7 +982,7 @@ contains
       end if
     end if
 
-  end subroutine propagate_nhc
+  end subroutine integrate_nhc
   !!***
 
   !!****m* md_control/get_nhc_energy *
