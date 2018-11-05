@@ -14,14 +14,10 @@ module schro
   type(valence_info), allocatable, dimension(:) :: val
   logical :: flag_user_specified = .false.
   integer, dimension(0:6) :: n_proj ! Number of KB projectors for each l (declare as 6 to avoid alloc)
-  logical :: flag_run_debug = .false.
   logical :: flag_plot_output
   ! Do we use V_{l} (deprecated) ? 
   logical :: flag_use_Vl
 
-  integer :: n_debug_run, l_debug_run
-  real(double) :: E_debug_run
-  
   real(double), allocatable, dimension(:) :: deltaE_large_radius! = 0.00073498_double
   real(double), allocatable, dimension(:) :: deltaE_small_radius! = 0.073498_double
   
@@ -80,22 +76,6 @@ contains
        call get_vxc(nmesh,rr,local_and_vkb(i_species)%charge,i_species,vxc)
        if(flag_pcc_global) & 
             local_and_vkb(i_species)%charge = local_and_vkb(i_species)%charge - local_and_vkb(i_species)%pcc
-       if(flag_run_debug) then
-          call io_assign(lun)
-          open(unit=lun,file=pte(pseudo(i_species)%z)//"_AtomicVHaVXC.dat")
-          ! Write out charge, VHa, VXC and PCC if applicable
-          if(flag_pcc_global) then
-             do i=1,nmesh
-                write(lun,fmt='(5e18.10)') rr(i),local_and_vkb(i_species)%charge(i),vha(i),vxc(i), &
-                     local_and_vkb(i_species)%pcc(i)
-             end do
-          else
-             do i=1,nmesh
-                write(lun,fmt='(4e18.10)') rr(i),local_and_vkb(i_species)%charge(i),vha(i),vxc(i)
-             end do
-          end if
-          call io_close(lun)
-       end if
        ! Polarisation will be done separately at the end
        n_shells = val(i_species)%n_occ
        ! Find energy of valence states without confinement

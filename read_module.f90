@@ -17,6 +17,7 @@ module read
   integer, parameter :: full = 4
 
   integer :: energy_units ! Local for reading; 1 is Ha, 2 is eV
+  real(double) :: energy_conv ! Define a factor for energy conversion (often 1.0)
   real(double) :: energy_semicore ! Threshold for semi-core states
 contains
 
@@ -28,9 +29,9 @@ contains
     use species_module, ONLY: n_species
     use pseudopotential_common, ONLY: ABINIT, UPF, pseudo_file_format_oncv
     use mesh, ONLY: mesh_type, hamann, siesta, alpha, beta, nmesh_reg, delta_r_reg
-    use schro, ONLY: pseudo_type, flag_user_specified, flag_default_cutoffs, flag_run_debug, &
+    use schro, ONLY: pseudo_type, flag_user_specified, flag_default_cutoffs, &
          pao_cutoff_energies, pao_cutoff_radii, pao_cutoff_default, deltaE_large_radius, deltaE_small_radius, &
-         flag_plot_output, local_and_vkb, val, n_debug_run, l_debug_run, E_debug_run, flag_use_Vl
+         flag_plot_output, local_and_vkb, val, flag_use_Vl
     use pao_info, ONLY: paos
     use units, ONLY: HaToeV
     use radial_xc, ONLY: alloc_xc
@@ -46,28 +47,44 @@ contains
     ! Load the Conquest_input files
     call load_input
     ! Now scan for parameters
+    !
+    ! IO
+    ! 
     iprint = fdf_integer('IO.Iprint',0)
+    flag_plot_output = fdf_boolean('IO.PlotOutput',.false.)
+    !
+    ! General
+    !
     n_species = fdf_integer('General.NumberOfSpecies',1)
-    ps_format = fdf_string(4,'General.PseudoFileFormatONCV','psp8')
-    if((ps_format(1:3).eq.'upf').OR.(ps_format(1:3).eq.'UPF')) then
-       pseudo_file_format_oncv = UPF
-    else if((ps_format(1:4).eq.'psp8').OR.(ps_format(1:4).eq.'PSP8')) then
-       pseudo_file_format_oncv = ABINIT
-    end if
+    flag_use_Vl = fdf_boolean('General.UseVl',.false.) ! Check later whether this is valid
+    energy_semicore = fdf_double('General.SemicoreEnergy',-one)
+    if(energy_semicore>zero) &
+         write(*,fmt='(4x,"Possible error: your semi-core threshold is positive ! ",f6.3)') energy_semicore
+    !
+    ! Not used at present, and may need to be species dependent
+    !ps_format = fdf_string(4,'General.PseudoFileFormatONCV','psp8')
+    !if((ps_format(1:3).eq.'upf').OR.(ps_format(1:3).eq.'UPF')) then
+    !   pseudo_file_format_oncv = UPF
+    !else if((ps_format(1:4).eq.'psp8').OR.(ps_format(1:4).eq.'PSP8')) then
+    !   pseudo_file_format_oncv = ABINIT
+    !end if
+    !
+    ! PS
+    !
     input_string = fdf_string(6,'PS.PseudopotentialType','hamann')
     if(input_string(1:6)=='hamann') then
        pseudo_type = hamann
     else if(input_string(1:6)=='siesta') then
        pseudo_type = siesta
     end if
-    flag_plot_output = fdf_boolean('IO.PlotOutput',.false.)
+    ! 
+    ! Mesh
+    ! 
     input_string = fdf_string(6,'Mesh.MeshType',input_string(1:6)) ! Take mesh-type default as semilocal type
     if(input_string(1:6)=='hamann') then
        mesh_type = hamann
-       !write(*,*) 'Mesh type: ',hamann
     else if(input_string(1:6)=='siesta') then
        mesh_type = siesta
-       !write(*,*) 'Mesh type: ',hamann
     else
        call cq_abort("Unrecognised mesh type: "//input_string(1:6))
     end if
@@ -75,11 +92,19 @@ contains
     beta = fdf_double("Mesh.Beta",beta)
     nmesh_reg = fdf_integer("Mesh.NMeshRegular",500)
     delta_r_reg = fdf_double("Mesh.RegularSpacing",0.01_double)
+    !
+    ! Allocating per-species data
+    !
     allocate(pseudo_file_name(n_species),vps_file_name(n_species),species_label(n_species),&
          paos(n_species),vkb_file_name(n_species))
     allocate(local_and_vkb(n_species),val(n_species))
-    ! Allocate space for XC functionals
+    ! XC functionals
     call alloc_xc(n_species)
+    ! Energy cutoffs
+    allocate(deltaE_large_radius(n_species), deltaE_small_radius(n_species))
+    !
+    ! Read details of species
+    !
     ! Loop over species, finding their labels in the file
     ! All other species-dependent data will then be in the block with that label
     if(fdf_block('SpeciesLabels')) then
@@ -93,19 +118,20 @@ contains
     else
        call cq_abort("You need to specify SpeciesLabels block")
     end if
-    ! Is this a debug run ? 
-    flag_run_debug = fdf_boolean('General.RunDebug',.false.)
-    flag_use_Vl = fdf_boolean('General.UseVl',.false.) ! Check later whether this is valid
-    energy_semicore = fdf_double('General.SemicoreEnergy',-one)
-    if(energy_semicore>zero) write(*,fmt='(4x,"Possible error: your semi-core threshold is positive ! ",f6.3)') energy_semicore
-    ! Energy cutoffs
-    allocate(deltaE_large_radius(n_species), deltaE_small_radius(n_species))
+    !
     ! Now read the species-dependent data
+    !
     do i=1,n_species
+       !
+       ! Atom blocks
+       !
        if(fdf_block(species_label(i))) then
           pseudo_file_name(i) = fdf_string(80,'Atom.PseudopotentialFile',' ')
           vps_file_name(i) = fdf_string(80,'Atom.SemilocalFile',' ')
           vkb_file_name(i) = fdf_string(80,'Atom.VKBFile',' ')
+          !
+          ! Polarisation
+          !
           paos(i)%flag_perturb_polarise = fdf_boolean("Atom.Perturbative_Polarised",.false.)
           if(paos(i)%flag_perturb_polarise) then
              paos(i)%polarised_n = fdf_integer("Atom.PolarisedN",0)
@@ -114,6 +140,9 @@ contains
              if(paos(i)%polarised_l==-1) call cq_abort("Must specify polarised shell l when using perturbation")
              paos(i)%polarised_shell = 0
           end if
+          !
+          ! Form for zetas: compress or split norm
+          !
           input_string = fdf_string(80,'Atom.ZetaForm','split')
           if(leqi(input_string(1:3),'spl')) then
              paos(i)%flag_zetas = 1 ! Split-norm approach
@@ -122,8 +151,14 @@ contains
           else
              call cq_abort("Unrecognised zeta form flag "//input_string(1:8))
           end if
+          !
+          ! Confinement
+          !
           width = fdf_double("Atom.WidthConfine",one)
           prefac = fdf_double("Atom.PrefacConfine",zero)
+          !
+          ! Cutoffs
+          !
           input_string = fdf_string(8,"Atom.Cutoffs","default")
           if(leqi(input_string(1:2),'en')) then ! Take reasonable keyword
              paos(i)%flag_cutoff = pao_cutoff_energies
@@ -134,10 +169,15 @@ contains
           else
              call cq_abort("Unrecognised atomic cutoff flag "//input_string(1:8))
           end if
+          !
+          ! Energy units
+          !
           energy_units = 1
+          energy_conv = one
           input_string = fdf_string(2,"Atom.EnergyUnits","Ha")
           if(leqi(input_string(1:2),"eV")) then
              energy_units = 2
+             energy_conv = one / HaToeV
              deltaE_large_radius(i) = fdf_double("Atom.dE_large_radius",0.02_double)
              deltaE_small_radius(i) = fdf_double("Atom.dE_small_radius",two)
              deltaE_large_radius(i) = deltaE_large_radius(i) / HaToeV
@@ -146,6 +186,9 @@ contains
              deltaE_large_radius(i) = fdf_double("Atom.dE_large_radius",0.00073498_double)
              deltaE_small_radius(i) = fdf_double("Atom.dE_small_radius",0.073498_double)
           end if
+          !
+          ! Basis size
+          !
           input_string = fdf_string(7,'Atom.BasisSize','none')
           if(leqi(input_string(1:7),'minimal')) then
              basis_size = minimal
@@ -158,12 +201,9 @@ contains
           else
              call cq_abort("Error ! Unknown Atom.BasisSize specification: "//input_string(1:7))
           end if
-          ! If debug, check for specific n/l/energy
-          if(flag_run_debug) then
-             n_debug_run = fdf_integer("Atom.Debug_N",0)
-             l_debug_run = fdf_integer("Atom.Debug_L",-1)
-             E_debug_run = fdf_double("Atom.Debug_E",100.0_double)
-          end if
+          !
+          ! Basis block
+          !
           input_string = fdf_string(80,'Atom.BasisBlock','none')
           if(.NOT.(leqi(input_string(1:4),'none'))) then !.AND.paos(i)%flag_cutoff==3)) then
              paos(i)%n_shells = fdf_integer("Atom.PAO_N_Shells",0)
@@ -172,7 +212,10 @@ contains
           call fdf_endblock
        else
           call cq_abort("Can't find species block for label "//species_label(i))
-       end if
+       end if ! if fdf_block(species(i)) - is this species defined ?!
+       !
+       ! Read Atom.BasisBlock
+       !
        if(input_string(1:4)=='none') then ! Default radii and zetas
           write(*,fmt='(2x,"Using default PAO specification")')
           flag_default_cutoffs = .true.
@@ -181,9 +224,6 @@ contains
           flag_default_cutoffs = .false.
           if(fdf_block(input_string)) then
              flag_user_specified = .true.
-             !if(1+block_end-block_start<n_species) & 
-             !     call cq_abort("Too few species in SpeciesLabels: ",&
-             !     1+block_end-block_start,n_species)
              allocate(paos(i)%nzeta(paos(i)%n_shells),paos(i)%l(paos(i)%n_shells), &
                   paos(i)%n(paos(i)%n_shells),paos(i)%npao(paos(i)%n_shells), &
                   paos(i)%has_semicore(paos(i)%n_shells),paos(i)%inner(paos(i)%n_shells),&
@@ -196,7 +236,6 @@ contains
                 do j=1,paos(i)%n_shells-1
                    read (unit=input_array(block_start+j-1),fmt=*) paos(i)%n(j), paos(i)%l(j), paos(i)%nzeta(j)
                    if(paos(i)%nzeta(j)>maxl) maxl = paos(i)%nzeta(j)
-                   !write(*,*) '# '//input_array(block_start+j-1)
                    n_paos = n_paos + paos(i)%nzeta(j)
                    if(paos(i)%n(j)==paos(i)%polarised_n.AND.paos(i)%l(j)==paos(i)%polarised_l) then
                       paos(i)%polarised_shell = j
@@ -223,10 +262,10 @@ contains
                 do j=1,paos(i)%n_shells
                    read (unit=input_array(block_start+j-1),fmt=*) paos(i)%n(j), paos(i)%l(j), paos(i)%nzeta(j)
                    if(paos(i)%nzeta(j)>maxl) maxl = paos(i)%nzeta(j)
-                   !write(*,*) '# '//input_array(block_start+j-1)
                    n_paos = n_paos + paos(i)%nzeta(j)
                    if(paos(i)%flag_perturb_polarise) then
-                      if(paos(i)%polarised_n == paos(i)%n(j).AND.paos(i)%polarised_l == paos(i)%l(j)) paos(i)%polarised_shell = j
+                      if(paos(i)%polarised_n == paos(i)%n(j).AND.paos(i)%polarised_l == paos(i)%l(j)) &
+                           paos(i)%polarised_shell = j
                    end if
                 end do
              end if
@@ -236,25 +275,18 @@ contains
              paos(i)%energy = zero
              allocate(paos(i)%psi(maxl,paos(i)%n_shells))
              allocate(paos(i)%psi_reg(maxl,paos(i)%n_shells))
-             !if(paos(i)%flag_perturb_polarise) then
-             !   allocate(paos(i)%pol(maxl))
-             !   allocate(paos(i)%pol_reg(maxl))
-             !   n_paos = n_paos + paos(i)%nzeta(paos(i)%n_shells)
-             !end if
              paos(i)%total_paos = n_paos
              if(paos(i)%flag_cutoff==pao_cutoff_energies.OR.paos(i)%flag_cutoff==pao_cutoff_default) then ! Energies
                 if(paos(i)%flag_perturb_polarise) then
                    do j=1,paos(i)%n_shells-1
-                      read (unit=input_array(block_start+paos(i)%n_shells-1+j-1),fmt=*) (paos(i)%energy(k,j),k=1,paos(i)%nzeta(j))
-                      if(energy_units==2) paos(i)%energy(:,j) = paos(i)%energy(:,j)/ HaToeV
-                      !write(*,*) '# '//input_array(block_start+paos(i)%n_shells-1+j-1)
+                      read (unit=input_array(block_start+paos(i)%n_shells-1+j-1),fmt=*) &
+                           (paos(i)%energy(k,j),k=1,paos(i)%nzeta(j))
                    end do
                    paos(i)%energy(:,paos(i)%n_shells) = paos(i)%energy(:,paos(i)%polarised_shell)
                 else
                    do j=1,paos(i)%n_shells
-                      read (unit=input_array(block_start+paos(i)%n_shells+j-1),fmt=*) (paos(i)%energy(k,j),k=1,paos(i)%nzeta(j))
-                      if(energy_units==2) paos(i)%energy(:,j) = paos(i)%energy(:,j)/ HaToeV
-                      !write(*,*) '# '//input_array(block_start+paos(i)%n_shells+j-1)
+                      read (unit=input_array(block_start+paos(i)%n_shells+j-1),fmt=*) &
+                           (paos(i)%energy(k,j),k=1,paos(i)%nzeta(j))
                    end do
                 end if
                 do j=1,paos(i)%n_shells
@@ -262,25 +294,30 @@ contains
                         write(*,fmt='("Warning: energy shift of ",f6.3,"Ha is rather large.  Are these radii ?")') &
                         paos(i)%energy(1,j)
                 end do
+                ! Scale energies
+                paos(i)%energy(:,:) = paos(i)%energy(:,:) * energy_conv
              else if(paos(i)%flag_cutoff==pao_cutoff_radii) then
                 if(paos(i)%flag_perturb_polarise) then
                    do j=1,paos(i)%n_shells-1
-                      read (unit=input_array(block_start+paos(i)%n_shells-1+j-1),fmt=*) (paos(i)%cutoff(k,j),k=1,paos(i)%nzeta(j))
-                      !write(*,*) '# '//input_array(block_start+paos(i)%n_shells-1+j-1)
+                      read (unit=input_array(block_start+paos(i)%n_shells-1+j-1),fmt=*) &
+                           (paos(i)%cutoff(k,j),k=1,paos(i)%nzeta(j))
                    end do
                    paos(i)%cutoff(:,paos(i)%n_shells) = paos(i)%cutoff(:,paos(i)%polarised_shell)
                 else
                    do j=1,paos(i)%n_shells
-                      read (unit=input_array(block_start+paos(i)%n_shells+j-1),fmt=*) (paos(i)%cutoff(k,j),k=1,paos(i)%nzeta(j))
-                      !write(*,*) '# '//input_array(block_start+paos(i)%n_shells+j-1)
+                      read (unit=input_array(block_start+paos(i)%n_shells+j-1),fmt=*) &
+                           (paos(i)%cutoff(k,j),k=1,paos(i)%nzeta(j))
                    end do
                 end if
                 do j=1,paos(i)%n_shells
                    if(paos(i)%cutoff(1,j)<two) &
-                        write(*,fmt='("Warning: radius of ",f6.3,"a0 is rather small.  Are these energies ?")') paos(i)%cutoff(1,j)
+                        write(*,fmt='("Warning: radius of ",f6.3,"a0 is rather small.  Are these energies ?")') &
+                        paos(i)%cutoff(1,j)
                 end do
              end if
-             ! Do we have confinement potentials ?
+             !
+             ! Check for confinement potentials
+             !
              if(paos(i)%flag_perturb_polarise) then
                 if(1+block_end-block_start>2*paos(i)%n_shells-2) then
                    do j=1,paos(i)%n_shells-1
@@ -296,77 +333,37 @@ contains
                    end do
                 end if
              end if
+             !
              ! Sort the energies/cutoffs so that largest is first
-             do j=1,paos(i)%n_shells
-                if(paos(i)%flag_cutoff==pao_cutoff_radii) then
-                   if(paos(i)%nzeta(j)==2) then
-                      if(paos(i)%cutoff(1,j)<paos(i)%cutoff(2,j)) then
-                         temp = paos(i)%cutoff(2,j)
-                         paos(i)%cutoff(2,j) = paos(i)%cutoff(1,j)
-                         paos(i)%cutoff(1,j) = temp
-                      end if
-                   else if(paos(i)%nzeta(j)==3) then
-                      ! Not the most elegant, but simple; 1&2; 2&3; 1&2 again
-                      if(paos(i)%cutoff(1,j)<paos(i)%cutoff(2,j)) then
-                         temp = paos(i)%cutoff(2,j)
-                         paos(i)%cutoff(2,j) = paos(i)%cutoff(1,j)
-                         paos(i)%cutoff(1,j) = temp
-                      end if
-                      if(paos(i)%cutoff(2,j)<paos(i)%cutoff(3,j)) then
-                         temp = paos(i)%cutoff(3,j)
-                         paos(i)%cutoff(3,j) = paos(i)%cutoff(2,j)
-                         paos(i)%cutoff(2,j) = temp
-                      end if
-                      if(paos(i)%cutoff(1,j)<paos(i)%cutoff(2,j)) then
-                         temp = paos(i)%cutoff(2,j)
-                         paos(i)%cutoff(2,j) = paos(i)%cutoff(1,j)
-                         paos(i)%cutoff(1,j) = temp
-                      end if
-                   end if
-                else ! Energies
-                   if(paos(i)%nzeta(j)==2) then
-                      if(paos(i)%energy(1,j)>paos(i)%energy(2,j)) then
-                         temp = paos(i)%energy(2,j)
-                         paos(i)%energy(2,j) = paos(i)%energy(1,j)
-                         paos(i)%energy(1,j) = temp
-                      end if
-                   else if(paos(i)%nzeta(j)==3) then
-                      ! Not the most elegant, but simple; 1&2; 2&3; 1&2 again
-                      if(paos(i)%energy(1,j)>paos(i)%energy(2,j)) then
-                         temp = paos(i)%energy(2,j)
-                         paos(i)%energy(2,j) = paos(i)%energy(1,j)
-                         paos(i)%energy(1,j) = temp
-                      end if
-                      if(paos(i)%energy(2,j)>paos(i)%energy(3,j)) then
-                         temp = paos(i)%energy(3,j)
-                         paos(i)%energy(3,j) = paos(i)%energy(2,j)
-                         paos(i)%energy(2,j) = temp
-                      end if
-                      if(paos(i)%energy(1,j)>paos(i)%energy(2,j)) then
-                         temp = paos(i)%energy(2,j)
-                         paos(i)%energy(2,j) = paos(i)%energy(1,j)
-                         paos(i)%energy(1,j) = temp
-                      end if
-                   end if
-                end if
-             end do
+             !
+             if(paos(i)%flag_cutoff==pao_cutoff_radii) then
+                do j=1,paos(i)%n_shells
+                   call lsort(paos(i)%cutoff(:,j),paos(i)%nzeta(j))
+                end do
+             else
+                do j=1,paos(i)%n_shells
+                   call lsort(paos(i)%energy(:,j),paos(i)%nzeta(j))
+                end do
+             end if
+             ! Close block
              call fdf_endblock
           else
              call cq_abort("Can't find species basis block "//input_string)
           end if
-       end if
+       end if ! Default radii or user-specified
     end do
     call io_close(fdf_out)
     return
   end subroutine read_input
 
-    ! Read semi-local potentials output by a DRB hack of Hamann's code
+  ! Read semi-local potentials output by a DRB patch to Hamann's code
   ! Now read KB potentials
   subroutine read_vkb
 
     use numbers
     use species_module, ONLY: n_species
-    use schro, ONLY: local_and_vkb, pseudo_type, val, flag_default_cutoffs, n_proj, pao_cutoff_energies, pao_cutoff_radii
+    use schro, ONLY: local_and_vkb, pseudo_type, val, flag_default_cutoffs, n_proj, &
+         pao_cutoff_energies, pao_cutoff_radii
     use pseudo_tm_info, ONLY: pseudo
     use input_module, ONLY: io_assign, io_close
     use mesh, ONLY: siesta
@@ -993,9 +990,9 @@ contains
     end if
   end subroutine set_pao_initial
 
-  ! These routines were written to read the output from the Hamann code before realising that (a) we needed the semi-local
-  ! potentials and (b) that the logarithmic radial mesh gave a much more accurate result.  They're kept below for reference
-  ! but aren't used.
+  ! These routines were written to read the output from the Hamann code before realising that
+  ! (a) we needed the semi-local potentials and (b) that the logarithmic radial mesh gave
+  ! a much more accurate result.  They're kept below for reference but aren't used.
   subroutine read_abinit
 
     use datatypes
@@ -1517,188 +1514,75 @@ contains
     return
   end function get_upf_line
 
-!%%!   ! Read semi-local potentials output by a DRB hack of Hamann's code
-!%%!   ! Now read KB potentials
-!%%!   subroutine read_vps
-!%%! 
-!%%!     use numbers
-!%%!     use species_module, ONLY: n_species
-!%%!     use schro, ONLY: pseudo_type, val, flag_default_cutoffs
-!%%!     use pseudo_tm_info, ONLY: pseudo
-!%%!     use input_module, ONLY: io_assign, io_close
-!%%!     use mesh, ONLY: siesta
-!%%!     use global_module, ONLY: flag_pcc_global
-!%%!     use pao_info, ONLY: paos
-!%%!     
-!%%!     implicit none
-!%%! 
-!%%!     integer :: i_species, ios, lun, ngrid, ell, i, n_occ, n_paos
-!%%!     integer :: n_shells
-!%%!     integer, dimension(0:4) :: count_func
-!%%!     character(len=2) :: char_in
-!%%!     logical :: flag_core_done = .false.
-!%%!     real(double) :: dummy
-!%%! 
-!%%!     allocate(semilocal(n_species),val(n_species))
-!%%!     do i_species = 1,n_species
-!%%!        ! open file
-!%%!        call io_assign(lun)
-!%%!        open(unit=lun, file=vps_file_name(i_species), status='old', iostat=ios)
-!%%!        if ( ios > 0 ) call cq_abort('Error opening pseudopotential file: '//vps_file_name(i_species))
-!%%!        ! Allocate space
-!%%!        read(lun,*) char_in,n_shells
-!%%!        if(paos(i_species)%n_shells==0) then
-!%%!           paos(i_species)%n_shells = n_shells
-!%%!        else if(paos(i_species)%n_shells/=n_shells) then
-!%%!           call cq_abort("Incompatibility of valence shells: ",paos(i_species)%n_shells,n_shells)
-!%%!        end if
-!%%!        if(flag_default_cutoffs) then
-!%%!           allocate(paos(i_species)%nzeta(n_shells),paos(i_species)%l(n_shells),paos(i_species)%n(n_shells))
-!%%!           ! For default, we have SZ (shallow core) and TZTP so maximum number of zetas is 3
-!%%!           allocate(paos(i_species)%cutoff(3,n_shells))
-!%%!           paos(i_species)%cutoff = zero
-!%%!           allocate(paos(i_species)%energy(3,n_shells))
-!%%!           paos(i_species)%energy = zero
-!%%!           allocate(paos(i_species)%psi(3,n_shells))
-!%%!           allocate(paos(i_species)%psi_reg(3,n_shells))
-!%%!           if(paos(i_species)%flag_polarise) then
-!%%!              allocate(paos(i_species)%pol(3))
-!%%!              allocate(paos(i_species)%pol_reg(3))
-!%%!           end if
-!%%!        end if
-!%%!        write(*,*) '# In VPS, number of shells: ',n_shells
-!%%!        allocate(val(i_species)%n(n_shells),val(i_species)%l(n_shells), &
-!%%!             val(i_species)%occ(n_shells),val(i_species)%semicore(n_shells),val(i_species)%en_ps(n_shells))
-!%%!        count_func = 0 ! Count how many functions per l channel
-!%%!        n_occ = 0
-!%%!        do i = 1,n_shells
-!%%!           read(lun,*) char_in,val(i_species)%n(i),val(i_species)%l(i),val(i_species)%occ(i),val(i_species)%en_ps(i)
-!%%!           write(*,*) '# Valence : ',val(i_species)%n(i),val(i_species)%l(i),val(i_species)%occ(i),val(i_species)%en_ps(i)
-!%%!           count_func(val(i_species)%l(i)) = count_func(val(i_species)%l(i)) + 1
-!%%!           val(i_species)%semicore(i) = 0
-!%%!           if(val(i_species)%occ(i)>RD_ERR) n_occ = n_occ + 1
-!%%!           if(flag_default_cutoffs) then
-!%%!              paos(i_species)%n(i) = val(i_species)%n(i)
-!%%!              paos(i_species)%l(i) = val(i_species)%l(i)
-!%%!              paos(i_species)%nzeta(i) = 3 ! Fix for semi-core later
-!%%!           end if
-!%%!        end do
-!%%!        write(*,*) '# valence shells, occupied shells: ',n_shells, n_occ
-!%%!        val(i_species)%n_occ = n_occ
-!%%!        ! Now flag semi-core states
-!%%!        if(flag_default_cutoffs) n_paos = 0
-!%%!        do ell=0,4
-!%%!           if(count_func(ell)>1) then ! We have semi-core
-!%%!              do i = 1,n_shells ! Loop over valence shells
-!%%!                 if(val(i_species)%l(i)==ell.AND.(.NOT.flag_core_done)) then ! If this is the first, flag it
-!%%!                    val(i_species)%semicore(i) = 1
-!%%!                    val(i_species)%n(i) = ell+1
-!%%!                    flag_core_done = .true.
-!%%!                    paos(i_species)%nzeta(i) = 1 ! Fix for semi-core
-!%%!                    if(flag_default_cutoffs) n_paos = n_paos + 1
-!%%!                 else
-!%%!                    val(i_species)%n(i) = ell+2                   
-!%%!                    if(flag_default_cutoffs) n_paos = n_paos + 3
-!%%!                 end if
-!%%!              end do
-!%%!           else
-!%%!              do i = 1,n_shells ! Loop over valence shells
-!%%!                 if(val(i_species)%l(i)==ell) then ! If this is the first, flag it
-!%%!                    val(i_species)%n(i) = ell+1
-!%%!                    if(flag_default_cutoffs) n_paos = n_paos + 3
-!%%!                 end if
-!%%!              end do
-!%%!           end if
-!%%!        end do
-!%%!        read(lun,*) ngrid
-!%%!        semilocal(i_species)%ngrid = ngrid
-!%%!        allocate(semilocal(i_species)%rr(ngrid))
-!%%!        allocate(semilocal(i_species)%charge(ngrid))
-!%%!        allocate(semilocal(i_species)%potential(ngrid,0:pseudo(i_species)%lmax))
-!%%!        if(flag_pcc_global) then
-!%%!           allocate(semilocal(i_species)%pcc(ngrid))
-!%%!           do i=1,ngrid
-!%%!              read(lun,*) semilocal(i_species)%rr(i),semilocal(i_species)%charge(i), semilocal(i_species)%pcc(i), &
-!%%!                   (semilocal(i_species)%potential(i,ell),ell=0,pseudo(i_species)%lmax)
-!%%!           end do
-!%%!        else
-!%%!           do i=1,ngrid
-!%%!              read(lun,*) semilocal(i_species)%rr(i),semilocal(i_species)%charge(i), dummy, &
-!%%!                   (semilocal(i_species)%potential(i,ell),ell=0,pseudo(i_species)%lmax)
-!%%!           end do
-!%%!        end if
-!%%!        if(pseudo_type==siesta) then
-!%%!           write(*,*) '# Semilocal ps type siesta; scaling charge by 1/r2 and potential by 0.5'
-!%%!           do i=1,ngrid
-!%%!              semilocal(i_species)%charge(i) = semilocal(i_species)%charge(i)/ &
-!%%!                   (semilocal(i_species)%rr(i)*semilocal(i_species)%rr(i))
-!%%!              semilocal(i_species)%potential(i,:) = half*semilocal(i_species)%potential(i,:)
-!%%!           end do
-!%%!        end if
-!%%!        call io_close(lun)
-!%%!     end do
-!%%!   end subroutine read_vps
-!%%! 
-!%%!   ! Read semi-local potentials output by a DRB hack of Hamann's code
-!%%!   ! Only reads the potentials (assumes that all the rest is done by read_vkb)
-!%%!   subroutine read_semilocal
-!%%! 
-!%%!     use numbers
-!%%!     use species_module, ONLY: n_species
-!%%!     use schro, ONLY: semilocal, pseudo_type, val, flag_default_cutoffs
-!%%!     use pseudo_tm_info, ONLY: pseudo
-!%%!     use input_module, ONLY: io_assign, io_close
-!%%!     use mesh, ONLY: siesta
-!%%!     use global_module, ONLY: flag_pcc_global
-!%%!     use pao_info, ONLY: paos
-!%%!     
-!%%!     implicit none
-!%%! 
-!%%!     integer :: i_species, ios, lun, ngrid, ell, i, n_occ, n_paos
-!%%!     integer :: n_shells, en
-!%%!     integer, dimension(0:4) :: count_func
-!%%!     character(len=2) :: char_in
-!%%!     logical :: flag_core_done = .false.
-!%%!     real(double) :: dummy, dummy2
-!%%! 
-!%%!     allocate(semilocal(n_species))
-!%%!     do i_species = 1,n_species
-!%%!        ! open file
-!%%!        call io_assign(lun)
-!%%!        open(unit=lun, file=vps_file_name(i_species), status='old', iostat=ios)
-!%%!        if ( ios > 0 ) call cq_abort('Error opening pseudopotential file: '//vps_file_name(i_species))
-!%%!        ! Allocate space
-!%%!        read(lun,*) char_in,n_shells
-!%%!        do i = 1,n_shells
-!%%!           read(lun,*) char_in,en, ell, dummy, dummy2
-!%%!        end do
-!%%!        read(lun,*) ngrid
-!%%!        semilocal(i_species)%ngrid = ngrid
-!%%!        allocate(semilocal(i_species)%rr(ngrid))
-!%%!        allocate(semilocal(i_species)%charge(ngrid))
-!%%!        allocate(semilocal(i_species)%potential(ngrid,0:pseudo(i_species)%lmax))
-!%%!        if(flag_pcc_global) then
-!%%!           allocate(semilocal(i_species)%pcc(ngrid))
-!%%!           do i=1,ngrid
-!%%!              read(lun,*) semilocal(i_species)%rr(i),semilocal(i_species)%charge(i), semilocal(i_species)%pcc(i), &
-!%%!                   (semilocal(i_species)%potential(i,ell),ell=0,pseudo(i_species)%lmax)
-!%%!           end do
-!%%!        else
-!%%!           do i=1,ngrid
-!%%!              read(lun,*) semilocal(i_species)%rr(i),semilocal(i_species)%charge(i), dummy, &
-!%%!                   (semilocal(i_species)%potential(i,ell),ell=0,pseudo(i_species)%lmax)
-!%%!           end do
-!%%!        end if
-!%%!        if(pseudo_type==siesta) then
-!%%!           write(*,*) '# Semilocal ps type siesta; scaling charge by 1/r2 and potential by 0.5'
-!%%!           do i=1,ngrid
-!%%!              semilocal(i_species)%charge(i) = semilocal(i_species)%charge(i)/ &
-!%%!                   (semilocal(i_species)%rr(i)*semilocal(i_species)%rr(i))
-!%%!              semilocal(i_species)%potential(i,:) = half*semilocal(i_species)%potential(i,:)
-!%%!           end do
-!%%!        end if
-!%%!        call io_close(lun)
-!%%!     end do
-!%%!   end subroutine read_semilocal
-  
+  ! Simple sorting routine - uses heap sort for n>2
+  subroutine lsort(a,n)
+
+    use datatypes
+
+    implicit none
+
+    ! Passed variables
+    integer :: n
+    real(double), dimension(n) :: a
+
+    ! Local variables
+    real(double), dimension(n) :: b
+    real(double) :: temp
+    integer, dimension(n) :: indx
+    integer :: i, j, m, ir, indxt
+    
+    if(n==1) then
+       return
+    else if(n==2) then
+       if(a(1)<a(2)) then
+          temp = a(2)
+          a(2) = a(1)
+          a(1) = temp
+       end if
+       return
+    else
+       b = a ! Copy array
+       do i=1,n
+          indx(i) = i
+       end do
+       m=1+n/2
+       ir = n
+       do while(.true.)
+          if(m>1) then
+             m=m-1
+             indxt = indx(m)
+             temp = a(indxt)
+          else
+             indxt = indx(ir)
+             temp = a(indxt)
+             indx(ir)=indx(1)
+             ir=ir-1
+             if(ir==1) then
+                indx(1) = indxt
+                ! Copy back
+                do i=1,n
+                   a(i) = b(indx(i))
+                end do
+                return
+             end if
+          end if
+          i = m
+          j = m+m
+          do while(j<=ir)
+             if(j<ir) then
+                if(a(indx(j))<a(indx(j+1))) j=j+1
+             end if
+             if(temp<a(indx(j))) then
+                indx(i) = indx(j)
+                i=j
+                j=j+j
+             else
+                j=ir+1
+             end if
+          end do
+          indx(i) = indxt
+       end do ! Infinite ?!
+    end if
+    return
+  end subroutine lsort
 end module read

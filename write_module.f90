@@ -58,7 +58,7 @@ contains
           ell = paos(i_species)%l(i_shell)
           en = paos(i_species)%n(i_shell)
           if(paos(i_species)%flag_perturb_polarise.AND.i_shell==paos(i_species)%n_shells) then
-             if(en<3) en = en+1
+             if(en<3) en = en+1 ! OK - should an O polarised shell be 3d ?!
              write(lun,fmt='("n =",i2,", l =",i2,",",i2," zetas, perturbative polarisation shell")') &
                   en, ell,paos(i_species)%nzeta(i_shell)
           else if(i_shell<=val(i_species)%n_occ) then 
