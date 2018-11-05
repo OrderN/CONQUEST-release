@@ -588,6 +588,10 @@ contains
 !!    Bug fix: added Ry->Ha conversion for Siesta VNA d2 table (as well as f table)
 !!   2018/01/22 14:39 JST dave
 !!    Added test for lmax_pao/lmax_ps to find maximum PAO/PP angular momentum
+!!   2018/10/30 11:02 dave
+!!    Added semicore flag for each zeta
+!!   2018/11/02 16:30 nakata
+!!    Bug fix: set semicore when numprocs>1
 !!  SOURCE
 !!
   subroutine read_ion_ascii_tmp(ps_info,pao_info)
@@ -672,7 +676,9 @@ contains
           if(iprint_pseudo>3.AND.inode==ionode) write(io_lun,fmt='(10x,"l, zl: ",2i5)') l,zl(l)
           if(zl(l)>0) then
              call start_timer(tmr_std_allocation)
-             allocate(pao_info%angmom(l)%zeta(zl(l)),pao_info%angmom(l)%prncpl(zl(l)),pao_info%angmom(l)%occ(zl(l)),STAT=alls)
+             allocate(pao_info%angmom(l)%zeta(zl(l)),pao_info%angmom(l)%prncpl(zl(l)), &
+                  pao_info%angmom(l)%occ(zl(l)),pao_info%angmom(l)%semicore(zl(l)),STAT=alls)
+             pao_info%angmom(l)%semicore(:) = 0
              if(alls/=0) call cq_abort('Failed to allocate PAOs zeta')
              call stop_timer(tmr_std_allocation)
              count = count + zl(l)*(2*l+1)
@@ -814,7 +820,8 @@ contains
           if(tzl>0) then
              if(inode/=ionode) then
                 call start_timer(tmr_std_allocation)
-                allocate(pao_info%angmom(l)%zeta(tzl),pao_info%angmom(l)%prncpl(tzl),pao_info%angmom(l)%occ(tzl),STAT=alls)
+                allocate(pao_info%angmom(l)%zeta(tzl),pao_info%angmom(l)%prncpl(tzl),&
+                         pao_info%angmom(l)%occ(tzl),pao_info%angmom(l)%semicore(tzl),STAT=alls)
                 if(alls/=0) call cq_abort('Failed to allocate PAOs zeta')
                 call stop_timer(tmr_std_allocation)
              end if
@@ -825,6 +832,7 @@ contains
                 call gcopy(pao_info%angmom(l)%zeta(nzeta)%delta)
                 call gcopy(pao_info%angmom(l)%prncpl(nzeta))
                 call gcopy(pao_info%angmom(l)%occ(nzeta))
+                call gcopy(pao_info%angmom(l)%semicore(nzeta))
                 if(inode/=ionode) then
                    if(pao_info%angmom(l)%zeta(nzeta)%length>=1) then
                       call start_timer(tmr_std_allocation)

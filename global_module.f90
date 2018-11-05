@@ -134,6 +134,8 @@
 !!    Changed flag_readAtomicSpin to flag_InitialAtomicSpin (more descriptive) and moved to density_module
 !!   2018/09/19 18:30 nakata
 !!    Added a flag for orbital angular momentum resolved PDOS
+!!   2018/10/22 14:25 dave & jsb
+!!    Adding (l,m)-projection for PDOS
 !!  SOURCE
 !!
 module global_module
@@ -354,8 +356,8 @@ module global_module
   ! it more properly applies to matrices (specifically how many temporary matrices we can store)
   integer :: mx_temp_matrices                   ! Defaults to 100; used in mult_module (immi)
   
-  ! DOS output
-  logical :: flag_write_DOS, flag_write_projected_DOS, flag_normalise_pDOS, flag_pDOS_angmom
+  ! DOS output (NB Maybe move these into DiagModule and revisit names)
+  logical :: flag_write_DOS, flag_write_projected_DOS, flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm
   real(double) :: E_DOS_min, E_DOS_max, sigma_DOS
   integer :: n_DOS
 

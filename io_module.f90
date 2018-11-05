@@ -2955,25 +2955,28 @@ second:   do
   !!    Corrected the order of dimension of pDOS
   !!   2018/09/19 18:30 nakata
   !!    Added orbital angular momentum resolved DOS (pDOS_angmom)
+  !!   2018/10/22 14:22 dave & jsb
+  !!    Adding (l,m)-projected DOS
   !! SOURCE
   !!
   subroutine dump_projected_DOS(pDOS,Ef,pDOS_angmom,Nangmom)
 
     use datatypes
     use global_module, only: n_DOS, E_DOS_max, E_DOS_min, sigma_DOS, flag_pDOS_angmom, &
-                             nspin, atomf, sf, ni_in_cell
+                             nspin, atomf, sf, ni_in_cell, flag_pDOS_lm
     use primary_module,  only: bundle
 
     ! Passed variables
     real(double), dimension(n_DOS,bundle%n_prim,nspin) :: pDOS
     real(double), dimension(nspin) :: Ef
-    real(double), OPTIONAL, dimension(:,:,:,:) :: pDOS_angmom
+    real(double), OPTIONAL, dimension(:,:,:,:,:) :: pDOS_angmom ! bin, atom, l, m, spin
     integer, OPTIONAL :: Nangmom
 
     ! Local variables
-    integer :: lun, i, j, iprim, natom
+    integer :: lun, i, j, k, iprim, natom, tmp_col
     real(double) :: dE, thisE
     character(len=50) :: filename, fmt_DOS
+    character(len=200) :: colstr
 
     if (atomf==sf) natom = bundle%n_prim
     if (atomf/=sf) natom = ni_in_cell
@@ -2993,16 +2996,44 @@ second:   do
                Ef(1:nspin),E_DOS_min,E_DOS_max, n_DOS
        end if
        write(lun,fmt='(2x,"# Broadening: ",f12.5)') sigma_DOS
+       ! Indicate columns
+       if(flag_PDOS_angmom) then
+          if(flag_pDOS_lm) then
+             colstr = "  #     Energy     |   Total pDOS   |    l=0, m= 0   |    l=1, m=-1   |&
+                  &    l=1, m= 0   |    l=1, m= 1   |    l=2, m=-2   |    l=2, m=-1   |&
+                  &    l=2, m= 0   |    l=2, m= 1   |    l=2, m= 2   "
+          else
+             colstr = "  #     Energy     |   Total pDOS   |      l=0       |      l=1       |&
+                  &      l=2       "
+          end if
+       else
+          colstr =    "  #     Energy     |   Total pDOS    "
+       end if
+       write(lun,fmt='(a)') colstr
        dE = (E_DOS_max - E_DOS_min)/real(n_DOS - 1,double)
        thisE = E_DOS_min
        if(nspin==1) then
           if (flag_PDOS_angmom) then
-             write(fmt_DOS,*) Nangmom+2
-             fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
-             do i=1,n_DOS
-                write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),(pDOS_angmom(i,iprim,j,1),j=1,Nangmom)
-                thisE = thisE + dE
-             end do
+             if(flag_pDOS_lm) then
+                tmp_col = 0
+                do i=1,Nangmom
+                   tmp_col = tmp_col + 2*i-1  ! Because i is l+1 
+                end do
+                write(fmt_DOS,*) tmp_col+2 ! NB this is number of columns in format
+                fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
+                do i=1,n_DOS
+                   write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),((pDOS_angmom(i,iprim,j,k,1),k=1,2*j-1),j=1,Nangmom)
+                   thisE = thisE + dE
+                end do
+             else
+                write(fmt_DOS,*) Nangmom+2 ! NB this is number of columns in format
+                write(*,*) 'N cols: ',Nangmom+2
+                fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
+                do i=1,n_DOS
+                   write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),(pDOS_angmom(i,iprim,j,1,1),j=1,Nangmom)
+                   thisE = thisE + dE
+                end do
+             end if
           else
              do i=1,n_DOS
                 write(lun,fmt='(2f17.10)') thisE,pDOS(i,iprim,1)
@@ -3011,13 +3042,27 @@ second:   do
           endif
        else if(nspin==2) then
           if (flag_PDOS_angmom) then
-             write(fmt_DOS,*) Nangmom*2+3
-             fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
-             do i=1,n_DOS
-                write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),(pDOS_angmom(i,iprim,j,1),j=1,Nangmom), &
-                                        -pDOS(i,iprim,2),(-pDOS_angmom(i,iprim,j,2),j=1,Nangmom)
-                thisE = thisE + dE
-             end do
+             if(flag_pDOS_lm) then
+                tmp_col = 0
+                do i=1,Nangmom
+                   tmp_col = tmp_col + 2*i-1  ! Because i is l+1 
+                end do
+                write(fmt_DOS,*) tmp_col*2+3
+                fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
+                do i=1,n_DOS
+                   write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),((pDOS_angmom(i,iprim,j,k,1),k=1,2*j-1),j=1,Nangmom), &
+                        -pDOS(i,iprim,2),((-pDOS_angmom(i,iprim,j,k,2),k=1,2*j-1),j=1,Nangmom)
+                   thisE = thisE + dE
+                end do
+             else
+                write(fmt_DOS,*) Nangmom*2+3 ! Total number of columns
+                fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
+                do i=1,n_DOS
+                   write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),(pDOS_angmom(i,iprim,j,1,1),j=1,Nangmom), &
+                        -pDOS(i,iprim,2),(-pDOS_angmom(i,iprim,j,1,2),j=1,Nangmom)
+                   thisE = thisE + dE
+                end do
+             end if
           else
              do i=1,n_DOS
                 write(lun,fmt='(3f17.10)') thisE,pDOS(i,iprim,1),-pDOS(i,iprim,2)

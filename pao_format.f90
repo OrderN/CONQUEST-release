@@ -49,6 +49,8 @@
 !!    Added angmom%prncpl to store the information of principal qunatum number
 !!   2017/03/23 dave
 !!    Added delta to table
+!!   2018/10/30 11:01 dave
+!!    Added semicore array to angmom_pao to flag semi-core states
 !!  SOURCE
 module pao_format
 
@@ -76,6 +78,7 @@ module pao_format
      type(table), pointer, dimension(:) :: zeta
      real(double), pointer, dimension(:) :: occ
      integer, pointer, dimension(:) :: prncpl
+     integer, pointer, dimension(:) :: semicore  ! Flags whether a given zeta is semi-core
   end type angmom_pao
 
   type species_pao
