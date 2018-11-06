@@ -189,10 +189,13 @@ if not opts.compare:
   nsteps, data = read_stats(opts.statfile,opts.nstop)
   avg = {}
   std = {}
+  rms = {}
   for key in data:
     data[key] = sp.array(data[key])
     avg[key] = sp.mean(data[key][opts.nequil:-1])
     std[key] = sp.std(data[key][opts.nequil:-1])
+    devsq = (data[key][opts.nequil:-1] - avg[key])**2
+    rms[key] = sp.sqrt(sp.mean(devsq))
   time = [float(s)*dt for s in data['step']]
   data['time'] = sp.array(time)
 
@@ -215,18 +218,18 @@ if not opts.compare:
     ax1a.plot(data['time'][opts.nskip:], data['pV'][opts.nskip:], 'm-', label='pV')
   ax2.plot(data['time'][opts.nskip:], data['H\''][opts.nskip:])
   ax2.plot((opts.nskip,data['time'][-1]), (avg['H\''],avg['H\'']), '-',
-        label=r'$\langle H\' \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['H\''], std['H\'']))
+        label=r'$\langle H\' \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['H\''], rms['H\'']))
   ax3.plot(data['time'][opts.nskip:], data['T'][opts.nskip:])
   ax3.plot((opts.nskip,data['time'][-1]), (avg['T'],avg['T']), '-',
-        label=r'$\langle T \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['T'], std['T']))
+        label=r'$\langle T \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['T'], rms['T']))
   ax4.plot(data['time'][opts.nskip:], data['P'][opts.nskip:], 'b-')
   ax4.plot((opts.nskip,data['time'][-1]), (avg['P'],avg['P']), 'b--',
-        label=r'$\langle P \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['P'], std['P']))
+        label=r'$\langle P \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['P'], rms['P']))
   if cq_params['MD.Ensemble'][1] == 'p':
     ax4a = ax4.twinx()
     ax4a.plot(data['time'][opts.nskip:], data['V'][opts.nskip:], 'r-')
     ax4a.plot((opts.nskip,data['time'][-1]), (avg['V'],avg['V']), 'r--',
-          label=r'$\langle V \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['V'], std['V']))
+          label=r'$\langle V \rangle$ = {0:>12.4f} $\pm$ {1:<12.4f}'.format(avg['V'], rms['V']))
   ax1.set_ylabel("E (Ha)")
   ax2.set_ylabel("H$'$ (Ha)")
   ax3.set_ylabel("T (K)")
