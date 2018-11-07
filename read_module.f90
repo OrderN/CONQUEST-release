@@ -213,6 +213,10 @@ contains
        else
           call cq_abort("Can't find species block for label "//species_label(i))
        end if ! if fdf_block(species(i)) - is this species defined ?!
+       ! --------------------------------
+       ! Done reading atom block
+       ! Read atom basis block if defined
+       ! --------------------------------
        !
        ! Read Atom.BasisBlock
        !
@@ -337,10 +341,12 @@ contains
              ! Sort the energies/cutoffs so that largest is first
              !
              if(paos(i)%flag_cutoff==pao_cutoff_radii) then
+                ! We want to sort cutoffs large -> small
                 do j=1,paos(i)%n_shells
-                   call lsort(paos(i)%cutoff(:,j),paos(i)%nzeta(j))
+                   call lsortr(paos(i)%cutoff(:,j),paos(i)%nzeta(j))
                 end do
              else
+                ! We want to sort energies small -> large
                 do j=1,paos(i)%n_shells
                    call lsort(paos(i)%energy(:,j),paos(i)%nzeta(j))
                 end do
@@ -1534,7 +1540,7 @@ contains
     if(n==1) then
        return
     else if(n==2) then
-       if(a(1)<a(2)) then
+       if(a(1)>a(2)) then
           temp = a(2)
           a(2) = a(1)
           a(1) = temp
@@ -1585,4 +1591,77 @@ contains
     end if
     return
   end subroutine lsort
+
+  ! Simple sorting routine - uses heap sort for n>2
+  ! This sorts large -> small
+  subroutine lsortr(a,n)
+
+    use datatypes
+
+    implicit none
+
+    ! Passed variables
+    integer :: n
+    real(double), dimension(n) :: a
+
+    ! Local variables
+    real(double), dimension(n) :: b
+    real(double) :: temp
+    integer, dimension(n) :: indx
+    integer :: i, j, m, ir, indxt
+    
+    if(n==1) then
+       return
+    else if(n==2) then
+       if(a(1)<a(2)) then
+          temp = a(2)
+          a(2) = a(1)
+          a(1) = temp
+       end if
+       return
+    else
+       b = a ! Copy array
+       do i=1,n
+          indx(i) = i
+       end do
+       m=1+n/2
+       ir = n
+       do while(.true.)
+          if(m>1) then
+             m=m-1
+             indxt = indx(m)
+             temp = a(indxt)
+          else
+             indxt = indx(ir)
+             temp = a(indxt)
+             indx(ir)=indx(1)
+             ir=ir-1
+             if(ir==1) then
+                indx(1) = indxt
+                ! Copy back
+                do i=1,n
+                   a(i) = b(indx(n+1-i))
+                end do
+                return
+             end if
+          end if
+          i = m
+          j = m+m
+          do while(j<=ir)
+             if(j<ir) then
+                if(a(indx(j))<a(indx(j+1))) j=j+1
+             end if
+             if(temp<a(indx(j))) then
+                indx(i) = indx(j)
+                i=j
+                j=j+j
+             else
+                j=ir+1
+             end if
+          end do
+          indx(i) = indxt
+       end do ! Infinite ?!
+    end if
+    return
+  end subroutine lsortr
 end module read
