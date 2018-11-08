@@ -918,7 +918,6 @@ contains
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
           call th%propagate_v_eta_lin(i_nhc, th%dt_ys(i_ys), quarter)
           call th%apply_nhc_drag(baro, i_nhc)
-          if (th%cell_nhc) th%v_eta_cell(i_nhc) = th%v_eta_cell(i_nhc)*baro%p_drag
           call th%propagate_v_eta_exp(i_nhc, th%dt_ys(i_ys), one_eighth)
         end do
 
