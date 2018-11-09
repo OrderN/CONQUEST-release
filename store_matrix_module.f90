@@ -19,7 +19,8 @@ module store_matrix
   use global_module, ONLY: numprocs
   use input_module, ONLY: io_assign, io_close
   use GenComms, ONLY: inode, ionode, cq_abort, myid
-  use io_module, ONLY: flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat
+  use io_module, ONLY: flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
+                       flag_MatrixFile_BinaryFormat_Grab, flag_MatrixFile_BinaryFormat_Dump
 
   implicit none
 
@@ -339,7 +340,7 @@ contains
      call io_assign(lun)
 
     ! Case 1 : Binary Format   2018Oct22 TM -----------------------
-    if(flag_MatrixFile_BinaryFormat) then
+    if(flag_MatrixFile_BinaryFormat_Dump) then
      open (lun,file=file_name,form='unformatted')
 
       ! 1. node ID, no. of PS of atoms "i".
@@ -1097,11 +1098,17 @@ contains
         call io_assign(lun)
     
        ! Case 1 : Binary Format   2018Oct22 TM -----------------------
-       if(flag_MatrixFile_BinaryFormat) then
+       if(flag_MatrixFile_BinaryFormat_Grab) then
         open (lun,file=file_name,status='old',iostat=stat,form='unformatted')
-        if (stat.NE.0) call cq_abort('Fail in opening Lmatrix file.')
+        if (stat.NE.0) call cq_abort('Fail in opening Lmatrix file in Binary.')
         ! Get dimension, allocate arrays and store necessary data.
-        read (lun) proc_id, Info(ifile)%natom_i
+        read (lun,iostat=stat) proc_id, Info(ifile)%natom_i
+         if(stat.NE.0) then
+          write(io_lun,*) " ERROR in reading Binary File of Lmatrix : inode= ", inode
+          write(io_lun,*) "  ** Set IO.MatirxFile.BinaryFormat or IO.MatrixFile.BinaryFormat.Grab as False.&
+                          & if you use ASCII for Matrix Files."
+          call cq_abort('Fail in reading Lmatrix File in Binary')
+         endif
         size = Info(ifile)%natom_i
         allocate (Info(ifile)%alpha_i(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating alpha_i:', size)
@@ -1177,9 +1184,15 @@ contains
        else
        ! Case 2 : Text Format   old version  -----------------------
         open (lun,file=file_name,status='old',iostat=stat)
-        if (stat.NE.0) call cq_abort('Fail in opening Lmatrix file.')
+        if (stat.NE.0) call cq_abort('Fail in opening ASCII Lmatrix file.')
         ! Get dimension, allocate arrays and store necessary data.
-        read (lun,*) proc_id, Info(ifile)%natom_i
+        read (lun,*,iostat=stat) proc_id, Info(ifile)%natom_i
+         if(stat.NE.0) then
+          write(io_lun,*) " ERROR in reading ASCII File of Lmatrix : inode= ", inode
+          write(io_lun,*) "  ** Set IO.MatirxFile.BinaryFormat or IO.MatrixFile.BinaryFormat.Grab as .True.&
+                          & if you use Binary for Matrix Files."
+          call cq_abort('Fail in reading Lmatrix File in ASCII')
+         endif
         size = Info(ifile)%natom_i
         allocate (Info(ifile)%alpha_i(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating alpha_i:', size)

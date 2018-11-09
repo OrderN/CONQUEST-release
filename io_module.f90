@@ -98,7 +98,9 @@ module io_module
    
   !Name and Format of  MatrixFile used in store_matrix
   logical          :: flag_MatrixFile_RankFromZero  ! Starting from 0 in ##### (*matrix2.i**.p#####)
-  logical          :: flag_MatrixFile_BinaryFormat  ! Binary or Text 
+  logical          :: flag_MatrixFile_BinaryFormat  ! Binary or Ascii
+  logical          :: flag_MatrixFile_BinaryFormat_Grab ! Binary or Ascii for reading
+  logical          :: flag_MatrixFile_BinaryFormat_Dump ! Binary or Ascii for writing
 
   ! RCS tag for object file identification 
   character(len=80), save, private :: &
