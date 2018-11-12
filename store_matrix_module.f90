@@ -18,7 +18,9 @@ module store_matrix
   use datatypes
   use global_module, ONLY: numprocs
   use input_module, ONLY: io_assign, io_close
-  use GenComms, ONLY: inode, ionode, cq_abort
+  use GenComms, ONLY: inode, ionode, cq_abort, myid
+  use io_module, ONLY: flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
+                       flag_MatrixFile_BinaryFormat_Grab, flag_MatrixFile_BinaryFormat_Dump
 
   implicit none
 
@@ -329,11 +331,57 @@ contains
     call set_matrix_store(stub,matA,range,tmp_matrix_store)
 
     ! Actual Dump (from dump_matrix2)
-     ! First, make a file based upon the node ID.
-     !call get_file_name(stub//'matrix2',numprocs,inode,file_name)
-     call get_file_name_2rank(stub//'matrix2',file_name,index,inode)
+     ! First, get the name of a file based upon the node ID or rank.
+     if(flag_MatrixFile_RankFromZero) then
+      call get_file_name_2rank(stub//'matrix2',file_name,index,myid)
+     else
+      call get_file_name_2rank(stub//'matrix2',file_name,index,inode)
+     endif
      call io_assign(lun)
-    open (lun,file=file_name)
+
+    ! Case 1 : Binary Format   2018Oct22 TM -----------------------
+    if(flag_MatrixFile_BinaryFormat_Dump) then
+     open (lun,file=file_name,form='unformatted')
+
+      ! 1. node ID, no. of PS of atoms "i".
+        nprim=tmp_matrix_store%n_prim
+        write (lun) inode, nprim
+      ! 2. no. of alpha for each "i".
+        write (lun) tmp_matrix_store%nsf_spec_i(1:nprim)
+      ! NOTE: The followings are written out with neighbour-labelling
+      ! 3. no. of the neighbours "j" for each "i".
+      ! 4. no. of "neighbour-j x beta" for each "i".
+        write (lun) tmp_matrix_store%jmax_i(1:nprim)
+        write (lun) tmp_matrix_store%jbeta_max_i(1:nprim)
+
+     !I will change the order of dumping in the following, later.   2016/09/30: TM@UCL
+      if(nprim .GT. 0) then
+       do iprim=1,nprim
+          jmax = tmp_matrix_store%jmax_i(iprim)
+          ibeg = tmp_matrix_store%ibeg_Rij(iprim)
+          write (lun) tmp_matrix_store%idglob_i(iprim)
+          write (lun) tmp_matrix_store%beta_j(ibeg:ibeg+jmax-1)
+          write (lun) tmp_matrix_store%idglob_j(ibeg:ibeg+jmax-1)
+         do jj=1,jmax
+          write (lun) tmp_matrix_store%vec_Rij(1:3,ibeg+jj-1)
+         enddo !jj=1,jmax
+         if(iprim < nprim) then
+           len = tmp_matrix_store%ibeg_data_matrix(iprim+1)-tmp_matrix_store%ibeg_data_matrix(iprim)
+         else
+           len = tmp_matrix_store%matrix_size-tmp_matrix_store%ibeg_data_matrix(iprim)+1
+         endif
+           ibeg = tmp_matrix_store%ibeg_data_matrix(iprim)
+         do jbeta_alpha = 1, len
+          !write (lun,fmt='(e30.20)') tmp_matrix_store%data_matrix(ibeg+jbeta_alpha-1)
+          write (lun) tmp_matrix_store%data_matrix(ibeg+jbeta_alpha-1)
+         enddo !jbeta_alpha = 1, len
+       enddo !iprim=1,nprim
+      endif  ! (nprim .GT. 0)
+    
+    ! Case 2 : Text Format   (old version) -----------------------
+    !                 I assume this part will be removed in the future...
+    else
+     open (lun,file=file_name,form='formatted')
 
       ! 1. node ID, no. of PS of atoms "i".
         nprim=tmp_matrix_store%n_prim
@@ -364,10 +412,13 @@ contains
          endif
            ibeg = tmp_matrix_store%ibeg_data_matrix(iprim)
          do jbeta_alpha = 1, len
-          write (lun,fmt='(f25.18)') tmp_matrix_store%data_matrix(ibeg+jbeta_alpha-1)
+          write (lun,fmt='(e30.20)') tmp_matrix_store%data_matrix(ibeg+jbeta_alpha-1)
          enddo !jbeta_alpha = 1, len
        enddo !iprim=1,nprim
       endif  ! (nprim .GT. 0) 
+    
+    endif  
+    ! Binary or Text  -----------------------
 
     ! Close the file in the end.
     call io_close(lun)
@@ -602,7 +653,7 @@ contains
 
     ! Module usage
     use global_module, ONLY: ni_in_cell,numprocs,rcellx,rcelly,rcellz,id_glob, io_lun
-    use GenComms, ONLY: cq_abort, inode, ionode, my_barrier
+    use GenComms, ONLY: cq_abort, inode, ionode, my_barrier, myid
     use group_module, ONLY: parts
     use io_module, ONLY: get_file_name, get_file_name_2rank
 
@@ -1036,27 +1087,112 @@ contains
       if (stat_alloc.NE.0) call cq_abort('Error allocating Info: ', nfile)
       do ifile = 1, nfile
         ! Open a file to start with.
+       if(flag_MatrixFile_RankFromZero) then
+        index_file=numprocs*(ifile-1)+myid
+       else
         index_file=numprocs*(ifile-1)+inode
-        !padzeros=MAX(3, &
-        !             FLOOR(1.0+LOG10(REAL(numprocs,kind=double)))) - &
-        !             FLOOR(1.0+LOG10(REAL(inode,kind=double)))
-        !write (num,'(i80)') index_file
-        !num=adjustl(num)
-        !file_name=stub//'matrix2.'
-    
-        !do i = 1, padzeros
-        !  file_name=trim(file_name)//'0'
-        !enddo
-        !file_name=trim(file_name)//num
+       endif
 
         call get_file_name_2rank(stub//'matrix2',file_name,index,index_file)
-!         write(*,*) ' FILE NAME :: inode,ifile = ',inode,ifile,'  NAME ',file_name
 
         call io_assign(lun)
-        open (lun,file=file_name,status='old',iostat=stat)
-        if (stat.NE.0) call cq_abort('Fail in opening Lmatrix file.')
+    
+       ! Case 1 : Binary Format   2018Oct22 TM -----------------------
+       if(flag_MatrixFile_BinaryFormat_Grab) then
+        open (lun,file=file_name,status='old',iostat=stat,form='unformatted')
+        if (stat.NE.0) call cq_abort('Fail in opening Lmatrix file in Binary.')
         ! Get dimension, allocate arrays and store necessary data.
-        read (lun,*) proc_id, Info(ifile)%natom_i
+        read (lun,iostat=stat) proc_id, Info(ifile)%natom_i
+         if(stat.NE.0) then
+          write(io_lun,*) " ERROR in reading Binary File of Lmatrix : inode= ", inode
+          write(io_lun,*) "  ** Set IO.MatirxFile.BinaryFormat or IO.MatrixFile.BinaryFormat.Grab as False.&
+                          & if you use ASCII for Matrix Files."
+          call cq_abort('Fail in reading Lmatrix File in Binary')
+         endif
+        size = Info(ifile)%natom_i
+        allocate (Info(ifile)%alpha_i(size), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating alpha_i:', size)
+        allocate (Info(ifile)%idglob_i(size), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating idglob_i:', size)
+        allocate (Info(ifile)%jmax_i(size), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating jmax_i:', size)
+        allocate (Info(ifile)%jbeta_max_i(size), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating jbeta_max_i:', size)
+        allocate (Info(ifile)%ibeg_dataL(size), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating ibeg_dataL:', size)
+        allocate (Info(ifile)%ibeg_Pij(size), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating ibeg_Pij:', size)
+        read (lun) Info(ifile)%alpha_i(1:size)
+        read (lun) Info(ifile)%jmax_i(1:size)
+        read (lun) Info(ifile)%jbeta_max_i(1:size)
+        jmax_i_max = -1
+        do i = 1, size
+          if (Info(ifile)%jmax_i(i).GT.jmax_i_max) jmax_i_max = Info(ifile)%jmax_i(i)
+        enddo
+        !db write (io_lun,*) "jmax_i_max: ", jmax_i_max
+        size2 = 0
+        do i = 1, size
+          size2 = size2 + Info(ifile)%jmax_i(i)
+        enddo
+        allocate (Info(ifile)%idglob_j(size2), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating idglob_j:', size2)
+        allocate (Info(ifile)%beta_j_i(size2), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating beta_j_i:', size2)
+        allocate (Info(ifile)%rvec_Pij(3,size2), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating rvec_Pij:',size2)
+        sizeL = 0
+        do i = 1, size
+          sizeL = sizeL + Info(ifile)%alpha_i(i)*Info(ifile)%jbeta_max_i(i)
+        enddo
+        ! n_matrix depends on nspin
+        n_matrix = 1
+        !if (nspin.EQ.2) n_matrix = 2
+        allocate (Info(ifile)%data_Lold(sizeL,n_matrix), STAT=stat_alloc)
+        if (stat_alloc.NE.0) call cq_abort('Error allocating data_Lold:', sizeL, n_matrix)
+
+        Info(ifile)%ibeg_dataL(1) = 1 ; Info(ifile)%ibeg_Pij(1) = 1
+        ibeg = 1
+        do i = 1, size
+          read (lun) Info(ifile)%idglob_i(i)
+          read (lun) Info(ifile)%beta_j_i(Info(ifile)%ibeg_Pij(i) : &
+                                             Info(ifile)%ibeg_Pij(i)+Info(ifile)%jmax_i(i)-1)
+          read (lun) Info(ifile)%idglob_j(Info(ifile)%ibeg_Pij(i) : &
+                                             Info(ifile)%ibeg_Pij(i)+Info(ifile)%jmax_i(i)-1)
+          do j = 1, Info(ifile)%jmax_i(i)
+            read (lun) Info(ifile)%rvec_Pij(1:3,Info(ifile)%ibeg_Pij(i)+j-1)
+          enddo
+          len = Info(ifile)%jbeta_max_i(i)*Info(ifile)%alpha_i(i)
+
+          ! spin
+          !if (nspin.EQ.1) then
+            do jbeta_alpha = 1, len
+              read (lun) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 1)
+            enddo
+          !elseif (nspin.EQ.2) then
+          !  do jbeta_alpha = 1, len
+          !    read (lun,*) Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 1), &
+          !                 Info(ifile)%data_Lold(Info(ifile)%ibeg_dataL(i)+jbeta_alpha-1, 2)
+          !  enddo
+          !endif
+
+          if (i+1.LE.size) then
+            Info(ifile)%ibeg_Pij(i+1) = Info(ifile)%ibeg_Pij(i) + Info(ifile)%jmax_i(i)
+            Info(ifile)%ibeg_dataL(i+1) = Info(ifile)%ibeg_dataL(i) + len
+          endif
+        enddo !(i, size)
+
+       else
+       ! Case 2 : Text Format   old version  -----------------------
+        open (lun,file=file_name,status='old',iostat=stat)
+        if (stat.NE.0) call cq_abort('Fail in opening ASCII Lmatrix file.')
+        ! Get dimension, allocate arrays and store necessary data.
+        read (lun,*,iostat=stat) proc_id, Info(ifile)%natom_i
+         if(stat.NE.0) then
+          write(io_lun,*) " ERROR in reading ASCII File of Lmatrix : inode= ", inode
+          write(io_lun,*) "  ** Set IO.MatirxFile.BinaryFormat or IO.MatrixFile.BinaryFormat.Grab as .True.&
+                          & if you use Binary for Matrix Files."
+          call cq_abort('Fail in reading Lmatrix File in ASCII')
+         endif
         size = Info(ifile)%natom_i
         allocate (Info(ifile)%alpha_i(size), STAT=stat_alloc)
         if (stat_alloc.NE.0) call cq_abort('Error allocating alpha_i:', size)
@@ -1129,8 +1265,11 @@ contains
           endif
         enddo !(i, size)
 
+       endif
+       !Binary or Text -------
+
         ! Close the file.
-        call io_close (lun)
+       call io_close (lun)
       enddo !(ifile, nfile)
     endif
 

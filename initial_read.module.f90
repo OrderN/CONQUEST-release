@@ -773,7 +773,10 @@ contains
                                  flag_which_force, TF_direction, &
                                  TF_atom_moved, TF_delta
     use io_module, only: pdb_format, pdb_altloc, append_coords,  &
-                         pdb_output, banner, get_file_name, time_max
+                         pdb_output, banner, get_file_name, time_max, &
+                         flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
+                         flag_MatrixFile_BinaryFormat_Grab, flag_MatrixFile_BinaryFormat_Dump
+
     use group_module,     only: part_method, HILBERT, PYTHON
     use energy,           only: flag_check_DFT
     use H_matrix_module,  only: locps_output, locps_choice
@@ -1447,6 +1450,12 @@ contains
 !!$
 !!$
 !!$
+       ! Name and Format of Matrix Files  (see store_matrix)
+         flag_MatrixFile_RankFromZero = fdf_boolean('IO.MatrixFile.RankFromZero', .true.)
+         flag_MatrixFile_BinaryFormat = fdf_boolean('IO.MatrixFile.BinaryFormat', .true.)
+         flag_MatrixFile_BinaryFormat_Grab = fdf_boolean('IO.MatrixFile.BinaryFormat.Grab', flag_MatrixFile_BinaryFormat)
+         flag_MatrixFile_BinaryFormat_Dump = fdf_boolean('IO.MatrixFile.BinaryFormat.Dump', flag_MatrixFile_BinaryFormat)
+ 
        ! read wavefunction output flags
        mx_temp_matrices = fdf_integer('General.MaxTempMatrices',100)
        flag_out_wf=fdf_boolean('IO.outputWF',.false.)

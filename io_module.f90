@@ -96,6 +96,12 @@ module io_module
   !Maximum of wallclock time (in seconds): See subroutine 'check_stop' 2018.Jan.17 TM 
   real(double)      :: time_max =zero
    
+  !Name and Format of  MatrixFile used in store_matrix
+  logical          :: flag_MatrixFile_RankFromZero  ! Starting from 0 in ##### (*matrix2.i**.p#####)
+  logical          :: flag_MatrixFile_BinaryFormat  ! Binary or Ascii
+  logical          :: flag_MatrixFile_BinaryFormat_Grab ! Binary or Ascii for reading
+  logical          :: flag_MatrixFile_BinaryFormat_Dump ! Binary or Ascii for writing
+
   ! RCS tag for object file identification 
   character(len=80), save, private :: &
        RCSid = "$Id$"
