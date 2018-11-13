@@ -2055,15 +2055,15 @@ contains
        if (stat /= 0) &
             call cq_abort('associate_matrices: failed to allocate spin &
                            &depdendent ATOMF matrix tags', nspin, stat)
-       if (atomf.ne.sf) then
-          allocate(matSFcoeff(nspin),  matSFcoeff_tran(nspin), &
-                   matdSFcoeff(nspin), matdSFcoeff_e(nspin), STAT=stat)
-          if (stat /= 0) &
-               call cq_abort('associate_matrices: failed to allocate spin &
-                              &depdendent SFcoefficient matrix tags', nspin, stat)
-       endif
 !!! 2018.5.24 nakata SD-MSSF
        ! For spin_SF dependent matrices
+       if (atomf.ne.sf) then
+          allocate(matSFcoeff(nspin_SF),  matSFcoeff_tran(nspin_SF), &
+                   matdSFcoeff(nspin_SF), matdSFcoeff_e(nspin_SF), STAT=stat)
+          if (stat /= 0) &
+               call cq_abort('associate_matrices: failed to allocate spin_SF &
+                              &depdendent SFcoefficient matrix tags', nspin_SF, stat)
+       endif
        allocate(matKE(nspin_SF), matNL(nspin_SF), matNA(nspin_SF), STAT=stat) 
        if (stat /= 0) &
             call cq_abort('associate_matrices: failed to allocate spin_SF &
@@ -2146,11 +2146,14 @@ contains
           matHatomf(2)       = current_matrix + 1  ! 42
           matKatomf(2)       = current_matrix + 2  ! 43
           matXatomf(2)       = current_matrix + 3  ! 44
-          matSFcoeff(2)      = current_matrix + 4  ! 45
-          matSFcoeff_tran(2) = current_matrix + 5  ! 46
-          matdSFcoeff(2)     = current_matrix + 6  ! 47
-          matdSFcoeff_e(2)   = current_matrix + 7  ! 48
-          current_matrix     = current_matrix + 7  ! 48
+          current_matrix     = current_matrix + 3  ! 44
+          if (nspin_SF == 2) then
+             matSFcoeff(2)      = current_matrix + 1  ! 45
+             matSFcoeff_tran(2) = current_matrix + 2  ! 46
+             matdSFcoeff(2)     = current_matrix + 3  ! 47
+             matdSFcoeff_e(2)   = current_matrix + 4  ! 48
+             current_matrix     = current_matrix + 4  ! 48
+          endif
        endif
     endif ! atomf
     if( flag_neutral_atom_projector ) then
@@ -2225,13 +2228,15 @@ contains
        mat_p(matKEatomf)%sf1_type = atomf
        mat_p(matNLatomf)%sf1_type = atomf
        do spin = 1, nspin
-          mat_p(matKatomf(spin)      )%sf1_type = atomf
-          mat_p(matHatomf(spin)      )%sf1_type = atomf
-          mat_p(matXatomf(spin)      )%sf1_type = atomf
-          mat_p(matSFcoeff(spin)     )%sf1_type = sf
-          mat_p(matSFcoeff_tran(spin))%sf1_type = atomf
-          mat_p(matdSFcoeff(spin)    )%sf1_type = sf
-          mat_p(matdSFcoeff_e(spin)  )%sf1_type = sf
+          mat_p(matKatomf(spin))%sf1_type = atomf
+          mat_p(matHatomf(spin))%sf1_type = atomf
+          mat_p(matXatomf(spin))%sf1_type = atomf
+       enddo
+       do spin_SF = 1, nspin_SF
+          mat_p(matSFcoeff(spin_SF)     )%sf1_type = sf
+          mat_p(matSFcoeff_tran(spin_SF))%sf1_type = atomf
+          mat_p(matdSFcoeff(spin_SF)    )%sf1_type = sf
+          mat_p(matdSFcoeff_e(spin_SF)  )%sf1_type = sf
        enddo
     endif
     if( flag_neutral_atom_projector ) then
@@ -2275,13 +2280,15 @@ contains
        mat_p(matKEatomf)%sf2_type = atomf
        mat_p(matNLatomf)%sf2_type = atomf
        do spin = 1, nspin
-          mat_p(matKatomf(spin)      )%sf2_type = atomf
-          mat_p(matHatomf(spin)      )%sf2_type = atomf
-          mat_p(matXatomf(spin)      )%sf2_type = atomf
-          mat_p(matSFcoeff(spin)     )%sf2_type = atomf
-          mat_p(matSFcoeff_tran(spin))%sf2_type = sf
-          mat_p(matdSFcoeff(spin)    )%sf2_type = atomf
-          mat_p(matdSFcoeff_e(spin)  )%sf2_type = atomf
+          mat_p(matKatomf(spin))%sf2_type = atomf
+          mat_p(matHatomf(spin))%sf2_type = atomf
+          mat_p(matXatomf(spin))%sf2_type = atomf
+       enddo
+       do spin_SF = 1, nspin_SF
+          mat_p(matSFcoeff(spin_SF)     )%sf2_type = atomf
+          mat_p(matSFcoeff_tran(spin_SF))%sf2_type = sf
+          mat_p(matdSFcoeff(spin_SF)    )%sf2_type = atomf
+          mat_p(matdSFcoeff_e(spin_SF)  )%sf2_type = atomf
        enddo
     endif
     if( flag_neutral_atom_projector ) then
@@ -2327,13 +2334,15 @@ contains
        matrix_index(matKEatomf) = aHa_range
        matrix_index(matNLatomf) = aHa_range
        do spin = 1, nspin
-          matrix_index(matKatomf(spin)      ) = aHa_range
-          matrix_index(matHatomf(spin)      ) = aHa_range
-          matrix_index(matXatomf(spin)      ) = aHa_range   ! Xatomf_range
-          matrix_index(matSFcoeff(spin)     ) = SFcoeff_range
-          matrix_index(matSFcoeff_tran(spin)) = SFcoeffTr_range
-          matrix_index(matdSFcoeff(spin)    ) = SFcoeff_range
-          matrix_index(matdSFcoeff_e(spin)  ) = SFcoeff_range
+          matrix_index(matKatomf(spin)) = aHa_range
+          matrix_index(matHatomf(spin)) = aHa_range
+          matrix_index(matXatomf(spin)) = aHa_range   ! Xatomf_range
+       enddo
+       do spin_SF = 1, nspin_SF
+          matrix_index(matSFcoeff(spin_SF)     ) = SFcoeff_range
+          matrix_index(matSFcoeff_tran(spin_SF)) = SFcoeffTr_range
+          matrix_index(matdSFcoeff(spin_SF)    ) = SFcoeff_range
+          matrix_index(matdSFcoeff_e(spin_SF)  ) = SFcoeff_range
        end do
     endif
     if( flag_neutral_atom_projector ) then
@@ -2432,13 +2441,15 @@ contains
        trans_index(matKEatomf) = 0
        trans_index(matNLatomf) = 0
        do spin = 1, nspin
-          trans_index(matKatomf(spin)      ) = 0
-          trans_index(matHatomf(spin)      ) = 0 ! Hatomf_trans
-          trans_index(matXatomf(spin)      ) = 0 ! Satomf_trans
-          trans_index(matSFcoeff(spin)     ) = SFcoeff_trans 
-          trans_index(matSFcoeff_tran(spin)) = SFcoeff_trans 
-          trans_index(matdSFcoeff(spin)    ) = SFcoeff_trans 
-          trans_index(matdSFcoeff_e(spin)  ) = SFcoeff_trans 
+          trans_index(matKatomf(spin)) = 0
+          trans_index(matHatomf(spin)) = 0 ! Hatomf_trans
+          trans_index(matXatomf(spin)) = 0 ! Satomf_trans
+       enddo
+       do spin_SF = 1, nspin_SF
+          trans_index(matSFcoeff(spin_SF)     ) = SFcoeff_trans 
+          trans_index(matSFcoeff_tran(spin_SF)) = SFcoeff_trans 
+          trans_index(matdSFcoeff(spin_SF)    ) = SFcoeff_trans 
+          trans_index(matdSFcoeff_e(spin_SF)  ) = SFcoeff_trans 
        end do
     endif
     if( flag_neutral_atom_projector ) then

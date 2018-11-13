@@ -339,7 +339,10 @@ contains
        else
           atomf = paof
        end if
-       if (flag_SpinDependentSF) nspin_SF = nspin
+       if (flag_SpinDependentSF) then
+          nspin_SF = nspin
+          if (inode==ionode) write(io_lun,'(2X,A,I1)') 'Support functions are spin-dependent, nspin_SF = ',nspin_SF
+       endif
        if (flag_one_to_one.AND.flag_vary_basis) then
           write(io_lun,fmt='(/2x,"************")')
           write(io_lun,fmt='(2x,"* WARNING !*")')
