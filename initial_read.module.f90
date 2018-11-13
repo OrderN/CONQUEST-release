@@ -144,6 +144,8 @@ contains
   !!    Bug fix (GitHub issue #36) to turn off basis optimisation if NSF=NPAO
   !!   2018/05/11 10:26 dave
   !!    Bug fix (GitHub issue #80) to set flag_SFcoeffReuse false if NSF=NPAO
+  !!   2018/07/13 09:37 dave
+  !!    Added test for missing coordinate file name
   !!  SOURCE
   !!
   subroutine read_and_write(start, start_L, inode, ionode,          &
@@ -175,7 +177,8 @@ contains
                                       flag_SpinDependentSF, nspin_SF,  &
                                       flag_Multisite,                  &
                                       flag_cdft_atom, flag_local_excitation, &
-                                      flag_diagonalisation, flag_vary_basis, flag_SFcoeffReuse
+                                      flag_diagonalisation, flag_vary_basis, &
+                                      flag_MDcontinue, flag_SFcoeffReuse
     use cdft_data, only: cDFT_NAtoms, &
                          cDFT_NumberAtomGroups, cDFT_AtomList
     use memory_module,          only: reg_alloc_mem, type_dbl
@@ -194,11 +197,11 @@ contains
     use pseudopotential_common, only: core_radius, pseudo_type, OLDPS, &
                                       SIESTA, ABINIT
     use pseudo_tm_module,       only: init_pseudo_tm
-    use input_module,           only: fdf_string, fdf_out, io_close
+    use input_module,           only: fdf_string, fdf_out, io_close, leqi
     use force_module,           only: tot_force
-    !use DiagModule,             only: diagon
     use constraint_module,      only: flag_RigidBonds,constraints
     use support_spec_format,    only: flag_one_to_one, symmetry_breaking, read_option
+    use md_control,             only: md_position_file
     use pao_format
 
     implicit none
@@ -237,6 +240,7 @@ contains
     call my_barrier()
     def = ' '
     atom_coord_file = fdf_string(80,'IO.Coordinates',def)
+    if(leqi(def,atom_coord_file)) call cq_abort("No coordinate file specified: please set with IO.Coordinates")
     if ( pdb_format ) then
        pdb_template = fdf_string(80,'IO.PdbTemplate',atom_coord_file)
     else
@@ -244,7 +248,11 @@ contains
     end if    
     def = 'make_prt.dat'
     part_coord_file = fdf_string(80,'IO.Partitions',def)
-    call read_atomic_positions(trim(atom_coord_file))
+    if (.not. flag_MDcontinue) then
+      call read_atomic_positions(trim(atom_coord_file))
+    else
+      call read_atomic_positions(md_position_file)
+    end if
     if(iprint_init>4) call print_process_info()
     ! By now, we'll have unit cell sizes and grid cutoff
     call find_grid
@@ -616,6 +624,10 @@ contains
   !!    Adding parameters for simulation cell optimisation
   !!   2017/10/15 dave & an
   !!    Reading atomic spins: small tweak to test on net spin (uses abs and RD_ERR)
+  !!   2017/10/24 zamaan
+  !!    added thermostat flags for refactored NVT
+  !!   2017/11/13 18:15 nakata
+  !!    Added flag_normalise to normalise each eigenstate of PDOS
   !!   2018/01/19 dave
   !!    Added test for lmax_ps and NA projector functions
   !!   2018/01/22 tsuyoshi (with dave)
@@ -626,8 +638,27 @@ contains
   !!    Bug fix: turn off mixed L-SCF with diagonalisation (was breaking force tests)
   !!    Second issue (14:08) set SC.MinIters to 0 as was breaking force tests; also tweaked
   !!    linear mixing end default
+  !!   2018/03/09 zamaan
+  !!    Set some flags to true when restarting MD (loading matrices)
   !!   2018/04/12 22:00 nakata
   !!    Bug fix: turn on flag_LFD_MD_UseAtomicDensity only when flag_SFcoeffReuse is .false.
+  !!   2018/04/24 zamaan
+  !!    Changed AtomMove.FixCentreOfMass default to .true. except when running
+  !!    FIRE qMD. minE.GlobalTolerance now defaults to .false. for MD.
+  !!   2018/4/25 zamaan
+  !!    added md_tdep flag for TDEP output dump
+  !!   2018/05/17 12:54 dave with Ayako Nakata
+  !!    flag_InitialAtomicSpin now comes from density_module (not global)
+  !!   2018/07/16 16:02 dave
+  !!    Bug fix: only read RadiusMS when flag_Multisite is true
+  !!   2018/07/16 17:09 dave
+  !!    Adding zero T requirement for flag_quench_MD as well as FIRE
+  !!   2018/09/19 18:30 nakata
+  !!    Added flag_pDOS_angmom for orbital angular momentum resolved PDOS
+  !!   2018/10/22 14:26 dave & jsb
+  !!    Added flag_PDOS_lm for (l,m) projected DOS
+  !!   2018/10/30 11:52 dave
+  !!    added flag_PDOS_include_semicore to allow inclusion/exclusion of semi-core states from PDOS
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -653,17 +684,7 @@ contains
                              flag_old_partitions, ne_in_cell,          &
                              ne_spin_in_cell, nspin, spin_factor,      &
                              ne_magn_in_cell,                          &
-                             max_L_iterations, flag_functional_type,   &
-                             functional_description,                   &
-                             functional_lda_pz81,                      &
-                             functional_lda_gth96,                     &
-                             functional_lda_pw92,                      &
-                             functional_gga_pbe96,                     &
-                             functional_gga_pbe96_rev98,               &
-                             functional_gga_pbe96_r99,                 &
-                             functional_gga_pbe96_wc,                  &
-                             functional_hyb_pbe0,                      &
-                             functional_hartree_fock,                  &
+                             max_L_iterations,    &
                              flag_reset_dens_on_atom_move,             &
                              flag_continue_on_SC_fail, iprint_init,    &
                              iprint_mat, iprint_ops, iprint_DM,        &
@@ -688,16 +709,17 @@ contains
                              dscf_target_nfold, flag_local_excitation, dscf_HOMO_thresh,   &
                              dscf_LUMO_thresh, dscf_HOMO_limit, dscf_LUMO_limit,           &
                              flag_MDcontinue,flag_MDdebug,flag_MDold,  &
+                             flag_thermoDebug, flag_baroDebug, &
                              flag_LmatrixReuse,flag_TmatrixReuse,flag_SkipEarlyDM,McWFreq, &
                              restart_T,restart_X,flag_XLBOMD,flag_propagateX,              &
                              flag_propagateL,flag_dissipation,integratorXL, flag_FixCOM,   &
                              flag_exx, exx_alpha, exx_scf, exx_scf_tol, exx_siter,         &
                              flag_out_wf,flag_out_wf_by_kp,max_wf,out_wf,wf_self_con, flag_fire_qMD, &
                              flag_write_DOS, flag_write_projected_DOS, &
+                             flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm, &
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
-                             flag_readAtomicSpin, &
                              flag_opt_cell, cell_constraint_flag, cell_en_tol
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
@@ -715,6 +737,7 @@ contains
                               species_file, species_from_files
     use GenComms,   only: gcopy, my_barrier, cq_abort, inode, ionode
     !use DiagModule, only: diagon
+    use DiagModule,             only: flag_pDOS_include_semicore
     use energy,     only: flag_check_Diag
     use DMMin,      only: maxpulayDMM, maxpulaystepDMM, minpulaystepDMM, &
                           LinTol_DMM, n_dumpL
@@ -726,7 +749,8 @@ contains
                        n_exact, maxitersSC, maxearlySC, maxpulaySC,   &
                        atomch_output, flag_Kerker, flag_wdmetric, minitersSC
     use atomic_density,  only: read_atomic_density_file, &
-                              atomic_density_method
+         atomic_density_method
+    use density_module, only: flag_InitialAtomicSpin
     use S_matrix_module, only: InvSTolerance, InvSMaxSteps,&
                                InvSDeltaOmegaTolerance
     use blip,          only: blip_info, init_blip_flag, alpha, beta
@@ -749,7 +773,10 @@ contains
                                  flag_which_force, TF_direction, &
                                  TF_atom_moved, TF_delta
     use io_module, only: pdb_format, pdb_altloc, append_coords,  &
-                         pdb_output, banner, get_file_name, time_max
+                         pdb_output, banner, get_file_name, time_max, &
+                         flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
+                         flag_MatrixFile_BinaryFormat_Grab, flag_MatrixFile_BinaryFormat_Dump
+
     use group_module,     only: part_method, HILBERT, PYTHON
     use energy,           only: flag_check_DFT
     use H_matrix_module,  only: locps_output, locps_choice
@@ -777,9 +804,18 @@ contains
                                   flag_LFD_minimise, LFD_ThreshE, LFD_ThreshD,           &
                                   LFD_Thresh_EnergyRise, LFD_max_iteration,              &
                                   flag_LFD_MD_UseAtomicDensity
-    use move_atoms,         only: threshold_resetCD
+    use control,    only: md_ensemble
+    use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
+                          md_target_press, md_baro_type, md_tau_P, &
+                          md_thermo_type, md_bulkmod_est, md_box_mass, &
+                          flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
+                          md_calc_xlmass, md_berendsen_equil, &
+                          md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
+    use md_model,   only: md_tdep
+    use move_atoms,         only: threshold_resetCD, flag_stop_on_empty_bundle
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
+    use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0
 
     implicit none
 
@@ -946,7 +982,6 @@ contains
           call cq_abort('read_input: you may not select restart for a run just now')
        endif
        init_blip_flag = fdf_string(10,'Basis.InitBlipFlag','pao')
-       restart_LorK   = fdf_boolean('General.LoadL',   .false.)
        restart_rho    = fdf_boolean('General.LoadRho', .false.)
        restart_T      = fdf_boolean('General.LoadInvS',.false.)
        ! Is there a net charge on the cell ?
@@ -1039,7 +1074,7 @@ contains
        flag_analytic_blip_int = fdf_boolean('Basis.AnalyticBlipIntegrals',.false.)
        !
        !
-       find_chdens            = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
+!       find_chdens            = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
        flag_Becke_weights     = fdf_boolean('SC.BeckeWeights',          .false.)
        flag_Becke_atomic_radii= fdf_boolean('SC.BeckeAtomicRadii',      .false.)
        ! Number of species
@@ -1203,7 +1238,7 @@ contains
              charge_dn(i)     = fdf_double ('Atom.SpinNeDn',zero)
              sum_elecN_spin   = charge_up(i)+charge_dn(i)
              if (abs(sum_elecN_spin)>RD_ERR) then
-                flag_readAtomicSpin = .true.
+                flag_InitialAtomicSpin = .true.
                 if (abs(sum_elecN_spin-charge(i))>RD_ERR) &
                    call cq_abort('read_input: sum of number of electrons &
                                  &in spin channels is different from total &
@@ -1213,7 +1248,8 @@ contains
              nsf_species(i)   = fdf_integer('Atom.NumberOfSupports',0)
              RadiusSupport(i) = fdf_double ('Atom.SupportFunctionRange',r_h)
              RadiusAtomf(i)   = RadiusSupport(i) ! = r_pao for (atomf=paof) or r_sf for (atomf==sf)
-             RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
+             ! Added DRB 2018/07/16 for safety
+             if(flag_Multisite) RadiusMS(i)      = fdf_double ('Atom.MultisiteRange',zero)
              RadiusLD(i)      = fdf_double ('Atom.LFDRange',zero)
              if (flag_Multisite) RadiusSupport(i) = RadiusAtomf(i) + RadiusMS(i)
              ! DRB 2016/08/05 Keep track of maximum support radius
@@ -1269,6 +1305,13 @@ contains
                 charge(i) = zero
              endif
           enddo
+        ! At present, we cannot use neutral atom potential for ghost atoms.
+        !    2018/Sep/26   Tsuyoshi Miyazaki
+         if(flag_neutral_atom) then
+           if(inode==ionode) write(io_lun,'(10x,A)') &
+             'Now, we cannot use neutral atom potential for ghost atoms. Please set General.NeutralAtom as false.'
+           call cq_abort("Error: Neutral Atom potential cannot be used for ghost atom, at present.")
+         endif
        endif
 !!$        
 !!$        
@@ -1334,7 +1377,11 @@ contains
 !!$ 
        !blip_width = support_grid_spacing *
        !             fdf_double('blip_width_over_support_grid_spacing',four)
-       flag_global_tolerance = fdf_boolean('minE.GlobalTolerance',     .true. )
+       if (leqi(runtype,'md')) then
+         flag_global_tolerance = fdf_boolean('minE.GlobalTolerance', .true.)
+       else
+         flag_global_tolerance = fdf_boolean('minE.GlobalTolerance', .false.)
+       end if
        L_tolerance           = fdf_double ('minE.LTolerance',    1.0e-7_double)
        sc_tolerance          = fdf_double ('minE.SCTolerance',   1.0e-6_double)
        maxpulayDMM           = fdf_integer('DM.MaxPulay',        5            )
@@ -1359,6 +1406,7 @@ contains
        flag_opt_cell         = fdf_boolean('AtomMove.OptCell',          .false.)
        cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
        cell_en_tol           = fdf_double('AtomMove.OptCell.EnTol',0.00001_double)
+       flag_stop_on_empty_bundle = fdf_boolean('AtomMove.StopOnEmptyBundle',.false.)
        !
        flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
        if(.NOT.flag_vary_basis) then
@@ -1402,6 +1450,12 @@ contains
 !!$
 !!$
 !!$
+       ! Name and Format of Matrix Files  (see store_matrix)
+         flag_MatrixFile_RankFromZero = fdf_boolean('IO.MatrixFile.RankFromZero', .true.)
+         flag_MatrixFile_BinaryFormat = fdf_boolean('IO.MatrixFile.BinaryFormat', .true.)
+         flag_MatrixFile_BinaryFormat_Grab = fdf_boolean('IO.MatrixFile.BinaryFormat.Grab', flag_MatrixFile_BinaryFormat)
+         flag_MatrixFile_BinaryFormat_Dump = fdf_boolean('IO.MatrixFile.BinaryFormat.Dump', flag_MatrixFile_BinaryFormat)
+ 
        ! read wavefunction output flags
        mx_temp_matrices = fdf_integer('General.MaxTempMatrices',100)
        flag_out_wf=fdf_boolean('IO.outputWF',.false.)
@@ -1444,6 +1498,22 @@ contains
              E_DOS_max = fdf_double('IO.max_DOS_E',zero)
              sigma_DOS = fdf_double('IO.sigma_DOS',0.001_double)
              n_DOS = fdf_integer('IO.n_DOS',201)
+             flag_normalise_pDOS = fdf_boolean('IO.normalise_PDOS',.true.)
+             flag_pDOS_angmom = fdf_boolean('IO.PDOS_Angmom',.false.)
+             flag_pDOS_lm = fdf_boolean('IO.PDOS_lm_resolved',.false.)
+             flag_pDOS_include_semicore = fdf_boolean('IO.PDOS_include_semicore',.true.)
+             if(flag_pDOS_lm.AND.(.NOT.flag_pDOS_angmom)) then
+                if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom T as (l,m)-resolved PDOS requested")')
+                flag_pDOS_angmom = .true.
+             end if
+             if (.not.flag_write_projected_DOS) then
+                flag_normalise_pDOS = .false.
+                flag_pDOS_angmom = .false.
+             endif
+             if (flag_pDOS_angmom .and. flag_basis_set==blips) then
+                flag_pDOS_angmom = .false.
+                if(inode==ionode) write(io_lun,'(2x,"Setting IO.PDOS_Angmom F as using blips")')
+             endif               
           else
              flag_write_DOS = .false.
              if(inode==ionode) write(io_lun,'(2x,"Setting IO.writeDOS F as solving O(N)")')
@@ -1566,10 +1636,19 @@ contains
           if(inode==ionode) write(io_lun,*) ' As ghost atoms are included, UseGemm must be false.'
           UseGemm = .false.
        endif
+
        flag_check_DFT     = fdf_boolean('General.CheckDFT',.false.)
-       flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
        flag_quench_MD     = fdf_boolean('AtomMove.QuenchMD',.false.)
        flag_fire_qMD = fdf_boolean('AtomMove.FIRE',.false.)
+       ! If we're doing MD, then the centre of mass should generally be fixed,
+       ! except for FIRE quenched MD
+       if (leqi(runtype, 'md')) then
+          if (flag_fire_qMD) then
+            flag_FixCOM = fdf_boolean('AtomMove.FixCentreOfMass', .false.)
+          else
+            flag_FixCOM = fdf_boolean('AtomMove.FixCentreOfMass', .true.)
+          end if
+       end if
        if(flag_fire_qMD) then
           fire_N_min         = fdf_integer('AtomMove.FireNMin',5)
           fire_N_max         = fdf_integer('AtomMove.FireNMaxSlowQMD',10)
@@ -1580,6 +1659,9 @@ contains
           fire_max_step      = fdf_double ('AtomMove.FireMaxStep',2.0_double)
           fire_N_below_thresh= fdf_integer('AtomMove.FireNBelowThresh',3)
           temp_ion           = fdf_double ('AtomMove.IonTemperature',0.0_double)
+       else if(flag_quench_MD) then
+          temp_ion           = fdf_double ('AtomMove.IonTemperature',0.0_double)
+          fire_alpha0        = fdf_double ('AtomMove.QMDAlpha',0.5_double)
        else
           temp_ion           = fdf_double ('AtomMove.IonTemperature',300.0_double)
        end if
@@ -1627,29 +1709,6 @@ contains
 !!$
 !!$       
        flag_functional_type = fdf_integer('General.FunctionalType', 3)   ! LDA PW92
-!!$
-!!$
-!!$
-!!$
-       ! check if functional types are set correctly
-       ! **<lat>** added PBE0 and HF
-       if (flag_spin_polarisation) then
-          !
-          if ( flag_functional_type == functional_lda_pz81       .or. &
-               !flag_functional_type == functional_hyb_PBE0       .or. &
-               !flag_functional_type == functional_hartree_fock ) .or. & 
-               flag_functional_type == functional_lda_gth96     ) then
-             !
-             if (inode == ionode) &
-                  write (io_lun,'(/,a,/)') &
-                  '*** WARNING: the chosen xc-functional is not &
-                  &implemented for spin polarised calculation, &
-                  &reverting to LDA-PW92. ***'
-             flag_functional_type = functional_lda_pw92
-             !
-             !
-          end if          
-       end if
 !!$
 !!$
 !!$  E X X 
@@ -1706,31 +1765,6 @@ contains
           exx_mem       = 1
           exx_debug     = .false.
        end if
-!!$
-!!$
-!!$ 
-!!$
-!!$
-       select case(flag_functional_type)
-       case (functional_lda_pz81)
-          functional_description = 'LDA PZ81'
-       case (functional_lda_gth96)
-          functional_description = 'LDA GTH96'
-       case (functional_lda_pw92)
-          functional_description = 'LSDA PW92'
-       case (functional_gga_pbe96)
-          functional_description = 'GGA PBE96'
-       case (functional_gga_pbe96_rev98)            ! This is PBE with the parameter correction
-          functional_description = 'GGA revPBE98'   !   in Zhang & Yang, PRL 80:4, 890 (1998)
-       case (functional_gga_pbe96_r99)              ! This is PBE with the functional form redefinition
-          functional_description = 'GGA RPBE99'     !   in Hammer et al., PRB 59:11, 7413-7421 (1999)
-       case (functional_gga_pbe96_wc)               ! Wu-Cohen nonempirical GGA functional
-          functional_description = 'GGA WC'         !   in Wu and Cohen, PRB 73. 235116, (2006)
-       case (functional_hyb_pbe0)                   ! This is PB0E with the functional form redefinition
-          functional_description = 'hyb PBE0'        
-       case default
-          functional_description = 'LSDA PW92'
-       end select
 !!$
 !!$
 !!$  U N I T S
@@ -1841,6 +1875,7 @@ contains
        flag_MDcontinue   = fdf_boolean('AtomMove.RestartRun',.false.)
        flag_SFcoeffReuse = fdf_boolean('AtomMove.ReuseSFcoeff',.false.)
        flag_LmatrixReuse = fdf_boolean('AtomMove.ReuseL',.false.)
+       flag_write_xsf    = fdf_boolean('AtomMove.WriteXSF', .true.)
        if (flag_LFD .and. .not.flag_SFcoeffReuse) then
           ! if LFD, use atomic density in default when we don't reuse SFcoeff
           flag_LFD_MD_UseAtomicDensity = fdf_boolean('Multisite.LFD.UpdateWithAtomicDensity',.true.)
@@ -1849,12 +1884,29 @@ contains
        !if(flag_spin_polarisation.AND.flag_LmatrixReuse) then
        !   call cq_abort("L matrix re-use and spin polarisation not implemented !")
        !end if
+
        flag_TmatrixReuse = fdf_boolean('AtomMove.ReuseInvS',.false.)
        flag_SkipEarlyDM  = fdf_boolean('AtomMove.SkipEarlyDM',.false.)
        McWFreq           = fdf_integer('AtomMove.McWeenyFreq',0)
-       flag_FixCOM       = fdf_boolean('AtomMove.FixCentreOfMass', .false.)
        ! XL-BOMD
        flag_XLBOMD       = fdf_boolean('AtomMove.ExtendedLagrangian',.false.)
+
+       ! zamaan 2018/03/03 I can't imagine a case where you would want to
+       ! restart a MD run without loading the various matrices, so I'm 
+       ! Defaulting some flags to true. Calling fdf to ensure that input.log
+       ! remains consistent
+       if (flag_MDcontinue) then
+         flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.true.)
+         restart_LorK   = fdf_boolean('General.LoadL', .true.)
+         find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.true.)
+         if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .true.)
+       else
+         flag_read_velocity = fdf_boolean('AtomMove.ReadVelocity',.false.)
+         restart_LorK   = fdf_boolean('General.LoadL', .false.)
+         find_chdens    = fdf_boolean('SC.MakeInitialChargeFromK',.false.)
+         if (flag_XLBOMD) restart_X=fdf_boolean('XL.LoadX', .false.)
+       end if
+
        if (flag_XLBOMD) then
          kappa=fdf_double('XL.Kappa',2.0_double)
          if (kappa.GT.2.0_double) then
@@ -1898,7 +1950,6 @@ contains
              "WARNING: integrator must be velocity Verlet when dissipation &
              &does not apply ! Setting to velocity Verlet "
          endif
-         restart_X=fdf_boolean('XL.LoadX',.false.)
        endif ! XL-BOMD
        ! Constraints
        flag_RigidBonds=fdf_boolean('AtomMove.RigidBonds', .false.)
@@ -1930,6 +1981,54 @@ contains
            call fdf_endblock
          enddo
        endif ! Constraints
+
+       md_ensemble        = fdf_string(3, 'MD.Ensemble', 'nve')
+       md_calc_xlmass     = fdf_boolean('MD.CalculateXLMass', .true.)
+
+       ! Thermostat
+       select case(md_ensemble)
+       case('nve')
+         md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'none')
+         md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
+       case('nvt') 
+         md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
+         md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
+       case('npt')
+         md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
+         md_baro_type       = fdf_string(20, 'MD.Barostat', 'iso-ssm')
+       end select
+       md_tau_T           = fdf_double('MD.tauT', -one)
+       md_tau_T_equil     = fdf_double('MD.tauTEquil', one)
+       md_n_nhc           = fdf_integer('MD.nNHC', 5) 
+       md_n_ys            = fdf_integer('MD.nYoshida', 1)
+       md_n_mts           = fdf_integer('MD.nMTS', 1)
+       flag_thermoDebug   = fdf_boolean('MD.ThermoDebug',.false.)
+       md_t_drag          = fdf_double('MD.TDrag', zero)
+       allocate(md_nhc_mass(md_n_nhc)) 
+       allocate(md_nhc_cell_mass(md_n_nhc)) 
+       md_nhc_mass = one
+       md_nhc_cell_mass = one
+       if (fdf_block('MD.NHCMass')) then
+         read(unit=input_array(block_start), fmt=*) md_nhc_mass
+       end if
+       call fdf_endblock
+       if (fdf_block('MD.CellNHCMass')) then
+         read(unit=input_array(block_start), fmt=*) md_nhc_cell_mass
+       end if
+       call fdf_endblock
+
+       ! Barostat
+       md_target_press    = fdf_double('MD.TargetPressure', zero)
+       md_box_mass        = fdf_double('MD.BoxMass', one)
+       md_tau_P           = fdf_double('MD.tauP', -one)
+       md_tau_P_equil     = fdf_double('MD.tauPEquil', 100.0_double)
+       md_bulkmod_est     = fdf_double('MD.BulkModulusEst', 100.0_double)
+       md_cell_nhc        = fdf_boolean('MD.CellNHC', .true.)
+       flag_baroDebug     = fdf_boolean('MD.BaroDebug',.false.)
+       md_berendsen_equil = fdf_integer('MD.BerendsenEquil', 0)
+       md_tdep            = fdf_boolean('MD.TDEP', .false.)
+       md_p_drag          = fdf_double('MD.PDrag', zero)
+
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")
     end if ! new_format
@@ -2154,7 +2253,6 @@ contains
                                     iMethfessel_Paxton
     use blip,                 only: blip_info
     use global_module,        only: flag_basis_set, PAOs,blips,        &
-                                    functional_description,            &
                                     flag_precondition_blips, io_lun,   &
                                     flag_Multisite, flag_diagonalisation, flag_neutral_atom
     use minimise,             only: energy_tolerance, L_tolerance,     &
@@ -2282,8 +2380,6 @@ contains
 
     write(io_lun,7) NODES
 
-    write(io_lun,8) functional_description
-
     write(io_lun,11) n_support_iterations, n_L_iterations
 
     write(io_lun,13) dist_conv*r_h, d_units(dist_units), &
@@ -2301,7 +2397,6 @@ contains
 5   format(/10x,'The simulation box contains ',i7,' atoms.')
 ! 6   format(/10x,'The number of bands is ',f8.2)
 7   format(/10x,'The calculation will be performed on ',i5,' processors')
-8   format(/10x, 'The functional used will be ', a15)
 9   format(/10x,'The number of cell grid points in each direction is :',/, &
            20x,i5,' cell grid points along x',/, &
            20x,i5,' cell grid points along y',/, &

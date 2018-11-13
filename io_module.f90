@@ -96,6 +96,12 @@ module io_module
   !Maximum of wallclock time (in seconds): See subroutine 'check_stop' 2018.Jan.17 TM 
   real(double)      :: time_max =zero
    
+  !Name and Format of  MatrixFile used in store_matrix
+  logical          :: flag_MatrixFile_RankFromZero  ! Starting from 0 in ##### (*matrix2.i**.p#####)
+  logical          :: flag_MatrixFile_BinaryFormat  ! Binary or Ascii
+  logical          :: flag_MatrixFile_BinaryFormat_Grab ! Binary or Ascii for reading
+  logical          :: flag_MatrixFile_BinaryFormat_Dump ! Binary or Ascii for writing
+
   ! RCS tag for object file identification 
   character(len=80), save, private :: &
        RCSid = "$Id$"
@@ -400,7 +406,7 @@ second:   do
           end do
           call io_close(lun)
        else
-          if(iprint_init>2) write(io_lun,'(10x,a30)') 'Entering read_atomic_positions'
+          if(iprint_init>2) write(io_lun,'(10x,a40,a20)') 'Entering read_atomic_positions; reading ', filename
           call io_assign(lun)
           open(unit=lun,file=filename,status='old')
           ! Read supercell vector - for now it must be orthorhombic so
@@ -801,9 +807,7 @@ second:   do
        y_atom_cell(ni) = atom_coord(2,id_global)
        z_atom_cell(ni) = atom_coord(3,id_global)
        species(ni)     = species_glob(id_global)
-       !id_glob_inv(id_global) = ni  !in read_partitions
     end do
-
 !****lat<$
     call stop_backtrace(t=backtrace_timer,who='read_mult')
 !****lat>$
@@ -2951,25 +2955,41 @@ second:   do
   !! CREATION DATE 
   !!   2015/07/02 17:21
   !! MODIFICATION HISTORY
+  !!   2017/11/09 16:00 nakata
+  !!    Added atomf to find whether the PDOS is with PAOs or MSSFs
+  !!   2018/09/19 18:00 nakata
+  !!    Corrected the order of dimension of pDOS
+  !!   2018/09/19 18:30 nakata
+  !!    Added orbital angular momentum resolved DOS (pDOS_angmom)
+  !!   2018/10/22 14:22 dave & jsb
+  !!    Adding (l,m)-projected DOS
   !! SOURCE
   !!
-  subroutine dump_projected_DOS(pDOS,Ef)
+  subroutine dump_projected_DOS(pDOS,Ef,pDOS_angmom,Nangmom)
 
     use datatypes
-    use global_module, only: n_DOS, E_DOS_max, E_DOS_min, sigma_DOS, nspin
+    use global_module, only: n_DOS, E_DOS_max, E_DOS_min, sigma_DOS, flag_pDOS_angmom, &
+                             nspin, atomf, sf, ni_in_cell, flag_pDOS_lm
     use primary_module,  only: bundle
 
     ! Passed variables
-    real(double), dimension(n_DOS,nspin,bundle%n_prim) :: pDOS
+    real(double), dimension(n_DOS,bundle%n_prim,nspin) :: pDOS
     real(double), dimension(nspin) :: Ef
+    real(double), OPTIONAL, dimension(:,:,:,:,:) :: pDOS_angmom ! bin, atom, l, m, spin
+    integer, OPTIONAL :: Nangmom
 
     ! Local variables
-    integer :: lun, i, iprim
+    integer :: lun, i, j, k, iprim, natom, tmp_col
     real(double) :: dE, thisE
-    character(len=50) :: filename
+    character(len=50) :: filename, fmt_DOS
+    character(len=200) :: colstr
 
-    do iprim = 1,bundle%n_prim
-       write(filename,'("Atom",I0.7,"DOS.dat")') bundle%ig_prim(iprim)
+    if (atomf==sf) natom = bundle%n_prim
+    if (atomf/=sf) natom = ni_in_cell
+
+    do iprim = 1,natom
+       if (atomf==sf) write(filename,'("Atom",I0.7,"DOS.dat")') bundle%ig_prim(iprim)
+       if (atomf/=sf) write(filename,'("Atom",I0.7,"DOS.dat")') iprim ! iprim is equal to global ID if atomf = paof (MSSFs)
        ! Open file
        call io_assign (lun)
        open (unit = lun, file = filename)
@@ -2982,18 +3002,79 @@ second:   do
                Ef(1:nspin),E_DOS_min,E_DOS_max, n_DOS
        end if
        write(lun,fmt='(2x,"# Broadening: ",f12.5)') sigma_DOS
+       ! Indicate columns
+       if(flag_PDOS_angmom) then
+          if(flag_pDOS_lm) then
+             colstr = "  #     Energy     |   Total pDOS   |    l=0, m= 0   |    l=1, m=-1   |&
+                  &    l=1, m= 0   |    l=1, m= 1   |    l=2, m=-2   |    l=2, m=-1   |&
+                  &    l=2, m= 0   |    l=2, m= 1   |    l=2, m= 2   "
+          else
+             colstr = "  #     Energy     |   Total pDOS   |      l=0       |      l=1       |&
+                  &      l=2       "
+          end if
+       else
+          colstr =    "  #     Energy     |   Total pDOS    "
+       end if
+       write(lun,fmt='(a)') colstr
        dE = (E_DOS_max - E_DOS_min)/real(n_DOS - 1,double)
        thisE = E_DOS_min
        if(nspin==1) then
-          do i=1,n_DOS
-             write(lun,fmt='(2f17.10)') thisE,pDOS(i,1,iprim)
-             thisE = thisE + dE
-          end do
+          if (flag_PDOS_angmom) then
+             if(flag_pDOS_lm) then
+                tmp_col = 0
+                do i=1,Nangmom
+                   tmp_col = tmp_col + 2*i-1  ! Because i is l+1 
+                end do
+                write(fmt_DOS,*) tmp_col+2 ! NB this is number of columns in format
+                fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
+                do i=1,n_DOS
+                   write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),((pDOS_angmom(i,iprim,j,k,1),k=1,2*j-1),j=1,Nangmom)
+                   thisE = thisE + dE
+                end do
+             else
+                write(fmt_DOS,*) Nangmom+2 ! NB this is number of columns in format
+                write(*,*) 'N cols: ',Nangmom+2
+                fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
+                do i=1,n_DOS
+                   write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),(pDOS_angmom(i,iprim,j,1,1),j=1,Nangmom)
+                   thisE = thisE + dE
+                end do
+             end if
+          else
+             do i=1,n_DOS
+                write(lun,fmt='(2f17.10)') thisE,pDOS(i,iprim,1)
+                thisE = thisE + dE
+             end do
+          endif
        else if(nspin==2) then
-          do i=1,n_DOS
-             write(lun,fmt='(3f17.10)') thisE,pDOS(i,iprim,1),-pDOS(i,iprim,2)
-             thisE = thisE + dE
-          end do
+          if (flag_PDOS_angmom) then
+             if(flag_pDOS_lm) then
+                tmp_col = 0
+                do i=1,Nangmom
+                   tmp_col = tmp_col + 2*i-1  ! Because i is l+1 
+                end do
+                write(fmt_DOS,*) tmp_col*2+3
+                fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
+                do i=1,n_DOS
+                   write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),((pDOS_angmom(i,iprim,j,k,1),k=1,2*j-1),j=1,Nangmom), &
+                        -pDOS(i,iprim,2),((-pDOS_angmom(i,iprim,j,k,2),k=1,2*j-1),j=1,Nangmom)
+                   thisE = thisE + dE
+                end do
+             else
+                write(fmt_DOS,*) Nangmom*2+3 ! Total number of columns
+                fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
+                do i=1,n_DOS
+                   write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),(pDOS_angmom(i,iprim,j,1,1),j=1,Nangmom), &
+                        -pDOS(i,iprim,2),(-pDOS_angmom(i,iprim,j,1,2),j=1,Nangmom)
+                   thisE = thisE + dE
+                end do
+             end if
+          else
+             do i=1,n_DOS
+                write(lun,fmt='(3f17.10)') thisE,pDOS(i,iprim,1),-pDOS(i,iprim,2)
+                thisE = thisE + dE
+             end do
+          end if
        end if
        call io_close (lun)
     end do
@@ -3962,6 +4043,70 @@ second:   do
   end subroutine write_positions
   !!***
 
+  !!****f* io_module/write_xsf *
+  !!
+  !!  NAME 
+  !!   write_xsf
+  !!  PURPOSE
+  !!   Writes atomic positions to a .xsf file, viewable using VMD
+  !!  INPUTS
+  !!   type(group_set) :: parts
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2017/10/26
+  !!  MODIFICATION HISTORY
+  !!   
+  !!  SOURCE
+  !!
+  subroutine write_xsf(filename, step)
+
+    use datatypes
+    use numbers,        only: zero
+    use dimens,         only: r_super_x, r_super_y, r_super_z
+    use global_module,  only: ni_in_cell, iprint_init, atom_coord, &
+                              species_glob
+    use species_module, only: species_label
+    use GenComms,       only: inode, ionode, cq_abort
+    use units,          only: BohrToAng
+    use timer_module
+
+    ! Passed variables
+    character(len=*)  :: filename
+    integer           :: step
+
+    ! Local variables
+    integer                    :: lun, i
+    character(len=2)           :: atom_name
+
+    if(inode==ionode) then
+      if (iprint_init>2) write(io_lun,*) 'Writing atomic positions to .xsf'
+      call io_assign(lun)
+      if(append_coords) then
+         open(unit=lun,file=filename,position='append')
+         write(lun,*)
+      else
+         open(unit=lun,file=filename)
+      end if
+      write(lun,'(a)') "CRYSTAL"
+      write(lun,'("PRIMVEC   ",i8)') step
+      write(lun,fmt='(3f14.8)') r_super_x*BohrToAng, zero, zero
+      write(lun,fmt='(3f14.8)') zero, r_super_y*BohrToAng, zero
+      write(lun,fmt='(3f14.8)') zero, zero, r_super_z*BohrToAng
+      write(lun,'("PRIMCOORD ",i8)') step
+      write(lun,fmt='(2i8)') ni_in_cell, 1
+      do i=1,ni_in_cell
+        atom_name = adjustr(species_label(species_glob(i))(1:2))
+        write(lun,'(a4,3f16.8)') atom_name, atom_coord(:,i)*BohrToAng
+                 ! species_glob(i),flag_move_atom(1,i),flag_move_atom(2,i), &
+      end do
+      call io_close(lun)
+    end if
+  end subroutine write_xsf
+  !!***
+
   ! Hopefully we'll never need this kludgy but portable way of flushing buffers !
   !  subroutine force_buffers(lun)
   !
@@ -4283,7 +4428,7 @@ second:   do
   !!
   subroutine read_velocity(velocity, filename)
     use numbers
-    use global_module, only: id_glob, ni_in_cell,id_glob_inv
+    use global_module, only: id_glob, ni_in_cell,id_glob_inv, iprint_init
     use GenComms, only: inode, ionode, cq_abort, gcopy
 
     implicit none
@@ -4297,6 +4442,7 @@ second:   do
     integer :: lun
 
     if(inode == ionode) then
+       if(iprint_init>2) write(io_lun,'(10x,a40,a20)') 'Entering read_velocity; reading ', filename
        call io_assign(lun)
        open(unit=lun,file=filename)
        rewind(unit=lun)

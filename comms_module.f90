@@ -28,6 +28,8 @@
 !!    Changed for output to file not stdout
 !!   2012/01/17 17:05 dave
 !!    Added routines for blip coefficient transfer (analytic blip integrals)
+!1   2018/10/03 17:17 dave
+!!    Changing MPI tags to conform to standard
 !!  SOURCE
 !!
 module comms_module
@@ -68,6 +70,8 @@ contains
 !!  MODIFICATION HISTORY
 !!   24/06/2002 drb
 !!    Changed the if statement (introduced get flag) to avoid array bounds checking error
+!1   2018/10/03 17:17 dave
+!!    Changing MPI tags to conform to standard
 !!  SOURCE
 !!
   subroutine Mquest_start_send(a_b_c,b,nreq,myid,mx_nponn,sends)
@@ -93,7 +97,7 @@ contains
 
     ! Local variables
     integer :: i,j,k,ind_part,ierr,istart,ilen1,ilen2,ilen3
-    integer :: istart2,istart3,tag, lenb, lenbind
+    integer :: istart2,istart3,tag, lenb, lenbind, unique_parts_sent
     logical :: get
 
     lenb = size(b)
@@ -101,11 +105,9 @@ contains
     !write(io_lun,*) 'Lengths: ',lenb,lenbind
     sends = 0
     do i=1,a_b_c%comms%inode ! Loop over neighbour nodes
+       unique_parts_sent = 0
        do j=1,a_b_c%comms%np_send(i) ! Loop over partitions to send
           ind_part = a_b_c%comms%pl_send(j,i)
-          ! This defines a unique tag for each message sent by this node
-          tag = (a_b_c%comms%ncomm(i)-1)*mx_nponn*mx_msg_per_part+ &
-               (ind_part-1)*mx_msg_per_part
           get = .false.
           if(j>1) then
              if(ind_part/=a_b_c%comms%pl_send(j-1,i)) then
@@ -115,7 +117,8 @@ contains
              get = .true.
           end if
           if(get) then
-             !        if(j.EQ.1.OR.(j.gt.1.AND.ind_part.ne.a_b_c%comms%pl_send(j-1,i))) then
+             unique_parts_sent = unique_parts_sent + 1
+             tag = (unique_parts_sent-1)*2
              istart = a_b_c%bmat(ind_part)%array_posn
              if(istart==0) call cq_abort(' ERROR : istart zero ',ind_part)
              istart2 = a_b_c%bmat(ind_part)%nd_offset+a_b_c%bmat(ind_part)%i_nd_acc(1)
@@ -171,11 +174,14 @@ contains
 !!  CREATION DATE
 !! 
 !!  MODIFICATION HISTORY
-!!
+!1   2018/10/03 17:17 dave
+!!    Changing MPI tags to conform to standard
+!!   2018/10/04 17:31 dave
+!!    Adding new argument to pass MPI tag in
 !!  SOURCE
 !!
   subroutine Mquest_get( mx_nponn, ilen2,ilen3,nc_part,send_node,sent_part,myid,&
-       bind_rem,b_rem,lenb_rem,bind,b,istart,mx_babs,mx_part)
+       bind_rem,b_rem,lenb_rem,bind,b,istart,mx_babs,mx_part,tag)
 
     ! Module usage
     use mpi
@@ -196,14 +202,13 @@ contains
     ! Miscellaneous data
     integer :: nc_part,send_node,sent_part,myid,ilen2,ilen3,size,istart,offset
     integer :: nrstat(MPI_STATUS_SIZE)
+    integer :: tag
 
     ! Local variables
-    integer :: ilen1,ierr,tag,lenbind_rem
+    integer :: ilen1,ierr,lenbind_rem
 
     !lenb_rem = size(b_rem)
     !lenbind_rem = size(bind_rem)
-    ! Define a unique tag for this message
-    tag = myid*mx_nponn*mx_msg_per_part+(sent_part-1)*mx_msg_per_part    
     ierr = 0
     ilen1 = nc_part
     !if(3*ilen1+5*ilen2>lenbind_rem) call cq_abort('Get error ',3*ilen1+5*ilen2,lenbind_rem)

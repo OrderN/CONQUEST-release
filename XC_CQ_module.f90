@@ -1,16 +1,19 @@
 ! ------------------------------------------------------------------------------
 ! $Id$
 ! ------------------------------------------------------------------------------
-! Module XC_module
+! Module XC
 ! ------------------------------------------------------------------------------
 ! Code area 3: Operators
 ! ------------------------------------------------------------------------------
 
-!!****h* Conquest/XC_module
+!!****h* Conquest/XC
 !! PURPOSE
 !!   Collects together all the routines associated to
 !!   exchange-correlation functionals (note the van der Waal
 !!   implementations are in its separate module)
+!!
+!!   This version is now Conquest native implementations of
+!!   the functionals (as opposed to the LibXC interface)
 !! AUTHOR
 !!   L.Tong
 !! CREATION DATE
@@ -20,49 +23,365 @@
 !!    Adding GGA stress terms
 !!   2015/09/03 17:27 dave
 !!    Added GGA stress term to PBE0
+!!   2018/02/13 10:52 dave
+!!    Renamed to XC
+!!    Moved functional numbers out of global
+!!    Deleted obsolete routine map_density
+!!   2018/06/15 12:21 dave
+!!    Added spin_factor in module use statements
 !! SOURCE
 !!
-module XC_module
+module XC
 
   use datatypes
-  use global_module, only: area_ops
+  use global_module, only: area_ops, io_lun, iprint_ops, spin_factor
 
   implicit none
 
+  save
+
+  ! Public, general variables
   real(double), dimension(3), public :: XC_GGA_stress
+  real(double), public :: s_6  ! For DFT D2
+  logical, public :: flag_is_GGA ! Needed for non-SC forces
+  ! Numerical flag choosing functional type
+  integer, public :: flag_functional_type
 
-  ! methods
-  public ::                         &
-       get_xc_potential,            & ! LDA-PZ81, spin non-polarised
-       get_dxc_potential,           &
-       get_GTH_xc_potential,        & ! LDA-GTH96, spin non-polarised
-       get_GTH_dxc_potential,       &
-       Vxc_of_r_LSDA_PW92,          &
-       get_xc_potential_LDA_PW92,   & ! LDA-PW92, spin non-polarised
-       get_dxc_potential_LDA_PW92,  &
-       get_xc_potential_LSDA_PW92,  & ! LDA-PW92, spin polarised
-       get_dxc_potential_LSDA_PW92, &
-       get_xc_potential_GGA_PBE,    & ! GGA-PBE96 (rev98 or rev99), no spin
-       eps_xc_of_r_GGA_PBE,         &
-       get_dxc_potential_GGA_PBE,   &
-       get_xc_potential_hyb_PBE0,   & ! hyb-PBE0
-       build_gradient,              & ! calculates gradient of density
-       map_density                    ! map cartisian coordinates to
-                                      ! density index, obsolete
-  private
+  ! Public methods
+  public :: get_xc_potential, get_dxc_potential, init_xc
 
-    ! RCS tag for object file identification
-  character(len=80), save :: &
-       RCSid = "$Id$"
+  ! Conquest functional identifiers
+  integer, parameter :: functional_lda_pz81        = 1
+  integer, parameter :: functional_lda_gth96       = 2
+  integer, parameter :: functional_lda_pw92        = 3    ! PRB 45, 13244 (1992) + PRL 45, 566 (1980)
+  integer, parameter :: functional_xalpha          = 4    ! Slater/Dirac exchange only  ; no correlation
+  integer, parameter :: functional_hartree_fock    = 10   ! Hartree-Fock exact exchange ; no correlation  
 
+  integer, parameter :: functional_gga_pbe96       = 101  ! Standard PBE
+  integer, parameter :: functional_gga_pbe96_rev98 = 102  ! revPBE (PBE + Zhang-Yang 1998)
+  integer, parameter :: functional_gga_pbe96_r99   = 103  ! RPBE   (PBE + Hammer-Hansen-Norskov 1999)
+  integer, parameter :: functional_gga_pbe96_wc    = 104  ! WC   (Wu-Cohen 2006)
+
+  integer, parameter :: functional_hyb_pbe0        = 201  ! PBE0   (hybrid PBE with exx_alpha=0.25)
+
+  ! Conquest output string
+  character(len=15)  :: functional_description 
 !!*****
 
 contains
 
-  !!****f* XC_module/get_xc_potential *
+  !!****f* XC_module/init_xc *
   !!
   !!  NAME
-  !!   get_xc_potential
+  !!   init_xc
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Initialises the exchange-correlation calculations
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2018/02/05
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine init_xc
+
+    use global_module, ONLY: flag_dft_d2, nspin
+    use GenComms, ONLY: inode, ionode, cq_abort
+    use numbers
+
+    implicit none
+
+    ! Test for sensible input
+    if(flag_functional_type<0) call cq_abort("Error setting functional: this code is not linked with LibXC ",flag_functional_type)
+    if(nspin==2) then ! Check for spin-compatible functionals
+       if ( flag_functional_type == functional_lda_pz81       .or. &
+            flag_functional_type == functional_lda_gth96     ) then
+          if (inode == ionode) &
+               write (io_lun,'(/,a,/)') &
+               '*** WARNING: the chosen xc-functional is not &
+               &implemented for spin polarised calculation, &
+               &reverting to LDA-PW92. ***'
+          flag_functional_type = functional_lda_pw92
+       end if
+    end if
+    ! Set up DFT-D2 and output functional
+    s_6 = zero
+    select case(flag_functional_type)
+    case (functional_lda_pz81)
+       functional_description = 'LDA PZ81'
+       if(flag_dft_d2) call cq_abort("DFT-D2 only compatible with PBE and rPBE")
+    case (functional_lda_gth96)
+       functional_description = 'LDA GTH96'
+       if(flag_dft_d2) call cq_abort("DFT-D2 only compatible with PBE and rPBE")
+    case (functional_lda_pw92)
+       functional_description = 'LSDA PW92'
+       if(flag_dft_d2) call cq_abort("DFT-D2 only compatible with PBE and rPBE")
+    case (functional_gga_pbe96)
+       functional_description = 'GGA PBE96'
+       if(flag_dft_d2) s_6 = 0.75_double
+    case (functional_gga_pbe96_rev98)            ! This is PBE with the parameter correction
+       functional_description = 'GGA revPBE98'   !   in Zhang & Yang, PRL 80:4, 890 (1998)
+       if(flag_dft_d2) s_6 = 1.25_double
+    case (functional_gga_pbe96_r99)              ! This is PBE with the functional form redefinition
+       functional_description = 'GGA RPBE99'     !   in Hammer et al., PRB 59:11, 7413-7421 (1999)
+       if(flag_dft_d2) call cq_abort("DFT-D2 only compatible with PBE and rPBE")
+    case (functional_gga_pbe96_wc)               ! Wu-Cohen nonempirical GGA functional
+       functional_description = 'GGA WC'         !   in Wu and Cohen, PRB 73. 235116, (2006)
+       if(flag_dft_d2) call cq_abort("DFT-D2 only compatible with PBE and rPBE")
+    case (functional_hyb_pbe0)                   ! This is PB0E with the functional form redefinition
+       functional_description = 'hyb PBE0'
+       if(flag_dft_d2) call cq_abort("DFT-D2 only compatible with PBE and rPBE")
+    case default
+       functional_description = 'LSDA PW92'
+       if(flag_dft_d2) call cq_abort("DFT-D2 only compatible with PBE and rPBE")
+    end select
+    if(inode==ionode) write(io_lun,'(/10x, "The functional used will be ", a15)') functional_description
+    ! This is a temporary, Conquest-specific test - we will
+    ! need to keep an eye on this and potentially introduce
+    ! tests against functional name
+    if(flag_functional_type>100) then
+       flag_is_GGA = .true.
+    else
+       flag_is_GGA = .false.
+    end if
+    return
+  end subroutine init_xc
+  !!***
+
+  !!****f* XC/get_xc_potential *
+  !!
+  !!  NAME
+  !!   get_cq_xc_potential
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Interface to CQ routines
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2018/02/13
+  !!  MODIFICATION HISTORY
+  !!  SOURCE
+  !!
+  subroutine get_xc_potential(density, xc_potential, xc_epsilon,     &
+                              xc_energy, size, &!x_epsilon, c_epsilon, &
+                              x_energy)
+
+    use datatypes
+    use numbers
+    use global_module,               only: exx_niter, exx_siter, exx_alpha, nspin
+
+    implicit none
+
+    ! Passed variables
+    integer                    :: size
+    real(double)               :: xc_energy
+    real(double), dimension(size,nspin) :: density
+    real(double), dimension(size,nspin) :: xc_potential
+    real(double), dimension(size) :: xc_epsilon
+    ! optional
+    !real(double), dimension(:), optional :: x_epsilon, c_epsilon
+    real(double),               optional :: x_energy
+
+    ! Local variables
+    real(double) :: loc_x_energy, exx_tmp
+
+    select case(flag_functional_type)
+    case (functional_lda_pz81)
+       ! NOT SPIN POLARISED
+       call get_xc_potential_LDA_PZ81(density=density(:,1), size=size, &
+            xc_potential=xc_potential(:,1),    &
+            xc_epsilon  =xc_epsilon, &
+            xc_energy   =xc_energy,  &
+            x_energy    =loc_x_energy    )
+       !
+       !
+    case (functional_lda_gth96)
+       ! NOT SPIN POLARISED
+       call get_GTH_xc_potential(density(:,1), xc_potential(:,1), &
+            xc_epsilon, xc_energy, size)
+       ! not possible to decompose the xc energy...
+       loc_x_energy = zero
+       !
+       !
+    case (functional_lda_pw92)
+       call get_xc_potential_LSDA_PW92(density=density, size=size,&
+            xc_potential    =xc_potential,    &
+            xc_epsilon      =xc_epsilon,      &
+            xc_energy_total =xc_energy,       &
+            x_energy_total  =loc_x_energy         )
+       !
+       !
+    case (functional_gga_pbe96)
+       call get_xc_potential_GGA_PBE(density=density, grid_size=size, &
+            xc_potential=xc_potential,  &
+            xc_epsilon  =xc_epsilon,    &
+            xc_energy   =xc_energy,     &
+            x_energy    =loc_x_energy       )
+       !
+       !
+    case (functional_gga_pbe96_rev98)
+       call get_xc_potential_GGA_PBE(density=density, grid_size=size, &
+            xc_potential=xc_potential,  &
+            xc_epsilon  =xc_epsilon,    &
+            xc_energy   =xc_energy,     &
+            x_energy    =loc_x_energy,      &
+            flavour=functional_gga_pbe96_rev98 )
+       !
+       !
+    case (functional_gga_pbe96_r99)
+       call get_xc_potential_GGA_PBE(density=density, grid_size=size, &
+            xc_potential=xc_potential,  &
+            xc_epsilon  =xc_epsilon,    &
+            xc_energy   =xc_energy,     &
+            x_energy    =loc_x_energy,      &
+            flavour=functional_gga_pbe96_r99 )
+       !
+       !
+    case (functional_gga_pbe96_wc)
+       call get_xc_potential_GGA_PBE(density=density, grid_size=size, &
+            xc_potential=xc_potential,  &
+            xc_epsilon  =xc_epsilon,    &
+            xc_energy   =xc_energy,     &
+            x_energy    =loc_x_energy,      &
+            flavour=functional_gga_pbe96_wc )
+       !
+       !
+    case (functional_hyb_pbe0)
+       !
+       if ( exx_niter < exx_siter ) then
+          exx_tmp = one
+       else
+          exx_tmp = one - exx_alpha
+       end if
+       !
+       call get_xc_potential_hyb_PBE0(density=density, grid_size=size, &
+            xc_potential=xc_potential,   &
+            xc_epsilon  =xc_epsilon,     &
+            exx_a       =exx_tmp,        &
+            xc_energy   =xc_energy,      &
+            x_energy    =loc_x_energy,       &
+            flavour=functional_gga_pbe96 )
+       !
+       !
+    case (functional_hartree_fock)
+       ! **<lat>**
+       ! not optimal but experimental
+       if (exx_niter < exx_siter) then
+          ! for the first call of get_H_matrix using Hartree-Fock method
+          ! to get something not to much stupid ; use pure exchange functional
+          ! in near futur such as Xalpha
+          call get_xc_potential_LSDA_PW92(density=density, size=size,&
+               xc_potential    =xc_potential,    &
+               xc_epsilon      =xc_epsilon,      &
+               xc_energy_total =xc_energy,       &
+               x_energy_total  =loc_x_energy         )
+       else
+          xc_epsilon   = zero
+          xc_energy    = zero
+          xc_epsilon   = zero
+          xc_potential = zero
+          loc_x_energy     = zero
+       end if
+       !
+       !
+    case default
+       call get_xc_potential_LSDA_PW92(density, xc_potential, &
+            xc_epsilon, xc_energy, size)
+       !
+       !
+    end select
+    if(present(x_energy)) x_energy = loc_x_energy
+    return
+  end subroutine get_xc_potential
+  !!***
+
+  !!****f* XC/get_dxc_potential *
+  !!
+  !!  NAME
+  !!   get_dxc_potential
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Interface to CQ routines
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   D. R. Bowler
+  !!  CREATION DATE
+  !!   2018/02/13
+  !!  MODIFICATION HISTORY
+  !!   2018/02/14 11:00 dave
+  !!    Bug fix: introduced test for presence of density_out (only used for GGA, PCC)
+  !!  SOURCE
+  !!
+  subroutine get_dxc_potential(density, dxc_potential, nsize, density_out)
+
+    implicit none
+
+    ! Passed variables
+    integer                    :: nsize
+    real(double), dimension(:,:) :: density
+    real(double), dimension(:,:,:) :: dxc_potential
+    real(double), dimension(:,:), optional :: density_out
+
+    select case (flag_functional_type)
+    case (functional_lda_pz81)
+       ! NON SPIN POLARISED CALCULATION ONLY
+       !
+       call get_dxc_potential_LDA_PZ81(density(:,1), dxc_potential(:,1,1), nsize)
+       !
+    case (functional_lda_gth96)
+       ! NON SPIN POLARISED CALCULATION ONLY
+       call get_GTH_dxc_potential(density(:,1), dxc_potential(:,1,1), nsize)
+       !
+    case (functional_lda_pw92)
+       call get_dxc_potential_LSDA_PW92(density, dxc_potential, nsize)
+       !
+    case (functional_gga_pbe96) ! Original PBE
+       ! NON SPIN POLARISED CALCULATION ONLY
+       call get_dxc_potential_GGA_PBE(density       = density(:,1),     &
+                                      density_out   = density_out(:,1), &
+                                      dxc_potential = dxc_potential(:,1,1),    &
+                                      size          = nsize)
+       !
+    case (functional_gga_pbe96_rev98)
+       ! PBE with kappa of PRL 80, 890 (1998)
+       call get_dxc_potential_GGA_PBE(density(:,1),         &
+                                      density_out(:,1),     &
+                                      dxc_potential(:,1,1), nsize,  &
+                                      functional_gga_pbe96_rev98)
+    case (functional_gga_pbe96_r99)
+       ! PBE with form of PRB 59, 7413 (1999)
+       ! NON SPIN POLARISED CALCULATION ONLY
+       call get_dxc_potential_GGA_PBE(density(:,1),         &
+                                      density_out(:,1),     &
+                                      dxc_potential(:,1,1), nsize,  &
+                                      functional_gga_pbe96_r99)
+       !
+    case default
+          call get_dxc_potential_LDA_PZ81(density(:,1), dxc_potential(:,1,1), nsize)
+       !
+    end select
+  end subroutine get_dxc_potential
+  !!***
+
+  !!****f* XC_module/get_xc_potential_LDA_PZ81 *
+  !!
+  !!  NAME
+  !!   get_xc_potential_LDA_PZ81
   !!  USAGE
   !!
   !!  PURPOSE
@@ -115,9 +434,13 @@ contains
   !!     the exchange and correlation parts of xc_epsilon respectively.
   !!   2014/09/24 L.Truflandier
   !!   - Added optional x_energy for output
+  !!   2018/02/13 11:03 dave
+  !!    Renamed (added _LDA_PZ81) as part of refactoring
+  !!   2018/06/11 17:38 dave
+  !!    Bug fix for bug #91 - factor of spin_factor required for non-spin polarised
   !!  SOURCE
   !!
-  subroutine get_xc_potential(density, xc_potential, xc_epsilon,     &
+  subroutine get_xc_potential_LDA_PZ81(density, xc_potential, xc_epsilon,     &
                               xc_energy, size, x_epsilon, c_epsilon, &
                               x_energy)
 
@@ -157,7 +480,7 @@ contains
     if (present(x_energy))  x_energy  = zero
 
     do n = 1, n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
+       rho = spin_factor * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
        if (rho > RD_ERR) then ! Find radius of hole
           rcp_rs = ( four_thirds * pi * rho )**(third)
        else
@@ -189,9 +512,9 @@ contains
           v_correlation = zero
        end if
        if (present(c_epsilon)) c_epsilon(n) = e_correlation
-       if (present(x_energy))  x_energy     = x_energy + e_exchange * density(n)
+       if (present(x_energy))  x_energy     = x_energy + e_exchange * spin_factor * density(n) ! DRB Added to correct for lack of spin 2018/06/11
        ! Both X and C
-       xc_energy       = xc_energy  + (e_exchange + e_correlation) * density(n)
+       xc_energy       = xc_energy  + (e_exchange + e_correlation) * spin_factor * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
        xc_potential(n) = v_exchange + v_correlation
        xc_epsilon(n)   = e_exchange + e_correlation
        ! These two for testing
@@ -211,7 +534,7 @@ contains
     if (present(x_energy)) x_energy =  x_energy * grid_point_volume
 
     return
-  end subroutine get_xc_potential
+  end subroutine get_xc_potential_LDA_PZ81
   !!***
 
 
@@ -242,6 +565,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2011/12/12 L.Tong
   !!     Removed third, it is now defined in numbers module
+  !!   2018/06/11 17:39 dave
+  !!     Bug fix for bug #91 adding factor of spin_factor to account for lack of spin
   !!  SOURCE
   !!
   subroutine get_GTH_xc_potential(density, xc_potential, xc_epsilon, &
@@ -278,7 +603,7 @@ contains
 
     xc_energy = zero
     do n = 1, n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
+       rho = spin_factor * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
        if (rho > RD_ERR) then ! Find radius of hole
           rcp_rs = ( four*third * pi * rho )**(third)
           rs     = one/rcp_rs
@@ -404,7 +729,7 @@ contains
     if (present(c_epsilon)) c_epsilon = zero
 
     do n = 1, n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
+       rho = spin_factor * density(n)  ! DRB Added to correct for lack of spin 2018/06/11
 
        if (rho > RD_ERR) then ! Find radius of hole
           rcp_rs = k00 * ( rho**third )
@@ -930,16 +1255,14 @@ contains
   !! CREATION DATE
   !!   2012/04/25
   !! MODIFICATION HISTORY
+  !!   2018/06/15 12:25 dave
+  !!    Removed local spin_factor variable (now use equivalent from global_module)
   !! SOURCE
   !!
   subroutine eps_xc_of_r_GGA_PBE(nspin, flavour, rho_r, grho_r, eps_x,&
                                  eps_c, drhoEps_x, drhoEps_c)
     use datatypes
     use numbers
-    use global_module, only: functional_gga_pbe96,       &
-                             functional_gga_pbe96_rev98, &
-                             functional_gga_pbe96_r99,   &
-                             functional_gga_pbe96_wc
     use GenComms,      only: cq_abort
 
     implicit none
@@ -965,7 +1288,6 @@ contains
                     F3, F4, dFx_drho, ds_drho, ds_dgrho, dt_drho,     &
                     dt_dgrho, dF1_drho, dF2_drho, dF3_drho, dF4_drho, &
                     dF3_dgrho, dF4_dgrho, Xwc, dXwc_ds,  dF1_dgrho
-    real(double) :: spin_factor
     real(double), dimension(1)       :: rho_s
     real(double), dimension(1:3,1)   :: grho_s
     real(double), dimension(1:3)     :: grho_tot_r
@@ -1036,13 +1358,6 @@ contains
     mod_grho_tot_r = &
          sqrt(grho_tot_r(1)**2 + grho_tot_r(2)**2 + grho_tot_r(3)**2)
     mod_grho_tot_r = max(min_mod_grho, mod_grho_tot_r)
-
-    ! work out spin_factor
-    if (nspin == 1) then
-       spin_factor = two
-    else
-       spin_factor = one
-    end if
 
     ! Exchange part
     if (present(eps_x)) then
@@ -1279,6 +1594,8 @@ contains
   !!   - Added stress term
   !!   2017/08/29 jack baker & dave
   !!     Removed rcellx references (redundant)
+  !!   2018/06/15 12:25 dave
+  !!    Removed spin_factor from use statement (global to module now)
   !! SOURCE
   !!
   subroutine get_xc_potential_GGA_PBE(density, xc_potential,            &
@@ -1286,10 +1603,7 @@ contains
                                       flavour, x_energy )
     use datatypes
     use numbers
-    use global_module, only: functional_gga_pbe96,            &
-                             functional_gga_pbe96_rev98,      &
-                             functional_gga_pbe96_r99, nspin, &
-                             spin_factor
+    use global_module, only: nspin
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum, cq_abort
     use fft_module,    only: fft3, recip_vector
@@ -1437,6 +1751,8 @@ contains
   !!     Added GGA XC stress term
   !!   2017/08/29 jack baker & dave
   !!     Removed rcellx references (redundant)
+  !!   2018/06/15 12:25 dave
+  !!    Removed spin_factor from use statement (global to module now)
   !! SOURCE
   !!
   subroutine get_xc_potential_hyb_PBE0(density, xc_potential, exx_a,     &
@@ -1444,8 +1760,7 @@ contains
                                        flavour, x_energy )
     use datatypes
     use numbers
-    use global_module, only: spin_factor, nspin, &
-                             functional_gga_pbe96
+    use global_module, only: nspin
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum, cq_abort
     use fft_module,    only: fft3, recip_vector
@@ -1619,8 +1934,6 @@ contains
 
     use datatypes
     use numbers
-    use global_module, only: functional_gga_pbe96_rev98,           &
-                             functional_gga_pbe96_r99
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum, cq_abort
     use fft_module,    only: fft3, recip_vector
@@ -2125,81 +2438,10 @@ contains
   end subroutine build_gradient
   !!***
 
-
-  !!****f* H_matrix_module/map_density *
+  !!****f* XC_module/get_dxc_potential_LDA_PZ81 *
   !!
   !!  NAME
-  !!   map_density
-  !!  USAGE
-  !!
-  !!  PURPOSE
-  !!   Map cartesian coordinates to density index
-  !! (Only for one processor and old arrangement of the density)
-  !! (x,y,z) starts at (1,1,1)
-  !!  INPUTS
-  !!
-  !!  USES
-  !!
-  !!  AUTHOR
-  !!   A.S. Torralba
-  !!  CREATION DATE
-  !!   21/11/05
-  !!  MODIFICATION HISTORY
-  !!
-  !!  SOURCE
-  !!
-  subroutine map_density(x, y, z, n)
-
-    use block_module, only: nx_in_block, ny_in_block, nz_in_block
-    use group_module, only: blocks
-
-    implicit none
-
-    ! Passed variables
-    integer, intent(in) :: x, y, z
-    integer, intent(out) :: n
-
-    ! Local variables
-    integer :: gx, gy, gz, bx, by, bz, n_block
-
-    if((x > (nx_in_block * blocks%ngcellx)).OR.&
-       (y > (ny_in_block * blocks%ngcelly)).OR.&
-       (z > (nz_in_block * blocks%ngcellz))) &
-    then
-        n = -1
-        return
-    end if
-
-    gx=1+mod(x-1, nx_in_block)
-    gy=1+mod(y-1, ny_in_block)
-    gz=1+mod(z-1, nz_in_block)
-
-    bx=1+(x-1)/nx_in_block
-    by=1+(y-1)/ny_in_block
-    bz=1+(z-1)/nz_in_block
-
-    if(mod(by+bz, 2) == 1) then
-        bx = blocks%ngcellx - bx + 1
-    end if
-
-    if(mod(bz, 2) == 0) then
-        by = blocks%ngcelly - by + 1
-    end if
-
-    n_block = bx + blocks%ngcellx*((by-1) + blocks%ngcelly*(bz-1))
-
-    n = nx_in_block*ny_in_block*nz_in_block*(n_block-1) + &
-        gx + nx_in_block*((gy-1) + ny_in_block*(gz-1))
-
-    return
-  end subroutine map_density
-  !!***
-
-
-  !!****f* XC_module/get_dxc_potential *
-  !!
-  !!  NAME
-  !!   get_dxc_potential
+  !!   get_dxc_potential_LDA_PZ81
   !!  USAGE
   !!
   !!  PURPOSE
@@ -2228,9 +2470,13 @@ contains
   !!    Removed dsqrt
   !!   2011/12/13 L.Tong
   !!    Removed third, as it is now defined in numbers module
+  !!   2018/02/13 11:03 dave
+  !!    Renamed (added _LDA_PZ81) as part of refactoring
+  !!   2018/06/11 17:40 dave
+  !!    Bug fix for bug #91 adding factor of spin_factor to account for lack of spin
   !!  SOURCE
   !!
-  subroutine get_dxc_potential(density, dxc_potential, size)
+  subroutine get_dxc_potential_LDA_PZ81(density, dxc_potential, size)
 
     use datatypes
     use numbers
@@ -2259,8 +2505,8 @@ contains
     real(double), parameter :: ninth = 1.0_double/9.0_double
     real(double), parameter :: sixth = 1.0_double/6.0_double
 
-    do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
+    do n=1,n_my_grid_points   ! loop over grid pts and store potl on each
+       rho = spin_factor * density(n) ! DRB Added to correct for lack of spin 2018/06/11
        if (rho>RD_ERR) then ! Find radius of hole
           rcp_rs = ( four_thirds * pi * rho )**(third)
        else
@@ -2310,7 +2556,7 @@ contains
        !dxc_potential(n) = dv_exchange
     end do ! do n_my_grid_points
     return
-  end subroutine get_dxc_potential
+  end subroutine get_dxc_potential_LDA_PZ81
   !!***
 
 
@@ -2340,6 +2586,8 @@ contains
   !!  MODIFICATION HISTORY
   !!   2011/12/13 L.Tong
   !!    Removed third, it is now defined in numbers module
+  !    2018/06/11 17:40 dave
+  !!    Bug fix for bug #91 adding factor of spin_factor to account for lack of spin
   !!  SOURCE
   !!
   subroutine get_GTH_dxc_potential(density, dxc_potential, size)
@@ -2371,9 +2619,9 @@ contains
     real(double), parameter :: b3=1.110667363742916_double
     real(double), parameter :: b4=0.02359291751427506_double
 
-    do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
-       if (rho>RD_ERR) then ! Find radius of hole
+    do n=1,n_my_grid_points   ! loop over grid pts and store potl on each
+       rho = spin_factor * density(n) ! DRB Added to correct for lack of spin 2018/06/11
+       if (rho>RD_ERR) then   ! Find radius of hole
           rcp_rs = ( 4.0_double*third * pi * rho )**(third)
           rs = one/rcp_rs
        else
@@ -2631,6 +2879,8 @@ contains
   !!    Removed third, and eight, they are now defined in numbers module
   !!   2017/08/29 jack baker & dave
   !!    Removed rcellx references (redundant)
+  !!   2018/06/12 11:11 dave
+  !!    Fixing missing factors of spin_factor for non-spin polarisation (this routine only does zero spin)
   !!  SOURCE
   !!
   subroutine get_dxc_potential_GGA_PBE(density, density_out, &
@@ -2638,7 +2888,6 @@ contains
 
     use datatypes
     use numbers
-    use global_module, only: functional_gga_pbe96_rev98, functional_gga_pbe96_r99
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum
     use fft_module,    only: fft3, recip_vector
@@ -2740,23 +2989,24 @@ if(selector == fx_alternative) then
   print *,"!!!!!!!!WARNING!!!!!!!!!!!"
 end if
 
+    ! Get the LDA part of the functional
+    grad_density = spin_factor * density ! Factor of spin_factor to account for lack of spin
+    call get_dxc_potential_LDA_PW92(grad_density, dxc_potential_lda, size, &
+                                    eclda, declda_drho, d2eclda_drho2)
+    grad_density = zero
     ! Build the gradient of the density
     call build_gradient(density, grad_density_xyz, size)
-
+    grad_density_xyz(:,:) = spin_factor * grad_density_xyz(:,:)
     grad_density(:) = sqrt(grad_density_xyz(:,1)**2 + &
                            grad_density_xyz(:,2)**2 + &
                            grad_density_xyz(:,3)**2)
 
-    ! Get the LDA part of the functional
-
-    call get_dxc_potential_LDA_PW92(density, dxc_potential_lda, size, &
-                                    eclda, declda_drho, d2eclda_drho2)
 
     do n=1,n_my_grid_points ! loop over grid pts and store potl on each
-       rho = density(n)
+       rho = spin_factor * density(n)
        grad_rho = grad_density(n)
 
-       diff_rho(n) = density(n) - density_out(n)
+       diff_rho(n) = spin_factor * (density(n) - density_out(n))
 
        !!!!   EXCHANGE
 
@@ -3095,6 +3345,8 @@ end if
   !!   - (maxngrid,nspin,nspin), so
   !!     dxc_potential_ddensity(n,spin1,spin2) corresponds to
   !!     dVxc(spin1) / drho(spin2) at grid point n.
+  !!   2018/06/15 12:25 dave
+  !!    Removed spin_factor from use statement (global to module now)
   !! SOURCE
   !!
   subroutine get_dxc_potential_LSDA_PW92(density,                &
@@ -3104,7 +3356,7 @@ end if
     use numbers
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum
-    use global_module, only: nspin, spin_factor
+    use global_module, only: nspin
 
     implicit none
 
@@ -3395,4 +3647,4 @@ end if
   end subroutine PW92_G
   !*****
 
-end module XC_module
+end module XC

@@ -183,6 +183,7 @@ module GenComms
      module procedure double_one_gsumv
      module procedure double_two_gsumv
      module procedure double_three_gsumv
+     module procedure double_four_gsumv
      module procedure dcplx_one_gsumv
      module procedure logical_gsum
   end interface
@@ -1091,6 +1092,69 @@ contains
     timings(5) = timings(5) + t2 - t1
     return
   end subroutine double_three_gsumv
+!!***
+
+!!****f* GenComms/double_four_gsumv *
+!!
+!!  NAME 
+!!   double_four_gsumv - global sum on a real(double) vector
+!!  USAGE
+!!   double_four_gsumv(variable, len1, len2, len3, len4)
+!!  PURPOSE
+!!   Performs a global sum on a specified real(double) 3D vector- in
+!!   other words, sum vector over all processors and ensure
+!!   that all processors get the results
+!!
+!!   Since we don't know in advance how big this will be, we'll
+!!   have a parameter in the module header double_gsum_buf which 
+!!   will allow the sum to be done piecewise (for memory conservation)
+!!
+!!   The shenanigans with temp are necessary as there's no in-place
+!!   global sum in MPI
+!!
+!!   N.B. This routine (double_two_gsumv) assumes that len1 is smaller
+!!   than double_gsum_buf - if not, things might get a little hairy.
+!!  INPUTS
+!!   integer :: len1, len2, len3
+!!   real(double), dimension(len1,len2,len3) :: variable
+!!  USES
+!! 
+!!  AUTHOR
+!!   D.R.Bowler
+!!  CREATION DATE
+!!   2018/10/22 15:03 dave
+!!  MODIFICATION HISTORY
+!! 
+!!  SOURCE
+!!
+  subroutine double_four_gsumv(variable, len1, len2, len3, len4)
+
+    use datatypes
+
+    implicit none
+
+    ! Passed variables
+    integer :: len1, len2, len3, len4
+    real(double), dimension(len1,len2,len3, len4) :: variable
+
+    ! Local variables
+    real(double), allocatable, dimension(:,:,:,:) :: temp
+    integer :: ierr, stat, tmpsize, j, mod_dgsum_buf, mod_dgsum
+
+    allocate(temp(len1,len2,len3,len4))
+    t1 = MPI_wtime()
+    call dcopy(len1*len2*len3*len4,variable,1,temp,1)
+    call MPI_allreduce(temp,variable,len1*len2*len3*len4,&
+         MPI_Double_precision, MPI_Sum,MPI_COMM_WORLD,ierr)
+    if(ierr/=MPI_Success) &
+         call cq_abort('double_gsumv: Problem with allreduce')
+    ! Tidy up
+    deallocate(temp,STAT=stat)
+    if(stat/=0) call cq_abort('double_gsumv: error deallocating temp')
+    t2 = MPI_wtime()
+    timings(5) = timings(5) + t2 - t1
+    return
+  end subroutine double_four_gsumv
 !!***
 
 !!****f* GenComms/dcplx_one_gsumv *

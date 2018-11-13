@@ -40,6 +40,8 @@
 !!    RD_ERR, then N is regarded as zero.
 !!   2014/08/29 L.Truflandier
 !!    Added fourpi
+!!   2017/10/24 Z.Raza
+!!     Added one_eighth for MD Trotter expansion
 !!  SOURCE
 !!
 module numbers
@@ -83,6 +85,7 @@ module numbers
   real(double), parameter :: one_sixth = 1.0_double/6.0_double
   real(double), parameter :: five_sixths = 5.0_double/6.0_double
   real(double), parameter :: seven_sixths = 7.0_double/6.0_double
+  real(double), parameter :: one_eighth = 1.0_double/8.0_double
   real(double), parameter :: one_ninth = 1.0_double/9.0_double
   real(double), parameter :: seven_thirtysixths = 7.0_double/36.0_double
   real(double), parameter :: pi = 3.14159265358979323846_double 

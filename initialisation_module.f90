@@ -109,6 +109,8 @@ contains
   !!    Removed restart_file from call to read_and_write and initial_phis (redundant)
   !!   2018/01/22 12:39 JST dave
   !!    Changes to find maximum angular momentum for PAOs and pseudopotentials (for factorial function)
+  !!   2018/02/13 12:18 dave
+  !!    Changes to new XC interface
   !!  SOURCE
   !!
   subroutine initialise(vary_mu, fixed_potential, mu, total_energy)
@@ -130,6 +132,7 @@ contains
     use pseudo_tm_module,   only: make_neutral_atom
     use angular_coeff_routines, only: set_fact
     use maxima_module,          only: lmax_ps, lmax_pao
+    use XC, only: init_xc
     
     implicit none
 
@@ -159,7 +162,7 @@ contains
     ! Read input
     call read_and_write(start, start_L, inode, ionode, &
                         vary_mu, mu, find_chdens, read_phi)
-
+    call init_xc
     ! IMPORTANT!!!!! No timers allowed before this point
     !                We need to know if the user wants them or not
     !                  before actually starting one

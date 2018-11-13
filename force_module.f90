@@ -68,6 +68,8 @@
 !!    Adding non-SCF and PCC stress components
 !!   2015/11/26 15:24 dave
 !!    Changing ewald_force and ewald_stress to ion_interaction_force and _stress
+!!   2017/11/8 10:44 zamaan
+!!    added target attribute to stress
 !!   2018/01/24 11:45 JST dave
 !!    Added NA integral & projector approach to forces (flag_neutral_atom_projector)
 !!  SOURCE
@@ -85,10 +87,11 @@ module force_module
 
   save
 
-  real(double), dimension(:,:), allocatable :: tot_force, s_pulay_for, phi_pulay_for
+  real(double), dimension(:,:), allocatable, target :: tot_force
+  real(double), dimension(:,:), allocatable :: s_pulay_for, phi_pulay_for
 
   ! On-site part of stress tensor as Conquest uses orthorhombic cells (easily extended)
-  real(double), dimension(3) :: stress
+  real(double), dimension(3), target :: stress
   real(double), dimension(3) :: SP_stress, KE_stress, NL_stress, PP_stress, GPV_stress, &
        XC_stress, nonSCF_stress, pcc_stress, NA_stress
 
@@ -243,7 +246,7 @@ contains
     use energy,                  only: hartree_energy_total_rho, local_ps_energy, &
                                        delta_E_xc, xc_energy, hartree_energy_drho
     use hartree_module, only: Hartree_stress
-    use XC_module, ONLY: XC_GGA_stress
+    use XC, ONLY: XC_GGA_stress
 
     implicit none
 
@@ -2853,10 +2856,11 @@ contains
   !!    Renamed naba_atm -> naba_atoms_of_blocks
   !!   2016/11/02 10:24 dave
   !!    - Subtle GGA error: return is inside if(inode==ionode) loop causing hang !
+  !!   2018/02/13 11:52 dave
+  !!    Changes for new, universal XC interface
   !!   2018/02/14 13:26 dave
-  !!    More subtle errors ! The non-PCC, non-SCF XC stress did not have spin
-  !!    factor applied, and used only one call (get_xc_potential) where it should
-  !!    have had the call to the appropriate functional routine
+  !!    More subtle errors ! The PCC, non-SCF XC stress did not have spin
+  !!    factor applied (as above in non-SCF routine)
   !!  SOURCE
   !!
   subroutine get_nonSC_correction_force(HF_force, density_out, inode, &
@@ -2868,22 +2872,11 @@ contains
     use GenComms,            only: gsum
     use global_module,       only: rcellx, rcelly, rcellz, id_glob,    &
                                    ni_in_cell, species_glob, dens,     &
-                                   flag_functional_type,               &
-                                   functional_lda_pz81,                &
-                                   functional_lda_gth96,               &
-                                   functional_lda_pw92,                &
-                                   functional_gga_pbe96,               &
-                                   functional_gga_pbe96_rev98,         &
-                                   functional_gga_pbe96_r99,           &
                                    area_moveatoms, IPRINT_TIME_THRES3, &
                                    flag_pcc_global, nspin, spin_factor
-    use XC_module,           only: get_dxc_potential,                  &
-                                   get_GTH_dxc_potential,              &
-                                   get_dxc_potential_LSDA_PW92,        &
-                                   get_dxc_potential_GGA_PBE, get_xc_potential, &
-                                   get_GTH_xc_potential,               &
-                                   get_xc_potential_GGA_PBE,           &
-                                   get_xc_potential_LSDA_PW92
+    use XC,                  only: get_xc_potential,                   &
+                                   get_dxc_potential,                  &
+                                   flag_is_GGA
     use block_module,        only: nx_in_block, ny_in_block,           &
                                    nz_in_block, n_pts_in_block
     use group_module,        only: blocks, parts
@@ -2950,12 +2943,8 @@ contains
 !****lat<$
     call start_backtrace(t=backtrace_timer,who='get_nonSC_correction_force',where=7,level=3,echo=.true.)
 !****lat>$ 
-
     ! Spin-polarised PBE non-SCF forces not implemented, so exit if necessary
-    if ((nspin == 2) .and. &
-         ((flag_functional_type == functional_gga_pbe96) .or. &
-         (flag_functional_type == functional_gga_pbe96_rev98) .or. &
-         (flag_functional_type == functional_gga_pbe96_r99))) then
+    if ((nspin == 2) .and. flag_is_GGA) then ! Only true for CQ not LibXC
        if (inode == ionode) then
           write (io_lun, fmt='(10x,a)') &
                "*****************************************************"
@@ -3054,34 +3043,8 @@ contains
     ! DeltaXC is added in the main force routine
     ! For PCC we will do this in the PCC force routine (easier)
     if (.NOT.flag_pcc_global) then
-       select case (flag_functional_type)
-       case (functional_lda_pz81)
-          ! NOT SPIN POLARISED
-          call get_xc_potential(density_total, dVxc_drho(:,1,1),     &
+       call get_xc_potential(density, dVxc_drho(:,:,1),    &
                potential(:,1), y_pcc, nsize)
-       case (functional_lda_gth96)
-          ! NOT SPIN POLARISED
-          call get_GTH_xc_potential(density_total, dVxc_drho(:,1,1), &
-               potential(:,1), y_pcc, nsize)
-       case (functional_lda_pw92)
-          call get_xc_potential_LSDA_PW92(density, dVxc_drho(:,:,1),    &
-               potential(:,1), y_pcc, nsize)
-       case (functional_gga_pbe96)
-          call get_xc_potential_GGA_PBE(density,                &
-               dVxc_drho(:,:,1), potential(:,1), &
-               y_pcc, nsize)
-       case (functional_gga_pbe96_rev98)
-          call get_xc_potential_GGA_PBE(density,                &
-               dVxc_drho(:,:,1), potential(:,1), &
-               y_pcc, nsize)
-       case (functional_gga_pbe96_r99)
-          call get_xc_potential_GGA_PBE(density,                &
-               dVxc_drho(:,:,1), potential(:,1), &
-               y_pcc, nsize)
-       case default
-          call get_xc_potential_LSDA_PW92(density, dVxc_drho(:,:,1),    &
-               potential(:,1), y_pcc, nsize)
-       end select
        jacobian = zero
        do spin = 1, nspin
           do ipoint = 1,nsize
@@ -3117,13 +3080,9 @@ contains
           wk_grid_total(:) = wk_grid_total(:) + spin_factor * wk_grid(:,spin)
        end do
        ! only for GGA
-       if ((flag_functional_type == functional_gga_pbe96)       .or. &
-           (flag_functional_type == functional_gga_pbe96_rev98) .or. &
-           (flag_functional_type == functional_gga_pbe96_r99))   then
-          allocate(density_out_GGA_total(nsize), density_out_GGA(nsize,nspin), &
-                   STAT=stat)
-          if (stat /= 0)&
-               call cq_abort ('Error allocating &
+       if (flag_is_GGA) then
+          allocate(density_out_GGA_total(nsize), density_out_GGA(nsize,nspin), STAT=stat)
+          if (stat /= 0) call cq_abort ('Error allocating &
                                &density_out_GGAs in get_nonSC_force ', stat)
           call reg_alloc_mem(area_moveatoms, (nspin + 1) * nsize, type_dbl)
           density_out_GGA_total = zero
@@ -3143,136 +3102,40 @@ contains
     end if
 
     call start_timer (tmr_l_tmp1, WITH_LEVEL)
-    select case (flag_functional_type)
-    case (functional_lda_pz81)
-       ! NON SPIN POLARISED CALCULATION ONLY
-       !print*, 'enter functional_lda_pz81'
-       if (flag_pcc_global) then
-          call get_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), nsize)
+    if (flag_pcc_global) then
+       if(flag_is_GGA) then
+          call get_dxc_potential(wk_grid, dVxc_drho, nsize, density_out_GGA)
+          ! GGA with spin not implemented ! 
+          potential(:,1) = potential(:,1) + dVxc_drho(:,1,1) 
        else
-          !print*, size(density_total), size(dVxc_drho(:,1,1)), nsize
-          call get_dxc_potential(density_total, dVxc_drho(:,1,1), nsize)
+          call get_dxc_potential(wk_grid, dVxc_drho, nsize)
        end if
-       !print*, 'leave functional_lda_pz81'
-       !
-       !
-    case (functional_lda_gth96)
-       ! NON SPIN POLARISED CALCULATION ONLY
-       if (flag_pcc_global) then
-          call get_GTH_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), nsize)
+    else
+       if(flag_is_GGA) then
+          call get_dxc_potential(density, dVxc_drho, nsize, density_out)
+          ! GGA with spin not implemented ! 
+          potential(:,1) = potential(:,1) + dVxc_drho(:,1,1) 
        else
-          call get_GTH_dxc_potential(density_total, dVxc_drho(:,1,1), nsize)
+          call get_dxc_potential(density, dVxc_drho, nsize)
        end if
-       !
-       !
-    case (functional_lda_pw92)
-       !print*, 'enter functional_lda_pw92'
-       if (flag_pcc_global) then
-          call get_dxc_potential_LSDA_PW92(wk_grid, dVxc_drho, nsize)
-       else
-          call get_dxc_potential_LSDA_PW92(density, dVxc_drho, nsize)
-       end if
-       !print*, 'enter functional_lda_pw92'
-       !
-       !
-    case (functional_gga_pbe96) ! Original PBE
-       ! NON SPIN POLARISED CALCULATION ONLY
-       !print*, 'enter functional_gga_pbe96'
-       if (flag_pcc_global) then
-          call get_dxc_potential_GGA_PBE(wk_grid_total,         &
-                                         density_out_GGA_total, &
-                                         potential(:,1), nsize)
-       else
-          !print*, 'enter functional_gga_pbe96'
-          !print*, size(density_total) 
-          !print*, size(density_total)
-          !print*, size(density_out_total)
-          !print*, size(potential(:,1)) 
-          call get_dxc_potential_GGA_PBE(density       = density_total,     &
-                                         density_out   = density_out_total, &
-                                         dxc_potential = potential(:,1),    &
-                                         size          = nsize)
-          !print*, 'leave functional_gga_pbe96'
-       end if
-       !print*, 'leave functional_gga_pbe96'
-       !
-       !
-    case (functional_gga_pbe96_rev98)
-       ! PBE with kappa of PRL 80, 890 (1998)
-       ! NON SPIN POLARISED CALCULATION ONLY
-       if (flag_pcc_global) then
-          call get_dxc_potential_GGA_PBE(wk_grid_total,         &
-                                         density_out_total,     &
-                                         potential(:,1), nsize,  &
-                                         functional_gga_pbe96_rev98)
-       else
-          call get_dxc_potential_GGA_PBE(density_total,         &
-                                         density_out_total,     &
-                                         potential(:,1), nsize,  &
-                                         functional_gga_pbe96_rev98)
-       end if
-    case (functional_gga_pbe96_r99)
-       ! PBE with form of PRB 59, 7413 (1999)
-       ! NON SPIN POLARISED CALCULATION ONLY
-       if (flag_pcc_global) then
-          call get_dxc_potential_GGA_PBE(wk_grid_total,         &
-                                         density_out_total,     &
-                                         potential(:,1), nsize,  &
-                                         functional_gga_pbe96_r99)
-       else
-          call get_dxc_potential_GGA_PBE(density_total,         &
-                                         density_out_total,     &
-                                         potential(:,1), nsize,  &
-                                         functional_gga_pbe96_r99)
-       end if
-       !
-       !
-    case default
-       !print*, 'enter functional_default'
-       if (flag_pcc_global) then
-          call get_dxc_potential(wk_grid_total, dVxc_drho(:,1,1), nsize)
-       else
-          call get_dxc_potential(density_total, dVxc_drho(:,1,1), nsize)
-       end if
-       !print*, 'leave functional_lda_pz81'
-       !
-       !
-    end select
-
+    end if
     ! deallocating density_out_GGA: only for P.C.C.
     if (flag_pcc_global)  then
-       if ((flag_functional_type == functional_gga_pbe96) .or.       &
-           (flag_functional_type == functional_gga_pbe96_rev98) .or. &
-           (flag_functional_type == functional_gga_pbe96_r99)) then
-          deallocate(density_out_GGA_total, density_out_GGA,         &
-                     STAT=stat)
-          if (stat /= 0) &
-               call cq_abort('Error deallocating density_out_GGAs in &
+       if (flag_is_GGA) then
+          deallocate(density_out_GGA_total, density_out_GGA, STAT=stat)
+          if (stat /= 0) call cq_abort('Error deallocating density_out_GGAs in &
                               &get_nonSC_force ', stat)
           call reg_dealloc_mem(area_moveatoms, (nspin + 1) * nsize, type_dbl)
+          ! make a copy of potential at this point
+          ! use wk_grid as a temporary storage
+          do spin = 1, nspin
+             wk_grid(:,spin) = potential(:,spin)
+          end do
        end if
     end if !flag_pcc_global
 
-    ! for GGA
-    if (flag_pcc_global .and.                                      &
-        ((flag_functional_type == functional_gga_pbe96) .or.       &
-         (flag_functional_type == functional_gga_pbe96_rev98) .or. &
-         (flag_functional_type == functional_gga_pbe96_r99))) then
-       ! make a copy of potential at this point
-       ! use wk_grid as a temporary storage
-       do spin = 1, nspin
-          wk_grid(:,spin) = potential(:,spin)
-       end do
-       ! wk_grid = zero
-       ! do spin = 1, nspin
-       !    call axpy(nsize, one, potential(:,spin), 1, wk_grid(:,spin), 1)
-       ! end do
-    end if
-
     ! for LDA
-    if ((flag_functional_type /= functional_gga_pbe96) .and.       &
-        (flag_functional_type /= functional_gga_pbe96_rev98) .and. &
-        (flag_functional_type /= functional_gga_pbe96_r99)) then
+    if (.NOT.(flag_is_GGA)) then
        do spin = 1, nspin
           do spin_2 = 1, nspin
              do i = 1, n_my_grid_points
@@ -3418,9 +3281,16 @@ contains
     ! only called for P.C.C.
     ! compute - int d^3r ( delta n_{v} * dxc(n_{c} + n_{v} ) * dn_{c} )
     if (flag_pcc_global) then
-       if ((flag_functional_type /= functional_gga_pbe96) .and.       &
-           (flag_functional_type /= functional_gga_pbe96_rev98) .and. &
-           (flag_functional_type /= functional_gga_pbe96_r99)) then
+       if (flag_is_GGA) then
+          ! for GGA
+          potential = zero
+          do spin = 1, nspin
+             do i = 1, n_my_grid_points
+                ! -delta n * dxc_potential
+                potential(i,spin) = wk_grid(i,spin) - h_potential_in(i)
+             end do
+          end do
+       else
           ! For LDA
           potential = zero
           do spin = 1, nspin
@@ -3432,17 +3302,6 @@ contains
                         (density(i,spin_2) - density_out(i,spin_2)) * &
                         dVxc_drho(i,spin_2,spin)
                 end do
-             end do
-          end do
-       else if ((flag_functional_type == functional_gga_pbe96) .or.       &
-                (flag_functional_type == functional_gga_pbe96_rev98) .or. &
-                (flag_functional_type == functional_gga_pbe96_r99) ) then
-          ! for GGA
-          potential = zero
-          do spin = 1, nspin
-             do i = 1, n_my_grid_points
-                ! -delta n * dxc_potential
-                potential(i,spin) = wk_grid(i,spin) - h_potential_in(i)
              end do
           end do
        end if
@@ -3586,9 +3445,7 @@ contains
             call cq_abort('Error deallocating wk_grid in &
                            &get_nonSC_correction_force ', stat)
        call reg_dealloc_mem(area_moveatoms, (nspin + 1) * nsize, type_dbl)
-       if ((flag_functional_type == functional_gga_pbe96) .or. &
-           (flag_functional_type == functional_gga_pbe96_rev98) .or. &
-           (flag_functional_type == functional_gga_pbe96_r99)) then
+       if (flag_is_GGA) then
           deallocate(h_potential_in, STAT=stat)
           if (stat /= 0) &
                call cq_abort('Error deallocating h_potential_in in &
@@ -3659,6 +3516,10 @@ contains
   !!    Renamed naba_atm -> naba_atoms_of_blocks
   !!   2017/10/20 12:08 dave
   !!    Added extra optional argument to allow return of XC energy (for force testing)
+  !!   2018/02/09 14:41 dave
+  !!    Adding call for LibXC integration
+  !!   2018/02/13 11:52 dave
+  !!    Changes for new, universal XC interface
   !!   2018/02/14 13:26 dave
   !!    More subtle errors ! The PCC, non-SCF XC stress did not have spin
   !!    factor applied (as above in non-SCF routine)
@@ -3672,13 +3533,6 @@ contains
     use GenComms,            only: gsum
     use global_module,       only: rcellx, rcelly, rcellz, id_glob,    &
                                    ni_in_cell, species_glob, dens,     &
-                                   flag_functional_type,               &
-                                   functional_lda_pz81,                &
-                                   functional_lda_gth96,               &
-                                   functional_lda_pw92,                &
-                                   functional_gga_pbe96,               &
-                                   functional_gga_pbe96_rev98,         &
-                                   functional_gga_pbe96_r99,           &
                                    area_moveatoms, IPRINT_TIME_THRES3, &
                                    nspin, spin_factor, flag_self_consistent
     use block_module,        only: nx_in_block,ny_in_block,            &
@@ -3693,10 +3547,7 @@ contains
     use dimens,              only: grid_point_volume, n_my_grid_points
     use GenBlas,             only: axpy
     use density_module,      only: density, density_scale, density_pcc
-    use XC_module,           only: get_xc_potential,                   &
-                                   get_GTH_xc_potential,               &
-                                   get_xc_potential_GGA_PBE,           &
-                                   get_xc_potential_LSDA_PW92
+    use XC,                  only: get_xc_potential
     use maxima_module,       only: maxngrid
     use memory_module,       only: reg_alloc_mem, reg_dealloc_mem,     &
                                    type_dbl
@@ -3733,7 +3584,9 @@ contains
     ! allocatable arrays
     real(double), dimension(:),   allocatable :: xc_epsilon, density_wk_tot
     real(double), dimension(:,:), allocatable :: xc_potential, density_wk
+    type(cq_timer) :: backtrace_timer
 
+    call start_backtrace(t=backtrace_timer,who='get_PCC_force',where=7,level=3,echo=.true.)
     allocate(xc_epsilon(size), density_wk_tot(size), &
              xc_potential(size,nspin), density_wk(size,nspin), STAT=stat)
     if (stat /= 0) call cq_abort("get_pcc_force: Error alloc mem: ", size)
@@ -3760,37 +3613,8 @@ contains
        density_wk_tot(:) = density_wk_tot(:) + spin_factor * density_wk(:,spin)
     end do
 
-    select case (flag_functional_type)
-    case (functional_lda_pz81)
-       ! NOT SPIN POLARISED
-       call get_xc_potential(density_wk_tot, xc_potential(:,1),     &
-                             xc_epsilon, xc_energy, size)
-    case (functional_lda_gth96)
-       ! NOT SPIN POLARISED
-       call get_GTH_xc_potential(density_wk_tot, xc_potential(:,1), &
-                                 xc_epsilon, xc_energy, size)
-    case (functional_lda_pw92)
-       call get_xc_potential_LSDA_PW92(density_wk, xc_potential,    &
-                                       xc_epsilon, xc_energy, size)
-    case (functional_gga_pbe96)
-       ! Original PBE
-       call get_xc_potential_GGA_PBE(density_wk,                &
-                                     xc_potential, xc_epsilon, &
-                                     xc_energy, size)
-    case (functional_gga_pbe96_rev98)
-       ! PBE with kappa of PRL 80, 890 (1998)
-       call get_xc_potential_GGA_PBE(density_wk,                &
-                                     xc_potential, xc_epsilon, &
-                                     xc_energy, size)
-    case (functional_gga_pbe96_r99)
-       ! PBE with form of PRB 59, 7413 (1999)
-       call get_xc_potential_GGA_PBE(density_wk,                &
-                                     xc_potential, xc_epsilon, &
-                                     xc_energy, size)
-    case default
-       call get_xc_potential_LSDA_PW92(density_wk, xc_potential,    &
-                                       xc_epsilon, xc_energy, size)
-    end select
+    call get_xc_potential(density_wk, xc_potential,     &
+         xc_epsilon, xc_energy, size)
     if(PRESENT(xc_energy_ret)) xc_energy_ret = xc_energy
     ! We do this here to re-use xc_potential - for non-PCC we do it in get_nonSC_correction_force
     if(.NOT.flag_self_consistent) then
@@ -3928,6 +3752,7 @@ contains
     deallocate(xc_epsilon, density_wk_tot, xc_potential, density_wk, STAT=stat)
     if (stat /= 0) call cq_abort("get_pcc_force: Error dealloc mem")
     call reg_dealloc_mem(area_moveatoms, (2+2*nspin)*size, type_dbl)
+    call stop_backtrace(t=backtrace_timer,who='get_PCC_force',echo=.true.)
 
     return
   end subroutine get_pcc_force

@@ -124,8 +124,18 @@
 !!    Adding variables for cell optimisation
 !!   2017/10/20 09:19 dave
 !!    Moved fire variables to Integrators_module
+!!   2017/11/13 18:15 nakata
+!!    Added a flag to normalise pDOS
 !!   2017/12/05 09:59 dave with TM & NW (MIZUHO)
 !!    Added new function type - NA projector function (napf)
+!!   2018/04/25 10:00 zamaan
+!!    Added target attribute to rcellx, x_atom_cell etc.
+!!   2018/05/17 12:51 dave with Ayako Nakata
+!!    Changed flag_readAtomicSpin to flag_InitialAtomicSpin (more descriptive) and moved to density_module
+!!   2018/09/19 18:30 nakata
+!!    Added a flag for orbital angular momentum resolved PDOS
+!!   2018/10/22 14:25 dave & jsb
+!!    Adding (l,m)-projection for PDOS
 !!  SOURCE
 !!
 module global_module
@@ -146,16 +156,16 @@ module global_module
   integer, allocatable, dimension(:) :: id_glob_inv  ! gives global number for a CC atom
   integer, dimension(:), allocatable :: species_glob ! gives species 
   integer :: numprocs               ! number of processors
-  real(double) :: rcellx,rcelly,rcellz  ! cell side lengths
-  real(double), allocatable, dimension(:) :: x_atom_cell ! position of atom in sim cell (CC)
-  real(double), allocatable, dimension(:) :: y_atom_cell
-  real(double), allocatable, dimension(:) :: z_atom_cell
-  integer,      allocatable, dimension(:) :: coord_to_glob
+  real(double), target :: rcellx,rcelly,rcellz  ! cell side lengths
+  real(double), allocatable, dimension(:), target :: x_atom_cell ! position of atom in sim cell (CC)
+  real(double), allocatable, dimension(:), target :: y_atom_cell
+  real(double), allocatable, dimension(:), target :: z_atom_cell
+  integer,      allocatable, dimension(:), target :: coord_to_glob
   integer      :: ni_in_cell ! Atoms in cell
   real(double) :: ne_in_cell ! Electrons in cell
   ! atom_coord : Use global labelling, in the future this array should
   ! be used instead of x, y, z_atom_cell. by T. Miyazaki
-  real(double), dimension(:,:), allocatable :: atom_coord ! Atomic coordinates
+  real(double), dimension(:,:), allocatable, target :: atom_coord ! Atomic coordinates
   integer,      dimension(:,:), allocatable :: sorted_coord ! Atom IDs of atoms sorted according to x, y, z coords
   logical,      dimension(:,:), allocatable :: flag_move_atom  ! Move atoms ?
   integer,      dimension(:),   allocatable :: flag_cdft_atom
@@ -213,22 +223,6 @@ module global_module
   integer, parameter :: blips = 1
   integer, parameter :: PAOS  = 2
 
-  ! Numerical flag choosing functional type
-  integer :: flag_functional_type
-  character(len=15)  :: functional_description 
-  integer, parameter :: functional_lda_pz81        = 1
-  integer, parameter :: functional_lda_gth96       = 2
-  integer, parameter :: functional_lda_pw92        = 3    ! PRB 45, 13244 (1992) + PRL 45, 566 (1980)
-  integer, parameter :: functional_xalpha          = 4    ! Slater/Dirac exchange only  ; no correlation
-  integer, parameter :: functional_hartree_fock    = 10   ! Hartree-Fock exact exchange ; no correlation  
-
-  integer, parameter :: functional_gga_pbe96       = 101  ! Standard PBE
-  integer, parameter :: functional_gga_pbe96_rev98 = 102  ! revPBE (PBE + Zhang-Yang 1998)
-  integer, parameter :: functional_gga_pbe96_r99   = 103  ! RPBE   (PBE + Hammer-Hansen-Norskov 1999)
-  integer, parameter :: functional_gga_pbe96_wc    = 104  ! WC   (Wu-Cohen 2006)
-
-  integer, parameter :: functional_hyb_pbe0        = 201  ! PBE0   (hybrid PBE with exx_alpha=0.25)
- 
   ! Switch for variation of blips in get_support_gradient
   integer :: WhichPulay
   integer, parameter :: PhiPulay  = 1
@@ -330,10 +324,13 @@ module global_module
   logical :: flag_SkipEarlyDM
   logical :: flag_MDcontinue
   logical :: flag_MDdebug
+  logical :: flag_thermoDebug
+  logical :: flag_baroDebug
   logical :: flag_FixCOM 
   integer :: McWFreq
   integer :: MDinit_step  
-  real(double),parameter   :: shift_in_bohr = 1.0E-03_double
+  !ORI real(double),parameter   :: shift_in_bohr = 1.0E-03_double
+  real(double),parameter   :: shift_in_bohr = 1.0E-06_double
   ! Table showing atoms (global) in nodes
   integer :: n_proc_old
   integer,allocatable :: glob2node(:)        ! size: ni_in_cell
@@ -359,8 +356,8 @@ module global_module
   ! it more properly applies to matrices (specifically how many temporary matrices we can store)
   integer :: mx_temp_matrices                   ! Defaults to 100; used in mult_module (immi)
   
-  ! DOS output
-  logical :: flag_write_DOS, flag_write_projected_DOS
+  ! DOS output (NB Maybe move these into DiagModule and revisit names)
+  logical :: flag_write_DOS, flag_write_projected_DOS, flag_normalise_pDOS, flag_pDOS_angmom, flag_pDOS_lm
   real(double) :: E_DOS_min, E_DOS_max, sigma_DOS
   integer :: n_DOS
 
@@ -379,8 +376,5 @@ module global_module
   ! diagonalise or linear scaling
   logical :: flag_diagonalisation
 
-  ! Initialise spin
-  logical :: flag_readAtomicSpin
-  
 end module global_module
 !!***

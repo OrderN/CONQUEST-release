@@ -20,22 +20,20 @@
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2016/04/06 dave
 !!    Changed Info type from allocatable to pointer (fix gcc 4.4.7 compile issue)
+!!   2018/07/11 12:21 dave
+!!    Removed ambiguous and unnecessary parts and blocks variables, and added test for empty bundle
 !!  SOURCE
 !!
 module UpdateMember_module
 
   ! Module usage
   use datatypes
-  use basic_types
   use global_module,          only: flag_MDdebug, iprint_MDdebug
   use timer_module,           only: start_timer, stop_timer
   use timer_stdclocks_module, only: tmr_std_indexing, tmr_std_allocation
 
   implicit none
   save
-
-  type(group_set) :: parts  ! Partitions of atoms
-  type(group_set) :: blocks ! Blocks of integration grid points
 
   character(80),private :: RCSid = "$Id$"
 
@@ -73,32 +71,37 @@ contains
   !!  MODIFICATION HISTORY
   !!   2013/08/21 M.Arita
   !!   - Removed iteration
+  !!   2018/07/11 12:01 dave
+  !!    Added empty bundle flag to force redistribution of partitions to processes
   !!  SOURCE
   !!
-  !ORI subroutine group_update_mparts(velocity,iteration)
-  subroutine group_update_mparts(velocity)
+  subroutine group_update_mparts(velocity, flag_empty_bundle)
 
     ! Module usage
     use basic_types
-    use GenComms, ONLY: cq_abort
+    use GenComms, ONLY: cq_abort, ionode, inode
     use global_module, ONLY: ni_in_cell,id_glob,id_glob_inv, &
                              id_glob_old,id_glob_inv_old, species_glob, &
-                             x_atom_cell,y_atom_cell,z_atom_cell,atom_coord
+                             x_atom_cell,y_atom_cell,z_atom_cell,atom_coord, flag_neutral_atom
+    use global_module, ONLY: numprocs
+    use global_module, ONLY: flag_dft_d2
     use species_module, ONLY: species
     use atom_dispenser, ONLY: allatom2part
-    use group_module, ONLY: parts
+    use group_module, ONLY: parts, blocks
+    use group_module, ONLY: deallocate_group_set
+    use primary_module, ONLY: deallocate_primary_set, bundle, make_prim, domain
+    use construct_module, ONLY: init_primary
+    use maxima_module, ONLY: maxatomspart
     ! DB
     use io_module, ONLY: get_file_name
     use input_module, ONLY: io_assign,io_close
-    use GenComms, ONLY: ionode,inode
-    use global_module, ONLY: numprocs
-    use maxima_module, ONLY: maxpartsproc,maxatomspart
-
+    
     implicit none
 
     ! passed variables
     !ORI integer,intent(in), optional :: iteration
     real(double) :: velocity(3,ni_in_cell)
+    logical :: flag_empty_bundle
 
     ! local variables
     integer :: mx_mem_grp,np_cc,np_cc_old,CC_part,np_old,ia_part_lab
@@ -109,10 +112,11 @@ contains
     real(double), allocatable :: x_atom_cell_tmp(:)
     real(double), allocatable :: y_atom_cell_tmp(:)
     real(double), allocatable :: z_atom_cell_tmp(:)
-    logical :: flag_init,flag
+    logical :: flag_init, flag_empty_part
     logical, allocatable :: flag_hitprts(:)
     character(12) :: file_prt = 'make_prt.dat'
     integer :: lun_prt,inode_beg
+    real(double) :: rcut_max
 
     ! DB
     integer :: lun_db,stat,id_global
@@ -187,38 +191,44 @@ contains
     endif
     !! ------------ DEBG: ------------ !!
 
-    ! Get icell_beg(:).
+    ! Create new icell_beg(:)
     parts%icell_beg = 0
     flag_init = .true.
-    parts%icell_beg=1 ; np_old=1
-    flag=.false.
+    parts%icell_beg=1
+    np_old=1
+    flag_empty_part = .false.
+    flag_empty_bundle = .false.
+    ! DRB 2018/07/03 Empty bundle termination fix: check for empty bundle here
     do nnd = 1, numprocs
+      natom = 0 ! Number of atoms on process
       if (parts%ng_on_node(nnd).GT.0) then
         do np = 1, parts%ng_on_node(nnd)
           CC_part=parts%ngnode(parts%inode_beg(nnd)+np-1)
-          if (.NOT. flag) then
+          if (.NOT. flag_empty_part) then
             parts%icell_beg(CC_part)=parts%icell_beg(np_old)
           else
             parts%icell_beg(CC_part)=parts%icell_beg(np_old)+parts%nm_group(np_old)
           endif
-          ! No atoms in part?
+          ! No atoms in partition ?
           if (parts%nm_group(CC_part).GT.0) then
-            flag=.true.
+            flag_empty_part=.true.
           else
-            flag=.false.
+            flag_empty_part=.false.
           endif
-          np_old=CC_part
-          ! Error check.
-          !if (parts%icell_beg(CC_part).GT.ni_in_cell) &
-          !call cq_abort('Error: icell_beg must not be larger than ni_in_cell:', &
-          !               parts%icell_beg(CC_part))
+          np_old = CC_part
+          ! Accumulate atoms in this partition into bundle total
+          natom = natom + parts%nm_group(CC_part)
         enddo
+        !write(*,*) "On proc: ",myid," number of atoms on ",nnd," is ",natom
+        ! Test for empty bundle
+        if (natom==0) flag_empty_bundle=.true.
       endif
     enddo
+    if(flag_empty_bundle) return
 
     ! Update 'id_glob', 'id_glob_inv', 'species', 'xyz_atom_cell' and velocity/direction.
     do iglob = 1, ni_in_cell
-      ia_part_lab = parts%icell_beg(ind_ip(iglob))+ind_ia(iglob)-1 ! parts. labelling
+       ia_part_lab = parts%icell_beg(ind_ip(iglob))+ind_ia(iglob)-1 ! parts. labelling
       if (ia_part_lab .LE.0 .OR. ia_part_lab .GT. ni_in_cell) &
         call cq_abort('Error in ia_part_lab:', ia_part_lab)
       id_glob(ia_part_lab) = iglob
@@ -244,32 +254,12 @@ contains
       x_atom_cell(ni) = x_atom_cell_tmp(ni_old)                    ! Unwrapped
       y_atom_cell(ni) = y_atom_cell_tmp(ni_old)                    ! Unwrapped
       z_atom_cell(ni) = z_atom_cell_tmp(ni_old)                    ! Unwrapped
-      ! The following updates are already done in velocityVerlet -- See update_atom_coord.
-      !NOT NEEDED atom_coord(1,id_global) = x_atom_cell(ni)
-      !NOT NEEDED atom_coord(2,id_global) = y_atom_cell(ni)
-      !NOT NEEDED atom_coord(3,id_global) = z_atom_cell(ni)
+      ! atom_coord is updated elsewhere
       velocity(1,ni)  = velocity_tmp(1,ni_old)
       velocity(2,ni)  = velocity_tmp(2,ni_old)
       velocity(3,ni)  = velocity_tmp(3,ni_old)
       species(ni)     = species_glob(id_global)
     enddo
-
-    ! Check whether bundle is not empty.
-    ! This might be critical in some cases.
-    !  --> Needs to redistribute atoms to processors.
-    if (inode.EQ.ionode) then
-      do nnd = 1, numprocs
-        natom = 0
-        if (parts%ng_on_node(nnd).GT.0) then
-          do np = 1, parts%ng_on_node(nnd)
-            ind_group = parts%ngnode(parts%inode_beg(nnd)+np-1)  ! CC
-            natom = natom + parts%nm_group(ind_group)
-          enddo
-          if (natom.EQ.0) &
-            call cq_abort('Critical error: No atoms in bundle!', nnd)
-        endif
-      enddo !(nnd, numprocs)
-    endif
 
     deallocate (ind_part, STAT=stat_alloc)
     if (stat_alloc.NE.0) call cq_abort('Error deallocating ind_part: ', ni_in_cell)
@@ -347,7 +337,7 @@ contains
       !ORI if (present(iteration)) write (lun_prt,*) iteration
       call io_close(lun_prt)
     endif
-
+!%!    end if
 1   format(3i5)
 2   format(i10)
 3   format(3i10)
@@ -1103,9 +1093,11 @@ contains
   !!    Removed old ewald reference
   !!   2016/04/06 dave
   !!     Changed nx_in_cover allocatable to pointer (gcc 4.4.7 issue)
+  !!   2018/07/11 12:01 dave
+  !!    Added empty bundle flag to force redistribution of partitions to processes
   !!  SOURCE
   !!
-  subroutine updateMembers(fixed_potential,velocity)
+  subroutine updateMembers(fixed_potential,velocity,flag_empty_bundle)
 
     ! Module usage
     use basic_types
@@ -1126,6 +1118,7 @@ contains
     ! passed variables
     logical :: fixed_potential
     real(double) :: velocity(3,ni_in_cell)
+    logical :: flag_empty_bundle
     !ORI integer, intent(in), optional :: iteration
 
     ! local variables
@@ -1143,8 +1136,8 @@ contains
     !ORI else
     !ORI   call group_update_mparts(velocity)                        ! for CG
     !ORI endif
-    call group_update_mparts(velocity) ! both for md & cg
-
+    call group_update_mparts(velocity,flag_empty_bundle) ! both for md & cg
+    if(flag_empty_bundle) return
     ! Update members n PS
     call deallocate_PSmember
     call allocate_PSmember(parts)
