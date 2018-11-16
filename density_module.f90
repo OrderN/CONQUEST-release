@@ -183,6 +183,8 @@ contains
   !!    Following on from fix for Bug #82, changes to variable names for clarity
   !!   2018/05/21 15:53 dave with Ayako Nakata
   !!    Bug fix: allocate/deallocate density_atom when not using neutral atom
+  !!   2018/11/16 tsuyoshi
+  !!    Bug fix: for ghost atoms
   !!  SOURCE
   !!
   subroutine set_atomic_density(flag_set_density,level)
@@ -210,7 +212,7 @@ contains
     use GenBlas,             only: rsum, scal
     use timer_module,        only: WITH_LEVEL
     use maxima_module,  only: maxngrid
-    use species_module, only: charge, charge_up, charge_dn
+    use species_module, only: charge, charge_up, charge_dn, type_species
     use memory_module,          only: reg_alloc_mem, reg_dealloc_mem,  &
                                       type_dbl
 
@@ -324,6 +326,8 @@ contains
 
                 ! determine the type of the current atom
                 the_species = species_glob(ig_atom)
+                 if(type_species(the_species) < 0) cycle   ! if ghost atoms 
+
                 loc_cutoff = atomic_density_table(the_species)%cutoff
                 ! step in the density table
                 step = loc_cutoff / &
@@ -396,6 +400,8 @@ contains
     call gsum(grid_electrons)
     ! Scaling factor for renormalizing atomic density
     scale = ne_in_cell/grid_electrons
+
+    !write(*,*) "SCALE in atomic_density = ", scale, ne_in_cell, grid_electrons
 
     ! Set density if required
     if(flag_set_density) then
