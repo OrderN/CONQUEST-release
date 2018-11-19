@@ -1305,12 +1305,15 @@ contains
                 charge(i) = zero
              endif
           enddo
+  
         ! At present, we cannot use neutral atom potential for ghost atoms.
         !    2018/Sep/26   Tsuyoshi Miyazaki
-         if(flag_neutral_atom) then
+        ! Fixed for Neutral Atom Potential  2018/Nov/16  TM
+        !   but not for neutral atom projectors ...   
+         if(flag_neutral_atom_projector) then
            if(inode==ionode) write(io_lun,'(10x,A)') &
-             'Now, we cannot use neutral atom potential for ghost atoms. Please set General.NeutralAtom as false.'
-           call cq_abort("Error: Neutral Atom potential cannot be used for ghost atom, at present.")
+             'Now, we cannot use neutral atom projector for ghost atoms. Please set General.NeutralAtomProjector as false.'
+           call cq_abort("Error: Neutral Atom Projector cannot be used for ghost atom, at present.")
          endif
        endif
 !!$        

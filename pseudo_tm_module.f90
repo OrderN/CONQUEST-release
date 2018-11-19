@@ -448,6 +448,8 @@ contains
 !!    Removed unused sf in global_module
 !!   2017/11/27 15:27 dave   
 !!    Added if loop for NA projectors to avoid making pseudopotential on grid
+!!   2018/11/16 tsuyoshi
+!!    Debug for ghost atoms
 !!  SOURCE
 !!
   subroutine set_tm_pseudo
@@ -459,7 +461,7 @@ contains
                              flag_basis_set, blips,                    &
                              IPRINT_TIME_THRES3, flag_analytic_blip_int, &
                              flag_neutral_atom, dens
-    use species_module, only: species, nlpf_species, n_species
+    use species_module, only: species, nlpf_species, n_species, type_species
     !  At present, these arrays are dummy arguments.
     use block_module, only : nx_in_block,ny_in_block,nz_in_block, &
          n_pts_in_block
@@ -599,6 +601,7 @@ contains
 
                 !the_species=species(ig_atom)
                 the_species = species_glob(ig_atom)
+                if(type_species(the_species) < 0) cycle   
 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.
@@ -951,6 +954,8 @@ contains
 !!    Removed unused sf in global_module
 !!   2017/11/27 15:28 dave
 !!    Remove calculation of HF forces for NA projectors
+!!   2018/11/16 tsuyoshi
+!!    Debug for ghost atoms
 !!  SOURCE
 !!
   subroutine loc_pp_derivative_tm ( hf_force, density, size )
@@ -966,7 +971,7 @@ contains
     use cover_module, only: DCS_parts
     use set_blipgrid_module, only : naba_atoms_of_blocks
 
-    use species_module, only: species
+    use species_module, only: species, type_species
     use GenComms, only: gsum, cq_abort, inode, ionode
     use hartree_module, only: hartree, Hartree_stress
     use maxima_module, only: maxngrid
@@ -1087,6 +1092,7 @@ contains
 
                 !the_species=species(ig_atom)
                 the_species = species_glob(ig_atom)
+                if(type_species(the_species) < 0) cycle   
 
                 !calculates distances between the atom and integration grid points
                 !in the block and stores which integration grids are neighbours.

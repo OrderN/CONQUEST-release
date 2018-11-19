@@ -1338,6 +1338,8 @@ contains
 !!    which vastly simplifies the calculation and the code
 !!   2016/02/04 17:27 dave
 !!    Bug fix: the cutoff needed to be doubled
+!!   2018/11/13 TM
+!!    Bug fix for ghost atoms
 !!  SOURCE
 !!  
   subroutine setup_screened_ion_interaction
@@ -1351,7 +1353,7 @@ contains
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use cover_module, ONLY : ion_ion_CS, make_cs
     use primary_module, ONLY : bundle
-    use species_module, only: n_species ! for Neutral atom potential
+    use species_module, only: n_species, type_species ! for Neutral atom potential
     use atomic_density, only: atomic_density_table ! for Neutral atom potential
 
     implicit none
@@ -1361,6 +1363,7 @@ contains
     ! Find the cutoff distance
     ion_ion_cutoff = zero
     do isp=1, n_species
+      if(type_species(isp) < 0) cycle
        if( ion_ion_cutoff<atomic_density_table(isp)%cutoff ) then
           ion_ion_cutoff=atomic_density_table(isp)%cutoff
        end if
@@ -1418,6 +1421,8 @@ contains
 !!    Changed force reference - now saves to correct atoms
 !!   2017/03/23 dave
 !!    Changed cutoff criterion on interactions to use individual species size
+!!   2018/11/13 TM
+!!    Bug fix for ghost atoms
 !!  SOURCE
 !!  
   subroutine screened_ion_interaction
@@ -1430,7 +1435,7 @@ contains
     use maxima_module, ONLY : maxatomsproc
     use numbers
     use primary_module, ONLY : bundle
-    use species_module, ONLY : charge, species
+    use species_module, ONLY : charge, species, type_species
     use memory_module, ONLY: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module, ONLY: cq_timer,start_timer,stop_print_timer,WITH_LEVEL
     use energy, ONLY: local_ps_energy, screened_ion_interaction_energy
@@ -1456,6 +1461,7 @@ contains
           do ni = 1, bundle%nm_nodgroup(ip)
              i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
              spi = bundle%species(bundle%nm_nodbeg(ip)+ni-1)
+             if(type_species(spi) < 0) cycle
              q_i = charge(spi)
              do nc = 1, ion_ion_CS%ng_cover
                 ig_atom_beg = parts%icell_beg(ion_ion_CS%lab_cell(nc))
@@ -1463,6 +1469,7 @@ contains
                 if(ion_ion_CS%n_ing_cover(nc) > 0) then
                    do nj = 1, ion_ion_CS%n_ing_cover(nc)
                       spj = species_glob(id_glob(ig_atom_beg+nj-1))
+                      if(type_species(spj) < 0) cycle
                       q_j = charge(spj)
                       rijx = bundle%xprim(bundle%nm_nodbeg(ip)+ni-1) - ion_ion_CS%xcover(ion_ion_CS%icover_ibeg(nc)+nj-1)
                       rijy = bundle%yprim(bundle%nm_nodbeg(ip)+ni-1) - ion_ion_CS%ycover(ion_ion_CS%icover_ibeg(nc)+nj-1)
