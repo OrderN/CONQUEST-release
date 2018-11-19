@@ -217,7 +217,8 @@ contains
     if (LmatrixSend%nrecv_node.GT.0 .AND. numprocs.NE.1) then
       call CommMat_send_neigh(LmatrixSend,isend2_array,Info)
       call CommMat_send_data(LmatrixSend,send_array,Info)
-      write (io_lun,*) "Finished sending neighbour & L-matrix data", inode !db
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MDdebug > 3) &
+        write (io_lun,*) "Finished sending neighbour & L-matrix data", inode !db
     endif
     if (LmatrixRecv%nsend_node.GT.0 .AND. numprocs.NE.1) then
       !db write (io_lun,*) "Check MPI_Wait:", inode
