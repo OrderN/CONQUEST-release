@@ -301,27 +301,34 @@
     !!  CREATION DATE
     !!   2013/12/03
     !!  MODIFICATION
+    !!   2018/11/13 17:30 nakata
+    !!    Changed matT and matTtran to be spin_SF dependent
     !!  SOURCE
     !!
     subroutine get_initialL_XL()
       ! Module usage
       use numbers
-      use global_module, ONLY: nspin,io_lun,flag_propagateX,flag_propagateL
+      use global_module, ONLY: nspin,io_lun,flag_propagateX,flag_propagateL, &
+                               nspin_SF, flag_SpinDependentSF
       use GenComms, ONLY: inode,ionode
       use mult_module, ONLY: mult,matrix_product,matL,matT,matTtran,LS_T_L, &
                              symmetrise_L,mat_p,matrix_sum,matrix_transpose
 
       implicit none
       ! local variables
-      integer :: ispin
+      integer :: ispin, ispin_SF
 
       if (inode.EQ.ionode .AND. iprint_MD.GT.1) &
         write (io_lun,*) "Make an initial guess on L-matrix"
+
       if (flag_propagateX) then
-        call matrix_transpose(matT,matTtran)
+        call matrix_transpose(matT(1),matTtran(1))
+        if (nspin_SF==2) call matrix_transpose(matT(2),matTtran(2))
+        ispin_SF = 1
         do ispin = 1, nspin
-          !WRONG call matrix_product(matX(ispin),matT,matL(ispin),mult(LS_T_L))
-          call matrix_product(matX(ispin),matTtran,matL(ispin),mult(LS_T_L))
+          if (flag_SpinDependentSF) ispin_SF = ispin
+          !WRONG call matrix_product(matX(ispin),matT(ispin_SF),matL(ispin),mult(LS_T_L))
+          call matrix_product(matX(ispin),matTtran(ispin_SF),matL(ispin),mult(LS_T_L))
         enddo
       elseif (flag_propagateL) then
         !ORI mat_p(matL(1))%matrix = mat_p(matX(1))%matrix
@@ -360,11 +367,14 @@
     !!  CREATION DATE
     !!   2013/12/03
     !!  MODIFICATION
+    !!   2018/11/13 17:30 nakata
+    !!    Changed matS to be spin_SF dependent
     !!  SOURCE
     !!
     subroutine CommRebuild_matX(MDiter,range,trans)
       ! Module usage
-      use global_module, ONLY: nspin,flag_dissipation,integratorXL,flag_propagateX
+      use global_module, ONLY: nspin,flag_dissipation,integratorXL,flag_propagateX, &
+                               flag_SpinDependentSF   ! nakata SD-MSSF
       use GenComms, ONLY: cq_abort,inode,my_barrier
       use matrix_data, ONLY: LSrange,Srange
       use mult_module, ONLY: LS_trans,S_trans,matS,matL,matrix_product,mult, &
@@ -379,14 +389,16 @@
       ! passed variables
       integer,intent(in) :: MDiter,range,trans
       ! local variables
-      integer :: nfile,ispin,symm
+      integer :: nfile,ispin,ispin_SF,symm
 
       ! Fetches & reconstructs X-matrix, Xvel-matrix & S-matrix
       call grab_XXvelS(range,trans)
       ! Gets Z(t) = L^{opt}(t) * S(t)
       if (flag_propagateX) then
+        ispin_SF = 1
         do ispin = 1, nspin
-          call matrix_product(matL(ispin),matS,matZ(ispin),mult(L_S_LS))
+          if (flag_SpinDependentSF) ispin_SF = ispin
+          call matrix_product(matL(ispin),matS(ispin_SF),matZ(ispin),mult(L_S_LS))
         enddo
         if (myid.EQ.0 .AND. iprint_MD.GT.1) &
           write (io_lun,*) "Got Z-matrix" 
@@ -409,7 +421,7 @@
       subroutine init_matX()
         ! Module usage
         use numbers, ONLY: zero,one
-        use global_module, ONLY: integratorXL,flag_propagateX
+        use global_module, ONLY: integratorXL,flag_propagateX,flag_SpinDependentSF
         use GenComms, ONLY: cq_abort
         use mult_module, ONLY: mult,matrix_product,matrix_sum,matS,matL,L_S_LS, &
                                mat_p,matrix_scale
@@ -417,7 +429,7 @@
         implicit none
         ! local variables
         integer,save :: iter = 0
-        integer :: ispin,n
+        integer :: ispin,ispin_SF,n
         logical :: flag
 
         flag = .false.
@@ -432,8 +444,10 @@
           if (myid.EQ.0 .AND. iprint_MD.GT.1) &
             write (io_lun,*) "Initialising X-matrix", iter
           if (flag_propagateX) then
+            ispin_SF = 1
             do ispin = 1, nspin
-              call matrix_product(matL(ispin),matS,matX(ispin),mult(L_S_LS))
+              if (flag_SpinDependentSF) ispin_SF = ispin
+              call matrix_product(matL(ispin),matS(ispin_SF),matX(ispin),mult(L_S_LS))
               call matrix_sum(zero,matZ(ispin),one,matX(ispin))
 !% michi - comments 14/11/2013
 !%            I think the above two calls are redundant. It should
@@ -479,10 +493,14 @@
     !!  MODIFICATION
     !!   2017/05/11 dave
     !!    Adding read option for spin polarisation
+    !!   2018/11/13 17:30 nakata
+    !!    Changed matS to be spin_SF dependent
+    !!   2018/11/15 15:45 nakata
+    !!    Bug fix: InfoXvel should be used for Xvel_2
     !!  SOURCE
     subroutine grab_XXvelS(range,trans)
       ! Module usage
-      use global_module, ONLY: integratorXL,flag_propagateX, nspin
+      use global_module, ONLY: integratorXL,flag_propagateX, nspin, nspin_SF
       use GenComms, ONLY: inode
       use matrix_data, ONLY: Srange
       use mult_module, ONLY: matS,S_trans
@@ -507,14 +525,18 @@
         call grab_matrix2('Xvel',inode,nfile,InfoXvel)
         call Matrix_CommRebuild(InfoXvel,range,trans,matXvel(1),nfile)
         if(nspin==2) then
-           call grab_matrix2('Xvel_2',inode,nfile,InfoX)
-           call Matrix_CommRebuild(InfoX,range,trans,matXvel(2),nfile)
+           call grab_matrix2('Xvel_2',inode,nfile,InfoXvel)
+           call Matrix_CommRebuild(InfoXvel,range,trans,matXvel(2),nfile)
         end if
       endif
       ! Fetches & reconstructs S-matrix
       if (flag_propagateX) then
         call grab_matrix2('S',inode,nfile,InfoS)
-        call Matrix_CommRebuild(InfoS,Srange,S_trans,matS,nfile,symm)
+        call Matrix_CommRebuild(InfoS,Srange,S_trans,matS(1),nfile,symm)
+        if(nspin_SF==2) then
+           call grab_matrix2('S2',inode,nfile,InfoS)
+           call Matrix_CommRebuild(InfoS,Srange,S_trans,matS(2),nfile,symm)
+        endif
       endif
 
       return
@@ -1134,6 +1156,8 @@
     !!  CREATION DATE
     !!   2013/12/03 
     !!  MODIFICATION
+    !!   2018/11/13 17:30 nakata
+    !!    Removed matS, matL, L_S_LS and mult which was passed but not used
     !!  SOURCE
     !!
     subroutine Verlet_matX(MDiter,matA,Arange)
@@ -1142,7 +1166,7 @@
       use global_module, ONLY: flag_dissipation
       use GenComms, ONLY: inode,cq_abort
       use matrix_data, ONLY: LSrange
-      use mult_module, ONLY: mat_p,matrix_product,matS,matL,L_S_LS,mult, &
+      use mult_module, ONLY: mat_p,matrix_product, &
                              matrix_sum,allocate_temp_matrix,free_temp_matrix, &
                              matrix_product_trace
       use store_matrix, ONLY: dump_matrix2

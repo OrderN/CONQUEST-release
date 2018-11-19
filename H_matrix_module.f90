@@ -174,8 +174,8 @@ contains
   !!  2018/01/30 10:06 dave
   !!   Moved call to NA projector matrix build inside the rebuild_KE_NL loop to improve
   !!   efficiency (it should have been in there in the first place)
-  !!  2018/05/23 16:00 nakata
-  !!   Changed matKE, matNL and matNA to be spin_SF dependent
+  !!  2018/11/13 17:30 nakata
+  !!   Changed matS, matKE, matNL and matNA to be spin_SF dependent
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -289,7 +289,7 @@ contains
        if (rebuild_KE_NL) then
           if (inode == ionode .and. iprint_ops > 3)&
                & write(io_lun, fmt='(2x,"Rebuilding KE")')
-          ! both matKE and matNL are independent of spin (only XC is spin dependent)
+          ! both matKEatomf and matNLatomf are independent of spin (only XC is spin dependent)
           if(.NOT.flag_analytic_blip_int.OR.flag_basis_set/=blips) &
                call matrix_scale(zero, matKEatomf)
           call matrix_scale(zero, matNLatomf)
@@ -418,7 +418,12 @@ contains
     !
     ! dump matrices if required
     if (iprint_ops > 3) then
-       call dump_matrix("NS", matS, inode)
+       if (nspin_SF == 1) then
+          call dump_matrix("NS", matS(1), inode)
+       else
+          call dump_matrix("NS_up", matS(1), inode)
+          call dump_matrix("NS_dn", matS(2), inode)
+       endif
        if (nspin == 1) then
           call dump_matrix("NH",    matH(1), inode)
        else

@@ -182,7 +182,8 @@ contains
 !             if (flag_propagateX) then
 !                call dump_matrix2('X',matX(1),LSrange)
 !                if(nspin==2) call dump_matrix2('X_2',matX(2),LSrange)
-!                call dump_matrix2('S',matS   ,Srange)
+!                call dump_matrix2('S',matS(1),Srange)
+!                if(nspin_SF==2) call dump_matrix2('S2',matS(2),LSrange)
 !                if (integratorXL.EQ.'velocityVerlet') then
 !                   call dump_matrix2('Xvel',matXvel(1),LSrange)
 !                   if(nspin==2) call dump_matrix2('Xvel_2',matXvel(2),LSrange)

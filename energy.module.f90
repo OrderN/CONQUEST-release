@@ -438,8 +438,9 @@ contains
   !!    - Added experimental backtrace
   !!   2015/11/30 17:13 dave
   !!    - Added neutral atom output
-  !!   2018/05/24 19:00 nakata
-  !!    Changed matKE, matNL and matNA to be spin_SF dependent
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matS, matKE, matNL and matNA to be spin_SF dependent
+  !!    Activated "electrons_tot2" calculation
   !!  SOURCE
   !!
   subroutine final_energy(level)
@@ -506,8 +507,9 @@ contains
     total_energy1       = zero
     total_energy2       = zero
 
-    ! Nonlocal pseudop, kinetic and band energies
     spin_SF = 1
+
+    ! Nonlocal pseudop, kinetic and band energies
     do spin = 1, nspin
        if (flag_SpinDependentSF) spin_SF = spin
        ! 2*Tr[K NL]
@@ -571,9 +573,9 @@ contains
     call electron_number(electrons)
     if (inode == ionode) electrons_tot1 = electrons(1) + electrons(nspin)
    
-    if (inode == ionode) write(io_lun,*) 'electrons_tot2 start'
-    !electrons_tot2 = matrix_product_trace_length(matK(1),matS)
-    if (inode == ionode) write(io_lun,*) 'electrons_tot2 stop'
+    !if (inode == ionode) write(io_lun,*) 'electrons_tot2 start'
+    !electrons_tot2 = matrix_product_trace_length(matK(1),matS(1))
+    !if (inode == ionode) write(io_lun,*) 'electrons_tot2 stop'
 
     if (inode == ionode) then
        !
@@ -727,10 +729,11 @@ contains
     if (inode == ionode) electrons_tot1 = electrons(1) + electrons(nspin)
 
     electrons_tot2 = zero
-    !do spin = 1, nspin
-       !electrons_tot2 = electrons_tot2 + &
-       !     spin_factor * matrix_product_trace_length(matK(spin),matS)
-    !end do
+    do spin = 1, nspin
+       if (flag_SpinDependentSF) spin_SF = spin
+       electrons_tot2 = electrons_tot2 + &
+            spin_factor * matrix_product_trace_length(matK(spin),matS(spin_SF))
+    end do
     
 
     if (inode == ionode) then

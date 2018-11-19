@@ -772,6 +772,7 @@ contains
     real(double)      :: factor
     integer           :: isf, np, ni, iprim, n_blip
     integer           :: n_run, spec, this_nsf
+    integer           :: spin_SF
 
 !****lat<$
     if (       present(level) ) backtrace_level = level+1
@@ -782,6 +783,10 @@ contains
 
     ! Used by pseudopotentials as well as PAOs
     if (flag_basis_set==blips) then
+
+       spin_SF = 1
+!       if (flag_SpinDependentSF) spin_SF = spin   ! SpinDependentSF is not available with blips at present
+
        if (inode==ionode) &
             write(io_lun,fmt='(10x,"Using blips as basis set for &
                                &support functions")')
@@ -837,7 +842,7 @@ contains
           !     call blip_to_support_new(inode-1, support, data_blip, &
           !          NSF, SUPPORT_SIZE, MAX_N_BLIPS)
           !     write(io_lun,*) 'S matrix for normalisation on Node= ',inode
-          call get_matrix_elements_new(inode-1,rem_bucket(1),matS,&
+          call get_matrix_elements_new(inode-1,rem_bucket(1),matS(spin_SF),&
                                        atomfns,atomfns)
           ! Do the onsite elements analytically
           if(flag_onsite_blip_ana) then
@@ -848,7 +853,7 @@ contains
                       iprim=iprim+1
                       spec = bundle%species(iprim)
                       this_nsf = nsf_species(spec)
-                      call get_onsite_S(blips_on_atom(iprim), matS,&
+                      call get_onsite_S(blips_on_atom(iprim), matS(spin_SF),&
                                         np, ni, iprim, this_nsf, spec)
                    end do
                 end if
@@ -861,7 +866,7 @@ contains
                 do ni=1,bundle%nm_nodgroup(np)
                    iprim=iprim+1
                    do isf=1,mat(np,Srange)%ndimi(ni)
-                      factor = return_matrix_value(matS,np,ni,iprim,0,isf,isf,1)
+                      factor = return_matrix_value(matS(spin_SF),np,ni,iprim,0,isf,isf,1)
                       if(factor>RD_ERR) then
                          factor=one/sqrt(factor)
                       else
@@ -882,7 +887,7 @@ contains
           if(inode==ionode.AND.iprint_init>1) &
                write(io_lun,fmt='(10x,"Completed normalise_support")')
           call blip_to_support_new(inode-1, atomfns)
-          call get_matrix_elements_new(inode-1,rem_bucket(1),matS,&
+          call get_matrix_elements_new(inode-1,rem_bucket(1),matS(spin_SF),&
                                        atomfns,atomfns)
           ! Do the onsite elements analytically
           if(flag_onsite_blip_ana) then
@@ -893,13 +898,13 @@ contains
                       iprim=iprim+1
                       spec = bundle%species(iprim)
                       this_nsf = nsf_species(spec)
-                      call get_onsite_S(blips_on_atom(iprim), matS,&
+                      call get_onsite_S(blips_on_atom(iprim), matS(spin_SF),&
                                         np, ni, iprim, this_nsf, spec)
                    end do
                 end if
              end do
           end if
-          !call dump_matrix("NS",matS,inode)
+          !call dump_matrix("NS",matS(1),inode)
        else
           if(inode==ionode.AND.iprint_init>1) &
                write(io_lun,fmt='(10x,"Skipped normalise_support")')
@@ -1042,6 +1047,8 @@ contains
   !!    Updates for new atom movement routines
   !!   2018/02/08 tsuyoshi (with dave)
   !!    Bug fix for reading K after atom movement
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matT to be spin_SF dependent
   !!  SOURCE
   !!
   subroutine initial_H(start, start_L, find_chdens, fixed_potential, &
@@ -1244,7 +1251,12 @@ contains
     if (.not. flag_MDold .and. restart_T) then
        call grab_matrix2('T',inode,nfile,Info)
        call my_barrier()
-       call Matrix_CommRebuild(Info,Trange,T_trans,matT,nfile,symm)
+       call Matrix_CommRebuild(Info,Trange,T_trans,matT(1),nfile,symm)
+       if (nspin_SF==2) then
+          call grab_matrix2('T2',inode,nfile,Info)
+          call my_barrier()
+          call Matrix_CommRebuild(Info,Trange,T_trans,matT(2),nfile,symm)
+       endif
     endif
     if (flag_LFD .and. .not.read_option) then
        ! Spao was already made in sub:initial_SFcoeff
@@ -1880,6 +1892,10 @@ contains
   !!   - Changed spin implementation
   !!   2015/06/08 lat
   !!    - Added experimental backtrace
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matT to be spin_SF dependent
+  !!   2018/11/15 15:45 nakata
+  !!    Bug fix: matL(1) should be matL(spin)
   !!  SOURCE
   !!
   subroutine initial_L(level)
@@ -1887,12 +1903,12 @@ contains
     use datatypes
     use numbers,       only: half, zero
     use mult_module,   only: matL, matT, matrix_sum
-    use global_module, only: nspin
+    use global_module, only: nspin, flag_SpinDependentSF
 
     implicit none
 
     integer, optional :: level
-    integer           :: spin
+    integer           :: spin, spin_SF
     type(cq_timer)    :: backtrace_timer
     integer           :: backtrace_level 
 
@@ -1903,9 +1919,11 @@ contains
          where=area,level=backtrace_level,echo=.true.)
 !****lat>$
 
+    spin_SF = 1
     do spin = 1, nspin
+       if (flag_SpinDependentSF) spin_SF = spin
        ! set L for the second spin component also equal to 1/2 S^-1
-       call matrix_sum(zero, matL(1), half, matT)
+       call matrix_sum(zero, matL(spin), half, matT(spin_SF))
     end do
 
 !****lat<$

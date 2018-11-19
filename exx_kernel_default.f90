@@ -88,6 +88,8 @@ contains
   !!    Adding recv_part variable to count partitions received from processes
   !!    to follow update of multiplies (to conform to MPI standard for
   !!    tags)
+  !!   2018/11/13 18:00 nakata
+  !!    Removed matS which was passed but not used
   !!  SOURCE
   !!
   subroutine get_X_matrix( exxspin, level )
@@ -108,7 +110,7 @@ contains
     use cover_module,   only: BCS_parts
     use matrix_data,    only: mat, Hrange, Srange, Xrange, SXrange, halo, rcut
     use mult_module,    only: S_X_SX, mat_p, mult 
-    use mult_module,    only: matX, matK, matS, matrix_scale, matrix_trace
+    use mult_module,    only: matX, matK, matrix_scale, matrix_trace
     use mult_module,    only: matrix_product_trace, matrix_product_trace_length 
     use mult_module,    only: return_matrix_value,  matrix_pos
     use mult_module,    only: store_matrix_value,   store_matrix_value_pos

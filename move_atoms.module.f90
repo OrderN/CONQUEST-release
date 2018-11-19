@@ -3474,7 +3474,9 @@ contains
   !!   2017/Nov/12
   !!  MODIFICATION
   !!   2018/Sep/07  tsuyoshi
-  !!       added calling ReportUpdateMatrix when flag_debug_move_atoms is true.
+  !!    Added calling ReportUpdateMatrix when flag_debug_move_atoms is true.
+  !!   2018/11/13 17:30 nakata
+  !!    Changed matS to be spin_SF dependent
   !!
   !!  SOURCE
   !!
@@ -3653,15 +3655,14 @@ contains
   if(flag_S) then
      call grab_matrix2('S',inode,nfile,Info)
      call my_barrier()
-     call Matrix_CommRebuild(Info,Srange,S_trans,matS,nfile)
+     call Matrix_CommRebuild(Info,Srange,S_trans,matS(1),nfile)
       if(flag_debug_move_atoms) call Report_UpdateMatrix("Smat")
-     ! If we introduce spin-dependent support ...
-     !if(nspin==2) then
-     !  call grab_matrix2('S2',inode,nfile,Info)
-     !  call my_barrier()
-     !  call Matrix_CommRebuild(Info,Srange,S_trans,matS(2),nfile,symm)
-     !   if(flag_debug_move_atoms) call Report_UpdateMatrix("S2  ")
-     !end if
+     if(nspin_SF==2) then
+       call grab_matrix2('S2',inode,nfile,Info)
+       call my_barrier()
+       call Matrix_CommRebuild(Info,Srange,S_trans,matS(2),nfile,symm)
+        if(flag_debug_move_atoms) call Report_UpdateMatrix("S2  ")
+     end if
   endif
 
   if(flag_SFcoeff) then
