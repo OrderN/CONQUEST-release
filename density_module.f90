@@ -185,6 +185,8 @@ contains
   !!    Bug fix: allocate/deallocate density_atom when not using neutral atom
   !!   2018/11/16 tsuyoshi
   !!    Bug fix: for ghost atoms
+  !!   2018/12/13 13:25 nakata
+  !!    Bug fix: for the output of the number of electrons
   !!  SOURCE
   !!
   subroutine set_atomic_density(flag_set_density,level)
@@ -431,7 +433,7 @@ contains
              if (inode == ionode .and. iprint_SC > 0) &
                   write (io_lun, &
                   fmt='(10x,"In set_atomic_density, electrons (spin=",i1,"): ",f20.12)') &
-                  spin, density_scale(spin) * grid_electrons
+                  spin, density_scale(spin) * half * grid_electrons
           end do
        endif
     end if ! flag_set_density
