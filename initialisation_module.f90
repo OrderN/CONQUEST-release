@@ -1383,7 +1383,7 @@ contains
        density = density * ne_in_cell/electrons_tot
        if (inode == ionode .and. iprint_init > 1) &
             write (io_lun, *) 'In initial_H, electrons: ', electrons_tot
-       ! if flag_LFD=T, update SF-PAO coefficients with the obtained density
+       ! if flag_LFD=T, update SF-PAO coefficients with the obtained density unless they have been read
        ! and update S with the coefficients
        if ((.NOT.read_option).AND.flag_LFD) then
           call initial_SFcoeff(.false., .true., fixed_potential, .false.)
