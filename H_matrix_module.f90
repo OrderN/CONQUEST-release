@@ -174,6 +174,8 @@ contains
   !!  2018/01/30 10:06 dave
   !!   Moved call to NA projector matrix build inside the rebuild_KE_NL loop to improve
   !!   efficiency (it should have been in there in the first place)
+  !!  2019/01/31 16:00 nakata
+  !!   Moved dump_matrix(NSmatrix) to sub:get_S_matrix
   !! SOURCE
   !!
   subroutine get_H_matrix(rebuild_KE_NL, fixed_potential, electrons, &
@@ -414,7 +416,6 @@ contains
     !
     ! dump matrices if required
     if (iprint_ops > 3) then
-       call dump_matrix("NS", matS, inode)
        if (nspin == 1) then
           call dump_matrix("NH",    matH(1), inode)
        else
