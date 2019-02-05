@@ -285,6 +285,8 @@ contains
 !!    Added "use numbers" statement
 !!   17/04/2002 lkd
 !!    Added logical flag to return false if all OK, true if the given x is out of range
+!!   25/01/2019 tsuyoshi
+!!    added RD_ERR term for the round-error problem
 !! 
 !!  SOURCE
 !!
@@ -307,7 +309,8 @@ contains
 
     ! initialize warning flag
     flag = .false.
-    if (x .gt. xa(n) .or. x .lt. xa(1)) then
+    !ORI if (x .gt. xa(n) .or. x .lt. xa(1)) then
+    if (x .gt. xa(n)+RD_ERR .or. x .lt. xa(1)-RD_ERR) then
        flag = .true. ! the given x lies outside the tabulated values, warn the calling routine
     end if
 
@@ -323,9 +326,19 @@ contains
        end if
     end do
     h=xa(khi)-xa(klo)      ! Find x spacing
-    if(h==0) then
-       call cq_abort('splint_nonU: bisection failed, h=0')
-    end if
+   !2019/Jan/29 TM
+    if(khi == klo) then
+      if (khi == n .or. khi == 1) then
+         y = ya(khi)
+         return
+      else
+         call cq_abort('splint_nonU: bisection failed, h=0')
+      endif
+    endif
+    !ori if(h==0) then
+    !ori    call cq_abort('splint_nonU: bisection failed, h=0')
+    !ori end if
+   !2019/Jan/29 TM
     ! Create value of y
     a = (xa(khi)-x)/h
     b = (x-xa(klo))/h
@@ -368,6 +381,8 @@ contains
 !!    Fixed ANOTHER major bug: I'd forgotten that the array reference was used to create the x position so needs one taken off it !
 !!   08:56, 2003/11/20 dave
 !!    Added return to prevent array overrun
+!!   25/01/2019 tsuyoshi
+!!    added RD_ERR term for the round-error problem
 !!  SOURCE
 !!
   subroutine splint(delta_x,ya,y2a,n,x,y,flag)
@@ -390,7 +405,8 @@ contains
 
     ! initialize warning flag
     flag = .false.
-    if (x>real(n-1,double)*delta_x .or. x<0) then
+    !ORI if (x>real(n-1,double)*delta_x .or. x<0) then
+    if (x>real(n-1,double)*delta_x+RD_ERR .or. x<-RD_ERR) then
        flag = .true. ! the given x lies outside the tabulated values, warn the calling routine
        y = 0.0_double ! Avoid array overruns
        return
@@ -399,7 +415,16 @@ contains
     ! bracket x value   
     klo = aint(x/delta_x) + 1 ! integer division gives lower bound, add 1 for array value
     khi = klo + 1
-    if(khi>n) call cq_abort("Error in splint: index beyond range ",khi,n)
+    !2019/Jan/29 TM
+    !ori if(khi>n) call cq_abort("Error in splint: index beyond range ",khi,n)
+     if(khi>n+1) then
+        call cq_abort("Error in splint: index beyond range ",khi,n)
+     elseif(khi==n+1) then
+        y = 0.0_double
+        return
+     endif
+     
+    
     ! Remember that we added to get array value and subtract it off again !
     xlo =delta_x*real(klo-1,double)
     xhi =delta_x*real(khi-1,double)
@@ -448,6 +473,8 @@ contains
 !!    Added return to prevent array overrun
 !!   08:01, 2003/12/04 dave
 !!    Added return of spline-interpolated value as well as derivative
+!!   25/01/2019 tsuyoshi
+!!    added RD_ERR term for the round-error problem
 !!  SOURCE
 !!
   subroutine dsplint(delta_x,ya,y2a,n,x,y,dy,flag)
@@ -470,7 +497,8 @@ contains
 
     ! initialize warning flag
     flag = .false.
-    if (x>(n-1)*delta_x.OR.x<0) then
+    !ORI if (x>(n-1)*delta_x.OR.x<0) then
+    if (x>(n-1)*delta_x+RD_ERR.OR.x<-RD_ERR) then
        flag = .true. ! the given x lies outside the tabulated values, warn the calling routine
        y = 0.0_double
        dy = 0.0_double ! Avoid array overruns
@@ -483,6 +511,14 @@ contains
     ! Remember that we added to get array value and subtract it off again !
     xlo =delta_x*real(klo-1,double)
     xhi =delta_x*real(khi-1,double)
+
+    !2019/Jan/29 TM
+     if(klo == n) then
+       y = 0.0_double
+       dy = 0.0_double ! Avoid array overruns
+       return
+     endif
+    !2019/Jan/29 TM
 
     ! Create value of y
     a = (xhi-x)/delta_x
