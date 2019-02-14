@@ -180,6 +180,7 @@ module global_module
 
 
   logical :: flag_opt_cell ! optimize the simulation cell?
+  integer :: optcell_method ! method for cell optimiisation 1 = cell, fixed fractional coords, 2 = nested loop cell + geometry optimisation, 3 = single vector full optimisation
   ! specify sim cell dims/ratios of dims to be held constant.
   character(len=20), save :: cell_constraint_flag
   ! Termination condition to exit cell_cg_run

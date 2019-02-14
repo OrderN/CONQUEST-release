@@ -1555,6 +1555,414 @@ contains
   end subroutine safemin_cell
   !!***
 
+  !!****f* move_atoms/safemin_full *
+  !! PURPOSE
+  !!  Carry out line minimisation of cell + ionic degrees of freedom 
+  !! in conjunction with reusing L-matrix (adapted from safemin2)
+  !! INPUTS
+  !!
+  !! AUTHOR
+  !!   Zamaan Raza
+  !! CREATION DATE 
+  !!   2019/02/06
+  !! MODIFICATION HISTORY
+  !!
+  !! SOURCE
+  !!
+  subroutine safemin_full(config, force, cell_ref, enthalpy_in, enthalpy_out, &
+                          target_press, fixed_potential, vary_mu, &
+                          total_enthalpy)
+
+    ! Module usage
+    use datatypes
+    use numbers
+    use units
+    use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell,    &
+                              z_atom_cell, flag_vary_basis,           &
+                              ni_in_cell, rcellx, rcelly, rcellz,     &
+                              flag_self_consistent,                   &
+                              IPRINT_TIME_THRES1, flag_pcc_global,    &
+                              flag_LmatrixReuse, flag_SFcoeffReuse
+    use minimise,       only: get_E_and_F, sc_tolerance, L_tolerance, &
+                              n_L_iterations
+    use GenComms,       only: inode, ionode, cq_abort
+    use SelfCon,        only: new_SC_potl
+    use io_module,      only: write_atomic_positions, pdb_template
+    use density_module, only: set_density_pcc
+    use timer_module
+    use store_matrix, ONLY: dump_pos_and_matrices
+    use UpdateInfo_module, ONLY: Matrix_CommRebuild
+    use multisiteSF_module, only: flag_LFD_minimise
+
+    implicit none
+
+    ! Passed variables
+    real(double) :: enthalpy_in, enthalpy_out, target_press
+    real(double), dimension(:,:) :: config, force
+    real(double), dimension(:)   :: cell_ref
+    logical           :: vary_mu, fixed_potential
+    real(double)      :: total_enthalpy
+
+
+    ! Local variables
+    integer        :: i, j, iter, lun, gatom, stat, nfile, symm
+    logical        :: reset_L = .false.
+    logical        :: done
+    type(cq_timer) :: tmr_l_iter, tmr_l_tmp1
+    real(double)   :: k0, k1, k2, k3, lambda, k3old, energy_out
+    real(double)   :: e0, e1, e2, e3, h0, h1, h2, h3, tmp, bottom
+    real(double), save :: kmin = zero, dH = zero
+    real(double), dimension(:), allocatable :: store_density
+    real(double) :: k3_old, k3_local, kmin_old
+    real(double), dimension(:,:), allocatable :: config_start
+    real(double), dimension(:), allocatable :: start_x, start_y, start_z
+    real(double)  :: orcellx, orcelly, orcellz
+
+    real(double) :: dx, dy, dz, d
+
+    integer :: ig, both, mat
+
+    ! for debugging
+    integer :: mat_SFcoeff_old, mat_K_old
+    ! for debugging
+
+    allocate(start_x(ni_in_cell), start_y(ni_in_cell), start_z(ni_in_cell))
+    allocate(config_start(3,ni_in_cell+1))
+
+    if (inode==ionode .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "move_atoms/safemin_full"
+
+    call start_timer(tmr_std_moveatoms)
+
+    h0 = total_enthalpy
+    if (inode == ionode .and. iprint_MD > 0) &
+         write (io_lun, &
+         fmt='(4x,"In safemin_full, initial enthalpy is ",f20.10," ",a2)') &
+         en_conv * enthalpy_in, en_units(energy_units)
+    if (inode == ionode) &
+         write (io_lun, fmt='(/4x,"Seeking bracketing triplet of points"/)')
+    ! Unnecessary and over cautious !
+
+    config_start = config
+    start_x = x_atom_cell
+    start_y = y_atom_cell
+    start_z = z_atom_cell
+
+    k0 = zero
+
+    iter = 1
+    k1 = zero
+    h1 = enthalpy_in
+    k2 = k0
+    h2 = h0
+    h3 = h2
+    if (kmin < 1.0e-3) then
+       kmin = 0.2_double
+    else
+       kmin = 0.75_double * kmin
+    end if
+    k3 = kmin
+    k3_local = k3
+    lambda = two
+    done = .false.
+
+    ! Loop to find a bracketing triplet
+    do while (.not. done) !e3<=e2)
+       call start_timer(tmr_l_iter, WITH_LEVEL)
+       call start_timer(tmr_l_tmp1, WITH_LEVEL)
+
+       ! Change the configuration
+       call propagate_vector(force, config_start, config, cell_ref, k3)
+       call vector_to_cq(config, cell_ref, orcellx, orcelly, orcellz)
+
+       if (ionode==inode) write(io_lun,*) "CG: 1st stage"
+
+       if (flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,force(:,2:))
+       else
+          call update_pos_and_matrices(updateLorK,force(:,2:))
+       end if
+
+       if (inode==ionode .and. iprint_MD>2) then
+          do i=1,ni_in_cell
+             write (io_lun,*) 'Position: ', i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+          end do
+       end if
+       call update_H(fixed_potential)
+       !Update start_x,start_y & start_z
+       call update_vector_indices(config_start)
+       call update_start_xyz(start_x,start_y,start_z)
+       if (iprint_MD>2) call print_displacement(orcellx, orcelly, orcellz, &
+                                                start_x, start_y, start_z)
+
+       ! Write out atomic positions
+       if (iprint_MD > 2) then
+          call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+               trim(pdb_template))
+       end if
+       ! Now in update_H
+       !if (flag_reset_dens_on_atom_move) call set_density()
+       if (flag_pcc_global) call set_density_pcc()
+       call stop_print_timer(tmr_l_tmp1, "atom updates", IPRINT_TIME_THRES1)
+       ! We've just moved the atoms - we need a self-consistent ground
+       ! state before we can minimise blips !
+       if (flag_vary_basis .or. flag_LFD_minimise) then
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, e3)
+       end if
+       call get_E_and_F(fixed_potential, vary_mu, e3, .false., &
+            .false.)
+       ! Now, we call dump_pos_and_matrices here. : 2018.Jan19 TM
+       !  but if we want to use the information of the matrices in the beginning of this line minimisation
+       !  you can comment the following line, in the future. 
+       call dump_pos_and_matrices
+
+       h3 = enthalpy(e3, target_press)
+       if (inode == ionode .and. iprint_MD > 1) &
+            write (io_lun, &
+            fmt='(4x,"In safemin_full, iter ",i3," step and enthalpy &
+            &are ",2f20.10" ",a2)') &
+            iter, k3, en_conv * h3, en_units(energy_units)
+       k3_old = k3
+       if (h3 < h2) then ! We're still going down hill
+          k1 = k2
+          h1 = h2
+          k2 = k3
+          h2 = h3
+          k3 = lambda * k3
+          iter = iter + 1
+          ! if (inode.EQ.ionode) write (io_lun,*) "INCREASE k3!"
+       ! zamaan - should be k2 < small surely?
+       else if (k2 == zero) then ! We've gone too far
+          k3 = k3/lambda
+          ! if (inode.EQ.ionode) write (io_lun,*) "DECREASE k3!"
+       else
+          done = .true.
+          ! if (inode.EQ.ionode) write (io_lun,*) "TRUE!"
+       end if
+       k3_local = k3 - k3_old
+       if (inode.EQ.ionode) write (io_lun,'(a,1x,3f15.10)') "k3,k3_old,k3_local:", &
+            k3,k3_old,k3_local
+       if (k3 <= very_small) call cq_abort("Step too small: safemin_full failed!")
+       call stop_print_timer(tmr_l_iter, "a safemin_full iteration", &
+            IPRINT_TIME_THRES1)
+       if (inode.EQ.ionode) write (io_lun,*) "Cycle the loop! -- CG"
+       if (inode.EQ.ionode) write (io_lun,*) "iter & k3:", iter, k3
+    end do ! while (.not. done)
+    call start_timer(tmr_l_tmp1,WITH_LEVEL)  ! Final interpolation and updates
+    if (inode == ionode) write(io_lun, fmt='(/4x,"Interpolating minimum"/)')
+    ! Interpolate to find minimum.
+    if (inode == ionode .and. iprint_MD > 1) &
+         write (io_lun, fmt='(4x,"In safemin_full, brackets are: ",6f18.10)') &
+         k1, h1, k2, h2, k3, h3
+    bottom = ((k1-k3)*(h1-h2)-(k1-k2)*(h1-h3))
+    if (abs(bottom) > very_small) then
+       kmin = 0.5_double * (((k1*k1 - k3*k3)*(h1 - h2) -    &
+            (k1*k1 - k2*k2) * (h1 - h3)) / &
+            ((k1-k3)*(h1-h2) - (k1-k2)*(h1-h3)))
+    else
+       if (inode == ionode) then
+          write (io_lun, fmt='(4x,"Error in safemin_full !")')
+          write (io_lun, fmt='(4x,"Interpolation failed: ",6f15.10)') &
+               k1, h1, k2, h2, k3, h3
+       end if
+       kmin = k2
+    end if
+
+    call propagate_vector(force, config_start, config, cell_ref, kmin)
+    call vector_to_cq(config, cell_ref, orcellx, orcelly, orcellz)
+    k3_local = kmin - k3
+
+    if(inode==ionode.AND.iprint_MD>0) write (io_lun,*) "CG: 2nd stage"
+    if(flag_SFcoeffReuse) then
+       call update_pos_and_matrices(updateSFcoeff,force(:,2:))
+    else
+       call update_pos_and_matrices(updateLorK,force(:,2:))
+    endif
+
+    if (inode == ionode .and. iprint_MD > 1) then
+       do i=1,ni_in_cell
+          write (io_lun,*) 'Position: ', i, &
+                           x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+       end do
+    end if
+    call update_H(fixed_potential)
+
+    call update_vector_indices(config_start)
+    call update_start_xyz(start_x,start_y,start_z)
+    if (iprint_MD>2) call print_displacement(orcellx, orcelly, orcellz, &
+                                             start_x, start_y, start_z)
+
+    if (iprint_MD > 2) then
+       call write_atomic_positions("UpdatedAtoms_tmp.dat", trim(pdb_template))
+    end if
+    ! Now in update_H
+    !if(flag_reset_dens_on_atom_move) call set_density()
+    if (flag_pcc_global) call set_density_pcc()
+    call stop_print_timer(tmr_l_tmp1, &
+         "safemin_full - Final interpolation and updates", &
+         IPRINT_TIME_THRES1)
+    ! We've just moved the atoms - we need a self-consistent ground state before
+    ! we can minimise blips !
+    if (flag_vary_basis .or. flag_LFD_minimise) then
+       call new_SC_potl(.false., sc_tolerance, reset_L,           &
+            fixed_potential, vary_mu, n_L_iterations, &
+            L_tolerance, e3)
+    end if
+    energy_out = e3
+    if (iprint_MD > 0) then
+       call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .true.)
+    else
+       call get_E_and_F(fixed_potential, vary_mu, energy_out, .true., .false.)
+    end if
+
+    ! 2018.Jan19  TM
+    call dump_pos_and_matrices
+
+    enthalpy_out = enthalpy(energy_out, target_press)
+    if (inode == ionode .and. iprint_MD > 1) &
+         write (io_lun, &
+         fmt='(4x,"In safemin_full, Interpolation step and enthalpy &
+         &are ",f15.10,f20.10" ",a2)') &
+         kmin, en_conv*enthalpy_out, en_units(energy_units)
+    ! If interpolation step failed, do interpolation AGAIN
+    if (enthalpy_out > h2 .and. abs(bottom) > RD_ERR) then
+       if(h1<h3) then ! Keep k1
+          if(k2<kmin) then
+             k3 = kmin
+             h3 = enthalpy_out
+          else
+             k3 = k2
+             h3 = h2
+             k2 = kmin
+             h2 = enthalpy_out
+          end if
+       else ! Keep k3
+          if(k2<kmin) then
+             k1 = k2
+             h1 = h2
+             k2 = kmin
+             h2 = enthalpy_out
+          end if
+       end if
+       kmin_old = kmin
+       if (inode == ionode .and. iprint_MD > 1) &
+            write (io_lun, fmt='(4x,"In safemin_full, brackets are: ",6f18.10)') &
+            k1, h1, k2, h2, k3, h3
+       bottom = ((k1-k3)*(h1-h2)-(k1-k2)*(h1-h3))
+       if (abs(bottom) > very_small) then
+          kmin = 0.5_double * (((k1*k1 - k3*k3)*(h1 - h2) -    &
+               (k1*k1 - k2*k2) * (h1 - h3)) / &
+               ((k1-k3)*(h1-h2) - (k1-k2)*(h1-h3)))
+          if (inode == ionode .and. iprint_MD > 1) &
+               write (io_lun, &
+               fmt='(4x,"In safemin_full, second interpolation step is ", f15.10)') kmin
+          if(kmin<k1.OR.kmin>k3) then
+             if(inode == ionode .and. iprint_MD > 0) &
+                  write(io_lun,*) 'Second interpolation outside limits: ',k1,k3,kmin
+             dH = h0 - enthalpy_out
+             kmin = kmin_old
+             if (inode == ionode .and. iprint_MD > 0) then
+                write (io_lun, &
+                     fmt='(4x,"In safemin_full, exit after ",i4," &
+                     &iterations with enthlapy ",f20.10," ",a2)') &
+                     iter, en_conv * enthalpy_out, en_units(energy_units)
+             else if (inode == ionode) then
+                write (io_lun, fmt='(/4x,"Final enthalpy: ",f20.10," ",a2)') &
+                     en_conv * enthalpy_out, en_units(energy_units)
+             end if
+             if (inode.EQ.ionode) write (io_lun,*) "Get out of safemin_full !" !db
+             return
+          end if
+       else
+          dH = h0 - enthalpy_out
+          if (inode == ionode .and. iprint_MD > 0) then
+             write (io_lun, &
+                  fmt='(4x,"In safemin_full, exit after ",i4," &
+                  &iterations with enthalpy ",f20.10," ",a2)') &
+                  iter, en_conv * enthalpy_out, en_units(energy_units)
+          else if (inode == ionode) then
+             write (io_lun, fmt='(/4x,"Final enthalpy: ",f20.10," ",a2)') &
+                  en_conv * enthalpy_out, en_units(energy_units)
+          end if
+          if (inode==ionode) write (io_lun,'(2x,a)') &
+            "Get out of safemin_full!" 
+          return
+       end if
+
+       call propagate_vector(force, config_start, config, cell_ref, kmin)
+       call vector_to_cq(config, cell_ref, orcellx, orcelly, orcellz)
+       k3_local = kmin-kmin_old!03/07/2013
+
+       write (io_lun,*) "CG: 3rd stage"
+       if(flag_SFcoeffReuse) then
+          call update_pos_and_matrices(updateSFcoeff,force(:,2:))
+       else
+          call update_pos_and_matrices(updateLorK,force(:,2:))
+       endif
+
+       if (inode == ionode .and. iprint_MD > 2) then
+          do i=1,ni_in_cell
+             write (io_lun,*) 'Position: ', i, x_atom_cell(i), y_atom_cell(i), z_atom_cell(i)
+          end do
+       end if
+       call update_H(fixed_potential)
+
+       call update_vector_indices(config_start)
+       call update_start_xyz(start_x,start_y,start_z)
+       if (iprint_MD>2) call print_displacement(orcellx, orcelly, orcellz, &
+                                                start_x, start_y, start_z)
+
+       if (iprint_MD > 2) then
+          call write_atomic_positions("UpdatedAtoms_tmp.dat", &
+               trim(pdb_template))
+       end if
+       ! Now in update_H
+       if (flag_pcc_global) call set_density_pcc()
+       call stop_print_timer(tmr_l_tmp1, &
+            "safemin_full - Failed interpolation + Retry", &
+            IPRINT_TIME_THRES1)
+       ! We've just moved the atoms - we need a self-consistent ground
+       ! state before we can minimise blips !
+       if(flag_vary_basis .or. flag_LFD_minimise) then
+          call new_SC_potl(.false., sc_tolerance, reset_L,           &
+               fixed_potential, vary_mu, n_L_iterations, &
+               L_tolerance, e3)
+       end if
+       energy_out = e3
+       if (iprint_MD > 0) then
+          call get_E_and_F(fixed_potential, vary_mu, energy_out, &
+               .true., .true.)
+       else
+          call get_E_and_F(fixed_potential, vary_mu, energy_out, &
+               .true., .false.)
+       end if
+
+       ! 2018.Jan19  TM : probably we don't need to call dump_pos_and_matrices here, since
+       !                  we will call it after calling safemin2
+       call dump_pos_and_matrices
+
+    end if
+    dH = h0 - enthalpy_out
+7   format(4x,3f15.8)
+    if (inode==ionode .and. iprint_MD > 0) then
+       write (io_lun, &
+            fmt='(4x,"In safemin_full, exit after ",i4," &
+            &iterations with enthalpy ",f20.10," ",a2)') &
+            iter, en_conv * enthalpy_out, en_units(energy_units)
+    else if (inode == ionode) then
+       write (io_lun, fmt='(/4x,"Final enthalpy: ",f20.10," ",a2)') &
+            en_conv * enthalpy_out, en_units(energy_units)
+    end if
+
+    if (inode==ionode) write (io_lun,*) "Get out of safemin_full !" !db
+    deallocate(start_x, start_y, start_z, config_start)
+    call stop_timer(tmr_std_moveatoms)
+    return
+  end subroutine safemin_full
+  !!***
+
   !!****f* move_atoms/update_start_xyz *
   !!
   !!NAME 
@@ -1580,7 +1988,7 @@ contains
     ! Module usage
     use datatypes
     use global_module, ONLY: ni_in_cell,id_glob,id_glob_inv_old, &
-                             flag_MDdebug,Iprint_MDdebug
+                             flag_MDdebug,Iprint_MDdebug, iprint_MD
     use GenComms, ONLY: cq_abort
     ! DB
     use input_module, ONLY: io_assign, io_close
@@ -1598,6 +2006,9 @@ contains
     ! DB
     integer :: lun_db
     character(7) :: file_name
+
+    if (inode==ionode .and. iprint_MD > 1) &
+      write(io_lun,'(2x,a)') "move_atoms/update_start_xyz"
 
     allocate (x_tmp(ni_in_cell),y_tmp(ni_in_cell),z_tmp(ni_in_cell), &
               STAT=stat_alloc)
@@ -3310,10 +3721,9 @@ contains
   !!  MODIFICATION HISTORY
   !!  SOURCE
   !!
-
-
-  subroutine update_cell_dims(start_rcellx, start_rcelly, start_rcellz, search_dir_x,&
-                              search_dir_y, search_dir_z, k, iter, search_dir_mean)
+  subroutine update_cell_dims(start_rcellx, start_rcelly, start_rcellz, &
+                              search_dir_x, search_dir_y, search_dir_z, &
+                              k, iter, search_dir_mean)
     use datatypes
     use numbers
     use units
@@ -3449,6 +3859,87 @@ contains
     write(io_lun,*) 'current sim cell dims', rcellx, rcelly, rcellz
 
   end subroutine update_cell_dims
+  !!***
+
+  !!****f* move_atoms/rescale_grids_and_density *
+  !!  NAME
+  !!   rescale_grids_and_density
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   scale the grid and density when the cell is updated
+  !!   (adapted from move_atoms/update_cell_dims)
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/02/07
+  !!  MODIFICATION HISTORY
+  !! 
+  !!  SOURCE
+  !!
+  subroutine rescale_grids_and_density(orcellx, orcelly, orcellz)
+
+    use datatypes
+    use numbers
+    use global_module,  only: x_atom_cell, y_atom_cell, z_atom_cell, &
+                              rcellx, rcelly, rcellz, flag_diagonalisation, &
+                              iprint_MD
+    use GenComms,       only: inode, ionode
+    use maxima_module,  only: maxngrid
+    use dimens,         only: r_super_x, r_super_y, r_super_z, &
+                              r_super_x_squared, r_super_y_squared, &
+                              r_super_z_squared, volume, grid_point_volume, &
+                              one_over_grid_point_volume, n_grid_x, n_grid_y, &
+                              n_grid_z
+    use DiagModule,     only: kk, nkp
+    use fft_module,     only: recip_vector, hartree_factor, i0
+    use density_module, only: density
+    use input_module,   only: leqi
+    
+    implicit none
+
+    ! passed variables
+    real(double), intent(in)  :: orcellx, orcelly, orcellz ! old cell
+    ! local variables
+    integer                   :: i, j
+    real(double)              :: xvec, yvec, zvec, r2, scale
+
+    if (inode==ionode .and. iprint_MD > 1) &
+      write(io_lun,'(2x,a)') "move_atoms/rescale_grid_and_density"
+
+    r_super_x = rcellx
+    r_super_y = rcelly
+    r_super_z = rcellz
+    ! DRB added 2017/05/24 17:05
+    ! We've changed the simulation cell. Now we must update grids and the density
+    r_super_x_squared = r_super_x * r_super_x
+    r_super_y_squared = r_super_y * r_super_y
+    r_super_z_squared = r_super_z * r_super_z
+    volume = r_super_x * r_super_y * r_super_z
+    grid_point_volume = volume/(n_grid_x*n_grid_y*n_grid_z)
+    one_over_grid_point_volume = one / grid_point_volume
+    scale = (orcellx*orcelly*orcellz)/volume
+    density = density * scale
+    if(flag_diagonalisation) then
+       do i = 1, nkp
+          kk(1,i) = kk(1,i) * orcellx / rcellx
+          kk(2,i) = kk(2,i) * orcelly / rcelly
+          kk(3,i) = kk(3,i) * orcellz / rcellz
+       end do
+    end if
+    do j = 1, maxngrid
+       recip_vector(j,1) = recip_vector(j,1) * orcellx / rcellx
+       recip_vector(j,2) = recip_vector(j,2) * orcelly / rcelly
+       recip_vector(j,3) = recip_vector(j,3) * orcellz / rcellz
+       xvec = recip_vector(j,1)/(two*pi)
+       yvec = recip_vector(j,2)/(two*pi)
+       zvec = recip_vector(j,3)/(two*pi)
+       r2 = xvec*xvec + yvec*yvec + zvec*zvec
+       if(j/=i0) hartree_factor(j) = one/r2 ! i0 notates gamma point
+    end do
+
+  end subroutine rescale_grids_and_density
+  !!***
 
   ! -----------------------------------------------------------------------
   ! Subroutine update_pos_and_matrices
@@ -3691,5 +4182,356 @@ contains
 
  return
  end subroutine update_pos_and_matrices
+ !!***
+
+   !!****f* control/propagate_vector *
+  !!
+  !!  NAME
+  !!   propagate_vector
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Generate new configuration by shifting the position vector config in 
+  !!   direction force by distance k
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Z Raza
+  !!  CREATION DATE
+  !!   2019/02/08
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  subroutine propagate_vector(force, config, config_new, cell_ref, k)
+
+    use GenComms,      only: inode, ionode
+    use global_module, only: iprint_MD, ni_in_cell
+
+    implicit none
+
+    ! passed variables
+    real(double), dimension(:,:), intent(in)  :: force, config
+    real(double), dimension(:,:), intent(out) :: config_new
+    real(double), dimension(3), intent(in)    :: cell_ref
+    real(double), intent(in)                  :: k
+
+    ! local variables
+    integer       :: i, j
+    real(double)  :: d
+
+    if (inode==ionode .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "move_atoms/propagate_vector"
+
+    ! config_new = config + k*force
+    do i=1,ni_in_cell+1
+      do j=1,3
+        config_new(j,i) = config(j,i) + k*force(j,i)
+      end do
+    end do
+
+  end subroutine propagate_vector
+  !!***
+
+  !!****f* control/vector_to_cq *
+  !!
+  !!  NAME
+  !!   vector_to_cq
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Convert optimisable vector config (containing strains and fractional
+  !!   coordinates) to Conquest variables (Cartesian coordinates) for
+  !!   electronic structure calculation. Increment the positions using the
+  !!   force vector, containing scaled stresses and ionic forces in lattice
+  !!   coordinates, as defined in !!   Pfrommer et al. J. Comput. Phys. 131,
+  !!    233 (1997)
+  !!
+  !!   Stress components: 
+  !!      f_sigma,i = -(sigma_i + pV)(1 + epsilon_i)^-1
+  !!   f_sigma,i = ith component of force on cell as defined above
+  !!   sigma_i = ith component of stress
+  !!   epsilon = ith component of strain
+  !!   ionic force components:
+  !!      F_i = h^T h f_i
+  !!   h = matrix of lattice vectors (h^T h = g, metric tensor)
+  !!   f_i = force on atom i, as computed from gradient of energy
+  !! 
+  !!   force contains scaled stresses force(:,1) and ionic forces in lattice
+  !!   coordinates force(:,2:)
+  !!
+  !!   config contains strains config(:,1) and fractional coordinates
+  !!   config(:,2:)
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Z Raza
+  !!  CREATION DATE
+  !!   2019/02/06
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  subroutine vector_to_cq(config, cell_ref, orcellx, orcelly, orcellz)
+
+    use numbers
+    use GenComms,      only: inode, ionode
+    use global_module, only: x_atom_cell, y_atom_cell, z_atom_cell, &
+                             rcellx, rcelly, rcellz, ni_in_cell, &
+                             iprint_MD
+
+    implicit none
+
+    ! passed variables
+    real(double), dimension(:,:), intent(in)  :: config
+    real(double), dimension(3), intent(in)    :: cell_ref
+    real(double), intent(out) :: orcellx, orcelly, orcellz
+
+    ! local variables
+    integer       :: i
+    real(double)  :: dx, dy, dz
+
+    if (inode==ionode .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "move_atoms/vector_to_cq"
+
+
+    orcellx = rcellx
+    orcelly = rcelly
+    orcellz = rcellz
+
+    rcellx = (one + config(1,1))*cell_ref(1)
+    rcelly = (one + config(2,1))*cell_ref(2)
+    rcellz = (one + config(3,1))*cell_ref(3)
+    do i=1,ni_in_cell
+      x_atom_cell(i) = config(1,i+1)*rcellx
+      y_atom_cell(i) = config(2,i+1)*rcelly
+      z_atom_cell(i) = config(3,i+1)*rcellz
+    end do
+
+    call rescale_grids_and_density(orcellx, orcelly, orcellz)
+
+  end subroutine vector_to_cq
+  !!***
+
+  !!****f* control/cq_to_vector *
+  !!
+  !!  NAME
+  !!   cq_to_vector
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Convert Conquest variables x_atom_cell, y_atom_cell, z_atom_cell,
+  !!   rcellx, rcelly, rcellz and tot_force to the vectors required for full
+  !!   cell optimisation, as defined in Pfrommer et al. 
+  !!   J. Comput. Phys. 131, 233 (1997) (see cq_to_vector)
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Z Raza
+  !!  CREATION DATE
+  !!   2019/02/06
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine cq_to_vector(force, config, cell_ref, target_press)
+ 
+    use numbers
+    use global_module, only: x_atom_cell, y_atom_cell, z_atom_cell, &
+                             rcellx, rcelly, rcellz, ni_in_cell, &
+                             iprint_MD
+    use GenComms,      only: inode, ionode
+    use force_module,  only: stress, tot_force
+
+    implicit none
+ 
+    ! passed variables
+    real(double), dimension(:,:), intent(out) :: force, config
+    real(double), dimension(3), intent(in)    :: cell_ref
+    real(double), intent(in)                  :: target_press
+
+    ! local variables
+    integer                     :: i, j
+    real(double)                :: vol
+    real(double), dimension(3)  :: one_plus_strain
+
+    if (inode==ionode .and. iprint_MD>2) &
+      write(io_lun,'(2x,a)') "move_atoms/cq_to_vector"
+ 
+    vol = rcellx*rcelly*rcellz
+    one_plus_strain(1) = rcellx/cell_ref(1)
+    one_plus_strain(2) = rcelly/cell_ref(2)
+    one_plus_strain(3) = rcellz/cell_ref(3)
+    do i=1,3
+      config(i,1) = one_plus_strain(i) - one
+      force(i,1) = -(stress(i) + target_press*vol)/one_plus_strain(i)
+    end do
+    do i=2,ni_in_cell+1
+      config(1,i) = x_atom_cell(i-1)/rcellx
+      config(2,i) = y_atom_cell(i-1)/rcelly
+      config(3,i) = z_atom_cell(i-1)/rcellz
+      force(1,i) = tot_force(1,i-1)/rcellx
+      force(2,i) = tot_force(2,i-1)/rcelly
+      force(3,i) = tot_force(3,i-1)/rcellz
+    end do
+
+    if (inode==ionode .and. iprint_MD>1) then
+      write(io_lun,'(4x,a)') "Position vector:"
+      write(io_lun,'(4x,a8,3f20.12)') "strain: ", config(:,1)
+      do i=1,ni_in_cell
+        write(io_lun,'(4x,i8,3f20.12)') i, config(:,i+1)
+      end do
+      write(io_lun,'(4x,a)') "Force vector:"
+      write(io_lun,'(4x,a8,3f20.12)') "stress: ", force(:,1)
+      do i=1,ni_in_cell
+        write(io_lun,'(4x,i8,3f20.12)') i, force(:,i+1)
+      end do
+      write(io_lun,*)
+    end if
+
+  end subroutine cq_to_vector
+  !!***
+
+  !!****f* move_atoms/update_vector_indices *
+  !!
+  !!  NAME 
+  !!   update_vector_indices
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   When atoms are moved in safemin_full, the indices for the force and 
+  !!   config vectors may change. This sub ensures that they are consistent.
+  !!   Adapted from update_start_xyz.
+  !!  INPUTS
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2019/02/07
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine update_vector_indices(vector)
+
+    use datatypes
+    use GenComms,       only: inode, ionode
+    use global_module,  only: ni_in_cell, id_glob, id_glob_inv, iprint_MD
+
+    implicit none
+
+    ! passed variables
+    real(double), dimension(:,:), intent(inout) :: vector
+
+    ! local variables
+    real(double), dimension(:,:), allocatable :: v_tmp
+    integer :: i, i_old, id_global
+
+    if (inode==ionode .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "move_atoms/update_vector_indices"
+
+    allocate(v_tmp(3,ni_in_cell+1))
+
+    v_tmp = vector
+    do i=1,ni_in_cell
+      id_global = id_glob(i)
+      i_old = id_glob_inv(id_global)
+      vector(:,i+1) = v_tmp(:,i_old+1)
+    end do
+
+    deallocate(v_tmp)
+
+  end subroutine update_vector_indices
+
+  !!****f* move_atoms/enthalpy *
+  !!
+  !!  NAME 
+  !!   enthalpy
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Compute the enthalpy for cell optimisation
+  !!  INPUTS
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2019/02/07
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  function enthalpy(e, p) result(h)
+
+    use global_module,  only: rcellx, rcelly, rcellz
+
+    implicit none
+
+    ! passed variables
+    real(double), intent(in)  :: e, p    
+    real(double)              :: h
+
+    h = e + p*(rcellx*rcelly*rcellz)
+
+  end function enthalpy
+  !!***
+
+  !!****f* move_atoms/print_displacement *
+  !!
+  !!  NAME 
+  !!   print_displacement
+  !!  USAGE
+  !! 
+  !!  PURPOSE
+  !!   Print the atomic displacements during geometry optimisation
+  !!  INPUTS
+  !! 
+  !!  USES
+  !! 
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2019/02/13
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  subroutine print_displacement(orcellx, orcelly, orcellz, &
+                                start_x, start_y, start_z)
+
+    use datatypes
+    use GenComms,       only: inode, ionode
+    use global_module,  only: iprint_MD, x_atom_cell, y_atom_cell, &
+                              z_atom_cell, rcellx, rcelly, rcellz, ni_in_cell
+
+    ! passed variables
+    real(double), dimension(:), intent(in)  :: start_x, start_y, start_z
+    real(double), intent(in)  :: orcellx, orcelly, orcellz
+
+    ! local variables
+    real(double)  :: dx, dy, dz
+    integer       :: i
+
+    if (inode==ionode) then
+      write(io_lun,'(4x,a)') "Change in cell dimensions:"
+      write(io_lun,'(4x,a4,f16.8)') 'a', rcellx - orcellx
+      write(io_lun,'(4x,a4,f16.8)') 'b', rcelly - orcelly
+      write(io_lun,'(4x,a4,f16.8)') 'c', rcellz - orcellz
+      write(io_lun,'(4x,a8,a16)') 'atom', 'displacement'
+      do i=1,ni_in_cell
+        dx = x_atom_cell(i) - start_x(i)
+        dy = y_atom_cell(i) - start_y(i)
+        dz = z_atom_cell(i) - start_z(i)
+        write(io_lun,'(4x,i8,f16.8)') i, sqrt(dx**2 + dy**2 + dz**2)
+      end do
+    end if
+
+  end subroutine print_displacement
+  !!***
 
 end module move_atoms

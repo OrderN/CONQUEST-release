@@ -720,7 +720,8 @@ contains
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
-                             flag_opt_cell, cell_constraint_flag, cell_en_tol
+                             flag_opt_cell, cell_constraint_flag, &
+                             cell_en_tol, optcell_method
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -806,7 +807,7 @@ contains
                                   flag_LFD_MD_UseAtomicDensity
     use control,    only: md_ensemble
     use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
-                          md_target_press, md_baro_type, md_tau_P, &
+                          target_pressure, md_baro_type, md_tau_P, &
                           md_thermo_type, md_bulkmod_est, md_box_mass, &
                           flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
                           md_calc_xlmass, md_berendsen_equil, &
@@ -1407,6 +1408,7 @@ contains
        MDtimestep            = fdf_double ('AtomMove.Timestep',      0.5_double)
        MDcgtol               = fdf_double ('AtomMove.MaxForceTol',0.0005_double)
        flag_opt_cell         = fdf_boolean('AtomMove.OptCell',          .false.)
+       optcell_method        = fdf_integer('AtomMove.OptCellMethod', 1)
        cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
        cell_en_tol           = fdf_double('AtomMove.OptCell.EnTol',0.00001_double)
        flag_stop_on_empty_bundle = fdf_boolean('AtomMove.StopOnEmptyBundle',.false.)
@@ -2021,7 +2023,7 @@ contains
        call fdf_endblock
 
        ! Barostat
-       md_target_press    = fdf_double('MD.TargetPressure', zero)
+       target_pressure    = fdf_double('AtomMove.TargetPressure', zero)
        md_box_mass        = fdf_double('MD.BoxMass', one)
        md_tau_P           = fdf_double('MD.tauP', -one)
        md_tau_P_equil     = fdf_double('MD.tauPEquil', 100.0_double)
