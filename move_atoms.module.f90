@@ -586,7 +586,7 @@ contains
           ! New DRB 2007/04/18
           k3 = lambda * k3
           iter = iter + 1
-       else if (k2 == zero) then ! We've gone too far
+       else if (abs(k2) < RD_ERR) then ! We've gone too far
           !k3old = k3
           !if(abs(dE)<RD_ERR) then 
           !   k3 = k3old/2.0_double
@@ -971,7 +971,7 @@ contains
           k3 = lambda * k3
           iter = iter + 1
           !db if (inode.EQ.ionode) write (io_lun,*) "INCREASE k3!"
-       else if (k2 == zero) then ! We've gone too far
+       else if (abs(k2) < RD_ERR) then ! We've gone too far
           !k3old = k3
           !if(abs(dE)<very_small) then
           !   k3 = k3old/2.0_double
@@ -1407,7 +1407,7 @@ contains
           ! New DRB 2007/04/18
           k3 = lambda * k3
           iter = iter + 1
-       else if (k2 == zero) then ! We've gone too far
+       else if (abs(k2) < RD_ERR) then ! We've gone too far
           k3 = k3/lambda
           if (inode == ionode .and. iprint_MD > 0) write(io_lun,*) "Gone too far"
        else
@@ -1734,7 +1734,7 @@ contains
           iter = iter + 1
           ! if (inode.EQ.ionode) write (io_lun,*) "INCREASE k3!"
        ! zamaan - should be k2 < small surely?
-       else if (k2 == zero) then ! We've gone too far
+       else if (abs(k2) < RD_ERR) then ! We've gone too far
           k3 = k3/lambda
           ! if (inode.EQ.ionode) write (io_lun,*) "DECREASE k3!"
        else
