@@ -4373,9 +4373,9 @@ contains
       config(1,i) = x_atom_cell(i-1)/rcellx
       config(2,i) = y_atom_cell(i-1)/rcelly
       config(3,i) = z_atom_cell(i-1)/rcellz
-      force(1,i) = tot_force(1,i-1)/rcellx
-      force(2,i) = tot_force(2,i-1)/rcelly
-      force(3,i) = tot_force(3,i-1)/rcellz
+      force(1,i) = tot_force(1,i-1)*rcellx
+      force(2,i) = tot_force(2,i-1)*rcelly
+      force(3,i) = tot_force(3,i-1)*rcellz
     end do
 
     if (inode==ionode .and. iprint_MD>1) then
