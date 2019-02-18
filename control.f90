@@ -163,9 +163,11 @@ contains
            case(1)
              call cell_cg_run(fixed_potential, vary_mu, total_energy)
            case(2)
-             call full_cg_run(fixed_potential, vary_mu, total_energy)
+             call full_cg_run_double_loop(fixed_potential, vary_mu, &
+                                          total_energy)
            case(3)
-             call full_cg_run2(fixed_potential, vary_mu, total_energy)
+             call full_cg_run_single_vector(fixed_potential, vary_mu, &
+                                            total_energy)
            end select
         else
             call cg_run(fixed_potential, vary_mu, total_energy)
@@ -1953,7 +1955,27 @@ end subroutine write_md_data
   end subroutine get_gamma_cell_cg
 !!***
 
-  subroutine full_cg_run(fixed_potential, vary_mu, total_energy)
+  !!****f* control/full_cg_run_double_loop *
+  !!
+  !!  NAME
+  !!   full_cg_run_double_loop
+  !!  USAGE
+  !!
+  !!  PURPOSE
+  !!   Simple implementation of cell + ionic geometry optimisation using a
+  !!   nested loop: the outer loop does one cell steepest descent step, the
+  !!   inner does a full ionic conjugate gradients optimisation
+  !!  INPUTS
+  !!
+  !!  USES
+  !!
+  !!  AUTHOR
+  !!   Z Raza
+  !!  CREATION DATE
+  !!   2018/02/06
+  !!  MODIFICATION HISTORY
+  !!
+  subroutine full_cg_run_double_loop(fixed_potential, vary_mu, total_energy)
 
     ! Module usage
     use numbers
@@ -1999,6 +2021,9 @@ end subroutine write_md_data
                     mean_stress, energy2
     integer      :: iter_cell
 
+
+    if (inode==ionode .and. iprint_MD > 2) &
+      write(io_lun,'(2x,a)') "control/full_cg_run_double_loop"
 
     allocate(cg(3,ni_in_cell), STAT=stat)
     if (stat /= 0) &
@@ -2271,12 +2296,12 @@ end subroutine write_md_data
   8   format(4x,'Energy change: ',f15.8,' ',a2)
   9   format(4x,'RMS Stress change: ',f15.8,' ',a2)
 
-  end subroutine full_cg_run
+  end subroutine full_cg_run_double_loop
 
-  !!****f* control/full_cg_run2 *
+  !!****f* control/full_cg_run_single_vector *
   !!
   !!  NAME
-  !!   full_cg_run2
+  !!   full_cg_run_single_vector
   !!  USAGE
   !!
   !!  PURPOSE
@@ -2294,7 +2319,7 @@ end subroutine write_md_data
   !!  MODIFICATION HISTORY
   !!
   !!  SOURCE
-  subroutine full_cg_run2(fixed_potential, vary_mu, total_energy)
+  subroutine full_cg_run_single_vector(fixed_potential, vary_mu, total_energy)
 
     ! Module usage
     use numbers
@@ -2339,7 +2364,7 @@ end subroutine write_md_data
     real(double), dimension(3) :: one_plus_strain, strain, cell, cell_ref
 
     if (inode==ionode .and. iprint_MD > 2) &
-      write(io_lun,'(2x,a)') "control/full_cg_run2"
+      write(io_lun,'(2x,a)') "control/full_cg_run_single_vector"
 
     allocate(cg(3,ni_in_cell+1), STAT=stat)
     allocate(force(3,ni_in_cell+1), STAT=stat)
@@ -2485,7 +2510,7 @@ end subroutine write_md_data
     5   format(4x,'Force Residual: ',f15.10,' ',a2,'/',a2)
     6   format(4x,'Maximum force component: ',f15.8,' ',a2,'/',a2)
     7   format(4x,3f15.8)
-  end subroutine full_cg_run2
+  end subroutine full_cg_run_single_vector
   !!***
 
 end module control
