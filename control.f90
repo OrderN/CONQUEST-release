@@ -2437,7 +2437,7 @@ end subroutine write_md_data
       end if
       end if
       if (inode == ionode) &
-        write (io_lun,'(4x,"CG iteration: ",i5,"Gamma: ",f12.6)') iter, gamma
+        write (io_lun,'(4x,"CG iteration: ",i5," Gamma: ",f12.6)') iter, gamma
       ggold = gg
       ! Build search direction
       cg(1,1) = gamma*cg(1,1) + force(1,1)
@@ -2468,7 +2468,7 @@ end subroutine write_md_data
       max = zero
       do i=1,ni_in_cell+1
         do k=1,3
-          if (abs(force(k,i)) > max) max = abs(force(k,i))
+          if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
         end do
       end do
       ! Output and energy changes
