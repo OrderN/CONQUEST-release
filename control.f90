@@ -2480,7 +2480,7 @@ end subroutine write_md_data
           for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
           d_units(dist_units)
         write(io_lun,'(4x,"Maximum force component: ",f15.10," ",a2,"/",a2)') &
-          MDcgtol, en_units(energy_units), d_units(dist_units)
+          max, en_units(energy_units), d_units(dist_units)
       end if
 
       enthalpy0 = enthalpy1
