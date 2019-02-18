@@ -2456,9 +2456,10 @@ end subroutine write_md_data
 
       ! Output positions
       if (inode==ionode .and. iprint_gen > 1) then
+        write(io_lun,'(4x,a4,a15)') "Atom", "Position"
         do i = 1, ni_in_cell
-          write(io_lun,'(4x,"Atom ",i8," Position ",3f15.8)') i,atom_coord(:,i)
-      end do
+          write(io_lun,'(4x,i8,3f15.8)') i,atom_coord(:,i)
+        end do
       end if
       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
       if (flag_write_xsf) call write_xsf('trajectory.xsf', iter)
