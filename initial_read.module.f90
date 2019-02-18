@@ -813,7 +813,9 @@ contains
                           md_calc_xlmass, md_berendsen_equil, &
                           md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
     use md_model,   only: md_tdep
-    use move_atoms,         only: threshold_resetCD, flag_stop_on_empty_bundle
+    use move_atoms,         only: threshold_resetCD, &
+                                  flag_stop_on_empty_bundle, &
+                                  enthalpy_tolerance
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
          fire_N_max, fire_max_step, fire_N_below_thresh
     use XC, only : flag_functional_type, functional_hartree_fock, functional_hyb_pbe0
@@ -1412,6 +1414,7 @@ contains
        cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
        cell_en_tol           = fdf_double('AtomMove.OptCell.EnTol',0.00001_double)
        flag_stop_on_empty_bundle = fdf_boolean('AtomMove.StopOnEmptyBundle',.false.)
+       enthalpy_tolerance    = fdf_double('AtomMove.EnthalpyTolerance', 1.0e-5_double)
        !
        flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
        if(.NOT.flag_vary_basis) then

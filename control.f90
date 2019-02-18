@@ -2331,12 +2331,13 @@ end subroutine write_md_data
                              IPRINT_TIME_THRES1, flag_MDold
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin_full, cq_to_vector, enthalpy
+    use move_atoms,    only: safemin_full, cq_to_vector, enthalpy, &
+                             enthalpy_tolerance
     use GenComms,      only: inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force
     use io_module,     only: write_atomic_positions, pdb_template, &
-                       check_stop, write_xsf
+                             check_stop, write_xsf
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
     use store_matrix,  ONLY: dump_InfoMatGlobal, dump_pos_and_matrices
@@ -2351,17 +2352,14 @@ end subroutine write_md_data
 
     ! Local variables
     real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma, gg1, &
-                      new_rcellx, new_rcelly, new_rcellz, press, &
-                      rcellx_ref, rcelly_ref, rcellz_ref, &
+                      press, rcellx_ref, rcelly_ref, rcellz_ref, &
                       enthalpy0, enthalpy1, dH
-    integer        :: i,j,k,iter,length, jj, lun, stat
+    integer        :: i,j,k,iter,length, jj, stat
     logical        :: done
     type(cq_timer) :: tmr_l_iter
     real(double), allocatable, dimension(:,:) :: cg, force, force_old, &
                                                  config, config_old
-    real(double), allocatable, dimension(:)   :: x_new_pos, y_new_pos,&
-                                                 z_new_pos
-    real(double), dimension(3) :: one_plus_strain, strain, cell, cell_ref
+    real(double), dimension(3) :: one_plus_strain, strain, cell_ref
 
     if (inode==ionode .and. iprint_MD > 2) &
       write(io_lun,'(2x,a)') "control/full_cg_run_single_vector"
@@ -2380,8 +2378,11 @@ end subroutine write_md_data
     ! Do we need to add MD.MaxCGDispl ?
     done = .false.
     length = 3*(ni_in_cell+1)
-    if (inode==ionode .and. iprint_gen > 0) &
-      write (io_lun, 2) MDn_steps, MDcgtol
+    if (inode==ionode .and. iprint_gen > 0) then
+      write(io_lun,'(4x,"Welcome to cg_run. Doing ",i4," steps")') MDn_steps
+      write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
+      write(io_lun,'(4x,"Enthalpy tolerance: ",f20.10)') enthalpy_tolerance
+    end if
     press = target_pressure/fac_HaBohr32GPa
     energy0 = total_energy
     enthalpy0 = enthalpy(energy0, press)
@@ -2436,7 +2437,7 @@ end subroutine write_md_data
       end if
       end if
       if (inode == ionode) &
-        write (io_lun, fmt='(/4x,"Cell optimisation CG iteration: ",i5)') iter
+        write (io_lun,'(4x,"CG iteration: ",i5,"Gamma: ",f12.6)') iter, gamma
       ggold = gg
       ! Build search direction
       cg(1,1) = gamma*cg(1,1) + force(1,1)
@@ -2456,8 +2457,7 @@ end subroutine write_md_data
       ! Output positions
       if (inode==ionode .and. iprint_gen > 1) then
         do i = 1, ni_in_cell
-          write (io_lun, 1) i, atom_coord(1,i), atom_coord(2,i), &
-                            atom_coord(3,i)
+          write(io_lun,'(4x,"Atom ",i8," Position ",3f15.8)') i,atom_coord(:,i)
       end do
       end if
       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
@@ -2473,21 +2473,32 @@ end subroutine write_md_data
       ! Output and energy changes
       iter = iter + 1
       dH = enthalpy0 - enthalpy1
-      if (inode==ionode) write(io_lun, 4) en_conv*dH, en_units(energy_units)
-      if (inode==ionode) write(io_lun, 5) for_conv*sqrt(g0/ni_in_cell), &
-                                          en_units(energy_units),       &
-                                          d_units(dist_units)
+      if (inode==ionode) then
+        write(io_lun,'(4x,"Enthalpy change: ",f20.10," ",a2)') &
+          en_conv*dH, en_units(energy_units)
+        write(io_lun,'(4x,"Force Residual: ",f15.10," ",a2,"/",a2)') &
+          for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+          d_units(dist_units)
+        write(io_lun,'(4x,"Maximum force component: ",f15.10," ",a2,"/",a2)') &
+          MDcgtol, en_units(energy_units), d_units(dist_units)
+      end if
+
       enthalpy0 = enthalpy1
       if (iter > MDn_steps) then
         done = .true.
         if (inode==ionode) &
           write(io_lun, fmt='(4x,"Exceeded number of MD steps: ",i6)') iter
-        end if
-      if (abs(max) < MDcgtol) then
+      end if
+      if (abs(max) < MDcgtol .and. abs(dH) < enthalpy_tolerance) then
         done = .true.
-        if (inode==ionode) &
-          write(io_lun, fmt='(4x,"Maximum force below threshold: ",f12.5)') &
-                 max
+        if (inode==ionode) then
+          write(io_lun,fmt='(a)') "Convergence thresholds reached"
+          write(io_lun, fmt='(4x,"Maximum force:      ",f20.10)') max
+          write(io_lun, fmt='(4x,"Force tolerance:    ",f20.10)') MDcgtol
+          write(io_lun, fmt='(4x,"Enthalpy change:    ",f20.10)') dH
+          write(io_lun, fmt='(4x,"Enthalpy tolerance: ",f20.10)') &
+            enthalpy_tolerance
+        end if
       end if
 
       call dump_pos_and_matrices
@@ -2502,14 +2513,6 @@ end subroutine write_md_data
                    ni_in_cell,stat)
     call reg_dealloc_mem(area_general, 5*length, type_dbl)
 
-    1   format(4x,'Atom ',i8,' Position ',3f15.8)
-    2   format(4x,'Welcome to cg_run. Doing ',i4,&
-     ' steps with tolerance of ',f8.4,' ev/A')
-    3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
-    4   format(4x,'Enthalpy change: ',f15.8,' ',a2)
-    5   format(4x,'Force Residual: ',f15.10,' ',a2,'/',a2)
-    6   format(4x,'Maximum force component: ',f15.8,' ',a2,'/',a2)
-    7   format(4x,3f15.8)
   end subroutine full_cg_run_single_vector
   !!***
 

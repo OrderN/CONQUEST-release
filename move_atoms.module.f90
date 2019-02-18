@@ -79,6 +79,8 @@ module move_atoms
 
   real(double) :: threshold_resetCD
 
+  real(double) :: enthalpy_tolerance
+
   logical :: flag_stop_on_empty_bundle
   
   ! Table to show the methods to update  (for update_pos_and_matrix)
