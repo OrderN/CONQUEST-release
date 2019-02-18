@@ -2474,13 +2474,15 @@ end subroutine write_md_data
       iter = iter + 1
       dH = enthalpy0 - enthalpy1
       if (inode==ionode) then
-        write(io_lun,'(4x,"Enthalpy change: ",f20.10," ",a2)') &
-          en_conv*dH, en_units(energy_units)
-        write(io_lun,'(4x,"Force Residual: ",f15.10," ",a2,"/",a2)') &
-          for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
-          d_units(dist_units)
-        write(io_lun,'(4x,"Maximum force component: ",f15.10," ",a2,"/",a2)') &
-          max, en_units(energy_units), d_units(dist_units)
+          write(io_lun,'(4x,"Force Residual:     ",f20.10," ",a2,"/",a2)') &
+            for_conv*sqrt(g0/ni_in_cell), en_units(energy_units), & 
+            d_units(dist_units)
+          write(io_lun,'(4x,"Maximum force:      ",f20.10)') max
+          write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
+          write(io_lun,'(4x,"Enthalpy change:    ",f20.10," ",a2)') &
+            en_conv*dH, en_units(energy_units)
+          write(io_lun,'(4x,"Enthalpy tolerance: ",f20.10)') &
+            enthalpy_tolerance
       end if
 
       enthalpy0 = enthalpy1
