@@ -2466,7 +2466,7 @@ end subroutine write_md_data
       ! Analyse forces
       g0 = dot(length, force, 1, force, 1)
       max = zero
-      do i=1,ni_in_cell+1
+      do i=1,ni_in_cell
         do k=1,3
           if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
         end do
