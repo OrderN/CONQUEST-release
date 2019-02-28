@@ -38,6 +38,8 @@
 !!   2018/07/12 zamaan
 !!    Added SSM integrator, adapted from W. Shinoda et al., PRB 69:134103
 !!    (2004)
+!!   2019/02/28 zamaan
+!!    2 new subroutines for cell optimisation (double loop and single vector)
 !!  SOURCE
 !!
 module control
@@ -1700,10 +1702,10 @@ end subroutine write_md_data
                              atom_coord, rcellx, rcelly, rcellz,   &
                              area_general, iprint_MD,              &
                              IPRINT_TIME_THRES1, flag_MDold, cell_en_tol, &
-                             cell_constraint_flag
+                             cell_constraint_flag, cell_stress_tol
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin_cell
+    use move_atoms,    only: safemin_cell, enthalpy, enthalpy_tolerance
     use GenComms,      only: gsum, myid, inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: stress, tot_force
@@ -1714,6 +1716,7 @@ end subroutine write_md_data
     use io_module,      only: leqi
     use dimens, ONLY: r_super_x, r_super_y, r_super_z
     use store_matrix,  only: dump_pos_and_matrices
+    use md_control,    only: target_pressure, fac_HaBohr32GPa
 
     implicit none
 
@@ -1723,21 +1726,23 @@ end subroutine write_md_data
     real(double) :: total_energy
 
     ! Local variables
-    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma
+    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma, &
+                      enthalpy0, enthalpy1, dH, press
     integer        :: i,j,k,iter,length, jj, lun, stat, reset_iter
     logical        :: done
     type(cq_timer) :: tmr_l_iter
     real(double) :: new_rcellx, new_rcelly, new_rcellz, search_dir_x, search_dir_y,&
                     search_dir_z, stressx, stressy, stressz, RMSstress, newRMSstress,&
-                    dRMSstress, search_dir_mean, mean_stress
+                    dRMSstress, search_dir_mean, mean_stress, max_stress, &
+                    stress_diff, volume
 
     call reg_alloc_mem(area_general, 6 * ni_in_cell, type_dbl)
 
     if (myid == 0 .and. iprint_gen > 0) &
          write (io_lun, fmt='(/4x,"Starting CG lattice vector relaxation"/)')
-    search_dir_z = zero
     search_dir_x = zero
     search_dir_y = zero
+    search_dir_z = zero
     search_dir_mean = zero
     ! Do we need to add MD.MaxCGDispl ?
     done = .false.
@@ -1753,12 +1758,22 @@ end subroutine write_md_data
     reset_iter = 1
     ggold = zero
     energy1 = energy0
+
+    press = target_pressure/fac_HaBohr32GPa
+    if (inode==ionode) write(io_lun,*) "###", target_pressure, press
+    enthalpy0 = enthalpy(energy0, press)
+    enthalpy1 = enthalpy0
+    dH = zero
+    if (inode==ionode) write(io_lun,'(2x,a,f20.10)') "Initial enthalpy is ", &
+                                                     enthalpy0
+
     call dump_pos_and_matrices(index=0,MDstep=iter)
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
-       stressx = -stress(1)
-       stressy = -stress(2)
-       stressz = -stress(3)
+       volume = rcellx*rcelly*rcellz
+       stressx = -stress(1)/volume
+       stressy = -stress(2)/volume
+       stressz = -stress(3)/volume
        mean_stress = (stressx + stressy + stressz)/3
        RMSstress = sqrt(((stressx*stressx) + (stressy*stressy) + (stressz*stressz))/3)
 
@@ -1792,9 +1807,9 @@ end subroutine write_md_data
        if (leqi(cell_constraint_flag, 'volume')) then
          search_dir_mean = gamma*search_dir_mean + mean_stress
        else
-         search_dir_x = gamma*search_dir_x + stressx
-         search_dir_y = gamma*search_dir_y + stressy
-         search_dir_z = gamma*search_dir_z + stressz
+         search_dir_x = gamma*search_dir_x + stressx - press
+         search_dir_y = gamma*search_dir_y + stressy - press
+         search_dir_z = gamma*search_dir_z + stressz - press
        end if
 
        if (inode == ionode .and. iprint_gen > 0) &
@@ -1807,8 +1822,8 @@ end subroutine write_md_data
        ! Minimise in this direction. Constraint information is also used within
        ! safemin_cell. Look in move_atoms.module.f90 for further information.
        call safemin_cell(new_rcellx, new_rcelly, new_rcellz, search_dir_x, &
-                         search_dir_y, search_dir_z, energy0, energy1, &
-                         fixed_potential, vary_mu, energy1, search_dir_mean)
+                         search_dir_y, search_dir_z, search_dir_mean, press, &
+                         enthalpy0, enthalpy1, fixed_potential, vary_mu)
        ! Output positions to UpdatedAtoms.dat
        if (myid == 0 .and. iprint_gen > 1) then
           do i = 1, ni_in_cell
@@ -1819,21 +1834,28 @@ end subroutine write_md_data
        call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
 
        ! Analyse Stresses and energies
-       dE = energy0 - energy1
+       dH = enthalpy0 - enthalpy1
        newRMSstress = sqrt(((stress(1)*stress(1)) + (stress(2)*stress(2)) + (stress(3)*stress(3)))/3)
        dRMSstress = RMSstress - newRMSstress
+
+       enthalpy0 = enthalpy1
+       ! Check exit criteria
+       volume = rcellx*rcelly*rcellx
+       max_stress = zero
+       do i=1,3
+         stress_diff = abs(press + stress(i))/volume
+         if (stress_diff > max_stress) max_stress = stress_diff
+       end do
 
        iter = iter + 1
        reset_iter = reset_iter +1
 
-       if (myid == 0 .and. iprint_gen > 0) then
-           write (io_lun, 4) en_conv*dE, en_units(energy_units)
+       if (myid == 0 .and. iprint_MD > 0) then
+           write (io_lun, 4) en_conv*dH, en_units(energy_units)
            write (io_lun, 5) dRMSstress, "Ha"
+           write(io_lun,'(4x,"Change in stress: ",f15.8," ",a2)') max_stress, &
+                 en_units(energy_units)
        end if
-
-       energy0 = energy1
-
-       ! Check exit criteria
 
        ! First exit is if too many steps have been taken. Default is 50.
        if (iter > MDn_steps) then
@@ -1845,11 +1867,13 @@ end subroutine write_md_data
 
        ! Second exit is if the desired energy tolerence has ben reached
        ! Will replace with stress tolerance when more reliable
-       if (abs(dE)<cell_en_tol) then
+       if (abs(dH)<enthalpy_tolerance .and. max_stress < cell_stress_tol) then
           done = .true.
           if (myid == 0 .and. iprint_gen > 0) &
-               write (io_lun, fmt='(4x,"Energy change below threshold: ",f20.10)') &
-                     max
+               write (io_lun, fmt='(4x,"Enthalpy change below threshold: ",f20.10)') &
+                     dH
+               write (io_lun, fmt='(4x,"Stress change below threshold:   ",f20.10)') &
+                     max_stress
        end if
 
        call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
@@ -1869,7 +1893,7 @@ end subroutine write_md_data
 2   format(4x,'Welcome to cell_cg_run. Doing ',i4,&
            ' steps with tolerance of ',f12.5,a2)
 3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
-4   format(4x,'Energy change: ',f15.8,' ',a2)
+4   format(4x,'Enthalpy change: ',f15.8,' ',a2)
 5   format(4x,'RMS Stress change: ',f15.8,' ',a2)
 
   end subroutine cell_cg_run
@@ -1984,10 +2008,12 @@ end subroutine write_md_data
                              y_atom_cell, z_atom_cell, id_glob,    &
                              atom_coord, area_general, iprint_MD,  &
                              IPRINT_TIME_THRES1, flag_MDold,       &
-                             cell_en_tol, rcellx, rcelly, rcellz
+                             cell_en_tol, cell_stress_tol,         &
+                             rcellx, rcelly, rcellz
     use group_module,  only: parts
     use minimise,      only: get_E_and_F
-    use move_atoms,    only: safemin, safemin2, safemin_cell
+    use move_atoms,    only: safemin, safemin2, safemin_cell, enthalpy, &
+                             enthalpy_tolerance
     use GenComms,      only: inode, ionode
     use GenBlas,       only: dot
     use force_module,  only: tot_force, stress
@@ -1995,8 +2021,9 @@ end subroutine write_md_data
                              check_stop, write_xsf
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use timer_module
-    use store_matrix,  ONLY: dump_InfoMatGlobal, dump_pos_and_matrices
-    use md_control,    only: flag_write_xsf
+    use store_matrix,  only: dump_InfoMatGlobal, dump_pos_and_matrices
+    use md_control,    only: flag_write_xsf, target_pressure, &
+                             fac_HaBohr32GPa
 
     implicit none
 
@@ -2006,7 +2033,8 @@ end subroutine write_md_data
     real(double) :: total_energy
 
     ! Local variables for ionic relaxation
-    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma,gg1
+    real(double)   :: energy0, energy1, max, g0, dE, gg, ggold, gamma,gg1, &
+                      enthalpy0, enthalpy1, dH, press
     integer        :: i,j,k,iter,length, jj, lun, stat
     logical        :: done_ions, done_cell
     type(cq_timer) :: tmr_l_iter
@@ -2018,7 +2046,7 @@ end subroutine write_md_data
     real(double) :: new_rcellx, new_rcelly, new_rcellz, search_dir_x, &
                     search_dir_y, search_dir_z, stressx, stressy, stressz, &
                     RMSstress, newRMSstress, dRMSstress, search_dir_mean, &
-                    mean_stress, energy2
+                    mean_stress, energy2, volume, stress_diff, max_stress
     integer      :: iter_cell
 
 
@@ -2044,8 +2072,11 @@ end subroutine write_md_data
     done_ions = .false.
     done_cell = .false.
     length = 3 * ni_in_cell
-    if (inode==ionode .and. iprint_gen > 0) &
-      write (io_lun, 2) MDn_steps, MDcgtol
+    if (inode==ionode .and. iprint_gen > 0) then
+      write(io_lun,'(4x,"Welcome to cg_run. Doing ",i4," steps")') MDn_steps
+      write(io_lun,'(4x,"Force tolerance:    ",f20.10)') MDcgtol
+      write(io_lun,'(4x,"Enthalpy tolerance: ",f20.10)') enthalpy_tolerance
+    end if
     energy0 = total_energy
     energy1 = zero
     energy2 = zero
@@ -2059,6 +2090,11 @@ end subroutine write_md_data
      write (io_lun, fmt='(/4x,"Starting full cell optimisation"/)')
      write(io_lun,*)  "Initial cell dims", rcellx, rcelly, rcellz
    end if
+
+    press = target_pressure/fac_HaBohr32GPa
+    enthalpy0 = enthalpy(energy0, press)
+    enthalpy1 = enthalpy0
+    dH = zero
 
     iter_cell = 1
     ! Cell loop
@@ -2126,10 +2162,10 @@ end subroutine write_md_data
                        energy1, fixed_potential, vary_mu, energy1)
         end if
         ! Output positions
-        if (inode==ionode .and. iprint_gen>1) then
+        if (inode==ionode .and. iprint_gen > 1) then
+          write(io_lun,'(4x,a4,a15)') "Atom", "Position"
           do i = 1, ni_in_cell
-            write (io_lun, 1) i, atom_coord(1,i), atom_coord(2,i), &
-                              atom_coord(3,i)
+            write(io_lun,'(4x,i8,3f15.8)') i,atom_coord(:,i)
           end do
         end if
         call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
@@ -2166,35 +2202,18 @@ end subroutine write_md_data
         end if
 
         call dump_pos_and_matrices
-         
         call stop_print_timer(tmr_l_iter, "a CG iteration", IPRINT_TIME_THRES1)
         if (.not. done_ions) call check_stop(done_ions, iter)
       end do ! ionic loop
 
-      stressx = -stress(1)
-      stressy = -stress(2)
-      stressz = -stress(3)
+      enthalpy0 = enthalpy(energy0, press)
+      volume = rcellx*rcelly*rcellz
+      stressx = -stress(1)/volume
+      stressy = -stress(2)/volume
+      stressz = -stress(3)/volume
       mean_stress = (stressx + stressy + stressz)/3
       RMSstress = sqrt(((stressx*stressx) + (stressy*stressy) + (stressz*stressz))/3)
 
-      ! call get_gamma_cell_cg(ggold, gg, gamma, stressx, stressy, stressz)
-      ! ! if (myid == 0 .and. iprint_gen > 0) &
-      ! !     write(io_lun, 3) iter, gamma
-
-      ! if (inode == ionode .and. iprint_MD > 2) &
-      !      write (io_lun,*) ' CHECK :: energy residual = ', &
-      !                         dE
-      ! if (inode == ionode .and. iprint_MD > 2) &
-      !      write (io_lun,*) ' CHECK :: gamma = ', gamma
-
-      ! if (CGreset) then
-      !    if (gamma > one .or. reset_iter > length) then
-      !       if (inode == ionode .and. iprint_gen > 0) &
-      !            write(io_lun,*) ' CG direction is reset to steepest descents! '
-      !       gamma = zero
-      !       reset_iter = 0
-      !    end if
-      ! end if
       gamma = zero ! steepest descent only for cell iteration
       if (inode == ionode .and. iprint_gen > 0) &
         write (io_lun, fmt='(/4x,"Lattice vector relaxation iteration: ",i5)') iter_cell
@@ -2206,9 +2225,9 @@ end subroutine write_md_data
       ! if (leqi(cell_constraint_flag, 'volume')) then
       !   search_dir_mean = gamma*search_dir_mean + mean_stress
       ! else
-        search_dir_x = gamma*search_dir_x + stressx
-        search_dir_y = gamma*search_dir_y + stressy
-        search_dir_z = gamma*search_dir_z + stressz
+      search_dir_x = gamma*search_dir_x + stressx - press
+      search_dir_y = gamma*search_dir_y + stressy - press
+      search_dir_z = gamma*search_dir_z + stressz - press
       ! end if
 
       new_rcellx = rcellx
@@ -2218,31 +2237,43 @@ end subroutine write_md_data
       ! Minimise in this direction. Constraint information is also used within
       ! safemin_cell. Look in move_atoms.module.f90 for further information.
       call safemin_cell(new_rcellx, new_rcelly, new_rcellz, search_dir_x, &
-                        search_dir_y, search_dir_z, energy0, energy1, &
-                        fixed_potential, vary_mu, energy1, search_dir_mean)
+                        search_dir_y, search_dir_z, search_dir_mean, press, &
+                        enthalpy0, enthalpy1, fixed_potential, vary_mu)
       ! Output positions to UpdatedAtoms.dat
-      if (inode==ionode .and. iprint_gen>1) then
+      if (inode==ionode .and. iprint_gen > 1) then
+        write(io_lun,'(4x,a4,a15)') "Atom", "Position"
         do i = 1, ni_in_cell
-          write (io_lun, 1) i, atom_coord(1,i), atom_coord(2,i), &
-                            atom_coord(3,i)
+          write(io_lun,'(4x,i8,3f15.8)') i,atom_coord(:,i)
         end do
       end if
       call write_atomic_positions("UpdatedAtoms.dat", trim(pdb_template))
 
       ! Analyse Stresses and energies
-      dE = energy0 - energy1
+      dH = enthalpy0 - enthalpy1
       newRMSstress = sqrt(((stress(1)*stress(1)) + (stress(2)*stress(2)) &
                      + (stress(3)*stress(3)))/3)
       dRMSstress = RMSstress - newRMSstress
 
+      volume = rcellx*rcelly*rcellx
+      max_stress = zero
+      do i=1,3
+        stress_diff = abs(press + stress(i))/volume
+        if (stress_diff > max_stress) max_stress = stress_diff
+      end do
+
       iter_cell = iter_cell + 1
 
       if (inode==ionode .and. iprint_gen>0) then
-        write (io_lun, 8) en_conv*dE, en_units(energy_units)
-        write (io_lun, 9) dRMSstress, "Ha"
+        write(io_lun,'(4x,"Enthalpy change:   ",f15.8,a2)') en_conv*dH, &
+                                                             en_units(energy_units)
+        write(io_lun,'(4x,"Max Stress change: ",f15.8,a2)') max_stress, &
+                                                             en_units(energy_units)
+        write(io_lun,'(4x,"RMS Stress change: ",f15.8,a2)') dRMSstress, &
+                                                             en_units(energy_units)
       end if
 
       energy0 = energy1
+      enthalpy0 = enthalpy1
 
       ! Check exit criteria
       ! First exit is if too many steps have been taken. Default is 50.
@@ -2255,13 +2286,17 @@ end subroutine write_md_data
       ! we can assume the ionic positions are correct, THEN check cell
       ! convergence
         if (abs(max) < MDcgtol) then
-          if (abs(dE)<cell_en_tol) then
+          if (abs(dH)<enthalpy_tolerance .and. max_stress < cell_stress_tol) then
             done_cell = .true.
             if (inode==ionode) then
               write (io_lun, &
                 fmt='(4x,"Maximum force below threshold: ",f12.5)') max
               write (io_lun, &
-                fmt='(4x,"Energy change below threshold: ",f20.10)') dE*en_conv
+                fmt='(4x,"Enthalpy change below threshold: ",f20.10)') &
+                  enthalpy_tolerance*enthalpy_tolerance
+              write(io_lun, &
+                fmt='(4x,"Stress change below threshold:   ",f20.10)') &
+                  max_stress
             end if
           end if
         end if
@@ -2271,7 +2306,7 @@ end subroutine write_md_data
     end do
 
    if (inode == ionode .and. iprint_gen > 0) then
-     write (io_lun, fmt='(/4x,"Finished full cell optimisation"/)')
+     write(io_lun, fmt='(/4x,"Finished full cell optimisation"/)')
      write(io_lun,*)  "Final cell dims", rcellx, rcelly, rcellz
    end if
 
@@ -2285,16 +2320,11 @@ end subroutine write_md_data
       call cq_abort("Error deallocating cg in control: ", ni_in_cell,stat)
     call reg_dealloc_mem(area_general, 6*ni_in_cell, type_dbl)
 
-  1   format(4x,'Atom ',i8,' Position ',3f15.8)
-  2   format(4x,'Welcome to cg_run. Doing ',i4,&
-         ' steps with tolerance of ',f8.4,' ev/A')
   3   format(4x,'*** CG step ',i4,' Gamma: ',f14.8)
-  4   format(4x,'Energy change: ',f15.8,' ',a2)
+  4   format(4x,'Enthalpy change: ',f15.8,' ',a2)
   5   format(4x,'Force Residual: ',f15.10,' ',a2,'/',a2)
   6   format(4x,'Maximum force component: ',f15.8,' ',a2,'/',a2)
   7   format(4x,3f15.8)
-  8   format(4x,'Energy change: ',f15.8,' ',a2)
-  9   format(4x,'RMS Stress change: ',f15.8,' ',a2)
 
   end subroutine full_cg_run_double_loop
 
@@ -2335,7 +2365,7 @@ end subroutine write_md_data
                              enthalpy_tolerance
     use GenComms,      only: inode, ionode
     use GenBlas,       only: dot
-    use force_module,  only: tot_force
+    use force_module,  only: tot_force, stress
     use io_module,     only: write_atomic_positions, pdb_template, &
                              check_stop, write_xsf
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
@@ -2466,7 +2496,7 @@ end subroutine write_md_data
       ! Analyse forces
       g0 = dot(length, force, 1, force, 1)
       max = zero
-      do i=1,ni_in_cell+1
+      do i=1,ni_in_cell
         do k=1,3
           if (abs(tot_force(k,i)) > max) max = abs(tot_force(k,i))
         end do
@@ -2484,6 +2514,7 @@ end subroutine write_md_data
             en_conv*dH, en_units(energy_units)
           write(io_lun,'(4x,"Enthalpy tolerance: ",f20.10)') &
             enthalpy_tolerance
+          write(io_lun,'(4x,"Stress:             ",3f10.6)') stress
       end if
 
       enthalpy0 = enthalpy1

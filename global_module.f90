@@ -136,6 +136,8 @@
 !!    Added a flag for orbital angular momentum resolved PDOS
 !!   2018/10/22 14:25 dave & jsb
 !!    Adding (l,m)-projection for PDOS
+!!   2019/02/28 zamaan
+!!    Added enthalpy and stress tolerances for cell optimisation
 !!  SOURCE
 !!
 module global_module
@@ -184,7 +186,7 @@ module global_module
   ! specify sim cell dims/ratios of dims to be held constant.
   character(len=20), save :: cell_constraint_flag
   ! Termination condition to exit cell_cg_run
-  real(double) :: cell_en_tol
+  real(double) :: cell_en_tol, cell_stress_tol
 
 
   ! Logical flags controlling run
