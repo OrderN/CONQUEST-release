@@ -15,6 +15,9 @@ module write
          "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac", "Th", &
          "Pa", "U ", "Np", "Pu", "Am", "Cm", "Bk", "Cf", "Es", "Fm", &
          "Md", "No", "Lr"/)
+
+  character(len=132), dimension(:), allocatable :: hamann_input_array
+  
 contains
 
   subroutine write_header(val)
@@ -41,6 +44,13 @@ contains
        open(unit=lun, file=filename)
        ! Tag preamble
        write(lun,fmt='("<preamble>")')
+       write(lun,fmt='("<Conquest_pseudopotential_info>")')
+       write(lun,fmt='("")') ! Type - Hamann ONCV or Siesta TM
+       write(lun,fmt='("")') ! Some PS identifier?
+       write(lun,fmt='("")') ! Core radii
+       write(lun,fmt='("")') ! Date of generation, version of PAO code
+       write(lun,fmt='("")') ! XC functional
+       write(lun,fmt='("</Conquest_pseudopotential_info>")')
        write(lun,fmt='("<Conquest_basis_specs>")')
        ! Give XC functional and seet functional label for later
        select case(flag_functional_type(i_species))
@@ -262,5 +272,5 @@ contains
           '(/4x,"Code compiled on: ",a,/10x,"Version comment: ",/6x,a//)') &
          datestr, commentver
   end subroutine write_banner
-  
+
 end module write

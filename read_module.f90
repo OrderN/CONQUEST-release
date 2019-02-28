@@ -544,14 +544,18 @@ contains
     use radial_xc, ONLY: flag_functional_type, init_xc, functional_lda_pz81, functional_gga_pbe96, &
          functional_description
     use global_module, ONLY: flag_pcc_global
+    use write, ONLY: hamann_input_array
     
     implicit none
 
     integer :: i_species, lun, z, nc, nv, iexc, i_shell, en, ell, icmod, i, j, zeta, ios, n_nl_proj
+    integer :: input_lines
     real(double) :: fill, zval
     character(len=80) :: a
     character(len=2) :: sym
     character(len=4) :: file_format
+    character(len=132) :: line
+    logical :: done
 
     allocate(pseudo(n_species))
     flag_pcc_global = .false.
@@ -561,6 +565,31 @@ contains
        open(unit=lun, file=pseudo_file_name(i_species), status='old', iostat=ios)
        if ( ios > 0 ) call cq_abort('Error opening Hamann input file: '//pseudo_file_name(i_species))
        pseudo(i_species)%filename = pseudo_file_name(i_species)
+       ! Load file into array
+       input_lines = 0
+       done = .false.
+       do while(.NOT.done)
+          read(lun,fmt='(a)',iostat=ios) line
+          if(ios<0) then
+             done = .true.
+             exit
+          end if
+          input_lines = input_lines+1
+       end do
+       call io_close(lun)
+       allocate(hamann_input_array(input_lines))
+       done = .false.
+       input_lines = 1
+       do while(.NOT.done)
+          read(lun,fmt='(a)',iostat=ios) line
+          if(ios<0) then
+             done = .true.
+             exit
+          end if
+          hamann_input_array(input_lines) = line
+          input_lines = input_lines + 1
+       end do
+       call io_close(lun)
        ! Basic element information
        a = get_hamann_line(lun)
        read(a,*) sym,z,nc,nv,iexc,file_format
