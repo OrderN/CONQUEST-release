@@ -2664,8 +2664,13 @@ contains
              gaussian_height = 0.1_double
           end if
           gaussian_width = two * sqrt(-log(gaussian_height)) * kT
-          incEf(spin) = gaussian_width / &
-               (two * real(iMethfessel_Paxton, double) * finess)
+          if (iMethfessel_Paxton == 0) then   !! prevents division by zero using default iMethfessel value
+             incEf(spin) = gaussian_width / &
+                  (two * real(1.0, double) * finess)
+          else 
+             incEf(spin) = gaussian_width / &
+                  (two * real(iMethfessel_Paxton, double) * finess)
+          end if
           highEf(spin) = lowEf(spin) + incEf(spin)
           call occupy(occ, eig, highEf, highElec, nbands, nkp, spin=spin)
           do while (highElec(spin) < electrons(spin))
