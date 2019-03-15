@@ -2666,7 +2666,7 @@ contains
           gaussian_width = two * sqrt(-log(gaussian_height)) * kT
           if (iMethfessel_Paxton < 2) then   !! prevents division by zero using default iMethfessel value
              incEf(spin) = gaussian_width / &
-                  (two * 1  * finess)
+                  (two * finess)
           else 
              incEf(spin) = gaussian_width / &
                   (two * real(iMethfessel_Paxton, double) * finess)
