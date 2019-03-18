@@ -463,6 +463,8 @@ contains
   !!    Added optional normalization of each eigenstate of PDOS
   !!   2018/10/22 14:28 dave & jsb
   !!    Adding (l,m)-projection for pDOS
+  !!   2019/03/18 17:00 nakata
+  !!    Added wf_self_con for accumulate_DOS
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -881,7 +883,7 @@ contains
                 kp = pg_kpoints(ng, i)
                 call DistributeSC_to_ref(DistribH, ng, z(:,:,spin), &
                      expH(:,:,spin))
-                if(flag_write_DOS) then
+                if(wf_self_con.AND.flag_write_DOS) then
                    if(flag_write_projected_DOS) then
                       if (flag_normalise_pDOS) then
                          call get_weight_pDOS(expH(:,:,spin),w_pDOS)
