@@ -3033,7 +3033,6 @@ second:   do
                 end do
              else
                 write(fmt_DOS,*) Nangmom+2 ! NB this is number of columns in format
-                write(*,*) 'N cols: ',Nangmom+2
                 fmt_DOS = '('//trim(adjustl(fmt_DOS))//'f17.10)'
                 do i=1,n_DOS
                    write(lun,fmt_DOS) thisE,pDOS(i,iprim,1),(pDOS_angmom(i,iprim,j,1,1),j=1,Nangmom)
