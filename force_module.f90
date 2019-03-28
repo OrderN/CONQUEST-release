@@ -72,6 +72,9 @@
 !!    added target attribute to stress
 !!   2018/01/24 11:45 JST dave
 !!    Added NA integral & projector approach to forces (flag_neutral_atom_projector)
+!!   2019/03/28 zamaan
+!!    Changed stress 3-vectors to 3x3 matrices. Modified calculations to
+!!    include off-diagonal elements.
 !!  SOURCE
 !!
 module force_module
@@ -91,9 +94,10 @@ module force_module
   real(double), dimension(:,:), allocatable :: s_pulay_for, phi_pulay_for
 
   ! On-site part of stress tensor as Conquest uses orthorhombic cells (easily extended)
-  real(double), dimension(3), target :: stress
-  real(double), dimension(3) :: SP_stress, KE_stress, NL_stress, PP_stress, GPV_stress, &
-       XC_stress, nonSCF_stress, pcc_stress, NA_stress
+  real(double), dimension(3,3), target :: stress
+  real(double), dimension(3,3) :: SP_stress, KE_stress, NL_stress, &
+                                  PP_stress, GPV_stress, XC_stress, &
+                                  nonSCF_stress, pcc_stress, NA_stress
 
   ! Useful parameters for selecting force calculations in NL part
   integer, parameter :: HF = 1
@@ -258,7 +262,8 @@ contains
     integer, optional :: level 
 
     ! Local variables
-    integer        :: i, j, ii, stat, max_atom, max_compt, ispin, direction
+    integer        :: i, j, ii, stat, max_atom, max_compt, ispin, &
+                      direction, dir1, dir2
     real(double)   :: max_force, volume, scale
     type(cq_timer) :: tmr_l_tmp1
     type(cq_timer) :: backtrace_timer
@@ -348,20 +353,22 @@ contains
     ! Probably wrong to call this GPV; it's really a jacobian term, from the change in the
     ! integration volume element for grid-based integrals
     ! Different definitions for non-SCF and SCF
-    do direction = 1,3
+    do dir1 = 1,3
        if(flag_neutral_atom) then
           if(flag_neutral_atom_projector) then
-             GPV_stress(direction) = hartree_energy_drho ! NA is not done on grid
+             GPV_stress(dir1,dir1) = hartree_energy_drho ! NA is not done on grid
           else
-             GPV_stress(direction) = (hartree_energy_drho + local_ps_energy)
+             GPV_stress(dir1,dir1) = (hartree_energy_drho + local_ps_energy)
           end if
        else
-          GPV_stress(direction) = (hartree_energy_total_rho + local_ps_energy - core_correction) ! core contains 1/V term
+          GPV_stress(dir1,dir1) = (hartree_energy_total_rho + &
+            local_ps_energy - core_correction) ! core contains 1/V term
        end if
        if(flag_self_consistent) then
-          XC_stress(direction) = xc_energy + spin_factor*XC_GGA_stress(direction)
+          XC_stress(dir1,dir1) = xc_energy + &
+            spin_factor*XC_GGA_stress(direction)
        else ! nonSCF XC found later, along with corrections to Hartree
-          XC_stress(direction) = delta_E_xc !xc_energy + spin_factor*XC_GGA_stress(direction)
+          XC_stress(dir1,dir1) = delta_E_xc !xc_energy + spin_factor*XC_GGA_stress(direction)
        end if
     end do    
     WhichPulay  = BothPulay
@@ -568,61 +575,58 @@ contains
     ! We will add PCC and nonSCF stresses even if the flags are not set, as they are
     ! zeroed at the start
     if(flag_neutral_atom) then
-       do direction = 1, 3
-          stress(direction) = KE_stress(direction) + SP_stress(direction) + &
-               PP_stress(direction) + NL_stress(direction) + &
-               GPV_stress(direction) + XC_stress(direction) + &
-               screened_ion_stress(direction) + Hartree_stress(direction) + &
-               loc_HF_stress(direction) +  &
-               pcc_stress(direction) + nonSCF_stress(direction)
-          if(flag_neutral_atom_projector) stress(direction) = stress(direction) + NA_stress(direction)
+       do dir1 = 1, 3
+          do dir2 = 1,3
+             stress(dir1,dir2) = KE_stress(dir1,dir2) + &
+               SP_stress(dir1,dir2) + PP_stress(dir1,dir2) + &
+               NL_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
+               XC_stress(dir1,dir2) + screened_ion_stress(dir1,dir2) + &
+               Hartree_stress(dir1,dir2) + loc_HF_stress(dir1,dir2) +  &
+               pcc_stress(dir1,dir2) + nonSCF_stress(dir1,dir2)
+             if(flag_neutral_atom_projector) stress(dir1,dir2) = &
+                stress(dir1,dir2) + NA_stress(dir1,dir2)
+          end do
        end do
     else
-       do direction = 1, 3
-          stress(direction) = KE_stress(direction) + SP_stress(direction) + &
-               PP_stress(direction) + NL_stress(direction) + &
-               GPV_stress(direction) + XC_stress(direction) + &
-               Ion_Interaction_stress(direction) + Hartree_stress(direction) + &
-               loc_HF_stress(direction) + loc_G_stress(direction) + &
-               pcc_stress(direction) + nonSCF_stress(direction)
+       do dir1 = 1, 3
+          do dir2 = 1, 3
+             stress(dir1,dir2) = KE_stress(dir1,dir2) + &
+               SP_stress(dir1,dir2) + PP_stress(dir1,dir2) + &
+               NL_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
+               XC_stress(dir1,dir2) + Ion_Interaction_stress(dir1,dir2) + &
+               Hartree_stress(dir1,dir2) + loc_HF_stress(dir1,dir2) + &
+               loc_G_stress(dir1,dir2) + pcc_stress(dir1,dir2) + &
+               nonSCF_stress(dir1,dir2)
+          end do
        end do
     end if
     if (inode == ionode) then       
        write (io_lun,fmt='(/4x,"                  ",3a15)') "X","Y","Z"
        write(io_lun,fmt='(4x,"Stress contributions:")')
-       if (iprint_MD > 2) then
-          write (io_lun,fmt='(4x,"K.E. stress:      ",3f15.8,a3)') KE_stress(1:3), en_units(energy_units)
-          write (io_lun,fmt='(4x,"S-Pulay stress:   ",3f15.8,a3)') SP_stress(1:3), en_units(energy_units)
-          write (io_lun,fmt='(4x,"Phi-Pulay stress: ",3f15.8,a3)') PP_stress(1:3), en_units(energy_units)
-          write (io_lun,fmt='(4x,"Local stress:     ",3f15.8,a3)') loc_HF_stress(1:3), en_units(energy_units)
-          if(.NOT.flag_neutral_atom) &
-               write (io_lun,fmt='(4x,"Local G stress:   ",3f15.8,a3)') loc_G_stress(1:3), en_units(energy_units)
-          write (io_lun,fmt='(4x,"Non-local stress: ",3f15.8,a3)') NL_stress(1:3), en_units(energy_units)
-          write (io_lun,fmt='(4x,"Jacobian stress:  ",3f15.8,a3)') GPV_stress(1:3), en_units(energy_units)
-          write (io_lun,fmt='(4x,"XC stress:        ",3f15.8,a3)') XC_stress(1:3), en_units(energy_units)
-          if(flag_neutral_atom) then
-             write (io_lun,fmt='(4x,"Ion-Ion stress:   ",3f15.8,a3)') screened_ion_stress(1:3), en_units(energy_units)
-             if(flag_neutral_atom_projector) &
-                  write (io_lun,fmt='(4x,"Neutral atom stress: ",f12.8,2f15.8,a3)') NA_stress(1:3), en_units(energy_units)
-
-          else
-             write (io_lun,fmt='(4x,"Ion-Ion stress:   ",3f15.8,a3)') ion_interaction_stress(1:3), en_units(energy_units)
-          end if
-          write (io_lun,fmt='(4x,"Hartree stress:   ",3f15.8,a3)') Hartree_stress(1:3), en_units(energy_units)
-          if (flag_pcc_global) then
-             write (io_lun,fmt='(4x,"PCC stress:       ",3f15.8,a3)') pcc_stress(1:3), en_units(energy_units)
-          end if
-          if (.not. flag_self_consistent) then
-             write (io_lun,fmt='(4x,"non-SCF stress:   ",3f15.8,a3)') nonSCF_stress(1:3), en_units(energy_units)
-          end if
-       end if
-       write (io_lun,fmt='(/4x,"Total stress:     ", 3f15.8,a3)') stress(1:3), en_units(energy_units)
-       volume = rcellx*rcelly*rcellz
-       ! Include Ha/cubic bohr to GPa conversion and 1/volume factor
-       ! Factor of 1e21 comes from Ang to m (1e30) and Pa to GPa (1e-9) 
-       scale = -(HaToeV*eVToJ*1e21_double)/(volume*BohrToAng*BohrToAng*BohrToAng)
-       write(io_lun,fmt='(/4x,"Total pressure:   ",3f15.8," GPa"/)') stress(1)*scale,stress(2)*scale,stress(3)*scale
     end if
+    call print_stress("K.E. stress:      ", KE_stress, 3)
+    call print_stress("S-Pulay stress:   ", SP_stress, 3)
+    call print_stress("Phi-Pulay stress: ", PP_stress, 3)
+    call print_stress("Local stress:     ", loc_HF_stress, 3)
+    call print_stress("Local G stress:   ", loc_G_stress, 3)
+    call print_stress("Non-local stress: ", NL_stress, 3)
+    call print_stress("Jacobian stress:  ", GPV_stress, 3)
+    call print_stress("XC stress:        ", XC_stress, 3)
+    if (flag_neutral_atom) then
+      call print_stress("Ion-ion stress:   ", screened_ion_stress, 3)
+      call print_stress("N.A. stress:      ", NA_stress, 3)
+    else
+      call print_stress("Ion-ion stress:   ", ion_interaction_stress, 3)
+    end if
+    call print_stress("Hartree stress:   ", Hartree_stress, 3)
+    call print_stress("PCC stress:       ", pcc_stress, 3)
+    call print_stress("non-SCF stress:   ", nonSCF_stress, 3)
+    call print_stress("Total stress:     ", stress, 0)
+    volume = rcellx*rcelly*rcellz
+    ! Include Ha/cubic bohr to GPa conversion and 1/volume factor
+    ! Factor of 1e21 comes from Ang to m (1e30) and Pa to GPa (1e-9) 
+    scale = -(HaToeV*eVToJ*1e21_double)/(volume*BohrToAng*BohrToAng*BohrToAng)
+    call print_stress("Total pressure:   ", stress*scale, 0)
 
     call my_barrier()
     if(iprint_MD>3) deallocate(s_pulay_for,phi_pulay_for)
@@ -3757,5 +3761,52 @@ contains
     return
   end subroutine get_pcc_force
   !*****
+
+!!****f* force_module/print_stress *
+!!
+!!  NAME 
+!!   print_stress
+!!  PURPOSE
+!!   Print the stress or stress contribution, format depending on print 
+!!   level and whether the full tensor was computed
+!!  AUTHOR
+!!   Zamaan Raza
+!!  CREATION DATE
+!!   28 March 2019
+!!  MODIFICATION HISTORY
+!!  
+!!  SOURCE
+!!  
+subroutine print_stress(label, str_mat, print_level)
+
+  use datatypes
+  use numbers
+  use units
+  use GenComms,       only: inode, ionode
+  use global_module,  only: iprint_MD, flag_full_stress
+
+  ! Passed variables
+  character(*), intent(in)                  :: label
+  real(double), dimension(3,3), intent(in)  :: str_mat
+  integer, intent(in)                       :: print_level
+
+  ! local variables
+  character(20) :: fmt = '(4x,a18,3f15.8,a3)'
+  character(20) :: black = ''
+
+  if (inode==ionode) then
+    if (iprint_MD >= print_level) then
+      if (flag_full_stress) then
+        write(io_lun,fmt=fmt) label, str_mat(1,:), en_units(energy_units)
+        write(io_lun,fmt=fmt) blank, str_mat(2,:), blank
+        write(io_lun,fmt=fmt) blank, str_mat(3,:), blank
+      else
+        write(io_lun,fmt=fmt) label, str_mat(1,1), str_mat(2,2), &
+                              str_mat(3,3), en_units(energy_units)
+      end if
+    end if
+  end if
+end subroutine print_stress
+!!*****
 
 end module force_module
