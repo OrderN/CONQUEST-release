@@ -4235,17 +4235,21 @@ contains
     real(double), intent(in)                  :: k
 
     ! local variables
-    integer       :: i, j
-    real(double)  :: d, i_glob
+    integer       :: i, j, i_glob
+    real(double)  :: d
 
     if (inode==ionode .and. iprint_MD > 2) &
       write(io_lun,'(2x,a)') "move_atoms/propagate_vector"
 
     ! config_new = config + k*force
-    do i=1,ni_in_cell+1
-      i_glob = id_glob(i)
+    do i=1,3
+      config_new(j,1) = config(j,1) + k*force(j,1)
+    end do
+
+    do i=2,ni_in_cell+1
+      i_glob = id_glob(i-1)
       do j=1,3
-        config_new(j,i) = config(j,i) + k*force(j,i_glob)
+        config_new(j,i) = config(j,i) + k*force(j,i_glob+1)
       end do
     end do
 
