@@ -1262,6 +1262,9 @@ contains
   !!    so that uniform volume scaling of cell doesn't generate atom position changes
   !!   2018/01/22 tsuyoshi (with dave)
   !!    Updated to use new matrix rebuilding following atom movement
+  !!   2019/02/28 zamaan
+  !!    Modified to minimise enthalpy instead of energy, relax to target
+  !!    pressure
   !! SOURCE
 
   subroutine safemin_cell(start_rcellx, start_rcelly, start_rcellz, &
@@ -4221,7 +4224,7 @@ contains
   subroutine propagate_vector(force, config, config_new, cell_ref, k)
 
     use GenComms,      only: inode, ionode
-    use global_module, only: iprint_MD, ni_in_cell
+    use global_module, only: iprint_MD, ni_in_cell, id_glob
 
     implicit none
 
@@ -4233,15 +4236,16 @@ contains
 
     ! local variables
     integer       :: i, j
-    real(double)  :: d
+    real(double)  :: d, i_glob
 
     if (inode==ionode .and. iprint_MD > 2) &
       write(io_lun,'(2x,a)') "move_atoms/propagate_vector"
 
     ! config_new = config + k*force
     do i=1,ni_in_cell+1
+      i_glob = id_glob(i)
       do j=1,3
-        config_new(j,i) = config(j,i) + k*force(j,i)
+        config_new(j,i) = config(j,i) + k*force(j,i_glob)
       end do
     end do
 
