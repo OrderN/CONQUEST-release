@@ -4247,9 +4247,10 @@ contains
     end do
 
     do i=2,ni_in_cell+1
-      i_glob = id_glob(i-1)
+!      i_glob = id_glob(i-1)
       do j=1,3
-        config_new(j,i) = config(j,i) + k*force(j,i_glob+1)
+!        config_new(j,i) = config(j,i) + k*force(j,i_glob+1)
+        config_new(j,i) = config(j,i) + k*force(j,i)
       end do
     end do
 
@@ -4302,7 +4303,7 @@ contains
     use GenComms,      only: inode, ionode
     use global_module, only: x_atom_cell, y_atom_cell, z_atom_cell, &
                              rcellx, rcelly, rcellz, ni_in_cell, &
-                             iprint_MD
+                             iprint_MD, id_glob_inv
 
     implicit none
 
@@ -4312,7 +4313,7 @@ contains
     real(double), intent(out) :: orcellx, orcelly, orcellz
 
     ! local variables
-    integer       :: i
+    integer       :: i, i_global
     real(double)  :: dx, dy, dz
 
     if (inode==ionode .and. iprint_MD > 2) &
@@ -4326,10 +4327,11 @@ contains
     rcellx = (one + config(1,1))*cell_ref(1)
     rcelly = (one + config(2,1))*cell_ref(2)
     rcellz = (one + config(3,1))*cell_ref(3)
-    do i=1,ni_in_cell
-      x_atom_cell(i) = config(1,i+1)*rcellx
-      y_atom_cell(i) = config(2,i+1)*rcelly
-      z_atom_cell(i) = config(3,i+1)*rcellz
+    do i_global=1,ni_in_cell
+      i = id_glob_inv(i_global) 
+      x_atom_cell(i) = config(1,i_global+1)*rcellx
+      y_atom_cell(i) = config(2,i_global+1)*rcelly
+      z_atom_cell(i) = config(3,i_global+1)*rcellz
     end do
 
     call rescale_grids_and_density(orcellx, orcelly, orcellz)
@@ -4365,7 +4367,7 @@ contains
     use numbers
     use global_module, only: x_atom_cell, y_atom_cell, z_atom_cell, &
                              rcellx, rcelly, rcellz, ni_in_cell, &
-                             iprint_MD
+                             iprint_MD, id_glob
     use GenComms,      only: inode, ionode
     use force_module,  only: stress, tot_force
 
@@ -4377,7 +4379,7 @@ contains
     real(double), intent(in)                  :: target_press
 
     ! local variables
-    integer                     :: i, j
+    integer                     :: i, j, i_global
     real(double)                :: vol
     real(double), dimension(3)  :: one_plus_strain
 
@@ -4392,13 +4394,14 @@ contains
       config(i,1) = one_plus_strain(i) - one
       force(i,1) = -(stress(i) + target_press*vol)/one_plus_strain(i)
     end do
-    do i=2,ni_in_cell+1
-      config(1,i) = x_atom_cell(i-1)/rcellx
-      config(2,i) = y_atom_cell(i-1)/rcelly
-      config(3,i) = z_atom_cell(i-1)/rcellz
-      force(1,i) = tot_force(1,i-1)*rcellx
-      force(2,i) = tot_force(2,i-1)*rcelly
-      force(3,i) = tot_force(3,i-1)*rcellz
+    do i=1,ni_in_cell
+      i_global = id_glob(i)
+      config(1,i_global+1) = x_atom_cell(i)/rcellx
+      config(2,i_global+1) = y_atom_cell(i)/rcelly
+      config(3,i_global+1) = z_atom_cell(i)/rcellz
+      force(1,i+1) = tot_force(1,i)*rcellx
+      force(2,i+1) = tot_force(2,i)*rcelly
+      force(3,i+1) = tot_force(3,i)*rcellz
 !      force(1,i) = tot_force(1,i-1)/rcellx
 !      force(2,i) = tot_force(2,i-1)/rcelly
 !      force(3,i) = tot_force(3,i-1)/rcellz
