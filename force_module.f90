@@ -775,6 +775,8 @@ contains
   !!    - Changing location of diagon flag from DiagModule to global and name to flag_diagonalisation
   !!   2017/03/28 dave
   !!    Small bug fix on order of deallocation of matM12atomf
+  !!   2019/04/01 zamaan
+  !!    Added calculations for off-diagonal stress tensor elements
   !!  SOURCE
   !!
   subroutine pulay_force(p_force, KE_force, fixed_potential, vary_mu,  &
@@ -804,7 +806,10 @@ contains
                                            blips, PAOs, sf, atomf,   &
                                            flag_onsite_blip_ana,     &
                                            nspin, spin_factor,       &
-                                           flag_analytic_blip_int, id_glob, species_glob, flag_diagonalisation
+                                           flag_analytic_blip_int,   &
+                                           id_glob, species_glob,    &
+                                           flag_diagonalisation,     &
+                                           flag_full_stress
     use set_bucket_module,           only: rem_bucket, atomf_atomf_rem
     use blip_grid_transform_module,  only: blip_to_support_new,      &
                                            blip_to_grad_new
@@ -853,7 +858,7 @@ contains
     logical      :: test
     integer      :: direction, count, nb, na, nsf1, point, place, i, &
                     neigh, ist, wheremat, jsf, gcspart, tmp_fn, n1,  &
-                    n2, this_nsf, spin, tmp_fn2
+                    n2, this_nsf, spin, tmp_fn2, tmp_fn3, tmp_fn4
     integer :: spec, icall, jpart, ind_part, j_in_halo, pb_len, nab
     integer :: j,jseq,specj,i_in_prim,speci, pb_st, nblipsj, nod, nsfj,sends,ierr
     integer :: neigh_global_num, neigh_global_part, neigh_species, neigh_prim, this_nsfi, this_nsfj
@@ -868,7 +873,7 @@ contains
     real(double), allocatable, dimension(:,:,:) :: this_data_K
     real(double), allocatable, dimension(:,:,:) :: this_data_M12
     real(double) :: forS, forKE
-    real(double) :: thisG_dS_dR, thisK_dH_dR, r_str
+    real(double) :: thisG_dS_dR, thisK_dH_dR, r_str_x, r_str_y, r_str_z
 
     ! Workarray for New Version
     !    I am not sure the present way for calculating p_force is the right way.
@@ -884,7 +889,7 @@ contains
     !   with local communication. (I am not sure it is important or not)
     !    --  02/Feb/2001  Tsuyoshi Miyazaki
 
-    integer        :: iprim, np, ni, isf, mat_tmp, mat_tmp2
+    integer        :: iprim, np, ni, isf, mat_tmp, mat_tmp2, mat_tmp3, mat_tmp4
     integer, dimension(nspin) :: matM12atomf
     real(double)   :: matM12_value, matK_value
     type(cq_timer) :: tmr_std_loc
@@ -1136,6 +1141,14 @@ contains
        tmp_fn2 = allocate_temp_fn_on_grid(atomf)
        gridfunctions(tmp_fn2)%griddata = zero
        mat_tmp2 = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
+       if (flag_full_stress) then
+          tmp_fn3 = allocate_temp_fn_on_grid(atomf)
+          tmp_fn4 = allocate_temp_fn_on_grid(atomf)
+          gridfunctions(tmp_fn3)%griddata = zero
+          gridfunctions(tmp_fn4)%griddata = zero
+          mat_tmp3 = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
+          mat_tmp4 = allocate_temp_matrix(aSa_range, 0, atomf, atomf)
+       end if
        !temp_local = allocate_temp_fn_on_grid(atomf) ! Edited SYM 2014/09/01 17:55 
        ! now for each direction in turn
        do direction = 1, 3
@@ -1153,7 +1166,6 @@ contains
                      direction, t1 - t0
           t0 = t1
           ! Now scale the gradient by r
-          call get_r_on_atomfns(direction,tmp_fn,tmp_fn2)
           t1 = mtime()
           if (inode == ionode .and. iprint_MD > 3)&
                write (io_lun, fmt='(10x,"Phi Pulay r_on_supp ",i4," time: ",f12.5)')&
@@ -1162,8 +1174,21 @@ contains
           ! Make matrix elements
           call get_matrix_elements_new(inode-1, rem_bucket(atomf_atomf_rem),&
                                        mat_tmp, H_on_atomfns(1), tmp_fn)
+
+          call get_r_on_atomfns(1,tmp_fn,tmp_fn2)
           call get_matrix_elements_new(inode-1, rem_bucket(atomf_atomf_rem),&
                                        mat_tmp2, H_on_atomfns(1), tmp_fn2)
+         ! zamaan - for off-diagonal stress. Not sure if this is the best way, 
+         ! requires 3 times the memory, but the alternative is an additional 
+         ! outer loop.
+          if (flag_full_stress) then
+            call get_r_on_atomfns(2,tmp_fn,tmp_fn3)
+            call get_r_on_atomfns(3,tmp_fn,tmp_fn4)
+            call get_matrix_elements_new(inode-1, rem_bucket(atomf_atomf_rem),&
+                                         mat_tmp3, H_on_atomfns(1), tmp_fn2)
+            call get_matrix_elements_new(inode-1, rem_bucket(atomf_atomf_rem),&
+                                         mat_tmp4, H_on_atomfns(1), tmp_fn2)
+          end if
           t1 = mtime()
           if (inode == ionode .and. iprint_MD > 3) &
                write (io_lun, fmt='(10x,"Phi Pulay int ",i4," time: ",f12.5)')&
@@ -1183,8 +1208,17 @@ contains
                    do isf = 1, natomf_species(bundle%species(iprim))
                       p_force(direction, i) = p_force(direction, i) - &
                            return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
-                      PP_stress(direction) = PP_stress(direction) - &  
+                      PP_stress(direction,1) = PP_stress(direction,1) - &  
                            return_matrix_value(mat_tmp2, np, ni, 0, 0, isf, isf, 1)
+                      if (flag_full_stress) then
+                        PP_stress(direction,2) = PP_stress(direction,2) - &  
+                             return_matrix_value(mat_tmp3, np, ni, 0, 0, &
+                                                 isf, isf, 1)
+                        PP_stress(direction,3) = PP_stress(direction,3) - &  
+                             return_matrix_value(mat_tmp4, np, ni, 0, 0, isf, isf, 1)
+                      end if
+                      if(iprint_MD>3) phi_pulay_for(direction, i) = phi_pulay_for(direction, i) - &
+                      if(iprint_MD>3) phi_pulay_for(direction, i) = phi_pulay_for(direction, i) - &
                       if(iprint_MD>3) phi_pulay_for(direction, i) = phi_pulay_for(direction, i) - &
                            return_matrix_value(mat_tmp, np, ni, 0, 0, isf, isf, 1)
                    end do ! isf
@@ -1202,6 +1236,12 @@ contains
        call free_temp_fn_on_grid(tmp_fn)
        call free_temp_matrix(mat_tmp2)
        call free_temp_matrix(mat_tmp)
+       if (flag_full_stress) then
+         call free_temp_fn_on_grid(tmp_fn3)
+         call free_temp_fn_on_grid(tmp_fn4)
+         call free_temp_matrix(mat_tmp3)
+         call free_temp_matrix(mat_tmp4)
+       end if
     end if ! if (WhichPulay == BothPulay .OR. WhichPulay == PhiPulay .OR.&
            !  & (WhichPulay == SPulay .AND. flag_basis_set == blips)) then
 
@@ -1219,15 +1259,15 @@ contains
              call SF_to_AtomF_transform(matM12(spin), matM12atomf(spin), spin, Srange)
           enddo
        endif
-       do direction = 1, 3
+       do dir1 = 1, 3
           ! Call assemble to generate dS_ij/dR_kl
           if (flag_basis_set == blips) then
-             call blip_to_grad_new(inode-1, direction, tmp_fn)
+             call blip_to_grad_new(inode-1, dir1, tmp_fn)
              call get_matrix_elements_new(inode-1, rem_bucket(atomf_atomf_rem),&
                   mat_tmp, atomfns, tmp_fn)
              call matrix_scale(minus_one, mat_tmp)
           else if (flag_basis_set == PAOs) then
-             call assemble_deriv_2(direction, aSa_range, mat_tmp, 1)
+             call assemble_deriv_2(dir1, aSa_range, mat_tmp, 1)
           end if
           ! For each primary set atom, we want \sum_j dS_ij G_ij (I think)
           iprim = 0
@@ -1244,13 +1284,9 @@ contains
                       gcspart = &
                            BCS_parts%icover_ibeg(mat(np,aSa_range)%i_part(ist)) + &
                            mat(np,aSa_range)%i_seq(ist) - 1
-                      if(direction==1) then
-                         r_str=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
-                      else if(direction==2) then
-                         r_str=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
-                      else if(direction==3) then
-                         r_str=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
-                      end if
+                      r_str_x=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                      r_str_y=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                      r_str_z=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
                       ! matM12(1) here is just used to work out the
                       ! position in matrix, this position will be
                       ! identical for matM12(nspin), so only matM12(1)
@@ -1272,9 +1308,26 @@ contains
                                ! chain rule in derivatives of K
                                ! respect to phi
                                thisG_dS_dR = two*matM12_value * return_matrix_value(mat_tmp, np, ni, iprim, neigh, jsf, isf)
-                               p_force(direction,i) = p_force(direction,i) + thisG_dS_dR
-                               if(iprint_MD>3) s_pulay_for(direction,i) = s_pulay_for(direction,i) + thisG_dS_dR
-                               SP_stress(direction) = SP_stress(direction) + thisG_dS_dR * r_str
+                               p_force(dir1,i) = p_force(dir1,i) + thisG_dS_dR
+                               if(iprint_MD>3) s_pulay_for(dir1,i) = s_pulay_for(dir1,i) + thisG_dS_dR
+                               if (flag_full_stress) then
+                                 do dir2=1,3
+                                   if (dir2==1) then
+                                     SP_stress(dir1,dir2) = SP_stress(dir1,dir2) + thisG_dS_dR * r_str_x
+                                   else if (dir2==2) then
+                                     SP_stress(dir1,dir2) = SP_stress(dir1,dir2) + thisG_dS_dR * r_str_y
+                                   else if (dir2==3) then
+                                     SP_stress(dir1,dir2) = SP_stress(dir1,dir2) + thisG_dS_dR * r_str_z
+                                   end if
+                                 end do
+                               else
+                                 if (dir1==1) then
+                                   SP_stress(dir1,dir1) = SP_stress(dir1,dir2) + thisG_dS_dR * r_str_x
+                                 else if (dir1==2) then
+                                   SP_stress(dir1,dir1) = SP_stress(dir1,dir2) + thisG_dS_dR * r_str_y
+                                 else if (dir1==3) then
+                                   SP_stress(dir1,dir1) = SP_stress(dir1,dir2) + thisG_dS_dR * r_str_z
+                               end if ! flag_full_stress
                             end do ! jsf
                          end do ! isf
                       end if ! (wheremat /= mat(np,aSa_range)%onsite(ni))
@@ -1285,9 +1338,9 @@ contains
           call stop_timer(tmr_std_matrices)
           t1 = mtime ()
           if (inode == ionode .AND. iprint_MD > 3) &
-               write (io_lun,*) 'S Pulay ', direction, ' time: ', t1 - t0
+               write (io_lun,*) 'S Pulay ', dir1, ' time: ', t1 - t0
           t0 = t1
-       end do ! direction
+       end do ! dir1
 
        if (atomf.ne.sf) then
           do spin = nspin,1,-1 ! Inverse order required
@@ -1305,8 +1358,8 @@ contains
        call gsum(s_pulay_for,3,n_atoms)
        call gsum(phi_pulay_for,3,n_atoms)
     end if
-    call gsum(PP_stress,3)
-    call gsum(SP_stress,3)
+    call gsum(PP_stress,3,3)
+    call gsum(SP_stress,3,3)
     SP_stress = half*SP_stress
     if(flag_basis_set == blips .and. flag_analytic_blip_int) KE_stress = half*KE_stress
     ! NB we do NOT need to halve PP_stress because it is from an integral on the grid
