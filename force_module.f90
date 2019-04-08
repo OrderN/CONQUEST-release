@@ -1033,18 +1033,19 @@ contains
                            - forS!(dir1)
                       KE_force(dir1,bundle%ig_prim(i_in_prim)) = KE_force(dir1,bundle%ig_prim(i_in_prim)) &
                            - forKE!(dir1)
-                      do dir2=1,3
-                        SP_stress(dir1,dir2) = SP_stress(dir1,dir2) - &
-                          forS*dr(dir2)
-                        KE_stress(dir1,dir2) = KE_stress(dir1,dir2) - &
-                          forKE*dr(dir2)
-                      end do
-                      ! if(dir1==1) SP_stress(dir1) = SP_stress(dir1) - forS*dx
-                      ! if(dir1==2) SP_stress(dir1) = SP_stress(dir1) - forS*dy
-                      ! if(dir1==3) SP_stress(dir1) = SP_stress(dir1) - forS*dz
-                      ! if(dir1==1) KE_stress(dir1) = KE_stress(dir1) - forKE*dx
-                      ! if(dir1==2) KE_stress(dir1) = KE_stress(dir1) - forKE*dy
-                      ! if(dir1==3) KE_stress(dir1) = KE_stress(dir1) - forKE*dz
+                      if (flag_full_stress) then
+                        do dir2=1,3
+                          SP_stress(dir1,dir2) = SP_stress(dir1,dir2) - &
+                            forS*dr(dir2)
+                          KE_stress(dir1,dir2) = KE_stress(dir1,dir2) - &
+                            forKE*dr(dir2)
+                        end do
+                      else
+                        SP_stress(dir1,dir1) = SP_stress(dir1,dir1) - &
+                          forS*dr(dir1)
+                        KE_stress(dir1,dir1) = KE_stress(dir1,dir1) - &
+                          forKE*dr(dir1)
+                      end if
                    end do
                    deallocate(this_data_M12,this_data_K)
                 end if
@@ -1072,7 +1073,7 @@ contains
        call my_barrier
        deallocate(nreqs)
        call gsum (KE_force, 3, n_atoms)
-       call gsum(KE_stress, 3)
+       call gsum(KE_stress, 3, 3)
        if(WhichPulay==PhiPulay) p_force = zero
        if(WhichPulay==BothPulay) WhichPulay = PhiPulay ! We've DONE S-pulay above
        if(WhichPulay==SPulay) then
@@ -2003,15 +2004,19 @@ contains
                    r_str(1)=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
                    r_str(2)=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
                    r_str(3)=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
-                   do dir2=1,3
-                     do isf = 1, mat(np,APrange)%ndimj(ist)
-                        do jsf = 1, mat(np,APrange)%ndimi(ni)
-                           thisdAP = return_matrix_value(matdAP(dir1), np, ni, iprim, nab, jsf, isf)
-                           call store_matrix_value(matdAPr(dir1,dir2), np, ni, iprim, nab, jsf, isf, r_str(dir2)*thisdAP)
+                   do isf = 1, mat(np,APrange)%ndimj(ist)
+                      do jsf = 1, mat(np,APrange)%ndimi(ni)
+                        thisdAP = return_matrix_value(matdAP(dir1), np, ni, iprim, nab, jsf, isf)
+                        if (flag_full_stress) then
+                          do dir2=1,3
+                             call store_matrix_value(matdAPr(dir1,dir2), np, ni, iprim, nab, jsf, isf, r_str(dir2)*thisdAP)
+                          end do
+                        else
+                          call store_matrix_value(matdPAr(dir1,dir1), np, ni, iprim, nab, jsf, isf, r_str*thisdAP)
+                        end if
                            ! Reuse variable
                            !thisdAP = return_matrix_value(matdPA(dir1), np, ni, iprim, nab, jsf, isf)
                            !call store_matrix_value(matdPAr(dir1), np, ni, iprim, nab, jsf, isf, r_str*thisdAP)
-                        end do
                      end do
                    end do
                 end do
@@ -2035,9 +2040,13 @@ contains
              end do
           end if
        end do
-       do dir2=1,3
-         call matrix_transpose(matdAPr(dir1,dir2), matdPAr(dir1,dir2))
-       end do
+       if (flag_full_stress) then
+         do dir2=1,3
+           call matrix_transpose(matdAPr(dir1,dir2), matdPAr(dir1,dir2))
+         end do
+       else
+         call matrix_transpose(matdAPr(dir1,dir1), matdPAr(dir1,dir1))
+       end if
        !call matrix_scale(-one, matdPAr(direction))
     end do ! dir1
     if (flag_basis_set == blips .and. (.not.flag_analytic_blip_int)) &
@@ -2066,10 +2075,15 @@ contains
              ! Note that matrix_diagonal accumulates HF_NL_force(k,:)
              call matrix_diagonal(matdAP(k), matU(spin), &
                                   HF_NL_force(k,:), APrange, inode)
-             do l = 1, 3
-               call matrix_diagonal(matdAPr(k,l), matU(spin), &
-                                    NL_P_stress(k,:), APrange, inode)
-             end do
+             if (flag_full_stress) then
+               do l = 1, 3
+                 call matrix_diagonal(matdAPr(k,l), matU(spin), &
+                                      NL_P_stress(k,l,:), APrange, inode)
+               end do
+             else
+               call matrix_diagonal(matdAPr(k,k), matU(spin), &
+                                    NL_P_stress(k,k,:), APrange, inode)
+             end if
           end do ! spin
        end do ! k
     end if
@@ -2080,10 +2094,15 @@ contains
              ! Note that matrix_diagonal accumulates HF_NL_force(k,:)
              call matrix_diagonal(matdPA(k), matUT(spin), &
                                   HF_NL_force(k,:), PArange,inode)
-             do l = 1, 3
-               call matrix_diagonal(matdPAr(k,l), matUT(spin), &
-                                    NL_HF_stress(k,l,:), PArange, inode)
-             end do
+             if (flag_full_stress) then
+               do l = 1, 3
+                 call matrix_diagonal(matdPAr(k,l), matUT(spin), &
+                                      NL_HF_stress(k,l,:), PArange, inode)
+               end do
+             else
+               call matrix_diagonal(matdPAr(k,k), matUT(spin), &
+                                    NL_HF_stress(k,k,:), PArange, inode)
+             end if
           end do ! spin
        end do ! k
     end if
@@ -2091,9 +2110,13 @@ contains
     call gsum(HF_NL_force, 3, n_atoms)
     do i = 1, n_atoms
        do k=1,3
-          do l=1,3
-            NL_stress(k,l) = NL_stress(k,l) + half*(NL_P_stress(k,l,i) + NL_HF_stress(k,l,i))
-          end do
+          if (flag_full_stress) then
+            do l=1,3
+              NL_stress(k,l) = NL_stress(k,l) + half*(NL_P_stress(k,l,i) + NL_HF_stress(k,l,i))
+            end do
+          else
+            NL_stress(k,k) = NL_stress(k,k) + half*(NL_P_stress(k,k,i) + NL_HF_stress(k,k,i))
+          end if
        end do
     end do
     call gsum(NL_stress,3,3)
@@ -3030,11 +3053,13 @@ contains
     real(double)   :: dx, dy, dz, loc_cutoff, loc_cutoff2, v
     real(double)   :: pcc_cutoff, pcc_cutoff2, step_pcc, x_pcc, y_pcc, &
                       z_pcc, derivative_pcc, v_pcc, jacobian
+    real(double), dimension(3)       :: r, r_1, r_pcc
+    real(double), dimension(3,nspin) :: fr_1, fr_pcc
     logical        :: range_flag
     type(cq_timer) :: tmr_l_tmp1, tmr_l_tmp2
     type(cq_timer) :: backtrace_timer
 
-    real(double), dimension(3) :: loc_stress
+    real(double), dimension(3,3) :: loc_stress
     real(double), dimension(:),     allocatable :: h_potential,   &
                                                    density_total, &
                                                    density_out_total
@@ -3143,10 +3168,10 @@ contains
     ! Hartree_stress and loc_stress are the terms coming from the change of reciprocal space
     ! lattice vectors, 2GaGb/G^4
     ! Writing it this way gives out (n^{out} - 0.5 n^{PAD})*V^{PAD} as required
-    Hartree_stress(:) = loc_stress(:) - Hartree_stress(:)
-    nonSCF_stress(1) = jacobian 
-    nonSCF_stress(2) = jacobian 
-    nonSCF_stress(3) = jacobian
+    Hartree_stress(:,:) = loc_stress(:,:) - Hartree_stress(:,:)
+    nonSCF_stress(1,1) = jacobian 
+    nonSCF_stress(2,2) = jacobian 
+    nonSCF_stress(3,3) = jacobian
     ! Find the PAD XC potential to calculate the correct Jacobian
     ! The correct Jacobian comes from \int n^{out} V_{XC}(n^{PAD}) + DeltaXC
     ! DeltaXC is added in the main force routine
@@ -3163,9 +3188,9 @@ contains
        jacobian = jacobian*grid_point_volume
        call gsum(jacobian) ! gsum as XC_stress isn't summed elsewhere
        ! Correct XC stress 
-       XC_stress(1) = XC_stress(1) + jacobian
-       XC_stress(2) = XC_stress(2) + jacobian
-       XC_stress(3) = XC_stress(3) + jacobian
+       XC_stress(1,1) = XC_stress(1,1) + jacobian
+       XC_stress(2,2) = XC_stress(2,2) + jacobian
+       XC_stress(3,3) = XC_stress(3,3) + jacobian
     end if
     ! Accumulate PAD Hartree potential
     potential = zero
@@ -3324,20 +3349,18 @@ contains
                          dx = dcellx_grid * (ix - 1)
                          dy = dcelly_grid * (iy - 1)
                          dz = dcellz_grid * (iz - 1)
-                         rx = xblock + dx - xatom
-                         ry = yblock + dy - yatom
-                         rz = zblock + dz - zatom
+                         r(1) = xblock + dx - xatom
+                         r(2) = yblock + dy - yatom
+                         r(3) = zblock + dz - zatom
                          r2 = rx * rx + ry * ry + rz * rz
                          if (r2 < loc_cutoff2) then
                             r_from_i = sqrt(r2)
                             if (r_from_i > RD_ERR) then
-                               x = rx / r_from_i
-                               y = ry / r_from_i
-                               z = rz / r_from_i
+                               r_1(1) = r(1) / r_from_i
+                               r_1(2) = r(2) / r_from_i
+                               r_1(3) = r(3) / r_from_i
                             else
-                               x = zero
-                               y = zero
-                               z = zero
+                               r_1 = zero
                             end if
                             call dsplint(                                       &
                                  step,                                          &
@@ -3351,30 +3374,36 @@ contains
                             ! start, (in set_density of density module). So we assume the same to be
                             ! consistent, and then apply density_scale calculated from set_density
                             ! NB This means that spin_factor cancels out the half for non-spin polarised
-                            do spin = 1, nspin
-                               fx_1(spin) = &
-                                    -x * half * derivative * density_scale(spin)
-                               fy_1(spin) = &
-                                    -y * half * derivative * density_scale(spin)
-                               fz_1(spin) = &
-                                    -z * half * derivative * density_scale(spin)
+                            do dir1=1,3
+                              do spin = 1, nspin
+                                 fr_1(dir1,spin) = -r_1(dir1) * half * &
+                                   derivative * density_scale(spin)
+                              end do
                             end do
                          else
-                            do spin = 1, nspin
-                               fx_1(spin) = zero
-                               fy_1(spin) = zero
-                               fz_1(spin) = zero
-                            end do
+                            fr_1 = zero
                          end if
                          ! could be written in a simpler form, but written this way gives more clear idea
                          ! on what we are doing here.
                          do spin = 1, nspin
-                            HF_force(1,ig_atom) = HF_force(1,ig_atom) + spin_factor * fx_1(spin) * pot_here(spin)
-                            HF_force(2,ig_atom) = HF_force(2,ig_atom) + spin_factor * fy_1(spin) * pot_here(spin)
-                            HF_force(3,ig_atom) = HF_force(3,ig_atom) + spin_factor * fz_1(spin) * pot_here(spin)
-                            nonSCF_stress(1) = nonSCF_stress(1) + rx*spin_factor * fx_1(spin) * pot_here(spin)
-                            nonSCF_stress(2) = nonSCF_stress(2) + ry*spin_factor * fy_1(spin) * pot_here(spin)
-                            nonSCF_stress(3) = nonSCF_stress(3) + rz*spin_factor * fz_1(spin) * pot_here(spin)
+                            do dir1 = 1, 3
+                                HF_force(dir1,ig_atom) = &
+                                  HF_force(dir1,ig_atom) + spin_factor * &
+                                  fr_1(dir1,spin) * pot_here(spin)
+                              if (flag_full_stress) then
+                                do dir2 = 1, 3
+                                  nonSCF_stress(dir1,dir2) = &
+                                    nonSCF_stress(dir1,dir2) + r(dir1) * &
+                                    spin_factor * fr_1(dir2,spin) * &
+                                    pot_here(spin)
+                                end do ! dir2
+                              else
+                                nonSCF_stress(dir1,dir1) = &
+                                  nonSCF_stress(dir1,dir1) + r(dir1) * &
+                                  spin_factor * fr_1(dir1,spin) * &
+                                  pot_here(spin)
+                              end if
+                            end do ! dir1
                          end do ! spin
                       end do !ix
                    end do  !iy
@@ -3466,20 +3495,18 @@ contains
                             dx = dcellx_grid * (ix - 1)
                             dy = dcelly_grid * (iy - 1)
                             dz = dcellz_grid * (iz - 1)
-                            rx = xblock + dx - xatom
-                            ry = yblock + dy - yatom
-                            rz = zblock + dz - zatom
+                            r(1) = xblock + dx - xatom
+                            r(2) = yblock + dy - yatom
+                            r(3) = zblock + dz - zatom
                             r2 = rx * rx + ry * ry + rz * rz
                             if (r2 < pcc_cutoff2) then
                                r_from_i = sqrt( r2 )
                                if ( r_from_i > RD_ERR ) then
-                                  x_pcc = rx / r_from_i
-                                  y_pcc = ry / r_from_i
-                                  z_pcc = rz / r_from_i
+                                  r_pcc(1) = r(1) / r_from_i
+                                  r_pcc(2) = r(2) / r_from_i
+                                  r_pcc(3) = r(3) / r_from_i
                                else
-                                  x_pcc = zero
-                                  y_pcc = zero
-                                  z_pcc = zero
+                                  r_pcc = zero
                                end if
                                call dsplint(step_pcc, &
                                             pseudo(the_species)%chpcc%f(:), &
@@ -3497,39 +3524,35 @@ contains
                                ! consistent, and then apply density_scale
                                ! calculated from set_density
                                do spin = 1, nspin
-                                  fx_pcc(spin) = &
-                                       -x_pcc * half * derivative_pcc * &
-                                       density_scale(spin)
-                                  fy_pcc(spin) = &
-                                       -y_pcc * half * derivative_pcc * &
-                                       density_scale(spin)
-                                  fz_pcc(spin) = &
-                                       -z_pcc * half * derivative_pcc * &
-                                       density_scale(spin)
+                                  do dir1 = 1, 3
+                                    fr_pcc(dir1,spin) = r_pcc(dir1) * half * derivative_pcc * density_scale(spin)
+                                  end do
                                end do
                             else
-                               do spin = 1, nspin
-                                  fx_pcc(spin) = zero
-                                  fy_pcc(spin) = zero
-                                  fz_pcc(spin) = zero
-                               end do
+                               fr_pcc = zero
                             end if
                             ! assuming derivative of ppc charge
                             ! (assumed same for different spin
                             ! components)
                             do spin = 1, nspin
-                               HF_force(1,ig_atom) = HF_force(1,ig_atom) + &
-                                    spin_factor * fx_pcc(spin) * pot_here_pcc(spin)
-                               HF_force(2,ig_atom) = HF_force(2,ig_atom) + &
-                                    spin_factor * fy_pcc(spin) * pot_here_pcc(spin)
-                               HF_force(3,ig_atom) = HF_force(3,ig_atom) + &
-                                    spin_factor * fz_pcc(spin) * pot_here_pcc(spin)
-                               nonSCF_stress(1) = nonSCF_stress(1) + &
-                                    rx*spin_factor * fx_pcc(spin) * pot_here_pcc(spin)
-                               nonSCF_stress(2) = nonSCF_stress(2) + &
-                                    ry*spin_factor * fy_pcc(spin) * pot_here_pcc(spin)
-                               nonSCF_stress(3) = nonSCF_stress(3) + &
-                                    rz*spin_factor * fz_pcc(spin) * pot_here_pcc(spin)
+                               do dir1 = 1, 3
+                                 HF_force(dir1,ig_atom) = &
+                                   HF_force(dir1,ig_atom) + spin_factor * &
+                                   fr_pcc(dir1,spin) * pot_here_pcc(spin)
+                                 if (flag_full_stress) then
+                                   do dir2 = 1, 3
+                                     nonSCF_stress(dir1,dir2) = &
+                                       nonSCF_stress(dir1,dir2) + r(dir1) * &
+                                       spin_factor * fr_pcc(dir2,spin) * &
+                                       pot_here_pcc(spin)
+                                   end do ! dir1
+                                 else
+                                   nonSCF_stress(dir1,dir1) = &
+                                     nonSCF_stress(dir1,dir1) + r(dir1) * &
+                                     spin_factor * fr_pcc(dir1,spin) * &
+                                     pot_here_pcc(spin)
+                                 end if
+                               end do ! dir2
                             end do ! spin
                          end do !ix
                       end do  !iy
@@ -3542,7 +3565,7 @@ contains
 
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
     call gsum(HF_force, 3, n_atoms)
-    call gsum(nonSCF_stress,3)
+    call gsum(nonSCF_stress,3,3)
     call stop_print_timer(tmr_l_tmp1, "NSC force - Compilation", &
                           IPRINT_TIME_THRES3)
 
