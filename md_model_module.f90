@@ -99,7 +99,7 @@ module md_model
 
     ! Barostat
     character(20), pointer                  :: baro_type
-    real(double), pointer, dimension(:)     :: stress
+    real(double), pointer, dimension(:,:)   :: stress
     real(double), pointer, dimension(:,:)   :: static_stress
     real(double), pointer, dimension(:,:)   :: ke_stress
     real(double), pointer                   :: box_kinetic_energy
@@ -423,9 +423,9 @@ contains
       end do
       write(lun,'(a)') "end cell_vectors"
       write(lun,'(a)') "stress_tensor"
-      write(lun,'(3f14.6)') mdl%stress(1), zero, zero
-      write(lun,'(3f14.6)') zero, mdl%stress(2), zero
-      write(lun,'(3f14.6)') zero, zero, mdl%stress(3)
+      write(lun,'(3f14.6)') mdl%stress(1,:)
+      write(lun,'(3f14.6)') mdl%stress(2,:)
+      write(lun,'(3f14.6)') mdl%stress(3,:)
       write(lun,'(a)') "end stress_tensor"
       write(lun,'(a)') "positions"
       call mdl%dump_mdl_atom_arr(lun, mdl%atom_coords)
@@ -533,8 +533,8 @@ contains
         (mdl%dft_total_energy+mdl%ion_kinetic_energy)*HaToeV, &
         mdl%dft_total_energy*HaToeV, &
         mdl%ion_kinetic_energy*HaToeV, mdl%T_int, mdl%P_int, &
-        mdl%stress(1)*fac_HaBohr32GPa, mdl%stress(2)*fac_HaBohr32GPa, &
-        mdl%stress(3)*fac_HaBohr32GPa, zero, zero, zero
+        mdl%stress(1,1)*fac_HaBohr32GPa, mdl%stress(2,2)*fac_HaBohr32GPa, &
+        mdl%stress(3,3)*fac_HaBohr32GPa, zero, zero, zero
  
       call io_close(lun1)
     end if
