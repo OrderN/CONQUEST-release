@@ -1263,8 +1263,8 @@ contains
                             front = two * pseudo(the_species)%alpha * pseudo(the_species)%prefac * &
                                  gauss * h_potential( igrid ) * pseudo(the_species)%zval* r_from_i * grid_point_volume
                             do dir1=1,3
-                              fx_1(dir1) = r(dir1) * derivative
-                              fx_2 = front * r(dir1)
+                              fr_1(dir1) = r(dir1) * derivative
+                              fr_2 = front * r(dir1)
                               HF_force(dir1,ig_atom) = &
                                 HF_force(dir1,ig_atom) + &
                                 fr_1(dir1) * elec_here * fr_2(dir1)
