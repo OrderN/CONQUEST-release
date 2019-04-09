@@ -28,6 +28,8 @@
 !!    fixed call start/stop_timer to timer_module (not timer_stdlocks_module !)
 !!   2015/05/01 13:41 dave and sym
 !!    Adding stress
+!!   2019/04/08 zamaan
+!!    Added off-diagonal elements of stress tensor contribution
 !!  SOURCE
 !!
 module pseudo_tm_module
@@ -70,7 +72,7 @@ module pseudo_tm_module
   real(double), allocatable :: y_store(:)
   real(double), allocatable :: z_store(:)
   real(double), allocatable :: r_store(:)
-  real(double), dimension(3) :: loc_HF_stress, loc_G_stress
+  real(double), dimension(3,3) :: loc_HF_stress, loc_G_stress
   !interface
   !   interface nonloc_pp_derivative_tm
   !     module procedure nonloc_pp_derivative_tm
@@ -956,6 +958,8 @@ contains
 !!    Remove calculation of HF forces for NA projectors
 !!   2018/11/16 tsuyoshi
 !!    Debug for ghost atoms
+!!   2019/04/08 zamaan
+!!    Off-diagonal stress tensor elements
 !!  SOURCE
 !!
   subroutine loc_pp_derivative_tm ( hf_force, density, size )
@@ -964,7 +968,8 @@ contains
     use numbers
     use dimens, only: grid_point_volume, n_my_grid_points
     use global_module, only: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, &
-         species_glob, nlpf,ni_in_cell, flag_neutral_atom, dens
+         species_glob, nlpf,ni_in_cell, flag_neutral_atom, dens, &
+         flag_full_stress
     use block_module, only : n_pts_in_block
     use group_module, only : blocks, parts
     use primary_module, only: domain
@@ -987,13 +992,14 @@ contains
     real(double),intent(out) :: hf_force( 3, ni_in_cell )
 
     ! Local variables
-    integer :: i, j, pseudo_neighbour
+    integer :: i, j, pseudo_neighbour, dir1, dir2
 
     real(double) :: a, b, c, d, alpha, beta, gamma, delta, derivative 
     real(double) :: fx_1, fy_1, fz_1
     real(double) :: fx_2, fy_2, fz_2
     real(double) :: h_energy, r_from_i, x, y, z, step, elec_here, front, gauss
     real(double):: r1, r2, r3, r4, da, db, dc, dd, gauss_charge
+    real(double), dimension(3) :: r, fr_1, fr_2
 
     real(double):: dcellx_block,dcelly_block,dcellz_block
     integer :: ipart,jpart,ind_part,ia,ii,icover,ig_atom
@@ -1003,7 +1009,7 @@ contains
     integer :: iblock,ipoint,igrid
     real(double) :: rr
     integer ::  iatom, stat, ip, npoint, nl
-    real(double) :: rcut, temp(3)
+    real(double) :: rcut, temp(3,3)
 
     ! allocatable
     real(double),allocatable, dimension(:) :: h_potential, drho_tot
@@ -1132,9 +1138,9 @@ contains
                       if(igrid > n_my_grid_points) call cq_abort &
                            ('set_ps: igrid error ', igrid, n_my_grid_points)
                       r_from_i = r_store(ip)
-                      x = x_store(ip)
-                      y = y_store(ip)
-                      z = z_store(ip)
+                      r(1) = x_store(ip)
+                      r(2) = y_store(ip)
+                      r(3) = z_store(ip)
                       if(flag_neutral_atom) then
                          step = pseudo(the_species)%vna%delta
                       else if(pseudo(the_species)%tm_loc_pot==loc_pot) then
@@ -1168,16 +1174,26 @@ contains
                             derivative = &
                                  alpha * r1 + beta * r2 + gamma * r3 + delta * r4
 
-                            fx_2 = x * derivative * density( igrid )
-                            fy_2 = y * derivative * density( igrid )
-                            fz_2 = z * derivative * density( igrid )
-                            i=ig_atom
-                            HF_force(1,i) = HF_force(1,i) + fx_2 * grid_point_volume
-                            HF_force(2,i) = HF_force(2,i) + fy_2 * grid_point_volume
-                            HF_force(3,i) = HF_force(3,i) + fz_2 * grid_point_volume
-                            loc_HF_stress(1) = loc_HF_stress(1) + fx_2 * grid_point_volume * x*r_from_i
-                            loc_HF_stress(2) = loc_HF_stress(2) + fy_2 * grid_point_volume * y*r_from_i
-                            loc_HF_stress(3) = loc_HF_stress(3) + fz_2 * grid_point_volume * z*r_from_i
+                            do dir1=1,3
+                              fr_2(dir1) = r(dir1)*derivative*density(igrid)
+                              i = ig_atom
+                              HF_force(dir1,ig_atom) = &
+                                HF_force(dir1,ig_atom) + &
+                                fr_2(dir1) * grid_point_volume
+                              if (flag_full_stress) then
+                                do dir2=1,3
+                                  loc_HF_stress(dir1,dir2) = &
+                                    loc_HF_stress(dir1,dir2) + 
+                                    fr_2(dir1) * grid_point_volume * &
+                                    r(dir2) * r_from_i
+                                end do
+                              else
+                                loc_HF_stress(dir1,dir1) = &
+                                  loc_HF_stress(dir1,dir1) + 
+                                  fr_2(dir1) * grid_point_volume * &
+                                  r(dir1) * r_from_i
+                              end if
+                            end do
                          end if ! j+1<pseudo(the_species)%vna%n
                          ! Now the atomic density interacting with the potential from drho
                          ! Note that this is the force from the SCREENED Hartree potential
@@ -1202,17 +1218,25 @@ contains
                             derivative =  &
                                  alpha * r1 + beta * r2 + gamma * r3 + delta * r4
 
-                            fx_2 = minus_one * x * derivative * h_potential( igrid )
-                            fy_2 = minus_one * y * derivative * h_potential( igrid )
-                            fz_2 = minus_one * z * derivative * h_potential( igrid )
-                            i=ig_atom
-                            HF_force(1,i) = HF_force(1,i) + fx_2 * grid_point_volume
-                            HF_force(2,i) = HF_force(2,i) + fy_2 * grid_point_volume
-                            HF_force(3,i) = HF_force(3,i) + fz_2 * grid_point_volume
-                            loc_HF_stress(1) = loc_HF_stress(1) + fx_2 * grid_point_volume * x*r_from_i
-                            loc_HF_stress(2) = loc_HF_stress(2) + fy_2 * grid_point_volume * y*r_from_i
-                            loc_HF_stress(3) = loc_HF_stress(3) + fz_2 * grid_point_volume * z*r_from_i
-
+                            do dir1=1,3
+                              fr_2(dir1) = minus_one * r(dir1) * derivative * &
+                                           h_potential(igrid)
+                              HF_force(dir1,ig_atom) = HF_force(ig_atom) + &
+                                fr_2(dir1) * grid_point_volume
+                              if (flag_full_stress) then
+                                do dir2=1,3
+                                  loc_HF_stress(dir1,dir2) = &
+                                    loc_HF_stress(dir1,dir2) + &
+                                    fr_2(dir1) * grid_point_volume * &
+                                    r(dir2) * r_from_i
+                                end do
+                              else
+                                loc_HF_stress(dir1,dir1) = &
+                                  loc_HF_stress(dir1,dir1) + &
+                                  fr_2(dir1) * grid_point_volume * &
+                                  r(dir1) * r_from_i
+                              end if
+                            end do
                          end if ! j+1<atomic_density_table(the_species)%length
 
                       else if(pseudo(the_species)%tm_loc_pot==loc_pot) then
@@ -1236,21 +1260,28 @@ contains
                             ! This is a little obscure, but the multiples below have had 
                             ! the minus sign which should be there removed to correct an 
                             ! earlier on dropped in the da, db, dc, dd expressions.DRB 27.11.97
-                            fx_1 = x * derivative
-                            fy_1 = y * derivative 
-                            fz_1 = z * derivative 
                             front = two * pseudo(the_species)%alpha * pseudo(the_species)%prefac * &
                                  gauss * h_potential( igrid ) * pseudo(the_species)%zval* r_from_i * grid_point_volume
-                            fx_2 = front* x 
-                            fy_2 = front* y
-                            fz_2 = front* z
-                            i=ig_atom
-                            HF_force(1,ig_atom) = HF_force(1,ig_atom) + fx_1 * elec_here + fx_2
-                            HF_force(2,ig_atom) = HF_force(2,ig_atom) + fy_1 * elec_here + fy_2
-                            HF_force(3,ig_atom) = HF_force(3,ig_atom) + fz_1 * elec_here + fz_2
-                            loc_HF_stress(1) = loc_HF_stress(1) + (fx_1 * elec_here + fx_2) * x*r_from_i
-                            loc_HF_stress(2) = loc_HF_stress(2) + (fy_1 * elec_here + fy_2) * y*r_from_i
-                            loc_HF_stress(3) = loc_HF_stress(3) + (fz_1 * elec_here + fz_2) * z*r_from_i
+                            do dir1=1,3
+                              fx_1(dir1) = r(dir1) * derivative
+                              fx_2 = front * r(dir1)
+                              HF_force(dir1,ig_atom) = &
+                                HF_force(dir1,ig_atom) + &
+                                fr_1(dir1) * elec_here * fr_2(dir1)
+                              if (flag_full_stress) then
+                                do dir2=1,3
+                                  loc_HF_stress(dir1,dir2) = &
+                                    loc_HF_stress(dir1,dir2) + &
+                                    (fr_1(dir1) * elec_here + fr_2(dir1)) * &
+                                    r(dir2) * r_from_i
+                                end do
+                              else
+                                loc_HF_stress(dir1,dir1) = &
+                                  loc_HF_stress(dir1,dir1) + &
+                                  (fr_1(dir1) * elec_here + fr_2(dir1)) * &
+                                  r(dir1) * r_from_i
+                              end if
+                            end do
                             r2 = r_from_i*r_from_i
                             gauss_charge = pseudo(the_species)%prefac* exp(-pseudo(the_species)%alpha * r2)
                             loc_charge(igrid) = loc_charge(igrid) + gauss_charge * pseudo(the_species)%zval
@@ -1278,21 +1309,28 @@ contains
 
                             !elec_here = density(igrid) * grid_point_volume
 
-                            fx_2 = x * derivative * h_potential( igrid )
-                            fy_2 = y * derivative * h_potential( igrid )
-                            fz_2 = z * derivative * h_potential( igrid )
-
-
-                            i=ig_atom
                             ! *grid_point_volume is added  03032003 T. MIYAZAKI
-                            HF_force(1,i) = HF_force(1,i) + fx_2 * grid_point_volume
-                            HF_force(2,i) = HF_force(2,i) + fy_2 * grid_point_volume
-                            HF_force(3,i) = HF_force(3,i) + fz_2 * grid_point_volume
-
-                            ! SYM, DRB 2014/09/02 and 2015/03: Accumulate HF stress and local charge (for reciprocal space stress)
-                            loc_HF_stress(1) = loc_HF_stress(1) + fx_2 * grid_point_volume * x*r_from_i
-                            loc_HF_stress(2) = loc_HF_stress(2) + fy_2 * grid_point_volume * y*r_from_i
-                            loc_HF_stress(3) = loc_HF_stress(3) + fz_2 * grid_point_volume * z*r_from_i
+                            do dir1=1,3
+                              fr_2(dir1) = r(dir1) * derivative * &
+                                           h_potential(igrid)
+                              HF_force(dir1,ig_atom) = &
+                                HF_force(dir1,ig_atom) + &
+                                fr_2(dir1) * grid_point_volume
+                              if (flag_full_stress) then
+                                do dir2=1,3
+                                ! SYM, DRB 2014/09/02 and 2015/03: Accumulate HF stress and local charge (for reciprocal space stress)
+                                  loc_HF_stress(dir1,dir2) = &
+                                    loc_HF_stress(dir1,dir2) + &
+                                    fr_2(dir1) * grid_point_volume * &
+                                    r(dir2) * r_from_i
+                                end do
+                              else
+                                loc_HF_stress(dir1,dir1) = &
+                                  loc_HF_stress(dir1,dir1) + &
+                                  fr_2(dir1) * grid_point_volume * &
+                                  r(dir1) * r_from_i
+                              end if
+                            end do
                             loc_charge(igrid) = loc_charge(igrid)  + a*r1+b*r2+c*r3+d*r4
                          end if ! j+1<pseudo(the_species)%chlocal%n
                       end if
@@ -1328,7 +1366,7 @@ contains
     !  In the future this should be replaced by summation with local communication
     !    Tsuyoshi Miyazaki
     call gsum(HF_force,3,ni_in_cell)
-    call gsum(loc_HF_stress,3)
+    call gsum(loc_HF_stress,3,3)
     ! Don't gsum loc_G_stress - that's done in hartree
     call stop_timer(tmr_std_pseudopot)
 
