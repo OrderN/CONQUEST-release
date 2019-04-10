@@ -1811,7 +1811,9 @@ end subroutine write_md_data
 
        ! Analyse Stresses and energies
        dE = energy0 - energy1
-       newRMSstress = sqrt(((stress(1)*stress(1)) + (stress(2)*stress(2)) + (stress(3)*stress(3)))/3)
+       newRMSstress = sqrt(((stress(1,1)*stress(1,1)) + &
+                            (stress(2,2)*stress(2,2)) + &
+                            (stress(3,3)*stress(3,3)))/3)
        dRMSstress = RMSstress - newRMSstress
 
        iter = iter + 1

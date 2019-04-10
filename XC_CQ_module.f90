@@ -1690,7 +1690,7 @@ contains
     call gsum(xc_energy)
     if (present(x_energy)) call gsum(x_energy)
     xc_energy = xc_energy * grid_point_volume
-    call gsum(XC_GGA_stress,3)
+    call gsum(XC_GGA_stress,3,3)
     XC_GGA_stress = XC_GGA_stress*grid_point_volume
     !write(*,*) 'GGA stress term: ',XC_GGA_stress
     if (present(x_energy)) x_energy = x_energy * grid_point_volume

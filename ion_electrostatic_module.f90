@@ -1145,14 +1145,26 @@ contains
                    arg_1 = ewald_gamma*rij_squared
                    arg_2 = sqrt(arg_1)
                    ewald_real_sum_ip = ewald_real_sum_ip + &
-                        &q_i * q_j * erfc(arg_2) / rij
+                     q_i * q_j * erfc(arg_2) / rij
                    dummy = q_i * q_j * (erfc(arg_2)/rij + coeff_1*exp(-arg_1))/rij_squared
-                   ewald_intra_force_x(bundle%nm_nodbeg(ip)+ni-1) = ewald_intra_force_x(bundle%nm_nodbeg(ip)+ni-1) + dummy*rij_vec(1)
-                   ewald_intra_force_x(bundle%nm_nodbeg(ip)+nj-1) = ewald_intra_force_x(bundle%nm_nodbeg(ip)+nj-1) - dummy*rij_vec(1)
-                   ewald_intra_force_y(bundle%nm_nodbeg(ip)+ni-1) = ewald_intra_force_y(bundle%nm_nodbeg(ip)+ni-1) + dummy*rij_vec(2)
-                   ewald_intra_force_y(bundle%nm_nodbeg(ip)+nj-1) = ewald_intra_force_y(bundle%nm_nodbeg(ip)+nj-1) - dummy*rij_vec(2)
-                   ewald_intra_force_z(bundle%nm_nodbeg(ip)+ni-1) = ewald_intra_force_z(bundle%nm_nodbeg(ip)+ni-1) + dummy*rij_vec(3)
-                   ewald_intra_force_z(bundle%nm_nodbeg(ip)+nj-1) = ewald_intra_force_z(bundle%nm_nodbeg(ip)+nj-1) - dummy*rij_vec(3)
+                   ewald_intra_force_x(bundle%nm_nodbeg(ip)+ni-1) = &
+                     ewald_intra_force_x(bundle%nm_nodbeg(ip)+ni-1) + &
+                     dummy*rij_vec(1)
+                   ewald_intra_force_x(bundle%nm_nodbeg(ip)+nj-1) = &
+                     ewald_intra_force_x(bundle%nm_nodbeg(ip)+nj-1) - &
+                     dummy*rij_vec(1)
+                   ewald_intra_force_y(bundle%nm_nodbeg(ip)+ni-1) = &
+                     ewald_intra_force_y(bundle%nm_nodbeg(ip)+ni-1) + &
+                     dummy*rij_vec(2)
+                   ewald_intra_force_y(bundle%nm_nodbeg(ip)+nj-1) = &
+                     ewald_intra_force_y(bundle%nm_nodbeg(ip)+nj-1) - &
+                     dummy*rij_vec(2)
+                   ewald_intra_force_z(bundle%nm_nodbeg(ip)+ni-1) = &
+                     ewald_intra_force_z(bundle%nm_nodbeg(ip)+ni-1) + &
+                     dummy*rij_vec(3)
+                   ewald_intra_force_z(bundle%nm_nodbeg(ip)+nj-1) = &
+                     ewald_intra_force_z(bundle%nm_nodbeg(ip)+nj-1) - &
+                     dummy*rij_vec(3)
                    ! --- Edited SYM 2014/10/16 14:23 Ewald stress
                    do dir1=1,3
                      if (flag_full_stress) then
@@ -1561,14 +1573,14 @@ contains
                                     screened_ion_stress(dir1,dir2) - &
                                     half * &
                                     (dummy*rij_vec(dir1) + goverlap(dir1)) * &
-                                    rij(dir2)
+                                    rij_vec(dir2)
                                 end do
                               else
                                 screened_ion_stress(dir1,dir1) = &
                                   screened_ion_stress(dir1,dir1) - &
                                   half * &
                                   (dummy*rij_vec(dir1) + goverlap(dir1)) * &
-                                  rij(dir1)
+                                  rij_vec(dir1)
                               end if
                             end do
                          else ! i=j we just need -0.5*overlap

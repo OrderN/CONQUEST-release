@@ -1183,13 +1183,13 @@ contains
                               if (flag_full_stress) then
                                 do dir2=1,3
                                   loc_HF_stress(dir1,dir2) = &
-                                    loc_HF_stress(dir1,dir2) + 
+                                    loc_HF_stress(dir1,dir2) + &
                                     fr_2(dir1) * grid_point_volume * &
                                     r(dir2) * r_from_i
                                 end do
                               else
                                 loc_HF_stress(dir1,dir1) = &
-                                  loc_HF_stress(dir1,dir1) + 
+                                  loc_HF_stress(dir1,dir1) + &
                                   fr_2(dir1) * grid_point_volume * &
                                   r(dir1) * r_from_i
                               end if
@@ -1221,7 +1221,8 @@ contains
                             do dir1=1,3
                               fr_2(dir1) = minus_one * r(dir1) * derivative * &
                                            h_potential(igrid)
-                              HF_force(dir1,ig_atom) = HF_force(ig_atom) + &
+                              HF_force(dir1,ig_atom) = &
+                                HF_force(dir1,ig_atom) + &
                                 fr_2(dir1) * grid_point_volume
                               if (flag_full_stress) then
                                 do dir2=1,3
