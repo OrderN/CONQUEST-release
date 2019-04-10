@@ -1844,10 +1844,15 @@ contains
           grad_density(rr,1:3,spin) = exx_a * drhoEps_x(1:3,spin) + &
                                       drhoEps_c(1:3,spin)
           do dir1=1,3
-             do dir2=1,3
-                XC_GGA_stress(dir1,dir2) = XC_GGA_stress(dir1,dir2) - &
-                  grho_r(dir1,spin)*grad_density(rr,dir2,spin)
-             end do
+             if (flag_full_stress) then
+               do dir2=1,3
+                  XC_GGA_stress(dir1,dir2) = XC_GGA_stress(dir1,dir2) - &
+                    grho_r(dir1,spin)*grad_density(rr,dir2,spin)
+               end do
+             else
+               XC_GGA_stress(dir1,dir1) = XC_GGA_stress(dir1,dir1) - &
+                 grho_r(dir1,spin)*grad_density(rr,dir1,spin)
+             end if
           end do
        end do
     end do ! rr

@@ -1305,13 +1305,13 @@ contains
                                if (flag_full_stress) then
                                  do dir2=1,3
                                    SP_stress(dir1,dir2) = &
-                                    SP_stress(dir1,dir2) + &
-                                    thisG_dS_dR * r_str(dir2)
+                                     SP_stress(dir1,dir2) + &
+                                     thisG_dS_dR * r_str(dir2)
                                  end do
                                else
                                  SP_stress(dir1,dir1) = &
-                                  SP_stress(dir1,dir1) + &
-                                    thisG_dS_dR * r_str(dir1)
+                                   SP_stress(dir1,dir1) + &
+                                   thisG_dS_dR * r_str(dir1)
                                end if ! flag_full_stress
                             end do ! jsf
                          end do ! isf
@@ -3042,8 +3042,7 @@ contains
                                                    density_total, &
                                                    density_out_total
     real(double), dimension(:,:,:), allocatable :: dVxc_drho
-    real(double), dimension(nspin) :: pot_here, fx_1, fy_1, fz_1, &
-                                      fx_pcc, fy_pcc, fz_pcc, pot_here_pcc
+    real(double), dimension(nspin) :: pot_here, pot_here_pcc
     ! only for GGA with P.C.C.
     real(double), allocatable, dimension(:)   :: h_potential_in,       &
                                                  wk_grid_total,        &
