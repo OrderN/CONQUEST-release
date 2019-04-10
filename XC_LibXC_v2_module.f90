@@ -20,6 +20,8 @@
 !! MODIFICATION HISTORY
 !!   2018/06/15 12:21 dave
 !!    Added spin_factor in module use statements
+!!   2019/04/09 zamaan
+!!    Off-diagonal elements of stress tensor added
 !! SOURCE
 !!
 module XC

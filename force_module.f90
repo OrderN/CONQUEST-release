@@ -873,8 +873,8 @@ contains
     real(double), allocatable, dimension(:,:,:) :: this_data_K
     real(double), allocatable, dimension(:,:,:) :: this_data_M12
     real(double) :: forS, forKE
-    real(double) :: thisG_dS_dR, thisK_dH_dR, r_str_x, r_str_y, r_str_z
-    real(double), dimension(3) :: dr
+    real(double) :: thisG_dS_dR, thisK_dH_dR
+    real(double), dimension(3) :: dr, r_str
 
     ! Workarray for New Version
     !    I am not sure the present way for calculating p_force is the right way.
@@ -1176,8 +1176,8 @@ contains
           call get_matrix_elements_new(inode-1, rem_bucket(atomf_atomf_rem),&
                                        mat_tmp, H_on_atomfns(1), tmp_fn)
 
-          if (flag_full_stress) n_stress = 3 ! loop over 3 directions for full stress tensor
-          else n_stress = 1                  ! or 1 for diagonal elements only
+          if (flag_full_stress) n_stress = 3 ! 3 directions: full stress tensor
+          else n_stress = 1                  ! 1 for diagonal elements only
           do dir2=1,n_stress
             if (flag_full_stress) call get_r_on_atomfns(dir2,tmp_fn,tmp_fn2)
             else call get_r_on_atomfns(dir1,tmp_fn,tmp_fn2)
@@ -1270,9 +1270,9 @@ contains
                       gcspart = &
                            BCS_parts%icover_ibeg(mat(np,aSa_range)%i_part(ist)) + &
                            mat(np,aSa_range)%i_seq(ist) - 1
-                      r_str_x=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
-                      r_str_y=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
-                      r_str_z=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
+                      r_str(1)=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                      r_str(2)=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                      r_str(3)=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
                       ! matM12(1) here is just used to work out the
                       ! position in matrix, this position will be
                       ! identical for matM12(nspin), so only matM12(1)
@@ -1285,10 +1285,10 @@ contains
                             do jsf = 1, mat(np,aSa_range)%ndimi(ni)
                                matM12_value = zero
                                do spin = 1, nspin
-                                  matM12_value =                                      &
-                                       matM12_value + spin_factor *                   &
-                                       return_matrix_value(matM12atomf(spin), np, ni, &
-                                                           iprim, neigh, jsf, isf)
+                                  matM12_value = &
+                                       matM12_value + spin_factor * &
+                                       return_matrix_value(matM12atomf(spin), &
+                                       np, ni, iprim, neigh, jsf, isf)
                                end do ! spin
                                ! the factor of two here comes from
                                ! chain rule in derivatives of K
@@ -1298,21 +1298,14 @@ contains
                                if(iprint_MD>3) s_pulay_for(dir1,i) = s_pulay_for(dir1,i) + thisG_dS_dR
                                if (flag_full_stress) then
                                  do dir2=1,3
-                                   if (dir2==1) then
-                                     SP_stress(dir1,dir2) = SP_stress(dir1,dir2) + thisG_dS_dR * r_str_x
-                                   else if (dir2==2) then
-                                     SP_stress(dir1,dir2) = SP_stress(dir1,dir2) + thisG_dS_dR * r_str_y
-                                   else if (dir2==3) then
-                                     SP_stress(dir1,dir2) = SP_stress(dir1,dir2) + thisG_dS_dR * r_str_z
-                                   end if
+                                   SP_stress(dir1,dir2) = &
+                                    SP_stress(dir1,dir2) + &
+                                    thisG_dS_dR * r_str(dir2)
                                  end do
                                else
-                                 if (dir1==1) then
-                                   SP_stress(dir1,dir1) = SP_stress(dir1,dir2) + thisG_dS_dR * r_str_x
-                                 else if (dir1==2) then
-                                   SP_stress(dir1,dir1) = SP_stress(dir1,dir2) + thisG_dS_dR * r_str_y
-                                 else if (dir1==3) then
-                                   SP_stress(dir1,dir1) = SP_stress(dir1,dir2) + thisG_dS_dR * r_str_z
+                                 SP_stress(dir1,dir1) = &
+                                  SP_stress(dir1,dir1) + &
+                                    thisG_dS_dR * r_str(dir1)
                                end if ! flag_full_stress
                             end do ! jsf
                          end do ! isf
@@ -2256,7 +2249,8 @@ contains
     integer :: i, j, grad_direction, f_dir1, f_dir2, element, np, nn,&
                atom, n1, n2, mat_grad_T, ist, gcspart, iprim, tmp_fn, &
                spin
-    real(double) :: r_str_x, r_str_y, r_str_z, thisK_gradT
+    real(double) :: thisK_gradT
+    real(double), dimension(3) :: r_str
 
 
 !    ! First, clear the diagonal blocks of data K; this is the easiest way
@@ -2297,9 +2291,9 @@ contains
                          gcspart =                                                &
                               BCS_parts%icover_ibeg(mat(np,aHa_range)%i_part(ist)) + &
                               mat(np,aHa_range)%i_seq(ist) - 1
-                         r_str_x=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
-                         r_str_y=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
-                         r_str_z=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
+                         r_str(1)=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                         r_str(2)=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                         r_str(3)=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
                          ! matKatomf(1) here is just to work out the matrix
                          ! position, it is going to be the same as
                          ! matKatomf(nspin)
@@ -2311,46 +2305,25 @@ contains
                             do n1 = 1, mat(np,aHa_range)%ndimj(ist)
                                do n2 = 1, mat(np,aHa_range)%ndimi(i)
                                   do spin = 1, nspin
-                                     thisK_gradT = spin_factor *                     &
-                                          return_matrix_value(matKatomf(spin),   &
-                                          np, i, iprim, &
-                                          j, n2, n1) *  &
-                                          return_matrix_value(mat_grad_T,   &
-                                          np, i, iprim, &
-                                          j, n2, n1)
-                                     KE_force(f_dir1,atom) =       &
+                                     thisK_gradT = spin_factor * & 
+                                        return_matrix_value(matKatomf(spin), & 
+                                        np, i, iprim, j, n2, n1) *  &
+                                        return_matrix_value(mat_grad_T,   &
+                                        np, i, iprim, &
+                                        j, n2, n1)
+                                     KE_force(f_dir1,atom) = &
                                           KE_force(f_dir1,atom) + thisK_gradT
                                      if (flag_full_stress) then
                                        do f_dir2=1,3
-                                         if (f_dir1==1) then
-                                           KE_stress(f_dir1,f_dir1) = &
-                                                KE_stress(f_dir1,f_dir2) + &
-                                                thisK_gradT * r_str_x
-                                         else if (f_dir1==2) then
-                                           KE_stress(f_dir1,f_dir2) = &
-                                                KE_stress(f_dir1,f_dir2) + &
-                                                thisK_gradT * r_str_y
-                                         else if (f_dir1==2) then
-                                           KE_stress(f_dir1,f_dir2) = &
-                                                KE_stress(f_dir1) + &
-                                                thisK_gradT * r_str_z
-                                         end if
+                                         KE_stress(f_dir1,f_dir2) = &
+                                              KE_stress(f_dir1,f_dir2) + &
+                                              thisK_gradT * r_str(dir2)
                                        end do
                                      else
-                                       if (f_dir1==1) then
-                                         KE_stress(f_dir1,f_dir1) = &
-                                              KE_stress(f_dir1,f_dir1) + &
-                                              thisK_gradT * r_str_x
-                                       else if (f_dir1==2) then
-                                         KE_stress(f_dir1,f_dir1) = &
-                                              KE_stress(f_dir1,f_dir1) + &
-                                              thisK_gradT * r_str_y
-                                       else if (f_dir1==2) then
-                                         KE_stress(f_dir1,f_dir1) = &
-                                              KE_stress(f_dir1,f_dir1) + &
-                                              thisK_gradT * r_str_z
-                                       end if
-                                     end if
+                                       KE_stress(f_dir1,f_dir1) = &
+                                            KE_stress(f_dir1,f_dir1) + &
+                                            thisK_gradT * r_str(dir1)
+                                     end if ! flag_full_stress
                                   end do ! spin
                                end do ! n2
                             end do ! n1
@@ -2382,65 +2355,38 @@ contains
                    iprim = iprim + 1
                    do j = 1, mat(np,aHa_range)%n_nab(i)
                       ist = mat(np,aHa_range)%i_acc(i) + j - 1
-                      gcspart =                                                &
-                           BCS_parts%icover_ibeg(mat(np,aHa_range)%i_part(ist)) + &
-                           mat(np,aHa_range)%i_seq(ist) - 1
-                      if(f_dir1==1) then
-                         r_str=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
-                      else if(f_dir1==2) then
-                         r_str=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
-                      else if(f_dir1==3) then
-                         r_str=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
-                      end if
+                      gcspart = &
+                        BCS_parts%icover_ibeg(mat(np,aHa_range)%i_part(ist)) +&
+                        mat(np,aHa_range)%i_seq(ist) - 1
+                      r_str(1)=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                      r_str(2)=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                      r_str(3)=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
                       ! matKatomf(1) is used to just to get the position
-                      element =                    &
-                           matrix_pos(matKatomf(1), iprim, &
-                                      halo(aHa_range)%i_halo(gcspart), 1, 1)
+                      element = matrix_pos(matKatomf(1), iprim, &
+                                halo(aHa_range)%i_halo(gcspart), 1, 1)
                       if (element /= mat(np,aHa_range)%onsite(i)) then
                          do n1 = 1, mat(np,aHa_range)%ndimj(ist)
                             do n2 = 1, mat(np,aHa_range)%ndimi(i)
                                do spin = 1, nspin
-                                  thisK_gradT = spin_factor *                     &
-                                       return_matrix_value(matKatomf(spin),   &
-                                       np, i, iprim, &
-                                       j, n2, n1) *  &
+                                  thisK_gradT = spin_factor * &
+                                       return_matrix_value(matKatomf(spin), &
+                                       np, i, iprim, j, n2, n1) *  &
                                        return_matrix_value(mat_grad_T,   &
-                                       np, i, iprim, &
-                                       j, n2, n1)
+                                       np, i, iprim, j, n2, n1)
                                   KE_force(f_dir1,atom) =       &
                                        KE_force(f_dir1,atom) +  &
                                        thisK_gradT
                                   if (flag_full_stress) then
                                     do f_dir2=1,3
-                                      if (f_dir1==1) then
-                                        KE_stress(f_dir1,f_dir1) = &
-                                             KE_stress(f_dir1,f_dir2) + &
-                                             thisK_gradT * r_str_x
-                                      else if (f_dir1==2) then
-                                        KE_stress(f_dir1,f_dir2) = &
-                                             KE_stress(f_dir1,f_dir2) + &
-                                             thisK_gradT * r_str_y
-                                      else if (f_dir1==2) then
-                                        KE_stress(f_dir1,f_dir2) = &
-                                             KE_stress(f_dir1) + &
-                                             thisK_gradT * r_str_z
-                                      end if
-                                    end do
+                                      KE_stress(f_dir1,f_dir2) = &
+                                           KE_stress(f_dir1,f_dir2) + &
+                                           thisK_gradT * r_str(dir2)
+                                    end do ! f_dir2
                                   else
-                                    if (f_dir1==1) then
-                                      KE_stress(f_dir1,f_dir1) = &
-                                           KE_stress(f_dir1,f_dir1) + &
-                                           thisK_gradT * r_str_x
-                                    else if (f_dir1==2) then
-                                      KE_stress(f_dir1,f_dir1) = &
-                                           KE_stress(f_dir1,f_dir1) + &
-                                           thisK_gradT * r_str_y
-                                    else if (f_dir1==2) then
-                                      KE_stress(f_dir1,f_dir1) = &
-                                           KE_stress(f_dir1,f_dir1) + &
-                                           thisK_gradT * r_str_z
-                                    end if
-                                  end if
+                                    KE_stress(f_dir1,f_dir1) = &
+                                         KE_stress(f_dir1,f_dir1) + &
+                                         thisK_gradT * r_str(dir1)
+                                  end if ! flag_full_stress
                                end do ! spin
                             end do ! n2
                          end do ! n1
@@ -2533,18 +2479,20 @@ contains
     ! local variables
     integer :: i, j, grad_direction, force_direction, element, np, nn,&
                atom, n1, n2, mat_grad_T, ist, gcspart, iprim, tmp_fn, &
-               spin, mat_dNA, mat_dNAT, j_atom
+               spin, mat_dNA, mat_dNAT, j_atom, f_dir1
     integer :: ip, nsf1, nsf2
-    real(double) :: r_str, thisK_gradT
+    real(double) :: thisK_gradT
 
+    real(double), dimension(3) :: r_str
     integer, dimension(3) :: matdaNA, matdNAa, matdaNAr, matdNAar
-    integer      :: direction, k, stat, dpseudofns, i1, i2, &
+    integer, dimension(3,3) :: matdaNAr, matDNAar
+    integer      :: dir1, dir2 , k, l, stat, dpseudofns, i1, i2, &
          spec, this_nsf, this_nlpf, ni, isf, jsf
     integer, dimension(2) :: matKzero
     integer      :: nab, neigh_global_num,        &
                     neigh_global_part, neigh_species, wheremat, matU_NA, matUT_NA
     real(double) :: dx, dy, dz, thisdAP, locforce
-    real(double), dimension(:,:), allocatable ::  NA_P_stress, NA_HF_stress
+    real(double), dimension(:,:,:), allocatable ::  NA_P_stress, NA_HF_stress
     real(double), dimension(:), allocatable :: force_contrib, f_c2
     
 !    ! First, clear the diagonal blocks of data K; this is the easiest way
@@ -2556,15 +2504,19 @@ contains
     do k = 1, 3
        matdaNA(k) = allocate_temp_matrix (aNArange, aNA_trans, atomf, napf)
        matdNAa(k) = allocate_temp_matrix (NAarange, aNA_trans, napf, atomf)
-       matdaNAr(k) = allocate_temp_matrix (aNArange, aNA_trans, atomf, napf)
-       matdNAar(k) = allocate_temp_matrix (NAarange, aNA_trans, napf, atomf)
+       do l = 1, 3
+         matdaNAr(k,l) = &
+           allocate_temp_matrix (aNArange, aNA_trans, atomf, napf)
+         matdNAar(k,l) = &
+           allocate_temp_matrix (NAarange, aNA_trans, napf, atomf)
+       end do
     end do
     matU_NA = allocate_temp_matrix(aNArange,aNA_trans,atomf,napf)
     matUT_NA = allocate_temp_matrix(NAarange,aNA_trans,napf,atomf)
     do spin = 1,nspin
        matKzero(spin) = allocate_temp_matrix(aHa_range,0,atomf,atomf)
     end do
-    allocate(NA_HF_stress(3,ni_in_cell),NA_P_stress(3,ni_in_cell))
+    allocate(NA_HF_stress(3,3,ni_in_cell),NA_P_stress(3,3,ni_in_cell))
     NA_P_stress = zero
     NA_HF_stress = zero
     NA_stress = zero
@@ -2587,21 +2539,23 @@ contains
        end if
     end do
     ! to save memory we do each direction in turn...
-    do direction = 1, 3
-       call matrix_scale(zero, matdaNA(direction))
-       call matrix_scale(zero, matdNAa(direction))
-       call matrix_scale(zero, matdaNAr(direction))
-       call matrix_scale(zero, matdNAar(direction))
+    do dir1 = 1, 3
+       call matrix_scale(zero, matdaNA(dir1))
+       call matrix_scale(zero, matdNAa(dir1))
+       do dir2 = 1, 3
+          call matrix_scale(zero, matdaNAr(dir1,dir2))
+          call matrix_scale(zero, matdNAar(dir1,dir2))
+       end do
           ! Get matrix elements between derivative of projectors and
           ! support functions
-       call assemble_deriv_2(direction, aNArange, matdaNA(direction), 5)
-       call matrix_scale(-one, matdaNA(direction))
+       call assemble_deriv_2(dir1, aNArange, matdaNA(dir1), 5)
+       call matrix_scale(-one, matdaNA(dir1))
 
        ! Get matrix elements between projectors and derivative of
        ! support functions BY TRANSPOSE. This is fine (I think)
        ! because the transpose ought to be exact
-       call matrix_transpose(matdaNA(direction), matdNAa(direction))
-       call matrix_scale(-one, matdNAa(direction))
+       call matrix_transpose(matdaNA(dir1), matdNAa(dir1))
+       call matrix_scale(-one, matdNAa(dir1))
        ! Now scale dAP and dPA by R_{ji} for stress
        ! 2014/08/06 11:45 Shereif
        iprim = 0
@@ -2612,24 +2566,22 @@ contains
                 do nab = 1, mat(np,aNArange)%n_nab(ni)
                    ist = mat(np,aNArange)%i_acc(ni) + nab - 1
                    gcspart = BCS_parts%icover_ibeg(mat(np,aNArange)%i_part(ist)) + mat(np,aNArange)%i_seq(ist) - 1
-                   if(direction==1) then
-                      r_str=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
-                   else if(direction==2) then
-                      r_str=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
-                   else if(direction==3) then
-                      r_str=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
-                   end if
+                   r_str(1)=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                   r_str(2)=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                   r_str(3)=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
                    do isf = 1, mat(np,aNArange)%ndimj(ist)
                       do jsf = 1, mat(np,aNArange)%ndimi(ni)
-                         thisdAP = return_matrix_value(matdaNA(direction), np, ni, iprim, nab, jsf, isf)
-                         call store_matrix_value(matdaNAr(direction), np, ni, iprim, nab, jsf, isf, r_str*thisdAP)
+                         thisdAP = return_matrix_value(matdaNA(dir1), np, ni, iprim, nab, jsf, isf)
+                         do dir2=1,3
+                           call store_matrix_value(matdaNAr(dir1), np, ni, iprim, nab, jsf, isf, r_str(dir2)*thisdAP)
+                         end do
                       end do
                    end do
                 end do
              end do
           end if
        end do
-       call matrix_transpose(matdaNAr(direction), matdNAar(direction))
+       call matrix_transpose(matdaNAr(dir1), matdNAar(dir1))
        
        
     end do ! Now end the direction loop
@@ -2660,8 +2612,10 @@ contains
           ! Note that matrix_diagonal accumulates HF_NA_force(k,:)
           call matrix_diagonal(matdaNA(k), matU_NA, &
             NA_force(k,:), aNArange, inode)
-          call matrix_diagonal(matdaNAr(k), matU_NA, &
-            NA_P_stress(k,:), aNArange, inode)
+          do l = 1, 3
+            call matrix_diagonal(matdaNAr(k,l), matU_NA, &
+              NA_P_stress(k,l,:), aNArange, inode)
+          end do
         end do ! k
         !end if
       ! Evaluate the Hellmann-Feynman term - due to the chis changing
@@ -2671,15 +2625,20 @@ contains
           ! Note that matrix_diagonal accumulates HF_NA_force(k,:)
           call matrix_diagonal(matdNAa(k), matUT_NA, &
             NA_force(k,:), NAarange,inode)
-          call matrix_diagonal(matdNAar(k), matUT_NA, &
-            NA_HF_stress(k,:), NAarange,inode)
+          do l = 1, 3
+            call matrix_diagonal(matdNAar(k,l), matUT_NA, &
+              NA_HF_stress(k,l,:), NAarange,inode)
+          end do
         end do ! k
       !end if
     end do ! spin
 
     do i = 1, ni_in_cell!n_atoms
        do k=1,3
-          NA_stress(k) = NA_stress(k) + half*(NA_P_stress(k,i) + NA_HF_stress(k,i))
+          do l=1,3
+            NA_stress(k,l) = NA_stress(k,l) + &
+                             half*(NA_P_stress(k,l,i) + NA_HF_stress(k,l,i))
+          end do
        end do
     end do
     deallocate(NA_P_stress,NA_HF_stress)
@@ -2689,8 +2648,10 @@ contains
     call free_temp_matrix(matUT_NA)
     call free_temp_matrix(matU_NA)
     do k = 3, 1, -1
-       call free_temp_matrix(matdNAar(k))
-       call free_temp_matrix(matdaNAr(k))
+       do l = 3, 1, -1
+         call free_temp_matrix(matdNAar(k,l))
+         call free_temp_matrix(matdaNAr(k,l))
+       end do
        call free_temp_matrix(matdNAa(k))
        call free_temp_matrix(matdaNA(k))
     end do
@@ -2699,10 +2660,10 @@ contains
     mat_dNA = allocate_temp_matrix(aHa_range,aNAa_trans,atomf,atomf)
     mat_dNAT = allocate_temp_matrix(aHa_range,aNAa_trans,atomf,atomf)
     ! Now, for the offsite part, done on the integration grid.
-    do force_direction = 1, 3
+    do f_dir1 = 1, 3
        force_contrib = zero
        ! Build derivatives
-       call assemble_deriv_2(force_direction,aHa_range, mat_dNA, 4)
+       call assemble_deriv_2(f_dir1,aHa_range, mat_dNA, 4)
        call matrix_transpose(mat_dNA, mat_dNAT)
        call matrix_sum(one,mat_dNA,-one,mat_dNAT)
        ! Add < i | VNA_j | i >
@@ -2722,13 +2683,9 @@ contains
                    gcspart =                                                &
                         BCS_parts%icover_ibeg(mat(np,aHa_range)%i_part(ist)) + &
                         mat(np,aHa_range)%i_seq(ist) - 1
-                   if(force_direction==1) then
-                      r_str=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
-                   else if(force_direction==2) then
-                      r_str=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
-                   else if(force_direction==3) then
-                      r_str=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
-                   end if
+                   r_str(1)=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                   r_str(2)S_parts%ycover(gcspart)-bundle%yprim(iprim)
+                   r_str(3)=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
                    ! matKatomf(1) is used to just to get the position
                    element =                    &
                         matrix_pos(matKatomf(1), iprim, &
@@ -2737,19 +2694,18 @@ contains
                       do n1 = 1, mat(np,aHa_range)%ndimj(ist)
                          do n2 = 1, mat(np,aHa_range)%ndimi(i)
                             do spin = 1, nspin
-                               thisK_gradT = spin_factor *                     &
+                               thisK_gradT = spin_factor * &
                                     return_matrix_value(matKatomf(spin),   &
-                                    np, i, iprim, &
-                                    j, n2, n1) *  &
+                                    np, i, iprim, j, n2, n1) *  &
                                     return_matrix_value(mat_dNA,   &
-                                    np, i, iprim, &
-                                    j, n2, n1)
-                               NA_force(force_direction,atom) =       &
-                                    NA_force(force_direction,atom) +  &
-                                    two*thisK_gradT
+                                    np, i, iprim, j, n2, n1)
+                               NA_force(f_dir1,atom) =       &
+                                    NA_force(f_dir1,atom) + two*thisK_gradT
                                force_contrib(atom) = force_contrib(atom) + two*thisK_gradT
-                               NA_stress(force_direction) = NA_stress(force_direction) + &
-                                    thisK_gradT * r_str
+                               do dir2=1,3
+                                 NA_stress(f_dir1) = NA_stress(f_dir1) + &
+                                                     thisK_gradT * r_str(dir2)
+                               end do
                             end do ! spin
                          end do ! n2
                       end do ! n1
@@ -2759,7 +2715,7 @@ contains
           end if  ! (bundle%nm_nodgroup(np) > 0)
        end do ! np
        call matrix_scale(zero,mat_dNAT)
-       call assemble_deriv_2(force_direction,aHa_range, mat_dNAT, 6)
+       call assemble_deriv_2(f_dir1,aHa_range, mat_dNAT, 6)
        force_contrib = zero
        !f_c2 = zero
        iprim = 0
@@ -2778,11 +2734,11 @@ contains
                         BCS_parts%icover_ibeg(mat(np,aHa_range)%i_part(ist)) + &
                         mat(np,aHa_range)%i_seq(ist) - 1
                    if(force_direction==1) then
-                      r_str=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
+                      r_str(1)=BCS_parts%xcover(gcspart)-bundle%xprim(iprim)
                    else if(force_direction==2) then
-                      r_str=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
+                      r_str(2)=BCS_parts%ycover(gcspart)-bundle%yprim(iprim)
                    else if(force_direction==3) then
-                      r_str=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
+                      r_str(3)=BCS_parts%zcover(gcspart)-bundle%zprim(iprim)
                    end if
                    ! Global number of neighbour: id_glob( parts%icell_beg(gcs%lab_cell(np)) +ni-1 )
                       j_atom = id_glob( parts%icell_beg( BCS_parts%lab_cell(mat(np,aHa_range)%i_part(ist))) &
@@ -2797,7 +2753,7 @@ contains
                            np, i, iprim, j, 1, 1)
                       NA_stress(force_direction) = NA_stress(force_direction) + &
                            spin_factor * return_matrix_value(mat_dNAT,   &
-                           np, i, iprim, j, 1, 1) * r_str
+                           np, i, iprim, j, 1, 1) * r_str(f_dir1)
                       force_contrib(j_atom) = force_contrib(j_atom)-spin_factor * return_matrix_value(mat_dNAT,   &
                            np, i, iprim, j, 1, 1)
                       force_contrib(atom) = force_contrib(atom)+spin_factor * return_matrix_value(mat_dNAT,   &
@@ -2807,7 +2763,7 @@ contains
              end if  ! (bundle%nm_nodgroup(np) > 0)
           end do ! np
        call stop_timer(tmr_std_matrices)
-    end do ! force directions
+    end do ! f_dir1
 
     call gsum(NA_force, 3, ni_in_cell)
     !KE_stress = half*KE_stress
