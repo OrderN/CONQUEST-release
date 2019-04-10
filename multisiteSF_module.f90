@@ -57,6 +57,12 @@ module multisiteSF_module
   ! RCS tag for object file identification
   character(len=80), save, private :: RCSid = "$Id$"
 
+  ! Number of MSSFs
+  logical :: flag_MSSF_nonminimal              !nonmin_mssf
+  real(double) :: MSSF_nonminimal_offset       !nonmin_mssf
+
+
+
   ! Smearing MSSF
   logical :: flag_MSSF_smear                                     ! smear MSSF (default=F)
   integer :: MSSF_Smear_type                                     ! smearing-function type (default=1:Fermi-Dirac)
@@ -874,14 +880,14 @@ contains
     abstol = 1.0e-300_double
 
     ! open debug file for TVEC and subspace MOs
-    if (iprint_basis>=6) then
+    !if (iprint_basis>=6) then
        call get_file_name('TVECr',numprocs,inode,filename11)  ! Build a filename based on node number for TVEC
        call io_assign(lun11)                                  ! Open file 
        open(unit=lun11,file=filename11)
        call get_file_name('SubMOr',numprocs,inode,filename12) ! Build a filename based on node number for MOs
        call io_assign(lun12)                                  ! Open file
        open(unit=lun12,file=filename12)
-    endif
+    !endif
 
     ! estimate the maximum size of subspace matrices for halo-atoms (Ssub and Hsub)
     max_npao     = maxval(npao_species)                         ! max. number of PAOs belonging to a halo atom
@@ -1010,7 +1016,7 @@ contains
                 NEsub = zero
                 call LFD_make_TVEC(TVEC,NTVEC,len_Sub_i,np,i,atom_i,atom_num,atom_spec,LFDhalo, NEsub, &
                                    len_Sub_i_d,n_naba_i_d,l_k_g,l_k_r2,l_kpao)  
-                if (iprint_basis>=6) call LFD_debug_matrix(lun11,0,np,atom_i,EVAL,TVEC,len_Sub_i,NTVEC, &
+                call LFD_debug_matrix(lun11,0,np,atom_i,EVAL,TVEC,len_Sub_i,NTVEC, &
                                                            n_naba_i_d,l_k_g,l_k_r2,l_kpao)           
 !
 !               --- (2) make subspaces for atom_i
@@ -1798,6 +1804,8 @@ contains
     real(double) :: dx,dy,dz,r2,cutoff
     real(double), dimension(7) :: occ_n, max_cutoff_n
     real(double), parameter :: R2_ERR = 1.0e-4_double
+    real(double) :: MSSF_nonminimal_offset
+
 
     if (iprint_basis>=5.and.inode==ionode) write(io_lun,*) 'We are in sub:LFD_make_TVEC'
 
@@ -1845,12 +1853,20 @@ contains
                 tvec_n(:) = 0
                 do nacz1 = 1, pao(atom_spec)%angmom(l1)%n_zeta_in_angmom
                    prncpl = pao(atom_spec)%angmom(l1)%prncpl(nacz1)
-                   if (occ_n(prncpl).gt.zero) then ! Semicore or Valence PAOs
+                   if (.not.flag_MSSF_nonminimal) then
+                      if (occ_n(prncpl).gt.zero) then ! Semicore or Valence PAOs
+                         cutoff = pao(atom_spec)%angmom(l1)%zeta(nacz1)%cutoff
+                         if (cutoff.gt.max_cutoff_n(prncpl)) then
+                            max_cutoff_n(prncpl) = cutoff
+                            tvec_n(prncpl) = nacz1 ! Z of the largest PAO for this L and this N
+                         endif
+                      endif
+                   else
                       cutoff = pao(atom_spec)%angmom(l1)%zeta(nacz1)%cutoff
                       if (cutoff.gt.max_cutoff_n(prncpl)) then
                          max_cutoff_n(prncpl) = cutoff
-                         tvec_n(prncpl) = nacz1 ! Z of the largest PAO for this L and this N
-                      endif                         
+                         tvec_n(prncpl) = nacz1 ! Z of the largest PAO for this L and this N                           
+                      endif
                    endif
                 enddo
                 ! make TVEC
@@ -1862,6 +1878,15 @@ contains
                          kpao = kpao + 1
                          TVEC(kpao0+kpao,ITVEC) = one
                       enddo ! m1
+                   else if (flag_MSSF_nonminimal .and. nacz1.ne.tvec_n(prncpl)) then
+                      !ITVEC = 0  
+                      !kpao  = 0    
+                      do m1 = -l1,l1
+                         ITVEC = ITVEC + 1
+                         kpao = kpao + 1
+                         TVEC(kpao0+kpao,ITVEC) = MSSF_nonminimal_offset
+                      enddo
+                      ITVEC = ITVEC - (2*l1+1)
                    else
                       kpao = kpao + 2*l1 + 1
                    endif

@@ -204,7 +204,9 @@ contains
     !use DiagModule,             only: diagon
     use constraint_module,      only: flag_RigidBonds,constraints
     use support_spec_format,    only: flag_one_to_one, symmetry_breaking, read_option
-    use multisiteSF_module,     only: flag_LFD_ReadTVEC
+    use multisiteSF_module,     only: flag_LFD_ReadTVEC, &
+                                      flag_MSSF_nonminimal, &  !nonmin_mssf
+                                      MSSF_nonminimal_offset   !nonmin_mssf
     use pao_format
 
     implicit none
@@ -375,17 +377,17 @@ contains
                 ! multi-site SFs should be in SingleZeta-size in default.
                 ! If the user wants to increase the number of the multi-site SFs, 
                 ! the user must provide the initial SFcoeffmatrix or the trial vectors for the LFD method. 
-                if (count_SZ.ne.nsf_species(i)) then
-                   if (.not.flag_LFD_ReadTVEC .and. .not.read_option) then
-                      if(inode==ionode) then
-                         write(io_lun,fmt='("You have a major problem with your multi-site support functions.")')
-                         write(io_lun,'(A,I3,A,I3)') "Number of multi-site SFs", nsf_species(i), &
-                                                     " is not equal to single-zeta size", count_SZ
-                         write(io_lun,'(A/A)') "You must provide initial SFcoeffmatrix or trial vectors for the LFD method,", &
-                                               "or fix Atom.NumberOfSupports."
-                      endif
-                      call cq_abort("Multi-site support function error for species ",i)
+                !if (count_SZ.ne.nsf_species(i)) then
+                 !if (.not.flag_LFD_ReadTVEC .and. .not.read_option) then
+                if (count_SZ.ne.nsf_species(i) .and. .not.flag_MSSF_nonminimal) then 
+                   if(inode==ionode) then
+                      write(io_lun,fmt='("You have a major problem with your multi-site support functions.")')
+                      write(io_lun,'(A,I3,A,I3)') "Number of multi-site SFs", nsf_species(i), &
+                           " is not equal to single-zeta size", count_SZ
+                      !write(io_lun,'(A/A)') "You must provide initial SFcoeffmatrix or trial vectors for the LFD method,", &
+                         !                      "or fix Atom.NumberOfSupports
                    endif
+                   call cq_abort("Multi-site support function error for species ",i)
                 endif
              else 
                 ! If number of support functions is less than total number of ang. mom. components (ignoring
@@ -800,7 +802,8 @@ contains
                                   LFD_kT, LFD_ChemP, flag_LFD_useChemPsub,               &
                                   flag_LFD_minimise, LFD_ThreshE, LFD_ThreshD,           &
                                   LFD_Thresh_EnergyRise, LFD_max_iteration,              &
-                                  flag_LFD_MD_UseAtomicDensity
+                                  flag_LFD_MD_UseAtomicDensity,  flag_MSSF_nonminimal,   &
+                                  MSSF_nonminimal_offset ! nonmin_mssf
     use control,    only: md_ensemble
     use md_control, only: md_tau_T, md_n_nhc, md_n_ys, md_n_mts, md_nhc_mass, &
                           md_target_press, md_baro_type, md_tau_P, &
@@ -1310,6 +1313,8 @@ contains
 !!$        
        ! Set variables for multisite support functions
        if (flag_Multisite) then
+          flag_MSSF_nonminimal = fdf_boolean('Multisite.nonminimal', .false.) !nonmin_mssf
+          MSSF_nonminimal_offset = fdf_double('Multisite.nonminimal.offset', 0.0_double) !nonmin_mssf
           flag_LFD = fdf_boolean('Multisite.LFD', .true.)
           flag_MSSF_smear = fdf_boolean('Multisite.Smear', .false.)
           if (flag_MSSF_smear) then
