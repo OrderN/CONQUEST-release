@@ -1766,7 +1766,7 @@ contains
                                        flavour, x_energy )
     use datatypes
     use numbers
-    use global_module, only: nspin
+    use global_module, only: nspin, flag_full_stress
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum, cq_abort
     use fft_module,    only: fft3, recip_vector

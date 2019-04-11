@@ -123,8 +123,7 @@ contains
     complex(double_cplx), allocatable, dimension(:) :: chdenr
     complex(double_cplx), allocatable, dimension(:) :: str_chdenr
 
-    real(double) :: dumi, dumr, rp, ip, rp2, ip2
-    real(double), dimension(3,3) :: rv2
+    real(double) :: dumi, dumr, rp, ip, rp2, ip2, rv2
     ! refcoul is energy of two electrons seperated by one unit of distance.
     real(double), parameter :: refcoul = one
     ! harcon is the constant needed for energy and potential. It assumes that
@@ -168,37 +167,18 @@ contains
        do dir1 = 1,3
           if (flag_full_stress) then
              do dir2 = 1,3
-               rv2(dir1,dir2) = recip_vector(i,dir1)*recip_vector(i,dir2)
-               chden_str_r(dir1,dir2) = dumr * rv2(dir1,dir2) * &
-                                        hartree_factor(i)
-               chden_str_i(dir1,dir2) = dumi * rv2(dir1,dir2) * &
-                                        hartree_factor(i)
+               rv2 = recip_vector(i,dir1)*recip_vector(i,dir2)
+               chden_str_r(dir1,dir2) = dumr * rv2 * hartree_factor(i)
+               chden_str_i(dir1,dir2) = dumi * rv2 * hartree_factor(i)
                Hartree_stress(dir1,dir2) = Hartree_stress(dir1,dir2) + &
                  rp*chden_str_r(dir1,dir2) + ip*chden_str_i(dir1,dir2)
                if (second_stress) stress2(dir1,dir2) = stress2(dir1,dir2) + &
                  rp2*chden_str_r(dir1,dir2) + ip2*chden_str_i(dir1,dir2)
              end do
-             rv2(dir1,dir2) = recip_vector(i,dir1)*recip_vector(i,dir1)
-             chden_str_r(dir1,dir1) = dumr * rv2(dir1,dir1) * hartree_factor(i)
-             chden_str_i(dir1,dir1) = dumi * rv2(dir1,dir1) * hartree_factor(i)
-             Hartree_stress(dir1,dir1) = Hartree_stress(dir1,dir1) + &
-               rp*chden_str_r(dir1,dir1) + ip*chden_str_i(dir1,dir1)
-             if (second_stress) stress2(dir1,dir1) = stress2(dir1,dir1) + &
-               rp2*chden_str_r(dir1,dir1) + ip2*chden_str_i(dir1,dir1)
           else
-             rv2(dir1,dir1) = recip_vector(i,dir1)*recip_vector(i,dir1)
-             chden_str_r(dir1,dir1) = dumr * rv2(dir1,dir1) * &
-                                      hartree_factor(i)
-             chden_str_i(dir1,dir1) = dumi * rv2(dir1,dir1) * &
-                                      hartree_factor(i)
-             Hartree_stress(dir1,dir1) = Hartree_stress(dir1,dir1) + &
-               rp*chden_str_r(dir1,dir1) + ip*chden_str_i(dir1,dir1)
-             if (second_stress) stress2(dir1,dir1) = stress2(dir1,dir1) + &
-               rp2*chden_str_r(dir1,dir1) + ip2*chden_str_i(dir1,dir1)
-
-             rv2(dir1,dir1) = recip_vector(i,dir1)*recip_vector(i,dir1)
-             chden_str_r(dir1,dir1) = dumr * rv2(dir1,dir1) * hartree_factor(i)
-             chden_str_i(dir1,dir1) = dumi * rv2(dir1,dir1) * hartree_factor(i)
+             rv2 = recip_vector(i,dir1)*recip_vector(i,dir1)
+             chden_str_r(dir1,dir1) = dumr * rv2 * hartree_factor(i)
+             chden_str_i(dir1,dir1) = dumi * rv2 * hartree_factor(i)
              Hartree_stress(dir1,dir1) = Hartree_stress(dir1,dir1) + &
                rp*chden_str_r(dir1,dir1) + ip*chden_str_i(dir1,dir1)
              if (second_stress) stress2(dir1,dir1) = stress2(dir1,dir1) + &
