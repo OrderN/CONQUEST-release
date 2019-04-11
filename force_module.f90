@@ -3800,7 +3800,7 @@ contains
                          r(1) = xblock + dx - xatom
                          r(2) = yblock + dy - yatom
                          r(3) = zblock + dz - zatom
-                         r2 = r(1) * r(1) + r(1) * r(2) + r(3) * r(3)
+                         r2 = r(1)*r(1) + r(2)*r(2) + r(3)*r(3)
                          if (r2 < pcc_cutoff2) then
                             r_from_i = sqrt(r2)
                             if (r_from_i > RD_ERR) then
