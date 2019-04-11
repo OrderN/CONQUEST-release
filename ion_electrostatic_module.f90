@@ -343,7 +343,7 @@ contains
     use GenComms, ONLY : cq_abort, my_barrier
     use group_module, ONLY : parts
     use global_module, ONLY : x_atom_cell, y_atom_cell, z_atom_cell, &
-         iprint_gen, ni_in_cell, area_general
+                              iprint_gen, ni_in_cell, area_general, flag_stress
     use numbers
     use primary_module, ONLY : bundle
     use species_module, ONLY : charge, species
@@ -581,10 +581,12 @@ contains
     ! I'm assuming ewald_gaussian_self_stress is only a diagonal
     ! contribution - zamaan
     ewald_gaussian_self_stress = zero
-    gaussian_self_stress = pi * total_charge * total_charge/(two * ewald_real_cell_volume * ewald_gamma)
-    do direction = 1, 3
-       ewald_gaussian_self_stress(direction,direction) = gaussian_self_stress
-    enddo
+    if (flag_stress) then
+      gaussian_self_stress = pi * total_charge * total_charge/(two * ewald_real_cell_volume * ewald_gamma)
+      do direction = 1, 3
+         ewald_gaussian_self_stress(direction,direction) = gaussian_self_stress
+      enddo
+    end if
 
     ! --- limits for recip-space covering set
     rec_lim_1 = int(ewald_recip_cutoff* sqrt(real_cell_vec(1,1)**2 + &
@@ -956,7 +958,9 @@ contains
     use cover_module,   ONLY: ion_ion_CS
     use datatypes
     use GenComms,       ONLY: gsum, cq_abort, inode, ionode
-    use global_module,  ONLY: id_glob, iprint_gen, species_glob, ni_in_cell, area_general, IPRINT_TIME_THRES3, flag_full_stress
+    use global_module,  ONLY: id_glob, iprint_gen, species_glob, ni_in_cell, &
+                              area_general, IPRINT_TIME_THRES3, &
+                              flag_full_stress, flag_stress
     use group_module,   ONLY: parts
     use maxima_module,  ONLY: maxatomsproc
     use numbers
@@ -1036,23 +1040,25 @@ contains
 
        one_over_g_squared = &
          one/(egv_n(1)*egv_n(1) + egv_n(2)*egv_n(2) + egv_n(3)*egv_n(3))
-       do dir1=1,3
-         if (flag_full_stress) then
-           do dir2=1,3
-             ewald_recip_stress(dir1,dir2) = ewald_recip_stress(dir1,dir2) + &
+       if (flag_stress) then
+         do dir1=1,3
+           if (flag_full_stress) then
+             do dir2=1,3
+               ewald_recip_stress(dir1,dir2) = ewald_recip_stress(dir1,dir2) + &
+                 ewald_g_factor(n) * (struc_fac_r(n)*struc_fac_r(n) + &
+                 struc_fac_i(n)*struc_fac_i(n)) * &
+                 ((two*egv_n(dir1)*egv_n(dir2) * & ! off-diagonal - zamaan
+                  (one/(four*ewald_gamma)) + one_over_g_squared - one))
+             end do
+           else
+             ewald_recip_stress(dir1,dir1) = ewald_recip_stress(dir1,dir1) + &
                ewald_g_factor(n) * (struc_fac_r(n)*struc_fac_r(n) + &
                struc_fac_i(n)*struc_fac_i(n)) * &
-               ((two*egv_n(dir1)*egv_n(dir2) * & ! off-diagonal - zamaan
+               ((two*egv_n(dir1)*egv_n(dir1) * &
                 (one/(four*ewald_gamma)) + one_over_g_squared - one))
-           end do
-         else
-           ewald_recip_stress(dir1,dir1) = ewald_recip_stress(dir1,dir1) + &
-             ewald_g_factor(n) * (struc_fac_r(n)*struc_fac_r(n) + &
-             struc_fac_i(n)*struc_fac_i(n)) * &
-             ((two*egv_n(dir1)*egv_n(dir1) * &
-              (one/(four*ewald_gamma)) + one_over_g_squared - one))
-         end if
-       end do
+           end if
+         end do
+       end if
 
        do ip = 1, bundle%groups_on_node
           if(bundle%nm_nodgroup(ip) > 0) then
@@ -1091,12 +1097,14 @@ contains
        endif
     enddo
     ! Correctly scale stress
-    do dir1=1,3 
-      do dir2=1,3
-        ewald_recip_stress(dir1,dir2) = ewald_recip_stress(dir1,dir2) * &
-                                        two * pi/(ewald_real_cell_volume)
-        end do
-    end do
+    if (flag_stress) then
+      do dir1=1,3 
+        do dir2=1,3
+          ewald_recip_stress(dir1,dir2) = ewald_recip_stress(dir1,dir2) * &
+                                          two * pi/(ewald_real_cell_volume)
+          end do
+      end do
+    end if
     ! 2015/05/01 13:35 dave
     !  I think that the reciprocal space part doesn't need this sum, but I should check
     !call gsum(ewald_recip_stress,3)
@@ -1166,19 +1174,21 @@ contains
                      ewald_intra_force_z(bundle%nm_nodbeg(ip)+nj-1) - &
                      dummy*rij_vec(3)
                    ! --- Edited SYM 2014/10/16 14:23 Ewald stress
-                   do dir1=1,3
-                     if (flag_full_stress) then
-                       do dir2=1,3
-                         ewald_intra_stress(dir1,dir2) = &
-                           ewald_intra_stress(dir1,dir2) - &
-                           (dummy * rij_vec(dir1) * rij_vec(dir2))
-                       end do ! dir2
-                     else
-                       ewald_intra_stress(dir1,dir1) = &
-                         ewald_intra_stress(dir1,dir1) - &
-                         (dummy * rij_vec(dir1) * rij_vec(dir1))
-                     end if
-                   end do ! dir1
+                   if (flag_stress) then
+                     do dir1=1,3
+                       if (flag_full_stress) then
+                         do dir2=1,3
+                           ewald_intra_stress(dir1,dir2) = &
+                             ewald_intra_stress(dir1,dir2) - &
+                             (dummy * rij_vec(dir1) * rij_vec(dir2))
+                         end do ! dir2
+                       else
+                         ewald_intra_stress(dir1,dir1) = &
+                           ewald_intra_stress(dir1,dir1) - &
+                           (dummy * rij_vec(dir1) * rij_vec(dir1))
+                       end if
+                     end do ! dir1
+                   end if
                 endif
              enddo
           enddo
@@ -1190,7 +1200,7 @@ contains
     enddo
 
     call gsum(ewald_real_sum_intra)
-    call gsum(ewald_intra_stress,3,3)
+    if (flag_stress) call gsum(ewald_intra_stress,3,3)
     if(inode == ionode.AND.iprint_gen>=6) then
        write(unit=io_lun,fmt='(/" Ewald real-space self info for node:",i3/)') inode 
        write(unit=io_lun,fmt='(/" self-partition part of real_space Ewald:",e20.12)') ewald_real_sum_intra
@@ -1262,19 +1272,21 @@ contains
                               ewald_inter_force_y(bundle%nm_nodbeg(ip)+ni-1) + dummy*rij_vec(2)
                          ewald_inter_force_z(bundle%nm_nodbeg(ip)+ni-1) = &
                               ewald_inter_force_z(bundle%nm_nodbeg(ip)+ni-1) + dummy*rij_vec(3)
-                         do dir1=1,3
-                           if (flag_full_stress) then
-                             do dir2=1,3
-                               ewald_inter_stress(dir1,dir2) = &
-                                 ewald_inter_stress(dir1,dir2) - &
-                                 dummy * rij_vec(dir1) * rij_vec(dir2)
-                             end do ! dir2
-                           else
-                             ewald_inter_stress(dir1,dir1) = &
-                               ewald_inter_stress(dir1,dir1) - &
-                               dummy * rij_vec(dir1) * rij_vec(dir1)
-                           end if
-                         end do ! dir1
+                         if (flag_stress) then
+                           do dir1=1,3
+                             if (flag_full_stress) then
+                               do dir2=1,3
+                                 ewald_inter_stress(dir1,dir2) = &
+                                   ewald_inter_stress(dir1,dir2) - &
+                                   dummy * rij_vec(dir1) * rij_vec(dir2)
+                               end do ! dir2
+                             else
+                               ewald_inter_stress(dir1,dir1) = &
+                                 ewald_inter_stress(dir1,dir1) - &
+                                 dummy * rij_vec(dir1) * rij_vec(dir1)
+                             end if
+                           end do ! dir1
+                         end if
                       endif
                    enddo
                 endif
@@ -1286,14 +1298,16 @@ contains
             &" is:",e20.12)') inode, ip, ewald_real_sum_ip
        ewald_real_sum_inter = ewald_real_sum_inter + ewald_real_sum_ip
     enddo
-    do dir1=1,3
-       do dir2=1,3
-          ewald_inter_stress(dir1,dir2) = half*ewald_inter_stress(dir1,dir2)
-       end do
-    end do
+    if (flag_stress) then
+      do dir1=1,3
+         do dir2=1,3
+            ewald_inter_stress(dir1,dir2) = half*ewald_inter_stress(dir1,dir2)
+         end do
+      end do
+    end if
 
     call gsum(ewald_real_sum_inter)
-    call gsum(ewald_inter_stress,3,3)
+    if (flag_stress) call gsum(ewald_inter_stress,3,3)
     if(inode == ionode.AND.iprint_gen>=6) then
        write(unit=io_lun,fmt='(/" Ewald real-space other info for node:",i3/)') inode 
        write(unit=io_lun,fmt='(/" other-partition part of real_space Ewald:",e20.12)') ewald_real_sum_inter
@@ -1340,13 +1354,16 @@ contains
     call gsum(ewald_total_force_y,ni_in_cell)
     call gsum(ewald_total_force_z,ni_in_cell)
     ! SYM 2014/10/22 14:34: Summ all the stress contributions
-    do dir1=1,3
-       do dir2=1,3
-          ion_interaction_stress(dir1,dir2) = ewald_intra_stress(dir1,dir2) + &
-            ewald_inter_stress(dir1,dir2) + ewald_recip_stress(dir1,dir2) + &
-            ewald_gaussian_self_stress(dir1,dir2)
-        end do
-    end do
+    if (flag_stress) then
+      do dir1=1,3
+         do dir2=1,3
+            ion_interaction_stress(dir1,dir2) = &
+              ewald_intra_stress(dir1,dir2) + ewald_inter_stress(dir1,dir2) + &
+              ewald_recip_stress(dir1,dir2) + &
+              ewald_gaussian_self_stress(dir1,dir2)
+          end do
+      end do
+    end if
     ! Added DRB & MJG 2003/10/22 to make force available to rest of code
     do i=1,ni_in_cell
        ion_interaction_force(1,i) = ewald_total_force_x(i)
@@ -1496,7 +1513,9 @@ contains
     use cover_module, ONLY : ion_ion_CS
     use datatypes
     use GenComms, ONLY : gsum, cq_abort, inode, ionode
-    use global_module, ONLY : id_glob, iprint_gen, species_glob, ni_in_cell, area_general, IPRINT_TIME_THRES3, flag_full_stress
+    use global_module, ONLY : id_glob, iprint_gen, species_glob, ni_in_cell, &
+                              area_general, IPRINT_TIME_THRES3, &
+                              flag_full_stress, flag_stress
     use group_module, ONLY : parts
     use maxima_module, ONLY : maxatomsproc
     use numbers
@@ -1567,20 +1586,22 @@ contains
                               screened_ion_force(dir1,i) = &
                                 screened_ion_force(dir1,i) + &
                                 dummy*rij_vec(dir1) + goverlap(dir1)
-                              if (flag_full_stress) then
-                                do dir2=1,3
-                                  screened_ion_stress(dir1,dir2) = &
-                                    screened_ion_stress(dir1,dir2) - &
+                              if (flag_stress) then
+                                if (flag_full_stress) then
+                                  do dir2=1,3
+                                    screened_ion_stress(dir1,dir2) = &
+                                      screened_ion_stress(dir1,dir2) - &
+                                      half * &
+                                      (dummy*rij_vec(dir1) + goverlap(dir1))* &
+                                      rij_vec(dir2)
+                                  end do
+                                else
+                                  screened_ion_stress(dir1,dir1) = &
+                                    screened_ion_stress(dir1,dir1) - &
                                     half * &
                                     (dummy*rij_vec(dir1) + goverlap(dir1)) * &
-                                    rij_vec(dir2)
-                                end do
-                              else
-                                screened_ion_stress(dir1,dir1) = &
-                                  screened_ion_stress(dir1,dir1) - &
-                                  half * &
-                                  (dummy*rij_vec(dir1) + goverlap(dir1)) * &
-                                  rij_vec(dir1)
+                                    rij_vec(dir1)
+                                end if
                               end if
                             end do
                          else ! i=j we just need -0.5*overlap
@@ -1597,7 +1618,7 @@ contains
     enddo
     call gsum(screened_ion_interaction_energy)
     call gsum(screened_ion_force,3,ni_in_cell)
-    call gsum(screened_ion_stress,3,3)
+    if (flag_stress) call gsum(screened_ion_stress,3,3)
     if(inode == ionode.AND.iprint_gen>1) &
          write(unit=io_lun,fmt='(/8x," ++++++ Screened ion interaction energy:",e20.12)') &
          &screened_ion_interaction_energy

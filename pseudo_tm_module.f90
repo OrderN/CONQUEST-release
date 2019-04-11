@@ -969,7 +969,7 @@ contains
     use dimens, only: grid_point_volume, n_my_grid_points
     use global_module, only: rcellx,rcelly,rcellz,id_glob, iprint_pseudo, &
          species_glob, nlpf,ni_in_cell, flag_neutral_atom, dens, &
-         flag_full_stress
+         flag_full_stress, flag_stress
     use block_module, only : n_pts_in_block
     use group_module, only : blocks, parts
     use primary_module, only: domain
@@ -1010,12 +1010,14 @@ contains
     real(double) :: rr
     integer ::  iatom, stat, ip, npoint, nl
     real(double) :: rcut, temp(3,3)
+    type(cq_timer) :: backtrace_timer
 
     ! allocatable
     real(double),allocatable, dimension(:) :: h_potential, drho_tot
     ! Store potential scaled by 2GaGb/G^4 for stress
     real(double),allocatable :: loc_charge(:)
 
+    call start_backtrace(t=backtrace_timer,who='loc_pp_derivative_tm',where=7,level=3,echo=.true.)
     call start_timer(tmr_std_pseudopot)
     if(iprint_pseudo>2.AND.inode==ionode) write(io_lun,fmt='(4x,"Doing TM force with pseudotype: ",i3)') pseudo(1)%tm_loc_pot
     ! the structure of this subroutine is similar to set_tm_pseudo et.
@@ -1180,18 +1182,20 @@ contains
                               HF_force(dir1,ig_atom) = &
                                 HF_force(dir1,ig_atom) + &
                                 fr_2(dir1) * grid_point_volume
-                              if (flag_full_stress) then
-                                do dir2=1,3
-                                  loc_HF_stress(dir1,dir2) = &
-                                    loc_HF_stress(dir1,dir2) + &
+                              if (flag_stress) then
+                                if (flag_full_stress) then
+                                  do dir2=1,3
+                                    loc_HF_stress(dir1,dir2) = &
+                                      loc_HF_stress(dir1,dir2) + &
+                                      fr_2(dir1) * grid_point_volume * &
+                                      r(dir2) * r_from_i
+                                  end do
+                                else
+                                  loc_HF_stress(dir1,dir1) = &
+                                    loc_HF_stress(dir1,dir1) + &
                                     fr_2(dir1) * grid_point_volume * &
-                                    r(dir2) * r_from_i
-                                end do
-                              else
-                                loc_HF_stress(dir1,dir1) = &
-                                  loc_HF_stress(dir1,dir1) + &
-                                  fr_2(dir1) * grid_point_volume * &
-                                  r(dir1) * r_from_i
+                                    r(dir1) * r_from_i
+                                end if
                               end if
                             end do
                          end if ! j+1<pseudo(the_species)%vna%n
@@ -1224,18 +1228,20 @@ contains
                               HF_force(dir1,ig_atom) = &
                                 HF_force(dir1,ig_atom) + &
                                 fr_2(dir1) * grid_point_volume
-                              if (flag_full_stress) then
-                                do dir2=1,3
-                                  loc_HF_stress(dir1,dir2) = &
-                                    loc_HF_stress(dir1,dir2) + &
+                              if (flag_stress) then
+                                if (flag_full_stress) then
+                                  do dir2=1,3
+                                    loc_HF_stress(dir1,dir2) = &
+                                      loc_HF_stress(dir1,dir2) + &
+                                      fr_2(dir1) * grid_point_volume * &
+                                      r(dir2) * r_from_i
+                                  end do
+                                else
+                                  loc_HF_stress(dir1,dir1) = &
+                                    loc_HF_stress(dir1,dir1) + &
                                     fr_2(dir1) * grid_point_volume * &
-                                    r(dir2) * r_from_i
-                                end do
-                              else
-                                loc_HF_stress(dir1,dir1) = &
-                                  loc_HF_stress(dir1,dir1) + &
-                                  fr_2(dir1) * grid_point_volume * &
-                                  r(dir1) * r_from_i
+                                    r(dir1) * r_from_i
+                                end if
                               end if
                             end do
                          end if ! j+1<atomic_density_table(the_species)%length
@@ -1269,18 +1275,20 @@ contains
                               HF_force(dir1,ig_atom) = &
                                 HF_force(dir1,ig_atom) + &
                                 fr_1(dir1) * elec_here * fr_2(dir1)
-                              if (flag_full_stress) then
-                                do dir2=1,3
-                                  loc_HF_stress(dir1,dir2) = &
-                                    loc_HF_stress(dir1,dir2) + &
+                              if (flag_stress) then
+                                if (flag_full_stress) then
+                                  do dir2=1,3
+                                    loc_HF_stress(dir1,dir2) = &
+                                      loc_HF_stress(dir1,dir2) + &
+                                      (fr_1(dir1) * elec_here + fr_2(dir1)) * &
+                                      r(dir2) * r_from_i
+                                  end do
+                                else
+                                  loc_HF_stress(dir1,dir1) = &
+                                    loc_HF_stress(dir1,dir1) + &
                                     (fr_1(dir1) * elec_here + fr_2(dir1)) * &
-                                    r(dir2) * r_from_i
-                                end do
-                              else
-                                loc_HF_stress(dir1,dir1) = &
-                                  loc_HF_stress(dir1,dir1) + &
-                                  (fr_1(dir1) * elec_here + fr_2(dir1)) * &
-                                  r(dir1) * r_from_i
+                                    r(dir1) * r_from_i
+                                end if
                               end if
                             end do
                             r2 = r_from_i*r_from_i
@@ -1317,19 +1325,21 @@ contains
                               HF_force(dir1,ig_atom) = &
                                 HF_force(dir1,ig_atom) + &
                                 fr_2(dir1) * grid_point_volume
-                              if (flag_full_stress) then
-                                do dir2=1,3
-                                ! SYM, DRB 2014/09/02 and 2015/03: Accumulate HF stress and local charge (for reciprocal space stress)
-                                  loc_HF_stress(dir1,dir2) = &
-                                    loc_HF_stress(dir1,dir2) + &
+                              if (flag_stress) then
+                                if (flag_full_stress) then
+                                  do dir2=1,3
+                                  ! SYM, DRB 2014/09/02 and 2015/03: Accumulate HF stress and local charge (for reciprocal space stress)
+                                    loc_HF_stress(dir1,dir2) = &
+                                      loc_HF_stress(dir1,dir2) + &
+                                      fr_2(dir1) * grid_point_volume * &
+                                      r(dir2) * r_from_i
+                                  end do
+                                else
+                                  loc_HF_stress(dir1,dir1) = &
+                                    loc_HF_stress(dir1,dir1) + &
                                     fr_2(dir1) * grid_point_volume * &
-                                    r(dir2) * r_from_i
-                                end do
-                              else
-                                loc_HF_stress(dir1,dir1) = &
-                                  loc_HF_stress(dir1,dir1) + &
-                                  fr_2(dir1) * grid_point_volume * &
-                                  r(dir1) * r_from_i
+                                    r(dir1) * r_from_i
+                                end if
                               end if
                             end do
                             loc_charge(igrid) = loc_charge(igrid)  + a*r1+b*r2+c*r3+d*r4
@@ -1367,9 +1377,10 @@ contains
     !  In the future this should be replaced by summation with local communication
     !    Tsuyoshi Miyazaki
     call gsum(HF_force,3,ni_in_cell)
-    call gsum(loc_HF_stress,3,3)
+    if (flag_stress) call gsum(loc_HF_stress,3,3)
     ! Don't gsum loc_G_stress - that's done in hartree
     call stop_timer(tmr_std_pseudopot)
+    call stop_backtrace(t=backtrace_timer,who='loc_pp_derivative_tm',echo=.true.)
 
     return
   end subroutine loc_pp_derivative_tm

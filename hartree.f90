@@ -103,7 +103,7 @@ contains
                              one_over_grid_point_volume, n_grid_z
     use fft_module,    only: fft3, hartree_factor, z_columns_node, i0, recip_vector
     use GenComms,      only: gsum,  inode, cq_abort
-    use global_module, only: area_SC, flag_full_stress
+    use global_module, only: area_SC, flag_full_stress, flag_stress
     use memory_module, only: reg_alloc_mem, reg_dealloc_mem, type_dbl
 
     implicit none
@@ -159,32 +159,36 @@ contains
        dumi = ip * hartree_factor(i) 
        energy = energy + dumr * rp + dumi * ip
        chdenr(i) = cmplx(dumr, dumi, double_cplx)
-       if(second_stress) then
-          rp2 = real(str_chdenr(i),double)
-          ip2 = aimag(str_chdenr(i))
+       if (flag_stress) then
+         if(second_stress) then
+            rp2 = real(str_chdenr(i),double)
+            ip2 = aimag(str_chdenr(i))
+         end if
        end if
        ! SYM 2014/09/08 15:41 Hartree stress calculate and accumulate
-       do dir1 = 1,3
-          if (flag_full_stress) then
-             do dir2 = 1,3
-               rv2 = recip_vector(i,dir1)*recip_vector(i,dir2)
-               chden_str_r(dir1,dir2) = dumr * rv2 * hartree_factor(i)
-               chden_str_i(dir1,dir2) = dumi * rv2 * hartree_factor(i)
-               Hartree_stress(dir1,dir2) = Hartree_stress(dir1,dir2) + &
-                 rp*chden_str_r(dir1,dir2) + ip*chden_str_i(dir1,dir2)
-               if (second_stress) stress2(dir1,dir2) = stress2(dir1,dir2) + &
-                 rp2*chden_str_r(dir1,dir2) + ip2*chden_str_i(dir1,dir2)
-             end do
-          else
-             rv2 = recip_vector(i,dir1)*recip_vector(i,dir1)
-             chden_str_r(dir1,dir1) = dumr * rv2 * hartree_factor(i)
-             chden_str_i(dir1,dir1) = dumi * rv2 * hartree_factor(i)
-             Hartree_stress(dir1,dir1) = Hartree_stress(dir1,dir1) + &
-               rp*chden_str_r(dir1,dir1) + ip*chden_str_i(dir1,dir1)
-             if (second_stress) stress2(dir1,dir1) = stress2(dir1,dir1) + &
-               rp2*chden_str_r(dir1,dir1) + ip2*chden_str_i(dir1,dir1)
-          end if
-       end do
+       if (flag_stress) then
+         do dir1 = 1,3
+            if (flag_full_stress) then
+               do dir2 = 1,3
+                 rv2 = recip_vector(i,dir1)*recip_vector(i,dir2)
+                 chden_str_r(dir1,dir2) = dumr * rv2 * hartree_factor(i)
+                 chden_str_i(dir1,dir2) = dumi * rv2 * hartree_factor(i)
+                 Hartree_stress(dir1,dir2) = Hartree_stress(dir1,dir2) + &
+                   rp*chden_str_r(dir1,dir2) + ip*chden_str_i(dir1,dir2)
+                 if (second_stress) stress2(dir1,dir2) = stress2(dir1,dir2) + &
+                   rp2*chden_str_r(dir1,dir2) + ip2*chden_str_i(dir1,dir2)
+               end do
+            else
+               rv2 = recip_vector(i,dir1)*recip_vector(i,dir1)
+               chden_str_r(dir1,dir1) = dumr * rv2 * hartree_factor(i)
+               chden_str_i(dir1,dir1) = dumi * rv2 * hartree_factor(i)
+               Hartree_stress(dir1,dir1) = Hartree_stress(dir1,dir1) + &
+                 rp*chden_str_r(dir1,dir1) + ip*chden_str_i(dir1,dir1)
+               if (second_stress) stress2(dir1,dir1) = stress2(dir1,dir1) + &
+                 rp2*chden_str_r(dir1,dir1) + ip2*chden_str_i(dir1,dir1)
+            end if
+         end do
+       end if
     end do
     call fft3(potential, chdenr, size, +1)
     ! Sum over processes
@@ -193,12 +197,14 @@ contains
     ! Scale
     potential = potential*harcon
     energy = energy * grid_point_volume*half* harcon 
-    Hartree_stress(1:3,1:3) = Hartree_stress(1:3,1:3) * harcon * &
-                              grid_point_volume/(two*pi*two*pi)
-    if(second_stress) then
-       call gsum(stress2,3,3)
-       stress2(1:3,1:3) = stress2(1:3,1:3) * two * harcon * &
-                          grid_point_volume/(two*pi*two*pi)
+    if (flag_stress) then
+      Hartree_stress(1:3,1:3) = Hartree_stress(1:3,1:3) * harcon * &
+                                grid_point_volume/(two*pi*two*pi)
+      if(second_stress) then
+         call gsum(stress2,3,3)
+         stress2(1:3,1:3) = stress2(1:3,1:3) * two * harcon * &
+                            grid_point_volume/(two*pi*two*pi)
+      end if
     end if
     deallocate(chdenr, STAT=stat)
     if (stat /= 0) &

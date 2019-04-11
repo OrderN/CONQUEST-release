@@ -1605,7 +1605,7 @@ contains
                                       flavour, x_energy )
     use datatypes
     use numbers
-    use global_module, only: nspin
+    use global_module, only: nspin, flag_stress, flag_full_stress
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum, cq_abort
     use fft_module,    only: fft3, recip_vector
@@ -1680,18 +1680,27 @@ contains
           do dir1=1,3
              grad_density(rr,dir1,spin) = drhoEps_x(dir1,spin) + &
                                           drhoEps_c(dir1,spin)
-             do dir2=1,3
-                XC_GGA_stress(dir1,dir2) = XC_GGA_stress(dir1,dir2) - &
-                  grho_r(dir1,spin)*grad_density(rr,dir2,spin)
-             end do
+             if (flag_stress) then
+               if (flag_full_stress) then
+                 do dir2=1,3
+                    XC_GGA_stress(dir1,dir2) = XC_GGA_stress(dir1,dir2) - &
+                      grho_r(dir1,spin)*grad_density(rr,dir2,spin)
+                 end do
+               else
+                  XC_GGA_stress(dir1,dir1) = XC_GGA_stress(dir1,dir1) - &
+                    grho_r(dir1,spin)*grad_density(rr,dir1,spin)
+               end if
+             end if
           end do
        end do
     end do ! rr
     call gsum(xc_energy)
     if (present(x_energy)) call gsum(x_energy)
     xc_energy = xc_energy * grid_point_volume
-    call gsum(XC_GGA_stress,3,3)
-    XC_GGA_stress = XC_GGA_stress*grid_point_volume
+    if (flag_stress) then
+      call gsum(XC_GGA_stress,3,3)
+      XC_GGA_stress = XC_GGA_stress*grid_point_volume
+    end if
     !write(*,*) 'GGA stress term: ',XC_GGA_stress
     if (present(x_energy)) x_energy = x_energy * grid_point_volume
 
@@ -1766,7 +1775,7 @@ contains
                                        flavour, x_energy )
     use datatypes
     use numbers
-    use global_module, only: nspin, flag_full_stress
+    use global_module, only: nspin, flag_full_stress, flag_stress
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum, cq_abort
     use fft_module,    only: fft3, recip_vector
@@ -1844,14 +1853,16 @@ contains
           grad_density(rr,1:3,spin) = exx_a * drhoEps_x(1:3,spin) + &
                                       drhoEps_c(1:3,spin)
           do dir1=1,3
-             if (flag_full_stress) then
-               do dir2=1,3
-                  XC_GGA_stress(dir1,dir2) = XC_GGA_stress(dir1,dir2) - &
-                    grho_r(dir1,spin)*grad_density(rr,dir2,spin)
-               end do
-             else
-               XC_GGA_stress(dir1,dir1) = XC_GGA_stress(dir1,dir1) - &
-                 grho_r(dir1,spin)*grad_density(rr,dir1,spin)
+             if (flag_stress) then
+               if (flag_full_stress) then
+                 do dir2=1,3
+                    XC_GGA_stress(dir1,dir2) = XC_GGA_stress(dir1,dir2) - &
+                      grho_r(dir1,spin)*grad_density(rr,dir2,spin)
+                 end do
+               else
+                 XC_GGA_stress(dir1,dir1) = XC_GGA_stress(dir1,dir1) - &
+                   grho_r(dir1,spin)*grad_density(rr,dir1,spin)
+               end if
              end if
           end do
        end do
@@ -1859,8 +1870,10 @@ contains
     call gsum(xc_energy)
     if (present(x_energy)) call gsum(x_energy)
     xc_energy = xc_energy * grid_point_volume
-    call gsum(XC_GGA_stress,3,3)
-    XC_GGA_stress = XC_GGA_stress*grid_point_volume
+    if (flag_stress) then
+      call gsum(XC_GGA_stress,3,3)
+      XC_GGA_stress = XC_GGA_stress*grid_point_volume
+    end if
     if (present(x_energy)) x_energy =  x_energy * grid_point_volume
 
     ! add the second term to potential
