@@ -2320,7 +2320,9 @@ contains
                spin
     real(double) :: thisK_gradT
     real(double), dimension(3) :: r_str
+    type(cq_timer) :: backtrace_timer
 
+    call start_backtrace(t=backtrace_timer,who='get_KE_force',where=7,level=3,echo=.true.)
 
 !    ! First, clear the diagonal blocks of data K; this is the easiest way
 !    ! to avoid doing the onsite terms
@@ -2479,6 +2481,7 @@ contains
     end if
 
       call free_temp_matrix(mat_grad_T)
+      call stop_backtrace(t=backtrace_timer,who='get_KE_force',echo=.true.)
 
       return
     end subroutine get_KE_force
@@ -2571,7 +2574,10 @@ contains
     real(double) :: dx, dy, dz, thisdAP, locforce
     real(double), dimension(:,:,:), allocatable ::  NA_P_stress, NA_HF_stress
     real(double), dimension(:), allocatable :: force_contrib, f_c2
+    type(cq_timer) :: backtrace_timer
     
+    call start_backtrace(t=backtrace_timer,who='get_HNA_force',where=7,level=3,echo=.true.)
+
 !    ! First, clear the diagonal blocks of data K; this is the easiest way
 !    ! to avoid doing the onsite terms
     NA_force = zero
@@ -2914,6 +2920,7 @@ contains
     call free_temp_matrix(mat_dNAT)
     call free_temp_matrix(mat_dNA)
     deallocate(force_contrib)
+    call stop_backtrace(t=backtrace_timer,who='get_HNA_force',echo=.true.)
     return
   end subroutine get_HNA_force
   !!***
