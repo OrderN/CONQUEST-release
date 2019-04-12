@@ -880,14 +880,14 @@ contains
     abstol = 1.0e-300_double
 
     ! open debug file for TVEC and subspace MOs
-    !if (iprint_basis>=6) then
+    if (iprint_basis>=6) then
        call get_file_name('TVECr',numprocs,inode,filename11)  ! Build a filename based on node number for TVEC
        call io_assign(lun11)                                  ! Open file 
        open(unit=lun11,file=filename11)
        call get_file_name('SubMOr',numprocs,inode,filename12) ! Build a filename based on node number for MOs
        call io_assign(lun12)                                  ! Open file
        open(unit=lun12,file=filename12)
-    !endif
+    endif
 
     ! estimate the maximum size of subspace matrices for halo-atoms (Ssub and Hsub)
     max_npao     = maxval(npao_species)                         ! max. number of PAOs belonging to a halo atom
@@ -1016,8 +1016,8 @@ contains
                 NEsub = zero
                 call LFD_make_TVEC(TVEC,NTVEC,len_Sub_i,np,i,atom_i,atom_num,atom_spec,LFDhalo, NEsub, &
                                    len_Sub_i_d,n_naba_i_d,l_k_g,l_k_r2,l_kpao)  
-                call LFD_debug_matrix(lun11,0,np,atom_i,EVAL,TVEC,len_Sub_i,NTVEC, &
-                                                           n_naba_i_d,l_k_g,l_k_r2,l_kpao)           
+                !call LFD_debug_matrix(lun11,0,np,atom_i,EVAL,TVEC,len_Sub_i,NTVEC, &
+                !                                           n_naba_i_d,l_k_g,l_k_r2,l_kpao)
 !
 !               --- (2) make subspaces for atom_i
 !
