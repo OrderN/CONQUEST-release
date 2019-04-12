@@ -157,6 +157,8 @@ contains
   !!    Added experimental backtrace
   !!   2018/01/22 tsuyoshi (with dave)
   !!    Allocate atom_coord_diff for all calculations
+  !!   2019/04/04 14:17 dave
+  !!    Correct bug in wrapping with non-fractional coordinates and Angstroms
   !!  SOURCE
   !!
   subroutine read_atomic_positions(filename)
@@ -446,6 +448,10 @@ second:   do
                 atom_coord(1,i) = x
                 atom_coord(2,i) = y
                 atom_coord(3,i) = z
+                !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
+                ! 2019/04/04 14:16 dave
+                ! Moved here so that distances are corrected *before* wrapping below
+                if(dist_units == ang) atom_coord(:,i)=atom_coord(:,i)*AngToBohr
              end if
              ! Wrap coordinates
              cell(1) = r_super_x
@@ -476,10 +482,6 @@ second:   do
                        i,atom_coord(1:3,i), species_glob(i), &
                        flag_move_atom(1:3,i)
           end do
-          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
-             if(.not.flag_fractional_atomic_coords .and. dist_units == ang) &
-              atom_coord(:,:)=atom_coord(:,:)*AngToBohr
-          !2010.06.25 TM (Angstrom Units in coords file, but not pdb)
           call io_close(lun)
        end if pdb
     end if
