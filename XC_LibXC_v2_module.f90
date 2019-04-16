@@ -101,7 +101,7 @@ contains
     implicit none
 
     ! Local variables
-    integer :: vmakor, vminor, vmicro, i, j
+    integer :: vmajor, vminor, vmicro, i, j
     integer, dimension(2) :: xcpart
     character(len=120) :: name, kind, family, ref
     type(xc_f90_pointer_t) :: temp_xc_func
