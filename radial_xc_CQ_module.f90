@@ -4,7 +4,7 @@ module radial_xc
   implicit none
 
   ! Numerical flag choosing functional type
-  integer, allocatable, dimension(:) :: flag_functional_type
+  integer :: flag_functional_type
   character(len=120)  :: functional_description  ! DRB lengthened to contain LibXC names
   integer, parameter :: functional_lda_pz81        = 1
   integer, parameter :: functional_lda_gth96       = 2
@@ -21,25 +21,13 @@ module radial_xc
  
   
   ! LibXC variables
-  integer, allocatable, dimension(:) :: n_xc_terms
-  integer, allocatable, dimension(:,:) :: i_xc_family
-  logical, allocatable, dimension(:) :: flag_use_libxc
+  integer :: n_xc_terms
+  integer, dimension(2) :: i_xc_family
+  logical :: flag_use_libxc
 
 contains
 
-  ! Allocate variables for XC storage
-  subroutine alloc_xc(n_species)
-
-    implicit none
-
-    integer :: n_species
-    
-    allocate(flag_functional_type(n_species),n_xc_terms(n_species),i_xc_family(2,n_species), &
-         flag_use_libxc(n_species))
-    return
-  end subroutine alloc_xc
-  
-  subroutine init_xc(species)
+  subroutine init_xc
 
     use global_module, ONLY : nspin, flag_dft_d2, iprint
     use GenComms, ONLY : inode, ionode, cq_abort
@@ -47,37 +35,35 @@ contains
     
     implicit none
 
-    integer :: species
-
     ! Local variables
     integer :: vmajor, vminor, vmicro, i, j
     integer, dimension(2) :: xcpart
     character(len=120) :: name, kind, family, ref
 
     ! Test for LibXC or CQ
-    if(flag_functional_type(species)<0) then
+    if(flag_functional_type<0) then
        ! --------------------------
        ! LibXC functional specified
        ! --------------------------
        call cq_abort("This binary was not compiled against LibXC: aborting as functional < 0 ", &
-            flag_functional_type(species))
+            flag_functional_type)
     else
        ! -----------------------------
        ! Conquest functional specified
        ! -----------------------------
        flag_use_libxc = .false.
        if(nspin==2) then ! Check for spin-compatible functionals
-          if ( flag_functional_type(species) == functional_lda_pz81       .or. &
-               flag_functional_type(species) == functional_lda_gth96     ) then
+          if ( flag_functional_type == functional_lda_pz81       .or. &
+               flag_functional_type == functional_lda_gth96     ) then
              if (inode == ionode) &
                   write (*,'(/,a,/)') &
                   '*** WARNING: the chosen xc-functional is not &
                   &implemented for spin polarised calculation, &
                   &reverting to LDA-PW92. ***'
-             flag_functional_type(species) = functional_lda_pw92
+             flag_functional_type = functional_lda_pw92
           end if
        end if
-       select case(flag_functional_type(species))
+       select case(flag_functional_type)
        case (functional_lda_pz81)
           functional_description = 'LDA PZ81'
           if(flag_dft_d2) call cq_abort("DFT-D2 only compatible with PBE and rPBE")
@@ -109,7 +95,7 @@ contains
   end subroutine init_xc
   !!***
 
-  subroutine get_vxc(n_tot,rr,rho,i_species,vxc,exc)
+  subroutine get_vxc(n_tot,rr,rho,vxc,exc)
 
     use datatypes
     use numbers
@@ -119,7 +105,7 @@ contains
     implicit none
 
     ! Passed variables
-    integer :: n_tot, i_species
+    integer :: n_tot
     real(double), dimension(n_tot) :: rho, rr,vxc
     real(double), OPTIONAL :: exc
     real(double), allocatable, dimension(:) :: exc_array
@@ -136,7 +122,7 @@ contains
     end if
     vxc = zero
     ! Choose LibXC or Conquest
-    select case(flag_functional_type(i_species))
+    select case(flag_functional_type)
     case(functional_lda_pz81)
        if(flag_energy) then
           call vxc_pz_ca(n_tot, rr, rho, vxc, exc_array)

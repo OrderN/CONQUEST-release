@@ -16,34 +16,45 @@ program MakeIonFiles
   ! UPF and pseudo_file_format_oncv are new - are they needed ?
   use pseudopotential_common, ONLY: ABINIT, UPF, pseudo_file_format_oncv
   ! Local modules
-  use pao_info
+  use pseudo_atom_info
   use read
   use write
   use schro
   use mesh
+  use input_module, ONLY: input_lines
 
   implicit none
+
+  integer :: i_species
 
   call init_comms(myid,numprocs)
   call init_reg_mem
 
   call write_banner
-  ! Read input (from Conquest_input file)
-  call read_input
-  !! Read pseudopotential files
-  !if(pseudo_file_format_oncv==ABINIT) then
-  !   call read_abinit
-  !else if(pseudo_file_format_oncv==UPF) then
-  !   call read_upf
-  !else
-  !   call cq_abort("Unknown pseudopotential format: ",pseudo_file_format_oncv)
-  !end if
-  call read_hamann_input
-  call read_vkb
-  call set_pao_initial
-  call make_paos
-  call write_header(val)
-  call write_paos(val)
-  call write_pseudopotential
-
+  ! Load Conquest_input, read general parameters
+  call read_general_input
+  ! Loop over species, read appropriate data and generate PAOs
+  do i_species = 1, n_species
+     !
+     ! Inputs
+     !
+     call read_species_input(i_species)
+     !call read_hamann_input(i_species)
+     !call read_vkb(i_species)
+     !
+     ! Setup
+     !
+     call set_pao_initial(i_species)
+     ! Make PAOs
+     call make_paos(i_species)
+     !
+     ! Output
+     !
+     call write_header(i_species)
+     call write_paos(i_species)
+     call write_pseudopotential(i_species)
+     call deallocate_val
+     call deallocate_pao
+     call deallocate_vkb(i_species)
+  end do
 end program MakeIonFiles
