@@ -3290,6 +3290,44 @@ contains
   end subroutine ran2
   !!***
 
+  !!****f* move_atoms/box_muller *
+  !!  NAME
+  !!   box_muller
+  !!  PURPOSE
+  !!   Box-Muller transform to generate pairs of numbers drawn from a 
+  !!   Gaussian distribution given a uniform distribution, via 
+  !!   Marsaglia's polar method (no sine or cosine calls)
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/04/19
+  !!  MODIFICATION HISTORY
+  !!
+  !!  SOURCE
+  !!
+  subroutine box_muller(sigma, mu, y1, y2)
+
+    ! Passed variables
+    real(double), intent(in)  :: sigma, mu
+    real(double), intent(out) :: y1, y2 ! generate two random numbers
+
+    ! Local variables
+    real(double)              :: x1, x2, w
+
+    do
+      call ran2(x1,1)
+      call ran2(x1,2)
+      y1 = two*x1 - one
+      y2 = two*x2 - one
+      w = y1*y1 + y2*y2
+      if (w < 1.0) exit
+    end do
+    w = sqrt(-two*log(w)/w)
+    y1 = y1*w*sigma + mu
+    y2 = y2*w*sigma + mu
+
+  end subroutine box_muller
+
 
   !!****f* move_atoms/update_cell_dims *
   !!  NAME

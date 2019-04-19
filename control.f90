@@ -1033,16 +1033,21 @@ contains
         if (present(second_call)) call thermo%get_nhc_energy
       case('berendsen')
         if (present(second_call)) then
-          call thermo%berendsen_v_rescale(velocity)
+          call thermo%v_rescale(velocity)
         else
           call thermo%get_berendsen_thermo_sf(MDtimestep)
+        end if
+      case('csvr')
+        if (present(second_call)) then
+          call thermo%get_csvr_thermo_sf(MDtimestep)
+          call thermo%v_rescale(velocity)
         end if
      end select
    case('npt')
       select case(baro%baro_type)
       case('berendsen')
         if (present(second_call)) then
-          call thermo%berendsen_v_rescale(velocity)
+          call thermo%v_rescale(velocity)
           ! Berendsen barostat propagation occurs after second
           ! vVerlet_v_dthalf step
         else
@@ -1053,7 +1058,7 @@ contains
       case('iso-mttk')
         if (mdl%nequil  > 0) then
           if (present(second_call)) then
-            call thermo%berendsen_v_rescale(velocity)
+            call thermo%v_rescale(velocity)
           else
             call thermo%get_berendsen_thermo_sf(MDtimestep)
             call baro%get_berendsen_baro_sf(MDtimestep)

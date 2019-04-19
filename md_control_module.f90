@@ -139,7 +139,8 @@ module md_control
       procedure, public   :: init_nhc
       procedure, public   :: init_ys
       procedure, public   :: get_berendsen_thermo_sf
-      procedure, public   :: berendsen_v_rescale
+      procedure, public   :: get_csvr_thermo_sf
+      procedure, public   :: v_rescale
       procedure, public   :: get_nhc_energy
       procedure, public   :: get_temperature_and_ke
       procedure, public   :: dump_thermo_state
@@ -298,6 +299,8 @@ contains
     select case(th%thermo_type)
     case('none')
     case('berendsen')
+      flag_extended_system = .false.
+    case('csvr')
       flag_extended_system = .false.
     case('nhc')
       call th%init_nhc(dt)
@@ -659,9 +662,68 @@ contains
   end subroutine get_berendsen_thermo_sf
   !!***
 
-  !!****m* md_control/berendsen_v_rescale *
+  !!****m* md_control/get_csvr_thermo_sf *
   !!  NAME
-  !!   berendsen_v_rescale
+  !!   get_csvr_thermo_sf
+  !!  PURPOSE
+  !!   Get velocity scaling factor for CSVR thermostat: &
+  !!   Bussi et al. J. Chem. Phys. 126, 014101 (2007)
+  !!  AUTHOR
+  !!    Zamaan Raza 
+  !!  CREATION DATE
+  !!   2019/04/19
+  !!  SOURCE
+  !!  
+  subroutine get_csvr_thermo_sf(th, dt)
+
+    use move_atoms,    only: box_muller
+
+    ! Passed variables
+    class(type_thermostat), intent(inout)   :: th
+    real(double), intent(in)                :: dt
+
+    ! Local variables
+    real(double)  :: ke, rn1, rn2, alpha_sq, exp_dt_tau, r1, &
+                     sum_ri_sq, temp_fac
+    integer       :: i, n_bm_calls
+    logical       :: odd
+
+    if (modulo(th%ndof,2) == 0) then
+      n_bm_calls = th%ndof/2
+      odd = .false.
+    else
+      n_bm_calls = (th%ndof - 1)/2
+      odd = .true.
+    end if
+
+    exp_dt_tau = exp(-dt/th%tau_T)
+    temp_fac = th%ke_target/th%ndof/th%ke_ions
+
+    ! sum can be replaced by a single number drawn from a gamma distribution
+    sum_ri_sq = zero
+    do i=1,n_bm_calls
+      call box_muller(one, zero, rn1, rn2)
+      if (i == 1) then
+        r1 = rn1
+      else
+        sum_ri_sq = sum_ri_sq + rn1*rn1
+      end if
+      sum_ri_sq = sum_ri_sq + rn2*rn2
+    end do
+    if (odd) then
+      call box_muller(one, zero, rn1, rn2)
+      sum_ri_sq = sum_ri_sq + rn1*rn1
+    end if
+
+    alpha_sq = exp_dt_tau + temp_fac * (r1*r1 + sum_ri_sq) + &
+               two*sqrt(exp_dt_tau) * sqrt(temp_fac*(one - exp_dt_tau)) * r1
+    th%lambda = sqrt(alpha_sq)
+
+  end subroutine get_csvr_thermo_sf
+
+  !!****m* md_control/v_rescale *
+  !!  NAME
+  !!   v_rescale
   !!  PURPOSE
   !!   rescale veolocity using Berendsen (weak coupling) velocity rescaling.
   !!   Note that the scaling factor is computed before the first vVerlet
@@ -673,7 +735,7 @@ contains
   !!   2017/10/24 14:26
   !!  SOURCE
   !!  
-  subroutine berendsen_v_rescale(th, v)
+  subroutine v_rescale(th, v)
 
     ! passed variables
     class(type_thermostat), intent(inout)       :: th
@@ -682,11 +744,11 @@ contains
     v = v*th%lambda
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
-      write(io_lun,'(2x,a)') "berendsen_v_rescale"
+      write(io_lun,'(2x,a)') "v_rescale"
       write(io_lun,'(4x,"lambda: ",e16.8)') th%lambda
     end if
 
-  end subroutine berendsen_v_rescale
+  end subroutine v_rescale
   !!***
 
   !!****m* md_control/update_G_nhc *
@@ -1208,6 +1270,8 @@ contains
     select case(baro%baro_type)
     case('none')
     case('berendsen')
+      flag_extended_system = .false.
+    case('iisvr')
       flag_extended_system = .false.
     case('iso-mttk')
       flag_extended_system = .true.
