@@ -586,6 +586,12 @@ contains
     type(type_thermostat), target :: thermo
     type(type_barostat), target   :: baro
 
+    ! backtrace timer
+    type(cq_timer)    :: backtrace_timer
+
+    call start_backtrace(t=backtrace_timer,who='md_run',&
+         where=area,level=1,echo=.true.)
+
     n_stop_qMD = 0
     final_call = 1
     allocate(ion_velocity(3,ni_in_cell), STAT=stat)
@@ -637,8 +643,8 @@ contains
     ! Thermostat/barostat initialisation
     call init_ensemble(baro, thermo, mdl, md_ndof, nequil)
     call thermo%get_temperature_and_ke(baro, ion_velocity, &
-                                      mdl%ion_kinetic_energy)
-    call baro%get_pressure_and_stress
+         mdl%ion_kinetic_energy, bt_level=2)
+    call baro%get_pressure_and_stress(bt_level=2)
     call mdl%get_cons_qty
 
     ! Get converted 1-D array for flag_atom_move
@@ -675,8 +681,8 @@ contains
             write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
 
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
-                                          mdl%ion_kinetic_energy)
-       call baro%get_pressure_and_stress
+            mdl%ion_kinetic_energy, bt_level=2)
+       call baro%get_pressure_and_stress(bt_level=2)
 
        ! thermostat/barostat (MTTK splitting of Liouvillian)
        call integrate_pt(baro, thermo, mdl, ion_velocity)
@@ -751,8 +757,8 @@ contains
        end if
        thermo%ke_ions = mdl%ion_kinetic_energy
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
-                                          mdl%ion_kinetic_energy)
-       call baro%get_pressure_and_stress
+            mdl%ion_kinetic_energy, bt_level=2)
+       call baro%get_pressure_and_stress(bt_level=2)
 
        !! For Debuggging !!
        !!call cq_abort(" STOP FOR DEBUGGING")
@@ -816,9 +822,8 @@ contains
        ! The kinetic component of stress changes after the second velocity
        ! update 
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
-                                          mdl%ion_kinetic_energy, &
-                                          final_call)
-       call baro%get_pressure_and_stress(final_call)
+            mdl%ion_kinetic_energy, final_call=final_call, bt_level=2)
+       call baro%get_pressure_and_stress(final_call=final_call, bt_level=2)
  
        if (nequil > 0) then
          nequil = nequil - 1
@@ -858,6 +863,7 @@ contains
     if (stat /= 0) call cq_abort("Error deallocating velocity in md_run: ", &
                                  ni_in_cell, stat)
     call reg_dealloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
+    call stop_backtrace(t=backtrace_timer,who='md_run',echo=.true.)
     return
   end subroutine md_run
   !!***
@@ -905,7 +911,11 @@ contains
     logical, optional                     :: second_call
 
     ! local variables
-    character(50) :: file_velocity='velocity.dat'
+    character(50)  :: file_velocity='velocity.dat'
+    type(cq_timer) :: backtrace_timer
+
+    call start_backtrace(t=backtrace_timer,who='init_ensemble',&
+         where=area,level=2,echo=.true.)
 
     if (inode==ionode .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "Welcome to init_ensemble"
@@ -956,6 +966,31 @@ contains
       end if
       call baro%init_baro('none', MDtimestep, md_ndof, stress, ion_velocity, &
                           md_tau_P, mdl%ion_kinetic_energy) !to get the pressure
+    case('nph')
+      if (leqi(md_baro_type, 'berendsen')) then
+        call thermo%init_thermo('none', 'berendsen', MDtimestep, &
+                                md_ndof, md_tau_T, mdl%ion_kinetic_energy)
+        call baro%init_baro('berendsen', MDtimestep, md_ndof, stress, &
+                            ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
+      else
+        if (nequil > 0) then ! Equilibrate using Berendsen?
+          if (inode == ionode) then
+            write (io_lun, '(4x,"Equilibrating using Berendsen &
+                            &barostat for ",i8," steps")') nequil
+          end if
+          call thermo%init_thermo('none', 'berendsen', MDtimestep, &
+                                  md_ndof, md_tau_T_equil, &
+                                  mdl%ion_kinetic_energy)
+          call baro%init_baro('berendsen', MDtimestep, md_ndof, stress, &
+                              ion_velocity, md_tau_P_equil, &
+                              mdl%ion_kinetic_energy)
+        else
+          call thermo%init_thermo('none', md_baro_type, MDtimestep, &
+                                  md_ndof, md_tau_T, mdl%ion_kinetic_energy)
+          call baro%init_baro(md_baro_type, MDtimestep, md_ndof, stress, &
+                              ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
+        end if
+      end if
     case('npt')
       if (leqi(md_baro_type, 'berendsen')) then
         md_thermo_type = 'berendsen'
@@ -964,7 +999,6 @@ contains
         call baro%init_baro('berendsen', MDtimestep, md_ndof, stress, &
                             ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
       else
-        md_thermo_type = 'nhc'
         if (nequil > 0) then ! Equilibrate using Berendsen?
           if (inode == ionode) then
             write (io_lun, '(4x,"Equilibrating using Berendsen &
@@ -985,6 +1019,8 @@ contains
       end if
     end select
     if (flag_MDcontinue) call read_md_checkpoint(thermo, baro)
+    
+    call stop_backtrace(t=backtrace_timer,who='init_ensemble',echo=.true.)
 
   end subroutine init_ensemble
 
@@ -1002,6 +1038,7 @@ contains
   !!  
   subroutine integrate_pt(baro, thermo, mdl, velocity, second_call)
 
+    use numbers
     use global_module,    only: iprint_MD
     use GenComms,         only: inode, ionode
     use md_model,         only: type_md_model
@@ -1016,6 +1053,10 @@ contains
     logical, optional                           :: second_call
 
     ! local variables
+    type(cq_timer) :: backtrace_timer
+
+    call start_backtrace(t=backtrace_timer,who='integrate_pt',&
+         where=area,level=2,echo=.true.)
   
     if (inode==ionode .and. iprint_MD > 1) then
       if (present(second_call)) then
@@ -1037,12 +1078,29 @@ contains
         else
           call thermo%get_berendsen_thermo_sf(MDtimestep)
         end if
-      case('csvr')
+      case('svr')
         if (present(second_call)) then
-          call thermo%get_csvr_thermo_sf(MDtimestep)
+          call thermo%get_svr_thermo_sf(MDtimestep)
           call thermo%v_rescale(velocity)
         end if
      end select
+   case('nph')
+      select case(baro%baro_type)
+      case('ssm')
+        if (present(second_call)) then
+          call baro%couple_box_particle_velocity(thermo, velocity)
+          call thermo%get_temperature_and_ke(baro, velocity, &
+                                             mdl%ion_kinetic_energy)
+          call baro%get_pressure_and_stress(bt_level=3)
+          call baro%integrate_box(thermo)
+        else
+          call thermo%get_temperature_and_ke(baro, velocity, &
+                                             mdl%ion_kinetic_energy)
+          call baro%get_pressure_and_stress(bt_level=3)
+          call baro%integrate_box(thermo)
+          call baro%couple_box_particle_velocity(thermo, velocity)
+        end if
+      end select 
    case('npt')
       select case(baro%baro_type)
       case('berendsen')
@@ -1055,165 +1113,158 @@ contains
           call baro%get_berendsen_baro_sf(MDtimestep)
         end if
 !            call baro%propagate_berendsen(flag_movable)
-      case('iso-mttk')
-        if (mdl%nequil  > 0) then
-          if (present(second_call)) then
+      case('mttk')
+        call baro%propagate_npt_mttk(thermo, mdl%ion_kinetic_energy, &
+                                     velocity)
+      case('ssm')
+        if (present(second_call)) then
+          call baro%couple_box_particle_velocity(thermo, velocity)
+          call thermo%get_temperature_and_ke(baro, velocity, &
+               mdl%ion_kinetic_energy, bt_level=3)
+          call baro%get_pressure_and_stress(bt_level=3)
+          call baro%integrate_box(thermo)
+          select case(thermo%thermo_type)
+          case('nhc')
+            call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
+          case('svr')
+            call thermo%get_svr_thermo_sf(MDtimestep/two, baro)
             call thermo%v_rescale(velocity)
-          else
-            call thermo%get_berendsen_thermo_sf(MDtimestep)
-            call baro%get_berendsen_baro_sf(MDtimestep)
-          end if
+          case default
+            call cq_abort('Thermostat type must be "nhc" or "svr"')
+          end select
         else
-          call baro%propagate_npt_mttk(thermo, mdl%ion_kinetic_energy, &
-                                       velocity)
-        end if
-      case('ortho-mttk')
-      case('mttk')
-      case('iso-ssm')
-        if (present(second_call)) then
-          call baro%couple_box_particle_velocity(thermo, velocity)
+          select case(thermo%thermo_type)
+          case('nhc')
+            call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
+          case('svr')
+            call thermo%get_svr_thermo_sf(MDtimestep/two, baro)
+            call thermo%v_rescale(velocity)
+          case default
+            call cq_abort('Thermostat type must be "nhc" or "svr"')
+          end select
           call thermo%get_temperature_and_ke(baro, velocity, &
-                                             mdl%ion_kinetic_energy)
-          call baro%get_pressure_and_stress
-          call baro%integrate_box(thermo)
-          call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
-        else
-          call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
-          call thermo%get_temperature_and_ke(baro, velocity, &
-                                             mdl%ion_kinetic_energy)
-          call baro%get_pressure_and_stress
-          call baro%integrate_box(thermo)
-          call baro%couple_box_particle_velocity(thermo, velocity)
-        end if
-      case('ortho-ssm')
-        if (present(second_call)) then
-          call baro%couple_box_particle_velocity(thermo, velocity)
-          call thermo%get_temperature_and_ke(baro, velocity, &
-                                             mdl%ion_kinetic_energy)
-          call baro%get_pressure_and_stress
-          call baro%integrate_box(thermo)
-          call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
-        else
-          call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
-          call thermo%get_temperature_and_ke(baro, velocity, &
-                                             mdl%ion_kinetic_energy)
-          call baro%get_pressure_and_stress
+               mdl%ion_kinetic_energy, bt_level=3)
+          call baro%get_pressure_and_stress(bt_level=3)
           call baro%integrate_box(thermo)
           call baro%couple_box_particle_velocity(thermo, velocity)
         end if
       end select
-   end select
-end subroutine integrate_pt
+    end select
+    call stop_backtrace(t=backtrace_timer,who='integrate_pt',echo=.true.)
+  end subroutine integrate_pt
 !!*****
 
-!!****m* control/update_pos_and_box *
-!!  NAME
-!!   update_pos_and_box
-!!  PURPOSE
-!!   Perform the (modified) velocity Verlet position and box updates, &
-!!   depending on the ensemble and integrator
-!!  AUTHOR
-!!   Zamaan Raza
-!!  CREATION DATE
-!!   2018/08/11 10:27
-!!  SOURCE
-!!  
-subroutine update_pos_and_box(baro, nequil, flag_movable)
+  !!****m* control/update_pos_and_box *
+  !!  NAME
+  !!   update_pos_and_box
+  !!  PURPOSE
+  !!   Perform the (modified) velocity Verlet position and box updates, &
+  !!   depending on the ensemble and integrator
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/08/11 10:27
+  !!  SOURCE
+  !!  
+  subroutine update_pos_and_box(baro, nequil, flag_movable)
 
-  use Integrators,   only: vVerlet_r_dt
-  use io_module,     only: leqi
-  use GenComms,      only: inode, ionode
-  use global_module, only: iprint_MD
-  use md_control,    only: type_thermostat, type_barostat, ion_velocity, &
-                           md_baro_type
+    use Integrators,   only: vVerlet_r_dt
+    use io_module,     only: leqi
+    use GenComms,      only: inode, ionode
+    use global_module, only: iprint_MD
+    use md_control,    only: type_thermostat, type_barostat, ion_velocity, &
+                             md_baro_type
 
-  ! passed variables
-  type(type_barostat), intent(inout)  :: baro
-  integer, intent(in)                 :: nequil
-  logical, dimension(:), intent(in)   :: flag_movable
+    ! passed variables
+    type(type_barostat), intent(inout)  :: baro
+    integer, intent(in)                 :: nequil
+    logical, dimension(:), intent(in)   :: flag_movable
 
-  ! local variables
+    ! local variables
+    type(cq_timer) :: backtrace_timer
+
+    call start_backtrace(t=backtrace_timer,who='update_pos_and_box',&
+      where=area,level=2,echo=.true.)
 
     if (inode==ionode .and. iprint_MD > 1) &
-        write(io_lun,'(2x,a)') "Welcome to update_pos_and_box"
+      write(io_lun,'(2x,a)') "Welcome to update_pos_and_box"
 
-  if (leqi(md_ensemble, 'npt')) then
-    if (leqi(md_baro_type, "berendsen") .or. nequil > 0) then
-      call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
+    if (leqi(md_ensemble, 'npt')) then
+      if (leqi(md_baro_type, "berendsen") .or. nequil > 0) then
+        call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
+      else
+        ! Modified velocity Verlet position step for NPT ensemble
+        select case(md_baro_type)
+        case('ssm')
+          call baro%propagate_box_ssm
+          call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
+          call baro%propagate_box_ssm
+        case('mttk')
+          call baro%propagate_r_mttk(MDtimestep, ion_velocity, flag_movable)
+          call baro%propagate_box_mttk(MDtimestep)
+        end select
+      end if
     else
-      ! Modified velocity Verlet position step for NPT ensemble
-      select case(md_baro_type)
-      case('iso-ssm')
-        call baro%propagate_box_ssm
-        call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
-        call baro%propagate_box_ssm
-      case('ortho-ssm')
-        call baro%propagate_box_ssm
-        call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
-        call baro%propagate_box_ssm
-      case('iso-mttk')
-        call baro%propagate_r_mttk(MDtimestep, ion_velocity, flag_movable)
-        call baro%propagate_box_mttk(MDtimestep)
-      case('mttk')
-        call baro%propagate_r_mttk(MDtimestep, ion_velocity, flag_movable)
-        call baro%propagate_box_mttk(MDtimestep)
-      end select
+      ! For NVE or NVT
+      call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
     end if
-  else
-    ! For NVE or NVT
-    call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
-  end if
+    call stop_backtrace(t=backtrace_timer,who='update_pos_and_box',echo=.true.)
 
-end subroutine update_pos_and_box
-!!*****
+  end subroutine update_pos_and_box
+  !!*****
 
-!!****m* control/write_md_data *
-!!  NAME
-!!   write_md_data
-!!  PURPOSE
-!!   Write MD data to various files at the end of an ionic step
-!!  AUTHOR
-!!   Zamaan Raza
-!!  CREATION DATE
-!!   2018/08/11 10:27
-!!  SOURCE
-!!  
-subroutine write_md_data(iter, thermo, baro, mdl, nequil)
+  !!****m* control/write_md_data *
+  !!  NAME
+  !!   write_md_data
+  !!  PURPOSE
+  !!   Write MD data to various files at the end of an ionic step
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2018/08/11 10:27
+  !!  SOURCE
+  !!  
+  subroutine write_md_data(iter, thermo, baro, mdl, nequil)
 
-  use GenComms,      only: inode, ionode
-  use io_module,     only: write_xsf
-  use global_module, only: iprint_MD, flag_baroDebug, flag_thermoDebug
-  use md_model,      only: type_md_model, md_tdep
-  use md_control,    only: type_barostat, type_thermostat, &
-                           write_md_checkpoint, flag_write_xsf, &
-                           md_thermo_file, md_baro_file, &
-                           md_trajectory_file, md_frames_file, &
-                           md_stats_file
+    use GenComms,      only: inode, ionode
+    use io_module,     only: write_xsf
+    use global_module, only: iprint_MD, flag_baroDebug, flag_thermoDebug
+    use md_model,      only: type_md_model, md_tdep
+    use md_control,    only: type_barostat, type_thermostat, &
+                             write_md_checkpoint, flag_write_xsf, &
+                             md_thermo_file, md_baro_file, &
+                             md_trajectory_file, md_frames_file, &
+                             md_stats_file
 
-  ! Passed variables
-  type(type_barostat), intent(inout)    :: baro
-  type(type_thermostat), intent(inout)  :: thermo
-  type(type_md_model), intent(inout)    :: mdl
-  integer, intent(in)                   :: iter, nequil
+    ! Passed variables
+    type(type_barostat), intent(inout)    :: baro
+    type(type_thermostat), intent(inout)  :: thermo
+    type(type_md_model), intent(inout)    :: mdl
+    integer, intent(in)                   :: iter, nequil
+    type(cq_timer)                        :: backtrace_timer
+
+    call start_backtrace(t=backtrace_timer,who='write_md_data',&
+      where=area,level=2,echo=.true.)
 
     if (inode==ionode .and. iprint_MD > 1) &
-        write(io_lun,'(2x,a)') "Welcome to write_md_data"
+      write(io_lun,'(2x,a)') "Welcome to write_md_data"
 
-  call write_md_checkpoint(thermo, baro)
-  call mdl%dump_stats(md_stats_file, nequil)
-  if (inode == ionode .and. mod(iter, MDfreq) == 0) then
-    call mdl%dump_frame(md_frames_file)
-    if (md_tdep) call mdl%dump_tdep
-  end if
-  if (flag_write_xsf) call write_xsf(md_trajectory_file, iter)
-  if (flag_thermoDebug) &
-    call thermo%dump_thermo_state(iter, md_thermo_file)
-  if (flag_baroDebug) &
-    call baro%dump_baro_state(iter, md_baro_file)
-  mdl%append = .true.
+    call write_md_checkpoint(thermo, baro)
+    call mdl%dump_stats(md_stats_file, nequil)
+    if (inode == ionode .and. mod(iter, MDfreq) == 0) then
+      call mdl%dump_frame(md_frames_file)
+      if (md_tdep) call mdl%dump_tdep
+    end if
+    if (flag_write_xsf) call write_xsf(md_trajectory_file, iter)
+    if (flag_thermoDebug) &
+      call thermo%dump_thermo_state(iter, md_thermo_file)
+    if (flag_baroDebug) &
+      call baro%dump_baro_state(iter, md_baro_file)
+    mdl%append = .true.
+    call stop_backtrace(t=backtrace_timer,who='write_md_data',echo=.true.)
 
-end subroutine write_md_data
-!!*****
+  end subroutine write_md_data
+  !!*****
 
   !!****f* control/dummy_run *
   !! PURPOSE

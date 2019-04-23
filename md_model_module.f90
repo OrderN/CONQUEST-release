@@ -19,13 +19,15 @@ module md_model
   use datatypes
   use numbers
   use GenComms,         only: inode, ionode
+  use input_module,     only: leqi
   use force_module,     only: tot_force, stress
   use global_module,    only: ni_in_cell, io_lun, atom_coord, iprint_MD, &
                               flag_MDcontinue, flag_MDdebug, x_atom_cell, &
                               y_atom_cell, z_atom_cell, rcellx, rcelly, rcellz
   use species_module,   only: species
   use md_control,       only: md_n_nhc, ion_velocity, type_thermostat, &
-                              type_barostat, lattice_vec, flag_extended_system
+                              type_barostat, lattice_vec, &
+                              flag_extended_system, md_cell_constraint
 
   implicit none
 
@@ -233,10 +235,23 @@ contains
       else
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy
       end if
-    case("npt")
+    case("nph")
       if (flag_extended_system) then
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
-                      mdl%nhc_energy + mdl%box_kinetic_energy + mdl%PV
+                      mdl%box_kinetic_energy + mdl%PV
+      else
+        mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + mdl%PV
+      end if
+    case("npt")
+      if (flag_extended_system) then
+        select case(mdl%thermo_type)
+        case('nhc')
+          mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
+                        mdl%nhc_energy + mdl%box_kinetic_energy + mdl%PV
+        case('svr')
+          mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
+                        mdl%box_kinetic_energy + mdl%PV
+        end select
       else
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + mdl%PV
       end if
@@ -280,8 +295,10 @@ contains
       case('npt')
         if (flag_extended_system) then
           if (mdl%nequil < 1) then
-            write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
-              mdl%nhc_energy
+            if (leqi(mdl%thermo_type, 'nhc')) then
+              write (io_lun, '(4x,"Nose-Hoover energy      : ",f15.8)') &
+                mdl%nhc_energy
+            end if
             write (io_lun, '(4x,"Box kinetic energy      : ",f15.8)') &
               mdl%box_kinetic_energy
             write (io_lun, '(4x,"PV                      : ",f15.8)') &
@@ -318,7 +335,6 @@ contains
     if (inode==ionode .and. iprint_MD > 1) &
       write(io_lun,'(2x,"Writing statistics to ",a)') filename
 
-    if (inode==ionode) write(io_lun,*) mdl%P_int
     ! Convert units if necessary
     P_GPa = mdl%P_int*fac_HaBohr32GPa
 
@@ -337,6 +353,14 @@ contains
             write(lun,'(a10,4a18,2a12)') "step", "pe", "ke", "nhc", "H'", "T", "P"
           else
             write(lun,'(a10,3a16,2a12)') "step", "pe", "ke", "H'", "T", "P"
+          end if
+        case ('nph')
+          if (flag_extended_system .or. md_berendsen_equil > 0) then
+            write(lun,'(a10,5a18,2a12,a16)') "step", "pe", "ke", "box", &
+              "pV", "H'", "T", "P", "V"
+          else
+            write(lun,'(a10,4a18,2a12,a16)') "step", "pe", "ke", "pV", &
+              "H'", "T", "P", "V"
           end if
         case ('npt')
           if (flag_extended_system .or. md_berendsen_equil > 0) then
@@ -364,6 +388,21 @@ contains
         else
           write(lun,'(i10,3e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, P_GPa
+        end if
+      case ('nph')
+        if (flag_extended_system .and. nequil == 0) then
+          write(lun,'(i10,5e18.8,2f12.4,e16.8)') mdl%step, &
+            mdl%dft_total_energy, mdl%ion_kinetic_energy, &
+            mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
+            mdl%volume
+        else if (nequil > 0) then
+          write(lun,'(i10,5e18.8,2f12.4,e16.8)') mdl%step, &
+            mdl%dft_total_energy, mdl%ion_kinetic_energy, zero, &
+            mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
+        else
+          write(lun,'(i10,4e18.8,2f12.4,e16.8)') mdl%step, &
+            mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%PV, &
+            mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
         end if
       case ('npt')
         if (flag_extended_system .and. nequil == 0) then

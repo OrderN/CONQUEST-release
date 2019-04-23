@@ -810,7 +810,8 @@ contains
                           md_thermo_type, md_bulkmod_est, md_box_mass, &
                           flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
                           md_calc_xlmass, md_berendsen_equil, &
-                          md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
+                          md_tau_T_equil, md_tau_P_equil, md_p_drag, &
+                          md_t_drag, md_cell_constraint
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, flag_stop_on_empty_bundle
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
@@ -2031,6 +2032,7 @@ contains
        md_berendsen_equil = fdf_integer('MD.BerendsenEquil', 0)
        md_tdep            = fdf_boolean('MD.TDEP', .false.)
        md_p_drag          = fdf_double('MD.PDrag', zero)
+       md_cell_constraint = fdf_string(20, 'MD.CellConstraint', 'volume')
 
     else
        call cq_abort("Old-style CQ input no longer supported: please convert")
