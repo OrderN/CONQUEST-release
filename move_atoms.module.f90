@@ -3305,9 +3305,13 @@ contains
   !!
   !!  SOURCE
   !!
-  subroutine box_muller(sigma, mu, y1, y2)
+  subroutine box_muller(seed, sigma, mu, y1, y2)
+
+    use numbers
+    use GenComms, only: inode, ionode
 
     ! Passed variables
+    integer, intent(in)       :: seed
     real(double), intent(in)  :: sigma, mu
     real(double), intent(out) :: y1, y2 ! generate two random numbers
 
@@ -3315,8 +3319,8 @@ contains
     real(double)              :: x1, x2, w
 
     do
-      call ran2(x1,1)
-      call ran2(x1,2)
+      call ran2(x1,seed)
+      call ran2(x2,seed)
       y1 = two*x1 - one
       y2 = two*x2 - one
       w = y1*y1 + y2*y2
@@ -3327,7 +3331,6 @@ contains
     y2 = y2*w*sigma + mu
 
   end subroutine box_muller
-
 
   !!****f* move_atoms/update_cell_dims *
   !!  NAME

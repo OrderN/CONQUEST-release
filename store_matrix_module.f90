@@ -21,8 +21,13 @@ module store_matrix
   use GenComms, ONLY: inode, ionode, cq_abort, myid
   use io_module, ONLY: flag_MatrixFile_RankFromZero, flag_MatrixFile_BinaryFormat, &
                        flag_MatrixFile_BinaryFormat_Grab, flag_MatrixFile_BinaryFormat_Dump
+  use timer_module, only: cq_timer, start_backtrace, stop_backtrace
 
   implicit none
+
+
+  ! Area identification
+  integer, parameter, private :: area = 2
 
 ! matrix_store : 
 !   It includes the information of a matrix in my process.
@@ -131,6 +136,10 @@ contains
     logical :: append_coords_bkup
     integer :: index_local, MDstep_local
     real(double), intent(in), optional :: velocity(1:3,ni_in_cell)
+    type(cq_timer) :: backtrace_timer
+
+    call start_backtrace(t=backtrace_timer,who='dump_pos_and_matrices',&
+         where=area,echo=.true.)
     
 
     !!! Check whether we should write out the files or not.  !!!
@@ -203,8 +212,10 @@ contains
        append_coords_bkup = append_coords; append_coords = .false.
         call write_atomic_positions('coord_next.dat',trim(pdb_template))
        append_coords = append_coords_bkup
+    call stop_backtrace(t=backtrace_timer,who='dump_pos_and_matrices',&
+                        echo=.true.)
 
-   return
+    return
   end subroutine dump_pos_and_matrices
   !!***
   ! -----------------------------------------------------------------------
@@ -247,6 +258,10 @@ contains
     integer,intent(inout), optional :: MDstep
     real(double), intent(in), optional :: velocity(1:3,ni_in_cell)
     integer :: index_local
+    type(cq_timer) :: backtrace_timer
+
+    call start_backtrace(t=backtrace_timer,who='dump_matrix_update',&
+         where=area,echo=.true.)
 
     index_local=0; if(present(index_in)) index_local=index_in
     if(.not.present(iprint_mode)) iprint_mode = 0
@@ -268,6 +283,8 @@ contains
         call dump_InfoMatGlobal(index_local,MDstep=MDstep)
        endif
      end select ! case(iprint_mode)
+     call stop_backtrace(t=backtrace_timer,who='dump_matrix_update',&
+          echo=.true.)
  
     return
    end subroutine dump_matrix_update
@@ -324,6 +341,10 @@ contains
     integer :: lun, iprim, nprim, jmax, jj, ibeg, jbeta_alpha, len
     character(32) :: file_name
     integer :: index
+    type(cq_timer) :: backtrace_timer
+
+    call start_backtrace(t=backtrace_timer,who='dump_matrix2',&
+         where=area,echo=.true.)
 
     index=0; if(present(index_in)) index=index_in
 
@@ -425,6 +446,7 @@ contains
     
     ! free_matrix_store : free tmp_matrix_store
     call free_matrix_store(tmp_matrix_store)
+    call stop_backtrace(t=backtrace_timer,who='dump_matrix2',echo=.true.)
 
     return
    end subroutine dump_matrix2
@@ -479,6 +501,10 @@ contains
     integer :: ist, n_beta, neigh, gcspart, ibeg, j_global_part, len
     integer :: sf1, sf2  ! 2017/Dec/06 for reading SF_coeff
     integer :: ibeg2, jcount, jst ! 2017/Dec/26 for introducing ibeg_Rij
+    type(cq_timer) :: backtrace_timer
+
+    call start_backtrace(t=backtrace_timer,who='set_matrix_store',&
+         where=area,echo=.true.)
 
     !name & n_prim
       matinfo%name=stub
@@ -601,6 +627,7 @@ contains
      if(istat .NE. 0) call cq_abort('Allocation 4 in set_matrix_store', istat, matinfo%matrix_size)
     matinfo%data_matrix(1:matinfo%matrix_size)=mat_p(matA)%matrix(1:matinfo%matrix_size)
 
+    call stop_backtrace(t=backtrace_timer,who='set_matrix_store',echo=.true.)
     return
    end subroutine set_matrix_store
 
@@ -667,6 +694,10 @@ contains
     character(len=80) :: filename
 
     logical :: flag_index, flag_velocity, flag_MDstep
+    type(cq_timer) :: backtrace_timer
+
+    call start_backtrace(t=backtrace_timer,who='dump_InfoMatGlobal',&
+         where=area,echo=.true.)
 
     if(present(index)) then
      flag_index=.true. 
@@ -725,6 +756,7 @@ contains
     endif
 
     call free_InfoMatGlobal(mat_global_tmp)
+    call stop_backtrace(t=backtrace_timer,who='dump_InfoMatGlobal',echo=.true.)
     return
   end subroutine dump_InfoMatGlobal
   !!***

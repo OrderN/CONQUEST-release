@@ -620,7 +620,7 @@ contains
     call start_backtrace(t=backtrace_timer,who='get_temperature_and_ke',&
          where=area,level=bt_level,echo=.true.)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "get_temperature_and_ke"
 
     ! Update the kinetic energy and stress
@@ -685,7 +685,7 @@ contains
     th%lambda = sqrt(one + (dt/th%tau_T)* &
                      (th%T_ext/th%T_int - one))
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') "get_berendsen_thermo_sf"
       write(io_lun,'(4x,"lambda: ",e16.8)') th%lambda
     end if
@@ -710,7 +710,7 @@ contains
   !!  
   subroutine get_svr_thermo_sf(th, dt, baro)
 
-    use move_atoms,    only: box_muller
+    use move_atoms,    only: box_muller, ran2
 
     ! Passed variables
     class(type_thermostat), intent(inout)   :: th
@@ -720,15 +720,21 @@ contains
     ! Local variables
     real(double)    :: ke, rn1, rn2, alpha_sq, exp_dt_tau, r1, &
                        sum_ri_sq, temp_fac
-    integer         :: i, n_bm_calls
+    integer         :: i, n_bm_calls, seed
     logical         :: odd
     type(cq_timer)  :: backtrace_timer
 
     call start_backtrace(t=backtrace_timer,who='get_svr_thermo_sf',&
          where=area,level=3,echo=.true.)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "get_svr_thermo_sf"
+
+    ! Initialise the rng
+    seed = 0
+    do i=1,30
+      call ran2(rn1,seed)
+    end do
 
     ! Box-Muller transform generates two normally distributed random numbers
     ! from two uniformly distributed random numbers, so we need to work out 
@@ -753,7 +759,7 @@ contains
     ! sum can be replaced by a single number drawn from a gamma distribution
     sum_ri_sq = zero
     do i=1,n_bm_calls
-      call box_muller(one, zero, rn1, rn2)
+      call box_muller(seed, one, zero, rn1, rn2)
       if (i == 1) then
         r1 = rn1
       else
@@ -762,7 +768,7 @@ contains
       sum_ri_sq = sum_ri_sq + rn2*rn2
     end do
     if (odd) then
-      call box_muller(one, zero, rn1, rn2)
+      call box_muller(seed, one, zero, rn1, rn2)
       sum_ri_sq = sum_ri_sq + rn1*rn1
     end if
 
@@ -770,7 +776,7 @@ contains
                two*sqrt(exp_dt_tau) * sqrt(temp_fac*(one - exp_dt_tau)) * r1
     th%lambda = sqrt(alpha_sq)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(4x,"lambda: ",e16.8)') th%lambda
     call stop_backtrace(t=backtrace_timer,who='get_svr_thermo_sf',echo=.true.)
 
@@ -804,7 +810,7 @@ contains
 
     v = v*th%lambda
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') "v_rescale"
       write(io_lun,'(4x,"lambda: ",e16.8)') th%lambda
     end if
@@ -1024,7 +1030,7 @@ contains
     call start_backtrace(t=backtrace_timer,who='integrate_nhc',&
          where=area,level=3,echo=.true.)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "integrate_nhc"
 
     th%ke_ions = ke
@@ -1142,7 +1148,7 @@ contains
     call start_backtrace(t=backtrace_timer,who='get_nhc_energy',&
          where=area,level=bt_level,echo=.true.)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "get_nhc_energy"
 
     th%ke_nhc_ion = zero
@@ -1431,7 +1437,7 @@ contains
     call start_backtrace(t=backtrace_timer,who='get_pressure_and_stress',&
          where=area,level=bt_level,echo=.true.)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "get_pressure_and_stress"
 
     ! Get the static stress from the global variable
@@ -1501,7 +1507,7 @@ contains
 
     baro%volume = baro%lat(1,1)*baro%lat(2,2)*baro%lat(3,3)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') "get_volume"
       write(io_lun,'(4x,a,e16.8)') "volume:     ", baro%volume
     end if
@@ -1563,7 +1569,7 @@ contains
     call start_backtrace(t=backtrace_timer,who='propagate_berendsen',&
          where=area,level=3,echo=.true.)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') "propagate_berendsen"
       write(io_lun,'(4x,a,e16.8)') "mu:   :     ", baro%mu
     end if
@@ -1642,7 +1648,7 @@ contains
     end if
 
     if (present(final_call)) then
-      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) then
+      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
         write(io_lun,'(2x,a)') "get_box_energy"
         write(io_lun,'(4x,a,e16.8)') "ke_box:     ", baro%ke_box
       end if
@@ -1951,7 +1957,7 @@ contains
     call start_backtrace(t=backtrace_timer,who='propagate_r_mttk',&
          where=area,level=3,echo=.true.)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "propagate_r_mttk"
 
     if (leqi(md_cell_constraint, 'volume')) then
@@ -2019,7 +2025,7 @@ contains
     call start_backtrace(t=backtrace_timer,who='propagate_box_mttk',&
          where=area,level=3,echo=.true.)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "propagate_box_mttk"
 
     baro%v_old = baro%volume
@@ -2093,7 +2099,7 @@ contains
     call start_backtrace(t=backtrace_timer,who='propagate_npt_mttk',&
          where=area,level=3,echo=.true.)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "propagate_npt_mttk"
 
     v_sfac = one
@@ -2212,7 +2218,7 @@ contains
     call start_backtrace(t=backtrace_timer,who='integrate_box',&
          where=area,level=3,echo=.true.)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "integrate_box"
 
     if (leqi(md_cell_constraint, 'volume')) then
@@ -2275,7 +2281,7 @@ contains
     call start_backtrace(t=backtrace_timer,who='couple_box_particle_velocity',&
          where=area,level=3,echo=.true.)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "couple_box_particle_velocity"
 
     const = zero
@@ -2328,7 +2334,7 @@ contains
     call start_backtrace(t=backtrace_timer,who='propagate_box_ssm',&
          where=area,level=3,echo=.true.)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "propagate_box_ssm"
 
     baro%v_old = baro%volume
@@ -2477,7 +2483,7 @@ contains
     call start_backtrace(t=backtrace_timer,who='update_cell',&
          where=area,level=4,echo=.true.)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 2) &
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "update_cell"
 
     orcellx = rcellx

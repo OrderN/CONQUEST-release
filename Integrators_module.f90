@@ -30,8 +30,12 @@
 module Integrators
 
   use datatypes
+  use timer_module,     only: cq_timer, start_backtrace, stop_backtrace
   implicit none
   character(80),save,private :: RCSid = "$Id$"
+  
+  ! Area identification
+  integer, parameter, private :: area = 7
 
   ! FIRE relaxation method
   ! Parameters adjusted after this many steps if there is slow convergence
@@ -76,6 +80,10 @@ contains
    real(double) :: massa
    logical :: flagx,flagy,flagz
    real(double) :: dx, dy, dz
+   type(cq_timer) :: backtrace_timer
+
+   call start_backtrace(t=backtrace_timer,who='vVerlet_r_dt',&
+        where=area,level=2,echo=.true.)
 
    if (myid==0 .and. iprint_MD>1) write(io_lun,*) "Welcome to vVerlet_r_dt"
 
@@ -107,6 +115,7 @@ contains
        z_atom_cell(atom) = z_atom_cell(atom) + dz
      endif
    enddo
+   call stop_backtrace(t=backtrace_timer,who='vVerlet_r_dt',echo=.true.)
 
    return
   end subroutine vVerlet_r_dt
@@ -157,6 +166,10 @@ contains
    integer :: atom,speca,gatom,k,ibeg_atom
    real(double) :: vf,massa,ff,scale_fac
    logical :: flag_first
+   type(cq_timer) :: backtrace_timer
+
+   call start_backtrace(t=backtrace_timer,who='vVerlet_v_dthalf',&
+        where=area,level=2,echo=.true.)
 
    flag_first=.true.
    if(present(second_call)) flag_first = .false.
@@ -234,6 +247,7 @@ contains
          ibeg_atom = ibeg_atom + 3
       enddo
    endif
+   call stop_backtrace(t=backtrace_timer,who='vVerlet_v_dthalf',echo=.true.)
 
    return
   end subroutine vVerlet_v_dthalf
@@ -313,6 +327,10 @@ contains
     ! modified FIRE quenched MD
     real(double) :: fire_P, fire_norm_F, fire_norm_v, fire_r
     real(double) :: fire_r1, fire_r2
+    type(cq_timer) :: backtrace_timer
+
+    call start_backtrace(t=backtrace_timer,who='fire_qMD',&
+         where=area,level=2,echo=.true.)
 
     fire_r1 = 0.75_double / fire_max_step
     fire_r2 = 1.25_double / fire_max_step
@@ -428,6 +446,7 @@ contains
           z_atom_cell(atom) = z_atom_cell(atom) + dz
        endif
     end do
+    call stop_backtrace(t=backtrace_timer,who='fire_qMD',echo=.true.)
 
 11  format(4x,'iter ',i3, 2x, 'N= ', i3, 2x, 'N2= ', i3, 2x, 'P= ', f12.8,&
          2x,'dt= ', f9.6, 2x, 'alpha= ' ,f9.6, 2x, '|v|/|F|= ',f9.6)
