@@ -364,8 +364,13 @@ contains
           end if
         case ('npt')
           if (flag_extended_system .or. md_berendsen_equil > 0) then
-            write(lun,'(a10,6a18,2a12,a16)') "step", "pe", "ke", "nhc", &
-              "box", "pV", "H'", "T", "P", "V"
+            if (leqi(mdl%thermo_type, 'nhc')) then
+              write(lun,'(a10,6a18,2a12,a16)') "step", "pe", "ke", "nhc", &
+                "box", "pV", "H'", "T", "P", "V"
+            else
+              write(lun,'(a10,5a18,2a12,a16)') "step", "pe", "ke", "box", &
+                "pV", "H'", "T", "P", "V"
+            end if
           else
             write(lun,'(a10,4a18,2a12,a16)') "step", "pe", "ke", "pV", &
               "H'", "T", "P", "V"
@@ -377,43 +382,56 @@ contains
         write(lun,'(i10,3e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
           mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, P_GPa
       case ('nvt')
-        if (flag_extended_system .or. nequil == 0) then
-          write(lun,'(i10,4e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
-            mdl%ion_kinetic_energy, mdl%nhc_energy, mdl%h_prime, mdl%T_int, &
-            P_GPa
-        else if (nequil > 0) then
-          write(lun,'(i10,4e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
-            mdl%ion_kinetic_energy, zero, mdl%h_prime, mdl%T_int, &
-            P_GPa
+        if (flag_extended_system) then
+          if (nequil > 0) then
+            write(lun,'(i10,4e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
+              mdl%ion_kinetic_energy, zero, mdl%h_prime, mdl%T_int, &
+              P_GPa
+          else
+            write(lun,'(i10,4e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
+              mdl%ion_kinetic_energy, mdl%nhc_energy, mdl%h_prime, mdl%T_int, &
+              P_GPa
+          end if
         else
           write(lun,'(i10,3e18.8,2f12.4)') mdl%step, mdl%dft_total_energy, &
             mdl%ion_kinetic_energy, mdl%h_prime, mdl%T_int, P_GPa
         end if
       case ('nph')
-        if (flag_extended_system .and. nequil == 0) then
-          write(lun,'(i10,5e18.8,2f12.4,e16.8)') mdl%step, &
-            mdl%dft_total_energy, mdl%ion_kinetic_energy, &
-            mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
-            mdl%volume
-        else if (nequil > 0) then
-          write(lun,'(i10,5e18.8,2f12.4,e16.8)') mdl%step, &
-            mdl%dft_total_energy, mdl%ion_kinetic_energy, zero, &
-            mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
+        if (flag_extended_system) then
+          if (nequil > 0) then
+            write(lun,'(i10,5e18.8,2f12.4,e16.8)') mdl%step, &
+              mdl%dft_total_energy, mdl%ion_kinetic_energy, zero, &
+              mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
+          else
+            write(lun,'(i10,5e18.8,2f12.4,e16.8)') mdl%step, &
+              mdl%dft_total_energy, mdl%ion_kinetic_energy, &
+              mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
+              mdl%volume
+          end if
         else
           write(lun,'(i10,4e18.8,2f12.4,e16.8)') mdl%step, &
             mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%PV, &
             mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
         end if
       case ('npt')
-        if (flag_extended_system .and. nequil == 0) then
-          write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
-            mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%nhc_energy, &
-            mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
-            mdl%volume
-        else if (nequil > 0) then
-          write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
-            mdl%dft_total_energy, mdl%ion_kinetic_energy, zero, zero, &
-            mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
+        if (flag_extended_system) then
+          if (leqi(mdl%thermo_type, 'nhc')) then
+            if (nequil > 0) then
+              write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
+                mdl%dft_total_energy, mdl%ion_kinetic_energy, zero, zero, &
+                mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, mdl%volume
+            else
+              write(lun,'(i10,6e18.8,2f12.4,e16.8)') mdl%step, &
+                mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%nhc_energy, &
+                mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, &
+                P_GPa, mdl%volume
+            end if
+          else
+            write(lun,'(i10,5e18.8,2f12.4,e16.8)') mdl%step, &
+              mdl%dft_total_energy, mdl%ion_kinetic_energy, &
+              mdl%box_kinetic_energy, mdl%PV, mdl%h_prime, mdl%T_int, P_GPa, &
+              mdl%volume
+          end if
         else
           write(lun,'(i10,4e18.8,2f12.4,e16.8)') mdl%step, &
             mdl%dft_total_energy, mdl%ion_kinetic_energy, mdl%PV, &

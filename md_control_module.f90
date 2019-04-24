@@ -38,6 +38,10 @@
 !!   2018/08/12 zamaan
 !!    Removed read/write_thermo/baro_checkpoint, replaced with a unified &
 !!    checkpoint that includes ionic velocities
+!!   2019/04/23 zamaan
+!!    Implemented stochastic velocity scaling MD, Bussi et al., J. Chem.
+!!    Phys. 126, 014101 (2007) (NVT) and Bussi et al., J. Chem. Phys.
+!!    130, 074101 (2009) (NPT)
 !!  SOURCE
 !!
 module md_control
@@ -114,6 +118,9 @@ module md_control
     logical             :: append
     logical             :: cell_nhc     ! separate NHC for cell?
     real(double)        :: lambda       ! velocity scaling factor
+
+    ! Stochastic velocity rescaling (SVR) variables
+    integer             :: rng_seed
 
     ! Weak coupling thermostat variables
     real(double)        :: tau_T        ! temperature coupling time period
@@ -269,6 +276,8 @@ contains
   !!  
   subroutine init_thermo(th, thermo_type, baro_type, dt, ndof, tau_T, ke_ions)
 
+    use move_atoms,       only: ran2
+
     ! passed variables
     class(type_thermostat), intent(inout) :: th
     character(*), intent(in)              :: thermo_type, baro_type
@@ -276,6 +285,10 @@ contains
     integer, intent(in)                   :: ndof
     real(double), intent(in)              :: ke_ions, tau_T
     type(cq_timer)                        :: backtrace_timer
+
+    ! local variables
+    real(double)                          :: dummy_rn
+    integer                               :: i
 
     call start_backtrace(t=backtrace_timer,who='init_thermo',&
          where=area,level=3,echo=.true.)
@@ -287,6 +300,7 @@ contains
     th%dt = dt
     th%ndof = ndof
     th%ke_ions = ke_ions
+    th%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*th%T_ext
     th%tau_T = tau_T
     th%thermo_type = thermo_type
     th%baro_type = baro_type
@@ -310,7 +324,15 @@ contains
     case('berendsen')
       flag_extended_system = .false.
     case('svr')
+      ! This will be true for isobaric-isothermal SVR, because we will use
+      ! Parrinello-Rahman NPH dynamics with a SVR thermostat (barostat 
+      ! is initialised AFTER thermostat)
       flag_extended_system = .false.
+      ! Initialise the rng
+      th%rng_seed = 0
+      do i=1,30
+        call ran2(dummy_rn,th%rng_seed)
+      end do
     case('nhc')
       call th%init_nhc(dt)
     case('ssm')
@@ -321,13 +343,12 @@ contains
 
     if (inode==ionode .and. iprint_MD > 1) then
       write(io_lun,'(4x,"Thermostat type: ",a)') th%thermo_type
+      write(io_lun,'(4x,"Extended system: ",l)') flag_extended_system
       if (.not. leqi(thermo_type, 'none')) then
         write(io_lun,'(4x,a,f10.2)') 'Target temperature        T_ext = ', &
                                      th%T_ext
         write(io_lun,'(4x,a,f10.2)') 'Coupling time period      tau_T = ', &
                                      th%tau_T
-        write(io_lun,'(4x,a,l)')     'Cell NHC                          ', &
-                                     th%cell_nhc
       end if
     end if
     call stop_backtrace(t=backtrace_timer,who='init_thermo',echo=.true.)
@@ -371,7 +392,6 @@ contains
     th%n_mts_nhc = md_n_mts
     th%lambda = one
     th%t_drag = one - (md_t_drag*dt/md_tau_T/md_n_mts/md_n_ys)
-    th%ke_target = half*md_ndof_ions*fac_Kelvin2Hartree*th%T_ext
     write(th%nhc_fmt,'("(4x,a12,",i4,"e14.6)")') th%n_nhc
     write(th%nhc_fmt2,'("(",i4,"e20.12)")') th%n_nhc
 
@@ -720,7 +740,7 @@ contains
     ! Local variables
     real(double)    :: ke, rn1, rn2, alpha_sq, exp_dt_tau, r1, &
                        sum_ri_sq, temp_fac
-    integer         :: i, n_bm_calls, seed
+    integer         :: i, n_bm_calls
     logical         :: odd
     type(cq_timer)  :: backtrace_timer
 
@@ -729,12 +749,6 @@ contains
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "get_svr_thermo_sf"
-
-    ! Initialise the rng
-    seed = 0
-    do i=1,30
-      call ran2(rn1,seed)
-    end do
 
     ! Box-Muller transform generates two normally distributed random numbers
     ! from two uniformly distributed random numbers, so we need to work out 
@@ -759,20 +773,21 @@ contains
     ! sum can be replaced by a single number drawn from a gamma distribution
     sum_ri_sq = zero
     do i=1,n_bm_calls
-      call box_muller(seed, one, zero, rn1, rn2)
+      call box_muller(th%rng_seed, one, zero, rn1, rn2)
       if (i == 1) then
         r1 = rn1
+        sum_ri_sq = sum_ri_sq + r1*r1
       else
         sum_ri_sq = sum_ri_sq + rn1*rn1
       end if
       sum_ri_sq = sum_ri_sq + rn2*rn2
     end do
     if (odd) then
-      call box_muller(seed, one, zero, rn1, rn2)
+      call box_muller(th%rng_seed, one, zero, rn1, rn2)
       sum_ri_sq = sum_ri_sq + rn1*rn1
     end if
 
-    alpha_sq = exp_dt_tau + temp_fac * (r1*r1 + sum_ri_sq) + &
+    alpha_sq = exp_dt_tau + temp_fac * (one - exp_dt_tau) * sum_ri_sq + &
                two*sqrt(exp_dt_tau) * sqrt(temp_fac*(one - exp_dt_tau)) * r1
     th%lambda = sqrt(alpha_sq)
 
@@ -1303,16 +1318,17 @@ contains
     baro%dt = dt
     baro%ndof = ndof
     baro%ke_box = zero
+
+    select case(md_cell_constraint)
+    case('volume')
+      baro%cell_ndof = 1
+    case('xyz')
+      baro%cell_ndof = 3
+    end select
+
     if (md_tau_P < zero) md_tau_P = dt*ten*ten
     if (md_calc_xlmass) then
       omega_P = twopi/md_tau_P
-
-      select case(md_cell_constraint)
-      case('volume')
-        baro%cell_ndof = 1
-      case('xyz')
-        baro%cell_ndof = 3
-      end select
 
       baro%box_mass = &
         (baro%ndof+baro%cell_ndof)*temp_ion*fac_Kelvin2Hartree/omega_P**2
@@ -1329,18 +1345,13 @@ contains
       baro%box_mass = md_box_mass
     end if
 
-    ! constants for polynomial expanion
-    baro%c2 = one/6.0_double
-    baro%c4 = baro%c2/20.0_double
-    baro%c6 = baro%c4/42.0_double
-    baro%c8 = baro%c6/72.0_double
-
     baro%P_ext = md_target_press/fac_HaBohr32GPa
     baro%lat_ref = zero
     baro%lat_ref(1,1) = rcellx
     baro%lat_ref(2,2) = rcelly
     baro%lat_ref(3,3) = rcellz
     baro%lat = baro%lat_ref
+    call baro%get_volume
     call baro%get_pressure_and_stress(bt_level=4)
     baro%volume_ref = baro%volume
     baro%v_old = baro%volume
@@ -1362,6 +1373,11 @@ contains
       baro%G_eps = zero
       call baro%get_box_energy
       baro%odnf = one + three/baro%ndof
+      ! constants for polynomial expanion
+      baro%c2 = one/6.0_double
+      baro%c4 = baro%c2/20.0_double
+      baro%c6 = baro%c4/42.0_double
+      baro%c8 = baro%c6/72.0_double
     case('ssm')
       flag_extended_system = .true.
       baro%append = .false.
@@ -1382,7 +1398,8 @@ contains
 
     if (inode==ionode .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') 'Welcome to init_baro'
-      write(io_lun,'(4x,"Barostat type: ",a)') baro%baro_type
+      write(io_lun,'(4x,"Barostat type:   ",a)') baro%baro_type
+      write(io_lun,'(4x,"Extended system: ",l)') flag_extended_system
       if (.not. leqi(baro_type, 'none')) then
         write(io_lun,'(4x,a,f14.2)') 'Target pressure        P_ext = ', &
                                       baro%P_ext
@@ -1459,7 +1476,7 @@ contains
     end if
 
     ! Update the total stress and pressure pressure
-    call baro%get_volume
+    if (.not. (leqi(baro%baro_type, 'none'))) call baro%get_volume
     baro%total_stress = zero
     baro%P_int = zero
     baro%total_stress = (baro%ke_stress + baro%static_stress)/baro%volume

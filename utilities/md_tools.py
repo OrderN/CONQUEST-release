@@ -10,6 +10,7 @@ from frame import Frame
 from pdb import set_trace
 
 bohr2ang = 0.529177249
+small = 1.0e-3
 
 def diff_mic(pos1, pos2, cell):
   """Minimum image convention relative vector (orthorhombic cell only)"""
@@ -61,9 +62,10 @@ class Pairdist:
     for i in range(self.nat):
       for j in range(i+1, self.nat):
         diff = diff_mic(frame.r[i,:], frame.r[j,:], cell)*bohr2ang
-        d = norm(diff)
-        if d < self.rcut:
-          ind = int(round((d+self.binwidth)/self.binwidth))-1
+        self.dt[i,j] = norm(diff)
+        self.dt[j,i] = norm(diff)
+        if self.dt[i,j] < self.rcut:
+          ind = int(round((self.dt[i,j]+self.binwidth)/self.binwidth))-1
           self.freq_total[ind] += 2
           if self.nspec > 1:
             for ispec in range(self.nspec):
@@ -142,7 +144,7 @@ class Pairdist:
   def dump_gr(self):
     header_bit = "{0:>16s}"
     rdf_bit = "{0:>16.6f}"
-    header_fmt = "{0:>16s}{1:>16s}{2:>16f}"
+    header_fmt = "{0:>16s}{1:>16s}{2:>16s}"
     rdf_fmt = "{0:>16.6f}{1:>16.6f}{2:>16.6f}"
     filename = "rdf.dat"
 
@@ -160,11 +162,53 @@ class Pairdist:
         rdf_line = rdf_fmt.format(self.bins[i], self.gr_total[i],
                                   self.coord_total[i])
         if self.nspec > 1:
-          for ispec in range(self.nsepc):
+          for ispec in range(self.nspec):
             for jspec in range(ispec,self.nspec):
-              rdf_line += rdf_bit.format(gr[i,ispec,jspec])
+              rdf_line += rdf_bit.format(self.gr[i,ispec,jspec])
         rdf_line += "\n"
-            
+        outfile.write(rdf_line)
+
+
+  def get_bondlength(self, bondcut, frame, printall):
+
+    bond_tot = sp.zeros((self.nspec, self.nspec), dtype=float)
+    bondsq_tot = sp.zeros((self.nspec, self.nspec), dtype=float)
+    bond_avg = sp.zeros((self.nspec, self.nspec), dtype=float)
+    bond_sd = sp.zeros((self.nspec, self.nspec), dtype=float)
+    bond_min = sp.zeros((self.nspec, self.nspec), dtype=float)
+    nbonds = sp.zeros((self.nspec, self.nspec), dtype=int)
+
+    bond_min = bondcut
+    for i in range(self.nat):
+      for j in range(i+1, self.nat):
+        s1 = frame.species[i]-1
+        s2 = frame.species[j]-1
+        if self.dt[i,j] < bondcut[s1,s2]:
+          if self.dt[i,j] > small:
+            bond_tot[s1,s2] += self.dt[i,j]
+            bondsq_tot[s1,s2] += self.dt[i,j]**2
+            nbonds[s1,s2] += 1
+            if self.dt[i,j] < bond_min[s1,s2]:
+              bond_min[s1,s2] = self.dt[i,j]
+
+            if printall:
+              pair = "{}--{}".format(self.species[s1+1], self.species[s2+1])
+              print(f'{pair}: {i:>4d}--{j:<4d} {self.dt[i,j]:>8.4f}')
+
+    print("Mean bond lengths:")
+    for i in range(self.nspec):
+      for j in range(i,self.nspec):
+        if nbonds[i,j] > 0:
+          bond_avg[i,j] = bond_tot[i,j]/float(nbonds[i,j])
+          bond_sd[i,j] = sp.sqrt(bondsq_tot[i,j]/nbonds[i,j] - bond_avg[i,j]**2)
+          pair = "{}-{}".format(self.species[i+1], self.species[j+1])
+          print(f'{pair}: {bond_avg[i,j]:>8.4f} +/- {bond_sd[i,j]:>8.4f}')
+
+    print("Minimum bond lengths:")
+    for i in range(self.nspec):
+      for j in range(i,self.nspec):
+          pair = "{}-{}".format(self.species[i+1], self.species[j+1])
+          print(f'{pair}: {bond_min[i,j]:>8.4f}')
 
 class MSER:
   """Marginal Standard Error Rule heuristic 

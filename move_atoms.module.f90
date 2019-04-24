@@ -3308,7 +3308,6 @@ contains
   subroutine box_muller(seed, sigma, mu, y1, y2)
 
     use numbers
-    use GenComms, only: inode, ionode
 
     ! Passed variables
     integer, intent(in)       :: seed

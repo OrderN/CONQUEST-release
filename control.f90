@@ -805,8 +805,8 @@ contains
        end if
 
        ! Compute and print the conserved quantity and its components
-       call thermo%get_nhc_energy
-       call baro%get_box_energy(final_call)
+       if (leqi(thermo%thermo_type, 'nhc')) call thermo%get_nhc_energy
+       if (leqi(baro%baro_type, 'ssm')) call baro%get_box_energy(final_call)
        call mdl%get_cons_qty
        call mdl%print_md_energy()
 
@@ -917,8 +917,10 @@ contains
     call start_backtrace(t=backtrace_timer,who='init_ensemble',&
          where=area,level=2,echo=.true.)
 
-    if (inode==ionode .and. iprint_MD > 1) &
+    if (inode==ionode .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') "Welcome to init_ensemble"
+      write(io_lun,'(4x,"MD ensemble is ",a)') md_ensemble
+    end if
 
     if (.not. present(second_call)) then
     ! Initialise the model only once per run
@@ -1071,7 +1073,6 @@ contains
       select case(thermo%thermo_type)
       case('nhc')
         call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
-        if (present(second_call)) call thermo%get_nhc_energy
       case('berendsen')
         if (present(second_call)) then
           call thermo%v_rescale(velocity)
