@@ -14,7 +14,7 @@ contains
     use numbers
     use pseudo_tm_info, ONLY: pseudo, rad_alloc
     use mesh, ONLY: nmesh, make_mesh, rr, nmesh_reg, rmesh_reg, new_interpolate, interpolate, &
-         make_mesh_reg, rr_squared, delta_r_reg, convert_r_to_i, drdi, alpha
+         make_mesh_reg, rr_squared, delta_r_reg, convert_r_to_i, drdi, alpha, beta
     use global_module, ONLY: iprint
     use GenComms, ONLY: cq_abort
     use radial_xc, ONLY: get_vxc
@@ -43,9 +43,11 @@ contains
     nmesh = local_and_vkb%ngrid
     alpha_hamann = 0.01_double*log(local_and_vkb%rr(101)/local_and_vkb%rr(1))
     write(*,fmt='(/"Mesh parameters"/2x,"Alpha from Hamann table: ",f12.9)') alpha_hamann
-    write(*,fmt='(2x,"Default alpha: ",f12.9)') alpha
-    write(*,fmt='(2x,"Default beta: ",f12.9)') beta
-    alpha = alpha_hamann
+    write(*,fmt='(2x,"Default alpha:           ",f12.9)') alpha
+    write(*,fmt='(2x,"Default beta:            ",f12.9)') beta
+    if(abs(alpha-alpha_hamann)>1e-6_double) then ! Arbitrary?
+       alpha = alpha_hamann
+    end if
     call make_mesh(i_species)
     !allocate(psi_reg(nmesh_reg))
     allocate(vha(nmesh),vxc(nmesh),vha_conf(nmesh))

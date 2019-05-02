@@ -109,7 +109,6 @@ contains
        call read_hamann_input(species)
        vkb_file_name    = fdf_string(80,'Atom.VKBFile',' ')
        call read_vkb(species)
-       write(*,*) 'Done reading input'
        !
        ! Mesh
        !
@@ -142,7 +141,6 @@ contains
        !
        ! Form for zetas: compress or split norm
        !
-       write(*,*) 'Reading zeta'
        input_string = fdf_string(80,'Atom.ZetaForm','split')
        if(leqi(input_string(1:3),'spl')) then
           paos%flag_zetas = 1 ! Split-norm approach
@@ -204,7 +202,6 @@ contains
        !
        ! Basis block
        !
-       write(*,*) 'Reading block'
        input_string = fdf_string(80,'Atom.BasisBlock','none')
        if(.NOT.(leqi(input_string(1:4),'none'))) then !.AND.paos%flag_cutoff==3)) then
           paos%n_shells = fdf_integer("Atom.PAO_N_Shells",0)
@@ -995,7 +992,6 @@ contains
     integer, dimension(0:4) :: count_func
     logical :: flag_confine = .false.
 
-    write(*,*) 'Staring PAO initialisation'
     ! If we are using defaults, then set up the structures
     if(flag_default_cutoffs) then 
        write(*,fmt='(/"Default basis chosen"/)')
