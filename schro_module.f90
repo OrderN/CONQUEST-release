@@ -14,7 +14,7 @@ contains
     use numbers
     use pseudo_tm_info, ONLY: pseudo, rad_alloc
     use mesh, ONLY: nmesh, make_mesh, rr, nmesh_reg, rmesh_reg, new_interpolate, interpolate, &
-         make_mesh_reg, rr_squared, delta_r_reg, convert_r_to_i, drdi
+         make_mesh_reg, rr_squared, delta_r_reg, convert_r_to_i, drdi, alpha
     use global_module, ONLY: iprint
     use GenComms, ONLY: cq_abort
     use radial_xc, ONLY: get_vxc
@@ -29,7 +29,7 @@ contains
     integer :: ell, en, i, j, k, zeta, n_shells, i_shell, grid_size, n_val, lun, nrc
     real(double), allocatable, dimension(:) :: psi_reg, x_reg, vha, vxc, vha_reg, psi, atomic_rho, &
          small_cutoff, large_cutoff, cutoffs, vha_conf
-    real(double) :: energy, max_cutoff, small_energy, large_energy, dot_p
+    real(double) :: energy, max_cutoff, small_energy, large_energy, dot_p, alpha_hamann
     real(double) :: radius_small, radius_med, radius_large, sum_small, sum_large, orig_dr
     real(double), dimension(3) :: scaling
     !logical :: flag_plot = .true.
@@ -41,6 +41,11 @@ contains
     end do
     write(*,fmt='(/"Generating PAOs for ",a2/)') pte(pseudo(i_species)%z)
     nmesh = local_and_vkb%ngrid
+    alpha_hamann = 0.01_double*log(local_and_vkb%rr(101)/local_and_vkb%rr(1))
+    write(*,fmt='(/"Mesh parameters"/2x,"Alpha from Hamann table: ",f12.9)') alpha_hamann
+    write(*,fmt='(2x,"Default alpha: ",f12.9)') alpha
+    write(*,fmt='(2x,"Default beta: ",f12.9)') beta
+    alpha = alpha_hamann
     call make_mesh(i_species)
     !allocate(psi_reg(nmesh_reg))
     allocate(vha(nmesh),vxc(nmesh),vha_conf(nmesh))

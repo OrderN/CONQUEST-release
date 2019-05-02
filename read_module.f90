@@ -113,6 +113,7 @@ contains
        !
        ! Mesh
        !
+       mesh_type = hamann
        !input_string = fdf_string(6,'Atom.MeshType',input_string(1:6)) ! Take mesh-type default as semilocal type
        !if(input_string(1:6)=='hamann') then
        !   mesh_type = hamann
@@ -121,8 +122,8 @@ contains
        !else
        !   call cq_abort("Unrecognised mesh type: "//input_string(1:6))
        !end if
-       !alpha = fdf_double("Mesh.Alpha",alpha)
-       !beta = fdf_double("Mesh.Beta",beta)
+       alpha = fdf_double("Mesh.Alpha",alpha)
+       beta = fdf_double("Mesh.Beta",beta)
        delta_r_reg = fdf_double("Atom.RegularSpacing",0.01_double)       
        !
        ! Polarisation
