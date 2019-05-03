@@ -1,9 +1,0 @@
-#!/bin/csh
-set file = $argv[1]
-echo $file
-cat <<EOF > /tmp/sed.tmp
-1,\$s/cmpi//
-EOF
-echo Operating on $file
-sed -f /tmp/sed.tmp ${file} > ${file:r}_mpi.f
-rm -f /tmp/sed.tmp
