@@ -1,0 +1,18 @@
+#!/bin/sh
+#
+# Adapted by Joao Lins, Instituto de Quimica da U.F.R.J.
+#
+# For really large computations, you can ultimately try:
+# 1,\$s/numprm=400/numprm=1600/
+#
+cat <<EOF > /tmp/sed.tmp
+1,\$s/mxcon=8/mxcon=10/
+EOF
+#
+for file in  *.f 
+do
+   echo Operating on $file
+   mv $file ${file}.org
+   sed -f /tmp/sed.tmp ${file}.org > $file
+done
+rm -f /tmp/sed.tmp

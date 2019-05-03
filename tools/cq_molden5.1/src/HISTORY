@@ -1,0 +1,5076 @@
+
+These changes are always immediately updated in the "molden5.x.tar.Z"
+source file, however the platform dependent executables in the
+directory "/pub/molgraph/molden/bin" on the ftp site are not always
+in tune with the latest changes, check the date on the executable.
+
+------------------------------------------------------------------------
+
+Molden5.1
+
+Wed Jan 22 2014
+
+- Updated the ambfor and ambmd codes to run optimisations and MD
+  on proteins faster. This hold for the optimisations with cutoff
+  They now use the Damped Shifted Force protocol by Fennell
+  Gezelter. Also creation of a water box has been sped up.
+
+Molden5.0.7
+
+Fri Jan 10 2014
+
+- Paul Fleurat-Lessard did an update of the molden routines reading
+  VASP POSCAR and XDATCAR files. This was necesary to support a newer
+  version of these files.
+
+- added the keyword 'wrmolf' to ne used in the molden command file.
+  'wrmolf' triggers the writing of a molden format file 'mol.molf'
+
+- update the opengl secundary structure renderings (gmolden) of protein
+  being edit in the z-matrix (and in animated variables). This is important
+  for the psi and psi angles. Now the changes in psi and psi angles are
+  immediately applied to the structures on screen.
+
+- molden compiled with gfortran would sometimes crash on an unexpected
+  end of line. Fixed it.
+
+- molden format files with multiple sets of coordinates would not be displayed
+  correctly.
+
+- When reading ambfor .xyz files, molden would not set the internal 
+  (molden) variable ipdbt() for C-Terminal OXT residues. This would lead
+  to a faulty .xyz file written by molden, for instance on subsequent use
+  of the original file to start further ambfor/ambmd calculations.
+
+- When doing from molden a MD run in the background (with ambmd), the first
+  read in .xyz file (by tnkfst in runjob.f) would lose the reordering information
+  when more memory was allocated. This resulted strange water connectivity.
+  Fixed it.
+
+Molden5.0.6
+
+Tue Apr  9
+
+- The functionality of adding hydrogens to hetatm residues was broken due to
+  change in the web service pdbechem. With this version it is again functional.
+
+- gmolden: shader bug when using occlusion and Blur caused the screeen
+           to not be updated correctly on some systems.
+
+- gmolden: Added a proper "balls & sticks" mode, next to the already existing
+           sticks mode (in gmolden incorrectly named as balls & sticks).
+
+Molden5.0.5
+
+Thu Dec 20
+
+- Added to possibility to localize orbitals (boys scheme).
+  Next to the 'orbitals' button there is now a 'local' button.
+
+Molden5.0.4
+
+Mon Nov 26
+
+- Added a ramachandran plot for proteins. It can be found as last option
+  under the 'Surface' icon.
+- Fixed a bug that made the Average CH3 button disappear in the NMR spectrum.
+
+Fri Nov  9
+
+- Restructured file selection so that it can now be generally used.
+  Used the file selector in the "Read Grid" button in the density mode
+  and also on the "Vr" button where you can map an other grid onto the
+  first grid.
+  Added a filter to the file selector, nothing fancy just a substring match.
+
+- Cleaned to code of molsint.f. Now when calculating distributed multipoles
+  Molden will report when mxsite is exceded. This usually only happens when
+  NO overlap contributions are shifted to atomic sites.
+
+- Somebody reported problems on his self constructed gaussian style files.
+  Fixed this.
+
+- Added a charges scaling option to ambfor (for example : ambfor -S 0.7)
+- Ambfor will now parse a file called 'param' with alternative parameters
+  (If it exists of course).
+
+ 
+Thu Sep 20 
+
+- Molden now by default no longer searches for mpi executables at start up.
+  On machines with terabytes of disks this can take very long.
+
+- Updated reading of Orca files, so that geometry+gradient single point runs
+  should now also be supported.
+
+Thu Sep 13
+
+- Molden can now also read Gamess-US inputfiles with cartesian coordinates
+
+- Adjusted the writing of ambfor .xyz files so that the file can still be
+  read by molden if there is an undefined atom type.
+
+Fri Jul 13
+
+- Molden used to read in the first point with orbitals for Gaussian09
+  This was because in the beginning of its release, the orbitals
+  of the stationary point were not printed. 
+  Currently Gaussian09 does print the orbitals of the stationary point.
+  Now Molden will display the orbitals of the stationary point.
+
+Fri Jun 15
+
+- Molden now check then openGL vendor string to circumvent a bug
+  in the graphic drivers of intel video cards.
+  This caused a segment violation on _mesa_generate_mipmap
+
+Thu Jun  7
+
+- the .jdx file written with the use of the keyword PLECTRUM now
+  also contains information for use in combination with jspecview
+  and jmol.
+
+Thu Apr 26
+
+- included wrting of a .jdx file with the keyword PLECTRUM
+- keyword SPACE=value now is honoured when reading cube/grid files
+
+Thu Mar 15
+
+- Made the generated web pages for spectra (keyword PLECTRUM) compatible
+  with Internet explorer.
+
+Tue Feb 28
+
+- Improved generation of the html page created with the use of the
+  PLECTRUM keyword. (see below Tue Feb 14).
+  The command used to convert the postscript file now is:
+
+  gs -sDEVICE=jpeggray -g1000x500 -dBATCH -dNOPAUSE -sOutputFile=spec.jpg spec.ps
+
+  The index.html file now also contains javascript code to view the
+  active normal mode as a red line drawn on the spectrum.
+  It also contains a table of available frequencies together with intensities,
+  they can be clicked.
+  
+Tue Feb 14
+
+- The molden keyword PLECTRUM calculates a spectrum for files that have
+  frequency and intensity information, in addition it converts the
+  postscript file that contains the spectrum to a jpg file. 
+  For the conversion to work the ghostscript program must be installed
+  and defined. The folowing command is used to generate spec.jpg:
+  gs -sDEVICE=jpeg -r500x250 -dBATCH -dNOPAUSE -sOutputFile=spec.jpg spec.ps
+  It also creates the files index.html, mol.xyz and freq???.xyz. 
+  The last files contain animations of the normal modes. These can be used 
+  for interactive spectra in combination with the jmol viewer.
+
+- Rudimentary support for NWchem output files.
+  
+Mon Feb 13
+
+- The xyz format already supported dummys with the 'xx' element label.
+  Now Banquo ('Bq') sites are also supported. Both are displayed with the 'xx'
+  label.
+
+Fri Feb 02
+
+- Added molden keywords SPECTRUM (and PLECTRUM) to calculate a spec.ps
+  from a molden commandfile. Only for files that have spectra information.
+- Molden now visualizes a file with just one atom better.
+
+Fri Jan 20
+
+- Added keywords EXTPOSCHG and EXTNEGCHG which specify a single pointcharge
+  to be added for the calculating of the QM electrostatic potential.
+  This can be used to model a counter charge when calculating the Elec.
+  Pot. of an anion or cation.
+  EXTPOSCHG=(r.rr,r.rr,r.rr) where r.rr is a real number representing
+  the cartesian coordinates in Bohr.
+
+- Added commandline flag -U to switch of using shaders. On some graphics
+  cards the opengl version (gmolden) can hang on setting up the shaders.
+
+Mon Jan  9
+
+- Some optimisation to shader code for the benefit of older graphics
+  cards under Ubuntu Natty
+
+Sat Dec 31
+
+- The lines representation of a surface in Opengl shader language
+  gave problems. Fixed it.
+
+Thu Dec  1
+
+- Molden uses the pdbechem service to find out what hydrogens to add
+  on ligands. Unfortunately, the URL for this service has changed.
+  I have updated Molden to point to the new URL.
+
+Mon Nov 28
+
+- Fixed blocky noise when using occlusion.
+
+Mon Oct 24
+
+- amfor xyz files with cell information were not correctly stored in
+  the internal common blocks of molden.
+  As a result writing a just optimised structure and comparing it with the
+  structure on screen would give different results.
+  Fixed it !
+  
+Sun Oct 23
+
+- Reading molden format files that contain only data for MO coefficients
+  that are non-zero. When this file is not the first file read in
+  it could occur that coefficinet that should be zero were actually non-zero.
+  Fixed this.
+
+Fri Oct 21
+
+- Fixed small bug that would leave a atom selected in solid mode hovering
+  around when switched to line or stick mode.
+- gmolden using shaders would sometimes not draw a surface as transparent
+
+Mon Oct 17
+
+- Added a bigger font for the labels of atoms and residues for the opengl
+  version gmolden.
+
+Wed Oct 12
+
+- added the commandline option '-k int' (int=0-15), to specify the
+  color used to plot lables. Only available for the openGL version (gmolden).
+
+Thu Sep 29
+
+- The by molden created *.ogl files can now also be read from the commandline:
+  ./gmolden molden.ogl
+  Previously, these files could only be read from the filemanager.
+
+Wed Sep 28
+
+- fixed a bug that would leave the outvector of the plotplane essentially
+  as a nul vector. This would only occur if you let molden figure out
+  a default plane AND if the first three atoms would be on a line. 
+
+Fri Sep 23
+
+- Built in a button to make a gif screen shot in the density mode.
+- Pressing 'R' for shadows now does not make the background black when
+  no shader capability is found.
+- when writing a ambfor .xyz file with crystal information, now also
+  expands the cell before writing.
+
+Thu Sep 15
+
+- GAFF atom type assignement: switched from default aromatic Nitrogen 
+  type nb to nc. (nb is only for pure aromatic compounds such as pyridine)
+- also truncated negative values (see Wed Sep 14).
+
+Wed Sep 14
+
+- fixed problem with writing cube files on 64-bits platforms.
+  Function values that are less than 1.0d-99, are 'truncated' to
+  1.0d-99
+
+Mon Sep  5
+
+- Fixed a bug in the C code that calls getpoi (Thanks to Ben Roberts,
+  University of Florida for fixing this). This bug could affect the 
+  processing of Gaussian files.
+
+- When there is only one (hetatm) molecule in a PDB file, molden would
+  not pass on the total charge to the routines that calculate partial charges, 
+  even when it offered the possibility to set it. Fixed.
+
+Thu Sep  1
+
+- when the main window was resized (or -geom commandline option was used)
+  in the opengl version (gmolden), the rubber selection band for selecting
+  atoms in the z-matrix editor was wrongly displayed. This is now fixed.
+
+- when assingning charges to hetatm molecules of pdb files, molden would
+  try to retrive the total the total charge from the pdbchem. If no valid
+  three letter residue identifier was defined it would return charge option
+   -15, as a result the default total charge in the "assign total charge" 
+  window would be "quintet" in stead of "0". Such a situation would accur
+  when a ligand was added by combination of two structures in the structures
+  window.
+
+Thu Aug 18
+
+- When using xming as xwindows/opengl emulator, in the opengl mode when
+  using the "select by pointer" mode in the z-matrix editor, the rubberband
+  would not be drawn. This is now fixed.
+
+Tue Aug 16
+
+- When writing a Gamess-US style z-matrix and when variables were specified
+  as constants, Molden now writes an ifreez record and nzvar.
+
+Wed Aug 10
+
+- Added visualisation of calculated UV-spectra from TD-DFT calculations with
+  Gaussian.  Please feel free to suggest improvements.
+
+Mon Aug  8
+
+- Fixed a bug which could make molden crash when having multiple structures.
+- The output of the internally run 'locate' command on linux is now redirected
+  to /dev/null. So unsuspecting users are not confused.
+- Added small tweaks to the gaff forcefield types assignment (nitrogen in 
+  cyanide is now typed).
+- Added a lot of ifdef statements to make sure older linux distributions
+  do not include the newer code for OpenGL shaders.
+
+Mon Aug  1
+
+- Fix for reading gaussian 09 output when coordinates were frozen.
+
+Wed Jul 13
+
+- reading of esp charges on gaussian output has now been put before reading of
+  basis-set. This way when no basis-set is written the esp charges
+  will still be read.
+
+Mon Jul 4
+
+- The 3D wireframe drawing (X-windows) of the density/orbital mesh was
+  no longer drawn with equal width and height when using the commandline
+  -geom 1600x800 qualifier (example). Fixed it.
+  The use of shadowmaps currently only works if you dont resize.
+
+Thu Jun 30
+
+- Introducing Shadow mapping, for proteins, the secondary structure cartoons
+  cast shadows on them selves. See the palette icon, option shadows.
+  Or just hit 'r' in the drawing screen.
+
+Tue Jun  7 
+
+- Introduced a bug in reading multi xyz formats, some month ago. Fixed it.
+
+Tue May 31
+
+- There was a bug reading Mopac2009 output
+
+Mon May 16
+
+- Molden now prevents the jobname being the same as the file being currently
+  read. This can cause problems.
+
+Wed May 12,13
+
+- Removed a bugs from the mpi MD code.
+
+Thu May  5
+
+- gmolden will draw proteins faster in the space filling mode.
+
+Wed May  4
+
+- gmolden would be killed due to too much memory consumption, during an MD
+  run, fixed.
+- xyz files containing more than 1000 structures, are now all accounted
+  for in the geom conv. window.
+
+Thu Apr 28
+
+- There is a bug detected in the fast water code of ambmd. I have
+  applied a temporary quick fix.
+
+Tue Apr 12
+
+- Added postprocessing options: Blur and Occlusion to the colorpalette
+  icon. These options work as toggles. It will slow this down a bit,
+  certainly on less powerfull systems (graphics card dependant).
+  This is only available if you run molden locally.
+
+- Changed the default for gmolden (mixed openGL/Xwindows executable)
+  to be fullgl. You can still get the old mixed behaviour by using the 
+  commandline option -F.
+
+- Molden does now also better support the mol2 file dialect used by
+  the popular docking program FlexX.
+ 
+- When calculating the contacts between a ligand and residues in opengl
+  mode, the distance labels where not correctly displayed at far away 
+  distances. Fixed it.
+
+Wed Apr  6
+
+- input z-matrices having variable names longer than 8 characters were
+  not read in. I have now increased the maximum variable lenght to 10.
+
+Wed Mar 16
+
+- Molden now has per pixel lighting built in. This looks a lot better,
+  especially the specular lighting. The per pixel lighting is accomplished
+  with shaders. Windows emulators like Xming and Xwin32 do not support shaders,
+  so you will not see a difference there.
+
+Mon Mar 14
+
+- Molden compiled with gfortran had problems with reading the protein
+  density file, fixed it.
+- Molden compiled with gfortran sometimes crashed when reading in a 
+  second structure, fixed it.
+
+Wed Mar  2
+
+- Added a cutoff scheme for water-water interaction, see:
+
+  Is the Ewald summation still necessary? Pairwise alternatives to 
+  the accepted standard for long-range electrostatics
+  Cristopher J. Fennell and J. Daniel Gezelter, 
+  Journal of Chemical Physics. 124, 234104 (2006)
+
+- Adapted the makefile to be a little more intelligent.
+  It now tries to figure out on what os it is. This will cover most
+  flavors of linux, MacOSX and cygwin.
+
+Fri Feb 25
+
+- Added support for the Gaussian 09, new IRC mode HPC.
+  By request of Prof. Ugo Cosentino
+
+Thu Feb 17
+
+- added a routine for water-water interections. It uses a lookup table.
+  It is unfortunately only a little bit faster (factor 0.66)
+
+Fri Feb 11
+
+- removed a bug that would not copy all of the force field information
+  after allocating memory for a water filled box.
+
+Thu Feb  3
+
+- Adding ions is now done depending on the electrostatic potential.
+  You can still invoke random placement with the commandline argument
+  -z on ambfor/ambmd (in combination with -b).
+
+Wed Feb  2
+
+- replaced use of fork by vfork in an attempt to stop forking errors
+  on windows7 (64bits version still has problems).
+- When adding a water box in ambfor or ambmd automatically ions are
+  added to neutralise the box. The placement of the ions is accomplished
+  by replacing waters randomly
+
+Fri Jan 28
+
+- there is now also a multiprocessor version of the crystal optimiser.
+- removed a small bug in the opengl version when reading a jaguar cube
+  file.
+
+Tue Jan 25
+
+- The molden/gmolden interface will now automatically detect whether the 
+  openmpi executables have been built. If so an option to use multiple
+  processors will be availabe in the window that fires ambfor/ambmd jobs.
+
+- Removed a bug in the multiprocessor version of the MD program, ambmd.
+  Each subprocess would have its own initial velocities, which in turn
+  would lead to different coordinates in each subprocess. Fixed it.
+
+Thu Jan 13
+
+- Finally got the interactive optimisation working flawless on
+  WindowsXP.
+- Fixed continued rotation during interactive optimise.
+- optimised update time during optimisations
+
+Wed Jan  5
+
+ - Added atom type 'cz' to the GAFF force field, this is needed for guadinium
+   and arginine. Also added improper torsion to keep the C connected to the
+   three N's in one plane.
+
+Tue Dec  7
+
+- Crystal optimiser was only working for non-covalently bound crystals.
+  Current version has been tested on organic crystals and seems to work.
+
+Molden5
+
+- Added a crystal optimizer, based on the gaff force field.
+  Periodic conditions are enforced by translation symmetry copies.
+  NO ewald summations ! This is a beta test.
+
+- Gamess-US irc data, bug fix.  first atom was not displayed
+
+- While adding support for the calculated NMR spectra, a bug was introduced
+  that made it impossible to set the maximum intensity in a spectrum.
+  fixed.
+
+- When doing a combine structure on two proteins, the ligands are now also
+  colored by structure.
+
+- When using combine + align on two none protein structures, the user
+  is asked to specify 3 pairs of atoms. Each pair consisting of one
+  atom from the first and one atom of the second molecule. The code
+  has been changed in such a way that only atoms can be selected
+  of the first/second structure.
+
+- Adapted molden to be more vista/windows7 friendly.
+
+- When aligning two structures no longer the pmf score window pops-up
+  after pressing escape two or more times.
+
+- the interface to qchem and orca was only partly functional. Fixed it.
+
+- The crystal information of a mol2 file was nolonger parsed, fixed it.
+
+------------------------------------------------------------------------
+
+Molden4.9
+
+Wed Sep 22
+
+- Updated molden to read gaussian09 IRC caclulations outputs.
+
+Wed Aug 11
+
+- Updated Updated reading of Gamess-us output, kindly supplied by 
+  Mariusz Klobukowski. The number of electrons when using pseudopotentials
+  is also calculated correctly.
+
+Mon Jun 21
+
+- Updated reading of Gamess-us output, kindly supplied by Mariusz Klobukowski
+
+  1) to read results from hessian calculation in the latest version of
+     gamess-us (lines with mode symmetry information were added)
+
+  2) to read basis sets in semiempirical calculations (we changed gamess-us
+     to be able to see the semiempirical MOs, with the STO basis sets expanded 
+     in terms of STO-nG expansions).
+
+Thu Jun 17
+
+- The reading of a gridkont file (Program GRID) has been moved from the
+  density mode to the molecular mode. Under the surface icon, there now is 
+  an option "gridkont". The benefit of this move is visualisation of the
+  GRID molecular interaction together with the full opengl protein 
+  visualisation and the use of clipping planes.
+- added a box around the grid for gridkont and protein electron density.
+
+Wed Jun  2
+
+- Added the option to for the electron density to follow the current residue.
+  This build on a feature of molden to show the label of the residue
+  the pointer is currently over. In addition now also a block of
+  electron density follows the residue the pointer is currently over.
+  You can fix the postion of the block, by hitting the spacebar. 
+  Hitting it again will make the block follow the pointer movement again.
+  This all in the context of the latest hanges to molden of Fri May 28.
+  See below.
+
+Fri May 28
+
+- Under the surface icon, there was the option electron density map.
+  Clicking this would try to read a file contaning protein electron
+  in the so called 'omap' or DSN6 format. These files are available
+  from the Electron Density Server at Uppsala University:
+
+  http://eds.bmc.uu.se/eds/
+
+  This functionality has been extended. When reading a pdb file the pdbid
+  is automatically parsed and stored. When clicking the "elec. Dens. Map'
+  option the pdbid is used to automatically retrieve the omap file from
+  the electron density server. (the program wget is used for this).
+
+  After the file is read, a window will pop up, where you can specify the
+  electron density contour level. The rendered electron density volume
+  can also be clipped in three directions, for clarity.
+
+- on request from Paolo Tosco, molden4.9 now allows upto four keyword lines
+  in a molden keyword file.
+
+Wed Apr 21
+
+- When reading a protein ambfor .arc file, the secundury structure would be 
+  all coils, fixed this.
+
+Mon Apr 19
+
+- When interactively omptimising a structure with a water box, molden
+  sometimes would not show the waters. Also aborting the optimisation
+  by pressing escape, would sometimes disrupt the X protocol.
+  Fixed.
+- Updated the windows version.
+
+Wed Apr 14
+
+- When a ambfor xyz file was loaded after a pdb file, its secundary
+  would be all coils. Fixed.
+
+Tue Apr 13
+
+- When reading a ambfor xyz file, nolonger the hydrogen bonds are
+  calculated by default. In the presence of a big water box this becomes
+  very slow.
+
+- Going into the zmatrix editor the waters were stored. After quitting
+  the zmatrix editor, the waters were restored. However in the presence
+  of a large water box, the restoration was very slow. Fixed.
+
+- Using the default optimiser(lbfgs) now also the waters that water out
+  of the box are come in to the other side of the box.
+
+Mon Apr 12
+
+- When interactively optimising a small molecule , in the presence of 
+  water box, the waters and box would not be visible in the line drawing
+  mode (solid was ok). Fixed.
+  The box itself is now also visible.
+
+- In the residue command window, when multiple chains were available,
+  you would have to specify the chain also in order to visualise residues.
+  This is now changed. You can however still use the chain identifier:
+  *:A for example will switch on all residues belonging to the A chain.
+
+- When reading an ambfor xyz file containing a protein, and subsequently
+  writing a PDB file, every first residue of a chain had residue number 1.
+  This caused probelms when there were chains consisting of 1 residue.
+  Such a pdb file would not parsew correctly. Now all residues have a unique
+  number.
+
+- reading an ambfor xyz file with a box specified, would lead to an empty
+  screen when opening the z-matrix editor. This is fixed.
+
+- When optimising the Hydrogen positions, waters that are close to a metal
+  center now also have hydrogens added.
+
+- Water boxes containing more than 5000 waters would have a corrupt [RESIDUE]
+  section in the ambfor xyz file. This would lead to artifact in visiulisation 
+  with molden.
+
+Wed Apr  7
+
+- ambfor: made ff99sb the default protein force field. The unmodified
+          amber 99 force field will be used when specifying the -x
+          commandline flag
+          
+- ambfor: for rna/dna modelling the ff99bsc0 modification of the amber
+          force field  will be used when specifying the -y 
+          commandline flag
+
+- fixed a bug that would visually screw up the secundary structure, when
+  in the xwindow mode.
+
+- in the standard molden xwindow version the residue popup windows,
+  would have options, when clicked would activate the wrong action.
+  This bug was introduced the week before.
+
+Thu Apr  1
+
+- absolute scores for histidines were still to big, relative scores
+  were already OK.
+
+- fixed a bug is the secundary visualisation, which under very special
+  circumstances would not show part of the coil.
+
+- The small amino acid menues you can bring up by clicking with the second
+  mouse button now also contain an option to change the protonation states
+  for histidine, and a flip option for asn and gln
+
+- In ambfor the total charge on non amino acid residues is checked and
+  corrected if it does not add up to a discrete integer.
+
+
+Thu Mar 25
+
+- fixed a major bug in calculating the scores for histidine (D,E,+),
+  under the optimise hydrogen positions.
+
+- added prediction of asn/gln flips, under the optimise hydrogen positions
+
+Fri Mar 19
+
+- Fixed a bug that could make the hetatm residues disappear in the z-matrix 
+  editor, when previously "Opt H pos." was used.
+
+- when aligning two protein structures, both structures have a different color.
+  Also in the backbone mode the secondary structure visualisation will have a
+  different color per structure.
+
+- when combining two small molecules from the structure window, you will now
+  be asked to move the two structures into visible range.
+
+- when using command from the residue command window in combination with
+  the SURF keyword, molden will now display opengl surfaces in opengl mode.
+
+- cysteines missing an HG atom will now have partial charges adding up to -1.
+  This also implemented in ambfor.
+
+- some pdb structures containing hydrogens with labels not recognised by 
+  molden are now recognized. There are probably more, let me know 
+  if you find more.
+
+- fixed a bug that would make some surfaces not being displayed in the 
+  surfaces window. This could also cause: surface OFF, not to work.
+
+Mon Mar  8
+
+- added ambfor support for modified nucleotides such as:
+
+  1MA,5MC,OMC,2MG,M2G,7MG,OMG,YG,H2U,5MU,PSU
+
+  NOT supported are:
+
+  1MG,I,+U
+
+- water oxygen atoms connected to the protein are disconnected before
+  writing ambfor xyz files.
+
+
+Wed Feb 24
+
+- fixed a minor bug that would give a superposed atoms in z-matrix,
+  after doing optimise hydrogen positions on a dna molecule.
+
+Tue Feb 23
+
+- for rna to z-matrix molden now takes an OXT atom in to account.
+
+Mon Feb 22
+
+- Added parameters for nucleotides to the amber force field implementation
+  in molden and ambfor.
+
+- corrected charges for water, which did not completely add up to zero.
+
+Mon Feb  1
+
+- G09 has different zmatrix output than G03. Molden can now deal with this.
+
+Tue Jan 26
+
+- Molden4.9 introduces to optimisation method lbfgs as default optimisation
+  algorithem for Ambfor. Together with some other code optimisations, this
+  increases the speed of ambfor with a factor 4.
+- changed param.f, such that less continuation lines are used.
+  The many continuation lines caused problems with compilers such as ifort.
+
+Wed Dec 23 
+- more bug fixes concerning interaction between Molden with Tinker and Ambfor.
+  
+Tue Dec 22
+
+- MAJOR Bug fixes concerning interaction between Molden with Tinker and Ambfor.
+  For ambfor the bug was introduced on 27 November, when the writing of ambfor
+  xyz files was changed. This bug is now fixed.
+
+  Ambfor will now write a file 'ambfor.wr' to indicate it is writing 
+  intermediate optimisation files, when done writing it will remove this
+  lock file. This improves the interaction with Molden, which in some cases
+  would begin to read the file when its writing was not yet complete, resulting
+  in incomplete structure on screen.
+
+  The interface with Tinker was compromised earlier when ambfor started to
+  write intermediate files in binary form. Tinker and Ambfor now have their
+  own reading routines.
+  The jobname.run file, a csh script now has a -f added to the #!/bin/csh
+  line. This is because .cshrc files could contain commands preventing the
+  succesful executing of this file.
+  An number of buttons not applicable to Tinker jobs are now nolonger visible
+  in the Tinker optimise window.
+  
+Sat Dec 19
+
+- fixed a small bug that interfered with wget, which molden uses to
+  fetch pdb and hydrogen positions to add to ligands.
+
+- fixed a bug that would make ambfor crash when using the -N option
+  in combination with a liagnd being present
+
+Thu Dec 17
+
+- The switching function for the electrostatic used with cutoff with ambfor
+  caused distortions of the final protein geometry. I switched to a 
+  shifting function for the electrostatics to solve this problem.
+
+- The use of switching/cutoffs (commandline flag -N) in ambfor/ambmd
+  is now twice as fast.
+
+Mon Dec 14
+
+- Open shell stuctures are now also read from a Mopac2007 .aux file.
+- Molden now tries to find the environment variable g09root
+- Fixed a small bug that could make Molden crash after reading in two
+  large structures.
+- Fix that treats negative J-couplings correctly (NMR from gaussian)
+
+Thu Dec 10
+
+- In addition to 1H NMR, molden now also calculates the 13C NMR spectrum.
+- The magnetic shielding and J-coupling corresponding with rotationally
+  equivalent Hydrogens can be averaged by clicking the corresponding
+  Button.
+
+Wed Dec  9
+
+- Molden can now display caculated H NMR spectra from gaussian
+  You need to have caculated magnetic shieldings and J-couplings
+
+Mon Nov 30
+
+- Fixed bug in reading nmr data from gaussian output.
+
+Fri Nov 27
+
+- Ambfor can now be run using cutoff's and switching functions: use the -N
+  commandline flag to use cutoffs and switching. This can be faster than
+  all atom optimisation ( a lot).
+  The window form which ambfor optimisations can be fired from Molden
+  now also has a button to use cutoff's and switching.
+
+- When writing ambfor files the order is now such that ambfor can
+  work with contigous molecules. The ambfor file now contains an extra
+  sections '[RESIDUES]' which contains the begin of amino acids and
+  hetatm ligands (including water).
+
+- The ambfor and ambmd now catch the user's Control-C and now flush the buffer
+  before exiting.
+
+- Ambfor now handles better finding equivalent parameters for covalently linked
+  ligands to aminos acids.
+
+- Ambfor can now be run using cutoff's and switching functions: use the -N
+  commandline flag to use cutoffs and switching. This can be faster than
+  all atom optimisation ( a lot).
+
+
+Fri Nov 20
+
+- When using Gaussian with the keyword NMR, the nuclear shieldings
+  are read and can now be displayed as a label. If also J-couplings are
+  available and extra "J" button will appear in the "calculate" section.
+  When clicking it, select two atoms and the their J-coupling is displayed
+  in the calculate window.
+
+Sun Nov 15
+
+- Removed a bug that affected the prediction of HID/HIE histidine
+  residues.
+ 
+Tue Nov 10
+
+- Optimisation of Hydrogen positions under "H" icon, now also includes
+  getting the formal charges of HETATM residues, adds hydrogens if not added
+  already and calculates the partial charges of the hetatm residue.
+  It then optimises the OH positions of THR, TYR, SER resiudes.
+  Then it optimises the the choic between HIE and HID histidine residues.
+  Finally it adds hydrogens to the water molecules , that are in close contact
+  with the protein.
+
+- the atom attributes window now also offers an editable field for the atom
+  number. Which makes it easier to identify an atom on screen, when only
+  its atomnumber is known.
+  
+Wed Nov  4 
+
+- The generation of charges on a pdb file is now more verbose. It also
+  does nolonger consider the amino acids, since they have charges from
+  the ambfor forcefield. For each HETATM residue, the charges are 
+  calculated separately.
+
+- Molden now also writes HETATM residue names, when writing a PDB file
+  via the "write" button.
+ 
+- When charges are calculated for a HETATM residue, the VDW surface 
+  colored by electrostatic potential is now supported.
+
+Tue Nov  3
+
+- The Hydrogens added to HETATM residues, are now put directly after
+  the the residue. This way it does not interfere with other fucntionality
+  such as interactive docking and interactive optimalisation.
+
+Sun Nov  1
+
+- Removed bug parsing PDB entries like 1eat, which have more than
+  two alternative residues
+- Made routines to add hydrogens to HETATM residues crash proove
+  when no residue is recognized.
+
+Thu Oct 29
+
+- added routines to add hydrogens to HETATM residues from the PDB.
+
+  The default uses the web server from PDBeChem. 
+  It uses the external program 'wget' for this.
+  If you dont have it, you can retrieve it from:
+     http://ftp.gnu.org/gnu/wget/
+
+  A second fallback method adds hydrogens by looking at the angles of the
+  atom it coonects to. This method is far from ideal or unambiguous
+
+- added the possibility to retrieve a PDB file from the internet. It uses the
+  external program 'wget' to do this (see above).
+  You will find a  "Get PDB"  button and text entry field in the file selector.
+
+- When element information is available from columns 77,78 in the HETATM
+  record of the PDB file, this is now used to determine the element type.
+  The old method, which uses the atom label to determine the element type,
+  is still used for old style pdb files.
+
+
+Wed Oct 21
+
+- Sometime back the MS-DOS fileformat check was introduced, for files
+  supplied at the commandline (for files via the file select window
+  this was already in place).
+  However, when a non-existent file was specified, an empty file with
+  that name was mistakenly created. This is now fixed.
+
+- In case that there are intensities together with frequencies, both are
+  now listed together in the frequency list box.
+
+Tue Oct 20
+
+- when reading a pdb structure from the commandline, followed by
+  2nd mouse button click on and hetatm residue -> "Mol. -> Structure"
+  molden would crash. Fixed it.
+
+Mon Oct 19
+
+- Added optimisation of water to the H optimise option.
+  Waters acting as donors/acceptors to a residue, have hydrogens added.
+  Other waters are deleted.
+
+- An error in reading AMBFOR .xyz files no longer leads to an exit from
+  the program.
+
+- when reading an AMBFOR .xyz file, the error printing has now improved.
+
+- removed a bug in ambfor (which can reveal it self after new memory
+  allocation.
+
+Mon Oct 12
+
+- Changed the default for a histidine residue to be Neutral (HID).
+  The option under the H icon, "Opt. Ser/Thr/Tyr/His H", will now
+  also select which histidine is the best HID or HIE (both neutral).
+  positive HIS has to be created via the z-matrix by adding a H to
+  the neutral histidine.
+
+- In Opengl mode structures would not be updated after zmatrix editing
+  of a protein, fixed.
+
+Fri Oct  9
+
+- removed bug that would switch hetatms to visible when in backbone mode, 
+  after setting a distance monitor.
+
+- when switching from stick to solid in gmolden (opengl) already set
+  distance monitors would no longer be visible. Fixed it.
+
+- Fixed a bug that sometimes would ambfor crash when allocating more
+  memory
+
+- added the option the optimise the hydroxyl hydrogens positions of the
+  threonine, serine and tyrosine residues. Under the H icon.
+
+Mon Oct  5
+
+- removed bug which under certain conditions would not correctly show 
+  the opengl secondary structure of the second structure read in (gmolden).
+  
+Fri Oct  2
+
+- Some more fullgl opengl version of gmolden updates.
+- removed opengl helices/strands/coils during an optimisation, since
+  they were not updated.
+
+Thu Oct  1
+
+- The fullgl opengl version of gmolden (as opposed to the mixed xwindows/opengl
+  version) has a few bugs fixed. In the lines mode, during an protein movie
+  the residues would not be updated.  Now they are.
+
+- The distance monitor now also works during a protein movie.
+
+Mon Sep 28
+
+- when creating a water filled box with ambfor/ambmd, some of the waters
+  at the edges could be very close to waters in neighbouring cells.
+  When using this box in MD this would result is waters with very high
+  velocities.  This problem is fixed now.
+
+Thu Sep 24
+
+- Gaussian09 MP2 energies are now correctly read.
+
+Fri Sep 18
+
+- Fixed a problem introduced in molden4.8 with reading AMBFOR xyz files.
+  specifically recognising protein structure.
+- fixed some of the things that dont work when running the full opengl 
+  version of gmolden (-F commandline) flag. There still remain
+  some issues.
+- The zmatrix is NO LONGER updated during a movie
+- Scroll wheel now also work in interactive optimisation mode 
+
+Thu Sep 17 
+
+- more updates to swooth the interaction between molden/gmolden and
+  ambfor/ambmd
+- You can now add a water box to both force field and md simulation.
+- When ambfor xyz/arc files are read in, the element types are mapped
+  from the integer atom type, and nolonger from the atom label
+
+Fri Sep 11
+
+Molden4.8
+
+- Molden4.8 introduces ambmd:
+  Added a simple isotropic MD program to the ambfor program.
+  The Molden interface can now fire these MD jobs via the optimise (AMBFOR)
+  window. You can now select 'ambmd' in addition to ambfor.
+
+- the ambfor and ambmd programs now have a -b commandline flag, which
+  will add a waterbox to your structure
+
+- ambmd produces a .arc file as the trajectory file. The reading of
+  this file in molden has been speeded up.
+
+Wed Sep  2
+
+- When adding the possibility of contraints to optimisation with
+  ambfor, it was overlooked that in the event that no restraints
+  were set, all atoms in the ambfor xyz file would be treated as fixed.
+  This has now been corrected.
+
+- Water was not handled well in ambfor, fixed it.
+
+Thu Aug 27
+
+- Added a simple isotropic MD program to the ambfor program.
+  The Molden interface can now fire these MD jobs via the optimise (AMBFOR)
+  window. You can now select 'ambmd' in addition to ambfor.
+
+Thu Aug 20
+
+- When reading G09 output, molden now correctly deals with the fact
+  that G09 only prints orbitals for the input geometry and nolonger
+  prints orbitals of the stationary point.
+
+- Molden now also recognizes MSDOS files supplied via the commandline
+  and automatically converts them to unix formatted files.
+
+Wed Aug 12
+
+- reading back in ambfor generated xyz files, the amber atom types
+  have automatically charges assigned
+
+Tue Aug 11
+
+- further compatability fix for reading g09.
+
+Thu Jul 23
+
+- fixed serious bug in reading gaussian output, while creating support
+  for g09. Fixed !
+
+- reading back in ambfor generated xyz files, the supported amber ions
+  are now correctly classified by element.
+
+Tue Jul 21
+
+- first support for gaussian 09
+  single point, simple optimise, simple force/freq jobs supported
+  More updates are probable to follow
+
+Sun Jul 19
+
+- Removed a number of bugs concerning reading the latest Gamess-UK
+  output.
+
+Fri Jul 17
+
+- Reading gamess-uk output with more than 99 points in the 
+  geometry optimisation, all point above 99 would not be updated, fixed it.
+
+- The energies from the latest Gamess-UK output are picked by molden
+  and shown in the geom. conv. window.
+
+- The fullgl version of molden would not update the background color when
+  changed with the paleete icon: fixed
+  
+
+Wed Jul 15
+
+- fixed recently introduced bug, reading 3dgridfile
+
+Mon Jul 13
+
+- Partial optimisation can now run in BFGS optimisation mode in ambfor
+  upto 330 flexible atoms.
+
+- Molden reads back in ambfor .xyz files better.
+
+- Updating labels no longer lags in slow connection opengl mode.
+
+- Resizing main screen in opengl is now one update.
+
+Tue Jul 7
+
+- Added the possibility of partial optimisation. If you want to optimise
+  a docked pose, select only the ligand and the surrounding residues
+  flexible. And optimise with the the amber/gaff force field.
+
+- Molden now supports the scroll wheel to zoom in and out.
+
+- When using starnet X-Win32 X-windows server, gmolden switches
+  to use full OpenGL (not mixed xwindows/opengl mode).
+  The newer versions of X-Win32 ver 8, have problems with
+  zooming in via the Ctrl key, in this case use the right Control key
+  or the scroll wheel.
+
+- Molden can not determine which version of X-Win32 server is active.
+  You can use the molden commandline flag -Q, to return to the mixed
+  OpenGL/Xwindows mode. This will work better with older versions of
+  X-Win32 (6.1 and older).
+
+- When aligning two small molecules and using the align and combine
+  option, there was an extra copy of one of the molecules. Fixed it.
+
+Wed Jun  3
+
+- Removed bug from the handling of the multi mol2 and sdf files
+
+Fri May 28
+
+- Added the option to compile a complete GL version of gmolden.
+  Uptill now gmolden did some graphics in xwindows and most graphics
+  in OpenGL. In the MacOSX version of gmolden, the xwindows graphics
+  were not visible. I therefore created the option to let gmolden
+  do all graphics with OpenGL calls. You request this new functionality
+  by adding the -F command line flag. 
+
+Mon May 4
+
+- fixed annoyance that during animations, the animation would stop because
+  of the help window popup on the button started the animation.
+
+Tue Apr 28
+
+- fixed bug that could screw up the displaying of secundary structure
+  in the opengl version of molden, in the case of multiple proteins
+  being loaded.
+
+Mon Apr 27
+
+- Multi molecule files, such a .sdf files and .mol2 files will now
+  open an extra window in which each separate molecule is clickable.
+- In addition you can now combine .mol2 files conataining poses for
+  a ligand with the protein being docked into:
+  First load protein. Second, read multi mol2 file with "Add" selected
+  in the read file window.
+
+Wed Apr 16
+
+- added the calculation of topological polar surface area (PSA).
+  Molden control window -> surface icon -> totpol. PSA
+
+- added the calculation of the Quantum Mechanical PSA,
+  fisrt calculate a 3dgridfile with the density, second calculate
+  3dgridfile with QM electrostatic potential (slow),
+  Start up molden, go to the density mode, read in density gridfile
+  map esp on density, Vr icon. -> mapped
+
+- fixed bug, after animating normal modes going into the zmatrix
+  editor, clicking one of the variables would move the structure
+  allow a normal mode.
+
+- added the reading of multi molecular sdf files.
+  click the 'M' button to select other structures in the sdf file
+
+- fixed a bug that would mess up windows on centos, when keeping
+  the pointer over a button and make the help text appear.
+
+
+Thu Mar  5
+
+- fixed bug causes the atoms not to be connected in the density mode
+  in combination with gamess-us and qchem outputs
+
+- fixed a bug that would shown an empty structure for orca outout.
+
+- surface off would sometimes also switch off some parts of the coil
+  in opengl mode; fixed it
+
+Wed Feb 25
+
+- MAYOR: BUG FIX FOR AMBFOR the standalone amber/gaff force field
+  optimizer which is called by molden.
+  The bug caused some torsion force constants to be to big and 
+  could lead to distorted optimised geometries.
+  eg anything with a -so4- group.
+
+- fixed a bug that would let molden crash when deleting all active structures
+  from the structures window, when the atom attributes window was displayed.
+
+- some programs out there write pdb files with lowercase element and residue
+  labels. Molden can now handle these.
+
+- fixed a bug that caused read in ambfor .xyz files, to be treated as
+  if they had no charges
+
+Thu Jan 15
+
+- added 64 bits executables for linux on our anonymous ftp directory
+  ftp://ftp.cmbi.ru.nl/pub/molgraph/molden/bin/Linux/64bits
+
+- fixed a minor bug in the 64 bits version when rendering helices
+
+The Dec 18
+
+- Zoom is now kept when editing a zmatrix
+- Updated the makefile somewhat, let me know if you have problems with it
+
+Tue Nov 25
+
+- When a protein was edited via the z-matrix all waters were gone
+  except those with a connection to the protein. Now the waters are
+  restored when exiting the z-matrix editor.
+
+- removed a a bug in an earlier undocumented implementation of the
+  above that would make molden crash during the animation of variables
+  in the z-matrix editor.
+
+Thu Nov 20
+
+- Added the posibility to color by chains (opengl only).
+- fixed a bug that would render the molecule as opengl sticks after
+  a HETATM molecule of a protein was removed via the 2nd mouse click
+  popup window.
+
+Wed Nov 12
+
+- fixed a bug that could make molden freeze when a help window on a
+  button was activated
+- fixed a bug with rendering forces and the in/de-crease scale buttons.
+- fixed a small bug with reading non protein mol2 files, which would cause
+  problems when combining the molecule with a protein structure.
+- Fixed bug which caused crystal information (biosym car,arc), to be
+  wrongly symmetry expanded if it was not the first structure be read in
+- fixed a bug that would let molden crash when clicking H-BONDS in the
+  stick mode
+- fixed a bug that would let molden hang on reading a VASP CONTCAR file
+- fixed a bug that would let molden crash when as a first file a freq
+  jobs was read in, and consequently the spectrum was displayed.
+  (introduced very recently).
+
+Mon Nov 10
+
+- Fixed bug in memory allocation associated with the writing of .ogl
+  files in the surfaces window.
+  When you do a combine between a small molecule and a protein, the memory
+  would be corrupted. fixed it.
+
+Fri Nov  7
+
+- Fixed bug writing "charges derived" electrostatic potential mapped
+  surfaces in opengl surfaces window
+
+- Fixed minor bug in writing mopac surfaces in density mode in
+  opengl surfaces window
+
+Thu Nov  6
+
+- Fixed bug which caused filetypes with crystal information (biosym car,arc)
+  and multiple structures to be treated as containing just one structure.
+
+- when only surfaces but no molecule was present in a .ogl, 
+  the scene would not be properly displayed. In perspective mode
+  you would be inside the surface with no possibility to zoom in.
+  In the non-perspective mode nothing would be displayed.
+  Fixed it.
+
+- fixed bug in new .ogl writing routine, that sometimes wrote too many
+  connections.
+
+Tue Nov  4
+
+- when choosing contacts to be displayed followed by a distance
+  measurement, the part of the distance window where the distance
+  should be displyed stayed black, fixed it.
+
+- in pdb files with dna/rna the label OP2,OP1 where not supported,
+  now they are.
+
+Fri Oct 31
+
+- The newly introduced surfaces window also now allows to write all
+  surfaces to a .ogl file. You can for instance now create several
+  orbitals and write then to a .ogl file
+
+- .ogl files ca now be read back in to gmolden.
+
+Fri Oct 24
+
+- A new window lets you manage the opengl surfaces created by molden.
+  In the molden control window -> color palette icon -> surfaces
+  You can delete surfaces, change color. Separate helices can now
+  be colored differently. The surfaces window is also available in
+  the denisty mode. It automatically pops up once the opengl icon
+  is clicked. Surfaces can now be activated and deactivated.
+
+- The .ogl files when selected in the read file window used longer
+  trigger the launch of the external moldenogl helper program.
+  This behaviour still goes for the Xwindows only version of molden.
+  For the mixed opengl/Xwindows version of molden (gmolden), the .ogl
+  files are dispayed within gmolden itself
+
+- Removed a bug that would overwrite the last read file with postscript
+  code, when the character 'p' was pressed in the display window of
+  molden.
+
+Wed Sep 17
+
+- The align button in the structures window now also works for small
+  molecules.
+
+- When viewing gromacs trajectory the backbone view is maintained if
+  chosen. Also the labels of the cell are no longer displayed in this case.
+
+- You can now create a separate structure from the pdb hetatm molecules
+  by clicking with the 2nd mouse button on the drawing screen.
+  This makes it easy to save these molecules in a separte pdb file.
+
+- Added cyclopentane and pyrrole as fragments in the zmatrix editor.
+
+Fri Sep 12
+
+- Added the option to map the electrostatic potential to the solvent
+  accessible surface
+
+Tue Sep  9
+
+- Added the possibility to align proteins
+
+Fri Aug 29
+
+- Removed another bug that made the program crash when freeing allocated memory
+
+Thu Aug 28 (My birthday :-)
+
+- Removed a bug that made the program crash when freeing allocated memory
+
+- mol2 files containing multiple structures are now also supported.
+  An extra button (M) in the points section of the molden control window
+  will appear. Clicking this button will allow you to select an other 
+  structure in the mol2 file.
+
+- Two structures can now be combined. Select a structure, supply a 
+  structure number in the field next to the "Combine" button, and click
+  'Combine'. The structure corresponding to the number will be appended
+  to the active structure.
+  
+Molden 4.7 first version Aug 22 2008
+
+- Molden4.7 can keep multiple structures in memory. Each time a new file is
+  read in this is a new structure. You can switch betweeen structures 
+  in the newly added structure window. The currently selected structure
+  is displayed. You can also delete structures in this window. The original
+  one structure at a time behaviour is still available when specifying
+  the -O command line flag.
+
+Molden 4.6
+
+Tue Aug 12
+
+- Fixed a bug when going up one directory (..) in the filemanager.
+  This one managed to escape my attention for a long time.
+
+- Minor changes to scrolling
+
+Wed Jul 6
+
+- Added dynamic memory allocation voor mopac2007 .aux files
+
+Wed Jul 2
+
+- Removed a bug that lets molden crash when you add the first line
+  of a new structure in the z-matrix (windows,macosx)
+
+Tue Jun 24
+
+- The mopac2007 .aux format is now supported.
+  The mopac .aux format can hold geometry optimisation data, charges, dipole
+  and orbitals information.
+  The MP6 and RM1 methods have been added in the submit job interface.
+
+- Corrected a bug in displaying the dipole moment.
+
+Thu May 29
+
+- Activating the picture icon will allways cause a gif image to be
+  written, also in OpenGL mode. The latter requires a 24 bit to 8 bit 
+  conversion, which has now been incorporated into molden.
+  For those who would like the rgb picture back, let me know.
+
+Tue Apr 29
+
+- Removed bug in gmolden that when adding the first atom in a new 
+  z-matrix would make the atom invisible (solid/stick mode only).
+
+- Added the ability to cap residues 
+
+- Added support for neutral asp, glu and lys (ambfor force field)
+
+- Improved zmatrix editing of proteins: adding H to histidine will
+  now be recognized as the proper HIS form.
+
+Wed Apr 16
+
+- Small annoyance fixes.
+  Switched atom selecting back to the fisrt mouse button again in the 
+  atom properties windows.
+  When doing a optimisation, selected atoms now become unselected.
+  
+  
+Thu Apr 3
+
+- Added small help boxes describing the use of button. If you keep the pointer
+  over a button and dont move, after 1.5 seconds, this helpful window 
+  will appear. NOT yet implemented for all windows !!
+  Gradually help for more windows will be added.
+
+- Added possibility to close/abort query box
+
+- When the user would try to kill the main drawing window by clicking
+  on the x in the border supplied by the window manager, molden would popup
+  a window saying you should kill molden by clicking on the skull button.
+  On some Xwindow servers, this popup window would be off screen. Fixed it.
+
+Tue Mar 18
+
+- In the window to specify the atoms and methods for Oniom, the possibility
+  of writing amber charges as part of the element specification for Gaussian
+  has been added.
+
+Fri Mar 14
+
+- While reading tinker/ambfor xyz files, a proline could be misclassified
+  as a lysine. The most visible direct effect was strange behaviour of
+  the spline to indicate the coil secundary structure.
+  Fixed.
+
+Thu Mar 13
+
+- Labels of Cell axes are now also visible in the opengl mode of gmolden.
+- Labels of XYZ axes are now also visible in the opengl mode of gmolden.
+
+Mon Mar 10
+
+- Fixed bug in 'edit cell parameters'
+
+Fri Feb 22
+
+- Added axes, only in gmolden with solid mode. It can be called by pressing
+  '+' or '='. No labels of axes yet: red=x, green=y, blue=z
+
+- Added the possibility of calculating molecular surfaces, with help of the
+  program 'surf': 
+
+   ``Linearly Scalable Computation of Smooth Molecular Surfaces",
+   A. Varshney, F. P. Brooks, Jr., and W. V. Wright, IEEE Computer Graphics
+   and Applications, September 1994 [invited submission].
+
+  You will find the option under the 'surface' icon -> Mol. surf.
+  This option is mainly intended for use with proteins.
+
+Fri Jan 25
+
+- corrected bug in reading molden format files when non integer occupation
+  numbers would be present.
+
+Mon Jan 21
+
+- Added reading/writing of CIF files
+
+Thu Jan 10
+
+- Added writing of Gaussian cube files (reading was already present).
+  This can also be used to store data on a 3D grid which are slow to 
+  calculate.
+
+Mon Dec 17
+
+- fixed a bug which could make the automatic z-matrix conversion crash
+  for very small molecules with few connected atoms
+
+Wed Dec 12
+
+- Fixed working with nptsx,nptsy,nptsz, edy,edy,edz in combination
+  with opengl 
+
+- Going to full screen in OpenGL mode would leave the molecule not
+  centered on the ceter of the screen, fixed it.
+
+- Refined creating connections between backbone connections.
+
+- Refined handeling of unclassified pdb symbols in the ATOM records
+  of a PDB file.
+
+- Fog is now automaically disabled in the density mode.
+
+Mon Dec 10
+
+- Fixed atom selection by clicking on an atom with the second mouse button 
+  while the "Atom Properties window" is open. This functionality was
+  destroyed when introducing the popup window for HETATM molecules on
+  Aug 8
+
+Fri Dec  7
+
+- Atomcolor is now switch on for all but protein structures after
+  reading a new file
+- Better default setting of shade for proteins
+
+Sat Dec  1
+
+- Fixed Molden in such away that it is more compatible with the free
+  Xming Xserver for windows. 
+
+- Fixed a bug that would let the structure rotate after an buttonpress
+  in the main screen and clicking on of the amino acid options.
+
+Fri Nov 23
+
+- fixed bug with displaying G-functions
+
+Wed Nov 14
+
+- Added optimisations for displaying the opengl stick & balls for all atoms
+- added support for gaussian counterpoise optimisations.
+- added a commandlineflag -S to let molden start with shade off.
+
+Fri Nov  9
+
+- Added support for gaussian mp2 optimisations
+  Previously the HF energy would be listed in the geometry convergence
+  window, now the MP2 energy will be displayed.
+- Added support for gaussian IRC outputs, previously all points were displayed
+  in the geometry convergence windows, now only the optimised geometries
+  along each point of the reaction coordinate.
+
+Wed Nov  7
+
+- added a window that lets you specify the total charge when using
+  the EEM charges.
+- added two new parameter sets to calculate EEM charges with, PESP and
+  ESFF force field parameters
+- Changed the default for automatically calculating charges for forcefield
+  optimisation with ambfor to PESP. This is because the previous default
+  only had parameters for HCNOF. In addition a string will be printed
+  when no parameters for an element are available.
+  You can always assign charges interactively and switch off automatic
+  charge assigning in the AMBFOR optimise window.
+- Improved GAFF forcefield typing a bit.
+- Removed a bug that would occasionally make molden crash when doing a
+  interactive GAFF/Ambfor optimisation and charge labels were also printed
+  (Recursive IO bug).
+- when the number of atoms exceeded 10000 the writing of tinker xyz files
+  would not print connectivity correctly, fixed it.
+
+
+Tue Oct 30
+
+- added option to interactively change the parameters that determine
+  when molden draws a hydrogen bond. You will find a new entry 'H-bond
+  parameters' under the H icon, the 8th icon from the top from the 
+  middle column in the molden control window.
+
+Tue Oct 23
+
+- fixed a bug where the reading of Gaussian files would go wrong if
+  the following line was present:
+
+   RelInt: Using uncontracted basis, .... etc.
+
+Wed Oct 17
+
+- added a 'prev' button in addition to the existing 'first', 'next' and
+  'movie' buttons. 
+- added to molden makefile, the feature to build molden, gmolden and
+  ambfor/ambfor when you type 'make'
+- added option to convert gaussian log files to zmatrices:
+
+  gmolden molin
+
+  contents of file molin:
+  title
+  file=gaussian.log wrzmat=2
+
+  The zmatrix will be written in the file called 'zmat.out'
+
+- added possibility to scan a part of a proteins rotamer space 
+  (max. 6 residues). The best 10 rotamer combinations will be remembered.
+  The initial scoring is done via the dfire pmf score. The output can
+  be saved and (re)loaded via the file 'resrot'. The rotamer combinations
+  can be rescored with the amber force field.
+  To activate the window click on a residue with the second mouse button
+  and select the last option in the menu (add flexible residue). 
+  Subsequently do the same for all the residues you want to be flexible.
+  However you first have to create a zmatrix for the protein fisrt by clicking
+  the zmatrix button, otherwise the new option will not be presented.
+
+Thu Sep 13
+
+- Fixed bug when applying edited cellparameters
+- Added option to calculate charges for hetatm molecules from the PDB
+  (in the popup menu, activated with second mouse button click)
+
+Fri Sep  7
+
+Fix bug ambfor memory allocation
+
+Mon Sep  3
+
+Fixed bug that caused the zmatrix-ordering of atoms to be applied
+without also changing the charges ordering accordingly, when
+starting an ambfor (amber/gaff) optimisation.
+
+Thu Aug 30
+
+Fixed bug when writing zmatrices bigger than 100 atoms.
+
+Wed Aug 29
+
+- improved GAFF typing
+
+Thu Aug 23
+
+- fixed a bug that would not display a residue when replaced (in opengl)
+
+- fixed a bug that could occur when memory is allocated for proteins
+  larger than 20000 atoms.
+
+Fri Aug 17
+
+- fixed bug that displayed "(null)" string when the cursor was above
+  an atom when displaying a non pdb file
+
+Tue Aug 14
+
+- fixed a bug that caused molden not to make a correct z-matrix for
+  a pdb file containing nucleotides
+
+Wed Aug  8
+
+- added support with ORCA through reading of the ORCA output, currently
+  supported are:
+
+  single point, geometry optimisation and force/frequency jobs
+
+  No support for reading electron density and orbitals
+
+- Added support for hetatm moelcules from the pdb file, which label
+  will now light up when the pointer is over the hetatm molecule.
+  Clicking the middle mouse button will now bring up a popup menu
+  with options to center on the molecule, create a surface of the
+  molecule and to find neighbouring aminoacids.
+
+Mon Jun 11
+
+- Fixed bug in displaying residue labels for pdb files containing DNA
+
+- Added the option to have a background color with a gradient.
+  When clicking the 'Palette' icon the first option now is 'Background Mode'
+  You can choose between "solid color" (the way it was) and ' color gradient'
+  To implement this we changed color 13 of the 15 basic molden colors to dark 
+  blue, which is used for the default gradient color.
+  Of course this affects the .moldenrc file so you had best remove it and 
+  reset your defaults. The background mode is also saved in the .moldenrc
+  file.
+
+- Added the reading of electron density maps in the O format (also known as 
+  DSN6 format) these are available form the electron density server in Upsala:
+
+  http://eds.bmc.uu.se/eds/
+
+  These maps are only displayed in the OpenGL mode (so gmolden).
+
+Wed May 30
+
+- Fixed a bug in writing .mol filee, of elements with a two letter abbreviation
+  only the last was written.
+
+- added reading of DSN6 electron density maps, these can be read in from
+  the surface icon -> last option and can be displayed on top of a pdb 
+  structure
+
+- added information how to compile under gfortran/gcc4.0 and higher to
+  the makefile and molden.f file (uncomment external gfortran_iarc)
+
+Fri May  4
+
+- Fixed bug of displaying the dipole moment, the dipole moment
+  was only correctly displayed for single point QM calculations, not
+  QM optimisations. Fixed it.
+
+Tue Mar 20
+
+- Removed a bug affecting the processing of biosym .car files.
+  Bug was introduced when adding dynamic memory allocation for protein
+  coordinates
+
+- Removed a bug affecting reading of xyz files being added to an existing
+  structure.
+  Bug was introduced when adding dynamic memory allocation for protein
+  coordinates
+
+Mon Mar 12
+
+- Removed a bug affecting the visualisation of vibrations of gamess-us
+  and Qchem introduced when adding dynamic memory allocation for protein
+  coordinates
+
+Fri Mar  9
+
+- Removed a bug in the processing of gaussian outputs, the bug is
+  'fixed' but be aware that it is not exhaustively tested as of yet
+
+- made a minor bug fix to the reading of QChem output
+
+Fri Mar  2
+
+- Performance update: OpenGL density mode now makes less unnecessary 
+  screen updates. Only important for working with remote displays.
+
+Tue Feb 20
+
+- Created dynamic memory allocation for proteins (all formats that support
+  protein information, pdb, mol2, tinker xyz, .gro)
+
+- Display of dipole moment, if QM electron density is available, the QM dipole
+  moment is first calculated, if charges are available (but no QM electron 
+  density), the dipole moment is calculated from the charges.
+
+- Added possibility to rotate ligand within an active site:
+
+  The align icon (middle column, 9th from the top) Interactive docking -> 
+  Pick molecule from screen -> pick a molecule from the HETATM records of 
+  the Pdb file.
+
+------------------------------------------------------------------------
+
+Molden 4.5
+
+Fri Dec 2
+
+- Optimised protein display in the opengl version:
+
+  - residues now have their own gllist, when you display a whole
+    protien as solid you will see the protein being build up residue
+    per residue. Solid protein display will also display somewhat faster.
+  - when clicking the backbone button you will immediately see the
+    secondary structure elements
+  - animation of variables in the zmatrix editor in solid mode will
+    be a lot faster, also replacing rotamers.
+  - you can now choose between the richardson and dunbrack rotamer
+    libraries
+
+Tue Oct 17
+
+- Did some improvements to the QChem interface
+
+Thu Sep  7
+
+- Did some optimisation of orbitals and regular density space filling
+  plots.
+
+Thu Aug 31
+
+- changed the fortran code so that use of the -O2 compiler flag on linux
+  nolonger causes incorrect display of the surface in xwindows lines mode
+  (the surface looked incomplete)
+
+Thu Aug 17
+
+- The opengl version of molden (gmolden) would show dark blue lines
+  in the density-3dgrid mode with certain xwindow emulators. Fixed it
+  so that the lines are white again i
+
+Wed Jul 12
+
+- added a button "to Xmgr" which when clicked will right a file with
+  pairs of frequency,intensity on each lines. These files can be imported
+  into xmgr or xmgrace
+
+Mon Jul 10
+
+- when displaying vasp POSCAR or CONTCAR files, and there is a XDATCAR
+  file present molden will ask to use the XDATCAR, the multiple structures 
+  can be called with the 'fisrt','next' and 'movie' buttons.
+
+- when doing interactive docking sometimes extra hydrogens were added
+  to the second molecule with erroneous connections to the first molecule,
+  fixed it.
+
+- when doing interactive docking you are now asked if you want to align
+  the centers of both molecules or not (yes used to be the default)
+
+- the make option 'make noxwin' now should work again. This can be used
+  to create a version of molden without xwindows and opengl, you can
+  only control this version with a keyword file.
+
+Wed Jun 28
+
+- The internal opengl representation of mopac .gpt files had errors
+  in representing the connections of the molecule.
+
+- Tinker xyz files which use the amber or charm forcefields are now
+  correctly visualized when atoms like F, P Cl and Br are used.
+
+Tue Jun  6
+
+- B. van Eijck added the keyword CHADD, which will read extra charge
+  centers from a 'molden.def' file.
+
+Tue May 30
+
+- Removed some small bugs, reported by Robert Gyepes
+- added a special makefile for cygwin makefile.cygwin
+
+Fri May 19
+
+- Added 'best rotamer' option, this calulates for a particular residue,
+  the best scoring rotamer according to the dfire protein-protein score.
+
+- Removed a bug which on some platforms would make molden crash when
+  writing out a z-matrix
+
+- Some rudumentary support for gfortran (you still have to edit molden.f
+  and comment out the line 'external iargc' )
+
+Wed Mar  8
+
+  Spherical G-functions (9G) in combination with electrostatic potential
+  and mulliken charges are now also fully supported
+
+Mon Mar  6
+
+- Support for Gaussian cartesian G-functions (previously i was unaware of
+  G-functions in the Gaussian series of packages).
+
+- Support for the Gaussian03 revision D, the output format of the basisset
+  has slightly changed. Adpated molden to deal with it.
+
+
+Tue Feb  7
+
+- First support for QChem outputs: For molden to be able to read orbital
+  and basis-set information, supply the following qchem keywords in the $rem
+  section:
+
+  PRINT_ORBITALS          TRUE
+  PRINT_GENERAL_BASIS     TRUE
+
+  You can supply output of composite qchem jobs, molden detects it and will
+  allow you to select the different job outputs by clicking on the 'M' button
+  which appears in the "Select Point:" section in the molden control window.
+
+  NOTE: support is still rudimentary, i dont have qchem, only a few outputs
+        sent to me by a user. If you think this functionality is important
+        than let me know when it doesnt work
+
+Thu Jan 19
+
+- Support for dynamic memory allocation for the part that shows geometry
+  convergence, implemented for use with gromacs and cpmd.
+
+- In popop menus you always had to choose a selection (sometimes cancel)
+  Now you can click besides the popup window to get out of the popup and
+  cancel the selection. Therefor the option "Cancel" there where used to 
+  be offered has been removed.
+
+Tue Dec 20
+
+- Support for the latest Gamess-US version (tested 27 JUN 2005 (R3) version).
+  The basis-set print out of Gamess-US version had changed.
+
+Fri Dec 16
+
+- When writing PDB files, in case of no chain information read in 
+  molden will now generate and write chain labels
+
+- With gromacs files the generation of connectivity is now much quicker
+  also solvent molecules will be rendered in less detail in opengl molden
+  which will speed things up a little
+
+Fri Dec 9
+
+- Molden can now read the binary gromacs files .trr and .edr. Previously
+  molden would first convert them to their ascii counterparts with the gmxdump
+  utility. This way the very large ascii files are nolonger needed.
+
+Tue Nov 29
+
+- Added molden keyword 'MOGL' which will let you create a molden.ogl
+  file from a molden keyword file.
+
+Mon Nov 28
+
+- When replacing one amino acid residue by another, followed by writing
+  a pdb file, the replaced residue number would be wrong: fixed
+
+- When writing .mol2 files, sometimes a double bond to many was written
+  (conjugated systems), since molden does not do anything with bond types
+  this was not serious, but other programs (sybyl) do work with bond types.
+
+- When Cbeta or backbone O (C=O) was missing on a pdb residue, connections
+  to a non existing atom at cart.coord (0,0,0) would be drawn in the opengl
+  version of molden (gmolden)
+ 
+Mon Nov  7
+
+- With gmolden the aminoacid currently under the pointer is shown by
+  temporarily showing the label, when clicking with the second mouse button
+  a popup window with a few options pertaining to amino acids would appear,
+  every now and then this window would not be visible untill you moved the
+  pointer over it (only on certain xservers), fixed it.
+
+Wed Nov  2
+
+- Fixed writing of Gaussian inputfiles for oniom calculations (from the submit
+  Gaussian Job windows). This bug was introduced when charges for proteins
+  were added (amber forcefield) in molden4.1 (Why does no one ever tell
+  me it does not work ???)
+
+- Changed the working of the residue commands window:
+
+  128-130:A   would mean residue 128 through 130 of chain with Label "A"
+
+  NOW all numbers refer to residue numbers used in the PDB file:
+  128-130:A now actually means the same as 128-130.
+  You still can use the chain label for things like coloring:
+
+  *:A col
+
+  Will let you pick a color with which all residues belonging to chain "A"
+  are colored with this color
+
+  128
+
+  residue with PDB residue number 128 will be shown.
+
+
+
+Fri Oct 28
+
+- fixed a bug that would override user assigned sybyl atom types, when
+  writing mol2 files
+
+- added the possibility to change the potential levels at which certain colors
+  where used for the colorcoded opengl esp potential 
+
+- The PC-UNIX version of Gamess-US misses the first column with respect
+  to the regular Unix version, made some adaptation to let molden work
+  with this output to.
+
+- Fixed geom conv for a series of xyz structures where so of them had 'heat'
+  0.0
+
+ 
+Fri Sep 30
+
+- reorder Z-matrix, clicking a few atoms and then hitting 
+  escape, this would create a zmatrix in the order of clicked atoms
+  and the rest would be figured out by molden. This did not always
+  work. I fixed it in such a way that it can handle nearly all cases
+  but there are still some conditions not supported, but this is not
+  so relevant since you can always do it again.
+
+- When doing interactive docking, you can now change the center around
+  which the ligand rotates (in the same way as the overall rotation center).
+  And you can now reorder the z-matrix of the docked ligand.
+
+Wed Sep 23
+
+- Added the possiblity to do a surface per residue in the surface window
+  (opengl version only), takes longer but also looks a lot better.
+
+- When aligning or docking and then writing as a PDB file some of the atoms
+  were missing, corrected it.
+
+- When docking a molecule, the to be docked molecule is placed at the center
+  of the molecule docked to.
+
+Wed Sep 21
+
+- Fixed running tinker in the background for the opengl version of molden
+- Made residue commands concerning surface also work for the opengl version
+- Added Fit Rotamer option, which will replace the amino acid conformation
+  with the closest rotamer in the rotamer library
+
+Mon Sep  5
+
+- Added support for the tinker amoebapro force field
+- reading in tinker xyz amber files would be retyped to charmm types
+  fixed this
+
+Mon Aug 15
+
+- Fixed xwin.c for molden without OpenGL
+
+- Fixed writing of GIF files for using Xservers with 16 bit planes
+
+Fri Jul 15
+
+- Added interactive opengl support for the density mode (only available
+  with 'make gmolden').
+
+- Fixed bug which can lead to not displaying gaussian outputs correctly
+  in some cases.
+
+- Fixed a number of small annoyances (dont worry, there are enough left).
+
+
+Wed Jun 15
+
+- fixed bug that let f-functions run in to the code meant for the g-functions
+  resulting in reporting number of orbitals is wrong
+
+- fixed reading MOL files, this bug was introduced with support for reading
+  gromacs files
+
+Thu Jun  2
+
+Addition of creating opengl surfaces in the molecular mode, when clicked
+add to the backbone (protein structure only), and clicking with the second 
+mouse button on a backbone atom a drop menu will appear, which let you
+do things like (un)display the residue, center it, and add to the surface
+(of course only available when molden is compiled with opengl support (gmolden))
+
+------------------------------------------------------------------------
+
+		Molden4.4
+
+Mon May  9
+
+The main reasons for this new minor version of molden are:
+
+- Introduction of the incorporation of interactive Opengl in the main
+  interface of molden (molden already had opengl helper program moldenogl)
+  You can build the gmolden version by typing; 
+
+      make gmolden
+
+  This version is still under development
+
+- Reading of NLMO's of the NBO analysis in gaussian
+
+- Partial support for G-functions. As far as orbitals and electron density
+  G-functions are supported. Also mulliken charges, except when using 9G
+  functions. The electrostatic potential is not yet supported.
+
+  Addition of a new keyword to the molden format: [9G]
+
+  which specifies the use of spherical G-functions instead of gaussians.
+
+  The order in which molden expects MO coefficients to pe printed is:
+  For spherical G-functions:
+
+  G 0,G+1,G-1,G+2,G-2,G+3,G-3,G+4,G-4
+
+  For cartesian G-functions:
+
+  xxxx yyyy zzzz xxxy xxxz yyyx yyyz zzzx zzzy 
+  xxyy xxzz yyzz xxyz yyxz zzxy
+
+  The request for support for G-function came from the molcas development
+  people, but also Gamess-US will benefit from this support.
+
+------------------------------------------------------------------------
+
+		Molden4.3
+
+Fri Apr 29
+
+- introduced number of small bug fixes:
+  the environment g03root was not recognised and g98 was written in the
+  .run files created by molden
+
+- premature end of file in gaussian can let molden crash, removed one
+  instance on which it could crash
+
+- Introduction of the incorporation of interactive Opengl in the main
+  interface of molden (molden already had opengl helper program moldenogl)
+  You can build the gmolden version by typing; 
+
+      make gmolden
+
+  This version is still under development
+
+- Reading of NLMO's of the NBO analysis in gaussian
+
+- addition of dynamic aminoacid labels and clicking on a backbone
+  atom will bring up a small dropdown menu with visualisation options
+
+Wed Feb 23
+
+- Fixed bug that effectively disabled the aligning of two molecules
+
+- Fixed a bug in the z-matrix editor that would not correctly show all
+  atoms in the when the 'stickcolor' mode was disabled.
+
+Fri Jan 28 2005
+
+- Lots of small bugfixes, as there are:
+  
+  Fixed editing z-matrix of ligand when doing interactive docking,
+  Not edit operations where bug free
+
+  Fixed updating of properties when editing the z-matrix
+
+- Added support for the Gromacs (gmx) file format .gro:
+
+  Molden will read the file name.gro and will then look for the file
+  name.top to read connectivity, charges and atom types. When not found
+  Molden will create connectivity.
+
+  Next molden will look for a trajectory file name.ttr. If found it will
+  use gmxdump to convert it to an ascii trajectory file name.trra.
+  Molden will not do the conversion if a ascii trajectory file name.trra
+  already exists.
+
+  Next molden will look for an energy file name.edr. If found it will
+  use gmxdump to convert it to an ascii energy file  name.trra.
+  Molden will not do the conversion if a ascii trajectory file name.trra
+  already exists.
+
+  If a trajectory file is found, then molden can animate the MD run by
+  clicking on the movie button.
+
+- Hitting the escape key when running an animation will exit the animation.
+  Hitting the space key will stop the animation and when hit again will resume
+  the animation.
+
+Fri Jan 14 2005
+
+- Some more work on the writing of mol2 file for proteins.
+
+- Incomplete amino acids are now reported.
+
+- changed xwin.c so it does better on 64 bits AMD/Opteron systems.
+
+Tue Dec 21 2004
+
+Introduction of Molden4.3:
+
+- The reading of Gaussian output files has been restructured, it is
+  possible that this may temporarily be a step back in molden reliablity.
+  PLEASE inform us of any problems related to reading gaussian outputs.
+
+- Did some work on writing better mol2 files for proteins, there are
+  still problems, but at least molden can now read it back and create
+  a z-matrix for the protein without crashing.
+  Sybyl still has problems with these files ! It needs more work.
+
+- Added forces information to the molden format, example:
+ 
+  [FORCES]
+  point    1
+  3
+    -0.000038    -0.000160     0.000430
+     0.000834     0.000150     0.000047
+    -0.000263     0.000008    -0.000017
+  point    2
+  3
+    -0.000505     0.000339     0.000987
+     0.001268    -0.000634    -0.000242
+     0.000123    -0.000017    -0.000640
+  ....
+  point   10
+  3
+    -0.001299     0.000970     0.001904
+     0.002139    -0.001328    -0.001049
+     0.000512     0.000004    -0.001636
+  
+ The number of points must match the number of points used in the [GEOMETRIES]
+ section.
+ Second form includes coordinates, this is only needed when the forces are
+ not in the same orientation as the geometries supplied in the [GEOMETRIES]
+ section. For instance, the Gamess-US forces are not in the z-matrix orientation
+ , so when [GEOMETRIES] ZMAT is used the forces would not be in the correct
+ orientation.
+
+  [FORCES] COORD
+  point    1
+  3
+    -0.000038    -0.000160     0.000430   0.0  0.0  0.0
+     0.000834     0.000150     0.000047   0.0  0.0  1.0
+    -0.000263     0.000008    -0.000017   0.0  0.0 -1.0
+  ....
+
+  NOTE: this extension is on trial, it may not be the final solution.
+        Developers who write their own molden format should not be
+        overanxious to implement it.
+
+ - fixed problems with reading circulair peptides.
+
+ - increased the max number of geometries and scf iterations molden can handle
+   to 2000 and 1000 respectively.
+
+------------------------------------------------------------------------
+		Molden4.2
+
+Tue Oct 05 2004
+
+- Corrected a few fortran syntax errors, thnx to Gyepes R. 
+- on some platforms molden would not write a z-matrix, after stating
+  that it just did. fixed
+
+Thu Aug 05 2004
+
+Molden 4.2 introduces quite some radical changes in the way proteins
+can be manipulated with the z-matrix editor. Where in previous versions
+any change to the z-matrix was followed by a complete update of the 
+cartesian structure, with molden4.1 only those parts of the cartesian 
+structure are updated that have actually changed. 
+The advantages are that protein manipulation is much faster and now
+larger proteins can be manipulated, these manipulations include,
+deletion, insertion and replacement of amino acids. Also the animation
+of variables such as the chi sidechain rotamer angles can now be done
+interactively. A new feature is the possiblity to change side-chain rotamers.
+The procedure is now:
+
+1) load in a PDB file
+2) click the zmatrix button and create a zmatrix for this protein
+3) click the backbone button
+4) NEW click on the backbone with the SECOND mouse button and a popup
+   window with side-chain commands will appear: 
+B
+
+   switch on display of this amino-acid, replace amino acid, replace rotamer
+
+5) Switch to full zmatrix to edit individual atoms
+6) click in the zmatrix on the Chi1-4 edit boxes with the second mouse
+   button and select "animate", click the edit box again to end the animation.
+
+7) click in the Molden Control window the button "Hetatm" and switch on
+   Helix, Beta sheet, and coil and optionally any hetatm records.
+8) click on the Vr icon (7th from the top) and select OpenGL
+   (you need to have the molden opengl helper program installed for this,
+   moldenogl) to get a high quality opengl display of your protein.
+
+The z-matrix is only used for manipulation of the protein, a zmtrix of a
+protein should never be saved, instead the updated result should be stored in
+PDB file.
+The disadvantage of this new approach is a much more complicated algorithm,
+in which undoubtable some bugs have found there way home.
+
+
+------------------------------------------------------------------------
+		Molden4.1
+
+Wed Jul 21
+		- The zmatrix conversion for proteins containing nucleotides
+		  has been improved, it will now create a zmatrix.
+		  Still No manipulation of nucleotides however.
+ 
+
+		- The windows version of molden now start the opengl
+		  helper program mogl, when you click a *.ogl file
+		  in the read file window.
+
+Thu Jul 15
+		- Now when you apply the tinker amber force, automatically
+                  the charges associated with the atoms belonging to 
+                  amino acid residues are set.
+
+		- A user reported that within gaussian03 you can have the
+		  condition that you use pure D functions (5D), but
+		  use cartesian F functions (10F). Molden did not handle
+		  this correctly, it would assume the use of all pure 
+		  functions (5D and 7F) or all cartesian (6D and 10F).
+		  Molden can now handle this mixed use of pure and cartesian
+		  D and F functions.
+		  This also has ramifications for the molden file format:
+		
+		  Previously the default was 6D en 10F, the use of the keyword
+		  [5D] would mean 5D en 7F. The new format uses:
+
+                  - default is    6D and 10F
+		  - [5D7F]  means 5D and  7F
+		  - [5D10F] means 5D and 10F
+		  - [7F]    means 6D and  7F
+
+ 		  for backwards compatibility, [5D] still means 5D and  7F.
+
+		- Fixed a bug that would molden not read the Pseudo
+		  Potential information of a G03 run (older versions
+		  were ok).
+
+		- Added the [PSEUDO] section to the molden format:
+
+ 		  [PSEUDO]
+		  Fe 1 16
+		  ....
+
+ 		  This is elementname followed by the number of the atom
+		  and the effective core charge.
+
+Wed Jun 16
+		- fixed bug that would let the windows version of molden
+		  crash when you go to the density mode without having
+		  read in a file (for the benefit of reading gaussian 
+		  cube files)
+
+		- Molden now checks whether the contraction coefficient
+		  it reads in via gaussian output files and molden format
+		  files contain the normalisation of the contracted
+		  gaussian.
+
+		- increased the maximum number of atoms in the density
+		  mode from 300 to 2000, this to the benefit of oniom 
+		  calculations. (this is independend of the max number of
+		  basis functions in molden).
+
+Wed Jun  9
+		- Added interactive docking:
+
+		  - start molden with a PDB/mol2 file containing the pocket
+		  - Click the icon with the two phenyl rings overlayed:
+		    (In the Molden Control window, the nineth icon from the
+		    top). Choose 'Interactive docking'		  
+		  - Supply the name of the PDB file containing the ligand.
+		  - Follow on screen instructions for rotation/translation
+		  - the Docking Score window will appear, when you rotate/
+		    translate the ligand, the PMF score will be updated
+		    in this window.
+		  - the window also allows you to store and write combinations
+		    of rotation/translation of the ligand (pose).
+		    The filename pose.xx will be used for written poses.
+		  - The AtomInf button lets you display info on the PMF score
+		    contributions of a picked ligand atom: click on one of
+		    the ligand atoms. The PMF score window will pop-up with
+		    a list of the top negative (=favorable) and top positive
+		    atom-pair contribution for the slected ligand atom.
+		    When clicking on a list entry the corresponding protein
+		    atom of the ligand atom - protein atom pair lights of
+		    on the screen (clicking again will switch it off).
+		  - activating the 'ligand color mode', will color ligand
+		    atoms according to the amount the contribute to the total
+		    PMF score for the ligand.
+
+Thu Mar 25
+		- In the z-matrix editor, you can now use the second mouse
+		  button to select in molecule drawing screen an atom.
+		  Now a change fragment popup box will appear to facilitate
+		  structure manipulation.
+ 
+		- added the ability to read the high level layer orbitals/
+		  basis-set of an oniom calculation. Apparently the orbitals
+		  are only printed at the first point, NOT at the stationary
+		  point of an optimise run.
+
+		- improved the interface to run amber within gaussian.
+		  Parameters are automatically assigned (for amino acid atoms!)
+
+		- When using ONIOM with High and Low layers, the charge & 
+		  multiplicity check went wrong, fixed it.
+
+
+ 		PLEASE LET ME KNOW if you use the oniom interface in molden
+		and have suggestions for inprovement.
+
+------------------------------------------------------------------------
+
+		Molden4.0
+
+Wed Mar 17
+		- When there is an error reading the vectors (orbitals)
+		  in gaussian, molden would automatically skip the reading
+		  of ESP charges from gaussian. Fixed this.
+		- The print format for ESP charges has changed going from
+		  g98 to g03. The new format is now supported.
+`
+Mon Mar 15
+		Fixed a bug that lets molden think that any file that
+		begins with an empty line is a mopac .gpt file.
+
+Mon Mar  1
+		- Molden didnt correctly parse Gaussian oniom output:
+		  corrected it.
+
+		- Added better support for the MacOS system, by adding
+		  an entry to the makefile for the moldenogl program
+		  and adding #ifdef statements to the corresponding
+		  C code, ogmol.c and silly.c
+
+Tue Feb 17
+		- Fixed the reading of gaussian outputfiles when using
+		  the amber forcefield.
+
+Fri Feb 13
+		- Fixed small bug that wouldnt let you display beta
+		  orbitals with the molden commandfile.
+Thu Feb  5
+		- Changed common block /freq/ in such a way that
+		  compilers no longer complain
+
+Mon Jan 19
+		- Fixed a problem with the new Multi molden_format,
+		  In case of multiple molecules with vibrational
+		  information, this information was not updated.
+
+		- The name of the file read via the filemananger
+		  will now be displayed as the name of the main
+		  graphics window. Same holds for named [MOLECULE]
+		  sections of a multi molden_format file.
+
+		- Changed the code of wrzmat.f, this gave problems
+		  on some platforms (AIX).
+
+Wed Jan 14
+		- Fixed a bug that presented it self with g98,g03
+		  xyz optimisation of a molecule with more than 50
+		  atoms. When clicking in the geometry optisation window
+		  on a point, the shown geometry would be out of sync
+		  with the next/movie button geometries.
+
+Mon Jan 12
+		- Fixed a bug that made molden crash every once in
+		  a while on LINUX !!!
+
+		- Reduced the flickering of windows when
+		  an other window is moved over it for LINUX.
+
+Thu Jan 08
+		- support for gaussian with pseudopotentials:
+		  Now the proper mulliken charges and density are calculated
+
+		- In rare cases gaussian reduces the number of MO's,
+		  making it smaller than the number of basis functions.
+		  Molden can now handle this.
+
+Wed Jan 07	- fixed bug reading Molden Format files:
+		  when reading two Molden Format files after each other
+		  and the number of occupied orbitals in the first was
+		  bigger, the second file would have the wrong density
+		  matrix due to some old occupation numbers being present.
+		  
+		- Molden allocates memory for the orbitals dynamically
+		  but not so for the basis-set. This could lead to problems
+		  with very large calculations. I increased the storage
+		  for the basis-set with a factor of 4.
+
+		- Added new feature to the Molden format:
+
+		  Molden format files can now be concatenated in to
+		  one file, provided they are separated by the
+		  [MOLECULE] keyword line. In addition each molecule
+		  can have a [TITLE] line, example:
+
+		  [MOLDEN FORMAT]
+		  [MOLECULE]
+		  [TITLE]
+                  title molecule 1
+		  .... rest as usual
+		  [MOLECULE]
+		  [TITLE]
+                  title molecule 2
+		  .... rest as usual
+
+		  If Molden reads such a file, a extra button will appear in
+		  the "select point" section of the molden control window.
+		  When pressed, the titles of the molecule sections will
+		  be listed and when selected the appropriate molecule
+		  section will be read.
+		  Each [MOLECULE] section can have all the previously supported
+		  sections/keywords.
+
+2004
+
+Tue Nov 25
+		- When reordering a Z-matrix nolonger all atoms have to be
+		  clicked. When hitting the escape key molden will try
+		  to figure out the ordering of the remaining atoms.
+
+		- Gaussian03 no longer prints just electronic energy
+		  during SCF, but total energy, when using the #P keyword.
+		  Molden wrongly subtracted the nuclear repulsion energy.
+		  Fixed.
+
+		- Added a button near the "first, next and movie" buttons.
+		  When clicked this button will open a window in which the
+		  delay time (in milliseconds) between one structure and
+		  the next. This delay time also has effect on the display
+		  of normal vibrations.
+
+Mon Nov 17
+		- Molden now fully supports 5D and 7F orbitals.
+		  Previously, only orbitals and density were supported,
+		  NOT mulliken charges, electrostatic potential and
+		  multipole expansion.
+
+Fri Oct 17
+
+		- Via the button "read", there is now the option "add"
+		  available as opposed to "replace" which stand for the
+		  original behaviour. "ADD" adds a structure to the 
+		  existing structure on the screen.
+		  Currently this option is ONLY supported for the following
+		  file types: pdb, mol2, and xyz
+		  This option is mainly useful for comparing different
+		  conformations (protein) AND offers the ability to
+		  read in a protein and overlay different docked ligands.
+
+		- A mayor overhaul of the PDB editing capabilty via the
+		  Z-matrix editor. This will probably need more work, but
+		  is quite an improvement over the existing situation.
+
+		- The Z-matrix editor will now try to keep the original
+		  orientation and translation when translating zmat to
+		  cartesians.
+
+		- Molden picks up the normal modes symmetry tag for
+		  Gaussian and Mopac output.
+
+		- prelimenary support for Tinker4.1. Tinker4.1 has
+		  different names for the amber and charmm parameters files.
+		  Also a few (non residue) atom types have changed, this is
+		  NOT YET supported.
+
+		- use of the gaussian keyword hpmodes caused problems 
+		  for molden: fixed
+
+
+------------------------------------------------------------------------
+
+		Molden3.9
+
+
+Tue Aug 26
+		- calculated spectrum now also supported for mopac
+
+Mon Aug 25
+		- corrected bug that didmt read old gaussian freq
+		  outputs
+
+Wed Aug 20
+		- Corrected a bug in the new calculated spectrum part.
+		  This bug only manifested itself when the number of 
+		  frequencies exceeded 200.
+
+Mon Jun 30
+		- Corrected Gaussian03 frequency reading
+
+		- Now with PDB file writing, the original residue number
+		  is maintained
+
+		- You use an expression like *:A to turn on all residues
+		  of the A chain
+
+Tue Jun 17
+
+		- Added a feature to display an interactive spectrum
+
+		- Added to the Molden format an item:
+		  [INT]
+		  intensity1 [raman_intensity1]
+		  intensity2 [raman_intensity2]
+		  ...
+		  intensityn [raman_intensityn]
+
+		- Added the support for gamess-us Natural orbitals
+
+------------------------------------------------------------------------
+
+		Molden3.8
+
+Thu May 22
+		- Gaussian03 basis-set output has slightly changed
+		  with respect to Gaussian98, this would cause error
+		  in molden with molecules with more than 9 atoms.
+		  Fixed it.
+
+Wed May 21
+		- When forces or displacement were to large, Gaussian
+		  would print *******
+		  Molden couldnt deal with that, now it can.
+Tue May 20
+		- Support for mopac2000 ASCII gpt files
+Tue Apr 29
+		- 3Ddrc gamess-us IRC support
+Wed Apr 16
+
+		- First support for Gaussian03
+
+Tue Apr 01
+
+		- PDB residue numbering is now consistent with those
+		  in the actucal PDB file
+		- MOPAC grid search output is now somewhat supported
+		- Drawing errors for coil secundary structure are
+		  reduced
+		- In the Z-matrix for PDB entries, HETATM's will
+		  be attached to the backbone instead of the closest atom. 
+
+Mon Feb 17
+		- Added the ability to write MDL mol files.
+		- Added the ability to calculate EEM charges,
+		  a sort of gasteiger charges, by Patrick Bultinck
+		- The reading of PDB files now handles additional
+		  Hydrogen labels
+
+Wed Dec 04
+		The oniom stuff had a bug for the linux version, fixed.
+
+Thu Nov 28
+		Added an update to the ONIOM window.
+
+Tue Nov 05
+		- Complete update of the Gamess-UK dedicated code by
+		  Huub v. Dam:
+
+		  - Reading of SCF-convergence for CASSCF and DFT
+		  - Reading of CASSCF orbital occupancies
+		  - Support for HESSIAN jobs added
+		  - and more ...
+Thu Oct 17
+		- Added support for the CPMD program
+		  Distributed with the permission of TEODORO LAINO
+		  NEST Laboratories - INFM - Scuola Normale Superiore
+		  Some work still needs to be done.
+
+Fri Oct 11
+		- Added makefile entry for Mac OSX, thanks to Eric Brown.
+
+Wed Sep 25
+
+		- Molden3.8 has support for tinker3.9, older versions of
+		  tinker are not supported (Molden3.7 support tinker3.6)
+		  (Thanks to Nicolas Ferre)
+
+		- Nicolas Ferre added support for ONIOM calculations with
+		  gaussian98. 
+
+		- In submit gaussian window you can specify
+		  you want to write cartesian coordinates instead of z-matrix.
+
+		- You can now run amber from gaussian, in the following way
+		  Read in a pdb file, click the z-matrix button and create
+		  a z-matrix, assign tinker amber atom types (the FF button)
+		  Go to submit job option gaussian, choose method "amber"
+		  "Write XYZ" form the "Gaussian Job" window.
+		  In principle this can be combined with the oniom method
+		  but this is not tested yet.
+
+		- When introducing Mopac2000 support a bug was introduced
+		  which interfered with the reading of tinker xyz files, fixed.
+
+
+		Molden3.7
+
+Wed Sep 25
+		- When introducing Mopac2000 support a bug was introduced
+		  which interfered with the reading of tinker xyz files, fixed.
+
+Mon Jul 08
+		- Correction added to the postscript plot.
+		- added F and Cl as hydrogen-bond donors
+
+Mon Apr 08	
+		- Gamess-US version 16 FEB 2002, has a slightly different
+		  basis-set section. Molden now supports this.
+
+Fri Apr  5	- Added support for reading Mopac2000, out and arc files.
+
+Wed Mar 20
+		- added some small changes to the automatic xyz->z-mat
+		  conversion 
+
+Wed Mar 13
+		- when mol2 files would miss residue information
+		  molden would display the structure, fixed
+
+		- when reading xyz files containing multiple structures
+		  containing energy values in the title line, energy values
+		  of zero, would not be correctly read on the second time
+		  a multiple xyz structure was read. Fixed this.
+
+Tue Mar 05
+		- The introduction of a extra line "FORCE CONST.:" when
+		running a force job with gamess-us, caused molden
+		to not find the normal coordinates. Fixed this.
+
+		- When running a Gaussian job using F functions, molden
+		incorrectly calculated the ESP charges. Fixed this.
+
+		- added an option to read the ESP charges calculated by Gaussian
+		Under the surface icon there is a new option "read ESP charges"
+
+
+YEAR 2002
+
+
+ 
+Thu Nov 15
+		Adapted the script multi_vrml_orbitals.csh to deal with
+		the changed VRML orbitals.
+
+Tue Oct 02
+		The Gamess-UK orbital occupancy section has changed,
+		molden now deals with it.
+
+Thu Aug 30
+
+		- Assigning sybyl force field atom types sometimes failed
+		  to assign aromatic types, fixed it
+		- Now support for different spacegroup setting in mol2
+		  file (the CRYSIN line, setting field (75-142 alternative
+		  settings are NOT supported)).
+		- Molden now reads mol files, only 3D tested. The mol file
+		  is recognized when the string V2000 or V3000 is present.
+
+Wed Jul 25
+		The Gamess-UK optxyz output has changed, molden gave errors
+		with these new outputs, fixed it.
+
+Tue Jul 17
+		- Added a conversion program to convert CADPAC output to
+		  molden format (cad2mol). This program was written by
+		  Mariusz Klobukowski (Mariusz.Klobukowski@ualberta.ca).
+		  This program is now distributed together with the molden
+		  source, to compile it type: 
+
+		    make cad2mol
+
+		  To run it:
+
+		  cad2mol 'cadpac_output'.out
+
+		  A file 'cadpac_output'.mdn will be created, molden will
+		  be able to read it.
+
+
+Mon Jul 09
+		- Molden did not allow to subsequent subtractions of 2D grids
+		  (gridfile) from the current (density) grid.
+		  Rho_AB - Rho_A - Rho_B was not possible. Corrected for it.
+		- Molden nolonger recalculates the density before reading /
+		  writing a 2D grid, this make it possible to write 
+		  subtracted grids.
+
+Fri Jun 29 
+		- Added the possibility to render orbitals transparent
+		  in VRML2.0 by clicking on them
+		  Commandline flag -k adds background + a light.
+		  This is to overcome a very dark scene on some terminals.
+
+Thu Jun 21	- added small correction to the reading of
+		  GAMESS-US outputs (when SCFTYP= and RUNTYP=HESSIAN
+		  were not on the same line in the input file, molden
+		  would not display the vibrations).
+		  Thanks to Georgy Salnikov, NMR Group,
+		  Novosibirsk Institute of Organic Chemistry, Russia
+
+Thu May 31	- Added support for writing mopac2000 input
+		  containing crystal information (Tv vectors)
+
+Tue May 15
+		- Added support for mopac2000 output containing crystal
+		  information (Tv vectors)
+
+Mon May 14
+		- Removed a bug in reading pdb files containing just
+		  HETATM records.
+Thu May 10
+		- REMOVED MAYOR BUG in reading new basis-set section
+                  of GAMESS_US !!!!!
+
+Thu May  9 	- Molden can now launch a G98W session on windows 
+
+Thu Apr 19
+		- Addded new makefile section for HP-UX
+Mon Apr  2
+		- The Z-matrix editor option "substitute atom by fragment"->
+		  "Read" sometimes passed the wrong filename, fixed it.
+
+Tue Mar 13
+		- Molden sometimes crashed on the OPTXYZ output of
+		  Gamess-UK. Fixed thanks to Huub van Dam.
+
+Wed Mar 07
+		- Molden now deals with changed writing o MCSCF orbitals
+		  of Gamess-US.
+
+		- Gaussian98 by default only prints the Z-matrix and resultant
+		  coordinates ONLY for 50 atoms or less. However molden
+		  didnt respond correctly when this default was overridden
+		  with the keyword: IOP(2/11=1). Fixed.
+
+Tue Dec 19
+		-Added Option to specify opt=z-matrix in the "submit job"
+		 for Gaussian, available from the Z-matrix editor.
+		 This forces Gaussian to use the Z-matrix when optimising.
+		 The default is to use a nonredundant set of 
+		 internal coordinates
+
+		- Molden should now nolonger crash on empty files
+
+Mon Nov 27
+                Molden format in combination with both alpha and beta
+                spin orbitals gave problems when more than 128 orbitals
+                were present solved it.
+
+Tue Oct 31
+
+		Added the ability to visualize protein secondary
+		structure elements such as helices,strands and coil 
+		with the OpenGL helper program. The procedure is
+		as follows:
+
+		- you read in your protein
+
+		- you click the "BackBone" button
+		  (If you do not, all of your protein atoms will
+		   visible in the OpenGL, making it extremely slow,
+		   except for small polypeptides)
+
+		- you select ligands via the "HetAtm" button
+		  No need to select "Helix","Beta","RNA/DNA" or "coil",
+		  they will automatically be included in the OpenGL.
+
+		- select separate residues to be displayed by clicking
+		  "Residue" and then clicking on the backbone on the
+		  screen.
+
+		- Decide wether you want the residues and ligands to
+		  be displayed as tubes (default) or as spacefilling
+		  The latter can be switched on by clicking "Solid"
+		  -> "Space Filling"
+
+		- Decide wether you want the residues and ligands to
+		  colored by their elements or by residue/ligand color
+		  This is controlled by the "StickColor" button.			
+
+		- Now click the "Vr" icon and select "OpenGL"
+		  Molden will create a file called "molden.ogl"
+		  and start up the OpenGL helper program "moldenogl"
+		  Remember to rename this file if you want to keep
+		  it, otherwise molden will overwrite it the next time.
+
+		- At anytime you can visualize this file again, without
+		  having to start molden by typing:
+
+		  moldenogl 
+
+		  or:
+
+		  moldenogl molden.ogl
+
+		- use the moldenogl cammand line flag "-r" is you
+		  want to use high quality spheres and cylinders.
+		  This will increase the graphics quality at the expense
+		  of speed of rotation.
+
+		- Use the left mouse button to rotate your molecule.
+		  In combination with the "Ctrl" and "Shift" button
+		  respectively, a zoom and translation are performed.
+
+		- The third mouse button will bring up menu with
+		  lots of option, of which the "Screen Capture"
+		  option allows you to save your picture as screen
+		  dump postscript or "Vector Postscript". The latter
+		  take longer but will yield a better picture on a 
+		  native postscript printer.
+
+		- molden has a new commandline option "-z", this
+		  will let molden use more polygons and will
+		  result in a better opengl picture (at the expense of
+		  speed, but ideal for a good postscript picture
+		  in combination with the moldenogl -r flag). 
+
+		- you can edit the "molden.ogl" file,
+		  specifically the following section is important:
+
+		  [COL STRANDTOP] 0.0 0.0 1.0
+		  [COL STRANDBOTTOM] 1.0 0.0 1.0
+		  [COL HELIXOUT] 0.0 1.0 0.0
+		  [COL HELIXIN] 0.6 0.6 0.6
+		  [COL RNA] 0.5 1.0 0.5
+		  [COL COIL] 1.0 1.0 1.0
+
+		  This defines the color of the beta strand (first two),
+		  the helix outer and inner surface (following two),
+		  and the RNA and Coil parts respectively.
+
+		  They are used further down the file:
+
+		  [RIBBON] HELIXOUT
+
+		  Alternatively you may supply a color per ribbon,
+		  by supplying rgb triples (red,green,blue):
+
+		  [RIBBON] COLOR 1.0 0.0 0.0
+
+
+		In molden you can now also select "coil".
+		In addition you can click on the helix,strand or
+		coil to activate a residue (in combination with the
+		"Residue" button.
+
+		Also added the writing of POVRAY files of the ribbon
+		cartoons as desribed above. Follow the same procedure
+		to generate then, except that you have to choose
+		"Povray" under the "Vr" icon.
+
+		Molden3.6:
+
+Fri Sep 15
+		- Gamess-us (After Jan10 2000) outputs gave problems
+		  on 64-bit Alpha-linux systems, corrected it.
+		  G77 compiler flag -mieee has to be added.
+
+Tue Sep 12
+		- Added screen capture possibilities to the OpenGL 
+		  helper program moldenogl. Three options:
+
+		  - IRIS RGB format (key F10)
+		  - greyscale encapsulated postscript (key F11)
+		  - PPM bitmap file (key F12)
+
+		  added a menu option "screen capture" holding the
+		  above three options
+		  
+		  Thanks to Pedro Vazquez for supplying the code for
+		  postscript and PPM writing.
+
+Mon Aug 21
+
+		- Problem with reading shelx files generated by
+		  the CSD's conquest code:
+
+		  SYMM .5+x, .5+y, z
+
+		  Molden expected all capitals, fixed to handle 
+		  lower case. (All commands must still be in uppercase
+		  however).
+
+		- Trying to edit the cell parameters of a structure
+		  read in as shelx file, made the program core dump, fixed.
+
+Thu Aug 17
+		- Added keywords to enable mapping of properties
+		  onto a isosurface with Gaussian Cube files, example:
+
+		  title
+		  GAUCUB=meto_dens.cube MAPFIL=meto_esp.cube VRML2.0 
+		  SPACE=0.001 MAPVAL=(-0.3,-0.1,0.0,0.1,0.3)
+
+		  GAUCUB for the Gaussian cube containing the density
+		  MAPFIL for the Gaussian cube containing the property
+		         (like the electrostatic potential)
+		  MAPVAL use to change the default property values
+		         associated with the 5 basic colors used
+			 for interpolation
+			 (default values: (-0.1,-0.05,0.0,0.05,0.1))
+
+		  
+		  Remember currently mapping only works with VRML2.0
+		  and OpenGL output.
+
+		- Added a program called 'short_wrl' written by
+		  Andreas Klamt of COSMOlogic, to remove redundant
+		  vertices from moldens VRML2.0 files
+		  To build it type: make short_wrl
+		  To run it:  short_wrl molden.wrl
+		  Now molden.+.wrl contains the new VRML2.0 file
+
+Fri Aug 11
+		- The GAMESS-US basis-set output section has changed
+		  molden has been updated to deal with this
+
+		- Molden now also writes a '[LINES]' section to
+		  the molden.ogl file. This is the input file for the
+		  molden OpenGL helper application moldenogl.
+		  Older versions of moldenogl may have problems with
+		  this new section.
+		  The [LINES] section has been constructed to visualize
+		  the cell and alpha helices and beta strands.
+
+		- Added a few options to the moldenogl, when clicking
+		  with the third mouse button in the main drawing window
+		  you find a menu with as new option 'Animation'
+		  this options under it will allow you to stop/start the 
+		  animation, advance by one point (also key 'n' or 'N')
+		  and lets you slow down animations.
+
+Fri Jun 30
+
+		- GAMESS-US has a changed writing when using pure 5D
+		  molden now deals with in (Thanks to Fred Arnold)
+
+		- the moldenogl helper program can now also be called
+		  from the 'molecular mode', it will do normal vibration
+		  animations and animations of molecular reactions.
+		  (Via the VR icon->Opengl).
+		  the molden.ogl format now accepts more molecules.
+		  Added the option -l,-p,-b number to moldenolg
+
+		  -l = low resolution molecule (faster)
+		  -p = perspective mode on
+		  -b number = choose background color
+
+		  Added also to the popup menu, including a fullscreen
+		  option, and a light2. (three lights 0,1,2)
+
+Mon Jun 26
+
+		- The routine reading XYZ files had a problem reading
+		  actinium 'ac', fixed it
+	
+		- Added a number of things to the opengl helper program
+		  moldenogl, accesible via the menu (third mouse button click):
+
+		  + transparency toggle (or 't')
+		  + switching on/off of lights 1 through 3 (or '1','2','3')
+		  + fullscreen option (or 'f')
+		  + perspective mode (or 'p')
+		
+
+Thu Jun 15
+
+		- Added the possibility to create an isodensity surface
+		  colorcoded with the electrostatic potential.
+		  Needed are two gaussian cube files or two molden
+		  3dgridfile's (you can create these by clicking
+		  'write grid' after a 'space' calculation. 
+		  Molden will always create a file called '3dgridfile')
+		  Currently only "Opengl" and VRML2.0 output is supported
+		  You will need the updated version of 'moldenogl'
+		  to view the OpenGL output.
+		  For an explanation how to to this see URL:
+
+		  http://www.cmbi.kun.nl/~schaft/molden/mapped.html
+
+		  For an example VRML2.0 file:
+
+		  http://www.cmbi.kun.nl/~schaft/molden/wrl/gamuk.wrl
+
+		  Added to 'moldenogl' opengl helper is a menuitem
+		  (Third mouse button click) 'transparency'
+		  In the molden file select window, a click on a file
+		  ending with the name '.ogl' will bring up moldenogl
+		  with this file.
+
+Fri Jun 09
+		- When a job required more than the default 256
+		  orbitals, molden allocated more memory, but as a result
+		  the HOMO and LUMO buttons of the xwindows interface
+		  nolonger worked correctly. Fixed it.
+
+Mon Jun  5
+		- Jeffrey Frey and James Hess have suggested a small
+		  adjustment of the [MOLDENOGL] format.
+		  You can now adjust the transparency of a surface by adding
+		  a number:
+
+		  [SURF] TRANS 0.75
+
+Wed May 31
+
+		- When reading molden format files with more than 256
+		  orbitals, some arrays were overwritten, fixed it.
+
+		- In z-matrix editor: the check box to specify
+		  Gamess-US style z-matrix writing now print a
+		  small explaining message when operated
+
+Fri May 12
+		- Molden generated Povray orbitals had swapped
+		  colors with respect to VRML and OpenGL orbitals
+		  This is corrected.
+		  (blue = positive, red= negative)
+
+
+Thu Apr 27
+
+		- BIOSYM/MSI car files for non-periodic work again
+
+		- In z-matrix editor: instead of "clear status all variables"
+		  you now get the option to set the status to variable
+		  or constant
+
+		- In z-matrix editor: Added a check box the specify
+		  Gamess-US style z-matrix writing
+
+		- In z-matrix editor: when typing "c" in the main drawing
+		  window molden will look for a file "mapfile" which
+		  contains coordinates to orient cartesian coordinates
+		  after z-matrix -> cartesian conversion
+		  Example "mapfile"
+
+		  1 50.006  81.343  67.412
+		  2 50.599  80.892  66.194
+		  3 49.514  80.759  65.162
+
+		  Contains coordinates (angstrom) of atoms numbered 1,2,3
+
+Thu Mar 30
+
+		- Molden now nolonger always creates the file 'plot'
+		  The xwindow interfaces doesnt, here you generate
+		  a postscript plotfile by clicking the corresponding button.
+		  Only when supply you molden with a keyword file it will 
+		  create the plot file
+
+Thu Mar 23
+		- Added primitive support for Jaguar cube files
+		  No molecular geometry is displayed however.
+		  Start molden without a filename on the commandline
+		  Go to the density mode, click "Read Cube", chose "Jaguar"
+		  supply a filename, then click the "space" button and supply
+		  a contour value.
+
+Tue Mar 14
+
+		- Fred Arnold added support for reading Gamess-us 
+		  orbital localisation schemes; Pipek-Mezey and 
+		  Edmiston-Ruedenberg
+
+Thu Mar 09
+
+		- Changed povray writing didnt work for orbitals,
+		  corrected by Fred Arnold
+
+Wed Mar 08
+
+		- Under edit cell parameters, you can now also specify
+		  a spacegroup name, instead of just a spacegroup number.
+
+Fri Mar 03
+
+		- support for Gamess-us version with long contraction
+		  coefficients. 
+
+Tue Feb 29
+		- Fred Arnold updated the writing of povray files.
+
+Thu Feb 24
+
+		- Molden now nolonger dies when you kill one of its windows
+
+		- Added a restore color options, under the color palette
+		  icon
+
+Wed Feb 23
+		- molden used to center a molecule by working
+		  on the atomic coordinates directly.
+		  Now this is accomplished via a viewing transformation
+		  the coordinates are not affected.
+
+		- In principle now the conversion of a z-matrix to
+		  cartesian takes into account the original orientation
+		  of the molecule in cartesian space
+
+Fri Feb 11
+		- Added writing of CML molecules (primitive)
+
+		- With the introduction the new style of rotation
+		  there was a clash between the use of control 
+		  for zooming in and for temporarily escaping selecting
+	  	  of atoms, under the "Reorder Z-matrix" button of the
+		  Z-matrix editor
+
+Wed Feb 02
+
+		- Added dynamic memory allocation for reading mopac .gpt
+		  files.
+
+		- corrected reading of *.ogl files by moldenogl, 
+		  created with mopac .gpt files.
+
+Mon Jan 31
+		- added commandlineflag to adjust the maximum number
+		  of Gif files molden will write (default 100)
+		  molden -j 2000
+		  Molden will write 2000 files at the max.
+
+Fri Jan 28
+		- While adding OpenGL support some errors were 
+		  introduced for the platforms VMS, CRAY and AIX
+
+Mon Jan 24
+
+		- Full support to view orbitals/density etc. in OpenGL
+		  This is accomplished via a helper program called
+		  'moldenogl', this needs to be build separately.
+		  (make moldenogl), you need to place this program
+		  in a directory which is in the default path, say
+		  /usr/local/bin. You can evoke it from the Xwindows
+		  interface under the 'Vr' icon, option OpenGL.
+		  Molden will write a file 'molden.ogl', which will
+		  be read by the helper program. If you want to save
+		  this file you will have to rename it before you
+		  choose OpenGL again. You can run 'moldenogl' standalone.
+
+		  moldenogl file.ogl
+		  
+		  This has been tested for Silicon Graphics and linux.
+		  The latter needs the MESA graphical library
+		  have a look at URL: http://www.mesa3d.org/
+		  You may need to activate the 'LIBSG' line for your
+		  platform. 
+
+		  HOW TO OPERATE MOLDENOGL:
+
+		  Use the mouse to rotate the scene, drag while holding
+		  down the left mouse button.
+		  Further one letter commands:
+
+		  Left Mouse button           - rotate
+ 		  Left Mouse button + Shift   - translate
+		  Left Mouse button + Control - zoom in / out
+		  Right Mouse button          - bring up options
+
+		  m                           - toggle molecule
+		  x,y,z,X,Y,Z                 - move position of light
+
+
+		  PS. On linux the mesa libraries are installed in the
+		      the directory /usr/local/lib. This may give the
+		      problem that moldenogl cant find these libraries,
+		      you can remedie this by either copying the libraries
+		      to /usr/lib, or setting the environment variable;
+		      LD_LIBRARY_PATH, in say /etc/csh.cshrc
+		      (setenv LD_LIBRARY_PATH "/usr/lib;/usr/local/lib")
+
+
+		 You generate .ogl file from a molden keyword file by use
+		 of the keyword OPENGL.
+
+		- added comandline option -t, which will let molden read
+		  chem3d style ascii .gpt files (mopac93)
+
+		- added a threshhold for plotting displacement vectors
+		  in the postscript output of a normal mode.
+		  You can set it via the -y commandline flag:
+
+		  molden -y 2.0 
+
+		  (default the threshhold is 0.0, every arrow is plotted)
+ 
+		  Thanks to:
+
+		   Valentin P. Ananikov
+		   NMR Group
+		   ND Zelinsky Institute of Organic Chemistry
+		   Moscow, Russia
+		   e-mail: val@cacr.ioc.ac.ru
+
+		   (URL: http://nmr.ioc.ac.ru/Staff/AnanikovVP/molden-t/
+		    PS: the path uses the -t commandline flag, this is now -y)
+
+
+Thu Jan 13
+
+		- The color editor didnt work well on linux, fixed it.
+
+Wed Jan 12	
+		- Added first primitive support for OpenGL,
+
+		  THE BELOW IS OUTDATED HAVE A LOOK AT THE ENTRY FOR Jan 24
+
+		  read the makefile on how to activate it.
+		  It only works for Silicon Graphics machines and
+		  linux machines. The latter needs the MESA graphical
+		  library. Currently only a the equivalent of the 3dx mode
+		  is available.
+		  You can only activate the OpenGL via a molden keyword file,
+		  and the use of the keyword 'silly', file 'molin'
+
+		  Title
+		  file=test/adf.molf silly homo
+
+		  ./molden molin
+
+		  Use the mouse to rotate the scene, drag while holding
+		  down the left mouse button.
+		  Further one letter commands:
+
+		  m toggle molecule
+		  . zoom in
+		  , zoom out
+		  x,y,z,X,Y,Z move position of light
+
+		- Added the another type of molecular rotation model.
+		  It is available via a new icon in the lower right
+		  corner of the 'Molden Control Window'.
+		  In this model you rotate the molecule by dragging
+		  the mouse while holding down the left mouse button.
+		  Doing the same while keeping the 'Shift' button pressed
+		  lets you translate the molecule. 
+		  Doing the same while keeping the 'Control' button pressed
+		  lets you zoom in/out.
+
+Wed Jan 05
+
+		- Added maxmimum line width selection under:
+		  the palette icon, the option: 'shade depth'.
+
+Wed Dec 22
+
+		- Added depth of shade editor, under the palette icon
+		  there is a new option: 'shade depth'.
+		  This option has no effect on the solid drawing mode
+		  with perspective off, only the stick mode and 
+		  solid+perspective modes are affected.
+
+Tue Dec 21
+
+		- Added the ability to edit colors, under the palette icon
+		  there is a new option: 'edit colors'. This option will
+		  edit the basic 15 colors available in molden. It will
+		  write the colors toe the file '.moldenrc' in the users
+		  home directory. The use of 'molden -r colorfile' takes
+		  precendence over the reading of .moldenrc.
+		  To reset to the defaults just remove the ~/.moldenrc file
+
+Thu Dec  9
+
+		- the WRZMAT keyword now writes the last z-matrix of
+		  say a geometry optimisation, instead of the first
+
+		- added the commandline flag '-=', which causes a 
+		  gamess-us dialect of gaussian zmatrix to be written,
+		  it has the = sign between variable names and values
+		  For use with COORD=ZMAT
+
+		- Gamess-UK6.2 energies of the geometry convergence
+		  were not read properly, fixed it
+ 
+Wed Dec 08	- Updated the makefile entry for CRAY unicos, for
+		  running the f90 compiler
+
+Thu Dec 02
+		- writing of non-periodic MSI files used atomic units
+		  rather than angstroms, corrected it.
+
+		- When writing postscript in the molecular mode, molden
+		  will check for dummy atoms and will ask you if you
+		  want to include them in the plot. In the current situation
+		  dummies where not plotted.
+		
+		- In the molecular mode you can change the connectivity
+		  of the atoms, but not so in the density mode. This proved
+		  a problem for people generating VRML orbitals of metal
+		  complexes, i have solved this ONLY for the VRML writing:
+
+			Before it will write the VRML molecule, it will check 
+			for the existence of a file called 'molden_connect' 
+			(be sure you have the permission to read it, 
+			ls -l molden_connect), this file should hold the 
+			connectivity of the molecule, per line two number; 
+			atom1 atom2 If atom2 is negative, molden will read an 
+			extra line with 5 numbers it will average the 
+			coordinates of these 5 atoms and create a bond
+			between atom1 (of the first line) and the average over 
+			the 5 atoms (of line two), it will use the color 
+			associated with the first atom of line two. If you want
+			to average over less then 5 atoms just supply
+			zeros for the remaining atoms 
+			(so avg over 3: i1 i2 i3 0 0)
+
+		  DONT FORGET TO REMOVE OR RENAME THE 'molden_connect' FILE
+		  AFTERWARDS.
+
+		- When you select atoms in the Z_matrix to 'cut out' a part
+		  of the atoms to create a new z-matrix, properties like
+		  atoms types, forcefield types, color, residue and charge
+		  are now inherited.
+
+Thu Nov 18
+		- Added keyword POVRAY, to generate the povray file molden.pov
+		- Added support for Ampac style cube files
+
+Thu Nov 11	- Fetched some minor problems:
+
+		  - some msi files were not read correctly, fixed
+		  - gamess-US, sometimes doesnt end coordinates
+		    with an empty line, but with:
+			'...... END OF ONE-ELECTRON INTEGRALS ......'
+		    dealt with
+		  - the geometry convergence window sometimes didnt
+		    update correctly, fixed it + made them smaller (for PC)
+		  - when moving atoms in a cell you couldt use the
+		    distance button anymore, fixed it
+
+Tue Oct 12	- Solved problem when replacing last amino acid
+		
+Thu Oct  7	- Reading msi files generated stray atoms when H-bonds
+		  where present in the msi file, resolved.
+
+Thu Sep 30
+
+		- First support for GamessUK6.2, now coping with changed
+		  orbital writeout
+
+		- Added Button to the Z-matrix window to make it smaller.
+
+		- GLX and ASX PDB residues are mapped to GLN and ASN
+		  GLX and ASX caused problems in protein z-matrices
+
+Mon Sep 20
+
+		- fixed bug: when creating a peptide via the z-matrix
+		  closing the z-matrix window and then opening it again
+		  caused molden to crash.
+
+		- Added support for MOL2 protein files, small molecules
+		  were already supported.
+
+		- Added support for reading/writing MSI Cerius files,
+		  The reading is NOT robust, it will read simple, periodic
+		  structures 
+
+Thu Sep  9
+
+		Molden now uses dynamic memory allocation for the
+		size of the grid, this will allow you to read in 
+		any size gaussian or vasp cube files.
+		It also allows you to redefine the size of the grid
+		in points from the 'plotplane' window, via the commnds
+		nptsx= nptsy= nptsz=
+		Previously the maximum was nptsx=nptsy=nptsz=61
+
+		The molden version created with 'make noxwin' is NOT
+		dynamic.
+Mon Sep  6
+
+		Molden now uses dynamic memory allocation in some
+		parts of the program:
+
+		- For a z-matrix of a protein
+		  (Not for reading a z-matrix of a protein)
+
+		- For basis-sets larger than 256 orbitals
+
+		Not done are for instance the maximum size of a grid
+		(which is 61*61*61), so cube files with larger dimensions
+		are still a problem
+
+		The molden version created with 'make noxwin' is NOT
+		dynamic.
+
+Mon Aug 23
+
+		Linked Z-mat variables were not updated onscreen.
+		Non bonded atoms in the stick mode were not correctly
+		shown in the postscript output
+
+Thu Aug 19
+
+		A word of WARNING:
+
+		Molden3.6 has gone through quite a few
+		drastic changes, it can therefore be expected to have a few
+		bugs introduced, so for the time being use this version
+		at your own risk, and PLEASE report any problems you
+		encounter (schaft@caos.kun.nl)
+
+		- Improved filemanager, it now also works correctly in 
+		  directories other that the current.
+		  A directory select window has been added.
+
+		- More labels options: added "pdbsymbol","residue"
+
+		- Molden now treats any color depth greater or equal 8
+		  as having 256 color cells
+
+		- Molden "Author" icon has been replaced by the "FF" icon
+		  which when clicked pops up the ForceField type assign
+		  window. You can still invoke the author window by typing
+		  "a" in the drawing window.
+
+		- Typing "u" in the drawing window, brings molden secondary
+		  windows ontop of the drawing window. (This may not work
+		  with the gnome window manager).
+
+		- In the stick drawing mode, atoms which are not bonded
+		  used to be invisible, they are now represented as crosses.
+
+		- When saving a structure as PDB file it will ask you
+		  if you want to write the Hydrogens or not.
+
+		- Under the "H" icon an option has been added to
+		  recalculate the H-bonds.
+
+		- The biggest addon is the pdb to z-matrix conversion,
+		  in essence this was already there in the 3.5 version,
+		  but was very buggy (there will probably be some more :-))
+		  In the 3.5 version the whole z-matrix of the protein was
+		  shown, which is way to much and cumbersome to handle.
+		  In 3.6 the default is to create a z-matrix representation
+		  which list the aminoacids with its phi,psi and chi angles.
+		  You can click on the Aminoacid button and choose from a 
+		  number of options:
+
+		  Switch On
+		  Switch Off
+		  Center
+		  Contacts
+		  Delete
+		  Insert
+		  Replace
+
+		  The one letter codes are also displayed. You can search
+		  with a string of one letter codes. There is a button to
+		  go to the "full Z-matrix"
+
+		  Unlike the old behaviour, ONLY variables which were changed 
+		  on screen are updated in the internally stored z-matrix
+
+		  IMPORTANT:
+
+			MOLDEN WILL ONLY PROMPT YOU TO CREATE A Z-MATRIX
+			FOR A PDB FILE WHEN IT HAS ENOUGH ROOM TO STORE
+			THE Z-MATRIX, DEFAULT IT WILL ACCOMODATE 1000 ATOMS,
+			NOT ENOUGH FOR MOST PROTEINS. SO YOU HAVE TO CREATE
+			A BIGGER VERSION OF MOLDEN:
+
+			- edit the file "change_parameter"
+			- replace the body:
+
+				1,\$s/maxorb=256/maxorb=1024/
+				1,\$s/numatm=150/numatm=300/
+
+			  by:
+
+				1,\$s/maxat=1000/maxat=20000/
+
+			- save this file and execute it:
+
+			  ./change_parameter
+
+
+			- change_parameter only works on the fortran files
+			  you have to edit the C code manually:
+
+			- edit xwin.c, replace:
+
+				#define MAXAT 1000
+
+			  by:
+
+				#define MAXAT 20000
+			
+			- save the file, and type 'make'
+
+
+
+
+		  	   
+		Molden3.5:
+
+Mon Jul 19
+
+		- Fixed bug which let you not save charges you edited,
+		  when you start of with a file which has no charges
+
+Thu Jun 17
+
+		- removed small bug in rdgaus.f which made some compilers
+		  stop.
+
+		- added the capability to write and read files with custom
+		  spherical atom densities to be used in difference density
+		  plots (bonds keyword).
+		  
+		  molden inputfile
+
+		  inputfile:
+
+		  some title
+                  file=gaussian_atomic.log genat
+
+		  a file 'basiinf.mbi' will be written, these can be 
+		  concatenated and read back in to molden, fi:
+
+		  molden -x atomicdens
+
+		  Thanks to Bjoern Pedersen who implemented it.
+		  (Bjoern Pedersen, Technische Universitaet Muenchen
+		   Institut fuer organische und Biochemie, 
+		   Bjoern.Pedersen@ch.tum.de)
+
+
+Thu Jun  3	
+
+		- Added resizebility of the geometry convergence window
+
+		- Removed SERIOUS BUG introduced Fri May 21
+
+
+Wed Jun  2	Added commandline opiton -m, which turns off bell sounds
+
+Fri May 21	Added scale factor for normal mode displacement vectors
+		in the frequencey window.
+
+Fri May  7
+		GAUSSIAN:
+
+		- COMPOUND jobs, (optimisation, followed by a FREQ job)
+		  should now be oke.
+
+		- Gaussian98 doesnt print 'input orientation', for a
+		  molecule with more than 50 atoms, in this case molden
+		  couldnt show intermediate structures of an optimisation
+		  run, FIXED. (The problem could be fixed by supplying
+		  IOP(2/11=1) but molden now always takes the 'standard
+		  orientation' and disregards forces (for more than 50 atoms))
+
+Tue Apr 27
+		- Support for reading Gaussian cube files via the
+		  molden keyword file (new keyword GAUCUB):
+
+		  tlite
+                  gaucub=test/test_homo.cube space=0.1 vrml
+
+Thu Apr 22
+		- Molden can write VASP POSCAR files, under the 'cell' icon,
+		  'write' -> 'write VASP', Molden can also read these files
+		  (Use always 'direct or selective' keywords fullout)
+		  (Use the first line not as title but put the element
+		   names in there).
+		  Read support is rudimentary; POSCAR files have all atoms
+		  lying in the cell, which may give a scattered outlook
+		  of the molecule in the cell.
+		  Molden can also read the VASP density grid files, although
+		  they tend to be too big for the default molden version.
+		  Presently only grids which axes are under 90 degrees 
+		  will be accepted.
+
+		- Changed under the 'Cell' icon: the seperate write options;
+		  'write DMAREL', 'write SHELX', 'write CRYSTAL95', into
+		  one options 'write', which lets you select out these
+		  options + 'write VASP'
+Thu Apr 15
+		- Molden can now generate Gif's for 24-bits displays
+
+Fri Mar 26
+		- Added Possibility to delete and move atoms in a
+		  crystal, under the CELL icon, the last two options.
+		  It was already possible to translate the atoms in a cell
+		  but this was interactively, the new translate option
+		  allows discrete translations (say 0.5 0 0) of selected
+		  atoms in the assymetric unit.
+		  
+Fri Mar  5
+
+		- Added commandline flag "-geom XXXxYYY-xxx-yyy"
+		  where XXX and YYY are the size of the window in pixels,
+		  and xxx and yyy are the position of the window in pixels.
+
+Thu Mar  4
+
+		- Molden can now read Gaussian Cube files:
+
+		  restrictions:
+
+		  - these must be formatted cube files
+		  - supported are: density, potential and orbital cubes
+			(orbital cubes only with ONE orbital!)
+		  - the grid MUST be rectangular 
+		  - grid can only be read in the 'density mode'
+
+		- Molden now also supports grids which dont have an
+		  equal number of points in all three directions,
+		  and also the radius in the three directions can be
+		  different, under the 'PlotPlane' window there are now
+		  6 new keywords available:
+
+		  npts1,npts2,npts3 and edx,edy,edz
+
+
+
+
+		Molden3.4:
+
+Fri Feb 12
+
+		- Added support for G98 optxyz output
+
+		- Added support for Pluton SPF format
+
+		- Added some aminoacid sequence editing stuff
+
+Tue Jan 19
+
+		- Tinker optimisation of structures in molden is done
+		  in the Z-matrix ordering of atoms, even if the read in
+		  structure is a Tinker xyz file. The last case was not
+		  handled properly, it is fixed. You can optimise in the 
+		  original ordering by suppressing the generation of a
+		  Z-matrix by using the commandlineflag -a
+
+Tue Jan 12
+
+		- Fixed bug in writing chemx .cssr files
+		- Fixed bug in creating the super cell
+		- Fixed bug in interpreting molden-format when [5D]
+		  was used.
+		- Added calculation of electrostatic energy, a new
+		  button 'E q' was added and a field for specifying
+		  the residue number (Eq also calculated interresidue
+		  electrostatics), both in the 'Atom Attributes Window'
+		  this is popped up when you click with the middle
+		  mouse button on a atom.
+		  Shift Mouse click in the residue field lets you set
+		  this residue number to all the atoms you will subsequently
+		  select.
+		- Added -R npts commandline flag this allows you to
+		  downsize the size of the grid in points. 
+		  You can compile with a bigger number of maximum points
+		  (Use the script 'change_parameter':
+			1,\$s/mx3d=61/mx3d=200/
+		   to change the grid size, memory is a consideration
+		   since an array of the size mx3d*mx3d*mx3d will be used.)
+
+		  Thanks to:
+
+		  Bjoern Pedersen
+		  Technische Universitaet Muenchen
+
+
+Tue Dec  1
+		- Molden treated Gaussian semi-emirical optimisations
+		  as single points, fixed it
+
+		- With Tinker xyz (charmm,amber), the caps are nolonger
+		  (faultily) assigned as residues
+		
+Mon Nov 30	
+		- Fixed bug that makes molden crash on WinNT/95 and linux
+		  when a mopac GRAPH file is read and the orbital select
+		  window is activated
+
+Mon Nov  9
+		- For the submit gaussian job, molden now also looks
+		  for the g98root environment variable.
+Tue Oct 20
+		- support for cssr.arc files.
+
+Tue Oct 13	
+		- Removed bug introduced Sep 23, which disabled the
+		  mapping of files onto the z-matrix
+		- Further integration of wijnand Mooy's xtinker.
+
+Mon Oct  5
+
+		- Removed a bug which would in some cases now
+		  show a structure in the "molecular mode" for
+		  Guassian98 files.
+
+		- Implemented tinker "amber" force field
+Tue Sep 29
+
+		- Removed bug that occured when viewing MO's from MOPAC/VAMP
+		  in the "Molecular Mode" created in the "Density Mode";
+		  the connectivity of the atoms would be messed up.
+
+Mon Sep 28
+		- Implemented tinker preferences window.
+
+Wed Sep 23
+
+		- Implemented, real time structure optimising with
+		  tinker mm3 (small molecule) or tinker charmm (proteins).
+		  the molecular display is updated with the intermediate
+		  structures. At the end a tinker archive file is created.
+
+		- Support for tinker archive files.
+
+		- Vrml from the elctrostatic potential derived from charges
+		  in the density mode, now shows both positive and negative
+		  lobes.
+
+		- Adding of fragments can now be done at the start of a
+		  new z-matrix
+
+Fri Sep 18	- In submit job (Gaussian, Gamess) the check for charge
+		  and multiplicity gave an error when there was an dummy (X)
+		  present.
+
+Mon Sep  7	- Added VRML equivalent of the 3D-X plotting mode,
+		  first select this mode from the Molden Control Window,
+		  then click the "Vr" icon.
+
+		- Added creation of peptides.
+		  Click "ZMAT Editor", select "Substitute atom by Fragment",
+		  select "Sequence" and the "Build Sequence Window" will 
+		  pop up. Select what kind of conformation you want; alfa
+		  helix, or beta (sheet) alternatively a turn. This selects
+		  the PHI and PSI angles used. You can still change them 
+		  in the corresponding PSI and PHI fields. Now specify an
+		  amino acid sequence by clicking on the residue buttons,
+		  a status bar shows the last 16 residues selected.
+		  You can correct an error with the "Undo" button.
+		  When ready click "Build". 
+		  Alternatively you can read in a protein file, which should
+		  contain per line:
+
+		  '3 letter amino acid code' Phi Psi [Omega] [Chi1] [Chi2] 
+			[Chi3] [Chi4]
+ 
+		  Everything between [] is optional.
+		  The files used by tinker to create peptide can be used.
+		  Molden will remember the last amino acid added, so that
+		  new partial sequences can be added without selecting an
+		  atom to which it should be attached.
+		  When ready you can write it out as a PDB file, in the
+		  "Molden Control" window click "write" select "PDB".
+		  You can also write it as a tinker charm file, close the
+		  ZMAT-editor, click with the middle mouse button on an atom
+		  this will bring up the "Atom Attributes Window", click on
+		  The Force Field button and select "Tinker Charmm", now click
+		  on the write button int the "molden Control" window and
+		  select "Tinker".
+
+
+Tue Aug 25	
+		- Fixed bug that let molden crash on certain pdb, tinker
+		  charmm files.
+
+
+Tue Aug 11
+		- Added support for Gaussian98
+		- Molden now adds hydrogens to the amino acids and
+		  nucleotides of a PDB entry.
+		- Added checking to user selection of atom types,
+		  for Tinker MM3 aand Tinker Charmm.
+
+
+		Molden3.3:
+
+Thu Jul 23	- Added actinide elements, to atoms property editor
+		- Fixed small bug which wrongly switch label button
+		  when FFtype was selected.
+
+Wed Jul 22	- Fixed bug in code to deal with ADF orbitals
+		  (Fabio Mariotti)
+		- Gamess-uk/us uses different sequence of F orbitals
+		  than gaussian, molden always did the gaussian way,
+		  corrected.
+
+Mon Jul 20
+		- Fixed small bug which prints lots of arrows on a molcular
+		  postscript plot when normal coordinates are available.
+		- the ADF routine assumed exponents and normalisation
+		  constants read in from a molden format file as written
+		  by the ADFrom program to be in atomic units, this was
+		  not the case, the routine has been adapted.
+
+Tue Jul 14
+		- By default molden always tries to make a z-matrix if 
+		  there is none, occasionally it will have to add a 
+		  dummy atom to accomplish this. This could cause
+		  problems reading some of the frequencies of a frequency
+		  job. Noe Fixed.
+
+Mon Jul 13	
+		- The window that lets you edit forcefield types,
+		  is now brought up when you select the label "ForceF.Type"
+		  When you click an atom with the middle mouse button
+		  as before this window is also popped up, but in addition
+		  the labelling is set to "ForceF.Type"
+		- When using "Optimise" from the z-matrix editor it
+		  checks wether atoms typing has already been done.
+		- Added some tinker forcefield parameters for acids, and esters
+		  to the .key file written when selecting "Optimise with Tinker"
+
+Wed Jul  8
+
+		- Added almost all spacegroups.
+		- for molecules with no crystal information, it will
+		  be generated when you click on the CELL icon
+		- Added reading of biosym arc files, use the movie
+		  and next button in combination with the "Geom. Conv."
+		  button.
+		- Under the CELL icon, option "edit cell parameters";
+		  you can now change the spacegroup of the cell
+		- FDAT files containing multiple entries can now
+		  be viewed with the "Next" button.
+		- Added "fit multipoles" under the surface icon
+		  (molden has to be compiled with "make molden.mpfit"
+		   for this option)
+		- Added "Optimise xtinker" option under the CELL icon
+		  this writes input files for and executes an adapted version
+		  of xtalmin, an crystal structure optimiser from the tinker
+		  suite of programs. Adaptation by Wijnand Mooij, not yet
+		  available in the tinker distribution.
+
+Mon Jun 15	- Added plotting of distance monitors to postscript
+		- Added more types for tinker mm3, automatic assigning
+		  still restricted to the old types.
+
+Thu Jun 11	- Added writing of Chemx(CSSR) files.
+		
+		IMPORTANT !!!!!!!
+
+		- Fixed BUG in reading GAUSSIAN94 frequency outputs.
+		  It was introduced on 11 april 1998.
+
+Wed Jun  3	- Added Scrollable scrollbars
+		- Added atom dynamic typing, click with the middle
+		  mouse button on a atom.
+
+Tue May 19	- Fixed a bug in molden.f which caused some compilers
+		  not to compile it. (Introduced at Thu May 14)
+
+		- Writing of animated vibrations in VRML2.0:
+
+		  molden -w3 test/mopac.freq
+
+		  Click "Norm. Mode" button, select a frequency, say 11 
+		  a file "freq11.wrl" will have been written now.
+		  
+Thu May 14	- Added routine to fit multipoles to the electrostatic
+		  potential, stuff written by Wijnand Mooij 
+		  (w.t.m.mooij@chem.ruu.nl), use keyword 'MPFIT'
+		  together with keywords described in file 'mpolefit.f'
+		  type 'make molden.mpfit' in the source directory to
+		  add this feature to molden.
+
+		- The new Gamess-US prints frequencies a little different
+		  which caused molden not to display the right frequencies
+		  this is solved
+
+Wed May  6
+
+		- Milan Hodoscek (xvibs) supplied code to plot
+		  normal coordinates as arrows in the postscript
+		  plot. EG: molden test/gaussian.freq
+		  click on Norm. mode button, choose the frequency, 
+		  then click on Norm. mode button again, now click the
+		  postscript button. You can use the -s commandline flag
+		  to scale the amplitudes (eg: molden -s4.0)
+
+Mon Apr 27
+
+		- Improved the writing of VRML2.0 animations.
+		  These are invoked by:
+  
+		  molden -w3 geometriesfile
+
+		  Then clicking the "Movie" button. At completion
+		  the VRML2.0 file 'movie.wrl' is written.
+		  It include a file via the WEB:
+
+		  http://www.caos.kun.nl/~schaft/molden/wrl/animator.wrl
+
+		  You can edit the movie.wrl via and subtitute the 
+		  EXTERNPROTO declaration by the contents of animator.wrl.
+
+		  Other adjustable parameters are the size of the animation
+		  window: Window [2,1] (Within the DEF MOLDEN_ANIMATOR
+		  definition). The cycleInterval in DEF MOLDEN_TIMER
+		  this is the time the animation should take. 
+
+Wed Apr 15
+
+		- Added possibility to 'read' and 'write' basis set
+		  3D grids, a file 3dgridfile is created.
+
+		- Added choice of solid molecule draw:
+
+		  "molden radii" (The old molden solid)
+
+	          "vdwaals radii"
+
+		  This on user requests.
+
+
+Tue Apr 14
+
+		- Added reading of BOYS localised orbitals for Gamess-US
+
+Fri Apr  3
+
+		- The non Xwindows version of molden now works again
+
+		- Crystal visualisation support for chemx .cssr format
+		  and biosym .car files
+
+		- Through the Z-matrix editor you can build z-matrices
+		  which have translation or screw-axis symmetry.
+		  Read in the repeating unit, then click on 
+	
+		  "Substitute atom by Fragment" 
+
+		  pick "Periodic", pick "Translation" or "screw-axis",
+		  specify the number of repeats.
+
+Mon Mar 23
+
+		- Support for the new(?) gamess_us PC version is 
+		  has been added.
+
+		- Added animation of z-matrix variables.
+
+		- Added writing of POVRAY files
+
+Fri Feb 13
+
+		- enabled atonnumbering in postscript printing
+
+		- Electrostatic potential mapped to an isodensity
+		  surface is now possible. Also charges derived this way.
+
+		- Writing and reading of surfaces.
+
+		- Orbitals can be displayed as surfaces as well
+
+Tue Jan 27
+
+		- Enabled writing of 'ATOM' records in the PDB
+		  format.
+
+                - Enabled writing of Tinker Charmm files
+
+		- Postscript files written by molden, now allow
+		  the turning of of the zero contour
+
+                - Molden Postscript supports non solids drawings and
+		  shading on these sticks
+
+Fri Jan  9
+
+		- Added posibility to create a super cell
+
+		- Added read/write support for the crystallographic
+		  SHELX format (LATT 3, not yet supported)
+
+Thu Jan  8
+		- Constants read in from the constants section of a
+		  gaussian/gamess-uk input file are flagged as such
+		  in the z-matrix editor, constants which have other
+		  variables linked to it, are written to the constants
+		  section of an gaussian/gamess z-matrix
+
+Wed Jan  7 
+
+		- Fixed small bug in the gaussian output reading routine.
+		  When reading frequency output and encountering a
+		  'exceeding maxnum of orbitals' condition, the wrong
+		  coordinates were read.
+
+Fri Dec  5
+
+		- You can now specify the order of atoms in which a
+		  Z-matrix is to be created
+
+		- When working with files which contain crystal information
+		  (FDAT,MOL2,MSF) it is possible to map a z-matrix on file
+		  onto the cartesian coordinates. Your z-matrix file has
+		  to contain extra mapping information, so after the
+		  Z-matrix itself you have to supply the keyword 'map'
+		  followed a line per z-matrix atom which indicates
+		  to which atom it corresponds in the cartesian file.
+		  The name of this special Z-matrix file has to be 'mapfile'.
+		  You then start molden with the commanline flag -Z:
+
+		  molden -Z test.fdat
+
+Mon Nov 24	
+
+		- removed bug introduced a week ago, that messed up the
+		  connolly surfaces
+
+		- Added distance monitors
+
+		- Added editing of cell parameters.
+
+		- Added the possibilty to align two structures:
+
+		  Read in stucture 1.
+		  Click the align icon in the center of the molden control
+		  window. Then supply the filename of the file containing
+		  structure2. Now use the standard ways of rotation,translation
+		  and zoom in/out (z-translation)  to align stucture2 to
+		  structure1. You can also use the origin icon to change
+		  the center of rotation in structure2.
+		  You can switch between rotating both structures or
+		  structure2 by using the Esc key.
+		  Use the Tab key to align by selecting three couples of
+		  atoms (a couple =  atom structure1 (red), atom structure2 
+		  (white)
+		  
+		- Reading Support for the tinker .xyz  format (mm3/charmm)
+
+		- It is now possible to work with crystals and change
+		  the position and orientation of the packed molecuul
+		  via the "Cell Rot On/Off" option under the cell icon.
+		  You can switch between rotating both structures or
+		  structure2 by using the Esc key.
+		  At the same time you can change the packed molecule itself
+		  via the z-matrix editor.
+
+		- Molden can now write input files for the Crystal95
+		  package. Basis sets of previous read in gamess/gaussian
+		  jobs are transferred to the Crystal95 input.
+		  Works of course only on fdat files and mol2/msf files
+		  containing crystal structures.
+
+		- molden -f pdbfile
+		  would create connectivity from scratch, however the
+		  HETATM records where not dealt with correctly.
+
+		- You can change 14 of the colors of the color palette
+		  "molden -r colorfile", where colorfile could be:
+
+ 		  atom color(1-15) VandeWaalsRadius, (- = skip)
+		  background color(1-15)
+		  palette red #CF54FD ...   (14 colors)
+
+		  You can continue the last line on the next line when using
+		  the "\" character. You can use color names or Hex red-green
+		  -blue triplets
+
+Wed Nov  5
+		- Added more spacegroups for use with mol2/msf files.
+		  (100 spacegroups supported)
+
+		- Improved crystal building code
+
+		- Support for Gamess-US IRC files
+
+		- Electrostatic potential due to point charges can
+		  be calculated/displayed on a connolly surface
+		  See Surface icon.
+
+		- On mopac output the ESP charges are read in when available.
+
+		- Writing of simple pdb files, via the 'HETATM' record.
+
+		- Fixed a bug that caused variable names such as 'e1', 'd1'
+		  in a z-matrix input to be not handled correctly.
+		  Bug was introduced with the introduction of the molden format.
+
+Mon Oct 27	- Introduction of the molden_format
+
+		- fix of molden format on linux
+
+		Molden3.2:
+
+Fri Oct 24	- Introduction of the molden_format, have a look at
+		  the "write" button. 
+
+		- Normal modes with a sequence number greater than 99
+		  where not handled correctly
+
+		- The background color can be set via the molden -r
+		  flag, see molden -h; molden -r
+
+Mon Oct 13	- Gaussian Beta Orbitals were not always visible
+		  specially when read of a checkpoint file:
+
+Fri Oct 10	- Support for ADF, an intermediate program which
+		  reads ADF's tape21 can produce files readable
+		  by molden. This program was developed by Fabio Mariotti
+		  from Prof. Alessandro Bencini group in florence.
+
+		  This intermediate program will eventually become part
+		  of the molden distribution, but since it is still
+		  under development, you should contact Prof. Bencini:
+
+			Prof. Alessandro Bencini
+			Universita di Firenze
+			Dipartimento di Chimica, Via Maragliano 75/77
+			50144 Firenze, Italia
+
+			Tel: 39-(0)55-354841
+			e-mail: sandro@chim1.unifi.it
+					bencini@dada.it
+
+Wed Oct  8	- Fixed bug in Gamess-UK submit job scheme, the
+		  proper 'vectors' option was not always chosen.
+
+		- The Postscript color of the unit cell is now black
+		  per default, it can be changed by in the postscript
+		  file by setting /cellcol
+
+Wed Sep 24 	- Added spin density for UHF calculations
+		  Use keyword SPINDENS together with IPSI=0
+
+		- Improved dmarel interface
+
+		- Removed multiple expose events on the zmatrix editor
+
+Mon Sep  8
+		- more Gamess-UK version 6.0 support
+
+Fri Sep  5
+
+		- removed bug introduced day earlier, resulting
+		  in an floating exception on at least Linux
+Wed Sep  3
+
+		- Gamess-UK version 6.0, added first support.
+
+		- Adapted postscript driver to handle editing of
+		  atom display radii.
+
+Thu Aug 28	- Enhanced atom color editor to atom property editor
+		  Now color, vdw and display radii can be altered.
+
+Thu Aug 21
+		- Added Submitting of Gamess-UK Jobs.
+		  GAMESS_ROOT has to be set and the 'rungamess' script
+		  must be operational.
+
+Mon Aug 18
+		- Added atom color editor.
+
+Fri Aug 15	
+
+		- Removed bug which when molden was started without
+		  a file name would cause the molden control window
+		  to never pop up, certainly on AIX.
+
+		- Gamess-US: when using print options to print
+		  'AO MULLIKEN POPULATIONS IN EACH MOLECULAR ORBITAL'
+		  molden didnt read the occupancies correctly, 
+		  resulting in the density to be calculated to low,
+		  and mulliken charges to be incorrect, orbitals ok.
+		  Fixed it.
+
+		- Added Submitting of Mopac Jobs, still very primitive.
+		  MOPAC_ROOT has to be set
+
+Mon Aug 11	- Removed small bug whith respect to the PLANE/ROT
+		  versus LINE/CENTER keywords.
+		  Using the PLANE keyword the orientation of the calculated
+		  rectangle of points is such that, the first atom specified
+		  with the PLANE keyword together with the center of the 
+		  plot lie parallel with Y-plot axis, when LINE/CENTER
+		  or even ROT is used this scheme is abandoned.
+
+Wed Jul 23	- Added Submitting of Gaussian Jobs, still very primitive.
+
+Thu Jul 17	- Fixed bug that was dormant but became serious
+		  on a few platforms after introducing reading of mol2
+		  file on July 13. Files would not be correctly recognized.
+
+Wed Jul 16	- Added writing of tinker .xyz files.
+
+		- Added under "XYZ->curr.zmat" in the Z-matrix editor
+		  the possibility to optimise a structure with, sybyl
+		  quanta or tinker.
+		  The corresponding environment variable has to be set
+		  first (TA_ROOT, QNT_ROOT or TNK_ROOT)
+		  TNK_ROOT is not used by tinker itself, but molden needs
+		  it. (eg: setenv TNK_ROOT /compchem/tinker) 
+		  The mm3 tinker parameter set will be used.
+		  Running quanta is shakey.
+
+		- Removed a bug that applied to Z-matrices automatically
+		  generated for XYZ files, changing variables in the Z-matrix
+		  would screw up the molecule.
+
+Fri Jul  4	- Added writing of Quanta/Charmm MSF files.
+
+		- Added atom row containing AG etc. in z-matrix editor.
+
+Tue Jul  1	- Added reading of Quanta/Charmm MSF files.
+
+		- You can now optimise you molecule with sybyl
+		  from the z-matrix editor. The environment variable
+		  TA_ROOT has to be set first. Choose the "XYZ->curr. zmat"
+		  button.
+
+Wed Jun 25	- Removed two bugs by which seemingly only the
+		  OpenVMS version was affected.
+
+Mon Jun 23	- The tolerence for partioning multipole expansion
+		  in symmetric molecules was to low, leading very
+		  occasionally to wrong multipoles, for higly symmetric
+		  molecules. Fixed it.
+
+Fri Jun 13	- Incorporated reading and writing mol2 files.
+		  For protein just coordinates are read.
+		  Writing of Mol2 is very primitive, with respect to
+		  atom types, and type of bonds is always single.
+		  But you can convert fdat to mol2 files this way,
+		  including charges, just first calculate charges on
+		  a job with the same atom order as the fdat file, 
+		  then read in the fdat file and write mol2 (you will
+		  find it under the z-matrix editor, cartesian coordinates.
+		  Only the top-ten spacegroups have been incorporated,
+		  so 90 % of crystal structures will be read.
+
+Wed Jun  4	- Fixed bug introduced Fri May 30, affecting the proper
+		  writing of zmatrices.
+
+		- Fixed also some bug related with "delete line" in the
+		  z-matrix editor, having to do with maintaining the right
+		  status of an internal variable(=constant,=variable,=linked)
+
+		- In mopac DRC calculations the potential energy is now
+		  picked up.
+
+Fri May 30	- Rotation around the z-axis is now possible in both
+		  directions, clicking the mouse in the middle of the
+		  screen will give positive rotation, doing the same
+		  while holding down the Control or Shift key will
+		  give negative rotation
+
+		- Molden now supports writing of VRML2.0.
+		  Apart from the keyword VRML you can now use VRML2.0
+		  The -W commandline flag does the same.
+		  The various VRML buttons now let you choose  between
+		  VRML1.0 and VRML2.0. 
+		  The -w commandline flag now knows an option 3.
+		  When the movie button is pressed a VRML2.0 animation
+		  is written (movie.wrl). This can be viewed with a VRML2.0
+		  compliant browser such as Silicon Graphics Cosmoplayer
+		  plug-in (free available, also fro PC's). Clicking on
+		  the molecule will start the animation.
+
+		- typing "g" in the display screen will let you read in
+		  and XYZ file which will be mapped onto the current
+		  z-matrix, provided the number and the order of the elements
+		  is the same in both.
+
+Tue May 27	- Added interactive choice between mono and color postscript
+
+Fri May 23	- Added Pasting of strings capability to query boxes
+		  (For now button 3 will do this)
+
+		- The interactive calculations of:
+	
+			True ESP derived charges (Very Slow)
+			DMA esp derived charges
+			Mulliken Charges
+
+		  Via the Surface button.
+
+Thu May 22	- Removed a small bug in calculating the multipole
+		  derived electrostatic potential
+
+Fri May 16	- Charges are printed in postscript when the label
+		  "atom+charge" is active
+
+Wed May 14	- VRML of the elctrostatic potential "space" plots
+		  are now handled correctly.
+
+Tue May  6	- The Z-matrix scrollbar can now be clicked it, it
+		  will trigger pageup or pagedown movement.
+
+Fri May  2	- electrostatic potential on a connolly surface:
+
+		  When clicking on the color level rectangle in the
+		  upper right corner with the second (or middle) mouse
+		  button you can change the colors used.
+
+		- Added keyword DMACH to calculate charges fit to
+		  Distributed Multipole Derived electrostatic potential.
+
+Tue Apr 29	- the true or multipole derived electrostatic potential 
+		  on a connolly surface via keyword file now includes a
+		  postscript plot (-C to generate color postscript):
+
+		  molden -C molin > molden.out
+
+		  For the true electrostatic potential:
+
+		  molin:
+		  ----------------------------------------------------------
+		  title
+		  file=test/gamess_us.h2o_631g_opt.out postscript vdws elpot
+		  ----------------------------------------------------
+
+		  The new keywords XANG,YANG and ZANG controls the 
+		  orientation viewed, usage XANG=45 (45 degrees)
+
+		- added the EST parameter set for writing input for the DMAREL
+		  program. (molden -e)
+
+		- added a button "H" to undisplay hydrogens, this is handy
+		  in combination with the CSD fdat files when displaying
+		  multiple cells. Getting rid of the hydrogen gives a
+		  clearer view of the crystal packing
+
+		- Dummy atoms will no longer be displayed in postscript
+		  molecule plots.
+
+Thu Mar 13	- Molden could already calculate the true or multipole
+		  derived electrostatic potential on a connolly surface,
+		  also VRML could be generated for this but only
+		  interactively, this can now be done with keywords:
+
+		  molden molin > molden.out
+
+		  For the true electrostatic potential:
+
+		  molin:
+		  ----------------------------------------------------------
+		  title
+		  file=test/gamess_us.h2o_631g_opt.out vrml vdws elpot
+		  ----------------------------------------------------
+
+		  For the multipole derived electrostatic potential:
+
+		  molin:
+		  ----------------------------------------------------------
+		  title
+		  file=test/gamess_us.h2o_631g_opt.out vrml vdws
+		  ----------------------------------------------------------
+
+		  A file molden.wrl will be written.
+
+
+Wed Mar 12	- Added ability to display a cell with an Xmol xyz
+		  cartesian file:
+
+                  After regular atoms add cell points, valid
+		  labels:
+
+		  OO,OA,OB,OC,AB,BC,AC,ZZ
+
+		  These cell points must be included in the number
+		  of atoms.
+		
+		- The geometry convergence window together with
+		  the movie button have been updated:
+		
+		  You can now stop a movie by clicking "first", "next"
+		  or by selecting a point in the geometry window.
+		  The tick marks are adapted so as not to overlap
+		  when there are a large number of points.
+
+		- added a file epint.f.g77, gnu fortran has problems
+		  compiling the original epint.f. So before typing
+		  "make", copy epint.f.g77 to epint.f.
+
+		- Linux2.* has problems with Molden (And Gaussian94)
+		  this probably due to an operating system bug affecting
+		  memory management.
+
+		- Removed bug in calculating the q31s octupole moment
+		  (Only when using D-functions)
+
+		- Added commandline flag to keep the order of atoms
+		  when creating a z-matrix from cartesian coordinates
+
+		  molden -A
+
+		- Molden now writes an file "esp.xyz" when doing an
+		  ESP charges calculation, it contains the atoms +charge
+		  in xyz-coordinates
+
+		- added support for Gamess-UK rhf localised orbitals.
+
+		- Added beta-test support for DMAREL, a package that
+		  can calculate lattice energies from a multipole
+		  expansion.
+
+		  New Commandline flags:
+
+		    -E        DMAREL input: use coordinates from multipoles
+		    -i opt    fdat files: 
+		              opt=1 standardise H-C, H-N
+		              opt=2 1 + standardise phenyl rings
+
+		  Other Relevant flags:
+
+		    -A        Keep order of atoms when creating a Z-matrix
+		    -D opt    DMA mode:
+		              0 = atomic sites only (default)
+		              1 = atomic+halfway-bond sites
+
+		  When creating a z-matrix for an optimisation run to be used 
+		  with DMAREL you must keep the order of the atoms as in the 
+		  CSD FDAT file and turn of symmetry to keep it this way:
+
+		  molden -A -i 2 azijnzuur.fdat -> azijnzuur.zmat
+
+		  To use the optimised coordinates instead of the FDAT 
+		  coordinates in writing DMAREL input, use
+
+		  molden -E azijnzuur_opt.out azijnzuur.fdat
+
+		  if you want to use bondcenters as well,
+
+		  molden -E -D 1 azijnzuur_opt.out azijnzuur.fdat
+
+		  If you want to use fdat coordinates with bondcenters,
+
+	          molden -D 1 -i 2 azijnzuur.out azijnzuur.fdat
+			
+		  In molden click on the surface button, choose 
+		  "Multipole Derived", then read in the FDAT file,
+		  click on the "Cell" button and choose "Write DMAREL"
+		  a file "dmain" will be created.
+
+
+Wed Feb 12	- In the density mode you could zoom in on the plot
+		  with the second mouse button, sometimes old plot
+		  were mixed with new plots, fixed it.
+
+Tue Feb 11	- GAMESS-US: when using the HSSEND keyword to do a
+		  normal vibration analysis at the end of a geometry
+		  optimisation, the default is to display geometry
+		  optimisation information, but molden -H will
+		  trigger visualisation of normal vibration analysis.
+		- GAMESS-US: when imaginairy frequencies were present
+		  molden would skip the rest of the normal modes in
+		  that line of the output.
+
+Mon Feb 10	- Fixed bug in the 'space' mode of orbital plotting
+		  A space plot consists of the density/orbital-amplitude
+		  plotting and the plotting of the molecule in the
+		  stick mode. If the density/orbital-amplitude was to low
+		  in a slice then also the part of the molecule in this
+		  slice was not plotted. (This did not affect the VRML
+		  space filling plots)
+
+Wed Dec 18	- Incorporated writing of inputfiles for aresp:
+		  Using the keyword 'aresp' will let molden write
+		  the files 'resp.in' and 'esp.in'
+		  Example keyword file:
+		
+		  line1: test esp
+		  line2: file = water.out espch debug aresp
+
+		- The keyword occu dint work correctly, fixed
+Wed Dec 11
+		- Molden can now do gaussian natural orbitals as generated
+		  by the keywords:
+		  pop=(naturalorbitals) gfinput iop(6/7=3)
+		- Molden with Gaussian94 and outputs with only cartesian
+		  coordinates would say 'reference to an undefined center'
+		  but would still work correct, solved
+
+Mon Dec  9	- Molden didnt recognise certain Gaussian94 UHF jobs.
+		  Resulting in only one set of orbitals being displayed
+
+		- Dihedrals with a negative value where not properly
+		  written as constants in write zmatrix
+
+		- In zmatrix editor in the line drawing plot mode
+		  the molecule become invisible after adding line two
+		  this because th view direction was along the axis of the
+		  molecule, fixed it.
+
+		- some mopac output reads would hang
+
+		- added a little more control over the postscript file
+
+
+
+Fri Oct 18	Removed following bugs:
+
+		- GAMESS-US input files with zmatrix and point group C1
+		  failed
+
+		- PDB file containing only non-protein and non-rna werent
+		  handled well
+
+		- FDAT files with NRAD=0 failed
+
+Thu Oct 17	Removed following bug, when building a structure
+		with the zmatrix editor the display would show the mirror
+		image of the real structure. When writing out this structure
+		and then reading it back in to molden the structure would
+		be displayed in the right way.
+
+Wed Oct  9	Added the possibility to do a Distributed Multipole Analysis
+		and the calculation of Mulliken charges.
+		For now, Mulliken charges are calculated only for single point
+		Gamess/Gaussian runs.
+		The Distributed Multipole Analysis can be activated by use
+		of the keyword "MOLPOT". Interactively it can be activated
+		either from the "molden control window" by pushing the
+		"surface button" (The 6th icon in the middle of the window)
+		or pushing the "Dens. Mode" button and consequently choosing
+		the plot function "Elec. Pot" in both cases the user is then
+		presented with the choice between the true electrostatic
+		potential and the electrostatic potential derived from a
+		Multipole expansion. The latter is an order of a magnitude
+		faster than the first.
+
+		Three types of DMA are available, they can be selected via
+		the "-D opt" commandline flag, where opt can have the values:
+
+
+			0 = atomic sites only (default)
+			1 = atomic+halfway-bond sites
+			2 = no shift of overlap dens. of conn. atoms
+		
+		NOTE: In previous versions the keyword "MOLPOT" was used
+		      with a DMA analysis read from a Gamess-UK outputfile.
+		      Use keyword "RDMULT" to get the old functionality.
+
+
+
+
+
+
+		Molden3.1:
+
+Thu Aug 29	Calculating the Laplacian via a keyword file, core dumped
+		It has been resolved.
+
+Thu Aug 22	- When visualizing csd fdat files in the "multiple cells"
+		  problems arose when there were Hydrogen bonds present.
+		  This has been resolved.
+
+Wed Aug 21	- Support for the laplacian of the electron density,
+		  (the trace of the hessian).
+		  Two commandline flags were introduced to aid the
+		  space type of plots with the laplacian.
+
+		   -L   display both neg. and pos. contour in space
+			plot of the laplacian. Default only the value
+			specified with "space=value" will be rendered.
+		   -1	use only the lower half of the cubic grid
+			used for the space type plot
+		   -2   use only the upper half of the cubic grid
+			used for the space type plot
+
+		  The latter two were introduced to increase the visibility
+		  of the inner (enclosed by other surfaces) surfaces.
+
+Thu Jul 25	- Corrected a bug which made you have to click buttons
+		  twice
+
+Fri Jul 12	- Corrected problem with postscript
+
+		- Electrostatic potential on connolly surface added.
+		  Activated by Clicking on the appropriate icon in the
+		  middle of the molden control window.
+		  Clicking on points of the surface brings of a popup
+		  window with its electrostatic potential value.
+		  In the upper right corner of the screen there is a
+		  color code rectangle, clicking in it lets you change
+		  the increment value between different colors.
+		  The 'molden -G 0.5' commandline flag controls the
+		  spacing between the lines that make up the connolly
+		  surface.
+
+		- Added the capability to write VRML
+		  (molden -V filename, specifies density VRML file,
+		   default: molden.wrl)
+		
+		- You can now create a Z-matrix with symmetry, use
+		  mouse button two in the zmatrix editor, to:
+			- link variables
+			- to make constants
+			- to mark or unmark
+
+		Molden3.0:
+
+Thu May 23	- Corrected problems on some platforms with the fdat format
+		  and the reading of XYZ format without the -X flag
+
+Wed May 22	- Rotation in the density window is now attached to button
+		  one, rotation will proceed until the button is released,
+		  cropping is now attached to button two
+
+Wed May 15	- Molden now also recognizes XYZ format without the -X flag
+		- zoom in/out will proceed untill the button is released
+
+Fri May 10	- Better encapsulated postscript
+		- Better hydrogen bond display for PDB files
+		- support for hydrogens on RNA/DNA pdb.
+		- molden -r fname: read file with per line;
+			atom color(1-15) VandeWaalsRadius, (- = skip)
+		- molden -w opt: write all points of a movie to a file:
+			opt specifies format; xyz(=1) zmat(=2,mopac)
+
+Thu Apr 25	- Increased support for CSD .fdat files.
+
+Wed Apr 17	- Support for mopac93/6.0 irc output
+		- gamess-uk inputfiles with no variables/constants oke now
+		- added command line flag for switching off automatic
+		  cartesian -> zmatrix conversion; "molden -a"
+
+Tue Apr 09	- Some platforms dont support the "logical*1"
+		- Enhanced cartesian -> Z-matrix conversion
+
+Tue Mar 29      - Support for mopac6.0/7.0 force runs.
+		- Allow to set the background color, via palette icon.
+
+Tue Mar 28      - Support for CSD .fdat files, molden -S will generate
+                  symmetry positions and a unit cell.
+                - xmol files that used scientific notation (1.0e05)
+                  are now also handled well
+
+Tue Mar 19	Mopac input files didnt show up in the z-matrix editor
+		fixed it. You read mopac input files as fragment in the
+		z-matrix editor.
+
+Fri Mar 15	Added built in GIF writing capability, dropping the use
+		of the external "convert" program from ImageMagick
+
+Wed Mar 13	Extended and improved the rotation of the molecule,
+		holding the mouse button down in the center of the graph
+		will invoke rotation around a z-axis
+
+Tue Mar  5	A VERY serious bug effected the calculation of the
+		electrostatic potential and esp charges with  Gamess-US/UK
+		output. (It was introduced with Gamess-US support nov. 95)
+		esp's from Gaussian were unaffected !!
+
+		- ESP charges: introduced keywords AXIS-X,AXIS-Y,AXIS-Z
+		  They the define the principle axis used in constructing 
+		  the atomspheres which make up the connolly surface.
+		  Sometimes necessary when you want to reproduce symmetry.
+
+Wed Mar  4	- support now for dih, -dih variable use when reading
+		  Gamess/Gaussian inputfiles.
+		- With Gamess-UK optimise jobs molden would show
+		  orbital energies of the first point, instead of the last
+		  point, fixed.
+
+Mon Feb 26	A number of bug fixes and new features, see also
+		The history of molden2.9:
+
+		- Added color postscript for Density Display.
+		  Triggered by commandline flag -C
+
+		- Removed bug that would mess up the EUCLID display
+		  when clicking the Postscript button.
+
+		- considerably enhanced reading and displaying of PDB
+		  structures.
+
+		  Helix, beta secondary structure information, will
+		  by default be read from the PDB file, if not available
+		  Molden will calculate secondary structure information.
+		  Use "molden -g" to allways force the latter.
+		  From the "Residue Command" window this information can
+		  be edited.
+		  The color postscript rendering of PDB structures has
+		  also been dramatically improved.
+		  Molden also lets you display parts of the molecule as
+		  a connolly surface.
+
+		- molden now supports pure F/D-functions (7f,5d)
+
+		- GAUSSIAN: molden now also read orbitals from dft
+		  calculations.
+
+		- Added commandline flag -h, which prints the available
+		  options.
+
+
+
+
+		Molden2.9:
+
+Thu Feb 22	- Added color postscript for Density Display.
+		  Triggered by commandline flag -C
+
+		- Removed bug that would mess up the EUCLID display
+		  when clicking the Postscript button.
+
+		- Made postscript file more suitable for customizing.
+
+Tue Feb 20	GAUSSIAN: molden now supports pure F-functions (7f)
+			  molden only used to read cartesian F (10f)
+			  (As with pure D, not yet for the electrostatic
+			   potential)
+			  With Gaussian92 and older in combination with
+			  ROHF all orbitals were printed, Molden now
+			  reads all the orbitals.
+
+Fri Feb 16	GAUSSIAN: the use of nosymm could lead to problems.
+		          Think I've tackled it now.
+			  Also the SCF convergence reading when
+			  "SCF Done:  E(RB+HF-LYP)" was on the output
+			  could cause problems.
+
+Thu Feb 15	Changed default to Color Postscript for the molecular
+		display. (Color postscript for the density display not
+		yet implemented) Mono postscript can still be generated
+		by use of the commandline flag -M (molden -M)
+
+Thu Feb  8      - Removed bug in postscript printing.
+                - PDB: default is now to read secondary structure info
+		       from the PDB file, if there is non the info is
+		       calculated. Use "molden -g" to allways force the 
+		       latter.
+
+Wed Feb  7	The postscript (color) rendering of protein structures from 
+		the PDB has considerably been enhanced
+
+Fri Feb  2	Removed small bug affecting only Ultrix versions of molden
+		when displaying dummy atoms in the solid mode.
+		Removed small bug affecting Ultrix,Solaris when adding
+		a fragment in the Z-matrix editor when no line is selected
+
+Thu Feb 1	On the rs6000 (ibm,aix) molden sometimes gave annoying
+		run time warnings, such as "C invalid decimal digit"
+
+Wed Jan 31	- GAMESS-US:
+		  With geometry optimisations, for each geometry point
+		  the z-matrix is read from the output. It used to be
+		  generated by Molden. To update the coordinates on screen
+		  with the coordinates belonging to the z-matrix,
+		  push "Aplly current changes to Z-matrix"
+		  Supplying "molden -u" will restore the old behaviour.
+
+		- Removed small bug which caused problems on
+		  a Gaussian optimise job on an already optimised
+		  geometry (vectors are still a problem in this case)
+
+Tue Jan 30	- Added connolly surface's for protein (PDB) viewing.
+		- Added commandline flag to scale normal motions
+		  molden -s4
+		  will increase the amplitude of the vibrations times 4
+		
+		Molden2.8:
+
+Tue Jan 25	- Removed small bug in the automatic z-matrix generation
+		- GAMESS-US: not converged optimisations showed a last
+		  invalid point, rendering de energy plot useless.
+		- Problems encountered when having more than 200 points
+		  in an optimisation or IRC have been dealt with.
+
+Tue Jan 23	Gaussian: molden used to generate its own z-matrix
+		for the z-matrix editor (except gaussian input files)
+		Now it retains the z-matrix on the outputfile.
+		(except for "force jobs")
+
+Tue Jan 22	Removed small bug in displaying SCF convergence, SCF
+		convergence of last point sometimes not displayed.
+
+Thu Jan 18	Provisionally supported gaussian 5d functions.
+		(density only, electrostatic potentials not yet supported)
+
+Wed Jan 17	Removed a bug affecting the reading of gamess input files.
+
+Wed Jan 16	Added beta sheet solid rendering.
+
+Fri Jan 12	Added numbering to atoms on screen for the convenience
+		of the Z-matrix editor (switch on label when in the
+		zmat editor.
+
+		Added "substitute atom by fragment" capability in the
+		zmat editor, you can also read a gamess/gaussian/mopac
+		input file as fragment.
+
+
+1995
+
+
+Thu Dec 21      Added nucleotide support when reading PDB files
+
+Thu Dec 20	Removed bug in z-matrix editor which yielded
+		wrong guesses for bond distances for rare atoms
+		Removed bug in z-matrix editor, which in case of a wrongly
+		user supplied value and when the # of zmat lines was less
+		than 9, would garble the zmat-editor screen.
+
+Thu Dec  7	Removed a bug which only affected the Sun solaris version.
+		(In the z-matrix editor whilst adding the second atom)
+
+Tue Dec  5	MAJOR BUG FIXES:
+	
+		- molden with GAUSSIAN94 UHF showed only alpha orbitals
+		- GAMESS-US UHF geometry optimisation showed no orbitals
+
+Thu Nov 30	removed sleep call in inferr.f, caused problems on AIX,linux
+		and openvms.
+		Zmatrix editor now supplies the first fragments
+
+Wed Nov 29	On AIX molden hangs after pushing the "space" button,
+		it was caused by a call to sleep, which should return
+		after 2 seconds but it never returns, you have to
+		deactivate this line in file inferr.f
+
+		GAMESS-US IMPORTANT BUGS:
+
+		- Scf-Convergence of GAMESS-US outputs would be empty
+		  when "* * *   INITIATING DIIS PROCEDURE   * * *"
+		  was on the output. Taken care of.
+
+		- fixed inproper reading of orbital occupancies.
+	
+		- fixed incorrect handling of normal vibrations > 9
+
+Tue Nov 21	When entering the z-matix editor without having read a file
+		first, an error occured while adding the second atom of a
+		new z-matrix, removed it.
+		Cleaned up z-matrix editor code for monochrome displays.
+		Removed a bug in routine hidedr, only OpenVMS affected.
+`		Z-mat editor is a little more intelligent now.
+
+Fri Nov 10	Protein viewing: removed inconsistency in displaying hetatm
+		records
+
+Mon Nov  6	Gaussian-94 users NOW should use iop(6/7=3) instead of
+		iop(6/7=1), the latter option under g94 nolonger prints all
+		occupied orbitals, the first prints all orbitals.
+
+Fri Oct 20	First beta support for Gamess-US
+		And both alpha and beta orbitals (UHF runs) are now displayable.
+
+
+
+		Molden2.7:
+
+Mon Oct  9 	Made minor changes to let the code compile on Linux,
+		the user has to edit file inferr.f before compilation.
+
+Thu Sep 28	The distance,angle and dihedral button now display their
+		output in a dedicated window.
+
+Wed Sep 27	Support of Gaussian94 output.
+		Fixed bug introduced on Sep 11, which made the gamess
+		vibration animation routines use the wrong set of coordinates.
+
+
+		Molden2.6:
+
+Tue Sep 26	Support for pdb ambiguity amino acids, asx,glx,his
+		and hydroxyproline (hyp).
+		Also HETATM A.. are now recognised.
+		Added popup box that lets you choose the color of your HETATM
+		molecule.
+
+Fri Sep 22	Fixed an important bug introduced on Mon Sep 18.
+
+Mon Sep 18	The cartesian coordinates to z-mat converter now WILL
+		produce a z-matrix for molecules containing 3 atoms on a line.
+
+Fri Sep 15	Added the capability to write cartesian coordinates from
+		the Z-matrix editor.
+
+Thu Sep 14	Fixed a bug that lets molden crash on some systems, in the
+		case of a molecule containing 3 atoms on a line.
+		Fixed a few other unclarities in the z-mat editor, however
+		the z-mat editor still needs a lot of work.
+		The cartesian coordinates to z-mat converter will not
+		produce a z-matrix for molecules containing 3 atoms on a line
+
+Mon Sep 11	Single point gamess calculations retain their user specified
+		z-matrix in the z-matrix editor
+
+Thu Sep  7	For pdb files only:
+		Made second display type for the solid helix default
+		Added "neigh=r" command in the residu command window.
+		Neigh looks for neighbours at distance r
+		Changed "substrate" to "hetatm" in the molden control
+		window, clicking it will lets you choose which hetatm molecules
+		you want to display
+
+Tue Aug  1	Added second display type for the solid helix
+
+Mon Jul 24	Display of vibrations for mopac (tested on mopac93)
+
+Fri Jul 14	Incorporated calculation of charges fitted to the
+		ElectroStatic Potential (ESP) on a series of connolly
+		surfaces. (Only for gamess/gaussian) (see test/esp.txt)
+
+
+		Molden2.5:
+
+Fri Jun 30	The compilation of xwin.c caused some problems on non-ansi
+		compiler systems (hp,sun), fixed it.
+
+Thu Jan 26	Removed redundant code which made molden eat cpu when it
+		should be idle.
+		Apparently molden plotted inverted molecules, changed it
+
+Jan		Improved lighting (At least for protein viewing)
+
+1994
+
+Fri Oct 21	Made support for XMOL cartesian format. Use -X flag
+		
+Thu Oct 20	Changed resolution of postscript molecule plotting,
+		depending on number of atoms. (Plotting proteins was
+		very slow)
+		Eliminated trailing in rotating the molecule.
+		Molden can now generate color postscript for the molecule
+		display by using the -C flag.
+
+Tue Sep 22	ZMatrix editor implemented, incorporating a very rudimentary
+		builder.
+
+
+
+		Molden2.4:
+
+Tue Aug 16	Scf/Geometry convergence graphs improved and will now
+		display function value when cursor is over the graph point.
+		clicking in the graph will bring up the current point for
+		display
+
+Tue Aug 10	Added support for reading Gamess/Gaussian/Mopac inputfiles
+		and Mopac/Ampac arc files.
+
+Mon Aug  1	Added listbox to select orbitals, made internal rearrangements
+		for systematic handeling of queryboxes, listboxes
+		Some query boxes now remain on the screen untill a toggle
+		button is pressed
+
+Mon Jul 11	Gamess/Gaussian frequencies/Norm. Modes can now be displayed.
+
+
+		Molden2.3:
+
+Mon Jun 27	Improved shaded plotmode & switched to fully 3D controls
+
+Tue May 17	Removed bugs on commandline parsing on some systems
+
+Tue Feb 1	handle gaussian92 scf convergence
+		(turned on by #P in gaussian inputfile)
+
+Jan 20		Made molden pc X compatible
+
+Thu Dec 23	-c0.2 define depth of shading 0.0 is max, 1.0 is no shades
+
+Tue Dec 16	removed bug in the H-bond on screen display routine
+
+Wed Dec 15	-f with PDB files, forces connectivity to be build by molden
+		by default connectivity between amino acid atoms are read
+		from the PDB file and for all other atoms molden determines
+		the connectivity
+
+Fri Dec 3	better handling hbond when more than one chain
+		better spheres, and beter coloring with shade
+
+Thu Dec 2	Better atom selecting by cursor.
+		perspective is now uniform from large to small molecules
+		-p10.0  perspective flag
+
+Tue Nov 30	Added reading of binary mopac/ampac *.gpt files
+
+Fri Nov 26	-ofilename change the default plotfilename='plot'
+		trying to put in spheres with real depth, not satisf. yet
+		-d debug flag
+
+Thu Nov 25	bug out of getmul.f, by Dirk Huckriede
+
+Nov 10		Dec Alpha version, corrected problems in wrzmat.f
+
+=========================================================================
+
+
+TODO:
+
+- improve zmat editor
+
+- Density Functional orbitals of Gaussian94 ?
+
+- Clean up handling of dummies
+
+- Third rotation axis.
+
+- Mopac IRC
+

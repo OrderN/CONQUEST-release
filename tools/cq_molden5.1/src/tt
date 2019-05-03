@@ -1,0 +1,25 @@
+#if defined(VMS) || defined(UNDERSC)
+getnfr(istat)
+#else
+#ifdef CRAY
+GETNFR(istat)
+#else
+getnfr_(istat)
+#endif
+#endif
+int *istat;
+{
+
+#if defined(VMS) || defined(UNDERSC)
+	getnfd(istat,
+#else
+#ifdef CRAY
+	GETNFD(istat,
+#else
+	getnfd_(istat,
+#endif
+#endif
+	xyzp->coo);
+
+}
+
