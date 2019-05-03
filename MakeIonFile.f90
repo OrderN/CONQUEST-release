@@ -39,8 +39,6 @@ program MakeIonFiles
      ! Inputs
      !
      call read_species_input(i_species)
-     !call read_hamann_input(i_species)
-     !call read_vkb(i_species)
      !
      ! Setup
      !

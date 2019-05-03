@@ -555,7 +555,7 @@ contains
           end if
        end do
     end if
-    !deallocate(psi)
+    deallocate(large_cutoff,small_cutoff)
     return
   end subroutine find_default_cutoffs
   
@@ -644,6 +644,7 @@ contains
     Rc = rr(i) - psi(i)*(rr(i+1)-rr(i))/(psi(i+1)-psi(i))
     !write(*,*) 'ri, ri+1 and interp are: ',rr(i), rr(i+1),psi(i),psi(i+1), - psi(i)*(rr(i+1)-rr(i))/(psi(i+1)-psi(i))
     if(iprint>5) write(*,*) '# Found radius ',Rc
+    deallocate(f,potential,psi)
     return
   end subroutine find_radius_from_energy
     
@@ -674,10 +675,13 @@ contains
     real(double) :: delta_energy_bracket, zval, l_l_plus_one, alpha_sq_over_four, xkap
     real(double) :: gin, gout, gsgin, gsgout, xin, xout, exponent, delta
     logical :: flag_find_radius = .false.
-    logical :: flag_confine = .false.
+    logical :: flag_confine
 
     if(iprint>2) write(*,fmt='(2x,"Entering find_eigenstate_and_energy_vkb")')
-    if(present(width).AND.present(prefac)) flag_confine = .true.
+    flag_confine = .false.
+    if(present(width).AND.present(prefac)) then
+       if(abs(prefac)>RD_ERR) flag_confine = .true.
+    end if
     l_half_sq = real(ell,double) + half
     l_half_sq = l_half_sq*l_half_sq
     l_l_plus_one = real(ell*(ell+1),double)
@@ -713,7 +717,7 @@ contains
        energy = half*(e_lower+e_upper)
     end if
     tol = 1.0e-8_double
-    !write(*,*) "# Nmax is ",nmax
+    write(*,*) "# Nmax is ",nmax, flag_confine
     if(flag_confine) then
        delta = 0.01_double
        do i=1,nmax
@@ -1057,7 +1061,7 @@ contains
     do i=2,n_kink
        if(rr(i)>half.AND.psi(i)*psi(i-1)<zero) n_crossings = n_crossings+1
     end do
-    deallocate(pot_matrix, pot_vector, s, psi_h, psi_inh)
+    deallocate(pot_matrix, pot_vector, s, psi_h, psi_inh, integrand)
   end subroutine integrate_vkb_outwards
   
   subroutine find_polarisation(i_species,en,ell,Rc,psi_l,psi_pol,energy,vha,vxc)
@@ -1199,7 +1203,7 @@ contains
        psi_pol = psi_pol/rr
        if(loop<ell+1) psi_l = psi_l/rr
     end do
-    deallocate(f,potential)
+    deallocate(f, g, s, potential)
   end subroutine find_polarisation
 
   ! I've added the possibility to include a source term, for the VKB inhomogeneous solutions
@@ -1369,7 +1373,7 @@ contains
        vha(i) = y(i)*sqrt_drdi(i)/rr(i) + V0
        !write(25,*) rr(i),vha(i), rho(i)
     end do
-    deallocate(y)
+    deallocate(y,s)
   end subroutine radial_hartree
 
   subroutine integrate_simpson(f,metric,np,total)

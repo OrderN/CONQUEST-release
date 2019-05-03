@@ -111,7 +111,14 @@ contains
 
     implicit none
 
+    integer :: i_shell, zeta
+    
     ! Deallocate internal tables
+    do i_shell = 1,paos%n_shells
+       do zeta = 1,paos%nzeta(i_shell)
+          deallocate(paos%psi(zeta,i_shell)%f,paos%psi_reg(zeta,i_shell)%f,paos%psi_reg(zeta,i_shell)%x)
+       end do
+    end do
     ! Deallocate maxz terms
     deallocate(paos%cutoff,paos%energy,paos%psi,paos%psi_reg)
     ! Deallocate single terms

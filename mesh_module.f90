@@ -38,15 +38,16 @@ contains
     ! Local variables
     integer :: i
     
-    if(.NOT.allocated(rr)) then
-       allocate(rr(nmesh),rr_squared(nmesh),drdi(nmesh),sqrt_rr(nmesh),drdi_squared(nmesh),sqrt_drdi(nmesh))
-       rr = zero
-       rr_squared = zero
-       drdi = zero
-       sqrt_rr = zero
-       drdi_squared = zero
-       sqrt_drdi = zero
+    if(allocated(rr)) then
+       deallocate(rr,rr_squared,drdi,sqrt_rr,drdi_squared,sqrt_drdi)
     end if
+    allocate(rr(nmesh),rr_squared(nmesh),drdi(nmesh),sqrt_rr(nmesh),drdi_squared(nmesh),sqrt_drdi(nmesh))
+    rr = zero
+    rr_squared = zero
+    drdi = zero
+    sqrt_rr = zero
+    drdi_squared = zero
+    sqrt_drdi = zero
     !write(*,*) '# Mesh: ',mesh_type,alpha,beta
     mesh_z = pseudo(species)%z
     if(mesh_type==hamann) then
