@@ -1,0 +1,8 @@
+mol="DMI" Charge="1"
+lab="N1"	NH="1" 
+lab="C2"	NH="0" 
+lab="CM2"	NH="3" 
+lab="N3"	NH="0" 
+lab="CM3"	NH="3" 
+lab="C4"	NH="1" 
+lab="C5"	NH="1" 

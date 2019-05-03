@@ -1,0 +1,30 @@
+title
+oxalate 6-311G optimization
+accuracy 20 7
+charge -2
+zmat angs
+x
+c 1 cx
+o 2 co 1 ocx
+o 2 co 1 ocx 3 180
+x 1 d 2 xxc 3 90.0
+c 1 cx 5 xxc 2 180.0
+o 6 co 1 ocx 3 ocxo
+o 6 co 1 ocx 7 180.0
+variables
+cx 0.801646 hessian 0.929882
+co 1.24266 hessian 3.635572
+ocx 117.056 hessian 4.852961
+constants
+ocxo 180
+d 1.0
+xxc 90.0
+end
+basis
+tzvp O 6-311G
+tzvp C 6-311G
+end
+runtype optimize
+vectors extguess
+enter 1
+stop

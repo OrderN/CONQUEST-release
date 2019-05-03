@@ -1,0 +1,31 @@
+#!/bin/csh
+#
+# change ambfor from double to single precision
+#
+cat <<EOF > /tmp/sed.tmp
+1,\$s/double precision/real/
+1,\$s/dsqrt/sqrt/g
+1,\$s/dble/real/g
+1,\$s/datan/atan/g
+1,\$s/dacos/acos/g
+1,\$s/dcos/cos/g
+1,\$s/dsin/sin/g
+1,\$s/dabs/abs/g
+1,\$s/dint/int/g
+1,\$s/dexp/exp/g
+1,\$s/d\([0-9][0-9]*\)/e\1/g
+1,\$s/cone34/cond34/
+EOF
+#
+foreach file ( *.f )
+   echo Operating on $file
+   mv $file ${file}.org
+   sed -f /tmp/sed.tmp ${file}.org > $file
+end
+rm -f /tmp/sed.tmp
+cat <<EOF > /tmp/sed.tmp
+1,\$s/double/float/
+EOF
+mv alloc.c alloc.c.org
+sed -f /tmp/sed.tmp alloc.c.org > alloc.c
+rm -f /tmp/sed.tmp

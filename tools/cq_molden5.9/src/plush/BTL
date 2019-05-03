@@ -1,0 +1,8 @@
+mol="BTL" Charge="1"
+lab="O1"	NH="0" 
+lab="C"	NH="1" 
+lab="CA"	NH="2" 
+lab="N"	NH="0" 
+lab="C3"	NH="3" 
+lab="C2"	NH="3" 
+lab="C1"	NH="3" 

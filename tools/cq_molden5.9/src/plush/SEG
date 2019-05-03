@@ -1,0 +1,8 @@
+mol="SEG" Charge="0"
+lab="N"	NH="2" 
+lab="OD"	NH="1" 
+lab="CB"	NH="2" 
+lab="CA"	NH="1" 
+lab="C"	NH="0" 
+lab="O"	NH="0" 
+lab="OXT"	NH="1" 

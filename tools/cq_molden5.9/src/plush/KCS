@@ -1,0 +1,5 @@
+mol="KCS" Charge="0"
+lab="SAA"	NH="1" 
+lab="CAB"	NH="0" 
+lab="SAC"	NH="0" 
+lab="SAD"	NH="1" 

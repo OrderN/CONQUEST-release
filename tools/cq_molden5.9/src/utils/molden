@@ -1,0 +1,10 @@
+#!/bin/csh
+#
+setenv TNK_ROOT /compchem/1/tinker
+setenv TA_ROOT /compchem/1/sybyl63
+#setenv QNT_ROOT /mnt/compchem1/msi/quanta96
+setenv g94root /cmsc
+setenv MOPAC_ROOT /compchem/1/mopac93
+#
+/usr/local/bin/molden.exe $argv
+#
