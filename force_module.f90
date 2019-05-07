@@ -2568,7 +2568,7 @@ contains
     integer      :: nab, neigh_global_num,        &
                     neigh_global_part, neigh_species, wheremat, matU_NA, matUT_NA
     real(double) :: dx, dy, dz, thisdAP, locforce
-    real(double), dimension(:,:,:), allocatable ::  NA_P_stress, NA_HF_stress
+    real(double), dimension(3,3) :: NA_P_stress, NA_HF_stress
     real(double), dimension(:), allocatable :: force_contrib, f_c2
     type(cq_timer) :: backtrace_timer
     
@@ -2604,8 +2604,6 @@ contains
     do spin = 1,nspin
        matKzero(spin) = allocate_temp_matrix(aHa_range,0,atomf,atomf)
     end do
-    if (flag_stress) &
-      allocate(NA_HF_stress(3,3,ni_in_cell),NA_P_stress(3,3,ni_in_cell))
     NA_P_stress = zero
     NA_HF_stress = zero
     NA_stress = zero
@@ -2729,12 +2727,12 @@ contains
           if (flag_stress) then
             if (flag_full_stress) then
               do l = 1, 3
-                call matrix_diagonal(matdaNAr(k,l), matU_NA, &
-                  NA_P_stress(k,l,:), aNArange, inode)
+                call matrix_diagonal_stress(matdaNAr(k,l), matU_NA, &
+                  NA_P_stress(k,l), aNArange, inode)
               end do
             else
-              call matrix_diagonal(matdaNAr(k,k), matU_NA, &
-                NA_P_stress(k,k,:), aNArange, inode)
+              call matrix_diagonal_stress(matdaNAr(k,k), matU_NA, &
+                NA_P_stress(k,k), aNArange, inode)
             end if
           end if
         end do ! k
@@ -2747,25 +2745,27 @@ contains
           call matrix_diagonal(matdNAa(k), matUT_NA, &
             NA_force(k,:), NAarange,inode)
           if (flag_stress) then
-            do l = 1, 3
-              call matrix_diagonal(matdNAar(k,l), matUT_NA, &
-                NA_HF_stress(k,l,:), NAarange,inode)
-            end do
+            if (flag_full_stress) then
+              do l = 1, 3
+                call matrix_diagonal_stress(matdNAar(k,l), matUT_NA, &
+                  NA_HF_stress(k,l), NAarange,inode)
+              end do
+            else
+              call matrix_diagonal_stress(matdNAar(k,k), matUT_NA, &
+                NA_HF_stress(k,k), NAarange,inode)
+            end if
           end if
         end do ! k
       !end if
     end do ! spin
 
     if (flag_stress) then
-      do i = 1, ni_in_cell!n_atoms
-         do k=1,3
-            do l=1,3
-              NA_stress(k,l) = NA_stress(k,l) + &
-                               half*(NA_P_stress(k,l,i) + NA_HF_stress(k,l,i))
-            end do
-         end do
+       do k=1,3
+          do l=1,3
+            NA_stress(k,l) = NA_stress(k,l) + &
+                             half*(NA_P_stress(k,l) + NA_HF_stress(k,l))
+          end do
       end do
-      deallocate(NA_P_stress,NA_HF_stress)
     end if
 
     do spin = nspin,1,-1
