@@ -138,6 +138,9 @@
 !!    Adding (l,m)-projection for PDOS
 !!   2019/03/28 zamaan
 !!    Added flag_stress and flag_full_stress
+!!   2019/05/08 zamaan
+!!    Added flag_atomic_stress and atomic_stress for atomic contributions to 
+!!    stress and heat flux
 !!  SOURCE
 !!
 module global_module
@@ -182,6 +185,14 @@ module global_module
 
   logical :: flag_stress   ! Compute the stress tensor?
   logical :: flag_full_stress ! Compute the off-diagonal elements?
+  logical :: flag_atomic_stress ! Compute atomic contributions to stress?
+
+  ! Atomic contributions to total stress
+  ! I would rather not put this in global module, but it is required by enough
+  ! different force computing modules that it's impossible to put it in a more
+  ! sensible file without circular dependencies - zamaan
+  real(double), dimension(:,:,:), allocatable :: atomic_stress
+
   logical :: flag_opt_cell ! optimize the simulation cell?
   ! specify sim cell dims/ratios of dims to be held constant.
   character(len=20), save :: cell_constraint_flag

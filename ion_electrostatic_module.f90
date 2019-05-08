@@ -951,6 +951,8 @@ contains
 !!    Added use statement for erfc
 !!   2019/04/09 zamaan
 !!    Modifications to compute off-diagonal stress tensor elements
+!!   2019/05/08 zamaan
+!!    Added atomic stress contributions
 !!  SOURCE
 !!  
   subroutine ewald()
@@ -960,7 +962,8 @@ contains
     use GenComms,       ONLY: gsum, cq_abort, inode, ionode
     use global_module,  ONLY: id_glob, iprint_gen, species_glob, ni_in_cell, &
                               area_general, IPRINT_TIME_THRES3, &
-                              flag_full_stress, flag_stress
+                              flag_full_stress, flag_stress, &
+                              flag_atomic_stress, atomic_stress
     use group_module,   ONLY: parts
     use maxima_module,  ONLY: maxatomsproc
     use numbers
@@ -975,7 +978,7 @@ contains
     
     implicit none
 
-    integer :: i, ip, ig_atom_beg, j, n, nc, ni, nj, nn, stat, direction, dir1, dir2
+    integer :: i, ip, ig_atom_beg, j, n, nc, ni, nj, nn, stat, direction, dir1, dir2, iatom, jatom
     real(double) :: arg_1, arg_2, coeff_1, dummy, ewald_real_energy, ewald_real_sum_inter, ewald_real_sum_intra, &
          &ewald_real_sum_ip, ewald_recip_energy, ewald_total_energy, g_dot_r, q_i, q_j, rij, rijx, rijy, rijz, &
          rij_squared, x, y, z, one_over_g_squared
@@ -1044,11 +1047,13 @@ contains
          do dir1=1,3
            if (flag_full_stress) then
              do dir2=1,3
-               ewald_recip_stress(dir1,dir2) = ewald_recip_stress(dir1,dir2) + &
+               ewald_recip_stress(dir1,dir2) = ewald_recip_stress(dir1,dir2)+ &
                  ewald_g_factor(n) * (struc_fac_r(n)*struc_fac_r(n) + &
                  struc_fac_i(n)*struc_fac_i(n)) * &
                  ((two*egv_n(dir1)*egv_n(dir2) * & ! off-diagonal - zamaan
                   (one/(four*ewald_gamma)) + one_over_g_squared - one))
+                if (flag_atomic_stress) then
+                end if
              end do
            else
              ewald_recip_stress(dir1,dir1) = ewald_recip_stress(dir1,dir1) + &
@@ -1140,12 +1145,11 @@ contains
                 j = bundle%ig_prim(bundle%nm_nodbeg(ip)+nj-1)
                 q_j = charge(bundle%species(bundle%nm_nodbeg(ip)+nj-1))
                 ! ... Cartesian components of vector separation of the two atoms
-                rij_vec(1) = bundle%xprim(bundle%nm_nodbeg(ip)+ni-1) - &
-                  bundle%xprim(bundle%nm_nodbeg(ip)+nj-1)
-                rij_vec(2) = bundle%yprim(bundle%nm_nodbeg(ip)+ni-1) - &
-                  bundle%yprim(bundle%nm_nodbeg(ip)+nj-1)
-                rij_vec(3) = bundle%zprim(bundle%nm_nodbeg(ip)+ni-1) - &
-                  bundle%zprim(bundle%nm_nodbeg(ip)+nj-1)
+                iatom = bundle%nm_nodbeg(ip)+ni-1
+                jatom = bundle%nm_nodbeg(ip)+nj-1
+                rij_vec(1) = bundle%xprim(iatom) - bundle%xprim(jatom)
+                rij_vec(2) = bundle%yprim(iatom) - bundle%yprim(jatom)
+                rij_vec(3) = bundle%zprim(iatom) - bundle%zprim(jatom)
                 rij_squared = rij_vec(1)*rij_vec(1) + rij_vec(2)*rij_vec(2) + &
                               rij_vec(3)*rij_vec(3)
                 rij = sqrt(rij_squared)
@@ -1155,24 +1159,18 @@ contains
                    ewald_real_sum_ip = ewald_real_sum_ip + &
                      q_i * q_j * erfc(arg_2) / rij
                    dummy = q_i * q_j * (erfc(arg_2)/rij + coeff_1*exp(-arg_1))/rij_squared
-                   ewald_intra_force_x(bundle%nm_nodbeg(ip)+ni-1) = &
-                     ewald_intra_force_x(bundle%nm_nodbeg(ip)+ni-1) + &
-                     dummy*rij_vec(1)
-                   ewald_intra_force_x(bundle%nm_nodbeg(ip)+nj-1) = &
-                     ewald_intra_force_x(bundle%nm_nodbeg(ip)+nj-1) - &
-                     dummy*rij_vec(1)
-                   ewald_intra_force_y(bundle%nm_nodbeg(ip)+ni-1) = &
-                     ewald_intra_force_y(bundle%nm_nodbeg(ip)+ni-1) + &
-                     dummy*rij_vec(2)
-                   ewald_intra_force_y(bundle%nm_nodbeg(ip)+nj-1) = &
-                     ewald_intra_force_y(bundle%nm_nodbeg(ip)+nj-1) - &
-                     dummy*rij_vec(2)
-                   ewald_intra_force_z(bundle%nm_nodbeg(ip)+ni-1) = &
-                     ewald_intra_force_z(bundle%nm_nodbeg(ip)+ni-1) + &
-                     dummy*rij_vec(3)
-                   ewald_intra_force_z(bundle%nm_nodbeg(ip)+nj-1) = &
-                     ewald_intra_force_z(bundle%nm_nodbeg(ip)+nj-1) - &
-                     dummy*rij_vec(3)
+                   ewald_intra_force_x(iatom) = &
+                     ewald_intra_force_x(iatom) + dummy*rij_vec(1)
+                   ewald_intra_force_x(jatom) = &
+                     ewald_intra_force_x(jatom) - dummy*rij_vec(1)
+                   ewald_intra_force_y(iatom) = &
+                     ewald_intra_force_y(iatom) + dummy*rij_vec(2)
+                   ewald_intra_force_y(jatom) = &
+                     ewald_intra_force_y(jatom) - dummy*rij_vec(2)
+                   ewald_intra_force_z(iatom) = &
+                     ewald_intra_force_z(iatom) + dummy*rij_vec(3)
+                   ewald_intra_force_z(jatom) = &
+                     ewald_intra_force_z(jatom) - dummy*rij_vec(3)
                    ! --- Edited SYM 2014/10/16 14:23 Ewald stress
                    if (flag_stress) then
                      do dir1=1,3
@@ -1181,6 +1179,13 @@ contains
                            ewald_intra_stress(dir1,dir2) = &
                              ewald_intra_stress(dir1,dir2) - &
                              (dummy * rij_vec(dir1) * rij_vec(dir2))
+                           if (flag_atomic_stress) then
+                             ! how is this contributions split between the 
+                             ! two atoms? - zamaan
+                             atomic_stress(dir1,dir2,iatom) = &
+                               atomic_stress(dir1,dir2,iatom) - &
+                               (dummy * rij_vec(dir1) * rij_vec(dir2))
+                           end if
                          end do ! dir2
                        else
                          ewald_intra_stress(dir1,dir1) = &
@@ -1201,6 +1206,7 @@ contains
 
     call gsum(ewald_real_sum_intra)
     if (flag_stress) call gsum(ewald_intra_stress,3,3)
+    if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
     if(inode == ionode.AND.iprint_gen>=6) then
        write(unit=io_lun,fmt='(/" Ewald real-space self info for node:",i3/)') inode 
        write(unit=io_lun,fmt='(/" self-partition part of real_space Ewald:",e20.12)') ewald_real_sum_intra
@@ -1238,8 +1244,9 @@ contains
        if(bundle%nm_nodgroup(ip) > 0) then
           do ni = 1, bundle%nm_nodgroup(ip)
              ! ... global label and charge of current primary-set atom
-             i = bundle%ig_prim(bundle%nm_nodbeg(ip)+ni-1)
-             q_i = charge(bundle%species(bundle%nm_nodbeg(ip)+ni-1))
+             iatom = bundle%nm_nodbeg(ip)+ni-1
+             i = bundle%ig_prim(iatom)
+             q_i = charge(bundle%species(iatom))
              ! --- loop over Ewald neighbour-list of partitions in Ewald covering set
              do nn = 1, n_partition_neighbours
                 ! ... get PG label of current ECS partition
@@ -1251,11 +1258,11 @@ contains
                       ! ... global label and charge of current atom in ECS partition
                       q_j = charge(species_glob(id_glob(ig_atom_beg+nj-1)))
                       ! ... Cartesian components of vector separation of the two atoms
-                      rij_vec(1) = bundle%xprim(bundle%nm_nodbeg(ip)+ni-1) - &
+                      rij_vec(1) = bundle%xprim(iatom) - &
                         ion_ion_CS%xcover(ion_ion_CS%icover_ibeg(nc)+nj-1)
-                      rij_vec(2) = bundle%yprim(bundle%nm_nodbeg(ip)+ni-1) - &
+                      rij_vec(2) = bundle%yprim(iatom) - &
                         ion_ion_CS%ycover(ion_ion_CS%icover_ibeg(nc)+nj-1)
-                      rij_vec(3) = bundle%zprim(bundle%nm_nodbeg(ip)+ni-1) - &
+                      rij_vec(3) = bundle%zprim(iatom) - &
                         ion_ion_CS%zcover(ion_ion_CS%icover_ibeg(nc)+nj-1)
                       rij_squared = rij_vec(1)*rij_vec(1) + &
                         rij_vec(2)*rij_vec(2) + rij_vec(3)*rij_vec(3)
@@ -1266,12 +1273,12 @@ contains
                          ewald_real_sum_ip = ewald_real_sum_ip + &
                               &q_i * q_j * erfc(arg_2) / rij
                          dummy = q_i * q_j * (erfc(arg_2)/rij + coeff_1*exp(-arg_1))/rij_squared
-                         ewald_inter_force_x(bundle%nm_nodbeg(ip)+ni-1) = &
-                              ewald_inter_force_x(bundle%nm_nodbeg(ip)+ni-1) + dummy*rij_vec(1)
-                         ewald_inter_force_y(bundle%nm_nodbeg(ip)+ni-1) = &
-                              ewald_inter_force_y(bundle%nm_nodbeg(ip)+ni-1) + dummy*rij_vec(2)
-                         ewald_inter_force_z(bundle%nm_nodbeg(ip)+ni-1) = &
-                              ewald_inter_force_z(bundle%nm_nodbeg(ip)+ni-1) + dummy*rij_vec(3)
+                         ewald_inter_force_x(iatom) = &
+                              ewald_inter_force_x(iatom) + dummy*rij_vec(1)
+                         ewald_inter_force_y(iatom) = &
+                              ewald_inter_force_y(iatom) + dummy*rij_vec(2)
+                         ewald_inter_force_z(iatom) = &
+                              ewald_inter_force_z(iatom) + dummy*rij_vec(3)
                          if (flag_stress) then
                            do dir1=1,3
                              if (flag_full_stress) then
@@ -1279,6 +1286,12 @@ contains
                                  ewald_inter_stress(dir1,dir2) = &
                                    ewald_inter_stress(dir1,dir2) - &
                                    dummy * rij_vec(dir1) * rij_vec(dir2)
+                                 if (flag_atomic_stress) then
+                                   atomic_stress(dir1,dir2,iatom) = &
+                                     atomic_stress(dir1,dir2,iatom) - &
+                                     dummy * rij_vec(dir1) * &
+                                     rij_vec(dir2) * half
+                                 end if
                                end do ! dir2
                              else
                                ewald_inter_stress(dir1,dir1) = &
@@ -1308,6 +1321,7 @@ contains
 
     call gsum(ewald_real_sum_inter)
     if (flag_stress) call gsum(ewald_inter_stress,3,3)
+    if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
     if(inode == ionode.AND.iprint_gen>=6) then
        write(unit=io_lun,fmt='(/" Ewald real-space other info for node:",i3/)') inode 
        write(unit=io_lun,fmt='(/" other-partition part of real_space Ewald:",e20.12)') ewald_real_sum_inter
@@ -1506,6 +1520,8 @@ contains
 !!    Changed cutoff criterion on interactions to use individual species size
 !!   2018/11/13 TM
 !!    Bug fix for ghost atoms
+!!   2019/05/08 zamaan
+!!    Added atomic stress contributions
 !!  SOURCE
 !!  
   subroutine screened_ion_interaction
@@ -1515,7 +1531,8 @@ contains
     use GenComms, ONLY : gsum, cq_abort, inode, ionode
     use global_module, ONLY : id_glob, iprint_gen, species_glob, ni_in_cell, &
                               area_general, IPRINT_TIME_THRES3, &
-                              flag_full_stress, flag_stress
+                              flag_full_stress, flag_stress, &
+                              flag_atomic_stress, atomic_stress
     use group_module, ONLY : parts
     use maxima_module, ONLY : maxatomsproc
     use numbers
@@ -1594,6 +1611,12 @@ contains
                                       half * &
                                       (dummy*rij_vec(dir1) + goverlap(dir1))* &
                                       rij_vec(dir2)
+                                      if (flag_atomic_stress) then
+                                        atomic_stress(dir1,dir2,i) = &
+                                          atomic_stress(dir1,dir2,i) - &
+                                          half * (dummy*rij_vec(dir1) + &
+                                          goverlap(dir1)) * rij_vec(dir2)
+                                      end if
                                   end do
                                 else
                                   screened_ion_stress(dir1,dir1) = &
@@ -1619,6 +1642,7 @@ contains
     call gsum(screened_ion_interaction_energy)
     call gsum(screened_ion_force,3,ni_in_cell)
     if (flag_stress) call gsum(screened_ion_stress,3,3)
+    if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
     if(inode == ionode.AND.iprint_gen>1) &
          write(unit=io_lun,fmt='(/8x," ++++++ Screened ion interaction energy:",e20.12)') &
          &screened_ion_interaction_energy

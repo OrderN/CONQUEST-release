@@ -724,7 +724,8 @@ contains
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
                              flag_opt_cell, cell_constraint_flag, cell_en_tol, &
-                             flag_stress, flag_full_stress
+                             flag_stress, flag_full_stress, &
+                             flag_atomic_stress
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -1416,6 +1417,7 @@ contains
        flag_stop_on_empty_bundle = fdf_boolean('AtomMove.StopOnEmptyBundle',.false.)
        flag_stress           = fdf_boolean('AtomMove.CalcStress', .true.)
        flag_full_stress      = fdf_boolean('AtomMove.FullStress', .false.)
+       flag_atomic_stress    = fdf_boolean('AtomMove.AtomicStress', .false.)
        !
        flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
        if(.NOT.flag_vary_basis) then
