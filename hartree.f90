@@ -193,7 +193,7 @@ contains
     call fft3(potential, chdenr, size, +1)
     ! Sum over processes
     call gsum(energy)
-    call gsum(Hartree_stress,3,3)
+    if (flag_stress) call gsum(Hartree_stress,3,3)
     ! Scale
     potential = potential*harcon
     energy = energy * grid_point_volume*half* harcon 

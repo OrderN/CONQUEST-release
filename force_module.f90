@@ -1931,7 +1931,8 @@ contains
     integer      :: iprim, gcspart, ist, nab, neigh_global_num,        &
                     neigh_global_part, neigh_species, wheremat, isf, jsf
     real(double) :: dx, dy, dz, thisdAP
-    real(double), dimension(:,:,:), allocatable ::  NL_P_stress, NL_HF_stress
+    real(double), dimension(3,3) :: NL_P_stress, NL_HF_stress
+    real(double), dimension(:,:,:), allocatable :: NL_P_atomic, NL_HF_atomic
     real(double), dimension(3) :: r_str
     type(cq_timer) :: backtrace_timer
 
@@ -1957,10 +1958,16 @@ contains
     if (flag_basis_set == blips .and. (.not. flag_analytic_blip_int)) then
        dpseudofns = allocate_temp_fn_on_grid(nlpf)
     end if
-    HF_NL_force = zero
-    if (flag_stress) then
-      allocate(NL_HF_stress(3,3,ni_in_cell),NL_P_stress(3,3,ni_in_cell))
+    if (flag_atomic_stress) then
+      allocate(NL_HF_atomic(3,3,ni_in_cell), STAT=stat)
+      if (stat /= 0) &
+        call cq_abort("Error allocating NL atomic stress: ", ni_in_cell)
+      allocate(NL_P_atomic(3,3,ni_in_cell), STAT=stat)
+      if (stat /= 0) &
+        call cq_abort("Error allocating NL atomic stress: ", ni_in_cell)
+      call reg_alloc_mem(area_moveatoms, 2*3*3*ni_in_cell, type_dbl)
     end if
+    HF_NL_force = zero
     NL_P_stress = zero
     NL_HF_stress = zero
     NL_stress = zero
@@ -2162,12 +2169,12 @@ contains
              if (flag_stress) then
                if (flag_full_stress) then
                  do l = 1, 3
-                   call matrix_diagonal(matdAPr(k,l), matU(spin), &
-                                        NL_P_stress(k,l,:), APrange, inode)
+                   call matrix_diagonal_stress(matdAPr(k,l), matU(spin), &
+                                        NL_P_stress(k,l), APrange, inode)
                  end do
                else
-                 call matrix_diagonal(matdAPr(k,k), matU(spin), &
-                                      NL_P_stress(k,k,:), APrange, inode)
+                 call matrix_diagonal_stress(matdAPr(k,k), matU(spin), &
+                                      NL_P_stress(k,k), APrange, inode)
                end if
              end if
           end do ! spin
@@ -2183,12 +2190,17 @@ contains
              if (flag_stress) then
                if (flag_full_stress) then
                  do l = 1, 3
-                   call matrix_diagonal(matdPAr(k,l), matUT(spin), &
-                                        NL_HF_stress(k,l,:), PArange, inode)
+                   if (flag_atomic_stress) then
+                     call matrix_diagonal_stress(matdPAr(k,l), matUT(spin), &
+                          NL_HF_stress(k,l), PArange, inode, atomic_stress(k,l,:))
+                   else
+                     call matrix_diagonal_stress(matdPAr(k,l), matUT(spin), &
+                          NL_HF_stress(k,l), PArange, inode)
+                   end if
                  end do
                else
-                 call matrix_diagonal(matdPAr(k,k), matUT(spin), &
-                                      NL_HF_stress(k,k,:), PArange, inode)
+                 call matrix_diagonal_stress(matdPAr(k,k), matUT(spin), &
+                      NL_HF_stress(k,k), PArange, inode)
                end if
              end if
           end do ! spin
@@ -2196,25 +2208,28 @@ contains
     end if
 
     call gsum(HF_NL_force, 3, n_atoms)
+    if (flag_atomic_stress) then
+      deallocate(NL_HF_atomic, NL_P_atomic, STAT=stat)
+      if (stat /= 0) &
+        call cq_abort("Error deallocating NL atomic stress: ", ni_in_cell)
+      call reg_dealloc_mem(area_moveatoms, 2*3*3*ni_in_cell, type_dbl)
+    end if
     if (flag_stress) then
-      do i = 1, n_atoms
-         do k=1,3
-            if (flag_full_stress) then
-              do l=1,3
-                NL_stress(k,l) = NL_stress(k,l) + half*(NL_P_stress(k,l,i) + NL_HF_stress(k,l,i))
-                if (flag_atomic_stress) then
-                  atomic_stress(k,l,i) = atomic_stress(k,l,i) + &
-                    half*(NL_P_stress(k,l,i))
-                end if
-              end do
-            else
-              NL_stress(k,k) = NL_stress(k,k) + half*(NL_P_stress(k,k,i) + NL_HF_stress(k,k,i))
-            end if
-         end do
-      end do
+       do k=1,3
+          if (flag_full_stress) then
+            do l=1,3
+              NL_stress(k,l) = NL_stress(k,l) + &
+                               half*(NL_P_stress(k,l) + NL_HF_stress(k,l))
+            end do
+          else
+            NL_stress(k,k) = NL_stress(k,k) + &
+                             half*(NL_P_stress(k,k) + NL_HF_stress(k,k))
+          end if
+       end do
       call gsum(NL_stress,3,3)
+      ! Note that the atomic contributions are computed in flag_diagonal_stress
+      ! for memory efficiency
       if (flag_atomic_stress) call gsum(atomic_stress,3,3,n_atoms)
-      deallocate(NL_P_stress,NL_HF_stress)
     end if
     do k = 3, 1, -1
        if (flag_stress) then
@@ -2632,7 +2647,7 @@ contains
     integer      :: nab, neigh_global_num,        &
                     neigh_global_part, neigh_species, wheremat, matU_NA, matUT_NA
     real(double) :: dx, dy, dz, thisdAP, locforce
-    real(double), dimension(:,:,:), allocatable ::  NA_P_stress, NA_HF_stress
+    real(double), dimension(3,3) :: NA_P_stress, NA_HF_stress
     real(double), dimension(:), allocatable :: force_contrib, f_c2
     type(cq_timer) :: backtrace_timer
     
@@ -2668,8 +2683,6 @@ contains
     do spin = 1,nspin
        matKzero(spin) = allocate_temp_matrix(aHa_range,0,atomf,atomf)
     end do
-    if (flag_stress) &
-      allocate(NA_HF_stress(3,3,ni_in_cell),NA_P_stress(3,3,ni_in_cell))
     NA_P_stress = zero
     NA_HF_stress = zero
     NA_stress = zero
@@ -2793,12 +2806,12 @@ contains
           if (flag_stress) then
             if (flag_full_stress) then
               do l = 1, 3
-                call matrix_diagonal(matdaNAr(k,l), matU_NA, &
-                  NA_P_stress(k,l,:), aNArange, inode)
+                call matrix_diagonal_stress(matdaNAr(k,l), matU_NA, &
+                  NA_P_stress(k,l), aNArange, inode)
               end do
             else
-              call matrix_diagonal(matdaNAr(k,k), matU_NA, &
-                NA_P_stress(k,k,:), aNArange, inode)
+              call matrix_diagonal_stress(matdaNAr(k,k), matU_NA, &
+                NA_P_stress(k,k), aNArange, inode)
             end if
           end if
         end do ! k
@@ -2811,29 +2824,32 @@ contains
           call matrix_diagonal(matdNAa(k), matUT_NA, &
             NA_force(k,:), NAarange,inode)
           if (flag_stress) then
-            do l = 1, 3
-              call matrix_diagonal(matdNAar(k,l), matUT_NA, &
-                NA_HF_stress(k,l,:), NAarange,inode)
-            end do
+            if (flag_full_stress) then
+              do l = 1, 3
+                call matrix_diagonal_stress(matdNAar(k,l), matUT_NA, &
+                  NA_HF_stress(k,l), NAarange,inode)
+              end do
+            else
+              call matrix_diagonal_stress(matdNAar(k,k), matUT_NA, &
+                NA_HF_stress(k,k), NAarange,inode)
+            end if
           end if
         end do ! k
       !end if
     end do ! spin
 
     if (flag_stress) then
-      do i = 1, ni_in_cell!n_atoms
-         do k=1,3
-            do l=1,3
-              NA_stress(k,l) = NA_stress(k,l) + &
-                               half*(NA_P_stress(k,l,i) + NA_HF_stress(k,l,i))
-              if (flag_atomic_stress) then
-                atomic_stress(k,l,i) = atomic_stress(k,l,i) + &
-                  half * (NA_P_stress(k,l,i) + NA_HF_stress(k,l,i))
-              end if
-            end do
-         end do
+       do k=1,3
+         if (flag_full_stress) then
+           do l=1,3
+             NA_stress(k,l) = NA_stress(k,l) + &
+                              half*(NA_P_stress(k,l) + NA_HF_stress(k,l))
+           end do
+         else
+           NA_stress(k,k) = NA_stress(k,k) + &
+                            half*(NA_P_stress(k,k) + NA_HF_stress(k,k))
+         end if
       end do
-      deallocate(NA_P_stress,NA_HF_stress)
     end if
 
     do spin = nspin,1,-1
@@ -2991,6 +3007,8 @@ contains
     call gsum(NA_force, 3, ni_in_cell)
     !KE_stress = half*KE_stress
     if (flag_stress) call gsum(NA_stress,3,3)
+    ! Note that the atomic contributions are computed in flag_diagonal_stress
+    ! for memory efficiency
     if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
 
     call free_temp_matrix(mat_dNAT)
@@ -3081,6 +3099,82 @@ contains
     call stop_timer(tmr_std_matrices)
     return
   end subroutine matrix_diagonal
+!!***
+
+!!****f* force_module/matrix_diagonal_stress *
+!!
+!!  NAME
+!!   matrix_diagonal
+!!  USAGE
+!!
+!!  PURPOSE
+!!   Does the same thing as matrix_diagonal, except it sums the 
+!!   atomic contributions. Adapted from matrix_diagonal, for 
+!!   memory efficiency
+!!  AUTHOR
+!!   Zamaan Raza
+!!  CREATION DATE
+!!   2019/05/07
+!!  MODIFICATION HISTORY
+!!
+!!  SOURCE
+!!
+  subroutine matrix_diagonal_stress(matA, matB, stress, range, inode, diagonal)
+
+    use datatypes
+    use global_module, only: atomic_stress
+    use primary_module, only : bundle
+    use matrix_module, only: matrix, matrix_halo
+    use matrix_data, only : mat, halo
+    use cover_module, only: BCS_parts
+    use mult_module, only: return_matrix_value_pos, matrix_pos
+    use GenBlas
+
+    implicit none
+
+    ! Shared variables
+    real(double) :: stress
+    real(double), dimension(:), optional :: diagonal
+    integer :: range, inode, matA, matB
+
+    ! Local variables
+    integer :: iprim, np, i, j, element, n1, n2, ist, gcspart, atom
+    
+    iprim = 0
+    call start_timer(tmr_std_matrices)
+    do np = 1,bundle%groups_on_node
+       if(bundle%nm_nodgroup(np) > 0) then
+          do i=1,bundle%nm_nodgroup(np)
+             iprim = iprim + 1
+             atom = bundle%ig_prim(iprim)
+             do j = 1,mat(np,range)%n_nab(i)
+                ist = mat(np,range)%i_acc(i)+j-1
+                gcspart = BCS_parts%icover_ibeg(mat(np,range)%i_part(ist))+mat(np,range)%i_seq(ist)-1
+                do n2 = 1,mat(np,range)%ndimj(ist)
+                   do n1 = 1,mat(np,range)%ndimi(i)
+                      element = matrix_pos(matA,iprim,halo(range)%i_halo(gcspart),n1,n2)
+                      stress = stress + &
+                           return_matrix_value_pos(matA,element) * &
+                           return_matrix_value_pos(matB,element)
+                      if (present(diagonal)) then
+                        diagonal(atom) = diagonal(atom) + &
+                          return_matrix_value_pos(matA,element) * &
+                          return_matrix_value_pos(matB,element) * half
+                        ! the factor of half arises because the total 
+                        ! non-local/neutral atom is 
+                        ! half*(N*_P_stress + N*_HF_stress), but for memory
+                        ! efficiency, I'm not storing the atomic contributions
+                        ! in an array - zamaan
+                      end if
+                   end do
+                end do
+             end do
+          end do
+       end if  !  (bundle%nm_nodgroup(np) > 0)
+    end do
+    call stop_timer(tmr_std_matrices)
+    return
+  end subroutine matrix_diagonal_stress
 !!***
 
   ! -----------------------------------------------------------
