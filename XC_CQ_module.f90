@@ -29,6 +29,8 @@
 !!    Deleted obsolete routine map_density
 !!   2018/06/15 12:21 dave
 !!    Added spin_factor in module use statements
+!!   2019/04/08 zamaan
+!!    Added off-diagonal elements of XC stress tensor contributions
 !! SOURCE
 !!
 module XC
@@ -41,7 +43,7 @@ module XC
   save
 
   ! Public, general variables
-  real(double), dimension(3), public :: XC_GGA_stress
+  real(double), dimension(3,3), public :: XC_GGA_stress
   real(double), public :: s_6  ! For DFT D2
   logical, public :: flag_is_GGA ! Needed for non-SC forces
   ! Numerical flag choosing functional type
@@ -1603,7 +1605,7 @@ contains
                                       flavour, x_energy )
     use datatypes
     use numbers
-    use global_module, only: nspin
+    use global_module, only: nspin, flag_stress, flag_full_stress
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum, cq_abort
     use fft_module,    only: fft3, recip_vector
@@ -1622,7 +1624,7 @@ contains
 
     ! local variables
     integer      :: PBE_type
-    integer      :: rr, spin, stat, dir
+    integer      :: rr, spin, stat, dir1, dir2
     real(double) :: eps_x, eps_c, rho_tot_r
     real(double),         dimension(nspin)        :: rho_r
     real(double),         dimension(3,nspin)      :: grho_r
@@ -1675,17 +1677,30 @@ contains
           ! note that grad_density(rr,1:3,1:spin) has already been used
           ! at this point, so we can savely reuse this slot to store
           ! d(rho * eps_xc) / dgrho at rr.
-          do dir=1,3
-             grad_density(rr,dir,spin) = drhoEps_x(dir,spin) + drhoEps_c(dir,spin)
-             XC_GGA_stress(dir) = XC_GGA_stress(dir) - grho_r(dir,spin)*grad_density(rr,dir,spin)
+          do dir1=1,3
+             grad_density(rr,dir1,spin) = drhoEps_x(dir1,spin) + &
+                                          drhoEps_c(dir1,spin)
+             if (flag_stress) then
+               if (flag_full_stress) then
+                 do dir2=1,3
+                    XC_GGA_stress(dir1,dir2) = XC_GGA_stress(dir1,dir2) - &
+                      grho_r(dir1,spin)*grad_density(rr,dir2,spin)
+                 end do
+               else
+                  XC_GGA_stress(dir1,dir1) = XC_GGA_stress(dir1,dir1) - &
+                    grho_r(dir1,spin)*grad_density(rr,dir1,spin)
+               end if
+             end if
           end do
        end do
     end do ! rr
     call gsum(xc_energy)
     if (present(x_energy)) call gsum(x_energy)
     xc_energy = xc_energy * grid_point_volume
-    call gsum(XC_GGA_stress,3)
-    XC_GGA_stress = XC_GGA_stress*grid_point_volume
+    if (flag_stress) then
+      call gsum(XC_GGA_stress,3,3)
+      XC_GGA_stress = XC_GGA_stress*grid_point_volume
+    end if
     !write(*,*) 'GGA stress term: ',XC_GGA_stress
     if (present(x_energy)) x_energy = x_energy * grid_point_volume
 
@@ -1760,7 +1775,7 @@ contains
                                        flavour, x_energy )
     use datatypes
     use numbers
-    use global_module, only: nspin
+    use global_module, only: nspin, flag_full_stress, flag_stress
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum, cq_abort
     use fft_module,    only: fft3, recip_vector
@@ -1780,7 +1795,7 @@ contains
 
     ! local variables
     integer      :: PBE_type
-    integer      :: rr, spin, stat
+    integer      :: rr, spin, stat, dir1, dir2
     real(double) :: eps_x, eps_c, rho_tot_r
     real(double),         dimension(nspin)        :: rho_r
     real(double),         dimension(3,nspin)      :: grho_r
@@ -1837,14 +1852,28 @@ contains
           ! d(rho * eps_xc) / dgrho at rr.
           grad_density(rr,1:3,spin) = exx_a * drhoEps_x(1:3,spin) + &
                                       drhoEps_c(1:3,spin)
-          XC_GGA_stress(1:3) = XC_GGA_stress(1:3) - grho_r(1:3,spin)*grad_density(rr,1:3,spin)
+          do dir1=1,3
+             if (flag_stress) then
+               if (flag_full_stress) then
+                 do dir2=1,3
+                    XC_GGA_stress(dir1,dir2) = XC_GGA_stress(dir1,dir2) - &
+                      grho_r(dir1,spin)*grad_density(rr,dir2,spin)
+                 end do
+               else
+                 XC_GGA_stress(dir1,dir1) = XC_GGA_stress(dir1,dir1) - &
+                   grho_r(dir1,spin)*grad_density(rr,dir1,spin)
+               end if
+             end if
+          end do
        end do
     end do ! rr
     call gsum(xc_energy)
     if (present(x_energy)) call gsum(x_energy)
     xc_energy = xc_energy * grid_point_volume
-    call gsum(XC_GGA_stress,3)
-    XC_GGA_stress = XC_GGA_stress*grid_point_volume
+    if (flag_stress) then
+      call gsum(XC_GGA_stress,3,3)
+      XC_GGA_stress = XC_GGA_stress*grid_point_volume
+    end if
     if (present(x_energy)) x_energy =  x_energy * grid_point_volume
 
     ! add the second term to potential
