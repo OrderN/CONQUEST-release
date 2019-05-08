@@ -1894,7 +1894,8 @@ contains
                                            id_glob, species_glob,      &
                                            flag_analytic_blip_int,     &
                                            ni_in_cell, flag_full_stress, &
-                                           flag_stress, flag_atomic_stress
+                                           flag_stress, flag_atomic_stress, &
+                                           area_moveatoms
     ! TEMP
     use build_PAO_matrices,          only: assemble_deriv_2
     use group_module,                only: parts
@@ -1912,6 +1913,8 @@ contains
     use primary_module,              only: bundle
     use cover_module,                only: BCS_parts
     use species_module,              only: nsf_species, nlpf_species
+    use memory_module,               only: reg_alloc_mem, reg_dealloc_mem,  &
+                                           type_dbl
 
     implicit none
 
