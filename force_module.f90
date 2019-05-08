@@ -2760,11 +2760,16 @@ contains
     end do ! spin
 
     if (flag_stress) then
-       do k=1,3
+      do k=1,3
+        if (flag_full_stress) then
           do l=1,3
             NA_stress(k,l) = NA_stress(k,l) + &
                              half*(NA_P_stress(k,l) + NA_HF_stress(k,l))
           end do
+        else
+          NA_stress(k,k) = NA_stress(k,k) + &
+                           half*(NA_P_stress(k,k) + NA_HF_stress(k,k))
+        end if
       end do
     end if
 
