@@ -1289,9 +1289,12 @@ contains
   !!    Zamaan Raza 
   !!  CREATION DATE
   !!   2017/11/17 12:44
+  !!  MODIFICATION HISTORY
+  !!   2019/04/09 zamaan
+  !!    Removed unnecessary stress input argument
   !!  SOURCE
   !!  
-  subroutine init_baro(baro, baro_type, dt, ndof, stress, v, tau_P, ke_ions)
+  subroutine init_baro(baro, baro_type, dt, ndof, v, tau_P, ke_ions)
 
     use global_module,    only: rcellx, rcelly, rcellz
 
@@ -1300,7 +1303,6 @@ contains
     character(*), intent(in)                  :: baro_type
     real(double), intent(in)                  :: ke_ions, tau_P, dt
     integer, intent(in)                       :: ndof
-    real(double), dimension(3), intent(in)    :: stress
     real(double), dimension(:,:), intent(in)  :: v
 
     ! local variables
@@ -1432,6 +1434,9 @@ contains
   !!   2018/08/11 zamaan
   !!    Added final_call optional argument so that we only print to
   !!    Conquest_out once per step
+  !!   2019/04/09 zamaan
+  !!    Minor change since Conquet now computes the off-diagonal stress &
+  !!    tensor elements.
   !!  SOURCE
   !!  
   subroutine get_pressure_and_stress(baro, final_call, bt_level)
@@ -1457,7 +1462,7 @@ contains
     ! Get the static stress from the global variable
     baro%static_stress = zero
     do i=1,3
-      baro%static_stress(i,i) = -stress(i) ! note the sign convention!!
+      baro%static_stress(i,i) = -stress(i,i) ! note the sign convention!!
     end do
 
     if (present(final_call)) then

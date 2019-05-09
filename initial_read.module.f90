@@ -659,6 +659,9 @@ contains
   !!    Added flag_PDOS_lm for (l,m) projected DOS
   !!   2018/10/30 11:52 dave
   !!    added flag_PDOS_include_semicore to allow inclusion/exclusion of semi-core states from PDOS
+  !!   2018/03/28 zamaan
+  !!    Added flag_stress and flag_full_stress to toggle calculation of stress
+  !!    and off-diagonal elements respectively
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -720,7 +723,8 @@ contains
                              E_DOS_min, E_DOS_max, sigma_DOS, n_DOS, E_wf_min, E_wf_max, flag_wf_range_Ef, &
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
-                             flag_opt_cell, cell_constraint_flag, cell_en_tol
+                             flag_opt_cell, cell_constraint_flag, cell_en_tol, &
+                             flag_stress, flag_full_stress
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -1411,6 +1415,8 @@ contains
        cell_constraint_flag  = fdf_string(20,'AtomMove.OptCell.Constraint','none')
        cell_en_tol           = fdf_double('AtomMove.OptCell.EnTol',0.00001_double)
        flag_stop_on_empty_bundle = fdf_boolean('AtomMove.StopOnEmptyBundle',.false.)
+       flag_stress           = fdf_boolean('AtomMove.CalcStress', .true.)
+       flag_full_stress      = fdf_boolean('AtomMove.FullStress', .false.)
        !
        flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
        if(.NOT.flag_vary_basis) then
