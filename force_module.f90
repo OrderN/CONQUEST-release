@@ -328,12 +328,6 @@ contains
        phi_pulay_for = zero
     end if
     allocate(NA_force(3,ni_in_cell))
-    if (flag_atomic_stress) then
-     allocate(atomic_stress(3,3,ni_in_cell), STAT=stat)
-     if (stat /= 0) &
-       call cq_abort("Error allocating atomic_stress: ", ni_in_cell)
-     call reg_alloc_mem(area_moveatoms, 3*3*ni_in_cell, type_dbl)
-    end if
     NA_force = zero
     call stop_timer (tmr_std_allocation)
     ! get total density

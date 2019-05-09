@@ -11,6 +11,9 @@
 !!   2018/05/30 zamaan
 !!    Modified dump_stats to print correct header and columns when using
 !!    Berendsen equilibration in NVT ensemble
+!!  2019/05/09 zmaaan
+!!    New dump_heat_flux suboroutine to save heat flux to file for thermal
+!!    conductivity calculations
 !!
 !!  SOURCE
 !!
@@ -74,11 +77,12 @@ module md_model
 
     ! Thermodynamic variables
     real(double), pointer                   :: T_int    ! internal temperature
-    real(double), pointer                   :: T_ext    ! internal temperature
+    real(double), pointer                   :: T_ext    ! target temperature
     real(double), pointer                   :: P_int    ! internal pressure
-    real(double), pointer                   :: P_ext    ! internal pressure
+    real(double), pointer                   :: P_ext    ! target pressure
     real(double), pointer                   :: PV
     real(double)                            :: enthalpy
+    real(double), pointer, dimension(:)     :: heat_flux
 
     ! Thermostat
     character(20), pointer                  :: thermo_type
@@ -117,6 +121,7 @@ module md_model
       procedure, public   :: print_md_energy
       procedure, public   :: dump_stats
       procedure, public   :: dump_frame
+      procedure, public   :: dump_heat_flux
       procedure, public   :: dump_tdep
 
       procedure, private  :: dump_mdl_atom_arr
@@ -442,6 +447,43 @@ contains
     call io_close(lun)
 
   end subroutine dump_frame
+  !!***
+
+  !!****m* md_model/dump_heat_flux *
+  !!  NAME
+  !!   dump_heat_flux
+  !!  PURPOSE
+  !!   Dump the heat flux for Green-Kubo thermal conductivity
+  !!  AUTHOR
+  !!   Zamaan Raza 
+  !!  SOURCE
+  !!  
+  subroutine dump_heat_flux(mdl, filename)
+
+    use input_module,     only: io_assign, io_close
+
+    ! passed variables
+    class(type_md_model), intent(inout)   :: mdl
+    character(len=*), intent(in)          :: filename
+
+    ! local variables
+    integer                               :: lun, i
+
+    if (inode==ionode) then
+      if (iprint_MD > 1) write(io_lun,'("Writing heat flux to ",a)') filename
+      call io_assign(lun)
+      if (mdl%append) then
+        open(unit=lun,file=filename,position='append')
+      else 
+        open(unit=lun,file=filename,status='replace')
+      end if
+
+      write(lun,'(3f12.6)') mdl%heat_flux
+    end if
+
+    call io_close(lun)
+
+  end subroutine dump_heat_flux
   !!***
 
   !!****m* md_model/dump_mdl_atom_arr *

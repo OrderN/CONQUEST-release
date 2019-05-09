@@ -38,6 +38,8 @@
 !!   2018/08/12 zamaan
 !!    Removed read/write_thermo/baro_checkpoint, replaced with a unified &
 !!    checkpoint that includes ionic velocities
+!!   2019/05/08 zamaan
+!!    minor changes for heat flux calculations
 !!  SOURCE
 !!
 module md_control
@@ -64,8 +66,9 @@ module md_control
   character(20) :: md_thermo_file = "md.thermostat"
   character(20) :: md_baro_file = "md.barostat"
   character(20) :: md_trajectory_file = "trajectory.xsf"
-  character(20) :: md_frames_file = "Frames"
-  character(20) :: md_stats_file = "Stats"
+  character(20) :: md_frames_file = "md.frames"
+  character(20) :: md_stats_file = "md.stats"
+  character(20) :: md_heat_flux_file = "md.heatflux"
 
   ! Module variables
   character(20) :: md_thermo_type, md_baro_type
@@ -73,11 +76,13 @@ module md_control
                    md_box_mass, md_ndof_ions, md_omega_t, md_omega_p, &
                    md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
   integer       :: md_n_nhc, md_n_ys, md_n_mts, md_berendsen_equil
-  logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass
+  logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass, flag_nhc, &
+                   flag_heat_flux
   logical       :: flag_extended_system = .false.
   real(double), dimension(3,3), target      :: lattice_vec
   real(double), dimension(:), allocatable   :: md_nhc_mass, md_nhc_cell_mass
   real(double), dimension(:,:), allocatable, target :: ion_velocity
+  real(double), dimension(3), target        :: heat_flux
 
   !!****s* md_control/type_thermostat
   !!  NAME
@@ -350,6 +355,7 @@ contains
     integer                               :: i
 
     flag_extended_system = .true.
+    flag_nhc = .true.
     th%n_nhc = md_n_nhc
     th%n_ys = md_n_ys
     th%n_mts_nhc = md_n_mts

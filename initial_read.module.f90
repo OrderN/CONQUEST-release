@@ -815,7 +815,8 @@ contains
                           md_thermo_type, md_bulkmod_est, md_box_mass, &
                           flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
                           md_calc_xlmass, md_berendsen_equil, &
-                          md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
+                          md_tau_T_equil, md_tau_P_equil, md_p_drag, &
+                          md_t_drag, flag_heat_flux
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, flag_stop_on_empty_bundle
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &
@@ -2015,18 +2016,21 @@ contains
        md_n_mts           = fdf_integer('MD.nMTS', 1)
        flag_thermoDebug   = fdf_boolean('MD.ThermoDebug',.false.)
        md_t_drag          = fdf_double('MD.TDrag', zero)
-       allocate(md_nhc_mass(md_n_nhc)) 
-       allocate(md_nhc_cell_mass(md_n_nhc)) 
-       md_nhc_mass = one
-       md_nhc_cell_mass = one
-       if (fdf_block('MD.NHCMass')) then
-         read(unit=input_array(block_start), fmt=*) md_nhc_mass
+       if (leqi(md_thermo_type, 'nhc')) then
+         allocate(md_nhc_mass(md_n_nhc)) 
+         allocate(md_nhc_cell_mass(md_n_nhc)) 
+         md_nhc_mass = one
+         md_nhc_cell_mass = one
+         if (fdf_block('MD.NHCMass')) then
+           read(unit=input_array(block_start), fmt=*) md_nhc_mass
+         end if
+         call fdf_endblock
+         if (fdf_block('MD.CellNHCMass')) then
+           read(unit=input_array(block_start), fmt=*) md_nhc_cell_mass
+         end if
+         call fdf_endblock
        end if
-       call fdf_endblock
-       if (fdf_block('MD.CellNHCMass')) then
-         read(unit=input_array(block_start), fmt=*) md_nhc_cell_mass
-       end if
-       call fdf_endblock
+       flag_heat_flux = fdf_boolean('MD.HeatFlux', .false.)
 
        ! Barostat
        md_target_press    = fdf_double('MD.TargetPressure', zero)

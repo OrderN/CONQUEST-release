@@ -30,7 +30,6 @@ def strip_comments(line, separator):
       line = line[:i]
   return line.strip()
 
-
 def parse_cq_input(cq_input_file):
   cq_params = {}
   with open(cq_input_file, 'r') as cqip:
@@ -49,8 +48,11 @@ def parse_cq_input(cq_input_file):
     m = re.search(specblock_re, cqip.read())
     specinfo = m.group(1).splitlines()
     for line in specinfo:
-      bits = line.split()
-      cq_params['species'][int(bits[0])] = bits[2]
+      try:
+        index, mass, spec  = line.split()
+      except ValueError:
+        index, mass, spec, ionfile = line.split()
+      cq_params['species'][int(index)] = spec
 
   return cq_params
 
@@ -125,6 +127,10 @@ parser.add_argument('-s', '--stats', action='store', dest='statfile',
                     default='Stats', help='MD statistics file')
 parser.add_argument('--skip', action='store', dest='nskip', default=0,
                     type=int, help='Number of equilibration steps to skip')
+parser.add_argument('--stride', action='store', dest='stride', default=1,
+                    type=int, help='Only analyse every nth step of frames file')
+parser.add_argument('--snap', action='store', dest='snap', default=-1, 
+                    type=int, help='Analyse Frame of a single snapshot')
 parser.add_argument('--stop', action='store', dest='nstop', default=-1, 
                     type=int, help='Number of last frame in analysis')
 parser.add_argument('--equil', action='store', dest='nequil', default=0, 
@@ -298,8 +304,9 @@ if read_frames:
   stress = []
   lat = []
   first_frame = True
+  done = False
   with open(opts.framesfile, 'r') as framesfile:
-    while True:
+    while not done:
       line = framesfile.readline()
       if not line:
         break
@@ -308,21 +315,29 @@ if read_frames:
 
       if re.match(endframe_re, line):
         newframe = True
+        if opts.snap != -1:
+          if n != opts.snap:
+            continue
+          else:
+            done = True
         if n <= opts.nskip:
+          continue
+        elif n%opts.stride != 0:
           continue
         else:
           nframes += 1
         if opts.nstop != -1:
           if n > opts.nstop:
-            break
+            done = True
         sys.stdout.write("Processing frame {}\r".format(n))
         if first_frame:
           first_frame = False
           f1 = Frame(natoms,n)
           f1.parse_frame(buf)
           if opts.rdf:
-            pairdist = Pairdist(natoms, init_config['nspecies'], opts.rdfcut, 
-                                opts.rdfwidth, cq_params['species'],
+            pairdist = Pairdist(natoms, init_config['nspecies'],
+                                float(opts.rdfcut), float(opts.rdfwidth),
+                                cq_params['species'],
                                 init_config['species_count'])
           if opts.vacf:
             c = VACF(natoms, dt, f1)
