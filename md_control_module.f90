@@ -707,7 +707,6 @@ contains
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') "get_berendsen_thermo_sf"
-      write(io_lun,'(4x,"lambda: ",e16.8)') th%lambda
     end if
 
     call stop_backtrace(t=backtrace_timer,who='get_berendsen_thermo_sf', &
@@ -791,8 +790,6 @@ contains
                two*sqrt(exp_dt_tau) * sqrt(temp_fac*(one - exp_dt_tau)) * r1
     th%lambda = sqrt(alpha_sq)
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(4x,"lambda: ",e16.8)') th%lambda
     call stop_backtrace(t=backtrace_timer,who='get_svr_thermo_sf',echo=.true.)
 
   end subroutine get_svr_thermo_sf

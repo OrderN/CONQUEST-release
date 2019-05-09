@@ -1030,8 +1030,8 @@ contains
   !!  NAME
   !!   integrate_pt
   !!  PURPOSE
-  !!   Integrate the thermostat and barostat using the
-  !!    Martyna/Tobias/Tuckerman/Klein splitting of the Liouvillian
+  !!   Integrate the thermostat and barostat depending on the ensemble
+  !!   and thermostat/barostat type
   !!  AUTHOR
   !!   Zamaan Raza
   !!  CREATION DATE
@@ -1081,8 +1081,9 @@ contains
         end if
       case('svr')
         if (present(second_call)) then
-          call thermo%get_svr_thermo_sf(MDtimestep)
           call thermo%v_rescale(velocity)
+        else
+          call thermo%get_svr_thermo_sf(MDtimestep)
         end if
      end select
    case('nph')
