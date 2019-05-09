@@ -502,6 +502,8 @@ contains
 !!   2018/8/11 zamaan
 !!    Moved ionic position and box update to its own subroutine; moved 
 !!    velocity initialisation to init_md
+!!   2019/05/09 zamaan
+!!    Moved velocity array allocation/deallocation to init_md/end_md
 !!  SOURCE
 !!
   subroutine md_run (fixed_potential, vary_mu, total_energy)
@@ -593,11 +595,6 @@ contains
 
     n_stop_qMD = 0
     final_call = 1
-    allocate(ion_velocity(3,ni_in_cell), STAT=stat)
-    if (stat /= 0) &
-         call cq_abort("Error allocating velocity in md_run: ", &
-                       ni_in_cell, stat)
-    call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
     energy0 = zero
     energy1 = zero
     dE = zero
@@ -864,10 +861,6 @@ contains
     end do ! Main MD loop
 
     call end_md(thermo, baro)
-    deallocate(ion_velocity, STAT=stat)
-    if (stat /= 0) call cq_abort("Error deallocating velocity in md_run: ", &
-                                 ni_in_cell, stat)
-    call reg_dealloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
     return
   end subroutine md_run
   !!***
@@ -932,6 +925,14 @@ contains
       lattice_vec(2,2) = rcelly
       lattice_vec(3,3) = rcellz
       call mdl%init_model(md_ensemble, MDtimestep, thermo, baro)
+    end if
+
+    if (.not. allocated(ion_velocity)) then
+      allocate(ion_velocity(3,ni_in_cell), STAT=stat)
+      if (stat /= 0) &
+           call cq_abort("Error allocating velocity in init_md: ", &
+                         ni_in_cell, stat)
+      call reg_alloc_mem(area_moveatoms, 3*ni_in_cell, type_dbl)
     end if
 
     if (.not. flag_MDcontinue) then
@@ -1034,7 +1035,7 @@ contains
     use memory_module,    only: reg_alloc_mem, reg_dealloc_mem, type_dbl
     use md_control,       only: type_thermostat, type_barostat, &
                                 md_nhc_mass, md_nhc_cell_mass, &
-                                flag_nhc
+                                flag_nhc, ion_velocity
 
     ! passed variables
     class(type_thermostat), intent(inout)   :: th
@@ -1053,9 +1054,15 @@ contains
       call reg_dealloc_mem(area_moveatoms, 8*th%n_nhc, type_dbl)
     end if        
 
+    deallocate(ion_velocity, STAT=stat)
+    if (stat /= 0) call cq_abort("Error deallocating velocity in md_run: ", &
+                                 ni_in_cell, stat)
+    call reg_dealloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
     if (flag_atomic_stress) then
       deallocate(atomic_stress, STAT=stat)
-      if (stat /= 0) call cq_abort("atomic_stress: Error dealloc mem")
+      if (stat /= 0) &
+        call cq_abort("Error deallocating atomic_stress in end_md: ", &
+        ni_in_cell, stat)
       call reg_dealloc_mem(area_moveatoms, 3*3*ni_in_cell, type_dbl)
     end if
 
