@@ -465,7 +465,7 @@ contains
     integer                               :: lun, i
 
     if (inode==ionode) then
-      if (iprint_MD > 1) write(io_lun,'("Writing frame to ",a)') filename
+      if (iprint_MD > 1) write(io_lun,'(2x,"Writing frame to ",a)') filename
       call io_assign(lun)
       if (mdl%append) then
         open(unit=lun,file=filename,position='append')
