@@ -973,7 +973,7 @@ contains
       if (leqi(md_baro_type, 'berendsen')) then
         call thermo%init_thermo('none', 'berendsen', MDtimestep, &
                                 md_ndof, md_tau_T, mdl%ion_kinetic_energy)
-        call baro%init_baro('berendsen', MDtimestep, md_ndof, stress, &
+        call baro%init_baro('berendsen', MDtimestep, md_ndof, &
                             ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
       else
         if (nequil > 0) then ! Equilibrate using Berendsen?
@@ -984,13 +984,13 @@ contains
           call thermo%init_thermo('none', 'berendsen', MDtimestep, &
                                   md_ndof, md_tau_T_equil, &
                                   mdl%ion_kinetic_energy)
-          call baro%init_baro('berendsen', MDtimestep, md_ndof, stress, &
+          call baro%init_baro('berendsen', MDtimestep, md_ndof, &
                               ion_velocity, md_tau_P_equil, &
                               mdl%ion_kinetic_energy)
         else
           call thermo%init_thermo('none', md_baro_type, MDtimestep, &
                                   md_ndof, md_tau_T, mdl%ion_kinetic_energy)
-          call baro%init_baro(md_baro_type, MDtimestep, md_ndof, stress, &
+          call baro%init_baro(md_baro_type, MDtimestep, md_ndof, &
                               ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
         end if
       end if
