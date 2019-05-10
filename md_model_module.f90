@@ -325,7 +325,6 @@ contains
     if (inode==ionode .and. iprint_MD > 1) &
       write(io_lun,'(2x,"Writing statistics to ",a)') filename
 
-    if (inode==ionode) write(io_lun,*) mdl%P_int
     ! Convert units if necessary
     P_GPa = mdl%P_int*fac_HaBohr32GPa
 
@@ -415,7 +414,7 @@ contains
     integer                               :: lun, i
 
     if (inode==ionode) then
-      if (iprint_MD > 1) write(io_lun,'("Writing frame to ",a)') filename
+      if (iprint_MD > 1) write(io_lun,'(2x,"Writing frame to ",a)') filename
       call io_assign(lun)
       if (mdl%append) then
         open(unit=lun,file=filename,position='append')
@@ -472,7 +471,7 @@ contains
     integer                               :: lun, i
 
     if (inode==ionode) then
-      if (iprint_MD > 1) write(io_lun,'("Writing heat flux to ",a)') filename
+      if (iprint_MD > 1) write(io_lun,'(2x,"Writing heat flux to ",a)') filename
       call io_assign(lun)
       if (mdl%append) then
         open(unit=lun,file=filename,position='append')
@@ -537,7 +536,7 @@ contains
  
     if (inode==ionode) then
       if (flag_MDdebug .and. iprint_MD > 1) &
-        write(io_lun,*) "Writing TDEP output"
+        write(io_lun,'(2x,a)') "Writing TDEP output"
       call io_assign(lun1)
       open(unit=lun1,file=file_meta,status='replace')
       write(lun1,'(i12,a)') mdl%natoms, " # N atoms"
