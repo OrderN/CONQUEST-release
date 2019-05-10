@@ -39,11 +39,14 @@ contains
 
     implicit none
 
-    integer :: i, j
+    integer :: i, j, ios
     
-    ! Load the Conquest_input file - this will be preserved
+    !
+    ! Load the Conquest_input file into memory
+    !
     call load_input
-    ! Now scan for general parameters
+    !
+    ! Scan for general parameters
     !
     ! IO
     ! 
@@ -63,7 +66,8 @@ contains
             call cq_abort("Too few species in SpeciesLabels: ",&
             1+block_end-block_start,n_species)
        do i=1,n_species
-          read (unit=input_array(block_start+i-1),fmt=*) j, species_label(j)
+          read (unit=input_array(block_start+i-1),fmt=*, iostat=ios) j, species_label(j)
+          if(ios/=0) call line_read_error('SpeciesLabels',ios,i)
        end do
        call fdf_endblock
     else
@@ -79,7 +83,8 @@ contains
     return
   end subroutine read_general_input
 
-  ! Read input for a species
+  ! Read input from Conquest_input for a species
+  ! This routine also reads input and output from Hamann code
   subroutine read_species_input(species)
 
     use numbers
@@ -94,6 +99,7 @@ contains
 
     ! Local variables
     character(len=80) :: input_string
+    integer :: i
     
     if(fdf_block(species_label(species))) then
        !
@@ -127,16 +133,28 @@ contains
        !
        ! Polarisation
        !
-       paos%flag_perturb_polarise = fdf_boolean("Atom.Perturbative_Polarised",.true.)
+       paos%flag_perturb_polarise = fdf_boolean("Atom.Perturbative_Polarised",.false.)
        if(paos%flag_perturb_polarise) then
           ! This is for compatibility but should be false
           flag_use_Vl = fdf_boolean('Atom.UseVl',flag_gen_use_Vl)
           ! Assume that the default polarised level is the highest occupied state
-          paos%polarised_n = fdf_integer("Atom.PolarisedN",val%n(val%n_shells))
-          if(paos%polarised_n==0) call cq_abort("Must specify polarised shell n when using perturbation")
-          paos%polarised_l = fdf_integer("Atom.PolarisedL",val%l(val%n_shells))
-          if(paos%polarised_l==-1) call cq_abort("Must specify polarised shell l when using perturbation")
+          paos%polarised_n = fdf_integer("Atom.PolarisedN",0)  !val%n(val%n_shells))
+          paos%polarised_l = fdf_integer("Atom.PolarisedL",-1) !val%l(val%n_shells))
           paos%polarised_shell = 0
+          !
+          ! Default to outer shell (or previous if outer shell has l=2)
+          !
+          if(paos%polarised_n==0.AND.paos%polarised_l==-1) then
+             ! Outer-most occupied shell
+             i = val%n_shells
+             ! If it is l=2 (or more!) then default to one lower
+             if(val%l(i)>1) i = i-1
+             if(i==0) &
+                  call cq_abort("We have one shell with l=2; I can't polarise this automatically.")
+             paos%polarised_n = val%n(i)
+             paos%polarised_l = val%l(i)
+             paos%polarised_shell = i
+          end if
        end if
        !
        ! Form for zetas: compress or split norm
@@ -194,7 +212,8 @@ contains
           basis_size = small
        else if(leqi(input_string,'medium')) then
           basis_size = medium
-       else if(leqi(input_string(1:4),'full').OR.leqi(input_string(1:4),'none').OR.leqi(input_string(1:5),'large')) then ! Default
+       else if(leqi(input_string(1:4),'full').OR.leqi(input_string(1:4),'none').OR.&
+            leqi(input_string(1:5),'large')) then ! Default
           basis_size = full
        else
           call cq_abort("Error ! Unknown Atom.BasisSize specification: "//input_string(1:7))
@@ -220,9 +239,10 @@ contains
     else
        call cq_abort("Can't find species block for label "//species_label(species))
     end if ! if fdf_block(species(species)) - is this species defined ?!
-    
+    return
   end subroutine read_species_input
 
+  ! Read the basis specification for an atom
   subroutine read_basis_block(basis_block_string)
 
     use numbers
@@ -238,139 +258,81 @@ contains
     integer :: maxl, n_paos
     
     if(fdf_block(basis_block_string)) then
+       !
+       ! Initialise
+       ! 
        call allocate_pao(paos%n_shells)
        paos%width = width
        paos%prefac = prefac
        maxl = 0
        n_paos = 0
+       !
+       ! Set number of shells to read
+       !
        if(paos%flag_perturb_polarise) then
-          do j=1,paos%n_shells-1
-             read (unit=input_array(block_start+j-1),fmt=*) paos%n(j), paos%l(j), paos%nzeta(j)
-             if(paos%nzeta(j)>maxl) maxl = paos%nzeta(j)
-             n_paos = n_paos + paos%nzeta(j)
-             if(paos%n(j)==paos%polarised_n.AND.paos%l(j)==paos%polarised_l) then
-                paos%polarised_shell = j
-                if(iprint>3) write(*,fmt='("Found shell to polarise: ",i2)') j
-             end if
-          end do
-          if(paos%polarised_shell==0) call cq_abort("Can't find shell to polarise corresponding to n, l: ", &
-               paos%polarised_n,paos%polarised_l)
-          if(iprint>2) write(*,fmt='("For polarisation, we will perturb shell with n=",i2," and l=",i2)') &
-               paos%n(paos%polarised_shell), paos%l(paos%polarised_shell)
-          paos%n(paos%n_shells) = paos%n(paos%polarised_shell)
-          paos%l(paos%n_shells) = paos%l(paos%polarised_shell)+1
-          paos%npao(paos%n_shells) = paos%l(paos%polarised_shell)+1
-          do j=paos%n_shells-1,1,-1
-             if(paos%l(j)==paos%l(paos%n_shells)) then ! Semi-core with this l
-                paos%npao(paos%n_shells) = paos%npao(paos%n_shells) + 1
-                write(*,*) 'Found semi-core state ! ',paos%l(j),paos%npao(paos%n_shells)
-                exit
-             end if
-          end do
-          paos%nzeta(paos%n_shells) = paos%nzeta(paos%polarised_shell)
-          n_paos = n_paos + paos%nzeta(paos%n_shells)
+          n_shells_read = paos%n_shells-1
        else
-          do j=1,paos%n_shells
-             read (unit=input_array(block_start+j-1),fmt=*) paos%n(j), paos%l(j), paos%nzeta(j)
-             if(paos%nzeta(j)>maxl) maxl = paos%nzeta(j)
-             n_paos = n_paos + paos%nzeta(j)
-          end do
+          n_shells_read = paos%n_shells
        end if
+       !
+       ! Read zetas for each shell
+       !
+       do j=1,n_shells_read
+          read (unit=input_array(block_start-1+j),fmt=*, iostat=ios) paos%n(j), paos%l(j), paos%nzeta(j)
+          if(ios/=0) call line_read_error(basis_block_string,ios,j)
+          if(paos%nzeta(j)>maxl) maxl = paos%nzeta(j)
+          n_paos = n_paos + paos%nzeta(j)
+       end do
+       if(paos%flag_perturb_polarise) then
+          call set_polarisation
+          paos%nzeta(paos%n_shells) = paos%nzeta(paos%polarised_shell)
+       end if
+       !
+       ! Allocate
+       !
        call allocate_pao_z(maxl)
-       paos%total_paos = n_paos
-       if(paos%flag_cutoff==pao_cutoff_energies.OR.paos%flag_cutoff==pao_cutoff_default) then ! Energies
-          if(paos%flag_perturb_polarise) then
-             do j=1,paos%n_shells-1
-                ios = 0
-                read (unit=input_array(block_start+paos%n_shells-1+j-1),fmt=*, iostat=ios) &
-                     (paos%energy(k,j),k=1,paos%nzeta(j))
-                if(ios<0) then
-                   write(*,fmt='(2x,"Problem with reading atom block ",(a))') basis_block_string
-                   write(*,fmt='(2x,"End of record or end of file; please check block format")')
-                   write(*,fmt='(2x,"Note that perturbed polarisation is selected")')
-                   call cq_abort("Basis block error")
-                endif
-             end do
-             paos%energy(:,paos%n_shells) = paos%energy(:,paos%polarised_shell)
+       !paos%total_paos = n_paos
+       !
+       ! Check for format error
+       !
+       if(block_start-1+2*n_shells_read>block_end) then
+          write(*,fmt='(2x,"Not enough lines in atom block ",(a))') basis_block_string
+          call cq_abort("Basis block error")
+       end if
+       !
+       ! Read radii/energies
+       !
+       do j=1,n_shells_read
+          ios = 0
+          if(paos%flag_cutoff==pao_cutoff_energies) then ! Energies
+             read (unit=input_array(block_start-1+n_shells_read+j),fmt=*, iostat=ios) &
+                  (paos%energy(k,j),k=1,paos%nzeta(j))
+             if(paos%energy(1,j)>two) write(*,fmt='("Warning: energy shift of ",f6.3, &
+                  & "Ha is rather large.  Are these radii ?")') paos%energy(1,j)
           else
-             if(block_start-1+2*paos%n_shells>block_end) then
-                write(*,fmt='(2x,"Not enough lines in atom block ",(a))') basis_block_string
-                write(*,fmt='(2x,"Perturbed polarisation is NOT selected; please check")')
-                call cq_abort("Basis block error")
-             end if
-             do j=1,paos%n_shells
-                ios = 0
-                read (unit=input_array(block_start+paos%n_shells+j-1),fmt=*, iostat=ios) &
-                     (paos%energy(k,j),k=1,paos%nzeta(j))
-                if(ios<0) then
-                   write(*,fmt='(2x,"Problem with reading atom block ",(a))') basis_block_string
-                   write(*,fmt='(2x,"End of record or end of file; please check block format")')
-                   write(*,fmt='(2x,"Note that perturbed polarisation is NOT selected")')
-                   call cq_abort("Basis block error")
-                endif
-             end do
+             read (unit=input_array(block_start-1+n_shells_read+j),fmt=*, iostat=ios) &
+                  (paos%cutoff(k,j),k=1,paos%nzeta(j))
+             if(paos%cutoff(1,j)<two) write(*,fmt='("Warning: radius of ",f6.3, &
+                  & "a0 is rather small.  Are these energies ?")') paos%cutoff(1,j)
           end if
-          do j=1,paos%n_shells
-             if(paos%energy(1,j)>two) &
-                  write(*,fmt='("Warning: energy shift of ",f6.3,"Ha is rather large.  Are these radii ?")') &
-                  paos%energy(1,j)
-          end do
-          ! Scale energies
-          paos%energy(:,:) = paos%energy(:,:) * energy_conv
-       else if(paos%flag_cutoff==pao_cutoff_radii) then
-          if(paos%flag_perturb_polarise) then
-             do j=1,paos%n_shells-1
-                ios = 0
-                read (unit=input_array(block_start+paos%n_shells-1+j-1),fmt=*, iostat=ios) &
-                     (paos%cutoff(k,j),k=1,paos%nzeta(j))
-                if(ios<0) then
-                   write(*,fmt='(2x,"Problem with reading atom block ",(a))') basis_block_string
-                   write(*,fmt='(2x,"End of record or end of file; please check block format")')
-                   write(*,fmt='(2x,"Note that perturbed polarisation is selected")')
-                   call cq_abort("Basis block error")
-                endif
-             end do
-             paos%cutoff(:,paos%n_shells) = paos%cutoff(:,paos%polarised_shell)
-          else
-             if(block_start-1+2*paos%n_shells>block_end) then
-                write(*,fmt='(2x,"Not enough lines in atom block ",(a))') basis_block_string
-                write(*,fmt='(2x,"Perturbed polarisation is NOT selected; please check")')
-                call cq_abort("Basis block error")
-             end if
-             do j=1,paos%n_shells
-                ios = 0
-                read (unit=input_array(block_start+paos%n_shells+j-1),fmt=*) &
-                     (paos%cutoff(k,j),k=1,paos%nzeta(j))
-                if(ios<0) then
-                   write(*,fmt='(2x,"Problem with reading atom block ",(a))') basis_block_string
-                   write(*,fmt='(2x,"End of record or end of file; please check block format")')
-                   write(*,fmt='(2x,"Note that perturbed polarisation is NOT selected")')
-                   call cq_abort("Basis block error")
-                endif
-             end do
-          end if
-          do j=1,paos%n_shells
-             if(paos%cutoff(1,j)<two) &
-                  write(*,fmt='("Warning: radius of ",f6.3,"a0 is rather small.  Are these energies ?")') &
-                  paos%cutoff(1,j)
-          end do
+          if(ios/=0) call line_read_error(basis_block_string,ios,j)
+       end do
+       if(paos%flag_perturb_polarise) then
+          paos%cutoff(:,paos%n_shells) = paos%cutoff(:,paos%polarised_shell)
+          paos%energy(:,paos%n_shells) = paos%energy(:,paos%polarised_shell)
        end if
        !
        ! Check for confinement potentials
        !
-       if(paos%flag_perturb_polarise) then
-          if(1+block_end-block_start>2*paos%n_shells-2) then
-             do j=1,paos%n_shells-1
-                read (unit=input_array(block_start+2*paos%n_shells-2+j-1),fmt=*) &
-                     paos%width(j),paos%prefac(j)
-             end do
-          end if
-       else
-          if(1+block_end-block_start>2*paos%n_shells) then
-             do j=1,paos%n_shells
-                read (unit=input_array(block_start+2*paos%n_shells+j-1),fmt=*) &
-                     paos%width(j),paos%prefac(j)
-             end do
+       if(1+block_end-block_start>2*n_shells_read) then
+          do j=1,n_shells_read
+             read (unit=input_array(block_start-1+2*n_shells_read+j),fmt=*,iostat=ios) &
+                  paos%width(j),paos%prefac(j)
+          if(ios/=0) call line_read_error(basis_block_string,ios,j)
+          end do
+          if(paos%flag_perturb_polarise) then
+             paos%width(paos%n_shells) = paos%width(paos%polarised_shell)
+             paos%prefac(paos%n_shells) = paos%prefac(paos%polarised_shell)
           end if
        end if
        !
@@ -387,13 +349,77 @@ contains
              call lsort(paos%energy(:,j),paos%nzeta(j))
           end do
        end if
+       !
        ! Close block
+       !
        call fdf_endblock
     else
        call cq_abort("Can't find species basis block "//basis_block_string)
     end if
     return
   end subroutine read_basis_block
+
+  ! Find inner shell and set npao
+  subroutine set_polarisation
+
+    use pseudo_atom_info, ONLY: paos, val
+    
+    implicit none
+
+    ! Local variables
+    integer :: i
+
+    !
+    ! Locate perturbed shell index, if necessary
+    !
+    if(paos%polarised_shell==0) then
+       do i=val%n_shells,1,-1
+          if(val%n(i)==paos%polarised_n.AND.val%l(i)==paos%polarised_l) then
+             paos%polarised_shell=i
+             write(*,fmt='(4x,"Polarising shell ",i3)') i
+             exit
+          end if
+       end do
+       if(paos%polarised_shell==0) call cq_abort("Can't find shell to polarise ",&
+            paos%n(paos%polarised_shell), paos%l(paos%polarised_shell))
+    end if
+    ! Set n, l
+    paos%l(paos%n_shells) = paos%l(paos%polarised_shell)+1
+    paos%n(paos%n_shells) = max(paos%n(paos%polarised_shell),paos%l(paos%n_shells)+1)
+    if(iprint>2) write(*,fmt='("For polarisation, we will perturb shell with n=",i2," and l=",i2)') &
+         paos%n(paos%polarised_shell), paos%l(paos%polarised_shell)
+    !
+    ! Check whether there is an inner shell
+    !
+    if(val%inner(paos%polarised_shell)>0) &
+         call cq_abort("Can't use perturbative polarisation on shell with nodes: ", &
+         paos%polarised_n, paos%polarised_l)
+    !
+    ! Set npao for polarisation - use same as the shell being perturbed
+    !
+    paos%npao(paos%n_shells) = val%npao(paos%polarised_shell)
+    return
+  end subroutine set_polarisation
+  
+  ! Error reading line
+  subroutine line_read_error(basis_block_string,ios,j)
+
+    use GenComms, only: cq_abort
+
+    implicit none
+    
+    character(len=*) :: basis_block_string
+    integer :: ios, j
+    
+    write(*,fmt='(2x,"Problem with reading atom block ",(a))') basis_block_string
+    write(*,fmt='(2x,"Problem with shell ",i2)') j
+    if(ios<0) then
+       write(*,fmt='(2x,"End of record or end of file; please check block format")')
+       call cq_abort("Basis block error")
+    else if(ios>0) then
+       call cq_abort("System-dependent read error: ",ios)
+    endif
+  end subroutine line_read_error
   
   ! Read semi-local potentials output by a DRB patch to Hamann's code
   ! Now read KB potentials
@@ -413,25 +439,39 @@ contains
 
     ! Local variables
     integer :: ios, lun, ngrid, ell, en, i, j, n_occ, n_read
-    integer :: n_shells, n_nl_proj, this_l
+    integer :: n_shells, n_nl_proj, this_l, number_of_this_l
     integer, dimension(0:4) :: count_func
+    integer, dimension(3,0:4) :: index_count_func
     character(len=2) :: char_in
     character(len=80) :: line
     logical :: flag_core_done = .false.
     real(double) :: dummy, dummy2
 
-    ! open file
+    !
+    ! Zero arrays
+    !
+    count_func = 0
+    index_count_func = 0
+    !
+    ! Open file
+    !
     call io_assign(lun)
     open(unit=lun, file=vkb_file_name, status='old', iostat=ios)
     if ( ios > 0 ) call cq_abort('Error opening pseudopotential file: '//vkb_file_name)
-    ! Allocate space
+    !
+    ! Find number of shells and allocate space
+    !
     read(lun,*) char_in,n_shells
     if(iprint>4) write(*,fmt='("Reading Hamann output, with ",i3," valence shells")') n_shells
     call allocate_val(n_shells)
+    !
     ! Read in table of shells, energies and occupancies and test for ordering
+    !
     do i = 1,n_shells
        read(lun,*) char_in,val%n(i),val%l(i),val%occ(i),val%en_ps(i)
-       ! Simplistic check for correct ordering - I think that this is all that's needed though
+       !
+       ! Ensure that shells are ordered; relatively simplistic but effective
+       !
        if(i>1) then
           do j=i,2,-1
              if(val%en_ps(j)<val%en_ps(j-1).AND.val%occ(j)>RD_ERR) then ! Only re-order occupied
@@ -451,47 +491,40 @@ contains
           end do
        end if
     end do
-    ! Check for semi-core states, count number of occupied shells and assign pseudo-n value (for nodes)
-    count_func = 0 ! Count how many functions per l channel
+    ! 
     n_occ = 0
     if(iprint>3) then
        write(*,fmt='("Valence shells from pseudopotential calculation")')
        write(*,fmt='("  n  l    occ    energy")')
     end if
+    !
+    ! Check for inner shells and assign pseudo-n value (for nodes)
+    !
     do i = 1,n_shells
-       if(iprint>3) write(*,fmt='(2i3,f7.2,f10.4)') &
-            val%n(i),val%l(i),val%occ(i),val%en_ps(i)
+       if(iprint>3) write(*,fmt='(2i3,f7.2,f10.4)') val%n(i),val%l(i),val%occ(i),val%en_ps(i)
+       ! Check for inner shells: count shells with this l and store
        this_l = val%l(i)
-       val%npao(i) = this_l+1
-       count_func(this_l) = count_func(this_l) + 1
-       val%has_semicore(i) = .false.
-       val%semicore(i) = 0
-       ! Do we have semi-core states ? 
-       if(count_func(this_l)>1) then
-          ! Find the corresponding inner shell
-          do j=1,i-1
-             if(val%l(j)==this_l) then
-                val%semicore(j) = 1
-                val%npao(j) = val%l(j)+1
-                val%npao(i) = this_l+2
-                val%has_semicore(i) = .true.
-                val%inner(i) = j
-                exit
-             end if
-          end do
-       else if(val%en_ps(i)<energy_semicore) then 
-          val%semicore(i) = 1
-       end if
+       number_of_this_l = count_func(this_l) + 1
+       count_func(this_l) = number_of_this_l
+       index_count_func(number_of_this_l, this_l) = i
+       if(number_of_this_l>1) val%inner(i) = index_count_func(number_of_this_l-1,this_l)
+       ! Set n for PAO (sets number of nodes)
+       val%npao(i) = this_l + number_of_this_l 
+       ! Check for semi-core state
+       if(val%en_ps(i)<energy_semicore) val%semicore(i) = 1
+       ! Count occupied states
        if(val%occ(i)>RD_ERR) n_occ = n_occ + 1
     end do
     if(iprint>3) write(*,fmt='(i2," valence shells, with ",i2," occupied")') n_shells, n_occ
     val%n_occ = n_occ
-    if(paos%n_shells -2 >= val%n_occ.AND.paos%flag_cutoff == pao_cutoff_energies) &
-         write(*,fmt='("Warning: cutoffs for unoccupied orbitals may not be reliable. Consider setting radii manually.")')
+    !
     ! Read grid, charge, partial core, local potential, semilocal potentials
+    !
     read(lun,*) char_in, ngrid
     call allocate_vkb(ngrid,i_species)
+    !
     ! Read and store first block: local data
+    !
     if(pseudo(i_species)%flag_pcc) then
        ! Read logarithmic mesh, atomic charge, partial core charge, local potential
        do i=1,ngrid
@@ -500,38 +533,43 @@ contains
                (local_and_vkb%semilocal_potential(i,j),j=0,pseudo(i_species)%lmax)
        end do
     else
-       ! Read logarithmic mesh, atomic charge, local potential - the core charge will be zero, so read as dummy
+       ! Read logarithmic mesh, atomic charge, dummy for core, local potential 
        do i=1,ngrid
           read(lun,*) local_and_vkb%rr(i),local_and_vkb%charge(i), &
                dummy, local_and_vkb%local(i), &
                (local_and_vkb%semilocal_potential(i,j),j=0,pseudo(i_species)%lmax)
        end do
     end if
-    ! The VKB projectors are shorter-ranged than the full mesh, so store this size
+    !
+    ! Read number of VKB projectors
+    !
     read(lun,*) line!char_in,i,j,ios ! We could this as a check on the number of projectors
-    ! Read VKB projector coefficients
     if(iprint>4) write(*,fmt='("VKB projector energies"/,"  l  energies")')
     n_read = 0
     do ell=0,pseudo(i_species)%lmax
        read(lun,*) char_in,j,pseudo(i_species)%pjnl_ekb(n_read+1:n_read+local_and_vkb%n_proj(ell))
-       if(iprint>4) write(*,fmt='(i3,4f10.5)') ell, pseudo(i_species)%pjnl_ekb(n_read+1:n_read+local_and_vkb%n_proj(ell))
+       if(iprint>4) write(*,fmt='(i3,4f10.5)') ell, &
+            pseudo(i_species)%pjnl_ekb(n_read+1:n_read+local_and_vkb%n_proj(ell))
        n_read = n_read+local_and_vkb%n_proj(ell)
     end do
     read(lun,*) char_in, ngrid
     local_and_vkb%r_vkb = local_and_vkb%rr(ngrid)
     local_and_vkb%ngrid_vkb = ngrid
-    ! And read VKB projectors
+    !
+    ! Read VKB projectors
+    !
     do i=1,ngrid
-       read(lun,*) ((local_and_vkb%projector(i,j,ell),j=1,local_and_vkb%n_proj(ell)),ell=0,pseudo(i_species)%lmax)
+       read(lun,*) ((local_and_vkb%projector(i,j,ell), &
+            j=1,local_and_vkb%n_proj(ell)), ell=0,pseudo(i_species)%lmax)
     end do
-    if(pseudo_type==siesta) then
-       !write(*,*) '# Local_And_Vkb ps type siesta; scaling charge by 1/r2 and potential by 0.5'
-       do i=1,ngrid
-          local_and_vkb%charge(i) = local_and_vkb%charge(i)/ &
-               (local_and_vkb%rr(i)*local_and_vkb%rr(i))
-          local_and_vkb%local(i) = half*local_and_vkb%local(i)
-       end do
-    end if
+    !if(pseudo_type==siesta) then
+    !   !write(*,*) '# Local_And_Vkb ps type siesta; scaling charge by 1/r2 and potential by 0.5'
+    !   do i=1,ngrid
+    !      local_and_vkb%charge(i) = local_and_vkb%charge(i)/ &
+    !           (local_and_vkb%rr(i)*local_and_vkb%rr(i))
+    !      local_and_vkb%local(i) = half*local_and_vkb%local(i)
+    !   end do
+    !end if
     call io_close(lun)
     return
   end subroutine read_vkb

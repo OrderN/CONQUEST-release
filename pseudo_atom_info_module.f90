@@ -43,7 +43,6 @@ module pseudo_atom_info
      integer, pointer, dimension(:) :: n, l, semicore, nkb, npao, inner
      integer :: n_shells, n_occ, functional
      real(double), pointer, dimension(:) :: occ, en_ps, en_pao
-     logical, pointer, dimension(:) :: has_semicore
   end type valence_info
 
   type(pao) :: paos
@@ -139,7 +138,7 @@ contains
         val%n_shells = n_shells
     allocate(val%n(n_shells),val%npao(n_shells),val%l(n_shells), &
          val%occ(n_shells),val%semicore(n_shells),val%en_ps(n_shells), &
-         val%en_pao(n_shells),val%has_semicore(n_shells),val%inner(n_shells))
+         val%en_pao(n_shells),val%inner(n_shells))
     val%n = 0
     val%npao = 0
     val%l = 0
@@ -156,7 +155,7 @@ contains
     implicit none
 
     deallocate(val%n,val%npao,val%l, val%occ,val%semicore,val%en_ps, &
-         val%en_pao,val%has_semicore,val%inner)
+         val%en_pao,val%inner)
     return
   end subroutine deallocate_val
 
