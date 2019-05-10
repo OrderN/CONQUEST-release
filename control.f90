@@ -668,6 +668,9 @@ contains
        call read_fire(fire_N, fire_N2, fire_P0, MDtimestep, fire_alpha)
     endif
 
+    if (flag_heat_flux) &
+      call get_heat_flux(atomic_stress, ion_velocity, heat_flux)
+
     if (.not. flag_MDcontinue) &
       call write_md_data(i_first-1, thermo, baro, mdl, nequil)
 
@@ -892,7 +895,8 @@ contains
     use global_module,  only: rcellx, rcelly, rcellz, temp_ion, ni_in_cell, &
                               flag_MDcontinue, flag_read_velocity, &
                               flag_MDdebug, iprint_MD, flag_atomic_stress, &
-                              atomic_stress, area_moveatoms
+                              atomic_stress, area_moveatoms, &
+                              flag_full_stress
     use move_atoms,     only: init_velocity
     use md_control,     only: type_thermostat, type_barostat, md_tau_T, &
                               md_tau_P, md_n_nhc, md_n_ys, md_n_mts, &
@@ -1003,12 +1007,21 @@ contains
 
     ! initialise heat flux calculation
     if (flag_heat_flux) then
-      flag_atomic_stress = .true.
+      if (.not. flag_full_stress) then
+        flag_full_stress = .true.
+        write(io_lun,'(2x,a)') &
+          "WARNING: setting AtomMove.FullStress T for heat flux calculation"
+      end if
+      if (.not. flag_atomic_stress) then
+        flag_atomic_stress = .true.
+        write(io_lun,'(2x,a)') &
+          "WARNING: setting AtomMove.AtomicStress T for heat flux calculation"
+      end if
       allocate(atomic_stress(3,3,ni_in_cell), STAT=stat)
+      atomic_stress = zero
       if (stat /= 0) &
         call cq_abort("Error allocating atomic_stress: ", ni_in_cell)
       call reg_alloc_mem(area_moveatoms, 3*3*ni_in_cell, type_dbl)
-      call get_heat_flux(atomic_stress, ion_velocity, heat_flux)
     end if
 
     if (flag_MDcontinue) call read_md_checkpoint(thermo, baro)
