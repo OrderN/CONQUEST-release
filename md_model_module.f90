@@ -12,7 +12,7 @@
 !!    Modified dump_stats to print correct header and columns when using
 !!    Berendsen equilibration in NVT ensemble
 !!  2019/05/09 zmaaan
-!!    New dump_heat_flux suboroutine to save heat flux to file for thermal
+!!    New dump_heat_flux subroutine to save heat flux to file for thermal
 !!    conductivity calculations
 !!
 !!  SOURCE

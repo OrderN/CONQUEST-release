@@ -922,15 +922,6 @@ contains
     if (inode==ionode .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "Welcome to init_md"
 
-    if (.not. present(second_call)) then
-    ! Initialise the model only once per run
-      lattice_vec = zero
-      lattice_vec(1,1) = rcellx
-      lattice_vec(2,2) = rcelly
-      lattice_vec(3,3) = rcellz
-      call mdl%init_model(md_ensemble, MDtimestep, thermo, baro)
-    end if
-
     if (.not. allocated(ion_velocity)) then
       allocate(ion_velocity(3,ni_in_cell), STAT=stat)
       if (stat /= 0) &
@@ -953,6 +944,15 @@ contains
         end if
       end if
       call gcopy(ion_velocity, 3, ni_in_cell)
+    end if
+
+    if (.not. present(second_call)) then
+    ! Initialise the model only once per run
+      lattice_vec = zero
+      lattice_vec(1,1) = rcellx
+      lattice_vec(2,2) = rcelly
+      lattice_vec(3,3) = rcellz
+      call mdl%init_model(md_ensemble, MDtimestep, thermo, baro)
     end if
 
     select case(md_ensemble)
