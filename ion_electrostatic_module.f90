@@ -963,7 +963,8 @@ contains
     use global_module,  ONLY: id_glob, iprint_gen, species_glob, ni_in_cell, &
                               area_general, IPRINT_TIME_THRES3, &
                               flag_full_stress, flag_stress, &
-                              flag_atomic_stress, atomic_stress
+                              flag_atomic_stress, atomic_stress, &
+                              non_atomic_stress
     use group_module,   ONLY: parts
     use maxima_module,  ONLY: maxatomsproc
     use numbers
@@ -1375,6 +1376,13 @@ contains
               ewald_intra_stress(dir1,dir2) + ewald_inter_stress(dir1,dir2) + &
               ewald_recip_stress(dir1,dir2) + &
               ewald_gaussian_self_stress(dir1,dir2)
+            if (flag_atomic_stress) then
+              ! contributions already gsummed? - zamaan
+              non_atomic_stress(dir1,dir2) = &
+                non_atomic_stress(dir1,dir2) + &
+                ewald_recip_stress(dir1,dir2) + &
+                ewald_gaussian_self_stress(dir1,dir2)
+            end if
           end do
       end do
     end if

@@ -725,7 +725,7 @@ contains
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
                              flag_opt_cell, cell_constraint_flag, cell_en_tol, &
                              flag_stress, flag_full_stress, &
-                             flag_atomic_stress
+                             flag_atomic_stress, flag_heat_flux
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -816,7 +816,7 @@ contains
                           flag_write_xsf, md_cell_nhc, md_nhc_cell_mass, &
                           md_calc_xlmass, md_berendsen_equil, &
                           md_tau_T_equil, md_tau_P_equil, md_p_drag, &
-                          md_t_drag, flag_heat_flux
+                          md_t_drag
     use md_model,   only: md_tdep
     use move_atoms,         only: threshold_resetCD, flag_stop_on_empty_bundle
     use Integrators, only: fire_alpha0, fire_f_inc, fire_f_dec, fire_f_alpha, fire_N_min, &

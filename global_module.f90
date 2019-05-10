@@ -186,12 +186,14 @@ module global_module
   logical :: flag_stress   ! Compute the stress tensor?
   logical :: flag_full_stress ! Compute the off-diagonal elements?
   logical :: flag_atomic_stress ! Compute atomic contributions to stress?
+  logical :: flag_heat_flux ! Compute heat flux during MD?
 
   ! Atomic contributions to total stress
   ! I would rather not put this in global module, but it is required by enough
   ! different force computing modules that it's impossible to put it in a more
   ! sensible file without circular dependencies - zamaan
   real(double), dimension(:,:,:), allocatable :: atomic_stress
+  real(double), dimension(3,3)                :: non_atomic_stress
 
   logical :: flag_opt_cell ! optimize the simulation cell?
   ! specify sim cell dims/ratios of dims to be held constant.

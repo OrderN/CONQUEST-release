@@ -243,7 +243,8 @@ contains
                                       flag_analytic_blip_int, &
                                       flag_neutral_atom, flag_stress, &
                                       rcellx, rcelly, rcellz, &
-                                      flag_atomic_stress
+                                      flag_atomic_stress, non_atomic_stress, &
+                                      flag_heat_flux
     use density_module,         only: get_electronic_density, density, &
                                       build_Becke_weight_forces
     use functions_on_grid,      only: atomfns, H_on_atomfns
@@ -329,6 +330,15 @@ contains
     end if
     allocate(NA_force(3,ni_in_cell))
     NA_force = zero
+    if (flag_atomic_stress) then
+      if (.not. flag_heat_flux) then
+        allocate(atomic_stress(3,3,ni_in_cell), STAT=stat)
+        atomic_stress = zero
+        if (stat /= 0) &
+          call cq_abort("Error allocating atomic_stress: ", ni_in_cell)
+        call reg_alloc_mem(area_moveatoms, 3*3*ni_in_cell, type_dbl)
+      end if
+    end if
     call stop_timer (tmr_std_allocation)
     ! get total density
     density_total = zero
@@ -349,6 +359,7 @@ contains
     ! Zero stresses
     stress  = zero
     atomic_stress = zero
+    non_atomic_stress = zero
     KE_stress = zero
     SP_stress = zero
     PP_stress = zero
@@ -594,8 +605,15 @@ contains
                  XC_stress(dir1,dir2) + screened_ion_stress(dir1,dir2) + &
                  Hartree_stress(dir1,dir2) + loc_HF_stress(dir1,dir2) +  &
                  pcc_stress(dir1,dir2) + nonSCF_stress(dir1,dir2)
-               if(flag_neutral_atom_projector) stress(dir1,dir2) = &
-                  stress(dir1,dir2) + NA_stress(dir1,dir2)
+               if (flag_atomic_stress) then
+                 non_atomic_stress(dir1,dir2) = &
+                   non_atomic_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
+                   XC_stress(dir1,dir2) + Hartree_stress(dir1,dir2)
+               end if
+               if (flag_neutral_atom_projector) then
+                 stress(dir1,dir2) = stress(dir1,dir2) + NA_stress(dir1,dir2)
+               end if
+
             end do
          end do
       else
@@ -608,9 +626,16 @@ contains
                  Hartree_stress(dir1,dir2) + loc_HF_stress(dir1,dir2) + &
                  loc_G_stress(dir1,dir2) + pcc_stress(dir1,dir2) + &
                  nonSCF_stress(dir1,dir2)
+               if (flag_atomic_stress) then
+                 non_atomic_stress(dir1,dir2) = &
+                   non_atomic_stress(dir1,dir2) + GPV_stress(dir1,dir2) + &
+                   XC_stress(dir1,dir2) + Hartree_stress(dir1,dir2) + &
+                   loc_G_stress(dir1,dir2)
+               end if
             end do
          end do
       end if
+
       if (inode == ionode) then       
          write (io_lun,fmt='(/4x,"                  ",3a15)') "X","Y","Z"
          write(io_lun,fmt='(4x,"Stress contributions:")')
@@ -638,6 +663,7 @@ contains
       ! Factor of 1e21 comes from Ang to m (1e30) and Pa to GPa (1e-9) 
       scale = -(HaToeV*eVToJ*1e21_double)/(volume*BohrToAng*BohrToAng*BohrToAng)
       call print_stress("Total pressure:   ", stress*scale, 0)
+      if (flag_atomic_stress .and. iprint_MD > 2) call check_atomic_stress
     end if
 
     call my_barrier()
@@ -663,9 +689,11 @@ contains
     if (stat /= 0) call cq_abort("force: Error dealloc mem")
     call reg_dealloc_mem(area_moveatoms, maxngrid, type_dbl)
     if (flag_atomic_stress) then
-      deallocate(atomic_stress, STAT=stat)
-      if (stat /= 0) call cq_abort("atomic_stress: Error dealloc mem")
-      call reg_dealloc_mem(area_moveatoms, 3*3*ni_in_cell, type_dbl)
+      if (.not. flag_heat_flux) then
+        deallocate(atomic_stress, STAT=stat)
+        if (stat /= 0) call cq_abort("atomic_stress: Error dealloc mem")
+        call reg_dealloc_mem(area_moveatoms, 3*3*ni_in_cell, type_dbl)
+      end if
     end if
     call stop_timer(tmr_std_allocation)
 
@@ -4253,6 +4281,51 @@ subroutine print_stress(label, str_mat, print_level)
     end if
   end if
 end subroutine print_stress
+!!*****
+
+!!****f* force_module/check_atomic_stress *
+!!
+!!  NAME 
+!!   check_atomic_stress
+!!  PURPOSE
+!!   Sanity check the atomic stress contributions
+!!  AUTHOR
+!!   Zamaan Raza
+!!  CREATION DATE
+!!   28 March 2019
+!!  MODIFICATION HISTORY
+!!  
+!!  SOURCE
+!!  
+subroutine check_atomic_stress
+
+  use GenComms,       only: inode, ionode
+  use global_module,  only: iprint_MD, flag_full_stress, atomic_stress, &
+                            non_atomic_stress
+
+  ! Passed variables
+
+  ! local variables
+  real(double), dimension(3,3) :: total_atomic, total
+  integer :: dir1, dir2
+
+  do dir1=1,3
+    do dir2=1,3
+      total_atomic(dir1,dir2) = sum(atomic_stress(dir1,dir2,:))
+      total(dir1,dir2)  = total_atomic(dir1,dir2) + &
+                          non_atomic_stress(dir1,dir2)
+    end do
+  end do
+
+  if (inode==ionode) then
+    write(io_lun,'(2x,a)') &
+      "Checking sum of atomic and non-atomic contributions to stress:"
+  end if
+  call print_stress("Atomic total:     ", total_atomic, 3)
+  call print_stress("Non-atomic total: ", non_atomic_stress, 3)
+  call print_stress("Total:            ", total, 3)
+
+end subroutine check_atomic_stress
 !!*****
 
 end module force_module

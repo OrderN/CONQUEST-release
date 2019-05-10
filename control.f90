@@ -522,7 +522,8 @@ contains
                               nspin, flag_thermoDebug, flag_baroDebug,&
                               flag_move_atom,rcellx, rcelly, rcellz,  &
                               flag_Multisite,flag_SFcoeffReuse, &
-                              atom_coord, flag_quench_MD, atomic_stress
+                              atom_coord, flag_quench_MD, atomic_stress, &
+                              flag_heat_flux
     use group_module,   only: parts
     use minimise,       only: get_E_and_F
     use move_atoms,     only: velocityVerlet, updateIndices,           &
@@ -555,7 +556,7 @@ contains
                               md_n_ys, md_n_mts, ion_velocity, lattice_vec, &
                               md_baro_type, md_target_press, md_ndof_ions, &
                               md_berendsen_equil, md_tau_T, md_tau_P, &
-                              md_thermo_type, flag_heat_flux, heat_flux
+                              md_thermo_type, heat_flux
 
     use atoms,          only: distribute_atoms,deallocate_distribute_atom
     use global_module,  only: atom_coord_diff, iprint_MD, area_moveatoms
@@ -896,7 +897,7 @@ contains
                               flag_MDcontinue, flag_read_velocity, &
                               flag_MDdebug, iprint_MD, flag_atomic_stress, &
                               atomic_stress, area_moveatoms, &
-                              flag_full_stress
+                              flag_full_stress, flag_heat_flux
     use move_atoms,     only: init_velocity
     use md_control,     only: type_thermostat, type_barostat, md_tau_T, &
                               md_tau_P, md_n_nhc, md_n_ys, md_n_mts, &
@@ -904,8 +905,7 @@ contains
                               md_thermo_type, md_baro_type, md_target_press, &
                               md_ndof_ions, md_tau_P_equil, md_tau_T_equil, &
                               write_md_checkpoint, read_md_checkpoint, &
-                              flag_extended_system, flag_heat_flux, &
-                              heat_flux
+                              flag_extended_system, heat_flux
 
     ! passed variableariables
     type(type_barostat), intent(inout)    :: baro
@@ -1276,8 +1276,7 @@ subroutine get_heat_flux(atomic_stress, velocity, heat_flux)
 
   use numbers
   use GenComms,      only: inode, ionode
-  use global_module, only: iprint_MD, ni_in_cell
-  use md_control,    only: flag_heat_flux
+  use global_module, only: iprint_MD, ni_in_cell, flag_heat_flux
 
   ! Passed variables
   real(double), dimension(3,3,ni_in_cell), intent(in)   :: atomic_stress
@@ -1313,14 +1312,14 @@ subroutine write_md_data(iter, thermo, baro, mdl, nequil)
 
   use GenComms,      only: inode, ionode
   use io_module,     only: write_xsf
-  use global_module, only: iprint_MD, flag_baroDebug, flag_thermoDebug
+  use global_module, only: iprint_MD, flag_baroDebug, flag_thermoDebug, &
+                           flag_heat_flux
   use md_model,      only: type_md_model, md_tdep
   use md_control,    only: type_barostat, type_thermostat, &
                            write_md_checkpoint, flag_write_xsf, &
                            md_thermo_file, md_baro_file, &
                            md_trajectory_file, md_frames_file, &
-                           md_stats_file, md_heat_flux_file, &
-                           flag_heat_flux
+                           md_stats_file, md_heat_flux_file
 
   ! Passed variables
   type(type_barostat), intent(inout)    :: baro

@@ -76,8 +76,7 @@ module md_control
                    md_box_mass, md_ndof_ions, md_omega_t, md_omega_p, &
                    md_tau_T_equil, md_tau_P_equil, md_p_drag, md_t_drag
   integer       :: md_n_nhc, md_n_ys, md_n_mts, md_berendsen_equil
-  logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass, flag_nhc, &
-                   flag_heat_flux
+  logical       :: flag_write_xsf, md_cell_nhc, md_calc_xlmass, flag_nhc
   logical       :: flag_extended_system = .false.
   real(double), dimension(3,3), target      :: lattice_vec
   real(double), dimension(:), allocatable   :: md_nhc_mass, md_nhc_cell_mass
