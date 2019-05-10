@@ -28,7 +28,8 @@ module md_model
                               y_atom_cell, z_atom_cell, rcellx, rcelly, rcellz
   use species_module,   only: species
   use md_control,       only: md_n_nhc, ion_velocity, type_thermostat, &
-                              type_barostat, lattice_vec, flag_extended_system
+                              type_barostat, lattice_vec, &
+                              flag_extended_system, heat_flux
 
   implicit none
 
@@ -82,7 +83,7 @@ module md_model
     real(double), pointer                   :: P_ext    ! target pressure
     real(double), pointer                   :: PV
     real(double)                            :: enthalpy
-    real(double), pointer, dimension(:)     :: heat_flux
+    real(double), pointer, dimension(:)     :: J_v
 
     ! Thermostat
     character(20), pointer                  :: thermo_type
@@ -172,6 +173,7 @@ contains
     mdl%atom_velocity => ion_velocity
     mdl%lattice_vec   => lattice_vec
     mdl%stress        => stress
+    mdl%J_v           => heat_flux
 
     ! Thermostat
     mdl%T_int         => thermo%T_int
@@ -478,7 +480,7 @@ contains
         open(unit=lun,file=filename,status='replace')
       end if
 
-      write(lun,'(3f12.6)') mdl%heat_flux
+      write(lun,'(3f12.6)') mdl%J_v
     end if
 
     call io_close(lun)
