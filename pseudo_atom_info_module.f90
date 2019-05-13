@@ -27,7 +27,7 @@ module pseudo_atom_info
   type pao
      integer :: n_shells, lmax
      integer :: total_paos
-     integer :: polarised_l, polarised_n, polarised_shell, inner_shell
+     integer :: polarised_l, polarised_n, polarised_shell
      integer :: flag_cutoff ! 1 for radii, 2 for energies, 3 for default (mix of all)
      logical :: flag_perturb_polarise
      integer :: flag_zetas ! 1 for split-norm, 2 for compressed energies
@@ -35,7 +35,6 @@ module pseudo_atom_info
      real(double), pointer, dimension(:,:) :: cutoff, energy
      type(radial_table), pointer, dimension(:,:) :: psi, psi_reg
      type(radial_table), pointer, dimension(:) :: pol, pol_reg
-     logical, pointer, dimension(:) :: has_semicore
      real(double), pointer, dimension(:) :: width, prefac ! Parameters for exponential confinement
   end type pao
 
@@ -76,7 +75,7 @@ contains
     paos%n_shells = n_shells
     allocate(paos%nzeta(n_shells),paos%l(n_shells), &
             paos%n(n_shells),paos%npao(n_shells), &
-            paos%has_semicore(n_shells),paos%inner(n_shells),&
+            paos%inner(n_shells),&
             paos%width(n_shells),paos%prefac(n_shells),paos%l_no(n_shells))
     paos%n = 0
     paos%npao = 0
@@ -86,6 +85,7 @@ contains
     paos%lmax = 0
     paos%width = one
     paos%prefac = zero
+    paos%inner = 0
     return
   end subroutine allocate_pao
 
@@ -122,7 +122,7 @@ contains
     deallocate(paos%cutoff,paos%energy,paos%psi,paos%psi_reg)
     ! Deallocate single terms
     deallocate(paos%nzeta,paos%l, paos%n,paos%npao, &
-            paos%has_semicore,paos%inner, paos%width,paos%prefac)
+            paos%inner, paos%width,paos%prefac)
     paos%n_shells = 0
     return
   end subroutine deallocate_pao

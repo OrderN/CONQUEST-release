@@ -723,16 +723,22 @@ contains
     integer :: i_species
 
     ! Local variabls
-    integer :: j, i_highest_occ
+    integer :: j, i_highest_occ, this_l, number_of_this_l
     integer :: i_shell, ell, en, n_paos, n_shells, ell_hocc, max_zeta, n_pol_zeta
     integer, dimension(0:4) :: count_func
     logical :: flag_confine
 
     flag_confine = .false.
-    ! If we are using defaults, then set up the structures
+    write(*,fmt='(/"Species ",i2," is ",a2)') i_species, pte(pseudo(i_species)%z)
+    !
+    ! Defaults
+    !
     if(flag_default_cutoffs) then 
        write(*,fmt='(/"Default basis chosen"/)')
-       ! Set maxima based on chosen size
+       write(*,fmt='("  n  l  nodes  zetas")')
+       !
+       ! Set numbers of functions
+       !
        if(basis_size==minimal) then ! One zeta for valence
           max_zeta = 1
        else if(basis_size==small) then ! As above plus polarisation
@@ -745,161 +751,86 @@ contains
           max_zeta = 3
           n_pol_zeta = 3
        end if
+       !
+       ! Allocate space
+       !
        write(*,fmt='(/"Species ",i2," is ",a2)') i_species, pte(pseudo(i_species)%z)
        count_func = 0
        write(*,fmt='("  n  l  nodes  zetas")')
-       if(basis_size==minimal) then
-          n_shells = val%n_occ ! Occupied only
-       else
-          n_shells = val%n_occ + 1 ! Occupied and polarisation
-       end if
        call allocate_pao(n_shells)
        call allocate_pao_z(max_zeta)
        paos%width = width
        paos%prefac = prefac
-       n_paos = 0
-       paos%inner_shell = 0
-       paos%inner = 0
-       paos%has_semicore(:) = .false.
-       do i_shell = 1,n_shells
-          if(i_shell<=val%n_occ) then ! We have n/l
-             paos%n(i_shell) = val%n(i_shell)
-             paos%l(i_shell) = val%l(i_shell)
-             paos%npao(i_shell) = val%npao(i_shell)
-             if(val%semicore(i_shell)>0) then
-                paos%nzeta(i_shell) = 1 
-                n_paos = n_paos + 1
-             else
-                paos%nzeta(i_shell) = max_zeta 
-                n_paos = n_paos + max_zeta
-             end if
-             do j=i_shell-1,1,-1
-                if(paos%l(j)==paos%l(i_shell)) then ! Semi-core with this l
-                   paos%has_semicore(i_shell) = .true.
-                   paos%inner(i_shell) = j
-                end if
-             end do
-          else ! Polarisation shell, defined as not being within the occupied valence states
+       !
+       ! Set information about PAOs: valence
+       !
+       do i_shell = 1,val%n_occ          
+          this_l = val%l(i_shell)
+          number_of_this_l = count_func(this_l) + 1
+          count_func(this_l) = number_of_this_l
+          paos%n(i_shell) = val%n(i_shell)
+          paos%l(i_shell) = this_l
+          paos%npao(i_shell) = val%npao(i_shell)
+          if(val%semicore(i_shell)>0) then
+             paos%nzeta(i_shell) = 1 
+             write(*,fmt='(2i3,2i7, "  semi-core state")') paos%n(i_shell), paos%l(i_shell),&
+                  paos%npao(i_shell) - paos%l(i_shell) - 1, &
+                  paos%nzeta(i_shell)
+          else
+             paos%nzeta(i_shell) = max_zeta 
+             write(*,fmt='(2i3,2i7)') paos%n(i_shell), paos%l(i_shell),&
+                  paos%npao(i_shell) - paos%l(i_shell) - 1, &
+                  paos%nzeta(i_shell)
+          end if
+          if(val%inner(i_shell)>0) then
+             paos%inner(i_shell)=val%inner(i_shell)
+             paos%npao(i_shell) = paos%npao(i_shell)+1
+          end if
+       end do
+       !
+       ! Set information about PAOs: polarisation
+       !
+       if(basis_size>minimal) then
+          ! Perturbative
+          if(paos%flag_perturb_polarise) then
+             call set_polarisation
+             paos%nzeta(paos%n_shells) = n_pol_zeta
+          else
+             ! Determine polarisation shell: assume l(highest occupied)+1 unless that is l=2
              i_highest_occ = val%n_occ
-             if(paos%l(i_highest_occ)<2) then ! We polarise this
-                ell = paos%l(i_highest_occ)+1
-                paos%npao(i_shell) = ell+1 ! Will need to change for perturb
-                if(paos%flag_perturb_polarise)then
-                   do j=1,paos%n_shells -1
-                      if(paos%n(j)==paos%polarised_n.AND. &
-                           paos%l(j)==paos%polarised_l) then
-                         paos%polarised_shell = j
-                         paos%npao(i_shell) = paos%npao(j) !+ 1
-                         paos%n(i_shell) = paos%n(j)
-                         paos%l(i_shell) = paos%l(j)+1
-                         exit
-                      end if
-                   end do
-                else
-                   do j=i_shell-1,1,-1
-                      if(paos%l(j)==ell) then ! Semi-core with this l
-                         paos%npao(i_shell) = paos%npao(i_shell) + 1
-                         paos%has_semicore(i_shell) = .true.
-                         paos%inner(i_shell) = j
-                         !if(paos%flag_perturb_polarise) &
-                         !     call cq_abort("We cannot support perturbative polarisation with semi-core states")
-                         exit
-                      end if
-                   end do
-                   paos%n(i_shell) = paos%n(i_highest_occ)
-                   paos%l(i_shell) = ell
-                end if
-                paos%nzeta(i_shell) = n_pol_zeta 
-                n_paos = n_paos + n_pol_zeta
-             else if(i_highest_occ==1) then
-                call cq_abort("I can't polarise an atom with one shell and l=2")
-             else ! Polarise the i_highest_occ - 1 shell
-                ell = paos%l(i_highest_occ-1)+1
-                paos%npao(i_shell) = ell + 1
-                if(paos%flag_perturb_polarise)then
-                   paos%npao(i_shell) = ell
-                end if
-                do j=i_shell-1,1,-1
-                   if(paos%l(j)==ell) then ! Semi-core with this l
-                      paos%npao(i_shell) = paos%npao(i_shell) + 1
-                      exit
-                   end if
-                end do
-                paos%n(i_shell) = paos%n(i_highest_occ-1)
-                if((paos%n(i_shell) - ell -1) < 0) &
-                     paos%n(i_shell) = paos%n(i_shell) + 1
-                paos%l(i_shell) = ell
-                paos%nzeta(i_shell) = n_pol_zeta 
-                n_paos = n_paos + n_pol_zeta
+             if(paos%l(i_highest_occ)>1) then
+                i_highest_occ = i_highest_occ - 1
+                if(i_highest_occ==0) &
+                     call cq_abort("We have only one shell with l=2; &
+                     & I can't polarise this automatically.")
              end if
-             if(paos%l(i_shell)>pseudo(i_species)%lmax) then ! We will need to use perturbation
+             ! Set l
+             paos%l(paos%n_shells) = paos%l(i_highest_occ)+1
+             ! Check for equivalent l in pseudopotentials - invoke perturbation if necessary
+             if(paos%l(paos%n_shells)>pseudo(i_species)%lmax) then
                 write(*,fmt='("Warning ! l for polarisation is greater than lmax for pseudopotential.&
-                     &  Using perturbation.")')
+                     &  We have to use perturbation.")')
                 paos%flag_perturb_polarise = .true.
-                do j=i_shell-1,1,-1
-                   !if(paos%l(j)==pseudo(i_species)%lmax) then
-                   if(paos%l(j)<2) then
-                      paos%polarised_shell = j
-                      exit
-                   end if
-                end do
-                paos%polarised_l = paos%l(paos%polarised_shell)
-                paos%polarised_n = paos%n(paos%polarised_shell)
-                paos%n(i_shell) = paos%n(paos%polarised_shell)
-                ell = paos%l(paos%polarised_shell)+1
-                paos%l(i_shell) = ell
-                if((paos%n(i_shell) - paos%l(i_shell) -1) < 0) &
-                     paos%n(i_shell) = paos%n(i_shell) + 1
-                !paos%nzeta(i_shell) = paos%nzeta(paos%polarised_shell)
-                paos%npao(i_shell) = paos%npao(paos%polarised_shell)
-                do j=i_shell-1,1,-1
-                   if(paos%l(j)==ell) then ! Semi-core with this l
-                      paos%npao(i_shell) = paos%npao(i_shell) + 1
-                      exit
-                   end if
-                end do
-             end if
-          end if
-          if(paos%flag_perturb_polarise.AND.i_shell==n_shells) then
-             if((paos%l(i_shell)+1)>paos%lmax) paos%lmax=(paos%l(i_shell)+1)
-             count_func(paos%l(i_shell)+1) = count_func(paos%l(i_shell)) + 1
-          else
-             if(paos%l(i_shell)>paos%lmax) paos%lmax=paos%l(i_shell)
-             count_func(paos%l(i_shell)) = count_func(paos%l(i_shell)) + 1
-          end if
-          if(i_shell<=val%n_occ) then
-             if(val%semicore(i_shell)>0) then
-                write(*,fmt='(2i3,2i7, "  semi-core state")') paos%n(i_shell), paos%l(i_shell),&
-                     paos%npao(i_shell) - paos%l(i_shell) - 1, &
-                     paos%nzeta(i_shell)
+                call set_polarisation
              else
-                write(*,fmt='(2i3,2i7)') paos%n(i_shell), paos%l(i_shell),&
-                     paos%npao(i_shell) - paos%l(i_shell) - 1, &
-                     paos%nzeta(i_shell)
+                paos%n(paos%n_shells) = max(paos%n(i_highest_occ),paos%l(i_highest_occ)+1)
+                ! Set npao for nodes
+                paos%npao(paos%n_shells) = paos%l(paos%n_shells)+1
+                ! Check for inner shell with same l value
+                if(count_func(paos%l(paos%n_shells))>0) then
+                   paos%npao(paos%n_shells) = paos%npao(paos%n_shells)+1
+                   do j = paos%n_shells-1,1,-1
+                      if(paos%l(j)==paos%l(paos%n_shells)) paos%inner(paos%n_shells) = j
+                   end do
+                end if
              end if
-          else
-             if(paos%flag_perturb_polarise) then
-                en = paos%n(i_shell)
-                ell = paos%l(i_shell)
-                !if(en-ell-1<0) en = en+1
-                write(*,fmt='(2i3,2i7)') en, ell,&
-                     paos%npao(i_shell) - paos%l(i_shell) , &
-                     paos%nzeta(i_shell)
-             else
-                write(*,fmt='(2i3,2i7)') paos%n(i_shell), paos%l(i_shell),&
-                     paos%npao(i_shell) - paos%l(i_shell) - 1, &
-                     paos%nzeta(i_shell)
-             end if
+             paos%nzeta(paos%n_shells) = n_pol_zeta
           end if
-       end do ! n_shells
-       if(basis_size==minimal) then
-          paos%polarised_shell = 0
-       else
-          paos%polarised_shell = n_shells
+          write(*,fmt='(2i3,2i7)') paos%n(i_shell), paos%l(i_shell),&
+               paos%npao(i_shell) - paos%l(i_shell) - 1, &
+               paos%nzeta(i_shell)
        end if
-       if(count_func(paos%l(n_shells))>1.AND.paos%flag_perturb_polarise) &
-            call cq_abort("You can't have perturbative polarisation functions with semi-core states")
-       paos%total_paos = n_paos
+       !paos%total_paos = n_paos
     else ! Check that the user specification is consistent
        write(*,fmt='("User-specified basis")')
        count_func = 0
@@ -913,7 +844,6 @@ contains
        ! Create npao - used for number of nodes
        paos%lmax = 0
        paos%inner = 0
-       paos%has_semicore(:) = .false.
        do i_shell = 1,paos%n_shells
           if(paos%prefac(i_shell)>RD_ERR) flag_confine = .true.
           count_func(paos%l(i_shell)) = count_func(paos%l(i_shell))+1
@@ -942,20 +872,9 @@ contains
                   paos%nzeta(i_shell)
              do j=i_shell-1,1,-1
                 if(paos%l(j)==paos%l(i_shell)) then ! Semi-core with this l
-                   paos%has_semicore(i_shell) = .true.
                    paos%inner(i_shell) = j
                 end if
              end do
-          end if
-          if(i_shell>val%n_occ) then
-             if(val%n_shells>2) then
-                if(val%l(i_shell-1)==2.AND.val%l(i_shell-2)==0) then ! OK - we have d/s overlap and polarise s
-                   paos%inner_shell = i_shell-2
-                end if
-             else
-                paos%inner_shell = i_shell-1
-             end if
-             if(iprint>4) write(*,fmt='(4x,"Using shell ",i2," as polarised shell")') paos%inner_shell
           end if
           if(paos%l(i_shell)>pseudo(i_species)%lmax) then ! Potential problem
              if(paos%flag_perturb_polarise.AND.paos%l(i_shell)==pseudo(i_species)%lmax+1) then

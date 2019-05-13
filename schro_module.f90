@@ -117,9 +117,9 @@ contains
        end do
        do i_shell = val%n_occ+1,paos%n_shells
           if(i_shell>val%n_occ+1) write(*,fmt='(2x,"Dangerous to set unoccupied shell radii via energy !")')
-          if(paos%inner_shell>0) then
+          if(paos%inner(i_shell)>0) then
              do zeta = 1,paos%nzeta(i_shell)
-                paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,paos%inner_shell)
+                paos%cutoff(zeta,i_shell) = paos%cutoff(zeta,paos%inner(i_shell))
              end do
           else
              do zeta = 1,paos%nzeta(i_shell)
@@ -189,7 +189,7 @@ contains
                 call find_eigenstate_and_energy_vkb(i_species,en,ell,paos%cutoff(zeta,i_shell),&
                      paos%psi(zeta,i_shell)%f,paos%energy(zeta,i_shell), &
                      vha,vxc,paos%width(i_shell),paos%prefac(i_shell))
-                if(paos%has_semicore(i_shell)) then
+                if(paos%inner(i_shell)>0) then
                    ! Dot product of two
                    dot_p = zero
                    do i=1,nmesh
@@ -227,7 +227,7 @@ contains
                      large_energy - val%en_ps(i_shell)
                 paos%energy(zeta,i_shell) = large_energy
                 ! Orthogonalise to semi-core state
-                if(paos%has_semicore(i_shell)) then
+                if(paos%inner(i_shell)>0) then
                    ! Dot product of two
                    dot_p = zero
                    do i=1,nmesh
