@@ -18,11 +18,11 @@ Move to  `src/` and edit the `makefile`, then:
 
 ## Examples
 
-### From pdb file
+### From pdb or xyz file
 with the X-Ray crystal structure of HMGB1 domain A bound to a cisplatin, from [*Nature* 399, 708-712 (1999)](https://www.rcsb.org/structure/1CKT)
 
 - in `examples/1.from_pdb/` directory, run:
-`$ gmolden 1ckt.pdb` 
+`$ gmolden 1ckt.pdb` or `$ gmolden 1ckt.xyz`
 - in *Draw Mode* click on buttons `Solid` and `StickColor` to have a
   nice overview
 - click on the unit cell button, then `Molecule` and `Mol+Cell` to
@@ -38,16 +38,18 @@ directory. You can check with:
 Remark (need `wget` package installed):
 you can also load the `pdb` file directly in `molden`by:
 - clicking on `Read`
-- entering the `pdb` code; in this example, the code is `1CKT`
+- entering the `pdb` code (in this example, the code is `1CKT`)
 - clicking on `Get PDB`
 
 ### From Conquest_coord file
 
-- in `examples/2.from_conquest/` directory, run:  
+In `examples/2.from_conquest/` directory, run:
+
 `$ gmolden Conquest_coord` 
 
-**WARNING**: the `Conquest_coord` file must contain the list of species
-following the numbering of the 4th column 
+**WARNING**: the `Conquest_coord` file must contain the list of
+species after the number of atoms at line 4 and following the
+numbering of the 4th column 
 
 An example with CH<sub>3</sub>COOH in a cube of length 10 Ang.
 
