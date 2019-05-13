@@ -1053,8 +1053,6 @@ contains
                  struc_fac_i(n)*struc_fac_i(n)) * &
                  ((two*egv_n(dir1)*egv_n(dir2) * & ! off-diagonal - zamaan
                   (one/(four*ewald_gamma)) + one_over_g_squared - one))
-                if (flag_atomic_stress) then
-                end if
              end do
            else
              ewald_recip_stress(dir1,dir1) = ewald_recip_stress(dir1,dir1) + &

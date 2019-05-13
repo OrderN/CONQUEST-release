@@ -1090,7 +1090,7 @@ contains
                             if (flag_atomic_stress) then
                               atomic_stress(dir1,dir2,iatom) = &
                                 atomic_stress(dir1,dir2,iatom) - &
-                                forS*dr(dir2) - forKE*dr(dir2)
+                                (forS*dr(dir2) - forKE*dr(dir2))*half
                             end if
                           end do
                         else
@@ -1373,7 +1373,7 @@ contains
                                        if (flag_atomic_stress) then
                                          atomic_stress(dir1,dir2,i) = &
                                            atomic_stress(dir1,dir2,i) + &
-                                           thisG_dS_dR * r_str(dir2)
+                                           thisG_dS_dR * r_str(dir2) * half
                                        end if
                                    end do
                                  else
@@ -2479,7 +2479,7 @@ contains
                                            if (flag_atomic_stress) then
                                              atomic_stress(dir1,dir2,atom) = &
                                                atomic_stress(dir1,dir2,atom) +&
-                                               thisK_gradT * r_str(dir2)
+                                               thisK_gradT * r_str(dir2) * half
 
                                            end if
                                          end do
@@ -2550,7 +2550,7 @@ contains
                                         if (flag_atomic_stress) then
                                           atomic_stress(dir1,dir2,atom) = &
                                             atomic_stress(dir1,dir2,atom) + &
-                                            thisK_gradT * r_str(dir2)
+                                            thisK_gradT * r_str(dir2) * half
                                         end if
                                       end do ! dir2
                                     else
