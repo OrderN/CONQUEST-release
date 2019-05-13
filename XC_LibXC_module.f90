@@ -20,6 +20,8 @@
 !! MODIFICATION HISTORY
 !!   2018/06/15 12:21 dave
 !!    Added spin_factor in module use statements
+!!   2019/04/09 zamaan
+!!    Off-diagonal elements of stress tensor added
 !! SOURCE
 !!
 module XC
@@ -2255,6 +2257,8 @@ contains
   !!     Removed rcellx references (redundant)
   !!   2018/06/15 12:25 dave
   !!    Removed spin_factor from use statement (global to module now)
+  !!   2019/05/13 10:36 dave
+  !!    Bug fix for generalised stress
   !! SOURCE
   !!
   subroutine get_xc_potential_GGA_PBE(density, xc_potential,            &
@@ -2334,9 +2338,8 @@ contains
           ! note that grad_density(rr,1:3,1:spin) has already been used
           ! at this point, so we can savely reuse this slot to store
           ! d(rho * eps_xc) / dgrho at rr.
+          grad_density(rr,1:3,spin) = drhoEps_x(1:3,spin) + drhoEps_c(1:3,spin)
           do dir1=1,3
-             grad_density(rr,dir1,spin) = drhoEps_x(dir1,spin) + &
-               drhoEps_c(dir1,spin)
              if (flag_stress) then
                if (flag_full_stress) then
                  do dir2=1,3
@@ -2507,9 +2510,8 @@ contains
           ! note that grad_density(rr,1:3,1:spin) has already been used
           ! at this point, so we can savely reuse this slot to store
           ! d(rho * eps_xc) / dgrho at rr.
+          grad_density(rr,1:3,spin) = exx_a * drhoEps_x(1:3,spin) + drhoEps_c(1:3,spin)
           do dir1=1,3
-            grad_density(rr,dir1,spin) = exx_a * drhoEps_x(dir,spin) + &
-                                         drhoEps_c(dir2,spin)
             if (flag_stress) then
               if (flag_full_stress) then
                 do dir2=1,3
