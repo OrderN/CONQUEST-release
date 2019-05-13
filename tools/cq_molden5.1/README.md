@@ -4,7 +4,7 @@ This tool is to help Conquest users which want to:
 - edit xyz, pdb... molecular/crystal structures 
 - convert/check the format without pain 
 
-Typical application is for editing biomolecules/DNAsequance/proteins... and save it directly into `Conquest_coord` format.
+Typical application is for editing molecules/DNA strand/proteins... and save it directly into `Conquest_coord` format.
 
 Remarks:
 - this is not intended to handle millions of atoms
@@ -13,7 +13,7 @@ Remarks:
 
 Move to and edit the makefile in `src/`, then:
 
-`$ make`
+`$ make`  
 `$ molden -l` or `$ gmolden` (activate OpenGL)
 
 ## Examples
@@ -36,7 +36,7 @@ directory. You can check with:
 `$ gmolden Conquest_coord` 
 
 Remark (need `wget` package installed):
-You can also load the `pdb` file directly in `molden`by:
+you can also load the `pdb` file directly in `molden`by:
 - clicking on `Read`
 - entering the `pdb` code; in this example, the code is `1CKT`
 - clicking on `Get PDB`
