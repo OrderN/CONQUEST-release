@@ -5763,7 +5763,7 @@ c check
 
 c                =========================================
                  elseif (incp.eq.28) then
-                   if (opfil(46,'conquest.coord',6,1,0,0)) then
+                   if (opfil(46,'Conquest_coord',6,1,0,0)) then
                       call fdat(4,1,istdbd,iuseab,moddma,idebug)
                       call wrconquest(46)
                       call fdat(ifd,0,istdbd,iuseab,moddma,idebug)

@@ -1796,7 +1796,7 @@ c      write(iun,'(a)') 'Direct'
 
       end do
 
-      call inferr('Wrote file: conquest.coord',0)
+      call inferr('Wrote file: Conquest_coord',0)
 
       print*, '*** end of Conquest WRITE ***'
 
