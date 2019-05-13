@@ -260,7 +260,7 @@ LIBSOGL = -lglut -lGLU -lGL -lXmu -lX11 -lm
 #
 #LIBSG = -L/usr/X11R6/lib -Wl,-framework -Wl,GLUT -Wl,-framework -Wl,OpenGL -Wl,-framework -Wl,Cocoa -lGLU -lGL -lXmu -lX11 -lm
 
-all:	molden gmolden ambfor/ambfor ambfor/ambmd surf/surf
+all:	molden gmolden ambfor/ambfor ambfor/ambmd #surf/surf
 
 
 molden:	$(OBJS) mpdum.o xwin.o 
