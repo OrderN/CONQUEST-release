@@ -154,6 +154,8 @@ contains
              paos%polarised_n = val%n(i)
              paos%polarised_l = val%l(i)
              paos%polarised_shell = i
+             write(*,fmt='(4x,"Polarising shell ",i2," with n=",i2," and l=",i2)') &
+                  i, paos%polarised_n, paos%polarised_l
           end if
        end if
        !
@@ -735,12 +737,13 @@ contains
     !
     if(flag_default_cutoffs) then 
        write(*,fmt='(/"Default basis chosen"/)')
-       write(*,fmt='("  n  l  nodes  zetas")')
        !
        ! Set numbers of functions
        !
+       n_shells = val%n_occ+1 ! Default
        if(basis_size==minimal) then ! One zeta for valence
           max_zeta = 1
+          n_shells = val%n_occ
        else if(basis_size==small) then ! As above plus polarisation
           max_zeta = 1
           n_pol_zeta = 1
@@ -754,7 +757,6 @@ contains
        !
        ! Allocate space
        !
-       write(*,fmt='(/"Species ",i2," is ",a2)') i_species, pte(pseudo(i_species)%z)
        count_func = 0
        write(*,fmt='("  n  l  nodes  zetas")')
        call allocate_pao(n_shells)
@@ -791,10 +793,14 @@ contains
        ! Set information about PAOs: polarisation
        !
        if(basis_size>minimal) then
+          i_shell = paos%n_shells
+          paos%nzeta(i_shell) = n_pol_zeta
           ! Perturbative
           if(paos%flag_perturb_polarise) then
              call set_polarisation
-             paos%nzeta(paos%n_shells) = n_pol_zeta
+             write(*,fmt='(2i3,2i7)') paos%n(i_shell), paos%l(i_shell),&
+                  paos%npao(i_shell) - paos%l(i_shell), &
+                  paos%nzeta(i_shell)
           else
              ! Determine polarisation shell: assume l(highest occupied)+1 unless that is l=2
              i_highest_occ = val%n_occ
@@ -805,33 +811,38 @@ contains
                      & I can't polarise this automatically.")
              end if
              ! Set l
-             paos%l(paos%n_shells) = paos%l(i_highest_occ)+1
+             paos%l(i_shell) = paos%l(i_highest_occ)+1
              ! Check for equivalent l in pseudopotentials - invoke perturbation if necessary
-             if(paos%l(paos%n_shells)>pseudo(i_species)%lmax) then
+             if(paos%l(i_shell)>pseudo(i_species)%lmax) then
                 write(*,fmt='("Warning ! l for polarisation is greater than lmax for pseudopotential.&
                      &  We have to use perturbation.")')
                 paos%flag_perturb_polarise = .true.
                 call set_polarisation
+                write(*,fmt='(2i3,2i7)') paos%n(i_shell), paos%l(i_shell),&
+                     paos%npao(i_shell) - paos%l(i_shell), &
+                     paos%nzeta(i_shell)
              else
-                paos%n(paos%n_shells) = max(paos%n(i_highest_occ),paos%l(i_highest_occ)+1)
+                paos%n(i_shell) = max(paos%n(i_highest_occ),paos%l(i_highest_occ)+1)
                 ! Set npao for nodes
-                paos%npao(paos%n_shells) = paos%l(paos%n_shells)+1
+                paos%npao(i_shell) = paos%l(i_shell)+1
                 ! Check for inner shell with same l value
-                if(count_func(paos%l(paos%n_shells))>0) then
-                   paos%npao(paos%n_shells) = paos%npao(paos%n_shells)+1
-                   do j = paos%n_shells-1,1,-1
-                      if(paos%l(j)==paos%l(paos%n_shells)) paos%inner(paos%n_shells) = j
+                if(count_func(paos%l(i_shell))>0) then
+                   paos%npao(i_shell) = paos%npao(i_shell)+1
+                   do j = i_shell-1,1,-1
+                      if(paos%l(j)==paos%l(i_shell)) paos%inner(i_shell) = j
                    end do
                 end if
+                write(*,fmt='(2i3,2i7)') paos%n(i_shell), paos%l(i_shell),&
+                     paos%npao(i_shell) - paos%l(i_shell) - 1, &
+                     paos%nzeta(i_shell)
              end if
-             paos%nzeta(paos%n_shells) = n_pol_zeta
           end if
-          write(*,fmt='(2i3,2i7)') paos%n(i_shell), paos%l(i_shell),&
-               paos%npao(i_shell) - paos%l(i_shell) - 1, &
-               paos%nzeta(i_shell)
        end if
        !paos%total_paos = n_paos
-    else ! Check that the user specification is consistent
+       !
+       ! User-specified basis
+       !
+    else 
        write(*,fmt='("User-specified basis")')
        count_func = 0
        write(*,fmt='("  n  l  nodes  zetas")')
