@@ -225,7 +225,7 @@ contains
                                       screened_ion_force, screened_ion_stress
     use pseudopotential_data,   only: non_local
     use GenComms,               only: my_barrier, inode, ionode,       &
-                                      cq_abort
+                                      cq_abort, gsum
     ! TM new pseudo
     use pseudopotential_common, only: pseudo_type, OLDPS, SIESTA,      &
                                       STATE, ABINIT, core_correction, flag_neutral_atom_projector
@@ -635,6 +635,7 @@ contains
             end do
          end do
       end if
+      if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
 
       if (inode == ionode) then       
          write (io_lun,fmt='(/4x,"                  ",3a15)') "X","Y","Z"
@@ -1127,7 +1128,6 @@ contains
        call my_barrier
        deallocate(nreqs)
        call gsum (KE_force, 3, n_atoms)
-       if (flag_atomic_stress) call gsum(atomic_stress,3,3,n_atoms)
        if (flag_stress) call gsum(KE_stress, 3, 3)
        if(WhichPulay==PhiPulay) p_force = zero
        if(WhichPulay==BothPulay) WhichPulay = PhiPulay ! We've DONE S-pulay above
@@ -1274,7 +1274,7 @@ contains
                             end if
                           else
                             PP_stress(dir1,dir1) = PP_stress(dir1,dir1) - &  
-                               return_matrix_value(mat_tmp2, np, ni, 0, 0, isf, isf, 1)
+                              return_matrix_value(mat_tmp2, np, ni, 0, 0, isf, isf, 1)
                           end if
                         end if
 
@@ -1415,7 +1415,6 @@ contains
     if (flag_stress) then
       call gsum(PP_stress,3,3)
       call gsum(SP_stress,3,3)
-      if (flag_atomic_stress) call gsum(atomic_stress,3,3,n_atoms)
       SP_stress = half*SP_stress
       if (flag_basis_set == blips .and. flag_analytic_blip_int) &
         KE_stress = half*KE_stress
@@ -2254,7 +2253,6 @@ contains
       call gsum(NL_stress,3,3)
       ! Note that the atomic contributions are computed in flag_diagonal_stress
       ! for memory efficiency
-      if (flag_atomic_stress) call gsum(atomic_stress,3,3,n_atoms)
     end if
     do k = 3, 1, -1
        if (flag_stress) then
@@ -2575,7 +2573,6 @@ contains
     if (flag_stress) then
       KE_stress = half*KE_stress
       call gsum(KE_stress, 3, 3)
-      call gsum(atomic_stress,3,3,n_atoms)
     end if
 
       call free_temp_matrix(mat_grad_T)
@@ -3034,7 +3031,6 @@ contains
     if (flag_stress) call gsum(NA_stress,3,3)
     ! Note that the atomic contributions are computed in flag_diagonal_stress
     ! for memory efficiency
-    if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
 
     call free_temp_matrix(mat_dNAT)
     call free_temp_matrix(mat_dNA)
@@ -3890,7 +3886,6 @@ contains
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
     call gsum(HF_force, 3, n_atoms)
     if (flag_stress) call gsum(nonSCF_stress,3,3)
-    if (flag_atomic_stress) call gsum(atomic_stress,3,3,n_atoms)
     call stop_print_timer(tmr_l_tmp1, "NSC force - Compilation", &
                           IPRINT_TIME_THRES3)
 
@@ -4223,7 +4218,6 @@ contains
     call start_timer(tmr_l_tmp1, WITH_LEVEL)
     call gsum(pcc_force, 3, n_atoms)
     if (flag_stress) call gsum(pcc_stress, 3, 3)
-    if (flag_atomic_stress) call gsum(atomic_stress,3,3,n_atoms)
     call stop_print_timer(tmr_l_tmp1, "PCC force - Compilation", &
                           IPRINT_TIME_THRES3)
 

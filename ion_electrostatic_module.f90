@@ -1205,7 +1205,6 @@ contains
 
     call gsum(ewald_real_sum_intra)
     if (flag_stress) call gsum(ewald_intra_stress,3,3)
-    if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
     if(inode == ionode.AND.iprint_gen>=6) then
        write(unit=io_lun,fmt='(/" Ewald real-space self info for node:",i3/)') inode 
        write(unit=io_lun,fmt='(/" self-partition part of real_space Ewald:",e20.12)') ewald_real_sum_intra
@@ -1320,7 +1319,6 @@ contains
 
     call gsum(ewald_real_sum_inter)
     if (flag_stress) call gsum(ewald_inter_stress,3,3)
-    if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
     if(inode == ionode.AND.iprint_gen>=6) then
        write(unit=io_lun,fmt='(/" Ewald real-space other info for node:",i3/)') inode 
        write(unit=io_lun,fmt='(/" other-partition part of real_space Ewald:",e20.12)') ewald_real_sum_inter
@@ -1648,7 +1646,6 @@ contains
     call gsum(screened_ion_interaction_energy)
     call gsum(screened_ion_force,3,ni_in_cell)
     if (flag_stress) call gsum(screened_ion_stress,3,3)
-    if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
     if(inode == ionode.AND.iprint_gen>1) &
          write(unit=io_lun,fmt='(/8x," ++++++ Screened ion interaction energy:",e20.12)') &
          &screened_ion_interaction_energy

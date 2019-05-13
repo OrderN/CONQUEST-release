@@ -1404,7 +1404,6 @@ contains
     !    Tsuyoshi Miyazaki
     call gsum(HF_force,3,ni_in_cell)
     if (flag_stress) call gsum(loc_HF_stress,3,3)
-    if (flag_atomic_stress) call gsum(atomic_stress,3,3,ni_in_cell)
     ! Don't gsum loc_G_stress - that's done in hartree
     call stop_timer(tmr_std_pseudopot)
     call stop_backtrace(t=backtrace_timer,who='loc_pp_derivative_tm',echo=.true.)
