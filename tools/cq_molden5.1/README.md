@@ -11,7 +11,7 @@ Remarks:
 - this is more to help you for input easy edit (without scripts ;-)
 - help for fast vizual inspection that the structure provided to the CQ code is correct!
 
-Move to and edit the makefile in `src/`, then:
+Move to  `src/` and edit the `makefile`, then:
 
 `$ make`  
 `$ molden -l` or `$ gmolden` (activate OpenGL)
@@ -43,26 +43,26 @@ you can also load the `pdb` file directly in `molden`by:
 
 ### From Conquest_coord file
 
-- in `examples/2.from_conquest/` directory, run:
+- in `examples/2.from_conquest/` directory, run:  
 `$ gmolden Conquest_coord` 
 
 **WARNING**: the `Conquest_coord` file must contain the list of species
 following the numbering of the 4th column 
 
-Example with CH<sub>3</sub>COOH in a cube of length 10 Ang.
+An example with CH<sub>3</sub>COOH in a cube of length 10 Ang.
 
-`    10.000000000000       0.000000000000       0.000000000000`
-`      0.000000000000     10.000000000000       0.000000000000`
-`      0.000000000000       0.000000000000      10.000000000000`
-`           8     O  C  H`
-`    0.5090523420     0.5000002846     0.4969778870        2   T  T  T`
-`    0.3834785868     0.5000002846     0.4244778461        2   T  T  T`
-`    0.5090523420     0.5000002846     0.6369779668        1   T  T  T`
-`    0.6147075016     0.5000002846     0.4359778525        1   T  T  T`
-`    0.5986192518     0.5000002846     0.6686446516        3   T  T  T`
-`    0.4033778282     0.5000002846     0.3174113084        3   T  T  T`
-`    0.3263738563     0.4110837574     0.4507860993        3   T  T  T`
-`    0.3263738563     0.5889168118     0.4507860993        3   T  T  T`
+`10.000000000000       0.000000000000       0.000000000000`  
+`  0.000000000000     10.000000000000       0.000000000000`  
+`  0.000000000000       0.000000000000     10.000000000000`  
+`       8     O  C  H`  
+`  0.5090523420     0.5000002846     0.4969778870        2   T  T T`  
+`  0.3834785868     0.5000002846     0.4244778461        2   T  T  T`  
+`  0.5090523420     0.5000002846     0.6369779668        1   T  T  T`  
+`  0.6147075016     0.5000002846     0.4359778525        1   T  T  T`  
+`  0.5986192518     0.5000002846     0.6686446516        3   T  T  T`  
+`  0.4033778282     0.5000002846     0.3174113084        3   T  T  T`  
+`  0.3263738563     0.4110837574     0.4507860993        3   T  T  T`  
+`  0.3263738563     0.5889168118     0.4507860993        3   T  T  T`  
 
 
 
