@@ -1091,7 +1091,7 @@ contains
                             if (flag_atomic_stress) then
                               atomic_stress(dir1,dir2,iatom) = &
                                 atomic_stress(dir1,dir2,iatom) - &
-                                (forS*dr(dir2) - forKE*dr(dir2))*half
+                                (forS*dr(dir2) + forKE*dr(dir2))*half
                             end if
                           end do
                         else
@@ -2193,8 +2193,13 @@ contains
              if (flag_stress) then
                if (flag_full_stress) then
                  do l = 1, 3
-                   call matrix_diagonal_stress(matdAPr(k,l), matU(spin), &
-                                        NL_P_stress(k,l), APrange, inode)
+                   if (flag_atomic_stress) then
+                     call matrix_diagonal_stress(matdAPr(k,l), matU(spin), &
+                          NL_P_stress(k,l), APrange, inode,atomic_stress(k,l,:))
+                   else
+                     call matrix_diagonal_stress(matdAPr(k,l), matU(spin), &
+                          NL_P_stress(k,l), APrange, inode)
+                   end if
                  end do
                else
                  call matrix_diagonal_stress(matdAPr(k,k), matU(spin), &
@@ -2216,7 +2221,7 @@ contains
                  do l = 1, 3
                    if (flag_atomic_stress) then
                      call matrix_diagonal_stress(matdPAr(k,l), matUT(spin), &
-                          NL_HF_stress(k,l), PArange, inode, atomic_stress(k,l,:))
+                          NL_HF_stress(k,l), PArange,inode,atomic_stress(k,l,:))
                    else
                      call matrix_diagonal_stress(matdPAr(k,l), matUT(spin), &
                           NL_HF_stress(k,l), PArange, inode)
@@ -2828,8 +2833,13 @@ contains
           if (flag_stress) then
             if (flag_full_stress) then
               do l = 1, 3
-                call matrix_diagonal_stress(matdaNAr(k,l), matU_NA, &
-                  NA_P_stress(k,l), aNArange, inode)
+                if (flag_atomic_stress) then
+                  call matrix_diagonal_stress(matdaNAr(k,l), matU_NA, &
+                    NA_P_stress(k,l), aNArange, inode, atomic_stress(k,l,:))
+                else
+                  call matrix_diagonal_stress(matdaNAr(k,l), matU_NA, &
+                    NA_P_stress(k,l), aNArange, inode)
+                end if
               end do
             else
               call matrix_diagonal_stress(matdaNAr(k,k), matU_NA, &
@@ -2848,8 +2858,13 @@ contains
           if (flag_stress) then
             if (flag_full_stress) then
               do l = 1, 3
-                call matrix_diagonal_stress(matdNAar(k,l), matUT_NA, &
-                  NA_HF_stress(k,l), NAarange,inode)
+                if (flag_atomic_stress) then
+                  call matrix_diagonal_stress(matdNAar(k,l), matUT_NA, &
+                    NA_HF_stress(k,l), NAarange,inode, atomic_stress(k,l,:))
+                else
+                  call matrix_diagonal_stress(matdNAar(k,l), matUT_NA, &
+                    NA_HF_stress(k,l), NAarange,inode)
+                end if
               end do
             else
               call matrix_diagonal_stress(matdNAar(k,k), matUT_NA, &

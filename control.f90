@@ -1009,12 +1009,12 @@ contains
     if (flag_heat_flux) then
       if (.not. flag_full_stress) then
         flag_full_stress = .true.
-        write(io_lun,'(2x,a)') &
+        if (inode==ionode) write(io_lun,'(2x,a)') &
           "WARNING: setting AtomMove.FullStress T for heat flux calculation"
       end if
       if (.not. flag_atomic_stress) then
         flag_atomic_stress = .true.
-        write(io_lun,'(2x,a)') &
+        if (inode==ionode) write(io_lun,'(2x,a)') &
           "WARNING: setting AtomMove.AtomicStress T for heat flux calculation"
       end if
       allocate(atomic_stress(3,3,ni_in_cell), STAT=stat)
