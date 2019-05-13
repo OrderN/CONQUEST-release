@@ -12,6 +12,7 @@ Remarks:
 - help for fast vizual inspection that the structure provided to the CQ code is correct!
 
 Move to and edit the makefile in `src/`, then:
+
 `$ make`
 `$ molden -l` or `$ gmolden` (activate OpenGL)
 
@@ -30,7 +31,8 @@ vizualise the initial guess for the unit cell
 - then `Write` and `write Conquest`
 
 You should find the corresponding `Conquest_coord` file in the current
-directory.You can check with:
+directory. You can check with:
+
 `$ gmolden Conquest_coord` 
 
 Remark (need `wget` package installed):
@@ -40,11 +42,33 @@ You can also load the `pdb` file directly in `molden`by:
 - clicking on `Get PDB`
 
 ### From Conquest_coord file
-**WARNING**: the `Conquest_coord` file must contain the list of species
-following the order of appearance in the input.
 
-Example with H<sub>2</sub>O:
-`Conquest_input` read:
+- in `examples/2.from_conquest/` directory, run:
+`$ gmolden Conquest_coord` 
+
+**WARNING**: the `Conquest_coord` file must contain the list of species
+following the numbering of the 4th column 
+
+Example with CH<sub>3</sub>COOH in a cube of length 10 Ang.
+
+`    10.000000000000       0.000000000000       0.000000000000`
+`      0.000000000000     10.000000000000       0.000000000000`
+`      0.000000000000       0.000000000000      10.000000000000`
+`           8     O  C  H`
+`    0.5090523420     0.5000002846     0.4969778870        2   T  T  T`
+`    0.3834785868     0.5000002846     0.4244778461        2   T  T  T`
+`    0.5090523420     0.5000002846     0.6369779668        1   T  T  T`
+`    0.6147075016     0.5000002846     0.4359778525        1   T  T  T`
+`    0.5986192518     0.5000002846     0.6686446516        3   T  T  T`
+`    0.4033778282     0.5000002846     0.3174113084        3   T  T  T`
+`    0.3263738563     0.4110837574     0.4507860993        3   T  T  T`
+`    0.3263738563     0.5889168118     0.4507860993        3   T  T  T`
+
+
+
+
+
+
 
 
 
