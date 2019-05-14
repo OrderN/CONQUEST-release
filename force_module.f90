@@ -2106,7 +2106,7 @@ contains
                                call store_matrix_value(matdAPr(dir1,dir2), np, ni, iprim, nab, jsf, isf, r_str(dir2)*thisdAP)
                             end do
                           else
-                            call store_matrix_value(matdPAr(dir1,dir1), np, ni, iprim, nab, jsf, isf, r_str(dir1)*thisdAP)
+                            call store_matrix_value(matdAPr(dir1,dir1), np, ni, iprim, nab, jsf, isf, r_str(dir1)*thisdAP)
                           end if
                         end if
                            ! Reuse variable

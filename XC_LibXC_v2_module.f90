@@ -530,7 +530,7 @@ contains
     use GenComms,      only: gsum
     use GenBlas,       only: dot
     use dimens,        only: grid_point_volume, n_my_grid_points
-    use global_module, only : nspin, io_lun
+    use global_module, only : nspin, io_lun, flag_full_stress, flag_stress
     use fft_module,    only: fft3, recip_vector
 
     implicit none
@@ -2319,9 +2319,8 @@ contains
           ! note that grad_density(rr,1:3,1:spin) has already been used
           ! at this point, so we can savely reuse this slot to store
           ! d(rho * eps_xc) / dgrho at rr.
+          grad_density(rr,1:3,spin) = drhoEps_x(1:3,spin) + drhoEps_c(1:3,spin)
           do dir1=1,3
-             grad_density(rr,dir1,spin) = drhoEps_x(dir1,spin) + &
-               drhoEps_c(dir1,spin)
              if (flag_stress) then
                if (flag_full_stress) then
                  do dir2=1,3
@@ -2410,6 +2409,8 @@ contains
   !!     Removed rcellx references (redundant)
   !!   2018/06/15 12:25 dave
   !!    Removed spin_factor from use statement (global to module now)
+  !!   2019/05/13 10:36 dave
+  !!    Bug fix for generalised stress
   !! SOURCE
   !!
   subroutine get_xc_potential_hyb_PBE0(density, xc_potential, exx_a,     &
@@ -2417,7 +2418,7 @@ contains
                                        flavour, x_energy )
     use datatypes
     use numbers
-    use global_module, only: nspin
+    use global_module, only: nspin, flag_full_stress, flag_stress
     use dimens,        only: grid_point_volume, n_my_grid_points
     use GenComms,      only: gsum, cq_abort
     use fft_module,    only: fft3, recip_vector
@@ -2437,7 +2438,7 @@ contains
 
     ! local variables
     integer      :: PBE_type
-    integer      :: rr, spin, stat
+    integer      :: rr, spin, stat, dir1, dir2
     real(double) :: eps_x, eps_c, rho_tot_r
     real(double),         dimension(nspin)        :: rho_r
     real(double),         dimension(3,nspin)      :: grho_r
@@ -2492,9 +2493,8 @@ contains
           ! note that grad_density(rr,1:3,1:spin) has already been used
           ! at this point, so we can savely reuse this slot to store
           ! d(rho * eps_xc) / dgrho at rr.
+          grad_density(rr,1:3,spin) = exx_a * drhoEps_x(1:3,spin) + drhoEps_c(1:3,spin)
           do dir1=1,3
-            grad_density(rr,dir1,spin) = exx_a * drhoEps_x(dir,spin) + &
-                                         drhoEps_c(dir2,spin)
             if (flag_stress) then
               if (flag_full_stress) then
                 do dir2=1,3
