@@ -1020,10 +1020,10 @@ contains
        endif
     enddo
     ! Zero stress
-     ewald_recip_stress = zero
-     ewald_intra_stress = zero
-     ewald_inter_stress = zero
-     ion_interaction_stress = zero
+    ewald_recip_stress = zero
+    ewald_intra_stress = zero
+    ewald_inter_stress = zero
+    ion_interaction_stress = zero
     ! Allocate memory for and call structure_factor
     allocate(struc_fac_r(number_of_g_vectors),struc_fac_i(number_of_g_vectors),STAT=stat)
     if(stat/=0) call cq_abort("ewald: error allocating struc_fac ",number_of_g_vectors,stat)
@@ -1373,7 +1373,6 @@ contains
               ewald_recip_stress(dir1,dir2) + &
               ewald_gaussian_self_stress(dir1,dir2)
             if (flag_atomic_stress) then
-              ! contributions already gsummed? - zamaan
               non_atomic_stress(dir1,dir2) = &
                 non_atomic_stress(dir1,dir2) + &
                 ewald_recip_stress(dir1,dir2) + &

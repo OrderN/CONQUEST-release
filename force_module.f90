@@ -330,15 +330,6 @@ contains
     end if
     allocate(NA_force(3,ni_in_cell))
     NA_force = zero
-    if (flag_atomic_stress) then
-      if (.not. flag_heat_flux) then
-        allocate(atomic_stress(3,3,ni_in_cell), STAT=stat)
-        atomic_stress = zero
-        if (stat /= 0) &
-          call cq_abort("Error allocating atomic_stress: ", ni_in_cell)
-        call reg_alloc_mem(area_moveatoms, 3*3*ni_in_cell, type_dbl)
-      end if
-    end if
     call stop_timer (tmr_std_allocation)
     ! get total density
     density_total = zero
@@ -358,8 +349,6 @@ contains
     tot_force   = zero
     ! Zero stresses
     stress  = zero
-    atomic_stress = zero
-    non_atomic_stress = zero
     KE_stress = zero
     SP_stress = zero
     PP_stress = zero
@@ -689,13 +678,6 @@ contains
     deallocate(density_total, STAT=stat)
     if (stat /= 0) call cq_abort("force: Error dealloc mem")
     call reg_dealloc_mem(area_moveatoms, maxngrid, type_dbl)
-    if (flag_atomic_stress) then
-      if (.not. flag_heat_flux) then
-        deallocate(atomic_stress, STAT=stat)
-        if (stat /= 0) call cq_abort("atomic_stress: Error dealloc mem")
-        call reg_dealloc_mem(area_moveatoms, 3*3*ni_in_cell, type_dbl)
-      end if
-    end if
     call stop_timer(tmr_std_allocation)
 
 !****lat<$

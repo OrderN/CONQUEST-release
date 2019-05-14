@@ -2297,7 +2297,10 @@ contains
                                       atomf, sf, nspin_SF, flag_LFD,   &
                                       flag_SFcoeffReuse, flag_diagonalisation, &
                                       ne_spin_in_cell,                 &
-                                      ne_in_cell, spin_factor
+                                      ne_in_cell, spin_factor,         &
+                                      atomic_stress, non_atomic_stress,&
+                                      flag_atomic_stress, flag_heat_flux, &
+                                      ni_in_cell, area_moveatoms
     use density_module,         only: set_atomic_density,              &
                                       flag_no_atomic_densities,        &
                                       density, set_density_pcc,        &
@@ -2308,6 +2311,7 @@ contains
     use functions_on_grid,      ONLY: atomfns, H_on_atomfns
     use XLBOMD_module,          ONLY: get_initialL_XL
     use multisiteSF_module,     ONLY: initial_SFcoeff, flag_LFD_MD_UseAtomicDensity
+    use memory_module,          only: reg_alloc_mem, type_dbl
 
     implicit none
 
@@ -2318,7 +2322,7 @@ contains
     type(cq_timer) :: tmr_l_tmp1
     real(double), dimension(nspin) :: electrons, energy_tmp
     real(double) :: scale
-    integer :: spin_SF, spin
+    integer :: spin_SF, spin, stat
 
     call start_timer(tmr_l_tmp1,WITH_LEVEL)
     ! (0) Pseudopotentials: choose correct form
@@ -2367,6 +2371,17 @@ contains
     end if
     ! (4) core correction?
     ! (5) Find the Ewald energy for the initial set of atoms
+    if (flag_atomic_stress) then
+      if (.not. flag_heat_flux) then
+        ! haven't found an appropriate place to deallocate this - zamaan
+        allocate(atomic_stress(3,3,ni_in_cell), STAT=stat)
+        if (stat /= 0) &
+          call cq_abort("Error allocating atomic_stress: ", ni_in_cell)
+        call reg_alloc_mem(area_moveatoms, 3*3*ni_in_cell, type_dbl)
+      end if
+      atomic_stress = zero
+      non_atomic_stress = zero
+    end if
     if(flag_neutral_atom) then
        call screened_ion_interaction
     else

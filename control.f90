@@ -632,6 +632,10 @@ contains
     call baro%get_pressure_and_stress
     call mdl%get_cons_qty
 
+    ! If we need the atomic contributiosn to the ion-ion stress, need to call
+    ! update_H again because the arrays weren't initialised in the first
+    ! instance - zamaan
+    if (flag_heat_flux) call update_H(fixed_potential)
     ! Find energy and forces
     if (flag_fire_qMD) then
        call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
