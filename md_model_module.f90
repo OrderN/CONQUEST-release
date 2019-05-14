@@ -479,7 +479,7 @@ contains
         open(unit=lun,file=filename,status='replace')
       end if
 
-      write(lun,'(3f12.6)') mdl%J_v
+      write(lun,'(i8,3f12.6)') mdl%step, mdl%J_v
     end if
 
     call io_close(lun)

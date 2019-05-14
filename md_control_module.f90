@@ -912,8 +912,8 @@ contains
     do i_mts=1,th%n_mts_nhc ! MTS loop
       do i_ys=1,th%n_ys     ! Yoshida-Suzuki loop
         if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-          write(io_lun,'(4x,a,8i)') "i_ys  = ", i_ys
-          write(io_lun,'(4x,a,8i)') "dt_ys = ", th%dt_ys(i_ys)
+          write(io_lun,'(4x,a,i8)') "i_ys  = ", i_ys
+          write(io_lun,'(4x,a,i8)') "dt_ys = ", th%dt_ys(i_ys)
         end if
         ! Reverse part of Trotter expansion: update thermostat force/velocity
         call th%propagate_v_eta_lin(th%n_nhc, th%dt_ys(i_ys), quarter)
