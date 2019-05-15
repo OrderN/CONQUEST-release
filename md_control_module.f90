@@ -49,21 +49,16 @@ module md_control
   use datatypes
   use numbers
   use global_module,    only: ni_in_cell, io_lun, iprint_MD, &
-                              temp_ion, flag_MDcontinue, flag_MDdebug, &
-                              area_moveatoms
-  use input_module,     only: leqi
+                              temp_ion, flag_MDcontinue, flag_MDdebug
   use move_atoms,       only: fac_Kelvin2Hartree
   use species_module,   only: species, mass
   use GenComms,         only: inode, ionode, cq_abort
-  use timer_module,     only: start_timer, stop_timer, cq_timer, &
-                              start_backtrace, stop_backtrace
+  use input_module,     only: leqi
 
   implicit none
 
-  ! Area identification
-  integer, parameter, private :: area = 7
-
   ! Flags
+
   character(20) :: md_cell_constraint
 
   ! Unit conversion factors
@@ -284,14 +279,10 @@ contains
     real(double), intent(in)              :: dt
     integer, intent(in)                   :: ndof
     real(double), intent(in)              :: ke_ions, tau_T
-    type(cq_timer)                        :: backtrace_timer
 
     ! local variables
     real(double)                          :: dummy_rn
     integer                               :: i
-
-    call start_backtrace(t=backtrace_timer,who='init_thermo',&
-         where=area,level=3,echo=.true.)
 
     if (inode==ionode .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') 'Welcome to init_thermo'
@@ -351,7 +342,6 @@ contains
                                      th%tau_T
       end if
     end if
-    call stop_backtrace(t=backtrace_timer,who='init_thermo',echo=.true.)
 
   end subroutine init_thermo
   !!***
@@ -381,10 +371,6 @@ contains
     real(double)                          :: omega_thermo, omega_baro, &
                                              ndof_baro, tauT, tauP
     integer                               :: i
-    type(cq_timer)                        :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='init_nhc',&
-         where=area,level=3,echo=.true.)
 
     flag_extended_system = .true.
     th%n_nhc = md_n_nhc
@@ -478,7 +464,6 @@ contains
       if (th%cell_nhc) write(io_lun,fmt1) 'cell NHC masses:', th%m_nhc_cell
     end if
     call th%get_nhc_energy
-    call stop_backtrace(t=backtrace_timer,who='init_nhc',echo=.true.)
 
   end subroutine init_nhc
   !!***
@@ -508,10 +493,6 @@ contains
     integer                                   :: i, j, k, l, m
     real(double), dimension(:,:), allocatable :: psuz
     real(double)                              :: xnt
-    type(cq_timer)                            :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='init_ys',&
-         where=area,level=3,echo=.true.)
 
     allocate(psuz(n_ys,5))
     allocate(th%dt_ys(n_ys))
@@ -600,7 +581,6 @@ contains
     end select
     th%dt_ys = dt*th%dt_ys/real(th%n_mts_nhc, double)
     deallocate(psuz)
-    call stop_backtrace(t=backtrace_timer,who='init_ys',echo=.true.)
 
   end subroutine init_ys
   !!***
@@ -620,7 +600,7 @@ contains
   !!   Conquest_out once per step
   !!  SOURCE
   !!  
-  subroutine get_temperature_and_ke(th, baro, v, KE, final_call, bt_level)
+  subroutine get_temperature_and_ke(th, baro, v, KE, final_call)
 
     use move_atoms,       only: fac
 
@@ -630,15 +610,10 @@ contains
     real(double), dimension(3,ni_in_cell), intent(in)  :: v  ! ion velocities
     real(double), intent(out)                 :: KE
     integer, optional                         :: final_call
-    integer, optional                         :: bt_level
 
     ! local variables
-    integer                                   :: j, k, iatom, level
+    integer                                   :: j, k, iatom
     real(double)                              :: m, trace
-    type(cq_timer)                            :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='get_temperature_and_ke',&
-         where=area,level=bt_level,echo=.true.)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "get_temperature_and_ke"
@@ -675,8 +650,6 @@ contains
         end if
       end if
     end if
-    call stop_backtrace(t=backtrace_timer,who='get_temperature_and_ke',&
-                        echo=.true.)
   end subroutine get_temperature_and_ke
 
   !!****m* md_control/get_berendsen_thermo_sf *
@@ -696,22 +669,12 @@ contains
     class(type_thermostat), intent(inout)   :: th
     real(double), intent(in)                :: dt
 
-    ! local variables
-    type(cq_timer)                        :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='get_berendsen_thermo_sf',&
-         where=area,level=3,echo=.true.)
-
     th%lambda = sqrt(one + (dt/th%tau_T)* &
                      (th%T_ext/th%T_int - one))
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') "get_berendsen_thermo_sf"
     end if
-
-    call stop_backtrace(t=backtrace_timer,who='get_berendsen_thermo_sf', &
-         echo=.true.)
-
   end subroutine get_berendsen_thermo_sf
   !!***
 
@@ -741,10 +704,6 @@ contains
                        sum_ri_sq, temp_fac
     integer         :: i, n_bm_calls
     logical         :: odd
-    type(cq_timer)  :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='get_svr_thermo_sf',&
-         where=area,level=3,echo=.true.)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "get_svr_thermo_sf"
@@ -790,15 +749,13 @@ contains
                two*sqrt(exp_dt_tau) * sqrt(temp_fac*(one - exp_dt_tau)) * r1
     th%lambda = sqrt(alpha_sq)
 
-    call stop_backtrace(t=backtrace_timer,who='get_svr_thermo_sf',echo=.true.)
-
   end subroutine get_svr_thermo_sf
 
   !!****m* md_control/v_rescale *
   !!  NAME
   !!   v_rescale
   !!  PURPOSE
-  !!   rescale veolocity using Berendsen (weak coupling) velocity rescaling.
+  !!   rescale veolocity for simple velocity rescaling thermostats.
   !!   Note that the scaling factor is computed before the first vVerlet
   !!   velocity update, and the velocities scaled after the second vVerlet
   !!   velocity update.
@@ -814,19 +771,12 @@ contains
     class(type_thermostat), intent(inout)       :: th
     real(double), dimension(:,:), intent(inout) :: v
 
-    ! local variables
-    type(cq_timer)                              :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='v_rescale',&
-         where=area,level=3,echo=.true.)
-
     v = v*th%lambda
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') "v_rescale"
       write(io_lun,'(4x,"lambda: ",e16.8)') th%lambda
     end if
-    call stop_backtrace(t=backtrace_timer,who='v_rescale',echo=.true.)
 
   end subroutine v_rescale
   !!***
@@ -1037,10 +987,6 @@ contains
     real(double)    :: v_sfac   ! ionic velocity scaling factor
     real(double)    :: box_sfac ! box velocity scaling factor
     real(double)    :: fac
-    type(cq_timer)  :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='integrate_nhc',&
-         where=area,level=3,echo=.true.)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "integrate_nhc"
@@ -1126,7 +1072,6 @@ contains
         write(io_lun,th%nhc_fmt) "G_nhc_cell: ", th%G_nhc_cell
       end if
     end if
-    call stop_backtrace(t=backtrace_timer,who='integrate_nhc',echo=.true.)
 
   end subroutine integrate_nhc
   !!***
@@ -1145,20 +1090,15 @@ contains
   !!    Corrected sign of potential energy contribution, added cell_ndof
   !!  SOURCE
   !!  
-  subroutine get_nhc_energy(th, bt_level)
+  subroutine get_nhc_energy(th)
 
     use input_module,     only: io_assign, io_close
 
     ! passed variables
     class(type_thermostat), intent(inout) :: th
-    integer, optional                     :: bt_level
 
     ! local variables
-    integer                               :: k, lun, level
-    type(cq_timer)                        :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='get_nhc_energy',&
-         where=area,level=bt_level,echo=.true.)
+    integer                               :: k, lun
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "get_nhc_energy"
@@ -1219,7 +1159,6 @@ contains
         call io_close(lun)
       end if
     end if
-    call stop_backtrace(t=backtrace_timer,who='get_nhc_energy',echo=.true.)
 
   end subroutine get_nhc_energy
   !!***
@@ -1307,10 +1246,6 @@ contains
 
     ! local variables
     real(double)                              :: tauP, omega_P
-    type(cq_timer)                            :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='init_baro',&
-         where=area,level=3,echo=.true.)
 
     ! Globals
     baro%baro_type = baro_type
@@ -1351,7 +1286,7 @@ contains
     baro%lat_ref(3,3) = rcellz
     baro%lat = baro%lat_ref
     call baro%get_volume
-    call baro%get_pressure_and_stress(bt_level=4)
+    call baro%get_pressure_and_stress
     baro%volume_ref = baro%volume
     baro%v_old = baro%volume
     baro%tau_P = tau_P
@@ -1412,7 +1347,6 @@ contains
         end if
       end if
     end if
-    call stop_backtrace(t=backtrace_timer,who='init_baro',echo=.true.)
 
   end subroutine init_baro
   !!***
@@ -1439,7 +1373,7 @@ contains
   !!    tensor elements.
   !!  SOURCE
   !!  
-  subroutine get_pressure_and_stress(baro, final_call, bt_level)
+  subroutine get_pressure_and_stress(baro, final_call)
 
     use force_module,     only: stress
     use move_atoms,       only: fac
@@ -1447,14 +1381,9 @@ contains
     ! passed variables
     class(type_barostat), intent(inout)       :: baro
     integer, optional                         :: final_call
-    integer, optional                         :: bt_level
 
     ! local variables
     integer                                   :: i
-    type(cq_timer)                            :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='get_pressure_and_stress',&
-         where=area,level=bt_level,echo=.true.)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "get_pressure_and_stress"
@@ -1502,8 +1431,6 @@ contains
         write(io_lun,'(4x,"PV: ",f12.6," Ha")') baro%PV
       end if
     end if
-    call stop_backtrace(t=backtrace_timer,who='get_pressure_and_stress',&
-         echo=.true.)
 
   end subroutine get_pressure_and_stress
   !!***
@@ -1583,10 +1510,6 @@ contains
     integer                                     :: i, gatom, ibeg_atom
     real(double)                                :: x_old, y_old, z_old
     logical                                     :: flagx, flagy, flagz
-    type(cq_timer)                              :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='propagate_berendsen',&
-         where=area,level=3,echo=.true.)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') "propagate_berendsen"
@@ -1619,8 +1542,6 @@ contains
       end if
     end do
     call baro%update_cell
-    call stop_backtrace(t=backtrace_timer,who='propagate_berendsen',&
-         echo=.true.)
 
   end subroutine propagate_berendsen
   !!***
@@ -1636,19 +1557,14 @@ contains
   !!   2017/11/17 14:09
   !!  SOURCE
   !!  
-  subroutine get_box_energy(baro, final_call, bt_level)
+  subroutine get_box_energy(baro, final_call)
 
     ! passed variables
     class(type_barostat), intent(inout)         :: baro
     integer, optional                           :: final_call
-    integer, optional                           :: bt_level
 
     ! local variables
     integer                                     :: i
-    type(cq_timer)                              :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='get_box_energy',&
-         where=area,level=bt_level,echo=.true.)
 
     baro%ke_box = zero
     if (flag_extended_system) then
@@ -1672,7 +1588,6 @@ contains
         write(io_lun,'(4x,a,e16.8)') "ke_box:     ", baro%ke_box
       end if
     end if
-    call stop_backtrace(t=backtrace_timer,who='get_box_energy',echo=.true.)
 
   end subroutine get_box_energy
   !!***
@@ -1971,10 +1886,6 @@ contains
                                              fac_v, massa, x_old, y_old, z_old
     integer                               :: i, speca, gatom, ibeg_atom
     logical                               :: flagx, flagy, flagz
-    type(cq_timer)                        :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='propagate_r_mttk',&
-         where=area,level=3,echo=.true.)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "propagate_r_mttk"
@@ -2015,7 +1926,6 @@ contains
       write(io_lun,'(4x,a,e16.8)') "fac_v:      ", fac_v
       write(io_lun,'(4x,a,e16.8)') "fac_r:      ", fac_r
     end if
-    call stop_backtrace(t=backtrace_timer,who='propagate_r_mttk',echo=.true.)
 
   end subroutine propagate_r_mttk
   !!***
@@ -2039,12 +1949,7 @@ contains
 
     ! local variables
     real(double)                          :: v_new, v_old, lat_sfac
-    type(cq_timer)                        :: backtrace_timer
 
-    call start_backtrace(t=backtrace_timer,who='propagate_box_mttk',&
-         where=area,level=3,echo=.true.)
-
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "propagate_box_mttk"
 
     baro%v_old = baro%volume
@@ -2060,7 +1965,6 @@ contains
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
       write(io_lun,'(4x,a,e16.8)') "lat_sfac:   ", lat_sfac
     end if
-    call stop_backtrace(t=backtrace_timer,who='propagate_box_mttk',echo=.true.)
 
   end subroutine propagate_box_mttk
   !!***
@@ -2113,10 +2017,6 @@ contains
     ! local variables
     integer                                 :: i_mts, i_ys, i_nhc
     real(double)                            :: v_sfac, v_eta_couple
-    type(cq_timer)                          :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='propagate_npt_mttk',&
-         where=area,level=3,echo=.true.)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "propagate_npt_mttk"
@@ -2207,7 +2107,6 @@ contains
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
       write(io_lun,'(4x,a,e16.8)') "v_sfac:     ", v_sfac
     end if
-    call stop_backtrace(t=backtrace_timer,who='propagate_npt_mttk',echo=.true.)
 
   end subroutine propagate_npt_mttk
   !!***
@@ -2232,10 +2131,6 @@ contains
     ! local variables
     integer                                 :: i
     real(double)                            :: tr_ke_stress
-    type(cq_timer)                          :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='integrate_box',&
-         where=area,level=3,echo=.true.)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "integrate_box"
@@ -2270,7 +2165,6 @@ contains
                                        baro%G_h(2,2), baro%G_h(3,3)
       end if
     end if
-    call stop_backtrace(t=backtrace_timer,who='integrate_box',echo=.true.)
 
   end subroutine integrate_box
 
@@ -2295,10 +2189,6 @@ contains
     ! local variables
     real(double)                            :: expfac, const
     integer                                 :: i
-    type(cq_timer)                          :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='couple_box_particle_velocity',&
-         where=area,level=3,echo=.true.)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "couple_box_particle_velocity"
@@ -2323,8 +2213,6 @@ contains
         write(io_lun,'(4x,"expfac ",i2,": ",f16.8)') i, expfac
       end do
     end if
-    call stop_backtrace(t=backtrace_timer, &
-         who='couple_box_particle_velocity',echo=.true.)
 
   end subroutine couple_box_particle_velocity
 
@@ -2348,10 +2236,6 @@ contains
     real(double)                            :: expfac, tr_vh
     real(double), dimension(3)              :: expfac_h
     integer                                 :: i
-    type(cq_timer)                          :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='propagate_box_ssm',&
-         where=area,level=3,echo=.true.)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "propagate_box_ssm"
@@ -2386,7 +2270,6 @@ contains
         write(io_lun,'(4x,"expfac_h: ",3f16.8)') expfac_h
       end if
     end if
-    call stop_backtrace(t=backtrace_timer,who='propagate_box_ssm',echo=.true.)
 
   end subroutine propagate_box_ssm
 
@@ -2497,10 +2380,6 @@ contains
     ! local variables
     real(double) :: orcellx, orcelly, orcellz, xvec, yvec, zvec, r2, scale
     integer :: i, j
-    type(cq_timer) :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='update_cell',&
-         where=area,level=4,echo=.true.)
 
     if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "update_cell"
@@ -2557,7 +2436,6 @@ contains
       write(io_lun,'(a,3f12.6)') "new cell dimensions:  ", rcellx, rcelly, &
                                  rcellz
     end if
-    call stop_backtrace(t=backtrace_timer,who='update_cell',echo=.true.)
 
   end subroutine update_cell
   !!***
@@ -2589,10 +2467,6 @@ contains
     ! local variables
     integer                               :: lun, id_global, ni
     logical                               :: append_coords_bak
-    type(cq_timer)                        :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='write_md_checkpoint',&
-         where=area,level=3,echo=.true.)
 
     if (inode==ionode) then
       if (iprint_MD > 1) &
@@ -2654,8 +2528,6 @@ contains
       end if
       call io_close(lun)
     end if
-    call stop_backtrace(t=backtrace_timer,who='write_md_checkpoint',&
-         echo=.true.)
 
   end subroutine write_md_checkpoint
   !!***
@@ -2685,10 +2557,6 @@ contains
     ! local variables
     integer                               :: lun, id_global, ni, ni2, id_tmp
     real(double), dimension(3,ni_in_cell) :: v
-    type(cq_timer)                        :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='read_md_checkpoint',&
-         where=area,level=3,echo=.true.)
 
     if (inode==ionode) then
       if (iprint_MD > 1) &
@@ -2825,7 +2693,6 @@ contains
       call gcopy(baro%v_h,3,3)
       call gcopy(baro%G_h,3,3)
     end if
-    call stop_backtrace(t=backtrace_timer,who='read_md_checkpoint',echo=.true.)
 
   end subroutine read_md_checkpoint
   !!***

@@ -586,12 +586,6 @@ contains
     type(type_thermostat), target :: thermo
     type(type_barostat), target   :: baro
 
-    ! backtrace timer
-    type(cq_timer)    :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='md_run',&
-         where=area,level=1,echo=.true.)
-
     n_stop_qMD = 0
     final_call = 1
     allocate(ion_velocity(3,ni_in_cell), STAT=stat)
@@ -643,8 +637,8 @@ contains
     ! Thermostat/barostat initialisation
     call init_ensemble(baro, thermo, mdl, md_ndof, nequil)
     call thermo%get_temperature_and_ke(baro, ion_velocity, &
-         mdl%ion_kinetic_energy, bt_level=2)
-    call baro%get_pressure_and_stress(bt_level=2)
+                                      mdl%ion_kinetic_energy)
+    call baro%get_pressure_and_stress
     call mdl%get_cons_qty
 
     ! Get converted 1-D array for flag_atom_move
@@ -681,8 +675,8 @@ contains
             write(io_lun,fmt='(4x,"MD run, iteration ",i5)') iter
 
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
-            mdl%ion_kinetic_energy, bt_level=2)
-       call baro%get_pressure_and_stress(bt_level=2)
+                                          mdl%ion_kinetic_energy)
+       call baro%get_pressure_and_stress
 
        ! thermostat/barostat (MTTK splitting of Liouvillian)
        call integrate_pt(baro, thermo, mdl, ion_velocity)
@@ -757,8 +751,8 @@ contains
        end if
        thermo%ke_ions = mdl%ion_kinetic_energy
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
-            mdl%ion_kinetic_energy, bt_level=2)
-       call baro%get_pressure_and_stress(bt_level=2)
+                                          mdl%ion_kinetic_energy)
+       call baro%get_pressure_and_stress
 
        !! For Debuggging !!
        !!call cq_abort(" STOP FOR DEBUGGING")
@@ -822,8 +816,9 @@ contains
        ! The kinetic component of stress changes after the second velocity
        ! update 
        call thermo%get_temperature_and_ke(baro, ion_velocity, &
-            mdl%ion_kinetic_energy, final_call=final_call, bt_level=2)
-       call baro%get_pressure_and_stress(final_call=final_call, bt_level=2)
+                                          mdl%ion_kinetic_energy, &
+                                          final_call)
+       call baro%get_pressure_and_stress(final_call)
  
        if (nequil > 0) then
          nequil = nequil - 1
@@ -863,7 +858,6 @@ contains
     if (stat /= 0) call cq_abort("Error deallocating velocity in md_run: ", &
                                  ni_in_cell, stat)
     call reg_dealloc_mem(area_moveatoms, 3 * ni_in_cell, type_dbl)
-    call stop_backtrace(t=backtrace_timer,who='md_run',echo=.true.)
     return
   end subroutine md_run
   !!***
@@ -913,10 +907,6 @@ contains
 
     ! local variables
     character(50)  :: file_velocity='velocity.dat'
-    type(cq_timer) :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='init_ensemble',&
-         where=area,level=2,echo=.true.)
 
     if (inode==ionode .and. iprint_MD > 1) then
       write(io_lun,'(2x,a)') "Welcome to init_ensemble"
@@ -1022,8 +1012,6 @@ contains
       end if
     end select
     if (flag_MDcontinue) call read_md_checkpoint(thermo, baro)
-    
-    call stop_backtrace(t=backtrace_timer,who='init_ensemble',echo=.true.)
 
   end subroutine init_ensemble
 
@@ -1056,10 +1044,6 @@ contains
     logical, optional                           :: second_call
 
     ! local variables
-    type(cq_timer) :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='integrate_pt',&
-         where=area,level=2,echo=.true.)
   
     if (inode==ionode .and. iprint_MD > 1) then
       if (present(second_call)) then
@@ -1094,12 +1078,12 @@ contains
           call baro%couple_box_particle_velocity(thermo, velocity)
           call thermo%get_temperature_and_ke(baro, velocity, &
                                              mdl%ion_kinetic_energy)
-          call baro%get_pressure_and_stress(bt_level=3)
+          call baro%get_pressure_and_stress
           call baro%integrate_box(thermo)
         else
           call thermo%get_temperature_and_ke(baro, velocity, &
                                              mdl%ion_kinetic_energy)
-          call baro%get_pressure_and_stress(bt_level=3)
+          call baro%get_pressure_and_stress
           call baro%integrate_box(thermo)
           call baro%couple_box_particle_velocity(thermo, velocity)
         end if
@@ -1123,8 +1107,8 @@ contains
         if (present(second_call)) then
           call baro%couple_box_particle_velocity(thermo, velocity)
           call thermo%get_temperature_and_ke(baro, velocity, &
-               mdl%ion_kinetic_energy, bt_level=3)
-          call baro%get_pressure_and_stress(bt_level=3)
+               mdl%ion_kinetic_energy)
+          call baro%get_pressure_and_stress
           call baro%integrate_box(thermo)
           select case(thermo%thermo_type)
           case('nhc')
@@ -1146,14 +1130,13 @@ contains
             call cq_abort('Thermostat type must be "nhc" or "svr"')
           end select
           call thermo%get_temperature_and_ke(baro, velocity, &
-               mdl%ion_kinetic_energy, bt_level=3)
-          call baro%get_pressure_and_stress(bt_level=3)
+               mdl%ion_kinetic_energy)
+          call baro%get_pressure_and_stress
           call baro%integrate_box(thermo)
           call baro%couple_box_particle_velocity(thermo, velocity)
         end if
       end select
     end select
-    call stop_backtrace(t=backtrace_timer,who='integrate_pt',echo=.true.)
   end subroutine integrate_pt
 !!*****
 
@@ -1184,10 +1167,6 @@ contains
     logical, dimension(:), intent(in)   :: flag_movable
 
     ! local variables
-    type(cq_timer) :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='update_pos_and_box',&
-      where=area,level=2,echo=.true.)
 
     if (inode==ionode .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "Welcome to update_pos_and_box"
@@ -1211,7 +1190,6 @@ contains
       ! For NVE or NVT
       call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
     end if
-    call stop_backtrace(t=backtrace_timer,who='update_pos_and_box',echo=.true.)
 
   end subroutine update_pos_and_box
   !!*****
@@ -1244,10 +1222,6 @@ contains
     type(type_thermostat), intent(inout)  :: thermo
     type(type_md_model), intent(inout)    :: mdl
     integer, intent(in)                   :: iter, nequil
-    type(cq_timer)                        :: backtrace_timer
-
-    call start_backtrace(t=backtrace_timer,who='write_md_data',&
-      where=area,level=2,echo=.true.)
 
     if (inode==ionode .and. iprint_MD > 1) &
       write(io_lun,'(2x,a)') "Welcome to write_md_data"
@@ -1264,7 +1238,6 @@ contains
     if (flag_baroDebug) &
       call baro%dump_baro_state(iter, md_baro_file)
     mdl%append = .true.
-    call stop_backtrace(t=backtrace_timer,who='write_md_data',echo=.true.)
 
   end subroutine write_md_data
   !!*****
