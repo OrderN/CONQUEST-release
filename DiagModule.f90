@@ -465,6 +465,8 @@ contains
   !!    Adding (l,m)-projection for pDOS
   !!   2019/03/18 17:00 nakata
   !!    Added wf_self_con for accumulate_DOS
+  !!   2019/05/09 dave
+  !!    Bug fix for band density output (and added write_eigenvalues call)
   !!  SOURCE
   !!
   subroutine FindEvals(electrons)
@@ -1020,8 +1022,24 @@ contains
              end do
           end do
        else
-          do wf_no=1,max_wf
-             do spin = 1, nspin
+          if(inode==ionode) call write_eigenvalues(w,matrix_size,nkp,nspin,kk,wtk,Efermi)
+          if(nspin>1) then
+             do wf_no=1,max_wf
+                do spin = 1, nspin
+                   abs_wf(:)=zero
+                   if (atomf.ne.sf) then
+                      call SF_to_AtomF_transform(matBand(wf_no), matBand_atomf, spin, Hrange)
+                      call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand_atomf,maxngrid)
+                   else
+                      call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand(wf_no),maxngrid)
+                   endif
+                   call wf_output(spin,abs_wf,wf_no)
+                   call my_barrier()
+                end do
+             end do
+          else
+             spin = 1
+             do wf_no=1,max_wf
                 abs_wf(:)=zero
                 if (atomf.ne.sf) then
                    call SF_to_AtomF_transform(matBand(wf_no), matBand_atomf, spin, Hrange)
@@ -1029,10 +1047,10 @@ contains
                 else
                    call get_band_density(abs_wf,spin,atomfns,atom_fns_K,matBand(wf_no),maxngrid)
                 endif
-                call wf_output(spin,abs_wf,wf_no)
+                call wf_output(0,abs_wf,wf_no)
                 call my_barrier()
              end do
-          end do
+          end if
        end if
        deallocate(abs_wf,STAT=stat)
        if (stat /= 0) call cq_abort('Find Evals: Failed to deallocate wfs',stat)

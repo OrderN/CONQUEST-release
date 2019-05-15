@@ -1677,9 +1677,8 @@ contains
           ! note that grad_density(rr,1:3,1:spin) has already been used
           ! at this point, so we can savely reuse this slot to store
           ! d(rho * eps_xc) / dgrho at rr.
+          grad_density(rr,1:3,spin) = drhoEps_x(1:3,spin) + drhoEps_c(1:3,spin)
           do dir1=1,3
-             grad_density(rr,dir1,spin) = drhoEps_x(dir1,spin) + &
-                                          drhoEps_c(dir1,spin)
              if (flag_stress) then
                if (flag_full_stress) then
                  do dir2=1,3
@@ -1850,8 +1849,7 @@ contains
           ! note that grad_density(rr,1:3,1:spin) has already been used
           ! at this point, so we can savely reuse this slot to store
           ! d(rho * eps_xc) / dgrho at rr.
-          grad_density(rr,1:3,spin) = exx_a * drhoEps_x(1:3,spin) + &
-                                      drhoEps_c(1:3,spin)
+          grad_density(rr,1:3,spin) = exx_a * drhoEps_x(1:3,spin) + drhoEps_c(1:3,spin)
           do dir1=1,3
              if (flag_stress) then
                if (flag_full_stress) then
