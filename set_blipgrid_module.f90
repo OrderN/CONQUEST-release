@@ -302,7 +302,7 @@ contains
   subroutine get_naba_BCSblk(rcut,naba_blk,comm_naba_blocks_of_atoms)
 
     use datatypes
-    use numbers,        ONLY: very_small, pi,three,four
+    use numbers,        ONLY: very_small, pi,three,four, RD_ERR
     use group_module,   ONLY: blocks,parts
     use primary_module, ONLY: bundle
     use cover_module,   ONLY: BCS_blocks,DCS_parts
@@ -415,7 +415,7 @@ contains
 
                 ! if(distsq < rcutsq) then  ! If it is a neighbour block,...
                 ! if(distsq < rcutsq+very_small) then  ! If it is a neighbour block,...
-                if(distsq < rcutsq(spec)) then  ! If it is a neighbour block,...
+                if(distsq < rcutsq(spec)+RD_ERR) then  ! If it is a neighbour block,...
 
                    ! nxmin etc. (those will be used in BtoG trans.)
                    if(naba_blk%no_naba_blk(inp)==0) then
@@ -546,7 +546,7 @@ contains
   subroutine get_naba_BCSblk_max(rcut,max_naba_blocks_of_atoms, max_recv_node_BtoG)
 
     use datatypes
-    use numbers,        ONLY: very_small, pi,three,four
+    use numbers,        ONLY: very_small, pi,three,four, RD_ERR
     use group_module,   ONLY: blocks,parts
     use primary_module, ONLY: bundle
     use cover_module,   ONLY: BCS_blocks,DCS_parts
@@ -626,7 +626,7 @@ contains
                 zmax= zmin+ dcellz_block -dcellz_grid
                 call distsq_blk_atom&
                      (xatom,yatom,zatom,xmin,xmax,ymin,ymax,zmin,zmax,distsq)
-                if(distsq < rcutsq(spec)) then  ! If it is a neighbour block,...
+                if(distsq < rcutsq(spec)+RD_ERR) then  ! If it is a neighbour block,...
 
                    ind_block= BCS_blocks%lab_cell(iblock)  !CC in a sim. cell
                    if(ind_block > blocks%mx_gcell) call cq_abort(' ERROR: ind_block in get_naba_BCSblk',ind_block,blocks%mx_gcell)
@@ -760,6 +760,7 @@ contains
   subroutine get_naba_DCSprt(rcut,naba_set,halo_set)
 
     use datatypes
+    use numbers,        ONLY: RD_ERR
     use global_module,  ONLY: rcellx,rcelly,rcellz,numprocs, id_glob, species_glob, sf, nlpf, paof
     use species_module, ONLY: nsf_species, nlpf_species, npao_species, n_species
     use group_module,   ONLY: parts,blocks
@@ -844,7 +845,7 @@ contains
                 call distsq_blk_atom &
                      (xatom,yatom,zatom,xmin,xmax,ymin,ymax,zmin,zmax,distsq)
                 spec = species_glob( id_glob( parts%icell_beg(DCS_parts%lab_cell(np)) +ni-1 ))
-                if(distsq<rcutsq(spec)) then
+                if(distsq<rcutsq(spec)+RD_ERR) then
                 !if(distsq < rcutsq) then  ! have found a naba atom
                    ia=ia+1             ! seq. no. of naba atoms for iprim_blk
                    halo_set%ihalo(icover)=1     ! icover-th atom is a halo atom
@@ -1014,6 +1015,7 @@ contains
   subroutine get_naba_DCSprt_max(rcut,max_naba_prt,max_naba_atm,max_halo_part,max_halo_nodes)
 
     use datatypes
+    use numbers,        ONLY: RD_ERR
     use global_module,  ONLY: rcellx,rcelly,rcellz,numprocs, id_glob, species_glob, sf, nlpf, paof
     use species_module, ONLY: nsf_species, nlpf_species, npao_species, n_species
     use group_module,   ONLY: parts,blocks
@@ -1091,7 +1093,7 @@ contains
                 call distsq_blk_atom(xatom,yatom,zatom,xmin,xmax,ymin,ymax,zmin,zmax,distsq)
                 spec = species_glob( id_glob( parts%icell_beg(DCS_parts%lab_cell(np)) +ni-1 ))
 
-                if(distsq < rcutsq(spec)) then  ! have found a naba atom
+                if(distsq < rcutsq(spec)+RD_ERR) then  ! have found a naba atom
                    ia=ia+1          
                    atoms = .true.
                    ihalo(icover) = 1
