@@ -79,7 +79,7 @@ contains
     flag_gen_use_Vl = fdf_boolean('General.UseVl',.false.)
     gen_energy_semicore = fdf_double('General.SemicoreEnergy',-one)
     if(gen_energy_semicore>zero) &
-         write(*,fmt='(4x,"Possible error: your semi-core threshold is positive ! ",f6.3)') gen_energy_semicore
+         write(*,fmt='(4x,"Error: your semi-core threshold is positive ! ",f6.3)') gen_energy_semicore
     return
   end subroutine read_general_input
 
@@ -88,7 +88,8 @@ contains
   subroutine read_species_input(species)
 
     use numbers
-    use input_module, ONLY: fdf_block, fdf_string, leqi, fdf_integer, fdf_double, fdf_boolean, fdf_endblock
+    use input_module, ONLY: fdf_block, fdf_string, leqi, fdf_integer, fdf_double, fdf_boolean, &
+         fdf_endblock
     use pseudo_atom_info, ONLY: paos, flag_use_Vl, val, deltaE_large_radius, deltaE_small_radius, &
          flag_default_cutoffs, pao_cutoff_energies, pao_cutoff_radii, pao_cutoff_default
     use units, ONLY: HaToeV
@@ -107,7 +108,7 @@ contains
        ! 
        energy_semicore = fdf_double('Atom.SemicoreEnergy',gen_energy_semicore)
        if(energy_semicore>zero) &
-            write(*,fmt='(4x,"Possible error: your semi-core threshold is positive ! ",f6.3)') energy_semicore
+            write(*,fmt='(4x,"Error: your semi-core threshold is positive ! ",f6.3)') energy_semicore
        !
        ! Get Hamann input and output file names and read files
        !
@@ -119,14 +120,6 @@ contains
        ! Mesh
        !
        mesh_type = hamann
-       !input_string = fdf_string(6,'Atom.MeshType',input_string(1:6)) ! Take mesh-type default as semilocal type
-       !if(input_string(1:6)=='hamann') then
-       !   mesh_type = hamann
-       !else if(input_string(1:6)=='siesta') then
-       !   mesh_type = siesta
-       !else
-       !   call cq_abort("Unrecognised mesh type: "//input_string(1:6))
-       !end if
        alpha = fdf_double("Mesh.Alpha",alpha)
        beta = fdf_double("Mesh.Beta",beta)
        delta_r_reg = fdf_double("Atom.RegularSpacing",0.01_double)       
@@ -137,9 +130,9 @@ contains
        if(paos%flag_perturb_polarise) then
           ! This is for compatibility but should be false
           flag_use_Vl = fdf_boolean('Atom.UseVl',flag_gen_use_Vl)
-          ! Assume that the default polarised level is the highest occupied state
-          paos%polarised_n = fdf_integer("Atom.PolarisedN",0)  !val%n(val%n_shells))
-          paos%polarised_l = fdf_integer("Atom.PolarisedL",-1) !val%l(val%n_shells))
+          ! Do we have state to polarise? 
+          paos%polarised_n = fdf_integer("Atom.PolarisedN",0)
+          paos%polarised_l = fdf_integer("Atom.PolarisedL",-1)
           paos%polarised_shell = 0
           !
           ! Default to outer shell (or previous if outer shell has l=2)
@@ -564,14 +557,6 @@ contains
        read(lun,*) ((local_and_vkb%projector(i,j,ell), &
             j=1,local_and_vkb%n_proj(ell)), ell=0,pseudo(i_species)%lmax)
     end do
-    !if(pseudo_type==siesta) then
-    !   !write(*,*) '# Local_And_Vkb ps type siesta; scaling charge by 1/r2 and potential by 0.5'
-    !   do i=1,ngrid
-    !      local_and_vkb%charge(i) = local_and_vkb%charge(i)/ &
-    !           (local_and_vkb%rr(i)*local_and_vkb%rr(i))
-    !      local_and_vkb%local(i) = half*local_and_vkb%local(i)
-    !   end do
-    !end if
     call io_close(lun)
     return
   end subroutine read_vkb
@@ -602,7 +587,9 @@ contains
     character(len=132) :: line
     logical :: done
 
+    !
     ! Open appropriate file
+    !
     call io_assign(lun)
     open(unit=lun, file=pseudo_file_name, status='old', iostat=ios)
     if ( ios > 0 ) call cq_abort('Error opening Hamann input file: '//pseudo_file_name)
@@ -611,7 +598,9 @@ contains
     read(a,*) sym,z,nc,nv,iexc,file_format
     write(*,fmt='(/"Information about pseudopotential for species: ",a2/)') sym
     pseudo(i_species)%z = z
+    !
     ! Assign and initialise XC functional for species
+    !
     if(iexc==3) then
        flag_functional_type = functional_lda_pz81
     else if(iexc==4) then
@@ -622,10 +611,11 @@ contains
        call cq_abort("Error: unrecognised iexc value: ",iexc)
     end if
     call init_xc
-    !write(*,fmt='("For species ",i2," we are using XC functional: ",a12)') i_species,functional_description
     write(*,fmt='("There are ",i2," core and ",i2," valence shells")') nc,nv
     a = get_hamann_line(lun)
+    !
     ! Read n, l, filling for core
+    !
     do i_shell = 1, nc
        read(a,*) en,ell,fill
        a = get_hamann_line(lun)
@@ -639,17 +629,25 @@ contains
     end do
     pseudo(i_species)%zval = zval
     write(*,fmt='("The atomic number is",i3,", with valence charge ",f4.1)') z,zval
+    !
     ! lmax
+    !
     read(a,*) pseudo(i_species)%lmax
     write(*,fmt='("Maximum angular momentum for pseudopotential is l=",i1)') pseudo(i_species)%lmax
+    !
     ! Projector radii etc
+    !
     a = get_hamann_line(lun)
     do ell = 0, pseudo(i_species)%lmax-1
        a = get_hamann_line(lun)
     end do
+    !
     ! Local potential
+    !
     a = get_hamann_line(lun)
+    !
     ! Numbers of projectors
+    !
     local_and_vkb%n_proj = 0
     local_and_vkb%n_nl_proj = 0
     a = get_hamann_line(lun)
@@ -666,12 +664,13 @@ contains
        do j=1,local_and_vkb%n_proj(ell)
           i=i+1
           zeta = zeta+1
-          !call rad_alloc(pseudo(i_species)%pjnl(i),grid_size)
           pseudo(i_species)%pjnl_l(i) = ell
           pseudo(i_species)%pjnl_n(i) = zeta
        end do
     end do
-    ! Partial core corrections ?
+    !
+    ! Partial core correction ?
+    !
     pseudo(i_species)%flag_pcc = .false.
     read(a,*) icmod
     if(icmod>0) then
@@ -680,15 +679,6 @@ contains
     else
        write(*,fmt='("This pseudopotential does not include partial core corrections"/)') 
     end if
-    ! From here on we don't need the data, so the lines are commented out
-    !! Comment line
-    !read(lun, '(a)') a
-    !! Log derivative analysis
-    !read(lun, '(a)') a
-    !read(lun, '(a)') a
-    !! Comment line
-    !read(lun, '(a)') a
-    !! Output grid (Hamann code)
     call io_close(lun)
   end subroutine read_hamann_input
   
@@ -711,6 +701,7 @@ contains
     return
   end function get_hamann_line
 
+  ! Set up PAO basis in case of default, or check user-specified basis
   subroutine set_pao_initial(i_species)
 
     use numbers
@@ -786,7 +777,6 @@ contains
           end if
           if(val%inner(i_shell)>0) then
              paos%inner(i_shell)=val%inner(i_shell)
-             paos%npao(i_shell) = paos%npao(i_shell)+1
           end if
        end do
        !
@@ -795,50 +785,48 @@ contains
        if(basis_size>minimal) then
           i_shell = paos%n_shells
           paos%nzeta(i_shell) = n_pol_zeta
-          ! Perturbative
+          !
+          ! Determine polarisation shell: assume l(highest occupied)+1 unless that is l=2
+          !
+          i_highest_occ = val%n_occ
+          if(paos%l(i_highest_occ)>1) then
+             i_highest_occ = i_highest_occ - 1
+             if(i_highest_occ==0) &
+                  call cq_abort("Only one shell, with l=2; I can't polarise this automatically.")
+          end if
+          !
+          ! Check for equivalent l in pseudopotentials - switch to perturbation if necessary
+          !
+          if(paos%l(i_highest_occ)+1>pseudo(i_species)%lmax.and.(.not.paos%flag_perturb_polarise)) then
+             write(*,fmt='("Warning ! l for polarisation is greater than lmax for pseudopotential.&
+                  &  We have to use perturbation.")')
+             paos%flag_perturb_polarise = .true.
+             paos%polarised_l = paos%l(i_highest_occ)
+             paos%polarised_n = paos%n(i_highest_occ)
+          end if
+          !
+          ! Set l, n, npao (for nodes)
+          !
           if(paos%flag_perturb_polarise) then
              call set_polarisation
-             write(*,fmt='(2i3,2i7)') paos%n(i_shell), paos%l(i_shell),&
-                  paos%npao(i_shell) - paos%l(i_shell), &
-                  paos%nzeta(i_shell)
+             write(*,fmt='(2i3,2i7, "  perturbed polarisation state")') paos%n(i_shell), &
+                  paos%l(i_shell), paos%npao(i_shell) - paos%l(i_shell), paos%nzeta(i_shell)
           else
-             ! Determine polarisation shell: assume l(highest occupied)+1 unless that is l=2
-             i_highest_occ = val%n_occ
-             if(paos%l(i_highest_occ)>1) then
-                i_highest_occ = i_highest_occ - 1
-                if(i_highest_occ==0) &
-                     call cq_abort("We have only one shell with l=2; &
-                     & I can't polarise this automatically.")
-             end if
-             ! Set l
              paos%l(i_shell) = paos%l(i_highest_occ)+1
-             ! Check for equivalent l in pseudopotentials - invoke perturbation if necessary
-             if(paos%l(i_shell)>pseudo(i_species)%lmax) then
-                write(*,fmt='("Warning ! l for polarisation is greater than lmax for pseudopotential.&
-                     &  We have to use perturbation.")')
-                paos%flag_perturb_polarise = .true.
-                call set_polarisation
-                write(*,fmt='(2i3,2i7)') paos%n(i_shell), paos%l(i_shell),&
-                     paos%npao(i_shell) - paos%l(i_shell), &
-                     paos%nzeta(i_shell)
-             else
-                paos%n(i_shell) = max(paos%n(i_highest_occ),paos%l(i_highest_occ)+1)
-                ! Set npao for nodes
-                paos%npao(i_shell) = paos%l(i_shell)+1
-                ! Check for inner shell with same l value
-                if(count_func(paos%l(i_shell))>0) then
-                   paos%npao(i_shell) = paos%npao(i_shell)+1
-                   do j = i_shell-1,1,-1
-                      if(paos%l(j)==paos%l(i_shell)) paos%inner(i_shell) = j
-                   end do
-                end if
-                write(*,fmt='(2i3,2i7)') paos%n(i_shell), paos%l(i_shell),&
-                     paos%npao(i_shell) - paos%l(i_shell) - 1, &
-                     paos%nzeta(i_shell)
+             paos%n(i_shell) = max(paos%n(i_highest_occ),paos%l(i_highest_occ)+1)
+             paos%npao(i_shell) = paos%l(i_shell)+1
+             ! Check for inner shell with same l value
+             if(count_func(paos%l(i_shell))>0) then
+                paos%npao(i_shell) = paos%npao(i_shell)+1
+                do j = i_shell-1,1,-1
+                   if(paos%l(j)==paos%l(i_shell)) paos%inner(i_shell) = j
+                end do
              end if
+             write(*,fmt='(2i3,2i7, "  polarisation state")') paos%n(i_shell), paos%l(i_shell),&
+                  paos%npao(i_shell) - paos%l(i_shell) - 1, &
+                  paos%nzeta(i_shell)
           end if
        end if
-       !paos%total_paos = n_paos
        !
        ! User-specified basis
        !
@@ -846,63 +834,64 @@ contains
        write(*,fmt='("User-specified basis")')
        count_func = 0
        write(*,fmt='("  n  l  nodes  zetas")')
-       do i_shell = 1,val%n_occ
-          if(paos%n(i_shell) /= val%n(i_shell)) call cq_abort("Mismatch in valence n value: ", &
-               paos%n(i_shell),val%n(i_shell))
-          if(paos%l(i_shell) /= val%l(i_shell)) call cq_abort("Mismatch in valence n value: ", &
-               paos%l(i_shell),val%l(i_shell))
-       end do ! i_shell = 1,n_shells
-       ! Create npao - used for number of nodes
-       paos%lmax = 0
+       !
+       ! Create npao - used for number of nodes - and check consistency for n/l
+       !
        paos%inner = 0
-       do i_shell = 1,paos%n_shells
+       do i_shell = 1,val%n_occ
+          ! Checks
+          if( paos%n(i_shell) /= val%n(i_shell) ) &
+               call cq_abort("Mismatch in valence n value: ", paos%n(i_shell),val%n(i_shell))
+          if( paos%l(i_shell) /= val%l(i_shell) ) &
+               call cq_abort("Mismatch in valence l value: ", paos%l(i_shell),val%l(i_shell))
+          if(paos%l(i_shell)>pseudo(i_species)%lmax) then
+             write(*,fmt='(4x,"Max l value from pseudopotential: ",i2)') pseudo(i_species)%lmax
+             write(*,fmt='(4x,"Max l value specified for PAO   : ",i2)') paos%l(i_shell)
+             call cq_abort("Angular momentum mismatch between PS and PAO; please correct.")
+          end if
+          ! Confine?
           if(paos%prefac(i_shell)>RD_ERR) flag_confine = .true.
-          count_func(paos%l(i_shell)) = count_func(paos%l(i_shell))+1
-          if(paos%flag_perturb_polarise.AND.i_shell==paos%n_shells) then
-             if(paos%l(i_shell)+1>paos%lmax) paos%lmax=paos%l(i_shell)+1
-             !paos%npao(i_shell) = paos%npao(paos%polarised_shell)
-             !do j=i_shell-1,1,-1
-             !   if(paos%l(j)==ell) then ! Semi-core with this l
-             !      paos%npao(i_shell) = paos%npao(i_shell) + 1
-             !      exit
-             !   end if
-             !end do
-             en = paos%n(i_shell)
-             if(en<3) en = en+1
-             write(*,fmt='(2i3,2i7," using perturbative polarisation")') en, paos%l(i_shell), &
-                  paos%npao(i_shell) - paos%l(i_shell) - 1+1, & ! Silly book-keeping
+          this_l = val%l(i_shell)
+          count_func(this_l) = count_func(this_l) + 1
+          ! Set npao and write out
+          paos%npao(i_shell) = val%npao(i_shell)
+          write(*,fmt='(2i3,2i7)') paos%n(i_shell), paos%l(i_shell),&
+                  paos%npao(i_shell) - paos%l(i_shell) - 1, &
                   paos%nzeta(i_shell)
-             !write(*,fmt='(2i3,2i7,"  Shell being polarised")') paos%n(i_shell), paos%l(i_shell),&
-             !     paos%npao(i_shell) - paos%l(i_shell) - 1, &
-             !     paos%nzeta(i_shell)
-          else
-             if(paos%l(i_shell)>paos%lmax) paos%lmax=paos%l(i_shell)
-             paos%npao(i_shell) = paos%l(i_shell) + 1 + count_func(paos%l(i_shell))-1
+          ! Check for inner shell and reasonable l
+          if(val%inner(i_shell)>0) then
+             paos%inner(i_shell)=val%inner(i_shell)
+          end if
+       end do ! i_shell = 1,val%n_occ
+       !
+       ! And again for unoccupied (polarisation) shells
+       !
+       if(paos%flag_perturb_polarise.AND.paos%n_shells>val%n_occ) then
+          i_shell = paos%n_shells
+          call set_polarisation
+          paos%nzeta(i_shell) = paos%nzeta(paos%polarised_shell)
+          write(*,fmt='(2i3,2i7, "  perturbed polarisation state")') paos%n(i_shell), &
+               paos%l(i_shell), paos%npao(i_shell) - paos%l(i_shell), paos%nzeta(i_shell)
+       else
+          do i_shell = val%n_occ+1,paos%n_shells
+             if(paos%l(i_shell)>pseudo(i_species)%lmax) then
+                write(*,fmt='(4x,"Max l value from pseudopotential: ",i2)') pseudo(i_species)%lmax
+                write(*,fmt='(4x,"Max l value specified for PAO   : ",i2)') paos%l(i_shell)
+                call cq_abort("Angular momentum mismatch between PS and PAO; please correct.")
+             end if
+             ! Set npao and write out
+             paos%npao(i_shell) = paos%l(i_shell)+1
+             ! Check for inner shell with same l value
+             if(count_func(paos%l(i_shell))>0) then
+                paos%npao(i_shell) = paos%npao(i_shell)+1
+                do j = i_shell-1,1,-1
+                   if(paos%l(j)==paos%l(i_shell)) paos%inner(i_shell) = j
+                end do
+             end if
              write(*,fmt='(2i3,2i7)') paos%n(i_shell), paos%l(i_shell),&
                   paos%npao(i_shell) - paos%l(i_shell) - 1, &
                   paos%nzeta(i_shell)
-             do j=i_shell-1,1,-1
-                if(paos%l(j)==paos%l(i_shell)) then ! Semi-core with this l
-                   paos%inner(i_shell) = j
-                end if
-             end do
-          end if
-          if(paos%l(i_shell)>pseudo(i_species)%lmax) then ! Potential problem
-             if(paos%flag_perturb_polarise.AND.paos%l(i_shell)==pseudo(i_species)%lmax+1) then
-                write(*,fmt='("Maximum l value for pseudopotential is ",i2," but you have chosen PAOs with l=",i2)') &
-                     pseudo(i_species)%lmax, paos%l(i_shell)
-                write(*,fmt='("As you are using perturbative polarisation, this is OK")')
-             else
-                call cq_abort("Max l from PS smaller than max l from PAOs; use perturbative polarisation if needed.", &
-                     pseudo(i_species)%lmax, paos%l(i_shell))
-             end if
-          end if
-       end do ! i_shell = 1,n_shells
-       if(paos%n_shells>val%n_occ.AND.paos%flag_perturb_polarise) then
-          write(*,fmt='("Using perturbative polarisation: perturbing solution for n=",i2," and l=",i2)') &
-               paos%n(val%n_occ+1), paos%l(val%n_occ+1)
-          if(paos%n_shells-val%n_occ>1) &
-               write(*,fmt='("Using normal Schrodinger solver for further shells")')
+          end do
        end if
        if(flag_confine) then
           write(*,fmt='("Using exponential confinement for PAOs")')
