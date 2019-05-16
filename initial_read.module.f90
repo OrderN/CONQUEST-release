@@ -661,6 +661,9 @@ contains
   !!    added flag_PDOS_include_semicore to allow inclusion/exclusion of semi-core states from PDOS
   !!   2019/02/28 zamaan
   !!    added stress and enthalpy tolerances for cell optimisation
+  !!   2019/03/28 zamaan
+  !!    Added flag_stress and flag_full_stress to toggle calculation of stress
+  !!    and off-diagonal elements respectively
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -723,7 +726,8 @@ contains
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
                              flag_opt_cell, cell_constraint_flag, &
-                             cell_en_tol, optcell_method, cell_stress_tol
+                             cell_en_tol, optcell_method, cell_stress_tol, &
+                             flag_stress, flag_full_stress
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
                       RadiusSupport, RadiusAtomf, RadiusMS, RadiusLD, &
@@ -1418,6 +1422,8 @@ contains
        cell_stress_tol       = fdf_double('AtomMove.StressTolerance',0.005_double)
        flag_stop_on_empty_bundle = fdf_boolean('AtomMove.StopOnEmptyBundle',.false.)
        enthalpy_tolerance    = fdf_double('AtomMove.EnthalpyTolerance', 1.0e-5_double)
+       flag_stress           = fdf_boolean('AtomMove.CalcStress', .true.)
+       flag_full_stress      = fdf_boolean('AtomMove.FullStress', .false.)
        !
        flag_vary_basis       = fdf_boolean('minE.VaryBasis', .false.)
        if(.NOT.flag_vary_basis) then

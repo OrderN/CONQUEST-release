@@ -4392,7 +4392,7 @@ contains
     one_plus_strain(3) = rcellz/cell_ref(3)
     do i=1,3
       config(i,1) = one_plus_strain(i) - one
-      force(i,1) = -(stress(i) + target_press*vol)/one_plus_strain(i)
+      force(i,1) = -(stress(i,i) + target_press*vol)/one_plus_strain(i)
     end do
     do i=1,ni_in_cell
       i_global = id_glob(i)

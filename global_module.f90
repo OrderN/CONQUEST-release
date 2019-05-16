@@ -138,6 +138,8 @@
 !!    Adding (l,m)-projection for PDOS
 !!   2019/02/28 zamaan
 !!    Added enthalpy and stress tolerances for cell optimisation
+!!   2019/03/28 zamaan
+!!    Added flag_stress and flag_full_stress
 !!  SOURCE
 !!
 module global_module
@@ -180,7 +182,8 @@ module global_module
 
   character(len=20), save :: runtype ! What type of run is it ?
 
-
+  logical :: flag_stress   ! Compute the stress tensor?
+  logical :: flag_full_stress ! Compute the off-diagonal elements?
   logical :: flag_opt_cell ! optimize the simulation cell?
   integer :: optcell_method ! method for cell optimiisation 1 = cell, fixed fractional coords, 2 = nested loop cell + geometry optimisation, 3 = single vector full optimisation
   ! specify sim cell dims/ratios of dims to be held constant.

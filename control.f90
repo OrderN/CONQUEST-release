@@ -886,12 +886,13 @@ contains
   !!  MODIFICATION HISTORY
   !!   2018/05/30 zamaan
   !!    Made BerendsenEquil work with NVT ensemble.
+  !!   2019/04/09 zamaan
+  !!    Removed unnecessary references to stress tensor
   !!  SOURCE
   !!  
   subroutine init_ensemble(baro, thermo, mdl, md_ndof, nequil, second_call)
 
     use numbers
-    use force_module,   only: stress
     use input_module,   only: leqi
     use io_module,      only: read_velocity
     use md_model,       only: type_md_model
@@ -952,7 +953,7 @@ contains
       ! Just for computing temperature
       call thermo%init_thermo('none', 'none', MDtimestep, md_ndof, md_tau_T, &
                               mdl%ion_kinetic_energy)
-      call baro%init_baro('none', MDtimestep, md_ndof, stress, ion_velocity, &
+      call baro%init_baro('none', MDtimestep, md_ndof, ion_velocity, &
                           md_tau_P, mdl%ion_kinetic_energy) !to get the pressure
     case('nvt')
       if (nequil > 0) then ! Equilibrate using Berendsen?
@@ -966,14 +967,14 @@ contains
         call thermo%init_thermo(md_thermo_type, 'none', MDtimestep, md_ndof, &
                                 md_tau_T, mdl%ion_kinetic_energy)
       end if
-      call baro%init_baro('none', MDtimestep, md_ndof, stress, ion_velocity, &
+      call baro%init_baro('none', MDtimestep, md_ndof, ion_velocity, &
                           md_tau_P, mdl%ion_kinetic_energy) !to get the pressure
     case('npt')
       if (leqi(md_baro_type, 'berendsen')) then
         md_thermo_type = 'berendsen'
         call thermo%init_thermo('berendsen', 'berendsen', MDtimestep, &
                                 md_ndof, md_tau_T, mdl%ion_kinetic_energy)
-        call baro%init_baro('berendsen', MDtimestep, md_ndof, stress, &
+        call baro%init_baro('berendsen', MDtimestep, md_ndof, &
                             ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
       else
         md_thermo_type = 'nhc'
@@ -985,13 +986,13 @@ contains
           call thermo%init_thermo('berendsen', 'berendsen', MDtimestep, &
                                   md_ndof, md_tau_T_equil, &
                                   mdl%ion_kinetic_energy)
-          call baro%init_baro('berendsen', MDtimestep, md_ndof, stress, &
+          call baro%init_baro('berendsen', MDtimestep, md_ndof, &
                               ion_velocity, md_tau_P_equil, &
                               mdl%ion_kinetic_energy)
         else
           call thermo%init_thermo(md_thermo_type, md_baro_type, MDtimestep, &
                                   md_ndof, md_tau_T, mdl%ion_kinetic_energy)
-          call baro%init_baro(md_baro_type, MDtimestep, md_ndof, stress, &
+          call baro%init_baro(md_baro_type, MDtimestep, md_ndof, &
                               ion_velocity, md_tau_P, mdl%ion_kinetic_energy)
         end if
       end if
@@ -1771,9 +1772,9 @@ end subroutine write_md_data
     do while (.not. done)
        call start_timer(tmr_l_iter, WITH_LEVEL)
        volume = rcellx*rcelly*rcellz
-       stressx = -stress(1)/volume
-       stressy = -stress(2)/volume
-       stressz = -stress(3)/volume
+       stressx = -stress(1,1)/volume
+       stressy = -stress(2,2)/volume
+       stressz = -stress(3,3)/volume
        mean_stress = (stressx + stressy + stressz)/3
        RMSstress = sqrt(((stressx*stressx) + (stressy*stressy) + (stressz*stressz))/3)
 
@@ -1835,7 +1836,9 @@ end subroutine write_md_data
 
        ! Analyse Stresses and energies
        dH = enthalpy0 - enthalpy1
-       newRMSstress = sqrt(((stress(1)*stress(1)) + (stress(2)*stress(2)) + (stress(3)*stress(3)))/3)
+       newRMSstress = sqrt(((stress(1,1)*stress(1,1)) + &
+                            (stress(2,2)*stress(2,2)) + &
+                            (stress(3,3)*stress(3,3)))/3)
        dRMSstress = RMSstress - newRMSstress
 
        enthalpy0 = enthalpy1
@@ -1843,7 +1846,7 @@ end subroutine write_md_data
        volume = rcellx*rcelly*rcellx
        max_stress = zero
        do i=1,3
-         stress_diff = abs(press + stress(i))/volume
+         stress_diff = abs(press + stress(i,i))/volume
          if (stress_diff > max_stress) max_stress = stress_diff
        end do
 
@@ -2208,9 +2211,9 @@ end subroutine write_md_data
 
       enthalpy0 = enthalpy(energy0, press)
       volume = rcellx*rcelly*rcellz
-      stressx = -stress(1)/volume
-      stressy = -stress(2)/volume
-      stressz = -stress(3)/volume
+      stressx = -stress(1,1)/volume
+      stressy = -stress(2,2)/volume
+      stressz = -stress(3,3)/volume
       mean_stress = (stressx + stressy + stressz)/3
       RMSstress = sqrt(((stressx*stressx) + (stressy*stressy) + (stressz*stressz))/3)
 
@@ -2250,14 +2253,15 @@ end subroutine write_md_data
 
       ! Analyse Stresses and energies
       dH = enthalpy0 - enthalpy1
-      newRMSstress = sqrt(((stress(1)*stress(1)) + (stress(2)*stress(2)) &
-                     + (stress(3)*stress(3)))/3)
+      newRMSstress = sqrt(((stress(1,1)*stress(1,1)) + &
+                           (stress(2,2)*stress(2,2)) + &
+                           (stress(3,3)*stress(3,3)))/three)
       dRMSstress = RMSstress - newRMSstress
 
       volume = rcellx*rcelly*rcellx
       max_stress = zero
       do i=1,3
-        stress_diff = abs(press + stress(i))/volume
+        stress_diff = abs(press + stress(i,i))/volume
         if (stress_diff > max_stress) max_stress = stress_diff
       end do
 
