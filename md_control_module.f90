@@ -691,6 +691,7 @@ contains
   subroutine get_svr_thermo_sf(th, dt, baro)
 
     use move_atoms,    only: box_muller, ran2
+    use GenComms,      only: gsum, my_barrier
 
     ! Passed variables
     class(type_thermostat), intent(inout)   :: th
@@ -703,49 +704,55 @@ contains
     integer         :: i, n_bm_calls
     logical         :: odd
 
-    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "get_svr_thermo_sf"
+    th%lambda = zero
+    ! We need to guarantee that the generated random numbers are consistent on
+    ! all processes, so only doing this part on ionode, the gsumming the scaling
+    ! factor - zamaan
+    if (inode==ionode) then
+      if (flag_MDdebug .and. iprint_MD > 1) &
+        write(io_lun,'(2x,a)') "get_svr_thermo_sf"
 
-    ! Box-Muller transform generates two normally distributed random numbers
-    ! from two uniformly distributed random numbers, so we need to work out 
-    ! how many times to call it. There may be a better way of doing this.
-    ! - zamaan
-    if (modulo(th%ndof,2) == 0) then
-      n_bm_calls = (th%ndof + th%cell_ndof)/2
-      odd = .false.
-    else
-      n_bm_calls = (th%ndof + th%cell_ndof - 1)/2
-      odd = .true.
-    end if
+      ! Box-Muller transform generates two normally distributed random numbers
+      ! from two uniformly distributed random numbers, so we need to work out 
+      ! how many times to call it. There may be a better way of doing this.
+      ! - zamaan
+      if (modulo(th%ndof,2) == 0) then
+        n_bm_calls = (th%ndof + th%cell_ndof)/2
+        n_bm_calls = (th%ndof + th%cell_ndof - 1)/2
+        odd = .true.
+      end if
 
-    exp_dt_tau = exp(-dt/th%tau_T)
-    ke = th%ke_ions
-    if (present(baro)) then
-      call baro%get_box_energy
-      ke = ke + baro%ke_box
-    end if
-    temp_fac = th%ke_target/th%ndof/ke
+      exp_dt_tau = exp(-dt/th%tau_T)
+      ke = th%ke_ions
+      if (present(baro)) then
+        call baro%get_box_energy
+        ke = ke + baro%ke_box
+      end if
+      temp_fac = th%ke_target/th%ndof/ke
 
-    ! sum can be replaced by a single number drawn from a gamma distribution
-    sum_ri_sq = zero
-    do i=1,n_bm_calls
-      call box_muller(th%rng_seed, one, zero, rn1, rn2)
-      if (i == 1) then
-        r1 = rn1
-        sum_ri_sq = sum_ri_sq + r1*r1
-      else
+      ! sum can be replaced by a single number drawn from a gamma distribution
+      sum_ri_sq = zero
+      do i=1,n_bm_calls
+        call box_muller(th%rng_seed, one, zero, rn1, rn2)
+        if (i == 1) then
+          r1 = rn1
+          sum_ri_sq = sum_ri_sq + r1*r1
+        else
+          sum_ri_sq = sum_ri_sq + rn1*rn1
+        end if
+        sum_ri_sq = sum_ri_sq + rn2*rn2
+      end do
+      if (odd) then
+        call box_muller(th%rng_seed, one, zero, rn1, rn2)
         sum_ri_sq = sum_ri_sq + rn1*rn1
       end if
-      sum_ri_sq = sum_ri_sq + rn2*rn2
-    end do
-    if (odd) then
-      call box_muller(th%rng_seed, one, zero, rn1, rn2)
-      sum_ri_sq = sum_ri_sq + rn1*rn1
-    end if
 
-    alpha_sq = exp_dt_tau + temp_fac * (one - exp_dt_tau) * sum_ri_sq + &
-               two*sqrt(exp_dt_tau) * sqrt(temp_fac*(one - exp_dt_tau)) * r1
-    th%lambda = sqrt(alpha_sq)
+      alpha_sq = exp_dt_tau + temp_fac * (one - exp_dt_tau) * sum_ri_sq + &
+                 two*sqrt(exp_dt_tau) * sqrt(temp_fac*(one - exp_dt_tau)) * r1
+      th%lambda = sqrt(alpha_sq)
+    end if
+    call gsum(th%lambda)
+    call my_barrier
 
   end subroutine get_svr_thermo_sf
 
