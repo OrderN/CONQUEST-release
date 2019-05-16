@@ -326,8 +326,6 @@ contains
       end do
     case('nhc')
       call th%init_nhc(dt)
-    case('ssm')
-      call th%init_nhc(dt)
     case default
       call cq_abort("Unknown thermostat type")
     end select
