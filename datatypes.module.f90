@@ -42,6 +42,10 @@ module datatypes
   integer, parameter :: integ       = selected_int_kind ( 9     )
   integer, parameter :: wide        = selected_int_kind ( 15    ) 
 
+  ! For the Mersenne twister rng code - zamaan
+  integer, parameter :: i8          = selected_int_kind ( 18    )
+  integer, parameter :: r8          = selected_real_kind( 15    )
+
 end module datatypes
 !!***
 
