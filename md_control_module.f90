@@ -307,7 +307,7 @@ contains
     case('xyz')
       th%cell_ndof = 3
     case default
-      call cq_abort('MD.CellConstraint must be "volume" or "xyz"')
+      call cq_abort('MD.CellConstraint must be "fixed", "volume" or "xyz"')
     end select
 
     ! For NPT stochastic velocity rescaling we also need to thermostat the box
@@ -333,7 +333,7 @@ contains
     case('nhc')
       call th%init_nhc(dt)
     case default
-      call cq_abort("Unknown thermostat type")
+      call cq_abort("MD.ThermoType must be 'none', 'berendsen', 'svr' or 'nhc'")
     end select
 
     if (inode==ionode .and. iprint_MD > 1) then
@@ -1278,14 +1278,10 @@ contains
       baro%box_mass = &
         (baro%ndof+baro%cell_ndof)*temp_ion*fac_Kelvin2Hartree/omega_P**2
 
-      select case(baro_type)
-      case('ssm')
+      if (leqi(baro%baro_type, 'ssm')) then
         if (leqi(md_cell_constraint, 'xyz')) &
           baro%box_mass = baro%box_mass/three
-      case('iisvr')
-        if (leqi(md_cell_constraint, 'xyz')) &
-          baro%box_mass = baro%box_mass/three
-      end select
+      end if
     else
       baro%box_mass = md_box_mass
     end if
@@ -1338,7 +1334,7 @@ contains
       call baro%get_box_energy
       baro%odnf = one + three/baro%ndof
     case default
-      call cq_abort("Invalid barostat type")
+      call cq_abort("MD.BaroType must be 'none', 'berendsen', 'mttk' or 'ssm'")
     end select
 
     if (inode==ionode .and. iprint_MD > 1) then
