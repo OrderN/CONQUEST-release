@@ -1105,35 +1105,41 @@ contains
                                      velocity)
       case('ssm')
         if (present(second_call)) then
-          call baro%couple_box_particle_velocity(thermo, velocity)
-          call thermo%get_temperature_and_ke(baro, velocity, &
-               mdl%ion_kinetic_energy)
-          call baro%get_pressure_and_stress
-          call baro%integrate_box(thermo)
           select case(thermo%thermo_type)
           case('nhc')
+            call baro%couple_box_particle_velocity(thermo, velocity)
+            call thermo%get_temperature_and_ke(baro, velocity, &
+                 mdl%ion_kinetic_energy)
+            call baro%get_pressure_and_stress
+            call baro%integrate_box(thermo)
             call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
           case('svr')
+            call thermo%get_temperature_and_ke(baro, velocity, &
+                 mdl%ion_kinetic_energy)
+            call baro%get_pressure_and_stress
+            call baro%integrate_box(thermo)
             call thermo%get_svr_thermo_sf(MDtimestep/two, baro)
             call thermo%v_rescale(velocity)
-          case default
-            call cq_abort('Thermostat type must be "nhc" or "svr"')
+            call baro%scale_box_velocity(thermo)
           end select
         else
           select case(thermo%thermo_type)
           case('nhc')
             call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
+            call thermo%get_temperature_and_ke(baro, velocity, &
+                 mdl%ion_kinetic_energy)
+            call baro%get_pressure_and_stress
+            call baro%integrate_box(thermo)
+            call baro%couple_box_particle_velocity(thermo, velocity)
           case('svr')
             call thermo%get_svr_thermo_sf(MDtimestep/two, baro)
             call thermo%v_rescale(velocity)
-          case default
-            call cq_abort('Thermostat type must be "nhc" or "svr"')
+            call baro%scale_box_velocity(thermo)
+            call thermo%get_temperature_and_ke(baro, velocity, &
+                 mdl%ion_kinetic_energy)
+            call baro%get_pressure_and_stress
+            call baro%integrate_box(thermo)
           end select
-          call thermo%get_temperature_and_ke(baro, velocity, &
-               mdl%ion_kinetic_energy)
-          call baro%get_pressure_and_stress
-          call baro%integrate_box(thermo)
-          call baro%couple_box_particle_velocity(thermo, velocity)
         end if
       end select
     end select

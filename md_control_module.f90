@@ -239,6 +239,7 @@ module md_control
       procedure, public   :: propagate_box_mttk
       procedure, public   :: dump_baro_state
       procedure, public   :: update_cell
+      procedure, public   :: scale_box_velocity
 
       procedure, private  :: update_G_box
       procedure, private  :: propagate_eps_lin
@@ -301,7 +302,6 @@ contains
     select case(md_cell_constraint)
     case('fixed')
       th%cell_ndof = 0
-      th%cell_nhc = .false.
     case('volume')
       th%cell_ndof = 1
     case('xyz')
@@ -309,6 +309,12 @@ contains
     case default
       call cq_abort('MD.CellConstraint must be "volume" or "xyz"')
     end select
+
+    ! For NPT stochastic velocity rescaling we also need to thermostat the box
+    if (leqi(th%baro_type, 'svr')) then
+      th%ke_target = th%ke_target +  &
+                     half*th%cell_ndof*fac_Kelvin2Hartree*th%T_ext
+    end if
 
     select case(th%thermo_type)
     case('none')
@@ -325,8 +331,6 @@ contains
         call ran2(dummy_rn,th%rng_seed)
       end do
     case('nhc')
-      call th%init_nhc(dt)
-    case('ssm')
       call th%init_nhc(dt)
     case default
       call cq_abort("Unknown thermostat type")
@@ -1822,6 +1826,33 @@ contains
     end if
 
   end subroutine apply_box_drag
+  !!***
+
+  !!****m* md_control/scale_box_velocity *
+  !!  NAME
+  !!   scale_box_velocity
+  !!  PURPOSE
+  !!   Scale the box velocity during SVR NPT dynamics
+  !!  AUTHOR
+  !!   Zamaan Raza
+  !!  CREATION DATE
+  !!   2019/05/17
+  !!  SOURCE
+  !!  
+  subroutine scale_box_velocity(baro, th)
+
+    ! passed variables
+    class(type_barostat), intent(inout)   :: baro
+    type(type_thermostat), intent(in)     :: th
+
+    ! local variables
+    integer :: i
+
+    do i=1,3
+      baro%v_h(i,i) = baro%v_h(i,i)*th%lambda
+    end do
+
+  end subroutine scale_box_velocity
   !!***
 
   !!****m* md_control/update_vscale_fac *
