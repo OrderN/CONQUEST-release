@@ -86,22 +86,25 @@ module rng
 
   implicit none
 
-  integer(i8), parameter, private :: seed_length = 20
-  integer(i8), parameter, private :: nn       = 312_i8
-  integer(i8), parameter, private :: mm       = 156_i8
-  integer(i8), parameter, private :: seed_def = 5489_i8
-  integer(i8), parameter, private :: matrix_a = -5403634167711393303_i8
-  integer(i8), parameter, private :: um       = -2147483648_i8 ! most significant 33 bits
-  integer(i8), parameter, private :: lm       = -2147483647_i8 ! least significant 31 bits
-  real(r8), parameter, private    :: pi253_1  = 1._r8/(2._r8**53 - 1._r8)
-  real(r8), parameter, private    :: pi253    = 1._r8/(2._r8**53)
-  real(r8), parameter, private    :: pi252    = 1._r8/(2._r8**52)
+  integer(wide), parameter, private :: seed_length = 20
+  integer(wide), parameter, private :: nn       = 312_wide
+  integer(wide), parameter, private :: mm       = 156_wide
+  integer(wide), parameter, private :: seed_def = 5489_wide
+  integer(wide), parameter, private :: matrix_a = -5403634167711393303_wide
+  integer(wide), parameter, private :: um       = -2147483648_wide
+  ! most significant 33 bits
+  integer(wide), parameter, private :: lm       = -2147483647_wide
+  ! least significant 31 bits
+  real(double), parameter, private      :: pi253_1 = 1._double/(2._double**53 -&
+                                                     1._double)
+  real(double), parameter, private      :: pi253   = 1._double/(2._double**53)
+  real(double), parameter, private      :: pi252   = 1._double/(2._double**52)
 
   type type_rng
 
-    integer(i8), allocatable:: seed(:)
+    integer(wide), allocatable:: seed(:)
 
-    integer(i8) :: mt(nn)     ! array for state vector
+    integer(wide) :: mt(nn)     ! array for state vector
     integer     :: mti = nn+1 ! mti==nn+1 means mt(nn) is not initialized
 
     contains
@@ -142,14 +145,14 @@ module rng
 
       ! Passed variables
       class(type_rng), intent(inout)  :: rn
-      integer(i8), intent(in)         :: seed
+      integer(wide), intent(in)       :: seed
 
       ! Local variables
       integer                 :: i
 
       rn%mt(1) = seed
       do i = 1, nn-1
-        rn%mt(i+1) = 6364136223846793005_i8 * ieor(rn%mt(i), ishft(rn%mt(i), -62)) + i
+        rn%mt(i+1) = 6364136223846793005_wide * ieor(rn%mt(i), ishft(rn%mt(i), -62)) + i
       end do
 
       rn%mti = nn
@@ -177,16 +180,16 @@ module rng
 
       ! Passed variables
       class(type_rng), intent(inout)  :: rn
-      integer(i8), intent(in)         :: init_key(:)
+      integer(wide), intent(in)       :: init_key(:)
 
       ! Local variables
-      integer(i8), parameter  :: c1 = 3935559000370003845_i8
-      integer(i8), parameter  :: c2 = 2862933555777941757_i8
-      integer(i8)             :: i, j, k, kk, key_length
+      integer(wide), parameter  :: c1 = 3935559000370003845_wide
+      integer(wide), parameter  :: c2 = 2862933555777941757_wide
+      integer(wide)             :: i, j, k, kk, key_length
 
-      call rn%init_genrand64(19650218_i8)
+      call rn%init_genrand64(19650218_wide)
       key_length = size(init_key)
-      i = 1_i8; j = 0_i8
+      i = 1_wide; j = 0_wide
       k = max(nn, key_length)
 
       do kk = 1, k
@@ -209,7 +212,7 @@ module rng
         end if
       end do
 
-      rn%mt(1) = ishft(1_i8, 63)  ! MSB is 1; assuring non-zero initial array
+      rn%mt(1) = ishft(1_wide, 63)  ! MSB is 1; assuring non-zero initial array
 
     end subroutine init_by_array64
     !!***
@@ -228,7 +231,7 @@ module rng
     !!
     !!  SOURCE
     !!
-    integer(r8) function genrand64_int64(rn)
+    integer(double) function genrand64_int64(rn)
 
       implicit none
 
@@ -236,8 +239,8 @@ module rng
       class(type_rng), intent(inout)  :: rn
 
       ! Local variables
-      integer(i8) :: mag01(0:1) = (/0_i8, matrix_a/)
-      integer(i8) :: x
+      integer(wide) :: mag01(0:1) = (/0_wide, matrix_a/)
+      integer(wide) :: x
       integer     :: i
 
       if(rn%mti >= nn) then ! generate nn words at one time
@@ -247,16 +250,16 @@ module rng
 
         do i = 1, nn-mm
           x = ior(iand(rn%mt(i),um), iand(rn%mt(i+1), lm))
-          rn%mt(i) = ieor(ieor(rn%mt(i+mm), ishft(x, -1)), mag01(iand(x, 1_i8)))
+          rn%mt(i) = ieor(ieor(rn%mt(i+mm), ishft(x, -1)), mag01(iand(x, 1_wide)))
         end do
 
         do i = nn-mm+1, nn-1
           x = ior(iand(rn%mt(i), um), iand(rn%mt(i+1), lm))
-          rn%mt(i) = ieor(ieor(rn%mt(i+mm-nn), ishft(x, -1)), mag01(iand(x, 1_i8)))
+          rn%mt(i) = ieor(ieor(rn%mt(i+mm-nn), ishft(x, -1)), mag01(iand(x, 1_wide)))
         end do
 
         x = ior(iand(rn%mt(nn), um), iand(rn%mt(1), lm))
-        rn%mt(nn) = ieor(ieor(rn%mt(mm), ishft(x, -1)), mag01(iand(x, 1_i8)))
+        rn%mt(nn) = ieor(ieor(rn%mt(mm), ishft(x, -1)), mag01(iand(x, 1_wide)))
 
         rn%mti = 0
 
@@ -265,9 +268,9 @@ module rng
       rn%mti = rn%mti + 1
       x = rn%mt(rn%mti)
 
-      x = ieor(x, iand(ishft(x,-29), 6148914691236517205_i8))
-      x = ieor(x, iand(ishft(x, 17), 8202884508482404352_i8))
-      x = ieor(x, iand(ishft(x, 37),   -2270628950310912_i8))
+      x = ieor(x, iand(ishft(x,-29), 6148914691236517205_wide))
+      x = ieor(x, iand(ishft(x, 17), 8202884508482404352_wide))
+      x = ieor(x, iand(ishft(x, 37),   -2270628950310912_wide))
       x = ieor(x, ishft(x, -43))
 
       genrand64_int64 = x
@@ -289,14 +292,14 @@ module rng
     !!
     !!  SOURCE
     !!
-    real(r8) function genrand64_real1(rn)
+    real(double) function genrand64_real1(rn)
 
       implicit none
 
       ! Passed variables
       class(type_rng), intent(inout)  :: rn
 
-      genrand64_real1 = real(ishft(rn%genrand64_int64(), -11), kind=r8) * pi253_1
+        genrand64_real1 = real(ishft(rn%genrand64_int64(), -11), kind=double) * pi253_1
 
     end function genrand64_real1
 
@@ -314,14 +317,14 @@ module rng
     !!
     !!  SOURCE
     !!
-    real(r8) function genrand64_real2(rn)
+    real(double) function genrand64_real2(rn)
 
       implicit none
 
       ! Passed variables
       class(type_rng), intent(inout)  :: rn
 
-      genrand64_real2 = real(ishft(rn%genrand64_int64(), -11), kind=r8) * pi253
+        genrand64_real2 = real(ishft(rn%genrand64_int64(), -11), kind=double) * pi253
 
     end function genrand64_real2
     !!***
@@ -340,15 +343,15 @@ module rng
     !!
     !!  SOURCE
     !!
-    real(r8) function genrand64_real3(rn)
+    real(double) function genrand64_real3(rn)
 
       implicit none
 
       ! Passed variables
       class(type_rng), intent(inout)  :: rn
 
-      genrand64_real3 = real(ishft(rn%genrand64_int64(), -12), kind=r8)
-      genrand64_real3 = (genrand64_real3 + 0.5_r8) * pi252
+      genrand64_real3 = real(ishft(rn%genrand64_int64(), -12), kind=double)
+      genrand64_real3 = (genrand64_real3 + 0.5_double) * pi252
 
     end function genrand64_real3
     !!***
@@ -373,7 +376,7 @@ module rng
 
       ! Passed variables
       class(type_rng), intent(inout)  :: rn
-      integer(i8), intent(in)         :: n
+      integer(wide), intent(in)       :: n
 
       ! Local variables
       integer               :: i, un, istat, dt(8), pid, t(2), s
@@ -445,7 +448,7 @@ module rng
       integer, intent(in), optional     :: int_seed
 
       if (present(int_seed)) then
-        call init_genrand64(rn, int(int_seed,i8))
+        call init_genrand64(rn, int(int_seed,wide))
       else
         ! But how to initialise seed_length!? - zamaan
         call rn%get_random_seed(seed_length)
@@ -479,7 +482,7 @@ module rng
       integer, optional, intent(in)     :: interval
 
       ! Local variables
-      real(r8)                          :: num
+      real(double)                      :: num
 
       if (present(interval)) then
         select case(interval)
