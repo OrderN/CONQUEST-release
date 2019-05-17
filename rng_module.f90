@@ -116,7 +116,7 @@ module rng
       procedure, public   :: init_rng
       procedure, public   :: rng_uniform
       procedure, public   :: rng_normal
-!      procedure, public   :: rng_integer
+      procedure, public   :: rng_integer
   end type type_rng
   !!***
 
@@ -541,6 +541,38 @@ module rng
       y2 = y2*w*sigma + mu
 
     end subroutine rng_normal
+    !!***
+
+    !!****f* move_atoms/rng_integer *
+    !!  NAME
+    !!   rng_integer
+    !!  PURPOSE
+    !!   Generate random numbers in the interval [a,b)
+    !!  AUTHOR
+    !!   Zamaan Raza
+    !!  CREATION DATE
+    !!   2019/05/17
+    !!  MODIFICATION HISTORY
+    !!
+    !!  SOURCE
+    !!
+    integer rng_integer(rn, a, b)
+
+      use numbers
+
+      implicit none
+
+      ! Passed variables
+      class(type_rng), intent(inout)    :: rn
+      real(double), intent(in)  :: a, b
+
+      ! Local variables
+      integer :: rint
+
+      rint = modulo(rn%genrand64_int64(), (b-a))
+      rng_integer = int(rint) + a
+
+    end subroutine rng_integer
     !!***
 
 end module rng
