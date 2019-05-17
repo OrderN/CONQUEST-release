@@ -556,15 +556,15 @@ module rng
     !!
     !!  SOURCE
     !!
-    integer rng_integer(rn, a, b)
+    integer function rng_integer(rn, a, b)
 
-      use numbers
+      use datatypes
 
       implicit none
 
       ! Passed variables
-      class(type_rng), intent(inout)    :: rn
-      real(double), intent(in)  :: a, b
+      class(type_rng), intent(inout)  :: rn
+      integer, intent(in)             :: a, b
 
       ! Local variables
       integer :: rint
@@ -572,7 +572,7 @@ module rng
       rint = modulo(rn%genrand64_int64(), (b-a))
       rng_integer = int(rint) + a
 
-    end subroutine rng_integer
+    end function  rng_integer
     !!***
 
 end module rng
