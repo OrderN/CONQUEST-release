@@ -1,0 +1,47 @@
+#!/bin/sh
+LC_ALL=C
+export LC_ALL
+#
+# Environment variables for installing tool 
+#
+tool='molden'
+tool_version='5.1'
+tool_url=ftp://ftp.cmbi.umcn.nl/pub/molgraph/molden/
+#
+# Test for wget or curl needed for download 
+#
+grab=""
+if test "`which wget`" = "" ; then
+   if test "`which curl`" = "" ; then
+      echo "wget or curl not found: will not be able to download "$tool
+   else
+      grab="curl -o"
+      echo "curl found"
+   fi
+else
+   grab="wget -O"
+   echo "wget found"
+fi
+#
+# Test for patch 
+#
+cq_patch=""
+if test "`which patch`" = "" ; then
+   echo "patch not found: will not be able to install "'cq_'$tool
+else
+   cq_patch="patch"
+   echo "patch found"
+fi
+#cq_patch=""
+#
+# function to test the exit status of a job
+#
+check_failure () {
+    # usage: check_failure $?
+    if test $1 != 0
+    then
+        echo "Error condition encountered during test: exit status = $1"
+        echo "Aborting"
+        exit 1
+    fi
+}

@@ -1,0 +1,2494 @@
+diff -Naur molden5.1/dummys.f cq_molden5.1/src/dummys.f
+--- molden5.1/dummys.f	2014-02-05 13:26:14.000000000 +0100
++++ cq_molden5.1/src/dummys.f	2019-05-19 18:28:33.000000000 +0200
+@@ -1283,10 +1283,39 @@
+      &            nat,norg,icent,inorm,ncon,nspg,ichx,
+      &            nopr,ir,it,
+      &            xa,ya,yb,za,zb,zc,a,b,c,alpha,beta,gamma)
+-
++      
+       return
+       end
++      
++      subroutine rdconquest(npts1,npts2,npts3,iposng,istat,lenf,idocub,
++     &                  idebug)
++      implicit double precision (a-h,o-z)
++      parameter (numat1=20000)
++      parameter (mxcon=10)
++      parameter (lnbuck=10)
++      parameter (max3d=61)
++      parameter (max3d2=max3d*max3d)
++      common /spa3d/  denn(max3d*max3d*max3d),pmnn(max3d)
++      common /grdall/ dens(max3d2),denst(max3d2),edx(max3d2),
++     &                edy(max3d2),rz(max3d2),bucket(max3d+lnbuck),
++     &                iedlog(max3d2),ix(max3d2),iy(max3d2)
++      common /atcom/ coo(3,numat1),rzp(numat1),ianz(numat1),
++     &               iaton(numat1),iatclr(numat1),iresid(numat1),
++     &               ixp(numat1),iyp(numat1),iconn(mxcon+1,numat1)
++      integer*2 ir,it
++      common /cell/   nat,norg,icent,inorm,ncon,nspg,kz,ichx,icrtp,
++     &                nopr,ir(3,3,192),it(3,192),
++     &                xa,ya,yb,za,zb,zc,a,b,c,alpha,beta,gamma
++      
++      call rdcqd(npts1,npts2,npts3,iposng,istat,lenf,idocub,
++     &            idebug,denn,pmnn,bucket,coo,ianz,iatclr,iconn,
++     &            nat,norg,icent,inorm,ncon,nspg,ichx,
++     &            nopr,ir,it,
++     &            xa,ya,yb,za,zb,zc,a,b,c,alpha,beta,gamma)
+ 
++      return
++      end
++      
+       subroutine rdinfo(npts1,npts2,isubtr,istat)
+       implicit double precision (a-h,o-z)
+       parameter (lnbuck=10)
+@@ -3856,6 +3885,24 @@
+       return
+       end
+ 
++      subroutine wrconquest(iun)
++      implicit double precision (a-h,o-z), integer (i-n)
++      parameter (numat1=20000)
++      parameter (mxcon=10)
++      common /atcom/ coo(3,numat1),rzp(numat1),ianz(numat1),
++     &               iaton(numat1),iatclr(numat1),iresid(numat1),
++     &               ixp(numat1),iyp(numat1),iconn(mxcon+1,numat1)
++      integer*2 ir,it
++      common /cell/   nat,norg,icent,inorm,ncon,nspg,kz,ichx,icrtp,
++     &                nopr,ir(3,3,192),it(3,192),
++     &                xa,ya,yb,za,zb,zc,a,b,c,alpha,beta,gamma
++
++      call wrcqd(iun,coo,ianz,
++     &            xa,ya,yb,za,zb,zc,a,b,c,alpha,beta,gamma)
++      
++      return
++      end
++
+       subroutine wrmopa(iun)
+       implicit double precision (a-h,o-z), integer (i-n)
+       parameter (numat1=20000)
+diff -Naur molden5.1/makefile cq_molden5.1/src/makefile
+--- molden5.1/makefile	2014-02-14 09:57:13.000000000 +0100
++++ cq_molden5.1/src/makefile	2019-05-19 18:41:13.000000000 +0200
+@@ -13,7 +13,7 @@
+ #	Disregard compiler warnings on rdmolf.f
+ #
+ #
+-CC = cc
++CC = gcc
+ FC = gfortran
+ LIBS =  -lX11 -lm
+ LDR = ${FC} 
+@@ -49,7 +49,7 @@
+  comg77 := $(shell g77 -v | grep -i version)
+  comgfort := $(shell gfortran -v | grep -i version)
+  ifneq ($(comg77), $(empty))
+-    FC = g77
++    FC = gfortran
+  endif
+  ifneq ($(comgfort), $(empty))
+     FC = gfortran
+@@ -260,7 +260,7 @@
+ #
+ #LIBSG = -L/usr/X11R6/lib -Wl,-framework -Wl,GLUT -Wl,-framework -Wl,OpenGL -Wl,-framework -Wl,Cocoa -lGLU -lGL -lXmu -lX11 -lm
+ 
+-all:	molden gmolden ambfor/ambfor ambfor/ambmd surf/surf
++all:	molden gmolden ambfor/ambfor ambfor/ambmd #surf/surf
+ 
+ 
+ molden:	$(OBJS) mpdum.o xwin.o 
+@@ -316,4 +316,5 @@
+ cad2mol:	cad2mol.o
+ 	$(LDR) -o cad2mol cad2mol.o
+ 
+-
++clean:
++	rm -f $(OBJS) mpdum.o xwin.o xwingl.o molden gmolden ambfor/ambfor ambfor/ambmd surf/surf ambfor/*.o surf/*.o
+diff -Naur molden5.1/molden.f cq_molden5.1/src/molden.f
+--- molden5.1/molden.f	2014-02-10 16:43:12.000000000 +0100
++++ cq_molden5.1/src/molden.f	2019-05-19 18:28:33.000000000 +0200
+@@ -14,9 +14,9 @@
+ c     MAXORB         MAXIMUM NUMBER OF ORBITALS ALLOWED.                
+ c
+ c
+-      parameter (numat1=20000)
++      parameter (numat1=100000)
+       parameter (mxcon=10)
+-      parameter (numatm=2000)
++      parameter (numatm=100000)
+       parameter (maxpt=1000)
+       parameter (MAXPNT=2000)
+       parameter (maxorb=256)
+@@ -4473,13 +4473,15 @@
+              if (icrtp.eq.5) call inferr('VASP file',0)
+              if (icrtp.eq.6) call inferr('MSI file',0)
+              if (icrtp.eq.7) call inferr('CIF file',0)
++             if (icrtp.eq.8) call inferr('CONQUEST file',0)
+           endif
+           domol = .true.
+           goto 1234
+       else
+          rewind iun2
+       endif
+-c--------- is it gamess, gaussian or mopac ?-----------
++
++c---------is it gamess, gaussian or mopac ?-----------
+ 
+       call searcht(lstr,'g a m e s s','M.W.SCHMIDT','@<TRIPOS>',
+      &             istat)
+@@ -5099,6 +5101,7 @@
+ 
+ 1234  continue
+ 
++      
+      
+ c
+ c--------- plot initialisation ----------------
+@@ -5189,7 +5192,6 @@
+ c
+ c establish the number of points on the gamess/gauss output
+ c
+-
+          call procnv
+          call progeo(ipoints,iff,needm)
+          if (needm.ge.0) then
+@@ -5312,7 +5314,6 @@
+          endif
+ 
+ c read frequencies in CPMD....
+-
+          if (iftyp.eq.7.and.irtype.eq.4) then
+             call cpmdgetfr(istat)
+             if (istat.ne.0) then
+@@ -5420,7 +5421,6 @@
+          endif
+       endif
+ 777   continue
+-
+ 999   if (iplot.eq.6.and.domol) then
+           inct = inact
+           if (ifav.eq.1) then
+@@ -5760,6 +5760,17 @@
+                       call wrcif(46)
+                       close(46)
+                    endif
++
++c                =========================================
++                 elseif (incp.eq.28) then
++                   if (opfil(46,'Conquest_coord',6,1,0,0)) then
++                      call fdat(4,1,istdbd,iuseab,moddma,idebug)
++                      call wrconquest(46)
++                      call fdat(ifd,0,istdbd,iuseab,moddma,idebug)
++                      close(46)
++                   endif
++c                =========================================
++
+                  else
+                    ifdt = ifd
+                    ifd = incp
+@@ -5993,7 +6004,9 @@
+                     endif
+                  endif
+               endif
+-          endif
++           endif
++
++           
+           if (inct.eq.586) then
+ c kont file
+               ostep = .false.
+diff -Naur molden5.1/rdchx.f cq_molden5.1/src/rdchx.f
+--- molden5.1/rdchx.f	2014-01-10 14:58:26.000000000 +0100
++++ cq_molden5.1/src/rdchx.f	2019-05-19 18:28:33.000000000 +0200
+@@ -44,7 +44,7 @@
+ c      gamma = 90.0d0
+ 
+       hascon = .false.
+-
++      
+       read(iun2,'(a)',end=100,err=100) lstr
+ 
+       if (icdex(lstr,'[Molden Format]').ne.0) then
+@@ -52,7 +52,7 @@
+          istat = 0
+          return
+       endif
+-
++      
+       if (linlen(lstr).ge.62) then
+          lstr = lstr(39:62)
+          if (datlin(lstr)) then
+@@ -61,9 +61,11 @@
+             goto 100
+          endif
+       else
++         
++         !#### Standard reading goto 100 ####
+          goto 100
+       endif
+-
++      
+       a = at
+       b = bt
+       c = ct
+@@ -237,6 +239,8 @@
+       icrtp = 1
+       return
+ 
++
++      !#### Standard reading? ####
+ 100   istat = 0
+       if (icssr.eq.1) return
+ 
+@@ -258,7 +262,15 @@
+                   if (istat.eq.0) then
+                      rewind iun2
+                      call rdcif(idebug,istat)
+-                     if (istat.ne.0) icrtp = 7
++                     if (istat.eq.0) then
++                        rewind iun2
++                        call rdconquest(nptdum,nptdum,nptdum,0,
++     &                       istat,nstr,0,idebug)
++                        
++                        if (istat.ne.0) icrtp = 8
++                     else
++                        icrtp = 7
++                     endif
+                   else
+                      icrtp = 6
+                   endif
+@@ -274,6 +286,7 @@
+       else
+          icrtp = 3
+       endif
++      
+       if (istat.gt.0) iftyp = 6
+       if (istat.eq.2) then
+           ichx = 1
+diff -Naur molden5.1/rdgaus.f cq_molden5.1/src/rdgaus.f
+--- molden5.1/rdgaus.f	2014-01-10 15:02:10.000000000 +0100
++++ cq_molden5.1/src/rdgaus.f	2019-05-19 18:28:33.000000000 +0200
+@@ -470,6 +470,7 @@
+ 
+       end
+ 
++c     ====================================================================      
+       subroutine cubtst(iun,ijag)
+       implicit double precision ( a-h,o-z)
+       character*137 line,str
+@@ -620,7 +621,8 @@
+ 100   print*,'error reading grid file'
+       return
+       end
+-
++      
++c     ====================================================================
+       subroutine rdcubd(npts1,npts2,npts3,iposng,ipsi,istat,iun,
+      &                  idebug,denn,pmnn)
+       implicit double precision ( a-h,o-z)
+@@ -765,7 +767,6 @@
+       call vsc1(v2,1.0d0,1.0d-4)
+       call vsc1(tmp,1.0d0,1.0d-4)
+ 
+-
+       cx = tmp(1)
+       cy = tmp(2)
+       cz = tmp(3)
+@@ -923,6 +924,7 @@
+       return
+       end
+ 
++c     ====================================================================      
+       subroutine rdvasd(npts1,npts2,npts3,iposng,istat,lenf,
+      &                  idocub,idebug,denn,pmnn,bucket,
+      &                  coo,ianz,iatclr,iconn,
+@@ -968,8 +970,7 @@
+       logical felem
+       character*137 strtmp
+       common /vasp/nheadx,natx
+-
+-
++      
+       istat = 1
+       itype = 0
+       toang  = 0.52917706d0
+@@ -986,8 +987,7 @@
+          endif
+       endif
+ 
+-
+-c title
++c     title
+ 
+       natt = 0
+ 
+@@ -996,10 +996,10 @@
+       else
+ 
+          felem = .false.
+-
+          if (getlin(0).eq.1) then
+             do while(.true.)
+                ktype = nxtwrd(str,nstr,itype,rtype)
++
+                if (ktype.eq.1.and.(nstr.eq.1.or.nstr.eq.2)) then
+                   if (nstr.eq.1) then
+                      str(2:2) = str(1:1)
+@@ -1023,7 +1023,7 @@
+ 
+ 10    continue
+ 
+-c scale factor
++c     scale factor
+ 
+       if (getlin(0).eq.1) then
+          ktype = nxtwrd(str,nstr,itype,rtype)
+@@ -1032,7 +1032,7 @@
+          endif
+       endif
+ 
+-c unit vectors
++c     unit vectors
+ 
+       if (getlin(0).eq.1) then
+          if (.not.gnreal(v1,3,.false.)) goto 100
+@@ -1055,6 +1055,7 @@
+       r(1) = vlen(v1)*scl
+       r(2) = vlen(v2)*scl
+       r(3) = vlen(tmp)*scl
++
+       if (r(1).le.0.0d0.or.r(2).le.0.0d0.or.r(3).le.0.0d0) goto 100
+ 
+       a = r(1)
+@@ -1076,12 +1077,12 @@
+ c In new POSCARs there might be a line here to give the elements names
+ 
+       if (getlin(0).eq.1) then
+-
++         
+          call gtplin(strtmp)
+          ktype = nxtwrd(str,nstr,itype,rtype)
+-
++         
+          if (ktype.eq.1) then
+-
++            
+             if (.not.felem) then
+                call setlin(strtmp,0)
+                natt = 0
+@@ -1108,7 +1109,7 @@
+  11            continue
+             endif
+ 
+-c    we now read the number of atoms of each sort
++c     we now read the number of atoms of each sort
+ 
+             natoms = 0
+             ity = 0
+@@ -1162,7 +1163,7 @@
+             do j=1,ielnum(i)
+                k = k + 1
+                ianz(k) = ieltyp(i)
+-               nat(k) = ieltyp(i)
++               nat(k)  = ieltyp(i)
+             end do
+          end do
+       endif
+@@ -1204,8 +1205,9 @@
+      &                    tmp(j)*scl*xyzt(3)
+                coo(j,i) = xyzt(j)
+             end do
++            !print*, nat(i),(xyz(j,i),j=1,3)
+          else
+-            goto 100
++            goto 100            
+          endif
+       end do
+ 
+@@ -1240,17 +1242,15 @@
+                iconn(j,nstor+i) = iconn(j,i)
+             end do
+          end do
+-
+-
+ c      endif
+ 
+       ichx = 1
+ 
+       if (idocub.eq.0) then
+-          istat = 2
+-          return
++         istat = 2
++         return
+       endif
+-
++      
+       read(iun2,'(a)') line
+ 
+ c x,y,z dimension of grid
+@@ -1420,7 +1420,390 @@
+ 
+       return
+       end
++c$$$
++c$$$
++c$$$
++c$$$
++c$$$
++c$$$      
++c     ====================================================================      
++      subroutine rdcqd(npts1,npts2,npts3,iposng,istat,lenf,
++     &                  idocub,idebug,denn,pmnn,bucket,
++     &                  coo,ianz,iatclr,iconn,
++     &                  nnat,norg,icent,inorm,ncon,nspg,ichx,
++     &                  nopr,ir,it,
++     &                  xa,ya,yb,za,zb,zc,a,b,c,alpha,beta,gamma)
++      implicit double precision ( a-h,o-z)
++
++c THIS IS REALLY rdconquest
++
++      parameter (numatm=2000)
++      parameter (mxel=100)
++      parameter (mxcon=10)
++      parameter (lnbuck=10)
++      common /coord / xyz(3,numatm)
++      common /moldat/ natoms, norbs, nelecs,nat(numatm)
++      common /grdhlp/ mx3d,mx3d2
++      common /plane/  px, py, pz, cx, cy, cz, r(3),v1(3),v2(3),iplat
++      common /eulx/   ca,cb,sa,sb,cc,sc
++      integer*2 ir,it
++      logical oclose,osshad,ofill,ofrst
++      common /spacom/ grey,iscol,oclose,osshad,ofill,ofrst
++      common /zproj/  zval(numatm),nindx(numatm),nconn(numatm)
++      common /elmcom/ vdwr(mxel),vrad(mxel),icol(mxel)
++      common /athlp/ iatoms, mxnat
++      character*2 elemnt
++      common /elem/elemnt(mxel)
++
++      common /rdwr/   iun1,iun2,iun3,iun4,iun5
++      character*137 line,lstr
++      logical opfil,gnreal
++      integer getlin
++      character*137 str
++      character*2 tocapf
++      character keywrd*320, keyori*320
++      common /keywrd/ keywrd,keyori
++      dimension tmp(3),dtmp(10),xyzt(3)
++      dimension ieltyp(20),ielnum(20)
++      dimension denn(*),pmnn(*),bucket(*)
++      dimension coo(3,*),ianz(*),iatclr(*),iconn(mxcon+1,*),
++     &          ir(3,3,192),it(3,192)
++
++      logical felem
++      character*137 strtmp
++      !common /vasp/nheadx,natx
++
++      istat = 1
++      itype = 0
++      toang  = 0.52917706d0
++      todeg = 45.0d0 / datan(1.0d0)
++      lstr = ' '
++
++      print*, '*** begin of Conquest READ ***'   
++      print*, '    WARNINGS:'
++      print*, '     > coordinates must be fractional'
++      print*, '     > cell vectors in Bohr unit' 
++
++      if (idocub.eq.1) then
++         iuntmp = iun2
++         iun2 = 21
++         
++         if (.not.opfil(21,keywrd(1:lenf),lenf,1,1,0)) then
++            lstr = keywrd(1:lenf)//' non-existent'
++            goto 110
++         endif
++      endif
++
++
++c     unit vectors
++      
++      if (getlin(0).eq.1) then
++         if (.not.gnreal(v1,3,.false.)) goto 100
++         r(1) = vlen(v1)
++      else
++         goto 100
++      endif
++      
++      if (getlin(0).eq.1) then
++         if (.not.gnreal(v2,3,.false.)) goto 100
++         r(2) = vlen(v2)
++      else
++         goto 100
++      endif
++      
++      if (getlin(0).eq.1) then
++         if (.not.gnreal(tmp,3,.false.)) goto 100
++         r(3) = vlen(tmp)
++      else
++         goto 100
++      endif
++
++      r(1) = vlen(v1)*toang
++      r(2) = vlen(v2)*toang
++      r(3) = vlen(tmp)*toang
++      
++      if (r(1).le.0.0d0.or.r(2).le.0.0d0.or.r(3).le.0.0d0) goto 100
++
++      a = r(1)
++      b = r(2)
++      c = r(3)
++      call impsc(v2,tmp,csa)
++      call impsc(v1,tmp,csb)
++      call impsc(v1,v2,csc)
++      alpha = dacos(csa)*todeg
++      beta  = dacos(csb)*todeg
++      gamma = dacos(csc)*todeg
++      nspg  = 1
++
++      call prcell(nspg,a,b,c,alpha,beta,gamma)
++      call setop(xa,ya,yb,za,zb,zc,a,b,c,alpha,beta,gamma,1)
++      call cprot(nspg,nopr,icent,ir,it,.false.)
++      if (idebug.eq.1) call prop(nopr,ir,it)
++      
++c     get atom number and types
++
++      natt  = 0      
++      felem = .false.      
++      !
++      if (getlin(0).eq.1) then
++         !
++         ktype = nxtwrd(str,nstr,itype,rtype)
++         !
++         if (ktype.eq.2) then
++            natoms = itype
++            !
++         end if
++         !
++         do while(.true.)
++            !
++            ktype = nxtwrd(str,nstr,itype,rtype)
++            !
++            if (ktype.eq.1.and.(nstr.eq.1.or.nstr.eq.2)) then
++               if (nstr.eq.1) then
++                  str(2:2) = str(1:1)
++                  str(1:1) = ' '
++                  !
++               endif
++               !
++               ity = 0
++               do i=1,99
++                  if (tocapf(str).eq.tocapf(elemnt(i))) ity = i
++               end do
++               !
++               if (ity.ne.0) then
++                  felem = .true.
++                  natt = natt + 1
++                  ieltyp(natt) = ity
++                  !
++               endif
++               !
++            else
++               goto 10
++               !
++            endif
++            !
++         end do
++         !
++      endif
++      
++ 10   continue
++
++c     get atom positions: fractional coordinate assumed!
++
++      do i = 1, natoms
++         
++         if (natt.ne.ity) then
++            nat(i)  = 99
++            ianz(i) = 99
++         endif
++         
++         if (getlin(0).eq.1) then
++            
++            if (.not.gnreal(xyzt,3,.false.)) goto 100
++            
++            do j = 1, 3
++               xyz(j,i) = v1(j)*xyzt(1) + v2(j)*xyzt(2) +
++     &                    tmp(j)*xyzt(3)
++               coo(j,i) = xyzt(j)
++            end do
++
++            ktype = nxtwrd(str,nstr,itype,rtype)
++            if (ktype .ne. 2) goto 100
++
++            do j = 1, natt
++               if (itype .eq. j) then
++                  !print*, itype, ie  ltyp(j)
++                  ianz(i) = ieltyp(j)
++                  nat(i)  = ieltyp(j)
++               end if
++            end do
++            
++            print*, nat(i), (xyzt(j), j=1,3 ), itype, ktype
++            
++         else
++            goto 100
++         endif
++         
++      end do
++
++      ncon   = 1
++      inorm  = 0 
++      iatoms = natoms
++      nnat   = natoms
++      norg   = natoms
++      nstor  = mxnat-iatoms
++      
++      do i = 1, iatoms
++         
++         do j=1,3
++            coo(j,nstor+i) = coo(j,i)
++         end do
++         
++         call fr2crt(coo(1,i),xa,ya,yb,za,zb,zc)
++         do j=1,3
++            coo(j,i) = coo(j,i)/toang
++         end do
++         ianz(nstor+i)   = ianz(i)
++         iatclr(nstor+i) = 1
++         
++      end do
++      
++      call doconn
++      call dohcon(0)
++      
++      do i=1,iatoms
++         do j=1,iconn(1,i)+1
++            iconn(j,nstor+i) = iconn(j,i)
++         end do
++      end do
++         
++      ichx = 1
++
++      if (idocub.eq.0) then
++         print*, '*** end of Conquest READ ***' 
++         istat = 2
++         return
++      endif
++
++      
++100   if (idocub.eq.1) close(21)
++110   if (idocub.eq.1) iun2 = iuntmp
++
++      istat = 0
++      call inferr(lstr,0)
++
++      return
++      end
++
++      
++c     ====================================================================      
++      subroutine wrcqd(iun,coo,ianz,
++     &                  xa,ya,yb,za,zb,zc,a,b,c,alpha,beta,gamma)
++      implicit double precision ( a-h,o-z)
++      parameter (mxel=100)
++      parameter (mxetyp=20)
++      common /athlp/ iatoms, mxnat
++      character*2 elemnt
++      common /elem/elemnt(mxel)
++      logical fndel
++      dimension tmp(3),tr(3),rr(3,3),ieltyp(mxetyp),ielnum(mxetyp)
++      dimension coo(3,*),ianz(*)
++
++      toang  = 0.52917721092d0
++
++      print*, '*** begin of Conquest WRITE ***'
++      print*, '    WARNINGS:'
++      print*, '     > coordinates will be fractional'
++      print*, '     > cell vectors in Bohr unit'
++
++      natt = 0
++      do i=1,mxetyp
++         ielnum(i) = 0
++      end do
++
++      natoms = 0
++      do i=1,iatoms
++
++         if (ianz(i).gt.0.and.ianz(i).lt.99) then
++
++            fndel = .false.
++            do j=1,natt
++               if (ianz(i).eq.ieltyp(j)) then
++                  ielnum(j) = ielnum(j) + 1
++                  fndel = .true.
++               endif
++            end do
++
++            if (.not.fndel) then
++               natt = natt + 1
++               ieltyp(natt) = ianz(i)
++               ielnum(natt) = 1
++            endif
++
++            natoms = natoms + 1
++         endif
++
++      end do
++
++c      write(iun,'(20(a2,1x))') (elemnt(ieltyp(i)),i=1,natt)
++
++      scl = 1.0d0
++c      write(iun,'(f12.6)') scl
++
++      call setrr(alpha,beta,gamma,a,b,c,rr)
++
++      tmp(1) = 1.0d0
++      tmp(2) = 0.0d0
++      tmp(3) = 0.0d0
++c      call fr2crt(tmp,xa,ya,yb,za,zb,zc)
++      do k=1,3
++         tr(k) = trc(tmp,rr,k)
++      end do
++
++c      write(iun,'(3(f12.6,1x))') (tmp(i),i=1,3)
++      write(iun,'(3(f20.12,1x))') (tr(i)/toang,i=1,3)
++      
++      tmp(1) = 0.0d0
++      tmp(2) = 1.0d0
++      tmp(3) = 0.0d0
++c      call fr2crt(tmp,xa,ya,yb,za,zb,zc)
++      do k=1,3
++         tr(k) = trc(tmp,rr,k)
++      end do
++c      write(iun,'(3(f12.6,1x))') (tmp(i),i=1,3)
++      write(iun,'(3(f20.12,1x))') (tr(i)/toang,i=1,3)
++
++      tmp(1) = 0.0d0
++      tmp(2) = 0.0d0
++      tmp(3) = 1.0d0
++c      call fr2crt(tmp,xa,ya,yb,za,zb,zc)
++      do k=1,3
++         tr(k) = trc(tmp,rr,k)
++      end do
++c      write(iun,'(3(f12.6,1x))') (tmp(i),i=1,3)
++      write(iun,'(3(f20.12,1x))') (tr(i)/toang,i=1,3)
++ 
++      write(iun,'(i12,4x,20(a2,1x))') natoms,
++     &     (elemnt(ieltyp(i)),i=1,natt)
++
++
++c      write(iun,'(20(i3,1x))') (ielnum(i),i=1,natt)
++c      write(iun,'(20(a2,1x))') (elemnt(ieltyp(i)),i=1,natt)
++
++
++c      write(iun,'(a)') 'Direct'
++
++      do k=1,natt
++         !i_elnum = 0
++         !n_elnum = ielnum(k)
++         do i=1,iatoms
++
++            if (ianz(i).eq.ieltyp(k)) then
++               !i_elnum = i_elnum + 1
++               !
++               do j=1,3
++                  tmp(j) = coo(j,i) * toang
++               end do
++
++               call crt2fr(tmp,tr,xa,ya,yb,za,zb,zc)
++
++               write(iun,'(3(f16.10,1x),4x,i4,2x,a8)') (tr(j),j=1,3),
++     &              k,' T  T  T'
++
++            endif
+ 
++         end do
++
++      end do
++
++      call inferr('Wrote file: Conquest_coord',0)
++
++      print*, '*** end of Conquest WRITE ***'
++
++      return
++      end
++      
++c     ====================================================================
+       subroutine wrvasd(iun,coo,ianz,
+      &                  xa,ya,yb,za,zb,zc,a,b,c,alpha,beta,gamma)
+       implicit double precision ( a-h,o-z)
+@@ -1523,6 +1906,7 @@
+       return
+       end
+ 
++c     ====================================================================      
+       subroutine wrmopd(iun,coo,ianz,
+      &                  xa,ya,yb,za,zb,zc,a,b,c,alpha,beta,gamma)
+       implicit double precision ( a-h,o-z)
+@@ -1606,6 +1990,7 @@
+       return
+       end
+ 
++c     ====================================================================
+       subroutine rdgrdd(npts1,npts2,npts3,iun,istat,
+      &                  denn,dens,pmnn,buff)
+       implicit double precision (a-h,o-z)
+@@ -1759,6 +2144,7 @@
+       return
+       end
+ 
++c     ====================================================================      
+       subroutine rdomad(npts1,npts2,npts3,iun,istat,
+      &                  denn,dens,pmnn,ichx)
+       implicit double precision (a-h,o-z)
+@@ -2006,6 +2392,7 @@
+       return
+       end
+ 
++c     ====================================================================      
+       subroutine dpomad(iopt,denn)
+       implicit double precision (a-h,o-z)
+       logical dolap, lapdbl
+@@ -2068,6 +2455,7 @@
+       return
+       end
+ 
++c     ====================================================================      
+       subroutine getrec(buff,buflen,isil,ierr)
+       implicit real (a-h,o-z)
+       character*4 buff(*)
+@@ -2108,6 +2496,7 @@
+       return
+       end
+ 
++c     ====================================================================      
+       subroutine bytr2(intin)
+       implicit none
+       integer bigend,nlen,i
+@@ -2160,6 +2549,7 @@
+       return
+       end
+ 
++c     ====================================================================      
+       subroutine fndor(idebug)
+       implicit double precision ( a-h,o-z)
+       character*137 line
+@@ -2196,6 +2586,7 @@
+       return
+       end
+ 
++c     ====================================================================
+       subroutine wrcubd(npts1,npts2,npts3,ipsi,denn)
+ 
+ c THIS IS REALLY wrcube
+@@ -2287,6 +2678,7 @@
+       return
+       end
+ 
++c     ====================================================================      
+       subroutine nmrshl
+       implicit double precision (a-h,o-z)
+       parameter (numatm=2000)
+@@ -2321,6 +2713,7 @@
+       return
+       end
+ 
++c     ====================================================================      
+       subroutine nmrcpd(idebug,couplj)
+       implicit double precision (a-h,o-z)
+       parameter (numatm=2000)
+@@ -2357,6 +2750,7 @@
+       return
+       end
+ 
++c     ====================================================================      
+       subroutine qmtot
+       implicit double precision (a-h,o-z)
+       parameter (numatm=2000)
+diff -Naur molden5.1/surf/Makefile cq_molden5.1/src/surf/Makefile
+--- molden5.1/surf/Makefile	2008-08-25 19:59:06.000000000 +0200
++++ cq_molden5.1/src/surf/Makefile	2019-05-19 18:40:52.000000000 +0200
+@@ -1,6 +1,6 @@
+ # Compilation flags
+ #CC	    = cc
+-CC	    = cc
++CC	    = gcc
+ INCLUDE     = -I. 
+ #LINCLUDE    = -lcurses -ltermcap -lm
+ LINCLUDE    = -lm
+@@ -63,44 +63,683 @@
+ # DO NOT DELETE THIS LINE -- make depend depends on it.
+   
+  
+-# DO NOT DELETE THIS LINE -- make depend depends on it.
++# DO NOT DELETE
+ 
+-surf.o: surf.h /usr/include/stdio.h /usr/include/math.h /usr/include/stdlib.h
+-surf.o: /usr/include/sgidefs.h /usr/include/string.h /usr/include/sys/time.h
+-surf.o: linalg.h
+-io.o: surf.h /usr/include/stdio.h /usr/include/math.h /usr/include/stdlib.h
+-io.o: /usr/include/sgidefs.h /usr/include/string.h /usr/include/sys/time.h
+-io.o: linalg.h
+-compute.o: surf.h /usr/include/stdio.h /usr/include/math.h
+-compute.o: /usr/include/stdlib.h /usr/include/sgidefs.h /usr/include/string.h
+-compute.o: /usr/include/sys/time.h linalg.h chull.h dual.h
+-dual.o: surf.h /usr/include/stdio.h /usr/include/math.h /usr/include/stdlib.h
+-dual.o: /usr/include/sgidefs.h /usr/include/string.h /usr/include/sys/time.h
+-dual.o: linalg.h dual.h chull.h
+-utils.o: surf.h /usr/include/stdio.h /usr/include/math.h
+-utils.o: /usr/include/stdlib.h /usr/include/sgidefs.h /usr/include/string.h
+-utils.o: /usr/include/sys/time.h linalg.h
+-lp.o: surf.h /usr/include/stdio.h /usr/include/math.h /usr/include/stdlib.h
+-lp.o: /usr/include/sgidefs.h /usr/include/string.h /usr/include/sys/time.h
+-lp.o: linalg.h
+-chull.o: surf.h /usr/include/stdio.h /usr/include/math.h
+-chull.o: /usr/include/stdlib.h /usr/include/sgidefs.h /usr/include/string.h
+-chull.o: /usr/include/sys/time.h linalg.h chull.h
+-tessel_cases.o: surf.h /usr/include/stdio.h /usr/include/math.h
+-tessel_cases.o: /usr/include/stdlib.h /usr/include/sgidefs.h
+-tessel_cases.o: /usr/include/string.h /usr/include/sys/time.h linalg.h dual.h
+-tessel_patches.o: surf.h /usr/include/stdio.h /usr/include/math.h
+-tessel_patches.o: /usr/include/stdlib.h /usr/include/sgidefs.h
+-tessel_patches.o: /usr/include/string.h /usr/include/sys/time.h linalg.h
+-tessel_convex.o: surf.h /usr/include/stdio.h /usr/include/math.h
+-tessel_convex.o: /usr/include/stdlib.h /usr/include/sgidefs.h
+-tessel_convex.o: /usr/include/string.h /usr/include/sys/time.h linalg.h
+-tessel_concave.o: surf.h /usr/include/stdio.h /usr/include/math.h
+-tessel_concave.o: /usr/include/stdlib.h /usr/include/sgidefs.h
+-tessel_concave.o: /usr/include/string.h /usr/include/sys/time.h linalg.h
+-tessel_torus.o: surf.h /usr/include/stdio.h /usr/include/math.h
+-tessel_torus.o: /usr/include/stdlib.h /usr/include/sgidefs.h
+-tessel_torus.o: /usr/include/string.h /usr/include/sys/time.h linalg.h
++surf.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++surf.o: /usr/include/sys/_symbol_aliasing.h
++surf.o: /usr/include/sys/_posix_availability.h /usr/include/Availability.h
++surf.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++surf.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++surf.o: /usr/include/i386/_types.h /usr/include/sys/_pthread/_pthread_types.h
++surf.o: /usr/include/sys/_types/_va_list.h /usr/include/sys/_types/_size_t.h
++surf.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++surf.o: /usr/include/sys/_types/_off_t.h /usr/include/sys/_types/_ssize_t.h
++surf.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++surf.o: /usr/include/math.h /usr/include/stdlib.h /usr/include/sys/wait.h
++surf.o: /usr/include/sys/_types/_pid_t.h /usr/include/sys/_types/_id_t.h
++surf.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
++surf.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++surf.o: /usr/include/machine/_mcontext.h /usr/include/i386/_mcontext.h
++surf.o: /usr/include/mach/i386/_structs.h
++surf.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++surf.o: /usr/include/sys/_types/_sigaltstack.h
++surf.o: /usr/include/sys/_types/_ucontext.h
++surf.o: /usr/include/sys/_types/_sigset_t.h /usr/include/sys/_types/_uid_t.h
++surf.o: /usr/include/sys/resource.h /usr/include/stdint.h
++surf.o: /usr/include/sys/_types/_int8_t.h /usr/include/sys/_types/_int16_t.h
++surf.o: /usr/include/sys/_types/_int32_t.h /usr/include/sys/_types/_int64_t.h
++surf.o: /usr/include/_types/_uint8_t.h /usr/include/_types/_uint16_t.h
++surf.o: /usr/include/_types/_uint32_t.h /usr/include/_types/_uint64_t.h
++surf.o: /usr/include/sys/_types/_intptr_t.h
++surf.o: /usr/include/sys/_types/_uintptr_t.h /usr/include/_types/_intmax_t.h
++surf.o: /usr/include/_types/_uintmax_t.h /usr/include/sys/_types/_timeval.h
++surf.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++surf.o: /usr/include/sys/_endian.h /usr/include/libkern/_OSByteOrder.h
++surf.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
++surf.o: /usr/include/sys/_types/_ct_rune_t.h
++surf.o: /usr/include/sys/_types/_rune_t.h /usr/include/sys/_types/_wchar_t.h
++surf.o: /usr/include/machine/types.h /usr/include/i386/types.h
++surf.o: /usr/include/sys/_types/_dev_t.h /usr/include/sys/_types/_mode_t.h
++surf.o: /usr/include/string.h /usr/include/sys/_types/_rsize_t.h
++surf.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++surf.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++surf.o: /usr/include/sys/_types/_fd_def.h /usr/include/sys/_types/_timespec.h
++surf.o: /usr/include/sys/_types/_timeval64.h
++surf.o: /usr/include/sys/_types/_time_t.h
++surf.o: /usr/include/sys/_types/_suseconds_t.h
++surf.o: /usr/include/sys/_types/_fd_setsize.h
++surf.o: /usr/include/sys/_types/_fd_set.h /usr/include/sys/_types/_fd_clr.h
++surf.o: /usr/include/sys/_types/_fd_isset.h
++surf.o: /usr/include/sys/_types/_fd_zero.h /usr/include/sys/_types/_fd_copy.h
++surf.o: /usr/include/time.h /usr/include/sys/_types/_clock_t.h
++surf.o: /usr/include/sys/_select.h linalg.h
++io.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++io.o: /usr/include/sys/_symbol_aliasing.h
++io.o: /usr/include/sys/_posix_availability.h /usr/include/Availability.h
++io.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++io.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++io.o: /usr/include/i386/_types.h /usr/include/sys/_pthread/_pthread_types.h
++io.o: /usr/include/sys/_types/_va_list.h /usr/include/sys/_types/_size_t.h
++io.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++io.o: /usr/include/sys/_types/_off_t.h /usr/include/sys/_types/_ssize_t.h
++io.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++io.o: /usr/include/math.h /usr/include/stdlib.h /usr/include/sys/wait.h
++io.o: /usr/include/sys/_types/_pid_t.h /usr/include/sys/_types/_id_t.h
++io.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
++io.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++io.o: /usr/include/machine/_mcontext.h /usr/include/i386/_mcontext.h
++io.o: /usr/include/mach/i386/_structs.h
++io.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++io.o: /usr/include/sys/_types/_sigaltstack.h
++io.o: /usr/include/sys/_types/_ucontext.h /usr/include/sys/_types/_sigset_t.h
++io.o: /usr/include/sys/_types/_uid_t.h /usr/include/sys/resource.h
++io.o: /usr/include/stdint.h /usr/include/sys/_types/_int8_t.h
++io.o: /usr/include/sys/_types/_int16_t.h /usr/include/sys/_types/_int32_t.h
++io.o: /usr/include/sys/_types/_int64_t.h /usr/include/_types/_uint8_t.h
++io.o: /usr/include/_types/_uint16_t.h /usr/include/_types/_uint32_t.h
++io.o: /usr/include/_types/_uint64_t.h /usr/include/sys/_types/_intptr_t.h
++io.o: /usr/include/sys/_types/_uintptr_t.h /usr/include/_types/_intmax_t.h
++io.o: /usr/include/_types/_uintmax_t.h /usr/include/sys/_types/_timeval.h
++io.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++io.o: /usr/include/sys/_endian.h /usr/include/libkern/_OSByteOrder.h
++io.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
++io.o: /usr/include/sys/_types/_ct_rune_t.h /usr/include/sys/_types/_rune_t.h
++io.o: /usr/include/sys/_types/_wchar_t.h /usr/include/machine/types.h
++io.o: /usr/include/i386/types.h /usr/include/sys/_types/_dev_t.h
++io.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++io.o: /usr/include/sys/_types/_rsize_t.h /usr/include/sys/_types/_errno_t.h
++io.o: /usr/include/strings.h /usr/include/secure/_string.h
++io.o: /usr/include/sys/time.h /usr/include/sys/_types/_fd_def.h
++io.o: /usr/include/sys/_types/_timespec.h
++io.o: /usr/include/sys/_types/_timeval64.h /usr/include/sys/_types/_time_t.h
++io.o: /usr/include/sys/_types/_suseconds_t.h
++io.o: /usr/include/sys/_types/_fd_setsize.h /usr/include/sys/_types/_fd_set.h
++io.o: /usr/include/sys/_types/_fd_clr.h /usr/include/sys/_types/_fd_isset.h
++io.o: /usr/include/sys/_types/_fd_zero.h /usr/include/sys/_types/_fd_copy.h
++io.o: /usr/include/time.h /usr/include/sys/_types/_clock_t.h
++io.o: /usr/include/sys/_select.h linalg.h
++compute.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++compute.o: /usr/include/sys/_symbol_aliasing.h
++compute.o: /usr/include/sys/_posix_availability.h /usr/include/Availability.h
++compute.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++compute.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++compute.o: /usr/include/i386/_types.h
++compute.o: /usr/include/sys/_pthread/_pthread_types.h
++compute.o: /usr/include/sys/_types/_va_list.h
++compute.o: /usr/include/sys/_types/_size_t.h /usr/include/sys/_types/_null.h
++compute.o: /usr/include/sys/stdio.h /usr/include/sys/_types/_off_t.h
++compute.o: /usr/include/sys/_types/_ssize_t.h /usr/include/secure/_stdio.h
++compute.o: /usr/include/secure/_common.h /usr/include/math.h
++compute.o: /usr/include/stdlib.h /usr/include/sys/wait.h
++compute.o: /usr/include/sys/_types/_pid_t.h /usr/include/sys/_types/_id_t.h
++compute.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
++compute.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++compute.o: /usr/include/machine/_mcontext.h /usr/include/i386/_mcontext.h
++compute.o: /usr/include/mach/i386/_structs.h
++compute.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++compute.o: /usr/include/sys/_types/_sigaltstack.h
++compute.o: /usr/include/sys/_types/_ucontext.h
++compute.o: /usr/include/sys/_types/_sigset_t.h
++compute.o: /usr/include/sys/_types/_uid_t.h /usr/include/sys/resource.h
++compute.o: /usr/include/stdint.h /usr/include/sys/_types/_int8_t.h
++compute.o: /usr/include/sys/_types/_int16_t.h
++compute.o: /usr/include/sys/_types/_int32_t.h
++compute.o: /usr/include/sys/_types/_int64_t.h /usr/include/_types/_uint8_t.h
++compute.o: /usr/include/_types/_uint16_t.h /usr/include/_types/_uint32_t.h
++compute.o: /usr/include/_types/_uint64_t.h
++compute.o: /usr/include/sys/_types/_intptr_t.h
++compute.o: /usr/include/sys/_types/_uintptr_t.h
++compute.o: /usr/include/_types/_intmax_t.h /usr/include/_types/_uintmax_t.h
++compute.o: /usr/include/sys/_types/_timeval.h /usr/include/machine/endian.h
++compute.o: /usr/include/i386/endian.h /usr/include/sys/_endian.h
++compute.o: /usr/include/libkern/_OSByteOrder.h
++compute.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
++compute.o: /usr/include/sys/_types/_ct_rune_t.h
++compute.o: /usr/include/sys/_types/_rune_t.h
++compute.o: /usr/include/sys/_types/_wchar_t.h /usr/include/machine/types.h
++compute.o: /usr/include/i386/types.h /usr/include/sys/_types/_dev_t.h
++compute.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++compute.o: /usr/include/sys/_types/_rsize_t.h
++compute.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++compute.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++compute.o: /usr/include/sys/_types/_fd_def.h
++compute.o: /usr/include/sys/_types/_timespec.h
++compute.o: /usr/include/sys/_types/_timeval64.h
++compute.o: /usr/include/sys/_types/_time_t.h
++compute.o: /usr/include/sys/_types/_suseconds_t.h
++compute.o: /usr/include/sys/_types/_fd_setsize.h
++compute.o: /usr/include/sys/_types/_fd_set.h
++compute.o: /usr/include/sys/_types/_fd_clr.h
++compute.o: /usr/include/sys/_types/_fd_isset.h
++compute.o: /usr/include/sys/_types/_fd_zero.h
++compute.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++compute.o: /usr/include/sys/_types/_clock_t.h /usr/include/sys/_select.h
++compute.o: linalg.h chull.h dual.h
++dual.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++dual.o: /usr/include/sys/_symbol_aliasing.h
++dual.o: /usr/include/sys/_posix_availability.h /usr/include/Availability.h
++dual.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++dual.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++dual.o: /usr/include/i386/_types.h /usr/include/sys/_pthread/_pthread_types.h
++dual.o: /usr/include/sys/_types/_va_list.h /usr/include/sys/_types/_size_t.h
++dual.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++dual.o: /usr/include/sys/_types/_off_t.h /usr/include/sys/_types/_ssize_t.h
++dual.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++dual.o: /usr/include/math.h /usr/include/stdlib.h /usr/include/sys/wait.h
++dual.o: /usr/include/sys/_types/_pid_t.h /usr/include/sys/_types/_id_t.h
++dual.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
++dual.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++dual.o: /usr/include/machine/_mcontext.h /usr/include/i386/_mcontext.h
++dual.o: /usr/include/mach/i386/_structs.h
++dual.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++dual.o: /usr/include/sys/_types/_sigaltstack.h
++dual.o: /usr/include/sys/_types/_ucontext.h
++dual.o: /usr/include/sys/_types/_sigset_t.h /usr/include/sys/_types/_uid_t.h
++dual.o: /usr/include/sys/resource.h /usr/include/stdint.h
++dual.o: /usr/include/sys/_types/_int8_t.h /usr/include/sys/_types/_int16_t.h
++dual.o: /usr/include/sys/_types/_int32_t.h /usr/include/sys/_types/_int64_t.h
++dual.o: /usr/include/_types/_uint8_t.h /usr/include/_types/_uint16_t.h
++dual.o: /usr/include/_types/_uint32_t.h /usr/include/_types/_uint64_t.h
++dual.o: /usr/include/sys/_types/_intptr_t.h
++dual.o: /usr/include/sys/_types/_uintptr_t.h /usr/include/_types/_intmax_t.h
++dual.o: /usr/include/_types/_uintmax_t.h /usr/include/sys/_types/_timeval.h
++dual.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++dual.o: /usr/include/sys/_endian.h /usr/include/libkern/_OSByteOrder.h
++dual.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
++dual.o: /usr/include/sys/_types/_ct_rune_t.h
++dual.o: /usr/include/sys/_types/_rune_t.h /usr/include/sys/_types/_wchar_t.h
++dual.o: /usr/include/machine/types.h /usr/include/i386/types.h
++dual.o: /usr/include/sys/_types/_dev_t.h /usr/include/sys/_types/_mode_t.h
++dual.o: /usr/include/string.h /usr/include/sys/_types/_rsize_t.h
++dual.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++dual.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++dual.o: /usr/include/sys/_types/_fd_def.h /usr/include/sys/_types/_timespec.h
++dual.o: /usr/include/sys/_types/_timeval64.h
++dual.o: /usr/include/sys/_types/_time_t.h
++dual.o: /usr/include/sys/_types/_suseconds_t.h
++dual.o: /usr/include/sys/_types/_fd_setsize.h
++dual.o: /usr/include/sys/_types/_fd_set.h /usr/include/sys/_types/_fd_clr.h
++dual.o: /usr/include/sys/_types/_fd_isset.h
++dual.o: /usr/include/sys/_types/_fd_zero.h /usr/include/sys/_types/_fd_copy.h
++dual.o: /usr/include/time.h /usr/include/sys/_types/_clock_t.h
++dual.o: /usr/include/sys/_select.h linalg.h dual.h chull.h
++utils.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++utils.o: /usr/include/sys/_symbol_aliasing.h
++utils.o: /usr/include/sys/_posix_availability.h /usr/include/Availability.h
++utils.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++utils.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++utils.o: /usr/include/i386/_types.h
++utils.o: /usr/include/sys/_pthread/_pthread_types.h
++utils.o: /usr/include/sys/_types/_va_list.h /usr/include/sys/_types/_size_t.h
++utils.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++utils.o: /usr/include/sys/_types/_off_t.h /usr/include/sys/_types/_ssize_t.h
++utils.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++utils.o: /usr/include/math.h /usr/include/stdlib.h /usr/include/sys/wait.h
++utils.o: /usr/include/sys/_types/_pid_t.h /usr/include/sys/_types/_id_t.h
++utils.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
++utils.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++utils.o: /usr/include/machine/_mcontext.h /usr/include/i386/_mcontext.h
++utils.o: /usr/include/mach/i386/_structs.h
++utils.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++utils.o: /usr/include/sys/_types/_sigaltstack.h
++utils.o: /usr/include/sys/_types/_ucontext.h
++utils.o: /usr/include/sys/_types/_sigset_t.h /usr/include/sys/_types/_uid_t.h
++utils.o: /usr/include/sys/resource.h /usr/include/stdint.h
++utils.o: /usr/include/sys/_types/_int8_t.h /usr/include/sys/_types/_int16_t.h
++utils.o: /usr/include/sys/_types/_int32_t.h
++utils.o: /usr/include/sys/_types/_int64_t.h /usr/include/_types/_uint8_t.h
++utils.o: /usr/include/_types/_uint16_t.h /usr/include/_types/_uint32_t.h
++utils.o: /usr/include/_types/_uint64_t.h /usr/include/sys/_types/_intptr_t.h
++utils.o: /usr/include/sys/_types/_uintptr_t.h /usr/include/_types/_intmax_t.h
++utils.o: /usr/include/_types/_uintmax_t.h /usr/include/sys/_types/_timeval.h
++utils.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++utils.o: /usr/include/sys/_endian.h /usr/include/libkern/_OSByteOrder.h
++utils.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
++utils.o: /usr/include/sys/_types/_ct_rune_t.h
++utils.o: /usr/include/sys/_types/_rune_t.h /usr/include/sys/_types/_wchar_t.h
++utils.o: /usr/include/machine/types.h /usr/include/i386/types.h
++utils.o: /usr/include/sys/_types/_dev_t.h /usr/include/sys/_types/_mode_t.h
++utils.o: /usr/include/string.h /usr/include/sys/_types/_rsize_t.h
++utils.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++utils.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++utils.o: /usr/include/sys/_types/_fd_def.h
++utils.o: /usr/include/sys/_types/_timespec.h
++utils.o: /usr/include/sys/_types/_timeval64.h
++utils.o: /usr/include/sys/_types/_time_t.h
++utils.o: /usr/include/sys/_types/_suseconds_t.h
++utils.o: /usr/include/sys/_types/_fd_setsize.h
++utils.o: /usr/include/sys/_types/_fd_set.h /usr/include/sys/_types/_fd_clr.h
++utils.o: /usr/include/sys/_types/_fd_isset.h
++utils.o: /usr/include/sys/_types/_fd_zero.h
++utils.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++utils.o: /usr/include/sys/_types/_clock_t.h /usr/include/sys/_select.h
++utils.o: linalg.h
++lp.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++lp.o: /usr/include/sys/_symbol_aliasing.h
++lp.o: /usr/include/sys/_posix_availability.h /usr/include/Availability.h
++lp.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++lp.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++lp.o: /usr/include/i386/_types.h /usr/include/sys/_pthread/_pthread_types.h
++lp.o: /usr/include/sys/_types/_va_list.h /usr/include/sys/_types/_size_t.h
++lp.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++lp.o: /usr/include/sys/_types/_off_t.h /usr/include/sys/_types/_ssize_t.h
++lp.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++lp.o: /usr/include/math.h /usr/include/stdlib.h /usr/include/sys/wait.h
++lp.o: /usr/include/sys/_types/_pid_t.h /usr/include/sys/_types/_id_t.h
++lp.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
++lp.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++lp.o: /usr/include/machine/_mcontext.h /usr/include/i386/_mcontext.h
++lp.o: /usr/include/mach/i386/_structs.h
++lp.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++lp.o: /usr/include/sys/_types/_sigaltstack.h
++lp.o: /usr/include/sys/_types/_ucontext.h /usr/include/sys/_types/_sigset_t.h
++lp.o: /usr/include/sys/_types/_uid_t.h /usr/include/sys/resource.h
++lp.o: /usr/include/stdint.h /usr/include/sys/_types/_int8_t.h
++lp.o: /usr/include/sys/_types/_int16_t.h /usr/include/sys/_types/_int32_t.h
++lp.o: /usr/include/sys/_types/_int64_t.h /usr/include/_types/_uint8_t.h
++lp.o: /usr/include/_types/_uint16_t.h /usr/include/_types/_uint32_t.h
++lp.o: /usr/include/_types/_uint64_t.h /usr/include/sys/_types/_intptr_t.h
++lp.o: /usr/include/sys/_types/_uintptr_t.h /usr/include/_types/_intmax_t.h
++lp.o: /usr/include/_types/_uintmax_t.h /usr/include/sys/_types/_timeval.h
++lp.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++lp.o: /usr/include/sys/_endian.h /usr/include/libkern/_OSByteOrder.h
++lp.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
++lp.o: /usr/include/sys/_types/_ct_rune_t.h /usr/include/sys/_types/_rune_t.h
++lp.o: /usr/include/sys/_types/_wchar_t.h /usr/include/machine/types.h
++lp.o: /usr/include/i386/types.h /usr/include/sys/_types/_dev_t.h
++lp.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++lp.o: /usr/include/sys/_types/_rsize_t.h /usr/include/sys/_types/_errno_t.h
++lp.o: /usr/include/strings.h /usr/include/secure/_string.h
++lp.o: /usr/include/sys/time.h /usr/include/sys/_types/_fd_def.h
++lp.o: /usr/include/sys/_types/_timespec.h
++lp.o: /usr/include/sys/_types/_timeval64.h /usr/include/sys/_types/_time_t.h
++lp.o: /usr/include/sys/_types/_suseconds_t.h
++lp.o: /usr/include/sys/_types/_fd_setsize.h /usr/include/sys/_types/_fd_set.h
++lp.o: /usr/include/sys/_types/_fd_clr.h /usr/include/sys/_types/_fd_isset.h
++lp.o: /usr/include/sys/_types/_fd_zero.h /usr/include/sys/_types/_fd_copy.h
++lp.o: /usr/include/time.h /usr/include/sys/_types/_clock_t.h
++lp.o: /usr/include/sys/_select.h linalg.h
++chull.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++chull.o: /usr/include/sys/_symbol_aliasing.h
++chull.o: /usr/include/sys/_posix_availability.h /usr/include/Availability.h
++chull.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++chull.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++chull.o: /usr/include/i386/_types.h
++chull.o: /usr/include/sys/_pthread/_pthread_types.h
++chull.o: /usr/include/sys/_types/_va_list.h /usr/include/sys/_types/_size_t.h
++chull.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++chull.o: /usr/include/sys/_types/_off_t.h /usr/include/sys/_types/_ssize_t.h
++chull.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++chull.o: /usr/include/math.h /usr/include/stdlib.h /usr/include/sys/wait.h
++chull.o: /usr/include/sys/_types/_pid_t.h /usr/include/sys/_types/_id_t.h
++chull.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
++chull.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++chull.o: /usr/include/machine/_mcontext.h /usr/include/i386/_mcontext.h
++chull.o: /usr/include/mach/i386/_structs.h
++chull.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++chull.o: /usr/include/sys/_types/_sigaltstack.h
++chull.o: /usr/include/sys/_types/_ucontext.h
++chull.o: /usr/include/sys/_types/_sigset_t.h /usr/include/sys/_types/_uid_t.h
++chull.o: /usr/include/sys/resource.h /usr/include/stdint.h
++chull.o: /usr/include/sys/_types/_int8_t.h /usr/include/sys/_types/_int16_t.h
++chull.o: /usr/include/sys/_types/_int32_t.h
++chull.o: /usr/include/sys/_types/_int64_t.h /usr/include/_types/_uint8_t.h
++chull.o: /usr/include/_types/_uint16_t.h /usr/include/_types/_uint32_t.h
++chull.o: /usr/include/_types/_uint64_t.h /usr/include/sys/_types/_intptr_t.h
++chull.o: /usr/include/sys/_types/_uintptr_t.h /usr/include/_types/_intmax_t.h
++chull.o: /usr/include/_types/_uintmax_t.h /usr/include/sys/_types/_timeval.h
++chull.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++chull.o: /usr/include/sys/_endian.h /usr/include/libkern/_OSByteOrder.h
++chull.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
++chull.o: /usr/include/sys/_types/_ct_rune_t.h
++chull.o: /usr/include/sys/_types/_rune_t.h /usr/include/sys/_types/_wchar_t.h
++chull.o: /usr/include/machine/types.h /usr/include/i386/types.h
++chull.o: /usr/include/sys/_types/_dev_t.h /usr/include/sys/_types/_mode_t.h
++chull.o: /usr/include/string.h /usr/include/sys/_types/_rsize_t.h
++chull.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++chull.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++chull.o: /usr/include/sys/_types/_fd_def.h
++chull.o: /usr/include/sys/_types/_timespec.h
++chull.o: /usr/include/sys/_types/_timeval64.h
++chull.o: /usr/include/sys/_types/_time_t.h
++chull.o: /usr/include/sys/_types/_suseconds_t.h
++chull.o: /usr/include/sys/_types/_fd_setsize.h
++chull.o: /usr/include/sys/_types/_fd_set.h /usr/include/sys/_types/_fd_clr.h
++chull.o: /usr/include/sys/_types/_fd_isset.h
++chull.o: /usr/include/sys/_types/_fd_zero.h
++chull.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++chull.o: /usr/include/sys/_types/_clock_t.h /usr/include/sys/_select.h
++chull.o: linalg.h chull.h
++tessel_cases.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++tessel_cases.o: /usr/include/sys/_symbol_aliasing.h
++tessel_cases.o: /usr/include/sys/_posix_availability.h
++tessel_cases.o: /usr/include/Availability.h
++tessel_cases.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++tessel_cases.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++tessel_cases.o: /usr/include/i386/_types.h
++tessel_cases.o: /usr/include/sys/_pthread/_pthread_types.h
++tessel_cases.o: /usr/include/sys/_types/_va_list.h
++tessel_cases.o: /usr/include/sys/_types/_size_t.h
++tessel_cases.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++tessel_cases.o: /usr/include/sys/_types/_off_t.h
++tessel_cases.o: /usr/include/sys/_types/_ssize_t.h
++tessel_cases.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++tessel_cases.o: /usr/include/math.h /usr/include/stdlib.h
++tessel_cases.o: /usr/include/sys/wait.h /usr/include/sys/_types/_pid_t.h
++tessel_cases.o: /usr/include/sys/_types/_id_t.h /usr/include/sys/signal.h
++tessel_cases.o: /usr/include/sys/appleapiopts.h /usr/include/machine/signal.h
++tessel_cases.o: /usr/include/i386/signal.h /usr/include/machine/_mcontext.h
++tessel_cases.o: /usr/include/i386/_mcontext.h
++tessel_cases.o: /usr/include/mach/i386/_structs.h
++tessel_cases.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++tessel_cases.o: /usr/include/sys/_types/_sigaltstack.h
++tessel_cases.o: /usr/include/sys/_types/_ucontext.h
++tessel_cases.o: /usr/include/sys/_types/_sigset_t.h
++tessel_cases.o: /usr/include/sys/_types/_uid_t.h /usr/include/sys/resource.h
++tessel_cases.o: /usr/include/stdint.h /usr/include/sys/_types/_int8_t.h
++tessel_cases.o: /usr/include/sys/_types/_int16_t.h
++tessel_cases.o: /usr/include/sys/_types/_int32_t.h
++tessel_cases.o: /usr/include/sys/_types/_int64_t.h
++tessel_cases.o: /usr/include/_types/_uint8_t.h
++tessel_cases.o: /usr/include/_types/_uint16_t.h
++tessel_cases.o: /usr/include/_types/_uint32_t.h
++tessel_cases.o: /usr/include/_types/_uint64_t.h
++tessel_cases.o: /usr/include/sys/_types/_intptr_t.h
++tessel_cases.o: /usr/include/sys/_types/_uintptr_t.h
++tessel_cases.o: /usr/include/_types/_intmax_t.h
++tessel_cases.o: /usr/include/_types/_uintmax_t.h
++tessel_cases.o: /usr/include/sys/_types/_timeval.h
++tessel_cases.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++tessel_cases.o: /usr/include/sys/_endian.h
++tessel_cases.o: /usr/include/libkern/_OSByteOrder.h
++tessel_cases.o: /usr/include/libkern/i386/_OSByteOrder.h
++tessel_cases.o: /usr/include/alloca.h /usr/include/sys/_types/_ct_rune_t.h
++tessel_cases.o: /usr/include/sys/_types/_rune_t.h
++tessel_cases.o: /usr/include/sys/_types/_wchar_t.h
++tessel_cases.o: /usr/include/machine/types.h /usr/include/i386/types.h
++tessel_cases.o: /usr/include/sys/_types/_dev_t.h
++tessel_cases.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++tessel_cases.o: /usr/include/sys/_types/_rsize_t.h
++tessel_cases.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++tessel_cases.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++tessel_cases.o: /usr/include/sys/_types/_fd_def.h
++tessel_cases.o: /usr/include/sys/_types/_timespec.h
++tessel_cases.o: /usr/include/sys/_types/_timeval64.h
++tessel_cases.o: /usr/include/sys/_types/_time_t.h
++tessel_cases.o: /usr/include/sys/_types/_suseconds_t.h
++tessel_cases.o: /usr/include/sys/_types/_fd_setsize.h
++tessel_cases.o: /usr/include/sys/_types/_fd_set.h
++tessel_cases.o: /usr/include/sys/_types/_fd_clr.h
++tessel_cases.o: /usr/include/sys/_types/_fd_isset.h
++tessel_cases.o: /usr/include/sys/_types/_fd_zero.h
++tessel_cases.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++tessel_cases.o: /usr/include/sys/_types/_clock_t.h /usr/include/sys/_select.h
++tessel_cases.o: linalg.h dual.h
++tessel_patches.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++tessel_patches.o: /usr/include/sys/_symbol_aliasing.h
++tessel_patches.o: /usr/include/sys/_posix_availability.h
++tessel_patches.o: /usr/include/Availability.h
++tessel_patches.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++tessel_patches.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++tessel_patches.o: /usr/include/i386/_types.h
++tessel_patches.o: /usr/include/sys/_pthread/_pthread_types.h
++tessel_patches.o: /usr/include/sys/_types/_va_list.h
++tessel_patches.o: /usr/include/sys/_types/_size_t.h
++tessel_patches.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++tessel_patches.o: /usr/include/sys/_types/_off_t.h
++tessel_patches.o: /usr/include/sys/_types/_ssize_t.h
++tessel_patches.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++tessel_patches.o: /usr/include/math.h /usr/include/stdlib.h
++tessel_patches.o: /usr/include/sys/wait.h /usr/include/sys/_types/_pid_t.h
++tessel_patches.o: /usr/include/sys/_types/_id_t.h /usr/include/sys/signal.h
++tessel_patches.o: /usr/include/sys/appleapiopts.h
++tessel_patches.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++tessel_patches.o: /usr/include/machine/_mcontext.h
++tessel_patches.o: /usr/include/i386/_mcontext.h
++tessel_patches.o: /usr/include/mach/i386/_structs.h
++tessel_patches.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++tessel_patches.o: /usr/include/sys/_types/_sigaltstack.h
++tessel_patches.o: /usr/include/sys/_types/_ucontext.h
++tessel_patches.o: /usr/include/sys/_types/_sigset_t.h
++tessel_patches.o: /usr/include/sys/_types/_uid_t.h
++tessel_patches.o: /usr/include/sys/resource.h /usr/include/stdint.h
++tessel_patches.o: /usr/include/sys/_types/_int8_t.h
++tessel_patches.o: /usr/include/sys/_types/_int16_t.h
++tessel_patches.o: /usr/include/sys/_types/_int32_t.h
++tessel_patches.o: /usr/include/sys/_types/_int64_t.h
++tessel_patches.o: /usr/include/_types/_uint8_t.h
++tessel_patches.o: /usr/include/_types/_uint16_t.h
++tessel_patches.o: /usr/include/_types/_uint32_t.h
++tessel_patches.o: /usr/include/_types/_uint64_t.h
++tessel_patches.o: /usr/include/sys/_types/_intptr_t.h
++tessel_patches.o: /usr/include/sys/_types/_uintptr_t.h
++tessel_patches.o: /usr/include/_types/_intmax_t.h
++tessel_patches.o: /usr/include/_types/_uintmax_t.h
++tessel_patches.o: /usr/include/sys/_types/_timeval.h
++tessel_patches.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++tessel_patches.o: /usr/include/sys/_endian.h
++tessel_patches.o: /usr/include/libkern/_OSByteOrder.h
++tessel_patches.o: /usr/include/libkern/i386/_OSByteOrder.h
++tessel_patches.o: /usr/include/alloca.h /usr/include/sys/_types/_ct_rune_t.h
++tessel_patches.o: /usr/include/sys/_types/_rune_t.h
++tessel_patches.o: /usr/include/sys/_types/_wchar_t.h
++tessel_patches.o: /usr/include/machine/types.h /usr/include/i386/types.h
++tessel_patches.o: /usr/include/sys/_types/_dev_t.h
++tessel_patches.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++tessel_patches.o: /usr/include/sys/_types/_rsize_t.h
++tessel_patches.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++tessel_patches.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++tessel_patches.o: /usr/include/sys/_types/_fd_def.h
++tessel_patches.o: /usr/include/sys/_types/_timespec.h
++tessel_patches.o: /usr/include/sys/_types/_timeval64.h
++tessel_patches.o: /usr/include/sys/_types/_time_t.h
++tessel_patches.o: /usr/include/sys/_types/_suseconds_t.h
++tessel_patches.o: /usr/include/sys/_types/_fd_setsize.h
++tessel_patches.o: /usr/include/sys/_types/_fd_set.h
++tessel_patches.o: /usr/include/sys/_types/_fd_clr.h
++tessel_patches.o: /usr/include/sys/_types/_fd_isset.h
++tessel_patches.o: /usr/include/sys/_types/_fd_zero.h
++tessel_patches.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++tessel_patches.o: /usr/include/sys/_types/_clock_t.h
++tessel_patches.o: /usr/include/sys/_select.h linalg.h
++tessel_convex.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++tessel_convex.o: /usr/include/sys/_symbol_aliasing.h
++tessel_convex.o: /usr/include/sys/_posix_availability.h
++tessel_convex.o: /usr/include/Availability.h
++tessel_convex.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++tessel_convex.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++tessel_convex.o: /usr/include/i386/_types.h
++tessel_convex.o: /usr/include/sys/_pthread/_pthread_types.h
++tessel_convex.o: /usr/include/sys/_types/_va_list.h
++tessel_convex.o: /usr/include/sys/_types/_size_t.h
++tessel_convex.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++tessel_convex.o: /usr/include/sys/_types/_off_t.h
++tessel_convex.o: /usr/include/sys/_types/_ssize_t.h
++tessel_convex.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++tessel_convex.o: /usr/include/math.h /usr/include/stdlib.h
++tessel_convex.o: /usr/include/sys/wait.h /usr/include/sys/_types/_pid_t.h
++tessel_convex.o: /usr/include/sys/_types/_id_t.h /usr/include/sys/signal.h
++tessel_convex.o: /usr/include/sys/appleapiopts.h
++tessel_convex.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++tessel_convex.o: /usr/include/machine/_mcontext.h
++tessel_convex.o: /usr/include/i386/_mcontext.h
++tessel_convex.o: /usr/include/mach/i386/_structs.h
++tessel_convex.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++tessel_convex.o: /usr/include/sys/_types/_sigaltstack.h
++tessel_convex.o: /usr/include/sys/_types/_ucontext.h
++tessel_convex.o: /usr/include/sys/_types/_sigset_t.h
++tessel_convex.o: /usr/include/sys/_types/_uid_t.h /usr/include/sys/resource.h
++tessel_convex.o: /usr/include/stdint.h /usr/include/sys/_types/_int8_t.h
++tessel_convex.o: /usr/include/sys/_types/_int16_t.h
++tessel_convex.o: /usr/include/sys/_types/_int32_t.h
++tessel_convex.o: /usr/include/sys/_types/_int64_t.h
++tessel_convex.o: /usr/include/_types/_uint8_t.h
++tessel_convex.o: /usr/include/_types/_uint16_t.h
++tessel_convex.o: /usr/include/_types/_uint32_t.h
++tessel_convex.o: /usr/include/_types/_uint64_t.h
++tessel_convex.o: /usr/include/sys/_types/_intptr_t.h
++tessel_convex.o: /usr/include/sys/_types/_uintptr_t.h
++tessel_convex.o: /usr/include/_types/_intmax_t.h
++tessel_convex.o: /usr/include/_types/_uintmax_t.h
++tessel_convex.o: /usr/include/sys/_types/_timeval.h
++tessel_convex.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++tessel_convex.o: /usr/include/sys/_endian.h
++tessel_convex.o: /usr/include/libkern/_OSByteOrder.h
++tessel_convex.o: /usr/include/libkern/i386/_OSByteOrder.h
++tessel_convex.o: /usr/include/alloca.h /usr/include/sys/_types/_ct_rune_t.h
++tessel_convex.o: /usr/include/sys/_types/_rune_t.h
++tessel_convex.o: /usr/include/sys/_types/_wchar_t.h
++tessel_convex.o: /usr/include/machine/types.h /usr/include/i386/types.h
++tessel_convex.o: /usr/include/sys/_types/_dev_t.h
++tessel_convex.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++tessel_convex.o: /usr/include/sys/_types/_rsize_t.h
++tessel_convex.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++tessel_convex.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++tessel_convex.o: /usr/include/sys/_types/_fd_def.h
++tessel_convex.o: /usr/include/sys/_types/_timespec.h
++tessel_convex.o: /usr/include/sys/_types/_timeval64.h
++tessel_convex.o: /usr/include/sys/_types/_time_t.h
++tessel_convex.o: /usr/include/sys/_types/_suseconds_t.h
++tessel_convex.o: /usr/include/sys/_types/_fd_setsize.h
++tessel_convex.o: /usr/include/sys/_types/_fd_set.h
++tessel_convex.o: /usr/include/sys/_types/_fd_clr.h
++tessel_convex.o: /usr/include/sys/_types/_fd_isset.h
++tessel_convex.o: /usr/include/sys/_types/_fd_zero.h
++tessel_convex.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++tessel_convex.o: /usr/include/sys/_types/_clock_t.h
++tessel_convex.o: /usr/include/sys/_select.h linalg.h
++tessel_concave.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++tessel_concave.o: /usr/include/sys/_symbol_aliasing.h
++tessel_concave.o: /usr/include/sys/_posix_availability.h
++tessel_concave.o: /usr/include/Availability.h
++tessel_concave.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++tessel_concave.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++tessel_concave.o: /usr/include/i386/_types.h
++tessel_concave.o: /usr/include/sys/_pthread/_pthread_types.h
++tessel_concave.o: /usr/include/sys/_types/_va_list.h
++tessel_concave.o: /usr/include/sys/_types/_size_t.h
++tessel_concave.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++tessel_concave.o: /usr/include/sys/_types/_off_t.h
++tessel_concave.o: /usr/include/sys/_types/_ssize_t.h
++tessel_concave.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++tessel_concave.o: /usr/include/math.h /usr/include/stdlib.h
++tessel_concave.o: /usr/include/sys/wait.h /usr/include/sys/_types/_pid_t.h
++tessel_concave.o: /usr/include/sys/_types/_id_t.h /usr/include/sys/signal.h
++tessel_concave.o: /usr/include/sys/appleapiopts.h
++tessel_concave.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++tessel_concave.o: /usr/include/machine/_mcontext.h
++tessel_concave.o: /usr/include/i386/_mcontext.h
++tessel_concave.o: /usr/include/mach/i386/_structs.h
++tessel_concave.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++tessel_concave.o: /usr/include/sys/_types/_sigaltstack.h
++tessel_concave.o: /usr/include/sys/_types/_ucontext.h
++tessel_concave.o: /usr/include/sys/_types/_sigset_t.h
++tessel_concave.o: /usr/include/sys/_types/_uid_t.h
++tessel_concave.o: /usr/include/sys/resource.h /usr/include/stdint.h
++tessel_concave.o: /usr/include/sys/_types/_int8_t.h
++tessel_concave.o: /usr/include/sys/_types/_int16_t.h
++tessel_concave.o: /usr/include/sys/_types/_int32_t.h
++tessel_concave.o: /usr/include/sys/_types/_int64_t.h
++tessel_concave.o: /usr/include/_types/_uint8_t.h
++tessel_concave.o: /usr/include/_types/_uint16_t.h
++tessel_concave.o: /usr/include/_types/_uint32_t.h
++tessel_concave.o: /usr/include/_types/_uint64_t.h
++tessel_concave.o: /usr/include/sys/_types/_intptr_t.h
++tessel_concave.o: /usr/include/sys/_types/_uintptr_t.h
++tessel_concave.o: /usr/include/_types/_intmax_t.h
++tessel_concave.o: /usr/include/_types/_uintmax_t.h
++tessel_concave.o: /usr/include/sys/_types/_timeval.h
++tessel_concave.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++tessel_concave.o: /usr/include/sys/_endian.h
++tessel_concave.o: /usr/include/libkern/_OSByteOrder.h
++tessel_concave.o: /usr/include/libkern/i386/_OSByteOrder.h
++tessel_concave.o: /usr/include/alloca.h /usr/include/sys/_types/_ct_rune_t.h
++tessel_concave.o: /usr/include/sys/_types/_rune_t.h
++tessel_concave.o: /usr/include/sys/_types/_wchar_t.h
++tessel_concave.o: /usr/include/machine/types.h /usr/include/i386/types.h
++tessel_concave.o: /usr/include/sys/_types/_dev_t.h
++tessel_concave.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++tessel_concave.o: /usr/include/sys/_types/_rsize_t.h
++tessel_concave.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++tessel_concave.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++tessel_concave.o: /usr/include/sys/_types/_fd_def.h
++tessel_concave.o: /usr/include/sys/_types/_timespec.h
++tessel_concave.o: /usr/include/sys/_types/_timeval64.h
++tessel_concave.o: /usr/include/sys/_types/_time_t.h
++tessel_concave.o: /usr/include/sys/_types/_suseconds_t.h
++tessel_concave.o: /usr/include/sys/_types/_fd_setsize.h
++tessel_concave.o: /usr/include/sys/_types/_fd_set.h
++tessel_concave.o: /usr/include/sys/_types/_fd_clr.h
++tessel_concave.o: /usr/include/sys/_types/_fd_isset.h
++tessel_concave.o: /usr/include/sys/_types/_fd_zero.h
++tessel_concave.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++tessel_concave.o: /usr/include/sys/_types/_clock_t.h
++tessel_concave.o: /usr/include/sys/_select.h linalg.h
++tessel_torus.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++tessel_torus.o: /usr/include/sys/_symbol_aliasing.h
++tessel_torus.o: /usr/include/sys/_posix_availability.h
++tessel_torus.o: /usr/include/Availability.h
++tessel_torus.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++tessel_torus.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++tessel_torus.o: /usr/include/i386/_types.h
++tessel_torus.o: /usr/include/sys/_pthread/_pthread_types.h
++tessel_torus.o: /usr/include/sys/_types/_va_list.h
++tessel_torus.o: /usr/include/sys/_types/_size_t.h
++tessel_torus.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++tessel_torus.o: /usr/include/sys/_types/_off_t.h
++tessel_torus.o: /usr/include/sys/_types/_ssize_t.h
++tessel_torus.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++tessel_torus.o: /usr/include/math.h /usr/include/stdlib.h
++tessel_torus.o: /usr/include/sys/wait.h /usr/include/sys/_types/_pid_t.h
++tessel_torus.o: /usr/include/sys/_types/_id_t.h /usr/include/sys/signal.h
++tessel_torus.o: /usr/include/sys/appleapiopts.h /usr/include/machine/signal.h
++tessel_torus.o: /usr/include/i386/signal.h /usr/include/machine/_mcontext.h
++tessel_torus.o: /usr/include/i386/_mcontext.h
++tessel_torus.o: /usr/include/mach/i386/_structs.h
++tessel_torus.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++tessel_torus.o: /usr/include/sys/_types/_sigaltstack.h
++tessel_torus.o: /usr/include/sys/_types/_ucontext.h
++tessel_torus.o: /usr/include/sys/_types/_sigset_t.h
++tessel_torus.o: /usr/include/sys/_types/_uid_t.h /usr/include/sys/resource.h
++tessel_torus.o: /usr/include/stdint.h /usr/include/sys/_types/_int8_t.h
++tessel_torus.o: /usr/include/sys/_types/_int16_t.h
++tessel_torus.o: /usr/include/sys/_types/_int32_t.h
++tessel_torus.o: /usr/include/sys/_types/_int64_t.h
++tessel_torus.o: /usr/include/_types/_uint8_t.h
++tessel_torus.o: /usr/include/_types/_uint16_t.h
++tessel_torus.o: /usr/include/_types/_uint32_t.h
++tessel_torus.o: /usr/include/_types/_uint64_t.h
++tessel_torus.o: /usr/include/sys/_types/_intptr_t.h
++tessel_torus.o: /usr/include/sys/_types/_uintptr_t.h
++tessel_torus.o: /usr/include/_types/_intmax_t.h
++tessel_torus.o: /usr/include/_types/_uintmax_t.h
++tessel_torus.o: /usr/include/sys/_types/_timeval.h
++tessel_torus.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++tessel_torus.o: /usr/include/sys/_endian.h
++tessel_torus.o: /usr/include/libkern/_OSByteOrder.h
++tessel_torus.o: /usr/include/libkern/i386/_OSByteOrder.h
++tessel_torus.o: /usr/include/alloca.h /usr/include/sys/_types/_ct_rune_t.h
++tessel_torus.o: /usr/include/sys/_types/_rune_t.h
++tessel_torus.o: /usr/include/sys/_types/_wchar_t.h
++tessel_torus.o: /usr/include/machine/types.h /usr/include/i386/types.h
++tessel_torus.o: /usr/include/sys/_types/_dev_t.h
++tessel_torus.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++tessel_torus.o: /usr/include/sys/_types/_rsize_t.h
++tessel_torus.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++tessel_torus.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++tessel_torus.o: /usr/include/sys/_types/_fd_def.h
++tessel_torus.o: /usr/include/sys/_types/_timespec.h
++tessel_torus.o: /usr/include/sys/_types/_timeval64.h
++tessel_torus.o: /usr/include/sys/_types/_time_t.h
++tessel_torus.o: /usr/include/sys/_types/_suseconds_t.h
++tessel_torus.o: /usr/include/sys/_types/_fd_setsize.h
++tessel_torus.o: /usr/include/sys/_types/_fd_set.h
++tessel_torus.o: /usr/include/sys/_types/_fd_clr.h
++tessel_torus.o: /usr/include/sys/_types/_fd_isset.h
++tessel_torus.o: /usr/include/sys/_types/_fd_zero.h
++tessel_torus.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++tessel_torus.o: /usr/include/sys/_types/_clock_t.h /usr/include/sys/_select.h
++tessel_torus.o: linalg.h
+   
+ # DEPENDENCIES MUST END AT END OF FILE
+ # IF YOU PUT STUFF HERE IT WILL GO AWAY
+diff -Naur molden5.1/surf/Makefile.bak cq_molden5.1/src/surf/Makefile.bak
+--- molden5.1/surf/Makefile.bak	1970-01-01 01:00:00.000000000 +0100
++++ cq_molden5.1/src/surf/Makefile.bak	2019-05-19 18:40:52.000000000 +0200
+@@ -0,0 +1,747 @@
++# Compilation flags
++#CC	    = cc
++CC	    = gcc
++INCLUDE     = -I. 
++#LINCLUDE    = -lcurses -ltermcap -lm
++LINCLUDE    = -lm
++OPT_CFLAGS  = -O2 $(FLAGS) $(INCLUDE)
++#CFLAGS	    = -g $(FLAGS) $(INCLUDE)
++CFLAGS	    = -O2 $(FLAGS) $(INCLUDE)
++
++# These are the user object files in the application
++SRCS        = surf.c io.c compute.c dual.c utils.c lp.c chull.c tessel_cases.c \
++	      tessel_patches.c tessel_convex.c tessel_concave.c tessel_torus.c 
++
++# obj files for sequential execution
++OBJS        = surf.o io.o compute.o dual.o utils.o lp.o chull.o tessel_cases.o \
++	      tessel_patches.o tessel_convex.o tessel_concave.o tessel_torus.o  
++
++# make objects
++surf: $(OBJS) Makefile 
++	$(CC) $(CFLAGS) $(OBJS) -o surf $(LINCLUDE)
++
++lint:
++	lint $(INCLUDE) $(SRCS)
++
++clean:
++	-rm -f *.o 
++
++release:
++	tar -cvf surf.tar README *.[hc] Makefile
++	compress surf.tar
++
++.c.o: 
++	$(CC) $(CFLAGS) -c $*.c
++
++
++# make depend makes the proper include file dependencies.  You _could_ run
++# it on a sun4, but there's a bug in the SunOS version of sed that causes
++# the all-important "cat makedep | sed -e 's/\.o/.d4o/p'" etc. line to
++# not print the results to the stdout (but to keep pumping it through the
++# edits.  The 'p' flag effectively does nothing). To avoid this I have
++# replaced the 'p' flag by the 'w file' flag in sed.
++
++DEPEND = $(SRCS)
++
++depend: $(DEPEND)
++	@ echo making dependencies...
++	@ echo ' ' > makedep
++	@ makedepend $(INCLUDE) -f makedep $(DEPEND)
++	@ echo '/^# DO NOT DELETE THIS LINE/+2,$$d' >eddep
++	@ echo '$$r makedep' >>eddep
++	@ echo 'w' >>eddep
++	@ cp Makefile Makefile.bak
++	@ ex - Makefile < eddep
++	@ rm eddep makedep 
++	@ echo '  ' >> Makefile
++	@ echo '# DEPENDENCIES MUST END AT END OF FILE' >> Makefile
++	@ echo '# IF YOU PUT STUFF HERE IT WILL GO AWAY' >> Makefile
++	@ echo '# see make depend above' >> Makefile
++	@ echo 'done.'
++	@ echo '  ' >> Makefile
++
++# DO NOT DELETE THIS LINE -- make depend depends on it.
++  
++ 
++# DO NOT DELETE
++
++surf.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++surf.o: /usr/include/sys/_symbol_aliasing.h
++surf.o: /usr/include/sys/_posix_availability.h /usr/include/Availability.h
++surf.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++surf.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++surf.o: /usr/include/i386/_types.h /usr/include/sys/_pthread/_pthread_types.h
++surf.o: /usr/include/sys/_types/_va_list.h /usr/include/sys/_types/_size_t.h
++surf.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++surf.o: /usr/include/sys/_types/_off_t.h /usr/include/sys/_types/_ssize_t.h
++surf.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++surf.o: /usr/include/math.h /usr/include/stdlib.h /usr/include/sys/wait.h
++surf.o: /usr/include/sys/_types/_pid_t.h /usr/include/sys/_types/_id_t.h
++surf.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
++surf.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++surf.o: /usr/include/machine/_mcontext.h /usr/include/i386/_mcontext.h
++surf.o: /usr/include/mach/i386/_structs.h
++surf.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++surf.o: /usr/include/sys/_types/_sigaltstack.h
++surf.o: /usr/include/sys/_types/_ucontext.h
++surf.o: /usr/include/sys/_types/_sigset_t.h /usr/include/sys/_types/_uid_t.h
++surf.o: /usr/include/sys/resource.h /usr/include/stdint.h
++surf.o: /usr/include/sys/_types/_int8_t.h /usr/include/sys/_types/_int16_t.h
++surf.o: /usr/include/sys/_types/_int32_t.h /usr/include/sys/_types/_int64_t.h
++surf.o: /usr/include/_types/_uint8_t.h /usr/include/_types/_uint16_t.h
++surf.o: /usr/include/_types/_uint32_t.h /usr/include/_types/_uint64_t.h
++surf.o: /usr/include/sys/_types/_intptr_t.h
++surf.o: /usr/include/sys/_types/_uintptr_t.h /usr/include/_types/_intmax_t.h
++surf.o: /usr/include/_types/_uintmax_t.h /usr/include/sys/_types/_timeval.h
++surf.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++surf.o: /usr/include/sys/_endian.h /usr/include/libkern/_OSByteOrder.h
++surf.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
++surf.o: /usr/include/sys/_types/_ct_rune_t.h
++surf.o: /usr/include/sys/_types/_rune_t.h /usr/include/sys/_types/_wchar_t.h
++surf.o: /usr/include/machine/types.h /usr/include/i386/types.h
++surf.o: /usr/include/sys/_types/_dev_t.h /usr/include/sys/_types/_mode_t.h
++surf.o: /usr/include/string.h /usr/include/sys/_types/_rsize_t.h
++surf.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++surf.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++surf.o: /usr/include/sys/_types/_fd_def.h /usr/include/sys/_types/_timespec.h
++surf.o: /usr/include/sys/_types/_timeval64.h
++surf.o: /usr/include/sys/_types/_time_t.h
++surf.o: /usr/include/sys/_types/_suseconds_t.h
++surf.o: /usr/include/sys/_types/_fd_setsize.h
++surf.o: /usr/include/sys/_types/_fd_set.h /usr/include/sys/_types/_fd_clr.h
++surf.o: /usr/include/sys/_types/_fd_isset.h
++surf.o: /usr/include/sys/_types/_fd_zero.h /usr/include/sys/_types/_fd_copy.h
++surf.o: /usr/include/time.h /usr/include/sys/_types/_clock_t.h
++surf.o: /usr/include/sys/_select.h linalg.h
++io.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++io.o: /usr/include/sys/_symbol_aliasing.h
++io.o: /usr/include/sys/_posix_availability.h /usr/include/Availability.h
++io.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++io.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++io.o: /usr/include/i386/_types.h /usr/include/sys/_pthread/_pthread_types.h
++io.o: /usr/include/sys/_types/_va_list.h /usr/include/sys/_types/_size_t.h
++io.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++io.o: /usr/include/sys/_types/_off_t.h /usr/include/sys/_types/_ssize_t.h
++io.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++io.o: /usr/include/math.h /usr/include/stdlib.h /usr/include/sys/wait.h
++io.o: /usr/include/sys/_types/_pid_t.h /usr/include/sys/_types/_id_t.h
++io.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
++io.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++io.o: /usr/include/machine/_mcontext.h /usr/include/i386/_mcontext.h
++io.o: /usr/include/mach/i386/_structs.h
++io.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++io.o: /usr/include/sys/_types/_sigaltstack.h
++io.o: /usr/include/sys/_types/_ucontext.h /usr/include/sys/_types/_sigset_t.h
++io.o: /usr/include/sys/_types/_uid_t.h /usr/include/sys/resource.h
++io.o: /usr/include/stdint.h /usr/include/sys/_types/_int8_t.h
++io.o: /usr/include/sys/_types/_int16_t.h /usr/include/sys/_types/_int32_t.h
++io.o: /usr/include/sys/_types/_int64_t.h /usr/include/_types/_uint8_t.h
++io.o: /usr/include/_types/_uint16_t.h /usr/include/_types/_uint32_t.h
++io.o: /usr/include/_types/_uint64_t.h /usr/include/sys/_types/_intptr_t.h
++io.o: /usr/include/sys/_types/_uintptr_t.h /usr/include/_types/_intmax_t.h
++io.o: /usr/include/_types/_uintmax_t.h /usr/include/sys/_types/_timeval.h
++io.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++io.o: /usr/include/sys/_endian.h /usr/include/libkern/_OSByteOrder.h
++io.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
++io.o: /usr/include/sys/_types/_ct_rune_t.h /usr/include/sys/_types/_rune_t.h
++io.o: /usr/include/sys/_types/_wchar_t.h /usr/include/machine/types.h
++io.o: /usr/include/i386/types.h /usr/include/sys/_types/_dev_t.h
++io.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++io.o: /usr/include/sys/_types/_rsize_t.h /usr/include/sys/_types/_errno_t.h
++io.o: /usr/include/strings.h /usr/include/secure/_string.h
++io.o: /usr/include/sys/time.h /usr/include/sys/_types/_fd_def.h
++io.o: /usr/include/sys/_types/_timespec.h
++io.o: /usr/include/sys/_types/_timeval64.h /usr/include/sys/_types/_time_t.h
++io.o: /usr/include/sys/_types/_suseconds_t.h
++io.o: /usr/include/sys/_types/_fd_setsize.h /usr/include/sys/_types/_fd_set.h
++io.o: /usr/include/sys/_types/_fd_clr.h /usr/include/sys/_types/_fd_isset.h
++io.o: /usr/include/sys/_types/_fd_zero.h /usr/include/sys/_types/_fd_copy.h
++io.o: /usr/include/time.h /usr/include/sys/_types/_clock_t.h
++io.o: /usr/include/sys/_select.h linalg.h
++compute.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++compute.o: /usr/include/sys/_symbol_aliasing.h
++compute.o: /usr/include/sys/_posix_availability.h /usr/include/Availability.h
++compute.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++compute.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++compute.o: /usr/include/i386/_types.h
++compute.o: /usr/include/sys/_pthread/_pthread_types.h
++compute.o: /usr/include/sys/_types/_va_list.h
++compute.o: /usr/include/sys/_types/_size_t.h /usr/include/sys/_types/_null.h
++compute.o: /usr/include/sys/stdio.h /usr/include/sys/_types/_off_t.h
++compute.o: /usr/include/sys/_types/_ssize_t.h /usr/include/secure/_stdio.h
++compute.o: /usr/include/secure/_common.h /usr/include/math.h
++compute.o: /usr/include/stdlib.h /usr/include/sys/wait.h
++compute.o: /usr/include/sys/_types/_pid_t.h /usr/include/sys/_types/_id_t.h
++compute.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
++compute.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++compute.o: /usr/include/machine/_mcontext.h /usr/include/i386/_mcontext.h
++compute.o: /usr/include/mach/i386/_structs.h
++compute.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++compute.o: /usr/include/sys/_types/_sigaltstack.h
++compute.o: /usr/include/sys/_types/_ucontext.h
++compute.o: /usr/include/sys/_types/_sigset_t.h
++compute.o: /usr/include/sys/_types/_uid_t.h /usr/include/sys/resource.h
++compute.o: /usr/include/stdint.h /usr/include/sys/_types/_int8_t.h
++compute.o: /usr/include/sys/_types/_int16_t.h
++compute.o: /usr/include/sys/_types/_int32_t.h
++compute.o: /usr/include/sys/_types/_int64_t.h /usr/include/_types/_uint8_t.h
++compute.o: /usr/include/_types/_uint16_t.h /usr/include/_types/_uint32_t.h
++compute.o: /usr/include/_types/_uint64_t.h
++compute.o: /usr/include/sys/_types/_intptr_t.h
++compute.o: /usr/include/sys/_types/_uintptr_t.h
++compute.o: /usr/include/_types/_intmax_t.h /usr/include/_types/_uintmax_t.h
++compute.o: /usr/include/sys/_types/_timeval.h /usr/include/machine/endian.h
++compute.o: /usr/include/i386/endian.h /usr/include/sys/_endian.h
++compute.o: /usr/include/libkern/_OSByteOrder.h
++compute.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
++compute.o: /usr/include/sys/_types/_ct_rune_t.h
++compute.o: /usr/include/sys/_types/_rune_t.h
++compute.o: /usr/include/sys/_types/_wchar_t.h /usr/include/machine/types.h
++compute.o: /usr/include/i386/types.h /usr/include/sys/_types/_dev_t.h
++compute.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++compute.o: /usr/include/sys/_types/_rsize_t.h
++compute.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++compute.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++compute.o: /usr/include/sys/_types/_fd_def.h
++compute.o: /usr/include/sys/_types/_timespec.h
++compute.o: /usr/include/sys/_types/_timeval64.h
++compute.o: /usr/include/sys/_types/_time_t.h
++compute.o: /usr/include/sys/_types/_suseconds_t.h
++compute.o: /usr/include/sys/_types/_fd_setsize.h
++compute.o: /usr/include/sys/_types/_fd_set.h
++compute.o: /usr/include/sys/_types/_fd_clr.h
++compute.o: /usr/include/sys/_types/_fd_isset.h
++compute.o: /usr/include/sys/_types/_fd_zero.h
++compute.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++compute.o: /usr/include/sys/_types/_clock_t.h /usr/include/sys/_select.h
++compute.o: linalg.h chull.h dual.h
++dual.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++dual.o: /usr/include/sys/_symbol_aliasing.h
++dual.o: /usr/include/sys/_posix_availability.h /usr/include/Availability.h
++dual.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++dual.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++dual.o: /usr/include/i386/_types.h /usr/include/sys/_pthread/_pthread_types.h
++dual.o: /usr/include/sys/_types/_va_list.h /usr/include/sys/_types/_size_t.h
++dual.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++dual.o: /usr/include/sys/_types/_off_t.h /usr/include/sys/_types/_ssize_t.h
++dual.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++dual.o: /usr/include/math.h /usr/include/stdlib.h /usr/include/sys/wait.h
++dual.o: /usr/include/sys/_types/_pid_t.h /usr/include/sys/_types/_id_t.h
++dual.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
++dual.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++dual.o: /usr/include/machine/_mcontext.h /usr/include/i386/_mcontext.h
++dual.o: /usr/include/mach/i386/_structs.h
++dual.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++dual.o: /usr/include/sys/_types/_sigaltstack.h
++dual.o: /usr/include/sys/_types/_ucontext.h
++dual.o: /usr/include/sys/_types/_sigset_t.h /usr/include/sys/_types/_uid_t.h
++dual.o: /usr/include/sys/resource.h /usr/include/stdint.h
++dual.o: /usr/include/sys/_types/_int8_t.h /usr/include/sys/_types/_int16_t.h
++dual.o: /usr/include/sys/_types/_int32_t.h /usr/include/sys/_types/_int64_t.h
++dual.o: /usr/include/_types/_uint8_t.h /usr/include/_types/_uint16_t.h
++dual.o: /usr/include/_types/_uint32_t.h /usr/include/_types/_uint64_t.h
++dual.o: /usr/include/sys/_types/_intptr_t.h
++dual.o: /usr/include/sys/_types/_uintptr_t.h /usr/include/_types/_intmax_t.h
++dual.o: /usr/include/_types/_uintmax_t.h /usr/include/sys/_types/_timeval.h
++dual.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++dual.o: /usr/include/sys/_endian.h /usr/include/libkern/_OSByteOrder.h
++dual.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
++dual.o: /usr/include/sys/_types/_ct_rune_t.h
++dual.o: /usr/include/sys/_types/_rune_t.h /usr/include/sys/_types/_wchar_t.h
++dual.o: /usr/include/machine/types.h /usr/include/i386/types.h
++dual.o: /usr/include/sys/_types/_dev_t.h /usr/include/sys/_types/_mode_t.h
++dual.o: /usr/include/string.h /usr/include/sys/_types/_rsize_t.h
++dual.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++dual.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++dual.o: /usr/include/sys/_types/_fd_def.h /usr/include/sys/_types/_timespec.h
++dual.o: /usr/include/sys/_types/_timeval64.h
++dual.o: /usr/include/sys/_types/_time_t.h
++dual.o: /usr/include/sys/_types/_suseconds_t.h
++dual.o: /usr/include/sys/_types/_fd_setsize.h
++dual.o: /usr/include/sys/_types/_fd_set.h /usr/include/sys/_types/_fd_clr.h
++dual.o: /usr/include/sys/_types/_fd_isset.h
++dual.o: /usr/include/sys/_types/_fd_zero.h /usr/include/sys/_types/_fd_copy.h
++dual.o: /usr/include/time.h /usr/include/sys/_types/_clock_t.h
++dual.o: /usr/include/sys/_select.h linalg.h dual.h chull.h
++utils.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++utils.o: /usr/include/sys/_symbol_aliasing.h
++utils.o: /usr/include/sys/_posix_availability.h /usr/include/Availability.h
++utils.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++utils.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++utils.o: /usr/include/i386/_types.h
++utils.o: /usr/include/sys/_pthread/_pthread_types.h
++utils.o: /usr/include/sys/_types/_va_list.h /usr/include/sys/_types/_size_t.h
++utils.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++utils.o: /usr/include/sys/_types/_off_t.h /usr/include/sys/_types/_ssize_t.h
++utils.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++utils.o: /usr/include/math.h /usr/include/stdlib.h /usr/include/sys/wait.h
++utils.o: /usr/include/sys/_types/_pid_t.h /usr/include/sys/_types/_id_t.h
++utils.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
++utils.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++utils.o: /usr/include/machine/_mcontext.h /usr/include/i386/_mcontext.h
++utils.o: /usr/include/mach/i386/_structs.h
++utils.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++utils.o: /usr/include/sys/_types/_sigaltstack.h
++utils.o: /usr/include/sys/_types/_ucontext.h
++utils.o: /usr/include/sys/_types/_sigset_t.h /usr/include/sys/_types/_uid_t.h
++utils.o: /usr/include/sys/resource.h /usr/include/stdint.h
++utils.o: /usr/include/sys/_types/_int8_t.h /usr/include/sys/_types/_int16_t.h
++utils.o: /usr/include/sys/_types/_int32_t.h
++utils.o: /usr/include/sys/_types/_int64_t.h /usr/include/_types/_uint8_t.h
++utils.o: /usr/include/_types/_uint16_t.h /usr/include/_types/_uint32_t.h
++utils.o: /usr/include/_types/_uint64_t.h /usr/include/sys/_types/_intptr_t.h
++utils.o: /usr/include/sys/_types/_uintptr_t.h /usr/include/_types/_intmax_t.h
++utils.o: /usr/include/_types/_uintmax_t.h /usr/include/sys/_types/_timeval.h
++utils.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++utils.o: /usr/include/sys/_endian.h /usr/include/libkern/_OSByteOrder.h
++utils.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
++utils.o: /usr/include/sys/_types/_ct_rune_t.h
++utils.o: /usr/include/sys/_types/_rune_t.h /usr/include/sys/_types/_wchar_t.h
++utils.o: /usr/include/machine/types.h /usr/include/i386/types.h
++utils.o: /usr/include/sys/_types/_dev_t.h /usr/include/sys/_types/_mode_t.h
++utils.o: /usr/include/string.h /usr/include/sys/_types/_rsize_t.h
++utils.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++utils.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++utils.o: /usr/include/sys/_types/_fd_def.h
++utils.o: /usr/include/sys/_types/_timespec.h
++utils.o: /usr/include/sys/_types/_timeval64.h
++utils.o: /usr/include/sys/_types/_time_t.h
++utils.o: /usr/include/sys/_types/_suseconds_t.h
++utils.o: /usr/include/sys/_types/_fd_setsize.h
++utils.o: /usr/include/sys/_types/_fd_set.h /usr/include/sys/_types/_fd_clr.h
++utils.o: /usr/include/sys/_types/_fd_isset.h
++utils.o: /usr/include/sys/_types/_fd_zero.h
++utils.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++utils.o: /usr/include/sys/_types/_clock_t.h /usr/include/sys/_select.h
++utils.o: linalg.h
++lp.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++lp.o: /usr/include/sys/_symbol_aliasing.h
++lp.o: /usr/include/sys/_posix_availability.h /usr/include/Availability.h
++lp.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++lp.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++lp.o: /usr/include/i386/_types.h /usr/include/sys/_pthread/_pthread_types.h
++lp.o: /usr/include/sys/_types/_va_list.h /usr/include/sys/_types/_size_t.h
++lp.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++lp.o: /usr/include/sys/_types/_off_t.h /usr/include/sys/_types/_ssize_t.h
++lp.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++lp.o: /usr/include/math.h /usr/include/stdlib.h /usr/include/sys/wait.h
++lp.o: /usr/include/sys/_types/_pid_t.h /usr/include/sys/_types/_id_t.h
++lp.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
++lp.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++lp.o: /usr/include/machine/_mcontext.h /usr/include/i386/_mcontext.h
++lp.o: /usr/include/mach/i386/_structs.h
++lp.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++lp.o: /usr/include/sys/_types/_sigaltstack.h
++lp.o: /usr/include/sys/_types/_ucontext.h /usr/include/sys/_types/_sigset_t.h
++lp.o: /usr/include/sys/_types/_uid_t.h /usr/include/sys/resource.h
++lp.o: /usr/include/stdint.h /usr/include/sys/_types/_int8_t.h
++lp.o: /usr/include/sys/_types/_int16_t.h /usr/include/sys/_types/_int32_t.h
++lp.o: /usr/include/sys/_types/_int64_t.h /usr/include/_types/_uint8_t.h
++lp.o: /usr/include/_types/_uint16_t.h /usr/include/_types/_uint32_t.h
++lp.o: /usr/include/_types/_uint64_t.h /usr/include/sys/_types/_intptr_t.h
++lp.o: /usr/include/sys/_types/_uintptr_t.h /usr/include/_types/_intmax_t.h
++lp.o: /usr/include/_types/_uintmax_t.h /usr/include/sys/_types/_timeval.h
++lp.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++lp.o: /usr/include/sys/_endian.h /usr/include/libkern/_OSByteOrder.h
++lp.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
++lp.o: /usr/include/sys/_types/_ct_rune_t.h /usr/include/sys/_types/_rune_t.h
++lp.o: /usr/include/sys/_types/_wchar_t.h /usr/include/machine/types.h
++lp.o: /usr/include/i386/types.h /usr/include/sys/_types/_dev_t.h
++lp.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++lp.o: /usr/include/sys/_types/_rsize_t.h /usr/include/sys/_types/_errno_t.h
++lp.o: /usr/include/strings.h /usr/include/secure/_string.h
++lp.o: /usr/include/sys/time.h /usr/include/sys/_types/_fd_def.h
++lp.o: /usr/include/sys/_types/_timespec.h
++lp.o: /usr/include/sys/_types/_timeval64.h /usr/include/sys/_types/_time_t.h
++lp.o: /usr/include/sys/_types/_suseconds_t.h
++lp.o: /usr/include/sys/_types/_fd_setsize.h /usr/include/sys/_types/_fd_set.h
++lp.o: /usr/include/sys/_types/_fd_clr.h /usr/include/sys/_types/_fd_isset.h
++lp.o: /usr/include/sys/_types/_fd_zero.h /usr/include/sys/_types/_fd_copy.h
++lp.o: /usr/include/time.h /usr/include/sys/_types/_clock_t.h
++lp.o: /usr/include/sys/_select.h linalg.h
++chull.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++chull.o: /usr/include/sys/_symbol_aliasing.h
++chull.o: /usr/include/sys/_posix_availability.h /usr/include/Availability.h
++chull.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++chull.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++chull.o: /usr/include/i386/_types.h
++chull.o: /usr/include/sys/_pthread/_pthread_types.h
++chull.o: /usr/include/sys/_types/_va_list.h /usr/include/sys/_types/_size_t.h
++chull.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++chull.o: /usr/include/sys/_types/_off_t.h /usr/include/sys/_types/_ssize_t.h
++chull.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++chull.o: /usr/include/math.h /usr/include/stdlib.h /usr/include/sys/wait.h
++chull.o: /usr/include/sys/_types/_pid_t.h /usr/include/sys/_types/_id_t.h
++chull.o: /usr/include/sys/signal.h /usr/include/sys/appleapiopts.h
++chull.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++chull.o: /usr/include/machine/_mcontext.h /usr/include/i386/_mcontext.h
++chull.o: /usr/include/mach/i386/_structs.h
++chull.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++chull.o: /usr/include/sys/_types/_sigaltstack.h
++chull.o: /usr/include/sys/_types/_ucontext.h
++chull.o: /usr/include/sys/_types/_sigset_t.h /usr/include/sys/_types/_uid_t.h
++chull.o: /usr/include/sys/resource.h /usr/include/stdint.h
++chull.o: /usr/include/sys/_types/_int8_t.h /usr/include/sys/_types/_int16_t.h
++chull.o: /usr/include/sys/_types/_int32_t.h
++chull.o: /usr/include/sys/_types/_int64_t.h /usr/include/_types/_uint8_t.h
++chull.o: /usr/include/_types/_uint16_t.h /usr/include/_types/_uint32_t.h
++chull.o: /usr/include/_types/_uint64_t.h /usr/include/sys/_types/_intptr_t.h
++chull.o: /usr/include/sys/_types/_uintptr_t.h /usr/include/_types/_intmax_t.h
++chull.o: /usr/include/_types/_uintmax_t.h /usr/include/sys/_types/_timeval.h
++chull.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++chull.o: /usr/include/sys/_endian.h /usr/include/libkern/_OSByteOrder.h
++chull.o: /usr/include/libkern/i386/_OSByteOrder.h /usr/include/alloca.h
++chull.o: /usr/include/sys/_types/_ct_rune_t.h
++chull.o: /usr/include/sys/_types/_rune_t.h /usr/include/sys/_types/_wchar_t.h
++chull.o: /usr/include/machine/types.h /usr/include/i386/types.h
++chull.o: /usr/include/sys/_types/_dev_t.h /usr/include/sys/_types/_mode_t.h
++chull.o: /usr/include/string.h /usr/include/sys/_types/_rsize_t.h
++chull.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++chull.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++chull.o: /usr/include/sys/_types/_fd_def.h
++chull.o: /usr/include/sys/_types/_timespec.h
++chull.o: /usr/include/sys/_types/_timeval64.h
++chull.o: /usr/include/sys/_types/_time_t.h
++chull.o: /usr/include/sys/_types/_suseconds_t.h
++chull.o: /usr/include/sys/_types/_fd_setsize.h
++chull.o: /usr/include/sys/_types/_fd_set.h /usr/include/sys/_types/_fd_clr.h
++chull.o: /usr/include/sys/_types/_fd_isset.h
++chull.o: /usr/include/sys/_types/_fd_zero.h
++chull.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++chull.o: /usr/include/sys/_types/_clock_t.h /usr/include/sys/_select.h
++chull.o: linalg.h chull.h
++tessel_cases.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++tessel_cases.o: /usr/include/sys/_symbol_aliasing.h
++tessel_cases.o: /usr/include/sys/_posix_availability.h
++tessel_cases.o: /usr/include/Availability.h
++tessel_cases.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++tessel_cases.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++tessel_cases.o: /usr/include/i386/_types.h
++tessel_cases.o: /usr/include/sys/_pthread/_pthread_types.h
++tessel_cases.o: /usr/include/sys/_types/_va_list.h
++tessel_cases.o: /usr/include/sys/_types/_size_t.h
++tessel_cases.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++tessel_cases.o: /usr/include/sys/_types/_off_t.h
++tessel_cases.o: /usr/include/sys/_types/_ssize_t.h
++tessel_cases.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++tessel_cases.o: /usr/include/math.h /usr/include/stdlib.h
++tessel_cases.o: /usr/include/sys/wait.h /usr/include/sys/_types/_pid_t.h
++tessel_cases.o: /usr/include/sys/_types/_id_t.h /usr/include/sys/signal.h
++tessel_cases.o: /usr/include/sys/appleapiopts.h /usr/include/machine/signal.h
++tessel_cases.o: /usr/include/i386/signal.h /usr/include/machine/_mcontext.h
++tessel_cases.o: /usr/include/i386/_mcontext.h
++tessel_cases.o: /usr/include/mach/i386/_structs.h
++tessel_cases.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++tessel_cases.o: /usr/include/sys/_types/_sigaltstack.h
++tessel_cases.o: /usr/include/sys/_types/_ucontext.h
++tessel_cases.o: /usr/include/sys/_types/_sigset_t.h
++tessel_cases.o: /usr/include/sys/_types/_uid_t.h /usr/include/sys/resource.h
++tessel_cases.o: /usr/include/stdint.h /usr/include/sys/_types/_int8_t.h
++tessel_cases.o: /usr/include/sys/_types/_int16_t.h
++tessel_cases.o: /usr/include/sys/_types/_int32_t.h
++tessel_cases.o: /usr/include/sys/_types/_int64_t.h
++tessel_cases.o: /usr/include/_types/_uint8_t.h
++tessel_cases.o: /usr/include/_types/_uint16_t.h
++tessel_cases.o: /usr/include/_types/_uint32_t.h
++tessel_cases.o: /usr/include/_types/_uint64_t.h
++tessel_cases.o: /usr/include/sys/_types/_intptr_t.h
++tessel_cases.o: /usr/include/sys/_types/_uintptr_t.h
++tessel_cases.o: /usr/include/_types/_intmax_t.h
++tessel_cases.o: /usr/include/_types/_uintmax_t.h
++tessel_cases.o: /usr/include/sys/_types/_timeval.h
++tessel_cases.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++tessel_cases.o: /usr/include/sys/_endian.h
++tessel_cases.o: /usr/include/libkern/_OSByteOrder.h
++tessel_cases.o: /usr/include/libkern/i386/_OSByteOrder.h
++tessel_cases.o: /usr/include/alloca.h /usr/include/sys/_types/_ct_rune_t.h
++tessel_cases.o: /usr/include/sys/_types/_rune_t.h
++tessel_cases.o: /usr/include/sys/_types/_wchar_t.h
++tessel_cases.o: /usr/include/machine/types.h /usr/include/i386/types.h
++tessel_cases.o: /usr/include/sys/_types/_dev_t.h
++tessel_cases.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++tessel_cases.o: /usr/include/sys/_types/_rsize_t.h
++tessel_cases.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++tessel_cases.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++tessel_cases.o: /usr/include/sys/_types/_fd_def.h
++tessel_cases.o: /usr/include/sys/_types/_timespec.h
++tessel_cases.o: /usr/include/sys/_types/_timeval64.h
++tessel_cases.o: /usr/include/sys/_types/_time_t.h
++tessel_cases.o: /usr/include/sys/_types/_suseconds_t.h
++tessel_cases.o: /usr/include/sys/_types/_fd_setsize.h
++tessel_cases.o: /usr/include/sys/_types/_fd_set.h
++tessel_cases.o: /usr/include/sys/_types/_fd_clr.h
++tessel_cases.o: /usr/include/sys/_types/_fd_isset.h
++tessel_cases.o: /usr/include/sys/_types/_fd_zero.h
++tessel_cases.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++tessel_cases.o: /usr/include/sys/_types/_clock_t.h /usr/include/sys/_select.h
++tessel_cases.o: linalg.h dual.h
++tessel_patches.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++tessel_patches.o: /usr/include/sys/_symbol_aliasing.h
++tessel_patches.o: /usr/include/sys/_posix_availability.h
++tessel_patches.o: /usr/include/Availability.h
++tessel_patches.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++tessel_patches.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++tessel_patches.o: /usr/include/i386/_types.h
++tessel_patches.o: /usr/include/sys/_pthread/_pthread_types.h
++tessel_patches.o: /usr/include/sys/_types/_va_list.h
++tessel_patches.o: /usr/include/sys/_types/_size_t.h
++tessel_patches.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++tessel_patches.o: /usr/include/sys/_types/_off_t.h
++tessel_patches.o: /usr/include/sys/_types/_ssize_t.h
++tessel_patches.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++tessel_patches.o: /usr/include/math.h /usr/include/stdlib.h
++tessel_patches.o: /usr/include/sys/wait.h /usr/include/sys/_types/_pid_t.h
++tessel_patches.o: /usr/include/sys/_types/_id_t.h /usr/include/sys/signal.h
++tessel_patches.o: /usr/include/sys/appleapiopts.h
++tessel_patches.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++tessel_patches.o: /usr/include/machine/_mcontext.h
++tessel_patches.o: /usr/include/i386/_mcontext.h
++tessel_patches.o: /usr/include/mach/i386/_structs.h
++tessel_patches.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++tessel_patches.o: /usr/include/sys/_types/_sigaltstack.h
++tessel_patches.o: /usr/include/sys/_types/_ucontext.h
++tessel_patches.o: /usr/include/sys/_types/_sigset_t.h
++tessel_patches.o: /usr/include/sys/_types/_uid_t.h
++tessel_patches.o: /usr/include/sys/resource.h /usr/include/stdint.h
++tessel_patches.o: /usr/include/sys/_types/_int8_t.h
++tessel_patches.o: /usr/include/sys/_types/_int16_t.h
++tessel_patches.o: /usr/include/sys/_types/_int32_t.h
++tessel_patches.o: /usr/include/sys/_types/_int64_t.h
++tessel_patches.o: /usr/include/_types/_uint8_t.h
++tessel_patches.o: /usr/include/_types/_uint16_t.h
++tessel_patches.o: /usr/include/_types/_uint32_t.h
++tessel_patches.o: /usr/include/_types/_uint64_t.h
++tessel_patches.o: /usr/include/sys/_types/_intptr_t.h
++tessel_patches.o: /usr/include/sys/_types/_uintptr_t.h
++tessel_patches.o: /usr/include/_types/_intmax_t.h
++tessel_patches.o: /usr/include/_types/_uintmax_t.h
++tessel_patches.o: /usr/include/sys/_types/_timeval.h
++tessel_patches.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++tessel_patches.o: /usr/include/sys/_endian.h
++tessel_patches.o: /usr/include/libkern/_OSByteOrder.h
++tessel_patches.o: /usr/include/libkern/i386/_OSByteOrder.h
++tessel_patches.o: /usr/include/alloca.h /usr/include/sys/_types/_ct_rune_t.h
++tessel_patches.o: /usr/include/sys/_types/_rune_t.h
++tessel_patches.o: /usr/include/sys/_types/_wchar_t.h
++tessel_patches.o: /usr/include/machine/types.h /usr/include/i386/types.h
++tessel_patches.o: /usr/include/sys/_types/_dev_t.h
++tessel_patches.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++tessel_patches.o: /usr/include/sys/_types/_rsize_t.h
++tessel_patches.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++tessel_patches.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++tessel_patches.o: /usr/include/sys/_types/_fd_def.h
++tessel_patches.o: /usr/include/sys/_types/_timespec.h
++tessel_patches.o: /usr/include/sys/_types/_timeval64.h
++tessel_patches.o: /usr/include/sys/_types/_time_t.h
++tessel_patches.o: /usr/include/sys/_types/_suseconds_t.h
++tessel_patches.o: /usr/include/sys/_types/_fd_setsize.h
++tessel_patches.o: /usr/include/sys/_types/_fd_set.h
++tessel_patches.o: /usr/include/sys/_types/_fd_clr.h
++tessel_patches.o: /usr/include/sys/_types/_fd_isset.h
++tessel_patches.o: /usr/include/sys/_types/_fd_zero.h
++tessel_patches.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++tessel_patches.o: /usr/include/sys/_types/_clock_t.h
++tessel_patches.o: /usr/include/sys/_select.h linalg.h
++tessel_convex.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++tessel_convex.o: /usr/include/sys/_symbol_aliasing.h
++tessel_convex.o: /usr/include/sys/_posix_availability.h
++tessel_convex.o: /usr/include/Availability.h
++tessel_convex.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++tessel_convex.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++tessel_convex.o: /usr/include/i386/_types.h
++tessel_convex.o: /usr/include/sys/_pthread/_pthread_types.h
++tessel_convex.o: /usr/include/sys/_types/_va_list.h
++tessel_convex.o: /usr/include/sys/_types/_size_t.h
++tessel_convex.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++tessel_convex.o: /usr/include/sys/_types/_off_t.h
++tessel_convex.o: /usr/include/sys/_types/_ssize_t.h
++tessel_convex.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++tessel_convex.o: /usr/include/math.h /usr/include/stdlib.h
++tessel_convex.o: /usr/include/sys/wait.h /usr/include/sys/_types/_pid_t.h
++tessel_convex.o: /usr/include/sys/_types/_id_t.h /usr/include/sys/signal.h
++tessel_convex.o: /usr/include/sys/appleapiopts.h
++tessel_convex.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++tessel_convex.o: /usr/include/machine/_mcontext.h
++tessel_convex.o: /usr/include/i386/_mcontext.h
++tessel_convex.o: /usr/include/mach/i386/_structs.h
++tessel_convex.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++tessel_convex.o: /usr/include/sys/_types/_sigaltstack.h
++tessel_convex.o: /usr/include/sys/_types/_ucontext.h
++tessel_convex.o: /usr/include/sys/_types/_sigset_t.h
++tessel_convex.o: /usr/include/sys/_types/_uid_t.h /usr/include/sys/resource.h
++tessel_convex.o: /usr/include/stdint.h /usr/include/sys/_types/_int8_t.h
++tessel_convex.o: /usr/include/sys/_types/_int16_t.h
++tessel_convex.o: /usr/include/sys/_types/_int32_t.h
++tessel_convex.o: /usr/include/sys/_types/_int64_t.h
++tessel_convex.o: /usr/include/_types/_uint8_t.h
++tessel_convex.o: /usr/include/_types/_uint16_t.h
++tessel_convex.o: /usr/include/_types/_uint32_t.h
++tessel_convex.o: /usr/include/_types/_uint64_t.h
++tessel_convex.o: /usr/include/sys/_types/_intptr_t.h
++tessel_convex.o: /usr/include/sys/_types/_uintptr_t.h
++tessel_convex.o: /usr/include/_types/_intmax_t.h
++tessel_convex.o: /usr/include/_types/_uintmax_t.h
++tessel_convex.o: /usr/include/sys/_types/_timeval.h
++tessel_convex.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++tessel_convex.o: /usr/include/sys/_endian.h
++tessel_convex.o: /usr/include/libkern/_OSByteOrder.h
++tessel_convex.o: /usr/include/libkern/i386/_OSByteOrder.h
++tessel_convex.o: /usr/include/alloca.h /usr/include/sys/_types/_ct_rune_t.h
++tessel_convex.o: /usr/include/sys/_types/_rune_t.h
++tessel_convex.o: /usr/include/sys/_types/_wchar_t.h
++tessel_convex.o: /usr/include/machine/types.h /usr/include/i386/types.h
++tessel_convex.o: /usr/include/sys/_types/_dev_t.h
++tessel_convex.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++tessel_convex.o: /usr/include/sys/_types/_rsize_t.h
++tessel_convex.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++tessel_convex.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++tessel_convex.o: /usr/include/sys/_types/_fd_def.h
++tessel_convex.o: /usr/include/sys/_types/_timespec.h
++tessel_convex.o: /usr/include/sys/_types/_timeval64.h
++tessel_convex.o: /usr/include/sys/_types/_time_t.h
++tessel_convex.o: /usr/include/sys/_types/_suseconds_t.h
++tessel_convex.o: /usr/include/sys/_types/_fd_setsize.h
++tessel_convex.o: /usr/include/sys/_types/_fd_set.h
++tessel_convex.o: /usr/include/sys/_types/_fd_clr.h
++tessel_convex.o: /usr/include/sys/_types/_fd_isset.h
++tessel_convex.o: /usr/include/sys/_types/_fd_zero.h
++tessel_convex.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++tessel_convex.o: /usr/include/sys/_types/_clock_t.h
++tessel_convex.o: /usr/include/sys/_select.h linalg.h
++tessel_concave.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++tessel_concave.o: /usr/include/sys/_symbol_aliasing.h
++tessel_concave.o: /usr/include/sys/_posix_availability.h
++tessel_concave.o: /usr/include/Availability.h
++tessel_concave.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++tessel_concave.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++tessel_concave.o: /usr/include/i386/_types.h
++tessel_concave.o: /usr/include/sys/_pthread/_pthread_types.h
++tessel_concave.o: /usr/include/sys/_types/_va_list.h
++tessel_concave.o: /usr/include/sys/_types/_size_t.h
++tessel_concave.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++tessel_concave.o: /usr/include/sys/_types/_off_t.h
++tessel_concave.o: /usr/include/sys/_types/_ssize_t.h
++tessel_concave.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++tessel_concave.o: /usr/include/math.h /usr/include/stdlib.h
++tessel_concave.o: /usr/include/sys/wait.h /usr/include/sys/_types/_pid_t.h
++tessel_concave.o: /usr/include/sys/_types/_id_t.h /usr/include/sys/signal.h
++tessel_concave.o: /usr/include/sys/appleapiopts.h
++tessel_concave.o: /usr/include/machine/signal.h /usr/include/i386/signal.h
++tessel_concave.o: /usr/include/machine/_mcontext.h
++tessel_concave.o: /usr/include/i386/_mcontext.h
++tessel_concave.o: /usr/include/mach/i386/_structs.h
++tessel_concave.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++tessel_concave.o: /usr/include/sys/_types/_sigaltstack.h
++tessel_concave.o: /usr/include/sys/_types/_ucontext.h
++tessel_concave.o: /usr/include/sys/_types/_sigset_t.h
++tessel_concave.o: /usr/include/sys/_types/_uid_t.h
++tessel_concave.o: /usr/include/sys/resource.h /usr/include/stdint.h
++tessel_concave.o: /usr/include/sys/_types/_int8_t.h
++tessel_concave.o: /usr/include/sys/_types/_int16_t.h
++tessel_concave.o: /usr/include/sys/_types/_int32_t.h
++tessel_concave.o: /usr/include/sys/_types/_int64_t.h
++tessel_concave.o: /usr/include/_types/_uint8_t.h
++tessel_concave.o: /usr/include/_types/_uint16_t.h
++tessel_concave.o: /usr/include/_types/_uint32_t.h
++tessel_concave.o: /usr/include/_types/_uint64_t.h
++tessel_concave.o: /usr/include/sys/_types/_intptr_t.h
++tessel_concave.o: /usr/include/sys/_types/_uintptr_t.h
++tessel_concave.o: /usr/include/_types/_intmax_t.h
++tessel_concave.o: /usr/include/_types/_uintmax_t.h
++tessel_concave.o: /usr/include/sys/_types/_timeval.h
++tessel_concave.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++tessel_concave.o: /usr/include/sys/_endian.h
++tessel_concave.o: /usr/include/libkern/_OSByteOrder.h
++tessel_concave.o: /usr/include/libkern/i386/_OSByteOrder.h
++tessel_concave.o: /usr/include/alloca.h /usr/include/sys/_types/_ct_rune_t.h
++tessel_concave.o: /usr/include/sys/_types/_rune_t.h
++tessel_concave.o: /usr/include/sys/_types/_wchar_t.h
++tessel_concave.o: /usr/include/machine/types.h /usr/include/i386/types.h
++tessel_concave.o: /usr/include/sys/_types/_dev_t.h
++tessel_concave.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++tessel_concave.o: /usr/include/sys/_types/_rsize_t.h
++tessel_concave.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++tessel_concave.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++tessel_concave.o: /usr/include/sys/_types/_fd_def.h
++tessel_concave.o: /usr/include/sys/_types/_timespec.h
++tessel_concave.o: /usr/include/sys/_types/_timeval64.h
++tessel_concave.o: /usr/include/sys/_types/_time_t.h
++tessel_concave.o: /usr/include/sys/_types/_suseconds_t.h
++tessel_concave.o: /usr/include/sys/_types/_fd_setsize.h
++tessel_concave.o: /usr/include/sys/_types/_fd_set.h
++tessel_concave.o: /usr/include/sys/_types/_fd_clr.h
++tessel_concave.o: /usr/include/sys/_types/_fd_isset.h
++tessel_concave.o: /usr/include/sys/_types/_fd_zero.h
++tessel_concave.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++tessel_concave.o: /usr/include/sys/_types/_clock_t.h
++tessel_concave.o: /usr/include/sys/_select.h linalg.h
++tessel_torus.o: surf.h /usr/include/stdio.h /usr/include/sys/cdefs.h
++tessel_torus.o: /usr/include/sys/_symbol_aliasing.h
++tessel_torus.o: /usr/include/sys/_posix_availability.h
++tessel_torus.o: /usr/include/Availability.h
++tessel_torus.o: /usr/include/AvailabilityInternal.h /usr/include/_types.h
++tessel_torus.o: /usr/include/sys/_types.h /usr/include/machine/_types.h
++tessel_torus.o: /usr/include/i386/_types.h
++tessel_torus.o: /usr/include/sys/_pthread/_pthread_types.h
++tessel_torus.o: /usr/include/sys/_types/_va_list.h
++tessel_torus.o: /usr/include/sys/_types/_size_t.h
++tessel_torus.o: /usr/include/sys/_types/_null.h /usr/include/sys/stdio.h
++tessel_torus.o: /usr/include/sys/_types/_off_t.h
++tessel_torus.o: /usr/include/sys/_types/_ssize_t.h
++tessel_torus.o: /usr/include/secure/_stdio.h /usr/include/secure/_common.h
++tessel_torus.o: /usr/include/math.h /usr/include/stdlib.h
++tessel_torus.o: /usr/include/sys/wait.h /usr/include/sys/_types/_pid_t.h
++tessel_torus.o: /usr/include/sys/_types/_id_t.h /usr/include/sys/signal.h
++tessel_torus.o: /usr/include/sys/appleapiopts.h /usr/include/machine/signal.h
++tessel_torus.o: /usr/include/i386/signal.h /usr/include/machine/_mcontext.h
++tessel_torus.o: /usr/include/i386/_mcontext.h
++tessel_torus.o: /usr/include/mach/i386/_structs.h
++tessel_torus.o: /usr/include/sys/_pthread/_pthread_attr_t.h
++tessel_torus.o: /usr/include/sys/_types/_sigaltstack.h
++tessel_torus.o: /usr/include/sys/_types/_ucontext.h
++tessel_torus.o: /usr/include/sys/_types/_sigset_t.h
++tessel_torus.o: /usr/include/sys/_types/_uid_t.h /usr/include/sys/resource.h
++tessel_torus.o: /usr/include/stdint.h /usr/include/sys/_types/_int8_t.h
++tessel_torus.o: /usr/include/sys/_types/_int16_t.h
++tessel_torus.o: /usr/include/sys/_types/_int32_t.h
++tessel_torus.o: /usr/include/sys/_types/_int64_t.h
++tessel_torus.o: /usr/include/_types/_uint8_t.h
++tessel_torus.o: /usr/include/_types/_uint16_t.h
++tessel_torus.o: /usr/include/_types/_uint32_t.h
++tessel_torus.o: /usr/include/_types/_uint64_t.h
++tessel_torus.o: /usr/include/sys/_types/_intptr_t.h
++tessel_torus.o: /usr/include/sys/_types/_uintptr_t.h
++tessel_torus.o: /usr/include/_types/_intmax_t.h
++tessel_torus.o: /usr/include/_types/_uintmax_t.h
++tessel_torus.o: /usr/include/sys/_types/_timeval.h
++tessel_torus.o: /usr/include/machine/endian.h /usr/include/i386/endian.h
++tessel_torus.o: /usr/include/sys/_endian.h
++tessel_torus.o: /usr/include/libkern/_OSByteOrder.h
++tessel_torus.o: /usr/include/libkern/i386/_OSByteOrder.h
++tessel_torus.o: /usr/include/alloca.h /usr/include/sys/_types/_ct_rune_t.h
++tessel_torus.o: /usr/include/sys/_types/_rune_t.h
++tessel_torus.o: /usr/include/sys/_types/_wchar_t.h
++tessel_torus.o: /usr/include/machine/types.h /usr/include/i386/types.h
++tessel_torus.o: /usr/include/sys/_types/_dev_t.h
++tessel_torus.o: /usr/include/sys/_types/_mode_t.h /usr/include/string.h
++tessel_torus.o: /usr/include/sys/_types/_rsize_t.h
++tessel_torus.o: /usr/include/sys/_types/_errno_t.h /usr/include/strings.h
++tessel_torus.o: /usr/include/secure/_string.h /usr/include/sys/time.h
++tessel_torus.o: /usr/include/sys/_types/_fd_def.h
++tessel_torus.o: /usr/include/sys/_types/_timespec.h
++tessel_torus.o: /usr/include/sys/_types/_timeval64.h
++tessel_torus.o: /usr/include/sys/_types/_time_t.h
++tessel_torus.o: /usr/include/sys/_types/_suseconds_t.h
++tessel_torus.o: /usr/include/sys/_types/_fd_setsize.h
++tessel_torus.o: /usr/include/sys/_types/_fd_set.h
++tessel_torus.o: /usr/include/sys/_types/_fd_clr.h
++tessel_torus.o: /usr/include/sys/_types/_fd_isset.h
++tessel_torus.o: /usr/include/sys/_types/_fd_zero.h
++tessel_torus.o: /usr/include/sys/_types/_fd_copy.h /usr/include/time.h
++tessel_torus.o: /usr/include/sys/_types/_clock_t.h /usr/include/sys/_select.h
++tessel_torus.o: linalg.h
++  
++# DEPENDENCIES MUST END AT END OF FILE
++# IF YOU PUT STUFF HERE IT WILL GO AWAY
++# see make depend above
++  
+diff -Naur molden5.1/surf/makedep.bak cq_molden5.1/src/surf/makedep.bak
+--- molden5.1/surf/makedep.bak	1970-01-01 01:00:00.000000000 +0100
++++ cq_molden5.1/src/surf/makedep.bak	2019-05-19 18:40:52.000000000 +0200
+@@ -0,0 +1 @@
++ 
+diff -Naur molden5.1/xwin.c cq_molden5.1/src/xwin.c
+--- molden5.1/xwin.c	2014-02-12 13:25:49.000000000 +0100
++++ cq_molden5.1/src/xwin.c	2019-05-19 18:28:33.000000000 +0200
+@@ -1481,8 +1481,8 @@
+ "Multiple-CellsAC","Multiple-CellsBC","Cell Rot On/Off",
+ "Edit Cell Parameters","Delete Sel. Atoms","Move Sel. Atoms","SuperCell", "Optimise xtinker","Write"};
+ static int ncell = 20;
+-static char *cellwopts[] = {"Write DMAREL","Write CRYSTAL95","Write SHELX","Write VASP","write PLUTON","write MOPAC Tv","write CPMD","write CIF"};
+-static int nwcell = 8;
++static char *cellwopts[] = {"Write DMAREL","Write CRYSTAL95","Write SHELX","Write VASP","write PLUTON","write MOPAC Tv","write CPMD","write CIF", "write Conquest"};
++static int nwcell = 9;
+ static double CellTran[] = {0.0,0.0,0.0};
+ static char *xtinkopts[] = {"Charges","Multipoles"};
+ static char *ambwopts[] = {"Without Cell","With Cell"};
+@@ -9181,6 +9181,47 @@
+ }
+ 
+ #if defined(VMS) || defined(UNDERSC)
++rdconquest(npts1,npts2,npts3,iposng,istat,lenf,idocub,idebug)
++#else
++#ifdef CRAY
++RCONQUEST(npts1,npts2,npts3,iposng,istat,lenf,idocub,idebug)
++#else
++rdconquest_(npts1,npts2,npts3,iposng,istat,lenf,idocub,idebug)
++#endif
++#endif
++int *npts1;
++int *npts2;
++int *npts3;
++int *iposng;
++int *istat;
++int *lenf;
++int *idocub;
++int *idebug;
++{
++
++#if defined(VMS) || defined(UNDERSC)
++	rdcqd(npts1,npts2,npts3,iposng,istat,lenf,idocub,idebug,
++#else
++#ifdef CRAY
++	RDCQD(npts1,npts2,npts3,iposng,istat,lenf,idocub,idebug,
++#else
++	rdcqd_(npts1,npts2,npts3,iposng,istat,lenf,idocub,idebug,
++#endif
++#endif
++	sgrd.denn,sgrd.pmnn,sgrd.bucket,
++	xyzp->coo,xyzp->ianz,xyzp->iatclr,xyzp->iconn,
++	&cell->natc,&cell->norg,&cell->icent,&cell->inorm,
++	&cell->ncon,&cell->nspg,&cell->ichx,
++	&cell->nopr,cell->ir,cell->it,
++	&cell->xyzc[0],&cell->xyzc[1],&cell->xyzc[2],
++	&cell->xyzc[3],&cell->xyzc[4],&cell->xyzc[5],
++	&cell->cellc[0],&cell->cellc[1],&cell->cellc[2],
++	&cell->cellc[3],&cell->cellc[4],&cell->cellc[5]);
++
++}
++
++	       
++#if defined(VMS) || defined(UNDERSC)
+ rdinfo(npts1,npts2,isubtr,istat)
+ #else
+ #ifdef CRAY
+@@ -13197,6 +13238,36 @@
+ }
+ 
+ #if defined(VMS) || defined(UNDERSC)
++wrconquest(iun)
++#else
++#ifdef CRAY
++WRCONQUEST(iun)
++#else
++wrconquest_(iun)
++#endif
++#endif
++int *iun;
++{
++
++#if defined(VMS) || defined(UNDERSC)
++	wrcqd(iun,
++#else
++#ifdef CRAY
++	WRCQD(iun,
++#else
++	wrcqd_(iun,
++#endif
++#endif
++	xyzp->coo,xyzp->ianz,
++	&cell->xyzc[0],&cell->xyzc[1],&cell->xyzc[2],
++	&cell->xyzc[3],&cell->xyzc[4],&cell->xyzc[5],
++	&cell->cellc[0],&cell->cellc[1],&cell->cellc[2],
++	&cell->cellc[3],&cell->cellc[4],&cell->cellc[5]);
++
++}
++
++
++#if defined(VMS) || defined(UNDERSC)
+ wrmopa(iun)
+ #else
+ #ifdef CRAY
