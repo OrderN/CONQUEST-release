@@ -229,7 +229,7 @@ contains
     case("nve")
       mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy
     case("nvt")
-      if (flag_extended_system) then
+      if (leqi(mdl%thermo_type, 'nhc')) then
         mdl%h_prime = mdl%ion_kinetic_energy + mdl%dft_total_energy + &
                       mdl%nhc_energy
       else
