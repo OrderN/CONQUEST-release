@@ -86,7 +86,6 @@ module rng
 
   implicit none
 
-  integer(wide), parameter, private :: seed_length = 20
   integer(wide), parameter, private :: nn       = 312_wide
   integer(wide), parameter, private :: mm       = 156_wide
   integer(wide), parameter, private :: seed_def = 5489_wide
@@ -370,18 +369,18 @@ module rng
     !!
     !!  SOURCE
     !!
-    subroutine get_random_seed(rn, n)
+    subroutine get_random_seed(rn)
 
       implicit none
 
       ! Passed variables
       class(type_rng), intent(inout)  :: rn
-      integer(wide), intent(in)       :: n
 
       ! Local variables
-      integer               :: i, un, istat, dt(8), pid, t(2), s
+      integer               :: i, un, istat, dt(8), pid, t(2), s, n
       integer(8)            :: count, tms
 
+      call random_seed(size=n)
       allocate(rn%seed(n))
       ! First try if the OS provides a random number generator
       open(newunit=un, file="/dev/urandom", access="stream", &
@@ -450,8 +449,7 @@ module rng
       if (present(int_seed)) then
         call init_genrand64(rn, int(int_seed,wide))
       else
-        ! But how to initialise seed_length!? - zamaan
-        call rn%get_random_seed(seed_length)
+        call rn%get_random_seed
         call rn%init_by_array64(rn%seed)
       end if
     end subroutine init_rng
