@@ -1117,6 +1117,7 @@ contains
             call thermo%get_temperature_and_ke(baro, velocity, &
                  mdl%ion_kinetic_energy)
             call baro%get_pressure_and_stress
+            call baro%couple_box_particle_velocity(thermo, velocity)
             call baro%integrate_box(thermo)
             call thermo%get_svr_thermo_sf(MDtimestep/two, baro)
             call thermo%v_rescale(velocity)
@@ -1139,6 +1140,7 @@ contains
                  mdl%ion_kinetic_energy)
             call baro%get_pressure_and_stress
             call baro%integrate_box(thermo)
+            call baro%couple_box_particle_velocity(thermo, velocity)
           end select
         end if
       end select
