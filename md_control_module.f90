@@ -298,7 +298,10 @@ contains
     th%baro_type = baro_type
     th%cell_nhc = md_cell_nhc
 
-    if (leqi(baro_type, 'none')) md_cell_constraint = 'fixed'
+    if (leqi(baro_type, 'none')) then
+      md_cell_constraint = 'fixed'
+      th%cell_nhc = .false.
+    end if
     select case(md_cell_constraint)
     case('fixed')
       th%cell_ndof = 0
@@ -1119,56 +1122,54 @@ contains
     th%ke_nhc_cell = zero
     th%pe_nhc_cell = zero
     th%e_nhc = zero
-    if (flag_extended_system) then
+    if (th%cell_nhc) then
+      th%ke_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2
+      th%pe_nhc_ion = real(th%ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
+      th%ke_nhc_cell = half*th%m_nhc_cell(1)*th%v_eta_cell(1)**2
+      th%pe_nhc_cell = &
+        real(th%cell_ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta_cell(1)
+    else
+      th%ke_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2
+      th%pe_nhc_ion = real((th%ndof+th%cell_ndof), double) * &
+                      th%T_ext*fac_Kelvin2Hartree*th%eta(1)
+    end if
+
+    do k=2,th%n_nhc
+      th%ke_nhc_ion = th%ke_nhc_ion + half*th%m_nhc(k)*th%v_eta(k)**2
+      th%pe_nhc_ion = th%pe_nhc_ion + th%T_ext*fac_Kelvin2Hartree*th%eta(k)
       if (th%cell_nhc) then
-        th%ke_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2
-        th%pe_nhc_ion = real(th%ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta(1)
-        th%ke_nhc_cell = half*th%m_nhc_cell(1)*th%v_eta_cell(1)**2
-        th%pe_nhc_cell = &
-          real(th%cell_ndof, double)*th%T_ext*fac_Kelvin2Hartree*th%eta_cell(1)
+        th%ke_nhc_cell = th%ke_nhc_cell + &
+                         half*th%m_nhc_cell(k)*th%v_eta_cell(k)**2
+        th%pe_nhc_cell = th%pe_nhc_cell + &
+                         th%T_ext*fac_Kelvin2Hartree*th%eta_cell(k)
+      end if
+    end do
+    th%e_nhc = th%ke_nhc_ion + th%pe_nhc_ion + th%ke_nhc_cell + th%pe_nhc_cell
+
+    if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
+      write(io_lun,'(4x,"ke_nhc_ion: ",e16.8)') th%ke_nhc_ion
+      write(io_lun,'(4x,"pe_nhc_ion: ",e16.8)') th%pe_nhc_ion
+      if (th%cell_nhc) then
+        write(io_lun,'(4x,"ke_nhc_cell:",e16.8)') th%ke_nhc_cell
+        write(io_lun,'(4x,"pe_nhc_cell:",e16.8)') th%pe_nhc_cell
+      end if
+      write(io_lun,'(4x,"e_nhc:      ",e16.8)') th%e_nhc
+      call io_assign(lun)
+      if (th%append) then
+        open(unit=lun,file='nhc.dat',position='append')
+      else 
+        open(unit=lun,file='nhc.dat',status='replace')
+        write(lun,'(5a16)') "KE ion", "PE ion", "KE cell", "PE cell", "total"
+        th%append = .true.
+      end if
+      if (th%cell_nhc) then
+        write(lun,'(5e16.8)') th%ke_nhc_ion, th%pe_nhc_ion, &
+          th%ke_nhc_cell, th%pe_nhc_cell, th%e_nhc
       else
-        th%ke_nhc_ion = half*th%m_nhc(1)*th%v_eta(1)**2
-        th%pe_nhc_ion = real((th%ndof+th%cell_ndof), double) * &
-                        th%T_ext*fac_Kelvin2Hartree*th%eta(1)
+        write(lun,'(5e16.8)') th%ke_nhc_ion, th%pe_nhc_ion, &
+          zero, zero, th%e_nhc
       end if
-
-      do k=2,th%n_nhc
-        th%ke_nhc_ion = th%ke_nhc_ion + half*th%m_nhc(k)*th%v_eta(k)**2
-        th%pe_nhc_ion = th%pe_nhc_ion + th%T_ext*fac_Kelvin2Hartree*th%eta(k)
-        if (th%cell_nhc) then
-          th%ke_nhc_cell = th%ke_nhc_cell + &
-                           half*th%m_nhc_cell(k)*th%v_eta_cell(k)**2
-          th%pe_nhc_cell = th%pe_nhc_cell + &
-                           th%T_ext*fac_Kelvin2Hartree*th%eta_cell(k)
-        end if
-      end do
-      th%e_nhc = th%ke_nhc_ion + th%pe_nhc_ion + th%ke_nhc_cell + th%pe_nhc_cell
-
-      if (inode==ionode .and. flag_MDdebug .and. iprint_MD > 3) then
-        write(io_lun,'(4x,"ke_nhc_ion: ",e16.8)') th%ke_nhc_ion
-        write(io_lun,'(4x,"pe_nhc_ion: ",e16.8)') th%pe_nhc_ion
-        if (th%cell_nhc) then
-          write(io_lun,'(4x,"ke_nhc_cell:",e16.8)') th%ke_nhc_cell
-          write(io_lun,'(4x,"pe_nhc_cell:",e16.8)') th%pe_nhc_cell
-        end if
-        write(io_lun,'(4x,"e_nhc:      ",e16.8)') th%e_nhc
-        call io_assign(lun)
-        if (th%append) then
-          open(unit=lun,file='nhc.dat',position='append')
-        else 
-          open(unit=lun,file='nhc.dat',status='replace')
-          write(lun,'(5a16)') "KE ion", "PE ion", "KE cell", "PE cell", "total"
-          th%append = .true.
-        end if
-        if (th%cell_nhc) then
-          write(lun,'(5e16.8)') th%ke_nhc_ion, th%pe_nhc_ion, &
-            th%ke_nhc_cell, th%pe_nhc_cell, th%e_nhc
-        else
-          write(lun,'(5e16.8)') th%ke_nhc_ion, th%pe_nhc_ion, &
-            zero, zero, th%e_nhc
-        end if
-        call io_close(lun)
-      end if
+      call io_close(lun)
     end if
 
   end subroutine get_nhc_energy
@@ -1278,7 +1279,7 @@ contains
       baro%box_mass = &
         (baro%ndof+baro%cell_ndof)*temp_ion*fac_Kelvin2Hartree/omega_P**2
 
-      if (leqi(baro%baro_type, 'ssm')) then
+      if (leqi(baro%baro_type, 'pr')) then
         if (leqi(md_cell_constraint, 'xyz')) &
           baro%box_mass = baro%box_mass/three
       end if
@@ -1319,7 +1320,7 @@ contains
       baro%c4 = baro%c2/20.0_double
       baro%c6 = baro%c4/42.0_double
       baro%c8 = baro%c6/72.0_double
-    case('ssm')
+    case('pr')
       flag_extended_system = .true.
       baro%append = .false.
       if (leqi(md_cell_constraint, 'volume')) then
@@ -1334,7 +1335,7 @@ contains
       call baro%get_box_energy
       baro%odnf = one + three/baro%ndof
     case default
-      call cq_abort("MD.BaroType must be 'none', 'berendsen', 'mttk' or 'ssm'")
+      call cq_abort("MD.BaroType must be 'none', 'berendsen', 'mttk' or 'pr'")
     end select
 
     if (inode==ionode .and. iprint_MD > 1) then
@@ -1578,7 +1579,7 @@ contains
       select case(baro%baro_type)
       case('mttk')
         baro%ke_box = half*baro%box_mass*baro%v_eps**2
-      case('ssm')
+      case('pr')
         if (leqi(md_cell_constraint, 'volume')) then
           baro%ke_box = three*half*baro%box_mass*baro%v_eps**2
         else
@@ -1627,7 +1628,7 @@ contains
     case('mttk')
       baro%G_eps = (two*baro%odnf*th%ke_ions + &
                     three*(baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
-    case('ssm')
+    case('pr')
       if (leqi(md_cell_constraint, 'volume')) then
         baro%G_eps = (two*th%ke_ions/md_ndof_ions + &
                      (baro%P_int - baro%P_ext)*baro%volume)/baro%box_mass
@@ -1648,7 +1649,7 @@ contains
       select case(baro%baro_type)
       case('mttk')
         write(io_lun,'(2x,a,e16.8)') "G_eps: ", baro%G_eps
-      case('ssm')
+      case('pr')
         if (leqi(md_cell_constraint, 'volume')) then
           write(io_lun,'(2x,a,e16.8)') "G_eps: ", baro%G_eps
         else

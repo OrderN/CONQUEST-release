@@ -800,7 +800,7 @@ contains
 
        ! Compute and print the conserved quantity and its components
        if (leqi(thermo%thermo_type, 'nhc')) call thermo%get_nhc_energy
-       if (leqi(baro%baro_type, 'ssm')) call baro%get_box_energy(final_call)
+       if (leqi(baro%baro_type, 'pr')) call baro%get_box_energy(final_call)
        call mdl%get_cons_qty
        call mdl%print_md_energy()
 
@@ -1058,6 +1058,7 @@ contains
       select case(thermo%thermo_type)
       case('nhc')
         call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
+        if (present(second_call)) call thermo%get_nhc_energy
       case('berendsen')
         if (present(second_call)) then
           call thermo%v_rescale(velocity)
@@ -1073,7 +1074,7 @@ contains
      end select
    case('nph')
       select case(baro%baro_type)
-      case('ssm')
+      case('pr')
         if (present(second_call)) then
           call baro%couple_box_particle_velocity(thermo, velocity)
           call thermo%get_temperature_and_ke(baro, velocity, &
@@ -1103,7 +1104,7 @@ contains
       case('mttk')
         call baro%propagate_npt_mttk(thermo, mdl%ion_kinetic_energy, &
                                      velocity)
-      case('ssm')
+      case('pr')
         if (present(second_call)) then
           select case(thermo%thermo_type)
           case('nhc')
@@ -1113,6 +1114,7 @@ contains
             call baro%get_pressure_and_stress
             call baro%integrate_box(thermo)
             call thermo%integrate_nhc(baro, velocity, mdl%ion_kinetic_energy)
+            call thermo%get_nhc_energy
           case('svr')
             call thermo%get_temperature_and_ke(baro, velocity, &
                  mdl%ion_kinetic_energy)
@@ -1185,7 +1187,7 @@ contains
       else
         ! Modified velocity Verlet position step for NPT ensemble
         select case(md_baro_type)
-        case('ssm')
+        case('pr')
           call baro%propagate_box_ssm
           call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
           call baro%propagate_box_ssm

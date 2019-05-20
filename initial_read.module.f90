@@ -2005,7 +2005,7 @@ contains
          md_baro_type       = fdf_string(20, 'MD.Barostat', 'none')
        case('npt')
          md_thermo_type     = fdf_string(20, 'MD.Thermostat', 'nhc')
-         md_baro_type       = fdf_string(20, 'MD.Barostat', 'ssm')
+         md_baro_type       = fdf_string(20, 'MD.Barostat', 'pr')
        end select
        md_tau_T           = fdf_double('MD.tauT', -one)
        md_tau_T_equil     = fdf_double('MD.tauTEquil', one)
