@@ -23,7 +23,7 @@ Move to `$CQ_ROOT/tools/cq_molden5.1/` and run the installer:
 Move to `src/` and edit the `makefile` (gcc/gfortran is default), then:
 
 `$ make`  
-`$ molden -l` or `$ gmolden` (activate OpenGL)
+`$ ./molden -l` or `$ ./gmolden` (activate OpenGL)
 
 ## Examples
 
