@@ -114,9 +114,6 @@ module md_control
     logical             :: cell_nhc     ! separate NHC for cell?
     real(double)        :: lambda       ! velocity scaling factor
 
-    ! Stochastic velocity rescaling (SVR) variables
-    integer             :: rng_seed
-
     ! Weak coupling thermostat variables
     real(double)        :: tau_T        ! temperature coupling time period
 
@@ -272,8 +269,6 @@ contains
   !!  
   subroutine init_thermo(th, thermo_type, baro_type, dt, ndof, tau_T, ke_ions)
 
-    use move_atoms,       only: ran2
-
     ! passed variables
     class(type_thermostat), intent(inout) :: th
     character(*), intent(in)              :: thermo_type, baro_type
@@ -328,11 +323,6 @@ contains
       ! Parrinello-Rahman NPH dynamics with a SVR thermostat (barostat 
       ! is initialised AFTER thermostat)
       flag_extended_system = .false.
-      ! Initialise the rng
-      th%rng_seed = 0
-      do i=1,30
-        call ran2(dummy_rn,th%rng_seed)
-      end do
     case('nhc')
       call th%init_nhc(dt)
     case default
@@ -695,12 +685,15 @@ contains
   !!    Zamaan Raza 
   !!  CREATION DATE
   !!   2019/04/19
+  !!  MODIFICATION HISTORY
+  !!   2019/05/21 zamaan
+  !!    Replaced all calls to old RNG with new
   !!  SOURCE
   !!  
   subroutine get_svr_thermo_sf(th, dt, baro)
 
-    use move_atoms,    only: box_muller, ran2
     use GenComms,      only: gsum, my_barrier
+    use rng,           only: type_rng
 
     ! Passed variables
     class(type_thermostat), intent(inout)   :: th
@@ -708,10 +701,9 @@ contains
     type(type_barostat), intent(inout), optional :: baro
 
     ! Local variables
-    real(double)    :: ke, rn1, rn2, alpha_sq, exp_dt_tau, r1, &
-                       sum_ri_sq, temp_fac
-    integer         :: i, n_bm_calls
-    logical         :: odd
+    type(type_rng)  :: myrng
+    real(double)    :: ke, rn, alpha_sq, exp_dt_tau, r1, sum_ri_sq, temp_fac
+    integer         :: i, ndof
 
     th%lambda = zero
     ! We need to guarantee that the generated random numbers are consistent on
@@ -721,15 +713,9 @@ contains
       if (flag_MDdebug .and. iprint_MD > 1) &
         write(io_lun,'(2x,a)') "get_svr_thermo_sf"
 
-      ! Box-Muller transform generates two normally distributed random numbers
-      ! from two uniformly distributed random numbers, so we need to work out 
-      ! how many times to call it. There may be a better way of doing this.
-      ! - zamaan
-      if (modulo(th%ndof,2) == 0) then
-        n_bm_calls = (th%ndof + th%cell_ndof)/2
-        n_bm_calls = (th%ndof + th%cell_ndof - 1)/2
-        odd = .true.
-      end if
+      call myrng%init_rng
+      call myrng%init_normal(one, zero)
+      ndof = th%ndof + th%cell_ndof
 
       exp_dt_tau = exp(-dt/th%tau_T)
       ke = th%ke_ions
@@ -741,20 +727,12 @@ contains
 
       ! sum can be replaced by a single number drawn from a gamma distribution
       sum_ri_sq = zero
-      do i=1,n_bm_calls
-        call box_muller(th%rng_seed, one, zero, rn1, rn2)
-        if (i == 1) then
-          r1 = rn1
-          sum_ri_sq = sum_ri_sq + r1*r1
-        else
-          sum_ri_sq = sum_ri_sq + rn1*rn1
-        end if
-        sum_ri_sq = sum_ri_sq + rn2*rn2
+      r1 = myrng%rng_normal()
+      sum_ri_sq = sum_ri_sq + r1*r1
+      do i=1,ndof-1
+        rn = myrng%rng_normal()
+        sum_ri_sq = sum_ri_sq + rn*rn
       end do
-      if (odd) then
-        call box_muller(th%rng_seed, one, zero, rn1, rn2)
-        sum_ri_sq = sum_ri_sq + rn1*rn1
-      end if
 
       alpha_sq = exp_dt_tau + temp_fac * (one - exp_dt_tau) * sum_ri_sq + &
                  two*sqrt(exp_dt_tau) * sqrt(temp_fac*(one - exp_dt_tau)) * r1
@@ -764,6 +742,7 @@ contains
     call my_barrier
 
   end subroutine get_svr_thermo_sf
+  !!***
 
   !!****m* md_control/v_rescale *
   !!  NAME
