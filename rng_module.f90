@@ -577,7 +577,7 @@ module rng
           y1 = two*x1 - one
           y2 = two*x2 - one
           w = y1*y1 + y2*y2
-          if (w < 1.0) exit
+          if (w < one) exit
         end do
         w = sqrt(-two*log(w)/w)
         rng_normal = y1*w*rn%sigma + rn%mu
