@@ -10,7 +10,10 @@
 !!  CREATION DATE
 !!   2019/05/16
 !!  MODIFICATION HISTORY
-!!   
+!!   2019/05/21 zamaan
+!!    Changes to intialisation to make rng_normal easier to use. Now one call
+!!    returns a single random number, (the other is buffered) but it needs to
+!!    be initialised using init_normal
 !!  SOURCE
 !!  
 !-------------------------------------------------------------------------------
@@ -101,10 +104,14 @@ module rng
 
   type type_rng
 
-    integer(wide), allocatable:: seed(:)
+    integer(wide), allocatable  :: seed(:)
 
     integer(wide) :: mt(nn)     ! array for state vector
-    integer     :: mti = nn+1 ! mti==nn+1 means mt(nn) is not initialized
+    integer       :: mti = nn+1 ! mti==nn+1 means mt(nn) is not initialized
+
+    ! For normal distribution
+    logical       :: buffered
+    real(double)  :: buffer, sigma, mu
 
     contains
 
@@ -116,6 +123,7 @@ module rng
       procedure, private  :: genrand64_real3
       procedure, private  :: get_random_seed
       procedure, public   :: init_rng
+      procedure, public   :: init_normal
       procedure, public   :: rng_uniform
       procedure, public   :: rng_normal
       procedure, public   :: rng_integer
@@ -435,24 +443,56 @@ module rng
     !!  CREATION DATE
     !!   2019/05/16
     !!  MODIFICATION HISTORY
-    !!
+    !!   2019/05/21 zamaan
+    !!    Now takes rng_seed from global_module, generates a random seed array
+    !     if rng_seed < 0 (default = -1)
     !!  SOURCE
     !!
-    subroutine init_rng(rn, int_seed)
+    subroutine init_rng(rn)
+
+      use global_module, only: rng_seed
 
       implicit none
 
       ! Passed variables
       class(type_rng), intent(inout)    :: rn
-      integer, intent(in), optional     :: int_seed
 
-      if (present(int_seed)) then
-        call init_genrand64(rn, int(int_seed,wide))
+      if (rng_seed > 0)  then
+        call init_genrand64(rn, int(rng_seed,wide))
       else
         call rn%get_random_seed
         call rn%init_by_array64(rn%seed)
       end if
     end subroutine init_rng
+    !!***
+
+    !!****f* rng/init_normal *
+    !!
+    !!  NAME 
+    !!   init_normal
+    !!  PURPOSE
+    !!   Initialise generator for normal distribution
+    !!  AUTHOR
+    !!   Zamaan Raza
+    !!  CREATION DATE
+    !!   2019/05/21
+    !!  MODIFICATION HISTORY
+    !!
+    !!  SOURCE
+    !!
+    subroutine init_normal(rn, sigma, mu)
+
+      implicit none
+
+      ! Passed variables
+      class(type_rng), intent(inout)  :: rn
+      real(double), intent(in)        :: sigma, mu
+
+      rn%buffered = .false.
+      rn%sigma = sigma
+      rn%mu = mu
+
+    end subroutine init_normal
     !!***
 
     !!****f* rng/rng_uniform *
@@ -515,33 +555,37 @@ module rng
     !!
     !!  SOURCE
     !!
-    subroutine rng_normal(rn, sigma, mu, y1, y2)
+    real(double) function rng_normal(rn)
 
       use numbers
 
       implicit none
 
       ! Passed variables
-      class(type_rng), intent(inout)    :: rn
-      real(double), intent(in)  :: sigma, mu
-      real(double), intent(out) :: y1, y2 ! generate two random numbers
+      class(type_rng), intent(inout)  :: rn
 
       ! Local variables
-      real(double)              :: x1, x2, w
+      real(double)              :: x1, x2, y1, y2, w
 
-      do
-        x1 = rn%rng_uniform()
-        x2 = rn%rng_uniform()
-        y1 = two*x1 - one
-        y2 = two*x2 - one
-        w = y1*y1 + y2*y2
-        if (w < 1.0) exit
-      end do
-      w = sqrt(-two*log(w)/w)
-      y1 = y1*w*sigma + mu
-      y2 = y2*w*sigma + mu
+      if (rn%buffered) then
+        rng_normal = rn%buffer
+        rn%buffered = .false.
+      else
+        do
+          x1 = rn%rng_uniform()
+          x2 = rn%rng_uniform()
+          y1 = two*x1 - one
+          y2 = two*x2 - one
+          w = y1*y1 + y2*y2
+          if (w < 1.0) exit
+        end do
+        w = sqrt(-two*log(w)/w)
+        rng_normal = y1*w*rn%sigma + rn%mu
+        rn%buffer  = y2*w*rn%sigma + rn%mu
+        rn%buffered = .true.
+      end if
 
-    end subroutine rng_normal
+    end function rng_normal
     !!***
 
     !!****f* move_atoms/rng_integer *
