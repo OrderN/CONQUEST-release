@@ -4242,14 +4242,8 @@ contains
       write(io_lun,'(2x,a)') "move_atoms/propagate_vector"
 
     ! config_new = config + k*force
-    do i=1,3
-      config_new(j,1) = config(j,1) + k*force(j,1)
-    end do
-
-    do i=2,ni_in_cell+1
-!      i_glob = id_glob(i-1)
+    do i=1,ni_in_cell+1
       do j=1,3
-!        config_new(j,i) = config(j,i) + k*force(j,i_glob+1)
         config_new(j,i) = config(j,i) + k*force(j,i)
       end do
     end do
@@ -4324,14 +4318,14 @@ contains
     orcelly = rcelly
     orcellz = rcellz
 
-    rcellx = (one + config(1,1))*cell_ref(1)
-    rcelly = (one + config(2,1))*cell_ref(2)
-    rcellz = (one + config(3,1))*cell_ref(3)
+    rcellx = (one + config(1,ni_in_cell+1))*cell_ref(1)
+    rcelly = (one + config(2,ni_in_cell+1))*cell_ref(2)
+    rcellz = (one + config(3,ni_in_cell+1))*cell_ref(3)
     do i_global=1,ni_in_cell
       i = id_glob_inv(i_global) 
-      x_atom_cell(i) = config(1,i_global+1)*rcellx
-      y_atom_cell(i) = config(2,i_global+1)*rcelly
-      z_atom_cell(i) = config(3,i_global+1)*rcellz
+      x_atom_cell(i) = config(1,i_global)*rcellx
+      y_atom_cell(i) = config(2,i_global)*rcelly
+      z_atom_cell(i) = config(3,i_global)*rcellz
     end do
 
     call rescale_grids_and_density(orcellx, orcelly, orcellz)
@@ -4391,17 +4385,18 @@ contains
     one_plus_strain(2) = rcelly/cell_ref(2)
     one_plus_strain(3) = rcellz/cell_ref(3)
     do i=1,3
-      config(i,1) = one_plus_strain(i) - one
-      force(i,1) = -(stress(i,i) + target_press*vol)/one_plus_strain(i)
+      config(i,ni_in_cell+1) = one_plus_strain(i) - one
+      force(i,ni_in_cell+1) = &
+        -(stress(i,i) + target_press*vol)/one_plus_strain(i)
     end do
     do i=1,ni_in_cell
       i_global = id_glob(i)
-      config(1,i_global+1) = x_atom_cell(i)/rcellx
-      config(2,i_global+1) = y_atom_cell(i)/rcelly
-      config(3,i_global+1) = z_atom_cell(i)/rcellz
-      force(1,i+1) = tot_force(1,i)*rcellx
-      force(2,i+1) = tot_force(2,i)*rcelly
-      force(3,i+1) = tot_force(3,i)*rcellz
+      config(1,i_global) = x_atom_cell(i)/rcellx
+      config(2,i_global) = y_atom_cell(i)/rcelly
+      config(3,i_global) = z_atom_cell(i)/rcellz
+      force(1,i) = tot_force(1,i)*rcellx
+      force(2,i) = tot_force(2,i)*rcelly
+      force(3,i) = tot_force(3,i)*rcellz
 !      force(1,i) = tot_force(1,i-1)/rcellx
 !      force(2,i) = tot_force(2,i-1)/rcelly
 !      force(3,i) = tot_force(3,i-1)/rcellz
@@ -4470,7 +4465,7 @@ contains
     do i=1,ni_in_cell
       id_global = id_glob(i)
       i_old = id_glob_inv(id_global)
-      vector(:,i+1) = v_tmp(:,i_old+1)
+      vector(:,i) = v_tmp(:,i_old)
     end do
 
     deallocate(v_tmp)
