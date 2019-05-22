@@ -876,6 +876,8 @@ contains
   !!    Made BerendsenEquil work with NVT ensemble.
   !!   2019/04/09 zamaan
   !!    Removed unnecessary references to stress tensor
+  !!   2019/05/22 14:44 dave & tsuyoshi
+  !!    Tweak for initial velocities
   !!  SOURCE
   !!  
   subroutine init_ensemble(baro, thermo, mdl, md_ndof, nequil, second_call)
@@ -928,12 +930,9 @@ contains
         call read_velocity(ion_velocity, file_velocity)
       else
         if(temp_ion > RD_ERR) then
-          if (inode == ionode) then
-            call init_velocity(ni_in_cell, temp_ion, ion_velocity)
-          end if
+           call init_velocity(ni_in_cell, temp_ion, ion_velocity)
         end if
       end if
-      call gcopy(ion_velocity, 3, ni_in_cell)
     end if
 
     select case(md_ensemble)

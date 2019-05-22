@@ -2964,15 +2964,17 @@ contains
   !!  MODIFICATION HISTORY
   !!   2019/05/21 zamaan
   !!    Replaced old rng calls with new one from rng module
+  !!   2019/05/22 14:40 dave & tsuyoshi
+  !!    Moved ionode criterion for generation of velocities from init_ensemble
   !!  SOURCE
   !!
   subroutine init_velocity(ni_in_cell, temp, velocity)
 
     use datatypes,      only: double
-    use numbers,        only: three,two,twopi, zero, one, RD_ERR, half
+    use numbers,        only: three,two,twopi, zero, one, RD_ERR, half, three_halves
     use species_module, only: species, mass
-    use global_module,  only: id_glob_inv, flag_move_atom, species_glob
-    use GenComms,       only: cq_abort
+    use global_module,  only: id_glob_inv, flag_move_atom, species_glob, iprint_MD
+    use GenComms,       only: cq_abort, inode, ionode, gcopy
     use rng,            only: type_rng
 
     implicit none
@@ -2987,43 +2989,45 @@ contains
 
     type(type_rng) :: myrng
 
-    KE = zero
-    write(io_lun,'(2x,a,f16.8)') ' Welcome to init_velocity, fac = ',fac
-    velocity(:,:) = zero
-    call myrng%init_rng
-    call myrng%init_normal(one, zero)
+    if (inode == ionode) then
+       KE = zero
+       if(iprint_MD > 2) write(io_lun,'(2x,a,f16.8)') ' Welcome to init_velocity, fac = ',fac
+       velocity(:,:) = zero
+       call myrng%init_rng
+       call myrng%init_normal(one, zero)
 
-    !  We would like to use the order of global labelling in the following.
-    !(since we use random numbers, the order of atoms is probably relevant
-    ! if we want to have a same distribution of velocities as in other codes.)
+       !  We would like to use the order of global labelling in the following.
+       !(since we use random numbers, the order of atoms is probably relevant
+       ! if we want to have a same distribution of velocities as in other codes.)
 
-    do iglob=1,ni_in_cell
-       ia= id_glob_inv(iglob)
-       speca= species(ia)
-       massa= mass(speca)
-       if(ia < 1 .or. ia > ni_in_cell) &
-            call cq_abort('ERROR in init_velocity : ia,iglob ',ia,iglob)
+       do iglob=1,ni_in_cell
+          ia= id_glob_inv(iglob)
+          speca= species(ia)
+          massa= mass(speca)
+          if(ia < 1 .or. ia > ni_in_cell) &
+               call cq_abort('ERROR in init_velocity : ia,iglob ',ia,iglob)
 
-       ! -- (Important Notes) ----
-       ! it is tricky, but velocity is in the unit, bohr/fs, transforming from
-       ! (fs * Har/bohr)/ amu, with the factor (fac) defined in the beginning of 
-       ! this module.  This factor comes from that v is calculated as (dt*F/mass), 
-       ! and we want to express dt in femtosecond, force in Hartree/bohr, 
-       ! and m in atomic mass units. 
-       ! (it should be equivalent to express dt and m in atomic units, I think.)
-       ! Kinetic Energy is calculated as m/2*v^2 *fac in Hartree unit, and
-       ! Positions are calculated as v*dt in bohr unit. (m in amu, dt in fs)
-        v0 = sqrt(temp*fac_Kelvin2Hartree/(massa*fac)) 
-        do dir=1,3
-          u0 = myrng%rng_normal()
-          velocity(dir,ia) = v0 * u0
-          KE = KE + half * massa * fac * velocity(dir,ia)**2
-        end do
-    enddo
-    KE = KE/(three/two)
-    KE = KE/dfloat(ni_in_cell)/fac_Kelvin2Hartree
-    write(io_lun,*) ' init_velocity: Kinetic Energy in K = ',KE
-
+          ! -- (Important Notes) ----
+          ! it is tricky, but velocity is in the unit, bohr/fs, transforming from
+          ! (fs * Har/bohr)/ amu, with the factor (fac) defined in the beginning of 
+          ! this module.  This factor comes from that v is calculated as (dt*F/mass), 
+          ! and we want to express dt in femtosecond, force in Hartree/bohr, 
+          ! and m in atomic mass units. 
+          ! (it should be equivalent to express dt and m in atomic units, I think.)
+          ! Kinetic Energy is calculated as m/2*v^2 *fac in Hartree unit, and
+          ! Positions are calculated as v*dt in bohr unit. (m in amu, dt in fs)
+          v0 = sqrt(temp*fac_Kelvin2Hartree/(massa*fac)) 
+          do dir=1,3
+             u0 = myrng%rng_normal()
+             velocity(dir,ia) = v0 * u0
+             KE = KE + half * massa * fac * velocity(dir,ia)**2
+          end do
+       enddo
+       KE = KE*three_halves
+       KE = KE/(real(ni_in_cell,double)*fac_Kelvin2Hartree)
+       if(iprint_MD > 2) write(io_lun,*) ' init_velocity: Kinetic Energy in K = ',KE
+    end if
+    call gcopy(velocity, 3, ni_in_cell)
     return
   end subroutine init_velocity
   !!***
