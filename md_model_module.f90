@@ -318,7 +318,6 @@ contains
     if (inode==ionode .and. iprint_MD > 1) &
       write(io_lun,'(2x,"Writing statistics to ",a)') filename
 
-    if (inode==ionode) write(io_lun,*) mdl%P_int
     ! Convert units if necessary
     P_GPa = mdl%P_int*fac_HaBohr32GPa
 
@@ -408,7 +407,7 @@ contains
     integer                               :: lun, i
 
     if (inode==ionode) then
-      if (iprint_MD > 1) write(io_lun,'("Writing frame to ",a)') filename
+      if (iprint_MD > 1) write(io_lun,'(2x,"Writing frame to ",a)') filename
       call io_assign(lun)
       if (mdl%append) then
         open(unit=lun,file=filename,position='append')
