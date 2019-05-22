@@ -659,9 +659,11 @@ contains
   !!    Added flag_PDOS_lm for (l,m) projected DOS
   !!   2018/10/30 11:52 dave
   !!    added flag_PDOS_include_semicore to allow inclusion/exclusion of semi-core states from PDOS
-  !!   2018/03/28 zamaan
+  !!   2019/03/28 zamaan
   !!    Added flag_stress and flag_full_stress to toggle calculation of stress
   !!    and off-diagonal elements respectively
+  !!   2019/05/21 zamaan
+  !!    Added flag for RNG seed
   !!  TODO
   !!   Fix reading of start flags (change to block ?) 10/05/2002 dave
   !!   Fix rigid shift 10/05/2002 dave
@@ -724,7 +726,7 @@ contains
                              mx_temp_matrices, flag_neutral_atom, flag_diagonalisation, &
                              flag_SpinDependentSF, flag_Multisite, flag_LFD, flag_SFcoeffReuse, &
                              flag_opt_cell, cell_constraint_flag, cell_en_tol, &
-                             flag_stress, flag_full_stress, &
+                             flag_stress, flag_full_stress, rng_seed, &
                              flag_atomic_stress, flag_heat_flux
     use dimens, only: r_super_x, r_super_y, r_super_z, GridCutoff,    &
                       n_grid_x, n_grid_y, n_grid_z, r_h, r_c,         &
@@ -959,6 +961,8 @@ contains
        locps_choice  = fdf_integer('IO.LocalPotChoice',   8     )
        atomch_output = fdf_boolean('IO.AtomChargeOutput',.false.)
        !
+       ! Seed for RNG
+       rng_seed      = fdf_integer('General.RNGSeed', -1)
        !
        tmp = fdf_string(8,'General.MemoryUnits','MB')
        if( leqi(tmp(1:2),     'kB') ) then

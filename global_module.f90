@@ -141,6 +141,8 @@
 !!   2019/05/08 zamaan
 !!    Added flag_atomic_stress and atomic_stress for atomic contributions to 
 !!    stress and heat flux
+!!   2019/05/21 zamaan
+!!    Added RNG seed
 !!  SOURCE
 !!
 module global_module
@@ -177,6 +179,8 @@ module global_module
   logical :: restart_LorK, restart_rho, restart_T, restart_X
 
   integer :: global_maxatomspart ! Maximum atoms per partition, if exceeded, triggers partitioning refinement
+
+  integer :: rng_seed
 
   integer :: load_balance
   logical :: many_processors ! Selects appropriate algorithm for partitioning
