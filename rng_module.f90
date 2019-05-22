@@ -374,7 +374,8 @@ module rng
     !!  CREATION DATE
     !!   2019/05/16
     !!  MODIFICATION HISTORY
-    !!
+    !!   2019/05/22 zamaan
+    !!    Removed the compiler-dependent getpid() call
     !!  SOURCE
     !!
     subroutine get_random_seed(rn)
@@ -414,14 +415,18 @@ module rng
             t = transfer(tms, t)
          end if
          s = ieor(t(1), t(2))
-         pid = getpid() + 1099279 ! Add a prime
-         s = ieor(s, pid)
+         ! getpid is compiler-dependent; intrinsic in gfortran but but requires
+         ! ifport for ifort - zamaan
+!         pid = getpid() + 1099279 ! Add a prime
+!         s = ieor(s, pid)
          if (n >= 3) then
             rn%seed(1) = t(1) + 36269
             rn%seed(2) = t(2) + 72551
-            rn%seed(3) = pid
-            if (n > 3) then
-               rn%seed(4:) = s + 37 * (/ (i, i = 0, n - 4) /)
+!            rn%seed(3) = pid
+!            If (n > 3) then
+!               rn%seed(4:) = s + 37 * (/ (i, i = 0, n - 4) /)
+            if (n > 2) then
+               rn%seed(3:) = s + 37 * (/ (i, i = 0, n - 3) /)
             end if
          else
             rn%seed = s + 37 * (/ (i, i = 0, n - 1 ) /)
