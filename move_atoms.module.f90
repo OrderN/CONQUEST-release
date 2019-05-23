@@ -1696,9 +1696,9 @@ contains
        if (ionode==inode) write(io_lun,*) "CG: 1st stage"
 
        if (flag_SFcoeffReuse) then
-          call update_pos_and_matrices(updateSFcoeff,force(:,2:))
+          call update_pos_and_matrices(updateSFcoeff,force(:,1:ni_in_cell))
        else
-          call update_pos_and_matrices(updateLorK,force(:,2:))
+          call update_pos_and_matrices(updateLorK,force(:,1:ni_in_cell))
        end if
 
        if (inode==ionode .and. iprint_MD>2) then
@@ -1794,9 +1794,9 @@ contains
 
     if(inode==ionode.AND.iprint_MD>0) write (io_lun,*) "CG: 2nd stage"
     if(flag_SFcoeffReuse) then
-       call update_pos_and_matrices(updateSFcoeff,force(:,2:))
+       call update_pos_and_matrices(updateSFcoeff,force(:,1:ni_in_cell))
     else
-       call update_pos_and_matrices(updateLorK,force(:,2:))
+       call update_pos_and_matrices(updateLorK,force(:,1:ni_in_cell))
     endif
 
     if (inode == ionode .and. iprint_MD > 1) then
@@ -1915,9 +1915,9 @@ contains
 
        write (io_lun,*) "CG: 3rd stage"
        if(flag_SFcoeffReuse) then
-          call update_pos_and_matrices(updateSFcoeff,force(:,2:))
+          call update_pos_and_matrices(updateSFcoeff,force(:,1:ni_in_cell))
        else
-          call update_pos_and_matrices(updateLorK,force(:,2:))
+          call update_pos_and_matrices(updateLorK,force(:,1:))
        endif
 
        if (inode == ionode .and. iprint_MD > 2) then
@@ -4239,7 +4239,7 @@ contains
     real(double)  :: d
 
     if (inode==ionode .and. iprint_MD > 2) &
-      write(io_lun,'(2x,a)') "move_atoms/propagate_vector"
+      write(io_lun,'(2x,a,f12.6)') "move_atoms/propagate_vector: k=",k
 
     ! config_new = config + k*force
     do i=1,ni_in_cell+1
