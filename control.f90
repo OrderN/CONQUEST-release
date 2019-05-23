@@ -2430,7 +2430,6 @@ end subroutine write_md_data
     ! Find energy and forces
     call get_E_and_F(fixed_potential, vary_mu, energy0, .true., .true.)
     call dump_pos_and_matrices
-    ! Construct the vector to optimise (config) and its force vector (force)
     enthalpy0 = enthalpy(energy0, press)
 
     iter = 1
@@ -2440,6 +2439,7 @@ end subroutine write_md_data
     enthalpy1 = enthalpy0
     do while (.not. done)
       call start_timer(tmr_l_iter, WITH_LEVEL) ! Construct ratio for conjugacy
+      ! Construct the vector to optimise (config) and its force vector (force)
       call cq_to_vector(force, config, cell_ref, press)
       config_old = config
       gg = zero
@@ -2474,14 +2474,16 @@ end subroutine write_md_data
         write (io_lun,'(4x,"CG iteration: ",i5," Gamma: ",f12.6)') iter, gamma
       ggold = gg
       ! Build search direction
-      cg(1,1) = gamma*cg(1,1) + force(1,1)
-      cg(2,1) = gamma*cg(2,1) + force(2,1)
-      cg(3,1) = gamma*cg(3,1) + force(3,1)
+      ! For the lattice
+      do i=1,3
+        cg(i,ni_in_cell+1) = gamma*cg(i,ni_in_cell+1) + force(i,ni_in_cell+1)
+      end do
+      ! For the ions
       do j=1,ni_in_cell
-        jj = id_glob(j)+1
-        cg(1,j+1) = gamma*cg(1,j+1) + force(1,jj)
-        cg(2,j+1) = gamma*cg(2,j+1) + force(2,jj)
-        cg(3,j+1) = gamma*cg(3,j+1) + force(3,jj)
+        jj = id_glob(j)
+        cg(1,j) = gamma*cg(1,j) + force(1,jj)
+        cg(2,j) = gamma*cg(2,j) + force(2,jj)
+        cg(3,j) = gamma*cg(3,j) + force(3,jj)
       end do
       force_old = force
       ! Minimise in this direction

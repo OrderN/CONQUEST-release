@@ -4321,11 +4321,11 @@ contains
     rcellx = (one + config(1,ni_in_cell+1))*cell_ref(1)
     rcelly = (one + config(2,ni_in_cell+1))*cell_ref(2)
     rcellz = (one + config(3,ni_in_cell+1))*cell_ref(3)
-    do i_global=1,ni_in_cell
-      i = id_glob_inv(i_global) 
-      x_atom_cell(i) = config(1,i_global)*rcellx
-      y_atom_cell(i) = config(2,i_global)*rcelly
-      z_atom_cell(i) = config(3,i_global)*rcellz
+    do i=1,ni_in_cell
+      ! i = id_glob_inv(i_global) 
+      x_atom_cell(i) = config(1,i)*rcellx
+      y_atom_cell(i) = config(2,i)*rcelly
+      z_atom_cell(i) = config(3,i)*rcellz
     end do
 
     call rescale_grids_and_density(orcellx, orcelly, orcellz)
@@ -4390,10 +4390,10 @@ contains
         -(stress(i,i) + target_press*vol)/one_plus_strain(i)
     end do
     do i=1,ni_in_cell
-      i_global = id_glob(i)
-      config(1,i_global) = x_atom_cell(i)/rcellx
-      config(2,i_global) = y_atom_cell(i)/rcelly
-      config(3,i_global) = z_atom_cell(i)/rcellz
+      ! i_global = id_glob(i)
+      config(1,i) = x_atom_cell(i)/rcellx
+      config(2,i) = y_atom_cell(i)/rcelly
+      config(3,i) = z_atom_cell(i)/rcellz
       force(1,i) = tot_force(1,i)*rcellx
       force(2,i) = tot_force(2,i)*rcelly
       force(3,i) = tot_force(3,i)*rcellz
@@ -4404,15 +4404,15 @@ contains
 
     if (inode==ionode .and. iprint_MD>1) then
       write(io_lun,'(4x,a)') "Position vector:"
-      write(io_lun,'(4x,a8,3f20.12)') "strain: ", config(:,1)
       do i=1,ni_in_cell
-        write(io_lun,'(4x,i8,3f20.12)') i, config(:,i+1)
+        write(io_lun,'(4x,i8,3f20.12)') i, config(:,i)
       end do
+      write(io_lun,'(4x,a8,3f20.12)') "strain: ", config(:,ni_in_cell+1)
       write(io_lun,'(4x,a)') "Force vector:"
-      write(io_lun,'(4x,a8,3f20.12)') "stress: ", force(:,1)
       do i=1,ni_in_cell
-        write(io_lun,'(4x,i8,3f20.12)') i, force(:,i+1)
+        write(io_lun,'(4x,i8,3f20.12)') i, force(:,i)
       end do
+      write(io_lun,'(4x,a8,3f20.12)') "stress: ", force(:,ni_in_cell+1)
       write(io_lun,*)
     end if
 
