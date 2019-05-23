@@ -1145,43 +1145,43 @@ contains
           end select
         end if
       end select
-    end select
-  end subroutine integrate_pt
+   end select
+end subroutine integrate_pt
 !!*****
 
-  !!****m* control/update_pos_and_box *
-  !!  NAME
-  !!   update_pos_and_box
-  !!  PURPOSE
-  !!   Perform the (modified) velocity Verlet position and box updates, &
-  !!   depending on the ensemble and integrator
-  !!  AUTHOR
-  !!   Zamaan Raza
-  !!  CREATION DATE
-  !!   2018/08/11 10:27
-  !!  SOURCE
-  !!  
-  subroutine update_pos_and_box(baro, nequil, flag_movable)
+!!****m* control/update_pos_and_box *
+!!  NAME
+!!   update_pos_and_box
+!!  PURPOSE
+!!   Perform the (modified) velocity Verlet position and box updates, &
+!!   depending on the ensemble and integrator
+!!  AUTHOR
+!!   Zamaan Raza
+!!  CREATION DATE
+!!   2018/08/11 10:27
+!!  SOURCE
+!!  
+subroutine update_pos_and_box(baro, nequil, flag_movable)
 
-    use Integrators,   only: vVerlet_r_dt
-    use io_module,     only: leqi
-    use GenComms,      only: inode, ionode
-    use global_module, only: iprint_MD
-    use md_control,    only: type_thermostat, type_barostat, ion_velocity, &
-                             md_baro_type
+  use Integrators,   only: vVerlet_r_dt
+  use io_module,     only: leqi
+  use GenComms,      only: inode, ionode
+  use global_module, only: iprint_MD
+  use md_control,    only: type_thermostat, type_barostat, ion_velocity, &
+                           md_baro_type
 
-    ! passed variables
-    type(type_barostat), intent(inout)  :: baro
-    integer, intent(in)                 :: nequil
-    logical, dimension(:), intent(in)   :: flag_movable
+  ! passed variables
+  type(type_barostat), intent(inout)  :: baro
+  integer, intent(in)                 :: nequil
+  logical, dimension(:), intent(in)   :: flag_movable
 
-    ! local variables
+  ! local variables
 
     if (inode==ionode .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "Welcome to update_pos_and_box"
+        write(io_lun,'(2x,a)') "Welcome to update_pos_and_box"
 
-    if (leqi(md_ensemble, 'npt')) then
-      if (leqi(md_baro_type, "berendsen") .or. nequil > 0) then
+  if (leqi(md_ensemble, 'npt')) then
+    if (leqi(md_baro_type, "berendsen") .or. nequil > 0) then
         call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
       else
         ! Modified velocity Verlet position step for NPT ensemble
@@ -1200,56 +1200,56 @@ contains
       call vVerlet_r_dt(MDtimestep,ion_velocity,flag_movable)
     end if
 
-  end subroutine update_pos_and_box
-  !!*****
+end subroutine update_pos_and_box
+!!*****
 
-  !!****m* control/write_md_data *
-  !!  NAME
-  !!   write_md_data
-  !!  PURPOSE
-  !!   Write MD data to various files at the end of an ionic step
-  !!  AUTHOR
-  !!   Zamaan Raza
-  !!  CREATION DATE
-  !!   2018/08/11 10:27
-  !!  SOURCE
-  !!  
-  subroutine write_md_data(iter, thermo, baro, mdl, nequil)
+!!****m* control/write_md_data *
+!!  NAME
+!!   write_md_data
+!!  PURPOSE
+!!   Write MD data to various files at the end of an ionic step
+!!  AUTHOR
+!!   Zamaan Raza
+!!  CREATION DATE
+!!   2018/08/11 10:27
+!!  SOURCE
+!!  
+subroutine write_md_data(iter, thermo, baro, mdl, nequil)
 
-    use GenComms,      only: inode, ionode
-    use io_module,     only: write_xsf
-    use global_module, only: iprint_MD, flag_baroDebug, flag_thermoDebug
-    use md_model,      only: type_md_model, md_tdep
-    use md_control,    only: type_barostat, type_thermostat, &
-                             write_md_checkpoint, flag_write_xsf, &
-                             md_thermo_file, md_baro_file, &
-                             md_trajectory_file, md_frames_file, &
-                             md_stats_file
+  use GenComms,      only: inode, ionode
+  use io_module,     only: write_xsf
+  use global_module, only: iprint_MD, flag_baroDebug, flag_thermoDebug
+  use md_model,      only: type_md_model, md_tdep
+  use md_control,    only: type_barostat, type_thermostat, &
+                           write_md_checkpoint, flag_write_xsf, &
+                           md_thermo_file, md_baro_file, &
+                           md_trajectory_file, md_frames_file, &
+                           md_stats_file
 
-    ! Passed variables
-    type(type_barostat), intent(inout)    :: baro
-    type(type_thermostat), intent(inout)  :: thermo
-    type(type_md_model), intent(inout)    :: mdl
-    integer, intent(in)                   :: iter, nequil
+  ! Passed variables
+  type(type_barostat), intent(inout)    :: baro
+  type(type_thermostat), intent(inout)  :: thermo
+  type(type_md_model), intent(inout)    :: mdl
+  integer, intent(in)                   :: iter, nequil
 
     if (inode==ionode .and. iprint_MD > 1) &
-      write(io_lun,'(2x,a)') "Welcome to write_md_data"
+        write(io_lun,'(2x,a)') "Welcome to write_md_data"
 
-    call write_md_checkpoint(thermo, baro)
-    call mdl%dump_stats(md_stats_file, nequil)
-    if (inode == ionode .and. mod(iter, MDfreq) == 0) then
-      call mdl%dump_frame(md_frames_file)
-      if (md_tdep) call mdl%dump_tdep
-    end if
-    if (flag_write_xsf) call write_xsf(md_trajectory_file, iter)
-    if (flag_thermoDebug) &
-      call thermo%dump_thermo_state(iter, md_thermo_file)
-    if (flag_baroDebug) &
-      call baro%dump_baro_state(iter, md_baro_file)
-    mdl%append = .true.
+  call write_md_checkpoint(thermo, baro)
+  call mdl%dump_stats(md_stats_file, nequil)
+  if (inode == ionode .and. mod(iter, MDfreq) == 0) then
+    call mdl%dump_frame(md_frames_file)
+    if (md_tdep) call mdl%dump_tdep
+  end if
+  if (flag_write_xsf) call write_xsf(md_trajectory_file, iter)
+  if (flag_thermoDebug) &
+    call thermo%dump_thermo_state(iter, md_thermo_file)
+  if (flag_baroDebug) &
+    call baro%dump_baro_state(iter, md_baro_file)
+  mdl%append = .true.
 
-  end subroutine write_md_data
-  !!*****
+end subroutine write_md_data
+!!*****
 
   !!****f* control/dummy_run *
   !! PURPOSE
