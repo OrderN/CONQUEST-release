@@ -2966,6 +2966,8 @@ contains
   !!    Replaced old rng calls with new one from rng module
   !!   2019/05/22 14:40 dave & tsuyoshi
   !!    Moved ionode criterion for generation of velocities from init_ensemble
+  !!   2019/05/23 zamaan
+  !!    Zeroed COM velocity after initialisation
   !!  SOURCE
   !!
   subroutine init_velocity(ni_in_cell, temp, velocity)
@@ -2973,7 +2975,8 @@ contains
     use datatypes,      only: double
     use numbers,        only: three,two,twopi, zero, one, RD_ERR, half, three_halves
     use species_module, only: species, mass
-    use global_module,  only: id_glob_inv, flag_move_atom, species_glob, iprint_MD
+    use global_module,  only: id_glob_inv, flag_move_atom, species_glob, &
+                              iprint_MD, flag_FixCOM
     use GenComms,       only: cq_abort, inode, ionode, gcopy
     use rng,            only: type_rng
 
@@ -3023,6 +3026,7 @@ contains
              KE = KE + half * massa * fac * velocity(dir,ia)**2
           end do
        enddo
+       if (flag_FixCOM) call zero_COM_velocity(velocity)
        KE = KE*three_halves
        KE = KE/(real(ni_in_cell,double)*fac_Kelvin2Hartree)
        if(iprint_MD > 2) write(io_lun,*) ' init_velocity: Kinetic Energy in K = ',KE
