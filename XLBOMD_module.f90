@@ -540,6 +540,8 @@
     !!  MODIFICATION
     !!   2017/05/11 dave
     !!    Adding read option for spin polarisation
+    !!   2019/05/24 tsuyoshi
+    !!    Change the filenames and tidying up the code
     !!  SOURCE
     subroutine grab_Xhistories(range,trans)
       ! Module usage
@@ -560,10 +562,6 @@
       ! local variables
       integer :: maxiters,nfile,istep
 
-      !db
-      !if (myid.EQ.0) write (io_lun,*) "Got into grab_Xhistories"
-      !db
-
       maxiters = maxitersDissipation
       if(maxiters < 3) maxiters=3  ! even without dissipation, we need matX_store(:,1:4)
       if(maxiters > 9) then
@@ -582,135 +580,6 @@
         call Matrix_CommRebuild(Info,range,trans,matX_store(istep,2),nfile)
        enddo
       endif
-
-
-!      K = maxitersDissipation
-!      ! Grab X-matrix files
-!      !% Spin non-polarised only considered
-!      call grab_matrix2('X1',inode,nfile,Info)
-!      call Matrix_CommRebuild(Info,range,trans,matX_store(1,1),nfile)
-!      call grab_matrix2('X2',inode,nfile,Info)
-!      call Matrix_CommRebuild(Info,range,trans,matX_store(2,1),nfile)
-!      call grab_matrix2('X3',inode,nfile,Info)
-!      call Matrix_CommRebuild(Info,range,trans,matX_store(3,1),nfile)
-!      call grab_matrix2('X4',inode,nfile,Info)
-!      call Matrix_CommRebuild(Info,range,trans,matX_store(4,1),nfile)
-!      if(nspin==2) then
-!         call grab_matrix2('X1_2',inode,nfile,Info)
-!         call Matrix_CommRebuild(Info,range,trans,matX_store(1,2),nfile)
-!         call grab_matrix2('X2_2',inode,nfile,Info)
-!         call Matrix_CommRebuild(Info,range,trans,matX_store(2,2),nfile)
-!         call grab_matrix2('X3_2',inode,nfile,Info)
-!         call Matrix_CommRebuild(Info,range,trans,matX_store(3,2),nfile)
-!         call grab_matrix2('X4_2',inode,nfile,Info)
-!         call Matrix_CommRebuild(Info,range,trans,matX_store(4,2),nfile)
-!      end if
-!
-!      ! I DO HATE the following way, but leave it for now... [01/10/2013 michi]
-!      select case (K)
-!      case (4)
-!        call grab_matrix2('X5',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(5,1),nfile)
-!        if(nspin==2) then
-!           call grab_matrix2('X5_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(5,2),nfile)
-!        end if
-!      case (5)
-!        call grab_matrix2('X5',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(5,1),nfile)
-!        call grab_matrix2('X6',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(6,1),nfile)
-!        if(nspin==2) then
-!           call grab_matrix2('X5_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(5,2),nfile)
-!           call grab_matrix2('X6_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(6,2),nfile)
-!        end if
-!      case (6)
-!        call grab_matrix2('X5',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(5,1),nfile)
-!        call grab_matrix2('X6',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(6,1),nfile)
-!        call grab_matrix2('X7',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(7,1),nfile)
-!        if(nspin==2) then
-!           call grab_matrix2('X5_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(5,2),nfile)
-!           call grab_matrix2('X6_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(6,2),nfile)
-!           call grab_matrix2('X7_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(7,2),nfile)
-!        end if
-!      case (7)
-!        call grab_matrix2('X5',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(5,1),nfile)
-!        call grab_matrix2('X6',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(6,1),nfile)
-!        call grab_matrix2('X7',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(7,1),nfile)
-!        call grab_matrix2('X8',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(8,1),nfile)
-!        if(nspin==2) then
-!           call grab_matrix2('X5_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(5,2),nfile)
-!           call grab_matrix2('X6_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(6,2),nfile)
-!           call grab_matrix2('X7_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(7,2),nfile)
-!           call grab_matrix2('X8_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(8,2),nfile)
-!        end if
-!      case (8)
-!        call grab_matrix2('X5',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(5,1),nfile)
-!        call grab_matrix2('X6',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(6,1),nfile)
-!        call grab_matrix2('X7',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(7,1),nfile)
-!        call grab_matrix2('X8',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(8,1),nfile)
-!        call grab_matrix2('X9',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(9,1),nfile)
-!        if(nspin==2) then
-!           call grab_matrix2('X5_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(5,2),nfile)
-!           call grab_matrix2('X6_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(6,2),nfile)
-!           call grab_matrix2('X7_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(7,2),nfile)
-!           call grab_matrix2('X8_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(8,2),nfile)
-!           call grab_matrix2('X9_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(9,2),nfile)
-!        end if
-!      case (9)
-!        call grab_matrix2('X5',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(5,1),nfile)
-!        call grab_matrix2('X6',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(6,1),nfile)
-!        call grab_matrix2('X7',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(7,1),nfile)
-!        call grab_matrix2('X8',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(8,1),nfile)
-!        call grab_matrix2('X9',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(9,1),nfile)
-!        call grab_matrix2('X10',inode,nfile,Info)
-!        call Matrix_CommRebuild(Info,range,trans,matX_store(10,1),nfile)
-!        if(nspin==2) then
-!           call grab_matrix2('X5_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(5,2),nfile)
-!           call grab_matrix2('X6_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(6,2),nfile)
-!           call grab_matrix2('X7_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(7,2),nfile)
-!           call grab_matrix2('X8_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(8,2),nfile)
-!           call grab_matrix2('X9_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(9,2),nfile)
-!           call grab_matrix2('X10_2',inode,nfile,Info)
-!           call Matrix_CommRebuild(Info,range,trans,matX_store(10,2),nfile)
-!        end if
-!      end select
 
       return
     end subroutine grab_Xhistories
@@ -734,6 +603,8 @@
     !!  MODIFICATION
     !!   2017/05/11 dave
     !!    Adding write option for spin polarisation
+    !!   2019/05/24 tsuyoshi
+    !!    Change the filenames and tidying up the code
     !!  SOURCE
     subroutine dump_XL()
       ! Module usage
@@ -768,81 +639,6 @@
         call dump_matrix2('X2',matX_store(istep,2),range,index_in=istep)
        enddo
       endif
-
-!      !% Spin non-polarised only considered
-!      call dump_matrix2('X1',matX_store(1,1),range)
-!      call dump_matrix2('X2',matX_store(2,1),range)
-!      call dump_matrix2('X3',matX_store(3,1),range)
-!      call dump_matrix2('X4',matX_store(4,1),range)
-!      if(nspin==2) then
-!         call dump_matrix2('X1_2',matX_store(1,2),range)
-!         call dump_matrix2('X2_2',matX_store(2,2),range)
-!         call dump_matrix2('X3_2',matX_store(3,2),range)
-!         call dump_matrix2('X4_2',matX_store(4,2),range)
-!      end if
-!      ! I DO HATE the following way, but leave it for now.. [01/10/2013 michi]
-!      select case (maxiters)
-!      case (4)
-!        call dump_matrix2('X5',matX_store(5,1),range)
-!        if(nspin==2) then
-!           call dump_matrix2('X5_2',matX_store(5,2),range)
-!        end if
-!      case (5)
-!        call dump_matrix2('X5',matX_store(5,1),range)
-!        call dump_matrix2('X6',matX_store(6,1),range)
-!        if(nspin==2) then
-!           call dump_matrix2('X5_2',matX_store(5,2),range)
-!           call dump_matrix2('X6_2',matX_store(6,2),range)
-!        end if
-!      case (6)
-!        call dump_matrix2('X5',matX_store(5,1),range)
-!        call dump_matrix2('X6',matX_store(6,1),range)
-!        call dump_matrix2('X7',matX_store(7,1),range)
-!        if(nspin==2) then
-!           call dump_matrix2('X5_2',matX_store(5,2),range)
-!           call dump_matrix2('X6_2',matX_store(6,2),range)
-!           call dump_matrix2('X7_2',matX_store(7,2),range)
-!        end if
-!      case (7)
-!        call dump_matrix2('X5',matX_store(5,1),range)
-!        call dump_matrix2('X6',matX_store(6,1),range)
-!        call dump_matrix2('X7',matX_store(7,1),range)
-!        call dump_matrix2('X8',matX_store(8,1),range)
-!        if(nspin==2) then
-!           call dump_matrix2('X5_2',matX_store(5,2),range)
-!           call dump_matrix2('X6_2',matX_store(6,2),range)
-!           call dump_matrix2('X7_2',matX_store(7,2),range)
-!           call dump_matrix2('X8_2',matX_store(8,2),range)
-!        end if
-!      case (8)
-!        call dump_matrix2('X5',matX_store(5,1),range)
-!        call dump_matrix2('X6',matX_store(6,1),range)
-!        call dump_matrix2('X7',matX_store(7,1),range)
-!        call dump_matrix2('X8',matX_store(8,1),range)
-!        call dump_matrix2('X9',matX_store(9,1),range)
-!        if(nspin==2) then
-!           call dump_matrix2('X5_2',matX_store(5,2),range)
-!           call dump_matrix2('X6_2',matX_store(6,2),range)
-!           call dump_matrix2('X7_2',matX_store(7,2),range)
-!           call dump_matrix2('X8_2',matX_store(8,2),range)
-!           call dump_matrix2('X9_2',matX_store(9,2),range)
-!        end if
-!      case (9)
-!        call dump_matrix2('X5',matX_store(5,1),range)
-!        call dump_matrix2('X6',matX_store(6,1),range)
-!        call dump_matrix2('X7',matX_store(7,1),range)
-!        call dump_matrix2('X8',matX_store(8,1),range)
-!        call dump_matrix2('X9',matX_store(9,1),range)
-!        call dump_matrix2('X10',matX_store(10,1),range)
-!        if(nspin==2) then
-!           call dump_matrix2('X5_2',matX_store(5,2),range)
-!           call dump_matrix2('X6_2',matX_store(6,2),range)
-!           call dump_matrix2('X7_2',matX_store(7,2),range)
-!           call dump_matrix2('X8_2',matX_store(8,2),range)
-!           call dump_matrix2('X9_2',matX_store(9,2),range)
-!           call dump_matrix2('X10_2',matX_store(10,2),range)
-!        end if
-!      end select
 
       return
     end subroutine dump_XL
@@ -965,16 +761,6 @@
         enddo
       enddo
       dissipation = dissipation * alpha
-
-      !db
-      !call get_file_name('F_dissipation',numprocs,inode,file_name)
-      !call io_assign(lun_db)
-      !open (lun_db,file=file_name)
-      !do len = 1, mat_p(matX(1))%length
-      !  write (lun_db,'(f25.15)') dissipation(len,1)
-      !enddo
-      !call io_close(lun_db)
-      !db
 
       return
     end subroutine calc_dissipative_force
